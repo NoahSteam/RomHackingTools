@@ -22,6 +22,8 @@
 #include "Theme.h"
 
 #include <condition_variable>
+#include <fstream>
+#include <iterator>
 #include <map>
 #include <set>
 #include <mutex>
@@ -398,6 +400,214 @@ void TestLineClickNavigates()
     f.LineMenu(line, "View in Memory");
     r = f.Take();
     CHECK(r.viewHex && r.hexAddr == ln.firstAddr);
+}
+
+// A7-1. What hovering a line says (LineOriginText), from lines built by hand: the number is the
+// address of the SH-2 instruction the line came from, not a value in it; a line from several
+// instructions says so and lists them; a line from none has no text. Pinned verbatim: the user
+// could not tell what the bare "0x06086F54" it replaced was.
+void TestLineOriginText()
+{
+    auto tok = [](uint32_t a) {
+        Token t;
+        t.addr = a;
+        return t;
+    };
+    Line none;
+    none.text = "}";
+    none.tokens = { tok(0), tok(0) };
+    CHECK(LineInstructions(none).empty());
+    CHECK(LineOriginText(none).empty());
+    CHECK(LineOriginText(Line()).empty());
+
+    Line one;
+    one.text = "puVar2[4] = *(uint2 *)((uint4)param_5 * 10 + iRam0608b3e4);";
+    one.tokens = { tok(0x06086F54), tok(0), tok(0x06086F54) };
+    one.firstAddr = 0x06086F54;
+    CHECK(LineInstructions(one) == std::vector<uint32_t>{ 0x06086F54 });
+    CHECK(LineOriginText(one) ==
+          "Decompiled from the SH-2 instruction at 0x06086F54 (an address in the program, not a value in this line).\n"
+          "Click to show it in SH-2 Assembly.");
+
+    Line several = one;
+    several.tokens = { tok(0x06086F60), tok(0x06086F54), tok(0x06086F58), tok(0x06086F54) };
+    CHECK((LineInstructions(several) == std::vector<uint32_t>{ 0x06086F54, 0x06086F58, 0x06086F60 }));
+    CHECK(LineOriginText(several) ==
+          "Decompiled from 3 SH-2 instructions (an address is not a value in this line):\n"
+          "0x06086F54, 0x06086F58, 0x06086F60\n"
+          "Click to show the first, 0x06086F54, in SH-2 Assembly.");
+
+    // Ten instructions: the first eight are listed, the rest counted.
+    Line wide = one;
+    wide.tokens.clear();
+    for (uint32_t i = 0; i < 10; ++i) wide.tokens.push_back(tok(0x06000100u + 4 * i));
+    CHECK(LineInstructions(wide).size() == 10);
+    CHECK(LineOriginText(wide) ==
+          "Decompiled from 10 SH-2 instructions (an address is not a value in this line):\n"
+          "0x06000100, 0x06000104, 0x06000108, 0x0600010C, 0x06000110, 0x06000114, 0x06000118, 0x0600011C, and 2 more\n"
+          "Click to show the first, 0x06000100, in SH-2 Assembly.");
+}
+
+#ifdef SE_DECOMPILER_GUIDE
+// The guide quotes the tooltip (DECOMPILER_GUIDE.md, "Reading the output"): the text it shows for a line from one instruction, the
+// words for several, and the menu item that reaches the others. A change to the tooltip that leaves the guide behind fails here.
+void TestGuideQuotesTheTooltip()
+{
+    std::ifstream in(SE_DECOMPILER_GUIDE, std::ios::binary);
+    CHECK(in.good());
+    const std::string guide((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    Token t;
+    t.addr = 0x06086F54;
+    Line one;
+    one.tokens = { t };
+    std::string flat = LineOriginText(one);
+    for (char& c : flat)
+        if (c == '\n') c = ' ';
+    CHECK(Has(guide, flat.c_str()));
+    Line two = one;
+    t.addr = 0x06086F58;
+    two.tokens.push_back(t);
+    t.addr = 0x06086F60;
+    two.tokens.push_back(t);
+    const std::string several = LineOriginText(two);
+    CHECK(Has(guide, several.substr(0, several.find(" (")).c_str()));   // "Decompiled from 3 SH-2 instructions"
+    CHECK(Has(guide, "Show Other Instructions"));
+}
+#endif
+
+// A7-1 on the panel: hovering a line opens that text over it, and only for a line with an
+// instruction behind it. A line from several instructions says so. Clicking a line without an
+// address navigates nowhere, and its menu items that need an address are off (A7 oracle 4).
+void TestLineHoverAndNoAddress()
+{
+    Fixture f;
+    f.panel.ShowFunctionContaining(0, dts::kFixture1AddOne);
+    CHECK(f.WaitShown("+ 1"));
+    const DecompileResult& shown = f.Shown();
+    int withOne = -1, withNone = -1, withSeveral = -1;
+    for (size_t i = 0; i < shown.lines.size(); ++i)
+    {
+        const size_t n = LineInstructions(shown.lines[i]).size();
+        if (n == 1 && withOne < 0) withOne = static_cast<int>(i);
+        if (n == 0 && !shown.lines[i].text.empty() && withNone < 0) withNone = static_cast<int>(i);
+        if (n > 1 && withSeveral < 0) withSeveral = static_cast<int>(i);
+    }
+    CHECK(withOne >= 0);
+    CHECK(withNone >= 0);
+    CHECK(withSeveral >= 0);
+    f.Idle(3);
+
+    // Hover: long enough for ImGui's tooltip delay, the mouse still.
+    auto hoverTip = [&](int line) {
+        ImVec2 a, b;
+        CHECK(f.panel.LineRect(line, a, b));
+        for (int i = 0; i < 40; ++i) f.h.Frame(Centre(a, b), false);
+        return f.panel.LineTooltip();
+    };
+    for (int line : { withOne, withSeveral })
+    {
+        if (line < 0) continue;
+        const Line& ln = f.Shown().lines[static_cast<size_t>(line)];
+        const std::string tip = hoverTip(line);
+        CHECK(!tip.empty() && tip == LineOriginText(ln));
+        char first[16];
+        std::snprintf(first, sizeof first, "0x%08X", ln.firstAddr);
+        CHECK(Has(tip, first));
+        CHECK(Has(tip, "SH-2 Assembly"));
+        // The text is on screen, not only computed.
+        ImGuiWindow* w = ImGui::FindWindowByName("##Tooltip_00");
+        CHECK(w != nullptr && w->WasActive);
+        f.Idle(2);
+        CHECK(f.panel.LineTooltip().empty());   // the pointer left
+    }
+    if (withSeveral >= 0) CHECK(Has(hoverTip(withSeveral), " SH-2 instructions"));
+    if (withOne >= 0) CHECK(!Has(hoverTip(withOne), " SH-2 instructions"));
+    f.Idle(2);
+
+    // The click on a line from several instructions goes to the lowest address, on the panel's CPU.
+    if (withSeveral >= 0)
+    {
+        const Line& ln = f.Shown().lines[static_cast<size_t>(withSeveral)];
+        CHECK(ln.firstAddr == LineInstructions(ln)[0]);
+        ImVec2 a, b;
+        CHECK(f.panel.LineRect(withSeveral, a, b));
+        f.Take();
+        f.h.Hover(Centre(a, b));
+        f.h.Click(Centre(a, b));
+        const DecompilerPanel::Request r = f.Take();
+        CHECK(r.jumpAssembly && r.cpu == 0 && r.addr == ln.firstAddr);
+    }
+    // A line with no instruction behind it: no tooltip, and a click goes nowhere.
+    if (withNone >= 0)
+    {
+        CHECK(f.Shown().lines[static_cast<size_t>(withNone)].firstAddr == 0);
+        CHECK(hoverTip(withNone).empty());
+        ImVec2 a, b;
+        CHECK(f.panel.LineRect(withNone, a, b));
+        f.Take();
+        f.h.Hover(Centre(a, b));
+        f.h.Click(Centre(a, b));
+        DecompilerPanel::Request r = f.Take();
+        CHECK(!r.jumpAssembly && !r.viewHex && !r.boundsChanged && !r.rename);
+        // ...and the items of its menu that act on an address do nothing when picked.
+        f.LineMenu(withNone, "Show in SH-2 Assembly");
+        r = f.Take();
+        CHECK(!r.jumpAssembly);
+        f.LineMenu(withNone, "View in Memory");
+        r = f.Take();
+        CHECK(!r.viewHex);
+        f.LineMenu(withNone, "Set Function Start Here");
+        r = f.Take();
+        CHECK(!r.boundsChanged);
+    }
+}
+
+// A7-2. A line from several instructions: the click shows the first; the context menu lists the
+// others, and picking one shows that instruction (on the panel's CPU). A line from one has no such
+// menu.
+void TestOtherInstructionsMenu()
+{
+    Fixture f;
+    f.panel.ShowFunctionContaining(0, dts::kFixture1AddOne);
+    CHECK(f.WaitShown("+ 1"));
+    int several = -1, single = -1;
+    for (size_t i = 0; i < f.Shown().lines.size(); ++i)
+    {
+        const size_t n = LineInstructions(f.Shown().lines[i]).size();
+        if (n > 1 && several < 0) several = static_cast<int>(i);
+        if (n == 1 && single < 0) single = static_cast<int>(i);
+    }
+    CHECK(several >= 0 && single >= 0);
+    if (several < 0 || single < 0) return;
+    f.Idle(3);
+    const std::vector<uint32_t> at = LineInstructions(f.Shown().lines[static_cast<size_t>(several)]);
+
+    ImVec2 a, b;
+    CHECK(f.panel.LineRect(several, a, b));
+    f.h.Hover(Centre(a, b));
+    f.h.RightClick(Centre(a, b));
+    ImVec2 ma, mb;
+    CHECK(f.panel.ItemRect("Show Other Instructions", ma, mb));
+    f.h.Hover(Centre(ma, mb));
+    f.h.Hover(Centre(ma, mb));
+    char label[24];
+    std::snprintf(label, sizeof label, "0x%08X", at[1]);
+    ImVec2 ia, ib;
+    CHECK(f.panel.ItemRect(label, ia, ib));
+    f.Take();
+    f.h.Hover(Centre(ia, ib));
+    f.h.Click(Centre(ia, ib));
+    f.Idle();
+    const DecompilerPanel::Request r = f.Take();
+    CHECK(r.jumpAssembly && r.cpu == 0 && r.addr == at[1] && at[1] != at[0]);
+
+    // One instruction: nothing else to show.
+    f.Idle(3);
+    CHECK(f.panel.LineRect(single, a, b));
+    f.h.Hover(Centre(a, b));
+    f.h.RightClick(Centre(a, b));
+    CHECK(!f.panel.ItemRect("Show Other Instructions", ma, mb));
+    CHECK(f.panel.ItemRect("Show in SH-2 Assembly", ma, mb));
 }
 
 // Switching CPU keeps the output. With Follow PC it asks for the other CPU's function, and the old
@@ -2416,6 +2626,12 @@ int main(int argc, char** argv)
     try
     {
         RUN(TestLineClickNavigates());
+        RUN(TestLineOriginText());
+#ifdef SE_DECOMPILER_GUIDE
+        RUN(TestGuideQuotesTheTooltip());
+#endif
+        RUN(TestLineHoverAndNoAddress());
+        RUN(TestOtherInstructionsMenu());
         RUN(TestCpuSwitchKeepsOutput());
         RUN(TestHexWriteReRequests());
         RUN(TestInstallRule());

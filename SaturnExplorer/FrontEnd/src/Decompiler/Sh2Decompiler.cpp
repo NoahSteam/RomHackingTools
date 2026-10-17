@@ -1785,17 +1785,75 @@ std::vector<Line> LinesFromMarkup(const std::string& packed, const ghidra::Funcd
     };
     while (decoder.peekElement() != 0) walk();
 
+    // A read printed inside another op's expression has no token of its own: an array form (p[i]) is printed by the pointer
+    // expression's op, which holds the brackets; a read the statement uses only as an operand is printed by the op that uses it.
+    // The load's instruction would then be on no line and a reader could not get from it to the text that shows its read
+    // (A7-3). Each line that prints that expression gets an empty token at its end that carries the load's address: it draws
+    // nothing, and the line belongs to that instruction too (navigation, the user's notes, the halt hint).
+    if (printed)
+        for (auto it = fd.beginOpAlive(); it != fd.endOpAlive(); ++it)
+        {
+            const ghidra::PcodeOp* o = *it;
+            if (o->code() != ghidra::CPUI_LOAD || printed->count(o) != 0) continue;
+            const std::set<size_t>* where = nullptr;
+            if (o->getIn(1)->isWritten() && o->getIn(1)->isImplied())
+            {
+                const auto p = printed->find(o->getIn(1)->getDef());
+                if (p != printed->end()) where = &p->second.first;
+            }
+            // ...else the op that finally uses its value, through the implied values between
+            for (const ghidra::Varnode* v = o->getOut(); !where && v != nullptr && v->isImplied();)
+            {
+                const ghidra::PcodeOp* use = v->loneDescend();
+                if (!use) break;
+                const auto p = printed->find(use);
+                if (p != printed->end()) where = &p->second.first;
+                v = use->getOut();
+            }
+            if (!where) continue;
+            uint32_t insn = static_cast<uint32_t>(o->getAddr().getOffset()), canonical = 0;
+            if (CanonicalAddress(insn, canonical)) insn = canonical;
+            for (size_t at : *where)
+            {
+                if (at >= lines.size()) continue;
+                Line& line = lines[at];
+                bool carried = false;
+                for (const Token& t : line.tokens) carried = carried || t.addr == insn;
+                if (carried) continue;
+                Token t;
+                t.begin = t.end = static_cast<uint16_t>(std::min<size_t>(line.text.size(), 0xFFFF));
+                t.kind = TokenKind::Plain;
+                t.addr = insn;
+                line.tokens.push_back(t);
+            }
+        }
+
     std::vector<Line> out;
+    size_t leading = 0;
     for (Line& l : lines)
     {
         const bool blank = l.text.find_first_not_of(' ') == std::string::npos;
-        if (blank && out.empty()) continue;   // the document's leading break
+        if (blank && out.empty())
+        {
+            ++leading;   // the document's leading break
+            continue;
+        }
         if (blank) l.text.clear();
         for (const Token& t : l.tokens)
             if (t.addr && (l.firstAddr == 0 || t.addr < l.firstAddr)) l.firstAddr = t.addr;
         out.push_back(std::move(l));
     }
     while (!out.empty() && out.back().text.empty()) out.pop_back();
+    // 'printed' names lines by their index among all the document's lines; the lines returned begin after the leading
+    // breaks, so the indices move up with them (A7-4: MemoryAccess::firstLine named the line after the one it printed on).
+    if (printed && leading)
+        for (auto& kv : *printed)
+        {
+            std::set<size_t> moved;
+            for (size_t at : kv.second.first)
+                if (at >= leading) moved.insert(at - leading);
+            kv.second.first = std::move(moved);
+        }
     return out;
 }
 
@@ -2935,6 +2993,40 @@ std::string DecompileResult::Text() const
         s += l.text;
         s += '\n';
     }
+    return s;
+}
+
+std::vector<uint32_t> LineInstructions(const Line& line)
+{
+    std::vector<uint32_t> at;
+    for (const Token& t : line.tokens)
+        if (t.addr) at.push_back(t.addr);
+    std::sort(at.begin(), at.end());
+    at.erase(std::unique(at.begin(), at.end()), at.end());
+    return at;
+}
+
+std::string LineOriginText(const Line& line)
+{
+    const std::vector<uint32_t> at = LineInstructions(line);
+    if (at.empty()) return std::string();
+    // The click and the menu go to the lowest address (Line::firstAddr), the one named first.
+    std::string s;
+    if (at.size() == 1)
+    {
+        s = "Decompiled from the SH-2 instruction at " + Hex8(at[0]) + " (an address in the program, not a value in this line).\n"
+            "Click to show it in SH-2 Assembly.";
+        return s;
+    }
+    s = "Decompiled from " + std::to_string(at.size()) + " SH-2 instructions (an address is not a value in this line):\n";
+    const size_t kListed = 8;
+    for (size_t i = 0; i < at.size() && i < kListed; ++i)
+    {
+        if (i) s += ", ";
+        s += Hex8(at[i]);
+    }
+    if (at.size() > kListed) s += ", and " + std::to_string(at.size() - kListed) + " more";
+    s += "\nClick to show the first, " + Hex8(at[0]) + ", in SH-2 Assembly.";
     return s;
 }
 

@@ -742,6 +742,9 @@ if(BUILD_TESTING)
         target_include_directories(SaturnExplorerDecompilerPanelTests
             PRIVATE FrontEnd/src FrontEnd/tests ${SE_IMGUI_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include)
         target_link_libraries(SaturnExplorerDecompilerPanelTests PRIVATE SaturnExplorerGhidraDecomp Threads::Threads)
+        # The guide quotes the line tooltip (A7-1); the test reads it to keep the two the same.
+        target_compile_definitions(SaturnExplorerDecompilerPanelTests PRIVATE
+            SE_DECOMPILER_GUIDE="${CMAKE_CURRENT_SOURCE_DIR}/DECOMPILER_GUIDE.md")
         add_test(NAME SaturnExplorerDecompilerPanelTests
                  COMMAND SaturnExplorerDecompilerPanelTests ${CMAKE_CURRENT_BINARY_DIR}/decompiler_panel_test)
         set_tests_properties(SaturnExplorerDecompilerPanelTests PROPERTIES TIMEOUT 60)

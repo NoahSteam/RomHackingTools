@@ -220,6 +220,8 @@ public:
     // ...and of a named control in the last Draw: "cpu", "entry", "refresh", "stop", or a line
     // context-menu item by its label ("Set Function Start Here", "View in Memory", ...).
     bool ItemRect(const char* name, ImVec2& min, ImVec2& max) const;
+    // The tooltip the last Draw showed over a line (LineOriginText), or "" when none was open.
+    const std::string& LineTooltip() const { return mLineTooltip; }
 
 private:
     enum class TargetKind : uint8_t { FollowPc, Containing, Entry };
@@ -432,6 +434,7 @@ private:
 
     struct DrawnLine { int index; ImVec2 min, max; };
     std::vector<DrawnLine> mDrawn;
+    std::string mLineTooltip;   // what the last Draw showed over a line, for tests
     struct DrawnItem { std::string name; ImVec2 min, max; };
     std::vector<DrawnItem> mItems;
     void Remember(const char* name);

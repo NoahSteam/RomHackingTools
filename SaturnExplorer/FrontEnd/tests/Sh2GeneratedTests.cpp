@@ -169,6 +169,13 @@
 //   12. The mirror of 11 (round 3, A3-3): when a function this one calls was lent a signature that changes a
 //       register the model keeps -- r8-r14, GBR, VBR -- the text never reads that register as the value it had
 //       on entry (unaff_<reg>, in_<reg>), unless the function reads it on purpose.
+//   Area 7, the pseudocode-to-assembly mapping (MappingOracle.h, shared with the game-code run):
+//   13. Every token address of the text is even, lies in the body (or is named by a flow warning), and is an instruction that
+//       decodes; a line's firstAddr is its lowest token address; a line from several instructions says so in its hover text
+//       (LineOriginText) and lists them; every access the ledger lists has a token of its instruction on its first line; every
+//       call in the final p-code has a token at its instruction; every executed instruction in the body is counted by what carries
+//       it (`map.executed.*`: a token, or none because the instruction is a delay slot, a move or an operation folded into its user).
+//       SE_GENERATED_MUTATE=tokodd|tokoutside|tokfirst|tokdrop|tokcall|tokunmark|tokhover damages a result as the defect would.
 //   And the generator's own contract (not the decompiler's): a version 2 function returns, restores
 //   r8-r15 and ends with PR as it began (but what it was generated to change: Func::clobbers).
 // The ground truth is emulator runs with different inputs (registers, what hardware reads
@@ -186,7 +193,7 @@
 //   SE_GENERATED_SHRINK=<n>  how many findings to reduce (default 3; 0 none; large: all)
 //   SE_GENERATED_VERBOSE=1   print the full report of every failing seed, not just the first few
 //   SE_GENERATED_TOKENS=1    print each output line with the addresses its tokens came from
-//   SE_GENERATED_MUTATE=1|ledger|second|alias|params|ret|body|cases|warn|preserved|lent|data|honour|kept
+//   SE_GENERATED_MUTATE=1|ledger|second|alias|params|ret|body|cases|warn|preserved|lent|data|honour|kept|tokodd|tokoutside|tokfirst|tokdrop|tokcall|tokunmark|tokhover
 //                            damage every result as one defect would (1: delete the first ledger entry) and
 //                            pass only if the check reports it: the checks checked
 //   SE_GENERATED_COVERAGE=1  print the mnemonics of the generated programs and how often each was emitted
@@ -202,6 +209,7 @@
 //                            SE_GENERATED_TABLES="jmp:sel:n:default:entry,...;...", SE_GENERATED_DATA and
 //                            SE_GENERATED_RETURNS="1,0,2,..." (the generator's intent per function: 1 returns r0, 0 leaves it alone, 2 copies a parameter to r0 on one path only)
 #include "DecompilerTestSupport.h"
+#include "MappingOracle.h"
 
 #include "Decompiler/SaturnArchitecture.h"
 #include "Decompiler/SaturnHardwareMap.h"
@@ -3659,11 +3667,14 @@ void Mutate(DecompileResult& r, const Subject& s, int fi)
         l.text = "  return unaff_r8 + unaff_r9 + unaff_r10 + unaff_r11 + unaff_r12 + unaff_r13 + unaff_r14 + unaff_gbr + unaff_vbr;";
         r.lines.push_back(l);
     }
+    else if (dts::MutateMapping(r, gMutateKind)) {}
     else if (gMutateKind == "data")
         for (const FnInfo& f : s.fns)
             if (!f.layout.data.empty()) r.body.push_back(f.layout.data[0]);
     (void)fi;
 }
+
+std::string OriginTextUnderTest(const Line& l) { return dts::MutatedOriginText(gMutateKind, l); }
 
 // Whether the function calls one that changes r8-r14, GBR or VBR for good (Func::effClobbers) and was lent no signature:
 // the engine's model keeps those registers across every call it knows nothing about.
@@ -4265,6 +4276,71 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                         add("data-in-body", "the body holds " + Hex(a) + ", a data word skipped by a bra");
                         break;
                     }
+        // ---- Area 7: the mapping from the text to the instructions (MappingOracle.h) ----
+        {
+            const dts::MappingAudit audit = dts::AuditMapping(
+                r, [&](uint32_t pc, uint16_t& w) {
+                    if (subject.UnitOf(pc) < 0) return false;
+                    w = subject.WordAt(pc);
+                    return true;
+                }, "", OriginTextUnderTest);
+            auto flag = [&](const char* sig, int n) {
+                if (n) add(sig, std::to_string(n) + " time(s); first: " + (audit.problems.empty() ? std::string("-") : audit.problems[0]));
+            };
+            flag("map-odd", audit.odd);
+            flag("map-outside", audit.outside);
+            flag("map-not-instruction", audit.notInsn);
+            flag("map-first-addr", audit.firstAddrWrong);
+            flag("map-range", audit.badRange);
+            flag("map-call-token", audit.callWithoutCall);
+            flag("map-unmarked", audit.unmarked);
+            flag("map-hover", audit.misnamed);
+            flag("map-access-unmapped", audit.accessUnmapped);
+            flag("map-call-unmapped", audit.callUnmapped);
+            flag("map-call-removed", audit.callGoneUnsaid);
+            flag("map-round-trip", audit.roundTrip);
+            count("map.lines", audit.lines);
+            count("map.lines.one", audit.single);
+            count("map.lines.several", audit.multi);
+            count("map.lines.several.apart", audit.multiNonAdjacent);
+            // The executed instructions of the body, and what carries each: a token of its own, or none. A call in the final
+            // p-code must have one (the line `f(x)` is the call's), and so must an access the ledger lists (the audit above).
+            std::set<uint32_t> carried;
+            for (const Line& l : r.lines)
+                for (const Token& t : l.tokens)
+                    if (t.addr) carried.insert(t.addr);
+            std::set<uint32_t> callInsns;
+            for (const CallSite& c : r.calls) callInsns.insert(c.insn);
+            std::set<uint32_t> fated;   // an access whose fate the engine recorded (folded into a variable, dead, removed)
+            for (const AccessFate& f : r.accessFates) fated.insert(f.insn);
+            for (uint32_t pc : executed)
+            {
+                if (!r.InBody(pc)) continue;
+                count("map.executed");
+                const sfe::DisassembledInstruction d = sfe::Sh2Decode(pc, subject.WordAt(pc));
+                if (callInsns.count(pc) && !carried.count(pc))
+                    add("map-call-unmapped", "the call at " + Hex(pc) + " was executed and no token of the text came from it");
+                if (carried.count(pc))
+                {
+                    count("map.executed.token");
+                    continue;
+                }
+                uint16_t prev = 0;
+                const bool slot = r.InBody(pc - 2) && subject.UnitOf(pc - 2) >= 0 && (prev = subject.WordAt(pc - 2), sfe::Sh2Decode(pc - 2, prev).HasDelaySlot);
+                const bool mem = d.Operands.find('@') != std::string::npos && d.PcRel == sfe::Sh2PcRel::None && !d.IsBranch;
+                count(slot ? "map.executed.bare.slot" : d.IsCall || d.IsBranch ? "map.executed.bare.branch" : mem ? "map.executed.bare.memory" :
+                      "map.executed.bare.operation");
+                if (mem && !slot)
+                {
+                    bool listed = false;
+                    for (const MemoryAccess& m : r.accesses) listed = listed || m.insn == pc;
+                    // Listed in the ledger it has a token (the audit above). Not listed: folded into a variable by design,
+                    // or the stack's own; the engine's record says which, or the output says it was removed.
+                    if (listed) add("map-access-bare", "the access at " + Hex(pc) + " is in the ledger and carries no token");
+                    else if (!fated.count(pc) && !SaidMissing(r, pc)) count("map.executed.bare.memory.unaccounted");
+                }
+            }
+        }
         // A jump table: every destination the run took is a case the output prints, or a warning says
         // cases may be missing.
         bool tableWarned = false;

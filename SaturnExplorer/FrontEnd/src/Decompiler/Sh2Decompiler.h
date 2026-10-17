@@ -163,6 +163,19 @@ struct Line
     uint32_t firstAddr = 0;        // the lowest token address on the line; 0 = none
 };
 
+// The instructions a line was decompiled from: the distinct non-zero token addresses, ascending
+// (canonical). A line is a statement, and a statement holds the p-code of every instruction whose
+// result it combines (a pointer built in one place, an index in another, the load in a third), so
+// one line is often several instructions, not always next to each other. Navigation (a click, the
+// menu) goes to the first only.
+std::vector<uint32_t> LineInstructions(const Line& line);
+
+// What hovering a line says (A7-1): that the number is the address of the SH-2 instruction the
+// line came from -- not a value in the line -- that a click shows it in SH-2 Assembly, and, when
+// the line is several instructions, how many and which. Empty for a line with no address (a
+// declaration, a brace), where a click does nothing.
+std::string LineOriginText(const Line& line);
+
 // Where the engine is within one decompilation. Two passes repeat Init..Actions; only the last
 // prints. The cancel check-points are in Flow and Actions; Init, Print and Teardown have none
 // (PLAN.md A4), so a cancel requested there takes effect at the next check-point, if any. The

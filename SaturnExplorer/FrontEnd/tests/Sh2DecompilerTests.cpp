@@ -12,6 +12,7 @@
 //
 // usage: SaturnExplorerSh2DecompilerTests <scratch dir>
 #include "DecompilerTestSupport.h"
+#include "MappingOracle.h"
 
 #include "AllocFailure.h"
 #include "Decompiler/SaturnArchitecture.h"
@@ -58,9 +59,17 @@ void Print(const char* label, const DecompileResult& r)
         std::printf("  ended: %s of %u bytes at %08X (%s%08X): %s\n", f.write ? "write" : "read", unsigned(f.size), f.insn,
                     f.constantAddress ? "" : "through a pointer; ", f.address, names[int(f.fate)]);
     }
+    // SE_GAME_TOKENS=1: every instruction a line came from, not just the first (the click goes to the first).
+    static const bool allAddresses = std::getenv("SE_GAME_TOKENS") != nullptr;
     for (const Line& l : r.lines)
     {
-        if (l.firstAddr) std::printf("  %-50s ; %08X\n", l.text.c_str(), l.firstAddr);
+        if (l.firstAddr && allAddresses)
+        {
+            std::printf("  %-50s ;", l.text.c_str());
+            for (uint32_t a : LineInstructions(l)) std::printf(" %08X", a);
+            std::printf("\n");
+        }
+        else if (l.firstAddr) std::printf("  %-50s ; %08X\n", l.text.c_str(), l.firstAddr);
         else std::printf("  %s\n", l.text.c_str());
     }
 }
@@ -84,6 +93,61 @@ DecompileRequest Request(uint32_t entry)
     DecompileRequest q;
     q.entry = entry;
     return q;
+}
+
+// Area 7 (MappingOracle.h) over the engine's fixtures, every run of ctest: the fixtures hold delay slots, a loop, a switch, a call, and
+// literal loads, so every token address of their texts is checked against the body, and the lines several instructions made are
+// marked. The game code does the same over every function (TestGameCode, TestGameLending). Also pins which instructions the
+// fixture 1 lines come from.
+void TestMappingOracleOnFixtures()
+{
+    std::vector<uint8_t> hw(0x100000u, 0);
+    dts::PlaceFixture1(hw);
+    dts::PlaceFixture3(hw);
+    dts::PlaceDiamonds(hw, 3);
+    dts::PlaceStraight(hw, 4);
+    dts::PlaceJumpTable(hw, 4, 2);
+    auto snap = MakeSnapshot(hw);
+    Sh2Decompiler d(gConfig);
+    const std::function<bool(uint32_t, uint16_t&)> wordAt = [&hw](uint32_t a, uint16_t& w) {
+        if (a < 0x06000000u || a - 0x06000000u + 1 >= hw.size()) return false;
+        w = static_cast<uint16_t>(hw[a - 0x06000000u] << 8 | hw[a - 0x06000000u + 1]);
+        return true;
+    };
+    std::vector<uint32_t> entries = { dts::kFixture1Caller, dts::kFixture3Bra, dts::kFixture3Bfs, dts::kFixture3BsrMova,
+                                      dts::kFixture3BsrLoad, dts::kFixture3BraTarget, dts::kFixture3SlotJumped,
+                                      dts::kFixture3SwitchSlot, dts::kDiamondsBase, dts::kStraightBase, dts::kJumpTableBase };
+    for (const dts::Fixture3Case& c : dts::kFixture3Others) entries.push_back(c.entry);
+    dts::MappingAudit all;
+    for (uint32_t entry : entries)
+    {
+        const DecompileResult r = d.Decompile(snap, Request(entry));
+        CHECK(r.status == DecompileStatus::Ok);
+        char where[32];
+        std::snprintf(where, sizeof where, "fixture %08X", entry);
+        const dts::MappingAudit a = dts::AuditMapping(r, wordAt, where);
+        if (a.Violations()) dts::PrintMappingAudit(a, where);
+        all.Add(a);
+    }
+    dts::PrintMappingAudit(all, "fixtures");
+    CHECK(all.Violations() == 0);
+    // ...and the ledger names the line each access prints on (MemoryAccess::firstLine counted the document's leading break, A7-4)
+    CHECK(all.accessOffLine == 0);
+    CHECK(all.functions == static_cast<int>(entries.size()));
+    CHECK(all.single > 10 && all.multi > 3);   // the fixtures hold both kinds of line, so both are checked
+
+    // Fixture 1: `if (0 < param_1)` is the cmp/pl and the bf it tests; the call is the jsr (its argument, in the delay slot, rides
+    // with it); the line after it is the add; no line is from an instruction in a delay slot's own address.
+    const DecompileResult r1 = d.Decompile(snap, Request(dts::kFixture1Caller));
+    const Line* guard = LineWith(r1, "if (0 < param_1)");
+    const Line* call = LineWith(r1, "func_0x06005000(");
+    const Line* brace = LineWith(r1, "}");
+    CHECK(guard && LineInstructions(*guard) == (std::vector<uint32_t>{ 0x06004008u, 0x0600400Au }));
+    CHECK(call && LineInstructions(*call) == (std::vector<uint32_t>{ dts::kFixture1Jsr }));
+    CHECK(brace && LineInstructions(*brace).empty() && brace->firstAddr == 0 && LineOriginText(*brace).empty());
+    // A statement from two instructions names both, and the first is where a click goes.
+    CHECK(guard && guard->firstAddr == 0x06004008u && Has(LineOriginText(*guard), "2 SH-2 instructions") &&
+          Has(LineOriginText(*guard), "0x06004008, 0x0600400A"));
 }
 
 void TestFixture1()
@@ -3835,6 +3899,14 @@ void TestGameCode()
     const std::function<bool(uint32_t)> noneMarked = [](uint32_t) { return false; };
     double total = 0, worst = 0;
     uint32_t worstAt = 0;
+    // Area 7: the pseudocode-to-assembly mapping over every function (MappingOracle.h).
+    dts::MappingAudit mapping;
+    const std::string mappingMutate = std::getenv("SE_GAME_MAPPING_MUTATE") ? std::getenv("SE_GAME_MAPPING_MUTATE") : "";
+    const std::function<bool(uint32_t, uint16_t&)> wordAt = [&hw](uint32_t a, uint16_t& w) {
+        if (a < 0x06000000u || a - 0x06000000u + 1 >= hw.size()) return false;
+        w = static_cast<uint16_t>(hw[a - 0x06000000u] << 8 | hw[a - 0x06000000u + 1]);
+        return true;
+    };
     for (uint32_t k = 0; k + 1 < hw.size(); k += 2)
     {
         if (hw[k] != 0x4F || hw[k + 1] != 0x22) continue;
@@ -3851,6 +3923,15 @@ void TestGameCode()
         if (r.status == DecompileStatus::Ok) ++ok;
         else if (r.status == DecompileStatus::Failed) ++failed;
         else ++other;
+        if (r.status == DecompileStatus::Ok)
+        {
+            char where[32];
+            std::snprintf(where, sizeof where, "function %08X", entry);
+            // SE_GAME_MAPPING_MUTATE=<kind> (MappingOracle.h) damages the result as one defect would; the run must then fail.
+            DecompileResult damaged = r;
+            if (!mappingMutate.empty()) dts::MutateMapping(damaged, mappingMutate);
+            mapping.Add(dts::AuditMapping(damaged, wordAt, where, [&](const Line& l) { return dts::MutatedOriginText(mappingMutate, l); }));
+        }
         total += r.elapsedMs;
         if (r.elapsedMs > worst) { worst = r.elapsedMs; worstAt = entry; }
         if (!r.accesses.empty()) ++withAccesses;
@@ -4037,6 +4118,8 @@ void TestGameCode()
     std::printf("  ended dead: %d reads through a pointer, %d reads of constant addresses of ordinary memory, %d of "
                 "hardware, %d writes; %d of them are no direct access of ordinary memory\n", deadPointerReads, deadConstantReads,
                 deadHardwareReads, deadWrites, deadLost);
+    dts::PrintMappingAudit(mapping, "alone");
+    CHECK(mapping.Violations() == 0);
     CHECK(dropped == 0);
     CHECK(deadLost == 0);
     CHECK(noReference == 0);
@@ -4144,6 +4227,13 @@ void TestGameLending()
         bool extraoutKept = false;   // the text has a call's r8-r14, GBR or VBR as extraout_
     };
     constexpr uint32_t kModelKept = (0x7Fu << 8) | (1u << 17) | (1u << 18);   // r8-r14, GBR, VBR
+    // Area 7: the mapping of the texts the panel shows, with lent signatures (MappingOracle.h).
+    dts::MappingAudit mappingLent;
+    const std::function<bool(uint32_t, uint16_t&)> wordAt = [&hw](uint32_t a, uint16_t& w) {
+        if (a < 0x06000000u || a - 0x06000000u + 1 >= hw.size()) return false;
+        w = static_cast<uint16_t>(hw[a - 0x06000000u] << 8 | hw[a - 0x06000000u + 1]);
+        return true;
+    };
     auto pass = [&](bool lendEffects, const char* label) {
         Sh2Decompiler::SetLendEffectsForTests(lendEffects);
         std::vector<Row> rows(entries.size());
@@ -4167,6 +4257,12 @@ void TestGameLending()
             }
             const DecompileResult r = d.Decompile(snap, rq);
             ms += r.elapsedMs;
+            if (lendEffects && r.status == DecompileStatus::Ok)
+            {
+                char where[32];
+                std::snprintf(where, sizeof where, "lent function %08X", entries[i]);
+                mappingLent.Add(dts::AuditMapping(r, wordAt, where));
+            }
             Row& row = rows[i];
             row.ok = r.status == DecompileStatus::Ok;
             row.failed = r.status == DecompileStatus::Failed;
@@ -4207,6 +4303,8 @@ void TestGameLending()
     const std::vector<Row> before = pass(false, "before");
     const std::vector<Row> after = pass(true, "after");
     Sh2Decompiler::SetLendEffectsForTests(true);
+    dts::PrintMappingAudit(mappingLent, "lent");
+    CHECK(mappingLent.Violations() == 0);
 
     auto summarize = [&](const std::vector<Row>& rows, const char* label) {
         int ok = 0, known = 0, afterCall = 0, withLent = 0, withKeeping = 0, keepingKnown = 0, keepingExtraout = 0, extraout = 0;
@@ -9872,6 +9970,7 @@ int main(int argc, char** argv)
     try
     {
         RUN(TestFixture1());
+        RUN(TestMappingOracleOnFixtures());
         RUN(TestFixture1b());
         RUN(TestNoCodeAndMirror());
         RUN(TestMovaFollowsExecutionAddress());
