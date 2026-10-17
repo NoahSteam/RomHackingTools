@@ -2419,22 +2419,22 @@ const Pin kPins[] = {
     { "mailbox", "actions", 0, 40, 0, "VarnodeBank::create(;Funcdata::newConstant#0", "A6-9 Funcdata::newConstant (VarnodeBank::create), in ActionPrototypeTypes" },
     { "mailbox", "actions", 0, 24, 169, "BlockGraph::newBlockCopy;BlockGraph::buildCopy#0", "A6-9 BlockGraph::newBlockCopy: the copy is freed when it cannot be added" },
     { "mailbox", "actions", 1, 24, 169, "BlockGraph::newBlockCopy;BlockGraph::buildCopy#0", "A6-9 the same, in the printing pass" },
-    { "mailbox", "actions", 0, 40, 215, "CommentDatabaseInternal::addCommentNoDuplicate#0", "A6-9 CommentDatabaseInternal::addCommentNoDuplicate: the comment is freed when it cannot be stored" },
-    { "mailbox", "actions", 1, 40, 215, "CommentDatabaseInternal::addCommentNoDuplicate#0", "A6-9 the same, in the printing pass" },
+    { "mailbox", "actions", 0, 40, 214, "CommentDatabaseInternal::addCommentNoDuplicate#0", "A6-9 CommentDatabaseInternal::addCommentNoDuplicate: the comment is freed when it cannot be stored" },
+    { "mailbox", "actions", 1, 40, 214, "CommentDatabaseInternal::addCommentNoDuplicate#0", "A6-9 the same, in the printing pass" },
     // Round 2 (patch 0032): the sweeps of the other fixtures. A6-10 and A6-11 crash without the fix; A6-14 and A6-15 leak, seen under LeakSanitizer.
     { "fixture1", "actions", 0, 64, 58, "ProtoStoreSymbol::clone;FuncProto::copy#0", "A6-10 FuncProto::copy: the other prototype's store is cloned before the old one is freed (ProtoStoreSymbol)" },
     { "fixture1", "actions", 0, 72, 26, "ProtoStoreSymbol::clone;FuncProto::copy#0", "A6-10 ProtoStoreSymbol::clone: the constructor's parameter" },
     { "fixture1", "actions", 0, 72, 27, "ProtoStoreSymbol::clone;FuncProto::copy#1", "A6-10 ProtoStoreSymbol::clone: the copy of the parameter, made before the constructor's is freed" },
     { "fixture1", "actions", 1, 64, 58, "ProtoStoreSymbol::clone;FuncProto::copy#0", "A6-10 the same, second pass" },
     { "fixture1", "actions", 1, 72, 27, "ProtoStoreSymbol::clone;FuncProto::copy#1", "A6-10 the same, second pass" },
-    { "shapes", "actions", 0, 16, 344, "HighVariable::mergeInternal#0", "A6-11 HighVariable::mergeInternal: the merged list is built before any Varnode changes owner" },
-    { "shapes", "actions", 0, 24, 901, "HighVariable::mergeInternal#0", "A6-11 the same, another merge" },
-    { "shapes", "actions", 0, 32, 261, "HighVariable::mergeInternal#0", "A6-11 the same, another merge" },
-    { "shapes", "actions", 0, 40, 575, "HighVariable::mergeInternal#0", "A6-11 the same, another merge" },
-    { "shapes", "actions", 0, 48, 57, "HighVariable::mergeInternal#0", "A6-11 the same, another merge" },
-    { "shapes", "actions", 0, 56, 103, "Cover::merge;HighVariable::mergeInternal#0", "A6-11 the cover merge after the move: the emptied HighVariable is freed when it fails" },
-    { "shapes", "actions", 1, 24, 901, "HighVariable::mergeInternal#0", "A6-11 the same, second pass" },
-    { "shapes", "actions", 1, 32, 261, "HighVariable::mergeInternal#0", "A6-11 the same, second pass" },
+    { "shapes", "actions", 0, 16, 338, "HighVariable::mergeInternal#0", "A6-11 HighVariable::mergeInternal: the merged list is built before any Varnode changes owner" },
+    { "shapes", "actions", 0, 24, 882, "HighVariable::mergeInternal#0", "A6-11 the same, another merge" },
+    { "shapes", "actions", 0, 32, 259, "HighVariable::mergeInternal#0", "A6-11 the same, another merge" },
+    { "shapes", "actions", 0, 40, 568, "HighVariable::mergeInternal#0", "A6-11 the same, another merge" },
+    { "shapes", "actions", 0, 48, 56, "HighVariable::mergeInternal#0", "A6-11 the same, another merge" },
+    { "shapes", "actions", 0, 56, 104, "Cover::merge;HighVariable::mergeInternal#0", "A6-11 the cover merge after the move: the emptied HighVariable is freed when it fails" },
+    { "shapes", "actions", 1, 24, 882, "HighVariable::mergeInternal#0", "A6-11 the same, second pass" },
+    { "shapes", "actions", 1, 32, 259, "HighVariable::mergeInternal#0", "A6-11 the same, second pass" },
     { "stack", "actions", 0, 40, 19, "VarnodeBank::xref;VarnodeBank::setInput#0", "A6-14 VarnodeBank::setInput: a Varnode taken out of the lists is kept if it cannot be put back" },
     { "stack", "actions", 0, 40, 89, "VarnodeBank::xref;VarnodeBank::setDef#0", "A6-14 VarnodeBank::setDef: the same" },
     { "stack", "actions", 0, 40, 37, "VarnodeBank::makeFree;Funcdata::clearDeadVarnodes#0", "A6-14 VarnodeBank::makeFree: the same" },
@@ -2446,14 +2446,14 @@ const Pin kPins[] = {
     // The leaks the round 2 survey found in the Flow and Print phases and in the action tree's clone (patch 0032), seen under LeakSanitizer:
     { "fixture1", "followFlow", 0, 8, 9, "FlowInfo::setupCallindSpecs#0", "A6-8 FlowInfo::setupCallindSpecs: the call site is freed when the function cannot list it" },
     { "mailbox", "followFlow", 0, 8, 8, "BlockGraph::addBlock;BlockGraph::newBlockBasic#0", "A6-8 BlockGraph::newBlockBasic: the block is freed when the graph cannot take it" },
-    { "mailbox", "actions", 0, 24, 222, "BlockGraph::createVirtualRoot#0", "A6-9 BlockGraph::createVirtualRoot: the virtual root is freed when an edge cannot be made" },
+    { "mailbox", "actions", 0, 24, 221, "BlockGraph::createVirtualRoot#0", "A6-9 BlockGraph::createVirtualRoot: the virtual root is freed when an edge cannot be made" },
     { "mailbox", "print", 0, 32, 2, "PackedDecode::ingestStream#0", "A6-9 PackedDecode::allocateNextInputBuffer: the buffer is freed when the stream cannot hold it" },
     { "jumptable", "followFlow", 0, 144, 0, "ActionRestartGroup::clone;ActionDatabase::deriveAction#0", "A6-7 ActionRestartGroup::clone: the copy of the action tree is freed when it cannot be completed" },
     { "jumptable", "followFlow", 0, 8, 31, "ActionRestartGroup::clone;ActionDatabase::deriveAction#0", "A6-7 the same, the member in hand when the group's list cannot grow" },
     { "jumptable", "followFlow", 0, 16, 23, "ActionGroup::clone;ActionRestartGroup::clone#0", "A6-7 ActionGroup::clone: the same, in a nested group" },
     { "jumptable", "followFlow", 0, 8, 33, "ActionPool::addRule;ActionPool::clone#0", "A6-7 ActionPool::clone: the rule in hand when the pool's list cannot grow" },
     { "jumptable", "followFlow", 0, 24, 175, "RuleIdentityEl::getOpList;ActionPool::addRule#0", "A6-7 ActionPool::clone: the rule is the pool's already when its op-code index cannot grow (not freed twice)" },
-    { "mailbox", "actions", 0, 48, 7, "BlockGraph::calcForwardDominator;Funcdata::structureReset#1", "A6-9 BlockGraph::calcForwardDominator: the virtual root is freed when it cannot be added to the order" },
+    { "mailbox", "actions", 0, 48, 6, "BlockGraph::calcForwardDominator;Funcdata::structureReset#1", "A6-9 BlockGraph::calcForwardDominator: the virtual root is freed when it cannot be added to the order" },
     { "jumptable", "init", 1, 48, 71, "Database::attachScope;Funcdata::Funcdata#1", "A6-7 Database::attachScope: the Scope is freed, and its id taken out of the map, when the parent cannot hold it (Funcdata::Funcdata)" },
     { "jumptable", "init", 1, 40, 40, "TypeFactory::getTypeVoid;TypeFactory::setCoreType#0", "A6-7 TypeFactory::getTypeVoid: the \"void\" data-type is freed when the tree cannot take it" },
     // Round 3 (patch 0040): jump-table recovery and the structurer's TraceDAG; leaks, seen under LeakSanitizer.
@@ -2461,13 +2461,13 @@ const Pin kPins[] = {
     { "jumptable", "followFlow", 0, 8, 197, "vector<ghidra::JumpTable*;Funcdata::recoverJumpTable#0", "A6-21 Funcdata::recoverJumpTable: the permanent table is freed when the list of tables cannot take it" },
     { "jumptable", "followFlow", 1, 64, 94, "JumpValuesRange::clone;JumpBasic::clone#0", "A6-21 the same, second pass" },
     { "jumptable", "followFlow", 1, 8, 197, "vector<ghidra::JumpTable*;Funcdata::recoverJumpTable#0", "A6-21 the same, second pass" },
-    { "dag", "actions", 0, 8, 148, "vector<ghidra::TraceDAG::BranchPoint*;TraceDAG::initialize#0", "A6-22 TraceDAG::initialize: the root BranchPoint is owned by the list before anything else can fail" },
-    { "dag", "actions", 0, 8, 149, "vector<ghidra::TraceDAG::BlockTrace*;TraceDAG::initialize#0", "A6-22 TraceDAG::initialize: a root BlockTrace is owned by its BranchPoint before the active list takes it" },
-    { "dag", "actions", 0, 8, 150, "vector<ghidra::TraceDAG::BlockTrace*;BranchPoint::createTraces#0", "A6-22 BranchPoint::BranchPoint (createTraces): the first trace is freed when the list of paths cannot take it" },
-    { "dag", "actions", 0, 16, 108, "vector<ghidra::TraceDAG::BlockTrace*;BranchPoint::createTraces#0", "A6-22 createTraces: the traces made so far are freed when the constructor fails" },
-    { "dag", "actions", 0, 16, 109, "vector<ghidra::TraceDAG::BranchPoint*;TraceDAG::openBranch#0", "A6-22 TraceDAG::openBranch: the new BranchPoint is freed when the list cannot take it, and the parent trace is untouched" },
-    { "dag", "actions", 1, 8, 148, "vector<ghidra::TraceDAG::BranchPoint*;TraceDAG::initialize#0", "A6-22 the same, second pass" },
-    { "dag", "actions", 1, 16, 109, "vector<ghidra::TraceDAG::BranchPoint*;TraceDAG::openBranch#0", "A6-22 the same, second pass" },
+    { "dag", "actions", 0, 8, 145, "vector<ghidra::TraceDAG::BranchPoint*;TraceDAG::initialize#0", "A6-22 TraceDAG::initialize: the root BranchPoint is owned by the list before anything else can fail" },
+    { "dag", "actions", 0, 8, 146, "vector<ghidra::TraceDAG::BlockTrace*;TraceDAG::initialize#0", "A6-22 TraceDAG::initialize: a root BlockTrace is owned by its BranchPoint before the active list takes it" },
+    { "dag", "actions", 0, 8, 147, "vector<ghidra::TraceDAG::BlockTrace*;BranchPoint::createTraces#0", "A6-22 BranchPoint::BranchPoint (createTraces): the first trace is freed when the list of paths cannot take it" },
+    { "dag", "actions", 0, 16, 107, "vector<ghidra::TraceDAG::BlockTrace*;BranchPoint::createTraces#0", "A6-22 createTraces: the traces made so far are freed when the constructor fails" },
+    { "dag", "actions", 0, 16, 108, "vector<ghidra::TraceDAG::BranchPoint*;TraceDAG::openBranch#0", "A6-22 TraceDAG::openBranch: the new BranchPoint is freed when the list cannot take it, and the parent trace is untouched" },
+    { "dag", "actions", 1, 8, 145, "vector<ghidra::TraceDAG::BranchPoint*;TraceDAG::initialize#0", "A6-22 the same, second pass" },
+    { "dag", "actions", 1, 16, 108, "vector<ghidra::TraceDAG::BranchPoint*;TraceDAG::openBranch#0", "A6-22 the same, second pass" },
     { "loopbrk", "actions", 0, 8, 136, "vector<ghidra::TraceDAG::BranchPoint*;TraceDAG::initialize#0", "A6-22 TraceDAG::initialize, in a loop with an early return" },
     { "loopbrk", "actions", 0, 8, 137, "vector<ghidra::TraceDAG::BlockTrace*;TraceDAG::initialize#0", "A6-22 TraceDAG::initialize: the root trace, in a loop with an early return" },
     { "loopbrk", "actions", 0, 16, 102, "vector<ghidra::TraceDAG::BranchPoint*;TraceDAG::openBranch#0", "A6-22 TraceDAG::openBranch, in a loop with an early return" },
@@ -2966,12 +2966,12 @@ int PinSelfTest(Ctx& c, const std::string& scratch)
     static const std::string good = std::string(kCreate) + "#0", wrongOrd = std::string(kCreate) + "#1", noOrd = std::string(kCreate) + "#99",
                              noSite = "TraceDAG::initialize#0", noHash = kCreate;
     static const Pin pins[] = {
-        { "dag", "actions", 0, 16, 108, good.c_str(), "right coordinates, right ordinal" },
-        { "dag", "actions", 0, 16, 108, wrongOrd.c_str(), "right coordinates, the next allocation's ordinal" },
-        { "dag", "actions", 0, 16, 108, noOrd.c_str(), "an ordinal the site does not have" },
-        { "dag", "actions", 0, 16, 109, good.c_str(), "coordinates one allocation off, right ordinal" },
-        { "dag", "actions", 0, 16, 108, noSite.c_str(), "a site no allocation of the entry is made at" },
-        { "dag", "actions", 0, 16, 108, noHash.c_str(), "no ordinal at all" },
+        { "dag", "actions", 0, 16, 107, good.c_str(), "right coordinates, right ordinal" },
+        { "dag", "actions", 0, 16, 107, wrongOrd.c_str(), "right coordinates, the next allocation's ordinal" },
+        { "dag", "actions", 0, 16, 107, noOrd.c_str(), "an ordinal the site does not have" },
+        { "dag", "actions", 0, 16, 108, good.c_str(), "coordinates one allocation off, right ordinal" },
+        { "dag", "actions", 0, 16, 107, noSite.c_str(), "a site no allocation of the entry is made at" },
+        { "dag", "actions", 0, 16, 107, noHash.c_str(), "no ordinal at all" },
     };
     const std::vector<PinRes> res = ResolvePins(c, scratch, pins, sizeof pins / sizeof pins[0]);
     int bad = 0;
@@ -2991,7 +2991,9 @@ int PinSelfTest(Ctx& c, const std::string& scratch)
     check(1, starts(1, "MOVED") && PinFails(res[1]) && res[1].ks.size() == 1 && res[1].ks[0] != res[1].k0 && res[1].note.find("Re-pin") != std::string::npos,
           "a wrong ordinal is MOVED, fails the run, tests the ordinal's allocation, and says how to re-pin");
     check(2, starts(2, "STALE") && PinFails(res[2]) && res[2].ks.empty(), "an ordinal the site does not have is STALE");
-    check(3, starts(3, "MOVED") && PinFails(res[3]) && res[3].ks.size() == 1 && res[3].note.find("nth = 108") != std::string::npos,
+    // The re-pin the note offers is the good pin's nth: pins[0]'s, whatever the engine's allocation count is this round.
+    const std::string repin = "nth = " + std::to_string(pins[0].nth);
+    check(3, starts(3, "MOVED") && PinFails(res[3]) && res[3].ks.size() == 1 && res[3].note.find(repin) != std::string::npos,
           "coordinates one off are MOVED, fail the run, and the note gives the nth that re-pins them");
     check(4, starts(4, "STALE") && PinFails(res[4]), "a site nothing in the entry is made at is STALE");
     check(5, starts(5, "STALE") && PinFails(res[5]), "a pin without an ordinal is STALE");
