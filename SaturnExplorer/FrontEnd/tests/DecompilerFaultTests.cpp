@@ -2834,6 +2834,16 @@ std::vector<PinRes> ResolvePins(Ctx& c, const std::string& scratch, const Pin* p
         std::_Exit(0);
     };
     CellRun run = ForkCell(scratch, body, CellTimeout());
+    // The census buffers were for the child (this process never ran the census); freed here because the pin self-test resolves twice
+    // in one process, and a sanitizer build counts the first set as a leak.
+    std::free(fa::gCensusStack);
+    std::free(fa::gCensusK);
+    std::free(fa::gCensusSize);
+    fa::gCensusStack = nullptr;
+    fa::gCensusK = nullptr;
+    fa::gCensusSize = nullptr;
+    fa::gCensusWant = nullptr;
+    fa::gCensusWantN = 0;
     std::vector<std::string> top(out.size());
     std::vector<std::vector<long>> matches(out.size());
     std::vector<long> rank0(out.size(), -1);
