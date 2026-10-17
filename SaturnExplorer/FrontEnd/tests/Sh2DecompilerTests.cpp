@@ -315,6 +315,11 @@ void TestDelaySlotPcRelative()
         CHECK(r.status == DecompileStatus::Ok);
         CHECK(!r.unsupported && r.unsupportedAt == 0);
         CHECK(!Has(r.Text(), "0x44444444") && !Has(r.Text(), "0x55555555") && !Has(r.Text(), "0x66666666"));
+        // The address is the hardware's: rts + mov.w @(1,pc) loads from PR + 2 + 2 * 1, jsr + mov.l @(1,pc) from (r1 + 2 & ~3) + 4 * 1,
+        // braf r1 + mov.l @(1,pc) from (r1 + the slot's address + 4 & ~3) + 4 * 1 (the target + 2).
+        if (std::string(c.name) == "rts + mov.w") CHECK(Has(r.Text(), "unaff_retaddr + 4"));
+        if (std::string(c.name) == "jsr + mov.l") CHECK(Has(r.Text(), "in_r1 + 2") && Has(r.Text(), "0xfffffffc) + 4"));
+        if (std::string(c.name) == "braf + mov.l") CHECK(Has(r.Text(), "in_r1 + 0x6006506U") && Has(r.Text(), "0xfffffffc) + 4"));
     }
 }
 
