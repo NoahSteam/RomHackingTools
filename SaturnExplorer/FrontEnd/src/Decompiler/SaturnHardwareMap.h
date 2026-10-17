@@ -310,7 +310,11 @@ bool InHardwareRange(uint32_t address);
 // cartridge and 0x3FFFFE for the 4 MiB one. The 1 MiB one decodes bit 21 (the bank) and bits 18-1, so each 2 MiB half of the window is a 512 KiB
 // bank repeated four times (0x02480000 is 0x02400000, 0x02600000 is the other bank); the 4 MiB one decodes bits 21-1 and repeats nothing. The
 // decompiler is not told which is plugged in: the 1 MiB repeat is taken, the safe side (volatile for nothing on a 4 MiB cartridge, never wrong).
-enum class MemoryKind : uint8_t { WorkRamHigh, WorkRamLow, Vdp1Vram, Vdp1FrameBuffer, Vdp2Vram, Vdp2ColorRam, ExtRam };
+//
+// The cache's data array (sh7095.inc, A5-71): partitions 4 (0x80000000) and 6 (0xC0000000) both index CacheData[(A >> 4) & 0x3F][(A >> 10) & 3][A & 0xF],
+// bits 31-12 not decoded: 4 KiB, 0xC0000000, 0xC0001000 and 0x80000000 are one word. A5-35 took the array for ordinary memory, which holds for one name
+// per cell only.
+enum class MemoryKind : uint8_t { WorkRamHigh, WorkRamLow, Vdp1Vram, Vdp1FrameBuffer, Vdp2Vram, Vdp2ColorRam, ExtRam, CacheData };
 struct MemoryBytes
 {
     MemoryKind kind = MemoryKind::WorkRamHigh;

@@ -1848,6 +1848,13 @@ std::string RegisterNames(const std::vector<const HardwareRegister*>& regs)
     return names;
 }
 
+// An address the bus decodes to a register area (named or not).
+bool IsRegisterArea(uint32_t address)
+{
+    uint32_t canonical = 0;
+    return HardwareAlias(address, canonical);
+}
+
 // The addresses a pointer varnode can hold, as far as the analysis proves them: the values the printed code shows as `&REG` (`puVar2 =
 // &VDP2_TVSTAT; if (c) puVar2 = &VDP2_VCNT;`), as numbers (`pxVar1 = (xunknown4 *)0x25fe0110;`: a register's alias, A5-38) or as such a
 // base plus a constant offset (`puVar1[4]`, `add #-4,Rn`; A5-37: the access is at base + offset, a different register). Every path to the
@@ -1855,16 +1862,46 @@ std::string RegisterNames(const std::vector<const HardwareRegister*>& regs)
 // callee's output): the pointer may hold something else as well. 'steps' is set when a path runs through a cycle, a pointer stepped in a loop
 // (A5-39): it holds the first value and then others. 'bases' are the addresses an indexed pointer starts from (`(&SCU_D0EN)[param_1 * 8]`, a
 // base plus an index the analysis does not know): the access is at the base plus an amount, said only for the index 0.
+
+// One step a loop applies to a pointer's own value on a turn (A5-60, A5-70): a bitwise operation with a set of known numbers (the set is the
+// values the other operand can take), or an add of a known number (the pointer stepped).
+struct SelfStep
+{
+    ghidra::OpCode code = ghidra::CPUI_COPY;
+    std::set<uint32_t> operands;
+    bool operator==(const SelfStep& o) const { return code == o.code && operands == o.operands; }
+    bool Adds() const { return code == ghidra::CPUI_INT_ADD; }
+};
+
+// The way from the value of a node still being walked, round the loop, back to the node: the steps one turn applies to it, in order (none: the
+// value comes back unchanged). Every path of a loop body is one of these, however the body branches and joins, so a conditional operation, two
+// operations in one turn and an operation on one path and a step on the other are each their own path; the node closes them over the values it
+// has (CloseBack) and nothing is lost on the way.
+struct SelfPath
+{
+    const ghidra::Varnode* origin = nullptr;
+    std::vector<SelfStep> steps;
+    bool operator==(const SelfPath& o) const { return origin == o.origin && steps == o.steps; }
+    bool Adds() const
+    {
+        for (const SelfStep& s : steps)
+            if (s.Adds()) return true;
+        return false;
+    }
+};
+
 struct PointerValues
 {
     std::map<uint32_t, bool> constants;   // address -> reached through a constant offset (printed as base[k], not as the address)
     std::set<uint32_t> bases;
     bool others = false;
     bool steps = false;
-    bool cycle = false;   // (while walking) the value of a node still being walked: the path came back to it unchanged
-    // (while walking) a bitwise operation with a known constant applied to the value of a node still being walked: `p = p and mask` round a
-    // loop. The loop's merge closes it over the values the pointer has gone in with (A5-60); a fixed point of the mask adds nothing.
-    std::vector<std::pair<ghidra::OpCode, std::set<uint32_t>>> selfOps;
+    // (while walking) the value includes the value of a node still being walked, taken through each of these paths. Closed where that node ends.
+    std::vector<SelfPath> back;
+    // A pointer stepped in a loop, whose first values are no cached-partition register but whose later ones are (`(p + 4) and 0x1FFFFFFF` from
+    // 0x25F80004 reads 0x05F80008 next): one such address, for the cache caution the stepped note then gives (A5-70).
+    bool steppedCached = false;
+    uint32_t steppedCachedAt = 0;
 };
 
 class PointerResolver
@@ -1873,9 +1910,9 @@ public:
     PointerValues Resolve(const ghidra::Varnode* start)
     {
         PointerValues v = Walk(start, 0);
-        if (budget_ <= 0 || !v.selfOps.empty()) v.others = true;   // (an operation round a loop no merge closed)
-        v.selfOps.clear();
-        v.cycle = false;
+        if (budget_ <= 0 || !v.back.empty()) v.others = true;   // (a path round a loop no node closed)
+        for (const SelfPath& p : v.back) v.steps |= p.Adds();
+        v.back.clear();
         return v;
     }
 
@@ -1889,9 +1926,9 @@ private:
         if (vn->isConstant()) { out.constants[static_cast<uint32_t>(vn->getOffset())] = false; return out; }
         const auto memo = done_.find(vn);
         if (memo != done_.end()) return memo->second;
-        // A path back to a node being walked, unchanged (a loop's merge of its own value) adds nothing; one that adds to it on the way
-        // (Shift, Indexed) is a pointer stepped in a loop.
-        if (active_.count(vn)) { out.cycle = true; return out; }
+        // A path back to a node being walked: the value comes back unchanged. What the loop does to it on the way is added by the operations
+        // that path runs through (Shift, Bitwise, Indexed), and the node closes the paths where it ends.
+        if (active_.count(vn)) { out.back.push_back(SelfPath{ vn, {} }); return out; }
         const ghidra::PcodeOp* d = vn->isWritten() ? vn->getDef() : nullptr;
         if (!d) { out.others = true; return out; }
         active_.insert(vn);
@@ -1903,7 +1940,6 @@ private:
             break;
         case ghidra::CPUI_MULTIEQUAL:
             for (int i = 0; i < d->numInput(); ++i) Merge(out, Walk(d->getIn(i), depth + 1));
-            CloseSelfOps(out);
             break;
         case ghidra::CPUI_PTRSUB:   // the address of a global: PTRSUB(0, address); or a base and a field offset
             if (d->getIn(0)->isConstant() && d->getIn(1)->isConstant())
@@ -1934,6 +1970,12 @@ private:
                 const ghidra::Varnode* base = b->isConstant() ? a : b;
                 const uint32_t k = static_cast<uint32_t>((b->isConstant() ? b : a)->getOffset());
                 out = Shift(Walk(base, depth + 1), sub ? 0u - k : k);
+                // An unknown plus a number that is an address of colour RAM or of a register area: the number is the base and the unknown the
+                // index (`param + 0x25F00000`), not a small offset of an unknown. The engine prints a symbol's address as the symbol (and the
+                // pointer is based at it already); colour RAM has none, nor has an unnamed register (A5-78). Said for the index 0, as an indexed
+                // pointer is.
+                if (!sub && out.others && out.constants.empty() && out.bases.empty() && out.back.empty() && !out.steps && (InColorRam(k) || IsRegisterArea(k)))
+                    out.bases.insert(k);
             }
             else
             {
@@ -1942,12 +1984,13 @@ private:
                 const bool anyBase = !x.constants.empty() || !x.bases.empty() || !y.constants.empty() || !y.bases.empty();
                 if (!anyBase)
                 {
+                    // An unknown added to the pointer's own value, round a loop, steps it by an amount nothing is known about (A5-54: the
+                    // qualifier "it may hold other values too" said so, the stepped note did not).
+                    const bool loops = !x.back.empty() || !y.back.empty();
                     Merge(out, x);
                     Merge(out, y);
                     out.others = true;
-                    // An unknown added to the pointer's own value, round a loop, steps it by an amount nothing is known about (A5-54: the
-                    // qualifier "it may hold other values too" said so, the stepped note did not).
-                    if (x.cycle || y.cycle) out.steps = true;
+                    if (loops) out.steps = true;
                 }
                 else
                 {
@@ -1955,7 +1998,6 @@ private:
                     if (!sub) Merge(out, Indexed(y));
                     out.others |= x.steps || y.steps;   // (an unknown addend is the index: it makes the pointer indexed, not unknown)
                     out.steps |= x.steps || y.steps;
-                    out.cycle |= x.cycle || y.cycle;
                 }
             }
             break;
@@ -1970,12 +2012,21 @@ private:
             break;
         }
         active_.erase(vn);
+        CloseBack(out, vn);
+        // What was worked out while this node was being walked, for the paths round it, is no longer the answer for them: it was closed here.
+        for (auto it = done_.begin(); it != done_.end();)
+        {
+            bool mine = false;
+            for (const SelfPath& p : it->second.back) mine |= p.origin == vn;
+            it = mine ? done_.erase(it) : std::next(it);
+        }
         done_[vn] = out;
         return out;
     }
 
     static void Merge(PointerValues& into, const PointerValues& from)
     {
+        constexpr size_t kMaxPaths = 32;   // (a loop body with more paths than this is not worked out)
         for (const auto& c : from.constants)
         {
             auto at = into.constants.find(c.first);
@@ -1985,45 +2036,108 @@ private:
         into.bases.insert(from.bases.begin(), from.bases.end());
         into.others |= from.others;
         into.steps |= from.steps;
-        into.cycle |= from.cycle;
-        into.selfOps.insert(into.selfOps.end(), from.selfOps.begin(), from.selfOps.end());
+        for (const SelfPath& p : from.back)
+            if (std::find(into.back.begin(), into.back.end(), p) == into.back.end()) into.back.push_back(p);
+        if (into.back.size() > kMaxPaths)
+        {
+            into.back.clear();
+            into.others = into.steps = true;
+        }
+        if (!into.steppedCached && from.steppedCached)
+        {
+            into.steppedCached = true;
+            into.steppedCachedAt = from.steppedCachedAt;
+        }
     }
 
-    // The values a loop's pointer takes when a bitwise operation with a constant is applied to its own value on every turn: the closure of the
-    // values it went in with under the operations (`0x25F80004 and 0x1FFFFFFF` is 0x05F80004, a fixed point after that; `xor 0x20000000`
-    // alternates between two). More than kMaxPairs values is left unknown.
-    static void CloseSelfOps(PointerValues& v)
+    // The values a pointer takes round a loop: the closure of the values it holds at 'node' under the paths from the node back to itself. A path
+    // of bitwise operations with known numbers gives values a finite closure holds exactly (`0x25F80004 and 0x1FFFFFFF` is 0x05F80004, a fixed point
+    // after that; `xor 0x20000000` alternates between two; `(p and 0xFFFFFFF0) xor 4` gives two); more than kMaxValues values is left unknown. A path
+    // that adds a number steps the pointer by it every turn, which no closure ends: the pointer is then stepped (`steps`, `others`), its first
+    // values are kept, and the later ones are not worked out; but whether they come to read through the cached partition is looked for in a bounded
+    // walk, because the cache caution is about that partition, not the register (A5-70).
+    static void CloseBack(PointerValues& v, const ghidra::Varnode* node)
     {
-        if (v.selfOps.empty()) return;
-        constexpr size_t kMaxPairs = 64;
+        std::vector<SelfPath> rest;
+        std::vector<const SelfPath*> exact, stepped;
+        std::vector<SelfPath> mine;
+        for (const SelfPath& p : v.back)
+            (p.origin == node ? mine : rest).push_back(p);
+        if (mine.empty()) return;
+        v.back = rest;
+        for (const SelfPath& p : mine) (p.Adds() ? stepped : exact).push_back(&p);
+        constexpr size_t kMaxValues = 64;
         std::set<uint32_t> all;
         for (const auto& c : v.constants) all.insert(c.first);
         std::vector<uint32_t> work(all.begin(), all.end());
-        while (!work.empty() && !v.others)
+        bool overflow = false;
+        while (!work.empty() && !overflow)
         {
             const uint32_t a = work.back();
             work.pop_back();
-            for (const auto& op : v.selfOps)
-                for (uint32_t m : op.second)
+            for (const SelfPath* p : exact)
+            {
+                for (uint32_t r : Eval(*p, a))
                 {
-                    const uint32_t r = Apply(op.first, a, m);
                     if (!all.insert(r).second) continue;
                     v.constants[r] = true;
                     work.push_back(r);
-                    if (all.size() > kMaxPairs) { v.others = true; break; }
+                    if (all.size() > kMaxValues) { v.others = true; overflow = true; break; }
                 }
+                if (overflow) break;
+            }
         }
-        v.selfOps.clear();
+        if (stepped.empty()) return;
+        v.steps = v.others = true;
+        if (overflow || v.steppedCached) return;
+        bool cachedKnown = false;
+        for (uint32_t a : all) cachedKnown |= (a >> 29) == 0 && IsRegisterArea(a);
+        if (cachedKnown) return;   // (the caution is made for that address already)
+        std::set<uint32_t> seen = all;
+        std::vector<uint32_t> queue(all.begin(), all.end());
+        size_t derived = 0;
+        for (size_t i = 0; i < queue.size() && derived < kMaxValues && !v.steppedCached; ++i)
+            for (const SelfPath& p : mine)
+                for (uint32_t r : Eval(p, queue[i]))
+                {
+                    if (!seen.insert(r).second) continue;
+                    ++derived;
+                    queue.push_back(r);
+                    if (!v.steppedCached && (r >> 29) == 0 && IsRegisterArea(r))
+                    {
+                        v.steppedCached = true;
+                        v.steppedCachedAt = r;
+                    }
+                }
     }
 
+    // The values 'a' becomes after one turn along 'path'.
+    static std::set<uint32_t> Eval(const SelfPath& path, uint32_t a)
+    {
+        std::set<uint32_t> cur{ a };
+        for (const SelfStep& s : path.steps)
+        {
+            std::set<uint32_t> next;
+            for (uint32_t x : cur)
+                for (uint32_t m : s.operands) next.insert(Apply(s.code, x, m));
+            cur.swap(next);
+        }
+        return cur;
+    }
+
+    // v shifted by k. A path round a loop that is shifted is a step.
     static PointerValues Shift(const PointerValues& v, uint32_t k)
     {
         PointerValues out;
         out.others = v.others;
         out.steps = v.steps;
-        out.cycle = v.cycle;
-        if (!v.selfOps.empty()) out.steps = out.others = true;   // (the operation round the loop and then a step: not worked out)
-        if (v.cycle && k != 0) out.steps = out.others = true;
+        out.steppedCached = v.steppedCached;
+        out.steppedCachedAt = v.steppedCachedAt + k;
+        for (SelfPath p : v.back)
+        {
+            if (k != 0) p.steps.push_back(SelfStep{ ghidra::CPUI_INT_ADD, { k } });
+            out.back.push_back(std::move(p));
+        }
         for (const auto& c : v.constants) out.constants[c.first + k] = c.second || k != 0;
         for (uint32_t b : v.bases) out.bases.insert(b + k);
         return out;
@@ -2034,28 +2148,34 @@ private:
     // through the cached partition). Every result is an address the pointer holds through an operation, never one printed as itself. The
     // other side may hold more besides (`others`). An operand nothing is known about (a parameter, a loaded value, a computed mask) makes
     // the result unknown. An indexed pointer keeps its bases, moved (A5-61). A side that is only the pointer's own value
-    // round a loop (no address, no unknown) adds nothing, as in a merge: `p = p & mask` steps nothing.
+    // round a loop (no address, no unknown) is a path round the loop that applies the operation (A5-60): the node closes it with the others
+    // (A5-70), so `p = p and mask` is a fixed point only when the first value already is one.
     static PointerValues Bitwise(ghidra::OpCode code, const PointerValues& x, const PointerValues& y)
     {
         PointerValues out;
         constexpr size_t kMaxPairs = 64;   // (a pointer merged from more addresses than this is not worked out)
-        auto known = [](const PointerValues& v) { return !v.constants.empty() && v.bases.empty() && !v.others; };
-        auto onlyCycle = [](const PointerValues& v) { return v.constants.empty() && v.bases.empty() && !v.others && v.cycle; };
+        auto known = [](const PointerValues& v) { return !v.constants.empty() && v.bases.empty() && !v.others && v.back.empty(); };
+        auto onlyBack = [](const PointerValues& v) { return v.constants.empty() && v.bases.empty() && !v.others && !v.back.empty(); };
         out.steps = x.steps || y.steps;
-        out.cycle = x.cycle || y.cycle;
-        if (onlyCycle(x) && onlyCycle(y))
-            return out;   // (p and p)
-        if (onlyCycle(x) || onlyCycle(y))
+        if (onlyBack(x) && onlyBack(y))
         {
-            // The operation applied to the pointer's own value is a second value it holds (A5-60): `p = p and mask` is a fixed point only
-            // when the first value already is one (0x25F80004 moves to 0x05F80004 on the first turn). With a mask known the merge of the
-            // loop closes it over the values the pointer holds; with one that is not, the pointer holds others.
-            const PointerValues& other = onlyCycle(x) ? y : x;
+            Merge(out, x);   // (p and p)
+            Merge(out, y);
+            return out;
+        }
+        if (onlyBack(x) || onlyBack(y))
+        {
+            const PointerValues& other = onlyBack(x) ? y : x;
+            const PointerValues& own = onlyBack(x) ? x : y;
             if (known(other))
             {
                 std::set<uint32_t> masks;
                 for (const auto& c : other.constants) masks.insert(c.first);
-                out.selfOps.emplace_back(code, std::move(masks));
+                for (SelfPath p : own.back)
+                {
+                    p.steps.push_back(SelfStep{ code, masks });
+                    out.back.push_back(std::move(p));
+                }
             }
             else
                 out.others = out.steps = true;
@@ -2078,21 +2198,23 @@ private:
             for (const auto& m : mask->constants)
                 out.bases.insert(Apply(code, base, m.first));
         out.others = set->others;
-        // The operation's own result is one of the values the loop merges back (`q = phi(p0, q and m)`: the value after the operation is
-        // the first value moved, and moved again, round the turns): close it too (A5-60).
-        if (set->cycle)
+        // The pointer's own value round a loop, moved by the operation: a path that the node it comes back to closes (A5-60, A5-70).
+        if (!set->back.empty())
         {
             std::set<uint32_t> masks;
             for (const auto& m : mask->constants) masks.insert(m.first);
-            out.selfOps.emplace_back(code, std::move(masks));
-            CloseSelfOps(out);
+            for (SelfPath p : set->back)
+            {
+                p.steps.push_back(SelfStep{ code, masks });
+                out.back.push_back(std::move(p));
+            }
         }
         return out;
     }
 
     static uint32_t Apply(ghidra::OpCode code, uint32_t a, uint32_t b)
     {
-        return code == ghidra::CPUI_INT_AND ? (a & b) : code == ghidra::CPUI_INT_OR ? (a | b) : (a ^ b);
+        return code == ghidra::CPUI_INT_AND ? (a & b) : code == ghidra::CPUI_INT_OR ? (a | b) : code == ghidra::CPUI_INT_ADD ? a + b : (a ^ b);
     }
 
     // Every address held becomes the base of an indexed pointer.
@@ -2101,8 +2223,7 @@ private:
         PointerValues out;
         out.others = v.others;
         out.steps = v.steps;
-        out.cycle = v.cycle;
-        if (v.cycle || !v.selfOps.empty()) out.steps = out.others = true;
+        if (!v.back.empty()) out.steps = out.others = true;
         for (const auto& c : v.constants) out.bases.insert(c.first);
         out.bases.insert(v.bases.begin(), v.bases.end());
         return out;
@@ -2349,8 +2470,16 @@ std::vector<HardwareNote> HardwareNotes(const ghidra::Funcdata& fd, const std::f
                 for (const Candidate& rc : registers)
                     if (!HardwareRegistersReached(AccessAddress(rc.address, size), size, write).empty() || NamedRegisterNear(rc.address, kSteppedReach))
                     {
+                        // A step and a mask in one turn moves the pointer into the cached partition (A5-70): its addresses are not worked out,
+                        // but a read of a register through that partition is a cache read, whichever register it is.
+                        const bool cached = pv.steppedCached && !write;
                         noteRaw(insn, "the pointer is stepped in a loop from " + Hex8(rc.address) + ": the iterations after the first reach other addresses, "
-                                "other registers perhaps, which are not said", false);
+                                "other registers perhaps, which are not said" +
+                                (cached ? std::string("; they read through the cached partition (" + Hex8(pv.steppedCachedAt) + " is one) too, and a read of a "
+                                        "register through the cached partition is a cache read when the cache is on (SH2_CCR.CE): a hit returns the cached bytes "
+                                        "without reading the hardware, so a poll of it may never see it change; read it through 0x2xxxxxxx to bypass the cache")
+                                        : std::string()),
+                                cached);
                         break;
                     }
             continue;
@@ -2365,7 +2494,7 @@ std::vector<HardwareNote> HardwareNotes(const ghidra::Funcdata& fd, const std::f
         account(canonicalOf(static_cast<uint32_t>(o->getAddr().getOffset())), static_cast<uint32_t>(o->getIn(1)->getOffset()),
                 static_cast<uint32_t>(value->getSize()), write, value, std::string(), true);
     }
-    // A store to the BIOS ROM (0x00000000-0x000FFFFF through either bus partition) that the engine folded into ordinary memory: the
+    // A store to the BIOS ROM (0x00000000-0x000FFFFF through either bus partition), or to the cartridge areas, that the engine folded into ordinary memory: the
     // ROM drops the write (ss.c BusRW_DB_CS0_u8/u16/u32_W1: the ROM branch stores nothing), but a later read of the address in this
     // function is shown as the value written (A5-33). The store is no volatile op to hang a note on; the engine's record of how it
     // ended (patch 0017) is the only trace, so the caution is made from it.
@@ -2373,7 +2502,22 @@ std::vector<HardwareNote> HardwareNotes(const ghidra::Funcdata& fd, const std::f
     {
         if (!rec.store || rec.fate != ghidra::fate_folded_ordinary || rec.addr.isInvalid() || rec.addr.getSpace() != fd.getArch()->getDefaultCodeSpace()) continue;
         const uint32_t a = static_cast<uint32_t>(rec.addr.getOffset());
-        if ((a >> 29) > 1 || (a & 0x07FFFFFFu) > 0x000FFFFFu) continue;
+        if ((a >> 29) > 1) continue;
+        const uint32_t bus = a & 0x07FFFFFFu;
+        if (bus > 0x000FFFFFu)
+        {
+            // The A-bus cartridge areas, 0x02000000-0x04FFFFFF (A5-73): what a write does is the cartridge's, and the decompiler is told none. Mednafen's
+            // default is no cartridge (cart.c DummyRead / DummyWrite: a write goes nowhere, a read returns 0xFFFF); a ROM cartridge drops writes; the
+            // backup RAM cartridge (cart/backup.c, 0x04000000) keeps a byte at an odd address only (`if(A & 1) *ptr = *DB`, the same function for a word
+            // write, so a word write stores nothing); the extended RAM cartridge answers 0x02400000 and up. A cartridge probe -- store a pattern, read it
+            // back, compare -- is folded to a match, and the absent-cartridge branch goes.
+            if (bus < 0x02000000u || bus > 0x04FFFFFFu) continue;
+            noteRaw(canonicalOf(static_cast<uint32_t>(rec.pc.getOffset())),
+                    "a write to the cartridge area at " + Hex8(a) + " may be dropped (no cartridge, a ROM cartridge, a backup RAM cartridge for a word or "
+                    "an even byte): a later read of it in this function is shown as the value written, which the cartridge may not hold",
+                    true);
+            continue;
+        }
         noteRaw(canonicalOf(static_cast<uint32_t>(rec.pc.getOffset())),
                 "a write to the BIOS ROM at " + Hex8(a) + " does nothing (the ROM takes no write), but the decompiler treats the address as ordinary "
                 "memory: a later read of it in this function is shown as the value written, which the ROM does not hold",
@@ -3009,9 +3153,13 @@ struct ConstAccess
     uint32_t address = 0;
     uint32_t bus = 0;
     uint32_t size = 0;
+    // The bytes the access covers on the bus, when they are not its own (MemoryBytesOf of 'bus' and this): an associative purge invalidates the
+    // 16-byte line of its address, whatever word it names (sh7095.inc SH7095_Cache_AssocPurge: the tag of the line is compared, A5-72).
+    uint32_t busSize = 0;
     bool store = false;
     // A write to a register that changes how a memory is addressed from then on (A5-68): bit 0 VDP1_TVMR (the frame buffer's 8 bpp rotate
-    // scramble), bit 1 VDP2_RAMCTL (the colour RAM mode). Not an access of any memory; the evidence that the function re-addresses them.
+    // scramble), bit 1 VDP2_RAMCTL (the colour RAM mode), bit 2 VDP1_FBCR (the frame change: after it the same frame buffer address is the other
+    // buffer, vdp1.c `FBDrawWhich = !FBDrawWhich`, A5-79). Not an access of any memory; the evidence that the function re-addresses them.
     uint8_t remaps = 0;
     bool operator<(const ConstAccess& o) const { return std::tie(address, size, store) < std::tie(o.address, o.size, o.store); }
 };
@@ -3043,7 +3191,7 @@ std::vector<ConstAccess> ConstantAccesses(const ghidra::Funcdata& fd, const ghid
             const uint32_t width = static_cast<uint32_t>(o->getIn(2)->getSize());
             uint8_t remaps = 0;
             for (const HardwareRegister* reg : HardwareRegistersCovering(address, width))
-                remaps |= reg->address == 0x05D00000u ? 1 : reg->address == 0x05F8000Eu ? 2 : 0;
+                remaps |= reg->address == 0x05D00000u ? 1 : reg->address == 0x05F8000Eu ? 2 : reg->address == 0x05D00002u ? 4 : 0;
             if (remaps)
             {
                 ConstAccess c;
@@ -3061,7 +3209,8 @@ std::vector<ConstAccess> ConstantAccesses(const ghidra::Funcdata& fd, const ghid
         if (!value) continue;
         ConstAccess c;
         c.address = address;
-        c.bus = address & 0x07FFFFFFu;   // the line it purges, as the cached partition names it
+        c.bus = address & 0x07FFFFF0u;   // the line it purges, as the cached partition names it (A5-72: the whole line, not the word named)
+        c.busSize = 16;
         c.size = static_cast<uint32_t>(value->getSize());
         c.store = store;
         out.push_back(c);
@@ -3084,9 +3233,11 @@ std::vector<HardwareRange> NewAliasedRanges(const std::vector<ConstAccess>& seen
     };
     std::vector<Member> members;
     std::set<ConstAccess> have;
-    // The function writes VDP1_TVMR or VDP2_RAMCTL: the memory that register re-addresses is not the memory the data flow keys by address
-    // after the write. A store before it and a load after it are not the same bytes (the mode 3 colour RAM reads another entry), so every
-    // access the function makes to that memory is volatile (A5-68). (Seen as accesses of the register in 'seen' or 'known'.)
+    // The function writes VDP1_TVMR, VDP2_RAMCTL or VDP1_FBCR: the memory that register re-addresses is not the memory the data flow keys by
+    // address after the write. A store before it and a load after it are not the same bytes (the mode 3 colour RAM reads another entry; after a
+    // frame change the frame buffer address is the other buffer), so every access the function makes to that memory is volatile (A5-68, A5-79).
+    // (Seen as accesses of the register in 'seen' or 'known'.) A frame change with no FBCR write in the function (the automatic one, FCM clear)
+    // has no position to hang this on: that is the user's volatile range.
     uint8_t remaps = 0;
     for (const ConstAccess& c : known) remaps |= c.remaps;
     for (const ConstAccess& c : seen) remaps |= c.remaps;
@@ -3095,11 +3246,12 @@ std::vector<HardwareRange> NewAliasedRanges(const std::vector<ConstAccess>& seen
         Member m;
         m.access = c;
         m.isKnown = isKnown;
-        if (!MemoryBytesOf(c.bus, c.size, m.bytes)) return;
+        if (!MemoryBytesOf(c.bus, c.busSize ? c.busSize : c.size, m.bytes)) return;
         members.push_back(m);
     };
     for (const ConstAccess& c : known) add(c, true);
-    for (const ConstAccess& c : seen) add(c, false);    std::sort(members.begin(), members.end(), [](const Member& x, const Member& y) {
+    for (const ConstAccess& c : seen) add(c, false);
+    std::sort(members.begin(), members.end(), [](const Member& x, const Member& y) {
         return std::tie(x.bytes.kind, x.bytes.first, x.bytes.last) < std::tie(y.bytes.kind, y.bytes.first, y.bytes.last);
     });
     auto overlap = [](uint32_t a0, uint32_t a1, uint32_t b0, uint32_t b1) { return a0 <= b1 && b0 <= a1; };
@@ -3107,7 +3259,7 @@ std::vector<HardwareRange> NewAliasedRanges(const std::vector<ConstAccess>& seen
     {
         Member& mi = members[i];
         if (mi.bytes.kind == MemoryKind::Vdp2ColorRam && mi.access.store && mi.access.size == 1) mi.flagged = true;
-        if ((mi.bytes.kind == MemoryKind::Vdp1FrameBuffer && (remaps & 1)) || (mi.bytes.kind == MemoryKind::Vdp2ColorRam && (remaps & 2)))
+        if ((mi.bytes.kind == MemoryKind::Vdp1FrameBuffer && (remaps & 5)) || (mi.bytes.kind == MemoryKind::Vdp2ColorRam && (remaps & 2)))
             mi.flagged = true;
         for (size_t j = i + 1; j < members.size(); ++j)
         {
