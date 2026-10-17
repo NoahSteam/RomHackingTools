@@ -7987,3 +7987,23 @@ file). The notes changed in four functions, three new notes per image, all the n
 - The 4 MiB cartridge's missing repeat, the low work RAM's upper MiB and the colour RAM modes remain over-approximations (volatile for nothing, never wrong).
 - The `MOVED` pins of the fault suite (patch 0044) are left to the coordinator's head, as asked; no pin was touched.
 - Mednafen was not run; every claim is from its source, as in every area 5 round.
+
+## Areas 1 and 4: the nightly long run at 721beb7
+
+The generator's long run (the scheduled `Generator, long run` job of `saturn-explorer-decompiler.yml`, 20,000 seeds, dispatched by hand as run
+51 on `721beb7` because the only scheduled run so far, 36 on `4210e8e`, had failed before the round 4 to 6 fixes) finished green: 0 failing
+seeds, 0 findings. The push runs 50, 52, 53 and 54 on `721beb7`, `7a0e6a1`, `7882250` and `cfb39a6` are green too, the sanitizer gate included.
+
+- **Area 4 (control flow and boundaries) is done** by the program's rule: rounds 2 and 3 found no P1 or P2 (the review sections "Area 5 round 3
+  and area 4 round 2 review" and "Areas 3 and 4 round 4 review", and nothing since), every A4 row is `fixed` or `accepted`, and the long run on
+  its grammar is green. Its oracle stays on: the generator's prototype and flow checks run in `ctest` and in the long run.
+- **Area 1 (invalidation)** has two clean rounds and the long run, and one open P3, A1-7 (a paused panel asks again every UI frame while a state
+  load is unconfirmed). The row's fix was declared out of the round 3 fixer's scope; it is given to a fixer now (`review/1-a1-7-fix`). Area 1 is
+  done when that row is `fixed` or `accepted`.
+
+The integration of `review/5-round8-fix` at `a608d8c` had one merge defect, in `DecompilerFaultTests.cpp`: the branch's `kAliasBase` was
+`0x0600B700`, the address the area 6 round 5 review had given `kWideBase`; it is `0x0600BC00` on master (the `nest` fixture ends at `0x0600BA5A`),
+and `addedForCoverage` names both branches' fixtures. The matrix on `a608d8c`: 97 of 97 (`SaturnExplorerDecompilerRunnerTests` timed out once at
+its own 120 s limit under load 7 with three suites running beside it, and passed alone in 64 s), fault suite 0 of 71 jobs failed, generator
+grammar 2 at 3,000 and grammar 1 at 1,000 seeds 0 failing, printed-C at 3,000 seeds 0 findings, the 20,000-seed run 0 failing, both corpora every
+ledger count 0, 0 and 4 missing and said, lending 662 (923) and 1,020 (1,282).
