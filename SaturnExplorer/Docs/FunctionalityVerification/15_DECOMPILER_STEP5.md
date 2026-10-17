@@ -8294,7 +8294,7 @@ The generator, the whole of round 9's grammar against the base decompiler (1,000
 | Run | Result |
 |---|---|
 | Build | RelWithDebInfo, gcc, a scratch build of its own; the map compiles with `-Werror=format-truncation=2` |
-| `ctest -j3 --timeout 900` | CTEST_RESULT |
+| `ctest -j3 --timeout 900` | 96 of 97 pass at the first run: `SaturnExplorerDecompilerRunnerTests` timed out at its 120 s limit under load 15 (three of my own runs and other agents' builds); it passes alone in 67.8 s. The live-capture tests passed (no other copy ran at the time). |
 | `Sh2DecompilerTests` | all passed (about 6 s without the corpus) |
 | Generator, grammar 2, 3,000 seeds | 0 failing seeds, 0 findings; `alias.words` 22, `cart.write.said` 6, `litptr.cache` 172, `litptr.cart` 102 |
 | Generator, grammar 1, 1,000 seeds | 0 failing seeds, 0 findings; `alias.words` 262, `cart.write.said` 37, `pointer.effect.said` 15 |
