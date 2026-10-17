@@ -8,6 +8,7 @@
 #include <atomic>
 #include <cstdint>
 #include <cstring>
+#include <vector>
 
 namespace sfe
 {
@@ -84,18 +85,32 @@ std::string Extract(const std::string& dir, const std::string& manifest,
 {
     const std::string tmp = dir + ".tmp-" + std::to_string(ProcessId());
     if (!RemoveEntry(tmp)) return "cannot clear the staging directory " + tmp;
+    // Every path this function will create inside the staging directory, made BEFORE the directory exists: a failure
+    // making them leaves nothing staged, and the guard below can then remove what was staged with unlink and rmdir
+    // alone, which allocate nothing. Its removal used to be RemoveEntry (a directory listing, path strings), and with
+    // an allocation failure that stays (sustained exhaustion) none could be made: the staging directory stayed on disk
+    // for good, up to 19 KB, because no later process removes another pid's (A6-37).
+    std::vector<std::string> staged;
+    staged.reserve(files.size() + 1);
+    for (const SpecFileData& f : files) staged.push_back(Join(tmp, f.name));
+    staged.push_back(Join(tmp, kManifestName));
     if (!MakeDirectory(tmp)) return "cannot create " + tmp;
     // Whichever way this function is left, the staging directory goes with it unless it was moved into place: an
-    // exception (a failed allocation in a Join, in the staged Verify's read) used to leave it for good, up to 19 KB a
-    // time, and no later process removes another pid's (A6-33). The removal is best effort and must not throw out of a
-    // destructor that may be running during unwinding.
+    // exception (a failed allocation in the staged Verify's read, a path in an error return) used to leave it for good
+    // (A6-33). The removal is best effort and must not throw out of a destructor that may be running during unwinding.
     struct StagingGuard
     {
         const std::string& dir;
+        const std::vector<std::string>& staged;
         bool armed;
         ~StagingGuard()
         {
             if (!armed) return;
+            // The names are known, so nothing here allocates: unlink each and remove the directory.
+            for (const std::string& path : staged) RemoveFile(path);
+            if (RemoveEmptyDirectory(dir)) return;
+            // Something not on the list is in it (the '.separt-' temporary of a write an exception interrupted):
+            // a listing finds it, where the heap allows one.
             try
             {
                 RemoveEntry(dir);
@@ -104,19 +119,19 @@ std::string Extract(const std::string& dir, const std::string& manifest,
             {
             }
         }
-    } guard{ tmp, true };
+    } guard{ tmp, staged, true };
 
     std::string error;
-    for (const SpecFileData& f : files)
+    for (size_t i = 0; i < files.size(); ++i)
     {
-        const std::string path = Join(tmp, f.name);
-        if (!WriteFileAtomically(path, f.data, f.size, error))
+        const std::string& path = staged[i];
+        if (!WriteFileAtomically(path, files[i].data, files[i].size, error))
         {
             RemoveEntry(tmp);
             return "cannot write " + path + ": " + error;
         }
     }
-    if (!WriteFileAtomically(Join(tmp, kManifestName), manifest.data(), manifest.size(), error))
+    if (!WriteFileAtomically(staged.back(), manifest.data(), manifest.size(), error))
     {
         RemoveEntry(tmp);
         return "cannot write the manifest in " + tmp + ": " + error;
