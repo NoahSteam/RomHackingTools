@@ -7387,3 +7387,166 @@ The two game work-RAM images of the corpus (images 007 and 008; the lending test
 - `rte` still cannot run in the generator (A2-20, with `bsrf` and `trapa`); A2-36 is pinned by text. `braf` is not value-checked by any generated function (A2-38): by design of the engine's reading of it.
 - The sleigh compiler warns during `se-regen-sla` and in `SlaFreshnessTests` ("1 operations wrote to temporaries that were not read"): the `nop`'s temporary. Neither reads warnings.
 - Not run this round: `SE_GENERATED_ALPHABET=specials`, interrupts and the slot-illegal exception (A2-8).
+
+## Area 5, round 8 review
+
+Reviewer, branch `review/5-round8-review`, at `d7da94a` (master, the merge of `review/5-round7-fix`, with area 3's round 6 fix merged between). Findings
+only; no engine code and no test changed. Every fixture is in `Docs/Decompiler/REVIEW_LEDGER.md` (A5-59 to A5-68) with its words, current and expected
+output and the oracle's verdict (in the ledger's code quotes `or` stands for the C bar). Reproduced on a RelWithDebInfo gcc build (the main build's
+options) with `SaturnExplorerSh2GeneratedTests` in its `SE_GENERATED_WORDS` mode as the harness (it prints the trace, every note and caution, the ledger
+and the text, and gives the generator's verdict on the same words; a small assembler turned the hand-written functions into words), with
+`SaturnExplorerSh2DecompilerTests` (suite and corpus), `SaturnExplorerHardwareWidthTableTests` with `derive_handler_cases.py --check`, and, for the
+retry, `SaturnExplorerDecompilerFaultTests --cell`. Mednafen read from the review path (`mednafen/ss`): `ss.c` (`SS_SetPhysMemMap`, `SetFastMemMap`,
+the CS0 and CS3 handlers), `sh7095.inc` (`MemRead`, `MemWrite`, `SH7095_Cache_AssocPurge`, `SH7095_BSC_Bus*`), `scu.inc` (`BBusRW_DB_u16_W1_SH0`,
+`SCU_RegRW_DB_u32_W1`), `vdp1.c` (`VDP1_Write8_DB`, `_Write16_DB`, `_Read16_DB`, `WriteReg`, the frame-end swap), `vdp2.c` (`RW_R16`, `RW_W8`,
+`RW_W16`, `RegsWrite` case 0x0E), `scsp.inc` (`SS_SCSP_RW_u8_W1`, `_u16_W1`, `SS_SCSP_RunDMA`, the interrupt recalculations), `smpc.c` (`SMPC_Write`,
+`SMPC_Read`, the command switch), `cart/extram.c`.
+
+**Area 5 has no P1 and no P2 this round. Ten P3 rows (A5-59 to A5-68): none drops or duplicates a hardware access; two fold a stored value wrongly (A5-65, A5-68), in shapes neither corpus image has.** Round 7's fixes hold for
+every shape they were written for, on the suite, on both corpus images and on the generator. What broke is at the edges of the new machinery: the
+mask-following resolver (A5-60, A5-61), the alias design's recognition of a name (A5-62) and of memories it does not list (A5-65, A5-68), its retry
+(A5-63), the texts (A5-59, A5-64, A5-66, A5-67).
+
+### Verified (round 7)
+
+| Attack | Result |
+|---|---|
+| The round 7 fixtures (`a5_50`-`a5_56` and variants, 50 fixtures) and the whole suite | held: `Sh2DecompilerTests` all passed on both corpus runs; `HardwareWidthTableTests` 337 registers, 3,038 cells, 37 value-triggered write targets, passes; `derive_handler_cases.py --check` current |
+| A5-52, one name: a function that stores 0 to a work-RAM word under one address and polls it (the other side being another function, the slave or a DMA) | folds, as before the fix and by design. The caution still comes where hardware follows the loop: `a1` (store 0 to 0x06003304, poll it, then `SCU_D0EN = 1`) prints `do { } while( true );` with `the 4-byte write of SCU_D0EN here is missing: ... after a loop it takes to run for ever` on the instruction and in the warnings, the signature withheld. Where nothing but memory follows, the engine's own `Do nothing block with infinite loop` is the only voice (a removed call is not an access) |
+| A5-52, a call between the store and the load | held: the store is not forwarded past a `jsr` (`xRam06003304 = 5; func(); return xRam06003304;` with the pointer in r8); two functions naming one word under two addresses, one storing and calling the other, are therefore safe |
+| A5-52, shapes: a store of 0 under two names and a poll under one; `tas.b` on the cache-through name with a read through the cached one; byte store and word load of the same word; nine words nested under forward branches (`nest9`, 27 accesses found in the first pass); six chained wait loops | held: every access kept, in order (`Ram26003300 = 0; Ram06003300 = 0; do { iVar1 = Ram26003300; } while ...`) |
+| A5-50 / A5-53 (colour RAM, VRAM, frame buffer) fixtures against the handlers | held; see the decode table below |
+| The five texts of A5-55 against the handlers (SCSP_DTLG EX, KYONEX, SCIRE and MCIRE, SMPC_COMREG, VDP1_FBCR FCM) at byte, word and long widths | right: DTLG's EX is latched and `SS_SCSP_RunDMA` runs inside the same write; KYONEX is latched into `KeyExecute` and cleared from the register by `*SRV &= 0x0FFF`, so only the high byte of word 0 carries it (`k_b0` says it, `k_b1` does not); SCIRE clears SCIPD and MCIRE MCIPD by the bits written; COMREG's `PendingCommand = V` takes the low byte of any width and the 16 commands are `smpc.c`'s, an unknown value completing with no effect; FBCR's `FBManualPending |= value & 2` is consumed at the frame end (`FCM` and `FCT`: swap, else erase only) as the text says |
+| A5-56 (SMPC bus buffer) | held for the polls: an `and #1` poll says nothing, `cmp/eq #1,r0` on the whole byte says the note, a byte stored through a pointer parameter says it. Escape through ordinary memory: A5-66 |
+| A5-51 (masks) | held for the pointer's first value: `or 0x40000000` (purge), `or 0xE0000000` (on-chip mirror), `or 0x80000000` (cache data array) and `and 0xFF` (BIOS) are folded by the engine itself when the pointer is one value and followed otherwise. The loop and the index cases: A5-60, A5-61 |
+
+Open and accepted rows, looked at again: **A5-8** (low work RAM repeating every MiB) is confirmed as a safe-side choice: Mednafen's data handlers answer the lower MiB
+only, its fast map repeats (table below). **A5-57**'s premise is wrong: the scramble is a bijection of the address bits, so no store is forwarded past an
+alias it makes; the case that does break is a write to `VDP1_TVMR` between a store and a load, filed with `VDP2_RAMCTL`'s equivalent as A5-68 (the
+coordinator closes or keeps A5-57). **A5-36**'s base-only note for an indexed pointer is what a mask applied after the add removes (A5-61). **A5-17** and
+**A5-35** unchanged (the even-lane SMPC byte write is cautioned; the cache data array stays ordinary memory). **A5-58** unchanged (the stepped walk is not worked
+out; a callee-returned pointer is not said).
+
+### 1. The A5-52 design, one name
+
+The "missing and said" caution is still produced for a poll of a word named under one address (`a1` above, and the four corpus cautions below), and
+silent only where the removed code holds no access. The design does not change that either way. A call between the store and the poll ends the
+forwarding. What the design cannot cover is a single name whose other writer is elsewhere and whose poll sits in the same function as the function's
+own store: that is the user's volatile mark, as in `DESIGN.md` 6.1. No row.
+
+### 2. `MemoryBytesOf` against Mednafen's decode
+
+| Memory | Mednafen | `MemoryBytesOf` | Verdict |
+|---|---|---|---|
+| Bits 31-29 | `MemRead` / `MemWrite` case 0 and 1 reach the bus with `A &= (1 << 27) - 1` (`SH7095_ExtBusRead_INLINE_*`); 2 and 5 are the associative purge, 3 the address array, 4 and 6 the data array, 7 on-chip | partitions 0 and 1 only | agrees. The purge as a name: the partition 5 is missed (A5-62) |
+| Bits 28-27 | not decoded | ignored (`address & 0x07FFFFFF`) | agrees (`a5_52_bit27`) |
+| High work RAM 0x06000000-0x07FFFFFF | CS3, `(A & 0xFFFFC) >> 1` | every MiB | agrees |
+| Low work RAM 0x00200000-0x003FFFFF | the data handlers (`BusRW_DB_CS0_*`) answer the lower MiB only: `if(A & 0x100000) { *DB |= 0xFFFF; return; }` for a read, a write dropped (VA0/VA1). The fast map (`SS_SetPhysMemMap(0x200000, 0x3FFFFF, WorkRAML, 1 MiB)` into `SetFastMemMap`: `(A - Astart) % length`) repeats it, and instruction fetches and `CacheBypassHack` use it | every MiB | the repeat is not what the data path does, only what the fast map does; the table errs on the safe side (A5-8, accepted). The 0x0 region below 0x00100000 is the BIOS ROM, read-only |
+| VDP1 VRAM 0x05C00000-0x05C7FFFF | `A < 0x80000`, no repeat | 512 KiB window, mask 0x7FFFF | agrees |
+| VDP1 frame buffer 0x05C80000-0x05CFFFFF | `(FBA >> 1) & 0x1FFFF` | mask 0x3FFFF | agrees. The 8 bpp rotate scramble is a permutation of the 18 address bits and cannot alias (A5-68 corrects A5-57); the buffer in use swaps at the frame end (`FBDrawWhich`), which no function sees from its own code |
+| VDP2 VRAM 0x05E00000-0x05EFFFFF | `(A & 0x7FFFF) >> 1` | mask 0x7FFFF | agrees |
+| VDP2 colour RAM 0x05F00000-0x05F7FFFF | `cri = (A & 0xFFF) >> 1`; mode 0 writes entries `cri & 0x3FF` and `+ 0x400`; mode 1 `CRAM[cri]`; modes 2 and 3 `((cri >> 1) & 0x3FF) or ((cri & 1) << 10)` | mask 0x7FF, in every mode | exact in mode 0, over-approximate in 1 to 3 (volatile for nothing, never wrong). The request does not carry the mode; a write to `VDP2_RAMCTL` between a store and a load re-addresses the memory (A5-68). A byte store is flagged in every mode, rightly (all three branches store `*DB` whole) |
+| Extended RAM cartridge 0x02400000-0x027FFFFF | `ExtRAM_Mask = 0x27FFFE` (1 MiB) or `0x3FFFFE` (4 MiB) | not listed | A5-65 |
+
+### 3. The retry
+
+`kAliasRounds = 6`: the loop runs seven printing passes at most, the last with `mayRetry` false. A function whose set grows on every pass could not be
+built: every shape I tried (a chain of stages each hidden behind the fold of the one before: loops, forward branches, nesting to nine and chaining to
+nine) was found in the first pass, because the engine's access records are made when
+the loads and stores become variables, before the unreachable block is removed, so a fold that cuts code off still shows its accesses (a temporary
+pass log, kept out of the tree: 27 accesses flagged in the first pass for nine stages, none new in the print pass). In 1,000 grammar 1 seeds no
+printing pass retried. A retry happens only for a request without a first pass (`registerCallees = false`, a seeded request). So the sixth-pass text
+(new words found in the last pass, reported in `aliasedMemory` and folded in the text) is unreachable in what I could build; by reading, it would be
+unsound, and the oracles would excuse the words (`aliasedMemory` counts as marked): recorded in the not-reached list, not as a row (no fixture).
+
+The cancel-enter cells for a retrying function: the lean fixture (`aliasl`: `a5_52a`'s words with `registerCallees = false`; phases init, followFlow,
+actions, teardown, init, followFlow, actions, print, teardown) passes 8 of 9; the cell raised in the first teardown fails (A5-63): the retry has
+no `checkCancel()` between its teardown and the next Init, as the first pass has since A6-35. The non-lean fixture with the same words passes all nine
+(it has a first pass, and no printing pass retries). The default subset of the fault suite has no fixture with an alias, so it cannot see this.
+
+### 4. The resolver
+
+Held: a mask that is not a partition mask applied to a constant folds in the engine; a merge of two register addresses and a mask gives the cross
+product (at most 64 pairs, else unknown); an unknown operand makes the result unknown with `others`. Broke: a pointer moved by a bitwise operation
+round a loop (A5-60: `onlyCycle` makes `p = p and mask` add nothing, true only if the first value is a fixed point), and a mask applied after an
+index add (A5-61: the base is lost and the index-0 note with it). The generator's rule 3b rejects the loop case (`n:cache-read-pointer-unsaid`), so its
+oracle sees one of them; the other two are texts only.
+
+### 5. Value-triggered writes
+
+The five texts are right (table above). Others the handlers decode that the cases file does not mark: A5-64 (SMPC_IREG0's continue and break bits,
+SCU_IMS, SCSP_SCIEB, MCIEB and SCILV, SCSP_MOBUF, the SCSP slot words 12-15, SCSP_TIMA to TIMC). The script's `V` finds a latch assigned from the value
+and `SCIPD or MCIPD and-not value`; it does not find an interrupt recalculation, a schedule, a MIDI byte sent, `*SRV = 0`.
+
+### 6. The format-truncation warnings
+
+Real, and not about the name: the cache-read caution's fixed text is 345 characters in a 320-byte buffer, so every read of a register through the cached
+partition ends `read it t`; the watchdog key text (147 in 128) ends `pending SH`. A5-59 gives both fixtures and the full texts. These are the only two
+`snprintf` calls of `SaturnHardwareMap.cpp` that gcc `-Wformat-truncation=2` finds too long.
+
+### 7. The corpora
+
+`SE_GAME_HWRAM=<hwram>.bin SE_GAME_LEND=1`, the main build's options:
+
+| | `hwram007.bin` | `hwram008.bin` |
+|---|---|---|
+| Functions | 839 of 839 ok | 1,554 of 1,554 ok |
+| Every ledger count | 0 | 0 |
+| Dropped against the reference run | 0 | 0 |
+| Missing and said | **0** | **4** (two functions) |
+| Records | 14,831 folded, 0 dead, 0 unreachable, 27 switch lookups | 38,687 folded, 0 dead, 4 unreachable, 155 switch lookups |
+| Direct volatile accesses, notes, cautions | 163, 32, 0 | 232, 54, 4 |
+| Lending (before, after) | 600 (834 parameters), 660 (921) | 954 (1,194), 1,018 (1,280) |
+
+All as round 7's record (the lending counts moved with area 3's merge). The suite part of both runs passed.
+
+Hand reading against the raw code (the disassembly beside the text): **06003C06** (007; copies **060340BE** in 007 and **060750FE** in 008, the same text
+with other addresses): `Ram26003304 = 0x534c4156;` then the wait `do { iVar2 = Ram26003304; } while (iVar2 != 0);` (`bf` back while r0 is nonzero),
+`SH2_IPRA = 0; SH2_IPRB = 0;` (word stores, the first through FFFFFEE2), `SH2_TIER = 1;` (byte), `SINIT = 0xffff;` (word), the FTCSR wait on bit 0x80 (a byte
+read at FFFFFE11, `tst #0x80`, `bt` back), `SH2_FTCSR = 0;` (byte at +1), the purge store `Ram46003304 = 0;` (r0 = 0 left by the clear), the poll
+`pcVar1 = (code *)Ram06003304;` through the cached name, `if (pcVar1 != 0) (*pcVar1)(xRam06003308);` (r4 loaded in the `jsr` slot, so before the call), then
+`Ram26003304 = 0; SINIT = 0xffff;` and the `bra` back to the FTCSR wait with the `SINIT` store in its slot: every statement is an instruction, in the
+code's order, at its width, and nothing is added. The two notes (FTCSR's flag-clearing read, the purge) are right. **06003C46**, **060340FE**, **0607513E**
+(the idle loop entered at the `sts.l pr` before the call; `in_r0` and `in_r1` its inputs): `(*in_r0)(*(xunknown4 *)(in_r1 + 4));` (the load in the slot), then the
+inner loop `Ram26003304 = 0; SINIT = 0xffff;` / FTCSR wait / `SH2_FTCSR = 0; Ram46003304 = 0; in_r1 = 0x6003304; in_r0 = (code *)Ram06003304; ... while (in_r0 == 0)`
+and the outer `while( true )`: the `bt` to 3C4E repeats the inner loop when r0 is zero, the fall into 3C46 calls: right, and the poll is a read of the cached name.
+**060716A8** (008): `Write_SR(in_sr & 0x3f3 | 0xf0)` (the `or #0xf0` of SR), `SH2_IPRA = 0; SH2_IPRB = 0; SH2_TIER = 1;` (r2 = 0 and r1 = 1 as the source registers), the FTCSR wait with
+`and #0x80`, `SH2_FTCSR = 0;` (r8 = 0), `pcVar1 = (code *)Ram260b72e8; (*pcVar1)(); Ram060b72e8 = 0;` (the pointer read through the cache-through name, the store of
+r8 in the `bra` slot through the cached one, after the call): right.
+
+The four "missing and said" of `hwram008` are the two functions **0600C2DA** and **0600C49A** (the same code twice; the second returns `(uRam060fe014 & 2) != 0`):
+`xRam060fe048 = 0; while (iRam060fe014 == 0) { xRam0608d220 = 1; xRam0608d254 = 0; func_0x06073334(xRam060fe000); if (iRam060fe01c == 1) break; iVar1 = func_0x060737a4(...); if (iVar1 == 1) { do { } while( true ); } }`.
+The raw code stores 0 to `*(r8 + 8)` (060fe008) and polls it, writing 1 to 0608d220 on each turn, to wait for another processor or an interrupt handler to
+set it; the word is named under one address, so the poll folds to an empty endless loop and the two `VDP2_BGON` word writes after it (and four calls)
+are removed. The cautions name the two writes, 2-byte, at 0600C334 and 0600C340 (0600C4F4 and 0600C504): each is a real instruction of the removed
+code, the width is right (`mov.w r1,@r12`), the cause is right and the advice (mark the memory volatile) is the one that fixes it. Right. (They say nothing of the four
+calls or the dropped stores to ordinary memory: the first is not an access, the second is by design.)
+
+### 8. The generator
+
+| Run | Result |
+|---|---|
+| `SE_GENERATED_GRAMMAR=2 SE_GENERATED_SEEDS=3000` | 0 failing seeds, 0 findings; `alias.words` 24 (as round 7), `cache.read.said` 140, `cache.read.pointer.said` 46 |
+| `SE_GENERATED_GRAMMAR=1 SE_GENERATED_SEEDS=1000` | 0 failing seeds, 0 findings; `alias.words` 262, `litptr.mask.and` 59, `.or` 60 (this run on the binary with the pass log, which changes nothing it computes) |
+| `SE_GENERATED_MUTATE=alias SE_GENERATED_SEEDS=300` | `6 of 300 seeds reported the damage`; passes |
+
+Why grammar 2 reaches the alias rule rarely: `MaybeAlias` (the only place a second name is made) fires for a work-RAM or mailbox literal with probability 30%,
+and only when an earlier literal of the same function is work RAM or a mailbox; grammar 2 draws literals from `PickKind2` (45% hardware, 40% work RAM, 15% mailbox)
+and most of a v2 function's memory items are stack accesses, calls and flow, so a function seldom has two work-RAM literals and seldom reads or writes through
+both on the traced path. The rule counts a word only when the engine took both accesses at constant addresses and the trace saw both. The change that would
+make it reach: a v2 item that emits the whole shape in one go (the `a5_52a` triple: literal under a name, literal under a second name made by one of the five
+flips, a store through each, a load through the first, optionally a poll or a purge between), with a tunable share of the function's items; a second-name draw
+that picks from the module's work-RAM literals, not only the function's; and the VDP2 colour RAM / VRAM / frame-buffer memories added to the emulator's
+`Env` (a byte store to colour RAM storing the whole entry, the 512 KiB and 256 KiB repeats, the 0x800 mode 0 alias), so that A5-50, A5-53 and A5-68 are held by
+seeds and not only by fixtures. Grammar 1 would gain a `p = p or/and mask` loop item for A5-60, and a rotating pointer for A5-61.
+
+### Not reached
+
+- A function whose alias set grows on each pass (the sixth printing pass). Not built; the code reading says its text would be unsound (the words found in the
+  last pass are reported in `aliasedMemory` but folded in the text), and the oracles would excuse it.
+- Mednafen itself was not run; every Mednafen claim is from its source. The hardware's own behaviour (the SH7604 partition 0xA, the RAM cartridge's mirroring,
+  low work RAM's upper MiB) is the emulator's, as everywhere in area 5.
+- No sanitizer run, no full `ctest`, no timing comparison (this round changed no code). The fault suite ran only the cells named in A5-63.
+- The VDP1 frame buffer swap at the frame end (`FBDrawWhich`) and the SCU, VDP1 and SCSP DMA writing work RAM behind a function's back: not seen by any
+  function's own accesses, like the mailbox; the volatile mark and the removal caution are the design.
+- SCU_IST and CD_HIRQ writes of 0 clear flags and say nothing on the write (their `split` text is on a read-back): the class of A5-64, left as round 7 decided it.
