@@ -7001,7 +7001,7 @@ Subject MakeCanarySubject(int variant, std::string& label)
     s.words = words;
     s.codeWords = words.size();
     // The callers of the callees are decompiled after them: the harness lends in the order of the functions, last first.
-    char buf[96];
+    char buf[160];   // the longest text is 110 characters
     std::snprintf(buf, sizeof buf, "canary %d: %s, %s%s, %d earlier call(s)%s%s%s", variant, names[kind], fp ? "frame pointer, " : "", jsr ? "jsr" : "bsr", pre,
                   kind <= Unlent2 ? (form == 0 ? ", exact address" : form == 1 ? ", plus an index" : ", minus an index") : "",
                   shape == 1 ? ", under a branch" : shape == 2 ? ", in a loop" : "", plus1 ? ", result plus one" : "");
