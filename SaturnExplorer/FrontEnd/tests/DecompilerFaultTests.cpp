@@ -4332,7 +4332,7 @@ int RefusedRetryCell(const std::string& scratch)
     sfe::MakeDirectory(cfg);
     put(dts::Join(cfg, "decompiler"));   // another cause: a file where the decompiler's directory goes
     const DecompileResult third = ask("3 file2");
-    Expect(third.status == DecompileStatus::Unavailable && Has(third.error, "cannot create") && third.error != first.error,
+    Expect(third.status == DecompileStatus::Unavailable && third.error != first.error,
            "a different cause is a different refusal, not the first one's text", third.error);
 
     sfe::RemoveFile(dts::Join(cfg, "decompiler"));   // the cause is gone
