@@ -81,7 +81,7 @@ FFFFFFF0 w4 ? -> [note] SH2_RTCSR takes a 4-byte write only with 0xA55A in its u
 FFFFFFE0 w2 0x0000A55A -> (not a keyed write)
 FFFFFE80 w2 0x00005A12 -> [note] keyed watchdog write: requests SH2_WTCNT = 0x12 (taken while SH2_WTCSR's TME is set)
 FFFFFE80 w2 0x0000A512 -> [note] keyed watchdog write: SH2_WTCSR = 0x02 (TME is clear: OVF is cleared whatever a read saw, and SH2_WTCNT is reset to 0)
-FFFFFE80 w2 0x00001234 -> [caution] watchdog write with key 0x12, which neither SH2_WTCNT (0x5A) nor SH2_WTCSR (0xA5) takes: ignored (it still cancels a pending SH
+FFFFFE80 w2 0x00001234 -> [caution] watchdog write with key 0x12, which neither SH2_WTCNT (0x5A) nor SH2_WTCSR (0xA5) takes: ignored (it still cancels a pending SH2_RSTCSR WOVF clear)
 FFFFFE80 w2 ? -> [note] keyed watchdog write: SH2_WTCNT when the upper byte is 0x5A (taken while SH2_WTCSR's TME is set), SH2_WTCSR when it is 0xA5 (with TME clear, OVF is cleared and SH2_WTCNT reset; with TME set, OVF is cleared only if a read saw it set and SBYCR's SBY is cleared)
 FFFFFE82 w2 0x0000A500 -> [note] keyed watchdog write: clears SH2_RSTCSR's WOVF, if a read saw it set
 FFFFFE82 w2 0x00005A60 -> [note] keyed watchdog write: SH2_RSTCSR RSTE/RSTS = 0x60
