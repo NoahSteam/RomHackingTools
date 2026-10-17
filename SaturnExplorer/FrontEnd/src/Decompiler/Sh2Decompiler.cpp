@@ -464,6 +464,9 @@ private:
         bool usesR0 = false;
         // Fuzzy: made, wholly or in part, by a join of two different values (the engine's MULTIEQUAL).
         bool joined = false;
+        // Fuzzy: a join one of whose alternatives is r0's entry value itself, a path that leaves r0 alone (A3-45). Not kept by an operation: a value
+        // computed from such a join is r0's entry value transformed on every path, not a path that leaves it alone.
+        bool keepsR0 = false;
         // Fuzzy: a stack address built from one at or above the entry r15 (the exact r15, a word of the caller's frame) and an
         // index that may be anything. The base is given up for the frame's lowest slot (kLowBase), which a local array's address
         // with a variable index also is, so this says which of the two a store through it may be: the caller's word (A3-39).
@@ -479,6 +482,7 @@ private:
         bool Own() const { return kind != Fuzzy || own; }
         // As an operand: r0's entry value itself, or something already computed from it.
         bool Joined() const { return kind == Fuzzy && joined; }
+        bool KeepsR0() const { return (kind == Reg && v == 0) || (kind == Fuzzy && keepsR0); }
         bool UsesR0() const { return (kind == Reg && v == 0) || (kind == Fuzzy && usesR0); }
         // A stack address that is, or may be, at or above the entry r15: a store through it can be a word of the caller's frame.
         // (A local array below r15 indexed by a variable is not: its base is negative. Nor is an address inside the last word below
@@ -507,7 +511,7 @@ private:
         bool operator==(const Value& o) const
         {
             return kind == o.kind && v == o.v && carried == o.carried && callTarget == o.callTarget && read == o.read &&
-                   (kind != Fuzzy || (from == o.from && direct == o.direct && stackBase == o.stackBase && own == o.own && usesR0 == o.usesR0 && joined == o.joined &&
+                   (kind != Fuzzy || (from == o.from && direct == o.direct && stackBase == o.stackBase && own == o.own && usesR0 == o.usesR0 && joined == o.joined && keepsR0 == o.keepsR0 &&
                                      callerHigh == o.callerHigh && part == o.part));
         }
     };
@@ -666,6 +670,7 @@ private:
             m.read = a.read && b.read;
             m.usesR0 = a.usesR0 || b.usesR0;
             m.joined = true;
+            m.keepsR0 = a.KeepsR0() || b.KeepsR0();
             // ...at or above r15 on every path, or flagged: an exact address at or above r15 joined with a lower one is a walk (a loop
             // that steps a pointer down from r15, `mov.l r0,@-r1`, A3-16) as often as a choice of two addresses, and is not followed.
             m.callerHigh = (a.kind == Value::Fuzzy && a.callerHigh) || (b.kind == Value::Fuzzy && b.callerHigh) ||
@@ -991,7 +996,11 @@ private:
                 const uint32_t d = v.Direct();
                 const bool onlyInputs = (d & ~origin::kRegisters) == 0 && (d & origin::kRegisters) != 0 && (d & ~(kNotParameters | 1u | (1u << kSr))) == 0;
                 if (v.Joined() && onlyInputs && (d & (1u << kSr))) mInputsInReturn |= 1u << kSr;
-                if ((d & 1u) && v.usesR0 && (!v.Joined() || onlyInputs)) mInputsInReturn |= 1u;
+                // ...and when no path leaves r0 alone (A3-45): a value computed from r0 on every path of a loop that rotates it
+                // (`L: rotcr r0 ; tas.b @r5 ; dt r3 ; bf L`) is a join at the loop head and a transformation of it at the exit, and its
+                // origins are whatever the rest of the loop carried into the flag it used (a memory byte, here). Only a join that has
+                // r0's entry value among its alternatives is the scratch r0 of compiled code (A3-14).
+                if ((d & 1u) && v.usesR0 && (!v.Joined() || onlyInputs || !v.KeepsR0())) mInputsInReturn |= 1u;
                 // ...and a join of r0's entry value with a parameter (A3-20): `if (b) return a;` leaves r0 alone on the path that
                 // does not return, and the engine takes the join for no return like the ones above, so the parameter that is the
                 // value (and, if nothing else reads it, the one that chooses the path) is lost with it. The origins are registers

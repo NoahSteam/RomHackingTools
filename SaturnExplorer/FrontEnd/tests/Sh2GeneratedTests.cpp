@@ -2346,6 +2346,11 @@ protected:
             const uint32_t at = static_cast<uint32_t>(op->getAddr().getOffset()) & 0xFFFFFu;
             if (at + 1 < mEnv->ram.size()) word = static_cast<uint16_t>(mEnv->ram[at] << 8 | mEnv->ram[at + 1]);
         }
+        // ...nor are the words that write r0 with the value it has (A2-43, patch 0048: mov r0,r0, and r0,r0, or r0,r0, add #0,r0, xor #0,r0,
+        // or #0,r0): the engine and the host take them as nop. Counted as writes, a path that runs one of them and leaves r0 alone on every
+        // other looks like a function that writes r0 on every path, and r0's entry value then reaches its result (A3-46: a sample of runs that
+        // all took the `and r0,r0` path, never the one that skips it).
+        if (word == 0x6003u || word == 0x2009u || word == 0x200Bu || word == 0x7000u || word == 0xCA00u || word == 0xCB00u) return;
         for (int i = 0; i < op->numInput(); ++i)
         {
             const ghidra::VarnodeData* vn = op->getInput(i);
@@ -3943,7 +3948,18 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                 size_t swBegin = 0, swEnd = 0;
                 if (FindSwitch(r.lines, tl.jmpInsn, swBegin, swEnd))
                 {
-                    if (GroupAddrs(r.lines, labels, swBegin, swEnd, dest.first, group))
+                    // A switch on the loaded address, not on the index (A2-16, A4-10, A4-11): the engine recovered the table when the function
+                    // was still partial, and in the finished one a bound check whose T bit is part of a whole SR word that something else also
+                    // uses (`stc sr`, `div1`, an SR returned) is not a compare any more, so the model that matched it finds no guard and falls
+                    // back to the trivial one -- one case for each destination, labelled with its address, the bound check an `if` before
+                    // it. The text is right; the label of the index is the address the table holds for it.
+                    bool byAddress = false;
+                    for (size_t k = swBegin; k < swEnd && !byAddress; ++k)
+                        for (long label : labels[k].cases)
+                            for (uint32_t e : tl.entry)
+                                if (static_cast<uint32_t>(label) == e || (tl.hasPre && static_cast<uint32_t>(label) == tl.preEntry)) byAddress = true;
+                    if (byAddress) count("table.switch-on-address");
+                    if (GroupAddrs(r.lines, labels, swBegin, swEnd, byAddress ? static_cast<long>(dest.second) : dest.first, group))
                     {
                         for (uint32_t a : group)
                             if (range.first <= a && a < range.second) printed = true;
