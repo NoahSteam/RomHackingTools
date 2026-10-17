@@ -12,6 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified for SaturnExplorer: a call output a locked prototype returns is a return value whatever else it is used for (patches/0044-engine-round5-printed-value-fixes.patch).
  */
 #include "funcdata.hh"
 
@@ -1998,6 +2000,24 @@ bool Funcdata::onlyOpUse(const Varnode *invn,const PcodeOp *opmatch,const ParamT
   return res;
 }
 
+/// \brief Is the given Varnode the output of a CALL whose prototype is locked and returns a value?
+///
+/// SaturnExplorer (patches/0044-engine-round5-printed-value-fixes.patch): a host lent the callee's signature, so
+/// the value is evidence of a return that needs no second one.
+/// \param data is the function
+/// \param vn is the given Varnode
+/// \return \b true if it is the output of such a call
+static bool isLockedCallOutput(const Funcdata &data,const Varnode *vn)
+
+{
+  if (!vn->isWritten()) return false;
+  const PcodeOp *callop = vn->getDef();
+  if (callop->code() != CPUI_CALL && callop->code() != CPUI_CALLIND) return false;
+  const FuncCallSpecs *fc = data.getCallSpecs(callop);
+  if (fc == (const FuncCallSpecs *)0) return false;
+  return fc->isOutputLocked() && fc->getOutputType()->getMetatype() != TYPE_VOID;
+}
+
 /// \brief Test if the given trial Varnode is likely only used for parameter passing
 ///
 /// Flow is followed from the Varnode itself and from ancestors the Varnode was copied from
@@ -2060,6 +2080,9 @@ bool Funcdata::ancestorOpUse(int4 maxlevel,const Varnode *invn,
   case CPUI_SUBPIECE:
   {
     int4 newOff = def->getIn(1)->getOffset();
+    // SaturnExplorer: a register that holds a piece of a locked call's output (the half of a 64-bit return) is that call's, as above
+    if (op->code() == CPUI_RETURN && isLockedCallOutput(*this,def->getIn(0)))
+      return true;
     // This is a rather kludgy way to get around where a DIV (or other similar) instruction
     // causes a register that looks like the high precision piece of the function return
     // to be set with the remainder as a side effect
@@ -2080,7 +2103,14 @@ bool Funcdata::ancestorOpUse(int4 maxlevel,const Varnode *invn,
   }
   case CPUI_CALL:
   case CPUI_CALLIND:
-    return false;		// A call is never a good indication of a single op use
+    // SaturnExplorer: a call is never a good indication of a single op use, except for a RETURN whose value is the output of a
+    // call whose prototype is locked and returns a value (a host lent it): the function returns what its callee returns, with
+    // whatever else the value is used for (`return g(p);`, `p = g(x); if (p) *p = 0; return p;`). Without it the decision
+    // was left to the instruction in rts's delay slot: a nop, which then wrote r0, made the value a return, and any other
+    // slot did not (patches/0044-engine-round5-printed-value-fixes.patch).
+    if (op->code() == CPUI_RETURN && isLockedCallOutput(*this,invn))
+      return true;
+    return false;
   default:
     break;
   }

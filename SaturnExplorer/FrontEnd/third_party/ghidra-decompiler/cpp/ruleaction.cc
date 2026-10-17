@@ -17,6 +17,7 @@
  * Modified for SaturnExplorer: every LOAD and STORE's fate is recorded (patches/0017-access-fates.patch).
  * Modified for SaturnExplorer: an access that runs past the end of its space stays a LOAD or STORE (patches/0031-access-past-space-end.patch).
  * Modified for SaturnExplorer: RuleDivTermAdd and RuleDivTermAdd2 keep a product that overflows only for a division; RulePiecePathology needs the register it names (patches/0037-engine-division-piece-and-input-names.patch).
+ * Modified for SaturnExplorer: RuleDivTermAdd and RuleDivTermAdd2 keep an overflowing product only when the shifts that follow stay inside the multiply (patches/0044-engine-round5-printed-value-fixes.patch).
  */
 #include "ruleaction.hh"
 #include "coreaction.hh"
@@ -7830,8 +7831,9 @@ static bool divTermProductFits(const uint8 *multConst,uint4 xbits,int4 size,bool
 /// \param multConst is the new multiplier
 /// \param xbits is the number of significant bits of the multiplied value
 /// \param shiftopc is the right shift the readers must be (unsigned or signed)
+/// \param size is the size of the multiply in bytes
 /// \return \b true if all readers form a division
-static bool divTermIsDivided(Varnode *outvn,uint4 n,uint8 *multConst,uint4 xbits,OpCode shiftopc)
+static bool divTermIsDivided(Varnode *outvn,uint4 n,uint8 *multConst,uint4 xbits,OpCode shiftopc,int4 size)
 
 {
   list<PcodeOp *>::const_iterator iter = outvn->beginDescend();
@@ -7843,6 +7845,10 @@ static bool divTermIsDivided(Varnode *outvn,uint4 n,uint8 *multConst,uint4 xbits
     if (!cvn->isConstant()) return false;
     uintb total = n + cvn->getOffset();
     if (total > 127) return false;
+    // The shifts are merged into one before RuleDivOpt looks at them, and a shift by the width of the multiply or more
+    // is 0 in that multiply, whose product (up to 65 bits here) is not the value the division reasons about
+    // (`x / 0xFFFFFFFE`, total 64, printed `return 0`).
+    if (total >= (uintb)8 * size) return false;
     uint8 y[2] = { multConst[0], multConst[1] };	// calcDivisor works on its copy (it subtracts one)
     if (!RuleDivOpt::isDivision((uint4)total,y,xbits)) return false;
   }
@@ -7908,7 +7914,7 @@ int4 RuleDivTermAdd::applyOp(PcodeOp *op,Funcdata &data)
       continue;
     // The new product may need more bits than the multiply has, which is only acceptable on the way to a division
     if (!divTermProductFits(multConst,xbits,extvn->getSize(),opc == CPUI_INT_SEXT) &&
-	!divTermIsDivided(addop->getOut(),n,multConst,xbits,(opc == CPUI_INT_SEXT) ? CPUI_INT_SRIGHT : CPUI_INT_RIGHT))
+	!divTermIsDivided(addop->getOut(),n,multConst,xbits,(opc == CPUI_INT_SEXT) ? CPUI_INT_SRIGHT : CPUI_INT_RIGHT,extvn->getSize()))
       continue;
 
     // Construct the new constant
@@ -8051,7 +8057,7 @@ int4 RuleDivTermAdd2::applyOp(PcodeOp *op,Funcdata &data)
     // The new product may need more bits than the multiply has, which is only acceptable on the way to a division
     uint4 xbits = 8*sizeof(uintb) - count_leading_zeros(x->getNZMask());
     if (!divTermProductFits(newConst,xbits,zextvn->getSize(),false) &&
-	!divTermIsDivided(addop->getOut(),n+1,newConst,xbits,CPUI_INT_RIGHT))
+	!divTermIsDivided(addop->getOut(),n+1,newConst,xbits,CPUI_INT_RIGHT,zextvn->getSize()))
       continue;
     multConst[0] = newConst[0];
     multConst[1] = newConst[1];

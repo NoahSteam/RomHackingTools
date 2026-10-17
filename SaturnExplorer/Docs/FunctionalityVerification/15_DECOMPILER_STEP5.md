@@ -7156,3 +7156,234 @@ The generator is blind to the colour RAM, VRAM and frame-buffer repeats (its emu
 - Low work RAM is taken as repeating every MiB (the hardware of some revisions does; Mednafen answers the lower MiB only). The error is on the safe side: more words are volatile.
 - A pointer a callee returns (`*extraout_r6`), and any word reached through a pointer the engine cannot resolve, are not decided: the engine's data flow already treats a store through an unknown pointer as clobbering.
 - Grammar 2 makes few second names (24 words in 3,000 seeds; grammar 1 260 in 1,000): its literals come from `PickKind2` and the mask item is grammar 1's only.
+
+## Area 2, round 5: the slot that decided a return, the divisors at 2^31 and above, SR across a call, and the printed-C oracle's own readings (A2-31 to A2-42)
+
+Fixer, branch `review/2-round5-fix`, from master `887cf11` (patches 0001 to 0040; 0041, 0042 and 0043 are the other fixers' this round, so this round's are **0044** and **0045**). Fixes the nine rows of
+"Area 2, round 5 review": A2-31 to A2-36 (P2) and A2-37 to A2-39 (P3) are `fixed`. Three new rows, all P3: **A2-40** (the printed-C input pool lacked the negative values whose low half is positive; fixed),
+**A2-41** (the three strict mismatches the reviewer could not explain; they are the harness's reading, fixed with A2-33) and **A2-42** (a value in r0 with another use is never the return, in any slot; **accepted**,
+with the measurement below). The host (`Sh2Decompiler.cpp`) is touched in these functions only, all inside area 3's rules and each small: `EntryStateUse` (the `CPUI_STORE` case, and `MayReadMemory`, which it was the only user of, removed with its call in `WithholdReason`), `ReturnCheck::Return` (`InputsInReturn`: r0 computed from r0's entry value for any value, not joins only) and `ReturnCheck::Step` (the interpretation of `INT_SUB` and `INT_XOR` of a value with itself: 0). Nothing else of `ReturnCheck`, `LendEffects` or `WithholdReason`.
+
+### 1. A2-31: what makes r0 a return
+
+*Two causes, one symptom.* (a) `nop` was `r0 = r0` in the spec (upstream's "FIXME: intentional nop ... do this to suppress warning", the sleigh compiler's complaint about an empty constructor). The COPY is the last write of r0
+and, for a function ending `rts ; nop`, its only use is the RETURN, so `Funcdata::ancestorOpUse` / `onlyOpUse` (upstream, `funcdata_varnode.cc`) accept the return trial; with any other instruction in the slot the trial is the value's own
+definition and `onlyOpUse` rejects it when the value has any other use (a CBRANCH through `cmp/eq #imm,r0`, a LOAD or STORE, a copy to r1 that reaches the RETURN). So an unrelated slot instruction decided it. (b) `ancestorOpUse`
+returns false for any CALL ("a call is never a good indication of a single op use"), a rule written for the parameters of a call; it also decided the return trial of the function's own RETURN, so `return g(p);` (r0 is the
+call's output, a RETURN of r0) was `g(p); return;` unless the nop's COPY stood between them.
+
+*What the corpus said before anything was decided.* A `nop` in the slot gave 324 of 397 `void` functions of image 007 and 778 of 963 of image 008 a return (the reviewer's `slotscan`): the nop was the commonest cause of a
+**wrong** return, not of a right one. A first reading of the base build's text confirms it (`SH2_CCR = 0x11; return 0x11;`, a state machine that returned the byte it had just read: `06005978`), and
+the 131 wrappers with a filled slot are one shape (`return g(p);`) the nop had been covering for the nop-slot ones.
+
+*The rule, three candidates.* (1) Keep the nop hack: rejected, it is the defect. (2) The host withholds every `void` signature over an r0 that the function writes on every path (the reviewer's "withheld, not lent
+`void`"): measured with `SE_GAME_LEND`, it takes the lent signatures from **600 to 365** (image 007) and from **984 to 553** (image 008), because compiled `void` code leaves scratch in r0 and every withheld callee
+withholds its callers; and it buys nothing a caller needs, since a lent `void` is safe for the callers (a caller that reads r0 after the call is withheld on it, "it uses r0 after calling ..."). Rejected, with the numbers in A2-42.
+(3) Chosen: **the slot decides nothing** (`nop` writes nothing, patch 0045), **upstream's own rule holds in every slot** (a value with another use is scratch), and **a RETURN of a call's output is a return when the
+call's prototype is locked and returns a value** (patch 0044 (1)): that is evidence a host gave (the callee was lent as returning), it is the C idiom of a wrapper, and it needs no other. A call whose prototype is unknown is decided as before.
+
+*The spec.* `nop` keeps one op at its address (`local nothing:1 = 0;`, dead at once): the body of a function is read from the ops, and an instruction with no op at all would leave the body. The sleigh compiler now warns of
+"1 operations wrote to temporaries that were not read" in place of "1 NOP constructors found"; `SlaFreshnessTests` does not read warnings.
+
+*What the nop had been hiding in the host.* `shll r0 ; cmp/eq #1,r0 ; bf ; rts ; nop` is r0 computed from r0's entry value and used again. With a nop the engine kept the return (`in_r0 * 2`, the text read `in_r0`, A3-5's input scan withheld
+it); with any other slot, and now with a nop, the engine drops the return and the read of r0 with it, and the function was lent `void` (the generator's grammar 1 found it at seed 212 the first time the nop stopped covering it:
+`input-dropped:r0`). `ReturnCheck::Return` took A3-14's "r0 computed from its own entry value" for joins only; it takes it for any value computed from r0 alone now (`InputsInReturn`), and the function is withheld
+("its return is computed from r0 on entry"). A path that leaves r0 alone is still not a read (the control).
+
+### 2. A2-31: the decision, measured
+
+*Decision.* A function's r0 is its return when the engine's own rule says so (a value whose only use is the RETURN, or the output of a call whose prototype is locked and returns), in every rts slot. The slot no longer decides; a value in r0
+that is also compared, stored or used as an address is scratch (A2-42, accepted). The reviewer's alternative, withhold every `void` signature over an r0 written on every path, was measured with `SE_GAME_LEND=1` (lent signatures **600 to 365** in
+image 007, **984 to 553** in image 008) and rejected: it costs two lent signatures in five, and a lent `void` is already safe for callers.
+
+*Lending on the corpus, before (master `887cf11`, base) and after (this branch).* Image 007: **600 (786 parameters) to 602 (788)** lent signatures; image 008: **984 (1,223) to 986 (1,225)**. The lines "withheld: it uses a register after calling"
+(image 007 30 to 28, image 008 67 to 63) fall; no function loses a lent signature (the first version of the host rule withheld image 008's `06073C7C`, `xor r0,r0 ; ... ; rts`, lent `void` before; `xor r0,r0` is 0, not a read, and the rule says so now). Both corpora with `SE_GAME_LEND=1`: every ledger count 0, **16** (image 007) and **20** (image 008) accesses missing and each said (code the analysis removed as unreachable), 0 dropped,
+0 functions without a reference run, 0 functions failed.
+
+*What changed, function by function* (the lists are in section 8, each with its reason). Of the 1,732 functions of image 007, 251 changed text with the lent signatures (118 of the 839 decompiled alone); of the 2,997 of image 008, 315 (147 of 1,554 alone). The
+changes are five things and nothing else:
+
+1. **r0 was scratch, the nop had made it a return** (A in section 8, lent `void` now; and the same in the withheld functions, B and C): 17 and 22 functions. Read: `06003884` (`mov #0x11,r0 ; mov.b r0,@(2,r1) ; ... ; rts ; nop`, a state machine that returned the byte it had just stored:
+   `return 0x11;`), `06005978` (returned `uRam0603acc1`, the byte it had read and compared), `060241CC` (`mov #0,r0 ; mov.w r0,@r1` ... `rts` after a loop on memory: `return 0;`), `060259D8` (a table of stores through r0: `return 0xffff8000;`), `06026824` (`dmuls`
+   with r0 loaded from memory as a factor: `return iVar3` of a loaded word). Each returned a value the code never meant as a result.
+2. **A call's result is returned when its callee is lent as returning** (D, 55 and 66 functions, `return g(p);` where the text said `g(p); return;`; the callers that read r0 after such a call lose their `extraout_r0` (H and I: 2 + 15 and 2 + 23 functions; H are the functions that were withheld "it uses r0 after calling 0x0602D418" and are lent: `0602C278`, `0602C27E`; `0606CD64`, `0606CD6A`). Read: `0602D388` (`jsr` then `rts`: `return g(*(param_1 + 8));`), `060052E4` (stores the callee's r0 and leaves it there for the caller), `0601D080` (tests it, then `rts`): in each r0 at the `rts` is the callee's output, which the callee was lent as returning.
+3. **A call's result is not returned when the callee's signature is not known** (B, 60 and 80 functions, all withheld, with the reason on the first line: "it calls 0x..., whose signature is not known" or "an indirect call it does not resolve"). The nop in the slot had made the result a return; upstream's rule ("a call is never a good indication of a single op use") now holds for a call whose prototype is not locked. This is A2-42's second half. E (47 and 57 functions) is the converse for functions that are withheld for another reason: `void` before, the lent callee's result returned now, and the text is the guess either way.
+4. **Withheld functions' guesses** (C, 55 and 54 functions): the signature is withheld, the text is the engine's guess, and the guess is no longer decided by the slot (`06005A12` returned `CONCAT44(iVar3,uVar4)` for a `rts` after `mov.l @r15+,r9`; `060264D0` returned `CONCAT44(iVar1,extraout_r1)`
+   from a function ending `rts ; nop`). The eleven F functions of image 008 (7 lent, 4 withheld; none in image 007) are a fifth thing and the one to look at: a function that calls a function lent as returning, tests the result and goes on, so that r0 at its `rts` is a merge of the call's output on one path and whatever the other paths left. `ancestorOpUse` accepts a merge when any one input is a good single-use ancestor (upstream's rule), and a locked call output is one now, so the function returns the merge. `060560B8` calls `func_0x060571a4(i)` for each of 32 entries, and returns `iVar3`, which is 0 on the path where the call returned 0 and `iVar2 + 0x38`, a pointer it had used as an index base, on the other; `0604EE1C`/`0604F00A` (the same shape, `return iVar17`) and the withheld `060284A4` (`return 0`) and `06073334` were read. What the text says is what r0 holds at the `rts`, which is true to the machine, and a caller that does not read r0 after the call is unaffected; it is the scratch face of A2-42 (a returned value the code did not mean as one), now in a lent signature, 7 of 2,997 functions. The alternative, to count the call output as evidence only when it is the whole returned value and not one input of a merge, was not made: it would leave `x = g(); if (x) {...} return x;` without its return, which is the C idiom of the other 55 + 66.
+
+*Sampling by reading.* Thirteen functions of the lists were read against their disassembly (image 007: `06003884`, `06005978`, `060241CC`, `060259D8`, `06026824`, `06005A12`, `06024ACC`, `06027130`, `060264D0`; image 008: `060284A4`, `0604EE1C`, `060560B8`, `06073334`): every dropped return was a scratch r0 (a stored constant,
+a compared byte, a factor) or an unknown callee's result in a function that is withheld; every added return is a lent callee's `r0` or, for F, a value on every path to the `rts`. None is a function whose value the code meant as a result and the text lost while the signature is lent.
+
+### 3. A2-32: the shift of 64 (patch 0044 (2))
+
+`x / 0xFFFFFFFE` (multiplier 3), `0xFFFFFFFC` (5) and `0xFFFFFFF0` (0x11) take the add form `t + ((x - t) >> 1)`, which `RuleDivTermAdd2` turns into `sub((zext(x) * (c + 2^32)) >> 33, 0)`: a product that needs 65 bits in an 8-byte
+multiply. Patch 0037's guard lets that stand when every reader is a right shift `RuleDivOpt::isDivision` accepts, and here the reader shifts by 31, the total is 64 and it is accepted. But the shifts are merged before `RuleDivOpt` looks
+at them, and a shift by the width of the multiply is 0 in that multiply: the product folded to 0 and `return 0;` was printed with the parameter dropped. (With a total of 63, `x / 0x7FFFFFFF`, the merged shift is still inside the multiply and `RuleDivOpt` fires.)
+`divTermIsDivided` now takes the size of the multiply and refuses a total at or above its width, for the unsigned and the signed rule alike; the unrewritten form, `(x - iVar1 >> 1) + iVar1 >> 0x1f` with `iVar1 = (int4)((uint8)x * 3 >> 0x20)`, right for every x, stays. The
+word the reviewer gave and its three siblings (and the scaled `x / 0xFFFFFFFE * 4` of seed 1900) are fixtures in both suites; the other large divisors (13 unsigned, 12 signed) were right before and are right now.
+
+### 4. The oracle (A2-33, A2-34, A2-38, A2-39, A2-40, A2-41)
+
+*A2-33: the second reading is the engine's.* `narrow-c` was assigned on a mismatch when the text declared any 1- or 2-byte variable, or the difference was in the high word of an 8-byte return and a `(uint8)` appeared anywhere, with no
+second reading run for either. Every mismatch (bar the A2-26 `upper-bits` class) goes to a second reading now, and the reading is the engine's own: `CxxHeader` compiles the same text as C++ in which every integer type is a class that does
+the arithmetic at its own width, as DECOMPILER_GUIDE.md says to read it ("read the types, not C's promotion rules"). The rules are those of A2-19 and nothing more: two operands are brought to the wider, each extended by its own sign; the result is unsigned
+if either is, at one width; a comparison or `!` gives a four-byte unsigned (the extension of the engine's bool, which the text does not show); `(uint8)x` of a 4-byte x is a zero extension and any other widening cast follows the source's sign; xunknown
+and the unknown-sign pieces are signed; a value narrower than int meeting a plain number is brought to four bytes with its sign (the invisible extension C's promotion makes, which is why `(in_sr & 1) - 1 >> 2` of a uint1 is a four-byte
+unsigned subtraction and a logical shift, and why `(int4)-param_1` of a char negates a byte: the extension after it is the visible cast). A text that agrees there is `narrow-c`, one that agrees in neither reading is a finding, and a text the
+reading cannot compile is a finding with the compiler's message. Unlike the old second reading this one could not be tuned to excuse a case: it took the A2-19 cases of the reviewer's strict copy (17 of 25, three of them unexplained, see A2-41) with
+one change after the first run (the pieces `unkbyte3`/`unkbyte5..7` read as signed, as xunknown is), and it fails a wrong value (with A2-32 reverted, the two words of seeds 3404 and 9223 are `mismatch`; with the old oracle they were `narrow-c`).
+
+*A2-34: what is a failure.* The reviewer's rule, "a lent `void` whose run returns a value fails", is A3-5's decision read as covering every `void` function that leaves a value in r0, and the corpus says what that costs (section 1: two lent signatures in five). What
+the register-only generator can say is what it meant: its `rts` slot `mov Rm,r0` is the compiled idiom for `return Rm`, and a `void` text over it whose signature is lent is a return the engine dropped without the host withholding it. That is
+`return-dropped`, a failure (the fixture `rts ; mov r1,r0`, withheld by A3-5, is counted `void-return`; with the host rule off it is the finding). The rest are counted and printed as they were, and `void-return-lent` is a class of its own now, so a
+lent `void` is no longer invisible: 123 of 3,072 functions at one per seed, 761 of 20,072 at two.
+
+*A2-38: the item that was never compared.* All 268 `skipped:call-or-stack` functions of 3,000 seeds had a `braf` item, which the engine reads as a tail call to its one target (a documented limit: `braf` is for jump tables), so the text calls the
+code after it and the oracle cannot run it. The item is `mov #2n,Rx ; bra +n ; slot ; n skipped` now (the same draws and the same number of words; the mov stays), so the functions are compared (3,000 seeds: **0 skipped, 2,661 compared**), and
+a generated function the harness skips for a call or a stack argument is a `grammar-leak` failure (a seed can have neither). `braf`'s semantics are checked where they were: `SaturnExplorerSh2DecodeTests` (the differential against Mednafen, `braf r1 ; mov.l @(0,pc),r2` among its shapes) and `TestTailJumpToUnreachedCode`
+(the tail-call warning); no generated function value-checks one, which the row's other branch (a target laid out as code the oracle may run to the end) would have given and the engine's reading of `braf` does not allow.
+
+*A2-39.* (a) is the engine's reading of a comparison as a four-byte unsigned in arithmetic; (b) `fieldSet` accepts `x._1_3_ =` with the value on the next line (the printer wraps a long one).
+
+*A2-40: the pool.* `0xFFFF7FFF`, `0xFFFFFF7F`, `0xFF7FFFFF` and `0x7F7F7F7F` joined the 22 edge values (the first 26 inputs of a function walk them through r4-r7). Run with them: 0 findings in 3,072 and in 20,072 functions, so no engine defect
+is known that they expose; they are checked for the next one.
+
+*A2-41: the three unexplained strict mismatches* are the harness's C reading of a 3-byte field of an unknown-sign piece (`(int4)xStack_4._0_3_`, seeds 3619 #1 and 8889 #1) and of `(int4)CONCAT11(...)` (the third); all three agree with the run in the engine's reading.
+
+The generator (grammar 2) draws `return g(p);` now (`fn.ret_call`, from a stream of its own so no earlier draw moves: the last call of a returning function, no instruction between it and the return, the pop or a nop in the slot): 30 functions in 3,000
+seeds, and with the call rule of 0044 off they are `return-dropped` (the mutation table). The values stored or compared and also returned (A2-42) are not drawn as returns: the engine takes them for scratch by upstream's rule and the oracle would only
+repeat the row.
+
+### 5. A2-35, A2-36, A2-37
+
+*A2-35.* `EntryStateUse` let a whole SR stored through a pointer pass when the function itself could not read memory back (A2-23's allowance); the memory outlives the function and the caller reads the word back, so `stc sr,r1 ; mov.l r1,@r4` is
+an input like a branch on T, and the function and its callers are withheld. The compiler's saved mask is a stack local, not a STORE after the engine's stack analysis, and still lends (the control).
+The generator's pair (`param-dropped:r5`, `r6` before) has 0 findings. No corpus function changed for it.
+
+*A2-36.* `rte` restores `sr` before its delay slot, so a slot that reads T sees the restored one; `Write_SR(sr)` now follows `delayslot(1)`, so the SR the text says the interrupted code resumes with is the one the slot leaves
+(Mednafen's `RTE`: `SR = stacked & 0x3F3`, then the slot). `rte ; sett`, `clrt` and `cmp/eq` write `& 0x3f2 | 1`, `& 0x3f2` and the compare; a slot that stores to the stacked SR, `ldc r4,vbr` and `movt r0` are as before. `sh-2.sla` and `Sh2SpecData.h` regenerated, both committed.
+
+*A2-37.* `ScopeInternal::buildVariableName` gives a piece of a register the function keeps the same byte suffix as an input's (`unaff_r8`, `unaff_r8_b1` to `_b3`; `cmp/str r6,r8`, `r14`, `r15`); the printed-C harness gives `unaff_rN_bK` its value.
+
+### 6. Mutation
+
+Each change reverted alone (the engine, spec or host rebuilt, `se-regen-sla` for the spec), then: `Sh2DecompilerTests` (the whole suite), the printed-C run (the 72 fixtures and 300 seeds) and the generator (grammar 2, 400 seeds; 3,000 for the call
+rule). Restored, all pass.
+
+| Reverted alone | Unit suite (`Sh2DecompilerTests`) | Printed-C (fixtures + 300 seeds) | Generator (grammar 2) |
+|---|---|---|---|
+| the shift guard of `divTermIsDivided` (0044 (2)) | FAILS: 5 checks (lines 7949, 7950, 7951, 7955, 7956) | FAILS: [mismatch] A2-32 x / 0xFFFFFFFE; [mismatch] A2-32 x / 0xFFFFFFFC; [mismatch] A2-32 x / 0xFFFFFFF0; [mismatch] A2-32 x / 0xFFFFFFFE * 4 (seed 1900) (+2) | pass (400 seeds) |
+| the byte suffix of an unaffected register piece (0044 (3)) | FAILS: 2 checks (lines 7995, 7996) | FAILS: [fixture-skipped] A2-37 cmp/str r6,r8; [fixture-skipped] A2-37 cmp/str r6,r14 | pass (400 seeds) |
+| the call-output return in `ancestorOpUse` (0044 (1)), both the CALL and the SUBPIECE case | FAILS: 8 checks (lines 6899, 7281, 7878, 7879, 7884, 7885, 7890, 7891) | pass | FAILS: n:return-dropped=6 (3000 seeds) |
+| the SUBPIECE case alone (a piece of a 64-bit call output) | FAILS: 1 checks (lines 7896) | pass | pass (3000 seeds) |
+| `nop` writes `r0 = r0` again (0045) | FAILS: 20 checks (lines 1664 to 7926) | pass | pass (400 seeds) |
+| `rte`: `Write_SR(_sr)` before the slot and none after (0045) | FAILS: 3 checks (lines 7962, 7964, 7966) | pass | pass (400 seeds) |
+| the SR stored through a pointer is lent again (`EntryStateUse`, host) | FAILS: 5 checks (lines 7794, 7799, 7980, 7981, 7983) | pass | pass (400 seeds) |
+| `ReturnCheck::Return` takes r0 computed from r0 for joins only (host) | FAILS: 2 checks (lines 7923, 7926) | pass | pass (400 seeds) |
+| `xor r0,r0` is not 0 (host) | FAILS: 1 checks (lines 7934) | pass | pass (400 seeds) |
+| the A3-5 input scan is off, which the A2-34 intent check relies on (host) | FAILS: 10 checks (lines 6899 to 7926) | FAILS: [return-dropped] A2-34 rts ; mov r1,r0 (r1 on entry); [return-dropped] seed7_0; [return-dropped] seed19_0; [return-dropped] seed105_0 (+11) | pass (400 seeds) |
+| the generator draws `braf` again (A2-38) | pass | FAILS: [grammar-leak] seed11_0; [grammar-leak] seed37_0; [grammar-leak] seed52_0; [grammar-leak] seed57_0 (+24) | pass (400 seeds) |
+| `fieldSet` needs the value on the same line (A2-39 b) | pass | FAILS: [not-compilable] A2-39 b: a wrapped field assignment | pass (400 seeds) |
+| the A2-34 intent check off (`VoidReturnClass`: a lent `void` over `rts ; mov Rm,r0` is no longer `return-dropped`) | pass | FAILS: 1 oracle self-checks (`TestOracleOwnDecisions`, lines 5322) | pass (400 seeds) |
+| the four new pool values removed (A2-40; `PrintedCPool`) | pass | FAILS: 1 oracle self-checks (`TestOracleOwnDecisions`, lines 5335) | pass (400 seeds) |
+
+The unit column counts the failing `CHECK` lines of `Sh2DecompilerTests` (all `TestArea2Round5` and its neighbours unless a line is outside 7780 to 8000). Reading it:
+
+- **A2-32** is caught by the unit fixtures and by the printed-C fixtures (the four words of the row, the scaled one of seed 1900, and the two A2-33 words), and not by 400 generated seeds. **The oracle itself**: with the guard reverted, the words of seeds 3404 and 9223 are
+  `mismatch` in the engine's reading and were `narrow-c` in 887cf11's (the two fixtures, run against both oracles with the same engine: `hand0 mismatch / narrow-c`, `hand1 mismatch / narrow-c`).
+- **The call rule (0044 (1))** is caught by 8 unit checks and by the generator's new `return g(p)` form (6 `return-dropped` in 3,000 seeds; 400 seeds draw none of them, which is why the call rule was run at 3,000). **Its SUBPIECE case alone** is caught by the 64-bit fixture only: the generator found it (nightly seed 5234), but not in 3,000 seeds.
+- **`nop` as `r0 = r0`** is caught by the unit suite only (20 checks: the slot fixtures, and the fixtures whose `rts ; nop` returned r0 and so changed their text); the printed-C run and the generator count `void-return` 30 to 28 and `void-return-lent` 6 to 3 and fail nothing, because a returned scratch r0 is
+  no failure of the text (A2-34).
+- **`rte`**: restoring SR before the slot *and* after it (the first mutation tried, `A2-36` alone) leaves the same final SR and is an equivalent mutant (the unit suite passes, as it should). The whole revert (before the slot, none after) fails the three slot fixtures; removing the write after the slot
+  and leaving none at all (`A2-36b`) fails six, one of them the older `rte` check at line 7806.
+- **The host changes** are caught by the unit suite (A2-35: 5 checks; `ReturnCheck::Return` for any value: the `shll` and `add r4,r0 ; xor r0,r1` pair; `xor r0,r0`: 1) and by nothing in 400 generated seeds; the generator found the first two before they had fixtures (grammar 1 seed 212, nightly seed 12623).
+  **A3-5 off** (the rule the A2-34 intent check stands on) fails 10 unit checks and 15 printed-C findings (`return-dropped`: the row's fixture and 14 generated functions).
+- **The oracle's own changes** are caught by the printed-C run only: `braf` drawn again, 28 `grammar-leak`; the field macro, 1 `not-compilable`. **Two survived the first round**: the A2-34 intent check (`VoidReturnClass`) and the pool of A2-40, because nothing failed when they were removed (the engine has no defect they expose, and the intent check
+  needs the host rule off to show). They are functions now and `TestOracleOwnDecisions` pins them (the intent rule on seven slot shapes; the pool on a negative value whose low 8, 16 and 24 bits are positive); both die.
+
+
+### 7. Matrix (RelWithDebInfo, gcc 13.3, four cores shared with three other fixers: load average 9 to 11)
+
+All on the final tree (the code of this branch at `350c98f`), builds deleted at the end.
+
+- **Whole `ctest -j3 --timeout 900`** (RelWithDebInfo, gcc 13.3): **97 of 97 passed**, 103 s. (`SaturnExplorerSlaFreshnessTests` among them: `sh-2.sla` and `Sh2SpecData.h` are current.)
+- **Generator** (`SaturnExplorerSh2GeneratedTests`): grammar 2 x 3,000 seeds **0 failing seeds, 0 findings** (92 s, 5,941 functions); grammar 1 x 1,000 **0 / 0**; the nightly's `SE_GENERATED_SEEDS=20000` (10,000 per grammar, 19,456 functions
+  in the second grammar's modules) **0 / 0**.
+- **Printed-C differential**, with the engine's reading as the second reading: 3,000 seeds at one per seed: 3,072 functions, 2,661 compared, agrees 2,715, `narrow-c` 4, `void-return` 230, `void-return-lent` 123, **0 findings**; 10,000 seeds at two per seed:
+  20,072 functions, 17,444 compared, agrees 17,802, `narrow-c` 44, `void-return` 1,461, `void-return-lent` 761, `skipped:array-local` 2, `skipped:stack-piece` 2, **0 findings**. The A2-33 words (seeds 3404 and 9223) and the A2-32 words are fixtures in the default run (372 functions, 323 compared).
+- **ASan + UBSan + LSan** (gcc 13 Debug, the CI workflow's flags, `.github/scripts/run-decompiler-sanitizers.sh` restricted by `SE_SANITIZER_ONLY` to the four binaries, then `check-sanitizer-logs.sh`): `Sh2DecompilerTests`, `Sh2SemanticsTests`, `Sh2GeneratedTests`
+  (`SE_GENERATED_SEEDS=300`) and the printed-C run all exit 0; the checker passes ("no ASan/LSan report, no UBSan error beyond the two accepted sites": 5, 1, 2 and 1 accepted upstream lines).
+- **`vendor.py`** on a copy of `third_party/ghidra-decompiler` against the pinned checkout: `cpp/`, `processors/` and `sources.cmake` identical to the tree (0 differing lines); the two patch files are regenerated by `diff -u --label a/Ghidra/... --label b/Ghidra/...` against the tree with 0001 to 0040 applied
+  and are unchanged by regenerating them.
+- **Corpus** (both images, `SE_GAME_LEND=1`): section 8.
+
+
+### 8. Corpus
+
+The two game work-RAM images of the corpus (images 007 and 008; the lending test over 1,732 and 2,997 functions, the prologue-function run over 839 and 1,554), `SE_GAME_LEND=1`, the base being master `887cf11` built with the same flags.
+
+- Ledger counts (`TestGameCode`): every count **0** in both (accesses not printed exactly once, dropped against the reference run, functions without a reference run, failed functions); **16** (image 007) and **20** (image 008) accesses missing and said ("the analysis removed the code around it as unreachable"), as before.
+- Lending (`TestGameLending`), before and after this branch: image 007 **600 (786 parameters) to 602 (788)** lent signatures, image 008 **984 (1,223) to 986 (1,225)**; `withheld "uses a register after calling"` 30 to 28 and 67 to 63; functions printing `extraout_r4-7` 101 and 154, unchanged. No function loses a lent signature.
+- Every function whose text changed, by what happened to it (the first line of each result is the count; the lists are the addresses of the functions decompiled with the lent signatures, the panel's order; the functions decompiled alone are counted, not listed):
+**image 007, with the lent signatures (the panel's order)**: 1732 functions, 1481 the same, 251 changed.
+
+- A. returned a value, lent `void` now (r0 was scratch: a constant, a stored or compared value, a value with another use): **17**
+  `06003884 0600389E 06005978 060241C8 060241CC 06024588 060246B4 060246D4 060249AA 06024D82 06024DE4 0602588E 0602596C 060259D8 06025A24 06026824 06033E60`
+- B. returned a call's result, the function is withheld (the callee's signature is not known or the call is indirect: upstream's rule, A2-42): **60**
+  `0600DC56 060100EA 06013A9A 060141D2 06017204 06017206 060191FA 0601BBBC 0601BBC0 06023468 0602346C 060234FC 06023500 06023558 0602355A 060236F8 060236FC 06023728 06023730 06023B80 06023B84 06024278 060242A4 060242D8 0602430A 0602439C 060243A0 060245F8 0602463C 06024720 06024764 060247B0 060247E2 0602481C 0602488C 06024914 060249E8 06024A3C 06024A72 06025834 060258AC 06025B7E 06025BC8 06025C96 06025D3C 060266E8 06026708 06026AD8 06026C40 06026E8C 06026F6A 06026FC0 060273D0 06027800 06027844 060278C4 0602C878 0602C886 06033D50 06033D5A`
+- C. returned a guess, the function is withheld (the text is the engine's guess; the reason is on the first line): **55**
+  `06005A0C 06005A12 0601357A 06013872 06013EAE 06024072 0602469C 06024ACC 06024B18 06024B34 06024BC8 06024BF4 06024C18 06024C64 06024D1C 06024E24 060254C8 06025564 06025604 060256EE 0602579C 06025D90 0602623C 060262AC 060264D0 06026514 06026C98 06026CC0 06026CCC 06026D30 06026D50 06027018 06027130 06027170 060271E4 06027200 0602721C 0602722E 06027244 06027256 06027270 060272DC 06027344 06027360 0602737C 0602738E 060273A4 060273B6 06027486 060274D2 06027526 06027574 060275C4 06027640 060276BC`
+- D. `void` before, returns a call's result now (lent: the callee is lent as returning): **55**
+  `060052E4 0600D0E8 0600D0EE 06011EA0 06011EA4 0601964C 06019654 0601D080 0601D084 0601DBBE 0601ED38 0601ED40 0601EFAA 0601EFFE 0601F9DC 0601F9DE 0602C65E 0602C682 0602D328 0602D32A 0602D340 0602D342 0602D388 0602D38A 0602D3A0 0602D3A2 0602D3D0 0602D3D2 0602D3E8 0602D3EA 0602D400 0602D402 0602D418 0602D41A 0602D432 0602D448 0602D44A 0602D462 0602D478 0602D47A 0602D8EC 0602D8EE 0602DF9C 0602DFA0 0602E402 0602F288 0602F28A 0602F65C 0602F666 0603008C 06030090 06030B50 06030B52 06033718 0603371A`
+- E. `void` before, returns a call's result now (the function is withheld): **47**
+  `06006166 06007ECC 06007ED2 06007F26 06007F76 0600A318 0600A31A 0600CAB4 0600CABA 0600D46E 06010700 06010704 06011168 0601116E 0601F530 0601F534 060212A4 060212A6 0602BD10 0602BD12 0602DDDC 0602DDE8 0602E924 0602E92A 0602EA1C 0602EA1E 0602F118 0602F11E 0602FD46 06030160 0603016A 060325E2 0603262A 0603268A 060327B2 06032812 060329FA 06032F4A 06032F9E 0603313E 06033252 0603337A 060333BE 0603341A 06033536 06033592 060336E6`
+- H. signature withheld <-> lent (a callee now lent as returning r0: the caller reads the call output in place of `extraout_r0`): **2**
+  `0602C278 0602C27E`
+- I. text only (the same signature; a call output named in place of `extraout_r0`, or names and declarations): **15**
+  `06009E96 0600D160 0601AE3C 0601AE40 0601BC38 0601BC42 06024D98 0602BF4C 0602C2E4 0602C2F2 0602CC66 0602CF88 0602CF96 0602D510 0602D516`
+
+**image 007, each function alone (no lending)**: 839 functions, 721 the same, 118 changed.
+
+- B. returned a call's result, the function is withheld (the callee's signature is not known or the call is indirect: upstream's rule, A2-42): **76**
+- C. returned a guess, the function is withheld (the text is the engine's guess; the reason is on the first line): **39**
+- I. text only (the same signature; a call output named in place of `extraout_r0`, or names and declarations): **3**
+
+**image 008, with the lent signatures (the panel's order)**: 2997 functions, 2682 the same, 315 changed.
+
+- A. returned a value, lent `void` now (r0 was scratch: a constant, a stored or compared value, a value with another use): **22**
+  `06003884 0600389E 060059D4 0601E000 0601E00E 06029B10 0604D9F8 06063E68 06063E6C 06064228 06064354 06064374 0606464A 06064A22 06064A84 0606552E 0606560C 06065678 060656C4 060664C4 06073C60 06074EF4`
+- B. returned a call's result, the function is withheld (the callee's signature is not known or the call is indirect: upstream's rule, A2-42): **80**
+  `0601188C 06013138 06013142 06017694 06017696 06017A38 06019BF2 060324C4 060324CA 06032BB4 060352A0 060352AE 0603E99C 0603E9A6 0603ED44 0603ED52 06048E24 06048E32 0604911C 0604911E 0605B098 0605B09C 06062954 06062958 060629E8 060629EC 06062A44 06062A46 06062BE4 06062BE8 06062C14 06062C1C 06062D60 06062D64 06063820 06063824 06063F18 06063F44 06063F78 06063FAA 0606403C 06064040 06064298 060642DC 060643C0 06064404 06064450 06064482 060644BC 0606452C 060645B4 06064688 060646DC 06064712 060654D4 0606554C 0606581E 06065868 06065936 060659DC 06066388 060663A8 06066778 060668E0 06066B2C 06066C0A 06066C60 06067070 0606735C 060674A0 060674E4 06067564 0606D33C 0606D34A 06071908 06071912 0607204C 06072056 06074DE4 06074DEE`
+- C. returned a guess, the function is withheld (the text is the engine's guess; the reason is on the first line): **54**
+  `06005A68 06005A6E 06048B70 06048B7E 06055230 06063D12 0606433C 0606476C 060647B8 060647D4 06064868 06064894 060648B8 06064904 060649BC 06064AC4 06065168 06065204 060652A4 0606538E 0606543C 06065A30 06065EDC 06065F4C 06066170 060661B4 06066938 06066960 0606696C 060669D0 060669F0 06066CB8 06066DD0 06066E10 06066E84 06066EA0 06066EBC 06066ECE 06066EE4 06066EF6 06066F10 06066F7C 06066FE4 06067000 0606701C 0606702E 06067044 06067056 06067126 06067172 060671C6 06067214 06067264 060672E0`
+- D. `void` before, returns a call's result now (lent: the callee is lent as returning): **66**
+  `060052CC 0600E144 0600E14A 0601DC44 0601DC4A 06020110 06020114 06021A34 06021A3C 0602A29A 06031A9A 06031B02 06031B62 06035928 06035930 060582D0 060582D2 0605C55C 0605C560 0605D09A 0605E214 0605E21C 0605E486 0605E4DA 0605EEB8 0605EEBA 0606BD84 0606BD86 0606BD9C 0606BD9E 0606BDE4 0606BDE6 0606BDFC 0606BDFE 0606BE2C 0606BE2E 0606BE44 0606BE46 0606BE5C 0606BE5E 0606BE74 0606BE76 0606BE8E 0606BEA4 0606BEA6 0606BEBE 0606BED4 0606BED6 0606C1BA 0606D126 0606D14A 0606E460 0606E462 0606EB10 0606EB14 0606EEA0 0606EEA2 0606F274 0606F27E 0606FCA4 0606FCA8 06070768 0607076A 06073646 06073886 06073B5A`
+- E. `void` before, returns a call's result now (the function is withheld): **57**
+  `060061C2 06008000 06008006 0600805A 060080A4 060080AA 0600E4CA 06010DCC 06010DD6 060174A4 060174AA 060219C8 060219D0 0602A84A 0602A966 06032604 06032608 06033754 06033756 060373A8 060373B6 06040482 060434DC 060434E6 06053484 06053492 060572A0 060572A8 06057C98 06057CA4 0605844C 06058450 06058628 0605862C 0605EA0C 0605EA10 06060780 06060782 0606C6EC 0606C6F2 0606C7F0 0606C7F2 0606D990 0606D992 0606E08C 0606E092 0606E950 0606E95C 0606F95E 0606FD78 0606FD82 060734A0 0607365C 06073662 06073834 0607383C 0607428E`
+- F. `void` before, returns now (r0 at the `rts` merges a lent callee's output with what the other paths left; section 2): **11**
+  `060284A4 060284B2 0604EE1C 0604EE2A 0604F00A 0604F1DC 0604F1EA 060560B8 060560C2 06073334 0607333A`
+- H. signature withheld <-> lent (a callee now lent as returning r0: the caller reads the call output in place of `extraout_r0`): **2**
+  `0606CD64 0606CD6A`
+- I. text only (the same signature; a call output named in place of `extraout_r0`, or names and declarations): **23**
+  `0600B474 0600B482 0600E1BC 06029FF8 0602A004 0602E510 0602F47C 06035F32 06057E4C 06057E5A 06059A48 06059A4C 0605B114 0605B11E 06064A38 0606BA60 0606BA6E 0606BF6C 0606BF72 0606CA2C 0606CDD0 0606CDDE 0606D72A`
+
+**image 008, each function alone (no lending)**: 1554 functions, 1407 the same, 147 changed.
+
+- B. returned a call's result, the function is withheld (the callee's signature is not known or the call is indirect: upstream's rule, A2-42): **104**
+- C. returned a guess, the function is withheld (the text is the engine's guess; the reason is on the first line): **40**
+- I. text only (the same signature; a call output named in place of `extraout_r0`, or names and declarations): **3**
+
+
+### 9. Not done, and what the next reviewer should know
+
+- **A2-42** is accepted, with the measurement: a value in r0 with another use is scratch in every slot, a `void` signature over it is lent, and a function that returns `++*p` is shown `void`. The result of a call whose prototype is not lent
+  (a callee not decompiled yet, withheld, or an indirect call) is dropped the same way: `uVar1 = (*pcVar3)(...) ; bookkeeping ; return uVar1;` of image 007's `060100EA` printed the return before and does not now (76 of the 115 prologue functions of image 007
+  and 104 of 144 of image 008 that lost a return had returned a call's result, decompiled alone; with the panel's order, callees first, the lent ones are returned again). Withholding is the alternative and costs two lent signatures in five.
+  The call rule has the same face: an r0 at the `rts` that merges a lent callee's output with what the other paths left is returned (section 2, F: 7 lent and 4 withheld functions of image 008, none of image 007). Counting the call output as evidence only when it is the whole
+  returned value would leave `x = g(); if (x) {...} return x;` without its return; it was not done.
+- The unit suite's hand-written-convention fixtures (`TestCallsAndTraps`) compare the text with the run for every caller; for a caller whose signature is withheld they now accept a text that returns nothing (`PseudoAgreesWithRun(..., voidOk)`), because
+  such a caller's text is the engine's guess; a text that returns a wrong value is still caught, and the pins that the oracle rejects a dropped return (A3-13 `across a call that keeps r0`, A3-5) are unchanged. That narrowing is this round's, in area 3's tests; say so if area 3 wants it the other way.
+- The engine's reading has the rules above and no more; a construct it cannot compile fails (`[the engine's reading did not compile: ...]`). The nightly will say if a text uses one the header lacks (a `switch` on a narrow type, a compound assignment, a float).
+- `rte` still cannot run in the generator (A2-20, with `bsrf` and `trapa`); A2-36 is pinned by text. `braf` is not value-checked by any generated function (A2-38): by design of the engine's reading of it.
+- The sleigh compiler warns during `se-regen-sla` and in `SlaFreshnessTests` ("1 operations wrote to temporaries that were not read"): the `nop`'s temporary. Neither reads warnings.
+- Not run this round: `SE_GENERATED_ALPHABET=specials`, interrupts and the slot-illegal exception (A2-8).

@@ -400,6 +400,7 @@ struct Func
     bool returns = false;          // r0 is written on every path just before the return
     uint16_t retWord = 0;          // ...by this instruction
     bool retInSlot = false;        // ...which is rts's delay slot
+    bool retIsCall = false;        // ...or by no instruction: the function's last item is a call, and r0 is what its callee returned (`return g(p);`, A2-31)
     bool noR0 = false;             // never writes r0 itself (a function that returns nothing)
     bool partial = false;          // ...bar `tst ; bt ; mov Rs,r0` last: r0 is a parameter on one path and left alone on the other (A3-20)
     bool slotPop = false;          // the last stack instruction of the epilogue is rts's delay slot
@@ -451,6 +452,7 @@ struct Gen
     Rng frameRng;
     // ...and one for the partial result (a parameter copied to r0 on one path only, round 6 A3-20).
     Rng partialRng;
+    Rng retRng;   // a stream of its own: whether a returning function returns its last call's result (A2-31)
     // What the function being made changes for good / reads on entry through the wide alphabet and the GBR accesses
     // (an over-approximation: an item the grammar drops again is counted, which the checks that use it allow).
     uint32_t wideClobbers = 0;
@@ -472,7 +474,7 @@ struct Gen
     bool inSpill = false;     // r15 is moved: no local is addressed through it here
     int loopDepth = 0;        // inside a loop body: a pointer advanced here is advanced again by the next iteration
     std::vector<Func> built;  // the functions of this module generated so far (the later ones)
-    Gen(uint64_t seed) : rng(seed), macRng(seed ^ 0x6D61636D61636D61ull), guardRng(seed ^ 0x7367756172643A5Aull), convRng(seed ^ 0x636F6E7663727667ull), wideRng(seed ^ 0x77696465414C5521ull), aliasRng(seed ^ 0x616C696173526E67ull), maskRng(seed ^ 0x6D61736B52616E64ull), frameRng(seed ^ 0x6672616D6557616Cull), partialRng(seed ^ 0x7061727469616C52ull)
+    Gen(uint64_t seed) : rng(seed), macRng(seed ^ 0x6D61636D61636D61ull), guardRng(seed ^ 0x7367756172643A5Aull), convRng(seed ^ 0x636F6E7663727667ull), wideRng(seed ^ 0x77696465414C5521ull), aliasRng(seed ^ 0x616C696173526E67ull), maskRng(seed ^ 0x6D61736B52616E64ull), frameRng(seed ^ 0x6672616D6557616Cull), partialRng(seed ^ 0x7061727469616C52ull), retRng(seed ^ 0x7265747263616C6Cull)
     {
         for (int i = 0; i < 8; ++i) align[i] = 4, pref[i] = 4;
         p.mbox = 0x26001000u + 0x10u * rng.Below(4);
@@ -1549,6 +1551,15 @@ struct Gen
             f.retInSlot = rng.Chance(40);
         }
         if (f.end != Func::Fall && !f.retInSlot) f.slotPop = rng.Chance(45);
+        // `return g(p);`: the value is what the last call's callee returned, with nothing written after it (the usual epilogue pops in the
+        // slot, or a nop there). The draws above are those of the seeds found before this form existed; this one has a stream of its own.
+        if (f.returns && f.end == Func::Rts && !table && !f.items.empty() && f.items.back().type == Item::Call && f.items.back().callee >= 0 &&
+            fns[f.items.back().callee].returns && retRng.Chance(50))
+        {
+            f.retIsCall = true;
+            f.retInSlot = false;
+            f.slotPop = retRng.Chance(70);
+        }
         if (f.end == Func::TailJump)
         {
             f.tailReg = 1 + static_cast<int>(rng.Below(3));
@@ -1815,7 +1826,7 @@ struct Emitter
     void EmitExit(const Func& f)
     {
         if (f.end == Func::TailJump) PutLitLoad(f.tailReg, f.tailLit);
-        if (f.returns && f.end == Func::Rts && !f.retInSlot) Put(f.retWord);
+        if (f.returns && f.end == Func::Rts && !f.retInSlot && !f.retIsCall) Put(f.retWord);
         const ExitOps e = ExitSequence(f);
         const bool slotOp = f.slotPop && e.lastMovable && !f.retInSlot;
         for (size_t i = 0; i < e.ops.size(); ++i)
@@ -4521,6 +4532,7 @@ struct Shrinker
                     if (Try(f.shared, false)) changed = true;
                     if (Try(f.epilogueBelow, false)) changed = true;
                     if (Try(f.retInSlot, false)) changed = true;
+                    if (Try(f.retIsCall, false)) changed = true;
                     if (Try(f.slotPop, false)) changed = true;
                 }
             }
@@ -4629,7 +4641,7 @@ void CountProgramMnemonics(const Program& p, std::map<std::string, int>& m)
         CountWords(f.slotA, m);
         CountWords(f.slotB, m);
         m["rts"] += 1;
-        if (f.retWord) CountWords({ f.retWord }, m);
+        if (f.retWord && !f.retIsCall) CountWords({ f.retWord }, m);
         if (f.savePr) { m["sts.l"] += 1; m["lds.l"] += 1; }
         if (f.prReg >= 0) { m["sts"] += 1; m["lds"] += 1; }
         if (!f.pushed.empty()) { m["mov.l"] += 2 * static_cast<int>(f.pushed.size()); }
@@ -4660,6 +4672,7 @@ void CountProgram(const Program& p, std::map<std::string, int>& shapes)
         if (f.epilogueBelow) ++shapes["fn.exit_below"];
         if (f.slotPop) ++shapes["fn.slot_pop"];
         if (f.retInSlot) ++shapes["fn.ret_in_slot"];
+        if (f.retIsCall) ++shapes["fn.ret_call"];
         if (!f.argSave.empty()) ++shapes["fn.arg_copies"];
     }
     shapes["module.fns"] += static_cast<int>(p.fns.size());
@@ -4833,15 +4846,18 @@ Subject RawSubject(const char* raw)
 // emulator's r0 (r0 and r1 for an 8-byte return). The emulator is the spec: Sh2DecodeTests holds it
 // equal to Mednafen op by op.
 //   SE_GENERATED_PRINTEDC=1|only   run it (only: and nothing else; ctest's entry for it sets 'only')
-//   SE_GENERATED_PRINTEDC_INPUTS=n inputs per function (default 32: the first 22 walk the edge values through r4-r7)
+//   SE_GENERATED_PRINTEDC_INPUTS=n inputs per function (default 32: the first 26 walk the edge values through r4-r7)
 //   SE_GENERATED_PRINTEDC_PER=n    functions per seed (default 1)
 //   SE_GENERATED_PRINTEDC_WORDS="6153 E000 000B 0009;..."  check hand-written functions, text printed
 //   SE_C_COMPILER=<cc>             the compiler (default: cc, gcc, clang found on PATH)
+//   SE_CXX_COMPILER=<c++>          the C++ compiler of the engine reading of a text that disagrees as C (default: the one that goes with the C compiler)
 // Without a C compiler the run says so loudly and exits 77, which ctest reports as skipped.
-// A mismatch on a function whose text declares a 1- or 2-byte variable or parameter is counted
-// apart ('narrow-c'): the engine prints sub-int arithmetic at its own width (`(int4)-param_1` with
-// `char param_1` negates a byte) and ISO C widens it, so the difference is in the reading, not the
-// value (15_DECOMPILER_STEP5.md, "Area 2, round 3: ...", question 1).
+// A text that disagrees with the run as C is read once more as the engine means it (CxxHeader, C++ classes that do the
+// arithmetic at their own width: `(int4)-param_1` with `char param_1` negates a byte, a comparison is a four-byte unsigned
+// in the arithmetic around it, xunknown has no sign) and counted apart ('narrow-c') only if it agrees there: the difference is
+// then in the reading, not the value (15_DECOMPILER_STEP5.md, "Area 2, round 3", question 1, and "Area 2, round 5", A2-33).
+// No declaration or cast in the text excuses a mismatch by its looks. The generated functions are register-only: a text that
+// calls something or reads a stack argument is the grammar leaking an instruction it cannot run ('grammar-leak', A2-38).
 
 std::string gScratch;
 
@@ -5170,14 +5186,17 @@ RegFn GenRegFn(uint64_t seed, int k)
             for (uint32_t i = 0; i < skipped; ++i) it.w.push_back(RegOpWord(rng, shape));
             it.shape += delayed ? (onTrue ? "bt/s" : "bf/s") : (onTrue ? "bt" : "bf");
         }
-        else if (r < 16)   // braf over one to three instructions: mov #2n,Rx ; braf Rx ; slot ; n skipped
+        else if (r < 16)   // bra over one to three instructions: mov #2n,Rx ; bra +n ; slot ; n skipped
         {
+            // This was braf Rx (round 3 to 5), which the engine reads as a tail call to its one target (documented: a jump table is what
+            // braf is for), so the text calls the code after it and the oracle could not run it: all 268 `skipped:call-or-stack` of 3,060
+            // functions were that item (A2-38). The draws are the same, and so is the number of words; the mov stays (it sets Rx as before).
             const uint32_t x = rng.Below(8), skipped = 1 + rng.Below(3);
             it.w.push_back(static_cast<uint16_t>(0xE000 | x << 8 | 2 * skipped));
-            it.w.push_back(static_cast<uint16_t>(0x0023 | x << 8));
+            it.w.push_back(static_cast<uint16_t>(0xA000 | skipped));
             it.w.push_back(RegOpWord(rng, shape));
             for (uint32_t i = 0; i < skipped; ++i) it.w.push_back(RegOpWord(rng, shape));
-            it.shape = "braf";
+            it.shape = "bra";
         }
         else
         {
@@ -5219,10 +5238,10 @@ std::string FindCCompiler()
 
 // The names the engine prints for C, as C: sized integer types and the piece operations
 // (the engine's own definitions, `ghidra/Ghidra/Features/Decompiler/src/decompile/datatests/` style).
-std::string CHeader(bool altReading = false)
+std::string CHeader()
 {
     std::ostringstream o;
-    o << (altReading ? "#define ALT_READING 1\n" : "") << "#include <stdio.h>\n#include <stdint.h>\n#include <string.h>\n"
+    o << "#include <stdio.h>\n#include <stdint.h>\n#include <string.h>\n"
          "typedef unsigned char undefined; typedef unsigned char undefined1; typedef unsigned short undefined2;\n"
          "typedef unsigned int undefined3; typedef unsigned int undefined4; typedef unsigned long long undefined8;\n"
          "typedef unsigned char byte; typedef unsigned char uchar; typedef unsigned short ushort; typedef unsigned int uint;\n"
@@ -5230,10 +5249,8 @@ std::string CHeader(bool altReading = false)
          "typedef unsigned char bool; typedef unsigned short word; typedef unsigned int dword; typedef unsigned long long qword;\n"
          "typedef int int3; typedef signed char int1; typedef short int2; typedef int int4; typedef long long int8;\n"
          "typedef unsigned char uint1; typedef unsigned short uint2; typedef unsigned int uint4; typedef unsigned long long uint8;\n"
-         // xunknown is the engine's type with no sign: unsigned in the first reading, signed in the second (see CheckPrintedC)
+         // xunknown is the engine's type with no sign: unsigned in this reading, signed in the engine's (CxxHeader)
          "typedef unsigned char xunknown1; typedef unsigned short xunknown2; typedef unsigned int xunknown4; typedef unsigned long long xunknown8;\n"
-         "#ifdef ALT_READING\n#define xunknown1 xunknown1_alt\n#define xunknown2 xunknown2_alt\n#define xunknown4 xunknown4_alt\n#define xunknown8 xunknown8_alt\n"
-         "typedef signed char xunknown1_alt; typedef short xunknown2_alt; typedef int xunknown4_alt; typedef long long xunknown8_alt;\n#endif\n"
          "typedef unsigned int unkbyte3; typedef unsigned int unkuint3; typedef int unkint3; typedef unsigned long long unkbyte5; typedef unsigned long long unkbyte6;\n"
          "typedef unsigned long long unkbyte7; typedef unsigned long long unkuint5; typedef unsigned long long unkuint6; typedef unsigned long long unkuint7;\n"
          "typedef long long unkint5; typedef long long unkint6; typedef long long unkint7;\n"
@@ -5281,6 +5298,180 @@ std::string CHeader(bool altReading = false)
     return o.str();
 }
 
+static const char kCxxHeaderBase[] = R"CXX(// The engine's reading of its own pseudocode (A2-19, A2-33), as C++: every integer type is a class that does arithmetic at its own width, as the
+// p-code does and as DECOMPILER_GUIDE.md says to read the text ("read the types, not C's promotion rules"). Two operands are brought to the
+// wider one (each extended by its own sign), the result is unsigned if either is, at one width; a comparison or a logical operator gives
+// a four-byte unsigned (the extension of the engine's bool, which the text does not show); `(uint8)x` extends by the target's sign, as ZEXT and SEXT do
+// (an implicit conversion, invisible in the text, by the source's); xunknown has no sign and is read as signed.
+#include <stdio.h>
+#include <stdint.h>
+#include <string.h>
+#include <type_traits>
+typedef unsigned long long u64;
+typedef long long s64;
+template <int N> struct Rep { typedef typename std::conditional<(N <= 1), uint8_t, typename std::conditional<(N <= 2), uint16_t, typename std::conditional<(N <= 4), uint32_t, uint64_t>::type>::type>::type type; };
+template <int N, bool S> struct T;
+template <class I> struct IsInt { static const bool value = std::is_integral<I>::value; };
+static inline u64 B2U(bool x) { return x ? 1 : 0; }
+template <class I> static inline typename std::enable_if<std::is_signed<I>::value && !std::is_same<I, bool>::value, u64>::type B2U(I x) { return (u64)(s64)x; }
+template <class I> static inline typename std::enable_if<!std::is_signed<I>::value && !std::is_same<I, bool>::value, u64>::type B2U(I x) { return (u64)x; }
+template <int N, bool S> struct T {
+  typedef typename Rep<N>::type R;
+  R v;
+  static const int size = N;
+  static const bool sign = S;
+  static u64 Mask() { return N >= 8 ? ~0ULL : ((1ULL << (8 * N)) - 1); }
+  T() : v(0) {}
+  template <class I, class = typename std::enable_if<IsInt<I>::value>::type> T(I x) : v((R)(B2U(x) & Mask())) {}
+  // a cast (explicit): a wider target extends by the source's sign, as C does, except the unsigned 8-byte cast of a 4-byte value, which is the
+  // zero extension the engine builds a 64-bit product with (`(uint8)x` of a signed x: A2-19)
+  template <int M, bool U> explicit T(const T<M, U>& o) : v((R)((N > M ? ((N == 8 && M == 4 && !S) ? o.Zext() : o.Ext()) : o.Zext()) & Mask())) {}
+  // an implicit conversion, the one C does: by the source's sign
+  template <int M, bool U> operator T<M, U>() const { return T<M, U>(B2U(Ext())); }
+  u64 Zext() const { return (u64)v & Mask(); }
+  u64 Sext() const { return N >= 8 ? (u64)v : (u64)(((s64)((u64)v << (64 - 8 * N))) >> (64 - 8 * N)); }
+  u64 Ext() const { return S ? Sext() : Zext(); }
+  explicit operator bool() const { return Zext() != 0; }
+  template <class I, class = typename std::enable_if<std::is_arithmetic<I>::value && !std::is_same<I, bool>::value>::type> explicit operator I() const { return (I)Ext(); }
+};
+template <int N, bool S, int M, bool U> struct Common {
+  static const int size = N > M ? N : M;
+  static const bool sign = N == M ? (S && U) : (N > M ? S : U);
+  typedef T<size, sign> type;
+};
+typedef T<4, false> Bool4;
+// A value narrower than int meeting a plain number (the text's literal has no width of its own) is brought to four bytes first, keeping its sign: the
+// engine extends it where C's promotion would, invisibly, so `(in_sr & 1) - 1 >> 2` of a uint1 is a four-byte unsigned subtraction and a logical shift
+template <int N, bool S> struct Promoted { typedef T<(N < 4 ? 4 : N), S> type; };
+#define BINARY(op, body) \
+  template <int N, bool S, int M, bool U> typename Common<N, S, M, U>::type operator op(const T<N, S>& a, const T<M, U>& b) { \
+    typedef typename Common<N, S, M, U>::type C; \
+    C x, y; x.v = (typename C::R)(a.Ext() & C::Mask()); y.v = (typename C::R)(b.Ext() & C::Mask()); \
+    const bool sg = C::sign; (void)sg; \
+    body } \
+  template <int N, bool S, class I, class = typename std::enable_if<IsInt<I>::value>::type> typename Promoted<N, S>::type operator op(const T<N, S>& a, I b) { typedef typename Promoted<N, S>::type P; return P(a) op P(b); } \
+  template <int N, bool S, class I, class = typename std::enable_if<IsInt<I>::value>::type> typename Promoted<N, S>::type operator op(I a, const T<N, S>& b) { typedef typename Promoted<N, S>::type P; return P(a) op P(b); }
+BINARY(+, return C((x.Zext() + y.Zext()) & C::Mask());)
+BINARY(-, return C((x.Zext() - y.Zext()) & C::Mask());)
+BINARY(*, return C((x.Zext() * y.Zext()) & C::Mask());)
+BINARY(&, return C(x.Zext() & y.Zext());)
+BINARY(|, return C(x.Zext() | y.Zext());)
+BINARY(^, return C(x.Zext() ^ y.Zext());)
+BINARY(/, if (y.Zext() == 0) return C(0); if (sg && (s64)y.Sext() == -1) return C((0 - x.Zext()) & C::Mask()); return sg ? C((u64)((s64)x.Sext() / (s64)y.Sext())) : C(x.Zext() / y.Zext());)
+BINARY(%, if (y.Zext() == 0) return C(0); if (sg && (s64)y.Sext() == -1) return C(0); return sg ? C((u64)((s64)x.Sext() % (s64)y.Sext())) : C(x.Zext() % y.Zext());)
+#define CMP(op) \
+  template <int N, bool S, int M, bool U> Bool4 operator op(const T<N, S>& a, const T<M, U>& b) { \
+    typedef typename Common<N, S, M, U>::type C; \
+    C x, y; x.v = (typename C::R)(a.Ext() & C::Mask()); y.v = (typename C::R)(b.Ext() & C::Mask()); \
+    return Bool4(C::sign ? ((s64)x.Sext() op (s64)y.Sext()) : (x.Zext() op y.Zext())); } \
+  template <int N, bool S, class I, class = typename std::enable_if<IsInt<I>::value>::type> Bool4 operator op(const T<N, S>& a, I b) { typedef typename Promoted<N, S>::type P; return P(a) op P(b); } \
+  template <int N, bool S, class I, class = typename std::enable_if<IsInt<I>::value>::type> Bool4 operator op(I a, const T<N, S>& b) { typedef typename Promoted<N, S>::type P; return P(a) op P(b); }
+CMP(==) CMP(!=) CMP(<) CMP(<=) CMP(>) CMP(>=)
+// shifts take the type of the left operand
+template <int N, bool S, int M, bool U> T<N, S> operator<<(const T<N, S>& a, const T<M, U>& b) { u64 c = b.Zext(); return T<N, S>(c >= 8 * N ? 0 : (a.Zext() << c)); }
+template <int N, bool S, int M, bool U> T<N, S> operator>>(const T<N, S>& a, const T<M, U>& b) {
+  u64 c = b.Zext();
+  if (S) return T<N, S>(c >= 8 * N ? ((s64)a.Sext() < 0 ? ~0ULL : 0ULL) : (u64)((s64)a.Sext() >> c));
+  return T<N, S>(c >= 8 * N ? 0 : (a.Zext() >> c)); }
+template <int N, bool S, class I, class = typename std::enable_if<IsInt<I>::value>::type> T<N, S> operator<<(const T<N, S>& a, I b) { return a << T<4, false>(b); }
+template <int N, bool S, class I, class = typename std::enable_if<IsInt<I>::value>::type> T<N, S> operator>>(const T<N, S>& a, I b) { return a >> T<4, false>(b); }
+template <int N, bool S> T<N, S> operator-(const T<N, S>& a) { return T<N, S>((0 - a.Zext()) & T<N, S>::Mask()); }
+template <int N, bool S> T<N, S> operator~(const T<N, S>& a) { return T<N, S>(~a.Zext() & T<N, S>::Mask()); }
+template <int N, bool S> T<N, S> operator+(const T<N, S>& a) { return a; }
+template <int N, bool S> Bool4 operator!(const T<N, S>& a) { return Bool4(a.Zext() == 0); }
+template <int N, bool S, int M, bool U> Bool4 operator&&(const T<N, S>& a, const T<M, U>& b) { return Bool4(a.Zext() != 0 && b.Zext() != 0); }
+template <int N, bool S, int M, bool U> Bool4 operator||(const T<N, S>& a, const T<M, U>& b) { return Bool4(a.Zext() != 0 || b.Zext() != 0); }
+template <int N, bool S, class I, class = typename std::enable_if<IsInt<I>::value>::type> Bool4 operator&&(const T<N, S>& a, I b) { return Bool4(a.Zext() != 0 && b != 0); }
+template <int N, bool S, class I, class = typename std::enable_if<IsInt<I>::value>::type> Bool4 operator&&(I a, const T<N, S>& b) { return Bool4(a != 0 && b.Zext() != 0); }
+template <int N, bool S, class I, class = typename std::enable_if<IsInt<I>::value>::type> Bool4 operator||(const T<N, S>& a, I b) { return Bool4(a.Zext() != 0 || b != 0); }
+template <int N, bool S, class I, class = typename std::enable_if<IsInt<I>::value>::type> Bool4 operator||(I a, const T<N, S>& b) { return Bool4(a != 0 || b.Zext() != 0); }
+// the names the engine prints (xunknown: no sign, read as signed)
+typedef T<1, false> undefined; typedef T<1, false> undefined1; typedef T<2, false> undefined2; typedef T<3, false> undefined3; typedef T<4, false> undefined4; typedef T<8, false> undefined8;
+typedef T<1, false> byte; typedef T<1, false> uchar; typedef T<2, false> ushort; typedef T<4, false> uint; typedef T<3, false> uint3; typedef T<8, true> longlong; typedef T<8, false> ulonglong;
+typedef T<2, false> word; typedef T<4, false> dword; typedef T<8, false> qword;
+typedef T<3, true> int3; typedef T<1, true> int1; typedef T<2, true> int2; typedef T<4, true> int4; typedef T<8, true> int8;
+typedef T<1, false> uint1; typedef T<2, false> uint2; typedef T<4, false> uint4; typedef T<8, false> uint8;
+typedef T<1, true> xunknown1; typedef T<2, true> xunknown2; typedef T<4, true> xunknown4; typedef T<8, true> xunknown8;
+typedef T<3, true> unkbyte3; typedef T<3, false> unkuint3; typedef T<3, true> unkint3;
+typedef T<5, true> unkbyte5; typedef T<6, true> unkbyte6; typedef T<7, true> unkbyte7; typedef T<5, false> unkuint5; typedef T<6, false> unkuint6; typedef T<7, false> unkuint7;
+typedef T<5, true> unkint5; typedef T<6, true> unkint6; typedef T<7, true> unkint7;
+template <class X> static inline u64 RAW(const X& x) { return B2U(x); }
+template <int N, bool S> static inline u64 RAW(const T<N, S>& x) { return x.Zext(); }
+template <class X> struct SZ { static const int n = sizeof(X); };
+template <int N, bool S> struct SZ<T<N, S> > { static const int n = N; };
+#define SIZEOFV(v) (SZ<__typeof__(v)>::n)
+#define FLDMASK(n) ((n) >= 8 ? ~0ULL : ((1ULL << (8 * (n))) - 1))
+#define FLDRAW(v, o, n) ((RAW(v) >> (8 * (SIZEOFV(v) - (o) - (n)))) & FLDMASK(n))
+#define FLDT_1(x) (xunknown1((u64)(x)))
+#define FLDT_2(x) (xunknown2((u64)(x)))
+#define FLDT_3(x) (unkbyte3((u64)(x)))
+#define FLDT_4(x) (xunknown4((u64)(x)))
+#define FLDT_5(x) (T<5, true>((u64)(x)))
+#define FLDT_6(x) (T<6, true>((u64)(x)))
+#define FLDT_7(x) (T<7, true>((u64)(x)))
+#define FLDT_8(x) (T<8, false>((u64)(x)))
+#define FLD(v, o, n) FLDT_##n(FLDRAW(v, o, n))
+#define SETFLD(v, o, n, e) ((v) = static_cast<__typeof__(v)>((RAW(v) & ~(FLDMASK(n) << (8 * (SIZEOFV(v) - (o) - (n))))) | ((RAW(e) & FLDMASK(n)) << (8 * (SIZEOFV(v) - (o) - (n))))))
+static inline Bool4 CARRY4(u64 a, u64 b) { return Bool4((uint32_t)((uint32_t)a + (uint32_t)b) < (uint32_t)a); }
+static inline Bool4 CARRY1(u64 a, u64 b) { return Bool4((uint8_t)((uint8_t)a + (uint8_t)b) < (uint8_t)a); }
+static inline Bool4 SCARRY4(u64 a, u64 b) { return Bool4(((int32_t)a >= 0) == ((int32_t)b >= 0) && (((int32_t)((uint32_t)a + (uint32_t)b) >= 0) != ((int32_t)a >= 0))); }
+static inline Bool4 SCARRY1(u64 a, u64 b) { return Bool4(((int8_t)a >= 0) == ((int8_t)b >= 0) && (((int8_t)((uint8_t)a + (uint8_t)b) >= 0) != ((int8_t)a >= 0))); }
+static inline Bool4 SBORROW4(u64 a, u64 b) { return Bool4(((int32_t)a >= 0) != ((int32_t)b >= 0) && (((int32_t)((uint32_t)a - (uint32_t)b) >= 0) != ((int32_t)a >= 0))); }
+static inline Bool4 SBORROW1(u64 a, u64 b) { return Bool4(((int8_t)a >= 0) != ((int8_t)b >= 0) && (((int8_t)((uint8_t)a - (uint8_t)b) >= 0) != ((int8_t)a >= 0))); }
+#define CARRY4(a, b) CARRY4(RAW(a), RAW(b))
+#define CARRY1(a, b) CARRY1(RAW(a), RAW(b))
+#define SCARRY4(a, b) SCARRY4(RAW(a), RAW(b))
+#define SCARRY1(a, b) SCARRY1(RAW(a), RAW(b))
+#define SBORROW4(a, b) SBORROW4(RAW(a), RAW(b))
+#define SBORROW1(a, b) SBORROW1(RAW(a), RAW(b))
+static unsigned int g_in[16];
+static unsigned int g_wsr, g_wgbr, g_wvbr;
+template <class X> static void Write_SR(const X& v) { g_wsr = (unsigned int)RAW(v); }
+template <class X> static void Write_GBR(const X& v) { g_wgbr = (unsigned int)RAW(v); }
+template <class X> static void Write_VBR(const X& v) { g_wvbr = (unsigned int)RAW(v); }
+)CXX";
+
+// The compiler for the engine reading: SE_CXX_COMPILER, else the C++ driver that goes with the C compiler found (gcc -> g++, clang -> clang++, cc -> c++).
+std::string FindCxxCompiler(const std::string& cc)
+{
+    if (const char* env = std::getenv("SE_CXX_COMPILER"))
+        if (*env) return env;
+    std::vector<std::string> tries;
+    if (cc.find("clang") != std::string::npos) tries.push_back(cc.substr(0, cc.rfind("clang")) + "clang++");
+    else if (cc.size() >= 3 && cc.compare(cc.size() - 3, 3, "gcc") == 0) tries.push_back(cc.substr(0, cc.size() - 3) + "g++");
+    else if (cc.size() >= 2 && cc.compare(cc.size() - 2, 2, "cc") == 0) tries.push_back(cc.substr(0, cc.size() - 2) + "c++");
+    for (const char* name : { "c++", "g++", "clang++" }) tries.push_back(name);
+    for (const std::string& t : tries)
+        if (std::system((t + " --version > /dev/null 2>&1").c_str()) == 0) return t;
+    return std::string();
+}
+
+std::string CxxHeader()
+{
+    std::ostringstream o;
+    o << kCxxHeaderBase;
+    auto mask = [](int bytes) -> std::string {
+        char b[32];
+        std::snprintf(b, sizeof b, "0x%sULL", std::string(static_cast<size_t>(bytes) * 2, 'F').c_str());
+        return b;
+    };
+    // The piece operations, typed by the size they give (xunknown: signed in this reading).
+    for (int a = 1; a <= 7; ++a)
+        for (int b = 1; a + b <= 8; ++b)
+            o << "#define CONCAT" << a << b << "(a, b) (T<" << a + b << ", true>(((RAW(a) & " << mask(a) << ") << " << 8 * b << ") | (RAW(b) & " << mask(b) << ")))\n";
+    for (int a = 2; a <= 8; ++a)
+        for (int b = 1; b < a; ++b)
+            o << "#define SUB" << a << b << "(v, o) (T<" << b << ", true>((RAW(v) >> ((o) * 8)) & " << mask(b) << "))\n";
+    for (int a = 1; a <= 7; ++a)
+        for (int b = a + 1; b <= 8; ++b)
+        {
+            o << "#define ZEXT" << a << b << "(v) (T<" << b << ", false>(RAW(v) & " << mask(a) << "))\n";
+            o << "#define SEXT" << a << b << "(v) (T<" << b << ", true>(T<" << a << ", true>(RAW(v)).Sext()))\n";
+        }
+    o << "#define char T<1, true>\n#define bool T<1, false>\n#define true 1\n#define false 0\n";
+    return o.str();
+}
+
 struct CVerdict
 {
     std::string cls;      // "" agrees; else the class of the disagreement
@@ -5288,7 +5479,6 @@ struct CVerdict
     std::string text;
     bool compared = false;
     bool voidReturn = false;
-    bool narrow = false;
     bool upperBits = false;   // a narrow return whose r0 upper bits are no extension of it (A2-26): never excused as C's reading
     int mismatches = 0;
 };
@@ -5301,9 +5491,55 @@ struct CCase
 
 uint32_t CalleeSaved(int r) { return 0xA0000000u + static_cast<uint32_t>(r) * 0x01010101u; }
 
+// The edge values the printed-C inputs walk through r4-r7 first (the first poolSize inputs). It has the sign boundaries of the byte, the
+// word and the longword, and (A2-40) the negative values whose low 8, 16 or 24 bits are positive, which a text that sign-extends a narrow
+// piece of a value that is not itself narrow cannot tell from the run without.
+const std::vector<uint32_t>& PrintedCPool()
+{
+    static const std::vector<uint32_t> pool = { 0, 1, 2, 0xFFFFFFFFu, 0x7FFFFFFFu, 0x80000000u, 0x80000001u, 0xFFFFFFFEu, 0x7FFF, 0x8000, 0xFFFF,
+                                                0x10000, 0x7F, 0x80, 0xFF, 0x100, 0xFFFF8000u, 0xFFFFFF80u, 3, 31, 32, 33,
+                                                0xFFFF7FFFu, 0xFFFFFF7Fu, 0xFF7FFFFFu, 0x7F7F7F7Fu };
+    return pool;
+}
+
+// The class of a text that returns nothing over a run that changed r0. A function that returns nothing but whose r0 ended as something
+// other than it began: a return the engine dropped, or r0 left as scratch. Compiled code cannot tell the two apart, and 40 percent of the
+// corpora's lent signatures are such functions (withholding every one would cost 235 of 600 and 431 of 984: the round 5 record), so a `void`
+// text is no failure by itself (`void-return`, and `void-return-lent` when the signature is lent: counted, visible). But the generator knows
+// when it meant a result: the rts slot `mov Rm,r0` is the compiled idiom for `return Rm`. A `void` signature lent over that is a return
+// dropped, which is A3-5's decision (such a function is withheld, not lent void) and a failure (A2-34).
+std::string VoidReturnClass(bool signatureKnown, const std::vector<uint16_t>& words)
+{
+    const auto rts = std::find(words.begin(), words.end(), uint16_t(0x000B));
+    const bool intent = rts != words.end() && rts + 1 != words.end() && (*(rts + 1) & 0xFF0Fu) == 0x6003u && *(rts + 1) != 0x6003u;   // mov Rm,r0, Rm not r0
+    return !signatureKnown ? "void-return" : intent ? "return-dropped" : "void-return-lent";
+}
+
+// The two above are the oracle's own decisions, not the engine's, so a mutation of either does not fail the engine's fixtures: pinned here.
+void TestOracleOwnDecisions()
+{
+    // A2-34: the slot is the intent; a withheld signature, another slot, an r0-to-r0 move and a move before the rts are not
+    CHECK(VoidReturnClass(true, { 0x000B, 0x6013 }) == "return-dropped");        // rts ; mov r1,r0
+    CHECK(VoidReturnClass(true, { 0x000B, 0x63F3 }) == "void-return-lent");      // rts ; mov r15,r3
+    CHECK(VoidReturnClass(false, { 0x000B, 0x6013 }) == "void-return");
+    CHECK(VoidReturnClass(true, { 0x000B, 0x0009 }) == "void-return-lent");      // rts ; nop
+    CHECK(VoidReturnClass(true, { 0x000B, 0x6003 }) == "void-return-lent");      // rts ; mov r0,r0
+    CHECK(VoidReturnClass(true, { 0x6013, 0x000B, 0x0009 }) == "void-return-lent");
+    CHECK(VoidReturnClass(true, { 0x6013 }) == "void-return-lent");              // no rts at all
+    // A2-40: for each width a value with all the bits above it set whose narrow piece is positive
+    const std::vector<uint32_t>& pool = PrintedCPool();
+    for (int bits : { 8, 16, 24 })
+    {
+        const uint32_t high = ~0u << bits;
+        bool found = false;
+        for (uint32_t v : pool) found = found || ((v & high) == high && !((v >> (bits - 1)) & 1u));
+        CHECK(found);
+    }
+}
+
 bool IsFailing(const CVerdict& v)
 {
-    return !v.cls.empty() && v.cls != "narrow-c" && v.cls != "void-return" && v.cls.compare(0, 8, "skipped:") != 0;
+    return !v.cls.empty() && v.cls != "narrow-c" && v.cls != "void-return" && v.cls != "void-return-lent" && v.cls.compare(0, 8, "skipped:") != 0;
 }
 
 // Decompiles each case, runs it on the emulator for 'nIn' inputs, compiles every text together and runs the
@@ -5313,7 +5549,7 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
 {
     struct Prepared
     {
-        std::string name, cText, altText, mainText;
+        std::string name, cText, mainText;
         bool ready = false;
     };
     std::vector<CVerdict> out(cases.size());
@@ -5386,7 +5622,7 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
         static const std::regex decl("func_0x[0-9a-fA-F]+");
         text = std::regex_replace(text, decl, pr.name);
         // Field notation (`v._o_n_ = e;` and reads of it) is Ghidra's, not C's: the macros of the header say what it means.
-        static const std::regex fieldSet("\\b([A-Za-z_]\\w*)\\._(\\d+)_(\\d+)_ = ([^;]*);");
+        static const std::regex fieldSet("\\b([A-Za-z_]\\w*)\\._(\\d+)_(\\d+)_ =\\s+([^;]*);");   // the printer wraps a long one: `x._1_3_ =` and the value below (A2-39)
         static const std::regex fieldGet("\\b([A-Za-z_]\\w*)\\._(\\d+)_(\\d+)_");
         text = std::regex_replace(text, fieldSet, "SETFLD($1, $2, $3, $4);");
         text = std::regex_replace(text, fieldGet, "FLD($1, $2, $3)");
@@ -5403,13 +5639,18 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
             {
                 const std::string name = m[3];
                 std::string value;
+                std::smatch pieceName;
                 int num = -1;
                 if (std::sscanf(name.c_str() + (name.compare(0, 3, "in_") == 0 ? 4 : 7), "%d", &num) == 1 && num >= 0 && num <= 15 &&
                     (name == "in_r" + std::to_string(num) || name == "unaff_r" + std::to_string(num)))
                     value = num <= 7 ? "g_in[" + std::to_string(num) + "]" : std::to_string(CalleeSaved(num)) + "u";
-                else if (name.compare(0, 4, "in_r") == 0 && std::regex_match(name, std::regex("in_r[0-7]_b[0-3]")))
-                    // a byte of a register (cmp/str compares four): named with the byte it is, counted from the least significant (A2-25)
-                    value = "((g_in[" + name.substr(4, 1) + "] >> " + std::to_string(8 * (name[7] - '0')) + ") & 0xFF)";
+                else if (std::regex_match(name, pieceName, std::regex("(?:in|unaff)_r(\\d+)_b([1-3])")) && std::atoi(pieceName[1].str().c_str()) <= 15)
+                {
+                    // a byte of a register (cmp/str compares four): named with the byte it is, counted from the least significant (A2-25; r8-r15, A2-37)
+                    const int reg = std::atoi(pieceName[1].str().c_str());
+                    const std::string whole = reg <= 7 ? "g_in[" + std::to_string(reg) + "]" : std::to_string(CalleeSaved(reg)) + "u";
+                    value = "((" + whole + " >> " + std::to_string(8 * (pieceName[2].str()[0] - '0')) + ") & 0xFF)";
+                }
                 else if (name == "in_sr" || name == "unaff_sr") value = "g_in[8]";
                 else if (name == "in_mach" || name == "unaff_mach") value = "g_in[9]";
                 else if (name == "in_macl" || name == "unaff_macl") value = "g_in[10]";
@@ -5443,11 +5684,6 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
             if (!decls.empty() && brace != std::string::npos) rebuilt.insert(brace + 2, decls);
         }
         pr.cText = rebuilt;
-        // The other reading of the same text (CheckPrintedC): a cast to uint8 of a 4-byte value widens by zero extension.
-        {
-            static const std::regex wide("\\(uint8\\)(?!\\((?:u?int|u?char|byte|short|ushort|xunknown|undefined)\\w*\\))");
-            pr.altText = std::regex_replace(rebuilt, wide, "(uint8)(uint4)");
-        }
         // The signature: the return type and how many parameters.
         const size_t at = pr.cText.find(pr.name + "(");
         if (at == std::string::npos)
@@ -5462,13 +5698,10 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
         const size_t lineStart = pr.cText.rfind('\n', at);
         const std::string ret = pr.cText.substr(lineStart == std::string::npos ? 0 : lineStart + 1, at - (lineStart == std::string::npos ? 0 : lineStart + 1));
         v.voidReturn = ret.find("void") != std::string::npos;
-        static const std::regex narrow("\\b(char|uchar|byte|short|ushort|uint1|int1|uint2|int2|xunknown1|xunknown2|undefined1|undefined2)\\s+\\w+\\s*[;,)=]");
-        v.narrow = std::regex_search(pr.cText, narrow);
         // The run: the emulator from the entry for nIn inputs.
         Rng ir(inputSeed ^ (static_cast<uint64_t>(ci) * 0x9E3779B97F4A7C15ull) ^ c.words.size());
-        const uint32_t pool[] = { 0, 1, 2, 0xFFFFFFFFu, 0x7FFFFFFFu, 0x80000000u, 0x80000001u, 0xFFFFFFFEu, 0x7FFF, 0x8000, 0xFFFF,
-                                  0x10000, 0x7F, 0x80, 0xFF, 0x100, 0xFFFF8000u, 0xFFFFFF80u, 3, 31, 32, 33 };
-        const uint32_t poolSize = sizeof pool / sizeof pool[0];
+        const std::vector<uint32_t>& pool = PrintedCPool();
+        const uint32_t poolSize = static_cast<uint32_t>(pool.size());
         int sweep = 0;   // the first poolSize inputs walk the edge values through every register (r4 takes pool[k], r5 pool[k + 5] ...)
         auto draw = [&]() -> uint32_t {
             const uint32_t k = ir.Below(4);
@@ -5561,15 +5794,19 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
         pr.ready = true;
         v.compared = !v.voidReturn;
         v.detail = std::to_string(kept) + " inputs";
-        // A function that returns nothing but whose r0 ended as something other than it began: a return the
-        // signature dropped (A3-5, another row's class: counted, not failed here).
-        if (v.voidReturn && r0Changed) v.cls = "void-return";
+        // A `void` text over a run that changed r0: VoidReturnClass (A2-34).
+        if (v.voidReturn && r0Changed)
+        {
+            v.cls = VoidReturnClass(r.prototype.known, c.words);
+            if (v.cls == "return-dropped") v.detail = "the rts slot moves a register into r0 (the compiled `return Rm`), the text returns nothing and the signature is lent";
+        }
     }
     // Compile and run.
-    auto compileRun = [&](const std::vector<size_t>& which, const std::string& tag, std::string& log, bool& compiled, bool alt = false) -> std::string {
+    const std::string cxx = FindCxxCompiler(cc);
+    auto compileRun = [&](const std::vector<size_t>& which, const std::string& tag, std::string& log, bool& compiled, bool engine = false) -> std::string {
         std::ostringstream src;
-        src << CHeader(alt);
-        for (size_t i : which) src << "static int bad_" << prep[i].name << ";\n" << (alt ? prep[i].altText : prep[i].cText) << "\n";
+        src << (engine ? CxxHeader() : CHeader());
+        for (size_t i : which) src << "static int bad_" << prep[i].name << ";\n" << prep[i].cText << "\n";
         src << "int main(void) {\n";
         for (size_t i : which) src << prep[i].mainText;
         int total = 0;
@@ -5578,12 +5815,13 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
         for (size_t i : which) src << "  bad += bad_" << prep[i].name << ";\n";
         src << "  printf(\"BAD %d\\n\", bad);\n  return 0;\n}\n";
         const std::string base = dts::Join(gScratch, "printedc_" + std::to_string(batchNo) + "_" + tag);
-        const std::string cfile = base + ".c", bin = base + ".bin", clog = base + ".log", rlog = base + ".out";
+        const std::string cfile = base + (engine ? ".cpp" : ".c"), bin = base + ".bin", clog = base + ".log", rlog = base + ".out";
         {
             std::ofstream f(cfile);
             f << src.str();
         }
-        const std::string compileCmd = cc + " -O0 -fwrapv -fsigned-char -w -std=gnu11 -o " + bin + " " + cfile + " > " + clog + " 2>&1";
+        const std::string compileCmd = engine ? cxx + " -O0 -fwrapv -w -std=gnu++14 -o " + bin + " " + cfile + " > " + clog + " 2>&1"
+                                              : cc + " -O0 -fwrapv -fsigned-char -w -std=gnu11 -o " + bin + " " + cfile + " > " + clog + " 2>&1";
         compiled = std::system(compileCmd.c_str()) == 0;
         if (!compiled)
         {
@@ -5618,13 +5856,9 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
                 {
                     CVerdict& v = out[i];
                     if (++v.mismatches == 1) v.detail = line.substr(9);
-                    // Only the high word of an 8-byte value differs and the text widens with a C cast ((uint8)x of a signed
-                    // x sign-extends in C, the engine means a zero extension): the reading of the cast, not the value.
-                    const bool widenOnly = line.find("high-word-only") != std::string::npos &&
-                                           (v.text.find("(uint8)") != std::string::npos || v.text.find("(int8)") != std::string::npos);
                     // r0's upper bits that are no extension of a narrow return are not C's promotion: always a failure.
                     if (line.find(" upper-bits") != std::string::npos) v.cls = "mismatch", v.upperBits = true;
-                    else if (v.cls != "mismatch") v.cls = v.narrow || widenOnly ? "narrow-c" : "mismatch";
+                    else v.cls = "mismatch";   // a second reading below may excuse it; none is assumed (A2-33)
                 }
         }
     };
@@ -5650,36 +5884,51 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
                 out[i].detail = first;
             }
         }
-    // The text is not always C: a signed compare of a value the engine gives no sign (xunknown) reads as unsigned in C, and a
-    // cast of a signed 4-byte value to uint8 sign-extends where the engine means a zero extension (A2-19: the guide says what
-    // the casts mean). A text that disagrees with the run in the first reading and agrees in the second is counted apart
-    // ('narrow-c'), not failed; one that agrees in neither is a finding.
+    // The text is not always C (A2-19; DECOMPILER_GUIDE.md: read the types, not C's promotion rules): the engine prints arithmetic on a
+    // value narrower than int at its own width (`(int4)-param_1` of a char negates a byte), a comparison or a `!` is a four-byte unsigned
+    // in the arithmetic around it, `(uint8)x` of a signed x is a zero extension, and a value with no sign (xunknown) has none. A text that
+    // disagrees with the run as C is read once more as the engine means it (CxxHeader: C++ classes that do the arithmetic at their own
+    // width). If it agrees there it is counted apart ('narrow-c'); a text that agrees in neither reading is a finding, and so is one
+    // that cannot be read (A2-33: every mismatch goes through here, none is excused by what its declarations look like).
     {
         std::vector<size_t> cand;
         for (size_t i : all)
-            if (out[i].cls == "mismatch" && !out[i].upperBits &&
-                (out[i].text.find("xunknown") != std::string::npos || out[i].text.find("(uint8)") != std::string::npos ||
-                 std::regex_search(out[i].text, std::regex("\\._\\d+_\\d+_"))))
-                cand.push_back(i);
-        if (!cand.empty())
+            if (out[i].cls == "mismatch" && !out[i].upperBits) cand.push_back(i);
+        if (!cand.empty() && cxx.empty())
         {
-            std::string altLog;
-            bool altCompiled = false;
-            const std::string altRun = compileRun(cand, "alt", altLog, altCompiled, true);
-            if (altCompiled)
-            {
-                std::set<std::string> bad;
+            for (size_t i : cand) out[i].detail += " [no C++ compiler for the engine's reading: set SE_CXX_COMPILER]";
+        }
+        else if (!cand.empty())
+        {
+            std::set<std::string> bad, unreadable;
+            auto readBatch = [&](const std::vector<size_t>& which, const std::string& tag) {
+                std::string altLog;
+                bool altCompiled = false;
+                const std::string altRun = compileRun(which, tag, altLog, altCompiled, true);
+                if (!altCompiled)
+                    return false;
                 std::istringstream in(altRun);
                 std::string line;
                 while (std::getline(in, line))
                     if (line.compare(0, 9, "MISMATCH ") == 0) bad.insert(line.substr(9, line.find(' ', 9) - 9));
-                for (size_t i : cand)
-                    if (bad.count(prep[i].name) == 0)
+                return true;
+            };
+            if (!readBatch(cand, "engine"))
+                for (size_t i : cand)   // one at a time: which text this reading cannot read
+                    if (!readBatch({ i }, "engine_" + prep[i].name))
                     {
-                        out[i].cls = "narrow-c";
-                        out[i].detail += " [agrees when xunknown is signed and (uint8) widens by zero extension]";
+                        unreadable.insert(prep[i].name);
+                        std::string log1;
+                        bool ok1 = false;
+                        compileRun({ i }, "engine_" + prep[i].name, log1, ok1, true);
+                        out[i].detail += " [the engine's reading did not compile: " + log1.substr(0, 160) + "]";
                     }
-            }
+            for (size_t i : cand)
+                if (bad.count(prep[i].name) == 0 && unreadable.count(prep[i].name) == 0)
+                {
+                    out[i].cls = "narrow-c";
+                    out[i].detail += " [agrees when read as the engine means it]";
+                }
         }
     }
     return out;
@@ -5806,6 +6055,29 @@ std::vector<CCase> WidePrintedCFixtures()
     out.push_back({ "A2-22 control: byte at 0", { 0x6053, 0x2F46, 0x80F0, 0x60F6, 0x000B, 0x0009 } });
     out.push_back({ "A2-22 control: an operation after the load", { 0x6053, 0x2F46, 0x80F3, 0x60F6, 0x7001, 0x000B, 0x0009 } });
     out.push_back({ "A2-22 control: through registers", { 0x6043, 0x4019, 0x4018, 0x615C, 0x201B, 0x000B, 0x0009 } });
+    // Round 5. A2-32: x / 0xFFFFFFFE, 0xFFFFFFFC and 0xFFFFFFF0 (the add form, a total shift of 64) printed `return 0;`; the scaled form is seed 1900's
+    for (uint16_t multiplier : { uint16_t(3), uint16_t(5), uint16_t(0x11) })
+        out.push_back({ "A2-32 x / 0xFFFFFFF" + std::string(multiplier == 3 ? "E" : multiplier == 5 ? "C" : "0"),
+                        { 0xD106, 0x3415, 0x000A, 0x3408, 0x4401, 0x340C, 0x4429, 0x4419, 0x4409, 0x4409, 0x4409, 0x4401, 0x000B, 0x6043, 0x0000, multiplier } });
+    out.push_back({ "A2-32 x / 0xFFFFFFFE * 4 (seed 1900)", { 0xD307, 0x3535, 0x000A, 0x3508, 0x4501, 0x350C, 0x4529, 0x4519, 0x4509, 0x4509, 0x4509, 0x4501, 0x4508, 0x6053, 0x000B, 0x0009, 0x0000, 0x0003 } });
+    // A2-33: the two functions of seeds 3404 and 9223 that were A2-32's wrong value counted as `narrow-c` for the declarations and a `(uint8)` in the text
+    out.push_back({ "A2-33 seed 3404 #0", { 0x0537, 0x317A, 0x0018, 0x4700, 0x4408, 0x8B00, 0x673F, 0x3358, 0x0577, 0x4200, 0xD307, 0x3135, 0x020A, 0x3128, 0x4101, 0x312C, 0x4129,
+                                             0x4119, 0x4109, 0x4109, 0x4109, 0x4101, 0x6013, 0x000B, 0x6073, 0x0009, 0x0000, 0x0003 } });
+    out.push_back({ "A2-33 seed 9223 #0", { 0x4120, 0xD60C, 0x3065, 0x050A, 0x3058, 0x4001, 0x305C, 0x4029, 0x4019, 0x4009, 0x4009, 0x4009, 0x4001, 0x4008, 0x4008, 0x6003, 0x4004,
+                                             0x8B00, 0x462E, 0xCB02, 0x8901, 0x0412, 0x461A, 0x000B, 0x356A, 0x0009, 0x0000, 0x0003 } });
+    // A2-39: a bool minus one shifted right, with no narrow declaration (the engine's four-byte unsigned subtraction); a field assignment the printer wraps
+    out.push_back({ "A2-39 a: (bool) - 1 >> 16", { 0xCB6D, 0x602B, 0x400A, 0x0607, 0x4205, 0x2247, 0x0129, 0x2229, 0x3277, 0x4415, 0x4209, 0x4110, 0x677A, 0x337E, 0x6609, 0x4010,
+                                                    0x2258, 0x020A, 0x3554, 0xD202, 0x4129, 0x000B, 0x8802, 0x0009, 0x8000, 0x0000 } });
+    out.push_back({ "A2-39 b: a wrapped field assignment", { 0x6043, 0x6153, 0x6263, 0x6373, 0x214B, 0x324B, 0x8F02, 0x603C, 0x610A, 0x4320, 0x7300, 0x8D01, 0x323A, 0x4719, 0x636B,
+                                                              0x201B, 0x7FFC, 0x1F20, 0x6053, 0x81F0, 0x6053, 0x80F1, 0x57F0, 0x3437, 0x7F04, 0x000B, 0x6073 } });
+    // A2-37: the bytes of r8 and r14, which a function keeps, named with the byte they are, given their values by the run
+    out.push_back({ "A2-37 cmp/str r6,r8", { 0x286C, 0x000B, 0x0029 } });
+    out.push_back({ "A2-37 cmp/str r6,r14", { 0x2E6C, 0x000B, 0x0029 } });
+    // A2-34: `rts ; mov r1,r0` returns r1, an input no signature passes: the engine prints `void` and the signature is withheld (A3-5). A lent
+    // `void` over this slot is `return-dropped` and fails; withheld, it is counted as `void-return`.
+    out.push_back({ "A2-34 rts ; mov r1,r0 (r1 on entry)", { 0x000B, 0x6013 } });
+    // A2-38: bra over two instructions with a slot (the item that replaced braf in the grammar), and a bt/s with a slot
+    out.push_back({ "A2-38 mov #2,r1 ; bra +1 ; neg r4,r7 ; add #1,r5 ; mov r5,r0", { 0xE102, 0xA001, 0x674B, 0x7501, 0x6053, 0x000B, 0x0009 } });
     return out;
 }
 
@@ -5819,6 +6091,7 @@ void TestPrintedC()
         std::_Exit(77);
     }
     std::printf("printed-C differential with '%s'\n", cc.c_str());
+    TestOracleOwnDecisions();
     Sh2Decompiler d(gConfig);
     const int nIn = static_cast<int>(EnvNumber("SE_GENERATED_PRINTEDC_INPUTS", 32));
     std::vector<CCase> cases;
@@ -5880,10 +6153,21 @@ void TestPrintedC()
     const long shrinkCount = EnvNumber("SE_GENERATED_SHRINK", 3);
     for (size_t i = 0; i < verdicts.size(); ++i)
     {
-        const CVerdict& v = verdicts[i];
+        CVerdict& v = verdicts[i];
         compared += v.compared ? 1 : 0;
         ++classes[v.cls.empty() ? "agrees" : v.cls];
         if (hand || EnvNumber("SE_GENERATED_VERBOSE", 0) >= 2) std::printf("%s: %s%s\n%s\n", cases[i].name.c_str(), v.cls.empty() ? "agrees" : v.cls.c_str(), v.detail.empty() ? "" : (" (" + v.detail + ")").c_str(), v.text.c_str());
+        // A generated function (a seed) has no call and reads no stack argument: a text the oracle skipped for one is the grammar leaking an
+        // instruction it cannot run (A2-38: it was braf, which the engine reads as a tail call, in every one of 268 of 3,060).
+        const bool grammarLeak = !hand && v.cls == "skipped:call-or-stack" && cases[i].name.compare(0, 4, "seed") == 0;
+        if (grammarLeak) v.cls = "grammar-leak";
+        // A ledger fixture exists to be compared: one the harness skips (an input it cannot give a value, a stack piece) checks nothing, and is a failure,
+        // not a quiet class (A2-37: `unaff_r8_00` was `skipped:unknown-input`).
+        if (!hand && cases[i].name.compare(0, 4, "seed") != 0 && v.cls.compare(0, 8, "skipped:") == 0)
+        {
+            v.detail = "the fixture was skipped (" + v.cls + "): " + v.detail;
+            v.cls = "fixture-skipped";
+        }
         if (!IsFailing(v))
         {
             // Said, not failed: the classes that are another row's or a limit of the instrument.

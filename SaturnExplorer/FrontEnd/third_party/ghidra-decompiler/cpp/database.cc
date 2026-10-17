@@ -15,6 +15,7 @@
  *
  * Modified for SaturnExplorer: a Symbol the name tree cannot take back is kept, and a Symbol or map entry that a failed insertion leaves unowned is freed, and so is a Scope the parent cannot take (patches/0032-allocation-failure-order-2.patch).
  * Modified for SaturnExplorer: an input that is a piece of a register is named with the byte it starts at (patches/0037-engine-division-piece-and-input-names.patch).
+ * Modified for SaturnExplorer: the bytes of a register the function keeps are named with the byte they start at, as an input's are (patches/0044-engine-round5-printed-value-fixes.patch).
  */
 #include "database.hh"
 #include "funcdata.hh"
@@ -2652,6 +2653,38 @@ bool ScopeInternal::isNameUsed(const string &nm,const Scope *op2) const
   return par->isNameUsed(nm, op2);
 }
 
+/// \brief The suffix that tells a piece of a register from the register
+///
+/// SaturnExplorer: an input that is a piece of a register (the four bytes cmp/str compares) would be named like the
+/// register and told apart only by a counter. The byte it starts at, counted from the least significant, is part of the
+/// name: `in_r3_b3` is r3's most significant byte, `in_r3` its least, and `unaff_r8_b3` that of a register the function
+/// keeps (patches/0037-engine-division-piece-and-input-names.patch, 0044-engine-round5-printed-value-fixes.patch).
+/// \param glb is the architecture
+/// \param regname is the name of the register that holds the piece
+/// \param addr is where the piece is
+/// \param sz is its size
+/// \return the suffix, empty for the whole register and for its least significant piece
+static string registerPieceSuffix(Architecture *glb,const string &regname,const Address &addr,int4 sz)
+
+{
+  try {
+    const VarnodeData &reg(glb->translate->getRegister(regname));
+    if (reg.space == addr.getSpace() && (reg.size != sz || reg.offset != addr.getOffset()) &&
+	addr.getOffset() >= reg.offset && addr.getOffset() + sz <= reg.offset + reg.size) {
+      int4 lsb = addr.isBigEndian() ? (int4)(reg.offset + reg.size - addr.getOffset() - sz) : (int4)(addr.getOffset() - reg.offset);
+      if (lsb != 0) {		// the least significant piece keeps the register's name, as the parameter of a byte does
+	ostringstream s;
+	s << "_b" << dec << lsb;
+	if (sz > 1)
+	  s << "w" << sz;
+	return s.str();
+      }
+    }
+  } catch(LowlevelError &err) {
+  }
+  return string();
+}
+
 string ScopeInternal::buildVariableName(const Address &addr,
 					const Address &pc,
 					Datatype *ct,int4 &index,uint4 flags) const
@@ -2672,8 +2705,10 @@ string ScopeInternal::buildVariableName(const Address &addr,
 	s << "unaff_";
 	s << setw(8) << setfill('0') << hex << addr.getOffset();
       }
-      else
+      else {
 	s << "unaff_" << unaffname;
+	s << registerPieceSuffix(glb,unaffname,addr,sz);
+      }
     }
   }
   else if ((flags & Varnode::persist)!=0) {
@@ -2700,22 +2735,7 @@ string ScopeInternal::buildVariableName(const Address &addr,
     }
     else {
       s << "in_" << regname;
-      // SaturnExplorer: the input is a piece of the register (the four bytes cmp/str compares), which would be named like
-      // the register and told apart only by a counter. The byte it starts at, counted from the least significant, is
-      // part of the name: `in_r3_b3` is r3's most significant byte, `in_r3` its least (patches/0037-engine-division-piece-and-input-names.patch).
-      try {
-	const VarnodeData &reg(glb->translate->getRegister(regname));
-	if (reg.space == addr.getSpace() && (reg.size != sz || reg.offset != addr.getOffset()) &&
-	    addr.getOffset() >= reg.offset && addr.getOffset() + sz <= reg.offset + reg.size) {
-	  int4 lsb = addr.isBigEndian() ? (int4)(reg.offset + reg.size - addr.getOffset() - sz) : (int4)(addr.getOffset() - reg.offset);
-	  if (lsb != 0) {		// the least significant piece keeps the register's name, as the parameter of a byte does
-	    s << "_b" << dec << lsb;
-	    if (sz > 1)
-	      s << "w" << sz;
-	  }
-	}
-      } catch(LowlevelError &err) {
-      }
+      s << registerPieceSuffix(glb,regname,addr,sz);
     }
   }
   else if ((flags & Varnode::input)!=0) { // Regular parameter

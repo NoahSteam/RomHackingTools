@@ -4,7 +4,8 @@
 # SR loads keep only the bits the SH-2 has and rte restores SR before its delay slot (patches/0019-sleigh-sr-rte.patch).
 # trapa gives back the 8 bytes its handler's rte pops, after the call (patches/0025-sleigh-trapa-stack.patch).
 # ldc to SR, GBR and VBR also call a user op that carries the value written (patches/0034-sleigh-control-register-writes.patch).
-# rte also calls Write_SR with the SR it restores and Rte_PC with the PC it returns to (patches/0038-sleigh-rte-restores.patch).
+# rte also calls Write_SR with the SR it restores and Rte_PC with the PC it returns to (patches/0038-sleigh-rte-restores.patch);
+# the SR is the one after its delay slot, and nop writes nothing (patches/0045-sleigh-nop-writes-nothing-rte-sr-after-slot.patch).
 
 define endian=big;
 
@@ -1782,8 +1783,12 @@ define pcodeop Rte_PC;
 
 :nop  is opcode_00_15=0b0000000000001001 
 {
-    # FIXME: intentional nop
-    r0 = r0; # do this to suppress warning
+    # A nop writes nothing. It was `r0 = r0` (to keep the compiler from warning of an empty constructor), a COPY the
+    # engine's return recovery took for the last write of r0 and its only use, so that a function ending `rts ; nop`
+    # returned r0 where the same function with any other instruction in the slot did not (A2-31,
+    # patches/0045-sleigh-nop-writes-nothing-rte-sr-after-slot.patch). The temporary keeps one op at the instruction's address
+    # (the body of a function is read from the ops) and is dead at once.
+    local nothing:1 = 0;
 }
 
 :rte is opcode_00_15=0b0000000000101011 
@@ -1798,9 +1803,13 @@ define pcodeop Rte_PC;
     # SR is restored before the delay slot runs, the branch target is taken after it: a slot
     # that reads T sees the restored one, and a slot that writes T is not undone by the restore.
     sr = _sr;
-    Write_SR(_sr);
 
     delayslot(1);
+
+    # ...and what the interrupted code resumes with is the SR after the slot (Mednafen's RTE restores SR, then runs the slot): a
+    # handler that returns a status in T by `rte ; sett` is not doing nothing (A2-36,
+    # patches/0045-sleigh-nop-writes-nothing-rte-sr-after-slot.patch).
+    Write_SR(sr);
     
     # The stacked SR and PC are what the interrupted code resumes with. A handler that changes them (a status
     # returned in T, an instruction skipped) is not doing nothing: the return target is dropped from the data-flow
