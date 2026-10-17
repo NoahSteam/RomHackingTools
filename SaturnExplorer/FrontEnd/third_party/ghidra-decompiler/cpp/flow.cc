@@ -16,6 +16,7 @@
  * Modified for SaturnExplorer: host cancellation check-points (patches/0001-cancel-flag.patch).
  * Modified for SaturnExplorer: the instructions and jump tables the flow recovered are recorded (patches/0021-flow-instructions.patch).
  * Modified for SaturnExplorer: a call site the function cannot list is freed (patches/0032-allocation-failure-order-2.patch).
+ * Modified for SaturnExplorer: flow follows no branch target that is not a multiple of the host's instruction alignment (patches/0052-flow-instruction-alignment.patch).
  */
 #include "flow.hh"
 
@@ -424,6 +425,10 @@ bool FlowInfo::processInstruction(const Address &curaddr,bool &startbasic)
     pCodeOverride = (const Override::Record *)0;
 
   try {
+    // SaturnExplorer: the SLEIGH specification says alignment 1 (it is the same for every SuperH), so the translator decodes at an odd address,
+    // and the result overlaps the instructions around it. An address that is no instruction start is bad data, as one that cannot be read is.
+    if (glb->instructionAlignment > 1 && (curaddr.getOffset() % glb->instructionAlignment) != 0)
+      throw BadDataError("Instruction address not aligned");
     step = glb->translate->oneInstruction(emitter,curaddr); // Generate ops for instruction
   }
   catch(UnimplError &err) {	// Instruction is unimplemented

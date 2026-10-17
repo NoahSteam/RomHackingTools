@@ -16,6 +16,7 @@
  * Modified for SaturnExplorer: host cancellation check-points (patches/0001-cancel-flag.patch).
  * Modified for SaturnExplorer: unused loads kept until shown to be ordinary memory (patches/0009-keep-unused-loads.patch).
  * Modified for SaturnExplorer: a load is read once and in place, never duplicated or moved past another memory operation (patches/0010-load-not-duplicated.patch).
+ * Modified for SaturnExplorer: flow follows no branch target that is not a multiple of the host's instruction alignment (patches/0052-flow-instruction-alignment.patch).
  */
 /// \file architecture.hh
 /// \brief Architecture and associated classes that help manage a single processor architecture and load image
@@ -192,6 +193,7 @@ public:
   bool isCancelRequested(void) const { return cancelRequested != (std::atomic<bool> *)0 && cancelRequested->load(std::memory_order_relaxed); }
   bool keepUnusedLoads;		///< Host policy: an unused LOAD stays until its pointer is a constant (then volatility decides)
   bool loadsNotDuplicated;	///< Host policy: a LOAD is printed once and where it happens: explicit when its expression has several uses or would be printed past another memory operation
+  int4 instructionAlignment;	///< Host policy: instructions start at a multiple of this (1: at any address). Flow treats an address that is not one as bad data
   uint4 max_baddata;		///< Maximum number of bad instructions that one function can encounter
   int4 alias_block_level;	///< Aliases blocked by 0=none, 1=struct, 2=array, 3=all
   uint4 split_datatype_config;	///< Toggle for data-types splitting: Bit 0=structs, 1=arrays, 2=pointers

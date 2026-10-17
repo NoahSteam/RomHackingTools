@@ -2764,6 +2764,18 @@ bool OutOfFlowOrder(const FlowReach& fr, const MemoryAccess& a, const MemoryAcce
     return a.order < b.order ? !FlowOrdered(fr, a, b) : !FlowOrdered(fr, b, a);
 }
 
+// Where a run is handed to code the output does not follow: the index, in the run's instructions (a delay slot is not one of them), of the first
+// indirect jump at depth 0 that the output says it treats as a call (an unrecovered table: the cases, and what they run, are the callee's;
+// A4-7's signed bound, A4-17). What comes after it is not the output's to list or to order. SIZE_MAX when the run is never handed over.
+size_t HandedOverAt(const DecompileResult& r, const RunOut& run)
+{
+    for (size_t k = 0; k < run.pcs.size(); ++k)
+        if (run.depths[k] == 0)
+            for (const FlowWarning& w : r.flowWarnings)
+                if (w.address == run.pcs[k] && w.text.find("Treating indirect jump as call") != std::string::npos) return k;
+    return SIZE_MAX;
+}
+
 // Two accesses from blocks the flow kept apart by a branch, now in one block that ends in a switch:
 // a guard folded into the switch over a read, which then appears made for the guarded-out values.
 bool FoldedIntoSwitch(const FlowReach& fr, const MemoryAccess& a, const MemoryAccess& b)
@@ -4005,15 +4017,11 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
             // signed bound lets the negative indices through) hands the rest of the run to code the output does
             // not follow: what the run does after the jump's delay slot is not the output's to list, though the
             // instruction may be in the body by another path (the join after the cases).
-            int handedOver = INT32_MAX;
-            for (size_t k = 0; k < run.pcs.size() && handedOver == INT32_MAX; ++k)
-                if (run.depths[k] == 0)
-                    for (const FlowWarning& w : r.flowWarnings)
-                        if (w.address == run.pcs[k] && w.text.find("Treating indirect jump as call") != std::string::npos)
-                            handedOver = static_cast<int>(k) + 2;
+            const size_t handed = HandedOverAt(r, run);
+            const size_t handedOver = handed == SIZE_MAX ? SIZE_MAX : handed + 2;
             std::map<std::tuple<int, uint32_t, bool, int>, std::vector<uint32_t>> steps;
             for (const TraceRec& t : run.trace)
-                if (t.depth == 0 && t.step < handedOver) steps[std::make_tuple(t.step, t.insn, t.write, t.size)].push_back(t.addr);
+                if (t.depth == 0 && static_cast<size_t>(t.step) < handedOver) steps[std::make_tuple(t.step, t.insn, t.write, t.size)].push_back(t.addr);
             for (const auto& st : steps)
             {
                 std::vector<const MemoryAccess*> entries;
@@ -4219,8 +4227,13 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
         const FlowReach fr(r.flowSuccessors);
         // The rule that two accesses joined across a branch are not made together reports only what a run
         // shows: a branch whose condition is constant (a folded test) joins them rightly.
-        auto Ran = [](const RunOut& run, uint32_t insn) {
-            for (size_t k = 0; k < run.pcs.size(); ++k)
+        // ...and only what the run does before it is handed to code the output does not follow (A4-17): an indirect jump the output
+        // treats as a call (a table it could not recover, a signed bound) runs the cases in the callee, and a case that comes back to an
+        // instruction the text holds below the jump makes that instruction without the ones the text puts before it. The text says so
+        // ("Treating indirect jump as call"); it is not a join across a branch.
+        auto Ran = [&](const RunOut& run, uint32_t insn) {
+            const size_t handed = HandedOverAt(r, run);
+            for (size_t k = 0; k < run.pcs.size() && (handed == SIZE_MAX || k <= handed); ++k)
                 if (run.pcs[k] == insn && run.depths[k] == 0) return true;
             return false;
         };
@@ -7009,13 +7022,14 @@ struct ModulePin
     const char* returns;
     const char* clobbers;
     const char* reads;
+    const char* data = nullptr;   // SE_GENERATED_DATA: the data ranges of the module (hex byte offsets, "44-46")
 };
 
 Subject ModuleSubject(const ModulePin& m)
 {
     const char* names[] = { "SE_GENERATED_FUNCS", "SE_GENERATED_TABLES", "SE_GENERATED_RETURNS", "SE_GENERATED_CLOBBERS", "SE_GENERATED_READS",
                             "SE_GENERATED_VOLATILE", "SE_GENERATED_POLL", "SE_GENERATED_DATA" };
-    const char* values[] = { m.funcs, m.tables, m.returns, m.clobbers, m.reads, nullptr, nullptr, nullptr };
+    const char* values[] = { m.funcs, m.tables, m.returns, m.clobbers, m.reads, nullptr, nullptr, m.data };
     std::string saved[8];
     bool had[8];
     for (int i = 0; i < 8; ++i)
@@ -7134,6 +7148,10 @@ void TestA582Pins(Sh2Decompiler& d)
         { "A5-82, grammar 1 seed 69 (control: a register merged with an unmapped address)", false, 69, "cache.read.pointer.said", "cache.read.pointer.unrelated" },
         { "A5-82, grammar 1 seed 179 (control: the same)", false, 179, "pointer.effect.derived", nullptr },
     };
+    // (these seeds are programs of the default alphabet: under SE_GENERATED_ALPHABET=specials the same seed is another program, and the pin would
+    // fail for a run that is not about it)
+    const bool savedSpecials = gSpecialReads;
+    gSpecialReads = false;
     for (const SeedPin& sp : kSeeds)
     {
         const Report rep = EvaluateSubject(d, MakeSubject(sp.v2 ? MakeV2(sp.seed) : Generate(sp.seed)), true);
@@ -7148,6 +7166,7 @@ void TestA582Pins(Sh2Decompiler& d)
         if (sp.seen) CHECK(count(sp.seen) > 0);
         if (sp.notSeen) CHECK(count(sp.notSeen) == 0);
     }
+    gSpecialReads = savedSpecials;
 
     // The derivation itself, on text: what counts as the pointer of a read of VDP2_TVSTAT (0x25F80004) and what does not.
     uint32_t tvstat = 0;
@@ -7681,6 +7700,70 @@ void TestRound8Pins(Sh2Decompiler& d)
     }
 }
 
+// ---- The routed seeds: A3-55, A4-16, A4-17, A5-83 (found by the area 2 round 8 review beyond the nightly) ----------------------------------------
+// 519315 (grammar 2): A3-49's literal variant, withheld since cee85f5. 608802 (grammar 1, specials): a loaded word or a constant, chosen by r3, which no
+// signature passes; the engine drops the return and the read of r3 with it (the host now withholds: "chosen by r3"). 511038 (grammar 2): a switch whose
+// index is a constant its guard excludes, read as a table and followed into uncaptured memory; the actions remove that block, and the function is no
+// longer reported cut off by it. 609269 (grammar 2, specials): an unrecovered signed table hands the run to the cases, which come back to an instruction
+// the text holds below the jump: not a join across a branch (HandedOverAt). 603025 (grammar 1): a pointer stepped and flipped between the partitions
+// from an SCSP slot register no name is near: the cached reads are called cache reads.
+void TestRoutedPins(Sh2Decompiler& d)
+{
+    auto report = [&](const char* name, const Report& rep, size_t want = 0) {
+        std::printf("pin '%s': %zu finding(s)\n", name, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.size() == want);
+    };
+    auto count = [](const Report& rep, const char* name) {
+        const auto it = rep.counts.find(name);
+        return it == rep.counts.end() ? 0 : it->second;
+    };
+    const bool saved = gSpecialReads;
+    gSpecialReads = false;   // (a seed is another program under the specials alphabet: each pin says which it is)
+    // A3-55
+    report("A3-55, grammar 2 seed 519315", EvaluateSubject(d, MakeSubject(MakeV2(519315)), true));
+    {
+        static const ModulePin m = { "A3-55, seed 519315 shrunk",
+                                     "2F86 2F96 2FA6 2FC6 2FD6 0C2A 6843 6953 6A63 6063 4C2A 6DF6 6CF6 6AF6 69F6 68F6 000B 0009 7FF4 2448 8B00 D603 2558 8900 6063 7F0C 000B 0009 "
+                                     "2D80 00C0",
+                                     "0/0/24,24/24/38", nullptr, "1,2", "0,104000", "20000,0" };
+        report(m.name, EvaluateSubject(d, ModuleSubject(m), true));
+    }
+    gSpecialReads = true;
+    report("A3-55, grammar 1 seed 608802 (specials)", EvaluateSubject(d, MakeSubject(Generate(608802)), true));
+    report("A3-55, seed 608802 shrunk (specials)", EvaluateSubject(d, WordsSubject("D704 8579 E2A3 3300 8B01 6023 210B 000B 0009 0009 2600 2000"), true));
+    gSpecialReads = false;
+    // A4-16
+    report("A4-16, grammar 2 seed 511038", EvaluateSubject(d, MakeSubject(MakeV2(511038)), true));
+    {
+        static const ModulePin m = { "A4-16, seed 511038 shrunk",
+                                     "D613 7FD0 E104 3616 8919 4608 C701 016E 412B 0009 0600 9028 0600 9028 0600 902E 0600 9032 0600 9038 D70A A009 0009 A007 0009 855F A004 0009 "
+                                     "E03C A001 0009 D706 A001 0009 FFFF 6073 7F30 000B 0009 0009 C000 0010 25FE 0008 0600 1030",
+                                     "0/0/2,2/2/4e", "10:6:5:3e:28,28,2e,32,38", "1,1", nullptr, nullptr, "44-46" };
+        report(m.name, EvaluateSubject(d, ModuleSubject(m), true));
+    }
+    // A4-17
+    gSpecialReads = true;
+    report("A4-17, grammar 2 seed 609269 (specials)", EvaluateSubject(d, MakeSubject(MakeV2(609269)), true));
+    {
+        static const ModulePin m = { "A4-17, seed 609269 shrunk (specials)",
+                                     "2F86 2F96 4F22 6843 6953 E105 3517 891D 4508 C703 015E 412B 0009 0009 0600 9038 0600 9038 0600 904C 0600 903C 0600 9040 0600 9044 0600 9048 "
+                                     "A009 0009 A007 0009 A005 0009 A003 0009 A001 0009 2732 3110 89FF 6040 D302 4F26 69F6 68F6 432B 0009 0600 9064 2FE6 7FFC 6EF3 E103 3612 890F "
+                                     "4608 C702 016E 412B 0009 0009 0600 9088 0600 9088 0600 908C A002 0009 A000 0009 6073 7E04 6FE3 6EF6 000B 0009",
+                                     "0/0/60,64/64/9c", "16:5:6:4c:38,4c,3c,40,44,48:38;76:6:3:90:88,88,8c", "1,1", "80000,80000", "8,a0000" };
+        report(m.name, EvaluateSubject(d, ModuleSubject(m), true));
+    }
+    gSpecialReads = false;
+    // A5-83
+    {
+        const Report rep = EvaluateSubject(d, MakeSubject(Generate(603025)), true);
+        report("A5-83, grammar 1 seed 603025", rep);
+        std::printf("  cache.read.pointer.said %d\n", count(rep, "cache.read.pointer.said"));
+        CHECK(count(rep, "cache.read.pointer.said") > 0);
+    }
+    gSpecialReads = saved;
+}
+
 void TestCanary(Sh2Decompiler& d)
 {
     const long n = EnvNumber("SE_GENERATED_CANARY", 240);
@@ -7750,6 +7833,7 @@ void TestGenerated()
         RUN(TestRound7Pins(d));
         RUN(TestA582Pins(d));
         RUN(TestRound8Pins(d));
+        RUN(TestRoutedPins(d));
         if (EnvNumber("SE_GENERATED_CANARY", 240) > 0) RUN(TestCanary(d));
     }
     const long seeds = single ? 1 : EnvNumber("SE_GENERATED_SEEDS", 300);

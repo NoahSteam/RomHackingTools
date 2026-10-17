@@ -1428,8 +1428,9 @@ void DecompilerPanel::DrawLines(const DecompilerInputs& inputs, Request& req)
                         req.renameAddr = callee;
                     }
                 }
+                // ...not at an odd address (the word flow halted at as bad data can be one): an SH-2 function starts at an even address (A7-6).
                 if (item("Set Function Start Here",
-                         inputs.bounds && ln.firstAddr != 0 && ln.firstAddr != mShown.entry))
+                         inputs.bounds && ln.firstAddr != 0 && (ln.firstAddr & 1u) == 0 && ln.firstAddr != mShown.entry))
                 {
                     // A boundary correction. Every question is keyed by the function set, so the
                     // answers it outdates -- this function's and its callers' -- are not found again.
