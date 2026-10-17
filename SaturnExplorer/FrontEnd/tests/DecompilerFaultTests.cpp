@@ -4389,7 +4389,7 @@ std::string StrayStaging(const std::string& cfg)
 int DiskFullProbe(const std::string& scratch, bool sticky)
 {
     sfe::MakeDirectory(scratch);
-    std::signal(SIGXFSZ, SIG_IGN);
+    signal(SIGXFSZ, SIG_IGN);
     const auto snap = BuildSnapshot();
     const Fix* fx = FindFix("mailbox");
     const DecompileRequest rq = MakeRequest(*fx);
