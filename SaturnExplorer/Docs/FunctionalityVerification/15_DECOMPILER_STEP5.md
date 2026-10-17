@@ -8222,3 +8222,106 @@ no item adds an index to a base register with a mask. Item: an indexed store thr
 - Not run: the sanitizer builds, the full `ctest` (the executables above were run, not the whole list), the printed-C mode, the 20,000-seed run. The fault suite ran its default subset and the `aliasl` / `alias` families at every cell named above.
 - The generator beyond the nightly's range (`SE_GENERATED_FIRST=20001 SE_GENERATED_SEEDS=15000`, both grammars, the default alphabet): `alias.words` 1,791, `cache.read.pointer.unrelated` 2, and three failing seeds, none in area 5, for the coordinator: seeds 22001 and 24379 (grammar 1) `[n:input-dropped:r0]`, a function that reads r0 first (`rotcr r0`, `cmp/pl r0`) and is lent a signature without it, shrunk to `SE_GENERATED_WORDS="E301 4025 451B 4310 8BFB 000B 0009"` and `"5264 C880 8900 200A 2028 8B00 2009 000B 0009"` (A3-5's class); and seed 33994 (grammar 2) `[n:table-case]`, a jump table's case whose code the output does not hold, with no warning (A4's class), shrunk to `SE_GENERATED_WORDS="2F86 2F96 2FC6 0C2A 7FF0 6843 6953 604D 7F10 4C2A 6CF6 69F6 68F6 000B 0009 E301 A000 0009 4310 8BFD E103 3616 8913 4608 C701 016E 412B 0009 0600 9048 0600 904C 0600 9052 0600 9052 A005 0009 C604 A002 0009 A000 0009 E301 A000 0009 4310 8BFD 4515 8902 3154 A002 0009 A000 0009 E074 000B 0009" SE_GENERATED_FUNCS="0/0/1e,1e/1e/74" SE_GENERATED_TABLES="34:6:4:56:48,4c,52,52" SE_GENERATED_RETURNS="1,1" SE_GENERATED_CLOBBERS="0,0" SE_GENERATED_READS="0,20000"`. `SE_GENERATED_ALPHABET=specials`, 3,000 seeds from 50,001: `alias.words` 365 and one failing seed, 50070 (grammar 2), `[n:table-case]` again (two indices of one table), shrunk to `SE_GENERATED_WORDS="2F86 2F96 2FA6 4F22 7FF8 6843 6953 6A63 D203 7F08 4F26 6AF6 69F6 68F6 422B 0009 0600 9024 E105 3616 891B 4608 C701 016E 412B 0009 0600 904C 0600 9050 0600 9054 0600 9054 0600 9058 0600 905C A009 0009 A007 0009 A005 0009 A003 0009 517F A000 0009 0202 6023 000B 0009" SE_GENERATED_FUNCS="0/0/20,24/24/6a" SE_GENERATED_TABLES="30:6:6:62:4c,50,54,54,58,5c" SE_GENERATED_RETURNS="1,1" SE_GENERATED_CLOBBERS="41000,41000" SE_GENERATED_READS="0,0"` (A4's class).
 - No fixture was added to the suite: each is reproduced in the ledger row by its words (`SE_GENERATED_WORDS`), as the fixer moves them in.
+
+## Area 5, round 9: the loop closure by paths, the cache array and the purge line, the cartridge caution, five texts, and the oracle's new items
+
+Fixer, branch `review/5-round9-fix` from `539c18c` (the round 9 review merged). Rows A5-70 to A5-79 are **fixed** (A5-79 fixed for a frame change the function writes, the automatic swap accepted),
+A5-58 is **accepted** with its reasons, and two rows are new: A5-80 (accepted) and A5-81 (open, the oracle gaps below), all P3. Code commits `d193aac`, `884209b`, `4a21514`, `da71a06`. **No engine patch**
+(0049 not needed, no `vendor.py` run): every fix is in the host (`Sh2Decompiler.cpp`, `SaturnHardwareMap.cpp/.h`), the tests and the oracle tools. Each row's fixture was reproduced on the base first (a
+generator and a suite linked with `539c18c`'s `Sh2Decompiler.o` and `SaturnHardwareMap.o`, `SE_GENERATED_WORDS` for the words): (a) to (e) of A5-70, 71a/b, 72, 73, 74, 75, 76 (HIRQMSK, IST), 77, 78 and 79 print what the
+rows say, word for word. The fixtures are the reviewer's words verbatim (only the base moves) in `Sh2DecompilerTests.cpp` (the `r9` map, `a5_70*` to `a5_79`, with the controls).
+
+### Root causes
+
+| Row | Cause | Fix |
+|---|---|---|
+| A5-70 | `Walk` closed a loop's own bitwise operations (`selfOps`, A5-60) at every merge over the constants that merge itself held. The merge inside a loop body holds none (so the conditional operation was cleared with nothing closed), `Bitwise` kept the new operation only (so the earlier operation of a turn was dropped, and a false note named a register the code never reads), and a step on any path made the merge `others` and the closure stopped. | The closure is by **paths**. A walk that comes back to a node still being walked returns a `SelfPath` {origin node, steps}: the steps one turn applies to its value, in order (an `and`/`or`/`xor` with the set of numbers the other operand can be, or an add of a known number). `Bitwise`, `Shift` and `Merge` extend and union the paths of the value, whatever the body does (a conditional operation, two in a turn, an operation on one path and a step on the other); **the node the paths come back to closes them** (`CloseBack`, at the end of every `Walk`, not at merges): the closure of the values it holds under the paths without an add is exact (a finite set, more than 64 is unknown), a path with an add steps the pointer (`steps`, `others`, the first values kept, as A5-39), and whether the stepped values come to read through the cached partition is looked for in a bounded walk (64 values) and kept as `steppedCached`. The stepped note then says that the later iterations are cache reads too. Memo entries that depend on a node are dropped when it closes. |
+| A5-71 | `MemoryBytesOf` returned false for partitions 4 and 6. Mednafen indexes `CacheData[(A >> 4) & 0x3F][(A >> 10) & 3][A & 0xF]`: bits 31-12 are not decoded. | `MemoryKind::CacheData`, mask 0xFFF, both partitions: the names of one cell are one memory and `NewAliasedRanges` makes them volatile like work RAM's. |
+| A5-72 | The purge's evidence was the word it names (`ConstAccess::bus`, `size`). `SH7095_Cache_AssocPurge` compares the tag of the line. | The purge covers the 16-byte line (`busSize` 16, `bus & ~0xF`): any other word of the line the function accesses is kept. |
+| A5-73 | A store to the cartridge areas is folded like ordinary memory and nothing said that the cartridge decides what a write does. | The A5-33 mechanism: a caution from the engine's access record (patch 0017) for a folded store in 0x02000000-0x04FFFFFF, with the cases `cart.c`, `backup.c`, `extram.c` in its words. Making the area volatile was not done: it would also keep reads of a cartridge ROM the user captured. |
+| A5-74 | `WriteEffects` had PTMR's bit 0 only. | A second text for bit 1 (arms drawing at each frame change until written with it clear), by the same lane rules; the unknown-value case says both. |
+| A5-75 | The text read bit 7 of the byte as a fixed "continue". `smpc.c` waits for `bit 7 == NextContBit` and flips the bit after each continue. | The words of the review; a known byte is described (`the byte here has bit 7 clear and bit 6 set`), not judged. |
+| A5-76 | `RecalcIRQOut` and `IPending &= *DB | ~mask` were not in the script's `VALUE_ACTS`; round 7 had decided to say the clears on a read-back only. | Texts for CD_HIRQMSK, CD_HIRQ and SCU_IST; the cases file marks them `V`. SCSP_SCIRE already said its clear on the write, so the decision is reversed for the class's sake. |
+| A5-77 | `WriteEffects` made the text for any write that reached the SCILV register. The handler stores `& 0x00FF`. | The byte at the even address gets "this byte is not stored (only the low byte of the register is); ... recalculated at once". |
+| A5-78 | `INT_ADD(param, 0x25F00000)` took the number for an offset of an unknown; `bases` came only from symbol addresses. | An unknown plus a number that is a colour RAM or register address (below the on-chip partition: `param_1 + 0xFFFFFFF4` is `- 12`, A5-28) is based at the number. |
+| A5-79 | The data flow keys memory by address and a frame change makes an address the other buffer. | A write to VDP1_FBCR is evidence like TVMR's (`remaps` bit 4): the frame buffer is volatile in the function. The automatic swap (FCM clear, no write) has no position: accepted, the user's volatile range. |
+
+### Design decisions
+
+- **A5-70 by paths, not by flags.** The cache caution is per value and per partition, so a flag that says "other values" is not enough; and a path is the right unit because a loop body is a graph of branches: every route from the head back to itself is one path, and the equations of the pointer are the head's constants plus the paths applied to them. The cost is a vector of paths per value (at most 32, more is `others`). The old behaviour is a special case: a single path of one operation is A5-60's closure, a single add is A5-39's stepped pointer (the fixtures `a5_39*`, `a5_54*`, `a5_60*` pass unchanged).
+- **A5-70 (e), what is said for a stepped mask.** The values of a step and a mask in one turn are not worked out (the trip count is not known), but their partition is: the stepped note adds that the iterations after the first read through the cached partition too, with the first such address as an example. Said only when no value the pointer is known to hold is a cached register already (that address has its own caution).
+- **A5-73, a caution and not volatility** (the reviewer's proposal, A5-33's): the probe stays folded to "present", which the caution says; with no cartridge in the request nothing better can be said.
+- **A5-76, the class.** CD_HIRQ and SCU_IST are said on the write. The corpora do not write them.
+- **A5-79.** The reviewer asked for a decision: a write to FBCR re-addresses the frame buffer by position the way a mode write does, so the same mechanism (volatile in the function) is right and never wrong; the asynchronous swap is accepted for the reason A5-68 gave.
+- **A5-58 accepted.** (1) A stepped walk's reach needs the loop's trip count: a relation between the pointer's cycle and the counter's exit test that the engine's data flow does not give and the host's resolver (one def chain) does not follow. The note names the start and says the rest is not said, only where a register is within 256 bytes (`kSteppedReach`), and no text is wrong. Neither corpus image has a stepped note (their 35 and 57 notes are the classes the review listed). (2) A pointer a callee returns: the value is unknown to the host. `*extraout_rN` dereferences are 199 lines in 31 functions of image 007 and 210 in 43 of 008; a note on each would say "may be a register" about pointers that are overwhelmingly RAM, and no check can tell which. Revisit if the engine gains a return-value analysis.
+- **A5-80 (new, accepted).** The purge compares the tag, which holds bits 28-27; the decompiler ignores them like the bus does. A purge through 0x4E003304 does not invalidate a line cached from 0x06003304, and the poll is kept as if it did: volatile for nothing, never wrong.
+
+### Oracle items (the review's list)
+
+| Item | Done |
+|---|---|
+| Bitwise loop (A5-60, A5-70) | The grammar-1 generator puts an `and`/`or`/`xor` (0x1FFFFFFF, 0xFFFFFFF0, 0xFFFFFFF9, 0x20000000, 4) and, two times in five, a step of the pointer's alignment inside a loop body, alone or under a skip (`loop.mask.*`, `loop.step`; a stream of its own, pointers of the partitions 0 and 1 only). Rule 3b holds the reads to the cache caution. **New rule 3c:** a read or write the emulator traced at a register through a pointer the output derives from register addresses has the register's read effect and the width cautions on its instruction, unless the notes say the pointer may hold other values, is indexed or is stepped. It rejects (b) and (c) on the base (`pointer-effect-unsaid`: TVSTAT's read effect missing). |
+| Cache data array (A5-71) | `Env` has the 4 KiB array under partitions 4 and 6 (`ByteAt`, `MemKey`, `RamRange`); literal kind `Cache` (`litptr.cache`) with a second name of an earlier cell (the other partition, +0x1000, +0x2000) half the time; rule 2b reads the aliasing off the model. On the base: `dropped:*:alias:folded`. |
+| Purge line (A5-72) | `MaybeAlias` names another word of the line (two times in five of the purge names); rule 2b takes the line's 16 bytes for a purge access. |
+| Cartridge (A5-73) | Literal kind `Cart` (`litptr.cart`, 0x02400000 / 0x04000000, either partition); **new rule 3d:** a folded store in the cartridge areas is cautioned. On the base: `cart-write-unsaid` in 18 seeds of 1,000. No `Env` storage for the cartridge: the cartridge is the user's, the emulator has none, and the rule is about the text. A polled literal is never one of these (a poll waits for another processor, which only marked work RAM is): found by the first 20,000-seed run (seeds 4983 and 18905, the generator's own artifact), fixed in `da71a06`. |
+| Handler check | `L` (a write that stores nothing of the high byte: the SCSP's SCIPD, SCILV0-2, MCIPD) requires the two bytes' texts to differ; a label with two of `G V S D C` requires two texts; `V` from `PTMR = value`, `RecalcIRQOut` and `IPending &= *DB`. 188 value-triggered write targets (from 178). |
+| Not built, and why | **The mode registers (A5-68, A5-79):** `Env` keeps no VDP1 or VDP2 memory or mode, and a model of the scrambled frame buffer, colour RAM's +0x800 write and the swap, with a rule for what a write of a mode register does to later accesses, is a memory model of its own; the fixtures hold it. **The rotating index pointer (A5-61):** the engine keeps `bases` only for a pointer built of symbol addresses or of an unknown index, and the generator's pointers are constants; an unknown index is a parameter, which its perturbed inputs reach in r4-r7 as scratch pointers only. **The false-note direction of 3c** (a note for a register no run reached, A5-70 (c)'s VDP2_EXTEN): a path no input took is not a false note, so it needs the exact path set from a model; held by the fixture. The row A5-81 lists them. |
+
+### Mutation table
+
+Each fix reverted alone (one edit to one translation unit, relinked against the rest, the suite `Sh2DecompilerTests` and the width-table test run), then restored. Lines are the failing checks of `Sh2DecompilerTests.cpp`.
+
+| Mutation | Suite | Width-table test |
+|---|---|---|
+| A5-70: `CloseBack` closes nothing | 21 failures (a5_70*, and the a5_39/54/60 pointer fixtures) | passes |
+| A5-70: `Bitwise` keeps the new operation only | 5 (`a5_70b`, `c`, the mask-step and join fixtures) | passes |
+| A5-70 (e): `steppedCached` never set | 2 (`a5_70e`, `a5_70_mask_step`) | passes |
+| A5-70: a step is not recorded in the path | 10 | passes |
+| A5-71: the cache array removed from `MemoryBytesOf` | 2 (`a5_71a`, `a5_71b`) | passes |
+| A5-72: the purge covers its word only | 2 (`a5_72`: the poll folded, the code removed) | passes |
+| A5-73: the cartridge caution removed | 2 (`a5_73`, `a5_73_backup`) | passes |
+| A5-74: the bit 1 text removed | 3 (`a5_74`, `a5_74_3`, the PTMR pin) | fails: `VDP1_PTMR: the handler does 2 things on a write ... and WriteEffects says fewer` |
+| A5-75: the byte clause as round 8 had it | 3 (`a5_64_ireg0`, `a5_75`, `a5_75_break`) | passes (a text is not read) |
+| A5-76: HIRQMSK / HIRQ / IST text removed | 1 / 1 / 2 | fails each, naming the register |
+| A5-77: the lane test removed | 1 (`a5_77`) | fails: SCSP_SCILV0, 1 and 2 say the same of both bytes |
+| A5-78: the base of `param + number` removed | 2 (`a5_78a`, `a5_78b`) | passes |
+| A5-79: the FBCR write is no evidence | 1 (`a5_79`) | passes |
+
+The generator, the whole of round 9's grammar against the base decompiler (1,000 grammar-1 seeds, before the polled-literal fix): 26 failing seeds, 50 findings (`cart-write-unsaid` 18 seeds, `dropped:*:alias:folded` 9, `cache-read-pointer-unsaid` 2); against the fixed one: 0.
+
+### Matrix
+
+| Run | Result |
+|---|---|
+| Build | RelWithDebInfo, gcc, a scratch build of its own; the map compiles with `-Werror=format-truncation=2` |
+| `ctest -j3 --timeout 900` | CTEST_RESULT |
+| `Sh2DecompilerTests` | all passed (about 6 s without the corpus) |
+| Generator, grammar 2, 3,000 seeds | 0 failing seeds, 0 findings; `alias.words` 22, `cart.write.said` 6, `litptr.cache` 172, `litptr.cart` 102 |
+| Generator, grammar 1, 1,000 seeds | 0 failing seeds, 0 findings; `alias.words` 262, `cart.write.said` 37, `pointer.effect.said` 15 |
+| Generator, `SE_GENERATED_SEEDS=20000` | 0 failing seeds, 0 findings; `alias.words` 2,592, `cache.read.pointer.said` 600, `cart.write.said` 262, `pointer.effect.said` 205, loop masks 666, loop steps 259 |
+| Printed C, `SE_GENERATED_PRINTEDC=only`, 3,000 seeds | passed; 3,072 functions, 2,616 compared, `agrees` 2,673 |
+| `SE_GENERATED_MUTATE=alias`, 300 seeds | 6 of 300 seeds reported the damage; passes |
+| Fault suite | 0 of 71 jobs failed (247 s); no MOVED pin |
+| ASan + UBSan + LSan, `Sh2DecompilerTests` and `Sh2GeneratedTests` (300 seeds), Debug, the workflow's flags | exit 0 both; no AddressSanitizer or LeakSanitizer report; the only UBSan lines are the two accepted upstream shifts (`address.hh:605`, `slghpatexpress.cc:979`) |
+| Width table | 337 registers, 3,038 cells, passes; handler check: 188 value-triggered write targets; `derive_handler_cases.py --check` current |
+| `vendor.py` | not run: no patch |
+
+Corpora, `SE_GAME_HWRAM=<image> SE_GAME_LEND=1`, and the same run on a build of `539c18c`:
+
+| | `hwram007.bin` | `hwram008.bin` |
+|---|---|---|
+| Functions | 839 of 839 ok | 1,554 of 1,554 ok |
+| Every ledger count | 0 | 0 |
+| Dropped against the reference run | 0 | 0 |
+| Missing and said | 0 | 4 (as before) |
+| Records | 14,829 folded (14,831), 0 dead, 0 unreachable, 29 switch lookups | 38,685 folded (38,687), 0 dead, 4 unreachable, 169 switch lookups |
+| Direct volatile accesses, notes, cautions | 165 (163), 35, 0 | 234 (232), 57, 4 |
+| Lending (before, after) | 637 (866 parameters), 662 (923) | 992 (1,227), 1,020 (1,282) |
+
+**Three functions changed text, all one cause (A5-72):** 06003C06 and 060340BE in 007, 06003C06 and 060750FE in 008 (the slave's idle routine, in two copies each image): `(*pcVar1)(xRam06003308);` becomes `xVar2 = Ram06003308; (*pcVar1)(xVar2);`. The argument word is +4 of the line the routine purges (`Ram46003304 = 0;`): it is kept as a read in place now, which is what the hardware does (the master writes it, the idle loop reads it after the purge), and nothing else changes (the temporaries are renumbered). The two reads fewer folded and two more direct are those. No A5-73 text changed (no access to the cartridge areas). The worst function (008 0604F422, 4.9 s on this machine) takes the same time on both builds.
+
+### Left undone
+
+- A5-81: the generator has no `Env` frame buffer, colour RAM or mode registers, no rotating index pointer, no cartridge reads, no check that a note names no register the code never reaches (A5-70 (c)'s false note); they are held by fixtures. The record above says why for each.
+- A5-58 (accepted) and A5-80 (accepted) are over-approximations or silences, not wrong texts; the automatic frame swap and the 4 MiB cartridge's missing repeat remain.
+- Mednafen was not run; every claim is from its source, as in every area 5 round.
