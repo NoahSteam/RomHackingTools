@@ -135,6 +135,10 @@
 //      compared whenever the function writes it on every path, which is what a dropped return is.
 //   9. A return is claimed only if r0 is written on every run before the return; a function the
 //      generator made to return r0 does not claim to return nothing.
+//   9b. (round 7, A3-34) The canary family (not drawn from the grammar: enumerated, TestCanary): a function stores 0x5A in a local, calls a
+//       writer that overwrites it through a pointer in r4 or r2, through r15 plus an index, with a computed value or through a callee that
+//       gives a lent writer its own entry r15 + 4, and returns the local. No `return` of the text holds the canary (or a variable assigned it
+//       with no call between that could have written it) when no run returned it; the hand-back kinds only when the signature is lent.
 //   10. A register CallEffects::preserved names has the value it started with at every return: r0-r15, SR,
 //       GBR, VBR, MACH, MACL and PR (the four after SR started at values of their own).
 //   11. A lent preserved set is honoured by the caller's text (patch 0028): when every function this one
@@ -154,6 +158,7 @@
 // usage: SaturnExplorerSh2GeneratedTests <scratch dir>
 //   SE_GENERATED_SEEDS=<n>   how many seeds (default 300)
 //   SE_GENERATED_FIRST=<k>   the first seed (default 1): a nightly run moves it
+//   SE_GENERATED_CANARY=<n>  the canary family (TestCanary, A3-34): n programs, default 96, 0 off; SE_GENERATED_CANARY_ONLY=<k> prints variant k
 //   SE_GENERATED_SEED=<k>    one seed, with everything printed
 //   SE_GENERATED_GRAMMAR=1|2 only that grammar (default: the odd seeds are version 1, the even ones version 2)
 //   SE_GENERATED_SHRINK=<n>  how many findings to reduce (default 3; 0 none; large: all)
@@ -2851,6 +2856,9 @@ struct FnInfo
     int sel = -1;            // the register a jump table indexes with
     uint32_t clobbers = 0;   // registers it leaves changed (Func::effClobbers): bit n is Rn, 17 gbr, 18 vbr, 19 mach, 20 macl
     uint32_t reads = 0;      // registers whose entry value it reads on purpose (Func::reads)
+    uint32_t canary = 0;     // a constant the function stores in a local that a callee overwrites: no `return` of its text may contain it (A3-34)
+    bool canaryIfLent = false;   // ...only when the signature is lent: the callee hands the value back through the caller's own frame, which the
+                             // engine cannot see, so a caller withheld for it (A3-15, A3-21: the claim is the check) prints the stale local
 };
 
 // What is checked: the code and its literal pool as words from kCode, the functions in it, what the
@@ -3434,6 +3442,59 @@ bool CallsUnlentChanger(const Subject& subject, const std::map<uint32_t, Prototy
 
 // One decompilation of function 'fi', checked against its runs. 'lent' holds the prototypes of the
 // functions already decompiled (the later ones), 'results' their results.
+// Whether a text returns a canary: a `return` line that holds it (0x5a, or in decimal), or names a variable it was assigned to, with no
+// call between that could have written the variable. A call whose line takes an address (`&xStack_4 + p`) or carries the note of a frame
+// address in r2 may write any stack local, so the stack locals are clean after it; the others (xVar1) are written by no call
+// that is not passed their address. Straight-line texts only, which is what the canary programs are.
+bool CanaryReturned(const std::string& text, uint32_t canary, std::string& offending)
+{
+    char hex[16], dec[16];
+    std::snprintf(hex, sizeof hex, "0x%x", canary);
+    std::snprintf(dec, sizeof dec, "%u", canary);
+    auto isWord = [](char c) { return std::isalnum(static_cast<unsigned char>(c)) || c == '_'; };
+    auto has = [&](const std::string& line, const std::string& needle) {
+        for (size_t p = line.find(needle); p != std::string::npos; p = line.find(needle, p + 1))
+            if ((p == 0 || !isWord(line[p - 1])) && (p + needle.size() >= line.size() || !isWord(line[p + needle.size()]))) return true;
+        return false;
+    };
+    std::set<std::string> tainted;
+    auto taintedIn = [&](const std::string& line) {
+        if (has(line, hex) || has(line, dec)) return true;
+        for (const std::string& name : tainted)
+            if (has(line, name)) return true;
+        return false;
+    };
+    std::istringstream lines(text);
+    std::string raw;
+    while (std::getline(lines, raw))
+    {
+        const size_t at = raw.find_first_not_of(" \t");
+        if (at == std::string::npos) continue;
+        const std::string line = raw.substr(at);
+        if (line.compare(0, 6, "return") == 0)
+        {
+            if (taintedIn(line))
+            {
+                offending = line;
+                return true;
+            }
+            continue;
+        }
+        if (line.find('&') != std::string::npos || line.find("a frame address is in r2 here") != std::string::npos)
+            for (auto it = tainted.begin(); it != tainted.end();)
+                it = it->find("Stack") != std::string::npos ? tainted.erase(it) : std::next(it);
+        const size_t eq = line.find(" = ");
+        if (eq != std::string::npos && line.back() == ';' && line.find_first_of("(){}[]*") > eq)
+        {
+            const std::string name = line.substr(0, eq), rhs = line.substr(eq + 3);
+            if (name.find(' ') != std::string::npos) continue;
+            if (taintedIn(rhs)) tainted.insert(name);
+            else tainted.erase(name);
+        }
+    }
+    return false;
+}
+
 void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, const Subject& subject, int fi,
              const std::map<uint32_t, Prototype>& lent, const std::vector<DecompileResult>& results, bool volatileRun,
              const std::vector<RunOut>& runs, Runner& runner, Report& rep, bool wantText, DecompileResult& r)
@@ -3489,6 +3550,18 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
         if (r.unimplemented) add("unimplemented", "the spec has no semantics for an instruction");
         if (r.truncated) add("truncated", "flow left captured memory: " + r.truncatedWhy);
         if (!r.badDataAt.empty()) add("baddata", "bad data at " + Hex(r.badDataAt[0]));
+        // The canary (A3-34): the function stored fn.canary in a local that a callee overwrote, and no run returned it. A `return` that
+        // contains it (as 0x5a, or in decimal) is the local folded across the call, the value from before the callee wrote it.
+        if (fn.canary != 0)
+        {
+            bool returned = false;
+            for (const RunOut& run : runs) returned = returned || (run.finished && run.fin[0] == fn.canary);
+            count("canary.checked");
+            std::string line;
+            if (!returned && (!fn.canaryIfLent || r.prototype.known) && CanaryReturned(r.Text(), fn.canary, line))
+                add("canary:return", "the function stores " + Hex(fn.canary, 2) + " in a local that a callee overwrites and the run returns what the callee wrote, "
+                                      "but the text returns the value from before the call: `" + line + "`");
+        }
 
         auto inMarked = [&](uint32_t addr) {
             for (const HardwareRange& h : marked)
@@ -5490,7 +5563,10 @@ struct CCase
     std::vector<uint16_t> words;
 };
 
-uint32_t CalleeSaved(int r) { return 0xA0000000u + static_cast<uint32_t>(r) * 0x01010101u; }
+// The value r8-r14 start with in a printed-C run. Its four bytes differ from each other, for every register (A2-44): with
+// 0xA0000000 + r * 0x01010101 the bytes 1 and 2 were equal, so a text that named the two the wrong way round (`unaff_r8_b1` for the register's
+// byte 2) read the same value under either name and the differential could not tell.
+uint32_t CalleeSaved(int r) { return (0xA0000000u + static_cast<uint32_t>(r) * 0x01010101u) ^ 0x00010203u; }
 
 // The edge values the printed-C inputs walk through r4-r7 first (the first poolSize inputs). It has the sign boundaries of the byte, the
 // word and the longword, and (A2-40) the negative values whose low 8, 16 or 24 bits are positive, which a text that sign-extends a narrow
@@ -5527,6 +5603,14 @@ void TestOracleOwnDecisions()
     CHECK(VoidReturnClass(true, { 0x000B, 0x6003 }) == "void-return-lent");      // rts ; mov r0,r0
     CHECK(VoidReturnClass(true, { 0x6013, 0x000B, 0x0009 }) == "void-return-lent");
     CHECK(VoidReturnClass(true, { 0x6013 }) == "void-return-lent");              // no rts at all
+    // A2-44: the entry values of r8-r14 have four different bytes (a text that numbered the bytes 1 and 2 the wrong way round read the same
+    // value under both names)
+    for (int r = 8; r <= 14; ++r)
+    {
+        const uint32_t v = CalleeSaved(r);
+        for (int i = 0; i < 4; ++i)
+            for (int j = i + 1; j < 4; ++j) CHECK(((v >> (8 * i)) & 0xFF) != ((v >> (8 * j)) & 0xFF));
+    }
     // A2-40: for each width a value with all the bits above it set whose narrow piece is positive
     const std::vector<uint32_t>& pool = PrintedCPool();
     for (int bits : { 8, 16, 24 })
@@ -5644,12 +5728,14 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
                 int num = -1;
                 if (std::sscanf(name.c_str() + (name.compare(0, 3, "in_") == 0 ? 4 : 7), "%d", &num) == 1 && num >= 0 && num <= 15 &&
                     (name == "in_r" + std::to_string(num) || name == "unaff_r" + std::to_string(num)))
-                    value = num <= 7 ? "g_in[" + std::to_string(num) + "]" : std::to_string(CalleeSaved(num)) + "u";
+                    value = num <= 7 ? "g_in[" + std::to_string(num) + "]" : std::to_string(num == 15 ? kStackTop : CalleeSaved(num)) + "u";
                 else if (std::regex_match(name, pieceName, std::regex("(?:in|unaff)_r(\\d+)_b([1-3])")) && std::atoi(pieceName[1].str().c_str()) <= 15)
                 {
                     // a byte of a register (cmp/str compares four): named with the byte it is, counted from the least significant (A2-25; r8-r15, A2-37)
                     const int reg = std::atoi(pieceName[1].str().c_str());
-                    const std::string whole = reg <= 7 ? "g_in[" + std::to_string(reg) + "]" : std::to_string(CalleeSaved(reg)) + "u";
+                    // (r15 starts at the stack top the run gives it: the text was given CalleeSaved(15), which only agreed with the run
+                    // while no input matched a byte of either; A2-44.)
+                    const std::string whole = reg <= 7 ? "g_in[" + std::to_string(reg) + "]" : std::to_string(reg == 15 ? kStackTop : CalleeSaved(reg)) + "u";
                     value = "((" + whole + " >> " + std::to_string(8 * (pieceName[2].str()[0] - '0')) + ") & 0xFF)";
                 }
                 else if (name == "in_sr" || name == "unaff_sr") value = "g_in[8]";
@@ -5704,6 +5790,7 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
         const std::vector<uint32_t>& pool = PrintedCPool();
         const uint32_t poolSize = static_cast<uint32_t>(pool.size());
         int sweep = 0;   // the first poolSize inputs walk the edge values through every register (r4 takes pool[k], r5 pool[k + 5] ...)
+        int byteSweep = 0;   // ...and the next 44 share one byte with a register a function may compare them with (A2-44)
         auto draw = [&]() -> uint32_t {
             const uint32_t k = ir.Below(4);
             if (k == 0) return pool[ir.Below(poolSize)];
@@ -5716,7 +5803,7 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
         std::ostringstream rows;
         int kept = 0;
         bool r0Changed = false;
-        for (int k = 0; k < nIn; ++k)
+        for (int k = 0; k < nIn + 44; ++k)
         {
             uint32_t in[13];
             for (int i = 0; i < 8; ++i) in[i] = draw();
@@ -5733,6 +5820,21 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
                 in[1] = pool[(sweep * 3 + 1) % poolSize];
                 in[8] = (sweep & 1) ? (in[8] | 1u) : (in[8] & ~1u);   // T both ways
                 ++sweep;
+            }
+            // A parameter that shares exactly one byte with a register the function may compare it with (cmp/str is an OR of four byte
+            // compares, and a random 32-bit value matches a given byte with probability 1/256): the other three bytes are the register's
+            // complement, so a text that compares the wrong byte of it or names the wrong one decides differently (A2-44).
+            // The 44 inputs after the edge sweep walk every (register, byte) pair through every parameter register: register t = (j + 3 i) % 11
+            // (r0-r3, r8-r14) and byte (j / 11 + i) % 4 for parameter r(4 + i) at input j.
+            if (sweep >= static_cast<int>(poolSize) && byteSweep < 44)
+            {
+                for (int i = 0; i < 4; ++i)
+                {
+                    const uint32_t t = static_cast<uint32_t>(byteSweep + 3 * i) % 11, byte = (static_cast<uint32_t>(byteSweep) / 11 + i) % 4;
+                    const uint32_t other = t < 4 ? in[t] : CalleeSaved(8 + (t - 4));
+                    in[4 + i] = (~other & ~(0xFFu << (8 * byte))) | (other & (0xFFu << (8 * byte)));
+                }
+                ++byteSweep;
             }
             for (int i = 0; i < 8; ++i) machine->Set(("r" + std::to_string(i)).c_str(), in[i]);
             for (int i = 8; i < 15; ++i) machine->Set(("r" + std::to_string(i)).c_str(), CalleeSaved(i));
@@ -5832,12 +5934,14 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
             log = ss.str();
             return std::string();
         }
-        std::system((bin + " > " + rlog + " 2>&1").c_str());
+        const int runStatus = std::system((bin + " > " + rlog + " 2>&1").c_str());
         std::ifstream f(rlog);
         std::stringstream ss;
         ss << f.rdbuf();
-        // The program ends with "BAD <n>"; without it the run died (a signal) or never finished.
-        if (ss.str().find("\nBAD ") == std::string::npos && ss.str().compare(0, 4, "BAD ") != 0) compiled = false, log = "the compiled program did not finish: " + ss.str().substr(0, 200);
+        // The program ends with "BAD <n>"; without it the run died (a signal) or never finished. The exit status is kept for the message only:
+        // the marker is the verdict, since a program that printed it and then died in exit would still have compared every function.
+        if (ss.str().find("\nBAD ") == std::string::npos && ss.str().compare(0, 4, "BAD ") != 0)
+            compiled = false, log = "the compiled program did not finish (status " + std::to_string(runStatus) + "): " + ss.str().substr(0, 200);
         return ss.str();
     };
     std::vector<size_t> all;
@@ -6295,6 +6399,247 @@ void TestCalleeClobberPins(Sh2Decompiler& d)
     }
 }
 
+// ---- The canary family (ledger A3-34, A3-36, A3-37, A3-39, A3-40) ---------------------------------------------------------------------
+// The grammar never hands a callee the address of a local, nor reads a word a callee wrote, so a text that folds a local across a call (the
+// engine's own reading of what a call may write) is invisible to every other check: the function still returns a value, the registers still
+// agree, and the accesses are the same. Here the function stores a canary, 0x5A, in a local, calls a writer that overwrites that local through
+// a pointer or through its own stack pointer with 0x37 (or with r5 + r4, r5), and returns the local. The run returns the writer's value; a
+// text that folds the local reads 0x5A. So the check is on the printed text only: no `return` line contains the canary, when no run
+// returned it. The family is enumerated, not drawn from the grammar: six kinds, each over the shapes the review rounds found a hole in --
+// the frame address exact, plus an index, minus an index, in r4 (a writer lent or one that reads r1 and is not) or in r2; the frame in
+// r15 or r14; the call by bsr or by jsr through a literal; none to two earlier calls (to a callee lent or not); the callee that stores
+// through r15 plus an index, a computed value in the caller's word, and a callee that hands its own entry r15 + 4 to a writer.
+constexpr uint32_t kCanary = 0x5A, kCanaryWritten = 0x37;
+
+struct CanaryAsm
+{
+    std::vector<uint16_t> w;
+    int literals = 0;
+    std::vector<std::pair<uint32_t, uint32_t>> literalValues;   // (byte offset from kCode, value)
+    static constexpr uint32_t kPool = 0x60;
+    void Put(uint16_t x) { w.push_back(x); }
+    uint32_t Here() const { return static_cast<uint32_t>(2 * w.size()); }
+    void Bsr(uint32_t target)
+    {
+        const int32_t disp = (static_cast<int32_t>(target) - static_cast<int32_t>(Here() + 4)) / 2;
+        Put(static_cast<uint16_t>(0xB000 | (disp & 0xFFF)));
+    }
+    void LoadLiteral(int rn, uint32_t value)
+    {
+        const uint32_t at = kPool + 4u * static_cast<uint32_t>(literals++);
+        literalValues.emplace_back(at, value);
+        const uint32_t base = (Here() + 4) & ~3u;
+        Put(static_cast<uint16_t>(0xD000 | rn << 8 | ((at - base) / 4)));
+    }
+    // A call: `bsr` or `mov.l @(L,pc),r3 ; jsr @r3`, then the delay slot (nop when empty).
+    void Call(uint32_t target, bool jsr, uint16_t slot = 0x0009)
+    {
+        if (jsr)
+        {
+            LoadLiteral(3, kCode + target);
+            Put(0x430B);
+        }
+        else Bsr(target);
+        Put(slot);
+    }
+};
+
+Subject MakeCanarySubject(int variant, std::string& label)
+{
+    Rng r(0xCA4A41ull + static_cast<uint64_t>(variant) * 7919u);
+    enum Kind { Lent4, Unlent4, Unlent2, Indexed, Computed, Nested, kKinds };
+    const Kind kind = static_cast<Kind>(variant % kKinds);
+    const bool fp = kind <= Unlent2 && r.Chance(40);
+    const bool jsr = r.Chance(50);
+    const int pre = static_cast<int>(r.Below(3));
+    const int form = static_cast<int>(r.Below(3));   // 0 exact, 1 plus a negative index, 2 minus a positive one
+    const uint32_t kWriter = 0x80, kKeepLent = 0xA0, kKeepUnlent = 0xC0, kIndexWord = 0x100;
+    CanaryAsm a;
+    // (the callee that is not lent stores r1, which the caller sets, through r4: a read of r1 that is live, so the signature is withheld; a
+    // copy of r1 to a scratch register was dead code and the callee was lent)
+    std::vector<uint16_t> writer, keepLent = { 0x000B, 0x0009 }, keepUnlent = { 0x2412, 0x000B, 0x0009 };
+    const char* names[] = { "r4 lent", "r4 unlent", "r2 unlent", "indexed", "computed", "nested" };
+    const uint16_t seven = static_cast<uint16_t>(0xE100 | kCanaryWritten);   // mov #0x37,r1
+    // The functions after the caller: the writer, a callee that keeps everything and one that reads r1 (so is not lent), and for the nested
+    // kind the lent writer that the first one calls.
+    std::vector<std::pair<uint32_t, std::vector<uint16_t>>> others;
+    const uint32_t kInner = 0xE0;
+    std::vector<uint16_t> inner;
+    switch (kind)
+    {
+    case Lent4: writer = { seven, 0x000B, 0x2412 }; break;                   // mov #K,r1 ; rts ; mov.l r1,@r4
+    case Unlent4: writer = { 0x2412, 0x000B, 0x0009 }; break;                // mov.l r1,@r4 ; rts ; nop  (r1 is the caller's)
+    case Unlent2: writer = { 0x2212, 0x000B, 0x0009 }; break;                // mov.l r1,@r2
+    case Indexed: writer = r.Chance(50) ? std::vector<uint16_t>{ 0x61F3, 0x316C, 0x000B, 0x2152 }    // mov r15,r1 ; add r6,r1 ; rts ; mov.l r5,@r1
+                                        : std::vector<uint16_t>{ 0x6063, 0x000B, 0x0F56 };            // mov r6,r0 ; rts ; mov.l r5,@(r0,r15)
+        break;
+    case Computed: writer = { 0x6143, 0x315C, 0x2F12, 0x000B, 0x6013 }; break;   // r1 = r4 + r5 ; mov.l r1,@r15 ; rts ; mov r1,r0
+    case Nested:
+    {
+        // g: sts.l pr,@-r15 ; mov r15,r4 ; add #4,r4 ; bsr h ; nop ; lds.l @r15+,pr ; rts ; nop, with h the lent writer
+        const int32_t disp = (static_cast<int32_t>(kInner) - static_cast<int32_t>(kWriter + 2 * 3 + 4)) / 2;
+        writer = { 0x4F22, 0x64F3, 0x7404, static_cast<uint16_t>(0xB000 | (disp & 0xFFF)), 0x0009, 0x4F26, 0x000B, 0x0009 };
+        inner = { seven, 0x000B, 0x2412 };
+        break;
+    }
+    default: break;
+    }
+    others.emplace_back(kWriter, writer);
+    others.emplace_back(kKeepLent, keepLent);
+    others.emplace_back(kKeepUnlent, keepUnlent);
+    if (!inner.empty()) others.emplace_back(kInner, inner);   // last: the harness decompiles the last function first, so g finds h lent
+    const bool localKind = kind <= Unlent2;
+    const int base = fp ? 14 : 15;
+    // Prologue.
+    if (localKind)
+    {
+        if (fp) a.Put(0x2FE6);              // mov.l r14,@-r15
+        a.Put(0x4F22);                      // sts.l pr,@-r15
+        a.Put(0x7FF8);                      // add #-8,r15
+        if (fp) a.Put(0x6EF3);              // mov r15,r14
+        a.Put(static_cast<uint16_t>(0xE000 | kCanary));                 // mov #C,r0
+        a.Put(fp ? 0x2E02 : 0x2F02);                                    // mov.l r0,@base
+        a.Put(fp ? 0x1E01 : 0x1F01);                                    // mov.l r0,@(4,base)
+    }
+    else
+    {
+        a.Put(0x2FE6);                      // mov.l r14,@-r15
+        a.Put(0x0E2A);                      // sts pr,r14
+        a.Put(0x7FFC);                      // add #-4,r15
+        a.Put(static_cast<uint16_t>(0xE000 | kCanary));
+        a.Put(0x2F02);                      // mov.l r0,@r15: the word the callee will write
+    }
+    for (int i = 0; i < pre; ++i)
+    {
+        const bool lent = r.Chance(50);
+        a.Put(0xE101);                      // mov #1,r1 (an unlent callee reads it)
+        a.Call(lent ? kKeepLent : kKeepUnlent, r.Chance(50));
+    }
+    uint16_t slot = 0x0009;
+    switch (kind)
+    {
+    case Lent4:
+    case Unlent4:
+    case Unlent2:
+    {
+        const int reg = kind == Unlent2 ? 2 : 4;
+        if (kind == Unlent4) a.Put(seven);
+        if (kind == Unlent2) a.Put(seven);
+        if (form == 0 || kind == Unlent2)
+            a.Put(static_cast<uint16_t>(0x6003 | reg << 8 | base << 4));                    // mov base,Rn
+        else
+        {
+            // The index is read from a word of the image, which the engine takes for ordinary memory (a constant it could fold would
+            // make the address exact): -4 reaches the lower local from base + 4, and so does 4 taken away from it.
+            a.LoadLiteral(6, kCode + kIndexWord);                                           // mov.l @(L,pc),r6
+            a.Put(0x6562);                                                                  // mov.l @r6,r5
+            a.Put(static_cast<uint16_t>(0x6003 | reg << 8 | base << 4));
+            a.Put(static_cast<uint16_t>(0x7000 | reg << 8 | 4));                             // add #4,Rn
+            a.Put(static_cast<uint16_t>((form == 1 ? 0x300C : 0x3008) | reg << 8 | 5 << 4)); // add / sub r5,Rn
+        }
+        break;
+    }
+    case Indexed: slot = 0xE600; break;     // mov #0,r6 in the slot
+    default: break;
+    }
+    a.Call(kWriter, jsr, slot);
+    // The local back as the result.
+    if (localKind) a.Put(fp ? 0x50E0 : 0x50F0);   // mov.l @(0,base),r0
+    else a.Put(0x60F2);                           // mov.l @r15,r0
+    if (localKind)
+    {
+        if (fp)
+        {
+            a.Put(0x7E08);                  // add #8,r14
+            a.Put(0x6FE3);                  // mov r14,r15
+            a.Put(0x4F26);                  // lds.l @r15+,pr
+            a.Put(0x000B);                  // rts
+            a.Put(0x6EF6);                  //   mov.l @r15+,r14
+        }
+        else
+        {
+            a.Put(0x7F08);                  // add #8,r15
+            a.Put(0x4F26);
+            a.Put(0x000B);
+            a.Put(0x0009);
+        }
+    }
+    else
+    {
+        a.Put(0x7F04);                      // add #4,r15
+        a.Put(0x4E2A);                      // lds r14,pr
+        a.Put(0x000B);
+        a.Put(0x6EF6);                      //   mov.l @r15+,r14
+    }
+    const uint32_t callerEnd = a.Here();
+    std::vector<uint16_t> words = a.w;
+    words.resize(0x108 / 2, 0x0009);
+    words[kIndexWord / 2] = form == 1 ? 0xFFFF : 0x0000;       // the index: -4 (plus) or 4 (minus)
+    words[kIndexWord / 2 + 1] = form == 1 ? 0xFFFC : 0x0004;
+    for (const auto& lv : a.literalValues)
+    {
+        words[lv.first / 2] = static_cast<uint16_t>(lv.second >> 16);
+        words[lv.first / 2 + 1] = static_cast<uint16_t>(lv.second);
+    }
+    Subject s;
+    s.v2 = true;
+    FnInfo caller;
+    caller.layout.start = caller.layout.entry = kCode;
+    caller.layout.end = kCode + callerEnd;
+    caller.intent = caller.returns = true;
+    caller.canary = kCanary;
+    caller.canaryIfLent = !localKind;
+    s.fns.push_back(caller);
+    for (const auto& o : others)
+    {
+        for (size_t i = 0; i < o.second.size(); ++i) words[o.first / 2 + i] = o.second[i];
+        FnInfo f;
+        f.layout.start = f.layout.entry = kCode + o.first;
+        f.layout.end = kCode + o.first + 2 * static_cast<uint32_t>(o.second.size());
+        f.intent = true;
+        f.returns = kind == Computed && o.first == kWriter;   // the others leave r0 alone
+        s.fns.push_back(f);
+    }
+    s.words = words;
+    s.codeWords = words.size();
+    // The callers of the callees are decompiled after them: the harness lends in the order of the functions, last first.
+    char buf[96];
+    std::snprintf(buf, sizeof buf, "canary %d: %s, %s%s, %d earlier call(s)%s", variant, names[kind], fp ? "frame pointer, " : "", jsr ? "jsr" : "bsr", pre,
+                  kind <= Unlent2 ? (form == 0 ? ", exact address" : form == 1 ? ", plus an index" : ", minus an index") : "");
+    label = buf;
+    return s;
+}
+
+void TestCanary(Sh2Decompiler& d)
+{
+    const long n = EnvNumber("SE_GENERATED_CANARY", 96);
+    const long only = EnvNumber("SE_GENERATED_CANARY_ONLY", -1);
+    std::map<std::string, int> counts;
+    int failing = 0;
+    for (long v = only >= 0 ? only : 0; v < (only >= 0 ? only + 1 : n); ++v)
+    {
+        std::string label;
+        const Subject s = MakeCanarySubject(static_cast<int>(v), label);
+        Report rep = EvaluateSubject(d, s, only >= 0);
+        for (const auto& kv : rep.counts) counts[kv.first] += kv.second;
+        if (only >= 0) std::printf("%s", rep.text.c_str());
+        if (!rep.findings.empty())
+        {
+            ++failing;
+            std::printf("canary finding: %s [%s]\n", label.c_str(), rep.findings[0].sig.c_str());
+            if (failing <= 3)
+            {
+                const Report again = EvaluateSubject(d, s, true);
+                std::printf("CANARY FAILURE %s\n%s", label.c_str(), again.text.c_str());
+                for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+            }
+        }
+    }
+    std::printf("canary: %ld programs, %d failing, lent prototypes %d, withheld %d (SE_GENERATED_CANARY=<n>, SE_GENERATED_CANARY_ONLY=<k>)\n",
+                only >= 0 ? 1L : n, failing, counts["proto.lent"], counts["proto.withheld"]);
+    CHECK(failing == 0);
+}
+
 void TestGenerated()
 {
     Sh2Decompiler d(gConfig);
@@ -6330,6 +6675,7 @@ void TestGenerated()
     {
         RUN(TestDomainPins(d));
         RUN(TestCalleeClobberPins(d));
+        if (EnvNumber("SE_GENERATED_CANARY", 96) > 0) RUN(TestCanary(d));
     }
     const long seeds = single ? 1 : EnvNumber("SE_GENERATED_SEEDS", 300);
     const long first = single ? single : EnvNumber("SE_GENERATED_FIRST", 1);
