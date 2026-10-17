@@ -2785,6 +2785,31 @@ bool SiteMatches(const std::vector<std::string>& names, const char* site)
 }
 #endif
 
+// A6-47: the pins' coordinates (phase, size, ordinal) are counts of the allocations the engine's own containers and strings make, and
+// they were recorded against libstdc++. Another standard library allocates different helper objects in a different order, so on
+// libc++ (macOS) the same sites sit at other coordinates: every pin there was STALE or MOVED and seven jobs failed with nothing
+// wrong in the engine. Where the library is not libstdc++ the pin checks (the pins of the alloc family, and the pin self-test, which
+// pins an allocation of the same kind) are SKIPPED, with this reason; everything else still runs -- the sweeps (no crash, no leak,
+// Ok or an error under every allocation failure, the next request correct), the host-only stretches, and the cancel families, which
+// are the cross-platform gate. SE_FAULT_FOREIGN_STDLIB=1 forces the skip on libstdc++ too, so the logic is exercised on Linux.
+// Library-independent pins (an ordinal within a named ghidra:: frame) would bring the targeted cells back on other libraries; they
+// are not made (the census would need the stack of every allocation to be comparable across libraries, and it is not).
+std::string PinsSkippedReason()
+{
+    const char* forced = std::getenv("SE_FAULT_FOREIGN_STDLIB");
+    const bool force = forced && *forced && std::string(forced) != "0";
+#if defined(__GLIBCXX__)
+    if (!force) return std::string();
+    return "forced by SE_FAULT_FOREIGN_STDLIB (the standard library is libstdc++)";
+#elif defined(_LIBCPP_VERSION)
+    (void)force;
+    return "the standard library is libc++, and the pins' coordinates were recorded against libstdc++";
+#else
+    (void)force;
+    return "the standard library is not libstdc++, and the pins' coordinates were recorded against it";
+#endif
+}
+
 // A pin resolved against this build.
 struct PinRes
 {
@@ -3228,6 +3253,12 @@ int ReachCheck(const Ctx& c)
 // MOVED pin pass again would break nothing: every real pin is "site ok".
 int PinSelfTest(Ctx& c, const std::string& scratch)
 {
+    const std::string skippedWhy = PinsSkippedReason();
+    if (!skippedWhy.empty())
+    {
+        std::printf("SKIPPED pin-selftest: %s\n", skippedWhy.c_str());
+        return 0;
+    }
 #ifdef SE_FAULT_BACKTRACE
     static const char* const kCreate = "vector<ghidra::TraceDAG::BlockTrace*;BranchPoint::createTraces";
     static const std::string good = std::string(kCreate) + "#0", wrongOrd = std::string(kCreate) + "#1", noOrd = std::string(kCreate) + "#99",
@@ -3532,7 +3563,16 @@ int Driver(const std::string& familyArg, const std::string& fixture, const std::
     std::vector<long> cells;
     std::vector<PinRes> pins;
     DisasmBase disasm;
-    if (family == "alloc" && !sticky && only == -999999) pins = ResolvePins(c, scratch);
+    if (family == "alloc" && !sticky && only == -999999)
+    {
+        const std::string skipped = PinsSkippedReason();
+        if (!skipped.empty())
+        {
+            if (shard == 0) std::printf("SKIPPED pins of %s: %s\n", fixture.c_str(), skipped.c_str());
+        }
+        else
+            pins = ResolvePins(c, scratch);
+    }
     if (isCold) cells = ColdCells(cold, full);
     else if (family == "alloc") cells = AllocCells(c, full, pins);
     else if (family == "disasm")
@@ -4935,6 +4975,9 @@ int main(int argc, char** argv)
     const auto t0 = Clock::now();
     std::printf("fault matrix: %zu job(s), %zu in parallel, %s\n", jobs.size(), jobsParallel,
                 full ? "FULL (SE_FAULT_FULL=1)" : "default subset");
+    const std::string pinsSkipped = PinsSkippedReason();
+    if (!pinsSkipped.empty())
+        std::printf("fault matrix: the allocation pins and pin-selftest are SKIPPED: %s\n", pinsSkipped.c_str());
     const int failures = RunJobs(jobs, jobsParallel, timeout, false);
     std::printf("runner-oom: %zu cells (a process each; only failures are listed above)\n", oomCount);
     std::printf("fault matrix: %d of %zu job(s) failed, %.1f s\n", failures, jobs.size(), MsSince(t0) / 1000.0);

@@ -99,7 +99,7 @@ run SaturnExplorerLiveDecompilerCaptureTests \
 # SE_FAULT_FULL=1 (the whole matrix, hours) is not set.
 # The environment cannot weaken the gate: the full matrix, a job filter and the leak-check switch are cleared.
 run SaturnExplorerDecompilerFaultTests \
-  env -u SE_FAULT_FULL -u SE_FAULT_ONLY -u SE_FAULT_LEAKS -u SE_FAULT_LEAKLIST -u SE_FAULT_RANGE -u SE_FAULT_PHASE \
+  env -u SE_FAULT_FULL -u SE_FAULT_ONLY -u SE_FAULT_LEAKS -u SE_FAULT_LEAKLIST -u SE_FAULT_RANGE -u SE_FAULT_PHASE -u SE_FAULT_FOREIGN_STDLIB \
   "$build/bin/SaturnExplorerDecompilerFaultTests" "$(scratch decompiler_fault_test)"
 
 if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
