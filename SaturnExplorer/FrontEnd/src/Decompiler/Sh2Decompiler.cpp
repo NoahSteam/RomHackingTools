@@ -2081,7 +2081,17 @@ private:
                     }
                     const Value to = Get(s, op.in[0]);
                     if (!isReturn && mNested && to.kind == Value::Imm)
+                    {
                         MapCalleeWords(CalleeFrameWrites(static_cast<uint32_t>(to.v)), s, Get(s, mReg[kR15]));   // a thunk: walk its target
+                        // (area 3 round 11 fix) ...and a tail jump to a lent callee that stores below the pointer it is handed carries that
+                        // storesBelow transitively, so a walked thunk (CalleeStoresBelow) reports it: the thunk stores below whatever it
+                        // passed in that register (A3-82, through a tail jump). A lent callee's exact storesBelow is in its signature.
+                        auto p = mLent.find(static_cast<uint32_t>(to.v));
+                        if (p != mLent.end() && p->second.known)
+                            for (int r = 0; r < 15; ++r)
+                                if ((p->second.effects.storesBelow >> r) & 1u)
+                                    mStoresBelow |= Get(s, mReg[r]).Origins() & 0x7FFFu;
+                    }
                     // ...a jump to a register's entry value (a function pointer it was handed) is an onward tail call to code the walk cannot
                     // name. A jump to a value computed here (the switch idiom `mova ; mov.b @(r0,rN),rN ; add rN,r0 ; jmp @r0`) stays in the
                     // callee: its cases are not followed, the walk's limit since A3-61 (no table for a callee's switch), as for `braf`.
