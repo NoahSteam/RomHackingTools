@@ -9160,7 +9160,7 @@ void TestA365Pins(Sh2Decompiler& d)
     CHECK(WholeWord(SavesBeforeCallsDropped(head2 + "  if (c) {\n    func_0x06009028();\n  }\n  else {\n    unaff_r13 = extraout_r13;\n  }\n  *p = unaff_r13;\n}\n", "r13"), "unaff_r13"));
     CHECK(WholeWord(SavesBeforeCallsDropped(head2 + "  func_0x06009020();\n  if (c) {\n    func_0x06009028();\n    unaff_r13 = extraout_r13;\n  }\n  *p = unaff_r13;\n}\n", "r13"), "unaff_r13"));
     CHECK(WholeWord(SavesBeforeCallsDropped(head2 + "  func_0x06009028();\n  unaff_r13 = unaff_r13 + 1;\n  *p = unaff_r13;\n}\n", "r13"), "unaff_r13"));
-    CHECK(WholeWord(SavesBeforeCallsDropped(head2 + "  do {\n    *p = unaff_r13;\n    func_0x06009028();\n    unaff_r13 = extraout_r13;\n  } while (c);\n}\n", "r13"), "unaff_r13"));
+    CHECK(WholeWord(SavesBeforeCallsDropped(head2 + "  func_0x06009028();\n  unaff_r13 = extraout_r13;\n  do {\n    *p = unaff_r13;\n    func_0x06009028();\n  } while (c);\n}\n", "r13"), "unaff_r13"));
     CHECK(WholeWord(SavesBeforeCallsDropped(head2 + "  func_0x06009028();\n  unaff_r13 = extraout_r13;\n  func_0x06009028();\n  *p = unaff_r13;\n}\n", "r13"), "unaff_r13"));
     // the walk functions of the printed-C differential: every width, both directions, the read back up, within the first 400 seeds
     {
