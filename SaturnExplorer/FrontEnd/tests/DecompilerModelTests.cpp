@@ -1796,18 +1796,20 @@ struct Rig
                 if (!shownExcused)
                 {
                     const DecompileResult& want = oracle.Run(in.sig, in.sig.entry, Lent());
+                    std::string held;
+                    for (const Sig& st : in.memo.starved) held += "\n  the memo holds: " + DescribeSig(st);
                     Fail("TOO LARGE: " + where + "\n  the runner answered '" + in.result.error + "', but a from-scratch decompilation of these "
                          "inputs is status " + std::to_string(int(want.status)) + ": the verdict was reached for other bytes, or "
-                         "a Refresh has since shown that the function fits");
+                         "a Refresh has since shown that the function fits" + held);
                     break;
                 }
                 continue;
             }
             // An answer that is not "too large" for inputs that once ran out of budget overtakes the memo of them: the runner erased it
-            // when that run completed. Only an answer that lent no prototype is known to be a run of the very request that was stalled
+            // when that run completed. Only an answer of a function with no callee is known to be a run of the very request that was stalled
             // (the signature does not hold what the panel lent, and a request that lent a callee's signature is another request, with
-            // its own memo), so only that one erases; the other leaves the memo, which accepts more (area 8, round 1).
-            if (SameAnswer(in.result, oracle.Run(in.sig, in.sig.entry, Lent())))
+            // its own memo, whose answer can read the same), so only that one erases; the others leave the memo, which accepts more (area 8, round 1).
+            if (in.result.calledAt.empty() && SameAnswer(in.result, oracle.Run(in.sig, in.sig.entry, Lent())))
                 for (size_t i = memo.starved.size(); i-- > 0;)
                     if (memo.starved[i].Same(in.sig)) memo.starved.erase(memo.starved.begin() + static_cast<std::ptrdiff_t>(i));
             const std::vector<const DecompileResult*> cands = oracle.Candidates(in.sig);
