@@ -548,7 +548,7 @@ struct Gen
     }
 
     // A return chosen by an input (A3-64): the shapes of A3-55 to A3-58 and A3-62. Two values, each written to r0 on one arm of a branch and
-    // compared once (so the engine takes the return for none), and a chooser, read where the item stands (last in the function): r0 or a scratch
+    // used once more (so the engine takes the return for none), and a chooser, read where the item stands (last in the function): r0 or a scratch
     // register r1-r3 that no item wrote on every path (the caller's value, on some path at least), SR's interrupt mask when no item writes SR, a
     // parameter (r4-r7, which the function may or may not use otherwise), the stack argument at the entry r15, or a constant. The values: two
     // constants, two sums of one register (`r4 + 1`, `r4 + 2`), two loads through r4 and r5, a register and a constant.
@@ -604,7 +604,13 @@ struct Gen
             break;
         }
         it.onTrue = choiceRng.Chance(50);
-        const uint16_t use = uint16_t(0x8800 | choiceRng.Below(256));   // cmp/eq #imm,r0: the second use of each value
+        // The second use of each value: `or r0,Rn` into a register that holds a value (it is the function's last write of Rn, dead after; the engine
+        // counts the use and drops the return, A3-55), or a compare, which it does not count once its T is dead (that arm keeps its return).
+        int pool[8], np = 0;
+        for (int q = 1; q < 8; ++q)
+            if (Def(q) && q != by) pool[np++] = q;
+        const int un = np ? pool[choiceRng.Below(static_cast<uint32_t>(np))] : 4 + (by == 4);
+        auto useOf = [&]() { return choiceRng.Chance(75) ? uint16_t(0x200B | un << 8) : uint16_t(0x8800 | choiceRng.Below(256)); };   // or r0,Rn / cmp/eq #imm,r0
         const uint32_t values = choiceRng.Below(4);
         const int s = 4 + static_cast<int>(choiceRng.Below(4));
         const uint16_t a = uint16_t(choiceRng.Below(128)), b = uint16_t((a + 1 + choiceRng.Below(100)) & 0xFF);
@@ -623,8 +629,8 @@ struct Gen
         }
         default: it.setup = { uint16_t(0x6003 | s << 4) }; it.after = { uint16_t(0xE000 | b) }; break;                               // a register, a constant
         }
-        it.setup.push_back(use);
-        it.after.push_back(use);
+        it.setup.push_back(useOf());
+        it.after.push_back(useOf());
         return it;
     }
 
@@ -3979,18 +3985,19 @@ int ArenaOf(uint32_t addr)
 uint32_t ArenaBit(int arena) { return arena < 4 ? 1u << (4 + arena) : 1u << 17; }
 
 // (A3-63) The register whose start value 'v' is, give or take a small constant: a pointer the code stepped (the grammar's displacements and
-// increments stay within 0x80 bytes, a frame within 0x200). r4-r7 and GBR in their own arenas, r15 in the stack; -1 for anything else (a value
-// that lands in an arena by arithmetic on another register, `extu.w r5,r1 ; xor r5,r1`, is 0x100 below r4's start, and is not asked about).
+// increments stay within 0x80 bytes, a frame within 0x200). r4-r7 and GBR in their own arenas, and only one the run read (an OR of two arena
+// pointers is a third's start by chance: r5 | r6 is r7's, seed 2031); r15 in the stack; -1 for anything else (a value that lands in an arena by
+// arithmetic on another register, `extu.w r5,r1 ; xor r5,r1`, is 0x100 below r4's start, and is not asked about).
 int PointerRegister(const RunOut& run, uint32_t v)
 {
     for (int k = 4; k < 8; ++k)
     {
         const int32_t c = static_cast<int32_t>(v - run.init[k]);
-        if (c > -0x80 && c < 0x80 && ArenaOf(v) == k - 4) return k;
+        if (c > -0x80 && c < 0x80 && ArenaOf(v) == k - 4) return (run.use.readFirst >> k) & 1u ? k : -1;
     }
     {
         const int32_t c = static_cast<int32_t>(v - run.initState[0]);
-        if (c > -0x80 && c < 0x80 && ArenaOf(v) == 4) return 17;
+        if (c > -0x80 && c < 0x80 && ArenaOf(v) == 4) return (run.use.readFirst >> 17) & 1u ? 17 : -1;
     }
     const int32_t c = static_cast<int32_t>(v - run.init[15]);
     const uint32_t m = v & 0x0FFFFFFFu;

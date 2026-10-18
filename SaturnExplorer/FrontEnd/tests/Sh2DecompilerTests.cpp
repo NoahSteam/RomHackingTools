@@ -10711,6 +10711,16 @@ void TestArea3Round9Fix()
         Print(f.name.c_str(), r);
         CHECK(!r.prototype.known && Has(r.prototypeWithheld, "r3 on entry"));
     }
+    // D4's shape (A3-58) with the compare against a word loaded through r5 (memory, no input) for r3, the values made from r7, which the dropped
+    // return takes with it: mov.l @r5,r3 ; mov r7,r0 ; add #1,r0 ; cmp/eq r0,r3 ; bf L ; mov r7,r0 ; add #2,r0 ; or r0,r1 ; L: rts ; nop.
+    withheld("round 9 fix: r7 + 1 or r7 + 2, chosen by a loaded word", { 0x6352, 0x6073, 0x7001, 0x3300, 0x8B02, 0x6073, 0x7002, 0x210B, 0x000B, 0x0009 },
+             "its return is computed from r7 on entry, which the signature does not hold");
+    // r0 joined with a word loaded through a pointer that may be anywhere in the stack (a frame address escaped through r4 first): nothing is known
+    // of it, which is taken for memory (A3-55's limit, for data); r5 is held (stored too). Lent void.
+    lentVoid("round 9 fix: r0 or a word nothing is known of", { 0x61F3, 0x2412, 0x6242, 0x1451, 0x2558, 0x8900, 0x6022, 0x000B, 0x0009 });
+    // The interrupt-mask idiom as 06010054 has it (SR whole with the mask set, written back, and the saved SR masked and written back), r0 left
+    // with no other use: the machine's state, lent void.
+    lentVoid("round 9 fix: the interrupt-mask idiom, 06010054's", { 0x0002, 0xCBF0, 0x400E, 0xE30F, 0x0102, 0x2139, 0x410E, 0x000B, 0x0009 });
     // An identity op on one path (`and r0,r0`, A2-43) is no read of r0: r4 is held (stored through r5), so nothing is dropped. Lent void.
     lentVoid("round 9 fix: and r0,r0 on one path", { 0x2542, 0x2448, 0x8900, 0x2009, 0x000B, 0x0009 });
     // SR transformed whole (the interrupt-mask idiom) and compared, with no join: lent (the engine returns it here; image 007's 06010054, where it
@@ -10824,6 +10834,9 @@ void TestArea3Round9Fix()
         // (SA6) the callee copies its fifth argument (7) into its sixth (the caller's 9): the text returned 9
         slot("a3_61 SA6: the callee copies the fifth word into the sixth", atG({ 0x4F22, 0x7FF8, 0xE007, 0x2F02, 0xE009, 0x1F01, 0xD303, 0x430B, 0x0009, 0x50F1, 0x7F08, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9040 },
                                                                             { 0x61F2, 0x1F11, 0x000B, 0x0009 }), 7u, true, "return 9;");
+        // ...and written again after the call, before the read: the read is the caller's own store, no note.
+        slot("a3_61 control: the word rewritten after the call", atG({ 0x4F22, 0x7FF8, 0xE007, 0x2F02, 0xD304, 0x430B, 0x0009, 0xE109, 0x2F12, 0x60F2, 0x7F08, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9040 },
+                                                                   { 0xE337, 0x2F32, 0x000B, 0x0009 }), 9u, false, nullptr);
         // Controls: a callee that only reads the word (SA1's, A3-51: the accepted text of an unlent call), and one that writes its own frame below its
         // entry r15: no note, and the local is the value stored (the engine's fold is right).
         slot("a3_61 control: the callee reads the word", atG({ 0x4F22, 0x7FF8, 0xE007, 0x2F02, 0xD303, 0x430B, 0x0009, 0x60F2, 0x7F08, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9040 },

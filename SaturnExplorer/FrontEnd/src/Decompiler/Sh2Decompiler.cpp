@@ -1207,8 +1207,7 @@ private:
             if (n == 4)
             {
                 Value w = value;
-                w.hole = false;
-                w.exposedAt = 0;
+                w.hole = false;   // (and no exposure: a register's value never carries one, Set)
                 s.slots[addr.v] = w;
             }
             return;
