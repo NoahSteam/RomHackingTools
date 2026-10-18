@@ -1091,8 +1091,12 @@ private:
                     mCallerFrameStores |= origin::kFrame;
                     if (mNested) MapCalleeWords(CallEffects::kFrameAny, s, Get(s, mReg[kR15]));   // the walked callee hands its caller's frame on
                 }
-            // ...and a lent callee that writes its own caller's frame (a home-area spill): those words, seen from the walked function.
-            if (mNested && (e.storesThrough & origin::kFrame)) MapCalleeWords(e.frameWords, s, Get(s, mReg[kR15]));
+            // ...and a lent callee that writes its own caller's frame at exact offsets (a home-area spill): those words, seen from the walked
+            // function. Its kFrameAny is any store through a stack pointer it could not place (a local array with an index), which a walked
+            // callee's own stores do not count either (mOwnFrameWords: exact words, and addresses at or above its entry): the index is taken
+            // as the engine takes it (A3-9, A3-17), and an address of the caller's frame it was handed is caught above.
+            if (mNested && (e.storesThrough & origin::kFrame) && !(e.frameWords & CallEffects::kFrameAny))
+                MapCalleeWords(e.frameWords, s, Get(s, mReg[kR15]));
         }
         Apply(s, e, targetIsR0);
     }
