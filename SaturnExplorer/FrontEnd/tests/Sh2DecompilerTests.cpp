@@ -11449,6 +11449,10 @@ void TestArea3Round10Fix()
         withTwoCallees("a3_70a: a thunk hands the write on", { 0x4F22, 0x7FF8, 0xE005, 0x2F02, 0xD103, 0x410B, 0x0009, 0x60F2, 0x7F08, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9040 },
                        { 0xD101, 0x412B, 0x0009, 0x0009, 0x0600, 0x9080 }, { 0xE109, 0x2F12, 0x000B, 0x0009 }, &text);
         CHECK(!Has(text, "return 5;") && Has(text, "a local at or above the stack pointer is read after this call"));
+        // Control (precision of the transitive walk): the thunk's target writes nothing, so nothing is exposed and the local stays folded.
+        withTwoCallees("a3_70 control: a thunk to a callee that writes nothing", { 0x4F22, 0x7FF8, 0xE005, 0x2F02, 0xD103, 0x410B, 0x0009, 0x60F2, 0x7F08, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9040 },
+                       { 0xD101, 0x412B, 0x0009, 0x0009, 0x0600, 0x9080 }, { 0xE207, 0x000B, 0x0009, 0x0009 }, &text);
+        CHECK(Has(text, "return 5;") && !Has(text, "a local at or above the stack pointer is read after this call"));
         // h hands its entry r15 + 4 in r4 to k, which stores through r4: k lent (b), and not lent (c).
         for (bool lendK : { true, false })
         {
