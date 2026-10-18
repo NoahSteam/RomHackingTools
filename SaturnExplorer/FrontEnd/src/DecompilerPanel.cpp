@@ -104,8 +104,9 @@ DecompilerPanel::ViewId DecompilerPanel::IdOf(const DecompilerView& view)
 void DecompilerPanel::SetTarget(const Target& target)
 {
     mTarget = target;
-    // Another question: a refusal belonged to the one before it.
+    // Another question: a refusal belonged to the one before it, and so did a Stop.
     mEntryRefused = false;
+    ForgetStop();
     mResolved = false;
     mExplicit = true;
 }
@@ -269,6 +270,13 @@ bool DecompilerPanel::ShownOutdatedByView() const
     return mShownValid && mShownSnapId != mViewId;
 }
 
+bool DecompilerPanel::EmulatorMovedOn() const
+{
+    return mShownValid && mShownSnapId.valid && mViewId.valid &&
+           (mViewKind == DecompViewKind::LiveRunning || mViewKind == DecompViewKind::LivePaused) &&
+           mShownSnapId.sourceId == mViewId.sourceId && mShownSnapId.frameNumber != mViewId.frameNumber;
+}
+
 bool DecompilerPanel::ShownStale() const
 {
     if (!mShownValid) return false;
@@ -285,10 +293,11 @@ DecompilerPanel::StaleReason DecompilerPanel::GetStaleReason() const
 {
     if (!ShownStale()) return StaleReason::None;
     // A request the user has just Stopped is still outstanding until the runner acknowledges it,
-    // but no replacement is coming from it.
-    if (mPending.active && !mPending.cancelled) return StaleReason::Pending;
+    // but no replacement is coming from it. Nor from one for a question that has found no function since (A8-9).
+    const bool wanted = RequestWanted();
+    if (wanted && !mPending.cancelled) return StaleReason::Pending;
     if (mRunnerDisabled) return StaleReason::Disabled;
-    if (mStopped || (mPending.active && mPending.cancelled)) return StaleReason::Stopped;
+    if (mStopped || (wanted && mPending.cancelled)) return StaleReason::Stopped;
     return StaleReason::NeedsRefresh;
 }
 
@@ -309,6 +318,10 @@ std::string DecompilerPanel::StaleTooltip() const
     case StaleReason::NeedsRefresh:
         break;
     }
+    // No source on screen (it was closed, or the emulator went away): Enter and Refresh ask about nothing (A8-8).
+    if (mViewKind == DecompViewKind::None)
+        return "This output is from an earlier state. No source is open, so there is nothing to replace it with until one is\n"
+               "connected or opened.";
     // A target that finds no function says what the user can change (A8-2): the followed PC, the
     // registers, the address asked about -- the entry box only when it is what was refused. Ahead of
     // the running emulator's lag: the failure is why a refresh alone would not help.
@@ -340,7 +353,7 @@ std::string DecompilerPanel::StaleTooltip() const
         return "This output is from an earlier state, and the entry box names no function to replace it\n"
                "(see the message below). Correct the entry and press Enter.";
     }
-    if (mViewKind == DecompViewKind::LiveRunning && ShownOutdatedByView())
+    if (mViewKind == DecompViewKind::LiveRunning && EmulatorMovedOn())
         return "The emulator has moved on since this was decompiled. Press Refresh.";
     return "This output is from an earlier state and nothing is being decompiled. Press Enter in the\n"
            "entry box or Refresh to replace it.";
@@ -394,6 +407,7 @@ void DecompilerPanel::Resolve(const DecompilerInputs& inputs)
     {
         mEntryError = kRefusedEntryMessage;
         mEntryFailure = EntryFailure::Refused;
+        ForgetStop();
         return;
     }
 
@@ -409,6 +423,7 @@ void DecompilerPanel::Resolve(const DecompilerInputs& inputs)
             std::snprintf(b, sizeof b, "0x%08X is not code memory: %s", mTarget.address, why.c_str());
             mEntryError = b;
             mEntryFailure = EntryFailure::NotCode;
+            ForgetStop();
             return;
         }
         mEntryOk = true;
@@ -427,6 +442,7 @@ void DecompilerPanel::Resolve(const DecompilerInputs& inputs)
             std::snprintf(b, sizeof b, "This source has no %s SH-2 registers to follow.", mCpu ? "slave" : "master");
             mEntryError = b;
             mEntryFailure = EntryFailure::NoRegisters;
+            ForgetStop();
             return;
         }
         anchor = mSnap->regs[mCpu].pc;
@@ -438,6 +454,7 @@ void DecompilerPanel::Resolve(const DecompilerInputs& inputs)
         std::snprintf(b, sizeof b, "No function found containing 0x%08X: %s", anchor, g.why.c_str());
         mEntryError = b;
         mEntryFailure = EntryFailure::NotFound;
+        ForgetStop();
         return;
     }
     // The finder answers in canonical addresses; the entry is asked for in the mirror the anchor
@@ -889,6 +906,7 @@ void DecompilerPanel::Update(const DecompilerView& view, DecompilerRunner& runne
         return;
     }
     mPending.active = true;
+    mPending.cancelled = false;   // a Stop was for the request before this one (A8-7)
     mPending.generation = generation;
     mPending.epoch = runner.Epoch();
     mPending.key = mSnap->key;
@@ -1014,6 +1032,7 @@ void DecompilerPanel::DrawHeader(const DecompilerView& view, const DecompilerRun
         }
         SetTarget(t);
     }
+    Remember("follow");
 
     ImGui::SameLine();
     // Not while the box is being edited: ImGui owns its text then, and would also lose the draft.
@@ -1048,6 +1067,7 @@ void DecompilerPanel::DrawHeader(const DecompilerView& view, const DecompilerRun
             mEntryOk = false;
             mEntryFailure = EntryFailure::Refused;
             mEntryError = kRefusedEntryMessage;
+            ForgetStop();
         }
     }
     mEntryActive = ImGui::IsItemActive();
@@ -1140,18 +1160,21 @@ void DecompilerPanel::DrawStatus(const DecompilerView& view, const DecompilerRun
             ImGui::TextDisabled("(entry from %s)", mShownEntrySource.c_str());
         }
     }
-    if (mPending.active)
+    if (RequestWanted())
     {
         ImGui::SameLine();
-        ImGui::TextColored(kAmber, "decompiling\xe2\x80\xa6");
+        // Stop was pressed: the request is outstanding until the runner acknowledges the cancel (up to its deadline, when it
+        // does not), but no replacement is coming from it, and "decompiling" would say one is (A8-6).
+        ImGui::TextColored(kAmber, mPending.cancelled ? "stopping\xe2\x80\xa6" : "decompiling\xe2\x80\xa6");
     }
     if (ShownStale())
     {
         ImGui::SameLine();
-        if (ShownOutdatedByView())
+        if (EmulatorMovedOn())
             ImGui::TextColored(kAmber, "[stale: frame %llu]", static_cast<unsigned long long>(mShown.key.frameNumber));
         else
             ImGui::TextColored(kAmber, "[stale]");
+        Remember("stale");   // the badge's rectangle, for the tests that hover it
         ImGui::SetItemTooltip("%s", StaleTooltip().c_str());
     }
 
