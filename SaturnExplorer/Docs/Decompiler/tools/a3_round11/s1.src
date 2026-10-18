@@ -1,0 +1,203 @@
+name S0 control: A3-80h spill no call, whole word
+asm 06009000
+add #-24,r15
+mov r15,r2
+add #16,r2
+mov #5,r0
+mov.l r0,@r15
+mov.l r2,@(16,r15)
+mov.l @(16,r15),r2
+mov #4,r1
+L:
+mov.l r1,@-r2
+dt r1
+bf L
+mov.l @r15,r0
+add #24,r15
+rts
+nop
+endasm
+args 0 0 0 0
+end
+name S1 chain of two locals
+asm 06009000
+add #-28,r15
+mov r15,r2
+add #20,r2
+mov #5,r0
+mov.l r0,@r15
+mov.l r2,@(20,r15)
+mov.l @(20,r15),r3
+mov.l r3,@(24,r15)
+mov.l @(24,r15),r2
+mov #5,r1
+L:
+mov.l r1,@-r2
+dt r1
+bf L
+mov.l @r15,r0
+add #28,r15
+rts
+nop
+endasm
+args 0 0 0 0
+end
+name S2 spill into caller incoming stack arg area
+asm 06009000
+add #-24,r15
+mov r15,r2
+add #16,r2
+mov #5,r0
+mov.l r0,@r15
+mov.l r2,@(24,r15)
+mov.l @(24,r15),r2
+mov #4,r1
+L:
+mov.l r1,@-r2
+dt r1
+bf L
+mov.l @r15,r0
+add #24,r15
+rts
+nop
+endasm
+args 0 0 0 0
+end
+name S3 pointer through a global
+asm 06009000
+add #-24,r15
+mov r15,r2
+add #16,r2
+mov #5,r0
+mov.l r0,@r15
+mov.l r2,@(16,r15)
+mov.l @(16,r15),r2
+mov.l =0x0600F100,r3
+mov.l r2,@r3
+mov.l @r3,r2
+mov #4,r1
+L:
+mov.l r1,@-r2
+dt r1
+bf L
+mov.l @r15,r0
+add #24,r15
+rts
+nop
+endasm
+args 0 0 0 0
+end
+name S3b pointer straight to a global (no local spill)
+asm 06009000
+add #-24,r15
+mov r15,r2
+add #16,r2
+mov #5,r0
+mov.l r0,@r15
+mov.l =0x0600F100,r3
+mov.l r2,@r3
+mov.l @r3,r2
+mov #4,r1
+L:
+mov.l r1,@-r2
+dt r1
+bf L
+mov.l @r15,r0
+add #24,r15
+rts
+nop
+endasm
+args 0 0 0 0
+end
+name S4 pointer spilled as two halves, reloaded whole
+asm 06009000
+add #-24,r15
+mov r15,r2
+add #16,r2
+mov #5,r0
+mov.l r0,@r15
+mov r15,r3
+add #18,r3
+mov.w r2,@r3
+shlr16 r2
+add #-2,r3
+mov.w r2,@r3
+mov.l @(16,r15),r2
+mov #4,r1
+L:
+mov.l r1,@-r2
+dt r1
+bf L
+mov.l @r15,r0
+add #24,r15
+rts
+nop
+endasm
+args 0 0 0 0
+end
+name S5 pointer spilled whole, reloaded as two halves and reassembled
+asm 06009000
+add #-24,r15
+mov r15,r2
+add #16,r2
+mov #5,r0
+mov.l r0,@r15
+mov.l r2,@(16,r15)
+mov r15,r3
+add #16,r3
+mov.w @r3,r4
+add #2,r3
+mov.w @r3,r5
+shll16 r4
+extu.w r5,r5
+or r5,r4
+mov r4,r2
+mov #4,r1
+L:
+mov.l r1,@-r2
+dt r1
+bf L
+mov.l @r15,r0
+add #24,r15
+rts
+nop
+endasm
+args 0 0 0 0
+end
+name S6 pointer spilled and reloaded by bytes (4 mov.b) and reassembled
+asm 06009000
+add #-24,r15
+mov r15,r2
+add #16,r2
+mov #5,r0
+mov.l r0,@r15
+mov.l r2,@(16,r15)
+mov r15,r3
+add #16,r3
+mov.b @r3+,r4
+mov.b @r3+,r5
+mov.b @r3+,r6
+mov.b @r3+,r7
+extu.b r4,r4
+extu.b r5,r5
+extu.b r6,r6
+extu.b r7,r7
+shll8 r4
+or r5,r4
+shll8 r4
+or r6,r4
+shll8 r4
+or r7,r4
+mov r4,r2
+mov #4,r1
+L:
+mov.l r1,@-r2
+dt r1
+bf L
+mov.l @r15,r0
+add #24,r15
+rts
+nop
+endasm
+args 0 0 0 0
+end

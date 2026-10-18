@@ -1,0 +1,119 @@
+name S7 pointer spilled to an indexed stack slot (r0 index) and reloaded
+asm 06009000
+add #-32,r15
+mov r15,r2
+add #16,r2
+mov #5,r0
+mov.l r0,@r15
+mov #20,r0
+mov.l r2,@(r0,r15)
+mov.l @(r0,r15),r2
+mov #4,r1
+L:
+mov.l r1,@-r2
+dt r1
+bf L
+mov.l @r15,r0
+add #32,r15
+rts
+nop
+endasm
+args 0 0 0 0
+end
+name S7b pointer spilled to an indexed stack slot with a parameter index (r4 = 20)
+asm 06009000
+add #-32,r15
+mov r15,r2
+add #16,r2
+mov #5,r0
+mov.l r0,@r15
+mov r4,r0
+mov.l r2,@(r0,r15)
+mov.l @(r0,r15),r2
+mov #4,r1
+L:
+mov.l r1,@-r2
+dt r1
+bf L
+mov.l @r15,r0
+add #32,r15
+rts
+nop
+endasm
+args 20 0 0 0
+end
+name S8 pointer pushed and popped around nothing
+asm 06009000
+add #-24,r15
+mov r15,r2
+add #16,r2
+mov #5,r0
+mov.l r0,@r15
+mov.l r2,@-r15
+mov.l @r15+,r2
+mov #4,r1
+L:
+mov.l r1,@-r2
+dt r1
+bf L
+mov.l @r15,r0
+add #24,r15
+rts
+nop
+endasm
+args 0 0 0 0
+end
+name S9 two walked pointers, one spilled
+asm 06009000
+add #-40,r15
+mov r15,r2
+add #16,r2
+mov r15,r3
+add #36,r3
+mov #5,r0
+mov.l r0,@r15
+mov #7,r0
+mov.l r0,@(20,r15)
+mov.l r2,@(36,r15)
+mov.l @(36,r15),r2
+mov #4,r1
+L:
+mov.l r1,@-r2
+mov.l r1,@-r3
+dt r1
+bf L
+mov.l @r15,r0
+mov.l @(20,r15),r4
+add r4,r0
+add #40,r15
+rts
+nop
+endasm
+args 0 0 0 0
+end
+name S10 nested loops, pointer spilled and reloaded per outer pass
+asm 06009000
+add #-40,r15
+mov r15,r2
+add #32,r2
+mov #5,r0
+mov.l r0,@r15
+mov #4,r5
+mov.l r2,@(32,r15)
+O:
+mov.l @(32,r15),r2
+mov #2,r1
+L:
+mov.l r1,@-r2
+dt r1
+bf L
+mov.l r2,@(32,r15)
+dt r5
+bf O
+mov.l @r15,r0
+add #40,r15
+rts
+nop
+endasm
+args 0 0 0 0
+end

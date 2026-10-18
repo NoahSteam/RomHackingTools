@@ -11766,6 +11766,85 @@ void TestArea3HiddenInputFuzz()
     CHECK(findings == 0);
 }
 
+// ===== Area 3, round 11 review: controls that hold at 1b364f7 =====================================================================================
+// The shapes beside the rows A3-82 to A3-88 that print the right text today: a lent callee that spills, pushes, moves or adds and subtracts the pointer it
+// steps down (its `storesBelow` is recorded: the caller prints the local and agrees with the run), a frame address kept through two locals, a slot indexed
+// by r0 or pushed and popped, two walked pointers, nested loops with the pointer reloaded each pass, and a pointer chosen between two frame addresses or
+// stored through at its base. The fixtures of the rows themselves print a wrong text (`return 5;`, `return 3;`) and are in the ledger, not here: a fix
+// round moves them into the suite. Nothing is mutation-checked: these hold behaviour the fixes of the rows will touch.
+void TestArea3Round11()
+{
+    Sh2Decompiler d(gConfig);
+    uint64_t serial = 111000;
+    const uint32_t base = 0x06009000u, gAt = 0x06009040u;
+    const std::vector<std::vector<uint32_t>> inputs = { { 0x11111111u, 0x22222222u, 0x0600B000u, 0x44444444u },
+                                                        { 0x00000000u, 0x00000001u, 0x0600B000u, 0x80000000u } };
+    auto withCallee = [&](const char* name, std::vector<uint16_t> caller, const std::vector<uint16_t>& callee, bool lendCallee,
+                          bool* callerKnown, std::string* text, bool* agrees) {
+        caller.resize(32, 0x0009);
+        caller.insert(caller.end(), callee.begin(), callee.end());
+        const CallFixture f = { name, base, std::move(caller) };
+        auto snap = CallSnapshot(f, ++serial);
+        DecompileRequest q = Request(f.base);
+        if (lendCallee)
+        {
+            const DecompileResult c = d.Decompile(snap, Request(gAt));
+            CHECK(c.status == DecompileStatus::Ok && c.prototype.known);
+            q.prototypes.emplace_back(gAt, c.prototype);
+        }
+        const DecompileResult r = d.Decompile(snap, q);
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok);
+        if (callerKnown) *callerKnown = r.prototype.known;
+        if (text) *text = r.Text();
+        if (agrees) *agrees = PseudoAgreesWithRun(r, snap, f, inputs);
+    };
+    // a lent function whose text has `want` and not `stale` (the value stored before the walk), and no stack register
+    auto lentText = [&](const char* name, std::vector<uint16_t> words, const char* want, const char* stale) {
+        const CallFixture f = { name, base, std::move(words) };
+        const DecompileResult r = d.Decompile(CallSnapshot(f, ++serial), Request(f.base));
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok && r.prototype.known);
+        CHECK(Has(r.Text(), want) && !Has(r.Text(), stale) && !Has(r.Text(), "register0x0000003c"));
+    };
+    bool known = false, agrees = false;
+    std::string text;
+        withCallee("round 11 control: the callee spills the pointer whole to its frame and walks the reload", { 0x4F22, 0x7FEC, 0xE005, 0x2F02, 0x64F3, 0x7410, 0xD103, 0x410B, 0x0009, 0x60F2, 0x7F14, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9040 },
+                   { 0x7FFC, 0x2F42, 0x65F2, 0xE104, 0x2516, 0x4110, 0x8BFC, 0x7F04, 0x000B, 0x0009 }, true, &known, &text, &agrees);
+        CHECK(known && agrees && !Has(text, "return 5;"));
+        withCallee("round 11 control: the callee pushes and pops the pointer", { 0x4F22, 0x7FEC, 0xE005, 0x2F02, 0x64F3, 0x7410, 0xD103, 0x410B, 0x0009, 0x60F2, 0x7F14, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9040 },
+                   { 0x2F46, 0x64F6, 0xE104, 0x2416, 0x4110, 0x8BFC, 0x000B, 0x0009 }, true, &known, &text, &agrees);
+        CHECK(known && agrees && !Has(text, "return 5;"));
+        withCallee("round 11 control: the callee moves the pointer through r14", { 0x4F22, 0x7FEC, 0xE005, 0x2F02, 0x64F3, 0x7410, 0xD103, 0x410B, 0x0009, 0x60F2, 0x7F14, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9040 },
+                   { 0x2FE6, 0x6E43, 0x65E3, 0x6EF6, 0xE104, 0x2516, 0x4110, 0x8BFC, 0x000B, 0x0009 }, true, &known, &text, &agrees);
+        CHECK(known && agrees && !Has(text, "return 5;"));
+        withCallee("round 11 control: the callee adds and subtracts a negated constant", { 0x4F22, 0x7FEC, 0xE005, 0x2F02, 0x64F3, 0x7410, 0xD103, 0x410B, 0x0009, 0x60F2, 0x7F14, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9040 },
+                   { 0xE308, 0x633B, 0x343C, 0x3438, 0xE104, 0x2416, 0x4110, 0x8BFC, 0x000B, 0x0009 }, true, &known, &text, &agrees);
+        CHECK(known && agrees && !Has(text, "return 5;"));
+
+    lentText("a3_88 round 11 control: the pointer through two locals in a chain",
+             { 0x7FE4, 0x62F3, 0x7214, 0xE005, 0x2F02, 0x1F25, 0x53F5, 0x1F36, 0x52F6, 0xE105, 0x2216, 0x4110, 0x8BFC, 0x60F2, 0x7F1C, 0x000B, 0x0009, 0x0009 },
+             "return xStack_1c;", "return 5;");
+    lentText("a3_88 round 11 control: the pointer in a slot indexed by r0",
+             { 0x7FE0, 0x62F3, 0x7210, 0xE005, 0x2F02, 0xE014, 0x0F26, 0x02FE, 0xE104, 0x2216, 0x4110, 0x8BFC, 0x60F2, 0x7F20, 0x000B, 0x0009 },
+             "return xStack_20;", "return 5;");
+    lentText("a3_88 round 11 control: the pointer pushed and popped",
+             { 0x7FE8, 0x62F3, 0x7210, 0xE005, 0x2F02, 0x2F26, 0x62F6, 0xE104, 0x2216, 0x4110, 0x8BFC, 0x60F2, 0x7F18, 0x000B, 0x0009, 0x0009 },
+             "return xStack_18;", "return 5;");
+    lentText("a3_88 round 11 control: two pointers walked, one spilled",
+             { 0x7FD8, 0x62F3, 0x7210, 0x63F3, 0x7324, 0xE005, 0x2F02, 0xE007, 0x1F05, 0x1F29, 0x52F9, 0xE104, 0x2216, 0x2316, 0x4110, 0x8BFB, 0x60F2, 0x54F5, 0x304C, 0x7F28, 0x000B, 0x0009 },
+             "return iStack_28 + iStack_14;", "return 12;");
+    lentText("a3_88 round 11 control: nested loops, the pointer reloaded and stored back each outer pass",
+             { 0x7FD8, 0x62F3, 0x7220, 0xE005, 0x2F02, 0xE504, 0x1F28, 0x52F8, 0xE102, 0x2216, 0x4110, 0x8BFC, 0x1F28, 0x4510, 0x8BF7, 0x60F2, 0x7F28, 0x000B, 0x0009, 0x0009 },
+             "return xStack_28;", "return 5;");
+    lentText("a3_88 round 11 control: a pointer chosen between two frame addresses, walked down",
+             { 0x7FF0, 0xE003, 0x1F00, 0x62F3, 0x7208, 0x63F3, 0x730C, 0x2448, 0x8900, 0x6233, 0xE102, 0x2216, 0x4110, 0x8BFC, 0x50F0, 0x7F10, 0x000B, 0x0009 },
+             "return xStack_10;", "return 3;");
+    lentText("a3_88 round 11 control: a pointer chosen between a frame address and a global, stored through at the base",
+             { 0x7FF0, 0xE003, 0x1F02, 0x62F3, 0x7208, 0xD305, 0x2448, 0x8900, 0x6233, 0xE101, 0x2212, 0x50F2, 0x7F10, 0x000B, 0x0009, 0x0009, 0x0600, 0xF100 },
+             "return axStack_8[0];", "return 3;");
+}
+
 // ===== A3-65 (P1): a copy of r15 walked down by pre-decrement stores ===========================================================================
 // `*--p = v` over a local array compiles to a copy of r15 (or of the frame pointer r14), moved to the top of the array and walked down by
 // `mov.l Rm,@-Rn`. The engine's alias analysis (AliasChecker, upstream's) takes a pointer into the frame to reach only what lies at or above its base,
@@ -12222,6 +12301,7 @@ int main(int argc, char** argv)
         RUN(TestArea3Round10());
         RUN(TestArea3Round10Fix());
         RUN(TestArea3HiddenInputFuzz());
+        RUN(TestArea3Round11());
         RUN(TestArea2Round8());
         RUN(TestArea2Round9());
         RUN(TestArea2Round10());

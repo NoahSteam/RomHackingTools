@@ -1,0 +1,289 @@
+name H6 caller passes &slot holding a frame address; callee loads it and walks
+asm 06009000
+.word 0x4F22
+add #-24,r15
+mov #5,r0
+mov.l r0,@r15
+mov r15,r2
+add #16,r2
+mov.l r2,@(16,r15)
+mov r15,r4
+add #16,r4
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l @r15,r0
+add #24,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+mov.l @r4,r5
+mov #4,r1
+L:
+mov.l r1,@-r5
+dt r1
+bf L
+rts
+nop
+endasm
+lend 06009100
+args 0 0 0 0
+end
+name H1 callee walks r7 (param in r7)
+asm 06009000
+.word 0x4F22
+add #-20,r15
+mov #5,r0
+mov.l r0,@r15
+mov r15,r7
+add #16,r7
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l @r15,r0
+add #20,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+mov #4,r1
+L:
+mov.l r1,@-r7
+dt r1
+bf L
+rts
+nop
+endasm
+lend 06009100
+args 0 0 0 0
+end
+name H2 callee stores at @(r0,r4) with r0=-16
+asm 06009000
+.word 0x4F22
+add #-20,r15
+mov #5,r0
+mov.l r0,@r15
+mov r15,r4
+add #16,r4
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l @r15,r0
+add #20,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+mov #-16,r0
+mov #1,r1
+mov.l r1,@(r0,r4)
+rts
+nop
+endasm
+lend 06009100
+args 0 0 0 0
+end
+name H3 callee pre-decrement byte stores
+asm 06009000
+.word 0x4F22
+add #-20,r15
+mov #5,r0
+mov.l r0,@r15
+mov r15,r4
+add #16,r4
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l @r15,r0
+add #20,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+mov #16,r1
+L:
+mov.b r1,@-r4
+dt r1
+bf L
+rts
+nop
+endasm
+lend 06009100
+args 0 0 0 0
+end
+name H4 callee stores 16 below via sub r3,r4 (r3=16 const)
+asm 06009000
+.word 0x4F22
+add #-20,r15
+mov #5,r0
+mov.l r0,@r15
+mov r15,r4
+add #16,r4
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l @r15,r0
+add #20,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+mov #16,r3
+sub r3,r4
+mov #1,r1
+mov.l r1,@r4
+rts
+nop
+endasm
+lend 06009100
+args 0 0 0 0
+end
+name H5 callee stores 16 below via add of mov #-16 const
+asm 06009000
+.word 0x4F22
+add #-20,r15
+mov #5,r0
+mov.l r0,@r15
+mov r15,r4
+add #16,r4
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l @r15,r0
+add #20,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+mov #-16,r3
+add r3,r4
+mov #1,r1
+mov.l r1,@r4
+rts
+nop
+endasm
+lend 06009100
+args 0 0 0 0
+end
+name H7 callee stores 16 below via shll2 of -4 (unfolded)
+asm 06009000
+.word 0x4F22
+add #-20,r15
+mov #5,r0
+mov.l r0,@r15
+mov r15,r4
+add #16,r4
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l @r15,r0
+add #20,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+mov #-4,r3
+shll2 r3
+add r3,r4
+mov #1,r1
+mov.l r1,@r4
+rts
+nop
+endasm
+lend 06009100
+args 0 0 0 0
+end
+name H8 callee stores 16 below via mulx? mov #-1; mul by 16 via shll2 shll2
+asm 06009000
+.word 0x4F22
+add #-20,r15
+mov #5,r0
+mov.l r0,@r15
+mov r15,r4
+add #16,r4
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l @r15,r0
+add #20,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+mov #-1,r3
+shll2 r3
+shll2 r3
+add r3,r4
+mov #1,r1
+mov.l r1,@r4
+rts
+nop
+endasm
+lend 06009100
+args 0 0 0 0
+end
+name H9 callee stores 16 below via add of a pool constant
+asm 06009000
+.word 0x4F22
+add #-20,r15
+mov #5,r0
+mov.l r0,@r15
+mov r15,r4
+add #16,r4
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l @r15,r0
+add #20,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+mov.l =-16,r3
+add r3,r4
+mov #1,r1
+mov.l r1,@r4
+rts
+nop
+endasm
+lend 06009100
+args 0 0 0 0
+end
+name H10 callee stores 16 below via add of a word-pool constant
+asm 06009000
+.word 0x4F22
+add #-20,r15
+mov #5,r0
+mov.l r0,@r15
+mov r15,r4
+add #16,r4
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l @r15,r0
+add #20,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+mov.w =-16,r3
+add r3,r4
+mov #1,r1
+mov.l r1,@r4
+rts
+nop
+endasm
+lend 06009100
+args 0 0 0 0
+end
