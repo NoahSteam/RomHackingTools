@@ -10342,3 +10342,82 @@ the generator, the corpora (no engine change).
 * A8-15: the instrument gaps. The next reviewer should read the guide's table against the panel for anything the model has no line for, and try the tooltips of a panel that is docked narrow (the glyph reader holds a cut line as a prefix).
 * The finder's texts ("Entry: …", the confidence beside the source) are area 4's; the model takes them from the true state.
 * The trust test is in `ctest` (47 s). Adding it to the sanitizer job is the coordinator's call.
+
+## Area 3, round 10 review
+
+Reviewer, branch `review/3-round10-review`, on master `b7bfb3e` (the merge of area 8 round 1; the head of the A3-56 to A3-65 fixes). Findings only, no fixes; the one code change is a suite function of controls that pass (`TestArea3Round10`, below). New ledger rows: **A3-71, A3-72 (P1)**, **A3-66, A3-67, A3-68, A3-69, A3-70, A3-75, A3-76 (P2)**, A3-73, A3-74, A3-77 (P3). No row is routed to another area; the probe's walk has no cancel point (A3-74, a timing, area 6's matrix does not reach it) and is said once for the coordinator.
+**The round is not clean: nine rows at P1 or P2.** Area 3 has no open row before this round's, and the count of consecutive clean rounds is 0 again. Two of the P1 rows are A3-65's class (a pointer that is walked down) in the two places patch 0056 does not reach: a lent callee that does the walk, and a step under a condition. The P2 rows are the rule of round 9 itself: three of its exceptions hide an input that the guarantee says cannot be hidden (the nothing-known value, the SR exception, the part of a register that is not a read), a fourth place where a value loses its dependences (the sum of a stack address and an index), and the walk of A3-61 in two places it was not meant to stop at (the callee's callee, the second of two calls). The round 9 fixes held where they were written to hold (below).
+
+### Instruments (scratch, not committed; described so the next reviewer can rebuild them)
+
+- **The fixture driver** of rounds 6 to 9, rebuilt from the suite's own file (`Sh2DecompilerTests.cpp` with `main` renamed and a `drvmain.inc` appended: a text spec of words at addresses, callees decompiled and lent first, inputs run on the emulator, `PseudoEval` against the run), with one extension: an `args` line may set registers (`r3=55 sr=1`), so a hidden register or the T flag is varied from line to line. A small assembler with labels and a literal pool (`stc`, `and #imm`, `mova`, `jmp` and the rest added), and a spec maker. About a hundred hand fixtures.
+- **A scratch fuzzer** over the driver: random register and frame programs of 2 to 7 instructions (moves, ALU, partial reads and extensions, shifts, `addc`/`subc`/`negc`, `movt`, `stc sr`, `mul.l`/`sts macl`, a store of a width and a reload of another through a copy of r15, a branch over one instruction), each ending `or r0,r1 ; rts ; nop`, run with the hidden registers r0-r3 and r8-r11 and the T flag varied one at a time; it reports a function the host lent as `void` whose r0 depends on one. 44,100 programs in 21 runs: 21,000 with no frame access and no `stc sr` (they find the partial read of r0, A3-68, and nothing else), 9,000 with the frame and no `stc sr` (the sum of a stack address and an index, A3-76), 6,000 with `stc sr` and no frame (A3-69), 8,100 with all of it. A non-void lent function whose text the evaluator rejects as returning a different value: none.
+- **The generator beyond the nightly's range**, own RelWithDebInfo build (`-j2`): grammar 2 at 1,100,001 to 1,120,000, grammar 1 at 1,100,001 to 1,110,000, grammar 2 at 1,200,001 to 1,205,000 with `SE_GENERATED_ALPHABET=specials`, in pieces of 5,000 seeds; the printed-C differential at 1,300,001 to 1,306,000.
+- **The corpora** with `SE_GAME_HWRAM=<img> SE_GAME_LEND=1`, `hwram007.bin` and `hwram008.bin`.
+
+### What round 9's fixes held under
+
+- **The rule's pins.** Every fixture of A3-56 to A3-62 and their controls: the suite and the generator's pins pass at the head. The exceptions one by one:
+  - *the unread entry r0* (`phi(in_r0, x)`): lent when chosen by a held parameter, withheld when chosen by r3 ("chosen by r3 on entry") or when a hidden register is the data. The exception breaks only through the part of a register (A3-68).
+  - *the identity ops* (A2-43): `and r0,r0`, `or r0,r0`, `or #0,r0`, `add #0,r0`, `mov r0,r0` and `and r1,r1` leave r0 alone and are lent; `and #255,r0` is a read and withheld. `xor #0,r0` is not an identity to `ReturnCheck` (A3-77, the safe direction).
+  - *r1*: `mov r3,r1` under a returned `r4 + 1` is lent `int4` (the second half of a 64-bit value is dropped; a caller that reads r1 is withheld, by design); the same with `add #1,r1` is a 64-bit return and withheld ("reads r3").
+  - *the interrupt-mask idiom*: `stc sr,r0 ; or #0xF0,r0 ; ldc r0,sr` is lent, `stc sr,r0` alone is withheld, and the idiom joined with a path that leaves r0 alone is withheld ("computed from sr"). The exception is wider than the idiom (A3-69).
+  - *A3-13's carried value*: `mov #5,r0 ; jsr g (keeps r0) ; or r0,r1` is withheld; one partial read after the call and it is lent (A3-68).
+- **The three unmutated clauses** (the join across returns, a load's address, a jump table's index): the fixer's claim holds. A switch on r3 whose cases write constants is recovered and the engine keeps `switch (in_r3)`, so the function is withheld "reads r3 on entry"; two returns chosen by r3 keep the branch; `mov.b @(r0,r3),r0` keeps the load. No shape was found in which the engine drops the read and the clause is the only guard (a switch on r3, two returns chosen by r3, `mov.b @(r0,r3),r0` with a second use: each withheld by "reads r3/r0 on entry"). What the clauses are worth is whatever they take as the load's value, and that is where A3-66 and A3-76 are.
+- **A3-60 and A3-51.** The frame address in word 0 after an earlier unlent call killed r4 to r7 (the note is said), with no earlier call (the same), in the second word with the first written, in a pushed word, through an r14 frame: held.
+- **A3-61.** The callee that writes the slot directly, after calling something else, on one path only, through a pointer it computes (`mov r15,r1 ; add r4,r1 ; mov.l r2,@r1`), through an r14 frame pointer, called through the cache-through mirror (0x26009040): the note is said and the local is not folded. A callee that does it after 19,000 instructions is walked; after 21,000 it is not (the limit the fix names).
+- **Patch 0056 (A3-65).** A walk down by `add #-4,rN ; mov.l Rm,@rN` and by `mov.l Rm,@-rN`, over a frame of 4 or 8 words, in nested loops (8 words), with the pointer restarted from an outer pointer each pass, by byte stores read back as a word, by 8 bytes a step, by a register amount (`sub r3,r2`), from r14, with the pointer in a stack local (no call), two pointers walked at once, a walk over the pushed r13 and r14 (their slots are overwritten, `preserved` clears both bits, the read after the walk is the local), a walk from r15 + 16, which writes the caller's frame (withheld, "writes a word of its caller's frame"): each prints the local the walk wrote, not the value stored before it, and agrees with the run. A walk up is right.
+- **Check 10b's claims, the generator's choice item, the printed-C differential.** 0 failing seeds in 25,000 grammar-2 seeds (118,257 claims checked in the 20,000, 29,336 in the specials 5,000), and the printed-C differential's 7,427 functions beyond its range compare 6,826 and agree. The one failing seed of the 35,000 is grammar 1's (below), and it is A3-68's.
+
+### What the attack found
+
+1. **A3-66 and A3-67: the nothing-known exception hides what it is combined with.** `ReturnInput` and `ChooserInput` return 0 for a value whose dependences include every register ("a load through a pointer that may be anywhere in the stack, taken for memory", 06038F64 and 06038F72 of image 008). `Merge` and `Sum` union dependences, so `phi(r3, nothing-known)`, `nothing-known + r3` and `cmp/eq r3, nothing-known` are nothing known as a whole: r3 is neither data nor chooser. The engine drops the return of a join with a copy of an unheld input (a failing branch of a MULTIEQUAL fails the join) and of any value that has a second use, and the input goes with it. By hand the value is a load below r15; with no unusual code it is **any stack access whose offset is a literal-pool word**: `WithholdReason`'s `ReturnCheck` does not fold a pool load (only the probe has `SetLiterals`), so `mov.w =20,r2 ; add r15,r2 ; mov.l @r2,r0` is the frame plus a loaded index, and A3-62's stack-argument chooser, pinned withheld for `mov.l @r15,r3`, is lent as soon as its address comes from a pool literal, at offset 0 too. The first two rows' fixtures are lent `void` over a return that r3 or the stack argument chooses.
+2. **A3-68: the flags the rule reads are lost where a value is rebuilt.** `Get` of a part of a register, and the load and store of fewer than 4 bytes of a stack slot, build `Value::From(...)` and drop `usesR0`, `carried`, `joined`, `keepsR0` and `read`. `ReturnInput` clears r0's bit from a value `!UsesR0()`, so `extu.b r0,r0 ; or r0,r1 ; rts` is lent `void f(void)` (so are `extu.w`, `exts.b r0,r2 ; mov r2,r0`, a byte spill and reload of r0, and `add r4,r0 ; extu.b r0,r0` with r4 held), and the carried constant of A3-13 is lent once an `extu.b` follows the call. The generator found it by itself at grammar 1 seed 1103677 (shrunk `extu.w r0,r0 ; cmp/eq #0,r0 ; bf L ; L: rts`), 1 seed in 10,000, in the range the nightly never ran.
+3. **A3-69 and A3-77: the SR exception and the identity table.** `in.data &= ~(kSr | kDepT)` for a value that is neither SR itself nor a join: the T flag a caller left is cleared with the mask. `and #imm,r0` is `r0 & zext(imm:1)` and `Step` gives the ZEXT of a constant a Fuzzy value, so `OpDeps` sees no mask: `stc sr,r0 ; and #1,r0 ; or r0,r1 ; rts` is lent `void` and returns the entry T (the `movt` form is withheld). The same missing fold makes `xor #0,r0` a read of r0 (a safe withhold).
+4. **A3-76: the sum of a stack address and anything drops the other operand.** `Step`'s `INT_ADD` branch for "an index added to a stack address" builds `Value::From(origin::kStack)`: `mov r15,r0 ; add r3,r0 ; or r0,r1 ; rts` is lent `void`; the fuzzer's `addc r4,r11` with r4 a frame address is the same. The index of a frame array is a parameter the signature holds in compiled code; hand-written, it is a register.
+5. **A3-70 and A3-75: A3-61's walk, in two places.** One level: a thunk (`mov.l @(lit),r1 ; jmp @r1`), a callee that hands its entry r15 to a lent or an unlent function that stores through it, are not walked (`mNested`; `Call` sets `mCallerFrameStores` but not `mOwnFrameWords`). One mark per word: `exposedAt` is the address of the last unlent call, so a word the first of two calls wrote and the second leaves alone is read back folded. Both print `return 5;` for a code that returns 9, with no note, in a withheld caller (A3-61's state, P2 there).
+6. **A3-71: a lent callee that writes below its pointer.** `NoteFrameEscapeOf` skips an exact frame address (`!exactToo && v.kind == Sp`), on the ground that the engine reaches what lies at and above it. A callee that steps its pointer down or stores at a negative offset writes the locals below: the caller, **lent**, prints `return 5;` and the code returns 1, for a walk (`mov.l r1,@-r4`), one word below (`add #-4,r4 ; mov.l r1,@r4`) and the pointer in r5. A3-65's loop, one call away.
+7. **A3-72: patch 0056 stops at a conditional step.** `if (c) *--p = v;` in a loop (`tst r4,r4 ; bt S ; mov.l r1,@-r2 ; S: dt r1 ; bf L`) makes a second MULTIEQUAL between the step and the loop's back edge, which `stepsDown` does not pass: the text is A3-65's before the fix (`register0x0000003c = ...`, `return 5;`), lent, for the pointer in r2, in r14 (`aiStack_204 + 0x80`) and in an inner loop. The pointer kept in a stack local across a call (the record's "Not done") prints `return 5;` as well, in a withheld function.
+8. **A3-73: a lent non-void signature reading a stack argument past the model's 500 bytes** (`in_stack_00000258`).
+9. **A3-74: the walk's cost is quadratic in the callee's stores**: a callee of 6,000 pushes costs one decompile of its caller 14.7 s and 2.2 GB (227 ms and 76 MB at 1,000); the 20,000 steps allow 24 GB. The walk is not recursive (depth one), which bounds the chains the review was asked about, and is asked once per target per probe; any caller that restores PR from the stack after the call asks.
+
+### Generator beyond the nightly
+
+| Range | Seeds | Failing | Notes |
+|---|---|---|---|
+| grammar 2, 1,100,001 to 1,120,000 | 20,000 | 0 | 38,945 functions, 28,272 lent, 118,257 runs held to the claims, 171,178 runs, 1,175 choices drawn |
+| grammar 1, 1,100,001 to 1,110,000 | 10,000 | 1 | seed 1103677: `input-dropped:r0`, A3-68 (shrunk `600D 8800 8BFF 000B 0009`); 45,600 runs |
+| grammar 2, 1,200,001 to 1,205,000, `specials` | 5,000 | 0 | 280 choices, 29,336 claims |
+| printed-C differential, 1,300,001 to 1,306,000 | 6,000 | 0 | 7,427 functions, 6,826 compared, agrees 6,883, `narrow-c` 18, `skipped:stack-address` 2, `void-return` 474, `void-return-lent` 50 |
+
+35,000 generator seeds, one failing, one finding class, and it is area 3's: no seed for another area (the open rows are A10, A12, A7 and A8's, instruments or other areas'; none shows in this range's output). The canary, 240 programs, 0 failing, in each run.
+
+### Corpus (`SE_GAME_LEND=1`)
+
+Image 007: 1,730 functions in the lending run, **662 lent (923 parameters)** (637 (866) before lending the proved effects), 839 of 839 functions ok alone, 25 gain a lent signature, every ledger count 0 (0 accesses dropped, 0 missing and said). Image 008: 2,995 functions, **1,021 lent (1,287)** (992 (1,227) before), 1,554 of 1,554 ok alone, 29 gain a signature, ledger counts 0 (0 dropped, **4** missing and said). Both suites "all passed". The numbers are the round 9 and the A3-65 fixes' own. The suite's time (alone: 9.0 s and 26.3 s) is within the noise of the earlier rounds' on a shared machine.
+
+### Pins committed
+
+`TestArea3Round10` (`Sh2DecompilerTests.cpp`, 13 fixtures, all passing at the head): the controls beside the rows that hold today (a stack word by `add #20`, r3 or a constant or a loaded word chosen by a held r4, `cmp/eq r3` with a constant, `extu.b r3,r0`, `movt`, a value held across a callee that keeps r0, a callee walking up and one reading below its pointer, four walks the patch covers, a walk from the caller's frame). No fixture of a finding is committed (the current output is wrong; the rows carry them). The controls were run at the head only; none was mutation-checked, since they hold behaviour the fixes of the rows will touch rather than code the round wrote.
+
+### Matrix
+
+| Run | Result |
+|---|---|
+| `ctest -E SaturnExplorerLive -j2 --timeout 900` under `ulimit -v 4000000` (RelWithDebInfo, 93 tests, with `TestArea3Round10`) | 93 of 93 pass (136 s; the decompiler suite alone 17 s) |
+| generator, grammar 2, 1,100,001 to 1,120,000 | 0 failing seeds, 0 findings |
+| generator, grammar 1, 1,100,001 to 1,110,000 | 1 failing seed (1103677, A3-68), 1 finding class |
+| generator, grammar 2 `specials`, 1,200,001 to 1,205,000 | 0 failing seeds |
+| printed-C differential, 1,300,001 to 1,306,000 | passed, 0 findings |
+| corpus 007 / 008 | lent 662 (923) / 1,021 (1,287), ledger counts 0, 0 and 4 missing and said, all passed |
+| scratch fuzzer, 44,100 programs | A3-68, A3-69 and A3-76 only |
+| sanitizers, the Live tests, vendoring | not run: no engine or host code changed; the Live tests share a socket
+
+### Not covered
+
+- **Mutual recursion, interrupts between a callee's store and its caller's read, the probe's `kMaxSteps` exit** as in rounds 7 to 9.
+- **A fix for any row**, and the cost of the candidate fixes on the corpus: the fix directions in the rows are sketches. The first (A3-66) must keep 06038F64 and 06038F72 lent; the second (A3-68) is a change of flags and should move no count; A3-69 needs the mask idiom's own bits; A3-71 needs a new claim in `CallEffects`.
+- **A non-void lent signature's text against the run beyond the evaluator's reach** (loops, 64-bit returns): the fuzzer's rejects are the evaluator's.
+- The Live tests and the sanitizer job (shared socket path; CI).
+
+**Done criteria.** Nine rows at P1 or P2 (A3-66 to A3-72, A3-75, A3-76) and three at P3: a fix round, then two consecutive clean review rounds.
