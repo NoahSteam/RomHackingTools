@@ -8,8 +8,9 @@
 #                the product compared, the high word extended (RulePiece2Zext, RulePiece2Sext, RuleConcatShift, RuleZextEliminate)
 #   42 widecmp   a 64-bit value in two registers (addc / subc / negc / mach:macl) compared as 64 bits, by cmp/hi, cmp/hs, cmp/gt, cmp/ge, cmp/eq
 #                of the high words and the low words (the carry and borrow rules)
+#   44 extcmp    an extended byte or word compared with a literal round the edge of the extension (RuleZextEliminate, RuleZextSless)
 #   43 sameval   a value computed twice or compared with itself (RuleTrivialArith): x ^ x, x == x, (x+y) == (x+y), (x*c) != (x*c), tst r,r
-# usage: dagen12.py <first seed> <count> [family 40..43]   -> one function per seed, ";" joined (SE_GENERATED_PRINTEDC_WORDS)
+# usage: dagen12.py <first seed> <count> [family 40..44]   -> one function per seed, ";" joined (SE_GENERATED_PRINTEDC_WORDS)
 #        dagen12.py extras <first seed> <count> <family>   -> the comma-joined hex list for SE_GENERATED_PRINTEDC_EXTRA
 import importlib.util, os, random, sys
 
@@ -123,7 +124,24 @@ def fam_sameval(r, f):
     elif k == 6: f.add(and_(5, 4), mov(0, 4), mov(2, 4), and_(5, 2), or_(2, 0))                 # x & y | x & y
     else: f.add(mov(2, 4), neg(2, 2), mov(3, 4), neg(3, 3), cmp_hs(3, 2), movt(0))
 
-FAMS12 = {40: fam_ovfsign, 41: fam_fixmul, 42: fam_widecmp, 43: fam_sameval}
+def fam_extcmp(r, f):
+    """an extended byte or word compared with a literal at, just under and just over the edge of what the extension can hold, and with a
+    negative one (RuleZextEliminate, RuleZextSless, RuleSextSless: zext(V) < c with c wider than V)"""
+    kind = r.choice([0, 1, 2, 3])
+    f.add([extub, extsb, extuw, extsw][kind](0, 4))
+    if r.random() < 0.3: f.add(addi(0, r.choice([1, 0x7F, 0x80, 0xFF, 0xFE])))
+    size = 8 if kind < 2 else 16
+    top = 1 << size
+    edge = [0, 1, 0x7F, 0x80, 0xFF, 0x7FFF, 0x8000, 0xFFFF, top - 1, top, top + 1, top + 0x7F, top + 0x80, top + 0xFF, 2 * top - 1, 2 * top, 0x7FFFFFFF, 0x80000000,
+            0xFFFFFFFF, 0xFFFFFF80, 0xFFFFFF7F, 0xFFFFFF00, 0xFFFF8000, 0xFFFF7FFF, 0xFFFF0000, (-top) & M32, (-top - 1) & M32, (1 << 31) | top, 0x100, 0x101, 0x1FF, 0x200, 0x10000, 0x10001]
+    L = r.choice(edge) & M32
+    lit_or_imm(f, r, 1, L)
+    nm = r.choice(['eq', 'hs', 'hi', 'ge', 'gt'])
+    if nm == 'eq' or r.random() < 0.5: f.add(CMPS[nm] | 0 << 8 | 1 << 4)
+    else: f.add(CMPS[nm] | 1 << 8 | 0 << 4)
+    result_of_t(r, f, 0)
+
+FAMS12 = {40: fam_ovfsign, 41: fam_fixmul, 42: fam_widecmp, 43: fam_sameval, 44: fam_extcmp}
 
 def build(seed, fam=None, want_fn=False):
     r = random.Random(seed * 104729 + 12)
