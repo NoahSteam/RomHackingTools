@@ -1817,8 +1817,17 @@ private:
                     const bool isReturn = Return(s, op.in[0]);
                     if (!isReturn && !mTolerant) return "an indirect jump it does not resolve";
                     // A3-70: in a nested callee walk a tail jump the walk cannot resolve (a thunk `jmp @r1` to the function that actually
-                    // writes the frame) may reach any writer of this function's caller's frame. Fail closed.
-                    if (!isReturn && mNested)
+                    // writes the frame) may reach any writer of this function's caller's frame: fail closed when it can hand that frame on --
+                    // r15 back at or above the callee's entry (the jump's target takes its stack arguments there) or an address of it in a
+                    // register. A jump with r15 still below the entry stays in the callee that pushed (a switch whose table the walk has not):
+                    // its cases are not followed, which is the walk's limit (in the record).
+                    bool handsOn = false;
+                    {
+                        const Value sp = Get(s, mReg[kR15]);
+                        handsOn = sp.kind != Value::Sp || sp.v >= 0;
+                        for (int r = 0; r < 15 && !handsOn; ++r) handsOn = r != kR15 && Get(s, mReg[r]).AtOrAboveEntry();
+                    }
+                    if (!isReturn && mNested && handsOn)
                     {
                         mOwnFrameWords |= CallEffects::kFrameAny;
                         mCallerFrameStores |= origin::kFrame;
