@@ -3355,10 +3355,15 @@ bool PointerPrintsFromHardware(const DecompileResult& r, uint32_t insn, const st
 // engine shows a save slot as a local when a pointer stepped down may reach it (patch 0056, A3-65: seed 901303 runs on after its pops and walks
 // over the words they freed), and the save reads the register before any call can change it. A read of the local after the call is a read of the
 // local; one of the register after a call still prints `unaff_r13` elsewhere and is found.
+// A save the engine shows in part is the same save (A3-78, grammar 2 seed 1009895): function 0 pushes r10 and tail-jumps into function 2, whose
+// `mov.w @r15` reads the half of the push slot that is read later, so the push prints as `iStack_c = (int2)((uint4)unaff_r10 >> 0x10);`. A cast,
+// a right shift by a constant and the parentheses around them change which bits are kept, not when the register is read.
 bool WholeWord(const std::string& text, const std::string& word);
 std::string SavesBeforeCallsDropped(const std::string& text, const char* reg)
 {
-    const std::regex save("^\\s*_?[A-Za-z]*Stack_[0-9a-f]+ = unaff_" + std::string(reg) + ";\\s*$");
+    static const std::string cast = "(?:\\(\\s*\\w+\\s*\\**\\s*\\)\\s*)";
+    const std::regex save("^\\s*_?[A-Za-z]*Stack_[0-9a-f]+ = " + cast + "*\\(?\\s*" + cast + "*unaff_" + std::string(reg) +
+                          "(?:\\s*>>\\s*(?:0x[0-9a-f]+|\\d+))?\\s*\\)?;\\s*$");
     static const std::regex call("\\bfunc_0x[0-9a-fA-F]+\\s*\\(");
     std::istringstream in(text);
     std::string out, line;
@@ -8854,6 +8859,10 @@ void TestRound9Pins(Sh2Decompiler& d)
 // before any call for no read of r13 (SavesBeforeCallsDropped). The walk the printed-C differential draws (GenWalkFn) is drawn in every form.
 void TestA365Pins(Sh2Decompiler& d)
 {
+    auto count = [](const Report& rep, const char* name) {
+        const auto it = rep.counts.find(name);
+        return it == rep.counts.end() ? 0 : it->second;
+    };
     {
         const ModulePin m = { "A3-65, seed 901303 shrunk", "2F86 2F96 2FD6 4F22 6843 6953 B00C 6593 6483 6593 D103 4F26 6DF6 69F6 68F6 412B 0009 0009 0600 9028 2FD6 7FF8 62F3 7208 E102 2216 4110 8BFC E200 84F1 1605 6073 7F08 6DF6 000B 0009",
                               "0/0/22,28/28/48", nullptr, "1,1", "0,0", "40000,0" };
@@ -8869,11 +8878,38 @@ void TestA365Pins(Sh2Decompiler& d)
         for (const Finding& f : seed.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
         CHECK(seed.findings.empty());
     }
+    // A3-78, seed 1009895 (grammar 2) and its shrunk module: function 0 pushes r10, calls function 1 (lent, changes r10), pops and tail-jumps
+    // into function 2, whose `mov.w @r15` reads the half of the slot r10 was pushed to. The text saves that half before the call
+    // (`iStack_c = (int2)((uint4)unaff_r10 >> 0x10);`) and reads the local after it: right, and no read of r10 kept across the call.
+    {
+        const ModulePin m = { "A3-78, seed 1009895 shrunk",
+                              "2F86 2F96 2FA6 2FC6 0C2A 7FF4 6843 6953 6A63 B00F 0009 6483 6593 66A3 020A D104 7F0C 4C2A 6CF6 6AF6 69F6 68F6 412B 0009 0600 9068 "
+                              "2F86 2F96 2FA6 2FB6 2FC6 0C2A 7FD0 6843 6953 6A63 6B73 B00D 0009 6483 6593 66A3 67B3 7F30 4C2A 6CF6 6BF6 6AF6 69F6 68F6 000B 0009 "
+                              "7FF4 61F1 2418 8B00 6262 62F3 720C E103 2216 4110 8BFC E200 7F0C 000B 0009",
+                              "0/0/30,34/34/68,68/68/86", nullptr, "0,0,0", "184000,184000,184000", "0,4000,0" };
+        const Report rep = EvaluateSubject(d, ModuleSubject(m), true);
+        std::printf("pin '%s': %zu finding(s)\n", m.name, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty() && count(rep, "lent.changed.checked") > 0);
+        const bool savedSpecials = gSpecialReads;
+        gSpecialReads = false;
+        const Report seed = EvaluateSubject(d, MakeSubject(MakeV2(1009895)), true);
+        gSpecialReads = savedSpecials;
+        std::printf("pin 'A3-78, grammar 2 seed 1009895': %zu finding(s)\n", seed.findings.size());
+        for (const Finding& f : seed.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(seed.findings.empty());
+    }
     // check 12's reading of a save: before the first call it is no read of the register; after one, or a read elsewhere, it is
     const std::string head = "xunknown4 func_0x06009000(void)\n\n{\n  xunknown4 unaff_r13;\n  xunknown4 xStack_c;\n\n";
     CHECK(!WholeWord(SavesBeforeCallsDropped(head + "  xStack_c = unaff_r13;\n  func_0x06009028();\n  return xStack_c;\n}\n", "r13"), "unaff_r13"));
     CHECK(WholeWord(SavesBeforeCallsDropped(head + "  func_0x06009028();\n  xStack_c = unaff_r13;\n  return xStack_c;\n}\n", "r13"), "unaff_r13"));
     CHECK(WholeWord(SavesBeforeCallsDropped(head + "  xStack_c = unaff_r13;\n  func_0x06009028();\n  return unaff_r13;\n}\n", "r13"), "unaff_r13"));
+    // A3-78: a save shown in part (a cast, a right shift by a constant) is the same save; an operation that combines it with anything is not
+    CHECK(!WholeWord(SavesBeforeCallsDropped(head + "  xStack_c = (int2)((uint4)unaff_r13 >> 0x10);\n  func_0x06009028();\n  return xStack_c;\n}\n", "r13"), "unaff_r13"));
+    CHECK(!WholeWord(SavesBeforeCallsDropped(head + "  xStack_c = (char)unaff_r13;\n  func_0x06009028();\n  return xStack_c;\n}\n", "r13"), "unaff_r13"));
+    CHECK(WholeWord(SavesBeforeCallsDropped(head + "  func_0x06009028();\n  xStack_c = (int2)((uint4)unaff_r13 >> 0x10);\n  return xStack_c;\n}\n", "r13"), "unaff_r13"));
+    CHECK(WholeWord(SavesBeforeCallsDropped(head + "  xStack_c = (int2)((uint4)unaff_r13 + 0x10);\n  func_0x06009028();\n  return xStack_c;\n}\n", "r13"), "unaff_r13"));
+    CHECK(WholeWord(SavesBeforeCallsDropped(head + "  xStack_c = (int2)((uint4)unaff_r13 >> 0x10);\n  func_0x06009028();\n  return unaff_r13;\n}\n", "r13"), "unaff_r13"));
     // the walk functions of the printed-C differential: every width, both directions, the read back up, within the first 400 seeds
     {
         std::map<std::string, int> drawn;
