@@ -26,6 +26,7 @@
 
 #include "libdecomp.hh"
 #include "loadimage.hh"
+#include "rangeutil.hh"
 #include "sleigh_arch.hh"
 
 #include <atomic>
@@ -701,6 +702,212 @@ void TestUnwritableConfigDir(const std::string& scratch)
     RemoveTree(config);
 }
 
+
+// ---- CircleRange::pullBackUnary / pullBackBinary, against brute force (area 2, round 10: A2-64) -------------------------------------------
+// RuleRangeMeld and the jump-table guards pull the range of a result back through the operation that made it, and treat what comes back as
+// exactly the set of inputs that give such a result. Upstream's pullBackBinary answered a comparison that may be true or false (a range holding
+// both 0 and 1) with [0,2) and the mask widened to the input's size where its own comment says "all possible ins": `addv` with a literal printed
+// `1 < param_1 && ...` for `0x7fffffff < param_1 && ...` (patch 0058). The same sweep found a constant minus the unknown (INT_SUB, slot 1) pulled
+// back as the reversed range, a constant shifted by the unknown (INT_RIGHT, INT_SRIGHT, slot 1) pulled back as the unknown shifted by the
+// constant, an arithmetic shift by the size or more, and INT_SEXT's gap placed by `left & step`. Every operation is checked at one and two bytes
+// over a grid of edge values and a seeded sample of the rest (ranges with a step of 2 and 4 too): a pull-back that succeeds must equal the set
+// of inputs whose result is in the range, with the mask of the input; one that fails is allowed.
+struct PullBackTally
+{
+    long cases = 0, failed = 0, exact = 0, wrong = 0;
+};
+
+uint64_t PbMask(int size) { return size >= 8 ? ~static_cast<uint64_t>(0) : ((static_cast<uint64_t>(1) << (8 * size)) - 1); }
+int64_t PbSigned(uint64_t v, int size)
+{
+    const uint64_t sign = static_cast<uint64_t>(1) << (8 * size - 1);
+    return static_cast<int64_t>((v ^ sign) - sign);
+}
+
+bool PbEvalBinary(ghidra::OpCode opc, uint64_t x, uint64_t val, int slot, int size, uint64_t& out)
+{
+    const uint64_t m = PbMask(size);
+    const uint64_t a = slot == 0 ? x : val, b = slot == 0 ? val : x;
+    const uint64_t width = 8 * static_cast<uint64_t>(size);
+    switch (opc)
+    {
+    case ghidra::CPUI_INT_EQUAL: out = a == b; return true;
+    case ghidra::CPUI_INT_NOTEQUAL: out = a != b; return true;
+    case ghidra::CPUI_INT_LESS: out = a < b; return true;
+    case ghidra::CPUI_INT_LESSEQUAL: out = a <= b; return true;
+    case ghidra::CPUI_INT_SLESS: out = PbSigned(a, size) < PbSigned(b, size); return true;
+    case ghidra::CPUI_INT_SLESSEQUAL: out = PbSigned(a, size) <= PbSigned(b, size); return true;
+    case ghidra::CPUI_INT_CARRY: out = ((a + b) & m) < a; return true;
+    case ghidra::CPUI_INT_ADD: out = (a + b) & m; return true;
+    case ghidra::CPUI_INT_SUB: out = (a - b) & m; return true;
+    case ghidra::CPUI_INT_RIGHT: out = (b >= width) ? 0 : (a >> b); return true;
+    case ghidra::CPUI_INT_SRIGHT: out = static_cast<uint64_t>(PbSigned(a, size) >> (b >= width ? width - 1 : b)) & m; return true;
+    default: return false;
+    }
+}
+
+uint64_t PbUnary(ghidra::OpCode opc, uint64_t x, int inSize, int outSize)
+{
+    switch (opc)
+    {
+    case ghidra::CPUI_BOOL_NEGATE: return x ^ 1;
+    case ghidra::CPUI_COPY: return x;
+    case ghidra::CPUI_INT_2COMP: return (0 - x) & PbMask(outSize);
+    case ghidra::CPUI_INT_NEGATE: return (~x) & PbMask(outSize);
+    case ghidra::CPUI_INT_ZEXT: return x;
+    default: return static_cast<uint64_t>(PbSigned(x, inSize)) & PbMask(outSize);   // INT_SEXT
+    }
+}
+
+// True when the pulled-back range is exactly 'truth' (a table over the input space), in the input's mask.
+bool PbEqual(const ghidra::CircleRange& q, int inSize, const std::vector<char>& truth, std::string& why)
+{
+    if (q.isEmpty())
+    {
+        for (size_t x = 0; x < truth.size(); ++x)
+            if (truth[x]) { why = "empty, but " + std::to_string(x) + " belongs"; return false; }
+        return true;
+    }
+    if (q.getMask() != PbMask(inSize)) { why = "mask " + std::to_string(q.getMask()); return false; }
+    for (size_t x = 0; x < truth.size(); ++x)
+        if (q.contains(x) != (truth[x] != 0))
+        {
+            why = std::string(truth[x] ? "misses " : "holds ") + std::to_string(x) + " [" + std::to_string(q.getMin()) + "," + std::to_string(q.getEnd()) + ")";
+            return false;
+        }
+    return true;
+}
+
+void TestPullBackRanges()
+{
+    using namespace ghidra;
+    // splitmix64
+    uint64_t state = 0x5A17;
+    auto next = [&state]() {
+        uint64_t z = (state += 0x9E3779B97F4A7C15ull);
+        z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ull;
+        z = (z ^ (z >> 27)) * 0x94D049BB133111EBull;
+        return z ^ (z >> 31);
+    };
+    struct Bin { OpCode opc; const char* name; bool cmp; };
+    static const Bin bins[] = { { CPUI_INT_EQUAL, "INT_EQUAL", true }, { CPUI_INT_NOTEQUAL, "INT_NOTEQUAL", true }, { CPUI_INT_LESS, "INT_LESS", true },
+                                { CPUI_INT_LESSEQUAL, "INT_LESSEQUAL", true }, { CPUI_INT_SLESS, "INT_SLESS", true }, { CPUI_INT_SLESSEQUAL, "INT_SLESSEQUAL", true },
+                                { CPUI_INT_CARRY, "INT_CARRY", true }, { CPUI_INT_ADD, "INT_ADD", false }, { CPUI_INT_SUB, "INT_SUB", false },
+                                { CPUI_INT_RIGHT, "INT_RIGHT", false }, { CPUI_INT_SRIGHT, "INT_SRIGHT", false } };
+    int shown = 0;
+    long total = 0, exact = 0, failedPullBacks = 0;
+    for (int in = 1; in <= 2; ++in)
+    {
+        const uint64_t ms = PbMask(in), space = ms + 1;
+        std::vector<uint64_t> edge = { 0, 1, 2, 3, 0x7e, 0x7f, 0x80, 0x81, 0xfe, 0xff, ms - 1, ms, ms >> 1, (ms >> 1) + 1, (ms >> 1) + 2 };
+        if (in == 2) for (uint64_t v : { 0x100u, 0x101u, 0xff00u, 0x7f00u, 0x8000u }) edge.push_back(v);
+        for (uint64_t& v : edge) v &= ms;
+        for (const Bin& b : bins)
+        {
+            const int out = b.cmp ? 1 : in;
+            const uint64_t om = PbMask(out);
+            for (size_t it = 0; it < edge.size() * edge.size() + 3000; ++it)
+            {
+                uint64_t l, r, val;
+                int slot = static_cast<int>(next() & 1), step = 1;
+                if (it < edge.size() * edge.size()) { l = edge[it / edge.size()]; r = edge[it % edge.size()]; val = edge[next() % edge.size()]; }
+                else
+                {
+                    l = next() & om; r = next() & om; val = (next() % 3) ? edge[next() % edge.size()] : (next() & ms);
+                    if (!b.cmp && next() % 4 == 0)
+                    {
+                        step = 1 << (1 + next() % 2);
+                        l = ((l - l % step) + (next() % step)) & om;
+                        r = ((r - r % step) + (l % step)) & om;
+                    }
+                }
+                if (b.cmp)
+                {
+                    static const uint64_t bl[5] = { 0, 1, 0, 2, 0 }, br[5] = { 1, 2, 2, 3, 2 };   // {0}, {1}, {0,1}, neither, {0,1} again
+                    const size_t pick = it % 5;
+                    l = bl[pick]; r = br[pick];
+                }
+                if (b.opc == CPUI_INT_RIGHT || b.opc == CPUI_INT_SRIGHT) { if (next() % 4) { slot = 0; val = next() % (8 * in + 3); } }
+                if (step > 1 && l == r) continue;
+                CircleRange range(l, r, out, step);
+                std::vector<char> truth(space, 0);
+                for (uint64_t x = 0; x < space; ++x)
+                {
+                    uint64_t o = 0;
+                    PbEvalBinary(b.opc, x, val, slot, in, o);
+                    truth[x] = range.contains(o);
+                }
+                CircleRange q = range;
+                ++total;
+                if (!q.pullBackBinary(b.opc, val, slot, in, out)) { ++failedPullBacks; continue; }
+                std::string why;
+                if (PbEqual(q, in, truth, why)) { ++exact; continue; }
+                CHECK(false);
+                if (shown++ < 12)
+                    std::printf("pull-back %s, %d byte(s): range [%llx,%llx) step %d, constant %llx in slot %d: %s\n", b.name, in, (unsigned long long)l,
+                                (unsigned long long)r, step, (unsigned long long)val, slot, why.c_str());
+            }
+        }
+        struct Un { OpCode opc; const char* name; int in, out; };
+        const Un uns[] = { { CPUI_BOOL_NEGATE, "BOOL_NEGATE", 1, 1 }, { CPUI_COPY, "COPY", in, in }, { CPUI_INT_2COMP, "INT_2COMP", in, in },
+                           { CPUI_INT_NEGATE, "INT_NEGATE", in, in }, { CPUI_INT_ZEXT, "INT_ZEXT", in, 4 }, { CPUI_INT_SEXT, "INT_SEXT", in, 4 } };
+        for (const Un& u : uns)
+        {
+            const uint64_t om = PbMask(u.out), usp = PbMask(u.in) + 1;
+            std::vector<uint64_t> ue = { 0, 1, 2, 3, 0x7e, 0x7f, 0x80, 0x81, 0xfe, 0xff, 0x100, 0x101, 0x7f00, 0x7fff, 0x8000, 0xff00, 0xffffff80u, 0xffffff7fu, 0xffff8000u, 0xffff7fffu, 0xffffffffu };
+            for (uint64_t& v : ue) v &= om;
+            for (size_t it = 0; it < ue.size() * ue.size() + 3000; ++it)
+            {
+                uint64_t l, r;
+                int step = 1;
+                if (it < ue.size() * ue.size()) { l = ue[it / ue.size()]; r = ue[it % ue.size()]; }
+                else
+                {
+                    l = next() & om; r = next() & om;
+                    if (next() % 4 == 0)
+                    {
+                        step = 1 << (1 + next() % 2);
+                        l = ((l - l % step) + (next() % step)) & om;
+                        r = ((r - r % step) + (l % step)) & om;
+                    }
+                }
+                if (u.opc == CPUI_BOOL_NEGATE) { const size_t pick = it % 3; static const uint64_t bl[3] = { 0, 1, 0 }, br[3] = { 1, 2, 2 }; l = bl[pick]; r = br[pick]; step = 1; }
+                if (step > 1 && l == r) continue;
+                CircleRange range(l, r, u.out, step);
+                std::vector<char> truth(usp, 0);
+                for (uint64_t x = 0; x < usp; ++x) truth[x] = range.contains(PbUnary(u.opc, x, u.in, u.out)) && (u.opc != CPUI_BOOL_NEGATE || x < 2);
+                if (u.opc == CPUI_BOOL_NEGATE) { for (uint64_t x = 2; x < usp; ++x) truth[x] = 0; }
+                CircleRange q = range;
+                ++total;
+                if (!q.pullBackUnary(u.opc, u.in, u.out)) { ++failedPullBacks; continue; }
+                std::string why;
+                bool ok;
+                if (u.opc == CPUI_BOOL_NEGATE)   // the input is a boolean: only 0 and 1 are asked about
+                {
+                    ok = q.getMask() == 0xff && q.contains(0) == (truth[0] != 0) && q.contains(1) == (truth[1] != 0);
+                    if (!ok) why = "a boolean pull-back differs";
+                }
+                else
+                    ok = PbEqual(q, u.in, truth, why);
+                if (ok) { ++exact; continue; }
+                CHECK(false);
+                if (shown++ < 12)
+                    std::printf("pull-back %s, %d -> %d byte(s): range [%llx,%llx) step %d: %s\n", u.name, u.in, u.out, (unsigned long long)l, (unsigned long long)r, step, why.c_str());
+            }
+        }
+    }
+    std::printf("pull-back sweep: %ld cases, %ld exact, %ld refused\n", total, exact, failedPullBacks);
+    CHECK(total - exact - failedPullBacks == 0);
+    CHECK(exact > total / 2);   // the sweep must keep checking something: most pull-backs succeed
+    // A2-64 itself: a comparison whose result may be true or false is true or false for every input
+    for (OpCode opc : { CPUI_INT_EQUAL, CPUI_INT_NOTEQUAL, CPUI_INT_LESS, CPUI_INT_LESSEQUAL, CPUI_INT_SLESS, CPUI_INT_SLESSEQUAL, CPUI_INT_CARRY })
+    {
+        CircleRange both(0, 2, 1, 1);   // {0, 1}
+        CHECK(both.pullBackBinary(opc, 0xAAAAAAABu, 1, 4, 1));
+        CHECK(both.isFull() && both.getMask() == 0xFFFFFFFFu);
+    }
+}
+
 }  // namespace
 
 // Each case announces itself first; with stdout unbuffered, the last name printed is where a
@@ -732,6 +939,7 @@ int main(int argc, char** argv)
     // exception filter above sees them first, as an opaque 0xE06D7363, without the message.
     try
     {
+        RUN(TestPullBackRanges());
         RUN(TestSha256KnownAnswers());
         RUN(TestDecompileThroughBundle(config));
         RUN(TestCancelDuringJumpTableRecovery());

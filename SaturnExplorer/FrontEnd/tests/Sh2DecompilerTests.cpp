@@ -11302,12 +11302,13 @@ void TestArea3Round10()
     withheld("a3_72 control: a walk from r15 + 16 goes into the caller's frame", { 0x7FF8, 0xE005, 0x2F02, 0x62F3, 0x7210, 0xE104, 0x2216, 0x4110, 0x8BFC, 0x60F2, 0x7F08, 0x000B, 0x0009, 0x0009 },
              "it writes a word of its caller's frame");
 }
-// Area 2, round 10 review. A2-64 (P1), OPEN: this holds the WRONG text so that the suite stays green, and flips with the fix.
-// addv r0,r4 with the literal 0xAAAAAAAB in r4, T tested by bf: the code leaves r1 = 5 unless the signed add overflows (r0 negative and the sum not),
-// when it sets 7. RuleRangeMeld melds the boolean `(r0 s< 0) != 0xff` with `!(r0 s< 0)` by pulling the first back through `r0 s< 0`; the range of
-// a boolean that holds both 0 and 1 is left as [0,2) in the 4-byte space by CircleRange::pullBackBinary (`bothTrueFalse`: the comment says all
-// possible ins, the range is the two values 0 and 1), so the meld is `r0 < 2` and the test prints `1 < param_1 && -1 < (int4)(param_1 + 0xaaaaaaab)`:
-// true for r0 = 0x60000000, where the code does not overflow. The same literal as an immediate (mov #-3) prints the right test (the control).
+// Area 2, round 10. A2-64 (P1), fixed by patch 0058: addv r0,r4 with the literal 0xAAAAAAAB in r4, T tested by bf: the code leaves r1 = 5 unless the
+// signed add overflows (r0 negative and the sum not), when it sets 7. RuleRangeMeld melds the boolean `(r0 s< 0) != 0xff` with `!(r0 s< 0)` by pulling
+// the first back through `r0 s< 0`; the range of a boolean that holds both 0 and 1 was left as [0,2) in the 4-byte space by
+// CircleRange::pullBackBinary (`bothTrueFalse`: the comment says all possible ins, the range was the two values 0 and 1), so the meld was `r0 < 2`
+// and the test printed `1 < param_1 && -1 < (int4)(param_1 + 0xaaaaaaab)`: true for r0 = 0x60000000, where the code does not overflow. The pull-back
+// is now the full range, and the test is `0x7fffffff < param_1 && ...`. The same literal as an immediate (mov #-3) printed the right test (the
+// control). The pull-back itself is held against brute force in SaturnExplorerSh2DecompilerEngineTests (TestPullBackRanges).
 void TestArea2Round10()
 {
     Sh2Decompiler d(gConfig);
@@ -11318,8 +11319,42 @@ void TestArea2Round10()
         const R8Outcome o = R8Check(d, "A2-64 addv literal", words, { { 0x60000000u }, { 0x80000000u }, { 0u }, { 0xFFFFFFFFu } }, "", {}, ++serial, 0x06009000u, &r);
         Print("A2-64: addv with a literal in r4, T tested by bf", r);
         CHECK(r.status == DecompileStatus::Ok);
-        CHECK(o.verdict == "differs");   // WRONG (open): r0 = 0x60000000 does not overflow, the text takes the branch
-        CHECK(Has(r.Text(), "1 < param_1 && -1 < (int4)(param_1 + 0xaaaaaaab)"));   // the fix: 0x7fffffff < param_1
+        CHECK(o.verdict == "agrees");   // r0 = 0x60000000 does not overflow: the text does not take the branch
+        CHECK(Has(r.Text(), "0x7fffffff < param_1 && -1 < (int4)(param_1 + 0xaaaaaaab)"));
+        CHECK(!Has(r.Text(), "1 < param_1 &&"));   // the meld that was [0,2) widened
+    }
+    // The family: addv and subv against pool literals, T tested by bf or bt (or read by movt), the literal in the destination register or the source.
+    // Each agrees with the run for inputs on both sides of every boundary the literal makes (the overflow and the unsigned wrap of the sum).
+    {
+        static const uint32_t kLits[] = { 0xAAAAAAABu, 0x80000001u, 0xF0000000u, 0x55555555u, 0x7FFFFFFFu, 0xC0000000u, 0x40000000u, 0xFFFFFFFDu, 1u };   // not 0x80000000: `-0x80000000 - param_1` is right as the engine reads it (printed-C: narrow-c) and not in this evaluator, which does not wrap it
+        static const uint32_t kIn[] = { 0x60000000u, 0x80000000u, 0u, 0xFFFFFFFFu, 0x7FFFFFFFu, 0x55555555u, 0x55555556u, 0xAAAAAAABu, 0xC0000000u, 0x40000000u, 0x7FFFFFFEu, 0x80000001u, 1u, 2u };
+        std::vector<std::vector<uint32_t>> inputs;
+        for (uint32_t v : kIn) inputs.push_back({ v });
+        int n = 0;
+        for (uint32_t lit : kLits)
+            for (int form = 0; form < 4; ++form)
+                for (int tail = 0; tail < 3; ++tail)
+                {
+                    // form 0, 1: mov r4,r0 ; mov.l @(lit),r4 ; addv / subv r0,r4 (the literal in the destination, the input copied to r0)
+                    // form 2, 3: mov.l @(lit),r0 ; addv / subv r4,r0 (the input is the parameter itself)
+                    // then bf / bt over `mov #7,r1` after `mov #5,r1` and the result `mov r1,r0`, or movt r0
+                    const bool copy = form < 2;
+                    std::vector<uint16_t> w;
+                    if (copy) { w.push_back(0x6043); w.push_back(0xD404); w.push_back(form == 0 ? 0x340F : 0x340B); }
+                    else { w.push_back(0xD004); w.push_back(form == 2 ? 0x304F : 0x304B); }
+                    if (tail < 2) { w.push_back(0xE105); w.push_back(tail ? 0x8900 : 0x8B00); w.push_back(0xE107); w.push_back(0x6013); }
+                    else w.push_back(0x0029);
+                    w.push_back(0x000B); w.push_back(0x0009);
+                    if (w.size() % 2) w.push_back(0x0009);
+                    const size_t load = copy ? 1 : 0, pool = w.size();   // the pool follows, on a longword
+                    w.push_back(static_cast<uint16_t>(lit >> 16)); w.push_back(static_cast<uint16_t>(lit & 0xFFFF));
+                    w[load] = static_cast<uint16_t>((w[load] & 0xFF00) | ((2 * pool - ((2 * load + 4) & ~static_cast<size_t>(3))) / 4));
+                    DecompileResult r;
+                    const R8Outcome o = R8Check(d, "A2-64 family " + std::to_string(n++), w, inputs, "", {}, ++serial, 0x06009000u, &r);
+                    CHECK(r.status == DecompileStatus::Ok);
+                    CHECK(o.verdict == "agrees");
+                    if (o.verdict != "agrees") std::printf("A2-64 family %d (literal %08X, form %d, tail %d): %s %s\n%s\n", n - 1, lit, form, tail, o.verdict.c_str(), o.detail.c_str(), r.Text().c_str());
+                }
     }
     {
         const std::vector<uint16_t> words = { 0x6043, 0xE4FD, 0x340F, 0xE105, 0x8B00, 0xE107, 0x6013, 0x000B, 0x0009, 0x0009 };
