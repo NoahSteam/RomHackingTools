@@ -11192,7 +11192,7 @@ Mutation: `effects.storesBelow = 0;` in `ReturnCheck::Run` (the claim A3-71 adde
 
 | Run | Result |
 |---|---|
-| `ctest -E SaturnExplorerLive -j2 --timeout 900` under `ulimit -v 4000000` (RelWithDebInfo, 93 tests, with `TestArea3Round11`) | CTEST_PLACEHOLDER |
+| `ctest -E SaturnExplorerLive -j2 --timeout 900` under `ulimit -v 4000000` (RelWithDebInfo, 93 tests, with `TestArea3Round11`) | 93 of 93 pass (148 s; the decompiler suite alone 19 s, `TestArea3Round11` among its tests) |
 | generator, grammar 2, 1,600,001 to 1,620,000 (4 x 5,000) | 0 failing seeds, 0 findings |
 | generator, grammar 1, 1,600,001 to 1,610,000 (2 x 5,000) | 0 failing seeds |
 | printed-C, 1,600,001 to 1,610,000 (5 x 2,000) | 1 finding: seed 1602820, A3-79's class (A3-87) |
