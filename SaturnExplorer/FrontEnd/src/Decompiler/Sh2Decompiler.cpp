@@ -1051,13 +1051,13 @@ private:
             {
                 const Value sp = Get(s, mReg[kR15]);
                 if (haveTarget)
-                    MapCalleeWords(CalleeFrameWrites(target), sp);   // walked in turn (bounded)
+                    MapCalleeWords(CalleeFrameWrites(target), s, sp);   // walked in turn (bounded)
                 else
                 {
                     // ...a target the walk cannot name: fail closed when the frame is handed on.
                     bool handsFrame = sp.kind != Value::Sp || sp.v >= 0;
                     for (int r = 0; r < 8 && !handsFrame; ++r) handsFrame = Get(s, mReg[r]).AtOrAboveEntry();
-                    if (handsFrame) MapCalleeWords(CallEffects::kFrameAny, sp);
+                    if (handsFrame) MapCalleeWords(CallEffects::kFrameAny, s, sp);
                 }
             }
         }
@@ -1089,10 +1089,10 @@ private:
                 if (((e.storesThrough >> r) & 1u) && Get(s, mReg[r]).AtOrAboveEntry())
                 {
                     mCallerFrameStores |= origin::kFrame;
-                    if (mNested) MapCalleeWords(CallEffects::kFrameAny, Get(s, mReg[kR15]));   // the walked callee hands its caller's frame on
+                    if (mNested) MapCalleeWords(CallEffects::kFrameAny, s, Get(s, mReg[kR15]));   // the walked callee hands its caller's frame on
                 }
             // ...and a lent callee that writes its own caller's frame (a home-area spill): those words, seen from the walked function.
-            if (mNested && (e.storesThrough & origin::kFrame)) MapCalleeWords(e.frameWords, Get(s, mReg[kR15]));
+            if (mNested && (e.storesThrough & origin::kFrame)) MapCalleeWords(e.frameWords, s, Get(s, mReg[kR15]));
         }
         Apply(s, e, targetIsR0);
     }
@@ -1167,14 +1167,21 @@ private:
     // The walk descends into the callee's own callees and tail-jump targets (A3-70), to kNestedMaxDepth levels and within one shared budget; a
     // callee it cannot follow -- the levels or the budget exhausted, too many paths, too many stack words (A3-74), a cycle -- is taken to write
     // any word (kFrameAny), not none. A target whose first instruction is not captured (the BIOS) is the walk's one limit: no code to read.
+    // kUnwalked: the walk did not descend (the levels or the budget exhausted, or a walk of the target already in progress: a cycle). The
+    // walker then treats the call as one to a target it cannot name: it fails closed only when it hands the frame on (MapCalleeWords).
+    static constexpr uint32_t kUnwalked = 0x7FFFFFFFu;
     uint32_t CalleeFrameWrites(uint32_t target)
     {
         NestedContext* ctx = mNestedCtx != nullptr ? mNestedCtx : &mOwnCtx;
         if (ctx == &mOwnCtx && ctx->cache.empty() && ctx->budget == 0) ctx->budget = kNestedBudget;
         const auto known = ctx->cache.find(target);
         if (known != ctx->cache.end()) return known->second;
-        if (mDepth >= kNestedMaxDepth || ctx->budget == 0) return CallEffects::kFrameAny;
-        ctx->cache[target] = CallEffects::kFrameAny;
+        if (mDepth >= kNestedMaxDepth || ctx->budget == 0)
+        {
+            if (mDepth == 0) return CallEffects::kFrameAny;
+            return kUnwalked;
+        }
+        ctx->cache[target] = kUnwalked;
         static const JumpDests kNoTables;
         ReturnCheck callee(mFd, target, mLent, kNoTables);
         callee.mNested = true;
@@ -1196,9 +1203,16 @@ private:
     }
     // A walked callee's own callee (or tail-jump target) writes 'words' of its caller's frame, counted from the r15 it was entered with ('sp'):
     // those at or above this walked function's entry r15 are words of the frame being asked about.
-    void MapCalleeWords(uint32_t words, const Value& sp)
+    void MapCalleeWords(uint32_t words, const State& s, const Value& sp)
     {
         if (words == 0) return;
+        if (words == kUnwalked)
+        {
+            bool handsFrame = sp.kind != Value::Sp || sp.v >= 0;
+            for (int r = 0; r < 15 && !handsFrame; ++r) handsFrame = r != kR15 && Get(s, mReg[r]).AtOrAboveEntry();
+            if (!handsFrame) return;
+            words = CallEffects::kFrameAny;
+        }
         if ((words & CallEffects::kFrameAny) || sp.kind != Value::Sp)
         {
             mOwnFrameWords |= CallEffects::kFrameAny;
@@ -1905,9 +1919,9 @@ private:
                     }
                     const Value to = Get(s, op.in[0]);
                     if (!isReturn && mNested && to.kind == Value::Imm)
-                        MapCalleeWords(CalleeFrameWrites(static_cast<uint32_t>(to.v)), Get(s, mReg[kR15]));   // a thunk: walk its target
+                        MapCalleeWords(CalleeFrameWrites(static_cast<uint32_t>(to.v)), s, Get(s, mReg[kR15]));   // a thunk: walk its target
                     else if (!isReturn && mNested && handsOn)
-                        MapCalleeWords(CallEffects::kFrameAny, Get(s, mReg[kR15]));
+                        MapCalleeWords(CallEffects::kFrameAny, s, Get(s, mReg[kR15]));
                 }
                 falls = false;
                 break;
