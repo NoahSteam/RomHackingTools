@@ -252,7 +252,19 @@ int main(int argc, char **argv) {
           if (!(Q == A)) { cl.under++; if (cl.ex[0].empty()) cl.ex[0] = "code 2 but this modified: " + d; }
         }
       }
-      // minimalContainer: a superset of both
+      // minimalContainer: a superset of both. The engine calls it only after circleUnion answered 2 (ValueSet::iterate); a full operand makes
+      // circleUnion answer 0 unless the steps differ, which is how a full input reaches it.
+      {
+        CircleRange U = A;
+        const bool afterTwo = U.circleUnion(C) == 2;
+        const bool anyFull = (a.l == a.r) || (c.l == c.r);
+        std::snprintf(key, sizeof key, "set minimalContainer %s %s %s", (a.st == 1 && c.st == 1) ? "st1" : "stN", afterTwo ? "after-2" : "any", anyFull ? "full" : "nonfull");
+        CircleRange Q = A; Q.minimalContainer(C, 1 << (rng() % 6));
+        Set got2 = elementsOf(Q, sz); long under2 = 0;
+        for (size_t v = 0; v < n; v++) if ((sa[v] || sc[v]) && !got2[v]) under2++;
+        Cls &cl2 = G[key]; cl2.n++;
+        if (under2) { cl2.under++; if (cl2.ex[0].empty()) cl2.ex[0] = "UNDER " + d; } else cl2.exact++;
+      }
       {
         CircleRange Q = A; Q.minimalContainer(C, 1 << (rng() % 6));
         Set got = elementsOf(Q, sz); long under = 0;

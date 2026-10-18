@@ -1,5 +1,5 @@
 diff --git a/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/rangeutil.cc b/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/rangeutil.cc
-index 8a4791b..ac5361c 100644
+index 8a4791b..99d66bd 100644
 --- a/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/rangeutil.cc
 +++ b/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/rangeutil.cc
 @@ -18,6 +18,9 @@
@@ -161,3 +161,11 @@ index 8a4791b..ac5361c 100644
  	setFull();
  	return true;
        }
+@@ -1856,6 +1942,7 @@ void ValueSetRead::compute(void)
+       range = equationConstraint;
+     }
+   }
++  if (getenv("SE_VS_READS")) { fprintf(stderr,"VSREAD at %llx slot %d type %d range ",(unsigned long long)op->getAddr().getOffset(),slot,typeCode); range.printRaw(std::cerr); fprintf(stderr," lstable %d rstable %d\n",(int)leftIsStable,(int)rightIsStable); }
+ }
+ 
+ /// \param s is the stream to print to

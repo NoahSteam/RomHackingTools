@@ -10596,3 +10596,153 @@ stopped at 0056. The coordinator's reproduction check did not see it: `vendor.py
 committed files and the comparison was empty. The check now also requires `vendor.py`'s exit status 0 and its "vendored" line. The repaired 0056
 (three context lines) comes with this merge, and is the same as the area 3 round 10 fixer's 8ab4912. The vendored sources themselves were right
 throughout; only the patch file that reproduces them was stale.
+
+## Area 2, round 11 review
+
+Reviewer, branch `review/2-round11-review`, on the coordinator's head `c816ec5` (patches up to 0058 in the tree). Tools, a pin, the ledger and this record only; no spec, engine or host file changed (the engine trials below were made in the working copy and reverted: every patch to `rangeutil.cc`, `ruleaction.cc`, `funcdata_op.cc` is a file in `Docs/Decompiler/tools/a2_round11/` or described here, and `git status` shows none). New ledger rows **A2-67 to A2-72**: five open P3 rows (A2-67 to A2-71, none with a wrong printed value) and A2-72, an instrument row closed here. **Nothing at P1 or P2 was found, so this round is clean: it is the first clean round after round 10's fix, and area 2's count of consecutive clean rounds is 1.** Patch 0058 held: the pull-backs are exact at 3 and 4 bytes (sampled) and the audit at 1 and 2 bytes is exhaustive; the one gap is the 8-byte shifts (A2-69).
+
+The brief asked for the rest of the engine's range machinery, the constant arithmetic of the division and comparison rules, 0058's own sweep at 4 bytes, the generator beyond the nightly range and the decode oracle at new seeds. What was found is in the range machinery, and it is real but not in the path of a printed value: the forward half of `CircleRange` (what `ValueSetSolver` computes with) is unsound at the edges of wrapped and full ranges (A2-67, A2-68), in upstream's code. What the printed value depends on, the pull-back and the meld, is exact, and the rules that fold comparisons and constants, run by value against the run on 14,400 new functions of nine families and 15,000 of ten more, and by a sweep of all 65,536 values of r4 for 420 of them, are right (section 3).
+
+### 1. What I ran
+
+Own RelWithDebInfo build under the scratch directory (`-j2`; every run under `ulimit -v 4000000` and `timeout`, one heavy job at a time).
+
+| Run | Result |
+|---|---|
+| `ctest -E SaturnExplorerLive -j2 --timeout 900` (the pin in, the harness patch applied, nothing mutated) | 93 of 93 pass (189 s) |
+| decode oracle with `SE_MEDNAFEN_SS`, seeds 424242, 8675309, 123123, 50505, 777777 (`SE_DECODE_CASES=100000` each) | 65,000,000 differential executions (13,000,000 a seed): 0 differ, 0 could not run, 0 of 130 forms fail, 18 named shapes 0 differ, 2 decode lines a seed (the headers); SLEIGH defines 53,752 words, 0 disagreements with Mednafen (the spec did not change) |
+| generator, grammar 2, `SE_GENERATED_FIRST=1400001`, 20,000 seeds (four runs of 5,000: 170, 152, 150, 178 s) | **1 failing seed, 1418819** (`n:kept-read:r10` and `r12`: a function that ends in a tail jump into the next, A3-78's shape: routed, section 7); the other 19,999 clean |
+| generator, grammar 1, `SE_GENERATED_FIRST=1400001`, 10,000 seeds (116, 118 s) | 0 failing seeds |
+| printed-C differential, `SE_GENERATED_PRINTEDC=only SE_GENERATED_FIRST=1400001`, 15,000 seeds (three runs of 5,000, 104 s each) | 18,216 functions (the seeds, the walks and the fixtures), 16,893 compared: agrees 16,997, `narrow-c` 63, `skipped:stack-address` 3, `skipped:array-local` 1, `void-return` 1,043, `void-return-lent` 109; **0 findings** |
+| new families through the printed-C differential (section 3) | 29,400 new functions (`dagen11.py` 20 to 28, 1,600 each; `dagen11b.py` 29 to 38, 1,500 each) and 12,000 of round 10's (`dagen10.py` 0 to 19, 600 each, with the byte rows): **0 findings in the engine**; A2-71 in the oracle (28 of family 24) |
+| the 16-bit sweep (`SE_GENERATED_PRINTEDC_SWEEP16=1`), 420 functions of 9 families (20, 28, 29, 30, 34 to 38) | every one of the 65,536 values of r4 for each (27.5 million values): 0 findings |
+| jump tables, `swtab11.py` | 2,700 modules (2,500 + 200): 0 failing; `negguard11.py` for A2-68 |
+| corpora hwram007.bin, hwram008.bin, `SE_GAME_LEND=1` | 839 and 1,554 functions, all ok; every ledger count 0 (0 accesses dropped against the reference run; missing and said 0 and 4, as in round 10); lending 662 (923 parameters) and 1,021 (1,287); mapping violations 0 (the 'several-instruction' counts as before) |
+| the standalone audits of sections 2 and 3 | as tabled there |
+
+### 2. The range machinery
+
+Who uses what (read from the tree, then measured):
+
+| User | Calls | Exact? |
+|---|---|---|
+| `RuleRangeMeld` | `pullBack` (usenzmask false), `intersect` / `circleUnion` of two step-1 ranges, `translate2Op` | pull-back: exact (0058). `intersect`, `circleUnion`, `translate2Op` of step-1 ranges of one mask: exact (the pin below, all 65,536 byte ranges against 3 partners each, and 12,000 random pairs of the sweep, 1 and 2 bytes) |
+| `JumpBasic::analyzeGuards` / `checkUnrolledGuard` / `calcRange` | `pullBack` (usenzmask true), `intersect` with the initial range (a step from the value's non-zero mask), `getSize`, `getNext` | pull-back exact; `intersect` with a step: A2-68; `getSize` exact (12,000 ranges of the sweep) |
+| `ValueSet::iterate` (only in `Heritage::analyzeNewLoadGuards`) | `pushForwardUnary`, `pushForwardBinary`, `circleUnion`, `minimalContainer`, `intersect` (equations) | A2-67: sound for the small, unwrapped ranges of loops and guards; not at the edges |
+| `JumpBasic2` | none of these: in this tree it is a model of its own (a MULTIEQUAL with a constant default), it does not run the solver | |
+
+**The forward sweep** (`forward_audit.cpp`, seed 1, 3,000 cases per row, ranges of 1 and 2 bytes with steps 1, 2, 4, 8, wrapped, full and single; the truth is the operation on every element of the inputs):
+
+| Row (1 and 2 bytes) | Cases | Exact | Wider than needed | **Values missing** |
+|---|---|---|---|---|
+| `COPY`, `INT_2COMP`, `INT_NEGATE` | 3,000 each | all | 0 | 0 |
+| `INT_ADD` | 3,000 / 1,460 | 2,907 / 1,405 | 93 / 55 | 0 |
+| `INT_ZEXT`, `INT_SEXT` (1 to 2) | 3,000 each (1,057 / 1,011 refused) | all answered | 0 / 508 | 0 |
+| `INT_LEFT` | 3,000 / 3,000 | 717 / 434 | 2,202 / 2,478 | **81 / 88** |
+| `INT_MULT` by a constant | 3,000 / 3,000 | 910 / 727 | 2,009 / 2,178 | **81 / 95** |
+| `INT_RIGHT` | 3,000 / 3,000 | 1,975 / 1,846 | 160 / 131 | **865 / 1,023** |
+| `INT_SRIGHT` | 3,000 / 3,000 | 2,298 / 2,266 | 491 / 600 | **211 / 134** |
+| `SUBPIECE` (2 to 1) | 3,000 | 2,517 | 128 | **355** |
+| `minimalContainer`, after `circleUnion` answered 2 | 6,308 non-full pairs / 1,856 with a full operand | 6,308 / 1,251 | 0 | 0 / **605** |
+| `getMaxInfo` | 12,000 | 10,743 | 0 | **1,257** (one bit short) |
+| `intersect` (answer 0), both steps 1 | 3,940 | 3,940 | 0 | 0 |
+| `intersect` with a step | 3,553 / 3,528 | 3,210 / 3,288 | 174 / 169 (wider: the `code 2` cases excluded) | **169 / 71** (empty or too small) |
+| `circleUnion` (answer 0), any steps | 3,859 | 3,859 | 0 | 0 |
+| `invert`, `getSize`, `contains(value)`, `translate2Op` | 12,000 / 12,000 / 12,000 / 7,237 | all | 0 | 0 |
+| `contains(CircleRange)` claimed true, steps 1 / a step | 1,215 / 940 | 1,215 / 781 | 0 | 0 / **159** |
+
+**The scratch check on real code.** `vs_check.patch` (apply to `rangeutil.cc`; `SE_VS_CHECK=1`) wraps the two push-forward calls and the MULTIEQUAL union of `ValueSet::iterate` and checks the answer against 20 sampled elements of each input (the first and last few, and random ones):
+
+| Run | Checks | Unsound |
+|---|---|---|
+| engine fixtures (`Sh2DecompilerTests`, no image) | 100,706 | 0 |
+| hwram007.bin | 2,409,720 | 60 (one phi, 0x0602CD36) |
+| hwram008.bin | 14,852,907 | 96 (two phis, 0x0606D7FA, 0x0603B582) |
+| generator, grammar 1, 3,000 seeds from 1,400,001 | 137,752 | 0 |
+| generator, grammar 2, 3,000 seeds from 1,400,001 | 5,426,817 | 0 |
+| printed-C, 3,000 seeds from 1,400,001 (walks) | 3,342,672 | 160 (the union again, and `INT_ADD` of a container that kept an unmasked bound) |
+| `loopfix11.py` (variant 0, 1 and 2) | 4,860 each | 4 each |
+
+The three phis of the images are in the stack-walking loops of function 0x0602CD36 (hwram007) and of 0x0606D7FA and 0x0603B582 (hwram008): a stride-8 or stride-4 range `[0,0x10)` step 8 meets a full input, and the container answers `[0,9)`. With `minimalContainer` repaired for a full operand (the experiment `minimalcontainer_full.experiment.patch`: a full operand makes the container full) the printed text of all 839 and 1,554 functions, and the lent texts of both, is byte for byte the same (`diff -r` empty). The union is unsound in both runs of the solver that `analyzeNewLoadGuards` makes (`WidenerNone`, which freezes every value set at its third iteration, then `WidenerFull`), and the range `LoadGuard::finalizeRange` takes from the second is the narrow one (`[-0x808,-0x7ff)`, nine bytes of a 2 KiB buffer): the guard is wrong. The text is not. `loopfix11.py` is the shape in 40 instructions, three variants (a loop that loads through the index and sums, a loop that stores through it and a direct read of a slot outside the narrow range after it, the frame addressed through r14 or through r15 itself): the check reports the same union and the final range at the load is nine bytes, and the printed text is right in all three: the 16 direct stores are kept (the stack array is address-exposed by the base of the computed pointer) and the read after the indexed store is a read of the array, not a constant. That is why the rows are P3: I could not make a printed value depend on it, and I looked. What would raise it: a stack local that is not address-exposed, a computed load or store whose narrow range excludes it, and a read of it afterwards.
+
+**The set operations** (same sweep, 6,000 pairs per width): `intersect`, `circleUnion`, `invert`, `translate2Op`, `getSize` and `contains(value)` are exact for step-1 ranges of one mask, `circleUnion` for every step; `minimalContainer` is sound for every pair of non-full ranges (6,308 after an answer of 2) and unsound only with a full operand of a different step than the other (A2-67); `intersect` with a step: A2-68.
+
+**0058's sweep at 3, 4 and 8 bytes** (`pullback4.cpp`, 20,000 cases per row, the points where the truth can change, each +-3, 20 random per case): 580,000 cases at 3 and 4 bytes (and the extensions to 4), both slots of the compares, the subtraction and the shifts, ranges of step 1, 2, 4 and 8: **0 wrong** (78,521 refused, as 0058 refuses); 300,000 at 8 bytes: **259 wrong**, 163 of them `INT_RIGHT` by 0 and 96 `INT_SRIGHT` by 63. The 8-byte rows: `INT_RIGHT` by 0 (the right bound `(mask >> 0) + 1` is 0) and `INT_SRIGHT` by 63 (a 64-bit shift by 64) answer wrongly (A2-69); no path from SH-2 code to them.
+
+**The transfer functions and the folder.** `nzmask_audit.py` cuts `PcodeOp::getNZMaskLocal`'s switch out of `op.cc` and checks it for 19 operations against every value under the masks (all pairs of masks at 1 byte, sampled at 2, 4 and 8): 10.9 billion values, none outside the mask except `INT_SRIGHT` by a constant of 64 or more (33,299 of them: the shift of `fullmask` by 64 is undefined, A2-70). `opbehavior_audit.cpp` checks every integer `OpBehavior` (the constant folder and the emulator share them): 194 rows, 14.0 million operand pairs (every pair at one byte; 100,000 and the edge pairs at 2, 4 and 8 bytes; the shifts with counts up to 2^64-1; `recoverInput`s), 0 wrong, except the host trap of `INT64_MIN` by -1 that the sweep skips (A2-70). `divopt_audit.sh` cuts `RuleDivOpt::calcDivisor` out of `ruleaction.cc` and checks each division it claims, at the multiples of the divisor and their neighbours, the ends of the range and random values: 366,647 unsigned and 189,876 signed claims in 2 million cases (seed 3), 3,667,169 more in 20 million (seed 7): 0 wrong.
+
+**The pin.** `TestRangeAlgebraRound11` (`Sh2DecompilerEngineTests.cpp`, 0.7 s) holds what is exact today: the set operations of step-1 ranges at one byte (65,536 left/right pairs, 3 partners each: `intersect`, `circleUnion`, `invert`, `translate2Op`, `getSize`, `contains`), the pull-back at 3 and 4 bytes, and the integer `OpBehavior`s. It does not hold the forward half, which is open. Mutants (one at a time, the file restored after): `intersect`'s `case 'c'` with the right bound one short (killed by `intersect` of round 11 and by round 10's pull-back through `INT_ZEXT`); `circleUnion`'s `case 'b'` with the left range's bound (killed by round 11's `circleUnion` only); `OpBehaviorIntSborrow` with `|` for `&` (killed by round 11's `INT_SBORROW` only); 0058's `INT_SUB` slot 1 reverted to the reversed range (killed by round 10's sweep, which fails first).
+
+### 3. The rules, by value
+
+The printed-C differential (`SaturnExplorerSh2GeneratedTests`, `SE_GENERATED_PRINTEDC=only`) compiles the printed text and runs it beside the emulator. Its inputs are 32 edge and random values; for this round I added to the harness (`printedc_extra_rows.patch`, environment-gated, nothing changes without the variables) three things the families need: `SE_GENERATED_PRINTEDC_EXTRA=<hex,...>` rows with r4 and r5 at the literals of the batch and their neighbours (the boundary of a comparison with a pool literal is a value the pool never held), `SE_GENERATED_PRINTEDC_BYTES=1` every byte value and its sign extension as r4 and r5, and `SE_GENERATED_PRINTEDC_SWEEP16=1` every one of the 65,536 values of r4 for a function, from compact tables (so a function that reduces r4 to a word is checked for all its inputs).
+
+The new families (`dagen11.py` 20 to 28, `dagen11b.py` 29 to 38; `run11.sh` runs a family in batches; `swtab11.py` and `runsw.sh` the jump tables):
+
+| Family | Shapes | Functions | Compared | Classes |
+|---|---|---|---|---|
+| 20 cmpbyte | a byte, word or whole register reduced, offset and shifted by immediates, compared with a literal of the right size by `cmp/eq`, `hs`, `hi`, `ge`, `gt` (either order), `pz`, `pl`, `cmp/eq #imm`; two tests in sequence; the result by `movt` or a branch over two constants; with the byte rows every byte value is r4 and r5 | 1,600 | 1,600 | agrees 1,580, `narrow-c` 20 |
+| 21 udiv | `x / d` by `dmulu.l` and shifts, with and without the add fix-up, d from 2 to 0xFFFFFFFF with the magic computed, a remainder by multiply, a compare of the quotient; the extras are the multiples of d and their neighbours | 1,600 | 1,600 | agrees 1,600 |
+| 22 sdiv | `dmuls.l`, the sign correction, negative divisors, the remainder, the compare | 1,600 | 1,600 | agrees 1,600 |
+| 23 div1 | `div0u`/`div0s` and 1 to 32 `rotcl ; div1` | 1,600 | 1,600 | agrees 1,600 |
+| 24 dmul | `dmuls.l`, `dmulu.l`, `mul.l`, `muls.w`, `mulu.w` of r4, r5 or a pool literal, mach and macl read alone and combined | 1,600 | 1,600 | agrees 1,572, **`mismatch` 28 (A2-71)** |
+| 25 shifts | chains of `shll`, `shlr`, `shar`, rotates, the 2, 8, 16 shifts; a variable shift as a counted loop | 1,600 | 1,426 | agrees 1,426, `void-return-lent` 174 |
+| 26 addcchain | `addc`, `subc`, `negc`, `addv` pairs as 64-bit add, subtract, negate and compare | 1,600 | 1,333 | agrees 1,333, `void-return` 267 |
+| 27 signtest | `cmp/pz`, abs, sign, min, max, clamp, `tst` of a mask, `x >> 31` | 1,600 | 1,600 | agrees 1,600 |
+| 28 rangetst | seven forms of `lo <= x < hi`, `x == lo \| x == hi`, `(x - lo) <u (hi - lo)`, three-way compares; byte, word, register | 1,600 | 1,600 | agrees 1,549, `narrow-c` 51 |
+| 29 udiv2 | the quotient scaled, masked, multiplied, added to x or to the remainder, compared, xored with the remainder | 1,500 | 1,500 | agrees 1,500 |
+| 30 sdiv2 | the same for the signed form | 1,500 | 1,500 | agrees 1,500 |
+| 31 divpair | two divisions of one dividend, by two constants or one | 1,500 | 1,500 | agrees 1,500 |
+| 32 divsum | `(x + y) / d`, `(x * k) / d`, `(x >> s) / d`, of a byte or a word | 1,500 | 1,500 | agrees 1,500 |
+| 33 pow2 | signed `/ 2^k`, `% 2^k` with the bias by a branch | 1,500 | 1,500 | agrees 1,500 |
+| 34 signmask | the sign by a chain of `shar`, tested for 0 / -1, masked, xored, compared (RuleTestSign) | 1,500 | 1,500 | agrees 1,500 |
+| 35 pow2b | signed `/ 2^k`, `% 2^k` with the mask by `shll ; subc` | 1,500 | 1,500 | agrees 1,500 |
+| 36 lessor | `(x > y) \| (x == y)`, `(x > y) \| (x != y)`, `(x >= y) & (x != y)` by `movt` and by branches (RuleLessEqual, RuleLessNotEqual) | 1,500 | 1,500 | agrees 1,499, `narrow-c` 1 |
+| 37 condconst | a register compared with a literal for equality, then used in the arm where it is known (ActionConditionalConst) | 1,500 | 1,500 | agrees 1,500 |
+| 38 pow2c | signed `/ 2^k`, `% 2^k` with the mask by a chain of `shar` (RuleSignNearMult) | 1,500 | 1,500 | agrees 1,500 |
+| `dagen10.py` 0 to 19 | round 10's families with the byte rows | 12,000 | 11,731 | no finding |
+
+(In the `Shapes` column the `\|` of the C shapes is a vertical bar.)
+
+Every function agrees with the run, or is `narrow-c` (the text agrees when read as the engine means it) or `void-return` of a function that returns nothing, except A2-71's 28 (the oracle). **Power of the families**, by mutating the rule and rebuilding (one mutant at a time, restored after; findings in the first N functions of the named family):
+
+| Mutant (one rule, rebuilt, restored) | Killed by (findings in the first N functions) |
+|---|---|
+| `Funcdata::replaceLessequal`: the constant moved by 2 | family 20: 47 of 300; family 28: 118 of 300 (not by families 27 or `dagen10.py` 6) |
+| `RuleDivOpt::calcDivisor`: `maxx >> 1` for `maxx` (accepts a multiply that is not a division) | family 29: 5 of 400 (families 30 and 22: 0 of 300) |
+| `RuleTestSign`: `INT_SLESS` for `INT_SLESSEQUAL` | **survived** families 27, 28, 20 and `dagen10.py` 6 and 0 (1,000 functions); family 34: 55 of 500 |
+| `CircleRange::intersect` `case 'c'`: the right bound one short | family 28: 11 of 300; `swtab11.py`: 44 of 300 (family 20: 0 of 300) |
+| `RuleSignNearMult`: the replacement multiplier doubled | **survived** families 33, 35 and 22 (900 functions); family 38: 176 of 500 |
+| `RuleLessEqual`: signed and unsigned swapped | **survived** families 28, `dagen10.py` 6 and 7 (700 functions); family 36: 33 of 500 |
+
+The families that did not kill a mutant at first (RuleTestSign, RuleSignNearMult, RuleLessEqual) did not reach the rule: the shapes were added (families 34, 38, 36) and kill them; the rules are reached by `shar`-chains, `shll ; subc` and `cmp ; movt ; or` idioms and not by the other forms of the same test.
+
+### 4. The generator beyond the nightly range
+
+Chunks of at most 5,000 seeds, each under 3 minutes, the logs in the scratch directory (`gen_range.sh` of round 10).
+
+| Run | Seeds | Result |
+|---|---|---|
+| grammar 2, `SE_GENERATED_GRAMMAR=2` | 1,400,001 to 1,420,000 | 1 failing seed, **1418819** (below) |
+| grammar 1, `SE_GENERATED_GRAMMAR=1` | 1,400,001 to 1,410,000 | 0 |
+| printed-C, `SE_GENERATED_PRINTEDC=only` | 1,400,001 to 1,415,000 | 0 findings; 18,216 functions, 16,893 compared |
+
+Seed 1418819: `[n:kept-read:r10]` and `[n:kept-read:r12]`, "a function it calls was lent a signature that changes r10, and the text reads r10 as the value it had on entry", function 0 at 0x06009014, which begins with an exit sequence (`jmp @r3` into function 2 at 0x06009068) before its own entry. It is the shape of **A3-78** (seed 1009895 of round 10, the same check on a function that ends in a tail jump into the next), which is open with the area 3 fixer; I add the seed there rather than a row (section 7).
+
+### 5. The decode oracle at new seeds
+
+`decode_seeds.sh` (round 10) with `SaturnExplorerSh2DecodeTests`, seeds 424242, 8675309, 123123, 50505 and 777777 (none used before), 100,000 cases each: for every seed the transcribed table equals Mednafen's for 65,536 words, SLEIGH and `Sh2Disasm` define 53,752 and disagree on none, and the differential execution of 130 forms (13,000,000 cases a seed, 40 to 43 s) has 0 differ, 0 could not run, 0 forms that fail and 0 of the 18 named shapes; 65 million executions in all. The spec did not change since round 10 (patches 0054 to 0058 are engine patches), so this is the second look at it by new seeds and no more.
+
+### 6. The corpora
+
+`SE_GAME_LEND=1 SE_GAME_HWRAM=<image> build/bin/SaturnExplorerSh2DecompilerTests <scratch>` on both images, before the harness patch and the tools had any part in it (the engine is the head's): 839 and 1,554 functions, 839 and 1,554 ok, 0 failed; ledger: 0 accesses dropped against the reference run, 0 and 4 missing and said (code removed as unreachable), 0 functions without a reference; mapping violations 0 in the fixtures, alone and lent (1,730 and 2,995 functions); lending 662 (923 parameters) and 1,021 (1,287 parameters), 28 and 63 withheld for a register used after a call, as in round 10; 65 of 65 injected failures reported. The texts are the ones the repaired `minimalContainer` also gives (section 2).
+
+### 7. Routed
+
+* **Grammar 2, seed 1418819** (area 3): the check `kept-read` on r10 and r12, the shape of the open row A3-78. Replay: `SE_GENERATED_GRAMMAR=2 SE_GENERATED_SEED=1418819 build/bin/SaturnExplorerSh2GeneratedTests <dir>`; shrunk (35 evaluations): `SE_GENERATED_WORDS="2F86 2F96 2FD6 2FE6 4F22 7FF0 6EF3 6843 6953 2458 8903 B00F 0009 6483 6593 D305 7E10 6FE3 4F26 6EF6 6DF6 69F6 68F6 432B 0009 0009 0600 9038 2F86 2F96 2FA6 2FC6 0C2A 6843 6953 6A63 B00A 0009 6483 6593 66A3 4C2A 6CF6 6AF6 69F6 68F6 000B 0009 2FD6 2FE6 7FF0 6EF3 62F3 7210 E103 2216 4110 8BFC E200 E0A6 7E10 6FE3 6EF6 6DF6 000B 0009" SE_GENERATED_FUNCS="0/0/32,38/38/60,60/60/84" SE_GENERATED_RETURNS="0,0,1"`. No new row: the area 3 fixer has A3-66 to A3-79 and this is A3-78's check on a second seed.
+* Nothing else for other areas: the jump-table and range findings are area 2's (A2-68 is a switch guard the engine does not fold, not a wrong table).
+
+### 8. What stays open
+
+* A2-67 to A2-71 are the fixer's. A2-67 and A2-68 want the forward half of `CircleRange` repaired where the solver can reach it (the `right = mask >> sa` +1, the sign in the overflow test of `INT_LEFT` / `INT_MULT`, the wrapped inputs of `INT_SRIGHT` and `SUBPIECE`, a full operand in `minimalContainer`, and the rounding in `newStride`); the sweep `forward_audit.cpp` is the test, and the pin `TestRangeAlgebraRound11` already holds the exact part. A2-69 wants the two 8-byte shifts refused, as 0058 refuses the others; `TestPullBackRanges` can take the 8-byte rows. A2-70 are two guards (`sa >= 64`; `INT64_MIN` by -1). A2-71 is a rule of the oracle's second reading.
+* The next review round verifies none of 0058 again (it held) and attacks what it has not: the lent signatures against the new families, and the phi of the solver's partial analysis if a store through a computed pointer can be built that depends on it.

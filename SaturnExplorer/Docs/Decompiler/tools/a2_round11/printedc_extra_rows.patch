@@ -1,5 +1,5 @@
 diff --git a/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp b/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp
-index 1ff1f7a..9799b4c 100644
+index 1ff1f7a..2ff9614 100644
 --- a/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp
 +++ b/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp
 @@ -7283,8 +7283,35 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>&
@@ -95,7 +95,7 @@ index 1ff1f7a..9799b4c 100644
 +                tk << (ok ? 1 : 0) << (j + 1 < 65536 ? "," : "");
 +            }
 +            m << "    { static const unsigned int B[13] = { " << tb.str() << " };\n      static const unsigned int S0[65536] = { " << t0.str() << " };\n"
-+              << "      static const unsigned int S1[65536] = { " << t1.str() << " };\n      static const unsigned char SK[65536] = { " << tk.str() << " };\n"
++              << "      static const unsigned int S1[65536] = { " << t1.str() << " };\n      static const unsigned int SK[65536] = { " << tk.str() << " };\n"
 +              << "      for (unsigned k = 0; k < 65536; ++k) {\n        if (!SK[k]) continue;\n"
 +              << "        memcpy(g_in, B, sizeof g_in[0] * 11);\n        g_in[4] = k; g_in[11] = B[11]; g_in[12] = B[12];\n"
 +              << "        g_wsr = g_in[8]; g_wgbr = g_in[11]; g_wvbr = g_in[12];\n";
