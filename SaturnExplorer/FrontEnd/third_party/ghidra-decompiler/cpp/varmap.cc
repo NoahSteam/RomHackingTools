@@ -873,11 +873,16 @@ void AliasChecker::gatherInternal(void) const
 bool AliasChecker::stepsDown(PcodeOp *multi)
 
 {
+  // SaturnExplorer (patches/0057-engine-stack-walk-down-conditional.patch): the forward walk is keyed on (varnode, offset), not the varnode
+  // alone. A step taken only on some paths of the loop (`if (c) *--p = v;`) makes a nested MULTIEQUAL between the step and the loop's back edge
+  // (phi(p, p-4)); its output is reached first with offset 0 (the unstepped path), and keying on the varnode alone then pruned the stepped
+  // path (offset -4) before it could reach the loop join, so the loop was not seen to step down (ledger A3-72). Keyed on the pair, the stepped
+  // offset reaches the join. Offsets are masked to the varnode's size, so the set of (varnode, offset) is finite; the cap guards nested loops.
   vector<pair<Varnode *,uintb> > work;
-  vector<Varnode *> seen;
+  vector<pair<Varnode *,uintb> > seen;
   work.push_back(pair<Varnode *,uintb>(multi->getOut(),0));
-  seen.push_back(multi->getOut());
-  while(!work.empty() && seen.size() < 256) {
+  seen.push_back(pair<Varnode *,uintb>(multi->getOut(),0));
+  while(!work.empty() && seen.size() < 4096) {
     Varnode *vn = work.back().first;
     uintb off = work.back().second;
     work.pop_back();
@@ -926,11 +931,12 @@ bool AliasChecker::stepsDown(PcodeOp *multi)
       }
       Varnode *out = op->getOut();
       if (out == (Varnode *)0) continue;
+      next &= calc_mask(out->getSize());
       bool known = false;
       for(int4 i=0;i<seen.size();++i)
-	if (seen[i] == out) { known = true; break; }
+	if (seen[i].first == out && seen[i].second == next) { known = true; break; }
       if (known) continue;
-      seen.push_back(out);
+      seen.push_back(pair<Varnode *,uintb>(out,next));
       work.push_back(pair<Varnode *,uintb>(out,next));
     }
   }
