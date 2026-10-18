@@ -1,0 +1,49 @@
+// Area 2 round 12 (A2-76): RuleScarry applied to scarry(a, c) != (0 s< a + c) built in a Funcdata (drop into Sh2DecompilerEngineTests.cpp after
+// TestNzMaskShiftRound11 in main: it needs the library started). For c = 0x80000000 the compare becomes `0x80000000 s< a` (true for every a but the
+// minimum) where the original is true for a = the minimum only; c = 0x7fffffff and 5 are rewritten correctly (a s< -c).
+void TestScarryScratch()
+{
+    auto* image = new RegionLoadImage(kImageBase, Fixture1());
+    std::ostringstream errs;
+    TestArchitecture arch(image, &errs);
+    ghidra::DocumentStorage store;
+    arch.init(store);
+    ghidra::AddrSpace* ram = arch.getDefaultCodeSpace();
+    const ghidra::Address entry(ram, kCaller);
+    std::string name;
+    arch.nameFunction(entry, name);
+    ghidra::Funcdata* fd = arch.symboltab->getGlobalScope()->addFunction(entry, name)->getFunction();
+    for (uint64_t c : { 0x80000000ull, 0x7fffffffull, 5ull })
+    {
+        ghidra::PcodeOp* op1 = fd->newOp(1, entry);
+        fd->opSetOpcode(op1, ghidra::CPUI_COPY);
+        ghidra::Varnode* a = fd->newUniqueOut(4, op1);
+        fd->opSetInput(op1, fd->newConstant(4, 0x1234), 0);
+        ghidra::PcodeOp* opS = fd->newOp(2, entry);
+        fd->opSetOpcode(opS, ghidra::CPUI_INT_SCARRY);
+        ghidra::Varnode* sv = fd->newUniqueOut(1, opS);
+        fd->opSetInput(opS, a, 0);
+        fd->opSetInput(opS, fd->newConstant(4, c), 1);
+        ghidra::PcodeOp* opA = fd->newOp(2, entry);
+        fd->opSetOpcode(opA, ghidra::CPUI_INT_ADD);
+        ghidra::Varnode* x = fd->newUniqueOut(4, opA);
+        fd->opSetInput(opA, a, 0);
+        fd->opSetInput(opA, fd->newConstant(4, c), 1);
+        ghidra::PcodeOp* opL = fd->newOp(2, entry);
+        fd->opSetOpcode(opL, ghidra::CPUI_INT_SLESS);
+        ghidra::Varnode* lv = fd->newUniqueOut(1, opL);
+        fd->opSetInput(opL, fd->newConstant(4, 0), 0);
+        fd->opSetInput(opL, x, 1);
+        ghidra::PcodeOp* opN = fd->newOp(2, entry);
+        fd->opSetOpcode(opN, ghidra::CPUI_INT_NOTEQUAL);
+        fd->newUniqueOut(1, opN);
+        fd->opSetInput(opN, sv, 0);
+        fd->opSetInput(opN, lv, 1);
+        ghidra::RuleScarry rule("scratch");
+        const int rc = rule.applyOp(opS, *fd);
+        std::printf("SCARRY scratch: constant %llx: rule returned %d, the compare is now opcode %d (NOTEQUAL=%d SLESS=%d SLESSEQUAL=%d) in0 const %d %llx in1 const %d %llx\n", static_cast<unsigned long long>(c), rc, static_cast<int>(opN->code()),
+                    static_cast<int>(ghidra::CPUI_INT_NOTEQUAL), static_cast<int>(ghidra::CPUI_INT_SLESS), static_cast<int>(ghidra::CPUI_INT_SLESSEQUAL),
+                    static_cast<int>(opN->getIn(0)->isConstant()), static_cast<unsigned long long>(opN->getIn(0)->getOffset()), static_cast<int>(opN->getIn(1)->isConstant()), static_cast<unsigned long long>(opN->getIn(1)->getOffset()));
+    }
+}
+

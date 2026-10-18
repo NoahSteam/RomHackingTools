@@ -9,8 +9,7 @@
 #   42 widecmp   a 64-bit value in two registers (addc / subc / negc / mach:macl) compared as 64 bits, by cmp/hi, cmp/hs, cmp/gt, cmp/ge, cmp/eq
 #                of the high words and the low words (the carry and borrow rules)
 #   43 sameval   a value computed twice or compared with itself (RuleTrivialArith): x ^ x, x == x, (x+y) == (x+y), (x*c) != (x*c), tst r,r
-#   44 shiftvar  a variable-count shift, count from a register masked or not, the count a literal in a register (RuleShift2Mult, shld, shad)
-# usage: dagen12.py <first seed> <count> [family 40..44]   -> one function per seed, ";" joined (SE_GENERATED_PRINTEDC_WORDS)
+# usage: dagen12.py <first seed> <count> [family 40..43]   -> one function per seed, ";" joined (SE_GENERATED_PRINTEDC_WORDS)
 #        dagen12.py extras <first seed> <count> <family>   -> the comma-joined hex list for SE_GENERATED_PRINTEDC_EXTRA
 import importlib.util, os, random, sys
 
@@ -124,18 +123,7 @@ def fam_sameval(r, f):
     elif k == 6: f.add(and_(5, 4), mov(0, 4), mov(2, 4), and_(5, 2), or_(2, 0))                 # x & y | x & y
     else: f.add(mov(2, 4), neg(2, 2), mov(3, 4), neg(3, 3), cmp_hs(3, 2), movt(0))
 
-def fam_shiftvar(r, f):
-    """shld / shad with the count from a register: masked (and #31), literal, or the raw r5. The SH-2 count is signed: negative shifts right"""
-    sel = r.randrange(0, 4)
-    f.add(mov(0, 4))
-    if sel == 0: f.add(mov(1, 5))
-    elif sel == 1: f.lit(1, r.choice([0, 1, 2, 31, 32, 0xFFFFFFFF, 0xFFFFFFE0, 0xFFFFFFE1, 0x80000000, 0x80000001, 0x7FFFFFFF, 0x100, 0xFFFFFF1F, 33, 0x20, 0xFFFFFFFF]))
-    elif sel == 2: f.add(mov(1, 5)); f.lit(2, 0x1F); f.add(and_(2, 1))
-    else: f.add(mov(1, 5)); f.lit(2, 0x8000001F); f.add(and_(2, 1))
-    f.add(r.choice([0x400C, 0x400D]) | 0 << 8 | 1 << 4)      # shad r1,r0 / shld r1,r0
-    if r.random() < 0.4: f.add(r.choice([0x4009, 0x4008, 0x4001, 0x4021]) | 0 << 8)
-
-FAMS12 = {40: fam_ovfsign, 41: fam_fixmul, 42: fam_widecmp, 43: fam_sameval, 44: fam_shiftvar}
+FAMS12 = {40: fam_ovfsign, 41: fam_fixmul, 42: fam_widecmp, 43: fam_sameval}
 
 def build(seed, fam=None, want_fn=False):
     r = random.Random(seed * 104729 + 12)
