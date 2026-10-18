@@ -11214,7 +11214,7 @@ Mutation: `effects.storesBelow = 0;` in `ReturnCheck::Run` (the claim A3-71 adde
 
 ## Area 3, round 11 fix
 
-Fixer, branch `review/3-round11-fix`, on the coordinator's head `d8e4068`. Code commits `38b49f6` to `36a00d9` (host and pins), then the ledger, this record and the matrix. Own RelWithDebInfo build under the scratch directory, `-j2`, every run under `ulimit -v 4000000`.
+Fixer, branch `review/3-round11-fix`, on the coordinator's head `d8e4068`. Code commits `38b49f6` to `66d5fb9` (host and pins; `0fdfdcf` updates a spike fixture pin), then the ledger, this record and the matrix. Own RelWithDebInfo build under the scratch directory, `-j2`, every run under `ulimit -v 4000000`.
 
 **What is fixed, and what stays open.** The three host rows are fixed: **A3-82, A3-83, A3-84 (P1)** by one fail-closed rule in the host interpreter (`ReturnCheck`, `Sh2Decompiler.cpp`). **A3-86 part a (P2)** is fixed the same way (the probe now reads an unlent captured callee's `storesBelow`). **A3-87 (P2)** and **A3-79 (P3)** are closed: a function whose text names the raw stack register is marked unsupported and withheld, and the printed-C differential excuses that known limit. **A3-85 and A3-88 (P1), and A3-86 part b, stay open**: they are engine-side (the alias analysis of patches 0056-0060), and a sound fix for them is a broad change to the vendored engine that needs the corpus-and-timing loop to validate -- section 6. No engine patch was added this round, so there is no new vendored patch, and `0061` stays unused.
 
@@ -11264,7 +11264,20 @@ Each part reverted alone in the committed tree, the suite rebuilt and run (`mut_
 
 ### 5. Cost on the corpora
 
-Not measured this round: the corpus-and-timing loop was not run to completion in this session. The transitive and laundering claims widen the host alias at calls whose callee stores below a register, so lending is expected to drop on functions that pass a frame address to such a callee or launder a pointer; the brief accepts a sound, measured drop, and this measurement is the open item the next round or the coordinator should take before merge. The round 10 baseline is hwram007 655 (901) / 680 (958) lending and hwram008 1,041 (1,253) / 1,071 (1,314); the before/after on both images, the list of functions whose text changes, a read of a sample against the code, and `TestGameCode` timed against 10.0 s and 33.6 s (under 1.5x) remain to be recorded.
+Both images, `SE_GAME_HWRAM=<img> SE_GAME_LEND=1`, the fixed tree (`0fdfdcf`). Every function ok, 0 accesses dropped, mapping oracle clean.
+
+| | 007 | 008 |
+|---|---|---|
+| functions alone; lending run | 839 ok; 1,730 ok | 1,554 ok; 2,995 ok |
+| lent (parameters), unlent / lent run | 655 (901) / **680 (958)** | 1,010 (1,251) / **1,040 (1,312)** |
+| ledger counts | 0 dropped, 0 missing and said | 0 dropped, 4 missing and said |
+| `TestGameCode` game-code time / the round 11 review's record | 9,965 ms / 10.0 s (0.99x) | 32,550 ms / 33.6 s (0.97x) |
+
+**007 is unchanged**: lending 680 (958), exactly the round 10 / round 11-review figure; no function's text differs in the measured items (`extraout_r4-7 gone from 24, new in 0`). The laundering and frame-passing shapes the fix guards do not occur in 007's work RAM.
+
+**008 drops 31 lent functions**: the lent run was 1,071 (1,314) at the head and is 1,040 (1,312) here (the unlent run 1,041 to 1,010). The drop is the fail-closed rule's measured cost: functions that hand a frame address to a callee that launders and stores through a pointer, or that store through a laundered own-frame pointer, now expose the frame (a host alias) or record `storesBelow`, so a signature that depended on a now-exposed stack word is withheld. No function failed, no access was dropped, `extraout_r4-7` is new in 0, and the 4 missing-and-said are the round 10 figure -- the drop is sound (withholding is always safe), not a wrong output. A deeper read of the 31 against the code was not completed this session and is the one open measurement item before merge. The timing is well under the 1.5x budget on both images.
+
+Timing is below the round 11 review's recorded 10.0 s / 33.6 s because the review ran on a shared machine; the point is that the fail-closed host work adds no measurable cost (the probe's walk is the round 10 cost, unchanged).
 
 ### 6. Not done (the engine rows)
 
@@ -11277,11 +11290,19 @@ Not measured this round: the corpus-and-timing loop was not run to completion in
 
 Partly closed. The printed-C differential now has the `raw-stack-register` class and the four A3-87/A3-79 pins (section 3), and reverting the host withhold or the excuse fails them (section 4). **Still open** (for the engine rows and a complete close of section 7 of the round 11 review): `storesBelow` is not yet checked against a run in check 10b, and `GenWalkFn`/`GenSpillWalkFn` do not yet draw a callee that steps below its pointer, a wrapper or thunk around one, a laundering step before the walk, or a join of a frame address with another pointer. Those draws exercise the engine rows above, so they are best added with the engine fix that makes them pass.
 
-### 8. Matrix (host fix, code `36a00d9`)
+### 8. Matrix (host fix, code `0fdfdcf`)
 
 | Run | Result |
 |---|---|
+| `ctest -E SaturnExplorerLive -j2 --timeout 900` (93 tests) | 93 of 93 pass |
+| `SaturnExplorerDecompilerFaultTests` | 0 of 94 jobs failed, 0 MOVED (no re-pin: `storesBelow` moved no allocation) |
+| `SE_GENERATED_SEEDS=3000 SE_GENERATED_GRAMMAR=2` | 0 failing seeds, 0 findings; 4,236 lent (vs 4,245 at the head: the fail-closed drop) |
+| `SE_GENERATED_GRAMMAR=1 SE_GENERATED_SEEDS=1000` | 0 failing seeds, 0 findings |
+| `SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000` | all passed; the four A3-87/A3-79 pins `raw-stack-register`, 0 failing seeds |
+| `TestArea3HiddenInputFuzz` seeds 6 and 7 (5,000 each) | 1,204 and 1,216 lent, 15,652 and 15,808 perturbed runs, 0 findings |
 | `SaturnExplorerSh2DecompilerTests` (the suite, with `TestArea3Round11Fix`) | all passed |
 | `rowsfix.src` via the reviewer's driver | A3-82 (a-e), A3-83 (a-h), A3-84 (a-d) print the local and agree with the run; A3-86a withheld and prints the local; A3-87 withheld; A3-85, A3-88 still fold (open, section 6) |
 | mutation table | section 4 |
-| the two area-2-round-12 A3-87 replays (1503985, 1506163) | excused (`raw-stack-register`), 0 failing seeds |
+| corpora 007 / 008 | section 5 |
+
+**Not run this session** (long, additional confidence; no regression expected given the above): `SE_GENERATED_SEEDS=20000`; the reviewer's ranges (grammar 2 1,600,001-1,620,000, specials 1,700,001-1,705,000); the sanitizer and Live jobs (shared socket; CI).
