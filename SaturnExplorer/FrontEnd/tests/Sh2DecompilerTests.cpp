@@ -11205,6 +11205,104 @@ void TestArea2Round9()
     }
 }
 
+// ===== Area 3, round 10 review: the controls of the round's rows that hold today =============================================================
+// The round's findings (A3-66 to A3-75) are wrong outputs and are in the ledger with their fixtures, not here. These are the shapes beside them that
+// the engine and the host get right, so a fix that moves the exceptions of the return rule (the nothing-known value, the interrupt-mask SR, the part
+// of a register), the walk of a callee (A3-61) or patch 0056's stepping down does not take them with it.
+void TestArea3Round10()
+{
+    Sh2Decompiler d(gConfig);
+    uint64_t serial = 100000;
+    const uint32_t base = 0x06009000u, gAt = 0x06009040u;
+    const std::vector<std::vector<uint32_t>> inputs = { { 0x11111111u, 0x22222222u, 0x0600B000u, 0x44444444u },
+                                                        { 0x00000000u, 0x00000001u, 0x0600B000u, 0x80000000u } };
+    auto withheld = [&](const char* name, std::vector<uint16_t> words, const char* reason) {
+        const CallFixture f = { name, base, std::move(words) };
+        auto snap = CallSnapshot(f, ++serial);
+        const DecompileResult r = d.Decompile(snap, Request(f.base));
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(!r.prototype.known && Has(r.prototypeWithheld, reason));
+    };
+    // The callee at 0x06009040 is decompiled first and lent to the caller.
+    auto together = [](std::vector<uint16_t> caller, const std::vector<uint16_t>& callee) {
+        caller.resize(32, 0x0009);
+        caller.insert(caller.end(), callee.begin(), callee.end());
+        return caller;
+    };
+    auto lentCallee = [&](const char* name, std::vector<uint16_t> words, bool* callerKnown, std::string* text, bool* agrees) {
+        const CallFixture f = { name, base, std::move(words) };
+        auto snap = CallSnapshot(f, ++serial);
+        const DecompileResult callee = d.Decompile(snap, Request(gAt));
+        CHECK(callee.status == DecompileStatus::Ok && callee.prototype.known);
+        DecompileRequest q = Request(f.base);
+        q.prototypes.emplace_back(gAt, callee.prototype);
+        const DecompileResult r = d.Decompile(snap, q);
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok);
+        if (callerKnown) *callerKnown = r.prototype.known;
+        if (text) *text = r.Text();
+        if (agrees) *agrees = PseudoAgreesWithRun(r, snap, f, inputs);
+        return r;
+    };
+    // A text for a function with a loop (the evaluator has none): the local the walk wrote is returned, not the value stored before the walk, and the
+    // stack register does not appear.
+    auto walkText = [&](const char* name, std::vector<uint16_t> words, const char* want) {
+        const CallFixture f = { name, base, std::move(words) };
+        const DecompileResult r = d.Decompile(CallSnapshot(f, ++serial), Request(f.base));
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(Has(r.Text(), want) && !Has(r.Text(), "return 5;") && !Has(r.Text(), "register0x0000003c"));
+    };
+
+    // ---- A3-66, A3-67: a stack word at a frame offset the check can place, and a hidden register next to a constant or a loaded word ------------
+    withheld("a3_66 control: the stack word at +20 by add #20", { 0x62F3, 0x7214, 0x6022, 0x210B, 0x000B, 0x0009 },
+             "its return is computed from a stack argument");
+    withheld("a3_66 control: r3 or a constant, chosen by r4 (held)", { 0xE201, 0x2422, 0x2448, 0x8902, 0x6033, 0xA001, 0x0009, 0xE009, 0x000B, 0x0009 },
+             "its return is computed from r3 on entry");
+    withheld("a3_66 control: r3 or a word loaded through the held r4", { 0xE201, 0x2422, 0x2448, 0x8902, 0x6033, 0xA001, 0x0009, 0x6042, 0x000B, 0x0009 },
+             "its return is computed from r3 on entry");
+    withheld("a3_67 control: cmp/eq r3 with a constant chooses", { 0xE201, 0x2422, 0xE207, 0x3230, 0x8903, 0xE001, 0x210B, 0xA002, 0x0009, 0xE002, 0x210B, 0x000B, 0x0009, 0x0009 },
+             "its return is chosen by r3 on entry");
+
+    // ---- A3-68, A3-69: a part of r3 is still r3; the T flag as movt; a value held in r0 across a callee that keeps it ----------------------------
+    withheld("a3_68 control: extu.b r3,r0 ; or r0,r1", { 0x603C, 0x210B, 0x000B, 0x0009 }, "its return is computed from r3 on entry");
+    withheld("a3_69 control: movt r0 ; or r0,r1", { 0x0029, 0x210B, 0x000B, 0x0009 }, "its return is computed from the T flag on entry");
+    {
+        bool known = true;
+        lentCallee("a3_68 control: r0 = 5 held across a callee that keeps r0",
+                   together({ 0x4F22, 0xE005, 0xD102, 0x410B, 0x0009, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9040 }, { 0xE207, 0x000B, 0x0009, 0x0009 }), &known,
+                   nullptr, nullptr);
+        CHECK(!known);
+    }
+
+    // ---- A3-71: a lent callee that walks UP from the address it is handed, and one that only reads below it ------------------------------------
+    {
+        bool known = false, agrees = false;
+        std::string text;
+        lentCallee("a3_71 control: the callee walks up from the pointer",
+                   together({ 0x4F22, 0x7FEC, 0xE005, 0x2F02, 0x64F3, 0xD104, 0x410B, 0x0009, 0x60F2, 0x7F14, 0x4F26, 0x000B, 0x0009, 0x0009, 0x0600, 0x9040 },
+                            { 0xE104, 0x2412, 0x7404, 0x4110, 0x8BFB, 0x000B, 0x0009, 0x0009 }),
+                   &known, &text, &agrees);
+        CHECK(known && agrees && !Has(text, "return 5;"));
+        lentCallee("a3_71 control: the callee reads the word below its pointer",
+                   together({ 0x4F22, 0x7FEC, 0xE005, 0x2F02, 0x64F3, 0x7404, 0xD103, 0x410B, 0x0009, 0x7F14, 0x4F26, 0x000B, 0x0009, 0x0009, 0x0600, 0x9040 },
+                            { 0x74FC, 0x6042, 0x000B, 0x0009 }),
+                   &known, &text, &agrees);
+        CHECK(agrees);
+    }
+
+    // ---- A3-72: steps that A3-65's patch covers: an if/else of steps, a conditional store, the pointer in a local; and a walk from the caller's frame --
+    walkText("a3_72 control: step 4 or 8 on the arms of an if", { 0x7FE0, 0x62F3, 0x7220, 0xE005, 0x2F02, 0xE103, 0x2448, 0x8902, 0x72FC, 0xA001, 0x0009, 0x72F8, 0x2212, 0x4110, 0x8BF6, 0x60F2, 0x7F20, 0x000B, 0x0009, 0x0009 },
+             "return xStack_20;");
+    walkText("a3_72 control: the step always, the store under a condition", { 0x7FF0, 0x62F3, 0x7210, 0xE005, 0x2F02, 0xE104, 0x72FC, 0x2448, 0x8900, 0x2212, 0x4110, 0x8BF9, 0x60F2, 0x7F10, 0x000B, 0x0009 },
+             "return xStack_10;");
+    walkText("a3_72 control: the pointer kept in a stack local", { 0x7FE8, 0x62F3, 0x7210, 0x1F24, 0xE005, 0x2F02, 0xE104, 0x52F4, 0x72FC, 0x1F24, 0x2212, 0x4110, 0x8BF9, 0x60F2, 0x7F18, 0x000B, 0x0009, 0x0009 },
+             "return xStack_18;");
+    withheld("a3_72 control: a walk from r15 + 16 goes into the caller's frame", { 0x7FF8, 0xE005, 0x2F02, 0x62F3, 0x7210, 0xE104, 0x2216, 0x4110, 0x8BFC, 0x60F2, 0x7F08, 0x000B, 0x0009, 0x0009 },
+             "it writes a word of its caller's frame");
+}
+
 // ===== A3-65 (P1): a copy of r15 walked down by pre-decrement stores ===========================================================================
 // `*--p = v` over a local array compiles to a copy of r15 (or of the frame pointer r14), moved to the top of the array and walked down by
 // `mov.l Rm,@-Rn`. The engine's alias analysis (AliasChecker, upstream's) takes a pointer into the frame to reach only what lies at or above its base,
@@ -11658,6 +11756,7 @@ int main(int argc, char** argv)
         RUN(TestRoutedSeeds());
         RUN(TestArea3Round9());
         RUN(TestArea3Round9Fix());
+        RUN(TestArea3Round10());
         RUN(TestArea2Round8());
         RUN(TestArea2Round9());
         RUN(TestA365WalkDown());
