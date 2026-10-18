@@ -65,6 +65,7 @@ static void structCheck(Funcdata &data, const std::string &where) {
       std::ostringstream so; so << op->getSeqNum();
       std::fprintf(stderr, "STRUCT kind=C where=%s fn=%s defop=%s slot=%d seq=%s size=%d have=%llx need=%llx missing=%llx innzm=%llx indef=%s\n", where.c_str(), data.getName().c_str(), get_opname(op->code()), i, so.str().c_str(), in->getSize(),
                    (unsigned long long)in->getConsume(), (unsigned long long)need, (unsigned long long)miss, (unsigned long long)in->getNZMask(), in->isWritten() ? get_opname(in->getDef()->code()) : (in->isConstant() ? "const" : "input"));
+      if (op->getOut() != (Varnode *)0) std::fprintf(stderr, "   out: consume=%llx nzm=%llx autolive=%d addrforce=%d hold=%d directwrite=%d space=%s\n", (unsigned long long)op->getOut()->getConsume(), (unsigned long long)op->getOut()->getNZMask(), (int)op->getOut()->isAutoLive(), (int)op->getOut()->isAddrForce(), (int)op->getOut()->isAutoLiveHold(), (int)op->getOut()->isDirectWrite(), op->getOut()->getSpace()->getName().c_str());
       ++structReports; structByWhere[where + " C"] += 1;
       if (std::getenv("SE_NZM_VERBOSE")) { std::ostringstream os; data.printRaw(os); std::fprintf(stderr, "--- the function when %s left it so ---\n%s\n---\n", where.c_str(), os.str().c_str()); }
     }
@@ -89,6 +90,15 @@ static void modelCheck(Funcdata &data, const std::string &where) {
       bool rootOp = op->isCall() || !op->isAssignment() || in->isAutoLive() || (op->getOut() != (Varnode *)0 && op->getOut()->isAutoLive());
       if (rootOp) {
         uintb need = chk_need(&data, op, i, ~(uintb)0) & calc_mask(in->getSize());
+        if (op->code() == CPUI_RETURN && i > 0 && !data.getFuncProto().isOutputLocked() && data.getActiveOutput() == (ParamActive *)0 && in->getSpace()->getType() != IPTR_JOIN) {
+          // ActionDeadCode::gatherConsumedReturn: the union over every RETURN of the function
+          uintb u = 0;
+          for (list<PcodeOp *>::const_iterator ri = data.beginOpAlive(); ri != data.endOpAlive(); ++ri)
+            if ((*ri)->code() == CPUI_RETURN && (*ri)->numInput() > 1) { Varnode *rv = (*ri)->getIn(1); u |= (rv->getSpace()->getType() == IPTR_JOIN) ? calc_mask(rv->getSize()) : minimalmask(rv->getNZMask()); }
+          int4 bc = data.getFuncProto().getReturnBytesConsumed();
+          if (bc != 0) u &= calc_mask(bc);
+          need = u & calc_mask(in->getSize());
+        }
         uintb &c = C[in];
         if ((need & ~c) != 0) { c |= need; if (in->isWritten()) work.push_back(in); }
       }

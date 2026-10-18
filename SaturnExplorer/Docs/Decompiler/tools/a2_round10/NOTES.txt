@@ -1,0 +1,3 @@
+work in progress notes (round 10 reviewer); removed before the final commit
+- A2-64 candidate (P3 oracle): printed-C frame mode does not skip a returned local array name (dagen10 family 5, 18 of seeds 1..300): `return axStack_8;`, `return CONCAT44(axStack_4,param_2);`
+- structural checker: STRUCT kind=C rows with indef=LOAD are the held-load flag set by ActionDeadCode::lastChanceLoad after the pass (model note, harmless)

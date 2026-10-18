@@ -21,3 +21,8 @@ open(d + '/action.cc', 'w').write(s)
 f = open(d + '/funcdata_op.cc').read()
 f += open(t + '/structcheck_funcdata_op.cc.txt').read()
 open(d + '/funcdata_op.cc', 'w').write(f)
+h = open(d + '/funcdata.hh').read()
+line = '  uintb inputConsumeNeeded(PcodeOp *op,int4 slot) const;'
+assert line in h
+h = h.replace(line, 'public:\n' + line + '\nprivate:', 1)
+open(d + '/funcdata.hh', 'w').write(h)
