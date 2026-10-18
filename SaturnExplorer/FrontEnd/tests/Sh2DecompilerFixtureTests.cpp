@@ -123,7 +123,11 @@ void Run(const std::string& config)
     CHECK(Has(c, "int4 func_0x06031598(int4 param_1,int4 param_2,int4 param_3,int4 param_4)"));
     CHECK(Has(c, "func_0x06031510(param_1,0)"));
     CHECK(Has(c, "func_0x06030548(1);"));
-    CHECK(Has(c, "} while (iVar5 < 20000);"));
+    // The literal-pool loop bound 20000 is recovered as a do-while. (Area 3 round 11 fix: the fail-closed A3-83 rule records
+    // storesBelow for a store through a laundered pointer in a callee here -- a caller-saved argument register it then cannot
+    // prove preserved -- so the loop counter and the post-call reads renumber and show extraout_r4; the bound is unchanged. The
+    // pin no longer names the counter, only the recovered bound and the loop shape.)
+    CHECK(Has(c, "< 20000);") && Has(c, "do {"));
     CHECK(!Has(c, "(*(code *)"));   // every literal-pool call became a named one
     // The callees' names navigate: each func_ token on a call line carries its target.
     std::set<uint32_t> tokenTargets;
