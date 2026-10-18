@@ -11845,6 +11845,128 @@ void TestArea3Round11()
              "return axStack_8[0];", "return 3;");
 }
 
+// ===== Area 3 round 11 FIX pins (A3-82, A3-83, A3-84, A3-86 a): the host's fail-closed frame-address provenance =================================
+// A frame address was recognised only through a list of exact forms; any other form failed open (treated as "not a frame address"), so a lent
+// caller that handed such a form to a callee that stores below its pointer folded the locals under the address and printed the value before the
+// call. The fix makes the rule fail closed: a value is a possible frame address when the stack pointer is among its origins by any data path
+// (laundering, a spill in parts, a store to memory and a reload); a callee's store through any register-derived pointer with no exact base sets
+// storesBelow; Apply carries storesBelow across wrappers, thunks and a lowered pointer; a storesBelow register of stack origin exposes the frame.
+// Each fixture prints the local the walk wrote (not the stale constant), the callee chain lent. The values are held by the reviewer's driver
+// (rowsfix.src) against the emulator; here the texts are pinned (PseudoEval has no loops).
+void TestArea3Round11Fix()
+{
+    Sh2Decompiler d(gConfig);
+    uint64_t serial = 112000;
+    const uint32_t base = 0x06009000u;
+    // Decompile a caller whose callees sit at 0x06009040, 0x06009080, ... (0x40-byte slots), lending the deepest first so each sees the ones it
+    // calls. Returns the entry's result. 'callees' are given deepest-last (the order they are placed), lent in reverse.
+    auto chain = [&](const char* name, std::vector<uint16_t> caller, std::vector<std::vector<uint16_t>> callees) {
+        std::vector<uint16_t> words = caller;
+        words.resize(32, 0x0009);
+        std::vector<uint32_t> at;
+        for (size_t i = 0; i < callees.size(); ++i)
+        {
+            at.push_back(base + 0x40u * static_cast<uint32_t>(i + 1));
+            std::vector<uint16_t> c = callees[i];
+            c.resize(32, 0x0009);
+            words.insert(words.end(), c.begin(), c.end());
+        }
+        const CallFixture f = { name, base, std::move(words) };
+        auto snap = CallSnapshot(f, ++serial);
+        DecompileRequest q = Request(f.base);
+        for (size_t i = callees.size(); i-- > 0;)
+        {
+            DecompileRequest cq = Request(at[i]);
+            cq.prototypes = q.prototypes;
+            const DecompileResult c = d.Decompile(snap, cq);
+            CHECK(c.status == DecompileStatus::Ok && c.prototype.known);
+            q.prototypes.emplace_back(at[i], c.prototype);
+        }
+        const DecompileResult r = d.Decompile(snap, q);
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok);
+        return r;
+    };
+    // The fill-backwards leaf (A3-71a) and the caller that hands it an exact frame address (A3-82's V5a).
+    const std::vector<uint16_t> k = { 0xE104, 0x2416, 0x4110, 0x8BFC, 0x000B, 0x0009 };   // mov #4,r1 ; L: mov.l r1,@-r4 ; dt r1 ; bf L ; rts
+    const std::vector<uint16_t> callerToG = { 0x4F22, 0x7FEC, 0xE005, 0x2F02, 0x64F3, 0x7410, 0xD103, 0x410B, 0x0009, 0x60F2, 0x7F14, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9040 };
+    auto lent = [&](const DecompileResult& r) { return r.prototype.known; };
+
+    // A3-82 a: a wrapper g that forwards r4 to the lent fill-backwards k; the caller is lent and must read the local, not 5.
+    {
+        const std::vector<uint16_t> g = { 0x4F22, 0xD103, 0x410B, 0x0009, 0x4F26, 0x000B, 0x0009, 0x0009, 0x0600, 0x9080 };   // sts.l pr ; call k ; lds.l pr ; rts
+        const DecompileResult r = chain("A3-82a wrapper forwards r4 to lent fill-backwards k", callerToG, { g, k });
+        CHECK(lent(r) && Has(r.Text(), "axStack") && !Has(r.Text(), "return 5;"));
+    }
+    // A3-82 b: a thunk that jumps to k.
+    {
+        const std::vector<uint16_t> g = { 0xD101, 0x412B, 0x0009, 0x0009, 0x0600, 0x9080 };   // mov.l =k,r1 ; jmp @r1 ; nop
+        const DecompileResult r = chain("A3-82b thunk jumps to lent fill-backwards k", callerToG, { g, k });
+        CHECK(lent(r) && Has(r.Text(), "axStack") && !Has(r.Text(), "return 5;"));
+    }
+    // A3-82 d: a thunk that lowers r4 by 16 then jumps to a lent k that stores at its pointer.
+    {
+        const std::vector<uint16_t> g = { 0xD101, 0x412B, 0x74F0, 0x0009, 0x0600, 0x9080 };   // mov.l =k,r1 ; jmp @r1 ; add #-16,r4
+        const std::vector<uint16_t> kAt = { 0xE101, 0x2412, 0x000B, 0x0009 };   // mov #1,r1 ; mov.l r1,@r4 ; rts
+        const DecompileResult r = chain("A3-82d thunk lowers r4 by 16, lent k stores at its pointer", callerToG, { g, kAt });
+        CHECK(lent(r) && Has(r.Text(), "axStack") && !Has(r.Text(), "return 5;"));
+    }
+    // A3-83: the callee launders the pointer before stepping down. Each is lent and reads the local.
+    auto a83 = [&](const char* name, std::vector<uint16_t> g) {
+        const DecompileResult r = chain(name, callerToG, { g });
+        CHECK(lent(r) && Has(r.Text(), "axStack") && !Has(r.Text(), "return 5;") && !Has(r.Text(), "register0x"));
+    };
+    a83("A3-83a callee masks the pointer with shll2/shlr2", { 0x6543, 0x4508, 0x4509, 0xE104, 0x2516, 0x4110, 0x8BFC, 0x000B, 0x0009, 0x0009 });
+    a83("A3-83d callee adds a negated constant", { 0xE310, 0x633B, 0x343C, 0xE101, 0x2412, 0x000B, 0x0009, 0x0009 });
+    a83("A3-83e callee adds a shll2'd constant", { 0xE3FC, 0x4308, 0x343C, 0xE101, 0x2412, 0x000B, 0x0009, 0x0009 });
+    a83("A3-83f callee swaps the pointer twice", { 0x6449, 0x6449, 0xE104, 0x2416, 0x4110, 0x8BFC, 0x000B, 0x0009 });
+    a83("A3-83h callee aligns the pointer with a mask (compiled)", { 0xE3FC, 0x2439, 0xE104, 0x2416, 0x4110, 0x8BFC, 0x000B, 0x0009 });
+    // A3-83 c (global round trip) and g (load through the argument) need their own callers/callees.
+    {
+        const std::vector<uint16_t> g = { 0xD304, 0x2342, 0x6532, 0xE104, 0x2516, 0x4110, 0x8BFC, 0x000B, 0x0009, 0x0009, 0x0600, 0xF100 };
+        const DecompileResult r = chain("A3-83c callee stores the pointer to a global and walks the reload", callerToG, { g });
+        CHECK(lent(r) && Has(r.Text(), "axStack") && !Has(r.Text(), "return 5;"));
+    }
+    {
+        const std::vector<uint16_t> callerG = { 0x4F22, 0x7FE8, 0xE005, 0x2F02, 0x62F3, 0x7210, 0x1F24, 0x64F3, 0x7410, 0xD104, 0x410B, 0x0009, 0x60F2, 0x7F18, 0x4F26, 0x000B, 0x0009, 0x0009, 0x0600, 0x9040 };
+        const std::vector<uint16_t> g = { 0x6542, 0xE104, 0x2516, 0x4110, 0x8BFC, 0x000B, 0x0009, 0x0009 };   // mov.l @r4,r5 ; fill-backwards r5
+        const DecompileResult r = chain("A3-83g callee loads the pointer from the word its argument points to", callerG, { g });
+        CHECK(lent(r) && Has(r.Text(), "axStack") && !Has(r.Text(), "return 5;"));
+    }
+    // A3-84: the caller launders the exact frame address before handing it to the lent fill-backwards k (A3-71a).
+    {
+        const std::vector<uint16_t> callerMask = { 0x4F22, 0x7FEC, 0xE005, 0x2F02, 0x64F3, 0x7410, 0xE3FC, 0x2439, 0xD103, 0x410B, 0x0009, 0x60F2, 0x7F14, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9040 };
+        const DecompileResult r = chain("A3-84a caller masks the frame address (and #-4, compiled)", callerMask, { k });
+        CHECK(lent(r) && Has(r.Text(), "axStack") && !Has(r.Text(), "return 5;"));
+    }
+    {
+        const std::vector<uint16_t> callerGlobal = { 0x4F22, 0x7FEC, 0xE005, 0x2F02, 0x64F3, 0x7410, 0xD305, 0x2342, 0xE400, 0x6432, 0xD104, 0x410B, 0x0009, 0x60F2, 0x7F14, 0x4F26, 0x000B, 0x0009, 0x0600, 0xF100, 0x0600, 0x9040 };
+        const DecompileResult r = chain("A3-84b caller passes the frame address through a global", callerGlobal, { k });
+        CHECK(lent(r) && Has(r.Text(), "axStack") && !Has(r.Text(), "return 5;"));
+    }
+    {
+        const std::vector<uint16_t> callerSwap = { 0x4F22, 0x7FEC, 0xE005, 0x2F02, 0x64F3, 0x7410, 0x6449, 0x6449, 0xD103, 0x410B, 0x0009, 0x60F2, 0x7F14, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9040 };
+        const DecompileResult r = chain("A3-84d caller swaps the frame address twice", callerSwap, { k });
+        CHECK(lent(r) && Has(r.Text(), "axStack") && !Has(r.Text(), "return 5;"));
+    }
+    // A3-86 a: a captured, unlent callee (reads r3 on entry) that fills backwards. The caller is withheld (it calls an unknown-signature
+    // function), but the probe walks the callee for storesBelow and exposes the frame, so the text reads the local, not the stale 5.
+    {
+        const std::vector<uint16_t> caller86 = { 0x4F22, 0x7FEC, 0xE005, 0x2F02, 0xE304, 0x64F3, 0x7410, 0xD104, 0x410B, 0x0009, 0x60F2, 0x7F14, 0x4F26, 0x000B, 0x0009, 0x0009, 0x0600, 0x9040 };
+        const std::vector<uint16_t> g = { 0x6133, 0x2416, 0x4110, 0x8BFC, 0x000B, 0x0009 };   // mov r3,r1 ; L: mov.l r1,@-r4 ; dt r1 ; bf L ; rts (reads r3)
+        std::vector<uint16_t> words = caller86;
+        words.resize(32, 0x0009);
+        std::vector<uint16_t> c = g;
+        c.resize(32, 0x0009);
+        words.insert(words.end(), c.begin(), c.end());
+        const CallFixture f = { "A3-86a unlent captured fill-backwards callee (reads r3)", base, std::move(words) };
+        const DecompileResult r = d.Decompile(CallSnapshot(f, ++serial), Request(base));
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok && !r.prototype.known);   // withheld: it calls an unknown-signature function
+        CHECK(Has(r.Text(), "axStack") && !Has(r.Text(), "return 5;"));
+    }
+}
+
 // ===== A3-65 (P1): a copy of r15 walked down by pre-decrement stores ===========================================================================
 // `*--p = v` over a local array compiles to a copy of r15 (or of the frame pointer r14), moved to the top of the array and walked down by
 // `mov.l Rm,@-Rn`. The engine's alias analysis (AliasChecker, upstream's) takes a pointer into the frame to reach only what lies at or above its base,
@@ -12309,6 +12431,7 @@ int main(int argc, char** argv)
         RUN(TestArea3Round10Fix());
         RUN(TestArea3HiddenInputFuzz());
         RUN(TestArea3Round11());
+        RUN(TestArea3Round11Fix());
         RUN(TestArea2Round8());
         RUN(TestArea2Round9());
         RUN(TestArea2Round10());
