@@ -1,0 +1,193 @@
+name C0 control direct
+asm 06009000
+.word 0x4F22
+add #-24,r15
+mov #5,r0
+mov.l r0,@r15
+mov r15,r4
+add #16,r4
+
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l @r15,r0
+add #24,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+mov #4,r1
+L:
+mov.l r1,@-r4
+dt r1
+bf L
+rts
+nop
+endasm
+lend 06009100
+args 0 0 0 0
+end
+name C1 caller spills the address to a local and reloads it
+asm 06009000
+.word 0x4F22
+add #-24,r15
+mov #5,r0
+mov.l r0,@r15
+mov r15,r4
+add #16,r4
+mov.l r4,@(16,r15)
+mov #0,r4
+mov.l @(16,r15),r4
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l @r15,r0
+add #24,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+mov #4,r1
+L:
+mov.l r1,@-r4
+dt r1
+bf L
+rts
+nop
+endasm
+lend 06009100
+args 0 0 0 0
+end
+name C2 caller spills the address as halves and reassembles
+asm 06009000
+.word 0x4F22
+add #-24,r15
+mov #5,r0
+mov.l r0,@r15
+mov r15,r4
+add #16,r4
+mov r15,r3
+add #18,r3
+mov.w r4,@r3
+shlr16 r4
+add #-2,r3
+mov.w r4,@r3
+mov.l @(16,r15),r4
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l @r15,r0
+add #24,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+mov #4,r1
+L:
+mov.l r1,@-r4
+dt r1
+bf L
+rts
+nop
+endasm
+lend 06009100
+args 0 0 0 0
+end
+name C3 caller stores the address to a global and reloads it
+asm 06009000
+.word 0x4F22
+add #-24,r15
+mov #5,r0
+mov.l r0,@r15
+mov r15,r4
+add #16,r4
+mov.l =0x0600F100,r3
+mov.l r4,@r3
+mov #0,r4
+mov.l @r3,r4
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l @r15,r0
+add #24,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+mov #4,r1
+L:
+mov.l r1,@-r4
+dt r1
+bf L
+rts
+nop
+endasm
+lend 06009100
+args 0 0 0 0
+end
+name C4 caller masks the address (and #-4)
+asm 06009000
+.word 0x4F22
+add #-24,r15
+mov #5,r0
+mov.l r0,@r15
+mov r15,r4
+add #16,r4
+mov #-4,r3
+and r3,r4
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l @r15,r0
+add #24,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+mov #4,r1
+L:
+mov.l r1,@-r4
+dt r1
+bf L
+rts
+nop
+endasm
+lend 06009100
+args 0 0 0 0
+end
+name C5 caller adds a loaded zero
+asm 06009000
+.word 0x4F22
+add #-24,r15
+mov #5,r0
+mov.l r0,@r15
+mov r15,r4
+add #16,r4
+mov.l @(20,r15),r3
+add r3,r4
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l @r15,r0
+add #24,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+mov #4,r1
+L:
+mov.l r1,@-r4
+dt r1
+bf L
+rts
+nop
+endasm
+lend 06009100
+args 0 0 0 0
+end

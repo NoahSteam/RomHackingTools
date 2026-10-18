@@ -1,0 +1,60 @@
+name G11 pointer passed as a stack argument (5th), callee walks it down
+asm 06009000
+.word 0x4F22
+add #-24,r15
+mov #5,r0
+mov.l r0,@(4,r15)
+mov r15,r2
+add #20,r2
+mov.l r2,@r15
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l @(4,r15),r0
+add #24,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+mov.l @r15,r5
+mov #4,r1
+L:
+mov.l r1,@-r5
+dt r1
+bf L
+rts
+nop
+endasm
+lend 06009100
+args 0 0 0 0
+end
+name G11b control: same as direct r4 (pointer in r4)
+asm 06009000
+.word 0x4F22
+add #-24,r15
+mov #5,r0
+mov.l r0,@(4,r15)
+mov r15,r4
+add #20,r4
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l @(4,r15),r0
+add #24,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+mov #4,r1
+L:
+mov.l r1,@-r4
+dt r1
+bf L
+rts
+nop
+endasm
+lend 06009100
+args 0 0 0 0
+end
