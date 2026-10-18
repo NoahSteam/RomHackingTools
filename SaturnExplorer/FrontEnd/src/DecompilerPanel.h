@@ -180,6 +180,9 @@ public:
     const decomp::DecompileResult* Shown() const { return mShownValid ? &mShown : nullptr; }
     bool ShownStale() const;                  // shown output is not the answer for the view now
     bool ShownOutdatedByView() const;         // ...because the memory on screen moved on
+    // ...and the live emulator on screen is at another frame than the output was made at: the emulator moved on (the badge says
+    // "stale: frame N"). A write, a scrub or a BIOS image moves the view too, but is not the emulator moving on (A8-5).
+    bool EmulatorMovedOn() const;
     // Why the stale badge is up, and so what its tooltip may promise (A8-1). A stale output with
     // nothing outstanding is not "being replaced": it needs the user, or nothing will come.
     enum class StaleReason : uint8_t
@@ -194,6 +197,9 @@ public:
     // The badge's tooltip for the reason (what Draw shows); "" when not stale.
     std::string StaleTooltip() const;
     bool Pending() const { return mPending.active; }
+    // ...and the one outstanding is for the question wanted now. A target that has since found no function (a refused entry, a PC where
+    // none is) leaves the request running: its answer will be thrown away, and nothing on screen is waiting for it (A8-9).
+    bool RequestWanted() const { return mPending.active && !(mResolved && !mEntryOk); }
     uint64_t PendingGeneration() const { return mPending.generation; }
     const decomp::SnapshotKey* HeldKey() const { return mSnap ? &mSnap->key : nullptr; }
     uint32_t WantedEntry() const { return mEntryOk ? mEntry : 0; }   // as run: a mirror stays one
@@ -287,6 +293,8 @@ private:
     };
 
     void SetTarget(const Target& target);
+    // A Stop belongs to the question it stopped. A question that has since found no function, or another target, is not stopped (A8-10).
+    void ForgetStop() { mStopped = false; mNote.clear(); }
     void Resolve(const DecompilerInputs& inputs);
     // The finder's hints for the snapshot held (the user's starts, names, call stack, callees found).
     decomp::FinderHints FinderHintsFor(const DecompilerInputs& inputs) const;
