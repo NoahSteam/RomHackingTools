@@ -5022,17 +5022,28 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         r.lines = LinesFromMarkup(markup.str(), *fd, arch.get(), &printed);
         // A3-87 (closing A3-79): the engine prints a pointer into stack storage no local is mapped to -- a save slot a walk down
         // reaches (A3-65's recorded limit) -- as the raw stack register `register0x0000003c` (BADSPACEBASE), which is no C a caller
-        // could compile. A lent signature whose text names it would hand callers non-compilable code (the printed-C differential
-        // rejects it), so withhold such a function; the withheld variant A3-79 filed is the same raw name, already withheld for its
-        // own reason. The value is right -- only a local to name the slot is missing, which the engine cannot supply here.
-        if (r.prototype.known)
+        // or the printed-C differential could compile (`'register0x0000003c' undeclared`). The value is right, but the text is not
+        // usable C and no local names the slot, so the decompiler cannot render this function: mark it unsupported and withhold the
+        // signature (its text names a raw register). This closes A3-79 (its withheld variant is the same raw name) and the lent
+        // variant A3-87, soundly -- never a lent signature, and never a `not-compilable` text offered as a decompilation.
+        {
+            bool rawRegister = false;
             for (const Line& ln : r.lines)
-                if (ln.text.find("register0x") != std::string::npos)
+                if (ln.text.find("register0x") != std::string::npos) { rawRegister = true; break; }
+            if (rawRegister)
+            {
+                // The text is not usable C, so the decompiler cannot render this function: the printed-C differential must skip
+                // it, not compile it (`'register0x0000003c' undeclared`). Mark it unsupported whatever its signature state.
+                r.unsupported = true;
+                // ...and, if it was about to be lent (A3-87), withhold it: never a lent signature with non-compilable text. A
+                // function already withheld for its own reason (A3-79's "reads vbr", A3-72's raw-register cases) keeps that reason.
+                if (r.prototype.known)
                 {
                     r.prototype = Prototype();
                     r.prototypeWithheld = "its text names a raw stack register (no local is mapped to the storage a walk down reaches)";
-                    break;
                 }
+            }
+        }
         r.accesses = Accesses(*fd, printed, canonicalOf, flow);
         // How each flow access that is no longer a LOAD or STORE ended (patch 0017). The engine
         // keeps the records of the last generation of the function (a restart clears them with the

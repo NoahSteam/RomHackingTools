@@ -11896,8 +11896,15 @@ void TestA365WalkDown()
     // from the frame pointer r14: mov.l r14,@-r15 ; add #-8,r15 ; mov r15,r14 ; mov #5,r0 ; mov.l r0,@r14 ; mov r14,r2 ; add #8,r2 ; mov #2,r1 ;
     // L: mov.l r1,@-r2 ; dt r1 ; bf L ; mov.l @r14,r0 ; mov r14,r15 ; add #8,r15 ; rts ; mov.l @r15+,r14. The walk starts at the word r14 was pushed
     // to, which is no local (raw, see above).
-    check("A3-65 from the frame pointer r14", { 0x2FE6, 0x7FF8, 0x6EF3, 0xE005, 0x2E02, 0x62E3, 0x7208, 0xE102, 0x2216, 0x4110, 0x8BFC, 0x60E2, 0x6FE3, 0x7F08, 0x000B, 0x6EF6 },
-          8, true, "return xStack_c;");
+    // A3-87: the walk starts at the word r14 was pushed to, storage no local is mapped to, so the text names the raw stack
+    // register `register0x0000003c` (no C). The value is right, but a lent signature (or any output) with non-compilable text is a
+    // finding (the printed-C differential rejects it). The function is now marked unsupported and withheld: the raw text is still
+    // printed (the engine cannot name the slot), but the decompiler no longer offers it as a usable decompilation or a signature.
+    {
+        const DecompileResult r = check("A3-65 from the frame pointer r14", { 0x2FE6, 0x7FF8, 0x6EF3, 0xE005, 0x2E02, 0x62E3, 0x7208, 0xE102, 0x2216, 0x4110, 0x8BFC, 0x60E2, 0x6FE3, 0x7F08, 0x000B, 0x6EF6 },
+              8, true, "return xStack_c;");
+        CHECK(r.unsupported && !r.prototype.known);   // A3-87: withheld for the raw register
+    }
     // ...and from r14 + 8 of a 12-byte frame, inside it: the pointer is a local's address
     check("A3-65 from the frame pointer r14, inside the frame", { 0x2FE6, 0x7FF4, 0x6EF3, 0xE005, 0x2E02, 0x62E3, 0x7208, 0xE102, 0x2216, 0x4110, 0x8BFC, 0x60E2, 0x6FE3, 0x7F0C, 0x000B, 0x6EF6 },
           8, false, "return xStack_10;");
