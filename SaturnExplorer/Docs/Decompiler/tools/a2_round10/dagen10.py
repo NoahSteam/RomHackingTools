@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # Area 2 round 10 instrument (dagen.py of round 9, families 0..11 unchanged, 12..17 new):
-# 12 loopadd, 13 loopor (two accumulators), 14 loopmix, 15 nested loops, 16 loopsel (conditional update), 17 loopmask (masked accumulator / checksum / crc shapes), 18 tworet (two returns)
+# 12 loopadd, 13 loopor (two accumulators), 14 loopmix, 15 nested loops, 16 loopsel (conditional update), 17 loopmask (masked accumulator / checksum / crc shapes), 18 tworet (two returns), 19 ovf (T producers with a literal, A2-64)
 # Area 2 round 9 instrument: register-only functions with structure the round 8 generators did not draw: a value computed twice (the CSE
 # merge of A2-56), diamonds and counted loops (MULTIEQUAL, cycles through it), copies that make partial results shared, and a mask,
 # shift pair or extension read after.
-# usage: dagen.py <first seed> <count> [family 0..18]   -> one function per seed, ";" joined (SE_GENERATED_PRINTEDC_WORDS / fixtures)
+# usage: dagen.py <first seed> <count> [family 0..19]   -> one function per seed, ";" joined (SE_GENERATED_PRINTEDC_WORDS / fixtures)
 # families: 0 twice, 1 sum, 2 diamond, 3 loop, 4 chain, 5 stack, 6 sign (T-flag idioms), 7 join (A2-58), 8 join2 (A2-58), 9 join3 (A2-58), 10 loopsum, 11 loopand (A2-59)
 import random, sys
 
@@ -530,7 +530,42 @@ def fam_tworet(r, f):
     if r.random() < 0.5: tail(r, f, r.choice([0, 1, 2, 3]))
     else: f.add(0x6003 | r.choice([1, 2, 3]) << 4)
 
-FAMS = [fam_twice, fam_sum, fam_diamond, fam_loop, fam_chain, fam_stack, fam_sign, fam_join, fam_join2, fam_join3, fam_loopsum, fam_loopand, fam_loopadd, fam_loopor, fam_loopmix, fam_nested, fam_loopsel, fam_loopmask, fam_tworet]
+
+def fam_ovf(r, f):
+    """T-flag producers with a literal operand (addv, subv, addc, subc, negc, cmp/..), the T tested by a branch or read by movt: the boolean
+    combinations the SLEIGH of addv/subv builds meet the range rules (A2-64: RuleRangeMeld over CircleRange::pullBackBinary)"""
+    lits = [0xAAAAAAAB, 0x80000001, 0xC0000000, 0x9999999A, 0xFFFF0000, 0xFFFFFFFD, 0xF0000000, 0x12345678, 0x7FFFFFFF, 0x80000000, 0x00010000, 0x55555555,
+            0xFFFFFFFF, 0x00000001, 0x0000FFFF, 0x7FFF0000, 0xFFFFFFF0]
+    if r.random() < 0.5: f.add(0x6043 | r.choice([0, 1, 2, 3]) << 8 & 0)   # mov r4,r0
+    reg = r.choice([4, 5])
+    f.lit(reg, r.choice(lits))
+    a = r.choice([0, 1, 2, 3, 6, 7]); 
+    for _ in range(r.randrange(1, 3)):
+        k = r.randrange(0, 12)
+        if k == 0: f.add(0x300F | reg << 8 | a << 4)                    # addv a,reg
+        elif k == 1: f.add(0x300B | reg << 8 | a << 4)                  # subv
+        elif k == 2: f.add(0x0008, 0x300E | reg << 8 | a << 4)          # clrt ; addc
+        elif k == 3: f.add(0x0018, 0x300A | reg << 8 | a << 4)          # sett ; subc
+        elif k == 4: f.add(0x0008, 0x600A | reg << 8 | a << 4)          # clrt ; negc
+        elif k == 5: f.add(0x300F | a << 8 | reg << 4)                  # addv reg,a
+        elif k == 6: f.add(0x300B | a << 8 | reg << 4)
+        elif k == 7: f.add(0x3003 | reg << 8 | a << 4)                  # cmp/ge
+        elif k == 8: f.add(0x3007 | reg << 8 | a << 4)                  # cmp/gt
+        elif k == 9: f.add(0x3002 | reg << 8 | a << 4)                  # cmp/hs
+        elif k == 10: f.add(0x3006 | reg << 8 | a << 4)                 # cmp/hi
+        else: f.add(0x3000 | reg << 8 | a << 4)                         # cmp/eq
+    d = r.choice([1, 2, 3])
+    if r.random() < 0.6:
+        f.add(0xE000 | d << 8 | r.choice([0, 1, 5, 0xFF]))                   # mov #c,rd
+        f.br(r.choice(['bf', 'bt']), 'sk')
+        f.add(0xE000 | d << 8 | r.choice([2, 7, 9, 0x10]))
+        f.label('sk')
+        f.add(0x6003 | d << 4)
+    else:
+        f.add(0x0029)                                                        # movt r0
+        if r.random() < 0.5: f.add(r.choice([0x4000, 0x4008, 0x400C & 0x4008]))
+
+FAMS = [fam_twice, fam_sum, fam_diamond, fam_loop, fam_chain, fam_stack, fam_sign, fam_join, fam_join2, fam_join3, fam_loopsum, fam_loopand, fam_loopadd, fam_loopor, fam_loopmix, fam_nested, fam_loopsel, fam_loopmask, fam_tworet, fam_ovf]
 
 def build(seed, fam=None):
     r = random.Random(seed * 7919 + 13)
