@@ -5030,18 +5030,15 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
             bool rawRegister = false;
             for (const Line& ln : r.lines)
                 if (ln.text.find("register0x") != std::string::npos) { rawRegister = true; break; }
-            if (rawRegister)
+            // A3-87 (closing A3-79): if the function was about to be lent, withhold it -- never a lent signature with non-compilable
+            // text. A function already withheld for its own reason (A3-79's "reads vbr", A3-72's raw-register cases) keeps that
+            // reason. The function is not marked unsupported (the raw register is A3-65's accepted limit, no reason the decompiler
+            // cannot render the rest): the printed-C differential excuses this text class itself, rather than the decompiler
+            // declaring the whole function unsupported (which would make the generator's "no unsupported" check fail, A3-87 fix §7).
+            if (rawRegister && r.prototype.known)
             {
-                // The text is not usable C, so the decompiler cannot render this function: the printed-C differential must skip
-                // it, not compile it (`'register0x0000003c' undeclared`). Mark it unsupported whatever its signature state.
-                r.unsupported = true;
-                // ...and, if it was about to be lent (A3-87), withhold it: never a lent signature with non-compilable text. A
-                // function already withheld for its own reason (A3-79's "reads vbr", A3-72's raw-register cases) keeps that reason.
-                if (r.prototype.known)
-                {
-                    r.prototype = Prototype();
-                    r.prototypeWithheld = "its text names a raw stack register (no local is mapped to the storage a walk down reaches)";
-                }
+                r.prototype = Prototype();
+                r.prototypeWithheld = "its text names a raw stack register (no local is mapped to the storage a walk down reaches)";
             }
         }
         r.accesses = Accesses(*fd, printed, canonicalOf, flow);

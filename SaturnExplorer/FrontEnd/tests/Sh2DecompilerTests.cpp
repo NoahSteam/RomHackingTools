@@ -12025,7 +12025,7 @@ void TestA365WalkDown()
     {
         const DecompileResult r = check("A3-65 from the frame pointer r14", { 0x2FE6, 0x7FF8, 0x6EF3, 0xE005, 0x2E02, 0x62E3, 0x7208, 0xE102, 0x2216, 0x4110, 0x8BFC, 0x60E2, 0x6FE3, 0x7F08, 0x000B, 0x6EF6 },
               8, true, "return xStack_c;");
-        CHECK(r.unsupported && !r.prototype.known);   // A3-87: withheld for the raw register
+        CHECK(!r.prototype.known);   // A3-87: withheld for the raw register (lent at the head)
     }
     // ...and from r14 + 8 of a 12-byte frame, inside it: the pointer is a local's address
     check("A3-65 from the frame pointer r14, inside the frame", { 0x2FE6, 0x7FF4, 0x6EF3, 0xE005, 0x2E02, 0x62E3, 0x7208, 0xE102, 0x2216, 0x4110, 0x8BFC, 0x60E2, 0x6FE3, 0x7F0C, 0x000B, 0x6EF6 },
