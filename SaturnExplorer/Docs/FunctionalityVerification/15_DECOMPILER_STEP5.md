@@ -11123,7 +11123,6 @@ Both images, `SE_GAME_HWRAM=<img> SE_GAME_LEND=1` with `SE_GAME_OUT`, the head `
 - A3-79 (P3, the raw stack register for a walk from unmapped storage) is unchanged by patch 0060.
 - The Live tests and the sanitizer job were not run (shared socket path; CI).
 
-
 ## Area 3, round 11 review
 
 Reviewer, branch `review/3-round11-review`, on the coordinator's head `1b364f7` (patches up to 0060 in the tree). Findings only, no fixes: the code changes are none; the repository gets tools (`Docs/Decompiler/tools/a3_round11/`), the ledger rows, a suite function of controls that pass (`TestArea3Round11`, below) and this record. New ledger rows **A3-82, A3-83, A3-84, A3-85, A3-88 (P1)** and **A3-86, A3-87 (P2)**; A3-79 (open P3) is raised by A3-87. The generator beyond the nightly range finds nothing new for another area (below), so nothing is routed.

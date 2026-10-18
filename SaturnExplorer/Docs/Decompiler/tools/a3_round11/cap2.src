@@ -1,0 +1,650 @@
+name cap2 k=20 conditional steps in a loop
+asm 06009000
+add #-80,r15
+mov #5,r0
+mov.l r0,@r15
+mov r15,r2
+add #80,r2
+mov #1,r1
+L:
+tst r4,r4
+bt S0
+add #-4,r2
+S0:
+tst r4,r4
+bt S1
+add #-4,r2
+S1:
+tst r4,r4
+bt S2
+add #-4,r2
+S2:
+tst r4,r4
+bt S3
+add #-4,r2
+S3:
+tst r4,r4
+bt S4
+add #-4,r2
+S4:
+tst r4,r4
+bt S5
+add #-4,r2
+S5:
+tst r4,r4
+bt S6
+add #-4,r2
+S6:
+tst r4,r4
+bt S7
+add #-4,r2
+S7:
+tst r4,r4
+bt S8
+add #-4,r2
+S8:
+tst r4,r4
+bt S9
+add #-4,r2
+S9:
+tst r4,r4
+bt S10
+add #-4,r2
+S10:
+tst r4,r4
+bt S11
+add #-4,r2
+S11:
+tst r4,r4
+bt S12
+add #-4,r2
+S12:
+tst r4,r4
+bt S13
+add #-4,r2
+S13:
+tst r4,r4
+bt S14
+add #-4,r2
+S14:
+tst r4,r4
+bt S15
+add #-4,r2
+S15:
+tst r4,r4
+bt S16
+add #-4,r2
+S16:
+tst r4,r4
+bt S17
+add #-4,r2
+S17:
+tst r4,r4
+bt S18
+add #-4,r2
+S18:
+tst r4,r4
+bt S19
+add #-4,r2
+S19:
+mov.l r1,@r2
+dt r1
+bt OUT
+bra L
+nop
+OUT:
+mov.l @r15,r0
+add #80,r15
+rts
+nop
+endasm
+quiet
+args 1 0 0 0
+end
+name cap2 k=128 conditional steps in a loop
+asm 06009000
+add #-127,r15
+add #-127,r15
+add #-127,r15
+add #-127,r15
+add #-4,r15
+mov #5,r0
+mov.l r0,@r15
+mov r15,r2
+add #127,r2
+add #127,r2
+add #127,r2
+add #127,r2
+add #4,r2
+mov #1,r1
+L:
+tst r4,r4
+bt S0
+add #-4,r2
+S0:
+tst r4,r4
+bt S1
+add #-4,r2
+S1:
+tst r4,r4
+bt S2
+add #-4,r2
+S2:
+tst r4,r4
+bt S3
+add #-4,r2
+S3:
+tst r4,r4
+bt S4
+add #-4,r2
+S4:
+tst r4,r4
+bt S5
+add #-4,r2
+S5:
+tst r4,r4
+bt S6
+add #-4,r2
+S6:
+tst r4,r4
+bt S7
+add #-4,r2
+S7:
+tst r4,r4
+bt S8
+add #-4,r2
+S8:
+tst r4,r4
+bt S9
+add #-4,r2
+S9:
+tst r4,r4
+bt S10
+add #-4,r2
+S10:
+tst r4,r4
+bt S11
+add #-4,r2
+S11:
+tst r4,r4
+bt S12
+add #-4,r2
+S12:
+tst r4,r4
+bt S13
+add #-4,r2
+S13:
+tst r4,r4
+bt S14
+add #-4,r2
+S14:
+tst r4,r4
+bt S15
+add #-4,r2
+S15:
+tst r4,r4
+bt S16
+add #-4,r2
+S16:
+tst r4,r4
+bt S17
+add #-4,r2
+S17:
+tst r4,r4
+bt S18
+add #-4,r2
+S18:
+tst r4,r4
+bt S19
+add #-4,r2
+S19:
+tst r4,r4
+bt S20
+add #-4,r2
+S20:
+tst r4,r4
+bt S21
+add #-4,r2
+S21:
+tst r4,r4
+bt S22
+add #-4,r2
+S22:
+tst r4,r4
+bt S23
+add #-4,r2
+S23:
+tst r4,r4
+bt S24
+add #-4,r2
+S24:
+tst r4,r4
+bt S25
+add #-4,r2
+S25:
+tst r4,r4
+bt S26
+add #-4,r2
+S26:
+tst r4,r4
+bt S27
+add #-4,r2
+S27:
+tst r4,r4
+bt S28
+add #-4,r2
+S28:
+tst r4,r4
+bt S29
+add #-4,r2
+S29:
+tst r4,r4
+bt S30
+add #-4,r2
+S30:
+tst r4,r4
+bt S31
+add #-4,r2
+S31:
+tst r4,r4
+bt S32
+add #-4,r2
+S32:
+tst r4,r4
+bt S33
+add #-4,r2
+S33:
+tst r4,r4
+bt S34
+add #-4,r2
+S34:
+tst r4,r4
+bt S35
+add #-4,r2
+S35:
+tst r4,r4
+bt S36
+add #-4,r2
+S36:
+tst r4,r4
+bt S37
+add #-4,r2
+S37:
+tst r4,r4
+bt S38
+add #-4,r2
+S38:
+tst r4,r4
+bt S39
+add #-4,r2
+S39:
+tst r4,r4
+bt S40
+add #-4,r2
+S40:
+tst r4,r4
+bt S41
+add #-4,r2
+S41:
+tst r4,r4
+bt S42
+add #-4,r2
+S42:
+tst r4,r4
+bt S43
+add #-4,r2
+S43:
+tst r4,r4
+bt S44
+add #-4,r2
+S44:
+tst r4,r4
+bt S45
+add #-4,r2
+S45:
+tst r4,r4
+bt S46
+add #-4,r2
+S46:
+tst r4,r4
+bt S47
+add #-4,r2
+S47:
+tst r4,r4
+bt S48
+add #-4,r2
+S48:
+tst r4,r4
+bt S49
+add #-4,r2
+S49:
+tst r4,r4
+bt S50
+add #-4,r2
+S50:
+tst r4,r4
+bt S51
+add #-4,r2
+S51:
+tst r4,r4
+bt S52
+add #-4,r2
+S52:
+tst r4,r4
+bt S53
+add #-4,r2
+S53:
+tst r4,r4
+bt S54
+add #-4,r2
+S54:
+tst r4,r4
+bt S55
+add #-4,r2
+S55:
+tst r4,r4
+bt S56
+add #-4,r2
+S56:
+tst r4,r4
+bt S57
+add #-4,r2
+S57:
+tst r4,r4
+bt S58
+add #-4,r2
+S58:
+tst r4,r4
+bt S59
+add #-4,r2
+S59:
+tst r4,r4
+bt S60
+add #-4,r2
+S60:
+tst r4,r4
+bt S61
+add #-4,r2
+S61:
+tst r4,r4
+bt S62
+add #-4,r2
+S62:
+tst r4,r4
+bt S63
+add #-4,r2
+S63:
+tst r4,r4
+bt S64
+add #-4,r2
+S64:
+tst r4,r4
+bt S65
+add #-4,r2
+S65:
+tst r4,r4
+bt S66
+add #-4,r2
+S66:
+tst r4,r4
+bt S67
+add #-4,r2
+S67:
+tst r4,r4
+bt S68
+add #-4,r2
+S68:
+tst r4,r4
+bt S69
+add #-4,r2
+S69:
+tst r4,r4
+bt S70
+add #-4,r2
+S70:
+tst r4,r4
+bt S71
+add #-4,r2
+S71:
+tst r4,r4
+bt S72
+add #-4,r2
+S72:
+tst r4,r4
+bt S73
+add #-4,r2
+S73:
+tst r4,r4
+bt S74
+add #-4,r2
+S74:
+tst r4,r4
+bt S75
+add #-4,r2
+S75:
+tst r4,r4
+bt S76
+add #-4,r2
+S76:
+tst r4,r4
+bt S77
+add #-4,r2
+S77:
+tst r4,r4
+bt S78
+add #-4,r2
+S78:
+tst r4,r4
+bt S79
+add #-4,r2
+S79:
+tst r4,r4
+bt S80
+add #-4,r2
+S80:
+tst r4,r4
+bt S81
+add #-4,r2
+S81:
+tst r4,r4
+bt S82
+add #-4,r2
+S82:
+tst r4,r4
+bt S83
+add #-4,r2
+S83:
+tst r4,r4
+bt S84
+add #-4,r2
+S84:
+tst r4,r4
+bt S85
+add #-4,r2
+S85:
+tst r4,r4
+bt S86
+add #-4,r2
+S86:
+tst r4,r4
+bt S87
+add #-4,r2
+S87:
+tst r4,r4
+bt S88
+add #-4,r2
+S88:
+tst r4,r4
+bt S89
+add #-4,r2
+S89:
+tst r4,r4
+bt S90
+add #-4,r2
+S90:
+tst r4,r4
+bt S91
+add #-4,r2
+S91:
+tst r4,r4
+bt S92
+add #-4,r2
+S92:
+tst r4,r4
+bt S93
+add #-4,r2
+S93:
+tst r4,r4
+bt S94
+add #-4,r2
+S94:
+tst r4,r4
+bt S95
+add #-4,r2
+S95:
+tst r4,r4
+bt S96
+add #-4,r2
+S96:
+tst r4,r4
+bt S97
+add #-4,r2
+S97:
+tst r4,r4
+bt S98
+add #-4,r2
+S98:
+tst r4,r4
+bt S99
+add #-4,r2
+S99:
+tst r4,r4
+bt S100
+add #-4,r2
+S100:
+tst r4,r4
+bt S101
+add #-4,r2
+S101:
+tst r4,r4
+bt S102
+add #-4,r2
+S102:
+tst r4,r4
+bt S103
+add #-4,r2
+S103:
+tst r4,r4
+bt S104
+add #-4,r2
+S104:
+tst r4,r4
+bt S105
+add #-4,r2
+S105:
+tst r4,r4
+bt S106
+add #-4,r2
+S106:
+tst r4,r4
+bt S107
+add #-4,r2
+S107:
+tst r4,r4
+bt S108
+add #-4,r2
+S108:
+tst r4,r4
+bt S109
+add #-4,r2
+S109:
+tst r4,r4
+bt S110
+add #-4,r2
+S110:
+tst r4,r4
+bt S111
+add #-4,r2
+S111:
+tst r4,r4
+bt S112
+add #-4,r2
+S112:
+tst r4,r4
+bt S113
+add #-4,r2
+S113:
+tst r4,r4
+bt S114
+add #-4,r2
+S114:
+tst r4,r4
+bt S115
+add #-4,r2
+S115:
+tst r4,r4
+bt S116
+add #-4,r2
+S116:
+tst r4,r4
+bt S117
+add #-4,r2
+S117:
+tst r4,r4
+bt S118
+add #-4,r2
+S118:
+tst r4,r4
+bt S119
+add #-4,r2
+S119:
+tst r4,r4
+bt S120
+add #-4,r2
+S120:
+tst r4,r4
+bt S121
+add #-4,r2
+S121:
+tst r4,r4
+bt S122
+add #-4,r2
+S122:
+tst r4,r4
+bt S123
+add #-4,r2
+S123:
+tst r4,r4
+bt S124
+add #-4,r2
+S124:
+tst r4,r4
+bt S125
+add #-4,r2
+S125:
+tst r4,r4
+bt S126
+add #-4,r2
+S126:
+tst r4,r4
+bt S127
+add #-4,r2
+S127:
+mov.l r1,@r2
+dt r1
+bt OUT
+bra L
+nop
+OUT:
+mov.l @r15,r0
+add #127,r15
+add #127,r15
+add #127,r15
+add #127,r15
+add #4,r15
+rts
+nop
+endasm
+quiet
+args 1 0 0 0
+end
