@@ -16,7 +16,7 @@
  * Modified for SaturnExplorer: a host can declare a pointer into the stack the actions cannot see (patches/0030-host-stack-alias.patch).
  * Modified for SaturnExplorer: a RangeHint the list cannot take is freed (patches/0032-allocation-failure-order-2.patch).
  * Modified for SaturnExplorer: a pointer a loop steps down from a stack address aliases the locals below that address (patches/0056-engine-stack-walk-down-aliases.patch).
- * Modified for SaturnExplorer: so does one kept in a stack local and read back, across a call too (patches/0059-engine-stack-walk-down-spilled.patch).
+ * Modified for SaturnExplorer: so does one kept in a stack local and read back, across a call too (patches/0060-engine-stack-walk-down-spilled.patch).
  */
 #include "varmap.hh"
 #include "funcdata.hh"
@@ -858,7 +858,7 @@ void AliasChecker::gatherInternal(void) const
   }
 }
 
-/// SaturnExplorer (patches/0059-engine-stack-walk-down-spilled.patch): does the pointer \b base reach a loop that steps it down?
+/// SaturnExplorer (patches/0060-engine-stack-walk-down-spilled.patch): does the pointer \b base reach a loop that steps it down?
 /// The pointer is followed forward through copies, additions, joins and the INDIRECTs of a call or a store, which is how a
 /// frame address kept in a stack local and read back looks once the stack is heritaged (`COPY` into the local, the call's
 /// INDIRECT on it, the read's `COPY` out). A pointer read back after a call that may have rewritten the local is taken to be

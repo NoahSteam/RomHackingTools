@@ -15,7 +15,7 @@
  *
  * Modified for SaturnExplorer: a host can declare a pointer into the stack the actions cannot see (patches/0030-host-stack-alias.patch).
  * Modified for SaturnExplorer: a pointer a loop steps down from a stack address aliases the locals below that address (patches/0056-engine-stack-walk-down-aliases.patch).
- * Modified for SaturnExplorer: so does one kept in a stack local and read back, across a call too (patches/0059-engine-stack-walk-down-spilled.patch).
+ * Modified for SaturnExplorer: so does one kept in a stack local and read back, across a call too (patches/0060-engine-stack-walk-down-spilled.patch).
  */
 /// \file varmap.hh
 /// \brief Classes for keeping track of local variables and reconstructing stack layout
@@ -176,7 +176,7 @@ public:
   static void gatherAdditiveBase(Varnode *startvn,vector<AddBase> &addbase);
   static uintb gatherOffset(Varnode *vn);
   static bool stepsDown(PcodeOp *multi);	///< SaturnExplorer: does a loop step the pointer joined by \b multi down (patches/0056-engine-stack-walk-down-aliases.patch)
-  static bool reachesStepDown(Varnode *base);	///< SaturnExplorer: does \b base reach a loop that steps it down, through a spill and its reload too (patches/0059-engine-stack-walk-down-spilled.patch)
+  static bool reachesStepDown(Varnode *base);	///< SaturnExplorer: does \b base reach a loop that steps it down, through a spill and its reload too (patches/0060-engine-stack-walk-down-spilled.patch)
 };
 
 /// \brief A container for hints about the data-type layout of an address space

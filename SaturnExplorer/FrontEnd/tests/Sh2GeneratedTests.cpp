@@ -3365,6 +3365,16 @@ std::string SavesBeforeCallsDropped(const std::string& text, const char* reg)
     const std::regex save("^\\s*_?[A-Za-z]*Stack_[0-9a-f]+ = " + cast + "*\\(?\\s*" + cast + "*unaff_" + std::string(reg) +
                           "(?:\\s*>>\\s*(?:0x[0-9a-f]+|\\d+))?\\s*\\)?;\\s*$");
     static const std::regex call("\\bfunc_0x[0-9a-fA-F]+\\s*\\(");
+    // A3-78, seed 1418819: the variable of the entry value is given the call's output after the call (`unaff_r10 = extraout_r10;` in the
+    // branch that calls, the engine's join of the two values under one name), and a read of it after that is a read of what the call left.
+    // Followed in the text's order, so only outside loops and in a text without gotos, where that order is the order the code runs in.
+    const std::regex assign("^\\s*unaff_" + std::string(reg) + " = ([^;]*);\\s*$");
+    const std::regex word("\\bunaff_" + std::string(reg) + "\\b");
+    static const std::regex jump("\\bgoto\\b");
+    static const std::regex loopOpen("^\\s*(do|while|for)\\b");
+    const bool straight = !std::regex_search(text, jump);
+    std::vector<bool> loops;   // the open blocks of the body, each a loop or not
+    bool reassigned = false, staleAtCall = false, blockSinceCall = false;
     std::istringstream in(text);
     std::string out, line;
     bool body = false, called = false;
@@ -3376,7 +3386,32 @@ std::string SavesBeforeCallsDropped(const std::string& text, const char* reg)
             out += line + "\n";
             continue;
         }
-        if (std::regex_search(line, call)) called = true;
+        const bool callHere = std::regex_search(line, call);
+        std::smatch am;
+        // `unaff_r10 = extraout_r10;` right after the call, in its block (no brace between), when no earlier call had left the entry value
+        // stale: every path that reaches a later read either ran the call and this assignment, or neither
+        const bool inLoop = std::find(loops.begin(), loops.end(), true) != loops.end();
+        if (straight && !inLoop && called && !callHere && !blockSinceCall && !staleAtCall && std::regex_match(line, am, assign) &&
+            !std::regex_search(am[1].str(), word))
+        {
+            reassigned = true;
+            continue;
+        }
+        if (called && reassigned && !inLoop) line = std::regex_replace(line, word, "reassigned_" + std::string(reg));   // read before this line's call
+        if (callHere)
+        {
+            staleAtCall = called && (!reassigned || inLoop);
+            called = true;
+            reassigned = false;
+            blockSinceCall = false;
+        }
+        // the blocks the line closes and opens (`} while (c);`, `} else {`, `do {`): inside a loop the text's order is not the code's
+        for (char ch : line)
+            if (ch == '}' && !loops.empty()) loops.pop_back();
+        if (line.find('{') != std::string::npos)
+            loops.push_back(std::regex_search(line, loopOpen));
+        if (line.find('{') != std::string::npos || line.find('}') != std::string::npos)
+            blockSinceCall = true;
         if (!called && std::regex_match(line, save)) continue;
         out += line + "\n";
     }
@@ -8899,6 +8934,28 @@ void TestA365Pins(Sh2Decompiler& d)
         for (const Finding& f : seed.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
         CHECK(seed.findings.empty());
     }
+    // A3-78, seed 1418819 (the area 2 round 11 review) and its shrunk module: function 0 calls function 1 on one path and tail-jumps into it,
+    // whose pushes of r10 and r12 print in function 0's text after the branch. The engine joins the entry value and the call's output under one
+    // name (`unaff_r10 = extraout_r10;` after the call), so the pushes read `unaff_r10`: the entry value on the path without the call, the call's
+    // output on the other. Right, and no read of r10 or r12 kept across the call.
+    {
+        const ModulePin m = { "A3-78, seed 1418819 shrunk",
+                              "2F86 2F96 2FD6 2FE6 4F22 7FF0 6EF3 6843 6953 2458 8903 B00F 0009 6483 6593 D305 7E10 6FE3 4F26 6EF6 6DF6 69F6 68F6 432B 0009 0009 0600 9038 "
+                              "2F86 2F96 2FA6 2FC6 0C2A 6843 6953 6A63 B00A 0009 6483 6593 66A3 4C2A 6CF6 6AF6 69F6 68F6 000B 0009 "
+                              "2FD6 2FE6 7FF0 6EF3 62F3 7210 E103 2216 4110 8BFC E200 E0A6 7E10 6FE3 6EF6 6DF6 000B 0009",
+                              "0/0/32,38/38/60,60/60/84", nullptr, "0,0,1", nullptr, nullptr };
+        const Report rep = EvaluateSubject(d, ModuleSubject(m), true);
+        std::printf("pin '%s': %zu finding(s)\n", m.name, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty() && count(rep, "lent.changed.checked") > 0);
+        const bool savedSpecials = gSpecialReads;
+        gSpecialReads = false;
+        const Report seed = EvaluateSubject(d, MakeSubject(MakeV2(1418819)), true);
+        gSpecialReads = savedSpecials;
+        std::printf("pin 'A3-78, grammar 2 seed 1418819': %zu finding(s)\n", seed.findings.size());
+        for (const Finding& f : seed.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(seed.findings.empty());
+    }
     // check 12's reading of a save: before the first call it is no read of the register; after one, or a read elsewhere, it is
     const std::string head = "xunknown4 func_0x06009000(void)\n\n{\n  xunknown4 unaff_r13;\n  xunknown4 xStack_c;\n\n";
     CHECK(!WholeWord(SavesBeforeCallsDropped(head + "  xStack_c = unaff_r13;\n  func_0x06009028();\n  return xStack_c;\n}\n", "r13"), "unaff_r13"));
@@ -8910,6 +8967,15 @@ void TestA365Pins(Sh2Decompiler& d)
     CHECK(WholeWord(SavesBeforeCallsDropped(head + "  func_0x06009028();\n  xStack_c = (int2)((uint4)unaff_r13 >> 0x10);\n  return xStack_c;\n}\n", "r13"), "unaff_r13"));
     CHECK(WholeWord(SavesBeforeCallsDropped(head + "  xStack_c = (int2)((uint4)unaff_r13 + 0x10);\n  func_0x06009028();\n  return xStack_c;\n}\n", "r13"), "unaff_r13"));
     CHECK(WholeWord(SavesBeforeCallsDropped(head + "  xStack_c = (int2)((uint4)unaff_r13 >> 0x10);\n  func_0x06009028();\n  return unaff_r13;\n}\n", "r13"), "unaff_r13"));
+    // A3-78, seed 1418819: the entry value's variable given the call's output right after the call is no stale read; given it in another block,
+    // after an earlier call, or from itself, or in a text with a loop, it is
+    const std::string head2 = "xunknown4 func_0x06009000(void)\n\n{\n  xunknown4 unaff_r13;\n  xunknown4 extraout_r13;\n\n";
+    CHECK(!WholeWord(SavesBeforeCallsDropped(head2 + "  if (c) {\n    func_0x06009028();\n    unaff_r13 = extraout_r13;\n  }\n  *p = unaff_r13;\n}\n", "r13"), "unaff_r13"));
+    CHECK(WholeWord(SavesBeforeCallsDropped(head2 + "  if (c) {\n    func_0x06009028();\n  }\n  else {\n    unaff_r13 = extraout_r13;\n  }\n  *p = unaff_r13;\n}\n", "r13"), "unaff_r13"));
+    CHECK(WholeWord(SavesBeforeCallsDropped(head2 + "  func_0x06009020();\n  if (c) {\n    func_0x06009028();\n    unaff_r13 = extraout_r13;\n  }\n  *p = unaff_r13;\n}\n", "r13"), "unaff_r13"));
+    CHECK(WholeWord(SavesBeforeCallsDropped(head2 + "  func_0x06009028();\n  unaff_r13 = unaff_r13 + 1;\n  *p = unaff_r13;\n}\n", "r13"), "unaff_r13"));
+    CHECK(WholeWord(SavesBeforeCallsDropped(head2 + "  do {\n    *p = unaff_r13;\n    func_0x06009028();\n    unaff_r13 = extraout_r13;\n  } while (c);\n}\n", "r13"), "unaff_r13"));
+    CHECK(WholeWord(SavesBeforeCallsDropped(head2 + "  func_0x06009028();\n  unaff_r13 = extraout_r13;\n  func_0x06009028();\n  *p = unaff_r13;\n}\n", "r13"), "unaff_r13"));
     // the walk functions of the printed-C differential: every width, both directions, the read back up, within the first 400 seeds
     {
         std::map<std::string, int> drawn;

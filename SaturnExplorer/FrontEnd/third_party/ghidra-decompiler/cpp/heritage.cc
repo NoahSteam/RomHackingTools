@@ -14,7 +14,7 @@
  * limitations under the License.
  *
  * Modified for SaturnExplorer: an indexed stack access whose pointer is stepped down guards the stack below it (patches/0056-engine-stack-walk-down-aliases.patch).
- * Modified for SaturnExplorer: a STORE through a frame address kept in a stack local and read back is guarded (patches/0059-engine-stack-walk-down-spilled.patch).
+ * Modified for SaturnExplorer: a STORE through a frame address kept in a stack local and read back is guarded (patches/0060-engine-stack-walk-down-spilled.patch).
  */
 #include "heritage.hh"
 #include "funcdata.hh"
@@ -970,7 +970,7 @@ bool Heritage::protectFreeStores(AddrSpace *spc,vector<PcodeOp *> &freeStores)
     PcodeOp *op = *iter;
     ++iter;
     if (op->isDead()) continue;
-    // SaturnExplorer (patches/0059-engine-stack-walk-down-spilled.patch): the pointer is traced back through the joins of a loop
+    // SaturnExplorer (patches/0060-engine-stack-walk-down-spilled.patch): the pointer is traced back through the joins of a loop
     // and the INDIRECTs of a call as well, not along copies and constant additions alone. A frame address kept in a stack local
     // and read back (`mov.l r2,@(16,r15) ; ... ; mov.l @(16,r15),r2`), then stepped down in a loop (`mov.l r1,@-r2`), reaches the
     // free stack word through the loop's MULTIEQUAL; the STORE was taken for no store to the stack, no INDIRECT was made for the
