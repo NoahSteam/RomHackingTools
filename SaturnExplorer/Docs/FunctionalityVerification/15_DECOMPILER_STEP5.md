@@ -10144,3 +10144,12 @@ No compiled function of either image walks a frame address down in a loop over a
 - A pointer into a register's save area that is no local prints the stack register raw (`(int4)register0x0000003c + -4`), as upstream does and as the head did; its value is right. The printed-C harness cannot run such a text off Linux (the cast of a host pointer to four bytes), so the generator's walk keeps to frames with no pushes.
 - A walk whose pointer passes through a call before the loop is recognized once `ActionStackPtrFlow` has resolved the call's effect on r15; seed 901303 is such a case and is right, but a pass of the alias analysis before that resolution could still mark a slot unaliased for good (nolocalalias is never cleared). No fixture or seed shows it.
 - The Live tests and the sanitizer job were not run (shared socket path; CI).
+
+Integration note (coordinator), at the merge of `review/a3-65-fix` onto `e75dfb2`: the area 2 round 9 fix (A2-61) and this fix changed the
+printed-C harness in ways that met. A2-61 classes a text that takes a local's address as `skipped:stack-address`, because a returned stack address is
+the machine's in the run and the host's in the C. This fix's frame mode maps the locals onto memory, and its fixtures take `&xStack00000000` to start
+the walk. Merged, the ten A3-65 printed-C fixtures were skipped and `SaturnExplorerSh2PrintedCTests` failed (`fixture-skipped`), and 267 generated
+walk functions were skipped rather than compared. The fix: in frame mode the search for a local's address is of the return statements only, since an
+address that stays inside the mapped frame is comparable. The A2-61 pin is still `skipped:stack-address` (it is not in frame mode). After it: printed-C
+at 3,000 seeds 3,703 functions, 3,397 compared, agrees 3,425, 0 skipped as a stack address, 0 findings; the ten A3-65 fixtures agree by value. Patches
+0054 and 0056 both touch `coreaction.cc` (its header comment only conflicted); `vendor.py` reproduces the merged tree with 0054, 0055 and 0056 in order.

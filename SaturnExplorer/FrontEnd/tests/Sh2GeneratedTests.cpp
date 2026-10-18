@@ -7062,13 +7062,27 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
         }
         // The address of a local (`return &xStack_1;`, `(uint4)&xStack00000000 & 0xff`): the run's is an address in the machine's stack, the C's one in
         // the host's, so the two cannot be compared by value (A2-61: the harness took it for 0, a mismatch where the text is right).
+        // In frame mode (A3-65) a local's address is a pointer into the mapped frame and the walk's own: only one returned as a value is
+        // still incomparable, so there the search is of the return statements alone.
         static const std::regex stackAddress("&\\s*[A-Za-z]*[Ss]tack_?[0-9a-fA-F]+\\b");
+        static const std::regex returnStmt("\\breturn\\b[^;]*;");
         {
+            std::string what;   // the address taken, copied: a match into a statement's string would not outlive it
             std::smatch m;
-            if (std::regex_search(text, m, stackAddress))
+            if (!frameMode)
+            {
+                if (std::regex_search(text, m, stackAddress)) what = m.str();
+            }
+            else
+                for (std::sregex_iterator r(text.begin(), text.end(), returnStmt), e; r != e && what.empty(); ++r)
+                {
+                    const std::string stmt = r->str();
+                    if (std::regex_search(stmt, m, stackAddress)) what = m.str();
+                }
+            if (!what.empty())
             {
                 v.cls = "skipped:stack-address";
-                v.detail = "the text computes the address of a local ('" + m.str() + "')";
+                v.detail = "the text computes the address of a local ('" + what + "')";
                 continue;
             }
         }
