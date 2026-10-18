@@ -11361,14 +11361,22 @@ void TestArea3Round10Fix()
     };
     // caller + h at gAt + k at hAt (neither lent: the caller is withheld, the pin is the text).
     auto withTwoCallees = [&](const char* name, std::vector<uint16_t> caller, const std::vector<uint16_t>& h, const std::vector<uint16_t>& k,
-                              std::string* text) {
+                              std::string* text, bool lendK = false) {
         caller.resize(32, 0x0009);
         std::vector<uint16_t> hh = h;
         hh.resize(32, 0x0009);
         caller.insert(caller.end(), hh.begin(), hh.end());
         caller.insert(caller.end(), k.begin(), k.end());
         const CallFixture f = { name, base, std::move(caller) };
-        const DecompileResult r = d.Decompile(CallSnapshot(f, ++serial), Request(f.base));
+        auto snap = CallSnapshot(f, ++serial);
+        DecompileRequest q = Request(f.base);
+        if (lendK)
+        {
+            const DecompileResult c = d.Decompile(snap, Request(hAt));
+            CHECK(c.status == DecompileStatus::Ok && c.prototype.known);
+            q.prototypes.emplace_back(hAt, c.prototype);
+        }
+        const DecompileResult r = d.Decompile(snap, q);
         Print(f.name.c_str(), r);
         CHECK(r.status == DecompileStatus::Ok && !r.prototype.known);
         if (text) *text = r.Text();
@@ -11437,6 +11445,15 @@ void TestArea3Round10Fix()
         withTwoCallees("a3_70a: a thunk hands the write on", { 0x4F22, 0x7FF8, 0xE005, 0x2F02, 0xD103, 0x410B, 0x0009, 0x60F2, 0x7F08, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9040 },
                        { 0xD101, 0x412B, 0x0009, 0x0009, 0x0600, 0x9080 }, { 0xE109, 0x2F12, 0x000B, 0x0009 }, &text);
         CHECK(!Has(text, "return 5;") && Has(text, "a local at or above the stack pointer is read after this call"));
+        // h hands its entry r15 + 4 in r4 to k, which stores through r4: k lent (b), and not lent (c).
+        for (bool lendK : { true, false })
+        {
+            withTwoCallees(lendK ? "a3_70b: h hands its incoming slot to a lent k" : "a3_70c: h hands its incoming slot to an unlent k",
+                           { 0x4F22, 0x7FF8, 0xE005, 0x2F02, 0xD103, 0x410B, 0x0009, 0x60F2, 0x7F08, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9040 },
+                           { 0x4F22, 0x64F3, 0x7404, 0xD103, 0x410B, 0x0009, 0x4F26, 0x000B, 0x0009, 0x0009, 0x0600, 0x9080 }, { 0xE109, 0x2412, 0x000B, 0x0009 },
+                           &text, lendK);
+            CHECK(!Has(text, "return 5;") && Has(text, "a local at or above the stack pointer is read after this call"));
+        }
     }
 
     // ---- A3-75: every unlent call a word was exposed at is kept ----------------------------------------------------------------------------------

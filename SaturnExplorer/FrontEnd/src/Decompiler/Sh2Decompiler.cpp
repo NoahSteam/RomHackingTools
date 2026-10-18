@@ -1054,7 +1054,13 @@ private:
             {
                 const Value sp = Get(s, mReg[kR15]);
                 if (haveTarget)
+                {
                     MapCalleeWords(CalleeFrameWrites(target), s, sp);   // walked in turn (bounded)
+                    // ...and an address of the caller's frame handed to it in a register: what it does through that is no word of its own
+                    // frame, so its walk does not count it (A3-70 c).
+                    for (int r = 0; r < 8; ++r)
+                        if (Get(s, mReg[r]).AtOrAboveEntry()) MapCalleeWords(CallEffects::kFrameAny, s, sp);
+                }
                 else
                 {
                     // ...a target the walk cannot name: fail closed when the frame is handed on.
