@@ -11373,6 +11373,35 @@ void TestArea2Round10()
 }
 
 
+// ===== Area 2, round 11 P3 fix (A2-68) ======================================================================
+// A switch over a scaled index with a signed lower bound: `mov #-2,r1 ; cmp/ge r1,r0 ; bf default ; cmp/hi ...`. The guard's range, intersected with the
+// stride of the value (a multiple of 4), was empty for a bound of -1, -2 or -3 (the left bound rounded from below zero past the top of the mask:
+// CircleRange::newStride), which ended the chain of guards, so the guard stayed around the switch (`if (-3 < param_1 * 4) { switch(param_1 * 4) ...`)
+// where the bounds -4 to -8 fold. Patch 0059: the guard folds for every bound, and the text agrees with the run.
+void TestArea2Round11Fix()
+{
+    Sh2Decompiler d(gConfig);
+    uint64_t serial = 61000;
+    for (int bound = -1; bound >= -8; --bound)
+    {
+        // negguard11.py: shll2 of r4 into r0, cmp/ge against the bound (mov #bound,r1), the table of five cases and the default after it
+        std::vector<uint16_t> words = { 0x6043, 0x4008, static_cast<uint16_t>(0xE100 | (bound & 0xFF)), 0x3013, 0x8B1B, 0xE110, 0x3016, 0x8918, 0x6203, 0xC70E, 0x002E, 0x402B,
+                                        0x0009, 0xE340, 0x1530, 0x000B, 0x0009, 0xE341, 0x1531, 0x000B, 0x0009, 0xE342, 0x1532, 0x000B, 0x0009, 0xE343, 0x1533, 0x000B, 0x0009,
+                                        0xE344, 0x1534, 0x000B, 0x0009, 0xE37F, 0x153F, 0x000B, 0x0009, 0x0009, 0x0600, 0x901A, 0x0600, 0x9022, 0x0600, 0x902A, 0x0600, 0x9032,
+                                        0x0600, 0x903A };
+        DecompileResult r;
+        const R8Outcome o = R8Check(d, "A2-68 bound " + std::to_string(bound), words,
+                                    { { 0u }, { 1u }, { 2u }, { 3u }, { 4u }, { 5u }, { 0xFFFFFFFFu }, { 0xFFFFFFFEu }, { 0xFFFFFFFCu }, { 0x40000000u }, { 0x3FFFFFFFu }, { 0x80000000u } },
+                                    "v", {}, ++serial, 0x06009000u, &r);   // the function returns nothing: it stores through r5
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(Has(r.Text(), "switch(param_1 * 4)"));
+        CHECK(!Has(r.Text(), " < param_1 * 4"));   // the guard is folded into the switch, not left round it
+        CHECK(o.verdict == "agrees" || o.verdict == "void-ok");   // void-ok: the stores are what it does, r0 is not a result
+        if (!Has(r.Text(), "switch(param_1 * 4)") || Has(r.Text(), " < param_1 * 4") || (o.verdict != "agrees" && o.verdict != "void-ok"))
+            std::printf("A2-68 bound %d: %s %s\n%s\n", bound, o.verdict.c_str(), o.detail.c_str(), r.Text().c_str());
+    }
+}
+
 // ===== Area 3, round 10 fix: the fail-closed return rule and the new frame claims (A3-66 to A3-77) ============================================
 // The findings of the round 10 review, each flipped to the right answer. The rule: a function the engine made `void` is lent only when no input
 // the signature does not hold can change what it leaves in r0; a value, op or address the interpreter cannot model contributes all of its inputs'
@@ -12129,6 +12158,7 @@ int main(int argc, char** argv)
         RUN(TestArea2Round8());
         RUN(TestArea2Round9());
         RUN(TestArea2Round10());
+        RUN(TestArea2Round11Fix());
         RUN(TestA365WalkDown());
         RUN(TestFetchAndDataRefusals());
         RUN(TestAllocationFailureIsReported());

@@ -17,6 +17,7 @@
  * Modified for SaturnExplorer: a PcodeOp that cannot be inserted or moved between lists is not lost (patches/0023-allocation-failure-order.patch).
  * Modified for SaturnExplorer: a PcodeOp that cannot be put on the final list is not lost; one that cannot be listed is freed (patches/0032-allocation-failure-order-2.patch).
  * Modified for SaturnExplorer: the backward step of the consume analysis is a function of one op (patches/0054-engine-cached-masks-never-narrower.patch).
+ * Modified for SaturnExplorer: the non-zero mask of a signed shift by 64 or more is the sign's fill (patches/0059-engine-range-arithmetic-sound.patch).
  */
 #include "op.hh"
 #include "funcdata.hh"
@@ -668,14 +669,18 @@ uintb PcodeOp::getNZMaskLocal(bool cliploop) const
     if ((!getIn(1)->isConstant())||(size > sizeof(uintb)))
       resmask = fullmask;
     else {
-      sa = getIn(1)->getOffset();	// Get shift amount
+      // SaturnExplorer (patches/0059-engine-range-arithmetic-sound.patch): the amount saturates at the width of a uintb, and the sign's fill
+      // is taken with pcode_right: (fullmask >> sa) is a shift by sa & 63 on x86 for sa of 64 or more, which gave the mask of the value
+      // shifted by 0 for a shift by 64 (the result of an arithmetic shift by the width or more is all sign bits, or zero)
+      const uintb saFull = getIn(1)->getOffset();	// Get shift amount
+      sa = (saFull >= 8*sizeof(uintb)) ? 8*sizeof(uintb) : (int4)saFull;
       resmask = getIn(0)->getNZMask();
       if ((resmask & (fullmask ^ (fullmask>>1))) == 0) {	// If we know sign bit is zero
 	resmask = pcode_right(resmask,sa);			// Same as CPUI_INT_RIGHT
       }
       else {
 	resmask = pcode_right(resmask,sa);
-	resmask |= (fullmask >> sa) ^ fullmask;			// Don't know what the new high bits are
+	resmask |= pcode_right(fullmask,sa) ^ fullmask;		// Don't know what the new high bits are
       }
     }
     break;
