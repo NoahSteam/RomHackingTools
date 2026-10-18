@@ -45,12 +45,16 @@ std::string Hex8(uint32_t v)
     return b;
 }
 
+// Tests only: the bound on the passes of one repeating action of the engine (patch 0055), 0 for the engine's own.
+int gActionRepeatLimitForTests = 0;
+
 std::unique_ptr<SaturnArchitecture> BuildArchitecture(const std::shared_ptr<const MemorySnapshot>& snapshot,
                                                       uint32_t maxInstructions, std::atomic<bool>* cancel,
                                                       std::ostream& errors)
 {
     std::unique_ptr<SaturnArchitecture> arch(new SaturnArchitecture(snapshot, &errors));
     arch->Initialise(maxInstructions, cancel);
+    if (gActionRepeatLimitForTests > 0) arch->maxActionRepeats = gActionRepeatLimitForTests;
     return arch;
 }
 
@@ -2350,9 +2354,16 @@ EngineWarning ClassifyEngineWarning(const std::string& comment)
     for (const char* o : kCasesMissing) w.casesMissing |= text.compare(0, std::strlen(o), o) == 0;
     static const char kRestarts[] = "Exceeded maximum restarts";
     w.restartLimit = text.compare(0, sizeof kRestarts - 1, kRestarts) == 0;
+    static const char kRepeats[] = "Exceeded maximum repeats of ";
+    w.repeatLimit = text.compare(0, sizeof kRepeats - 1, kRepeats) == 0;
     w.keep = !scratch || w.casesMissing;
     w.text = text;
     return w;
+}
+
+void Sh2Decompiler::SetActionRepeatLimitForTests(int limit)
+{
+    gActionRepeatLimitForTests = limit;
 }
 
 void Sh2Decompiler::SetLendEffectsForTests(bool lend)
@@ -4288,7 +4299,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
             uint8_t b[2];
             return !snapshot->Read(a, b, 2, &why);
         };
-        bool restartsExhausted = false, tableIncomplete = false;
+        bool restartsExhausted = false, repeatsExhausted = false, tableIncomplete = false;
         // The blocks the actions removed as unreachable, by the address they start at as the engine wrote it ("Removing unreachable block
         // (ram,0x25fe0008)"). A halt flow made at the start of one is not in the function that is shown (A4-16).
         std::set<uint32_t> removedBlocks;
@@ -4310,6 +4321,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
             const bool outcome = cls.casesMissing;
             tableIncomplete |= cls.casesMissing;
             restartsExhausted |= cls.restartLimit;
+            repeatsExhausted |= cls.repeatLimit;
             const bool header = (c->getType() & ghidra::Comment::warningheader) != 0;
             // Said once per halt below, where it is.
             if (header && (text == "Control flow encountered bad instruction data" ||
@@ -4464,6 +4476,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         if (r.truncated) r.prototypeWithheld = "truncated";
         else if (tableIncomplete) r.prototypeWithheld = "a jump table recovered incompletely";
         else if (restartsExhausted) r.prototypeWithheld = "the analysis did not settle (restart limit)";
+        else if (repeatsExhausted) r.prototypeWithheld = "the analysis did not settle (repeat limit)";
         else if (r.unsupported) r.prototypeWithheld = "unsupported";
         else if (r.unimplemented) r.prototypeWithheld = "unimplemented";
         CallEffects effects;

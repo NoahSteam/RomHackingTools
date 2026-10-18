@@ -113,6 +113,12 @@ The output is always for a specific snapshot. If what you are looking at changes
   register the function reads (the four bytes `cmp/str` compares) is named with the byte, counted from the least significant:
   `in_r3` is the low byte, `in_r3_b3` the most significant, and `unaff_r8_b3` the same for a register the function keeps. A return in both r0 and r1 is shown as an 8-byte value (`CONCAT44(r0, r1)`,
   `(uint8)x`) even when r1 is only a scratch register the function left a value in: the code does not say which.
+- The stack pointer on entry is taken to be a multiple of 4, as the SH-2 needs it to be for a longword push (one through
+  an r15 that is not raises an address error) and as compiled code keeps it. Code that tests or rounds r15 is printed with
+  that assumption: `mov r15,r0 ; and #3,r0` is `return 0;` and `mov r15,r0 ; add #2,r0 ; and #3,r0` is `return 2;`, where a
+  function entered with r15 at 2 more than a multiple of 4 returns 2 and 0. Rounding to 8 or more keeps its AND
+  (`mov r15,r0 ; mov #-8,r1 ; and r1,r0` is `(uint4)&xStack00000000 & 0xfffffff8`). Only hand-written code that calls with
+  a word pushed can enter a function with r15 at 2 more than a multiple of 4.
 - The pseudocode describes the instructions of an ordinary run. It does not model what the CPU does when it cannot
   carry one out, and it does not say so:
   - *Address errors.* A word or longword access at an address that is not a multiple of its size (`mov.w`, `mov.l`,

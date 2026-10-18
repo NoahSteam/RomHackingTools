@@ -11106,8 +11106,11 @@ void TestArea2Round9()
         const R8Outcome o = R8Check(d, "A2-58 add", words, { { 0, 0x80000001u, 0xFFu }, { 0, 0x7FFFFFFFu, 0x80000000u }, { 5, 0x0u, 0x80000000u } }, "", {}, ++serial, 0x06009000u, &r);
         Print("A2-58: r1 = src & 0x80000000 in both arms, r2 = r1 + 1, join reads r1 low byte and r2", r);
         CHECK(r.status == DecompileStatus::Ok);
-        CHECK(o.verdict == "differs");              // WRONG: the code returns 0x80000001 for r5 = 0x80000001, the text returns 1
-        CHECK(Has(r.Text(), "return 1;"));          // WRONG (the fix: "return (param_2 & 0x80000000) + 1" or the like)
+        // Fixed by patch 0054: the phi of r1 that RulePushMulti points the merged add at is consumed in every bit the add takes, and so
+        // are the two `src & 0x80000000` above it, which RuleAndMask then keeps. Was `return 1;` with no parameter (the verdict `differs`).
+        CHECK(o.verdict == "agrees");
+        CHECK(!Has(r.Text(), "return 1;"));
+        CHECK(Has(r.Text(), "return (param_3 & 0x80000000) + 1;"));
     }
     {
         // the same with the test: tst r1,r1 in each arm, the join returns -T (shll2 r0 ; movt r2 ; sub r2,r0): the code returns 0 when the chosen source has
@@ -11118,8 +11121,10 @@ void TestArea2Round9()
         const R8Outcome o = R8Check(d, "A2-58 tst", words, { { 2, 0x7FFFu, 0xFFFF8000u }, { 0, 0x7FFFu, 0xFFFF8000u }, { 2, 0x80000000u, 0u } }, "", {}, ++serial, 0x06009000u, &r);
         Print("A2-58: tst r1,r1 in both arms, the join returns -T of the test", r);
         CHECK(r.status == DecompileStatus::Ok);
-        CHECK(o.verdict == "differs");              // WRONG: r4 = 2 reads r6 = 0xFFFF8000, whose sign bit is set: the code returns 0, the text 0xffffffff
-        CHECK(Has(r.Text(), "return 0xffffffff;")); // WRONG
+        // Fixed by patch 0054 (was `return 0xffffffff;`, the verdict `differs`: r4 = 2 reads r6 = 0xFFFF8000, whose sign bit is set, and the code returns 0)
+        CHECK(o.verdict == "agrees");
+        CHECK(!Has(r.Text(), "return 0xffffffff;"));
+        CHECK(Has(r.Text(), "(param_3 & 0x80000000) == 0"));
     }
     {
         // control: the join reads r1 whole (no extu.b): the phi is consumed in every bit and nothing is lost
@@ -11131,22 +11136,72 @@ void TestArea2Round9()
         CHECK(o.verdict == "agrees");
     }
     // ---- (2) A2-59 (P2): a counted loop that ANDs a constant-seeded accumulator with a value assembled from the pieces of a register ----
+    // mov #4,r1 ; L: swap.b r2,r3 ; and r3,r1 ; dt r6 ; bf L ; rts ; mov r1,r0. Patch 0049 forgot the non-zero mask of the phi of r1 after the first
+    // RuleAndDistribute (`r1 & (A | B)` into `(A & r1) | (B & r1)`), so the second distribution of the nest (the mask `0x4` it keys on was gone) did not
+    // fire in the pass and RuleHumptyOr merged the first one back; ActionNonzeroMask worked the mask out again at the next pass and the two rules undid
+    // each other for ever (about 44 MB of operations a second), until the cancel flag. Patch 0054 forgets nothing that is still true (the
+    // distribution keeps the value, and the phi its `0x4`), and patch 0055 bounds the passes of a repeating action. The request runs against a cancel
+    // flag raised after 30 s, so that a regression fails here instead of hanging the suite; it must finish, settled: no warning of the bound, the
+    // signature not withheld for it. (The other three words of the row: swap.w, a shift and a swap, xtrct.)
     {
-        // mov #4,r1 ; L: swap.b r2,r3 ; and r3,r1 ; dt r6 ; bf L ; rts ; mov r1,r0. Patch 0049 forgets the non-zero mask of the phi of r1 after the first
-        // RuleAndDistribute (`r1 & (A | B)` into `(A & r1) | (B & r1)`), so the second distribution of the nest (the mask `0x4` it keys on is gone) does not
-        // fire in the pass and RuleHumptyOr merges the first one back; ActionNonzeroMask works the mask out again at the next pass and the two rules undo each
-        // other for ever (about 44 MB of operations a second; without the walk, two RuleAndDistribute in a row and RuleAndMask finish). The engine does not
-        // finish, and this holds that: the cancel flag is the only stop, so the request is cancelled after 1.5 s. WRONG (the fix flips it to Ok).
-        auto snap = CallSnapshot({ "A2-59 loop", 0x06009000u, { 0xE104, 0x6328, 0x2139, 0x4610, 0x8BFB, 0x000B, 0x6013, 0x0009 } }, ++serial);
-        std::atomic<bool> cancel(false);
-        std::thread stopper([&cancel] {
-            std::this_thread::sleep_for(std::chrono::milliseconds(1500));
-            cancel = true;
-        });
-        const DecompileResult r = d.Decompile(snap, Request(0x06009000u), &cancel);
-        stopper.join();
-        std::printf("A2-59: the loop that ANDs with swap.b: status %d\n", static_cast<int>(r.status));
-        CHECK(r.status == DecompileStatus::Cancelled);
+        struct Loop
+        {
+            const char* name;
+            std::vector<uint16_t> words;
+        };
+        const Loop loops[] = { { "A2-59 swap.b", { 0xE104, 0x6328, 0x2139, 0x4610, 0x8BFB, 0x000B, 0x6013, 0x0009 } },
+                               { "A2-59 swap.w", { 0xE104, 0x6329, 0x2139, 0x4610, 0x8BFB, 0x000B, 0x6013, 0x0009 } },
+                               { "A2-59 shlr8 ; swap.b", { 0xE11C, 0xE601, 0x6323, 0x4319, 0x6338, 0x2139, 0x4610, 0x8BF9, 0x000B, 0x6013, 0x000B, 0x6033 } },
+                               { "A2-59 xtrct", { 0xE601, 0xE17F, 0x222B, 0x200D, 0x2109, 0x4610, 0x8BFA, 0x4308, 0x6023, 0x000B, 0x0009, 0x0009 } } };
+        for (const Loop& loop : loops)
+        {
+            auto snap = CallSnapshot({ loop.name, 0x06009000u, loop.words }, ++serial);
+            std::atomic<bool> cancel(false), done(false);
+            std::thread stopper([&cancel, &done] {
+                for (int i = 0; i < 3000 && !done; ++i) std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                cancel = true;
+            });
+            const auto start = std::chrono::steady_clock::now();
+            const DecompileResult r = d.Decompile(snap, Request(0x06009000u), &cancel);
+            done = true;
+            stopper.join();
+            const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+            std::printf("%s: status %d, %.1f ms\n", loop.name, static_cast<int>(r.status), ms);
+            Print(loop.name, r);
+            bool bounded = false;
+            for (const std::string& w : r.warnings) bounded |= Has(w, "Exceeded maximum repeats");
+            CHECK(r.status == DecompileStatus::Ok);
+            CHECK(!bounded);
+            CHECK(!Has(r.prototypeWithheld, "did not settle"));   // (withheld for reading r2 on entry, which no signature passes)
+            CHECK(Has(r.Text(), "while ("));
+        }
+        // (By value they are printed-C fixtures of Sh2GeneratedTests, `A2-59 ...`: this evaluator does not run loops.)
+    }
+    // ---- (3) patch 0055: a repeating action that does not settle stops, says so, and the signature is withheld ----
+    {
+        // The bound lowered to 2 passes for the A2-58 join (whose rule pool needs more): the text is still printed (every pass keeps the meaning of the
+        // function), the engine's warning is passed on, and the signature is withheld as for the restart limit. With the bound at the engine's own
+        // (300 passes; the most any function of the two game images needs is 60, of the rule pool) nothing is said.
+        const std::vector<uint16_t> words = { 0xE301, 0x4305, 0x4415, 0x8905, 0x6153, 0x2139, 0x6213, 0x7201, 0xA004, 0x0009, 0x6163, 0x2139, 0x6213, 0x7201,
+                                              0x6013, 0x600C, 0x202B, 0x000B, 0x0009, 0x0009 };
+        Sh2Decompiler::SetActionRepeatLimitForTests(2);
+        const DecompileResult r = d.Decompile(CallSnapshot({ "0055 bound", 0x06009000u, words }, ++serial), Request(0x06009000u));
+        Sh2Decompiler::SetActionRepeatLimitForTests(0);
+        Print("0055: the passes of one action bounded to 2", r);
+        bool bounded = false;
+        for (const std::string& w : r.warnings) bounded |= Has(w, "Exceeded maximum repeats of ");
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(bounded);
+        CHECK(r.prototypeWithheld == "the analysis did not settle (repeat limit)");
+        CHECK(Has(r.Text(), "return"));
+        const DecompileResult again = d.Decompile(CallSnapshot({ "0055 bound", 0x06009000u, words }, ++serial), Request(0x06009000u));
+        bounded = false;
+        for (const std::string& w : again.warnings) bounded |= Has(w, "Exceeded maximum repeats");
+        CHECK(again.status == DecompileStatus::Ok && !bounded && again.prototypeWithheld.empty());
+        EngineWarning w = ClassifyEngineWarning("WARNING: Exceeded maximum repeats of mainloop with changes still pending");
+        CHECK(w.keep && w.repeatLimit && !w.restartLimit);
+        w = ClassifyEngineWarning("WARNING (jumptable): Exceeded maximum repeats of oppool1 with changes still pending");
+        CHECK(!w.keep);   // the scratch copy's own analysis, as every warning of it that is not about the table
     }
 }
 

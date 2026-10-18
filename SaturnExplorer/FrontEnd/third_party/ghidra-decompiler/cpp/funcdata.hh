@@ -15,6 +15,7 @@
  *
  * Modified for SaturnExplorer: every LOAD and STORE's fate is recorded (patches/0017-access-fates.patch).
  * Modified for SaturnExplorer: the instructions and jump tables the flow recovered are recorded (patches/0021-flow-instructions.patch).
+ * Modified for SaturnExplorer: an op that changes keeps the cached masks around it a superset of the truth (patches/0054-engine-cached-masks-never-narrower.patch).
  */
 #ifndef __FUNCDATA_HH__
 #define __FUNCDATA_HH__
@@ -156,6 +157,8 @@ class Funcdata {
   bool applyUnionFacet(DynamicEntry *entry,DynamicHash &dhash);
 				// Low level op functions
   void opZeroMulti(PcodeOp *op);		///< Transform trivial CPUI_MULTIEQUAL to CPUI_COPY
+  void opMasksChanged(PcodeOp *op);		///< Keep the cached non-zero and consume masks wide enough after \e op changed
+  uintb inputConsumeNeeded(PcodeOp *op,int4 slot) const;	///< The bits of an input the given op consumes now
 				// Low level block functions
   void blockRemoveInternal(BlockBasic *bb,bool unreachable);
   void branchRemoveInternal(BlockBasic *bb,int4 num);

@@ -250,6 +250,7 @@ public:
   PcodeOp *previousOp(void) const; ///< Return the previous op within this op's basic block or \e null
   PcodeOp *target(void) const;	///< Return starting op for instruction associated with this op
   uintb getNZMaskLocal(bool cliploop) const; ///< Calculate known zero bits for output to this op
+  bool getConsumeLocal(int4 slot,uintb outc,uintb &res) const; ///< Calculate the bits of an input that are consumed, from those of the output
   int4 compareOrder(const PcodeOp *bop) const; ///< Compare the control-flow order of this and \e bop
   bool verifyMultNegOne(void) const;	///< Check if \b this is CPUI_INT_MULT by -1
   void printRaw(ostream &s) const { opcode->printRaw(s,this); }	///< Print raw info about this op to stream

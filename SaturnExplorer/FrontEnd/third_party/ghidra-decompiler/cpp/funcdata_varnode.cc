@@ -17,6 +17,7 @@
  * Modified for SaturnExplorer: a write of the return register with the value it holds is not a value of its own (patches/0048-engine-identity-write-return.patch).
  * Modified for SaturnExplorer: a Varnode that takes over the readers of another is consumed in the bits the other was (patches/0051-engine-replaced-varnode-consume-merged.patch).
  * Modified for SaturnExplorer: the stack pointer on entry is taken to be aligned to a longword, not to 256 (patches/0052-engine-stack-pointer-longword-aligned.patch).
+ * Modified for SaturnExplorer: a new output keeps the cached masks around its op a superset of the truth; totalReplace leaves that to opSetInput (patches/0054-engine-cached-masks-never-narrower.patch).
  */
 #include "funcdata.hh"
 
@@ -132,6 +133,7 @@ Varnode *Funcdata::newVarnodeOut(int4 s,const Address &m,PcodeOp *op)
   else
     vn->setFlags(vflags & ~Varnode::typelock); // Typelock set by updateType
 
+  opMasksChanged(op);	// SaturnExplorer (patches/0054-engine-cached-masks-never-narrower.patch)
   return vn;
 }
 
@@ -145,11 +147,13 @@ Varnode *Funcdata::newUniqueOut(int4 s,PcodeOp *op)
 {
   Datatype *ct = glb->types->getBase(s,TYPE_UNKNOWN);
   Varnode *vn = vbank.createDefUnique(s,ct,op);
+  vn->setConsume(0);	// SaturnExplorer (patches/0054-engine-cached-masks-never-narrower.patch): a temporary no op reads yet; each reader widens it
   op->setOutput(vn);
   assignHigh(vn);
   if (s >= minLanedSize)
     checkForLanedRegister(s, vn->getAddr());
   // No chance of matching localmap
+  opMasksChanged(op);	// SaturnExplorer (patches/0054-engine-cached-masks-never-narrower.patch)
   return vn;
 }
 
@@ -1553,18 +1557,9 @@ void Funcdata::totalReplace(Varnode *vn,Varnode *newvn)
   PcodeOp *op;
   int4 i;
 
-  // SaturnExplorer (patches/0051-engine-replaced-varnode-consume-merged.patch): the readers of vn are about to read newvn, so
-  // newvn is consumed in every bit vn was. The consume mask is worked out by ActionDeadCode, once a pass, and what a rule
-  // does after that has to leave it a superset of what the readers use: ActionVarnodeProps, the first action of the next pass,
-  // replaces a Varnode whose non-zero mask and consume mask do not meet by a zero before ActionDeadCode runs again. A merge of
-  // two equal SUBPIECEs (RuleSelectCse, through cseElimination) left the byte of SR read by "& 1" with the consume mask 0x01
-  // and a reader of the whole byte on it, and the byte was printed as 0.
-  if (vn != newvn && !newvn->isConstant() && !vn->hasNoDescend()) {
-    uintb moved = vn->getConsume();
-    if (vn->getSize() != newvn->getSize())	// not the same bits: no claim can be made, so every bit
-      moved = ~((uintb)0);
-    newvn->setConsume((newvn->getConsume() | moved) & calc_mask(newvn->getSize()));
-  }
+  // SaturnExplorer: newvn is consumed in every bit a reader of vn takes of it. Patch 0051 merged the consume mask of vn into
+  // newvn here; opSetInput now widens newvn's mask by what each reader it gains takes, which is the same fact for each
+  // reader and holds for every other way a Varnode gains one (patches/0054-engine-cached-masks-never-narrower.patch).
   iter = vn->beginDescend();
   while(iter != vn->endDescend()) {
     op = *iter++;	       // Increment before removing descendant

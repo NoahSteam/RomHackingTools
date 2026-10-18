@@ -301,14 +301,16 @@ struct CallSite
 
 // How one of the engine's warning comments is reported: kept or not (warnings from jump-table
 // recovery's scratch copy are dropped, unless they say cases were dropped), its text, and whether
-// it means a jump table lost cases or the analysis hit its restart limit (either withholds the
-// signature). Exposed for tests: a failed second-stage table recovery has no SH-2 fixture that
-// reaches it, since both stages analyse the same scratch copy.
+// it means a jump table lost cases or the analysis hit its restart limit or its bound on the
+// passes of one action (any of them withholds the signature). Exposed for tests: a failed
+// second-stage table recovery has no SH-2 fixture that reaches it, since both stages analyse the
+// same scratch copy.
 struct EngineWarning
 {
     bool keep = false;
     bool casesMissing = false;
     bool restartLimit = false;
+    bool repeatLimit = false;   // patch 0055: an action of the engine stopped repeating with changes still pending (A2-59)
     std::string text;   // without the "WARNING: " prefix
 };
 EngineWarning ClassifyEngineWarning(const std::string& comment);
@@ -435,6 +437,9 @@ public:
     // it keeps, so a caller reads them as they were instead of extraout_rN). On unless cleared: the
     // lending measurements run both ways. Process-wide.
     static void SetLendEffectsForTests(bool lend);
+    // Tests only: the most passes one repeating action of the engine makes before it stops with "Exceeded maximum repeats of"
+    // and the signature is withheld (patch 0055; 0 restores the engine's own bound). Process-wide.
+    static void SetActionRepeatLimitForTests(int limit);
     // Tests only: called as each phase begins, in every pass, including the reference run's (which
     // the observer is not told of); and just before the reference run starts. Process-wide.
     static void SetPhaseHookForTests(std::function<void(DecompilePhase)> hook);
