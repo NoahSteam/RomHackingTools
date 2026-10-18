@@ -32,7 +32,7 @@
 //
 // usage: SaturnExplorerDecompilerTrustTests <scratch dir>
 //   SE_TRUST_STEPS=<n>   run at least n operations per outcome mix (default: a short run)
-//   SE_TRUST_MIX=<k>     only mix k (see kMixNames)
+//   SE_TRUST_MIX=<k>     only mix k (see kMixNames); SE_TRUST_FROM=<seed> starts it there, to run a long mix in pieces
 //   SE_TRUST_SEED=<k>    (with SE_TRUST_MIX) one sequence of that mix, every step printed; SE_TRUST_SKIP=3,5 and SE_TRUST_LIMIT=n shrink it
 //   SE_TRUST_FOLLOW_SEED=<k>  one sequence of the Follow PC rig (mix 8), every step printed
 //   SE_TRUST_SCRIPT="select A; t-inject failed" SE_MODEL_WORLD=C,A   one sequence written out (area 1's words, and t-...)
@@ -1892,6 +1892,8 @@ int main(int argc, char** argv)
     const char* seedEnv = std::getenv("SE_TRUST_SEED");
     const bool long_ = stepsEnv && *stepsEnv;
     const uint64_t perMix = long_ ? std::strtoull(stepsEnv, nullptr, 10) : 120;
+    const char* fromEnv = std::getenv("SE_TRUST_FROM");   // the first seed of each mix: a long run in pieces
+    const uint64_t fromSeed = fromEnv && *fromEnv ? std::strtoull(fromEnv, nullptr, 10) : 1;
     int failedPrograms = 0;
     std::vector<std::string> failedList;
     try
@@ -1964,7 +1966,7 @@ int main(int argc, char** argv)
             const uint64_t before = gT.steps;
             const auto t0 = std::chrono::steady_clock::now();
             uint64_t seeds = 0;
-            for (uint64_t seed = 1; gT.steps - before < perMix; ++seed)
+            for (uint64_t seed = fromSeed; gT.steps - before < perMix; ++seed)
             {
                 const bool ok = RunTrust(oracle, MakeProgram(seed, mix), seed, false);
                 ++seeds;
@@ -1974,8 +1976,9 @@ int main(int argc, char** argv)
                     failedList.push_back("mix " + std::to_string(mix) + " seed " + std::to_string(seed));
                 }
             }
-            std::printf("mix %d (%s): %llu sequences, %llu operations, %.1f s\n", mix, kMixNames[mix],
-                        static_cast<unsigned long long>(seeds), static_cast<unsigned long long>(gT.steps - before),
+            std::printf("mix %d (%s): %llu sequences (seeds %llu to %llu), %llu operations, %.1f s\n", mix, kMixNames[mix],
+                        static_cast<unsigned long long>(seeds), static_cast<unsigned long long>(fromSeed),
+                        static_cast<unsigned long long>(fromSeed + seeds - 1), static_cast<unsigned long long>(gT.steps - before),
                         dts::MsSince(t0) / 1000.0);
         }
 
@@ -1984,7 +1987,7 @@ int main(int argc, char** argv)
         {
             const auto t0 = std::chrono::steady_clock::now();
             uint64_t ops = 0, seeds = 0;
-            for (uint64_t seed = 1; ops < perMix; ++seed)
+            for (uint64_t seed = fromSeed; ops < perMix; ++seed)
             {
                 const bool ok = RunFollow(seed, false, ops);
                 ++seeds;
@@ -1996,8 +1999,9 @@ int main(int argc, char** argv)
                 }
             }
             gT.steps += ops;
-            std::printf("mix %d (Follow PC, registers, the CPU switched, the entry typed, Decompile): %llu sequences, %llu operations, %.1f s\n", kMixes,
-                        static_cast<unsigned long long>(seeds), static_cast<unsigned long long>(ops), dts::MsSince(t0) / 1000.0);
+            std::printf("mix %d (Follow PC, registers, the CPU switched, the entry typed, Decompile): %llu sequences (seeds %llu to %llu), %llu operations, %.1f s\n", kMixes,
+                        static_cast<unsigned long long>(seeds), static_cast<unsigned long long>(fromSeed),
+                        static_cast<unsigned long long>(fromSeed + seeds - 1), static_cast<unsigned long long>(ops), dts::MsSince(t0) / 1000.0);
         }
     }
     catch (std::exception& e)
