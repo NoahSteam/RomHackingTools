@@ -10325,7 +10325,10 @@ void TestRoutedSeeds()
     lentVoid("a3_55 control: r3 is compared, r0 is the word on both paths", { 0xD704, 0x8579, 0x3300, 0x8B00, 0x6203, 0x000B, 0x0009, 0x0009, 0x0009, 0x0009, 0x2600, 0x2000 });
     // ...and by a value nothing is known of: a word loaded through a pointer that may be in the stack, after a frame address escaped (every
     // register is among its origins). mov r15,r1 ; mov.l r1,@r4 ; mov.l @r4,r2 ; mov.l @r2,r1 ; tst r1,r1 ; bt L ; mov #1,r0 ; L: rts ; nop.
-    lentVoid("a3_55 control: chosen by a value nothing is known of", { 0x61F3, 0x2412, 0x6242, 0x6122, 0x2118, 0x8900, 0xE001, 0x000B, 0x0009 });
+    // Reversed by the area 3 round 10 fix (the nothing-known exception removed): the pointer reloaded from *r4 may be the entry r15 the function
+    // stored there, so the word it reads may be the stack argument at r15 + 0, and that word chooses r0.
+    withheld("a3_55 control: chosen by a value nothing is known of", { 0x61F3, 0x2412, 0x6242, 0x6122, 0x2118, 0x8900, 0xE001, 0x000B, 0x0009 },
+             "its return is chosen by a stack argument");
 
     // ---- A4-16 ---------------------------------------------------------------------------------------------------------------------------
     // Seed 511038 shrunk: function 0 is `mov.l @(lit),r6` and runs into function 1, a switch on r6 (`cmp/hi #4,r6 ; bt default ; shll2 r6 ; mova ; mov.l
@@ -10720,7 +10723,9 @@ void TestArea3Round9Fix()
              "its return is computed from r7 on entry, which the signature does not hold");
     // r0 joined with a word loaded through a pointer that may be anywhere in the stack (a frame address escaped through r4 first): nothing is known
     // of it, which is taken for memory (A3-55's limit, for data); r5 is held (stored too). Lent void.
-    lentVoid("round 9 fix: r0 or a word nothing is known of", { 0x61F3, 0x2412, 0x6242, 0x1451, 0x2558, 0x8900, 0x6022, 0x000B, 0x0009 });
+    // Reversed by the area 3 round 10 fix: the word may be the stack argument at the entry r15 (the frame address escaped through r4 and came back).
+    withheld("round 9 fix: r0 or a word nothing is known of", { 0x61F3, 0x2412, 0x6242, 0x1451, 0x2558, 0x8900, 0x6022, 0x000B, 0x0009 },
+             "its return is computed from a stack argument");
     // The interrupt-mask idiom as 06010054 has it (SR whole with the mask set, written back, and the saved SR masked and written back), r0 left
     // with no other use: the machine's state, lent void.
     lentVoid("round 9 fix: the interrupt-mask idiom, 06010054's", { 0x0002, 0xCBF0, 0x400E, 0xE30F, 0x0102, 0x2139, 0x410E, 0x000B, 0x0009 });
@@ -11381,11 +11386,13 @@ void TestArea3Round10Fix()
              "its return is computed from r3 on entry");
     withheld("a3_66b: the word below r15 summed with r3", { 0xE201, 0x2422, 0x61F3, 0x71FC, 0x6012, 0x303C, 0x210B, 0x000B, 0x0009 },
              "its return is computed from r3 on entry");
-    lent("a3_66c: a stack argument read through a pool-offset address (folded)", { 0x9204, 0x32FC, 0x6022, 0x210B, 0x000B, 0x0009, 0x0014, 0x0009 });
+    withheld("a3_66c: a stack argument read through a pool-offset address (the mov.w literal folded)", { 0x9204, 0x32FC, 0x6022, 0x210B, 0x000B, 0x0009, 0x0014, 0x0009 },
+             "its return is computed from a stack argument");
     // ---- A3-67: the chooser side -------------------------------------------------------------------------------------------------------------
     withheld("a3_67a: r3 compared with the word below r15 chooses", { 0xE201, 0x2422, 0x61F3, 0x71FC, 0x6212, 0x3230, 0x8903, 0xE001, 0x210B, 0xA002, 0x0009, 0xE002, 0x210B, 0x000B, 0x0009, 0x0009 },
              "its return is chosen by r3 on entry");
-    lent("a3_67b: a pool-offset stack argument chooses (folded)", { 0x910C, 0x31FC, 0x6212, 0x2228, 0x8903, 0xE001, 0x210B, 0xA002, 0x0009, 0xE002, 0x210B, 0x000B, 0x0009, 0x0009, 0x0014, 0x0009 });
+    withheld("a3_67b: a pool-offset stack argument chooses (the mov.w literal folded)", { 0x910C, 0x31FC, 0x6212, 0x2228, 0x8903, 0xE001, 0x210B, 0xA002, 0x0009, 0xE002, 0x210B, 0x000B, 0x0009, 0x0009, 0x0014, 0x0009 },
+             "its return is chosen by a stack argument");
     // ---- A3-68: a part of r0, a byte spill, a carried value through extu.b -----------------------------------------------------------------------
     withheld("a3_68a: extu.b r0,r0", { 0x600C, 0x210B, 0x000B, 0x0009 }, "its return is computed from r0 on entry");
     withheld("a3_68b: extu.w r0,r0", { 0x600D, 0x210B, 0x000B, 0x0009 }, "its return is computed from r0 on entry");

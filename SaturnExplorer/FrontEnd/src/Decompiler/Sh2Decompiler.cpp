@@ -433,6 +433,7 @@ public:
         {
             const uint32_t a = *work.begin();
             work.erase(work.begin());
+            ++mStepsUsed;
             if (++steps > mMaxSteps) return "a return not proven to go to its caller (too many paths)";
             // A cancel requested anywhere reaches the probe's walk too (A3-74: the outer phases check it, this did not).
             if (mCancel != nullptr && (steps & 0x3FFu) == 0 && mCancel->load()) throw ghidra::CancelError("cancelled");
@@ -476,6 +477,8 @@ private:
     static constexpr size_t kMaxSteps = 200000;
     static constexpr size_t kNestedMaxSteps = 20000;   // a callee walked for CalleeFrameWrites: one it cannot follow in that writes nothing
     static constexpr size_t kNestedMaxSlots = 256;     // ...and the stack words it stores to: past this the walk is bounded (A3-74)
+    static constexpr int kNestedMaxDepth = 4;            // callees of callees walked, transitively (A3-70)
+    static constexpr size_t kNestedBudget = 80000;       // instruction visits over all the levels of one probe's walks
     static constexpr int kWidenAfter = 6;
     static constexpr int kTracked = 22;   // the registers origin:: names, in its order
     static constexpr int kR15 = 15, kSr = 16, kPr = 21;
@@ -1047,12 +1050,14 @@ private:
             if (mNested)
             {
                 const Value sp = Get(s, mReg[kR15]);
-                bool handsFrame = sp.kind == Value::Sp && sp.v >= 0;
-                for (int r = 0; r < 8 && !handsFrame; ++r) handsFrame = Get(s, mReg[r]).AtOrAboveEntry();
-                if (handsFrame)
+                if (haveTarget)
+                    MapCalleeWords(CalleeFrameWrites(target), sp);   // walked in turn (bounded)
+                else
                 {
-                    mOwnFrameWords |= CallEffects::kFrameAny;
-                    mCallerFrameStores |= origin::kFrame;
+                    // ...a target the walk cannot name: fail closed when the frame is handed on.
+                    bool handsFrame = sp.kind != Value::Sp || sp.v >= 0;
+                    for (int r = 0; r < 8 && !handsFrame; ++r) handsFrame = Get(s, mReg[r]).AtOrAboveEntry();
+                    if (handsFrame) MapCalleeWords(CallEffects::kFrameAny, sp);
                 }
             }
         }
@@ -1081,7 +1086,13 @@ private:
             // r4) writes a word of this function's caller's frame, as a store of its own there would (A3-39). What h stores is not in the
             // effects as a value, so the hand-back is withheld whatever it is.
             for (int r = 0; r < 15; ++r)
-                if (((e.storesThrough >> r) & 1u) && Get(s, mReg[r]).AtOrAboveEntry()) mCallerFrameStores |= origin::kFrame;
+                if (((e.storesThrough >> r) & 1u) && Get(s, mReg[r]).AtOrAboveEntry())
+                {
+                    mCallerFrameStores |= origin::kFrame;
+                    if (mNested) MapCalleeWords(CallEffects::kFrameAny, Get(s, mReg[kR15]));   // the walked callee hands its caller's frame on
+                }
+            // ...and a lent callee that writes its own caller's frame (a home-area spill): those words, seen from the walked function.
+            if (mNested && (e.storesThrough & origin::kFrame)) MapCalleeWords(e.frameWords, Get(s, mReg[kR15]));
         }
         Apply(s, e, targetIsR0);
     }
@@ -1153,21 +1164,70 @@ private:
     // The words of its caller's frame that the function at 'target' writes itself, as CallEffects::frameWords has them (A3-21's stores, an
     // argument register spilled into the home area included), read from its code by the same walk; 0 when it writes none, or when the walk
     // cannot follow it (memory not captured, too many paths). Asked once per target, by the probe only.
+    // The walk descends into the callee's own callees and tail-jump targets (A3-70), to kNestedMaxDepth levels and within one shared budget; a
+    // callee it cannot follow -- the levels or the budget exhausted, too many paths, too many stack words (A3-74), a cycle -- is taken to write
+    // any word (kFrameAny), not none. A target whose first instruction is not captured (the BIOS) is the walk's one limit: no code to read.
     uint32_t CalleeFrameWrites(uint32_t target)
     {
-        if (mNested) return 0;
-        const auto known = mCalleeFrameWrites.find(target);
-        if (known != mCalleeFrameWrites.end()) return known->second;
+        NestedContext* ctx = mNestedCtx != nullptr ? mNestedCtx : &mOwnCtx;
+        if (ctx == &mOwnCtx && ctx->cache.empty() && ctx->budget == 0) ctx->budget = kNestedBudget;
+        const auto known = ctx->cache.find(target);
+        if (known != ctx->cache.end()) return known->second;
+        if (mDepth >= kNestedMaxDepth || ctx->budget == 0) return CallEffects::kFrameAny;
+        ctx->cache[target] = CallEffects::kFrameAny;
         static const JumpDests kNoTables;
         ReturnCheck callee(mFd, target, mLent, kNoTables);
         callee.mNested = true;
-        callee.mMaxSteps = kNestedMaxSteps;
+        callee.mNestedCtx = ctx;
+        callee.mDepth = mDepth + 1;
+        callee.mFoldPcLoads = true;
+        callee.mMaxSteps = std::min(kNestedMaxSteps, ctx->budget);
+        callee.mCancel = mCancel;
         callee.SetTolerant();
         CallEffects unused;
+        const std::string why = callee.Run(unused);
+        ctx->budget -= std::min(ctx->budget, callee.mStepsUsed);
         uint32_t words = 0;
-        if (callee.Run(unused).empty() && callee.CallerFrameStores() != 0) words = callee.mOwnFrameWords;
-        mCalleeFrameWrites[target] = words;
+        if (!why.empty()) words = CallEffects::kFrameAny;
+        else if (callee.mEntryUndecodable) words = 0;
+        else if (callee.CallerFrameStores() != 0) words = callee.mOwnFrameWords;
+        ctx->cache[target] = words;
         return words;
+    }
+    // A walked callee's own callee (or tail-jump target) writes 'words' of its caller's frame, counted from the r15 it was entered with ('sp'):
+    // those at or above this walked function's entry r15 are words of the frame being asked about.
+    void MapCalleeWords(uint32_t words, const Value& sp)
+    {
+        if (words == 0) return;
+        if ((words & CallEffects::kFrameAny) || sp.kind != Value::Sp)
+        {
+            mOwnFrameWords |= CallEffects::kFrameAny;
+            mCallerFrameStores |= origin::kFrame;
+            return;
+        }
+        for (int k = 0; k < 31; ++k)
+            if ((words >> k) & 1u)
+            {
+                const int64_t off = sp.v + 4 * k;
+                if (off < 0) continue;   // a word of this function's own frame
+                mOwnFrameWords |= off / 4 >= 31 ? CallEffects::kFrameAny : 1u << (off / 4);
+                mCallerFrameStores |= origin::kFrame;
+            }
+    }
+    bool ReadCode(uint32_t addr, int n, uint32_t& v) const
+    {
+        ghidra::uint1 b[4] = { 0, 0, 0, 0 };
+        try
+        {
+            mFd.getArch()->loader->loadFill(b, n, ghidra::Address(mRam, addr));
+        }
+        catch (ghidra::LowlevelError&)
+        {
+            return false;
+        }
+        v = 0;
+        for (int i = 0; i < n; ++i) v = (v << 8) | b[i];
+        return true;
     }
     // ...the read of such a word, after the call that exposed it: the alias from the word up, and the note at that call (bit 16 of its mask).
     // Whether the callee writes it was settled when the word was marked (ExposeStackArguments), so each word points at the call that wrote it.
@@ -1407,8 +1467,13 @@ private:
             return r;
         }
         // Through an address that may be in the stack but not exactly: nothing bounds it above r15,
-        // so it may read free stack, which holds anything.
-        return MayBeStack(s, addr) ? FreeStack() : Loaded(s);
+        // so it may read free stack, which holds anything -- or a word of the caller's frame, a stack argument: even a base below the entry r15
+        // with an index the engine takes as non-negative reaches upward without bound. Fail closed: it depends on the stack arguments (A3-66 c,
+        // A3-67 b).
+        if (!MayBeStack(s, addr)) return Loaded(s);
+        Value f = FreeStack();
+        f.dep = Deps::All(origin::kMemory | origin::kStack | kDepArgs);
+        return f;
     }
 
     // At a return: PR must be the caller's; and what the caller sees afterwards is recorded.
@@ -1559,6 +1624,7 @@ private:
         }
         catch (ghidra::LowlevelError&)   // bad data, memory not captured
         {
+            if (a == mExec) mEntryUndecodable = true;
             return mTolerant ? std::string() : std::string("an instruction that does not decode");
         }
         const uint32_t next = a + static_cast<uint32_t>(length);
@@ -1689,8 +1755,13 @@ private:
             {
                 const Value from = Get(s, op.in[1]);
                 uint32_t word = 0;
-                if (mLiterals != nullptr && from.kind == Value::Imm && op.out.size == 4 && mLiterals->count(static_cast<uint32_t>(from.v)) != 0 &&
-                    mLiteralMemory->ReadU32(static_cast<uint32_t>(from.v), word))
+                // A literal-pool word: the probe's and the return rule's are the raw scan's (SetLiterals), of either width (`mov.w @(disp,PC)` is
+                // the common pool offset, A3-66 c); a walked callee's are any load through a constant the instruction itself computed (an address
+                // no register holds is PC-relative), read from the capture (mFoldPcLoads, A3-70: a thunk's target, a callee's own callee).
+                const bool poolWord = from.kind == Value::Imm && (op.out.size == 4 || op.out.size == 2) &&
+                                      ((mLiterals != nullptr && mLiterals->count(static_cast<uint32_t>(from.v)) != 0) ||
+                                       (mFoldPcLoads && op.in[1].space != mReg[0].space));
+                if (poolWord && ReadCode(static_cast<uint32_t>(from.v), static_cast<int>(op.out.size), word))
                     Set(s, op.out, Value::Const(word));
                 else
                 {
@@ -1732,7 +1803,12 @@ private:
                     // A target the code loaded from a literal word (the probe): the callee the engine will find once it folds the load.
                     bool literal = false;
                     uint32_t target = 0;
-                    if (op.code == ghidra::CPUI_CALLIND && mLiterals != nullptr)
+                    if (op.code == ghidra::CPUI_CALL && mFoldPcLoads && op.in[0].space == mRam)   // a walked callee's bsr: its target is in the op
+                    {
+                        literal = true;
+                        target = static_cast<uint32_t>(op.in[0].offset);
+                    }
+                    else if (op.code == ghidra::CPUI_CALLIND && (mLiterals != nullptr || mFoldPcLoads))
                     {
                         const Value t = Get(s, op.in[0]);
                         if (t.kind == Value::Imm)
@@ -1827,11 +1903,11 @@ private:
                         handsOn = sp.kind != Value::Sp || sp.v >= 0;
                         for (int r = 0; r < 15 && !handsOn; ++r) handsOn = r != kR15 && Get(s, mReg[r]).AtOrAboveEntry();
                     }
-                    if (!isReturn && mNested && handsOn)
-                    {
-                        mOwnFrameWords |= CallEffects::kFrameAny;
-                        mCallerFrameStores |= origin::kFrame;
-                    }
+                    const Value to = Get(s, op.in[0]);
+                    if (!isReturn && mNested && to.kind == Value::Imm)
+                        MapCalleeWords(CalleeFrameWrites(static_cast<uint32_t>(to.v)), Get(s, mReg[kR15]));   // a thunk: walk its target
+                    else if (!isReturn && mNested && handsOn)
+                        MapCalleeWords(CallEffects::kFrameAny, Get(s, mReg[kR15]));
                 }
                 falls = false;
                 break;
@@ -1913,7 +1989,19 @@ private:
     bool mNested = false;              // a walk of a callee's code for CalleeFrameWrites, which asks no further
     size_t mMaxSteps = kMaxSteps;
     uint32_t mOwnFrameWords = 0;       // the words of the caller's frame this function's own stores write (CallEffects::frameWords' bits)
-    std::map<uint32_t, uint32_t> mCalleeFrameWrites;   // CalleeFrameWrites, by target
+    // The walks of unlent callees (CalleeFrameWrites) share one cache and one step budget across every level (A3-70, A3-74): the top-level
+    // probe owns it, each nested walk points at it.
+    struct NestedContext
+    {
+        std::map<uint32_t, uint32_t> cache;   // by target; kFrameAny while a walk of it is in progress (a cycle fails closed)
+        size_t budget = 0;
+    };
+    NestedContext mOwnCtx;
+    NestedContext* mNestedCtx = nullptr;
+    int mDepth = 0;                    // 0: the function itself; a walked callee is one more than its walker
+    bool mFoldPcLoads = false;         // a walked callee folds its own PC-relative literal loads from the capture
+    size_t mStepsUsed = 0;
+    bool mEntryUndecodable = false;    // the entry instruction could not be decoded (memory not captured)
     std::map<uint32_t, uint32_t> mEscapeSites;   // the calls that escape was declared at because of r2 or r7, and which
     bool mEscaped = false;   // r2 held a frame address at a call that may read it
     bool mEscapedLow = false;   // ...of which one with no lower bound than the frame's lowest slot
