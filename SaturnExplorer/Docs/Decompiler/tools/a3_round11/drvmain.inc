@@ -87,7 +87,11 @@ void RunSpec(Sh2Decompiler& d, const Spec& s, uint64_t serial)
         try
         {
             RunMachine m(snap);
-            for (const auto& kv : regs) m.Set(kv.first.c_str(), kv.second);
+            for (const auto& kv : regs)
+            {
+                if (kv.first[0] == 'M') m.Poke(std::strtoul(kv.first.c_str() + 1, nullptr, 16), kv.second);
+                else m.Set(kv.first.c_str(), kv.second);
+            }
             ok = m.Run(s.entry, kRunSentinel, 100000);
             r0 = m.Get("r0");
             r1 = m.Get("r1");
