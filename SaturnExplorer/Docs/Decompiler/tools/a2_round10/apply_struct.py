@@ -1,0 +1,23 @@
+#!/usr/bin/env python3
+# usage: apply_struct.py <cpp dir>   (a tree that nzm_check_r9.patch is applied to)
+import sys
+d = sys.argv[1]; t = sys.argv[2] if len(sys.argv) > 2 else '.'
+s = open(d + '/action.cc').read()
+marker = "}\n\n/// Specify the name, group, and properties of the Action"
+code = open(t + '/structcheck_action_cc.txt').read()
+assert marker in s
+s = s.replace(marker, code + marker, 1)
+a = '''	nzmchk::dumpEach(data, std::string("action:") + getName());
+	count_apply += 1;'''
+assert a in s
+s = s.replace(a, '''	nzmchk::dumpEach(data, std::string("action:") + getName());
+	if (nzmchk::structEnabled() && !nzmchk::isCompound(this)) { nzmchk::structCheck(data, std::string("action:") + getName()); if (getName() == "deadcode") nzmchk::modelCheck(data, std::string("action:") + getName()); }
+	count_apply += 1;''', 1)
+b = '''      nzmchk::dumpEach(data, std::string("rule:") + rl->getName());'''
+assert b in s
+s = s.replace(b, b + '''
+      if (nzmchk::structEnabled()) nzmchk::structCheck(data, std::string("rule:") + rl->getName());''', 1)
+open(d + '/action.cc', 'w').write(s)
+f = open(d + '/funcdata_op.cc').read()
+f += open(t + '/structcheck_funcdata_op.cc.txt').read()
+open(d + '/funcdata_op.cc', 'w').write(f)
