@@ -20,6 +20,7 @@ m(13, R, "static bool divTermProductFits(const uint8 *multConst,uint4 xbits,int4
 m(14, R, "static bool divTermIsDivided(Varnode *outvn,uint4 n,uint8 *multConst,uint4 xbits,OpCode shiftopc,int4 size)\n\n{", "static bool divTermIsDivided(Varnode *outvn,uint4 n,uint8 *multConst,uint4 xbits,OpCode shiftopc,int4 size)\n\n{\n  if (seMut(14)) return true;", "divTermIsDivided: always divided (guard off)")
 m(15, R, "    if (sa1 + sa2 < 8*size) {\n      Varnode *newvn = data.newConstant(4,sa1+sa2);", "    if (sa1 + sa2 < 8*size + (seMut(15) ? 1 : 0)) {\n      Varnode *newvn = data.newConstant(4,sa1+sa2);", "RuleDoubleShift: two same-direction shifts adding to the width kept as a shift")
 m(16, R, "      mask = (mask >> sa2) & mask;\t// Least significant bits remain after initial INT_LEFT", "      mask = (mask >> (sa2 + (seMut(16) ? 1 : 0))) & mask;\t// Least significant bits remain after initial INT_LEFT", "RuleDoubleShift: the mask one bit short")
+m(17, R, "    andconst  = baseconst << subop->getIn(1)->getOffset() * 8;", "    andconst  = baseconst << subop->getIn(1)->getOffset() * (seMut(17) ? 4 : 8);", "RuleAndCompare: the byte offset of a SUBPIECE taken for nibbles")
 src = {R: open(sys.argv[1]).read(), S: open(sys.argv[2]).read()}
 hdr = "\n#include <cstdlib>\nstatic inline bool seMut(int id) { static int cur = -2; if (cur == -2) { const char *e = getenv(\"SE_MUT\"); cur = e ? atoi(e) : -1; } return cur == id; }\n"
 for f in src:
