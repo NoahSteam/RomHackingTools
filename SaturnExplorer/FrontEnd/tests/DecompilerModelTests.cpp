@@ -1225,15 +1225,6 @@ struct Rig
         in.excused = injectedGens.count(s->generation) != 0 || (cfgBroken && s->status == DecompileStatus::Unavailable);
         shownInjected = in.excused;
         installs.push_back(std::move(in));
-        {
-            // An answer that is not "too large" for inputs that once ran out of budget overtakes the
-            // memo of them: the runner erased it when that run completed (or the panel's cache holds
-            // the answer, and Refresh runs the request again regardless).
-            const Install& last = installs.back();
-            if (last.result.status != DecompileStatus::TooLarge)
-                for (size_t i = memo.starved.size(); i-- > 0;)
-                    if (memo.starved[i].Same(last.sig)) memo.starved.erase(memo.starved.begin() + static_cast<std::ptrdiff_t>(i));
-        }
         shown = installs.back().sig;
         shownNamesGen = namesGeneration;
         haveShown = true;
@@ -1812,6 +1803,13 @@ struct Rig
                 }
                 continue;
             }
+            // An answer that is not "too large" for inputs that once ran out of budget overtakes the memo of them: the runner erased it
+            // when that run completed. Only an answer that lent no prototype is known to be a run of the very request that was stalled
+            // (the signature does not hold what the panel lent, and a request that lent a callee's signature is another request, with
+            // its own memo), so only that one erases; the other leaves the memo, which accepts more (area 8, round 1).
+            if (SameAnswer(in.result, oracle.Run(in.sig, in.sig.entry, Lent())))
+                for (size_t i = memo.starved.size(); i-- > 0;)
+                    if (memo.starved[i].Same(in.sig)) memo.starved.erase(memo.starved.begin() + static_cast<std::ptrdiff_t>(i));
             const std::vector<const DecompileResult*> cands = oracle.Candidates(in.sig);
             bool ok = false;
             for (const DecompileResult* c : cands)

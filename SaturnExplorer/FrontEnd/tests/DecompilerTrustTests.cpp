@@ -33,7 +33,9 @@
 // usage: SaturnExplorerDecompilerTrustTests <scratch dir>
 //   SE_TRUST_STEPS=<n>   run at least n operations per outcome mix (default: a short run)
 //   SE_TRUST_MIX=<k>     only mix k (see kMixNames)
-//   SE_TRUST_SEED=<k>    (with SE_TRUST_MIX) one sequence of that mix, every step printed
+//   SE_TRUST_SEED=<k>    (with SE_TRUST_MIX) one sequence of that mix, every step printed; SE_TRUST_SKIP=3,5 and SE_TRUST_LIMIT=n shrink it
+//   SE_TRUST_FOLLOW_SEED=<k>  one sequence of the Follow PC rig (mix 8), every step printed
+//   SE_TRUST_SCRIPT="select A; t-inject failed" SE_MODEL_WORLD=C,A   one sequence written out (area 1's words, and t-...)
 //   SE_TRUST_NOHOVER=1   do not hover the badge (faster)
 #define SE_MODEL_NO_MAIN
 #include "DecompilerModelTests.cpp"
@@ -738,7 +740,7 @@ std::string TrustOp(Rig& r, const Op& o)
     {
         if (!r.visible) return "(panel hidden)";
         TypeEntry(r, arg == "F" ? "FFFFFFF0" : "zz");
-        r.explicitPending = true;
+        r.explicitPending = arg == "F";   // an entry that parses is a request (a capture even of a running emulator); a refused one is not
         r.haveStopped = false;   // a Stop belongs to the question it stopped (A8-10)
         r.noEntry = arg == "F" ? 2 : 1;
         return "";
@@ -746,7 +748,7 @@ std::string TrustOp(Rig& r, const Op& o)
     if (verb == "containbad")
     {
         if (!r.visible) return "(panel hidden)";
-        r.panel.ShowFunctionContaining(0, 0x00001FF0u);
+        r.panel.ShowFunctionContaining(0, 0x00300004u);   // past LWRAM: not captured whatever BIOS image is mapped
         r.explicitPending = true;
         r.haveStopped = false;
         r.noEntry = 3;
@@ -877,7 +879,7 @@ void Setup(Rig& rig)
     };
 }
 
-bool RunTrust(Oracle& oracle, const Program& p, uint64_t seed, bool verbose)
+bool RunTrust(Oracle& oracle, const Program& p, uint64_t seed, bool verbose, const std::set<int>& skip = std::set<int>(), int limit = -1)
 {
     HealForRun();
     oracle.beforeRun = [] {
@@ -888,7 +890,7 @@ bool RunTrust(Oracle& oracle, const Program& p, uint64_t seed, bool verbose)
     };
     gRigSetup = Setup;
     const uint64_t before = gStats.ops + gStats.noEffect;
-    const bool ok = RunProgram(oracle, p, seed, verbose, std::set<int>(), -1);
+    const bool ok = RunProgram(oracle, p, seed, verbose, skip, limit);
     gT.steps += gStats.ops + gStats.noEffect - before;
     ++gT.programs;
     gRig = nullptr;
@@ -903,6 +905,7 @@ bool RunTrust(Oracle& oracle, const Program& p, uint64_t seed, bool verbose)
 // by hand for each, and held to the model by the same Verify.
 struct MiniRig
 {
+    Gate gate;   // before the runner: it must outlive the worker that waits on it
     ContentBackend backend;
     DecompilerRunner runner;
     DecompilerPanel panel;
@@ -920,6 +923,7 @@ struct MiniRig
     {
         ApplyTheme(ImGui::GetStyle());
         LoadFonts(ImGui::GetIO());
+        runner.SetPhaseObserverForTests([this](DecompilePhase ph) { gate.Observe(ph); });
         placed = { FnC, FnA };
         backend.content = BuildImage(placed, 0);
         backend.source = source;
@@ -1168,6 +1172,24 @@ void RunMiniPins()
         t.inputsDiffer = false;
         t.frameMoved = false;
         MiniVerify(m, "...paused again and asked: the hint is back", t, "(*(code *)");
+        // A write while the engine holds the replacement: the output is stale and has no hint (the registers belong to the old memory).
+        m.gate.Close();
+        std::vector<uint8_t> hw2 = m.backend.content->bytes;
+        hw2[Defs()[FnC].sites[1].addr - kHw] ^= 0x01;
+        m.backend.content = MakeContent(std::move(hw2));
+        ++m.serial;
+        m.Idle(3);
+        const auto t0 = std::chrono::steady_clock::now();
+        while (m.runner.Busy() && m.gate.Held() == 0 && dts::MsSince(t0) < 30000.0) std::this_thread::yield();
+        m.Idle(2);
+        t.inputsDiffer = true;
+        t.outstanding = true;
+        MiniVerify(m, "...a write with the replacement held: stale, no hint", t, "(*(code *)");
+        m.gate.Open();
+        CHECK(m.Settle());
+        t.inputsDiffer = false;
+        t.outstanding = false;
+        MiniVerify(m, "...the replacement shown: the hint again", t, "(*(code *)");
     }
     {
         // The window when the app has no runner: red, and it says it stays.
@@ -1741,6 +1763,7 @@ const Pin kPins[] = {
     { "unsupported and stale at once (dimmed to the lesser)", "select U; hold; edit A 0 1; edit U 1 1; wait", "U,A" },
     { "five cautions", "select W; edit W 0 1; edit W 0 0", "W,A" },
     { "stale: a write, a scrub, a rename, a start, the volatile list, a BIOS image", "select A; hold; edit A 0 1; wait; hold; scrub 1; wait; hold; name A 1; wait; hold; bound A 1; wait; hold; volatile 1; wait; hold; bios 1; wait", "C,A" },
+    { "stale by a rename of a function already named (only the names generation says so)", "select A; name A 1; wait; hold; name A 2; wait; hold; name A 1; wait", "C,A" },
     { "stale: frame N on a running emulator", "select A; run; advance; advance; refresh; advance; pause", "C,A" },
     { "a request outstanding, then stopped", "select A; hold; edit A 0 1; stop; wait; edit A 0 2; wait", "C,A" },
     { "a request after a Stop is not stopped (its tooltip says a replacement is coming)", "select A; hold; edit A 0 1; stop; wait; hold; edit A 0 2; wait; hold; edit A 0 3; stop; wait", "C,A" },
@@ -1878,7 +1901,9 @@ int main(int argc, char** argv)
         {
             const int mix = mixEnv && *mixEnv ? std::atoi(mixEnv) : 0;
             const uint64_t seed = std::strtoull(seedEnv, nullptr, 10);
-            const bool ok = RunTrust(oracle, MakeProgram(seed, mix), seed, true);
+            // SE_TRUST_SKIP=3,5 drops those operations and SE_TRUST_LIMIT=n stops after n, to shrink a failure by hand.
+            const char* lim = std::getenv("SE_TRUST_LIMIT");
+            const bool ok = RunTrust(oracle, MakeProgram(seed, mix), seed, true, ParseList(std::getenv("SE_TRUST_SKIP")), lim && *lim ? std::atoi(lim) : -1);
             std::printf("mix %d seed %llu: %s\n", mix, static_cast<unsigned long long>(seed), ok ? "ok" : "FAILED");
             dts::RemoveTree(scratch);
             return ok ? 0 : 1;
