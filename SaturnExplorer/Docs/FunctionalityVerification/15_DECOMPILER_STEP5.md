@@ -10989,3 +10989,136 @@ Own RelWithDebInfo build under the scratch directory (2.5 GB, `-j2`, every run u
 * The next review round verifies this one. The two things it has not seen: `TestForwardRangesRound11` samples the 16-bit space (it is not exhaustive: 2^32 ranges), and the 4 and 8-byte rows are sampled.
 * The `int4` truncation of the shift amount in `getNZMaskLocal` for `INT_LEFT` and `INT_RIGHT` (section 1, 'what was not changed').
 * `TestPullBackRanges` takes 26 s of the engine tests' 36 (it did before this round); the new push-forward pin adds 9 s.
+
+## A3-78 and A3-80
+
+Fixer, branch `review/3-a378-a380-fix`, on the coordinator's head `e9ac42e`. Code commits `0957777` to `78b4d44` (the last re-pins the fault matrix), then this record. **A3-80 is fixed by engine patch 0060** (renumbered from 0059 at the coordinator's word: 0059 is the area 2 P3 fixer's) and **raised to P1**: the same cause with no call between is lent with a wrong value. **A3-78 is an oracle false positive, P3** (set down from the provisional P2), fixed in the oracle, with a second instance the coordinator routed (seed 1418819). **A3-81** (new, P3, performance): the coordinator's timing of `TestGameCode`, measured, profiled and fixed in the host. Own RelWithDebInfo build under the scratch directory, `-j2`, every run under `ulimit -v 4000000`.
+
+### 1. A3-80: the cause
+
+The row's fixture (A3-72 part b): `sts.l pr,@-r15 ; add #-24,r15 ; mov r15,r2 ; add #16,r2 ; mov #5,r0 ; mov.l r0,@r15 ; mov.l r2,@(16,r15) ; jsr g ; mov.l @(16,r15),r2 ; mov #4,r1 ; L: mov.l r1,@-r2 ; dt r1 ; bf L ; mov.l @r15,r0`. The walk writes r15 + 12, + 8, + 4 and r15 + 0 last, with 1; the text printed `return 5;`. Reproduced at the head with g lent and not lent (withheld both ways). Two parts of the engine did not see the read-back pointer as a pointer into the frame:
+
+- **The alias boundary** (`AliasChecker::gatherInternal`). Patch 0056 asks `stepsDown` of each MULTIEQUAL that reads a gathered base (`gatherAdditiveBase`'s records). Once the stack is heritaged the spill is a `COPY` into the local, a call between puts an INDIRECT on that local, and the read back is a `COPY` out of it into r2; the loop's MULTIEQUAL reads that copy. `gatherAdditiveBase` follows copies but stops at the INDIRECT (a use that is no addition), so the base whose descendants were asked was the local before the call, which no MULTIEQUAL reads. The boundary stayed at the base and the locals below it were unaliased.
+- **The STORE** (`Heritage::protectFreeStores`). A STORE is guarded for the stack (INDIRECTs for the stack's locals at it) when `discoverIndexedStackPointers` reaches its pointer from the entry r15, or, while the stack is not yet heritaged, when its pointer leads back to a free stack word along copies and constant additions. The loop's pointer leads back to the loop's MULTIEQUAL and stopped there, and the forward walk from r15 cannot pass a local that is not yet heritaged. So the walk's stores were taken for no stores to the stack at all, whatever the aliasing said.
+
+**With no call between, the same function is lent.** `add #-24,r15 ; mov r15,r2 ; add #16,r2 ; mov #5,r0 ; mov.l r0,@r15 ; mov.l r2,@(16,r15) ; mov.l @(16,r15),r2 ; mov #4,r1 ; L: mov.l r1,@-r2 ; dt r1 ; bf L ; mov.l @r15,r0 ; add #24,r15 ; rts` (the reviewer's control kept the pointer in the local every pass, which the engine resolves; this one reads it back once) prints `return 5;` and is lent `int4 f(void)`; the code returns 1. The alias part held there (the copies are all `gatherAdditiveBase` follows), and the STORE part alone hid the walk. That is A3-65's P1 standard, a wrong value in a lent signature with no note, so the row is raised to P1. The byte walk (`mov.b r1,@-r3` from a pointer read back into another register) is the same.
+
+### 2. A3-80: the fix, patch 0060
+
+`0060-engine-stack-walk-down-spilled.patch` amends 0056 and 0057, in `varmap.cc`/`.hh` and `heritage.cc`.
+
+1. `AliasChecker::reachesStepDown(base)`: the base is followed forward through copies, additions (`INT_ADD`, `INT_SUB`, `PTRADD`, `PTRSUB` of the pointer), joins and INDIRECTs (their input 0), and `stepsDown` is asked of every MULTIEQUAL reached. A pointer read back after a call that may have rewritten the local is taken to be the one written: the fail-closed reading the row asks for, and the only addresses the call could have put there are one it was handed or one of its own frame, below ours, which the same reach covers. A walk that grows past 1,024 varnodes is taken to step down.
+2. `Heritage::protectFreeStores`: a STORE's pointer is traced back through MULTIEQUALs (every input) and INDIRECTs as well. A STORE marked this way is marked "even though we're not sure", as upstream's own are, and `reprocessFreeStores` unmarks it and removes its INDIRECTs when the full pass then finds no stack pointer behind it: the mark costs no precision. A trace past 256 varnodes marks the STORE, for the same full pass to settle.
+
+The texts with the patch (`Sh2DecompilerTests.cpp`, `TestArea3Round10Fix`, `a3_80a` to `a3_80i`):
+
+| Fixture | Head | Fixed |
+|---|---|---|
+| across a lent call; an unlent call (a, b) | `return 5;`, withheld | `xStack_1c = 5;` ... `return xStack_1c;`, withheld |
+| through the frame pointer r14, unlent call (c) | `return 5;` | `return xStack_20;` |
+| by bytes, lent call (d) | `return 5;` | `return (int4)cStack_1c;` |
+| two calls between (e); moved down a slot after the read back (f); copied into a second local and read back from it (g) | `return 5;` | `return xStack_1c;` |
+| no call, longwords (h); no call, bytes (i) | `return 5;`, **lent** | `return xStack_18;`, `return (int4)cStack_18;`, lent |
+| control: walked up after the read back | `return xStack_10;` | the same |
+
+### 3. A3-80: the generator draws it
+
+`GenSpillWalkFn` (`Sh2GeneratedTests.cpp`), in the printed-C mode, on a stream of its own (`seed * 3266489917 + 0xA380`), one seed in five, after every other case: a frame of 8 to 20 bytes, the slot read back written first with a constant (101 to 127, or a negative byte: never a value the walk stores), a copy of r15 + N stored to a longword of the frame, half the time a call to a leaf that does nothing (`bsr`, PR saved), the pointer read back, a quarter of the time moved down a slot, walked down a counted number of slots at the width of the slot (1, 2 or 4) storing the counter or a constant stepped each pass, the slot read into r0. The slot read back is one the walk writes three times in four; the fourth is a control. The function reads no input, so its run is one value. The printed-C harness cannot run these texts (a pointer kept in memory is 8 bytes on the host), so `CheckSpillWalks` checks what it can: every constant the text returns against the run's r0 (`stale-constant`); a text that returns a local is counted (`spill:local`). `SE_GENERATED_PRINTEDC_SPILL=0` leaves them out, `SE_GENERATED_SPILL_WORDS` replays one. `TestA365Pins` holds that both forms (call, no call), every width, the lowered pointer and the control are drawn in the first 400 seeds.
+
+**The head's engine fails it:** over the default 300 seeds, 52 spill functions, of which the head's engine (patch 0060 reverted) returns the stale constant in 40; the fixed engine in none (47 return the local, 5 controls return the right constant). Over 3,000 seeds, 563 spill functions, 0 stale (539 local, 24 agree).
+
+### 4. A3-81: the cost of the round 10 fix, measured and fixed
+
+`TestGameCode` alone (a driver that runs only it, so the suite's other tests do not count), image 007 then 008, three rounds, the heads alternating within each round, on the shared machine (load 1.3 to 3.1, the other agent's builds included):
+
+| | c816ec5 | e9ac42e | fixed | e9ac42e / c816ec5 | fixed / c816ec5 |
+|---|---|---|---|---|---|
+| 007, ms (median of 8,928, 8,588, 8,825 / 20,941, 20,443, 20,719 / 9,931, 10,034, 10,101) | 8,825 | 20,719 | 10,034 | 2.35 | 1.14 |
+| 008 (26,265, 27,116, 26,517 / 56,447, 54,985, 55,998 / 33,455, 33,671, 33,648) | 26,517 | 55,998 | 33,648 | 2.11 | 1.27 |
+| worst function, 007 | 0601A0C8, 246-261 ms | 06016142, 379-455 ms | 06016142, 245-254 ms | | |
+| worst function, 008 | 0604F422, 3,351-3,501 ms | 0604F422, 3,499-3,660 ms | 0604F422, 3,261-3,612 ms | | |
+
+An earlier round of the same comparison gave 9,088 / 21,246 and 27,566 / 59,823 ms (2.34 and 2.17).
+
+**Where the time went.** The slowdown is not in the worst function. 0604F422 costs the same on both heads: under callgrind, half of it is the engine's jump-table recovery (`Funcdata::recoverJumpTable`, 4.2 of 8.5 billion instructions at c816ec5, the same count at e9ac42e), and the return check is 7 % at c816ec5 and 21 % at e9ac42e (14 % the callee walk); it is nowhere near the 10 s budget. The cost is spread: per function, 339 of image 007's 839 functions took more than 1.5 times as long at e9ac42e, small ones most (0600ADBE 5.7 to 230.9 ms, 06005182 6.2 to 222.4 ms). Under callgrind 0600ADBE spends 95 % in `ReturnCheck::CalleeFrameWrites` (1.16 of 1.22 billion instructions): counted with the walk instrumented, 177 walks of callees to depth 8 (the limit), about 8,400 instructions interpreted in all of them, not one of which wrote the caller's frame. Three quarters of the instructions were `malloc` and `free`: `ReturnCheck::Step` copied the whole interpreter state (the map of registers and temporaries, the map of stack slots) for every p-code op, twice (into the op's slot and out of it), so an instruction of ten ops copied it twenty times. The fail-closed interpreter of round 10 is not the cost; the transitive walk multiplied how much of this interpreter runs.
+
+**The fix** (`Sh2Decompiler.cpp`, host only):
+
+- `Step` moves the state through an instruction's p-code when the instruction's branches go only forward (all but a few): each op is then reached once, from the ops before it, which the work set (lowest first) has run, so the state at an op is final when it is taken. The state an op falls through with is moved as well. A p-code loop back keeps the copies.
+- The state an instruction hands on drops its temporaries (the unique space, which lives within one instruction's p-code, a delay slot's included).
+- The callee walks are shared by the probes of one request (`ShareWalks`: the frame-escape probe and `WithholdReason`'s check, in every printing pass): a walk depends only on the callee's code in the capture and the lent signatures, which no pass of a request changes. Each probe keeps its own budget; a result is reused as it was found.
+
+0600ADBE: 230.9 ms, 162 ms with the sharing alone, 70 ms with the moves (callgrind: 1.22 billion instructions to 0.32 billion). Lending, every text and every count are unchanged: **no output file of either image differs** between the head, patch 0060 alone and the fixed tree (4,299 and 7,544 files). Severity P3 (above 1.5 times, no function near the budget), fixed: 1.14 and 1.27 times c816ec5. The cost left is the walk itself, which round 10 added on purpose.
+
+### 5. A3-78: an oracle false positive
+
+Reproduced at the head: `SE_GENERATED_GRAMMAR=2 SE_GENERATED_SEED=1009895` gives `n:kept-read:r10` on function 0. Shrunk: function 0 pushes r8, r9, r10 and r12, keeps PR in r12, calls function 1 (lent; its signature changes r10), restores and tail-jumps (`jmp @r1`) into function 2, which allocates 12 bytes and reads `mov.w @r15,r1`: the halfword at function 0's entry r15 - 12, where r10 was pushed. The text:
+
+```
+iStack_c = (int2)((uint4)unaff_r10 >> 0x10);
+func_0x06009034(param_1,param_2,param_3);
+if (((int4)iStack_c & extraout_r8) == 0) {
+```
+
+That is right: the push reads r10 before the call, and the read after it is of the local. Check 12 (A3-3) drops a save of a register into a stack local before the first call (A3-65's `SavesBeforeCallsDropped`) only when the save is the whole register (`xStack_c = unaff_r13;`); here the engine shows only the half that is read later. So not A3-52's run-on class as such: the reads of function 2, which the body holds, were already taken (A3-52's fix); it is A3-65's save rule, one form short.
+
+**The second instance**, grammar 2 seed 1418819 (the area 2 round 11 review, routed by the coordinator: `kept-read` on r10 and r12). Function 0 calls function 1 on one path (`bt` over a `bsr`) and then tail-jumps into it; function 1's pushes of r10 and r12 run on in function 0's text after the branch. The engine joins the entry value and the call's output under one name, so the text has, in the branch, `unaff_r10 = extraout_r10; unaff_r12 = extraout_r12;` after the call, and after the branch `*(xunknown4 *)(pxVar6 + 0x18) = unaff_r10;`: the entry value on the path without the call, the call's output on the other. Right as well.
+
+**Fixed in the oracle** (`SavesBeforeCallsDropped`):
+
+- a save of a register shown in part (casts, a right shift by a constant and their parentheses around `unaff_rN`) before the first call is the same save;
+- after a call, `unaff_rN = <value>;` in the call's own block (no brace between them), outside every loop, when no earlier call had left the entry value stale, and not computed from `unaff_rN` itself, gives the variable the call's output: a read of `unaff_rN` after it, outside loops and before the next call, is a read of that value. The text's order is followed, so only outside loops (the text's order is not the code's there) and in a text with no `goto`.
+
+Pins (`TestA365Pins`): both seeds and their shrunk modules, no finding; on `SavesBeforeCallsDropped`, the save in part before a call (two forms), the same after a call, combined with an addition, and followed by a read of the register; the reassignment in the call's block, in an else block, after an earlier call, from itself, read in a loop after it, and read after a second call. Severity P3: the check reported a right text; no engine or host output was wrong.
+
+### 6. The mutation table
+
+Each part reverted alone in the fixed tree, the decompiler suite, the generator's default run (its pins) and the printed-C mode's default 300 seeds rebuilt and run (`mut.py` in the scratch directory). Counts are the CHECKs that fail.
+
+| Reverted | Fails |
+|---|---|
+| M1 the whole of patch 0060 (the head's `heritage.cc`, `varmap.cc`, `varmap.hh`) | 9 (`a3_80a` to `a3_80i`; the control passes); printed-C: 40 `stale-constant` of 52 spill walks |
+| M2 part 1, `reachesStepDown` (the head's look at the base's own MULTIEQUALs) | 7 (`a3_80a` to `a3_80g`: every one with a call); 17 `stale-constant` |
+| M3 part 2, `protectFreeStores` (the head's `heritage.cc`) | 2 (`a3_80h`, `a3_80i`: no call, lent); 23 `stale-constant` |
+| M4 `reachesStepDown` does not follow INDIRECTs | 7 (as M2); 17 `stale-constant` |
+| M5 a save shown in part is no save (A3-78) | 4 (seed 1009895 and its module; the two saves in part) |
+| M6 no reassignment after a call (A3-78) | 3 (seed 1418819 and its module; the reassignment in the call's block) |
+| M7 a reassignment in another block counts | 1 (the else block) |
+| M8 a reassignment after an earlier call counts | 1 (the earlier call) |
+| M9 reads inside a loop are excused | 1 (the read in a loop after the reassignment) |
+| M10 the spill walk not drawn | 8 (the draws pin: every form) |
+| A3-81's three changes | none: they are timing, measured in section 4 (no output file of either image changes); a timing pin would be the machine's load, not the code's |
+
+### 7. The matrix, on the fixed tree (code `78b4d44`)
+
+| Run | Result |
+|---|---|
+| `ctest -E SaturnExplorerLive -j2 --timeout 900` (93 tests) | 93 of 93 pass (147 s). The first run failed the fault suite on eight MOVED pins (below) |
+| `SaturnExplorerDecompilerFaultTests` | 0 of 94 jobs failed (78 s) after the re-pin. Patch 0060's walk allocates in the alias gather (`reachesStepDown`'s set and vector) and the request's walk cache in the host: fixture1's `FuncProto::copy` (both passes) moved from the 64-byte allocation 61 to 62; stack's `VarnodeBank::setDef` 89 to 104, `VarnodeBank::makeFree` 37 to 43, `MapState::addRange` 29 to 35, `ScopeInternal::renameSymbol` 108 to 129, `ScopeInternal::addSymbolInternal` 42 to 53, `Scope::addMapPoint` 30 to 36, as the matrix printed them |
+| `SE_GENERATED_SEEDS=3000 SE_GENERATED_GRAMMAR=2` | 0 failing seeds, 0 findings; 4,245 lent, 17,750 runs held to the claims, canary 240 programs, 0 failing (the round 10 fix's counts) |
+| `SE_GENERATED_GRAMMAR=1 SE_GENERATED_SEEDS=1000` | 0 failing seeds |
+| `SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000` | passed: 3,703 functions, 3,424 compared, agrees 3,443, `narrow-c` 9, `void-return` 227, `void-return-lent` 24; spill walks 563, 0 stale (539 local, 24 agree). The other cases count as at the head (`e9ac42e`'s generator over the same 3,000 seeds: the same five numbers) |
+| `SE_GENERATED_SEEDS=20000` | 0 failing seeds, 16,082 lent, 64,258 runs held to the claims (the round 10 fix's counts) |
+| grammar 2, 1,000,001 to 1,020,000 (four pieces of 5,000) | 0 failing seeds, 0 findings in each piece; 28,698 lent (7,232, 7,302, 7,142, 7,022). A3-78's seed 1009895 is in the range |
+| `TestArea3HiddenInputFuzz` | 400 programs in the suite; 5,000 at the new seeds 4 and 5 (`SE_A3FUZZ_PROGRAMS=5000 SE_A3FUZZ_SEED=4`, `=5`): 1,171 and 1,187 lent, 15,223 and 15,431 perturbed runs, 0 findings |
+| corpora 007 / 008 with `SE_GAME_LEND=1` | section 8 |
+| vendoring | `python3 -I vendor.py <ghidra>` in a scratch copy of `ghidra-decompiler` against the pinned checkout: exit status 0, its `vendored 84 library sources, 3 compiler sources, 94 headers, 5 spec files; patches: 0001 ... 0058, 0060` line printed, and the copy's `cpp/`, `sources.cmake` and `processors/` are identical to the committed tree (`diff -r`) |
+
+### 8. The corpora
+
+Both images, `SE_GAME_HWRAM=<img> SE_GAME_LEND=1` with `SE_GAME_OUT`, the head `e9ac42e` built beside, every output file compared: **no file differs** in either image (4,299 and 7,544 files: each function alone, and the lending run's before and after), with patch 0060 alone or with the A3-81 changes. So no game function keeps a frame address in a stack local and walks it down after reading it back; and the A3-81 changes are timing only.
+
+| | 007 | 008 |
+|---|---|---|
+| lent (parameters), unlent / lent run | 655 (901) / 680 (958), as the head | 1,041 (1,253) / 1,071 (1,314), as the head |
+| ledger counts | 0 dropped, 0 missing and said | 0 dropped, 4 missing and said |
+| mapping oracle, every violation count (alone, lent) | 0 | 0 |
+| functions alone; lending run | 839 of 839 ok; 1,730 ok | 1,554 of 1,554 ok; 2,995 ok |
+| texts that differ | none | none |
+
+### 9. Not done
+
+- A frame address kept in memory that is not a stack local (a global, or a word reached through another pointer) and read back is not followed: the engine takes a pointer read from memory to reach no local, as upstream does, and no fixture or seed shows it.
+- `CheckSpillWalks` compares constant returns only: the fixed engine's `return xStack_1c;` is counted, not evaluated (the evaluator has no loops, the printed-C harness cannot run a pointer kept in memory).
+- A3-79 (P3, the raw stack register for a walk from unmapped storage) is unchanged by patch 0060.
+- The Live tests and the sanitizer job were not run (shared socket path; CI).

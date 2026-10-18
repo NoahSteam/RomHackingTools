@@ -345,6 +345,10 @@ public:
     }
     // A cancel flag the walk checks periodically (A3-74): a long walk of an adversarial callee is interruptible.
     void SetCancel(std::atomic<bool>* cancel) { mCancel = cancel; }
+    // The results of CalleeFrameWrites kept for every probe of one request (A3-81): a walk depends only on the callee's code in the capture and
+    // the lent signatures, which no pass of a request changes, and each of the request's probes (two a printing pass, one more pass when a host
+    // alias is declared) walked the same callees again, with a budget of its own. Each probe keeps its own budget; a result is reused as found.
+    void ShareWalks(std::map<uint32_t, uint32_t>* walks) { mOwnCtx.shared = walks; }
 
     // The calls (by the instruction that makes them) a frame address escapes at in a register the call is shown without, and which (bit 2: r2, bit 7: r7).
     const std::map<uint32_t, uint32_t>& EscapeSites() const { return mEscapeSites; }
@@ -1186,15 +1190,20 @@ private:
     uint32_t CalleeFrameWrites(uint32_t target)
     {
         NestedContext* ctx = mNestedCtx != nullptr ? mNestedCtx : &mOwnCtx;
-        if (ctx == &mOwnCtx && ctx->cache.empty() && ctx->budget == 0) ctx->budget = kNestedBudget;
-        const auto known = ctx->cache.find(target);
-        if (known != ctx->cache.end()) return known->second;
+        if (ctx == &mOwnCtx && !ctx->started)
+        {
+            ctx->started = true;
+            ctx->budget = kNestedBudget;
+        }
+        std::map<uint32_t, uint32_t>& cache = ctx->Cache();
+        const auto known = cache.find(target);
+        if (known != cache.end()) return known->second;
         if (mDepth >= kNestedMaxDepth || ctx->budget == 0)
         {
             if (mDepth == 0) return CallEffects::kFrameAny;
             return kUnwalked;
         }
-        ctx->cache[target] = kUnwalked;
+        cache[target] = kUnwalked;
         static const JumpDests kNoTables;
         ReturnCheck callee(mFd, target, mLent, kNoTables);
         callee.mNested = true;
@@ -1211,7 +1220,7 @@ private:
         if (!why.empty()) words = CallEffects::kFrameAny;
         else if (callee.mEntryUndecodable) words = 0;
         else if (callee.CallerFrameStores() != 0) words = callee.mOwnFrameWords;
-        ctx->cache[target] = words;
+        cache[target] = words;
         return words;
     }
     // A walked callee's own callee (or tail-jump target) writes 'words' of its caller's frame, counted from the r15 it was entered with ('sp'):
@@ -1692,6 +1701,19 @@ private:
             else return Join(at[to], s);
             return true;
         };
+        // An instruction whose p-code branches only forward (all but a few) reaches each op once, from the ops before it, all of which the
+        // work set (lowest first) has run by then: the state at an op is final when it is taken, so it is moved, not copied, and so is the
+        // state an op falls through with (A3-81: a copy of the state for every op was the most of the interpreter's cost).
+        bool forwardOnly = true;
+        for (const Op& op : c.ops)
+            if ((op.code == ghidra::CPUI_BRANCH || op.code == ghidra::CPUI_CBRANCH) && !op.in.empty() &&
+                op.in[0].space->getType() == ghidra::IPTR_CONSTANT && static_cast<int64_t>(op.in[0].offset) <= 0)
+                forwardOnly = false;
+        auto fallTo = [&](int to, State& s) {
+            if (!forwardOnly || to < 0 || to > n || at[to].reached) return flow(to, s);
+            at[to] = std::move(s);
+            return true;
+        };
         std::set<int> work{ 0 };
         size_t steps = 0;
         while (!work.empty())
@@ -1700,7 +1722,7 @@ private:
             work.erase(work.begin());
             if (i == n) continue;
             if (++steps > 4096) return "a return not proven to go to its caller (too many paths)";
-            State s = at[i];
+            State s = forwardOnly ? std::move(at[i]) : at[i];
             const Op& op = c.ops[i];
             mDef = (static_cast<uint64_t>(a) << 12) | static_cast<uint64_t>(i + 1);   // what this op makes (Value::def)
             // r0 read by this op: a call's result in it is used (see Value::read). Not by a copy of r0 onto itself, which the spec makes of
@@ -1907,7 +1929,7 @@ private:
                     if (flow(to, s)) work.insert(to);
                 }
                 else
-                    succ.emplace_back(static_cast<uint32_t>(op.in[0].offset), s);
+                    succ.emplace_back(static_cast<uint32_t>(op.in[0].offset), Leaving(s));
                 falls = op.code == ghidra::CPUI_CBRANCH;
                 break;
             case ghidra::CPUI_BRANCHIND:
@@ -1917,7 +1939,7 @@ private:
                 // ...and a jump table's index: the target is loaded through it.
                 if (found) s.ctl |= ChooserInput(Get(s, op.in[0]));
                 if (found)
-                    for (uint32_t to : table->second) succ.emplace_back(to, s);
+                    for (uint32_t to : table->second) succ.emplace_back(to, Leaving(s));
                 // A tail call: the engine made the jump a call and a return (its flow says so, and the call specs have it). The
                 // callee's effects apply as at any call -- a value in r0 it keeps is carried across, A3-27 -- and its rts goes
                 // to our caller, so the path ends here with PR as it was, if it was the caller's.
@@ -2012,10 +2034,20 @@ private:
                 }
                 break;
             }
-            if (falls && flow(i + 1, s)) work.insert(i + 1);
+            if (falls && fallTo(i + 1, s)) work.insert(i + 1);
         }
-        if (at[n].reached) succ.emplace_back(next, at[n]);
+        if (at[n].reached) succ.emplace_back(next, Leaving(std::move(at[n])));
         return std::string();
+    }
+    // The state an instruction hands the next one: without its temporaries. A SLEIGH temporary (the unique space) lives within one
+    // instruction's p-code, a delay slot's included, and kept in the state it was copied with every op of every instruction after it, so the
+    // cost of a path grew with its length (A3-81: the transitive callee walk of A3-70 made that the most of a game function's decompile).
+    static State Leaving(State s)
+    {
+        for (auto it = s.vars.begin(); it != s.vars.end();)
+            if (std::get<0>(it->first)->getType() == ghidra::IPTR_INTERNAL) it = s.vars.erase(it);
+            else ++it;
+        return s;
     }
 
 
@@ -2049,8 +2081,11 @@ private:
     // probe owns it, each nested walk points at it.
     struct NestedContext
     {
-        std::map<uint32_t, uint32_t> cache;   // by target; kFrameAny while a walk of it is in progress (a cycle fails closed)
+        std::map<uint32_t, uint32_t> cache;   // by target; kUnwalked while a walk of it is in progress (a cycle fails closed)
+        std::map<uint32_t, uint32_t>* shared = nullptr;   // the request's, when the probe was given it (ShareWalks)
         size_t budget = 0;
+        bool started = false;
+        std::map<uint32_t, uint32_t>& Cache() { return shared != nullptr ? *shared : cache; }
     };
     NestedContext mOwnCtx;
     NestedContext* mNestedCtx = nullptr;
@@ -2179,7 +2214,8 @@ uint32_t HeldInputs(const ghidra::Funcdata& fd)
 // nothing later revisits it. So it is lent only when the recovery saw everything that decides it.
 std::string WithholdReason(ghidra::Funcdata& fd, const std::map<uint32_t, Prototype>& lent, uint32_t exec,
                            uint32_t entry, const JumpDests& tables, CallEffects& effects,
-                           const std::set<uint32_t>* literals = nullptr, const MemorySnapshot* literalMemory = nullptr)
+                           const std::set<uint32_t>* literals = nullptr, const MemorySnapshot* literalMemory = nullptr,
+                           std::map<uint32_t, uint32_t>* walks = nullptr)
 {
     if (fd.hasBadData()) return "bad instruction data";
     const ghidra::FuncProto& fp = fd.getFuncProto();
@@ -2297,6 +2333,7 @@ std::string WithholdReason(ghidra::Funcdata& fd, const std::map<uint32_t, Protot
     // Fold the literal-pool loads the probe folds, so an ordinary stack access whose offset is a pool word (`mov.w =20,r2 ; add r15,r2 ;
     // mov.l @r2,r0`) is seen as the stack argument it is, not a "nothing-known" address (A3-66 c, A3-67 b).
     if (literals != nullptr && literalMemory != nullptr) check.SetLiterals(*literals, *literalMemory);
+    check.ShareWalks(walks);
     const std::string why = check.Run(effects);
     if (!why.empty()) return why;
     // The return rule (A3-5, A3-13, A3-14, A3-20, A3-45, A3-49, A3-50, A3-55 to A3-59, A3-62). A function the engine made `void` is lent only
@@ -4370,6 +4407,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
     // One pass: a fresh Architecture, every function registered, flow followed, read-only
     // literals applied, actions run. 'print' adds the markup output; 'mayRetry' lets a print pass stop, before it prints, when the
     // actions showed memory with two names that is not yet volatile ('aliasRetry').
+    std::map<uint32_t, uint32_t> calleeWalks;   // CalleeFrameWrites' results, for every probe of this request's passes (ShareWalks, A3-81)
     auto runPass = [&](const CalleeAliases& callees, bool print, CalleeAliases* targets, bool mayRetry) {
         Enter(DecompilePhase::Init);
         std::ostringstream errors;
@@ -4534,6 +4572,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
             probe.SetTolerant();
             probe.SetLiterals(scan.literalWords, *snapshot);
             probe.SetCancel(cancel);   // the callee walk can be long for an adversarial callee (A3-74)
+            probe.ShareWalks(&calleeWalks);
             CallEffects unused;
             probe.Run(unused);
             uint32_t from = 0;
@@ -4864,7 +4903,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         {
             AddJumpTables(*fd, flowTables);
             AddFlowTables(*fd, flowTables);
-            r.prototypeWithheld = WithholdReason(*fd, prototypes, exec, entry, flowTables, effects, &scan.literalWords, snapshot.get());
+            r.prototypeWithheld = WithholdReason(*fd, prototypes, exec, entry, flowTables, effects, &scan.literalWords, snapshot.get(), &calleeWalks);
         }
         if (r.prototypeWithheld.empty())
         {

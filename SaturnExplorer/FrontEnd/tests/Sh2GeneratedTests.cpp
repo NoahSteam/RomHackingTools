@@ -3355,11 +3355,26 @@ bool PointerPrintsFromHardware(const DecompileResult& r, uint32_t insn, const st
 // engine shows a save slot as a local when a pointer stepped down may reach it (patch 0056, A3-65: seed 901303 runs on after its pops and walks
 // over the words they freed), and the save reads the register before any call can change it. A read of the local after the call is a read of the
 // local; one of the register after a call still prints `unaff_r13` elsewhere and is found.
+// A save the engine shows in part is the same save (A3-78, grammar 2 seed 1009895): function 0 pushes r10 and tail-jumps into function 2, whose
+// `mov.w @r15` reads the half of the push slot that is read later, so the push prints as `iStack_c = (int2)((uint4)unaff_r10 >> 0x10);`. A cast,
+// a right shift by a constant and the parentheses around them change which bits are kept, not when the register is read.
 bool WholeWord(const std::string& text, const std::string& word);
 std::string SavesBeforeCallsDropped(const std::string& text, const char* reg)
 {
-    const std::regex save("^\\s*_?[A-Za-z]*Stack_[0-9a-f]+ = unaff_" + std::string(reg) + ";\\s*$");
+    static const std::string cast = "(?:\\(\\s*\\w+\\s*\\**\\s*\\)\\s*)";
+    const std::regex save("^\\s*_?[A-Za-z]*Stack_[0-9a-f]+ = " + cast + "*\\(?\\s*" + cast + "*unaff_" + std::string(reg) +
+                          "(?:\\s*>>\\s*(?:0x[0-9a-f]+|\\d+))?\\s*\\)?;\\s*$");
     static const std::regex call("\\bfunc_0x[0-9a-fA-F]+\\s*\\(");
+    // A3-78, seed 1418819: the variable of the entry value is given the call's output after the call (`unaff_r10 = extraout_r10;` in the
+    // branch that calls, the engine's join of the two values under one name), and a read of it after that is a read of what the call left.
+    // Followed in the text's order, so only outside loops and in a text without gotos, where that order is the order the code runs in.
+    const std::regex assign("^\\s*unaff_" + std::string(reg) + " = ([^;]*);\\s*$");
+    const std::regex word("\\bunaff_" + std::string(reg) + "\\b");
+    static const std::regex jump("\\bgoto\\b");
+    static const std::regex loopOpen("^\\s*(do|while|for)\\b");
+    const bool straight = !std::regex_search(text, jump);
+    std::vector<bool> loops;   // the open blocks of the body, each a loop or not
+    bool reassigned = false, staleAtCall = false, blockSinceCall = false;
     std::istringstream in(text);
     std::string out, line;
     bool body = false, called = false;
@@ -3371,7 +3386,32 @@ std::string SavesBeforeCallsDropped(const std::string& text, const char* reg)
             out += line + "\n";
             continue;
         }
-        if (std::regex_search(line, call)) called = true;
+        const bool callHere = std::regex_search(line, call);
+        std::smatch am;
+        // `unaff_r10 = extraout_r10;` right after the call, in its block (no brace between), when no earlier call had left the entry value
+        // stale: every path that reaches a later read either ran the call and this assignment, or neither
+        const bool inLoop = std::find(loops.begin(), loops.end(), true) != loops.end();
+        if (straight && !inLoop && called && !callHere && !blockSinceCall && !staleAtCall && std::regex_match(line, am, assign) &&
+            !std::regex_search(am[1].str(), word))
+        {
+            reassigned = true;
+            continue;
+        }
+        if (called && reassigned && !inLoop) line = std::regex_replace(line, word, "reassigned_" + std::string(reg));   // read before this line's call
+        if (callHere)
+        {
+            staleAtCall = called && (!reassigned || inLoop);
+            called = true;
+            reassigned = false;
+            blockSinceCall = false;
+        }
+        // the blocks the line closes and opens (`} while (c);`, `} else {`, `do {`): inside a loop the text's order is not the code's
+        for (char ch : line)
+            if (ch == '}' && !loops.empty()) loops.pop_back();
+        if (line.find('{') != std::string::npos)
+            loops.push_back(std::regex_search(line, loopOpen));
+        if (line.find('{') != std::string::npos || line.find('}') != std::string::npos)
+            blockSinceCall = true;
         if (!called && std::regex_match(line, save)) continue;
         out += line + "\n";
     }
@@ -7800,6 +7840,147 @@ std::vector<CCase> WidePrintedCFixtures()
     return out;
 }
 
+// The walk pointer kept in a stack local and read back (A3-80, patch 0060): a frame of F bytes, the slot read back written with a constant
+// first, a copy of r15 + N stored to a longword of the frame (`mov.l Rp,@(4*S,r15)`), half the time a call to a leaf that does nothing
+// (`bsr`, the function then saves PR), the pointer read back (`mov.l @(4*S,r15),Rp`), sometimes moved down by a slot, and walked down a
+// counted number of slots storing the counter or a constant stepped each pass, one slot read back into r0. Engine patches 0056 and 0057
+// follow the registers only: the read-back pointer's stores were taken not to reach the stack below it, and the slot printed its first
+// constant (`return 5;` where the code returns 1), lent when there was no call. The run of every such function is deterministic (no input
+// is read), so a text whose returns are all constants is checked against it (CheckSpillWalks). Drawn on a stream of its own, one seed in five.
+bool GenSpillWalkFn(uint64_t seed, CCase& c, std::string& shape)
+{
+    Rng rng(seed * 3266489917u + 0xA380u);
+    if (!rng.Chance(20)) return false;
+    static const int kWidths[3] = { 1, 2, 4 };
+    const int w = kWidths[rng.Below(3)];
+    const int sz = w == 1 ? 0 : w == 2 ? 1 : 2;
+    const int frame = 8 + 4 * static_cast<int>(rng.Below(w == 4 ? 4 : 3));   // 8-20 / 8-16 bytes: the displacements reach
+    const int slots = frame / w;
+    const bool call = rng.Chance(50);
+    uint32_t regs[7] = { 1, 2, 3, 4, 5, 6, 7 };
+    for (int i = 6; i > 0; --i) std::swap(regs[i], regs[rng.Below(static_cast<uint32_t>(i + 1))]);
+    const uint32_t p = regs[0], ctr = regs[1];
+    const uint32_t v = rng.Chance(33) ? ctr : regs[2];
+    const int start = 1 + static_cast<int>(rng.Below(static_cast<uint32_t>(slots)));   // the slot the read-back pointer starts at (units of w)
+    const bool lower = start > 1 && rng.Chance(25);                                     // read back, then moved down a slot before the walk
+    const int from = lower ? start - 1 : start;
+    const int count = 1 + static_cast<int>(rng.Below(static_cast<uint32_t>(from)));
+    const int lowest = from - count, highest = from - 1;
+    // the slot read back: one the walk writes three times in four (its constant is then stale), and never in the spilled longword
+    int spill = static_cast<int>(rng.Below(static_cast<uint32_t>(frame / 4)));
+    int back = rng.Chance(75) ? lowest + static_cast<int>(rng.Below(static_cast<uint32_t>(count))) : static_cast<int>(rng.Below(static_cast<uint32_t>(slots)));
+    if ((back * w) / 4 == spill) spill = (spill + 1) % (frame / 4);
+    const int k = 1 + static_cast<int>(rng.Below(100));   // the constant written first: 1-100, never a value the walk stores (<= count, or + 3k)
+    const int first = 100 + k;
+    c.words.clear();
+    if (call) c.words.push_back(0x4F22);                                                       // sts.l pr,@-r15
+    c.words.push_back(static_cast<uint16_t>(0x7F00 | ((0x100 - frame) & 0xFF)));              // add #-F,r15
+    c.words.push_back(static_cast<uint16_t>(0xE000 | (first & 0xFF)));                        // mov #first,r0 (101-127 or a negative byte)
+    if (w == 4) c.words.push_back(static_cast<uint16_t>(0x1F00 | back));                      // mov.l r0,@(4*back,r15)
+    else c.words.push_back(static_cast<uint16_t>((w == 2 ? 0x81F0 : 0x80F0) | back));         // mov.w / mov.b r0,@(disp,r15)
+    c.words.push_back(static_cast<uint16_t>(0x6003 | p << 8 | 15 << 4));                      // mov r15,Rp
+    c.words.push_back(static_cast<uint16_t>(0x7000 | p << 8 | (start * w)));                  // add #N,Rp
+    c.words.push_back(static_cast<uint16_t>(0x1F00 | p << 4 | spill));                        // mov.l Rp,@(4*S,r15)
+    size_t bsrAt = 0;
+    if (call)
+    {
+        bsrAt = c.words.size();
+        c.words.push_back(0xB000);                                                             // bsr leaf (patched below)
+        c.words.push_back(0x0009);                                                             // nop
+    }
+    c.words.push_back(static_cast<uint16_t>(0x5000 | p << 8 | 15 << 4 | spill));              // mov.l @(4*S,r15),Rp
+    if (lower) c.words.push_back(static_cast<uint16_t>(0x7000 | p << 8 | ((0x100 - w) & 0xFF)));   // add #-W,Rp
+    c.words.push_back(static_cast<uint16_t>(0xE000 | ctr << 8 | count));                      // mov #count,Rc
+    if (v != ctr) c.words.push_back(static_cast<uint16_t>(0xE000 | v << 8 | 0x01));           // mov #1,Rv
+    const size_t loop = c.words.size();
+    c.words.push_back(static_cast<uint16_t>(0x2004 | p << 8 | v << 4 | sz));                  // L: mov.X Rv,@-Rp
+    if (v != ctr) c.words.push_back(static_cast<uint16_t>(0x7000 | v << 8 | 0x03));           //    add #3,Rv
+    c.words.push_back(static_cast<uint16_t>(0x4010 | ctr << 8));                              //    dt Rc
+    c.words.push_back(static_cast<uint16_t>(0x8B00 | ((static_cast<int>(loop) - static_cast<int>(c.words.size()) - 2) & 0xFF)));   // bf L
+    if (w == 4) c.words.push_back(static_cast<uint16_t>(0x50F0 | back));                      // mov.l @(4*back,r15),r0
+    else c.words.push_back(static_cast<uint16_t>((w == 2 ? 0x85F0 : 0x84F0) | back));         // mov.w / mov.b @(disp,r15),r0
+    c.words.push_back(static_cast<uint16_t>(0x7F00 | frame));                                 // add #F,r15
+    if (call) c.words.push_back(0x4F26);                                                       // lds.l @r15+,pr
+    c.words.push_back(0x000B);                                                                 // rts
+    c.words.push_back(0x0009);                                                                 // nop
+    if (call)
+    {
+        const size_t leaf = c.words.size();
+        c.words.push_back(0x000B);                                                             // leaf: rts
+        c.words.push_back(0x0009);                                                             //       nop
+        c.words[bsrAt] = static_cast<uint16_t>(0xB000 | ((static_cast<int>(leaf) - static_cast<int>(bsrAt) - 2) & 0xFFF));
+    }
+    shape = std::string("spill.") + (call ? "call." : "nocall.") + (w == 1 ? "b" : w == 2 ? "w" : "l") + (lower ? ".lowered" : "") +
+            (back >= lowest && back <= highest ? "" : ".control");
+    c.name = "seed" + std::to_string(seed) + "_spill";
+    return true;
+}
+
+// The check of the spill walks (A3-80): decompile, run once, and compare every constant return with the run's r0. A text that returns a local
+// (the fixed engine's `return xStack_1c;`) is counted, not compared: the evaluator has no loops, and the printed-C harness cannot run a pointer kept
+// in memory (the host's are 8 bytes). The class this catches is the stale constant, a local folded to the value it had before the walk.
+std::vector<CVerdict> CheckSpillWalks(Sh2Decompiler& d, const std::vector<CCase>& cases)
+{
+    std::vector<CVerdict> out(cases.size());
+    static const std::regex ret("\\breturn\\b\\s*([^;]*);");
+    static const std::regex literal("^\\(?\\s*(?:\\(\\s*\\w+\\s*\\)\\s*)?(-?(?:0x[0-9a-fA-F]+|\\d+))\\s*\\)?$");
+    for (size_t ci = 0; ci < cases.size(); ++ci)
+    {
+        const CCase& c = cases[ci];
+        CVerdict& v = out[ci];
+        std::vector<uint8_t> hw;
+        for (size_t i = 0; i < c.words.size(); ++i) dts::Put16(hw, kCode - 0x06000000u + 2 * i, c.words[i]);
+        dts::Put16(hw, kSentinel - 0x06000000u, 0x0009);
+        dts::Put16(hw, kSentinel - 0x06000000u + 2, 0x0009);
+        auto snap = dts::MakeSnapshot(hw, 5000 + ci);
+        DecompileRequest q;
+        q.entry = kCode;
+        const DecompileResult r = d.Decompile(snap, q);
+        v.text = r.Text();
+        if (r.status != DecompileStatus::Ok || r.unsupported || r.truncated)
+        {
+            v.cls = "undecompiled";
+            continue;
+        }
+        Env env;
+        env.ram = snap->regions[1].bytes;
+        std::unique_ptr<Machine> machine(new Machine(snap, &env));
+        for (int i = 0; i < 15; ++i) machine->Set(("r" + std::to_string(i)).c_str(), i < 8 ? 0x11111111u * static_cast<uint32_t>(i) : CalleeSaved(i));
+        machine->Set("r15", kStackTop);
+        machine->Set("pr", kSentinel);
+        RunOut run;
+        if (!machine->Run(kCode, kSentinel, kStepLimit, run, env))
+        {
+            v.cls = "generator:no-return";
+            continue;
+        }
+        bool any = false, local = false;
+        for (std::sregex_iterator it(v.text.begin(), v.text.end(), ret), e; it != e; ++it)
+        {
+            any = true;
+            const std::string what = (*it)[1].str();
+            std::smatch m;
+            if (!std::regex_match(what, m, literal))
+            {
+                local = true;
+                continue;
+            }
+            const std::string n = m[1].str();
+            const bool neg = n[0] == '-';
+            const uint32_t mag = static_cast<uint32_t>(std::strtoull(n.c_str() + (neg ? 1 : 0), nullptr, 0));
+            const uint32_t value = neg ? 0u - mag : mag;
+            v.compared = true;
+            if (value != run.fin[0])
+            {
+                v.cls = "stale-constant";
+                v.detail = "the text returns " + what + "; the code returns " + Hex(run.fin[0]);
+            }
+        }
+        if (v.cls.empty() && (!any || local)) v.cls = any ? "spill:local" : "spill:no-return";
+    }
+    return out;
+}
+
 void TestPrintedC()
 {
     const std::string cc = FindCCompiler();
@@ -7937,6 +8118,51 @@ void TestPrintedC()
     }
     int failing = 0;
     for (const CVerdict& v : verdicts) failing += IsFailing(v) ? 1 : 0;
+    // The walk pointer kept in a stack local (A3-80), from a stream of its own, after every other case: checked by its constant returns.
+    // SE_GENERATED_PRINTEDC_SPILL=0 leaves them out.
+    // SE_GENERATED_SPILL_WORDS replays one function (the words of a finding).
+    const char* spillWords = std::getenv("SE_GENERATED_SPILL_WORDS");
+    if ((!hand || spillWords) && EnvNumber("SE_GENERATED_PRINTEDC_SPILL", 1) != 0)
+    {
+        const long single = EnvNumber("SE_GENERATED_SEED", 0);
+        const long seeds = single ? 1 : EnvNumber("SE_GENERATED_SEEDS", 300);
+        const long first = single ? single : EnvNumber("SE_GENERATED_FIRST", 1);
+        std::vector<CCase> spills;
+        std::map<std::string, int> spillShapes, spillClasses;
+        for (long seed = first; seed < first + seeds; ++seed)
+        {
+            CCase c;
+            std::string shape;
+            if (spillWords || !GenSpillWalkFn(static_cast<uint64_t>(seed), c, shape)) continue;
+            ++spillShapes[shape];
+            spills.push_back(c);
+        }
+        if (spillWords)
+        {
+            CCase c;
+            c.name = "spill-hand";
+            std::istringstream in(spillWords);
+            std::string tok;
+            while (in >> tok) c.words.push_back(static_cast<uint16_t>(std::strtoul(tok.c_str(), nullptr, 16)));
+            spills.push_back(c);
+        }
+        const std::vector<CVerdict> sv = CheckSpillWalks(d, spills);
+        for (size_t i = 0; i < sv.size(); ++i)
+        {
+            ++spillClasses[sv[i].cls.empty() ? "agrees" : sv[i].cls];
+            const bool bad = sv[i].cls == "stale-constant" || sv[i].cls == "undecompiled" || sv[i].cls == "generator:no-return";
+            if (spillWords) std::printf("%s: %s %s\n%s\n", spills[i].name.c_str(), sv[i].cls.empty() ? "agrees" : sv[i].cls.c_str(), sv[i].detail.c_str(), sv[i].text.c_str());
+            if (!bad) continue;
+            ++failing;
+            std::printf("FINDING [%s] %s\n  words: %s\n  detail: %s\n  replay: SE_GENERATED_PRINTEDC=only SE_GENERATED_SPILL_WORDS=\"%s\"\n%s\n", sv[i].cls.c_str(),
+                        spills[i].name.c_str(), WordsText(spills[i].words).c_str(), sv[i].detail.c_str(), WordsText(spills[i].words).c_str(), sv[i].text.c_str());
+        }
+        std::printf("spill walks: functions=%zu classes:", sv.size());
+        for (const auto& c : spillClasses) std::printf(" %s=%d", c.first.c_str(), c.second);
+        std::printf(" shapes:");
+        for (const auto& c : spillShapes) std::printf(" %s=%d", c.first.c_str(), c.second);
+        std::printf("\n");
+    }
     std::printf("printed-C: functions=%zu compared=%d inputs each=%d (%.0f ms) classes:", verdicts.size(), compared, nIn, dts::MsSince(t0));
     for (const auto& c : classes) std::printf(" %s=%d", c.first.c_str(), c.second);
     std::printf("\n");
@@ -8951,6 +9177,10 @@ void TestRound9Pins(Sh2Decompiler& d)
 // before any call for no read of r13 (SavesBeforeCallsDropped). The walk the printed-C differential draws (GenWalkFn) is drawn in every form.
 void TestA365Pins(Sh2Decompiler& d)
 {
+    auto count = [](const Report& rep, const char* name) {
+        const auto it = rep.counts.find(name);
+        return it == rep.counts.end() ? 0 : it->second;
+    };
     {
         const ModulePin m = { "A3-65, seed 901303 shrunk", "2F86 2F96 2FD6 4F22 6843 6953 B00C 6593 6483 6593 D103 4F26 6DF6 69F6 68F6 412B 0009 0009 0600 9028 2FD6 7FF8 62F3 7208 E102 2216 4110 8BFC E200 84F1 1605 6073 7F08 6DF6 000B 0009",
                               "0/0/22,28/28/48", nullptr, "1,1", "0,0", "40000,0" };
@@ -8966,11 +9196,69 @@ void TestA365Pins(Sh2Decompiler& d)
         for (const Finding& f : seed.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
         CHECK(seed.findings.empty());
     }
+    // A3-78, seed 1009895 (grammar 2) and its shrunk module: function 0 pushes r10, calls function 1 (lent, changes r10), pops and tail-jumps
+    // into function 2, whose `mov.w @r15` reads the half of the slot r10 was pushed to. The text saves that half before the call
+    // (`iStack_c = (int2)((uint4)unaff_r10 >> 0x10);`) and reads the local after it: right, and no read of r10 kept across the call.
+    {
+        const ModulePin m = { "A3-78, seed 1009895 shrunk",
+                              "2F86 2F96 2FA6 2FC6 0C2A 7FF4 6843 6953 6A63 B00F 0009 6483 6593 66A3 020A D104 7F0C 4C2A 6CF6 6AF6 69F6 68F6 412B 0009 0600 9068 "
+                              "2F86 2F96 2FA6 2FB6 2FC6 0C2A 7FD0 6843 6953 6A63 6B73 B00D 0009 6483 6593 66A3 67B3 7F30 4C2A 6CF6 6BF6 6AF6 69F6 68F6 000B 0009 "
+                              "7FF4 61F1 2418 8B00 6262 62F3 720C E103 2216 4110 8BFC E200 7F0C 000B 0009",
+                              "0/0/30,34/34/68,68/68/86", nullptr, "0,0,0", "184000,184000,184000", "0,4000,0" };
+        const Report rep = EvaluateSubject(d, ModuleSubject(m), true);
+        std::printf("pin '%s': %zu finding(s)\n", m.name, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty() && count(rep, "lent.changed.checked") > 0);
+        const bool savedSpecials = gSpecialReads;
+        gSpecialReads = false;
+        const Report seed = EvaluateSubject(d, MakeSubject(MakeV2(1009895)), true);
+        gSpecialReads = savedSpecials;
+        std::printf("pin 'A3-78, grammar 2 seed 1009895': %zu finding(s)\n", seed.findings.size());
+        for (const Finding& f : seed.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(seed.findings.empty());
+    }
+    // A3-78, seed 1418819 (the area 2 round 11 review) and its shrunk module: function 0 calls function 1 on one path and tail-jumps into it,
+    // whose pushes of r10 and r12 print in function 0's text after the branch. The engine joins the entry value and the call's output under one
+    // name (`unaff_r10 = extraout_r10;` after the call), so the pushes read `unaff_r10`: the entry value on the path without the call, the call's
+    // output on the other. Right, and no read of r10 or r12 kept across the call.
+    {
+        const ModulePin m = { "A3-78, seed 1418819 shrunk",
+                              "2F86 2F96 2FD6 2FE6 4F22 7FF0 6EF3 6843 6953 2458 8903 B00F 0009 6483 6593 D305 7E10 6FE3 4F26 6EF6 6DF6 69F6 68F6 432B 0009 0009 0600 9038 "
+                              "2F86 2F96 2FA6 2FC6 0C2A 6843 6953 6A63 B00A 0009 6483 6593 66A3 4C2A 6CF6 6AF6 69F6 68F6 000B 0009 "
+                              "2FD6 2FE6 7FF0 6EF3 62F3 7210 E103 2216 4110 8BFC E200 E0A6 7E10 6FE3 6EF6 6DF6 000B 0009",
+                              "0/0/32,38/38/60,60/60/84", nullptr, "0,0,1", nullptr, nullptr };
+        const Report rep = EvaluateSubject(d, ModuleSubject(m), true);
+        std::printf("pin '%s': %zu finding(s)\n", m.name, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty() && count(rep, "lent.changed.checked") > 0);
+        const bool savedSpecials = gSpecialReads;
+        gSpecialReads = false;
+        const Report seed = EvaluateSubject(d, MakeSubject(MakeV2(1418819)), true);
+        gSpecialReads = savedSpecials;
+        std::printf("pin 'A3-78, grammar 2 seed 1418819': %zu finding(s)\n", seed.findings.size());
+        for (const Finding& f : seed.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(seed.findings.empty());
+    }
     // check 12's reading of a save: before the first call it is no read of the register; after one, or a read elsewhere, it is
     const std::string head = "xunknown4 func_0x06009000(void)\n\n{\n  xunknown4 unaff_r13;\n  xunknown4 xStack_c;\n\n";
     CHECK(!WholeWord(SavesBeforeCallsDropped(head + "  xStack_c = unaff_r13;\n  func_0x06009028();\n  return xStack_c;\n}\n", "r13"), "unaff_r13"));
     CHECK(WholeWord(SavesBeforeCallsDropped(head + "  func_0x06009028();\n  xStack_c = unaff_r13;\n  return xStack_c;\n}\n", "r13"), "unaff_r13"));
     CHECK(WholeWord(SavesBeforeCallsDropped(head + "  xStack_c = unaff_r13;\n  func_0x06009028();\n  return unaff_r13;\n}\n", "r13"), "unaff_r13"));
+    // A3-78: a save shown in part (a cast, a right shift by a constant) is the same save; an operation that combines it with anything is not
+    CHECK(!WholeWord(SavesBeforeCallsDropped(head + "  xStack_c = (int2)((uint4)unaff_r13 >> 0x10);\n  func_0x06009028();\n  return xStack_c;\n}\n", "r13"), "unaff_r13"));
+    CHECK(!WholeWord(SavesBeforeCallsDropped(head + "  xStack_c = (char)unaff_r13;\n  func_0x06009028();\n  return xStack_c;\n}\n", "r13"), "unaff_r13"));
+    CHECK(WholeWord(SavesBeforeCallsDropped(head + "  func_0x06009028();\n  xStack_c = (int2)((uint4)unaff_r13 >> 0x10);\n  return xStack_c;\n}\n", "r13"), "unaff_r13"));
+    CHECK(WholeWord(SavesBeforeCallsDropped(head + "  xStack_c = (int2)((uint4)unaff_r13 + 0x10);\n  func_0x06009028();\n  return xStack_c;\n}\n", "r13"), "unaff_r13"));
+    CHECK(WholeWord(SavesBeforeCallsDropped(head + "  xStack_c = (int2)((uint4)unaff_r13 >> 0x10);\n  func_0x06009028();\n  return unaff_r13;\n}\n", "r13"), "unaff_r13"));
+    // A3-78, seed 1418819: the entry value's variable given the call's output right after the call is no stale read; given it in another block,
+    // after an earlier call, or from itself, or in a text with a loop, it is
+    const std::string head2 = "xunknown4 func_0x06009000(void)\n\n{\n  xunknown4 unaff_r13;\n  xunknown4 extraout_r13;\n\n";
+    CHECK(!WholeWord(SavesBeforeCallsDropped(head2 + "  if (c) {\n    func_0x06009028();\n    unaff_r13 = extraout_r13;\n  }\n  *p = unaff_r13;\n}\n", "r13"), "unaff_r13"));
+    CHECK(WholeWord(SavesBeforeCallsDropped(head2 + "  if (c) {\n    func_0x06009028();\n  }\n  else {\n    unaff_r13 = extraout_r13;\n  }\n  *p = unaff_r13;\n}\n", "r13"), "unaff_r13"));
+    CHECK(WholeWord(SavesBeforeCallsDropped(head2 + "  func_0x06009020();\n  if (c) {\n    func_0x06009028();\n    unaff_r13 = extraout_r13;\n  }\n  *p = unaff_r13;\n}\n", "r13"), "unaff_r13"));
+    CHECK(WholeWord(SavesBeforeCallsDropped(head2 + "  func_0x06009028();\n  unaff_r13 = unaff_r13 + 1;\n  *p = unaff_r13;\n}\n", "r13"), "unaff_r13"));
+    CHECK(WholeWord(SavesBeforeCallsDropped(head2 + "  func_0x06009028();\n  unaff_r13 = extraout_r13;\n  do {\n    *p = unaff_r13;\n    func_0x06009028();\n  } while (c);\n}\n", "r13"), "unaff_r13"));
+    CHECK(WholeWord(SavesBeforeCallsDropped(head2 + "  func_0x06009028();\n  unaff_r13 = extraout_r13;\n  func_0x06009028();\n  *p = unaff_r13;\n}\n", "r13"), "unaff_r13"));
     // the walk functions of the printed-C differential: every width, both directions, the read back up, within the first 400 seeds
     {
         std::map<std::string, int> drawn;
@@ -8986,6 +9274,26 @@ void TestA365Pins(Sh2Decompiler& d)
         for (const auto& k : drawn) if (k.first.compare(0, 5, "walk.") == 0) std::printf(" %s=%d", k.first.c_str(), k.second);
         std::printf("\n");
         for (const char* shape : { "walk.down.b", "walk.down.w", "walk.down.l", "walk.up.b", "walk.up.w", "walk.up.l", "walk.down.l.readback" })
+            CHECK(drawn[shape] > 0);
+    }
+    // A3-80: the walk pointer kept in a stack local, with and without a call, at every width, moved down after the read, and the controls
+    {
+        std::map<std::string, int> drawn;
+        int spills = 0;
+        for (uint64_t seed = 1; seed <= 400; ++seed)
+        {
+            CCase c;
+            std::string shape;
+            if (!GenSpillWalkFn(seed, c, shape)) continue;
+            ++spills;
+            ++drawn[shape.substr(0, shape.find('.', 6) == std::string::npos ? shape.size() : shape.find('.', 6) + 2)];
+            if (shape.find(".lowered") != std::string::npos) ++drawn["lowered"];
+            if (shape.find(".control") != std::string::npos) ++drawn["control"];
+        }
+        std::printf("pin 'A3-80 spill draws': %d spill functions in 400 seeds:", spills);
+        for (const auto& k : drawn) std::printf(" %s=%d", k.first.c_str(), k.second);
+        std::printf("\n");
+        for (const char* shape : { "spill.call.b", "spill.call.w", "spill.call.l", "spill.nocall.b", "spill.nocall.w", "spill.nocall.l", "lowered", "control" })
             CHECK(drawn[shape] > 0);
     }
 }

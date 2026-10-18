@@ -16,6 +16,7 @@
  * Modified for SaturnExplorer: a host can declare a pointer into the stack the actions cannot see (patches/0030-host-stack-alias.patch).
  * Modified for SaturnExplorer: a RangeHint the list cannot take is freed (patches/0032-allocation-failure-order-2.patch).
  * Modified for SaturnExplorer: a pointer a loop steps down from a stack address aliases the locals below that address (patches/0056-engine-stack-walk-down-aliases.patch).
+ * Modified for SaturnExplorer: so does one kept in a stack local and read back, across a call too (patches/0060-engine-stack-walk-down-spilled.patch).
  */
 #include "varmap.hh"
 #include "funcdata.hh"
@@ -840,14 +841,7 @@ void AliasChecker::gatherInternal(void) const
   for(vector<AddBase>::iterator iter=addBase.begin();iter!=addBase.end();++iter) {
     Varnode *base = (*iter).base;
     if (base == (Varnode *)0) continue;
-    bool down = false;
-    for(list<PcodeOp *>::const_iterator diter=base->beginDescend();diter!=base->endDescend();++diter) {
-      PcodeOp *op = *diter;
-      if (op->code() == CPUI_MULTIEQUAL && stepsDown(op)) {
-	down = true;
-	break;
-      }
-    }
+    bool down = reachesStepDown(base);
     if (!down) continue;
     uintb offset = AddrSpace::addressToByte(gatherOffset(base),space->getWordSize());
     uintb low = (offset - 0xffff) & calc_mask(space->getAddrSize());
@@ -862,6 +856,52 @@ void AliasChecker::gatherInternal(void) const
     if (low < aliasBoundary)
       aliasBoundary = low;
   }
+}
+
+/// SaturnExplorer (patches/0060-engine-stack-walk-down-spilled.patch): does the pointer \b base reach a loop that steps it down?
+/// The pointer is followed forward through copies, additions, joins and the INDIRECTs of a call or a store, which is how a
+/// frame address kept in a stack local and read back looks once the stack is heritaged (`COPY` into the local, the call's
+/// INDIRECT on it, the read's `COPY` out). A pointer read back after a call that may have rewritten the local is taken to be
+/// the one written (the call can write there only an address it was given, or one of its own frame below ours), so the
+/// walk fails closed: the base is taken to reach below itself (ledger A3-80). Patches 0056 and 0057 looked only at the
+/// MULTIEQUALs that read the base itself.
+/// \param base is a pointer into the stack (one of the AddBase records)
+/// \return \b true if a loop the pointer reaches steps it down
+bool AliasChecker::reachesStepDown(Varnode *base)
+
+{
+  vector<Varnode *> work;
+  set<Varnode *> seen;
+  work.push_back(base);
+  seen.insert(base);
+  for(int4 k=0;k<work.size();++k) {
+    if (work.size() >= 1024) return true;	// too far to follow: taken to step down (fail closed)
+    Varnode *vn = work[k];
+    for(list<PcodeOp *>::const_iterator iter=vn->beginDescend();iter!=vn->endDescend();++iter) {
+      PcodeOp *op = *iter;
+      switch(op->code()) {
+      case CPUI_MULTIEQUAL:
+	if (stepsDown(op)) return true;
+	break;
+      case CPUI_COPY:
+      case CPUI_INT_ADD:
+	break;
+      case CPUI_INDIRECT:
+      case CPUI_INT_SUB:
+      case CPUI_PTRADD:
+      case CPUI_PTRSUB:
+	if (op->getIn(0) != vn) continue;
+	break;
+      default:
+	continue;
+      }
+      Varnode *out = op->getOut();
+      if (out == (Varnode *)0) continue;
+      if (seen.insert(out).second)
+	work.push_back(out);
+    }
+  }
+  return false;
 }
 
 /// SaturnExplorer (patches/0056-engine-stack-walk-down-aliases.patch): follow the pointer a MULTIEQUAL joins forward, through
@@ -1231,10 +1271,10 @@ void MapState::addRange(uintb st,Datatype *ct,uint4 fl,RangeHint::RangeType rt,i
 #ifdef OPACTION_DEBUG
   if (debugon) {
     ostringstream s;
-    s << "Add Range: " << hex << st << ":" << dec << ct->getSize();
+    s << "Add Range: " << std::hex << st << ":" << dec << ct->getSize();
     s << " ";
     ct->printRaw(s);
-    s << endl;
+    s << std::endl;
     glb->printDebug(s.str());
   }
 #endif

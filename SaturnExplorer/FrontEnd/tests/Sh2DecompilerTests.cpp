@@ -11587,6 +11587,73 @@ void TestArea3Round10Fix()
              "return xStack_14;");
     walkText("a3_72c: the conditional step in an inner loop", { 0x7FE0, 0x62F3, 0x7220, 0xE005, 0x2F02, 0xE302, 0xE104, 0x2448, 0x8900, 0x2216, 0x4110, 0x8BFA, 0x4310, 0x8BF7, 0x60F2, 0x7F20, 0x000B, 0x0009 },
              "return xStack_20;");
+
+    // ---- A3-80: engine patch 0060, the walk pointer kept in a stack local and read back -------------------------------------------------------
+    // `mov.l r2,@(16,r15)` (r2 = r15 + 16), the read back `mov.l @(16,r15),r2`, then the walk `mov.l r1,@-r2` four times: the local at r15 is
+    // written last, with 1. Patches 0056 and 0057 followed the registers only, so the read-back pointer was no frame base and its stores no stores
+    // to the stack: the local kept its 5 (`return 5;`). With no call between, the function was lent so (a wrong value with no note).
+    {
+        const std::vector<uint16_t> leaf = { 0x000B, 0x0009 };
+        std::string text;
+        bool known = true;
+        for (bool lend : { true, false })
+        {
+            withCallee(lend ? "a3_80a: the pointer kept in a stack local across a lent call" : "a3_80b: the pointer kept in a stack local across an unlent call",
+                       { 0x4F22, 0x7FE8, 0x68F3, 0x62F3, 0x7210, 0xE005, 0x2F02, 0x1F24, 0xD106, 0x410B, 0x0009, 0x52F4, 0xE104, 0x2216, 0x4110, 0x8BFC, 0x60F2,
+                         0x7F18, 0x4F26, 0x000B, 0x0009, 0x0009, 0x0600, 0x9040 },
+                       leaf, lend, &known, &text, nullptr);
+            CHECK(!known && Has(text, "return xStack_1c;") && !Has(text, "return 5;"));
+        }
+        // through the frame pointer r14, an unlent call
+        withCallee("a3_80c: the pointer kept in an r14 frame's local across a call",
+                   { 0x2FE6, 0x4F22, 0x7FE8, 0x6EF3, 0x62E3, 0x7210, 0xE005, 0x2E02, 0x1E24, 0xD106, 0x410B, 0x0009, 0x52E4, 0xE104, 0x2216, 0x4110, 0x8BFC,
+                     0x60E2, 0x7F18, 0x4F26, 0x000B, 0x6EF6, 0x0600, 0x9040 },
+                   leaf, false, &known, &text, nullptr);
+        CHECK(Has(text, "return xStack_20;") && !Has(text, "return 5;"));
+        // by bytes
+        withCallee("a3_80d: the pointer kept in a stack local, a walk by bytes",
+                   { 0x4F22, 0x7FE8, 0x62F3, 0x7204, 0xE005, 0x80F0, 0x1F24, 0xD106, 0x410B, 0x0009, 0x52F4, 0xE104, 0x2214, 0x4110, 0x8BFC, 0x84F0, 0x7F18,
+                     0x4F26, 0x000B, 0x0009, 0x0600, 0x9040 },
+                   leaf, true, &known, &text, nullptr);
+        CHECK(Has(text, "return (int4)cStack_1c;") && !Has(text, "return 5;"));
+        // two calls between the spill and the read back
+        withCallee("a3_80e: two calls between the spill and the read back",
+                   { 0x4F22, 0x7FE8, 0x62F3, 0x7210, 0xE005, 0x2F02, 0x1F24, 0xD108, 0x410B, 0x0009, 0xD106, 0x410B, 0x0009, 0x52F4, 0xE104, 0x2216, 0x4110,
+                     0x8BFC, 0x60F2, 0x7F18, 0x4F26, 0x000B, 0x0009, 0x0009, 0x0600, 0x9040 },
+                   leaf, true, &known, &text, nullptr);
+        CHECK(Has(text, "return xStack_1c;") && !Has(text, "return 5;"));
+        // read back, then moved down a slot before the walk
+        withCallee("a3_80f: read back, then moved down before the walk",
+                   { 0x4F22, 0x7FE8, 0x62F3, 0x7214, 0xE005, 0x2F02, 0x1F25, 0xD107, 0x410B, 0x0009, 0x52F5, 0x72FC, 0xE104, 0x2216, 0x4110, 0x8BFC, 0x60F2,
+                     0x7F18, 0x4F26, 0x000B, 0x0009, 0x0009, 0x0600, 0x9040 },
+                   leaf, true, &known, &text, nullptr);
+        CHECK(Has(text, "return xStack_1c;") && !Has(text, "return 5;"));
+        // copied into a second local before the call, read back from that one
+        withCallee("a3_80g: copied into a second local, read back from it",
+                   { 0x4F22, 0x7FE8, 0x62F3, 0x7210, 0xE005, 0x2F02, 0x1F24, 0x53F4, 0x1F35, 0xD106, 0x410B, 0x0009, 0x52F5, 0xE104, 0x2216, 0x4110, 0x8BFC,
+                     0x60F2, 0x7F18, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9040 },
+                   leaf, true, &known, &text, nullptr);
+        CHECK(Has(text, "return xStack_1c;") && !Has(text, "return 5;"));
+        // control: walked up from the read-back pointer (right before the patch too)
+        withCallee("a3_80 control: walked up after the read back",
+                   { 0x4F22, 0x7FE8, 0x62F3, 0xE005, 0x1F03, 0x1F24, 0xD106, 0x410B, 0x0009, 0x52F4, 0xE104, 0x2212, 0x7204, 0x4110, 0x8BFB, 0x50F3, 0x7F18,
+                     0x4F26, 0x000B, 0x0009, 0x0600, 0x9040 },
+                   leaf, true, &known, &text, nullptr);
+        CHECK(Has(text, "return xStack_10;") && !Has(text, "return 5;"));
+    }
+    // no call: the spill and the read back alone, lent
+    auto walkLent = [&](const char* name, std::vector<uint16_t> words, const char* want) {
+        const CallFixture f = { name, base, std::move(words) };
+        const DecompileResult r = d.Decompile(CallSnapshot(f, ++serial), Request(f.base));
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok && r.prototype.known);
+        CHECK(Has(r.Text(), want) && !Has(r.Text(), "return 5;") && !Has(r.Text(), "register0x0000003c"));
+    };
+    walkLent("a3_80h: the pointer kept in a stack local, no call (lent)",
+             { 0x7FE8, 0x62F3, 0x7210, 0xE005, 0x2F02, 0x1F24, 0x52F4, 0xE104, 0x2216, 0x4110, 0x8BFC, 0x60F2, 0x7F18, 0x000B, 0x0009, 0x0009 }, "return xStack_18;");
+    walkLent("a3_80i: the same by bytes, read back into another register (lent)",
+             { 0x7FE8, 0x62F3, 0x7204, 0xE005, 0x80F0, 0x1F24, 0x53F4, 0xE104, 0x2314, 0x4110, 0x8BFC, 0x84F0, 0x7F18, 0x000B, 0x0009, 0x0009 },
+             "return (int4)cStack_18;");
 }
 
 // ===== Area 3, round 10 fix: the hidden-input fuzzer (the round 10 reviewer's scratch fuzzer, ported) ====================================
