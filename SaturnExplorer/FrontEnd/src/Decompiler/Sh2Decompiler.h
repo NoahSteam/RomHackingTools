@@ -69,6 +69,9 @@ constexpr const char* kFrameEscapeNote = "a frame address is in r2 here, in none
 constexpr const char* kFrameEscapeNoteR7 = "a frame address is in r7 here, in none of the arguments: the call may write the locals from there up";
 // ...and for the call's stack argument slots (A3-51): the engine drops an argument that follows three unset registers, the stack word with it.
 constexpr const char* kFrameEscapeNoteStack = "a frame address is in a stack argument slot here, in none of the arguments: the call may write the locals from there up";
+// ...and for a local the function wrote at or above the stack pointer before a call to a function with no lent signature and reads after it (A3-61):
+// the callee's stack arguments are those words, and a hand-written one may hand a value back in its own argument slot.
+constexpr const char* kFrameEscapeNoteSlot = "a local at or above the stack pointer is read after this call, which may write it as one of its stack arguments";
 
 namespace origin
 {

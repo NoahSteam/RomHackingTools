@@ -389,7 +389,7 @@ struct Lit
 struct Item
 {
     // Poll is version 1 only; the types after it are version 2.
-    enum Type : uint8_t { Alu, Mem, LitPtr, Skip, Loop, Poll, Spill, Call, Table, BraLoop, BraBack, DataSkip, Mask } type = Alu;
+    enum Type : uint8_t { Alu, Mem, LitPtr, Skip, Loop, Poll, Spill, Call, Table, BraLoop, BraBack, DataSkip, Mask, Choice } type = Alu;
     const char* shape = "";
     std::vector<uint16_t> words;   // Alu, Mem: the instruction words (an indexed access: mov #k,r0 first)
     int base = -1;                 // Mem: the pointer register
@@ -423,6 +423,8 @@ struct Item
     std::vector<int> target;       // Table: for each entry, the index of the case it goes to, or -1: the default
     std::vector<std::vector<Item>> cases;   // Table: the bodies of the cases
     std::vector<uint16_t> data;    // DataSkip: the words skipped over
+    // Choice (A3-64): `words` (the chooser's test; empty: the T the caller left) ; bt/bf L ; `setup` ; bra M ; nop ; L: `after` ; M:. Each arm writes
+    // r0 and uses it once more (a compare), so the engine drops the return (A3-55).
 };
 
 // One generated function (version 1 programs have exactly one, with the v1 prologue-free shape).
@@ -445,6 +447,8 @@ struct Func
     uint16_t retWord = 0;          // ...by this instruction
     bool retInSlot = false;        // ...which is rts's delay slot
     bool retIsCall = false;        // ...or by no instruction: the function's last item is a call, and r0 is what its callee returned (`return g(p);`, A2-31)
+    // ...or by no instruction after its first item, a Choice of two values by an input (A3-64): what chose them (Choice*), else -1.
+    int choiceBy = -1;
     bool noR0 = false;             // never writes r0 itself (a function that returns nothing)
     bool partial = false;          // ...bar `tst ; bt ; mov Rs,r0` last: r0 is a parameter on one path and left alone on the other (A3-20)
     bool slotPop = false;          // the last stack instruction of the epilogue is rts's delay slot
@@ -500,6 +504,7 @@ struct Gen
     Rng partialRng;
     Rng retRng;   // a stream of its own: whether a returning function returns its last call's result (A2-31)
     Rng bsrfRng;  // ...and one for which register-called calls are bsrf (A2-20)
+    Rng choiceRng;   // ...and one for the return chosen by an input (A3-64)
     // What the function being made changes for good / reads on entry through the wide alphabet and the GBR accesses
     // (an over-approximation: an item the grammar drops again is counted, which the checks that use it allow).
     uint32_t wideClobbers = 0;
@@ -521,10 +526,159 @@ struct Gen
     bool inSpill = false;     // r15 is moved: no local is addressed through it here
     int loopDepth = 0;        // inside a loop body: a pointer advanced here is advanced again by the next iteration
     std::vector<Func> built;  // the functions of this module generated so far (the later ones)
-    Gen(uint64_t seed) : rng(seed), macRng(seed ^ 0x6D61636D61636D61ull), guardRng(seed ^ 0x7367756172643A5Aull), convRng(seed ^ 0x636F6E7663727667ull), wideRng(seed ^ 0x77696465414C5521ull), aliasRng(seed ^ 0x616C696173526E67ull), maskRng(seed ^ 0x6D61736B52616E64ull), placeRng(seed ^ 0x706C616365526E67ull), loopMaskRng(seed ^ 0x6C6F6F704D61736Bull), frameRng(seed ^ 0x6672616D6557616Cull), partialRng(seed ^ 0x7061727469616C52ull), retRng(seed ^ 0x7265747263616C6Cull), bsrfRng(seed ^ 0x6273726652656C21ull)
+    Gen(uint64_t seed) : rng(seed), macRng(seed ^ 0x6D61636D61636D61ull), guardRng(seed ^ 0x7367756172643A5Aull), convRng(seed ^ 0x636F6E7663727667ull), wideRng(seed ^ 0x77696465414C5521ull), aliasRng(seed ^ 0x616C696173526E67ull), maskRng(seed ^ 0x6D61736B52616E64ull), placeRng(seed ^ 0x706C616365526E67ull), loopMaskRng(seed ^ 0x6C6F6F704D61736Bull), frameRng(seed ^ 0x6672616D6557616Cull), partialRng(seed ^ 0x7061727469616C52ull), retRng(seed ^ 0x7265747263616C6Cull), bsrfRng(seed ^ 0x6273726652656C21ull), choiceRng(seed ^ 0x63686F6F73657221ull)
     {
         for (int i = 0; i < 8; ++i) align[i] = 4, pref[i] = 4;
         p.mbox = 0x26001000u + 0x10u * rng.Below(4);
+    }
+
+    // The registers r0-r3 an item may write on some path (A3-64's choosers: r0 or a scratch register is the caller's value only where no item wrote
+    // it on any path; `Def` says only that one wrote it on every path, and a loop's write is on none). Read off the words as the decoder prints
+    // them (the last operand when it is a register, @-Rn and @Rn+), conservatively, and the registers items write without a word of their own.
+    static uint32_t MayWriteLow(const std::vector<Item>& items)
+    {
+        uint32_t m = 0;
+        auto scan = [&m](uint16_t w) {
+            const sfe::DisassembledInstruction ins = sfe::Sh2Decode(kCode, w);
+            const std::string& o = ins.Operands;
+            for (int k = 0; k < 4; ++k)
+            {
+                const std::string r = "r" + std::to_string(k);
+                const bool last = o.size() >= r.size() && o.compare(o.size() - r.size(), r.size(), r) == 0 &&
+                                  (o.size() == r.size() || o[o.size() - r.size() - 1] == ',');
+                if (last || o.find("@-" + r) != std::string::npos || o.find("@" + r + "+") != std::string::npos) m |= 1u << k;
+            }
+        };
+        for (const Item& it : items)
+        {
+            for (const std::vector<uint16_t>* ws : { &it.words, &it.setup, &it.after, &it.slotWords })
+                for (uint16_t w : *ws) scan(w);
+            if (it.type == Item::Skip) scan(it.cond);
+            if (it.type == Item::Loop || it.type == Item::BraLoop || it.type == Item::BraBack) m |= 1u << it.counter;
+            if (it.type == Item::LitPtr || it.type == Item::Poll || it.type == Item::Mask) m |= (1u << it.reg) | (1u << it.jsrReg) | 1u;
+            if (it.type == Item::Table || it.type == Item::Call) m |= 0xFu;
+            m |= MayWriteLow(it.slot) | MayWriteLow(it.kids);
+            for (const std::vector<Item>& c : it.cases) m |= MayWriteLow(c);
+        }
+        return m & 0xFu;
+    }
+    // The registers an item loads a literal into (a pointer item, a poll): their value is no longer the caller's, on that path at least.
+    static uint32_t ReloadedRegs(const std::vector<Item>& items)
+    {
+        uint32_t m = 0;
+        for (const Item& it : items)
+        {
+            if (it.type == Item::LitPtr || it.type == Item::Poll) m |= 1u << it.reg;
+            m |= ReloadedRegs(it.slot) | ReloadedRegs(it.kids);
+            for (const std::vector<Item>& c : it.cases) m |= ReloadedRegs(c);
+        }
+        return m;
+    }
+    // Whether an item writes SR other than its flags (ldc to SR): the interrupt mask a chooser reads is then not the caller's.
+    static bool WritesSr(const std::vector<Item>& items)
+    {
+        for (const Item& it : items)
+        {
+            for (const std::vector<uint16_t>* ws : { &it.words, &it.setup, &it.after, &it.slotWords })
+                for (uint16_t w : *ws)
+                    if ((w & 0xF0FF) == 0x400E || (w & 0xF0FF) == 0x4007) return true;   // ldc Rm,sr / ldc.l @Rm+,sr
+            if (WritesSr(it.slot) || WritesSr(it.kids)) return true;
+            for (const std::vector<Item>& c : it.cases)
+                if (WritesSr(c)) return true;
+        }
+        return false;
+    }
+
+    // A return chosen by an input (A3-64): the shapes of A3-55 to A3-58 and A3-62. Two values, each written to r0 on one arm of a branch and
+    // used once more (so the engine takes the return for none), and a chooser, read where the item stands (last in the function): r0 or a scratch
+    // register r1-r3 that no item wrote on every path (the caller's value, on some path at least), SR's interrupt mask when no item writes SR, a
+    // parameter (r4-r7, which the function may or may not use otherwise), the stack argument at the entry r15, or a constant. The values: two
+    // constants, two sums of one register (`r4 + 1`, `r4 + 2`), two loads through r4 and r5, a register and a constant.
+    // 'entryOff': the entry r15 from the function's r15 after its prologue. 'by' is the chooser as Func::choiceBy has it.
+    static constexpr int kChoiceStack = 15, kChoiceSr = 16, kChoiceConst = 17;
+    Item MakeChoice(int entryOff, int& by, bool srWritten, uint32_t reloaded, uint32_t lowWritten)
+    {
+        Item it;
+        it.type = Item::Choice;
+        int params[4], nparams = 0;   // the parameters that still hold the caller's value (stepped, perhaps), not a literal an item loaded
+        for (int q = 4; q < 8; ++q)
+            if (!((reloaded >> q) & 1u)) params[nparams++] = q;
+        std::vector<int> kinds = { 5 };   // a constant
+        if (nparams) kinds.insert(kinds.end(), { 4, 4 });   // a parameter, twice as often
+        if (!(lowWritten & 1u)) kinds.push_back(0);
+        if (!srWritten) kinds.push_back(1);
+        if ((lowWritten & 0xEu) != 0xEu) kinds.push_back(2);
+        if (entryOff <= 60) kinds.push_back(6);
+        switch (kinds[choiceRng.Below(static_cast<uint32_t>(kinds.size()))])
+        {
+        case 0:
+            by = 0;
+            it.words = { choiceRng.Chance(50) ? uint16_t(0x2008) : uint16_t(0x8800 | choiceRng.Below(4)) };   // tst r0,r0 / cmp/eq #imm,r0
+            it.shape = "choice.by_r0";
+            break;
+        case 1:
+            by = kChoiceSr;
+            it.words = { 0x0002, 0xC8F0 };   // stc sr,r0 ; tst #0xF0,r0
+            it.shape = "choice.by_sr";
+            break;
+        case 2:
+        {
+            int pool[3], n = 0;
+            for (int k = 1; k <= 3; ++k)
+                if (!((lowWritten >> k) & 1u)) pool[n++] = k;
+            by = pool[choiceRng.Below(static_cast<uint32_t>(n))];
+            it.words = { uint16_t(0x2008 | by << 8 | by << 4) };   // tst Rn,Rn
+            it.shape = "choice.by_scratch";
+            break;
+        }
+        case 4:
+        {
+            by = params[choiceRng.Below(static_cast<uint32_t>(nparams))];
+            it.words = { choiceRng.Chance(50) ? uint16_t(0x2008 | by << 8 | by << 4) : uint16_t(0x4015 | by << 8) };   // tst Rn,Rn / cmp/pl Rn
+            it.shape = "choice.by_param";
+            break;
+        }
+        case 5:
+            by = kChoiceConst;
+            it.words = { uint16_t(0xE000 | choiceRng.Below(2)), 0x2008 };   // mov #0 or #1,r0 ; tst r0,r0
+            it.shape = "choice.by_const";
+            break;
+        default:
+            by = kChoiceStack;
+            it.words = { uint16_t(0x50F0 | (entryOff / 4)), 0x2008 };   // mov.l @(entry r15),r0 ; tst r0,r0
+            it.shape = "choice.by_stack";
+            break;
+        }
+        it.onTrue = choiceRng.Chance(50);
+        // The second use of each value: `or r0,Rn` into a register that holds a value (it is the function's last write of Rn, dead after; the engine
+        // counts the use and drops the return, A3-55), or a compare, which it does not count once its T is dead (that arm keeps its return).
+        // (a scratch register: an `or` into a pointer register lands in another's arena by chance, r5 | (r6 + 0x63) is r7's + 0x63: seed 19860)
+        int pool[3], np = 0;
+        for (int q = 1; q <= 3; ++q)
+            if (Def(q) && q != by) pool[np++] = q;
+        const int un = np ? pool[choiceRng.Below(static_cast<uint32_t>(np))] : -1;
+        auto useOf = [&]() { return un >= 0 && choiceRng.Chance(75) ? uint16_t(0x200B | un << 8) : uint16_t(0x8800 | choiceRng.Below(256)); };   // or r0,Rn / cmp/eq #imm,r0
+        const uint32_t values = choiceRng.Below(4);
+        const int s = 4 + static_cast<int>(choiceRng.Below(4));
+        const uint16_t a = uint16_t(choiceRng.Below(128)), b = uint16_t((a + 1 + choiceRng.Below(100)) & 0xFF);
+        switch (values)
+        {
+        case 0: it.setup = { uint16_t(0xE000 | a) }; it.after = { uint16_t(0xE000 | b) }; break;                                   // two constants
+        case 1: it.setup = { uint16_t(0x6003 | s << 4), uint16_t(0x7000 | a) }; it.after = { uint16_t(0x6003 | s << 4), uint16_t(0x7000 | b) }; break;   // r + a, r + b
+        case 2:
+        {
+            // mov.x @r4,r0 / @r5,r0, of the width both pointers are still aligned for (an increment earlier may have left one at 2 or 1: A11-2)
+            const int al = std::min(align[4], align[5]);
+            const uint16_t sz = !gTrackAlignment || al >= 4 ? 2 : al >= 2 ? 1 : 0;
+            it.setup = { uint16_t(0x6040 | sz) };
+            it.after = { uint16_t(0x6050 | sz) };
+            break;
+        }
+        default: it.setup = { uint16_t(0x6003 | s << 4) }; it.after = { uint16_t(0xE000 | b) }; break;                               // a register, a constant
+        }
+        it.setup.push_back(useOf());
+        it.after.push_back(useOf());
+        return it;
     }
 
     bool Def(int r) const { return (defined >> r) & 1u; }
@@ -1549,6 +1703,15 @@ struct Gen
             }
         }
         if (hasConvRead) f.items.insert(f.items.begin(), convRead);   // first: before anything can write what it reads
+        // A return chosen by an input (A3-64), from a stream of its own and after every other draw, so no program a seed made before it changes but
+        // for this item: in a function that returns, makes no call (a callee may leave anything in r0), and has no table (mova writes r0) and no
+        // shared exit. Last, as the return value (no retWord follows it).
+        if (f.returns && f.end == Func::Rts && nCalls == 0 && !table && f.sel < 0 && !f.shared && choiceRng.Chance(15))
+        {
+            const int entryOff = 4 * static_cast<int>(f.pushed.size()) + (f.savePr ? 4 : 0) + f.frame;
+            f.items.push_back(MakeChoice(entryOff, f.choiceBy, WritesSr(f.items), ReloadedRegs(f.items), MayWriteLow(f.items)));
+            if (f.choiceBy >= 1 && f.choiceBy <= 3) f.reads |= 1u << f.choiceBy;
+        }
         // `if (b) return a;` with no return on the other path (A3-20): last, so every path passes it. Only in a function that makes no call
         // (a callee may leave anything in r0) and returns nothing otherwise.
         if (!f.returns && f.end == Func::Rts && nCalls == 0 && !table && f.sel < 0 && partialRng.Chance(10))
@@ -1632,6 +1795,7 @@ struct Gen
             f.retInSlot = rng.Chance(40);
         }
         if (f.end != Func::Fall && !f.retInSlot) f.slotPop = rng.Chance(45);
+        if (f.choiceBy >= 0) f.retInSlot = false;   // the choice is the return value: no instruction writes r0 after it (EmitExit)
         // `return g(p);`: the value is what the last call's callee returned, with nothing written after it (the usual epilogue pops in the
         // slot, or a nop there). The draws above are those of the seeds found before this form existed; this one has a stream of its own.
         if (f.returns && f.end == Func::Rts && !table && !f.items.empty() && f.items.back().type == Item::Call && f.items.back().callee >= 0 &&
@@ -1986,7 +2150,7 @@ struct Emitter
     void EmitExit(const Func& f)
     {
         if (f.end == Func::TailJump) PutLitLoad(f.tailReg, f.tailLit);
-        if (f.returns && f.end == Func::Rts && !f.retInSlot && !f.retIsCall) Put(f.retWord);
+        if (f.returns && f.end == Func::Rts && !f.retInSlot && !f.retIsCall && f.choiceBy < 0) Put(f.retWord);
         const ExitOps e = ExitSequence(f);
         const bool slotOp = f.slotPop && e.lastMovable && !f.retInSlot;
         for (size_t i = 0; i < e.ops.size(); ++i)
@@ -2076,6 +2240,19 @@ struct Emitter
             PutLitLoad(it.jsrReg, it.lit);
             Put(static_cast<uint16_t>((it.xorOp ? 0x200A : it.onTrue ? 0x2009 : 0x200B) | it.reg << 8 | it.jsrReg << 4));   // and / xor / or Rm,Rn
             break;
+        case Item::Choice:
+        {
+            const int taken = NewLabel(), join = NewLabel();
+            for (uint16_t x : it.words) Put(x);
+            PutBranch(it.onTrue ? 0x8900 : 0x8B00, taken);
+            for (uint16_t x : it.setup) Put(x);
+            PutBranch12(0xA000, join);   // bra
+            Put(0x0009);
+            Place(taken);
+            for (uint16_t x : it.after) Put(x);
+            Place(join);
+            break;
+        }
         case Item::Skip:
         {
             const int skip = NewLabel();
@@ -3116,6 +3293,8 @@ struct FnInfo
     bool intent = false;     // generated: 'returns' and 'sel' mean something
     bool returns = false;    // r0 is written on every path just before the return
     bool partial = false;    // ...or on some paths only, from a parameter, and left alone on the rest (SE_GENERATED_RETURNS 2)
+    int choiceBy = -1;       // ...or by two values a chooser decides between (Func::choiceBy; SE_GENERATED_RETURNS 30 + it, hex)
+    bool choiceInherited = false;   // ...in a function it jumps to or runs on into
     int sel = -1;            // the register a jump table indexes with
     uint32_t clobbers = 0;   // registers it leaves changed (Func::effClobbers): bit n is Rn, 17 gbr, 18 vbr, 19 mach, 20 macl
     uint32_t reads = 0;      // registers whose entry value it reads on purpose (Func::reads)
@@ -3175,6 +3354,15 @@ Subject MakeSubject(const Program& p)
         f.intent = p.fns[i].v2;
         f.returns = p.fns[i].returns;
         f.partial = p.fns[i].partial;
+        // (a function that jumps to or runs on into a choice returns its value: Func::returns is the target's)
+        f.choiceBy = p.fns[i].choiceBy;
+        for (size_t k = i; f.choiceBy < 0 && k < p.fns.size() && p.fns[k].v2;)
+        {
+            const Func& g = p.fns[k];
+            k = g.end == Func::TailJump ? static_cast<size_t>(g.tailTo) : g.end == Func::Fall ? k + 1 : p.fns.size();
+            if (k < p.fns.size()) f.choiceBy = p.fns[k].choiceBy;
+            f.choiceInherited = f.choiceBy >= 0;
+        }
         f.sel = p.fns[i].sel;
         f.clobbers = p.fns[i].effClobbers;
         f.reads = p.fns[i].reads;
@@ -3236,7 +3424,8 @@ std::string SubjectText(const Subject& s, Sh2Decompiler& d, const std::shared_pt
         if (!tabs.str().empty()) o << " SE_GENERATED_TABLES=\"" << tabs.str() << "\"";
         if (!data.str().empty()) o << " SE_GENERATED_DATA=\"" << data.str() << "\"";
         o << " SE_GENERATED_RETURNS=\"";
-        for (size_t i = 0; i < s.fns.size(); ++i) o << (i ? "," : "") << (s.fns[i].returns ? 1 : s.fns[i].partial ? 2 : 0);
+        for (size_t i = 0; i < s.fns.size(); ++i)
+            o << (i ? "," : "") << std::hex << (s.fns[i].choiceBy >= 0 ? 0x30 + s.fns[i].choiceBy : s.fns[i].returns ? 1 : s.fns[i].partial ? 2 : 0) << std::dec;
         o << "\"";
         bool conv = false;
         for (const FnInfo& f : s.fns) conv = conv || f.clobbers || f.reads;
@@ -3844,6 +4033,28 @@ int ArenaOf(uint32_t addr)
 }
 uint32_t ArenaBit(int arena) { return arena < 4 ? 1u << (4 + arena) : 1u << 17; }
 
+// (A3-63) The register whose start value 'v' is, give or take a small constant: a pointer the code stepped (the grammar's displacements and
+// increments stay within 0x80 bytes, a frame within 0x200). r4-r7 and GBR in their own arenas, and only one the run read (an OR of two arena
+// pointers is a third's start by chance: r5 | r6 is r7's, seed 2031); r15 in the stack; -1 for anything else (a value that lands in an arena by
+// arithmetic on another register, `extu.w r5,r1 ; xor r5,r1`, is 0x100 below r4's start, and is not asked about).
+int PointerRegister(const RunOut& run, uint32_t v)
+{
+    for (int k = 4; k < 8; ++k)
+    {
+        const int32_t c = static_cast<int32_t>(v - run.init[k]);
+        if (c > -0x80 && c < 0x80 && ArenaOf(v) == k - 4) return (run.use.readFirst >> k) & 1u ? k : -1;
+    }
+    {
+        const int32_t c = static_cast<int32_t>(v - run.initState[0]);
+        if (c > -0x80 && c < 0x80 && ArenaOf(v) == 4) return (run.use.readFirst >> 17) & 1u ? 17 : -1;
+    }
+    const int32_t c = static_cast<int32_t>(v - run.init[15]);
+    const uint32_t m = v & 0x0FFFFFFFu;
+    return c > -0x200 && c < 0x200 && m >= kStackLo && m < kStackHi ? 15 : -1;
+}
+uint32_t PointerOrigin(int k) { return k == 15 ? origin::kStack : 1u << k; }
+std::string PointerName(int k) { return k == 15 ? std::string("r15 (the stack)") : k == 17 ? std::string("gbr") : "r" + std::to_string(k); }
+
 std::string EffectClaimsContradicted(const CallEffects& e, const RunOut& run, std::string* sigOut = nullptr)
 {
     auto fail = [&](const char* sig, const std::string& what) {
@@ -3872,6 +4083,26 @@ std::string EffectClaimsContradicted(const CallEffects& e, const RunOut& run, st
             return fail("claim-wrong:storesThrough", "a run stores at " + Hex(a) + ", in the arena of " + (arena < 4 ? "r" + std::to_string(4 + arena) : std::string("gbr")) +
                                                          ", and storesThrough names neither that register nor memory");
     }
+    // (A3-63) What it stores: a pointer (a register's start value stepped, or a stack address) stored at or above the entry r15 needs that origin,
+    // or memory, in `frameValues`; stored anywhere else outside the stack (memory the function does not track: an arena, a literal's target,
+    // hardware), in `leaks`. A caller's `escaped` flag, the notes at its calls and A3-21's hand-back rest on both.
+    for (const TraceRec& t : run.trace)
+    {
+        if (!t.write || t.size != 4) continue;
+        const int k = PointerRegister(run, static_cast<uint32_t>(t.value));
+        if (k < 0) continue;
+        const uint32_t a = t.addr & 0x0FFFFFFFu;
+        const uint32_t want = PointerOrigin(k) | origin::kMemory;
+        if (a >= kStackTop && a < kStackHi)
+        {
+            if (!(e.frameValues & want))
+                return fail("claim-wrong:frameValues", "a run stores " + Hex(static_cast<uint32_t>(t.value)) + ", a pointer from " + PointerName(k) + ", at " + Hex(a) +
+                                                           ", at or above the entry r15, and frameValues names neither it nor memory");
+        }
+        else if ((a < kStackLo || a >= kStackHi) && !(e.leaks & want))
+            return fail("claim-wrong:leaks", "a run stores " + Hex(static_cast<uint32_t>(t.value)) + ", a pointer from " + PointerName(k) + ", at " + Hex(a) +
+                                                 ", and leaks names neither it nor memory");
+    }
     for (int r = 0; r < 15; ++r)
     {
         if ((e.preserved >> r) & 1u) continue;
@@ -3885,6 +4116,10 @@ std::string EffectClaimsContradicted(const CallEffects& e, const RunOut& run, st
         const uint32_t m = v & 0x0FFFFFFFu;
         if (m >= kStackLo && m < kStackHi && !(e.outOrigins & (origin::kStack | origin::kRegisters | origin::kMemory)))
             return fail("claim-wrong:outOrigins", "r" + std::to_string(r) + " ends as " + Hex(v) + ", a stack address, and outOrigins names nothing it can come from");
+        // (A3-63) ...and when it is a register's start value stepped, or the entry r15's, that register (the stack), or memory: not some register.
+        const int k = PointerRegister(run, v);
+        if (k >= 0 && !(e.outOrigins & (PointerOrigin(k) | origin::kMemory)))
+            return fail("claim-wrong:outOrigins", "r" + std::to_string(r) + " ends as " + Hex(v) + ", a pointer from " + PointerName(k) + ", and outOrigins names neither it nor memory");
     }
     return std::string();
 }
@@ -4667,7 +4902,16 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
             // that took out the instruction that did, A2-50) is not a counterexample, whatever its prototype says.
             if (fn.intent && fn.returns && pr.ret.kind == TypeKind::Void && !everUnwritten)
             {
+                // A return chosen by a parameter the signature holds, or by a constant, stays lent void (A3-62, accepted: no input is dropped, and a
+                // caller that reads r0 afterwards is withheld); chosen by any other input it is withheld (the return rule, A3-56 to A3-62).
+                const bool heldChooser = (fn.choiceBy >= 4 && fn.choiceBy <= 7 && static_cast<size_t>(fn.choiceBy - 3) <= pr.params.size()) ||
+                                         (fn.choiceBy == Gen::kChoiceStack && pr.params.size() >= 5) || fn.choiceBy == Gen::kChoiceConst;
                 if (ComparesCallResult(subject, fn)) count("excluded.call-result-compared.return-dropped");   // A2-49, accepted
+                else if (fn.choiceBy >= 0 && heldChooser) count("excluded.choice-held.return-dropped");
+                // A function that runs on or jumps into a choice returns its value, but chose its chooser's value itself (seed 706074): the choice is
+                // checked where it is drawn.
+                else if (fn.choiceBy >= 0 && fn.choiceInherited) count("excluded.choice-inherited.return-dropped");
+                else if (fn.choiceBy >= 0) add("return-dropped:choice", "r0 is one of two values an input of the function chooses between and the prototype returns nothing");
                 else add("return-dropped", "the function writes r0 as its result on every path and the prototype returns nothing");
             }
             // A parameter copied to r0 on one path and r0 left alone on the other (A3-20): the engine takes the join for no return, and
@@ -5295,6 +5539,7 @@ void CountMnemonics(const std::vector<Item>& items, std::map<std::string, int>& 
         case Item::Table: m["mova"] += 1; m["shll2"] += 1; m["jmp"] += 1; m["cmp/hi"] += 1; break;
         case Item::BraLoop: case Item::BraBack: m["bra"] += 1; break;
         case Item::DataSkip: m["bra"] += 1; break;
+        case Item::Choice: m[it.onTrue ? "bt" : "bf"] += 1; m["bra"] += 1; break;
         case Item::Mask: m["mov.l"] += 1; m[it.xorOp ? "xor" : it.onTrue ? "and" : "or"] += 1; break;
         default: break;
         }
@@ -5348,6 +5593,7 @@ void CountProgram(const Program& p, std::map<std::string, int>& shapes)
         if (f.slotPop) ++shapes["fn.slot_pop"];
         if (f.retInSlot) ++shapes["fn.ret_in_slot"];
         if (f.retIsCall) ++shapes["fn.ret_call"];
+        if (f.choiceBy >= 0) ++shapes["fn.ret_choice"];
         if (!f.argSave.empty()) ++shapes["fn.arg_copies"];
     }
     shapes["module.fns"] += static_cast<int>(p.fns.size());
@@ -5415,8 +5661,9 @@ Subject RawSubject(const char* raw)
             for (size_t i = 0; i < flags.size() && i < s.fns.size(); ++i)
             {
                 s.fns[i].intent = true;
-                s.fns[i].returns = flags[i] == 1;
+                s.fns[i].returns = flags[i] == 1 || flags[i] >= 0x30;
                 s.fns[i].partial = flags[i] == 2;
+                if (flags[i] >= 0x30) s.fns[i].choiceBy = static_cast<int>(flags[i] - 0x30);
             }
         }
         // The registers each function leaves changed and the ones it reads on purpose, hex masks (bit n: Rn,
@@ -7139,9 +7386,11 @@ Subject ModuleSubject(const ModulePin& m)
 void TestLeftoverSeedPins(Sh2Decompiler& d)
 {
     // A3-45 (seed 22001): rotcr r0 in a do-while loop, r0's entry value reaches the result on every path: not lent. A3-46 (seed 24379): r0 is left
-    // alone on the path that skips both writes: lent, and the oracle must not count `and r0,r0` as the write that fills it.
+    // alone on the path that skips both writes, and the oracle must not count `and r0,r0` as the write that fills it (it was lent; since area 3
+    // round 9 it is withheld, its return chosen by r0's entry value, `tst #0x80,r0`). No finding either way.
     for (const char* words : { "E301 4025 451B 4310 8BFB 000B 0009", "5264 C880 8900 200A 2028 8B00 2009 000B 0009",
-                               // control: the same loop entered only if r4 is not zero, so a path leaves r0 alone (the scratch join of A3-14): lent void
+                               // the same loop entered only if r4 is not zero (lent void as A3-14's scratch join until round 9, withheld since: r0 rotated
+                               // on one path is a read of it)
                                "2448 8902 4025 4410 8BFC 000B 0009" })
     {
         const Report rep = EvaluateSubject(d, WordsSubject(words), true);
@@ -7876,6 +8125,71 @@ void TestRoutedPins(Sh2Decompiler& d)
     gSpecialReads = saved;
 }
 
+// ===== Area 3, round 9 fix: the shapes of A3-56 to A3-59 and A3-62 as modules, the grammar's choices, and the claims of A3-63 =====
+void TestRound9Pins(Sh2Decompiler& d)
+{
+    auto count = [](const Report& rep, const char* name) {
+        const auto it = rep.counts.find(name);
+        return it == rep.counts.end() ? 0 : it->second;
+    };
+    // Each module is the review's replay. The code before the fix lent it `void` and the checks found it (the finding in the comment); with the
+    // return rule it is withheld, and nothing is found. (A3-58's two loaded words, D1, are the suite's: its replay's words sit in the arenas, whose
+    // folded reads the ledger reports for the module, round 9's record.)
+    struct Shape
+    {
+        const char* name;
+        const char* words;
+        const char* funcs;
+    };
+    static const Shape kShapes[] = {
+        { "A3-56 tst r0,r0 chooses ([n:input-dropped:r0], [n:return-dropped])", "2008 8903 E001 210B A002 0009 E002 210B 000B 0009", "0/0/14" },
+        { "A3-57 bt on the entry T ([n:return-dropped])", "8903 E001 210B A002 0009 E002 210B 000B 0009", "0/0/12" },
+        { "A3-58 r4 + 1 or r4 + 2 by r3 ([n:return-dropped])", "6043 7001 3300 8B02 6043 7002 210B 000B 0009", "0/0/12" },
+        { "A3-59 add r4,r0 under tst r5, r4 stored ([n:input-dropped:r0], [n:return-dropped])", "2558 8901 304C 2642 000B 0009", "0/0/c" },
+        { "A3-62 tst r4,r4 chooses ([n:return-dropped])", "2448 8903 E001 210B A002 0009 E002 210B 000B 0009", "0/0/14" },
+        { "A3-62 the word at r15 chooses ([n:return-dropped])", "63F2 2338 8903 E001 210B A002 0009 E002 210B 000B 0009", "0/0/16" },
+    };
+    for (const Shape& s : kShapes)
+    {
+        const ModulePin m = { s.name, s.words, s.funcs, nullptr, "1", nullptr, nullptr };
+        const Report rep = EvaluateSubject(d, ModuleSubject(m), true);
+        std::printf("pin '%s': %zu finding(s), %d withheld\n", s.name, rep.findings.size(), count(rep, "proto.withheld"));
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty() && count(rep, "proto.withheld") >= 1);
+    }
+    // The grammar's choices (A3-64): the first grammar-2 seed that draws each chooser, decompiled and checked. A chooser the signature does not hold
+    // is withheld; one it holds, or a constant, is the accepted void (`excluded.choice-held.return-dropped`).
+    {
+        const char* const kKinds[] = { "choice.by_r0", "choice.by_sr", "choice.by_scratch", "choice.by_param", "choice.by_const", "choice.by_stack" };
+        for (const char* kind : kKinds)
+        {
+            long found = -1;
+            for (long seed = 1; seed <= 20000 && found < 0; ++seed)
+            {
+                std::map<std::string, int> shapes;
+                CountProgram(MakeV2(static_cast<uint64_t>(seed)), shapes);
+                if (shapes[kind] > 0) found = seed;
+            }
+            std::printf("pin '%s': first drawn by grammar 2 seed %ld\n", kind, found);
+            CHECK(found > 0);
+            if (found < 0) continue;
+            const Report rep = EvaluateSubject(d, MakeSubject(MakeV2(static_cast<uint64_t>(found))), true);
+            for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+            CHECK(rep.findings.empty());
+        }
+    }
+    // The claims of A3-63, held by check 10b on a lent function's runs: `mov.l r4,@r15` spills the argument into its caller's home area (frameValues:
+    // r4), `mov.l r5,@r4` stores a pointer to memory it does not track (leaks: r5), and r1 and r2 end as r4 + 4 and as the stack pointer (outOrigins:
+    // r4, the stack). Each claim mutated as the review's m1, m2, m3 and m5 did is reported here.
+    {
+        const ModulePin m = { "A3-63: a lent function's frameValues, leaks and outOrigins", "2F42 2452 6143 7104 62F3 000B 0009", "0/0/e", nullptr, "0", nullptr, nullptr };
+        const Report rep = EvaluateSubject(d, ModuleSubject(m), true);
+        std::printf("pin '%s': %zu finding(s), %d lent, %d runs held to the claims\n", m.name, rep.findings.size(), count(rep, "proto.lent"), count(rep, "claims.checked"));
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty() && count(rep, "proto.lent") >= 1 && count(rep, "claims.checked") > 0);
+    }
+}
+
 void TestCanary(Sh2Decompiler& d)
 {
     const long n = EnvNumber("SE_GENERATED_CANARY", 240);
@@ -7946,6 +8260,7 @@ void TestGenerated()
         RUN(TestA582Pins(d));
         RUN(TestRound8Pins(d));
         RUN(TestRoutedPins(d));
+        RUN(TestRound9Pins(d));
         if (EnvNumber("SE_GENERATED_CANARY", 240) > 0) RUN(TestCanary(d));
     }
     const long seeds = single ? 1 : EnvNumber("SE_GENERATED_SEEDS", 300);
