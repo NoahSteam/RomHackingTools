@@ -477,7 +477,7 @@ private:
     static constexpr size_t kMaxSteps = 200000;
     static constexpr size_t kNestedMaxSteps = 20000;   // a callee walked for CalleeFrameWrites: one it cannot follow in that writes nothing
     static constexpr size_t kNestedMaxSlots = 256;     // ...and the stack words it stores to: past this the walk is bounded (A3-74)
-    static constexpr int kNestedMaxDepth = 4;            // callees of callees walked, transitively (A3-70)
+    static constexpr int kNestedMaxDepth = 8;            // callees of callees walked, transitively (A3-70)
     static constexpr size_t kNestedBudget = 80000;       // instruction visits over all the levels of one probe's walks
     static constexpr int kWidenAfter = 6;
     static constexpr int kTracked = 22;   // the registers origin:: names, in its order
@@ -1055,7 +1055,7 @@ private:
                 else
                 {
                     // ...a target the walk cannot name: fail closed when the frame is handed on.
-                    bool handsFrame = sp.kind != Value::Sp || sp.v >= 0;
+                    bool handsFrame = (sp.kind != Value::Sp && sp.kind != Value::Imm) || (sp.kind == Value::Sp && sp.v >= 0);
                     for (int r = 0; r < 8 && !handsFrame; ++r) handsFrame = Get(s, mReg[r]).AtOrAboveEntry();
                     if (handsFrame) MapCalleeWords(CallEffects::kFrameAny, s, sp);
                 }
@@ -1212,7 +1212,7 @@ private:
         if (words == 0) return;
         if (words == kUnwalked)
         {
-            bool handsFrame = sp.kind != Value::Sp || sp.v >= 0;
+            bool handsFrame = (sp.kind != Value::Sp && sp.kind != Value::Imm) || (sp.kind == Value::Sp && sp.v >= 0);
             for (int r = 0; r < 15 && !handsFrame; ++r) handsFrame = r != kR15 && Get(s, mReg[r]).AtOrAboveEntry();
             if (!handsFrame) return;
             words = CallEffects::kFrameAny;
@@ -1916,7 +1916,7 @@ private:
                     bool handsOn = false;
                     {
                         const Value sp = Get(s, mReg[kR15]);
-                        handsOn = sp.kind != Value::Sp || sp.v >= 0;
+                        handsOn = (sp.kind != Value::Sp && sp.kind != Value::Imm) || (sp.kind == Value::Sp && sp.v >= 0);   // (an absolute r15: another stack)
                         for (int r = 0; r < 15 && !handsOn; ++r) handsOn = r != kR15 && Get(s, mReg[r]).AtOrAboveEntry();
                     }
                     const Value to = Get(s, op.in[0]);
