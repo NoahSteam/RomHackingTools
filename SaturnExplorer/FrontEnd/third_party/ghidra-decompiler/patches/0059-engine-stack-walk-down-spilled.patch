@@ -1,0 +1,176 @@
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.cc
+@@ -14,6 +14,7 @@
+  * limitations under the License.
+  *
+  * Modified for SaturnExplorer: an indexed stack access whose pointer is stepped down guards the stack below it (patches/0056-engine-stack-walk-down-aliases.patch).
++ * Modified for SaturnExplorer: a STORE through a frame address kept in a stack local and read back is guarded (patches/0059-engine-stack-walk-down-spilled.patch).
+  */
+ #include "heritage.hh"
+ #include "funcdata.hh"
+@@ -969,18 +970,44 @@ bool Heritage::protectFreeStores(AddrSpace *spc,vector<PcodeOp *> &freeStores)
+     PcodeOp *op = *iter;
+     ++iter;
+     if (op->isDead()) continue;
+-    Varnode *vn = op->getIn(1);
+-    while (vn->isWritten()) {
++    // SaturnExplorer (patches/0059-engine-stack-walk-down-spilled.patch): the pointer is traced back through the joins of a loop
++    // and the INDIRECTs of a call as well, not along copies and constant additions alone. A frame address kept in a stack local
++    // and read back (`mov.l r2,@(16,r15) ; ... ; mov.l @(16,r15),r2`), then stepped down in a loop (`mov.l r1,@-r2`), reaches the
++    // free stack word through the loop's MULTIEQUAL; the STORE was taken for no store to the stack, no INDIRECT was made for the
++    // locals at it, and a local the walk wrote kept its first value (ledger A3-80). A STORE marked here that the full pass then
++    // finds no stack pointer for is unmarked again and its INDIRECTs removed (reprocessFreeStores), so marking costs no precision.
++    vector<Varnode *> trace;
++    trace.push_back(op->getIn(1));
++    bool reached = false;
++    for(int4 k=0;k<trace.size() && !reached;++k) {
++      if (k >= 256) {		// too far to follow: guarded, and settled by the full pass (fail closed)
++	reached = true;
++	break;
++      }
++      Varnode *vn = trace[k];
++      if (vn->isFree()) {
++	reached = (vn->getSpace() == spc);
++	continue;
++      }
++      if (!vn->isWritten()) continue;
+       PcodeOp *defOp = vn->getDef();
+       OpCode opc = defOp->code();
+-      if (opc == CPUI_COPY)
+-	vn = defOp->getIn(0);
++      int4 num = 0;
++      if (opc == CPUI_COPY || opc == CPUI_INDIRECT)
++	num = 1;
+       else if (opc == CPUI_INT_ADD && defOp->getIn(1)->isConstant())
+-	vn = defOp->getIn(0);
+-      else
+-	break;
++	num = 1;
++      else if (opc == CPUI_MULTIEQUAL)
++	num = defOp->numInput();
++      for(int4 j=0;j<num;++j) {
++	Varnode *in = defOp->getIn(j);
++	bool known = false;
++	for(int4 m=0;m<trace.size();++m)
++	  if (trace[m] == in) { known = true; break; }
++	if (!known) trace.push_back(in);
++      }
+     }
+-    if (vn->isFree() && vn->getSpace() == spc) {
++    if (reached) {
+       fd->opMarkSpacebasePtr(op);	// Mark op as spacebase STORE, even though we're not sure
+       freeStores.push_back(op);
+       hasNew = true;
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/varmap.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/varmap.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/varmap.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/varmap.cc
+@@ -16,6 +16,7 @@
+  * Modified for SaturnExplorer: a host can declare a pointer into the stack the actions cannot see (patches/0030-host-stack-alias.patch).
+  * Modified for SaturnExplorer: a RangeHint the list cannot take is freed (patches/0032-allocation-failure-order-2.patch).
+  * Modified for SaturnExplorer: a pointer a loop steps down from a stack address aliases the locals below that address (patches/0056-engine-stack-walk-down-aliases.patch).
++ * Modified for SaturnExplorer: so does one kept in a stack local and read back, across a call too (patches/0059-engine-stack-walk-down-spilled.patch).
+  */
+ #include "varmap.hh"
+ #include "funcdata.hh"
+@@ -840,14 +841,7 @@ void AliasChecker::gatherInternal(void) const
+   for(vector<AddBase>::iterator iter=addBase.begin();iter!=addBase.end();++iter) {
+     Varnode *base = (*iter).base;
+     if (base == (Varnode *)0) continue;
+-    bool down = false;
+-    for(list<PcodeOp *>::const_iterator diter=base->beginDescend();diter!=base->endDescend();++diter) {
+-      PcodeOp *op = *diter;
+-      if (op->code() == CPUI_MULTIEQUAL && stepsDown(op)) {
+-	down = true;
+-	break;
+-      }
+-    }
++    bool down = reachesStepDown(base);
+     if (!down) continue;
+     uintb offset = AddrSpace::addressToByte(gatherOffset(base),space->getWordSize());
+     uintb low = (offset - 0xffff) & calc_mask(space->getAddrSize());
+@@ -864,6 +858,52 @@ void AliasChecker::gatherInternal(void) const
+   }
+ }
+ 
++/// SaturnExplorer (patches/0059-engine-stack-walk-down-spilled.patch): does the pointer \b base reach a loop that steps it down?
++/// The pointer is followed forward through copies, additions, joins and the INDIRECTs of a call or a store, which is how a
++/// frame address kept in a stack local and read back looks once the stack is heritaged (`COPY` into the local, the call's
++/// INDIRECT on it, the read's `COPY` out). A pointer read back after a call that may have rewritten the local is taken to be
++/// the one written (the call can write there only an address it was given, or one of its own frame below ours), so the
++/// walk fails closed: the base is taken to reach below itself (ledger A3-80). Patches 0056 and 0057 looked only at the
++/// MULTIEQUALs that read the base itself.
++/// \param base is a pointer into the stack (one of the AddBase records)
++/// \return \b true if a loop the pointer reaches steps it down
++bool AliasChecker::reachesStepDown(Varnode *base)
++
++{
++  vector<Varnode *> work;
++  set<Varnode *> seen;
++  work.push_back(base);
++  seen.insert(base);
++  for(int4 k=0;k<work.size();++k) {
++    if (work.size() >= 1024) return true;	// too far to follow: taken to step down (fail closed)
++    Varnode *vn = work[k];
++    for(list<PcodeOp *>::const_iterator iter=vn->beginDescend();iter!=vn->endDescend();++iter) {
++      PcodeOp *op = *iter;
++      switch(op->code()) {
++      case CPUI_MULTIEQUAL:
++	if (stepsDown(op)) return true;
++	break;
++      case CPUI_COPY:
++      case CPUI_INT_ADD:
++	break;
++      case CPUI_INDIRECT:
++      case CPUI_INT_SUB:
++      case CPUI_PTRADD:
++      case CPUI_PTRSUB:
++	if (op->getIn(0) != vn) continue;
++	break;
++      default:
++	continue;
++      }
++      Varnode *out = op->getOut();
++      if (out == (Varnode *)0) continue;
++      if (seen.insert(out).second)
++	work.push_back(out);
++    }
++  }
++  return false;
++}
++
+ /// SaturnExplorer (patches/0056-engine-stack-walk-down-aliases.patch): follow the pointer a MULTIEQUAL joins forward, through
+ /// copies and additions, back to the MULTIEQUAL itself. If the sum on any such loop is negative, or a
+ /// value of unknown size is subtracted on it, the loop steps the pointer down. An index of unknown
+@@ -1231,10 +1271,10 @@ void MapState::addRange(uintb st,Datatype *ct,uint4 fl,RangeHint::RangeType rt,i
+ #ifdef OPACTION_DEBUG
+   if (debugon) {
+     ostringstream s;
+-    s << "Add Range: " << hex << st << ":" << dec << ct->getSize();
++    s << "Add Range: " << std::hex << st << ":" << dec << ct->getSize();
+     s << " ";
+     ct->printRaw(s);
+-    s << endl;
++    s << std::endl;
+     glb->printDebug(s.str());
+   }
+ #endif
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/varmap.hh b/Ghidra/Features/Decompiler/src/decompile/cpp/varmap.hh
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/varmap.hh
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/varmap.hh
+@@ -15,6 +15,7 @@
+  *
+  * Modified for SaturnExplorer: a host can declare a pointer into the stack the actions cannot see (patches/0030-host-stack-alias.patch).
+  * Modified for SaturnExplorer: a pointer a loop steps down from a stack address aliases the locals below that address (patches/0056-engine-stack-walk-down-aliases.patch).
++ * Modified for SaturnExplorer: so does one kept in a stack local and read back, across a call too (patches/0059-engine-stack-walk-down-spilled.patch).
+  */
+ /// \file varmap.hh
+ /// \brief Classes for keeping track of local variables and reconstructing stack layout
+@@ -175,6 +176,7 @@ public:
+   static void gatherAdditiveBase(Varnode *startvn,vector<AddBase> &addbase);
+   static uintb gatherOffset(Varnode *vn);
+   static bool stepsDown(PcodeOp *multi);	///< SaturnExplorer: does a loop step the pointer joined by \b multi down (patches/0056-engine-stack-walk-down-aliases.patch)
++  static bool reachesStepDown(Varnode *base);	///< SaturnExplorer: does \b base reach a loop that steps it down, through a spill and its reload too (patches/0059-engine-stack-walk-down-spilled.patch)
+ };
+ 
+ /// \brief A container for hints about the data-type layout of an address space

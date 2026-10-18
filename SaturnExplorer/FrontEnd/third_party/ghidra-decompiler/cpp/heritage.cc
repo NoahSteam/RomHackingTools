@@ -14,6 +14,7 @@
  * limitations under the License.
  *
  * Modified for SaturnExplorer: an indexed stack access whose pointer is stepped down guards the stack below it (patches/0056-engine-stack-walk-down-aliases.patch).
+ * Modified for SaturnExplorer: a STORE through a frame address kept in a stack local and read back is guarded (patches/0059-engine-stack-walk-down-spilled.patch).
  */
 #include "heritage.hh"
 #include "funcdata.hh"
@@ -969,18 +970,44 @@ bool Heritage::protectFreeStores(AddrSpace *spc,vector<PcodeOp *> &freeStores)
     PcodeOp *op = *iter;
     ++iter;
     if (op->isDead()) continue;
-    Varnode *vn = op->getIn(1);
-    while (vn->isWritten()) {
+    // SaturnExplorer (patches/0059-engine-stack-walk-down-spilled.patch): the pointer is traced back through the joins of a loop
+    // and the INDIRECTs of a call as well, not along copies and constant additions alone. A frame address kept in a stack local
+    // and read back (`mov.l r2,@(16,r15) ; ... ; mov.l @(16,r15),r2`), then stepped down in a loop (`mov.l r1,@-r2`), reaches the
+    // free stack word through the loop's MULTIEQUAL; the STORE was taken for no store to the stack, no INDIRECT was made for the
+    // locals at it, and a local the walk wrote kept its first value (ledger A3-80). A STORE marked here that the full pass then
+    // finds no stack pointer for is unmarked again and its INDIRECTs removed (reprocessFreeStores), so marking costs no precision.
+    vector<Varnode *> trace;
+    trace.push_back(op->getIn(1));
+    bool reached = false;
+    for(int4 k=0;k<trace.size() && !reached;++k) {
+      if (k >= 256) {		// too far to follow: guarded, and settled by the full pass (fail closed)
+	reached = true;
+	break;
+      }
+      Varnode *vn = trace[k];
+      if (vn->isFree()) {
+	reached = (vn->getSpace() == spc);
+	continue;
+      }
+      if (!vn->isWritten()) continue;
       PcodeOp *defOp = vn->getDef();
       OpCode opc = defOp->code();
-      if (opc == CPUI_COPY)
-	vn = defOp->getIn(0);
+      int4 num = 0;
+      if (opc == CPUI_COPY || opc == CPUI_INDIRECT)
+	num = 1;
       else if (opc == CPUI_INT_ADD && defOp->getIn(1)->isConstant())
-	vn = defOp->getIn(0);
-      else
-	break;
+	num = 1;
+      else if (opc == CPUI_MULTIEQUAL)
+	num = defOp->numInput();
+      for(int4 j=0;j<num;++j) {
+	Varnode *in = defOp->getIn(j);
+	bool known = false;
+	for(int4 m=0;m<trace.size();++m)
+	  if (trace[m] == in) { known = true; break; }
+	if (!known) trace.push_back(in);
+      }
     }
-    if (vn->isFree() && vn->getSpace() == spc) {
+    if (reached) {
       fd->opMarkSpacebasePtr(op);	// Mark op as spacebase STORE, even though we're not sure
       freeStores.push_back(op);
       hasNew = true;
