@@ -1575,6 +1575,206 @@ void TestForwardRangesRound11()
                 std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count());
 }
 
+// The push-forwards at every size from 1 to 8 bytes (area 2 round 12). Round 11's pin has 1, 2, 4 and 8; the engine meets 3, 5, 6 and 7 as
+// the pieces of a CONCAT and a SUBPIECE, and every extension, not only the doubling one (`extu.b` is 1 to 4). The ranges are drawn from structured
+// bounds (powers of two and their neighbours, both sign boundaries, the ends), steps 1 to 32; the elements pushed through an operation are the ends,
+// the points round zero, the top and the sign boundary, and for a product the points where it crosses a multiple of the domain.
+void TestForwardRangesRound12()
+{
+    using namespace ghidra;
+    const auto t0 = std::chrono::steady_clock::now();
+    uint64_t state = 0x12B0A7;
+    auto next = [&state]() {
+        uint64_t z = (state += 0x9E3779B97F4A7C15ull);
+        z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ull;
+        z = (z ^ (z >> 27)) * 0x94D049BB133111EBull;
+        return z ^ (z >> 31);
+    };
+    int shown = 0;
+    auto fail = [&shown](const std::string& what, const std::string& detail) {
+        CHECK(false);
+        if (shown++ < 14) std::printf("forward round 12: %s: %s\n", what.c_str(), detail.c_str());
+    };
+    auto hex = [](uint64_t v) { char b[32]; std::snprintf(b, sizeof b, "%llx", static_cast<unsigned long long>(v)); return std::string(b); };
+    auto pickVal = [&](int size) -> uint64_t {
+        const uint64_t m = PbMask(size);
+        switch (next() % 8)
+        {
+        case 0: return next() & m;
+        case 1: return (next() % 17) & m;
+        case 2: return (m - next() % 17) & m;
+        case 3: return ((m >> 1) + next() % 17 - 8) & m;
+        case 4: return ((static_cast<uint64_t>(1) << (next() % (8 * size))) + next() % 9 - 4) & m;
+        case 5: return ((0 - (static_cast<uint64_t>(1) << (next() % (8 * size)))) + next() % 9 - 4) & m;
+        case 6: return (next() & next() & next()) & m;
+        default: return (next() | next() | next()) & m;
+        }
+    };
+    auto genRange = [&](int size) {
+        const uint64_t m = PbMask(size);
+        static const int steps[] = { 1, 1, 1, 1, 2, 2, 4, 8, 16, 32 };
+        int st = steps[next() % 10];
+        while (static_cast<uint64_t>(st) > m) st >>= 1;
+        FwRange g;
+        g.step = st;
+        g.l = pickVal(size);
+        switch (next() % 12)
+        {
+        case 0: g.r = g.l; break;
+        case 1: g.r = (g.l + st) & m; break;
+        case 2: g.r = (g.l + 2 * st) & m; break;
+        case 3: g.r = (g.l - st) & m; break;
+        default: g.r = pickVal(size);
+        }
+        const uint64_t rem = g.l % st;
+        g.r = (g.r - g.r % st + rem) & m;
+        if (g.r % st != rem) g.r = g.l;
+        if (g.l == g.r) g.l = g.r = rem;
+        return g;
+    };
+    auto sample = [&](const FwRange& g, int size, const std::vector<uint64_t>& extra, std::vector<uint64_t>& out) {
+        const uint64_t m = PbMask(size);
+        out.clear();
+        const uint64_t n = FwCount(g, m);
+        if (n <= 64) for (uint64_t j = 0; j < n; ++j) out.push_back(FwElem(g, m, j));
+        else
+        {
+            for (uint64_t j = 0; j < 8; ++j) { out.push_back(FwElem(g, m, j)); out.push_back(FwElem(g, m, n - 1 - j)); }
+            for (int k = 0; k < 40; ++k) out.push_back(FwElem(g, m, next() % n));
+        }
+        std::vector<uint64_t> targets = { 0, m, m >> 1, (m >> 1) + 1 };
+        for (uint64_t t : extra) targets.push_back(t & m);
+        for (uint64_t t : targets)
+            for (int d = -5; d <= 5; ++d)
+            {
+                const uint64_t v = (t + d) & m;
+                if (FwMember(v, g, m)) out.push_back(v);
+            }
+    };
+    long checks = 0;
+    auto judge = [&](const char* op, const FwRange& a, const std::string& param, bool ok, const CircleRange& q, int outSize, const std::vector<uint64_t>& images) {
+        ++checks;
+        if (!ok) return;
+        std::string why;
+        if (!FwWellFormed(q, outSize, why)) { fail(op, FwText(a) + " " + param + " -> " + FwText(q) + ": " + why); return; }
+        for (uint64_t y : images)
+            if (q.isEmpty() || !q.contains(y) || !FwMember(y, FwRange{ q.getMin(), q.getEnd(), q.getStep() }, PbMask(outSize)))
+            {
+                fail(op, FwText(a) + " " + param + " -> " + FwText(q) + " misses " + hex(y));
+                return;
+            }
+    };
+    const int iters = 6000;
+    std::vector<uint64_t> el, el2, im;
+    for (int size = 1; size <= 8; ++size)
+    {
+        const uint64_t m = PbMask(size);
+        for (int it = 0; it < iters; ++it)
+        {
+            const FwRange a = genRange(size);
+            const CircleRange A(a.l, a.r, size, a.step);
+            // shifts by a constant of 1, 4 or 8 bytes
+            {
+                static const uint64_t amounts[] = { 0, 1, 2, 3, 7, 8, 9, 15, 16, 17, 31, 32, 33, 63, 64, 65, 255, 0x7fffffffull, 0x80000000ull, 0xffffffffull, 0x100000000ull, 0x8000000000000000ull, ~0ull };
+                const uint64_t sa = (next() % 3) ? amounts[next() % (sizeof amounts / sizeof amounts[0])] : next() % (8 * size + 4);
+                int asz = sa <= 0xff ? ((next() % 2) ? 1 : 4) : (sa <= 0xffffffffull ? 4 : 8);
+                std::vector<uint64_t> extra;
+                if (sa > 0 && sa < static_cast<uint64_t>(8 * size))   // the shift 8 * size - sa is below 64
+                    for (int j = 1; j <= 3; ++j) for (int d = -1; d <= 1; ++d) extra.push_back(((static_cast<uint64_t>(j) << (8 * size - sa)) + d) & m);
+                sample(a, size, extra, el);
+                const CircleRange C(sa, asz);
+                const int maxStep = 1 << (next() % 6);
+                for (OpCode opc : { CPUI_INT_LEFT, CPUI_INT_RIGHT, CPUI_INT_SRIGHT })
+                {
+                    im.clear();
+                    for (uint64_t x : el)
+                    {
+                        uint64_t y;
+                        if (opc == CPUI_INT_LEFT) y = sa >= static_cast<uint64_t>(8 * size) ? 0 : (x << sa) & m;
+                        else if (opc == CPUI_INT_RIGHT) y = sa >= static_cast<uint64_t>(8 * size) ? 0 : x >> sa;
+                        else y = static_cast<uint64_t>(PbSigned(x, size) >> (sa >= static_cast<uint64_t>(8 * size) ? 8 * size - 1 : sa)) & m;
+                        im.push_back(y);
+                    }
+                    CircleRange q;
+                    judge("shift", a, "op " + std::to_string(static_cast<int>(opc)) + " size " + std::to_string(size) + " by " + hex(sa), q.pushForwardBinary(opc, A, C, size, size, maxStep), q, size, im);
+                }
+            }
+            // the product by a constant, either side: the points where it crosses a multiple of the domain among the elements
+            {
+                uint64_t c;
+                switch (next() % 6)
+                {
+                case 0: c = next() % 20; break;
+                case 1: c = 0 - next() % 20; break;
+                case 2: c = static_cast<uint64_t>(1) << (next() % (8 * size)); break;
+                case 3: c = (static_cast<uint64_t>(1) << (next() % (8 * size))) + next() % 5 - 2; break;
+                case 4: c = pickVal(size); break;
+                default: c = next();
+                }
+                c &= m;
+                const uint64_t mag = (c & (m ^ (m >> 1))) ? ((0 - c) & m) : c;
+                std::vector<uint64_t> extra;
+                if (mag > 1)
+                    for (int j = 1; j <= 4; ++j)
+                    {
+                        const long double x = static_cast<long double>(j) * (m == ~static_cast<uint64_t>(0) ? 18446744073709551616.0L : static_cast<long double>(m + 1)) / static_cast<long double>(mag);
+                        for (int d = -1; d <= 1; ++d) { const uint64_t xv = static_cast<uint64_t>(x); extra.push_back((xv + d) & m); extra.push_back((0 - xv - d) & m); }
+                    }
+                sample(a, size, extra, el);
+                im.clear();
+                for (uint64_t x : el) im.push_back((x * c) & m);
+                const CircleRange C(c, size);
+                const int maxStep = 1 << (next() % 6);
+                CircleRange q, q2;
+                judge("INT_MULT", a, "size " + std::to_string(size) + " by " + hex(c), q.pushForwardBinary(CPUI_INT_MULT, A, C, size, size, maxStep), q, size, im);
+                judge("INT_MULT (constant first)", a, "size " + std::to_string(size) + " by " + hex(c), q2.pushForwardBinary(CPUI_INT_MULT, C, A, size, size, maxStep), q2, size, im);
+            }
+            // the sum of two ranges, and unary operations, and every extension from this size
+            {
+                FwRange b = genRange(size);
+                if (next() % 6 == 0) { b.l = pickVal(size); b.step = 1; b.r = (b.l + 1) & m; }
+                const CircleRange B(b.l, b.r, size, b.step);
+                sample(a, size, {}, el);
+                sample(b, size, {}, el2);
+                im.clear();
+                for (uint64_t x : el) for (size_t i = 0; i < el2.size(); i += 1 + (el2.size() > 40 ? 3 : 0)) im.push_back((x + el2[i]) & m);
+                CircleRange q;
+                judge("INT_ADD", a, "+ " + FwText(b) + " size " + std::to_string(size), q.pushForwardBinary(CPUI_INT_ADD, A, B, size, size, 32), q, size, im);
+                for (OpCode opc : { CPUI_COPY, CPUI_INT_2COMP, CPUI_INT_NEGATE })
+                {
+                    im.clear();
+                    for (uint64_t x : el) im.push_back(opc == CPUI_INT_2COMP ? ((0 - x) & m) : opc == CPUI_INT_NEGATE ? ((~x) & m) : x);
+                    CircleRange u;
+                    judge("unary", a, "op " + std::to_string(static_cast<int>(opc)) + " size " + std::to_string(size), u.pushForwardUnary(opc, A, size, size), u, size, im);
+                }
+                for (int out = size + 1; out <= 8; ++out)
+                    for (OpCode opc : { CPUI_INT_ZEXT, CPUI_INT_SEXT })
+                    {
+                        im.clear();
+                        for (uint64_t x : el) im.push_back(opc == CPUI_INT_ZEXT ? x : (static_cast<uint64_t>(PbSigned(x, size)) & PbMask(out)));
+                        CircleRange u;
+                        judge("extension", a, "op " + std::to_string(static_cast<int>(opc)) + " " + std::to_string(size) + " to " + std::to_string(out), u.pushForwardUnary(opc, A, size, out), u, out, im);
+                    }
+            }
+            // every SUBPIECE of this size
+            if (size >= 2)
+            {
+                sample(a, size, {}, el);
+                for (int out = 1; out < size; ++out)
+                    for (int off = 0; off + out <= size; ++off)
+                    {
+                        im.clear();
+                        for (uint64_t x : el) im.push_back((x >> (8 * off)) & PbMask(out));
+                        CircleRange q;
+                        judge("SUBPIECE", a, std::to_string(size) + " to " + std::to_string(out) + " bytes at " + std::to_string(off), q.pushForwardBinary(CPUI_SUBPIECE, A, CircleRange(static_cast<uint64_t>(off), 4), size, out, 32), q, out, im);
+                    }
+            }
+        }
+    }
+    std::printf("forward round 12: %ld push-forwards checked, sizes 1 to 8 (%.0f ms)\n", checks, MsSince(t0));
+    CHECK(checks > 1000000);
+}
+
 // PcodeOp::getNZMaskLocal for a signed shift by a constant of 64 or more (A2-70): the result of x s>> n is the sign's fill, all bits of the
 // size when the sign may be set. The shift of the full mask by 64 is a shift by 0 on x86, which gave a value that is not zero the mask of a zero.
 void TestNzMaskShiftRound11()
@@ -1663,6 +1863,7 @@ int main(int argc, char** argv)
         RUN(TestPullBackRanges());
         RUN(TestRangeAlgebraRound11());
         RUN(TestForwardRangesRound11());
+        RUN(TestForwardRangesRound12());
         RUN(TestSha256KnownAnswers());
         RUN(TestDecompileThroughBundle(config));
         RUN(TestNzMaskShiftRound11());
