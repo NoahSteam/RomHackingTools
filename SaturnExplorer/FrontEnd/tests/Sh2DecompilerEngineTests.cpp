@@ -28,6 +28,7 @@
 #include "loadimage.hh"
 #include "opbehavior.hh"
 #include "rangeutil.hh"
+#include "ruleaction.hh"
 #include "sleigh_arch.hh"
 
 #include <algorithm>
