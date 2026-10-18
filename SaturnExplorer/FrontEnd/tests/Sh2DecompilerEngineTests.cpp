@@ -1679,7 +1679,7 @@ void TestForwardRangesRound12()
                 const uint64_t sa = (next() % 3) ? amounts[next() % (sizeof amounts / sizeof amounts[0])] : next() % (8 * size + 4);
                 int asz = sa <= 0xff ? ((next() % 2) ? 1 : 4) : (sa <= 0xffffffffull ? 4 : 8);
                 std::vector<uint64_t> extra;
-                if (sa < static_cast<uint64_t>(8 * size) && sa < 64)
+                if (sa > 0 && sa < static_cast<uint64_t>(8 * size))   // the shift 8 * size - sa is below 64
                     for (int j = 1; j <= 3; ++j) for (int d = -1; d <= 1; ++d) extra.push_back(((static_cast<uint64_t>(j) << (8 * size - sa)) + d) & m);
                 sample(a, size, extra, el);
                 const CircleRange C(sa, asz);
