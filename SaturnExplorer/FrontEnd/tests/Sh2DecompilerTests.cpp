@@ -11448,6 +11448,20 @@ void TestArea3Round10Fix()
         CHECK(!Has(text, "return 5;") && Has(text, "a local at or above the stack pointer is read after this call"));
     }
 
+    // ---- A3-74: the walk of a callee of 6,000 pushes is bounded (the head took 14.7 s and 2.2 GB) and fails closed ---------------------------------
+    {
+        std::vector<uint16_t> w = { 0x4F22, 0x7FF8, 0xE005, 0x2F02, 0xD103, 0x410B, 0x0009, 0x60F2, 0x7F08, 0x4F26, 0x000B, 0x0009, 0x0602, 0x0000 };
+        w.resize((0x06020000u - base) / 2, 0x0009);
+        w.insert(w.end(), 6000, 0x2F16);   // mov.l r1,@-r15
+        w.push_back(0x000B);
+        w.push_back(0x0009);
+        const CallFixture f = { "a3_74: a callee of 6,000 pushes, the caller restores PR from the stack", base, std::move(w) };
+        const DecompileResult r = d.Decompile(CallSnapshot(f, ++serial), Request(f.base));
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok && r.elapsedMs < 3000.0);
+        CHECK(Has(r.Text(), "a local at or above the stack pointer is read after this call") && !Has(r.Text(), "return 5;"));
+    }
+
     // ---- A3-72: engine patch 0057, a pointer stepped down under a condition in a loop -----------------------------------------------------------
     walkText("a3_72a: if (c) *--p = v in a counted loop", { 0x7FF0, 0x62F3, 0x7210, 0xE005, 0x2F02, 0xE104, 0x2448, 0x8900, 0x2216, 0x4110, 0x8BFA, 0x60F2, 0x7F10, 0x000B, 0x0009, 0x0009 },
              "return xStack_10;");
