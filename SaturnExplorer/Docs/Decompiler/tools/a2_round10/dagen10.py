@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # Area 2 round 10 instrument (dagen.py of round 9, families 0..11 unchanged, 12..17 new):
-# 12 loopadd, 13 loopor (two accumulators), 14 loopmix, 15 nested loops, 16 loopsel (conditional update), 17 loopmask (masked accumulator / checksum / crc shapes)
+# 12 loopadd, 13 loopor (two accumulators), 14 loopmix, 15 nested loops, 16 loopsel (conditional update), 17 loopmask (masked accumulator / checksum / crc shapes), 18 tworet (two returns)
 # Area 2 round 9 instrument: register-only functions with structure the round 8 generators did not draw: a value computed twice (the CSE
 # merge of A2-56), diamonds and counted loops (MULTIEQUAL, cycles through it), copies that make partial results shared, and a mask,
 # shift pair or extension read after.
-# usage: dagen.py <first seed> <count> [family 0..17]   -> one function per seed, ";" joined (SE_GENERATED_PRINTEDC_WORDS / fixtures)
+# usage: dagen.py <first seed> <count> [family 0..18]   -> one function per seed, ";" joined (SE_GENERATED_PRINTEDC_WORDS / fixtures)
 # families: 0 twice, 1 sum, 2 diamond, 3 loop, 4 chain, 5 stack, 6 sign (T-flag idioms), 7 join (A2-58), 8 join2 (A2-58), 9 join3 (A2-58), 10 loopsum, 11 loopand (A2-59)
 import random, sys
 
@@ -514,7 +514,23 @@ def fam_loopmask(r, f):
     loopfinish(r, f, 6)
     retacc(r, f, 1)
 
-FAMS = [fam_twice, fam_sum, fam_diamond, fam_loop, fam_chain, fam_stack, fam_sign, fam_join, fam_join2, fam_join3, fam_loopsum, fam_loopand, fam_loopadd, fam_loopor, fam_loopmix, fam_nested, fam_loopsel, fam_loopmask]
+
+def fam_tworet(r, f):
+    """two returns (two RETURN ops, A2-58's gatherConsumedReturn: one consume mask for all of them), each arm computing its own value, one often narrow"""
+    body(r, f, r.randrange(0, 3), [0, 1, 2, 3])
+    tbool(r, f, 3) if r.random() < 0.3 else f.add(r.choice([0x3047, 0x3043, 0x3046, 0x3040, 0x4515, 0x2458, 0x245C]))
+    f.br(r.choice(['bf', 'bt']), 'else')
+    body(r, f, r.randrange(1, 4), [0, 1, 2, 3])
+    if r.random() < 0.7: tail(r, f, r.choice([0, 1, 2, 3]))
+    else: f.add(0x6003 | r.choice([1, 2, 3]) << 4)
+    f.add(0xC9FF if r.random() < 0.3 else 0x600C if r.random() < 0.5 else 0x0009)   # a narrowing of the return in one arm
+    f.add(0x000B, r.choice([0x0009, 0x600C, 0x600D, 0x6003 | 1 << 4, 0x7001]))   # rts ; slot
+    f.label('else')
+    body(r, f, r.randrange(1, 4), [0, 1, 2, 3])
+    if r.random() < 0.5: tail(r, f, r.choice([0, 1, 2, 3]))
+    else: f.add(0x6003 | r.choice([1, 2, 3]) << 4)
+
+FAMS = [fam_twice, fam_sum, fam_diamond, fam_loop, fam_chain, fam_stack, fam_sign, fam_join, fam_join2, fam_join3, fam_loopsum, fam_loopand, fam_loopadd, fam_loopor, fam_loopmix, fam_nested, fam_loopsel, fam_loopmask, fam_tworet]
 
 def build(seed, fam=None):
     r = random.Random(seed * 7919 + 13)
