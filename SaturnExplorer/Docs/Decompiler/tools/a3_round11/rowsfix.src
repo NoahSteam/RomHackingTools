@@ -99,6 +99,73 @@ endasm
 lend 06009040
 args 0 0 0 0
 end
+name 82d thunk lowers r4 by 16 in the delay slot of its jump to a lent k that stores at its pointer
+asm 06009000
+.word 0x4F22
+add #-20,r15
+mov #5,r0
+mov.l r0,@r15
+mov r15,r4
+add #16,r4
+mov.l =0x06009040,r1
+jsr @r1
+nop
+mov.l @r15,r0
+add #20,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009040
+mov.l =0x06009080,r1
+jmp @r1
+add #-16,r4
+endasm
+asm 06009080
+mov #1,r1
+mov.l r1,@r4
+rts
+nop
+endasm
+lend 06009080 06009040
+args 0 0 0 0
+end
+name 82e wrapper lowers r4 by 16 and calls a lent k that stores at its pointer
+asm 06009000
+.word 0x4F22
+add #-20,r15
+mov #5,r0
+mov.l r0,@r15
+mov r15,r4
+add #16,r4
+mov.l =0x06009040,r1
+jsr @r1
+nop
+mov.l @r15,r0
+add #20,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009040
+.word 0x4F22
+add #-16,r4
+mov.l =0x06009080,r1
+jsr @r1
+nop
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009080
+mov #1,r1
+mov.l r1,@r4
+rts
+nop
+endasm
+lend 06009080 06009040
+args 0 0 0 0
+end
 name 83a callee masks the pointer with shll2/shlr2
 asm 06009000
 .word 0x4F22
@@ -280,6 +347,37 @@ endasm
 asm 06009040
 swap.w r4,r4
 swap.w r4,r4
+mov #4,r1
+L:
+mov.l r1,@-r4
+dt r1
+bf L
+rts
+nop
+endasm
+lend 06009040
+args 0 0 0 0
+end
+name 83h callee aligns the pointer with a mask (mov #-4,r3 ; and r3,r4)
+asm 06009000
+.word 0x4F22
+add #-20,r15
+mov #5,r0
+mov.l r0,@r15
+mov r15,r4
+add #16,r4
+mov.l =0x06009040,r1
+jsr @r1
+nop
+mov.l @r15,r0
+add #20,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009040
+mov #-4,r3
+and r3,r4
 mov #4,r1
 L:
 mov.l r1,@-r4
@@ -589,6 +687,148 @@ rts
 nop
 endasm
 args 0 0 0 0
+end
+name 88a pointer chosen between a local and a global, two pre-decrement stores
+asm 06009000
+add #-16,r15
+mov #3,r0
+mov.l r0,@(0,r15)
+mov r15,r2
+add #8,r2
+mov.l =0x0600F100,r3
+tst r4,r4
+bt L1
+mov r3,r2
+L1:
+mov #1,r1
+mov.l r1,@-r2
+mov.l r1,@-r2
+mov.l @(0,r15),r0
+add #16,r15
+rts
+nop
+endasm
+args 0 0 0 0
+args 1 0 0 0
+end
+name 88b pointer chosen between a local and a global, one store 8 bytes below
+asm 06009000
+add #-16,r15
+mov #3,r0
+mov.l r0,@(0,r15)
+mov r15,r2
+add #8,r2
+mov.l =0x0600F100,r3
+tst r4,r4
+bt L1
+mov r3,r2
+L1:
+mov #1,r1
+add #-8,r2
+mov.l r1,@r2
+mov.l @(0,r15),r0
+add #16,r15
+rts
+nop
+endasm
+args 0 0 0 0
+args 1 0 0 0
+end
+name 88c pointer chosen between a local and a parameter, two pre-decrement stores
+asm 06009000
+add #-16,r15
+mov #3,r0
+mov.l r0,@(0,r15)
+mov r15,r2
+add #8,r2
+mov r5,r3
+tst r4,r4
+bt L1
+mov r3,r2
+L1:
+mov #1,r1
+mov.l r1,@-r2
+mov.l r1,@-r2
+mov.l @(0,r15),r0
+add #16,r15
+rts
+nop
+endasm
+args 0 0 0600F100 0
+args 1 0 0600F100 0
+end
+name 88d pointer chosen between a local and a global, counted walk down
+asm 06009000
+add #-16,r15
+mov #3,r0
+mov.l r0,@(0,r15)
+mov r15,r2
+add #8,r2
+mov.l =0x0600F100,r3
+tst r4,r4
+bt L1
+mov r3,r2
+L1:
+mov #2,r1
+L2:
+mov.l r1,@-r2
+dt r1
+bf L2
+mov.l @(0,r15),r0
+add #16,r15
+rts
+nop
+endasm
+args 0 0 0 0
+args 1 0 0 0
+end
+name 88e control: chosen between two locals, counted walk down
+asm 06009000
+add #-16,r15
+mov #3,r0
+mov.l r0,@(0,r15)
+mov r15,r2
+add #8,r2
+mov r15,r3
+add #12,r3
+tst r4,r4
+bt L1
+mov r3,r2
+L1:
+mov #2,r1
+L2:
+mov.l r1,@-r2
+dt r1
+bf L2
+mov.l @(0,r15),r0
+add #16,r15
+rts
+nop
+endasm
+args 0 0 0 0
+args 1 0 0 0
+end
+name 88f control: chosen between a local and a global, one store at the pointer (at the base)
+asm 06009000
+add #-16,r15
+mov #3,r0
+mov.l r0,@(8,r15)
+mov r15,r2
+add #8,r2
+mov.l =0x0600F100,r3
+tst r4,r4
+bt L1
+mov r3,r2
+L1:
+mov #1,r1
+mov.l r1,@r2
+mov.l @(8,r15),r0
+add #16,r15
+rts
+nop
+endasm
+args 0 0 0 0
+args 1 0 0 0
 end
 name 86a callee withheld (reads r3 on entry) fills backwards through r4
 asm 06009000

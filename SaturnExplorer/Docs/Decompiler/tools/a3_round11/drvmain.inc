@@ -33,6 +33,7 @@ struct Spec
     std::map<std::string, uint32_t> regs;
     bool noResult = false;
     bool quiet = false;
+    bool image = false;
 };
 std::shared_ptr<MemorySnapshot> SpecSnapshot(const Spec& s, uint64_t serial)
 {
@@ -43,10 +44,13 @@ std::shared_ptr<MemorySnapshot> SpecSnapshot(const Spec& s, uint64_t serial)
         for (uint16_t w : c.second) { dts::Put16(hw, off, w); off += 2; }
     }
     for (auto& l : s.longs) dts::Put32(hw, l.first - 0x06000000u, l.second);
-    for (uint32_t vec = 0; vec < 0x100; ++vec) dts::Put32(hw, kRunVbr - 0x06000000u + vec * 4, kRunHandler);
-    dts::Put16(hw, kRunHandler - 0x06000000u, 0x002B);
-    dts::Put16(hw, kRunHandler - 0x06000000u + 2, 0x0009);
-    dts::Put16(hw, kRunSentinel - 0x06000000u, 0x0009);
+    if (!s.image)
+    {
+        for (uint32_t vec = 0; vec < 0x100; ++vec) dts::Put32(hw, kRunVbr - 0x06000000u + vec * 4, kRunHandler);
+        dts::Put16(hw, kRunHandler - 0x06000000u, 0x002B);
+        dts::Put16(hw, kRunHandler - 0x06000000u + 2, 0x0009);
+        dts::Put16(hw, kRunSentinel - 0x06000000u, 0x0009);
+    }
     return MakeSnapshot(hw, serial);
 }
 void RunSpec(Sh2Decompiler& d, const Spec& s, uint64_t serial)
@@ -182,6 +186,17 @@ int main(int argc, char** argv)
                 in >> a;
                 const uint32_t addr = std::strtoul(a.c_str(), nullptr, 16);
                 s.code.emplace_back(addr, Words(in));
+            }
+            else if (k == "image")
+            {
+                std::string path;
+                in >> path;
+                std::ifstream img(path, std::ios::binary);
+                std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(img)), std::istreambuf_iterator<char>());
+                std::vector<uint16_t> w;
+                for (size_t i = 0; i + 1 < bytes.size(); i += 2) w.push_back(uint16_t((bytes[i] << 8) | bytes[i + 1]));
+                s.code.emplace_back(0x06000000u, w);
+                s.image = true;
             }
             else if (k == "long")
             {
