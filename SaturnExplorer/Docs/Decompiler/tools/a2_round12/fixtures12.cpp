@@ -13,6 +13,12 @@ int main() {
   { CircleRange q; bool ok = q.setNZMask(0x80000000u, 4); printf("setNZMask(0x80000000, 4) -> %d ", ok); show("", q); }
   { CircleRange q; bool ok = q.setNZMask(1ull << 63, 8); printf("setNZMask(1<<63, 8) -> %d ", ok); show("", q); }
   { CircleRange q; bool ok = q.setNZMask(1ull << 40, 8); printf("setNZMask(1<<40, 8) -> %d ", ok); show("", q); }
+  // what the negative step does in the intersect that pullBack(usenzmask) makes with it
+  { CircleRange nz; nz.setNZMask(0x80000000u, 4);
+    { CircleRange r(0, 5, 4, 1); int rc = r.intersect(nz); printf("[0,5) ^ setNZMask(0x80000000): rc %d ", rc); show("", r); }
+    { CircleRange r(2, 10, 4, 4); int rc = r.intersect(nz); printf("[2,10)/4 ^ setNZMask(0x80000000): rc %d ", rc); show("", r); }
+    { CircleRange r(0x80000000u, 0x80000001u, 4, 1); int rc = r.intersect(nz); printf("[0x80000000,+1) ^ setNZMask(0x80000000): rc %d ", rc); show("", r); }
+    { CircleRange r(0, 16, 4, 4); int rc = r.intersect(nz); printf("[0,16)/4 ^ setNZMask(0x80000000): rc %d ", rc); show("", r); } }
   // A2-75: widen leaves the bounds of a strided range in different phases
   { CircleRange a(0x34, 0x44, 1, 16), b(0xfa, 0xf9, 1, 1); a.widen(b, false); show("[34,44)/16 widened to [fa,f9) at the right (left unstable)", a); printf("   contains 0x34: %d (it held it before)\n", (int)a.contains(0x34)); }
   { CircleRange a(0x0e, 0x6e, 1, 8), b(0, 0, 1, 2); a.widen(b, false); show("[e,6e)/8 widened to the evens (left unstable)", a); printf("   contains 0xe: %d\n", (int)a.contains(0xe)); }
