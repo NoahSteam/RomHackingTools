@@ -1259,6 +1259,8 @@ void TestForwardRangesRound11()
         }
         std::vector<uint64_t> ed = { 0, 1, 2, 3, 5, 7, 8, 9, 16, 17, 33, 64, 0x7f, 0x80, 0x81, 0xc0, 0xfe, 0xff, 0x100, 0x7fff, 0x8000, 0xffff, 0x1000000, 0x7fffffff, 0x80000000ull,
                                      0xffffffffull, m, m - 1, m >> 1, (m >> 1) + 1, (m >> 1) - 1, m >> 2, (m >> 2) + 1, m - (m >> 2) };
+        if (size == 2)   // the 16-bit space is 2^32 ranges: the bounds are every pairing of these, the two sign boundaries and both ends
+            for (uint64_t v : { 4, 6, 10, 0x7e, 0x7ffe, 0x7ffd, 0x8002, 0xfffe, 0x3fff, 0x4000, 0xc000, 0xbfff, 0xff, 0x101, 0x180, 0xff00, 0xff01, 0x7f00, 0x8100, 0xfe00 }) ed.push_back(v);
         for (uint64_t& v : ed) v &= m;
         std::sort(ed.begin(), ed.end());
         ed.erase(std::unique(ed.begin(), ed.end()), ed.end());
