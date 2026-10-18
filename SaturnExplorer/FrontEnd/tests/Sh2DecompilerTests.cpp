@@ -11415,6 +11415,10 @@ void TestArea3Round10Fix()
     // ---- A3-69: the SR exception no longer clears the entry T; A3-77: xor #0,r0 is the identity op the table means -------------------------------
     withheld("a3_69a: stc sr,r0 ; and #1,r0 returns the entry T", { 0x0002, 0xC901, 0x210B, 0x000B, 0x0009, 0x0009 },
              "its return is computed from the T flag on entry");
+    // ...and SR's exception is only for r0 holding the value `ldc` wrote back (06010054's idiom stays lent, TestArea3Round9Fix): SR summed, or the
+    // mask set with no write-back, is an input.
+    withheld("a3_69: stc sr,r0 ; add #1,r0", { 0x0002, 0x7001, 0x210B, 0x000B, 0x0009, 0x0009 }, "its return is computed from sr on entry");
+    withheld("a3_69: the mask idiom with no write-back", { 0x0002, 0xCBF0, 0x210B, 0x000B, 0x0009, 0x0009 }, "its return is computed from sr on entry");
     lent("a3_77: xor #0,r0 is a nop", { 0xCA00, 0x210B, 0x000B, 0x0009 });
     // ---- A3-76: the sum of a stack address and an index keeps the index --------------------------------------------------------------------------
     withheld("a3_76a: r15 + r3 returned", { 0x60F3, 0x303C, 0x210B, 0x000B, 0x0009, 0x0009 }, "its return is computed from r3 on entry");
