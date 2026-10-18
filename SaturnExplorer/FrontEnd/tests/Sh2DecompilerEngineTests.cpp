@@ -30,6 +30,8 @@
 #include "rangeutil.hh"
 #include "sleigh_arch.hh"
 
+#include <algorithm>
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <cstdio>
@@ -910,10 +912,11 @@ void TestPullBackRanges()
 }
 
 // Area 2 round 11 (A2-67 to A2-72): what RuleRangeMeld and the jump-table guards rely on besides the pull-back, held against brute force. The
-// forward half of CircleRange (push-forward, strided intersect) has open defects (REVIEW_LEDGER.md) and is not pinned here; the part below holds today.
+// forward half of CircleRange (push-forward) and the strided set operations are pinned by TestForwardRangesRound11 below (patch 0059).
 //  1. step-1 ranges of one byte, every (left,right) pair against a sample of partners: intersect and circleUnion are exactly the set operation
 //     when they answer 0, invert is the complement, translate2Op's comparison is true on exactly the range, getSize counts, contains agrees
-//  2. the pull-back at 3 and 4 bytes (round 10's sweep is exhaustive at 1 and 2), the points where the truth can change, each +-3, and random ones
+//  2. the pull-back at 3, 4 and 8 bytes (round 10's sweep is exhaustive at 1 and 2), the points where the truth can change, each +-3, and random ones
+//     (the shifts by 0 and by the size less one at 8 bytes: A2-69)
 //  3. the integer OpBehavior (the constant folder and the p-code emulator share it): every operand pair at one byte, edge pairs and random at 2, 4, 8
 void TestRangeAlgebraRound11()
 {
@@ -1025,7 +1028,7 @@ void TestRangeAlgebraRound11()
             if (l == r) return true;
             return l < r ? (v >= l && v < r) : (v < r || v >= l);
         };
-        for (int in : { 3, 4 })
+        for (int in : { 3, 4, 8 })
         {
             const uint64_t ms = PbMask(in);
             std::vector<uint64_t> ed = { 0, 1, 2, 3, 4, 5, 7, 8, 9, 15, 16, 31, 32, 33, 0x7f, 0x80, 0xff, 0x100, 0x7fff, 0x8000, 0xffff, 0x10000, 0xffffff, 0x1000000, 0x7fffffff, 0x80000000ull,
@@ -1047,7 +1050,15 @@ void TestRangeAlgebraRound11()
                         if (next() % 4 == 0) { step = 1 << (1 + next() % 3); const uint64_t rem = next() % step; l = ((l - l % step) + rem) & om; r = ((r - r % step) + rem) & om; if (l % step != r % step) r = l; }
                         if (l == r) l = r = (step == 1) ? 0 : l % step;
                     }
-                    if (b.opc == CPUI_INT_RIGHT || b.opc == CPUI_INT_SRIGHT) { slot = (next() % 4) ? 0 : 1; if (slot == 0) val = next() % (8 * in + 3); }
+                    if (b.opc == CPUI_INT_RIGHT || b.opc == CPUI_INT_SRIGHT)
+                    {
+                        slot = (next() % 4) ? 0 : 1;
+                        if (slot == 0)
+                        {
+                            const uint64_t amounts[] = { 0, 1, 2, static_cast<uint64_t>(8 * in - 2), static_cast<uint64_t>(8 * in - 1), static_cast<uint64_t>(8 * in), static_cast<uint64_t>(8 * in + 1) };
+                            val = (next() % 3) ? amounts[next() % 7] : next() % (8 * in + 3);
+                        }
+                    }
                     CircleRange rng(l, r, out, step), q = rng;
                     if (!q.pullBackBinary(b.opc, val, slot, in, out)) continue;
                     std::vector<uint64_t> T = { 0, 1, ms, ms >> 1, (ms >> 1) + 1, val, l, r, 0 - l, 0 - r, ~l, ~r, val - l, val - r, val + l, val + r, l - val, r - val, 0 - val,
@@ -1102,8 +1113,10 @@ void TestRangeAlgebraRound11()
                 if (b != 0)
                 {
                     if (udiv.evaluateBinary(sz, sz, a, b) != a / b || urem.evaluateBinary(sz, sz, a, b) != a % b) bad("INT_DIV/REM");
-                    if (!(sz == 8 && a == 0x8000000000000000ull && b == m))   // INT64_MIN s/ -1 is a host trap (A2-72)
+                    // INT64_MIN s/ -1 trapped in the host (A2-70, patch 0059): it is the value itself, and the remainder 0
+                    {
                         if (sdiv.evaluateBinary(sz, sz, a, b) != (uint64_t)((sx(a) / sx(b)) & (s128)m) || srem.evaluateBinary(sz, sz, a, b) != (uint64_t)((sx(a) % sx(b)) & (s128)m)) bad("INT_SDIV/SREM");
+                    }
                 }
             };
             if (sz == 1) { for (uint64_t a = 0; a < 256; ++a) for (uint64_t b = 0; b < 256; ++b) pair(a, b); }
@@ -1129,6 +1142,489 @@ void TestRangeAlgebraRound11()
         }
         std::printf("round 11 integer behaviors: %ld operand pairs (%.0f ms in all)\n", n, std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count());
     }
+}
+
+
+// ---- The forward half of CircleRange and the set operations with a step, against brute force (area 2 round 11 fix: A2-67, A2-68) -------------------
+// ValueSet::iterate pushes the value sets of the inputs of an operation forward through it and unions them; Heritage::analyzeNewLoadGuards takes
+// the range of a computed pointer from the answer. An answer that omits a value the operation yields guards too little of the stack. The rule
+// (patch 0059): a push-forward that returns true, and a union or container, holds every value the operation can produce from the elements of
+// its inputs, in the output's mask, and is a well-formed range; one that returns false is allowed. One byte is exhaustive (every range of step 1,
+// 2, 4 and 8: 123,000 of them, wrapped, full and single ones among them, against every shift amount and a set of multipliers and partners); two,
+// four and eight bytes are the edge values of the size and a seeded sample, with the elements at both ends of each input and random ones.
+struct FwRange
+{
+    uint64_t l, r;
+    int step;
+};
+
+bool FwFull(const FwRange& g) { return g.l == g.r; }
+uint64_t FwCount(const FwRange& g, uint64_t m)   // the number of elements
+{
+    if (FwFull(g)) return m / g.step + 1;
+    return ((g.r - g.l) & m) / g.step;
+}
+uint64_t FwElem(const FwRange& g, uint64_t m, uint64_t j) { return (g.l + j * static_cast<uint64_t>(g.step)) & m; }
+bool FwMember(uint64_t v, const FwRange& g, uint64_t m)   // the definition of the set, written out (contains() semantics)
+{
+    v &= m;
+    if (v % g.step != g.l % g.step) return false;
+    if (g.l == g.r) return true;
+    return g.l < g.r ? (v >= g.l && v < g.r) : (v < g.r || v >= g.l);
+}
+bool FwWellFormed(const ghidra::CircleRange& q, int size, std::string& why)
+{
+    if (q.isEmpty()) return true;
+    if (q.getMask() != PbMask(size)) { why = "mask " + std::to_string(q.getMask()); return false; }
+    const int st = q.getStep();
+    if (st < 1 || (st & (st - 1))) { why = "step not a power of two"; return false; }
+    if ((q.getMin() & ~q.getMask()) || (q.getEnd() & ~q.getMask())) { why = "a bound outside the mask"; return false; }
+    if (q.getMin() % st != q.getEnd() % st) { why = "bounds differ modulo the step"; return false; }
+    return true;
+}
+std::string FwText(const FwRange& g)
+{
+    char b[96];
+    std::snprintf(b, sizeof b, "[%llx,%llx)/%d", static_cast<unsigned long long>(g.l), static_cast<unsigned long long>(g.r), g.step);
+    return b;
+}
+std::string FwText(const ghidra::CircleRange& q)
+{
+    char b[128];
+    std::snprintf(b, sizeof b, "[%llx,%llx)/%d m%llx%s", static_cast<unsigned long long>(q.getMin()), static_cast<unsigned long long>(q.getEnd()), q.getStep(),
+                  static_cast<unsigned long long>(q.getMask()), q.isEmpty() ? " empty" : "");
+    return b;
+}
+
+// The elements to push through an operation: all of them when there are few, else both ends and a seeded sample.
+template <class Next>
+void FwElements(const FwRange& g, uint64_t m, Next& next, std::vector<uint64_t>& out)
+{
+    out.clear();
+    const uint64_t n = FwCount(g, m);
+    if (n <= 300)
+    {
+        for (uint64_t j = 0; j < n; ++j) out.push_back(FwElem(g, m, j));
+        return;
+    }
+    for (uint64_t j = 0; j < 12; ++j) { out.push_back(FwElem(g, m, j)); out.push_back(FwElem(g, m, n - 1 - j)); }
+    for (int k = 0; k < 80; ++k) out.push_back(FwElem(g, m, next() % n));
+    // the values around the sign boundary and zero, where a range that wraps changes behaviour
+    for (uint64_t t : { m >> 1, (m >> 1) + 1, m, static_cast<uint64_t>(0) })
+        for (int d = -3; d <= 3; ++d)
+        {
+            const uint64_t v = (t + d) & m;
+            if (FwMember(v, g, m)) out.push_back(v);
+        }
+}
+
+struct FwTally
+{
+    long cases = 0, refused = 0, exact = 0;
+};
+
+void TestForwardRangesRound11()
+{
+    using namespace ghidra;
+    const auto t0 = std::chrono::steady_clock::now();
+    uint64_t state = 0xF0C0FFEE;
+    auto next = [&state]() {
+        uint64_t z = (state += 0x9E3779B97F4A7C15ull);
+        z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ull;
+        z = (z ^ (z >> 27)) * 0x94D049BB133111EBull;
+        return z ^ (z >> 31);
+    };
+    int shown = 0;
+    auto fail = [&shown](const std::string& what, const std::string& detail) {
+        CHECK(false);
+        if (shown++ < 14) std::printf("forward round 11: %s: %s\n", what.c_str(), detail.c_str());
+    };
+    auto hex = [](uint64_t v) { char b[32]; std::snprintf(b, sizeof b, "%llx", static_cast<unsigned long long>(v)); return std::string(b); };
+
+    // The ranges of a size. One byte: every one. Larger: the edge values paired, steps 1 to 8, and random ones.
+    auto makeRanges = [&](int size, bool exhaustive, int randoms) {
+        std::vector<FwRange> out;
+        const uint64_t m = PbMask(size);
+        if (exhaustive)
+        {
+            for (int st : { 1, 2, 4, 8 })
+                for (uint64_t l = 0; l <= m; ++l)
+                    for (uint64_t r = 0; r <= m; ++r)
+                    {
+                        if (l % st != r % st) continue;
+                        if (l == r && l >= static_cast<uint64_t>(st)) continue;   // a full range is written with its phase as the bound
+                        out.push_back({ l, r, st });
+                    }
+            return out;
+        }
+        std::vector<uint64_t> ed = { 0, 1, 2, 3, 5, 7, 8, 9, 16, 17, 33, 64, 0x7f, 0x80, 0x81, 0xc0, 0xfe, 0xff, 0x100, 0x7fff, 0x8000, 0xffff, 0x1000000, 0x7fffffff, 0x80000000ull,
+                                     0xffffffffull, m, m - 1, m >> 1, (m >> 1) + 1, (m >> 1) - 1, m >> 2, (m >> 2) + 1, m - (m >> 2) };
+        for (uint64_t& v : ed) v &= m;
+        std::sort(ed.begin(), ed.end());
+        ed.erase(std::unique(ed.begin(), ed.end()), ed.end());
+        auto fix = [&](uint64_t l, uint64_t r, int st) {
+            const uint64_t rem = l % st;
+            r = ((r - r % st) + rem) & m;
+            if (r % st != rem) r = l;
+            if (l == r) l = r = rem;
+            out.push_back({ l, r, st });
+        };
+        for (int st : { 1, 2, 4, 8 })
+            for (uint64_t l : ed)
+                for (uint64_t r : ed) fix(l, r, st);
+        for (int k = 0; k < randoms; ++k)
+        {
+            const int st = 1 << (next() % 4 == 0 ? 1 + next() % 3 : 0);
+            const uint64_t l = (next() % 3) ? ed[next() % ed.size()] : (next() & m), r = (next() % 3) ? ed[next() % ed.size()] : (next() & m);
+            fix(l, (next() % 12) ? r : l, st);
+        }
+        return out;
+    };
+
+    // ---- 1. push-forward, unary and binary
+    long checks = 0, refused = 0;
+    std::vector<uint64_t> el, el2;
+    auto judge = [&](const char* op, const FwRange& a, const std::string& param, bool ok, const CircleRange& q, int outSize, const std::vector<uint64_t>& images) {
+        ++checks;
+        if (!ok) { ++refused; return; }
+        std::string why;
+        if (!FwWellFormed(q, outSize, why)) { fail(op, FwText(a) + " " + param + " -> " + FwText(q) + ": " + why); return; }
+        for (uint64_t y : images)
+            if (q.isEmpty() || !q.contains(y)) { fail(op, FwText(a) + " " + param + " -> " + FwText(q) + " misses " + hex(y)); return; }
+    };
+    struct Case { int size; bool exhaustive; int randoms; };
+    const Case cases[] = { { 1, true, 0 }, { 2, false, 1500 }, { 4, false, 1500 }, { 8, false, 1500 } };
+    for (const Case& cs : cases)
+    {
+        const int size = cs.size;
+        const uint64_t m = PbMask(size);
+        const std::vector<FwRange> ranges = makeRanges(size, cs.exhaustive, cs.randoms);
+        std::vector<uint64_t> images;
+        for (const FwRange& a : ranges)
+        {
+            const CircleRange A(a.l, a.r, size, a.step);
+            FwElements(a, m, next, el);
+            // unary, the same size
+            for (OpCode opc : { CPUI_COPY, CPUI_INT_2COMP, CPUI_INT_NEGATE })
+            {
+                images.clear();
+                for (uint64_t x : el) images.push_back(opc == CPUI_COPY ? x : opc == CPUI_INT_2COMP ? ((0 - x) & m) : ((~x) & m));
+                CircleRange q;
+                judge("unary", a, "op " + std::to_string(static_cast<int>(opc)), q.pushForwardUnary(opc, A, size, size), q, size, images);
+            }
+            if (size <= 4)   // the extensions
+                for (OpCode opc : { CPUI_INT_ZEXT, CPUI_INT_SEXT })
+                {
+                    const int out = size * 2;
+                    images.clear();
+                    for (uint64_t x : el) images.push_back(opc == CPUI_INT_ZEXT ? x : (static_cast<uint64_t>(PbSigned(x, size)) & PbMask(out)));
+                    CircleRange q;
+                    judge("extension", a, "op " + std::to_string(static_cast<int>(opc)), q.pushForwardUnary(opc, A, size, out), q, out, images);
+                }
+            // the shifts by a constant, the amounts round the size as well as small ones
+            std::vector<uint64_t> amounts;
+            if (cs.exhaustive) amounts = { 0, 1, 2, 3, 4, 7, 8, 9, 64 };
+            else
+            {
+                const uint64_t special[] = { 0, 1, 2, 3, 8, 9, static_cast<uint64_t>(8 * size - 2), static_cast<uint64_t>(8 * size - 1), static_cast<uint64_t>(8 * size), static_cast<uint64_t>(8 * size + 1), 63, 64, 65, 0x100000000ull };
+                amounts = { special[next() % 14], special[next() % 14], special[next() % 14], next() % (8 * size + 2) };
+            }
+            for (uint64_t sa : amounts)
+            {
+                const CircleRange C(sa, 4);
+                const int maxStep = (next() % 3 == 0) ? 1 : 32;
+                for (OpCode opc : { CPUI_INT_LEFT, CPUI_INT_RIGHT, CPUI_INT_SRIGHT })
+                {
+                    images.clear();
+                    for (uint64_t x : el)
+                    {
+                        uint64_t y;
+                        if (opc == CPUI_INT_LEFT) y = sa >= static_cast<uint64_t>(8 * size) ? 0 : (x << sa) & m;
+                        else if (opc == CPUI_INT_RIGHT) y = sa >= static_cast<uint64_t>(8 * size) ? 0 : x >> sa;
+                        else y = static_cast<uint64_t>(PbSigned(x, size) >> (sa >= static_cast<uint64_t>(8 * size) ? 8 * size - 1 : sa)) & m;
+                        images.push_back(y);
+                    }
+                    CircleRange q;
+                    judge("shift", a, "op " + std::to_string(static_cast<int>(opc)) + " by " + hex(sa), q.pushForwardBinary(opc, A, C, size, size, maxStep), q, size, images);
+                }
+            }
+            // the product by a constant, either side
+            static const uint64_t mults[] = { 0, 1, 2, 3, 4, 6, 0x10, 0x55, 0x7f, 0x80, 0xaa, 0xfe, 0xff, 0x100, 0xffff, 0xffffffffffffffffull, 0xfffffffffffffff0ull, 0x8000000000000000ull };
+            for (uint64_t c0 : mults)
+            {
+                const uint64_t c = c0 & m;
+                if (cs.exhaustive ? (c0 > 0xff) : (next() % 3 != 0)) continue;
+                images.clear();
+                for (uint64_t x : el) images.push_back((x * c) & m);
+                const CircleRange C(c, size);
+                const int maxStep = (next() % 3 == 0) ? 2 : 32;
+                CircleRange q;
+                judge("INT_MULT", a, "by " + hex(c), q.pushForwardBinary(CPUI_INT_MULT, A, C, size, size, maxStep), q, size, images);
+                CircleRange q2;
+                judge("INT_MULT (constant first)", a, "by " + hex(c), q2.pushForwardBinary(CPUI_INT_MULT, C, A, size, size, maxStep), q2, size, images);
+            }
+            // the sum of two ranges: partners of fixed shapes and two others
+            if (cs.exhaustive ? (next() % 8 == 0) : true)
+            {
+                for (int k = 0; k < (cs.exhaustive ? 3 : 1); ++k)
+                {
+                    const FwRange& b = ranges[next() % ranges.size()];
+                    FwElements(b, m, next, el2);
+                    images.clear();
+                    for (uint64_t x : el)
+                        for (size_t i = 0; i < el2.size() && i < 12; ++i) images.push_back((x + el2[i]) & m);
+                    // the sample of b must be the one whose elements are summed: ends and the first 24 of el2 are in b
+                    const CircleRange B(b.l, b.r, size, b.step);
+                    CircleRange q;
+                    judge("INT_ADD", a, "+ " + FwText(b), q.pushForwardBinary(CPUI_INT_ADD, A, B, size, size, 32), q, size, images);
+                }
+            }
+        }
+    }
+    // SUBPIECE: the low and high bytes of 2, 4 and 8 bytes
+    for (int in : { 2, 4, 8 })
+    {
+        const uint64_t m = PbMask(in);
+        const std::vector<FwRange> ranges = makeRanges(in, false, 1500);
+        std::vector<uint64_t> images;
+        for (const FwRange& a : ranges)
+        {
+            const CircleRange A(a.l, a.r, in, a.step);
+            FwElements(a, m, next, el);
+            for (int out = 1; out < in; out *= 2)
+                for (int off = 0; off <= in; ++off)
+                {
+                    if (off + out > in && off != in) continue;
+                    images.clear();
+                    for (uint64_t x : el) images.push_back(off >= in ? 0 : ((x >> (8 * off)) & PbMask(out)));
+                    CircleRange q;
+                    judge("SUBPIECE", a, "to " + std::to_string(out) + " bytes at " + std::to_string(off), q.pushForwardBinary(CPUI_SUBPIECE, A, CircleRange(static_cast<uint64_t>(off), 4), in, out, 32), q, out, images);
+                }
+        }
+    }
+    std::printf("forward round 11: %ld push-forwards checked (%ld refused)\n", checks, refused);
+    CHECK(checks > 1000000 && refused < checks / 2);
+
+    // ---- 2. the set operations with steps, wrapped and full ranges
+    long pairs = 0, exactInter = 0, twoPieces = 0;
+    for (const Case& cs : cases)
+    {
+        const int size = cs.size;
+        const uint64_t m = PbMask(size);
+        std::vector<FwRange> ranges = makeRanges(size, cs.exhaustive, cs.randoms);
+        std::vector<std::array<uint64_t, 4>> bits;   // the elements of each one-byte range
+        if (cs.exhaustive)
+        {
+            bits.resize(ranges.size());
+            for (size_t i = 0; i < ranges.size(); ++i)
+            {
+                bits[i] = { 0, 0, 0, 0 };
+                const uint64_t n = FwCount(ranges[i], m);
+                for (uint64_t j = 0; j < n; ++j) { const uint64_t v = FwElem(ranges[i], m, j); bits[i][v >> 6] |= static_cast<uint64_t>(1) << (v & 63); }
+            }
+        }
+        // fixed partners: a full range of each step and phase, a single, a wrapped one, the halves
+        std::vector<FwRange> fixedPartners = { { 0, 0, 1 }, { 1, 1, 2 }, { 0, 0, 4 }, { 3, 3, 4 }, { 2, 2, 8 }, { 5, 6, 1 }, { 1, 3, 2 }, { m - 1, 2, 1 }, { m - 3, 5, 2 }, { m >> 1, (m >> 1) + 1, 1 }, { (m >> 1) + 1, 0, 1 }, { 0, (m >> 1) + 1, 1 } };
+        for (FwRange& g : fixedPartners)
+        {
+            g.l &= m; g.r &= m;
+            if (g.l % g.step != g.r % g.step) g.r = g.l;
+            if (g.l == g.r) g.l = g.r = g.l % g.step;
+        }
+        auto bitsOf = [&](const FwRange& g) {
+            std::array<uint64_t, 4> b = { 0, 0, 0, 0 };
+            const uint64_t n = FwCount(g, m);
+            for (uint64_t j = 0; j < n; ++j) { const uint64_t v = FwElem(g, m, j); b[v >> 6] |= static_cast<uint64_t>(1) << (v & 63); }
+            return b;
+        };
+        for (size_t ia = 0; ia < ranges.size(); ++ia)
+        {
+            const FwRange& a = ranges[ia];
+            const CircleRange A(a.l, a.r, size, a.step);
+            // getMaxInfo: at least the bits of the largest magnitude of the elements
+            {
+                FwElements(a, m, next, el);
+                int worst = 0;
+                for (uint64_t x : el)
+                {
+                    const int64_t sv = PbSigned(x, size);
+                    uint64_t mag = sv < 0 ? static_cast<uint64_t>(0) - static_cast<uint64_t>(sv) : static_cast<uint64_t>(sv);
+                    int bl = 0;
+                    while (mag) { ++bl; mag >>= 1; }
+                    worst = std::max(worst, bl);
+                }
+                if (A.getMaxInfo() < worst) fail("getMaxInfo", FwText(a) + " is " + std::to_string(A.getMaxInfo()) + ", needs " + std::to_string(worst));
+            }
+            const int total = cs.exhaustive ? 5 : 6 + static_cast<int>(fixedPartners.size());
+            for (int k = 0; k < total; ++k)
+            {
+                const FwRange b = cs.exhaustive ? (k < 2 ? ranges[next() % ranges.size()] : fixedPartners[next() % fixedPartners.size()])
+                                                : (k < 6 ? ranges[next() % ranges.size()] : fixedPartners[k - 6]);
+                const CircleRange B(b.l, b.r, size, b.step);
+                ++pairs;
+                const std::string both = FwText(a) + " , " + FwText(b);
+                // How a result is compared: at one byte by the sets of 256 bits, else at the points round each bound, the phases and the ends.
+                std::array<uint64_t, 4> ba = { 0, 0, 0, 0 }, bb = ba;
+                std::vector<uint64_t> pts;
+                if (cs.exhaustive) { ba = bits[ia]; bb = bitsOf(b); }
+                else
+                {
+                    for (uint64_t t : { a.l, a.r, b.l, b.r, static_cast<uint64_t>(0), m, m >> 1, (m >> 1) + 1 })
+                        for (int d = -9; d <= 9; ++d) pts.push_back((t + d) & m);
+                    for (int q = 0; q < 40; ++q) pts.push_back(next() & m);
+                }
+                // mode 0: q is exactly A and B; 1: exactly A or B; 2: q holds A or B; 3: q holds everything. Returns a value at which q differs, or -1.
+                auto firstDiff = [&](const CircleRange& q, int mode) -> int64_t {
+                    if (cs.exhaustive)
+                    {
+                        std::array<uint64_t, 4> qb = { 0, 0, 0, 0 };
+                        if (!q.isEmpty())
+                        {
+                            uint64_t v = q.getMin();
+                            for (int guard = 0; guard < 300; ++guard)
+                            {
+                                qb[v >> 6] |= static_cast<uint64_t>(1) << (v & 63);
+                                if (!q.getNext(v)) break;
+                            }
+                        }
+                        for (int w = 0; w < 4; ++w)
+                        {
+                            const uint64_t want = mode == 0 ? (ba[w] & bb[w]) : mode == 1 ? (ba[w] | bb[w]) : mode == 2 ? (ba[w] | bb[w]) : ~static_cast<uint64_t>(0);
+                            const uint64_t diff = (mode >= 2) ? (want & ~qb[w]) : (want ^ qb[w]);
+                            if (diff) { int bit = 0; while (!((diff >> bit) & 1)) ++bit; return static_cast<int64_t>(w * 64 + bit); }
+                        }
+                        return -1;
+                    }
+                    for (uint64_t v : pts)
+                    {
+                        const bool has = !q.isEmpty() && q.contains(v);
+                        const bool inAny = FwMember(v, a, m) || FwMember(v, b, m), inBoth = FwMember(v, a, m) && FwMember(v, b, m);
+                        if (mode == 0 && has != inBoth) return static_cast<int64_t>(v);
+                        if (mode == 1 && has != inAny) return static_cast<int64_t>(v);
+                        if (mode == 2 && inAny && !has) return static_cast<int64_t>(v);
+                        if (mode == 3 && !has) return static_cast<int64_t>(v);
+                    }
+                    return -1;
+                };
+                // intersect
+                {
+                    CircleRange q = A;
+                    const int rc = q.intersect(B);
+                    if (rc == 0)
+                    {
+                        std::string why;
+                        if (!FwWellFormed(q, size, why)) fail("intersect", both + " -> " + FwText(q) + ": " + why);
+                        else
+                        {
+                            const int64_t d = firstDiff(q, 0);
+                            if (d >= 0) fail("intersect", both + " -> " + FwText(q) + " differs at " + hex(static_cast<uint64_t>(d)));
+                            else ++exactInter;
+                        }
+                    }
+                    else
+                    {
+                        ++twoPieces;
+                        if (!(q == A)) fail("intersect (two pieces)", both + " changed this");
+                    }
+                }
+                // circleUnion
+                {
+                    CircleRange q = A;
+                    if (q.circleUnion(B) == 0)
+                    {
+                        std::string why;
+                        if (!FwWellFormed(q, size, why)) fail("circleUnion", both + " -> " + FwText(q) + ": " + why);
+                        else
+                        {
+                            const int64_t d = firstDiff(q, 1);
+                            if (d >= 0) fail("circleUnion", both + " -> " + FwText(q) + " differs at " + hex(static_cast<uint64_t>(d)));
+                        }
+                    }
+                }
+                // the container of two ranges (what ValueSet::iterate takes when the union is two pieces; a full range reaches it with another step)
+                {
+                    CircleRange q = A;
+                    const bool everything = q.minimalContainer(B, 1 << (next() % 6));
+                    std::string why;
+                    if (!FwWellFormed(q, size, why)) fail("minimalContainer", both + " -> " + FwText(q) + ": " + why);
+                    else
+                    {
+                        int64_t d = firstDiff(q, 2);
+                        if (d >= 0) fail("minimalContainer", both + " -> " + FwText(q) + " misses " + hex(static_cast<uint64_t>(d)));
+                        else if (everything && (d = firstDiff(q, 3)) >= 0) fail("minimalContainer (everything)", both + " -> " + FwText(q) + " misses " + hex(static_cast<uint64_t>(d)));
+                    }
+                }
+                // containment claimed is containment
+                if (A.contains(B))
+                {
+                    if (cs.exhaustive)
+                    {
+                        for (int w = 0; w < 4; ++w)
+                            if (bb[w] & ~ba[w]) { fail("contains(range)", both); break; }
+                    }
+                    else
+                        for (uint64_t v : pts)
+                            if (FwMember(v, b, m) && !FwMember(v, a, m)) { fail("contains(range)", both + " at " + hex(v)); break; }
+                }
+            }
+        }
+    }
+    std::printf("forward round 11: %ld range pairs (intersect exact for %ld, two pieces for %ld; %.0f ms in all)\n", pairs, exactInter, twoPieces,
+                std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count());
+}
+
+// PcodeOp::getNZMaskLocal for a signed shift by a constant of 64 or more (A2-70): the result of x s>> n is the sign's fill, all bits of the
+// size when the sign may be set. The shift of the full mask by 64 is a shift by 0 on x86, which gave a value that is not zero the mask of a zero.
+void TestNzMaskShiftRound11()
+{
+    auto* image = new RegionLoadImage(kImageBase, Fixture1());
+    std::ostringstream errs;
+    TestArchitecture arch(image, &errs);
+    ghidra::DocumentStorage store;
+    try
+    {
+        arch.init(store);
+    }
+    catch (ghidra::LowlevelError& e)
+    {
+        std::printf("  Architecture::init failed: %s\n  %s\n", e.explain.c_str(), errs.str().c_str());
+        CHECK(false);
+        return;
+    }
+    ghidra::AddrSpace* ram = arch.getDefaultCodeSpace();
+    const ghidra::Address entry(ram, kCaller);
+    std::string name;
+    arch.nameFunction(entry, name);
+    ghidra::Funcdata* fd = arch.symboltab->getGlobalScope()->addFunction(entry, name)->getFunction();
+    long checked = 0;
+    for (int size : { 1, 2, 4, 8 })
+    {
+        const uint64_t m = PbMask(size);
+        for (uint64_t x : { static_cast<uint64_t>(0), static_cast<uint64_t>(1), m >> 1, (m >> 1) + 1, m, (m >> 1) + 1 + (m >> 5) , static_cast<uint64_t>(0xf4000000u) })
+        {
+            x &= m;
+            for (int saSize : { 4, 8 })
+                for (uint64_t sa : { 0ull, 1ull, 7ull, 8ull, 31ull, 32ull, 33ull, 63ull, 64ull, 65ull, 71ull, 72ull, 127ull, 128ull, 255ull, 0xffffffffull, 0x100000000ull, 0x8000000000000000ull, ~0ull })
+                {
+                    if (saSize == 4 && sa > 0xffffffffull) continue;
+                    ghidra::PcodeOp* op = fd->newOp(2, entry);
+                    fd->opSetOpcode(op, ghidra::CPUI_INT_SRIGHT);
+                    fd->newUniqueOut(size, op);
+                    fd->opSetInput(op, fd->newConstant(size, x), 0);
+                    fd->opSetInput(op, fd->newConstant(saSize, sa), 1);
+                    const uint64_t nz = op->getNZMaskLocal(false);
+                    const uint64_t truth = static_cast<uint64_t>(PbSigned(x, size) >> (sa >= static_cast<uint64_t>(8 * size) ? 8 * size - 1 : sa)) & m;
+                    ++checked;
+                    if ((truth & ~nz) != 0 || (nz & ~m) != 0)
+                    {
+                        CHECK(false);
+                        std::printf("non-zero mask of %d-byte %llx s>> %llx is %llx, the result is %llx\n", size, static_cast<unsigned long long>(x), static_cast<unsigned long long>(sa),
+                                    static_cast<unsigned long long>(nz), static_cast<unsigned long long>(truth));
+                    }
+                }
+        }
+    }
+    std::printf("nz mask of signed shifts: %ld checked\n", checked);
 }
 
 }  // namespace
@@ -1164,8 +1660,10 @@ int main(int argc, char** argv)
     {
         RUN(TestPullBackRanges());
         RUN(TestRangeAlgebraRound11());
+        RUN(TestForwardRangesRound11());
         RUN(TestSha256KnownAnswers());
         RUN(TestDecompileThroughBundle(config));
+        RUN(TestNzMaskShiftRound11());
         RUN(TestCancelDuringJumpTableRecovery());
         RUN(TestReuseAndRepair(config));
         RUN(TestForeignHashUntouched(config));

@@ -14,7 +14,8 @@
  * limitations under the License.
  *
  * Modified for SaturnExplorer: a pull-back through a comparison of a range holding both 0 and 1 is the full range; the other pull-backs are
- * exact or refused (patches/0058-engine-pullback-ranges-exact.patch).
+ * exact or refused (patches/0058-engine-pullback-ranges-exact.patch). The push-forward half is sound at the edges of wrapped and full ranges,
+ * a strided intersect is not empty by rounding, and the 8-byte pull-backs through a shift are exact (patches/0059-engine-range-arithmetic-sound.patch).
  */
 #include "rangeutil.hh"
 #include "block.hh"
@@ -111,25 +112,53 @@ bool CircleRange::newStride(uintb mask,int4 step,int4 oldStep,uint4 rem,uintb &m
     if (oldRem != (rem % oldStep))
       return true;			// Step is completely off
   }
-  bool origOrder = (myleft < myright);
-  uint4 leftRem = (uint4)(myleft % step);
-  uint4 rightRem = (uint4)(myright % step);
-  if (leftRem > rem)
-    myleft += rem + step - leftRem;
-  else
-    myleft += rem - leftRem;
-
-  if (rightRem > rem)
-    myright += rem + step - rightRem;
-  else
-    myright += rem - rightRem;
-  myleft &= mask;
-  myright &= mask;
-
-  bool newOrder = (myleft < myright);
-  if (origOrder != newOrder)
-    return true;
-
+  // SaturnExplorer (patches/0059-engine-range-arithmetic-sound.patch): the elements of [myleft,myright) that are congruent to rem modulo
+  // step, as a range. Each bound is rounded up to the first value of the new phase; that value can lie past the top of the domain (nothing of
+  // the phase is left in it, or the range ends at the top and its right bound wraps to the phase's first value) and a wrapped range is
+  // two pieces of the domain. The order of the rounded bounds said none of that: a bound rounded past the mask looked like a change of order and
+  // the set was taken as empty although the range holds elements of the phase.
+  if (myleft == myright) {		// everything of the old stride: everything of the new phase
+    myleft = rem;
+    myright = rem;
+    return false;
+  }
+  const uintb dl = (uintb)(rem + step - (uint4)(myleft % step)) % (uintb)step;	// distance to the first value of the phase at or above each bound
+  const uintb dr = (uintb)(rem + step - (uint4)(myright % step)) % (uintb)step;
+  const bool leftBeyond = dl > mask - myleft;		// that value is past the top of the domain
+  const bool rightBeyond = dr > mask - myright;
+  const uintb l2 = (myleft + dl) & mask;
+  const uintb r2 = (myright + dr) & mask;		// when beyond, the wrap: rem, the first value of the phase
+  if (myleft < myright) {		// one piece [left,right)
+    if (leftBeyond) return true;
+    if (!rightBeyond && l2 >= r2) return true;	// no element of the phase between the bounds
+    myleft = l2;
+    myright = r2;
+    if (myleft == myright) {		// from the first value of the phase to past the last one: all of the phase
+      myleft = rem;
+      myright = rem;
+    }
+    return false;
+  }
+  // wrapped: [left,top] and [0,right)
+  const bool upper = !leftBeyond;			// an element of the phase at or above left
+  const bool lower = rightBeyond || r2 > rem;		// an element of the phase below right
+  if (!upper && !lower) return true;
+  if (!upper) {
+    myleft = rem;
+    myright = r2;
+  }
+  else if (!lower) {
+    myleft = l2;
+    myright = rem;
+  }
+  else {
+    myleft = l2;
+    myright = r2;
+  }
+  if (myleft == myright) {		// the two pieces meet: all of the phase
+    myleft = rem;
+    myright = rem;
+  }
   return false;			// not empty
 }
 
@@ -284,17 +313,21 @@ int4 CircleRange::getMaxInfo(void) const
 
 {
   uintb halfPoint = mask ^ (mask >> 1);
-  if (contains(halfPoint))
+  // SaturnExplorer (patches/0059-engine-range-arithmetic-sound.patch): a range that passes the half point holds a value of its full width or
+  // one next to it. It was told by contains(halfPoint), which a stride of the other phase fails: [1,0xc1) step 2 holds 0x81, not 0x80, and answered 6 bits.
+  // And the information of a negative bound is that of its magnitude ~bound + 1; the bits of ~bound left a negative power of two (-64 is
+  // 7 bits) and -1 (1 bit) one short.
+  bool passes;
+  if (isempty) passes = false;
+  else if (left == right) passes = true;
+  else if (left < right) passes = (left <= halfPoint) && (halfPoint < right);
+  else passes = (halfPoint >= left) || (halfPoint < right);
+  if (passes)
     return 8*sizeof(uintb) - count_leading_zeros(halfPoint);
-  int4 sizeLeft,sizeRight;
-  if ((halfPoint & left) == 0)
-    sizeLeft = count_leading_zeros(left);
-  else
-    sizeLeft = count_leading_zeros(~left & mask);
-  if ((halfPoint & right) == 0)
-    sizeRight = count_leading_zeros(right);
-  else
-    sizeRight = count_leading_zeros(~right & mask);
+  uintb magLeft = ((halfPoint & left) == 0) ? left : (((~left) & mask) + 1);
+  uintb magRight = ((halfPoint & right) == 0) ? right : (((~right) & mask) + 1);
+  int4 sizeLeft = count_leading_zeros(magLeft);
+  int4 sizeRight = count_leading_zeros(magRight);
   int4 size1 = 8*sizeof(uintb) - (sizeRight < sizeLeft ? sizeRight : sizeLeft);
   return size1;
 }
@@ -314,9 +347,9 @@ bool CircleRange::contains(const CircleRange &op2) const
     if (!op2.isSingle())
       return false;
   }
+  if (left % step != op2.left % step) return false;	// Wrong phase (SaturnExplorer, patches/0059: before the full range answers true; a full range of step 2 does not hold 3)
   if (left == right) return true;
   if (op2.left == op2.right) return false;
-  if (left % step != op2.left % step) return false;	// Wrong phase
   if (left == op2.left && right == op2.right) return true;
 
   char overlapCode = encodeRangeOverlaps(left, right, op2.left, op2.right);
@@ -457,6 +490,22 @@ int4 CircleRange::circleUnion(const CircleRange &op2)
 bool CircleRange::minimalContainer(const CircleRange &op2,int4 maxStep)
 
 {
+  // SaturnExplorer (patches/0059-engine-range-arithmetic-sound.patch): a full range (left == right: all of its stride) is read below as the
+  // empty [0,0) of step 1, and a container of it and another range of another step answered the other range ([0,0x10) step 8 and full was [0,9)).
+  // The elements of a full range lie all round the domain: the container of it is the whole domain. So is one of two domains, which this
+  // arithmetic cannot tell apart.
+  if (op2.isempty) return (!isempty && left == right);
+  if (isempty) {
+    *this = op2;
+    return (left == right);
+  }
+  if (left == right || op2.left == op2.right || mask != op2.mask) {
+    mask |= op2.mask;
+    step = 1;
+    left = 0;
+    right = 0;
+    return true;
+  }
   if (isSingle() && op2.isSingle()) {
     uintb min,max;
     if (getMin() < op2.getMin()) {
@@ -478,8 +527,8 @@ bool CircleRange::minimalContainer(const CircleRange &op2,int4 maxStep)
     }
   }
 
-  uintb aRight = right - step + 1;		// Treat original ranges as having step=1
-  uintb bRight = op2.right - op2.step + 1;
+  uintb aRight = (right - step + 1) & mask;		// Treat original ranges as having step=1 (SaturnExplorer, patches/0059: inside the mask)
+  uintb bRight = (op2.right - op2.step + 1) & mask;
   step = 1;
   mask |= op2.mask;
   uintb vacantSize1,vacantSize2;
@@ -580,8 +629,13 @@ int4 CircleRange::intersect(const CircleRange &op2)
       return 0;
     }
   }
-  else
+  else {
     newStep = step;
+    if (step != 1 && (left % step) != (op2.left % step)) {	// SaturnExplorer (patches/0059): two strides of one step and another phase share no element
+      isempty = true;
+      return 0;
+    }
+  }
   newMask = mask & op2.mask;
   if (mask != newMask) {
     if (newDomain(newMask,newStep,myleft,myright)) {
@@ -986,17 +1040,21 @@ bool CircleRange::pullBackBinary(OpCode opc,uintb val,int4 slot,int4 inSize,int4
       // and a shift by the size or more is not a shift of the bits below.
       if (slot != 0 || val >= (uintb)inSize * 8) return false;
       if (step == 1) {
-	uintb rightBound = (calc_mask(inSize) >> val) + 1; // The maximal right bound
-	if (((left >= rightBound) && (right >= rightBound) && (left >= right))
-	    || ((left == 0) && (right >= rightBound)) || (left == right)) {
+	// SaturnExplorer (patches/0059-engine-range-arithmetic-sound.patch): for a shift by 0 of 8 bytes the bound is 2^64, which is 0 in a
+	// uintb: the range [0x10000,0x1000000) pulled back through x >> 0 was empty. No value reaches it: it is "past every right bound".
+	const uintb topValue = calc_mask(inSize) >> val;
+	const bool bounded = (topValue + 1) != 0;
+	const uintb rightBound = topValue + 1; // The maximal right bound
+	if ((left == right) || (bounded && (((left >= rightBound) && (right >= rightBound) && (left >= right))
+	    || ((left == 0) && (right >= rightBound))))) {
 	  // covers everything in range of shift
 	  left = 0;		// So domain is everything
 	  right = 0;
 	}
 	else {
-	  if (left > rightBound)
+	  if (bounded && left > rightBound)
 	    left = rightBound;
-	  if (right > rightBound)
+	  if (bounded && right > rightBound)
 	    right = 0;
 	  left = (left << val) & mask;
 	  right = (right << val) & mask;
@@ -1013,7 +1071,7 @@ bool CircleRange::pullBackBinary(OpCode opc,uintb val,int4 slot,int4 inSize,int4
       if (slot != 0 || val >= (uintb)inSize * 8) return false;	// SaturnExplorer (patches/0058-engine-pullback-ranges-exact.patch), as for INT_RIGHT
       if (step == 1) {
 	uintb rightb = calc_mask(inSize);
-	uintb leftb = rightb >> (val + 1);
+	uintb leftb = (val + 1 >= 8 * sizeof(uintb)) ? 0 : rightb >> (val + 1);	// SaturnExplorer (patches/0059): a shift by 64 is not a shift by 0 (x86)
 	rightb = leftb ^ rightb; // Smallest negative possible
 	leftb += 1;		// Biggest positive (+1) possible
 	if (((left >= leftb) && (left <= rightb) && (right >= leftb)
@@ -1259,16 +1317,22 @@ bool CircleRange::pushForwardBinary(OpCode opc,const CircleRange &in1,const Circ
       break;
     case CPUI_INT_MULT:
     {
+      // SaturnExplorer (patches/0059-engine-range-arithmetic-sound.patch): the result of the push-forward holds every product, or it is the
+      // whole stride. The sign was left out of upstream's test for an overflow (a magnitude test on the bits only, wrong for a range that wraps
+      // through zero): the product's span, in magnitude, must also fit in one lap of the domain.
       isempty = false;
       mask = in1.mask | in2.mask;
       uintb constVal;
+      const CircleRange *other;		// the operand that is not the constant
       if (in1.isSingle()) {
 	constVal = in1.getMin();
 	step = in2.step;
+	other = &in2;
       }
       else if (in2.isSingle()) {
 	constVal = in2.getMin();
 	step = in1.step;
+	other = &in1;
       }
       else
 	return false;
@@ -1279,13 +1343,24 @@ bool CircleRange::pushForwardBinary(OpCode opc,const CircleRange &in1,const Circ
 	tmp >>= 1;
       }
       int4 wholeSize = 8*sizeof(uintb) - count_leading_zeros(mask);
-      if (in1.getMaxInfo() + in2.getMaxInfo() > wholeSize) {
+      const bool negative = (constVal & (mask ^ (mask >> 1))) != 0;	// Multiplying by negative number
+      bool covered = in1.getMaxInfo() + in2.getMaxInfo() > wholeSize;
+      if (!covered) {
+	if (other->left == other->right)
+	  covered = true;			// all of a stride: the products are all of another
+	else {
+	  const uintb magnitude = negative ? ((0 - constVal) & mask) : constVal;
+	  const uintb lap = (other->right - other->step - other->left) & mask;	// from the first element to the last
+	  covered = (magnitude != 0) && (lap > mask / magnitude);
+	}
+      }
+      if (covered) {
 	left = (in1.left * in2.left) % step;
 	right = left;				// Covered everything
 	normalize();
 	return true;
       }
-      if ((constVal & (mask ^ (mask >> 1))) != 0) {	// Multiplying by negative number
+      if (negative) {
 	left = ((in1.right - in1.step) * (in2.right - in2.step)) & mask;
 	right = ((in1.left * in2.left) + step) & mask;
       }
@@ -1301,7 +1376,15 @@ bool CircleRange::pushForwardBinary(OpCode opc,const CircleRange &in1,const Circ
       isempty = false;
       mask = in1.mask;
       step = in1.step;
-      uint4 sa = (uint4)in2.getMin();
+      const int4 wholeSize = 8*sizeof(uintb) - count_leading_zeros(mask);
+      const uintb saFull = in2.getMin();
+      if (saFull >= (uintb)wholeSize) {	// SaturnExplorer (patches/0059): every bit is shifted out, and a shift of 64 or more is no shift in C
+	step = 1;
+	left = 0;
+	right = 1 & mask;
+	return true;
+      }
+      uint4 sa = (uint4)saFull;
       uint4 tmp = sa;
       while(step < maxStep && tmp > 0) {
 	step <<= 1;
@@ -1309,8 +1392,15 @@ bool CircleRange::pushForwardBinary(OpCode opc,const CircleRange &in1,const Circ
       }
       left = (in1.left << sa)&mask;
       right = (in1.right << sa)&mask;
-      int4 wholeSize = 8*sizeof(uintb) - count_leading_zeros(mask);
-      if (in1.getMaxInfo() + sa > wholeSize) {
+      // Upstream's test counted the bits of the magnitude; the span of the range, shifted, must also fit in one lap of the domain
+      bool covered = in1.getMaxInfo() + (int4)sa > wholeSize;
+      if (!covered) {
+	if (in1.left == in1.right)
+	  covered = true;
+	else
+	  covered = ((in1.right - in1.left) & mask) > (mask >> sa);
+      }
+      if (covered) {
 	right = left;	// Covered everything
 	normalize();
 	return true;
@@ -1319,63 +1409,135 @@ bool CircleRange::pushForwardBinary(OpCode opc,const CircleRange &in1,const Circ
     }
     case CPUI_SUBPIECE:
     {
+      // SaturnExplorer (patches/0059-engine-range-arithmetic-sound.patch): the low bytes of a wrapped range and of a full range of a stride
+      // were taken from the gap of the range and from the stride of phase 0; the bytes above the low ones of a wrapped range left out the
+      // piece of the range that ends at the top.
       if (!in2.isSingle()) return false;
       isempty = false;
-      int4 sa = (int4)in2.left * 8;
       mask = calc_mask(outSize);
-      step = (sa == 0) ? in1.step : 1;
-      uintb range = (in1.left < in1.right) ? in1.right-in1.left : in1.left - in1.right;
-
-      if (range == 0 || ((range >> sa) > mask )) {
-	left = right = 0;	// We cover everything
+      const uintb off = in2.getMin();		// the bytes cut off the bottom
+      if (off >= (uintb)inSize) {		// nothing of the input is left
+	step = 1;
+	left = 0;
+	right = 1 & mask;
+	return true;
       }
-      else {
-	left = in1.left >> sa;
-	right = ((in1.right - in1.step) >> sa) + step;
-	left &= mask;
-	right &= mask;
+      const int4 sa = (int4)off * 8;
+      const bool full = in1.left == in1.right;
+      const uintb last = (in1.right - in1.step) & in1.mask;	// the right-most element (of a range that is not full)
+      if (sa == 0) {
+	step = in1.step;
+	if (step != 1 && (uintb)step > mask) {	// the stride is a multiple of the output's domain: one value
+	  step = 1;
+	  left = in1.left & mask;
+	  right = (left + 1) & mask;
+	}
+	else if (full) {
+	  left = in1.left % step;
+	  right = left;
+	}
+	else if (((last - in1.left) & in1.mask) <= mask - (uintb)(step - 1)) {	// the elements fit in one lap of the output's domain
+	  left = in1.left & mask;
+	  right = (last + step) & mask;
+	}
+	else {
+	  left = in1.left % step;			// they wrap round it: all of the stride
+	  right = left;
+	}
 	normalize();
+	return true;
       }
+      step = 1;
+      if (!full && in1.left <= last) {		// one piece, not wrapped
+	const uintb a = in1.left >> sa, b = last >> sa;
+	if (b - a > mask) {			// more values than the domain holds
+	  left = 0;
+	  right = 0;
+	}
+	else {
+	  left = a & mask;
+	  right = (b + 1) & mask;
+	}
+	normalize();
+	return true;
+      }
+      const uintb top = in1.mask >> sa;		// the largest value of the shifted input
+      if (top > mask) {				// the high bits are cut as well: they may be anything
+	left = 0;
+	right = 0;
+	return true;
+      }
+      const uintb first = in1.left >> sa, lastv = last >> sa;
+      if (full || lastv + 1 >= first) {		// the two pieces, [first,top] and [0,last], meet
+	left = 0;
+	right = (top + 1) & mask;
+      }
+      else {					// wrapped: [first,top] and [0,last] (the arc holds the gap past top as well)
+	left = first;
+	right = lastv + 1;
+      }
+      normalize();
       break;
     }
     case CPUI_INT_RIGHT:
     {
+      // SaturnExplorer (patches/0059-engine-range-arithmetic-sound.patch): the top value of a wrapped or full range was left out
+      // (right = mask >> sa, without the +1: a full 4-byte value >> 2 is [0,0x3fffffff), and 0x3fffffff is a result)
       if (!in2.isSingle()) return false;
       isempty = false;
-      int4 sa = (int4)in2.left;
       mask = calc_mask(outSize);
       step = 1;			// Lose any step
-      if (in1.left < in1.right) {
+      const int4 wholeSize = 8*sizeof(uintb) - count_leading_zeros(in1.mask);
+      const uintb saFull = in2.getMin();
+      if (saFull >= (uintb)wholeSize) {		// every bit is shifted out
+	left = 0;
+	right = 1 & mask;
+	break;
+      }
+      const int4 sa = (int4)saFull;
+      const bool full = in1.left == in1.right;
+      const uintb last = (in1.right - in1.step) & in1.mask;
+      if (!full && in1.left <= last) {
 	left = in1.left >> sa;
-	right = ((in1.right - in1.step) >> sa) + 1;
+	right = ((last >> sa) + 1) & mask;
       }
       else {
-	left = 0;
-	right = in1.mask >> sa;
+	const uintb first = in1.left >> sa, lastv = last >> sa;
+	if (full || lastv + 1 >= first) {	// [first,top] and [0,last] meet
+	  left = 0;
+	  right = ((in1.mask >> sa) + 1) & mask;
+	}
+	else {
+	  left = first;
+	  right = lastv + 1;
+	}
       }
-      if (left == right)	// Don't truncate accidentally to everything
-	right = (left + 1)&mask;
       break;
     }
     case CPUI_INT_SRIGHT:
     {
+      // SaturnExplorer (patches/0059-engine-range-arithmetic-sound.patch): the range of a signed shift is the shifted ends of the signed
+      // values (the largest positive was lost for a range that crosses it, and the largest of a full one)
       if (!in2.isSingle()) return false;
       isempty = false;
-      int4 sa = (int4)in2.left;
       mask = calc_mask(outSize);
       step = 1;			// Lose any step
-      int4 bitPos = 8*inSize - 1;
-      intb valLeft = sign_extend(in1.left,bitPos);
-      intb valRight = sign_extend(in1.right,bitPos);
-      if (valLeft >= valRight) {
-	valRight = (intb)(mask >> 1);	// Max positive
-	valLeft = valRight + 1;		// Min negative
-	valLeft = sign_extend(valLeft,bitPos);
+      const int4 bitPos = 8*inSize - 1;
+      const uintb saFull = in2.getMin();
+      const int4 sa = (saFull > (uintb)bitPos) ? bitPos : (int4)saFull;	// a shift by the size or more is the shift that only fills with the sign
+      intb valLeft = 0, valRight = 0;
+      bool whole = (in1.left == in1.right);
+      if (!whole) {
+	valLeft = sign_extend((intb)in1.left,bitPos);
+	valRight = sign_extend((intb)((in1.right - in1.step) & in1.mask),bitPos);
+	whole = valLeft > valRight;	// the range crosses the largest positive: the signed values it holds run from the smallest to the largest
       }
-      left = (valLeft >> sa) & mask;
-      right = (((valRight - in1.step) >> sa) + 1) & mask;
-      if (left == right)	// Don't truncate accidentally to everything
-	right = (left + 1)&mask;
+      if (whole) {
+	valRight = (intb)(in1.mask >> 1);	// Max positive
+	valLeft = -valRight - 1;		// Min negative
+      }
+      left = ((uintb)(valLeft >> sa)) & mask;
+      right = ((uintb)(valRight >> sa) + 1) & mask;
       break;
     }
     case CPUI_INT_EQUAL:

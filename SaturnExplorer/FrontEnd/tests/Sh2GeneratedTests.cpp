@@ -6851,6 +6851,17 @@ std::string UnsignedLiteralsTyped(const std::string& text)
     return std::regex_replace(std::regex_replace(text, wide, "uint8($1)"), narrow, "uint4($1)");
 }
 
+// The engine's reading of a negative literal (A2-71). The engine prints an 8-byte constant of -2^31 and below, to -(2^32-1), as `-0x80000000`: a
+// negative number of the arithmetic around it, which the 8-byte operand is multiplied by or added to. In C and C++ a hexadecimal literal that does
+// not fit an int is an `unsigned int` and its negation the same unsigned int, so `(int8)param_2 * -0x80000000` multiplied by +2^31 (and
+// the verdict was `mismatch` where the text means the product by -2^31, which agrees with the run). Here the literal is a `long long`; at four bytes
+// the value is the same bits (the class takes the low four bytes), so no function whose text is read at four bytes changes.
+std::string NegativeWideLiteralsTyped(const std::string& text)
+{
+    static const std::regex neg("-(0x[89a-fA-F][0-9a-fA-F]{7})\\b");
+    return std::regex_replace(text, neg, "-$1LL");
+}
+
 std::string CxxHeader()
 {
     std::ostringstream o;
@@ -6981,6 +6992,10 @@ void TestOracleOwnDecisions()
     CHECK(UnsignedLiteralsTyped("0x7f < param_1 + 0x80U") == "0x7f < param_1 + uint4(0x80)");
     CHECK(UnsignedLiteralsTyped("x * 3U + 0xfffffffeULL") == "x * uint4(3) + uint8(0xfffffffe)");
     CHECK(UnsignedLiteralsTyped("uVar1 = in_r2U + 0xffffffff; uRam0600U = 1;") == "uVar1 = in_r2U + 0xffffffff; uRam0600U = 1;");
+    // A2-71: an 8-byte constant of -0x80000000 is negative in the engine's reading; the other literals are as they were
+    CHECK(NegativeWideLiteralsTyped("(int8)param_2 * -0x80000000") == "(int8)param_2 * -0x80000000LL");
+    CHECK(NegativeWideLiteralsTyped("x + -0xfffffffe;") == "x + -0xfffffffeLL;");
+    CHECK(NegativeWideLiteralsTyped("x * -0x7fffffff + y - 0x80000000 + -0x80000000U + -0x180000000 + -2147483648") == "x * -0x7fffffff + y - 0x80000000 + -0x80000000U + -0x180000000 + -2147483648");
 }
 
 bool IsFailing(const CVerdict& v)
@@ -7283,8 +7298,35 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
         std::unique_ptr<Machine> machine(new Machine(snap, &env));
         std::ostringstream rows;
         int kept = 0;
+        uint32_t baseIn[13] = {};   // the first row's inputs (area 2 round 11: SE_GENERATED_PRINTEDC_SWEEP16 varies r4 from it)
         bool r0Changed = false;
-        for (int k = 0; k < nIn + 44; ++k)
+        // Area 2 round 11 instrument: SE_GENERATED_PRINTEDC_EXTRA=<hex>,<hex>,... and SE_GENERATED_PRINTEDC_BYTES=1 add rows with r4 (and r5)
+        // set to those values (the byte rows: every value 0..255 and its sign extension), after the rows above.
+        static const std::vector<uint32_t> extraVals = [] {
+            std::vector<uint32_t> e;
+            if (const char* x = std::getenv("SE_GENERATED_PRINTEDC_EXTRA"))
+            {
+                std::string t(x);
+                size_t at = 0;
+                while (at < t.size())
+                {
+                    size_t c = t.find(',', at);
+                    if (c == std::string::npos) c = t.size();
+                    if (c > at) e.push_back(static_cast<uint32_t>(std::strtoull(t.substr(at, c - at).c_str(), nullptr, 16)));
+                    at = c + 1;
+                }
+            }
+            if (const char* b = std::getenv("SE_GENERATED_PRINTEDC_BYTES"))
+                if (b[0] == '1')
+                    for (uint32_t j = 0; j < 256; ++j)
+                    {
+                        e.push_back(j);
+                        e.push_back(j >= 0x80 ? (0xFFFFFF00u | j) : j);
+                    }
+            return e;
+        }();
+        const int extraRows = static_cast<int>(extraVals.size()) * 2;
+        for (int k = 0; k < nIn + 44 + extraRows; ++k)
         {
             uint32_t in[13];
             for (int i = 0; i < 8; ++i) in[i] = draw();
@@ -7317,6 +7359,12 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
                 }
                 ++byteSweep;
             }
+            if (k >= nIn + 44)
+            {
+                const size_t xi = static_cast<size_t>(k - (nIn + 44)) / 2, n = extraVals.size();
+                if ((k - (nIn + 44)) & 1) { in[5] = extraVals[xi]; in[4] = extraVals[(xi * 5 + 1) % n]; }
+                else { in[4] = extraVals[xi]; in[5] = extraVals[(xi * 7 + 3) % n]; }
+            }
             for (int i = 0; i < 8; ++i) machine->Set(("r" + std::to_string(i)).c_str(), in[i]);
             for (int i = 8; i < 15; ++i) machine->Set(("r" + std::to_string(i)).c_str(), CalleeSaved(i));
             machine->Set("r15", kStackTop);
@@ -7335,6 +7383,7 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
                           in[0], in[1], in[2], in[3], in[4], in[5], in[6], in[7], in[8], in[9], in[10], run.fin[0], run.fin[1], run.finSr,
                           machine->Get("gbr"), machine->Get("vbr"), in[11], in[12]);
             rows << buf;
+            if (kept == 0) std::memcpy(baseIn, in, sizeof baseIn);
             ++kept;
         }
         if (!kept)
@@ -7374,7 +7423,55 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
                  "got, rsz == 8 ? (unsigned int)g64 : 0u); ++bad_" << pr.name << "; }\n";
             m << ctl;
         }
-        m << "    }\n  }\n";
+        m << "    }\n";
+        // Area 2 round 11 instrument (SE_GENERATED_PRINTEDC_SWEEP16=1): r4 = every value 0..65535, the other inputs those of the first row,
+        // the run's r0 kept in compact tables and each value compared as the rows above are (the 16-bit domain of a function that reduces r4).
+        static const bool sweep16 = std::getenv("SE_GENERATED_PRINTEDC_SWEEP16") != nullptr;
+        if (sweep16 && !v.voidReturn && nParams >= 1)
+        {
+            std::ostringstream t0, t1, tk, tb;
+            for (int i = 0; i < 13; ++i) tb << (i ? "," : "") << baseIn[i] << "u";
+            for (uint32_t j = 0; j < 65536; ++j)
+            {
+                uint32_t in2[13];
+                std::memcpy(in2, baseIn, sizeof in2);
+                in2[4] = j;
+                for (int i = 0; i < 8; ++i) machine->Set(("r" + std::to_string(i)).c_str(), in2[i]);
+                for (int i = 8; i < 15; ++i) machine->Set(("r" + std::to_string(i)).c_str(), CalleeSaved(i));
+                machine->Set("r15", kStackTop);
+                machine->Set("pr", kSentinel);
+                machine->Set("sr", in2[8]);
+                machine->Set("gbr", in2[11]);
+                machine->Set("vbr", in2[12]);
+                machine->Set("mach", in2[9]);
+                machine->Set("macl", in2[10]);
+                RunOut run2;
+                env.trace.clear();
+                const bool ok = machine->Run(kCode, kSentinel, kStepLimit, run2, env);
+                t0 << (ok ? run2.fin[0] : 0u) << (j + 1 < 65536 ? "," : "");
+                t1 << (ok ? run2.fin[1] : 0u) << (j + 1 < 65536 ? "," : "");
+                tk << (ok ? 1 : 0) << (j + 1 < 65536 ? "," : "");
+            }
+            m << "    { static const unsigned int B[13] = { " << tb.str() << " };\n      static const unsigned int S0[65536] = { " << t0.str() << " };\n"
+              << "      static const unsigned int S1[65536] = { " << t1.str() << " };\n      static const unsigned int SK[65536] = { " << tk.str() << " };\n"
+              << "      for (unsigned k = 0; k < 65536; ++k) {\n        if (!SK[k]) continue;\n"
+              << "        memcpy(g_in, B, sizeof g_in[0] * 11);\n        g_in[4] = k; g_in[11] = B[11]; g_in[12] = B[12];\n"
+              << "        g_wsr = g_in[8]; g_wgbr = g_in[11]; g_wvbr = g_in[12];\n";
+            if (frameMode) m << "        memset((void *)(uintptr_t)g_frame_base, 0, 0x10000);\n";
+            m << "        unsigned long long g64 = (unsigned long long)" << call.str() << ";\n"
+              << "        int rsz = (int)sizeof(" << call.str() << ");\n"
+              << "        unsigned int rmask = rsz >= 4 ? 0xFFFFFFFFu : (1u << (8 * rsz)) - 1;\n"
+              << "        unsigned int got = rsz == 8 ? (unsigned int)(g64 >> 32) : (unsigned int)g64 & rmask;\n"
+              << "        unsigned int want = rsz == 8 ? S0[k] : S0[k] & rmask;\n"
+              << "        int badext = 0;\n"
+              << "        if (rsz < 4) { unsigned sh = 32 - 8 * rsz; unsigned sx = (unsigned)((int)(want << sh) >> sh); badext = S0[k] != want && S0[k] != sx; }\n"
+              << "        if (got != want || badext || (rsz == 8 && (unsigned int)g64 != S1[k])) { printf(\"MISMATCH " << pr.name
+              << " r4=%08X r5=%08X r6=%08X r7=%08X size=%d%s run=%08X:%08X pseudo=%08X:%08X\\n\", g_in[4], g_in[5], g_in[6], g_in[7], rsz, "
+                 "(rsz == 8 && (unsigned int)g64 == S1[k]) ? \" high-word-only\" : badext ? \" upper-bits\" : \"\", S0[k], S1[k], "
+                 "got, rsz == 8 ? (unsigned int)g64 : 0u); ++bad_" << pr.name << "; }\n"
+              << "      } }\n";
+        }
+        m << "  }\n";
         pr.mainText = m.str();
         pr.ready = true;
         v.compared = !v.voidReturn;
@@ -7391,7 +7488,7 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
     auto compileRun = [&](const std::vector<size_t>& which, const std::string& tag, std::string& log, bool& compiled, bool engine = false) -> std::string {
         std::ostringstream src;
         src << (engine ? CxxHeader() : CHeader());
-        for (size_t i : which) src << "static int bad_" << prep[i].name << ";\n" << (engine ? UnsignedLiteralsTyped(prep[i].cText) : prep[i].cText) << "\n";
+        for (size_t i : which) src << "static int bad_" << prep[i].name << ";\n" << (engine ? NegativeWideLiteralsTyped(UnsignedLiteralsTyped(prep[i].cText)) : prep[i].cText) << "\n";
         src << "int main(void) {\n  FrameInit();\n";
         for (size_t i : which) src << prep[i].mainText;
         int total = 0;
