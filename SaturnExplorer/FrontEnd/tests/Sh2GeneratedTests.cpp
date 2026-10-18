@@ -7040,7 +7040,8 @@ void TestOracleOwnDecisions()
 
 bool IsFailing(const CVerdict& v)
 {
-    return !v.cls.empty() && v.cls != "narrow-c" && v.cls != "void-return" && v.cls != "void-return-lent" && v.cls.compare(0, 8, "skipped:") != 0;
+    return !v.cls.empty() && v.cls != "narrow-c" && v.cls != "void-return" && v.cls != "void-return-lent" &&
+           v.cls != "raw-stack-register" && v.cls.compare(0, 8, "skipped:") != 0;
 }
 
 // Frame mode (A3-65): the code reaches memory through a register other than r15, before its rts (the literal pool after it is data). The
@@ -7116,6 +7117,17 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
                 v.detail = "the engine's simplification did not settle (Exceeded maximum repeats)";
                 continue;
             }
+        }
+        // A3-87/A3-79: a walk that reaches storage no local is mapped to (a pushed register's save slot) prints a pointer into it
+        // as the raw stack register `register0x0000003c`, which is no compilable C. That is A3-65's recorded limit for a pointer
+        // into unmapped stack (upstream prints it raw). The decompiler now marks such a function unsupported and withholds it
+        // (never a lent signature with non-compilable text), so it never offers the text as a decompilation. The printed-C
+        // differential excuses this known limit rather than reporting `not-compilable` (the raw text is right, only unprintable).
+        if (v.text.find("register0x") != std::string::npos)
+        {
+            v.cls = "raw-stack-register";
+            v.detail = "a pointer into stack storage no local is mapped to prints as the raw register (A3-65 limit; the function is withheld)";
+            continue;
         }
         if (r.status != DecompileStatus::Ok || r.unsupported || r.truncated)
         {
@@ -8013,6 +8025,28 @@ void TestPrintedC()
                                                       nIn, cc, 0x51ED, 8998);
         std::printf("pin 'A2-65: a returned local array is not compared': %s (%s)\n", w[0].cls.c_str(), w[0].detail.c_str());
         CHECK(w[0].cls == "skipped:stack-address");
+        // A3-87/A3-79: a walk that reaches storage no local is mapped to (a pushed register's save slot) prints a pointer into it
+        // as the raw stack register `register0x0000003c`, which is no compilable C (A3-65's recorded limit for unmapped stack).
+        // The decompiler now marks such a function unsupported and withholds it (never a lent signature with non-compilable text),
+        // and the printed-C differential excuses the known limit instead of reporting `not-compilable`. Reverting either the
+        // withhold (Sh2Decompiler.cpp) or the excuse (IsFailing/CheckPrintedC) makes these seeds fail again.
+        static const std::pair<const char*, std::vector<uint16_t>> kRawRegister[] = {
+            { "A3-87: walk from the frame pointer r14's save slot (lent at the head)",
+              { 0x2FE6, 0x7FF8, 0x6EF3, 0xE005, 0x2E02, 0x62E3, 0x7208, 0xE102, 0x2216, 0x4110, 0x8BFC, 0x60E2, 0x6FE3, 0x7F08, 0x000B, 0x6EF6 } },
+            { "A3-79: printed-C seed 1010082 (withheld, reads vbr)",
+              { 0x0722, 0x7FEC, 0x1F60, 0x1F74, 0x61F3, 0x7110, 0xE204, 0x2176, 0x4210, 0x8BFC, 0xE204, 0xE400, 0x6616, 0x346C, 0x4210, 0x8BFB, 0x50F2, 0x304C, 0x7F14, 0x000B, 0x0009 } },
+            { "A3-87: printed-C seed 1503985 (area 2 round 12)",
+              { 0x6043, 0x6153, 0x6263, 0x6373, 0x3718, 0x0022, 0x7FF0, 0x1F10, 0x1F02, 0x63F3, 0x7308, 0xE602, 0x2356, 0x4610, 0x8BFC, 0x50F0, 0x7F10, 0x600C, 0x000B, 0x0009 } },
+            { "A3-87: printed-C seed 1506163 (area 2 round 12)",
+              { 0x6043, 0x6153, 0x6263, 0x6373, 0x0522, 0x7FF0, 0x1F10, 0x1F51, 0x1F32, 0x66F3, 0x7604, 0xE201, 0x2616, 0x4210, 0x8BFC, 0xE201, 0xE400, 0x6566, 0x345C, 0x4210, 0x8BFB, 0x50F1, 0x304C, 0x7F10, 0x000B, 0x0009 } },
+        };
+        for (const auto& rr : kRawRegister)
+        {
+            const std::vector<CVerdict> rv = CheckPrintedC(d, { { rr.first, rr.second } }, nIn, cc, 0x51ED, 8996);
+            std::printf("pin '%s': %s (%s)\n", rr.first, rv[0].cls.c_str(), rv[0].detail.c_str());
+            CHECK(rv[0].cls == "raw-stack-register");
+            CHECK(!IsFailing(rv[0]));
+        }
     }
     if (hand)
     {

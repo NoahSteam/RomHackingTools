@@ -348,7 +348,11 @@ public:
     // The results of CalleeFrameWrites kept for every probe of one request (A3-81): a walk depends only on the callee's code in the capture and
     // the lent signatures, which no pass of a request changes, and each of the request's probes (two a printing pass, one more pass when a host
     // alias is declared) walked the same callees again, with a budget of its own. Each probe keeps its own budget; a result is reused as found.
-    void ShareWalks(std::map<uint32_t, uint32_t>* walks) { mOwnCtx.shared = walks; }
+    void ShareWalks(std::map<uint32_t, uint32_t>* walks, std::map<uint32_t, uint32_t>* below = nullptr)
+    {
+        mOwnCtx.shared = walks;
+        mOwnCtx.sharedBelow = below;
+    }
 
     // The calls (by the instruction that makes them) a frame address escapes at in a register the call is shown without, and which (bit 2: r2, bit 7: r7).
     const std::map<uint32_t, uint32_t>& EscapeSites() const { return mEscapeSites; }
@@ -1073,6 +1077,21 @@ private:
                     if (handsFrame) MapCalleeWords(CallEffects::kFrameAny, s, sp);
                 }
             }
+            // A3-86 a: the probe (mTolerant, not nested) can name a captured callee that is not lent; it may step its pointer down
+            // (a fill-backwards), and the engine then reaches only at and above the address it was handed. The frame-words walk
+            // above threw the callee's effects away. Walk it for its storesBelow (cached), and expose this frame from its lowest
+            // slot when a register holds a possible frame address of ours -- so the probe declares the host alias and the folded
+            // local is not shown wrong. Only at depth 0 (the request's own probe); a nested walk's own callees are its concern.
+            if (mTolerant && !mNested && haveTarget)
+            {
+                const uint32_t sb = CalleeStoresBelow(target);
+                for (int r = 0; r < 15; ++r)
+                    if (((sb >> r) & 1u) && (Get(s, mReg[r]).Origins() & origin::kStack))
+                    {
+                        mEscaped = true;
+                        mEscapedLow = true;
+                    }
+            }
         }
         else
         {
@@ -1081,7 +1100,18 @@ private:
             // was made from out of the alias (A3-22). Declared for the registers the callee stores through, when the address is
             // not exact (an exact one is the engine's, and was never a problem).
             for (int r = 0; r < 15; ++r)
-                if ((e.storesThrough >> r) & 1u) NoteFrameEscape(s, r, false, at);
+                if ((e.storesThrough >> r) & 1u)
+                {
+                    NoteFrameEscape(s, r, false, at);
+                    // A3-82 d/e: the callee stores at or above the pointer it was handed in r; if this function passed it a
+                    // parameter register lowered below its entry (a thunk doing `fill(p - 16)`), or a pointer laundered so its
+                    // offset is unknown, the store may reach below that register's entry -- so this function stores below it too.
+                    // A pointer passed unchanged (the register's entry value) is at or above it: no claim (the home area, A3-39).
+                    const Value h = Get(s, mReg[r]);
+                    if (h.StoresBelow()) mStoresBelow |= 1u << h.baseReg;
+                    else if (h.kind == Value::Fuzzy && h.Base() == Value::kNoBase && h.baseReg < 0)
+                        mStoresBelow |= h.Origins() & 0x7FFFu;
+                }
             // ...and one that writes below the exact frame address it was handed (a lent `fill backwards`, `*--p = v`): the engine reaches only
             // the object at the address and above, so the locals below it would be folded across the call (A3-71). The amount is unknown, so the
             // whole frame below is exposed. NoteFrameEscape's skip of an exact address stands for a callee that only writes at or above it.
@@ -1089,11 +1119,20 @@ private:
                 if ((e.storesBelow >> r) & 1u)
                 {
                     const Value h = Get(s, mReg[r]);
-                    if (h.kind == Value::Sp || (h.kind == Value::Fuzzy && h.Base() != Value::kNoBase))
+                    // A3-84: a possible frame address is one with the stack pointer among its origins by any data path -- an exact
+                    // address, one laundered through an op the interpreter does not track (a mask, a shift or swap pair, halves), or
+                    // one read back from memory the frame escaped into. Any of them in a storesBelow register exposes the frame from
+                    // its lowest slot, as an exact one does. (Fail closed: the old test asked for an exact Sp or a tracked base.)
+                    if (h.Origins() & origin::kStack)
                     {
                         mEscaped = true;
                         mEscapedLow = true;   // from the frame's lowest slot (FrameEscape)
                     }
+                    // A3-82: storesBelow is transitive. Reached through this function (a wrapper, a thunk, a pointer lowered on the
+                    // way, a tail call), the lent callee stores below whatever this function passed in r, so this function stores
+                    // below each register that value was made from -- its register origins (the fail-closed mapping, as a store
+                    // below an untracked pointer is recorded in Store, A3-83). A caller handing us a frame address is then exposed.
+                    mStoresBelow |= h.Origins() & 0x7FFFu;
                 }
             // ...and one handed an address at or above this function's entry r15 (`mov r15,r4 ; add #4,r4 ; bsr h`, h stores through
             // r4) writes a word of this function's caller's frame, as a store of its own there would (A3-39). What h stores is not in the
@@ -1221,7 +1260,24 @@ private:
         else if (callee.mEntryUndecodable) words = 0;
         else if (callee.CallerFrameStores() != 0) words = callee.mOwnFrameWords;
         cache[target] = words;
+        // A3-86 a: the registers the walked callee stores below the pointer it was handed (fill backwards), kept beside the
+        // frame-words result so the top-level probe can expose this frame when it hands such a callee a frame address. A callee
+        // the walk could not follow (a reason, the entry not captured) is taken to store below any register (fail closed).
+        ctx->Below()[target] = (!why.empty() || callee.mEntryUndecodable) ? 0x7FFFu : callee.mStoresBelow;
         return words;
+    }
+    // A3-86 a: the registers a captured, unlent callee may store below the pointer it was handed, from the frame-words walk's
+    // record (or that walk, run now). 0x7FFF (every register) when the callee could not be walked: fail closed.
+    uint32_t CalleeStoresBelow(uint32_t target)
+    {
+        NestedContext* ctx = mNestedCtx != nullptr ? mNestedCtx : &mOwnCtx;
+        auto f = ctx->Below().find(target);
+        if (f == ctx->Below().end())
+        {
+            CalleeFrameWrites(target);   // fills ctx->below as a side effect, within the shared budget
+            f = ctx->Below().find(target);
+        }
+        return f != ctx->Below().end() ? f->second : 0x7FFFu;
     }
     // A walked callee's own callee (or tail-jump target) writes 'words' of its caller's frame, counted from the r15 it was entered with ('sp'):
     // those at or above this walked function's entry r15 are words of the frame being asked about.
@@ -1420,6 +1476,14 @@ private:
         // A3-71: a store below the frame address a parameter register held on entry (`*--p = v`, a negative displacement). A caller that hands
         // a lent callee an exact frame address in that register must expose the locals below it (Call reads CallEffects::storesBelow).
         if (addr.StoresBelow()) mStoresBelow |= 1u << addr.baseReg;
+        // A3-83: fail closed. A store through a value with a parameter register among its origins and no exact base or stack base
+        // (a pointer laundered through an op the interpreter does not model: a mask `and #-4`, a shift pair, a swap pair, a spill
+        // in halves or bytes, a load from a global) could be at, above or below the address the callee was handed. The engine
+        // reaches only at and above, so claim it may store below each such register ("stores anywhere through r_n"), as A3-71
+        // records a known decrement. An exact stack address or a tracked register base is handled above; a pure memory pointer
+        // (a global, a loaded word with no register among its origins) names no register and claims none.
+        else if (addr.kind == Value::Fuzzy && addr.Base() == Value::kNoBase && addr.baseReg < 0)
+            mStoresBelow |= addr.Origins() & 0x7FFFu;
         if (addr.kind == Value::Sp)
         {
             if (addr.v + n > 0)   // at or above r15 on entry: the caller's frame
@@ -1530,13 +1594,21 @@ private:
             r.dep = d;
             return r;
         }
-        // Through an address that may be in the stack but not exactly: nothing bounds it above r15,
-        // so it may read free stack, which holds anything -- or a word of the caller's frame, a stack argument: even a base below the entry r15
-        // with an index the engine takes as non-negative reaches upward without bound. Fail closed: it depends on the stack arguments (A3-66 c,
-        // A3-67 b).
-        if (!MayBeStack(s, addr)) return Loaded(s);
+        // A3-83 (c, g): fail-closed pointer provenance through memory. A pointer the callee reaches through a parameter register
+        // (`mov.l @r4,r5`, a struct field holding a frame address), or loads back from memory it leaked a parameter register into
+        // (`mov.l r4,@global ; mov.l @global,r5`), keeps that register among its origins only (not its dependences, which the
+        // return rule reads): the value loaded from memory the host cannot follow may be the pointer it put there, so a store below
+        // it records storesBelow for that register (Store). The caller then exposes when it passes such a callee a frame address.
+        const uint32_t taint = (addr.Origins() & 0x7FFFu) | (mLeaks & 0x7FFFu);
+        if (!MayBeStack(s, addr))
+        {
+            Value l = Loaded(s);
+            l.from |= taint;
+            return l;
+        }
         Value f = FreeStack();
         f.dep = Deps::All(origin::kMemory | origin::kStack | kDepArgs);
+        f.from |= taint;
         return f;
     }
 
@@ -2030,6 +2102,27 @@ private:
                         r = xs[0];
                     else if ((op.code == ghidra::CPUI_INT_OR || op.code == ghidra::CPUI_INT_XOR) && xs.size() == 2 && xs[1].kind == Value::Imm && xs[1].v == 0)
                         r = xs[0];
+                    // A negation, a shift or a product of constants is a constant, as the engine folds it: `mov #16,r3 ; neg r3,r3`
+                    // is -16 and `mov #-4,r3 ; shll2 r3` is -16, so `add r3,r4` lowers r4 by a tracked amount (a store below it is
+                    // recorded) instead of adding a value of unknown sign the interpreter takes as a non-negative index (A3-83 d, e).
+                    else if (xs.size() == 1 && xs[0].kind == Value::Imm &&
+                             (op.code == ghidra::CPUI_INT_2COMP || op.code == ghidra::CPUI_INT_NEGATE))
+                    {
+                        const int64_t rv = op.code == ghidra::CPUI_INT_2COMP ? -xs[0].v : ~xs[0].v;
+                        r = Value::Const(op.out.size >= 8 ? rv : Wrap(rv));
+                    }
+                    else if (xs.size() == 2 && xs[0].kind == Value::Imm && xs[1].kind == Value::Imm &&
+                             (op.code == ghidra::CPUI_INT_LEFT || op.code == ghidra::CPUI_INT_RIGHT ||
+                              op.code == ghidra::CPUI_INT_SRIGHT || op.code == ghidra::CPUI_INT_MULT))
+                    {
+                        const int64_t a0 = xs[0].v, sh = xs[1].v;
+                        int64_t rv = 0;
+                        if (op.code == ghidra::CPUI_INT_MULT) rv = a0 * sh;
+                        else if (op.code == ghidra::CPUI_INT_LEFT) rv = sh >= 64 ? 0 : static_cast<int64_t>(static_cast<uint64_t>(a0) << sh);
+                        else if (op.code == ghidra::CPUI_INT_RIGHT) rv = sh >= 64 ? 0 : static_cast<int64_t>(static_cast<uint64_t>(a0) >> sh);
+                        else rv = sh >= 64 ? (a0 < 0 ? -1 : 0) : a0 >> sh;   // INT_SRIGHT, arithmetic
+                        r = Value::Const(op.out.size >= 8 ? rv : Wrap(rv));
+                    }
                     Set(s, op.out, r);
                 }
                 break;
@@ -2082,10 +2175,13 @@ private:
     struct NestedContext
     {
         std::map<uint32_t, uint32_t> cache;   // by target; kUnwalked while a walk of it is in progress (a cycle fails closed)
+        std::map<uint32_t, uint32_t> belowOwn;   // A3-86 a: the registers each walked callee stores below the pointer it was handed
         std::map<uint32_t, uint32_t>* shared = nullptr;   // the request's, when the probe was given it (ShareWalks)
+        std::map<uint32_t, uint32_t>* sharedBelow = nullptr;
         size_t budget = 0;
         bool started = false;
         std::map<uint32_t, uint32_t>& Cache() { return shared != nullptr ? *shared : cache; }
+        std::map<uint32_t, uint32_t>& Below() { return sharedBelow != nullptr ? *sharedBelow : belowOwn; }
     };
     NestedContext mOwnCtx;
     NestedContext* mNestedCtx = nullptr;
@@ -4408,6 +4504,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
     // literals applied, actions run. 'print' adds the markup output; 'mayRetry' lets a print pass stop, before it prints, when the
     // actions showed memory with two names that is not yet volatile ('aliasRetry').
     std::map<uint32_t, uint32_t> calleeWalks;   // CalleeFrameWrites' results, for every probe of this request's passes (ShareWalks, A3-81)
+    std::map<uint32_t, uint32_t> calleeBelow;   // ...and each walked callee's storesBelow (A3-86 a), shared the same way
     auto runPass = [&](const CalleeAliases& callees, bool print, CalleeAliases* targets, bool mayRetry) {
         Enter(DecompilePhase::Init);
         std::ostringstream errors;
@@ -4572,7 +4669,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
             probe.SetTolerant();
             probe.SetLiterals(scan.literalWords, *snapshot);
             probe.SetCancel(cancel);   // the callee walk can be long for an adversarial callee (A3-74)
-            probe.ShareWalks(&calleeWalks);
+            probe.ShareWalks(&calleeWalks, &calleeBelow);
             CallEffects unused;
             probe.Run(unused);
             uint32_t from = 0;
@@ -4923,6 +5020,27 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         // reaches here with badbit set, and this says so if that ever stops being true.
         if (markup.bad()) throw std::bad_alloc();
         r.lines = LinesFromMarkup(markup.str(), *fd, arch.get(), &printed);
+        // A3-87 (closing A3-79): the engine prints a pointer into stack storage no local is mapped to -- a save slot a walk down
+        // reaches (A3-65's recorded limit) -- as the raw stack register `register0x0000003c` (BADSPACEBASE), which is no C a caller
+        // or the printed-C differential could compile (`'register0x0000003c' undeclared`). The value is right, but the text is not
+        // usable C and no local names the slot, so the decompiler cannot render this function: mark it unsupported and withhold the
+        // signature (its text names a raw register). This closes A3-79 (its withheld variant is the same raw name) and the lent
+        // variant A3-87, soundly -- never a lent signature, and never a `not-compilable` text offered as a decompilation.
+        {
+            bool rawRegister = false;
+            for (const Line& ln : r.lines)
+                if (ln.text.find("register0x") != std::string::npos) { rawRegister = true; break; }
+            // A3-87 (closing A3-79): if the function was about to be lent, withhold it -- never a lent signature with non-compilable
+            // text. A function already withheld for its own reason (A3-79's "reads vbr", A3-72's raw-register cases) keeps that
+            // reason. The function is not marked unsupported (the raw register is A3-65's accepted limit, no reason the decompiler
+            // cannot render the rest): the printed-C differential excuses this text class itself, rather than the decompiler
+            // declaring the whole function unsupported (which would make the generator's "no unsupported" check fail, A3-87 fix §7).
+            if (rawRegister && r.prototype.known)
+            {
+                r.prototype = Prototype();
+                r.prototypeWithheld = "its text names a raw stack register (no local is mapped to the storage a walk down reaches)";
+            }
+        }
         r.accesses = Accesses(*fd, printed, canonicalOf, flow);
         // How each flow access that is no longer a LOAD or STORE ended (patch 0017). The engine
         // keeps the records of the last generation of the function (a restart clears them with the
