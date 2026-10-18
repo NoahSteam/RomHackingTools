@@ -11323,6 +11323,39 @@ void TestArea2Round10()
         CHECK(Has(r.Text(), "0x7fffffff < param_1 && -1 < (int4)(param_1 + 0xaaaaaaab)"));
         CHECK(!Has(r.Text(), "1 < param_1 &&"));   // the meld that was [0,2) widened
     }
+    // The family: addv and subv against pool literals, T tested by bf or bt (or read by movt), the literal in the destination register or the source.
+    // Each agrees with the run for inputs on both sides of every boundary the literal makes (the overflow and the unsigned wrap of the sum).
+    {
+        static const uint32_t kLits[] = { 0xAAAAAAABu, 0x80000001u, 0xF0000000u, 0x55555555u, 0x7FFFFFFFu, 0xC0000000u, 0x40000000u, 0xFFFFFFFDu, 1u };   // not 0x80000000: `-0x80000000 - param_1` is right as the engine reads it (printed-C: narrow-c) and not in this evaluator, which does not wrap it
+        static const uint32_t kIn[] = { 0x60000000u, 0x80000000u, 0u, 0xFFFFFFFFu, 0x7FFFFFFFu, 0x55555555u, 0x55555556u, 0xAAAAAAABu, 0xC0000000u, 0x40000000u, 0x7FFFFFFEu, 0x80000001u, 1u, 2u };
+        std::vector<std::vector<uint32_t>> inputs;
+        for (uint32_t v : kIn) inputs.push_back({ v });
+        int n = 0;
+        for (uint32_t lit : kLits)
+            for (int form = 0; form < 4; ++form)
+                for (int tail = 0; tail < 3; ++tail)
+                {
+                    // form 0, 1: mov r4,r0 ; mov.l @(lit),r4 ; addv / subv r0,r4 (the literal in the destination, the input copied to r0)
+                    // form 2, 3: mov.l @(lit),r0 ; addv / subv r4,r0 (the input is the parameter itself)
+                    // then bf / bt over `mov #7,r1` after `mov #5,r1` and the result `mov r1,r0`, or movt r0
+                    const bool copy = form < 2;
+                    std::vector<uint16_t> w;
+                    if (copy) { w.push_back(0x6043); w.push_back(0xD404); w.push_back(form == 0 ? 0x340F : 0x340B); }
+                    else { w.push_back(0xD004); w.push_back(form == 2 ? 0x304F : 0x304B); }
+                    if (tail < 2) { w.push_back(0xE105); w.push_back(tail ? 0x8900 : 0x8B00); w.push_back(0xE107); w.push_back(0x6013); }
+                    else w.push_back(0x0029);
+                    w.push_back(0x000B); w.push_back(0x0009);
+                    if (w.size() % 2) w.push_back(0x0009);
+                    const size_t load = copy ? 1 : 0, pool = w.size();   // the pool follows, on a longword
+                    w.push_back(static_cast<uint16_t>(lit >> 16)); w.push_back(static_cast<uint16_t>(lit & 0xFFFF));
+                    w[load] = static_cast<uint16_t>((w[load] & 0xFF00) | ((2 * pool - ((2 * load + 4) & ~static_cast<size_t>(3))) / 4));
+                    DecompileResult r;
+                    const R8Outcome o = R8Check(d, "A2-64 family " + std::to_string(n++), w, inputs, "", {}, ++serial, 0x06009000u, &r);
+                    CHECK(r.status == DecompileStatus::Ok);
+                    CHECK(o.verdict == "agrees");
+                    if (o.verdict != "agrees") std::printf("A2-64 family %d (literal %08X, form %d, tail %d): %s %s\n%s\n", n - 1, lit, form, tail, o.verdict.c_str(), o.detail.c_str(), r.Text().c_str());
+                }
+    }
     {
         const std::vector<uint16_t> words = { 0x6043, 0xE4FD, 0x340F, 0xE105, 0x8B00, 0xE107, 0x6013, 0x000B, 0x0009, 0x0009 };
         DecompileResult r;
