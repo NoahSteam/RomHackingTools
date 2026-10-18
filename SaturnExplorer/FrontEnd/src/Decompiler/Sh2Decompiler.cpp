@@ -1316,7 +1316,10 @@ private:
         if (sp.kind == Value::Sp) Clobber(s, kAnything, origin::kMemory | origin::kStack, INT64_MIN, sp.v);
         else Clobber(s, kAnything, origin::kMemory | origin::kStack);
         // Its writes and what it lets out are this function's too.
-        Leak(s, leaked);
+        // (the callee's own stack addresses it lets out -- the kStack bit of its summary -- point below this function's r15 once it returns:
+        // free stack, not this frame. Only an address of ours it was handed, through our registers or memory, lets this frame out.)
+        mLeaks |= leaked;
+        if (map(e.leaks & ~origin::kStack) & origin::kStack) s.escaped = true;
         if (e.storesThrough & origin::kFrame)
         {
             // Above its r15: our frame from the call's r15 up, and our caller's.
