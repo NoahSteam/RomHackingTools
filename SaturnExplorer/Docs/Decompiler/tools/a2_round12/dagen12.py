@@ -1,0 +1,167 @@
+#!/usr/bin/env python3
+# Area 2 round 12 instrument. Register-only functions for the printed-C differential, on the carry / overflow / extension rules that rounds
+# 8 to 11 had not drawn (loads dagen11.py and through it dagen10.py; their helpers are reused):
+#   40 ovfsign   addv / subv / addc / subc of r4 with a literal or a register, the overflow T read by movt, and the sign of the SUM tested on
+#                its own (cmp/pz, cmp/pl, shll, shar) and combined with the overflow: V == sign, V != sign (RuleScarry, RuleSborrow),
+#                with the extreme literals (0x80000000, 0x7FFFFFFF, 0, 1, -1) on either side
+#   41 fixmul    fixed-point multiplies: dmuls.l / dmulu.l, then the middle word by xtrct (the product >> 16), >> 8, >> 15, >> 31, >> 32,
+#                the product compared, the high word extended (RulePiece2Zext, RulePiece2Sext, RuleConcatShift, RuleZextEliminate)
+#   42 widecmp   a 64-bit value in two registers (addc / subc / negc / mach:macl) compared as 64 bits, by cmp/hi, cmp/hs, cmp/gt, cmp/ge, cmp/eq
+#                of the high words and the low words (the carry and borrow rules)
+#   43 sameval   a value computed twice or compared with itself (RuleTrivialArith): x ^ x, x == x, (x+y) == (x+y), (x*c) != (x*c), tst r,r
+#   44 shiftvar  a variable-count shift, count from a register masked or not, the count a literal in a register (RuleShift2Mult, shld, shad)
+# usage: dagen12.py <first seed> <count> [family 40..44]   -> one function per seed, ";" joined (SE_GENERATED_PRINTEDC_WORDS)
+#        dagen12.py extras <first seed> <count> <family>   -> the comma-joined hex list for SE_GENERATED_PRINTEDC_EXTRA
+import importlib.util, os, random, sys
+
+here = os.path.dirname(os.path.abspath(__file__))
+spec = importlib.util.spec_from_file_location("dagen11", os.path.join(here, "..", "a2_round11", "dagen11.py"))
+d11 = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(d11)
+globals().update({k: v for k, v in vars(d11).items() if not k.startswith('__')})
+
+EXT = [0x80000000, 0x7FFFFFFF, 0, 1, 0xFFFFFFFF, 0x80000001, 0xFFFFFFFE, 0x40000000, 0xC0000000, 2, 0x100, 0xFFFF, 0x10000, 0xFFFF0000, 0x7FFF, 0x8000]
+
+def addv(m, n): return 0x300F | n << 8 | m << 4
+def subv(m, n): return 0x300B | n << 8 | m << 4
+def addc(m, n): return 0x300E | n << 8 | m << 4
+def subc(m, n): return 0x300A | n << 8 | m << 4
+def negc(m, n): return 0x600A | n << 8 | m << 4
+CLRT, SETT = 0x0008, 0x0018
+def movt(d): return 0x0029 | d << 8
+def cmp_pz(n): return 0x4011 | n << 8
+def cmp_pl(n): return 0x4015 | n << 8
+def cmp_eq(m, n): return 0x3000 | n << 8 | m << 4
+def cmp_hi(m, n): return 0x3006 | n << 8 | m << 4
+def cmp_hs(m, n): return 0x3002 | n << 8 | m << 4
+def cmp_gt(m, n): return 0x3007 | n << 8 | m << 4
+def cmp_ge(m, n): return 0x3003 | n << 8 | m << 4
+def xor(m, n): return 0x200A | n << 8 | m << 4
+def and_(m, n): return 0x2009 | n << 8 | m << 4
+def or_(m, n): return 0x200B | n << 8 | m << 4
+def xtrct(m, n): return 0x200D | n << 8 | m << 4
+def neg(m, n): return 0x600B | n << 8 | m << 4
+
+def fam_ovfsign(r, f):
+    """the sum of an operand and a literal (or register), the overflow of it and the sign of it"""
+    L = r.choice(EXT) if r.random() < 0.8 else r.getrandbits(32)
+    op = r.choice([addv, addv, subv, addc, subc])
+    lit_in_n = r.random() < 0.5            # the literal is the register added to (Rn) or the one added (Rm)
+    f.add(mov(0, 4))                       # r0 = x
+    f.lit(1, L)
+    if op in (addc, subc): f.add(CLRT if r.random() < 0.5 else SETT)
+    if lit_in_n: f.add(mov(0, 1), mov(1, 4)); f.add(op(1, 0))      # r0 = L (+/-) x, written op(Rm = x, Rn = L)
+    else: f.add(op(1, 0))                                           # r0 = x (+/-) L
+    f.add(movt(2))                          # r2 = V
+    sk = r.randrange(0, 5)
+    if sk == 0: f.add(cmp_pz(0), movt(3))                      # r3 = sum >= 0
+    elif sk == 1: f.add(cmp_pl(0), movt(3))                    # r3 = sum > 0
+    elif sk == 2: f.add(mov(3, 0), SHLL | 3 << 8, 0x0029 | 3 << 8)   # r3 = sign of sum (the shll carries it to T)
+    elif sk == 3: f.add(mov(3, 0)); shr_arith(f, 3, 31); f.add(0x2008 | 3 << 8 | 3 << 4, movt(3))   # r3 = (sum >> 31) == 0
+    else: f.add(mov(3, 0)); shr_logical(f, 3, 31)           # r3 = sign bit
+    form = r.randrange(0, 6)
+    if form == 0: f.add(cmp_eq(2, 3), movt(0))                  # V == r3
+    elif form == 1: f.add(xor(2, 3), mov(0, 3))                 # V ^ r3
+    elif form == 2: f.add(cmp_eq(2, 3)); f.br('bt', 'ye'); f.add(movi(0, r.choice([0, 5]))); f.br('bra', 'en'); f.add(0x0009); f.label('ye'); f.add(movi(0, r.choice([1, 9]))); f.label('en')
+    elif form == 3: f.add(or_(2, 3), mov(0, 3))                 # V | r3
+    elif form == 4: f.add(and_(2, 3), mov(0, 3))
+    else: f.add(mov(0, 2))   # V alone
+
+def fam_fixmul(r, f):
+    signed = r.random() < 0.6
+    a = 4
+    if r.random() < 0.3: f.add(mov(1, 5)); lit_or_imm(f, r, 1, r.choice(EXT + [0x10000, 0x8000, 0x4000, 0xB504, 0x1999A, 0x6487E])); b = 1
+    else: b = 5
+    f.add((dmuls if signed else dmulu)(b, a))
+    f.add(stsmach(1), stsmacl(0))
+    k = r.randrange(0, 9)
+    if k == 0: f.add(xtrct(1, 0))                          # >> 16
+    elif k == 1: f.add(xtrct(1, 0)); shr_arith(f, 0, 7) if signed else shr_logical(f, 0, 7)   # >> 23
+    elif k == 2: f.add(xtrct(1, 0)); shl(f, 0, 1)         # >> 15 (low bit lost)
+    elif k == 3: f.add(mov(0, 1))                          # high word
+    elif k == 4: f.add(mov(0, 1)); (shr_arith if signed else shr_logical)(f, 0, r.choice([1, 8, 16, 31]))
+    elif k == 5:                                           # high word compared with 0 / -1 / sign of low
+        f.add(cmp_pz(1) if signed else 0x2008 | 1 << 8 | 1 << 4, movt(0))
+    elif k == 6:                                           # 64-bit result tested against a literal in both halves
+        lit_or_imm(f, r, 2, r.choice(EXT)); f.add(cmp_eq(2, 1), movt(3)); lit_or_imm(f, r, 2, r.choice(EXT)); f.add(cmp_eq(2, 0), movt(0), and_(3, 0))
+    elif k == 7:                                           # does the product fit 32 bits: high == low >> 31
+        if signed: f.add(mov(2, 0)); shr_arith(f, 2, 31); f.add(cmp_eq(1, 2), movt(0))
+        else: f.add(0x2008 | 1 << 8 | 1 << 4, movt(0))
+    else: f.add(xtrct(1, 0), extuw(0, 0) if r.random() < 0.5 else extsw(0, 0))
+
+def fam_widecmp(r, f):
+    """a 64-bit value in r1:r0 built from r4/r5 and literals by carries, then ordered against a 64-bit literal"""
+    f.add(mov(0, 4), mov(1, 5))
+    L0, L1 = r.choice(EXT), r.choice(EXT)
+    f.lit(2, L0); f.lit(3, L1)
+    k = r.randrange(0, 4)
+    if k == 0: f.add(CLRT, addc(2, 0), addc(3, 1))
+    elif k == 1: f.add(CLRT, subc(2, 0), subc(3, 1))
+    elif k == 2: f.add(CLRT, negc(0, 0), negc(1, 1))
+    else: f.add(CLRT, addc(0, 0), addc(1, 1))              # shifted left by one as 64 bits
+    # r1:r0 vs L3:L2 (reload the literals)
+    f.lit(2, r.choice(EXT)); f.lit(3, r.choice(EXT))
+    cmpk = r.choice([cmp_hi, cmp_hs, cmp_gt, cmp_ge])
+    f.add(cmpk(3, 1), movt(5))                              # high words ordered
+    f.add(cmp_eq(3, 1), movt(6))                            # high words equal
+    f.add(cmp_hi(2, 0), movt(7))                            # low words ordered (unsigned)
+    form = r.randrange(0, 3)
+    if form == 0: f.add(and_(6, 7), or_(7, 5), mov(0, 7))   # high > || (high == && low >)
+    elif form == 1: f.add(mov(0, 5), xor(6, 0))
+    else:
+        f.add(cmp_eq(3, 1)); f.br('bf', 'hi'); f.add(mov(0, 7)); f.br('bra', 'end'); f.add(0x0009)
+        f.label('hi'); f.add(mov(0, 5)); f.label('end')
+
+def fam_sameval(r, f):
+    k = r.randrange(0, 8)
+    f.add(mov(0, 4), mov(1, 5))
+    if k == 0: f.add(mov(2, 4), xor(4, 2), mov(0, 2))      # x ^ x
+    elif k == 1: f.add(mov(2, 4), add(2, 5), mov(3, 4), add(3, 5), cmp_eq(2, 3), movt(0))     # (x+y) == (x+y)
+    elif k == 2: f.lit(2, r.choice(EXT)); f.add(0x0007 | 4 << 8 | 2 << 4, stsmacl(3), 0x0007 | 4 << 8 | 2 << 4, stsmacl(0), cmp_eq(3, 0), movt(0))   # (x*c) == (x*c)
+    elif k == 3: f.add(extub(2, 4), extub(3, 4), cmp_hi(3, 2), movt(0))                         # (x&ff) u< (x&ff)
+    elif k == 4: f.add(extsb(2, 4), extsb(3, 4), cmp_ge(3, 2), movt(0))
+    elif k == 5: f.add(mov(2, 4)); shl(f, 2, 3); f.add(mov(3, 4)); shl(f, 3, 3); f.add(cmp_gt(3, 2), movt(0))
+    elif k == 6: f.add(and_(5, 4), mov(0, 4), mov(2, 4), and_(5, 2), or_(2, 0))                 # x & y | x & y
+    else: f.add(mov(2, 4), neg(2, 2), mov(3, 4), neg(3, 3), cmp_hs(3, 2), movt(0))
+
+def fam_shiftvar(r, f):
+    """shld / shad with the count from a register: masked (and #31), literal, or the raw r5. The SH-2 count is signed: negative shifts right"""
+    sel = r.randrange(0, 4)
+    f.add(mov(0, 4))
+    if sel == 0: f.add(mov(1, 5))
+    elif sel == 1: f.lit(1, r.choice([0, 1, 2, 31, 32, 0xFFFFFFFF, 0xFFFFFFE0, 0xFFFFFFE1, 0x80000000, 0x80000001, 0x7FFFFFFF, 0x100, 0xFFFFFF1F, 33, 0x20, 0xFFFFFFFF]))
+    elif sel == 2: f.add(mov(1, 5)); f.lit(2, 0x1F); f.add(and_(2, 1))
+    else: f.add(mov(1, 5)); f.lit(2, 0x8000001F); f.add(and_(2, 1))
+    f.add(r.choice([0x400C, 0x400D]) | 0 << 8 | 1 << 4)      # shad r1,r0 / shld r1,r0
+    if r.random() < 0.4: f.add(r.choice([0x4009, 0x4008, 0x4001, 0x4021]) | 0 << 8)
+
+FAMS12 = {40: fam_ovfsign, 41: fam_fixmul, 42: fam_widecmp, 43: fam_sameval, 44: fam_shiftvar}
+
+def build(seed, fam=None, want_fn=False):
+    r = random.Random(seed * 104729 + 12)
+    f = Fn(r)
+    f.d_hint = None
+    fm = FAMS12[fam] if fam is not None else FAMS12[r.choice(sorted(FAMS12))]
+    fm(r, f)
+    f.add(0x000B, 0x0009)
+    if want_fn: return f
+    return finish(f)
+
+def extras(first, count, fam):
+    vals = set()
+    for s in range(first, first + count):
+        f = build(s, fam, want_fn=True)
+        for v in lits_of(f):
+            for dv in (-2, -1, 0, 1, 2): vals.add((v + dv) & M32)
+            vals.add((-v) & M32)
+    return sorted(vals)
+
+if __name__ == "__main__":
+    if sys.argv[1] == 'extras':
+        first, count, fam = int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4])
+        print(",".join("%X" % v for v in extras(first, count, fam)))
+    else:
+        first, count = int(sys.argv[1]), int(sys.argv[2])
+        fam = int(sys.argv[3]) if len(sys.argv) > 3 else None
+        out = [g for g in (build(s, fam) for s in range(first, first + count)) if g]
+        print(";".join(out))
