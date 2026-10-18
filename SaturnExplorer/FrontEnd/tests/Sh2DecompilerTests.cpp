@@ -11150,6 +11150,87 @@ void TestArea2Round9()
     }
 }
 
+// ===== A3-65 (P1): a copy of r15 walked down by pre-decrement stores ===========================================================================
+// `*--p = v` over a local array compiles to a copy of r15 (or of the frame pointer r14), moved to the top of the array and walked down by
+// `mov.l Rm,@-Rn`. The engine's alias analysis (AliasChecker, upstream's) takes a pointer into the frame to reach only what lies at or above its base,
+// as an index does, and the guard of an indexed store (LoadGuard::establishRange) covered only the few iterations its partial analysis ran or what
+// lies above the base: the locals below the walk's start were taken for unaliased, their INDIRECTs at the walk's stores were collapsed, and a read
+// of one after the loop printed the value it had before it (`return 5;`, the code returns 1), with the signature lent and no note. A walk from the
+// entry r15 itself printed as the stack register (`register0x0000003c = (BADSPACEBASE *)((int4)register0x0000003c + -4);`). Patch 0056: such a base
+// aliases what lies below it, the guard covers the stack below a pointer that is stepped down, the join of the entry r15 is a pointer to the frame
+// (and no reference to a stack parameter). Each fixture by value (the pseudocode evaluated against the code run on the emulator), the walk's store
+// printed, and no stack register in the text; the printed-C differential holds the same fixtures compiled (Sh2GeneratedTests.cpp, "A3-65").
+void TestA365WalkDown()
+{
+    Sh2Decompiler d(gConfig);
+    uint64_t serial = 36500;
+    // 'walkStore' is the store instruction of the walk (its offset in words); 'want' the return statement, which reads the local the walk wrote last
+    // (the value of every fixture is held by the printed-C differential, compiled and run: the evaluator here has no loops); 'raw' whether the text
+    // may name the stack register (a pointer into the save area of a pushed register has no local to be named after: upstream prints those raw,
+    // `(int4 *)((int4)register0x0000003c + -4)`, here and at the head alike, with the right value).
+    auto check = [&](const char* name, std::vector<uint16_t> words, size_t walkStore, bool raw, const char* want) {
+        const CallFixture f = { name, 0x06009000u, std::move(words) };
+        auto snap = CallSnapshot(f, ++serial);
+        const DecompileResult r = d.Decompile(snap, Request(f.base));
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(Has(r.Text(), want));
+        CHECK(!Has(r.Text(), "return 5;"));   // WRONG at the head: the value stored before the walk
+        if (!raw) CHECK(!Has(r.Text(), "register0x") && !Has(r.Text(), "BADSPACEBASE"));
+        CHECK(!std::regex_search(r.Text(), std::regex("\\[[0-9]{3,}\\];")));   // no array of the 64 KiB guessed below the walk (LoadGuard::guessedBelow)
+        bool printed = false;
+        for (const MemoryAccess& m : r.accesses) printed |= m.insn == f.base + 2 * static_cast<uint32_t>(walkStore) && m.printed > 0;
+        CHECK(printed);
+        return r;
+    };
+    // The leaf of the ledger row: add #-8,r15 ; mov #5,r0 ; mov.l r0,@r15 ; mov r15,r2 ; add #8,r2 ; mov #2,r1 ; L: mov.l r1,@-r2 ; dt r1 ; bf L ;
+    // mov.l @r15,r0 ; rts ; add #8,r15. The code returns 1.
+    {
+        const DecompileResult r = check("A3-65 leaf: r15 + 8 walked down by longwords",
+                                        { 0x7FF8, 0xE005, 0x2F02, 0x62F3, 0x7208, 0xE102, 0x2216, 0x4110, 0x8BFC, 0x60F2, 0x000B, 0x7F08 }, 6, false, "return xStack_8;");
+        CHECK(r.prototype.known);   // right, and so lent
+    }
+    check("A3-65 walked down by bytes", { 0x7FF8, 0xE005, 0x2F00, 0x62F3, 0x7208, 0xE108, 0x2214, 0x4110, 0x8BFC, 0x60F0, 0x000B, 0x7F08 }, 6, false, "return (int4)cStack_8;");
+    check("A3-65 walked down by words", { 0x7FF8, 0xE005, 0x2F01, 0x62F3, 0x7208, 0xE104, 0x2215, 0x4110, 0x8BFC, 0x60F1, 0x000B, 0x7F08 }, 6, false, "return (int4)iStack_8;");
+    // from r15 + N: the walk starts inside the frame (4, 8 of 12, 12 of 16)
+    check("A3-65 from r15 + 4", { 0x7FF8, 0xE005, 0x2F02, 0x62F3, 0x7204, 0xE101, 0x2216, 0x4110, 0x8BFC, 0x60F2, 0x000B, 0x7F08 }, 6, false, "return xStack_8;");
+    check("A3-65 from r15 + 8 of a 12-byte frame", { 0x7FF4, 0xE005, 0x2F02, 0x62F3, 0x7208, 0xE102, 0x2216, 0x4110, 0x8BFC, 0x60F2, 0x000B, 0x7F0C }, 6, false, "return xStack_c;");
+    check("A3-65 from r15 + 12 of a 16-byte frame", { 0x7FF0, 0xE005, 0x2F02, 0x62F3, 0x720C, 0xE103, 0x2216, 0x4110, 0x8BFC, 0x60F2, 0x000B, 0x7F10 }, 6, false, "return xStack_10;");
+    // ...a deeper walk than the partial analysis's three iterations: eight longwords from the top of a 32-byte frame, the lowest read back
+    check("A3-65 eight longwords down a 32-byte frame", { 0x7FE0, 0xE005, 0x2F02, 0x62F3, 0x7220, 0xE108, 0x2216, 0x4110, 0x8BFC, 0x60F2, 0x000B, 0x7F20 }, 6, false, "return xStack_20;");
+    // from the frame pointer r14: mov.l r14,@-r15 ; add #-8,r15 ; mov r15,r14 ; mov #5,r0 ; mov.l r0,@r14 ; mov r14,r2 ; add #8,r2 ; mov #2,r1 ;
+    // L: mov.l r1,@-r2 ; dt r1 ; bf L ; mov.l @r14,r0 ; mov r14,r15 ; add #8,r15 ; rts ; mov.l @r15+,r14. The walk starts at the word r14 was pushed
+    // to, which is no local (raw, see above).
+    check("A3-65 from the frame pointer r14", { 0x2FE6, 0x7FF8, 0x6EF3, 0xE005, 0x2E02, 0x62E3, 0x7208, 0xE102, 0x2216, 0x4110, 0x8BFC, 0x60E2, 0x6FE3, 0x7F08, 0x000B, 0x6EF6 },
+          8, true, "return xStack_c;");
+    // ...and from r14 + 8 of a 12-byte frame, inside it: the pointer is a local's address
+    check("A3-65 from the frame pointer r14, inside the frame", { 0x2FE6, 0x7FF4, 0x6EF3, 0xE005, 0x2E02, 0x62E3, 0x7208, 0xE102, 0x2216, 0x4110, 0x8BFC, 0x60E2, 0x6FE3, 0x7F0C, 0x000B, 0x6EF6 },
+          8, false, "return xStack_10;");
+    // a loop that writes, then a loop that reads back up (`mov.l @r2+,r4`): 2 + 1
+    check("A3-65 walked down, then read back up", { 0x7FF8, 0xE005, 0x2F02, 0x62F3, 0x7208, 0xE102, 0x2216, 0x4110, 0x8BFC, 0xE102, 0xE300, 0x6426, 0x334C, 0x4110, 0x8BFB, 0x6033, 0x000B, 0x7F08 },
+          6, false, "return iVar3;");
+    // written by stores at constant offsets (5 and 7), read by a walk down (`add #-4,r2 ; mov.l @r2,r4`): the stores are kept, the walk reads them
+    {
+        const DecompileResult r = check("A3-65 written, then read down",
+                                        { 0x7FF8, 0xE005, 0x2F02, 0xE007, 0x1F01, 0x62F3, 0x7208, 0xE102, 0xE300, 0x72FC, 0x6422, 0x334C, 0x4110, 0x8BFA, 0x6033, 0x000B, 0x7F08 },
+                                        10, false, "return iVar3;");
+        CHECK(Has(r.Text(), "= 5;") && Has(r.Text(), "= 7;"));
+    }
+    // over the save slot of a register its pop freed (`mov.l r13,@-r15 ; mov.l @r15+,r13` before the frame, the shape of seed 901303's run-on): the
+    // slot was storage no local is mapped to, one variable with r13, and the text returned `unaff_r13`
+    check("A3-65 over a freed save slot", { 0x2FD6, 0x6DF6, 0x7FF8, 0x62F3, 0x7208, 0xE102, 0x2216, 0x4110, 0x8BFC, 0x50F1, 0x000B, 0x7F08 }, 6, false, "return xStack_4;");
+    // The controls: the same walked up (`mov.l r1,@r2 ; add #4,r2`), which the engine always had right: the local the walk wrote first.
+    check("A3-65 control: walked up by longwords", { 0x7FF8, 0xE005, 0x2F02, 0x62F3, 0xE102, 0x2212, 0x7204, 0x4110, 0x8BFB, 0x60F2, 0x000B, 0x7F08 }, 5, false, "return aiStack_8[0];");
+    check("A3-65 control: walked up by bytes", { 0x7FF8, 0xE005, 0x2F00, 0x62F3, 0xE108, 0x2210, 0x7201, 0x4110, 0x8BFB, 0x60F0, 0x000B, 0x7F08 }, 5, false, "return (int4)acStack_8[0];");
+    // A walk down from the entry r15 reads no stack argument: the signature has none (the join's pointer is no reference to one).
+    {
+        const DecompileResult r = check("A3-65 a walk down from the entry r15 has no stack argument",
+                                        { 0x7FF8, 0x6073, 0x81F0, 0x64F3, 0x7408, 0xE102, 0x2455, 0x4110, 0x8BFC, 0xE102, 0xE200, 0x6645, 0x326C, 0x4110, 0x8BFB, 0x85F3, 0x302C, 0x7F08, 0x000B, 0x0009 },
+                                        6, false, "return iStack_2 + iVar3;");
+        CHECK(!Has(r.Text(), "param_3") && !Has(r.Text(), "in_stack"));
+    }
+}
+
 void TestFetchAndDataRefusals()
 {
     Sh2Decompiler d(gConfig);
@@ -11524,6 +11605,7 @@ int main(int argc, char** argv)
         RUN(TestArea3Round9Fix());
         RUN(TestArea2Round8());
         RUN(TestArea2Round9());
+        RUN(TestA365WalkDown());
         RUN(TestFetchAndDataRefusals());
         RUN(TestAllocationFailureIsReported());
         RUN(TestFunctionFreesActiveOutput());

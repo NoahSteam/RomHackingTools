@@ -3168,6 +3168,60 @@ std::vector<std::pair<size_t, size_t>> BackEdgeSpans(const std::vector<Line>& li
     return spans;
 }
 
+// The operands of the dereferences in a statement's text: what follows a unary `*` (up to the end of its operand: a `,`, a `;`, a `)` that closes
+// nothing, ` = `), and the name before a `[` (A5-85). A `*` is unary at the start, after an operator or an opening parenthesis, or after a cast
+// (`(int4)*p`, `(xunknown4 *)`); after a name, a number or another closing parenthesis it multiplies. Empty when the text dereferences nothing.
+std::string DerefOperands(const std::string& text)
+{
+    static const std::regex castRe("^\\s*(?:[A-Za-z_]\\w*\\s*)+\\*+\\s*$|^\\s*(?:u?int\\d|xunknown\\d|undefined\\d?|char|uchar|short|ushort|bool|byte|word|dword|qword|long|ulong|float\\d*|code|void|unkbyte\\d+|unkuint\\d+|unkint\\d+)\\s*$");
+    std::string out;
+    for (size_t i = 0; i < text.size(); ++i)
+    {
+        if (text[i] == '[')
+        {
+            size_t e = i;
+            while (e > 0 && text[e - 1] == ' ') --e;
+            size_t b = e;
+            while (b > 0 && (std::isalnum(static_cast<unsigned char>(text[b - 1])) || text[b - 1] == '_')) --b;
+            if (b < e) out += text.substr(b, e - b) + " ; ";
+            continue;
+        }
+        if (text[i] != '*') continue;
+        size_t k = i;
+        while (k > 0 && text[k - 1] == ' ') --k;
+        bool unary = k == 0;
+        if (!unary)
+        {
+            const char p = text[k - 1];
+            if (p == ')')
+            {
+                int depth = 0;
+                size_t open = std::string::npos;
+                for (size_t q = k; q-- > 0;)
+                {
+                    if (text[q] == ')') ++depth;
+                    else if (text[q] == '(' && --depth == 0) { open = q; break; }
+                }
+                unary = open != std::string::npos && std::regex_match(text.substr(open + 1, k - 1 - open - 1), castRe);
+            }
+            else unary = !(std::isalnum(static_cast<unsigned char>(p)) || p == '_' || p == ']');
+        }
+        if (!unary) continue;
+        int depth = 0;
+        size_t j = i + 1;
+        for (; j < text.size(); ++j)
+        {
+            const char c = text[j];
+            if (c == '(' || c == '[') ++depth;
+            else if (c == ')' || c == ']') { if (depth == 0) break; --depth; }
+            else if (depth == 0 && (c == ',' || c == ';' || text.compare(j, 3, " = ") == 0)) break;
+        }
+        const std::string operand = text.substr(i + 1, j - i - 1);
+        if (operand.find_first_not_of(" *") != std::string::npos) out += operand + " ; ";
+    }
+    return out;
+}
+
 // The read at 'insn' goes through a pointer that the output derives from a hardware base: the statement holding it names one, or a
 // variable in it is assigned one, through assignments of variables to variables that can reach it (A5-82: an assignment further down the text,
 // outside every loop and backward goto the statement is in, is made after the read on every path, however it may name `&REG`). 'unrelated' is set when it does not but the output
@@ -3223,39 +3277,108 @@ bool PointerPrintsFromHardware(const DecompileResult& r, uint32_t insn, const st
             if (sp.first <= useLine && assignLine <= sp.second) return true;
         return false;
     };
-    std::set<std::pair<std::string, size_t>> seen;
-    std::vector<std::pair<std::string, size_t>> todo;   // (variable, the line of the statement that reads it)
-    for (const auto& statement : statements)
-    {
-        std::string text = statement.first;
-        const size_t b = text.find_first_not_of(' ');
-        size_t e = b == std::string::npos ? 0 : b;
-        while (e < text.size() && (std::isalnum(static_cast<unsigned char>(text[e])) || text[e] == '_')) ++e;
-        if (b != std::string::npos && e > b && text.compare(e, 3, " = ") == 0) text = text.substr(e + 3);   // (not the variable assigned to)
-        text = WithoutCalls(text);
-        if (NamesHardwareBase(text, reached, tooFar)) return true;
-        for (const std::string& id : Identifiers(text)) todo.emplace_back(id, statement.second);
-    }
-    while (!todo.empty() && seen.size() < 256)
-    {
-        const std::pair<std::string, size_t> item = todo.back();
-        todo.pop_back();
-        if (!seen.insert(item).second) continue;
-        for (const Assign& a : assigns)
+    // (A5-85) When the statement dereferences something, the pointer is in the operand of the dereference: `return CONCAT44((int4)*param_1,xVar1);`
+    // reads through param_1, and xVar1, the other half of the value returned, was assigned a number that is an on-chip address within reach of the
+    // one the run read (0xffffffd3, 41 bytes from 0xFFFFFFFC). The derivation is followed from the operands first; one that names a base only
+    // outside them is counted as not the pointer.
+    auto derive = [&](bool operandsOnly, bool& narrowed) {
+        std::set<std::pair<std::string, size_t>> seen;
+        std::vector<std::pair<std::string, size_t>> todo;   // (variable, the line of the statement that reads it)
+        for (const auto& statement : statements)
         {
-            if (a.name != item.first) continue;
-            const std::string rhs = WithoutCalls(a.rhs);
-            if (!reaches(a.line, item.second))
+            std::string text = statement.first;
+            const size_t b = text.find_first_not_of(' ');
+            size_t e = b == std::string::npos ? 0 : b;
+            while (e < text.size() && (std::isalnum(static_cast<unsigned char>(text[e])) || text[e] == '_')) ++e;
+            if (b != std::string::npos && e > b && text.compare(e, 3, " = ") == 0) text = text.substr(e + 3);   // (not the variable assigned to)
+            text = WithoutCalls(text);
+            if (operandsOnly)
             {
-                if (NamesHardwareBase(rhs, reached, tooFar)) tooFar = true;   // (named, but made after the read: counted as not the pointer)
-                continue;
+                // (the read's own tokens hold no parentheses or casts of other instructions, so the dereferences are found in the whole line,
+                // and the operands kept are those that name something of the read's own tokens)
+                const std::string all = DerefOperands(r.lines[statement.second].text);
+                std::set<std::string> own;
+                for (const std::string& id : Identifiers(text)) own.insert(id);
+                std::string ops;
+                size_t from = 0;
+                while (from < all.size())
+                {
+                    const size_t to = all.find(" ; ", from);
+                    const std::string one = all.substr(from, to == std::string::npos ? std::string::npos : to - from);
+                    bool mine = false;
+                    for (const std::string& id : Identifiers(one)) mine |= own.count(id) != 0;
+                    if (mine) ops += one + " ; ";
+                    if (to == std::string::npos) break;
+                    from = to + 3;
+                }
+                if (!ops.empty())
+                {
+                    text = ops;
+                    narrowed = true;
+                }
             }
-            if (NamesHardwareBase(rhs, reached, tooFar)) return true;
-            for (const std::string& q : Identifiers(rhs)) todo.emplace_back(q, a.line);
+            if (NamesHardwareBase(text, reached, tooFar)) return true;
+            for (const std::string& id : Identifiers(text)) todo.emplace_back(id, statement.second);
         }
+        while (!todo.empty() && seen.size() < 256)
+        {
+            const std::pair<std::string, size_t> item = todo.back();
+            todo.pop_back();
+            if (!seen.insert(item).second) continue;
+            for (const Assign& a : assigns)
+            {
+                if (a.name != item.first) continue;
+                const std::string rhs = WithoutCalls(a.rhs);
+                if (!reaches(a.line, item.second))
+                {
+                    if (NamesHardwareBase(rhs, reached, tooFar)) tooFar = true;   // (named, but made after the read: counted as not the pointer)
+                    continue;
+                }
+                if (NamesHardwareBase(rhs, reached, tooFar)) return true;
+                for (const std::string& q : Identifiers(rhs)) todo.emplace_back(q, a.line);
+            }
+        }
+        return false;
+    };
+    bool narrowed = false;
+    if (derive(true, narrowed)) return true;
+    if (narrowed)
+    {
+        bool again = false;
+        if (derive(false, again)) tooFar = true;   // (named outside the dereference: not the pointer)
     }
     unrelated = elsewhere || tooFar;
     return false;
+}
+
+// The text without the saves of a register's entry value into a stack local made before the first call (`xStack_c = unaff_r13;`, a push): the
+// engine shows a save slot as a local when a pointer stepped down may reach it (patch 0056, A3-65: seed 901303 runs on after its pops and walks
+// over the words they freed), and the save reads the register before any call can change it. A read of the local after the call is a read of the
+// local; one of the register after a call still prints `unaff_r13` elsewhere and is found.
+bool WholeWord(const std::string& text, const std::string& word);
+std::string SavesBeforeCallsDropped(const std::string& text, const char* reg)
+{
+    const std::regex save("^\\s*_?[A-Za-z]*Stack_[0-9a-f]+ = unaff_" + std::string(reg) + ";\\s*$");
+    static const std::regex call("\\bfunc_0x[0-9a-fA-F]+\\s*\\(");
+    std::istringstream in(text);
+    std::string out, line;
+    bool body = false, called = false;
+    while (std::getline(in, line))
+    {
+        if (!body)
+        {
+            body = line.compare(0, 1, "{") == 0;
+            out += line + "\n";
+            continue;
+        }
+        if (std::regex_search(line, call)) called = true;
+        if (!called && std::regex_match(line, save)) continue;
+        out += line + "\n";
+    }
+    // ...and then the register's declaration, if nothing else names it
+    const std::regex decl("(^|\\n)\\s*\\w+ \\**unaff_" + std::string(reg) + ";\\s*(\\n|$)");
+    const std::string withoutDecl = std::regex_replace(out, decl, "$1", std::regex_constants::format_first_only);
+    return WholeWord(withoutDecl, std::string("unaff_") + reg) ? out : withoutDecl;
 }
 
 // The output says, on this instruction, that its access is missing because the code around it was
@@ -5051,7 +5174,7 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                 }
                 if (!changed) continue;
                 count("lent.changed.checked");
-                if (WholeWord(text, std::string("unaff_") + k.name) || WholeWord(text, std::string("in_") + k.name))
+                if (WholeWord(SavesBeforeCallsDropped(text, k.name), std::string("unaff_") + k.name) || WholeWord(text, std::string("in_") + k.name))
                     add(std::string("kept-read:") + k.name, std::string("a function it calls was lent a signature that changes ") + k.name +
                                                                 ", and the text reads " + k.name + " as the value it had on entry");
             }
@@ -6204,6 +6327,127 @@ RegFn GenRegFn(uint64_t seed, int k)
     return f;
 }
 
+// A local array filled from the top down (A3-65): `*--p = v` over a frame, which compiles to a copy of r15 walked down by `mov.l Rm,@-Rn`.
+// The engine took a pointer into the frame to reach only what lies at or above its base, so a local the walk wrote below it kept the value it
+// had before the loop (`return 5;` where the code returns 1), and a walk from the entry r15 itself printed as the stack register
+// (`register0x0000003c`, `BADSPACEBASE *`). The item: allocate a frame of F bytes, store into some of its slots at the width W of the walk,
+// copy r15 (or r15 + N) into a pointer, walk it down a counted number of slots storing a value (the counter, or a register stepped each pass),
+// sometimes read the slots back up with `mov @Rp+` and sum them, read one slot back into r0, release the frame. A quarter of the walks go up
+// instead (`mov Rm,@Rp ; add #W,Rp`, the control the engine always had right). Every slot read was written first, at the width it is read, so
+// the run and the text agree on a little-endian host as well (the printed-C harness maps the frame onto memory: frame mode, CheckPrintedC).
+RegItem MakeWalkItem(Rng& rng)
+{
+    RegItem it;
+    static const int kWidths[3] = { 1, 2, 4 };
+    const int w = kWidths[rng.Below(3)];
+    const int sz = w == 1 ? 0 : w == 2 ? 1 : 2;
+    const int frame = w == 4 ? 8 + 4 * static_cast<int>(rng.Below(5)) : 8 + 4 * static_cast<int>(rng.Below(3));   // 8-24 / 8-16 bytes
+    const int slots = frame / w;
+    const bool up = rng.Chance(25);
+    // three distinct registers of r1-r7: the pointer, the counter, the value stored (the counter itself a third of the time)
+    uint32_t regs[7] = { 1, 2, 3, 4, 5, 6, 7 };
+    for (int i = 6; i > 0; --i) std::swap(regs[i], regs[rng.Below(static_cast<uint32_t>(i + 1))]);
+    const uint32_t p = regs[0], c = regs[1];
+    const uint32_t v = rng.Chance(33) ? c : regs[2];
+    const bool stepValue = v != c && rng.Chance(50);
+    int start, count;   // the slot the pointer starts at (in units of w from r15), how many slots the loop writes
+    if (up)
+    {
+        start = static_cast<int>(rng.Below(static_cast<uint32_t>(slots)));
+        count = 1 + static_cast<int>(rng.Below(static_cast<uint32_t>(slots - start)));
+    }
+    else
+    {
+        start = 1 + static_cast<int>(rng.Below(static_cast<uint32_t>(slots)));   // up to the frame's top: the entry r15
+        count = 1 + static_cast<int>(rng.Below(static_cast<uint32_t>(start)));
+    }
+    const int lowest = up ? start : start - count, highest = up ? start + count - 1 : start - 1;   // the slots the loop writes
+    const int back = static_cast<int>(rng.Below(static_cast<uint32_t>(slots)));                    // the slot read back into r0
+    it.shape = std::string("walk.") + (up ? "up." : "down.") + (w == 1 ? "b" : w == 2 ? "w" : "l");
+    it.w.push_back(static_cast<uint16_t>(0x7F00 | ((0x100 - frame) & 0xFF)));   // add #-F,r15
+    auto store = [&](int slot, uint32_t m) {
+        if (w == 4) it.w.push_back(static_cast<uint16_t>(0x1F00 | m << 4 | slot));   // mov.l Rm,@(4*slot,r15)
+        else
+        {
+            if (m != 0) it.w.push_back(static_cast<uint16_t>(0x6003 | m << 4));          // mov Rm,r0
+            it.w.push_back(static_cast<uint16_t>((w == 2 ? 0x81F0 : 0x80F0) | slot));      // mov.w / mov.b r0,@(disp,r15)
+        }
+    };
+    // the slots first written before the loop: the one read back if the loop does not write it, and some others
+    for (int s = 0; s < slots; ++s)
+        if ((s == back && (s < lowest || s > highest)) || rng.Chance(30)) store(s, rng.Below(8));
+    it.w.push_back(static_cast<uint16_t>(0x6003 | p << 8 | 15 << 4));                     // mov r15,Rp
+    if (start) it.w.push_back(static_cast<uint16_t>(0x7000 | p << 8 | (start * w)));      // add #N,Rp
+    it.w.push_back(static_cast<uint16_t>(0xE000 | c << 8 | count));                       // mov #count,Rc
+    const size_t loop = it.w.size();
+    if (up)
+    {
+        it.w.push_back(static_cast<uint16_t>(0x2000 | p << 8 | v << 4 | sz));             // L: mov.X Rv,@Rp
+        it.w.push_back(static_cast<uint16_t>(0x7000 | p << 8 | w));                       //    add #W,Rp
+    }
+    else
+        it.w.push_back(static_cast<uint16_t>(0x2004 | p << 8 | v << 4 | sz));             // L: mov.X Rv,@-Rp
+    if (stepValue) it.w.push_back(static_cast<uint16_t>(0x7000 | v << 8 | 0x03));         //    add #3,Rv
+    it.w.push_back(static_cast<uint16_t>(0x4010 | c << 8));                               //    dt Rc
+    it.w.push_back(static_cast<uint16_t>(0x8B00 | ((static_cast<int>(loop) - static_cast<int>(it.w.size()) - 2) & 0xFF)));   // bf L
+    // a walk down read back up: the pointer is at the lowest slot written; sum what the loop wrote into the counter's register
+    const bool readBack = !up && rng.Chance(35);
+    if (readBack)
+    {
+        const uint32_t t = v == c ? regs[2] : regs[3], a = regs[4];
+        it.w.push_back(static_cast<uint16_t>(0xE000 | c << 8 | count));                   // mov #count,Rc
+        it.w.push_back(static_cast<uint16_t>(0xE000 | a << 8));                           // mov #0,Ra
+        const size_t loop2 = it.w.size();
+        it.w.push_back(static_cast<uint16_t>(0x6004 | t << 8 | p << 4 | sz));             // L2: mov.X @Rp+,Rt
+        it.w.push_back(static_cast<uint16_t>(0x300C | a << 8 | t << 4));                  //     add Rt,Ra
+        it.w.push_back(static_cast<uint16_t>(0x4010 | c << 8));                           //     dt Rc
+        it.w.push_back(static_cast<uint16_t>(0x8B00 | ((static_cast<int>(loop2) - static_cast<int>(it.w.size()) - 2) & 0xFF)));
+        it.shape += ".readback";
+        if (w == 4) it.w.push_back(static_cast<uint16_t>(0x50F0 | back));                 // mov.l @(4*back,r15),r0
+        else it.w.push_back(static_cast<uint16_t>((w == 2 ? 0x85F0 : 0x84F0) | back));     // mov.w / mov.b @(disp,r15),r0
+        it.w.push_back(static_cast<uint16_t>(0x300C | a << 4));                           // add Ra,r0
+    }
+    else if (w == 4) it.w.push_back(static_cast<uint16_t>(0x50F0 | back));                // mov.l @(4*back,r15),r0
+    else it.w.push_back(static_cast<uint16_t>((w == 2 ? 0x85F0 : 0x84F0) | back));        // mov.w / mov.b @(disp,r15),r0
+    it.w.push_back(static_cast<uint16_t>(0x7F00 | frame));                                // add #F,r15
+    return it;
+}
+
+// A function of its own for the walk (A3-65), from a stream of its own: the seeds' other functions, and the inputs each is run with, are the
+// ones of the rounds before (the walk functions are checked after every other case). A few register-only items, the walk, sometimes one more
+// operation on r0. Empty when the seed draws none.
+bool GenWalkFn(uint64_t seed, RegFn& f)
+{
+    Rng rng(seed * 2654435761u + 0xA365u);
+    if (!rng.Chance(20)) return false;
+    f = RegFn();
+    if (rng.Chance(60))
+    {
+        RegItem copies;
+        copies.w = { 0x6043, 0x6153, 0x6263, 0x6373 };
+        copies.shape = "mov";
+        f.items.push_back(copies);
+    }
+    const int before = static_cast<int>(rng.Below(3));
+    for (int i = 0; i < before; ++i)
+    {
+        RegItem it;
+        it.w.push_back(RegOpWord(rng, it.shape));
+        f.items.push_back(it);
+    }
+    f.items.push_back(MakeWalkItem(rng));
+    if (rng.Chance(25))
+    {
+        RegItem it;
+        static const uint16_t kAfter[] = { 0x600C, 0x600D, 0x600E, 0x600F, 0x7001, 0x4000, 0x4001, 0x600B };   // extu.b/.w, exts.b/.w, add #1, shll, shlr, neg
+        it.w.push_back(kAfter[rng.Below(8)]);
+        it.shape = "after";
+        f.items.push_back(it);
+    }
+    f.slot = 0x0009;
+    return true;
+}
+
 // The compiler: SE_C_COMPILER, else the first of cc, gcc, clang that answers --version.
 std::string FindCCompiler()
 {
@@ -6213,6 +6457,24 @@ std::string FindCCompiler()
         if (std::system((std::string(cc) + " --version > /dev/null 2>&1").c_str()) == 0) return cc;
     return std::string();
 }
+
+// The frame of a function in frame mode (A3-65, CheckPrintedC): 64 KiB of memory for the stack locals, the entry r15 at its middle, mapped below
+// 2 GiB where the host allows it, so that a text that casts a frame address to a four-byte integer and back (`(int4 *)((int4)p + 4)`) keeps it.
+static const char kFrameHeader[] = R"FRAME(
+#if defined(__linux__)
+#include <sys/mman.h>
+#endif
+static unsigned long long g_frame_base;
+static unsigned char g_frame_static[0x10000];
+static void FrameInit(void)
+{
+#if defined(__linux__) && defined(MAP_32BIT)
+  void *m = mmap(0, 0x10000, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_32BIT, -1, 0);
+  if (m != MAP_FAILED) { g_frame_base = (unsigned long long)(uintptr_t)m; return; }
+#endif
+  g_frame_base = (unsigned long long)(uintptr_t)g_frame_static;
+}
+)FRAME";
 
 // The names the engine prints for C, as C: sized integer types and the piece operations
 // (the engine's own definitions, `ghidra/Ghidra/Features/Decompiler/src/decompile/datatests/` style).
@@ -6273,6 +6535,7 @@ std::string CHeader()
          "static void Write_SR(unsigned long long v) { g_wsr = (unsigned int)v; }\n"
          "static void Write_GBR(unsigned long long v) { g_wgbr = (unsigned int)v; }\n"
          "static void Write_VBR(unsigned long long v) { g_wvbr = (unsigned int)v; }\n";
+    o << kFrameHeader;
     return o.str();
 }
 
@@ -6446,6 +6709,7 @@ std::string CxxHeader()
             o << "#define ZEXT" << a << b << "(v) (T<" << b << ", false>(RAW(v) & " << mask(a) << "))\n";
             o << "#define SEXT" << a << b << "(v) (T<" << b << ", true>(T<" << a << ", true>(RAW(v)).Sext()))\n";
         }
+    o << kFrameHeader;
     o << "#define char T<1, true>\n#define bool T<1, false>\n#define true 1\n#define false 0\n";
     return o.str();
 }
@@ -6556,6 +6820,41 @@ bool IsFailing(const CVerdict& v)
     return !v.cls.empty() && v.cls != "narrow-c" && v.cls != "void-return" && v.cls != "void-return-lent" && v.cls.compare(0, 8, "skipped:") != 0;
 }
 
+// Frame mode (A3-65): the code reaches memory through a register other than r15, before its rts (the literal pool after it is data). The
+// register-only grammar's own memory is its stack items, through r15; the walk of a frame (MakeWalkItem) copies r15 into another register.
+bool UsesFrameMemory(const std::vector<uint16_t>& words)
+{
+    for (size_t i = 0; i < words.size(); ++i)
+    {
+        const uint16_t w = words[i];
+        const uint32_t hi = w >> 12, n = (w >> 8) & 15, m = (w >> 4) & 15, lo = w & 15;
+        const bool form = lo <= 2 || (lo >= 4 && lo <= 6);
+        if (hi == 2 && form && n != 15) return true;   // mov.X Rm,@Rn / mov.X Rm,@-Rn
+        if (hi == 6 && form && m != 15) return true;   // mov.X @Rm,Rn / mov.X @Rm+,Rn
+        if (i > 0 && words[i - 1] == 0x000B) break;   // rts's slot is the last instruction looked at
+    }
+    return false;
+}
+
+// The stack offset (from the entry r15) of a local's name: `xStack_8` is 8 below it, `iStack00000004` and `_xStack00000004` 4 above.
+bool StackNameOffset(const std::string& name, int64_t& off)
+{
+    const size_t at = name.find("Stack");
+    if (at == std::string::npos) return false;
+    const std::string rest = name.substr(at + 5);
+    if (rest.size() > 1 && rest[0] == '_')
+    {
+        off = -static_cast<int64_t>(std::strtoull(rest.c_str() + 1, nullptr, 16));
+        return true;
+    }
+    if (rest.size() == 8)
+    {
+        off = static_cast<int32_t>(static_cast<uint32_t>(std::strtoul(rest.c_str(), nullptr, 16)));
+        return true;
+    }
+    return false;
+}
+
 // Decompiles each case, runs it on the emulator for 'nIn' inputs, compiles every text together and runs the
 // comparison. A text that does not compile alone is told apart by compiling the cases one by one.
 std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& cases, int nIn, const std::string& cc, uint64_t inputSeed,
@@ -6565,6 +6864,7 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
     {
         std::string name, cText, mainText;
         bool ready = false;
+        bool frame = false;   // frame mode (A3-65): the locals are in g_frame_base's memory, cleared before each call
     };
     std::vector<CVerdict> out(cases.size());
     std::vector<Prepared> prep(cases.size());
@@ -6605,9 +6905,12 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
         const size_t firstName = text.find("func_0x");
         const bool callsSomething = firstName != std::string::npos && text.find("func_0x", firstName + 1) != std::string::npos;   // a second name: a call
         // The oracle models registers only: a function that reads or writes memory (a pointer parameter, a dereference)
-        // is not run (the host's pointers are 64-bit and its memory is not the machine's).
+        // is not run (the host's pointers are 64-bit and its memory is not the machine's). But for its own frame (A3-65): a function whose code
+        // reaches memory through a register other than r15 (a copy of it walked over the locals) has its stack locals mapped onto memory
+        // (frame mode, below), and a dereference in it is of a frame address: it is run.
+        const bool frameMode = UsesFrameMemory(c.words);
         static const std::regex memoryRe("\\*[A-Za-z_(]");
-        if (std::regex_search(text, memoryRe))
+        if (!frameMode && std::regex_search(text, memoryRe))
         {
             v.cls = "skipped:memory";
             continue;
@@ -6621,7 +6924,7 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
             v.cls = "skipped:stack-piece";
             continue;
         }
-        if (std::regex_search(text, arrayLocal))
+        if (!frameMode && std::regex_search(text, arrayLocal))
         {
             v.cls = "skipped:array-local";
             continue;
@@ -6687,6 +6990,37 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
             v.cls = "skipped:unknown-input";
             continue;
         }
+        // Frame mode (A3-65): every stack local the text declares (`xunknown4 xStack_8;`, `int4 aiStack_10 [3];`, `xunknown1 xStack00000000;`) is
+        // a name for the bytes at its offset from the entry r15 in g_frame_base's memory, the entry r15 at its middle, so that the text's pointers
+        // into the frame (`piVar2 = &iStack_4; *--piVar2`) reach the locals the code's walk does. The run's stores are of the width they are read
+        // at (MakeWalkItem), so the host's byte order does not matter. A name the engine gives the stack register itself (`register0x0000003c`)
+        // is left undeclared: the text cannot be run, and fails.
+        std::set<std::string> frameNames;
+        std::string frameDefines, frameUndefs;
+        if (frameMode)
+        {
+            static const std::regex declRe("^\\s*([A-Za-z_][\\w ]*?[\\w*])\\s*\\b(_?[A-Za-z]*Stack(?:_[0-9a-f]+|[0-9a-f]{8}))(\\s*\\[(\\d+)\\])?;\\s*$");
+            std::istringstream in(rebuilt);
+            std::string kept, l;
+            while (std::getline(in, l))
+            {
+                std::smatch dm;
+                int64_t off = 0;
+                if (std::regex_match(l, dm, declRe) && dm[1].str().compare(0, 6, "return") != 0 && dm[1].str().compare(0, 4, "goto") != 0 &&
+                    StackNameOffset(dm[2].str(), off))
+                {
+                    const std::string name = dm[2].str(), type = dm[1].str();
+                    const bool array = dm[3].matched;
+                    frameDefines += "#define " + name + (array ? " ((" : " (*(") + type + " *)(g_frame_base + 0x8000 + (" + std::to_string(off) + "))" +
+                                    ")\n";
+                    frameUndefs += "#undef " + name + "\n";
+                    frameNames.insert(name);
+                    continue;
+                }
+                kept += l + "\n";
+            }
+            rebuilt = kept;
+        }
         // A name the engine makes for an access wider than the symbol it starts at (`_Stack_4 = CONCAT31(...)` where only `Stack_4`
         // and `xStack_1` are declared) is no declaration of its own. It is declared with the width of the write (A2-57): `CONCATab` gives a + b
         // bytes, and the engine's untyped name for that width (`xunknown4`: unsigned as C, signed as the engine reads it) is the type the
@@ -6699,10 +7033,11 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
             const size_t brace = rebuilt.find("{\n");
             std::string decls;
             for (const std::string& n : names)
-                if (n.compare(0, 2, "__") != 0) decls += "  " + UnderscoreNameType(rebuilt, n) + " " + n + ";\n";
+                if (n.compare(0, 2, "__") != 0 && frameNames.count(n) == 0) decls += "  " + UnderscoreNameType(rebuilt, n) + " " + n + ";\n";
             if (!decls.empty() && brace != std::string::npos) rebuilt.insert(brace + 2, decls);
         }
-        pr.cText = rebuilt;
+        pr.cText = frameDefines + rebuilt + frameUndefs;
+        pr.frame = frameMode;
         // The signature: the return type and how many parameters.
         const size_t at = pr.cText.find(pr.name + "(");
         if (at == std::string::npos)
@@ -6806,6 +7141,7 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
             " control registers: pseudo sr=%08X gbr=%08X vbr=%08X, run sr=%08X gbr=%08X vbr=%08X\\n\", g_wsr, g_wgbr, g_wvbr, D[k][13], D[k][14], D[k][15]); ++bad_" +
             pr.name + "; }\n";
         m << "      g_wsr = g_in[8]; g_wgbr = g_in[11]; g_wvbr = g_in[12];\n";
+        if (frameMode) m << "      memset((void *)(uintptr_t)g_frame_base, 0, 0x10000);\n";
         if (v.voidReturn) m << "      " << call.str() << ";\n" << ctl;
         else
         {
@@ -6842,7 +7178,7 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
         std::ostringstream src;
         src << (engine ? CxxHeader() : CHeader());
         for (size_t i : which) src << "static int bad_" << prep[i].name << ";\n" << prep[i].cText << "\n";
-        src << "int main(void) {\n";
+        src << "int main(void) {\n  FrameInit();\n";
         for (size_t i : which) src << prep[i].mainText;
         int total = 0;
         (void)total;
@@ -7046,6 +7382,23 @@ const PrintedCFixture kPrintedCFixtures[] = {
     { "A2-52 c + 8x + 4y + 14x, shlr2 ; shll2", { 0xD008, 0xD309, 0x0347, 0x031A, 0x303C, 0xD308, 0x0367, 0x031A, 0x303C, 0xD307, 0x0347, 0x031A, 0x303C, 0x4009, 0x4008, 0x000B, 0x0009, 0x0009, 0x0000, 0x0100, 0x0000, 0x0008, 0x0000, 0x0004, 0x0000, 0x000E } },
     { "A2-52 termgen 2", { 0x2468, 0x0129, 0xD00A, 0x6343, 0x4308, 0x4308, 0x303C, 0x6313, 0x4308, 0x4308, 0x303C, 0xD307, 0x0367, 0x031A, 0x303C, 0xD306, 0x0347, 0x031A, 0x303C, 0xD305, 0x2039, 0x000B, 0x0009, 0x0009, 0x0000, 0x0000, 0x0000, 0x0008, 0xFFFF, 0xFFFA, 0xFFFF, 0xFFFC } },
     { "A2-52 termgen 4", { 0x3456, 0x0129, 0xD00A, 0xD30B, 0x0317, 0x031A, 0x3038, 0xD30A, 0x0367, 0x031A, 0x303C, 0xD309, 0x0347, 0x031A, 0x3038, 0xD308, 0x0317, 0x031A, 0x303C, 0xD307, 0x2039, 0x000B, 0x0009, 0x0009, 0x0000, 0x0000, 0x0000, 0x0048, 0x0000, 0x001C, 0x0000, 0x0024, 0x0000, 0x0001, 0xFFFF, 0xFFFC } },
+    // A3-65: a copy of r15 walked down by `mov.l Rm,@-Rn` over a local (`*--p = v`). The engine took a pointer into the frame to reach only what lies
+    // at or above its base, so the local the walk wrote kept its first value (`return 5;`, the code returns 1), and a walk from the entry r15 itself
+    // printed as the stack register (`register0x0000003c`). By value, in frame mode (the locals mapped onto memory, CheckPrintedC).
+    { "A3-65 leaf: r15 + 8 walked down by longwords", { 0x7FF8, 0xE005, 0x2F02, 0x62F3, 0x7208, 0xE102, 0x2216, 0x4110, 0x8BFC, 0x60F2, 0x000B, 0x7F08 } },
+    { "A3-65 walked down by bytes", { 0x7FF8, 0xE005, 0x2F00, 0x62F3, 0x7208, 0xE108, 0x2214, 0x4110, 0x8BFC, 0x60F0, 0x000B, 0x7F08 } },
+    { "A3-65 walked down by words", { 0x7FF8, 0xE005, 0x2F01, 0x62F3, 0x7208, 0xE104, 0x2215, 0x4110, 0x8BFC, 0x60F1, 0x000B, 0x7F08 } },
+    { "A3-65 from r15 + 4", { 0x7FF8, 0xE005, 0x2F02, 0x62F3, 0x7204, 0xE101, 0x2216, 0x4110, 0x8BFC, 0x60F2, 0x000B, 0x7F08 } },
+    { "A3-65 from r15 + 8 of a 12-byte frame", { 0x7FF4, 0xE005, 0x2F02, 0x62F3, 0x7208, 0xE102, 0x2216, 0x4110, 0x8BFC, 0x60F2, 0x000B, 0x7F0C } },
+    { "A3-65 from r15 + 12 of a 16-byte frame", { 0x7FF0, 0xE005, 0x2F02, 0x62F3, 0x720C, 0xE103, 0x2216, 0x4110, 0x8BFC, 0x60F2, 0x000B, 0x7F10 } },
+    { "A3-65 written, then read down", { 0x7FF8, 0xE005, 0x2F02, 0xE007, 0x1F01, 0x62F3, 0x7208, 0xE102, 0xE300, 0x72FC, 0x6422, 0x334C, 0x4110, 0x8BFA, 0x6033, 0x000B, 0x7F08 } },
+    { "A3-65 walked down, then read back up", { 0x7FF8, 0xE005, 0x2F02, 0x62F3, 0x7208, 0xE102, 0x2216, 0x4110, 0x8BFC, 0xE102, 0xE300, 0x6426, 0x334C, 0x4110, 0x8BFB, 0x6033, 0x000B, 0x7F08 } },
+    // ...over a register's save slot its pop freed (`mov.l r13,@-r15 ; mov.l @r15+,r13` first): the slot was one variable with r13 (`return unaff_r13;`)
+    { "A3-65 over a freed save slot", { 0x2FD6, 0x6DF6, 0x7FF8, 0x62F3, 0x7208, 0xE102, 0x2216, 0x4110, 0x8BFC, 0x50F1, 0x000B, 0x7F08 } },
+    { "A3-65 over a freed save slot, a byte of it", { 0x2FD6, 0x6DF6, 0x7FF8, 0x62F3, 0x7208, 0xE102, 0x2216, 0x4110, 0x8BFC, 0x84F5, 0x000B, 0x7F08 } },
+    // ...and the controls, walked up (`mov.l r1,@r2 ; add #4,r2`), which the engine always had right
+    { "A3-65 control: walked up by longwords", { 0x7FF8, 0xE005, 0x2F02, 0x62F3, 0xE102, 0x2212, 0x7204, 0x4110, 0x8BFB, 0x60F2, 0x000B, 0x7F08 } },
+    { "A3-65 control: walked up by bytes", { 0x7FF8, 0xE005, 0x2F00, 0x62F3, 0xE108, 0x2210, 0x7201, 0x4110, 0x8BFB, 0x60F0, 0x000B, 0x7F08 } },
 };
 
 // The fixtures of area 2, round 4 (A2-21, A2-22, A2-26): the compiler's division by a constant, scaled by the power of two it
@@ -7171,6 +7524,16 @@ void TestPrintedC()
             {
                 fns.push_back(GenRegFn(static_cast<uint64_t>(seed), static_cast<int>(k)));
                 cases.push_back({ "seed" + std::to_string(seed) + "_" + std::to_string(k), fns.back().Words() });
+            }
+        // The walks of a frame (A3-65), after every other case, so that none of those moves (a case's inputs are drawn from its place in its batch).
+        // SE_GENERATED_PRINTEDC_WALK=0 leaves them out.
+        if (EnvNumber("SE_GENERATED_PRINTEDC_WALK", 1) != 0)
+            for (long seed = first; seed < first + seeds; ++seed)
+            {
+                RegFn walk;
+                if (!GenWalkFn(static_cast<uint64_t>(seed), walk)) continue;
+                fns.push_back(walk);
+                cases.push_back({ "seed" + std::to_string(seed) + "_walk", walk.Words() });
             }
     }
     if (EnvNumber("SE_GENERATED_COVERAGE", 0) != 0)
@@ -7462,6 +7825,8 @@ void TestA582Pins(Sh2Decompiler& d)
             "0/0/30,30/30/3a", "c:5:4:30:30,24,28,2c:28", "1,1", "80000,80000", "2,0" }, "pointer.effect.unrelated" },
         { { "A5-82, seed 405136", "2F86 2F96 4F22 7FD0 6843 6953 B00C 0009 6483 6593 D103 7F30 4F26 69F6 68F6 412B 0009 0009 0600 9028 E1E6 E008 0616 E106 3712 8919 4708 C702 017E 412B 0009 0009 0600 9058 0600 9068 0600 905C 0600 9068 0600 9060 0600 9064 A007 0009 A005 0009 A003 0009 A001 0009 D601 6013 000B 0009 05F8 007C",
             "0/0/22,28/28/70", "3a:7:6:68:58,68,5c,68,60,64", "1,1", "0,0", "20000,20000" }, "pointer.effect.unrelated" },
+        { { "A5-85, seed 910697", "E105 3413 8916 4408 C702 014E 412B 0009 0600 902C 0600 9028 0600 9028 0600 902C 0600 902C 0600 9030 A004 0009 A002 0009 A000 0009 E103 3512 890F 4508 C701 015E 412B 0009 0600 9050 0600 9050 0600 9056 E1D3 A002 0009 A000 0009 000B 6040",
+            "0/0/34,34/34/5e", "c:4:5:34:28,28,2c,2c,30:2c;40:5:3:5a:50,50,56", "1,1", "180000,180000", "0,20000" }, "pointer.effect.unrelated" },
         { { "A5-82, seed 202350 (specials)", "2F86 2F96 2FA6 2FB6 4F22 6843 6953 6A63 6B73 E106 3613 891A 4608 C703 016E 412B 0009 0009 0600 904A 0600 904E 0600 9040 0600 9046 0600 9046 0600 9046 0600 904A D70B A004 0009 A002 0009 A000 0009 6072 2448 8B01 A003 E11D D706 A000 E1C8 6073 4F26 6BF6 6AF6 69F6 68F6 000B 0009 0009 1DFE 0064 25F8 00D2",
             "0/0/6e", "1e:6:6:4e:4e,40,46,46,46,4a:4a", "1", "1000", "60000" }, "cache.read.pointer.unrelated" },
     };
@@ -7486,6 +7851,7 @@ void TestA582Pins(Sh2Decompiler& d)
         { "A5-82, grammar 2 seed 310654", true, 310654, "pointer.effect.unrelated", nullptr },
         { "A5-82, grammar 2 seed 313937", true, 313937, "pointer.effect.unrelated", nullptr },
         { "A5-82, grammar 2 seed 405136", true, 405136, "pointer.effect.unrelated", nullptr },
+        { "A5-85, grammar 2 seed 910697", true, 910697, "pointer.effect.unrelated", nullptr },
         { "A5-82, grammar 1 seed 69 (control: a register merged with an unmapped address)", false, 69, "cache.read.pointer.said", "cache.read.pointer.unrelated" },
         { "A5-82, grammar 1 seed 179 (control: the same)", false, 179, "pointer.effect.derived", nullptr },
     };
@@ -7530,6 +7896,44 @@ void TestA582Pins(Sh2Decompiler& d)
     check("a register 68 bytes from the one reached", { "puVar1 = &VDP2_TVSTAT;", "uVar2 = puVar1[0x22];" }, 1, tvstat + 0x44, false, true);
     check("a stored value that is an on-chip address", { "*extraout_r7 = 0xffffffe6;" }, 0, tvstat, false, true);
     check("hardware no register is named at, where the run went", { "puVar1 = (uint4 *)0x5fe00dc;", "uVar2 = *puVar1;" }, 1, 0x05FE00DCu, true, false);
+    // A5-85: the read's statement holds a value besides the dereference (`CONCAT44(*param_1, xVar1)`, the rts slot's read and the r1 half of the
+    // return); what that value was assigned is not the pointer. The pointer in the dereference, or behind a cast of it, or a name indexed, still is.
+    // (the read's own tokens, as the printer gives them to the rts slot's `mov.b @r4,r0` of seed 910697: the parentheses and the cast are no one's)
+    auto checkOwn = [&](const char* what, const std::vector<std::string>& lines, const std::vector<std::string>& own, uint32_t reached, bool want,
+                        bool wantUnrelated) {
+        DecompileResult r = FakeOutput(lines);
+        Line& l = r.lines.back();
+        l.tokens.clear();
+        size_t at = 0;
+        for (const std::string& piece : own)
+        {
+            at = l.text.find(piece, at);
+            CHECK(at != std::string::npos);
+            if (at == std::string::npos) return;
+            Token t;
+            t.begin = static_cast<uint16_t>(at);
+            t.end = static_cast<uint16_t>(at + piece.size());
+            t.addr = 0x06009000u + static_cast<uint32_t>(lines.size() - 1) * 2;
+            l.tokens.push_back(t);
+            at += piece.size();
+        }
+        bool unrelated = false;
+        const bool got = PointerPrintsFromHardware(r, 0x06009000u + static_cast<uint32_t>(lines.size() - 1) * 2, none, reached, unrelated);
+        std::printf("pin 'A5-85 derivation: %s': %s (want %s), set aside %s\n", what, got ? "pointer" : "not", want ? "pointer" : "not", unrelated ? "yes" : "no");
+        CHECK(got == want);
+        CHECK(unrelated == wantUnrelated);
+    };
+    checkOwn("a value beside the dereference", { "xVar1 = &VDP2_TVSTAT;", "return CONCAT44((int4)*param_1,xVar1);" },
+             { "return", "CONCAT44", "*", "param_1", ",", "xVar1", ";" }, tvstat, false, true);
+    checkOwn("the pointer behind a cast, beside a value (control)", { "puVar1 = &VDP2_TVSTAT;", "return CONCAT44((int4)*puVar1,xVar2);" },
+             { "return", "CONCAT44", "*", "puVar1", ",", "xVar2", ";" }, tvstat, true, false);
+    checkOwn("a value beside, the pointer in the dereference too (control)", { "puVar1 = &VDP2_TVSTAT;", "xVar2 = &VDP2_TVMD;", "return CONCAT44((int4)*puVar1,xVar2);" },
+             { "return", "CONCAT44", "*", "puVar1", ",", "xVar2", ";" }, tvstat, true, false);
+    check("a cast pointer dereferenced (A5-85 control)", { "iVar1 = (int4)&VDP2_TVSTAT;", "uVar2 = *(uint4 *)(iVar1 + 0);" }, 1, tvstat, true, false);
+    check("a product is no dereference (A5-85 control)", { "puVar1 = &VDP2_TVSTAT;", "uVar2 = puVar1[iVar3 * 2];" }, 1, tvstat, true, false);
+    CHECK(DerefOperands("return CONCAT44((int4)*param_1,xVar1);") == "param_1 ; ");
+    CHECK(DerefOperands("x = a * b;").empty());
+    CHECK(DerefOperands("x = *(xunknown4 *)(p + 4) + y;") == "(xunknown4 *)(p + 4) + y ; ");
 }
 
 // ---- Area 2 round 7 (ledger A2-49, A2-50) ----------------------------------------------------------------------------------------------
@@ -8190,6 +8594,52 @@ void TestRound9Pins(Sh2Decompiler& d)
     }
 }
 
+// ---- A3-65: a copy of r15 walked down (patch 0056) ---------------------------------------------------------------------------------------------
+// Seed 901303 (grammar 2), where the class was found: function 0 restores its registers and runs on into function 1, whose frame walk goes down
+// over the words function 0's pushes freed; the text read the walk's byte as the saved r13 (`(char)((uint4)unaff_r13 >> 0x10)`). With the patch the
+// save slot is a local the walk may write (`xStack_c = unaff_r13;` at the push, `xStack_c._1_1_` read after the walk), and check 12 takes the save
+// before any call for no read of r13 (SavesBeforeCallsDropped). The walk the printed-C differential draws (GenWalkFn) is drawn in every form.
+void TestA365Pins(Sh2Decompiler& d)
+{
+    {
+        const ModulePin m = { "A3-65, seed 901303 shrunk", "2F86 2F96 2FD6 4F22 6843 6953 B00C 6593 6483 6593 D103 4F26 6DF6 69F6 68F6 412B 0009 0009 0600 9028 2FD6 7FF8 62F3 7208 E102 2216 4110 8BFC E200 84F1 1605 6073 7F08 6DF6 000B 0009",
+                              "0/0/22,28/28/48", nullptr, "1,1", "0,0", "40000,0" };
+        const Report rep = EvaluateSubject(d, ModuleSubject(m), true);
+        std::printf("pin '%s': %zu finding(s)\n", m.name, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+        const bool savedSpecials = gSpecialReads;
+        gSpecialReads = false;
+        const Report seed = EvaluateSubject(d, MakeSubject(MakeV2(901303)), true);
+        gSpecialReads = savedSpecials;
+        std::printf("pin 'A3-65, grammar 2 seed 901303': %zu finding(s)\n", seed.findings.size());
+        for (const Finding& f : seed.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(seed.findings.empty());
+    }
+    // check 12's reading of a save: before the first call it is no read of the register; after one, or a read elsewhere, it is
+    const std::string head = "xunknown4 func_0x06009000(void)\n\n{\n  xunknown4 unaff_r13;\n  xunknown4 xStack_c;\n\n";
+    CHECK(!WholeWord(SavesBeforeCallsDropped(head + "  xStack_c = unaff_r13;\n  func_0x06009028();\n  return xStack_c;\n}\n", "r13"), "unaff_r13"));
+    CHECK(WholeWord(SavesBeforeCallsDropped(head + "  func_0x06009028();\n  xStack_c = unaff_r13;\n  return xStack_c;\n}\n", "r13"), "unaff_r13"));
+    CHECK(WholeWord(SavesBeforeCallsDropped(head + "  xStack_c = unaff_r13;\n  func_0x06009028();\n  return unaff_r13;\n}\n", "r13"), "unaff_r13"));
+    // the walk functions of the printed-C differential: every width, both directions, the read back up, within the first 400 seeds
+    {
+        std::map<std::string, int> drawn;
+        int walks = 0;
+        for (uint64_t seed = 1; seed <= 400; ++seed)
+        {
+            RegFn f;
+            if (!GenWalkFn(seed, f)) continue;
+            ++walks;
+            for (const RegItem& it : f.items) ++drawn[it.shape];
+        }
+        std::printf("pin 'A3-65 walk draws': %d walk functions in 400 seeds:", walks);
+        for (const auto& k : drawn) if (k.first.compare(0, 5, "walk.") == 0) std::printf(" %s=%d", k.first.c_str(), k.second);
+        std::printf("\n");
+        for (const char* shape : { "walk.down.b", "walk.down.w", "walk.down.l", "walk.up.b", "walk.up.w", "walk.up.l", "walk.down.l.readback" })
+            CHECK(drawn[shape] > 0);
+    }
+}
+
 void TestCanary(Sh2Decompiler& d)
 {
     const long n = EnvNumber("SE_GENERATED_CANARY", 240);
@@ -8261,6 +8711,7 @@ void TestGenerated()
         RUN(TestRound8Pins(d));
         RUN(TestRoutedPins(d));
         RUN(TestRound9Pins(d));
+        RUN(TestA365Pins(d));
         if (EnvNumber("SE_GENERATED_CANARY", 240) > 0) RUN(TestCanary(d));
     }
     const long seeds = single ? 1 : EnvNumber("SE_GENERATED_SEEDS", 300);

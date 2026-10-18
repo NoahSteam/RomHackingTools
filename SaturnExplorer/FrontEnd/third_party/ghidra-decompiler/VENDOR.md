@@ -75,6 +75,7 @@ The embedded copy of the runtime files is `FrontEnd/src/Decompiler/Sh2SpecData.h
 | `0051-engine-replaced-varnode-consume-merged.patch` | `Funcdata::totalReplace` ORs the consume mask of the Varnode it replaces into the one that takes over its readers, so a common-subexpression merge cannot leave the byte of SR read by `& 1` and by a whole-byte compare with the consume mask of the first, and `ActionVarnodeProps` cannot replace it by a zero (ledger A2-56). |
 | `0052-flow-instruction-alignment.patch` | `Architecture::instructionAlignment` (host policy; SaturnExplorer sets 2): flow halts as at bad data at an address that is not a multiple of it, so a jump table entry that is no address no longer sends flow into the middle of an instruction (ledger A7-6). |
 | `0053-engine-stack-pointer-longword-aligned.patch` | `Funcdata::calcNZMask` takes the stack pointer on entry to be aligned to a longword (`~3`), not to 256, so `mov r15,r0 ; and #0xff,r0` is not `return 0;` (ledger A2-53). |
+| `0056-engine-stack-walk-down-aliases.patch` | A pointer into the frame that a loop steps down (`*--p = v`, `mov.l Rm,@-Rn` from a copy of r15 or r14) aliases the stack below its base: `AliasChecker` lowers its alias boundary 0xffff below such a base, the guard of the indexed access covers the stack below it (`LoadGuard::establishRange`), a save slot it reaches stays mapped, and the join of the entry r15 is a pointer to the frame, not the stack register (`register0x0000003c`) or a stack parameter. A local the walk wrote no longer prints its first value (ledger A3-65). |
 
 MSVC and Apple clang needed no patch beyond these.
 
@@ -143,6 +144,7 @@ applies 0005 to 0008) must run before `se-regen-sla`.
   - 0051: `TestArea2Round8` part 7 (`cmp/str` on the SR byte after `addc`: the byte is compared whole) and the printed-C fixture `A2-56` (by value).
   - 0052: `TestRoutedSeeds` (a switch with an odd table entry: `halt_baddata()` at the odd address, the flow warning says it is odd, no "overlaps instruction" warning, an odd entry is refused) and the mapping oracle's corpus counts (odd addresses in functions with overlapping instructions, and functions entered at an odd address: both 0).
   - 0053: `TestArea2Round8` part 3 (`mov r15,r0 ; and #0xff,r0` keeps the AND on r15; `and #3` is still 0).
+  - 0056: `TestA365WalkDown` (the leaf and its variants: bytes, words, from r15 + N, eight longwords, from r14, written then read down, read back up, over a freed save slot, no stack argument; the walks up as controls), the printed-C fixtures `A3-65` (by value, frame mode) and the generator's walk functions, and `TestA365Pins` (seed 901303).
 
 
   If upstream's Makefile source groups changed, update the lists in `vendor.py`.
