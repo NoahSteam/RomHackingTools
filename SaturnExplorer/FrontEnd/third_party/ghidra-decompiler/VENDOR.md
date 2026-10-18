@@ -77,6 +77,7 @@ The embedded copy of the runtime files is `FrontEnd/src/Decompiler/Sh2SpecData.h
 | `0053-engine-stack-pointer-longword-aligned.patch` | `Funcdata::calcNZMask` takes the stack pointer on entry to be aligned to a longword (`~3`), not to 256, so `mov r15,r0 ; and #0xff,r0` is not `return 0;` (ledger A2-53). |
 | `0054-engine-cached-masks-never-narrower.patch` | Every change to an op's op-code, inputs or output, and every new reader of a Varnode, keeps the cached non-zero and consume masks around it a superset of the truth (`Funcdata::opMasksChanged`): the changed op's output gets the mask its inputs give, the masks below and above are widened until they already hold what their neighbours give, nothing true is forgotten. Replaces the resets of 0046, 0049 and 0051 (ledger A2-58, A2-59). See "Cached masks" below. |
 | `0055-engine-action-repeats-bounded.patch` | A repeating group or pool of actions stops after `Architecture::maxActionRepeats` passes (300) with the warning `Exceeded maximum repeats of <action> with changes still pending`, which the host reports and for which it withholds the signature: two rules that undo each other end as a reported, bounded failure, not as memory taken until the host cancels (ledger A2-59). |
+| `0056-engine-stack-walk-down-aliases.patch` | A pointer into the frame that a loop steps down (`*--p = v`, `mov.l Rm,@-Rn` from a copy of r15 or r14) aliases the stack below its base: `AliasChecker` lowers its alias boundary 0xffff below such a base, the guard of the indexed access covers the stack below it (`LoadGuard::establishRange`), a save slot it reaches stays mapped, and the join of the entry r15 is a pointer to the frame, not the stack register (`register0x0000003c`) or a stack parameter. A local the walk wrote no longer prints its first value (ledger A3-65). |
 
 MSVC and Apple clang needed no patch beyond these.
 
@@ -162,6 +163,7 @@ applies 0005 to 0008) must run before `se-regen-sla`.
   - 0053: `TestArea2Round8` part 3 (`mov r15,r0 ; and #0xff,r0` keeps the AND on r15; `and #3` is still 0).
   - 0054: `TestArea2Round9` parts 1 and 2 (the A2-58 joins agree with the run; the A2-59 loops finish, settled), `TestArea2Round8` part 5 and `TestArea2Round7SlotValues` (the sums of A2-47 and A2-52), the canary checks of `TestArea3Round8` and `TestArea3Round9`, the printed-C fixtures `A2-58 ...` and `A2-59 ...`, and the mask checker over `dagen.py`'s families ("Cached masks" above).
   - 0055: `TestArea2Round9` part 3 (the bound lowered to 2: the text printed, the warning passed on, the signature withheld).
+  - 0056: `TestA365WalkDown` (the leaf and its variants: bytes, words, from r15 + N, eight longwords, from r14, written then read down, read back up, over a freed save slot, no stack argument; the walks up as controls), the printed-C fixtures `A3-65` (by value, frame mode) and the generator's walk functions, and `TestA365Pins` (seed 901303).
 
 
   If upstream's Makefile source groups changed, update the lists in `vendor.py`.

@@ -12,6 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified for SaturnExplorer: an indexed stack access whose pointer is stepped down guards the stack below it (patches/0056-engine-stack-walk-down-aliases.patch).
  */
 #include "heritage.hh"
 #include "funcdata.hh"
@@ -758,18 +760,33 @@ void LoadGuard::establishRange(const ValueSetRead &valueSet)
     if (valueSet.isLeftStable()) {
       minimumOffset = range.getMin();
     }
-    else if (valueSet.isRightStable()) {
-      if (pointerBase < range.getEnd()) {
-	minimumOffset = pointerBase;
-	size = (range.getEnd() - pointerBase);
+    else {
+      // SaturnExplorer (patches/0056-engine-stack-walk-down-aliases.patch): the left end of the range moved, so the
+      // pointer is stepped down (a pre-decrement walk, `*--p = v`), and the iterations the partial
+      // analysis ran say nothing of how far. Upstream guarded those few iterations, or the range
+      // from pointerBase up, so the stack below went unguarded and a store there was taken for no
+      // store to it (ledger A3-65). Guard everything up to the highest access and 0xffff below it,
+      // the counterpart of the 0x1000 guessed for a pointer that only moves up; a range that would
+      // wrap below offset 0 guards the whole space. A range neither end of which held still may
+      // move either way and is guarded both ways.
+      uintb highest = spc->getHighest();
+      uintb top = valueSet.isRightStable() ? range.getMax() : pointerBase;
+      int4 accessSize = (op->code() == CPUI_STORE) ? op->getIn(2)->getSize() : op->getOut()->getSize();
+      uintb last = top + (accessSize > 0 ? accessSize - 1 : 0);
+      if (!valueSet.isRightStable())
+	last = top + 0xfff;
+      if (last < top || last > highest)
+	last = highest;
+      guessedBelow = true;
+      if (top >= 0xffff) {
+	minimumOffset = top - 0xffff;
+	size = last - minimumOffset + 1;
       }
       else {
-	minimumOffset = range.getMin();
-	size = rangeSize * range.getStep();
+	minimumOffset = 0;
+	size = highest + 1;
       }
     }
-    else
-      minimumOffset = pointerBase;
   }
   uintb max = spc->getHighest();
   if (minimumOffset > max) {

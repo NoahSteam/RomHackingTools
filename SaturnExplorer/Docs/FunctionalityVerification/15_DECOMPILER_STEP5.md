@@ -10030,3 +10030,117 @@ The lending texts (`lend_before/`, `lend_after/`, each function decompiled with 
 - 0055's bound is the same for every function. A legitimate function needing more than 300 passes of a pool would be printed with the warning and its signature withheld; none of the 2,393 game functions or 85,000 generated ones comes within a factor of 5 of it.
 - `getNZMaskLocal` and `getConsumeLocal` are upstream's steps, trusted as sound; the walks only keep their post-fixpoint. The INDIRECT side effect of `ActionDeadCode::propagateConsumed` (a COPY whose output overlaps an INDIRECT's is marked consumed) is not repeated by the walk; I did not build a case where a rule makes such an INDIRECT in the middle of a pass, and the checker reported none.
 - The decode oracle ran at its default seed only; the spec did not change.
+
+## A3-65 and A5-85
+
+Fixer, branch `review/a3-65-fix`, on the coordinator's head `bc872a1`. Code commits `7983675` (engine patch 0056, the suites, the generator, the oracle) and `3e5f985` (four fault-matrix pins re-pinned), then the record. **A3-65 (P1) is fixed** by engine patch **0056** (renumbered from 0055 at the coordinator's word: 0054 and 0055 are the area 2 fixer's). **A5-85 is an oracle false positive, P3** (set down from the provisional P2), fixed in the oracle. Own RelWithDebInfo build under the scratch directory, `-j3`.
+
+### 1. A3-65: the cause
+
+Every part of upstream's stack analysis takes a pointer into the frame to reach only what lies at or above its base, as an array index does. A loop that steps the pointer down (`*--p = v` over a local array: a copy of r15 or of the frame pointer r14, moved to the array's top and walked by `mov.l Rm,@-Rn`) reaches what lies below it, and four places did not see it:
+
+- **The alias boundary** (`AliasChecker::gatherInternal`, `varmap.cc`). The walk's start is recorded as a base (the MULTIEQUAL that joins it with the stepped value is a use that is no addition), and everything at or above that offset is aliased, nothing below. The locals the walk wrote were unaliased, `opCollapseIndirectsForAlias` removed the INDIRECTs the walk's stores made for them, and the read after the loop was the value before it: the leaf's `return 5;`. A base at the entry r15 itself (offset 0, the walk from the frame's top) is taken for a reference to a stack parameter and aliases no local at all.
+- **The guard of the indexed store** (`LoadGuard::establishRange`, `heritage.cc`). The partial value-set analysis runs three iterations; a range whose left end moved (the pointer goes down) was guarded over those three steps, or from `pointerBase` up, and the full analysis does not bound a counted loop, so the guard stood: the INDIRECTs of the locals below were collapsed for the guard as well. With the alias alone fixed, a walk deeper than three steps still printed the stale value (pin "eight longwords down a 32-byte frame").
+- **The raw stack pointer** (`ScopeLocal::annotateRawStackPtr`). A loop join of the entry r15 itself merged the register into the loop's pointer: the text printed `register0x0000003c = (BADSPACEBASE *)((int4)register0x0000003c + -4);` (the stack register under the stack space's own type), with its stores through a "pointer" no reader can place.
+- **The save slots** (`ActionRestrictLocal`, `coreaction.cc`). A register's save slot is storage no local is mapped to, so it is unaliased and one variable with the register saved in it. Code that runs on after its pops walks down over the words they freed: seed 901303's function 0 restores r8, r9, r13 and PR and tail-jumps into function 1, whose frame walk writes the word where r13 was saved; the text read the walk's byte as `(char)((uint4)unaff_r13 >> 0x10)`. The same in a leaf: `mov.l r13,@-r15 ; mov.l @r15+,r13 ; add #-8,r15 ; ...walk...` returned `unaff_r13`.
+
+A walk up was always right (each base aliases what lies above it, and a left-stable range is guarded from its start up), and so is a pointer into the frame with an index, which the engine and the host both take to be non-negative (A3-9, A3-17): those are unchanged. A host alias (A3-16's path, the triage's trial) changes nothing because the boundary it declares is the same base.
+
+### 2. The fix: patch 0056
+
+`0056-engine-stack-walk-down-aliases.patch`, in `varmap.cc`/`.hh`, `heritage.cc`/`.hh` and `coreaction.cc`; none of `funcdata_op.cc`, `op.cc` or `action.cc` (the area 2 patches' files).
+
+1. `AliasChecker::stepsDown(multi)` follows the pointer a MULTIEQUAL joins forward through copies, INDIRECTs and additions back to the join; a loop whose sum is negative, or that subtracts a value of unknown size, steps it down (an index added stays non-negative, as the rest of the analysis has it). A base joined by such a MULTIEQUAL aliases everything from 0xffff below it up: `aliasBoundary` is lowered to there, and the reach joins the alias starts `markUnaliased` reads (appended in `sortAlias`, after `MapState::gatherOpen` has read the starts one for one with the bases). 0xffff is the distance past which `markUnaliased` stops trusting an alias anyway; a reach that wraps below offset 0 still covers every local.
+2. `LoadGuard::establishRange`: a range that is right-stable only (stepped down) is guarded from 0xffff below its highest access up to that access, and one neither end of which held still is guarded both ways; a range that would wrap below 0 guards the whole space. The counterpart of upstream's 0x1000 guessed for a pointer that moves up. That guessed bottom is no array's start: `MapState::addGuard` makes no open hint for it (`LoadGuard::guessedBelow`), which otherwise declared a 64 KiB array of the frame (`int4 aiStack_10007 [16382];`).
+3. `ScopeLocal::annotateRawStackPtr` gives a join of the entry r15 that steps down the `PTRSUB` the other raw uses get, at the end of the block the input comes from: the text reads `piVar2 = (int4 *)&xStack00000000;` (a pointer to the frame's top). `ActionInputPrototype::gatherParamSpacebaseRefs` takes that `PTRSUB` for no reference to a stack parameter (it made the function take five: r4-r7 and the word at r15).
+4. `ActionRestrictLocal` leaves a save slot mapped when a walk down reaches it (`AliasChecker::getDownSpans`): the push prints as `xStack_c = unaff_r13;` and the read after the walk as the local.
+
+A pointer into a save area that is no local still prints raw, as upstream prints every pointer into unmapped stack storage, here and at the head alike, with the right value: the walk from r14 + 8 under a pushed r14 starts at the word r14 was pushed to, `piVar2 = (int4 *)((int4)register0x0000003c + -4);`. The leaf and its variants with the patch, by value (section 3):
+
+| Fixture | Head | Fixed |
+|---|---|---|
+| the leaf (r15 + 8, longwords) | `return 5;` and `register0x0000003c`, lent | `return xStack_8;`, lent; the code returns 1 |
+| bytes, words | `return 5;`, `register0x0000003c` | `return (int4)cStack_8;`, `return (int4)iStack_8;` |
+| from r15 + 4; + 8 of 12; + 12 of 16 | `return 5;` (`piVar2 = aiStack_8 + 1`) | the local the walk wrote last |
+| eight longwords down a 32-byte frame | `return 5;` | `return xStack_20;` (wrong with the alias part alone) |
+| from r14 at its save slot; inside the frame | `return 5;` | `return xStack_c;`; `return xStack_10;` |
+| written at constant offsets, read down | stores removed, the walk reads `register0x0000003c` | `xStack_8 = 5; xStack_4 = 7;`, the walk reads them |
+| walked down, read back up | `register0x0000003c` both ways | a pointer from `&xStack00000000` |
+| over a freed save slot | `return unaff_r13;` | `xStack_4 = unaff_r13;` ... `return xStack_4;` |
+| walked up (controls) | right | right, unchanged |
+
+### 3. Pins, the generator and the oracles
+
+- `Sh2DecompilerTests.cpp`, `TestA365WalkDown`: the fixtures of the table, each with its return statement, no `return 5;`, no stack register (but the save-slot walk from r14), no array of three digits, and the walk's access printed; the leaf lent; a walk from the entry r15 has no stack argument. The evaluator of `PseudoAgreesWithRun` has no loops, so the values are the printed-C differential's.
+- The printed-C differential (`Sh2GeneratedTests.cpp`) had no memory: a text that dereferences anything was `skipped:memory`. **Frame mode**: a function whose code reaches memory through a register other than r15 before its rts (`UsesFrameMemory`; the register-only grammar's own memory is its stack items, through r15) has every stack local it declares mapped onto 64 KiB of memory (`g_frame_base`, the entry r15 at its middle, below 2 GiB with `MAP_32BIT` where Linux has it), cleared before each call, so the text's pointers into the frame reach the locals the code's walk does. A name for the stack register is left undeclared, so a `register0x0000003c` text is not compilable and fails. The A3-65 printed-C fixtures (the ten walks down, by value; the two walks up as controls) run in every default run.
+- **The generator draws the shape** (`GenWalkFn`, `MakeWalkItem`): a function of its own per seed, one seed in five, from a stream of its own (`seed * 2654435761 + 0xA365`), checked after every other case so no other case's inputs move (a case's inputs are drawn from its place in its batch): a few register-only items, then a frame of 8 to 24 bytes, some of its slots written at the walk's width, a copy of r15 + N walked down by `mov.X Rv,@-Rp` a counted number of slots (the counter or a register stepped each pass), in a third of the walks down read back up with `mov.X @Rp+` and summed, one slot read back into r0; a quarter walk up. Every slot read was written at the width it is read, so the host's byte order does not matter. `SE_GENERATED_PRINTEDC_WALK=0` leaves them out. `TestA365Pins` holds that every form is drawn in the first 400 seeds. Over `SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`: 607 walk functions; **the head's engine fails 112 of them** (88 not compilable, the stack register; 24 mismatches, the stale local) and the ten fixtures, and passes the controls and every other case; the fixed engine fails none. The other 3,077 cases are as before (agrees 2,756, `narrow-c` 6, `void-return` 285, `void-return-lent` 30).
+- Grammar 2 already draws a frame walk (A3-16's `frame.walk`, from the top of the locals down), but none of its checks holds a value: seed 901303 was found by check 12 by accident. `TestA365Pins` holds seed 901303 and its shrunk module: no finding. With the save slot mapped, function 0's text names `unaff_r13` once, in the push's save `xStack_c = unaff_r13;` before any call, which check 12 took for a read of r13 kept across the call; `SavesBeforeCallsDropped` takes a save of the register into a stack local before the first call for no such read (pinned three ways: before the call, after it, and a read elsewhere).
+
+### 4. A5-85: an oracle false positive
+
+Reproduced on the head: `SE_GENERATED_GRAMMAR=2 SE_GENERATED_FIRST=910697 SE_GENERATED_SEEDS=1` gives `n:` and `v:pointer-effect-unsaid` for the 1-byte read at 0600905A, the rts slot's `mov.b @r4,r0` of function 1 shown inside function 0 ("runs on into the next"). On the run that reached 0xFFFFFFFC, the signed-bound table's index -1 had shifted r4 (`shll2 r4`) in code the text shows as the unresolved indirect call. The text is `return CONCAT44((int4)*param_1,xVar1);`: the read is through `param_1`. The printer gives the whole statement to the slot's instruction (its own tokens are `return CONCAT44 * param_1 , xVar1`), so `PointerPrintsFromHardware` followed `xVar1`, the other half of the value returned, to `xVar1 = 0xffffffd3;` (`mov #-45,r1`): a value, and an on-chip address 41 bytes from 0xFFFFFFFC, inside `kPointerReach`. That is A5-82's first mechanism, at the limit A5-82's fix named (a number that is a value within 60 bytes of the register reached is taken for the pointer). No engine or host defect: the text states what it can.
+
+Fixed in the oracle: when the statement dereferences something, the derivation is followed from the operands of the dereferences first (`DerefOperands`: what follows a unary `*`, at the start, after an operator, an opening parenthesis or a cast, and the name before a `[`; found on the whole line, since the read's own tokens hold no parentheses, and kept where they name one of the read's own tokens); a base named only outside them is counted `pointer.effect.unrelated` / `cache.read.pointer.unrelated`, as A5-82's set-aside derivations are. Pinned in `TestA582Pins`: the shrunk module and the seed (no finding, the derivation counted unrelated), the derivation on text with the read's own tokens (the value beside the dereference; the pointer behind a cast beside a value; both, a control), the earlier nine derivations unchanged, and `DerefOperands` on three statements.
+
+### 5. The mutation table
+
+Each part reverted on the fixed tree (the engine rows with a first form of the patch that also had the inert part named below), the suites rebuilt and run (the decompiler suite, the printed-C differential's default run, the generator's default run with its pins):
+
+| Mutation | Fails |
+|---|---|
+| the whole of 0056 (the head's engine) | 30 checks of `TestA365WalkDown` (every walk down; the controls pass), 10 printed-C fixtures and 5 walk functions of the default 300 seeds, `TestA365Pins` (901303, both) |
+| (1) the alias boundary and reach | 20 checks, 9 fixtures and 1 walk function, `TestA365Pins` |
+| (2) the guard below a pointer stepped down | 18 checks, 6 fixtures, `TestA365Pins` |
+| (2) no hint at the guessed bottom | 6 checks (the 64 KiB array) |
+| (3) the join's `PTRSUB` | 10 checks, 7 fixtures and 4 walk functions (`register0x0000003c`); 901303 passes (its walk starts below the entry r15) |
+| (3) the `PTRSUB` is no parameter reference | 1 check (five parameters), 2 walk functions (the text calls for an argument it has not) |
+| (4) the walked save slot mapped | 1 check, 2 fixtures, `TestA365Pins` |
+| check 12's save before a call | `TestA365Pins` (2 checks) |
+| frame mode off | the 12 printed-C fixtures, skipped (`fixture-skipped`) |
+| the walk not drawn | `TestA365Pins` (7 checks: no form drawn) |
+| A5-85: the dereference's operand first | `TestA582Pins` (6 checks: the module, the seed, the token-level derivation) |
+
+A first form of the patch also took a register's save slot reached by a walk for aliased in `ScopeLocal::isUnmappedUnaliased`; reverting it failed nothing (the mapping of item 4 covers the slot), so it is not in 0056, nor is a reset of `guessedBelow` that the range-locked branch made redundant.
+
+### 6. The matrix, on the fixed tree (code `7983675`)
+
+Commits `7983675` (code) and `3e5f985` (the fault re-pin); master is now `e75dfb2` with the area 2 fixer's 0054 and 0055, and this branch is not rebased on it (the coordinator resolves the vendored `cpp/` at the merge; 0056 touches none of `funcdata_op.cc`, `op.cc` or `action.cc`).
+
+| Run | Result |
+|---|---|
+| `ctest -E SaturnExplorerLive -j3 --timeout 900` (RelWithDebInfo, 92 tests) | 92 of 92 pass (120 s; the fault suite 120 s). The first run failed the fault suite on four MOVED pins (below) |
+| `SaturnExplorerDecompilerFaultTests` | 0 of 94 jobs failed (77 s) after the re-pin: the patch's allocations (the alias checker's vectors, `ActionRestrictLocal`'s gather) moved `FuncProto::copy` of fixture1 (both passes) from the 64-byte allocation 58 to 61, `MapState::addRange` from the 8-byte 28 to 29 and `Scope::addMapPoint` from 29 to 30, as the matrix printed them |
+| `SE_GENERATED_SEEDS=3000 SE_GENERATED_GRAMMAR=2` | 0 failing seeds, 0 findings; 4,231 lent (the head 4,232: seed 1998, below), claims held in 17,696 runs, canary 240 programs, 0 failing |
+| `SE_GENERATED_GRAMMAR=1 SE_GENERATED_SEEDS=1000` | 0 failing seeds |
+| `SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000` | passed: 3,696 functions (3,077 as before, 12 new fixtures, 607 walks), 3,334 compared, agrees 3,375, `narrow-c` 6, `void-return` 285, `void-return-lent` 30 |
+| `SE_GENERATED_SEEDS=20000` | 0 failing seeds (16,042 lent, 64,124 runs held to the claims) |
+| grammar 2, 900,001 to 920,000 (`SE_GENERATED_FIRST`) | 0 failing seeds, 0 findings (A5-85's 910697 and A3-65's 901303 among them); 28,492 lent, 119,129 runs held to the claims |
+| corpora 007 / 008 with `SE_GAME_LEND=1` | section 7: no output file differs |
+| the area 2 checkers (`tools/a2_round9/nzm_check_r9.patch` on a scratch copy of the fixed tree, `SE_CONSUME_CHECK=1 SE_NZM_CHECK=1 SE_NZM_FREE=1`) | no stale non-zero mask anywhere (`reports: 0`). Consume: the unit suite (496 functions) reports four `rule:push_multi` lines, all in `TestArea2Round9`'s A2-58 fixtures (the open row, pinned there as WRONG); grammar 2 seeds 1 to 1,000 report two `PIECE` returns (`action:restructure_varnode`, `rule:condnegate`), and the same checker over the head's engine reports the same two; the printed-C range of 3,000 seeds with the walks and the A3-65 fixtures reports none. So nothing the patch made |
+| vendoring | `python3 -I vendor.py <ghidra>` in a scratch copy of `ghidra-decompiler`: applies 0001 to 0053 and 0056, and the copy is identical to the committed tree (`diff -r`) |
+
+**Seed 1998 (grammar 2), the one lending change.** Function 1 walks a frame address down (A3-16's `frame.walk`), then calls `0x060090AC` twice; between the calls it stores `gbr - r5` into a word of the frame nothing reads. With the frame's locals aliased by the walk the store is no longer removed as dead (a call may read an aliased local), the text shows it (`iStack_20 = extraout_gbr - param_2;`), and the host withholds the function: "it uses gbr after calling 0x060090AC, which is not known to return it". The code does read GBR there; the head's text hid it by removing the store. A withheld signature for a lent one, which errs the safe way.
+
+**Oracle counts (A5-85).** Over grammar 2's 3,000 seeds the pointer rules count the same with the narrowing as without it (`pointer.effect.derived` 76, `.unrelated` 9, `cache.read.pointer.said` 48): it sets aside only what A5-85's shape is.
+
+**Time.** The corpora's default requests took 8,102 and 8,512 ms (image 007, head and fixed) and 25,150 and 26,108 ms (008), the lending runs 22,782 / 22,740 and 53,192 / 59,016 ms, on a shared machine (load 6 to 10): within its noise but for 008's lending run.
+
+### 7. The corpora
+
+Both images, `SE_GAME_HWRAM=<img> SE_GAME_LEND=1` with `SE_GAME_OUT`, the head `bc872a1` built beside, every output file compared: **no file differs** in either image (841 and 1,556 files: each function alone, and the lending run's before and after). So no game function prints a value this patch corrects, and no lent signature moves.
+
+| | 007 | 008 |
+|---|---|---|
+| ledger counts | 0 dropped, 0 missing and said | 0 dropped, 4 missing and said |
+| mapping oracle, every violation count (alone, lent) | 0 | 0 |
+| lent signatures (parameters), unlent / lent run | 637 (866) / **662 (923)** | 992 (1,227) / **1,021 (1,287)** |
+| functions alone; lending run | 839 of 839 ok; 1,730 ok | 1,554 of 1,554 ok; 2,995 ok |
+| texts that differ | none | none |
+
+No compiled function of either image walks a frame address down in a loop over a local the text reads after it, or the texts would differ: the patch changes the analysis only where `stepsDown` finds such a loop (and, for item 2, an indexed stack access whose range moves down).
+
+### 8. Not done
+
+- A pointer into a register's save area that is no local prints the stack register raw (`(int4)register0x0000003c + -4`), as upstream does and as the head did; its value is right. The printed-C harness cannot run such a text off Linux (the cast of a host pointer to four bytes), so the generator's walk keeps to frames with no pushes.
+- A walk whose pointer passes through a call before the loop is recognized once `ActionStackPtrFlow` has resolved the call's effect on r15; seed 901303 is such a case and is right, but a pass of the alias analysis before that resolution could still mark a slot unaliased for good (nolocalalias is never cleared). No fixture or seed shows it.
+- The Live tests and the sanitizer job were not run (shared socket path; CI).

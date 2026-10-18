@@ -20,6 +20,7 @@
  * Modified for SaturnExplorer: every load is held, not only the unused ones (patches/0018-hold-every-load.patch).
  * Modified for SaturnExplorer: a return in the join space is consumed whole, never narrowed to its low half (patches/0033-engine-printed-value-fixes.patch).
  * Modified for SaturnExplorer: the backward step of the consume analysis is PcodeOp::getConsumeLocal (patches/0054-engine-cached-masks-never-narrower.patch).
+ * Modified for SaturnExplorer: the entry stack pointer a loop walks down is no reference to a stack parameter, and a save slot it reaches stays mapped (patches/0056-engine-stack-walk-down-aliases.patch).
  */
 #include "coreaction.hh"
 #include "condexe.hh"
@@ -2086,6 +2087,14 @@ int4 ActionRestrictLocal::apply(Funcdata &data)
     }
   }
 
+  // SaturnExplorer (patches/0056-engine-stack-walk-down-aliases.patch): a save slot a pointer stepped down may reach stays mapped. Code
+  // that runs on after its pops (a run-on into the next function, a frame made after a push and a pop)
+  // walks down over the words they freed; unmapped, the slot was one variable with the register saved in
+  // it, and a read of it after the walk printed the register (`return unaff_r13;`).
+  AliasChecker walks;
+  AddrSpace *stackSpc = data.getScopeLocal()->getSpaceId();
+  walks.gather(&data,stackSpc,false);
+  const vector<pair<uintb,uintb> > &spans( walks.getDownSpans() );
   eiter = data.getFuncProto().effectBegin();
   endeiter = data.getFuncProto().effectEnd();
   for(;eiter!=endeiter;++eiter) { // Iterate through saved registers
@@ -2100,6 +2109,13 @@ int4 ActionRestrictLocal::apply(Funcdata &data)
 	Varnode *outvn = op->getOut();
 	if (!data.getScopeLocal()->isUnaffectedStorage(outvn))	// Is this where unaffected values get saved
 	  continue;
+	bool walked = false;
+	for(int4 k=0;k<spans.size();++k) {
+	  uintb low = spans[k].first, top = spans[k].second, off = outvn->getOffset();
+	  if (outvn->getSpace() == stackSpc && (low <= top ? (off >= low && off <= top) : (off >= low || off <= top)))
+	    walked = true;
+	}
+	if (walked) continue;
 	data.getScopeLocal()->markNotMapped(outvn->getSpace(),outvn->getOffset(),outvn->getSize(),false);
       }
     }
@@ -4876,6 +4892,19 @@ void ActionInputPrototype::gatherParamSpacebaseRefs(list<InputRef> &refs,Funcdat
     OpCode opc = op->code();
     if (opc == CPUI_PTRSUB) {
       vn = op->getIn(1);
+      // SaturnExplorer (patches/0056-engine-stack-walk-down-aliases.patch): the entry stack pointer a loop walks down
+      // (ScopeLocal::annotateRawStackPtr gives the join this PTRSUB) reaches only what lies below
+      // it, which is no parameter.
+      if (vn->getOffset() == 0 && !op->getOut()->hasNoDescend()) {
+	bool walk = true;
+	for(list<PcodeOp *>::const_iterator diter=op->getOut()->beginDescend();diter!=op->getOut()->endDescend();++diter) {
+	  if ((*diter)->code() != CPUI_MULTIEQUAL || !AliasChecker::stepsDown(*diter)) {
+	    walk = false;
+	    break;
+	  }
+	}
+	if (walk) continue;
+      }
       addr = sbtype->getAddress(vn->getOffset(),vn->getSize(),op->getAddr());
     }
     else if (opc == CPUI_PTRADD) {
