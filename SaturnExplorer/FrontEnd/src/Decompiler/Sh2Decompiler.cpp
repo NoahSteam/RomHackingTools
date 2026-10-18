@@ -848,7 +848,10 @@ private:
         const int64_t width = (address & -address) == 0 || (address & -address) > 4 ? 4 : (address & -address);
         return address < slot + 4 && slot < address + width;
     }
-    static void Clobber(State& s, uint32_t stored, int64_t from = INT64_MIN, int64_t to = INT64_MAX, bool spare = false,
+    // 'stored' is what the words may now come from (origins); 'storedDep' what they then depend on (the return rule's Deps), which is not the
+    // same: a value loaded from a free-stack word may come from anything and depends on memory only. Dependences flow by dependences -- built
+    // from origins they put every register in a word a callee may have written and hid real inputs behind a "nothing-known" value (A3-66).
+    static void Clobber(State& s, uint32_t stored, uint32_t storedDep, int64_t from = INT64_MIN, int64_t to = INT64_MAX, bool spare = false,
                         const std::vector<int64_t>* exact = nullptr)
     {
         auto handed = [&](int64_t slot) {
@@ -861,7 +864,7 @@ private:
             if (slot.first + 4 > from && slot.first < to && !(spare && SavedRegister(slot.second) && !handed(slot.first)))
             {
                 Deps d = slot.second.DepsOf();
-                d |= Deps::All(stored);
+                d |= Deps::All(storedDep);
                 const bool hole = slot.second.kind == Value::Fuzzy && slot.second.hole;
                 const uint32_t exposedAt = slot.second.exposedAt;
                 const Value was = slot.second;
@@ -1277,9 +1280,16 @@ private:
         // The callee's bits as origins here. Its entry registers are ours at the call. What it loads
         // from memory can be anything in memory, our slots included: it may read our frame through
         // its stack pointer or a pointer it was given. Its stack is ours above its r15.
-        uint32_t reg[kTracked];
-        for (int r = 0; r < kTracked; ++r) reg[r] = Get(s, mReg[r]).Origins();
+        uint32_t reg[kTracked], regDep[kTracked];
+        for (int r = 0; r < kTracked; ++r)
+        {
+            const Value x = Get(s, mReg[r]);
+            reg[r] = x.Origins();
+            regDep[r] = x.Direct();
+        }
         const uint32_t memory = Loaded(s).from | AllSlots(s);
+        uint32_t memoryDep = Loaded(s).Direct();
+        for (const auto& slot : s.slots) memoryDep |= slot.second.Direct();
         auto map = [&](uint32_t bits) {
             uint32_t o = bits & origin::kStack;
             if (bits & origin::kMemory) o |= memory;
@@ -1287,14 +1297,24 @@ private:
                 if (bits & (1u << r)) o |= reg[r];
             return o;
         };
+        // ...and the same as dependences: a value the callee stores was computed from our registers at the call and from what it loaded.
+        auto mapDep = [&](uint32_t bits) {
+            uint32_t o = bits & origin::kStack;
+            if (bits & origin::kMemory) o |= memoryDep;
+            for (int r = 0; r < kTracked; ++r)
+                if (bits & (1u << r)) o |= regDep[r];
+            return o;
+        };
+        const uint32_t leakedDep = mapDep(e.leaks), framedDep = mapDep(e.frameValues);
         const uint32_t stores = map(e.storesThrough & ~origin::kFrame);
         const uint32_t leaked = map(e.leaks);
         const uint32_t framed = map(e.frameValues);
         const uint32_t out = map(e.outOrigins);
         const Value sp = Get(s, mReg[kR15]);
         // Its pushes (and an interrupt's) land below the call's r15.
-        if (sp.kind == Value::Sp) Clobber(s, kAnything, INT64_MIN, sp.v);
-        else Clobber(s, kAnything);
+        // (free-stack garbage: anything as origins, memory as a dependence, as a load below r15 is: FreeStack)
+        if (sp.kind == Value::Sp) Clobber(s, kAnything, origin::kMemory | origin::kStack, INT64_MIN, sp.v);
+        else Clobber(s, kAnything, origin::kMemory | origin::kStack);
         // Its writes and what it lets out are this function's too.
         Leak(s, leaked);
         if (e.storesThrough & origin::kFrame)
@@ -1309,13 +1329,13 @@ private:
                     if ((e.frameWords >> k) & 1u)
                     {
                         const int64_t at = Wrap(sp.v + 4 * k);
-                        Clobber(s, framed, at, at + 4);
+                        Clobber(s, framed, framedDep, at, at + 4);
                         if (at + 4 > 0) AddFrameWords(at, 4);
                     }
             }
             else
             {
-                Clobber(s, framed, sp.kind == Value::Sp ? sp.v : INT64_MIN);
+                Clobber(s, framed, framedDep, sp.kind == Value::Sp ? sp.v : INT64_MIN);
                 mFrameWords |= CallEffects::kFrameAny;
             }
         }
@@ -1328,7 +1348,7 @@ private:
                     const Value h = Get(s, mReg[r]);
                     if (h.kind == Value::Sp) exact.push_back(h.v);
                 }
-            StoreThrough(s, Value::From(stores), leaked | framed, true, &exact);
+            StoreThrough(s, Value::From(stores), leaked | framed, leakedDep | framedDep, true, &exact);
         }
         // A value this function put in r0 and a callee that keeps r0 leaves there: the engine's call killed it (A3-13). Not
         // the callee's own address in `jsr @r0`, which compiled code leaves there (10 of the corpus's void functions).
@@ -1394,7 +1414,7 @@ private:
                 for (int64_t w = addr.v & ~int64_t(3); w < addr.v + n; w += 4)
                     if (s.slots.count(w) == 0) s.slots[w] = Unwritten(s, w);
             }
-            Clobber(s, v, addr.v, addr.v + n);
+            Clobber(s, v, value.Direct(), addr.v, addr.v + n);
             if (n == 4)
             {
                 Value w = value;
@@ -1421,13 +1441,13 @@ private:
             mCallerFrameStores |= v | origin::kFrame;
             mOwnFrameWords |= CallEffects::kFrameAny;
         }
-        StoreThrough(s, addr, v);
+        StoreThrough(s, addr, v, value.Direct());
     }
 
     // A store through an address not known exactly, made here or by a callee, of a value from
     // 'stored': recorded in this function's summary, and over every slot it may hit. An absolute
     // address is taken never to be in the stack, as the engine's own stack analysis takes it.
-    void StoreThrough(State& s, const Value& addr, uint32_t stored, bool spare = false, const std::vector<int64_t>* exact = nullptr)
+    void StoreThrough(State& s, const Value& addr, uint32_t stored, uint32_t storedDep, bool spare = false, const std::vector<int64_t>* exact = nullptr)
     {
         const uint32_t o = addr.Origins();
         // Whether the address may be in the stack is asked before the store lets a stack address out: the store that publishes a frame address
@@ -1442,8 +1462,8 @@ private:
             mFrameValues |= stored;
             mFrameWords |= CallEffects::kFrameAny;
         }
-        if (mayBeStack) Clobber(s, stored, INT64_MIN, INT64_MAX, spare, exact);
-        else Clobber(s, stored, 0);   // through an entry value: the caller's frame, at most
+        if (mayBeStack) Clobber(s, stored, storedDep, INT64_MIN, INT64_MAX, spare, exact);
+        else Clobber(s, stored, storedDep, 0);   // through an entry value: the caller's frame, at most
     }
 
     Value Load(const State& s, const Value& addr, ghidra::uint4 n)
