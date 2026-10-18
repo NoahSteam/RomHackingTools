@@ -10421,3 +10421,135 @@ Image 007: 1,730 functions in the lending run, **662 lent (923 parameters)** (63
 - The Live tests and the sanitizer job (shared socket path; CI).
 
 **Done criteria.** Nine rows at P1 or P2 (A3-66 to A3-72, A3-75, A3-76) and three at P3: a fix round, then two consecutive clean review rounds.
+
+## Area 3, round 10 fix
+
+Fixer, branch `review/3-round10-fix`, on the coordinator's head `9e00a73`. Code commits `9fc43a0` to `bf94c18` (host, engine patch 0057 in `8ab4912`), then pins and this record. **A3-71 is fixed; A3-72 is fixed for part a (P1) by engine patch 0057, and its part b stays open (a P2 text in a withheld function, section 6); A3-66 to A3-70, A3-75 and A3-76 (P2) are fixed; A3-73, A3-74 and A3-77 (P3) are fixed.** A3-78 and A3-79 (routed) are triaged and fall outside this rework (section 6). Own RelWithDebInfo build, `-j2`, every run under `ulimit -v 4000000`.
+
+### 1. The rule, as a guarantee
+
+Round 9 stated the return rule as one guarantee: a function the engine made `void` is lent only when no input its signature does not hold can change what it leaves in r0. Round 10 showed the guarantee leaking wherever the host's own interpreter (`ReturnCheck`) was incomplete, and it always leaked the same way: a place the interpreter did not model gave a value that depended on nothing, or on "everything" that an exception then threw away. This round makes the interpreter fail closed:
+
+**Every value the interpreter builds depends on all of its inputs' dependences unless the op is modelled exactly. A value nothing is known of depends on every input, never on none. The only things excused are the ones proved below.**
+
+What that took, by place:
+
+| Where it failed open | Now |
+|---|---|
+| a "nothing-known" value (every register among its dependences) returned 0 to the rule (`ReturnInput`, `ChooserInput`) | the exception is gone. A word read from free stack, or through a stack pointer the check cannot place, is modelled as what it is: a read of memory and the stack (`FreeStack`), and, unplaced, of the stack arguments too, since even a base below the entry r15 with an index the engine takes as non-negative reaches upward without bound (A3-66, A3-67) |
+| dependences built from **origins** | what a callee or a store writes carries the dependences of what was written (`Apply`'s `mapDep`, `Clobber`'s and `StoreThrough`'s explicit dependence word), not its origins. A free-stack word's origins are "anything", and counted as dependences they put every register into whatever a lent callee might have written (this was what hid 06038F64's input before) |
+| pool literals not folded in `WithholdReason`'s check | the raw scan's literal words of either width are folded (`mov.w @(disp,PC)` is the usual pool offset) |
+| `INT_ZEXT`/`INT_SEXT` of a constant, a bitwise op of two constants | folded, so `and #imm,r0` is a mask (A3-69) and `xor #0,r0` is the identity (A3-77) |
+| a part of a register, a partial store and reload of a slot, a clobbered slot, the extension of a constant rebuilt as `Value::From` | the flags the rule reads (`usesR0`, `carried`, `joined`, `keepsR0`) are kept (A3-68) |
+| a stack address plus an index | the sum keeps the index's dependences; only the origin narrows to the stack (A3-76) |
+| the frame "escaped" through a callee's own stack addresses, or through the free stack below the call | a callee's own frame and the words below the call's r15 are its stack once it is entered, not this function's frame; only an address of ours it was handed lets the frame out |
+
+The exceptions, each removed or proved:
+
+| Exception | Outcome |
+|---|---|
+| r0's entry value where no op read it | **proved**: no op reads it, so the dropped return removes no read from the text, and a caller that reads r0 after the call is withheld ("uses r0 after calling"). Made fail-closed: the `usesR0` flag now survives every place a value is rebuilt (A3-68) |
+| a value nothing is known of | **removed** |
+| SR's other bits and the T in them | **narrowed to what is proved**: excused only when r0 at every return is exactly the value the function wrote back to SR with `ldc` (`mSrWritten`, by the op that made it). The engine never removes that `Write_SR`, so every read the value was computed from stays in the text, and `EntryStateUse` settles the SR read itself. `and #1,r0`, `add #1,r0` and the mask set with no write-back are inputs (A3-69, and its c: SR's S bit is withheld too) |
+| a value carried in r0 across a callee that keeps r0 | A3-13's rule (it withholds); made fail-closed by the flags |
+| the identity ops (`and r0,r0`, `or r0,r0`, `or #0`, `xor #0`, `add #0`) | **proved**: algebraic identities, which the engine folds too (patch 0048): the output is the input value |
+| r1 | **proved by the model**: the cspec has no output in r1 alone (r0, or r0:r1 joined), so a value only in r1 is never a return a caller can be shown, and a caller that reads r1 after the call is withheld |
+
+**Why not the engine's own p-code dataflow.** The question is about r0 at the returns of a function the engine has already made `void`: its final graph has no r0 at the RETURN, so it would take a second decompilation with a forced return. And the engine's graph is the thing under review: its alias folds were A3-65's and A3-72's bugs, so an oracle built on it inherits them. The host's interpreter is independent of the engine and is now fail-closed; that is the cheaper and the safer one.
+
+### 2. The rows
+
+- **A3-71 (P1).** `CallEffects::storesBelow` (new, in the cache keys): `ReturnCheck` tracks a pointer that is a register's entry value give or take an offset (`Value::baseReg`, `regOff`; a constant moves it, a non-negative index added keeps it at or above, a variable subtracted or a loop lowers it), and a store at a negative or lowered offset records the register. `Call` reads it for a lent callee: a frame address in such a register exposes the frame from its lowest slot. The immediate of `add #-4,r4` is the 32-bit 0xFFFFFFFC and is read as signed (the single-store case b failed on it at first). V5a and V5c (and the r5 form) now print the local and agree with the run; the walk-up control is unchanged.
+- **A3-72 (P1), patch 0057.** `AliasChecker::stepsDown` keys its forward walk on `(varnode, offset)`. A step on some paths of the loop makes a nested MULTIEQUAL whose output was reached first with offset 0 and pruned the stepped path. Now V7c, V8d (r14) and V8c (inner loop) print the local, with no `register0x0000003c`. Part b: section 6.
+- **A3-70 (P2).** The walk of an unlent callee (`CalleeFrameWrites`) is now transitive and bounded. A walked callee folds its own PC-relative literals (`mFoldPcLoads`, read from the capture), names its `bsr`/`jsr` targets and its thunk targets, and walks them in turn: 8 levels, one 80,000-step budget for the whole probe, one cache, and a cycle is "not walked". A callee it cannot name or reach (a jump to a register's entry value, an unnamed call, the levels or the budget exhausted) fails closed only when it hands the frame on: r15 back at or above its entry, or an address of the caller's frame in a register. A caller-frame address handed to a named callee always fails closed. W3 (the thunk), W1 (lent k) and W2 (unlent k) now print the note and the local. The first versions of this were too coarse, and the corpus showed it: 381, then 1,244, then 649 of image 007's files gained the A3-61 note, from a switch inside a frameless leaf (`mova ; mov.b @(r0,r5),r5 ; add r5,r0 ; jmp @r0`) taken for a tail jump, from the depth limit, and from a lent sub-callee's `kFrameAny`. In the final version no game function gains the note.
+- **A3-75 (P2).** A word is marked when it is exposed, with the first call whose callee writes it (`ExposeStackArguments` asks `CalleeFrameWrites` there), and a later call that leaves it alone keeps the mark; `ReadExposed` only reads it.
+- **A3-73 (P3).** Any input in the stack space at or above the entry r15 that no parameter holds withholds, whatever the model's 500-byte window.
+- **A3-74 (P3).** A walked callee stops at 256 stack words a state and shares the budget, failing closed; `Run` checks the cancel flag every 1,024 steps. The 6,000-push callee: 30 ms (14.7 s and 2.2 GB at the head), with the note (the walk could not finish, so the saved word is not folded).
+- **A3-66, A3-67, A3-68, A3-69, A3-76, A3-77**: section 1. A3-66 c and A3-67 b are withheld as the rows expect ("from"/"chosen by a stack argument").
+- **Patch 0056 repaired.** Its `coreaction.cc` header hunk no longer applied after 0054 (0054 adds a header line between 0033's and the comment's end; the merge resolved `cpp/` and left the patch's context stale), so `vendor.py` could not reproduce master. The hunk's context now includes 0054's line; 0057 applies after it, and the reproduced tree is identical to the committed one.
+
+### 3. Pins
+
+`TestArea3Round10Fix` (`Sh2DecompilerTests.cpp`): every finding fixture of A3-66 to A3-77 in its right state (withheld with the row's reason, or lent; the A3-70, A3-71 and A3-75 texts with the note and the local, and the A3-71 ones agreeing with the run; the A3-72 walks printing their local), two SR pins (`add #1,r0`, the mask with no write-back), a thunk to a callee that writes nothing (no note, `return 5;`: the walk's precision), and A3-74 (under 3 s, with the note). `TestArea3HiddenInputFuzz`: the reviewer's scratch fuzzer, ported. It generates random register and frame programs, runs each lent one on the emulator once as is and once with each input the signature does not hold perturbed (r0-r3, r8-r11, the T flag, r4-r7 beyond its parameters), and reports a lent function whose r0 changes. It runs 400 programs by default; `SE_A3FUZZ_PROGRAMS`/`SE_A3FUZZ_SEED` widen it. Reversed on purpose: `a3_55 control: chosen by a value nothing is known of` and `round 9 fix: r0 or a word nothing is known of` are now withheld. In both, r15 escapes through `*r4` and comes back, so the word read may be the stack argument at r15 + 0.
+
+### 4. The mutation table
+
+Each part reverted alone in the committed tree, the decompiler suite rebuilt and run (`mut.py` in the scratch directory). The counts are the CHECKs that fail; the fuzzer found nothing under any mutant at its default 400.
+
+| Reverted | Fails |
+|---|---|
+| M01 the nothing-known exception back in `ReturnInput` | 0: subsumed (a free-stack read no longer depends on every register; with M03 it is the head's state) |
+| M02 the same in `ChooserInput` | 0: subsumed, as M01 |
+| M03 a free-stack read depends on every register | 3 (a3_66a, a3_66b, a3_67a) |
+| M04 an unplaced stack read without the stack arguments | 2 (the two reversed round 9 pins) |
+| M05 no pool-literal fold in the return check | 0 in the suite (a3_66c and a3_67b are still withheld through M04); the corpora lend 664 (929) and 1,022 (1,286), not 680 (958) and 1,071 (1,314) |
+| M06 a part of a register drops the flags | 4 (a3_68a, b, c, e) |
+| M07 a partial store or reload drops them | 1 (a3_68e) |
+| M08 no ZEXT/SEXT fold | 1 (a3_69a) |
+| M09 no fold of two constants | 1 (a3_77) |
+| M10 a constant's part or extension drops `carried` | 1 (a3_68f) |
+| M11 the SR exception as wide as before | 2 (the two SR pins) |
+| M12 the stack-address sum drops the index | 3 (a3_76a, b, c) |
+| M13 `storesBelow` not read at the call | 2 (a3_71a, b) |
+| M14 the register offset not wrapped to 32 bits | 1 (a3_71b) |
+| M15 `storesBelow` not recorded | 2 (a3_71a, b) |
+| M16 no transitive descent (depth 1) | 1 (the thunk precision control) |
+| M17 a thunk's target not walked | 1 (a3_70a) |
+| M18 a walked callee's literals not folded | 1 (a3_70a) |
+| M19 a later call's mark overwrites (the head's `exposedAt`) | 1 (a3_75) |
+| M20 no check beyond the stack window | 1 (a3_73) |
+| M21 no bound on a walked callee's stack words | 2 (a3_74: the time, the note) |
+| M22 a caller-frame address handed to a named callee not counted | 1 (a3_70c) |
+| M23 the same for a lent callee | 1 (a3_70b) |
+| M24 dependences mapped from origins | 0 in the suite; in the corpus it withholds 06038F64 and 06038F72 as "computed from r1 on entry" |
+| M25 the SR write-back not recorded | 1 (06010054's idiom, `TestArea3Round9Fix`) |
+| M26 a clobbered slot drops the flags | 0: no fixture; kept by the argument of section 1 |
+| M27 patch 0057 reverted (`seen` keyed on the varnode) | 3 (a3_72a, b, c) |
+| every part at once (the head) | every row's fixture in the state its row records (the reviewer's verify spec, rerun at the head before the first edit) |
+
+The cancel check of A3-74 is held by no pin: the fault matrix's cancel points do not reach the probe's walk.
+
+### 5. The lending cost, and the corpora
+
+Both images, `SE_GAME_HWRAM=<img> SE_GAME_LEND=1` with `SE_GAME_OUT`, the head `9e00a73` built beside, every output file compared.
+
+| | 007 | 008 |
+|---|---|---|
+| ledger counts | 0 dropped, 0 missing and said (as the head) | 0 dropped, 4 missing and said (as the head) |
+| functions | 1,730 ok, all passed | 2,995 ok, all passed |
+| lent (parameters), unlent / lent run, head | 637 (866) / 662 (923) | 992 (1,227) / 1,021 (1,287) |
+| lent, fixed | **655 (901) / 680 (958)** | **1,041 (1,253) / 1,071 (1,314)** |
+| files that differ | 78 (39 in each lending run, none alone) | 182 (9 alone, 86 and 87 in the lending runs) |
+| A3-61 notes gained | 0 | 0 |
+| decompiler time, lending run (before / after) | 18.5 / 21.3 s at the head, 30.2 / 31.3 s fixed | 46.2 / 54.1 s, 65.7 / 75.0 s |
+
+**Lending rises, and the rise is the literal fold.** Without it (M05) the fixed tree lends 664 and 1,022: the fold accounts for 16 of image 007's 18 and 49 of image 008's 50. A function that hands a callee a pointer loaded from a literal (`mov.l @(lit),r8 ; mov r8,r4 ; jsr`, 06009A3A) had that pointer as memory that might be the stack. A lent callee storing through it then clobbered the saved PR, and the function was withheld "a return not to its caller". As a constant it is an absolute address, which the analysis, like the engine, takes never to be in the stack. The other two in 007 are 0602EB78 and its mid-entry 0602EB84, proved by the walk's other precision changes. Each function that becomes lent is checked like every other in the lending run (all ok, the mapping oracle clean).
+
+**What becomes withheld: two functions, both false withholds.** Image 008's **06038F64 and 06038F72** (the reviewer's "must stay lent") go from lent to withheld: "computed from r8 on entry" and "computed from a stack argument (the word at r15 + 0)". The code reads nothing it does not hold: r0 at the return is a value loaded through `param_1`-derived pointers. But the lent callee 06038EDC's own summary says it may let out its entry r14 (`leaks` names r14, here our frame pointer). From then on the frame has escaped, a load through a pointer from memory may read our frame, and fail-closed counts the saved-register slots (r8 to r14 on entry) and the stack arguments. Keeping them lent would need pointer provenance through memory, which the interpreter does not track. 007 has no function that becomes withheld. That holds the round 9 fixer's measured zero for the rest of the rule.
+
+**The other changed texts.** In 007, 17 withheld functions in each lending run show the newly lent 0x0601824C's `int2` return at their calls. Four go from "calls ..." to "a return not to its caller" (their callee is now lent, so the next check runs). In 008, 21 withheld functions differ in the same way. Eight go from "calls" to "a return not to its caller", two go the other way, one goes to "it holds a value in r0 across a call that keeps r0", and one bad-data function changes text. The 9 that differ when decompiled alone (06037E0C, 06037F1A, 060380BE, 06038264, 06038352, 06038512, 06038822, 0603885E, 0603ED52) are withheld functions whose local layout moved with the probe's host alias: an array split or merged, e.g. `xStack_247` with `axStack_23c [568]` into `axStack_247 [3]`, and 0603ED52 no longer has the "Heritage AFTER dead removal" warning. The diffs are `corpus007.diff` and `corpus008.diff` in the scratch directory.
+
+**Time.** The transitive walk and the folds cost about 40 % of the lending runs' decompiler time on a shared machine. The A3-74 bound keeps the worst case at the size of the budget.
+
+### 6. Not done, and the routed rows
+
+- **A3-72 part b** (a pointer kept in a stack local across a call, then stepped down): 0057 does not reach it. The spill and the reload through the frame break the def-use chain that `stepsDown` and the alias gather follow, so the reloaded pointer is no frame base. The text reads `return 5;` in a function that is withheld (no signature leaks), P2 as the row has it. Left open: it needs the engine to carry a frame pointer through a stack slot across a call.
+- **A3-79** (routed, provisional P2): still `register0x0000003c + -4` with 0057. It is not A3-72's conditional step: the walked pointer starts in storage no local is mapped to, which the A3-65 record already lists as not done (a pointer into unmapped stack prints raw, as upstream does). The function is withheld ("reads vbr"). Triaged P3 for the coordinator's ruling.
+- **A3-78** (routed, provisional P2): still `n:kept-read:r10` at grammar 2 seed 1009895. Function 0 tail-jumps into function 2 and the text shows function 2's read of r10, which a callee function 0 made changes. That is A3-52's run-on class through a tail jump, a flow and boundary question, not this rework's.
+- **The walk's limits**, kept and named: a walked callee's switch cases (the walk has no table for a callee's switch: a computed jump stays in the callee and is not followed), and a callee whose first instruction is not captured (the BIOS: no code to read). A lent sub-callee's `kFrameAny` (a store through a stack pointer it could not place) is not taken to reach its caller's caller. That follows the engine's index convention (A3-9, A3-17), and it is what a walked callee's own stores count as well.
+- The Live tests and the sanitizer job were not run (shared socket path; CI).
+
+### 7. The matrix, on the fixed tree (code `bf94c18`, pins after)
+
+| Run | Result |
+|---|---|
+| `ctest -E SaturnExplorerLive -j2 --timeout 900` (93 tests) | 93 of 93 pass (142 s) |
+| `SaturnExplorerDecompilerFaultTests` | 0 of 94 jobs failed, 0 MOVED: no re-pin (`storesBelow` moves no allocation pin) |
+| `SE_GENERATED_SEEDS=3000 SE_GENERATED_GRAMMAR=2` | 0 failing seeds, 0 findings; 4,245 lent (void 2,194, returning 2,051), 2,866 withheld, 17,750 runs held to the claims, canary 240 programs, 0 failing |
+| `SE_GENERATED_GRAMMAR=1 SE_GENERATED_SEEDS=1000` | 0 failing seeds |
+| `SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000` | passed: 3,703 functions, 3,397 compared, agrees 3,425, `narrow-c` 7, `void-return` 249, `void-return-lent` 22 |
+| `SE_GENERATED_SEEDS=20000` | 0 failing seeds, 16,082 lent, 64,258 runs held to the claims |
+| grammar 1, 1,100,001 to 1,110,000 | 0 failing seeds (seed 1103677, A3-68's, passes) |
+| `TestArea3HiddenInputFuzz` | 400 programs (96 lent) in the suite; 5,000 at seeds 2 and 3: 1,219 and 1,208 lent, 15,847 and 15,704 perturbed runs, 0 findings |
+| corpora 007 / 008 | section 5 |
+| vendoring | `python3 -I vendor.py <ghidra>` on a copy against the pinned checkout: 0001 to 0057 apply (0056 with its repaired context) and the copy's `cpp/`, `sources.cmake` and spec files are identical to the committed tree |
