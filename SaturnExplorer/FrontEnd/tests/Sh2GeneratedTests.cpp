@@ -532,6 +532,18 @@ struct Gen
         p.mbox = 0x26001000u + 0x10u * rng.Below(4);
     }
 
+    // The registers an item loads a literal into (a pointer item, a poll): their value is no longer the caller's, on that path at least.
+    static uint32_t ReloadedRegs(const std::vector<Item>& items)
+    {
+        uint32_t m = 0;
+        for (const Item& it : items)
+        {
+            if (it.type == Item::LitPtr || it.type == Item::Poll) m |= 1u << it.reg;
+            m |= ReloadedRegs(it.slot) | ReloadedRegs(it.kids);
+            for (const std::vector<Item>& c : it.cases) m |= ReloadedRegs(c);
+        }
+        return m;
+    }
     // Whether an item writes SR other than its flags (ldc to SR): the interrupt mask a chooser reads is then not the caller's.
     static bool WritesSr(const std::vector<Item>& items)
     {
@@ -554,11 +566,15 @@ struct Gen
     // constants, two sums of one register (`r4 + 1`, `r4 + 2`), two loads through r4 and r5, a register and a constant.
     // 'entryOff': the entry r15 from the function's r15 after its prologue. 'by' is the chooser as Func::choiceBy has it.
     static constexpr int kChoiceStack = 15, kChoiceSr = 16, kChoiceConst = 17;
-    Item MakeChoice(int entryOff, int& by, bool srWritten)
+    Item MakeChoice(int entryOff, int& by, bool srWritten, uint32_t reloaded)
     {
         Item it;
         it.type = Item::Choice;
-        std::vector<int> kinds = { 4, 4, 5 };   // a parameter (twice as often), a constant
+        int params[4], nparams = 0;   // the parameters that still hold the caller's value (stepped, perhaps), not a literal an item loaded
+        for (int q = 4; q < 8; ++q)
+            if (!((reloaded >> q) & 1u)) params[nparams++] = q;
+        std::vector<int> kinds = { 5 };   // a constant
+        if (nparams) kinds.insert(kinds.end(), { 4, 4 });   // a parameter, twice as often
         if (!Def(0)) kinds.push_back(0);
         if (!srWritten) kinds.push_back(1);
         if (!Def(1) || !Def(2) || !Def(3)) kinds.push_back(2);
@@ -587,7 +603,7 @@ struct Gen
         }
         case 4:
         {
-            by = 4 + static_cast<int>(choiceRng.Below(4));
+            by = params[choiceRng.Below(static_cast<uint32_t>(nparams))];
             it.words = { choiceRng.Chance(50) ? uint16_t(0x2008 | by << 8 | by << 4) : uint16_t(0x4015 | by << 8) };   // tst Rn,Rn / cmp/pl Rn
             it.shape = "choice.by_param";
             break;
@@ -606,11 +622,12 @@ struct Gen
         it.onTrue = choiceRng.Chance(50);
         // The second use of each value: `or r0,Rn` into a register that holds a value (it is the function's last write of Rn, dead after; the engine
         // counts the use and drops the return, A3-55), or a compare, which it does not count once its T is dead (that arm keeps its return).
-        int pool[8], np = 0;
-        for (int q = 1; q < 8; ++q)
+        // (a scratch register: an `or` into a pointer register lands in another's arena by chance, r5 | (r6 + 0x63) is r7's + 0x63: seed 19860)
+        int pool[3], np = 0;
+        for (int q = 1; q <= 3; ++q)
             if (Def(q) && q != by) pool[np++] = q;
-        const int un = np ? pool[choiceRng.Below(static_cast<uint32_t>(np))] : 4 + (by == 4);
-        auto useOf = [&]() { return choiceRng.Chance(75) ? uint16_t(0x200B | un << 8) : uint16_t(0x8800 | choiceRng.Below(256)); };   // or r0,Rn / cmp/eq #imm,r0
+        const int un = np ? pool[choiceRng.Below(static_cast<uint32_t>(np))] : -1;
+        auto useOf = [&]() { return un >= 0 && choiceRng.Chance(75) ? uint16_t(0x200B | un << 8) : uint16_t(0x8800 | choiceRng.Below(256)); };   // or r0,Rn / cmp/eq #imm,r0
         const uint32_t values = choiceRng.Below(4);
         const int s = 4 + static_cast<int>(choiceRng.Below(4));
         const uint16_t a = uint16_t(choiceRng.Below(128)), b = uint16_t((a + 1 + choiceRng.Below(100)) & 0xFF);
@@ -1662,7 +1679,7 @@ struct Gen
         if (f.returns && f.end == Func::Rts && nCalls == 0 && !table && f.sel < 0 && !f.shared && choiceRng.Chance(15))
         {
             const int entryOff = 4 * static_cast<int>(f.pushed.size()) + (f.savePr ? 4 : 0) + f.frame;
-            f.items.push_back(MakeChoice(entryOff, f.choiceBy, WritesSr(f.items)));
+            f.items.push_back(MakeChoice(entryOff, f.choiceBy, WritesSr(f.items), ReloadedRegs(f.items)));
             if (f.choiceBy >= 1 && f.choiceBy <= 3) f.reads |= 1u << f.choiceBy;
         }
         // `if (b) return a;` with no return on the other path (A3-20): last, so every path passes it. Only in a function that makes no call
@@ -3247,6 +3264,7 @@ struct FnInfo
     bool returns = false;    // r0 is written on every path just before the return
     bool partial = false;    // ...or on some paths only, from a parameter, and left alone on the rest (SE_GENERATED_RETURNS 2)
     int choiceBy = -1;       // ...or by two values a chooser decides between (Func::choiceBy; SE_GENERATED_RETURNS 30 + it, hex)
+    bool choiceInherited = false;   // ...in a function it jumps to or runs on into
     int sel = -1;            // the register a jump table indexes with
     uint32_t clobbers = 0;   // registers it leaves changed (Func::effClobbers): bit n is Rn, 17 gbr, 18 vbr, 19 mach, 20 macl
     uint32_t reads = 0;      // registers whose entry value it reads on purpose (Func::reads)
@@ -3313,6 +3331,7 @@ Subject MakeSubject(const Program& p)
             const Func& g = p.fns[k];
             k = g.end == Func::TailJump ? static_cast<size_t>(g.tailTo) : g.end == Func::Fall ? k + 1 : p.fns.size();
             if (k < p.fns.size()) f.choiceBy = p.fns[k].choiceBy;
+            f.choiceInherited = f.choiceBy >= 0;
         }
         f.sel = p.fns[i].sel;
         f.clobbers = p.fns[i].effClobbers;
@@ -4856,9 +4875,12 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                 // A return chosen by a parameter the signature holds, or by a constant, stays lent void (A3-62, accepted: no input is dropped, and a
                 // caller that reads r0 afterwards is withheld); chosen by any other input it is withheld (the return rule, A3-56 to A3-62).
                 const bool heldChooser = (fn.choiceBy >= 4 && fn.choiceBy <= 7 && static_cast<size_t>(fn.choiceBy - 3) <= pr.params.size()) ||
-                                         fn.choiceBy == Gen::kChoiceConst;
+                                         (fn.choiceBy == Gen::kChoiceStack && pr.params.size() >= 5) || fn.choiceBy == Gen::kChoiceConst;
                 if (ComparesCallResult(subject, fn)) count("excluded.call-result-compared.return-dropped");   // A2-49, accepted
                 else if (fn.choiceBy >= 0 && heldChooser) count("excluded.choice-held.return-dropped");
+                // A function that runs on or jumps into a choice returns its value, but chose its chooser's value itself (seed 706074): the choice is
+                // checked where it is drawn.
+                else if (fn.choiceBy >= 0 && fn.choiceInherited) count("excluded.choice-inherited.return-dropped");
                 else if (fn.choiceBy >= 0) add("return-dropped:choice", "r0 is one of two values an input of the function chooses between and the prototype returns nothing");
                 else add("return-dropped", "the function writes r0 as its result on every path and the prototype returns nothing");
             }
