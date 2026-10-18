@@ -16,6 +16,8 @@
  * Modified for SaturnExplorer: a pull-back through a comparison of a range holding both 0 and 1 is the full range; the other pull-backs are
  * exact or refused (patches/0058-engine-pullback-ranges-exact.patch). The push-forward half is sound at the edges of wrapped and full ranges,
  * a strided intersect is not empty by rounding, and the 8-byte pull-backs through a shift are exact (patches/0059-engine-range-arithmetic-sound.patch).
+ * Modified for SaturnExplorer: the intersect of ranges of two masks, a non-zero mask whose step does not fit, and a widened range hold what they
+ * must (patches/0062-engine-range-domain-nzmask-widen.patch).
  */
 #include "rangeutil.hh"
 #include "block.hh"
@@ -187,6 +189,11 @@ bool CircleRange::newDomain(uintb newMask,int4 newStep,uintb &myleft,uintb &myri
       myright = rem;		// Old range contained everything in newMask
       return false;
     }
+    // SaturnExplorer (patches/0062-engine-range-domain-nzmask-widen.patch): the range is the pieces [left,top] and [0,right) of the wider domain, and
+    // only the second can lie in the narrower one. A range that ends at the top of its domain has the right bound 0 (the phase of the top for a
+    // stride): its second piece is empty, and so is the intersection; upstream read that bound as a piece at the bottom of the narrow domain
+    // and answered all of it.
+    if (myright == rem) return true;
     myleft = rem;		// Take everything up to left edge of new range
   }
   if (myright > newMask) {
@@ -733,6 +740,10 @@ bool CircleRange::setNZMask(uintb nzmask,int4 size)
   if (trans>2) return false;	// Too many transitions to form a valid range
   bool hasstep = ((nzmask&1)==0);
   if ((!hasstep)&&(trans==2)) return false; // Two sections of non-zero bits
+  // SaturnExplorer (patches/0062-engine-range-domain-nzmask-widen.patch): the step is an int4. A lowest set bit of 31 or more does not fit
+  // (1 << 31 is negative and the range with it holds 0 and not the one value the mask allows; a shift of 32 or more is taken modulo 32 and
+  // gives a finer step). No range is the answer for a mask of too many transitions as well.
+  if (trans != 0 && leastsigbit_set(nzmask) > 30) return false;
   isempty = false;
   if (trans == 0) {
     mask = calc_mask(size);
@@ -1598,17 +1609,31 @@ bool CircleRange::pushForwardTrinary(OpCode opc,const CircleRange &in1,const Cir
 void CircleRange::widen(const CircleRange &op2,bool leftIsStable)
 
 {
+  // SaturnExplorer (patches/0062-engine-range-domain-nzmask-widen.patch): the widened range holds the old one, in the old range's step and phase.
+  // The moved bound is the landmark's rounded to the phase in the direction that keeps the elements: the right bound up (upstream rounded it down
+  // when the landmark's remainder was above the phase, leaving out the last element), the left bound up to the phase's first element at or above
+  // the landmark's (upstream took the landmark's bound as it was, in the wrong phase). A full landmark has no end to move to: when the bound it gives
+  // cuts the old range (a wrapped range moved to [left,0)) the answer is all of the phase.
+  if (isempty) return;
+  const uintb phase = left % step;
+  const uintb oldLeft = left;
+  const uintb oldRight = right;
   if (leftIsStable) {
-    uintb lmod = left % step;
-    uintb mod = op2.right % step;
-    if (mod <= lmod)
-      right = op2.right + (lmod - mod);
-    else
-      right = op2.right - (mod - lmod);
-    right &= mask;
+    const uintb mod = op2.right % step;
+    right = (op2.right + (phase + step - mod) % step) & mask;
   }
   else {
-    left = op2.left & mask;
+    const uintb mod = op2.left % step;
+    left = (op2.left + (phase + step - mod) % step) & mask;
+  }
+  // The length of the arc from left to right for the new range and the old (one bound has moved, the other is the same); equal bounds are the
+  // whole circle. The new range holds the old one if its arc is not shorter.
+  const uintb newDist = (right - left) & mask;
+  const uintb oldDist = (oldRight - oldLeft) & mask;
+  const bool holds = newDist == 0 || (oldDist != 0 && newDist >= oldDist);
+  if (!holds) {
+    left = phase;
+    right = phase;
   }
   normalize();
 }

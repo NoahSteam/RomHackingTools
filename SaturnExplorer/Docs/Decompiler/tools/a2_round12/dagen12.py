@@ -9,8 +9,11 @@
 #   42 widecmp   a 64-bit value in two registers (addc / subc / negc / mach:macl) compared as 64 bits, by cmp/hi, cmp/hs, cmp/gt, cmp/ge, cmp/eq
 #                of the high words and the low words (the carry and borrow rules)
 #   44 extcmp    an extended byte or word compared with a literal round the edge of the extension (RuleZextEliminate, RuleZextSless)
+#   45 signbias  x plus its sign bit shifted right arithmetically by k = 1 (x / 2, RuleSignDiv2) and by k > 1 (not a division)
+#   46 extshift  an extended byte or word shifted right and cut back to a byte or word; (V << 8k) >> 8k (RuleSignForm, RuleLeftRight)
+#   47 nonneg    a signed division by a constant of a zero-extended or masked dividend (RulePositiveDiv)
 #   43 sameval   a value computed twice or compared with itself (RuleTrivialArith): x ^ x, x == x, (x+y) == (x+y), (x*c) != (x*c), tst r,r
-# usage: dagen12.py <first seed> <count> [family 40..44]   -> one function per seed, ";" joined (SE_GENERATED_PRINTEDC_WORDS)
+# usage: dagen12.py <first seed> <count> [family 40..47]   -> one function per seed, ";" joined (SE_GENERATED_PRINTEDC_WORDS)
 #        dagen12.py extras <first seed> <count> <family>   -> the comma-joined hex list for SE_GENERATED_PRINTEDC_EXTRA
 import importlib.util, os, random, sys
 
@@ -141,7 +144,57 @@ def fam_extcmp(r, f):
     else: f.add(CMPS[nm] | 1 << 8 | 0 << 4)
     result_of_t(r, f, 0)
 
-FAMS12 = {40: fam_ovfsign, 41: fam_fixmul, 42: fam_widecmp, 43: fam_sameval, 44: fam_extcmp}
+def fam_signbias(r, f):
+    """x plus its sign bit (0 or 1: not the 2^k - 1 bias of a division by 2^k), shifted right arithmetically by k. `(x + (x >>> 31)) s>> 1` is x / 2
+    and RuleSignDiv2 rewrites it; for k above 1 it is no division (a mutant of the rule that takes a shift by 2 prints x / 2 for `(x + sign) >> 2`)"""
+    k = r.choice([1, 1, 2, 2, 3, 4, 5, 7, 8, 15, 16, 24, 31])
+    src = 4
+    if r.random() < 0.25: f.add(r.choice([extsb, extsw])(1, 4)); src = 1
+    form = r.randrange(0, 4)
+    f.add(mov(2, src))
+    if form == 0: shr_logical(f, 2, 31); f.add(add(2, src))                               # x + (x >>> 31)
+    elif form == 1: shr_arith(f, 2, 31); f.add(neg(2, 2), add(2, src))                    # x - (x s>> 31)
+    elif form == 2: f.add(cmp_pz(src), movt(2), movi(3, 1), xor(3, 2), add(2, src))       # x + !(x >= 0)
+    else: f.add(SHLL | 2 << 8, movt(2), add(2, src))                                      # the sign into T by shll, x + T (r2 was a copy of x: its sign bit)
+    if form == 3: f.add(0x0009)
+    shr_arith(f, 2, k)
+    t = r.randrange(0, 4)
+    if t == 0: f.add(mov(0, 2))
+    elif t == 1: shl(f, 2, k); f.add(mov(0, src), sub(0, 2))                            # x - ((x + sign) >> k << k)
+    elif t == 2: f.add(mov(0, 2), add(0, 2))
+    else: f.add(cmp_pl(2), movt(0))
+
+def fam_extshift(r, f):
+    """a byte or word extended, shifted right (arithmetic or logical) by a multiple of 8 or any amount, and cut back to a byte or word:
+    sub(sext(V), c) with c the size of V (the sign: RuleSignForm) or one short of it (the top byte of V, which a mutant of the rule takes for the sign),
+    and (V << 8k) >> 8k (RuleLeftRight)"""
+    form = r.randrange(0, 4)
+    if form < 3:
+        kind = r.randrange(0, 4)
+        f.add([extsb, extsw, extub, extuw][kind](0, 4))
+        n = r.choice([1, 7, 8, 9, 15, 16, 17, 24, 31, 23, 6, 12])
+        (shr_arith if (r.random() < 0.65 and form != 2) else shr_logical)(f, 0, n)
+        cut = r.choice([extub, extsb, extuw, extsw, None, None])
+        if cut: f.add(cut(0, 0))
+    else:
+        n = r.choice([8, 16, 24])
+        f.add(mov(0, 4)); shl(f, 0, n)
+        (shr_arith if r.random() < 0.5 else shr_logical)(f, 0, n)
+    if r.random() < 0.25: f.add(addi(0, r.choice([1, 0x7F, 0xFF])))
+
+def fam_nonneg(r, f):
+    """a signed division by a constant of a value known to be non-negative (a zero-extended byte or word, a masked or shifted register):
+    RulePositiveDiv turns the signed division into the unsigned one"""
+    d = r.choice([3, 5, 6, 7, 9, 10, 12, 25, 100, 1000, 3600, 641])
+    k = r.randrange(0, 4)
+    if k == 0: f.add(extub(1, 4))
+    elif k == 1: f.add(extuw(1, 4))
+    elif k == 2: f.add(mov(1, 4)); shr_logical(f, 1, r.choice([1, 2, 8, 16]))
+    else: f.lit(1, 0x7FFFFFFF); f.add(and_(4, 1))
+    emit_sdiv(r, f, d, 1, 0, 2)
+    f.d_hint = ('sdiv', d)
+
+FAMS12 = {40: fam_ovfsign, 41: fam_fixmul, 42: fam_widecmp, 43: fam_sameval, 44: fam_extcmp, 45: fam_signbias, 46: fam_extshift, 47: fam_nonneg}
 
 def build(seed, fam=None, want_fn=False):
     r = random.Random(seed * 104729 + 12)

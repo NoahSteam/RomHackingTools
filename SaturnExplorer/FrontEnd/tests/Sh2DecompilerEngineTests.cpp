@@ -1829,6 +1829,545 @@ void TestNzMaskShiftRound11()
     std::printf("nz mask of signed shifts: %ld checked\n", checked);
 }
 
+// ---- Area 2 round 12 P3 fix (patches/0062-engine-range-domain-nzmask-widen.patch) ----------------------------------------------------------------
+// Three CircleRange operations that patch 0059 did not touch, upstream's, none reached by a workload (ledger A2-73 to A2-75). The rule is 0059's: an
+// answer holds every value, or fails, or is everything.
+
+// A set of the one-byte domain, as 4 words: the elements of a range of the given mask that are at most 255.
+struct RcBits
+{
+    uint64_t w[4] = { 0, 0, 0, 0 };
+    void set(unsigned v) { w[v >> 6] |= static_cast<uint64_t>(1) << (v & 63); }
+    bool get(unsigned v) const { return (w[v >> 6] >> (v & 63)) & 1; }
+    bool operator==(const RcBits& o) const { return w[0] == o.w[0] && w[1] == o.w[1] && w[2] == o.w[2] && w[3] == o.w[3]; }
+};
+
+// Ranges of one size from structured bounds (the edges of the byte and of the word, the sign boundaries, the ends), steps 1 to 8, in the normal form
+// (the bounds congruent modulo the step, a full range written with its phase for both bounds).
+std::vector<FwRange> RcStructuredRanges(int size, const std::vector<uint64_t>& edges)
+{
+    std::vector<FwRange> out;
+    const uint64_t m = PbMask(size);
+    for (int st : { 1, 2, 4, 8 })
+        for (uint64_t l : edges)
+            for (uint64_t r0 : edges)
+            {
+                l &= m;
+                const uint64_t rem = l % st;
+                uint64_t r = ((r0 & m) - (r0 & m) % st + rem) & m;
+                if (r % st != rem) r = l;
+                uint64_t ll = l;
+                if (ll == r) ll = r = rem;
+                out.push_back({ ll, r, st });
+            }
+    return out;
+}
+
+// A2-73: CircleRange::intersect of ranges of two masks. newDomain cuts the wider range to the narrower mask and read a range that starts above the
+// narrower mask and ends at the top of the wider domain (the right bound 0, or the phase of the top for a stride) as the wrapped pair
+// [left,top] + [0,right): its right bound is not a piece at the bottom of the narrow domain, so the intersection is empty and not all of it.
+// An answer of 0 must be exactly the elements of both ranges within the narrower domain (an answer of 2 leaves the range as it was).
+void TestIntersectMixedMasksRound12()
+{
+    using namespace ghidra;
+    const auto t0 = std::chrono::steady_clock::now();
+    uint64_t state = 0x7A2C73;
+    auto next = [&state]() {
+        uint64_t z = (state += 0x9E3779B97F4A7C15ull);
+        z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ull;
+        z = (z ^ (z >> 27)) * 0x94D049BB133111EBull;
+        return z ^ (z >> 31);
+    };
+    int shown = 0;
+    auto fail = [&shown](const std::string& what, const std::string& detail) {
+        CHECK(false);
+        if (shown++ < 14) std::printf("intersect mixed masks round 12: %s: %s\n", what.c_str(), detail.c_str());
+    };
+    // the ledger's three: a one-byte range against a two-byte range that holds values above the byte only (0x8000 to 0xffff, 0x7ffb to 0xfffd step 1,
+    // 0x801 to the top at step 8); the intersection is empty
+    {
+        struct Fx { uint64_t al, ar; int as; uint64_t bl, br; int bs; };
+        const Fx fxs[] = { { 0, 0x10, 1, 0x8000, 0, 1 }, { 0xf8, 0xf4, 4, 0x7ffb, 0xfffe, 1 }, { 0x1, 0x9, 8, 0x801, 0xffff, 1 }, { 0, 0, 1, 0x100, 0, 1 }, { 3, 3, 4, 0x8003, 3, 4 } };
+        for (const Fx& f : fxs)
+            for (int order = 0; order < 2; ++order)
+            {
+                CircleRange a(f.al, f.ar, 1, f.as), b(f.bl, f.br, 2, f.bs);
+                int rc;
+                if (order == 0) { rc = a.intersect(b); CHECK(rc == 0 && a.isEmpty()); }
+                else { rc = b.intersect(a); CHECK(rc == 0 && b.isEmpty()); }
+            }
+    }
+    std::vector<uint64_t> byteEdges = { 0, 1, 2, 3, 4, 5, 7, 8, 0x10, 0x20, 0x3f, 0x40, 0x7e, 0x7f, 0x80, 0x81, 0xc0, 0xf0, 0xf4, 0xf8, 0xfc, 0xfe, 0xff };
+    std::vector<uint64_t> wordEdges = byteEdges;
+    for (uint64_t v : { 0x100, 0x101, 0x103, 0x180, 0x7ff8, 0x7ffb, 0x7fff, 0x8000, 0x8001, 0x8003, 0x801, 0x8100, 0xff00, 0xff03, 0xfff0, 0xfff8, 0xfffc, 0xfffe, 0xffff, 0x1000 })
+        wordEdges.push_back(v);
+    const std::vector<FwRange> bytes = RcStructuredRanges(1, byteEdges), words = RcStructuredRanges(2, wordEdges);
+    auto bitsOf = [](const FwRange& g, int size) {
+        RcBits b;
+        for (unsigned v = 0; v <= 255; ++v)
+            if (FwMember(v, g, PbMask(size))) b.set(v);
+        return b;
+    };
+    std::vector<RcBits> byteBits, wordBits;
+    for (const FwRange& g : bytes) byteBits.push_back(bitsOf(g, 1));
+    for (const FwRange& g : words) wordBits.push_back(bitsOf(g, 2));
+    long pairs = 0, answered = 0, empties = 0;
+    for (size_t wi = 0; wi < words.size(); ++wi)
+        for (int k = 0; k < 48; ++k)
+        {
+            const size_t bi = next() % bytes.size();
+            const FwRange &w = words[wi], &by = bytes[bi];
+            RcBits want;
+            for (int i = 0; i < 4; ++i) want.w[i] = wordBits[wi].w[i] & byteBits[bi].w[i];
+            for (int order = 0; order < 2; ++order)
+            {
+                const CircleRange B(w.l, w.r, 2, w.step), A(by.l, by.r, 1, by.step);
+                CircleRange q = order == 0 ? A : B;
+                const int rc = order == 0 ? q.intersect(B) : q.intersect(A);
+                ++pairs;
+                const std::string both = FwText(by) + "(1 byte) " + FwText(w) + "(2 bytes), " + (order == 0 ? "narrow first" : "wide first");
+                if (rc != 0)
+                {
+                    if (!(q == (order == 0 ? A : B))) fail("an answer of 2 changed the range", both);
+                    continue;
+                }
+                ++answered;
+                if (q.isEmpty()) ++empties;
+                RcBits got;
+                if (!q.isEmpty())
+                {
+                    std::string why;
+                    if (!FwWellFormed(q, 1, why)) { fail("malformed", both + " -> " + FwText(q) + ": " + why); continue; }
+                    for (unsigned v = 0; v <= 255; ++v)
+                        if (q.contains(v)) got.set(v);
+                }
+                if (!(got == want))
+                {
+                    unsigned at = 0;
+                    for (unsigned v = 0; v <= 255; ++v) if (got.get(v) != want.get(v)) { at = v; break; }
+                    fail(want.get(at) ? "an element is missing" : "an element too many", both + " -> " + FwText(q) + " at " + std::to_string(at));
+                }
+            }
+        }
+    std::printf("intersect of two masks round 12: %ld pairs, %ld answered (%ld empty), %.0f ms\n", pairs, answered, empties, MsSince(t0));
+    CHECK(pairs > 400000);
+    CHECK(empties > 1000);
+}
+
+// A2-74: CircleRange::setNZMask built its step as `int4 step = 1; step <<= leastsigbit_set(nzmask)`: for a lowest set bit of 31 or more the shift
+// leaves an int4. 4 bytes, mask 0x80000000: the step was -2^31 and the range [0,0) held 0 and not 0x80000000; 8 bytes, bit 63: the same with a bound
+// 0x7fffffff80000000; a lowest bit of 32 to 62 shifted by its count modulo 32 (a finer step). No range is the answer for a step that does not fit
+// (as for a mask of too many transitions); a range that is answered holds every value under the mask.
+void TestSetNZMaskRound12()
+{
+    using namespace ghidra;
+    const auto t0 = std::chrono::steady_clock::now();
+    uint64_t state = 0x5E7A2C74;
+    auto next = [&state]() {
+        uint64_t z = (state += 0x9E3779B97F4A7C15ull);
+        z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ull;
+        z = (z ^ (z >> 27)) * 0x94D049BB133111EBull;
+        return z ^ (z >> 31);
+    };
+    int shown = 0;
+    auto fail = [&shown](const std::string& what, const std::string& detail) {
+        CHECK(false);
+        if (shown++ < 14) std::printf("setNZMask round 12: %s: %s\n", what.c_str(), detail.c_str());
+    };
+    auto hex = [](uint64_t v) { char b[32]; std::snprintf(b, sizeof b, "%llx", static_cast<unsigned long long>(v)); return std::string(b); };
+    long masks = 0, answered = 0, refusedHigh = 0;
+    auto one = [&](uint64_t nz, int size) {
+        const uint64_t m = PbMask(size);
+        nz &= m;
+        CircleRange q;
+        const bool ok = q.setNZMask(nz, size);
+        ++masks;
+        const int lowest = nz == 0 ? -1 : __builtin_ctzll(nz);
+        if (lowest > 30 && ok) { fail("a step that does not fit", "mask " + hex(nz) + " at " + std::to_string(size) + " bytes -> " + FwText(q)); return; }
+        if (!ok) { if (lowest > 30) ++refusedHigh; return; }
+        ++answered;
+        std::string why;
+        if (!FwWellFormed(q, size, why)) { fail("malformed", "mask " + hex(nz) + " at " + std::to_string(size) + " bytes -> " + FwText(q) + ": " + why); return; }
+        std::vector<uint64_t> vs = { 0, nz, nz & (0 - nz) };
+        if (nz) vs.push_back(static_cast<uint64_t>(1) << (63 - __builtin_clzll(nz)));
+        for (int k = 0; k < 24; ++k) vs.push_back(next() & nz);
+        if (size <= 2)
+            for (uint64_t s = nz;; s = (s - 1) & nz) { vs.push_back(s); if (s == 0 || vs.size() > 4200) break; }
+        for (uint64_t v : vs)
+            if (!q.contains(v)) { fail("a value under the mask is not in the range", "mask " + hex(nz) + " at " + std::to_string(size) + " bytes -> " + FwText(q) + " misses " + hex(v)); return; }
+    };
+    for (uint64_t nz = 0; nz <= 0xffff; ++nz) one(nz, 2);          // every mask of one and two bytes
+    for (uint64_t nz = 0; nz <= 0xff; ++nz) one(nz, 1);
+    for (int size : { 4, 8 })
+    {
+        const int bits = 8 * size;
+        for (int lo = 0; lo < bits; ++lo)                           // a run of bits from lo to hi, and the run to the top
+            for (int hi = lo; hi < bits; ++hi)
+            {
+                const uint64_t run = (hi == 63 ? ~static_cast<uint64_t>(0) : ((static_cast<uint64_t>(1) << (hi + 1)) - 1)) & ~((static_cast<uint64_t>(1) << lo) - 1);
+                one(run, size);
+            }
+        for (int k = 0; k < 4000; ++k)                              // a random mask, with its low bits cleared
+        {
+            const uint64_t r = next() & (next() | next());
+            one(r << (next() % bits), size);
+        }
+    }
+    one(0x80000000u, 4);
+    one(static_cast<uint64_t>(1) << 63, 8);
+    one(static_cast<uint64_t>(1) << 40, 8);
+    one(static_cast<uint64_t>(0xffffffffull) << 32, 8);
+    CircleRange q;
+    CHECK(!q.setNZMask(0x80000000u, 4));
+    CHECK(!q.setNZMask(static_cast<uint64_t>(1) << 63, 8));
+    CHECK(q.setNZMask(0x40000000u, 4));       // the largest step that fits is kept as it was
+    CHECK(q.getStep() == 0x40000000 && q.contains(0) && q.contains(0x40000000u));
+    std::printf("setNZMask round 12: %ld masks, %ld answered, %ld high lowest bits refused, %.0f ms\n", masks, answered, refusedHigh, MsSince(t0));
+    CHECK(refusedHigh > 100);
+}
+
+// A2-75: CircleRange::widen. A range moved to a containing landmark must hold the old range, in the old step and phase. Upstream's left bound was
+// the landmark's as it was (another phase for a stride above the landmark's), its right bound rounded down when the landmark's remainder was above the
+// phase (the last element left out), and a full landmark gave the right bound 0, which cut a wrapped range to its first lap.
+void TestWidenRound12()
+{
+    using namespace ghidra;
+    const auto t0 = std::chrono::steady_clock::now();
+    uint64_t state = 0x5E7A2C75;
+    auto next = [&state]() {
+        uint64_t z = (state += 0x9E3779B97F4A7C15ull);
+        z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ull;
+        z = (z ^ (z >> 27)) * 0x94D049BB133111EBull;
+        return z ^ (z >> 31);
+    };
+    int shown = 0;
+    auto fail = [&shown](const std::string& what, const std::string& detail) {
+        CHECK(false);
+        if (shown++ < 14) std::printf("widen round 12: %s: %s\n", what.c_str(), detail.c_str());
+    };
+    // the ledger's two
+    {
+        CircleRange a(0x34, 0x44, 1, 16), b(0xfa, 0xf9, 1, 1);
+        a.widen(b, false);
+        CHECK(a.contains(0x34) && a.contains(0x44 - 16) && a.getMin() % 16 == a.getEnd() % 16);
+        CircleRange c(0x0e, 0x6e, 1, 8), d(0, 0, 1, 2);
+        c.widen(d, false);
+        CHECK(c.contains(0xe) && c.contains(0x66) && c.getStep() == 8);
+        CircleRange e(0x20, 0x10, 1, 1), f(0, 0, 1, 1);     // a wrapped range to a full landmark, right bound unstable: the whole circle, not [0x20,0)
+        e.widen(f, true);
+        CHECK(e.contains(0x20) && e.contains(0x0f) && e.contains(0x00) && e.contains(0xff));
+    }
+    // every one-byte landmark of a sample, with sub-ranges of it (the elements of the landmark taken as the bounds), both bounds unstable in turn
+    std::vector<FwRange> lands;
+    for (int st : { 1, 2, 4, 8 })
+        for (uint64_t l = 0; l < 256; ++l)
+            for (uint64_t r = 0; r < 256; ++r)
+            {
+                if (l % st != r % st) continue;
+                if (l == r && l >= static_cast<uint64_t>(st)) continue;
+                if (next() % (st == 1 ? 3 : 1) != 0 && st != 8) continue;       // a third of the step 1 landmarks, all of the others
+                lands.push_back({ l, r, st });
+            }
+    long pairs = 0, widened = 0, refusedByContains = 0;
+    for (const FwRange& lm : lands)
+    {
+        const CircleRange B(lm.l, lm.r, 1, lm.step);
+        for (int k = 0; k < 14; ++k)
+        {
+            // the old range: a sub-range of the landmark with the same or a bigger step, drawn from the landmark's elements
+            const uint64_t n = FwCount(lm, 255);
+            if (n == 0) continue;
+            const int mult = 1 << (next() % 3);
+            const int st = lm.step * mult;
+            if (st > 32) continue;
+            const uint64_t i = next() % n, len = 1 + next() % n;
+            FwRange a;
+            a.step = st;
+            const uint64_t first = FwElem(lm, 255, i);
+            a.l = first;
+            a.r = (first + len * static_cast<uint64_t>(lm.step) * mult) & 255;
+            if (a.r % st != a.l % st) a.r = a.l;
+            if (a.l == a.r) a.l = a.r = a.l % st;
+            const CircleRange A(a.l, a.r, 1, a.step);
+            if (!B.contains(A)) { ++refusedByContains; continue; }
+            for (int leftStable = 0; leftStable < 2; ++leftStable)
+            {
+                CircleRange q = A;
+                q.widen(B, leftStable != 0);
+                ++pairs;
+                const std::string both = FwText(a) + " in " + FwText(lm) + (leftStable ? " (left stable)" : " (right stable)");
+                std::string why;
+                if (!FwWellFormed(q, 1, why)) { fail("malformed", both + " -> " + FwText(q) + ": " + why); continue; }
+                if (q.getStep() != a.step) { fail("the step changed", both + " -> " + FwText(q)); continue; }
+                bool holds = true;
+                unsigned at = 0;
+                for (unsigned v = 0; v <= 255 && holds; ++v)
+                    if (FwMember(v, a, 255) && !q.contains(v)) { holds = false; at = v; }
+                if (!holds) { fail("the old range is not held", both + " -> " + FwText(q) + " misses " + std::to_string(at)); continue; }
+                // the bound that is stable stays; the other is the landmark's or the range is everything of its phase
+                if (leftStable ? q.getMin() != A.getMin() : q.getEnd() != A.getEnd())
+                    if (!(q.getMin() == q.getEnd())) fail("the stable bound moved", both + " -> " + FwText(q));
+                ++widened;
+            }
+        }
+    }
+    std::printf("widen round 12: %ld widenings of %ld sub-ranges checked (%ld pairs the containment test refused), %.0f ms\n", widened, pairs / 2, refusedByContains, MsSince(t0));
+    CHECK(widened > 10000);
+}
+
+// ---- Rules checked by value on a Funcdata (A2-76, A2-77) --------------------------------------------------------------------------------------
+// A rule is applied to a small p-code graph built in a Funcdata and the graph is evaluated before and after for a set of inputs: the rule must leave
+// the value of the graph as it was, whatever it rewrites (or not rewrite). The evaluator is the independent definition of each op; it covers only the ops
+// the graphs use.
+typedef std::vector<std::pair<const ghidra::Varnode*, uint64_t>> RcEnv;
+
+uint64_t RcEval(const ghidra::Varnode* vn, const RcEnv& env)
+{
+    using namespace ghidra;
+    const int size = vn->getSize();
+    const uint64_t m = PbMask(size);
+    if (vn->isConstant()) return vn->getOffset() & m;
+    for (const auto& e : env)
+        if (e.first == vn) return e.second & m;
+    const PcodeOp* d = vn->getDef();
+    if (d == nullptr) { CHECK(false); return 0; }
+    const int n = d->numInput();
+    const uint64_t a = n > 0 ? RcEval(d->getIn(0), env) : 0, b = n > 1 ? RcEval(d->getIn(1), env) : 0;
+    const int sa = n > 0 ? d->getIn(0)->getSize() : 0, sb = n > 1 ? d->getIn(1)->getSize() : 0;
+    switch (d->code())
+    {
+    case CPUI_COPY: return a;
+    case CPUI_INT_ADD: return (a + b) & m;
+    case CPUI_INT_MULT: return (a * b) & m;
+    case CPUI_INT_ZEXT: return a;
+    case CPUI_INT_SEXT: return static_cast<uint64_t>(PbSigned(a, sa)) & m;
+    case CPUI_SUBPIECE: return b >= 8 ? 0 : (a >> (8 * b)) & m;
+    case CPUI_PIECE: return ((a << (8 * sb)) | b) & m;
+    case CPUI_INT_LEFT: return b >= static_cast<uint64_t>(8 * size) ? 0 : (a << b) & m;
+    case CPUI_INT_RIGHT: return b >= static_cast<uint64_t>(8 * sa) ? 0 : a >> b;
+    case CPUI_INT_SRIGHT: return static_cast<uint64_t>(PbSigned(a, sa) >> (b >= static_cast<uint64_t>(8 * sa) ? 8 * sa - 1 : b)) & m;
+    case CPUI_INT_SDIV: return PbSigned(b, sb) == 0 ? 0 : static_cast<uint64_t>(PbSigned(a, sa) / PbSigned(b, sb)) & m;
+    case CPUI_INT_SCARRY:
+    {
+        const int64_t s = PbSigned(a, sa) + PbSigned(b, sa), lim = static_cast<int64_t>(1) << (8 * sa - 1);   // sizes up to 4
+        return (s < -lim || s >= lim) ? 1 : 0;
+    }
+    case CPUI_INT_SLESS: return PbSigned(a, sa) < PbSigned(b, sb);
+    case CPUI_INT_SLESSEQUAL: return PbSigned(a, sa) <= PbSigned(b, sb);
+    case CPUI_INT_EQUAL: return a == b;
+    case CPUI_INT_NOTEQUAL: return a != b;
+    default: break;
+    }
+    CHECK(false);
+    return 0;
+}
+
+// The Funcdata the rules are applied in (no actions run; the graphs are never put in a block).
+struct RcFuncdata
+{
+    RcFuncdata() : image(new RegionLoadImage(kImageBase, Fixture1())), arch(image, &errs)
+    {
+        ghidra::DocumentStorage store;
+        arch.init(store);
+        entry = ghidra::Address(arch.getDefaultCodeSpace(), kCaller);
+        std::string name;
+        arch.nameFunction(entry, name);
+        fd = arch.symboltab->getGlobalScope()->addFunction(entry, name)->getFunction();
+    }
+    ghidra::Varnode* copyOf(int size, uint64_t v)
+    {
+        ghidra::PcodeOp* op = fd->newOp(1, entry);
+        fd->opSetOpcode(op, ghidra::CPUI_COPY);
+        ghidra::Varnode* out = fd->newUniqueOut(size, op);
+        fd->opSetInput(op, fd->newConstant(size, v), 0);
+        return out;
+    }
+    ghidra::PcodeOp* op1(ghidra::OpCode opc, int outSize, ghidra::Varnode* a)
+    {
+        ghidra::PcodeOp* op = fd->newOp(1, entry);
+        fd->opSetOpcode(op, opc);
+        fd->newUniqueOut(outSize, op);
+        fd->opSetInput(op, a, 0);
+        return op;
+    }
+    ghidra::PcodeOp* op2(ghidra::OpCode opc, int outSize, ghidra::Varnode* a, ghidra::Varnode* b)
+    {
+        ghidra::PcodeOp* op = fd->newOp(2, entry);
+        fd->opSetOpcode(op, opc);
+        fd->newUniqueOut(outSize, op);
+        fd->opSetInput(op, a, 0);
+        fd->opSetInput(op, b, 1);
+        return op;
+    }
+    ghidra::Varnode* k(int size, uint64_t v) { return fd->newConstant(size, v); }
+
+    RegionLoadImage* image;
+    std::ostringstream errs;
+    TestArchitecture arch;
+    ghidra::Address entry;
+    ghidra::Funcdata* fd = nullptr;
+};
+
+// The values of a graph's result for every environment, kept to compare after the rule.
+std::vector<uint64_t> RcValues(const ghidra::Varnode* result, const std::vector<RcEnv>& envs)
+{
+    std::vector<uint64_t> out;
+    for (const RcEnv& e : envs) out.push_back(RcEval(result, e));
+    return out;
+}
+
+// The input values of a size that matter: the edges of its sign and width, small ones, and neighbours of the given constant.
+std::vector<uint64_t> RcInputs(int size, uint64_t around, uint64_t seed, int randoms)
+{
+    const uint64_t m = PbMask(size);
+    std::vector<uint64_t> v;
+    if (size == 1) { for (uint64_t x = 0; x <= 255; ++x) v.push_back(x); return v; }
+    for (uint64_t t : { static_cast<uint64_t>(0), m >> 1, (m >> 1) + 1, m, 0 - around, around })
+        for (int d = -3; d <= 3; ++d) v.push_back((t + d) & m);
+    uint64_t state = seed;
+    for (int k = 0; k < randoms; ++k)
+    {
+        uint64_t z = (state += 0x9E3779B97F4A7C15ull);
+        z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ull;
+        z = (z ^ (z >> 27)) * 0x94D049BB133111EBull;
+        v.push_back((z ^ (z >> 31)) & m);
+    }
+    return v;
+}
+
+// A2-76: RuleScarry. `scarry(V,c) != (V + c s< 0)` is `V s< -c` and its three companions for a constant c, and none of the four is right for the
+// minimum (-c is c): upstream refused it only for the operand it had swapped itself. Every constant at one byte, edges at two and four bytes,
+// each of the eight forms (the constant first or second in the scarry, the sum written c + V or V + c, equal or not equal, the zero on either
+// side of the less-than), the value of the compare before and after the rule for every V (one byte) or for edge values and a sample.
+void TestScarryMinimumRound12()
+{
+    using namespace ghidra;
+    RcFuncdata t;
+    long graphs = 0, applied = 0, values = 0;
+    int shown = 0;
+    for (int size : { 1, 2, 4 })
+    {
+        const uint64_t m = PbMask(size), minimum = (m >> 1) + 1;
+        std::vector<uint64_t> consts;
+        if (size == 1) for (uint64_t c = 0; c <= 255; ++c) consts.push_back(c);
+        else consts = { 0, 1, 2, 5, m >> 1, minimum, minimum + 1, minimum - 2, m, m - 1, m - 4, 0x1234 & m, 0x5a5a5a5a & m };
+        for (uint64_t c : consts)
+            for (int form = 0; form < 16; ++form)
+            {
+                const bool constFirst = form & 1, sumConstFirst = form & 2, equal = form & 4, zeroFirst = form & 8;
+                Varnode* a = t.copyOf(size, 0x1234 & m);
+                Varnode* s = constFirst ? t.op2(CPUI_INT_SCARRY, 1, t.k(size, c), a)->getOut() : t.op2(CPUI_INT_SCARRY, 1, a, t.k(size, c))->getOut();
+                Varnode* sum = sumConstFirst ? t.op2(CPUI_INT_ADD, size, t.k(size, c), a)->getOut() : t.op2(CPUI_INT_ADD, size, a, t.k(size, c))->getOut();
+                Varnode* less = zeroFirst ? t.op2(CPUI_INT_SLESS, 1, t.k(size, 0), sum)->getOut() : t.op2(CPUI_INT_SLESS, 1, sum, t.k(size, 0))->getOut();
+                PcodeOp* cmp = t.op2(equal ? CPUI_INT_EQUAL : CPUI_INT_NOTEQUAL, 1, s, less);
+                std::vector<RcEnv> envs;
+                for (uint64_t v : RcInputs(size, c, 77 + c, 60)) envs.push_back({ { a, v } });
+                const std::vector<uint64_t> before = RcValues(cmp->getOut(), envs);
+                RuleScarry rule("scratch");
+                const int rc = rule.applyOp(s->getDef(), *t.fd);
+                const std::vector<uint64_t> after = RcValues(cmp->getOut(), envs);
+                ++graphs;
+                if (rc != 0) ++applied;
+                for (size_t i = 0; i < envs.size(); ++i)
+                {
+                    ++values;
+                    if (before[i] != after[i])
+                    {
+                        CHECK(false);
+                        if (shown++ < 10)
+                            std::printf("RuleScarry: %d-byte constant %llx (form %d): the compare is %llu for V = %llx before the rule and %llu after (rule returned %d)\n", size, static_cast<unsigned long long>(c), form,
+                                        static_cast<unsigned long long>(before[i]), static_cast<unsigned long long>(envs[i][0].second), static_cast<unsigned long long>(after[i]), rc);
+                        break;
+                    }
+                }
+                if (c == minimum) CHECK(rc == 0);          // the minimum is refused, whichever operand it was
+                if (c != minimum && c != 0 && (form & 1) == 0 && (form & 2) == 0) CHECK(rc == 1);   // the plain forms are rewritten
+            }
+    }
+    std::printf("RuleScarry by value: %ld graphs (%ld rewritten), %ld values compared\n", graphs, applied, values);
+    CHECK(applied > 300);
+}
+
+// A2-77: the three rules whose mutants no family killed, by value on a Funcdata. RuleConcatShift `concat(V,W) >> 8k` for the exact cancellation
+// (`zext(V)` for the unsigned shift, `sext(V)` for the signed one: upstream's mutant took the other sign); RuleSignDiv2 `(V + (V s>> 31) * -1) s>> 1`
+// is `V s/ 2` and no other shift amount is (`s>> 2` of the same sum is not `V s/ 4`); RuleSignForm `sub(sext(V),c)` is `V s>> 31` for c at least the
+// size of V (c one short of it takes the top byte of V as well).
+void TestRulesByValueRound12()
+{
+    using namespace ghidra;
+    RcFuncdata t;
+    long graphs = 0, values = 0;
+    int shown = 0;
+    auto compare = [&](const char* rule, const std::string& what, const ghidra::Varnode* result, const std::vector<RcEnv>& envs, const std::vector<uint64_t>& before) {
+        const std::vector<uint64_t> after = RcValues(result, envs);
+        ++graphs;
+        for (size_t i = 0; i < envs.size(); ++i)
+        {
+            ++values;
+            if (before[i] != after[i])
+            {
+                CHECK(false);
+                if (shown++ < 12) std::printf("%s: %s: %llx before the rule and %llx after for the input %llx\n", rule, what.c_str(), static_cast<unsigned long long>(before[i]), static_cast<unsigned long long>(after[i]), static_cast<unsigned long long>(envs[i][0].second));
+                return;
+            }
+        }
+    };
+    // RuleConcatShift: concat(hi,lo) >> 8*size(lo), unsigned and signed, and one bit short of it (not a cancellation)
+    for (int hs : { 1, 2, 4 })
+        for (int ls : { 1, 2, 4 })
+            for (OpCode shiftOpc : { CPUI_INT_RIGHT, CPUI_INT_SRIGHT })
+                for (int delta : { 0, -1 })
+                {
+                    Varnode* hi = t.copyOf(hs, 0);
+                    Varnode* lo = t.copyOf(ls, 0);
+                    PcodeOp* piece = t.op2(CPUI_PIECE, hs + ls, hi, lo);
+                    PcodeOp* sh = t.op2(shiftOpc, hs + ls, piece->getOut(), t.k(4, 8 * ls + delta));
+                    std::vector<RcEnv> envs;
+                    for (uint64_t h : RcInputs(hs, 0, 5, 12))
+                        for (uint64_t l : { static_cast<uint64_t>(0), static_cast<uint64_t>(1), PbMask(ls), PbMask(ls) >> 1, (PbMask(ls) >> 1) + 1 })
+                            envs.push_back({ { hi, h }, { lo, l } });
+                    const std::vector<uint64_t> before = RcValues(sh->getOut(), envs);
+                    RuleConcatShift rule("scratch");
+                    const int rc = rule.applyOp(sh, *t.fd);
+                    CHECK(rc == (delta == 0 ? 1 : 0));
+                    compare("RuleConcatShift", std::to_string(hs) + "+" + std::to_string(ls) + " bytes, " + (shiftOpc == CPUI_INT_RIGHT ? "unsigned" : "signed") + " shift by " + std::to_string(8 * ls + delta), sh->getOut(), envs, before);
+                }
+    // RuleSignDiv2: (V + (V s>> 31) * -1) s>> k, the sum written either way round
+    for (int size : { 1, 2, 4 })
+        for (int k = 1; k <= 5; ++k)
+            for (int swap = 0; swap < 2; ++swap)
+            {
+                Varnode* a = t.copyOf(size, 0);
+                PcodeOp* sign = t.op2(CPUI_INT_SRIGHT, size, a, t.k(4, 8 * size - 1));
+                PcodeOp* neg = t.op2(CPUI_INT_MULT, size, sign->getOut(), t.k(size, PbMask(size)));
+                PcodeOp* add = swap ? t.op2(CPUI_INT_ADD, size, neg->getOut(), a) : t.op2(CPUI_INT_ADD, size, a, neg->getOut());
+                PcodeOp* sh = t.op2(CPUI_INT_SRIGHT, size, add->getOut(), t.k(4, k));
+                std::vector<RcEnv> envs;
+                for (uint64_t v : RcInputs(size, 1, 9, 60)) envs.push_back({ { a, v } });
+                const std::vector<uint64_t> before = RcValues(sh->getOut(), envs);
+                RuleSignDiv2 rule("scratch");
+                const int rc = rule.applyOp(sh, *t.fd);
+                CHECK(rc == (k == 1 ? 1 : 0));
+                compare("RuleSignDiv2", std::to_string(size) + "-byte value, shift by " + std::to_string(k), sh->getOut(), envs, before);
+            }
+    // RuleSignForm: sub(sext(V), c), V of 1, 2 or 4 bytes extended to twice its size, c from 0 to the size of V
+    for (int size : { 1, 2, 4 })
+        for (int c = 0; c <= size; ++c)
+        {
+            Varnode* a = t.copyOf(size, 0);
+            PcodeOp* ext = t.op1(CPUI_INT_SEXT, 2 * size, a);
+            PcodeOp* sub = t.op2(CPUI_SUBPIECE, size, ext->getOut(), t.k(4, c));
+            std::vector<RcEnv> envs;
+            for (uint64_t v : RcInputs(size, 1, 11, 60)) envs.push_back({ { a, v } });
+            const std::vector<uint64_t> before = RcValues(sub->getOut(), envs);
+            RuleSignForm rule("scratch");
+            const int rc = rule.applyOp(sub, *t.fd);
+            CHECK(rc == (c >= size ? 1 : 0));
+            compare("RuleSignForm", std::to_string(size) + "-byte value, SUBPIECE at " + std::to_string(c), sub->getOut(), envs, before);
+        }
+    std::printf("rules by value: %ld graphs, %ld values compared\n", graphs, values);
+}
+
 }  // namespace
 
 // Each case announces itself first; with stdout unbuffered, the last name printed is where a
@@ -1867,6 +2406,11 @@ int main(int argc, char** argv)
         RUN(TestSha256KnownAnswers());
         RUN(TestDecompileThroughBundle(config));
         RUN(TestNzMaskShiftRound11());
+        RUN(TestIntersectMixedMasksRound12());
+        RUN(TestSetNZMaskRound12());
+        RUN(TestWidenRound12());
+        RUN(TestScarryMinimumRound12());
+        RUN(TestRulesByValueRound12());
         RUN(TestCancelDuringJumpTableRecovery());
         RUN(TestReuseAndRepair(config));
         RUN(TestForeignHashUntouched(config));

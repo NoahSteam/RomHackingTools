@@ -18,6 +18,7 @@
  * Modified for SaturnExplorer: an access that runs past the end of its space stays a LOAD or STORE (patches/0031-access-past-space-end.patch).
  * Modified for SaturnExplorer: RuleDivTermAdd and RuleDivTermAdd2 keep a product that overflows only for a division; RulePiecePathology needs the register it names (patches/0037-engine-division-piece-and-input-names.patch).
  * Modified for SaturnExplorer: RuleDivTermAdd and RuleDivTermAdd2 keep an overflowing product only when the shifts that follow stay inside the multiply (patches/0044-engine-round5-printed-value-fixes.patch).
+ * Modified for SaturnExplorer: RuleScarry refuses the minimum for either operand (patches/0062-engine-range-domain-nzmask-widen.patch).
  */
 #include "ruleaction.hh"
 #include "coreaction.hh"
@@ -3404,6 +3405,11 @@ int4 RuleScarry::applyOp(PcodeOp *op,Funcdata &data)
     if (!avn->isConstant()) return 0;
     avn = bvn;
     bvn = op->getIn(0);
+  }
+  // SaturnExplorer (patches/0062-engine-range-domain-nzmask-widen.patch): the minimum is refused whichever operand it was. Upstream refused it only
+  // for the operand it had swapped itself, and rewrote scarry(V,min) != (V + min s< 0) to V s< -min = V s< min for a constant second operand:
+  // false for every V, where the original is true for V = min.
+  {
     uintb val = calc_mask(bvn->getSize());
     val = val ^ (val >> 1);	// Calculate integer minimum
     if (val == bvn->getOffset()) return 0;	// Rule does not work if bvn is the integer minimum

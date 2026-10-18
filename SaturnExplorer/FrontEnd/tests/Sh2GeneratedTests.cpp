@@ -6745,6 +6745,7 @@ typedef unsigned long long u64;
 typedef long long s64;
 template <int N> struct Rep { typedef typename std::conditional<(N <= 1), uint8_t, typename std::conditional<(N <= 2), uint16_t, typename std::conditional<(N <= 4), uint32_t, uint64_t>::type>::type>::type type; };
 template <int N, bool S> struct T;
+template <int N> struct Piece;
 template <class I> struct IsInt { static const bool value = std::is_integral<I>::value; };
 static inline u64 B2U(bool x) { return x ? 1 : 0; }
 template <class I> static inline typename std::enable_if<std::is_signed<I>::value && !std::is_same<I, bool>::value, u64>::type B2U(I x) { return (u64)(s64)x; }
@@ -6760,6 +6761,9 @@ template <int N, bool S> struct T {
   // a cast (explicit): a wider target extends by the source's sign, as C does, except the unsigned 8-byte cast of a 4-byte value, which is the
   // zero extension the engine builds a 64-bit product with (`(uint8)x` of a signed x: A2-19)
   template <int M, bool U> explicit T(const T<M, U>& o) : v((R)((N > M ? ((N == 8 && M == 4 && !S) ? o.Zext() : o.Ext()) : o.Zext()) & Mask())) {}
+  // the cast of a piece (CONCATab, the engine's untyped value of a + b bytes, 5 to 7 of them with no type of their own): the extension the engine
+  // builds is ZEXT or SEXT by the TARGET's type, so `(uint8)CONCAT14(...)` is the zero extension whatever the piece's top bit is (A2-79)
+  template <int M> explicit T(const Piece<M>& o) : v((R)((N > M ? (S ? o.Sext() : o.Zext()) : o.Zext()) & Mask())) {}
   // an implicit conversion, the one C does: by the source's sign
   template <int M, bool U> operator T<M, U>() const { return T<M, U>(B2U(Ext())); }
   u64 Zext() const { return (u64)v & Mask(); }
@@ -6772,6 +6776,11 @@ template <int N, bool S, int M, bool U> struct Common {
   static const int size = N > M ? N : M;
   static const bool sign = N == M ? (S && U) : (N > M ? S : U);
   typedef T<size, sign> type;
+};
+// The value of a CONCATab: signed as an xunknown is in this reading, with the cast above for the extension
+template <int N> struct Piece : T<N, true> {
+  Piece() {}
+  template <class I, class = typename std::enable_if<IsInt<I>::value>::type> Piece(I x) : T<N, true>(x) {}
 };
 typedef T<4, false> Bool4;
 // A value narrower than int meeting a plain number (the text's literal has no width of its own) is brought to four bytes first, keeping its sign: the
@@ -6831,8 +6840,10 @@ typedef T<5, true> unkbyte5; typedef T<6, true> unkbyte6; typedef T<7, true> unk
 typedef T<5, true> unkint5; typedef T<6, true> unkint6; typedef T<7, true> unkint7;
 template <class X> static inline u64 RAW(const X& x) { return B2U(x); }
 template <int N, bool S> static inline u64 RAW(const T<N, S>& x) { return x.Zext(); }
+template <int N> static inline u64 RAW(const Piece<N>& x) { return x.Zext(); }
 template <class X> struct SZ { static const int n = sizeof(X); };
 template <int N, bool S> struct SZ<T<N, S> > { static const int n = N; };
+template <int N> struct SZ<Piece<N> > { static const int n = N; };
 #define SIZEOFV(v) (SZ<__typeof__(v)>::n)
 #define FLDMASK(n) ((n) >= 8 ? ~0ULL : ((1ULL << (8 * (n))) - 1))
 #define FLDRAW(v, o, n) ((RAW(v) >> (8 * (SIZEOFV(v) - (o) - (n)))) & FLDMASK(n))
@@ -6914,7 +6925,7 @@ std::string CxxHeader()
     // The piece operations, typed by the size they give (xunknown: signed in this reading).
     for (int a = 1; a <= 7; ++a)
         for (int b = 1; a + b <= 8; ++b)
-            o << "#define CONCAT" << a << b << "(a, b) (T<" << a + b << ", true>(((RAW(a) & " << mask(a) << ") << " << 8 * b << ") | (RAW(b) & " << mask(b) << ")))\n";
+            o << "#define CONCAT" << a << b << "(a, b) (Piece<" << a + b << ">(((RAW(a) & " << mask(a) << ") << " << 8 * b << ") | (RAW(b) & " << mask(b) << ")))\n";
     for (int a = 2; a <= 8; ++a)
         for (int b = 1; b < a; ++b)
             o << "#define SUB" << a << b << "(v, o) (T<" << b << ", true>((RAW(v) >> ((o) * 8)) & " << mask(b) << "))\n";
