@@ -10525,7 +10525,7 @@ The reviewer's A2-64 is the mask case: for a comparison whose range holds both 0
 
 ### 2. The audit
 
-The reviewer asked for a reading of the rest; I made it a measurement. `TestPullBackRanges` (new, in `SaturnExplorerSh2DecompilerEngineTests`; the standalone form is the scratch file `pb.cpp`) takes every operation `pullBackUnary`/`pullBackBinary` handles, at one byte and at two bytes (and `ZEXT`/`SEXT` to four), builds the truth by running the operation on every input, and compares it with the pulled-back range: over a grid of edge values (0, 1, 2, 3, 0x7e..0x81, 0xfe, 0xff, the sign boundary, 0x100, 0xff00, 0x7f00, 0x8000) and a seeded sample (ranges with a step of 1, 2 and 4, both slots, the constant from the grid or random). about 21,000 cases per operation and size in the scratch run, about 3,300 per row in the test; a pull-back that succeeds must equal the truth in the input's mask, one that fails is allowed.
+The reviewer asked for a reading of the rest; I made it a measurement. `TestPullBackRanges` (new, in `SaturnExplorerSh2DecompilerEngineTests`; the standalone form is `Docs/Decompiler/tools/a2_round10/pullback_audit.cpp`) takes every operation `pullBackUnary`/`pullBackBinary` handles, at one byte and at two bytes (and `ZEXT`/`SEXT` to four), builds the truth by running the operation on every input, and compares it with the pulled-back range: over a grid of edge values (0, 1, 2, 3, 0x7e..0x81, 0xfe, 0xff, the sign boundary, 0x100, 0xff00, 0x7f00, 0x8000) and a seeded sample (ranges with a step of 1, 2 and 4, both slots, the constant from the grid or random). about 21,000 cases per operation and size in the scratch run, about 3,300 per row in the test; a pull-back that succeeds must equal the truth in the input's mask, one that fails is allowed.
 
 | Op-code | Result at the head | Fix |
 |---|---|---|
@@ -10586,6 +10586,6 @@ Own RelWithDebInfo build under the scratch directory (2.5 GB, `-j2`, every run u
 ### 7. What stays open
 
 * The one finding of the printed-C range is A3-79 (area 3's), not an area 2 finding.
-* The standalone `pb.cpp` runs about 21,000 cases per row; the committed test runs about 3,300 so that it stays in `ctest`'s time; the wider run is the scratch file's.
+* The standalone `pullback_audit.cpp` runs about 21,000 cases per row; the committed test runs about 3,300 so that it stays in `ctest`'s time; the wider run is the scratch file's.
 * The four extra pull-back defects have no text that reaches them in the family's 108 functions, the generator's functions and the two images; if a reviewer finds one, the sweep already holds the fix.
 * The next review round verifies A2-64 and A2-65; the count of clean rounds stays 0 until then.
