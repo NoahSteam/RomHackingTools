@@ -1,0 +1,117 @@
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/rangeutil.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/rangeutil.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/rangeutil.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/rangeutil.cc
+@@ -16,6 +16,8 @@
+  * Modified for SaturnExplorer: a pull-back through a comparison of a range holding both 0 and 1 is the full range; the other pull-backs are
+  * exact or refused (patches/0058-engine-pullback-ranges-exact.patch). The push-forward half is sound at the edges of wrapped and full ranges,
+  * a strided intersect is not empty by rounding, and the 8-byte pull-backs through a shift are exact (patches/0059-engine-range-arithmetic-sound.patch).
++ * Modified for SaturnExplorer: the intersect of ranges of two masks, a non-zero mask whose step does not fit, and a widened range hold what they
++ * must (patches/0062-engine-range-set-ops-and-rule-guards.patch).
+  */
+ #include "rangeutil.hh"
+ #include "block.hh"
+@@ -187,6 +189,11 @@ bool CircleRange::newDomain(uintb newMask,int4 newStep,uintb &myleft,uintb &myri
+       myright = rem;		// Old range contained everything in newMask
+       return false;
+     }
++    // SaturnExplorer (patches/0062-engine-range-set-ops-and-rule-guards.patch): the range is the pieces [left,top] and [0,right) of the wider domain, and
++    // only the second can lie in the narrower one. A range that ends at the top of its domain has the right bound 0 (the phase of the top for a
++    // stride): its second piece is empty, and so is the intersection; upstream read that bound as a piece at the bottom of the narrow domain
++    // and answered all of it.
++    if (myright == rem) return true;
+     myleft = rem;		// Take everything up to left edge of new range
+   }
+   if (myright > newMask) {
+@@ -733,6 +740,10 @@ bool CircleRange::setNZMask(uintb nzmask,int4 size)
+   if (trans>2) return false;	// Too many transitions to form a valid range
+   bool hasstep = ((nzmask&1)==0);
+   if ((!hasstep)&&(trans==2)) return false; // Two sections of non-zero bits
++  // SaturnExplorer (patches/0062-engine-range-set-ops-and-rule-guards.patch): the step is an int4. A lowest set bit of 31 or more does not fit
++  // (1 << 31 is negative and the range with it holds 0 and not the one value the mask allows; a shift of 32 or more is taken modulo 32 and
++  // gives a finer step). No range is the answer for a mask of too many transitions as well.
++  if (trans != 0 && leastsigbit_set(nzmask) > 30) return false;
+   isempty = false;
+   if (trans == 0) {
+     mask = calc_mask(size);
+@@ -1598,17 +1609,35 @@ bool CircleRange::pushForwardTrinary(OpCode opc,const CircleRange &in1,const Cir
+ void CircleRange::widen(const CircleRange &op2,bool leftIsStable)
+ 
+ {
++  // SaturnExplorer (patches/0062-engine-range-set-ops-and-rule-guards.patch): the widened range holds the old one, in the old range's step and phase.
++  // The right bound is upstream's (the landmark's, in the phase of the range: a landmark that contains the range ends at or after it, so the bound
++  // is never short of the range's last element); the left bound is the first element of the range's phase at or above the landmark's (upstream
++  // took the landmark's bound as it was, in the wrong phase for a stride above the landmark's). A full landmark has no end to move to: when the bound
++  // it gives cuts the old range (a wrapped range moved to [left,0)) the answer is all of the phase.
++  if (isempty) return;
++  const uintb phase = left % step;
++  const uintb oldLeft = left;
++  const uintb oldRight = right;
+   if (leftIsStable) {
+-    uintb lmod = left % step;
+     uintb mod = op2.right % step;
+-    if (mod <= lmod)
+-      right = op2.right + (lmod - mod);
++    if (mod <= phase)
++      right = op2.right + (phase - mod);
+     else
+-      right = op2.right - (mod - lmod);
++      right = op2.right - (mod - phase);
+     right &= mask;
+   }
+   else {
+-    left = op2.left & mask;
++    const uintb mod = op2.left % step;
++    left = (op2.left + (phase + step - mod) % step) & mask;
++  }
++  // The length of the arc from left to right for the new range and the old (one bound has moved, the other is the same); equal bounds are the
++  // whole circle. The new range holds the old one if its arc is not shorter.
++  const uintb newDist = (right - left) & mask;
++  const uintb oldDist = (oldRight - oldLeft) & mask;
++  const bool holds = newDist == 0 || (oldDist != 0 && newDist >= oldDist);
++  if (!holds) {
++    left = phase;
++    right = phase;
+   }
+   normalize();
+ }
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/ruleaction.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/ruleaction.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/ruleaction.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/ruleaction.cc
+@@ -18,6 +18,7 @@
+  * Modified for SaturnExplorer: an access that runs past the end of its space stays a LOAD or STORE (patches/0031-access-past-space-end.patch).
+  * Modified for SaturnExplorer: RuleDivTermAdd and RuleDivTermAdd2 keep a product that overflows only for a division; RulePiecePathology needs the register it names (patches/0037-engine-division-piece-and-input-names.patch).
+  * Modified for SaturnExplorer: RuleDivTermAdd and RuleDivTermAdd2 keep an overflowing product only when the shifts that follow stay inside the multiply (patches/0044-engine-round5-printed-value-fixes.patch).
++ * Modified for SaturnExplorer: RuleScarry refuses the minimum for either operand; RuleRightShiftAnd keeps the mask of a shift by the width or more (patches/0062-engine-range-set-ops-and-rule-guards.patch).
+  */
+ #include "ruleaction.hh"
+ #include "coreaction.hh"
+@@ -585,9 +586,15 @@ int4 RuleRightShiftAnd::applyOp(PcodeOp *op,Funcdata &data)
+   Varnode *maskVn = andOp->getIn(1);
+   if (!maskVn->isConstant()) return 0;
+ 
+-  int4 sa = (int4)constVn->getOffset();
+-  uintb mask = maskVn->getOffset() >> sa;
+   Varnode *rootVn = andOp->getIn(0);
++  // SaturnExplorer (patches/0062-engine-range-set-ops-and-rule-guards.patch): a shift by the width of the value or more leaves no bit of it to compare the
++  // mask with: both sides of the test below are 0 and the mask looked unnecessary, but an arithmetic shift by the width is the value's sign bit alone,
++  // and the mask can clear it. `(sext(b) & 0x20) s>> 8`, once the sub-variable flow had made the value one byte, was printed `b >> 8`: all the sign of
++  // b, where the code computes 0. The shift amount is read as the 64-bit number it is (an int4 cast made a large amount negative).
++  const uintb saFull = constVn->getOffset();
++  if (saFull >= (uintb)8*rootVn->getSize()) return 0;
++  int4 sa = (int4)saFull;
++  uintb mask = maskVn->getOffset() >> sa;
+   uintb full = calc_mask(rootVn->getSize()) >> sa;
+   if (full != mask) return 0;
+   if (rootVn->isFree()) return 0;
+@@ -3404,6 +3411,11 @@ int4 RuleScarry::applyOp(PcodeOp *op,Funcdata &data)
+     if (!avn->isConstant()) return 0;
+     avn = bvn;
+     bvn = op->getIn(0);
++  }
++  // SaturnExplorer (patches/0062-engine-range-set-ops-and-rule-guards.patch): the minimum is refused whichever operand it was. Upstream refused it only
++  // for the operand it had swapped itself, and rewrote scarry(V,min) != (V + min s< 0) to V s< -min = V s< min for a constant second operand:
++  // false for every V, where the original is true for V = min.
++  {
+     uintb val = calc_mask(bvn->getSize());
+     val = val ^ (val >> 1);	// Calculate integer minimum
+     if (val == bvn->getOffset()) return 0;	// Rule does not work if bvn is the integer minimum

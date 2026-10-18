@@ -175,6 +175,11 @@ def fam_extshift(r, f):
     sub(sext(V), c) with c the size of V (the sign: RuleSignForm) or one short of it (the top byte of V, which a mutant of the rule takes for the sign),
     and (V << 8k) >> 8k (RuleLeftRight)"""
     form = r.randrange(0, 4)
+    if r.random() < 0.3:         # a word sign-extended, its top byte shifted down as 32 bits (shlr8 or eight shar), cut back to the word: sub(sext(V), 1) of a
+        f.add(extsw(0, 4))       # two-byte V, one short of the sign (RuleSignForm's mutant takes it for the sign: 0 or -1)
+        (shr_arith if r.random() < 0.4 else shr_logical)(f, 0, 8)
+        f.add(r.choice([extuw, extsw])(0, 0))
+        return
     if form < 3:
         kind = r.randrange(0, 4)
         f.add([extsb, extsw, extub, extuw][kind](0, 4))

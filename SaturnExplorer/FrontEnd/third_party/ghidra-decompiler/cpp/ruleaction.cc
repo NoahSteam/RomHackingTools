@@ -18,7 +18,7 @@
  * Modified for SaturnExplorer: an access that runs past the end of its space stays a LOAD or STORE (patches/0031-access-past-space-end.patch).
  * Modified for SaturnExplorer: RuleDivTermAdd and RuleDivTermAdd2 keep a product that overflows only for a division; RulePiecePathology needs the register it names (patches/0037-engine-division-piece-and-input-names.patch).
  * Modified for SaturnExplorer: RuleDivTermAdd and RuleDivTermAdd2 keep an overflowing product only when the shifts that follow stay inside the multiply (patches/0044-engine-round5-printed-value-fixes.patch).
- * Modified for SaturnExplorer: RuleScarry refuses the minimum for either operand; RuleRightShiftAnd keeps the mask of a shift by the width or more (patches/0062-engine-range-domain-nzmask-widen.patch).
+ * Modified for SaturnExplorer: RuleScarry refuses the minimum for either operand; RuleRightShiftAnd keeps the mask of a shift by the width or more (patches/0062-engine-range-set-ops-and-rule-guards.patch).
  */
 #include "ruleaction.hh"
 #include "coreaction.hh"
@@ -587,7 +587,7 @@ int4 RuleRightShiftAnd::applyOp(PcodeOp *op,Funcdata &data)
   if (!maskVn->isConstant()) return 0;
 
   Varnode *rootVn = andOp->getIn(0);
-  // SaturnExplorer (patches/0062-engine-range-domain-nzmask-widen.patch): a shift by the width of the value or more leaves no bit of it to compare the
+  // SaturnExplorer (patches/0062-engine-range-set-ops-and-rule-guards.patch): a shift by the width of the value or more leaves no bit of it to compare the
   // mask with: both sides of the test below are 0 and the mask looked unnecessary, but an arithmetic shift by the width is the value's sign bit alone,
   // and the mask can clear it. `(sext(b) & 0x20) s>> 8`, once the sub-variable flow had made the value one byte, was printed `b >> 8`: all the sign of
   // b, where the code computes 0. The shift amount is read as the 64-bit number it is (an int4 cast made a large amount negative).
@@ -3412,7 +3412,7 @@ int4 RuleScarry::applyOp(PcodeOp *op,Funcdata &data)
     avn = bvn;
     bvn = op->getIn(0);
   }
-  // SaturnExplorer (patches/0062-engine-range-domain-nzmask-widen.patch): the minimum is refused whichever operand it was. Upstream refused it only
+  // SaturnExplorer (patches/0062-engine-range-set-ops-and-rule-guards.patch): the minimum is refused whichever operand it was. Upstream refused it only
   // for the operand it had swapped itself, and rewrote scarry(V,min) != (V + min s< 0) to V s< -min = V s< min for a constant second operand:
   // false for every V, where the original is true for V = min.
   {

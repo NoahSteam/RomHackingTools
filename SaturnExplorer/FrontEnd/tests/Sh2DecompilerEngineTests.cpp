@@ -1830,7 +1830,7 @@ void TestNzMaskShiftRound11()
     std::printf("nz mask of signed shifts: %ld checked\n", checked);
 }
 
-// ---- Area 2 round 12 P3 fix (patches/0062-engine-range-domain-nzmask-widen.patch) ----------------------------------------------------------------
+// ---- Area 2 round 12 P3 fix (patches/0062-engine-range-set-ops-and-rule-guards.patch) ----------------------------------------------------------------
 // Three CircleRange operations that patch 0059 did not touch, upstream's, none reached by a workload (ledger A2-73 to A2-75). The rule is 0059's: an
 // answer holds every value, or fails, or is everything.
 
