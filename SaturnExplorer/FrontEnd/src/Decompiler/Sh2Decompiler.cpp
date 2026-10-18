@@ -1287,9 +1287,17 @@ private:
             reg[r] = x.Origins();
             regDep[r] = x.Direct();
         }
-        const uint32_t memory = Loaded(s).from | AllSlots(s);
-        uint32_t memoryDep = Loaded(s).Direct();
-        for (const auto& slot : s.slots) memoryDep |= slot.second.Direct();
+        // What it can load from our frame: the words at or above the call's r15. Those below are its own stack once it is entered (free stack,
+        // what our pushes and an interrupt left), not ours to hand it; their origins are anything, and counted they made every value it stores
+        // a possible frame address of ours -- the frame "escaped" and every later load through a pointer was a possible stack argument.
+        const Value callSp = Get(s, mReg[kR15]);
+        uint32_t memory = Loaded(s).from, memoryDep = Loaded(s).Direct();
+        for (const auto& slot : s.slots)
+            if (callSp.kind != Value::Sp || slot.first >= callSp.v)
+            {
+                memory |= slot.second.Origins();
+                memoryDep |= slot.second.Direct();
+            }
         auto map = [&](uint32_t bits) {
             uint32_t o = bits & origin::kStack;
             if (bits & origin::kMemory) o |= memory;
