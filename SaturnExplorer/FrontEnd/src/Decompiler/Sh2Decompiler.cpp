@@ -1364,22 +1364,11 @@ private:
         // the address it was made from: that offset is the alias's lower bound, and every local from it up is aliased
         // whatever the index (A3-9). An address made from nothing known has none to declare: the whole frame would
         // make an array of every local.
+        // (area 3 round 11 fix) A value with the stack among its origins and no base (a frame address laundered, or read back from memory the
+        // frame escaped to) escaping to a lent callee is handled by the storesBelow loop and the engine's escape analysis (patch 0061); it is
+        // not exposed here, where it would over-expose the ordinary stack-save area of an idiom modelled as a call (trapa).
         const int64_t base = v.Base();
-        if (base == Value::kNoBase)
-        {
-            // (area 3 round 11 fix) ...but a value this function computed with the stack among its origins and no base -- a frame address
-            // laundered (masked, swapped, reassembled from halves) or read back from memory the frame escaped to -- is still possibly a frame
-            // address, and the engine does not see it as one: fail closed, the frame from its lowest slot is exposed (A3-84's class at a
-            // callee that stores at or above its pointer, and at a call whose signature is not lent). A value only a call returned is not
-            // this function's own and is not counted (an unknown callee's outputs carry every origin).
-            if (v.kind == Value::Fuzzy && PossibleFrame(v))
-            {
-                if (exactToo) mEscapeSites[at] |= 1u << reg;
-                mEscapedLow = true;
-                mEscaped = true;
-            }
-            return;
-        }
+        if (base == Value::kNoBase) return;
         if (exactToo) mEscapeSites[at] |= 1u << reg;   // the address is in no argument of the call: the text says so (A3-28)
         if (base == Value::kLowBase) mEscapedLow = true;
         else if (!mEscaped || base < mEscapeLow) mEscapeLow = base;
