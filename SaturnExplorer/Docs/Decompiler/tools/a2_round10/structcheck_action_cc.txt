@@ -1,0 +1,137 @@
+
+// ---- round 10 instrument (scratch only): the invariant of patch 0054, checked structurally after every rule and action ----
+// SE_STRUCT_CHECK=1: after each step (a rule that fired, a leaf action that changed something), for every op that is complete:
+//   N: the non-zero mask of its output holds PcodeOp::getNZMaskLocal(false) of its inputs' masks;
+//   C: the consume mask of each input holds Funcdata::inputConsumeNeeded;
+// and a violation that was not there at the previous step is reported against this step. SE_STRUCT_MODEL=1 adds, after ActionDeadCode,
+// X: the model's least fixpoint of the consume masks (roots and local steps as 0054 states them) against what ActionDeadCode left
+// (a bit consumed that the model does not reach is a root the model does not know).
+}
+bool chk_masksReady(const PcodeOp *op);
+uintb chk_icn(Funcdata *d,PcodeOp *op,int4 slot);
+uintb chk_need(Funcdata *d,PcodeOp *op,int4 slot,uintb outc);
+namespace nzmchk {
+static bool structEnabled() { static int on4 = -1; if (on4 < 0) on4 = std::getenv("SE_STRUCT_CHECK") ? 1 : 0; return on4 == 1; }
+static std::string lastFn;
+static std::set<std::string> prevViol;
+static std::set<std::string> reportedKeys;
+static long structReports = 0, structSteps = 0, structSkipped = 0, modelReports = 0;
+static struct StructSummary { ~StructSummary() { if (structEnabled()) std::fprintf(stderr, "STRUCTSUMMARY steps: %ld, skipped for size: %ld, reports: %ld, model reports: %ld\n", structSteps, structSkipped, structReports, modelReports); } } structSummary;
+static std::map<std::string,long> structByWhere;
+static struct StructDump { ~StructDump() { if (structEnabled()) for (std::map<std::string,long>::const_iterator i = structByWhere.begin(); i != structByWhere.end(); ++i) std::fprintf(stderr, "STRUCTBYWHERE %s %ld\n", i->first.c_str(), i->second); } } structDump;
+static void structCheck(Funcdata &data, const std::string &where) {
+  static long maxops = std::getenv("SE_STRUCT_MAXOPS") ? std::atol(std::getenv("SE_STRUCT_MAXOPS")) : 1500;
+  if (data.getName() != lastFn) { lastFn = data.getName(); prevViol.clear(); }
+  long nops = 0;
+  list<PcodeOp *>::const_iterator oiter;
+  for (oiter = data.beginOpAlive(); oiter != data.endOpAlive(); ++oiter) { if (++nops > maxops) { ++structSkipped; return; } }
+  ++structSteps;
+  std::set<std::string> cur;
+  for (oiter = data.beginOpAlive(); oiter != data.endOpAlive(); ++oiter) {
+    PcodeOp *op = *oiter;
+    if (!chk_masksReady(op)) continue;
+    Varnode *out = op->getOut();
+    char key[160];
+    if (out != (Varnode *)0 && out->getSize() <= 8) {
+      uintb need = op->getNZMaskLocal(false) & calc_mask(out->getSize());
+      uintb miss = need & ~out->getNZMask();
+      if (miss != 0) {
+        std::snprintf(key, sizeof key, "N|%lu|%d|%llx", (unsigned long)op->getSeqNum().getTime(), 0, (unsigned long long)miss);
+        std::string k = key;
+        cur.insert(k);
+        if (!prevViol.count(k)) {
+          std::string fk = data.getName() + k + where;
+          if (reportedKeys.insert(fk).second) {
+            std::ostringstream so; so << op->getSeqNum();
+            std::fprintf(stderr, "STRUCT kind=N where=%s fn=%s defop=%s seq=%s size=%d have=%llx need=%llx missing=%llx\n", where.c_str(), data.getName().c_str(), get_opname(op->code()), so.str().c_str(), out->getSize(),
+                         (unsigned long long)out->getNZMask(), (unsigned long long)need, (unsigned long long)miss);
+            ++structReports; structByWhere[where + " N"] += 1;
+          }
+        }
+      }
+    }
+    for (int i = 0; i < op->numInput(); ++i) {
+      Varnode *in = op->getIn(i);
+      if (in->getSize() > 8) continue;
+      uintb need = chk_icn(&data, op, i) & calc_mask(in->getSize());
+      uintb miss = need & ~in->getConsume();
+      if (miss == 0) continue;
+      std::snprintf(key, sizeof key, "C|%lu|%d|%llx", (unsigned long)op->getSeqNum().getTime(), i, (unsigned long long)miss);
+      std::string k = key;
+      cur.insert(k);
+      if (prevViol.count(k)) continue;
+      std::string fk = data.getName() + k + where;
+      if (!reportedKeys.insert(fk).second) continue;
+      std::ostringstream so; so << op->getSeqNum();
+      std::fprintf(stderr, "STRUCT kind=C where=%s fn=%s defop=%s slot=%d seq=%s size=%d have=%llx need=%llx missing=%llx innzm=%llx indef=%s\n", where.c_str(), data.getName().c_str(), get_opname(op->code()), i, so.str().c_str(), in->getSize(),
+                   (unsigned long long)in->getConsume(), (unsigned long long)need, (unsigned long long)miss, (unsigned long long)in->getNZMask(), in->isWritten() ? get_opname(in->getDef()->code()) : (in->isConstant() ? "const" : "input"));
+      if (op->getOut() != (Varnode *)0) std::fprintf(stderr, "   out: consume=%llx nzm=%llx autolive=%d addrforce=%d hold=%d directwrite=%d space=%s\n", (unsigned long long)op->getOut()->getConsume(), (unsigned long long)op->getOut()->getNZMask(), (int)op->getOut()->isAutoLive(), (int)op->getOut()->isAddrForce(), (int)op->getOut()->isAutoLiveHold(), (int)op->getOut()->isDirectWrite(), op->getOut()->getSpace()->getName().c_str());
+      ++structReports; structByWhere[where + " C"] += 1;
+      if (std::getenv("SE_NZM_VERBOSE")) { std::ostringstream os; data.printRaw(os); std::fprintf(stderr, "--- the function when %s left it so ---\n%s\n---\n", where.c_str(), os.str().c_str()); }
+    }
+  }
+  prevViol.swap(cur);
+}
+// the model of 0054's consume masks, from the roots, compared with what ActionDeadCode left
+static void modelCheck(Funcdata &data, const std::string &where) {
+  if (!std::getenv("SE_STRUCT_MODEL")) return;
+  static long maxops = std::getenv("SE_STRUCT_MAXOPS") ? std::atol(std::getenv("SE_STRUCT_MAXOPS")) : 1500;
+  long nops = 0;
+  list<PcodeOp *>::const_iterator oiter;
+  for (oiter = data.beginOpAlive(); oiter != data.endOpAlive(); ++oiter) { if (++nops > maxops) return; }
+  std::map<Varnode *,uintb> C;
+  std::vector<Varnode *> work;
+  for (oiter = data.beginOpAlive(); oiter != data.endOpAlive(); ++oiter) {
+    PcodeOp *op = *oiter;
+    if (!chk_masksReady(op)) continue;
+    for (int i = 0; i < op->numInput(); ++i) {
+      Varnode *in = op->getIn(i);
+      if (in->getSize() > 8) continue;
+      bool rootOp = op->isCall() || !op->isAssignment() || in->isAutoLive() || (op->getOut() != (Varnode *)0 && op->getOut()->isAutoLive());
+      if (rootOp) {
+        uintb need = chk_need(&data, op, i, ~(uintb)0) & calc_mask(in->getSize());
+        if (op->code() == CPUI_RETURN && i > 0 && !data.getFuncProto().isOutputLocked() && data.getActiveOutput() == (ParamActive *)0 && in->getSpace()->getType() != IPTR_JOIN) {
+          // ActionDeadCode::gatherConsumedReturn: the union over every RETURN of the function
+          uintb u = 0;
+          for (list<PcodeOp *>::const_iterator ri = data.beginOpAlive(); ri != data.endOpAlive(); ++ri)
+            if ((*ri)->code() == CPUI_RETURN && (*ri)->numInput() > 1) { Varnode *rv = (*ri)->getIn(1); u |= (rv->getSpace()->getType() == IPTR_JOIN) ? calc_mask(rv->getSize()) : minimalmask(rv->getNZMask()); }
+          int4 bc = data.getFuncProto().getReturnBytesConsumed();
+          if (bc != 0) u &= calc_mask(bc);
+          need = u & calc_mask(in->getSize());
+        }
+        uintb &c = C[in];
+        if ((need & ~c) != 0) { c |= need; if (in->isWritten()) work.push_back(in); }
+      }
+    }
+    Varnode *o = op->getOut();
+    if (o != (Varnode *)0 && o->isAutoLive() && o->getSize() <= 8) { uintb &c = C[o]; if ((calc_mask(o->getSize()) & ~c) != 0) { c = calc_mask(o->getSize()); if (o->isWritten()) work.push_back(o); } }
+  }
+  while (!work.empty()) {
+    Varnode *v = work.back(); work.pop_back();
+    PcodeOp *def = v->getDef();
+    if (def == (PcodeOp *)0 || !chk_masksReady(def)) continue;
+    uintb outc = C[v];
+    for (int i = 0; i < def->numInput(); ++i) {
+      Varnode *in = def->getIn(i);
+      if (in->getSize() > 8) continue;
+      uintb need = chk_need(&data, def, i, outc) & calc_mask(in->getSize());
+      uintb &c = C[in];
+      if ((need & ~c) != 0) { c |= need; if (in->isWritten()) work.push_back(in); }
+    }
+  }
+  for (oiter = data.beginOpAlive(); oiter != data.endOpAlive(); ++oiter) {
+    Varnode *o = (*oiter)->getOut();
+    if (o == (Varnode *)0 || o->getSize() > 8 || o->isAutoLive()) continue;
+    uintb extra = o->getConsume() & ~C[o] & calc_mask(o->getSize());
+    if (extra == 0) continue;
+    char key[200]; std::snprintf(key, sizeof key, "X|%s|%s|%llx|%llx", data.getName().c_str(), get_opname((*oiter)->code()), (unsigned long long)o->getConsume(), (unsigned long long)extra);
+    if (!reportedKeys.insert(key).second) continue;
+    std::ostringstream so; so << (*oiter)->getSeqNum();
+    std::fprintf(stderr, "STRUCT kind=X where=%s fn=%s defop=%s seq=%s space=%s size=%d have=%llx model=%llx extra=%llx readers=", where.c_str(), data.getName().c_str(), get_opname((*oiter)->code()), so.str().c_str(), o->getSpace()->getName().c_str(), o->getSize(),
+                 (unsigned long long)o->getConsume(), (unsigned long long)C[o], (unsigned long long)extra);
+    for (list<PcodeOp *>::const_iterator ri = o->beginDescend(); ri != o->endDescend(); ++ri) std::fprintf(stderr, "%s ", get_opname((*ri)->code()));
+    std::fprintf(stderr, "\n");
+    ++modelReports; structByWhere[where + " X"] += 1;
+  }
+}
+static bool isCompound(const Action *a) { return dynamic_cast<const ActionGroup *>(a) != (const ActionGroup *)0 || dynamic_cast<const ActionPool *>(a) != (const ActionPool *)0; }

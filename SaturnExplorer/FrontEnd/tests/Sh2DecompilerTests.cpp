@@ -11302,6 +11302,35 @@ void TestArea3Round10()
     withheld("a3_72 control: a walk from r15 + 16 goes into the caller's frame", { 0x7FF8, 0xE005, 0x2F02, 0x62F3, 0x7210, 0xE104, 0x2216, 0x4110, 0x8BFC, 0x60F2, 0x7F08, 0x000B, 0x0009, 0x0009 },
              "it writes a word of its caller's frame");
 }
+// Area 2, round 10 review. A2-64 (P1), OPEN: this holds the WRONG text so that the suite stays green, and flips with the fix.
+// addv r0,r4 with the literal 0xAAAAAAAB in r4, T tested by bf: the code leaves r1 = 5 unless the signed add overflows (r0 negative and the sum not),
+// when it sets 7. RuleRangeMeld melds the boolean `(r0 s< 0) != 0xff` with `!(r0 s< 0)` by pulling the first back through `r0 s< 0`; the range of
+// a boolean that holds both 0 and 1 is left as [0,2) in the 4-byte space by CircleRange::pullBackBinary (`bothTrueFalse`: the comment says all
+// possible ins, the range is the two values 0 and 1), so the meld is `r0 < 2` and the test prints `1 < param_1 && -1 < (int4)(param_1 + 0xaaaaaaab)`:
+// true for r0 = 0x60000000, where the code does not overflow. The same literal as an immediate (mov #-3) prints the right test (the control).
+void TestArea2Round10()
+{
+    Sh2Decompiler d(gConfig);
+    uint64_t serial = 60000;
+    {
+        const std::vector<uint16_t> words = { 0x6043, 0xD404, 0x340F, 0xE105, 0x8B00, 0xE107, 0x6013, 0x000B, 0x0009, 0x0009, 0xAAAA, 0xAAAB };
+        DecompileResult r;
+        const R8Outcome o = R8Check(d, "A2-64 addv literal", words, { { 0x60000000u }, { 0x80000000u }, { 0u }, { 0xFFFFFFFFu } }, "", {}, ++serial, 0x06009000u, &r);
+        Print("A2-64: addv with a literal in r4, T tested by bf", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(o.verdict == "differs");   // WRONG (open): r0 = 0x60000000 does not overflow, the text takes the branch
+        CHECK(Has(r.Text(), "1 < param_1 && -1 < (int4)(param_1 + 0xaaaaaaab)"));   // the fix: 0x7fffffff < param_1
+    }
+    {
+        const std::vector<uint16_t> words = { 0x6043, 0xE4FD, 0x340F, 0xE105, 0x8B00, 0xE107, 0x6013, 0x000B, 0x0009, 0x0009 };
+        DecompileResult r;
+        const R8Outcome o = R8Check(d, "A2-64 control immediate", words, { { 0x60000000u }, { 0x80000000u }, { 0u }, { 0xFFFFFFFFu } }, "", {}, ++serial, 0x06009000u, &r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(o.verdict == "agrees");
+        CHECK(Has(r.Text(), "0x7fffffff < param_1"));
+    }
+}
+
 
 // ===== A3-65 (P1): a copy of r15 walked down by pre-decrement stores ===========================================================================
 // `*--p = v` over a local array compiles to a copy of r15 (or of the frame pointer r14), moved to the top of the array and walked down by
@@ -11759,6 +11788,7 @@ int main(int argc, char** argv)
         RUN(TestArea3Round10());
         RUN(TestArea2Round8());
         RUN(TestArea2Round9());
+        RUN(TestArea2Round10());
         RUN(TestA365WalkDown());
         RUN(TestFetchAndDataRefusals());
         RUN(TestAllocationFailureIsReported());
