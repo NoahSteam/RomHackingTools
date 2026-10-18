@@ -25,6 +25,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cctype>
 #include <cstring>
 #include <fstream>
@@ -33,6 +34,7 @@
 #include <stdexcept>
 #include <cstdlib>
 #include <sstream>
+#include <thread>
 
 using namespace sfe::decomp;
 using dts::MakeSnapshot;
@@ -10827,6 +10829,72 @@ void TestArea2Round8()
     }
 }
 
+// ---- Area 2, round 9 ---------------------------------------------------------------------------------------------------------------------------
+// (1) A2-58 (P1): RulePushMulti moves a reader onto an existing MULTIEQUAL whose consume mask was worked out without that reader. Each predecessor of a
+// join makes `r1 = src & 0x80000000` and a second value from it (`r2 = r1 + 1`, or the test `tst r1,r1`); the join reads the phi of r1 through a few low
+// bits and the phi of the second value whole. The engine merges the two second-value computations into one, in the join, reading the phi of r1 (the
+// op `Funcdata::opSetInput` re-points at an existing Varnode: patch 0051 covers `totalReplace` and not this). That phi keeps the consume mask of its
+// first readers (0xff, 0x3fffffff), and its non-zero mask is the sign bit alone, so the next ActionVarnodeProps (first in the main loop, before
+// ActionDeadCode works the masks out again) replaces it by a zero: `return 1;` for r1 + 1, `return 0xffffffff;` for -(r1 == 0). The two texts below are
+// WRONG; the pins hold them so that a fix flips them (flip the `differs` and the two text checks with it). The values are the printed-C differential's
+// (`SE_GENERATED_PRINTEDC_WORDS`), which the A2-58 row replays; the controls read the join whole and agree already.
+void TestArea2Round9()
+{
+    Sh2Decompiler d(gConfig);
+    uint64_t serial = 50000;
+    {
+        // mov #1,r3 ; rotr r3 (r3 = 0x80000000) ; cmp/pl r4 ; bt B ; A: mov r5,r1 ; and r3,r1 ; mov r1,r2 ; add #1,r2 ; bra J ; nop ;
+        // B: mov r6,r1 ; and r3,r1 ; mov r1,r2 ; add #1,r2 ; J: mov r1,r0 ; extu.b r0,r0 ; or r2,r0 ; rts ; nop. The code returns r1 + 1 (r1 is 0 or 0x80000000).
+        const std::vector<uint16_t> words = { 0xE301, 0x4305, 0x4415, 0x8905, 0x6153, 0x2139, 0x6213, 0x7201, 0xA004, 0x0009, 0x6163, 0x2139, 0x6213, 0x7201,
+                                              0x6013, 0x600C, 0x202B, 0x000B, 0x0009, 0x0009 };
+        DecompileResult r;
+        const R8Outcome o = R8Check(d, "A2-58 add", words, { { 0, 0x80000001u, 0xFFu }, { 0, 0x7FFFFFFFu, 0x80000000u }, { 5, 0x0u, 0x80000000u } }, "", {}, ++serial, 0x06009000u, &r);
+        Print("A2-58: r1 = src & 0x80000000 in both arms, r2 = r1 + 1, join reads r1 low byte and r2", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(o.verdict == "differs");              // WRONG: the code returns 0x80000001 for r5 = 0x80000001, the text returns 1
+        CHECK(Has(r.Text(), "return 1;"));          // WRONG (the fix: "return (param_2 & 0x80000000) + 1" or the like)
+    }
+    {
+        // the same with the test: tst r1,r1 in each arm, the join returns -T (shll2 r0 ; movt r2 ; sub r2,r0): the code returns 0 when the chosen source has
+        // its sign bit set, and -1 when it has not; the text returns -1 always
+        const std::vector<uint16_t> words = { 0xE301, 0x4305, 0x4411, 0x8904, 0x6153, 0x2139, 0x2118, 0xA003, 0x0009, 0x6163, 0x2139, 0x2118, 0x6013, 0x4008,
+                                              0x0229, 0x3028, 0x000B, 0x0009 };
+        DecompileResult r;
+        const R8Outcome o = R8Check(d, "A2-58 tst", words, { { 2, 0x7FFFu, 0xFFFF8000u }, { 0, 0x7FFFu, 0xFFFF8000u }, { 2, 0x80000000u, 0u } }, "", {}, ++serial, 0x06009000u, &r);
+        Print("A2-58: tst r1,r1 in both arms, the join returns -T of the test", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(o.verdict == "differs");              // WRONG: r4 = 2 reads r6 = 0xFFFF8000, whose sign bit is set: the code returns 0, the text 0xffffffff
+        CHECK(Has(r.Text(), "return 0xffffffff;")); // WRONG
+    }
+    {
+        // control: the join reads r1 whole (no extu.b): the phi is consumed in every bit and nothing is lost
+        const std::vector<uint16_t> words = { 0xE301, 0x4305, 0x4415, 0x8905, 0x6153, 0x2139, 0x6213, 0x7201, 0xA004, 0x0009, 0x6163, 0x2139, 0x6213, 0x7201,
+                                              0x6013, 0x202B, 0x000B, 0x0009 };
+        DecompileResult r;
+        const R8Outcome o = R8Check(d, "A2-58 control", words, { { 0, 0x80000001u, 0xFFu }, { 0, 0x7FFFFFFFu, 0x80000000u }, { 5, 0x0u, 0x80000000u } }, "", {}, ++serial, 0x06009000u, &r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(o.verdict == "agrees");
+    }
+    // ---- (2) A2-59 (P2): a counted loop that ANDs a constant-seeded accumulator with a value assembled from the pieces of a register ----
+    {
+        // mov #4,r1 ; L: swap.b r2,r3 ; and r3,r1 ; dt r6 ; bf L ; rts ; mov r1,r0. Patch 0049 forgets the non-zero mask of the phi of r1 after the first
+        // RuleAndDistribute (`r1 & (A | B)` into `(A & r1) | (B & r1)`), so the second distribution of the nest (the mask `0x4` it keys on is gone) does not
+        // fire in the pass and RuleHumptyOr merges the first one back; ActionNonzeroMask works the mask out again at the next pass and the two rules undo each
+        // other for ever (about 44 MB of operations a second; without the walk, two RuleAndDistribute in a row and RuleAndMask finish). The engine does not
+        // finish, and this holds that: the cancel flag is the only stop, so the request is cancelled after 1.5 s. WRONG (the fix flips it to Ok).
+        auto snap = CallSnapshot({ "A2-59 loop", 0x06009000u, { 0xE104, 0x6328, 0x2139, 0x4610, 0x8BFB, 0x000B, 0x6013, 0x0009 } }, ++serial);
+        std::atomic<bool> cancel(false);
+        std::thread stopper([&cancel] {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+            cancel = true;
+        });
+        const DecompileResult r = d.Decompile(snap, Request(0x06009000u), &cancel);
+        stopper.join();
+        std::printf("A2-59: the loop that ANDs with swap.b: status %d\n", static_cast<int>(r.status));
+        CHECK(r.status == DecompileStatus::Cancelled);
+    }
+}
+
 void TestFetchAndDataRefusals()
 {
     Sh2Decompiler d(gConfig);
@@ -11199,6 +11267,7 @@ int main(int argc, char** argv)
         RUN(TestRoutedSeeds());
         RUN(TestArea3Round9());
         RUN(TestArea2Round8());
+        RUN(TestArea2Round9());
         RUN(TestFetchAndDataRefusals());
         RUN(TestAllocationFailureIsReported());
         RUN(TestFunctionFreesActiveOutput());
