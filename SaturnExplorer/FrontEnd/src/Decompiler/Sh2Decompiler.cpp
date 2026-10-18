@@ -818,6 +818,14 @@ private:
     }
 
     static constexpr uint32_t kAnything = origin::kRegisters | origin::kStack | origin::kMemory;
+    // (area 3 round 11 fix) A possible frame address of this function's own: an exact stack address, or a value it computed with the stack among
+    // its origins (a frame address laundered, or read back from memory the frame escaped to). Not a value nothing is known of (every origin:
+    // a free-stack word, a slot a callee clobbered), which the frame rules take for no address of this frame (round 10), nor what a call returned.
+    static bool PossibleFrame(const Value& x)
+    {
+        if (x.kind == Value::Sp) return true;
+        return x.kind == Value::Fuzzy && x.own && (x.Origins() & origin::kStack) && (x.Origins() & kAnything) != kAnything;
+    }
 
     // What a load from untracked memory can give.
     static Value Loaded(const State& s) { return Value::From(origin::kMemory | (s.escaped ? origin::kStack : 0)); }
@@ -1082,15 +1090,33 @@ private:
             // above threw the callee's effects away. Walk it for its storesBelow (cached), and expose this frame from its lowest
             // slot when a register holds a possible frame address of ours -- so the probe declares the host alias and the folded
             // local is not shown wrong. Only at depth 0 (the request's own probe); a nested walk's own callees are its concern.
-            if (mTolerant && !mNested && haveTarget)
-            {
-                const uint32_t sb = CalleeStoresBelow(target);
-                for (int r = 0; r < 15; ++r)
-                    if (((sb >> r) & 1u) && (Get(s, mReg[r]).Origins() & origin::kStack))
+            // ...and a callee the probe cannot name (a call through a pointer it does not resolve) may store anywhere through what it is
+            // handed: an exact frame address in an argument register it reads (r4-r7) exposes the frame from its lowest slot too (fail
+            // closed: its storesBelow is unknown, so every register).
+            if (mTolerant && !mNested && !haveTarget)
+                for (int r = 4; r < 8; ++r)
+                {
+                    const Value x = Get(s, mReg[r]);
+                    if (PossibleFrame(x))
                     {
                         mEscaped = true;
                         mEscapedLow = true;
                     }
+                }
+            if (mTolerant && !mNested && haveTarget)
+            {
+                const uint32_t sb = CalleeStoresBelow(target);
+                for (int r = 0; r < 15; ++r)
+                {
+                    // (a value only an earlier call returned carries every origin and is not counted here: a frame address a call
+                    // returns is the engine's to follow, patch 0061)
+                    const Value x = Get(s, mReg[r]);
+                    if (((sb >> r) & 1u) && PossibleFrame(x))
+                    {
+                        mEscaped = true;
+                        mEscapedLow = true;
+                    }
+                }
             }
         }
         else
@@ -1339,7 +1365,21 @@ private:
         // whatever the index (A3-9). An address made from nothing known has none to declare: the whole frame would
         // make an array of every local.
         const int64_t base = v.Base();
-        if (base == Value::kNoBase) return;
+        if (base == Value::kNoBase)
+        {
+            // (area 3 round 11 fix) ...but a value this function computed with the stack among its origins and no base -- a frame address
+            // laundered (masked, swapped, reassembled from halves) or read back from memory the frame escaped to -- is still possibly a frame
+            // address, and the engine does not see it as one: fail closed, the frame from its lowest slot is exposed (A3-84's class at a
+            // callee that stores at or above its pointer, and at a call whose signature is not lent). A value only a call returned is not
+            // this function's own and is not counted (an unknown callee's outputs carry every origin).
+            if (v.kind == Value::Fuzzy && PossibleFrame(v))
+            {
+                if (exactToo) mEscapeSites[at] |= 1u << reg;
+                mEscapedLow = true;
+                mEscaped = true;
+            }
+            return;
+        }
         if (exactToo) mEscapeSites[at] |= 1u << reg;   // the address is in no argument of the call: the text says so (A3-28)
         if (base == Value::kLowBase) mEscapedLow = true;
         else if (!mEscaped || base < mEscapeLow) mEscapeLow = base;
