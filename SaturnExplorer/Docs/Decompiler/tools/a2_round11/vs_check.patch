@@ -1,0 +1,155 @@
+diff --git a/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/rangeutil.cc b/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/rangeutil.cc
+index 8a4791b..bffcba4 100644
+--- a/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/rangeutil.cc
++++ b/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/rangeutil.cc
+@@ -1645,6 +1645,87 @@ bool ValueSet::computeTypeCode(void)
+   return false;
+ }
+ 
++// ---- Area 2 round 11 scratch instrument (SE_VS_CHECK=1): every claimed push-forward is checked against sampled elements of its inputs.
++#include <cstdio>
++#include <cstdlib>
++static uintb vsRandState = 88172645463325252ull;
++static uintb vsRand(void) { vsRandState ^= vsRandState << 13; vsRandState ^= vsRandState >> 7; vsRandState ^= vsRandState << 17; return vsRandState; }
++static bool vsOn(void) { static int on = -1; if (on < 0) on = getenv("SE_VS_CHECK") ? 1 : 0; return on == 1; }
++static long vsChecks = 0, vsBad = 0, vsLines = 0;
++static struct VsReport { ~VsReport() { if (vsChecks) fprintf(stderr, "VSCHK total %ld checks %ld unsound\n", vsChecks, vsBad); } } vsReport;
++static void vsSample(const CircleRange &r, vector<uintb> &out) {
++  if (r.isEmpty()) return;
++  uintb cnt = r.getSize();
++  if (cnt == 0) return;
++  uintb st = r.getStep(), m = r.getMask(), l = r.getMin();
++  uintb ks[8] = {0, 1, 2, 3, cnt - 1, cnt >= 2 ? cnt - 2 : 0, cnt >= 3 ? cnt - 3 : 0, cnt >> 1};
++  for (int i = 0; i < 8; ++i) if (ks[i] < cnt) out.push_back((l + st * ks[i]) & m);
++  for (int i = 0; i < 12; ++i) out.push_back((l + st * (vsRand() % cnt)) & m);
++}
++static uintb vsMask(int4 sz) { return sz >= 8 ? ~(uintb)0 : (((uintb)1 << (8 * sz)) - 1); }
++static intb vsSx(uintb v, int4 sz) { if (sz >= 8) return (intb)v; uintb s = (uintb)1 << (8 * sz - 1); return (intb)((v ^ s) - s); }
++static void vsFail(const char *what, OpCode opc, const CircleRange &a, const CircleRange *b, const CircleRange &res, uintb x, uintb y) {
++  vsBad++;
++  if (vsLines++ < 400) { fprintf(stderr, "VSCHK UNSOUND %s op=%d in1=", what, (int)opc); a.printRaw(cerr); if (b) { fprintf(stderr, " in2="); b->printRaw(cerr); } fprintf(stderr, " res="); res.printRaw(cerr); fprintf(stderr, " missing %llx (from %llx %llx)\n", 0ull, (unsigned long long)x, (unsigned long long)y); }
++}
++static void vsCheckUnary(OpCode opc, const CircleRange &in, int4 inSize, int4 outSize, const CircleRange &res) {
++  if (!vsOn()) return;
++  vector<uintb> xs; vsSample(in, xs);
++  for (uintb x : xs) {
++    uintb o;
++    switch (opc) {
++      case CPUI_CAST: case CPUI_COPY: o = x; break;
++      case CPUI_INT_ZEXT: o = x; break;
++      case CPUI_INT_SEXT: o = (uintb)vsSx(x, inSize) & vsMask(outSize); break;
++      case CPUI_INT_2COMP: o = (0 - x) & vsMask(outSize); break;
++      case CPUI_INT_NEGATE: o = (~x) & vsMask(outSize); break;
++      default: return;
++    }
++    vsChecks++;
++    if (!res.contains(o)) { vsFail("unary", opc, in, (const CircleRange *)0, res, x, o); return; }
++  }
++}
++static void vsCheckBinary(OpCode opc, const CircleRange &a, const CircleRange &b, int4 inSize, int4 outSize, const CircleRange &res) {
++  if (!vsOn()) return;
++  vector<uintb> xs, ys; vsSample(a, xs); vsSample(b, ys);
++  uintb om = vsMask(outSize);
++  for (uintb x : xs) for (uintb y : ys) {
++    uintb o;
++    switch (opc) {
++      case CPUI_PTRSUB: case CPUI_INT_ADD: o = (x + y) & om; break;
++      case CPUI_INT_MULT: o = (x * y) & om; break;
++      case CPUI_INT_LEFT: o = y >= (uintb)(8 * outSize) ? 0 : (x << y) & om; break;
++      case CPUI_INT_RIGHT: o = y >= (uintb)(8 * inSize) ? 0 : (x & vsMask(inSize)) >> y; break;
++      case CPUI_INT_SRIGHT: { uintb sh = y >= (uintb)(8 * inSize) ? 8 * inSize - 1 : y; o = (uintb)(vsSx(x, inSize) >> sh) & om; break; }
++      case CPUI_SUBPIECE: o = y >= (uintb)inSize ? 0 : (x >> (8 * y)) & om; break;
++      default: return;
++    }
++    vsChecks++;
++    if (!res.contains(o)) { vsFail("binary", opc, a, &b, res, x, y); return; }
++  }
++}
++
++static void vsCheckUnion(const vector<CircleRange> &ins,const CircleRange &prev,const CircleRange &res) {
++  if (!vsOn()) return;
++  for (size_t i = 0; i <= ins.size(); ++i) {
++    const CircleRange &r = i < ins.size() ? ins[i] : prev;
++    vector<uintb> xs; vsSample(r,xs);
++    for (uintb x : xs) { vsChecks++; if (!res.contains(x)) { vsFail("union",CPUI_MULTIEQUAL,r,(const CircleRange *)0,res,x,0); break; } }
++  }
++}
++static bool vsPFU(CircleRange &res,OpCode opc,const CircleRange &in1,int4 inSize,int4 outSize)
++{
++  bool ok = res.pushForwardUnary(opc,in1,inSize,outSize);
++  if (ok) vsCheckUnary(opc,in1,inSize,outSize,res);
++  return ok;
++}
++static bool vsPFB(CircleRange &res,OpCode opc,const CircleRange &in1,const CircleRange &in2,int4 inSize,int4 outSize,int4 maxStep)
++{
++  bool ok = res.pushForwardBinary(opc,in1,in2,inSize,outSize,maxStep);
++  if (ok) vsCheckBinary(opc,in1,in2,inSize,outSize,res);
++  return ok;
++}
++
+ /// Recalculate \b this value set by grabbing the value sets of the inputs to the
+ /// operator defining the Varnode attached to \b this value set and pushing them
+ /// forward through the operator.
+@@ -1666,6 +1747,7 @@ bool ValueSet::iterate(Widener &widener)
+   int4 eqPos = 0;
+   if (opCode == CPUI_MULTIEQUAL) {
+     int4 pieces = 0;
++    vector<CircleRange> vsInputs;
+     for(int4 i=0;i<numParams;++i) {
+       ValueSet *inSet = op->getIn(i)->getValueSet();
+       if (doesEquationApply(eqPos, i)) {
+@@ -1674,10 +1756,12 @@ bool ValueSet::iterate(Widener &widener)
+ 	  rangeCopy = equations[eqPos].range;
+ 	}
+ 	pieces = res.circleUnion(rangeCopy);
++	vsInputs.push_back(rangeCopy);
+ 	eqPos += 1;	// Equation was used
+       }
+       else {
+ 	pieces = res.circleUnion(inSet->range);
++	vsInputs.push_back(inSet->range);
+       }
+       if (pieces == 2) {
+ 	if (res.minimalContainer(inSet->range,MAX_STEP))	// Could not get clean union, force it
+@@ -1687,6 +1771,7 @@ bool ValueSet::iterate(Widener &widener)
+     if (0 != res.circleUnion(range)) {	// Union with the previous iteration's set
+       res.minimalContainer(range,MAX_STEP);
+     }
++    vsCheckUnion(vsInputs,range,res);
+     if (!range.isEmpty() && !res.isEmpty()) {
+       leftIsStable = range.getMin() == res.getMin();
+       rightIsStable = range.getEnd() == res.getEnd();
+@@ -1699,13 +1784,13 @@ bool ValueSet::iterate(Widener &widener)
+       if (0 != rangeCopy.intersect(equations[eqPos].range)) {
+ 	rangeCopy = equations[eqPos].range;
+       }
+-      if (!res.pushForwardUnary(opCode, rangeCopy, inSet1->vn->getSize(), vn->getSize())) {
++      if (!vsPFU(res,opCode, rangeCopy, inSet1->vn->getSize(), vn->getSize())) {
+ 	setFull();
+ 	return true;
+       }
+       eqPos += 1;
+     }
+-    else if (!res.pushForwardUnary(opCode, inSet1->range, inSet1->vn->getSize(), vn->getSize())) {
++    else if (!vsPFU(res,opCode, inSet1->range, inSet1->vn->getSize(), vn->getSize())) {
+       setFull();
+       return true;
+     }
+@@ -1716,7 +1801,7 @@ bool ValueSet::iterate(Widener &widener)
+     ValueSet *inSet1 = op->getIn(0)->getValueSet();
+     ValueSet *inSet2 = op->getIn(1)->getValueSet();
+     if (equations.size() == 0) {
+-      if (!res.pushForwardBinary(opCode, inSet1->range, inSet2->range, inSet1->vn->getSize(), vn->getSize(), MAX_STEP)) {
++      if (!vsPFB(res,opCode, inSet1->range, inSet2->range, inSet1->vn->getSize(), vn->getSize(), MAX_STEP)) {
+ 	setFull();
+ 	return true;
+       }
+@@ -1733,7 +1818,7 @@ bool ValueSet::iterate(Widener &widener)
+ 	if (0 != range2.intersect(equations[eqPos].range))
+ 	  range2 = equations[eqPos].range;
+       }
+-      if (!res.pushForwardBinary(opCode, range1, range2, inSet1->vn->getSize(), vn->getSize(), MAX_STEP)) {
++      if (!vsPFB(res,opCode, range1, range2, inSet1->vn->getSize(), vn->getSize(), MAX_STEP)) {
+ 	setFull();
+ 	return true;
+       }
