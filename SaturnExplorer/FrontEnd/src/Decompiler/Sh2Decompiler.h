@@ -100,10 +100,16 @@ struct CallEffects
     // say is not lent a signature (WithholdReason), and a caller's analysis takes r15 to be anything.
     static constexpr int32_t kSpUnknown = INT32_MIN;
     int32_t spDelta = kSpUnknown;
+    // The registers (bit r: r0-r14) the function may store through at an offset below the entry value it was handed in that register -- a
+    // negative displacement, or a pointer stepped down in a loop (`*--p = v`, A3-71). The engine's reach for a pointer argument is the object
+    // at the address and what lies above it, so a caller that hands a lent callee an exact frame address must expose the locals below it as
+    // well when this names that register. Unknown (a callee whose signature is not lent): every register, taken conservatively.
+    uint32_t storesBelow = origin::kRegisters;
     bool operator==(const CallEffects& o) const
     {
         return preserved == o.preserved && storesThrough == o.storesThrough && outOrigins == o.outOrigins &&
-               leaks == o.leaks && frameValues == o.frameValues && frameWords == o.frameWords && spDelta == o.spDelta;
+               leaks == o.leaks && frameValues == o.frameValues && frameWords == o.frameWords && spDelta == o.spDelta &&
+               storesBelow == o.storesBelow;
     }
 };
 
