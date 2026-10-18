@@ -10878,3 +10878,114 @@ Seed 1418819: `[n:kept-read:r10]` and `[n:kept-read:r12]`, "a function it calls 
 
 * A2-67 to A2-71 are the fixer's. A2-67 and A2-68 want the forward half of `CircleRange` repaired where the solver can reach it (the `right = mask >> sa` +1, the sign in the overflow test of `INT_LEFT` / `INT_MULT`, the wrapped inputs of `INT_SRIGHT` and `SUBPIECE`, a full operand in `minimalContainer`, and the rounding in `newStride`); the sweep `forward_audit.cpp` is the test, and the pin `TestRangeAlgebraRound11` already holds the exact part. A2-69 wants the two 8-byte shifts refused, as 0058 refuses the others; `TestPullBackRanges` can take the 8-byte rows. A2-70 are two guards (`sa >= 64`; `INT64_MIN` by -1). A2-71 is a rule of the oracle's second reading.
 * The next review round verifies none of 0058 again (it held) and attacks what it has not: the lent signatures against the new families, and the phi of the solver's partial analysis if a store through a computed pointer can be built that depends on it.
+
+## Area 2, round 11 P3 fix
+
+Fixer, branch `review/2-round11-p3-fix`, on the coordinator's head `7300510`. One engine patch (`0059-engine-range-arithmetic-sound.patch`: `rangeutil.cc`, `op.cc`, `opbehavior.cc`), the harness, the pins and this record. **A2-67, A2-68, A2-69, A2-70 and A2-71 are fixed; none is accepted.** Area 2's P3 rows are now all closed; the count of consecutive clean rounds stays at 1 until the next review round.
+
+No text of either game image changes: the 4,299 and 7,544 files of `SE_GAME_OUT` (the 839 and 1,554 functions, and the lent texts before and after) are byte for byte the ones the head prints (section 6). The fixes are for what the solver could say about a value, not for what is printed.
+
+### 1. Patch 0059 and its rules
+
+> **A push-forward through an operation, a union or a container of two ranges holds every value the operation can produce from the elements of its inputs, in the output's mask, as a well-formed range; or it fails (`false`) or answers "everything".** A set operation that answers 0 is exactly the set operation; one that answers 2 leaves `this` as it was.
+
+The same rule as 0058's for the pull-back, for the other direction. Where a result was already sound and exact the code is unchanged, so a text that depended on it does not move.
+
+| Row | What was wrong | What it is now |
+|---|---|---|
+| A2-67 `INT_RIGHT` | `right = mask >> sa` without the +1: a full 4-byte value `>> 2` was `[0,0x3fffffff)` | a wrapped or full range is `[0, (mask >> sa) + 1)`, or the arc from `first >> sa` to `last >> sa` + 1 when the two pieces leave a gap; the shift by the width or more is `{0}` (it is a shift by `sa & 63` on x86) |
+| A2-67 `INT_LEFT`, `INT_MULT` by a constant | the overflow test counted the bits of the magnitude (`getMaxInfo`), not the sign: a byte in `[0x89,0x4e)` shifted left by 1 is every even byte, and was `[0x12,0x9c)` step 2 | upstream's test is kept (it only widens) and the span of the range, shifted or multiplied by the magnitude of the constant, must fit in one lap of the domain, else the whole stride; a full range is the whole stride; the shift by the width or more is `{0}` |
+| A2-67 `INT_SRIGHT` | `[5,1)` step 2 `s>> 0` lost 0x7f (the largest positive was `valRight - step`) | the shifted ends of the signed values: from the first to the last element if the range does not cross the largest positive, else the smallest to the largest |
+| A2-67 `SUBPIECE` | a wrapped range took the gap for its size (`[6,0)` of 4 bytes cut to 2 bytes was `[6,0)`), a full strided range lost its phase (`[3,3)` step 4 cut to a byte held 0, not 3) | the low bytes are the arc of the elements when they fit one lap of the output (the range's step kept), else the whole stride with its phase; the bytes above are the arc from the first to the last shifted element, `[0, top + 1)` when the two pieces of a wrapped range meet, and everything when the high bits are cut as well |
+| A2-67 `getMaxInfo` | a negative power of two was one short (`[0xc0,2)` is 7 bits, it answered 6; -1 answered 0); and `contains(halfPoint)` fails a stride of the other phase (`[1,0xc1)` step 2 holds 0x81 and answered 6) | the information of a negative bound is that of `~bound + 1`; a range that passes the half point (whatever its stride) is the full width |
+| A2-67 `minimalContainer` | a full operand was read as the empty `[0,0)` of step 1: `[0,0x10)` step 8 and full was `[0,9)`; the bound `right - step + 1` was not masked | a full operand (or two masks) is everything; the bounds are masked; an empty operand returns the other |
+| A2-67 `contains(CircleRange)` | `[0,0)` step 2 (the evens) held the single value 3 | the phase is checked before "this is full" |
+| A2-68 `intersect`, `newStride` | `newStride` rounded both bounds of a range up to the phase of a bigger step and took the set as empty when their order changed: also when a bound rounds past the top of the mask (`[0x39,1)` step 4 with `[0x73,0xff)`: 0x75, 0x79 ... 0xfd are in both) or the range wraps | the bounds are rounded as integers; a bound past the top is the phase's first value (the range then runs to the top), the two pieces of a wrapped range are read apart; the result is exactly the elements of the phase, or all of the phase, or empty. Two strides of one step and different phases share nothing |
+| A2-69 `pullBackBinary` | `INT_RIGHT` by 0 at 8 bytes: `(mask >> 0) + 1` is 0 in a `uintb`, so `[0x10000,0x1000000)` pulled back to empty. `INT_SRIGHT` by 63 shifted a 64-bit value by 64 (a shift by 0 on x86), so `[0xffffff,0x4000000000000000)` pulled back to the negative values | the bound `2^64` is not representable and nothing reaches it (the range is its own pull-back); the shift by 64 is 0 |
+| A2-70 `getNZMaskLocal` | `INT_SRIGHT` by 64 or more: `(fullmask >> sa) ^ fullmask` is a shift by `sa & 63`, so a value that may be negative shifted by 64 was given the mask of a zero | `pcode_right(fullmask, sa)`, and the amount saturates at 64 instead of truncating to an `int4` |
+| A2-70 `OpBehaviorIntSdiv`, `OpBehaviorIntSrem` | `INT64_MIN` by -1 raised SIGFPE in the host | the quotient is the value, the remainder 0 |
+
+`getMaxInfo` is read only by the overflow test of `INT_LEFT` and `INT_MULT`. `ValueSet::iterate` is the only caller of the push-forward, `circleUnion` and `minimalContainer` (`Heritage::analyzeNewLoadGuards` the only user of the answers); `intersect` with a step is also reached by `JumpBasic::calcRange` and `CircleRange::pullBack(usenzmask)`.
+
+**What A2-68 did to the switch guard.** The reviewer's `negguard11.py -2` (`mov #-2,r1 ; cmp/ge r1,r0` on a scaled index) kept `if (-3 < param_1 * 4) { switch(param_1 * 4) ...` because the guard's range was empty after the intersection with the stride of the value. With the repair the guard folds into the switch for every bound from -1 to -8 (`switch(param_1 * 4)` alone), and the text agrees with the run for twelve values of r4 including the negatives and the sign boundary (`TestArea2Round11Fix`, `Sh2DecompilerTests`). That is the one text that changes with the patch, and it is the fixture the reviewer made; no function of either image reaches it.
+
+**A2-67 on real code.** `vs_check.patch` (the scratch check of every push-forward and union in `ValueSet::iterate` against sampled elements of its inputs), applied again to the fixed tree:
+
+| Run | Checks | Unsound, before | Unsound, now |
+|---|---|---|---|
+| hwram007.bin | 768,856 | 60 (one phi, 0x0602CD36) | **0** |
+| hwram008.bin | 4,229,656 | 96 (two phis, 0x0606D7FA and 0x0603B582) | **0** |
+| printed-C, 3,000 seeds from 1,400,001 (the walks) | 3,287,466 | 160 | **0** |
+| `loopfix11.py` variants 0, 1 and 2 | 2,762 each | 4 each | **0**; the range read at the load (`VSREAD`) is full, it was nine bytes of a 2 KiB buffer |
+
+(The totals are smaller than the reviewer's: the sets that were narrow and wrong are full now, and a full set has fewer elements to sample.)
+
+**What was not changed.** The `int4` truncation of the shift amount in the `INT_LEFT` and `INT_RIGHT` cases of `getNZMaskLocal` (a constant of 2^31 or more would shift by a negative amount in the host): the masks that result are supersets of the true ones for 2^31 to 2^32-1 only by accident of the value, and no SLEIGH of the spec shifts by a constant that large; it is the same class as A2-70 and is noted here, not fixed.
+
+### 2. The pins
+
+* `TestForwardRangesRound11` (`SaturnExplorerSh2DecompilerEngineTests`, 9 s): every operation of section 1 against the elements of its inputs. **One byte is exhaustive**: every range of step 1, 2, 4 and 8 (123,000 of them, wrapped, full and single among them) against `COPY`, `INT_2COMP`, `INT_NEGATE`, `INT_ZEXT`, `INT_SEXT`, the shifts by 0 to 4, 7 to 9 and 64, the products by 13 constants (either side), and sums with partners; then `intersect`, `circleUnion` and `minimalContainer` against fixed and random partners with the sets as 256 bits (the answer 0 of `intersect` and `circleUnion` is exactly the set operation; the container holds both and is everything when it says so), `contains(CircleRange)` and `getMaxInfo`. **Two bytes** are every pairing of about fifty edge values (the sign boundaries, the ends, the low byte's edges) at four steps, and 1,500 random ranges; **four and eight** the edge values of the size and 1,500 random ones, with the elements at both ends of each range and 80 random ones; SUBPIECE for every input size 2, 4, 8, every output size and every offset including the size itself. The 16-bit space is 2^32 ranges: it is not exhaustive, and the record says so. 7.8 million push-forwards and 895,000 range pairs are checked; the answer is allowed to be `false`, and 127,637 of the push-forwards are.
+* `TestRangeAlgebraRound11`: the pull-back sweep now also runs at 8 bytes (shift amounts 0, 1, 2, 8n-2, 8n-1, 8n, 8n+1), and the integer `OpBehavior` sweep no longer skips `INT64_MIN` by -1.
+* `TestNzMaskShiftRound11`: 980 `INT_SRIGHT` ops built in a `Funcdata` (1, 2, 4 and 8 bytes, seven values, amounts up to 2^64-1 in 4 and 8-byte constants): the non-zero mask holds the shifted value and nothing outside the size.
+* `TestArea2Round11Fix` (`Sh2DecompilerTests`): the switch guard of A2-68, bounds -1 to -8.
+* A2-71: three CHECKs on `NegativeWideLiteralsTyped` in `Sh2GeneratedTests`.
+
+The reviewer's own instruments, run on the fixed tree: `forward_audit.cpp` seeds 1 (3,000 a row), 7 and 99 (20,000): 0 unsound or malformed, `intersect` exact in every pair it answers (3,630 and 3,510 strided pairs of seed 1); `pullback4.cpp` seeds 1 and 5, 20,000 a row at 3, 4 and 8 bytes: 0 wrong; `opbehavior_audit.cpp`: 0 wrong.
+
+### 3. The oracle (A2-71)
+
+The engine's reading of a text (`CxxHeader`, C++ classes that do the arithmetic at their own width) read `-0x80000000` as C does: an `unsigned int`, negated. The engine prints the 8-byte constant -2^31 that way (and every 8-byte constant down to -0xffffffff), so `dmuls.l` by the literal 0x80000000 was the product by +2^31 and the verdict `mismatch` where the text agrees with the run. `NegativeWideLiteralsTyped` writes a negative literal of eight hex digits with the first at least 8 (no suffix) as a `long long` in that reading only; at four bytes the class takes the same low four bytes, so nothing read at four bytes moves. The row's words are now `narrow-c`; `dagen11.py` family 24, all 1,600 functions with the byte rows: agrees 1,572, `narrow-c` 28, `mismatch` 0 (28 before). `printedc_extra_rows.patch` is applied (environment-gated: `SE_GENERATED_PRINTEDC_EXTRA`, `_BYTES`, `_SWEEP16`; nothing changes without them), so `run11.sh` works on the tree as it is.
+
+### 4. Vendoring
+
+`patches/0059-engine-range-arithmetic-sound.patch` is the diff of `rangeutil.cc`, `op.cc` and `opbehavior.cc` (a header line each). `python3 -I vendor.py <pinned Ghidra checkout>` on a copy of the vendored directory: exit status 0, the "vendored 84 library sources, 3 compiler sources, 94 headers, 5 spec files" line, all 53 patches applied; `cpp/`, `processors/` and `sources.cmake` identical to the committed ones (`diff -r` empty). `patches/README.md` and `VENDOR.md` have the row and the pin.
+
+### 5. Mutation table
+
+Each fix reverted alone in the vendored source (the pin fails; the engine tests rebuilt for every mutant):
+
+| Mutant | Pin that fails |
+|---|---|
+| `INT_RIGHT` push-forward: wrapped/full `right` without the +1 | `TestForwardRangesRound11`: 84,597 checks (`INT_RIGHT` misses the top value) |
+| `INT_LEFT`: the lap test removed (upstream's bit count alone) | `TestForwardRangesRound11`: 19,625 (`[0x89,0x4e)` << 1 and the like) |
+| `INT_MULT`: the lap test removed | `TestForwardRangesRound11`: 688 |
+| `INT_SRIGHT`: the largest positive off by one in the crossing case | `TestForwardRangesRound11`: 55,226 |
+| `SUBPIECE`: the phase of a full strided range dropped | `TestForwardRangesRound11`: 944 |
+| `SUBPIECE`: the gap of a wrapped range taken for its size | `TestForwardRangesRound11`: 3,178 |
+| `getMaxInfo`: the magnitude of a negative bound without the +1 | `TestForwardRangesRound11`: 1,112 (`getMaxInfo` short) |
+| `getMaxInfo`: `contains(halfPoint)` for the half-point test | `TestForwardRangesRound11`: 7,131 |
+| `minimalContainer`: a full operand not everything | `TestForwardRangesRound11`: 55,291 (the container misses values) |
+| `minimalContainer`: the bounds not masked | `TestForwardRangesRound11`: 8,012 |
+| `contains(CircleRange)`: the phase checked after "this is full" | `TestForwardRangesRound11`: 4,288 (`contains(range)`) |
+| `newStride` as upstream's (A2-68) | `TestForwardRangesRound11`: 12,209 (`intersect` differs from the set); `TestArea2Round11Fix`: 3 (bounds -1, -2, -3 keep the guard round the switch) |
+| `intersect`: two strides of one step and other phases intersected as intervals | `TestForwardRangesRound11`: 48,120 |
+| pull-back `INT_RIGHT` by 0 at 8 bytes: the bound not tested (A2-69) | `TestRangeAlgebraRound11`: 138 (the 8-byte pull-back sweep) |
+| pull-back `INT_SRIGHT` by 63 at 8 bytes: `rightb >> 64` (A2-69) | `TestRangeAlgebraRound11`: 98 |
+| `getNZMaskLocal`: `(fullmask >> sa)` for the sign's fill (A2-70) | `TestNzMaskShiftRound11`: 247 (the printed `non-zero mask of N-byte X s>> A is M, the result is R`) |
+| `OpBehaviorIntSdiv`: the `-1` guard removed (A2-70) | `TestRangeAlgebraRound11`: the process ends with SIGFPE (exit 136) |
+| `OpBehaviorIntSrem`: the `-1` guard removed (A2-70) | `TestRangeAlgebraRound11`: SIGFPE (exit 136) |
+| A2-71: `NegativeWideLiteralsTyped` returns its text (the harness) | `Sh2GeneratedTests`: 2 CHECKs on the function, and the row's words go back to `mismatch (f0 r4=00000000 r5=80000001 ... run=BFFFFFFF:80000000 pseudo=40000000:00000000)` |
+
+### 6. The matrix
+
+Own RelWithDebInfo build under the scratch directory (2.5 GB, `-j2`, every run under `ulimit -v 4000000` and `timeout`, one heavy job at a time).
+
+| Run | Result |
+|---|---|
+| `ctest -E SaturnExplorerLive -j2 --timeout 900` | 93 of 93 pass (153 s) |
+| `SaturnExplorerDecompilerFaultTests` | 0 of 94 jobs fail (81.6 s); no MOVED pin |
+| generator, `SE_GENERATED_SEEDS=3000 SE_GENERATED_GRAMMAR=2` | 0 failing seeds (107 s) |
+| generator, `SE_GENERATED_GRAMMAR=1 SE_GENERATED_SEEDS=1000` | 0 failing seeds (34 s) |
+| `SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000` | 0 findings; 3,703 functions, 3,424 compared, agrees 3,443, `narrow-c` 9, `void-return` 227, `void-return-lent` 24 (64 s) |
+| `SE_GENERATED_SEEDS=20000` (four runs of 5,000 from seeds 1, 5,001, 10,001, 15,001) | 0 failing seeds in all (151, 149, 150, 120 s) |
+| decode oracle, `SE_MEDNAFEN_SS`, the default seed and seeds 424242 and 8675309 (100,000 cases = 13,000,000 differential executions each) | 0 differ, 0 could not run, 0 of 130 forms fail, 18 named shapes 0 differ; SLEIGH and `Sh2Disasm` 53,752 words defined, 0 disagreements with Mednafen |
+| corpora hwram007.bin, hwram008.bin, `SE_GAME_LEND=1` | every ledger count 0; missing and said 0 and 4; lending 680 (958 parameters) and 1,071 (1,314); mapping violations 0 (the 'on another line' count 4 for the lent ones, as before); 1,730 and 2,995 functions all ok |
+| **the corpora texts** | `SE_GAME_OUT` of the fixed build against the head's (built from the three unpatched files): **4,299 and 7,544 files, byte for byte identical** (`diff -rq` empty). Nothing to read. |
+| printed-C families | `dagen11.py` family 24 (1,600 functions, byte rows): 0 `mismatch`, `narrow-c` 28 (A2-71 closed) |
+| the reviewer's instruments | section 2 |
+
+### 7. What stays open
+
+* The next review round verifies this one. The two things it has not seen: `TestForwardRangesRound11` samples the 16-bit space (it is not exhaustive: 2^32 ranges), and the 4 and 8-byte rows are sampled.
+* The `int4` truncation of the shift amount in `getNZMaskLocal` for `INT_LEFT` and `INT_RIGHT` (section 1, 'what was not changed').
+* `TestPullBackRanges` takes 26 s of the engine tests' 36 (it did before this round); the new push-forward pin adds 9 s.
