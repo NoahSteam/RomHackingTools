@@ -1,4 +1,5 @@
 #!/bin/bash
+ulimit -v 4000000
 # usage: gen_range.sh <generator> <out dir> <label> <grammar|0> <first> <seeds> [printedc]
 gen=$1; out=$2; label=$3; gr=$4; first=$5; n=$6; pc=$7
 mkdir -p "$out"

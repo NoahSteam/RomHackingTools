@@ -22,6 +22,9 @@ b = '''      nzmchk::dumpEach(data, std::string("rule:") + rl->getName());'''
 assert b in s
 s = s.replace(b, b + '''
       if (nzmchk::structEnabled()) nzmchk::structCheck(data, std::string("rule:") + rl->getName());''', 1)
+a3 = '''      res = apply(data);	// Start or continue action\n#ifdef OPACTION_DEBUG'''
+assert a3 in s
+s = s.replace(a3, '''      res = apply(data);	// Start or continue action\n      if (nzmchk::structEnabled() && getName() == "deadcode" && res >= 0) nzmchk::modelCheck(data, "action:deadcode(always)");\n#ifdef OPACTION_DEBUG''', 1)
 open(d + '/action.cc', 'w').write(s)
 f = open(d + '/funcdata_op.cc').read()
 f += open(t + '/structcheck_funcdata_op.cc.txt').read()

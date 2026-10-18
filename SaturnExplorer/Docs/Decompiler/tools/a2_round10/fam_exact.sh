@@ -1,4 +1,5 @@
 #!/bin/bash
+ulimit -v 4000000
 # usage: GEN=<generator with the exact-stress> fam_exact.sh <mode 1|2|3> <family> <first seed> <count> <out dir>
 # runs 100 functions per process with a 120 s timeout so that a hang names its batch; SE_REPEAT_LIMIT=60
 mode=$1; fam=$2; first=$3; count=$4; out=$5; mkdir -p "$out"

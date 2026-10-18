@@ -62,12 +62,12 @@ static void exactStress(Funcdata &data) {
     for (oiter = data.beginOpAlive(); oiter != data.endOpAlive(); ++oiter) {
       PcodeOp *op = *oiter;
       Varnode *o = op->getOut();
-      if (o != (Varnode *)0 && o->getSize() <= 8) { std::map<Varnode *,uintb>::iterator it = C.find(o); o->setConsume(it == C.end() ? 0 : it->second); }
+      if (o != (Varnode *)0 && o->getSize() <= 8) { std::map<Varnode *,uintb>::iterator it = C.find(o); uintb nv = (it == C.end() ? 0 : it->second); if (!data.deadRemovalAllowed(o->getSpace())) nv = ~(uintb)0; if (std::getenv("SE_EXACT_LOG") && (o->getConsume() & ~nv)) std::fprintf(stderr, "NARROW defop=%s space=%s off=%llx size=%d cached=%llx model=%llx flags: addrforce=%d directwrite=%d\n", get_opname(op->code()), o->getSpace()->getName().c_str(), (unsigned long long)o->getOffset(), o->getSize(), (unsigned long long)o->getConsume(), (unsigned long long)nv, (int)o->isAddrForce(), (int)o->isDirectWrite()); if (std::getenv("SE_EXACT_LOG") && std::string(std::getenv("SE_EXACT_LOG")) == "2" && (o->getConsume() & ~nv) && o->getSpace()->getName() == "stack") { static int shown = 0; if (shown++ < 1) { std::ostringstream os; data.printRaw(os); std::fprintf(stderr, "--- raw at first stack narrow ---\n%s\n", os.str().c_str()); for (list<PcodeOp *>::const_iterator q = data.beginOpAlive(); q != data.endOpAlive(); ++q) if ((*q)->code() == CPUI_RETURN) { PcodeOp *rq = *q; std::fprintf(stderr, "RETURN n=%d ready=%d locked=%d active=%d bytes=%d", rq->numInput(), (int)chk_masksReady(rq), (int)data.getFuncProto().isOutputLocked(), (int)(data.getActiveOutput() != (ParamActive *)0), (int)data.getFuncProto().getReturnBytesConsumed()); for (int ii = 0; ii < rq->numInput(); ++ii) std::fprintf(stderr, " in%d size=%d nzm=%llx C=%llx need=%llx", ii, rq->getIn(ii)->getSize(), (unsigned long long)rq->getIn(ii)->getNZMask(), (unsigned long long)C[rq->getIn(ii)], (unsigned long long)chk_need(&data, rq, ii, ~(uintb)0)); std::fprintf(stderr, "\n"); } for (list<PcodeOp *>::const_iterator q = data.beginOpAlive(); q != data.endOpAlive(); ++q) if ((*q)->getOut() != (Varnode *)0) std::fprintf(stderr, "CONS %s %s:%llx:%d consume=%llx\n", get_opname((*q)->code()), (*q)->getOut()->getSpace()->getName().c_str(), (unsigned long long)(*q)->getOut()->getOffset(), (*q)->getOut()->getSize(), (unsigned long long)(*q)->getOut()->getConsume()); } } o->setConsume(nv); }
       for (int i = 0; i < op->numInput(); ++i) {
         Varnode *in = op->getIn(i);
         if (in->getSize() > 8 || in->isWritten()) continue;
         std::map<Varnode *,uintb>::iterator it = C.find(in);
-        in->setConsume(it == C.end() ? 0 : it->second);
+        { uintb nv = (it == C.end() ? 0 : it->second); if (!data.deadRemovalAllowed(in->getSpace())) nv = ~(uintb)0; in->setConsume(nv); }
       }
     }
   }

@@ -1,4 +1,5 @@
 #!/bin/bash
+ulimit -v 4000000
 # usage: GEN=<generator with the struct checker> fam_struct.sh <family> <first seed> <count> <out dir>   -> out/fam<F>_<first>.log (STRUCT lines and summaries), prints a one-line result
 fam=$1; first=$2; count=$3; out=$4; mkdir -p "$out"
 here=$(cd "$(dirname "$0")" && pwd)
