@@ -594,7 +594,8 @@ private:
         // Move a register offset by a constant, or by a non-negative variable (index added, or value subtracted).
         static int64_t MoveRegConst(int64_t off, int64_t by)
         {
-            return off == kLowBase ? kLowBase : off == kHighBase ? (by < 0 ? kLowBase : kHighBase) : off + by;
+            by = Wrap(by);   // the immediate is a 32-bit value (`add #-4` is 0xFFFFFFFC): read it as signed, or a decrement looks like a huge add
+            return off == kLowBase ? kLowBase : off == kHighBase ? (by < 0 ? kLowBase : kHighBase) : Wrap(off + by);
         }
         static int64_t MoveRegVar(int64_t off, bool add)
         {
@@ -1828,9 +1829,18 @@ private:
                     r.carried = carried;
                     r.usesR0 = usesR0;
                     r.joined = joined;
+                    // A bitwise op of two constants is a constant, so SLEIGH's `imm_00_07 & 0x000000FF` (the masked immediate of `xor #imm,r0`,
+                    // whose `#0` the identity table means to be a nop) folds and the identity check below sees a zero (A3-77).
+                    if (xs.size() == 2 && xs[0].kind == Value::Imm && xs[1].kind == Value::Imm &&
+                        (op.code == ghidra::CPUI_INT_AND || op.code == ghidra::CPUI_INT_OR || op.code == ghidra::CPUI_INT_XOR))
+                    {
+                        const uint64_t a0 = static_cast<uint64_t>(xs[0].v), a1 = static_cast<uint64_t>(xs[1].v);
+                        const uint64_t rv = op.code == ghidra::CPUI_INT_AND ? a0 & a1 : op.code == ghidra::CPUI_INT_OR ? a0 | a1 : a0 ^ a1;
+                        r = Value::Const(op.out.size >= 8 ? static_cast<int64_t>(rv) : Wrap(static_cast<int64_t>(rv)));
+                    }
                     // `xor r0,r0` is how compiled code zeroes a register: 0, computed from nothing (the engine folds it so). Taken for a value
                     // computed from r0's entry value it would withhold the function for a return that reads no input (A2-31: 06073C7C).
-                    if (op.code == ghidra::CPUI_INT_XOR && op.in.size() == 2 && KeyOf(op.in[0]) == KeyOf(op.in[1])) r = Value::Const(0);
+                    else if (op.code == ghidra::CPUI_INT_XOR && op.in.size() == 2 && KeyOf(op.in[0]) == KeyOf(op.in[1])) r = Value::Const(0);
                     // ...and `and r0,r0`, `or r0,r0`, `or #0,r0`, `xor #0,r0` leave it as it was: nops, as the engine takes them (A2-43, patch 0048).
                     else if ((op.code == ghidra::CPUI_INT_AND || op.code == ghidra::CPUI_INT_OR) && xs.size() == 2 && KeyOf(op.in[0]) == KeyOf(op.in[1]))
                         r = xs[0];
