@@ -26,6 +26,7 @@
 
 #include "libdecomp.hh"
 #include "loadimage.hh"
+#include "opbehavior.hh"
 #include "rangeutil.hh"
 #include "sleigh_arch.hh"
 
@@ -908,6 +909,228 @@ void TestPullBackRanges()
     }
 }
 
+// Area 2 round 11 (A2-67 to A2-72): what RuleRangeMeld and the jump-table guards rely on besides the pull-back, held against brute force. The
+// forward half of CircleRange (push-forward, strided intersect) has open defects (REVIEW_LEDGER.md) and is not pinned here; the part below holds today.
+//  1. step-1 ranges of one byte, every (left,right) pair against a sample of partners: intersect and circleUnion are exactly the set operation
+//     when they answer 0, invert is the complement, translate2Op's comparison is true on exactly the range, getSize counts, contains agrees
+//  2. the pull-back at 3 and 4 bytes (round 10's sweep is exhaustive at 1 and 2), the points where the truth can change, each +-3, and random ones
+//  3. the integer OpBehavior (the constant folder and the p-code emulator share it): every operand pair at one byte, edge pairs and random at 2, 4, 8
+void TestRangeAlgebraRound11()
+{
+    using namespace ghidra;
+    const auto t0 = std::chrono::steady_clock::now();
+    uint64_t state = 0x11AA55;
+    auto next = [&state]() {
+        uint64_t z = (state += 0x9E3779B97F4A7C15ull);
+        z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ull;
+        z = (z ^ (z >> 27)) * 0x94D049BB133111EBull;
+        return z ^ (z >> 31);
+    };
+    int shown = 0;
+    auto fail = [&shown](const char* what, const std::string& detail) {
+        CHECK(false);
+        if (shown++ < 12) std::printf("round 11: %s: %s\n", what, detail.c_str());
+    };
+    auto hex = [](uint64_t v) { char b[32]; std::snprintf(b, sizeof b, "%llx", (unsigned long long)v); return std::string(b); };
+    // ---- 1. set operations on step-1 ranges, one byte
+    {
+        std::vector<std::vector<char>> elems(65536);
+        for (unsigned l = 0; l < 256; ++l)
+            for (unsigned r = 0; r < 256; ++r)
+            {
+                std::vector<char>& e = elems[l * 256 + r];
+                e.assign(256, 0);
+                if (l == r) { e.assign(256, 1); continue; }
+                for (unsigned v = l; v != r; v = (v + 1) & 0xff) e[v] = 1;
+            }
+        long checked = 0;
+        for (unsigned l = 0; l < 256; ++l)
+            for (unsigned r = 0; r < 256; ++r)
+            {
+                const std::vector<char>& ea = elems[l * 256 + r];
+                const bool full = (l == r);
+                CircleRange a(l, r, 1, 1);
+                if (full) a.setFull(1);
+                // contains / size / invert / translate2Op on a alone
+                long n = 0;
+                for (unsigned v = 0; v < 256; ++v)
+                {
+                    n += ea[v];
+                    if (a.contains((uint64_t)v) != (ea[v] != 0)) { fail("contains(value)", hex(l) + "," + hex(r) + " at " + hex(v)); break; }
+                }
+                if (!full && (long)a.getSize() != n) fail("getSize", hex(l) + "," + hex(r));
+                if (full && a.getSize() != 256) fail("getSize(full)", hex(a.getSize()));
+                {
+                    CircleRange inv = a;
+                    inv.invert();
+                    for (unsigned v = 0; v < 256; ++v)
+                        if (inv.contains((uint64_t)v) == (ea[v] != 0)) { fail("invert", hex(l) + "," + hex(r) + " at " + hex(v)); break; }
+                }
+                {
+                    OpCode opc = CPUI_COPY;
+                    uintb c = 0;
+                    int cslot = 0;
+                    const int rc = a.translate2Op(opc, c, cslot);
+                    if (rc == 0)
+                    {
+                        for (unsigned v = 0; v < 256; ++v)
+                        {
+                            const uint64_t x = v, lhs = cslot == 1 ? x : c, rhs = cslot == 1 ? c : x;
+                            bool t = false;
+                            if (opc == CPUI_INT_EQUAL) t = x == c;
+                            else if (opc == CPUI_INT_NOTEQUAL) t = x != c;
+                            else if (opc == CPUI_INT_LESS) t = lhs < rhs;
+                            else if (opc == CPUI_INT_SLESS) t = PbSigned(lhs, 1) < PbSigned(rhs, 1);
+                            else { fail("translate2Op", "op " + std::to_string((int)opc)); break; }
+                            if (t != (ea[v] != 0)) { fail("translate2Op", hex(l) + "," + hex(r) + " at " + hex(v)); break; }
+                        }
+                    }
+                    else if (rc == 1) { if (n != 256) fail("translate2Op all", hex(l) + "," + hex(r)); }
+                    else if (rc == 3) { if (n != 0) fail("translate2Op none", hex(l) + "," + hex(r)); }
+                }
+                // against partners
+                for (int k = 0; k < 3; ++k)
+                {
+                    const unsigned bl = (k == 0) ? (unsigned)(next() & 0xff) : (k == 1 ? l : (unsigned)(next() & 0xff));
+                    const unsigned br = (k == 0) ? (unsigned)(next() & 0xff) : (k == 1 ? (unsigned)((r + 1) & 0xff) : (unsigned)(next() & 0xff));
+                    const std::vector<char>& eb = elems[bl * 256 + br];
+                    CircleRange b(bl, br, 1, 1);
+                    if (bl == br) b.setFull(1);
+                    ++checked;
+                    {
+                        CircleRange q = a;
+                        if (q.intersect(b) == 0)
+                            for (unsigned v = 0; v < 256; ++v)
+                                if (q.contains((uint64_t)v) != (ea[v] && eb[v])) { fail("intersect", hex(l) + "," + hex(r) + " & " + hex(bl) + "," + hex(br) + " at " + hex(v)); break; }
+                    }
+                    {
+                        CircleRange q = a;
+                        if (q.circleUnion(b) == 0)
+                            for (unsigned v = 0; v < 256; ++v)
+                                if (q.contains((uint64_t)v) != (ea[v] || eb[v])) { fail("circleUnion", hex(l) + "," + hex(r) + " | " + hex(bl) + "," + hex(br) + " at " + hex(v)); break; }
+                    }
+                }
+            }
+        std::printf("round 11 range algebra: %ld pairs\n", checked);
+    }
+    // ---- 2. the pull-back at 3 and 4 bytes
+    {
+        struct Bin { OpCode opc; bool cmp; };
+        static const Bin bins[] = { { CPUI_INT_EQUAL, true }, { CPUI_INT_NOTEQUAL, true }, { CPUI_INT_LESS, true }, { CPUI_INT_LESSEQUAL, true }, { CPUI_INT_SLESS, true },
+                                    { CPUI_INT_SLESSEQUAL, true }, { CPUI_INT_CARRY, true }, { CPUI_INT_ADD, false }, { CPUI_INT_SUB, false }, { CPUI_INT_RIGHT, false },
+                                    { CPUI_INT_SRIGHT, false } };
+        auto inRange = [](uint64_t v, uint64_t l, uint64_t r, int step, int osz) {
+            v &= PbMask(osz);
+            if (v % step != l % step) return false;
+            if (l == r) return true;
+            return l < r ? (v >= l && v < r) : (v < r || v >= l);
+        };
+        for (int in : { 3, 4 })
+        {
+            const uint64_t ms = PbMask(in);
+            std::vector<uint64_t> ed = { 0, 1, 2, 3, 4, 5, 7, 8, 9, 15, 16, 31, 32, 33, 0x7f, 0x80, 0xff, 0x100, 0x7fff, 0x8000, 0xffff, 0x10000, 0xffffff, 0x1000000, 0x7fffffff, 0x80000000ull,
+                                         0xffffffffull, ms, ms - 1, ms >> 1, (ms >> 1) + 1, 0xaaaaaaabull, 0x55555555ull };
+            for (uint64_t& v : ed) v &= ms;
+            for (const Bin& b : bins)
+            {
+                const int out = b.cmp ? 1 : in;
+                const uint64_t om = PbMask(out);
+                for (int it = 0; it < 2500; ++it)
+                {
+                    uint64_t l, r, val;
+                    int slot = (int)(next() & 1), step = 1;
+                    auto pick = [&](uint64_t m) { return (next() % 3) ? (ed[next() % ed.size()] & m) : (next() & m); };
+                    if (b.cmp) { const int p = (int)(next() % 3); l = p == 1 ? 1 : 0; r = p == 0 ? 1 : 2; val = pick(ms); }
+                    else
+                    {
+                        l = pick(om); r = (next() % 8) ? pick(om) : l; val = pick(ms);
+                        if (next() % 4 == 0) { step = 1 << (1 + next() % 3); const uint64_t rem = next() % step; l = ((l - l % step) + rem) & om; r = ((r - r % step) + rem) & om; if (l % step != r % step) r = l; }
+                        if (l == r) l = r = (step == 1) ? 0 : l % step;
+                    }
+                    if (b.opc == CPUI_INT_RIGHT || b.opc == CPUI_INT_SRIGHT) { slot = (next() % 4) ? 0 : 1; if (slot == 0) val = next() % (8 * in + 3); }
+                    CircleRange rng(l, r, out, step), q = rng;
+                    if (!q.pullBackBinary(b.opc, val, slot, in, out)) continue;
+                    std::vector<uint64_t> T = { 0, 1, ms, ms >> 1, (ms >> 1) + 1, val, l, r, 0 - l, 0 - r, ~l, ~r, val - l, val - r, val + l, val + r, l - val, r - val, 0 - val,
+                                                q.getMin(), q.getEnd(), q.getMax(), r - 1, l << (val & 63), r << (val & 63), (r << (val & 63)) - 1 };
+                    std::vector<uint64_t> X;
+                    for (uint64_t t : T) for (int d = -3; d <= 3; ++d) X.push_back((t + d) & ms);
+                    for (int k = 0; k < 20; ++k) X.push_back(next() & ms);
+                    if (!q.isEmpty() && q.getMask() != ms) { fail("pull-back mask", std::to_string(in) + " bytes"); continue; }
+                    for (uint64_t x : X)
+                    {
+                        uint64_t o = 0;
+                        PbEvalBinary(b.opc, x, val, slot, in, o);
+                        const bool want = inRange(o, l, r, step, out), got = !q.isEmpty() && q.contains(x);
+                        if (want != got)
+                        {
+                            fail("pull-back", "op " + std::to_string((int)b.opc) + " " + std::to_string(in) + " bytes range [" + hex(l) + "," + hex(r) + ") step " + std::to_string(step) + " constant " + hex(val) +
+                                                 " slot " + std::to_string(slot) + " at " + hex(x));
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    // ---- 3. the integer OpBehavior
+    {
+        OpBehaviorIntAdd add; OpBehaviorIntSub sub; OpBehaviorIntMult mul; OpBehaviorIntAnd andb; OpBehaviorIntOr orb; OpBehaviorIntXor xorb;
+        OpBehaviorIntLeft shl; OpBehaviorIntRight shr; OpBehaviorIntSright sar; OpBehaviorEqual eq; OpBehaviorIntLess lt; OpBehaviorIntSless slt;
+        OpBehaviorIntCarry carry; OpBehaviorIntScarry scarry; OpBehaviorIntSborrow sborrow; OpBehaviorIntDiv udiv; OpBehaviorIntSdiv sdiv;
+        OpBehaviorIntRem urem; OpBehaviorIntSrem srem; OpBehaviorInt2Comp neg; OpBehaviorIntNegate nt; OpBehaviorIntSext sext;
+        typedef __int128 s128;
+        long n = 0;
+        for (int sz : { 1, 2, 4, 8 })
+        {
+            const uint64_t m = PbMask(sz);
+            auto sx = [&](uint64_t v) { return (s128)PbSigned(v, sz); };
+            std::vector<uint64_t> ed = { 0, 1, 2, 3, 7, 8, 15, 16, 31, 32, 63, 64, 127, 128, 129, 255, 256, m, m - 1, m >> 1, (m >> 1) + 1, (m >> 1) - 1, 0x5555555555555555ull & m, 0xAAAAAAAAAAAAAAAAull & m };
+            for (uint64_t& v : ed) v &= m;
+            auto pair = [&](uint64_t a, uint64_t b) {
+                ++n;
+                const s128 lo = -((s128)1 << (8 * sz - 1)), hi = ((s128)1 << (8 * sz - 1)) - 1;
+                auto bad = [&](const char* nm) { fail(nm, std::to_string(sz) + " bytes " + hex(a) + " " + hex(b)); };
+                if (add.evaluateBinary(sz, sz, a, b) != ((a + b) & m)) bad("INT_ADD");
+                if (sub.evaluateBinary(sz, sz, a, b) != ((a - b) & m)) bad("INT_SUB");
+                if (mul.evaluateBinary(sz, sz, a, b) != ((a * b) & m)) bad("INT_MULT");
+                if (andb.evaluateBinary(sz, sz, a, b) != (a & b) || orb.evaluateBinary(sz, sz, a, b) != (a | b) || xorb.evaluateBinary(sz, sz, a, b) != (a ^ b)) bad("bitwise");
+                if (eq.evaluateBinary(1, sz, a, b) != (uint64_t)(a == b) || lt.evaluateBinary(1, sz, a, b) != (uint64_t)(a < b)) bad("compare");
+                if (slt.evaluateBinary(1, sz, a, b) != (uint64_t)(sx(a) < sx(b))) bad("INT_SLESS");
+                if (carry.evaluateBinary(1, sz, a, b) != (uint64_t)(((unsigned __int128)a + b) > (unsigned __int128)m)) bad("INT_CARRY");
+                { const s128 s = sx(a) + sx(b); if (scarry.evaluateBinary(1, sz, a, b) != (uint64_t)(s < lo || s > hi)) bad("INT_SCARRY"); }
+                { const s128 s = sx(a) - sx(b); if (sborrow.evaluateBinary(1, sz, a, b) != (uint64_t)(s < lo || s > hi)) bad("INT_SBORROW"); }
+                if (b != 0)
+                {
+                    if (udiv.evaluateBinary(sz, sz, a, b) != a / b || urem.evaluateBinary(sz, sz, a, b) != a % b) bad("INT_DIV/REM");
+                    if (!(sz == 8 && a == 0x8000000000000000ull && b == m))   // INT64_MIN s/ -1 is a host trap (A2-72)
+                        if (sdiv.evaluateBinary(sz, sz, a, b) != (uint64_t)((sx(a) / sx(b)) & (s128)m) || srem.evaluateBinary(sz, sz, a, b) != (uint64_t)((sx(a) % sx(b)) & (s128)m)) bad("INT_SDIV/SREM");
+                }
+            };
+            if (sz == 1) { for (uint64_t a = 0; a < 256; ++a) for (uint64_t b = 0; b < 256; ++b) pair(a, b); }
+            else
+            {
+                for (uint64_t a : ed) for (uint64_t b : ed) pair(a, b);
+                for (int i = 0; i < 20000; ++i) pair(next() & m, (i % 4) ? (next() & m) : ed[next() % ed.size()]);
+            }
+            for (uint64_t a : ed)
+                for (uint64_t c : { 0ull, 1ull, 3ull, 7ull, 8ull, 15ull, 16ull, 31ull, 32ull, 33ull, 63ull, 64ull, 65ull, 255ull, 0x100000000ull, ~0ull })
+                {
+                    const uint64_t exL = c >= (uint64_t)(8 * sz) ? 0 : (a << c) & m, exR = c >= (uint64_t)(8 * sz) ? 0 : a >> c;
+                    const uint64_t sh = c >= (uint64_t)(8 * sz) ? 8 * sz - 1 : c;
+                    const uint64_t exS = (uint64_t)(sx(a) >> sh) & m;
+                    if (shl.evaluateBinary(sz, sz, a, c) != exL || shr.evaluateBinary(sz, sz, a, c) != exR || sar.evaluateBinary(sz, sz, a, c) != exS)
+                        fail("shift", std::to_string(sz) + " bytes " + hex(a) + " by " + hex(c));
+                }
+            for (uint64_t a : ed)
+            {
+                if (neg.evaluateUnary(sz, sz, a) != ((~a + 1) & m) || nt.evaluateUnary(sz, sz, a) != (~a & m)) fail("INT_2COMP/NEGATE", hex(a));
+                if (sz < 8 && sext.evaluateUnary(8, sz, a) != (uint64_t)PbSigned(a, sz)) fail("INT_SEXT", hex(a));
+            }
+        }
+        std::printf("round 11 integer behaviors: %ld operand pairs (%.0f ms in all)\n", n, std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count());
+    }
+}
+
 }  // namespace
 
 // Each case announces itself first; with stdout unbuffered, the last name printed is where a
@@ -940,6 +1163,7 @@ int main(int argc, char** argv)
     try
     {
         RUN(TestPullBackRanges());
+        RUN(TestRangeAlgebraRound11());
         RUN(TestSha256KnownAnswers());
         RUN(TestDecompileThroughBundle(config));
         RUN(TestCancelDuringJumpTableRecovery());

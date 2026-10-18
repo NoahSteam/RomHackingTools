@@ -1,14 +1,22 @@
 diff --git a/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/rangeutil.cc b/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/rangeutil.cc
-index 8a4791b..bffcba4 100644
+index 8a4791b..ac5361c 100644
 --- a/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/rangeutil.cc
 +++ b/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/rangeutil.cc
-@@ -1645,6 +1645,87 @@ bool ValueSet::computeTypeCode(void)
+@@ -18,6 +18,9 @@
+  */
+ #include "rangeutil.hh"
+ #include "block.hh"
++#include <cstdio>
++#include <iostream>
++#include <cstdlib>
+ 
+ namespace ghidra {
+ 
+@@ -1645,6 +1648,85 @@ bool ValueSet::computeTypeCode(void)
    return false;
  }
  
 +// ---- Area 2 round 11 scratch instrument (SE_VS_CHECK=1): every claimed push-forward is checked against sampled elements of its inputs.
-+#include <cstdio>
-+#include <cstdlib>
 +static uintb vsRandState = 88172645463325252ull;
 +static uintb vsRand(void) { vsRandState ^= vsRandState << 13; vsRandState ^= vsRandState >> 7; vsRandState ^= vsRandState << 17; return vsRandState; }
 +static bool vsOn(void) { static int on = -1; if (on < 0) on = getenv("SE_VS_CHECK") ? 1 : 0; return on == 1; }
@@ -27,7 +35,7 @@ index 8a4791b..bffcba4 100644
 +static intb vsSx(uintb v, int4 sz) { if (sz >= 8) return (intb)v; uintb s = (uintb)1 << (8 * sz - 1); return (intb)((v ^ s) - s); }
 +static void vsFail(const char *what, OpCode opc, const CircleRange &a, const CircleRange *b, const CircleRange &res, uintb x, uintb y) {
 +  vsBad++;
-+  if (vsLines++ < 400) { fprintf(stderr, "VSCHK UNSOUND %s op=%d in1=", what, (int)opc); a.printRaw(cerr); if (b) { fprintf(stderr, " in2="); b->printRaw(cerr); } fprintf(stderr, " res="); res.printRaw(cerr); fprintf(stderr, " missing %llx (from %llx %llx)\n", 0ull, (unsigned long long)x, (unsigned long long)y); }
++  if (vsLines++ < 400) { fprintf(stderr, "VSCHK UNSOUND %s op=%d in1=", what, (int)opc); a.printRaw(std::cerr); if (b) { fprintf(stderr, " in2="); b->printRaw(std::cerr); } fprintf(stderr, " res="); res.printRaw(std::cerr); fprintf(stderr, " masks %llx/%llx steps %d/%d missing %llx (from %llx %llx)\n", (unsigned long long)a.getMask(), (unsigned long long)res.getMask(), a.getStep(), res.getStep(), 0ull, (unsigned long long)x, (unsigned long long)y); }
 +}
 +static void vsCheckUnary(OpCode opc, const CircleRange &in, int4 inSize, int4 outSize, const CircleRange &res) {
 +  if (!vsOn()) return;
@@ -66,12 +74,12 @@ index 8a4791b..bffcba4 100644
 +  }
 +}
 +
-+static void vsCheckUnion(const vector<CircleRange> &ins,const CircleRange &prev,const CircleRange &res) {
++static void vsCheckUnion(const vector<CircleRange> &ins,const CircleRange &prev,const CircleRange &res,const Address &at) {
 +  if (!vsOn()) return;
 +  for (size_t i = 0; i <= ins.size(); ++i) {
 +    const CircleRange &r = i < ins.size() ? ins[i] : prev;
 +    vector<uintb> xs; vsSample(r,xs);
-+    for (uintb x : xs) { vsChecks++; if (!res.contains(x)) { vsFail("union",CPUI_MULTIEQUAL,r,(const CircleRange *)0,res,x,0); break; } }
++    for (uintb x : xs) { vsChecks++; if (!res.contains(x)) { vsFail(i < ins.size() ? "union-input" : "union-previous",CPUI_MULTIEQUAL,r,(const CircleRange *)0,res,x,(uintb)ins.size()); fprintf(stderr,"   at "); at.printRaw(std::cerr); fprintf(stderr," index %d of %d; inputs:",(int)i,(int)ins.size()); for (size_t q = 0; q < ins.size(); ++q) { fprintf(stderr," "); ins[q].printRaw(std::cerr); } fprintf(stderr," previous: "); prev.printRaw(std::cerr); fprintf(stderr,"\n"); break; } }
 +  }
 +}
 +static bool vsPFU(CircleRange &res,OpCode opc,const CircleRange &in1,int4 inSize,int4 outSize)
@@ -90,7 +98,7 @@ index 8a4791b..bffcba4 100644
  /// Recalculate \b this value set by grabbing the value sets of the inputs to the
  /// operator defining the Varnode attached to \b this value set and pushing them
  /// forward through the operator.
-@@ -1666,6 +1747,7 @@ bool ValueSet::iterate(Widener &widener)
+@@ -1666,6 +1748,7 @@ bool ValueSet::iterate(Widener &widener)
    int4 eqPos = 0;
    if (opCode == CPUI_MULTIEQUAL) {
      int4 pieces = 0;
@@ -98,7 +106,7 @@ index 8a4791b..bffcba4 100644
      for(int4 i=0;i<numParams;++i) {
        ValueSet *inSet = op->getIn(i)->getValueSet();
        if (doesEquationApply(eqPos, i)) {
-@@ -1674,10 +1756,12 @@ bool ValueSet::iterate(Widener &widener)
+@@ -1674,10 +1757,12 @@ bool ValueSet::iterate(Widener &widener)
  	  rangeCopy = equations[eqPos].range;
  	}
  	pieces = res.circleUnion(rangeCopy);
@@ -111,15 +119,15 @@ index 8a4791b..bffcba4 100644
        }
        if (pieces == 2) {
  	if (res.minimalContainer(inSet->range,MAX_STEP))	// Could not get clean union, force it
-@@ -1687,6 +1771,7 @@ bool ValueSet::iterate(Widener &widener)
+@@ -1687,6 +1772,7 @@ bool ValueSet::iterate(Widener &widener)
      if (0 != res.circleUnion(range)) {	// Union with the previous iteration's set
        res.minimalContainer(range,MAX_STEP);
      }
-+    vsCheckUnion(vsInputs,range,res);
++    vsCheckUnion(vsInputs,range,res,op->getAddr());
      if (!range.isEmpty() && !res.isEmpty()) {
        leftIsStable = range.getMin() == res.getMin();
        rightIsStable = range.getEnd() == res.getEnd();
-@@ -1699,13 +1784,13 @@ bool ValueSet::iterate(Widener &widener)
+@@ -1699,13 +1785,13 @@ bool ValueSet::iterate(Widener &widener)
        if (0 != rangeCopy.intersect(equations[eqPos].range)) {
  	rangeCopy = equations[eqPos].range;
        }
@@ -135,7 +143,7 @@ index 8a4791b..bffcba4 100644
        setFull();
        return true;
      }
-@@ -1716,7 +1801,7 @@ bool ValueSet::iterate(Widener &widener)
+@@ -1716,7 +1802,7 @@ bool ValueSet::iterate(Widener &widener)
      ValueSet *inSet1 = op->getIn(0)->getValueSet();
      ValueSet *inSet2 = op->getIn(1)->getValueSet();
      if (equations.size() == 0) {
@@ -144,7 +152,7 @@ index 8a4791b..bffcba4 100644
  	setFull();
  	return true;
        }
-@@ -1733,7 +1818,7 @@ bool ValueSet::iterate(Widener &widener)
+@@ -1733,7 +1819,7 @@ bool ValueSet::iterate(Widener &widener)
  	if (0 != range2.intersect(equations[eqPos].range))
  	  range2 = equations[eqPos].range;
        }

@@ -94,7 +94,123 @@ def fam_pow2(r, f):
     else:                                                # x & (2^k - 1) for the unsigned remainder
         lit_or_imm(f, r, 1, (1 << k) - 1); f.add(mov(0, src), 0x2009 | 0 << 8 | 1 << 4)
 
-FAMS2 = {29: fam_udiv2, 30: fam_sdiv2, 31: fam_divpair, 32: fam_divsum, 33: fam_pow2}
+def fam_signmask(r, f):
+    """the sign of a register extracted by an arithmetic shift of 31 (a chain of shar, as 64-bit sign extensions and sign tests are written) and
+    tested for 0 / -1 / != 0 (RuleTestSign), or used as a mask (RuleSignShift, RuleSignForm)"""
+    kind = r.choice([0, 0, 1, 2, 3])
+    f.add(mov(0, 4))
+    if kind == 1: f.add(extsb(0, 0))
+    elif kind == 2: f.add(extsw(0, 0))
+    elif kind == 3: f.add(extsb(0, 0)); f.add(addi(0, r.choice([0x7F, 1, 0x80])))
+    f.add(mov(1, 0))
+    n = r.choice([31, 31, 31, 15, 7, 30])
+    shr_arith(f, 1, n)
+    form = r.randrange(0, 6)
+    if form == 0: f.add(0x2008 | 1 << 8 | 1 << 4); result_of_t(r, f, 0)                 # tst r1,r1 : sign mask == 0
+    elif form == 1: f.add(movi(2, 0xFF)); f.add(0x3000 | 1 << 8 | 2 << 4); result_of_t(r, f, 0)      # cmp/eq #-1 : negative
+    elif form == 2: f.add(mov(0, 1)); f.add(0x2009 | 0 << 8 | 5 << 4)                  # mask & r5
+    elif form == 3: f.add(mov(0, 1)); f.add(0x201A | 0 << 8 | 5 << 4)                  # mask ^ r5
+    elif form == 4: f.add(movi(2, 1)); f.add(0x2009 | 1 << 8 | 2 << 4); f.add(mov(0, 1))   # (mask & 1)
+    else: f.add(0x3002 | 1 << 8 | 5 << 4); result_of_t(r, f, 0)                           # cmp/hs r5,mask
+
+def fam_pow2b(r, f, shar_idiom=False):
+    """x / 2^k and x % 2^k written with the sign mask the way the SH-2 compilers write it: shll ; subc r,r (the mask), shlr (32-k) (the bias),
+    add, shar k (RuleSignDiv2, RuleSignNearMult, RuleSignForm2, RuleModOpt, RuleSignMod2nOpt*)"""
+    k = r.choice([1, 2, 3, 4, 5, 8, 12, 16, 24, 30])
+    src = 4
+    if r.random() < 0.25:
+        f.add(r.choice([extsb, extsw])(1, 4)); src = 1
+    form = r.randrange(0, 5)
+    f.add(mov(2, src))
+    if shar_idiom:
+        shr_arith(f, 2, 31)                                # r2 = x s>> 31  (the chain of shar the engine merges)
+    else:
+        f.add(0x0008)                                      # clrt
+        f.add(SHLL | 2 << 8, 0x300A | 2 << 8 | 2 << 4)     # shll r2 ; subc r2,r2   : r2 = x < 0 ? -1 : 0
+    shr_logical(f, 2, 32 - k)                              # the bias, 2^k - 1 for a negative x
+    f.add(add(2, src))                                     # x + bias
+    if form == 0:
+        shr_arith(f, 2, k); f.add(mov(0, 2))               # x / 2^k
+    elif form == 1:
+        lit_or_imm(f, r, 1, (~((1 << k) - 1)) & M32); f.add(0x2009 | 2 << 8 | 1 << 4)       # & ~(2^k-1) : x rounded toward zero
+        f.add(mov(0, 2))
+    elif form == 2:
+        lit_or_imm(f, r, 1, (~((1 << k) - 1)) & M32); f.add(0x2009 | 2 << 8 | 1 << 4)
+        f.add(mov(0, src), sub(0, 2))                      # x % 2^k  = x - rounded
+    elif form == 3:
+        shr_arith(f, 2, k); shl(f, 2, k); f.add(mov(0, 2))
+    else:
+        f.add(mov(0, 2))
+
+def fam_lessor(r, f):
+    """compare pairs the engine merges (RuleLessEqual, RuleLessNotEqual, RuleEqual2Zero ...): (x < y) || (x == y), (x < y) || (x != y), (x <= y) && (x != y),
+    (x > y) && (x != y), on whole registers or bytes, the two T's through movt and an or/and, or through branches"""
+    kind = r.choice([0, 0, 1, 2, 4])
+    reduce_in(r, f, 0, 4, kind); reduce_in(r, f, 1, 5, kind)
+    if r.random() < 0.3: lit_or_imm(f, r, 1, lit_for(r, kind))
+    form = r.randrange(0, 6)
+    lt, le = r.choice([(0x3006, 0x3002), (0x3007, 0x3003)])   # cmp/hi, cmp/hs   or cmp/gt, cmp/ge     (T = Rn op Rm)
+    swap = r.random() < 0.5
+    a, b = (0, 1) if not swap else (1, 0)
+    if form == 0:                                             # (a > b) || (a == b)
+        f.add(lt | a << 8 | b << 4, 0x0029 | 2 << 8)
+        f.add(0x3000 | a << 8 | b << 4, 0x0029 | 3 << 8)
+        f.add(0x200B | 2 << 8 | 3 << 4, mov(0, 2))
+    elif form == 1:                                           # (a > b) || (a != b)
+        f.add(lt | a << 8 | b << 4, 0x0029 | 2 << 8)
+        f.add(0x3000 | a << 8 | b << 4, 0x0029 | 3 << 8, 0x6007 | 3 << 8 | 3 << 4, 0xC900 | 1 if False else 0x0009)
+        f.add(0xE400 | 1, 0x2009 | 3 << 8 | 4 << 4)
+        f.add(0x200B | 2 << 8 | 3 << 4, mov(0, 2))
+    elif form == 2:                                           # (a >= b) && (a != b)
+        f.add(le | a << 8 | b << 4, 0x0029 | 2 << 8)
+        f.add(0x3000 | a << 8 | b << 4, 0x0029 | 3 << 8)
+        f.add(0xE400 | 1, 0x2009 | 3 << 8 | 4 << 4)
+        f.add(0x2009 | 2 << 8 | 3 << 4, mov(0, 2))
+    elif form == 3:                                           # branches: a > b ? 1 : a == b ? 1 : 0
+        f.add(lt | a << 8 | b << 4); f.br('bt', 'yes')
+        f.add(0x3000 | a << 8 | b << 4); f.br('bt', 'yes')
+        f.add(movi(0, 0)); f.br('bra', 'end'); f.add(0x0009)
+        f.label('yes'); f.add(movi(0, 1)); f.label('end')
+    elif form == 4:                                           # a >= b && a != b by branches
+        f.add(le | a << 8 | b << 4); f.br('bf', 'no')
+        f.add(0x3000 | a << 8 | b << 4); f.br('bt', 'no')
+        f.add(movi(0, 1)); f.br('bra', 'end'); f.add(0x0009)
+        f.label('no'); f.add(movi(0, 0)); f.label('end')
+    else:                                                     # (a > b) or (a == b), then a second use of the pieces
+        f.add(lt | a << 8 | b << 4, 0x0029 | 2 << 8)
+        f.add(0x3000 | a << 8 | b << 4, 0x0029 | 3 << 8)
+        f.add(0x200B | 2 << 8 | 3 << 4, mov(0, 2))
+        f.add(0x2009 | 0 << 8 | 3 << 4)
+
+def fam_condconst(r, f):
+    """a register compared with a constant for (in)equality, then used (not only compared) in the arm where the compare fixes its value
+    (ActionConditionalConst / ConditionalExecution), with a second level, on the byte, the word or the whole register"""
+    kind = r.choice([0, 0, 1, 2, 4, 4])
+    reduce_in(r, f, 0, 4, kind)
+    reduce_in(r, f, 3, 5, kind) if r.random() < 0.4 else f.add(mov(3, 5))
+    k1 = lit_for(r, kind); k2 = lit_for(r, kind)
+    lit_or_imm(f, r, 1, k1)
+    f.add(0x3000 | 0 << 8 | 1 << 4)                                  # cmp/eq r1,r0
+    neg = r.random() < 0.5
+    f.br('bf' if neg else 'bt', 'other')
+    # arm A: x == k1 (neg: x != k1)
+    for _ in range(r.randrange(1, 4)):
+        f.add(r.choice([add(3, 0), sub(3, 0), 0x2009 | 3 << 8 | 0 << 4, 0x200B | 3 << 8 | 0 << 4, 0x200A | 3 << 8 | 0 << 4, 0x7300 | r.choice([1, 0xFF, 3])]))
+    if r.random() < 0.5:
+        lit_or_imm(f, r, 2, k2); f.add(0x3000 | 0 << 8 | 2 << 4)    # a nested compare with the other literal
+        f.br('bt', 'inner')
+        f.add(add(3, 0)); f.label('inner')
+    f.add(mov(0, 3)); f.br('bra', 'end'); f.add(0x0009)
+    f.label('other')
+    for _ in range(r.randrange(0, 3)):
+        f.add(r.choice([add(3, 0), sub(3, 0), 0x2009 | 3 << 8 | 0 << 4, 0x200A | 3 << 8 | 0 << 4, 0x6007 | 3 << 8 | 0 << 4]))
+    f.add(r.choice([mov(0, 3), sub(0, 3), add(0, 3)]))
+    f.label('end')
+    if r.random() < 0.4: f.add(r.choice([extub(0, 0), extsb(0, 0), extuw(0, 0)]))
+
+def fam_pow2c(r, f): fam_pow2b(r, f, True)
+
+FAMS2 = {38: fam_pow2c, 29: fam_udiv2, 30: fam_sdiv2, 31: fam_divpair, 32: fam_divsum, 33: fam_pow2, 34: fam_signmask, 35: fam_pow2b, 36: fam_lessor, 37: fam_condconst}
 d11.FAMS.update(FAMS2)
 
 if __name__ == "__main__":
