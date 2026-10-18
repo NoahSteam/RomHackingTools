@@ -9893,3 +9893,192 @@ The cause is not the run-on. A leaf with no call reproduces it, and is **lent**:
 - The load-address and jump-table-index clauses of the rule are held by no fixture either (the engine keeps those reads), as section 4 says.
 - Nine ledger rows of other areas (A2-24, A2-25, A12-10, A5-50, A2-33, A2-36, A2-37, A6-41, A5-69) have more than eight cells, an unescaped `|` in a cell; left to their areas.
 - The Live tests and the sanitizer job were not run (shared socket path; CI).
+
+## Area 8, round 1: the trust-indicator model
+
+Branch `review/8-trust` from `e153cdf`. The first round of area 8, the trust indicators: what the decompiler panel tells the reader about whether the text on screen can be
+trusted (the stale badge and its tooltip, "decompiling…", the dimming of old output, and the amber and red lines: unsupported, truncated, unimplemented, unavailable, too large,
+failed, the engine's warnings, the disabled session). The round built the area's oracle, ran it, filed **A8-5 to A8-16 (all P3, no P1 or P2)** in
+`Docs/Decompiler/REVIEW_LEDGER.md`, and fixed A8-5 to A8-14: six panel defects (A8-5 to A8-10) and four places where the guide was silent or wrong (A8-11 to A8-14). A8-15
+(what the oracle does not hold) is open, A8-16 (a dead case) accepted. Code commit `70e1cdb`. **No engine patch** (no `vendor.py` run): the changes are in the host
+(`DecompilerPanel.cpp/.h`), the tests and the guide.
+
+### The oracle
+
+**1. The reference model** (`FrontEnd/tests/DecompilerTrustModel.h`, which includes nothing of the panel). A function from the *true state* to the indicators the reader must see.
+The true state is: whether the panel is drawn, whether a source is on screen, a live emulator (running or not), whether the inputs the shown result was made from differ from the
+inputs on screen (and whether the emulator's frame moved), whether a request for the question on screen is outstanding, being stopped (Stop pressed, the engine has not
+acknowledged) or was stopped, the session-disabled state with its reason, the reason no function was found for the question (a refused entry, an entry that is no code, a
+Containing nobody holds, a followed PC where none is, no registers), and the finder's doubt and the halt hint where the case has one. What the shown result says about itself is read
+from the result: its status, error text, whether it has lines, `unsupported`, `truncated` (where, why, how many places), the places that did not decode, `unimplemented`, the
+other warnings in order, the engine's notes. `Expect(state, result)` returns the badge (stale or not, its form `[stale]` or `[stale: frame N]`), the reason its tooltip may give,
+"decompiling…" or "stopping…", the brightness of the code, the amber and red lines **in the order they are drawn** (each as the pieces that must appear in it), the lines beyond the
+first four and what the tooltip of "N more warnings" lists, the grey count of the engine's notes with its tooltip, and the grey messages ("No source", "Nothing decompiled yet",
+"Stopped.").
+
+It was written from the guide's table "When the output is stale or missing", not from the panel's code. Where the guide was silent or ambiguous the decision was made, written into
+the guide and filed (A8-11 to A8-14): the brightness of stale (70%) and unsupported (50%) output and of an output that is both (the lesser); a rename undone again keeps the
+output marked; the order the badge's reasons are tried in (a replacement on its way, the session disabled, the user's Stop, no source, no function for the question, the emulator
+moved on, nothing asked); a request for a question that has since found no function is not a replacement; the form of the badge (`[stale: frame N]` only when the live emulator on
+screen is at another frame than the output's). `CheckGuide` reads `DECOMPILER_GUIDE.md` and fails if any of the 37 phrases the model relies on is not in it (the ten
+tooltip sentences' key phrases, the lines' texts, "dimmed to 70% brightness").
+
+**2. Reading what the panel drew** (`FrontEnd/tests/DrawnText.h`). The panel's own accessors (`StaleTooltip()`, `LineTooltip()`) are the panel's account of what it drew; the check
+reads the draw lists. ImGui turns each character into one textured quad of the window's `ImDrawList`; the font atlas knows the code point of each cell; the quads of the frame, in
+order, are the strings, colours and positions drawn (a space is a gap). So `Verify` compares the model with: the **amber and red runs of the panel's window, in order**; the **brightness of the
+glyphs of the code list**; the badge's rectangle (`ItemRect("stale")`, now remembered by `DrawStatus`); the **tooltip window that opens when the mouse is held over the badge**,
+over "N more warnings" and over the grey count of the engine's notes (45 frames of hover, the text read back from the tooltip window's glyphs); the grey messages. It also compares the
+state functions (`ShownStale`, `GetStaleReason`, `StaleTooltip`). Text wider than the window is cut by ImGui (no glyph is emitted past the clip rectangle), so a run that ends at the
+window's edge is held as a prefix; the ellipsis is one wildcard character.
+
+**3. The driver.** Area 1's rig (`DecompilerModelTests.cpp`, the real panel, runner and engine under random sequences of edit, scrub, Refresh, reconnect, source replacement, BIOS image,
+volatile list, names, function starts, Stop, hide and show, the emulator running) is included by `DecompilerTrustTests.cpp` with its `main` left out (`SE_MODEL_NO_MAIN`). The rig gained
+hooks (`custom`, `trustCheck`, `atEnd`, a window size, a list of results no engine made, an `Unavailable` it caused, a target with no function), three world functions no area 1
+sequence places (**T**: a `bt` out of captured memory, so truncated; **U**: Fixture 3's `bra` whose delay slot a `bt` jumps to, so unsupported, and with one edit dead code after
+the `bra`; **W**: five stores into the BIOS ROM, five cautions), and the exclusion of its from-scratch comparison for results the driver made up. At the end of every **settled** step (the engine holding a request, or idle) it calls `CheckTrust`.
+The outcomes the sequences are extended with, **real unless noted**:
+
+| Outcome | How |
+|---|---|
+| Ok, Truncated, Unsupported, several amber lines | functions T, U, W; edits that flip T between whole and cut and U between unsupported and supported |
+| TooLarge | area 1's `starve` (a 1 s budget, the engine held past it), and the runner's memo |
+| Unavailable | `t-breakcfg` puts a regular file where the language files go; every request is answered `Decompiler unavailable: cannot create ...`; `t-fixcfg` removes it. The area 1 oracle heals it around its own engine runs |
+| Cancelled / Stopped | Stop with the engine holding the request, and after it finished; the cancelled result of a queued request |
+| Session disabled | `wedge` (a cancel the engine does not acknowledge), `t-engfail` (a failure inside the worker: `SetRecordHookForTests` throws), and the recovery by a reconnect |
+| Failed (out of memory), NoCode, an engine damaged earlier, Unimplemented, a result with more amber lines than the panel shows (made up) | `t-inject <kind>`: the request the engine holds is answered by a result the driver makes (`DecompilerPanel::Accept`, public for this); the engine's own answer then comes and is thrown away. The SH-2 spec has no unimplemented instruction, so no engine run reaches that one |
+| No function for the question | `t-badentry zz` (refused), `t-badentry F` (an address that is no code memory), `t-containbad` (Decompile on an address no function holds) |
+
+The **Follow PC rig** (`FRig`, mix 8) gives the panel registers: the PC of each CPU and whether it has them, a live source that moves (a new frame and serial whenever its registers or
+memory change), a dump, the CPU switched, Follow PC toggled, the entry typed, Decompile on an address, edits that make U's dead code. Its true state is not read from the panel's policy:
+the registers of the snapshot the panel holds come from a history the rig kept by frame (`HeldKey` names it), the function a PC is in from the world's layout, the inputs the
+shown result was made from from its own key. It also holds the guide's policy for a source that does not run: once the panel has caught up it is not stale, unless nothing can be
+asked.
+
+**4. Invariants** held at every step: **I1** output never looks current (undimmed, no badge) while its inputs differ from the screen's; **I2** a truncated, unsupported,
+unimplemented or too-large result never presents as complete; **I3** a message never names the wrong reason (a tooltip has its reason's phrase and no other's, in the state and in
+the drawn window); **I4** every indicator the guide documents is reached (a coverage list of 39 indicators the run must have drawn and held to the model, or it fails).
+`kPins` (24 sequences written out) and the `MiniRig` pins (19 states of Follow PC, the registers, a source that goes away, the halt hint, an address the function never reaches, the window with no runner) run in the default run.
+
+### Sequences run
+
+The final binary (the one the default run uses, byte for byte), in pieces of 5,000 operations (`SE_TRUST_STEPS`, `SE_TRUST_FROM`; the restart-safe driver is a scratch script), the badge and the other tooltips hovered at every step that has one.
+An operation is one step of a sequence: no-effect steps (a Stop with nothing outstanding) are counted and checked too. Mix 2 has a 1 s budget, every stall costs a second and a half, so its pieces are 2,500 operations (five of them).
+
+| Mix | Outcomes added | Sequences | Operations | Failed | Settled checks | Drawn windows read back | Tooltips hovered | Made-up results |
+|---|---|---|---|---|---|---|---|---|
+| 0 | ok, truncated, unsupported, stopped | 193 | 10,036 | 0 | 11,765 (3,098 held, 8,667 idle) | 9,862 | 7,118 | 0 |
+| 1 | ... and several amber lines (W) | 193 | 10,024 | 0 | 11,946 (3,064 held, 8,882 idle) | 10,023 | 8,962 | 0 |
+| 2 | ... and too large (a 1 s budget) | 221 | 12,753 | 0 | 14,810 (3,641 held, 11,169 idle) | 12,476 | 9,995 | 0 |
+| 3 | ... and unavailable (the language files) | 179 | 10,090 | 0 | 11,621 (2,882 held, 8,739 idle) | 9,763 | 6,004 | 0 |
+| 4 | ... and the made-up results | 179 | 10,080 | 0 | 12,309 (2,879 held, 9,430 idle) | 10,414 | 9,213 | 574 |
+| 5 | ... and the session disabled (`wedge`, `t-engfail`) | 179 | 10,051 | 0 | 10,915 (3,793 held, 7,122 idle) | 9,052 | 9,871 | 0 |
+| 6 | ... and targets that find no function | 178 | 10,067 | 0 | 11,581 (2,884 held, 8,697 idle) | 9,724 | 9,575 | 0 |
+| 7 | everything | 181 | 10,073 | 0 | 11,979 (3,181 held, 8,798 idle) | 10,011 | 8,065 | 227 |
+| 8 | Follow PC with registers (the second rig) | 223 | 10,024 | 0 | 10,024 (4,579 held, 5,445 idle) | 9,754 | 6,668 | 0 |
+| | all nine | 1,726 | 93,198 | 0 | 106,950 (30,001 held, 76,949 idle) | 91,079 | 75,471 | 801 |
+
+Every mix has at least 10,000 operations, and no sequence failed on the final tree. (The long runs on the trees before each fix are how the findings were made; they are in Findings, not here.)
+What the runs drew and held to the model, summed over the nine mixes: the plain badge 22,928 times and the frame badge 4,625; "decompiling…" 16,998 and "stopping…" 193; stale output dimmed 22,382 times, unsupported output
+greyed 7,707, both 3,596; the truncated line 14,088 (at several places 404), the unsupported line 11,303, bad data 404, unimplemented 358, the too-large line 2,248, failed 298, no code 1,084, unavailable 4,279, the red disabled line 3,807,
+an engine warning 59,234, "N more warnings" 9,710, the grey count of notes 39,549; the refused entry 1,004, the entry that is no code 852, no function found 1,299, no registers 124, the anchor not reached 40, the finder's doubt 4,724;
+the tooltip reasons Replacement 16,507, Stopped 493, Disabled 3,381, EmulatorMoved 1,202, NothingAsked 2,698, EntryBox 1,849, ContainingNotFound 1,151, FollowNotFound 148, NoRegisters 124. The halt hint and the no-source tooltip come from the pins.
+
+### Findings
+
+All P3: the severity rule of the program makes a defect P1 when the output is wrong and looks right and P2 when a reader is misled about what the tool knows; here a message was imprecise, or named a reason that did not hold, with the rest of the panel
+(the dimming, the badge, the red line) still telling the truth.
+
+| Row | What | Status |
+|---|---|---|
+| A8-5 | The badge says "[stale: frame N]" for a write, a scrub or a BIOS image, where the guide says the emulator moved on | fixed |
+| A8-6 | "decompiling…" stays up after Stop, beside a tooltip that says it was stopped | fixed |
+| A8-7 | A Stop outlives its request: every later request's tooltip says "You stopped its replacement", and a discarded answer leaves its question unasked (A1-4 again) | fixed |
+| A8-8 | With no source open the tooltip says to press Enter or Refresh | fixed |
+| A8-9 | A request for a question that found no function is waited for: "decompiling…" and "its replacement is shown when it is ready" under a red "no function found" | fixed |
+| A8-10 | A Stop is remembered across a question that found no function (tooltip and note "Stopped.") | fixed |
+| A8-11 | The guide does not say how bright stale or unsupported output is | decided, guide |
+| A8-12 | The guide has no row for the unimplemented line, the failure lines, the damaged-engine message, the no-runner window, the grey count and messages, the hint, the entry errors, the tooltip sentences | written, guide |
+| A8-13 | The guide says a disabled session needs a restart; a new session recovers | decided, guide |
+| A8-14 | A rename undone still marks the output; the order the tooltip reasons are tried in is not said | decided, guide |
+| A8-15 | Instrument: what the oracle does not hold (the finder's texts, the engine's own Failed and Unimplemented, auto-refresh, Follow PC in the area 1 rig, text wider than the window) | open |
+| A8-16 | `DecompileStatus::Disabled` is never produced; its case in `DrawStatus` is dead | accepted |
+
+Two defects were found in the instruments on the way, not filed: the area 1 rig's `haveStopped` was set for a Stop whose press hit nothing (the answer was collected while the pointer settled on the button; Stop on a hidden panel set the generation anyway),
+and its too-large memo model erased a stalled request on any later answer for the same inputs, though a request that lends a callee's signature is another request (mix 2 seed 31: `select C` with a stalled `C`, then `select A`, `select C`, a scrub and a resume).
+The first is fixed (`pressedOn`), the second now erases only on a function with no callee, which accepts more. A hidden panel is judged when it is shown again (its reason and stale mark are the state it had when it was hidden, and nothing is drawn).
+A refused entry is not a request (it does not capture a running emulator), and `0x1FF0` resolves to a function when a BIOS image is mapped, so the "Containing nobody holds" address is past LWRAM.
+
+### Fixes
+
+* **A8-5.** `DecompilerPanel::EmulatorMovedOn()` (a live emulator, the same source, another frame) chooses `[stale: frame N]` and the "moved on" tooltip.
+* **A8-6.** `DrawStatus` says "stopping…" while a cancelled request is outstanding.
+* **A8-7.** `Update` clears `Outstanding::cancelled` when it records a request.
+* **A8-8.** `StaleTooltip` has a sentence for no source.
+* **A8-9.** `RequestWanted()` (a request that is outstanding and not for a question with no function) decides "decompiling…", "stopping…" and the Replacement and Stopped reasons; `Pending()` is unchanged.
+* **A8-10.** `ForgetStop()` in `SetTarget`, in the refused-entry path and in each failing branch of `Resolve`.
+* **Guide (A8-11 to A8-14, and the rows for every indicator).** The brightness of stale (70%), unsupported (50%) and both (the lesser); `[stale]` and `[stale: frame N]`; the ten tooltip sentences in the order they are tried; a row each for decompiling/stopping,
+  the grey messages, the grey count, unimplemented, the halt hint, the failure lines, the damaged engine, the window with no runner, the entry errors; a disabled session recovers in a new session.
+* **Observability.** `DecompilerPanel` remembers the badge's rectangle and the Follow PC box (`ItemRect("stale")`, `ItemRect("follow")`) for the tests.
+
+### Mutation table
+
+Each indicator broken in the product (or the guide) alone, the trust test rebuilt and run with 120 steps per mix (the default run: 24 pins, 19 Follow PC and register states, nine mixes), then the tree restored. "Pins" counts the pin lines that fail (of 43). "Sequences" is the sequences
+that fail of the pins and the generated sequences that ran. The mutations of A8-5 to A8-10 undo the fix.
+
+| Mutation | Pins failing | Sequences failing | First message |
+|---|---|---|---|
+| never dim stale output | 19 | 108 of 122 | `I1 STALE OUTPUT NOT DIMMED` |
+| unsupported output not greyed | 3 | 32 of 65 | `DIMMING` |
+| no badge for output nothing is replacing | 14 | 33 of 66 | `I1 OUTPUT LOOKS CURRENT` |
+| the badge has no tooltip | 20 | 123 of 137 | `TOOLTIP NOT DRAWN` |
+| swap two tooltip reasons (Pending and Stopped) | 8 | 85 of 105 | `I3` (the tooltip does not give the reason) |
+| drop the truncated line | 2 | 38 of 65 | `I2 TRUNCATED RESULT PRESENTED AS COMPLETE` |
+| the truncated line forgets "(and at N more places)" | 1 | 2 of 52 | `I2 TRUNCATED RESULT PRESENTED AS COMPLETE` |
+| drop the unsupported line | 3 | 32 of 65 | `I2 UNSUPPORTED RESULT PRESENTED AS TRUSTWORTHY` |
+| drop the too-large line | 1 | 9 of 57 | `I2 TOO-LARGE RESULT PRESENTED AS COMPLETE` |
+| five lines before "N more warnings", not four | 3 | 42 of 72 | `LINE MISSING` |
+| drop the engine's flow warnings (the unimplemented line with them) | 4 | 31 of 64 | `LINE MISSING` |
+| failure lines amber, not red | 4 | 15 of 56 | `LINE MISSING` |
+| failure lines not drawn | 4 | 15 of 56 | `LINE MISSING` |
+| drop the red disabled line | 2 | 10 of 56 | `LINE MISSING` |
+| "decompiling…" reads "working" | 8 | 91 of 111 | `LINE MISSING` |
+| the grey count of notes is one too many | 8 | 89 of 107 | `GREY WARNINGS` |
+| no "Stopped." note | 3 | 9 of 52 | `GREY MESSAGE MISSING` |
+| drop the "is not reached from this entry" line | 1 | 0 of 52 | `LINE MISSING` |
+| drop the "Entry: …" line | 12 | 0 of 52 | `LINE MISSING` |
+| the halt hint also on a running emulator | 1 | 0 of 52 | `AMBER AND RED LINES` |
+| the halt hint on stale output | 1 | 0 of 52 | `AMBER AND RED LINES` |
+| stale ignores the volatile list | 1 | 11 of 53 | area 1's `STALE SHOWN AS CURRENT` |
+| stale ignores a rename | 1 | 1 of 52 | area 1's `STALE SHOWN AS CURRENT` |
+| A8-2 undone: Follow PC without registers blames the entry box | 1 | 0 of 52 | `I3` (the tooltip does not give the reason) |
+| the guide's tooltip sentence changed | 0 (1 guide phrase missing) | 0 of 52 | `CheckGuide` |
+| A8-5 undone: the frame badge for every change of the view | 11 | 85 of 101 | `BADGE FORM` |
+| A8-6 undone: "decompiling…" after Stop | 3 | 10 of 52 | `LINE MISSING` |
+| A8-7 undone: a Stop outlives its request | 1 | 9 of 52 | `REASON` |
+| A8-8 undone: no-source tooltip says press Refresh | 1 | 0 of 52 | `I3` (the tooltip does not give the reason) |
+| A8-9 undone: a request for a question with no function is waited for | 1 | 3 of 52 | `I3` (the tooltip does not give the reason) |
+| A8-10 undone: a Stop outlives its question | 1 | 1 of 52 | `STALE REASON` (area 1) and the trust model's `REASON` |
+| Disabled and Stopped tried in the other order | 0 | 0 of 52 | (none: equivalent) |
+
+`reasonorder` is an equivalent mutation: a stopped question and a disabled session cannot hold together in one panel (the cancelled result of a stopped request is dropped by a disabled runner, and any new request clears the stop), so which of the two is tried first is
+not observable; the order is in the guide for the day it is. `stalevol`, `stalenames` and `forgetstop` are first caught by area 1's own checks (`STALE SHOWN AS CURRENT`, `STALE REASON`), which run before the trust check at the same step. The first seventeen mutations (to `nosource`) were run before the last driver fixes (the rig's Stop bookkeeping, the refused entry, the Containing address, a hidden panel, the memo model, which none of them reaches); the other fifteen were run on the final tree.
+
+### Matrix (RelWithDebInfo, gcc 13, own build, `-j2`, every test binary under `ulimit -v 4000000`)
+
+| Run | Result |
+|---|---|
+| `ctest -E SaturnExplorerLive -j2 --timeout 900` | 93 of 93 passed, 146 s (the trust test 46.8 s, the model test 20.9 s, the panel test 4.5 s, the fault test 85 s) |
+| `build/bin/SaturnExplorerDecompilerFaultTests` | 0 of 94 jobs failed, 84.5 s, no MOVED pin |
+| `SE_MODEL_SEEDS=420 SaturnExplorerDecompilerModelTests` (area 1, the rig changed) | 420 seeds, 0 failed (10,002 engine runs); the default 18 seeds and the pinned findings pass (A8-7 and A8-7 (twice) are new) |
+| `SaturnExplorerDecompilerTrustTests` default run | 52 sequences and 43 pins, 1,643 operations, 0 failed; 39 indicators reached |
+| the nine mixes, 10,000 operations or more each | above; 0 failed |
+| the mutation table | 32 mutations: 30 caught by pins or sequences, 1 by the guide check, 1 equivalent |
+
+Not run: the Live tests (they share a fixed socket path with the coordinator's runs), the sanitizer job (the trust test is not in its list, `.github/scripts/run-decompiler-sanitizers.sh`; it needs the model test's one-process-one-runner discipline and would run long under ASan),
+the generator, the corpora (no engine change).
+
+### For the next round
+
+* A8-15: the instrument gaps. The next reviewer should read the guide's table against the panel for anything the model has no line for, and try the tooltips of a panel that is docked narrow (the glyph reader holds a cut line as a prefix).
+* The finder's texts ("Entry: …", the confidence beside the source) are area 4's; the model takes them from the true state.
+* The trust test is in `ctest` (47 s). Adding it to the sanitizer job is the coordinator's call.
