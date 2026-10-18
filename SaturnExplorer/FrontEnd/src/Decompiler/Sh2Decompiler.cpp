@@ -380,7 +380,12 @@ public:
         if (!mExitSeen) return in;
         const bool one = !mExit.Joined();
         in.data = mReturnData;
-        if ((in.data & (1u << kSr)) && one && !(mExit.kind == Value::Reg && mExit.v == kSr)) in.data &= ~((1u << kSr) | kDepT);
+        // The interrupt-mask idiom (06010054: `stc sr,r0 ; or #0xF0,r0 ; ldc r0,sr`): SR's bits, T among them, are excused only when r0 at every
+        // return is the very value the function wrote back to SR with `ldc` (mSrWritten, by the op that made it). The engine never removes that
+        // Write_SR, so every read the value was computed from stays in the text, and how SR's entry value is used there is EntryStateUse's to
+        // settle. Any other value computed from SR -- `and #1,r0`, `add #1,r0`, the idiom with no write-back -- keeps T and SR as inputs (A3-69).
+        if ((in.data & (1u << kSr)) && one && mExit.kind == Value::Fuzzy && mExit.def != 0 && mSrWritten.count(mExit.def) != 0)
+            in.data &= ~((1u << kSr) | kDepT);
         in.joinsR0 = mReturnJoinsR0 & in.data;
         in.chosen = one ? 0u : mReturnCtl;
         return in;
@@ -413,6 +418,7 @@ public:
         mFrameWords = 0;
         mStoresThrough = 0;
         mStoresBelow = 0;
+        mSrWritten.clear();
         mOut = 0;
         mLeaks = 0;
         mFrameValues = 0;
@@ -855,7 +861,13 @@ private:
                 d |= Deps::All(stored);
                 const bool hole = slot.second.kind == Value::Fuzzy && slot.second.hole;
                 const uint32_t exposedAt = slot.second.exposedAt;
+                const Value was = slot.second;
                 slot.second = Value::From(slot.second.Origins() | stored, d);
+                // (a word that may now hold what it held is still a use of r0, carried or joined if that was: A3-68's flags, fail-closed)
+                slot.second.usesR0 = was.UsesR0() && !(was.kind == Value::Reg && was.v == 0);
+                slot.second.carried = was.carried;
+                slot.second.joined = was.Joined();
+                slot.second.keepsR0 = was.KeepsR0();
                 slot.second.hole = hole;
                 slot.second.exposedAt = exposedAt;
             }
@@ -1739,6 +1751,15 @@ private:
                 // op only keeps the write in the code); any other user op, anything.
                 {
                     const std::string& userOp = mFd.getArch()->userops.getOp(static_cast<ghidra::uint4>(op.in[0].offset))->getName();
+                    // `ldc Rm,sr` is `value = Rm & 0x3F3 ; sr = value ; Write_SR(value)`: remember the op that made Rm's value (the idiom's
+                    // exception above is for r0 holding exactly that value at the returns).
+                    if (userOp == "Write_SR" && op.in.size() > 1)
+                        for (int k = 0; k < i; ++k)
+                            if (c.ops[k].hasOut && KeyOf(c.ops[k].out) == KeyOf(op.in[1]) && c.ops[k].code == ghidra::CPUI_INT_AND && !c.ops[k].in.empty())
+                            {
+                                const Value rm = Get(s, c.ops[k].in[0]);
+                                if (rm.kind == Value::Fuzzy && rm.def != 0 && rm.def != Value::kJoin) mSrWritten.insert(rm.def);
+                            }
                     if (userOp != "Sleep_Standby" && userOp != "Write_SR" && userOp != "Write_GBR" && userOp != "Write_VBR")
                         Apply(s, CallEffects());
                 }
@@ -1869,6 +1890,7 @@ private:
     const MemorySnapshot* mLiteralMemory = nullptr;
     uint32_t mPreserved = 0, mStoresThrough = 0, mStoresBelow = 0, mOut = 0, mLeaks = 0, mFrameValues = 0;
     std::atomic<bool>* mCancel = nullptr;   // A3-74: checked in Run
+    std::set<uint64_t> mSrWritten;          // the ops whose value `ldc Rm,sr` wrote back (Inputs: the interrupt-mask idiom)
     bool mSpSeen = false, mSpKnown = true;   // r15 at the returns reached: one constant offset from its entry value, or not
     int64_t mSpDelta = 0;
     bool mCarriedInReturn = false;

@@ -30,6 +30,7 @@
 #include <cstring>
 #include <fstream>
 #include <map>
+#include <random>
 #include <regex>
 #include <stdexcept>
 #include <cstdlib>
@@ -11449,6 +11450,116 @@ void TestArea3Round10Fix()
              "return xStack_20;");
 }
 
+// ===== Area 3, round 10 fix: the hidden-input fuzzer (the round 10 reviewer's scratch fuzzer, ported) ====================================
+// Random register and frame programs of 2 to 7 items -- moves, ALU, partial reads and extensions, shifts, addc/subc/negc, movt, stc sr, mul.l and
+// sts macl, a store of one width and a reload of another through a copy of r15, a branch over one instruction -- each ending `add #16,r15 ;
+// or r0,r1 ; rts ; nop` so r0 has a second use. A program the host lends is run on the emulator once as it is and once with each input the
+// signature does not hold perturbed: r0-r3 and r8-r11, the T flag the caller left, and the r4-r7 beyond its parameters. A lent function whose
+// r0 changes with one of them drops an input (r0 left as it came in is the one excused case, A3-14). The review's 44,100 programs found A3-68,
+// A3-69 and A3-76 this way; SE_A3FUZZ_PROGRAMS and SE_A3FUZZ_SEED widen or move the run.
+void TestArea3HiddenInputFuzz()
+{
+    Sh2Decompiler d(gConfig);
+    const char* countEnv = std::getenv("SE_A3FUZZ_PROGRAMS");
+    const char* seedEnv = std::getenv("SE_A3FUZZ_SEED");
+    const int programs = countEnv ? std::atoi(countEnv) : 400;
+    std::mt19937 rng(seedEnv ? static_cast<uint32_t>(std::strtoul(seedEnv, nullptr, 10)) : 1u);
+    auto pick = [&](int n) { return static_cast<int>(rng() % static_cast<uint32_t>(n)); };
+    const int pool[] = { 0, 1, 2, 3, 8, 9, 10, 11, 4 };
+    auto reg = [&]() { return pool[pick(9)]; };
+    auto low = [&]() { return pick(4); };
+    uint64_t serial = 150000;
+    int lent = 0, findings = 0, checkedRuns = 0;
+    for (int p = 0; p < programs; ++p)
+    {
+        std::vector<uint16_t> w = { 0x7FF0 };   // add #-16,r15
+        const int n = 2 + pick(6);
+        for (int k = 0; k < n; ++k)
+        {
+            const int c = pick(41), dd = reg(), ss = reg();
+            const uint16_t D = static_cast<uint16_t>(dd << 8), S = static_cast<uint16_t>(ss << 4);
+            if (c < 4) w.push_back(0x6003 | D | S);
+            else if (c < 8) { const uint16_t ops[] = { 0x300C, 0x3008, 0x2009, 0x200B, 0x200A }; w.push_back(ops[pick(5)] | D | S); }
+            else if (c < 10) w.push_back((pick(2) ? 0x600B : 0x6007) | D | S);
+            else if (c < 14) { const uint16_t ops[] = { 0x600C, 0x600D, 0x600E, 0x600F, 0x6008, 0x6009 }; w.push_back(ops[pick(6)] | D | S); }
+            else if (c < 17) { const uint16_t ops[] = { 0x4000, 0x4001, 0x4008, 0x4009, 0x4018, 0x4019, 0x4028, 0x4029, 0x4004, 0x4005, 0x4021, 0x4020 }; w.push_back(ops[pick(12)] | D); }
+            else if (c < 19) { const int imm[] = { 1, -1, 5, 127, -128, 0 }; w.push_back(0x7000 | D | (imm[pick(6)] & 0xFF)); }
+            else if (c < 21) { const int imm[] = { 0, 1, 5, -1, 100 }; w.push_back(0xE000 | D | (imm[pick(5)] & 0xFF)); }
+            else if (c < 23) { const uint16_t ops[] = { 0xC900, 0xCB00, 0xCA00 }; const int imm[] = { 1, 2, 0xF0, 0xFF, 0x0F, 0 }; w.push_back(ops[pick(3)] | imm[pick(6)]); }
+            else if (c < 25) { w.push_back(0x3000 | D | S); w.push_back(0x0029 | static_cast<uint16_t>(low() << 8)); }
+            else if (c < 26) { w.push_back(0x2008 | D | S); w.push_back(0x0029 | static_cast<uint16_t>(low() << 8)); }
+            else if (c < 28) w.push_back(0x0002 | static_cast<uint16_t>(low() << 8));   // stc sr,rX
+            else if (c < 29) w.push_back(pick(2) ? 0x0008 : 0x0018);                     // clrt, sett
+            else if (c < 31) { const uint16_t ops[] = { 0x300E, 0x300A, 0x600A }; w.push_back(ops[pick(3)] | D | S); }
+            else if (c < 32) { w.push_back(0x0007 | D | S); w.push_back(0x001A | static_cast<uint16_t>(low() << 8)); }
+            else if (c < 36)
+            {
+                const int off[] = { 0, 4, 8 };
+                w.push_back(0x64F3);                                                  // mov r15,r4
+                w.push_back(0x7400 | static_cast<uint16_t>(off[pick(3)]));            // add #off,r4
+                w.push_back(0x2400 | S | static_cast<uint16_t>(pick(3)));             // mov.x rS,@r4
+                w.push_back(0x6040 | static_cast<uint16_t>(low() << 8) | static_cast<uint16_t>(pick(3)));   // mov.y @r4,rX
+            }
+            else if (c < 38)
+            {
+                const uint16_t tests[] = { static_cast<uint16_t>(0x2008 | (ss << 8) | S), static_cast<uint16_t>(0x3000 | D | S), static_cast<uint16_t>(0x4015 | (ss << 8)) };
+                w.push_back(tests[pick(3)]);
+                w.push_back(0x8900);                                                  // bt over the next instruction
+                w.push_back(0x6003 | static_cast<uint16_t>(low() << 8) | static_cast<uint16_t>(reg() << 4));
+            }
+            else w.push_back(0x6003 | S);                                             // mov rS,r0
+        }
+        if (pick(2)) w.push_back(0x6003 | static_cast<uint16_t>(reg() << 4));
+        for (uint16_t t : { 0x7F10, 0x210B, 0x000B, 0x0009 }) w.push_back(t);
+        const CallFixture f = { "a3 fuzz " + std::to_string(p), 0x06009000u, w };
+        auto snap = CallSnapshot(f, ++serial);
+        const DecompileResult r = d.Decompile(snap, Request(f.base));
+        if (r.status != DecompileStatus::Ok || !r.prototype.known) continue;
+        ++lent;
+        const size_t params = r.prototype.params.size();
+        auto run = [&](const std::map<std::string, uint32_t>& over, uint32_t& r0) {
+            try
+            {
+                RunMachine m(snap);
+                for (const auto& kv : RunEntryRegisters({ 0x0600F100u, 0, 0, 0 })) m.Set(kv.first.c_str(), kv.second);
+                for (const auto& kv : over) m.Set(kv.first.c_str(), kv.second);
+                if (!m.Run(f.base, kRunSentinel, 100000)) return false;
+                r0 = m.Get("r0");
+                return true;
+            }
+            catch (ghidra::LowlevelError&) { return false; }
+        };
+        uint32_t base = 0;
+        if (!run({}, base)) continue;
+        std::vector<std::pair<std::string, uint32_t>> perturb;
+        for (int h : { 0, 1, 2, 3, 8, 9, 10, 11 }) perturb.emplace_back("r" + std::to_string(h), 0x7000u + 0x11u * static_cast<uint32_t>(h));
+        for (size_t a = params; a < 4; ++a) perturb.emplace_back("r" + std::to_string(4 + a), 0x0600F200u + 0x10u * static_cast<uint32_t>(a));
+        perturb.emplace_back("sr", 1);
+        for (const auto& pv : perturb)
+        {
+            uint32_t v = 0;
+            if (!run({ { pv.first, pv.second } }, v)) continue;
+            ++checkedRuns;
+            if (v == base) continue;
+            if (pv.first == "r0" && v == pv.second) continue;   // r0 left as it came in: the excused case
+            ++findings;
+            std::string words;
+            for (uint16_t x : w)
+            {
+                char b[8];
+                std::snprintf(b, sizeof b, "%04X ", x);
+                words += b;
+            }
+            std::printf("  a3 fuzz FINDING program %d: lent (%zu parameters, %s) and r0 changes with %s: %08X -> %08X; words %s\n", p, params,
+                        r.prototype.ret.kind == TypeKind::Void ? "void" : "returning", pv.first.c_str(), base, v, words.c_str());
+            break;
+        }
+    }
+    std::printf("  a3 fuzz: %d programs, %d lent, %d perturbed runs checked, %d findings\n", programs, lent, checkedRuns, findings);
+    CHECK(lent > programs / 20);   // the fuzzer still reaches lent functions
+    CHECK(findings == 0);
+}
+
 // ===== A3-65 (P1): a copy of r15 walked down by pre-decrement stores ===========================================================================
 // `*--p = v` over a local array compiles to a copy of r15 (or of the frame pointer r14), moved to the top of the array and walked down by
 // `mov.l Rm,@-Rn`. The engine's alias analysis (AliasChecker, upstream's) takes a pointer into the frame to reach only what lies at or above its base,
@@ -11904,6 +12015,7 @@ int main(int argc, char** argv)
         RUN(TestArea3Round9Fix());
         RUN(TestArea3Round10());
         RUN(TestArea3Round10Fix());
+        RUN(TestArea3HiddenInputFuzz());
         RUN(TestArea2Round8());
         RUN(TestArea2Round9());
         RUN(TestA365WalkDown());
