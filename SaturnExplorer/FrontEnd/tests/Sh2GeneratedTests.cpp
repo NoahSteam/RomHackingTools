@@ -532,6 +532,36 @@ struct Gen
         p.mbox = 0x26001000u + 0x10u * rng.Below(4);
     }
 
+    // The registers r0-r3 an item may write on some path (A3-64's choosers: r0 or a scratch register is the caller's value only where no item wrote
+    // it on any path; `Def` says only that one wrote it on every path, and a loop's write is on none). Read off the words as the decoder prints
+    // them (the last operand when it is a register, @-Rn and @Rn+), conservatively, and the registers items write without a word of their own.
+    static uint32_t MayWriteLow(const std::vector<Item>& items)
+    {
+        uint32_t m = 0;
+        auto scan = [&m](uint16_t w) {
+            const sfe::DisassembledInstruction ins = sfe::Sh2Decode(kCode, w);
+            const std::string& o = ins.Operands;
+            for (int k = 0; k < 4; ++k)
+            {
+                const std::string r = "r" + std::to_string(k);
+                const bool last = o.size() >= r.size() && o.compare(o.size() - r.size(), r.size(), r) == 0 &&
+                                  (o.size() == r.size() || o[o.size() - r.size() - 1] == ',');
+                if (last || o.find("@-" + r) != std::string::npos || o.find("@" + r + "+") != std::string::npos) m |= 1u << k;
+            }
+        };
+        for (const Item& it : items)
+        {
+            for (const std::vector<uint16_t>* ws : { &it.words, &it.setup, &it.after, &it.slotWords })
+                for (uint16_t w : *ws) scan(w);
+            if (it.type == Item::Skip) scan(it.cond);
+            if (it.type == Item::Loop || it.type == Item::BraLoop || it.type == Item::BraBack) m |= 1u << it.counter;
+            if (it.type == Item::LitPtr || it.type == Item::Poll || it.type == Item::Mask) m |= (1u << it.reg) | (1u << it.jsrReg) | 1u;
+            if (it.type == Item::Table || it.type == Item::Call) m |= 0xFu;
+            m |= MayWriteLow(it.slot) | MayWriteLow(it.kids);
+            for (const std::vector<Item>& c : it.cases) m |= MayWriteLow(c);
+        }
+        return m & 0xFu;
+    }
     // The registers an item loads a literal into (a pointer item, a poll): their value is no longer the caller's, on that path at least.
     static uint32_t ReloadedRegs(const std::vector<Item>& items)
     {
@@ -566,7 +596,7 @@ struct Gen
     // constants, two sums of one register (`r4 + 1`, `r4 + 2`), two loads through r4 and r5, a register and a constant.
     // 'entryOff': the entry r15 from the function's r15 after its prologue. 'by' is the chooser as Func::choiceBy has it.
     static constexpr int kChoiceStack = 15, kChoiceSr = 16, kChoiceConst = 17;
-    Item MakeChoice(int entryOff, int& by, bool srWritten, uint32_t reloaded)
+    Item MakeChoice(int entryOff, int& by, bool srWritten, uint32_t reloaded, uint32_t lowWritten)
     {
         Item it;
         it.type = Item::Choice;
@@ -575,9 +605,9 @@ struct Gen
             if (!((reloaded >> q) & 1u)) params[nparams++] = q;
         std::vector<int> kinds = { 5 };   // a constant
         if (nparams) kinds.insert(kinds.end(), { 4, 4 });   // a parameter, twice as often
-        if (!Def(0)) kinds.push_back(0);
+        if (!(lowWritten & 1u)) kinds.push_back(0);
         if (!srWritten) kinds.push_back(1);
-        if (!Def(1) || !Def(2) || !Def(3)) kinds.push_back(2);
+        if ((lowWritten & 0xEu) != 0xEu) kinds.push_back(2);
         if (entryOff <= 60) kinds.push_back(6);
         switch (kinds[choiceRng.Below(static_cast<uint32_t>(kinds.size()))])
         {
@@ -595,7 +625,7 @@ struct Gen
         {
             int pool[3], n = 0;
             for (int k = 1; k <= 3; ++k)
-                if (!Def(k)) pool[n++] = k;
+                if (!((lowWritten >> k) & 1u)) pool[n++] = k;
             by = pool[choiceRng.Below(static_cast<uint32_t>(n))];
             it.words = { uint16_t(0x2008 | by << 8 | by << 4) };   // tst Rn,Rn
             it.shape = "choice.by_scratch";
@@ -1679,7 +1709,7 @@ struct Gen
         if (f.returns && f.end == Func::Rts && nCalls == 0 && !table && f.sel < 0 && !f.shared && choiceRng.Chance(15))
         {
             const int entryOff = 4 * static_cast<int>(f.pushed.size()) + (f.savePr ? 4 : 0) + f.frame;
-            f.items.push_back(MakeChoice(entryOff, f.choiceBy, WritesSr(f.items), ReloadedRegs(f.items)));
+            f.items.push_back(MakeChoice(entryOff, f.choiceBy, WritesSr(f.items), ReloadedRegs(f.items), MayWriteLow(f.items)));
             if (f.choiceBy >= 1 && f.choiceBy <= 3) f.reads |= 1u << f.choiceBy;
         }
         // `if (b) return a;` with no return on the other path (A3-20): last, so every path passes it. Only in a function that makes no call
