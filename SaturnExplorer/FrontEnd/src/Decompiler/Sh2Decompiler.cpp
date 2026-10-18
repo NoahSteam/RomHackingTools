@@ -1906,11 +1906,9 @@ private:
                 {
                     const bool isReturn = Return(s, op.in[0]);
                     if (!isReturn && !mTolerant) return "an indirect jump it does not resolve";
-                    // A3-70: in a nested callee walk a tail jump the walk cannot resolve (a thunk `jmp @r1` to the function that actually
-                    // writes the frame) may reach any writer of this function's caller's frame: fail closed when it can hand that frame on --
-                    // r15 back at or above the callee's entry (the jump's target takes its stack arguments there) or an address of it in a
-                    // register. A jump with r15 still below the entry stays in the callee that pushed (a switch whose table the walk has not):
-                    // its cases are not followed, which is the walk's limit (in the record).
+                    // A3-70: in a nested callee walk a tail jump hands this function's caller's frame on when r15 is back at or above the
+                    // callee's entry (the target takes its stack arguments there) or an address of it is in a register. A thunk's target (a
+                    // folded literal) is walked in turn.
                     bool handsOn = false;
                     {
                         const Value sp = Get(s, mReg[kR15]);
@@ -1920,7 +1918,10 @@ private:
                     const Value to = Get(s, op.in[0]);
                     if (!isReturn && mNested && to.kind == Value::Imm)
                         MapCalleeWords(CalleeFrameWrites(static_cast<uint32_t>(to.v)), s, Get(s, mReg[kR15]));   // a thunk: walk its target
-                    else if (!isReturn && mNested && handsOn)
+                    // ...a jump to a register's entry value (a function pointer it was handed) is an onward tail call to code the walk cannot
+                    // name. A jump to a value computed here (the switch idiom `mova ; mov.b @(r0,rN),rN ; add rN,r0 ; jmp @r0`) stays in the
+                    // callee: its cases are not followed, the walk's limit since A3-61 (no table for a callee's switch), as for `braf`.
+                    else if (!isReturn && mNested && handsOn && to.kind != Value::Fuzzy && to.kind != Value::Imm)
                         MapCalleeWords(CallEffects::kFrameAny, s, Get(s, mReg[kR15]));
                 }
                 falls = false;
