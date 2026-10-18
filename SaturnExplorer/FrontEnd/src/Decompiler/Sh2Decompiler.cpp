@@ -1100,7 +1100,18 @@ private:
             // was made from out of the alias (A3-22). Declared for the registers the callee stores through, when the address is
             // not exact (an exact one is the engine's, and was never a problem).
             for (int r = 0; r < 15; ++r)
-                if ((e.storesThrough >> r) & 1u) NoteFrameEscape(s, r, false, at);
+                if ((e.storesThrough >> r) & 1u)
+                {
+                    NoteFrameEscape(s, r, false, at);
+                    // A3-82 d/e: the callee stores at or above the pointer it was handed in r; if this function passed it a
+                    // parameter register lowered below its entry (a thunk doing `fill(p - 16)`), or a pointer laundered so its
+                    // offset is unknown, the store may reach below that register's entry -- so this function stores below it too.
+                    // A pointer passed unchanged (the register's entry value) is at or above it: no claim (the home area, A3-39).
+                    const Value h = Get(s, mReg[r]);
+                    if (h.StoresBelow()) mStoresBelow |= 1u << h.baseReg;
+                    else if (h.kind == Value::Fuzzy && h.Base() == Value::kNoBase && h.baseReg < 0)
+                        mStoresBelow |= h.Origins() & 0x7FFFu;
+                }
             // ...and one that writes below the exact frame address it was handed (a lent `fill backwards`, `*--p = v`): the engine reaches only
             // the object at the address and above, so the locals below it would be folded across the call (A3-71). The amount is unknown, so the
             // whole frame below is exposed. NoteFrameEscape's skip of an exact address stands for a callee that only writes at or above it.
@@ -1583,13 +1594,21 @@ private:
             r.dep = d;
             return r;
         }
-        // Through an address that may be in the stack but not exactly: nothing bounds it above r15,
-        // so it may read free stack, which holds anything -- or a word of the caller's frame, a stack argument: even a base below the entry r15
-        // with an index the engine takes as non-negative reaches upward without bound. Fail closed: it depends on the stack arguments (A3-66 c,
-        // A3-67 b).
-        if (!MayBeStack(s, addr)) return Loaded(s);
+        // A3-83 (c, g): fail-closed pointer provenance through memory. A pointer the callee reaches through a parameter register
+        // (`mov.l @r4,r5`, a struct field holding a frame address), or loads back from memory it leaked a parameter register into
+        // (`mov.l r4,@global ; mov.l @global,r5`), keeps that register among its origins only (not its dependences, which the
+        // return rule reads): the value loaded from memory the host cannot follow may be the pointer it put there, so a store below
+        // it records storesBelow for that register (Store). The caller then exposes when it passes such a callee a frame address.
+        const uint32_t taint = (addr.Origins() & 0x7FFFu) | (mLeaks & 0x7FFFu);
+        if (!MayBeStack(s, addr))
+        {
+            Value l = Loaded(s);
+            l.from |= taint;
+            return l;
+        }
         Value f = FreeStack();
         f.dep = Deps::All(origin::kMemory | origin::kStack | kDepArgs);
+        f.from |= taint;
         return f;
     }
 
@@ -2083,6 +2102,27 @@ private:
                         r = xs[0];
                     else if ((op.code == ghidra::CPUI_INT_OR || op.code == ghidra::CPUI_INT_XOR) && xs.size() == 2 && xs[1].kind == Value::Imm && xs[1].v == 0)
                         r = xs[0];
+                    // A negation, a shift or a product of constants is a constant, as the engine folds it: `mov #16,r3 ; neg r3,r3`
+                    // is -16 and `mov #-4,r3 ; shll2 r3` is -16, so `add r3,r4` lowers r4 by a tracked amount (a store below it is
+                    // recorded) instead of adding a value of unknown sign the interpreter takes as a non-negative index (A3-83 d, e).
+                    else if (xs.size() == 1 && xs[0].kind == Value::Imm &&
+                             (op.code == ghidra::CPUI_INT_2COMP || op.code == ghidra::CPUI_INT_NEGATE))
+                    {
+                        const int64_t rv = op.code == ghidra::CPUI_INT_2COMP ? -xs[0].v : ~xs[0].v;
+                        r = Value::Const(op.out.size >= 8 ? rv : Wrap(rv));
+                    }
+                    else if (xs.size() == 2 && xs[0].kind == Value::Imm && xs[1].kind == Value::Imm &&
+                             (op.code == ghidra::CPUI_INT_LEFT || op.code == ghidra::CPUI_INT_RIGHT ||
+                              op.code == ghidra::CPUI_INT_SRIGHT || op.code == ghidra::CPUI_INT_MULT))
+                    {
+                        const int64_t a0 = xs[0].v, sh = xs[1].v;
+                        int64_t rv = 0;
+                        if (op.code == ghidra::CPUI_INT_MULT) rv = a0 * sh;
+                        else if (op.code == ghidra::CPUI_INT_LEFT) rv = sh >= 64 ? 0 : static_cast<int64_t>(static_cast<uint64_t>(a0) << sh);
+                        else if (op.code == ghidra::CPUI_INT_RIGHT) rv = sh >= 64 ? 0 : static_cast<int64_t>(static_cast<uint64_t>(a0) >> sh);
+                        else rv = sh >= 64 ? (a0 < 0 ? -1 : 0) : a0 >> sh;   // INT_SRIGHT, arithmetic
+                        r = Value::Const(op.out.size >= 8 ? rv : Wrap(rv));
+                    }
                     Set(s, op.out, r);
                 }
                 break;
