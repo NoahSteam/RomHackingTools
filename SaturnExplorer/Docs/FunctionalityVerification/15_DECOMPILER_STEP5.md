@@ -11211,3 +11211,77 @@ Mutation: `effects.storesBelow = 0;` in `ReturnCheck::Run` (the claim A3-71 adde
 - **The Live tests and the sanitizer job** (shared socket path; CI).
 
 **Done criteria.** Five rows at P1 (A3-82, A3-83, A3-84, A3-85, A3-88) and two at P2 (A3-86, A3-87): a fix round, then two consecutive clean review rounds. The count of consecutive clean rounds is 0.
+
+## Area 3, round 11 fix
+
+Fixer, branch `review/3-round11-fix`, on the coordinator's head `d8e4068`. Code commits `38b49f6` to `36a00d9` (host and pins), then the ledger, this record and the matrix. Own RelWithDebInfo build under the scratch directory, `-j2`, every run under `ulimit -v 4000000`.
+
+**What is fixed, and what stays open.** The three host rows are fixed: **A3-82, A3-83, A3-84 (P1)** by one fail-closed rule in the host interpreter (`ReturnCheck`, `Sh2Decompiler.cpp`). **A3-86 part a (P2)** is fixed the same way (the probe now reads an unlent captured callee's `storesBelow`). **A3-87 (P2)** and **A3-79 (P3)** are closed: a function whose text names the raw stack register is marked unsupported and withheld, and the printed-C differential excuses that known limit. **A3-85 and A3-88 (P1), and A3-86 part b, stay open**: they are engine-side (the alias analysis of patches 0056-0060), and a sound fix for them is a broad change to the vendored engine that needs the corpus-and-timing loop to validate -- section 6. No engine patch was added this round, so there is no new vendored patch, and `0061` stays unused.
+
+### 1. The class, and the rule
+
+Every host row was the same mistake the brief named: a frame address was recognised only through a list of exact forms (a base-plus-offset, a copy, an add, a join, an INDIRECT), and any other form failed open -- it was treated as "not a frame address", so the locals it could reach were folded across a call. Round 10's `storesBelow` (A3-71) was itself tracked only by exact arithmetic on a pointer (`Value::baseReg`/`regOff`), the one claim the round 10 rule's "every value depends on all its inputs unless the op is modelled exactly" was not applied to.
+
+The fix makes the host side fail closed, on one principle: **a value is a possible frame address when the stack pointer is among its origins by any data path** (`Value::Origins() & origin::kStack`), and **a store through a register-derived pointer with no exact base may be below it**. Concretely, in `ReturnCheck`:
+
+| Where it failed open | Now (fail closed) |
+|---|---|
+| `Store` recorded `storesBelow` only for a pointer with a tracked below-offset (`Value::StoresBelow()`) | ...and for a store through any `Fuzzy` value with no base and a parameter register among its origins (a pointer laundered through a mask, a shift or swap pair, a spill in parts): "stores anywhere through r_n" (A3-83 a, b, d, e, f, h) |
+| a pointer laundered through memory lost its register origin | a `Load` from untracked memory keeps, in its origins only (not its dependences, which the return rule reads), the parameter registers the function dereferenced (`mov.l @r4,r5`) or leaked to memory and read back (`mov.l r4,@global ; mov.l @global,r5`): A3-83 c, g |
+| `neg`/shift of a constant was an unfolded `Fuzzy`, so `add r3,r4` looked like a non-negative index | `INT_2COMP`, `INT_NEGATE`, `INT_LEFT`, `INT_RIGHT`, `INT_SRIGHT`, `INT_MULT` of constants fold, so `mov #16,r3 ; neg r3,r3 ; add r3,r4` lowers r4 by a tracked -16 (A3-83 d, e) |
+| `Apply`/`Call` never carried a lent callee's `storesBelow` | the lent branch of `Call` maps it: a callee that stores below the pointer it was handed in r makes this function store below every register that value was made from (its register origins) -- a wrapper, a thunk, a tail call (A3-82 a, b), and a pointer lowered on the way via the `storesThrough` branch (A3-82 d, e) |
+| a caller exposed the frame only for an exact stack address or a `Fuzzy` with a `Base()` in a `storesBelow` register | any value of stack origin there (`Origins() & kStack`) -- masked, reassembled from halves, read back from a global -- exposes the frame from its lowest slot (A3-84 a-d) |
+| the probe (A3-4) threw away an unlent captured callee's effects (`CallEffects unused; callee.Run(unused)`) | it keeps the walked callee's `storesBelow` (a cache beside the frame-words cache, shared across a request's passes) and exposes this frame when a register holds a possible frame address of ours (A3-86 a) |
+| a lent function whose text named the raw stack register `register0x0000003c` (A3-65's limit for a pointer into unmapped stack) was offered as a decompilation | such a function is marked unsupported and withheld -- never a lent signature with non-compilable text; an already-withheld function keeps its own reason (A3-87, A3-79) |
+
+When precision is impossible the rule withholds or keeps the local in the text; it never folds. The transitive and laundering claims are register sets, so they widen a cache key and a host alias at a call -- the cost is a drop in lending precision, measured in section 5.
+
+### 2. A3-87 and A3-79: the raw stack register
+
+A walk that reaches storage no local is mapped to -- a pushed register's save slot (`mov.l r14,@-r15 ; ... ; mov r14,r2 ; mov.l r1,@-r2`) -- prints a pointer into it as `register0x0000003c` (`BADSPACEBASE`), which is no C the printed-C differential can compile (`'register0x0000003c' undeclared`). The value is right; only a local to name the slot is missing, which the engine cannot supply (the A3-65 record listed it as "not done"). A3-87 escalated it because the pinned r14 fixture was **lent**. The fix: when the final text names `register0x`, the decompiler marks the function unsupported (so the printed-C differential skips it, not compiles it) and, if it was about to be lent, withholds it. The printed-C oracle excuses this one class (`raw-stack-register`, keyed on the text) instead of reporting `not-compilable`. A3-79 (the withheld "reads vbr" variant, seed 1010082) is the same raw name and is closed with it.
+
+### 3. Pins
+
+- **`TestArea3Round11Fix`** (`Sh2DecompilerTests.cpp`): the finding fixtures of A3-82 (wrapper, thunk, lowered thunk), A3-83 (mask, neg, shll2 constant, swap, aligned mask, global round trip, load through the argument) and A3-84 (masked, through a global, swapped) each lent and printing the local, not the stale `5`; A3-86 a withheld and printing the local. The callee chain is lent deepest-first.
+- **`TestA365WalkDown`** "from the frame pointer r14": now asserts the function is unsupported and withheld (A3-87), where it was lent with the raw text at the head.
+- **`TestPrintedC`** pins (`Sh2GeneratedTests.cpp`): the r14 fixture, A3-79's seed 1010082, and the two area-2-round-12 replays the coordinator routed (printed-C seeds 1503985 and 1506163) each come back `raw-stack-register`, not a failing seed.
+
+### 4. The mutation table
+
+Each part reverted alone in the committed tree, the suite rebuilt and run (`mut_a3r11.py` in the scratch directory); the generator excuse reverted for the printed-C pins. Counts are the CHECKs that fail.
+
+| Reverted | Fails |
+|---|---|
+| M84 the caller's exposure back to the exact-only test | 3 (`A3-84a`, `b`, `d`) |
+| M83 no `storesBelow` for a laundered register pointer in `Store` | 5 (`A3-83a`, `e`, `f`, `h`, and the control) |
+| M82t the transitive `storesBelow` mapping in `Call` | 2 (`A3-82a`, `b`) |
+| M82d the `storesThrough`-below claim (a lowered pointer handed on) | 1 (`A3-82d`) |
+| Mtaint the `Load` memory/deref provenance | 2 (`A3-83c`, `g`) |
+| Mfold the constant folds of neg/shift | 2 (`A3-83d`, `e`) |
+| M86a the probe's read of an unlent callee's `storesBelow` | 1 (`A3-86a`) |
+| M87 the raw-register unsupported/withhold (host) | 1 (the r14 pin) |
+| the printed-C `raw-stack-register` excuse (generator) | 4 (the four `TestPrintedC` raw-register pins become `undecompiled`, a failing class) |
+
+### 5. Cost on the corpora
+
+Not measured this round: the corpus-and-timing loop was not run to completion in this session. The transitive and laundering claims widen the host alias at calls whose callee stores below a register, so lending is expected to drop on functions that pass a frame address to such a callee or launder a pointer; the brief accepts a sound, measured drop, and this measurement is the open item the next round or the coordinator should take before merge. The round 10 baseline is hwram007 655 (901) / 680 (958) lending and hwram008 1,041 (1,253) / 1,071 (1,314); the before/after on both images, the list of functions whose text changes, a read of a sample against the code, and `TestGameCode` timed against 10.0 s and 33.6 s (under 1.5x) remain to be recorded.
+
+### 6. Not done (the engine rows)
+
+- **A3-85 (P1).** A frame pointer laundered through memory -- stored to a global and read back, or spilled in halves or bytes and reassembled -- is never recognised as a stack pointer by the engine's `gatherAdditiveBase`, so `AliasChecker::reachesStepDown` is never asked about it and the locals below the walk fold. A trial patch that extended `reachesStepDown` to follow bit-carrying ops and treat an escape to non-stack memory as stepping down gave **no** change to the A3-85 fixtures (the base is not in `addBase` to begin with), so it was reverted. The sound fix is for the engine to recognise a pointer reassembled from memory as possibly a stack pointer, which is a broad change with corpus impact that needs the validation loop.
+- **A3-88 (P1).** A pointer that is the join of a frame address with another pointer (a global, a parameter) and is then stepped below the frame address: the join makes it an indexed stack access whose guard covers the base and above, and the net-negative reach after the join (`p[-2] = v`, a pre-decrement, a counted walk) is not taken by `generateStoreGuard`/the alias analysis. The fix is in the engine's indexed-stack-pointer and guard logic.
+- **A3-86 part b.** A frame address a call returns (`mov r4,r0 ; rts`) is a new value to the engine with no base, so a caller that walks it down folds the locals. The fix is for the engine to take a lent callee's output as a frame address when its `outOrigins` name the register the frame address was passed in; the walk of A3-80 then applies.
+- The next free engine patch number `0061` is therefore still unused.
+
+### 7. The instrument gap
+
+Partly closed. The printed-C differential now has the `raw-stack-register` class and the four A3-87/A3-79 pins (section 3), and reverting the host withhold or the excuse fails them (section 4). **Still open** (for the engine rows and a complete close of section 7 of the round 11 review): `storesBelow` is not yet checked against a run in check 10b, and `GenWalkFn`/`GenSpillWalkFn` do not yet draw a callee that steps below its pointer, a wrapper or thunk around one, a laundering step before the walk, or a join of a frame address with another pointer. Those draws exercise the engine rows above, so they are best added with the engine fix that makes them pass.
+
+### 8. Matrix (host fix, code `36a00d9`)
+
+| Run | Result |
+|---|---|
+| `SaturnExplorerSh2DecompilerTests` (the suite, with `TestArea3Round11Fix`) | all passed |
+| `rowsfix.src` via the reviewer's driver | A3-82 (a-e), A3-83 (a-h), A3-84 (a-d) print the local and agree with the run; A3-86a withheld and prints the local; A3-87 withheld; A3-85, A3-88 still fold (open, section 6) |
+| mutation table | section 4 |
+| the two area-2-round-12 A3-87 replays (1503985, 1506163) | excused (`raw-stack-register`), 0 failing seeds |
