@@ -1610,17 +1610,21 @@ void CircleRange::widen(const CircleRange &op2,bool leftIsStable)
 
 {
   // SaturnExplorer (patches/0062-engine-range-domain-nzmask-widen.patch): the widened range holds the old one, in the old range's step and phase.
-  // The moved bound is the landmark's rounded to the phase in the direction that keeps the elements: the right bound up (upstream rounded it down
-  // when the landmark's remainder was above the phase, leaving out the last element), the left bound up to the phase's first element at or above
-  // the landmark's (upstream took the landmark's bound as it was, in the wrong phase). A full landmark has no end to move to: when the bound it gives
-  // cuts the old range (a wrapped range moved to [left,0)) the answer is all of the phase.
+  // The right bound is upstream's (the landmark's, in the phase of the range: a landmark that contains the range ends at or after it, so the bound
+  // is never short of the range's last element); the left bound is the first element of the range's phase at or above the landmark's (upstream
+  // took the landmark's bound as it was, in the wrong phase for a stride above the landmark's). A full landmark has no end to move to: when the bound
+  // it gives cuts the old range (a wrapped range moved to [left,0)) the answer is all of the phase.
   if (isempty) return;
   const uintb phase = left % step;
   const uintb oldLeft = left;
   const uintb oldRight = right;
   if (leftIsStable) {
-    const uintb mod = op2.right % step;
-    right = (op2.right + (phase + step - mod) % step) & mask;
+    uintb mod = op2.right % step;
+    if (mod <= phase)
+      right = op2.right + (phase - mod);
+    else
+      right = op2.right - (mod - phase);
+    right &= mask;
   }
   else {
     const uintb mod = op2.left % step;

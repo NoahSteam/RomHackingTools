@@ -2105,6 +2105,15 @@ void TestWidenRound12()
                 for (unsigned v = 0; v <= 255 && holds; ++v)
                     if (FwMember(v, a, 255) && !q.contains(v)) { holds = false; at = v; }
                 if (!holds) { fail("the old range is not held", both + " -> " + FwText(q) + " misses " + std::to_string(at)); continue; }
+                // inside a landmark that is not everything the widened range stays inside it (the fallback to all of the phase is for a full landmark
+                // only, and a bound rounded the wrong way would hide behind it)
+                if (!FwFull(lm))
+                {
+                    unsigned out = 256;
+                    for (unsigned v = 0; v <= 255 && out == 256; ++v)
+                        if (q.contains(v) && !FwMember(v, lm, 255)) out = v;
+                    if (out != 256) { fail("the widened range leaves the landmark", both + " -> " + FwText(q) + " holds " + std::to_string(out)); continue; }
+                }
                 // the bound that is stable stays; the other is the landmark's or the range is everything of its phase
                 if (leftStable ? q.getMin() != A.getMin() : q.getEnd() != A.getEnd())
                     if (!(q.getMin() == q.getEnd())) fail("the stable bound moved", both + " -> " + FwText(q));
@@ -2139,6 +2148,7 @@ uint64_t RcEval(const ghidra::Varnode* vn, const RcEnv& env)
     {
     case CPUI_COPY: return a;
     case CPUI_INT_ADD: return (a + b) & m;
+    case CPUI_INT_AND: return a & b;
     case CPUI_INT_MULT: return (a * b) & m;
     case CPUI_INT_ZEXT: return a;
     case CPUI_INT_SEXT: return static_cast<uint64_t>(PbSigned(a, sa)) & m;
@@ -2153,6 +2163,8 @@ uint64_t RcEval(const ghidra::Varnode* vn, const RcEnv& env)
         const int64_t s = PbSigned(a, sa) + PbSigned(b, sa), lim = static_cast<int64_t>(1) << (8 * sa - 1);   // sizes up to 4
         return (s < -lim || s >= lim) ? 1 : 0;
     }
+    case CPUI_INT_LESS: return a < b;
+    case CPUI_INT_LESSEQUAL: return a <= b;
     case CPUI_INT_SLESS: return PbSigned(a, sa) < PbSigned(b, sb);
     case CPUI_INT_SLESSEQUAL: return PbSigned(a, sa) <= PbSigned(b, sb);
     case CPUI_INT_EQUAL: return a == b;
@@ -2366,6 +2378,81 @@ void TestRulesByValueRound12()
             CHECK(rc == (c >= size ? 1 : 0));
             compare("RuleSignForm", std::to_string(size) + "-byte value, SUBPIECE at " + std::to_string(c), sub->getOut(), envs, before);
         }
+    // RulePiece2Sext: concat(V s>> 31, V) is sext(V) and only for the same V (the mutant took the sign of another value); a shift of one short of the
+    // sign is no sign
+    for (int size : { 1, 2, 4 })
+        for (int variant = 0; variant < 3; ++variant)     // 0: the same value, 1: another value, 2: the shift one short
+        {
+            Varnode* a = t.copyOf(size, 0);
+            Varnode* b = t.copyOf(size, 0);
+            PcodeOp* sign = t.op2(CPUI_INT_SRIGHT, size, variant == 1 ? b : a, t.k(4, 8 * size - 1 - (variant == 2 ? 1 : 0)));
+            PcodeOp* piece = t.op2(CPUI_PIECE, 2 * size, sign->getOut(), a);
+            std::vector<RcEnv> envs;
+            for (uint64_t v : RcInputs(size, 1, 13, 20))
+                for (uint64_t w : { static_cast<uint64_t>(0), PbMask(size), (PbMask(size) >> 1) + 1, static_cast<uint64_t>(3) })
+                    envs.push_back({ { a, v }, { b, w } });
+            const std::vector<uint64_t> before = RcValues(piece->getOut(), envs);
+            RulePiece2Sext rule("scratch");
+            const int rc = rule.applyOp(piece, *t.fd);
+            CHECK(rc == (variant == 0 ? 1 : 0));
+            compare("RulePiece2Sext", std::to_string(size) + "-byte value, variant " + std::to_string(variant), piece->getOut(), envs, before);
+        }
+    // RuleZextSless (shadowed in the pool by RuleSlessToLess, which sees the clear sign bits first: applied directly): zext(V) s< c is V < c when c
+    // has its sign bit clear at the size of V and is left alone otherwise
+    for (int size : { 1, 2 })
+        for (uint64_t c : { static_cast<uint64_t>(0), static_cast<uint64_t>(1), PbMask(size) >> 1, (PbMask(size) >> 1) + 1, PbMask(size), PbMask(size) + 1, static_cast<uint64_t>(0x7fffffff) })
+            for (int slot = 0; slot < 2; ++slot)
+                for (OpCode opc : { CPUI_INT_SLESS, CPUI_INT_SLESSEQUAL })
+                {
+                    Varnode* a = t.copyOf(size, 0);
+                    PcodeOp* ext = t.op1(CPUI_INT_ZEXT, 4, a);
+                    PcodeOp* cmp = slot == 0 ? t.op2(opc, 1, ext->getOut(), t.k(4, c)) : t.op2(opc, 1, t.k(4, c), ext->getOut());
+                    std::vector<RcEnv> envs;
+                    for (uint64_t v : RcInputs(size, c, 17, 20)) envs.push_back({ { a, v } });
+                    const std::vector<uint64_t> before = RcValues(cmp->getOut(), envs);
+                    RuleZextSless rule("scratch");
+                    const int rc = rule.applyOp(cmp, *t.fd);
+                    CHECK(rc == ((c >> (8 * size - 1)) == 0 ? 1 : 0));
+                    compare("RuleZextSless", std::to_string(size) + "-byte value, constant " + std::to_string(c), cmp->getOut(), envs, before);
+                }
+    // RuleSignForm2 (it changes the input and returns 0, so the rule counter never saw it): sub(sext(V) * c, 4) s>> 31 reads V s>> 31 for a constant c of
+    // at most the size of V, and is left alone for a larger one
+    for (uint64_t c : { static_cast<uint64_t>(1), static_cast<uint64_t>(5), static_cast<uint64_t>(0x10001), static_cast<uint64_t>(0x7fffffff), static_cast<uint64_t>(0xffffffffu), static_cast<uint64_t>(0x100000000ull), static_cast<uint64_t>(0x8000000000000000ull) })
+    {
+        Varnode* a = t.copyOf(4, 0);
+        PcodeOp* ext = t.op1(CPUI_INT_SEXT, 8, a);
+        PcodeOp* mult = t.op2(CPUI_INT_MULT, 8, ext->getOut(), t.k(8, c));
+        PcodeOp* high = t.op2(CPUI_SUBPIECE, 4, mult->getOut(), t.k(4, 4));
+        PcodeOp* sh = t.op2(CPUI_INT_SRIGHT, 4, high->getOut(), t.k(4, 31));
+        std::vector<RcEnv> envs;
+        for (uint64_t v : RcInputs(4, 1, 19, 40)) envs.push_back({ { a, v } });
+        const std::vector<uint64_t> before = RcValues(sh->getOut(), envs);
+        RuleSignForm2 rule("scratch");
+        CHECK(rule.applyOp(sh, *t.fd) == 0);                     // it never reports a change
+        CHECK((sh->getIn(0) == a) == (c <= 0xffffffffull));      // but it makes one
+        compare("RuleSignForm2", "constant " + std::to_string(c), sh->getOut(), envs, before);
+    }
+    // RuleRightShiftAnd (A2-80): `(V & mask) >> sa` and `s>> sa` is `V >> sa` when the mask keeps every bit that survives the shift; for a shift by the
+    // width of V or more nothing survives, both sides of the rule's test were 0, and the mask was dropped, which is wrong for the arithmetic shift (its
+    // result is the sign bit, and the mask can clear it): `(b & 0x20) s>> 8` of a byte is 0, not the sign of b
+    for (int size : { 1, 2, 4 })
+        for (uint64_t sa : { 0, 1, 4, 7, 8, 9, 15, 16, 17, 31, 32, 33, 40, 63, 64 })
+            for (OpCode shiftOpc : { CPUI_INT_RIGHT, CPUI_INT_SRIGHT })
+                for (uint64_t mk : { PbMask(size), static_cast<uint64_t>(0x20), static_cast<uint64_t>(0xf0), PbMask(size) & ~static_cast<uint64_t>(0xff), (PbMask(size) >> 1) + 1, PbMask(size) >> 1, static_cast<uint64_t>(0xff00), static_cast<uint64_t>(0x8000) })
+                {
+                    const uint64_t m = PbMask(size);
+                    Varnode* a = t.copyOf(size, 0);
+                    PcodeOp* andOp = t.op2(CPUI_INT_AND, size, a, t.k(size, mk & m));
+                    PcodeOp* sh = t.op2(shiftOpc, size, andOp->getOut(), t.k(4, sa));
+                    std::vector<RcEnv> envs;
+                    for (uint64_t v : RcInputs(size, 1, 23, 30)) envs.push_back({ { a, v } });
+                    const std::vector<uint64_t> before = RcValues(sh->getOut(), envs);
+                    RuleRightShiftAnd rule("scratch");
+                    const int rc = rule.applyOp(sh, *t.fd);
+                    const bool applies = sa < static_cast<uint64_t>(8 * size) && ((mk & m) >> sa) == (m >> sa);
+                    CHECK(rc == (applies ? 1 : 0));
+                    compare("RuleRightShiftAnd", std::to_string(size) + "-byte value, mask " + std::to_string(mk & m) + ", " + (shiftOpc == CPUI_INT_RIGHT ? "unsigned" : "signed") + " shift by " + std::to_string(sa), sh->getOut(), envs, before);
+                }
     std::printf("rules by value: %ld graphs, %ld values compared\n", graphs, values);
 }
 
