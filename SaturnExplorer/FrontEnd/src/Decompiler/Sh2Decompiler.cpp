@@ -343,6 +343,8 @@ public:
         mLiterals = &words;
         mLiteralMemory = &snapshot;
     }
+    // A cancel flag the walk checks periodically (A3-74): a long walk of an adversarial callee is interruptible.
+    void SetCancel(std::atomic<bool>* cancel) { mCancel = cancel; }
 
     // The calls (by the instruction that makes them) a frame address escapes at in a register the call is shown without, and which (bit 2: r2, bit 7: r7).
     const std::map<uint32_t, uint32_t>& EscapeSites() const { return mEscapeSites; }
@@ -410,6 +412,7 @@ public:
         mOwnFrameWords = 0;
         mFrameWords = 0;
         mStoresThrough = 0;
+        mStoresBelow = 0;
         mOut = 0;
         mLeaks = 0;
         mFrameValues = 0;
@@ -425,6 +428,17 @@ public:
             const uint32_t a = *work.begin();
             work.erase(work.begin());
             if (++steps > mMaxSteps) return "a return not proven to go to its caller (too many paths)";
+            // A cancel requested anywhere reaches the probe's walk too (A3-74: the outer phases check it, this did not).
+            if (mCancel != nullptr && (steps & 0x3FFu) == 0 && mCancel->load()) throw ghidra::CancelError("cancelled");
+            // The walk of an unlent callee (CalleeFrameWrites) is quadratic in the callee's stores: each state copies its slots map, and a
+            // callee of thousands of pushes cost seconds and gigabytes (A3-74). Bound it by the slots a state holds, as kNestedMaxSteps bounds
+            // the instructions; past the bound, fail closed -- the callee may write any word of its caller's frame.
+            if (mNested && in[a].slots.size() > kNestedMaxSlots)
+            {
+                mOwnFrameWords |= CallEffects::kFrameAny;
+                mCallerFrameStores |= origin::kFrame;
+                break;
+            }
             std::vector<std::pair<uint32_t, State>> out;
             const std::string why = Step(a, in[a], out);
             if (!why.empty()) return why;
@@ -442,6 +456,7 @@ public:
         }
         effects.preserved = mPreserved;
         effects.storesThrough = mStoresThrough;
+        effects.storesBelow = mStoresBelow;
         effects.outOrigins = mOut;
         effects.leaks = mLeaks;
         effects.frameValues = mFrameValues;
@@ -454,6 +469,7 @@ public:
 private:
     static constexpr size_t kMaxSteps = 200000;
     static constexpr size_t kNestedMaxSteps = 20000;   // a callee walked for CalleeFrameWrites: one it cannot follow in that writes nothing
+    static constexpr size_t kNestedMaxSlots = 256;     // ...and the stack words it stores to: past this the walk is bounded (A3-74)
     static constexpr int kWidenAfter = 6;
     static constexpr int kTracked = 22;   // the registers origin:: names, in its order
     static constexpr int kR15 = 15, kSr = 16, kPr = 21;
@@ -568,6 +584,33 @@ private:
         static int64_t MoveBase(int64_t base, int64_t by) { return base == kLowBase ? kLowBase : Wrap(base + by); }
         int64_t stackBase = kNoBase;
         int64_t Base() const { return kind == Sp ? v : kind == Fuzzy ? stackBase : kNoBase; }
+        // A3-71: an offset from a parameter register's entry value (r0-r14, not r15), for recognising a store below the address a callee was
+        // handed in that register (`*--p = v`, `mov.l r1,@(-4,r4)`). 'baseReg' names the register, or -1. 'regOff' is the constant offset, or
+        // kLowBase (a variable was subtracted, or a loop lowered it: possibly below) or kHighBase (a non-negative variable index was added: at
+        // or above the entry value, exact unknown, as the engine takes an index). A store is below when regOff is kLowBase or a negative constant.
+        static constexpr int64_t kHighBase = INT64_MIN + 2;
+        int8_t baseReg = -1;
+        int64_t regOff = 0;
+        // Move a register offset by a constant, or by a non-negative variable (index added, or value subtracted).
+        static int64_t MoveRegConst(int64_t off, int64_t by)
+        {
+            return off == kLowBase ? kLowBase : off == kHighBase ? (by < 0 ? kLowBase : kHighBase) : off + by;
+        }
+        static int64_t MoveRegVar(int64_t off, bool add)
+        {
+            if (!add) return kLowBase;   // a variable subtracted: possibly below
+            return off == kLowBase ? kLowBase : off == kHighBase ? kHighBase : off >= 0 ? kHighBase : kLowBase;
+        }
+        bool RegBase(int& reg, int64_t& off) const
+        {
+            if (kind == Reg && v >= 0 && v < 15 && v != 15) { reg = static_cast<int>(v); off = 0; return true; }
+            if (kind == Fuzzy && baseReg >= 0) { reg = baseReg; off = regOff; return true; }
+            return false;
+        }
+        bool StoresBelow() const
+        {
+            return kind == Fuzzy && baseReg >= 0 && (regOff == kLowBase || (regOff != kHighBase && regOff < 0));
+        }
         static Value Entry(int r) { Value x; x.kind = Reg; x.v = r; return x; }
         static Value Stack(int64_t off) { Value x; x.kind = Sp; x.v = off; return x; }
         static Value Const(int64_t c) { Value x; x.kind = Imm; x.v = c; return x; }
@@ -654,7 +697,8 @@ private:
             return kind == o.kind && v == o.v && carried == o.carried && callTarget == o.callTarget && read == o.read &&
                    exposedAt == o.exposedAt &&
                    (kind != Fuzzy || (from == o.from && dep == o.dep && def == o.def && hole == o.hole && stackBase == o.stackBase && own == o.own &&
-                                     usesR0 == o.usesR0 && joined == o.joined && keepsR0 == o.keepsR0 && callerHigh == o.callerHigh && part == o.part));
+                                     usesR0 == o.usesR0 && joined == o.joined && keepsR0 == o.keepsR0 && callerHigh == o.callerHigh && part == o.part &&
+                                     baseReg == o.baseReg && regOff == o.regOff));
         }
     };
     using Key = std::tuple<ghidra::AddrSpace*, ghidra::uintb, ghidra::uint4>;
@@ -714,11 +758,22 @@ private:
                 const uint64_t below = std::get<2>(v.first) - (vn.offset - std::get<1>(v.first)) - vn.size;
                 Value p = Value::From(v.second.Origins(), v.second.DepsOf().Right(static_cast<int64_t>(8 * below)));
                 if (v.second.kind == Value::Reg) p.part = static_cast<int8_t>(v.second.v);
+                // A part of a register is rebuilt as a Fuzzy value, so the flags the return rule reads would be lost -- but a part of r0's entry
+                // value is a use of it, a part of a carried or joined value is that, a part of what a call returned is not the function's own
+                // (A3-68). Keep them.
+                p.usesR0 = v.second.UsesR0();
+                p.carried = v.second.carried;
+                p.joined = v.second.Joined();
+                p.keepsR0 = v.second.KeepsR0();
+                p.read = v.second.read;
+                p.own = v.second.Own();
                 return p;
             }
             const uint64_t whole = std::get<2>(v.first), below = whole - (vn.offset - std::get<1>(v.first)) - vn.size;
             const uint64_t mask = vn.size >= 8 ? ~0ull : (1ull << (8 * vn.size)) - 1;   // big-endian: the last bytes are the low ones
-            return Value::Const(static_cast<int64_t>((static_cast<uint64_t>(v.second.v) >> (8 * below)) & mask));
+            Value p = Value::Const(static_cast<int64_t>((static_cast<uint64_t>(v.second.v) >> (8 * below)) & mask));
+            p.carried = v.second.carried;   // a part of a value held in r0 across a call that keeps r0 is still that (A3-68)
+            return p;
         }
         return Value();
     }
@@ -741,13 +796,18 @@ private:
         // stack pointer rises past holds anything from then on.
         if (KeyOf(vn) == KeyOf(mReg[kR15]))
             for (auto& slot : s.slots)
-                if (v.kind != Value::Sp || slot.first < v.v) slot.second = Value::From(kAnything);
+                if (v.kind != Value::Sp || slot.first < v.v) slot.second = FreeStack();
     }
 
     static constexpr uint32_t kAnything = origin::kRegisters | origin::kStack | origin::kMemory;
 
     // What a load from untracked memory can give.
     static Value Loaded(const State& s) { return Value::From(origin::kMemory | (s.escaped ? origin::kStack : 0)); }
+    // A value read from free stack or through a stack pointer the interpreter cannot place (below r15, or a pointer with no bound): its
+    // origins are anything (it may be a spilled register), but as a dependence for the return rule it is a read of memory and the stack, not of
+    // every register -- a word read from the stack is no register a caller passes. Without this the union of its dependences with a real input
+    // (`nothing-known + r3`) hid that input (A3-66, A3-67); the input is now kept, and the pure memory read is still no input (06038F64/008).
+    static Value FreeStack() { return Value::From(kAnything, Deps::All(origin::kMemory | origin::kStack)); }
     // ...and a slot of the frame at 'offset' that nothing wrote on some path: at or above the entry r15, a word of the caller's frame, which is a
     // stack argument (kDepArg0).
     static Value Unwritten(const State& s, int64_t offset)
@@ -819,6 +879,7 @@ private:
     {
         auto widen = [](Value& v) {
             if (v.kind == Value::Fuzzy && v.stackBase != Value::kNoBase) v.stackBase = Value::kLowBase;
+            if (v.kind == Value::Fuzzy && v.baseReg >= 0) v.regOff = Value::kLowBase;   // A3-71: a loop that moves a register pointer
         };
         for (auto& v : st.vars) widen(v.second);
         for (auto& v : st.slots) widen(v.second);
@@ -857,6 +918,17 @@ private:
             if (ab && bb) m.stackBase = std::min(a.Base(), b.Base());
             else if (ab && !bStack) m.stackBase = a.Base();
             else if (bb && !aStack) m.stackBase = b.Base();
+        }
+        // A3-71: a register-relative pointer kept where both sides name the same register; two offsets of it (a loop decrement) is lowered to
+        // "possibly below".
+        {
+            int ar = -1, br = -1;
+            int64_t ao = 0, bo = 0;
+            if (a.RegBase(ar, ao) && b.RegBase(br, bo) && ar == br)
+            {
+                m.baseReg = static_cast<int8_t>(ar);
+                m.regOff = ao == bo ? ao : Value::kLowBase;
+            }
         }
         if (m == a) return false;
         a = m;
@@ -956,6 +1028,20 @@ private:
                 e.preserved |= 1u << kR15;
                 e.spDelta = 0;
             }
+            // A3-70: a callee walked for CalleeFrameWrites that itself hands its incoming frame onward -- r15 still at or above its entry (its
+            // stack-argument area is this function's frame), or a frame address in an argument register -- may write any word of its caller's
+            // frame through a call the nested walk cannot resolve. Fail closed: treat it as writing the whole frame.
+            if (mNested)
+            {
+                const Value sp = Get(s, mReg[kR15]);
+                bool handsFrame = sp.kind == Value::Sp && sp.v >= 0;
+                for (int r = 0; r < 8 && !handsFrame; ++r) handsFrame = Get(s, mReg[r]).AtOrAboveEntry();
+                if (handsFrame)
+                {
+                    mOwnFrameWords |= CallEffects::kFrameAny;
+                    mCallerFrameStores |= origin::kFrame;
+                }
+            }
         }
         else
         {
@@ -965,6 +1051,19 @@ private:
             // not exact (an exact one is the engine's, and was never a problem).
             for (int r = 0; r < 15; ++r)
                 if ((e.storesThrough >> r) & 1u) NoteFrameEscape(s, r, false, at);
+            // ...and one that writes below the exact frame address it was handed (a lent `fill backwards`, `*--p = v`): the engine reaches only
+            // the object at the address and above, so the locals below it would be folded across the call (A3-71). The amount is unknown, so the
+            // whole frame below is exposed. NoteFrameEscape's skip of an exact address stands for a callee that only writes at or above it.
+            for (int r = 0; r < 15; ++r)
+                if ((e.storesBelow >> r) & 1u)
+                {
+                    const Value h = Get(s, mReg[r]);
+                    if (h.kind == Value::Sp || (h.kind == Value::Fuzzy && h.Base() != Value::kNoBase))
+                    {
+                        mEscaped = true;
+                        mEscapedLow = true;   // from the frame's lowest slot (FrameEscape)
+                    }
+                }
             // ...and one handed an address at or above this function's entry r15 (`mov r15,r4 ; add #4,r4 ; bsr h`, h stores through
             // r4) writes a word of this function's caller's frame, as a store of its own there would (A3-39). What h stores is not in the
             // effects as a value, so the hand-back is withheld whatever it is.
@@ -1020,25 +1119,23 @@ private:
 
     // A callee that is not lent may write the words of this function's frame from the call's r15 up through its own r15: they are its incoming
     // stack arguments, and a hand-written one hands a value back in its argument slot (A3-21's channel, which withholds the callee). The engine
-    // takes the call to write none of them and folds this function's read of the word after the call to what it stored before (A3-61). The
-    // words this function wrote there are marked with the call (Value::exposedAt), and a read of one after it that the callee writes
-    // (CalleeFrameWrites: bit k the word at the call's r15 + 4k) declares the alias and says the note (ReadExposed). Not every word at or above
-    // the call's r15: compiled code keeps its locals there across calls, and a note at each (815 of image 007's 839 functions) says nothing.
+    // takes the call to write none of them and folds this function's read of the word after the call to what it stored before (A3-61). Each word
+    // this function wrote there, and that the callee writes (CalleeFrameWrites: bit k the word at the call's r15 + 4k), is marked with the call
+    // (Value::exposedAt); a read of it after the call declares the alias and says the note (ReadExposed). A word a later call leaves alone keeps
+    // the mark of the call that wrote it, so a word the first of two calls writes is not folded away because the second does not (A3-75). Not
+    // every word at or above the call's r15: compiled code keeps its locals there across calls, and a note at each (815 of 839) says nothing.
     void ExposeStackArguments(State& s, uint32_t at, uint32_t target)
     {
         const Value sp = Get(s, mReg[kR15]);
         if (sp.kind != Value::Sp) return;
-        bool any = false;
+        const uint32_t words = CalleeFrameWrites(target);
+        if (words == 0) return;   // the callee writes none of its caller's frame
         for (auto& slot : s.slots)
-            if (slot.first >= sp.v && !(slot.second.kind == Value::Fuzzy && slot.second.hole))
+            if (slot.first >= sp.v && slot.second.exposedAt == 0 && !(slot.second.kind == Value::Fuzzy && slot.second.hole))
             {
-                slot.second.exposedAt = at;
-                any = true;
+                const int64_t k = (slot.first - sp.v) / 4;
+                if ((words & CallEffects::kFrameAny) || (k >= 0 && k < 31 && ((words >> k) & 1u))) slot.second.exposedAt = at;
             }
-        if (!any) return;
-        // (the call's r15 is the same on every path to it, or the words are not placed: any of them)
-        auto e = mExposedCalls.emplace(at, ExposedCall{ target, sp.v });
-        if (!e.second && e.first->second.sp != sp.v) e.first->second.sp = Value::kNoBase;
     }
     // The words of its caller's frame that the function at 'target' writes itself, as CallEffects::frameWords has them (A3-21's stores, an
     // argument register spilled into the home area included), read from its code by the same walk; 0 when it writes none, or when the walk
@@ -1059,15 +1156,11 @@ private:
         mCalleeFrameWrites[target] = words;
         return words;
     }
-    // ...the read of such a word: when the callee writes it, the alias from the word up, and the note at the call (bit 16 of the site's mask).
+    // ...the read of such a word, after the call that exposed it: the alias from the word up, and the note at that call (bit 16 of its mask).
+    // Whether the callee writes it was settled when the word was marked (ExposeStackArguments), so each word points at the call that wrote it.
     void ReadExposed(const Value& slot, int64_t offset)
     {
         if (!mTolerant || slot.exposedAt == 0) return;
-        const auto c = mExposedCalls.find(slot.exposedAt);
-        if (c == mExposedCalls.end()) return;
-        const uint32_t words = CalleeFrameWrites(c->second.target);
-        const int64_t k = c->second.sp == Value::kNoBase ? -1 : (offset - c->second.sp) / 4;
-        if (!((words & CallEffects::kFrameAny) || (words != 0 && k < 0) || (k >= 0 && k < 31 && ((words >> k) & 1u)))) return;
         mEscapeSites[slot.exposedAt] |= 1u << 16;
         if (!mEscaped || offset < mEscapeLow) mEscapeLow = offset;
         mEscaped = true;
@@ -1187,6 +1280,9 @@ private:
     {
         const int64_t n = valueVn.size;
         const uint32_t v = value.Origins();
+        // A3-71: a store below the frame address a parameter register held on entry (`*--p = v`, a negative displacement). A caller that hands
+        // a lent callee an exact frame address in that register must expose the locals below it (Call reads CallEffects::storesBelow).
+        if (addr.StoresBelow()) mStoresBelow |= 1u << addr.baseReg;
         if (addr.kind == Value::Sp)
         {
             if (addr.v + n > 0)   // at or above r15 on entry: the caller's frame
@@ -1214,6 +1310,17 @@ private:
                 w.hole = false;   // (and no exposure: a register's value never carries one, Set)
                 s.slots[addr.v] = w;
             }
+            else
+                // A partial store leaves the word a Fuzzy mix (Clobber), which drops the flags; a byte of r0, or of a carried value, spilled
+                // and reloaded is still a use of r0, or carried (A3-68). Keep them on the word it touched.
+                for (auto& slot : s.slots)
+                    if (slot.first + 4 > addr.v && slot.first < addr.v + n)
+                    {
+                        slot.second.usesR0 = slot.second.UsesR0() || value.UsesR0();
+                        slot.second.carried = slot.second.carried || value.carried;
+                        slot.second.joined = slot.second.Joined() || value.Joined();
+                        slot.second.keepsR0 = slot.second.KeepsR0() || value.KeepsR0();
+                    }
             return;
         }
         // An address made of the entry r15 (or a word above it) and an index may be a word of the caller's frame: the same hand-back
@@ -1254,7 +1361,7 @@ private:
         {
             // Below r15 an interrupt may have written anything.
             const Value sp = Get(s, mReg[kR15]);
-            if (sp.kind != Value::Sp || addr.v < sp.v) return Value::From(kAnything);
+            if (sp.kind != Value::Sp || addr.v < sp.v) return FreeStack();
             if (n == 4)
             {
                 auto f = s.slots.find(addr.v);
@@ -1266,21 +1373,29 @@ private:
             }
             uint32_t o = Loaded(s).from;
             Deps d = Deps::All(o);
+            Value r;
             for (const auto& slot : s.slots)
                 if (slot.first < addr.v + n && addr.v < slot.first + 4)
                 {
                     ReadExposed(slot.second, slot.first);
                     o |= slot.second.Origins();
                     d |= Deps::All(slot.second.Direct());
+                    // A part of a word a byte spill of r0 (or a carried value) put there is read back: keep the flags (A3-68).
+                    r.usesR0 = r.usesR0 || slot.second.UsesR0();
+                    r.carried = r.carried || slot.second.carried;
+                    r.joined = r.joined || slot.second.Joined();
+                    r.keepsR0 = r.keepsR0 || slot.second.KeepsR0();
                 }
             // A word nothing wrote: at or above the entry r15, the caller's (a stack argument).
             for (int64_t w = addr.v & ~int64_t(3); w < addr.v + n; w += 4)
                 if (s.slots.count(w) == 0) d |= Deps::All(ArgDep(w));
-            return Value::From(o, d);
+            r.from = o;
+            r.dep = d;
+            return r;
         }
         // Through an address that may be in the stack but not exactly: nothing bounds it above r15,
         // so it may read free stack, which holds anything.
-        return MayBeStack(s, addr) ? Value::From(kAnything) : Loaded(s);
+        return MayBeStack(s, addr) ? FreeStack() : Loaded(s);
     }
 
     // At a return: PR must be the caller's; and what the caller sees afterwards is recorded.
@@ -1326,16 +1441,16 @@ private:
         if (v.Joined() && v.KeepsR0()) mReturnJoinsR0 |= d;
     }
 
-    // What a value in r0 at a return was computed from by this function's own instructions, as inputs (kInputs). Two things are no input of
-    // it. r0's entry value where no op read it: a path that leaves r0 alone (A3-14's scratch r0 of compiled code, `phi(in_r0, 5)`); an op that
-    // computes from it is a read (`add #1,r0`, `rotcr r0`, `mov.b @(r0,r4),r0`). And anything of a value nothing is known of (every register among
-    // its origins: a word loaded through a pointer that may be anywhere in the stack, a user op's output), which is taken for memory, as a
-    // condition on one is (A3-55).
+    // What a value in r0 at a return was computed from by this function's own instructions, as inputs (kInputs). One thing is no input of it:
+    // r0's entry value where no op read it, a path that leaves r0 alone (A3-14's scratch r0 of compiled code, `phi(in_r0, 5)`); an op that
+    // computes from it is a read (`add #1,r0`, `rotcr r0`, `mov.b @(r0,r4),r0`). Nothing else is excused: a value the interpreter cannot model
+    // carries its inputs' dependences and fails closed (A3-66 to A3-69, A3-76). A read of memory or the stack is modelled -- its dependence is
+    // kMemory/kStack, which `kInputs` does not name -- so a word loaded through a pointer anywhere in the stack (06038F64/008) is still no
+    // input, but r3 joined or summed with it is (its register bit survives the union).
     static uint32_t ReturnInput(const Value& v)
     {
         if (v.kind == Value::Reg && v.v == 0) return 0;
         uint32_t d = v.Direct();
-        if ((d & origin::kRegisters) == origin::kRegisters) return 0;
         if (!v.UsesR0()) d &= ~1u;
         return d & kInputs;
     }
@@ -1412,11 +1527,11 @@ private:
         return Deps::All(all.Union());
     }
 
-    // ...and of a condition (a branch's, or a jump table's index): the same, r0's entry value included (a test reads it).
+    // ...and of a condition (a branch's, or a jump table's index): the same, r0's entry value included (a test reads it), and failing closed in
+    // the same way -- a hidden register compared with a word read from the stack still chooses (A3-67).
     static uint32_t ChooserInput(const Value& c)
     {
-        const uint32_t d = c.Direct();
-        return (d & origin::kRegisters) == origin::kRegisters ? 0u : d & kInputs;
+        return c.Direct() & kInputs;
     }
 
     // One instruction (with its delay slot, which the engine's p-code for a delayed branch holds):
@@ -1472,6 +1587,35 @@ private:
             switch (op.code)
             {
             case ghidra::CPUI_COPY: Set(s, op.out, Get(s, op.in[0])); break;
+            // The zero- or sign-extension of a constant is a constant. SLEIGH writes `and #imm,r0` and `xor #imm,r0` as `r0 op zext(imm:1)`;
+            // without this fold the ZEXT is a Fuzzy value, so OpDeps saw no mask on the `and` (the T flag the caller left was dropped with SR's
+            // other bits, A3-69) and `xor #0,r0` was not the identity the table means it to be (A3-77).
+            case ghidra::CPUI_INT_ZEXT:
+            case ghidra::CPUI_INT_SEXT:
+                if (op.hasOut && !op.in.empty())
+                {
+                    const Value x = Get(s, op.in[0]);
+                    if (x.kind == Value::Imm)
+                    {
+                        const int inBits = 8 * static_cast<int>(op.in[0].size);
+                        const uint64_t mask = inBits >= 64 ? ~0ull : ((1ull << inBits) - 1);
+                        uint64_t val = static_cast<uint64_t>(x.v) & mask;
+                        if (op.code == ghidra::CPUI_INT_SEXT && inBits < 64 && ((val >> (inBits - 1)) & 1u)) val |= ~mask;
+                        Value r = Value::Const(op.out.size >= 8 ? static_cast<int64_t>(val) : Wrap(static_cast<int64_t>(val)));
+                        r.carried = x.carried;   // a carried value extended is still carried (A3-68)
+                        Set(s, op.out, r);
+                    }
+                    else
+                    {
+                        std::vector<Value> xs{ x };
+                        Value r = Value::From(x.Origins(), OpDeps(op, xs));
+                        r.carried = x.carried;
+                        r.usesR0 = x.UsesR0();
+                        r.joined = x.Joined();
+                        Set(s, op.out, r);
+                    }
+                }
+                break;
             case ghidra::CPUI_INT_ADD:
             case ghidra::CPUI_INT_SUB:
             {
@@ -1494,7 +1638,10 @@ private:
                 // a constant added to it later added to the base.
                 else if (x.Base() != Value::kNoBase || (!sub && y.Base() != Value::kNoBase))
                 {
-                    r = Value::From(origin::kStack);
+                    // The sum is a stack address, but it still depends on the index added to it: a frame address plus a hidden register, or
+                    // plus a loaded word, is a real input (A3-76). Keep the sum's dependences and flags; only the origin narrows to the stack.
+                    r.from = origin::kStack;
+                    r.stackBase = Value::kNoBase;
                     r.callerHigh = x.AtOrAboveEntry() || (!sub && y.AtOrAboveEntry());
                     const bool xb = x.Base() != Value::kNoBase, yb = y.Base() != Value::kNoBase;
                     // A constant moves the base; any other index may be negative (`p - i`, `p + i` for an i below zero reach the
@@ -1503,6 +1650,24 @@ private:
                         r.stackBase = y.kind == Value::Imm ? Value::MoveBase(x.Base(), sub ? -y.v : y.v) : Value::kLowBase;
                     else if (!sub && yb && !xb)
                         r.stackBase = x.kind == Value::Imm ? Value::MoveBase(y.Base(), x.v) : Value::kLowBase;
+                }
+                // ...and, for a pointer that is a parameter register's entry value give or take an offset, track that offset (A3-71), unless the
+                // value is a stack address (handled above).
+                if (r.kind == Value::Fuzzy && r.stackBase == Value::kNoBase)
+                {
+                    int xr = -1, yr = -1;
+                    int64_t xo = 0, yo = 0;
+                    const bool xg = x.RegBase(xr, xo), yg = y.RegBase(yr, yo);
+                    if (xg && !yg)
+                    {
+                        r.baseReg = static_cast<int8_t>(xr);
+                        r.regOff = y.kind == Value::Imm ? Value::MoveRegConst(xo, sub ? -y.v : y.v) : Value::MoveRegVar(xo, !sub);
+                    }
+                    else if (!sub && yg && !xg)
+                    {
+                        r.baseReg = static_cast<int8_t>(yr);
+                        r.regOff = x.kind == Value::Imm ? Value::MoveRegConst(yo, x.v) : Value::MoveRegVar(yo, true);
+                    }
                 }
                 Set(s, op.out, r);
                 break;
@@ -1625,7 +1790,18 @@ private:
                 }
                 // jmp @rN with rN holding the caller's PR is a return like rts (the engine takes a jump
                 // table it cannot recover that way too, when the target is the return address).
-                if (!found && !Return(s, op.in[0]) && !mTolerant) return "an indirect jump it does not resolve";
+                if (!found)
+                {
+                    const bool isReturn = Return(s, op.in[0]);
+                    if (!isReturn && !mTolerant) return "an indirect jump it does not resolve";
+                    // A3-70: in a nested callee walk a tail jump the walk cannot resolve (a thunk `jmp @r1` to the function that actually
+                    // writes the frame) may reach any writer of this function's caller's frame. Fail closed.
+                    if (!isReturn && mNested)
+                    {
+                        mOwnFrameWords |= CallEffects::kFrameAny;
+                        mCallerFrameStores |= origin::kFrame;
+                    }
+                }
                 falls = false;
                 break;
             }
@@ -1681,7 +1857,8 @@ private:
     std::set<uint32_t> mNoReturn;            // call instructions the engine knows do not return
     const std::set<uint32_t>* mLiterals = nullptr;   // the probe's literal-pool words, and where to read them (SetLiterals)
     const MemorySnapshot* mLiteralMemory = nullptr;
-    uint32_t mPreserved = 0, mStoresThrough = 0, mOut = 0, mLeaks = 0, mFrameValues = 0;
+    uint32_t mPreserved = 0, mStoresThrough = 0, mStoresBelow = 0, mOut = 0, mLeaks = 0, mFrameValues = 0;
+    std::atomic<bool>* mCancel = nullptr;   // A3-74: checked in Run
     bool mSpSeen = false, mSpKnown = true;   // r15 at the returns reached: one constant offset from its entry value, or not
     int64_t mSpDelta = 0;
     bool mCarriedInReturn = false;
@@ -1694,12 +1871,6 @@ private:
     bool mTolerant = false;
     bool mNested = false;              // a walk of a callee's code for CalleeFrameWrites, which asks no further
     size_t mMaxSteps = kMaxSteps;
-    struct ExposedCall
-    {
-        uint32_t target;
-        int64_t sp;   // the call's r15 (from r15 on entry), Value::kNoBase when it differs by path
-    };
-    std::map<uint32_t, ExposedCall> mExposedCalls;   // the unlent calls whose words are marked (ExposeStackArguments)
     uint32_t mOwnFrameWords = 0;       // the words of the caller's frame this function's own stores write (CallEffects::frameWords' bits)
     std::map<uint32_t, uint32_t> mCalleeFrameWrites;   // CalleeFrameWrites, by target
     std::map<uint32_t, uint32_t> mEscapeSites;   // the calls that escape was declared at because of r2 or r7, and which
@@ -1822,7 +1993,8 @@ uint32_t HeldInputs(const ghidra::Funcdata& fd)
 // signature is locked: the caller's call shows exactly those arguments and that return, and
 // nothing later revisits it. So it is lent only when the recovery saw everything that decides it.
 std::string WithholdReason(ghidra::Funcdata& fd, const std::map<uint32_t, Prototype>& lent, uint32_t exec,
-                           uint32_t entry, const JumpDests& tables, CallEffects& effects)
+                           uint32_t entry, const JumpDests& tables, CallEffects& effects,
+                           const std::set<uint32_t>* literals = nullptr, const MemorySnapshot* literalMemory = nullptr)
 {
     if (fd.hasBadData()) return "bad instruction data";
     const ghidra::FuncProto& fp = fd.getFuncProto();
@@ -1891,6 +2063,25 @@ std::string WithholdReason(ghidra::Funcdata& fd, const std::map<uint32_t, Protot
         }
         if (!held) return "an incoming argument outside its signature";
     }
+    // ...and past the model's parameter window. The default prototype's stack entry is 500 bytes (superh.cspec), so a read of the caller's
+    // frame at or above r15 + 500 is no possibleInputParam and the loop above misses it; a non-void signature then returns it as in_stack_NNN
+    // with no parameter for it (A3-73). Any input in the stack space at or above the entry r15 that no parameter holds is an argument the
+    // signature leaves out, whatever the window.
+    for (auto it = fd.beginDef(ghidra::Varnode::input); it != fd.endDef(ghidra::Varnode::input); ++it)
+    {
+        const ghidra::Varnode* vn = *it;
+        if (vn->getSpace()->getType() != ghidra::IPTR_SPACEBASE) continue;
+        if (static_cast<int32_t>(static_cast<uint32_t>(vn->getOffset())) < 0) continue;   // a local, not an incoming argument
+        bool held = false;
+        for (ghidra::int4 p = 0; p < fp.numParams() && !held; ++p)
+        {
+            const ghidra::ProtoParameter* param = fp.getParam(p);
+            const ghidra::Address a = param->getAddress();
+            held = a.getSpace() == vn->getSpace() && vn->getOffset() >= a.getOffset() &&
+                   vn->getOffset() + vn->getSize() <= a.getOffset() + param->getSize();
+        }
+        if (!held) return "an incoming argument outside its signature";
+    }
     // A register outside r4-r7 and the stack that the function reads before writing (r0-r3, r8-r14, GBR,
     // MACH, MACL, T): its value is an input no signature can pass, so a caller's setup of it is dead in
     // the caller's text and the call shows without it (A3-5). The calling convention of hand-written
@@ -1918,6 +2109,9 @@ std::string WithholdReason(ghidra::Funcdata& fd, const std::map<uint32_t, Protot
     // A return that does not go back to the caller (PR replaced, or saved after a call changed it)
     // is a jump somewhere else, not a return to the call site the signature describes.
     ReturnCheck check(fd, exec, lent, tables);
+    // Fold the literal-pool loads the probe folds, so an ordinary stack access whose offset is a pool word (`mov.w =20,r2 ; add r15,r2 ;
+    // mov.l @r2,r0`) is seen as the stack argument it is, not a "nothing-known" address (A3-66 c, A3-67 b).
+    if (literals != nullptr && literalMemory != nullptr) check.SetLiterals(*literals, *literalMemory);
     const std::string why = check.Run(effects);
     if (!why.empty()) return why;
     // The return rule (A3-5, A3-13, A3-14, A3-20, A3-45, A3-49, A3-50, A3-55 to A3-59, A3-62). A function the engine made `void` is lent only
@@ -4154,6 +4348,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
             ReturnCheck probe(*fd, exec, prototypes, flowTables);
             probe.SetTolerant();
             probe.SetLiterals(scan.literalWords, *snapshot);
+            probe.SetCancel(cancel);   // the callee walk can be long for an adversarial callee (A3-74)
             CallEffects unused;
             probe.Run(unused);
             uint32_t from = 0;
@@ -4484,7 +4679,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         {
             AddJumpTables(*fd, flowTables);
             AddFlowTables(*fd, flowTables);
-            r.prototypeWithheld = WithholdReason(*fd, prototypes, exec, entry, flowTables, effects);
+            r.prototypeWithheld = WithholdReason(*fd, prototypes, exec, entry, flowTables, effects, &scan.literalWords, snapshot.get());
         }
         if (r.prototypeWithheld.empty())
         {

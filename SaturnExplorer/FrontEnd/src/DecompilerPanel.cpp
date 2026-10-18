@@ -169,6 +169,7 @@ uint64_t DecompilerPanel::ShapeOf(const Prototype& proto)
     Mix(h, proto.effects.leaks);
     Mix(h, proto.effects.frameValues);
     Mix(h, proto.effects.frameWords);
+    Mix(h, proto.effects.storesBelow);
     Mix(h, static_cast<uint32_t>(proto.effects.spDelta));
     return h ? h : 1;   // 0 is "none lent"
 }
