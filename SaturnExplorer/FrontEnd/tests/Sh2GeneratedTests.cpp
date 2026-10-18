@@ -6337,6 +6337,46 @@ RegItem MakeLoopAnd(Rng& rng)
     return it;
 }
 
+// A flag test against a literal-pool constant (area 2, round 10: A2-64): `mov.l @(lit),A ; OP B,A` with OP one of addv, subv, addc, subc,
+// cmp/eq, cmp/hs, cmp/ge, cmp/hi, cmp/gt (the literal an edge of the signed and unsigned ranges: 0xAAAAAAAB, 0x80000001, 0xF0000000 ...), then
+// T tested: a short branch over `mov #k,Rt` (bt or bf) that the function returns, or `movt r0`. addv and subv with a literal fold to
+// `(b != 0xff) && !b || ...` with `b = r0 s< 0`, whose parts RuleRangeMeld pulls back through the comparison; CircleRange::pullBackBinary answered a
+// boolean range holding both 0 and 1 with [0,2) in the wide space instead of the full range, so the test printed `1 < param_1 && ...` where
+// the right one is `0x7fffffff < param_1 && ...`, and the register grammar drew no flag producer against a literal that a branch tests
+// (the nightly's three ranges, 45,000 functions, none). The item is drawn from a stream of its own (SE_GENERATED_PRINTEDC_FLAGS=0 gives the
+// functions of round 9).
+RegItem MakeFlagLit(Rng& rng)
+{
+    static const uint32_t kLits[] = { 0xAAAAAAABu, 0x55555555u, 0x55555556u, 0x80000001u, 0xF0000000u, 0x7FFFFFFFu, 0x80000000u, 0xFFFFFFFFu, 1u, 0x12345678u,
+                                      0xFFFFFFFDu, 0xC0000000u, 0x40000000u, 0xFFFF0000u, 0x0000FFFFu, 0x7FFFFFFEu, 0x24924925u };
+    static const uint16_t kOps[] = { 0x300F, 0x300F, 0x300B, 0x300B, 0x300E, 0x300A, 0x3000, 0x3002, 0x3003, 0x3006, 0x3007 };   // addv addv subv subv addc subc cmp/eq hs ge hi gt
+    RegItem it;
+    it.shape = "flaglit";
+    const uint32_t a = 1 + rng.Below(7);                 // holds the literal (r1-r7)
+    uint32_t b = rng.Below(8);                           // the other operand, an input or a copy of one
+    if (b == a) b = (b + 1) % 8;
+    const uint32_t value = rng.Chance(85) ? kLits[rng.Below(sizeof kLits / sizeof kLits[0])] : rng.Next();
+    if (b == 0 && rng.Chance(50)) it.w.push_back(static_cast<uint16_t>(0x6003 | 0 << 8 | (4 + rng.Below(4)) << 4));   // mov r4-r7,r0
+    it.lits.push_back(std::make_pair(it.w.size(), value));
+    it.w.push_back(static_cast<uint16_t>(0xD000 | a << 8));   // mov.l @(lit),Ra
+    const uint16_t op = kOps[rng.Below(sizeof kOps / sizeof kOps[0])];
+    if (rng.Chance(70)) it.w.push_back(static_cast<uint16_t>(op | a << 8 | b << 4));   // OP Rb,Ra
+    else it.w.push_back(static_cast<uint16_t>(op | b << 8 | a << 4));                   // OP Ra,Rb
+    if (rng.Chance(65))   // mov #k,Rt ; bf/bt +0 ; mov #j,Rt ; mov Rt,r0
+    {
+        uint32_t t = 1 + rng.Below(7);
+        while (t == a || t == b) t = 1 + t % 7;
+        static const uint32_t kK[] = { 5, 7, 0, 1, 0xFF, 0x80 };
+        it.w.push_back(static_cast<uint16_t>(0xE000 | t << 8 | kK[rng.Below(6)]));
+        it.w.push_back(static_cast<uint16_t>(rng.Chance(50) ? 0x8B00 : 0x8900));   // bf / bt  +0 (skips the next instruction)
+        it.w.push_back(static_cast<uint16_t>(0xE000 | t << 8 | kK[rng.Below(6)]));
+        it.w.push_back(static_cast<uint16_t>(0x6003 | t << 4));                  // mov Rt,r0
+    }
+    else
+        it.w.push_back(0x0029);   // movt r0
+    return it;
+}
+
 RegFn GenRegFn(uint64_t seed, int k)
 {
     Rng rng(seed * 7919u + static_cast<uint64_t>(k) + 0x5EEDu);
@@ -6425,6 +6465,14 @@ RegFn GenRegFn(uint64_t seed, int k)
             const size_t at = joins.Chance(70) ? f.items.size() : joins.Below(static_cast<uint32_t>(f.items.size()) + 1);
             f.items.insert(f.items.begin() + static_cast<long>(at), item);
         }
+    }
+    // The flag tests against a literal (A2-64), from a stream of their own: SE_GENERATED_PRINTEDC_FLAGS=0 gives the functions of round 9.
+    Rng flags(seed * 49979687u + static_cast<uint64_t>(k) + 0xA264u);
+    if (EnvNumber("SE_GENERATED_PRINTEDC_FLAGS", 1) != 0 && flags.Chance(20))
+    {
+        const RegItem item = MakeFlagLit(flags);
+        const size_t at = flags.Chance(60) ? f.items.size() : flags.Below(static_cast<uint32_t>(f.items.size()) + 1);
+        f.items.insert(f.items.begin() + static_cast<long>(at), item);
     }
     const uint32_t s = rng.Below(100);
     std::string shape;
@@ -7063,7 +7111,9 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
         // The address of a local (`return &xStack_1;`, `(uint4)&xStack00000000 & 0xff`): the run's is an address in the machine's stack, the C's one in
         // the host's, so the two cannot be compared by value (A2-61: the harness took it for 0, a mismatch where the text is right).
         // In frame mode (A3-65) a local's address is a pointer into the mapped frame and the walk's own: only one returned as a value is
-        // still incomparable, so there the search is of the return statements alone.
+        // still incomparable, so there the search is of the return statements alone. A local array named in a return statement is such an
+        // address as well (`return axStack_8;`, `return CONCAT44(axStack_4,param_2);`: the array decays to a pointer, the host's frame in the C
+        // and the machine's stack in the run), A2-65; an element (`axStack_8[1]`) is a value and is compared.
         static const std::regex stackAddress("&\\s*[A-Za-z]*[Ss]tack_?[0-9a-fA-F]+\\b");
         static const std::regex returnStmt("\\breturn\\b[^;]*;");
         {
@@ -7074,11 +7124,18 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
                 if (std::regex_search(text, m, stackAddress)) what = m.str();
             }
             else
+            {
+                static const std::regex arrayDecl("\\b(\\w+)\\s+\\[\\d+\\];");   // `xunknown1 axStack_8 [8];`
+                std::vector<std::string> arrays;
+                for (std::sregex_iterator r(text.begin(), text.end(), arrayDecl), e; r != e; ++r) arrays.push_back((*r)[1].str());
                 for (std::sregex_iterator r(text.begin(), text.end(), returnStmt), e; r != e && what.empty(); ++r)
                 {
                     const std::string stmt = r->str();
                     if (std::regex_search(stmt, m, stackAddress)) what = m.str();
+                    for (size_t k = 0; k < arrays.size() && what.empty(); ++k)
+                        if (std::regex_search(stmt, std::regex("\\b" + arrays[k] + "\\b(?!\\s*\\[)"))) what = arrays[k];
                 }
+            }
             if (!what.empty())
             {
                 v.cls = "skipped:stack-address";
@@ -7672,6 +7729,12 @@ void TestPrintedC()
                                                       nIn, cc, 0x51ED, 8997);
         std::printf("pin 'A2-61: a returned stack address is not compared': %s (%s)\n", v[0].cls.c_str(), v[0].detail.c_str());
         CHECK(v[0].cls == "skipped:stack-address");
+        // A2-65: a returned local array (frame mode, the register r15 copied) is its address too: it was a mismatch (run=0603FFF8, pseudo=41709FF8).
+        const std::vector<CVerdict> w = CheckPrintedC(d, { { "seedA2-65", { 0x6043, 0x6153, 0x6263, 0x6373, 0x7FF8, 0x81F2, 0x61F3, 0x7100, 0x2160, 0x62F3, 0x7200, 0x2262,
+                                                                            0x84F2, 0x4001, 0x4000, 0x84F4, 0xC903, 0x7F08, 0x000B, 0x6023 } } },
+                                                      nIn, cc, 0x51ED, 8998);
+        std::printf("pin 'A2-65: a returned local array is not compared': %s (%s)\n", w[0].cls.c_str(), w[0].detail.c_str());
+        CHECK(w[0].cls == "skipped:stack-address");
     }
     if (hand)
     {
