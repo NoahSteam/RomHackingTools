@@ -9644,3 +9644,141 @@ Image 007: 1,730 functions in the lending run, **662 lent (923 parameters)** (63
 - **The corpus dynamic run** of A3-54 part 2 (accepted in round 8) was not repeated.
 
 **Done criteria.** Seven P2 rows (A3-56 to A3-62) and two P3 (A3-63, A3-64): a fix round, then two consecutive clean review rounds. The measured costs above are the fixer's starting numbers: v3 (A3-56), v1 (A3-62) and v4 (A3-59) each leave both corpus counts unchanged and each flips named pins.
+
+## Area 3, round 9 fix
+
+Fixer, branch `review/3-round9-fix`, on the coordinator's head `b7cce51`. Code commits `2cf54bb`, `16ad9d0`, `1f236cb`, `2b0b76a` (host, suite, generator, guide), then the record. **A3-56 to A3-62 (P2) are fixed, A3-63 and A3-64 (P3) are fixed.** No engine patch: 0054 stays unused, and the vendored tree, `patches/`, `sh-2.sla` and `Sh2SpecData.h` are as they were, so there is nothing to reproduce with `vendor.py`. Own RelWithDebInfo build, `-j3`.
+
+Rounds 7, 8 and 9 each found new P2 rows in the rules that decide whether a function the engine made `void` may be lent, each a shape beside the one the last fix covered. This round replaces those rules (A3-5's on r0, A3-14, A3-20, A3-45, A3-49, A3-50, A3-55) with one, stated as what it guarantees, and lists its exceptions; the round's rows are instances of it, not new clauses.
+
+### 1. The rule, as a guarantee
+
+**A function the engine made `void` is lent only when no input its signature does not hold can change what it leaves in r0 at its returns: neither by data (what r0 was computed from) nor by choice (what decided which value r0 holds, when that differs by path).**
+
+Why that is the line: the engine drops a return it takes for none (A3-5: a value made of inputs no signature passes, or one with another use than the return), and every read whose only use was that value goes with it. The input leaves the text and the signature, and a caller's setup of it is dead in the caller's text. A value made only of what the signature holds, of memory, of constants and of what calls returned loses nothing a caller can see: a caller that reads r0 after the call is withheld ("uses r0 after calling").
+
+The inputs: r0-r14, SR's bits other than T, GBR, VBR, MACH and MACL as their entry values, the T flag the caller left, and the words of the caller's frame (the stack arguments) the function reads before it writes them. A signature holds r4-r7 that it has parameters in and the stack words of its stack parameters; r0-r3, r8-r14, SR, T, GBR, VBR, MACH and MACL no signature holds. r15 and PR are the stack and the return address, not inputs.
+
+How `ReturnCheck` computes it (`Sh2Decompiler.cpp`, `ReturnCheck::Inputs`, `WithholdReason`):
+
+- **One value for all the returns.** r0 at every return is joined into one value (`mExit`), as the paths would meet at a common exit, so two returns with two values are a choice as a join is.
+- **Values told apart by the op that made them** (`Value::def`: the instruction and op; a join of two different ones is `kJoin`), not by what they are made of. Two loads, or `r4 + 1` and `r4 + 2`, have the same origins and are two values (A3-58). A copy keeps the definition it had; one value on every path (one load, one constant) is no choice.
+- **Data**: what r0's value was computed from by the function's own instructions (`Value::dep`), the address of a load among it (`mov.b @(r0,r4),r0` reads r0 and r4), the stack arguments (a load from a word at or above the entry r15 that nothing wrote on that path: `ArgDep`).
+- **Choice**: when r0 is not one value, the inputs of every condition of a branch and of every jump table's index on the way to a return (`State::ctl`, `ChooserInput`), r0's entry value (`tst r0,r0`, A3-56), the T flag the caller left (A3-57) and the stack arguments (A3-62) among them.
+- **By bit position.** SLEIGH writes a flag as a masked update of SR (`sr = (sr & ~1) | t`): a dependence kept for the whole value gives every T a compare wrote the entry SR among its inputs, which is why the old rules left SR out of conditions altogether. `Deps` keeps bit 0, bit 1, bit 8 and bit 9 (T, S, Q and M when the value is SR) apart from the rest, exactly through the ops SLEIGH makes of a flag (masks, shifts, truth values) and conservatively through every other: a T written by `cmp/eq` carries the compare's inputs, the T the caller left is `kDepT`, and the Q and M that `div0u` cleared are no longer the entry SR's.
+
+The exceptions, each made in one place and named there:
+
+| Exception | Where | Why |
+|---|---|---|
+| r0's entry value where no op read it (a path that leaves r0 alone) | `ReturnInput` | no read: A3-14's scratch r0 of compiled code, `phi(in_r0, 5)`; an op that computes from r0, or a test of it, is a read |
+| a value nothing is known of (every register among its origins: a load through a pointer that may be anywhere in the stack, a user op's output) | `ReturnInput`, `ChooserInput` | taken for memory, as A3-55's fixer did for a condition (06038F64 and 06038F72 of image 008 are compiled code) |
+| SR's other bits, and the T in them, in a value that is neither SR itself nor a join | `Inputs` | the interrupt-mask helper's `stc sr,r0 ; or #0xF0,r0 ; ldc r0,sr`, which compiled code leaves in r0 as scratch (06010054); SR copied whole, or joined (A3-14's `phi(in_sr, in_sr \| 0xf0)`), is an input |
+| `and r0,r0`, `or r0,r0`, `or #0,r0`, `xor #0,r0`, `add #0,r0` | `Step` | nops, as the engine takes them (A2-43, patch 0048): no read and no write of r0 |
+| r1 | `Return` | the second half of a 64-bit return, scratch for every other function (unchanged) |
+| a value in r0 held across a callee that keeps it | `ReturnValue` | A3-13's rule, unchanged; its reason text is kept |
+
+What it no longer excepts, on purpose: a join chosen by a parameter the signature does not hold, or by a stack argument (A3-62, the coordinator's decision), and r0's entry value read on one path even when another path leaves it alone (A3-45's and A3-46's controls). Kept lent, as decided: a join chosen by a constant (A3-25), and one chosen by a parameter the signature holds (A3-20's accepted scratch of compiled code).
+
+The reason texts: "its return joins r0's entry value with a parameter it does not hold" (A3-20, A3-49) first, then "its return is computed from X on entry, which no signature passes" (A3-5, A3-14, A3-45, A3-50, A3-59), A3-13's, "its return is chosen by X on entry, which no signature passes" (A3-55 to A3-58), then the two for what a signature could hold and this one drops: "computed from r5 on entry, which the signature does not hold", "chosen by r4 on entry, which the signature does not hold" or "by a stack argument (the word at r15 + 0 on entry)" (A3-62). The pins of the old rules keep their texts.
+
+### 2. The other rows
+
+**A3-60 (P2).** The note for a frame address in a stack argument word (`kFrameEscapeNoteStack`) is said for every word the engine drops: all of them when r4-r6 or r5-r7 are unset (A3-51), otherwise every word from the first one not written on every path up (`NoteStackArguments`; a slot written on one path only, or in part, is a hole: `Value::hole`). Held to the engine by the review's two tables, now `TestArea3Round9Fix`: (i) the address in the second word, the first written or not, every subset of r4-r7 (32 cells); (ii) the address in word 1, 2 or 3, every subset of the words before it written, r4-r7 all unset, all set or r5 and r6 set (42 cells); plus a word written on one path only. In all 74 the local is not folded, the text agrees with the run, and the note is said exactly in the 55 cells the rule predicts (the review's 20 that had it, and its 35 that were wrong with no note).
+
+**A3-61 (P2).** A callee that writes its own stack argument slot writes a word of its caller's frame. The caller cannot tell such a call from a compiled one by its own code: a note at every unlent call after which the function reads back a word it wrote at or above the stack pointer changed 815 of image 007's 839 functions, every one compiled code keeping a local there. The callee can: A3-21 already finds a function that writes its caller's frame. So the probe walks the call's target from the snapshot with the same analysis (`CalleeFrameWrites`, a nested `ReturnCheck`, 20,000 steps, asked once per target and only when the caller reads such a word back), and a word the callee writes itself (`mOwnFrameWords`, A3-21's stores: an argument spilled into the home area counts) that the caller wrote before the call and reads after it declares the alias from that word up, so the read is not folded, and says a note at the call (`kFrameEscapeNoteSlot`: "a local at or above the stack pointer is read after this call, which may write it as one of its stack arguments"). SA2, SA3, SA5 (the word shown as the fifth argument and folded all the same) and SA6 (the callee copies its fifth word into its sixth) agree with the run; a callee that only reads the word (SA1, A3-51's accepted text) and one that writes below its entry r15 are controls with no note. The callers of A3-21's, A3-39's and A3-40's hand-back fixtures, pinned with the stale local (`return 5;`) as the evidence that they must be withheld, are still withheld and now print what the run returns. Limits: a call whose target the probe does not know (an indirect call it does not resolve, a trap), a target outside the capture, or one the walk cannot follow in 20,000 steps, is not walked.
+
+**A3-63 (P3).** Check 10b (`EffectClaimsContradicted`) holds three more claims against each finished run of a lent function. A pointer, a register's start value give or take 0x80 bytes in its own arena (r4-r7, GBR) or the entry r15's give or take 0x200 in the stack (`PointerRegister`): ending in a register the summary does not preserve, it needs that register's bit (or the stack) or memory in `outOrigins`; stored at or above the entry r15, in `frameValues`; stored anywhere else outside the stack, in `leaks`. (The first version of the review's (1) failed on arithmetic landing in an arena, `extu.w r5,r1 ; xor r5,r1`, which is 0x100 below r4's start and is not a stepped pointer.) The generator's random programs make no store to the caller's frame (a function that makes one is withheld), so `TestRound9Pins` holds a lent module that spills r4 into its caller's home area, stores r5 through r4 and leaves r1 as r4 + 4 and r2 as the stack pointer.
+
+**A3-64 (P3).** Grammar 2 draws a return chosen by an input (`Item::Choice`, `MakeChoice`, a stream of its own, `choiceRng`): last in a function that returns, makes no call and has no table or shared exit, two values written to r0 on the two arms of a branch and each used once more, by `or r0,Rn` into a register that holds a value or (one in four) a compare (the engine drops the return for the first and not for a compare whose T is dead, so a first version with compares only drew 165 choices in 3,000 seeds that the engine all returned): two constants, two sums of one register, two loads through r4 and r5, a register and a constant; chosen by r0 or a scratch register that no item writes on any path (`MayWriteLow`, read off the items' words as the decoder prints them), SR's interrupt mask when nothing writes SR, a parameter no item loaded a literal into, the stack argument at the entry r15, or a constant. Each of those conditions was learnt from a beyond-range seed the first versions failed on, every one an oracle error, not a product one: r0 written in a loop, which `Def` does not count (15812, 700810, 702926, 800874, 804398); r7 reloaded with a literal (701650); the stack word held by the signature as a fifth parameter (10932, 702548, 804085); a function that runs on into the choice after setting the chooser itself (706074); an `or` into a pointer register landing in a third register's arena (19860, and 2031 in the short run). It is drawn after every other draw of the function, so no program a seed made before changes except by the item itself (the first version put it first and changed the area 5 pin seed 313937, which no longer showed its class). Check 9 says `return-dropped:choice` for a choice lent `void` whose chooser the signature does not hold, and counts the held parameter, the stack word held as a fifth parameter and the constant (`excluded.choice-held.return-dropped`, A3-62's accepted limits); a function that jumps to or runs on into a choice returns its value (seed 522's function 0) and is counted, not checked (`excluded.choice-inherited.return-dropped`): it set the chooser itself. The replay gives it as `SE_GENERATED_RETURNS` 30 + the chooser, hex. Not drawn: the T flag the caller left alone (an item before the choice writes T), which `TestRound9Pins` holds as a module. Against b7cce51's decompiler the final generator fails 7 of 3,000 grammar-2 seeds (13 `return-dropped:choice` lines) and 7 pin CHECKs; with the fix none fails (section 5).
+
+### 3. Pins
+
+`TestArea3Round9Fix` (`Sh2DecompilerTests.cpp`): every fixture of A3-56 to A3-62 (H2, H5, H6, D1, D4, E1, E3, H4, S1, SA2, SA3, SA5, SA6), each withheld and its text rejected by the run, or noted and agreeing with it; their controls; the 74-cell table and the one-path cell; the identity op, the two-return and the interrupt-mask controls. `TestRound9Pins` (`Sh2GeneratedTests.cpp`): the review's modules (six; D1 stays in the suite, its replay's words sit in the arenas, whose folded reads the ledger reports for the module), the first seed that draws each chooser, and the A3-63 module.
+
+Pins reversed, as the coordinator decided (A3-62): A3-14's `r0 left alone on one path, set to a constant on the other` (`tst r4,r4 ; bt L ; mov #5,r0`: withheld "chosen by r4 ..., which the signature does not hold"), A3-55's `a3_55 control: chosen by r4` (the same), A3-45's `the loop may be skipped` ("computed from r0") and A3-46's function ("chosen by r0"); the generator's A3-45 and A3-46 pins report no finding either way. Each row says so.
+
+### 4. The mutation table
+
+Each part reverted alone in the committed tree (`mut/run.sh`: the edit applied, the decompiler suite and the generator built and run, the file restored and compared), "suite" the CHECKs of `SaturnExplorerSh2DecompilerTests` that fail, "pins" the generator's (600 grammar-2 seeds and every pin, with the choice item's first version):
+
+| Reverted | Suite | Generator pins |
+|---|---|---|
+| R01 r0's entry value is no chooser (the old `& ~1u`) | 3 (H2, `cmp/eq #5,r0`, A3-46's function) | 1 |
+| R02 the T the caller left is no chooser | 1 (H5) | 1 |
+| R03 SR is no chooser | 1 (H6, chosen by the T flag instead) | 0 |
+| R04 values equal by what they are made of (no `def`) | 2 (D1, D4) | 0 |
+| R05 a parameter the signature drops is no chooser | 6 (H4, S1's neighbours, the spilled r4, A3-14's and A3-55's reversed controls) | 2 |
+| R06 no stack arguments (`ArgDep` 0) | 2 (S1, the second word) | 1 |
+| R07 a parameter the signature drops is not counted in the data | 1 (r7 + 1 or r7 + 2 chosen by a loaded word) | 0 |
+| R08 r0's entry value is never counted in the data | 14 (A3-14 c, A2-31, A3-45, A3-50, A3-59, ...) | 2 |
+| R09 the returns not joined (the last return's value only) | 0 | 0 |
+| R10 a load's address not among its dependences | 0 | 0 |
+| R11 a jump table's index no chooser | 0 | 0 |
+| R12 dependences of the whole value (no bit positions) | 16 (the T and SR controls, every held-parameter control) | 0 |
+| R13 the identity ops read r0 | 1 (`and r0,r0` on one path) | 0 |
+| R14 a condition nothing is known of counts | 1 (A3-55's control) | 0 |
+| R15 a value nothing is known of counts in the data | 1 (r0 or a word nothing is known of) | 0 |
+| R16 the interrupt-mask idiom counts | 1 (06010054's words) | 0 |
+| S01 A3-60: only A3-51's condition | 107 (the table) | 0 |
+| S02 A3-60: a word written on one path is written | 2 (the one-path cell) | 0 |
+| S03 A3-61: no walk of the callee | 24 (SA2-SA6, the hand-back callers) | 0 |
+| S04 A3-61: every word read back noted | 5 (the controls, A3-15's and A3-10's pinned texts) | 0 |
+| every part at once (b7cce51's `Sh2Decompiler.cpp` with the final generator) | (the suite's new pins) | 7, and 7 failing seeds of 3,000 (`return-dropped:choice`, 13 lines) |
+
+R09, R10 and R11 are held by no fixture: in every shape built the engine keeps the read itself (the branch between two returns, a load through an index, a switch on a hidden register) and withholds the function on it, so each clause is there by the argument of section 1, not by a failing text. A fifth mutation, a store that leaves its word's exposure (A3-61), could not fail: a stored value is a register's or a temporary's, which never carries one, and the clause was removed.
+
+Check 10b's claims, the review's summary mutations against the final generator (3,000 grammar-2 seeds and the pins; the review's numbers before the fix in brackets): m1 `outOrigins` names the next register, 64 failing seeds and 4 pin CHECKs (0, the suite passed); m2 `leaks` cleared, 78 and 5 (0); m3 `frameValues` cleared, 0 and 1 (0: no random program stores to its caller's frame, the A3-63 module catches it); m5 `outOrigins` without the stack, 0 and 2 (0 seeds, the synthetic claim run only).
+
+### 5. The matrix, on the fixed tree (code `2b0b76a`)
+
+| Run | Result |
+|---|---|
+| `ctest -E SaturnExplorerLive -j3 --timeout 900` (RelWithDebInfo, 92 tests) | 92 of 92 pass (105 s; the fault suite 105 s) |
+| `SaturnExplorerDecompilerFaultTests` | 0 of 94 jobs failed (77 s), 0 MOVED: no re-pin |
+| `SE_GENERATED_SEEDS=3000 SE_GENERATED_GRAMMAR=2` | 0 failing seeds, 0 findings; 4,232 lent (b7cce51's decompiler lends 4,264 of the same programs: 26 withheld by the rule, 6 of their callers), 163 choices, claims held in 17,700 runs, canary 240 programs, 0 failing |
+| `SE_GENERATED_GRAMMAR=1 SE_GENERATED_SEEDS=1000` | 0 failing seeds |
+| `SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000` | passed: 3,077 functions, 2,715 compared, agrees 2,756, `narrow-c` 6, `void-return` 285, `void-return-lent` 30 (the head: 198 and 117; 87 register-only functions, which return r0 and read r0-r7 and T, were lent a `void` over a value that depends on an input the signature does not hold, and are withheld) |
+| `SE_GENERATED_SEEDS=20000` | 0 failing seeds (567 choices, 64,136 runs held to the claims) |
+| grammar 2, 700,001 to 720,000 | 0 failing seeds (1,207 choices, 119,107 runs held to the claims) |
+| grammar 2, `SE_GENERATED_ALPHABET=specials`, 800,001 to 805,000 | 0 failing seeds (298 choices) |
+| corpora 007 / 008 with `SE_GAME_LEND=1` | section 6 |
+| vendoring | not applicable: no engine patch |
+
+The sweeps were run three times: the first two versions of the choice item failed seeds that were all the oracle's (section 2), and one run of the three used a binary built while a mutation was applied, which the pins showed at once (every claim pin failed); the table is the run of a binary copied out of the build directory after a clean build.
+
+### 6. The corpora
+
+Both images, `SE_GAME_HWRAM=<img> SE_GAME_LEND=1` with `SE_GAME_OUT`, the head `b7cce51` built beside (its binary kept before the first edit) against the fixed tree, every output file compared.
+
+| | 007 | 008 |
+|---|---|---|
+| ledger counts | 0 dropped, 0 missing and said | 0 dropped, 4 missing and said |
+| mapping oracle, every violation count (alone, lent) | 0 | 0 |
+| lent signatures (parameters), unlent / lent run | 637 (866) / **662 (923)**, as before | 992 (1,227) / **1,021 (1,287)**, as before |
+| functions alone | 839 of 839 ok | 1,554 of 1,554 ok |
+| lending run | 1,730 functions, all ok | 2,995, all ok |
+| withheld reasons | none changes | none changes |
+| texts that differ, alone | 5: 060126DA, 06013A9A, 06013EAE, 060141D2, 06019A56 | 4: 06048E32, 060493CE, 060554B6, 06058662 |
+| texts that differ, lending runs (before and after) | 4: 060126CC, 060126DA, 06019A48, 06019A56 | 6: 06048E24, 06048E32, 060493CE, 060554B6, 06058654, 06058662 |
+
+**The return rule moves nothing**: with it alone (the first corpus run of the round, before the probe changes) every output file of both images, the withheld reasons included, is byte for byte the head's. The reviewer's measured zero holds for the whole rule, A3-56 to A3-59 and A3-62 together: compiled code reads no r0, T, scratch register or stack word before writing it, and a parameter it tests is one its signature holds. So no lent function changes, and there is none to argue.
+
+**Every text that differs differs by the A3-60 note** ("a frame address is in a stack argument slot here, in none of the arguments: the call may write the locals from there up") and nothing else, but for 060126DA, where the alias the note comes with splits the array `aiStack_70 [12]` into `aiStack_70 [10]` and `auStack_5c [2]` (`puStack_1c = auStack_5c` for `puStack_1c = (uint2 *)(aiStack_70 + 10)`, the same address). Each is a compiled function that keeps the address of a local in a local (`piStack_18 = ...`) above a word not yet written, at a call with arguments in registers: the engine drops that word from the call's arguments (the table of section 2 holds the rule), so the note is the "may" of A3-51's: 10 of the 2,393 functions with a prologue had it after round 8, 17 have it now (7 more, and a second one at another call in 06019A56 and 06058662, two of the ten). No function gets A3-61's note: no corpus callee writes its caller's frame (A3-21 withholds none for it).
+
+**Time.** The probe's walk of each unlent callee that is read back after (A3-61) costs about a tenth of a decompile: the default request of image 007 took 7,250 ms at the head and 8,131 ms fixed, image 008 22,737 ms and 24,904 ms (a shared machine, load 2.5 to 5; the return rule alone measured 7,245 and 23,272). A smaller step budget for the walk (3,000 for 20,000) changed nothing: the cost is the number of walks, not their length.
+
+### 7. A3-65 (routed by the coordinator, filed on master after this branch's base)
+
+Triaged, not fixed: it does not fit this round, and needs an engine change. Generator seed 901303 (grammar 2, `n:kept-read:r13`, shrunk replay in the area 2 round 9 review). Function 0 restores its registers and tail-jumps (`jmp @r1`, the literal is function 1's entry), the engine follows the jump as flow ("flow runs into 0x06009028"), and function 1's code, shown inside function 0, walks a pointer down from `r15 + 8` over the words where function 0 had saved r9 and r13. The code's `mov.b @(1,r15),r0` reads the walk's 0; function 0's text reads `(char)((uint4)unaff_r13 >> 0x10)`, the stale saved r13. Check 12 caught it by accident (function 1's effects keep no r13, so the text's `unaff_r13` is a kept read), and it is not A3-52's run-on class: the text is wrong, not the check.
+
+The cause is not the run-on. A leaf with no call reproduces it, and is **lent**: `add #-8,r15 ; mov #5,r0 ; mov.l r0,@r15 ; mov r15,r2 ; add #8,r2 ; mov #2,r1 ; L: mov.l r1,@-r2 ; dt r1 ; bf L ; mov.l @r15,r0 ; rts ; add #8,r15` prints `int4 f(void) { ... return 5; }` where the code returns 1 (head binary, `SE_GENERATED_WORDS="7FF8 E005 2F02 62F3 7208 E102 2216 4110 8BFC 60F2 000B 7F08"`, 0 findings: no check holds a value). With `mov.l r13,@-r15 ; mov.l @r15+,r13` before the walk the word a pop freed is read as `unaff_r13` (withheld, "reads r13"). The engine turns the walked copy of r15 into `register0x0000003c` (`BADSPACEBASE`, its spacebase placeholder): the stores through it are no stack stores, so no alias reaches them; the same walk upward (`mov.l r1,@r2 ; add #4,r2`) is an array (`aiStack_8[1]`) and right. A host alias from the frame's lowest slot (the probe's A3-16 path, tried) is declared and changes nothing. A loop that stores through a pointer it decrements from a local array's end is what `for (p = &a[n]; p != a;) *--p = v;` compiles to, so this is plausibly compiled code and a wrong value in a lent signature with no note: **P1** by the program's scale, area 3 (or 2), for an engine patch (0054 is free). Fixtures above; none is committed, as the current output is wrong.
+
+### 8. Not done
+
+- **The exit join** (r0 at two returns joined as at one exit) is held by no fixture the engine drops: in every two-return shape built the engine keeps the branch between the returns and its own read withholds the function. It stays for the argument of section 1.
+- **A3-61's limits**: an indirect call the probe does not resolve, a trap, a callee outside the capture or beyond the walk's budget.
+- A3-65: triaged in section 7, left for an engine patch.
+- The load-address and jump-table-index clauses of the rule are held by no fixture either (the engine keeps those reads), as section 4 says.
+- Nine ledger rows of other areas (A2-24, A2-25, A12-10, A5-50, A2-33, A2-36, A2-37, A6-41, A5-69) have more than eight cells, an unescaped `|` in a cell; left to their areas.
+- The Live tests and the sanitizer job were not run (shared socket path; CI).
