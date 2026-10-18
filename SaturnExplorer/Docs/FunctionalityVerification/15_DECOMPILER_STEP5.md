@@ -10509,3 +10509,83 @@ Ranges in section 1. Open rows checked first: A3-52 (check 12 on a function that
 - The consume-mask tight stress (mode 3) is not a working instrument; the non-zero stress (mode 2) is. A model of the consume roots between the return recovery's trials would make it one.
 - Kind X shows three roots the model lacks (CALLOTHER hold, the INDIRECT effect, the pseudo-ops); each is the safe direction, and I found no rule that creates the ops they belong to mid-pass.
 - Not run: the area 2 mutants of the spec (no spec change), the sanitizer job, the Live tests.
+
+
+## Area 2, round 10 fix
+
+Fixer, branch `review/2-round10-fix`, on the coordinator's head `11e144c`. The code is in the commits up to `5dd3b66` (one engine patch, the harness, the generator, the tests), and this record follows. **A2-64 (P1) and A2-65 (P3) are fixed; A2-66 was closed by the reviewer.** The audit asked for in A2-64 found four more pull-backs that were not the set they claim to be; none reaches a text of either game image.
+
+### 1. Patch 0058 and its rule
+
+`CircleRange::pullBackUnary` and `pullBackBinary` (`rangeutil.cc`, upstream's; no earlier patch touched it) turn the range of a result into the range of the input that makes it. `RuleRangeMeld` (a `&&` or `||` of two range tests becomes one comparison) and the jump-table guards (`JumpBasic::analyzeGuards` and `checkUnrolledGuard`, `pullBack` up to `maxpullback` times) use what comes back as exactly the set of inputs, and print a comparison for it. So:
+
+> **A pull-back returns exactly the set of inputs whose result falls in the range, in the input's mask, or it fails (returns `false`).** A narrower set, a wider set, a range in the wrong order or a mask widened without the range widened with it is a wrong text and no warning.
+
+The reviewer's A2-64 is the mask case: for a comparison whose range holds both 0 and 1 (`bothTrueFalse`, seven op-codes) the code set `mask = calc_mask(inSize)` and stopped on the comment 'All possible outs => all possible ins' with the range still `[0,2)`. The fix is what the comment says: `left = right = 0`, the full range (7 places, as the reviewer's experiment). `addv r0,r4` against 0xAAAAAAAB now prints `0x7fffffff < param_1 && -1 < (int4)(param_1 + 0xaaaaaaab)` and agrees with the run.
+
+### 2. The audit
+
+The reviewer asked for a reading of the rest; I made it a measurement. `TestPullBackRanges` (new, in `SaturnExplorerSh2DecompilerEngineTests`; the standalone form is the scratch file `pb.cpp`) takes every operation `pullBackUnary`/`pullBackBinary` handles, at one byte and at two bytes (and `ZEXT`/`SEXT` to four), builds the truth by running the operation on every input, and compares it with the pulled-back range: over a grid of edge values (0, 1, 2, 3, 0x7e..0x81, 0xfe, 0xff, the sign boundary, 0x100, 0xff00, 0x7f00, 0x8000) and a seeded sample (ranges with a step of 1, 2 and 4, both slots, the constant from the grid or random). about 21,000 cases per operation and size in the scratch run, about 3,300 per row in the test; a pull-back that succeeds must equal the truth in the input's mask, one that fails is allowed.
+
+| Op-code | Result at the head | Fix |
+|---|---|---|
+| `INT_EQUAL`, `INT_NOTEQUAL`, `INT_LESS`, `INT_LESSEQUAL`, `INT_SLESS`, `INT_SLESSEQUAL`, `INT_CARRY` | exact, except the range holding both 0 and 1 (A2-64: `[0,2)` for the full range, in the input's mask) | the full range |
+| `INT_SUB`, constant first (`val - x`, slot 1) | **wrong in almost every case**: the range came back reversed, `[val-left,val-right)` for `[val-right+step,val-left+step)` (a constant minus the unknown) | the right bounds |
+| `INT_RIGHT`, `INT_SRIGHT`, constant first (`val >> x`, slot 1) | **wrong**: the slot was ignored, so the range was that of `x >> val` | refused (`false`) |
+| `INT_RIGHT`, `INT_SRIGHT` by the size or more | `INT_SRIGHT` by 8 of a byte came back **empty** (the real set is every non-negative byte); `INT_RIGHT` and the shifts of a `uintb` by 64 or more are undefined in C++ | refused |
+| `INT_SEXT` | the gap of the values that are no sign extension was placed with `left & step`, not `left % step`: a range whose left bound is odd moved it by one and let 0x80 (of a byte) through as the sign extension of a byte (`[1,0x81)` came back as `[1,0x81)`, the true input set is `[1,0x80)`) | `left % step`, as `INT_ZEXT` |
+| `INT_ADD`, `INT_2COMP`, `INT_NEGATE`, `COPY`, `INT_ZEXT` | exact (steps of 1, 2 and 4 included) | none |
+| `BOOL_NEGATE` | exact over the boolean domain of its input (a `[0,2)` for both is the whole domain) | none |
+
+Callers: `RuleRangeMeld` (`usenzmask` false: the `SUBPIECE` branch of `CircleRange::pullBack` that widens the mask without widening the range is not taken); `JumpBasic::analyzeGuards` and `checkUnrolledGuard` (`usenzmask` true, starting from a single-valued boolean, so `bothTrueFalse` cannot be met at their first step; a later step through `INT_SUB` slot 1 or a shift was wrong, and is fixed or refused); `ValueSetSolver`'s guard on a relative constant (`pullBackBinary` on a one-valued boolean). In the `SUBPIECE` branch the widened range is intersected with the non-zero mask of the input, which is the part of the range the mask allows; when the mask is not a range (`setNZMask` fails) the range stays wide and holds values the mask excludes, which no execution has: an over-approximation of a set that is only ever intersected with the possible values, not a wrong test. Nothing there needed a change.
+
+None of the four extra defects changes a text of the two game images (section 6). I did not find a function that reaches `INT_SUB` slot 1, the shifts or `INT_SEXT` with these ranges through `RuleRangeMeld` or a switch guard in the generator's functions or either image (the texts are unchanged), and did not try to build one by hand; they are held by the sweep, which calls the function directly.
+
+### 3. The tests, and the generator
+
+* `TestPullBackRanges` (engine tests): the sweep above, plus the seven comparisons' both-true-and-false range being full with the mask of the input (the pin for A2-64 that does not need the rule engine).
+* `TestArea2Round10` (`Sh2DecompilerTests`): the fixture flipped (`agrees`, the text `0x7fffffff < param_1 && -1 < (int4)(param_1 + 0xaaaaaaab)`, no `1 < param_1 &&`), the immediate control, and 108 functions of the family: `addv` and `subv` against nine pool literals (0xAAAAAAAB, 0x80000001, 0xF0000000, 0x55555555, 0x7FFFFFFF, 0xC0000000, 0x40000000, 0xFFFFFFFD, 1) with the literal in the destination or the source register and T tested by `bf`, by `bt` or read by `movt`, each by value against the run for 14 inputs on both sides of the boundaries. 0x80000000 is left to the printed-C differential: the text `-1 < -0x80000000 - param_1` is right as the engine reads it (printed-C: `narrow-c`, 'agrees when read as the engine means it') and not in `TestArea2Round10`'s evaluator, which does not wrap the constant.
+* **The generator draws the shape** (`MakeFlagLit` in `Sh2GeneratedTests.cpp`, the register-only grammar of the printed-C differential, from a stream of its own so no other draw of a seed changes; `SE_GENERATED_PRINTEDC_FLAGS=0` gives the functions of round 9): one function in five gets `mov.l @(lit),Ra ; OP Rb,Ra` with OP an `addv` or `subv` (twice as often as the others), `addc`, `subc` or a `cmp/eq`, `cmp/hs`, `cmp/ge`, `cmp/hi`, `cmp/gt`, the literal one of 17 edge values (the signed and unsigned boundaries, 0xAAAAAAAB, 0x55555555, 0x80000001, 0xF0000000 ...) or random, then T tested by a `bf` or `bt` over a `mov #k,Rt` whose register the function returns, or `movt r0`. With patch 0058 reverted the printed-C differential reports 3 `mismatch` in 3,000 seeds (86, 999, 1843).
+* A2-65 (the harness): in frame mode the declarations of array locals (`xunknown1 axStack_8 [8];`) are collected and a return statement that names one without indexing it (`return axStack_8;`, `return CONCAT44(axStack_4,param_2);`) is `skipped:stack-address`; `axStack_8[1]` is a value and is compared. Pinned in `TestPrintedC` with the row's words (it was `mismatch (run=0603FFF8 pseudo=41709FF8)`).
+
+### 4. Vendoring
+
+`patches/0058-engine-pullback-ranges-exact.patch` is the diff of `rangeutil.cc` from the pinned upstream (a header line, one comment, the seven full ranges, `INT_SUB`, the two shifts, `INT_SEXT`). `vendor.py` on a copy of the vendored directory (`python3 -I vendor.py <pinned Ghidra checkout>`) gives a tree identical to the committed one (`diff -r` empty), all 51 patches applied. **That needed one repair that is not mine:** patch 0056 (area 3) did not apply on top of 0054: its `coreaction.cc` context lacked the header line 0054 adds, so `vendor.py` stopped (the vendored-tree CI job would have failed). The area 3 fixer repaired it on its branch (`8ab4912`); I made the identical change (the same two added lines), so the two branches merge without a conflict in that file. README and VENDOR.md carry the 0058 rows.
+
+### 5. Mutation table
+
+Each fix reverted alone, the pin that fails (the engine tests built per mutant; the sweep prints the first cases):
+
+| Mutant | Pin that fails |
+|---|---|
+| `INT_EQUAL`, `INT_NOTEQUAL`, `INT_LESS`, `INT_LESSEQUAL`, `INT_SLESS`, `INT_SLESSEQUAL`, `INT_CARRY` back to `break` (each alone, and the seven together) | `TestPullBackRanges`: 'misses 2 [0,2)' on that op-code, one mutant per op-code; together also `TestArea2Round10` (3 CHECKs on the fixture) and the printed-C differential (3 mismatches in 3,000 seeds) |
+| `INT_SUB` slot 1 as upstream | `TestPullBackRanges`: 'holds 0 [128,126)' and the like |
+| `INT_RIGHT` without the slot test; without the size test | `TestPullBackRanges`: 'misses 129 [0,129)'; 'holds 2 [2,0)' |
+| `INT_SRIGHT` without the slot test; without the size test | `TestPullBackRanges`: 'misses 2 [126,2)'; 'empty, but 0 belongs' |
+| `INT_SEXT` with `left & step` | `TestPullBackRanges`: 'holds 128 [1,129)' |
+| A2-65: the array-name test of the harness disabled | the A2-65 pin in `TestPrintedC`: `mismatch (... run=0603FFF8:0603FFF8 pseudo=00000000:41D20FF8)`, `CHECK w[0].cls == "skipped:stack-address"` |
+| the whole of 0058 reverted (upstream `rangeutil.cc`) | `Sh2DecompilerTests` (`TestArea2Round10`: 13 CHECKs, the fixture's 3 and 10 more), the engine sweep, the printed-C differential (3 mismatches) |
+
+### 6. The matrix
+
+Own RelWithDebInfo build under the scratch directory (2.5 GB, `-j2`, every run under `ulimit -v 4000000` and `timeout`, one heavy job at a time; the container restarted once, killing a mutation run and nothing else).
+
+| Run | Result |
+|---|---|
+| `ctest -E SaturnExplorerLive -j2 --timeout 900` | 93 of 93 pass (151 s), twice, the second after the last test edit |
+| `SaturnExplorerDecompilerFaultTests` | 0 of 94 jobs fail (89 s); no MOVED pin |
+| generator, `SE_GENERATED_SEEDS=3000 SE_GENERATED_GRAMMAR=2` | 0 failing seeds (106 s) |
+| generator, `SE_GENERATED_GRAMMAR=1 SE_GENERATED_SEEDS=1000` | 0 failing seeds (32 s) |
+| `SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000` | 0 findings; 3,703 functions, 3,424 compared, agrees 3,443, `narrow-c` 9, `void-return` 223, `void-return-lent` 28 |
+| `SE_GENERATED_SEEDS=20000` (four runs of 5,000 from seeds 1, 5,001, 10,001, 15,001) | 0 failing seeds in all (147, 148, 149, 126 s) |
+| printed-C, `SE_GENERATED_FIRST=1000001 SE_GENERATED_SEEDS=15000` | 18,090 functions, 16,797 compared, agrees 16,893, `narrow-c` 40, `skipped:stack-address` 1, `void-return` 1,049, `void-return-lent` 106, **1 finding: seed 1010082's walk `not-compilable`, the routed A3-79** (the review found the same; A2-64's `mismatch` is gone) |
+| decode oracle, `SE_MEDNAFEN_SS`, seed 7777 (20,000 cases) and 31337 (100,000 cases = 13,000,000 differential executions) | 0 differ, 0 could not run, 0 of 130 forms fail, 18 named shapes 0 differ; SLEIGH 53,752 words defined, 0 disagreements with Mednafen |
+| corpora hwram007.bin, hwram008.bin, `SE_GAME_LEND=1` | every ledger count 0; missing and said 0 and 4; lending 662 (923 parameters) and 1,021 (1,287); mapping violations 0 (the 'on another line' counts 4/11 and 4/21 as before); 839 and 1,554 functions |
+| **the corpora texts** | `SE_GAME_OUT` of the fixed build against the build with upstream's `rangeutil.cc`: **4,299 and 7,544 files (the 839 and 1,554 functions, and the lent texts before and after), byte for byte identical.** No game text changes with any of the five fixes. |
+
+### 7. What stays open
+
+* The one finding of the printed-C range is A3-79 (area 3's), not an area 2 finding.
+* The standalone `pb.cpp` runs about 21,000 cases per row; the committed test runs about 3,300 so that it stays in `ctest`'s time; the wider run is the scratch file's.
+* The four extra pull-back defects have no text that reaches them in the family's 108 functions, the generator's functions and the two images; if a reviewer finds one, the sweep already holds the fix.
+* The next review round verifies A2-64 and A2-65; the count of clean rounds stays 0 until then.
