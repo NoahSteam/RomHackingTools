@@ -1,0 +1,259 @@
+name G0 control: pre-decrement walk
+asm 06009000
+.word 0x4F22
+add #-20,r15
+mov #5,r0
+mov.l r0,@r15
+mov r15,r4
+add #16,r4
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l @r15,r0
+add #20,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+mov #4,r1
+L:
+mov.l r1,@-r4
+dt r1
+bf L
+rts
+nop
+endasm
+lend 06009100
+args 0 0 0 0
+end
+name G1 callee spills r4 whole to its frame, walks the reload
+asm 06009000
+.word 0x4F22
+add #-20,r15
+mov #5,r0
+mov.l r0,@r15
+mov r15,r4
+add #16,r4
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l @r15,r0
+add #20,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+add #-4,r15
+mov.l r4,@r15
+mov.l @r15,r5
+mov #4,r1
+L:
+mov.l r1,@-r5
+dt r1
+bf L
+add #4,r15
+rts
+nop
+endasm
+lend 06009100
+args 0 0 0 0
+end
+name G2 callee spills r4 as two halves, walks the reload
+asm 06009000
+.word 0x4F22
+add #-20,r15
+mov #5,r0
+mov.l r0,@r15
+mov r15,r4
+add #16,r4
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l @r15,r0
+add #20,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+add #-4,r15
+mov r15,r3
+add #2,r3
+mov r4,r6
+mov.w r6,@r3
+shlr16 r6
+add #-2,r3
+mov.w r6,@r3
+mov.l @r15,r5
+mov #4,r1
+L:
+mov.l r1,@-r5
+dt r1
+bf L
+add #4,r15
+rts
+nop
+endasm
+lend 06009100
+args 0 0 0 0
+end
+name G3 callee steps 4 below with a negated constant (one store)
+asm 06009000
+.word 0x4F22
+add #-20,r15
+mov #5,r0
+mov.l r0,@r15
+mov r15,r4
+add #16,r4
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l @r15,r0
+add #20,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+mov #4,r3
+neg r3,r3
+add r3,r4
+mov #1,r1
+mov.l r1,@r4
+rts
+nop
+endasm
+lend 06009100
+args 0 0 0 0
+end
+name G3b callee steps with shll2 of -1 in a loop
+asm 06009000
+.word 0x4F22
+add #-20,r15
+mov #5,r0
+mov.l r0,@r15
+mov r15,r4
+add #16,r4
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l @r15,r0
+add #20,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+mov #-1,r3
+shll2 r3
+mov #4,r1
+L:
+add r3,r4
+mov.l r1,@r4
+dt r1
+bf L
+rts
+nop
+endasm
+lend 06009100
+args 0 0 0 0
+end
+name G4 callee stores r4 to a global and walks the reload
+asm 06009000
+.word 0x4F22
+add #-20,r15
+mov #5,r0
+mov.l r0,@r15
+mov r15,r4
+add #16,r4
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l @r15,r0
+add #20,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+mov.l =0x0600F100,r3
+mov.l r4,@r3
+mov.l @r3,r5
+mov #4,r1
+L:
+mov.l r1,@-r5
+dt r1
+bf L
+rts
+nop
+endasm
+lend 06009100
+args 0 0 0 0
+end
+name G5 callee masks r4 (shll/shlr) and walks
+asm 06009000
+.word 0x4F22
+add #-20,r15
+mov #5,r0
+mov.l r0,@r15
+mov r15,r4
+add #16,r4
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l @r15,r0
+add #20,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+mov r4,r5
+shll r5
+shlr r5
+mov #4,r1
+L:
+mov.l r1,@-r5
+dt r1
+bf L
+rts
+nop
+endasm
+lend 06009100
+args 0 0 0 0
+end
+name G6 callee xor-twice pointer, walks
+asm 06009000
+.word 0x4F22
+add #-20,r15
+mov #5,r0
+mov.l r0,@r15
+mov r15,r4
+add #16,r4
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l @r15,r0
+add #20,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+mov r4,r5
+mov #3,r6
+xor r6,r5
+xor r6,r5
+mov #4,r1
+L:
+mov.l r1,@-r5
+dt r1
+bf L
+rts
+nop
+endasm
+lend 06009100
+args 0 0 0 0
+end
