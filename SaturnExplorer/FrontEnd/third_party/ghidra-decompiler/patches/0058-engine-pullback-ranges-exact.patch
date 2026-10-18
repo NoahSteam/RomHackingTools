@@ -1,0 +1,154 @@
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/rangeutil.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/rangeutil.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/rangeutil.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/rangeutil.cc
+@@ -12,6 +12,9 @@
+  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
++ *
++ * Modified for SaturnExplorer: a pull-back through a comparison of a range holding both 0 and 1 is the full range; the other pull-backs are
++ * exact or refused (patches/0058-engine-pullback-ranges-exact.patch).
+  */
+ #include "rangeutil.hh"
+ #include "block.hh"
+@@ -771,7 +774,7 @@
+     case CPUI_INT_SEXT:
+     {
+       val = calc_mask(inSize); // (smaller) input mask
+-      uintb rem = left & step;
++      uintb rem = left % step;	// SaturnExplorer (patches/0058-engine-pullback-ranges-exact.patch): the phase of the stride, not left & step (it moved the gap by one)
+       CircleRange sextrange;
+       sextrange.left = val ^ (val >> 1); // High order bit for (small) input space
+       sextrange.left += rem;
+@@ -798,6 +801,9 @@
+   return true;
+ }
+ 
++/// SaturnExplorer (patches/0058-engine-pullback-ranges-exact.patch): the result is exactly the set of inputs whose output falls in \b this, with
++/// the mask of the input, or the pull-back fails. A comparison that can be either true or false (\b this holds both 0 and 1) holds for
++/// every input: the full range, not [0,2) widened to the input's size.
+ /// \param opc is the OpCode to pull the range back through
+ /// \param val is the constant value of the other input parameter (if present)
+ /// \param slot is the slot of the input variable whose range gets produced
+@@ -817,8 +823,11 @@
+     case CPUI_INT_EQUAL:
+       bothTrueFalse = convertToBoolean();
+       mask = calc_mask(inSize);
+-      if (bothTrueFalse)
+-	break;	// All possible outs => all possible ins
++      if (bothTrueFalse) {	// All possible outs => all possible ins
++	left = 0;		// SaturnExplorer (patches/0058): the full range of the input
++	right = 0;
++	break;
++      }
+       yescomplement = (left == 0);
+       left = val;
+       right = (val + 1) & mask;
+@@ -828,7 +837,11 @@
+     case CPUI_INT_NOTEQUAL:
+       bothTrueFalse = convertToBoolean();
+       mask = calc_mask(inSize);
+-      if (bothTrueFalse) break;	// All possible outs => all possible ins
++      if (bothTrueFalse) {	// All possible outs => all possible ins
++	left = 0;		// SaturnExplorer (patches/0058): the full range of the input
++	right = 0;
++	break;
++      }
+       yescomplement = (left==0);
+       left = (val+1)&mask;
+       right = val;
+@@ -838,7 +851,11 @@
+     case CPUI_INT_LESS:
+       bothTrueFalse = convertToBoolean();
+       mask = calc_mask(inSize);
+-      if (bothTrueFalse) break;	// All possible outs => all possible ins
++      if (bothTrueFalse) {	// All possible outs => all possible ins
++	left = 0;		// SaturnExplorer (patches/0058): the full range of the input
++	right = 0;
++	break;
++      }
+       yescomplement = (left==0);
+       if (slot==0) {
+         if (val==0)
+@@ -862,7 +879,11 @@
+     case CPUI_INT_LESSEQUAL:
+       bothTrueFalse = convertToBoolean();
+       mask = calc_mask(inSize);
+-      if (bothTrueFalse) break;	// All possible outs => all possible ins
++      if (bothTrueFalse) {	// All possible outs => all possible ins
++	left = 0;		// SaturnExplorer (patches/0058): the full range of the input
++	right = 0;
++	break;
++      }
+       yescomplement = (left==0);
+       if (slot==0) {
+         left = 0;
+@@ -878,7 +899,11 @@
+     case CPUI_INT_SLESS:
+       bothTrueFalse = convertToBoolean();
+       mask = calc_mask(inSize);
+-      if (bothTrueFalse) break;	// All possible outs => all possible ins
++      if (bothTrueFalse) {	// All possible outs => all possible ins
++	left = 0;		// SaturnExplorer (patches/0058): the full range of the input
++	right = 0;
++	break;
++      }
+       yescomplement = (left==0);
+       if (slot==0) {
+         if (val == (mask>>1)+1)
+@@ -902,7 +927,11 @@
+     case CPUI_INT_SLESSEQUAL:
+       bothTrueFalse = convertToBoolean();
+       mask = calc_mask(inSize);
+-      if (bothTrueFalse) break;	// All possible outs => all possible ins
++      if (bothTrueFalse) {	// All possible outs => all possible ins
++	left = 0;		// SaturnExplorer (patches/0058): the full range of the input
++	right = 0;
++	break;
++      }
+       yescomplement = (left==0);
+       if (slot==0) {
+         left = (mask >> 1)+1;	// -infinity
+@@ -918,7 +947,11 @@
+     case CPUI_INT_CARRY:
+       bothTrueFalse = convertToBoolean();
+       mask = calc_mask(inSize);
+-      if (bothTrueFalse) break;	// All possible outs => all possible ins
++      if (bothTrueFalse) {	// All possible outs => all possible ins
++	left = 0;		// SaturnExplorer (patches/0058): the full range of the input
++	right = 0;
++	break;
++      }
+       yescomplement = (left==0);
+       if (val==0)
+         isempty = true;		// Nothing carries adding zero
+@@ -939,12 +972,19 @@
+   	right = (right+val)&mask;
+       }
+       else {
+-  	left = (val-left)&mask;
+-  	right = (val-right)&mask;
++	// SaturnExplorer (patches/0058-engine-pullback-ranges-exact.patch): val - x falls in [left,right) for x in (val-right,val-left],
++	// that is [val-right+step, val-left+step); the range was left reversed, as [val-left,val-right)
++  	uintb newLeft = (val-right+step)&mask;
++  	right = (val-left+step)&mask;
++  	left = newLeft;
+       }
+       break;
+     case CPUI_INT_RIGHT:
+     {
++      // SaturnExplorer (patches/0058-engine-pullback-ranges-exact.patch): only a shift of the input by a constant (slot 0) by less than the
++      // size is pulled back. A constant shifted by the input (slot 1) is another function (the range was taken for val >> x as x >> val),
++      // and a shift by the size or more is not a shift of the bits below.
++      if (slot != 0 || val >= (uintb)inSize * 8) return false;
+       if (step == 1) {
+ 	uintb rightBound = (calc_mask(inSize) >> val) + 1; // The maximal right bound
+ 	if (((left >= rightBound) && (right >= rightBound) && (left >= right))
+@@ -970,6 +1010,7 @@
+     }
+     case CPUI_INT_SRIGHT:
+     {
++      if (slot != 0 || val >= (uintb)inSize * 8) return false;	// SaturnExplorer (patches/0058-engine-pullback-ranges-exact.patch), as for INT_RIGHT
+       if (step == 1) {
+ 	uintb rightb = calc_mask(inSize);
+ 	uintb leftb = rightb >> (val + 1);
