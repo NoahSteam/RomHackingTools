@@ -3944,6 +3944,10 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
         if (r.unimplemented) add("unimplemented", "the spec has no semantics for an instruction");
         if (r.truncated) add("truncated", "flow left captured memory: " + r.truncatedWhy);
         if (!r.badDataAt.empty()) add("baddata", "bad data at " + Hex(r.badDataAt[0]));
+        // The engine's simplification did not settle (patch 0055 bounds the passes of a repeating action; two rules that undid each other, A2-59,
+        // ran until the host cancelled): a finding whatever the text, since a cycle is an engine defect.
+        for (const std::string& w : r.warnings)
+            if (w.find("Exceeded maximum repeats") != std::string::npos) add("unsettled", w);
         // The canary (A3-34): the function stored fn.canary in a local that a callee overwrote, and no run returned it. A `return` that
         // contains it (as 0x5a, or in decimal) is the local folded across the call, the value from before the callee wrote it.
         if (fn.canary != 0)
@@ -5875,6 +5879,94 @@ RegItem MakeTerms(Rng& rng)
     return it;
 }
 
+// A join whose two predecessors compute the same thing from a source register, read at two widths (area 2, round 9: A2-58): each arm makes
+// `r1 = src & M` (M a mask of high bits) and `r2 = G(r1)` (shifts, extensions, adds, a test), and the join reads r1 through a narrow H (a byte,
+// a shift pair) and r2 whole. RulePushMulti merges the two computations of r2 into one op in the join that reads the join's phi of r1, whose
+// consume mask was worked out from H alone; with that mask left as it was, RuleAndMask took `src & M` for unused and the text returned a
+// constant. The register grammar drew no join of equal computations (the nightly's three ranges, 45,000 functions, had none); the families of
+// tools/a2_round9/dagen.py (7 to 9) are its model.
+RegItem MakeJoin(Rng& rng)
+{
+    static const std::vector<uint16_t> kMasks[] = { { 0xE301, 0x4305 }, { 0xE301, 0x4305, 0x4309 }, { 0xE3FF, 0x4328 }, { 0xE3FF, 0x4328, 0x4318 },
+                                                    { 0xE3FF, 0x4318 }, { 0xE3FF, 0x4308, 0x4318 }, { 0xE30F, 0x4318 }, { 0xE3F0, 0x4318, 0x4308 },
+                                                    { 0xE301, 0x4305, 0x4309, 0x4309 } };
+    static const uint16_t kTests[] = { 0x4415, 0x4411, 0x2448, 0x3447, 0x3443 };   // cmp/pl r4, cmp/pz r4, tst r4,r4, cmp/gt r4,r4, cmp/ge r4,r4
+    static const uint16_t kG[] = { 0x4219, 0x4209, 0x4201, 0x4200, 0x4208, 0x4218, 0x4228, 0x4229, 0x7201, 0x7204, 0x7280, 0x6228, 0x6229,
+                                   0x622C, 0x622D, 0x622E, 0x622F, 0x6227, 0x622B, 0x4204, 0x4205 };   // on r2: shifts, add #k, swaps, extensions, not, neg, rotates
+    static const uint16_t kArmTests[] = { 0x2118, 0x2118, 0x4115, 0x4111 };   // tst r1,r1, cmp/pl r1, cmp/pz r1 (the join reads T)
+    static const std::vector<uint16_t> kH[] = { { 0x600C }, { 0x600D }, { 0x4019, 0x600C }, { 0x4009, 0x600C }, { 0x4029, 0x600D }, { 0x4018, 0x4019 },
+                                                { 0x4000 }, { 0x4008 }, { 0x6008 }, { 0xC97F }, { 0xC9F0 }, { 0x4021 }, { 0x4001, 0x600C }, { 0x600F }, { 0x600E } };
+    static const uint16_t kCombine[] = { 0x302C, 0x3028, 0x202B, 0x202A, 0x2029 };   // add, sub, or, xor, and r2,r0
+    RegItem it;
+    it.shape = "join";
+    const std::vector<uint16_t>& mask = kMasks[rng.Below(sizeof kMasks / sizeof kMasks[0])];
+    it.w.insert(it.w.end(), mask.begin(), mask.end());
+    it.w.push_back(kTests[rng.Below(sizeof kTests / sizeof kTests[0])]);
+    const bool viaT = rng.Chance(30);
+    std::vector<uint16_t> g;
+    if (viaT)
+    {
+        if (rng.Chance(40)) g.push_back(static_cast<uint16_t>(0x7100 | rng.Below(3)));   // add #k,r1 (on r1, before the test)
+        g.push_back(kArmTests[rng.Below(sizeof kArmTests / sizeof kArmTests[0])]);
+    }
+    else
+    {
+        g.push_back(0x6213);   // mov r1,r2
+        const uint32_t n = 1 + rng.Below(3);
+        for (uint32_t i = 0; i < n; ++i) g.push_back(kG[rng.Below(sizeof kG / sizeof kG[0])]);
+    }
+    auto arm = [&](uint32_t src) {
+        std::vector<uint16_t> a = { static_cast<uint16_t>(0x6103 | src << 4), 0x2139 };   // mov src,r1 ; and r3,r1
+        a.insert(a.end(), g.begin(), g.end());
+        return a;
+    };
+    const std::vector<uint16_t> a = arm(5), b = arm(6);
+    it.w.push_back(static_cast<uint16_t>((rng.Chance(50) ? 0x8900 : 0x8B00) | (a.size() + 1)));   // bt/bf B
+    it.w.insert(it.w.end(), a.begin(), a.end());
+    it.w.push_back(static_cast<uint16_t>(0xA000 | b.size()));   // bra J
+    it.w.push_back(0x0009);
+    it.w.insert(it.w.end(), b.begin(), b.end());
+    it.w.push_back(0x6013);   // J: mov r1,r0
+    const std::vector<uint16_t>& h = kH[rng.Below(sizeof kH / sizeof kH[0])];
+    it.w.insert(it.w.end(), h.begin(), h.end());
+    if (viaT) it.w.push_back(0x0229);   // movt r2
+    it.w.push_back(kCombine[rng.Below(sizeof kCombine / sizeof kCombine[0])]);
+    return it;
+}
+
+// A counted loop that carries `r1 &= f(src)` (or |=, ^=), r1 seeded with a small constant and f a value assembled from the pieces of a
+// register (swap.b, swap.w, xtrct, a shift and a swap) (area 2, round 9: A2-59). RuleAndDistribute distributes the AND over the OR of the
+// pieces when the non-zero mask of the carried value (the loop's phi) misses a piece; with that mask forgotten after the first distribution
+// (patch 0049) the second did not fire and RuleHumptyOr merged the first back, for ever. The register grammar drew no loop at all.
+RegItem MakeLoopAnd(Rng& rng)
+{
+    static const uint16_t kSeeds[] = { 1, 2, 4, 0x0F, 0x1C, 0x7F, 0xFC, 0x03, 0x10 };
+    static const uint32_t kSources[] = { 2, 4, 5, 7 };
+    RegItem it;
+    it.shape = "loopand";
+    it.w.push_back(static_cast<uint16_t>(0xE100 | kSeeds[rng.Below(sizeof kSeeds / sizeof kSeeds[0])]));   // mov #c,r1
+    it.w.push_back(static_cast<uint16_t>(0xE600 | (1 + rng.Below(3))));                                    // mov #n,r6
+    const size_t top = it.w.size();
+    const uint32_t src = kSources[rng.Below(4)];
+    it.w.push_back(static_cast<uint16_t>(0x6303 | src << 4));   // mov src,r3
+    switch (rng.Below(6))
+    {
+    case 0: it.w.push_back(0x6338); break;                                                  // swap.b r3,r3
+    case 1: it.w.push_back(0x6339); break;                                                  // swap.w r3,r3
+    case 2: it.w.push_back(0x6338); it.w.push_back(0x6339); break;
+    case 3: it.w.push_back(static_cast<uint16_t>(0x230D | kSources[rng.Below(4)] << 4)); break;   // xtrct rm,r3
+    case 4: it.w.push_back(0x4319); it.w.push_back(0x6338); break;                         // shlr8 r3 ; swap.b r3,r3
+    default: it.w.push_back(0x6338); it.w.push_back(static_cast<uint16_t>(0x230B | src << 4)); break;   // swap.b ; or src,r3
+    }
+    static const uint16_t kAcc[] = { 0x2139, 0x2139, 0x213B, 0x213A };   // and, and, or, xor r3,r1
+    it.w.push_back(kAcc[rng.Below(4)]);
+    it.w.push_back(0x4610);   // dt r6
+    const int disp = static_cast<int>(top) - static_cast<int>(it.w.size() + 2);
+    it.w.push_back(static_cast<uint16_t>(0x8B00 | (disp & 0xFF)));   // bf top
+    it.w.push_back(0x6013);   // mov r1,r0
+    return it;
+}
+
 RegFn GenRegFn(uint64_t seed, int k)
 {
     Rng rng(seed * 7919u + static_cast<uint64_t>(k) + 0x5EEDu);
@@ -5950,6 +6042,19 @@ RegFn GenRegFn(uint64_t seed, int k)
         const RegItem item = MakeTerms(sums);
         const size_t at = sums.Chance(70) ? f.items.size() : sums.Below(static_cast<uint32_t>(f.items.size()) + 1);
         f.items.insert(f.items.begin() + static_cast<long>(at), item);
+    }
+    // The joins of equal computations and the loops that AND an accumulator with the pieces of a register (A2-58, A2-59), from a stream
+    // of their own once more: SE_GENERATED_PRINTEDC_JOINS=0 gives the functions of round 8.
+    Rng joins(seed * 32452843u + static_cast<uint64_t>(k) + 0xA258u);
+    if (EnvNumber("SE_GENERATED_PRINTEDC_JOINS", 1) != 0)
+    {
+        const uint32_t pick = joins.Below(100);
+        if (pick < 25)
+        {
+            const RegItem item = pick < 15 ? MakeJoin(joins) : MakeLoopAnd(joins);
+            const size_t at = joins.Chance(70) ? f.items.size() : joins.Below(static_cast<uint32_t>(f.items.size()) + 1);
+            f.items.insert(f.items.begin() + static_cast<long>(at), item);
+        }
     }
     const uint32_t s = rng.Below(100);
     std::string shape;
@@ -6177,6 +6282,17 @@ std::string FindCxxCompiler(const std::string& cc)
     return std::string();
 }
 
+// The engine's reading of an unsigned literal (A2-60). The engine prints `U` on a constant whose operation is unsigned where the other operand is
+// signed (`param_1 + 0x80U` of an int4 param_1 is an unsigned sum and `0x7f < param_1 + 0x80U` an unsigned compare); in C++ `0x80U` and a plain
+// `0xffffffff` are both an `unsigned int`, which Promoted brings to the other operand's sign like any plain number, so the U was lost. Here the
+// suffixed literals are made the engine's unsigned types (`uint4(0x80)`, `uint8(...)` for ULL), which Common and Promoted treat as unsigned.
+std::string UnsignedLiteralsTyped(const std::string& text)
+{
+    static const std::regex wide("\\b(0x[0-9a-fA-F]+|[0-9]+)(?:ULL|LLU|ull|llu)\\b");
+    static const std::regex narrow("\\b(0x[0-9a-fA-F]+|[0-9]+)[Uu]\\b");
+    return std::regex_replace(std::regex_replace(text, wide, "uint8($1)"), narrow, "uint4($1)");
+}
+
 std::string CxxHeader()
 {
     std::ostringstream o;
@@ -6302,6 +6418,10 @@ void TestOracleOwnDecisions()
         for (uint32_t v : pool) found = found || ((v & high) == high && !((v >> (bits - 1)) & 1u));
         CHECK(found);
     }
+    // A2-60: a literal the engine prints with `U` is unsigned in the engine's reading, a plain one takes the other operand's type
+    CHECK(UnsignedLiteralsTyped("0x7f < param_1 + 0x80U") == "0x7f < param_1 + uint4(0x80)");
+    CHECK(UnsignedLiteralsTyped("x * 3U + 0xfffffffeULL") == "x * uint4(3) + uint8(0xfffffffe)");
+    CHECK(UnsignedLiteralsTyped("uVar1 = in_r2U + 0xffffffff; uRam0600U = 1;") == "uVar1 = in_r2U + 0xffffffff; uRam0600U = 1;");
 }
 
 bool IsFailing(const CVerdict& v)
@@ -6336,6 +6456,17 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
         q.entry = kCode;
         const DecompileResult r = d.Decompile(snap, q);
         v.text = r.Text();
+        {
+            bool unsettled = false;
+            for (const std::string& w : r.warnings) unsettled |= w.find("Exceeded maximum repeats") != std::string::npos;
+            if (unsettled && r.status == DecompileStatus::Ok)
+            {
+                // patch 0055 stopped a repeating action of the engine that did not settle (A2-59's class): failing, whatever the value
+                v.cls = "unsettled";
+                v.detail = "the engine's simplification did not settle (Exceeded maximum repeats)";
+                continue;
+            }
+        }
         if (r.status != DecompileStatus::Ok || r.unsupported || r.truncated)
         {
             v.cls = "undecompiled";
@@ -6378,6 +6509,18 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
         {
             v.cls = "skipped:array-local";
             continue;
+        }
+        // The address of a local (`return &xStack_1;`, `(uint4)&xStack00000000 & 0xff`): the run's is an address in the machine's stack, the C's one in
+        // the host's, so the two cannot be compared by value (A2-61: the harness took it for 0, a mismatch where the text is right).
+        static const std::regex stackAddress("&\\s*[A-Za-z]*[Ss]tack_?[0-9a-fA-F]+\\b");
+        {
+            std::smatch m;
+            if (std::regex_search(text, m, stackAddress))
+            {
+                v.cls = "skipped:stack-address";
+                v.detail = "the text computes the address of a local ('" + m.str() + "')";
+                continue;
+            }
         }
         if (text.find("halt_baddata") != std::string::npos || text.find("(code *)") != std::string::npos ||
             text.find("extraout_") != std::string::npos || text.find("in_stack") != std::string::npos ||
@@ -6594,7 +6737,7 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
     auto compileRun = [&](const std::vector<size_t>& which, const std::string& tag, std::string& log, bool& compiled, bool engine = false) -> std::string {
         std::ostringstream src;
         src << (engine ? CxxHeader() : CHeader());
-        for (size_t i : which) src << "static int bad_" << prep[i].name << ";\n" << prep[i].cText << "\n";
+        for (size_t i : which) src << "static int bad_" << prep[i].name << ";\n" << (engine ? UnsignedLiteralsTyped(prep[i].cText) : prep[i].cText) << "\n";
         src << "int main(void) {\n";
         for (size_t i : which) src << prep[i].mainText;
         int total = 0;
@@ -6799,6 +6942,16 @@ const PrintedCFixture kPrintedCFixtures[] = {
     { "A2-52 c + 8x + 4y + 14x, shlr2 ; shll2", { 0xD008, 0xD309, 0x0347, 0x031A, 0x303C, 0xD308, 0x0367, 0x031A, 0x303C, 0xD307, 0x0347, 0x031A, 0x303C, 0x4009, 0x4008, 0x000B, 0x0009, 0x0009, 0x0000, 0x0100, 0x0000, 0x0008, 0x0000, 0x0004, 0x0000, 0x000E } },
     { "A2-52 termgen 2", { 0x2468, 0x0129, 0xD00A, 0x6343, 0x4308, 0x4308, 0x303C, 0x6313, 0x4308, 0x4308, 0x303C, 0xD307, 0x0367, 0x031A, 0x303C, 0xD306, 0x0347, 0x031A, 0x303C, 0xD305, 0x2039, 0x000B, 0x0009, 0x0009, 0x0000, 0x0000, 0x0000, 0x0008, 0xFFFF, 0xFFFA, 0xFFFF, 0xFFFC } },
     { "A2-52 termgen 4", { 0x3456, 0x0129, 0xD00A, 0xD30B, 0x0317, 0x031A, 0x3038, 0xD30A, 0x0367, 0x031A, 0x303C, 0xD309, 0x0347, 0x031A, 0x3038, 0xD308, 0x0317, 0x031A, 0x303C, 0xD307, 0x2039, 0x000B, 0x0009, 0x0009, 0x0000, 0x0000, 0x0000, 0x0048, 0x0000, 0x001C, 0x0000, 0x0024, 0x0000, 0x0001, 0xFFFF, 0xFFFC } },
+    // Area 2, round 9. A2-58: a join of two equal computations (RulePushMulti) read at two widths, through an add and through a test.
+    { "A2-58 add", { 0xE301, 0x4305, 0x4415, 0x8905, 0x6153, 0x2139, 0x6213, 0x7201, 0xA004, 0x0009, 0x6163, 0x2139, 0x6213, 0x7201, 0x6013, 0x600C, 0x202B, 0x000B, 0x0009, 0x0009 } },
+    { "A2-58 tst", { 0xE301, 0x4305, 0x4411, 0x8904, 0x6153, 0x2139, 0x2118, 0xA003, 0x0009, 0x6163, 0x2139, 0x2118, 0x6013, 0x4008, 0x0229, 0x3028, 0x000B, 0x0009 } },
+    // A2-59: loops that AND a seeded accumulator with the pieces of a register (the engine did not finish these: RuleAndDistribute and RuleHumptyOr).
+    { "A2-59 swap.b", { 0xE104, 0x6328, 0x2139, 0x4610, 0x8BFB, 0x000B, 0x6013, 0x0009 } },
+    { "A2-59 swap.w", { 0xE104, 0x6329, 0x2139, 0x4610, 0x8BFB, 0x000B, 0x6013, 0x0009 } },
+    { "A2-59 shlr8 ; swap.b", { 0xE11C, 0xE601, 0x6323, 0x4319, 0x6338, 0x2139, 0x4610, 0x8BF9, 0x000B, 0x6013, 0x000B, 0x6033 } },
+    { "A2-59 xtrct", { 0xE601, 0xE17F, 0x222B, 0x200D, 0x2109, 0x4610, 0x8BFA, 0x4308, 0x6023, 0x000B, 0x0009, 0x0009 } },
+    // A2-60 (oracle): `0x7f < param_1 + 0x80U` read as the engine means it, an unsigned compare (the C reading widens the two-byte negation: narrow-c).
+    { "A2-60 0x80U in the engine's reading", { 0x6043, 0x6153, 0x6263, 0x6373, 0x4404, 0x4421, 0x323C, 0x651B, 0x4421, 0xD104, 0x301C, 0x3012, 0x0129, 0x321C, 0x6053, 0x600F, 0x000B, 0x0009, 0x0000, 0x0080 } },
 };
 
 // The fixtures of area 2, round 4 (A2-21, A2-22, A2-26): the compiler's division by a constant, scaled by the power of two it
@@ -6895,6 +7048,17 @@ void TestPrintedC()
     std::vector<CCase> cases;
     std::vector<RegFn> fns;
     const bool hand = std::getenv("SE_GENERATED_PRINTEDC_WORDS") != nullptr;
+    if (!hand)
+    {
+        // A2-61: a text that returns the address of a local is not compared by value (it was a mismatch: the run's stack address against the C's 0).
+        // Not a fixture (a fixture the harness skips is a failure), so it is classified here.
+        const std::vector<CVerdict> v = CheckPrintedC(d, { { "seedA2-61", { 0x7FF0, 0x1F72, 0x62F3, 0x720E, 0x2261, 0x62F3, 0x7208, 0x2242, 0x1F01, 0x0447, 0x041A,
+                                                                            0x1F60, 0x63F3, 0x730F, 0x2340, 0x7508, 0x50F1, 0x85F5, 0x85F5, 0x600D, 0x7F10, 0x000B,
+                                                                            0x6033, 0x0009 } } },
+                                                      nIn, cc, 0x51ED, 8997);
+        std::printf("pin 'A2-61: a returned stack address is not compared': %s (%s)\n", v[0].cls.c_str(), v[0].detail.c_str());
+        CHECK(v[0].cls == "skipped:stack-address");
+    }
     if (hand)
     {
         std::stringstream all(std::getenv("SE_GENERATED_PRINTEDC_WORDS"));
@@ -7709,6 +7873,18 @@ void TestRound8Pins(Sh2Decompiler& d)
         }
         std::printf("pin 'A2-52: the register-only grammar draws sums of scaled terms': %d of %d functions\n", withTerms, total);
         CHECK(withTerms >= 100 && withTerms <= 260);
+        // A2-58 and A2-59: the joins of equal computations and the loops that AND an accumulator with the pieces of a register, from a stream of
+        // their own (SE_GENERATED_PRINTEDC_JOINS=0 gives round 8's functions): about 15 and 10 in a hundred.
+        int withJoin = 0, withLoop = 0;
+        for (long seed = 1; seed <= 600; ++seed)
+            for (const RegItem& it : GenRegFn(static_cast<uint64_t>(seed), 0).items)
+            {
+                withJoin += it.shape == "join";
+                withLoop += it.shape == "loopand";
+            }
+        std::printf("pin 'A2-58, A2-59: the register-only grammar draws joins and loops': %d and %d of %d functions\n", withJoin, withLoop, total);
+        CHECK(withJoin >= 50 && withJoin <= 140);
+        CHECK(withLoop >= 30 && withLoop <= 100);
         CHECK(UnderscoreNameType("  _Stack_4 = CONCAT31(Stack_4,param_2);", "_Stack_4") == "xunknown4");
         CHECK(UnderscoreNameType("  _Stack_4 = CONCAT44(a,b);", "_Stack_4") == "xunknown8");
         CHECK(UnderscoreNameType("  _Stack_4 = CONCAT11(a,b);", "_Stack_4") == "xunknown2");

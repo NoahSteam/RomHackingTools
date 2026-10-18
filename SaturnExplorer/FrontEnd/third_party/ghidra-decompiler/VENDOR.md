@@ -75,8 +75,25 @@ The embedded copy of the runtime files is `FrontEnd/src/Decompiler/Sh2SpecData.h
 | `0051-engine-replaced-varnode-consume-merged.patch` | `Funcdata::totalReplace` ORs the consume mask of the Varnode it replaces into the one that takes over its readers, so a common-subexpression merge cannot leave the byte of SR read by `& 1` and by a whole-byte compare with the consume mask of the first, and `ActionVarnodeProps` cannot replace it by a zero (ledger A2-56). |
 | `0052-flow-instruction-alignment.patch` | `Architecture::instructionAlignment` (host policy; SaturnExplorer sets 2): flow halts as at bad data at an address that is not a multiple of it, so a jump table entry that is no address no longer sends flow into the middle of an instruction (ledger A7-6). |
 | `0053-engine-stack-pointer-longword-aligned.patch` | `Funcdata::calcNZMask` takes the stack pointer on entry to be aligned to a longword (`~3`), not to 256, so `mov r15,r0 ; and #0xff,r0` is not `return 0;` (ledger A2-53). |
+| `0054-engine-cached-masks-never-narrower.patch` | Every change to an op's op-code, inputs or output, and every new reader of a Varnode, keeps the cached non-zero and consume masks around it a superset of the truth (`Funcdata::opMasksChanged`): the changed op's output gets the mask its inputs give, the masks below and above are widened until they already hold what their neighbours give, nothing true is forgotten. Replaces the resets of 0046, 0049 and 0051 (ledger A2-58, A2-59). See "Cached masks" below. |
+| `0055-engine-action-repeats-bounded.patch` | A repeating group or pool of actions stops after `Architecture::maxActionRepeats` passes (300) with the warning `Exceeded maximum repeats of <action> with changes still pending`, which the host reports and for which it withholds the signature: two rules that undo each other end as a reported, bounded failure, not as memory taken until the host cancels (ledger A2-59). |
 
 MSVC and Apple clang needed no patch beyond these.
+
+### Cached masks (the invariant of patch 0054)
+
+The engine caches two masks on each Varnode and its rules take them as facts between the actions that work them out: the
+non-zero mask (`ActionNonzeroMask`: which bits can be 1) and the consume mask (`ActionDeadCode`: which bits any reader sees).
+**At every rule application, a cached mask may be wider than the truth, never narrower.** A narrower one is a wrong text with
+no warning (`RuleAndMask` drops an AND, `ActionVarnodeProps` replaces a value by 0: ledger A2-47, A2-52, A2-56, A2-58); a
+wider one costs a simplification until the next pass, and forgetting a mask that was still true is what let two rules undo
+each other for ever (A2-59). `Funcdata::opMasksChanged` keeps it at every primitive that changes an op or gives a Varnode a
+reader. A patch that adds a way to change an op without one of those primitives (a direct `PcodeOp::setInput`,
+`PcodeOpBank::changeOpcode`) must call it, and a bump must re-check that `PcodeOp::getNZMaskLocal` and
+`PcodeOp::getConsumeLocal` are still the steps the two actions take (`ActionDeadCode::propagateConsumed` calls the second; the
+roots in `Funcdata::inputConsumeNeeded` mirror `ActionDeadCode::apply`, `markConsumedParameters` and `gatherConsumedReturn`).
+The instrument is `Docs/Decompiler/tools/a2_round9/nzm_check_r9.patch` (after every rule and action, a value contradicting a
+non-zero mask, a consume mask that leaves out a bit that changes a root) over `dagen.py`'s families.
 
 ## Builds
 
@@ -143,6 +160,8 @@ applies 0005 to 0008) must run before `se-regen-sla`.
   - 0051: `TestArea2Round8` part 7 (`cmp/str` on the SR byte after `addc`: the byte is compared whole) and the printed-C fixture `A2-56` (by value).
   - 0052: `TestRoutedSeeds` (a switch with an odd table entry: `halt_baddata()` at the odd address, the flow warning says it is odd, no "overlaps instruction" warning, an odd entry is refused) and the mapping oracle's corpus counts (odd addresses in functions with overlapping instructions, and functions entered at an odd address: both 0).
   - 0053: `TestArea2Round8` part 3 (`mov r15,r0 ; and #0xff,r0` keeps the AND on r15; `and #3` is still 0).
+  - 0054: `TestArea2Round9` parts 1 and 2 (the A2-58 joins agree with the run; the A2-59 loops finish, settled), `TestArea2Round8` part 5 and `TestArea2Round7SlotValues` (the sums of A2-47 and A2-52), the canary checks of `TestArea3Round8` and `TestArea3Round9`, the printed-C fixtures `A2-58 ...` and `A2-59 ...`, and the mask checker over `dagen.py`'s families ("Cached masks" above).
+  - 0055: `TestArea2Round9` part 3 (the bound lowered to 2: the text printed, the warning passed on, the signature withheld).
 
 
   If upstream's Makefile source groups changed, update the lists in `vendor.py`.
