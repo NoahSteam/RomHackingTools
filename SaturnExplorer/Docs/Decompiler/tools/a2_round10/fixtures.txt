@@ -1,0 +1,7 @@
+# Area 2 round 10 fixtures, in the format of SE_AREA2_FIXTURES (Sh2DecompilerTests): name|words|inputs (r4,r5,.. sets joined by ;)|flags|lend
+# A2-64 (P1): addv r0,r4 with the literal 0xAAAAAAAB in r4, T tested by bf: the code sets r1 = 7 only on signed overflow (r0 negative, sum non-negative);
+# the head prints `if (1 < param_1 && -1 < (int4)(param_1 + 0xaaaaaaab))` (head: differs for r4 = 0x60000000: the code gives 5, the text 7)
+# words: mov r4,r0 ; mov.l @(pc),r4 ; addv r0,r4 ; mov #5,r1 ; bf +0 ; mov #7,r1 ; mov r1,r0 ; rts ; nop ; nop ; .long 0xAAAAAAAB
+A2-64 addv literal|6043 D404 340F E105 8B00 E107 6013 000B 0009 0009 AAAA AAAB|60000000;80000000;0;FFFFFFFF;7FFFFFFF;55555555|p
+# the same literal as an immediate (mov #-3) prints the right test
+A2-64 control immediate|6043 E4FD 340F E105 8B00 E107 6013 000B 0009 0009|60000000;80000000;0;FFFFFFFF;7FFFFFFF;55555555|p
