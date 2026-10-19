@@ -818,6 +818,14 @@ private:
     }
 
     static constexpr uint32_t kAnything = origin::kRegisters | origin::kStack | origin::kMemory;
+    // (area 3 round 11 fix) A possible frame address of this function's own: an exact stack address, or a value it computed with the stack among
+    // its origins (a frame address laundered, or read back from memory the frame escaped to). Not a value nothing is known of (every origin:
+    // a free-stack word, a slot a callee clobbered), which the frame rules take for no address of this frame (round 10), nor what a call returned.
+    static bool PossibleFrame(const Value& x)
+    {
+        if (x.kind == Value::Sp) return true;
+        return x.kind == Value::Fuzzy && x.own && (x.Origins() & origin::kStack) && (x.Origins() & kAnything) != kAnything;
+    }
 
     // What a load from untracked memory can give.
     static Value Loaded(const State& s) { return Value::From(origin::kMemory | (s.escaped ? origin::kStack : 0)); }
@@ -1082,15 +1090,33 @@ private:
             // above threw the callee's effects away. Walk it for its storesBelow (cached), and expose this frame from its lowest
             // slot when a register holds a possible frame address of ours -- so the probe declares the host alias and the folded
             // local is not shown wrong. Only at depth 0 (the request's own probe); a nested walk's own callees are its concern.
-            if (mTolerant && !mNested && haveTarget)
-            {
-                const uint32_t sb = CalleeStoresBelow(target);
-                for (int r = 0; r < 15; ++r)
-                    if (((sb >> r) & 1u) && (Get(s, mReg[r]).Origins() & origin::kStack))
+            // ...and a callee the probe cannot name (a call through a pointer it does not resolve) may store anywhere through what it is
+            // handed: an exact frame address in an argument register it reads (r4-r7) exposes the frame from its lowest slot too (fail
+            // closed: its storesBelow is unknown, so every register).
+            if (mTolerant && !mNested && !haveTarget)
+                for (int r = 4; r < 8; ++r)
+                {
+                    const Value x = Get(s, mReg[r]);
+                    if (PossibleFrame(x))
                     {
                         mEscaped = true;
                         mEscapedLow = true;
                     }
+                }
+            if (mTolerant && !mNested && haveTarget)
+            {
+                const uint32_t sb = CalleeStoresBelow(target);
+                for (int r = 0; r < 15; ++r)
+                {
+                    // (a value only an earlier call returned carries every origin and is not counted here: a frame address a call
+                    // returns is the engine's to follow, patch 0061)
+                    const Value x = Get(s, mReg[r]);
+                    if (((sb >> r) & 1u) && PossibleFrame(x))
+                    {
+                        mEscaped = true;
+                        mEscapedLow = true;
+                    }
+                }
             }
         }
         else
@@ -1338,6 +1364,9 @@ private:
         // the address it was made from: that offset is the alias's lower bound, and every local from it up is aliased
         // whatever the index (A3-9). An address made from nothing known has none to declare: the whole frame would
         // make an array of every local.
+        // (area 3 round 11 fix) A value with the stack among its origins and no base (a frame address laundered, or read back from memory the
+        // frame escaped to) escaping to a lent callee is handled by the storesBelow loop and the engine's escape analysis (patch 0061); it is
+        // not exposed here, where it would over-expose the ordinary stack-save area of an idiom modelled as a call (trapa).
         const int64_t base = v.Base();
         if (base == Value::kNoBase) return;
         if (exactToo) mEscapeSites[at] |= 1u << reg;   // the address is in no argument of the call: the text says so (A3-28)
@@ -2052,7 +2081,17 @@ private:
                     }
                     const Value to = Get(s, op.in[0]);
                     if (!isReturn && mNested && to.kind == Value::Imm)
+                    {
                         MapCalleeWords(CalleeFrameWrites(static_cast<uint32_t>(to.v)), s, Get(s, mReg[kR15]));   // a thunk: walk its target
+                        // (area 3 round 11 fix) ...and a tail jump to a lent callee that stores below the pointer it is handed carries that
+                        // storesBelow transitively, so a walked thunk (CalleeStoresBelow) reports it: the thunk stores below whatever it
+                        // passed in that register (A3-82, through a tail jump). A lent callee's exact storesBelow is in its signature.
+                        auto p = mLent.find(static_cast<uint32_t>(to.v));
+                        if (p != mLent.end() && p->second.known)
+                            for (int r = 0; r < 15; ++r)
+                                if ((p->second.effects.storesBelow >> r) & 1u)
+                                    mStoresBelow |= Get(s, mReg[r]).Origins() & 0x7FFFu;
+                    }
                     // ...a jump to a register's entry value (a function pointer it was handed) is an onward tail call to code the walk cannot
                     // name. A jump to a value computed here (the switch idiom `mova ; mov.b @(r0,rN),rN ; add rN,r0 ; jmp @r0`) stays in the
                     // callee: its cases are not followed, the walk's limit since A3-61 (no table for a callee's switch), as for `braf`.

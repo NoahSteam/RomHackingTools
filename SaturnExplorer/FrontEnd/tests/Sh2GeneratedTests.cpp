@@ -4245,6 +4245,14 @@ std::string EffectClaimsContradicted(const CallEffects& e, const RunOut& run, st
         if (arena >= 0 && !(e.storesThrough & (ArenaBit(arena) | origin::kMemory)))
             return fail("claim-wrong:storesThrough", "a run stores at " + Hex(a) + ", in the arena of " + (arena < 4 ? "r" + std::to_string(4 + arena) : std::string("gbr")) +
                                                          ", and storesThrough names neither that register nor memory");
+        // (area 3 round 11 fix) ...and a store below the start value of r4-r7 in that register's arena (the runner starts each 0x100 into its
+        // page, so `mov.l r1,@-r4`, a negative displacement or a laundered pointer lands there) needs that register in storesBelow: a caller
+        // that hands such a function an exact frame address exposes the locals below it only on that claim (A3-71, A3-82, A3-83). Asked when
+        // the run read the register and storesThrough names it (a store through memory it loaded is the storesThrough check's).
+        if (arena >= 0 && arena < 4 && ((run.use.readFirst >> (4 + arena)) & 1u) && (e.storesThrough & ArenaBit(arena)) &&
+            a < (run.init[4 + arena] & 0x0FFFFFFFu) && !(e.storesBelow & ArenaBit(arena)))
+            return fail("claim-wrong:storesBelow", "a run stores at " + Hex(a) + ", below r" + std::to_string(4 + arena) + "'s start " +
+                                                       Hex(run.init[4 + arena]) + ", and storesBelow does not name r" + std::to_string(4 + arena));
     }
     // (A3-63) What it stores: a pointer (a register's start value stepped, or a stack address) stored at or above the entry r15 needs that origin,
     // or memory, in `frameValues`; stored anywhere else outside the stack (memory the function does not track: an arena, a literal's target,
@@ -7993,6 +8001,309 @@ std::vector<CVerdict> CheckSpillWalks(Sh2Decompiler& d, const std::vector<CCase>
     return out;
 }
 
+
+// ---- Round 11 fix instrument: laundered frame addresses, the walks below them, and the callees that make them (A3-82 to A3-88) ------------------
+// The reviewer's walk fuzzers, as a generator. A frame of 32 bytes, the sentinel at r15 + 0 written first with a constant (101-127), a frame
+// address p = r15 + 16 (four longwords above the sentinel), then one value-preserving laundering step of p (none, a mask, a swap pair, a
+// negation pair, a shift pair, a rotate pair, an xor pair, a global round trip, a spill in halves reloaded whole, a spill reloaded by bytes),
+// and a store below p that reaches the sentinel: a counted walk of four pre-decrement stores, or one store at a constant negative displacement.
+//   self: all of it in one function, sometimes p joined with a global pointer first (A3-88; the run takes the frame path); the engine's case
+//         (patch 0061's escape analysis, A3-85, A3-88).
+//   call: p handed in r4 to a callee that makes the store below it -- directly, through a wrapper that calls it, through a thunk that jumps to
+//         it, or through a thunk that lowers p by 16 on the way to a callee that stores at its pointer -- with the laundering step on the caller's
+//         side (A3-84) or the callee's (A3-83); the callees are decompiled first and lent, deepest first (the host's case: A3-82 to A3-84).
+// The run reads no input, so it is one value: a constant the text returns is checked against it (CheckLaunderWalks, `stale-constant`), as
+// CheckSpillWalks does; a text that returns a local is counted. Code at kCode, the callee at kCode + 0x80, its callee at kCode + 0xC0, the
+// literal pool at kCode + 0x100. Drawn on a stream of its own, one seed in four.
+const uint32_t kLaunderGlobal = 0x0600F100u;   // the global of the round trip and of the join (ordinary work RAM, zero)
+static const char* const kLaunderSteps[] = { "none", "mask", "swap2", "neg2", "shift2", "rot2", "xor2", "global", "halves", "bytes" };
+struct LaunderBuilder
+{
+    std::vector<uint16_t> w;      // the whole blob
+    std::vector<uint32_t> lits;   // literal values, at kCode + 0x100 + 4k
+    size_t at = 0;                // the next word of the function being built
+    void Put(uint16_t x)
+    {
+        if (w.size() <= at) w.resize(at + 1, 0x0009);
+        w[at++] = x;
+    }
+    // mov.l @(disp,PC),Rn of a literal (the pool is within reach of every function here)
+    void Lit(int n, uint32_t value)
+    {
+        size_t k = 0;
+        while (k < lits.size() && lits[k] != value) ++k;
+        if (k == lits.size()) lits.push_back(value);
+        const uint32_t pc = kCode + 2u * static_cast<uint32_t>(at);
+        const uint32_t ea = kCode + 0x100u + 4u * static_cast<uint32_t>(k);
+        Put(static_cast<uint16_t>(0xD000 | n << 8 | ((ea - ((pc & ~3u) + 4u)) / 4u)));
+    }
+    std::vector<uint16_t> Finish()
+    {
+        std::vector<uint16_t> out = w;
+        out.resize(0x80, 0x0009);   // through kCode + 0x100
+        for (uint32_t v : lits)
+        {
+            out.push_back(static_cast<uint16_t>(v >> 16));
+            out.push_back(static_cast<uint16_t>(v));
+        }
+        return out;
+    }
+};
+// The laundering step on register p (r2 or r4), with scratch t (r3) and x (r5), r0 free; 'h' the frame offset of a scratch longword the store
+// below p does not reach (for the spills).
+void LaunderStep(LaunderBuilder& b, const std::string& step, int p, int t, int x, int h)
+{
+    if (step == "mask") { b.Put(static_cast<uint16_t>(0xE0FC | t << 8)); b.Put(static_cast<uint16_t>(0x2009 | p << 8 | t << 4)); }          // mov #-4,t ; and t,p
+    else if (step == "swap2") { b.Put(static_cast<uint16_t>(0x6009 | p << 8 | p << 4)); b.Put(static_cast<uint16_t>(0x6009 | p << 8 | p << 4)); }
+    else if (step == "neg2") { b.Put(static_cast<uint16_t>(0x600B | p << 8 | p << 4)); b.Put(static_cast<uint16_t>(0x600B | p << 8 | p << 4)); }
+    else if (step == "shift2") { b.Put(static_cast<uint16_t>(0x4008 | p << 8)); b.Put(static_cast<uint16_t>(0x4009 | p << 8)); }         // shll2 ; shlr2
+    else if (step == "rot2") { b.Put(static_cast<uint16_t>(0x4004 | p << 8)); b.Put(static_cast<uint16_t>(0x4005 | p << 8)); }           // rotl ; rotr
+    else if (step == "xor2")
+    {
+        b.Put(static_cast<uint16_t>(0xE003 | t << 8));                                                                                    // mov #3,t
+        b.Put(static_cast<uint16_t>(0x200A | p << 8 | t << 4));
+        b.Put(static_cast<uint16_t>(0x200A | p << 8 | t << 4));
+    }
+    else if (step == "global")
+    {
+        b.Lit(t, kLaunderGlobal);
+        b.Put(static_cast<uint16_t>(0x2002 | t << 8 | p << 4));   // mov.l p,@t
+        b.Put(static_cast<uint16_t>(0x6002 | p << 8 | t << 4));   // mov.l @t,p
+    }
+    else if (step == "halves")
+    {
+        b.Put(static_cast<uint16_t>(0x6003 | 0 << 8 | p << 4));            // mov p,r0
+        b.Put(static_cast<uint16_t>(0x81F0 | ((h + 2) / 2)));              // mov.w r0,@(h+2,r15): the low half
+        b.Put(static_cast<uint16_t>(0x4029));                              // shlr16 r0
+        b.Put(static_cast<uint16_t>(0x81F0 | (h / 2)));                    // mov.w r0,@(h,r15): the high half
+        b.Put(static_cast<uint16_t>(0x5000 | p << 8 | 15 << 4 | (h / 4))); // mov.l @(h,r15),p
+    }
+    else if (step == "bytes")
+    {
+        b.Put(static_cast<uint16_t>(0x1F00 | p << 4 | (h / 4)));           // mov.l p,@(h,r15)
+        b.Put(static_cast<uint16_t>(0x6003 | t << 8 | 15 << 4));           // mov r15,t
+        b.Put(static_cast<uint16_t>(0x7000 | t << 8 | h));                 // add #h,t
+        b.Put(static_cast<uint16_t>(0x6004 | 0 << 8 | t << 4));            // mov.b @t+,r0
+        b.Put(0x600C);                                                     // extu.b r0,r0
+        for (int i = 0; i < 3; ++i)
+        {
+            b.Put(0x4018);                                                 // shll8 r0
+            b.Put(static_cast<uint16_t>(0x6004 | x << 8 | t << 4));        // mov.b @t+,x
+            b.Put(static_cast<uint16_t>(0x600C | x << 8 | x << 4));        // extu.b x,x
+            b.Put(static_cast<uint16_t>(0x200B | 0 << 8 | x << 4));        // or x,r0
+        }
+        b.Put(static_cast<uint16_t>(0x6003 | p << 8 | 0 << 4));            // mov r0,p
+    }
+}
+// The store below p that reaches p - 16 (the sentinel): four pre-decrement stores of the counter (the last is 1), or one store of 1 at p - 16.
+void LaunderBelow(LaunderBuilder& b, int p, bool walk)
+{
+    if (walk)
+    {
+        b.Put(0xE104);                                                     // mov #4,r1
+        const size_t loop = b.at;
+        b.Put(static_cast<uint16_t>(0x2016 | p << 8));                     // L: mov.l r1,@-p
+        b.Put(0x4110);                                                     //    dt r1
+        b.Put(static_cast<uint16_t>(0x8B00 | ((static_cast<int>(loop) - static_cast<int>(b.at) - 2) & 0xFF)));   // bf L
+    }
+    else
+    {
+        b.Put(static_cast<uint16_t>(0x70F0 | p << 8));                     // add #-16,p
+        b.Put(0xE101);                                                     // mov #1,r1
+        b.Put(static_cast<uint16_t>(0x2012 | p << 8));                     // mov.l r1,@p
+    }
+}
+bool GenLaunderWalkFn(uint64_t seed, CCase& c, std::string& shape)
+{
+    Rng rng(seed * 2246822519u + 0xA385u);
+    if (!rng.Chance(25)) return false;
+    const int K = 101 + static_cast<int>(rng.Below(27));
+    const bool call = rng.Chance(60);
+    const bool walk = rng.Chance(60);
+    const std::string step = kLaunderSteps[rng.Below(10)];
+    LaunderBuilder b;
+    if (!call)
+    {
+        const bool join = rng.Chance(30);
+        b.Put(0x2008);   // tst r0,r0   (r0 is 0 at the run: r7 = 1 picks the frame path of the join)
+        b.Put(0x0729);   // movt r7
+        b.Put(0x7FE0);   // add #-32,r15
+        b.Put(static_cast<uint16_t>(0xE000 | K));   // mov #K,r0
+        b.Put(0x2F02);   // mov.l r0,@r15
+        b.Put(0x62F3);   // mov r15,r2
+        b.Put(0x7210);   // add #16,r2
+        LaunderStep(b, step, 2, 3, 5, 24);
+        if (join)
+        {
+            b.Lit(6, kLaunderGlobal + 0x40u);
+            b.Put(0x2778);   // tst r7,r7
+            b.Put(0x8B00);   // bf S (over the next instruction)
+            b.Put(0x6263);   // mov r6,r2
+        }
+        LaunderBelow(b, 2, walk);
+        b.Put(0x60F2);   // mov.l @r15,r0
+        b.Put(0x7F20);   // add #32,r15
+        b.Put(0x000B);   // rts
+        b.Put(0x0009);
+        shape = std::string("launder.self.") + (walk ? "walk." : "disp.") + step + (join ? ".join" : "");
+    }
+    else
+    {
+        static const char* const kForms[] = { "direct", "wrapper", "thunk", "lowered" };
+        const std::string form = kForms[rng.Below(4)];
+        const bool callerSide = form != "lowered" && step != "none" && rng.Chance(40);
+        // the caller
+        b.Put(0x4F22);   // sts.l pr,@-r15
+        b.Put(0x7FE0);   // add #-32,r15
+        b.Put(static_cast<uint16_t>(0xE000 | K));
+        b.Put(0x2F02);   // mov.l r0,@r15
+        b.Put(0x64F3);   // mov r15,r4
+        b.Put(0x7410);   // add #16,r4
+        if (callerSide) LaunderStep(b, step, 4, 3, 5, 24);
+        b.Lit(1, kCode + 0x80u);
+        b.Put(0x410B);   // jsr @r1
+        b.Put(0x0009);
+        b.Put(0x60F2);   // mov.l @r15,r0
+        b.Put(0x7F20);   // add #32,r15
+        b.Put(0x4F26);   // lds.l @r15+,pr
+        b.Put(0x000B);
+        b.Put(0x0009);
+        // the callee at kCode + 0x80, its callee at kCode + 0xC0
+        const std::string calleeStep = callerSide ? std::string("none") : step;
+        auto body = [&](bool laundered) {
+            const bool frame = laundered && (calleeStep == "halves" || calleeStep == "bytes");
+            if (frame) b.Put(0x7FF8);   // add #-8,r15: a scratch word of the callee's own
+            if (laundered) LaunderStep(b, calleeStep, 4, 3, 5, 0);
+            if (frame) b.Put(0x7F08);
+            LaunderBelow(b, 4, walk);
+            b.Put(0x000B);
+            b.Put(0x0009);
+        };
+        b.at = 0x40;
+        if (form == "direct") body(true);
+        else if (form == "wrapper")
+        {
+            b.Put(0x4F22);
+            const bool frame = calleeStep == "halves" || calleeStep == "bytes";
+            if (frame) b.Put(0x7FF8);
+            LaunderStep(b, calleeStep, 4, 3, 5, 0);
+            if (frame) b.Put(0x7F08);
+            b.Lit(1, kCode + 0xC0u);
+            b.Put(0x410B);   // jsr @r1
+            b.Put(0x0009);
+            b.Put(0x4F26);
+            b.Put(0x000B);
+            b.Put(0x0009);
+            b.at = 0x60;
+            body(false);
+        }
+        else if (form == "thunk")
+        {
+            const bool frame = calleeStep == "halves" || calleeStep == "bytes";
+            if (frame) b.Put(0x7FF8);
+            LaunderStep(b, calleeStep, 4, 3, 5, 0);
+            if (frame) b.Put(0x7F08);
+            b.Lit(1, kCode + 0xC0u);
+            b.Put(0x412B);   // jmp @r1
+            b.Put(0x0009);
+            b.at = 0x60;
+            body(false);
+        }
+        else   // lowered: the thunk lowers p by 16 in its jump's slot; the callee stores at its pointer
+        {
+            if (calleeStep != "halves" && calleeStep != "bytes") LaunderStep(b, calleeStep, 4, 3, 5, 0);
+            b.Lit(1, kCode + 0xC0u);
+            b.Put(0x412B);   // jmp @r1
+            b.Put(0x74F0);   // add #-16,r4
+            b.at = 0x60;
+            b.Put(0xE101);   // mov #1,r1
+            b.Put(0x2412);   // mov.l r1,@r4
+            b.Put(0x000B);
+            b.Put(0x0009);
+        }
+        shape = std::string("launder.call.") + form + "." + (walk ? "walk." : "disp.") + step + (callerSide ? ".caller" : "");
+    }
+    c.words = b.Finish();
+    c.name = "seed" + std::to_string(seed) + "_launder";
+    return true;
+}
+
+// The check of the laundered walks: lend the callees (deepest first: kCode + 0xC0, then kCode + 0x80, when the blob has code there), decompile
+// the entry, run once, and compare every constant return with the run's r0 (as CheckSpillWalks).
+std::vector<CVerdict> CheckLaunderWalks(Sh2Decompiler& d, const std::vector<CCase>& cases)
+{
+    std::vector<CVerdict> out(cases.size());
+    static const std::regex ret("\\breturn\\b\\s*([^;]*);");
+    static const std::regex literal("^\\(?\\s*(?:\\(\\s*\\w+\\s*\\)\\s*)?(-?(?:0x[0-9a-fA-F]+|\\d+))\\s*\\)?$");
+    for (size_t ci = 0; ci < cases.size(); ++ci)
+    {
+        const CCase& c = cases[ci];
+        CVerdict& v = out[ci];
+        std::vector<uint8_t> hw;
+        for (size_t i = 0; i < c.words.size(); ++i) dts::Put16(hw, kCode - 0x06000000u + 2 * i, c.words[i]);
+        dts::Put16(hw, kSentinel - 0x06000000u, 0x0009);
+        dts::Put16(hw, kSentinel - 0x06000000u + 2, 0x0009);
+        auto snap = dts::MakeSnapshot(hw, 7000 + ci);
+        std::vector<std::pair<uint32_t, Prototype>> protos;
+        for (uint32_t off : { 0xC0u, 0x80u })
+        {
+            const size_t wi = off / 2;
+            if (c.words.size() <= wi || c.words[wi] == 0x0009) continue;
+            DecompileRequest cq;
+            cq.entry = kCode + off;
+            cq.prototypes = protos;
+            const DecompileResult cr = d.Decompile(snap, cq);
+            if (cr.status == DecompileStatus::Ok && cr.prototype.known) protos.emplace_back(kCode + off, cr.prototype);
+        }
+        DecompileRequest q;
+        q.entry = kCode;
+        q.prototypes = protos;
+        const DecompileResult r = d.Decompile(snap, q);
+        v.text = r.Text();
+        if (r.status != DecompileStatus::Ok || r.unsupported || r.truncated)
+        {
+            v.cls = "undecompiled";
+            continue;
+        }
+        Env env;
+        env.ram = snap->regions[1].bytes;
+        std::unique_ptr<Machine> machine(new Machine(snap, &env));
+        for (int i = 0; i < 15; ++i) machine->Set(("r" + std::to_string(i)).c_str(), i < 8 ? 0x11111111u * static_cast<uint32_t>(i) : CalleeSaved(i));
+        machine->Set("r15", kStackTop);
+        machine->Set("pr", kSentinel);
+        RunOut run;
+        if (!machine->Run(kCode, kSentinel, kStepLimit, run, env))
+        {
+            v.cls = "generator:no-return";
+            continue;
+        }
+        bool any = false, local = false;
+        for (std::sregex_iterator it(v.text.begin(), v.text.end(), ret), e; it != e; ++it)
+        {
+            any = true;
+            const std::string what = (*it)[1].str();
+            std::smatch m;
+            if (!std::regex_match(what, m, literal))
+            {
+                local = true;
+                continue;
+            }
+            const std::string n = m[1].str();
+            const bool neg = n[0] == '-';
+            const uint32_t mag = static_cast<uint32_t>(std::strtoull(n.c_str() + (neg ? 1 : 0), nullptr, 0));
+            const uint32_t value = neg ? 0u - mag : mag;
+            v.compared = true;
+            if (value != run.fin[0])
+            {
+                v.cls = "stale-constant";
+                v.detail = "the text returns " + what + "; the code returns " + Hex(run.fin[0]);
+            }
+        }
+        if (v.cls.empty() && (!any || local)) v.cls = any ? "launder:local" : "launder:no-return";
+    }
+    return out;
+}
+
 void TestPrintedC()
 {
     const std::string cc = FindCCompiler();
@@ -8195,6 +8506,54 @@ void TestPrintedC()
         for (const auto& c : spillClasses) std::printf(" %s=%d", c.first.c_str(), c.second);
         std::printf(" shapes:");
         for (const auto& c : spillShapes) std::printf(" %s=%d", c.first.c_str(), c.second);
+        std::printf("\n");
+    }
+    // The laundered frame addresses and the callees around them (round 11 fix, A3-82 to A3-88), from a stream of their own, checked by their
+    // constant returns. SE_GENERATED_PRINTEDC_LAUNDER=0 leaves them out; SE_GENERATED_LAUNDER_WORDS replays one (the words of a finding).
+    const char* launderWords = std::getenv("SE_GENERATED_LAUNDER_WORDS");
+    if ((!hand || launderWords) && EnvNumber("SE_GENERATED_PRINTEDC_LAUNDER", 1) != 0)
+    {
+        const long single = EnvNumber("SE_GENERATED_SEED", 0);
+        const long seeds = single ? 1 : EnvNumber("SE_GENERATED_SEEDS", 300);
+        const long first = single ? single : EnvNumber("SE_GENERATED_FIRST", 1);
+        std::vector<CCase> cases;
+        std::vector<std::string> shapes;
+        std::map<std::string, int> launderClasses;
+        for (long seed = first; seed < first + seeds && !launderWords; ++seed)
+        {
+            CCase c;
+            std::string shape;
+            if (!GenLaunderWalkFn(static_cast<uint64_t>(seed), c, shape)) continue;
+            cases.push_back(c);
+            shapes.push_back(shape);
+        }
+        if (launderWords)
+        {
+            CCase c;
+            c.name = "launder-hand";
+            std::istringstream in(launderWords);
+            std::string tok;
+            while (in >> tok) c.words.push_back(static_cast<uint16_t>(std::strtoul(tok.c_str(), nullptr, 16)));
+            cases.push_back(c);
+            shapes.push_back("hand");
+        }
+        const std::vector<CVerdict> lv = CheckLaunderWalks(d, cases);
+        std::map<std::string, int> staleByShape;
+        for (size_t i = 0; i < lv.size(); ++i)
+        {
+            ++launderClasses[lv[i].cls.empty() ? "agrees" : lv[i].cls];
+            const bool bad = lv[i].cls == "stale-constant" || lv[i].cls == "undecompiled" || lv[i].cls == "generator:no-return";
+            if (launderWords) std::printf("%s: %s %s\n%s\n", cases[i].name.c_str(), lv[i].cls.empty() ? "agrees" : lv[i].cls.c_str(), lv[i].detail.c_str(), lv[i].text.c_str());
+            if (!bad) continue;
+            ++failing;
+            ++staleByShape[shapes[i]];
+            std::printf("FINDING [%s] %s (%s)\n  detail: %s\n  replay: SE_GENERATED_PRINTEDC=only SE_GENERATED_LAUNDER_WORDS=\"%s\"\n%s\n", lv[i].cls.c_str(),
+                        cases[i].name.c_str(), shapes[i].c_str(), lv[i].detail.c_str(), WordsText(cases[i].words).c_str(), lv[i].text.c_str());
+        }
+        std::printf("laundered walks: functions=%zu classes:", lv.size());
+        for (const auto& k : launderClasses) std::printf(" %s=%d", k.first.c_str(), k.second);
+        std::printf(" failing by shape:");
+        for (const auto& k : staleByShape) std::printf(" %s=%d", k.first.c_str(), k.second);
         std::printf("\n");
     }
     std::printf("printed-C: functions=%zu compared=%d inputs each=%d (%.0f ms) classes:", verdicts.size(), compared, nIn, dts::MsSince(t0));
@@ -9035,6 +9394,23 @@ void TestRound8Pins(Sh2Decompiler& d)
         CallEffects viaMemory = none;
         viaMemory.storesThrough = origin::kMemory;
         CHECK(EffectClaimsContradicted(viaMemory, stores(kScratch4 + 8)).empty());
+        // (round 11 fix) a store below r5's start, through r5: needs r5 in storesBelow
+        {
+            RunOut below = stores(kScratch5 - 8);
+            below.init[5] = kScratch5;
+            below.use.readFirst |= 1u << 5;
+            CallEffects through = viaR5;
+            through.storesBelow = 0;
+            CHECK(!EffectClaimsContradicted(through, below, &sig).empty() && sig == "claim-wrong:storesBelow");
+            through.storesBelow = 1u << 5;
+            CHECK(EffectClaimsContradicted(through, below).empty());
+            CallEffects atOrAbove = viaR5;
+            atOrAbove.storesBelow = 0;
+            RunOut above = stores(kScratch5 + 8);
+            above.init[5] = kScratch5;
+            above.use.readFirst |= 1u << 5;
+            CHECK(EffectClaimsContradicted(atOrAbove, above).empty());   // at or above the start: no claim needed
+        }
         // a store at or above the entry r15: needs kFrame and its word in frameWords (or kFrameAny)
         CHECK(!EffectClaimsContradicted(none, stores(kStackTop + 8), &sig).empty() && sig == "claim-wrong:storesThrough");
         CallEffects frame = none;
@@ -9329,6 +9705,36 @@ void TestA365Pins(Sh2Decompiler& d)
         std::printf("\n");
         for (const char* shape : { "spill.call.b", "spill.call.w", "spill.call.l", "spill.nocall.b", "spill.nocall.w", "spill.nocall.l", "lowered", "control" })
             CHECK(drawn[shape] > 0);
+    }
+    // Round 11 fix: the laundered walks draw every step in each half, every callee form, the caller-side step and the join
+    {
+        std::map<std::string, int> drawn;
+        int n = 0;
+        for (uint64_t seed = 1; seed <= 2000; ++seed)
+        {
+            CCase c;
+            std::string shape;
+            if (!GenLaunderWalkFn(seed, c, shape)) continue;
+            ++n;
+            const bool self = shape.compare(0, 13, "launder.self.") == 0;
+            for (const char* st : kLaunderSteps)
+                if (shape.find(std::string(".") + st) != std::string::npos) ++drawn[std::string(self ? "self." : "call.") + st];
+            for (const char* fm : { "direct", "wrapper", "thunk", "lowered" })
+                if (shape.find(std::string(".") + fm + ".") != std::string::npos) ++drawn[fm];
+            if (shape.find(".caller") != std::string::npos) ++drawn["caller"];
+            if (shape.find(".join") != std::string::npos) ++drawn["join"];
+            if (shape.find(".walk.") != std::string::npos) ++drawn["walk"];
+            if (shape.find(".disp.") != std::string::npos) ++drawn["disp"];
+        }
+        std::printf("pin 'round 11 laundered-walk draws': %d functions in 2000 seeds:", n);
+        for (const auto& k : drawn) std::printf(" %s=%d", k.first.c_str(), k.second);
+        std::printf("\n");
+        for (const char* st : kLaunderSteps)
+        {
+            CHECK(drawn[std::string("self.") + st] > 0);
+            CHECK(drawn[std::string("call.") + st] > 0);
+        }
+        for (const char* k : { "direct", "wrapper", "thunk", "lowered", "caller", "join", "walk", "disp" }) CHECK(drawn[k] > 0);
     }
 }
 

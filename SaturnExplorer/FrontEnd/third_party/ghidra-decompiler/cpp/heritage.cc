@@ -15,6 +15,7 @@
  *
  * Modified for SaturnExplorer: an indexed stack access whose pointer is stepped down guards the stack below it (patches/0056-engine-stack-walk-down-aliases.patch).
  * Modified for SaturnExplorer: a STORE through a frame address kept in a stack local and read back is guarded (patches/0060-engine-stack-walk-down-spilled.patch).
+ * Modified for SaturnExplorer: a STORE a frame address may have escaped to is guarded, failing closed (patches/0061-engine-stack-frame-escape.patch).
  */
 #include "heritage.hh"
 #include "funcdata.hh"
@@ -918,6 +919,305 @@ void Heritage::analyzeNewLoadGuards(void)
   }
 }
 
+
+/// SaturnExplorer (patches/0061-engine-stack-frame-escape.patch): may the output of this op not carry an address? A comparison or a boolean
+/// op has a one-bit output, so a frame address that is only compared has not escaped.
+static bool frameBooleanOutput(OpCode opc)
+
+{
+  switch(opc) {
+  case CPUI_INT_EQUAL:
+  case CPUI_INT_NOTEQUAL:
+  case CPUI_INT_SLESS:
+  case CPUI_INT_SLESSEQUAL:
+  case CPUI_INT_LESS:
+  case CPUI_INT_LESSEQUAL:
+  case CPUI_INT_CARRY:
+  case CPUI_INT_SCARRY:
+  case CPUI_INT_SBORROW:
+  case CPUI_BOOL_NEGATE:
+  case CPUI_BOOL_XOR:
+  case CPUI_BOOL_AND:
+  case CPUI_BOOL_OR:
+    return true;
+  default:
+    break;
+  }
+  return false;
+}
+
+/// SaturnExplorer (patches/0061-engine-stack-frame-escape.patch): walk forward from the stack pointer's input over every value computed from
+/// it, by any op, and record which possible frame addresses the stack analysis models (copies, additions, subtractions of a constant, joins,
+/// INDIRECTs, PTRSUB and PTRADD), which it does not, and whether any escaped (see FrameEscape). Before the stack space is heritaged a read of
+/// a stack word is not yet linked to the write that spilled a frame address there, so every such read counts as a possible, unmodeled frame
+/// address: the STOREs marked from this are settled again once the stack is heritaged (reprocessFreeStores).
+/// \param fd is the function
+/// \param spc is the stack space
+/// \param preHeritage is \b true when the stack space is not yet heritaged
+void FrameEscape::compute(const Funcdata *fd,AddrSpace *spc,bool preHeritage)
+
+{
+  const int4 maxMembers = 8192;
+  map<Varnode *,uintb> offset;		// the exact frame offset of a modeled member, where known
+  vector<Varnode *> work;
+  for(int4 i=0;i<spc->numSpacebase();++i) {
+    const VarnodeData &sp(spc->getSpacebase(i));
+    Varnode *in = fd->findVarnodeInput(sp.size,sp.getAddr());
+    if (in == (Varnode *)0) continue;
+    offset[in] = 0;
+    if (members.insert(in).second) work.push_back(in);
+  }
+  if (members.empty()) return;
+  if (preHeritage) {
+    VarnodeLocSet::const_iterator iter = fd->beginLoc(spc);
+    VarnodeLocSet::const_iterator enditer = fd->endLoc(spc);
+    for(;iter!=enditer;++iter) {
+      Varnode *vn = *iter;
+      if (!vn->isFree() || vn->hasNoDescend()) continue;
+      unmodeled.insert(vn);
+      if (members.insert(vn).second) work.push_back(vn);
+    }
+  }
+  bool loadsAdded = false;
+  for(;;) {
+    while(!work.empty()) {
+      if (members.size() > maxMembers) {	// too far to follow: everything escaped (fail closed)
+	gaveUp = true;
+	escaped = true;
+	return;
+      }
+      Varnode *vn = work.back();
+      work.pop_back();
+      map<Varnode *,uintb>::const_iterator oiter = offset.find(vn);
+      bool hasOff = (oiter != offset.end());
+      uintb off = hasOff ? (*oiter).second : 0;
+      for(list<PcodeOp *>::const_iterator iter=vn->beginDescend();iter!=vn->endDescend();++iter) {
+	PcodeOp *op = *iter;
+	Varnode *out = op->getOut();
+	bool newOff = false;
+	uintb noff = 0;
+	switch(op->code()) {
+	case CPUI_COPY:
+	case CPUI_MULTIEQUAL:
+	  newOff = hasOff;
+	  noff = off;
+	  break;
+	case CPUI_INDIRECT:
+	  if (op->getIn(0) != vn) continue;
+	  newOff = hasOff;
+	  noff = off;
+	  break;
+	case CPUI_INT_ADD:
+	{
+	  Varnode *other = op->getIn(1 - op->getSlot(vn));
+	  if (other->isConstant() && hasOff) {
+	    newOff = true;
+	    noff = spc->wrapOffset(off + other->getOffset());
+	  }
+	  break;
+	}
+	case CPUI_PTRSUB:
+	  if (op->getIn(0) != vn) {
+	    if (out != (Varnode *)0) unmodeled.insert(out);
+	    break;
+	  }
+	  if (op->getIn(1)->isConstant() && hasOff) {
+	    newOff = true;
+	    noff = spc->wrapOffset(off + op->getIn(1)->getOffset());
+	  }
+	  break;
+	case CPUI_PTRADD:
+	  if (op->getIn(0) != vn && out != (Varnode *)0) unmodeled.insert(out);
+	  break;
+	case CPUI_INT_SUB:
+	  if (op->getIn(0) == vn && op->getIn(1) != vn && op->getIn(1)->isConstant()) {
+	    if (hasOff) {
+	      newOff = true;
+	      noff = spc->wrapOffset(off - op->getIn(1)->getOffset());
+	    }
+	  }
+	  else if (out != (Varnode *)0)
+	    unmodeled.insert(out);	// (a): a variable subtracted, or the frame address subtracted from something
+	  break;
+	case CPUI_LOAD:
+	  continue;			// an access through it; what it reads is memory (unless a frame address escaped to memory, below)
+	case CPUI_STORE:
+	  if (op->getIn(2) == vn) memoryEscape = true;	// (b)
+	  continue;
+	case CPUI_CALL:
+	case CPUI_CALLIND:
+	case CPUI_CALLOTHER:
+	  if (op->getIn(0) == vn) {
+	    escaped = true;		// a call through a frame address
+	    continue;
+	  }
+	  if (out != (Varnode *)0) unmodeled.insert(out);	// (d): what a call handed a frame address returns may be one
+	  break;
+	case CPUI_RETURN:
+	case CPUI_CBRANCH:
+	  continue;
+	case CPUI_BRANCHIND:
+	  escaped = true;
+	  continue;
+	default:
+	  if (frameBooleanOutput(op->code())) continue;
+	  if (out == (Varnode *)0) {
+	    escaped = true;
+	    continue;
+	  }
+	  unmodeled.insert(out);	// (a)
+	  break;
+	}
+	if (out == (Varnode *)0) continue;
+	if (newOff && offset.find(out) == offset.end())
+	  offset[out] = noff;
+	if (members.insert(out).second) work.push_back(out);
+      }
+    }
+    // (b): a frame address stored to memory may come back from any load
+    if (memoryEscape && !loadsAdded) {
+      loadsAdded = true;
+      list<PcodeOp *>::const_iterator iter = fd->beginOp(CPUI_LOAD);
+      list<PcodeOp *>::const_iterator enditer = fd->endOp(CPUI_LOAD);
+      for(;iter!=enditer;++iter) {
+	PcodeOp *op = *iter;
+	if (op->isDead() || op->getOut() == (Varnode *)0) continue;
+	unmodeled.insert(op->getOut());
+	if (members.insert(op->getOut()).second) work.push_back(op->getOut());
+      }
+      continue;
+    }
+    break;
+  }
+  // (c): a join with a value that is no frame address
+  for(set<Varnode *>::const_iterator iter=members.begin();iter!=members.end();++iter) {
+    Varnode *vn = *iter;
+    if (!vn->isWritten() || vn->getDef()->code() != CPUI_MULTIEQUAL) continue;
+    PcodeOp *multi = vn->getDef();
+    for(int4 j=0;j<multi->numInput();++j)
+      if (members.find(multi->getIn(j)) == members.end()) {
+	unmodeled.insert(vn);
+	break;
+      }
+  }
+  // An unmodeled value makes every member computed from it unmodeled
+  vector<Varnode *> uwork(unmodeled.begin(),unmodeled.end());
+  while(!uwork.empty()) {
+    Varnode *vn = uwork.back();
+    uwork.pop_back();
+    for(list<PcodeOp *>::const_iterator iter=vn->beginDescend();iter!=vn->endDescend();++iter) {
+      PcodeOp *op = *iter;
+      Varnode *out = op->getOut();
+      if (op->code() == CPUI_LOAD) continue;	// what it reads is not computed from the address
+      if (out == (Varnode *)0 || members.find(out) == members.end()) continue;
+      if (unmodeled.insert(out).second) uwork.push_back(out);
+    }
+  }
+  // The uses of an unmodeled frame address: an access through it, or a call it is handed to
+  for(set<Varnode *>::const_iterator iter=unmodeled.begin();iter!=unmodeled.end();++iter) {
+    Varnode *vn = *iter;
+    for(list<PcodeOp *>::const_iterator diter=vn->beginDescend();diter!=vn->endDescend();++diter) {
+      PcodeOp *op = *diter;
+      switch(op->code()) {
+      case CPUI_LOAD:
+	if (op->getIn(1) == vn) escaped = true;
+	break;
+      case CPUI_STORE:
+	if (op->getIn(1) == vn) {
+	  escaped = true;
+	  unmodeledStores.insert(op);
+	}
+	break;
+      case CPUI_CALL:
+      case CPUI_CALLIND:
+      case CPUI_CALLOTHER:
+	escaped = true;
+	break;
+      default:
+	break;
+      }
+    }
+  }
+  if (memoryEscape) escaped = true;
+  // The lowest frame offset reached, as a signed offset in the space, for the alias boundary: the lowest a frame address takes, and the
+  // lowest stack location the function has (once the frame's own accesses are direct stack varnodes, the frame address that reached the
+  // lowest local may be gone, and a local below every frame address left would be no alias).
+  vector<uintb> candidates;
+  for(map<Varnode *,uintb>::const_iterator iter=offset.begin();iter!=offset.end();++iter)
+    candidates.push_back((*iter).second);
+  {
+    VarnodeLocSet::const_iterator liter = fd->beginLoc(spc);
+    VarnodeLocSet::const_iterator lenditer = fd->endLoc(spc);
+    for(;liter!=lenditer;++liter)
+      candidates.push_back((*liter)->getOffset());
+  }
+  int4 bits = 8 * spc->getAddrSize();
+  for(vector<uintb>::const_iterator iter=candidates.begin();iter!=candidates.end();++iter) {
+    uintb o = *iter;
+    intb so = (intb)o;
+    if (bits < 64 && ((o >> (bits - 1)) & 1) != 0) so = (intb)(o | (~(uintb)0 << bits));
+    intb sl = (intb)lowest;
+    if (haveLowest && bits < 64 && ((lowest >> (bits - 1)) & 1) != 0) sl = (intb)(lowest | (~(uintb)0 << bits));
+    if (!haveLowest || so < sl) {
+      lowest = o;
+      haveLowest = true;
+    }
+  }
+}
+
+/// SaturnExplorer (patches/0061-engine-stack-frame-escape.patch): before the stack space is heritaged, mark every STORE made through a
+/// possible frame address the stack analysis does not model (FrameEscape), so the heritage guards the stack locals at it with INDIRECTs. The
+/// marks are settled again once the stack is heritaged: reprocessFreeStores keeps those the heritaged walk still finds unmodeled.
+/// \param spc is the stack space
+/// \param freeStores collects the STOREs marked
+/// \return \b true if any STORE was marked
+bool Heritage::markEscapedStores(AddrSpace *spc,vector<PcodeOp *> &freeStores)
+
+{
+  FrameEscape escape;
+  escape.compute(fd,spc,true);
+  bool marked = false;
+  list<PcodeOp *>::const_iterator iter = fd->beginOp(CPUI_STORE);
+  list<PcodeOp *>::const_iterator enditer = fd->endOp(CPUI_STORE);
+  for(;iter!=enditer;++iter) {
+    PcodeOp *op = *iter;
+    if (op->isDead() || op->usesSpacebasePtr()) continue;
+    if (op->getIn(1)->isConstant()) continue;		// an absolute address is never the stack
+    if (!escape.storeIsUnmodeled(op)) continue;
+    fd->opMarkSpacebasePtr(op);
+    freeStores.push_back(op);
+    marked = true;
+  }
+  return marked;
+}
+
+/// SaturnExplorer (patches/0061-engine-stack-frame-escape.patch): a STORE guard (an indexed store's range, from the value set analysis)
+/// on a STORE whose pointer may be an escaped frame address -- the join of a frame address with another pointer (A3-88) -- covers only what
+/// the analysis saw of the frame alternative, from its base up. Widen it to the whole stack space, so no INDIRECT at it is collapsed for a
+/// local below the base.
+void Heritage::widenEscapedStoreGuards(void)
+
+{
+  if (storeGuard.empty()) return;
+  AddrSpace *stackSpc = fd->getArch()->getStackSpace();
+  if (stackSpc == (AddrSpace *)0) return;
+  FrameEscape escape;
+  escape.compute(fd,stackSpc,false);
+  for(list<LoadGuard>::iterator iter=storeGuard.begin();iter!=storeGuard.end();++iter) {
+    LoadGuard &guard(*iter);
+    if (!guard.isValid(CPUI_STORE)) continue;
+    if (guard.analysisState == 0) continue;		// not analyzed yet: it guards everything until it is
+    if (!escape.storeIsUnmodeled(guard.op)) continue;
+    if (guard.minimumOffset == 0 && guard.maximumOffset == guard.spc->getHighest() && guard.guessedBelow) continue;	// widened already
+    guard.minimumOffset = 0;
+    guard.maximumOffset = guard.spc->getHighest();
+    guard.step = 0;
+    guard.analysisState = 2;
+    guard.guessedBelow = true;	// no array starts at this range (MapState::addGuard)
+    guard.op->setAliasUpdate();
+  }
+}
+
 /// \brief Generate a guard record given an indexed LOAD into a stack space
 ///
 /// Record the LOAD op and the (likely) range of addresses in the stack space that
@@ -1141,9 +1441,13 @@ bool Heritage::discoverIndexedStackPointers(AddrSpace *spc,vector<PcodeOp *> &fr
   }
   for(int4 i=0;i<markedVn.size();++i)
     markedVn[i]->clearMark();
+  bool hasNew = false;
   if (unknownStackStorage && checkFreeStores)
-    return protectFreeStores(spc, freeStores);
-  return false;
+    hasNew = protectFreeStores(spc, freeStores);
+  // SaturnExplorer (patches/0061-engine-stack-frame-escape.patch): and every STORE a frame address may have escaped to (FrameEscape)
+  if (checkFreeStores && markEscapedStores(spc, freeStores))
+    hasNew = true;
+  return hasNew;
 }
 
 /// \brief Revisit STOREs with free pointers now that a heritage pass has completed
@@ -1160,6 +1464,19 @@ void Heritage::reprocessFreeStores(AddrSpace *spc,vector<PcodeOp *> &freeStores)
     fd->opClearSpacebasePtr(freeStores[i]);
 
   discoverIndexedStackPointers(spc, freeStores, false);
+
+  // SaturnExplorer (patches/0061-engine-stack-frame-escape.patch): a STORE whose pointer, with the stack heritaged, may still be a frame
+  // address the stack analysis does not model (laundered, read back from memory, joined with another pointer, returned by a call it was
+  // handed to) stays a store to the stack: it was marked to be guarded, and the forward walk above cannot find it again (FrameEscape).
+  {
+    FrameEscape escape;
+    escape.compute(fd,spc,false);
+    for(int4 i=0;i<freeStores.size();++i) {
+      PcodeOp *op = freeStores[i];
+      if (!op->isDead() && !op->usesSpacebasePtr() && escape.storeIsUnmodeled(op))
+	fd->opMarkSpacebasePtr(op);
+    }
+  }
 
   for(int4 i=0;i<freeStores.size();++i) {
     PcodeOp *op = freeStores[i];
@@ -2789,6 +3106,7 @@ void Heritage::heritage(void)
   if (reprocessStackCount > 0)
     reprocessFreeStores(stackSpace, freeStores);
   analyzeNewLoadGuards();
+  widenEscapedStoreGuards();	// SaturnExplorer (patches/0061-engine-stack-frame-escape.patch)
   handleNewLoadCopies();
   if (pass == 0)
     splitmanage.splitAdditional();

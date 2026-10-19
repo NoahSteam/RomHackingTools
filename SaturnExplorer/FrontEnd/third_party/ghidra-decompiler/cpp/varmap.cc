@@ -17,6 +17,7 @@
  * Modified for SaturnExplorer: a RangeHint the list cannot take is freed (patches/0032-allocation-failure-order-2.patch).
  * Modified for SaturnExplorer: a pointer a loop steps down from a stack address aliases the locals below that address (patches/0056-engine-stack-walk-down-aliases.patch).
  * Modified for SaturnExplorer: so does one kept in a stack local and read back, across a call too (patches/0060-engine-stack-walk-down-spilled.patch).
+ * Modified for SaturnExplorer: once a frame address escapes, every local from the lowest frame offset up is aliased (patches/0061-engine-stack-frame-escape.patch).
  */
 #include "varmap.hh"
 #include "funcdata.hh"
@@ -855,6 +856,25 @@ void AliasChecker::gatherInternal(void) const
     }
     if (low < aliasBoundary)
       aliasBoundary = low;
+  }
+  // SaturnExplorer (patches/0061-engine-stack-frame-escape.patch): the walks above follow a frame address through the forms they model.
+  // Any other form -- an op that is no copy, addition, subtraction of a constant, join, INDIRECT, PTRSUB or PTRADD; a store of it to memory;
+  // a join with a value that is no frame address; a call it was handed to returning it -- failed open, and the locals below it were folded
+  // (ledger A3-85, A3-88, A3-86 b). Fail closed: if any frame address escapes (FrameEscape), alias everything from the lowest
+  // frame offset the function reaches up. Where the escaped value is used is not followed. Every local lies at or above the lowest offset
+  // the stack pointer or a frame address takes, so the alias starts there (an alias started 0xffff below it, as a pointer stepped down's
+  // is, lies in the unmapped stack below the scope's range, and ScopeLocal::markUnaliased turns such an alias off at the first local).
+  {
+    FrameEscape escape;
+    escape.compute(fd,space,false);
+    if (escape.escaped) {
+      uintb low = (escape.haveLowest ? escape.lowest : 0) & calc_mask(space->getAddrSize());
+      downReach.push_back(low);
+      downSpan.push_back(pair<uintb,uintb>(low,calc_mask(space->getAddrSize())));	// the whole frame, its save slots included
+      bool param = (direction == 1) ? (low < localBoundary) : (low > localBoundary);
+      if (!param && low < aliasBoundary)
+	aliasBoundary = low;
+    }
   }
 }
 

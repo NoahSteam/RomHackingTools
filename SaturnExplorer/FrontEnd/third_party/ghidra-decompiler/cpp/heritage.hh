@@ -15,6 +15,7 @@
  * limitations under the License.
  *
  * Modified for SaturnExplorer: a guard below a pointer stepped down is no array's start (patches/0056-engine-stack-walk-down-aliases.patch).
+ * Modified for SaturnExplorer: an escape analysis of the frame addresses, failing closed (patches/0061-engine-stack-frame-escape.patch).
  */
 /// \file heritage.hh
 /// \brief Utilities for building Static Single Assignment (SSA) form 
@@ -174,6 +175,34 @@ public:
   bool isValid(OpCode opc) const { return (!op->isDead() && op->code() == opc); }	///< Return \b true if the record still describes an active LOAD
 };
 
+/// \brief SaturnExplorer (patches/0061-engine-stack-frame-escape.patch): the escape analysis of a function's frame addresses
+///
+/// The stack analysis (AliasChecker, discoverIndexedStackPointers, and the walks of patches 0056, 0057 and 0060) knows a pointer into the
+/// frame only through a list of exact forms, and every other form failed open: a frame address laundered through an op it does not model
+/// (a mask, a shift or swap pair, halves reassembled), stored to memory and read back, joined with another pointer, or returned by a call it
+/// was handed to was taken for no frame address, so the stores through it were no stores to the stack and the locals below it were folded
+/// (ledger A3-85, A3-88, A3-86 b). This walk fails closed instead. A frame address \e escapes when it, or a value computed from it by any
+/// op, (a) is an input to an op other than a copy, an addition, a subtraction of a constant, a join, an INDIRECT, a PTRSUB or a PTRADD (an
+/// address operand of a LOAD or STORE is an access, a comparison's one-bit output cannot carry an address, a return leaves the frame);
+/// (b) is stored to memory; (c) is joined with a value that is no frame address; (d) is returned by a call it was handed to, and reaches a
+/// memory access from there. Where the escaped value goes is not followed: once one escapes, every local from the lowest frame offset up
+/// are aliased, and every STORE through a value that may be one is a store to the stack.
+class FrameEscape {
+public:
+  set<Varnode *> members;		///< The possible frame addresses
+  set<Varnode *> unmodeled;		///< ...of which those reached through a form the stack analysis does not model
+  set<PcodeOp *> unmodeledStores;	///< STOREs through an unmodeled possible frame address
+  bool memoryEscape;			///< A frame address was stored to memory
+  bool escaped;				///< Some frame address escaped
+  bool gaveUp;				///< The walk passed its bound: everything is taken to have escaped
+  bool haveLowest;			///< \b lowest is set
+  uintb lowest;				///< The lowest frame offset reached (a byte offset in the stack space)
+  FrameEscape(void) : memoryEscape(false), escaped(false), gaveUp(false), haveLowest(false), lowest(0) {}
+  void compute(const Funcdata *fd,AddrSpace *spc,bool preHeritage);	///< Run the walk over the given stack space
+  /// \brief Is the given STORE made through a possible frame address the stack analysis does not model?
+  bool storeIsUnmodeled(PcodeOp *op) const { return gaveUp || unmodeledStores.find(op) != unmodeledStores.end(); }
+};
+
 /// \brief Manage the construction of Static Single Assignment (SSA) form
 ///
 /// With a specific function (Funcdata), this class links the Varnode and
@@ -288,6 +317,8 @@ class Heritage {
   bool protectFreeStores(AddrSpace *spc,vector<PcodeOp *> &freeStores);
   bool discoverIndexedStackPointers(AddrSpace *spc,vector<PcodeOp *> &freeStores,bool checkFreeStores);
   void reprocessFreeStores(AddrSpace *spc,vector<PcodeOp *> &freeStores);
+  bool markEscapedStores(AddrSpace *spc,vector<PcodeOp *> &freeStores);	///< SaturnExplorer: mark the STOREs a frame address may have escaped to (patches/0061-engine-stack-frame-escape.patch)
+  void widenEscapedStoreGuards(void);	///< SaturnExplorer: a STORE guard through an escaped frame address guards the whole stack (patches/0061-engine-stack-frame-escape.patch)
   void guard(const Address &addr,int4 size,bool guardPerformed,
 	     vector<Varnode *> &read,vector<Varnode *> &write,vector<Varnode *> &inputvars);
   void guardInput(const Address &addr,int4 size,vector<Varnode *> &input);
