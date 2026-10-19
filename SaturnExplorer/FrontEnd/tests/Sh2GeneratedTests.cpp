@@ -6761,9 +6761,11 @@ template <int N, bool S> struct T {
   // a cast (explicit): a wider target extends by the source's sign, as C does, except the unsigned 8-byte cast of a 4-byte value, which is the
   // zero extension the engine builds a 64-bit product with (`(uint8)x` of a signed x: A2-19)
   template <int M, bool U> explicit T(const T<M, U>& o) : v((R)((N > M ? ((N == 8 && M == 4 && !S) ? o.Zext() : o.Ext()) : o.Zext()) & Mask())) {}
-  // the cast of a piece (CONCATab, the engine's untyped value of a + b bytes, 5 to 7 of them with no type of their own): the extension the engine
-  // builds is ZEXT or SEXT by the TARGET's type, so `(uint8)CONCAT14(...)` is the zero extension whatever the piece's top bit is (A2-79)
-  template <int M> explicit T(const Piece<M>& o) : v((R)((N > M ? (S ? o.Sext() : o.Zext()) : o.Zext()) & Mask())) {}
+  // the cast of a piece (CONCATab, the engine's untyped value of a + b bytes): for 5 to 7 bytes, which have no type of their own in C, a cast to an unsigned
+  // 8-byte type is the ZEXT the engine builds (`(uint8)CONCAT14((char)in_r1,in_r1)`: the high word of the run is 0, not the sign: A2-79). The engine prints a
+  // cast to the type of the variable it assigns to, so for sizes with a type (a 2-byte piece read by `mov.w` into a uint4) the extension is by the piece's
+  // sign, as for any other cast
+  template <int M> explicit T(const Piece<M>& o) : v((R)((N > M ? ((!S && M >= 5) ? o.Zext() : ((N == 8 && M == 4 && !S) ? o.Zext() : o.Ext())) : o.Zext()) & Mask())) {}
   // an implicit conversion, the one C does: by the source's sign
   template <int M, bool U> operator T<M, U>() const { return T<M, U>(B2U(Ext())); }
   u64 Zext() const { return (u64)v & Mask(); }
@@ -7776,6 +7778,11 @@ const PrintedCFixture kPrintedCFixtures[] = {
     // the width: both sides of its test were 0), and the text read `return param_1 >> 8` (the sign of b) where the code computes 0.
     { "A2-80 exts.b ; and #0x20 ; shar x8", { 0x604E, 0xC920, 0x4021, 0x4021, 0x4021, 0x4021, 0x4021, 0x4021, 0x4021, 0x4021, 0x000B, 0x0009 } },
     { "A2-80 exts.b ; and #0x40 ; shar x9", { 0x604E, 0xC940, 0x4021, 0x4021, 0x4021, 0x4021, 0x4021, 0x4021, 0x4021, 0x4021, 0x4021, 0x000B, 0x0009 } },
+    // A2-81 (engine, generator printed-C seed 2223957): RuleSLess2Zero took the high bit of a sum of two values that can both set it for the first of them:
+    // `(uVar1 + 0x80000000) s< 0` of a masked sign was `uVar1 != 0`, its negation, so the subv's T and the GBR write after it were the wrong way round.
+    { "A2-81 subv of a masked sign by 0x80000000, ldc r0,gbr unless T", { 0xE301, 0x4305, 0x2139, 0x313B, 0x8901, 0x401E, 0x0009, 0x000B, 0x0009 } },
+    { "A2-81 subv of a masked sign, the flag moved", { 0xE301, 0x4305, 0x2139, 0x313B, 0x0029, 0x6003, 0x000B, 0x0009 } },
+    { "A2-81 addv of a masked sign by 0x80000000", { 0xE301, 0x4305, 0x2139, 0x313F, 0x0029, 0x6003, 0x000B, 0x0009 } },
     { "A2-80 exts.b ; and #0x01 ; shar x12", { 0x604E, 0xC901, 0x4021, 0x4021, 0x4021, 0x4021, 0x4021, 0x4021, 0x4021, 0x4021, 0x4021, 0x4021, 0x4021, 0x4021, 0x000B, 0x0009 } },
 };
 
