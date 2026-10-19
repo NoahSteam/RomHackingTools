@@ -80,13 +80,14 @@ struct Fixture
     WatchPanel     watch;
     AssemblyPanel  panel;
     AssemblyPanel::Request req;
+    bool live = false;
     ImGuiHarness   h;
 
     Fixture() : h([this] {
         // Wide enough that every column, the comment one included, is on screen to be clicked.
         ImGui::SetNextWindowPos(ImVec2(0.0f, 0.0f));
         ImGui::SetNextWindowSize(ImVec2(1200.0f, 600.0f));
-        panel.Draw(ctx, backend, bps, actions, watch, false, req);
+        panel.Draw(ctx, backend, bps, actions, watch, live, req);
     })
     {
         se_data_source ds = se_test::MakeSource(state);
@@ -129,6 +130,17 @@ float ScrollY()
 {
     ImGuiTable* t = FindTable();
     return t && t->InnerWindow ? t->InnerWindow->Scroll.y : 0.0f;
+}
+
+// Check that the entire instruction row is visible below the frozen table header.
+void CheckInstructionVisible(uint32_t address)
+{
+    const ImGuiWindow* w = FindTable()->InnerWindow;
+    const float rowH = InferredRowHeight();
+    const float rowTop = w->DC.CursorStartPos.y + rowH +
+                         ((address - kBase) / 2) * rowH;
+    CHECK(rowTop >= w->InnerRect.Min.y + rowH - 1.0f);
+    CHECK(rowTop + rowH <= w->InnerRect.Max.y + 1.0f);
 }
 
 // The comment cell of the row 'n' rows below the first fully visible one.
@@ -200,6 +212,58 @@ void TestJumpLandsOnTargetWhileEditing()
     const float gotRow = ScrollY() / rowH;
     CHECK(std::fabs(gotRow - wantRow) < 2.0f);
 }
+// A breakpoint must return from browsing to the stopped CPU and PC, even when
+// Follow PC was disabled by an earlier address jump.
+void TestBreakpointRevealReturnsFromBrowsing()
+{
+    for (int cpu = 0; cpu < 2; ++cpu)
+    {
+        Fixture f;
+        f.live = true;
+        f.h.Settle();
+        const uint32_t stoppedPc = kBase + 0x4000;
+        f.panel.GoTo(1 - cpu, kBase + 0x90000);
+        f.h.Settle();
+        const float browsingScroll = ScrollY();
+
+        f.panel.SetBreakpointStop(true, cpu, stoppedPc);
+        f.panel.Reveal(cpu);
+        f.h.Settle();
+        CHECK(f.panel.Cpu() == cpu);
+        CHECK(ScrollY() < browsingScroll);
+        const float stoppedScroll = ScrollY();
+        CheckInstructionVisible(stoppedPc);
+
+        // Following resumes after the reveal, so a subsequent step stays visible.
+        f.panel.SetBreakpointStop(true, cpu, stoppedPc + 0x1000);
+        f.h.Settle();
+        CHECK(ScrollY() > stoppedScroll);
+        CheckInstructionVisible(stoppedPc + 0x1000);
+    }
+}
+
+// A new halt at the same PC must also scroll back after the user scrolled away.
+// The reveal is one-shot: browsing while that halt remains on screen is allowed.
+void TestBreakpointRevealAtUnchangedPc()
+{
+    Fixture f;
+    f.live = true;
+    f.h.Settle();
+    f.panel.SetBreakpointStop(true, 0, kBase + 0x4000);
+    f.h.Settle();
+    const float stoppedScroll = ScrollY();
+    CHECK(stoppedScroll > 0.0f);
+    ScrollToTop(f.h);
+    CHECK(ScrollY() == 0.0f);
+
+    f.panel.Reveal(0);
+    f.h.Settle();
+    // Initial window sizing can shift the alignment by part of a row.
+    CHECK(std::fabs(ScrollY() - stoppedScroll) < InferredRowHeight());
+    CheckInstructionVisible(kBase + 0x4000);
+    ScrollToTop(f.h);
+    CHECK(ScrollY() == 0.0f);
+}
 }  // namespace
 
 int main()
@@ -207,6 +271,8 @@ int main()
     TestDrawsTheWholeRegion();
     TestEditingACommentKeepsRowHeight();
     TestJumpLandsOnTargetWhileEditing();
+    TestBreakpointRevealReturnsFromBrowsing();
+    TestBreakpointRevealAtUnchangedPc();
     if (gFailures) { std::printf("FAILURES: %d\n", gFailures); return 1; }
     std::printf("all cases passed\n");
     return 0;

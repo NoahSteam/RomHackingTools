@@ -612,6 +612,8 @@ void App::CloseData(bool cancelAutoConnect)
     mCallStackDirty = true;
     mSelectedCommand = -1;
     mSelection.clear();
+    mCramPaletteCount = 0;
+    mNavigateToCramPalette = false;
     ResetSessionDebugState();
     // The frame texture is freed lazily (on next size change) or with the
     // platform's device at shutdown; mark it stale so a new dump recreates it.
@@ -8018,6 +8020,8 @@ void App::AdoptNewEmulatorInstance()
     mCallStackDirty = true;
     mSelectedCommand = -1;           // indexes into the old frame's VDP1 command list
     mSelection.clear();
+    mCramPaletteCount = 0;
+    mNavigateToCramPalette = false;
     mStepHalt.ResetForNewEmulator();  // no halt is in flight on a process that just started,
                                      // and it holds none of our breakpoints
 
@@ -9414,7 +9418,7 @@ se_result App::PaletteOf(const se_command& cmd, se_palette* pal)
 }
 
 // Draw a grid of palette swatches with per-swatch hover (index / raw / RGB), and a
-// double-click that reveals the palette's bytes in the Memory panel.
+// double-click that reveals the palette's bytes in Memory and, for bank palettes, Color RAM.
 // Swatch size adapts so a 256-colour bank still fits.
 void App::DrawPaletteSwatches(const se_palette& pal, uint32_t baseAddress)
 {
@@ -9455,8 +9459,10 @@ void App::DrawPaletteSwatches(const se_palette& pal, uint32_t baseAddress)
             ImGui::Text("#%d   raw 0x%04X", idx, e.raw);
             ImGui::Text("RGB  %d, %d, %d", e.r, e.g, e.b);
             if (baseAddress != 0)
-                ImGui::Text("Double-click to view this palette at 0x%08X in the Memory panel.",
-                            baseAddress);
+                ImGui::Text("Double-click to view this palette at 0x%08X in %s.",
+                            baseAddress,
+                            baseAddress >= kCramBase && baseAddress < kCramBase + kCramSize
+                                ? "Memory and Color RAM" : "the Memory panel");
             ImGui::EndTooltip();
         }
 
@@ -9468,6 +9474,13 @@ void App::DrawPaletteSwatches(const se_palette& pal, uint32_t baseAddress)
         {
             mHexEditor.GoTo(baseAddress);
             mPanels.hexEditor = true;
+            if (baseAddress >= kCramBase && baseAddress < kCramBase + kCramSize)
+            {
+                mCramPaletteOffset = baseAddress - kCramBase;
+                mCramPaletteCount = pal.count;
+                mNavigateToCramPalette = true;
+                mPanels.colorRam = true;
+            }
         }
     }
 }
@@ -10647,6 +10660,9 @@ void App::DrawSound(IPlatform& platform)
 
 void App::DrawColorRam()
 {
+    // Palette Viewer is submitted after this window, so apply its request next frame.
+    // Focusing before Begin also surfaces an inactive dock tab.
+    if (mNavigateToCramPalette) ImGui::SetNextWindowFocus();
     if (ImGui::Begin("Color RAM"))
     {
         if (!mbHasData)
@@ -10661,11 +10677,25 @@ void App::DrawColorRam()
                                                  mCramColors.data());
             const se_cram_mode mode = se_get_cram_mode(mContext);
             const bool rgb888 = (mode == SE_CRAM_RGB888_1024);
+            const uint32_t entryBytes = rgb888 ? 4u : 2u;
             ImGui::Text("%zu CRAM entries  (%s)", n,
                         rgb888 ? "RGB888" : "RGB555");
             const int cols = 32;
             const float sw = 12.0f;
             ImDrawList* dl = ImGui::GetWindowDrawList();
+            const size_t paletteStart = mCramPaletteOffset / entryBytes;
+            const bool havePalette = mCramPaletteCount != 0 && paletteStart < n;
+            if (mNavigateToCramPalette)
+            {
+                if (havePalette)
+                    // SetScrollFromPosY expects a position relative to the window,
+                    // including the current scroll displacement. GetCursorPosY()
+                    // removes that displacement, causing repeated jumps to overshoot.
+                    // ImGui clamps to the bottom if the row cannot reach the top.
+                    ImGui::SetScrollFromPosY(ImGui::GetCursorScreenPos().y - ImGui::GetWindowPos().y +
+                        static_cast<float>(paletteStart / cols) * sw, 0.0f);
+                mNavigateToCramPalette = false;
+            }
             const ImVec2 origin = ImGui::GetCursorScreenPos();
             for (size_t i = 0; i < n; ++i)
             {
@@ -10675,6 +10705,9 @@ void App::DrawColorRam()
                 const ImVec2 b(a.x + sw - 1.0f, a.y + sw - 1.0f);
                 const se_palette_entry& e = mCramColors[i];
                 dl->AddRectFilled(a, b, IM_COL32(e.r, e.g, e.b, 255));
+                // Match the decoder's wrapping when a palette crosses the end of CRAM.
+                if (havePalette && (i + n - paletteStart) % n < mCramPaletteCount)
+                    dl->AddRect(a, b, ui::SelectionOutline());
             }
             const int rows = (static_cast<int>(n) + cols - 1) / cols;
             ImGui::InvisibleButton("cram", ImVec2(cols * sw, rows * sw));
@@ -10700,6 +10733,8 @@ void App::DrawColorRam()
                         ImGui::Text("CRAM #%d   raw 0x%04X", idx, e.raw);
                     }
                     ImGui::Text("RGB  %d, %d, %d", e.r, e.g, e.b);
+                    ImGui::Text("Address  0x%08X", kCramBase +
+                                static_cast<uint32_t>(idx) * entryBytes);
                     ImGui::EndTooltip();
                 }
             }

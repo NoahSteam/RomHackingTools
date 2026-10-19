@@ -909,6 +909,10 @@ private:
 
     // Scratch buffer for the Color RAM panel, decoded once per frame.
     std::vector<se_palette_entry> mCramColors;
+    // Palette selection and one-shot scroll/focus request from Palette Viewer.
+    uint32_t         mCramPaletteOffset = 0;
+    uint16_t         mCramPaletteCount = 0;
+    bool             mNavigateToCramPalette = false;
 
     // Per-layer viewer tabs. Owns its own textures, export folder and grid toggles;
     // App only hands it the context + render options each frame.

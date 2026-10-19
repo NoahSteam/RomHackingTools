@@ -72,10 +72,16 @@ public:
 
     // Bring the panel forward on 'cpu' -- its dock tab is selected and, if the halt is on
     // the other SH-2, the view switches to it (the halted row is only tracked while the
-    // panel's own CPU matches). Deliberately not GoTo: that turns Follow PC off and pushes
-    // a history entry for a jump the user never made, and on a halt the panel is already
-    // following the PC. Used when execution stops so the halted instruction is on screen.
-    void Reveal(int cpu) { mCpu = cpu & 1; mFocusRequested = true; }
+    // panel's own CPU matches). Resume Follow PC and force a scroll even if this halt
+    // is at the previous PC: the user may have browsed or scrolled away in between.
+    // Deliberately not GoTo, which disables Follow PC and pushes navigation history.
+    void Reveal(int cpu)
+    {
+        mCpu = cpu & 1;
+        mFollowPc = true;
+        mWindowValid = false;
+        mFocusRequested = true;
+    }
 
     // The user's notes (address -> text), shared by both CPUs. Read by Data > Dump SH-2, which
     // writes them in place of the generated comments exactly as the panel shows them.
