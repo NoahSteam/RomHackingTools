@@ -1,0 +1,19 @@
+diff --git a/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/rangeutil.cc b/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/rangeutil.cc
+index 8a4791b..ae2e061 100644
+--- a/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/rangeutil.cc
++++ b/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/rangeutil.cc
+@@ -457,6 +457,14 @@ int4 CircleRange::circleUnion(const CircleRange &op2)
+ bool CircleRange::minimalContainer(const CircleRange &op2,int4 maxStep)
+ 
+ {
++  // EXPERIMENT (area 2 round 11, A2-67): a full operand (left == right) is everything; the code below reads it as an empty [0,0)
++  if (!isempty && !op2.isempty && (left == right || op2.left == op2.right)) {
++    mask |= op2.mask;
++    step = 1;
++    left = 0;
++    right = 0;
++    return true;
++  }
+   if (isSingle() && op2.isSingle()) {
+     uintb min,max;
+     if (getMin() < op2.getMin()) {

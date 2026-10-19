@@ -68,6 +68,7 @@
 
 #include <algorithm>
 #include <condition_variable>
+#include <functional>
 #include <cstring>
 #include <list>
 #include <map>
@@ -135,7 +136,10 @@ const uint32_t kLw = 0x00200000u, kHw = 0x06000000u, kSize = 0x00100000u;
 // a mailbox word and returns what it reads back (the stored value, unless the mailbox is volatile).
 // C, D, E call A/B/P/Q, C, and a BIOS function through a literal pool word.
 
-enum Fn { FnA, FnB, FnP, FnC, FnD, FnE, FnQ, kFns };
+// T, U and W are area 8's (DecompilerTrustTests.cpp): a function whose flow is cut off where it leaves captured memory, one with a
+// PC-relative load in a delay slot that other code jumps to (unsupported), and one that stores to the BIOS ROM five times over
+// (cautions). No area 1 sequence places them.
+enum Fn { FnA, FnB, FnP, FnC, FnD, FnE, FnQ, FnT, FnU, FnW, kFns };
 
 struct Site { uint32_t addr; std::vector<uint8_t> vals; };
 struct FnDef
@@ -170,6 +174,17 @@ const FnDef* Defs()
           { { 0x0600441E, { 0x07, 0x06 } }, { 0x06004407, { 0x00, 0x05 } } } },
         { "Q", 0x06005300, { 0xD103, 0x2142, 0x6012, 0x000B, 0x0009, 0x0009, 0x0009, 0x0009 }, 0x06005310, 0x06003000,
           { { 0x06005312, { 0x30, 0x31 } }, { 0x06005303, { 0x42, 0x52 } } } },
+        // T: cmp/pl r4 ; bt <-16 words: 0x05FFFFF6, past the start of work RAM, not captured> ; mov #0,r0 ; rts ; nop. The site is the
+        // displacement: -16 and -15 cut the flow off (truncated), 0 branches to the rts.
+        { "T", 0x06000010, { 0x4415, 0x89F0, 0xE000, 0x000B, 0x0009 }, 0, 0,
+          { { 0x06000013, { 0xF0, 0x00, 0xF1 } }, { 0x06000015, { 0x00, 0x01 } } } },
+        // U: Fixture 3's bra whose delay slot (a PC-relative load) a bt also jumps to -- unsupported. The first site moves the bt off the
+        // slot (supported; 3 leaves the two nops after the bra dead code), the second changes a literal.
+        { "U", 0x06005500, { 0x4415, 0x8900, 0xA002, 0xD103, 0x0009, 0x0009, 0x000B, 0x6013, 0x0009, 0x0009, 0x1111, 0x1111, 0x2222, 0x2222 },
+          0, 0, { { 0x06005503, { 0x00, 0x01, 0x03 } }, { 0x06005514, { 0x11, 0x12 } } } },
+        // W: five stores into the BIOS ROM (0x100..0x114), which the ROM does not take: a caution each.
+        { "W", 0x06005600, { 0xD104, 0xE001, 0x2102, 0x1101, 0x1102, 0x1103, 0x1104, 0x1105, 0x000B, 0x0009, 0x0000, 0x0100 }, 0, 0,
+          { { 0x06005603, { 0x01, 0x02 } } } },
     };
     return defs;
 }
@@ -380,6 +395,8 @@ class Oracle
 {
 public:
     uint64_t runs = 0, memoHits = 0;
+    // Around every engine run of the oracle (area 8: the language files are put back for it when the driver has broken them).
+    std::function<void()> beforeRun, afterRun;
 
     // The engine, built lazily and used only while the runner is idle (checked by the caller).
     const DecompileResult& Run(const Sig& s, uint32_t entry, const Lent& lent)
@@ -409,7 +426,9 @@ public:
         ++runs;
         Memo m;
         m.lent = lent;
+        if (beforeRun) beforeRun();
         m.result = mEngine->Decompile(Snapshot(s), rq);
+        if (afterRun) afterRun();
         bucket.push_back(std::move(m));
         return bucket.back().result;
     }
@@ -525,7 +544,9 @@ enum class OpKind
     // The live emulator publishes nothing new and the app captures it again (a paused emulator
     // while a state load is unconfirmed): the context re-derives, its serial moves, its bytes do
     // not (A1-7). Generated, since the identity must not move without an input changing.
-    Recapture
+    Recapture,
+    // Area 8 (DecompilerTrustTests.cpp): an operation the area 1 sequences do not have, run by Rig::custom ('t-<word> <args>' in a script).
+    Custom
 };
 
 struct Op
@@ -581,6 +602,7 @@ std::string Describe(const Op& o, const std::vector<int>& placed)
     case OpKind::Finish: return "let the engine finish, delivering nothing yet";
     case OpKind::Starve: return "Refresh, and stall the engine past the time budget";
     case OpKind::Wedge: return "Refresh, Stop, and keep the engine from acknowledging past the cancel deadline (decompilation disabled)";
+    case OpKind::Custom: return "area 8: " + o.text;
     }
     return "?";
 }
@@ -603,7 +625,7 @@ struct Program
 // finish, wedge, recapture. <fn> is a letter of the world (A B P C D E Q); X is the BIOS function.
 bool ParseScript(const std::string& script, const std::string& world, int image, Program& out, std::string& error)
 {
-    static const char* const letters = "ABPCDEQ";
+    static const char* const letters = "ABPCDEQTUW";
     out = Program();
     out.game = image;
     for (char ch : world)
@@ -663,6 +685,15 @@ bool ParseScript(const std::string& script, const std::string& world, int image,
         else if (verb == "wait") o.kind = OpKind::Wait;
         else if (verb == "finish") o.kind = OpKind::Finish;
         else if (verb == "wedge") { o.kind = OpKind::Wedge; out.wedge = true; }
+        else if (verb.compare(0, 2, "t-") == 0)
+        {
+            // Area 8's words: 't-inject failed', 't-breakcfg', ... run by Rig::custom, with the words after the verb as the text.
+            o.kind = OpKind::Custom;
+            o.text = verb.substr(2);
+            for (const std::string& w : arg) o.text += " " + w;
+            if (o.text.compare(0, 6, "starve") == 0) out.starve = true;
+            if (o.text.compare(0, 5, "wedge") == 0) out.wedge = true;
+        }
         else ok = false;
         if (!ok)
         {
@@ -800,7 +831,7 @@ Program Generate(uint64_t seed)
     int starves = p.starve ? 1 + rng.Below(2) : 0;
     int emitted = 0, showIn = 0;
     std::string letters;
-    for (int f : p.placed) letters += "ABPCDEQ"[f];
+    for (int f : p.placed) letters += "ABPCDEQTUW"[f];
     while (emitted < count)
     {
         if (!held && rng.Chance(8))
@@ -892,6 +923,7 @@ struct Install
     DecompileResult result;
     TooLargeMemo memo;   // as it was when this result was installed
     bool onScreen = true;   // the snapshot held was the one on screen (a running emulator's lags by design)
+    bool excused = false;   // a result the from-scratch answer is not the judge of: one the area 8 driver made up, or an Unavailable it caused
 };
 
 struct Rig
@@ -963,6 +995,18 @@ struct Rig
     std::string failure;
 
     bool holding = false;
+
+    // Area 8's extension points (DecompilerTrustTests.cpp); all empty in the area 1 run.
+    std::function<std::string(Rig&, const Op&)> custom;   // OpKind::Custom
+    std::function<void(Rig&, const char*)> trustCheck;     // at the end of every settled step ("held": the engine holds a request; "idle")
+    std::function<void(Rig&)> atEnd;                       // before the final callee-first walk
+    float winW = 760, winH = 380;                          // the panel's window
+    std::set<uint64_t> injectedGens;   // results offered to panel.Accept that no engine made: not the from-scratch answer's to judge
+    bool cfgBroken = false;            // the language files cannot be put back: a request is answered Unavailable
+    bool shownInjected = false;        // the result on screen is one of those, or that Unavailable
+    int noEntry = 0;                   // the target is one that finds no function (a refused entry, a Containing nobody holds): the output is
+                                       // stale with nothing outstanding, by the user's choice, until a function is typed
+    uint64_t stopGen = 0;              // the generation of the request Stop was last pressed on
 
     // The model of the budget: what the runner may legitimately answer "too large" for.
     TooLargeMemo memo;
@@ -1093,7 +1137,7 @@ struct Rig
         if (visible)
         {
             ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
-            ImGui::SetNextWindowSize(ImVec2(760, 380), ImGuiCond_Always);
+            ImGui::SetNextWindowSize(ImVec2(winW, winH), ImGuiCond_Always);
             panel.Draw(nullptr, v, runner, in, r);
         }
     }
@@ -1178,16 +1222,9 @@ struct Rig
                                ? held.source == now.source && held.BiosHash() == now.BiosHash()
                                : held.SameView(now));
         }
+        in.excused = injectedGens.count(s->generation) != 0 || (cfgBroken && s->status == DecompileStatus::Unavailable);
+        shownInjected = in.excused;
         installs.push_back(std::move(in));
-        {
-            // An answer that is not "too large" for inputs that once ran out of budget overtakes the
-            // memo of them: the runner erased it when that run completed (or the panel's cache holds
-            // the answer, and Refresh runs the request again regardless).
-            const Install& last = installs.back();
-            if (last.result.status != DecompileStatus::TooLarge)
-                for (size_t i = memo.starved.size(); i-- > 0;)
-                    if (memo.starved[i].Same(last.sig)) memo.starved.erase(memo.starved.begin() + static_cast<std::ptrdiff_t>(i));
-        }
         shown = installs.back().sig;
         shownNamesGen = namesGeneration;
         haveShown = true;
@@ -1256,6 +1293,7 @@ struct Rig
         while (runner.Busy() && gate.Held() == 0 && dts::MsSince(t0) < 30000.0) std::this_thread::yield();
         Idle(2);
         CheckStaleMark();
+        if (trustCheck && !failed) trustCheck(*this, "held");
     }
 
     // The stale badge's reason (area 8): it exists exactly when the result is stale, and the tooltip
@@ -1276,6 +1314,11 @@ struct Rig
             why = "a tooltip for an output that is not stale";
         else if (stale && tip.empty())
             why = "a stale output with no tooltip";
+        else if (stale && panel.Pending() && noEntry != 0)
+        {
+            // A request still running for a question that has found no function: no replacement is coming from it (A8-9).
+            if (promises) why = "the badge promises a replacement for a question that has found no function";
+        }
         else if (stale && panel.Pending())
         {
             // A request being Stopped is still outstanding until the runner acknowledges it.
@@ -1287,7 +1330,7 @@ struct Rig
             if (reason == R::Pending || promises) why = "nothing is outstanding but the badge promises a replacement";
             else if (runner.Disabled() != (reason == R::Disabled)) why = "the reason is Disabled exactly when the runner is";
             else if (reason == R::Stopped && !haveStopped) why = "the reason is Stopped though the user stopped nothing";
-            else if (reason != R::Stopped && !runner.Disabled() && haveStopped && SigOf(held).Same(stopped))
+            else if (visible && reason != R::Stopped && !runner.Disabled() && haveStopped && SigOf(held).Same(stopped))   // a hidden panel is not asked a thing: its Stop may have been answered out of its sight
                 why = "the user stopped this question and the badge does not say so";
             else if (reason == R::NeedsRefresh && tip.find("Refresh") == std::string::npos && tip.find("Enter") == std::string::npos)
                 why = "a stale output needing the user does not say to press Refresh or Enter";
@@ -1315,7 +1358,7 @@ struct Rig
         // The one excuse is the names: the panel keys them by generation, so a rename undone is
         // another generation and the output conservatively stale, though the content is equal.
         const bool namesMoved = shownNamesGen != namesGeneration;
-        if (same && stale && !namesMoved)
+        if (same && stale && !namesMoved && noEntry == 0)
         {
             Fail("STALE SHOWN WHILE CURRENT (checked with the engine held): the result on screen was made from the "
                  "inputs now, and is marked stale because a replacement is outstanding\n  shown under " + DescribeSig(shown) +
@@ -1409,7 +1452,7 @@ struct Rig
             explicitPending = true;
             haveStopped = false;
             Idle(1);
-            if (selected != -2 && !runner.Disabled() && panel.Submissions() == before)
+            if (selected != -2 && !runner.Disabled() && noEntry == 0 && panel.Submissions() == before)
                 Fail("REFRESH: Refresh was pressed with a function selected and the panel asked the runner for nothing");
             return "";
         }
@@ -1500,18 +1543,27 @@ struct Rig
             // An explicit Enter asks the question again even after a Stop (A1-3): nothing excuses a
             // stale result from here on. (A Stop with the request still outstanding is replaced.)
             haveStopped = false;
+            noEntry = 0;                // a typed function is a target that finds one
             ImGui::GetIO().AddKeyEvent(ImGuiKey_Enter, false);
             Frame();
             return "";
         }
         case OpKind::Stop:
+        {
             if (!panel.Pending()) return "(nothing outstanding)";
             stopped = SigOf(held);
             stopCertain = holding && gate.Held() > 0;
             stoppedNamesGen = namesGeneration;
+            const uint64_t pressedOn = panel.PendingGeneration();
             if (!Click("stop")) return "(no Stop button: panel hidden)";
+            stopGen = pressedOn;
             haveStopped = true;
+            // The answer may have been collected while the pointer was settling on the button (the engine had finished): the
+            // button was gone, the press hit nothing, and the question was answered, not stopped.
+            if (const DecompileResult* landed = panel.Shown())
+                if (landed->generation == stopGen) haveStopped = false;
             return "";
+        }
         case OpKind::Cpu:
             cpu = o.a & 1;
             panel.SetCpu(cpu);
@@ -1573,6 +1625,7 @@ struct Rig
         }
         case OpKind::Starve: return Starve();
         case OpKind::Wedge: return Wedge();
+        case OpKind::Custom: return custom ? custom(*this, o) : std::string("(no area 8 driver)");
         case OpKind::Hold:
         case OpKind::Wait:
             return "";
@@ -1636,7 +1689,9 @@ struct Rig
         stopped = SigOf(held);
         stopCertain = true;
         stoppedNamesGen = namesGeneration;
+        const uint64_t pressedOn = panel.PendingGeneration();
         if (!Click("stop")) return "(no Stop button)";
+        stopGen = pressedOn;
         haveStopped = true;
         const auto t1 = std::chrono::steady_clock::now();
         while (!runner.Disabled() && dts::MsSince(t1) < kShortCancelAck * 1000.0 + 5000.0)
@@ -1734,19 +1789,29 @@ struct Rig
                 Fail("ENTRY: " + where + "\n  expected entry " + Hex(in.sig.entry) + ", actual " + Hex(in.result.requestedEntry));
                 break;
             }
+            if (in.excused) continue;   // made up by the area 8 driver (or an Unavailable it caused): no from-scratch answer to compare with
             if (in.result.status == DecompileStatus::TooLarge)
             {
                 shownExcused = TooLargeExcused(in.sig, in.memo);
                 if (!shownExcused)
                 {
                     const DecompileResult& want = oracle.Run(in.sig, in.sig.entry, Lent());
+                    std::string held;
+                    for (const Sig& st : in.memo.starved) held += "\n  the memo holds: " + DescribeSig(st);
                     Fail("TOO LARGE: " + where + "\n  the runner answered '" + in.result.error + "', but a from-scratch decompilation of these "
                          "inputs is status " + std::to_string(int(want.status)) + ": the verdict was reached for other bytes, or "
-                         "a Refresh has since shown that the function fits");
+                         "a Refresh has since shown that the function fits" + held);
                     break;
                 }
                 continue;
             }
+            // An answer that is not "too large" for inputs that once ran out of budget overtakes the memo of them: the runner erased it
+            // when that run completed. Only an answer of a function with no callee is known to be a run of the very request that was stalled
+            // (the signature does not hold what the panel lent, and a request that lent a callee's signature is another request, with
+            // its own memo, whose answer can read the same), so only that one erases; the others leave the memo, which accepts more (area 8, round 1).
+            if (in.result.calledAt.empty() && SameAnswer(in.result, oracle.Run(in.sig, in.sig.entry, Lent())))
+                for (size_t i = memo.starved.size(); i-- > 0;)
+                    if (memo.starved[i].Same(in.sig)) memo.starved.erase(memo.starved.begin() + static_cast<std::ptrdiff_t>(i));
             const std::vector<const DecompileResult*> cands = oracle.Candidates(in.sig);
             bool ok = false;
             for (const DecompileResult* c : cands)
@@ -1827,7 +1892,7 @@ struct Rig
                                  shown.BiosHash() == now.BiosHash();
         // The user stopped this very question; or decompilation is disabled for this session (a cancel
         // that was not acknowledged, 'wedge'): nothing can be asked until a new session.
-        const bool excused = (haveStopped && SigOf(held).Same(stopped)) || runner.Disabled();
+        const bool excused = (haveStopped && SigOf(held).Same(stopped)) || runner.Disabled() || noEntry != 0;
         std::string state = "\n  shown under " + DescribeSig(shown) + "\n  now          " + DescribeSig(now) +
                             "\n  model stale " + std::to_string(modelStale) + " (view " + std::to_string(viewDiff) +
                             ", other inputs " + std::to_string(otherDiff) + "), panel stale " + std::to_string(panelStale);
@@ -1852,6 +1917,7 @@ struct Rig
                 Fail("TOO LARGE: the result on screen says '" + s->error + "' but nothing excuses it" + state);
             return;
         }
+        if (!modelStale && shownInjected) return;   // not an engine's answer: nothing from scratch to hold it to
         if (!modelStale)
         {
             // The result on screen is the answer for the inputs now.
@@ -1879,7 +1945,7 @@ struct Rig
         if (failed || selected == -2) return;
         const Sig now = ViewSig();
         const DecompileResult* s = panel.Shown();
-        if (!s || !haveShown || !shown.Same(now) || s->status == DecompileStatus::TooLarge) return;
+        if (!s || !haveShown || !shown.Same(now) || s->status == DecompileStatus::TooLarge || shownInjected || !injectedGens.empty()) return;   // a made-up answer in the cache lends nothing
         const DecompileResult& want = oracle.Converged(SigOf(held));
         std::string why;
         if (!SameAnswer(*s, want, &why))
@@ -1897,6 +1963,7 @@ struct Rig
             return;
         }
         CheckIdle();
+        if (trustCheck && !failed) trustCheck(*this, "idle");
     }
 
     void Run()
@@ -1916,6 +1983,7 @@ struct Rig
         }
         if (failed) return;
         Wait();
+        if (atEnd) atEnd(*this);
         Converge();
     }
 
@@ -1974,7 +2042,7 @@ struct Rig
         show.kind = OpKind::Show;
         Step(show, "final walk");
         std::vector<int> order;   // callees first: A, B, P, C, D, E (the world's call graph is acyclic that way)
-        for (int f : { FnA, FnB, FnP, FnQ, FnC, FnD, FnE })
+        for (int f : { FnA, FnB, FnP, FnQ, FnT, FnU, FnW, FnC, FnD, FnE })
             for (size_t i = 0; i < placed.size(); ++i)
                 if (placed[i] == f) order.push_back(static_cast<int>(i));
         const bool hasE = std::find(placed.begin(), placed.end(), int(FnE)) != placed.end();
@@ -2011,6 +2079,9 @@ const double Rig::kShortCancelAck = 0.5;
 
 // ---- Seeds -------------------------------------------------------------------------------------
 
+// Set by the area 8 driver: configures each Rig (its hooks, its window) before it runs.
+std::function<void(Rig&)> gRigSetup;
+
 bool RunProgram(Oracle& oracle, Program p, uint64_t seed, bool verbose, const std::set<int>& skip, int limit)
 {
     if (!skip.empty() || limit >= 0)
@@ -2041,6 +2112,7 @@ bool RunProgram(Oracle& oracle, Program p, uint64_t seed, bool verbose, const st
     }
     ++gStats.seeds;
     Rig rig(oracle, p, seed, verbose);
+    if (gRigSetup) gRigSetup(rig);
     rig.Run();
     return !rig.failed;
 }
@@ -2051,7 +2123,7 @@ bool RunSeed(Oracle& oracle, uint64_t seed, bool verbose, const std::set<int>& s
 }
 
 // The default run: this many seeds, then the shrunk sequences of the findings fixed from this model
-// (kPinned: REVIEW_LEDGER.md rows A1-1 to A1-5, A1-7, A8-1 and A8-3), which stay in the default run as regression pins.
+// (kPinned: REVIEW_LEDGER.md rows A1-1 to A1-5, A1-7, A8-1, A8-3 and A8-7), which stay in the default run as regression pins.
 const uint64_t kDefaultSeeds = 18;
 
 struct Pinned
@@ -2089,6 +2161,10 @@ const Pinned kPinned[] = {
     // step of every sequence; these are the two states it first reads without a replacement coming.
     { "A8-1 (stopped)", "hold; select A; stop; wait", "C,A", 0 },
     { "A8-1 (disabled)", "select A; wedge; edit A 0 1; wait", "C,A", 0 },
+    // A Stop belongs to the request it stopped (A8-7): the next request is not "stopped" by it, so its answer, discarded while the panel is
+    // closed, leaves the question unasked and the view coming back to it asks it, as after any request (A1-4).
+    { "A8-7", "hold; select A; stop; wait; hold; edit A 0 1; hide; scrub 1; wait; resume; show; wait", "C,A", 0 },
+    { "A8-7 (twice)", "select A; hold; edit A 0 1; stop; wait; hold; edit A 0 2; hide; scrub 1; wait; resume; show; wait", "C,A", 0 },
     // Refresh on output that already answers the inputs is not stale while the replacement runs (A8-3):
     // the held-engine check forbids a stale mark when the inputs are the ones shown, not only requires
     // one when they differ.
@@ -2136,6 +2212,7 @@ std::set<int> ParseList(const char* text)
 
 }  // namespace
 
+#ifndef SE_MODEL_NO_MAIN   // DecompilerTrustTests.cpp includes this file for the rig and brings its own main
 int main(int argc, char** argv)
 {
     if (argc != 2)
@@ -2267,3 +2344,4 @@ int main(int argc, char** argv)
     CHECK(failedSeeds == 0);
     return dts::Finish("DecompilerModelTests", start);
 }
+#endif  // SE_MODEL_NO_MAIN

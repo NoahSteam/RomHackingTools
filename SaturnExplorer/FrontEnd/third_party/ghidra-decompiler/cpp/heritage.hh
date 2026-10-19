@@ -13,6 +13,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified for SaturnExplorer: a guard below a pointer stepped down is no array's start (patches/0056-engine-stack-walk-down-aliases.patch).
  */
 /// \file heritage.hh
 /// \brief Utilities for building Static Single Assignment (SSA) form 
@@ -149,6 +151,7 @@ class LoadGuard {
   uintb maximumOffset;	///< Maximum offset of the LOAD
   int4 step;		///< Step of any access into this range (0=unknown)
   int4 analysisState;	///< 0=unanalyzed, 1=analyzed(partial result), 2=analyzed(full result)
+  bool guessedBelow;	///< SaturnExplorer: minimumOffset is a guess below a pointer stepped down, not where an array starts (patches/0056-engine-stack-walk-down-aliases.patch)
   void establishRange(const ValueSetRead &valueSet);	///< Convert partial value set analysis into guard range
   void finalizeRange(const ValueSetRead &valueSet);	///< Convert value set analysis to final guard range
 
@@ -158,13 +161,14 @@ class LoadGuard {
   /// \param s is the (stack) space it is loading from
   /// \param off is the base offset that is indexed from
   void set(PcodeOp *o,AddrSpace *s,uintb off) {
-    op = o; spc = s; pointerBase=off; minimumOffset=0; maximumOffset=s->getHighest(); step=0; analysisState=0;
+    op = o; spc = s; pointerBase=off; minimumOffset=0; maximumOffset=s->getHighest(); step=0; analysisState=0; guessedBelow=false;
   }
 public:
   PcodeOp *getOp(void) const { return op; }	///< Get the PcodeOp being guarded
   uintb getMinimum(void) const { return minimumOffset; }	///< Get minimum offset of the guarded range
   uintb getMaximum(void) const { return maximumOffset; }	///< Get maximum offset of the guarded range
   int4 getStep(void) const { return step; }		///< Get the calculated step associated with the range (or 0)
+  bool isGuessedBelow(void) const { return guessedBelow; }	///< SaturnExplorer: is the minimum a guess below a pointer stepped down
   bool isGuarded(const Address &addr) const;		///< Does \b this guard apply to the given address
   bool isRangeLocked(void) const { return (analysisState == 2); }	///< Return \b true if the range is fully determined
   bool isValid(OpCode opc) const { return (!op->isDead() && op->code() == opc); }	///< Return \b true if the record still describes an active LOAD

@@ -12,6 +12,7 @@
 //
 // usage: SaturnExplorerSh2DecompilerTests <scratch dir>
 #include "DecompilerTestSupport.h"
+#include "MappingOracle.h"
 
 #include "AllocFailure.h"
 #include "Decompiler/SaturnArchitecture.h"
@@ -24,12 +25,17 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cctype>
 #include <cstring>
+#include <fstream>
 #include <map>
+#include <random>
+#include <regex>
 #include <stdexcept>
 #include <cstdlib>
 #include <sstream>
+#include <thread>
 
 using namespace sfe::decomp;
 using dts::MakeSnapshot;
@@ -58,9 +64,17 @@ void Print(const char* label, const DecompileResult& r)
         std::printf("  ended: %s of %u bytes at %08X (%s%08X): %s\n", f.write ? "write" : "read", unsigned(f.size), f.insn,
                     f.constantAddress ? "" : "through a pointer; ", f.address, names[int(f.fate)]);
     }
+    // SE_GAME_TOKENS=1: every instruction a line came from, not just the first (the click goes to the first).
+    static const bool allAddresses = std::getenv("SE_GAME_TOKENS") != nullptr;
     for (const Line& l : r.lines)
     {
-        if (l.firstAddr) std::printf("  %-50s ; %08X\n", l.text.c_str(), l.firstAddr);
+        if (l.firstAddr && allAddresses)
+        {
+            std::printf("  %-50s ;", l.text.c_str());
+            for (uint32_t a : LineInstructions(l)) std::printf(" %08X", a);
+            std::printf("\n");
+        }
+        else if (l.firstAddr) std::printf("  %-50s ; %08X\n", l.text.c_str(), l.firstAddr);
         else std::printf("  %s\n", l.text.c_str());
     }
 }
@@ -84,6 +98,78 @@ DecompileRequest Request(uint32_t entry)
     DecompileRequest q;
     q.entry = entry;
     return q;
+}
+
+// Area 7 (MappingOracle.h) over the engine's fixtures, every run of ctest: the fixtures hold delay slots, a loop, a switch, a call, and
+// literal loads, so every token address of their texts is checked against the body, and the lines several instructions made are
+// marked. The game code does the same over every function (TestGameCode, TestGameLending). Also pins which instructions the
+// fixture 1 lines come from.
+void TestMappingOracleOnFixtures()
+{
+    std::vector<uint8_t> hw(0x100000u, 0);
+    dts::PlaceFixture1(hw);
+    dts::PlaceFixture3(hw);
+    dts::PlaceDiamonds(hw, 3);
+    dts::PlaceStraight(hw, 4);
+    dts::PlaceJumpTable(hw, 4, 2);
+    // A7-3, shrunk from generator seed 62956's first array read: mov.b @r4+,r0 ; mov.b @r4,r0 ; rts ; nop prints
+    // `return (int4)(char)param_1[1];`, whose brackets are the pointer expression's op, so the load at 0x06070002 had no token.
+    const uint32_t kArrayRead = 0x06070000u;
+    for (uint32_t i = 0; i < 4; ++i) dts::Put16(hw, kArrayRead - 0x06000000u + 2 * i, uint16_t(i == 0 ? 0x6044 : i == 1 ? 0x6040 : i == 2 ? 0x000B : 0x0009));
+    auto snap = MakeSnapshot(hw);
+    Sh2Decompiler d(gConfig);
+    const std::function<bool(uint32_t, uint16_t&)> wordAt = [&hw](uint32_t a, uint16_t& w) {
+        if (a < 0x06000000u || a - 0x06000000u + 1 >= hw.size()) return false;
+        w = static_cast<uint16_t>(hw[a - 0x06000000u] << 8 | hw[a - 0x06000000u + 1]);
+        return true;
+    };
+    std::vector<uint32_t> entries = { dts::kFixture1Caller, dts::kFixture3Bra, dts::kFixture3Bfs, dts::kFixture3BsrMova,
+                                      dts::kFixture3BsrLoad, dts::kFixture3BraTarget, dts::kFixture3SlotJumped,
+                                      dts::kFixture3SwitchSlot, dts::kDiamondsBase, dts::kStraightBase, dts::kJumpTableBase, kArrayRead };
+    for (const dts::Fixture3Case& c : dts::kFixture3Others) entries.push_back(c.entry);
+    dts::MappingAudit all;
+    for (uint32_t entry : entries)
+    {
+        const DecompileResult r = d.Decompile(snap, Request(entry));
+        CHECK(r.status == DecompileStatus::Ok);
+        char where[32];
+        std::snprintf(where, sizeof where, "fixture %08X", entry);
+        const dts::MappingAudit a = dts::AuditMapping(r, wordAt, where);
+        if (a.Violations()) dts::PrintMappingAudit(a, where);
+        all.Add(a);
+    }
+    dts::PrintMappingAudit(all, "fixtures");
+    CHECK(all.Violations() == 0);
+    // ...and the ledger names the line each access prints on (MemoryAccess::firstLine counted the document's leading break, A7-4)
+    CHECK(all.accessOffLine == 0);
+    CHECK(all.functions == static_cast<int>(entries.size()));
+    CHECK(all.single > 10 && all.multi > 3);   // the fixtures hold both kinds of line, so both are checked
+
+    const DecompileResult ra = d.Decompile(snap, Request(kArrayRead));
+    const Line* arr = LineWith(ra, "param_1[1]");
+    CHECK(ra.status == DecompileStatus::Ok && arr != nullptr);
+    if (arr)
+    {
+        const std::vector<uint32_t> from = LineInstructions(*arr);
+        CHECK(std::find(from.begin(), from.end(), kArrayRead + 2) != from.end());   // the load that reads param_1[1]
+        // ...as an empty token: nothing is drawn for it
+        bool empty = false;
+        for (const Token& t : arr->tokens) empty = empty || (t.addr == kArrayRead + 2 && t.begin == t.end);
+        CHECK(empty);
+    }
+
+    // Fixture 1: `if (0 < param_1)` is the cmp/pl and the bf it tests; the call is the jsr (its argument, in the delay slot, rides
+    // with it); the line after it is the add; no line is from an instruction in a delay slot's own address.
+    const DecompileResult r1 = d.Decompile(snap, Request(dts::kFixture1Caller));
+    const Line* guard = LineWith(r1, "if (0 < param_1)");
+    const Line* call = LineWith(r1, "func_0x06005000(");
+    const Line* brace = LineWith(r1, "}");
+    CHECK(guard && LineInstructions(*guard) == (std::vector<uint32_t>{ 0x06004008u, 0x0600400Au }));
+    CHECK(call && LineInstructions(*call) == (std::vector<uint32_t>{ dts::kFixture1Jsr }));
+    CHECK(brace && LineInstructions(*brace).empty() && brace->firstAddr == 0 && LineOriginText(*brace).empty());
+    // A statement from two instructions names both, and the first is where a click goes.
+    CHECK(guard && guard->firstAddr == 0x06004008u && Has(LineOriginText(*guard), "2 SH-2 instructions") &&
+          Has(LineOriginText(*guard), "0x06004008, 0x0600400A"));
 }
 
 void TestFixture1()
@@ -1805,6 +1891,12 @@ void TestHardwareVolatility()
         add("a5_78a", { 0xD102, 0x315C, 0xE005, 0x2100, 0x000B, 0x0009, 0x25F0, 0x0000 }, 0x0C, 0x25F00000u);
         add("a5_78b", { 0xD102, 0xE005, 0x314C, 0x2100, 0x000B, 0x0009, 0x25F0, 0x0000 }, 0x0C, 0x25F00000u);
         add("a5_78_small", { 0xD102, 0x315C, 0xE005, 0x2100, 0x000B, 0x0009, 0x0000, 0x0010 }, 0x0C, 0x00000010u);   // control: param + 0x10
+        // A5-83 (generator seed 603025): a pointer from a register area no name is near (an SCSP slot's, 0x05B000C8) stepped by an add and flipped
+        // between the partitions by an xor in one turn: `p = (p + 4) ^ 0x20000000` reads 0x35B000C8, then 0x15B000CC through the cached partition, then
+        // 0x35B000D0, and so on. The first control steps only (no cached read to say); the second writes through the same pointer (a write is written through).
+        add("a5_83", { 0xD104, 0xD305, 0xE403, 0x6012, 0x7104, 0x213A, 0x4410, 0x8BFA, 0x000B, 0x0009, 0x35B0, 0x00C8, 0x2000, 0x0000 }, 0x14, 0x35B000C8u);
+        add("a5_83_step", { 0xD103, 0xE403, 0x6012, 0x7104, 0x4410, 0x8BFB, 0x000B, 0x0009, 0x35B0, 0x00C8 }, 0x10, 0x35B000C8u);
+        add("a5_83_write", { 0xD104, 0xD305, 0xE403, 0x2102, 0x7104, 0x213A, 0x4410, 0x8BFA, 0x000B, 0x0009, 0x35B0, 0x00C8, 0x2000, 0x0000 }, 0x14, 0x35B000C8u);
         // A5-79: a frame buffer store, a frame change (VDP1_FBCR = 3), a wait for the frame end, the load of the same address
         add("a5_79", { 0xD807, 0x900B, 0x2801, 0xD107, 0xE203, 0x2121, 0xD306, 0x6031, 0xC808, 0x89FC, 0x6081, 0x000B, 0x0009, 0x0009, 0x1234, 0x0009, 0x25C8, 0x0200, 0x25D0, 0x0002, 0x25F8, 0x0004 }, 0x20, 0x25C80200u);
     }
@@ -3223,6 +3315,17 @@ void TestHardwareVolatility()
               HasNote(r, "if the pointer holds 0x25F80004 (VDP2_TVSTAT): VDP2_TVSTAT: a read clears EXLTFG", false) && !HasNote(r, "stepped in a loop", false) &&
               !HasNote(r, "it may hold other values too", true));
 
+        // A5-83: the stepped note says the cache caution whatever is near, when the later values read through the cached partition. The
+        // registers around 0x05B000C8 (an SCSP slot's) have no name, so the note was gated on a name within kSteppedReach and never said.
+        r = R9("a5_83", "p = 0x35B000C8; loop 3: read @p; p = (p + 4) ^ 0x20000000");
+        CHECK(HasNote(r, "the pointer is stepped in a loop from 0x35B000C8: the iterations after the first reach other addresses, other registers perhaps, which are not said; "
+                         "they read through the cached partition (0x15B000CC is one) too, and a read of a register through the cached partition is a cache read when the cache is on",
+                      true));
+        r = R9("a5_83_step", "control: p = 0x35B000C8; loop 3: read @p; p += 4 (no cached read, no name near: nothing to say)");
+        CHECK(!HasNote(r, "stepped in a loop", false) && !HasNote(r, "stepped in a loop", true));
+        r = R9("a5_83_write", "control: the same walk with a write: the cache is not read by a write");
+        CHECK(!HasNote(r, "cache read", true) && !HasNote(r, "cache read", false));
+
         // A5-71: the cache data array is 4 KiB under both partitions: the names of one cell are one memory.
         r = R9("a5_71a", "xRamc0000000 = 5; xRamc0001000 = 7; return xRamc0000000");
         CHECK(Ledger(r, { Wr(0xC0000000u, 4), Wr(0xC0001000u, 4), Rd(0xC0000000u, 4, false, true) }) && !Has(r.Text(), "return 5;") && !r.aliasedMemory.empty());
@@ -3835,6 +3938,14 @@ void TestGameCode()
     const std::function<bool(uint32_t)> noneMarked = [](uint32_t) { return false; };
     double total = 0, worst = 0;
     uint32_t worstAt = 0;
+    // Area 7: the pseudocode-to-assembly mapping over every function (MappingOracle.h).
+    dts::MappingAudit mapping;
+    const std::string mappingMutate = std::getenv("SE_GAME_MAPPING_MUTATE") ? std::getenv("SE_GAME_MAPPING_MUTATE") : "";
+    const std::function<bool(uint32_t, uint16_t&)> wordAt = [&hw](uint32_t a, uint16_t& w) {
+        if (a < 0x06000000u || a - 0x06000000u + 1 >= hw.size()) return false;
+        w = static_cast<uint16_t>(hw[a - 0x06000000u] << 8 | hw[a - 0x06000000u + 1]);
+        return true;
+    };
     for (uint32_t k = 0; k + 1 < hw.size(); k += 2)
     {
         if (hw[k] != 0x4F || hw[k + 1] != 0x22) continue;
@@ -3851,6 +3962,15 @@ void TestGameCode()
         if (r.status == DecompileStatus::Ok) ++ok;
         else if (r.status == DecompileStatus::Failed) ++failed;
         else ++other;
+        if (r.status == DecompileStatus::Ok)
+        {
+            char where[32];
+            std::snprintf(where, sizeof where, "function %08X", entry);
+            // SE_GAME_MAPPING_MUTATE=<kind> (MappingOracle.h) damages the result as one defect would; the run must then fail.
+            DecompileResult damaged = r;
+            if (!mappingMutate.empty()) dts::MutateMapping(damaged, mappingMutate);
+            mapping.Add(dts::AuditMapping(damaged, wordAt, where, [&](const Line& l) { return dts::MutatedOriginText(mappingMutate, l); }));
+        }
         total += r.elapsedMs;
         if (r.elapsedMs > worst) { worst = r.elapsedMs; worstAt = entry; }
         if (!r.accesses.empty()) ++withAccesses;
@@ -4037,6 +4157,8 @@ void TestGameCode()
     std::printf("  ended dead: %d reads through a pointer, %d reads of constant addresses of ordinary memory, %d of "
                 "hardware, %d writes; %d of them are no direct access of ordinary memory\n", deadPointerReads, deadConstantReads,
                 deadHardwareReads, deadWrites, deadLost);
+    dts::PrintMappingAudit(mapping, "alone");
+    CHECK(mapping.Violations() == 0);
     CHECK(dropped == 0);
     CHECK(deadLost == 0);
     CHECK(noReference == 0);
@@ -4144,6 +4266,13 @@ void TestGameLending()
         bool extraoutKept = false;   // the text has a call's r8-r14, GBR or VBR as extraout_
     };
     constexpr uint32_t kModelKept = (0x7Fu << 8) | (1u << 17) | (1u << 18);   // r8-r14, GBR, VBR
+    // Area 7: the mapping of the texts the panel shows, with lent signatures (MappingOracle.h).
+    dts::MappingAudit mappingLent;
+    const std::function<bool(uint32_t, uint16_t&)> wordAt = [&hw](uint32_t a, uint16_t& w) {
+        if (a < 0x06000000u || a - 0x06000000u + 1 >= hw.size()) return false;
+        w = static_cast<uint16_t>(hw[a - 0x06000000u] << 8 | hw[a - 0x06000000u + 1]);
+        return true;
+    };
     auto pass = [&](bool lendEffects, const char* label) {
         Sh2Decompiler::SetLendEffectsForTests(lendEffects);
         std::vector<Row> rows(entries.size());
@@ -4167,6 +4296,12 @@ void TestGameLending()
             }
             const DecompileResult r = d.Decompile(snap, rq);
             ms += r.elapsedMs;
+            if (lendEffects && r.status == DecompileStatus::Ok)
+            {
+                char where[32];
+                std::snprintf(where, sizeof where, "lent function %08X", entries[i]);
+                mappingLent.Add(dts::AuditMapping(r, wordAt, where));
+            }
             Row& row = rows[i];
             row.ok = r.status == DecompileStatus::Ok;
             row.failed = r.status == DecompileStatus::Failed;
@@ -4207,6 +4342,8 @@ void TestGameLending()
     const std::vector<Row> before = pass(false, "before");
     const std::vector<Row> after = pass(true, "after");
     Sh2Decompiler::SetLendEffectsForTests(true);
+    dts::PrintMappingAudit(mappingLent, "lent");
+    CHECK(mappingLent.Violations() == 0);
 
     auto summarize = [&](const std::vector<Row>& rows, const char* label) {
         int ok = 0, known = 0, afterCall = 0, withLent = 0, withKeeping = 0, keepingKnown = 0, keepingExtraout = 0, extraout = 0;
@@ -5680,6 +5817,11 @@ public:
         std::map<std::string, uint32_t> regs;   // "r0" ... "r15", "sr", "gbr", "vbr", "mach", "macl", "pr"
         std::shared_ptr<MemorySnapshot> snap;   // the stack words
         uint32_t sp = 0;                        // r15 on entry
+        // Round 8: a read of the snapshot's code area is the value it holds (`*(xunknown4 *)(addr)`, `xRam06009034`), for a fixture that stores
+        // nothing there. Off by default: a memory read is unknown, as it is for every other check.
+        bool readCode = false;
+        uint32_t codeLo = 0x06009000u, codeHi = 0x06010000u;
+        std::map<uint32_t, int> globalSize;   // the width of each constant-address access the host recorded (set by the harness)
     };
     void SetEntry(const Entry* e) { mEntry = e; }
 
@@ -5690,7 +5832,8 @@ public:
         for (size_t i = 0; i + 1 < mTok.size(); ++i)
             if (mTok[i] == "&") mAddrTaken.insert(mTok[i + 1]);   // a local whose address is taken: a call may write it
         // The engine's note at a call that a frame address reaches in r2 (A3-28): every stack word may have been written by it.
-        mEscapeNote = text.find("a frame address is in r2 here") != std::string::npos || text.find("a frame address is in r7 here") != std::string::npos;
+        mEscapeNote = text.find("a frame address is in r2 here") != std::string::npos || text.find("a frame address is in r7 here") != std::string::npos ||
+                      text.find("a frame address is in a stack argument slot here") != std::string::npos;
         // The header: everything up to the body's opening brace.
         while (mPos < mTok.size() && mTok[mPos] != "{") ++mPos;
         if (mPos >= mTok.size())
@@ -6455,6 +6598,38 @@ private:
             const Val v = Promote(ParseUnary(c, env));
             return v.known ? Make(~v.v, v.size, v.sg) : Unk(v.size, v.sg);
         }
+        if (t == "*" && mEntry != nullptr && mEntry->readCode && mEntry->snap != nullptr && c.pos < c.end && mTok[c.pos] == "(")
+        {
+            // `*(T *)operand`: the value T-wide at the operand's address when the snapshot holds it in the fixture's code area.
+            size_t k = c.pos + 1;
+            bool cast = k < c.end && IsType(mTok[k]);
+            while (cast && k < c.end && mTok[k] != ")")
+            {
+                if (!(IsType(mTok[k]) || mTok[k] == "*")) cast = false;
+                ++k;
+            }
+            if (cast && k < c.end && k >= c.pos + 3 && mTok[k - 1] == "*")
+            {
+                const Ty pointee = TypeOf(c.pos + 1, k - 1);
+                c.pos = k + 1;
+                const Val p = ParseUnary(c, env);
+                if (p.known && (pointee.size == 1 || pointee.size == 2 || pointee.size == 4))
+                {
+                    const uint32_t a = static_cast<uint32_t>(p.v);
+                    uint32_t word = 0, value = 0;
+                    if (a >= mEntry->codeLo && a + pointee.size <= mEntry->codeHi && mEntry->snap->ReadU32(a & ~3u, word))
+                    {
+                        const uint32_t sh = 32 - 8 * (a & 3) - 8 * pointee.size;
+                        if ((a & 3) + pointee.size <= 4)
+                        {
+                            value = (word >> sh) & (pointee.size == 4 ? 0xFFFFFFFFu : (1u << (8 * pointee.size)) - 1u);
+                            return Make(value, pointee.size, pointee.sg);
+                        }
+                    }
+                }
+                return Val();
+            }
+        }
         if (t == "*" || t == "&")   // a memory read or an address: unknown
         {
             ParseUnary(c, env);
@@ -6553,6 +6728,34 @@ private:
         }
         const auto it = env.find(t);
         if (it != env.end()) return it->second;
+        {
+            // A global of the fixture's code area, `iRam06009024`: its width is the declaration's, which the text does not give for a global.
+            // The host's record of the access (Entry::globalSize: address -> bytes, from the fates and the printed accesses) does; the letter
+            // gives the sign (`i`, `s`, `c` signed, `u`, `w`, `b` unsigned, `x` none).
+            const size_t r = t.find("Ram");
+            if (r != std::string::npos && t.size() == r + 11 && mEntry != nullptr && mEntry->readCode && mEntry->snap != nullptr)
+            {
+                char* endp = nullptr;
+                const uint32_t a = static_cast<uint32_t>(std::strtoul(t.c_str() + r + 3, &endp, 16));
+                const auto sz = mEntry->globalSize.find(a);
+                if (*endp == '\0' && sz != mEntry->globalSize.end() && a >= mEntry->codeLo && a + sz->second <= mEntry->codeHi)
+                {
+                    uint32_t word = 0;
+                    if (mEntry->snap->ReadU32(a & ~3u, word))
+                    {
+                        const int n = sz->second;
+                        if ((a & 3) + n <= 4 && (n == 1 || n == 2 || n == 4))
+                        {
+                            const uint32_t sh = 32 - 8 * (a & 3) - 8 * n;
+                            const uint32_t v = (word >> sh) & (n == 4 ? 0xFFFFFFFFu : (1u << (8 * n)) - 1u);
+                            const char c = t[0];
+                            const Sign sg = (c == 'i' || c == 's' || c == 'c') ? Signed : (c == 'u' || c == 'w' || c == 'b') ? Unsigned : Unknown;
+                            return Make(v, n, sg);
+                        }
+                    }
+                }
+            }
+        }
         const auto ty = mTypes.find(t);
         {
             Val init;
@@ -8051,16 +8254,17 @@ void TestCallsAndTraps()
                 CHECK(!r.prototype.known && Has(r.prototypeWithheld, (std::string("computed from ") + c.reg + " on entry").c_str()));
                 CHECK(!PseudoAgreesWithRun(r, snap, g, inputs));   // the engine's text returns nothing
             }
-            // Accepted, pinned: a path that leaves r0 alone and another that sets it to a constant (`phi(in_r0, 5)`) is lent
-            // `void` as before. It hides the caller's r0 behind the constant, but compiled code leaves exactly this as scratch: the
-            // rule that withholds it (a join with r0's entry value, whatever the other path) takes 15 functions of image 007 and
-            // 24 of image 008 out of the lent set, every one a void function with a scratch r0. The interrupt-mask idiom's plain
-            // transform of SR left in r0 (06010054) is not a join either, and stays lent.
+            // A path that leaves r0 alone and another that sets it to a constant (`phi(in_r0, 5)`) chosen by r4, which the lent `void f(void)`
+            // drops: withheld since area 3 round 9 (A3-62; it was accepted as the scratch r0 of compiled code here, but the choice is a read of
+            // r4 that the signature loses, and a compiled function that tests r4 holds it: 0 corpus functions withheld for it). Chosen by a
+            // constant it stays lent (A3-25), and so does the same join when the signature holds r4 (TestArea3Round9Fix). The interrupt-mask
+            // idiom's plain transform of SR left in r0 (06010054) is not a join, and stays lent.
             const CallFixture alone = { "r0 left alone on one path, set to a constant on the other", base, { 0x2448, 0x8900, 0xE005, 0x000B, 0x0009 } };
             auto snapA = CallSnapshot(alone, ++serial);
             const DecompileResult ra = d.Decompile(snapA, Request(alone.base));
             Print(alone.name.c_str(), ra);
-            CHECK(ra.prototype.known);
+            CHECK(!ra.prototype.known && Has(ra.prototypeWithheld, "its return is chosen by r4 on entry, which the signature does not hold"));
+            CHECK(!PseudoAgreesWithRun(ra, snapA, alone, inputs));   // `return;` where the code returns 5 or r0's entry value
         }
         // ---- A3-16 (round 5): a loop that moves a stack address down -----------------------------------------------
         // A3-9 made a join of two stack addresses keep the lower base; a loop that lowers an address each pass never
@@ -8273,7 +8477,10 @@ void TestCallsAndTraps()
                 const Lent lg = lend(g, true, false);
                 CHECK(!lg.callee.prototype.known && Has(lg.callee.prototypeWithheld, "caller's frame"));
                 CHECK(!lg.caller.prototype.known && Has(lg.caller.prototypeWithheld, "not known"));
-                CHECK(!PseudoAgreesWithRun(lg.caller, CallSnapshot(g, ++serial), g, inputs));
+                // The caller's text read the local as what it stored before the call (`return 5;`) until area 3 round 9 (A3-61): the probe reads
+                // the callee's stores of its caller's words, the local is not folded and the note says why.
+                CHECK(Has(lg.caller.Text(), "a local at or above the stack pointer is read after this call") && !Has(lg.caller.Text(), "return 5;"));
+                CHECK(PseudoAgreesWithRun(lg.caller, CallSnapshot(g, ++serial), g, inputs, true));
             }
             (void)pr8;
             // Controls. A callee that spills a parameter its signature holds into its caller's home area (`mov r4,r0 ; rts ;
@@ -8706,7 +8913,10 @@ void TestCallsAndTraps()
                 const Lent lg = lend(f, true, false);
                 CHECK(!lg.callee.prototype.known && Has(lg.callee.prototypeWithheld, kHandedBack));
                 CHECK(!lg.caller.prototype.known && Has(lg.caller.prototypeWithheld, "not known"));
-                CHECK(!PseudoAgreesWithRun(lg.caller, CallSnapshot(f, ++serial), f, viaR5));   // the withheld text still reads the stale 5
+                // The withheld caller's text read the stale 5 until area 3 round 9 (A3-61: a store the callee makes through an index off its entry r15
+                // may be any word of its caller's frame from the call's r15 up, so every local from there up is the alias's).
+                CHECK(Has(lg.caller.Text(), "a local at or above the stack pointer is read after this call") && !Has(lg.caller.Text(), "return 5;"));
+                CHECK(PseudoAgreesWithRun(lg.caller, CallSnapshot(f, ++serial), f, viaR5, true));
                 CHECK(returns(f, viaR5[0], 0x22222222u));
             }
             // N1: the callee hands its caller's word to a lent writer through its own entry r15 + 4.
@@ -8738,7 +8948,8 @@ void TestCallsAndTraps()
             const Lent l2 = lend(s2a2, true, false);
             CHECK(!l2.callee.prototype.known && Has(l2.callee.prototypeWithheld, kHandedBack));
             CHECK(!l2.caller.prototype.known && Has(l2.caller.prototypeWithheld, "not known"));
-            CHECK(!PseudoAgreesWithRun(l2.caller, CallSnapshot(s2a2, ++serial), s2a2, inputs));
+            CHECK(Has(l2.caller.Text(), "a local at or above the stack pointer is read after this call"));   // the stale local, until area 3 round 9 (A3-61)
+            CHECK(PseudoAgreesWithRun(l2.caller, CallSnapshot(s2a2, ++serial), s2a2, inputs, true));
             const CallFixture s2a = { "a3_40 S2a: mov r4,r0 ; add r5,r0 ; mov.l r0,@r15", base, withCallee(pr14, { 0x6043, 0x305C, 0x2F02, 0x000B, 0x0009 }) };
             CHECK(!lend(s2a, true, false).callee.prototype.known);
             // Controls. The plain spill of a held parameter stays lent, whole (A3-35, accepted) or as a halfword.
@@ -9331,15 +9542,17 @@ void TestAreas234Leftovers()
     // ---- A3-45: r0 rotated through the carry in a loop is an input ------------------------------------------------------------------
     // `mov #1,r3 ; L: rotcr r0 ; tas.b @r5 ; dt r3 ; bf L ; rts ; nop`: the rotate is dead code in the engine's text, the function returns
     // nothing, and r0 on entry decides what it leaves in r0. Not lent (a caller's setup of r0 is dead in its text). The same loop entered only
-    // if r4 is not zero leaves r0 alone on the other path, which is the scratch r0 of compiled code (A3-14): lent.
+    // if r4 is not zero leaves r0 alone on the other path, and rotated on the path that runs the loop: a read of r0 all the same, and withheld
+    // since area 3 round 9 (A3-59, A3-62: it was lent as A3-14's scratch r0, which is a path that leaves r0 alone and no other that reads it).
     {
         const DecompileResult r = decompile("A3-45 rotcr r0 in a do-while loop", { 0xE301, 0x4025, 0x451B, 0x4310, 0x8BFB, 0x000B, 0x0009 });
         CHECK(!r.prototype.known && Has(r.prototypeWithheld, "computed from r0 on entry"));
         const DecompileResult c = decompile("A3-45 control: the loop may be skipped", { 0x2448, 0x8902, 0x4025, 0x4410, 0x8BFC, 0x000B, 0x0009 });
-        CHECK(c.prototype.known);
-        // A3-46's function: r0 left alone on the path that skips both writes: lent too, and its `and r0,r0` is no write.
+        CHECK(!c.prototype.known && Has(c.prototypeWithheld, "computed from r0 on entry"));
+        // A3-46's function: r0 left alone on the path that skips both writes, its `and r0,r0` no write (A2-43) -- and r0's entry value the test
+        // that chooses between r0 and 0 (`tst #0x80,r0`): withheld since round 9 (A3-56; it was lent), "chosen by r0".
         const DecompileResult n = decompile("A3-46 r0 written by xor on one path, and r0,r0 on another", { 0x5264, 0xC880, 0x8900, 0x200A, 0x2028, 0x8B00, 0x2009, 0x000B, 0x0009 });
-        CHECK(n.prototype.known && n.prototype.ret.kind == TypeKind::Void);
+        CHECK(!n.prototype.known && Has(n.prototypeWithheld, "its return is chosen by r0 on entry, which no signature passes"));
     }
 
     // ---- A4-10, A4-11: a switch the engine could not normalize prints on the loaded address ----------------------------------------
@@ -9456,6 +9669,2389 @@ void TestAreas234Leftovers()
             Print(cr.name.c_str(), rr);
             CHECK(!Has(rr.Text(), "return 0x5a;") && !Has(rr.Text(), "a frame address is in r7 here"));
         }
+    }
+}
+
+// ===== Area 3, round 8: a join with a value from memory, and the stack argument of a call (ledger A3-49, A3-50, A3-51) =====
+// A3-49 and A3-50: A3-20's rule (a return that joins r0's entry value with a parameter the signature does not hold) and A3-14's (r0 computed from its
+// entry value on a path, left alone on another) took a join out of the rule when another alternative came from memory: a load, or a literal-pool word,
+// which the check reads as a load. The premise was that the engine keeps the return of a value from memory; it drops `phi(in_r0, *p)` and
+// `phi(in_r0, literal)` as it drops `phi(in_r0, in_r6)`. Each fixture is withheld, and its text is wrong (the run returns the value it drops).
+// A3-51: A3-48's channel through the stack. The engine drops an argument that follows three unset registers, the stack word with it, so a frame
+// address stored in the call's first stack slot is no argument and the local it points at was folded across the call.
+void TestArea3Round8()
+{
+    Sh2Decompiler d(gConfig);
+    uint64_t serial = 1000;
+    const uint32_t base = 0x06009020u;
+    const std::vector<std::vector<uint32_t>> inputs = { { 0x11111111u, 0x22222222u, 0x33333333u, 0x44444444u },
+                                                        { 0x00000000u, 0x00000001u, 0x7FFFFFFFu, 0x80000000u },
+                                                        { 0x11111111u, 0u, 0x33333333u, 0x44444444u } };
+    auto decompile = [&](const CallFixture& f, uint32_t entry) {
+        auto snap = CallSnapshot(f, ++serial);
+        const DecompileResult r = d.Decompile(snap, Request(entry));
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok);
+        return r;
+    };
+    // The function is withheld for the reason, and the text it would have been lent with is wrong: the oracle rejects it.
+    auto withheld = [&](const char* name, std::vector<uint16_t> words, const char* reason) {
+        const CallFixture f = { name, base, std::move(words) };
+        auto snap = CallSnapshot(f, ++serial);
+        const DecompileResult r = d.Decompile(snap, Request(f.base));
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(!r.prototype.known && Has(r.prototypeWithheld, reason));
+        CHECK(!PseudoAgreesWithRun(r, snap, f, inputs));
+    };
+    auto lent = [&](const char* name, std::vector<uint16_t> words, bool returnsValue) {
+        const CallFixture f = { name, base, std::move(words) };
+        const DecompileResult r = decompile(f, f.base);
+        CHECK(r.prototype.known && (r.prototype.ret.kind != TypeKind::Void) == returnsValue);
+        return r;
+    };
+
+    // ---- A3-49 ---------------------------------------------------------------------------------------------------------------------------
+    // (V8) tst r4,r4 ; bt L ; mov r6,r0 ; tst r5,r5 ; bt L ; mov.l @r5,r0 ; L: rts ; nop -- r6 is the value on one path, a word from memory on another
+    withheld("a3_49 a: r0 joins r6 and a loaded word", { 0x2448, 0x8903, 0x6063, 0x2558, 0x8900, 0x6052, 0x000B, 0x0009 }, "joins r0's entry value with a parameter");
+    // (V10) the last alternative a literal-pool word
+    withheld("a3_49 b: r0 joins r6 and a literal", { 0x2448, 0x8903, 0x6063, 0x2558, 0x8900, 0xD002, 0x000B, 0x0009, 0x0009, 0x0009, 0x0000, 0x1038 },
+             "joins r0's entry value with a parameter");
+    // seed 112124, function 1 alone: the literal in r6, `mov r6,r0` on one path
+    withheld("a3_49 c: seed 112124, function 1", { 0x7FFC, 0x2228, 0x8B00, 0xD603, 0x2558, 0x8900, 0x6063, 0x7F04, 0x000B, 0x0009, 0x2600, 0x1038 },
+             "joins r0's entry value with a parameter");
+    // Controls. The register-only join (V9, A3-20) stays withheld; a parameter the signature holds (r6 is stored through r4 here) is the scratch r0 of
+    // compiled code and stays lent void, with a memory alternative as without; r0 loaded on every path has no join with its entry value.
+    withheld("a3_49 control: r0 joins r6 only", { 0x2448, 0x8900, 0x6063, 0x000B, 0x0009 }, "joins r0's entry value with a parameter");
+    {
+        const DecompileResult r = lent("a3_49 control: r6 held by the signature", { 0x2462, 0x2448, 0x8903, 0x6063, 0x2558, 0x8900, 0x6052, 0x000B, 0x0009 }, false);
+        CHECK(r.prototype.params.size() >= 3);
+        const DecompileResult every = lent("a3_49 control: r0 loaded on both paths", { 0x2448, 0x8902, 0x6052, 0x000B, 0x0009, 0x6062, 0x000B, 0x0009 }, true);
+        (void)every;
+    }
+
+    // After a frame address has escaped (`mov r15,r1 ; mov.l r1,@r4`) every load carries a stack origin too (Loaded): the same join is withheld with it.
+    withheld("a3_49 d: V8 after a frame address escaped", { 0x61F3, 0x2412, 0x2448, 0x8903, 0x6063, 0x2558, 0x8900, 0x6052, 0x000B, 0x0009 },
+             "joins r0's entry value with a parameter");
+
+    // ---- A3-50 ---------------------------------------------------------------------------------------------------------------------------
+    // (W1) tst r4,r4 ; bt L ; mov.l @r5,r1 ; add r1,r0 ; L: rts -- r0 + a word from memory on one path, r0's entry value on the other
+    withheld("a3_50 a: r0 + a loaded word on one path", { 0x2448, 0x8901, 0x6152, 0x301C, 0x000B, 0x0009 }, "computed from r0 on entry");
+    withheld("a3_50 a': r0 ^ a loaded word on one path", { 0x2448, 0x8901, 0x6152, 0x201A, 0x000B, 0x0009 }, "computed from r0 on entry");
+    // (W3) the operand a literal
+    withheld("a3_50 b: r0 + a literal on one path", { 0x2448, 0x8901, 0xD102, 0x301C, 0x000B, 0x0009, 0x0009, 0x0009, 0x0000, 0x1038 }, "computed from r0 on entry");
+    // (W4) SR on one path, a literal on the other
+    withheld("a3_50 c: sr or a literal", { 0x0002, 0x2448, 0x8900, 0xD002, 0x000B, 0x0009, 0x0009, 0x0009, 0x0000, 0x1038 }, "computed from sr on entry");
+    withheld("a3_50 d: W1 after a frame address escaped", { 0x61F3, 0x2412, 0x2448, 0x8901, 0x6152, 0x301C, 0x000B, 0x0009 }, "computed from r0 on entry");
+    // Controls (A3-14): the register operands were withheld before.
+    withheld("a3_50 control: add #1,r0 on one path", { 0x2448, 0x8900, 0x7001, 0x000B, 0x0009 }, "computed from r0 on entry");
+    withheld("a3_50 control: add r4,r0 on one path", { 0x2448, 0x8900, 0x304C, 0x000B, 0x0009 }, "joins r0's entry value with a parameter");
+
+    // ---- A3-51 ---------------------------------------------------------------------------------------------------------------------------
+    // sts.l pr,@-r15 ; add #-8,r15 ; mov #0x5A,r0 ; mov.l r0,@(4,r15) ; mov r15,r1 ; add #4,r1 ; [mov #1,r4 ;] mov.l r1,@r15 ; bsr g ; nop ; mov.l @(4,r15),r0 ;
+    // add #8,r15 ; lds.l @r15+,pr ; rts ; nop. g (at 0x06009040) reads the word at its r15, the address of the caller's local, and stores 0x37 through it.
+    // r5, r6 and r7 are unset (r4 too, or set to 1): the engine drops the stack word from the call, and the local was folded: `return 0x5a;`.
+    const uint32_t gAt = 0x06009040u;
+    auto atG = [&](std::vector<uint16_t> caller, std::vector<uint16_t> g) {
+        caller.resize(32, 0x0009);
+        caller.insert(caller.end(), g.begin(), g.end());
+        return caller;
+    };
+    const std::vector<uint16_t> writer = { 0x62F2, 0xE337, 0x000B, 0x2232 };   // mov.l @r15,r2 ; mov #0x37,r3 ; rts ; mov.l r3,@r2
+    const char* const kStackNote = "a frame address is in a stack argument slot here";
+    {
+        const CallFixture f = { "a3_51 ST1: the address in the first stack slot, r4-r7 unset", 0x06009000u,
+                                atG({ 0x4F22, 0x7FF8, 0xE05A, 0x1F01, 0x61F3, 0x7104, 0x2F12, 0xB017, 0x0009, 0x50F1, 0x7F08, 0x4F26, 0x000B, 0x0009 }, writer) };
+        auto snap = CallSnapshot(f, ++serial);
+        const DecompileResult callee = d.Decompile(snap, Request(gAt));
+        CHECK(callee.status == DecompileStatus::Ok && !callee.prototype.known && Has(callee.prototypeWithheld, "outside its signature"));
+        const DecompileResult r = d.Decompile(snap, Request(f.base));
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok && !r.prototype.known);
+        CHECK(Has(r.Text(), kStackNote) && !Has(r.Text(), "return 0x5a;"));
+        CHECK(PseudoAgreesWithRun(r, snap, f, { { 1 }, { 2 } }, true));
+        uint32_t ran = 0;
+        CHECK(CallRunResult(snap, f, { 1 }, ran) && ran == 0x37u);
+        // ST4: r4 set to 1 -- r5, r6 and r7 are still three unset registers before the stack word
+        const CallFixture f4 = { "a3_51 ST4: r4 set, r5-r7 unset", 0x06009000u,
+                                 atG({ 0x4F22, 0x7FF8, 0xE05A, 0x1F01, 0x61F3, 0x7104, 0x2F12, 0xE401, 0xB016, 0x0009, 0x50F1, 0x7F08, 0x4F26, 0x000B, 0x0009 }, writer) };
+        auto snap4 = CallSnapshot(f4, ++serial);
+        const DecompileResult r4 = d.Decompile(snap4, Request(f4.base));
+        Print(f4.name.c_str(), r4);
+        CHECK(Has(r4.Text(), kStackNote) && !Has(r4.Text(), "return 0x5a;"));
+        CHECK(PseudoAgreesWithRun(r4, snap4, f4, { { 1 }, { 2 } }, true));
+        // ST3 (control): r5 set to 1 -- the engine shows the stack word as the fifth argument; no note, the local is not folded
+        const CallFixture f3 = { "a3_51 ST3 control: r5 set, the stack word is an argument", 0x06009000u,
+                                 atG({ 0x4F22, 0x7FF8, 0xE05A, 0x1F01, 0x61F3, 0x7104, 0x2F12, 0xE501, 0xB016, 0x0009, 0x50F1, 0x7F08, 0x4F26, 0x000B, 0x0009 }, writer) };
+        auto snap3 = CallSnapshot(f3, ++serial);
+        const DecompileResult r3 = d.Decompile(snap3, Request(f3.base));
+        Print(f3.name.c_str(), r3);
+        CHECK(!Has(r3.Text(), kStackNote) && !Has(r3.Text(), "return 0x5a;"));
+        CHECK(PseudoAgreesWithRun(r3, snap3, f3, { { 1 }, { 2 } }, true));
+        // ST5 (control): the same address also in r4 (a pointer to a local kept in a local, passed too): the engine shows it, no note
+        const CallFixture f5 = { "a3_51 ST5 control: the address in the stack slot and in r4", 0x06009000u,
+                                 atG({ 0x4F22, 0x7FF8, 0xE05A, 0x1F01, 0x61F3, 0x7104, 0x2F12, 0x6413, 0xB016, 0x0009, 0x50F1, 0x7F08, 0x4F26, 0x000B, 0x0009 }, writer) };
+        auto snap5 = CallSnapshot(f5, ++serial);
+        const DecompileResult r5 = d.Decompile(snap5, Request(f5.base));
+        Print(f5.name.c_str(), r5);
+        CHECK(Has(r5.Text(), "func_0x06009040(&xStack_8)") && !Has(r5.Text(), kStackNote) && !Has(r5.Text(), "return 0x5a;"));
+        // ST6: the address in the second stack word (a callee that reads its sixth argument), the first word unwritten: the same drop
+        const std::vector<uint16_t> writer2 = { 0x52F1, 0xE137, 0x000B, 0x2212 };   // mov.l @(4,r15),r2 ; mov #K,r1 ; rts ; mov.l r1,@r2
+        const CallFixture f6 = { "a3_51 ST6: the address in the second stack word", 0x06009000u,
+                                 atG({ 0x4F22, 0x7FF4, 0xE05A, 0x1F02, 0x61F3, 0x7108, 0x1F11, 0xB017, 0x0009, 0x50F2, 0x7F0C, 0x4F26, 0x000B, 0x0009 }, writer2) };
+        auto snap6 = CallSnapshot(f6, ++serial);
+        const DecompileResult r6 = d.Decompile(snap6, Request(f6.base));
+        Print(f6.name.c_str(), r6);
+        CHECK(Has(r6.Text(), kStackNote) && !Has(r6.Text(), "return 0x5a;"));
+        CHECK(PseudoAgreesWithRun(r6, snap6, f6, { { 1 }, { 2 } }, true));
+        uint32_t ran6 = 0;
+        CHECK(CallRunResult(snap6, f6, { 1 }, ran6) && ran6 == 0x37u);
+        // ST2 (control): the address in r4, the engine's own argument
+        const CallFixture f2 = { "a3_51 ST2 control: the address in r4", 0x06009000u,
+                                 atG({ 0x4F22, 0x7FF8, 0xE05A, 0x1F01, 0x64F3, 0x7404, 0xB018, 0x0009, 0x50F1, 0x7F08, 0x4F26, 0x000B, 0x0009 }, { 0xE337, 0x000B, 0x2432 }) };
+        auto snap2 = CallSnapshot(f2, ++serial);
+        const DecompileResult r2 = d.Decompile(snap2, Request(f2.base));
+        Print(f2.name.c_str(), r2);
+        CHECK(!Has(r2.Text(), kStackNote) && !Has(r2.Text(), "return 0x5a;"));
+    }
+    {
+        // Every subset of r4-r7 set before the call (`mov #1,rN`), the address in the first stack slot: the engine drops the stack word from the call when
+        // r4-r6 or r5-r7 are all unset (the rule of the probe) and shows it as the fifth argument otherwise; in both the local is not folded (no
+        // `return 0x5a;`), by the note in the first case and by the argument in the second, and the text agrees with the run.
+        for (int subset = 0; subset < 16; ++subset)
+        {
+            std::vector<uint16_t> w = { 0x4F22, 0x7FF8, 0xE05A, 0x1F01, 0x61F3, 0x7104, 0x2F12 };
+            int k = 0;
+            for (int reg = 4; reg < 8; ++reg)
+                if (subset >> (reg - 4) & 1)
+                {
+                    w.push_back(static_cast<uint16_t>(0xE001 | reg << 8));
+                    ++k;
+                }
+            for (uint16_t t : { static_cast<uint16_t>(0xB000 | (0x17 - k)), uint16_t(0x0009), uint16_t(0x50F1), uint16_t(0x7F08), uint16_t(0x4F26), uint16_t(0x000B), uint16_t(0x0009) }) w.push_back(t);
+            const bool r4 = subset & 1, r5 = subset >> 1 & 1, r6 = subset >> 2 & 1, r7 = subset >> 3 & 1;
+            const bool dropped = (!r4 && !r5 && !r6) || (!r5 && !r6 && !r7);
+            const std::string name = "a3_51 subset " + std::to_string(subset) + " of r4-r7 set";
+            const CallFixture f = { name, 0x06009000u, atG(w, writer) };
+            auto snap = CallSnapshot(f, ++serial);
+            const DecompileResult r = d.Decompile(snap, Request(f.base));
+            Print(f.name.c_str(), r);
+            CHECK(r.status == DecompileStatus::Ok);
+            CHECK(!Has(r.Text(), "return 0x5a;"));
+            CHECK(Has(r.Text(), kStackNote) == dropped);
+            CHECK(PseudoAgreesWithRun(r, snap, f, { { 1 }, { 2 } }, true));
+        }
+    }
+    {
+        // SA1: a plain value in the stack word, the fifth argument. The engine drops it from the call (`func_0x06009040(3);` where the code passes 7
+        // as well), and the callee, which reads a stack word its registers do not lead up to, is never lent, so the caller is withheld and the call
+        // is the unlent one. No local is folded and no frame address is lost: the accepted limit of an unlent call's text (A3-5: the arguments it shows
+        // are the ones the engine sees); pinned so a change to it is seen.
+        const CallFixture f = { "a3_51 SA1: a plain value in the first stack slot", 0x06009000u,
+                                atG({ 0x4F22, 0x7FFC, 0xE107, 0x2F12, 0xB01A, 0xE403, 0x7F04, 0x4F26, 0x000B, 0x0009 }, { 0x60F2, 0x000B, 0x304C }) };
+        auto snap = CallSnapshot(f, ++serial);
+        const DecompileResult callee = d.Decompile(snap, Request(gAt));
+        CHECK(!callee.prototype.known && Has(callee.prototypeWithheld, "outside its signature"));
+        const DecompileResult r = d.Decompile(snap, Request(f.base));
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok && !r.prototype.known && Has(r.Text(), "func_0x06009040(3)") && !Has(r.Text(), kStackNote));
+        uint32_t ran = 0;
+        CHECK(CallRunResult(snap, f, { 1 }, ran) && ran == 10u);
+    }
+}
+
+// ===== Area 2, round 7 review: the value the slot's PC-relative instruction makes, as the text computes it, against the run (A2-47) =====
+// TestDelaySlotPcRelative holds the text of these shapes to a substring ("unaff_retaddr + 4"); the decode oracle holds the p-code to the
+// hardware. Neither holds what the engine prints to the run: the printed expression is evaluated here and compared with the code run on the
+// emulator, for bt/s and bf/s taken and not (the slot's PC is the branch target + 2 or its own address + 4, chosen by T) with the target at an
+// even and an odd displacement (the two candidate PCs differ by 2 mod 4 for the odd one, which is where the alignment of mova and mov.l
+// matters), and for rts (PR + 2).
+//
+// A2-47 (patch 0046): `bt/s` + mova / mov.l with an odd displacement printed the address without its `& ~3`: `(uint4)(0 < param_1) * 6 + 0x6009018`
+// where the code makes 0x600901C. The sum's non-zero mask (`Varnode::nzm`) was stale when RuleAndMask read it: RuleCollectTerms rewrote
+// `T * 0x600900E + ((1 - T) * 0x6009008)` into `T * 6 + 0x6009008` by changing the inputs of an existing INT_ADD, whose output kept the mask of
+// the value it used to be (`(1 - T) * 0x6009008`: 0xfffffffc, the low two bits clear), and the AND with 0xfffffffc was "redundant".
+// `Funcdata::opSetInput` now forgets the mask of the output it feeds. Not particular to the slot: the same arithmetic written as code (control
+// 2 below) printed the same wrong text. Each case is held to the run, and the odd displacements to the mask in the text.
+void TestArea2Round7SlotValues()
+{
+    Sh2Decompiler d(gConfig);
+    uint64_t serial = 900;
+    const uint32_t base = 0x06009000u;
+    // 16 bytes of code, then distinct words 0x4000 + (address - base) / 2 up to 0x06009060, which the slots' loads read.
+    auto padded = [&](std::vector<uint16_t> code) {
+        if (code.size() < 8) code.resize(8, 0x0009);
+        for (uint32_t a = static_cast<uint32_t>(code.size()) * 2; a < 0x60; a += 2) code.push_back(static_cast<uint16_t>(0x4000 + a / 2));
+        return code;
+    };
+    struct Slot { const char* name; uint16_t word; };
+    // Not taken: the slot at 0x9004 reads PC 0x9008 (mov.w d=6: 0x9008 + 12 = 0x9014; mov.l, mova d=4: 0x9008 + 16 = 0x9018). Taken, target 0x900A
+    // (sdisp 2): PC 0x900C (mov.w 0x9018; mov.l, mova 0x900C + 16 = 0x901C); target 0x900C (sdisp 3): PC 0x900E (mov.w 0x901A; mov.l, mova
+    // 0x900C + 16 = 0x901C).
+    const Slot slots[] = { { "mova @(4,pc),r0", 0xC704 }, { "mov.w @(6,pc),r0", 0x9006 }, { "mov.l @(4,pc),r0", 0xD004 } };
+    const std::vector<std::vector<uint32_t>> inputs = { { 0 }, { 1 }, { 0xFFFFFFFFu }, { 5 }, { 0x80000000u } };
+    // The branch at the two alignments of the code (the function's first word a nop or not): the mask is the first thing to go wrong at one
+    // alignment for bt/s and at the other for bf/s, so each odd displacement is held at both.
+    for (int shift = 0; shift < 2; ++shift)
+        for (const Slot& s : slots)
+            for (int sense = 0; sense < 2; ++sense)
+                for (int sdisp = 2; sdisp <= 3; ++sdisp)
+                {
+                    // [nop ;] cmp/pl r4 ; bt/s L (bf/s L) ; <slot> ; rts ; nop ; ... ; L: rts ; nop
+                    std::vector<uint16_t> head;
+                    if (shift) head.push_back(0x0009);
+                    for (uint16_t w : { uint16_t(0x4415), uint16_t((sense ? 0x8F00 : 0x8D00) | sdisp), s.word, uint16_t(0x000B), uint16_t(0x0009) }) head.push_back(w);
+                    while (head.size() < size_t(3 + sdisp + shift)) head.push_back(0x0009);
+                    head.push_back(0x000B);
+                    head.push_back(0x0009);
+                    const std::string name = std::string(sense ? "bf/s + " : "bt/s + ") + s.name + (sdisp == 2 ? ", even displacement" : ", odd displacement") +
+                                             (shift ? ", branch at 0x06009004" : ", branch at 0x06009002");
+                    const CallFixture f = { name, base, padded(head) };
+                    auto snap = CallSnapshot(f, ++serial);
+                    const DecompileResult r = d.Decompile(snap, Request(base));
+                    Print(name.c_str(), r);
+                    CHECK(r.status == DecompileStatus::Ok && !r.unsupported);
+                    CHECK(PseudoAgreesWithRun(r, snap, f, inputs));
+                    // A2-47: the odd displacement with an aligned load. The evaluator does not know the value read by mov.l (a typed-unknown
+                    // load), so there the text is held to the mask: the load must be made at the aligned address, `... & 0xfffffffc`.
+                    if (s.word != 0x9006 && sdisp == 3) CHECK(Has(r.Text(), "0xfffffffc"));
+                }
+    // rts + mova @(1,pc),r0 returns (PR + 2 & ~3) + 4.
+    {
+        const CallFixture f = { "rts + mova", base, padded({ 0x000B, 0xC701 }) };
+        auto snap = CallSnapshot(f, ++serial);
+        const DecompileResult r = d.Decompile(snap, Request(base));
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok && !r.unsupported);
+        uint32_t ran = 0;
+        CHECK(CallRunResult(snap, f, { 0 }, ran) && ran == ((kRunSentinel + 2) & ~3u) + 4);
+        CHECK(PseudoAgreesWithRun(r, snap, f, { { 0 }, { 7 } }));
+    }
+    // Control 1: (6 * T + 0x06009008) & -4 written as code: the mask stays.
+    {
+        const CallFixture f = { "control: (6 * T + 0x06009008) & -4 as code", base,
+                                { 0x4415, 0x0129, 0xE306, 0x231E, 0x021A, 0xD503, 0x325C, 0xE6FC, 0x2269, 0x6023, 0x000B, 0x0009, 0x0600, 0x9008 } };
+        auto snap = CallSnapshot(f, ++serial);
+        const DecompileResult r = d.Decompile(snap, Request(base));
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(PseudoAgreesWithRun(r, snap, f, inputs));
+    }
+    // Control 2 (A2-47, the same arithmetic as the slot's, written as code): r6 = T * 0x0600900E + (1 - T) * 0x06009008 ; r6 &= -4 ; return r6.
+    // Printed `(uint4)(0 < param_1) * 6 + 0x6009008` and returned 0x0600900E for T = 1 where the code returns 0x0600900C.
+    {
+        const CallFixture f = { "A2-47: (T * A + (1 - T) * B) & -4 as code", base,
+                                { 0x4415, 0x0129, 0xD206, 0xD307, 0x0217, 0x061A, 0xE401, 0x3418, 0x0347, 0x051A, 0x365C, 0xE7FC, 0x2679, 0x6063, 0x000B, 0x0009,
+                                  0x0600, 0x900E, 0x0600, 0x9008 } };
+        auto snap = CallSnapshot(f, ++serial);
+        const DecompileResult r = d.Decompile(snap, Request(base));
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(PseudoAgreesWithRun(r, snap, f, inputs));
+        CHECK(Has(r.Text(), "0xfffffffc"));
+    }
+}
+
+// ===== Area 2, round 8 review: fixtures held to the run, with the ways of agreeing told apart =====
+// R8Check decompiles one fixture and compares the text with the code run on the emulator for each input. The verdicts: `agrees` (the text states the
+// run's value), `agrees-global` (it names a global of the fixture's code area, `xRam06009034`, whose word or halfword is the run's value: the
+// evaluator does not know a global), `unknown` (it states a value the evaluator cannot know: nothing was compared), `void-ok` (it states none and
+// the fixture allows that), `differs`, `cannot-evaluate` (the evaluator could not read the text), `no-run` (the code did not return on the
+// emulator), `not-ok` (the request failed or the function is marked unsupported). PseudoAgreesWithRun counts the third and fourth as agreeing,
+// which is how a value check of a text that states none of its own can pass without checking anything; the fixtures below are held to `agrees`
+// or `agrees-global`.
+// Flags (a string): `n` r0 is no result, `v` a text that returns nothing is not a difference, `c` the evaluator reads the code area (a `*(T *)addr`
+// and a global named by its address are the snapshot's word).
+struct R8Outcome
+{
+    std::string verdict, detail;
+};
+
+// The printer writes the saturation of mac.l and mac.w as `if (A && (v = K, B)) { v = X; }`: an assignment and a comma inside a condition, which the
+// evaluator has no rule for. It means `if (A) { v = K; if (B) { v = X; } }` (the assignment happens when A holds, B decides the body); the text is
+// rewritten so before it is evaluated, and one the rewrite does not fit is left alone (and is then `cannot-evaluate`, not an agreement).
+std::string R8FlattenCommaCondition(std::string text)
+{
+    static const std::regex pat("if \\(([\\s\\S]*?) &&\\s*\\((\\w+) = ([^,()]+), ([\\s\\S]*?)\\)\\) \\{");
+    for (int guard = 0; guard < 4; ++guard)
+    {
+        std::smatch m;
+        if (!std::regex_search(text, m, pat)) break;
+        // the block this if opens ends at its matching close brace; one more brace closes the new inner if
+        const size_t open = static_cast<size_t>(m.position(0) + m.length(0));
+        int depth = 1;
+        size_t close = open;
+        for (; close < text.size() && depth > 0; ++close)
+        {
+            if (text[close] == '{') ++depth;
+            else if (text[close] == '}') --depth;
+        }
+        if (depth != 0) break;
+        const std::string repl = "if (" + m.str(1) + ") {\n " + m.str(2) + " = " + m.str(3) + ";\n if (" + m.str(4) + ") {";
+        text = text.substr(0, static_cast<size_t>(m.position(0))) + repl + text.substr(open, close - open) + "}" + text.substr(close);
+    }
+    return text;
+}
+
+R8Outcome R8Check(Sh2Decompiler& d, const std::string& name, const std::vector<uint16_t>& words, const std::vector<std::vector<uint32_t>>& inputs,
+                  const std::string& flags, const std::vector<uint32_t>& lend, uint64_t serial, uint32_t base = 0x06009000u, DecompileResult* keep = nullptr,
+                  uint64_t* hash = nullptr)
+{
+    R8Outcome out;
+    CallFixture f = { name, base, words };
+    f.noResult = flags.find('n') != std::string::npos;
+    const bool voidOk = flags.find('v') != std::string::npos;
+    auto snap = CallSnapshot(f, serial);
+    DecompileRequest q = Request(base);
+    for (uint32_t addr : lend) q.prototypes.emplace_back(addr, d.Decompile(snap, Request(addr)).prototype);
+    const DecompileResult r = d.Decompile(snap, q);
+    if (keep) *keep = r;
+    if (hash)
+    {
+        uint64_t h = 1469598103934665603ull;
+        for (char ch : r.Text()) h = (h ^ static_cast<unsigned char>(ch)) * 1099511628211ull;
+        *hash = h;
+    }
+    out.verdict = "agrees";
+    bool viaGlobal = false;
+    if (r.status != DecompileStatus::Ok || r.unsupported)
+    {
+        out.verdict = "not-ok";
+        return out;
+    }
+    for (const std::vector<uint32_t>& args : inputs)
+    {
+        uint32_t ran = 0;
+        if (!CallRunResult(snap, f, args, ran))
+        {
+            out.verdict = "no-run";
+            return out;
+        }
+        PseudoEval::Entry entry;
+        entry.regs = RunEntryRegisters(args);
+        entry.snap = snap;
+        entry.sp = kRunStack;
+        entry.readCode = flags.find('c') != std::string::npos;
+        for (const AccessFate& fate : r.accessFates)
+            if (!fate.write && fate.constantAddress) entry.globalSize[fate.address] = static_cast<int>(fate.size);
+        for (const MemoryAccess& m : r.accesses)
+            if (!m.write && m.direct) entry.globalSize[m.address] = static_cast<int>(m.size);
+        PseudoEval eval(R8FlattenCommaCondition(r.Text()), args);
+        eval.SetEntry(&entry);
+        const std::vector<PseudoEval::Outcome> outs = eval.Run();
+        if (!eval.Error().empty())
+        {
+            out.verdict = "cannot-evaluate";
+            out.detail = eval.Error();
+            return out;
+        }
+        bool equal = false, unknown = false, none = false;
+        std::string saw;
+        for (const PseudoEval::Outcome& o : outs)
+        {
+            if (!o.value)
+            {
+                none = true;
+                continue;
+            }
+            if (!o.v.known)
+            {
+                unknown = true;
+                continue;
+            }
+            const uint32_t mask = o.v.size >= 4 ? 0xFFFFFFFFu : (1u << (8 * o.v.size)) - 1u;
+            char b[32];
+            std::snprintf(b, sizeof b, " %08X", static_cast<uint32_t>(o.v.v));
+            saw += b;
+            if ((static_cast<uint32_t>(o.v.v) & mask) == (ran & mask)) equal = true;
+        }
+        char b[160];
+        std::snprintf(b, sizeof b, "r4=%08X: the code returned %08X, the text returns%s%s%s", args.empty() ? 0u : args[0], ran, saw.c_str(),
+                      unknown ? " (a value it cannot know)" : "", none ? " (nothing)" : "");
+        if (equal) continue;
+        if (unknown && entry.readCode)
+        {
+            bool named = false, matched = false;
+            const std::string text = r.Text();
+            for (size_t at = text.find("Ram"); at != std::string::npos; at = text.find("Ram", at + 3))
+            {
+                if (at + 11 > text.size()) break;
+                char* endp = nullptr;
+                const std::string hex = text.substr(at + 3, 8);
+                const uint32_t a = static_cast<uint32_t>(std::strtoul(hex.c_str(), &endp, 16));
+                if (*endp != '\0') continue;
+                named = true;
+                uint32_t word = 0;
+                if (!snap->ReadU32(a & ~3u, word)) continue;
+                const uint32_t half = (a & 2) ? (word & 0xFFFF) : (word >> 16);
+                const uint32_t sext = static_cast<uint32_t>(static_cast<int32_t>(static_cast<int16_t>(half)));
+                if ((a & 3) == 0 && word == ran) matched = true;
+                if ((a & 1) == 0 && (sext == ran || half == ran)) matched = true;
+            }
+            if (named && matched)
+            {
+                viaGlobal = true;
+                continue;
+            }
+            if (named) unknown = false;   // named an address the run's value does not come from: a difference, not an unknown
+        }
+        out.detail = b;
+        out.verdict = unknown ? "unknown" : (none && (f.noResult || voidOk)) ? "void-ok" : "differs";
+        if (out.verdict == "differs" || out.verdict == "unknown") return out;
+    }
+    if (out.verdict == "agrees" && viaGlobal) out.verdict = "agrees-global";
+    return out;
+}
+
+// SE_AREA2_FIXTURES=<file> runs only this (see main): one fixture a line, `name|words|inputs|flags|lend`; words and inputs in hex (inputs: sets
+// separated by `;`, registers r4.. by `,`); flags as above and `p` (print the text whatever the verdict), `b=<hex>` (the base, default
+// 0x06009000); lend: callee addresses, hex, comma separated, whose prototypes are lent. SE_AREA2_HASH=1 prints a hash of each text, to compare two
+// orders of one file (a leak from a request into the next). Built so a script can draw thousands of fixtures without rebuilding this suite.
+std::vector<std::string> R8Split(const std::string& s, char sep)
+{
+    std::vector<std::string> out;
+    std::string cur;
+    for (char c : s)
+    {
+        if (c == sep)
+        {
+            out.push_back(cur);
+            cur.clear();
+        }
+        else cur += c;
+    }
+    out.push_back(cur);
+    return out;
+}
+
+int TestArea2Round8Fixtures(const char* path)
+{
+    Sh2Decompiler d(gConfig);
+    std::ifstream in(path);
+    std::string line;
+    uint64_t serial = 70000;
+    std::map<std::string, int> verdicts;
+    while (std::getline(in, line))
+    {
+        if (line.empty() || line[0] == '#') continue;
+        const std::vector<std::string> field = R8Split(line, '|');
+        if (field.size() < 3) continue;
+        std::vector<uint16_t> words;
+        {
+            std::istringstream ws(field[1]);
+            std::string tok;
+            while (ws >> tok) words.push_back(static_cast<uint16_t>(std::strtoul(tok.c_str(), nullptr, 16)));
+        }
+        std::vector<std::vector<uint32_t>> inputs;
+        for (const std::string& set : R8Split(field[2], ';'))
+        {
+            std::vector<uint32_t> args;
+            for (const std::string& a : R8Split(set, ','))
+                if (!a.empty()) args.push_back(static_cast<uint32_t>(std::strtoul(a.c_str(), nullptr, 16)));
+            inputs.push_back(args);
+        }
+        if (inputs.empty()) inputs.push_back({});
+        const std::string flags = field.size() > 3 ? field[3] : "";
+        uint32_t base = 0x06009000u;
+        const size_t bAt = flags.find("b=");
+        if (bAt != std::string::npos) base = static_cast<uint32_t>(std::strtoul(flags.c_str() + bAt + 2, nullptr, 16));
+        std::vector<uint32_t> lend;
+        if (field.size() > 4)
+            for (const std::string& a : R8Split(field[4], ','))
+                if (!a.empty()) lend.push_back(static_cast<uint32_t>(std::strtoul(a.c_str(), nullptr, 16)));
+        DecompileResult r;
+        uint64_t h = 0;
+        const R8Outcome o = R8Check(d, field[0], words, inputs, bAt == std::string::npos ? flags : flags.substr(0, bAt), lend, ++serial, base, &r, &h);
+        ++verdicts[o.verdict];
+        if (std::getenv("SE_AREA2_HASH")) std::printf("R8TEXT %s %016llx\n", field[0].c_str(), static_cast<unsigned long long>(h));
+        std::printf("R8 %s [%s] %s\n", o.verdict.c_str(), field[0].c_str(), o.detail.c_str());
+        if ((o.verdict != "agrees" && o.verdict != "agrees-global") || flags.find('p') != std::string::npos)
+        {
+            std::printf("  words: %s\n", field[1].c_str());
+            Print(field[0].c_str(), r);
+        }
+    }
+    std::printf("R8 fixtures:");
+    for (const auto& kv : verdicts) std::printf(" %s=%d", kv.first.c_str(), kv.second);
+    std::printf("\n");
+    return 0;
+}
+
+// ---- The slot's PC-relative load, by value, for the branches whose slot the round 7 test left to substrings --------------------------------
+// jmp, braf, jsr, bsrf and rte, each with mova, mov.w and mov.l in the slot, the branch at both alignments of the code, the target at both
+// alignments, a handful of displacements. The loads put distinct halfwords (0x4000 + offset / 2) in the code area, so any wrong address reads a
+// different value. What the text can state: jmp and braf to a constant are tail calls (the callee returns r4, which the slot loaded: `func(value)`),
+// jsr and bsrf call the same callee, rte returns to the target with r0 from the slot. A `mova` in the slot of a call or a tail call writes r0, which
+// the engine's convention does not pass, so there the text states nothing of it (compared as `void-ok`, not as a value). Layout, as slots.py of the
+// round: code from 0 (a leading nop if `shift`), the pool word at 0x20, the target at 0x28 or 0x2A, the data from 0x30 on.
+struct R8Slot
+{
+    std::vector<uint16_t> words;
+    std::vector<uint32_t> lend;
+};
+
+R8Slot R8SlotFixture(const std::string& kind, const std::string& slot, int d, int shift, int talign)
+{
+    std::map<uint32_t, uint16_t> mem;
+    const uint32_t base = 0x06009000u, pool = 0x20u, target = 0x28u + (talign ? 2u : 0u);
+    uint32_t off = 0;
+    auto put = [&](uint32_t o, uint32_t v) { mem[o] = static_cast<uint16_t>(v); };
+    auto poolLoad = [&](uint32_t at, uint32_t reg) {
+        const uint32_t b = (at & ~3u) + 4;
+        return 0xD000u | reg << 8 | ((pool - b) / 4);
+    };
+    uint16_t slotWord = 0;
+    if (slot == "mova") slotWord = static_cast<uint16_t>(0xC700 | d);
+    else if (slot == "movw0") slotWord = static_cast<uint16_t>(0x9000 | d);
+    else if (slot == "movl0") slotWord = static_cast<uint16_t>(0xD000 | d);
+    else if (slot == "movw4") slotWord = static_cast<uint16_t>(0x9400 | d);
+    else slotWord = static_cast<uint16_t>(0xD400 | d);   // movl4
+    const bool r4Slot = slot == "movw4" || slot == "movl4";
+    R8Slot out;
+    uint32_t poolValue = 0;
+    bool hasPool = true;
+    if (shift) put(off, 0x0009), off += 2;
+    if (kind == "jmp" || kind == "braf")
+    {
+        put(off, poolLoad(off, 1)), off += 2;
+        const uint32_t at = off;
+        put(off, kind == "jmp" ? 0x412B : 0x0123), off += 2;
+        put(off, slotWord), off += 2;
+        poolValue = kind == "jmp" ? base + target : target - (at + 4);
+        put(target, 0x000B);
+        put(target + 2, r4Slot ? 0x6043 : 0x0009);
+        if (r4Slot) out.lend.push_back(base + target);
+    }
+    else if (kind == "jsr" || kind == "bsrf")
+    {
+        put(off, 0x4F22), off += 2;
+        put(off, poolLoad(off, 1)), off += 2;
+        const uint32_t at = off;
+        put(off, kind == "jsr" ? 0x410B : 0x0103), off += 2;
+        put(off, slotWord), off += 2;
+        put(off, 0x4F26), off += 2;
+        put(off, 0x000B), off += 2;
+        put(off, 0x0009), off += 2;
+        poolValue = kind == "jsr" ? base + target : target - (at + 4);
+        put(target, 0x000B);
+        put(target + 2, r4Slot ? 0x6043 : 0x0009);
+        out.lend.push_back(base + target);
+    }
+    else if (kind == "rte_t")
+    {
+        put(off, 0x4F03), off += 2;
+        put(off, poolLoad(off, 1)), off += 2;
+        put(off, 0x2F16), off += 2;
+        put(off, 0x002B), off += 2;
+        put(off, slotWord), off += 2;
+        poolValue = base + target;
+        put(target, 0x000B);
+        put(target + 2, 0x0009);
+    }
+    else   // rte_s: returns to the sentinel in PR
+    {
+        put(off, 0x4F03), off += 2;
+        put(off, 0x4F22), off += 2;
+        put(off, 0x002B), off += 2;
+        put(off, slotWord), off += 2;
+        hasPool = false;
+        put(target, 0x000B);
+        put(target + 2, 0x0009);
+    }
+    if (hasPool)
+    {
+        put(pool, poolValue >> 16);
+        put(pool + 2, poolValue & 0xFFFF);
+    }
+    for (uint32_t o = 0; o < 0x100; o += 2)
+    {
+        auto it = mem.find(o);
+        if (it != mem.end()) out.words.push_back(it->second);
+        else out.words.push_back(o < pool && o >= off ? 0x0009 : static_cast<uint16_t>(0x4000 + o / 2));
+    }
+    return out;
+}
+
+// ===== The routed seeds (ledger A3-55, A4-16; A7-6 below): what the area 2 round 8 review found beyond the nightly =====
+// A3-55: seed 519315's function 1 (A3-49's literal variant, withheld since cee85f5) and seed 608802's (a join of a loaded word and a constant, chosen by
+// r3, a register no signature passes: the engine drops the return because each alternative has another use, and the read of r3 goes with it).
+// A4-16: seed 511038, a jump table read at a constant index its own bound check excludes: flow follows the destination (a literal word, 0x25FE0008,
+// uncaptured memory), the actions remove that block as unreachable, and the function was reported cut off by a path it does not have.
+void TestRoutedSeeds()
+{
+    Sh2Decompiler d(gConfig);
+    uint64_t serial = 60000;
+    const uint32_t base = 0x06009020u;
+    const std::vector<std::vector<uint32_t>> inputs = { { 0x11111111u, 0x22222222u, 0x33333333u, 0x44444444u },
+                                                        { 0x00000000u, 0x00000001u, 0x7FFFFFFFu, 0x80000000u },
+                                                        { 0x11111111u, 0u, 0x33333333u, 0x44444444u } };
+    // The function is withheld for the reason, and the text it would have been lent with is wrong: the oracle rejects it.
+    auto withheld = [&](const char* name, std::vector<uint16_t> words, const char* reason) {
+        const CallFixture f = { name, base, std::move(words) };
+        auto snap = CallSnapshot(f, ++serial);
+        const DecompileResult r = d.Decompile(snap, Request(f.base));
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(!r.prototype.known && Has(r.prototypeWithheld, reason));
+        CHECK(!PseudoAgreesWithRun(r, snap, f, inputs));
+    };
+    auto lentVoid = [&](const char* name, std::vector<uint16_t> words) {
+        const CallFixture f = { name, base, std::move(words) };
+        auto snap = CallSnapshot(f, ++serial);
+        const DecompileResult r = d.Decompile(snap, Request(f.base));
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(r.prototype.known && r.prototype.ret.kind == TypeKind::Void);
+        return r;
+    };
+
+    // ---- A3-55 ---------------------------------------------------------------------------------------------------------------------------
+    // Seed 519315, function 1: tst r4,r4 ; bf L ; mov.l @(lit),r6 ; L: tst r5,r5 ; bt M ; mov r6,r0 ; M: rts. A3-49's shape (r6 or a literal on one
+    // path, r0's entry value on the other), in a frame of 12 bytes. It failed at 572c29d, before cee85f5, and is withheld since.
+    withheld("a3_55 a: seed 519315, function 1", { 0x7FF4, 0x2448, 0x8B00, 0xD603, 0x2558, 0x8900, 0x6063, 0x7F0C, 0x000B, 0x0009, 0x2D80, 0x00C0 },
+             "joins r0's entry value with a parameter");
+    // Seed 608802: mov.l @(lit),r7 ; mov.w @(0x12,r7),r0 ; mov #-0x5d,r2 ; cmp/eq r0,r3 ; bf L ; mov r2,r0 ; or r0,r1 ; L: rts. r0 is the word, or the
+    // constant when it equals r3 (the entry r3: nothing passes it). Lent `void f(void)` and printed `return;`, the caller shown without r3's setup.
+    withheld("a3_55 b: seed 608802, r0 is a word or a constant by r3", { 0xD704, 0x8579, 0xE2A3, 0x3300, 0x8B01, 0x6023, 0x210B, 0x000B, 0x0009, 0x0009, 0x2600, 0x2000 },
+             "chosen by r3 on entry");
+    // The same chosen by r4, which the lent `void f(void)` does not hold: withheld since area 3 round 9 (A3-62; it was a control that stayed lent).
+    // A join chosen by a constant has no input in it and stays lent (the scratch r0 of a void function: the signature drops the join, and a caller
+    // that reads r0 afterwards is withheld); so does one chosen by a parameter the signature holds (TestArea3Round9Fix).
+    withheld("a3_55 control: chosen by r4", { 0xD704, 0x8579, 0xE2A3, 0x3400, 0x8B01, 0x6023, 0x210B, 0x000B, 0x0009, 0x0009, 0x2600, 0x2000 },
+             "its return is chosen by r4 on entry, which the signature does not hold");
+    lentVoid("a3_55 control: chosen by a constant", { 0xD704, 0x8579, 0xE2A3, 0x8805, 0x8B01, 0x6023, 0x210B, 0x000B, 0x0009, 0x0009, 0x2600, 0x2000 });
+    // r3 is compared and decides nothing: r0 is the word on both paths (a join needs two values), so there is no choice for r3 to make.
+    // mov.l @(lit),r7 ; mov.w @(0x12,r7),r0 ; cmp/eq r0,r3 ; bf L ; mov r0,r2 ; L: rts ; nop.
+    lentVoid("a3_55 control: r3 is compared, r0 is the word on both paths", { 0xD704, 0x8579, 0x3300, 0x8B00, 0x6203, 0x000B, 0x0009, 0x0009, 0x0009, 0x0009, 0x2600, 0x2000 });
+    // ...and by a value nothing is known of: a word loaded through a pointer that may be in the stack, after a frame address escaped (every
+    // register is among its origins). mov r15,r1 ; mov.l r1,@r4 ; mov.l @r4,r2 ; mov.l @r2,r1 ; tst r1,r1 ; bt L ; mov #1,r0 ; L: rts ; nop.
+    // Reversed by the area 3 round 10 fix (the nothing-known exception removed): the pointer reloaded from *r4 may be the entry r15 the function
+    // stored there, so the word it reads may be the stack argument at r15 + 0, and that word chooses r0.
+    withheld("a3_55 control: chosen by a value nothing is known of", { 0x61F3, 0x2412, 0x6242, 0x6122, 0x2118, 0x8900, 0xE001, 0x000B, 0x0009 },
+             "its return is chosen by a stack argument");
+
+    // ---- A4-16 ---------------------------------------------------------------------------------------------------------------------------
+    // Seed 511038 shrunk: function 0 is `mov.l @(lit),r6` and runs into function 1, a switch on r6 (`cmp/hi #4,r6 ; bt default ; shll2 r6 ; mova ; mov.l
+    // @(r0,r6),r1 ; jmp @r1`). r6 is 0xC0000010, so the guard always branches to the default, but the flow is made before the actions can know:
+    // it reads the table at the index 0xC0000010 << 2 (the literal after the table, 0x25FE0008), follows it into uncaptured memory, and the actions
+    // remove the block as unreachable. The text is `return 0x6001030;`, right; the function is not cut off.
+    {
+        const CallFixture f = { "a4_16: a table read at a constant index its guard excludes", 0x06009000u,
+                                { 0xD613, 0x7FD0, 0xE104, 0x3616, 0x8919, 0x4608, 0xC701, 0x016E, 0x412B, 0x0009, 0x0600, 0x9028, 0x0600, 0x9028, 0x0600, 0x902E,
+                                  0x0600, 0x9032, 0x0600, 0x9038, 0xD70A, 0xA009, 0x0009, 0xA007, 0x0009, 0x855F, 0xA004, 0x0009, 0xE03C, 0xA001, 0x0009, 0xD706,
+                                  0xA001, 0x0009, 0xFFFF, 0x6073, 0x7F30, 0x000B, 0x0009, 0x0009, 0xC000, 0x0010, 0x25FE, 0x0008, 0x0600, 0x1030 } };
+        auto snap = CallSnapshot(f, ++serial);
+        const DecompileResult r = d.Decompile(snap, Request(f.base));
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(!r.truncated && r.truncatedCount == 0 && r.truncatedWhy.empty());
+        int cuts = 0, said = 0;
+        for (const FlowWarning& w : r.flowWarnings)
+        {
+            cuts += w.kind == FlowWarning::Cut;
+            said += w.kind == FlowWarning::Engine && w.address == 0x05FE0008u && Has(w.text, "proved cannot be taken and removed") &&
+                    Has(w.text, "uncaptured memory at 0x05FE0008");
+        }
+        CHECK(cuts == 0 && said == 1);   // said once, where the flow went, and not as a cut
+        CHECK(Has(r.Text(), "return 0x6001030;"));
+        CHECK(r.badDataAt.empty());      // the function holds no bytes that do not decode
+        CHECK(!r.prototype.known);       // still withheld: the engine's own flag for the halt it made stays (bad instruction data), the safe side
+    }
+
+    // ---- A7-6 ----------------------------------------------------------------------------------------------------------------------------
+    // An SH-2 instruction starts at an even address. A jump table entry that is odd (here the middle of the table's three destinations; a word of data
+    // the bound does not exclude) sent flow into the middle of the instruction at the even address before it: the engine said "Instruction at ...
+    // overlaps instruction at ..." and the text was made of what it decoded there, under tokens with odd addresses (patch 0052: flow halts at such an
+    // address as it does at bytes that do not decode). mov.l @(lit),r2 ; mov #2,r1 ; cmp/hi r1,r4 ; bt def ; shll2 r4 ; mova table,r0 ; mov.l @(r0,r4),r1 ;
+    // jmp @r1 ; nop ; nop ; lit 0x06009034 ; table 0x0600902C, 0x06009031 (odd), 0x06009034 ; def: rts ; mov r2,r0 ; cases 0 to 2: rts ; mov #n,r0.
+    {
+        const uint32_t at = 0x06009000u;
+        const CallFixture f = { "a7_6: a jump table with an odd entry", at,
+                                { 0xD204, 0xE102, 0x3416, 0x890F, 0x4408, 0xC703, 0x014E, 0x412B, 0x0009, 0x0009, 0x0600, 0x9034, 0x0600, 0x902C, 0x0600, 0x9031,
+                                  0x0600, 0x9034, 0x0009, 0x0009, 0x000B, 0x6023, 0x000B, 0xE000, 0x000B, 0xE001, 0x000B, 0xE002 } };
+        auto snap = CallSnapshot(f, ++serial);
+        const DecompileResult r = d.Decompile(snap, Request(at));
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(std::find(r.badDataAt.begin(), r.badDataAt.end(), 0x06009031u) != r.badDataAt.end());
+        bool said = false;
+        for (const FlowWarning& w : r.flowWarnings) said |= w.kind == FlowWarning::BadData && w.address == 0x06009031u && Has(w.text, "odd address");
+        CHECK(said);
+        for (const std::string& w : r.warnings) CHECK(!Has(w, "overlaps instruction"));
+        CHECK(Has(r.Text(), "halt_baddata();"));
+        // Every token is at an even address but the halt's own, which is counted, not failed; the other destinations are still cases.
+        const std::function<bool(uint32_t, uint16_t&)> wordAt = [&f, at](uint32_t a, uint16_t& w) {
+            if ((a & 1) != 0 || a < at || (a - at) / 2 >= f.code.size()) return false;
+            w = f.code[(a - at) / 2];
+            return true;
+        };
+        const dts::MappingAudit a = dts::AuditMapping(r, wordAt, "a7_6");
+        CHECK(a.Violations() == 0 && a.odd == 0 && a.badDataTokens >= 1);
+        uint32_t odd = 0;
+        for (const Line& l : r.lines)
+            for (const Token& t : l.tokens) odd += (t.addr & 1u) != 0 && t.addr != 0x06009031u;
+        CHECK(odd == 0);
+        // The same table without the odd entry halts nowhere (the control: the even destination is a case).
+        std::vector<uint16_t> even = f.code;
+        even[15] = 0x9030;
+        const CallFixture fe = { "a7_6 control: the same table, an even entry", at, even };
+        auto snapEven = CallSnapshot(fe, ++serial);
+        const DecompileResult re = d.Decompile(snapEven, Request(at));
+        Print(fe.name.c_str(), re);
+        CHECK(re.status == DecompileStatus::Ok && re.badDataAt.empty() && !Has(re.Text(), "halt_baddata"));
+    }
+    // A function asked for at an odd address: refused, not decompiled from the middle of an instruction. Typed in the entry box, or found as the
+    // target of a call through a literal that is no code address (58 of the lending runs' functions).
+    {
+        const uint32_t at = 0x06009000u;
+        const CallFixture f = { "a7_6: an odd entry and an odd call target", at,
+                                { 0xD102, 0x410B, 0x0009, 0x000B, 0x0009, 0x0009, 0x0600, 0x9007 } };   // mov.l @(lit),r1 ; jsr @r1 ; nop ; rts ; nop ; lit
+        auto snap = CallSnapshot(f, ++serial);
+        const DecompileResult odd = d.Decompile(snap, Request(at + 1));
+        CHECK(odd.status == DecompileStatus::NoCode && Has(odd.error, "an SH-2 instruction starts at an even address") && odd.lines.empty());
+        const DecompileResult mirror = d.Decompile(snap, Request(0x20000000u + at + 3));   // through the cache-through mirror too
+        CHECK(mirror.status == DecompileStatus::NoCode && Has(mirror.error, "even address"));
+        const DecompileResult r = d.Decompile(snap, Request(at));
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(std::find(r.callees.begin(), r.callees.end(), 0x06009007u) == r.callees.end());   // an odd target is no function to decompile
+        CHECK(std::find(r.calledAt.begin(), r.calledAt.end(), 0x06009007u) == r.calledAt.end());
+    }
+}
+
+// ===== Area 3, round 9 review: what the round 8 fixes held under (controls; the findings are rows A3-56 to A3-64 of the ledger) =====
+// None of these is a defect: each prints what the record of round 9 says it held, so a fix of the open rows that disturbs one is seen.
+// A3-51 (the stack-slot note): the frame address in the slot is a note or an argument, the local is never folded, whether it is pushed right before
+// the call, held in an r14-based frame, in the second slot, passed through two calls, or r5/r6 is set on one path or by a copy. A3-55 (the join
+// chosen by a register no signature passes): the choice read through a spilled word, a byte, a push and a pop, a T flag set blocks before, a
+// counter, a join of distinct registers; the choice kept in the text (a second return, a load through the register) is the engine's own read and
+// withheld as such. Tail calls: the effects of a caller that jumps to a lent callee after restoring a register, popping its frame in the slot or
+// restoring PR in the slot.
+void TestArea3Round9()
+{
+    Sh2Decompiler d(gConfig);
+    uint64_t serial = 70000;
+    const uint32_t gAt = 0x06009040u;
+    const char* const kStackNote = "a frame address is in a stack argument slot here";
+    // A caller of an unlent callee that reads (and writes through) a frame address in a stack slot: the text is held to the run.
+    auto stackAddress = [&](const CallFixture& f, const std::vector<std::vector<uint32_t>>& inputs) {
+        auto snap = CallSnapshot(f, ++serial);
+        const DecompileResult callee = d.Decompile(snap, Request(gAt));
+        CHECK(callee.status == DecompileStatus::Ok && !callee.prototype.known);
+        const DecompileResult r = d.Decompile(snap, Request(f.base));
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok && !r.prototype.known);
+        CHECK(!Has(r.Text(), "return 0x5a;"));
+        CHECK(PseudoAgreesWithRun(r, snap, f, inputs, true));
+        uint32_t ran = 0;
+        CHECK(CallRunResult(snap, f, inputs[0], ran) && ran == 0x37u);
+        return r;
+    };
+    auto withheld = [&](const CallFixture& f, const char* reason) {
+        auto snap = CallSnapshot(f, ++serial);
+        const DecompileResult r = d.Decompile(snap, Request(f.base));
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(!r.prototype.known && Has(r.prototypeWithheld, reason));
+    };
+    // A caller that jumps to the lent callee at 0x06009040: lent, held to the run, and the registers it says it keeps are kept.
+    auto tailCall = [&](const CallFixture& f, uint32_t keptBit, bool kept) {
+        auto snap = CallSnapshot(f, ++serial);
+        const DecompileResult callee = d.Decompile(snap, Request(gAt));
+        CHECK(callee.status == DecompileStatus::Ok && callee.prototype.known);
+        DecompileRequest q = Request(f.base);
+        q.prototypes.emplace_back(gAt, callee.prototype);
+        const DecompileResult r = d.Decompile(snap, q);
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok && r.prototype.known);
+        CHECK(PseudoAgreesWithRun(r, snap, f, { { 1, 2, 3, 4 }, { 0, 1, 2, 3 } }));
+        CHECK((((r.prototype.effects.preserved >> keptBit) & 1u) != 0) == kept);
+        CHECK(r.prototype.effects.spDelta == 0);
+    };
+
+    // ---- A3-51: other slot offsets, pushes, frames, calls ----
+    {
+        const CallFixture f = { "a3_51 round 9 pushed (@-r15) right before the call", 0x06009000u,
+{
+        0x4F22, 0x7FF8, 0xE05A, 0x1F01, 0x61F3, 0x7104, 0x2F16, 0xD304, 0x430B, 0x0009, 0x7F04, 0x50F1,
+        0x7F08, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9040, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009,
+        0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x62F2, 0xE337, 0x000B, 0x2232 } };
+        stackAddress(f, { { 1 }, { 2 } });
+    }
+    {
+        const CallFixture f = { "a3_51 round 9 r14-based frame", 0x06009000u,
+{
+        0x4F22, 0x2FE6, 0x7FF8, 0x6EF3, 0xE05A, 0x1E01, 0x61E3, 0x7104, 0x2E12, 0xD304, 0x430B, 0x0009,
+        0x50E1, 0x7F08, 0x6EF6, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9040, 0x0009, 0x0009, 0x0009, 0x0009,
+        0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x62F2, 0xE337, 0x000B, 0x2232 } };
+        stackAddress(f, { { 1 }, { 2 } });
+    }
+    {
+        const CallFixture f = { "a3_51 round 9 the address passed through two calls", 0x06009000u,
+{
+        0x4F22, 0x7FF8, 0xE05A, 0x1F01, 0x61F3, 0x7104, 0x2F12, 0xD305, 0x430B, 0x0009, 0xD304, 0x430B,
+        0x0009, 0x50F1, 0x7F08, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9060, 0x0600, 0x9040, 0x0009, 0x0009,
+        0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x62F2, 0xE337, 0x000B, 0x2232,
+        0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009,
+        0x62F2, 0x000B, 0x6122, 0x0009 } };
+        stackAddress(f, { { 1 }, { 2 } });
+    }
+    {
+        const CallFixture f = { "a3_51 round 9 the address in the second slot, the first written", 0x06009000u,
+{
+        0x4F22, 0x7FF4, 0xE05A, 0x1F02, 0x61F3, 0x7108, 0x1F11, 0xD304, 0x430B, 0x0009, 0x50F2, 0x7F0C,
+        0x4F26, 0x000B, 0x0009, 0x0009, 0x0600, 0x9040, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009,
+        0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x52F1, 0xE337, 0x000B, 0x2232 } };
+        stackAddress(f, { { 1 }, { 2 } });
+    }
+    {
+        const CallFixture f = { "a3_51 round 9 r5 set on one path only", 0x06009000u,
+{
+        0x4F22, 0x7FF8, 0xE05A, 0x1F01, 0x61F3, 0x7104, 0x2F12, 0x2448, 0x8900, 0xE501, 0xD303, 0x430B,
+        0x0009, 0x50F1, 0x7F08, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9040, 0x0009, 0x0009, 0x0009, 0x0009,
+        0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x62F2, 0xE337, 0x000B, 0x2232 } };
+        stackAddress(f, { { 1 }, { 0 } });
+    }
+    {
+        const CallFixture f = { "a3_51 round 9 r6 set by a copy of r4", 0x06009000u,
+{
+        0x4F22, 0x7FF8, 0xE05A, 0x1F01, 0x61F3, 0x7104, 0x2F12, 0x6643, 0xD303, 0x430B, 0x0009, 0x50F1,
+        0x7F08, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9040, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009,
+        0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x62F2, 0xE337, 0x000B, 0x2232 } };
+        stackAddress(f, { { 1 }, { 2 } });
+    }
+    (void)kStackNote;
+    // ---- A3-55: the choice is in the text, or is read through a register the rule follows ----
+    {
+        const CallFixture f = { "a3_55 round 9 chosen by r3 spilled to a stack word and reloaded", 0x06009000u,
+{
+        0x7FF8, 0x2F32, 0x61F2, 0x2118, 0x8903, 0xE001, 0x210B, 0xA002, 0x0009, 0xE002, 0x210B, 0x7F08,
+        0x000B, 0x0009 } };
+        withheld(f, "chosen by r3");
+    }
+    {
+        const CallFixture f = { "a3_55 round 9 chosen by a byte of r3 spilled and reloaded", 0x06009000u,
+{
+        0x7FF8, 0x2F30, 0x61F0, 0x2118, 0x8903, 0xE001, 0x210B, 0xA002, 0x0009, 0xE002, 0x210B, 0x7F08,
+        0x000B, 0x0009 } };
+        withheld(f, "chosen by r3");
+    }
+    {
+        const CallFixture f = { "a3_55 round 9 chosen by r3 pushed and popped", 0x06009000u,
+{
+        0x2F36, 0x61F6, 0x2118, 0x8903, 0xE001, 0x210B, 0xA002, 0x0009, 0xE002, 0x210B, 0x000B, 0x0009 } };
+        withheld(f, "chosen by r3");
+    }
+    {
+        const CallFixture f = { "a3_55 round 9 chosen by T set by tst r3 two blocks earlier", 0x06009000u,
+{
+        0x2338, 0xE203, 0xA000, 0x0009, 0xE204, 0x8903, 0xE001, 0x210B, 0xA002, 0x0009, 0xE002, 0x210B,
+        0x000B, 0x0009 } };
+        withheld(f, "chosen by r3");
+    }
+    {
+        const CallFixture f = { "a3_55 round 9 chosen by dt r3", 0x06009000u,
+{
+        0x4310, 0x8903, 0xE001, 0x210B, 0xA002, 0x0009, 0xE002, 0x210B, 0x000B, 0x0009 } };
+        withheld(f, "chosen by r3");
+    }
+    {
+        const CallFixture f = { "a3_55 round 9 r5 or r6 chosen by r3", 0x06009000u,
+{
+        0x6053, 0x3300, 0x8B01, 0x6063, 0x210B, 0x000B, 0x0009, 0x0009 } };
+        withheld(f, "chosen by r3");
+    }
+    {
+        const CallFixture f = { "a3_55 round 9 chosen by a load through r3 (the engine keeps the read)", 0x06009000u,
+{
+        0xD705, 0x6071, 0xE2A3, 0x3200, 0x6132, 0x2118, 0x8B01, 0x6023, 0x210B, 0x000B, 0x0009, 0x0009,
+        0x0600, 0x9100 } };
+        withheld(f, "reads r3 on entry");
+    }
+    {
+        const CallFixture f = { "a3_55 round 9 two return sites chosen by r3 (the engine keeps the branch)", 0x06009000u,
+{
+        0x2338, 0x8903, 0xE001, 0x210B, 0x000B, 0x0009, 0xE002, 0x210B, 0x000B, 0x0009 } };
+        withheld(f, "reads r3 on entry");
+    }
+    // ---- tail calls: the caller's effects ----
+    {
+        const CallFixture f = { "a3_27 round 9 tail call after r8 is saved and restored: r8 kept", 0x06009000u,
+{
+        0x2F86, 0x6843, 0x7801, 0x68F6, 0xD101, 0x412B, 0x0009, 0x0009, 0x0600, 0x9040, 0x0009, 0x0009,
+        0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009,
+        0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x6043, 0x7001, 0x000B, 0x0009 } };
+        tailCall(f, 8, true);
+    }
+    {
+        const CallFixture f = { "a3_27 round 9 tail call to a callee that clobbers r9 without saving it: r9 not kept", 0x06009000u,
+{
+        0xD101, 0x412B, 0x0009, 0x0009, 0x0600, 0x9040, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009,
+        0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009,
+        0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0xE905, 0x6043, 0x000B, 0x0009 } };
+        tailCall(f, 9, false);
+    }
+    {
+        const CallFixture f = { "a3_27 round 9 tail call restoring PR in the slot of the jump", 0x06009000u,
+{
+        0x4F22, 0x6543, 0xD101, 0x412B, 0x4F26, 0x0009, 0x0600, 0x9040, 0x0009, 0x0009, 0x0009, 0x0009,
+        0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009,
+        0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x6053, 0x7003, 0x000B, 0x0009 } };
+        tailCall(f, 8, true);
+    }
+    {
+        const CallFixture f = { "a3_27 round 9 tail call popping the frame in the slot of the jump", 0x06009000u,
+{
+        0x7FF8, 0x6543, 0xD101, 0x412B, 0x7F08, 0x0009, 0x0600, 0x9040, 0x0009, 0x0009, 0x0009, 0x0009,
+        0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009,
+        0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x6053, 0x7003, 0x000B, 0x0009 } };
+        tailCall(f, 8, true);
+    }
+}
+
+// ===== Area 3, round 9 fix: the return rule, and the stack argument words (A3-56 to A3-62) =====
+// The return rule (WithholdReason, ReturnCheck::Inputs): a function the engine made `void` is lent only when no input its signature does not hold
+// can change what it leaves in r0, by data or by the choice of the path, with r0's value at all the returns taken as one value whose
+// alternatives are told apart by the op that made them. Each fixture of the round's rows is withheld and the text it would be lent with is
+// rejected by the run; the controls are the limits that stay lent.
+void TestArea3Round9Fix()
+{
+    Sh2Decompiler d(gConfig);
+    uint64_t serial = 90000;
+    const uint32_t base = 0x06009000u;
+    const std::vector<std::vector<uint32_t>> inputs = { { 0x11111111u, 0x22222222u, 0x0600B000u, 0x44444444u },
+                                                        { 0x00000000u, 0x00000001u, 0x0600B000u, 0x80000000u },
+                                                        { 0x00000001u, 0u, 0x0600B000u, 0x44444444u } };
+    auto withheld = [&](const char* name, std::vector<uint16_t> words, const char* reason) {
+        const CallFixture f = { name, base, std::move(words) };
+        auto snap = CallSnapshot(f, ++serial);
+        const DecompileResult r = d.Decompile(snap, Request(f.base));
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(!r.prototype.known && Has(r.prototypeWithheld, reason));
+        CHECK(!PseudoAgreesWithRun(r, snap, f, inputs));   // the engine's `void` text loses what the code returns
+    };
+    auto lentVoid = [&](const char* name, std::vector<uint16_t> words) {
+        const CallFixture f = { name, base, std::move(words) };
+        auto snap = CallSnapshot(f, ++serial);
+        const DecompileResult r = d.Decompile(snap, Request(f.base));
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(r.prototype.known && r.prototype.ret.kind == TypeKind::Void);
+        return r;
+    };
+    // The two alternatives each used by an `or r0,r1` nothing reads, so the engine drops the return (A3-55): `<test> ; bt L ; mov #1,r0 ;
+    // or r0,r1 ; bra M ; nop ; L: mov #2,r0 ; or r0,r1 ; M: rts ; nop`.
+    auto choice = [](std::vector<uint16_t> test) {
+        for (uint16_t w : { 0x8903, 0xE001, 0x210B, 0xA002, 0x0009, 0xE002, 0x210B, 0x000B, 0x0009 }) test.push_back(w);
+        return test;
+    };
+
+    // ---- A3-56: r0's entry value as the chooser (H2), `tst r0,r0` and `cmp/eq #5,r0` --------------------------------------------------------
+    withheld("a3_56 H2: tst r0,r0 chooses", choice({ 0x2008 }), "its return is chosen by r0 on entry, which no signature passes");
+    withheld("a3_56: cmp/eq #5,r0 chooses", choice({ 0x8805 }), "its return is chosen by r0 on entry, which no signature passes");
+    withheld("a3_56 control: tst r3,r3 chooses", choice({ 0x2338 }), "its return is chosen by r3 on entry, which no signature passes");
+
+    // ---- A3-57: the entry T flag (H5) or SR (H6) as the chooser --------------------------------------------------------------------------------
+    withheld("a3_57 H5: bt on the T the caller left", choice({}), "its return is chosen by the T flag on entry, which no signature passes");
+    withheld("a3_57 H6: stc sr,r1 ; tst r1,r1", choice({ 0x0102, 0x2118 }), "its return is chosen by sr on entry, which no signature passes");
+    // Controls: a T this function wrote (clrt, sett, a compare of a constant) chooses nothing that is an input; a T written by `tst r3,r3` is r3.
+    lentVoid("a3_57 control: clrt before the branch", choice({ 0x0008 }));
+    lentVoid("a3_57 control: cmp/eq of two constants", choice({ 0xE105, 0xE205, 0x3210 }));
+    withheld("a3_57 control: T written by tst r3,r3", choice({ 0x2338 }), "chosen by r3 on entry");
+    // ...and SR's interrupt mask transformed whole and left in r0 with no join (`stc sr,r0 ; or #0xF0,r0 ; ldc r0,sr`, 06010054's idiom): lent (the
+    // engine returns it here; image 007's 06010054, where it does not, is lent in the corpus run).
+    {
+        const CallFixture f = { "a3_57 control: the interrupt-mask idiom, no join", base, { 0x0002, 0xCBF0, 0x400E, 0x000B, 0x0009 } };
+        const DecompileResult r = d.Decompile(CallSnapshot(f, ++serial), Request(f.base));
+        Print(f.name.c_str(), r);
+        CHECK(r.prototype.known);
+    }
+
+    // ---- A3-58: two alternatives equal as values and made by two ops ---------------------------------------------------------------------------
+    // (D1) two words through two literal pointers, by r3: mov.l @(lit),r7 ; mov.l @(lit),r2 ; mov.w @r7,r0 ; cmp/eq r0,r3 ; bf L ; mov.w @r2,r0 ;
+    // or r0,r1 ; L: rts ; nop -- the words at 0x06009040 (0x1234) and 0x06009044 (0x5678).
+    {
+        std::vector<uint16_t> w = { 0xD704, 0xD205, 0x6071, 0x3300, 0x8B01, 0x6021, 0x210B, 0x000B, 0x0009, 0x0009, 0x0600, 0x9040, 0x0600, 0x9044 };
+        w.resize(32, 0x0009);
+        for (uint16_t x : { 0x1234, 0x0000, 0x5678, 0x0000 }) w.push_back(x);
+        withheld("a3_58 D1: two loaded words, chosen by r3", w, "its return is chosen by r3 on entry, which no signature passes");
+    }
+    // (D4) r4 + 1 or r4 + 2 by r3: the value is r4's as well, which the signature drops.
+    withheld("a3_58 D4: r4 + 1 or r4 + 2, chosen by r3", { 0x6043, 0x7001, 0x3300, 0x8B02, 0x6043, 0x7002, 0x210B, 0x000B, 0x0009 },
+             "its return is chosen by r3 on entry, which no signature passes");
+    // Control: one load on both paths is one value (no choice for r3 to make), as A3-55's control "r0 is the word on both paths".
+    lentVoid("a3_58 control: one word on both paths", { 0x6052, 0x3300, 0x8B00, 0x6203, 0x2542, 0x000B, 0x0009 });
+
+    // ---- A3-59: r0's entry value computed from on one path, with a parameter the signature holds -----------------------------------------------
+    withheld("a3_59 E1: add r4,r0 under tst r5, r4 stored", { 0x2558, 0x8901, 0x304C, 0x2642, 0x000B, 0x0009 }, "its return is computed from r0 on entry");
+    withheld("a3_59 E3: add r4,r0 under tst r4, r4 stored", { 0x2448, 0x8901, 0x304C, 0x2642, 0x000B, 0x0009 }, "its return is computed from r0 on entry");
+    // ...and r0 read as the index of a load on one path (`mov.b @(r0,r4),r0`): the address is read too (ReturnCheck's loads; here the engine keeps
+    // the load, and with it its own read of r0).
+    withheld("a3_59: r0 an index on one path", { 0x2558, 0x8901, 0x004C, 0x2642, 0x000B, 0x0009 }, "r0 on entry");
+
+    // ---- A3-62: a chooser the signature does not hold: a parameter (H4), a stack argument (S1) ---------------------------------------------------
+    withheld("a3_62 H4: tst r4,r4 chooses", choice({ 0x2448 }), "its return is chosen by r4 on entry, which the signature does not hold");
+    withheld("a3_62 S1: the word at r15 chooses", choice({ 0x63F2, 0x2338 }),
+             "its return is chosen by a stack argument (the word at r15 + 0 on entry), which the signature does not hold");
+    withheld("a3_62: the second stack word chooses", choice({ 0x53F1, 0x2338 }),
+             "its return is chosen by a stack argument (the word at r15 + 4 on entry), which the signature does not hold");
+    // Controls: chosen by r4 when the signature holds it (stored through r5 as well), and chosen by a constant (A3-25): lent.
+    lentVoid("a3_62 control: r4 held by the signature", choice({ 0x2542, 0x2448 }));
+    lentVoid("a3_62 control: chosen by a constant", choice({ 0xE101, 0x2118 }));
+    // ...and a word of the frame the function wrote before it reads it is no stack argument: add #-4,r15 ; mov.l r4,@r15 ; mov.l @r15,r3 ;
+    // tst r3,r3 ; ... ; add #4,r15 in the slot. r4 is the chooser, which the signature does not hold.
+    {
+        std::vector<uint16_t> w = choice({ 0x7FFC, 0x2F42, 0x63F2, 0x2338 });
+        w.back() = 0x7F04;
+        withheld("a3_62: a spilled r4 chooses", w, "its return is chosen by r4 on entry, which the signature does not hold");
+    }
+
+    // ---- The rule's other parts, each pinned ---------------------------------------------------------------------------------------------------
+    // Two returns, one value each, chosen by r3: the values at the returns are one value only when one op made them (the returns' r0s are joined
+    // as at a common exit). tst r3,r3 ; bt L ; mov #1,r0 ; rts ; cmp/eq #5,r0 ; L: mov #2,r0 ; rts ; cmp/eq #5,r0. The engine keeps the branch
+    // between two returns (here and in every such shape built), and its own read of r3 withholds the function: a control.
+    {
+        const CallFixture f = { "round 9 fix: two returns chosen by r3", base, { 0x2338, 0x8902, 0xE001, 0x000B, 0x8805, 0xE002, 0x000B, 0x8805 } };
+        const DecompileResult r = d.Decompile(CallSnapshot(f, ++serial), Request(f.base));
+        Print(f.name.c_str(), r);
+        CHECK(!r.prototype.known && Has(r.prototypeWithheld, "r3 on entry"));
+    }
+    // D4's shape (A3-58) with the compare against a word loaded through r5 (memory, no input) for r3, the values made from r7, which the dropped
+    // return takes with it: mov.l @r5,r3 ; mov r7,r0 ; add #1,r0 ; cmp/eq r0,r3 ; bf L ; mov r7,r0 ; add #2,r0 ; or r0,r1 ; L: rts ; nop.
+    withheld("round 9 fix: r7 + 1 or r7 + 2, chosen by a loaded word", { 0x6352, 0x6073, 0x7001, 0x3300, 0x8B02, 0x6073, 0x7002, 0x210B, 0x000B, 0x0009 },
+             "its return is computed from r7 on entry, which the signature does not hold");
+    // r0 joined with a word loaded through a pointer that may be anywhere in the stack (a frame address escaped through r4 first): nothing is known
+    // of it, which is taken for memory (A3-55's limit, for data); r5 is held (stored too). Lent void.
+    // Reversed by the area 3 round 10 fix: the word may be the stack argument at the entry r15 (the frame address escaped through r4 and came back).
+    withheld("round 9 fix: r0 or a word nothing is known of", { 0x61F3, 0x2412, 0x6242, 0x1451, 0x2558, 0x8900, 0x6022, 0x000B, 0x0009 },
+             "its return is computed from a stack argument");
+    // The interrupt-mask idiom as 06010054 has it (SR whole with the mask set, written back, and the saved SR masked and written back), r0 left
+    // with no other use: the machine's state, lent void.
+    lentVoid("round 9 fix: the interrupt-mask idiom, 06010054's", { 0x0002, 0xCBF0, 0x400E, 0xE30F, 0x0102, 0x2139, 0x410E, 0x000B, 0x0009 });
+    // An identity op on one path (`and r0,r0`, A2-43) is no read of r0: r4 is held (stored through r5), so nothing is dropped. Lent void.
+    lentVoid("round 9 fix: and r0,r0 on one path", { 0x2542, 0x2448, 0x8900, 0x2009, 0x000B, 0x0009 });
+    // SR transformed whole (the interrupt-mask idiom) and compared, with no join: lent (the engine returns it here; image 007's 06010054, where it
+    // does not, is the corpus's).
+    {
+        const CallFixture f = { "round 9 fix: the interrupt-mask idiom compared", base, { 0x0002, 0xCBF0, 0x400E, 0x8801, 0x000B, 0x0009 } };
+        const DecompileResult r = d.Decompile(CallSnapshot(f, ++serial), Request(f.base));
+        Print(f.name.c_str(), r);
+        CHECK(r.prototype.known);
+    }
+
+    // ---- A3-60: the stack words the engine drops, held to the engine -------------------------------------------------------------------------
+    // A caller whose stack word K (at the call's r15 + 4K) holds the address of its local (the word above them), with 'earlier' (bit j: word j < K)
+    // written and 'regs' (bit n - 4: rN) set before a `bsr` to g, which reads its word K and stores 0x37 through it; the caller returns the local.
+    // The engine drops every stack word when r4-r6 or r5-r7 are all unset, and otherwise the words from the first one not written up, whatever
+    // r4-r7 hold: the note is said exactly then, and in no cell is the local folded (`return 0x5a;`), by the note or by the argument the call shows.
+    {
+        const uint32_t gAt = 0x06009040u;
+        const char* const kStackNote = "a frame address is in a stack argument slot here";
+        int cells = 0, noted = 0;
+        auto cell = [&](int K, uint32_t earlier, uint32_t regs) {
+            std::vector<uint16_t> w = { 0x4F22, static_cast<uint16_t>(0x7F00 | ((-(4 * (K + 2))) & 0xFF)), 0xE05A, static_cast<uint16_t>(0x1F00 | (K + 1)),
+                                        0x61F3, static_cast<uint16_t>(0x7100 | (4 * (K + 1))), static_cast<uint16_t>(K == 0 ? 0x2F12 : 0x1F10 | K) };
+            for (int j = 0; j < K; ++j)
+                if ((earlier >> j) & 1u) w.push_back(static_cast<uint16_t>(j == 0 ? 0x2F02 : 0x1F00 | j));   // mov.l r0,@(4j,r15)
+            for (int n = 4; n < 8; ++n)
+                if ((regs >> (n - 4)) & 1u) w.push_back(static_cast<uint16_t>(0xE001 | n << 8));         // mov #1,rN
+            const uint32_t bsrAt = base + 2 * static_cast<uint32_t>(w.size());
+            w.push_back(static_cast<uint16_t>(0xB000 | (((gAt - bsrAt - 4) / 2) & 0xFFF)));
+            for (uint16_t x : { uint16_t(0x0009), static_cast<uint16_t>(0x50F0 | (K + 1)), static_cast<uint16_t>(0x7F00 | (4 * (K + 2))), uint16_t(0x4F26),
+                                uint16_t(0x000B), uint16_t(0x0009) })
+                w.push_back(x);
+            w.resize(32, 0x0009);
+            for (uint16_t x : { static_cast<uint16_t>(K == 0 ? 0x62F2 : 0x52F0 | K), uint16_t(0xE337), uint16_t(0x000B), uint16_t(0x2232) }) w.push_back(x);
+            bool hole = false;
+            for (int j = 0; j < K; ++j) hole = hole || !((earlier >> j) & 1u);
+            const bool r4 = regs & 1u, r5 = regs & 2u, r6 = regs & 4u, r7 = regs & 8u;
+            const bool dropped = (!r4 && !r5 && !r6) || (!r5 && !r6 && !r7) || hole;
+            const std::string name = "a3_60 cell: word " + std::to_string(K) + ", earlier words " + std::to_string(earlier) + ", r4-r7 " + std::to_string(regs);
+            const CallFixture f = { name, base, w };
+            auto snap = CallSnapshot(f, ++serial);
+            const DecompileResult r = d.Decompile(snap, Request(f.base));
+            Print(f.name.c_str(), r);
+            CHECK(r.status == DecompileStatus::Ok);
+            CHECK(!Has(r.Text(), "return 0x5a;"));
+            CHECK(Has(r.Text(), kStackNote) == dropped);
+            CHECK(PseudoAgreesWithRun(r, snap, f, { { 1 }, { 2 } }, true));
+            uint32_t ran = 0;
+            CHECK(CallRunResult(snap, f, { 1 }, ran) && ran == 0x37u);
+            ++cells;
+            noted += dropped;
+        };
+        // (i) the address in the second word, the first written or not, every subset of r4-r7: 32 cells
+        for (uint32_t earlier = 0; earlier < 2; ++earlier)
+            for (uint32_t regs = 0; regs < 16; ++regs) cell(1, earlier, regs);
+        // (ii) the address in word 1, 2 or 3, every subset of the words before it written, r4-r7 all unset, all set, or r5 and r6: 42 cells
+        for (int K = 1; K <= 3; ++K)
+            for (uint32_t earlier = 0; earlier < (1u << K); ++earlier)
+                for (uint32_t regs : { 0u, 0xFu, 0x6u }) cell(K, earlier, regs);
+        // (iii) the address in word 1 and word 0 written on one path only (`tst r4,r4 ; bt L ; mov.l r0,@r15 ; L:`, r5-r7 set): a word written on one
+        // path is not written for the engine, which drops the address with the word after it: the note.
+        {
+            std::vector<uint16_t> w = { 0x4F22, 0x7FF4, 0xE05A, 0x1F02, 0x61F3, 0x7108, 0x1F11, 0x2448, 0x8900, 0x2F02, 0xE501, 0xE601, 0xE701 };
+            const uint32_t bsrAt = base + 2 * static_cast<uint32_t>(w.size());
+            w.push_back(static_cast<uint16_t>(0xB000 | (((gAt - bsrAt - 4) / 2) & 0xFFF)));
+            for (uint16_t x : { 0x0009, 0x50F2, 0x7F0C, 0x4F26, 0x000B, 0x0009 }) w.push_back(x);
+            w.resize(32, 0x0009);
+            for (uint16_t x : { 0x52F1, 0xE337, 0x000B, 0x2232 }) w.push_back(x);
+            const CallFixture f = { "a3_60: word 0 written on one path", base, w };
+            auto snap = CallSnapshot(f, ++serial);
+            const DecompileResult r = d.Decompile(snap, Request(f.base));
+            Print(f.name.c_str(), r);
+            CHECK(Has(r.Text(), kStackNote) && !Has(r.Text(), "return 0x5a;"));
+            CHECK(PseudoAgreesWithRun(r, snap, f, { { 1 }, { 0 } }, true));
+        }
+        std::printf("a3_60: %d cells, the note in %d\n", cells, noted);
+        CHECK(cells == 74 && noted == 6 + 13 + 14 + 22);
+    }
+
+    // ---- A3-61: a callee that writes its own stack argument slot --------------------------------------------------------------------------------
+    // The caller stores a value in the word at its r15 (the callee's fifth argument) and reads it back after a call through a literal; the callee
+    // writes 0x37 there through its own r15. The engine took the call to write none of its caller's words and folded the read (`return 7;`).
+    {
+        const char* const kSlotNote = "a local at or above the stack pointer is read after this call";
+        auto atG = [](std::vector<uint16_t> caller, std::vector<uint16_t> g) {
+            caller.resize(32, 0x0009);
+            caller.insert(caller.end(), g.begin(), g.end());
+            return caller;
+        };
+        auto slot = [&](const char* name, std::vector<uint16_t> words, uint32_t returns, bool note, const char* stale) {
+            const CallFixture f = { name, base, std::move(words) };
+            auto snap = CallSnapshot(f, ++serial);
+            const DecompileResult r = d.Decompile(snap, Request(f.base));
+            Print(f.name.c_str(), r);
+            CHECK(r.status == DecompileStatus::Ok && !r.prototype.known);
+            CHECK(Has(r.Text(), kSlotNote) == note);
+            if (stale) CHECK(!Has(r.Text(), stale));
+            CHECK(PseudoAgreesWithRun(r, snap, f, { { 1 }, { 2 } }, true));
+            uint32_t ran = 0;
+            CHECK(CallRunResult(snap, f, { 1 }, ran) && ran == returns);
+        };
+        // (SA2) the first word, r4-r7 unset (the engine drops the word from the call too)
+        slot("a3_61 SA2: the callee writes the word at its r15", atG({ 0x4F22, 0x7FF8, 0xE007, 0x2F02, 0xD303, 0x430B, 0x0009, 0x60F2, 0x7F08, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9040 },
+                                                                     { 0xE337, 0x2F32, 0x000B, 0x0009 }), 0x37u, true, "return 7;");
+        // (SA3) the second word
+        slot("a3_61 SA3: the second word", atG({ 0x4F22, 0x7FF8, 0xE007, 0x1F01, 0xD303, 0x430B, 0x0009, 0x50F1, 0x7F08, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9040 },
+                                                { 0xE337, 0x1F31, 0x000B, 0x0009 }), 0x37u, true, "return 7;");
+        // (SA5) r5 set: the engine shows the word as the fifth argument, and folded the local all the same
+        slot("a3_61 SA5: r5 set, the word an argument", atG({ 0x4F22, 0x7FF8, 0xE007, 0x2F02, 0xE501, 0xD304, 0x430B, 0x0009, 0x60F2, 0x7F08, 0x4F26, 0x000B, 0x0009, 0x0009, 0x0600, 0x9040 },
+                                                         { 0xE337, 0x2F32, 0x000B, 0x0009 }), 0x37u, true, "return 7;");
+        // (SA6) the callee copies its fifth argument (7) into its sixth (the caller's 9): the text returned 9
+        slot("a3_61 SA6: the callee copies the fifth word into the sixth", atG({ 0x4F22, 0x7FF8, 0xE007, 0x2F02, 0xE009, 0x1F01, 0xD303, 0x430B, 0x0009, 0x50F1, 0x7F08, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9040 },
+                                                                            { 0x61F2, 0x1F11, 0x000B, 0x0009 }), 7u, true, "return 9;");
+        // ...and written again after the call, before the read: the read is the caller's own store, no note.
+        slot("a3_61 control: the word rewritten after the call", atG({ 0x4F22, 0x7FF8, 0xE007, 0x2F02, 0xD304, 0x430B, 0x0009, 0xE109, 0x2F12, 0x60F2, 0x7F08, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9040 },
+                                                                   { 0xE337, 0x2F32, 0x000B, 0x0009 }), 9u, false, nullptr);
+        // Controls: a callee that only reads the word (SA1's, A3-51: the accepted text of an unlent call), and one that writes its own frame below its
+        // entry r15: no note, and the local is the value stored (the engine's fold is right).
+        slot("a3_61 control: the callee reads the word", atG({ 0x4F22, 0x7FF8, 0xE007, 0x2F02, 0xD303, 0x430B, 0x0009, 0x60F2, 0x7F08, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9040 },
+                                                          { 0x61F2, 0x000B, 0x0009 }), 7u, false, nullptr);
+        slot("a3_61 control: the callee writes below its entry r15", atG({ 0x4F22, 0x7FF8, 0xE007, 0x2F02, 0xD303, 0x430B, 0x0009, 0x60F2, 0x7F08, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9040 },
+                                                                       { 0x7FFC, 0xE337, 0x2F32, 0x000B, 0x7F04 }), 7u, false, nullptr);
+    }
+}
+
+
+// ===== Area 2, round 8 review =====
+// (1) The slot loads above, by value. (2) The A2-47 family in ordinary code, 19 fixtures that printed a wrong value with patch 0046 reverted:
+// a value built from a boolean as `T * A + (1 - T) * B` (mul.l, sts macl), then a mask or a shift pair or an extension that reads the low
+// bits (Sh2GeneratedTests' scratch grammar of the round: 20,000 functions of these templates and 20,000 of a wider register-only grammar, 0 findings
+// on the fixed tree, 18 of 400 with patch 0046 reverted). (3) A2-53: the stack pointer on entry is taken to be 256-aligned. (5) A2-52: what patch 0046 leaves of A2-47. (6) the spec's decompiler-only lines (A2-55).
+void TestArea2Round8()
+{
+    Sh2Decompiler d(gConfig);
+    uint64_t serial = 40000;
+    // ---- (1) ----
+    {
+        std::map<std::string, int> verdicts;
+        int fixtures = 0;
+        const char* const kinds[] = { "jmp", "braf", "jsr", "bsrf", "rte_t", "rte_s" };
+        for (const char* kind : kinds)
+        {
+            const bool call = std::strcmp(kind, "jsr") == 0 || std::strcmp(kind, "bsrf") == 0;
+            const bool tail = std::strcmp(kind, "jmp") == 0 || std::strcmp(kind, "braf") == 0;
+            std::vector<const char*> slots;
+            if (tail) slots = { "movw4", "movl4" };
+            else if (call) slots = { "movw4", "movl4", "mova" };
+            else slots = { "mova", "movw0", "movl0" };
+            for (const char* slot : slots)
+                for (int d2 : { 1, 2, 3, 5 })
+                    for (int shift = 0; shift < 2; ++shift)
+                        for (int talign = 0; talign < 2; ++talign)
+                        {
+                            if (std::strcmp(kind, "rte_s") == 0 && talign) continue;
+                            const R8Slot f = R8SlotFixture(kind, slot, d2, shift, talign);
+                            const std::string name = std::string(kind) + " + " + slot + " d=" + std::to_string(d2) + (shift ? " branch at 2" : " branch at 0") +
+                                                     (talign ? " target at 2 mod 4" : " target at 0 mod 4");
+                            const bool voidSlot = call && std::strcmp(slot, "mova") == 0;
+                            const R8Outcome o = R8Check(d, name, f.words, { { 0 } }, voidSlot ? "cv" : "c", f.lend, ++serial);
+                            ++fixtures;
+                            ++verdicts[o.verdict];
+                            if (voidSlot) CHECK(o.verdict == "void-ok" || o.verdict == "agrees");
+                            else if (o.verdict != "agrees" && o.verdict != "agrees-global")
+                            {
+                                // d = 0 of a call reads the callee's own code, a global named by the function: not a fixture
+                                std::printf("  slot value %s: %s %s\n", name.c_str(), o.verdict.c_str(), o.detail.c_str());
+                                CHECK(false);
+                            }
+                        }
+        }
+        std::printf("A2 round 8, slot loads of jmp/braf/jsr/bsrf/rte by value: %d fixtures:", fixtures);
+        for (const auto& kv : verdicts) std::printf(" %s=%d", kv.first.c_str(), kv.second);
+        std::printf("\n");
+        CHECK(verdicts["differs"] == 0 && verdicts["unknown"] == 0 && verdicts["not-ok"] == 0 && verdicts["no-run"] == 0);
+        CHECK(verdicts["agrees"] + verdicts["agrees-global"] >= 100);
+    }
+    struct Family
+    {
+        const char* name;
+        std::vector<uint16_t> code;
+    };
+    // ---- (2) ----
+    {
+        const std::vector<Family> families = {
+            { "t5", { 0x4511, 0x0129, 0xD208, 0xD309, 0x0217, 0x061A, 0xE401, 0x3418, 0x0347, 0x051A, 0x365C, 0x6063, 0x4009, 0x4009, 0x4008, 0x4008, 0x7001, 0x000B, 0x0009, 0x0009, 0x0001, 0x0022, 0x0000, 0x0020 } },
+            { "t7", { 0x3567, 0x0129, 0xD207, 0xD308, 0x0217, 0x061A, 0xE401, 0x3418, 0x0347, 0x051A, 0x365C, 0x6063, 0xD704, 0x2679, 0x6063, 0x4000, 0x000B, 0x0009, 0x0000, 0x0106, 0x0000, 0x0100, 0x0000, 0x003C } },
+            { "t55", { 0x3457, 0x0129, 0xD207, 0xD308, 0x0217, 0x061A, 0xE401, 0x3418, 0x0347, 0x051A, 0x365C, 0x6063, 0x4009, 0x4008, 0x4000, 0x000B, 0x0009, 0x0009, 0x0600, 0x901E, 0x0600, 0x900C } },
+            { "t59", { 0x4415, 0x0129, 0xD207, 0xD308, 0x0217, 0x061A, 0xE401, 0x3418, 0x0347, 0x051A, 0x365C, 0x6063, 0x4009, 0x4008, 0x4000, 0x000B, 0x0009, 0x0009, 0x0600, 0x911A, 0x0600, 0x9018 } },
+            { "t127", { 0x2458, 0x0129, 0xD207, 0xD308, 0x0217, 0x061A, 0xE401, 0x3418, 0x0347, 0x051A, 0x365C, 0x6063, 0xD704, 0x2679, 0x6063, 0x4000, 0x000B, 0x0009, 0x0000, 0x0FFA, 0x0000, 0x1000, 0xFFFF, 0xFFFC } },
+            { "t131", { 0x3566, 0x0129, 0xD206, 0xD307, 0x0217, 0x061A, 0xE401, 0x3418, 0x0347, 0x051A, 0x365C, 0x6063, 0xC903, 0x4000, 0x000B, 0x0009, 0x0601, 0x8FFE, 0x0600, 0x8FFC } },
+            { "t146", { 0x3467, 0x0129, 0xD207, 0xD308, 0x0217, 0x061A, 0xE401, 0x3418, 0x0347, 0x051A, 0x365C, 0x6063, 0x4009, 0x4008, 0x4000, 0x000B, 0x0009, 0x0009, 0x0000, 0x1016, 0x0000, 0x1000 } },
+            { "t165", { 0x4415, 0x0129, 0xD208, 0xD309, 0x0217, 0x061A, 0xE401, 0x3418, 0x0347, 0x051A, 0x365C, 0x6063, 0x4009, 0x4009, 0x4008, 0x4008, 0x7001, 0x000B, 0x0009, 0x0009, 0x0600, 0x9052, 0x0600, 0x9020 } },
+            { "t209", { 0x3457, 0x0129, 0xD206, 0xD307, 0x0217, 0x061A, 0xE401, 0x3418, 0x0347, 0x051A, 0x365C, 0x6063, 0x4009, 0x4008, 0x000B, 0x0009, 0x0000, 0x1012, 0x0000, 0x1000 } },
+            { "t237", { 0x3477, 0x0129, 0xD207, 0xD308, 0x0217, 0x061A, 0xE401, 0x3418, 0x0347, 0x051A, 0x365C, 0x6063, 0x4009, 0x4008, 0x4001, 0x000B, 0x0009, 0x0009, 0x0600, 0x9042, 0x0600, 0x9010 } },
+            { "t238", { 0x4515, 0x0129, 0xD207, 0xD308, 0x0217, 0x061A, 0xE401, 0x3418, 0x0347, 0x051A, 0x365C, 0x6063, 0x4009, 0x4008, 0x7001, 0x000B, 0x0009, 0x0009, 0x0000, 0x0101, 0x0000, 0x0100 } },
+            { "t246", { 0x2458, 0x0129, 0xD208, 0xD309, 0x0217, 0x061A, 0xE401, 0x3418, 0x0347, 0x051A, 0x365C, 0x6063, 0x4009, 0x4009, 0x4008, 0x4008, 0x7001, 0x000B, 0x0009, 0x0009, 0x0000, 0x011A, 0x0000, 0x0100 } },
+            { "t268", { 0x4515, 0x0129, 0xD207, 0xD308, 0x0217, 0x061A, 0xE401, 0x3418, 0x0347, 0x051A, 0x365C, 0x6063, 0x4009, 0x4008, 0x4000, 0x000B, 0x0009, 0x0009, 0x0600, 0x902E, 0x0600, 0x8FFC } },
+            { "t291", { 0x4411, 0x0129, 0xD206, 0xD307, 0x0217, 0x061A, 0xE401, 0x3418, 0x0347, 0x051A, 0x365C, 0x6063, 0xC903, 0x4001, 0x000B, 0x0009, 0x0601, 0x901A, 0x0600, 0x9018 } },
+            { "t314", { 0x3460, 0x0129, 0xD206, 0xD307, 0x0217, 0x061A, 0xE401, 0x3418, 0x0347, 0x051A, 0x365C, 0x6063, 0x600C, 0x7001, 0x000B, 0x0009, 0x0600, 0x9008, 0x0600, 0x9000 } },
+            { "t315", { 0x4411, 0x0129, 0xD206, 0xD307, 0x0217, 0x061A, 0xE401, 0x3418, 0x0347, 0x051A, 0x365C, 0x6063, 0x4019, 0x4018, 0x000B, 0x0009, 0x0000, 0x0116, 0x0000, 0x0100 } },
+            { "t330", { 0x4415, 0x0129, 0xD207, 0xD308, 0x0217, 0x061A, 0xE401, 0x3418, 0x0347, 0x051A, 0x365C, 0x6063, 0x4019, 0x4018, 0x4000, 0x000B, 0x0009, 0x0009, 0x0000, 0x00FE, 0x0000, 0x0100 } },
+            { "t388", { 0x3566, 0x0129, 0xD208, 0xD309, 0x0217, 0x061A, 0xE401, 0x3418, 0x0347, 0x051A, 0x365C, 0x6063, 0x4009, 0x4009, 0x4008, 0x4008, 0x7001, 0x000B, 0x0009, 0x0009, 0x0000, 0x0028, 0x0000, 0x0020 } },
+            { "t397", { 0x4415, 0x0129, 0xD206, 0xD307, 0x0217, 0x061A, 0xE401, 0x3418, 0x0347, 0x051A, 0x365C, 0x6063, 0x600C, 0x7001, 0x000B, 0x0009, 0x0000, 0x0202, 0x0000, 0x0100 } },
+        };
+        const std::vector<std::vector<uint32_t>> inputs = { { 0, 0, 0, 0 }, { 1, 0, 0, 0 }, { 0, 1, 0, 0 }, { 5, 3, 1, 2 }, { 0xFFFFFFFFu, 1, 7, 9 },
+                                                            { 0x80000000u, 0x7FFFFFFFu, 3, 3 }, { 7, 7, 7, 7 }, { 2, 9, 0xFFFFFFFEu, 5 } };
+        int agree = 0;
+        for (const Family& fam : families)
+        {
+            const R8Outcome o = R8Check(d, fam.name, fam.code, inputs, "", {}, ++serial);
+            if (o.verdict != "agrees") std::printf("  A2-47 family %s: %s %s\n", fam.name, o.verdict.c_str(), o.detail.c_str());
+            CHECK(o.verdict == "agrees");
+            agree += o.verdict == "agrees" ? 1 : 0;
+        }
+        std::printf("A2 round 8, the A2-47 family in ordinary code: %d of %zu fixtures agree with the run\n", agree, families.size());
+    }
+    // ---- (4) mac.l and mac.w by value (round 7 left them to a hand reading) ----
+    {
+        // mova @(7,pc),r0 ; mov r0,r4 ; mova @(7,pc),r0 ; mov r0,r5 ; lds r6,mach ; lds r7,macl ; mov #S,r0 ; ldc r0,sr ; mac.x @r4+,@r5+ ;
+        // sts mac?,r0 ; rts ; nop ; padding ; the two operands at 0x20 and 0x24. The accumulator is MACH:MACL = r6:r7. S is SR bit 1: the saturation.
+        // The evaluator reads the operands as the globals the engine names by their addresses (Entry::readCode); the saturation is the printer's
+        // `if (A && (v = K, B)) { v = X; }` (R8FlattenCommaCondition).
+        const uint32_t kL[] = { 0, 1, 0xFFFFFFFFu, 0x7FFFFFFFu, 0x80000000u, 0x00010000u, 0x12345678u, 0xFFFF8000u };
+        const uint32_t kW[] = { 0, 1, 0xFFFF, 0x7FFF, 0x8000, 0x00FF, 0x1234, 0x4000 };
+        const std::pair<uint32_t, uint32_t> acc[] = { { 0, 0 }, { 0, 1 }, { 0, 0xFFFFFFFFu }, { 0xFFFFFFFFu, 0xFFFFFFFFu }, { 0, 0x7FFFFFFFu }, { 0, 0x80000000u },
+                                                      { 0x7FFF, 0xFFFFFFFFu }, { 0xFFFF8000u, 0 }, { 0x7FFF, 0x7FFFFFFFu }, { 0xFFFF8000u, 0x80000000u },
+                                                      { 0x80000000u, 0 }, { 0x7FFFFFFFu, 0xFFFFFFFFu }, { 1, 0 }, { 0xFFFFFFFFu, 0 }, { 0x8000, 0 },
+                                                      { 0xFFFF7FFFu, 0xFFFFFFFFu }, { 0x7FFF, 0xFFFF8000u } };
+        std::vector<std::vector<uint32_t>> inputs;
+        for (const auto& a : acc) inputs.push_back({ 0, 0, a.first, a.second });
+        int fixtures = 0, agree = 0;
+        for (int wide = 0; wide < 2; ++wide)
+            for (int sat = 0; sat < 2; ++sat)
+                for (int high = 0; high < 2; ++high)
+                    for (uint32_t a : (wide ? kL : kW))
+                        for (uint32_t b : (wide ? kL : kW))
+                        {
+                            std::vector<uint16_t> w = { 0xC707, 0x6403, 0xC707, 0x6503, 0x460A, 0x471A, static_cast<uint16_t>(sat ? 0xE002 : 0xE000), 0x400E,
+                                                        static_cast<uint16_t>(wide ? 0x054F : 0x455F), static_cast<uint16_t>(high ? 0x000A : 0x001A), 0x000B, 0x0009 };
+                            w.resize(16, 0x0009);
+                            if (wide) w.insert(w.end(), { uint16_t(a >> 16), uint16_t(a), uint16_t(b >> 16), uint16_t(b) });
+                            else w.insert(w.end(), { uint16_t(a), 0, uint16_t(b), 0 });
+                            char name[96];
+                            std::snprintf(name, sizeof name, "mac.%c S=%d %s a=%x b=%x", wide ? 'l' : 'w', sat, high ? "mach" : "macl", a, b);
+                            const R8Outcome o = R8Check(d, name, w, inputs, "c", {}, ++serial);
+                            ++fixtures;
+                            if (o.verdict != "agrees" && o.verdict != "agrees-global") std::printf("  %s: %s %s\n", name, o.verdict.c_str(), o.detail.c_str());
+                            CHECK(o.verdict == "agrees" || o.verdict == "agrees-global");
+                            agree += o.verdict == "agrees" || o.verdict == "agrees-global" ? 1 : 0;
+                        }
+        std::printf("A2 round 8, mac.l and mac.w by value: %d of %d fixtures agree with the run (%zu accumulators each)\n", agree, fixtures, inputs.size());
+    }
+    // ---- (5) A2-52 (P1): the A2-47 family that patch 0046 left ----
+    {
+        // A sum of terms over shared variables, `c + 8 * x + 4 * y + 14 * x` (constants from the literal pool, `mul.l`, `sts macl`), read through a mask
+        // (`shlr2 ; shll2`). RuleCollectTerms combines the two x terms: it zeroes the coefficient of one (the op that held `8 * x` is now `c + 0`) and puts
+        // `22 * x` in the other. Patch 0046 reset the non-zero mask of the output of each op whose input it replaces, and that was those two; the partial
+        // sum between them (`+ 4 * y`) read the first as a multiple of 8, was a multiple of 4, and is not now (22 * x is 2 mod 4), but kept the mask
+        // 0xfffffffc and so was the op RuleAndMask read when it removed the mask as redundant. The text dropped it: `x * 0x16 + 0x100 + y * 4`
+        // for r4 = 1, r6 = 0 is 0x116, the code returns 0x114. Patch 0049 forgets the mask of everything downstream of a changed input that had
+        // one narrower than its size, and the mask is in the text again: every fixture must AGREE with the run now (the pins held the wrong text, and
+        // every one differed, before the fix).
+        const std::vector<Family> wrong = {
+            { "A2-52 c + 8x + 4y + 14x, shlr2 ; shll2", { 0xD008, 0xD309, 0x0347, 0x031A, 0x303C, 0xD308, 0x0367, 0x031A, 0x303C, 0xD307, 0x0347, 0x031A, 0x303C, 0x4009, 0x4008, 0x000B, 0x0009, 0x0009, 0x0000, 0x0100, 0x0000, 0x0008, 0x0000, 0x0004, 0x0000, 0x000E } },
+            { "termgen 0", { 0xD00A, 0xD30B, 0x0367, 0x031A, 0x303C, 0x6353, 0x4308, 0x4308, 0x303C, 0xD308, 0x0347, 0x031A, 0x303C, 0xD307, 0x0367, 0x031A, 0x303C, 0x4009, 0x4008, 0x000B, 0x0009, 0x0009, 0x0000, 0x0100, 0x0000, 0x0010, 0x0000, 0x0008, 0x0000, 0x0012 } },
+            { "termgen 1", { 0xD008, 0xD309, 0x0347, 0x031A, 0x303C, 0xD308, 0x0367, 0x031A, 0x303C, 0xD307, 0x0347, 0x031A, 0x303C, 0x4009, 0x4008, 0x000B, 0x0009, 0x0009, 0x0000, 0x0100, 0x0000, 0x0008, 0x0600, 0x9008, 0x0600, 0x900E } },
+            { "termgen 2", { 0x2468, 0x0129, 0xD00A, 0x6343, 0x4308, 0x4308, 0x303C, 0x6313, 0x4308, 0x4308, 0x303C, 0xD307, 0x0367, 0x031A, 0x303C, 0xD306, 0x0347, 0x031A, 0x303C, 0xD305, 0x2039, 0x000B, 0x0009, 0x0009, 0x0000, 0x0000, 0x0000, 0x0008, 0xFFFF, 0xFFFA, 0xFFFF, 0xFFFC } },
+            { "termgen 3", { 0x2678, 0x0129, 0x3673, 0x0229, 0xD00A, 0xD30B, 0x0317, 0x031A, 0x303C, 0xD30A, 0x0357, 0x031A, 0x3038, 0xD309, 0x0367, 0x031A, 0x3038, 0xD308, 0x0357, 0x031A, 0x303C, 0xC903, 0x4000, 0x000B, 0x0009, 0x0009, 0x0000, 0x0000, 0x0000, 0x0004, 0x0000, 0x00B8, 0xFFFF, 0xFFFC, 0x0600, 0x900A } },
+            { "termgen 4", { 0x3456, 0x0129, 0xD00A, 0xD30B, 0x0317, 0x031A, 0x3038, 0xD30A, 0x0367, 0x031A, 0x303C, 0xD309, 0x0347, 0x031A, 0x3038, 0xD308, 0x0317, 0x031A, 0x303C, 0xD307, 0x2039, 0x000B, 0x0009, 0x0009, 0x0000, 0x0000, 0x0000, 0x0048, 0x0000, 0x001C, 0x0000, 0x0024, 0x0000, 0x0001, 0xFFFF, 0xFFFC } },
+            { "termgen 5", { 0xD00A, 0xD30B, 0x0357, 0x031A, 0x303C, 0xD30A, 0x0357, 0x031A, 0x303C, 0xD309, 0x0347, 0x031A, 0x303C, 0xD308, 0x0357, 0x031A, 0x3038, 0xD307, 0x2039, 0x000B, 0x0009, 0x0009, 0x0000, 0x0010, 0x0000, 0x0014, 0xFFFF, 0xFFFA, 0x0000, 0x0024, 0x0000, 0x0001, 0xFFFF, 0xFFFE } },
+            { "termgen 6", { 0xD008, 0xD309, 0x0357, 0x031A, 0x303C, 0xD308, 0x0367, 0x031A, 0x303C, 0xD307, 0x0357, 0x031A, 0x303C, 0x4009, 0x4008, 0x000B, 0x0009, 0x0009, 0x0000, 0x0004, 0x0000, 0x0008, 0x0000, 0x0010, 0x0000, 0x0001 } }
+        };
+        const std::vector<std::vector<uint32_t>> inputs = { { 0, 0, 0, 0 }, { 1, 0, 0, 0 }, { 0, 1, 0, 0 }, { 1, 0, 1, 0 }, { 5, 3, 1, 2 },
+                                                            { 1, 0xFFFFFFFEu, 0x100, 0x7F7F7F7Fu }, { 7, 7, 7, 7 }, { 2, 9, 0xFFFFFFFEu, 5 },
+                                                            { 0x80000001u, 3, 5, 9 }, { 5, 2, 3, 1 } };
+        int differ = 0;
+        for (const Family& fam : wrong)
+        {
+            DecompileResult r;
+            const R8Outcome o = R8Check(d, fam.name, fam.code, inputs, "", {}, ++serial, 0x06009000u, &r);
+            if (o.verdict != "agrees") std::printf("  A2-52 pin %s: %s %s\n", fam.name, o.verdict.c_str(), o.detail.c_str());
+            Print(fam.name, r);
+            CHECK(o.verdict == "agrees");
+            differ += o.verdict == "agrees" ? 1 : 0;
+            if (std::strncmp(fam.name, "A2-52 c + 8x", 12) == 0) CHECK(Has(r.Text(), "& 0xfffffffc"));   // the mask the sum is read through is in the text
+        }
+        std::printf("A2 round 8, A2-52 (the A2-47 family beyond patch 0046): %d of %zu fixtures agree with the run\n", differ, wrong.size());
+    }
+    // ---- (6) the spec's decompiler-only lines ----
+    // Mutants of superh.sinc that survived the decode oracle (its emulator does not run the op, or compares registers, not text), Sh2SemanticsTests
+    // and the whole of Sh2DecompilerTests before these pins: deleting `Write_VBR(rm)` from `ldc Rm,VBR`, `Write_VBR(value)` from `ldc.l @Rm+,VBR`,
+    // `Write_SR(value)` from `ldc.l @Rm+,SR`, and `r15 = r15 + 8` after trapa's call (deleted, or `- 8`). Each changes the printed text: the write
+    // is no longer shown, or the word pushed before a trap is read back from the wrong stack slot after it.
+    {
+        auto text = [&](const char* name, std::vector<uint16_t> code) {
+            auto snap = CallSnapshot({ name, 0x06009000u, std::move(code) }, ++serial);
+            const DecompileResult r = d.Decompile(snap, Request(0x06009000u));
+            Print(name, r);
+            CHECK(r.status == DecompileStatus::Ok);
+            return r.Text();
+        };
+        CHECK(Has(text("ldc r4,vbr", { 0x442E, 0x000B, 0x0009 }), "Write_VBR(param_1);"));
+        CHECK(Has(text("ldc.l @r4+,vbr", { 0x4427, 0x000B, 0x0009 }), "Write_VBR(*param_1);"));
+        CHECK(Has(text("ldc.l @r4+,sr", { 0x4407, 0x000B, 0x0009 }), "Write_SR(*param_1 & 0x3f3);"));
+        // mov.l r4,@-r15 ; trapa #5 ; mov.l @r15+,r0 ; rts ; nop: the trap pushes SR and PC and its handler's rte pops them, so r15 is where it was and the
+        // word read back is r4. The run (the handler at kRunHandler is rte ; nop) returns r4; the text must say so.
+        const R8Outcome o = R8Check(d, "push r4 ; trapa #5 ; pop r0", { 0x2F46, 0xC305, 0x60F6, 0x000B, 0x0009 }, { { 5 }, { 0x1234 }, { 0xFFFFFFFFu } }, "", {}, ++serial);
+        if (o.verdict != "agrees") std::printf("  trapa: %s %s\n", o.verdict.c_str(), o.detail.c_str());
+        CHECK(o.verdict == "agrees");
+    }
+    // ---- (7) A2-56 (P1): a consume mask that the common-subexpression merge left behind ----
+    {
+        // addc r6,r4 ; movt r5 ; dmuls.l r0,r4 ; stc sr,r2 ; cmp/str r2,r6 ; bf over the next two ; stc sr,r5 ; sts macl,r4 ; rts ; mov r5,r0 (generator seed 965717).
+        // The low byte of SR is read twice, once through `& 1` (the T bit of the carry chain) and once whole (cmp/str compares bytes): the two SUBPIECEs
+        // are equal and RuleSelectCse merged them with Funcdata::totalReplace, which re-pointed the readers and did not merge the consume masks, so the
+        // survivor kept the 0x01 of the reader that was there first. The next ActionVarnodeProps (the first action of the main loop, before ActionDeadCode
+        // recomputes the masks) replaces any varnode whose non-zero mask and consume mask do not meet by a zero: the byte was printed as 0, and the
+        // text compared `(bool)(char)param_3` where the code compares the whole byte `(uint1)(in_sr_low | carry) == (uint1)param_3`. The run returns 1 where
+        // the text returned 0x203 for SR = 0x202. Patch 0051 makes totalReplace OR the replaced varnode's consume mask into the survivor's.
+        auto snap = CallSnapshot({ "consume", 0x06009000u, { 0x346F, 0x0529, 0x340F, 0x0202, 0x262C, 0x8B01, 0x0502, 0x041A, 0x000B, 0x6053 } }, ++serial);
+        const DecompileResult r = d.Decompile(snap, Request(0x06009000u));
+        Print("A2-56: cmp/str on the SR byte after addc", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(!Has(r.Text(), "== (bool)(char)param_3"));   // the defect was a compare of the bool with the byte
+        CHECK(Has(r.Text(), "(uint1)param_3"));            // the byte is compared whole
+        // The value is the printed-C differential's (the fixture "A2-56 ..." of `kPrintedCFixtures`): it runs SR through the inputs, which this
+        // suite's call oracle does not (SR is 0 on entry).
+    }
+    // ---- (3) A2-53 ----
+    {
+        // mov r15,r0 ; and #0xFF,r0: r15 on entry is whatever the caller had (the run's is 0x0600F000, 256-aligned, so the run cannot tell). The engine
+        // took the stack pointer on entry to be aligned to 256 (Funcdata::calcNZMask: "Treat spacebase input as aligned") and printed `return 0;`;
+        // the code returns the low byte of r15. Patch 0053 takes it to be aligned to a longword, which the SH-2 requires of a stack that is pushed with
+        // `mov.l Rm,@-r15` (an address error otherwise) and both compilers' ABIs promise: the text keeps the dependence on r15.
+        auto snap = CallSnapshot({ "sp", 0x06009000u, { 0x60F3, 0xC9FF, 0x000B, 0x0009 } }, ++serial);
+        const DecompileResult r = d.Decompile(snap, Request(0x06009000u));
+        Print("A2-53: mov r15,r0 ; and #0xff,r0", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(!Has(r.Text(), "return 0;"));
+        CHECK(Has(r.Text(), "& 0xff;"));   // the low byte of the stack pointer, not a constant
+        // The same assumption through the idiom that rounds a pointer up to 8: `mov r15,r0 ; add #7,r0 ; mov #-8,r1 ; and r1,r0`. A 4-aligned stack
+        // pointer that is 4 mod 8 gives r15 + 4; the AND is not redundant for it, and the text keeps the rounding.
+        auto snap2 = CallSnapshot({ "sp", 0x06009000u, { 0x60F3, 0x7007, 0xE1F8, 0x2019, 0x000B, 0x0009 } }, ++serial);
+        const DecompileResult r2 = d.Decompile(snap2, Request(0x06009000u));
+        Print("A2-53: mov r15,r0 ; add #7,r0 ; and #-8", r2);
+        CHECK(!Has(r2.Text(), "return &xStack00000000;"));
+        CHECK(Has(r2.Text(), "& 0xfffffff8"));
+        // ...and `(r15 - 5) & 0x1c`: bits 2 to 4 of the stack pointer, printed as the constant 0x18
+        auto snap3 = CallSnapshot({ "sp", 0x06009000u, { 0x7FFB, 0x60F3, 0xC91C, 0x7F05, 0x000B, 0x0009 } }, ++serial);
+        const DecompileResult r3 = d.Decompile(snap3, Request(0x06009000u));
+        Print("A2-53: add #-5,r15 ; mov r15,r0 ; and #0x1c,r0", r3);
+        CHECK(!Has(r3.Text(), "return 0x18;"));
+        CHECK(Has(r3.Text(), "& 0x1c;"));
+        // What a longword-aligned stack pointer does decide stays decided: the two low bits are clear (`and #3`), and a frame rounded to 4 is no-op.
+        auto snap4 = CallSnapshot({ "sp", 0x06009000u, { 0x60F3, 0xC903, 0x000B, 0x0009 } }, ++serial);
+        const DecompileResult r4 = d.Decompile(snap4, Request(0x06009000u));
+        Print("A2-53 control: mov r15,r0 ; and #3,r0", r4);
+        CHECK(Has(r4.Text(), "return 0;"));
+    }
+}
+
+// ---- Area 2, round 9 ---------------------------------------------------------------------------------------------------------------------------
+// (1) A2-58 (P1): RulePushMulti moves a reader onto an existing MULTIEQUAL whose consume mask was worked out without that reader. Each predecessor of a
+// join makes `r1 = src & 0x80000000` and a second value from it (`r2 = r1 + 1`, or the test `tst r1,r1`); the join reads the phi of r1 through a few low
+// bits and the phi of the second value whole. The engine merges the two second-value computations into one, in the join, reading the phi of r1 (the
+// op `Funcdata::opSetInput` re-points at an existing Varnode: patch 0051 covers `totalReplace` and not this). That phi keeps the consume mask of its
+// first readers (0xff, 0x3fffffff), and its non-zero mask is the sign bit alone, so the next ActionVarnodeProps (first in the main loop, before
+// ActionDeadCode works the masks out again) replaces it by a zero: `return 1;` for r1 + 1, `return 0xffffffff;` for -(r1 == 0). The two texts below are
+// WRONG; the pins hold them so that a fix flips them (flip the `differs` and the two text checks with it). The values are the printed-C differential's
+// (`SE_GENERATED_PRINTEDC_WORDS`), which the A2-58 row replays; the controls read the join whole and agree already.
+void TestArea2Round9()
+{
+    Sh2Decompiler d(gConfig);
+    uint64_t serial = 50000;
+    {
+        // mov #1,r3 ; rotr r3 (r3 = 0x80000000) ; cmp/pl r4 ; bt B ; A: mov r5,r1 ; and r3,r1 ; mov r1,r2 ; add #1,r2 ; bra J ; nop ;
+        // B: mov r6,r1 ; and r3,r1 ; mov r1,r2 ; add #1,r2 ; J: mov r1,r0 ; extu.b r0,r0 ; or r2,r0 ; rts ; nop. The code returns r1 + 1 (r1 is 0 or 0x80000000).
+        const std::vector<uint16_t> words = { 0xE301, 0x4305, 0x4415, 0x8905, 0x6153, 0x2139, 0x6213, 0x7201, 0xA004, 0x0009, 0x6163, 0x2139, 0x6213, 0x7201,
+                                              0x6013, 0x600C, 0x202B, 0x000B, 0x0009, 0x0009 };
+        DecompileResult r;
+        const R8Outcome o = R8Check(d, "A2-58 add", words, { { 0, 0x80000001u, 0xFFu }, { 0, 0x7FFFFFFFu, 0x80000000u }, { 5, 0x0u, 0x80000000u } }, "", {}, ++serial, 0x06009000u, &r);
+        Print("A2-58: r1 = src & 0x80000000 in both arms, r2 = r1 + 1, join reads r1 low byte and r2", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        // Fixed by patch 0054: the phi of r1 that RulePushMulti points the merged add at is consumed in every bit the add takes, and so
+        // are the two `src & 0x80000000` above it, which RuleAndMask then keeps. Was `return 1;` with no parameter (the verdict `differs`).
+        CHECK(o.verdict == "agrees");
+        CHECK(!Has(r.Text(), "return 1;"));
+        CHECK(Has(r.Text(), "return (param_3 & 0x80000000) + 1;"));
+    }
+    {
+        // the same with the test: tst r1,r1 in each arm, the join returns -T (shll2 r0 ; movt r2 ; sub r2,r0): the code returns 0 when the chosen source has
+        // its sign bit set, and -1 when it has not; the text returns -1 always
+        const std::vector<uint16_t> words = { 0xE301, 0x4305, 0x4411, 0x8904, 0x6153, 0x2139, 0x2118, 0xA003, 0x0009, 0x6163, 0x2139, 0x2118, 0x6013, 0x4008,
+                                              0x0229, 0x3028, 0x000B, 0x0009 };
+        DecompileResult r;
+        const R8Outcome o = R8Check(d, "A2-58 tst", words, { { 2, 0x7FFFu, 0xFFFF8000u }, { 0, 0x7FFFu, 0xFFFF8000u }, { 2, 0x80000000u, 0u } }, "", {}, ++serial, 0x06009000u, &r);
+        Print("A2-58: tst r1,r1 in both arms, the join returns -T of the test", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        // Fixed by patch 0054 (was `return 0xffffffff;`, the verdict `differs`: r4 = 2 reads r6 = 0xFFFF8000, whose sign bit is set, and the code returns 0)
+        CHECK(o.verdict == "agrees");
+        CHECK(!Has(r.Text(), "return 0xffffffff;"));
+        CHECK(Has(r.Text(), "(param_3 & 0x80000000) == 0"));
+    }
+    {
+        // control: the join reads r1 whole (no extu.b): the phi is consumed in every bit and nothing is lost
+        const std::vector<uint16_t> words = { 0xE301, 0x4305, 0x4415, 0x8905, 0x6153, 0x2139, 0x6213, 0x7201, 0xA004, 0x0009, 0x6163, 0x2139, 0x6213, 0x7201,
+                                              0x6013, 0x202B, 0x000B, 0x0009 };
+        DecompileResult r;
+        const R8Outcome o = R8Check(d, "A2-58 control", words, { { 0, 0x80000001u, 0xFFu }, { 0, 0x7FFFFFFFu, 0x80000000u }, { 5, 0x0u, 0x80000000u } }, "", {}, ++serial, 0x06009000u, &r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(o.verdict == "agrees");
+    }
+    // ---- (2) A2-59 (P2): a counted loop that ANDs a constant-seeded accumulator with a value assembled from the pieces of a register ----
+    // mov #4,r1 ; L: swap.b r2,r3 ; and r3,r1 ; dt r6 ; bf L ; rts ; mov r1,r0. Patch 0049 forgot the non-zero mask of the phi of r1 after the first
+    // RuleAndDistribute (`r1 & (A | B)` into `(A & r1) | (B & r1)`), so the second distribution of the nest (the mask `0x4` it keys on was gone) did not
+    // fire in the pass and RuleHumptyOr merged the first one back; ActionNonzeroMask worked the mask out again at the next pass and the two rules undid
+    // each other for ever (about 44 MB of operations a second), until the cancel flag. Patch 0054 forgets nothing that is still true (the
+    // distribution keeps the value, and the phi its `0x4`), and patch 0055 bounds the passes of a repeating action. The request runs against a cancel
+    // flag raised after 30 s, so that a regression fails here instead of hanging the suite; it must finish, settled: no warning of the bound, the
+    // signature not withheld for it. (The other three words of the row: swap.w, a shift and a swap, xtrct.)
+    {
+        struct Loop
+        {
+            const char* name;
+            std::vector<uint16_t> words;
+        };
+        const Loop loops[] = { { "A2-59 swap.b", { 0xE104, 0x6328, 0x2139, 0x4610, 0x8BFB, 0x000B, 0x6013, 0x0009 } },
+                               { "A2-59 swap.w", { 0xE104, 0x6329, 0x2139, 0x4610, 0x8BFB, 0x000B, 0x6013, 0x0009 } },
+                               { "A2-59 shlr8 ; swap.b", { 0xE11C, 0xE601, 0x6323, 0x4319, 0x6338, 0x2139, 0x4610, 0x8BF9, 0x000B, 0x6013, 0x000B, 0x6033 } },
+                               { "A2-59 xtrct", { 0xE601, 0xE17F, 0x222B, 0x200D, 0x2109, 0x4610, 0x8BFA, 0x4308, 0x6023, 0x000B, 0x0009, 0x0009 } } };
+        for (const Loop& loop : loops)
+        {
+            auto snap = CallSnapshot({ loop.name, 0x06009000u, loop.words }, ++serial);
+            std::atomic<bool> cancel(false), done(false);
+            std::thread stopper([&cancel, &done] {
+                for (int i = 0; i < 3000 && !done; ++i) std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                cancel = true;
+            });
+            const auto start = std::chrono::steady_clock::now();
+            const DecompileResult r = d.Decompile(snap, Request(0x06009000u), &cancel);
+            done = true;
+            stopper.join();
+            const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+            std::printf("%s: status %d, %.1f ms\n", loop.name, static_cast<int>(r.status), ms);
+            Print(loop.name, r);
+            bool bounded = false;
+            for (const std::string& w : r.warnings) bounded |= Has(w, "Exceeded maximum repeats");
+            CHECK(r.status == DecompileStatus::Ok);
+            CHECK(!bounded);
+            CHECK(!Has(r.prototypeWithheld, "did not settle"));   // (withheld for reading r2 on entry, which no signature passes)
+            CHECK(Has(r.Text(), "while ("));
+        }
+        // (By value they are printed-C fixtures of Sh2GeneratedTests, `A2-59 ...`: this evaluator does not run loops.)
+    }
+    // ---- (3) patch 0055: a repeating action that does not settle stops, says so, and the signature is withheld ----
+    {
+        // The bound lowered to 2 passes for the A2-58 join (whose rule pool needs more): the text is still printed (every pass keeps the meaning of the
+        // function), the engine's warning is passed on, and the signature is withheld as for the restart limit. With the bound at the engine's own
+        // (300 passes; the most any function of the two game images needs is 60, of the rule pool) nothing is said.
+        const std::vector<uint16_t> words = { 0xE301, 0x4305, 0x4415, 0x8905, 0x6153, 0x2139, 0x6213, 0x7201, 0xA004, 0x0009, 0x6163, 0x2139, 0x6213, 0x7201,
+                                              0x6013, 0x600C, 0x202B, 0x000B, 0x0009, 0x0009 };
+        Sh2Decompiler::SetActionRepeatLimitForTests(2);
+        const DecompileResult r = d.Decompile(CallSnapshot({ "0055 bound", 0x06009000u, words }, ++serial), Request(0x06009000u));
+        Sh2Decompiler::SetActionRepeatLimitForTests(0);
+        Print("0055: the passes of one action bounded to 2", r);
+        bool bounded = false;
+        for (const std::string& w : r.warnings) bounded |= Has(w, "Exceeded maximum repeats of ");
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(bounded);
+        CHECK(r.prototypeWithheld == "the analysis did not settle (repeat limit)");
+        CHECK(Has(r.Text(), "return"));
+        const DecompileResult again = d.Decompile(CallSnapshot({ "0055 bound", 0x06009000u, words }, ++serial), Request(0x06009000u));
+        bounded = false;
+        for (const std::string& w : again.warnings) bounded |= Has(w, "Exceeded maximum repeats");
+        CHECK(again.status == DecompileStatus::Ok && !bounded && again.prototypeWithheld.empty());
+        EngineWarning w = ClassifyEngineWarning("WARNING: Exceeded maximum repeats of mainloop with changes still pending");
+        CHECK(w.keep && w.repeatLimit && !w.restartLimit);
+        w = ClassifyEngineWarning("WARNING (jumptable): Exceeded maximum repeats of oppool1 with changes still pending");
+        CHECK(!w.keep);   // the scratch copy's own analysis, as every warning of it that is not about the table
+    }
+}
+
+// ===== Area 3, round 10 review: the controls of the round's rows that hold today =============================================================
+// The round's findings (A3-66 to A3-75) are wrong outputs and are in the ledger with their fixtures, not here. These are the shapes beside them that
+// the engine and the host get right, so a fix that moves the exceptions of the return rule (the nothing-known value, the interrupt-mask SR, the part
+// of a register), the walk of a callee (A3-61) or patch 0056's stepping down does not take them with it.
+void TestArea3Round10()
+{
+    Sh2Decompiler d(gConfig);
+    uint64_t serial = 100000;
+    const uint32_t base = 0x06009000u, gAt = 0x06009040u;
+    const std::vector<std::vector<uint32_t>> inputs = { { 0x11111111u, 0x22222222u, 0x0600B000u, 0x44444444u },
+                                                        { 0x00000000u, 0x00000001u, 0x0600B000u, 0x80000000u } };
+    auto withheld = [&](const char* name, std::vector<uint16_t> words, const char* reason) {
+        const CallFixture f = { name, base, std::move(words) };
+        auto snap = CallSnapshot(f, ++serial);
+        const DecompileResult r = d.Decompile(snap, Request(f.base));
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(!r.prototype.known && Has(r.prototypeWithheld, reason));
+    };
+    // The callee at 0x06009040 is decompiled first and lent to the caller.
+    auto together = [](std::vector<uint16_t> caller, const std::vector<uint16_t>& callee) {
+        caller.resize(32, 0x0009);
+        caller.insert(caller.end(), callee.begin(), callee.end());
+        return caller;
+    };
+    auto lentCallee = [&](const char* name, std::vector<uint16_t> words, bool* callerKnown, std::string* text, bool* agrees) {
+        const CallFixture f = { name, base, std::move(words) };
+        auto snap = CallSnapshot(f, ++serial);
+        const DecompileResult callee = d.Decompile(snap, Request(gAt));
+        CHECK(callee.status == DecompileStatus::Ok && callee.prototype.known);
+        DecompileRequest q = Request(f.base);
+        q.prototypes.emplace_back(gAt, callee.prototype);
+        const DecompileResult r = d.Decompile(snap, q);
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok);
+        if (callerKnown) *callerKnown = r.prototype.known;
+        if (text) *text = r.Text();
+        if (agrees) *agrees = PseudoAgreesWithRun(r, snap, f, inputs);
+        return r;
+    };
+    // A text for a function with a loop (the evaluator has none): the local the walk wrote is returned, not the value stored before the walk, and the
+    // stack register does not appear.
+    auto walkText = [&](const char* name, std::vector<uint16_t> words, const char* want) {
+        const CallFixture f = { name, base, std::move(words) };
+        const DecompileResult r = d.Decompile(CallSnapshot(f, ++serial), Request(f.base));
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(Has(r.Text(), want) && !Has(r.Text(), "return 5;") && !Has(r.Text(), "register0x0000003c"));
+    };
+
+    // ---- A3-66, A3-67: a stack word at a frame offset the check can place, and a hidden register next to a constant or a loaded word ------------
+    withheld("a3_66 control: the stack word at +20 by add #20", { 0x62F3, 0x7214, 0x6022, 0x210B, 0x000B, 0x0009 },
+             "its return is computed from a stack argument");
+    withheld("a3_66 control: r3 or a constant, chosen by r4 (held)", { 0xE201, 0x2422, 0x2448, 0x8902, 0x6033, 0xA001, 0x0009, 0xE009, 0x000B, 0x0009 },
+             "its return is computed from r3 on entry");
+    withheld("a3_66 control: r3 or a word loaded through the held r4", { 0xE201, 0x2422, 0x2448, 0x8902, 0x6033, 0xA001, 0x0009, 0x6042, 0x000B, 0x0009 },
+             "its return is computed from r3 on entry");
+    withheld("a3_67 control: cmp/eq r3 with a constant chooses", { 0xE201, 0x2422, 0xE207, 0x3230, 0x8903, 0xE001, 0x210B, 0xA002, 0x0009, 0xE002, 0x210B, 0x000B, 0x0009, 0x0009 },
+             "its return is chosen by r3 on entry");
+
+    // ---- A3-68, A3-69: a part of r3 is still r3; the T flag as movt; a value held in r0 across a callee that keeps it ----------------------------
+    withheld("a3_68 control: extu.b r3,r0 ; or r0,r1", { 0x603C, 0x210B, 0x000B, 0x0009 }, "its return is computed from r3 on entry");
+    withheld("a3_69 control: movt r0 ; or r0,r1", { 0x0029, 0x210B, 0x000B, 0x0009 }, "its return is computed from the T flag on entry");
+    {
+        bool known = true;
+        lentCallee("a3_68 control: r0 = 5 held across a callee that keeps r0",
+                   together({ 0x4F22, 0xE005, 0xD102, 0x410B, 0x0009, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9040 }, { 0xE207, 0x000B, 0x0009, 0x0009 }), &known,
+                   nullptr, nullptr);
+        CHECK(!known);
+    }
+
+    // ---- A3-71: a lent callee that walks UP from the address it is handed, and one that only reads below it ------------------------------------
+    {
+        bool known = false, agrees = false;
+        std::string text;
+        lentCallee("a3_71 control: the callee walks up from the pointer",
+                   together({ 0x4F22, 0x7FEC, 0xE005, 0x2F02, 0x64F3, 0xD104, 0x410B, 0x0009, 0x60F2, 0x7F14, 0x4F26, 0x000B, 0x0009, 0x0009, 0x0600, 0x9040 },
+                            { 0xE104, 0x2412, 0x7404, 0x4110, 0x8BFB, 0x000B, 0x0009, 0x0009 }),
+                   &known, &text, &agrees);
+        CHECK(known && agrees && !Has(text, "return 5;"));
+        lentCallee("a3_71 control: the callee reads the word below its pointer",
+                   together({ 0x4F22, 0x7FEC, 0xE005, 0x2F02, 0x64F3, 0x7404, 0xD103, 0x410B, 0x0009, 0x7F14, 0x4F26, 0x000B, 0x0009, 0x0009, 0x0600, 0x9040 },
+                            { 0x74FC, 0x6042, 0x000B, 0x0009 }),
+                   &known, &text, &agrees);
+        CHECK(agrees);
+    }
+
+    // ---- A3-72: steps that A3-65's patch covers: an if/else of steps, a conditional store, the pointer in a local; and a walk from the caller's frame --
+    walkText("a3_72 control: step 4 or 8 on the arms of an if", { 0x7FE0, 0x62F3, 0x7220, 0xE005, 0x2F02, 0xE103, 0x2448, 0x8902, 0x72FC, 0xA001, 0x0009, 0x72F8, 0x2212, 0x4110, 0x8BF6, 0x60F2, 0x7F20, 0x000B, 0x0009, 0x0009 },
+             "return xStack_20;");
+    walkText("a3_72 control: the step always, the store under a condition", { 0x7FF0, 0x62F3, 0x7210, 0xE005, 0x2F02, 0xE104, 0x72FC, 0x2448, 0x8900, 0x2212, 0x4110, 0x8BF9, 0x60F2, 0x7F10, 0x000B, 0x0009 },
+             "return xStack_10;");
+    walkText("a3_72 control: the pointer kept in a stack local", { 0x7FE8, 0x62F3, 0x7210, 0x1F24, 0xE005, 0x2F02, 0xE104, 0x52F4, 0x72FC, 0x1F24, 0x2212, 0x4110, 0x8BF9, 0x60F2, 0x7F18, 0x000B, 0x0009, 0x0009 },
+             "return xStack_18;");
+    withheld("a3_72 control: a walk from r15 + 16 goes into the caller's frame", { 0x7FF8, 0xE005, 0x2F02, 0x62F3, 0x7210, 0xE104, 0x2216, 0x4110, 0x8BFC, 0x60F2, 0x7F08, 0x000B, 0x0009, 0x0009 },
+             "it writes a word of its caller's frame");
+}
+// Area 2, round 10. A2-64 (P1), fixed by patch 0058: addv r0,r4 with the literal 0xAAAAAAAB in r4, T tested by bf: the code leaves r1 = 5 unless the
+// signed add overflows (r0 negative and the sum not), when it sets 7. RuleRangeMeld melds the boolean `(r0 s< 0) != 0xff` with `!(r0 s< 0)` by pulling
+// the first back through `r0 s< 0`; the range of a boolean that holds both 0 and 1 was left as [0,2) in the 4-byte space by
+// CircleRange::pullBackBinary (`bothTrueFalse`: the comment says all possible ins, the range was the two values 0 and 1), so the meld was `r0 < 2`
+// and the test printed `1 < param_1 && -1 < (int4)(param_1 + 0xaaaaaaab)`: true for r0 = 0x60000000, where the code does not overflow. The pull-back
+// is now the full range, and the test is `0x7fffffff < param_1 && ...`. The same literal as an immediate (mov #-3) printed the right test (the
+// control). The pull-back itself is held against brute force in SaturnExplorerSh2DecompilerEngineTests (TestPullBackRanges).
+void TestArea2Round10()
+{
+    Sh2Decompiler d(gConfig);
+    uint64_t serial = 60000;
+    {
+        const std::vector<uint16_t> words = { 0x6043, 0xD404, 0x340F, 0xE105, 0x8B00, 0xE107, 0x6013, 0x000B, 0x0009, 0x0009, 0xAAAA, 0xAAAB };
+        DecompileResult r;
+        const R8Outcome o = R8Check(d, "A2-64 addv literal", words, { { 0x60000000u }, { 0x80000000u }, { 0u }, { 0xFFFFFFFFu } }, "", {}, ++serial, 0x06009000u, &r);
+        Print("A2-64: addv with a literal in r4, T tested by bf", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(o.verdict == "agrees");   // r0 = 0x60000000 does not overflow: the text does not take the branch
+        CHECK(Has(r.Text(), "0x7fffffff < param_1 && -1 < (int4)(param_1 + 0xaaaaaaab)"));
+        CHECK(!Has(r.Text(), "1 < param_1 &&"));   // the meld that was [0,2) widened
+    }
+    // The family: addv and subv against pool literals, T tested by bf or bt (or read by movt), the literal in the destination register or the source.
+    // Each agrees with the run for inputs on both sides of every boundary the literal makes (the overflow and the unsigned wrap of the sum).
+    {
+        static const uint32_t kLits[] = { 0xAAAAAAABu, 0x80000001u, 0xF0000000u, 0x55555555u, 0x7FFFFFFFu, 0xC0000000u, 0x40000000u, 0xFFFFFFFDu, 1u };   // not 0x80000000: `-0x80000000 - param_1` is right as the engine reads it (printed-C: narrow-c) and not in this evaluator, which does not wrap it
+        static const uint32_t kIn[] = { 0x60000000u, 0x80000000u, 0u, 0xFFFFFFFFu, 0x7FFFFFFFu, 0x55555555u, 0x55555556u, 0xAAAAAAABu, 0xC0000000u, 0x40000000u, 0x7FFFFFFEu, 0x80000001u, 1u, 2u };
+        std::vector<std::vector<uint32_t>> inputs;
+        for (uint32_t v : kIn) inputs.push_back({ v });
+        int n = 0;
+        for (uint32_t lit : kLits)
+            for (int form = 0; form < 4; ++form)
+                for (int tail = 0; tail < 3; ++tail)
+                {
+                    // form 0, 1: mov r4,r0 ; mov.l @(lit),r4 ; addv / subv r0,r4 (the literal in the destination, the input copied to r0)
+                    // form 2, 3: mov.l @(lit),r0 ; addv / subv r4,r0 (the input is the parameter itself)
+                    // then bf / bt over `mov #7,r1` after `mov #5,r1` and the result `mov r1,r0`, or movt r0
+                    const bool copy = form < 2;
+                    std::vector<uint16_t> w;
+                    if (copy) { w.push_back(0x6043); w.push_back(0xD404); w.push_back(form == 0 ? 0x340F : 0x340B); }
+                    else { w.push_back(0xD004); w.push_back(form == 2 ? 0x304F : 0x304B); }
+                    if (tail < 2) { w.push_back(0xE105); w.push_back(tail ? 0x8900 : 0x8B00); w.push_back(0xE107); w.push_back(0x6013); }
+                    else w.push_back(0x0029);
+                    w.push_back(0x000B); w.push_back(0x0009);
+                    if (w.size() % 2) w.push_back(0x0009);
+                    const size_t load = copy ? 1 : 0, pool = w.size();   // the pool follows, on a longword
+                    w.push_back(static_cast<uint16_t>(lit >> 16)); w.push_back(static_cast<uint16_t>(lit & 0xFFFF));
+                    w[load] = static_cast<uint16_t>((w[load] & 0xFF00) | ((2 * pool - ((2 * load + 4) & ~static_cast<size_t>(3))) / 4));
+                    DecompileResult r;
+                    const R8Outcome o = R8Check(d, "A2-64 family " + std::to_string(n++), w, inputs, "", {}, ++serial, 0x06009000u, &r);
+                    CHECK(r.status == DecompileStatus::Ok);
+                    CHECK(o.verdict == "agrees");
+                    if (o.verdict != "agrees") std::printf("A2-64 family %d (literal %08X, form %d, tail %d): %s %s\n%s\n", n - 1, lit, form, tail, o.verdict.c_str(), o.detail.c_str(), r.Text().c_str());
+                }
+    }
+    {
+        const std::vector<uint16_t> words = { 0x6043, 0xE4FD, 0x340F, 0xE105, 0x8B00, 0xE107, 0x6013, 0x000B, 0x0009, 0x0009 };
+        DecompileResult r;
+        const R8Outcome o = R8Check(d, "A2-64 control immediate", words, { { 0x60000000u }, { 0x80000000u }, { 0u }, { 0xFFFFFFFFu } }, "", {}, ++serial, 0x06009000u, &r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(o.verdict == "agrees");
+        CHECK(Has(r.Text(), "0x7fffffff < param_1"));
+    }
+}
+
+
+// ===== Area 2, round 11 P3 fix (A2-68) ======================================================================
+// A switch over a scaled index with a signed lower bound: `mov #-2,r1 ; cmp/ge r1,r0 ; bf default ; cmp/hi ...`. The guard's range, intersected with the
+// stride of the value (a multiple of 4), was empty for a bound of -1, -2 or -3 (the left bound rounded from below zero past the top of the mask:
+// CircleRange::newStride), which ended the chain of guards, so the guard stayed around the switch (`if (-3 < param_1 * 4) { switch(param_1 * 4) ...`)
+// where the bounds -4 to -8 fold. Patch 0059: the guard folds for every bound, and the text agrees with the run.
+void TestArea2Round11Fix()
+{
+    Sh2Decompiler d(gConfig);
+    uint64_t serial = 61000;
+    for (int bound = -1; bound >= -8; --bound)
+    {
+        // negguard11.py: shll2 of r4 into r0, cmp/ge against the bound (mov #bound,r1), the table of five cases and the default after it
+        std::vector<uint16_t> words = { 0x6043, 0x4008, static_cast<uint16_t>(0xE100 | (bound & 0xFF)), 0x3013, 0x8B1B, 0xE110, 0x3016, 0x8918, 0x6203, 0xC70E, 0x002E, 0x402B,
+                                        0x0009, 0xE340, 0x1530, 0x000B, 0x0009, 0xE341, 0x1531, 0x000B, 0x0009, 0xE342, 0x1532, 0x000B, 0x0009, 0xE343, 0x1533, 0x000B, 0x0009,
+                                        0xE344, 0x1534, 0x000B, 0x0009, 0xE37F, 0x153F, 0x000B, 0x0009, 0x0009, 0x0600, 0x901A, 0x0600, 0x9022, 0x0600, 0x902A, 0x0600, 0x9032,
+                                        0x0600, 0x903A };
+        DecompileResult r;
+        const R8Outcome o = R8Check(d, "A2-68 bound " + std::to_string(bound), words,
+                                    { { 0u }, { 1u }, { 2u }, { 3u }, { 4u }, { 5u }, { 0xFFFFFFFFu }, { 0xFFFFFFFEu }, { 0xFFFFFFFCu }, { 0x40000000u }, { 0x3FFFFFFFu }, { 0x80000000u } },
+                                    "v", {}, ++serial, 0x06009000u, &r);   // the function returns nothing: it stores through r5
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(Has(r.Text(), "switch(param_1 * 4)"));
+        CHECK(!Has(r.Text(), " < param_1 * 4"));   // the guard is folded into the switch, not left round it
+        CHECK(o.verdict == "agrees" || o.verdict == "void-ok");   // void-ok: the stores are what it does, r0 is not a result
+        if (!Has(r.Text(), "switch(param_1 * 4)") || Has(r.Text(), " < param_1 * 4") || (o.verdict != "agrees" && o.verdict != "void-ok"))
+            std::printf("A2-68 bound %d: %s %s\n%s\n", bound, o.verdict.c_str(), o.detail.c_str(), r.Text().c_str());
+    }
+}
+
+// ===== Area 3, round 10 fix: the fail-closed return rule and the new frame claims (A3-66 to A3-77) ============================================
+// The findings of the round 10 review, each flipped to the right answer. The rule: a function the engine made `void` is lent only when no input
+// the signature does not hold can change what it leaves in r0; a value, op or address the interpreter cannot model contributes all of its inputs'
+// dependences, never none (A3-66 to A3-69, A3-76, A3-77). A lent callee that writes below the frame address it was handed exposes the locals there
+// (A3-71); the callee walk reaches thunks and onward-handing callees and is bounded (A3-70, A3-74); every unlent call a word was exposed at is kept
+// (A3-75); a stack argument past the model's window is withheld (A3-73); engine patch 0057 reaches a pointer stepped down under a condition (A3-72).
+void TestArea3Round10Fix()
+{
+    Sh2Decompiler d(gConfig);
+    uint64_t serial = 101000;
+    const uint32_t base = 0x06009000u, gAt = 0x06009040u, hAt = 0x06009080u;
+    const std::vector<std::vector<uint32_t>> inputs = { { 0x11111111u, 0x22222222u, 0x0600B000u, 0x44444444u },
+                                                        { 0x00000000u, 0x00000001u, 0x0600B000u, 0x80000000u } };
+    auto withheld = [&](const char* name, std::vector<uint16_t> words, const char* reason) {
+        const CallFixture f = { name, base, std::move(words) };
+        const DecompileResult r = d.Decompile(CallSnapshot(f, ++serial), Request(f.base));
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(!r.prototype.known && Has(r.prototypeWithheld, reason));
+    };
+    auto lent = [&](const char* name, std::vector<uint16_t> words) {
+        const CallFixture f = { name, base, std::move(words) };
+        const DecompileResult r = d.Decompile(CallSnapshot(f, ++serial), Request(f.base));
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(r.prototype.known && r.prototypeWithheld.empty());
+    };
+    // caller + one callee at gAt (the callee decompiled and, if 'lendCallee', lent). The caller's last two words are the literal that holds gAt
+    // (`mov.l @(disp,PC),r1 ; jsr @r1`); 'together' keeps them in place and the callee lands at word 32 = gAt.
+    auto withCallee = [&](const char* name, std::vector<uint16_t> caller, const std::vector<uint16_t>& callee, bool lendCallee,
+                          bool* callerKnown, std::string* text, bool* agrees) -> DecompileResult {
+        caller.resize(32, 0x0009);
+        caller.insert(caller.end(), callee.begin(), callee.end());
+        const CallFixture f = { name, base, std::move(caller) };
+        auto snap = CallSnapshot(f, ++serial);
+        DecompileRequest q = Request(f.base);
+        if (lendCallee)
+        {
+            const DecompileResult c = d.Decompile(snap, Request(gAt));
+            CHECK(c.status == DecompileStatus::Ok && c.prototype.known);
+            q.prototypes.emplace_back(gAt, c.prototype);
+        }
+        const DecompileResult r = d.Decompile(snap, q);
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok);
+        if (callerKnown) *callerKnown = r.prototype.known;
+        if (text) *text = r.Text();
+        if (agrees) *agrees = PseudoAgreesWithRun(r, snap, f, inputs);
+        return r;
+    };
+    // caller + h at gAt + k at hAt (neither lent: the caller is withheld, the pin is the text).
+    auto withTwoCallees = [&](const char* name, std::vector<uint16_t> caller, const std::vector<uint16_t>& h, const std::vector<uint16_t>& k,
+                              std::string* text, bool lendK = false) {
+        caller.resize(32, 0x0009);
+        std::vector<uint16_t> hh = h;
+        hh.resize(32, 0x0009);
+        caller.insert(caller.end(), hh.begin(), hh.end());
+        caller.insert(caller.end(), k.begin(), k.end());
+        const CallFixture f = { name, base, std::move(caller) };
+        auto snap = CallSnapshot(f, ++serial);
+        DecompileRequest q = Request(f.base);
+        if (lendK)
+        {
+            const DecompileResult c = d.Decompile(snap, Request(hAt));
+            CHECK(c.status == DecompileStatus::Ok && c.prototype.known);
+            q.prototypes.emplace_back(hAt, c.prototype);
+        }
+        const DecompileResult r = d.Decompile(snap, q);
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok && !r.prototype.known);
+        if (text) *text = r.Text();
+    };
+    auto walkText = [&](const char* name, std::vector<uint16_t> words, const char* want) {
+        const CallFixture f = { name, base, std::move(words) };
+        const DecompileResult r = d.Decompile(CallSnapshot(f, ++serial), Request(f.base));
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(Has(r.Text(), want) && !Has(r.Text(), "return 5;") && !Has(r.Text(), "register0x0000003c"));
+    };
+
+    // ---- A3-66: a hidden register joined/summed with a nothing-known value is kept; a pool-offset stack access folds ----------------------------
+    withheld("a3_66a: join of r3 with the word below r15, chosen by r4", { 0xE201, 0x2422, 0x2448, 0x8902, 0x6033, 0xA003, 0x0009, 0x61F3, 0x71FC, 0x6012, 0x000B, 0x0009 },
+             "its return is computed from r3 on entry");
+    withheld("a3_66b: the word below r15 summed with r3", { 0xE201, 0x2422, 0x61F3, 0x71FC, 0x6012, 0x303C, 0x210B, 0x000B, 0x0009 },
+             "its return is computed from r3 on entry");
+    withheld("a3_66c: a stack argument read through a pool-offset address (the mov.w literal folded)", { 0x9204, 0x32FC, 0x6022, 0x210B, 0x000B, 0x0009, 0x0014, 0x0009 },
+             "its return is computed from a stack argument");
+    // ---- A3-67: the chooser side -------------------------------------------------------------------------------------------------------------
+    withheld("a3_67a: r3 compared with the word below r15 chooses", { 0xE201, 0x2422, 0x61F3, 0x71FC, 0x6212, 0x3230, 0x8903, 0xE001, 0x210B, 0xA002, 0x0009, 0xE002, 0x210B, 0x000B, 0x0009, 0x0009 },
+             "its return is chosen by r3 on entry");
+    withheld("a3_67b: a pool-offset stack argument chooses (the mov.w literal folded)", { 0x910C, 0x31FC, 0x6212, 0x2228, 0x8903, 0xE001, 0x210B, 0xA002, 0x0009, 0xE002, 0x210B, 0x000B, 0x0009, 0x0009, 0x0014, 0x0009 },
+             "its return is chosen by a stack argument");
+    // ---- A3-68: a part of r0, a byte spill, a carried value through extu.b -----------------------------------------------------------------------
+    withheld("a3_68a: extu.b r0,r0", { 0x600C, 0x210B, 0x000B, 0x0009 }, "its return is computed from r0 on entry");
+    withheld("a3_68b: extu.w r0,r0", { 0x600D, 0x210B, 0x000B, 0x0009 }, "its return is computed from r0 on entry");
+    withheld("a3_68c: exts.b r0,r2 ; mov r2,r0", { 0x620E, 0x6023, 0x210B, 0x000B, 0x0009, 0x0009 }, "its return is computed from r0 on entry");
+    withheld("a3_68e: byte spill and reload of r0", { 0x2F04, 0x60F4, 0x210B, 0x000B, 0x0009, 0x0009 }, "its return is computed from r0 on entry");
+    {
+        const DecompileResult r = withCallee("a3_68f: r0 = 5 held across a keeps-r0 callee, then extu.b",
+                   { 0x4F22, 0xE005, 0xD103, 0x410B, 0x0009, 0x600C, 0x210B, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9040 },
+                   { 0xE207, 0x000B, 0x0009, 0x0009 }, true, nullptr, nullptr, nullptr);
+        CHECK(!r.prototype.known && Has(r.prototypeWithheld, "it holds a value in r0 across a call that keeps r0"));
+    }
+    // ---- A3-69: the SR exception no longer clears the entry T; A3-77: xor #0,r0 is the identity op the table means -------------------------------
+    withheld("a3_69a: stc sr,r0 ; and #1,r0 returns the entry T", { 0x0002, 0xC901, 0x210B, 0x000B, 0x0009, 0x0009 },
+             "its return is computed from the T flag on entry");
+    // ...and SR's exception is only for r0 holding the value `ldc` wrote back (06010054's idiom stays lent, TestArea3Round9Fix): SR summed, or the
+    // mask set with no write-back, is an input.
+    withheld("a3_69: stc sr,r0 ; add #1,r0", { 0x0002, 0x7001, 0x210B, 0x000B, 0x0009, 0x0009 }, "its return is computed from sr on entry");
+    withheld("a3_69: the mask idiom with no write-back", { 0x0002, 0xCBF0, 0x210B, 0x000B, 0x0009, 0x0009 }, "its return is computed from sr on entry");
+    lent("a3_77: xor #0,r0 is a nop", { 0xCA00, 0x210B, 0x000B, 0x0009 });
+    // ---- A3-76: the sum of a stack address and an index keeps the index --------------------------------------------------------------------------
+    withheld("a3_76a: r15 + r3 returned", { 0x60F3, 0x303C, 0x210B, 0x000B, 0x0009, 0x0009 }, "its return is computed from r3 on entry");
+    withheld("a3_76b: r15 + r3 compared chooses", { 0x62F3, 0x323C, 0xD105, 0x3210, 0x8903, 0xE001, 0x210B, 0xA002, 0x0009, 0xE002, 0x210B, 0x000B, 0x0009, 0x0009, 0x0600, 0xF000 },
+             "its return is chosen by r3 on entry");
+    withheld("a3_76c: addc of a frame address into r11", { 0x7FF0, 0x64F3, 0x7408, 0x3B4E, 0x60B3, 0x7F10, 0x210B, 0x000B, 0x0009, 0x0009 },
+             "its return is computed from r11 on entry");
+    // ---- A3-73: a stack argument past the 500-byte model window ---------------------------------------------------------------------------------
+    withheld("a3_73: a return read from r15 + 600", { 0x9104, 0x31FC, 0x6012, 0x000B, 0x0009, 0x0009, 0x0258, 0x0009 },
+             "an incoming argument outside its signature");
+
+    // ---- A3-71: a lent callee that writes below the exact frame address it was handed -----------------------------------------------------------
+    {
+        bool known = false, agrees = false;
+        std::string text;
+        withCallee("a3_71a: g fills backwards through r4 (mov.l r1,@-r4)", { 0x4F22, 0x7FEC, 0xE005, 0x2F02, 0x64F3, 0x7410, 0xD103, 0x410B, 0x0009, 0x60F2, 0x7F14, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9040 },
+                   { 0xE104, 0x2416, 0x4110, 0x8BFC, 0x000B, 0x0009 }, true, &known, &text, &agrees);
+        CHECK(known && agrees && !Has(text, "return 5;"));
+        withCallee("a3_71b: g stores one word below r4 (add #-4,r4 ; mov.l r1,@r4)", { 0x4F22, 0x7FEC, 0xE005, 0x1F02, 0x64F3, 0x740C, 0xD103, 0x410B, 0x0009, 0x50F2, 0x7F14, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9040 },
+                   { 0xE104, 0x74FC, 0x2412, 0x000B, 0x0009, 0x0009 }, true, &known, &text, &agrees);
+        CHECK(known && agrees && !Has(text, "return 5;"));
+    }
+
+    // ---- A3-70: the callee walk reaches a thunk and an onward-handing callee ---------------------------------------------------------------------
+    {
+        std::string text;
+        // h at gAt is `mov.l @(lit),r1 ; jmp @r1 ; nop` to k at hAt, which writes the caller's frame word.
+        withTwoCallees("a3_70a: a thunk hands the write on", { 0x4F22, 0x7FF8, 0xE005, 0x2F02, 0xD103, 0x410B, 0x0009, 0x60F2, 0x7F08, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9040 },
+                       { 0xD101, 0x412B, 0x0009, 0x0009, 0x0600, 0x9080 }, { 0xE109, 0x2F12, 0x000B, 0x0009 }, &text);
+        CHECK(!Has(text, "return 5;") && Has(text, "a local at or above the stack pointer is read after this call"));
+        // Control (precision of the transitive walk): the thunk's target writes nothing, so nothing is exposed and the local stays folded.
+        withTwoCallees("a3_70 control: a thunk to a callee that writes nothing", { 0x4F22, 0x7FF8, 0xE005, 0x2F02, 0xD103, 0x410B, 0x0009, 0x60F2, 0x7F08, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9040 },
+                       { 0xD101, 0x412B, 0x0009, 0x0009, 0x0600, 0x9080 }, { 0xE207, 0x000B, 0x0009, 0x0009 }, &text);
+        CHECK(Has(text, "return 5;") && !Has(text, "a local at or above the stack pointer is read after this call"));
+        // h hands its entry r15 + 4 in r4 to k, which stores through r4: k lent (b), and not lent (c).
+        for (bool lendK : { true, false })
+        {
+            withTwoCallees(lendK ? "a3_70b: h hands its incoming slot to a lent k" : "a3_70c: h hands its incoming slot to an unlent k",
+                           { 0x4F22, 0x7FF8, 0xE005, 0x2F02, 0xD103, 0x410B, 0x0009, 0x60F2, 0x7F08, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9040 },
+                           { 0x4F22, 0x64F3, 0x7404, 0xD103, 0x410B, 0x0009, 0x4F26, 0x000B, 0x0009, 0x0009, 0x0600, 0x9080 }, { 0xE109, 0x2412, 0x000B, 0x0009 },
+                           &text, lendK);
+            CHECK(!Has(text, "return 5;") && Has(text, "a local at or above the stack pointer is read after this call"));
+        }
+    }
+
+    // ---- A3-75: every unlent call a word was exposed at is kept ----------------------------------------------------------------------------------
+    {
+        std::string text;
+        // g at gAt writes the word, h at hAt leaves it alone; the word is read back after both.
+        withTwoCallees("a3_75: a word the first call wrote, the second leaves alone", { 0x4F22, 0x7FF8, 0xE005, 0x2F02, 0xD105, 0x410B, 0x0009, 0xD105, 0x410B, 0x0009, 0x60F2, 0x7F08, 0x4F26, 0x000B, 0x0009, 0x0009, 0x0600, 0x9040, 0x0600, 0x9080 },
+                       { 0xE109, 0x2F12, 0x000B, 0x0009 }, { 0xE201, 0x000B, 0x0009, 0x0009 }, &text);
+        CHECK(!Has(text, "return 5;") && Has(text, "a local at or above the stack pointer is read after this call"));
+    }
+
+    // ---- A3-74: the walk of a callee of 6,000 pushes is bounded (the head took 14.7 s and 2.2 GB) and fails closed ---------------------------------
+    {
+        std::vector<uint16_t> w = { 0x4F22, 0x7FF8, 0xE005, 0x2F02, 0xD103, 0x410B, 0x0009, 0x60F2, 0x7F08, 0x4F26, 0x000B, 0x0009, 0x0602, 0x0000 };
+        w.resize((0x06020000u - base) / 2, 0x0009);
+        w.insert(w.end(), 6000, 0x2F16);   // mov.l r1,@-r15
+        w.push_back(0x000B);
+        w.push_back(0x0009);
+        const CallFixture f = { "a3_74: a callee of 6,000 pushes, the caller restores PR from the stack", base, std::move(w) };
+        const DecompileResult r = d.Decompile(CallSnapshot(f, ++serial), Request(f.base));
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok && r.elapsedMs < 3000.0);
+        CHECK(Has(r.Text(), "a local at or above the stack pointer is read after this call") && !Has(r.Text(), "return 5;"));
+    }
+
+    // ---- A3-72: engine patch 0057, a pointer stepped down under a condition in a loop -----------------------------------------------------------
+    walkText("a3_72a: if (c) *--p = v in a counted loop", { 0x7FF0, 0x62F3, 0x7210, 0xE005, 0x2F02, 0xE104, 0x2448, 0x8900, 0x2216, 0x4110, 0x8BFA, 0x60F2, 0x7F10, 0x000B, 0x0009, 0x0009 },
+             "return xStack_10;");
+    walkText("a3_72b: the conditional step through the r14 frame pointer", { 0x2FE6, 0x7FF0, 0x6EF3, 0x7E10, 0xE005, 0x2F02, 0xE104, 0x2448, 0x8900, 0x2E16, 0x4110, 0x8BFA, 0x60F2, 0x7F10, 0x6EF6, 0x000B, 0x0009, 0x0009 },
+             "return xStack_14;");
+    walkText("a3_72c: the conditional step in an inner loop", { 0x7FE0, 0x62F3, 0x7220, 0xE005, 0x2F02, 0xE302, 0xE104, 0x2448, 0x8900, 0x2216, 0x4110, 0x8BFA, 0x4310, 0x8BF7, 0x60F2, 0x7F20, 0x000B, 0x0009 },
+             "return xStack_20;");
+
+    // ---- A3-80: engine patch 0060, the walk pointer kept in a stack local and read back -------------------------------------------------------
+    // `mov.l r2,@(16,r15)` (r2 = r15 + 16), the read back `mov.l @(16,r15),r2`, then the walk `mov.l r1,@-r2` four times: the local at r15 is
+    // written last, with 1. Patches 0056 and 0057 followed the registers only, so the read-back pointer was no frame base and its stores no stores
+    // to the stack: the local kept its 5 (`return 5;`). With no call between, the function was lent so (a wrong value with no note).
+    {
+        const std::vector<uint16_t> leaf = { 0x000B, 0x0009 };
+        std::string text;
+        bool known = true;
+        for (bool lend : { true, false })
+        {
+            withCallee(lend ? "a3_80a: the pointer kept in a stack local across a lent call" : "a3_80b: the pointer kept in a stack local across an unlent call",
+                       { 0x4F22, 0x7FE8, 0x68F3, 0x62F3, 0x7210, 0xE005, 0x2F02, 0x1F24, 0xD106, 0x410B, 0x0009, 0x52F4, 0xE104, 0x2216, 0x4110, 0x8BFC, 0x60F2,
+                         0x7F18, 0x4F26, 0x000B, 0x0009, 0x0009, 0x0600, 0x9040 },
+                       leaf, lend, &known, &text, nullptr);
+            CHECK(!known && Has(text, "return xStack_1c;") && !Has(text, "return 5;"));
+        }
+        // through the frame pointer r14, an unlent call
+        withCallee("a3_80c: the pointer kept in an r14 frame's local across a call",
+                   { 0x2FE6, 0x4F22, 0x7FE8, 0x6EF3, 0x62E3, 0x7210, 0xE005, 0x2E02, 0x1E24, 0xD106, 0x410B, 0x0009, 0x52E4, 0xE104, 0x2216, 0x4110, 0x8BFC,
+                     0x60E2, 0x7F18, 0x4F26, 0x000B, 0x6EF6, 0x0600, 0x9040 },
+                   leaf, false, &known, &text, nullptr);
+        CHECK(Has(text, "return xStack_20;") && !Has(text, "return 5;"));
+        // by bytes
+        withCallee("a3_80d: the pointer kept in a stack local, a walk by bytes",
+                   { 0x4F22, 0x7FE8, 0x62F3, 0x7204, 0xE005, 0x80F0, 0x1F24, 0xD106, 0x410B, 0x0009, 0x52F4, 0xE104, 0x2214, 0x4110, 0x8BFC, 0x84F0, 0x7F18,
+                     0x4F26, 0x000B, 0x0009, 0x0600, 0x9040 },
+                   leaf, true, &known, &text, nullptr);
+        CHECK(Has(text, "return (int4)cStack_1c;") && !Has(text, "return 5;"));
+        // two calls between the spill and the read back
+        withCallee("a3_80e: two calls between the spill and the read back",
+                   { 0x4F22, 0x7FE8, 0x62F3, 0x7210, 0xE005, 0x2F02, 0x1F24, 0xD108, 0x410B, 0x0009, 0xD106, 0x410B, 0x0009, 0x52F4, 0xE104, 0x2216, 0x4110,
+                     0x8BFC, 0x60F2, 0x7F18, 0x4F26, 0x000B, 0x0009, 0x0009, 0x0600, 0x9040 },
+                   leaf, true, &known, &text, nullptr);
+        CHECK(Has(text, "return xStack_1c;") && !Has(text, "return 5;"));
+        // read back, then moved down a slot before the walk
+        withCallee("a3_80f: read back, then moved down before the walk",
+                   { 0x4F22, 0x7FE8, 0x62F3, 0x7214, 0xE005, 0x2F02, 0x1F25, 0xD107, 0x410B, 0x0009, 0x52F5, 0x72FC, 0xE104, 0x2216, 0x4110, 0x8BFC, 0x60F2,
+                     0x7F18, 0x4F26, 0x000B, 0x0009, 0x0009, 0x0600, 0x9040 },
+                   leaf, true, &known, &text, nullptr);
+        CHECK(Has(text, "return xStack_1c;") && !Has(text, "return 5;"));
+        // copied into a second local before the call, read back from that one
+        withCallee("a3_80g: copied into a second local, read back from it",
+                   { 0x4F22, 0x7FE8, 0x62F3, 0x7210, 0xE005, 0x2F02, 0x1F24, 0x53F4, 0x1F35, 0xD106, 0x410B, 0x0009, 0x52F5, 0xE104, 0x2216, 0x4110, 0x8BFC,
+                     0x60F2, 0x7F18, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9040 },
+                   leaf, true, &known, &text, nullptr);
+        CHECK(Has(text, "return xStack_1c;") && !Has(text, "return 5;"));
+        // control: walked up from the read-back pointer (right before the patch too)
+        withCallee("a3_80 control: walked up after the read back",
+                   { 0x4F22, 0x7FE8, 0x62F3, 0xE005, 0x1F03, 0x1F24, 0xD106, 0x410B, 0x0009, 0x52F4, 0xE104, 0x2212, 0x7204, 0x4110, 0x8BFB, 0x50F3, 0x7F18,
+                     0x4F26, 0x000B, 0x0009, 0x0600, 0x9040 },
+                   leaf, true, &known, &text, nullptr);
+        CHECK(Has(text, "return xStack_10;") && !Has(text, "return 5;"));
+    }
+    // no call: the spill and the read back alone, lent
+    auto walkLent = [&](const char* name, std::vector<uint16_t> words, const char* want) {
+        const CallFixture f = { name, base, std::move(words) };
+        const DecompileResult r = d.Decompile(CallSnapshot(f, ++serial), Request(f.base));
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok && r.prototype.known);
+        CHECK(Has(r.Text(), want) && !Has(r.Text(), "return 5;") && !Has(r.Text(), "register0x0000003c"));
+    };
+    walkLent("a3_80h: the pointer kept in a stack local, no call (lent)",
+             { 0x7FE8, 0x62F3, 0x7210, 0xE005, 0x2F02, 0x1F24, 0x52F4, 0xE104, 0x2216, 0x4110, 0x8BFC, 0x60F2, 0x7F18, 0x000B, 0x0009, 0x0009 }, "return xStack_18;");
+    walkLent("a3_80i: the same by bytes, read back into another register (lent)",
+             { 0x7FE8, 0x62F3, 0x7204, 0xE005, 0x80F0, 0x1F24, 0x53F4, 0xE104, 0x2314, 0x4110, 0x8BFC, 0x84F0, 0x7F18, 0x000B, 0x0009, 0x0009 },
+             "return (int4)cStack_18;");
+}
+
+// ===== Area 3, round 10 fix: the hidden-input fuzzer (the round 10 reviewer's scratch fuzzer, ported) ====================================
+// Random register and frame programs of 2 to 7 items -- moves, ALU, partial reads and extensions, shifts, addc/subc/negc, movt, stc sr, mul.l and
+// sts macl, a store of one width and a reload of another through a copy of r15, a branch over one instruction -- each ending `add #16,r15 ;
+// or r0,r1 ; rts ; nop` so r0 has a second use. A program the host lends is run on the emulator once as it is and once with each input the
+// signature does not hold perturbed: r0-r3 and r8-r11, the T flag the caller left, and the r4-r7 beyond its parameters. A lent function whose
+// r0 changes with one of them drops an input (r0 left as it came in is the one excused case, A3-14). The review's 44,100 programs found A3-68,
+// A3-69 and A3-76 this way; SE_A3FUZZ_PROGRAMS and SE_A3FUZZ_SEED widen or move the run.
+void TestArea3HiddenInputFuzz()
+{
+    Sh2Decompiler d(gConfig);
+    const char* countEnv = std::getenv("SE_A3FUZZ_PROGRAMS");
+    const char* seedEnv = std::getenv("SE_A3FUZZ_SEED");
+    const int programs = countEnv ? std::atoi(countEnv) : 400;
+    std::mt19937 rng(seedEnv ? static_cast<uint32_t>(std::strtoul(seedEnv, nullptr, 10)) : 1u);
+    auto pick = [&](int n) { return static_cast<int>(rng() % static_cast<uint32_t>(n)); };
+    const int pool[] = { 0, 1, 2, 3, 8, 9, 10, 11, 4 };
+    auto reg = [&]() { return pool[pick(9)]; };
+    auto low = [&]() { return pick(4); };
+    uint64_t serial = 150000;
+    int lent = 0, findings = 0, checkedRuns = 0;
+    for (int p = 0; p < programs; ++p)
+    {
+        std::vector<uint16_t> w = { 0x7FF0 };   // add #-16,r15
+        const int n = 2 + pick(6);
+        for (int k = 0; k < n; ++k)
+        {
+            const int c = pick(41), dd = reg(), ss = reg();
+            const uint16_t D = static_cast<uint16_t>(dd << 8), S = static_cast<uint16_t>(ss << 4);
+            if (c < 4) w.push_back(0x6003 | D | S);
+            else if (c < 8) { const uint16_t ops[] = { 0x300C, 0x3008, 0x2009, 0x200B, 0x200A }; w.push_back(ops[pick(5)] | D | S); }
+            else if (c < 10) w.push_back((pick(2) ? 0x600B : 0x6007) | D | S);
+            else if (c < 14) { const uint16_t ops[] = { 0x600C, 0x600D, 0x600E, 0x600F, 0x6008, 0x6009 }; w.push_back(ops[pick(6)] | D | S); }
+            else if (c < 17) { const uint16_t ops[] = { 0x4000, 0x4001, 0x4008, 0x4009, 0x4018, 0x4019, 0x4028, 0x4029, 0x4004, 0x4005, 0x4021, 0x4020 }; w.push_back(ops[pick(12)] | D); }
+            else if (c < 19) { const int imm[] = { 1, -1, 5, 127, -128, 0 }; w.push_back(0x7000 | D | (imm[pick(6)] & 0xFF)); }
+            else if (c < 21) { const int imm[] = { 0, 1, 5, -1, 100 }; w.push_back(0xE000 | D | (imm[pick(5)] & 0xFF)); }
+            else if (c < 23) { const uint16_t ops[] = { 0xC900, 0xCB00, 0xCA00 }; const int imm[] = { 1, 2, 0xF0, 0xFF, 0x0F, 0 }; w.push_back(ops[pick(3)] | imm[pick(6)]); }
+            else if (c < 25) { w.push_back(0x3000 | D | S); w.push_back(0x0029 | static_cast<uint16_t>(low() << 8)); }
+            else if (c < 26) { w.push_back(0x2008 | D | S); w.push_back(0x0029 | static_cast<uint16_t>(low() << 8)); }
+            else if (c < 28) w.push_back(0x0002 | static_cast<uint16_t>(low() << 8));   // stc sr,rX
+            else if (c < 29) w.push_back(pick(2) ? 0x0008 : 0x0018);                     // clrt, sett
+            else if (c < 31) { const uint16_t ops[] = { 0x300E, 0x300A, 0x600A }; w.push_back(ops[pick(3)] | D | S); }
+            else if (c < 32) { w.push_back(0x0007 | D | S); w.push_back(0x001A | static_cast<uint16_t>(low() << 8)); }
+            else if (c < 36)
+            {
+                const int off[] = { 0, 4, 8 };
+                w.push_back(0x64F3);                                                  // mov r15,r4
+                w.push_back(0x7400 | static_cast<uint16_t>(off[pick(3)]));            // add #off,r4
+                w.push_back(0x2400 | S | static_cast<uint16_t>(pick(3)));             // mov.x rS,@r4
+                w.push_back(0x6040 | static_cast<uint16_t>(low() << 8) | static_cast<uint16_t>(pick(3)));   // mov.y @r4,rX
+            }
+            else if (c < 38)
+            {
+                const uint16_t tests[] = { static_cast<uint16_t>(0x2008 | (ss << 8) | S), static_cast<uint16_t>(0x3000 | D | S), static_cast<uint16_t>(0x4015 | (ss << 8)) };
+                w.push_back(tests[pick(3)]);
+                w.push_back(0x8900);                                                  // bt over the next instruction
+                w.push_back(0x6003 | static_cast<uint16_t>(low() << 8) | static_cast<uint16_t>(reg() << 4));
+            }
+            else w.push_back(0x6003 | S);                                             // mov rS,r0
+        }
+        if (pick(2)) w.push_back(0x6003 | static_cast<uint16_t>(reg() << 4));
+        for (uint16_t t : { 0x7F10, 0x210B, 0x000B, 0x0009 }) w.push_back(t);
+        const CallFixture f = { "a3 fuzz " + std::to_string(p), 0x06009000u, w };
+        auto snap = CallSnapshot(f, ++serial);
+        const DecompileResult r = d.Decompile(snap, Request(f.base));
+        if (r.status != DecompileStatus::Ok || !r.prototype.known) continue;
+        ++lent;
+        const size_t params = r.prototype.params.size();
+        auto run = [&](const std::map<std::string, uint32_t>& over, uint32_t& r0) {
+            try
+            {
+                RunMachine m(snap);
+                for (const auto& kv : RunEntryRegisters({ 0x0600F100u, 0, 0, 0 })) m.Set(kv.first.c_str(), kv.second);
+                for (const auto& kv : over) m.Set(kv.first.c_str(), kv.second);
+                if (!m.Run(f.base, kRunSentinel, 100000)) return false;
+                r0 = m.Get("r0");
+                return true;
+            }
+            catch (ghidra::LowlevelError&) { return false; }
+        };
+        uint32_t base = 0;
+        if (!run({}, base)) continue;
+        std::vector<std::pair<std::string, uint32_t>> perturb;
+        for (int h : { 0, 1, 2, 3, 8, 9, 10, 11 }) perturb.emplace_back("r" + std::to_string(h), 0x7000u + 0x11u * static_cast<uint32_t>(h));
+        for (size_t a = params; a < 4; ++a) perturb.emplace_back("r" + std::to_string(4 + a), 0x0600F200u + 0x10u * static_cast<uint32_t>(a));
+        perturb.emplace_back("sr", 1);
+        for (const auto& pv : perturb)
+        {
+            uint32_t v = 0;
+            if (!run({ { pv.first, pv.second } }, v)) continue;
+            ++checkedRuns;
+            if (v == base) continue;
+            if (pv.first == "r0" && v == pv.second) continue;   // r0 left as it came in: the excused case
+            ++findings;
+            std::string words;
+            for (uint16_t x : w)
+            {
+                char b[8];
+                std::snprintf(b, sizeof b, "%04X ", x);
+                words += b;
+            }
+            std::printf("  a3 fuzz FINDING program %d: lent (%zu parameters, %s) and r0 changes with %s: %08X -> %08X; words %s\n", p, params,
+                        r.prototype.ret.kind == TypeKind::Void ? "void" : "returning", pv.first.c_str(), base, v, words.c_str());
+            break;
+        }
+    }
+    std::printf("  a3 fuzz: %d programs, %d lent, %d perturbed runs checked, %d findings\n", programs, lent, checkedRuns, findings);
+    CHECK(lent > programs / 20);   // the fuzzer still reaches lent functions
+    CHECK(findings == 0);
+}
+
+// ===== Area 3, round 11 review: controls that hold at 1b364f7 =====================================================================================
+// The shapes beside the rows A3-82 to A3-88 that print the right text today: a lent callee that spills, pushes, moves or adds and subtracts the pointer it
+// steps down (its `storesBelow` is recorded: the caller prints the local and agrees with the run), a frame address kept through two locals, a slot indexed
+// by r0 or pushed and popped, two walked pointers, nested loops with the pointer reloaded each pass, and a pointer chosen between two frame addresses or
+// stored through at its base. The fixtures of the rows themselves print a wrong text (`return 5;`, `return 3;`) and are in the ledger, not here: a fix
+// round moves them into the suite. Nothing is mutation-checked: these hold behaviour the fixes of the rows will touch.
+void TestArea3Round11()
+{
+    Sh2Decompiler d(gConfig);
+    uint64_t serial = 111000;
+    const uint32_t base = 0x06009000u, gAt = 0x06009040u;
+    const std::vector<std::vector<uint32_t>> inputs = { { 0x11111111u, 0x22222222u, 0x0600B000u, 0x44444444u },
+                                                        { 0x00000000u, 0x00000001u, 0x0600B000u, 0x80000000u } };
+    auto withCallee = [&](const char* name, std::vector<uint16_t> caller, const std::vector<uint16_t>& callee, bool lendCallee,
+                          bool* callerKnown, std::string* text, bool* agrees) {
+        caller.resize(32, 0x0009);
+        caller.insert(caller.end(), callee.begin(), callee.end());
+        const CallFixture f = { name, base, std::move(caller) };
+        auto snap = CallSnapshot(f, ++serial);
+        DecompileRequest q = Request(f.base);
+        if (lendCallee)
+        {
+            const DecompileResult c = d.Decompile(snap, Request(gAt));
+            CHECK(c.status == DecompileStatus::Ok && c.prototype.known);
+            q.prototypes.emplace_back(gAt, c.prototype);
+        }
+        const DecompileResult r = d.Decompile(snap, q);
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok);
+        if (callerKnown) *callerKnown = r.prototype.known;
+        if (text) *text = r.Text();
+        if (agrees) *agrees = PseudoAgreesWithRun(r, snap, f, inputs);
+    };
+    // a lent function whose text has `want` and not `stale` (the value stored before the walk), and no stack register
+    auto lentText = [&](const char* name, std::vector<uint16_t> words, const char* want, const char* stale) {
+        const CallFixture f = { name, base, std::move(words) };
+        const DecompileResult r = d.Decompile(CallSnapshot(f, ++serial), Request(f.base));
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok && r.prototype.known);
+        CHECK(Has(r.Text(), want) && !Has(r.Text(), stale) && !Has(r.Text(), "register0x0000003c"));
+    };
+    bool known = false, agrees = false;
+    std::string text;
+        withCallee("round 11 control: the callee spills the pointer whole to its frame and walks the reload", { 0x4F22, 0x7FEC, 0xE005, 0x2F02, 0x64F3, 0x7410, 0xD103, 0x410B, 0x0009, 0x60F2, 0x7F14, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9040 },
+                   { 0x7FFC, 0x2F42, 0x65F2, 0xE104, 0x2516, 0x4110, 0x8BFC, 0x7F04, 0x000B, 0x0009 }, true, &known, &text, &agrees);
+        CHECK(known && agrees && !Has(text, "return 5;"));
+        withCallee("round 11 control: the callee pushes and pops the pointer", { 0x4F22, 0x7FEC, 0xE005, 0x2F02, 0x64F3, 0x7410, 0xD103, 0x410B, 0x0009, 0x60F2, 0x7F14, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9040 },
+                   { 0x2F46, 0x64F6, 0xE104, 0x2416, 0x4110, 0x8BFC, 0x000B, 0x0009 }, true, &known, &text, &agrees);
+        CHECK(known && agrees && !Has(text, "return 5;"));
+        withCallee("round 11 control: the callee moves the pointer through r14", { 0x4F22, 0x7FEC, 0xE005, 0x2F02, 0x64F3, 0x7410, 0xD103, 0x410B, 0x0009, 0x60F2, 0x7F14, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9040 },
+                   { 0x2FE6, 0x6E43, 0x65E3, 0x6EF6, 0xE104, 0x2516, 0x4110, 0x8BFC, 0x000B, 0x0009 }, true, &known, &text, &agrees);
+        CHECK(known && agrees && !Has(text, "return 5;"));
+        withCallee("round 11 control: the callee adds and subtracts a negated constant", { 0x4F22, 0x7FEC, 0xE005, 0x2F02, 0x64F3, 0x7410, 0xD103, 0x410B, 0x0009, 0x60F2, 0x7F14, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9040 },
+                   { 0xE308, 0x633B, 0x343C, 0x3438, 0xE104, 0x2416, 0x4110, 0x8BFC, 0x000B, 0x0009 }, true, &known, &text, &agrees);
+        CHECK(known && agrees && !Has(text, "return 5;"));
+
+    lentText("a3_88 round 11 control: the pointer through two locals in a chain",
+             { 0x7FE4, 0x62F3, 0x7214, 0xE005, 0x2F02, 0x1F25, 0x53F5, 0x1F36, 0x52F6, 0xE105, 0x2216, 0x4110, 0x8BFC, 0x60F2, 0x7F1C, 0x000B, 0x0009, 0x0009 },
+             "return xStack_1c;", "return 5;");
+    lentText("a3_88 round 11 control: the pointer in a slot indexed by r0",
+             { 0x7FE0, 0x62F3, 0x7210, 0xE005, 0x2F02, 0xE014, 0x0F26, 0x02FE, 0xE104, 0x2216, 0x4110, 0x8BFC, 0x60F2, 0x7F20, 0x000B, 0x0009 },
+             "return xStack_20;", "return 5;");
+    lentText("a3_88 round 11 control: the pointer pushed and popped",
+             { 0x7FE8, 0x62F3, 0x7210, 0xE005, 0x2F02, 0x2F26, 0x62F6, 0xE104, 0x2216, 0x4110, 0x8BFC, 0x60F2, 0x7F18, 0x000B, 0x0009, 0x0009 },
+             "return xStack_18;", "return 5;");
+    lentText("a3_88 round 11 control: two pointers walked, one spilled",
+             { 0x7FD8, 0x62F3, 0x7210, 0x63F3, 0x7324, 0xE005, 0x2F02, 0xE007, 0x1F05, 0x1F29, 0x52F9, 0xE104, 0x2216, 0x2316, 0x4110, 0x8BFB, 0x60F2, 0x54F5, 0x304C, 0x7F28, 0x000B, 0x0009 },
+             "return iStack_28 + iStack_14;", "return 12;");
+    lentText("a3_88 round 11 control: nested loops, the pointer reloaded and stored back each outer pass",
+             { 0x7FD8, 0x62F3, 0x7220, 0xE005, 0x2F02, 0xE504, 0x1F28, 0x52F8, 0xE102, 0x2216, 0x4110, 0x8BFC, 0x1F28, 0x4510, 0x8BF7, 0x60F2, 0x7F28, 0x000B, 0x0009, 0x0009 },
+             "return xStack_28;", "return 5;");
+    lentText("a3_88 round 11 control: a pointer chosen between two frame addresses, walked down",
+             { 0x7FF0, 0xE003, 0x1F00, 0x62F3, 0x7208, 0x63F3, 0x730C, 0x2448, 0x8900, 0x6233, 0xE102, 0x2216, 0x4110, 0x8BFC, 0x50F0, 0x7F10, 0x000B, 0x0009 },
+             "return xStack_10;", "return 3;");
+    lentText("a3_88 round 11 control: a pointer chosen between a frame address and a global, stored through at the base",
+             { 0x7FF0, 0xE003, 0x1F02, 0x62F3, 0x7208, 0xD305, 0x2448, 0x8900, 0x6233, 0xE101, 0x2212, 0x50F2, 0x7F10, 0x000B, 0x0009, 0x0009, 0x0600, 0xF100 },
+             "return axStack_8[0];", "return 3;");
+}
+
+// ===== Area 3 round 11 FIX pins (A3-82, A3-83, A3-84, A3-86 a): the host's fail-closed frame-address provenance =================================
+// A frame address was recognised only through a list of exact forms; any other form failed open (treated as "not a frame address"), so a lent
+// caller that handed such a form to a callee that stores below its pointer folded the locals under the address and printed the value before the
+// call. The fix makes the rule fail closed: a value is a possible frame address when the stack pointer is among its origins by any data path
+// (laundering, a spill in parts, a store to memory and a reload); a callee's store through any register-derived pointer with no exact base sets
+// storesBelow; Apply carries storesBelow across wrappers, thunks and a lowered pointer; a storesBelow register of stack origin exposes the frame.
+// Each fixture prints the local the walk wrote (not the stale constant), the callee chain lent. The values are held by the reviewer's driver
+// (rowsfix.src) against the emulator; here the texts are pinned (PseudoEval has no loops).
+void TestArea3Round11Fix()
+{
+    Sh2Decompiler d(gConfig);
+    uint64_t serial = 112000;
+    const uint32_t base = 0x06009000u;
+    // Decompile a caller whose callees sit at 0x06009040, 0x06009080, ... (0x40-byte slots), lending the deepest first so each sees the ones it
+    // calls. Returns the entry's result. 'callees' are given deepest-last (the order they are placed), lent in reverse.
+    auto chain = [&](const char* name, std::vector<uint16_t> caller, std::vector<std::vector<uint16_t>> callees) {
+        std::vector<uint16_t> words = caller;
+        words.resize(32, 0x0009);
+        std::vector<uint32_t> at;
+        for (size_t i = 0; i < callees.size(); ++i)
+        {
+            at.push_back(base + 0x40u * static_cast<uint32_t>(i + 1));
+            std::vector<uint16_t> c = callees[i];
+            c.resize(32, 0x0009);
+            words.insert(words.end(), c.begin(), c.end());
+        }
+        const CallFixture f = { name, base, std::move(words) };
+        auto snap = CallSnapshot(f, ++serial);
+        DecompileRequest q = Request(f.base);
+        for (size_t i = callees.size(); i-- > 0;)
+        {
+            DecompileRequest cq = Request(at[i]);
+            cq.prototypes = q.prototypes;
+            const DecompileResult c = d.Decompile(snap, cq);
+            CHECK(c.status == DecompileStatus::Ok && c.prototype.known);
+            q.prototypes.emplace_back(at[i], c.prototype);
+        }
+        const DecompileResult r = d.Decompile(snap, q);
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok);
+        return r;
+    };
+    // The fill-backwards leaf (A3-71a) and the caller that hands it an exact frame address (A3-82's V5a).
+    const std::vector<uint16_t> k = { 0xE104, 0x2416, 0x4110, 0x8BFC, 0x000B, 0x0009 };   // mov #4,r1 ; L: mov.l r1,@-r4 ; dt r1 ; bf L ; rts
+    const std::vector<uint16_t> callerToG = { 0x4F22, 0x7FEC, 0xE005, 0x2F02, 0x64F3, 0x7410, 0xD103, 0x410B, 0x0009, 0x60F2, 0x7F14, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9040 };
+    auto lent = [&](const DecompileResult& r) { return r.prototype.known; };
+
+    // A3-82 a: a wrapper g that forwards r4 to the lent fill-backwards k; the caller is lent and must read the local, not 5.
+    {
+        const std::vector<uint16_t> g = { 0x4F22, 0xD103, 0x410B, 0x0009, 0x4F26, 0x000B, 0x0009, 0x0009, 0x0600, 0x9080 };   // sts.l pr ; call k ; lds.l pr ; rts
+        const DecompileResult r = chain("A3-82a wrapper forwards r4 to lent fill-backwards k", callerToG, { g, k });
+        CHECK(lent(r) && Has(r.Text(), "axStack") && !Has(r.Text(), "return 5;"));
+    }
+    // A3-82 b: a thunk that jumps to k.
+    {
+        const std::vector<uint16_t> g = { 0xD101, 0x412B, 0x0009, 0x0009, 0x0600, 0x9080 };   // mov.l =k,r1 ; jmp @r1 ; nop
+        const DecompileResult r = chain("A3-82b thunk jumps to lent fill-backwards k", callerToG, { g, k });
+        CHECK(lent(r) && Has(r.Text(), "axStack") && !Has(r.Text(), "return 5;"));
+    }
+    // A3-82 d: a thunk that lowers r4 by 16 then jumps to a lent k that stores at its pointer.
+    {
+        const std::vector<uint16_t> g = { 0xD101, 0x412B, 0x74F0, 0x0009, 0x0600, 0x9080 };   // mov.l =k,r1 ; jmp @r1 ; add #-16,r4
+        const std::vector<uint16_t> kAt = { 0xE101, 0x2412, 0x000B, 0x0009 };   // mov #1,r1 ; mov.l r1,@r4 ; rts
+        const DecompileResult r = chain("A3-82d thunk lowers r4 by 16, lent k stores at its pointer", callerToG, { g, kAt });
+        CHECK(lent(r) && Has(r.Text(), "axStack") && !Has(r.Text(), "return 5;"));
+    }
+    // A3-83: the callee launders the pointer before stepping down. Each is lent and reads the local.
+    auto a83 = [&](const char* name, std::vector<uint16_t> g) {
+        const DecompileResult r = chain(name, callerToG, { g });
+        CHECK(lent(r) && Has(r.Text(), "axStack") && !Has(r.Text(), "return 5;") && !Has(r.Text(), "register0x"));
+    };
+    a83("A3-83a callee masks the pointer with shll2/shlr2", { 0x6543, 0x4508, 0x4509, 0xE104, 0x2516, 0x4110, 0x8BFC, 0x000B, 0x0009, 0x0009 });
+    a83("A3-83d callee adds a negated constant", { 0xE310, 0x633B, 0x343C, 0xE101, 0x2412, 0x000B, 0x0009, 0x0009 });
+    a83("A3-83e callee adds a shll2'd constant", { 0xE3FC, 0x4308, 0x343C, 0xE101, 0x2412, 0x000B, 0x0009, 0x0009 });
+    a83("A3-83f callee swaps the pointer twice", { 0x6449, 0x6449, 0xE104, 0x2416, 0x4110, 0x8BFC, 0x000B, 0x0009 });
+    a83("A3-83h callee aligns the pointer with a mask (compiled)", { 0xE3FC, 0x2439, 0xE104, 0x2416, 0x4110, 0x8BFC, 0x000B, 0x0009 });
+    // A3-83 c (global round trip) and g (load through the argument) need their own callers/callees.
+    {
+        const std::vector<uint16_t> g = { 0xD304, 0x2342, 0x6532, 0xE104, 0x2516, 0x4110, 0x8BFC, 0x000B, 0x0009, 0x0009, 0x0600, 0xF100 };
+        const DecompileResult r = chain("A3-83c callee stores the pointer to a global and walks the reload", callerToG, { g });
+        CHECK(lent(r) && Has(r.Text(), "axStack") && !Has(r.Text(), "return 5;"));
+    }
+    {
+        const std::vector<uint16_t> callerG = { 0x4F22, 0x7FE8, 0xE005, 0x2F02, 0x62F3, 0x7210, 0x1F24, 0x64F3, 0x7410, 0xD104, 0x410B, 0x0009, 0x60F2, 0x7F18, 0x4F26, 0x000B, 0x0009, 0x0009, 0x0600, 0x9040 };
+        const std::vector<uint16_t> g = { 0x6542, 0xE104, 0x2516, 0x4110, 0x8BFC, 0x000B, 0x0009, 0x0009 };   // mov.l @r4,r5 ; fill-backwards r5
+        const DecompileResult r = chain("A3-83g callee loads the pointer from the word its argument points to", callerG, { g });
+        CHECK(lent(r) && Has(r.Text(), "axStack") && !Has(r.Text(), "return 5;"));
+    }
+    // A3-84: the caller launders the exact frame address before handing it to the lent fill-backwards k (A3-71a).
+    {
+        const std::vector<uint16_t> callerMask = { 0x4F22, 0x7FEC, 0xE005, 0x2F02, 0x64F3, 0x7410, 0xE3FC, 0x2439, 0xD103, 0x410B, 0x0009, 0x60F2, 0x7F14, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9040 };
+        const DecompileResult r = chain("A3-84a caller masks the frame address (and #-4, compiled)", callerMask, { k });
+        CHECK(lent(r) && Has(r.Text(), "axStack") && !Has(r.Text(), "return 5;"));
+    }
+    {
+        const std::vector<uint16_t> callerGlobal = { 0x4F22, 0x7FEC, 0xE005, 0x2F02, 0x64F3, 0x7410, 0xD305, 0x2342, 0xE400, 0x6432, 0xD104, 0x410B, 0x0009, 0x60F2, 0x7F14, 0x4F26, 0x000B, 0x0009, 0x0600, 0xF100, 0x0600, 0x9040 };
+        const DecompileResult r = chain("A3-84b caller passes the frame address through a global", callerGlobal, { k });
+        CHECK(lent(r) && Has(r.Text(), "axStack") && !Has(r.Text(), "return 5;"));
+    }
+    {
+        const std::vector<uint16_t> callerSwap = { 0x4F22, 0x7FEC, 0xE005, 0x2F02, 0x64F3, 0x7410, 0x6449, 0x6449, 0xD103, 0x410B, 0x0009, 0x60F2, 0x7F14, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9040 };
+        const DecompileResult r = chain("A3-84d caller swaps the frame address twice", callerSwap, { k });
+        CHECK(lent(r) && Has(r.Text(), "axStack") && !Has(r.Text(), "return 5;"));
+    }
+    // A3-86 a: a captured, unlent callee (reads r3 on entry) that fills backwards. The caller is withheld (it calls an unknown-signature
+    // function), but the probe walks the callee for storesBelow and exposes the frame, so the text reads the local, not the stale 5.
+    {
+        const std::vector<uint16_t> caller86 = { 0x4F22, 0x7FEC, 0xE005, 0x2F02, 0xE304, 0x64F3, 0x7410, 0xD104, 0x410B, 0x0009, 0x60F2, 0x7F14, 0x4F26, 0x000B, 0x0009, 0x0009, 0x0600, 0x9040 };
+        const std::vector<uint16_t> g = { 0x6133, 0x2416, 0x4110, 0x8BFC, 0x000B, 0x0009 };   // mov r3,r1 ; L: mov.l r1,@-r4 ; dt r1 ; bf L ; rts (reads r3)
+        std::vector<uint16_t> words = caller86;
+        words.resize(32, 0x0009);
+        std::vector<uint16_t> c = g;
+        c.resize(32, 0x0009);
+        words.insert(words.end(), c.begin(), c.end());
+        const CallFixture f = { "A3-86a unlent captured fill-backwards callee (reads r3)", base, std::move(words) };
+        const DecompileResult r = d.Decompile(CallSnapshot(f, ++serial), Request(base));
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok && !r.prototype.known);   // withheld: it calls an unknown-signature function
+        CHECK(Has(r.Text(), "axStack") && !Has(r.Text(), "return 5;"));
+    }
+}
+
+// ===== A3-65 (P1): a copy of r15 walked down by pre-decrement stores ===========================================================================
+// `*--p = v` over a local array compiles to a copy of r15 (or of the frame pointer r14), moved to the top of the array and walked down by
+// `mov.l Rm,@-Rn`. The engine's alias analysis (AliasChecker, upstream's) takes a pointer into the frame to reach only what lies at or above its base,
+// as an index does, and the guard of an indexed store (LoadGuard::establishRange) covered only the few iterations its partial analysis ran or what
+// lies above the base: the locals below the walk's start were taken for unaliased, their INDIRECTs at the walk's stores were collapsed, and a read
+// of one after the loop printed the value it had before it (`return 5;`, the code returns 1), with the signature lent and no note. A walk from the
+// entry r15 itself printed as the stack register (`register0x0000003c = (BADSPACEBASE *)((int4)register0x0000003c + -4);`). Patch 0056: such a base
+// aliases what lies below it, the guard covers the stack below a pointer that is stepped down, the join of the entry r15 is a pointer to the frame
+// (and no reference to a stack parameter). Each fixture by value (the pseudocode evaluated against the code run on the emulator), the walk's store
+// printed, and no stack register in the text; the printed-C differential holds the same fixtures compiled (Sh2GeneratedTests.cpp, "A3-65").
+void TestA365WalkDown()
+{
+    Sh2Decompiler d(gConfig);
+    uint64_t serial = 36500;
+    // 'walkStore' is the store instruction of the walk (its offset in words); 'want' the return statement, which reads the local the walk wrote last
+    // (the value of every fixture is held by the printed-C differential, compiled and run: the evaluator here has no loops); 'raw' whether the text
+    // may name the stack register (a pointer into the save area of a pushed register has no local to be named after: upstream prints those raw,
+    // `(int4 *)((int4)register0x0000003c + -4)`, here and at the head alike, with the right value).
+    auto check = [&](const char* name, std::vector<uint16_t> words, size_t walkStore, bool raw, const char* want) {
+        const CallFixture f = { name, 0x06009000u, std::move(words) };
+        auto snap = CallSnapshot(f, ++serial);
+        const DecompileResult r = d.Decompile(snap, Request(f.base));
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(Has(r.Text(), want));
+        CHECK(!Has(r.Text(), "return 5;"));   // WRONG at the head: the value stored before the walk
+        if (!raw) CHECK(!Has(r.Text(), "register0x") && !Has(r.Text(), "BADSPACEBASE"));
+        CHECK(!std::regex_search(r.Text(), std::regex("\\[[0-9]{3,}\\];")));   // no array of the 64 KiB guessed below the walk (LoadGuard::guessedBelow)
+        bool printed = false;
+        for (const MemoryAccess& m : r.accesses) printed |= m.insn == f.base + 2 * static_cast<uint32_t>(walkStore) && m.printed > 0;
+        CHECK(printed);
+        return r;
+    };
+    // The leaf of the ledger row: add #-8,r15 ; mov #5,r0 ; mov.l r0,@r15 ; mov r15,r2 ; add #8,r2 ; mov #2,r1 ; L: mov.l r1,@-r2 ; dt r1 ; bf L ;
+    // mov.l @r15,r0 ; rts ; add #8,r15. The code returns 1.
+    {
+        const DecompileResult r = check("A3-65 leaf: r15 + 8 walked down by longwords",
+                                        { 0x7FF8, 0xE005, 0x2F02, 0x62F3, 0x7208, 0xE102, 0x2216, 0x4110, 0x8BFC, 0x60F2, 0x000B, 0x7F08 }, 6, false, "return xStack_8;");
+        CHECK(r.prototype.known);   // right, and so lent
+    }
+    check("A3-65 walked down by bytes", { 0x7FF8, 0xE005, 0x2F00, 0x62F3, 0x7208, 0xE108, 0x2214, 0x4110, 0x8BFC, 0x60F0, 0x000B, 0x7F08 }, 6, false, "return (int4)cStack_8;");
+    check("A3-65 walked down by words", { 0x7FF8, 0xE005, 0x2F01, 0x62F3, 0x7208, 0xE104, 0x2215, 0x4110, 0x8BFC, 0x60F1, 0x000B, 0x7F08 }, 6, false, "return (int4)iStack_8;");
+    // from r15 + N: the walk starts inside the frame (4, 8 of 12, 12 of 16)
+    check("A3-65 from r15 + 4", { 0x7FF8, 0xE005, 0x2F02, 0x62F3, 0x7204, 0xE101, 0x2216, 0x4110, 0x8BFC, 0x60F2, 0x000B, 0x7F08 }, 6, false, "return xStack_8;");
+    check("A3-65 from r15 + 8 of a 12-byte frame", { 0x7FF4, 0xE005, 0x2F02, 0x62F3, 0x7208, 0xE102, 0x2216, 0x4110, 0x8BFC, 0x60F2, 0x000B, 0x7F0C }, 6, false, "return xStack_c;");
+    check("A3-65 from r15 + 12 of a 16-byte frame", { 0x7FF0, 0xE005, 0x2F02, 0x62F3, 0x720C, 0xE103, 0x2216, 0x4110, 0x8BFC, 0x60F2, 0x000B, 0x7F10 }, 6, false, "return xStack_10;");
+    // ...a deeper walk than the partial analysis's three iterations: eight longwords from the top of a 32-byte frame, the lowest read back
+    check("A3-65 eight longwords down a 32-byte frame", { 0x7FE0, 0xE005, 0x2F02, 0x62F3, 0x7220, 0xE108, 0x2216, 0x4110, 0x8BFC, 0x60F2, 0x000B, 0x7F20 }, 6, false, "return xStack_20;");
+    // from the frame pointer r14: mov.l r14,@-r15 ; add #-8,r15 ; mov r15,r14 ; mov #5,r0 ; mov.l r0,@r14 ; mov r14,r2 ; add #8,r2 ; mov #2,r1 ;
+    // L: mov.l r1,@-r2 ; dt r1 ; bf L ; mov.l @r14,r0 ; mov r14,r15 ; add #8,r15 ; rts ; mov.l @r15+,r14. The walk starts at the word r14 was pushed
+    // to, which is no local (raw, see above).
+    // A3-87: the walk starts at the word r14 was pushed to, storage no local is mapped to, so the text names the raw stack
+    // register `register0x0000003c` (no C). The value is right, but a lent signature (or any output) with non-compilable text is a
+    // finding (the printed-C differential rejects it). The function is now marked unsupported and withheld: the raw text is still
+    // printed (the engine cannot name the slot), but the decompiler no longer offers it as a usable decompilation or a signature.
+    {
+        const DecompileResult r = check("A3-65 from the frame pointer r14", { 0x2FE6, 0x7FF8, 0x6EF3, 0xE005, 0x2E02, 0x62E3, 0x7208, 0xE102, 0x2216, 0x4110, 0x8BFC, 0x60E2, 0x6FE3, 0x7F08, 0x000B, 0x6EF6 },
+              8, true, "return xStack_c;");
+        CHECK(!r.prototype.known);   // A3-87: withheld for the raw register (lent at the head)
+    }
+    // ...and from r14 + 8 of a 12-byte frame, inside it: the pointer is a local's address
+    check("A3-65 from the frame pointer r14, inside the frame", { 0x2FE6, 0x7FF4, 0x6EF3, 0xE005, 0x2E02, 0x62E3, 0x7208, 0xE102, 0x2216, 0x4110, 0x8BFC, 0x60E2, 0x6FE3, 0x7F0C, 0x000B, 0x6EF6 },
+          8, false, "return xStack_10;");
+    // a loop that writes, then a loop that reads back up (`mov.l @r2+,r4`): 2 + 1
+    check("A3-65 walked down, then read back up", { 0x7FF8, 0xE005, 0x2F02, 0x62F3, 0x7208, 0xE102, 0x2216, 0x4110, 0x8BFC, 0xE102, 0xE300, 0x6426, 0x334C, 0x4110, 0x8BFB, 0x6033, 0x000B, 0x7F08 },
+          6, false, "return iVar3;");
+    // written by stores at constant offsets (5 and 7), read by a walk down (`add #-4,r2 ; mov.l @r2,r4`): the stores are kept, the walk reads them
+    {
+        const DecompileResult r = check("A3-65 written, then read down",
+                                        { 0x7FF8, 0xE005, 0x2F02, 0xE007, 0x1F01, 0x62F3, 0x7208, 0xE102, 0xE300, 0x72FC, 0x6422, 0x334C, 0x4110, 0x8BFA, 0x6033, 0x000B, 0x7F08 },
+                                        10, false, "return iVar3;");
+        CHECK(Has(r.Text(), "= 5;") && Has(r.Text(), "= 7;"));
+    }
+    // over the save slot of a register its pop freed (`mov.l r13,@-r15 ; mov.l @r15+,r13` before the frame, the shape of seed 901303's run-on): the
+    // slot was storage no local is mapped to, one variable with r13, and the text returned `unaff_r13`
+    check("A3-65 over a freed save slot", { 0x2FD6, 0x6DF6, 0x7FF8, 0x62F3, 0x7208, 0xE102, 0x2216, 0x4110, 0x8BFC, 0x50F1, 0x000B, 0x7F08 }, 6, false, "return xStack_4;");
+    // The controls: the same walked up (`mov.l r1,@r2 ; add #4,r2`), which the engine always had right: the local the walk wrote first.
+    check("A3-65 control: walked up by longwords", { 0x7FF8, 0xE005, 0x2F02, 0x62F3, 0xE102, 0x2212, 0x7204, 0x4110, 0x8BFB, 0x60F2, 0x000B, 0x7F08 }, 5, false, "return aiStack_8[0];");
+    check("A3-65 control: walked up by bytes", { 0x7FF8, 0xE005, 0x2F00, 0x62F3, 0xE108, 0x2210, 0x7201, 0x4110, 0x8BFB, 0x60F0, 0x000B, 0x7F08 }, 5, false, "return (int4)acStack_8[0];");
+    // A walk down from the entry r15 reads no stack argument: the signature has none (the join's pointer is no reference to one).
+    {
+        const DecompileResult r = check("A3-65 a walk down from the entry r15 has no stack argument",
+                                        { 0x7FF8, 0x6073, 0x81F0, 0x64F3, 0x7408, 0xE102, 0x2455, 0x4110, 0x8BFC, 0xE102, 0xE200, 0x6645, 0x326C, 0x4110, 0x8BFB, 0x85F3, 0x302C, 0x7F08, 0x000B, 0x0009 },
+                                        6, false, "return iStack_2 + iVar3;");
+        CHECK(!Has(r.Text(), "param_3") && !Has(r.Text(), "in_stack"));
     }
 }
 
@@ -9777,9 +12373,24 @@ int main(int argc, char** argv)
     CHECK(sfe::MakeDirectory(scratch));
     gConfig = dts::Join(scratch, "config");
     CHECK(sfe::MakeDirectory(gConfig));
+    if (const char* fixtures = std::getenv("SE_AREA2_FIXTURES"))   // round 8: the fixtures of a file, nothing else
+    {
+        try
+        {
+            TestArea2Round8Fixtures(fixtures);
+        }
+        catch (std::exception& e)
+        {
+            std::printf("FATAL: uncaught std::exception: %s\n", e.what());
+            return 3;
+        }
+        dts::RemoveTree(scratch);
+        return dts::Finish("Sh2DecompilerTests (fixtures)", start);
+    }
     try
     {
         RUN(TestFixture1());
+        RUN(TestMappingOracleOnFixtures());
         RUN(TestFixture1b());
         RUN(TestNoCodeAndMirror());
         RUN(TestMovaFollowsExecutionAddress());
@@ -9811,6 +12422,21 @@ int main(int argc, char** argv)
         RUN(TestArea2Round4());
         RUN(TestArea2Round5());
         RUN(TestAreas234Leftovers());
+        RUN(TestArea2Round7SlotValues());
+        RUN(TestArea3Round8());
+        RUN(TestRoutedSeeds());
+        RUN(TestArea3Round9());
+        RUN(TestArea3Round9Fix());
+        RUN(TestArea3Round10());
+        RUN(TestArea3Round10Fix());
+        RUN(TestArea3HiddenInputFuzz());
+        RUN(TestArea3Round11());
+        RUN(TestArea3Round11Fix());
+        RUN(TestArea2Round8());
+        RUN(TestArea2Round9());
+        RUN(TestArea2Round10());
+        RUN(TestArea2Round11Fix());
+        RUN(TestA365WalkDown());
         RUN(TestFetchAndDataRefusals());
         RUN(TestAllocationFailureIsReported());
         RUN(TestFunctionFreesActiveOutput());

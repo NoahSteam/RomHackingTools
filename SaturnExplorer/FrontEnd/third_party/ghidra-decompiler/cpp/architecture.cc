@@ -18,6 +18,8 @@
  * Modified for SaturnExplorer: unused loads kept until shown to be ordinary memory (patches/0009-keep-unused-loads.patch).
  * Modified for SaturnExplorer: a load is read once and in place, never duplicated or moved past another memory operation (patches/0010-load-not-duplicated.patch).
  * Modified for SaturnExplorer: a constructor that fails frees its print language (patches/0023-allocation-failure-order.patch).
+ * Modified for SaturnExplorer: flow follows no branch target that is not a multiple of the host's instruction alignment (patches/0052-flow-instruction-alignment.patch).
+ * Modified for SaturnExplorer: a repeating action stops, with a warning, after a bounded number of passes (patches/0055-engine-action-repeats-bounded.patch).
  */
 // Set up decompiler for specific architectures
 
@@ -188,6 +190,8 @@ Architecture::Architecture(void)
   cancelRequested = (std::atomic<bool> *)0;
   keepUnusedLoads = false;
   loadsNotDuplicated = false;
+  instructionAlignment = 1;
+  maxActionRepeats = 300;	// SaturnExplorer (patches/0055-engine-action-repeats-bounded.patch); see Action::perform
 #ifdef CPUI_STATISTICS
   stats = new Statistics();
 #endif

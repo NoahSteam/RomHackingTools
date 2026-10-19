@@ -512,7 +512,9 @@ uintb OpBehaviorIntSdiv::evaluateBinary(int4 sizeout,int4 sizein,uintb in1,uintb
     throw EvaluationError("Divide by 0");
   intb num = sign_extend(in1,8*sizein-1);		// Convert to signed
   intb denom = sign_extend(in2,8*sizein-1);
-  intb sres = num/denom;	// Do the signed division
+  // SaturnExplorer (patches/0059-engine-range-arithmetic-sound.patch): the most negative 8-byte value divided by -1 traps in the host
+  // (the quotient 2^63 does not exist in 64 bits); the quotient of the p-code is the value itself, as it is at every smaller size
+  intb sres = (denom == -1) ? (intb)(0 - (uintb)num) : num/denom;	// Do the signed division
   sres = zero_extend(sres,8*sizeout-1); // Cut to appropriate size
   return (uintb)sres;		// Recast as unsigned
 }
@@ -534,7 +536,7 @@ uintb OpBehaviorIntSrem::evaluateBinary(int4 sizeout,int4 sizein,uintb in1,uintb
     throw EvaluationError("Remainder by 0");
   intb val = sign_extend(in1,8*sizein-1);	// Convert inputs to signed values
   intb mod = sign_extend(in2,8*sizein-1);
-  intb sres = val % mod;	// Do the remainder
+  intb sres = (mod == -1) ? 0 : val % mod;	// Do the remainder (SaturnExplorer, patches/0059: INT64_MIN % -1 traps in the host; the remainder is 0)
   sres = zero_extend(sres,8*sizeout-1); // Convert back to unsigned
   return (uintb)sres;
 }

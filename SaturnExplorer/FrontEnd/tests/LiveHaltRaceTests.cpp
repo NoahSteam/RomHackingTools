@@ -186,6 +186,7 @@ public:
         mThread = std::thread([this] {
             uint32_t pc = 0x06001000u;
             HaltStop(0, pc);
+            ++mHalts;
             while (!mStop.load())
             {
                 if (!SeExportGateHalt()) continue;   // still parked (spins: SE_EXPORT_SPIN_GATE)
@@ -204,7 +205,20 @@ public:
         mStop = true;
         if (mThread.joinable()) mThread.join();
     }
+    // Every halt published so far, the first one included.
     uint32_t Halts() const { return mHalts.load(); }
+    // Waits until more than `n` halts have been published. The deadline only bounds a broken run:
+    // how soon the CPU thread gets scheduled after a release is up to the machine, not the test.
+    bool WaitForHaltsAbove(uint32_t n) const
+    {
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+        while (Halts() <= n)
+        {
+            if (std::chrono::steady_clock::now() > deadline) return false;
+            std::this_thread::yield();
+        }
+        return true;
+    }
 
 private:
     std::atomic<bool>     mStop{false};
@@ -220,26 +234,34 @@ void TestAnImmediateStopSurvivesTheRelease(Client& cl)
 {
     HaltingCpu cpu;
     cpu.Start();
-    Sleep(50);
+    Check(cpu.WaitForHaltsAbove(0), "the emulate thread halted the first time");
 
-    int lost = 0, replies = 0;
+    // Each request is sent only once the CPU has re-halted from the one before, so every request
+    // releases a parked CPU -- one sent while it was still running would release nothing, and its
+    // reply could not show a lost stop. Waiting does not narrow the race: that lives between this
+    // request's release and its reply, and the wait comes after the reply.
+    int lost = 0, replies = 0, rehalted = 0;
     for (int i = 0; i < 400; ++i)
     {
         const bool step = (i % 2) != 0;
+        const uint32_t before = cpu.Halts();
         const Ctl c = cl.Exchange(step ? SE_LIVE_VERB_ISTEP : SE_LIVE_VERB_RESUME, 1);
         if (!c.ok) { Check(false, "a reply to the release request"); break; }
         ++replies;
         if (c.paused != 0 && c.reason == SE_LIVE_STOP_NONE) ++lost;
+        if (!cpu.WaitForHaltsAbove(before)) break;
+        ++rehalted;
     }
     Check(replies == 400, "all 400 release requests were answered");
     Check(lost == 0, "no reply reports a paused emulator whose stop was erased by the release");
+    // Without this the check above is vacuous: a CPU that never came back to a halt cannot lose one.
+    Check(rehalted == 400, "the emulate thread really did re-halt on each release");
 
     // And when it has come to rest, the final state agrees with itself.
     Sleep(50);
     const Ctl fin = cl.Exchange(SE_LIVE_VERB_GET, 0);
     Check(fin.ok && fin.paused == 1 && fin.reason != SE_LIVE_STOP_NONE,
           "at rest it is paused WITH a stop");
-    Check(cpu.Halts() >= 100, "the emulate thread really did re-halt on each release");
 }
 
 // Each published halt takes the next number, a resume leaves it alone, and the same PC twice is

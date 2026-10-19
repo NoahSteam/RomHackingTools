@@ -15,6 +15,7 @@
  *
  * Modified for SaturnExplorer: host cancellation check-points (patches/0001-cancel-flag.patch).
  * Modified for SaturnExplorer: a cloned action tree that cannot be completed or registered is freed (patches/0032-allocation-failure-order-2.patch).
+ * Modified for SaturnExplorer: a repeating action stops, with a warning, after a bounded number of passes (patches/0055-engine-action-repeats-bounded.patch).
  */
 #include "action.hh"
 #include "funcdata.hh"
@@ -306,6 +307,7 @@ int4 Action::perform(Funcdata &data)
   if (data.getArch()->isCancelRequested())
     throw CancelError("Decompilation cancelled");
 
+  int4 repeats = 0;	// SaturnExplorer (patches/0055-engine-action-repeats-bounded.patch): passes after the first
   do {
     switch(status) {
     case status_start:
@@ -353,6 +355,22 @@ int4 Action::perform(Funcdata &data)
       break;			// we either repeat, or return our count
     }
     status = status_repeat;
+    // SaturnExplorer (patches/0055-engine-action-repeats-bounded.patch): a repeating action ends when a pass changes nothing,
+    // and nothing else bounds it. Two rules that undo each other (RuleAndDistribute and RuleHumptyOr with a forgotten
+    // non-zero mask, ledger A2-59) made the main loop pass for ever, each pass leaving its dead ops behind (so each slower
+    // than the last), until the host cancelled: the user was told the function was too large. A group or a pool that is
+    // still changing after Architecture::maxActionRepeats passes (300; the most any function of the two game images needs is
+    // 60, of the rule pool) stops and says so. Every pass keeps the meaning of the function, so what has been done is printed;
+    // the host withholds the prototype, as for the restart limit. A single action that repeats (ActionDoNothing removes a
+    // block a pass) makes progress by construction and is not bounded.
+    if ((lcount<count)&&((flags&rule_repeatapply)!=0)) {
+      repeats += 1;
+      int4 limit = data.getArch()->maxActionRepeats;
+      if (limit > 0 && repeats >= limit && (dynamic_cast<ActionGroup *>(this) != (ActionGroup *)0 || dynamic_cast<ActionPool *>(this) != (ActionPool *)0)) {
+	data.warningHeader("Exceeded maximum repeats of " + getName() + " with changes still pending");
+	break;
+      }
+    }
   } while((lcount<count)&&((flags&rule_repeatapply)!=0));
 
   if ((flags&(rule_onceperfunc|rule_oneactperfunc))!=0) {

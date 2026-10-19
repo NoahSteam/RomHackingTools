@@ -16,6 +16,9 @@
  * Modified for SaturnExplorer: every LOAD and STORE's fate is recorded (patches/0017-access-fates.patch).
  * Modified for SaturnExplorer: the instructions and jump tables the flow recovered are recorded (patches/0021-flow-instructions.patch).
  * Modified for SaturnExplorer: a cloned jump-table is owned from the moment it is made (patches/0040-jumptable-tracedag-allocation-failure.patch).
+ * Modified for SaturnExplorer: replacing an input of an op forgets what was known of its output's non-zero bits (patches/0046-engine-input-replaced-resets-nzmask.patch).
+ * Modified for SaturnExplorer: and of the non-zero bits of what was worked out from that output (patches/0049-engine-nzmask-forgotten-downstream.patch).
+ * Modified for SaturnExplorer: every change to an op keeps the non-zero and consume masks around it a superset of the truth, in place of 0046 and 0049 (patches/0054-engine-cached-masks-never-narrower.patch).
  */
 #include "funcdata.hh"
 #include "flow.hh"
@@ -34,6 +37,278 @@ void Funcdata::opSetOpcode(PcodeOp *op,OpCode opc)
     debugModCheck(op);
 #endif
   obank.changeOpcode(op, glb->inst[opc] );
+  opMasksChanged(op);	// SaturnExplorer (patches/0054-engine-cached-masks-never-narrower.patch)
+}
+
+// SaturnExplorer (patches/0054-engine-cached-masks-never-narrower.patch): the cached masks of a Varnode.
+//
+// Two facts are cached on every Varnode and trusted by the rules between the two actions that work them out: the non-zero
+// mask (Varnode::nzm, which bits can be 1: ActionNonzeroMask, a forward analysis) and the consume mask (Varnode::consumed,
+// which bits any reader can see: ActionDeadCode, a backward one). RuleAndMask, RuleOrConsume, RuleAndDistribute, the
+// sub-variable flow and ActionVarnodeProps (which replaces a Varnode by 0 when the two do not meet) take them as facts. A
+// mask narrower than the truth is a wrong text with no warning; a wider one only delays a simplification. So the invariant
+// kept here is:
+//
+//   at every rule application, a cached mask may be wider than the truth, never narrower.
+//
+// It holds when each mask is at least what its neighbours' masks give: for every op, the non-zero mask of the output contains
+// PcodeOp::getNZMaskLocal of the inputs' masks, and the consume mask of every input contains what the op takes of it given
+// its output's consume mask (PcodeOp::getConsumeLocal, the step ActionDeadCode itself takes; a call's operands, a RETURN's
+// and the other roots as in ActionDeadCode::apply). Both actions establish it. It can break only where the graph changes:
+// an op computes something else (opSetOpcode, opSetInput, opSwapInput, opRemoveInput, opInsertInput, opSetAllInput), a
+// Varnode gains a reader (opSetInput, and so totalReplace and every rule that re-points an op), or an op gets an output
+// (opSetOutput, newVarnodeOut, newUniqueOut). Each of those calls this. The non-zero mask of the op's own output is set to
+// what its inputs give (exact for the value it computes now); below it, every mask the new value reaches is widened until
+// one already holds what its inputs give; the consume masks of the op's inputs, and of everything above them, are widened
+// until one already holds what its readers take; and a reader whose input's non-zero mask grew takes its inputs again where
+// that matters (a compare consumes the bits either side can have). Apart from the changed op's own output nothing is
+// narrowed, so the walks end, and a pass costs at most a visit per Varnode for each bit. A new temporary's output starts
+// consumed in no bit (newUniqueOut: nothing reads it yet) and grows by what each reader takes; a new op's output starts
+// with the non-zero mask of what it computes. So a rule's own new ops do not make the masks of what they read wider than
+// the readers need: wider than needed is what 0049 did, and it was enough to start the cycle of A2-59.
+//
+// The rounds before reset the masks they could name: 0046 the output of the op whose input was set, 0049 everything below
+// it (and every mask through a loop, so that RuleAndDistribute and RuleHumptyOr undid each other for ever: ledger A2-59),
+// 0051 the consume mask of a Varnode that takes another's readers in totalReplace and not of one that gains a reader by
+// opSetInput (RulePushMulti pointed an add at the phi of a join whose consume mask was its byte reader's: ledger A2-58).
+// A walk that widens to what the neighbours give forgets nothing that is still true.
+
+namespace {
+
+/// A worklist on the stack: a rule that changes an op allocates nothing unless more than 64 are waiting at once (the
+/// allocations of the engine are what the fault matrix counts, and patch 0049's first version moved 19 of its pins with a vector)
+template<typename T> class MaskWorklist {
+  T items[64];
+  int4 num;
+  vector<T> overflow;
+public:
+  MaskWorklist(void) : num(0) {}
+  void push(T x) { if (num < 64) items[num++] = x; else overflow.push_back(x); }
+  bool pop(T &x) {
+    if (!overflow.empty()) { x = overflow.back(); overflow.pop_back(); return true; }
+    if (num == 0) return false;
+    x = items[--num];
+    return true;
+  }
+};
+
+/// \brief Is the op complete enough for its masks to be worked out
+///
+/// A rule builds and rebuilds ops a slot or an op-code at a time: an op whose input is missing, whose count of inputs is
+/// not its op-code's, whose output is not there yet or whose offset is not a constant is half built, and the call that
+/// completes it does the work.
+bool masksReady(const PcodeOp *op)
+
+{
+  if (op->getOpcode() == (TypeOp *)0) return false;
+  int4 n = op->numInput();
+  for(int4 i=0;i<n;++i)
+    if (op->getIn(i) == (Varnode *)0) return false;
+  OpCode opc = op->code();
+  int4 need = -1;
+  switch(opc) {
+  case CPUI_COPY:
+  case CPUI_INT_ZEXT:
+  case CPUI_INT_SEXT:
+  case CPUI_INT_NEGATE:
+  case CPUI_INT_2COMP:
+  case CPUI_BOOL_NEGATE:
+  case CPUI_POPCOUNT:
+  case CPUI_LZCOUNT:
+  case CPUI_FLOAT_INT2FLOAT:
+    need = 1;
+    break;
+  case CPUI_INT_ADD:
+  case CPUI_INT_SUB:
+  case CPUI_INT_MULT:
+  case CPUI_INT_DIV:
+  case CPUI_INT_SDIV:
+  case CPUI_INT_REM:
+  case CPUI_INT_SREM:
+  case CPUI_INT_AND:
+  case CPUI_INT_OR:
+  case CPUI_INT_XOR:
+  case CPUI_INT_LEFT:
+  case CPUI_INT_RIGHT:
+  case CPUI_INT_SRIGHT:
+  case CPUI_INT_EQUAL:
+  case CPUI_INT_NOTEQUAL:
+  case CPUI_INT_LESS:
+  case CPUI_INT_LESSEQUAL:
+  case CPUI_INT_SLESS:
+  case CPUI_INT_SLESSEQUAL:
+  case CPUI_INT_CARRY:
+  case CPUI_INT_SCARRY:
+  case CPUI_INT_SBORROW:
+  case CPUI_BOOL_AND:
+  case CPUI_BOOL_OR:
+  case CPUI_BOOL_XOR:
+  case CPUI_PIECE:
+  case CPUI_SUBPIECE:
+  case CPUI_INDIRECT:
+    need = 2;
+    break;
+  case CPUI_ZPULL:
+  case CPUI_SPULL:
+    need = 3;
+    break;
+  case CPUI_INSERT:
+    need = 4;
+    break;
+  default:
+    break;
+  }
+  if (need >= 0 && n != need) return false;
+  switch(opc) {
+  case CPUI_SUBPIECE:
+    if (!op->getIn(1)->isConstant()) return false;
+    break;
+  case CPUI_ZPULL:
+  case CPUI_SPULL:
+    if (!op->getIn(1)->isConstant() || !op->getIn(2)->isConstant()) return false;
+    break;
+  case CPUI_INSERT:
+    if (!op->getIn(2)->isConstant() || !op->getIn(3)->isConstant()) return false;
+    break;
+  case CPUI_MULTIEQUAL:
+    if (n == 0) return false;
+    break;
+  default:
+    break;
+  }
+  if (op->getOut() == (Varnode *)0) {	// The op-codes that always write a value, and do not have one yet
+    switch(opc) {
+    case CPUI_STORE:
+    case CPUI_BRANCH:
+    case CPUI_CBRANCH:
+    case CPUI_BRANCHIND:
+    case CPUI_CALL:
+    case CPUI_CALLIND:
+    case CPUI_CALLOTHER:
+    case CPUI_RETURN:
+      break;
+    default:
+      return false;
+    }
+  }
+  return true;
+}
+
+/// Widen the consume mask of \e vn to hold \e need, and remember it if its definition has to take more of its inputs now
+void widenConsume(Varnode *vn,uintb need,MaskWorklist<Varnode *> &above)
+
+{
+  need &= calc_mask(vn->getSize());
+  if ((need & ~vn->getConsume()) == 0) return;
+  vn->setConsume(vn->getConsume() | need);
+  if (vn->isWritten())
+    above.push(vn);
+}
+
+}
+
+/// The consume mask that the given op, as it is now, needs of one of its inputs: the step of ActionDeadCode for an op that
+/// writes a value (PcodeOp::getConsumeLocal), and for the ops it starts from what ActionDeadCode::apply pushes, or every bit
+/// where it decides from the whole function (a switch's index) or from a call specification that may change.
+/// \param op is the reading op
+/// \param slot is the input slot
+/// \return the consume mask the input must hold
+uintb Funcdata::inputConsumeNeeded(PcodeOp *op,int4 slot) const
+
+{
+  Varnode *vn = op->getIn(slot);
+  if (vn->isAutoLive()) return ~((uintb)0);
+  if (op->isCall()) {
+    if (slot == 0 || op->isCallWithoutSpec()) return ~((uintb)0);
+    FuncCallSpecs *fc = getCallSpecs(op);
+    if (fc == (FuncCallSpecs *)0 || fc->isInputLocked() || fc->isInputActive()) return ~((uintb)0);
+    uintb val = minimalmask(vn->getNZMask());	// as ActionDeadCode::markConsumedParameters
+    int4 bytesConsumed = fc->getInputBytesConsumed(slot);
+    if (bytesConsumed != 0)
+      val &= calc_mask(bytesConsumed);
+    return val;
+  }
+  if (!op->isAssignment()) {
+    if (op->code() == CPUI_RETURN && slot > 0) {	// as ActionDeadCode::gatherConsumedReturn, for this one value
+      if (getFuncProto().isOutputLocked() || getActiveOutput() != (ParamActive *)0) return ~((uintb)0);
+      if (vn->getSpace()->getType() == IPTR_JOIN) return ~((uintb)0);	// (patch 0033)
+      uintb val = minimalmask(vn->getNZMask());
+      int4 bytesConsumed = getFuncProto().getReturnBytesConsumed();
+      if (bytesConsumed != 0)
+	val &= calc_mask(bytesConsumed);
+      return val;
+    }
+    return ~((uintb)0);		// a STORE, a branch, a switch's index (its own mask is narrower), the RETURN's address
+  }
+  Varnode *outvn = op->getOut();
+  uintb outc = outvn->isAutoLive() ? ~((uintb)0) : outvn->getConsume();
+  uintb res;
+  if (!op->getConsumeLocal(slot,outc,res)) return 0;
+  return res;
+}
+
+/// \brief Keep the cached masks around the given op a superset of the truth after it changed
+///
+/// Called after every change to the op-code, the inputs or the output of an op (see the comment above). The non-zero mask of
+/// the output is set to what the op gives from its inputs' masks, and that of every Varnode below it is widened to what its
+/// op gives; the consume masks of the inputs of every op whose inputs changed or now have wider non-zero masks, and of every
+/// Varnode above them, are widened to what their readers take. Nothing else is narrowed: the next ActionNonzeroMask and
+/// ActionDeadCode work the exact masks out again.
+/// \param op is the op that changed
+void Funcdata::opMasksChanged(PcodeOp *op)
+
+{
+  if (!masksReady(op)) return;		// Half built: the call that completes it does this
+  MaskWorklist<PcodeOp *> below;	// Ops whose inputs' non-zero masks grew
+  MaskWorklist<Varnode *> above;	// Varnodes whose consume masks grew, or that gained a reader
+  for(int4 i=0;i<op->numInput();++i)
+    widenConsume(op->getIn(i),inputConsumeNeeded(op,i),above);
+  Varnode *outvn = op->getOut();
+  if (outvn != (Varnode *)0) {
+    // The op's own output is what its inputs give now, exactly: the old mask was a fact about what the op computed before
+    // (and a new op's output, which has every bit, is told what it can hold). What is below is only ever widened.
+    uintb mask = op->getNZMaskLocal(false);
+    if (mask != outvn->nzm) {
+      outvn->nzm = mask;
+      list<PcodeOp *>::const_iterator iter;
+      for(iter=outvn->beginDescend();iter!=outvn->endDescend();++iter)
+	below.push(*iter);
+    }
+  }
+  PcodeOp *cur;
+  while(below.pop(cur)) {
+    if (!masksReady(cur)) continue;
+    for(int4 i=0;i<cur->numInput();++i)	// A reader whose input can hold more may take more of its inputs (a compare)
+      widenConsume(cur->getIn(i),inputConsumeNeeded(cur,i),above);
+    Varnode *vn = cur->getOut();
+    if (vn == (Varnode *)0) continue;
+    uintb mask = vn->nzm | cur->getNZMaskLocal(false);
+    if (mask != vn->nzm) {
+      vn->nzm = mask;
+      list<PcodeOp *>::const_iterator iter;
+      for(iter=vn->beginDescend();iter!=vn->endDescend();++iter)
+	below.push(*iter);
+    }
+  }
+  // A Varnode that gains a reader may hold its consume mask from before its definition's inputs were asked for it (a new
+  // output that is not a temporary starts with every bit consumed, and its op may have been completed before it was set):
+  // its definition is asked again.
+  for(int4 i=0;i<op->numInput();++i) {
+    Varnode *vn = op->getIn(i);
+    if (vn->isWritten())
+      above.push(vn);
+  }
+  Varnode *vn;
+  while(above.pop(vn)) {
+    PcodeOp *def = vn->getDef();
+    if (def == (PcodeOp *)0 || !masksReady(def)) continue;
+    uintb outc = vn->isAutoLive() ? ~((uintb)0) : vn->getConsume();
+    for(int4 i=0;i<def->numInput();++i) {
+      uintb need;
+      if (def->getConsumeLocal(i,outc,need))
+	widenConsume(def->getIn(i),need,above);
+    }
+  }
 }
 
 /// \param op is the given CPUI_RETURN op
@@ -88,6 +363,7 @@ void Funcdata::opSetOutput(PcodeOp *op,Varnode *vn)
   vn = vbank.setDef(vn,op);
   setVarnodeProperties(vn);
   op->setOutput(vn);
+  opMasksChanged(op);	// SaturnExplorer (patches/0054-engine-cached-masks-never-narrower.patch)
 }
 
 /// The input Varnode is unlinked from the op.
@@ -126,6 +402,10 @@ void Funcdata::opSetInput(PcodeOp *op,Varnode *vn,int4 slot)
 
   vn->addDescend(op);		// Add this op to list of vn's descendants
   op->setInput(vn,slot);	// op must be up to date AFTER calling descend_add
+  // SaturnExplorer (patches/0054-engine-cached-masks-never-narrower.patch): op computes something else now, and vn has a
+  // reader it did not have (see opMasksChanged). This replaces patches 0046 and 0049, which forgot the non-zero masks
+  // below the op instead.
+  opMasksChanged(op);
 }
 
 /// This is convenience method that is more efficient than call opSetInput() twice.
@@ -142,6 +422,7 @@ void Funcdata::opSwapInput(PcodeOp *op,int4 slot1,int4 slot2)
   Varnode *tmp = op->getIn(slot1);
   op->setInput(op->getIn(slot2),slot1);
   op->setInput(tmp,slot2);
+  opMasksChanged(op);	// SaturnExplorer (patches/0054-engine-cached-masks-never-narrower.patch): not every op is commutative
 }
 
 /// \brief Insert the given PcodeOp at specific point in a basic block
@@ -308,6 +589,7 @@ void Funcdata::opRemoveInput(PcodeOp *op,int4 slot)
 #endif
   opUnsetInput(op,slot);
   op->removeInput(slot);
+  opMasksChanged(op);	// SaturnExplorer (patches/0054-engine-cached-masks-never-narrower.patch)
 }
 
 /// The given Varnode is set into the given operand slot. Any existing input Varnodes

@@ -8764,3 +8764,2648 @@ A scratch gcc 13 build, `-j3` on a shared machine (load 1 to 9).
 - Windows and macOS were not built or run. A6-47 is checked on Linux by the forced skip and the written-off pin; the Mac's own run is the coordinator's.
 - A real ENOSPC (a small tmpfs) was not repeated; `RLIMIT_FSIZE` is the same `fwrite`/`fclose` failure.
 - The Ready-stage check holds the process-wide `StartLibrary` mutex while it reads and, rarely, repairs; a second thread's request would wait for it. The product has one worker.
+
+## Area 2, round 7 review
+
+Reviewer, branch `review/2-round7-review`, on the coordinator's head `ffc75a1` (patch 0050 and the regenerated `sh-2.sla` in the tree). Tests only: the decode oracle and the decompiler suite grew (commit `0cc677a`); no spec, engine or host file changed (the engine files I changed to find a cause or to try a fix were restored with `cp` from copies and `git status` is clean of them). New ledger rows **A2-46** to **A2-51**: **A2-47 is a P1** (a wrong printed address, no warning), **A2-48** a P2, **A2-46** a P2 oracle hole (closed here, oracle only), **A2-49**, **A2-50** (oracle) and **A2-51** (oracle, closed here) P3. **The round is not clean, so area 2 is not done**: round 6 was the first clean round, this one resets the count. Round 6 held otherwise: A2-4's patch 0050 is right in the spec (the decode oracle, 77 spec mutants, every delayed-branch kind), and the P1 is in how the engine prints what the spec makes.
+
+### 1. What I ran
+
+| Run | Result |
+|---|---|
+| `SaturnExplorerSh2DecodeTests` with `SE_MEDNAFEN_SS` (the real `sh7095_idecodetab.inc`) | transcribed table equals Mednafen's for all 65,536 words; SLEIGH and `Sh2Disasm` define 53,752 words, 0 disagreements; translation history 5,632 cells, 0 differ; the 18 named shapes agree. Differential execution on the round 6 code before I changed the oracle: 260,000 (default), 13,000,000 twice (`SE_DECODE_CASES=100000` at seeds 777 and 424242): 0 differ. After: 260,000 (default), 5,200,000 (`40000`, seed 6060606), 13,000,000 at seeds 31337, 777 and 424242 (`100000`), 6,500,000 at seed 555 (`50000`): **0 differ, 0 could not run, 0 of 130 forms fail**; and 2,000,000 cases of each of the ten delayed-branch forms at seed 555 |
+| `SaturnExplorerSh2SemanticsTests`, `SaturnExplorerSlaFreshnessTests` (`se-sleighc` compiles the `.slaspec`; the checked-in `sh-2.sla` and the embedded copy agree, 15,156 bytes; the compiler's one warning is the `nop` temporary, by design) | pass |
+| generator, grammar 2, seeds 1-3,000 | 5,941 functions, 0 findings; the canary's 240 programs 0 failing |
+| generator, grammar 1, seeds 1-1,000 | 0 findings |
+| generator, beyond the nightly's 20,000 | grammar 1 seeds 70,001-74,000: 0; grammar 2 seeds 100,001-106,000: 0; **grammar 2 seeds 60,001-66,000: 3 failing seeds** (60538, 62956, 64293: section 5) |
+| generator, `SE_GENERATED_ALPHABET=specials` (stc/sts let in) | grammar 2 and 1 seeds 60,001-66,000 (3,000 of each): the same two failing seeds as the default alphabet's (60538, 62956), none of its own; grammar 1 seeds 70,001-73,000: 0 |
+| printed-C, seeds 1-3,000 (one each) | 3,072 functions, 2,616 compared, agrees 2,673, `narrow-c` 4, `void-return` 243, `void-return-lent` 152, **0 findings** |
+| printed-C, seeds 950,001-956,000, two each | 12,072 functions, 10,300 compared, agrees 10,492, `narrow-c` 38, `skipped:array-local` 2, `void-return` 927, `void-return-lent` 613, 0 findings |
+| printed-C, hand | the classic 32-step unsigned division (`div0u ; mov #0,r1 ; (rotcl r0 ; div1 r5,r1) x 32 ; rotcl r0`, 68 words), a signed one (`div0s r5,r4` first), and 16 turns of two chained dividers: all agree with the run for 32 inputs, divisor 0 among them (the text is a 160-line expression) |
+| `ctest` on the six area 2 tests of my scratch build (Semantics, Decode, Decompiler, Generated, PrintedC, SlaFreshness) | 6 of 6 pass, 24 s. I did not run the whole ctest: the build is the decompiler targets only |
+
+### 2. Patch 0050 and the spec, attacked by mutation
+
+Seventy-seven mutants of `superh.sinc` (a scratch script: edit the text, `se-regen-sla`, rebuild the decode test, run it, restore the three files; 75 non-equivalent; of the other two one is equivalent by construction and one is a no-op I mistyped), each against the decode oracle.
+
+*The slot's PC and its context, 18 mutants.* For every kind the value and the context: bt/s not taken (slot + 2 for + 4), bt/s T polarity, bf/s taken (+ 2), jmp (Rm + 4, Rm + 0), rts (PR + 4), braf (+ 2), rte (r15 - 4, no + 2), the alignment mask of a kind, `slot_kind` of bt/s, jsr and rte swapped for another, `slot_rm` of braf (the wrong field, 0). All killed, 607 to 4,602 of 2,600,000 cases differ. The decode oracle holds the spec.
+
+*The arithmetic and flags, 59 more (one of them equivalent, one a no-op I mistyped).* div0s (T, Q and M swapped), div0u (T kept), div1 (T polarity, the carry compare signed, `m_eq_q` from the old Q), rotcl (T), rotcr (carry in), shar (logical), shal (T), addc and subc (either carry dropped), negc (either term dropped, T old), addv and subv (the conditions), the mac.w bounds, MACH bit 0, product sign and order, the mac.l bounds and the 48-bit constants, both operand orders for m == n, dmuls, dmulu, muls.w, mulu.w (signs), swap.b, xtrct, exts.b, exts.w, tas (T and the or), movt, dt, cmp/hs (signed), cmp/str (bytes 0 and 3), ldc, ldc.l and rte masks, the branch targets' signedness, trapa's pushed PC, rte's SR after its slot, jsr's PR after its slot, mov.l `@Rm+,Rn` with m == n, mov.l `Rm,@-Rn` stored value. All killed at 20,000 cases of each form **except** the four mac saturation bounds (the sum exactly on `0x7FFFFFFF`, `0xFFFFFFFF80000000`, `2^47 - 1`, `-2^47`) and one equivalent mutant (`product s>= 0` read as `s> 0`: product 0 never reaches the test). The second carry of addc was found by 30 cases of 2.6 million, negc's by 147, cmp/str's byte 3 by 131. That is **A2-46**: the spec is right (read against `MAC_W`, `MAC_L` and `DIV1` of `sh7095_ops.inc`), the oracle's uniform draw meets those states one time in 2^32. The widening (`RelateOperands`, `PlaceMacBoundary`, each on a stream of its own so every other case is what it was) kills them at the **default** 2,000 cases of each form: the 46 arithmetic mutants 11 to 2,141 cases differ (260,000), the four bounds 49 to 63 each; the current spec: 0 differ.
+
+*The new tests, mutation-checked.* A2-46: with the widening reverted the four bounds survive 2.6 million cases (the audit above, run before I wrote it), with it they are killed at 260,000. A2-48 and A2-47: each pin was turned round by a trial fix of the engine (below) and the rest of the suites stayed green; both trials were reverted.
+
+### 3. The slot, the three ways, and a word that is illegal there
+
+The three PC-relative reads in the slot of every kind are in the decode oracle's slot sweep (mova, mov.w, mov.l; 512 slots drawn from every non-branch form, a tenth of them PC-relative), taken and not taken, in cells at both alignments of the code and at address 0: 0 differ. What the oracle cannot see is what the engine prints for them. **`TestArea2Round7SlotValues`** evaluates the printed address against the run for bt/s and bf/s x mova, mov.w, mov.l x an even and an odd displacement, and for rts + mova: **A2-47**. mov.w (no alignment) agrees everywhere, even displacements agree, bf/s with a mova slot prints the mask at 0x06009002 and not at 0x06009004, bt/s the other way (a sweep of 48 cells; the mova ones decide). The cause is a stale non-zero mask (section 4), reproduced with the same arithmetic written as ordinary code.
+
+Words in a slot that are illegal on the hardware, 10 delayed branches x 15 words, decompiled: the ten delayed-branch words fail the request in every slot position (`Could not obtain cached delay slot instruction`, 100 of 150, the accepted A2-18), and `bt`, `bf`, `trapa`, `sleep` translate and print with no warning (40 of 150: the same acceptance, A2-18/A2-8), 0xFFFF reaches "flow reaches bytes that do not decode" (10). No crash, nothing new.
+
+### 4. What I found, and where it comes from
+
+- **A2-47 (P1).** `4415 8D03 C704 000B 0009 0009 000B 0009`: the text returns 0x0600901E where the code returns 0x0600901C. I printed the tree at `RuleAndMask::applyOp`: the AND's input is an INT_ADD whose output has `nz=fffffffc` and whose own inputs give `local=ffffffff`. `RuleCollectTerms` / `distributeIntMultAdd` changed the inputs of an existing op, the output kept the mask of the value it had (`(1 - t) * 0x6009008`), and the AND with `0xfffffffc` was removed as redundant. The trial: reset the output's mask in `Funcdata::opSetInput` when an input is replaced: the mask prints, the five pin CHECKs of the test fail as designed, nothing else in `Sh2DecompilerTests` does. Whether that is the right place is the fixer's; the generator cannot draw a PC-relative slot load, so the nightly could not have found it.
+- **A2-48 (P2).** `Sleigh::oneInstruction` leaves the parse tree's next address after the delay slot; the cached tree's commits are applied again with `inst_next` the instruction after the slot. `T(bsr) ; T(bsr) ; T(mova @(3,pc),r0)` gives the bra-style PC (the engine's p-code for the follower reads `slot_pc_valid = 1`). 215 of 240 follower cases differ after two translations in a row, 0 of 240 after one (`RunFollowers`; pinned `> 0`). The trial: `pos->setNaddr(pos->getAddr() + pos->getLength())` before `applyCommits()` makes it 0. I found no product reach (the emulator, which translates every executed instruction, can be poisoned by a tight delayed-branch loop whose exit then reads the ordinary PC from T; `ReturnCheck::Step` re-walks instructions); the oracle hole is the finding, and bra and bsr have had it since patch 0005.
+- **A2-51 (P3, oracle, closed).** The decode oracle itself fails at other seeds: `PrepMem` rewrote the jump register of jmp and jsr (and a slot's `PrepMem` or my relation any branch's) with an odd address; 8, 4 and 6 of 2 million cases of jsr, jmp and bsrf "could not run" at seed 555 on the base, one at 31337. Fixed (the register is kept; the failing lines name the slot, the address being translated and the registers).
+- **A2-49 (P3)**, **A2-50 (P3, oracle):** seed 62956 (section 5): a lent `void` for the value of a callee compared by a branch with empty arms, and the shrinker that keeps the fact the shrink removed.
+
+### 5. The seeds beyond the nightly, and the stc/sts fence
+
+Three of the 6,000 seeds 60,001-66,000 of the default grammar 2 fail; 6,000 of 100,001-106,000 and 4,000 of grammar 1 do not. None is a specials-alphabet class: the two that the specials window also hits are the default alphabet's own.
+
+| Seed | Class | Area | Replay (`SE_GENERATED_WORDS=`, with the shown `FUNCS`, `RETURNS`, `CLOBBERS`, `READS`) |
+|---|---|---|---|
+| 60538 | `n:kept-read:r14`: a function it calls was lent a signature that changes r14, and the text reads r14 as the value it had on entry | 3 | `2F86 2F96 2FA6 2FB6 2FD6 0D2A 6843 6953 6A63 6B73 61E3 2610 B010 0009 6483 6593 66A3 67B3 D304 4D2A 6DF6 6BF6 6AF6 69F6 68F6 432B 0009 0009 0600 903C 2FE6 7FF4 6EF3 62F3 720C E103 2216 4110 8BFC E200 6043 7E0C 6FE3 6EF6 000B 0009` with `FUNCS="0/0/0,0/0/36,3c/3c/5c" RETURNS="1,1,1" CLOBBERS="181000,101000,1000" READS="20100,4000,0"` (the generator's own shrink) |
+| 62956 | `n:return-dropped` | 2 (A2-49) | A2-49's 60 words |
+| 64293 | `n:cache-read-pointer-unsaid`: the read of 2 bytes at 0x06009170 (the cached partition 0x05F80074) through a pointer the output derives from a register address is not called a cache read | 5 | the generator's shrink: `2FD6 6013 6DF6 000B 0009 2F86 2F96 2FA6 2FE6 4F22 7FF0 6EF3 6843 6953 6A63 B02D 0009 6483 6593 66A3 E105 3616 8916 4608 C701 016E 412B 0009 0600 9050 0600 9050 0600 9054 0600 905C 0600 9058 0600 9058 A005 0009 A003 0009 A001 0009 D705 D106 7E10 6FE3 4F26 6EF6 6AF6 69F6 68F6 412B 0009 0009 25B0 0428 0600 907C 7FE8 E103 3616 8913 4608 C702 016E 412B 0009 0009 0600 90A0 0600 90A4 0600 90A8 0600 90AC A006 0009 A004 0009 A002 0009 8577 D702 E07D 7F18 000B 0009 05F8 0066` with `FUNCS="0/0/a,a/a/72,7c/7c/b8" TABLES="34:6:6:5c:50,50,54,5c,58,58;8a:6:4:ac:a0,a4,a8,ac" RETURNS="1,1,1" CLOBBERS="0,121000,101000" READS="20000,40000,800"` |
+
+I did not file rows for the two other areas' seeds (the coordinator numbers them); the fixers of areas 3 and 5 reproduce them with the lines above (the replay strings are the generator's own: `SE_GENERATED_WORDS="..."` with the other variables shown, run on `SaturnExplorerSh2GeneratedTests <scratch dir>`).
+
+**The fence.** The fixer's question: the stc/sts fence (`gSpecialReads`) can come off. Over 9,000 grammar-2 and grammar-1 seeds beyond what the fixer ran, the specials alphabet found nothing of its own (A2-16 and A3-5 are fixed and their pins hold). The coordinator's one-line change (the default alphabet draws stc/sts) changes the programs of every seed the other fixers replay and the nightly's seeds, so it should come with a new baseline of the nightly.
+
+### 6. What the alphabet and the grammars still exclude, and what covers it by hand
+
+| Excluded from the generator | Covered by |
+|---|---|
+| trapa | A2-9 (`TestCallsAndTraps`, value-checked against the run with the VBR table and the handler); the decode oracle |
+| rte | A2-24, A2-36 (`TestArea2Round4`, `TestArea2Round5`); the decode oracle's 130-form slot sweep and now rte + follower |
+| sleep | the "sleep keeps everything" prototype fixture; not run by the decode oracle (a user op) |
+| stc/sts in grammars 1 and 2 (the default alphabet) | the register-only grammar has them; the specials windows above; A2-16 and A3-5 pins |
+| ldc.l, stc.l, lds.l, sts.l except pr | A2-35 fixtures (`stc.l sr,@-r4`); the decode oracle |
+| mac.l and mac.w as values (printed-C is register-only; grammar 1 has them for the access ledger) | `Sh2SemanticsTests` (random, S both ways, m == n), the decode oracle (now the bounds), and my hand reading of the printed text of four mac.w accumulations with S set and clear (the test's evaluator cannot parse the C comma expression `(uVar5 = 0x7fffffff, iVar4 < 0)`; the text saturates by the same test as the spec). Not machine-compared |
+| a PC-relative load or mova in a slot (policy comment of the grammar) | `TestDelaySlotPcRelative`, `TestArea2Round7SlotValues` (bt/s, bf/s, rts; jmp, jsr, braf, bsrf, rte by the decode oracle's p-code and the substring fixtures only), the decode slot sweep |
+| a branch in a slot | A2-18 (accepted); the 150-combination table above |
+| braf in the printed-C grammar | A2-38 |
+| misaligned word and longword accesses, odd jump targets | A2-8 (a), accepted; the generator classifies them, the decode oracle's cases avoid them (A2-51) |
+| code at the top of the address space, interrupts, the bus lock of tas.b | A2-8/A2-30, accepted and in the guide |
+
+### 7. Not reached
+
+- The corpora (`SE_GAME_LEND`): the images are not in this worktree.
+- Sanitizers (CI's job).
+- jmp, jsr, braf, bsrf and rte slot loads are checked to the hardware at the p-code (decode oracle, 0 differ) and by substring in the text, not by value: a callee-visible value needs a lent callee, and the value of a tail jump's slot is not in the caller's text. The mova and rts values are; the rest depend on A2-47's fix to be worth building.
+- The mac.w and mac.l text by value (above).
+- A3 and A5 seeds 60538 and 64293 beyond the replay lines.
+
+## Area 2, round 7 fix
+
+Fixer, branch `review/2-round7-fix`, on the coordinator's head `1a87b1b`. One code commit, `ad80a00` (two engine patches, tests, the generator), and the record. **A2-47 (P1) and A2-48 (P2) are fixed, A2-50 (P3, oracle) is fixed, A2-49 (P3) is accepted** with a reason that matches A2-45's and a count in the generator in place of the failure. New patches: **0046** and **0047** (the numbers the gaps between 0045 and 0048 left; `vendor.py` applies them in file-name order and the reproduction below is identical). Nothing else in the engine or the spec changed, so `sh-2.sla` and `Sh2SpecData.h` are as they were.
+
+### 1. The rows
+
+**A2-47 (P1), patch 0046.** The reviewer's account is right except for one word. I printed the tree as `RuleAndMask` reads it and followed the rewrite: `Funcdata::distributeIntMultAdd` turns a MULT into an ADD and keeps its value, so it is not the one that leaves a wrong mask; `RuleCollectTerms` is. It collects the terms of an ADD tree, zeroes the coefficient of one term in one inner ADD (`opSetInput(order[i-1]->getOp(), zerocoeff, ...)`) and puts the combined coefficient in another, so the sum of the whole tree is what it was and the value of each inner op is not. The inner ADD that used to be `(1 - T) * 0x6009008` (a multiple of 4, mask `0xfffffffc`) became `T * 6 + 0x6009008` with that mask, and `RuleAndMask`, which trusts `getNZMask()` of its input, took the `& 0xfffffffc` for redundant. The mask is information about a value; the defect is in keeping it across an in-place change of the value, and `ActionNonzeroMask` (`calcNZMask`) only runs once per pass of the main loop, between pools of rules.
+
+The place: `Funcdata::opSetInput` sets the mask of the output of the op whose input it sets back to every bit possible (`~0`, what a new Varnode has) after the new input is in. Three candidate places were weighed:
+
+| Place | Verdict |
+|---|---|
+| In `RuleCollectTerms` after its `opSetInput` calls | Covers the rule that was found and none of the others that change an op's value in place; every one of them would need the same line, and the next rule written would not have it. |
+| `opSetInput` (the reviewer's trial) | One place for every rewrite through the common route; the mask is only information, so losing it for the rest of a pool costs at most a simplification that the next pass makes, never a value. **Chosen.** |
+| `opSetInput` recomputing with `PcodeOp::getNZMaskLocal(true)` instead of resetting | More exact, and I tried it: the game dump crashed (a segmentation fault in `getNZMaskLocal` for an op that reaches `opSetInput` half built or of a kind whose inputs it does not expect). A recomputation is a new reading of every op's shape at every input change; the reset needs to know nothing. Dropped. |
+
+`TestArea2Round7SlotValues` is flipped: every case is held to the run (it was `expectWrong` for the bt/s odd mova and mov.l, with `wrong == 2`), the odd-displacement mova and mov.l cases are held to `& 0xfffffffc` in the text, and the control (the same sum as code) too. The reviewer's sweep showed the wrong half is the other one for the other alignment of the code, so every case is now made at **both** alignments (a `nop` first or not): 24 slot cases (3 slots x bt/s and bf/s x even and odd x 2 alignments) plus `rts + mova` and the two controls. Reverting the patch fails 8 CHECKs.
+
+**A2-48 (P2), patch 0047.** `Sleigh::oneInstruction` now sets the tree's next address to `addr + length` of the branch itself before it applies the commits, then to the end of the slot as before (the `bsr` and `jsr` p-code needs that one for the return address). The trial of the review is the fix; the first translation sets it to what the parser had set already, so only a cached tree changes. `RunFollowers` is `CHECK(twice == 0)`: 60 pairs, 240 cases, 0 differ after one translation and after two in a row (215 differed). The decode oracle's other parts did not move.
+
+**A2-49 (P3), accepted.** I looked for the cause before accepting, because the row says "fix it if it is reasonable". The RETURN's value in the lent request is not the call's output: the callee returns 1 byte (`extu.b`), the lent type is `xunknown1`, and r0's other three bytes come from a MULTIEQUAL of the diamond that the `bt` makes, so the RETURN reads `ZEXT(SUBPIECE(CONCAT(MULTIEQUAL, call output)))` (printed with a debugging line in `ActionReturnRecovery::apply`, removed again). Patch 0044's rule, that a RETURN whose value is a locked call's output is a return whatever else uses the value, looks at the output itself; here `ancestorOpUse` falls to `onlyOpUse`, which finds the `CBRANCH` that the compare feeds, and the branch whose arms do nothing is removed after the return is decided (their dead writes go first, the empty branch later). To count it, either the extension and concatenation are looked through (a new case in `ancestorOpUse` that has to be right for every width and every piece), or dead code and branch removal run ahead of return recovery (upstream's order is the reverse). Both for a function that compares a value and does nothing with the answer, which is unoptimised code, and a caller that reads r0 afterwards is withheld ("uses r0 after calling"). The same reason as A2-45's (the order of the passes) and the same rule as A3-41 (r0 used for anything else is scratch). The reviewer's remark that seed 62956's arms are not empty is right: they hold dead writes (r2, r7, r1, r3), so the generator cannot recognise the shape by empty arms, and the reduction in the row (nops for those words) is the same function after the dead writes are gone.
+
+What the generator does about it: a function whose `returns` intent is lent `void` is not a `return-dropped` when its code compares r0 (`tst r0,r0`, `cmp/eq #imm,r0`, `cmp/pl`, `cmp/pz`, `cmp/xx` with r0 as an operand) with a `bt`, `bf`, `bt/s` or `bf/s` after its last call (`ComparesCallResult`); it is counted as `excluded.call-result-compared.return-dropped`, so a run shows how often the grammar draws it (1 of the 6,000 seeds 60,001 to 66,000, seed 62956; none in the 20,000 of the nightly). Pinned by `TestRound7Pins` (the seed, the review's reduction, and a control with the compare and the branch as nops, which returns r0 and is lent so and is not excluded).
+
+**A2-50 (P3, oracle).** Two guards, because the declaration can be false in two ways. `Shrinker::IntentHolds` is checked before every shrink step is evaluated: a function that returns the value of its last call (`retIsCall`, the one declaration an item carries) must still end in a call to a function that returns, so a step that takes out the call, or puts an item after it, is refused; the other declarations are words of the function itself (`retWord`, which no step removes) or are checked against the run (`partial`). And `return-dropped` itself needs r0 written on every finished run (`!everUnwritten`), the evidence the row asks for: a function that writes r0 nowhere is not a counterexample whatever it was declared. Seed 62956 shrunk with the A2-49 exclusion switched off keeps its call and its compare (`... B00F 0009 6483 6593 2008 8901 A002 0009 A000 E361 ...`) and is lent `void` over a callee that returns: a counterexample. Pins in `TestRound7Pins`: the review's shrunk replay with its `returns` declaration has no finding (the guard on the run); `IntentHolds` is false when the call is taken out and when an item follows it; and a shrink of the seed with every step accepted but the one that gives up `retIsCall` ends with the intent intact (the guard in the shrinker; `Shrinker` has an `accept` hook for it).
+
+**Other.** Seven A6-11 allocation pins of `DecompilerFaultTests` moved (a changed mask makes the main loop take a slightly different path through the `shapes` fixture, so the same allocation is a few ordinals away): `actions` pass 0: 16 bytes #338 to #368, 24 bytes #882 to #880, 32 bytes #259 to #283, 40 bytes #568 to #566, 56 bytes #104 to #106; pass 1: 24 bytes #882 to #880, 32 bytes #259 to #283, each as the suite prints it ("MOVED ... Re-pin: write nth = ..."). The pins name the same sites.
+
+### 2. The mutation table
+
+Each fix reverted in the committed tree (the engine file or the test file restored with `git checkout` after), the owning suite rebuilt and run:
+
+| Reverted | Pin | Result |
+|---|---|---|
+| 0046: the reset in `opSetInput` removed | `Sh2DecompilerTests` `TestArea2Round7SlotValues` | fails 8 CHECKs: 2 of the slot cases by value against the run, 4 for the missing `0xfffffffc` in the text, and the A2-47 control both ways |
+| 0047: `setNaddr` before `applyCommits` removed | `Sh2DecodeTests` `RunFollowers` (two in a row) | 215 of 240 cases differ, `twice == 0` fails (the review's number) |
+| A2-50: `!everUnwritten` removed from `return-dropped` | `TestRound7Pins` (the shrunk replay) | the replay gets a `return-dropped` finding |
+| A2-50: `IntentHolds` not asked in `Shrinker::Still` | `TestRound7Pins` (the shrinker with its hook) | the program that results fails `IntentHolds` |
+| A2-50: `IntentHolds` always true | `TestRound7Pins` | fails both (call taken out; item after it) |
+| A2-49: the exclusion off (`ComparesCallResult` false) | `TestRound7Pins` | fails 4: the seed and the reduction each get a finding and are not excluded |
+
+### 3. The matrix, on the fixed tree
+
+| Run | Result |
+|---|---|
+| `ctest -E SaturnExplorerLive -j3 --timeout 900` (RelWithDebInfo, 92 tests) | 92 of 92 pass (the longest, the fault suite, 123 s) |
+| `SaturnExplorerDecompilerFaultTests` | 94 jobs, 0 failed, after the seven re-pins (7 MOVED before them, 0 after) |
+| generator, grammar 2, `SE_GENERATED_SEEDS=3000` | 0 failing seeds, 0 findings; the canary 240 programs, 0 failing |
+| generator, grammar 1, 1,000 seeds | 0 failing, 0 findings |
+| generator, printed-C only, 3,000 seeds | 3,072 functions, 2,616 compared, agrees 2,673, `narrow-c` 4, `void-return` 243, `void-return-lent` 152, 0 findings (the review's numbers) |
+| generator, 20,000 seeds (10,000 of each grammar) | 0 failing seeds, 0 findings |
+| generator, grammar 2, `SE_GENERATED_FIRST=60001`, 6,000 seeds | **2 failing seeds, 60538 (A3) and 64293 (A5), neither this area's**; 62956 is counted as excluded (1) |
+| decode oracle with `SE_MEDNAFEN_SS` | transcribed table equals Mednafen's for 65,536 words, 53,752 defined, 0 disagreements for SLEIGH and `Sh2Disasm`; translation history 5,632 cells 0 differ; followers 60 pairs, 240 cases, **0 differ after one and after two translations**; differential execution 260,000 cases (default), 0 differ, 0 could not run, 0 of 130 forms; 6,500,000 at seed 555 and again at seed 31337 (`SE_DECODE_CASES=50000`), 0 differ, 0 could not run |
+| corpus 007 (`SE_GAME_HWRAM`, `SE_GAME_LEND=1`) | every ledger count 0 (0 dropped, 0 missing and said); 1,732 functions; lent signatures 637 (866 parameters) before, **662 (923)** after: as before the fix |
+| corpus 008 | every ledger count 0 (0 dropped, **4** missing and said); 2,997 functions; lent 992 (1,227) before, **1,021 (1,287)** after: as before the fix |
+| vendoring (`python3 -I vendor.py` on a copy, the pinned Ghidra checkout) | 43 patches applied; `cpp/`, `processors/` and `sources.cmake` identical to the tree (and every other file of the directory) |
+
+**The corpus texts, before and after.** The counts of the ledger and of lending did not move, but a mask change can move folding anywhere, so the texts were compared: all 839 functions of image 007 and all 1,554 of image 008 with a prologue (`sts.l pr,@-r15`), decompiled with the default request by the engine without patches 0046 and 0047 and with them, the one linked against the object files of the other. **10 of 839 and 24 of 1,554 differ (1.2 % and 1.5 %)**; the rest are byte for byte the same. I read every difference after renaming variables (`xVarN`, `auStack_N`): none changes a value. They are of four kinds:
+
+- *Branch layout* (15): an `if/else` that set a result and returned it becomes guard clauses and `return`s (`0602032E`, `0605F80A`, `06040FD6`, `06073D58`, `060731E2`), a conjunction becomes nested ifs (`0602CE96`, `0606D95A`, `0600FD18`, `060331B8`), a flag is kept with the opposite sense and negated where it is read (`0601C5A6`, `0605BA82`: `bVar = x == 0 ... bVar = !bVar`), a comparison is written the other way round (`0600AACE`, `0600AB32`, `0600A0DE`, `0600A142`: `-1 < p` to `p < 0` with the arms swapped).
+- *Types* (9): `xunknown1`/`xunknown2` becomes `uint1`/`uint2` (`0601E398`, `0601E3C4`, `0605D874`, `0605D8A0`), an `& 0xffff` is gone and the variable is a `uint2` (`0601E58E`, `0601E5F4`), a temporary is `xunknown4` (`06013142`), a byte read is kept in a `uint1` (`0603482E`, `06044576`).
+- *Order or naming of statements and temporaries* (6: `0601E54E`, `0605DA2A`, `0603B582`, `0603B636`, `0603B75A`, `0604080A`).
+- *Expressions written another way* (4): `(x >> 10 & 0x1f) * 0xb8` is printed as `(x & 0x1f) * 0x90 + ... * 0x28` (0x90 + 0x28 = 0xb8, `06036182`), a 16-bit sum is cast once instead of twice (`0603A080`), `uStack_8._0_1_` is `uStack_8 >> 0x18` (`0601FD58`, `0605F234`), the same value (offset 0 of a big-endian word).
+
+That is the cost of the reset: a few rules that read a mask in the pass in which an input changed read "every bit" for that pass and the simplification comes a pass later, or in another order. The register-only printed-C oracle, which compares values against the run, and the 20,000 seeds are the check that none of them is a value.
+
+### 4. Not done, and what is left
+
+- A2-49 stays a way for the engine to print `void` over a value that a lent callee returns and the function only compares; the generator counts it. A reviewer who wants it closed has the two ways in the row's reason.
+- The corpora were compared as text (above); no run compares the corpus functions' values (there is no emulator trace of the game).
+- A5-82 and the seed 60538 are not taken (other areas').
+
+## Area 3, round 8 review
+
+Reviewer, branch `review/3-round8-review`, on master `f1a3765`. Findings only, no fixes. New ledger rows: **A3-49, A3-50, A3-51 (P2)**, A3-52, A3-53, A3-54 (P3); and A5-82 (P3, area 5's numbering, an oracle row; A5-81 is the only open area 5 row and is the oracle's other direction, so nothing is duplicated).
+**The round is not clean: three P2 rows.** Two of them are one premise (the engine keeps the return of a value that comes from memory, which it does not) breaking two of the rules round 5 and 6 built on it; the third is A3-48's channel through the stack. The round 7 P2 fixes (A3-36, A3-38, A3-39) held under every variant I tried. Area 3 has no open row before this round's, and the two-consecutive-clean-rounds count restarts.
+
+The instruments were scratch, not committed, and are described so the next reviewer can rebuild them:
+- **The fixture driver** of rounds 6 and 7 (the suite's own file with `main` renamed, a text spec of words at addresses, callees decompiled and lent first, inputs run on the emulator, `PseudoEval` against the run, and every register the lent effects call preserved compared with its entry value), plus a `volatile a b` line in the spec, and the 200-line assembler (labels, literal pools, `.long`). About fifty hand fixtures.
+- **A corpus dynamic run** (new). The suite's lend pass over an image (callees first, effects lent) and then each lent function run on the emulator with the image as memory (LWRAM and HWRAM, a sentinel return address, the stack in LWRAM), 16 register sets each (the first fixed; the rest draw each register from 0, 1, small numbers, pointers into HWRAM, LWRAM, a window of the caller's frame, near-negative values), 300,000 steps. Per completed run: every register `preserved` names equals its entry value, `r15` ends at `spDelta`, every store against the effects' claims (below), and the observable behaviour (the stores, and r0 when the signature returns a value) with each of r4-r7 beyond the signature's parameter count changed ("dropped parameter") and then with each of r0-r3 and r8-r14 changed ("hidden input"). The corpus has had no dynamic oracle for signatures; this is one.
+- **A claims check in a scratch copy of the generator** (new): after the `preserved` check of a lent function, for every finished run: a store at or above the entry r15 needs `kFrame` in `storesThrough` and the word in `frameWords`; a store inside the arena of r4-r7 needs that register's bit or `kMemory`; a non-preserved register that ends as a pointer into an arena or the stack needs the origin in `outOrigins`. The same claim code is in the corpus run.
+- **The generator beyond the nightly's range**, grammar 2 (the call-heavy one): seeds 60,001 to 66,000, 100,001 to 120,000, 300,001 to 320,000, 400,001 to 420,000 (the last with the claims check), and 200,001 to 210,000 with `SE_GENERATED_ALPHABET=specials`; the canary at 2,000 and at 30,000 programs.
+- **Scratch changes to `Sh2Decompiler.cpp`** (a copy, linked into the driver, the suite and the generator): the measurement of what the fix of A3-49 and A3-50 would touch. Not a fix.
+- RelWithDebInfo gcc (the main checkout's options), a scratch build of its own; the machine was shared (load 3 to 5).
+
+### Round 7, verified
+
+The suite passes at `f1a3765` (inside both corpus runs: 94 s and 177 s, "all passed"). The fixtures of A3-36 to A3-48 print what the record says. These held under variants the round did not pin:
+- **A3-36 and A3-37, the probe.** `jsr @r3` through a literal with r4 = r15 + 4 + an index read from data, a writer lent: right (the local is read after the call). The same with the literal word marked volatile (the engine cannot fold it, the call stays indirect, the caller is withheld "an indirect call it does not resolve"): right. The struct-return form (r2) through `jsr @r3`, plain and volatile: the note is said and the text agrees. A frame address in r4 after `or`, `xor` with 4, `shll` then `shlr`, `neg` twice, `not` twice, `swap.w` twice, `addc` with T clear, `sub` from a negated r15, `and` with a mask, then handed to a lent writer: all agree (the engine reads the arithmetic from r15 itself and declares an array alias, `axStack_8 [4]`; the arithmetic that cancels folds to the exact address). The frame address in GBR (`ldc r1,gbr`) to an unlent callee that writes `@(0,gbr)`: right (the user op consumes the address). The same in r3 or r8 folds: A3-10, accepted.
+- **A3-38, `jsr @r0`.** Slots `mov.l @r5,r0`, `mov r4,r0`, `add #1,r0`: each caller withheld "holds a value in r0 across a call that keeps r0"; the compiled idiom (the target left in r0, nothing after) is lent `void`.
+- **A3-39 and A3-40.** A computed value (`exts.w r5,r1 ; mov.l r1,@r15`) handed back: callee withheld. A store of a register the signature does not hold at `@(8,r15)`: withheld. The held-parameter spills are as A3-35 accepts.
+- **Tail calls (A3-27, A3-29).** `jmp @r1` to a lent callee with a slot that sets its argument (`mov r5,r4`: `return func(param_2)`; `add #5,r4`: `func(param_1 + 5)`), a callee that pops its caller's word (`rts ; add #4,r15`) under a caller that pushed (spDelta 0), r4 restored after the frame pop, a call followed by a tail call to a void callee (the first callee's value returned), and `bt` into the entry of a lent callee: all agree with the run.
+- **The canary** (A3-34, A3-44): 2,000 programs 0 failing, and 30,000 programs 0 failing (lent 51,637, withheld 71,363).
+- **Stack arguments** (not in the canary): SA1 to SA5 (a fifth argument read by a callee, stored in the call's delay slot, forwarded to a second callee, spilled by the callee) and SB1 to SB3 (the call alone): the callee reading a stack word is withheld; the call prints the stack argument when r5, r6 or r7 is set before it. That boundary is A3-51.
+- **Corpus lending counts**: 662 lent (923 parameters) for image 007 and 1,021 (1,287) for 008, every ledger count 0 (0 accesses dropped against the reference run; 0 and 4 missing and said). Both suites "all passed".
+
+### What the attack found
+
+1. **A3-49 and A3-50: the premise "a value from memory keeps the engine's return" is false, and two rules rest on it.** `ReturnCheck::Return` flags a join with r0's entry value when its origins are registers only (`mJoinedParams`, A3-20; `onlyInputs`, A3-14 and A3-45). The engine drops `phi(in_r0, *p)` and `phi(in_r0, literal)` as it drops `phi(in_r0, in_r6)`. A second alternative from memory, or a literal-pool load (which `WithholdReason`'s ReturnCheck reads as memory: only the probe is given the literals), takes the function out of both rules: `tst r4,r4 ; bt L ; mov r6,r0 ; tst r5,r5 ; bt L ; mov.l @r5,r0 ; L: rts` is lent `void f(int4, xunknown4 *)` and the code returns r6; `tst r4,r4 ; bt L ; mov.l @r5,r1 ; add r1,r0 ; L: rts` is lent `void` and returns the hidden input r0 plus a word; with `stc sr,r0` and a literal, the same for SR. The controls with the second alternative absent are withheld. The generator finds the first on its own: **five seeds of 76,000 beyond the nightly's range, none below 20,000** (112124, 117195, 202318 and 207676 with `specials`, 400533), each `return-dropped:partial` (and, in the module, `input-dropped:r2` or `r3`: the hidden reads feed only the dropped return). A scratch change (ignore `kMemory` in both tests) withholds every fixture and every seed, passes the whole suite (A3-14, A3-20, A3-45 pins included), moves neither corpus count (662 (923), 1,021 (1,287)) and withholds 4 more of 4,338 lent signatures in 3,000 grammar-2 seeds (0 findings).
+2. **A3-51: A3-48's channel through the stack.** The engine fills in at most two unset registers before a set one; the stack slot comes after r7, so with r5, r6 and r7 unset the word at the call's r15 is dropped from the call and its store is dead. A frame address stored there is a frame address in no argument; the probe looks at r2, r4-r7 and r7 alone, at no stack word. `func_0x06009040(); return 0x5a;` where the run returns 0x37, no note (a callee that reads a stack word its registers do not lead up to is never lent, so this call is always an unlent one). The same drop loses a plain value (`func(3)` for a call that passes 7 on the stack).
+3. **The oracle's own rows (A3-52, A3-53).** Seeds 60538, 308527, 405351 and 413608 (`kept-read`: a function that runs on into the next, whose successor reads r14 or GBR on purpose; the text is right) and 62956 and 400785 (`return-dropped`: A3-41/A2-45's accepted shape, a call's result read by a compare and left in r0; the acceptance was not followed by an exemption in check 9). Both would fail any nightly whose range holds one. The coordinator's seed 60538 is the first class: reproduced with the words, functions, returns, clobbers and reads of the brief (`kept-read:r14` on function 0, whose emptied shrunk form shares the entry of function 1; with r14 added to function 0's reads the finding is gone), triaged as the oracle's, not the engine's: the text reads `unaff_r14` before the call that changes it, which is right.
+4. **Area 5's (A5-82).** Six seeds of the pointer checks (3b, 3c) report right texts: the register address reaches the access through the cases of an unrecovered signed-bound table (303290, 202350, 313937) or through a callee's output register (310654, 405136; 64293 a callee argument, not reduced). Filed as an oracle row in area 5's numbering.
+5. **No new finding in the effects themselves.** The claims check (generator, 20,000 seeds, 119,939 runs of lent functions, 239,743 stores inside the arenas of r4-r7, 511,219 non-preserved registers at a return) and the corpus run (below) found no violation of `preserved`, `spDelta`, `storesThrough`, `outOrigins`, and no dropped parameter or hidden input. A3-54 files the standing blind spot: the generator checks one field of `CallEffects`.
+
+### Generator beyond the nightly (grammar 2)
+
+| Range | Seeds | Failing | Seeds and rows |
+|---|---|---|---|
+| 60,001 to 66,000 | 6,000 | 3 | 60538 (A3-52), 62956 (A3-53), 64293 (A5-82) |
+| 100,001 to 120,000 | 20,000 | 2 | 112124, 117195 (A3-49) |
+| 200,001 to 210,000 (`specials`) | 10,000 | 3 | 202318, 207676 (A3-49), 202350 (A5-82) |
+| 300,001 to 320,000 | 20,000 | 4 | 308527 (A3-52), 303290, 310654, 313937 (A5-82) |
+| 400,001 to 420,000 (claims check) | 20,000 | 5 | 400533 (A3-49), 400785 (A3-53), 405136 (A5-82), 405351, 413608 (A3-52) |
+
+76,000 seeds, 17 failing, every one classified; none is a wrong text of a class the record calls fixed. The canary: 2,000 programs (inside the 100,001 run) and 30,000, 0 failing. The unpatched head with the nightly's first 3,000 grammar-2 seeds and 240 canary programs: 0 failing (4,338 lent signatures); with the scratch change of A3-49/A3-50: 0 failing (4,334).
+
+### Corpus (`SE_GAME_LEND=1`) and its dynamic run
+
+- **Counts.** Image 007: 1,732 functions, 662 lent (923 parameters), `lending the proved effects changes the text of 296 functions: 25 gain a lent signature`. Image 008: 2,997 functions, 1,021 lent (1,287), 557 and 29. Every ledger count 0 (0 accesses dropped; 0 and 4 missing and said). Both suites "all passed". With the scratch change the counts and the passing are the same.
+- **The dynamic run.** Image 007: 662 lent functions, 10,098 completed runs of 16 register sets each (494 did not return within 300,000 steps), 0 `preserved` or `spDelta` violations, 0 claim violations, 27,162 runs with r4-r7 beyond the signature changed (0 behaviour differences), and, in a pass of 8 register sets per function, 55,506 runs with r0-r3 and r8-r14 changed (1 difference). Image 008: 1,021, 15,388 completed (948 did not return), 0 and 0, 43,637 perturbed (0), 84,414 hidden-input runs (2), and 1 claim hit. All three hits have a cause outside the engine: `0601F248` and its twin `0605E724` copy a count of bytes (a register-set value past 4) from a 4-byte local into the pushed r14, an out-of-range read of the function's own frame (the run's value is the hidden input only because the program reads past its local); `06010D90` stores rows of a 0x100-byte stride past the instrument's 0x400-byte window (not reproduced alone: the register sets of a single-function run differ). The first pass of the claims check flagged more (stores near small-integer pointers, and a stack that lay in HWRAM where a game's own pointers point); the window rule and a stack in LWRAM removed those, which were the instrument's.
+
+### Findings
+
+| Row | Severity | Finding |
+|---|---|---|
+| A3-49 | P2 | A3-20's join rule is skipped when another alternative of the returned value is a memory load or a literal: `tst r4,r4 ; bt L ; mov r6,r0 ; tst r5,r5 ; bt L ; mov.l @r5,r0` is lent `void f(int4, xunknown4 *)` and the code returns r6; five generator seeds beyond 20,000. |
+| A3-50 | P2 | A3-14's rule (r0 computed from its entry value on a path) is skipped when the computed value has a memory or literal operand: `tst r4,r4 ; bt L ; mov.l @r5,r1 ; add r1,r0` is lent `void`; the same for SR with a literal. |
+| A3-51 | P2 | A frame address stored in the stack-argument slot of a call whose r5-r7 are unset is no argument of the call, and the local is folded: `func_0x06009040(); return 0x5a;`, the run returns 0x37; a plain value there is dropped too (`func(3)` for 3 and 7). |
+| A3-52 | P3 | Oracle: check 12 (`kept-read`) ignores the reads of the function the body runs on into; four seeds (60538, 308527, 405351, 413608). |
+| A3-53 | P3 | Oracle: check 9 reports A3-41's accepted shape (a call's result read by a compare, left in r0) as `return-dropped`; seeds 62956, 400785. |
+| A3-54 | P3 | Instrument: only `preserved` of `CallEffects` is checked against the trace; the scratch claims check and the corpus dynamic run found no violation; their place in the suites is open. |
+| A5-82 | P3 | Oracle (area 5): rules 3b/3c report right texts where the register address reaches the access through an unrecovered signed-bound table or a callee's output; six seeds. |
+
+### Not covered
+
+- **Mutual recursion, interrupts between a callee's store and its caller's read, the sanitizers** are as in rounds 6 and 7. No engine code was changed, so the sanitizer jobs, the fault suite and the printed-C mode were not run.
+- **The probe's `kMaxSteps` exit** (round 7's open question) was not probed again; no corpus function was seen to reach it.
+- **The dynamic run's reach.** Stores into the caller's frame by a lent function did not occur (a lent function that makes one is withheld), so the `frameWords` half of the claims check is exercised only by its negative: the corpus never shows a lent function writing the caller's frame. Arguments are drawn at random, so a function that needs a structure of a certain shape mostly takes its error path; 494 and 948 attempts did not return.
+- **Area 5 seeds**: A5-82's mechanism is read from the shrunk output for 303290, 202350, 310654 and 405136 and not reduced for 313937 and 64293.
+- **A3-33, A3-35, A3-41** are accepted and were not re-argued; A3-53 is their oracle row.
+
+**Done criteria.** Area 3 has three P2 rows this round (A3-49, A3-50, A3-51) and three P3 rows (A3-52, A3-53, A3-54); it needs a fix round and then two consecutive clean review rounds. The scratch change in "What the attack found" (1) is the measured size of the fix of A3-49 and A3-50 (two lines of `Return`, plus giving `WithholdReason`'s ReturnCheck the literals if the fixer prefers the more exact reading); A3-51 asks the probe about the words at the call's r15.
+
+## Area 5: A5-82
+
+Fixer, branch `review/5-a82-fix` from `41180fe`. One row, **A5-82**, provisional P2 when the area 2 round 7 review filed it (seed 64293), merged by the coordinator with the area 3 round 8 review's filing of the same class (six seeds, P3, "oracle"). **Fixed** (`c369e97`), **severity P3**. **Triage verdict: (b), a generator false positive.** No engine, host or spec code changed (no patch 0049, no `vendor.py` run); the whole fix is in `FrontEnd/tests/Sh2GeneratedTests.cpp`.
+
+### Triage
+
+Built RelWithDebInfo under the scratch directory, `SaturnExplorerSh2GeneratedTests` on the base for each seed (`SE_GENERATED_GRAMMAR=2 SE_GENERATED_FIRST=<seed> SE_GENERATED_SEEDS=1`; 202350 with `SE_GENERATED_ALPHABET=specials`), the shrunk module read in full, with `SE_GENERATED_TOKENS` for the tokens the oracle looks at (a new `=2` form prints each token with its instruction). All six reproduce on the base, and the pins fail on it (mutation M0 below). The question for each: does the text omit a caution it should give, or does the oracle take a register for the pointer that is not the access's pointer?
+
+| Seed | Rule | What the text says | What the oracle took for the pointer | Mechanism |
+|---|---|---|---|---|
+| 64293 | 3b | `puVar6 = extraout_r7;` on one path, `puVar6 = &SCSP_SCILV2;` on the other, then `uVar3 = puVar6[7];` and, below, `puVar6 = &VDP2_MPGHRB;` | the last assignment: `&VDP2_MPGHRB` is the literal 0x05F80066 the callee leaves in r7, 14 bytes from the register read (0x05F80074), so no distance test tells it from the pointer | (3) an assignment made after the read on every path, outside every loop |
+| 303290 | 3c | `*(xunknown4 *)(param_3 + 6) = 4; if (param_2 == 0) { param_3 = &VDP2_WCTLA; }`, after `Could not recover jumptable ... Too many branches`, `Treating indirect jump as call` | `&VDP2_WCTLA`, below the write; the run came through a table case (`mov.l lit,r6`, 0x25B00404) the text does not hold | (2) the same, and the cases' code is not in the text |
+| 202350 | 3b | `xVar1 = *(xunknown4 *)param_4; ... param_4 = &VDP2_WCTLB;` below, the same unrecovered table | `&VDP2_WCTLB`, below the read (the run read 0x1DFE0064, the cached SCU range) | (2) |
+| 310654 | 3c | `func_0x06009034(param_1,param_2); *extraout_r7 = 0xffffff9d;` | the number 0xffffff9d, the value stored: an on-chip register's address (the oracle reads any number the bus decodes to a register) | (1) a value taken for an address; the pointer is the callee's output (A5-58) |
+| 405136 | 3c | `*(xunknown4 *)(extraout_r6 + 8) = 0xffffffe6;` | 0xffffffe6, the value stored (BCR2's range) | (1) |
+| 313937 | 3c | `return CONCAT44((int4)*param_2,0xffffffa5);` after an unrecovered table | 0xffffffa5, the second operand of the same statement; the token carrying it belongs to the load's instruction, so token ownership does not separate it | (1) |
+
+The area 3 round 8 review's two situations are mechanism (2), and, for 310654 and 405136, a misreading of what the oracle took: the callee's output is why the text cannot name the pointer, but the number that made the check fire is the stored value. 64293 is neither: it needed the order of the text. In all six the output states what it can. A reader of 64293 is told that `puVar6` is `&SCSP_SCILV2` on one path and a callee's output on the other; the callee-returned pointer is A5-58 (accepted), and the read through it names no register it could be shown to read. So not a missing caution, not a P2: P3, an oracle row, as the area 3 review filed it.
+
+### The fix
+
+`PointerPrintsFromHardware` (rules 3b and 3c) derives the pointer of an access from the printed text: the statement holding the instruction's tokens, then the assignments of the variables in it. Two things were missing, and a third was too narrow.
+
+- **An assignment must be able to reach the read.** `BackEdgeSpans` finds the spans in which control goes back (a `do { } while`, a `while` or `for` block, a `goto` to a label above it). An assignment below the read counts only if one holds both lines. (64293, 303290, 202350.)
+- **The register named must be where the run went.** `NamesHardwareBase` takes a register symbol or a number as the pointer only within `kPointerReach` = 0x40 bytes (the longest displacement of one instruction, `mov.l @(disp,Rm)`) of the canonical address the emulator reached. A pointer is a register address plus the displacement, or an add of a small immediate; a register further away is a value or another path's pointer, and the oracle cannot tell by the text. (310654, 405136, 313937; also 303290, 202350.)
+- **Hardware no register is named at.** The old test took a number as a base only if a register covers it. Grammar 1 seeds 69 and 179 (found by comparing the checks against the base: 400 grammar-1 seeds, `cache.read.pointer.said` 22 to 20 and two reads gone from the rule) merge `&REG` with `0x5fe00dc` or `0x35d000d8`, addresses of the SCU and VDP1 ranges no register is named at; the engine says "a read of hardware through the cached partition" for them. Such a number now counts as the base when it is within reach of the address reached. With it grammar 2's 3,000 seeds check six more cached pointer reads than the base (`cache.read.pointer.said` 43 to 49, `cache.read.anonymous` 8 to 2), `pointer.effect.said` 2 to 2, and 7 derivations set aside (`pointer.effect.unrelated`), none of which had an effect wanted.
+
+New counts: `cache.read.pointer.unrelated` (now also: the register named is not the one reached), `pointer.effect.unrelated`, `pointer.effect.derived` (the 3c derivation holds, whether or not an effect is wanted). The header comment of rule 3b says what the derivation must now be.
+
+**Known limit.** A value printed as a number that lies within 60 bytes of the register the access reached is still taken for the pointer; 313937's 0xffffffa5 is 87 bytes from 0xFFFFFFFC and is excused by the distance, not by being a value. A parse of the access's address operand would settle it; the text of a statement with the instruction's tokens spread over several lines of the tree does not give one.
+
+### Pins (`TestA582Pins`, run in every run of the generator and so in ctest)
+
+- the six shrunk modules (no finding; the derivation counted unrelated);
+- the five grammar 2 seeds 64293, 303290, 310654, 313937 and 405136 as programs (64293's unshrunk text is the only one that holds the `&VDP2_MPGHRB` below the read: the shrunk module passes on distance alone);
+- grammar 1 seeds 69 and 179 as controls (the register merged with the unmapped address stays the pointer: `cache.read.pointer.unrelated` 0 with `cache.read.pointer.said` above 0; `pointer.effect.derived` above 0);
+- nine derivations on a hand-made output (`FakeOutput`): the assignment above the read; below it; below it in a `do-while`; below it before a backward `goto`; below it in a loop that does not hold the read; a register 60 and 68 bytes from the one reached; a stored value that is an on-chip address; hardware no register is named at.
+
+### Mutation table
+
+Each mutation made to `Sh2GeneratedTests.cpp` alone, the generator rebuilt, `SE_GENERATED_SEEDS=1` (the pins run first), then restored (`cmp` against the committed file).
+
+| Mutation | Failed checks | Pins that fail |
+|---|---|---|
+| M0: both fixes reverted (reach unbounded, every assignment reaches) | 30 | all six shrunk modules, the five seeds, the four derivations that want "not" |
+| M1: `kPointerReach` unbounded | 20 | shrunk 64293, 310654, 313937, 405136; seeds 64293, 310654, 313937, 405136; 68 bytes; the stored value |
+| M2: every assignment reaches the read | 6 | seed 64293 as a program; the assignment below the read in no loop and in a loop not holding it |
+| M3: `BackEdgeSpans` finds nothing | 4 | the `do-while` and the backward `goto` derivations |
+| M4: a number no register is named at never counts | 4 | the unmapped-hardware derivation; the grammar 1 seeds 69 and 179 controls |
+| M5: `pointer.effect.derived` not counted | 1 | seed 179 |
+
+M1 does not fail the shrunk 303290 and 202350 (the order alone excuses them), M2 does not fail the six shrunk modules (the distance excuses them, 64293's shrunk text has no assignment below), and each seed pin is only as strong as the mechanism it needs: hence the pairs.
+
+### Siblings
+
+Grammar 2, default alphabet, on the fixed generator: seeds 60,001 to 66,000: one failing seed, 60538 (area 3's, `kept-read:r14`, left alone); seeds 66,001 to 80,000 (14,000): four failing seeds, none a pointer-rule class: 66914 and 77197 `return-dropped:partial` (a lent `void` for a function that ends with r0 as r7), 69133 and 69493 `kept-read:gbr` (69133 also `into-function`, a shrink artifact of two functions at one address). No new A5 row (these are area 2/3's, for the coordinator). The six seeds of this row pass.
+
+### Matrix (RelWithDebInfo, `-j3`, own build)
+
+| Run | Result |
+|---|---|
+| `ctest -E SaturnExplorerLive -j3 --timeout 900` | 92 of 92 passed, 105 s |
+| `SaturnExplorerDecompilerFaultTests` | 0 of 94 jobs failed, 93.3 s, no MOVED pin |
+| `SE_GENERATED_SEEDS=3000 SE_GENERATED_GRAMMAR=2` | 0 failing seeds |
+| `SE_GENERATED_GRAMMAR=1 SE_GENERATED_SEEDS=1000` | 0 failing seeds |
+| `SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000` | passed (3,072 functions, 2,616 compared) |
+| `SE_GENERATED_SEEDS=20000` | 0 failing seeds |
+| `hwram007.bin`, `SE_GAME_LEND=1` | 839 of 839 ok; every ledger count 0; 0 missing and said; lending 637 (866) to 662 (923) |
+| `hwram008.bin`, `SE_GAME_LEND=1` | 1,554 of 1,554 ok; every ledger count 0; 4 missing and said; lending 992 (1,227) to 1,021 (1,287) |
+
+No ledger count or lending figure moved against the figures at the base; the host and the engine are the same bytes as at `41180fe`, so no function's text changed and there is none to diff.
+
+## Coordinator: area 6 and area 5 done; integration of five branches (67ba498 to 572c29d)
+
+**Area 6 is done.** The round 6 fix (A6-43 to A6-46) and A6-47 landed in 67ba498 after two clean review rounds. A6-47 came from a macOS run of
+f1a3765 (arm64, Apple clang 21, libc++): the fault suite's allocation pins were recorded against libstdc++, so off libstdc++ they are now skipped
+with a reason and the sweeps and cancel jobs still run. The same Mac re-ran 67ba498: build with 0 warnings, ctest 98 of 98, fault suite 0 of 94
+with the skip line printed. CI is Linux-only, so a pinned defect's regression is caught on Linux alone.
+
+**Area 5 is done.** Rounds 8 and 9 were clean of P1 and P2. A5-82 (generator seeds 64293, 303290, 202350, 310654, 313937, 405136, filed by the
+area 2 round 7 and area 3 round 8 reviews) was triaged as a generator false positive and fixed in the oracle (c369e97). A5-81 is accepted: its
+shapes are pinned by fixtures, and the generator gaps would each need a new device model (the row gives the reason).
+
+**Area 2** round 7 was not clean (A2-47 P1, A2-48 P2); the fix (patches 0046, 0047) landed in 41180fe, and round 8 review is under way.
+**Area 3** round 8 was not clean (A3-49 to A3-51 P2); its fixer is running.
+
+Integration notes:
+- The area 3 round 8 reviewer, working from f1a3765, numbered its own A5-82 for the class that 8de07fe had already filed as A5-82. The two were
+  merged into one row in 460d64f, and the fixer's closed row replaced it in 572c29d. No id was reused for a different finding.
+- 8de07fe: the A5-82 row was written after the area 2 round 7 review merge was staged, so it landed in its own commit.
+- `SaturnExplorerLiveHaltRaceTests` failed under load (2 of 5 runs alone, load average 7 to 8): it required 100 halts out of 400 releases, a
+  scheduling assumption. Fixed on a separate branch (each release now waits for the re-halt) and merged in 0893c2d; 20 of 20 under load since.
+  The live tests share one fixed Unix socket path (`SE_LIVE_DEFAULT_SOCK_PATH`), not a TCP port, so two copies still collide.
+
+Matrices (RelWithDebInfo, gcc 13), every one on the merged head before its push:
+
+| Head | ctest | fault suite | generator 3,000 g2 / 1,000 g1 / printed-C / 20,000 | corpora 007 / 008 | vendor.py |
+|---|---|---|---|---|---|
+| 67ba498 (area 6 fix) | 98 of 98 | 0 of 94 | 0 / 0 / 0 / 0 | 662 (923), 0 missing / 1,021 (1,287), 4 missing and said | no patch |
+| 1a87b1b (area 2 r7 review, tests only) | 92 of 92 + live 6 of 6 after 0893c2d | 0 of 94 | not needed | not needed | no patch |
+| 41180fe (area 2 r7 fix, 0046 and 0047) | 98 of 98 | 0 of 94 | 0 / 0 / 0 / 0 | unchanged | identical |
+| 572c29d (A5-82, oracle only) | 98 of 98 | 0 of 94 | 0 / 0 / 0 / 0 | unchanged | no patch |
+
+## Area 3, round 8 fix
+
+Fixer, branch `review/3-round8-fix`, on the coordinator's head `460d64f`. Code commits `cee85f5`, `127b21b`, `65f0705`, `8ed65e0` and `9323a50` (the host, the suite and the generator), then the record. **A3-49, A3-50 and A3-51 (P2) are fixed; A3-52, A3-53 and A3-54 (P3) are fixed**, with two parts accepted on a reason: SA1's plain value in A3-51 and the corpus run of A3-54 (below). No engine patch: the next free number, 0051, stays unused (0049 is the A5-82 agent's), so the vendored tree, `patches/`, `sh-2.sla` and `Sh2SpecData.h` are as they were and there is nothing to reproduce with `vendor.py`. The coordinator's four seeds from the area 5 fixer (66914, 77197, 69133, 69493) are triaged below: all four are old rows (A3-49 and A3-52), no new row.
+
+### 1. The rows
+
+**A3-49 and A3-50 (P2), one change in `ReturnCheck::Return`.** Both rules asked for registers only among the origins of the returned value (`(d & ~origin::kRegisters) == 0` in `mJoinedParams` and in `onlyInputs`), on the premise, written into the code comment, that the engine keeps the return of a value from memory. It does not, and the suite shows it on every fixture: each is withheld now, and the oracle still rejects the text the engine prints for it (`void ... { return; }` where the run returns r6 or r0 plus a word), which is what "the engine dropped it" means. Verified rather than trusted: the reviewer's claim that the fix touches 4 of 4,338 lent signatures is right. The first 3,000 grammar-2 seeds (the canary and the other short pins run beside them) lend **4,338** at `460d64f` and **4,334** with the fix (withheld 2,773 to 2,777; "its return joins r0's entry value with a parameter" 34 to 38; the other reasons move by the callers of those functions); 0 failing seeds in both. Both corpus images' full logs are identical to the unfixed tree's (below).
+
+The narrowest *sound* change is wider than the reviewer's scratch change, which dropped `kMemory` only. `Loaded()` gives a load the stack origin as well once a frame address has escaped (`s.escaped`), so in a function that has published a frame address (`mov r15,r1 ; mov.l r1,@r4`) V8 and W1 are still lent `void` with the memory-only change: two more fixtures, `a3_49 d` and `a3_50 d` in `TestArea3Round8`, fail with it (mutations M3 and M4). Every origin bit a value can have is now allowed (the clause is gone, not widened): the rule asks only for what it is about, r0's entry value among the alternatives and, for A3-49, a parameter the signature does not hold. The false comment is replaced. What is not changed, on purpose: a join of r0's entry value with a value that has neither an operation on r0 nor a parameter in it (`tst r4,r4 ; bt L ; mov.l @r5,r0 ; L: rts`, `mov r15,r0`) stays lent `void`, as `phi(in_r0, 5)` is in A3-14 (the scratch r0 of compiled code, 15 and 24 corpus functions; the generator's `return-dropped` needs r0 written on every path).
+
+Fixtures (`TestArea3Round8`, all withheld, all rejected by the oracle as texts): V8, V10 (literal), seed 112124's function 1, and the V9 control; W1, its `xor` form, W3 (literal), W4 (SR and a literal), the `add #1,r0` and `add r4,r0` controls; the controls that stay lent (r6 held by the signature with a memory alternative; r0 loaded on both paths). Generator (`TestRound8Pins`): seeds 112124, 117195, 400533, 66914, 77197 and, with the specials alphabet, 202318 and 207676, and V8, V10, W1, W3 as modules.
+
+**A3-51 (P2), the probe (`ReturnCheck::Call`, `NoteStackArguments`).** The engine drops an argument that follows a chain of three unset ones; the stack word comes after r7, so it is dropped with r4-r6 unset (r7 too) or with r5-r7 unset. The probe now asks the words of the frame at or above the call's r15 at an unlent call when either holds: a frame address in one of them declares the alias and says a note of its own (`kFrameEscapeNoteStack`: "a frame address is in a stack argument slot here, in none of the arguments: the call may write the locals from there up"), as A3-48 does for r7. Not when the same exact address is in r4-r7, which the call shows (ST5). The condition is held to the engine, not argued: `TestArea3Round8` runs all 16 subsets of r4-r7 set before a call with the address in the first stack word; the local is never folded, the note is said exactly when the rule predicts the drop, and the text agrees with the run (16 of 16). ST1, ST4 and the controls ST2 and ST3 print as the record says (ST3 shows `&xStack_8` as the fifth argument); ST6 puts the address in the second word. The generator's canary family has a new kind, `stack slot` (the address of the second local in the word at the call's r15, r4-r7 untouched, a callee that reads and writes through it), 21 of the 240 default programs (30 of 330); the oracle that cleans a local after the call (`CanaryReturned`) knows the note. The default canary: 240 programs, 0 failing; 330 programs, 0 failing.
+
+*Accepted: SA1.* A plain value in the stack word (`func_0x06009040(3);` for a call that passes 7 as well) is the same limit as A3-5's registers: the callee reads a stack word outside its signature and is never lent, so the caller is withheld; no local is folded and no address is lost; the text states the arguments the engine sees. A note for it would be said at every call with a written word at the stack pointer, and compiled code keeps its first local there. Pinned (`SA1`: text, withheld, the run's 10) so a change is seen.
+
+The corpus, default request: 10 of 2,393 functions with a prologue get the note (4 of 839 on image 007, 6 of 1,554 on image 008); every other line of their texts and every other function is byte for byte the same. The filter for an address the call shows removed 2 of the 12 the first version of the rule gave. The ones left keep a pointer to a local in a local (`piStack_8 = aiStack_10`) and call with no argument: the note is a "may", like the r2 one.
+
+**A3-52 (P3, oracle).** Check 12 asks which registers the function reads on purpose; it now takes the union with every other function whose entry the body holds (`readsOnPurpose`): a function without an `rts` falls into the next one and the engine shows that code as its own, so a read there, after the call, is right (`unaff_r14` before the call). Seeds 60538, 308527, 405351, 413608 pass and are pinned, with 69133 and 69493 (coordinator, `kept-read:gbr`; the `into-function` lines of 69133 are the shrinker's two functions at one address: the review's shrunk module has them too, so the seeds are the pins). Check 11 uses `calledAt`, which already holds the calls of the run-on code.
+
+**A3-53 (P3, oracle).** Already fixed, by `ad80a00` (A2-49's exclusion `ComparesCallResult`, counted as `excluded.call-result-compared.return-dropped`): the review ran on `f1a3765`, before it. Both seeds are excluded (1 each) with 0 findings at `460d64f`; 400785 is pinned beside 62956. Row closed on that commit.
+
+**A3-54 (P3, instrument).** Part (1) is committed as check 10b: `EffectClaimsContradicted` holds `storesThrough`, `frameWords`, `outOrigins` and `spDelta` against every finished run of a lent function: a store at or above the entry r15 needs `kFrame` and its word in `frameWords` (or `kFrameAny`); a store into the 4 KiB arena of r4-r7 or GBR needs that register's bit or `kMemory`; a register that does not end as it began and holds a pointer into an arena or the stack needs some origin (its own, memory or a register's: the first version asked for the arena's register and failed on `extu.w r5,r1 ; xor r5,r1`, 0x06020000 by arithmetic, seeds 5752, 11714, 12548, 12550, 16826, 18478); r15 ends `spDelta` from where it began. 18,096 runs per 3,000 grammar-2 seeds, 0 findings. `SE_GENERATED_MUTATE=claims` clears the claims (36 of 60 seeds reported it) and a pin runs it; one synthetic run per claim in `TestRound8Pins`. Stores to the caller's frame do not occur in the generator (a function that makes one is withheld), so the `frameWords` claim is held by the synthetic run only.
+
+*Accepted: part (2), the run of the lent functions of an image on the emulator.* It needs a writable machine over the image, a stack in LWRAM, 16 register sets, perturbations and a window rule for stores (the first pass of the review's instrument flagged more than it found, all its own); it found 0 violations in 25,486 completed runs of 1,683 lent functions and 3 hits with causes outside the engine (the record of round 8). The claims it checks are the ones now checked on the generator's 65,000 runs per 20,000 seeds; a reviewer who wants the corpus run has the description above.
+
+### 2. The mutation table
+
+Each change reverted alone in the committed tree (the file restored with `git checkout` after), the owning suites rebuilt and run; "dt" is `SaturnExplorerSh2DecompilerTests`, "gen" the generator's short run with its pins (and the canary with 330 programs for the A3-51 rows):
+
+| Reverted | Pins | Result |
+|---|---|---|
+| A3-49: `mJoinedParams` asks for registers only again (M1) | `a3_49` a-d, seeds | dt 4 CHECKs fail, gen 5 |
+| A3-50: `onlyInputs` asks for registers only again (M2) | `a3_50` a-d, W1/W3 | dt 5, gen 2 |
+| The review's memory-only change in `onlyInputs` (M3) | `a3_50 d` (a frame address has escaped) | dt 1 |
+| ...in `mJoinedParams` (M4) | `a3_49 d` | dt 1 |
+| A3-51: no `NoteStackArguments` (M5) | ST1, ST4, ST6, the 16 subsets, the canary kind | dt 13, gen 1 (the canary) |
+| ...only r4-r6 unset asked (M6) | ST4, the subsets | dt 5 |
+| ...only r5-r7 unset asked (M7) | ST1, the subsets | dt 3 |
+| ...only the word at the call's r15 (M8) | ST6 | dt 2 |
+| ...an address shown in r4-r7 still noted (M9) | ST5 | dt 1 |
+| A3-52: the reads of the run-on functions not taken (M10) | seeds 60538, 308527, 405351, 413608, 69133, 69493 | gen 6 |
+| A3-53: the A2-49 exclusion off (M11) | seeds 62956 and 400785, and A2's pins | gen 6 |
+| A3-54: the `spDelta` claim off (M12) | its synthetic run | gen 1 |
+| ...the `kFrame` claim off (M13) | | gen 1 |
+| ...the `frameWords` claim off (M14) | | gen 2 |
+| ...the arena store claim off (M15) | | gen 2 |
+| ...the `outOrigins` arena claim off (M16) / the stack claim off (M17) | | gen 1 / gen 1 |
+| ...the check not called from `CheckFn` (M18) | the `claims` mutation pin | gen 1 |
+
+### 3. The matrix, on the fixed tree (`8ed65e0` code, `9323a50` tests)
+
+| Run | Result |
+|---|---|
+| `ctest -E SaturnExplorerLive` (RelWithDebInfo, 92 tests) | 92 of 92 pass (the fault suite 136 s, the runner suite 86 s) |
+| `SaturnExplorerDecompilerFaultTests` | 94 jobs, 0 failed, 0 MOVED (no re-pin) |
+| generator, grammar 2, `SE_GENERATED_SEEDS=3000` | 0 failing seeds, 0 findings; 4,334 lent (4,338 before), claims checked in 18,096 runs; canary 240 programs, 0 failing |
+| generator, grammar 1, 1,000 seeds | 0 failing, 0 findings |
+| generator, printed-C only, 3,000 seeds | 3,072 functions, 2,616 compared, agrees 2,673, `narrow-c` 4, `void-return` 243, `void-return-lent` 152, 0 findings (the numbers of the round before) |
+| generator, 20,000 seeds (10,000 of each grammar) | 0 failing seeds, 0 findings (65,426 runs held to the claims) |
+| generator, grammar 2, `SE_GENERATED_FIRST=60001`, 6,000 seeds | 1 failing seed: 64293 (A5-82); 62956 excluded as before |
+| ...66,001 to 80,000, 14,000 seeds (the coordinator's range) | 0 failing, 0 findings (66914, 77197, 69133, 69493 fail at `460d64f`; 84,720 runs held to the claims) |
+| ...100,001 to 120,000, 20,000 seeds | 0 failing (112124 and 117195 failed at `460d64f`) |
+| ...200,001 to 210,000, 10,000 seeds, `SE_GENERATED_ALPHABET=specials` | 1 failing seed: 202350 (A5-82); 202318 and 207676 no longer fail |
+| ...300,001 to 320,000, 20,000 seeds | 3 failing seeds: 303290, 310654, 313937, all A5-82; 308527 no longer fails |
+| ...400,001 to 420,000, 20,000 seeds (the range of the review's claims check) | 1 failing seed: 405136 (A5-82); 400533, 400785, 405351, 413608 no longer fail |
+| corpus 007 (`SE_GAME_HWRAM`, `SE_GAME_LEND=1`) | every ledger count 0 (0 dropped, 0 missing and said); 1,732 functions; lent signatures 637 (866 parameters) before, **662 (923)** after: as at `460d64f` |
+| corpus 008 | every ledger count 0 (0 dropped, **4** missing and said); 2,997 functions; lent 992 (1,227) before, **1,021 (1,287)** after: as at `460d64f` |
+| vendoring | not applicable: no engine patch |
+
+**The corpus, before and after.** Lending counts and ledger counts are unchanged; the full logs of both runs (the suite's output, line by line, without the new test's section) are identical to those of the tree at `460d64f` built beside this one, so no function changes its lending and the counts of changed texts (290 and 527 functions, 25 and 29 gaining a signature) are the baseline's, not this round's. The reviewer's 296 and 557 were taken at `f1a3765`, before patches 0046 and 0047. Texts of the default request, all 839 functions of image 007 and all 1,554 of image 008 with a prologue, by the engine at `460d64f` and with the fix, the second linked against the other's object file: 4 and 6 differ, all by the note of A3-51 and nothing else (`06019A56`, `06021C24`, `06021E54`, `06022374`; `06021ADE`, `0603D5F6`, `06058662`, `06061100`, `06061330`, `06061850`). The A3-49 and A3-50 change reaches no text of the default request (it decides lending).
+
+### 4. Not done
+
+- A3-51, SA1's plain value, and A3-54, the corpus run on the emulator: accepted above.
+- The coordinator's seeds 66914 and 77197 (`return-dropped:partial`, r0 ends as r7: A3-49) and 69133 and 69493 (`kept-read:gbr`: A3-52) fail at `460d64f` and pass; they are in the pins and in the two rows. No new class.
+- Sanitizers and the Live tests were not run (no engine code changed; the Live tests share a socket).
+- A5-82 is not taken; its seeds are the only failures left in the ranges.
+
+## Area 2, round 8 review
+
+Reviewer, branch `review/2-round8-review`, on the coordinator's head `572c29d` (patches 0046, 0047 and the round 7 fixes in the tree). Tests, tools and the record only; no spec, engine or host file changed (the engine and spec trials below were made in scratch copies of the tree, and the one in-tree engine edit, a revert of patch 0046 for a mutation check, was restored; `git status` is clean of them). New ledger rows **A2-52** to **A2-57**: **A2-52 and A2-56 are P1s** (a wrong printed value, no warning: a non-zero mask left stale by a rewrite, and a consume mask left stale by a common-subexpression merge), **A2-53** a P3 (the stack pointer on entry taken as 256-aligned), **A2-54** and **A2-55** P3 oracle rows closed here, **A2-57** a P3 oracle gap in the printed-C harness (open). **The round is not clean, so area 2 is not done**: round 6 was the first clean round, round 7 reset the count, and this round does not restart it. The first P1 is the half of A2-47 that patch 0046 did not reach; the second is a sibling in the consume mask, found by the generator at a new range; the rest of what round 7 fixed held (section 2).
+
+### 1. What I ran
+
+| Run | Result |
+|---|---|
+| Build | own RelWithDebInfo build under the scratch directory (`-j3` at most; the decompiler suites' targets only); two scratch copies of the tree beside it, one with the checker (and the spec mutants) and one with the checker and the trial fix |
+| `ctest -E SaturnExplorerLive -R` the seven area 2 tests (Semantics, Decode, Decompiler, DecompilerEngine, Generated, PrintedC, SlaFreshness) on the final tree | 7 of 7 pass, 62 s on a loaded machine. I did not run the whole of ctest (the build is the decompiler targets) |
+| `SaturnExplorerSh2DecodeTests` with `SE_MEDNAFEN_SS` at three seeds beyond everything run so far: 1357911, 2468013, 8675309, `SE_DECODE_CASES=100000` | transcribed table equals Mednafen's for all 65,536 words; SLEIGH and `Sh2Disasm` define 53,752, 0 disagreements; translation history 5,632 cells 0 differ; followers 60 pairs, 240 cases, 0 differ after one and after two translations; **13,000,000 cases each (39,000,000), 0 differ, 0 could not run, 0 of 130 forms fail**; the new translation-order walk (section 4) 240,000 results each, 0 differ |
+| decompiler tests with the engine's non-zero masks checked against evaluation (section 3) | whole `Sh2DecompilerTests` suite (before its own A2-52 pins): 0 stale masks (after the checker was taught the engine's own stack-pointer assumption, A2-53); the slot, shared-slot, template and mac fixture files (1,076 + 1,600 fixtures): 0; generator grammar 2 seeds 1 to 3,000 with the checker on: 0; image 007 (`SE_GAME_HWRAM`, functions of up to 2,000 ops): 1,357 functions checked, 5 skipped for size, 0 reports beyond the 8 of the unit suite's own A2-52 fixtures; image 008: functions of at most 300 ops (the run at 2,000 ops had not finished after 29 minutes and was stopped): 2,113 functions checked, 416 skipped for size at least once, 0 reports beyond the same 8 |
+| printed-C against the run, hand-drawn grammars (`Docs/Decompiler/tools/a2_round8/`) | `maskgen` (random register-only functions, booleans, masks, shifts, extends) 20,300 functions: 0 findings, 0 stale masks (one latent, section 3); `tmplgen` (`T * A + (1 - T) * B`) 20,300: 0 findings, 0 stale (**18 of 400 wrong with patch 0046 reverted**: the instrument sees the A2-47 class); **`termgen` (sums of scaled terms over shared variables, then a mask) 6,000: 21 wrong values, 175 stale-mask reports, 156 of them at `rule:collect_terms` and the rest downstream: A2-52** |
+| divide by a constant, the compiler's idiom, a sweep the generator does not draw | unsigned, scale from the last shift: 6,671 divisors; unsigned, scale 0; signed, scale from the last shift and scale 2: each about 7,000 to 13,000 divisors (3 to 4,000, 2,500 random, 2^k + e, 2^32 - e, 2^31 + e, the classic 641, 6700417, 1e9), 48 inputs each: 0 findings in all four |
+| slot loads, by value (section 4) | 232 fixtures (jmp, braf, jsr, bsrf, rte x mova, mov.w, mov.l x branch at both alignments x target at both x displacements): 200 compared by value, all agree; the other 32 (`mova` in the slot of a call) state nothing to compare |
+| `mac.l`, `mac.w` by value | 1,600 fixtures (S clear and set, MACL and MACH, 16 x 16 and 12 x 12 edge operands in the code area, 17 accumulators each: 27,200 comparisons): all agree. 512 of them are in `TestArea2Round8` |
+| shared slots (a PC-relative slot that other code also reaches) | 270 fixtures: 216 flagged unsupported by the host (a jump to the slot by `bf`, by `bra`, by `jmp @r1` or by `braf r1` to a constant, the branch above or below), 54 unresolved jump tables (the layout does not resolve; nothing to compare) |
+| order of requests | 1,076 fixtures decompiled in the file's order, the reverse and a shuffle on one `Sh2Decompiler`: the text of every one is the same in the three (hash compared) |
+| generator, grammar 2, `SE_GENERATED_FIRST=500001`, 20,000 seeds | 39,172 functions, 2 failing seeds, neither this area's: 511038 (area 4) and 519315 (area 3, A3-49's family) |
+| generator, grammar 1, seeds 500,001 to 520,000 | 0 failing seeds |
+| printed-C differential, `SE_GENERATED_PRINTEDC=only`, default alphabet, seeds 960,001 to 975,000 (two functions a seed) | 30,072 functions, 25,609 compared: agrees 26,124, narrow-c 85, void-return 2,334, void-return-lent 1,519, skipped 8 (stack-piece 2, array-local 6), **mismatch 2: seed 965717 (A2-56, P1) and seed 968411 (A2-57, a harness gap)** |
+| generator, `SE_GENERATED_ALPHABET=specials`, seeds 600,001 to 610,000 of each grammar | grammar 2: 1 failing seed, 609269 (area 4); grammar 1: 2, 603025 (area 5) and 608802 (area 3, A3-49's family) |
+| spec mutants against the decode oracle | 324 of 867 (section 6): 237 killed of 277 that compile; 34 survivors equivalent, 6 decompiler-only (A2-55) |
+| 0046 on the corpus | the texts of images 007 and 008 with and without it: 10 of 839 and 24 of 1,554 differ, the fixer's numbers; I read the 34 and every change that touches an `&`, a shift, a cast or a type; no value changes (section 2) |
+
+### 2. What round 7's fixes held under
+
+- **Patch 0047 (A2-48) holds.** `TestTranslationOrder` (new, in `Sh2DecodeTests`) translates in random order and compares each result with a cold translator's (a machine built for the one translation): 2,621 addresses (ten kinds of delayed branch, each with every kind of slot, the instruction after the slot, the PC-relative forms at both alignments), walks of translations (p-code), listings and lengths, mostly of addresses near the last one. 720,000 results at three seeds, 0 differ. With patch 0047 reverted the same walk finds 456 of 48,000 differ and `RunFollowers` 215 of 240: the instrument sees the defect. The cached tree's context and delay-slot state leak nowhere else: every result is a function of the bytes, the address and the context of that address only.
+- **The slot as an instruction of its own is the one history effect left, and it is A2-4's accepted limit.** Translated after its branch, a PC-relative slot gets the branch's PC (87 of 24,000 results differ with `SE_DECODE_SLOTS_ALONE=1`: the slot after the branch, the branch after the slot while its tree is still in the ring, the listing of the slot after the branch). It reaches a decompile only when the slot is also a jump target, and `ScanRawPcode` flags that (the function is marked unsupported): 216 fixtures of an immediate branch, a constant `jmp @r1` and `braf r1`, a `bt` to the slot, in both orders and at both alignments, all flagged; no wrong text without the flag.
+- **Patch 0046 (A2-47) is incomplete: A2-52.** Section 3.
+- **The corpus claim (10 of 839, 24 of 1,554 change, none in value) holds as far as it can be checked.** I reproduced both counts (`SE_GAME_OUT` with the head and with the engine without the reset): the same 10 and 24 files. I read the differences that touch an `&`, a shift, a cast, a comparison or a type, and the large ones in full (`06044576`, `0603B636`): branch layout (`-1 < p` as `p < 0` with the arms swapped), types, the order of statements, `(x >> 10 & 0x1f) * 0xb8` as `(x & 0x1f) * 0x90 + ... * 0x28`, a 16-bit sum cast once, `uVar1 + 1 & 0xffff` into a `uint2` assignment, a duplicated constant initialisation of two copies of one variable. No change of value found. No difference in time (game code, 007: 6.8 s without, 7.0 s with; 008: 24.0 and 24.0).
+- **A2-50, A2-49:** not attacked beyond the seeds below; none of this round's failing seeds is theirs.
+
+### 3. A2-52: what patch 0046 leaves of A2-47
+
+**The fixture.** `mov.l @(8,pc),r0` = 0x100; then three times `mov.l c,r3 ; mul.l rv,r3 ; sts macl,r3 ; add r3,r0` with (r4, 8), (r6, 4), (r4, 14); `shlr2 r0 ; shll2 r0 ; rts ; nop`; the pool 0x100, 8, 4, 14. For r4 = 1, r6 = 0 the code returns 0x114 and the text returns 0x116: `return param_1 * 0x16 + 0x100 + param_3 * 4;`, the mask gone. The same text with patch 0046 reverted.
+
+**The cause.** `RuleCollectTerms` combines the two x terms, and the tree at the point of the rewrite (the checker printed it) is `u1 = r4 * 0x16 ; r0_6 = u1 + 0x100 ; r0_b = r0_6 + macl(r6 * 4) ; r0_10 = r0_b + 0 ; r0_12 = r0_10 & 0xfffffffc`. The rule changed the inputs of `r0_6` (the op that held `8 * x`, whose output the reset covers) and of `r0_10` (where `14 * x` was; covered). `r0_b`, the sum between them, has no input replaced, but its input's value changed (a multiple of 8 became a multiple of 2) and it keeps the mask `0xfffffffc` that was true of `c + 8x + 4y`. After `RuleIdentityEl` and `RulePropagateCopy` the AND reads `r0_b`'s mask. The value of every partial result below a changed op changes with it; resetting the output of the op that is changed is the right fix for the rule that A2-47 found (its changed op was the one the mask was read from) and not for a tree with a third term.
+
+**The instrument.** The checker (`tools/a2_round8/nzm_check.patch`, applied to `action.cc` in a scratch copy) evaluates the function's ops after every rule application and every action on eight assignments of the inputs (all zero, all ones, six pseudo-random, byte-wise so pieces of one register agree) and reports an op whose value has a bit its non-zero mask says is clear, with the rule or action that left it so; the engine's own assumption that a stack pointer on entry is 256-aligned (`calcNZMask`) is built into the evaluator, which is how A2-53 was found. The checker is strict where the engine is forgiving (a stale mask that nothing reads is reported), and exact about the one thing that matters: a mask that a value contradicts. It names no wrong text by itself; the printed-C differential does that. Run on the fixed tree it finds, in 20,000 + 20,000 + 6,000 programs of three grammars, 3,000 generator seeds, the unit suite, the slot, shared-slot and mac fixtures and the corpus (above): `rule:collect_terms` in the term family, and one other path.
+
+**Where else a mask goes stale (the brief's question).** With patch 0046 reverted the checker names two origins in the template family: `rule:collect_terms` (11 of 28 reports) and `rule:shift2mult` (3), the rest downstream of them. With the patch, `collect_terms` through an op it did not directly change (this row) is the only origin that prints a wrong value. The other path found is `SubvariableFlow::doReplacement`'s extension patch (`opSetAllInput` and `opSetOpcode` on the pulled op): in maskgen seed 17902 a `ZEXT` of a byte that holds 0xff keeps `nz=1` (`rule:subvar_and`, one function of 20,000). Nothing wrong is printed: the flow replaced `~ZEXT(T)` by `ZEXT(~T:1)` because its readers use bit 0 only, so the value that is wrong in the other bits is never consumed. I did not file it. `opSetOpcode`, `opRemoveInput`, `opInsertInput` and `opSwapInput` produced no stale mask in any program: they are used where the value is preserved (identity removal, commutation) or the rule goes through `opSetInput` as well. Consume masks are read by rules after all (`RuleAndMask` replaces an AND by 0 when `andmask & consume(out) == 0`, `RuleOrConsume`, the subvariable flow), and `ActionDeadCode` recomputes them from nothing once per main-loop pass; the checker has a second mode for them (`SE_CONSUME_CHECK`: flip the bits of a value its consume mask calls unneeded, among the bits the value really takes over the trials, and evaluate what the function does: its returns, stores, branch conditions and load addresses; the return is consumed down to its non-zero bits, as `gatherConsumedReturn` has it). On the head it finds two inconsistencies in 6,000 + 4,000 + 3,000 programs, the unit suite, 1,500 generator seeds and the 30,072 functions of the printed-C range below: maskgen seed 3875, where `RuleSelectCse` merges two copies of the low byte of r4, one read by `x & 0xfc` and one by `x == (x & 0xfc)`, and the survivor keeps the consume mask `0xfc` of the first although the second reads bits 0 and 1 (upstream's CSE does not or the masks together; nothing wrong is printed for this one, because no rule decided from the mask before `ActionDeadCode` recomputed it); and the same merge in **generator seed 965717, which prints a wrong value: A2-56**. There the survivor of the merge is the low byte of SR, read by `& 1` (consume `0x01`) and by `cmp/str`'s whole-byte compare; the next pass of the main loop starts with `ActionVarnodeProps`, which replaces a varnode whose `nzm & consume` is zero by a constant 0, before `ActionDeadCode` has recomputed the masks. The dump (`SE_DUMP_EACH=1 SE_DUMP_CONSUME=1`) shows `consume=01 nzm=fe` on `u10000036:1` through `rule:selectcse` and its replacement by `#0:1` at `action:varnodeprops`, eight steps later. An OR of the two consume masks in `Funcdata::cseElimination` (scratch copy) makes the fixture agree. The flags that survive `opSetOpcode` (`calculated_bool`) are set only for a locked call output of type `bool`, and the host lends a callee's `bool` only when the engine typed the callee's return so.
+
+**The experiment (not a fix).** In a scratch copy, `Funcdata::opSetInput` resets the mask of the output and of every varnode downstream of it (a worklist over the descendants): the fixture prints `... + param_3 * 4 & 0xfffffffc`; `termgen` seeds 1 to 6,000 give 0 wrong values and 0 stale masks (21 and 156 on the head); the whole `Sh2DecompilerTests` stays green except the eight pins of A2-52, which hold the wrong text and flip; the corpus texts change in 8 of 839 and 16 of 1,554 functions (the SR mask `0xffffff0e` printed `0x302`, types, branch layout), to be read by the fixer; I could not time it on the loaded machine (load average 10 to 13: the worst function of 008, 4.8 s and 6.3 s on the head, 6.2 s and 6.0 s with the trial, in the four orders). `Write_SR`'s argument is masked to `0x3f3` by the hardware, so `0xffffff0e` and `0x302` are the same write.
+
+**The rest.** A2-47's other half, the slot cases, is held at both alignments (24 cases + `rts`, round 7's test, and 232 slot loads of the other branches below). The ordinary-code family that patch 0046 does fix is pinned too: 19 fixtures of `T * A + (1 - T) * B` that print a wrong value with patch 0046 reverted (`TestArea2Round8` part 2; reverting the patch fails all 19 and the 8 of round 7).
+
+### 3b. A2-56 and A2-57: the generator at 960,001 to 975,000
+
+**A2-56 (P1).** `addc r6,r4 ; movt r5 ; dmuls.l r0,r4 ; stc sr,r2 ; cmp/str r2,r6 ; bf (over the next two) ; stc sr,r5 ; sts macl,r4 ; rts ; mov r5,r0` (shrunk from seed 965717: `SE_GENERATED_PRINTEDC=only SE_GENERATED_PRINTEDC_WORDS="346F 0529 340F 0202 262C 8B01 0502 041A 000B 6053"`, `cmp/str`: any byte of the two registers equal). For SR = 0x202 the code returns 1 and the text returns `0x203`: the text compares the carry as a bool with `(char)param_3` where the code compares the whole low byte of `(SR & ~1) | carry` with the low byte of r6. The cause is the stale consume mask above: `Funcdata::cseElimination` re-points the readers of the second SUBPIECE to the first and does not merge `Varnode::consumed`, so the survivor keeps `0x01` while a whole-byte reader now reads it, and `ActionVarnodeProps`, the first action of the next main-loop pass, takes `nzm & consume == 0` and replaces it by 0. The merge, the zeroing and the order of actions are in the per-step dump (`SE_DUMP_EACH=1 SE_DUMP_CONSUME=1` with the checker patch): `rule:selectcse`, then seven other steps that touch nothing of it, then `action:varnodeprops`. It is the consume twin of A2-52: a mask the engine trusts is a fact about the value as it was before a rewrite. P1 by the convention of A2-47 and A2-52 (a wrong printed value, no warning). The shape needs one byte of a register read at two widths, `& 1` and a whole-byte compare; I found it in generated code and not in the images (consume checker on image 007, functions of at most 300 ops, 1,345 functions: 0 reports; on 008 see section 7). Pinned in `TestArea2Round8` part 7 (text-level; the pin holds the wrong text and flips with the fix). Experiment in a scratch copy: OR the consume mask of the eliminated output into the survivor in `cseElimination`; the fixture prints `bVar4 = (uint1)((uint1)uVar3 | (carry)) == (uint1)param_3` and agrees on 76 inputs.
+
+**A2-57 (P3, oracle).** Seed 968411: `246B 7FF8 1F30 1F41 6053 80F7 6073 80F2 6013 80F1 55F1 7F08 350F 312A 000B 6053` is reported as a mismatch with the run (`run=800001FD:F1B411DA pseudo=800001FD:F1B411DB`) and 'the engine's reading did not compile'. The text names `_Stack_4`, a four-byte write wider than the symbol it starts at, which the engine does not declare (a printer gap; the known case, not area 2), and the harness declares it `unsigned long long` whatever the width: `_Stack_4 + in_r1 < 0` is then an unsigned compare of a 64-bit value, always false, and the C++ reading cannot assign `CONCAT31`'s `T<4, true>` to it. With `int _Stack_4;` put into the kept C file (`SE_GENERATED_KEEP=1`) the text agrees on all 32 inputs, so the text is right and the harness is not. Row open: the harness should declare the name at the width of the write.
+
+### 4. The slots, mac, and what the oracles could not see (A2-54, A2-55)
+
+- **Slot loads of jmp, jsr, braf, bsrf, rte by value.** `R8Check` (new) tells apart the ways a text can agree with a run: it states the value; it names a global of the code area whose word is the value (`xRam06009034`, `iRam06009030`; the evaluator did not know a global); it states a value the evaluator cannot know; it states none. `PseudoAgreesWithRun` counts the last three as agreement, so the substring fixtures of round 7 and a value check built on them can pass whatever the text says. With the evaluator taught to read the code area (`*(T *)addr`, a global by its address, with the width from the host's own access record) 200 of 232 slot fixtures are compared by value and agree: jmp and braf to a constant are tail calls with the loaded value as the argument (`func(0x4016...)`), jsr and bsrf call the same callee, rte returns to the stacked target or to PR with r0 from the slot; displacements 1, 2, 3, 5; the branch at 0 and 2 mod 4; the target at 0 and 2 mod 4. The other 32 (`mova` in the slot of a call) write r0, which the convention does not pass: the text states nothing and nothing can be compared. In the tail jumps with r0 in the slot (168 fixtures) the callee returns r0 and the text calls it and returns: the same A3-5 limit as for a `mova r0` before a `jmp` (r0 is scratch for a callee's signature). Result: **no difference**; A2-4 holds for all eight branch kinds by value, not only by substring.
+- **mac.l and mac.w by value** (round 7 read four of them by hand): the printer's `if (A && (v = K, B)) { v = X; }` is flattened for the evaluator; all 1,600 fixtures agree. No difference.
+- **The order walk** (section 2). **The mutants** (section 6).
+- **Not a defect, noted:** `PseudoAgreesWithRun` with `voidOk` and an `unknown` outcome are the two ways a text escapes the check; `R8Check` reports both and `TestArea2Round8` requires `agrees` or `agrees-global`.
+
+### 5. The generator beyond the nightly, and the routed seeds
+
+Grammar 2 seeds 500,001 to 520,000: 2 failing seeds; grammar 1 same range: 0; `SE_GENERATED_ALPHABET=specials`, 600,001 to 610,000: grammar 2 1, grammar 1 2. None is this area's: no `n:mismatch` or printed-C class, no class of A2. I did not file rows for the five (the coordinator numbers them); the replays below are run on the final tree.
+
+| Seed | Class | Area | Replay |
+|---|---|---|---|
+| 511038 (grammar 2) | `n:truncated`: "flow left captured memory: uncaptured memory at 0x05FE0008 (SCU)". Function 0 loads the literal 0xC0000010 into r6 and runs on into function 1, which is a switch on r6 (`cmp/hi #4,r6 ; bt default ; shll2 r6 ; mova ; mov.l @(r0,r6),r1 ; jmp @r1`): the bound check is statically false for the constant, the recovered table is read at index 0xC0000010 << 2 (the word after the table, a literal), and the flow follows it | 4 (jump tables) | `SE_GENERATED_GRAMMAR=2 SE_GENERATED_FIRST=511038 SE_GENERATED_SEEDS=1`; shrunk: `SE_GENERATED_WORDS="D613 7FD0 E104 3616 8919 4608 C701 016E 412B 0009 0600 9028 0600 9028 0600 902E 0600 9032 0600 9038 D70A A009 0009 A007 0009 855F A004 0009 E03C A001 0009 D706 A001 0009 FFFF 6073 7F30 000B 0009 0009 C000 0010 25FE 0008 0600 1030" SE_GENERATED_FUNCS="0/0/2,2/2/4e" SE_GENERATED_TABLES="10:6:5:3e:28,28,2e,32,38" SE_GENERATED_DATA="44-46" SE_GENERATED_RETURNS="1,1"` (the run reaches only the guarded part; the text is withheld "truncated") |
+| 609269 (grammar 2, specials) | `n:folded-into-switch`: "0600904C and 06009052 were joined into a switch's block across a branch, and a run made one without the other". Two tables, the first guarded by a signed `cmp/gt r1,r5 ; bt` (the family of A4-3 and A4-7) | 4 | `SE_GENERATED_ALPHABET=specials SE_GENERATED_GRAMMAR=2 SE_GENERATED_FIRST=609269 SE_GENERATED_SEEDS=1`; shrunk: `SE_GENERATED_WORDS="2F86 2F96 4F22 6843 6953 E105 3517 891D 4508 C703 015E 412B 0009 0009 0600 9038 0600 9038 0600 904C 0600 903C 0600 9040 0600 9044 0600 9048 A009 0009 A007 0009 A005 0009 A003 0009 A001 0009 2732 3110 89FF 6040 D302 4F26 69F6 68F6 432B 0009 0600 9064 2FE6 7FFC 6EF3 E103 3612 890F 4608 C702 016E 412B 0009 0009 0600 9088 0600 9088 0600 908C A002 0009 A000 0009 6073 7E04 6FE3 6EF6 000B 0009" SE_GENERATED_FUNCS="0/0/60,64/64/9c" SE_GENERATED_TABLES="16:5:6:4c:38,4c,3c,40,44,48:38;76:6:3:90:88,88,8c" SE_GENERATED_RETURNS="1,1" SE_GENERATED_CLOBBERS="80000,80000" SE_GENERATED_READS="8,a0000"` |
+| 519315 (grammar 2) | `n:return-dropped:partial`: r0 ends as r6 on a path and the lent prototype returns nothing. The shrunk function is A3-49's literal variant: `tst r4,r4 ; bf L ; mov.l @(lit),r6 ; L: tst r5,r5 ; bt M ; mov r6,r0 ; M: rts`, lent `void f(void)` | 3 (A3-49) | `SE_GENERATED_GRAMMAR=2 SE_GENERATED_FIRST=519315 SE_GENERATED_SEEDS=1`; shrunk: `SE_GENERATED_WORDS="2F86 2F96 2FA6 2FC6 2FD6 0C2A 6843 6953 6A63 6063 4C2A 6DF6 6CF6 6AF6 69F6 68F6 000B 0009 7FF4 2448 8B00 D603 2558 8900 6063 7F0C 000B 0009 2D80 00C0" SE_GENERATED_FUNCS="0/0/24,24/24/38" SE_GENERATED_RETURNS="1,2" SE_GENERATED_CLOBBERS="0,104000" SE_GENERATED_READS="20000,0"` |
+| 608802 (grammar 1, specials) | `n:input-dropped:r3`: the shrunk function is `mov.l @(lit),r7 ; mov.w @(0x12,r7),r0 ; mov #-0x5d,r2 ; cmp/eq r0,r3 ; bf L ; mov r2,r0 ; or r0,r1 ; L: rts ; nop`: r0 is the loaded word on one path and a constant on the other, chosen by r3, which no signature passes; lent `void f(void)` and printed `return;`. The same premise as A3-49 and A3-50 (a join with a memory origin keeps the engine's return); the join here is memory against a constant, the hidden input r3 | 3 (A3-49, A3-50) | `SE_GENERATED_ALPHABET=specials SE_GENERATED_GRAMMAR=1 SE_GENERATED_FIRST=608802 SE_GENERATED_SEEDS=1`; shrunk: `SE_GENERATED_WORDS="D704 8579 E2A3 3300 8B01 6023 210B 000B 0009 0009 2600 2000"` |
+| 603025 (grammar 1) | `v:cache-read-pointer-unsaid`: the read of 4 bytes at 0x06009036 (0x15B000CC, the cached partition) through a pointer the output derives from a register address is not called a cache read. Still found after A5-82's fix of rules 3b and 3c (head `572c29d` contains it); fails with the default alphabet as well as `specials` | 5 | `SE_GENERATED_GRAMMAR=1 SE_GENERATED_FIRST=603025 SE_GENERATED_SEEDS=1` |
+
+The A3 classes `return-dropped`, `input-dropped` and `kept-read` were checked against A3-49 to A3-54 before routing: 519315 and 608802 are A3-49's family; none is A3-52 (the function that runs on into the next one) or A3-53 (the compare of a callee's result).
+
+### 6. The spec mutants
+
+`mutspec.py` mutates one statement of `superh.sinc` in a scratch copy (an operator swapped, a constant changed, a statement deleted; lines inside the SH-1, SH-2A and FPU blocks are skipped), regenerates `sh-2.sla` and `Sh2SpecData.h` there, rebuilds the decode test and runs it. 867 candidates in the SH-2 text; 324 drawn at random (seed 7) and run; 47 do not compile; of 277 that do the decode oracle kills 237 (86 %). The 40 survivors: 11 size annotations the other side already fixes (`*:4 rn = rm` as `*:2`: the store takes the size of the value), 6 `delayslot(1)` read as `delayslot(2)` (a slot is one 2-byte instruction either way), 11 declarations or a local never read, 4 `sext` of a one-byte flag for `zext`, 1 `src = (rm s< 1)` in subv (the answer is dest either way), 1 `pc = _pc` before `call [_pc]`: 34 equivalent. The other 6 are lines only the decompiler sees (A2-55); 5 are now pinned and killed one by one, the sixth is `local nothing:1 = 0;` in nop, deleted, which changes no text I could print. The 18 slot-context mutants of round 7 were not repeated; the decode oracle's slot sweep and the new walk both pass on the final tree.
+
+### 7. Not done, and what is left
+
+- The corpora were compared as text and checked for stale non-zero masks (007 and 008) and consume masks (007 and 008, functions of at most 300 ops: 1,345 and 2,113 functions checked, 0 consume reports); no run compares the game functions' values.
+- Seed 965717 is the only wrong value in 30,072 generated functions of the new range; the consume checker was written late and ran on 1,500 seeds, the 3 hand grammars and 007, not on the whole of this round's generator ranges, so there may be more of its kind.
+- The fault suite, the sanitizers and the whole of ctest were not run.
+- The generator's register grammar (`GenRegFn`) is not widened with the term family: the scratch grammars in `tools/a2_round8/` are the instrument, and widening the committed one is the fixer's, with the fix. Until it is, the nightly cannot see A2-52 (8,072 printed-C functions with patch 0046 reverted: 0 findings).
+- Seeds 511038 and 609269 truncated or folded for reasons of area 4 and were not analysed beyond the class and the shrunk replay.
+
+## Area 7, round 1: the mapping oracle
+
+Branch `review/7-mapping` from `f31600c`. The first round of area 7 (the pseudocode-to-assembly mapping: each printed token carries the SH-2 address it came from, each line has a
+`firstAddr`, a click navigates SH-2 Assembly, a hover shows a tooltip). The round built the area's oracle, ran it over both game corpora and the generator, filed **A7-1 to A7-8
+(all P3, no P1 or P2)** in `Docs/Decompiler/REVIEW_LEDGER.md`, and fixed A7-1 to A7-4. A7-5 and A7-6 are open, A7-7 is accepted, A7-8 (an instrument) is open. Code commits `b4ec836` and
+`7d6ca75`. **No engine patch** (no `vendor.py` run): the changes are in the host (`Sh2Decompiler.cpp/.h`, `DecompilerPanel.cpp/.h`), the tests and the guide. The round also answers a
+user report: hovering a line showed a bare `0x06086F54` and the user could not tell what it was (A7-1).
+
+### The oracle
+
+`FrontEnd/tests/MappingOracle.h`, one function (`AuditMapping`) over one `DecompileResult`, used by the game-code runs (`TestGameCode`: every function alone; `TestGameLending`: every
+function as the panel decompiles it, with lent signatures), by `TestMappingOracleOnFixtures` (sixteen fixture functions, every run of ctest) and by the generator (`CheckFn`, rule 13):
+
+1. **Token addresses.** Every non-zero token address is even, lies in `body` (the instructions flow reached, delay slots included) or is named by a flow warning, and is the start of an
+   instruction that decodes. The exceptions are counted, not failed, and each has a row: the word flow halted at as bad data (`halt_baddata();` and its case label name that word, by
+   design), an odd address in a function the engine says has overlapping instructions or that was entered at an odd address (A7-6). A line's `firstAddr` is its lowest token address (0
+   with none); a token's range lies in its line's text; a call token (`FuncName` with a target) came from a call or a jump.
+2. **Marking.** A line from several instructions says so in its hover text (`LineOriginText`) and lists them; a line from one names it; a line from none has no text and no jump.
+3. **Round trip.** A click goes to `firstAddr`; the lines an instruction owns (those with a token of it) hold the line it was reached from. Checked on the data. The UI has no way back (A7-5).
+4. **Coverage.** Every access the ledger lists has a token of its instruction on some line, and every call in the final p-code has one; a call removed from the p-code is named by a
+   "Removing unreachable block" warning at or before it. The generator also fails an executed ledger access or call with no token. What else the body holds is counted by kind
+   (A7-7, A7-8).
+
+The checks are checked: `SE_GAME_MAPPING_MUTATE=<kind>` and `SE_GENERATED_MUTATE=<kind>` damage a result as one defect would (`tokodd`, `tokoutside`, `tokfirst`, `tokdrop`, `tokcall`,
+`tokunmark`, `tokhover`) and the run must report it (mutation table below).
+
+The UI half is `DecompilerPanelTests` under `ImGuiHarness`: `TestLineClickNavigates` (it already pinned that a click issues the jump with the line's address and the panel's CPU),
+`TestLineHoverAndNoAddress` (the tooltip is on screen with the right text; a line with no address has none, a click on it issues no jump, and **Show in SH-2 Assembly**, **View in
+Memory** and **Set Function Start Here** do nothing on it), `TestOtherInstructionsMenu`, `TestLineOriginText` (the text verbatim) and `TestGuideQuotesTheTooltip` (the guide quotes it;
+the test reads `DECOMPILER_GUIDE.md` through a compile definition).
+
+Run it: `SE_GAME_HWRAM=<hwram.bin> SE_GAME_LEND=1 build/bin/SaturnExplorerSh2DecompilerTests <scratch>` (add `SE_GAME_TOKENS=1 SE_GAME_ONLY=<entry>` to print every instruction of every
+line of one function); the generator needs nothing (`checks:` carries `map.*`).
+
+### The corpora (hwram007.bin, hwram008.bin; RelWithDebInfo, gcc 13)
+
+Every violation count is 0 on the fixed build, for the functions alone (`TestGameCode`) and as the panel decompiles them with lent signatures (`TestGameLending`).
+
+| Run | Functions | Lines | From one instruction | From several (not adjacent; widest) | From none | Tokens (with an address) | Body instructions (with a token) |
+|---|---|---|---|---|---|---|---|
+| 007 alone | 839 | 24,620 | 8,532 | 5,184 (2,739; 9) | 10,904 | 197,282 (63,819) | 50,882 (19,654) |
+| 007 lent | 1,731 | 49,397 | 17,875 | 10,233 (5,304; 10) | 21,289 | 415,020 (135,494) | 98,429 (38,186) |
+| 008 alone | 1,554 | 62,245 | 23,139 | 15,792 (8,615; 11) | 23,314 | 577,650 (191,720) | 139,355 (58,917) |
+| 008 lent | 2,996 | 104,605 | 38,677 | 25,353 (13,782; 11) | 40,575 | 960,999 (316,319) | 225,154 (93,674) |
+| 16 fixtures | 16 | 160 | 39 | 25 (0; 3) | 96 | 865 (244) | 158 (89) |
+
+Four lines in ten of those with an address come from more than one instruction, and about half of those from instructions that are not next to each other (A7-2). Counted, not failed:
+
+| Run | Odd, overlap warning | Odd, odd entry | Bad-data word | Delay slots without a token | Memory instructions without one | Calls removed (all said) | Conditional branches without one | Access on another line than `firstLine` |
+|---|---|---|---|---|---|---|---|---|
+| 007 alone | 18 | 0 | 9 | 6,327 | 7,533 | 8 | 288 | 4 |
+| 007 lent | 234 | 58 | 33 | 11,603 | 15,222 | 16 | 615 | 11 |
+| 008 alone | 25 | 0 | 6 | 15,654 | 15,343 | 21 | 715 | 4 |
+| 008 lent | 298 | 58 | 27 | 24,485 | 27,922 | 35 | 1,152 | 21 |
+
+What the first run of the oracle found, before any fix (007 alone; the lending runs are about twice as many): `MemoryAccess::firstLine` named the wrong line for 4,793 printed accesses (A7-4), 75 of
+them had no token anywhere (A7-3), 22 tokens were odd (18 in functions with an overlap warning, A7-6, and 4 at a bad-data word) and 5 more named a word that is no instruction (the
+bad-data words, by design), and no several-instruction line was marked because nothing marks one (A7-2: the check passed only once the tooltip said so). Ledger counts unchanged: 0 accesses dropped,
+0 missing and said in 007 and 4 in 008; lending 662 (923) and 1,021 (1,287).
+
+The generator, grammar 2 and 1: 3,000 and 1,000 seeds, 0 failing seeds. `map.lines.several` 17,319 and 4,595 of the lines with an address (`.apart` 3,809 and 1,024); of the 207,653 and 35,942
+executed instructions in a body, 74,316 and 19,328 carry a token; the others are 24,307 and 2,172 delay slots, 13,437 and 992 branches, 28,978 and 1,348 memory instructions (every one in
+the ledger, in the engine's records or said: 0 unaccounted) and 66,615 and 12,102 operations.
+
+### Findings
+
+All P3. The severity rule of the program makes a defect P1 when the output is wrong and looks right and P2 when a reader is misled about what the tool knows; nothing here computes
+anything wrong, so none is P1 or P2. A7-1 and A7-2 are the closest to P2: a reader took a number for a value, and could not reach most of the instructions of four lines in ten. The
+tooltip never claimed anything false, and the line is reachable through its lowest instruction, which is why they stay P3.
+
+| Row | What | Status |
+|---|---|---|
+| A7-1 | The tooltip is a bare `0x06086F54`; nothing says it is an instruction's address, where a click goes, or that it is not a value in the line | fixed |
+| A7-2 | A line built from several instructions is not marked; the click goes to the lowest, the others cannot be reached | fixed |
+| A7-3 | A read in array form has no token: its instruction is on no line (75 and 117 in the corpora) | fixed |
+| A7-4 | `MemoryAccess::firstLine` is one line too high (the leading break) | fixed |
+| A7-5 | No way back from an SH-2 Assembly row to its line (the round trip holds on the data only) | open |
+| A7-6 | Odd token addresses: a jump-table destination that is no address (said by a warning), and an odd entry (not said) | open (area 4) |
+| A7-7 | 58% to 61% of the body's instructions have no token (delay slots, folded operations, removed code) | accepted |
+| A7-8 | Instrument: a register-only instruction's reachability is counted, not checked | open |
+
+### Fixes
+
+* **The tooltip (A7-1).** `LineOriginText` (`Sh2Decompiler.cpp`, so the corpus runs can check it without ImGui). One instruction: "Decompiled from the SH-2 instruction at 0x06086F54 (an
+  address in the program, not a value in this line).", then "Click to show it in SH-2 Assembly." on a second line. Several: "Decompiled from 3 SH-2 instructions (an address is not a value in
+  this line):", then the addresses, ascending, comma separated (eight, then ", and 2 more"), then "Click to show the first, 0x06086F54, in SH-2 Assembly." A line with no address
+  has no tooltip. The panel shows exactly this text (`DecompilerPanel::LineTooltip()` returns what the last frame showed, for the tests). `DECOMPILER_GUIDE.md` documents it under
+  "Reading the output", and says "first" means the lowest address.
+* **The others of a line (A7-2).** The right-click menu of a line from several instructions has **Show Other Instructions**, a submenu with each of the others (the first 24, then "and n
+  more"); picking one jumps SH-2 Assembly to it on the panel's CPU, as the click does for the first.
+* **Array-form reads (A7-3).** `LinesFromMarkup` appends to each line that prints the pointer expression of a load whose instruction no token carries (or, when the pointer prints
+  nothing, the op that uses the load's value) a token with an empty range at the end of the text and the load's address. Nothing is drawn for it (the drawing loop paints
+  the text between tokens), and `LineInstructions`, `firstAddr`, the user's notes and the halt hint see it. The text of every function is unchanged (below).
+* **`firstLine` (A7-4).** The printed map's line indices move up with the leading lines dropped from the result.
+
+### Mutation table
+
+Each new check fails when its rule is broken. "Corpus" is hwram007.bin alone (`SE_GAME_MAPPING_MUTATE`), "generator" is 60 seeds of grammar 2 with the canary off
+(`SE_GENERATED_MUTATE`, "n of 60 seeds reported the damage"), "source" edits the product and rebuilds, then restores it (`git checkout`).
+
+| Mutation | Corpus | Generator | Other |
+|---|---|---|---|
+| `tokodd`: the first token with an address is one past an instruction | odd 837 | 60 of 60 | |
+| `tokoutside`: ...one MiB outside the body | outside the body 838, not an instruction 838 | 60 of 60 | |
+| `tokfirst`: `firstAddr` is the highest token address | firstAddr wrong 5,184 | 58 of 60 | |
+| `tokdrop`: the first printed access's instruction has no token | ledger accesses unmapped 557, calls 43 | 60 of 60 | |
+| `tokcall`: the tokens of every call lose their address | calls with no token 2,731, accesses unmapped 283 | 37 of 60 | |
+| `tokunmark`: a several-instruction line's text says one | unmarked 5,184, hover 5,184 | 58 of 60 | |
+| `tokhover`: ...lists all but the last | unmarked 3,348, hover 5,184 | 58 of 60 | |
+| B1 source: `LineOriginText` returns the bare `0x%08X` (the old tooltip) | | | fixtures 2 checks, panel 6 checks |
+| B2 source: no token for array-form reads (A7-3) | accesses unmapped 75 | 1 of 150 seeds (`6044 6040 000B 0009`) | fixtures 3 checks |
+| B3 source: `firstLine` not moved (A7-4) | | | fixtures 1 check (`accessOffLine == 0`) |
+| B4 source: a line with no address navigates | | | panel 1 check |
+| B5 source: the panel shows the bare address, not `LineOriginText` | | | panel 5 checks |
+| B6 source: no **Show Other Instructions** | | | panel 3 checks |
+| B7 source: the click goes to the highest address | | | panel 1 check |
+| B8 guide: the quoted sentence changed ("the line", not "this line") | | | panel 1 check (`TestGuideQuotesTheTooltip`) |
+
+The seeds that do not report a mutation have nothing for it to damage: seeds 30 and 32 have no line from several instructions (`tokfirst`, `tokunmark`, `tokhover`), and the 23 that miss
+`tokcall` make no call. Every mutation was applied alone, on the build at `b4ec836` (B2's fixture row at `7d6ca75`), and the tree restored with `git checkout`.
+
+### The text did not change
+
+The product change adds tokens with an empty range and moves indices; no `Line::text` is touched. Checked, not assumed: both corpora were written out (`SE_GAME_OUT`: every function alone,
+and the lending runs' `lend_before/` and `lend_after/`) on the fixed build and on the same sources with the A7-3 and A7-4 changes switched off (mutations B2 and B3 together, which is the
+engine as it was at `f31600c` for everything these texts hold): `diff -r` over 4,303 files (hwram007.bin) and 7,548 files (hwram008.bin) is empty. Statuses, warnings, signature lines and
+text are identical.
+
+### Matrix (RelWithDebInfo, gcc 13, `-j3`, own build at the head of the branch)
+
+| Run | Result |
+|---|---|
+| `ctest -E SaturnExplorerLive -j3 --timeout 900` | 92 of 92 passed, 122 s |
+| `SaturnExplorerDecompilerFaultTests` | 0 of 94 jobs failed, 113.5 s, no MOVED pin |
+| `SE_GENERATED_SEEDS=3000 SE_GENERATED_GRAMMAR=2` | 0 failing seeds (94 s; `map.*` counts above) |
+| `SE_GENERATED_GRAMMAR=1 SE_GENERATED_SEEDS=1000` | 0 failing seeds |
+| `hwram007.bin`, `SE_GAME_LEND=1` | 839 of 839 ok; every ledger count 0; 0 missing and said; lending 637 (866) to 662 (923); every mapping violation count 0 |
+| `hwram008.bin`, `SE_GAME_LEND=1` | 1,554 of 1,554 ok; every ledger count 0; 4 missing and said; lending 992 (1,227) to 1,021 (1,287); every mapping violation count 0 |
+| `diff -r` of both corpora's texts against the engine without A7-3 and A7-4 | empty |
+
+Not run: the Live tests (they share a fixed socket path with the coordinator's runs), the sanitizer job and the nightly generator (CI), the printed-C differential (nothing it covers changed).
+
+### For the next round
+
+* A reviewer should look for what the oracle cannot see: whether a tooltip or a menu item is *wrong* about a line, not just present. The oracle checks the addresses a line names are in the
+  body and are instructions, not that the instruction is the one that made the text. A7-8 is the standing gap; the stronger instrument is the p-code dependence of each token.
+* Verify the empty tokens in the views that read tokens: the user's notes and the hardware explanations (those on an array read now sit on its line; they were listed under "notes on instructions
+  with no line of their own"), the register hint at a halt, and the draw loop with a token at the end of the text. `TestUserCommentsOnLines` and the panel suite pass.
+* A7-5 needs a decision before it is built: a click in SH-2 Assembly selects one line in the pseudocode, but an instruction can be on several (a loop's test, a duplicated block).
+* A7-6 is area 4's: the engine should refuse an odd entry and stop at an odd destination as it stops at bad data.
+* The line's `firstAddr` is the lowest address, not the first the code executes; **Set Function Start Here** uses it. For a line that holds code from below the entry (a shared
+  epilogue) the two differ. Not filed: the menu item is the user's explicit choice of a line, and the lowest instruction of it is a defensible start.
+
+## Routed seeds: A3-55, A4-16, A4-17, A5-83, A7-6
+
+Fixer, branch `review/routed-seeds-fix` from `9d64aba`. The five seeds the area 2 round 8 review routed to areas 3, 4 and 5 (grammar 2 seeds 519315, 511038, 609269 with specials, grammar 1 seeds 608802 with specials and 603025), and area 7's A7-6. Code commit `ace11a5` (host, oracle, tests, engine patch 0052, the guide); the ledger rows and this record follow. Own RelWithDebInfo build, `-j3`. **Engine patch 0052** (0049 and 0051 left alone); `vendor.py` reproduced on a copy against the pinned Ghidra: `diff -r` of the copy and the committed tree is empty (`sh-2.sla` aside, which no patch touches here: no spec change, `Sh2SpecData.h` unchanged).
+
+### 1. Triage
+
+All five replay on `9d64aba` except one. Each was shrunk with the shrunk module of the review's record, read in full, and put through the engine's own decisions (`ancestorOpUse`, `onlyOpUse`, `JumpTable::isReachable`, `FlowInfo::processInstruction`).
+
+| Row | Seed | Verdict | True severity | Outcome |
+|---|---|---|---|---|
+| A3-55 (a) | 519315, grammar 2, `return-dropped:partial` | already fixed: the review ran on `572c29d`, before cee85f5; passes at `9d64aba` (A3-49's literal variant, `7FF4 2448 8B00 D603 2558 8900 6063 7F0C 000B 0009 ...`) | (A3-49's P2) | pinned, mutation M12 (the round 8 fix reverted) fails it |
+| A3-55 (b) | 608802, grammar 1 specials, `input-dropped:r3` | **product defect**, A3-5's family, not A3-49/A3-50's premise: r0 is a loaded word or a constant, *chosen* by r3, no entry value of r0 in the join. The engine keeps a return only if some alternative has no use but the return (`ancestorOpUse`/`onlyOpUse`); the word is compared and the constant is ored into r1, so the return is dropped and r3, read only to choose, goes with it | P2 | **fixed**: withheld "chosen by r3 on entry" |
+| A4-16 | 511038, grammar 2, `n:truncated` | **product over-report**: the flow reads a table at a constant index its own bound check excludes (0xC0000010 << 2 reaches the literal after the table), follows it into uncaptured memory, and the actions remove the block; the text (`return 0x6001030;`) is right | **P3** (down from P2) | **fixed** (status); the engine's own halt flag keeps the signature withheld |
+| A4-17 | 609269, grammar 2 specials, `n:folded-into-switch` | **generator false positive**, A5-82's second mechanism: the signed table is an indirect call the output says it is (cases are the callee's); a case comes back to an instruction below the jump | **P3** (down from P2) | **fixed** in the oracle |
+| A5-83 | 603025, grammar 1, `cache-read-pointer-unsaid` | **real missing caution**, not a fourth false-positive mechanism: `p = (p + 4) ^ 0x20000000` from 0x35B000C8 reads 0x15B000CC through the cached partition; the stepped note was gated on a *named* register within 256 bytes and the SCSP slot registers (0x05B00000-0x05B003FF) have no name, though a direct cached read of one is cautioned (A5-78) | P2 | **fixed** |
+| A7-6 | corpora | **product defect**, not accepted: the text of 8 functions per image was made of instructions decoded in the middle of others (06026C40: a store through `extraout_r4` and a read through `unaff_r14` that no code makes); 06027420 (007) and 060670C0 (008) failed outright | P3 | **fixed**, patch 0052 |
+| A5-84 (new) | sweeps, specials | **oracle**: A5-82's seed pins are default-alphabet programs; under `SE_GENERATED_ALPHABET=specials` every run exited 1 with 0 failing seeds | P3 | **fixed** |
+
+### 2. The fixes
+
+**A3-55.** `ReturnCheck` (`Sh2Decompiler.cpp`) carries in each state the registers outside r0 and r4-r7 that a taken branch's condition was computed from (`State::ctl`, joined as a union; `Value::Direct()`, so nothing a call returned). A function the engine made `void` whose r0 at a return is a join (`Value::Joined()`) with such a register in `ctl` is withheld, after A3-5, A3-13, A3-14 and A3-20's reasons (their texts are unchanged): "its return is chosen by r3 on entry, which no signature passes". Three things the first version got wrong, all found by running it: it withheld A3-45's control (the loop count is `dt r0`: r0's own entry value is A3-14's, so bit 0 is out); it withheld two functions of image 008 (06038F64 and 06038F72, compiled code) because a load through a pointer that may be in the stack, after a frame address escaped, has every register among its origins (`Value::Direct()` of "anything"): a condition on such a value is left out, as `Return` leaves it out for r0; and the new reason ran before A3-20's, changing the text of an old pin. Kept on purpose: a join chosen by a parameter or by a constant stays lent void (the scratch r0 of a void function; A3-20 withholds only a parameter that is the *value*), pinned as controls so a change is seen.
+
+**A4-16.** In `DecompileInto` the warnings of the engine are read twice; the first pass collects the blocks it removed ("Removing unreachable block (ram,0x25fe0008)"). A "Bad instruction - Truncating control flow here" whose address is a removed block's start, and that is a cut (memory not captured), becomes an engine-kind flow warning ("flow followed a path into uncaptured memory at 0x05FE0008 (SCU), which the analysis proved cannot be taken and removed: the function is not cut off there") and does not set `truncated`. Bytes that do not decode in a removed block are still bad data (nothing shows they are harmless). A cut at the start of a block that stays, or inside a block, is a cut as before (`TestFlowUncertainty`, `TestTruncatedFlow` are the controls). Not done: ending the flow at a table that a constant guard excludes. `JumpTable::isReachable` (upstream) already sees the guard has collapsed, marks the table partial, and with one table in the flow completes it; stopping there is an engine change whose only gain is lending this rare shape. `bodyBytes` of such a result spans to the removed block (536,702,985); nothing reads it.
+
+**A4-17.** `HandedOverAt` (`Sh2GeneratedTests.cpp`) is the index in a run's instructions of the first depth-0 indirect jump the output treats as a call; the folded-into-switch check (`Ran`) looks only up to it and the jump (a delay slot is not an entry of the run's instruction list, so the first version, one instruction late, did not fix the seed). The ledger check had a copy of the rule; it uses the function now.
+
+**A5-83.** In `HardwareNotes` the stepped-pointer note is said when `pv.steppedCached` (a later value reads through the cached partition), whatever register is near; for a plain step the gate on a named register stays (A5-54's DSP-area control). Corpora: no hardware note changes.
+
+**A7-6.** Engine patch **0052** (`flow.cc`, `architecture.hh/.cc`): `Architecture::instructionAlignment`, 1 by default, and `FlowInfo::processInstruction` raises `BadDataError` for an address that is not a multiple of it. The SLEIGH specification says `define alignment=1;` for every SuperH, so upstream's own check in `Sleigh::oneInstruction` is off; changing the specification would be a spec patch and raise `UnimplError`, which the host reports as an instruction the spec has no semantics for. The host (`SaturnArchitecture`) sets 2; flow halts at an odd destination as at bytes that do not decode (`halt_baddata();`, the case label kept), and the warning says "flow reaches an odd address, where no SH-2 instruction starts (a jump table entry or a pointer that is no code address), and stops there". An odd destination inside an instruction the flow already followed still gets the engine's "overlaps instruction" warning, which is then true. An odd entry is refused (`NoCode`, "an SH-2 instruction starts at an even address", also through a mirror); an odd call target is not registered as a callee; **Set Function Start Here** is not offered on a line at an odd address (the halt's own line can be one); the mapping oracle no longer excuses an odd token address (the `oddWarned` and `oddEntry` counters are gone). `DECOMPILER_GUIDE.md` says all three.
+
+The fault suite's A6-1 pin (`EmitPrettyPrint::setMarkup(false)`, mailbox) moved by one allocation (the set of removed blocks) and is re-pinned as it printed: `nth = 82`.
+
+### 3. Pins and the mutation table
+
+Pins: `TestRoutedSeeds` (`Sh2DecompilerTests.cpp`: A3-55 a and b and four controls, A4-16, A7-6 a table with an odd entry and its even control, the odd entry, the odd call target), `TestRoutedPins` (`Sh2GeneratedTests.cpp`: each seed, with its shrunk module, in the alphabet it is about), the `a5_83` fixtures with two controls in `TestHardwareVolatility`, `TestOddLineIsNoFunctionStart` (`DecompilerPanelTests.cpp`). Each mutation was made alone to the committed tree, the owning suites rebuilt and run, the file restored (`cmp` against the original), and every build after it forced from the restored mtime:
+
+| Mutation | Pins that fail |
+|---|---|
+| M1 the branch conditions are not recorded in `ctl` (A3-55) | `a3_55 b` (dt, 1 check); the 608802 seed and shrunk pins (generator, 2) |
+| M2 a condition on a value nothing is known of counts | the control "chosen by a value nothing is known of" (dt, 1) |
+| M3 a value written the same on every path counts as chosen (`Joined()` dropped) | the control "r3 is compared, r0 is the word on both paths" and one more (dt, 2) |
+| M4 a cut in a removed block is a cut again | `a4_16` (dt, 2); the 511038 seed and module (generator, 2) |
+| M5 `HandedOverAt` never hands over | the 609269 seed and module, and the pins that use the same rule (generator, 5) |
+| M6 the stepped note is gated on a named register again | `a5_83` (dt, 1); seed 603025 (generator, 5) |
+| M7 `instructionAlignment` 1 again (patch 0052's check off) | the odd-entry table in `a7_6` (dt, 1) |
+| M8 an odd entry is decompiled | `a7_6` (dt, 2) |
+| M9 an odd call target is a callee | `a7_6` (dt, 2) |
+| M10 Set Function Start Here on an odd line | `TestOddLineIsNoFunctionStart` (panel, 1) |
+| M11 the odd halt says "bytes that do not decode" | `a7_6` (dt, 1) |
+| M12 A3-49's round 8 fix reverted | `a3_55 a` and four of A3-49's (dt, 5); seed 519315 and 11 more (generator, 12) |
+
+### 4. The corpora
+
+Both images, `SE_GAME_LEND=1`, base (`9d64aba` built beside) against the fixed tree, the texts of every function alone and in both lending runs (`SE_GAME_OUT`) compared file by file.
+
+| | 007 | 008 |
+|---|---|---|
+| ledger counts | 0 dropped, 0 missing and said | 0 dropped, 4 missing and said |
+| lent signatures (parameters), unlent / lent run | 637 (866) / **662 (923)** | 992 (1,227) / **1,021 (1,287)** |
+| mapping oracle, every violation count | 0 (alone, lent, fixtures) | 0 |
+| functions alone | 839 of 839 ok; 1 text differs (06026C40) | 1,554 of 1,554; 1 differs (060668E0) |
+| lending runs | 1,732 functions, 1,731 ok before; 1,730, all ok after | 2,997, 2,996 ok; 2,995, all ok |
+| texts that differ | 8 functions, all with the "overlaps instruction" warning before; 3 odd-entry functions gone (0602778B, 06027793, 060277A3); 06027420 failed ("not a function the engine can decompile") and decompiles; 06025448 is new | 8, 3 gone (0606742B, 06067433, 06067443), 060670C0 now ok, 060650E8 new |
+| tokens at a bad-data halt (alone / lent) | 11 / 207 (9 / 33 before) | 9 / 206 (6 / 27 before) |
+
+What the 8 texts change: the odd case now shows `halt_baddata();`; the junk statements made of the decoded middle go (06026C40: `*(uint4 *)(extraout_r4 + 0x1c) = uVar2;`, `*extraout_r5 = (char)xVar4;`, `xVar4 = *(xunknown4 *)(unaff_r14 + 0x20);`); the "overlaps instruction" warning goes where the odd address was the only overlap (06024CB0, 06024D1C, ...), and three flow warnings say "odd address" for the three cuts of 06026C40; a function that was lent parameters from the junk (06024CB0) reads `in_r7` as an input and has none (its signature status is unchanged: lent counts above). No text differs for any reason but the odd addresses: no hardware note, no lending, no A3-55 withhold, no cut.
+
+### 5. The sweep, and the matrix
+
+Beyond the nightly's range, on the fixed tree: grammar 2, seeds 500,001 to 520,000 (20,000): **0 failing seeds**; `SE_GENERATED_ALPHABET=specials`, seeds 600,001 to 610,000: grammar 2 **0**, grammar 1 **0** (the five seeds of the row pass). No sibling class: no new row from the generator; A5-84 came from the exit code of these runs, which was 1 with no failing seed on a tree without the pin fix. The first sweeps ran on the tree before the last pin edits (same product code); the matrix below is the final tree.
+
+| Run | Result |
+|---|---|
+| `ctest -E SaturnExplorerLive -j3 --timeout 900` | 92 of 92 pass (131 s) |
+| `SaturnExplorerDecompilerFaultTests` | 0 of 94 jobs failed, 92 s; one MOVED pin re-pinned (A6-1 mailbox, `nth` 81 to 82) |
+| `SE_GENERATED_SEEDS=3000 SE_GENERATED_GRAMMAR=2` | 0 failing seeds; 4,333 lent (4,334 before: one function now withheld "chosen by"), canary 240 programs, 0 failing, 402 lent / 580 withheld as before |
+| `SE_GENERATED_GRAMMAR=1 SE_GENERATED_SEEDS=1000` | 0 failing seeds |
+| `SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000` | passed: 3,072 functions, 2,616 compared, agrees 2,673, `void-return` 244 (243), `void-return-lent` 151 (152): the one function moved |
+| `SE_GENERATED_SEEDS=20000` | 0 failing seeds |
+| grammar 2, 500,001 to 520,000 | 0 failing seeds |
+| specials, 600,001 to 610,000, grammar 2 / grammar 1 | 0 / 0 failing seeds (exit 0) |
+| corpora 007 / 008 with `SE_GAME_LEND=1` | section 4 |
+| vendoring | `vendor.py` on a copy against the pinned Ghidra: identical to the committed tree |
+
+### 6. Not done
+
+- The engine still follows a table that a constant guard excludes (A4-16), and the signature of such a function stays withheld ("bad instruction data"): the engine's flag for the halt it made is not cleared when the block is removed.
+- A join chosen by a parameter or a constant stays lent void (A3-55's limits); the generator's `param-dropped` sees it only for functions declared to return.
+- The Live tests and the sanitizer job were not run (shared socket path; CI).
+
+## Area 2, round 8 fix
+
+Fixer, branch `review/2-round8-fix`, on the coordinator's head `34fff86`. Two commits: the code, `7488669` (three engine patches, the harness, the generator, the tests), and this record. **A2-52 and A2-56 (P1) are fixed, A2-53 (P3) is fixed, A2-57 (P3, oracle) is fixed**; A2-54 and A2-55 were closed by the review and are untouched. New patches **0049**, **0051** and **0053** (the numbers the gaps in the series left; `vendor.py` applies them in file-name order and the reproduction below is identical). Nothing in the spec changed, so `sh-2.sla` and `Sh2SpecData.h` are as they were. Reproduced first: on the head the 6,000 `termgen` seeds as `R8Check` fixtures give 18 wrong values (the review counted 21 through the printed-C run, which draws other inputs), the A2-56 words print the wrong compare (`== (bool)(char)param_3`; the review's value is `0x203` for SR = 0x202), the A2-57 words are a `mismatch` in the printed-C run (reproduced with the harness change reverted), and the three A2-53 fixtures print `return 0;`, `return &xStack00000000;` and `return 0x18;`.
+
+### 1. The rows
+
+**A2-52 (P1), patch 0049.** Patch 0046 forgot the non-zero mask of the output of the op whose input `opSetInput` sets. `RuleCollectTerms` changes the inputs of two ADDs of a tree and the ADD between them has none replaced, but its input's value changed, and it kept the mask that was a fact about the old sum. The mask of a Varnode is a function of the masks of the inputs of the op that defines it (`ActionNonzeroMask` works it out so, in dominance order, once a pass), so when one is forgotten every mask worked out from it is no longer a fact, and the fix forgets those too. The three places weighed:
+
+| Place | Verdict |
+|---|---|
+| `RuleCollectTerms`: forget the output of every ADD of the tree it rewrote | The exact set for this rule (the partial sums between the two changed ops) and nothing for the next rule that changes an op in place and keeps the value of its root. With 0046 reverted the checker named two origins for the A2-47 family, `collect_terms` and `shift2mult`, so "the rule that is known" was already two. Not chosen. |
+| `opSetInput`: forget the mask of everything downstream, unconditionally (the reviewer's trial) | Sound, and not bounded: a rule that sets several inputs walks the cone below each every time, which in a long chain of sums can be quadratic (the review could not time it on its loaded machine). Its corpus effect was measured by the review (8 of 839, 16 of 1,554 texts). Not chosen as it stands. |
+| **`opSetInput`: forget the output, then walk the readers and forget each output whose mask is narrower than its size, stopping at one that already allows every bit** | Sound by construction under one invariant (a mask is never narrower than the function of its inputs' masks gives, which `ActionNonzeroMask` establishes and every reset keeps): what is below a Varnode that allows every bit was worked out from every bit, so the walk needs to go no further. Each Varnode is forgotten once between two runs of `ActionNonzeroMask`, so the cost is a visit per Varnode per pass whatever the number of inputs changed; the worklist is 32 entries on the stack (a vector for more), so a rule changing an input still allocates nothing. **Chosen.** |
+| `opSetInput`: recompute with `PcodeOp::getNZMaskLocal` instead of forgetting | The most exact, and dropped in round 7 for a crash on an op that is half built when an input is set (round 7's account; `RuleCollectTerms` itself builds a MULT whose second input is set after the first). A walk down the readers can meet such an op too. Not tried again. |
+
+The result is the smallest set that can be forgotten without knowing the rule: the exact set of values that changed is the cone between the changed op and the root of the rewritten expression, and only the rule knows the root; the walk takes the cone and what is below the root, and the extra (masks below the root forgotten for a pass) costs a simplification a pass later, never a value. Measured: the 6,000 `termgen` seeds as `R8Check` fixtures give 0 wrong values (18 on the head) and every pin of `TestArea2Round8` part 5 flips to agree (8 of 8), the first with `& 0xfffffffc` in the text. The generator did not draw this class (the review: 8,072 printed-C functions with 0046 reverted, 0 findings), so the register-only grammar has a new item, `MakeTerms` (`Sh2GeneratedTests.cpp`: `mov #c,r3` or a pool constant, `mul.l Rv,r3`, `sts macl,r3`, `add`/`sub r3,r0`, three or four terms over two of r4-r7, mostly even coefficients, then a mask, a shift pair or an extension; 193 of the first 600 functions have it, drawn from a stream of its own so that `SE_GENERATED_PRINTEDC_TERMS=0` gives the functions of the rounds before) and the printed-C fixtures `A2-52 ...` (the ledger fixture and two of `termgen`). With 0049 reverted the grammar alone finds the defect in 1 of 6,000 seeds (4901); the fixtures are the pin.
+
+**A2-56 (P1), patch 0051.** `Funcdata::totalReplace` is the one route of "the readers of this Varnode read that one instead", and it left the survivor's consume mask as it was. It now ORs the replaced Varnode's consume mask into the survivor's (not into a constant; a Varnode of another size gets every bit, no claim being possible). The audit of the class: `totalReplace` has 23 call sites and every one is covered by the one change: `buildCopyTemp`, `opCollapseIndirectsForCopy` (twice), `cseFindInBlock`/`cseElimination` (twice, the A2-56 merge), `Merge::buildDominantCopy`, `RulePushMulti`, `RuleMultiCollapse` (twice), `combineInputVarnodes` (twice), `adjustInputVarnodes`, `HeapSequence::deduplicatePairs`, `ActionMultiCse` (twice), `RulePullAbsorb` (twice), the sub-variable flow (three), and `Heritage` (three). The loops of `opSetInput` over a descendant list that are not `totalReplace` (`ruleaction.cc` 727, 5924, 6739, 8698, 8900, 8956; `jumptable.cc` 2361; `condexe.cc`) point a reader at a value that is not the old one (a rule's own output, the input of a COPY, whose consume mask already holds the reader's by `ActionDeadCode`'s propagation through the COPY), so they need no merge. The change is a superset of what was there, so the cost of a wrong guess is a simplification a pass later; no corpus text changes from it. `TestArea2Round8` part 7 flips (the byte is compared whole: `(uint1)param_3` and not `(bool)(char)param_3`), and the printed-C fixture `A2-56` agrees by value over 32 + 44 inputs (SR is drawn there; the unit suite's call oracle starts SR at 0).
+
+*The range.* `SE_GENERATED_PRINTEDC=only SE_GENERATED_FIRST=960001 SE_GENERATED_SEEDS=15000`: 15,077 functions (the 15,000 and the 77 fixtures), 13,248 compared, agrees 13,434, `narrow-c` 39, `void-return` 993, `void-return-lent` 608, skipped 3 (array-local), **0 findings**. The review's 30,072 functions are `SE_GENERATED_PRINTEDC_PER=2` with the term family off (the review's grammar): 30,077 functions, 25,614 compared, agrees 26,127, `narrow-c` 87, skipped 8 (stack-piece 2, array-local 6), **0 findings**; the review's numbers for the same functions are 30,072, 25,609, 85, 8 and 2 findings (seeds 965717, A2-56, and 968411, A2-57) (30,077 with the five fixtures; was 2 findings, seeds 965717 and 968411). With the family drawn (the new default), PER=2: 30,077 functions, 26,499 compared, agrees 26,833, `narrow-c` 74, skipped 7, **0 findings**.
+
+*The consume checker, over more seeds than the review could.* `tools/a2_round8/nzm_check.patch` applied to a scratch copy of the fixed tree (its evaluator now takes the stack pointer as longword-aligned, as the engine does), `SE_CONSUME_CHECK=1 SE_NZM_CHECK=1`: the `termgen` family 6,000 functions, `maskgen` 20,100, `tmplgen` 20,100, the register-only grammar's printed-C range 960,001 to 966,000 at two a seed (12,077 functions with the fixtures), the generator's 3,000 seeds of each grammar (867 and 71 functions of at most 300 ops checked at least once, the larger skipped) and the whole of `Sh2DecompilerTests` (488 functions): **0 reports of either kind** (stale non-zero mask, consume mask contradicted). With 0051 reverted in the scratch copy the checker reports maskgen seed 3875 (the review's other report, the same merge) and is silent on the A2-56 words themselves, which I did not explain; the printed-C fixture (by value) is what pins that one.
+
+**A2-53 (P3), patch 0053.** Fixed, not accepted. The assumption is in `Funcdata::calcNZMask` ("Treat spacebase input as aligned": `~0xff`, upstream's, for x86's `and esp,-16`); no cspec knob reaches it. It is now `~3`: the SH-2 raises an address error for a longword push through a stack pointer that is not aligned to 4 (Mednafen, A2-8), so a function that pushes a longword runs with an aligned r15 or does not run, and both compilers' ABIs keep it so. Code that rounds a frame to 8 or tests bit 2 and up keeps its AND: `mov r15,r0 ; and #0xff,r0` prints `return (uint4)&xStack00000000 & 0xff;`, `mov r15,r0 ; add #7,r0 ; and #-8` prints `(uint4)&xStack00000007 & 0xfffffff8`, `(r15 - 5) & 0x1c` prints `(uint4)axStack_5 & 0x1c`, and the control `and #3` is still `return 0;`. `TestArea2Round8` part 3 flips (three fixtures and the control). No corpus text changes from it. A function that depended on r15's bit 2 or 3 and was folded before now keeps the dependence, which is the correct text; the checker's evaluator and `nzm_check.patch` take the same assumption.
+
+**A2-57 (P3, oracle).** The harness declared every name the engine makes for an access wider than its symbol (`_Stack_4`) as `unsigned long long`. `UnderscoreNameType` reads the width off the text (`_Stack_4 = CONCAT31(...)` is 4 bytes; two different widths, or no `CONCAT`, keep the old type) and declares `xunknown1/2/4/8` or `unkbyte3`, the engine's untyped name for it (unsigned in the C reading, signed in the engine's), so the C++ reading can assign a `CONCAT31` to it and a signed compare of a four-byte one is a signed compare. Seed 968411 is `narrow-c` now (the C reading disagrees as it does for every xunknown compare; the engine's reading agrees): `800001FD:F1B411DA` both ways. Pinned: the printed-C fixture `A2-57` and five CHECKs of `UnderscoreNameType` in `TestRound8Pins`.
+
+**Other.** Five A6-11 allocation pins of `DecompilerFaultTests` moved (a changed mask makes the main loop take a slightly different path through the `shapes` fixture): `actions` pass 0: 16 bytes #368 to #374, 24 bytes #880 to #942, 40 bytes #566 to #605, 56 bytes #106 to #107; pass 1: 24 bytes #880 to #942, each as the suite prints it. (A first version of 0049 kept its worklist in a `std::vector`; its allocations moved 19 pins, fourteen of them by the vector's own 8, 16 and 32 byte allocations. The stack worklist is the reason it is 5.) The pins name the same sites.
+
+### 2. The mutation table
+
+Each fix reverted in the committed tree (the engine file or the test file restored after), the two suites rebuilt and run:
+
+| Reverted | Pin | Result |
+|---|---|---|
+| 0049 (the walk; 0046's reset stays) | `TestArea2Round8` part 5, printed-C fixtures `A2-52` | 9 CHECKs fail (8 fixtures differ from the run, the first without `& 0xfffffffc`), 3 printed-C fixtures `mismatch`; the grammar alone, 6,000 seeds: 1 finding (4901) |
+| 0051 (`totalReplace` as it was) | `TestArea2Round8` part 7, printed-C fixture `A2-56` | 2 CHECKs fail (`(bool)(char)param_3` is in the text, `(uint1)param_3` is not), 1 `mismatch` by value |
+| 0053 (`~0xff`) | `TestArea2Round8` part 3 | 6 CHECKs fail (the three texts and what they must keep) |
+| A2-57: `UnderscoreNameType` always `unsigned long long` | printed-C fixture `A2-57`, `TestRound8Pins` | 1 `mismatch` (the review's `800001FD:F1B411DB`), 3 CHECKs |
+| `MakeTerms` not drawn (`SE_GENERATED_PRINTEDC_TERMS` default 0) | `TestRound8Pins` | 1 CHECK (0 of 600 functions have the item) |
+| the stack worklist of 0049 replaced by a `std::vector` | `SaturnExplorerDecompilerFaultTests` | 19 pins MOVED where 5 did (not a value; the design reason above) |
+
+### 3. The matrix, on the fixed tree
+
+| Run | Result |
+|---|---|
+| `ctest -E SaturnExplorerLive -j3 --timeout 900` (RelWithDebInfo, 92 tests) | 92 of 92 pass (the longest, the fault suite, 125 s) |
+| `SaturnExplorerDecompilerFaultTests` | 94 jobs, 0 failed, after the five re-pins (19 MOVED with the vector, 5 with the stack worklist, 0 after) |
+| generator, grammar 2, `SE_GENERATED_SEEDS=3000` | 0 failing seeds, 0 findings; the canary 240 programs, 0 failing |
+| generator, grammar 1, 1,000 seeds | 0 failing, 0 findings |
+| generator, printed-C only, 3,000 seeds | 3,077 functions, 2,715 compared, agrees 2,756, `narrow-c` 6, `void-return` 198, `void-return-lent` 117, 0 findings |
+| generator, 20,000 seeds (10,000 of each grammar) | 0 failing seeds, 0 findings |
+| decode oracle with `SE_MEDNAFEN_SS` | transcribed table equals Mednafen's for 65,536 words, 53,752 defined, 0 disagreements for SLEIGH and `Sh2Disasm`; translation order 24,000 results 0 differ; history 5,632 cells 0 differ; followers 60 pairs, 240 cases, 0 differ after one and after two translations; differential execution 260,000 cases, 0 differ, 0 could not run, 0 of 130 forms |
+| corpus 007 (`SE_GAME_HWRAM`, `SE_GAME_LEND=1`) | every ledger count 0 (0 dropped, 0 missing and said); 839 functions; lent signatures 637 (866 parameters) before, **662 (923)** after: as before the fix |
+| corpus 008 | every ledger count 0 (0 dropped, **4** missing and said); 1,554 functions; lent 992 (1,227) before, **1,021 (1,287)** after: as before the fix |
+| vendoring (`python3 -I vendor.py` on a copy, the pinned Ghidra checkout) | 46 patches applied; `cpp/`, `processors/` and `sources.cmake` identical to the tree (and every other file of the directory) |
+
+**The corpus texts, before and after.** All 839 functions of image 007 and all 1,554 of image 008 with a prologue, decompiled with the default request by the engine at the head and by the engine with the three patches, and with each: **8 of 839 and 12 of 1,554 differ; every one of them is the work of 0049, and 0051 and 0053 change no text** (the three builds give the same files for 0049 alone, 0049 + 0051 and all three; the lending texts, `lend_before/` and `lend_after/`, change in the same functions). I read every difference. None changes a value. They are:
+
+- *A mask that the hardware drops anyway* (8: `0600541E`, `06008BB0`, `06008CCE` twice, `0600A996`, `0600540E`, `06008E70`, `06009FA6`, `06008F9A` twice): `Write_SR(... | uVar & 0xffffff0e | ...)` is `& 0x302`, and `& 0xffffff0f` is `& 0x303`. `Write_SR` writes `value & 0x3f3` (patch 0019), and `0xffffff0e & 0x3f3` is `0x302`: the same write.
+- *Branch layout* (4): `if (a && (v = x, v <= y) && y < z) { r = y - v; }` is the nested `if (a) { v = x; if (...) { r = y - v; } }` (`06031070`, `06070C88`), and the two comparisons of an `||` are in the other order (`0601B3B0`, `0605A560`: `&SCU_D0R <= p || p < 0x5a00000` and the reverse; both are pure compares).
+- *Types* (2): a `xunknown2` local is a `uint2` (`0601E3F6`, `0605D8D2`).
+- *A flag kept in the type it is used in* (3): `06041256` keeps `(x & 0x40) != 0` in a `char`, adds 1 for the second flag and tests `== 0`, where it was `bVar = (uint4)bVar == 0` and `== 0xffffffff` (a 0 or 1 plus 1 is never 0, and a 0 or 1 is never `0xffffffff`: the same two answers); `06056D30` keeps a compare in a `bool` and passes `(uint4)bVar` to `Write_SR`; `06056136` is `iRam == 0x12345678` for `(iRam == 0x12345678) != 0`.
+- *The 16-bit global written from a shifted difference* (1, `0603D5F6`): `uRam = (uint2)(x >> 16); if (x < 1) uRam = (uRam & 0xff) + 0x100;` is the if/else `(uint1)(x >> 16) + 0x100` / `(int2)(x >> 16)`; the low byte plus 0x100 either way, the same 16 bits, now `int2`; `iVar2` is not read after.
+- *Order of a store and a copy, naming* (2): `060123CC` (`xVar6 = e; xRam = xVar6;` is `xRam = e; xVar6 = xRam;`), `0604080A` (a `uint1` declared earlier, the others renumbered).
+
+Time: the walk costs a visit per Varnode per pass. `TestGameCode` (the whole of each image, the machine at a load of 2 to 3), two runs each: 007 took 6.7 s and 7.0 s at the head and 6.8 s and 6.9 s with 0049, 0051 and 0053; 008 took 22.2 s and 22.7 s and 22.1 s and 23.4 s. No difference beyond noise. The fault suite took 125 s in ctest and 154 s alone, as before.
+
+### 4. Not done, and what is left
+
+- The corpora were compared as text and the consume and non-zero masks checked on generated programs and the unit suite, not on the corpus functions (the review checked the images' functions of at most 300 ops for stale masks and found none; nothing was rerun on them with the new engine beyond the text comparison).
+- Other in-place rewrites that leave a downstream mask stale without going through `opSetInput` (`opSetOpcode`, `opSetAllInput`, `opRemoveInput`: the review found none in its programs) are not covered by 0049. The one it filed as latent, a `ZEXT` of a byte that holds 0xff keeping `nz=1` after `SubvariableFlow::doReplacement` (maskgen seed 17902), reports nothing in the 20,000 `maskgen` functions with the fixed tree.
+- The generator draws `MakeTerms` in 30 % of its functions and finds the 0049 revert in 1 of 6,000 seeds; the fixtures are what pin it. A grammar that also draws booleans (`movt`) as variables, as `termgen` does, would find it more often.
+- A5, A3 and A4 routed seeds (A3-55, A4-16, A4-17, A5-83) are not taken.
+
+Integration note (coordinator): this fix and the routed-seeds fix were given different patch numbers but both used 0052. The routed-seeds
+fix merged first (`0052-flow-instruction-alignment.patch`), so this fix's patch is `0053-engine-stack-pointer-longword-aligned.patch`; every
+mention of 0052 in this section and in row A2-53 means 0053. The two patches touch different files; the vendored `cpp/` merged without a
+conflict, and the reproduction was re-run on the merged tree with the new order.
+
+## Area 3, round 9 review
+
+Reviewer, branch `review/3-round9-review`, on master `c3256a5` (the merge of the routed-seeds fix). Findings only, no fixes; the one code change is a suite function of controls that pass (`TestArea3Round9`, below). New ledger rows: **A3-56, A3-57, A3-58, A3-59, A3-60, A3-61, A3-62 (P2)**, A3-63, A3-64 (P3). No row is routed to another area: no sweep produced a finding.
+**The round is not clean: seven P2 rows.** Area 3 has no open row before this round's, and the count of consecutive clean rounds is 0 again (round 8 was not clean either). None of the seven is a defect of a fix of round 8 in the sense of a regression: each is a shape the fix's reasoning left out, and four of them are in A3-55's rule itself, which a reviewer had not yet attacked. The round 8 fixes held where they were written to hold (below); the P2 rows are the sides of the same rules that the pins do not touch.
+
+### Instruments (scratch, not committed; described so the next reviewer can rebuild them)
+
+- **The fixture driver** of rounds 6 to 8 (the suite's own file with `main` renamed, `drvmain.inc`: a text spec of words at addresses, callees decompiled and lent first, inputs run on the emulator, `PseudoEval` against the run, and every register the lent effects call preserved compared with its entry value), a small assembler with labels and literal pools, and a spec maker that takes `@address` blocks. About 120 hand fixtures; a table generator for the stack-word experiments (32 and 42 cells).
+- **Scratch changes of `Sh2Decompiler.cpp`**, each linked into the driver, the decompiler suite and (for the mutations) the generator, with the object swapped on the link line: **v1** (a chooser in r4-r7 that the signature does not hold, and r0, counts for A3-55), **v2** (the `& ~1u` of A3-55 removed), **v3** (v2, and at the return a join that keeps r0's entry value leaves bit 0 out), **v4** (A3-14's r0 rule asks `usesR0` only), and the five mutations of the summary **m1** to **m5** (A3-63). The cost of each candidate fix is measured below; none is a fix.
+- **The generator beyond the nightly's range**, own RelWithDebInfo build (`-j3`): grammar 2 at 700,001 to 720,000, grammar 1 at 700,001 to 710,000, grammar 2 at 800,001 to 805,000 with `SE_GENERATED_ALPHABET=specials`.
+- **The corpora** with `SE_GAME_HWRAM=<img> SE_GAME_LEND=1` for `hwram007.bin` and `hwram008.bin`, on the head and on each scratch variant.
+
+### What round 8's fixes held under
+
+- **A3-49 and A3-50 (the widened join rules).** A join of r0's entry value with a stack load of a held parameter (`mov.l r5,@r15 ... mov.l @r15,r0` under a branch): withheld (J4). With a GBR-relative load (`mov.b @(0,gbr),r0` on one path): withheld, but by "it reads gbr on entry" (the load stays), not by the rule. With a call's result (`jsr g` on one path, r0 left on the other): lent `void`, with both arguments held; that is the compiled `void f(a, b) { if (a) g(b); }` and cannot be told from `int f(a, b) { if (a) return g(b); }` (A3-41's reading; not filed). A join of two call results chosen by a hidden register, each result compared: the engine keeps the return and r3 (read: withheld). No false withhold was found: the head's lent counts on both images are the round 8 fixer's (662 (923) and 1,021 (1,287)); the generator does not measure a withhold that was not needed.
+- **A3-51 (the stack-slot note).** The frame address pushed right before the call (`mov.l r1,@-r15`), held in an r14-based frame (`mov r15,r14`, stores through r14), in the second word with the first written, passed through two calls (the second reads it), with r5 set on one path only, with r6 set by a copy of r4: each prints `&xStack_8` as an argument or says the note, never folds the local, and agrees with the run (`a3_51 round 9` pins).
+- **A3-52 to A3-54 (the oracle).** No `kept-read` or `return-dropped` seed in 35,000 beyond-range seeds. Check 10b catches a `storesThrough` that names the wrong register (m4: 1,523 failing seeds, 28 suite checks).
+- **A3-55 (the join chosen by a hidden register).** The choice read through a stack spill and reload (a word, a byte), through a push and a pop, through a T flag set by `tst r3,r3` two blocks and a `bra` before the branch, through `dt r3`, nested (r1 chosen by r3, r0 chosen by r4 from r1 or a constant): all withheld "chosen by r3". Two return sites chosen by r3: the engine keeps the branch, "reads r3". A load through the hidden register (`mov.l @r3,r1 ; tst r1,r1`): the engine keeps the read, "reads r3". A switch on r3 selecting constants: recovered, "reads r3". A zero-extension or sign-extension of the joined value before the return: the engine keeps the return. Through a callee's output: the callee cannot read the hidden register (it would be withheld), a callee that keeps the register leaves its value to the rule, and a register passed in r4 is read by the call. All hold; the holes are in what the rule does not count as a chooser or a join (A3-56 to A3-58, A3-62).
+- **Tail calls.** A jump to a lent callee after r8 is saved and restored (r8 kept in the effects), to a callee that clobbers r9 without saving it (r9 not kept), with PR restored in the slot of the jump, with the frame popped in the slot: lent, effects agree with the run (`a3_27 round 9` pins).
+
+### What the attack found
+
+1. **A3-56 to A3-58: three ways A3-55's rule is not a rule about "a join chosen by a register no signature passes".** The chooser mask leaves out r0 (`& ~1u`) and SR (so the entry T flag and `stc sr`), and the join test is inequality of abstract values. `tst r0,r0 ; bt L ; mov #1,r0 ; or r0,r1 ; ... L: mov #2,r0 ; or r0,r1 ; rts` and `bt L ; ...` on the entry T are lent `void f(void)` and the code returns 1 or 2 by them (the same code by r3 is withheld). Two loads (`mov.w @r7,r0 ; cmp/eq r0,r3 ; bf L ; mov.w @r2,r0 ; or r0,r1`) or two sums of r4 (`r4 + 1`, `r4 + 2`) are no join: A3-55 b with the constant replaced by a second word is lent `void`, and the second shape drops r4 as well. The generator's checks reject every one of them as a module (`input-dropped:r0`, `input-dropped:r3`, `return-dropped`) and none is drawn by 35,000 seeds (A3-64). **Cost of the candidate fixes**, measured: v3 (r0 as a chooser except when the join keeps r0's entry value) withholds the fixtures, passes the whole suite, moves no lent count; v2 (the bare removal) breaks two pins (A3-45's control, A3-46); the T/SR row needs a "T written on this path" bit in the state and was not measured; the equal-values row needs a definition number per instruction and op in `Value`, not measured.
+2. **A3-59: A3-50's register side.** `tst r5,r5 ; bt L ; add r4,r0 ; mov.l r4,@r6 ; L: rts` returns the hidden r0 plus r4 on one path and is lent `void f(r4, r5, r6)`; with `add #1,r0` it is withheld. `onlyInputs` wants every origin to be a register no signature passes, so a held parameter in the operand turns the rule off, and A3-20 only looks at parameters the signature does not hold. The pinned `a3_45 control: the loop may be skipped` is lent by the same exemption, so the fix (v4: ask `usesR0` only) flips that control (and the reason text of one round 8 control); the lent counts do not move.
+3. **A3-60 and A3-61: A3-51's channel, the other two sides.** The note for a frame address in a stack word is said when r4-r6 or r5-r7 are unset; the engine drops the stack words after the first unwritten one whatever the registers hold. Two tables (32 and 42 cells) show 35 cells dropped and wrong with no note (13 and 22) against 20 noted and 19 shown. And SA1's acceptance ("no local is folded") is false for a callee that writes the slot it is passed: `func_0x06009040(); return 7;` where the run returns 0x37, with the argument shown or not. That is A3-21's channel read through a plain value; the callee and the caller are withheld and the text says nothing at the call, which is A3-48's and A3-51's state, P2 there.
+4. **A3-62: "a join chosen by a parameter or a constant stays lent void".** Decided: **a wrong signature, P2 for a parameter the signature does not hold and for a stack argument; the constant stays accepted.** `tst r4,r4 ; ...` choosing between two written values is lent `void f(void)`: r4 is dropped, the return is dropped, the caller's setup of r4 is dead in its text, and `mov.l @r15,r3 ; tst r3,r3 ; ...` drops a stack argument, the case "an incoming argument outside its signature" was written for. The area's rule is that a lent prototype never drops a register the callee reads before writing. The ground given (the scratch r0 of compiled void code) does not reach it: a compiled function that uses r4 holds r4, and v1 (such a chooser withholds) loses no lent function in either image. It reverses four pins that chose to keep these lent (A3-14's `tst r4,r4 ; bt L ; mov #5,r0`, A3-55's `chosen by r4` control, and by the r0 bit the A3-45 and A3-46 controls), which is the coordinator's to rule on.
+5. **A3-63: check 10b and the rest of `CallEffects`.** Five mutations of the summary against the generator (3,000 grammar-2 seeds) and the decompiler suite: `outOrigins` naming the wrong register survives both (m1: nothing holds its register identity), `leaks` and `frameValues` cleared survive the generator and are caught by 2 and 1 hand fixtures (m2, m3), a wrong `storesThrough` register is caught by both (m4), `outOrigins` without the stack origin is caught only by the synthetic claim run (m5). The claims the generator holds are `preserved`, `spDelta`, `storesThrough`, `frameWords` and the existence of an origin.
+6. **A3-64: the generator's grammar.** 0 failing seeds in 35,000 beyond the range, while the five hand shapes of this round are rejected as modules.
+
+### Generator beyond the nightly
+
+| Range | Seeds | Failing | Notes |
+|---|---|---|---|
+| grammar 2, 700,001 to 720,000 | 20,000 | 0 | 38,966 functions, 121,086 runs held to the claims, 171,157 runs |
+| grammar 1, 700,001 to 710,000 | 10,000 | 0 | 45,678 runs; 83 functions withheld "chosen by" a register (r1 40, r2 20, r3 15, macl 3, mach 5) |
+| grammar 2, 800,001 to 805,000, `specials` | 5,000 | 0 | |
+
+35,000 seeds, 0 failing, 0 findings; the canary 240 programs, 0 failing, in each run. No finding for another area: no routed seed.
+
+### Corpus (`SE_GAME_LEND=1`)
+
+Image 007: 1,730 functions in the lending run, **662 lent (923 parameters)** (637 (866) before lending the proved effects), 839 of 839 functions ok alone, 25 gain a lent signature, every ledger count 0 (0 accesses dropped, 0 missing and said), mapping oracle 0 in every violation count. Image 008: 2,995 functions, **1,021 lent (1,287)** (992 (1,227) before), 1,554 of 1,554 ok alone, 29 gain a signature, ledger counts 0 (0 dropped, **4** missing and said). Both suites "all passed". Each scratch variant (v1 to v4) leaves the same lent counts on both images: the candidate fixes of A3-56, A3-59 and A3-62 cost no corpus function.
+
+### Pins committed
+
+`TestArea3Round9` (`Sh2DecompilerTests.cpp`, 18 fixtures, all passing at the head): the six A3-51 variants that hold, the eight A3-55 shapes that hold or are withheld by the engine's own read, and the four tail calls. Each was run against a mutation and fails with it: the stack note removed (`NoteStackArguments` call off) fails the four address pins and the older A3-51 ones, `mChosenBy` off fails the six "chosen by r3" pins, and a stack-slot load taken for memory fails two of the A3-55 pins and the tail-call pins. No fixture of a finding is committed (the current output is wrong; the rows carry them).
+
+### Matrix
+
+| Run | Result |
+|---|---|
+| `ctest -E SaturnExplorerLive -j3` (RelWithDebInfo, 92 tests) | 92 of 92 pass (107 s; the fault suite 92 s) |
+| generator, grammar 2, 700,001 to 720,000 | 0 failing seeds |
+| generator, grammar 1, 700,001 to 710,000 | 0 failing seeds |
+| generator, grammar 2 `specials`, 800,001 to 805,000 | 0 failing seeds |
+| corpus 007 / 008 | lent 662 (923) / 1,021 (1,287), ledger counts 0, 0 and 4 missing and said, all passed |
+| sanitizers, the Live tests, vendoring | not run: no engine or host code changed; the Live tests share a socket |
+
+### Not covered
+
+- **Mutual recursion, interrupts between a callee's store and its caller's read, the probe's `kMaxSteps` exit** as in rounds 7 and 8.
+- **The T-flag fix** (A3-57) and the identity-of-definition fix (A3-58) were not prototyped; the rows say what they need.
+- **The corpus dynamic run** of A3-54 part 2 (accepted in round 8) was not repeated.
+
+**Done criteria.** Seven P2 rows (A3-56 to A3-62) and two P3 (A3-63, A3-64): a fix round, then two consecutive clean review rounds. The measured costs above are the fixer's starting numbers: v3 (A3-56), v1 (A3-62) and v4 (A3-59) each leave both corpus counts unchanged and each flips named pins.
+
+## Area 2, round 9 review
+
+Reviewer, branch `review/2-round9-review`, on the coordinator's head `225c45e` (patches 0049, 0051, 0053 in the tree; the round 8 fix merged). Tests, tools and the record only; no spec, engine or host file changed (the engine trials below were made in scratch copies of the tree; `git status` is clean of them). New ledger rows **A2-58 to A2-63**: **A2-58 is a P1** (a wrong printed value, no warning: the consume-mask class of A2-56, reached by a route patch 0051 does not cover), **A2-59 is a P2** (the engine does not finish a family of loops, and takes memory without bound until the host cancels: a regression of patch 0049), **A2-60 and A2-61 are P3 oracle rows**, **A2-62 a P3 documentation row**, **A2-63 a P3 oracle row closed here**. **The round is not clean, so area 2 is not done**: the count of clean rounds was 0 after round 8 and stays 0.
+
+### 1. What I ran
+
+| Run | Result |
+|---|---|
+| Build | own RelWithDebInfo build under the scratch directory (`-j3` at most), and four scratch copies of the tree beside it: the checker (`tools/a2_round9/nzm_check_r9.patch`), the checker with patch 0049's walk reverted, the checker with the trial fix of A2-58, and the plain tree with the walk reverted (for the timing) |
+| `ctest -E SaturnExplorerLive -j3` on the final tree | 92 of 92 pass (171 s; the longest, the fault suite, 147 s); `SaturnExplorerSh2DecompilerTests` holds the new `TestArea2Round9` |
+| `SaturnExplorerSh2DecodeTests` with `SE_MEDNAFEN_SS` at seeds 9109 and 424242 (`SE_DECODE_CASES=20000`, 2,600,000 cases each) and 555 (`SE_DECODE_CASES=100000`, 13,000,000 cases) | the transcribed table equals Mednafen's for all 65,536 words; SLEIGH and `Sh2Disasm` define 53,752, 0 disagreements; translation order 24,000 results, 0 differ; history 5,632 cells, 0 differ; followers 60 pairs, 240 cases, 0 differ after one and after two translations; differential execution 0 differ, 0 could not run, 0 of 130 forms fail (seed 555 is the one A2-51 failed at) |
+| generator, grammar 2, `SE_GENERATED_FIRST=900001`, 20,000 seeds | 39,069 functions, 171,533 runs; 2 failing seeds, 3 findings, none this area's (section 6) |
+| generator, grammar 1, `SE_GENERATED_FIRST=900001`, 10,000 seeds | 0 failing seeds, 0 findings |
+| printed-C differential, `SE_GENERATED_PRINTEDC=only SE_GENERATED_FIRST=980001 SE_GENERATED_SEEDS=15000` | 15,077 functions (the seeds and 77 fixtures), 13,349 compared: agrees 13,511, narrow-c 45, void-return 964, void-return-lent 555, skipped 2 (array-local), **0 findings** |
+| the checker with `SE_NZM_FREE=1` (section 2) on the unit suite and both images | unit suite: 0 reports in 494 functions; hwram007: 0 reports; hwram008: 6 reports, all one harmless instance of A2-58 (section 3) |
+| `dagen.py` (section 5), engine at the head | families 0 to 4, 6,000 functions each and the checker on 20,100 more of families 0 to 6: no engine finding (4 oracle findings: A2-60, A2-61), 0 stale non-zero masks; families 7 to 9, 600 each: 9, 102 and 43 printed wrong (A2-58); family 11: the engine does not finish 686 of 5,500 (A2-59) |
+| `dagen.py` families 7 to 9, 3,000 each, with the trial fix of A2-58 and the checker | 0 wrong values, 0 checker reports |
+| timing, hwram008, three runs each and again three, back to back (section 7) | no slowdown: block 1 medians 23.1 s (head) against 22.5 s (walk reverted), block 2 22.8 s against 22.5 s |
+
+### 2. What round 8's fixes held under
+
+**Patch 0049 (the walk).** The questions of the brief, in order.
+- *More than 32 varnodes to forget.* The 33rd and later go to a `std::vector` that is popped first, so none is dropped and nothing falls back to 'forget everything'. To test the path I cut the stack array to one entry in a scratch copy (every walk then leaves through the vector for all but its first varnode): the texts of the 839 functions of image 007 and the 1,554 of image 008 are byte for byte the same as on the head (0 differ). They have to be: the set forgotten is the closure over the readers whose mask is narrower than their size and does not depend on the order.
+- *Cycles through MULTIEQUAL.* A varnode is marked (its mask set to every bit) before it is pushed, and a varnode with every bit is skipped, so a cycle ends at its second visit. The loop families (3, 10 and 11) run the walk through phis that carry the narrow mask; no crash, no non-termination from the walk itself (the non-termination of A2-59 is the rules').
+- *`opSetOpcode`, `opSetAllInput`, `opRemoveInput`, `opInsertInput`.* `opSetAllInput` and `opInsertInput` end in `opSetInput` (`funcdata_op.cc`: `opSetAllInput` sets every input with it, `opInsertInput` sets the new one), so they carry the reset and the walk. `opSetOpcode` alone, `opRemoveInput` and `opSwapInput` appear without any `opSetInput` of the same op in 12 rules (a scan of every `applyOp` of `ruleaction.cc`): `RulePiece2Zext`, `RulePiece2Sext`, `RuleBxor2NotEqual`, `RuleOrConsume`, `RuleOrCollapse`, `RuleSlessToLess`, `RuleLogic2Bool`, `RuleIdentityEl`, `RuleStoreVarnode`, `RuleMultNegOne`, `RulePositiveDiv`, `RuleFloatSignCleanup`. Each keeps the value, or drops bits that are not consumed (`RuleOrConsume`), so the mask that was a fact stays one; the opposite direction, a value that gains bits in place, is not in any of them. The brief's examples do not exist in this tree (no rule turns an ADD into an OR or XOR in place; shift to multiply goes through `opSetInput`). No fixture builds a stale mask by these routes, and none was found by looking: the checker (below) reports 0 stale masks in about 52,000 functions of the families and the corpus, and reports `rule:collect_terms` at once on the tree with the walk reverted (`dagen.py` family 1: the sum family finds the revert in 5 of 2,400 functions, the nightly's grammar in 1 of 6,000, so the family is the stronger net for A2-52).
+- *The checker on the corpus functions with the new engine* (the fixer did not): the round 8 checker evaluated nothing through a MULTIEQUAL, a LOAD, a call or an INDIRECT, and gave up on any function with a call, so on the images it checked little. `nzm_check_r9.patch` (cumulative from the clean tree, not on top of the round 8 patch) has `SE_NZM_FREE=1`: a MULTIEQUAL takes the value of one of its inputs (chosen by the trial, the next if that one is a cycle), the other opaque outputs are free values within their own non-zero mask, and calls and indirect branches are roots (their arguments). It reports 3 times as many contradicted consume masks on the unit suite when asked to pretend the engine consumed too little (`SE_CONSUME_SELFTEST=1`: 5,914 against 1,894), so it sees more. Result: unit suite 0 reports in 494 functions; hwram007 0 reports (the executable's 1,351 function names checked at least once, 142 skipped for size at least once, 12 never checked: more than 300 ops); hwram008 6 reports (2,119 names, 416 skipped, 83 never checked), all in `0601E00E`, all one instance of A2-58 (below).
+
+**Patch 0051 (`totalReplace`).** A constant takes nothing and a varnode of another size takes every bit; I read the two cases and the merge sites: the INDIRECT collapse and the MULTIEQUAL merge (`RuleMultiCollapse`, `RulePushMulti`'s copy case, `ActionMultiCse`) all go through `totalReplace` and get the superset. Nothing else of the replaced varnode needs merging: its readers' outputs lose their non-zero masks in `opSetInput` (the loop of `totalReplace` calls it), the flags (`addrforce`, `typelock`, `persist`) belong to the storage and the survivor keeps its own, and the replaced varnode's own definition stays if it has them. **What 0051 does not cover is the class**: `totalReplace` is one route by which an existing varnode gains a reader, and `opSetInput` is the other (A2-58).
+
+**Patch 0053 (the stack pointer on entry, `~3`).** The fixture texts hold: `mov r15,r0 ; mov #-8,r1 ; and r1,r0` prints `(uint4)&xStack00000000 & 0xfffffff8`, `... #-16` `& 0xfffffff0`, `#-4` `return &xStack00000000;`, a rounded-up frame address `& 0xfffffff8`; an alloca-like realignment (`mov.l r14,@-r15 ; mov r15,r14 ; add #-12,r15 ; mov r15,r0 ; mov #-8,r1 ; and r1,r0 ; mov r0,r15 ; ... mov r14,r15`) keeps `(uint4)axStack_10 & 0xfffffff8` in the address of the local. Note `and #imm,r0` zero-extends its immediate (`and #0xF8,r0` is `& 0xf8`, not `& -8`; I tried it first). What the assumption costs is in A2-62: the text is the aligned arithmetic for a function entered with r15 at 2 mod 4, and the guide does not say so.
+
+### 3. A2-58 (P1): a Varnode that gains a reader through `opSetInput` keeps its consume mask
+
+**The fixtures.** Both are a join whose two predecessors compute the same two things from a source register (`r1 = src & 0x80000000`, and a second value from `r1`), the join reading the phi of `r1` through a few low bits and the phi of the second value whole. With an add: `mov #1,r3 ; rotr r3 ; cmp/pl r4 ; bt B ; A: mov r5,r1 ; and r3,r1 ; mov r1,r2 ; add #1,r2 ; bra J ; nop ; B: mov r6,r1 ; and r3,r1 ; mov r1,r2 ; add #1,r2 ; J: mov r1,r0 ; extu.b r0,r0 ; or r2,r0 ; rts ; nop` (`E301 4305 4415 8905 6153 2139 6213 7201 A004 0009 6163 2139 6213 7201 6013 600C 202B 000B 0009 0009`) returns `r1 + 1`, r1 being 0 or 0x80000000 (the low byte of r1 is 0); for r4 = 0, r5 = 0x80000001 the code returns 0x80000001 and the text is `xunknown4 func_0x06009000(void) { return 1; }`: no parameter, no warning. With a test, `tst r1,r1` in both arms and `shll2 r0 ; movt r2 ; sub r2,r0` at the join, the code returns -1 when the chosen source has its sign bit clear and 0 when it is set, and the text is `return 0xffffffff;` (r4 = 2, r6 = 0xFFFF8000: the code returns 0). Reproduced on the head by `SE_AREA2_FIXTURES=tools/a2_round9/fixtures.txt` (`R8 differs`) and by the printed-C differential (`mismatch`).
+
+**The cause**, from the per-step dump (`SE_DUMP_EACH=1 SE_DUMP_CONSUME=1 SE_DUMP_FN=...` of `nzm_check_r9.patch`). `RulePushMulti` finds a two-input MULTIEQUAL whose inputs are defined by functionally equal ops (here the two `r1 + 1`) and builds one op in the join; where it needs the MULTIEQUAL of their differing operands it calls `findSubstitute`, which returns the phi that is already there (the phi of `r1`), and then `data.opSetInput(op1,substitute->getOut(),slot1)` points the unified add at it. That phi was worked out by `ActionDeadCode` from its readers at the time (`extu.b`: `consume=ff`), and keeps it: the add reads all 32 bits. Two steps later `rule:push_multi` hoists the AND above the join, `rule:andorlump` folds the byte read to `x & 0`, and `rule:andmask` replaces `r1 = x & 0x80000000` by `#0`: `RuleAndMask`'s `(andmask & out->getConsume()) == 0` (andmask `0x80000000`, consume `0xff`). The dump shows the replacement three steps after the merge, inside the same pass; `ActionVarnodeProps` of the next pass would have done it too. It is A2-56's mechanism by another door: patch 0051 made `totalReplace` merge the consume masks and left `opSetInput`, the other way an existing varnode gets a reader. The fixer audited the `opSetInput` loops over a descendant list and found every one pointing a reader at a value that is not the old one; this one is not such a loop, it is a single call that moves one op onto a varnode that carried the same value on its own path.
+
+**It is a class, and the instruments say so.** The checker (`nzm_check_r9.patch`, `SE_CONSUME_CHECK=1`: flip the bits of a value its consume mask calls unneeded and see whether a root changes) reports `rule:push_multi` in each of the 43 functions of `dagen.py` family 9 (600 drawn) that print a wrong value on the head, and no other rule or action. Families 7, 8 and 9 print 9, 102 and 43 wrong in 600 each; the nightly's grammars draw none (no join whose predecessors compute equal ops from the phi'd value, read at two widths): grammar 2 at 900,001 to 920,000, grammar 1 at 900,001 to 910,000 and printed-C at 980,001 to 995,000 are clean. It occurs in game code: the checker reports it six times in `0601E00E` of hwram008 (a loop counter `r9` sign-extended from a halfword in both predecessors of the loop header; the join phi has `consume=7fffffff` because its readers are `* 2` and a halfword, and the pushed `!= 0` reads it whole). Harmless there: the phi's non-zero mask is `ffffffff`, so `nzm & consume` never meets zero and no rule decides from it. A function whose join values have a narrow non-zero mask (a flag, a field, a sign) would print wrong.
+
+**The experiment (not a fix).** In a scratch copy, `Funcdata::opSetInput` sets the consume mask of the new input to every bit (`if (!vn->isConstant()) vn->setConsume(~(uintb)0);`; `ActionDeadCode` works the real mask out again at the next pass): the two fixtures print `return (param_3 & 0x80000000) + 1;` and `return -(uint4)((param_3 & 0x80000000) == 0);` and agree on their inputs; families 7, 8 and 9, 3,000 functions each, give 0 wrong values and 0 checker reports (9, 102, 43 of 600 on the head); the three `TestArea2Round9` fixtures flip (4 CHECKs fail, the control still agrees); the corpus texts change in 5 of 839 and 19 of 1,554 functions, of which I read seven: the order and naming of locals, `0600708E` splits a `(uint2)*(uint1 *)` into two statements, `0603B636` loses two redundant copies of a character; no value changes. A narrower fix at the one site would be to widen the consume mask of `substitute->getOut()` in `RulePushMulti`; the generic one also covers any other rule that points an existing op at an existing varnode, none of which the checker reports (`rule:push_multi` is the only origin in about 52,000 functions of the families, the unit suite and the images). Pinned in `TestArea2Round9` part 1 (holds the wrong text and the `differs` verdict of both fixtures; flips with the fix).
+
+### 4. A2-59 (P2): the engine does not finish, and takes memory without bound
+
+**The fixture.** `mov #4,r1 ; L: swap.b r2,r3 ; and r3,r1 ; dt r6 ; bf L ; rts ; mov r1,r0` (`E104 6328 2139 4610 8BFB 000B 6013 0009`): r1 starts at 4 and is ANDed, once per iteration, with the byte-swapped r2. On the head `Decompile` does not return: one core at 100 %, resident memory 368 MB after 8 s, 720 MB after 16 s, 1,070 MB after 24 s and 1,410 MB after 32 s (about 44 MB a second; the ops each pass makes and unmakes probably stay in the function's dead list until the function is destroyed; I did not profile it). The host's cancel flag is the only stop: `ActionPool::apply` checks it every 1,024 ops, `Action::perform` at every action, and nothing bounds the number of passes of the main loop. In the application the runner's budget (10 s a request, `DecompilerRunner::Poll`) cancels it and the panel says 'too large to decompile within 10 s', which is the wrong reason; every request for such a function costs 10 s of one core and about 450 MB. The generator and the unit tests have no budget and hang.
+
+**Found** by a hang in a batch of the loop family (`dagen.py` family 3, a batch of 300 functions that never ended: the checker's process had run 10 minutes), shrunk by replacing words with `nop` while it still hung (`ddmin_hang.py`: the nop-substituted `0009 ... E104 ... 6328 2139 ... 8BFA ...` still hangs, the loop reading `T` as an unknown), and widened to a family (11) built for it.
+
+**A regression of patch 0049**, not an old upstream loop: with the walk of `opSetInput` reverted (patch 0046 kept, everything else as on the head) every function below finishes, and the 161 functions of family 11 I tried, of the 686 that hang on the head, all finish. The cause is in the per-step dump. A pass of the main loop applies `rule:anddistribute` and `rule:humptyor`, every pass, for ever (3,504 dumps in 3 s, `ActionHeritage`'s pass counter 447,292 to 577,506 in a few seconds): `RuleAndDistribute` `(A | B) & C => (A & C) | (B & C)` and `RuleHumptyOr` `(V & W) | (V & X) => V & (W | X)` are inverses. `swap.b` is the OR of three disjoint pieces of r2, so `r1 & (r3)` is an AND over a nest of two ORs, and r1 is the phi of the constant 4 and the AND, whose non-zero mask is `0x4`. `RuleAndDistribute` distributes when a piece's mask does not meet `othervn`'s (`(ormask & othermask) == 0`), skips when `othermask == fullmask` ('nothing useful from distributing'), and needs two firings in a row for the nest. Without 0049 the phi keeps `nzm=4` after the first distribution (`CONS BUILD(register:4) ... nzm=4` in the dump), the second one fires (`rule:anddistribute rule:anddistribute`), and `rule:andmask` cancels the pieces whose mask does not meet. With 0049 the first `opSetInput` forgets the phi (`nzm=ffffffffffffffff`), the second distribution is skipped, `RuleHumptyOr` sees `(A & r1) | (C & r1)` and merges it back, `ActionNonzeroMask` of the next pass gives the phi its `0x4` again, and the cycle starts over. The walk forgot what a rule that does not change the value of its op (an AND distributed over an OR) did not need forgotten: round 8's table weighed 'forget the output of every ADD of the tree `RuleCollectTerms` rewrote' (the one rule whose rewrite changes a partial result) against the walk and chose the walk because it needs no knowledge of the rule; this is what the generality costs. Needs a loop: the same words without it (a diamond, or straight-line code), with `or` or `xor` for the AND, with `E1FF` for `E104` all finish.
+
+**How common.** Family 11 (`mov #c,r1 ; mov #n,r6 ; L: <pieces of r2/r4/r5/r7 by swap.b, swap.w, xtrct, shlr8 ; or> ; and/or/xor r3,r1 ; dt r6 ; bf L`): 686 of 5,500 hang (12.5 %; 194 of seeds 1 to 1,500 and 492 of seeds 20,001 to 24,000; the accumulating op is AND in two draws of four and OR or XOR in the others: all 686 are AND, none of the OR and XOR ones hangs). The general loop family (family 3, seeds 10,001 to 13,000 and 30,001 to 36,000, 9,000 functions): 2 (`E601 E17F 222B 200D 2109 4610 8BFA 4308 6023 000B 0009 0009` is one of them: `xtrct r0,r0 ; and r0,r1` in a loop). The nightly's three ranges (45,000 functions and seeds) and the two game images (2,393 functions) have none. A loop that carries `x &= f(y)` where f is a byte swap, a word swap or an `xtrct` of a register, seeded with a small constant, is rare in compiled code and plausible in hand-written code (a mask accumulated over words); other pairs of rules that undo each other under a mask guard were not searched for. The family is not in the nightly's grammar; a loop that carries an AND of a seeded accumulator and a piece-assembled operand is the item to draw.
+
+**Pinned** in `TestArea2Round9` part 2 as a cancelled request: the decompile runs against a cancel flag set after 1.5 s and the status is `Cancelled` (about 70 MB at most); the fix flips it to `Ok`. The words are also in `fixtures.txt` as comments (a fixture file would not return).
+
+### 5. The families (`tools/a2_round9/dagen.py`), the other rows
+
+The generators of round 8 draw register-only functions from a fixed shape (straight-line arithmetic, selects of a flag, sums of scaled terms). `Docs/Decompiler/tools/a2_round9/dagen.py` draws structure they do not, one function per seed, ';' joined for `SE_GENERATED_PRINTEDC_WORDS`: 0 a value computed twice (the CSE merge of A2-56), 1 sums of scaled terms with partial sums kept in registers (A2-52), 2 diamonds, 3 counted loops, 4 chains, 5 frame pieces written at one width and read at another, 6 the T-flag idioms (`shll ; subc`, `addc`, `negc`, `div0s`, `movt` after rotates), 7 to 9 the joins of A2-58, 10 sums in a loop, 11 the loop of A2-59. `run_family.sh` runs a family through the printed-C differential (and, with `CHECK=1` on a build with `nzm_check_r9.patch`, through the stale-mask and consume checker), `hangscan.sh` finds the functions the engine does not finish (one process each, 10 s), `ddmin_hang.py` shrinks one, `fixtures.txt` is the file for `SE_AREA2_FIXTURES`.
+
+| Family | Functions on the head | Result |
+|---|---|---|
+| 0, 1, 2, 3, 4 (printed-C only) | 6,000 each | 0 findings, except one in family 4: A2-60 (oracle) |
+| 0, 1, 4 with the checker | 3,000 each | 0 findings, 0 reports |
+| 2 with the checker | 4,800 | 0, 0 |
+| 3 with the checker | 2,700 | 0 findings; 1 report at `action:setcasts` (after simplification: the casts the printer wants carry no consume mask; the printed-C agrees) |
+| 5 with the checker | 1,800 | 3 findings, all A2-61 (a returned stack address compared as 0); 0 reports |
+| 6 with the checker | 1,800 | 0, 0 |
+| 7, 8, 9 with the checker | 600 each | 9, 102 and 43 printed wrong; the checker names `rule:push_multi` for every one of family 9's 43 (A2-58) |
+| 7, 8, 9 with the checker and the trial fix of A2-58 | 3,000 each | 0 wrong, 0 reports |
+| 3 and 11, `hangscan.sh` | 9,000 and 5,500 | 2 and 686 do not finish (A2-59) |
+
+With patch 0049's walk reverted, family 1 prints 5 wrong in 2,400 functions and the checker names `rule:collect_terms`: the family is a stronger net for A2-52 than the nightly's grammar (1 in 6,000 by the round 8 fix's count). The functions that print `void` (A2-42's class, 29 in 600 of family 0) are counted, not failed, as the differential counts them.
+
+**A2-60 (P3, oracle).** `6043 6153 6263 6373 4404 4421 323C 651B 4421 D104 301C 3012 0129 321C 6053 600F 000B 0009 0000 0080` prints `CONCAT44((int4)-param_2,(uint4)(0x7f < param_1 + 0x80U))` with `int2 param_2`, and the printed-C differential reports it as a mismatch in both readings: C widens the two-byte negation (`0x00008000` where the code has `0xFFFF8000`), the engine's reading (`CxxHeader`) takes `param_1 + 0x80U` of a signed `param_1` for a signed sum (`Promoted` brings the plain number to the other operand's type, the `U` is lost) and gets the low word of the compare wrong. Written `uint4(0x80)` in the kept C++ file the engine's reading agrees on all inputs. The text is right. One of 6,000 in family 4; the function alone (`6043 D103 301C 3012 0029 000B 0009 0009 0000 0080`) agrees in the C reading, so the nightly reads it once and never meets this.
+
+**A2-61 (P3, oracle).** A returned address of a local (`return &xStack_1;`) is compared by value as 0 against the run's stack address: 3 of 1,800 functions of family 5.
+
+**A2-62 (P3, documentation).** The guide's Limits do not state patch 0053's assumption that the stack pointer on entry is a multiple of 4: `mov r15,r0 ; add #2,r0 ; and #3,r0` is `return 2;` and `and #3` alone `return 0;`. Section 2 has the cases the assumption keeps (a frame rounded to 8 or 16).
+
+**A2-63 (P3, oracle, closed here).** The checker's reach (section 2), the families above, the worklist test, the scan of the in-place rules.
+
+### 6. The generator beyond the nightly, and the routed seeds
+
+Grammar 2 at 900,001 to 920,000: 2 failing seeds, 3 findings; grammar 1 at 900,001 to 910,000: 0; printed-C at 980,001 to 995,000: 0. Neither failing seed is this area's. I did not file rows (the coordinator numbers them); both replay on the final tree. Open rows checked first: A3-52 (the kept-read check on a function that runs on into the next), A5-82 (the pointer checks on texts that are right), A3-55 (seeds 519315 and 608802, fixed), A7-5 and A7-8 (open, not this area).
+
+| Seed | Class | Area | Replay (shrunk) |
+|---|---|---|---|
+| 901303 (grammar 2) | `n:kept-read:r13`: 'a function it calls was lent a signature that changes r13, and the text reads r13 as the value it had on entry'. Function 0 (`mov.l r13,@-r15 ... bsr ... mov.l @(pc),r1 ; jmp @r1` into function 1) carries the engine's warning 'flow runs into 0x06009028, another function's entry: that code is shown as part of this function' and its prototype is withheld ('reads r13 on entry'): A3-52's shape (a function that runs on into the next, whose read of r13 is the callee's) | 3 (probably A3-52) | `SE_GENERATED_WORDS="2F86 2F96 2FD6 4F22 6843 6953 B00C 6593 6483 6593 D103 4F26 6DF6 69F6 68F6 412B 0009 0009 0600 9028 2FD6 7FF8 62F3 7208 E102 2216 4110 8BFC E200 84F1 1605 6073 7F08 6DF6 000B 0009" SE_GENERATED_FUNCS="0/0/22,28/28/48" SE_GENERATED_RETURNS="1,1" SE_GENERATED_CLOBBERS="0,0" SE_GENERATED_READS="40000,0"` |
+| 910697 (grammar 2) | `n` and `v:pointer-effect-unsaid`: the 1-byte read at 0600905A 'reached FFFFFFFC through a pointer the output derives from register addresses, and no note says'. The shrunk function is marked 'runs on into the next' and holds two signed-bound tables (`cmp/ge #5 ; bt` and `cmp/ge #3 ; bt`, the family A5-82 (2) describes: the index -1 lets the table through and the cases that set the pointer are code the text does not hold) | 5 (probably A5-82) | `SE_GENERATED_WORDS="E105 3413 8916 4408 C702 014E 412B 0009 0600 902C 0600 9028 0600 9028 0600 902C 0600 902C 0600 9030 A004 0009 A002 0009 A000 0009 E103 3512 890F 4508 C701 015E 412B 0009 0600 9050 0600 9050 0600 9056 E1D3 A002 0009 A000 0009 000B 6040" SE_GENERATED_FUNCS="0/0/34,34/34/5e" SE_GENERATED_TABLES="c:4:5:34:28,28,2c,2c,30:2c;40:5:3:5a:50,50,56" SE_GENERATED_RETURNS="1,1" SE_GENERATED_CLOBBERS="180000,180000" SE_GENERATED_READS="0,20000"` |
+
+Both are read from the replay's output, not from the cause: the coordinator should triage them against A3-52 and A5-82 before filing.
+
+### 7. Timing
+
+`TestGameCode` on hwram008 (1,554 functions, `SE_GAME_HWRAM=.../hwram008.bin`, the whole `Sh2DecompilerTests` executable run each time), the head (`225c45e`) and the same tree with patch 0049's walk reverted (0046 kept), alternating head, reverted, head, ... back to back, six rounds in two blocks of three, my own builds and scans stopped for the whole of it, the machine at a load average of 1.6 to 1.7 (another agent's job):
+
+| Block | Engine | `TestGameCode` ms (three runs) | median | worst function (0604F422) ms, median | process CPU, median |
+|---|---|---|---|---|---|
+| 1 | head | 23,128 / 22,843 / 23,599 | 23,128 | 3,698 | 53.3 s |
+| 1 | walk reverted | 22,166 / 22,670 / 22,479 | 22,479 | 3,426 | 51.8 s |
+| 2 | head | 22,774 / 21,737 / 22,761 | 22,761 | 3,416 | 52.7 s |
+| 2 | walk reverted | 22,540 / 22,770 / 22,302 | 22,540 | 3,524 | 52.1 s |
+
+The medians of all six: 22,808 ms on the head and 22,510 ms with the walk reverted, a ratio of 1.01 (the worst function 3,577 ms against 3,475, 1.03). **No slowdown from patch 0049.** The coordinator's 50.8 s against 24.5 s (worst function 7.85 s against 3.7 s) is most likely the machine: the head's own runs here range from 21.7 to 23.6 s when little else runs, and a doubling of every function's time, not of a few, is what a load average above the number of cores does. The walk visits a varnode once between two runs of `ActionNonzeroMask` and costs one pass over the readers of the output at each `opSetInput`; for the one function that matters (A2-59) it is the cause of an unbounded loop and not of a slow one.
+
+### 8. Not done, and what is left
+
+- A2-58 and A2-59 are open and need a fix round; the next review round verifies them and the count of clean rounds restarts. The experiments of both rows are in scratch copies; nothing is fixed here.
+- The consume checker reached 300 ops a function by default; of the images' functions 142 (hwram007) and 416 (hwram008) were skipped for size at least once (12 and 83 never checked). A larger `SE_NZM_MAXOPS` was not run: its cost grows with the square of the ops.
+- Other pairs of rules that undo each other under a mask guard (A2-59's class) and other routes by which an existing varnode gains a reader (A2-58's) are covered only by the families above, which found one of each. The trial fix of A2-58 is a superset; whether a narrower one is enough is the fixer's.
+- The decode oracle ran at three new seeds; the spec mutants of round 8 were not rerun (no spec change).
+- Patch 0053's assumption is documented nowhere (A2-62); a stack pointer that is not a multiple of 4 on entry is the one input for which the text can differ from the code.
+
+## Area 3, round 9 fix
+
+Fixer, branch `review/3-round9-fix`, on the coordinator's head `b7cce51`. Code commits `2cf54bb`, `16ad9d0`, `1f236cb`, `2b0b76a` (host, suite, generator, guide), then the record. **A3-56 to A3-62 (P2) are fixed, A3-63 and A3-64 (P3) are fixed.** No engine patch: 0054 stays unused, and the vendored tree, `patches/`, `sh-2.sla` and `Sh2SpecData.h` are as they were, so there is nothing to reproduce with `vendor.py`. Own RelWithDebInfo build, `-j3`.
+
+Rounds 7, 8 and 9 each found new P2 rows in the rules that decide whether a function the engine made `void` may be lent, each a shape beside the one the last fix covered. This round replaces those rules (A3-5's on r0, A3-14, A3-20, A3-45, A3-49, A3-50, A3-55) with one, stated as what it guarantees, and lists its exceptions; the round's rows are instances of it, not new clauses.
+
+### 1. The rule, as a guarantee
+
+**A function the engine made `void` is lent only when no input its signature does not hold can change what it leaves in r0 at its returns: neither by data (what r0 was computed from) nor by choice (what decided which value r0 holds, when that differs by path).**
+
+Why that is the line: the engine drops a return it takes for none (A3-5: a value made of inputs no signature passes, or one with another use than the return), and every read whose only use was that value goes with it. The input leaves the text and the signature, and a caller's setup of it is dead in the caller's text. A value made only of what the signature holds, of memory, of constants and of what calls returned loses nothing a caller can see: a caller that reads r0 after the call is withheld ("uses r0 after calling").
+
+The inputs: r0-r14, SR's bits other than T, GBR, VBR, MACH and MACL as their entry values, the T flag the caller left, and the words of the caller's frame (the stack arguments) the function reads before it writes them. A signature holds r4-r7 that it has parameters in and the stack words of its stack parameters; r0-r3, r8-r14, SR, T, GBR, VBR, MACH and MACL no signature holds. r15 and PR are the stack and the return address, not inputs.
+
+How `ReturnCheck` computes it (`Sh2Decompiler.cpp`, `ReturnCheck::Inputs`, `WithholdReason`):
+
+- **One value for all the returns.** r0 at every return is joined into one value (`mExit`), as the paths would meet at a common exit, so two returns with two values are a choice as a join is.
+- **Values told apart by the op that made them** (`Value::def`: the instruction and op; a join of two different ones is `kJoin`), not by what they are made of. Two loads, or `r4 + 1` and `r4 + 2`, have the same origins and are two values (A3-58). A copy keeps the definition it had; one value on every path (one load, one constant) is no choice.
+- **Data**: what r0's value was computed from by the function's own instructions (`Value::dep`), the address of a load among it (`mov.b @(r0,r4),r0` reads r0 and r4), the stack arguments (a load from a word at or above the entry r15 that nothing wrote on that path: `ArgDep`).
+- **Choice**: when r0 is not one value, the inputs of every condition of a branch and of every jump table's index on the way to a return (`State::ctl`, `ChooserInput`), r0's entry value (`tst r0,r0`, A3-56), the T flag the caller left (A3-57) and the stack arguments (A3-62) among them.
+- **By bit position.** SLEIGH writes a flag as a masked update of SR (`sr = (sr & ~1) | t`): a dependence kept for the whole value gives every T a compare wrote the entry SR among its inputs, which is why the old rules left SR out of conditions altogether. `Deps` keeps bit 0, bit 1, bit 8 and bit 9 (T, S, Q and M when the value is SR) apart from the rest, exactly through the ops SLEIGH makes of a flag (masks, shifts, truth values) and conservatively through every other: a T written by `cmp/eq` carries the compare's inputs, the T the caller left is `kDepT`, and the Q and M that `div0u` cleared are no longer the entry SR's.
+
+The exceptions, each made in one place and named there:
+
+| Exception | Where | Why |
+|---|---|---|
+| r0's entry value where no op read it (a path that leaves r0 alone) | `ReturnInput` | no read: A3-14's scratch r0 of compiled code, `phi(in_r0, 5)`; an op that computes from r0, or a test of it, is a read |
+| a value nothing is known of (every register among its origins: a load through a pointer that may be anywhere in the stack, a user op's output) | `ReturnInput`, `ChooserInput` | taken for memory, as A3-55's fixer did for a condition (06038F64 and 06038F72 of image 008 are compiled code) |
+| SR's other bits, and the T in them, in a value that is neither SR itself nor a join | `Inputs` | the interrupt-mask helper's `stc sr,r0 ; or #0xF0,r0 ; ldc r0,sr`, which compiled code leaves in r0 as scratch (06010054); SR copied whole, or joined (A3-14's `phi(in_sr, in_sr \| 0xf0)`), is an input |
+| `and r0,r0`, `or r0,r0`, `or #0,r0`, `xor #0,r0`, `add #0,r0` | `Step` | nops, as the engine takes them (A2-43, patch 0048): no read and no write of r0 |
+| r1 | `Return` | the second half of a 64-bit return, scratch for every other function (unchanged) |
+| a value in r0 held across a callee that keeps it | `ReturnValue` | A3-13's rule, unchanged; its reason text is kept |
+
+What it no longer excepts, on purpose: a join chosen by a parameter the signature does not hold, or by a stack argument (A3-62, the coordinator's decision), and r0's entry value read on one path even when another path leaves it alone (A3-45's and A3-46's controls). Kept lent, as decided: a join chosen by a constant (A3-25), and one chosen by a parameter the signature holds (A3-20's accepted scratch of compiled code).
+
+The reason texts: "its return joins r0's entry value with a parameter it does not hold" (A3-20, A3-49) first, then "its return is computed from X on entry, which no signature passes" (A3-5, A3-14, A3-45, A3-50, A3-59), A3-13's, "its return is chosen by X on entry, which no signature passes" (A3-55 to A3-58), then the two for what a signature could hold and this one drops: "computed from r5 on entry, which the signature does not hold", "chosen by r4 on entry, which the signature does not hold" or "by a stack argument (the word at r15 + 0 on entry)" (A3-62). The pins of the old rules keep their texts.
+
+### 2. The other rows
+
+**A3-60 (P2).** The note for a frame address in a stack argument word (`kFrameEscapeNoteStack`) is said for every word the engine drops: all of them when r4-r6 or r5-r7 are unset (A3-51), otherwise every word from the first one not written on every path up (`NoteStackArguments`; a slot written on one path only, or in part, is a hole: `Value::hole`). Held to the engine by the review's two tables, now `TestArea3Round9Fix`: (i) the address in the second word, the first written or not, every subset of r4-r7 (32 cells); (ii) the address in word 1, 2 or 3, every subset of the words before it written, r4-r7 all unset, all set or r5 and r6 set (42 cells); plus a word written on one path only. In all 74 the local is not folded, the text agrees with the run, and the note is said exactly in the 55 cells the rule predicts (the review's 20 that had it, and its 35 that were wrong with no note).
+
+**A3-61 (P2).** A callee that writes its own stack argument slot writes a word of its caller's frame. The caller cannot tell such a call from a compiled one by its own code: a note at every unlent call after which the function reads back a word it wrote at or above the stack pointer changed 815 of image 007's 839 functions, every one compiled code keeping a local there. The callee can: A3-21 already finds a function that writes its caller's frame. So the probe walks the call's target from the snapshot with the same analysis (`CalleeFrameWrites`, a nested `ReturnCheck`, 20,000 steps, asked once per target and only when the caller reads such a word back), and a word the callee writes itself (`mOwnFrameWords`, A3-21's stores: an argument spilled into the home area counts) that the caller wrote before the call and reads after it declares the alias from that word up, so the read is not folded, and says a note at the call (`kFrameEscapeNoteSlot`: "a local at or above the stack pointer is read after this call, which may write it as one of its stack arguments"). SA2, SA3, SA5 (the word shown as the fifth argument and folded all the same) and SA6 (the callee copies its fifth word into its sixth) agree with the run; a callee that only reads the word (SA1, A3-51's accepted text) and one that writes below its entry r15 are controls with no note. The callers of A3-21's, A3-39's and A3-40's hand-back fixtures, pinned with the stale local (`return 5;`) as the evidence that they must be withheld, are still withheld and now print what the run returns. Limits: a call whose target the probe does not know (an indirect call it does not resolve, a trap), a target outside the capture, or one the walk cannot follow in 20,000 steps, is not walked.
+
+**A3-63 (P3).** Check 10b (`EffectClaimsContradicted`) holds three more claims against each finished run of a lent function. A pointer, a register's start value give or take 0x80 bytes in its own arena (r4-r7, GBR) or the entry r15's give or take 0x200 in the stack (`PointerRegister`): ending in a register the summary does not preserve, it needs that register's bit (or the stack) or memory in `outOrigins`; stored at or above the entry r15, in `frameValues`; stored anywhere else outside the stack, in `leaks`. (The first version of the review's (1) failed on arithmetic landing in an arena, `extu.w r5,r1 ; xor r5,r1`, which is 0x100 below r4's start and is not a stepped pointer.) The generator's random programs make no store to the caller's frame (a function that makes one is withheld), so `TestRound9Pins` holds a lent module that spills r4 into its caller's home area, stores r5 through r4 and leaves r1 as r4 + 4 and r2 as the stack pointer.
+
+**A3-64 (P3).** Grammar 2 draws a return chosen by an input (`Item::Choice`, `MakeChoice`, a stream of its own, `choiceRng`): last in a function that returns, makes no call and has no table or shared exit, two values written to r0 on the two arms of a branch and each used once more, by `or r0,Rn` into a register that holds a value or (one in four) a compare (the engine drops the return for the first and not for a compare whose T is dead, so a first version with compares only drew 165 choices in 3,000 seeds that the engine all returned): two constants, two sums of one register, two loads through r4 and r5, a register and a constant; chosen by r0 or a scratch register that no item writes on any path (`MayWriteLow`, read off the items' words as the decoder prints them), SR's interrupt mask when nothing writes SR, a parameter no item loaded a literal into, the stack argument at the entry r15, or a constant. Each of those conditions was learnt from a beyond-range seed the first versions failed on, every one an oracle error, not a product one: r0 written in a loop, which `Def` does not count (15812, 700810, 702926, 800874, 804398); r7 reloaded with a literal (701650); the stack word held by the signature as a fifth parameter (10932, 702548, 804085); a function that runs on into the choice after setting the chooser itself (706074); an `or` into a pointer register landing in a third register's arena (19860, and 2031 in the short run). It is drawn after every other draw of the function, so no program a seed made before changes except by the item itself (the first version put it first and changed the area 5 pin seed 313937, which no longer showed its class). Check 9 says `return-dropped:choice` for a choice lent `void` whose chooser the signature does not hold, and counts the held parameter, the stack word held as a fifth parameter and the constant (`excluded.choice-held.return-dropped`, A3-62's accepted limits); a function that jumps to or runs on into a choice returns its value (seed 522's function 0) and is counted, not checked (`excluded.choice-inherited.return-dropped`): it set the chooser itself. The replay gives it as `SE_GENERATED_RETURNS` 30 + the chooser, hex. Not drawn: the T flag the caller left alone (an item before the choice writes T), which `TestRound9Pins` holds as a module. Against b7cce51's decompiler the final generator fails 7 of 3,000 grammar-2 seeds (13 `return-dropped:choice` lines) and 7 pin CHECKs; with the fix none fails (section 5).
+
+### 3. Pins
+
+`TestArea3Round9Fix` (`Sh2DecompilerTests.cpp`): every fixture of A3-56 to A3-62 (H2, H5, H6, D1, D4, E1, E3, H4, S1, SA2, SA3, SA5, SA6), each withheld and its text rejected by the run, or noted and agreeing with it; their controls; the 74-cell table and the one-path cell; the identity op, the two-return and the interrupt-mask controls. `TestRound9Pins` (`Sh2GeneratedTests.cpp`): the review's modules (six; D1 stays in the suite, its replay's words sit in the arenas, whose folded reads the ledger reports for the module), the first seed that draws each chooser, and the A3-63 module.
+
+Pins reversed, as the coordinator decided (A3-62): A3-14's `r0 left alone on one path, set to a constant on the other` (`tst r4,r4 ; bt L ; mov #5,r0`: withheld "chosen by r4 ..., which the signature does not hold"), A3-55's `a3_55 control: chosen by r4` (the same), A3-45's `the loop may be skipped` ("computed from r0") and A3-46's function ("chosen by r0"); the generator's A3-45 and A3-46 pins report no finding either way. Each row says so.
+
+### 4. The mutation table
+
+Each part reverted alone in the committed tree (`mut/run.sh`: the edit applied, the decompiler suite and the generator built and run, the file restored and compared), "suite" the CHECKs of `SaturnExplorerSh2DecompilerTests` that fail, "pins" the generator's (600 grammar-2 seeds and every pin, with the choice item's first version):
+
+| Reverted | Suite | Generator pins |
+|---|---|---|
+| R01 r0's entry value is no chooser (the old `& ~1u`) | 3 (H2, `cmp/eq #5,r0`, A3-46's function) | 1 |
+| R02 the T the caller left is no chooser | 1 (H5) | 1 |
+| R03 SR is no chooser | 1 (H6, chosen by the T flag instead) | 0 |
+| R04 values equal by what they are made of (no `def`) | 2 (D1, D4) | 0 |
+| R05 a parameter the signature drops is no chooser | 6 (H4, S1's neighbours, the spilled r4, A3-14's and A3-55's reversed controls) | 2 |
+| R06 no stack arguments (`ArgDep` 0) | 2 (S1, the second word) | 1 |
+| R07 a parameter the signature drops is not counted in the data | 1 (r7 + 1 or r7 + 2 chosen by a loaded word) | 0 |
+| R08 r0's entry value is never counted in the data | 14 (A3-14 c, A2-31, A3-45, A3-50, A3-59, ...) | 2 |
+| R09 the returns not joined (the last return's value only) | 0 | 0 |
+| R10 a load's address not among its dependences | 0 | 0 |
+| R11 a jump table's index no chooser | 0 | 0 |
+| R12 dependences of the whole value (no bit positions) | 16 (the T and SR controls, every held-parameter control) | 0 |
+| R13 the identity ops read r0 | 1 (`and r0,r0` on one path) | 0 |
+| R14 a condition nothing is known of counts | 1 (A3-55's control) | 0 |
+| R15 a value nothing is known of counts in the data | 1 (r0 or a word nothing is known of) | 0 |
+| R16 the interrupt-mask idiom counts | 1 (06010054's words) | 0 |
+| S01 A3-60: only A3-51's condition | 107 (the table) | 0 |
+| S02 A3-60: a word written on one path is written | 2 (the one-path cell) | 0 |
+| S03 A3-61: no walk of the callee | 24 (SA2-SA6, the hand-back callers) | 0 |
+| S04 A3-61: every word read back noted | 5 (the controls, A3-15's and A3-10's pinned texts) | 0 |
+| every part at once (b7cce51's `Sh2Decompiler.cpp` with the final generator) | (the suite's new pins) | 7, and 7 failing seeds of 3,000 (`return-dropped:choice`, 13 lines) |
+
+R09, R10 and R11 are held by no fixture: in every shape built the engine keeps the read itself (the branch between two returns, a load through an index, a switch on a hidden register) and withholds the function on it, so each clause is there by the argument of section 1, not by a failing text. A fifth mutation, a store that leaves its word's exposure (A3-61), could not fail: a stored value is a register's or a temporary's, which never carries one, and the clause was removed.
+
+Check 10b's claims, the review's summary mutations against the final generator (3,000 grammar-2 seeds and the pins; the review's numbers before the fix in brackets): m1 `outOrigins` names the next register, 64 failing seeds and 4 pin CHECKs (0, the suite passed); m2 `leaks` cleared, 78 and 5 (0); m3 `frameValues` cleared, 0 and 1 (0: no random program stores to its caller's frame, the A3-63 module catches it); m5 `outOrigins` without the stack, 0 and 2 (0 seeds, the synthetic claim run only).
+
+### 5. The matrix, on the fixed tree (code `2b0b76a`)
+
+| Run | Result |
+|---|---|
+| `ctest -E SaturnExplorerLive -j3 --timeout 900` (RelWithDebInfo, 92 tests) | 92 of 92 pass (105 s; the fault suite 105 s) |
+| `SaturnExplorerDecompilerFaultTests` | 0 of 94 jobs failed (77 s), 0 MOVED: no re-pin |
+| `SE_GENERATED_SEEDS=3000 SE_GENERATED_GRAMMAR=2` | 0 failing seeds, 0 findings; 4,232 lent (b7cce51's decompiler lends 4,264 of the same programs: 26 withheld by the rule, 6 of their callers), 163 choices, claims held in 17,700 runs, canary 240 programs, 0 failing |
+| `SE_GENERATED_GRAMMAR=1 SE_GENERATED_SEEDS=1000` | 0 failing seeds |
+| `SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000` | passed: 3,077 functions, 2,715 compared, agrees 2,756, `narrow-c` 6, `void-return` 285, `void-return-lent` 30 (the head: 198 and 117; 87 register-only functions, which return r0 and read r0-r7 and T, were lent a `void` over a value that depends on an input the signature does not hold, and are withheld) |
+| `SE_GENERATED_SEEDS=20000` | 0 failing seeds (567 choices, 64,136 runs held to the claims) |
+| grammar 2, 700,001 to 720,000 | 0 failing seeds (1,207 choices, 119,107 runs held to the claims) |
+| grammar 2, `SE_GENERATED_ALPHABET=specials`, 800,001 to 805,000 | 0 failing seeds (298 choices) |
+| corpora 007 / 008 with `SE_GAME_LEND=1` | section 6 |
+| vendoring | not applicable: no engine patch |
+
+The sweeps were run three times: the first two versions of the choice item failed seeds that were all the oracle's (section 2), and one run of the three used a binary built while a mutation was applied, which the pins showed at once (every claim pin failed); the table is the run of a binary copied out of the build directory after a clean build.
+
+### 6. The corpora
+
+Both images, `SE_GAME_HWRAM=<img> SE_GAME_LEND=1` with `SE_GAME_OUT`, the head `b7cce51` built beside (its binary kept before the first edit) against the fixed tree, every output file compared.
+
+| | 007 | 008 |
+|---|---|---|
+| ledger counts | 0 dropped, 0 missing and said | 0 dropped, 4 missing and said |
+| mapping oracle, every violation count (alone, lent) | 0 | 0 |
+| lent signatures (parameters), unlent / lent run | 637 (866) / **662 (923)**, as before | 992 (1,227) / **1,021 (1,287)**, as before |
+| functions alone | 839 of 839 ok | 1,554 of 1,554 ok |
+| lending run | 1,730 functions, all ok | 2,995, all ok |
+| withheld reasons | none changes | none changes |
+| texts that differ, alone | 5: 060126DA, 06013A9A, 06013EAE, 060141D2, 06019A56 | 4: 06048E32, 060493CE, 060554B6, 06058662 |
+| texts that differ, lending runs (before and after) | 4: 060126CC, 060126DA, 06019A48, 06019A56 | 6: 06048E24, 06048E32, 060493CE, 060554B6, 06058654, 06058662 |
+
+**The return rule moves nothing**: with it alone (the first corpus run of the round, before the probe changes) every output file of both images, the withheld reasons included, is byte for byte the head's. The reviewer's measured zero holds for the whole rule, A3-56 to A3-59 and A3-62 together: compiled code reads no r0, T, scratch register or stack word before writing it, and a parameter it tests is one its signature holds. So no lent function changes, and there is none to argue.
+
+**Every text that differs differs by the A3-60 note** ("a frame address is in a stack argument slot here, in none of the arguments: the call may write the locals from there up") and nothing else, but for 060126DA, where the alias the note comes with splits the array `aiStack_70 [12]` into `aiStack_70 [10]` and `auStack_5c [2]` (`puStack_1c = auStack_5c` for `puStack_1c = (uint2 *)(aiStack_70 + 10)`, the same address). Each is a compiled function that keeps the address of a local in a local (`piStack_18 = ...`) above a word not yet written, at a call with arguments in registers: the engine drops that word from the call's arguments (the table of section 2 holds the rule), so the note is the "may" of A3-51's: 10 of the 2,393 functions with a prologue had it after round 8, 17 have it now (7 more, and a second one at another call in 06019A56 and 06058662, two of the ten). No function gets A3-61's note: no corpus callee writes its caller's frame (A3-21 withholds none for it).
+
+**Time.** The probe's walk of each unlent callee that is read back after (A3-61) costs about a tenth of a decompile: the default request of image 007 took 7,250 ms at the head and 8,131 ms fixed, image 008 22,737 ms and 24,904 ms (a shared machine, load 2.5 to 5; the return rule alone measured 7,245 and 23,272). A smaller step budget for the walk (3,000 for 20,000) changed nothing: the cost is the number of walks, not their length.
+
+### 7. A3-65 (routed by the coordinator, filed on master after this branch's base)
+
+Triaged, not fixed: it does not fit this round, and needs an engine change. Generator seed 901303 (grammar 2, `n:kept-read:r13`, shrunk replay in the area 2 round 9 review). Function 0 restores its registers and tail-jumps (`jmp @r1`, the literal is function 1's entry), the engine follows the jump as flow ("flow runs into 0x06009028"), and function 1's code, shown inside function 0, walks a pointer down from `r15 + 8` over the words where function 0 had saved r9 and r13. The code's `mov.b @(1,r15),r0` reads the walk's 0; function 0's text reads `(char)((uint4)unaff_r13 >> 0x10)`, the stale saved r13. Check 12 caught it by accident (function 1's effects keep no r13, so the text's `unaff_r13` is a kept read), and it is not A3-52's run-on class: the text is wrong, not the check.
+
+The cause is not the run-on. A leaf with no call reproduces it, and is **lent**: `add #-8,r15 ; mov #5,r0 ; mov.l r0,@r15 ; mov r15,r2 ; add #8,r2 ; mov #2,r1 ; L: mov.l r1,@-r2 ; dt r1 ; bf L ; mov.l @r15,r0 ; rts ; add #8,r15` prints `int4 f(void) { ... return 5; }` where the code returns 1 (head binary, `SE_GENERATED_WORDS="7FF8 E005 2F02 62F3 7208 E102 2216 4110 8BFC 60F2 000B 7F08"`, 0 findings: no check holds a value). With `mov.l r13,@-r15 ; mov.l @r15+,r13` before the walk the word a pop freed is read as `unaff_r13` (withheld, "reads r13"). The engine turns the walked copy of r15 into `register0x0000003c` (`BADSPACEBASE`, its spacebase placeholder): the stores through it are no stack stores, so no alias reaches them; the same walk upward (`mov.l r1,@r2 ; add #4,r2`) is an array (`aiStack_8[1]`) and right. A host alias from the frame's lowest slot (the probe's A3-16 path, tried) is declared and changes nothing. A loop that stores through a pointer it decrements from a local array's end is what `for (p = &a[n]; p != a;) *--p = v;` compiles to, so this is plausibly compiled code and a wrong value in a lent signature with no note: **P1** by the program's scale, area 3 (or 2), for an engine patch (0054 is free). Fixtures above; none is committed, as the current output is wrong.
+
+### 8. Not done
+
+- **The exit join** (r0 at two returns joined as at one exit) is held by no fixture the engine drops: in every two-return shape built the engine keeps the branch between the returns and its own read withholds the function. It stays for the argument of section 1.
+- **A3-61's limits**: an indirect call the probe does not resolve, a trap, a callee outside the capture or beyond the walk's budget.
+- A3-65: triaged in section 7, left for an engine patch.
+- The load-address and jump-table-index clauses of the rule are held by no fixture either (the engine keeps those reads), as section 4 says.
+- Nine ledger rows of other areas (A2-24, A2-25, A12-10, A5-50, A2-33, A2-36, A2-37, A6-41, A5-69) have more than eight cells, an unescaped `|` in a cell; left to their areas.
+- The Live tests and the sanitizer job were not run (shared socket path; CI).
+
+## Area 2, round 9 fix
+
+Fixer, branch `review/2-round9-fix`, on the coordinator's head `933de0e`. Two commits: the code, `858f287` (two engine patches, the host's reading of the new warning, the harness, the generator, the tests, the guide), and this record. **A2-58 (P1) and A2-59 (P2) are fixed, A2-60 and A2-61 (P3, oracle) are fixed, A2-62 (P3, documentation) is fixed.** New patches **0054** (the invariant, in place of the resets of 0046, 0049 and 0051) and **0055** (a bound on the passes of a repeating action). Nothing in the spec changed, so `sh-2.sla` and `Sh2SpecData.h` are as they were. Reproduced first, on my own build of the head: the two A2-58 fixtures of `tools/a2_round9/fixtures.txt` are `R8 differs` (`return 1;` where the code returns 0x80000001, `return 0xffffffff;` where it returns 0), and the A2-59 words `E104 6328 2139 4610 8BFB 000B 6013 0009` and the `xtrct` loop do not finish (`timeout 8` ends them, 285 MB and 297 MB resident after 6 s).
+
+### 1. The invariant
+
+Rounds 7, 8 and 9 each found a P1 in one class: a fact the engine caches on a Varnode goes stale when the graph is rewritten, and a rule that trusts it prints a wrong value with no warning. Patch 0046 forgot the non-zero mask of the op a rule rewrote, 0049 of everything below it, 0051 merged consume masks in `totalReplace`; A2-58 is the consume mask through `opSetInput`, and A2-59 is what 0049's forgetting cost. Each patch named a route. 0054 states the class:
+
+> **At every rule application, a cached mask may be wider than the truth, never narrower.**
+
+The two masks are the non-zero mask (`Varnode::nzm`, which bits can be 1; `ActionNonzeroMask`, forward) and the consume mask (`Varnode::consumed`, which bits any reader sees; `ActionDeadCode`, backward). A narrower one is a wrong text (`RuleAndMask` drops an AND or replaces it by 0, `ActionVarnodeProps` replaces a Varnode whose two masks do not meet by 0); a wider one only delays a simplification to the next pass. The invariant is held in the form both actions establish: each mask holds at least what its neighbours' masks give. For every op, the non-zero mask of its output contains `PcodeOp::getNZMaskLocal` of its inputs' masks (a post-fixpoint of the forward step, which is sound by induction over any run), and the consume mask of each input contains what the op takes of it given its output's consume mask (`PcodeOp::getConsumeLocal`, now the one definition of the backward step: `ActionDeadCode::propagateConsumed` calls it), with the roots of `ActionDeadCode::apply` (a call's operands by its specification, a RETURN's value by `minimalmask` of its non-zero mask, every other op without an output in every bit).
+
+It can break only where the graph changes, and `Funcdata::opMasksChanged` runs at each of those places (section 2). It sets the changed op's output to the non-zero mask its inputs give, exactly (the old one was a fact about what the op computed before; a new op's output is told what it can hold); widens every non-zero mask below it until one already holds what its op gives; widens the consume masks of the op's inputs to what the op takes, and every consume mask above them until one already holds what its readers take; and gives a reader whose input's non-zero mask grew its inputs' needs again (a compare consumes the bits either side can have, a RETURN and a call's operand the bits up to the highest one that can be set). A new temporary (`newUniqueOut`) starts consumed in no bit, which is the truth (nothing reads it), and grows by what each reader takes. An op that is half built (a missing input, a count of inputs that is not its op-code's, an output not set yet, an offset that is not a constant) is skipped; the call that completes it does the work. Apart from the changed op's own output nothing is narrowed, so the walks end (a mask grows at most a bit at a time), and they stop at the first mask that already holds what its neighbours give, so a rewrite that keeps a value (an AND distributed over an OR, a copy propagated) touches nothing beyond the op it changed. The worklists are 64 entries on the stack and a vector beyond, so a rule allocates nothing in the common case.
+
+**Why not ordering.** The alternative the brief names, recomputing before any rule that trusts a mask, would have to run after every rule application: about a hundred rules read the masks (`getNZMask` and `getConsume` in `ruleaction.cc`, `subflow.cc`, `bitfield.cc`, `double.cc`), the pool applies them op by op in the middle of a pass, and a recomputation is a pass over the function, so the cost is quadratic in the size of the function. Moving `ActionDeadCode` before `ActionVarnodeProps` would cover only that action's read and none of the rules'. The incremental walk costs a visit per Varnode per bit that changes.
+
+**Why not wider resets.** The reviewer's trial (the new input's consume mask to every bit in `opSetInput`) gave 0 wrong values in 3,000 functions of each join family. It is sound for the Varnode that gains the reader and says nothing of what is above it (the arms' `src & 0x80000000` keep their old consume mask); I found no function where that mattered (a scratch engine that widens each new input to what its reader takes but nothing above it, new temporaries consumed in every bit as before: 0 wrong values in 1,500 functions each of families 0, 2, 6, 7, 8 and 9), and keep the walk above because the invariant needs it and because a new temporary that starts consumed in no bit needs it (section 5). More important, every reset forgets a mask that may still be true, and forgetting a true mask is what started A2-59 (section 4). 0054 widens to exactly what the neighbours give.
+
+### 2. The audit: where a Varnode gains a reader, and where an op changes in place
+
+Every change to the data-flow of a function goes through a `Funcdata` primitive; I read each, and grepped the engine for the ways around them (`PcodeOp::setInput`, `setOutput`, `insertInput`, `removeInput`, `setNumInputs`, `PcodeOpBank::changeOpcode` called directly).
+
+| Place (call sites in the engine) | What it changes | Masks that can go stale | 0054 |
+|---|---|---|---|
+| `opSetInput` (871) | a new input in a slot | the op's output and below (non-zero); the new input and above (consume); the op's other inputs where the op takes them by the slot's value (an AND with a constant, a compare) | `opMasksChanged` at its end |
+| `totalReplace` (24), `totalReplaceConstant` (2) | every reader of one Varnode reads another | the Varnode taking the readers and above (consume) | through `opSetInput`, reader by reader, by what each takes (0051's OR of the old consume mask is gone: it was this, as a union) |
+| `opInsertInput` (28), `opSetAllInput` (21) | inputs added or all replaced | as `opSetInput` | end in `opSetInput`; the op is half built until the last one, and that call does the work |
+| `opSetOpcode` (467) | what the op computes | its output and below; its inputs and above (a COPY takes what an OR took, a SUBPIECE something else) | `opMasksChanged` |
+| `opRemoveInput` (113), `opSwapInput` (6) | the slots | as `opSetOpcode` (not every op commutes) | `opMasksChanged` |
+| `opSetOutput` (91), `newVarnodeOut` (67), `newUniqueOut` (114) | an op gets an output (`RulePushMulti` moves the MULTIEQUAL's output onto the unified op) | that Varnode's non-zero mask and below; the op's inputs by the output's consume mask | `opMasksChanged`; a new temporary starts consumed in no bit |
+| `opUnsetInput`, `opUnsetOutput`, `opDestroy`, `opUnlink` | readers or ops removed | none: a consume mask with a reader fewer is wider than the truth, which is allowed | none |
+| `opInsert*`, `opUninsert`, `opDeadInsertAfter` | where the op is | none (an SSA value does not change with its place) | none |
+| `PcodeOp::setInput` direct: `VarnodeBank::replace` | | | unused in the engine |
+| `PcodeOp::insertInput` direct (`funcdata.cc` 505), `setNumInputs` (`funcdata_block.cc` 1097) | a slot made, then filled | | the `opSetInput` or `opSetOpcode` that follows does the work |
+| `PcodeOpBank::changeOpcode` direct (`newIndirect`) | a new INDIRECT | | its inputs are set through `opSetInput` after |
+| Flags that change a mask's rule after the fact: a type-locked bool input (`nzm = 1`), `calculated_bool` on a call output | | only narrower than what the Varnode had (every bit): wider than the truth until the next pass | none |
+
+The places a mask can become narrower than the truth are these primitives, not the rules. That is what makes the fix one invariant and not a list of routes: a rule that re-points an op, merges two values or rebuilds an op in place is correct for the masks whatever it does, because the primitive it uses keeps them. The reviewer's scan of the twelve rules that change an op with `opSetOpcode` or `opRemoveInput` alone (`RulePiece2Zext` to `RuleFloatSignCleanup`) found each one value-keeping; that is no longer a condition the invariant needs.
+
+### 3. The rows
+
+**A2-58 (P1), patch 0054.** `RulePushMulti` merges the two `r2 = r1 + 1` of the arms into one add in the join and points it at the join's existing phi of `r1` (`opSetInput(op1, substitute->getOut(), slot1)`); that phi was consumed `0xff` (its reader was the byte `extu.b`). `opSetInput` now widens it by what the add takes (`coveringmask` of the add's output's consume mask: every bit), and the walk carries that up through the phi to the two arms' `r1 = src & 0x80000000` (consumed `0x80000000` of `src`), so `RuleAndMask` no longer finds the AND's mask and consume mask disjoint. The fixtures print `int4 func_0x06009000(int4 param_1,uint4 param_2,uint4 param_3) { if (param_1 < 1) { param_3 = param_2; } return (param_3 & 0x80000000) + 1; }` and `... return -(uint4)((param_3 & 0x80000000) == 0);` with `param_1 < 0`, the row's expected texts, and agree with the run (`TestArea2Round9` part 1 flipped: `agrees`, no `return 1;` / `return 0xffffffff;`, the expression in the text; the control still agrees). The dagen join families 7, 8 and 9, 3,000 functions each through the printed-C differential and the checker: 3,000, 3,000 and 2,997 agree (3 `narrow-c`), 0 wrong values, 0 checker reports (9, 102 and 43 wrong in 600 on the head). The instance the checker found in game code (`0601E00E` of hwram008, harmless there) is gone (section 6). The generator draws the class now: `MakeJoin` (a join of two arms that compute `r1 = src & M` and `r2 = G(r1)`, read through a narrow H and whole; 89 of the first 600 functions) and the printed-C fixtures `A2-58 add` and `A2-58 tst`.
+
+**A2-59 (P2), patches 0054 and 0055.** The cause is the forgetting: 0049 set the non-zero mask of the phi of `r1` to every bit after the first `RuleAndDistribute`, though the distribution keeps the value, and `RuleHumptyOr` then merged it back. With 0054 the AND that becomes `(A & C) | (B & C)` gets the mask its new inputs give (`(nzm A & nzm C) | (nzm B & nzm C)`, no wider than before), the walk finds the phi's `0x4 | ...` already holding it and stops, the second distribution fires and `RuleAndMask` cancels the pieces. The four words of the row decompile in 3 to 6 ms (`uVar1 = (in_r2 & 0xff00) >> 8 & uVar1;` in the loop for the first) and agree with the run. Family 11, the loop family: 3,000 functions with the checker (seeds 1 to 3,000) and 4,000 more through the printed-C differential (seeds 20,001 to 24,000, where 492 of the head's 686 hangs are) finish and agree, 0 bound warnings (686 of 5,500 did not finish on the head); family 3, the general loop family, seeds 10,001 to 13,000 and 30,001 to 36,000 (2 of 9,000 hung on the head): 9,000 finish, 0 findings, 0 bound warnings. `TestArea2Round9` part 2 flipped: the four loops run against a cancel flag raised after 30 s (so that a regression fails instead of hanging the suite) and finish `Ok`, with no warning of the bound and the signature not withheld for it (it is withheld because they read r2 on entry). The generator draws the class: `MakeLoopAnd` (a counted loop that carries `r1 &=`, `|=` or `^=` a value made of the pieces of a register; 53 of the first 600 functions) and the four printed-C fixtures `A2-59 ...`.
+
+*The guard, patch 0055.* `Action::perform` stops a repeating group or pool of actions after `Architecture::maxActionRepeats` passes (300) with `Exceeded maximum repeats of <action> with changes still pending`. The bound: the most passes any function of the two images needs is 60 (the rule pool `oppool1`; the main loop 30), and the most in 36,000 functions of the families is 18. A cycle's passes get slower as they go (each leaves its dead ops in the function until it is destroyed), so the bound is measured, not guessed: with 0054 reverted the A2-59 words reach 1,000 passes in about 26 s each (a first version had 1,000) and 300 in 2.2 s. `ActionDoNothing`, the one single action that repeats, removes a do-nothing block a pass (47 at most in the images) and is not bounded: it cannot cycle. Every pass keeps the meaning of the function, so the text of what has been done is printed. The host classifies the warning (`EngineWarning::repeatLimit`) and withholds the signature, "the analysis did not settle (repeat limit)", as for the restart limit, and the warning is in the result's list. A warning of the bound is a finding in the generator (`unsettled`, both in the access checks and in the printed-C differential), so the nightly reports a cycle instead of passing its text: with 0054 reverted the two A2-59 words are `FINDING [unsettled]` in 2.2 s where the head never returns. Pinned in `TestArea2Round9` part 3: the bound lowered to 2 (`Sh2Decompiler::SetActionRepeatLimitForTests`) on the A2-58 join prints the text, passes on the warnings (of `oppool1`, `mainloop`, `fullloop`) and withholds the signature; at the engine's own bound nothing is said.
+
+**A2-60 (P3, oracle), the harness.** The engine's reading (`CxxHeader`) took `0x80U` for a plain number, which `Promoted` brings to the other operand's sign. `UnsignedLiteralsTyped` rewrites the literals the engine prints with `U` as `uint4(...)` (and `ULL` as `uint8(...)`) in the C++ reading only, so `param_1 + 0x80U` of an `int4` is an unsigned sum and `0x7f < ...` an unsigned compare. The row's words are `narrow-c` now (`[agrees when read as the engine means it]`; the C reading still disagrees on `(int4)-param_2` of a two-byte value, as C widens first); printed-C fixture `A2-60 0x80U in the engine's reading` and three CHECKs of `UnsignedLiteralsTyped` in `TestOracleOwnDecisions` (a plain `0xffffffff` and an identifier ending in `U` are left alone).
+
+**A2-61 (P3, oracle), the harness.** A text that computes the address of a local (`&xStack_1`, `(uint4)&xStack00000000 & 0xff`) is `skipped:stack-address`: the run's address is in the machine's stack and the C's in the host's, so they cannot be compared by value. The row's words, and the 7 functions of family 5 (seeds 1 to 3,000) that the checker run reported as mismatches with the head's harness, are all `skipped:stack-address` now. Not a fixture (a ledger fixture the harness skips is a failure); pinned in `TestPrintedC` ("pin 'A2-61: a returned stack address is not compared'").
+
+**A2-62 (P3, documentation).** `DECOMPILER_GUIDE.md`, Limits: the stack pointer on entry is taken to be a multiple of 4, with `mov r15,r0 ; and #3,r0` as `return 0;` and `mov r15,r0 ; add #2,r0 ; and #3,r0` as `return 2;`, what a function entered with r15 at 2 more than a multiple of 4 returns instead, and that rounding to 8 or more keeps its AND.
+
+### 4. Rule pairs that undo each other once a mask is forgotten
+
+The reviewer did not look for other pairs; a broader rule for forgetting would make one more likely, so I built an instrument to find them rather than read the rule set for inverses. In a scratch copy (the checker's, plus a few lines): after every rule application, forget every cached mask of the function (every non-zero mask to every bit, mode 1; every consume mask, mode 2), which is the most a forgetting rule could do, and log the rules that fire in the last two passes of an action that reaches the bound (lowered to 60 passes, the most any game function needs, so that a cycle ends quickly). A pair that undoes each other under a forgotten mask cycles to the bound under this stress.
+
+| Run | Mode 1 (non-zero masks forgotten) | Mode 2 (consume masks forgotten) |
+|---|---|---|
+| `dagen.py` families 0 to 11, 300 functions each (3,600) | cycles in families 9 (122) and 11 (11,224 bound hits over the batches); the rules in the cycles: `anddistribute`, `humptyor`, `earlyremoval` only | none |
+| hwram007 (839 functions) and hwram008 (1,554) | none in the game code (each run reports 202 bound hits, the same in both: they are the unit suite's, which runs first in the same process, and the rules in them are the same three) | none |
+
+The only mask-guarded pair that cycles is the one of A2-59. `RuleHumptyOr` has a guard against exactly this (`if ((b->getNZMask() & aMask)==0) return 0; // RuleAndDistribute would reverse us`), and the guard holds as long as the two rules read the same masks; it fails only when a mask is forgotten between them, which 0049 did and 0054 does not (a mask widens only when the value it describes does). No consume-guarded rule (`RuleAndMask`'s consume branch, `RuleOrConsume`, `RulePullsubMulti`, the sub-variable flow, `RuleSubvarAnd`) has an inverse that cycles with it under total forgetting. With 0055, a pair found later ends at the bound with a warning, a withheld signature and a generator finding.
+
+### 5. The mutation table
+
+Each fix reverted in a scratch copy of the committed tree (the engine and test files as committed, one change at a time), `Sh2DecompilerTests` and the printed-C run of `Sh2GeneratedTests` (`SE_GENERATED_PRINTEDC=only`, 300 seeds and the 84 fixtures) rebuilt and run:
+
+| Reverted | Pin | Result |
+|---|---|---|
+| 0054 whole (0046, 0049 and 0051 as they were; 0055 kept) | `TestArea2Round9` parts 1 and 2; printed-C fixtures `A2-58`, `A2-59` | 14 CHECKs fail: the two joins `differs` with `return 1;` and `return 0xffffffff;` (6), and each of the four loops ends at the bound in about 2 s with the warning and the signature withheld (8); printed-C: `A2-58 add` and `tst` `mismatch`, the four `A2-59` `unsettled`. The grammar alone, in the 300 default seeds: 2 `mismatch` (seeds 24 and 274) and 8 `unsettled` |
+| 0054, the walk below (the changed op's output set, nothing below it widened) | `TestArea2Round8` part 5, `TestArea2Round7SlotValues`; printed-C `A2-52` | 36 CHECKs (the A2-47 and A2-52 sums print without their AND); the three `A2-52` fixtures `mismatch` |
+| 0054, the changed op's output widened (`old \| F`) instead of set to what its inputs give | `TestArea2Round9` part 2; printed-C `A2-59` | 8 CHECKs (the loops end at the bound: a new op's output has every bit until it is told otherwise, so the distributed AND forgets the phi again); the four `A2-59` and 9 grammar seeds `unsettled` |
+| 0054, the walk above (each input widened, nothing above it) | `TestArea3Round8`, `TestArea3Round9` (the canary of a local a callee writes) | 32 CHECKs: `return 0x5a;`, the local folded across the call; a new temporary starts consumed in no bit, and without the walk the ops that compute it are never told it is read |
+| 0054, the consume half (no consume mask widened; a new temporary consumed in every bit, as before) | `TestArea2Round9` part 1; printed-C `A2-58` | 6 CHECKs (the A2-58 texts); `A2-58 add` and `tst` `mismatch`, and grammar seed 274 |
+| 0055 (no bound) | `TestArea2Round9` part 3 | 2 CHECKs (no warning, the signature not withheld) |
+| the host's classification (`repeatLimit` never set) | `TestArea2Round9` part 3 | 2 CHECKs (the signature not withheld; `ClassifyEngineWarning`) |
+| A2-60: `UnsignedLiteralsTyped` returns the text | printed-C fixture `A2-60`, `TestOracleOwnDecisions` | 1 `mismatch` (`pseudo=00000001:00000000` in the engine's reading), 2 CHECKs |
+| A2-61: the `stack-address` skip | "pin 'A2-61 ...'" | 1 CHECK (the class `mismatch`, `run=0603FFFF:00000001 pseudo=00000000:00000000`) |
+| the joins and loops not drawn (`SE_GENERATED_PRINTEDC_JOINS=0`) | the grammar pin | 2 CHECKs (0 and 0 of 600) |
+
+The A2-56 pin (`TestArea2Round8` part 7, the byte of SR compared whole) does not fail with the consume half off: with the non-zero masks exact the merge that left the narrow mask no longer happens in that order. The class is covered by the checker over the families, family 0 being the value computed twice of A2-56 (0 consume reports in 3,000).
+
+### 6. The matrix, on the fixed tree
+
+| Run | Result |
+|---|---|
+| `ctest -E SaturnExplorerLive -j3 --timeout 900` (RelWithDebInfo, 92 tests) | 92 of 92 pass (the longest, the fault suite, 98 s) |
+| `SaturnExplorerDecompilerFaultTests` | 94 jobs, 0 failed, after ten re-pins as the suite printed them (`shapes`: `HighVariable::mergeInternal` 16 bytes #374 to #338, 24 #942 to #882 in both passes, 32 #283 to #259 in both, 40 #605 to #568, `Cover::merge` 56 #107 to #104; `mailbox`: `addCommentNoDuplicate` 40 #214 to #212 in both passes, `createVirtualRoot` 24 #221 to #220). Six were STALE, not MOVED: their ordinals lay past the last allocation of that size, and `--sites` gave each its new one (the 24-byte one is back near #880, where it was before 0049 moved it to #942) |
+| generator, grammar 2, `SE_GENERATED_SEEDS=3000` | 0 failing seeds, 0 findings (5,941 functions) |
+| generator, grammar 1, 1,000 seeds | 0 failing seeds, 0 findings |
+| generator, printed-C only, 3,000 seeds | 3,084 functions (3,000 and 84 fixtures), 2,778 compared: agrees 2,806, `narrow-c` 7, `void-return` 173, `void-return-lent` 98, 0 findings |
+| generator, 20,000 seeds (10,000 of each grammar) | 0 failing seeds, 0 findings (19,456 functions; 26.8 ms a seed) |
+| printed-C, `SE_GENERATED_FIRST=960001`, 35,000 seeds (960,001 to 995,000) | 35,084 functions, 31,713 compared: agrees 32,007, `narrow-c` 90, `void-return` 1,903, `void-return-lent` 1,083, skipped 1 (array-local), **0 findings** (the joins and loops of the grammar drawn: the functions are not round 8's for the same seeds) |
+| decode oracle with `SE_MEDNAFEN_SS` | transcribed table equals Mednafen's for 65,536 words; SLEIGH and `Sh2Disasm` 53,752 defined, 0 disagreements; translation order 24,000 results 0 differ; history 5,632 cells 0 differ; followers 60 pairs, 240 cases, 0 differ after one and two translations; differential execution 260,000 cases, 0 differ, 0 could not run, 0 of 130 forms |
+| `dagen.py` families 0 to 11, 3,000 functions each (seeds 1 to 3,000), printed-C and the checker (`SE_NZM_FREE=1 SE_NZM_CHECK=1 SE_CONSUME_CHECK=1`) | 36,000 functions: 0 wrong values, 0 stale non-zero masks, 0 contradicted consume masks, 0 hangs or bound warnings (the most passes of any action: 18). The only findings were 7 of family 5, all A2-61's class with the head's harness, `skipped:stack-address` with the new one. The checker's self-test (`SE_CONSUME_SELFTEST=1`) still reports (1,288 in 300 of family 7), so it is live |
+| family 11 seeds 20,001 to 24,000, family 3 seeds 10,001 to 13,000 and 30,001 to 36,000 (the head's hangs) | 13,000 functions, 0 findings, 0 bound warnings |
+| the checker on the images (functions of at most 300 ops) | hwram007: 1,353 names checked at least once, 0 reports; hwram008: 2,122 names, 0 reports (6 on the head, all A2-58 in `0601E00E`) |
+| corpus 007 (`SE_GAME_HWRAM`, `SE_GAME_LEND=1`) | every ledger count 0 (0 dropped, 0 missing and said); 839 functions; lent 637 (866) before, **662 (923)** after; mapping: 0 of every violation class (the 4 and 11 "on another line than firstLine says" of the head, unchanged) |
+| corpus 008 | every ledger count 0 (0 dropped, **4** missing and said); 1,554 functions; lent 992 (1,227) before, **1,021 (1,287)** after; mapping as the head (0 violations; 4 and 21 on another line, unchanged) |
+| vendoring (`python3 -I vendor.py` on a copy, the pinned Ghidra checkout) | 49 patches applied, the copy identical to the tree (`cpp/`, `processors/`, `sources.cmake` and every other file) |
+
+### 7. Timing
+
+`TestGameCode` on hwram008 (the whole of `Sh2DecompilerTests` with `SE_GAME_HWRAM`, the head's build and mine alternating, no build of mine running, the machine at a load of 1.3 to 3):
+
+| Run | head ms (worst function, 0604F422) | fixed ms (worst) |
+|---|---|---|
+| 1 | 22,705 (3,341) | 23,608 (3,493) |
+| 2 | 22,605 (3,344) | 23,438 (3,564) |
+| 3 | 22,361 (3,204) | 23,346 (3,543) |
+| median | **22,605** (3,341) | **23,438** (3,543) |
+
+About 3.7 % slower (the worst function 6 %), the cost of the walks: every primitive that changes an op works out its output's mask and its inputs' needs, where 0046 to 0051 only reset. hwram007: 6,896 ms and 7,112 ms (one run each, the corpus runs). The fault suite took 98 s in ctest and 87 s alone (125 s and 154 s in round 8's record, on another load).
+
+
+### 8. The corpus texts, before and after
+
+All 839 functions of hwram007 and all 1,554 of hwram008 with a prologue, decompiled with the default request by the head (`933de0e`) and by the fixed engine (`SE_GAME_OUT`): **22 of 839 and 63 of 1,554 texts differ. I read every difference; none changes a value.** To tell what is new from what undoes patch 0049, the same functions were decompiled by the head with 0049's walk reverted (0046 kept): 7 and 9 of the differences are exactly that engine's text, the texts round 8 read when 0049 changed them (the `Write_SR` mask `0x302` back to `0xffffff0e`, which `Write_SR` reduces to the same `0x302`; `060123CC`'s store and copy, `0601E3F6`'s and `0605D8D2`'s `xunknown2`, `06031070`'s and `06070C88`'s nested if, `0603D5F6`, `06041256`'s flag, `06056136`, `06056D30`). An engine with 0054's non-zero half alone (the consume half switched off, a new temporary starting with every bit consumed, as before) gives 21 of the 22 and 59 of the 63 of the differences, so the consume half changes 1 and 4 texts. The rest, by kind (the names of the locals renumbered in most):
+
+- *Declarations only* (21: `0601F6FC`, `0601FA28`, `0602C1D0`, `0602C886`, `06031432`, `0601787E`, `0601793E`, `0601CE8A`, `060253E6`, `06039AB0`, `0603B582`, `060400EE`, `0604080A`, `0604535A`, `06046C06`, `0604F422` (the largest function, 1,570 lines of the diff, all renaming), `0605EBD8`, `0605EF04`, `0606CCBC`, `0606D34A`, `06071046`): a local declared at another place, and the others renumbered; `0603B582` also tests `uVar6 == 0` where it tested `uVar5 == 0`, and `uVar6 = (uint4)uVar5` two lines above with neither written between.
+- *Branch layout* (15): an early return as one return of a variable (`0602032E`, `0605F80A`, `06040FD6`, `060731E2`, `06073D58`); a nested `if` folded into `&&`, a store inside the condition as a comma expression in the same order (`0600FD18`, `060331B8`, `0602CE96`, `0606D95A`); a flag kept as `p != 0` instead of `p == 0` with the arms and negations moved (`0601C5A6`, `0605BA82`: the three paths that reach the test give the same calls), and `param_2 < 0` as `-1 < param_2` with the arms swapped (`0600AACE`, `0600AB32`, `0600A0DE`, `0600A142`).
+- *A statement moved where nothing reads between* (13): two adjacent stores of 0 to two ordinary globals at different addresses in the other order (`0602BC00`, `0602BCF0`, `0602E9BE`, `0602EAE6`, `0602EC46`, `0602ED36`, `0602EE2C`, `0602EF28`, `0602F010`, `0602F10A`, `0602E510`); in `0601E54E` and `0605DA2A` a copy `iVar2 = iStack_8` after an `if (...) goto` instead of before it and `iVar2 = iVar8` after a loop's `break` instead of before it: the variable is read only on the paths that assign it either way.
+- *Copies and casts* (9): a byte read kept in a `uint1` and cast at its two uses (`0600708E`, `060070EA`: `uVar2 | 0xff00` into a `uint2` is the same 16 bits as `(uint2)uVar2 | 0xff00`); a byte local that held `(xunknown1)iRam060a8562`, set on the three paths after the same call, replaced by the cast at its one use (`0602A376`; the global is not written between); a byte read kept in the stack local it is stored to (`0603482E`: the loop between writes `-0xc` to `-0x6`, the local is `-0x10` to `-0xd`); two redundant copies of a `char` gone (`0603B636`, `0603B75A`: the three were equal on every path; the reviewer's trial saw the same); the entry read of a two-byte global held in a `uint2` and a `uint4` (`06044576`: the OR in case 4 reads the one that holds the same value); two statements as one expression (`060462FA`); a dead `iVar = 1` gone (`0602A004`).
+- *Arithmetic written another way* (5): `(x >> 10 & 0x1f) * 0xb8` for the two terms `* 0x90` and `* 0x28` of the same field (`06036182`, twice; round 8 saw 0049 make the reverse change); `(int2)((int2)a + (int2)b)` for `(int2)(a + b)` (`0603A080`, twice); a `uint2` counter as a `uint4` with `+ 1 & 0xffff` (`0601E58E`, `0601E5F4`); the 2-byte global at `0x00200020` (`mov.w @r1,r1 ; extu.w r1,r11`) typed `uint2` where it was an `int2` read through `(uint2)` (`0601EEBE`; the test `== 0` the same, the read 2 bytes in both).
+- *Types* (6): a return of a byte or halfword buffer `uint1`/`uint2` as `xunknown1`/`xunknown2` (`0601E398`, `0601E3C4`, `0605D874`, `0605D8A0`); `0603FB36` a line break; `06041256`'s second flag in the `(uint4)b == 0` / `== 0xffffffff` form of pre-0049 (a call iff neither bit is set, in both).
+
+The lending texts (`lend_before/`, `lend_after/`, each function decompiled with and without its callees' lent signatures) change in 67 and 59 of 1,730 (hwram007) and 197 and 138 of 2,995 (hwram008); I read the default-request texts, not these, and the lending counts they give are the head's (section 6).
+
+### 9. Not done, and what is left
+
+- The checker reached functions of at most 300 ops on the images (142 and 416 names skipped for size at least once, 12 and 82 never checked), as in the review; a larger `SE_NZM_MAXOPS` was not run.
+- The stress of section 4 forgets every mask after every rule, the most a forgetting rule could do; a pair that cycles only under a partial forgetting, or only in code neither the families nor the images have, would not show. 0055 makes such a cycle a reported, bounded failure and a generator finding.
+- 0055's bound is the same for every function. A legitimate function needing more than 300 passes of a pool would be printed with the warning and its signature withheld; none of the 2,393 game functions or 85,000 generated ones comes within a factor of 5 of it.
+- `getNZMaskLocal` and `getConsumeLocal` are upstream's steps, trusted as sound; the walks only keep their post-fixpoint. The INDIRECT side effect of `ActionDeadCode::propagateConsumed` (a COPY whose output overlaps an INDIRECT's is marked consumed) is not repeated by the walk; I did not build a case where a rule makes such an INDIRECT in the middle of a pass, and the checker reported none.
+- The decode oracle ran at its default seed only; the spec did not change.
+
+## A3-65 and A5-85
+
+Fixer, branch `review/a3-65-fix`, on the coordinator's head `bc872a1`. Code commits `7983675` (engine patch 0056, the suites, the generator, the oracle) and `3e5f985` (four fault-matrix pins re-pinned), then the record. **A3-65 (P1) is fixed** by engine patch **0056** (renumbered from 0055 at the coordinator's word: 0054 and 0055 are the area 2 fixer's). **A5-85 is an oracle false positive, P3** (set down from the provisional P2), fixed in the oracle. Own RelWithDebInfo build under the scratch directory, `-j3`.
+
+### 1. A3-65: the cause
+
+Every part of upstream's stack analysis takes a pointer into the frame to reach only what lies at or above its base, as an array index does. A loop that steps the pointer down (`*--p = v` over a local array: a copy of r15 or of the frame pointer r14, moved to the array's top and walked by `mov.l Rm,@-Rn`) reaches what lies below it, and four places did not see it:
+
+- **The alias boundary** (`AliasChecker::gatherInternal`, `varmap.cc`). The walk's start is recorded as a base (the MULTIEQUAL that joins it with the stepped value is a use that is no addition), and everything at or above that offset is aliased, nothing below. The locals the walk wrote were unaliased, `opCollapseIndirectsForAlias` removed the INDIRECTs the walk's stores made for them, and the read after the loop was the value before it: the leaf's `return 5;`. A base at the entry r15 itself (offset 0, the walk from the frame's top) is taken for a reference to a stack parameter and aliases no local at all.
+- **The guard of the indexed store** (`LoadGuard::establishRange`, `heritage.cc`). The partial value-set analysis runs three iterations; a range whose left end moved (the pointer goes down) was guarded over those three steps, or from `pointerBase` up, and the full analysis does not bound a counted loop, so the guard stood: the INDIRECTs of the locals below were collapsed for the guard as well. With the alias alone fixed, a walk deeper than three steps still printed the stale value (pin "eight longwords down a 32-byte frame").
+- **The raw stack pointer** (`ScopeLocal::annotateRawStackPtr`). A loop join of the entry r15 itself merged the register into the loop's pointer: the text printed `register0x0000003c = (BADSPACEBASE *)((int4)register0x0000003c + -4);` (the stack register under the stack space's own type), with its stores through a "pointer" no reader can place.
+- **The save slots** (`ActionRestrictLocal`, `coreaction.cc`). A register's save slot is storage no local is mapped to, so it is unaliased and one variable with the register saved in it. Code that runs on after its pops walks down over the words they freed: seed 901303's function 0 restores r8, r9, r13 and PR and tail-jumps into function 1, whose frame walk writes the word where r13 was saved; the text read the walk's byte as `(char)((uint4)unaff_r13 >> 0x10)`. The same in a leaf: `mov.l r13,@-r15 ; mov.l @r15+,r13 ; add #-8,r15 ; ...walk...` returned `unaff_r13`.
+
+A walk up was always right (each base aliases what lies above it, and a left-stable range is guarded from its start up), and so is a pointer into the frame with an index, which the engine and the host both take to be non-negative (A3-9, A3-17): those are unchanged. A host alias (A3-16's path, the triage's trial) changes nothing because the boundary it declares is the same base.
+
+### 2. The fix: patch 0056
+
+`0056-engine-stack-walk-down-aliases.patch`, in `varmap.cc`/`.hh`, `heritage.cc`/`.hh` and `coreaction.cc`; none of `funcdata_op.cc`, `op.cc` or `action.cc` (the area 2 patches' files).
+
+1. `AliasChecker::stepsDown(multi)` follows the pointer a MULTIEQUAL joins forward through copies, INDIRECTs and additions back to the join; a loop whose sum is negative, or that subtracts a value of unknown size, steps it down (an index added stays non-negative, as the rest of the analysis has it). A base joined by such a MULTIEQUAL aliases everything from 0xffff below it up: `aliasBoundary` is lowered to there, and the reach joins the alias starts `markUnaliased` reads (appended in `sortAlias`, after `MapState::gatherOpen` has read the starts one for one with the bases). 0xffff is the distance past which `markUnaliased` stops trusting an alias anyway; a reach that wraps below offset 0 still covers every local.
+2. `LoadGuard::establishRange`: a range that is right-stable only (stepped down) is guarded from 0xffff below its highest access up to that access, and one neither end of which held still is guarded both ways; a range that would wrap below 0 guards the whole space. The counterpart of upstream's 0x1000 guessed for a pointer that moves up. That guessed bottom is no array's start: `MapState::addGuard` makes no open hint for it (`LoadGuard::guessedBelow`), which otherwise declared a 64 KiB array of the frame (`int4 aiStack_10007 [16382];`).
+3. `ScopeLocal::annotateRawStackPtr` gives a join of the entry r15 that steps down the `PTRSUB` the other raw uses get, at the end of the block the input comes from: the text reads `piVar2 = (int4 *)&xStack00000000;` (a pointer to the frame's top). `ActionInputPrototype::gatherParamSpacebaseRefs` takes that `PTRSUB` for no reference to a stack parameter (it made the function take five: r4-r7 and the word at r15).
+4. `ActionRestrictLocal` leaves a save slot mapped when a walk down reaches it (`AliasChecker::getDownSpans`): the push prints as `xStack_c = unaff_r13;` and the read after the walk as the local.
+
+A pointer into a save area that is no local still prints raw, as upstream prints every pointer into unmapped stack storage, here and at the head alike, with the right value: the walk from r14 + 8 under a pushed r14 starts at the word r14 was pushed to, `piVar2 = (int4 *)((int4)register0x0000003c + -4);`. The leaf and its variants with the patch, by value (section 3):
+
+| Fixture | Head | Fixed |
+|---|---|---|
+| the leaf (r15 + 8, longwords) | `return 5;` and `register0x0000003c`, lent | `return xStack_8;`, lent; the code returns 1 |
+| bytes, words | `return 5;`, `register0x0000003c` | `return (int4)cStack_8;`, `return (int4)iStack_8;` |
+| from r15 + 4; + 8 of 12; + 12 of 16 | `return 5;` (`piVar2 = aiStack_8 + 1`) | the local the walk wrote last |
+| eight longwords down a 32-byte frame | `return 5;` | `return xStack_20;` (wrong with the alias part alone) |
+| from r14 at its save slot; inside the frame | `return 5;` | `return xStack_c;`; `return xStack_10;` |
+| written at constant offsets, read down | stores removed, the walk reads `register0x0000003c` | `xStack_8 = 5; xStack_4 = 7;`, the walk reads them |
+| walked down, read back up | `register0x0000003c` both ways | a pointer from `&xStack00000000` |
+| over a freed save slot | `return unaff_r13;` | `xStack_4 = unaff_r13;` ... `return xStack_4;` |
+| walked up (controls) | right | right, unchanged |
+
+### 3. Pins, the generator and the oracles
+
+- `Sh2DecompilerTests.cpp`, `TestA365WalkDown`: the fixtures of the table, each with its return statement, no `return 5;`, no stack register (but the save-slot walk from r14), no array of three digits, and the walk's access printed; the leaf lent; a walk from the entry r15 has no stack argument. The evaluator of `PseudoAgreesWithRun` has no loops, so the values are the printed-C differential's.
+- The printed-C differential (`Sh2GeneratedTests.cpp`) had no memory: a text that dereferences anything was `skipped:memory`. **Frame mode**: a function whose code reaches memory through a register other than r15 before its rts (`UsesFrameMemory`; the register-only grammar's own memory is its stack items, through r15) has every stack local it declares mapped onto 64 KiB of memory (`g_frame_base`, the entry r15 at its middle, below 2 GiB with `MAP_32BIT` where Linux has it), cleared before each call, so the text's pointers into the frame reach the locals the code's walk does. A name for the stack register is left undeclared, so a `register0x0000003c` text is not compilable and fails. The A3-65 printed-C fixtures (the ten walks down, by value; the two walks up as controls) run in every default run.
+- **The generator draws the shape** (`GenWalkFn`, `MakeWalkItem`): a function of its own per seed, one seed in five, from a stream of its own (`seed * 2654435761 + 0xA365`), checked after every other case so no other case's inputs move (a case's inputs are drawn from its place in its batch): a few register-only items, then a frame of 8 to 24 bytes, some of its slots written at the walk's width, a copy of r15 + N walked down by `mov.X Rv,@-Rp` a counted number of slots (the counter or a register stepped each pass), in a third of the walks down read back up with `mov.X @Rp+` and summed, one slot read back into r0; a quarter walk up. Every slot read was written at the width it is read, so the host's byte order does not matter. `SE_GENERATED_PRINTEDC_WALK=0` leaves them out. `TestA365Pins` holds that every form is drawn in the first 400 seeds. Over `SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`: 607 walk functions; **the head's engine fails 112 of them** (88 not compilable, the stack register; 24 mismatches, the stale local) and the ten fixtures, and passes the controls and every other case; the fixed engine fails none. The other 3,077 cases are as before (agrees 2,756, `narrow-c` 6, `void-return` 285, `void-return-lent` 30).
+- Grammar 2 already draws a frame walk (A3-16's `frame.walk`, from the top of the locals down), but none of its checks holds a value: seed 901303 was found by check 12 by accident. `TestA365Pins` holds seed 901303 and its shrunk module: no finding. With the save slot mapped, function 0's text names `unaff_r13` once, in the push's save `xStack_c = unaff_r13;` before any call, which check 12 took for a read of r13 kept across the call; `SavesBeforeCallsDropped` takes a save of the register into a stack local before the first call for no such read (pinned three ways: before the call, after it, and a read elsewhere).
+
+### 4. A5-85: an oracle false positive
+
+Reproduced on the head: `SE_GENERATED_GRAMMAR=2 SE_GENERATED_FIRST=910697 SE_GENERATED_SEEDS=1` gives `n:` and `v:pointer-effect-unsaid` for the 1-byte read at 0600905A, the rts slot's `mov.b @r4,r0` of function 1 shown inside function 0 ("runs on into the next"). On the run that reached 0xFFFFFFFC, the signed-bound table's index -1 had shifted r4 (`shll2 r4`) in code the text shows as the unresolved indirect call. The text is `return CONCAT44((int4)*param_1,xVar1);`: the read is through `param_1`. The printer gives the whole statement to the slot's instruction (its own tokens are `return CONCAT44 * param_1 , xVar1`), so `PointerPrintsFromHardware` followed `xVar1`, the other half of the value returned, to `xVar1 = 0xffffffd3;` (`mov #-45,r1`): a value, and an on-chip address 41 bytes from 0xFFFFFFFC, inside `kPointerReach`. That is A5-82's first mechanism, at the limit A5-82's fix named (a number that is a value within 60 bytes of the register reached is taken for the pointer). No engine or host defect: the text states what it can.
+
+Fixed in the oracle: when the statement dereferences something, the derivation is followed from the operands of the dereferences first (`DerefOperands`: what follows a unary `*`, at the start, after an operator, an opening parenthesis or a cast, and the name before a `[`; found on the whole line, since the read's own tokens hold no parentheses, and kept where they name one of the read's own tokens); a base named only outside them is counted `pointer.effect.unrelated` / `cache.read.pointer.unrelated`, as A5-82's set-aside derivations are. Pinned in `TestA582Pins`: the shrunk module and the seed (no finding, the derivation counted unrelated), the derivation on text with the read's own tokens (the value beside the dereference; the pointer behind a cast beside a value; both, a control), the earlier nine derivations unchanged, and `DerefOperands` on three statements.
+
+### 5. The mutation table
+
+Each part reverted on the fixed tree (the engine rows with a first form of the patch that also had the inert part named below), the suites rebuilt and run (the decompiler suite, the printed-C differential's default run, the generator's default run with its pins):
+
+| Mutation | Fails |
+|---|---|
+| the whole of 0056 (the head's engine) | 30 checks of `TestA365WalkDown` (every walk down; the controls pass), 10 printed-C fixtures and 5 walk functions of the default 300 seeds, `TestA365Pins` (901303, both) |
+| (1) the alias boundary and reach | 20 checks, 9 fixtures and 1 walk function, `TestA365Pins` |
+| (2) the guard below a pointer stepped down | 18 checks, 6 fixtures, `TestA365Pins` |
+| (2) no hint at the guessed bottom | 6 checks (the 64 KiB array) |
+| (3) the join's `PTRSUB` | 10 checks, 7 fixtures and 4 walk functions (`register0x0000003c`); 901303 passes (its walk starts below the entry r15) |
+| (3) the `PTRSUB` is no parameter reference | 1 check (five parameters), 2 walk functions (the text calls for an argument it has not) |
+| (4) the walked save slot mapped | 1 check, 2 fixtures, `TestA365Pins` |
+| check 12's save before a call | `TestA365Pins` (2 checks) |
+| frame mode off | the 12 printed-C fixtures, skipped (`fixture-skipped`) |
+| the walk not drawn | `TestA365Pins` (7 checks: no form drawn) |
+| A5-85: the dereference's operand first | `TestA582Pins` (6 checks: the module, the seed, the token-level derivation) |
+
+A first form of the patch also took a register's save slot reached by a walk for aliased in `ScopeLocal::isUnmappedUnaliased`; reverting it failed nothing (the mapping of item 4 covers the slot), so it is not in 0056, nor is a reset of `guessedBelow` that the range-locked branch made redundant.
+
+### 6. The matrix, on the fixed tree (code `7983675`)
+
+Commits `7983675` (code) and `3e5f985` (the fault re-pin); master is now `e75dfb2` with the area 2 fixer's 0054 and 0055, and this branch is not rebased on it (the coordinator resolves the vendored `cpp/` at the merge; 0056 touches none of `funcdata_op.cc`, `op.cc` or `action.cc`).
+
+| Run | Result |
+|---|---|
+| `ctest -E SaturnExplorerLive -j3 --timeout 900` (RelWithDebInfo, 92 tests) | 92 of 92 pass (120 s; the fault suite 120 s). The first run failed the fault suite on four MOVED pins (below) |
+| `SaturnExplorerDecompilerFaultTests` | 0 of 94 jobs failed (77 s) after the re-pin: the patch's allocations (the alias checker's vectors, `ActionRestrictLocal`'s gather) moved `FuncProto::copy` of fixture1 (both passes) from the 64-byte allocation 58 to 61, `MapState::addRange` from the 8-byte 28 to 29 and `Scope::addMapPoint` from 29 to 30, as the matrix printed them |
+| `SE_GENERATED_SEEDS=3000 SE_GENERATED_GRAMMAR=2` | 0 failing seeds, 0 findings; 4,231 lent (the head 4,232: seed 1998, below), claims held in 17,696 runs, canary 240 programs, 0 failing |
+| `SE_GENERATED_GRAMMAR=1 SE_GENERATED_SEEDS=1000` | 0 failing seeds |
+| `SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000` | passed: 3,696 functions (3,077 as before, 12 new fixtures, 607 walks), 3,334 compared, agrees 3,375, `narrow-c` 6, `void-return` 285, `void-return-lent` 30 |
+| `SE_GENERATED_SEEDS=20000` | 0 failing seeds (16,042 lent, 64,124 runs held to the claims) |
+| grammar 2, 900,001 to 920,000 (`SE_GENERATED_FIRST`) | 0 failing seeds, 0 findings (A5-85's 910697 and A3-65's 901303 among them); 28,492 lent, 119,129 runs held to the claims |
+| corpora 007 / 008 with `SE_GAME_LEND=1` | section 7: no output file differs |
+| the area 2 checkers (`tools/a2_round9/nzm_check_r9.patch` on a scratch copy of the fixed tree, `SE_CONSUME_CHECK=1 SE_NZM_CHECK=1 SE_NZM_FREE=1`) | no stale non-zero mask anywhere (`reports: 0`). Consume: the unit suite (496 functions) reports four `rule:push_multi` lines, all in `TestArea2Round9`'s A2-58 fixtures (the open row, pinned there as WRONG); grammar 2 seeds 1 to 1,000 report two `PIECE` returns (`action:restructure_varnode`, `rule:condnegate`), and the same checker over the head's engine reports the same two; the printed-C range of 3,000 seeds with the walks and the A3-65 fixtures reports none. So nothing the patch made |
+| vendoring | `python3 -I vendor.py <ghidra>` in a scratch copy of `ghidra-decompiler`: applies 0001 to 0053 and 0056, and the copy is identical to the committed tree (`diff -r`) |
+
+**Seed 1998 (grammar 2), the one lending change.** Function 1 walks a frame address down (A3-16's `frame.walk`), then calls `0x060090AC` twice; between the calls it stores `gbr - r5` into a word of the frame nothing reads. With the frame's locals aliased by the walk the store is no longer removed as dead (a call may read an aliased local), the text shows it (`iStack_20 = extraout_gbr - param_2;`), and the host withholds the function: "it uses gbr after calling 0x060090AC, which is not known to return it". The code does read GBR there; the head's text hid it by removing the store. A withheld signature for a lent one, which errs the safe way.
+
+**Oracle counts (A5-85).** Over grammar 2's 3,000 seeds the pointer rules count the same with the narrowing as without it (`pointer.effect.derived` 76, `.unrelated` 9, `cache.read.pointer.said` 48): it sets aside only what A5-85's shape is.
+
+**Time.** The corpora's default requests took 8,102 and 8,512 ms (image 007, head and fixed) and 25,150 and 26,108 ms (008), the lending runs 22,782 / 22,740 and 53,192 / 59,016 ms, on a shared machine (load 6 to 10): within its noise but for 008's lending run.
+
+### 7. The corpora
+
+Both images, `SE_GAME_HWRAM=<img> SE_GAME_LEND=1` with `SE_GAME_OUT`, the head `bc872a1` built beside, every output file compared: **no file differs** in either image (841 and 1,556 files: each function alone, and the lending run's before and after). So no game function prints a value this patch corrects, and no lent signature moves.
+
+| | 007 | 008 |
+|---|---|---|
+| ledger counts | 0 dropped, 0 missing and said | 0 dropped, 4 missing and said |
+| mapping oracle, every violation count (alone, lent) | 0 | 0 |
+| lent signatures (parameters), unlent / lent run | 637 (866) / **662 (923)** | 992 (1,227) / **1,021 (1,287)** |
+| functions alone; lending run | 839 of 839 ok; 1,730 ok | 1,554 of 1,554 ok; 2,995 ok |
+| texts that differ | none | none |
+
+No compiled function of either image walks a frame address down in a loop over a local the text reads after it, or the texts would differ: the patch changes the analysis only where `stepsDown` finds such a loop (and, for item 2, an indexed stack access whose range moves down).
+
+### 8. Not done
+
+- A pointer into a register's save area that is no local prints the stack register raw (`(int4)register0x0000003c + -4`), as upstream does and as the head did; its value is right. The printed-C harness cannot run such a text off Linux (the cast of a host pointer to four bytes), so the generator's walk keeps to frames with no pushes.
+- A walk whose pointer passes through a call before the loop is recognized once `ActionStackPtrFlow` has resolved the call's effect on r15; seed 901303 is such a case and is right, but a pass of the alias analysis before that resolution could still mark a slot unaliased for good (nolocalalias is never cleared). No fixture or seed shows it.
+- The Live tests and the sanitizer job were not run (shared socket path; CI).
+
+Integration note (coordinator), at the merge of `review/a3-65-fix` onto `e75dfb2`: the area 2 round 9 fix (A2-61) and this fix changed the
+printed-C harness in ways that met. A2-61 classes a text that takes a local's address as `skipped:stack-address`, because a returned stack address is
+the machine's in the run and the host's in the C. This fix's frame mode maps the locals onto memory, and its fixtures take `&xStack00000000` to start
+the walk. Merged, the ten A3-65 printed-C fixtures were skipped and `SaturnExplorerSh2PrintedCTests` failed (`fixture-skipped`), and 267 generated
+walk functions were skipped rather than compared. The fix: in frame mode the search for a local's address is of the return statements only, since an
+address that stays inside the mapped frame is comparable. The A2-61 pin is still `skipped:stack-address` (it is not in frame mode). After it: printed-C
+at 3,000 seeds 3,703 functions, 3,397 compared, agrees 3,425, 0 skipped as a stack address, 0 findings; the ten A3-65 fixtures agree by value. Patches
+0054 and 0056 both touch `coreaction.cc` (its header comment only conflicted); `vendor.py` reproduces the merged tree with 0054, 0055 and 0056 in order.
+
+## Area 8, round 1: the trust-indicator model
+
+Branch `review/8-trust` from `e153cdf`. The first round of area 8, the trust indicators: what the decompiler panel tells the reader about whether the text on screen can be
+trusted (the stale badge and its tooltip, "decompiling…", the dimming of old output, and the amber and red lines: unsupported, truncated, unimplemented, unavailable, too large,
+failed, the engine's warnings, the disabled session). The round built the area's oracle, ran it, filed **A8-5 to A8-16 (all P3, no P1 or P2)** in
+`Docs/Decompiler/REVIEW_LEDGER.md`, and fixed A8-5 to A8-14: six panel defects (A8-5 to A8-10) and four places where the guide was silent or wrong (A8-11 to A8-14). A8-15
+(what the oracle does not hold) is open, A8-16 (a dead case) accepted. Code commit `70e1cdb`. **No engine patch** (no `vendor.py` run): the changes are in the host
+(`DecompilerPanel.cpp/.h`), the tests and the guide.
+
+### The oracle
+
+**1. The reference model** (`FrontEnd/tests/DecompilerTrustModel.h`, which includes nothing of the panel). A function from the *true state* to the indicators the reader must see.
+The true state is: whether the panel is drawn, whether a source is on screen, a live emulator (running or not), whether the inputs the shown result was made from differ from the
+inputs on screen (and whether the emulator's frame moved), whether a request for the question on screen is outstanding, being stopped (Stop pressed, the engine has not
+acknowledged) or was stopped, the session-disabled state with its reason, the reason no function was found for the question (a refused entry, an entry that is no code, a
+Containing nobody holds, a followed PC where none is, no registers), and the finder's doubt and the halt hint where the case has one. What the shown result says about itself is read
+from the result: its status, error text, whether it has lines, `unsupported`, `truncated` (where, why, how many places), the places that did not decode, `unimplemented`, the
+other warnings in order, the engine's notes. `Expect(state, result)` returns the badge (stale or not, its form `[stale]` or `[stale: frame N]`), the reason its tooltip may give,
+"decompiling…" or "stopping…", the brightness of the code, the amber and red lines **in the order they are drawn** (each as the pieces that must appear in it), the lines beyond the
+first four and what the tooltip of "N more warnings" lists, the grey count of the engine's notes with its tooltip, and the grey messages ("No source", "Nothing decompiled yet",
+"Stopped.").
+
+It was written from the guide's table "When the output is stale or missing", not from the panel's code. Where the guide was silent or ambiguous the decision was made, written into
+the guide and filed (A8-11 to A8-14): the brightness of stale (70%) and unsupported (50%) output and of an output that is both (the lesser); a rename undone again keeps the
+output marked; the order the badge's reasons are tried in (a replacement on its way, the session disabled, the user's Stop, no source, no function for the question, the emulator
+moved on, nothing asked); a request for a question that has since found no function is not a replacement; the form of the badge (`[stale: frame N]` only when the live emulator on
+screen is at another frame than the output's). `CheckGuide` reads `DECOMPILER_GUIDE.md` and fails if any of the 37 phrases the model relies on is not in it (the ten
+tooltip sentences' key phrases, the lines' texts, "dimmed to 70% brightness").
+
+**2. Reading what the panel drew** (`FrontEnd/tests/DrawnText.h`). The panel's own accessors (`StaleTooltip()`, `LineTooltip()`) are the panel's account of what it drew; the check
+reads the draw lists. ImGui turns each character into one textured quad of the window's `ImDrawList`; the font atlas knows the code point of each cell; the quads of the frame, in
+order, are the strings, colours and positions drawn (a space is a gap). So `Verify` compares the model with: the **amber and red runs of the panel's window, in order**; the **brightness of the
+glyphs of the code list**; the badge's rectangle (`ItemRect("stale")`, now remembered by `DrawStatus`); the **tooltip window that opens when the mouse is held over the badge**,
+over "N more warnings" and over the grey count of the engine's notes (45 frames of hover, the text read back from the tooltip window's glyphs); the grey messages. It also compares the
+state functions (`ShownStale`, `GetStaleReason`, `StaleTooltip`). Text wider than the window is cut by ImGui (no glyph is emitted past the clip rectangle), so a run that ends at the
+window's edge is held as a prefix; the ellipsis is one wildcard character.
+
+**3. The driver.** Area 1's rig (`DecompilerModelTests.cpp`, the real panel, runner and engine under random sequences of edit, scrub, Refresh, reconnect, source replacement, BIOS image,
+volatile list, names, function starts, Stop, hide and show, the emulator running) is included by `DecompilerTrustTests.cpp` with its `main` left out (`SE_MODEL_NO_MAIN`). The rig gained
+hooks (`custom`, `trustCheck`, `atEnd`, a window size, a list of results no engine made, an `Unavailable` it caused, a target with no function), three world functions no area 1
+sequence places (**T**: a `bt` out of captured memory, so truncated; **U**: Fixture 3's `bra` whose delay slot a `bt` jumps to, so unsupported, and with one edit dead code after
+the `bra`; **W**: five stores into the BIOS ROM, five cautions), and the exclusion of its from-scratch comparison for results the driver made up. At the end of every **settled** step (the engine holding a request, or idle) it calls `CheckTrust`.
+The outcomes the sequences are extended with, **real unless noted**:
+
+| Outcome | How |
+|---|---|
+| Ok, Truncated, Unsupported, several amber lines | functions T, U, W; edits that flip T between whole and cut and U between unsupported and supported |
+| TooLarge | area 1's `starve` (a 1 s budget, the engine held past it), and the runner's memo |
+| Unavailable | `t-breakcfg` puts a regular file where the language files go; every request is answered `Decompiler unavailable: cannot create ...`; `t-fixcfg` removes it. The area 1 oracle heals it around its own engine runs |
+| Cancelled / Stopped | Stop with the engine holding the request, and after it finished; the cancelled result of a queued request |
+| Session disabled | `wedge` (a cancel the engine does not acknowledge), `t-engfail` (a failure inside the worker: `SetRecordHookForTests` throws), and the recovery by a reconnect |
+| Failed (out of memory), NoCode, an engine damaged earlier, Unimplemented, a result with more amber lines than the panel shows (made up) | `t-inject <kind>`: the request the engine holds is answered by a result the driver makes (`DecompilerPanel::Accept`, public for this); the engine's own answer then comes and is thrown away. The SH-2 spec has no unimplemented instruction, so no engine run reaches that one |
+| No function for the question | `t-badentry zz` (refused), `t-badentry F` (an address that is no code memory), `t-containbad` (Decompile on an address no function holds) |
+
+The **Follow PC rig** (`FRig`, mix 8) gives the panel registers: the PC of each CPU and whether it has them, a live source that moves (a new frame and serial whenever its registers or
+memory change), a dump, the CPU switched, Follow PC toggled, the entry typed, Decompile on an address, edits that make U's dead code. Its true state is not read from the panel's policy:
+the registers of the snapshot the panel holds come from a history the rig kept by frame (`HeldKey` names it), the function a PC is in from the world's layout, the inputs the
+shown result was made from from its own key. It also holds the guide's policy for a source that does not run: once the panel has caught up it is not stale, unless nothing can be
+asked.
+
+**4. Invariants** held at every step: **I1** output never looks current (undimmed, no badge) while its inputs differ from the screen's; **I2** a truncated, unsupported,
+unimplemented or too-large result never presents as complete; **I3** a message never names the wrong reason (a tooltip has its reason's phrase and no other's, in the state and in
+the drawn window); **I4** every indicator the guide documents is reached (a coverage list of 39 indicators the run must have drawn and held to the model, or it fails).
+`kPins` (24 sequences written out) and the `MiniRig` pins (19 states of Follow PC, the registers, a source that goes away, the halt hint, an address the function never reaches, the window with no runner) run in the default run.
+
+### Sequences run
+
+The final binary (the one the default run uses, byte for byte), in pieces of 5,000 operations (`SE_TRUST_STEPS`, `SE_TRUST_FROM`; the restart-safe driver is a scratch script), the badge and the other tooltips hovered at every step that has one.
+An operation is one step of a sequence: no-effect steps (a Stop with nothing outstanding) are counted and checked too. Mix 2 has a 1 s budget, every stall costs a second and a half, so its pieces are 2,500 operations (five of them).
+
+| Mix | Outcomes added | Sequences | Operations | Failed | Settled checks | Drawn windows read back | Tooltips hovered | Made-up results |
+|---|---|---|---|---|---|---|---|---|
+| 0 | ok, truncated, unsupported, stopped | 193 | 10,036 | 0 | 11,765 (3,098 held, 8,667 idle) | 9,862 | 7,118 | 0 |
+| 1 | ... and several amber lines (W) | 193 | 10,024 | 0 | 11,946 (3,064 held, 8,882 idle) | 10,023 | 8,962 | 0 |
+| 2 | ... and too large (a 1 s budget) | 221 | 12,753 | 0 | 14,810 (3,641 held, 11,169 idle) | 12,476 | 9,995 | 0 |
+| 3 | ... and unavailable (the language files) | 179 | 10,090 | 0 | 11,621 (2,882 held, 8,739 idle) | 9,763 | 6,004 | 0 |
+| 4 | ... and the made-up results | 179 | 10,080 | 0 | 12,309 (2,879 held, 9,430 idle) | 10,414 | 9,213 | 574 |
+| 5 | ... and the session disabled (`wedge`, `t-engfail`) | 179 | 10,051 | 0 | 10,915 (3,793 held, 7,122 idle) | 9,052 | 9,871 | 0 |
+| 6 | ... and targets that find no function | 178 | 10,067 | 0 | 11,581 (2,884 held, 8,697 idle) | 9,724 | 9,575 | 0 |
+| 7 | everything | 181 | 10,073 | 0 | 11,979 (3,181 held, 8,798 idle) | 10,011 | 8,065 | 227 |
+| 8 | Follow PC with registers (the second rig) | 223 | 10,024 | 0 | 10,024 (4,579 held, 5,445 idle) | 9,754 | 6,668 | 0 |
+| | all nine | 1,726 | 93,198 | 0 | 106,950 (30,001 held, 76,949 idle) | 91,079 | 75,471 | 801 |
+
+Every mix has at least 10,000 operations, and no sequence failed on the final tree. (The long runs on the trees before each fix are how the findings were made; they are in Findings, not here.)
+What the runs drew and held to the model, summed over the nine mixes: the plain badge 22,928 times and the frame badge 4,625; "decompiling…" 16,998 and "stopping…" 193; stale output dimmed 22,382 times, unsupported output
+greyed 7,707, both 3,596; the truncated line 14,088 (at several places 404), the unsupported line 11,303, bad data 404, unimplemented 358, the too-large line 2,248, failed 298, no code 1,084, unavailable 4,279, the red disabled line 3,807,
+an engine warning 59,234, "N more warnings" 9,710, the grey count of notes 39,549; the refused entry 1,004, the entry that is no code 852, no function found 1,299, no registers 124, the anchor not reached 40, the finder's doubt 4,724;
+the tooltip reasons Replacement 16,507, Stopped 493, Disabled 3,381, EmulatorMoved 1,202, NothingAsked 2,698, EntryBox 1,849, ContainingNotFound 1,151, FollowNotFound 148, NoRegisters 124. The halt hint and the no-source tooltip come from the pins.
+
+### Findings
+
+All P3: the severity rule of the program makes a defect P1 when the output is wrong and looks right and P2 when a reader is misled about what the tool knows; here a message was imprecise, or named a reason that did not hold, with the rest of the panel
+(the dimming, the badge, the red line) still telling the truth.
+
+| Row | What | Status |
+|---|---|---|
+| A8-5 | The badge says "[stale: frame N]" for a write, a scrub or a BIOS image, where the guide says the emulator moved on | fixed |
+| A8-6 | "decompiling…" stays up after Stop, beside a tooltip that says it was stopped | fixed |
+| A8-7 | A Stop outlives its request: every later request's tooltip says "You stopped its replacement", and a discarded answer leaves its question unasked (A1-4 again) | fixed |
+| A8-8 | With no source open the tooltip says to press Enter or Refresh | fixed |
+| A8-9 | A request for a question that found no function is waited for: "decompiling…" and "its replacement is shown when it is ready" under a red "no function found" | fixed |
+| A8-10 | A Stop is remembered across a question that found no function (tooltip and note "Stopped.") | fixed |
+| A8-11 | The guide does not say how bright stale or unsupported output is | decided, guide |
+| A8-12 | The guide has no row for the unimplemented line, the failure lines, the damaged-engine message, the no-runner window, the grey count and messages, the hint, the entry errors, the tooltip sentences | written, guide |
+| A8-13 | The guide says a disabled session needs a restart; a new session recovers | decided, guide |
+| A8-14 | A rename undone still marks the output; the order the tooltip reasons are tried in is not said | decided, guide |
+| A8-15 | Instrument: what the oracle does not hold (the finder's texts, the engine's own Failed and Unimplemented, auto-refresh, Follow PC in the area 1 rig, text wider than the window) | open |
+| A8-16 | `DecompileStatus::Disabled` is never produced; its case in `DrawStatus` is dead | accepted |
+
+Two defects were found in the instruments on the way, not filed: the area 1 rig's `haveStopped` was set for a Stop whose press hit nothing (the answer was collected while the pointer settled on the button; Stop on a hidden panel set the generation anyway),
+and its too-large memo model erased a stalled request on any later answer for the same inputs, though a request that lends a callee's signature is another request (mix 2 seed 31: `select C` with a stalled `C`, then `select A`, `select C`, a scrub and a resume).
+The first is fixed (`pressedOn`), the second now erases only on a function with no callee, which accepts more. A hidden panel is judged when it is shown again (its reason and stale mark are the state it had when it was hidden, and nothing is drawn).
+A refused entry is not a request (it does not capture a running emulator), and `0x1FF0` resolves to a function when a BIOS image is mapped, so the "Containing nobody holds" address is past LWRAM.
+
+### Fixes
+
+* **A8-5.** `DecompilerPanel::EmulatorMovedOn()` (a live emulator, the same source, another frame) chooses `[stale: frame N]` and the "moved on" tooltip.
+* **A8-6.** `DrawStatus` says "stopping…" while a cancelled request is outstanding.
+* **A8-7.** `Update` clears `Outstanding::cancelled` when it records a request.
+* **A8-8.** `StaleTooltip` has a sentence for no source.
+* **A8-9.** `RequestWanted()` (a request that is outstanding and not for a question with no function) decides "decompiling…", "stopping…" and the Replacement and Stopped reasons; `Pending()` is unchanged.
+* **A8-10.** `ForgetStop()` in `SetTarget`, in the refused-entry path and in each failing branch of `Resolve`.
+* **Guide (A8-11 to A8-14, and the rows for every indicator).** The brightness of stale (70%), unsupported (50%) and both (the lesser); `[stale]` and `[stale: frame N]`; the ten tooltip sentences in the order they are tried; a row each for decompiling/stopping,
+  the grey messages, the grey count, unimplemented, the halt hint, the failure lines, the damaged engine, the window with no runner, the entry errors; a disabled session recovers in a new session.
+* **Observability.** `DecompilerPanel` remembers the badge's rectangle and the Follow PC box (`ItemRect("stale")`, `ItemRect("follow")`) for the tests.
+
+### Mutation table
+
+Each indicator broken in the product (or the guide) alone, the trust test rebuilt and run with 120 steps per mix (the default run: 24 pins, 19 Follow PC and register states, nine mixes), then the tree restored. "Pins" counts the pin lines that fail (of 43). "Sequences" is the sequences
+that fail of the pins and the generated sequences that ran. The mutations of A8-5 to A8-10 undo the fix.
+
+| Mutation | Pins failing | Sequences failing | First message |
+|---|---|---|---|
+| never dim stale output | 19 | 108 of 122 | `I1 STALE OUTPUT NOT DIMMED` |
+| unsupported output not greyed | 3 | 32 of 65 | `DIMMING` |
+| no badge for output nothing is replacing | 14 | 33 of 66 | `I1 OUTPUT LOOKS CURRENT` |
+| the badge has no tooltip | 20 | 123 of 137 | `TOOLTIP NOT DRAWN` |
+| swap two tooltip reasons (Pending and Stopped) | 8 | 85 of 105 | `I3` (the tooltip does not give the reason) |
+| drop the truncated line | 2 | 38 of 65 | `I2 TRUNCATED RESULT PRESENTED AS COMPLETE` |
+| the truncated line forgets "(and at N more places)" | 1 | 2 of 52 | `I2 TRUNCATED RESULT PRESENTED AS COMPLETE` |
+| drop the unsupported line | 3 | 32 of 65 | `I2 UNSUPPORTED RESULT PRESENTED AS TRUSTWORTHY` |
+| drop the too-large line | 1 | 9 of 57 | `I2 TOO-LARGE RESULT PRESENTED AS COMPLETE` |
+| five lines before "N more warnings", not four | 3 | 42 of 72 | `LINE MISSING` |
+| drop the engine's flow warnings (the unimplemented line with them) | 4 | 31 of 64 | `LINE MISSING` |
+| failure lines amber, not red | 4 | 15 of 56 | `LINE MISSING` |
+| failure lines not drawn | 4 | 15 of 56 | `LINE MISSING` |
+| drop the red disabled line | 2 | 10 of 56 | `LINE MISSING` |
+| "decompiling…" reads "working" | 8 | 91 of 111 | `LINE MISSING` |
+| the grey count of notes is one too many | 8 | 89 of 107 | `GREY WARNINGS` |
+| no "Stopped." note | 3 | 9 of 52 | `GREY MESSAGE MISSING` |
+| drop the "is not reached from this entry" line | 1 | 0 of 52 | `LINE MISSING` |
+| drop the "Entry: …" line | 12 | 0 of 52 | `LINE MISSING` |
+| the halt hint also on a running emulator | 1 | 0 of 52 | `AMBER AND RED LINES` |
+| the halt hint on stale output | 1 | 0 of 52 | `AMBER AND RED LINES` |
+| stale ignores the volatile list | 1 | 11 of 53 | area 1's `STALE SHOWN AS CURRENT` |
+| stale ignores a rename | 1 | 1 of 52 | area 1's `STALE SHOWN AS CURRENT` |
+| A8-2 undone: Follow PC without registers blames the entry box | 1 | 0 of 52 | `I3` (the tooltip does not give the reason) |
+| the guide's tooltip sentence changed | 0 (1 guide phrase missing) | 0 of 52 | `CheckGuide` |
+| A8-5 undone: the frame badge for every change of the view | 11 | 85 of 101 | `BADGE FORM` |
+| A8-6 undone: "decompiling…" after Stop | 3 | 10 of 52 | `LINE MISSING` |
+| A8-7 undone: a Stop outlives its request | 1 | 9 of 52 | `REASON` |
+| A8-8 undone: no-source tooltip says press Refresh | 1 | 0 of 52 | `I3` (the tooltip does not give the reason) |
+| A8-9 undone: a request for a question with no function is waited for | 1 | 3 of 52 | `I3` (the tooltip does not give the reason) |
+| A8-10 undone: a Stop outlives its question | 1 | 1 of 52 | `STALE REASON` (area 1) and the trust model's `REASON` |
+| Disabled and Stopped tried in the other order | 0 | 0 of 52 | (none: equivalent) |
+
+`reasonorder` is an equivalent mutation: a stopped question and a disabled session cannot hold together in one panel (the cancelled result of a stopped request is dropped by a disabled runner, and any new request clears the stop), so which of the two is tried first is
+not observable; the order is in the guide for the day it is. `stalevol`, `stalenames` and `forgetstop` are first caught by area 1's own checks (`STALE SHOWN AS CURRENT`, `STALE REASON`), which run before the trust check at the same step. The first seventeen mutations (to `nosource`) were run before the last driver fixes (the rig's Stop bookkeeping, the refused entry, the Containing address, a hidden panel, the memo model, which none of them reaches); the other fifteen were run on the final tree.
+
+### Matrix (RelWithDebInfo, gcc 13, own build, `-j2`, every test binary under `ulimit -v 4000000`)
+
+| Run | Result |
+|---|---|
+| `ctest -E SaturnExplorerLive -j2 --timeout 900` | 93 of 93 passed, 146 s (the trust test 46.8 s, the model test 20.9 s, the panel test 4.5 s, the fault test 85 s) |
+| `build/bin/SaturnExplorerDecompilerFaultTests` | 0 of 94 jobs failed, 84.5 s, no MOVED pin |
+| `SE_MODEL_SEEDS=420 SaturnExplorerDecompilerModelTests` (area 1, the rig changed) | 420 seeds, 0 failed (10,002 engine runs); the default 18 seeds and the pinned findings pass (A8-7 and A8-7 (twice) are new) |
+| `SaturnExplorerDecompilerTrustTests` default run | 52 sequences and 43 pins, 1,643 operations, 0 failed; 39 indicators reached |
+| the nine mixes, 10,000 operations or more each | above; 0 failed |
+| the mutation table | 32 mutations: 30 caught by pins or sequences, 1 by the guide check, 1 equivalent |
+
+Not run: the Live tests (they share a fixed socket path with the coordinator's runs), the sanitizer job (the trust test is not in its list, `.github/scripts/run-decompiler-sanitizers.sh`; it needs the model test's one-process-one-runner discipline and would run long under ASan),
+the generator, the corpora (no engine change).
+
+### For the next round
+
+* A8-15: the instrument gaps. The next reviewer should read the guide's table against the panel for anything the model has no line for, and try the tooltips of a panel that is docked narrow (the glyph reader holds a cut line as a prefix).
+* The finder's texts ("Entry: …", the confidence beside the source) are area 4's; the model takes them from the true state.
+* The trust test is in `ctest` (47 s). Adding it to the sanitizer job is the coordinator's call.
+
+## Area 3, round 10 review
+
+Reviewer, branch `review/3-round10-review`, on master `b7bfb3e` (the merge of area 8 round 1; the head of the A3-56 to A3-65 fixes). Findings only, no fixes; the one code change is a suite function of controls that pass (`TestArea3Round10`, below). New ledger rows: **A3-71, A3-72 (P1)**, **A3-66, A3-67, A3-68, A3-69, A3-70, A3-75, A3-76 (P2)**, A3-73, A3-74, A3-77 (P3). No row is routed to another area; the probe's walk has no cancel point (A3-74, a timing, area 6's matrix does not reach it) and is said once for the coordinator.
+**The round is not clean: nine rows at P1 or P2.** Area 3 has no open row before this round's, and the count of consecutive clean rounds is 0 again. Two of the P1 rows are A3-65's class (a pointer that is walked down) in the two places patch 0056 does not reach: a lent callee that does the walk, and a step under a condition. The P2 rows are the rule of round 9 itself: three of its exceptions hide an input that the guarantee says cannot be hidden (the nothing-known value, the SR exception, the part of a register that is not a read), a fourth place where a value loses its dependences (the sum of a stack address and an index), and the walk of A3-61 in two places it was not meant to stop at (the callee's callee, the second of two calls). The round 9 fixes held where they were written to hold (below).
+
+### Instruments (scratch, not committed; described so the next reviewer can rebuild them)
+
+- **The fixture driver** of rounds 6 to 9, rebuilt from the suite's own file (`Sh2DecompilerTests.cpp` with `main` renamed and a `drvmain.inc` appended: a text spec of words at addresses, callees decompiled and lent first, inputs run on the emulator, `PseudoEval` against the run), with one extension: an `args` line may set registers (`r3=55 sr=1`), so a hidden register or the T flag is varied from line to line. A small assembler with labels and a literal pool (`stc`, `and #imm`, `mova`, `jmp` and the rest added), and a spec maker. About a hundred hand fixtures.
+- **A scratch fuzzer** over the driver: random register and frame programs of 2 to 7 instructions (moves, ALU, partial reads and extensions, shifts, `addc`/`subc`/`negc`, `movt`, `stc sr`, `mul.l`/`sts macl`, a store of a width and a reload of another through a copy of r15, a branch over one instruction), each ending `or r0,r1 ; rts ; nop`, run with the hidden registers r0-r3 and r8-r11 and the T flag varied one at a time; it reports a function the host lent as `void` whose r0 depends on one. 44,100 programs in 21 runs: 21,000 with no frame access and no `stc sr` (they find the partial read of r0, A3-68, and nothing else), 9,000 with the frame and no `stc sr` (the sum of a stack address and an index, A3-76), 6,000 with `stc sr` and no frame (A3-69), 8,100 with all of it. A non-void lent function whose text the evaluator rejects as returning a different value: none.
+- **The generator beyond the nightly's range**, own RelWithDebInfo build (`-j2`): grammar 2 at 1,100,001 to 1,120,000, grammar 1 at 1,100,001 to 1,110,000, grammar 2 at 1,200,001 to 1,205,000 with `SE_GENERATED_ALPHABET=specials`, in pieces of 5,000 seeds; the printed-C differential at 1,300,001 to 1,306,000.
+- **The corpora** with `SE_GAME_HWRAM=<img> SE_GAME_LEND=1`, `hwram007.bin` and `hwram008.bin`.
+
+### What round 9's fixes held under
+
+- **The rule's pins.** Every fixture of A3-56 to A3-62 and their controls: the suite and the generator's pins pass at the head. The exceptions one by one:
+  - *the unread entry r0* (`phi(in_r0, x)`): lent when chosen by a held parameter, withheld when chosen by r3 ("chosen by r3 on entry") or when a hidden register is the data. The exception breaks only through the part of a register (A3-68).
+  - *the identity ops* (A2-43): `and r0,r0`, `or r0,r0`, `or #0,r0`, `add #0,r0`, `mov r0,r0` and `and r1,r1` leave r0 alone and are lent; `and #255,r0` is a read and withheld. `xor #0,r0` is not an identity to `ReturnCheck` (A3-77, the safe direction).
+  - *r1*: `mov r3,r1` under a returned `r4 + 1` is lent `int4` (the second half of a 64-bit value is dropped; a caller that reads r1 is withheld, by design); the same with `add #1,r1` is a 64-bit return and withheld ("reads r3").
+  - *the interrupt-mask idiom*: `stc sr,r0 ; or #0xF0,r0 ; ldc r0,sr` is lent, `stc sr,r0` alone is withheld, and the idiom joined with a path that leaves r0 alone is withheld ("computed from sr"). The exception is wider than the idiom (A3-69).
+  - *A3-13's carried value*: `mov #5,r0 ; jsr g (keeps r0) ; or r0,r1` is withheld; one partial read after the call and it is lent (A3-68).
+- **The three unmutated clauses** (the join across returns, a load's address, a jump table's index): the fixer's claim holds. A switch on r3 whose cases write constants is recovered and the engine keeps `switch (in_r3)`, so the function is withheld "reads r3 on entry"; two returns chosen by r3 keep the branch; `mov.b @(r0,r3),r0` keeps the load. No shape was found in which the engine drops the read and the clause is the only guard (a switch on r3, two returns chosen by r3, `mov.b @(r0,r3),r0` with a second use: each withheld by "reads r3/r0 on entry"). What the clauses are worth is whatever they take as the load's value, and that is where A3-66 and A3-76 are.
+- **A3-60 and A3-51.** The frame address in word 0 after an earlier unlent call killed r4 to r7 (the note is said), with no earlier call (the same), in the second word with the first written, in a pushed word, through an r14 frame: held.
+- **A3-61.** The callee that writes the slot directly, after calling something else, on one path only, through a pointer it computes (`mov r15,r1 ; add r4,r1 ; mov.l r2,@r1`), through an r14 frame pointer, called through the cache-through mirror (0x26009040): the note is said and the local is not folded. A callee that does it after 19,000 instructions is walked; after 21,000 it is not (the limit the fix names).
+- **Patch 0056 (A3-65).** A walk down by `add #-4,rN ; mov.l Rm,@rN` and by `mov.l Rm,@-rN`, over a frame of 4 or 8 words, in nested loops (8 words), with the pointer restarted from an outer pointer each pass, by byte stores read back as a word, by 8 bytes a step, by a register amount (`sub r3,r2`), from r14, with the pointer in a stack local (no call), two pointers walked at once, a walk over the pushed r13 and r14 (their slots are overwritten, `preserved` clears both bits, the read after the walk is the local), a walk from r15 + 16, which writes the caller's frame (withheld, "writes a word of its caller's frame"): each prints the local the walk wrote, not the value stored before it, and agrees with the run. A walk up is right.
+- **Check 10b's claims, the generator's choice item, the printed-C differential.** 0 failing seeds in 25,000 grammar-2 seeds (118,257 claims checked in the 20,000, 29,336 in the specials 5,000), and the printed-C differential's 7,427 functions beyond its range compare 6,826 and agree. The one failing seed of the 35,000 is grammar 1's (below), and it is A3-68's.
+
+### What the attack found
+
+1. **A3-66 and A3-67: the nothing-known exception hides what it is combined with.** `ReturnInput` and `ChooserInput` return 0 for a value whose dependences include every register ("a load through a pointer that may be anywhere in the stack, taken for memory", 06038F64 and 06038F72 of image 008). `Merge` and `Sum` union dependences, so `phi(r3, nothing-known)`, `nothing-known + r3` and `cmp/eq r3, nothing-known` are nothing known as a whole: r3 is neither data nor chooser. The engine drops the return of a join with a copy of an unheld input (a failing branch of a MULTIEQUAL fails the join) and of any value that has a second use, and the input goes with it. By hand the value is a load below r15; with no unusual code it is **any stack access whose offset is a literal-pool word**: `WithholdReason`'s `ReturnCheck` does not fold a pool load (only the probe has `SetLiterals`), so `mov.w =20,r2 ; add r15,r2 ; mov.l @r2,r0` is the frame plus a loaded index, and A3-62's stack-argument chooser, pinned withheld for `mov.l @r15,r3`, is lent as soon as its address comes from a pool literal, at offset 0 too. The first two rows' fixtures are lent `void` over a return that r3 or the stack argument chooses.
+2. **A3-68: the flags the rule reads are lost where a value is rebuilt.** `Get` of a part of a register, and the load and store of fewer than 4 bytes of a stack slot, build `Value::From(...)` and drop `usesR0`, `carried`, `joined`, `keepsR0` and `read`. `ReturnInput` clears r0's bit from a value `!UsesR0()`, so `extu.b r0,r0 ; or r0,r1 ; rts` is lent `void f(void)` (so are `extu.w`, `exts.b r0,r2 ; mov r2,r0`, a byte spill and reload of r0, and `add r4,r0 ; extu.b r0,r0` with r4 held), and the carried constant of A3-13 is lent once an `extu.b` follows the call. The generator found it by itself at grammar 1 seed 1103677 (shrunk `extu.w r0,r0 ; cmp/eq #0,r0 ; bf L ; L: rts`), 1 seed in 10,000, in the range the nightly never ran.
+3. **A3-69 and A3-77: the SR exception and the identity table.** `in.data &= ~(kSr | kDepT)` for a value that is neither SR itself nor a join: the T flag a caller left is cleared with the mask. `and #imm,r0` is `r0 & zext(imm:1)` and `Step` gives the ZEXT of a constant a Fuzzy value, so `OpDeps` sees no mask: `stc sr,r0 ; and #1,r0 ; or r0,r1 ; rts` is lent `void` and returns the entry T (the `movt` form is withheld). The same missing fold makes `xor #0,r0` a read of r0 (a safe withhold).
+4. **A3-76: the sum of a stack address and anything drops the other operand.** `Step`'s `INT_ADD` branch for "an index added to a stack address" builds `Value::From(origin::kStack)`: `mov r15,r0 ; add r3,r0 ; or r0,r1 ; rts` is lent `void`; the fuzzer's `addc r4,r11` with r4 a frame address is the same. The index of a frame array is a parameter the signature holds in compiled code; hand-written, it is a register.
+5. **A3-70 and A3-75: A3-61's walk, in two places.** One level: a thunk (`mov.l @(lit),r1 ; jmp @r1`), a callee that hands its entry r15 to a lent or an unlent function that stores through it, are not walked (`mNested`; `Call` sets `mCallerFrameStores` but not `mOwnFrameWords`). One mark per word: `exposedAt` is the address of the last unlent call, so a word the first of two calls wrote and the second leaves alone is read back folded. Both print `return 5;` for a code that returns 9, with no note, in a withheld caller (A3-61's state, P2 there).
+6. **A3-71: a lent callee that writes below its pointer.** `NoteFrameEscapeOf` skips an exact frame address (`!exactToo && v.kind == Sp`), on the ground that the engine reaches what lies at and above it. A callee that steps its pointer down or stores at a negative offset writes the locals below: the caller, **lent**, prints `return 5;` and the code returns 1, for a walk (`mov.l r1,@-r4`), one word below (`add #-4,r4 ; mov.l r1,@r4`) and the pointer in r5. A3-65's loop, one call away.
+7. **A3-72: patch 0056 stops at a conditional step.** `if (c) *--p = v;` in a loop (`tst r4,r4 ; bt S ; mov.l r1,@-r2 ; S: dt r1 ; bf L`) makes a second MULTIEQUAL between the step and the loop's back edge, which `stepsDown` does not pass: the text is A3-65's before the fix (`register0x0000003c = ...`, `return 5;`), lent, for the pointer in r2, in r14 (`aiStack_204 + 0x80`) and in an inner loop. The pointer kept in a stack local across a call (the record's "Not done") prints `return 5;` as well, in a withheld function.
+8. **A3-73: a lent non-void signature reading a stack argument past the model's 500 bytes** (`in_stack_00000258`).
+9. **A3-74: the walk's cost is quadratic in the callee's stores**: a callee of 6,000 pushes costs one decompile of its caller 14.7 s and 2.2 GB (227 ms and 76 MB at 1,000); the 20,000 steps allow 24 GB. The walk is not recursive (depth one), which bounds the chains the review was asked about, and is asked once per target per probe; any caller that restores PR from the stack after the call asks.
+
+### Generator beyond the nightly
+
+| Range | Seeds | Failing | Notes |
+|---|---|---|---|
+| grammar 2, 1,100,001 to 1,120,000 | 20,000 | 0 | 38,945 functions, 28,272 lent, 118,257 runs held to the claims, 171,178 runs, 1,175 choices drawn |
+| grammar 1, 1,100,001 to 1,110,000 | 10,000 | 1 | seed 1103677: `input-dropped:r0`, A3-68 (shrunk `600D 8800 8BFF 000B 0009`); 45,600 runs |
+| grammar 2, 1,200,001 to 1,205,000, `specials` | 5,000 | 0 | 280 choices, 29,336 claims |
+| printed-C differential, 1,300,001 to 1,306,000 | 6,000 | 0 | 7,427 functions, 6,826 compared, agrees 6,883, `narrow-c` 18, `skipped:stack-address` 2, `void-return` 474, `void-return-lent` 50 |
+
+35,000 generator seeds, one failing, one finding class, and it is area 3's: no seed for another area (the open rows are A10, A12, A7 and A8's, instruments or other areas'; none shows in this range's output). The canary, 240 programs, 0 failing, in each run.
+
+### Corpus (`SE_GAME_LEND=1`)
+
+Image 007: 1,730 functions in the lending run, **662 lent (923 parameters)** (637 (866) before lending the proved effects), 839 of 839 functions ok alone, 25 gain a lent signature, every ledger count 0 (0 accesses dropped, 0 missing and said). Image 008: 2,995 functions, **1,021 lent (1,287)** (992 (1,227) before), 1,554 of 1,554 ok alone, 29 gain a signature, ledger counts 0 (0 dropped, **4** missing and said). Both suites "all passed". The numbers are the round 9 and the A3-65 fixes' own. The suite's time (alone: 9.0 s and 26.3 s) is within the noise of the earlier rounds' on a shared machine.
+
+### Pins committed
+
+`TestArea3Round10` (`Sh2DecompilerTests.cpp`, 13 fixtures, all passing at the head): the controls beside the rows that hold today (a stack word by `add #20`, r3 or a constant or a loaded word chosen by a held r4, `cmp/eq r3` with a constant, `extu.b r3,r0`, `movt`, a value held across a callee that keeps r0, a callee walking up and one reading below its pointer, four walks the patch covers, a walk from the caller's frame). No fixture of a finding is committed (the current output is wrong; the rows carry them). The controls were run at the head only; none was mutation-checked, since they hold behaviour the fixes of the rows will touch rather than code the round wrote.
+
+### Matrix
+
+| Run | Result |
+|---|---|
+| `ctest -E SaturnExplorerLive -j2 --timeout 900` under `ulimit -v 4000000` (RelWithDebInfo, 93 tests, with `TestArea3Round10`) | 93 of 93 pass (136 s; the decompiler suite alone 17 s) |
+| generator, grammar 2, 1,100,001 to 1,120,000 | 0 failing seeds, 0 findings |
+| generator, grammar 1, 1,100,001 to 1,110,000 | 1 failing seed (1103677, A3-68), 1 finding class |
+| generator, grammar 2 `specials`, 1,200,001 to 1,205,000 | 0 failing seeds |
+| printed-C differential, 1,300,001 to 1,306,000 | passed, 0 findings |
+| corpus 007 / 008 | lent 662 (923) / 1,021 (1,287), ledger counts 0, 0 and 4 missing and said, all passed |
+| scratch fuzzer, 44,100 programs | A3-68, A3-69 and A3-76 only |
+| sanitizers, the Live tests, vendoring | not run: no engine or host code changed; the Live tests share a socket
+
+### Not covered
+
+- **Mutual recursion, interrupts between a callee's store and its caller's read, the probe's `kMaxSteps` exit** as in rounds 7 to 9.
+- **A fix for any row**, and the cost of the candidate fixes on the corpus: the fix directions in the rows are sketches. The first (A3-66) must keep 06038F64 and 06038F72 lent; the second (A3-68) is a change of flags and should move no count; A3-69 needs the mask idiom's own bits; A3-71 needs a new claim in `CallEffects`.
+- **A non-void lent signature's text against the run beyond the evaluator's reach** (loops, 64-bit returns): the fuzzer's rejects are the evaluator's.
+- The Live tests and the sanitizer job (shared socket path; CI).
+
+**Done criteria.** Nine rows at P1 or P2 (A3-66 to A3-72, A3-75, A3-76) and three at P3: a fix round, then two consecutive clean review rounds.
+
+## Area 2, round 10 review
+
+Reviewer, branch `review/2-round10-review`, on the coordinator's head `94b4365` (patches 0054, 0055 and 0056 in the tree). Tools, a pin, the ledger and this record only; no spec, engine or host file changed (the engine trials below were made in scratch copies). New ledger rows **A2-64 to A2-66**: **A2-64 is a P1** (a wrong printed value, no warning: a bug in the engine's range rules, not in the masks), **A2-65 a P3 oracle row**, **A2-66 a P3 instrument row closed here**. **The round is not clean, so area 2 is not done**: the count of clean rounds was 0 after round 9 and stays 0. Patches 0054 and 0055 themselves held: nothing at P1 or P2 was found in them (section 2).
+
+### 1. What I ran
+
+Own RelWithDebInfo builds under the scratch directory (`-j2` from the second half of the round; every run under `ulimit -v 4000000` and `timeout`, one heavy job at a time): the head, the head with the checkers (section 2), the head with patch 0054 reverted (0046, 0049 and 0051 as they were, 0055 and 0056 kept; for the timing), and a scratch copy with the fix of A2-64 (an experiment, not a fix).
+
+| Run | Result |
+|---|---|
+| `ctest -E SaturnExplorerLive -j2` with the pin of A2-64 | 92 of 92 pass (142 s; the fault suite 100 s) |
+| decode oracle with `SE_MEDNAFEN_SS`, seed 7777 (`SE_DECODE_CASES=20000`) and seeds 31337, 99991, 271828, 314159, 161803 (100,000 cases each, 13,000,000 cases) | the transcribed table equals Mednafen's for 65,536 words; SLEIGH and `Sh2Disasm` define 53,752, 0 disagreements; translation order 24,000 results 0 differ; history 5,632 cells 0 differ; followers 60 pairs 0 differ after one and two translations; differential execution 0 differ, 0 could not run, 0 of 130 forms fail, 18 named shapes 0 differ (the spec did not change) |
+| generator, grammar 2, `SE_GENERATED_FIRST=1000001`, 10,000 seeds and `1010001`, 10,000 seeds | 19,530 and 19,464 functions; 1 failing seed (1009895), 1 finding, none this area's (section 6); 0 for the second range |
+| generator, grammar 1, `SE_GENERATED_FIRST=1000001`, 10,000 seeds | 0 failing seeds, 0 findings |
+| printed-C differential, `SE_GENERATED_PRINTEDC=only SE_GENERATED_FIRST=1000001 SE_GENERATED_SEEDS=15000` | 18,090 functions (the seeds, the walks and the fixtures), 16,622 compared: agrees 16,756, `narrow-c` 28, `void-return` 1,182, `void-return-lent` 122, **2 findings**: seed 1002370 `mismatch` (**A2-64**), the walk of seed 1010082 `not-compilable` (routed, section 6) |
+| `dagen10.py` families 0 to 19, seeds 100,001 to 105,000 (100,000 functions), printed-C and the value checkers of round 9 (`SE_NZM_CHECK`, `SE_CONSUME_CHECK`, `SE_NZM_FREE`) and the structural checker (section 2) | 0 stale non-zero masks, 0 contradicted consume masks, 0 bound warnings; findings: family 5 436 (A2-65), family 19 73 (A2-64), none elsewhere |
+| tight-mask stress, mode 2, families 0 to 18, 1,000 functions each (seeds 200,001 to 201,000), bound 60 | 0 hangs, 0 bound hits; findings only family 5's (88, A2-65) |
+| hang scan, families 3 and 10 to 18, 3,000 each (seeds 300,001 to 303,000), batches of 100 under a 120 s limit | no batch over the limit that was not my own pause (five were; none of the 500 functions took 20 s alone); 0 bound warnings |
+| the structural checker on the images, no limit on a function's size | hwram007 1,106,534 steps, hwram008 2,823,411 steps: no kind N, kind C only the held LOAD and 3 BRANCHIND indexes (section 2) |
+| timing, `TestGameCode` on hwram008 | section 5: 1.10 times slower than with 0054 reverted |
+
+### 2. Patch 0054's invariant: what was attacked and what held
+
+**Reading the primitives again** (section 2 of the round 9 fix, against the tree): every change to an op or a Varnode's readers goes through `opSetInput`, `opSetOpcode`, `opSwapInput`, `opRemoveInput`, `opSetOutput`, `newVarnodeOut` or `newUniqueOut`, and each ends in `opMasksChanged`; `opInsertInput` and `opSetAllInput` end in `opSetInput`; `PcodeOp::setInput`, `insertInput`, `removeInput`, `setNumInputs` and `PcodeOpBank::changeOpcode` are called directly only by those primitives, by `CloneBlockOps::patchInputs` (which sets its inputs through `opSetInput` after), by `newIndirect` (same) and once in `funcdata.cc` at line 505 (`insertInput` of the slot the next `opSetInput` fills); `VarnodeBank::replace` is called by nothing. No rule, action or subvariable flow writes `Varnode::nzm` or `consumed` (`calcNZMask`, `ActionDeadCode` and `opMasksChanged` are the only writers). Block-structure changes reach the masks through `opRemoveInput` and `opSetOpcode` on the MULTIEQUALs (`branchRemoveInternal`, `blockRemoveInternal`, `CloneBlockOps`). The cases the brief names: a constant-propagation rule that builds a constant (`RuleCollapseConstants`: `opSetOpcode` to COPY on a two-input op is not complete until `opSetAllInput` sets the one input, which does the work; a new constant's non-zero mask is its value); an op whose output becomes wider (the output's mask is set from the new inputs, exactly, and what is below it is only widened: `RuleStoreVarnode`, which gives a STORE an output and then turns it into a COPY, passes through ready and not-ready states and ends with the output consumed in every bit, as a new Varnode is); a MULTIEQUAL cycle (widening a bit at a time ends; ActionNonzeroMask recomputes the least fixpoint, and the patch keeps any post-fixpoint, which contains it).
+
+**The instrument.** `tools/a2_round10/apply_struct.py` (on a scratch tree with `a2_round9/nzm_check_r9.patch`) checks the invariant itself instead of its effect on a value: after each rule that fires and each leaf action that changes something, for every op that is complete, kind N (the non-zero mask of the output holds `getNZMaskLocal(false)`) and kind C (the consume mask of each input holds `inputConsumeNeeded`), a violation being reported against the first step it is seen at; and after every `ActionDeadCode` pass, kind X (the consume masks against the model's least fixpoint from the roots, including the union over all RETURNs that `gatherConsumedReturn` takes). It reports what the round 9 value checkers cannot: a violation that does not change a value in the sampled runs.
+
+| Run | Steps | Kind N | Kind C | Kind X |
+|---|---|---|---|---|
+| families 0 to 19, 5,000 functions each | 11,176,109 | 0 | 9,973, all on the output of a LOAD | 0 |
+| hwram007, no limit on a function's size | 1,106,534 | 0 | 459 (LOAD) | 111 |
+| hwram008, no limit | 2,823,411 | 0 | 920 (LOAD) and 3 BRANCHIND indexes | 341 |
+
+*Kind C on a LOAD.* The host keeps every load (`keepUnusedLoads`), and `ActionDeadCode::lastChanceLoad` sets the hold on its output after its own pass: from then on `inputConsumeNeeded` takes the output as consumed in every bit, while the cached mask is what the readers took until the next pass. The cached is the narrower one; what it narrows is the liveness the hold stands for, not a bit any reader sees: `ActionVarnodeProps` tests the hold first, and the input of the LOAD (the pointer) is already consumed whole. Harmless; it is the only kind C in 100,000 functions. *Kind C on a BRANCHIND index* (3, in `0601561A` and `060535B6`): the model takes the switch index in every bit, `ActionDeadCode` takes `jt->getSwitchVarConsume()`; the primitive would widen the cached to the model on the next change, which is the allowed direction. *Kind X*: the cached masks are wider than the model for the outputs of CALLOTHER (`holdOutput`), the COPY of a stack store that an INDIRECT names (the effect the round 9 fix's section 9 says the walk does not repeat), and DELAY_SLOT and BUILD; the safe direction, and no rule makes such an op after the pass that makes them (new ones start with every bit consumed). **So 0054's invariant holds at every step I could observe, 15 million of them.**
+
+**Does widening suffice when the truth itself changes?** Yes at the places above: the output of the changed op is set to what its inputs give (exact, narrower or wider), and a wider one widens what is below. The one place where a per-op rule differs from the analysis is the RETURN: `gatherConsumedReturn` takes the union over all RETURNs of the minimal masks of their values, `inputConsumeNeeded` the op's own. After a rule widens one return's value the other return's value is not widened to the new union. This cannot print a wrong value (every bit a value can have is in its own minimal mask, and `SubvariableFlow::tryReturnPull` tests the consume mask of each return's value in `setReplacement`, so the widened one refuses the truncation); I did not find a case where it changes a text, and family 18 (two returns, 5,000 functions) reports nothing.
+
+**A tight-mask stress, the opposite of the fixer's.** The fixer forgot every mask after every rule (the widest masks a rule could leave). The reverse hazard is a rule that fires on the exact mask of a new op where upstream still had every bit (0054 gives a new op's output its exact mask at once): a pair that undoes each other only then. `SE_EXACT_STRESS=2` makes every non-zero mask exact after every rule (`Funcdata::calcNZMask`); with the bound at 60: families 0 to 18, 19,000 functions, no hang, no bound hit. Modes 1 and 3 (the consume masks made the model's after every rule) print wrong values in stack-heavy functions (family 5: 709 of 1,000 and 204 of 300): its model has no roots for the states the return recovery passes through, which the real passes have (kind X is empty after each real pass on the same functions), so it was dropped as an instrument limit. A2-66 holds the details.
+
+### 3. A2-64 (P1): `RuleRangeMeld` and `CircleRange::pullBackBinary`
+
+**Found** by the printed-C differential in a range nobody had run (seed 1002370 of 1,000,001 to 1,015,000: `mismatch`, `run=00555568:2AAAAAAB pseudo=00155548:00000000`), shrunk to 24 words and then by hand to the 12 words of the fixture.
+
+**The fixture.** `mov r4,r0 ; mov.l @(pc),r4 ; addv r0,r4 ; mov #5,r1 ; bf +0 ; mov #7,r1 ; mov r1,r0 ; rts ; nop ; nop ; .long 0xAAAAAAAB` (`6043 D404 340F E105 8B00 E107 6013 000B 0009 0009 AAAA AAAB`). `addv` sets T on signed overflow, so the code sets r1 = 7 only when r0 is negative and r0 + 0xAAAAAAAB is not. The head prints `if (1 < param_1 && -1 < (int4)(param_1 + 0xaaaaaaab)) { xVar1 = 7; }`: `1 < param_1` is unsigned, and the second term is true for r0 from 0x55555555 to 0x7FFFFFFF as well, where the add does not overflow. For r4 = 0x60000000 the code returns 5 and the text 7. The simplest reading of the same T (`addv` then `movt`) prints the right `0x7fffffff < param_1 && ...`; so does the branch form with an immediate (`mov #-3`). It is a literal-pool constant that does it: 0xAAAAAAAB, 0x80000001, 0xC0000000, 0x9999999A, 0xFFFF0000, 0xFFFFFFFD, 0xF0000000 print the wrong test; 0x7FFFFFFF, 0x12345678 and 0x80000000 do not.
+
+**The cause**, from the per-step dump (`SE_DUMP_EACH=1`). The spec builds the overflow test from two booleans (`src = (Rm s< 0) + (Rn s< 0)`, `T = (src == 0 || src == 2) && ...`); with one operand a literal it folds to `(b != 0xff) && !b || (r0 + c) s< 0` with `b = r0 s< 0`. `RuleRangeMeld` (a BOOL_AND of two boolean-valued ops) pulls both back to a common Varnode: the first through `b != 0xff` (a range of `b` that holds 0 and 1), then, because the sizes differ, through `b = r0 s< 0`; `CircleRange::pullBackBinary` for INT_SLESS calls `convertToBoolean()` (the range becomes `[0,2)` with mask 0xff), and when both 0 and 1 are in it, `bothTrueFalse`, it sets `mask = calc_mask(inSize)` and `break`s on the comment 'All possible outs => all possible ins' without making the range the full range: it stays `[0,2)`, now in 32-bit space. The meld of that with `!b` pulled back (`r0 >= 0`) is `r0 < 2`. The same seven lines are in INT_EQUAL, INT_NOTEQUAL, INT_LESS, INT_LESSEQUAL, INT_SLESS, INT_SLESSEQUAL and INT_CARRY. `rangeutil.cc` is upstream's (no local patch). It needs the second pull-back through a comparison whose output range holds both values, which `addv` and `subv` with a literal reach; a pull-back from a comparison the rule meets first has one value in its range and is right.
+
+**The experiment (not a fix).** In a scratch copy each `if (bothTrueFalse) break;` is `{ left = 0; right = 0; isempty = false; step = 1; break; }` (the full range): the fixture prints `0x7fffffff < param_1 && ...` and `R8 agrees`; the 12 words of the seed (`D409 ...`) agree; `dagen10.py` family 19 (T producers with a literal, `addv`, `subv`, `addc`, `subc`, `negc`, `cmp/..`): 18 findings in 1,500 functions on the head, 0 with the change; the texts of all 839 functions of hwram007 and all 1,554 of hwram008 are byte for byte the same with and without it (so no game function in the two images is affected). It is not 0054's, nor the masks': the structural checker reports nothing on it, and a build with 0054 reverted, and the round 9 fixer's head, print the same text. Pinned in `TestArea2Round10` (holds the wrong text and the verdict `differs`, with the right-text control for the immediate); it flips with the fix. A fixer should also look at the other users of `CircleRange::pullBack` (the value-set analysis of the jump tables and the guards) for the same range.
+
+**How common.** Any `addv`/`subv` (or a flag chain with the same booleans) whose other operand is a literal-pool constant of the kinds above, with T used by a branch or `movt`: rare in compiled code, plausible in saturating arithmetic. The nightly's grammars do not draw `addv` with a literal in a branch (the 45,000 seeds of this round are clean); `dagen10.py` family 19 does, in 1.5 % of its functions.
+
+### 4. A2-65 (P3, oracle) and the other families
+
+**A2-65.** In frame mode (A3-65) the printed-C differential maps the text's stack locals onto host memory; the A2-61 skip (a returned `&xStack...`) is the only one kept there, and a returned array local by its name is the same address: `return axStack_8;`, `return CONCAT44(axStack_4,param_2);`. 18 of 300 functions of family 5 (436 of 5,000) are reported as `mismatch` for it; The text is right. Row A2-65 has a 20-word replay. The nightly's printed-C does not draw these (family 5 writes a local at one width and reads it at another, and returns its address).
+
+**Families 12 to 19** (`dagen10.py`, families 0 to 11 as in round 9): 12 an ADD or SUB accumulator fed by a piece of an input each iteration, 13 two OR/XOR accumulators, the second reading the first, 14 several accumulate ops of different kinds and shifts of the accumulator, 15 nested loops, 16 a conditional update inside a loop, 17 masked, truncated and CRC-shaped accumulators, 18 two returns, 19 T producers with a literal operand. Results in section 1: no hang, no bound warning, no stale mask, in 100,000 functions with the checkers and 30,000 more with the hang scan; family 19 is where A2-64 shows.
+
+### 5. Patch 0055: is the bound soundly reported?
+
+*Every path.* The cap is in `Action::perform` for an ActionGroup or ActionPool that repeats (`oppool1`, `oppool2`, `cleanup`, `stackstall`, `mainloop`, `fullloop`), counted per call: a group nested in another gets a fresh count each time its parent calls it. The warning goes to the function's comments through `Funcdata::warningHeader`, and the host reads them (`commentdb`, warning and warningheader) and sets `repeatLimit`, withholds the prototype and lists the text among the result's warnings. I ran the A2-59 words on a build with 0054 reverted (their cycle returns): `E104 6328 2139 4610 8BFB 000B 6013 0009` ends in 1.8 s with `Exceeded maximum repeats of mainloop` and `of fullloop`, the printed-C differential says `unsettled`, and the text is right (`uVar1 = uVar1 & (...)` in the loop). The nested count does not multiply: after the main loop's 300 passes the full loop's later passes do not cycle again (1.8 s in all). *Two paths that do not carry the warning.* (a) The jump-table recovery's scratch copy: its warning is `WARNING (jumptable): Exceeded maximum repeats ...`, which `ClassifyEngineWarning` classes as the scratch copy's own and drops before it sets `repeatLimit` (pinned in `TestArea2Round9` as intended); a cycle that only the scratch copy has would end the table's analysis early with nothing said. The same holds for the restart limit (upstream's). I could not make a function that cycles in the scratch copy and not in the function proper (the scratch copy runs the same rules on a subset of the same flow), so this is an observation, not a row. (b) An infinite loop inside one pass of a pool is not bounded: `ActionPool::processOp` restarts an op's rule list when a rule changes its op-code, and the cap counts passes. No such loop exists in the 130,000 functions run; the hang scans would show it (the engine would not return).
+
+*Timing.* `TestGameCode` on hwram008 (1,554 functions, `SE_GAME_HWRAM`), the head `94b4365` and the same tree with patch 0054 reverted, alternating head, reverted, head, ..., back to back, nothing else of mine running (the machine at a load average of 0.9 to 1.4):
+
+| Run | head ms (worst function, 0604F422) | 0054 reverted ms (worst) | whole executable, head / reverted |
+|---|---|---|---|
+| 1 | 29,181 (4,270) | 27,293 (3,120) | 68.6 s / 74.1 s |
+| 2 | 27,904 (3,610) | 25,532 (3,095) | 66.9 s / 69.9 s |
+| 3 | 28,203 (3,448) | 25,712 (3,025) | 67.6 s / 72.3 s |
+| median | **28,203** (3,610) | **25,712** (3,095) | 67.6 s / 72.3 s |
+
+The head is 1.10 times slower on the game code (the worst function 1.17 times); the fixer measured 3.7 %. Far from 1.5 times, so not a finding. (The whole executable is slower with 0054 reverted because its unit tests include the A2-59 loops, which run to the bound there.)
+
+### 6. The generator beyond the nightly's range, and the routed seeds
+
+Ranges in section 1. Open rows checked first: A3-52 (check 12 on a function that runs on into another), A3-65 (fixed), A5-82 (the pointer checks), A7-5 and A7-8. Neither finding below is this area's; I filed no row for them.
+
+| Seed | Class | Area | Replay |
+|---|---|---|---|
+| 1009895 (grammar 2) | `n:kept-read:r10`: 'a function it calls was lent a signature that changes r10, and the text reads r10 as the value it had on entry'. Function 0 pushes r8, r9, r10 and r12, calls function 1, then ends in `mov.l @(pc),r1 ; jmp @r1` into function 2 (060090C0), the shape of A3-52 as a tail jump; the text reads `unaff_r10` in the save slot's store (`iStack_c = (int2)((uint4)unaff_r10 >> 0x10)`) | 3 (probably A3-52) | `SE_GENERATED_GRAMMAR=2 SE_GENERATED_SEED=1009895 SaturnExplorerSh2GeneratedTests <dir>` (the finding prints the shrunk module) |
+| 1010082 (printed-C, the walk `seed1010082_walk`) | `not-compilable`: `piVar1 = (int4 *)((int4)register0x0000003c + -4);` (the raw stack register of A3-65's section 8), and `return iStack_c + iVar3` reads a local that only the walk writes: the text is a raw pointer into the frame and a named local of the same memory, which the harness cannot run | 3 (A3-65's documented raw-pointer shape; the walk starts four bytes below the frame's top) | `SE_GENERATED_PRINTEDC=only SE_GENERATED_PRINTEDC_WORDS="0722 7FEC 1F60 1F74 61F3 7110 E204 2176 4210 8BFC E204 E400 6616 346C 4210 8BFB 50F2 304C 7F14 000B 0009"` |
+
+### 7. Not done, and what is left
+
+- A2-64 is open and needs a fix round (the experiment above is one candidate; a fixer should read every user of `CircleRange::pullBack`); the next review round verifies it and the count of clean rounds restarts.
+- The consume-mask tight stress (mode 3) is not a working instrument; the non-zero stress (mode 2) is. A model of the consume roots between the return recovery's trials would make it one.
+- Kind X shows three roots the model lacks (CALLOTHER hold, the INDIRECT effect, the pseudo-ops); each is the safe direction, and I found no rule that creates the ops they belong to mid-pass.
+- Not run: the area 2 mutants of the spec (no spec change), the sanitizer job, the Live tests.
+
+
+## Area 2, round 10 fix
+
+Fixer, branch `review/2-round10-fix`, on the coordinator's head `11e144c`. The code is in the commits up to `5dd3b66` (one engine patch, the harness, the generator, the tests), and this record follows. **A2-64 (P1) and A2-65 (P3) are fixed; A2-66 was closed by the reviewer.** The audit asked for in A2-64 found four more pull-backs that were not the set they claim to be; none reaches a text of either game image.
+
+### 1. Patch 0058 and its rule
+
+`CircleRange::pullBackUnary` and `pullBackBinary` (`rangeutil.cc`, upstream's; no earlier patch touched it) turn the range of a result into the range of the input that makes it. `RuleRangeMeld` (a `&&` or `||` of two range tests becomes one comparison) and the jump-table guards (`JumpBasic::analyzeGuards` and `checkUnrolledGuard`, `pullBack` up to `maxpullback` times) use what comes back as exactly the set of inputs, and print a comparison for it. So:
+
+> **A pull-back returns exactly the set of inputs whose result falls in the range, in the input's mask, or it fails (returns `false`).** A narrower set, a wider set, a range in the wrong order or a mask widened without the range widened with it is a wrong text and no warning.
+
+The reviewer's A2-64 is the mask case: for a comparison whose range holds both 0 and 1 (`bothTrueFalse`, seven op-codes) the code set `mask = calc_mask(inSize)` and stopped on the comment 'All possible outs => all possible ins' with the range still `[0,2)`. The fix is what the comment says: `left = right = 0`, the full range (7 places, as the reviewer's experiment). `addv r0,r4` against 0xAAAAAAAB now prints `0x7fffffff < param_1 && -1 < (int4)(param_1 + 0xaaaaaaab)` and agrees with the run.
+
+### 2. The audit
+
+The reviewer asked for a reading of the rest; I made it a measurement. `TestPullBackRanges` (new, in `SaturnExplorerSh2DecompilerEngineTests`; the standalone form is `Docs/Decompiler/tools/a2_round10/pullback_audit.cpp`) takes every operation `pullBackUnary`/`pullBackBinary` handles, at one byte and at two bytes (and `ZEXT`/`SEXT` to four), builds the truth by running the operation on every input, and compares it with the pulled-back range: over a grid of edge values (0, 1, 2, 3, 0x7e..0x81, 0xfe, 0xff, the sign boundary, 0x100, 0xff00, 0x7f00, 0x8000) and a seeded sample (ranges with a step of 1, 2 and 4, both slots, the constant from the grid or random). about 21,000 cases per operation and size in the scratch run, about 3,300 per row in the test; a pull-back that succeeds must equal the truth in the input's mask, one that fails is allowed.
+
+| Op-code | Result at the head | Fix |
+|---|---|---|
+| `INT_EQUAL`, `INT_NOTEQUAL`, `INT_LESS`, `INT_LESSEQUAL`, `INT_SLESS`, `INT_SLESSEQUAL`, `INT_CARRY` | exact, except the range holding both 0 and 1 (A2-64: `[0,2)` for the full range, in the input's mask) | the full range |
+| `INT_SUB`, constant first (`val - x`, slot 1) | **wrong in almost every case**: the range came back reversed, `[val-left,val-right)` for `[val-right+step,val-left+step)` (a constant minus the unknown) | the right bounds |
+| `INT_RIGHT`, `INT_SRIGHT`, constant first (`val >> x`, slot 1) | **wrong**: the slot was ignored, so the range was that of `x >> val` | refused (`false`) |
+| `INT_RIGHT`, `INT_SRIGHT` by the size or more | `INT_SRIGHT` by 8 of a byte came back **empty** (the real set is every non-negative byte); `INT_RIGHT` and the shifts of a `uintb` by 64 or more are undefined in C++ | refused |
+| `INT_SEXT` | the gap of the values that are no sign extension was placed with `left & step`, not `left % step`: a range whose left bound is odd moved it by one and let 0x80 (of a byte) through as the sign extension of a byte (`[1,0x81)` came back as `[1,0x81)`, the true input set is `[1,0x80)`) | `left % step`, as `INT_ZEXT` |
+| `INT_ADD`, `INT_2COMP`, `INT_NEGATE`, `COPY`, `INT_ZEXT` | exact (steps of 1, 2 and 4 included) | none |
+| `BOOL_NEGATE` | exact over the boolean domain of its input (a `[0,2)` for both is the whole domain) | none |
+
+Callers: `RuleRangeMeld` (`usenzmask` false: the `SUBPIECE` branch of `CircleRange::pullBack` that widens the mask without widening the range is not taken); `JumpBasic::analyzeGuards` and `checkUnrolledGuard` (`usenzmask` true, starting from a single-valued boolean, so `bothTrueFalse` cannot be met at their first step; a later step through `INT_SUB` slot 1 or a shift was wrong, and is fixed or refused); `ValueSetSolver`'s guard on a relative constant (`pullBackBinary` on a one-valued boolean). In the `SUBPIECE` branch the widened range is intersected with the non-zero mask of the input, which is the part of the range the mask allows; when the mask is not a range (`setNZMask` fails) the range stays wide and holds values the mask excludes, which no execution has: an over-approximation of a set that is only ever intersected with the possible values, not a wrong test. Nothing there needed a change.
+
+None of the four extra defects changes a text of the two game images (section 6). I did not find a function that reaches `INT_SUB` slot 1, the shifts or `INT_SEXT` with these ranges through `RuleRangeMeld` or a switch guard in the generator's functions or either image (the texts are unchanged), and did not try to build one by hand; they are held by the sweep, which calls the function directly.
+
+### 3. The tests, and the generator
+
+* `TestPullBackRanges` (engine tests): the sweep above, plus the seven comparisons' both-true-and-false range being full with the mask of the input (the pin for A2-64 that does not need the rule engine).
+* `TestArea2Round10` (`Sh2DecompilerTests`): the fixture flipped (`agrees`, the text `0x7fffffff < param_1 && -1 < (int4)(param_1 + 0xaaaaaaab)`, no `1 < param_1 &&`), the immediate control, and 108 functions of the family: `addv` and `subv` against nine pool literals (0xAAAAAAAB, 0x80000001, 0xF0000000, 0x55555555, 0x7FFFFFFF, 0xC0000000, 0x40000000, 0xFFFFFFFD, 1) with the literal in the destination or the source register and T tested by `bf`, by `bt` or read by `movt`, each by value against the run for 14 inputs on both sides of the boundaries. 0x80000000 is left to the printed-C differential: the text `-1 < -0x80000000 - param_1` is right as the engine reads it (printed-C: `narrow-c`, 'agrees when read as the engine means it') and not in `TestArea2Round10`'s evaluator, which does not wrap the constant.
+* **The generator draws the shape** (`MakeFlagLit` in `Sh2GeneratedTests.cpp`, the register-only grammar of the printed-C differential, from a stream of its own so no other draw of a seed changes; `SE_GENERATED_PRINTEDC_FLAGS=0` gives the functions of round 9): one function in five gets `mov.l @(lit),Ra ; OP Rb,Ra` with OP an `addv` or `subv` (twice as often as the others), `addc`, `subc` or a `cmp/eq`, `cmp/hs`, `cmp/ge`, `cmp/hi`, `cmp/gt`, the literal one of 17 edge values (the signed and unsigned boundaries, 0xAAAAAAAB, 0x55555555, 0x80000001, 0xF0000000 ...) or random, then T tested by a `bf` or `bt` over a `mov #k,Rt` whose register the function returns, or `movt r0`. With patch 0058 reverted the printed-C differential reports 3 `mismatch` in 3,000 seeds (86, 999, 1843).
+* A2-65 (the harness): in frame mode the declarations of array locals (`xunknown1 axStack_8 [8];`) are collected and a return statement that names one without indexing it (`return axStack_8;`, `return CONCAT44(axStack_4,param_2);`) is `skipped:stack-address`; `axStack_8[1]` is a value and is compared. Pinned in `TestPrintedC` with the row's words (it was `mismatch (run=0603FFF8 pseudo=41709FF8)`).
+
+### 4. Vendoring
+
+`patches/0058-engine-pullback-ranges-exact.patch` is the diff of `rangeutil.cc` from the pinned upstream (a header line, one comment, the seven full ranges, `INT_SUB`, the two shifts, `INT_SEXT`). `vendor.py` on a copy of the vendored directory (`python3 -I vendor.py <pinned Ghidra checkout>`) gives a tree identical to the committed one (`diff -r` empty), all 51 patches applied. **That needed one repair that is not mine:** patch 0056 (area 3) did not apply on top of 0054: its `coreaction.cc` context lacked the header line 0054 adds, so `vendor.py` stopped (the vendored-tree CI job would have failed). The area 3 fixer repaired it on its branch (`8ab4912`); I made the identical change (the same two added lines), so the two branches merge without a conflict in that file. README and VENDOR.md carry the 0058 rows.
+
+### 5. Mutation table
+
+Each fix reverted alone, the pin that fails (the engine tests built per mutant; the sweep prints the first cases):
+
+| Mutant | Pin that fails |
+|---|---|
+| `INT_EQUAL`, `INT_NOTEQUAL`, `INT_LESS`, `INT_LESSEQUAL`, `INT_SLESS`, `INT_SLESSEQUAL`, `INT_CARRY` back to `break` (each alone, and the seven together) | `TestPullBackRanges`: 'misses 2 [0,2)' on that op-code, one mutant per op-code; together also `TestArea2Round10` (3 CHECKs on the fixture) and the printed-C differential (3 mismatches in 3,000 seeds) |
+| `INT_SUB` slot 1 as upstream | `TestPullBackRanges`: 'holds 0 [128,126)' and the like |
+| `INT_RIGHT` without the slot test; without the size test | `TestPullBackRanges`: 'misses 129 [0,129)'; 'holds 2 [2,0)' |
+| `INT_SRIGHT` without the slot test; without the size test | `TestPullBackRanges`: 'misses 2 [126,2)'; 'empty, but 0 belongs' |
+| `INT_SEXT` with `left & step` | `TestPullBackRanges`: 'holds 128 [1,129)' |
+| A2-65: the array-name test of the harness disabled | the A2-65 pin in `TestPrintedC`: `mismatch (... run=0603FFF8:0603FFF8 pseudo=00000000:41D20FF8)`, `CHECK w[0].cls == "skipped:stack-address"` |
+| the whole of 0058 reverted (upstream `rangeutil.cc`) | `Sh2DecompilerTests` (`TestArea2Round10`: 13 CHECKs, the fixture's 3 and 10 more), the engine sweep, the printed-C differential (3 mismatches) |
+
+### 6. The matrix
+
+Own RelWithDebInfo build under the scratch directory (2.5 GB, `-j2`, every run under `ulimit -v 4000000` and `timeout`, one heavy job at a time; the container restarted once, killing a mutation run and nothing else).
+
+| Run | Result |
+|---|---|
+| `ctest -E SaturnExplorerLive -j2 --timeout 900` | 93 of 93 pass (151 s), twice, the second after the last test edit |
+| `SaturnExplorerDecompilerFaultTests` | 0 of 94 jobs fail (89 s); no MOVED pin |
+| generator, `SE_GENERATED_SEEDS=3000 SE_GENERATED_GRAMMAR=2` | 0 failing seeds (106 s) |
+| generator, `SE_GENERATED_GRAMMAR=1 SE_GENERATED_SEEDS=1000` | 0 failing seeds (32 s) |
+| `SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000` | 0 findings; 3,703 functions, 3,424 compared, agrees 3,443, `narrow-c` 9, `void-return` 223, `void-return-lent` 28 |
+| `SE_GENERATED_SEEDS=20000` (four runs of 5,000 from seeds 1, 5,001, 10,001, 15,001) | 0 failing seeds in all (147, 148, 149, 126 s) |
+| printed-C, `SE_GENERATED_FIRST=1000001 SE_GENERATED_SEEDS=15000` | 18,090 functions, 16,797 compared, agrees 16,893, `narrow-c` 40, `skipped:stack-address` 1, `void-return` 1,049, `void-return-lent` 106, **1 finding: seed 1010082's walk `not-compilable`, the routed A3-79** (the review found the same; A2-64's `mismatch` is gone) |
+| decode oracle, `SE_MEDNAFEN_SS`, seed 7777 (20,000 cases) and 31337 (100,000 cases = 13,000,000 differential executions) | 0 differ, 0 could not run, 0 of 130 forms fail, 18 named shapes 0 differ; SLEIGH 53,752 words defined, 0 disagreements with Mednafen |
+| corpora hwram007.bin, hwram008.bin, `SE_GAME_LEND=1` | every ledger count 0; missing and said 0 and 4; lending 662 (923 parameters) and 1,021 (1,287); mapping violations 0 (the 'on another line' counts 4/11 and 4/21 as before); 839 and 1,554 functions |
+| **the corpora texts** | `SE_GAME_OUT` of the fixed build against the build with upstream's `rangeutil.cc`: **4,299 and 7,544 files (the 839 and 1,554 functions, and the lent texts before and after), byte for byte identical.** No game text changes with any of the five fixes. |
+
+### 7. What stays open
+
+* The one finding of the printed-C range is A3-79 (area 3's), not an area 2 finding.
+* The standalone `pullback_audit.cpp` runs about 21,000 cases per row; the committed test runs about 3,300 so that it stays in `ctest`'s time; the wider run is the scratch file's.
+* The four extra pull-back defects have no text that reaches them in the family's 108 functions, the generator's functions and the two images; if a reviewer finds one, the sweep already holds the fix.
+* The next review round verifies A2-64 and A2-65; the count of clean rounds stays 0 until then.
+
+Integration note (coordinator): from `6fe255e` (the A3-65 merge) to this merge, master's patch 0056 did not apply on top of 0054. Both patches
+change the header comment of `coreaction.cc`, and the merge kept both comment lines in the vendored file but not in 0056's context, so `vendor.py`
+stopped at 0056. The coordinator's reproduction check did not see it: `vendor.py` writes nothing when a patch fails, so the copy it compared kept the
+committed files and the comparison was empty. The check now also requires `vendor.py`'s exit status 0 and its "vendored" line. The repaired 0056
+(three context lines) comes with this merge, and is the same as the area 3 round 10 fixer's 8ab4912. The vendored sources themselves were right
+throughout; only the patch file that reproduces them was stale.
+
+## Area 3, round 10 fix
+
+Fixer, branch `review/3-round10-fix`, on the coordinator's head `9e00a73`. Code commits `9fc43a0` to `bf94c18` (host, engine patch 0057 in `8ab4912`), then pins and this record. **A3-71 is fixed; A3-72 is fixed for part a (P1) by engine patch 0057, and its part b stays open (a P2 text in a withheld function, section 6); A3-66 to A3-70, A3-75 and A3-76 (P2) are fixed; A3-73, A3-74 and A3-77 (P3) are fixed.** A3-78 and A3-79 (routed) are triaged and fall outside this rework (section 6). Own RelWithDebInfo build, `-j2`, every run under `ulimit -v 4000000`.
+
+### 1. The rule, as a guarantee
+
+Round 9 stated the return rule as one guarantee: a function the engine made `void` is lent only when no input its signature does not hold can change what it leaves in r0. Round 10 showed the guarantee leaking wherever the host's own interpreter (`ReturnCheck`) was incomplete, and it always leaked the same way: a place the interpreter did not model gave a value that depended on nothing, or on "everything" that an exception then threw away. This round makes the interpreter fail closed:
+
+**Every value the interpreter builds depends on all of its inputs' dependences unless the op is modelled exactly. A value nothing is known of depends on every input, never on none. The only things excused are the ones proved below.**
+
+What that took, by place:
+
+| Where it failed open | Now |
+|---|---|
+| a "nothing-known" value (every register among its dependences) returned 0 to the rule (`ReturnInput`, `ChooserInput`) | the exception is gone. A word read from free stack, or through a stack pointer the check cannot place, is modelled as what it is: a read of memory and the stack (`FreeStack`), and, unplaced, of the stack arguments too, since even a base below the entry r15 with an index the engine takes as non-negative reaches upward without bound (A3-66, A3-67) |
+| dependences built from **origins** | what a callee or a store writes carries the dependences of what was written (`Apply`'s `mapDep`, `Clobber`'s and `StoreThrough`'s explicit dependence word), not its origins. A free-stack word's origins are "anything", and counted as dependences they put every register into whatever a lent callee might have written (this was what hid 06038F64's input before) |
+| pool literals not folded in `WithholdReason`'s check | the raw scan's literal words of either width are folded (`mov.w @(disp,PC)` is the usual pool offset) |
+| `INT_ZEXT`/`INT_SEXT` of a constant, a bitwise op of two constants | folded, so `and #imm,r0` is a mask (A3-69) and `xor #0,r0` is the identity (A3-77) |
+| a part of a register, a partial store and reload of a slot, a clobbered slot, the extension of a constant rebuilt as `Value::From` | the flags the rule reads (`usesR0`, `carried`, `joined`, `keepsR0`) are kept (A3-68) |
+| a stack address plus an index | the sum keeps the index's dependences; only the origin narrows to the stack (A3-76) |
+| the frame "escaped" through a callee's own stack addresses, or through the free stack below the call | a callee's own frame and the words below the call's r15 are its stack once it is entered, not this function's frame; only an address of ours it was handed lets the frame out |
+
+The exceptions, each removed or proved:
+
+| Exception | Outcome |
+|---|---|
+| r0's entry value where no op read it | **proved**: no op reads it, so the dropped return removes no read from the text, and a caller that reads r0 after the call is withheld ("uses r0 after calling"). Made fail-closed: the `usesR0` flag now survives every place a value is rebuilt (A3-68) |
+| a value nothing is known of | **removed** |
+| SR's other bits and the T in them | **narrowed to what is proved**: excused only when r0 at every return is exactly the value the function wrote back to SR with `ldc` (`mSrWritten`, by the op that made it). The engine never removes that `Write_SR`, so every read the value was computed from stays in the text, and `EntryStateUse` settles the SR read itself. `and #1,r0`, `add #1,r0` and the mask set with no write-back are inputs (A3-69, and its c: SR's S bit is withheld too) |
+| a value carried in r0 across a callee that keeps r0 | A3-13's rule (it withholds); made fail-closed by the flags |
+| the identity ops (`and r0,r0`, `or r0,r0`, `or #0`, `xor #0`, `add #0`) | **proved**: algebraic identities, which the engine folds too (patch 0048): the output is the input value |
+| r1 | **proved by the model**: the cspec has no output in r1 alone (r0, or r0:r1 joined), so a value only in r1 is never a return a caller can be shown, and a caller that reads r1 after the call is withheld |
+
+**Why not the engine's own p-code dataflow.** The question is about r0 at the returns of a function the engine has already made `void`: its final graph has no r0 at the RETURN, so it would take a second decompilation with a forced return. And the engine's graph is the thing under review: its alias folds were A3-65's and A3-72's bugs, so an oracle built on it inherits them. The host's interpreter is independent of the engine and is now fail-closed; that is the cheaper and the safer one.
+
+### 2. The rows
+
+- **A3-71 (P1).** `CallEffects::storesBelow` (new, in the cache keys): `ReturnCheck` tracks a pointer that is a register's entry value give or take an offset (`Value::baseReg`, `regOff`; a constant moves it, a non-negative index added keeps it at or above, a variable subtracted or a loop lowers it), and a store at a negative or lowered offset records the register. `Call` reads it for a lent callee: a frame address in such a register exposes the frame from its lowest slot. The immediate of `add #-4,r4` is the 32-bit 0xFFFFFFFC and is read as signed (the single-store case b failed on it at first). V5a and V5c (and the r5 form) now print the local and agree with the run; the walk-up control is unchanged.
+- **A3-72 (P1), patch 0057.** `AliasChecker::stepsDown` keys its forward walk on `(varnode, offset)`. A step on some paths of the loop makes a nested MULTIEQUAL whose output was reached first with offset 0 and pruned the stepped path. Now V7c, V8d (r14) and V8c (inner loop) print the local, with no `register0x0000003c`. Part b: section 6.
+- **A3-70 (P2).** The walk of an unlent callee (`CalleeFrameWrites`) is now transitive and bounded. A walked callee folds its own PC-relative literals (`mFoldPcLoads`, read from the capture), names its `bsr`/`jsr` targets and its thunk targets, and walks them in turn: 8 levels, one 80,000-step budget for the whole probe, one cache, and a cycle is "not walked". A callee it cannot name or reach (a jump to a register's entry value, an unnamed call, the levels or the budget exhausted) fails closed only when it hands the frame on: r15 back at or above its entry, or an address of the caller's frame in a register. A caller-frame address handed to a named callee always fails closed. W3 (the thunk), W1 (lent k) and W2 (unlent k) now print the note and the local. The first versions of this were too coarse, and the corpus showed it: 381, then 1,244, then 649 of image 007's files gained the A3-61 note, from a switch inside a frameless leaf (`mova ; mov.b @(r0,r5),r5 ; add r5,r0 ; jmp @r0`) taken for a tail jump, from the depth limit, and from a lent sub-callee's `kFrameAny`. In the final version no game function gains the note.
+- **A3-75 (P2).** A word is marked when it is exposed, with the first call whose callee writes it (`ExposeStackArguments` asks `CalleeFrameWrites` there), and a later call that leaves it alone keeps the mark; `ReadExposed` only reads it.
+- **A3-73 (P3).** Any input in the stack space at or above the entry r15 that no parameter holds withholds, whatever the model's 500-byte window.
+- **A3-74 (P3).** A walked callee stops at 256 stack words a state and shares the budget, failing closed; `Run` checks the cancel flag every 1,024 steps. The 6,000-push callee: 30 ms (14.7 s and 2.2 GB at the head), with the note (the walk could not finish, so the saved word is not folded).
+- **A3-66, A3-67, A3-68, A3-69, A3-76, A3-77**: section 1. A3-66 c and A3-67 b are withheld as the rows expect ("from"/"chosen by a stack argument").
+- **Patch 0056 repaired.** Its `coreaction.cc` header hunk no longer applied after 0054 (0054 adds a header line between 0033's and the comment's end; the merge resolved `cpp/` and left the patch's context stale), so `vendor.py` could not reproduce master. The hunk's context now includes 0054's line; 0057 applies after it, and the reproduced tree is identical to the committed one.
+
+### 3. Pins
+
+`TestArea3Round10Fix` (`Sh2DecompilerTests.cpp`): every finding fixture of A3-66 to A3-77 in its right state (withheld with the row's reason, or lent; the A3-70, A3-71 and A3-75 texts with the note and the local, and the A3-71 ones agreeing with the run; the A3-72 walks printing their local), two SR pins (`add #1,r0`, the mask with no write-back), a thunk to a callee that writes nothing (no note, `return 5;`: the walk's precision), and A3-74 (under 3 s, with the note). `TestArea3HiddenInputFuzz`: the reviewer's scratch fuzzer, ported. It generates random register and frame programs, runs each lent one on the emulator once as is and once with each input the signature does not hold perturbed (r0-r3, r8-r11, the T flag, r4-r7 beyond its parameters), and reports a lent function whose r0 changes. It runs 400 programs by default; `SE_A3FUZZ_PROGRAMS`/`SE_A3FUZZ_SEED` widen it. Reversed on purpose: `a3_55 control: chosen by a value nothing is known of` and `round 9 fix: r0 or a word nothing is known of` are now withheld. In both, r15 escapes through `*r4` and comes back, so the word read may be the stack argument at r15 + 0.
+
+### 4. The mutation table
+
+Each part reverted alone in the committed tree, the decompiler suite rebuilt and run (`mut.py` in the scratch directory). The counts are the CHECKs that fail; the fuzzer found nothing under any mutant at its default 400.
+
+| Reverted | Fails |
+|---|---|
+| M01 the nothing-known exception back in `ReturnInput` | 0: subsumed (a free-stack read no longer depends on every register; with M03 it is the head's state) |
+| M02 the same in `ChooserInput` | 0: subsumed, as M01 |
+| M03 a free-stack read depends on every register | 3 (a3_66a, a3_66b, a3_67a) |
+| M04 an unplaced stack read without the stack arguments | 2 (the two reversed round 9 pins) |
+| M05 no pool-literal fold in the return check | 0 in the suite (a3_66c and a3_67b are still withheld through M04); the corpora lend 664 (929) and 1,022 (1,286), not 680 (958) and 1,071 (1,314) |
+| M06 a part of a register drops the flags | 4 (a3_68a, b, c, e) |
+| M07 a partial store or reload drops them | 1 (a3_68e) |
+| M08 no ZEXT/SEXT fold | 1 (a3_69a) |
+| M09 no fold of two constants | 1 (a3_77) |
+| M10 a constant's part or extension drops `carried` | 1 (a3_68f) |
+| M11 the SR exception as wide as before | 2 (the two SR pins) |
+| M12 the stack-address sum drops the index | 3 (a3_76a, b, c) |
+| M13 `storesBelow` not read at the call | 2 (a3_71a, b) |
+| M14 the register offset not wrapped to 32 bits | 1 (a3_71b) |
+| M15 `storesBelow` not recorded | 2 (a3_71a, b) |
+| M16 no transitive descent (depth 1) | 1 (the thunk precision control) |
+| M17 a thunk's target not walked | 1 (a3_70a) |
+| M18 a walked callee's literals not folded | 1 (a3_70a) |
+| M19 a later call's mark overwrites (the head's `exposedAt`) | 1 (a3_75) |
+| M20 no check beyond the stack window | 1 (a3_73) |
+| M21 no bound on a walked callee's stack words | 2 (a3_74: the time, the note) |
+| M22 a caller-frame address handed to a named callee not counted | 1 (a3_70c) |
+| M23 the same for a lent callee | 1 (a3_70b) |
+| M24 dependences mapped from origins | 0 in the suite; in the corpus it withholds 06038F64 and 06038F72 as "computed from r1 on entry" |
+| M25 the SR write-back not recorded | 1 (06010054's idiom, `TestArea3Round9Fix`) |
+| M26 a clobbered slot drops the flags | 0: no fixture; kept by the argument of section 1 |
+| M27 patch 0057 reverted (`seen` keyed on the varnode) | 3 (a3_72a, b, c) |
+| every part at once (the head) | every row's fixture in the state its row records (the reviewer's verify spec, rerun at the head before the first edit) |
+
+The cancel check of A3-74 is held by no pin: the fault matrix's cancel points do not reach the probe's walk.
+
+### 5. The lending cost, and the corpora
+
+Both images, `SE_GAME_HWRAM=<img> SE_GAME_LEND=1` with `SE_GAME_OUT`, the head `9e00a73` built beside, every output file compared.
+
+| | 007 | 008 |
+|---|---|---|
+| ledger counts | 0 dropped, 0 missing and said (as the head) | 0 dropped, 4 missing and said (as the head) |
+| functions | 1,730 ok, all passed | 2,995 ok, all passed |
+| lent (parameters), unlent / lent run, head | 637 (866) / 662 (923) | 992 (1,227) / 1,021 (1,287) |
+| lent, fixed | **655 (901) / 680 (958)** | **1,041 (1,253) / 1,071 (1,314)** |
+| files that differ | 78 (39 in each lending run, none alone) | 182 (9 alone, 86 and 87 in the lending runs) |
+| A3-61 notes gained | 0 | 0 |
+| decompiler time, lending run (before / after) | 18.5 / 21.3 s at the head, 30.2 / 31.3 s fixed | 46.2 / 54.1 s, 65.7 / 75.0 s |
+
+**Lending rises, and the rise is the literal fold.** Without it (M05) the fixed tree lends 664 and 1,022: the fold accounts for 16 of image 007's 18 and 49 of image 008's 50. A function that hands a callee a pointer loaded from a literal (`mov.l @(lit),r8 ; mov r8,r4 ; jsr`, 06009A3A) had that pointer as memory that might be the stack. A lent callee storing through it then clobbered the saved PR, and the function was withheld "a return not to its caller". As a constant it is an absolute address, which the analysis, like the engine, takes never to be in the stack. The other two in 007 are 0602EB78 and its mid-entry 0602EB84, proved by the walk's other precision changes. Each function that becomes lent is checked like every other in the lending run (all ok, the mapping oracle clean).
+
+**What becomes withheld: two functions, both false withholds.** Image 008's **06038F64 and 06038F72** (the reviewer's "must stay lent") go from lent to withheld: "computed from r8 on entry" and "computed from a stack argument (the word at r15 + 0)". The code reads nothing it does not hold: r0 at the return is a value loaded through `param_1`-derived pointers. But the lent callee 06038EDC's own summary says it may let out its entry r14 (`leaks` names r14, here our frame pointer). From then on the frame has escaped, a load through a pointer from memory may read our frame, and fail-closed counts the saved-register slots (r8 to r14 on entry) and the stack arguments. Keeping them lent would need pointer provenance through memory, which the interpreter does not track. 007 has no function that becomes withheld. That holds the round 9 fixer's measured zero for the rest of the rule.
+
+**The other changed texts.** In 007, 17 withheld functions in each lending run show the newly lent 0x0601824C's `int2` return at their calls. Four go from "calls ..." to "a return not to its caller" (their callee is now lent, so the next check runs). In 008, 21 withheld functions differ in the same way. Eight go from "calls" to "a return not to its caller", two go the other way, one goes to "it holds a value in r0 across a call that keeps r0", and one bad-data function changes text. The 9 that differ when decompiled alone (06037E0C, 06037F1A, 060380BE, 06038264, 06038352, 06038512, 06038822, 0603885E, 0603ED52) are withheld functions whose local layout moved with the probe's host alias: an array split or merged, e.g. `xStack_247` with `axStack_23c [568]` into `axStack_247 [3]`, and 0603ED52 no longer has the "Heritage AFTER dead removal" warning. The diffs are `corpus007.diff` and `corpus008.diff` in the scratch directory.
+
+**Time.** The transitive walk and the folds cost about 40 % of the lending runs' decompiler time on a shared machine. The A3-74 bound keeps the worst case at the size of the budget.
+
+### 6. Not done, and the routed rows
+
+- **A3-72 part b** (a pointer kept in a stack local across a call, then stepped down): 0057 does not reach it. The spill and the reload through the frame break the def-use chain that `stepsDown` and the alias gather follow, so the reloaded pointer is no frame base. The text reads `return 5;` in a function that is withheld (no signature leaks), P2 as the row has it. Left open: it needs the engine to carry a frame pointer through a stack slot across a call.
+- **A3-79** (routed, provisional P2): still `register0x0000003c + -4` with 0057. It is not A3-72's conditional step: the walked pointer starts in storage no local is mapped to, which the A3-65 record already lists as not done (a pointer into unmapped stack prints raw, as upstream does). The function is withheld ("reads vbr"). Triaged P3 for the coordinator's ruling.
+- **A3-78** (routed, provisional P2): still `n:kept-read:r10` at grammar 2 seed 1009895. Function 0 tail-jumps into function 2 and the text shows function 2's read of r10, which a callee function 0 made changes. That is A3-52's run-on class through a tail jump, a flow and boundary question, not this rework's.
+- **The walk's limits**, kept and named: a walked callee's switch cases (the walk has no table for a callee's switch: a computed jump stays in the callee and is not followed), and a callee whose first instruction is not captured (the BIOS: no code to read). A lent sub-callee's `kFrameAny` (a store through a stack pointer it could not place) is not taken to reach its caller's caller. That follows the engine's index convention (A3-9, A3-17), and it is what a walked callee's own stores count as well.
+- The Live tests and the sanitizer job were not run (shared socket path; CI).
+
+### 7. The matrix, on the fixed tree (code `bf94c18`, pins after)
+
+| Run | Result |
+|---|---|
+| `ctest -E SaturnExplorerLive -j2 --timeout 900` (93 tests) | 93 of 93 pass (142 s) |
+| `SaturnExplorerDecompilerFaultTests` | 0 of 94 jobs failed, 0 MOVED: no re-pin (`storesBelow` moves no allocation pin) |
+| `SE_GENERATED_SEEDS=3000 SE_GENERATED_GRAMMAR=2` | 0 failing seeds, 0 findings; 4,245 lent (void 2,194, returning 2,051), 2,866 withheld, 17,750 runs held to the claims, canary 240 programs, 0 failing |
+| `SE_GENERATED_GRAMMAR=1 SE_GENERATED_SEEDS=1000` | 0 failing seeds |
+| `SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000` | passed: 3,703 functions, 3,397 compared, agrees 3,425, `narrow-c` 7, `void-return` 249, `void-return-lent` 22 |
+| `SE_GENERATED_SEEDS=20000` | 0 failing seeds, 16,082 lent, 64,258 runs held to the claims |
+| grammar 1, 1,100,001 to 1,110,000 | 0 failing seeds (seed 1103677, A3-68's, passes) |
+| `TestArea3HiddenInputFuzz` | 400 programs (96 lent) in the suite; 5,000 at seeds 2 and 3: 1,219 and 1,208 lent, 15,847 and 15,704 perturbed runs, 0 findings |
+| corpora 007 / 008 | section 5 |
+| vendoring | `python3 -I vendor.py <ghidra>` on a copy against the pinned checkout: 0001 to 0057 apply (0056 with its repaired context) and the copy's `cpp/`, `sources.cmake` and spec files are identical to the committed tree |
+
+## Area 2, round 11 review
+
+Reviewer, branch `review/2-round11-review`, on the coordinator's head `c816ec5` (patches up to 0058 in the tree). Tools, a pin, the ledger and this record only; no spec, engine or host file changed (the engine trials below were made in the working copy and reverted: every patch to `rangeutil.cc`, `ruleaction.cc`, `funcdata_op.cc` is a file in `Docs/Decompiler/tools/a2_round11/` or described here, and `git status` shows none). New ledger rows **A2-67 to A2-72**: five open P3 rows (A2-67 to A2-71, none with a wrong printed value) and A2-72, an instrument row closed here. **Nothing at P1 or P2 was found, so this round is clean: it is the first clean round after round 10's fix, and area 2's count of consecutive clean rounds is 1.** Patch 0058 held: the pull-backs are exact at 3 and 4 bytes (sampled) and the audit at 1 and 2 bytes is exhaustive; the one gap is the 8-byte shifts (A2-69).
+
+The brief asked for the rest of the engine's range machinery, the constant arithmetic of the division and comparison rules, 0058's own sweep at 4 bytes, the generator beyond the nightly range and the decode oracle at new seeds. What was found is in the range machinery, and it is real but not in the path of a printed value: the forward half of `CircleRange` (what `ValueSetSolver` computes with) is unsound at the edges of wrapped and full ranges (A2-67, A2-68), in upstream's code. What the printed value depends on, the pull-back and the meld, is exact, and the rules that fold comparisons and constants, run by value against the run on 14,400 new functions of nine families and 15,000 of ten more, and by a sweep of all 65,536 values of r4 for 420 of them, are right (section 3).
+
+### 1. What I ran
+
+Own RelWithDebInfo build under the scratch directory (`-j2`; every run under `ulimit -v 4000000` and `timeout`, one heavy job at a time).
+
+| Run | Result |
+|---|---|
+| `ctest -E SaturnExplorerLive -j2 --timeout 900` (the pin in, the harness patch applied, nothing mutated) | 93 of 93 pass (189 s) |
+| decode oracle with `SE_MEDNAFEN_SS`, seeds 424242, 8675309, 123123, 50505, 777777 (`SE_DECODE_CASES=100000` each) | 65,000,000 differential executions (13,000,000 a seed): 0 differ, 0 could not run, 0 of 130 forms fail, 18 named shapes 0 differ, 2 decode lines a seed (the headers); SLEIGH defines 53,752 words, 0 disagreements with Mednafen (the spec did not change) |
+| generator, grammar 2, `SE_GENERATED_FIRST=1400001`, 20,000 seeds (four runs of 5,000: 170, 152, 150, 178 s) | **1 failing seed, 1418819** (`n:kept-read:r10` and `r12`: a function that ends in a tail jump into the next, A3-78's shape: routed, section 7); the other 19,999 clean |
+| generator, grammar 1, `SE_GENERATED_FIRST=1400001`, 10,000 seeds (116, 118 s) | 0 failing seeds |
+| printed-C differential, `SE_GENERATED_PRINTEDC=only SE_GENERATED_FIRST=1400001`, 15,000 seeds (three runs of 5,000, 104 s each) | 18,216 functions (the seeds, the walks and the fixtures), 16,893 compared: agrees 16,997, `narrow-c` 63, `skipped:stack-address` 3, `skipped:array-local` 1, `void-return` 1,043, `void-return-lent` 109; **0 findings** |
+| new families through the printed-C differential (section 3) | 29,400 new functions (`dagen11.py` 20 to 28, 1,600 each; `dagen11b.py` 29 to 38, 1,500 each) and 12,000 of round 10's (`dagen10.py` 0 to 19, 600 each, with the byte rows): **0 findings in the engine**; A2-71 in the oracle (28 of family 24) |
+| the 16-bit sweep (`SE_GENERATED_PRINTEDC_SWEEP16=1`), 420 functions of 9 families (20, 28, 29, 30, 34 to 38) | every one of the 65,536 values of r4 for each (27.5 million values): 0 findings |
+| jump tables, `swtab11.py` | 2,700 modules (2,500 + 200): 0 failing; `negguard11.py` for A2-68 |
+| corpora hwram007.bin, hwram008.bin, `SE_GAME_LEND=1` | 839 and 1,554 functions, all ok; every ledger count 0 (0 accesses dropped against the reference run; missing and said 0 and 4, as in round 10); lending 662 (923 parameters) and 1,021 (1,287); mapping violations 0 (the 'several-instruction' counts as before) |
+| the standalone audits of sections 2 and 3 | as tabled there |
+
+### 2. The range machinery
+
+Who uses what (read from the tree, then measured):
+
+| User | Calls | Exact? |
+|---|---|---|
+| `RuleRangeMeld` | `pullBack` (usenzmask false), `intersect` / `circleUnion` of two step-1 ranges, `translate2Op` | pull-back: exact (0058). `intersect`, `circleUnion`, `translate2Op` of step-1 ranges of one mask: exact (the pin below, all 65,536 byte ranges against 3 partners each, and 12,000 random pairs of the sweep, 1 and 2 bytes) |
+| `JumpBasic::analyzeGuards` / `checkUnrolledGuard` / `calcRange` | `pullBack` (usenzmask true), `intersect` with the initial range (a step from the value's non-zero mask), `getSize`, `getNext` | pull-back exact; `intersect` with a step: A2-68; `getSize` exact (12,000 ranges of the sweep) |
+| `ValueSet::iterate` (only in `Heritage::analyzeNewLoadGuards`) | `pushForwardUnary`, `pushForwardBinary`, `circleUnion`, `minimalContainer`, `intersect` (equations) | A2-67: sound for the small, unwrapped ranges of loops and guards; not at the edges |
+| `JumpBasic2` | none of these: in this tree it is a model of its own (a MULTIEQUAL with a constant default), it does not run the solver | |
+
+**The forward sweep** (`forward_audit.cpp`, seed 1, 3,000 cases per row, ranges of 1 and 2 bytes with steps 1, 2, 4, 8, wrapped, full and single; the truth is the operation on every element of the inputs):
+
+| Row (1 and 2 bytes) | Cases | Exact | Wider than needed | **Values missing** |
+|---|---|---|---|---|
+| `COPY`, `INT_2COMP`, `INT_NEGATE` | 3,000 each | all | 0 | 0 |
+| `INT_ADD` | 3,000 / 1,460 | 2,907 / 1,405 | 93 / 55 | 0 |
+| `INT_ZEXT`, `INT_SEXT` (1 to 2) | 3,000 each (1,057 / 1,011 refused) | all answered | 0 / 508 | 0 |
+| `INT_LEFT` | 3,000 / 3,000 | 717 / 434 | 2,202 / 2,478 | **81 / 88** |
+| `INT_MULT` by a constant | 3,000 / 3,000 | 910 / 727 | 2,009 / 2,178 | **81 / 95** |
+| `INT_RIGHT` | 3,000 / 3,000 | 1,975 / 1,846 | 160 / 131 | **865 / 1,023** |
+| `INT_SRIGHT` | 3,000 / 3,000 | 2,298 / 2,266 | 491 / 600 | **211 / 134** |
+| `SUBPIECE` (2 to 1) | 3,000 | 2,517 | 128 | **355** |
+| `minimalContainer`, after `circleUnion` answered 2 | 6,308 non-full pairs / 1,856 with a full operand | 6,308 / 1,251 | 0 | 0 / **605** |
+| `getMaxInfo` | 12,000 | 10,743 | 0 | **1,257** (one bit short) |
+| `intersect` (answer 0), both steps 1 | 3,940 | 3,940 | 0 | 0 |
+| `intersect` with a step | 3,553 / 3,528 | 3,210 / 3,288 | 174 / 169 (wider: the `code 2` cases excluded) | **169 / 71** (empty or too small) |
+| `circleUnion` (answer 0), any steps | 3,859 | 3,859 | 0 | 0 |
+| `invert`, `getSize`, `contains(value)`, `translate2Op` | 12,000 / 12,000 / 12,000 / 7,237 | all | 0 | 0 |
+| `contains(CircleRange)` claimed true, steps 1 / a step | 1,215 / 940 | 1,215 / 781 | 0 | 0 / **159** |
+
+**The scratch check on real code.** `vs_check.patch` (apply to `rangeutil.cc`; `SE_VS_CHECK=1`) wraps the two push-forward calls and the MULTIEQUAL union of `ValueSet::iterate` and checks the answer against 20 sampled elements of each input (the first and last few, and random ones):
+
+| Run | Checks | Unsound |
+|---|---|---|
+| engine fixtures (`Sh2DecompilerTests`, no image) | 100,706 | 0 |
+| hwram007.bin | 2,409,720 | 60 (one phi, 0x0602CD36) |
+| hwram008.bin | 14,852,907 | 96 (two phis, 0x0606D7FA, 0x0603B582) |
+| generator, grammar 1, 3,000 seeds from 1,400,001 | 137,752 | 0 |
+| generator, grammar 2, 3,000 seeds from 1,400,001 | 5,426,817 | 0 |
+| printed-C, 3,000 seeds from 1,400,001 (walks) | 3,342,672 | 160 (the union again, and `INT_ADD` of a container that kept an unmasked bound) |
+| `loopfix11.py` (variant 0, 1 and 2) | 4,860 each | 4 each |
+
+The three phis of the images are in the stack-walking loops of function 0x0602CD36 (hwram007) and of 0x0606D7FA and 0x0603B582 (hwram008): a stride-8 or stride-4 range `[0,0x10)` step 8 meets a full input, and the container answers `[0,9)`. With `minimalContainer` repaired for a full operand (the experiment `minimalcontainer_full.experiment.patch`: a full operand makes the container full) the printed text of all 839 and 1,554 functions, and the lent texts of both, is byte for byte the same (`diff -r` empty). The union is unsound in both runs of the solver that `analyzeNewLoadGuards` makes (`WidenerNone`, which freezes every value set at its third iteration, then `WidenerFull`), and the range `LoadGuard::finalizeRange` takes from the second is the narrow one (`[-0x808,-0x7ff)`, nine bytes of a 2 KiB buffer): the guard is wrong. The text is not. `loopfix11.py` is the shape in 40 instructions, three variants (a loop that loads through the index and sums, a loop that stores through it and a direct read of a slot outside the narrow range after it, the frame addressed through r14 or through r15 itself): the check reports the same union and the final range at the load is nine bytes, and the printed text is right in all three: the 16 direct stores are kept (the stack array is address-exposed by the base of the computed pointer) and the read after the indexed store is a read of the array, not a constant. That is why the rows are P3: I could not make a printed value depend on it, and I looked. What would raise it: a stack local that is not address-exposed, a computed load or store whose narrow range excludes it, and a read of it afterwards.
+
+**The set operations** (same sweep, 6,000 pairs per width): `intersect`, `circleUnion`, `invert`, `translate2Op`, `getSize` and `contains(value)` are exact for step-1 ranges of one mask, `circleUnion` for every step; `minimalContainer` is sound for every pair of non-full ranges (6,308 after an answer of 2) and unsound only with a full operand of a different step than the other (A2-67); `intersect` with a step: A2-68.
+
+**0058's sweep at 3, 4 and 8 bytes** (`pullback4.cpp`, 20,000 cases per row, the points where the truth can change, each +-3, 20 random per case): 580,000 cases at 3 and 4 bytes (and the extensions to 4), both slots of the compares, the subtraction and the shifts, ranges of step 1, 2, 4 and 8: **0 wrong** (78,521 refused, as 0058 refuses); 300,000 at 8 bytes: **259 wrong**, 163 of them `INT_RIGHT` by 0 and 96 `INT_SRIGHT` by 63. The 8-byte rows: `INT_RIGHT` by 0 (the right bound `(mask >> 0) + 1` is 0) and `INT_SRIGHT` by 63 (a 64-bit shift by 64) answer wrongly (A2-69); no path from SH-2 code to them.
+
+**The transfer functions and the folder.** `nzmask_audit.py` cuts `PcodeOp::getNZMaskLocal`'s switch out of `op.cc` and checks it for 19 operations against every value under the masks (all pairs of masks at 1 byte, sampled at 2, 4 and 8): 10.9 billion values, none outside the mask except `INT_SRIGHT` by a constant of 64 or more (33,299 of them: the shift of `fullmask` by 64 is undefined, A2-70). `opbehavior_audit.cpp` checks every integer `OpBehavior` (the constant folder and the emulator share them): 194 rows, 14.0 million operand pairs (every pair at one byte; 100,000 and the edge pairs at 2, 4 and 8 bytes; the shifts with counts up to 2^64-1; `recoverInput`s), 0 wrong, except the host trap of `INT64_MIN` by -1 that the sweep skips (A2-70). `divopt_audit.sh` cuts `RuleDivOpt::calcDivisor` out of `ruleaction.cc` and checks each division it claims, at the multiples of the divisor and their neighbours, the ends of the range and random values: 366,647 unsigned and 189,876 signed claims in 2 million cases (seed 3), 3,667,169 more in 20 million (seed 7): 0 wrong.
+
+**The pin.** `TestRangeAlgebraRound11` (`Sh2DecompilerEngineTests.cpp`, 0.7 s) holds what is exact today: the set operations of step-1 ranges at one byte (65,536 left/right pairs, 3 partners each: `intersect`, `circleUnion`, `invert`, `translate2Op`, `getSize`, `contains`), the pull-back at 3 and 4 bytes, and the integer `OpBehavior`s. It does not hold the forward half, which is open. Mutants (one at a time, the file restored after): `intersect`'s `case 'c'` with the right bound one short (killed by `intersect` of round 11 and by round 10's pull-back through `INT_ZEXT`); `circleUnion`'s `case 'b'` with the left range's bound (killed by round 11's `circleUnion` only); `OpBehaviorIntSborrow` with `|` for `&` (killed by round 11's `INT_SBORROW` only); 0058's `INT_SUB` slot 1 reverted to the reversed range (killed by round 10's sweep, which fails first).
+
+### 3. The rules, by value
+
+The printed-C differential (`SaturnExplorerSh2GeneratedTests`, `SE_GENERATED_PRINTEDC=only`) compiles the printed text and runs it beside the emulator. Its inputs are 32 edge and random values; for this round I added to the harness (`printedc_extra_rows.patch`, environment-gated, nothing changes without the variables) three things the families need: `SE_GENERATED_PRINTEDC_EXTRA=<hex,...>` rows with r4 and r5 at the literals of the batch and their neighbours (the boundary of a comparison with a pool literal is a value the pool never held), `SE_GENERATED_PRINTEDC_BYTES=1` every byte value and its sign extension as r4 and r5, and `SE_GENERATED_PRINTEDC_SWEEP16=1` every one of the 65,536 values of r4 for a function, from compact tables (so a function that reduces r4 to a word is checked for all its inputs).
+
+The new families (`dagen11.py` 20 to 28, `dagen11b.py` 29 to 38; `run11.sh` runs a family in batches; `swtab11.py` and `runsw.sh` the jump tables):
+
+| Family | Shapes | Functions | Compared | Classes |
+|---|---|---|---|---|
+| 20 cmpbyte | a byte, word or whole register reduced, offset and shifted by immediates, compared with a literal of the right size by `cmp/eq`, `hs`, `hi`, `ge`, `gt` (either order), `pz`, `pl`, `cmp/eq #imm`; two tests in sequence; the result by `movt` or a branch over two constants; with the byte rows every byte value is r4 and r5 | 1,600 | 1,600 | agrees 1,580, `narrow-c` 20 |
+| 21 udiv | `x / d` by `dmulu.l` and shifts, with and without the add fix-up, d from 2 to 0xFFFFFFFF with the magic computed, a remainder by multiply, a compare of the quotient; the extras are the multiples of d and their neighbours | 1,600 | 1,600 | agrees 1,600 |
+| 22 sdiv | `dmuls.l`, the sign correction, negative divisors, the remainder, the compare | 1,600 | 1,600 | agrees 1,600 |
+| 23 div1 | `div0u`/`div0s` and 1 to 32 `rotcl ; div1` | 1,600 | 1,600 | agrees 1,600 |
+| 24 dmul | `dmuls.l`, `dmulu.l`, `mul.l`, `muls.w`, `mulu.w` of r4, r5 or a pool literal, mach and macl read alone and combined | 1,600 | 1,600 | agrees 1,572, **`mismatch` 28 (A2-71)** |
+| 25 shifts | chains of `shll`, `shlr`, `shar`, rotates, the 2, 8, 16 shifts; a variable shift as a counted loop | 1,600 | 1,426 | agrees 1,426, `void-return-lent` 174 |
+| 26 addcchain | `addc`, `subc`, `negc`, `addv` pairs as 64-bit add, subtract, negate and compare | 1,600 | 1,333 | agrees 1,333, `void-return` 267 |
+| 27 signtest | `cmp/pz`, abs, sign, min, max, clamp, `tst` of a mask, `x >> 31` | 1,600 | 1,600 | agrees 1,600 |
+| 28 rangetst | seven forms of `lo <= x < hi`, `x == lo \| x == hi`, `(x - lo) <u (hi - lo)`, three-way compares; byte, word, register | 1,600 | 1,600 | agrees 1,549, `narrow-c` 51 |
+| 29 udiv2 | the quotient scaled, masked, multiplied, added to x or to the remainder, compared, xored with the remainder | 1,500 | 1,500 | agrees 1,500 |
+| 30 sdiv2 | the same for the signed form | 1,500 | 1,500 | agrees 1,500 |
+| 31 divpair | two divisions of one dividend, by two constants or one | 1,500 | 1,500 | agrees 1,500 |
+| 32 divsum | `(x + y) / d`, `(x * k) / d`, `(x >> s) / d`, of a byte or a word | 1,500 | 1,500 | agrees 1,500 |
+| 33 pow2 | signed `/ 2^k`, `% 2^k` with the bias by a branch | 1,500 | 1,500 | agrees 1,500 |
+| 34 signmask | the sign by a chain of `shar`, tested for 0 / -1, masked, xored, compared (RuleTestSign) | 1,500 | 1,500 | agrees 1,500 |
+| 35 pow2b | signed `/ 2^k`, `% 2^k` with the mask by `shll ; subc` | 1,500 | 1,500 | agrees 1,500 |
+| 36 lessor | `(x > y) \| (x == y)`, `(x > y) \| (x != y)`, `(x >= y) & (x != y)` by `movt` and by branches (RuleLessEqual, RuleLessNotEqual) | 1,500 | 1,500 | agrees 1,499, `narrow-c` 1 |
+| 37 condconst | a register compared with a literal for equality, then used in the arm where it is known (ActionConditionalConst) | 1,500 | 1,500 | agrees 1,500 |
+| 38 pow2c | signed `/ 2^k`, `% 2^k` with the mask by a chain of `shar` (RuleSignNearMult) | 1,500 | 1,500 | agrees 1,500 |
+| `dagen10.py` 0 to 19 | round 10's families with the byte rows | 12,000 | 11,731 | no finding |
+
+(In the `Shapes` column the `\|` of the C shapes is a vertical bar.)
+
+Every function agrees with the run, or is `narrow-c` (the text agrees when read as the engine means it) or `void-return` of a function that returns nothing, except A2-71's 28 (the oracle). **Power of the families**, by mutating the rule and rebuilding (one mutant at a time, restored after; findings in the first N functions of the named family):
+
+| Mutant (one rule, rebuilt, restored) | Killed by (findings in the first N functions) |
+|---|---|
+| `Funcdata::replaceLessequal`: the constant moved by 2 | family 20: 47 of 300; family 28: 118 of 300 (not by families 27 or `dagen10.py` 6) |
+| `RuleDivOpt::calcDivisor`: `maxx >> 1` for `maxx` (accepts a multiply that is not a division) | family 29: 5 of 400 (families 30 and 22: 0 of 300) |
+| `RuleTestSign`: `INT_SLESS` for `INT_SLESSEQUAL` | **survived** families 27, 28, 20 and `dagen10.py` 6 and 0 (1,000 functions); family 34: 55 of 500 |
+| `CircleRange::intersect` `case 'c'`: the right bound one short | family 28: 11 of 300; `swtab11.py`: 44 of 300 (family 20: 0 of 300) |
+| `RuleSignNearMult`: the replacement multiplier doubled | **survived** families 33, 35 and 22 (900 functions); family 38: 176 of 500 |
+| `RuleLessEqual`: signed and unsigned swapped | **survived** families 28, `dagen10.py` 6 and 7 (700 functions); family 36: 33 of 500 |
+
+The families that did not kill a mutant at first (RuleTestSign, RuleSignNearMult, RuleLessEqual) did not reach the rule: the shapes were added (families 34, 38, 36) and kill them; the rules are reached by `shar`-chains, `shll ; subc` and `cmp ; movt ; or` idioms and not by the other forms of the same test.
+
+### 4. The generator beyond the nightly range
+
+Chunks of at most 5,000 seeds, each under 3 minutes, the logs in the scratch directory (`gen_range.sh` of round 10).
+
+| Run | Seeds | Result |
+|---|---|---|
+| grammar 2, `SE_GENERATED_GRAMMAR=2` | 1,400,001 to 1,420,000 | 1 failing seed, **1418819** (below) |
+| grammar 1, `SE_GENERATED_GRAMMAR=1` | 1,400,001 to 1,410,000 | 0 |
+| printed-C, `SE_GENERATED_PRINTEDC=only` | 1,400,001 to 1,415,000 | 0 findings; 18,216 functions, 16,893 compared |
+
+Seed 1418819: `[n:kept-read:r10]` and `[n:kept-read:r12]`, "a function it calls was lent a signature that changes r10, and the text reads r10 as the value it had on entry", function 0 at 0x06009014, which begins with an exit sequence (`jmp @r3` into function 2 at 0x06009068) before its own entry. It is the shape of **A3-78** (seed 1009895 of round 10, the same check on a function that ends in a tail jump into the next), which is open with the area 3 fixer; I add the seed there rather than a row (section 7).
+
+### 5. The decode oracle at new seeds
+
+`decode_seeds.sh` (round 10) with `SaturnExplorerSh2DecodeTests`, seeds 424242, 8675309, 123123, 50505 and 777777 (none used before), 100,000 cases each: for every seed the transcribed table equals Mednafen's for 65,536 words, SLEIGH and `Sh2Disasm` define 53,752 and disagree on none, and the differential execution of 130 forms (13,000,000 cases a seed, 40 to 43 s) has 0 differ, 0 could not run, 0 forms that fail and 0 of the 18 named shapes; 65 million executions in all. The spec did not change since round 10 (patches 0054 to 0058 are engine patches), so this is the second look at it by new seeds and no more.
+
+### 6. The corpora
+
+`SE_GAME_LEND=1 SE_GAME_HWRAM=<image> build/bin/SaturnExplorerSh2DecompilerTests <scratch>` on both images, before the harness patch and the tools had any part in it (the engine is the head's): 839 and 1,554 functions, 839 and 1,554 ok, 0 failed; ledger: 0 accesses dropped against the reference run, 0 and 4 missing and said (code removed as unreachable), 0 functions without a reference; mapping violations 0 in the fixtures, alone and lent (1,730 and 2,995 functions); lending 662 (923 parameters) and 1,021 (1,287 parameters), 28 and 63 withheld for a register used after a call, as in round 10; 65 of 65 injected failures reported. The texts are the ones the repaired `minimalContainer` also gives (section 2).
+
+### 7. Routed
+
+* **Grammar 2, seed 1418819** (area 3): the check `kept-read` on r10 and r12, the shape of the open row A3-78. Replay: `SE_GENERATED_GRAMMAR=2 SE_GENERATED_SEED=1418819 build/bin/SaturnExplorerSh2GeneratedTests <dir>`; shrunk (35 evaluations): `SE_GENERATED_WORDS="2F86 2F96 2FD6 2FE6 4F22 7FF0 6EF3 6843 6953 2458 8903 B00F 0009 6483 6593 D305 7E10 6FE3 4F26 6EF6 6DF6 69F6 68F6 432B 0009 0009 0600 9038 2F86 2F96 2FA6 2FC6 0C2A 6843 6953 6A63 B00A 0009 6483 6593 66A3 4C2A 6CF6 6AF6 69F6 68F6 000B 0009 2FD6 2FE6 7FF0 6EF3 62F3 7210 E103 2216 4110 8BFC E200 E0A6 7E10 6FE3 6EF6 6DF6 000B 0009" SE_GENERATED_FUNCS="0/0/32,38/38/60,60/60/84" SE_GENERATED_RETURNS="0,0,1"`. No new row: the area 3 fixer has A3-66 to A3-79 and this is A3-78's check on a second seed.
+* Nothing else for other areas: the jump-table and range findings are area 2's (A2-68 is a switch guard the engine does not fold, not a wrong table).
+
+### 8. What stays open
+
+* A2-67 to A2-71 are the fixer's. A2-67 and A2-68 want the forward half of `CircleRange` repaired where the solver can reach it (the `right = mask >> sa` +1, the sign in the overflow test of `INT_LEFT` / `INT_MULT`, the wrapped inputs of `INT_SRIGHT` and `SUBPIECE`, a full operand in `minimalContainer`, and the rounding in `newStride`); the sweep `forward_audit.cpp` is the test, and the pin `TestRangeAlgebraRound11` already holds the exact part. A2-69 wants the two 8-byte shifts refused, as 0058 refuses the others; `TestPullBackRanges` can take the 8-byte rows. A2-70 are two guards (`sa >= 64`; `INT64_MIN` by -1). A2-71 is a rule of the oracle's second reading.
+* The next review round verifies none of 0058 again (it held) and attacks what it has not: the lent signatures against the new families, and the phi of the solver's partial analysis if a store through a computed pointer can be built that depends on it.
+
+## Area 2, round 11 P3 fix
+
+Fixer, branch `review/2-round11-p3-fix`, on the coordinator's head `7300510`. One engine patch (`0059-engine-range-arithmetic-sound.patch`: `rangeutil.cc`, `op.cc`, `opbehavior.cc`), the harness, the pins and this record. **A2-67, A2-68, A2-69, A2-70 and A2-71 are fixed; none is accepted.** Area 2's P3 rows are now all closed; the count of consecutive clean rounds stays at 1 until the next review round.
+
+No text of either game image changes: the 4,299 and 7,544 files of `SE_GAME_OUT` (the 839 and 1,554 functions, and the lent texts before and after) are byte for byte the ones the head prints (section 6). The fixes are for what the solver could say about a value, not for what is printed.
+
+### 1. Patch 0059 and its rules
+
+> **A push-forward through an operation, a union or a container of two ranges holds every value the operation can produce from the elements of its inputs, in the output's mask, as a well-formed range; or it fails (`false`) or answers "everything".** A set operation that answers 0 is exactly the set operation; one that answers 2 leaves `this` as it was.
+
+The same rule as 0058's for the pull-back, for the other direction. Where a result was already sound and exact the code is unchanged, so a text that depended on it does not move.
+
+| Row | What was wrong | What it is now |
+|---|---|---|
+| A2-67 `INT_RIGHT` | `right = mask >> sa` without the +1: a full 4-byte value `>> 2` was `[0,0x3fffffff)` | a wrapped or full range is `[0, (mask >> sa) + 1)`, or the arc from `first >> sa` to `last >> sa` + 1 when the two pieces leave a gap; the shift by the width or more is `{0}` (it is a shift by `sa & 63` on x86) |
+| A2-67 `INT_LEFT`, `INT_MULT` by a constant | the overflow test counted the bits of the magnitude (`getMaxInfo`), not the sign: a byte in `[0x89,0x4e)` shifted left by 1 is every even byte, and was `[0x12,0x9c)` step 2 | upstream's test is kept (it only widens) and the span of the range, shifted or multiplied by the magnitude of the constant, must fit in one lap of the domain, else the whole stride; a full range is the whole stride; the shift by the width or more is `{0}` |
+| A2-67 `INT_SRIGHT` | `[5,1)` step 2 `s>> 0` lost 0x7f (the largest positive was `valRight - step`) | the shifted ends of the signed values: from the first to the last element if the range does not cross the largest positive, else the smallest to the largest |
+| A2-67 `SUBPIECE` | a wrapped range took the gap for its size (`[6,0)` of 4 bytes cut to 2 bytes was `[6,0)`), a full strided range lost its phase (`[3,3)` step 4 cut to a byte held 0, not 3) | the low bytes are the arc of the elements when they fit one lap of the output (the range's step kept), else the whole stride with its phase; the bytes above are the arc from the first to the last shifted element, `[0, top + 1)` when the two pieces of a wrapped range meet, and everything when the high bits are cut as well |
+| A2-67 `getMaxInfo` | a negative power of two was one short (`[0xc0,2)` is 7 bits, it answered 6; -1 answered 0); and `contains(halfPoint)` fails a stride of the other phase (`[1,0xc1)` step 2 holds 0x81 and answered 6) | the information of a negative bound is that of `~bound + 1`; a range that passes the half point (whatever its stride) is the full width |
+| A2-67 `minimalContainer` | a full operand was read as the empty `[0,0)` of step 1: `[0,0x10)` step 8 and full was `[0,9)`; the bound `right - step + 1` was not masked | a full operand (or two masks) is everything; the bounds are masked; an empty operand returns the other |
+| A2-67 `contains(CircleRange)` | `[0,0)` step 2 (the evens) held the single value 3 | the phase is checked before "this is full" |
+| A2-68 `intersect`, `newStride` | `newStride` rounded both bounds of a range up to the phase of a bigger step and took the set as empty when their order changed: also when a bound rounds past the top of the mask (`[0x39,1)` step 4 with `[0x73,0xff)`: 0x75, 0x79 ... 0xfd are in both) or the range wraps | the bounds are rounded as integers; a bound past the top is the phase's first value (the range then runs to the top), the two pieces of a wrapped range are read apart; the result is exactly the elements of the phase, or all of the phase, or empty. Two strides of one step and different phases share nothing |
+| A2-69 `pullBackBinary` | `INT_RIGHT` by 0 at 8 bytes: `(mask >> 0) + 1` is 0 in a `uintb`, so `[0x10000,0x1000000)` pulled back to empty. `INT_SRIGHT` by 63 shifted a 64-bit value by 64 (a shift by 0 on x86), so `[0xffffff,0x4000000000000000)` pulled back to the negative values | the bound `2^64` is not representable and nothing reaches it (the range is its own pull-back); the shift by 64 is 0 |
+| A2-70 `getNZMaskLocal` | `INT_SRIGHT` by 64 or more: `(fullmask >> sa) ^ fullmask` is a shift by `sa & 63`, so a value that may be negative shifted by 64 was given the mask of a zero | `pcode_right(fullmask, sa)`, and the amount saturates at 64 instead of truncating to an `int4` |
+| A2-70 `OpBehaviorIntSdiv`, `OpBehaviorIntSrem` | `INT64_MIN` by -1 raised SIGFPE in the host | the quotient is the value, the remainder 0 |
+
+`getMaxInfo` is read only by the overflow test of `INT_LEFT` and `INT_MULT`. `ValueSet::iterate` is the only caller of the push-forward, `circleUnion` and `minimalContainer` (`Heritage::analyzeNewLoadGuards` the only user of the answers); `intersect` with a step is also reached by `JumpBasic::calcRange` and `CircleRange::pullBack(usenzmask)`.
+
+**What A2-68 did to the switch guard.** The reviewer's `negguard11.py -2` (`mov #-2,r1 ; cmp/ge r1,r0` on a scaled index) kept `if (-3 < param_1 * 4) { switch(param_1 * 4) ...` because the guard's range was empty after the intersection with the stride of the value. With the repair the guard folds into the switch for every bound from -1 to -8 (`switch(param_1 * 4)` alone), and the text agrees with the run for twelve values of r4 including the negatives and the sign boundary (`TestArea2Round11Fix`, `Sh2DecompilerTests`). That is the one text that changes with the patch, and it is the fixture the reviewer made; no function of either image reaches it.
+
+**A2-67 on real code.** `vs_check.patch` (the scratch check of every push-forward and union in `ValueSet::iterate` against sampled elements of its inputs), applied again to the fixed tree:
+
+| Run | Checks | Unsound, before | Unsound, now |
+|---|---|---|---|
+| hwram007.bin | 768,856 | 60 (one phi, 0x0602CD36) | **0** |
+| hwram008.bin | 4,229,656 | 96 (two phis, 0x0606D7FA and 0x0603B582) | **0** |
+| printed-C, 3,000 seeds from 1,400,001 (the walks) | 3,287,466 | 160 | **0** |
+| `loopfix11.py` variants 0, 1 and 2 | 2,762 each | 4 each | **0**; the range read at the load (`VSREAD`) is full, it was nine bytes of a 2 KiB buffer |
+
+(The totals are smaller than the reviewer's: the sets that were narrow and wrong are full now, and a full set has fewer elements to sample.)
+
+**What was not changed.** The `int4` truncation of the shift amount in the `INT_LEFT` and `INT_RIGHT` cases of `getNZMaskLocal` (a constant of 2^31 or more would shift by a negative amount in the host): the masks that result are supersets of the true ones for 2^31 to 2^32-1 only by accident of the value, and no SLEIGH of the spec shifts by a constant that large; it is the same class as A2-70 and is noted here, not fixed.
+
+### 2. The pins
+
+* `TestForwardRangesRound11` (`SaturnExplorerSh2DecompilerEngineTests`, 9 s): every operation of section 1 against the elements of its inputs. **One byte is exhaustive**: every range of step 1, 2, 4 and 8 (123,000 of them, wrapped, full and single among them) against `COPY`, `INT_2COMP`, `INT_NEGATE`, `INT_ZEXT`, `INT_SEXT`, the shifts by 0 to 4, 7 to 9 and 64, the products by 13 constants (either side), and sums with partners; then `intersect`, `circleUnion` and `minimalContainer` against fixed and random partners with the sets as 256 bits (the answer 0 of `intersect` and `circleUnion` is exactly the set operation; the container holds both and is everything when it says so), `contains(CircleRange)` and `getMaxInfo`. **Two bytes** are every pairing of about fifty edge values (the sign boundaries, the ends, the low byte's edges) at four steps, and 1,500 random ranges; **four and eight** the edge values of the size and 1,500 random ones, with the elements at both ends of each range and 80 random ones; SUBPIECE for every input size 2, 4, 8, every output size and every offset including the size itself. The 16-bit space is 2^32 ranges: it is not exhaustive, and the record says so. 7.8 million push-forwards and 895,000 range pairs are checked; the answer is allowed to be `false`, and 127,637 of the push-forwards are.
+* `TestRangeAlgebraRound11`: the pull-back sweep now also runs at 8 bytes (shift amounts 0, 1, 2, 8n-2, 8n-1, 8n, 8n+1), and the integer `OpBehavior` sweep no longer skips `INT64_MIN` by -1.
+* `TestNzMaskShiftRound11`: 980 `INT_SRIGHT` ops built in a `Funcdata` (1, 2, 4 and 8 bytes, seven values, amounts up to 2^64-1 in 4 and 8-byte constants): the non-zero mask holds the shifted value and nothing outside the size.
+* `TestArea2Round11Fix` (`Sh2DecompilerTests`): the switch guard of A2-68, bounds -1 to -8.
+* A2-71: three CHECKs on `NegativeWideLiteralsTyped` in `Sh2GeneratedTests`.
+
+The reviewer's own instruments, run on the fixed tree: `forward_audit.cpp` seeds 1 (3,000 a row), 7 and 99 (20,000): 0 unsound or malformed, `intersect` exact in every pair it answers (3,630 and 3,510 strided pairs of seed 1); `pullback4.cpp` seeds 1 and 5, 20,000 a row at 3, 4 and 8 bytes: 0 wrong; `opbehavior_audit.cpp`: 0 wrong.
+
+### 3. The oracle (A2-71)
+
+The engine's reading of a text (`CxxHeader`, C++ classes that do the arithmetic at their own width) read `-0x80000000` as C does: an `unsigned int`, negated. The engine prints the 8-byte constant -2^31 that way (and every 8-byte constant down to -0xffffffff), so `dmuls.l` by the literal 0x80000000 was the product by +2^31 and the verdict `mismatch` where the text agrees with the run. `NegativeWideLiteralsTyped` writes a negative literal of eight hex digits with the first at least 8 (no suffix) as a `long long` in that reading only; at four bytes the class takes the same low four bytes, so nothing read at four bytes moves. The row's words are now `narrow-c`; `dagen11.py` family 24, all 1,600 functions with the byte rows: agrees 1,572, `narrow-c` 28, `mismatch` 0 (28 before). `printedc_extra_rows.patch` is applied (environment-gated: `SE_GENERATED_PRINTEDC_EXTRA`, `_BYTES`, `_SWEEP16`; nothing changes without them), so `run11.sh` works on the tree as it is.
+
+### 4. Vendoring
+
+`patches/0059-engine-range-arithmetic-sound.patch` is the diff of `rangeutil.cc`, `op.cc` and `opbehavior.cc` (a header line each). `python3 -I vendor.py <pinned Ghidra checkout>` on a copy of the vendored directory: exit status 0, the "vendored 84 library sources, 3 compiler sources, 94 headers, 5 spec files" line, all 53 patches applied; `cpp/`, `processors/` and `sources.cmake` identical to the committed ones (`diff -r` empty). `patches/README.md` and `VENDOR.md` have the row and the pin.
+
+### 5. Mutation table
+
+Each fix reverted alone in the vendored source (the pin fails; the engine tests rebuilt for every mutant):
+
+| Mutant | Pin that fails |
+|---|---|
+| `INT_RIGHT` push-forward: wrapped/full `right` without the +1 | `TestForwardRangesRound11`: 84,597 checks (`INT_RIGHT` misses the top value) |
+| `INT_LEFT`: the lap test removed (upstream's bit count alone) | `TestForwardRangesRound11`: 19,625 (`[0x89,0x4e)` << 1 and the like) |
+| `INT_MULT`: the lap test removed | `TestForwardRangesRound11`: 688 |
+| `INT_SRIGHT`: the largest positive off by one in the crossing case | `TestForwardRangesRound11`: 55,226 |
+| `SUBPIECE`: the phase of a full strided range dropped | `TestForwardRangesRound11`: 944 |
+| `SUBPIECE`: the gap of a wrapped range taken for its size | `TestForwardRangesRound11`: 3,178 |
+| `getMaxInfo`: the magnitude of a negative bound without the +1 | `TestForwardRangesRound11`: 1,112 (`getMaxInfo` short) |
+| `getMaxInfo`: `contains(halfPoint)` for the half-point test | `TestForwardRangesRound11`: 7,131 |
+| `minimalContainer`: a full operand not everything | `TestForwardRangesRound11`: 55,291 (the container misses values) |
+| `minimalContainer`: the bounds not masked | `TestForwardRangesRound11`: 8,012 |
+| `contains(CircleRange)`: the phase checked after "this is full" | `TestForwardRangesRound11`: 4,288 (`contains(range)`) |
+| `newStride` as upstream's (A2-68) | `TestForwardRangesRound11`: 12,209 (`intersect` differs from the set); `TestArea2Round11Fix`: 3 (bounds -1, -2, -3 keep the guard round the switch) |
+| `intersect`: two strides of one step and other phases intersected as intervals | `TestForwardRangesRound11`: 48,120 |
+| pull-back `INT_RIGHT` by 0 at 8 bytes: the bound not tested (A2-69) | `TestRangeAlgebraRound11`: 138 (the 8-byte pull-back sweep) |
+| pull-back `INT_SRIGHT` by 63 at 8 bytes: `rightb >> 64` (A2-69) | `TestRangeAlgebraRound11`: 98 |
+| `getNZMaskLocal`: `(fullmask >> sa)` for the sign's fill (A2-70) | `TestNzMaskShiftRound11`: 247 (the printed `non-zero mask of N-byte X s>> A is M, the result is R`) |
+| `OpBehaviorIntSdiv`: the `-1` guard removed (A2-70) | `TestRangeAlgebraRound11`: the process ends with SIGFPE (exit 136) |
+| `OpBehaviorIntSrem`: the `-1` guard removed (A2-70) | `TestRangeAlgebraRound11`: SIGFPE (exit 136) |
+| A2-71: `NegativeWideLiteralsTyped` returns its text (the harness) | `Sh2GeneratedTests`: 2 CHECKs on the function, and the row's words go back to `mismatch (f0 r4=00000000 r5=80000001 ... run=BFFFFFFF:80000000 pseudo=40000000:00000000)` |
+
+### 6. The matrix
+
+Own RelWithDebInfo build under the scratch directory (2.5 GB, `-j2`, every run under `ulimit -v 4000000` and `timeout`, one heavy job at a time).
+
+| Run | Result |
+|---|---|
+| `ctest -E SaturnExplorerLive -j2 --timeout 900` | 93 of 93 pass (153 s) |
+| `SaturnExplorerDecompilerFaultTests` | 0 of 94 jobs fail (81.6 s); no MOVED pin |
+| generator, `SE_GENERATED_SEEDS=3000 SE_GENERATED_GRAMMAR=2` | 0 failing seeds (107 s) |
+| generator, `SE_GENERATED_GRAMMAR=1 SE_GENERATED_SEEDS=1000` | 0 failing seeds (34 s) |
+| `SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000` | 0 findings; 3,703 functions, 3,424 compared, agrees 3,443, `narrow-c` 9, `void-return` 227, `void-return-lent` 24 (64 s) |
+| `SE_GENERATED_SEEDS=20000` (four runs of 5,000 from seeds 1, 5,001, 10,001, 15,001) | 0 failing seeds in all (151, 149, 150, 120 s) |
+| decode oracle, `SE_MEDNAFEN_SS`, the default seed and seeds 424242 and 8675309 (100,000 cases = 13,000,000 differential executions each) | 0 differ, 0 could not run, 0 of 130 forms fail, 18 named shapes 0 differ; SLEIGH and `Sh2Disasm` 53,752 words defined, 0 disagreements with Mednafen |
+| corpora hwram007.bin, hwram008.bin, `SE_GAME_LEND=1` | every ledger count 0; missing and said 0 and 4; lending 680 (958 parameters) and 1,071 (1,314); mapping violations 0 (the 'on another line' count 4 for the lent ones, as before); 1,730 and 2,995 functions all ok |
+| **the corpora texts** | `SE_GAME_OUT` of the fixed build against the head's (built from the three unpatched files): **4,299 and 7,544 files, byte for byte identical** (`diff -rq` empty). Nothing to read. |
+| printed-C families | `dagen11.py` family 24 (1,600 functions, byte rows): 0 `mismatch`, `narrow-c` 28 (A2-71 closed) |
+| the reviewer's instruments | section 2 |
+
+### 7. What stays open
+
+* The next review round verifies this one. The two things it has not seen: `TestForwardRangesRound11` samples the 16-bit space (it is not exhaustive: 2^32 ranges), and the 4 and 8-byte rows are sampled.
+* The `int4` truncation of the shift amount in `getNZMaskLocal` for `INT_LEFT` and `INT_RIGHT` (section 1, 'what was not changed').
+* `TestPullBackRanges` takes 26 s of the engine tests' 36 (it did before this round); the new push-forward pin adds 9 s.
+
+## A3-78 and A3-80
+
+Fixer, branch `review/3-a378-a380-fix`, on the coordinator's head `e9ac42e`. Code commits `0957777` to `78b4d44` (the last re-pins the fault matrix), then this record. **A3-80 is fixed by engine patch 0060** (renumbered from 0059 at the coordinator's word: 0059 is the area 2 P3 fixer's) and **raised to P1**: the same cause with no call between is lent with a wrong value. **A3-78 is an oracle false positive, P3** (set down from the provisional P2), fixed in the oracle, with a second instance the coordinator routed (seed 1418819). **A3-81** (new, P3, performance): the coordinator's timing of `TestGameCode`, measured, profiled and fixed in the host. Own RelWithDebInfo build under the scratch directory, `-j2`, every run under `ulimit -v 4000000`.
+
+### 1. A3-80: the cause
+
+The row's fixture (A3-72 part b): `sts.l pr,@-r15 ; add #-24,r15 ; mov r15,r2 ; add #16,r2 ; mov #5,r0 ; mov.l r0,@r15 ; mov.l r2,@(16,r15) ; jsr g ; mov.l @(16,r15),r2 ; mov #4,r1 ; L: mov.l r1,@-r2 ; dt r1 ; bf L ; mov.l @r15,r0`. The walk writes r15 + 12, + 8, + 4 and r15 + 0 last, with 1; the text printed `return 5;`. Reproduced at the head with g lent and not lent (withheld both ways). Two parts of the engine did not see the read-back pointer as a pointer into the frame:
+
+- **The alias boundary** (`AliasChecker::gatherInternal`). Patch 0056 asks `stepsDown` of each MULTIEQUAL that reads a gathered base (`gatherAdditiveBase`'s records). Once the stack is heritaged the spill is a `COPY` into the local, a call between puts an INDIRECT on that local, and the read back is a `COPY` out of it into r2; the loop's MULTIEQUAL reads that copy. `gatherAdditiveBase` follows copies but stops at the INDIRECT (a use that is no addition), so the base whose descendants were asked was the local before the call, which no MULTIEQUAL reads. The boundary stayed at the base and the locals below it were unaliased.
+- **The STORE** (`Heritage::protectFreeStores`). A STORE is guarded for the stack (INDIRECTs for the stack's locals at it) when `discoverIndexedStackPointers` reaches its pointer from the entry r15, or, while the stack is not yet heritaged, when its pointer leads back to a free stack word along copies and constant additions. The loop's pointer leads back to the loop's MULTIEQUAL and stopped there, and the forward walk from r15 cannot pass a local that is not yet heritaged. So the walk's stores were taken for no stores to the stack at all, whatever the aliasing said.
+
+**With no call between, the same function is lent.** `add #-24,r15 ; mov r15,r2 ; add #16,r2 ; mov #5,r0 ; mov.l r0,@r15 ; mov.l r2,@(16,r15) ; mov.l @(16,r15),r2 ; mov #4,r1 ; L: mov.l r1,@-r2 ; dt r1 ; bf L ; mov.l @r15,r0 ; add #24,r15 ; rts` (the reviewer's control kept the pointer in the local every pass, which the engine resolves; this one reads it back once) prints `return 5;` and is lent `int4 f(void)`; the code returns 1. The alias part held there (the copies are all `gatherAdditiveBase` follows), and the STORE part alone hid the walk. That is A3-65's P1 standard, a wrong value in a lent signature with no note, so the row is raised to P1. The byte walk (`mov.b r1,@-r3` from a pointer read back into another register) is the same.
+
+### 2. A3-80: the fix, patch 0060
+
+`0060-engine-stack-walk-down-spilled.patch` amends 0056 and 0057, in `varmap.cc`/`.hh` and `heritage.cc`.
+
+1. `AliasChecker::reachesStepDown(base)`: the base is followed forward through copies, additions (`INT_ADD`, `INT_SUB`, `PTRADD`, `PTRSUB` of the pointer), joins and INDIRECTs (their input 0), and `stepsDown` is asked of every MULTIEQUAL reached. A pointer read back after a call that may have rewritten the local is taken to be the one written: the fail-closed reading the row asks for, and the only addresses the call could have put there are one it was handed or one of its own frame, below ours, which the same reach covers. A walk that grows past 1,024 varnodes is taken to step down.
+2. `Heritage::protectFreeStores`: a STORE's pointer is traced back through MULTIEQUALs (every input) and INDIRECTs as well. A STORE marked this way is marked "even though we're not sure", as upstream's own are, and `reprocessFreeStores` unmarks it and removes its INDIRECTs when the full pass then finds no stack pointer behind it: the mark costs no precision. A trace past 256 varnodes marks the STORE, for the same full pass to settle.
+
+The texts with the patch (`Sh2DecompilerTests.cpp`, `TestArea3Round10Fix`, `a3_80a` to `a3_80i`):
+
+| Fixture | Head | Fixed |
+|---|---|---|
+| across a lent call; an unlent call (a, b) | `return 5;`, withheld | `xStack_1c = 5;` ... `return xStack_1c;`, withheld |
+| through the frame pointer r14, unlent call (c) | `return 5;` | `return xStack_20;` |
+| by bytes, lent call (d) | `return 5;` | `return (int4)cStack_1c;` |
+| two calls between (e); moved down a slot after the read back (f); copied into a second local and read back from it (g) | `return 5;` | `return xStack_1c;` |
+| no call, longwords (h); no call, bytes (i) | `return 5;`, **lent** | `return xStack_18;`, `return (int4)cStack_18;`, lent |
+| control: walked up after the read back | `return xStack_10;` | the same |
+
+### 3. A3-80: the generator draws it
+
+`GenSpillWalkFn` (`Sh2GeneratedTests.cpp`), in the printed-C mode, on a stream of its own (`seed * 3266489917 + 0xA380`), one seed in five, after every other case: a frame of 8 to 20 bytes, the slot read back written first with a constant (101 to 127, or a negative byte: never a value the walk stores), a copy of r15 + N stored to a longword of the frame, half the time a call to a leaf that does nothing (`bsr`, PR saved), the pointer read back, a quarter of the time moved down a slot, walked down a counted number of slots at the width of the slot (1, 2 or 4) storing the counter or a constant stepped each pass, the slot read into r0. The slot read back is one the walk writes three times in four; the fourth is a control. The function reads no input, so its run is one value. The printed-C harness cannot run these texts (a pointer kept in memory is 8 bytes on the host), so `CheckSpillWalks` checks what it can: every constant the text returns against the run's r0 (`stale-constant`); a text that returns a local is counted (`spill:local`). `SE_GENERATED_PRINTEDC_SPILL=0` leaves them out, `SE_GENERATED_SPILL_WORDS` replays one. `TestA365Pins` holds that both forms (call, no call), every width, the lowered pointer and the control are drawn in the first 400 seeds.
+
+**The head's engine fails it:** over the default 300 seeds, 52 spill functions, of which the head's engine (patch 0060 reverted) returns the stale constant in 40; the fixed engine in none (47 return the local, 5 controls return the right constant). Over 3,000 seeds, 563 spill functions, 0 stale (539 local, 24 agree).
+
+### 4. A3-81: the cost of the round 10 fix, measured and fixed
+
+`TestGameCode` alone (a driver that runs only it, so the suite's other tests do not count), image 007 then 008, three rounds, the heads alternating within each round, on the shared machine (load 1.3 to 3.1, the other agent's builds included):
+
+| | c816ec5 | e9ac42e | fixed | e9ac42e / c816ec5 | fixed / c816ec5 |
+|---|---|---|---|---|---|
+| 007, ms (median of 8,928, 8,588, 8,825 / 20,941, 20,443, 20,719 / 9,931, 10,034, 10,101) | 8,825 | 20,719 | 10,034 | 2.35 | 1.14 |
+| 008 (26,265, 27,116, 26,517 / 56,447, 54,985, 55,998 / 33,455, 33,671, 33,648) | 26,517 | 55,998 | 33,648 | 2.11 | 1.27 |
+| worst function, 007 | 0601A0C8, 246-261 ms | 06016142, 379-455 ms | 06016142, 245-254 ms | | |
+| worst function, 008 | 0604F422, 3,351-3,501 ms | 0604F422, 3,499-3,660 ms | 0604F422, 3,261-3,612 ms | | |
+
+An earlier round of the same comparison gave 9,088 / 21,246 and 27,566 / 59,823 ms (2.34 and 2.17).
+
+**Where the time went.** The slowdown is not in the worst function. 0604F422 costs the same on both heads: under callgrind, half of it is the engine's jump-table recovery (`Funcdata::recoverJumpTable`, 4.2 of 8.5 billion instructions at c816ec5, the same count at e9ac42e), and the return check is 7 % at c816ec5 and 21 % at e9ac42e (14 % the callee walk); it is nowhere near the 10 s budget. The cost is spread: per function, 339 of image 007's 839 functions took more than 1.5 times as long at e9ac42e, small ones most (0600ADBE 5.7 to 230.9 ms, 06005182 6.2 to 222.4 ms). Under callgrind 0600ADBE spends 95 % in `ReturnCheck::CalleeFrameWrites` (1.16 of 1.22 billion instructions): counted with the walk instrumented, 177 walks of callees to depth 8 (the limit), about 8,400 instructions interpreted in all of them, not one of which wrote the caller's frame. Three quarters of the instructions were `malloc` and `free`: `ReturnCheck::Step` copied the whole interpreter state (the map of registers and temporaries, the map of stack slots) for every p-code op, twice (into the op's slot and out of it), so an instruction of ten ops copied it twenty times. The fail-closed interpreter of round 10 is not the cost; the transitive walk multiplied how much of this interpreter runs.
+
+**The fix** (`Sh2Decompiler.cpp`, host only):
+
+- `Step` moves the state through an instruction's p-code when the instruction's branches go only forward (all but a few): each op is then reached once, from the ops before it, which the work set (lowest first) has run, so the state at an op is final when it is taken. The state an op falls through with is moved as well. A p-code loop back keeps the copies.
+- The state an instruction hands on drops its temporaries (the unique space, which lives within one instruction's p-code, a delay slot's included).
+- The callee walks are shared by the probes of one request (`ShareWalks`: the frame-escape probe and `WithholdReason`'s check, in every printing pass): a walk depends only on the callee's code in the capture and the lent signatures, which no pass of a request changes. Each probe keeps its own budget; a result is reused as it was found.
+
+0600ADBE: 230.9 ms, 162 ms with the sharing alone, 70 ms with the moves (callgrind: 1.22 billion instructions to 0.32 billion). Lending, every text and every count are unchanged: **no output file of either image differs** between the head, patch 0060 alone and the fixed tree (4,299 and 7,544 files). Severity P3 (above 1.5 times, no function near the budget), fixed: 1.14 and 1.27 times c816ec5. The cost left is the walk itself, which round 10 added on purpose.
+
+### 5. A3-78: an oracle false positive
+
+Reproduced at the head: `SE_GENERATED_GRAMMAR=2 SE_GENERATED_SEED=1009895` gives `n:kept-read:r10` on function 0. Shrunk: function 0 pushes r8, r9, r10 and r12, keeps PR in r12, calls function 1 (lent; its signature changes r10), restores and tail-jumps (`jmp @r1`) into function 2, which allocates 12 bytes and reads `mov.w @r15,r1`: the halfword at function 0's entry r15 - 12, where r10 was pushed. The text:
+
+```
+iStack_c = (int2)((uint4)unaff_r10 >> 0x10);
+func_0x06009034(param_1,param_2,param_3);
+if (((int4)iStack_c & extraout_r8) == 0) {
+```
+
+That is right: the push reads r10 before the call, and the read after it is of the local. Check 12 (A3-3) drops a save of a register into a stack local before the first call (A3-65's `SavesBeforeCallsDropped`) only when the save is the whole register (`xStack_c = unaff_r13;`); here the engine shows only the half that is read later. So not A3-52's run-on class as such: the reads of function 2, which the body holds, were already taken (A3-52's fix); it is A3-65's save rule, one form short.
+
+**The second instance**, grammar 2 seed 1418819 (the area 2 round 11 review, routed by the coordinator: `kept-read` on r10 and r12). Function 0 calls function 1 on one path (`bt` over a `bsr`) and then tail-jumps into it; function 1's pushes of r10 and r12 run on in function 0's text after the branch. The engine joins the entry value and the call's output under one name, so the text has, in the branch, `unaff_r10 = extraout_r10; unaff_r12 = extraout_r12;` after the call, and after the branch `*(xunknown4 *)(pxVar6 + 0x18) = unaff_r10;`: the entry value on the path without the call, the call's output on the other. Right as well.
+
+**Fixed in the oracle** (`SavesBeforeCallsDropped`):
+
+- a save of a register shown in part (casts, a right shift by a constant and their parentheses around `unaff_rN`) before the first call is the same save;
+- after a call, `unaff_rN = <value>;` in the call's own block (no brace between them), outside every loop, when no earlier call had left the entry value stale, and not computed from `unaff_rN` itself, gives the variable the call's output: a read of `unaff_rN` after it, outside loops and before the next call, is a read of that value. The text's order is followed, so only outside loops (the text's order is not the code's there) and in a text with no `goto`.
+
+Pins (`TestA365Pins`): both seeds and their shrunk modules, no finding; on `SavesBeforeCallsDropped`, the save in part before a call (two forms), the same after a call, combined with an addition, and followed by a read of the register; the reassignment in the call's block, in an else block, after an earlier call, from itself, read in a loop after it, and read after a second call. Severity P3: the check reported a right text; no engine or host output was wrong.
+
+### 6. The mutation table
+
+Each part reverted alone in the fixed tree, the decompiler suite, the generator's default run (its pins) and the printed-C mode's default 300 seeds rebuilt and run (`mut.py` in the scratch directory). Counts are the CHECKs that fail.
+
+| Reverted | Fails |
+|---|---|
+| M1 the whole of patch 0060 (the head's `heritage.cc`, `varmap.cc`, `varmap.hh`) | 9 (`a3_80a` to `a3_80i`; the control passes); printed-C: 40 `stale-constant` of 52 spill walks |
+| M2 part 1, `reachesStepDown` (the head's look at the base's own MULTIEQUALs) | 7 (`a3_80a` to `a3_80g`: every one with a call); 17 `stale-constant` |
+| M3 part 2, `protectFreeStores` (the head's `heritage.cc`) | 2 (`a3_80h`, `a3_80i`: no call, lent); 23 `stale-constant` |
+| M4 `reachesStepDown` does not follow INDIRECTs | 7 (as M2); 17 `stale-constant` |
+| M5 a save shown in part is no save (A3-78) | 4 (seed 1009895 and its module; the two saves in part) |
+| M6 no reassignment after a call (A3-78) | 3 (seed 1418819 and its module; the reassignment in the call's block) |
+| M7 a reassignment in another block counts | 1 (the else block) |
+| M8 a reassignment after an earlier call counts | 1 (the earlier call) |
+| M9 reads inside a loop are excused | 1 (the read in a loop after the reassignment) |
+| M10 the spill walk not drawn | 8 (the draws pin: every form) |
+| A3-81's three changes | none: they are timing, measured in section 4 (no output file of either image changes); a timing pin would be the machine's load, not the code's |
+
+### 7. The matrix, on the fixed tree (code `78b4d44`)
+
+| Run | Result |
+|---|---|
+| `ctest -E SaturnExplorerLive -j2 --timeout 900` (93 tests) | 93 of 93 pass (147 s). The first run failed the fault suite on eight MOVED pins (below) |
+| `SaturnExplorerDecompilerFaultTests` | 0 of 94 jobs failed (78 s) after the re-pin. Patch 0060's walk allocates in the alias gather (`reachesStepDown`'s set and vector) and the request's walk cache in the host: fixture1's `FuncProto::copy` (both passes) moved from the 64-byte allocation 61 to 62; stack's `VarnodeBank::setDef` 89 to 104, `VarnodeBank::makeFree` 37 to 43, `MapState::addRange` 29 to 35, `ScopeInternal::renameSymbol` 108 to 129, `ScopeInternal::addSymbolInternal` 42 to 53, `Scope::addMapPoint` 30 to 36, as the matrix printed them |
+| `SE_GENERATED_SEEDS=3000 SE_GENERATED_GRAMMAR=2` | 0 failing seeds, 0 findings; 4,245 lent, 17,750 runs held to the claims, canary 240 programs, 0 failing (the round 10 fix's counts) |
+| `SE_GENERATED_GRAMMAR=1 SE_GENERATED_SEEDS=1000` | 0 failing seeds |
+| `SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000` | passed: 3,703 functions, 3,424 compared, agrees 3,443, `narrow-c` 9, `void-return` 227, `void-return-lent` 24; spill walks 563, 0 stale (539 local, 24 agree). The other cases count as at the head (`e9ac42e`'s generator over the same 3,000 seeds: the same five numbers) |
+| `SE_GENERATED_SEEDS=20000` | 0 failing seeds, 16,082 lent, 64,258 runs held to the claims (the round 10 fix's counts) |
+| grammar 2, 1,000,001 to 1,020,000 (four pieces of 5,000) | 0 failing seeds, 0 findings in each piece; 28,698 lent (7,232, 7,302, 7,142, 7,022). A3-78's seed 1009895 is in the range |
+| `TestArea3HiddenInputFuzz` | 400 programs in the suite; 5,000 at the new seeds 4 and 5 (`SE_A3FUZZ_PROGRAMS=5000 SE_A3FUZZ_SEED=4`, `=5`): 1,171 and 1,187 lent, 15,223 and 15,431 perturbed runs, 0 findings |
+| corpora 007 / 008 with `SE_GAME_LEND=1` | section 8 |
+| vendoring | `python3 -I vendor.py <ghidra>` in a scratch copy of `ghidra-decompiler` against the pinned checkout: exit status 0, its `vendored 84 library sources, 3 compiler sources, 94 headers, 5 spec files; patches: 0001 ... 0058, 0060` line printed, and the copy's `cpp/`, `sources.cmake` and `processors/` are identical to the committed tree (`diff -r`) |
+
+### 8. The corpora
+
+Both images, `SE_GAME_HWRAM=<img> SE_GAME_LEND=1` with `SE_GAME_OUT`, the head `e9ac42e` built beside, every output file compared: **no file differs** in either image (4,299 and 7,544 files: each function alone, and the lending run's before and after), with patch 0060 alone or with the A3-81 changes. So no game function keeps a frame address in a stack local and walks it down after reading it back; and the A3-81 changes are timing only.
+
+| | 007 | 008 |
+|---|---|---|
+| lent (parameters), unlent / lent run | 655 (901) / 680 (958), as the head | 1,041 (1,253) / 1,071 (1,314), as the head |
+| ledger counts | 0 dropped, 0 missing and said | 0 dropped, 4 missing and said |
+| mapping oracle, every violation count (alone, lent) | 0 | 0 |
+| functions alone; lending run | 839 of 839 ok; 1,730 ok | 1,554 of 1,554 ok; 2,995 ok |
+| texts that differ | none | none |
+
+### 9. Not done
+
+- A frame address kept in memory that is not a stack local (a global, or a word reached through another pointer) and read back is not followed: the engine takes a pointer read from memory to reach no local, as upstream does, and no fixture or seed shows it.
+- `CheckSpillWalks` compares constant returns only: the fixed engine's `return xStack_1c;` is counted, not evaluated (the evaluator has no loops, the printed-C harness cannot run a pointer kept in memory).
+- A3-79 (P3, the raw stack register for a walk from unmapped storage) is unchanged by patch 0060.
+- The Live tests and the sanitizer job were not run (shared socket path; CI).
+
+## Area 3, round 11 review
+
+Reviewer, branch `review/3-round11-review`, on the coordinator's head `1b364f7` (patches up to 0060 in the tree). Findings only, no fixes: the code changes are none; the repository gets tools (`Docs/Decompiler/tools/a3_round11/`), the ledger rows, a suite function of controls that pass (`TestArea3Round11`, below) and this record. New ledger rows **A3-82, A3-83, A3-84, A3-85, A3-88 (P1)** and **A3-86, A3-87 (P2)**; A3-79 (open P3) is raised by A3-87. The generator beyond the nightly range finds nothing new for another area (below), so nothing is routed.
+
+**The round is not clean: five rows at P1 and two at P2.** Area 3 has no clean round yet and the count of consecutive clean rounds stays 0. Every row is a wrong value or a wrong text with no note, in a lent function for the P1 rows, and every one comes from the same two facts: the claims and the walks the round 10 and round 11 fixes added (`storesBelow`, patch 0060's follow set) are tracked by exact arithmetic on a pointer, and any other way to the same pointer loses them -- the interpreter's own principle of round 10, fail closed, was not applied to them. What the round found is in the places the brief named for patch 0060 (a pointer through a global, through halves), at its edges (a callee that hands the pointer on, a pointer chosen between a frame address and another one), and in the callee's side of A3-71. Check 12's new excuses, the state move of A3-81 and its shared walks, the 1,024-varnode cap and the rule's remaining exceptions held (below).
+
+### 1. Instruments
+
+- **The fixture driver** (`bdrv.sh`, `drvmain.inc`, `asm.py`, `mk.py`, `sum.py`, the fixtures `*.src`): the suite's own `Sh2DecompilerTests.cpp` with `main` renamed, `RunMachine::Poke` added and `drvmain.inc` appended; a text spec of words at addresses, callees decompiled and lent first, the code run on the emulator for each `args` line (registers and, new, words of memory by `M<address>=<value>`), and `PseudoEval` against the run. `rowsfix.src` holds every fixture of the new rows (`OUT=<dir> sh run.sh rowsfix.src`).
+- **`walkfuzz.py`** (a caller with a frame sentinel, a lent callee that writes below its pointer after a laundering of it: a spill of every width, a global, push and pop, a mask, a shift pair, a swap pair, an xor pair, a negation pair, an r14 copy, an add and subtract; optionally a forwarding wrapper; optionally the caller launders the address too) and **`walkfuzz2.py`** (one function: a frame address kept in r9 through one to three of the same steps and calls, then walked down; `ONESTEP=1` for one step): the run says whether the callee reached the sentinel, the text must not return the stale constant. 400 + 400 pairs and 400 + 150 functions.
+- **`hf2.py`**, a hidden-input fuzzer beyond the suite's `TestArea3HiddenInputFuzz`: loops counted by a hidden register, calls to seven lent leaves (keeps r0, writes a constant, r4, r5 + r6, a pushed r8, changes r9, loads through r4), branches over several instructions, stack arguments, frame slots of three widths, MACH, MACL, GBR, r12 to r14; each lent function is run as it is and with each hidden input perturbed (r0 to r3, r8 to r14, the T flag, r4 to r7 beyond its parameters, GBR, MACH, MACL, the first four stack words).
+- **The generator beyond the nightly's range**, own RelWithDebInfo build (`-j2`), `matrix.sh` in pieces of 5,000 seeds (2,000 for the printed-C mode), resumable.
+- **The corpora** with `SE_GAME_HWRAM=<img> SE_GAME_LEND=1`.
+
+### 2. What round 10's and 11's fixes held under
+
+- **Patch 0060's walk, in the shapes the brief named.** A spill through two locals in a chain (`xStack_1c`), through a slot indexed by r0 or by a parameter, pushed and popped, a pointer spilled to the caller's incoming stack-argument area (the text is right, the function withheld "writes a word of its caller's frame"), two walked pointers, nested loops with the pointer reloaded and stored back each outer pass, the pointer passed to a lent callee that steps it down directly (A3-71a, b, and with the pointer in r5, r7 and a delay slot): each prints the local the walk wrote and agrees with the run. `walkfuzz2` with one step before the walk (400 programs, 399 reach the sentinel): a whole-word spill, push and pop, an r14 copy, an add and subtract pair, a mask, a negation pair, a swap pair, an xor pair and a slot indexed by r0, with and without a call, 0 stale in 253; the 146 stale are in A3-85.
+- **The 1,024-varnode cap** fails closed (`reachesStepDown` returns true past it); a loop of 4,400 pre-decrement stores (so far past `stepsDown`'s 4,096 pairs) prints the local, because the engine folds the chain of constant additions before the walk (8.3 s); and a loop of 128 sequential conditional steps (`tst r4,r4 ; bt S ; add #-4,r2 ; S:`, more than 8,000 (varnode, offset) pairs for the walk, under 1,024 varnodes for `reachesStepDown`) prints the local as well (`cap_4400.src`, `cap2.src`).
+- **`protectFreeStores`'s wider trace** costs no precision that shows: stores through a join of a global and a frame address, spilled and reloaded, stepping up from the join, all print the local they may have written (`P1`, `P2` of `s13.src`), and 256 varnodes bound the trace.
+- **Check 12's excuses** (`SavesBeforeCallsDropped`). Read against the engine's texts and the pins: the partial save is a read of the register before any call; the reassignment is accepted only in the call's own block, outside loops, in a text with no `goto`, when no earlier call left the variable stale, and from a value that is not the variable. A reassignment on one path only (an `if` whose block closes before it, a sibling `else`), after an earlier call, from the variable itself, inside a loop, after a second call: each stays a `kept-read` or is a right text, and the fixer's pins hold each (M5 to M9 of its record). The two textual gaps left are no instance of a wrong text: a save before the first call *in the text* inside a loop whose later iteration reads the register after the call (a stale read, but only an engine that did not update the variable on the back edge would print it), and a `case` label (no brace) between a call and a read of a sibling case, which reads the entry value where no call ran. No engine text found hid a stale read behind either; `SE_GENERATED_SEEDS` below passes with 0 `kept-read`.
+- **A3-81's state move.** The SH-2 spec has no p-code branch backward (every `goto <label>` of `superh.sinc` is to a label defined later), so `forwardOnly` holds for every instruction and the move loses nothing; a branch's target is copied, the fall-through moved, the delay slot's p-code is inside the instruction. `Leaving` drops the unique space at the instruction's end, which no instruction's p-code reads across (a `jsr @rN` through a literal is read inside its own instruction). **`ShareWalks`**: a walk starts from a fresh state at the callee's entry and depends on the capture, the lent signatures (one `prototypes` map for every pass) and the depth it is first asked at; a result computed deeper is more conservative than a shallower one and is reused, never the other way, and a walk that ran out of budget is not cached except as `kFrameAny`. Two probes of one request cannot see each other's assumptions wrongly.
+- **The rule's exceptions**, 29,940 programs of `hf2.py` (3,222 lent, 0 findings that are not the SR returned whole, which is the text's own `return in_sr;` and A3-5's design) and the suite's fuzzer at seeds 6 and 7 (below): the unread entry r0 under a held chooser and under a hidden one, the identity ops, r1, the interrupt-mask idiom and a carried value across a keeps-r0 callee, with loops, calls, branches over several instructions, stack arguments, MACH, MACL and GBR. No lent function's r0 changes with an input its signature does not hold.
+
+### 3. What the attack found
+
+1. **A3-82: `storesBelow` is not transitive.** `Store` records it for the function's own stores below a parameter register; `Apply` maps a lent callee's `storesThrough`, `leaks`, `frameWords` and `frameValues` into the caller, never its `storesBelow`. A wrapper that forwards its pointer to a lent fill-backwards function, a thunk that jumps to it, and one that lowers the pointer on the way (`fill_backwards(p - 4)`) are lent with `storesThrough` r4 and no `storesBelow`: the caller that hands one an exact frame address prints `return 5;` where the code returns 1. The fuzzer: wrapped, unlaundered pointer 12 of 12 stale, direct 0 of 27.
+2. **A3-83: the callee's recording is exact arithmetic only.** The pointer's `baseReg` survives copies, adds and subtracts of a constant or a variable and a whole-word spill; a shift pair, a mask (`and #-4`), a swap, an xor pair, a negation pair, a spill in halves, a store to a global, a constant built by `neg` or `shll2`, a pointer loaded from the word the argument points to, build a value with the register among its origins and no base, so `storesBelow` is not set (the fail-open of the rule round 10 made closed everywhere else). Fuzzer: mask 9 of 9, negation pair 14 of 14, swap pair 12 of 12, halves 7 of 7, bytes 7 of 7, global 6 of 6, an unfolded constant 7 of 7 stale; the tracked transforms 0.
+3. **A3-84: the caller reads it the same way.** A lent callee's `storesBelow` register exposes the frame only if the caller's value there is an exact stack address or has a base; the same address masked, swapped, reassembled from halves or loaded back from a global is a Fuzzy value of stack origin with no base. Lent, `return 5;`.
+4. **A3-85: patch 0060's follow set.** `reachesStepDown` and `protectFreeStores` follow copies, additions, joins and INDIRECTs; a pointer through a global, spilled in halves or bytes, or read back in parts, is a chain they do not pass. The brief's global is the "not done" of the round 10 fix, with its fixture. `walkfuzz2 ONESTEP`: global 25 of 25, bytes 33 of 33, halves 27 of 27, a rotate pair 25 of 25, a shift pair 36 of 36 stale.
+5. **A3-88: a pointer chosen between a frame address and another pointer.** `p = c ? &local[2] : g_buf + 2; *--p = v;` (or `p[-2] = v`, or a counted walk): the join makes the store an indexed stack access whose guard covers the base and above; the pre-decrement, the negative displacement and the walk (where `stepsDown` does fire) leave the locals under the base folded. Both alternatives frame addresses: right. Lent, `return 3;` where the code returns 1.
+6. **A3-86: a withheld caller, a wrong text.** An unlent callee whose code is captured and steps down (the probe walks it for the caller's frame words and throws its effects away), and a frame address that a call returns and the caller walks down.
+7. **A3-87: A3-79's premise is false.** The suite's own pin `A3-65 from the frame pointer r14` is lent and prints `register0x0000003c`; the printed-C differential rejects it (`not-compilable`). Raised to P2. The generator beyond the range finds one more instance of the withheld form (printed-C seed 1602820, `walk`, "reads gbr on entry"), the same raw register as A3-79's seed 1010082.
+
+### 4. Generator beyond the nightly
+
+| Range | Seeds | Failing | Notes |
+|---|---|---|---|
+| grammar 2, 1,600,001 to 1,620,000 (four pieces) | 20,000 | 0 | 39,106 functions, 28,433 lent, 118,537 claims held to the runs, 171,764 runs; canary 240 programs, 0 failing, in each piece |
+| grammar 1, 1,600,001 to 1,610,000 (two pieces) | 10,000 | 0 | |
+| printed-C, 1,600,001 to 1,610,000 (five pieces of 2,000) | 10,000 | 1 | seed 1602820: `not-compilable`, `register0x0000003c`, a withheld function, A3-79's class (A3-87); the other four pieces: functions 2,485 to 2,534, compared 2,305 to 2,372, `narrow-c` 9 to 15, `void-return-lent` 11 to 20; the spill walks of A3-80 (`GenSpillWalkFn`) 386 to 412 functions a piece, 0 `stale-constant` |
+| grammar 2, 1,700,001 to 1,705,000, `specials` | 5,000 | 0 | 9,690 functions, 7,002 lent, 29,326 claims, 42,537 runs |
+
+No seed for another area. No row is routed. (An area 2 reviewer runs on 1,500,001 and up; these ranges do not overlap.)
+
+### 5. Corpus (`SE_GAME_HWRAM=<img> SE_GAME_LEND=1`)
+
+| | 007 | 008 |
+|---|---|---|
+| functions alone; lending run | 839 of 839 ok; 1,730 ok | 1,554 of 1,554 ok; 2,995 ok |
+| lent (parameters), unlent / lent run | 655 (901) / **680 (958)** | 1,041 (1,253) / **1,071 (1,314)** |
+| ledger counts | 0 dropped, 0 missing and said | 0 dropped, **4** missing and said |
+| mapping oracle, every violation count (alone, lent) | 0 | 0 (the lent run's lines are the round 10 fix's, character for character) |
+| `TestGameCode` alone-run time, this tree / the round 11 fix's record | 9,917 ms / 10.0 s | 33,175 ms / 33.6 s |
+| the suite | all passed (100 s) | all passed (243 s) |
+
+Nothing changed in the host or the engine, so the timing is the check that the tree is the one recorded (no other job of mine ran). **A sample of the lent signatures against the code**, the callers' texts read with the disassembly (`sample.py`, which lends the callee chain it finds in the text): image 007 -- `06009A3A` (void, no parameters, extrapop +12: the middle of a function whose caller-side pushes it pops; r4 is set from literals before both calls), `0601824C` (`int4 f(int2, int2, xunknown4, xunknown4)`: r4 and r5 are `exts.w`'d, r6 and r7 stored, r10 returned), `0602EB78` (`int4 f(int4, int2 *, int4)`: r4 to r6 read, r0 = the `int2` at the local), `0602C27E` (void, one parameter, extrapop +12 as the first), `06032876` (`xunknown8 f(uint4)`: the pair r0:r1 returned from the sub-callee); image 008 -- `06021A3C` (`xunknown8 f(int4 *, int4, int4)`, extrapop +16), `0606E648` (void, two parameters, the byte or halfword array copy), `06057C98` (`int4 f(int4, ptr, ptr, ptr, ptr)`: r5 to r7 saved in r10, r11, r9 and the fifth parameter the stack word at the entry r15 + 0, loaded into r8 and stored through). Each agrees with what the code reads, writes and returns; none is one the rows' defects reach (none passes a frame address to a callee that steps below it).
+
+### 6. Pins committed
+
+`TestArea3Round11` (`Sh2DecompilerTests.cpp`, 11 fixtures, all passing at the head): the controls beside the rows that print the right text today -- a lent callee that spills the pointer whole to its frame, pushes and pops it, moves it through r14, or adds and subtracts a negated constant before it steps down (the caller prints the local and agrees with the run); a frame address kept through two locals in a chain, in a slot indexed by r0, pushed and popped; two walked pointers; nested loops with the pointer reloaded and stored back each pass; a pointer chosen between two frame addresses, walked down; a pointer chosen between a frame address and a global, stored through at its base. No fixture of a finding is committed (the output is wrong; the rows carry them). The controls were run at the head only: they hold behaviour the fixes of the rows will touch, as round 10's did.
+
+### 7. Instrument check: `storesBelow` is held by nothing at random
+
+Mutation: `effects.storesBelow = 0;` in `ReturnCheck::Run` (the claim A3-71 added; `mutation.diff` is that one line), a generator binary linked from the mutated file beside the tree (the worktree is untouched; `build_mut.sh` is in the tools directory). The suite fails it (the fixer's M15: `a3_71a` and `a3_71b`); the generator does not: **3,000 grammar-2 seeds and 1,000 grammar-1 seeds, 0 failing seeds, 0 findings**, canary 240 programs 0 failing. The claims that check 10b holds against the runs (`storesThrough`, `frameWords`, `outOrigins`, `spDelta`, `leaks`, `frameValues`) do not include `storesBelow`, and no grammar draws a callee that steps below its pointer, a wrapper, or a pointer laundered before the walk. So the class A3-71 closed (and A3-82 to A3-85 reopen) is held by two suite fixtures and nothing at random: the next fix round should add the claim to check 10b (a store below a register's entry value in a run must have its bit) and draw a wrapper and a laundering step in `GenWalkFn`/`GenSpillWalkFn`.
+
+### 8. Matrix
+
+| Run | Result |
+|---|---|
+| `ctest -E SaturnExplorerLive -j2 --timeout 900` under `ulimit -v 4000000` (RelWithDebInfo, 93 tests, with `TestArea3Round11`) | 93 of 93 pass (148 s; the decompiler suite alone 19 s, `TestArea3Round11` among its tests) |
+| generator, grammar 2, 1,600,001 to 1,620,000 (4 x 5,000) | 0 failing seeds, 0 findings |
+| generator, grammar 1, 1,600,001 to 1,610,000 (2 x 5,000) | 0 failing seeds |
+| printed-C, 1,600,001 to 1,610,000 (5 x 2,000) | 1 finding: seed 1602820, A3-79's class (A3-87) |
+| generator, grammar 2 `specials`, 1,700,001 to 1,705,000 | 0 failing seeds |
+| `TestArea3HiddenInputFuzz` at seeds 6 and 7, 5,000 programs each | 1,204 and 1,216 lent, 15,652 and 15,808 perturbed runs, 0 findings |
+| `hf2.py`, 60 seeds of 500 programs | 29,940 programs, 3,222 lent, 1 finding (the SR returned whole, `return in_sr;`, A3-5's design) |
+| `walkfuzz.py` seeds 1 to 4 (about 400 pairs), `walkfuzz2.py` (about 550 functions) | the stale texts of A3-82, A3-83, A3-84, A3-85 and nothing else |
+| corpora 007 / 008 | section 5 |
+| sanitizers, the Live tests, the fault matrix beyond ctest's default subset, vendoring | not run: no engine or host code changed |
+
+### Not covered
+
+- **A fix for any row**, and what the candidate fixes cost on the corpora: a `storesBelow` bit for every register a frame address can reach a store through widens the host alias at every call whose callee has the bit, and how many of the images' lent callees have the bit was not counted.
+- **Mutual recursion, interrupts between a callee's store and its caller's read, the probe's `kMaxSteps` exit**, as in rounds 7 to 10.
+- **The printed-C differential cannot run a pointer kept in memory** (8 bytes on the host); the rows A3-83 to A3-85 are checked by the run of the code against the text's constant, as `CheckSpillWalks` does.
+- **The Live tests and the sanitizer job** (shared socket path; CI).
+
+**Done criteria.** Five rows at P1 (A3-82, A3-83, A3-84, A3-85, A3-88) and two at P2 (A3-86, A3-87): a fix round, then two consecutive clean review rounds. The count of consecutive clean rounds is 0.
+
+## Area 2, round 12 review
+
+Reviewer, branch `review/2-round12-review`, on the coordinator's head `1835336` (patches up to 0059 in the tree). Tools, one pin, the ledger and this record only; no spec, engine or host file changed (every engine trial below was made in the working copy with `census12.patch`, `mutate12.py` or the pre-0059 `rangeutil.cc` and reverted; `git status` shows none). New ledger rows **A2-73 to A2-79**: six open P3 rows (A2-73 to A2-77, A2-79; none with a wrong printed value) and A2-78, an instrument row closed here. **Nothing at P1 or P2 was found, so this round is clean: it is the second consecutive clean round after round 10's fix, and area 2's count of consecutive clean rounds is 2.** What keeps area 2 from being declared done by the program's own list is the P3 rows (each is to be fixed or accepted with a reason) and the overnight run of the generator on the area's grammar; no P1 or P2 row is open.
+
+Patch 0059 held. Its push-forwards, unions, containers and strided intersect are sound at every size from 1 to 8 bytes in 179 million push-forwards and 400,000 pairs of ranges drawn independently of the pin; the pull-backs and the transfer functions of the masks are exact; the consumers (`ValueSetSolver` through `Heritage::analyzeNewLoadGuards`; the jump-table guards through `intersect`; `RuleRangeMeld`) print what they printed before it, text for text. The defects found are in upstream code the patch did not touch (`newDomain`, `setNZMask`, `widen`) or in a rule that no SH-2 code reaches (`RuleScarry`), and in the oracle (A2-77, A2-79).
+
+### 1. What I ran
+
+Own RelWithDebInfo build under the scratch directory (`-j2`; every run under `ulimit -v 4000000` and `timeout`, one heavy job at a time).
+
+| Run | Result |
+|---|---|
+| `ctest -E SaturnExplorerLive -j2 --timeout 900` (the new pin in) | 93 of 93 pass (163 s); `SaturnExplorerSh2DecompilerEngineTests` 36 s, the new pin 1.8 s |
+| `SaturnExplorerDecompilerFaultTests` | 0 of 94 jobs fail (78.5 s) |
+| decode oracle with `SE_MEDNAFEN_SS`, seeds 31415926, 271828, 161803, 1000003, 987654321 (none used before; `SE_DECODE_CASES=100000` each) | 65,000,000 differential executions (13,000,000 a seed, 39 to 40 s each): 0 differ, 0 could not run, 0 of 130 forms fail, 18 named shapes 0 differ; SLEIGH defines 53,752 words, 0 disagreements with Mednafen (the spec did not change since round 10) |
+| generator, grammar 2, `SE_GENERATED_FIRST=1500001`, 20,000 seeds (four runs of 5,000: 161, 175, 168, 136 s) | **1 failing seed, 1515016** (`n:kept-read:r13`: a function that ends in a tail jump into the next, A3-78's shape: routed, section 6); the other 19,999 clean |
+| generator, grammar 1, `SE_GENERATED_FIRST=1500001`, 10,000 seeds (100, 115 s) | 0 failing seeds |
+| printed-C differential, `SE_GENERATED_PRINTEDC=only SE_GENERATED_FIRST=1500001`, 15,000 seeds (three runs of 5,000, 101 to 115 s) | 2 findings, both `not-compilable` walks that print the raw stack register `register0x0000003c` (seeds 1503985 and 1506163: A3-79's shape: routed); 0 `mismatch` |
+| standard matrix: grammar 2 3,000 seeds, grammar 1 1,000 seeds, printed-C 3,000 seeds from seed 1 | 0 failing seeds in either grammar; printed-C 3,703 functions, 3,424 compared, agrees 3,443, `narrow-c` 9, `void-return` 227, `void-return-lent` 24, 0 findings |
+| fresh-seed pass of all 44 families (`dagen10.py` 0-19, `dagen11.py` 20-28, `dagen11b.py` 29-38, `dagen12.py` 40-44), seeds 50001 to 51600 | 68,000 functions, 66,894 compared: agrees 66,615, `narrow-c` 285, `void-return` 793, `void-return-lent` 158, `skipped:stack-address` 146, `skipped:memory` 1, **`mismatch` 1 (A2-79, the oracle)**, `not-compilable` 1 (`&SMPC_IREG0` for the constant 0x20100000, area 5's print) |
+| new families 40 to 44 (`dagen12.py`), 3,000 each with the literal rows (`run11.sh`) | 15,000 functions: agrees 14,761, `narrow-c` 239, 0 findings |
+| `mac.l` / `mac.w` fixtures, round 8's `macgen.py` (1,600) and `macgen12.py` (4,986: the accumulator one register widened by sign, by zero, or twice) | all agree |
+| register-only functions of the images (`realfn.py`: every 4-aligned entry of hwram007/008/009 whose walk is arithmetic, branches and a pool, no load, store or call; 53 unique of 6 words or more) | 53 compared: agrees 47, `void-return` 6 |
+| corpora hwram007.bin, hwram008.bin, `SE_GAME_LEND=1` | 839 and 1,554 functions, all ok; 0 accesses dropped against the reference run; missing and said 0 and 4; lending 680 (958 parameters) and 1,071 (1,314); mapping violations 0 (the 'on another line' count 4 alone and 11 and 21 lent, and 3 tokens at a delay slot's own address in the lent texts of hwram008, all as with the pre-0059 engine); the same as master's numbers |
+| the corpora texts with and without patch 0059's `rangeutil.cc` | **841 and 1,556 files (the functions, the lent texts) byte for byte identical** (`diff -rq` empty); the only failure of the old build is the pin of A2-68 (`TestArea2Round11Fix`, bounds -1 to -3) |
+| jump-table modules (`swcmp.sh`, `swtab11.py`'s shapes at seeds 6001 to 6400 and 7001 to 8500) through the head and the pre-0059 `rangeutil.cc` | 1,900 modules: the whole output of the generator (the decompiled text and every verdict) the same, 0 failing |
+| the standalone audits of round 11 on the head: `pullback4` (seeds 11 to 13, 40,000 a row), `opbehavior_audit`, `forward_audit` (seed 21), `nzmask_audit.py` | 0 wrong pull-backs at 3, 4 and 8 bytes; 0 wrong integer behaviors; 0 unsound push-forwards; 0 unsound masks |
+
+### 2. Patch 0059 itself
+
+**`fwd12.cpp`**, written for this round and independent of `forward_audit.cpp` and of the pin, checks what the pin does not:
+
+* every size from 1 to 8 bytes for the push-forwards (the pin has 1, 2, 4 and 8; the engine meets 3, 5, 6 and 7 as the pieces of a CONCAT and of a SUBPIECE), every extension from a size to every larger one (the pin has the doubling: `extu.b` is 1 to 4), every SUBPIECE by (input size, output size, offset), the shift amount as a 1, 4 or 8 byte constant including amounts of 2^31 and more;
+* ranges from structured bounds (powers of two and their neighbours, both sign boundaries, the ends; steps 1, 2, 4, 8, 16, 32; full, single, all-but-one and wrapped ranges); the elements pushed through an operation are the ends of the range, the elements next to zero, the top and the sign boundary, and for `INT_LEFT` and `INT_MULT` the elements next to the points where the product crosses a multiple of the domain, so a mistaken 'fits in one lap' decision is hit where it fails;
+* a result is judged by two definitions of membership (the one written out in the tool and `contains()`), for well-formedness (mask, power-of-two step, bounds in the mask and congruent modulo the step) and for holding every image.
+
+Results: seed 11 (300,000 cases a row, 76.8 million push-forwards), seeds 12 and 13 (200,000, 51.2 million each): **0 unsound or malformed**. (Refusals, which are allowed, are 6.1 and 4.1 million, all of them extensions that give two pieces.) Power check: linked against the pre-0059 `rangeutil.cc` it reports the old defects at once (`INT_MULT` 91 to 114 of 2,000 cases at every size, SUBPIECE 130 to 790 a form, the shifts, `contains`, `intersect` and `minimalContainer`).
+
+**The set operations**, 2 bytes, against 65,536-bit sets (`fwd12 sets`, seeds 5 and 6, 400,000 pairs of ranges drawn as above, steps 1 to 32): `intersect` of two ranges of one mask is exact in all 281,860 answers of 0 (and an answer of 2 leaves `this` as it was); `circleUnion` exact in 63,097 and unchanged in 236,903 refusals; `minimalContainer` holds both ranges in 300,000 and 'everything' is everything in 108,665; `contains(range)` claimed true is true in 39,179; `invert` of a step-1 range is the complement in 120,089 and of a strided one a subset of it in 179,911; `getSize`, `getNext` and `contains(value)` agree with the set in 300,000. **The intersect of two ranges of different masks answers a superset** (never a smaller set: 0 of 147,234 pairs lose an element, 5,955 gain one): A2-73.
+
+**Round 11's checks, on the head:** `vs_check.patch` (the scratch check of every push-forward and union in `ValueSet::iterate`), changed to check every element of a range of 4,096 or fewer and 20 sampled ones of a larger: hwram007.bin 1,635,322 checks, hwram008.bin 151,166, grammar 1 and 2 (3,000 seeds each from 1,600,001) 4,686 and 213,818, the printed-C walks (3,000 seeds) 105,282: **0 unsound** (round 11 found 60, 96 and 160 before the patch). The three phis of the images that were unsound are the ones the patch repaired.
+
+**Did a consumer lose a bound?** The push-forward half has one reader, `Heritage::analyzeNewLoadGuards` (through `ValueSet::iterate` and `LoadGuard::finalizeRange`); `intersect` is read by `JumpBasic::calcRange` and `CircleRange::pullBack(usenzmask)`, `circleUnion` and `translate2Op` by `RuleRangeMeld`. Compared with the engine that has the pre-0059 `rangeutil.cc` (the one other file that matters to the text; `op.cc` and `opbehavior.cc` are the head's in both): the printed texts of both images are byte for byte the same (841 and 1,556 files), the jump-table warnings of the images are the same (they are in the texts), and 1,900 generated jump-table modules print the same, `switch` for `switch`. **No table or fold changed; the one text that does change is round 11's fixture** (`TestArea2Round11Fix`: the guard of a scaled index folds into the switch for bounds -1 to -8; with the pre-0059 `newStride` the bounds -1 to -3 leave `if (-3 < param_1 * 4)`, the three checks the old build fails), which is the repair of A2-68. **No fold became wrong from a wider answer:** the widened answers (a full range where a bound used to be) can only delay a simplification, the printed-C differential on the 68,000 functions above and the 15,000 new ones found no value that differs, and the solver's own answers are checked element by element in the run above.
+
+**The pin** (`TestForwardRangesRound11`) samples the 16-bit space (2^32 ranges). `fwd12` takes the cheaper route of drawing from the places where a result can fail instead of from the whole space; I did not make the 16-bit space exhaustive. The new pin, `TestForwardRangesRound12` (1.44 million checks at sizes 1 to 8, 1.8 s), is `fwd12`'s push-forward part; it fails against the pre-0059 `rangeutil.cc` (the first failures: `INT_LEFT` and `INT_SRIGHT` of a one-byte range by 2^31 and by 0, as soon as the engine tests start).
+
+**Findings in the range machinery that 0059 did not touch** (all latent; none reached by any workload; rows with fixtures):
+
+* **A2-73**, `newDomain`: the intersect of ranges of two masks over-approximates when the wider range ends at the top of its domain (right bound 0, or the phase for a strided one) and starts above the narrower mask.
+* **A2-74**, `setNZMask`: `step <<= shift` in an `int4`; the mask 0x80000000 gives a negative step (the range holds 0 and not 0x80000000), bit 63 of an 8-byte mask the same with a bad bound; bits 32 to 62 wrap to a finer step (harmless).
+* **A2-75**, `widen`: the widened range does not hold the old one (bounds in different phases of the step; a full landmark cuts the range to its first lap).
+
+### 3. The rules
+
+**The workload and the rules it reaches.** `census12.patch` counts every application of every rule (`SE_CENSUS=1`) and the odd cases of `op.cc` and `rangeutil.cc`. Over families 0 to 38 and 40 to 43 (120 functions each), both images, 3,000 seeds of each grammar of the generator and the mac fixtures, 115 of the 153 rules of the pool apply; the unapplied ones that are integer rules are listed in A2-77. The rules of the brief that apply, and how often (the families alone, 120 functions each; the images in brackets): `RuleCollectTerms` 1,876, `RuleTrivialArith` 1,906 (images: yes), `RuleShift2Mult` 3,256, `RuleConcatShift` 98, `RuleZextEliminate` 40, `RulePiece2Zext` 188, `RuleSignDiv2` 10, `RuleSignForm` 10, `RuleSubvarAnd` 2,360, `RuleDivOpt` 1,324, `RuleDivTermAdd` 68, `RuleDivTermAdd2` 236, `RuleDivChain` 36; `RulePiece2Sext` applies in the widened `mac` fixtures only (3,000 times, always right) and `RuleSubvarShift` in none. `RuleSborrow`, `RuleScarry` and `RuleCarryElim` never apply, and cannot: the spec writes `addv`, `subv`, `addc`, `subc` and `negc` with comparisons and sign bits (`superh.sinc` 963 to 1330) and no `INT_CARRY`, `INT_SCARRY` or `INT_SBORROW` op, and no rule builds one. That is why the 'carry and borrow rules behind addc/subc/negc' of the brief are not what is run: what is run are the unsigned comparisons and boolean combinations the spec builds, which the families 26, 40, 42 and `dagen10.py` 19 draw.
+
+**Upstream rules read against their documentation** (`RuleDivOpt::findForm`/`calcDivisor`, `RuleDivTermAdd`/`2` with the local guards `divTermProductFits` and `divTermIsDivided`, `RuleSignDiv2`, `RuleSignForm`, `RuleSubvarAnd`, `RuleSubvarShift`, `RuleCollectTerms`, `RuleShift2Mult`, `RuleTrivialArith`, `RuleConcatShift`, `RuleZextEliminate`, `RulePiece2Zext`/`Sext`, `RuleSborrow`, `RuleScarry`, `RuleCarryElim`, `RuleDoubleShift`, `RuleAndCompare`, `RuleDivChain`): the arithmetic of each is right where the engine can reach it. **One is wrong where it cannot: `RuleScarry` with the constant `INT_MIN`** (A2-76; proved at one byte, reproduced in a `Funcdata`). `RuleSignForm2` returns 0 after changing an input (upstream's; the pass count is not told of the change: a simplification may be delayed, no value is wrong).
+
+**Mutants.** `mutate12.py` puts 17 mutants of these rules in one build and `runmut.sh` runs a family on one; the table is in A2-77. Mutants killed by the families (by the generator's walks for 2 and 17): 1, 2, 4, 5, 7 (by the new family 44 only), 13, 14, 16, 17. Not killed: 6, 8, 9, 10, 11, 12, 15 (11 and 15 equivalent). The rules whose mutants live are the ones the workload applies rarely (A2-77); a wrong constant in them is something the families would not see, and the reading of their code above is what stands for them.
+
+**New families** (`dagen12.py`):
+
+| Family | Shapes | Functions | Classes |
+|---|---|---|---|
+| 40 ovfsign | `addv`/`subv`/`addc`/`subc` of r4 with an extreme literal or a register on either side, the overflow read by `movt`, the sign of the sum by `cmp/pz`, `cmp/pl`, `shll`, `shar`, and V against the sign (the forms `RuleScarry` and `RuleSborrow` would match) | 3,000 | agrees 2,980, `narrow-c` 20 |
+| 41 fixmul | `dmuls.l`/`dmulu.l` then the middle word by `xtrct` (the product >> 16, >> 23, >> 15), the high word shifted, compared, the product tested against a 64-bit literal, 'fits in 32 bits' | 3,000 | agrees 2,968, `narrow-c` 32 |
+| 42 widecmp | a 64-bit value in two registers by `addc`/`subc`/`negc`, ordered against a 64-bit literal by `cmp/hi`/`hs`/`gt`/`ge` of the high words and the low words | 3,000 | agrees 2,915, `narrow-c` 85 |
+| 43 sameval | a value computed twice and compared with itself, `x ^ x`, `(x+y) == (x+y)`, `(x*c) == (x*c)` (`RuleTrivialArith`) | 3,000 | agrees 3,000 |
+| 44 extcmp | an extended byte or word compared with a literal at, under and over the edge of what the extension holds, and negative ones (`RuleZextEliminate`) | 3,000 | agrees 2,898, `narrow-c` 102 |
+
+### 4. The `int4` truncation of the shift amount in `getNZMaskLocal`
+
+Round 11's fixer left it open because 'no spec shift reaches it'. The claim holds, and so does a stronger one. The spec's shifts are by constants up to 32 (`shll16`, the `<< 32` of `mac`) or by `rm & 0x1f`, and `shad`/`shld` are not SH-2 instructions (the decoder reports bad instruction data). The census counts the calls of `getNZMaskLocal` for `INT_LEFT`/`INT_RIGHT` with a constant of 64 or more: they occur (the images 841 and 3,527 for `INT_LEFT`, 42 and 319 for `INT_RIGHT`; the families; the grammars), and every one is a transient: a rule that turns a shift into a multiply, or a shift's input into a mask, sets the new constant (`1 << val` of `RuleShift2Mult`, the -1 of `RuleSignShift`, whose multiplier the first call shows as `>> #0xffffffff`) before it changes the op-code, and patch 0054's `opMasksChanged` computes the output's mask for the op as it is at that moment and again after `opSetOpcode`. A transient's mask is 0 (`pcode_left` and `pcode_right` take an `int4` amount of 64 or more, negative ones included, to be a shift out of the word) and the walk below it only widens, so nothing is narrowed and the final state is the multiply's. The truncation itself is harmless: a constant of 2^32 or more is a shift by the width or more, whose result is 0, and any mask the `int4` gives holds 0; a constant from 2^31 to 2^32 is a negative `int4` and is taken as 64 or more, correctly. The sites that read an amount as an `int4` and shift by it (`RuleShift2Mult` `val >= 32`, `RuleConcatShift`, `RuleDivChain`, `RuleSubvarShift`, `RuleDoubleShift`) are reached with amounts of 32 at most from SH-2 code. No row: the claim is the record's.
+
+### 5. The oracle
+
+* **The fresh-seed pass found one `mismatch`** (function 749 of `dagen10.py 50801 800 18`): the second reading of the printed-C differential sign-extends `(uint8)CONCAT14(...)`, where the engine's ZEXT of a 5-byte piece and the run are zero extensions (A2-79; the same reading is right for a 4-byte source, A2-19). The text is right as the engine means it.
+* **Gaps in the families** (A2-77): `RuleAndCompare` applies 3,785 times in the images and in no family function (the generator's walks kill its mutant, 9 of 3,703); `RuleConcatShift`, `RuleSignDiv2` and `RuleSignForm` apply in one or two families, in forms where the mutants of the sign or the width live.
+* **The consume transfer function** (patch 0054's `getConsumeLocal`): `consume_audit.py` cuts it out of `op.cc` and checks, for 26 forms of 20 ops (add, sub, multiply by a variable and a constant, and, or, xor, negate, copy, zext, sext, subpiece, piece, shifts by a constant and a variable, the four unsigned compares with non-zero masks, popcount, lzcount), that two values of an input that agree on the bits it answers give outputs that agree on the consumed bits of the output: every output mask and every pair of input values at one byte, the other input over a set of values: 407,788 cases, **0 unsound**; with the covering mask of add and sub dropped and the constant of AND complemented in the cut-out copy the tool reports 36,070 cases (the power check).
+* **The mac fixtures with a widened accumulator** (`macgen12.py`): `RulePiece2Sext` applies 3,000 times in them (it never did in a round before), every one of the 4,986 fixtures agrees.
+
+### 6. The generator beyond the nightly range, and what is routed
+
+Chunks of 5,000 seeds, each under 3 minutes; `genranges.sh` leaves a marker per chunk, so a restart resumes.
+
+| Run | Seeds | Result |
+|---|---|---|
+| grammar 2 | 1,500,001 to 1,520,000 | 1 failing seed, **1515016** |
+| grammar 1 | 1,500,001 to 1,510,000 | 0 |
+| printed-C | 1,500,001 to 1,515,000 | 2 `not-compilable`: 1503985 and 1506163 |
+
+* **Grammar 2, seed 1515016** (area 3): `[n:kept-read:r13] [function 0 at 06009000]`, 'a function it calls was lent a signature that changes r13, and the text reads r13 as the value it had on entry'. Function 0 ends in `jmp @r3` (the pool's `0x06009058` is function 1): the shape of the open row **A3-78** (and of round 11's seed 1418819), one more seed there. Replay: `SE_GENERATED_GRAMMAR=2 SE_GENERATED_SEED=1515016 build/bin/SaturnExplorerSh2GeneratedTests <dir>`; the raw words: `SE_GENERATED_WORDS="2F86 2F96 2FA6 2FB6 2FE6 4F22 7FC0 6EF3 6843 6953 6A63 6B73 D60D E248 2248 8D0A 2421 6483 65A3 6683 E7B4 B015 0009 6483 6593 66A3 67B3 2F46 6151 64F6 D305 7E40 6FE3 4F26 6EF6 6BF6 6AF6 69F6 432B 68F6 05FE 008C 0600 9058 2FD6 2FE6 7FE8 6EF3 6242 2728 8900 6351 2521 224B 62F3 7218 E103 2216 4110 8BFC E200 E303 2622 4310 8BFC 7E18 6FE3 6EF6 6DF6 000B 0009" SE_GENERATED_FUNCS="0/0/50,58/58/8e" SE_GENERATED_RETURNS="0,0"`. Not shrunk. No new row: A3-78 is open with the area 3 fixer.
+* **Printed-C seeds 1503985 and 1506163** (area 3): the text holds `register0x0000003c + -8`, a stack pointer stepped down in a counted loop and kept in a local only the walk writes, 'register0x0000003c undeclared': A3-79's shape (ruled P3 by the coordinator after patch 0057; round 11's 15,000 seeds had none and these 15,000 have two). Replays: `SE_GENERATED_PRINTEDC=only SE_GENERATED_PRINTEDC_WORDS="6043 6153 6263 6373 3718 0022 7FF0 1F10 1F02 63F3 7308 E602 2356 4610 8BFC 50F0 7F10 600C 000B 0009"` (shrunk: `0022 7FF0 1F10 1F02 63F3 7308 E602 2356 4610 8BFC 50F0 7F10 000B 0009`) and `"6043 6153 6263 6373 0522 7FF0 1F10 1F51 1F32 66F3 7604 E201 2616 4210 8BFC E201 E400 6566 345C 4210 8BFB 50F1 304C 7F10 000B 0009"`.
+* **Area 5**: the fresh-seed pass, family 2, function 233 of `dagen10.py 50801 800 2` (`6043 6153 6263 6373 4715 0329 D208 312C 3043 8905 3138 6117 312C 637F A002 0009 4200 4228 6177 6023 4009 4008 000B 6003 0600 9008`) prints `return CONCAT44(&SMPC_IREG0,~in_r7);` for the constant 0x20100000 the code computes (`0x06009008 << 17`), `not-compilable`: the symbol of a register area printed for an integer that is only a value (the register is at 0x20100001; A5-45's family). Informational.
+* **Area 7**: in the lent texts of hwram008.bin the mapping counts 3 tokens at a delay slot's own address (the other three runs 0); the same with the pre-0059 engine, so it is not this round's. Informational.
+* No other area's findings.
+
+### 7. What stays open
+
+* A2-73 to A2-77 and A2-79 are the fixer's: `newDomain` for the top-ended range; `setNZMask` with no range for a lowest bit of 31 or more; `widen` to keep the old range; `RuleScarry` to refuse the minimum on both branches (or the rule removed: no SH-2 op reaches it); families or fixtures for the rules of A2-77; the second reading of `(uint8)` for 5 to 7 byte sources. Fixtures are in the rows; `fixtures12.cpp`, `rulescarry_proof.py` and `scarry_fixture.txt` are the code.
+* The 16-bit space is not exhaustive for the push-forwards (2^32 ranges); the pin and `fwd12` draw from where a result can fail, 179 million push-forwards in all.
+* The generator has not been run overnight on area 2's grammar for the program's 'done' list; the 45,000 seeds of this round and 45,000 of round 11 beyond the nightly range each had one failing seed of A3-78's shape (this round also two walks of A3-79's) and no area 2 failure.
+
+## Area 3, round 11 fix
+
+Fixer, branch `review/3-round11-fix`, on the coordinator's head `d8e4068`. Code commits `38b49f6` to `66d5fb9` (host and pins; `0fdfdcf` updates a spike fixture pin), then the ledger, this record and the matrix. Own RelWithDebInfo build under the scratch directory, `-j2`, every run under `ulimit -v 4000000`.
+
+**What is fixed, and what stays open.** The three host rows are fixed: **A3-82, A3-83, A3-84 (P1)** by one fail-closed rule in the host interpreter (`ReturnCheck`, `Sh2Decompiler.cpp`). **A3-86 part a (P2)** is fixed the same way (the probe now reads an unlent captured callee's `storesBelow`). **A3-87 (P2)** and **A3-79 (P3)** are closed: a function whose text names the raw stack register is marked unsupported and withheld, and the printed-C differential excuses that known limit. **A3-85 and A3-88 (P1), and A3-86 part b, stay open**: they are engine-side (the alias analysis of patches 0056-0060), and a sound fix for them is a broad change to the vendored engine that needs the corpus-and-timing loop to validate -- section 6. No engine patch was added this round, so there is no new vendored patch, and `0061` stays unused.
+
+### 1. The class, and the rule
+
+Every host row was the same mistake the brief named: a frame address was recognised only through a list of exact forms (a base-plus-offset, a copy, an add, a join, an INDIRECT), and any other form failed open -- it was treated as "not a frame address", so the locals it could reach were folded across a call. Round 10's `storesBelow` (A3-71) was itself tracked only by exact arithmetic on a pointer (`Value::baseReg`/`regOff`), the one claim the round 10 rule's "every value depends on all its inputs unless the op is modelled exactly" was not applied to.
+
+The fix makes the host side fail closed, on one principle: **a value is a possible frame address when the stack pointer is among its origins by any data path** (`Value::Origins() & origin::kStack`), and **a store through a register-derived pointer with no exact base may be below it**. Concretely, in `ReturnCheck`:
+
+| Where it failed open | Now (fail closed) |
+|---|---|
+| `Store` recorded `storesBelow` only for a pointer with a tracked below-offset (`Value::StoresBelow()`) | ...and for a store through any `Fuzzy` value with no base and a parameter register among its origins (a pointer laundered through a mask, a shift or swap pair, a spill in parts): "stores anywhere through r_n" (A3-83 a, b, d, e, f, h) |
+| a pointer laundered through memory lost its register origin | a `Load` from untracked memory keeps, in its origins only (not its dependences, which the return rule reads), the parameter registers the function dereferenced (`mov.l @r4,r5`) or leaked to memory and read back (`mov.l r4,@global ; mov.l @global,r5`): A3-83 c, g |
+| `neg`/shift of a constant was an unfolded `Fuzzy`, so `add r3,r4` looked like a non-negative index | `INT_2COMP`, `INT_NEGATE`, `INT_LEFT`, `INT_RIGHT`, `INT_SRIGHT`, `INT_MULT` of constants fold, so `mov #16,r3 ; neg r3,r3 ; add r3,r4` lowers r4 by a tracked -16 (A3-83 d, e) |
+| `Apply`/`Call` never carried a lent callee's `storesBelow` | the lent branch of `Call` maps it: a callee that stores below the pointer it was handed in r makes this function store below every register that value was made from (its register origins) -- a wrapper, a thunk, a tail call (A3-82 a, b), and a pointer lowered on the way via the `storesThrough` branch (A3-82 d, e) |
+| a caller exposed the frame only for an exact stack address or a `Fuzzy` with a `Base()` in a `storesBelow` register | any value of stack origin there (`Origins() & kStack`) -- masked, reassembled from halves, read back from a global -- exposes the frame from its lowest slot (A3-84 a-d) |
+| the probe (A3-4) threw away an unlent captured callee's effects (`CallEffects unused; callee.Run(unused)`) | it keeps the walked callee's `storesBelow` (a cache beside the frame-words cache, shared across a request's passes) and exposes this frame when a register holds a possible frame address of ours (A3-86 a) |
+| a lent function whose text named the raw stack register `register0x0000003c` (A3-65's limit for a pointer into unmapped stack) was offered as a decompilation | such a function is marked unsupported and withheld -- never a lent signature with non-compilable text; an already-withheld function keeps its own reason (A3-87, A3-79) |
+
+When precision is impossible the rule withholds or keeps the local in the text; it never folds. The transitive and laundering claims are register sets, so they widen a cache key and a host alias at a call -- the cost is a drop in lending precision, measured in section 5.
+
+### 2. A3-87 and A3-79: the raw stack register
+
+A walk that reaches storage no local is mapped to -- a pushed register's save slot (`mov.l r14,@-r15 ; ... ; mov r14,r2 ; mov.l r1,@-r2`) -- prints a pointer into it as `register0x0000003c` (`BADSPACEBASE`), which is no C the printed-C differential can compile (`'register0x0000003c' undeclared`). The value is right; only a local to name the slot is missing, which the engine cannot supply (the A3-65 record listed it as "not done"). A3-87 escalated it because the pinned r14 fixture was **lent**. The fix: when the final text names `register0x`, the decompiler marks the function unsupported (so the printed-C differential skips it, not compiles it) and, if it was about to be lent, withholds it. The printed-C oracle excuses this one class (`raw-stack-register`, keyed on the text) instead of reporting `not-compilable`. A3-79 (the withheld "reads vbr" variant, seed 1010082) is the same raw name and is closed with it.
+
+### 3. Pins
+
+- **`TestArea3Round11Fix`** (`Sh2DecompilerTests.cpp`): the finding fixtures of A3-82 (wrapper, thunk, lowered thunk), A3-83 (mask, neg, shll2 constant, swap, aligned mask, global round trip, load through the argument) and A3-84 (masked, through a global, swapped) each lent and printing the local, not the stale `5`; A3-86 a withheld and printing the local. The callee chain is lent deepest-first.
+- **`TestA365WalkDown`** "from the frame pointer r14": now asserts the function is unsupported and withheld (A3-87), where it was lent with the raw text at the head.
+- **`TestPrintedC`** pins (`Sh2GeneratedTests.cpp`): the r14 fixture, A3-79's seed 1010082, and the two area-2-round-12 replays the coordinator routed (printed-C seeds 1503985 and 1506163) each come back `raw-stack-register`, not a failing seed.
+
+### 4. The mutation table
+
+Each part reverted alone in the committed tree, the suite rebuilt and run (`mut_a3r11.py` in the scratch directory); the generator excuse reverted for the printed-C pins. Counts are the CHECKs that fail.
+
+| Reverted | Fails |
+|---|---|
+| M84 the caller's exposure back to the exact-only test | 3 (`A3-84a`, `b`, `d`) |
+| M83 no `storesBelow` for a laundered register pointer in `Store` | 5 (`A3-83a`, `e`, `f`, `h`, and the control) |
+| M82t the transitive `storesBelow` mapping in `Call` | 2 (`A3-82a`, `b`) |
+| M82d the `storesThrough`-below claim (a lowered pointer handed on) | 1 (`A3-82d`) |
+| Mtaint the `Load` memory/deref provenance | 2 (`A3-83c`, `g`) |
+| Mfold the constant folds of neg/shift | 2 (`A3-83d`, `e`) |
+| M86a the probe's read of an unlent callee's `storesBelow` | 1 (`A3-86a`) |
+| M87 the raw-register unsupported/withhold (host) | 1 (the r14 pin) |
+| the printed-C `raw-stack-register` excuse (generator) | 4 (the four `TestPrintedC` raw-register pins become `undecompiled`, a failing class) |
+
+### 5. Cost on the corpora
+
+Both images, `SE_GAME_HWRAM=<img> SE_GAME_LEND=1`, the fixed tree (`0fdfdcf`). Every function ok, 0 accesses dropped, mapping oracle clean.
+
+| | 007 | 008 |
+|---|---|---|
+| functions alone; lending run | 839 ok; 1,730 ok | 1,554 ok; 2,995 ok |
+| lent (parameters), unlent / lent run | 655 (901) / **680 (958)** | 1,010 (1,251) / **1,040 (1,312)** |
+| ledger counts | 0 dropped, 0 missing and said | 0 dropped, 4 missing and said |
+| `TestGameCode` game-code time / the round 11 review's record | 9,965 ms / 10.0 s (0.99x) | 32,550 ms / 33.6 s (0.97x) |
+
+**007 is unchanged**: lending 680 (958), exactly the round 10 / round 11-review figure; no function's text differs in the measured items (`extraout_r4-7 gone from 24, new in 0`). The laundering and frame-passing shapes the fix guards do not occur in 007's work RAM.
+
+**008 drops 31 lent functions**: the lent run was 1,071 (1,314) at the head and is 1,040 (1,312) here (the unlent run 1,041 to 1,010). The drop is the fail-closed rule's measured cost: functions that hand a frame address to a callee that launders and stores through a pointer, or that store through a laundered own-frame pointer, now expose the frame (a host alias) or record `storesBelow`, so a signature that depended on a now-exposed stack word is withheld. No function failed, no access was dropped, `extraout_r4-7` is new in 0, and the 4 missing-and-said are the round 10 figure -- the drop is sound (withholding is always safe), not a wrong output. A deeper read of the 31 against the code was not completed this session and is the one open measurement item before merge. The timing is well under the 1.5x budget on both images.
+
+Timing is below the round 11 review's recorded 10.0 s / 33.6 s because the review ran on a shared machine; the point is that the fail-closed host work adds no measurable cost (the probe's walk is the round 10 cost, unchanged).
+
+### 6. Not done (the engine rows)
+
+- **A3-85 (P1).** A frame pointer laundered through memory -- stored to a global and read back, or spilled in halves or bytes and reassembled -- is never recognised as a stack pointer by the engine's `gatherAdditiveBase`, so `AliasChecker::reachesStepDown` is never asked about it and the locals below the walk fold. A trial patch that extended `reachesStepDown` to follow bit-carrying ops and treat an escape to non-stack memory as stepping down gave **no** change to the A3-85 fixtures (the base is not in `addBase` to begin with), so it was reverted. The sound fix is for the engine to recognise a pointer reassembled from memory as possibly a stack pointer, which is a broad change with corpus impact that needs the validation loop.
+- **A3-88 (P1).** A pointer that is the join of a frame address with another pointer (a global, a parameter) and is then stepped below the frame address: the join makes it an indexed stack access whose guard covers the base and above, and the net-negative reach after the join (`p[-2] = v`, a pre-decrement, a counted walk) is not taken by `generateStoreGuard`/the alias analysis. The fix is in the engine's indexed-stack-pointer and guard logic.
+- **A3-86 part b.** A frame address a call returns (`mov r4,r0 ; rts`) is a new value to the engine with no base, so a caller that walks it down folds the locals. The fix is for the engine to take a lent callee's output as a frame address when its `outOrigins` name the register the frame address was passed in; the walk of A3-80 then applies.
+- The next free engine patch number `0061` is therefore still unused.
+
+### 7. The instrument gap
+
+Partly closed. The printed-C differential now has the `raw-stack-register` class and the four A3-87/A3-79 pins (section 3), and reverting the host withhold or the excuse fails them (section 4). **Still open** (for the engine rows and a complete close of section 7 of the round 11 review): `storesBelow` is not yet checked against a run in check 10b, and `GenWalkFn`/`GenSpillWalkFn` do not yet draw a callee that steps below its pointer, a wrapper or thunk around one, a laundering step before the walk, or a join of a frame address with another pointer. Those draws exercise the engine rows above, so they are best added with the engine fix that makes them pass.
+
+### 8. Matrix (host fix, code `0fdfdcf`)
+
+| Run | Result |
+|---|---|
+| `ctest -E SaturnExplorerLive -j2 --timeout 900` (93 tests) | 93 of 93 pass |
+| `SaturnExplorerDecompilerFaultTests` | 0 of 94 jobs failed, 0 MOVED (no re-pin: `storesBelow` moved no allocation) |
+| `SE_GENERATED_SEEDS=3000 SE_GENERATED_GRAMMAR=2` | 0 failing seeds, 0 findings; 4,236 lent (vs 4,245 at the head: the fail-closed drop) |
+| `SE_GENERATED_GRAMMAR=1 SE_GENERATED_SEEDS=1000` | 0 failing seeds, 0 findings |
+| `SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000` | all passed; the four A3-87/A3-79 pins `raw-stack-register`, 0 failing seeds |
+| `TestArea3HiddenInputFuzz` seeds 6 and 7 (5,000 each) | 1,204 and 1,216 lent, 15,652 and 15,808 perturbed runs, 0 findings |
+| `SaturnExplorerSh2DecompilerTests` (the suite, with `TestArea3Round11Fix`) | all passed |
+| `rowsfix.src` via the reviewer's driver | A3-82 (a-e), A3-83 (a-h), A3-84 (a-d) print the local and agree with the run; A3-86a withheld and prints the local; A3-87 withheld; A3-85, A3-88 still fold (open, section 6) |
+| mutation table | section 4 |
+| corpora 007 / 008 | section 5 |
+
+**Not run this session** (long, additional confidence; no regression expected given the above): `SE_GENERATED_SEEDS=20000`; the reviewer's ranges (grammar 2 1,600,001-1,620,000, specials 1,700,001-1,705,000); the sanitizer and Live jobs (shared socket; CI).

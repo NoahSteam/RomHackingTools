@@ -742,6 +742,9 @@ if(BUILD_TESTING)
         target_include_directories(SaturnExplorerDecompilerPanelTests
             PRIVATE FrontEnd/src FrontEnd/tests ${SE_IMGUI_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include)
         target_link_libraries(SaturnExplorerDecompilerPanelTests PRIVATE SaturnExplorerGhidraDecomp Threads::Threads)
+        # The guide quotes the line tooltip (A7-1); the test reads it to keep the two the same.
+        target_compile_definitions(SaturnExplorerDecompilerPanelTests PRIVATE
+            SE_DECOMPILER_GUIDE="${CMAKE_CURRENT_SOURCE_DIR}/DECOMPILER_GUIDE.md")
         add_test(NAME SaturnExplorerDecompilerPanelTests
                  COMMAND SaturnExplorerDecompilerPanelTests ${CMAKE_CURRENT_BINARY_DIR}/decompiler_panel_test)
         set_tests_properties(SaturnExplorerDecompilerPanelTests PROPERTIES TIMEOUT 60)
@@ -768,6 +771,28 @@ if(BUILD_TESTING)
         # in kPinned with WILL_FAIL TRUE here, so ctest stays green until the fix lands and goes red
         # the day it does -- the signal to remove WILL_FAIL and keep the line.
         set_tests_properties(SaturnExplorerDecompilerModelTests PROPERTIES TIMEOUT 120)
+
+        # Area 8 of the review program: the trust indicators. The area 1 rig (it includes DecompilerModelTests.cpp, which
+        # brings no main of its own here) run through outcome mixes -- truncated, unsupported, too large, unavailable,
+        # unimplemented, failed, stopped, disabled -- with a reference model of what the badge, its tooltip, the dimming and the
+        # amber and red lines must say (DecompilerTrustModel.h) held to what the panel drew (DrawnText.h reads the glyphs back).
+        # SE_TRUST_STEPS=<n> runs n steps per mix, SE_TRUST_MIX=<k> one mix, SE_TRUST_SEED=<k> one sequence printed.
+        add_executable(SaturnExplorerDecompilerTrustTests
+            FrontEnd/tests/DecompilerTrustTests.cpp
+            FrontEnd/src/DecompilerPanel.cpp
+            FrontEnd/src/Theme.cpp
+            ${SE_DECOMPILER_TEST_SOURCES}
+            ${SE_IMGUI_CORE}
+        )
+        target_include_directories(SaturnExplorerDecompilerTrustTests
+            PRIVATE FrontEnd/src FrontEnd/tests ${SE_IMGUI_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include)
+        target_link_libraries(SaturnExplorerDecompilerTrustTests PRIVATE SaturnExplorerGhidraDecomp Threads::Threads)
+        # The model's phrases are the guide's: the test reads the guide and fails if one is not in it.
+        target_compile_definitions(SaturnExplorerDecompilerTrustTests PRIVATE
+            SE_DECOMPILER_GUIDE="${CMAKE_CURRENT_SOURCE_DIR}/DECOMPILER_GUIDE.md")
+        add_test(NAME SaturnExplorerDecompilerTrustTests
+                 COMMAND SaturnExplorerDecompilerTrustTests ${CMAKE_CURRENT_BINARY_DIR}/decompiler_trust_test)
+        set_tests_properties(SaturnExplorerDecompilerTrustTests PROPERTIES TIMEOUT 300)
     endif()
 
     # Frame identity in the scrub view: what a refresh shows as the ring evicts, and which frame staged

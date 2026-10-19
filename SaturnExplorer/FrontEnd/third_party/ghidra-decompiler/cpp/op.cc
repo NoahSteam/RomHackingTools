@@ -16,6 +16,8 @@
  * Modified for SaturnExplorer: a load is not moved past another load (patches/0012-load-in-place.patch).
  * Modified for SaturnExplorer: a PcodeOp that cannot be inserted or moved between lists is not lost (patches/0023-allocation-failure-order.patch).
  * Modified for SaturnExplorer: a PcodeOp that cannot be put on the final list is not lost; one that cannot be listed is freed (patches/0032-allocation-failure-order-2.patch).
+ * Modified for SaturnExplorer: the backward step of the consume analysis is a function of one op (patches/0054-engine-cached-masks-never-narrower.patch).
+ * Modified for SaturnExplorer: the non-zero mask of a signed shift by 64 or more is the sign's fill (patches/0059-engine-range-arithmetic-sound.patch).
  */
 #include "op.hh"
 #include "funcdata.hh"
@@ -667,14 +669,18 @@ uintb PcodeOp::getNZMaskLocal(bool cliploop) const
     if ((!getIn(1)->isConstant())||(size > sizeof(uintb)))
       resmask = fullmask;
     else {
-      sa = getIn(1)->getOffset();	// Get shift amount
+      // SaturnExplorer (patches/0059-engine-range-arithmetic-sound.patch): the amount saturates at the width of a uintb, and the sign's fill
+      // is taken with pcode_right: (fullmask >> sa) is a shift by sa & 63 on x86 for sa of 64 or more, which gave the mask of the value
+      // shifted by 0 for a shift by 64 (the result of an arithmetic shift by the width or more is all sign bits, or zero)
+      const uintb saFull = getIn(1)->getOffset();	// Get shift amount
+      sa = (saFull >= 8*sizeof(uintb)) ? 8*sizeof(uintb) : (int4)saFull;
       resmask = getIn(0)->getNZMask();
       if ((resmask & (fullmask ^ (fullmask>>1))) == 0) {	// If we know sign bit is zero
 	resmask = pcode_right(resmask,sa);			// Same as CPUI_INT_RIGHT
       }
       else {
 	resmask = pcode_right(resmask,sa);
-	resmask |= (fullmask >> sa) ^ fullmask;			// Don't know what the new high bits are
+	resmask |= pcode_right(fullmask,sa) ^ fullmask;		// Don't know what the new high bits are
       }
     }
     break;
@@ -807,6 +813,210 @@ uintb PcodeOp::getNZMaskLocal(bool cliploop) const
     break;
   }
   return resmask;
+}
+
+/// \brief Calculate the bits of an input that are consumed, from the bits of the output that are consumed
+///
+/// This is the backward step of the dead-code analysis (ActionDeadCode::propagateConsumed) for one input slot of an op
+/// that has an output: \e outc is the consume mask of the output, and the bits of the input in \b slot that can affect
+/// those are returned in \e res. (SaturnExplorer, patches/0054-engine-cached-masks-never-narrower.patch: the step is one
+/// function so that Funcdata can keep consume masks wide enough between two runs of the analysis with the same rules.)
+/// \param slot is the input slot
+/// \param outc is the consume mask of the output
+/// \param res is used to pass back the consume mask of the input
+/// \return \b false if the output says nothing of how the input is consumed (the operands of a call, the effect of an INDIRECT)
+bool PcodeOp::getConsumeLocal(int4 slot,uintb outc,uintb &res) const
+
+{
+  int4 sz;
+  uintb a,b;
+
+  switch(code()) {
+  case CPUI_INT_MULT:
+    b = coveringmask(outc);
+    if (slot == 1) {
+      res = b;
+      return true;
+    }
+    if (getIn(1)->isConstant()) {
+      int4 leastSet = leastsigbit_set(getIn(1)->getOffset());
+      if (leastSet >= 0) {
+	a = calc_mask(output->getSize()) >> leastSet;
+	a &= b;
+      }
+      else
+	a = 0;
+    }
+    else
+      a = b;
+    res = a;
+    return true;
+  case CPUI_INT_ADD:
+  case CPUI_INT_SUB:
+    res = coveringmask(outc);	// Make sure value is filled out as a contiguous mask
+    return true;
+  case CPUI_SUBPIECE:
+    if (slot == 1) {
+      res = (outc == 0) ? 0 : ~((uintb)0);
+      return true;
+    }
+    sz = getIn(1)->getOffset();
+    if (sz >= sizeof(uintb))	// If we are truncating beyond the precision of the consume field
+      a = 0;			// this tells us nothing about consuming bits within the field
+    else
+      a = outc << (sz*8);
+    if ((a==0)&&(outc!=0)&&(getIn(0)->getSize() > sizeof(uintb))) {
+      // If the consumed mask is zero because
+      // it isn't big enough to cover the whole varnode and
+      // there are still upper bits that are consumed
+      a = ~((uintb)0);
+      a = a ^ (a >> 1);		// Set the highest bit possible in the mask to indicate some consumption
+    }
+    res = a;
+    return true;
+  case CPUI_PIECE:
+    sz = getIn(1)->getSize();
+    if (output->getSize() > sizeof(uintb)) { // If the concatenation goes beyond the consume precision
+      if (sz >= sizeof(uintb)) {
+	a = ~((uintb)0);	// Assume the bits not in the consume field are consumed
+	b = outc;
+      }
+      else {
+	a = (outc >> (sz*8)) ^ ( (~((uintb)0)) << 8*(sizeof(uintb)-sz));
+	b = outc ^ (a << (sz*8));
+      }
+    }
+    else {
+      a = outc >> (sz*8);
+      b = outc ^ (a << (sz*8));
+    }
+    res = (slot == 0) ? a : b;
+    return true;
+  case CPUI_INDIRECT:
+    if (slot != 0) return false;	// The effect is an annotation
+    res = outc;
+    return true;
+  case CPUI_COPY:
+  case CPUI_INT_NEGATE:
+  case CPUI_INT_XOR:
+  case CPUI_INT_OR:
+  case CPUI_MULTIEQUAL:
+  case CPUI_INT_ZEXT:
+    res = outc;
+    return true;
+  case CPUI_INT_AND:
+    if (slot == 0 && getIn(1)->isConstant())
+      res = outc & getIn(1)->getOffset();
+    else
+      res = outc;
+    return true;
+  case CPUI_INT_SEXT:
+    b = calc_mask(getIn(0)->getSize());
+    a = outc & b;
+    if (outc > b)
+      a |= (b ^ (b>>1));	// Make sure signbit is marked used
+    res = a;
+    return true;
+  case CPUI_INT_LEFT:
+    if (getIn(1)->isConstant()) {
+      if (slot == 1) {
+	res = (outc == 0) ? 0 : ~((uintb)0);
+	return true;
+      }
+      sz = output->getSize();
+      int4 sa = getIn(1)->getOffset();
+      if (sz > sizeof(uintb)) {	// If there exists bits beyond the precision of the consume field
+	if (sa >= 8*sizeof(uintb))
+	  a = ~((uintb)0);	// Make sure we assume one bits where we shift in unrepresented bits
+	else if (sa == 0) {
+	  a = outc;
+	}
+	else
+	  a = (outc >> sa) ^ ( (~((uintb)0)) << (8*sizeof(uintb)-sa));
+	sz = 8*sz -sa;
+	if (sz < 8*sizeof(uintb)) {
+	  uintb mask = ~((uintb)0);
+	  mask <<= sz;
+	  a = a & ~mask;	// Make sure high bits that are left shifted out are not marked consumed
+	}
+      }
+      else
+	a = outc >> sa;		// Most cases just do this
+      res = a;
+    }
+    else
+      res = (outc==0) ? 0 : ~((uintb)0);
+    return true;
+  case CPUI_INT_RIGHT:
+    if (getIn(1)->isConstant()) {
+      if (slot == 1) {
+	res = (outc == 0) ? 0 : ~((uintb)0);
+	return true;
+      }
+      int4 sa = getIn(1)->getOffset();
+      if (sa >= 8*sizeof(uintb)) // If the shift is beyond the precision of the consume field
+	a = 0;			// We know nothing about the low order consumption of the input bits
+      else
+	a = outc << sa;		// Most cases just do this
+      res = a;
+    }
+    else
+      res = (outc==0) ? 0 : ~((uintb)0);
+    return true;
+  case CPUI_INT_LESS:
+  case CPUI_INT_LESSEQUAL:
+  case CPUI_INT_EQUAL:
+  case CPUI_INT_NOTEQUAL:
+    if (outc==0)
+      res = 0;
+    else			// Anywhere we know is zero, is not getting "consumed"
+      res = getIn(0)->getNZMask() | getIn(1)->getNZMask();
+    return true;
+  case CPUI_INSERT:
+    a = 1;
+    a <<= (int4)getIn(3)->getOffset();
+    a -= 1;	// Insert mask
+    if (slot == 1)
+      res = a;
+    else if (slot == 0) {
+      a <<= (int4)getIn(2)->getOffset();
+      res = outc & ~a;
+    }
+    else
+      res = (outc == 0) ? 0 : ~((uintb)0);
+    return true;
+  case CPUI_ZPULL:
+  case CPUI_SPULL:
+    if (slot != 0) {
+      res = (outc == 0) ? 0 : ~((uintb)0);
+      return true;
+    }
+    a = 1;
+    a <<= (int4)getIn(2)->getOffset();
+    a -= 1;	// Pull mask
+    a &= outc;	// Consumed bits of mask
+    a <<= (int4)getIn(1)->getOffset();
+    res = a;
+    return true;
+  case CPUI_POPCOUNT:
+  case CPUI_LZCOUNT:
+    a = 16 * getIn(0)->getSize() - 1;	// Mask for possible bits that could be set
+    a &= outc;					// Of the bits that could be set, which are consumed
+    res = (a == 0) ? 0 : ~((uintb)0);		// if any consumed, treat all input bits as consumed
+    return true;
+  case CPUI_CALL:
+  case CPUI_CALLIND:
+    return false;		// Call output doesn't indicate consumption of inputs
+  case CPUI_FLOAT_INT2FLOAT:
+    a = 0;
+    if (outc != 0)
+      a = coveringmask(getIn(0)->getNZMask());
+    res = a;
+    return true;
+  default:
+    res = (outc==0) ? 0 : ~((uintb)0); // all or nothing
+    return true;
+  }
 }
 
 /// Compare the execution order of -this- and -bop-, if -this- executes earlier (dominates) return -1;

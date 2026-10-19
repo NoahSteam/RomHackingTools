@@ -1,0 +1,74 @@
+
+// ---- round 10 instrument (scratch only): the tight-mask stress. After every rule application every non-zero mask is made the exact
+// least fixpoint (Funcdata::calcNZMask) and every consume mask the model's least fixpoint (the roots and local steps of patch 0054 /
+// ActionDeadCode, as modelCheck above), the opposite of the round 9 fixer's 'forget every mask' stress. A rule pair that undoes
+// each other only when the masks are tight (a rule that fires on a new op's exact mask where upstream would still have had every
+// bit) shows as a bound hit (SE_REPEAT_LIMIT=60) or a hang.
+// SE_EXACT_STRESS=1 (both), =2 (non-zero masks only), =3 (consume masks only)
+}
+namespace nzmchk {
+static int exactMode() { static int m = -1; if (m < 0) m = std::getenv("SE_EXACT_STRESS") ? std::atoi(std::getenv("SE_EXACT_STRESS")) : 0; return m; }
+static void modelConsume(Funcdata &data, std::map<Varnode *,uintb> &C) {
+  std::vector<Varnode *> work;
+  list<PcodeOp *>::const_iterator oiter;
+  uintb retUnion = 0; bool haveUnion = false;
+  for (oiter = data.beginOpAlive(); oiter != data.endOpAlive(); ++oiter) {
+    PcodeOp *op = *oiter;
+    if (!chk_masksReady(op)) continue;
+    for (int i = 0; i < op->numInput(); ++i) {
+      Varnode *in = op->getIn(i);
+      if (in->getSize() > 8) continue;
+      bool rootOp = op->isCall() || !op->isAssignment() || in->isAutoLive() || (op->getOut() != (Varnode *)0 && op->getOut()->isAutoLive());
+      if (!rootOp) continue;
+      uintb need = chk_need(&data, op, i, ~(uintb)0) & calc_mask(in->getSize());
+      if (op->code() == CPUI_RETURN && i > 0 && !data.getFuncProto().isOutputLocked() && data.getActiveOutput() == (ParamActive *)0 && in->getSpace()->getType() != IPTR_JOIN) {
+        if (!haveUnion) {
+          haveUnion = true;
+          for (list<PcodeOp *>::const_iterator ri = data.beginOpAlive(); ri != data.endOpAlive(); ++ri)
+            if ((*ri)->code() == CPUI_RETURN && (*ri)->numInput() > 1) { Varnode *rv = (*ri)->getIn(1); retUnion |= (rv->getSpace()->getType() == IPTR_JOIN) ? calc_mask(rv->getSize()) : minimalmask(rv->getNZMask()); }
+          int4 bc = data.getFuncProto().getReturnBytesConsumed();
+          if (bc != 0) retUnion &= calc_mask(bc);
+        }
+        need = retUnion & calc_mask(in->getSize());
+      }
+      uintb &c = C[in];
+      if ((need & ~c) != 0) { c |= need; if (in->isWritten()) work.push_back(in); }
+    }
+    Varnode *o = op->getOut();
+    if (o != (Varnode *)0 && o->isAutoLive() && o->getSize() <= 8) { uintb &c = C[o]; if ((calc_mask(o->getSize()) & ~c) != 0) { c = calc_mask(o->getSize()); if (o->isWritten()) work.push_back(o); } }
+  }
+  while (!work.empty()) {
+    Varnode *v = work.back(); work.pop_back();
+    PcodeOp *def = v->getDef();
+    if (def == (PcodeOp *)0 || !chk_masksReady(def)) continue;
+    uintb outc = C[v];
+    for (int i = 0; i < def->numInput(); ++i) {
+      Varnode *in = def->getIn(i);
+      if (in->getSize() > 8) continue;
+      uintb need = chk_need(&data, def, i, outc) & calc_mask(in->getSize());
+      uintb &c = C[in];
+      if ((need & ~c) != 0) { c |= need; if (in->isWritten()) work.push_back(in); }
+    }
+  }
+}
+static void exactStress(Funcdata &data) {
+  int m = exactMode();
+  if (m == 0) return;
+  if (m == 1 || m == 2) data.calcNZMask();
+  if (m == 1 || m == 3) {
+    std::map<Varnode *,uintb> C;
+    modelConsume(data, C);
+    list<PcodeOp *>::const_iterator oiter;
+    for (oiter = data.beginOpAlive(); oiter != data.endOpAlive(); ++oiter) {
+      PcodeOp *op = *oiter;
+      Varnode *o = op->getOut();
+      if (o != (Varnode *)0 && o->getSize() <= 8) { std::map<Varnode *,uintb>::iterator it = C.find(o); uintb nv = (it == C.end() ? 0 : it->second); if (!data.deadRemovalAllowed(o->getSpace())) nv = ~(uintb)0; if (std::getenv("SE_EXACT_LOG") && (o->getConsume() & ~nv)) std::fprintf(stderr, "NARROW defop=%s space=%s off=%llx size=%d cached=%llx model=%llx flags: addrforce=%d directwrite=%d\n", get_opname(op->code()), o->getSpace()->getName().c_str(), (unsigned long long)o->getOffset(), o->getSize(), (unsigned long long)o->getConsume(), (unsigned long long)nv, (int)o->isAddrForce(), (int)o->isDirectWrite()); if (std::getenv("SE_EXACT_LOG") && std::string(std::getenv("SE_EXACT_LOG")) == "2" && (o->getConsume() & ~nv) && o->getSpace()->getName() == "stack") { static int shown = 0; if (shown++ < 1) { std::ostringstream os; data.printRaw(os); std::fprintf(stderr, "--- raw at first stack narrow ---\n%s\n", os.str().c_str()); for (list<PcodeOp *>::const_iterator q = data.beginOpAlive(); q != data.endOpAlive(); ++q) if ((*q)->code() == CPUI_RETURN) { PcodeOp *rq = *q; std::fprintf(stderr, "RETURN n=%d ready=%d locked=%d active=%d bytes=%d", rq->numInput(), (int)chk_masksReady(rq), (int)data.getFuncProto().isOutputLocked(), (int)(data.getActiveOutput() != (ParamActive *)0), (int)data.getFuncProto().getReturnBytesConsumed()); for (int ii = 0; ii < rq->numInput(); ++ii) std::fprintf(stderr, " in%d size=%d nzm=%llx C=%llx need=%llx", ii, rq->getIn(ii)->getSize(), (unsigned long long)rq->getIn(ii)->getNZMask(), (unsigned long long)C[rq->getIn(ii)], (unsigned long long)chk_need(&data, rq, ii, ~(uintb)0)); std::fprintf(stderr, "\n"); } for (list<PcodeOp *>::const_iterator q = data.beginOpAlive(); q != data.endOpAlive(); ++q) if ((*q)->getOut() != (Varnode *)0) std::fprintf(stderr, "CONS %s %s:%llx:%d consume=%llx\n", get_opname((*q)->code()), (*q)->getOut()->getSpace()->getName().c_str(), (unsigned long long)(*q)->getOut()->getOffset(), (*q)->getOut()->getSize(), (unsigned long long)(*q)->getOut()->getConsume()); } } o->setConsume(nv); }
+      for (int i = 0; i < op->numInput(); ++i) {
+        Varnode *in = op->getIn(i);
+        if (in->getSize() > 8 || in->isWritten()) continue;
+        std::map<Varnode *,uintb>::iterator it = C.find(in);
+        { uintb nv = (it == C.end() ? 0 : it->second); if (!data.deadRemovalAllowed(in->getSpace())) nv = ~(uintb)0; in->setConsume(nv); }
+      }
+    }
+  }
+}

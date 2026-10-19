@@ -14,6 +14,8 @@
  * limitations under the License.
  *
  * Modified for SaturnExplorer: a host can declare a pointer into the stack the actions cannot see (patches/0030-host-stack-alias.patch).
+ * Modified for SaturnExplorer: a pointer a loop steps down from a stack address aliases the locals below that address (patches/0056-engine-stack-walk-down-aliases.patch).
+ * Modified for SaturnExplorer: so does one kept in a stack local and read back, across a call too (patches/0060-engine-stack-walk-down-spilled.patch).
  */
 /// \file varmap.hh
 /// \brief Classes for keeping track of local variables and reconstructing stack layout
@@ -154,6 +156,8 @@ private:
   AddrSpace *space;		///< AddressSpace in which to search
   mutable vector<AddBase> addBase; ///< Collection of pointers into the AddressSpace
   mutable vector<uintb> alias;	///< List of aliased addresses (as offsets)
+  mutable vector<uintb> downReach;	///< SaturnExplorer: the lowest offset a pointer stepped down from a base may reach, per such base (patches/0056-engine-stack-walk-down-aliases.patch)
+  mutable vector<pair<uintb,uintb> > downSpan;	///< SaturnExplorer: each such reach and the byte below its base
   mutable bool calculated;	///< Have aliases been calculated
   uintb localExtreme;		///< Largest possible offset for a local variable
   uintb localBoundary;		///< Boundary offset separating locals and parameters
@@ -168,8 +172,11 @@ public:
   void sortAlias(void) const;			///< Sort the alias starting offsets
   const vector<AddBase> &getAddBase(void) const { return addBase; }	///< Get the collection of pointer Varnodes
   const vector<uintb> &getAlias(void) const { return alias; }		///< Get the list of alias starting offsets
+  const vector<pair<uintb,uintb> > &getDownSpans(void) const { return downSpan; }	///< SaturnExplorer: the stack a pointer stepped down may reach
   static void gatherAdditiveBase(Varnode *startvn,vector<AddBase> &addbase);
   static uintb gatherOffset(Varnode *vn);
+  static bool stepsDown(PcodeOp *multi);	///< SaturnExplorer: does a loop step the pointer joined by \b multi down (patches/0056-engine-stack-walk-down-aliases.patch)
+  static bool reachesStepDown(Varnode *base);	///< SaturnExplorer: does \b base reach a loop that steps it down, through a spill and its reload too (patches/0060-engine-stack-walk-down-spilled.patch)
 };
 
 /// \brief A container for hints about the data-type layout of an address space

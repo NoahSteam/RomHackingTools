@@ -67,6 +67,11 @@ constexpr const char* kFrameEscapeNote = "a frame address is in r2 here, in none
 // ...and the same for r7 (A3-48): the engine fills in at most two unset registers before an argument it sees, so a frame address in r7 with r4-r6 all
 // untouched is dropped from the call's arguments.
 constexpr const char* kFrameEscapeNoteR7 = "a frame address is in r7 here, in none of the arguments: the call may write the locals from there up";
+// ...and for the call's stack argument slots (A3-51): the engine drops an argument that follows three unset registers, the stack word with it.
+constexpr const char* kFrameEscapeNoteStack = "a frame address is in a stack argument slot here, in none of the arguments: the call may write the locals from there up";
+// ...and for a local the function wrote at or above the stack pointer before a call to a function with no lent signature and reads after it (A3-61):
+// the callee's stack arguments are those words, and a hand-written one may hand a value back in its own argument slot.
+constexpr const char* kFrameEscapeNoteSlot = "a local at or above the stack pointer is read after this call, which may write it as one of its stack arguments";
 
 namespace origin
 {
@@ -95,10 +100,16 @@ struct CallEffects
     // say is not lent a signature (WithholdReason), and a caller's analysis takes r15 to be anything.
     static constexpr int32_t kSpUnknown = INT32_MIN;
     int32_t spDelta = kSpUnknown;
+    // The registers (bit r: r0-r14) the function may store through at an offset below the entry value it was handed in that register -- a
+    // negative displacement, or a pointer stepped down in a loop (`*--p = v`, A3-71). The engine's reach for a pointer argument is the object
+    // at the address and what lies above it, so a caller that hands a lent callee an exact frame address must expose the locals below it as
+    // well when this names that register. Unknown (a callee whose signature is not lent): every register, taken conservatively.
+    uint32_t storesBelow = origin::kRegisters;
     bool operator==(const CallEffects& o) const
     {
         return preserved == o.preserved && storesThrough == o.storesThrough && outOrigins == o.outOrigins &&
-               leaks == o.leaks && frameValues == o.frameValues && frameWords == o.frameWords && spDelta == o.spDelta;
+               leaks == o.leaks && frameValues == o.frameValues && frameWords == o.frameWords && spDelta == o.spDelta &&
+               storesBelow == o.storesBelow;
     }
 };
 
@@ -162,6 +173,19 @@ struct Line
     std::vector<Token> tokens;
     uint32_t firstAddr = 0;        // the lowest token address on the line; 0 = none
 };
+
+// The instructions a line was decompiled from: the distinct non-zero token addresses, ascending
+// (canonical). A line is a statement, and a statement holds the p-code of every instruction whose
+// result it combines (a pointer built in one place, an index in another, the load in a third), so
+// one line is often several instructions, not always next to each other. Navigation (a click, the
+// menu) goes to the first only.
+std::vector<uint32_t> LineInstructions(const Line& line);
+
+// What hovering a line says (A7-1): that the number is the address of the SH-2 instruction the
+// line came from -- not a value in the line -- that a click shows it in SH-2 Assembly, and, when
+// the line is several instructions, how many and which. Empty for a line with no address (a
+// declaration, a brace), where a click does nothing.
+std::string LineOriginText(const Line& line);
 
 // Where the engine is within one decompilation. Two passes repeat Init..Actions; only the last
 // prints. The cancel check-points are in Flow and Actions; Init, Print and Teardown have none
@@ -283,14 +307,16 @@ struct CallSite
 
 // How one of the engine's warning comments is reported: kept or not (warnings from jump-table
 // recovery's scratch copy are dropped, unless they say cases were dropped), its text, and whether
-// it means a jump table lost cases or the analysis hit its restart limit (either withholds the
-// signature). Exposed for tests: a failed second-stage table recovery has no SH-2 fixture that
-// reaches it, since both stages analyse the same scratch copy.
+// it means a jump table lost cases or the analysis hit its restart limit or its bound on the
+// passes of one action (any of them withholds the signature). Exposed for tests: a failed
+// second-stage table recovery has no SH-2 fixture that reaches it, since both stages analyse the
+// same scratch copy.
 struct EngineWarning
 {
     bool keep = false;
     bool casesMissing = false;
     bool restartLimit = false;
+    bool repeatLimit = false;   // patch 0055: an action of the engine stopped repeating with changes still pending (A2-59)
     std::string text;   // without the "WARNING: " prefix
 };
 EngineWarning ClassifyEngineWarning(const std::string& comment);
@@ -417,6 +443,9 @@ public:
     // it keeps, so a caller reads them as they were instead of extraout_rN). On unless cleared: the
     // lending measurements run both ways. Process-wide.
     static void SetLendEffectsForTests(bool lend);
+    // Tests only: the most passes one repeating action of the engine makes before it stops with "Exceeded maximum repeats of"
+    // and the signature is withheld (patch 0055; 0 restores the engine's own bound). Process-wide.
+    static void SetActionRepeatLimitForTests(int limit);
     // Tests only: called as each phase begins, in every pass, including the reference run's (which
     // the observer is not told of); and just before the reference run starts. Process-wide.
     static void SetPhaseHookForTests(std::function<void(DecompilePhase)> hook);

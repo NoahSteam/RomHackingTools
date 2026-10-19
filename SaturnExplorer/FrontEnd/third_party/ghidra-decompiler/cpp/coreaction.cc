@@ -19,6 +19,8 @@
  * Modified for SaturnExplorer: an unused load is held in every pass, not only the first (patches/0014-keep-unused-loads-late.patch).
  * Modified for SaturnExplorer: every load is held, not only the unused ones (patches/0018-hold-every-load.patch).
  * Modified for SaturnExplorer: a return in the join space is consumed whole, never narrowed to its low half (patches/0033-engine-printed-value-fixes.patch).
+ * Modified for SaturnExplorer: the backward step of the consume analysis is PcodeOp::getConsumeLocal (patches/0054-engine-cached-masks-never-narrower.patch).
+ * Modified for SaturnExplorer: the entry stack pointer a loop walks down is no reference to a stack parameter, and a save slot it reaches stays mapped (patches/0056-engine-stack-walk-down-aliases.patch).
  */
 #include "coreaction.hh"
 #include "condexe.hh"
@@ -2085,6 +2087,14 @@ int4 ActionRestrictLocal::apply(Funcdata &data)
     }
   }
 
+  // SaturnExplorer (patches/0056-engine-stack-walk-down-aliases.patch): a save slot a pointer stepped down may reach stays mapped. Code
+  // that runs on after its pops (a run-on into the next function, a frame made after a push and a pop)
+  // walks down over the words they freed; unmapped, the slot was one variable with the register saved in
+  // it, and a read of it after the walk printed the register (`return unaff_r13;`).
+  AliasChecker walks;
+  AddrSpace *stackSpc = data.getScopeLocal()->getSpaceId();
+  walks.gather(&data,stackSpc,false);
+  const vector<pair<uintb,uintb> > &spans( walks.getDownSpans() );
   eiter = data.getFuncProto().effectBegin();
   endeiter = data.getFuncProto().effectEnd();
   for(;eiter!=endeiter;++eiter) { // Iterate through saved registers
@@ -2099,6 +2109,13 @@ int4 ActionRestrictLocal::apply(Funcdata &data)
 	Varnode *outvn = op->getOut();
 	if (!data.getScopeLocal()->isUnaffectedStorage(outvn))	// Is this where unaffected values get saved
 	  continue;
+	bool walked = false;
+	for(int4 k=0;k<spans.size();++k) {
+	  uintb low = spans[k].first, top = spans[k].second, off = outvn->getOffset();
+	  if (outvn->getSpace() == stackSpc && (low <= top ? (off >= low && off <= top) : (off >= low || off <= top)))
+	    walked = true;
+	}
+	if (walked) continue;
 	data.getScopeLocal()->markNotMapped(outvn->getSpace(),outvn->getOffset(),outvn->getSize(),false);
       }
     }
@@ -3855,70 +3872,14 @@ void ActionDeadCode::propagateConsumed(vector<Varnode *> &worklist)
 
   PcodeOp *op = vn->getDef();	// Assume vn is written
 
-  int4 sz;
-  uintb a,b;
-
-  switch(op->code()) {
-  case CPUI_INT_MULT:
-    b = coveringmask(outc);
-    if (op->getIn(1)->isConstant()) {
-      int4 leastSet = leastsigbit_set(op->getIn(1)->getOffset());
-      if (leastSet >= 0) {
-	a = calc_mask(vn->getSize()) >> leastSet;
-	a &= b;
-      }
-      else
-	a = 0;
-    }
-    else
-      a = b;
-    pushConsumed(a,op->getIn(0),worklist);
-    pushConsumed(b,op->getIn(1),worklist);
-    break;
-  case CPUI_INT_ADD:
-  case CPUI_INT_SUB:
-    a = coveringmask(outc);	// Make sure value is filled out as a contiguous mask
-    pushConsumed(a,op->getIn(0),worklist);
-    pushConsumed(a,op->getIn(1),worklist);
-    break;
-  case CPUI_SUBPIECE:
-    sz = op->getIn(1)->getOffset();
-    if (sz >= sizeof(uintb))	// If we are truncating beyond the precision of the consume field
-      a = 0;			// this tells us nothing about consuming bits within the field
-    else
-      a = outc << (sz*8);
-    if ((a==0)&&(outc!=0)&&(op->getIn(0)->getSize() > sizeof(uintb))) {
-      // If the consumed mask is zero because
-      // it isn't big enough to cover the whole varnode and
-      // there are still upper bits that are consumed
-      a = ~((uintb)0);
-      a = a ^ (a >> 1);		// Set the highest bit possible in the mask to indicate some consumption
-    }
-    b = (outc == 0) ? 0 : ~((uintb)0);
-    pushConsumed(a,op->getIn(0),worklist);
-    pushConsumed(b,op->getIn(1),worklist);
-    break;
-  case CPUI_PIECE:
-    sz = op->getIn(1)->getSize();
-    if (vn->getSize() > sizeof(uintb)) { // If the concatenation goes beyond the consume precision
-      if (sz >= sizeof(uintb)) {
-	a = ~((uintb)0);	// Assume the bits not in the consume field are consumed
-	b = outc;
-      }
-      else {
-	a = (outc >> (sz*8)) ^ ( (~((uintb)0)) << 8*(sizeof(uintb)-sz));
-	b = outc ^ (a << (sz*8));
-      }
-    }
-    else {
-      a = outc >> (sz*8);
-      b = outc ^ (a << (sz*8));
-    }
-    pushConsumed(a,op->getIn(0),worklist);
-    pushConsumed(b,op->getIn(1),worklist);
-    break;
-  case CPUI_INDIRECT:
-    pushConsumed(outc,op->getIn(0),worklist);
+  // SaturnExplorer (patches/0054-engine-cached-masks-never-narrower.patch): the step for each input is
+  // PcodeOp::getConsumeLocal, which Funcdata also uses to keep consume masks wide enough between two runs of this action.
+  uintb a;
+  for(int4 i=0;i<op->numInput();++i) {
+    if (op->getConsumeLocal(i,outc,a))
+      pushConsumed(a,op->getIn(i),worklist);
+  }
+  if (op->code() == CPUI_INDIRECT) {
     if (op->getIn(1)->getSpace()->getType()==IPTR_IOP) {
       PcodeOp *indop = PcodeOp::getOpFromConst(op->getIn(1)->getAddr());
       if (!indop->isDead()) {
@@ -3933,146 +3894,7 @@ void ActionDeadCode::propagateConsumed(vector<Varnode *> &worklist)
 	  indop->setIndirectSource();
       }
     }
-    break;
-  case CPUI_COPY:
-  case CPUI_INT_NEGATE:
-    pushConsumed(outc,op->getIn(0),worklist);
-    break;
-  case CPUI_INT_XOR:
-  case CPUI_INT_OR:
-    pushConsumed(outc,op->getIn(0),worklist);
-    pushConsumed(outc,op->getIn(1),worklist);
-    break;
-  case CPUI_INT_AND:
-    if (op->getIn(1)->isConstant()) {
-      uintb val = op->getIn(1)->getOffset();
-      pushConsumed(outc&val,op->getIn(0),worklist);
-      pushConsumed(outc,op->getIn(1),worklist);
-    }
-    else {
-      pushConsumed(outc,op->getIn(0),worklist);
-      pushConsumed(outc,op->getIn(1),worklist);
-    }
-    break;
-  case CPUI_MULTIEQUAL:
-    for(int4 i=0;i<op->numInput();++i)
-      pushConsumed(outc,op->getIn(i),worklist);
-    break;
-  case CPUI_INT_ZEXT:
-    pushConsumed(outc,op->getIn(0),worklist);
-    break;
-  case CPUI_INT_SEXT:
-    b = calc_mask(op->getIn(0)->getSize());
-    a = outc & b;
-    if (outc > b)
-      a |= (b ^ (b>>1));	// Make sure signbit is marked used
-    pushConsumed(a,op->getIn(0),worklist);
-    break;
-  case CPUI_INT_LEFT:
-    if (op->getIn(1)->isConstant()) {
-      sz = vn->getSize();
-      int4 sa = op->getIn(1)->getOffset();
-      if (sz > sizeof(uintb)) {	// If there exists bits beyond the precision of the consume field
-	if (sa >= 8*sizeof(uintb))
-	  a = ~((uintb)0);	// Make sure we assume one bits where we shift in unrepresented bits
-	else if (sa == 0) {
-	  a = outc;
-	}
-	else
-	  a = (outc >> sa) ^ ( (~((uintb)0)) << (8*sizeof(uintb)-sa));
-	sz = 8*sz -sa;
-	if (sz < 8*sizeof(uintb)) {
-	  uintb mask = ~((uintb)0);
-	  mask <<= sz;
-	  a = a & ~mask;	// Make sure high bits that are left shifted out are not marked consumed
-	}
-      }
-      else
-	a = outc >> sa;		// Most cases just do this
-      b = (outc == 0) ? 0 : ~((uintb)0);
-      pushConsumed(a,op->getIn(0),worklist);
-      pushConsumed(b,op->getIn(1),worklist);
-    }
-    else {
-      a = (outc==0) ? 0 : ~((uintb)0);
-      pushConsumed(a,op->getIn(0),worklist);
-      pushConsumed(a,op->getIn(1),worklist);
-    }
-    break;
-  case CPUI_INT_RIGHT:
-    if (op->getIn(1)->isConstant()) {
-      int4 sa = op->getIn(1)->getOffset();
-      if (sa >= 8*sizeof(uintb)) // If the shift is beyond the precision of the consume field
-	a = 0;			// We know nothing about the low order consumption of the input bits
-      else
-	a = outc << sa;		// Most cases just do this
-      b = (outc == 0) ? 0 : ~((uintb)0);
-      pushConsumed(a,op->getIn(0),worklist);
-      pushConsumed(b,op->getIn(1),worklist);
-    }
-    else {
-      a = (outc==0) ? 0 : ~((uintb)0);
-      pushConsumed(a,op->getIn(0),worklist);
-      pushConsumed(a,op->getIn(1),worklist);
-    }
-    break;
-  case CPUI_INT_LESS:
-  case CPUI_INT_LESSEQUAL:
-  case CPUI_INT_EQUAL:
-  case CPUI_INT_NOTEQUAL:
-    if (outc==0)
-      a = 0;
-    else			// Anywhere we know is zero, is not getting "consumed"
-      a = op->getIn(0)->getNZMask() | op->getIn(1)->getNZMask();
-    pushConsumed(a,op->getIn(0),worklist);
-    pushConsumed(a,op->getIn(1),worklist);
-    break;
-  case CPUI_INSERT:
-    a = 1;
-    a <<= (int4)op->getIn(3)->getOffset();
-    a -= 1;	// Insert mask
-    pushConsumed(a,op->getIn(1),worklist);
-    a <<= (int4)op->getIn(2)->getOffset();
-    pushConsumed(outc & ~a, op->getIn(0), worklist);
-    b = (outc == 0) ? 0 : ~((uintb)0);
-    pushConsumed(b,op->getIn(2), worklist);
-    pushConsumed(b,op->getIn(3), worklist);
-    break;
-  case CPUI_ZPULL:
-  case CPUI_SPULL:
-    a = 1;
-    a <<= (int4)op->getIn(2)->getOffset();
-    a -= 1;	// Pull mask
-    a &= outc;	// Consumed bits of mask
-    a <<= (int4)op->getIn(1)->getOffset();
-    pushConsumed(a,op->getIn(0),worklist);
-    b = (outc == 0) ? 0 : ~((uintb)0);
-    pushConsumed(b,op->getIn(1), worklist);
-    pushConsumed(b,op->getIn(2), worklist);
-    break;
-  case CPUI_POPCOUNT:
-  case CPUI_LZCOUNT:
-    a = 16 * op->getIn(0)->getSize() - 1;	// Mask for possible bits that could be set
-    a &= outc;					// Of the bits that could be set, which are consumed
-    b = (a == 0) ? 0 : ~((uintb)0);		// if any consumed, treat all input bits as consumed
-    pushConsumed(b,op->getIn(0), worklist);
-    break;
-  case CPUI_CALL:
-  case CPUI_CALLIND:
-    break;		// Call output doesn't indicate consumption of inputs
-  case CPUI_FLOAT_INT2FLOAT:
-    a = 0;
-    if (outc != 0)
-      a = coveringmask(op->getIn(0)->getNZMask());
-    pushConsumed(a,op->getIn(0), worklist);
-    break;
-  default:
-    a = (outc==0) ? 0 : ~((uintb)0); // all or nothing
-    for(int4 i=0;i<op->numInput();++i)
-      pushConsumed(a,op->getIn(i),worklist);
-    break;
   }
-
 }
 
 /// \brief Deal with unconsumed Varnodes
@@ -5070,6 +4892,19 @@ void ActionInputPrototype::gatherParamSpacebaseRefs(list<InputRef> &refs,Funcdat
     OpCode opc = op->code();
     if (opc == CPUI_PTRSUB) {
       vn = op->getIn(1);
+      // SaturnExplorer (patches/0056-engine-stack-walk-down-aliases.patch): the entry stack pointer a loop walks down
+      // (ScopeLocal::annotateRawStackPtr gives the join this PTRSUB) reaches only what lies below
+      // it, which is no parameter.
+      if (vn->getOffset() == 0 && !op->getOut()->hasNoDescend()) {
+	bool walk = true;
+	for(list<PcodeOp *>::const_iterator diter=op->getOut()->beginDescend();diter!=op->getOut()->endDescend();++diter) {
+	  if ((*diter)->code() != CPUI_MULTIEQUAL || !AliasChecker::stepsDown(*diter)) {
+	    walk = false;
+	    break;
+	  }
+	}
+	if (walk) continue;
+      }
       addr = sbtype->getAddress(vn->getOffset(),vn->getSize(),op->getAddr());
     }
     else if (opc == CPUI_PTRADD) {

@@ -15,6 +15,8 @@
  *
  * Modified for SaturnExplorer: a host can declare a pointer into the stack the actions cannot see (patches/0030-host-stack-alias.patch).
  * Modified for SaturnExplorer: a RangeHint the list cannot take is freed (patches/0032-allocation-failure-order-2.patch).
+ * Modified for SaturnExplorer: a pointer a loop steps down from a stack address aliases the locals below that address (patches/0056-engine-stack-walk-down-aliases.patch).
+ * Modified for SaturnExplorer: so does one kept in a stack local and read back, across a call too (patches/0060-engine-stack-walk-down-spilled.patch).
  */
 #include "varmap.hh"
 #include "funcdata.hh"
@@ -479,9 +481,20 @@ void ScopeLocal::annotateRawStackPtr(void)
   if (spVn == (Varnode *)0) return;
   list<PcodeOp *>::const_iterator iter;
   vector<PcodeOp *> refOps;
+  vector<PcodeOp *> joinOps;
   bool sawRaw = false;
   for(iter=spVn->beginDescend();iter!=spVn->endDescend();++iter) {
     PcodeOp *op = *iter;
+    // SaturnExplorer (patches/0056-engine-stack-walk-down-aliases.patch): a loop join of the stack pointer itself (a copy of r15
+    // walked down by `mov.l Rm,@-Rn` from the entry r15) merged the register into the loop's
+    // pointer, which then printed as the register with the stack's own type (`register0x0000003c`,
+    // `BADSPACEBASE *`). Its input is given the PTRSUB the other raw uses get, at the end of the
+    // block it comes from.
+    if (op->code() == CPUI_MULTIEQUAL && AliasChecker::stepsDown(op)) {
+      joinOps.push_back(op);
+      sawRaw = true;
+      continue;
+    }
     if (op->getEvalType() == PcodeOp::special && !op->isCall()) continue;
     OpCode opc = op->code();
     if (opc == CPUI_PTRSUB) {
@@ -507,6 +520,30 @@ void ScopeLocal::annotateRawStackPtr(void)
     int4 slot = op->getSlot(spVn);
     PcodeOp *ptrsub = fd->newOpBefore(op,CPUI_PTRSUB,spVn,fd->newConstant(spVn->getSize(),0));
     fd->opSetInput(op, ptrsub->getOut(), slot);
+  }
+  for(int4 i=0;i<joinOps.size();++i) {
+    PcodeOp *op = joinOps[i];
+    BlockBasic *parent = op->getParent();
+    for(int4 slot=0;slot<op->numInput();++slot) {
+      if (op->getIn(slot) != spVn) continue;
+      if (slot >= parent->sizeIn()) break;
+      BlockBasic *pred = (BlockBasic *)parent->getIn(slot);
+      list<PcodeOp *>::iterator at = pred->endOp();
+      Address pc = pred->getStop();
+      if (at != pred->beginOp()) {
+	--at;
+	pc = (*at)->getAddr();
+	if (!(*at)->isBranch())
+	  ++at;
+      }
+      PcodeOp *ptrsub = fd->newOp(2,pc);
+      fd->opSetOpcode(ptrsub,CPUI_PTRSUB);
+      fd->newUniqueOut(spVn->getSize(),ptrsub);
+      fd->opSetInput(ptrsub,spVn,0);
+      fd->opSetInput(ptrsub,fd->newConstant(spVn->getSize(),0),1);
+      fd->opInsert(ptrsub,pred,at);
+      fd->opSetInput(op,ptrsub->getOut(),slot);
+    }
   }
 }
 
@@ -795,6 +832,155 @@ void AliasChecker::gatherInternal(void) const
     if (offset < aliasBoundary)
       aliasBoundary = offset;
   }
+  // SaturnExplorer: the rule above takes a pointer to reach only what lies at or above its base, as
+  // an array index does. A loop that steps the pointer down from the base (`*--p = v` over a local
+  // array, the SH-2's `mov.l Rm,@-Rn` from a copy of r15) reaches what lies below it: the locals
+  // there were taken for unaliased, their INDIRECTs at the stores were collapsed, and a read of one
+  // after the loop printed the value it had before it (ledger A3-65). Such a base aliases everything
+  // from 0xffff below it up (the distance past which markUnaliased stops trusting an alias anyway).
+  for(vector<AddBase>::iterator iter=addBase.begin();iter!=addBase.end();++iter) {
+    Varnode *base = (*iter).base;
+    if (base == (Varnode *)0) continue;
+    bool down = reachesStepDown(base);
+    if (!down) continue;
+    uintb offset = AddrSpace::addressToByte(gatherOffset(base),space->getWordSize());
+    uintb low = (offset - 0xffff) & calc_mask(space->getAddrSize());
+    downReach.push_back(low);
+    downSpan.push_back(pair<uintb,uintb>(low,(offset - 1) & calc_mask(space->getAddrSize())));
+    if (direction == 1) {
+      if (low < localBoundary) continue;
+    }
+    else {
+      if (low > localBoundary) continue;
+    }
+    if (low < aliasBoundary)
+      aliasBoundary = low;
+  }
+}
+
+/// SaturnExplorer (patches/0060-engine-stack-walk-down-spilled.patch): does the pointer \b base reach a loop that steps it down?
+/// The pointer is followed forward through copies, additions, joins and the INDIRECTs of a call or a store, which is how a
+/// frame address kept in a stack local and read back looks once the stack is heritaged (`COPY` into the local, the call's
+/// INDIRECT on it, the read's `COPY` out). A pointer read back after a call that may have rewritten the local is taken to be
+/// the one written (the call can write there only an address it was given, or one of its own frame below ours), so the
+/// walk fails closed: the base is taken to reach below itself (ledger A3-80). Patches 0056 and 0057 looked only at the
+/// MULTIEQUALs that read the base itself.
+/// \param base is a pointer into the stack (one of the AddBase records)
+/// \return \b true if a loop the pointer reaches steps it down
+bool AliasChecker::reachesStepDown(Varnode *base)
+
+{
+  vector<Varnode *> work;
+  set<Varnode *> seen;
+  work.push_back(base);
+  seen.insert(base);
+  for(int4 k=0;k<work.size();++k) {
+    if (work.size() >= 1024) return true;	// too far to follow: taken to step down (fail closed)
+    Varnode *vn = work[k];
+    for(list<PcodeOp *>::const_iterator iter=vn->beginDescend();iter!=vn->endDescend();++iter) {
+      PcodeOp *op = *iter;
+      switch(op->code()) {
+      case CPUI_MULTIEQUAL:
+	if (stepsDown(op)) return true;
+	break;
+      case CPUI_COPY:
+      case CPUI_INT_ADD:
+	break;
+      case CPUI_INDIRECT:
+      case CPUI_INT_SUB:
+      case CPUI_PTRADD:
+      case CPUI_PTRSUB:
+	if (op->getIn(0) != vn) continue;
+	break;
+      default:
+	continue;
+      }
+      Varnode *out = op->getOut();
+      if (out == (Varnode *)0) continue;
+      if (seen.insert(out).second)
+	work.push_back(out);
+    }
+  }
+  return false;
+}
+
+/// SaturnExplorer (patches/0056-engine-stack-walk-down-aliases.patch): follow the pointer a MULTIEQUAL joins forward, through
+/// copies and additions, back to the MULTIEQUAL itself. If the sum on any such loop is negative, or a
+/// value of unknown size is subtracted on it, the loop steps the pointer down. An index of unknown
+/// value that is added is taken to be non-negative, as the rest of the alias analysis takes it.
+/// \param multi is the MULTIEQUAL joining a pointer with its stepped value
+/// \return \b true if some loop through \b multi lowers the pointer
+bool AliasChecker::stepsDown(PcodeOp *multi)
+
+{
+  // SaturnExplorer (patches/0057-engine-stack-walk-down-conditional.patch): the forward walk is keyed on (varnode, offset), not the varnode
+  // alone. A step taken only on some paths of the loop (`if (c) *--p = v;`) makes a nested MULTIEQUAL between the step and the loop's back edge
+  // (phi(p, p-4)); its output is reached first with offset 0 (the unstepped path), and keying on the varnode alone then pruned the stepped
+  // path (offset -4) before it could reach the loop join, so the loop was not seen to step down (ledger A3-72). Keyed on the pair, the stepped
+  // offset reaches the join. Offsets are masked to the varnode's size, so the set of (varnode, offset) is finite; the cap guards nested loops.
+  vector<pair<Varnode *,uintb> > work;
+  vector<pair<Varnode *,uintb> > seen;
+  work.push_back(pair<Varnode *,uintb>(multi->getOut(),0));
+  seen.push_back(pair<Varnode *,uintb>(multi->getOut(),0));
+  while(!work.empty() && seen.size() < 4096) {
+    Varnode *vn = work.back().first;
+    uintb off = work.back().second;
+    work.pop_back();
+    uintb mask = calc_mask(vn->getSize());
+    for(list<PcodeOp *>::const_iterator iter=vn->beginDescend();iter!=vn->endDescend();++iter) {
+      PcodeOp *op = *iter;
+      uintb next = off;
+      switch(op->code()) {
+      case CPUI_MULTIEQUAL:
+	if (op == multi) {
+	  off &= mask;
+	  if (off != 0 && ((off >> (8 * vn->getSize() - 1)) & 1) != 0)
+	    return true;
+	  continue;
+	}
+	break;
+      case CPUI_COPY:
+	break;
+      case CPUI_INDIRECT:
+	if (op->getIn(0) != vn) continue;
+	break;
+      case CPUI_INT_ADD:
+      {
+	Varnode *other = op->getIn(1 - op->getSlot(vn));
+	if (other->isConstant())
+	  next = off + other->getOffset();
+	break;
+      }
+      case CPUI_INT_SUB:
+	if (op->getIn(0) != vn) continue;
+	if (!op->getIn(1)->isConstant())
+	  return true;
+	next = off - op->getIn(1)->getOffset();
+	break;
+      case CPUI_PTRADD:
+	if (op->getIn(0) != vn) continue;
+	if (op->getIn(1)->isConstant())
+	  next = off + op->getIn(1)->getOffset() * op->getIn(2)->getOffset();
+	break;
+      case CPUI_PTRSUB:
+	if (op->getIn(0) != vn) continue;
+	next = off + op->getIn(1)->getOffset();
+	break;
+      default:
+	continue;
+      }
+      Varnode *out = op->getOut();
+      if (out == (Varnode *)0) continue;
+      next &= calc_mask(out->getSize());
+      bool known = false;
+      for(int4 i=0;i<seen.size();++i)
+	if (seen[i].first == out && seen[i].second == next) { known = true; break; }
+      if (known) continue;
+      seen.push_back(pair<Varnode *,uintb>(out,next));
+      work.push_back(pair<Varnode *,uintb>(out,next));
+    }
+  }
+  return false;
 }
 
 /// For the given function and address space, gather all Varnodes that are pointers into the
@@ -811,6 +997,8 @@ void AliasChecker::gather(const Funcdata *f,AddrSpace *spc,bool defer)
   calculated = false;		// Defer calculation
   addBase.clear();
   alias.clear();
+  downReach.clear();
+  downSpan.clear();
   direction = space->stackGrowsNegative() ? 1 : -1;		// direction == 1 for normal negative stack growth
   deriveBoundaries(fd->getFuncProto());
   if (!defer)
@@ -840,6 +1028,10 @@ bool AliasChecker::hasLocalAlias(Varnode *vn) const
 void AliasChecker::sortAlias(void) const
 
 {
+  // SaturnExplorer: the reach of a pointer stepped down joins the alias starts here, after
+  // MapState::gatherOpen has read them one for one with the bases (patches/0056-engine-stack-walk-down-aliases.patch)
+  alias.insert(alias.end(),downReach.begin(),downReach.end());
+  downReach.clear();
   sort(alias.begin(),alias.end());
 }
 
@@ -1079,10 +1271,10 @@ void MapState::addRange(uintb st,Datatype *ct,uint4 fl,RangeHint::RangeType rt,i
 #ifdef OPACTION_DEBUG
   if (debugon) {
     ostringstream s;
-    s << "Add Range: " << hex << st << ":" << dec << ct->getSize();
+    s << "Add Range: " << std::hex << st << ":" << dec << ct->getSize();
     s << " ";
     ct->printRaw(s);
-    s << endl;
+    s << std::endl;
     glb->printDebug(s.str());
   }
 #endif
@@ -1204,6 +1396,8 @@ void MapState::addGuard(const LoadGuard &guard,OpCode opc,TypeFactory *typeFacto
     int4 minItems = ((guard.getMaximum() - guard.getMinimum()) + 1) / step;
     addRange(guard.getMinimum(),ct,0,RangeHint::open,minItems-1);
   }
+  else if (guard.isGuessedBelow())
+    return;	// SaturnExplorer: no array starts at a guess (patches/0056-engine-stack-walk-down-aliases.patch)
   else
     addRange(guard.getMinimum(),ct,0,RangeHint::open,3);
 }

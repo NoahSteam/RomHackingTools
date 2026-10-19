@@ -1,0 +1,911 @@
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc
+@@ -19,6 +19,7 @@
+  * Modified for SaturnExplorer: an unused load is held in every pass, not only the first (patches/0014-keep-unused-loads-late.patch).
+  * Modified for SaturnExplorer: every load is held, not only the unused ones (patches/0018-hold-every-load.patch).
+  * Modified for SaturnExplorer: a return in the join space is consumed whole, never narrowed to its low half (patches/0033-engine-printed-value-fixes.patch).
++ * Modified for SaturnExplorer: the backward step of the consume analysis is PcodeOp::getConsumeLocal (patches/0054-engine-cached-masks-never-narrower.patch).
+  */
+ #include "coreaction.hh"
+ #include "condexe.hh"
+@@ -3855,70 +3856,14 @@
+ 
+   PcodeOp *op = vn->getDef();	// Assume vn is written
+ 
+-  int4 sz;
+-  uintb a,b;
+-
+-  switch(op->code()) {
+-  case CPUI_INT_MULT:
+-    b = coveringmask(outc);
+-    if (op->getIn(1)->isConstant()) {
+-      int4 leastSet = leastsigbit_set(op->getIn(1)->getOffset());
+-      if (leastSet >= 0) {
+-	a = calc_mask(vn->getSize()) >> leastSet;
+-	a &= b;
+-      }
+-      else
+-	a = 0;
+-    }
+-    else
+-      a = b;
+-    pushConsumed(a,op->getIn(0),worklist);
+-    pushConsumed(b,op->getIn(1),worklist);
+-    break;
+-  case CPUI_INT_ADD:
+-  case CPUI_INT_SUB:
+-    a = coveringmask(outc);	// Make sure value is filled out as a contiguous mask
+-    pushConsumed(a,op->getIn(0),worklist);
+-    pushConsumed(a,op->getIn(1),worklist);
+-    break;
+-  case CPUI_SUBPIECE:
+-    sz = op->getIn(1)->getOffset();
+-    if (sz >= sizeof(uintb))	// If we are truncating beyond the precision of the consume field
+-      a = 0;			// this tells us nothing about consuming bits within the field
+-    else
+-      a = outc << (sz*8);
+-    if ((a==0)&&(outc!=0)&&(op->getIn(0)->getSize() > sizeof(uintb))) {
+-      // If the consumed mask is zero because
+-      // it isn't big enough to cover the whole varnode and
+-      // there are still upper bits that are consumed
+-      a = ~((uintb)0);
+-      a = a ^ (a >> 1);		// Set the highest bit possible in the mask to indicate some consumption
+-    }
+-    b = (outc == 0) ? 0 : ~((uintb)0);
+-    pushConsumed(a,op->getIn(0),worklist);
+-    pushConsumed(b,op->getIn(1),worklist);
+-    break;
+-  case CPUI_PIECE:
+-    sz = op->getIn(1)->getSize();
+-    if (vn->getSize() > sizeof(uintb)) { // If the concatenation goes beyond the consume precision
+-      if (sz >= sizeof(uintb)) {
+-	a = ~((uintb)0);	// Assume the bits not in the consume field are consumed
+-	b = outc;
+-      }
+-      else {
+-	a = (outc >> (sz*8)) ^ ( (~((uintb)0)) << 8*(sizeof(uintb)-sz));
+-	b = outc ^ (a << (sz*8));
+-      }
+-    }
+-    else {
+-      a = outc >> (sz*8);
+-      b = outc ^ (a << (sz*8));
+-    }
+-    pushConsumed(a,op->getIn(0),worklist);
+-    pushConsumed(b,op->getIn(1),worklist);
+-    break;
+-  case CPUI_INDIRECT:
+-    pushConsumed(outc,op->getIn(0),worklist);
++  // SaturnExplorer (patches/0054-engine-cached-masks-never-narrower.patch): the step for each input is
++  // PcodeOp::getConsumeLocal, which Funcdata also uses to keep consume masks wide enough between two runs of this action.
++  uintb a;
++  for(int4 i=0;i<op->numInput();++i) {
++    if (op->getConsumeLocal(i,outc,a))
++      pushConsumed(a,op->getIn(i),worklist);
++  }
++  if (op->code() == CPUI_INDIRECT) {
+     if (op->getIn(1)->getSpace()->getType()==IPTR_IOP) {
+       PcodeOp *indop = PcodeOp::getOpFromConst(op->getIn(1)->getAddr());
+       if (!indop->isDead()) {
+@@ -3933,146 +3878,7 @@
+ 	  indop->setIndirectSource();
+       }
+     }
+-    break;
+-  case CPUI_COPY:
+-  case CPUI_INT_NEGATE:
+-    pushConsumed(outc,op->getIn(0),worklist);
+-    break;
+-  case CPUI_INT_XOR:
+-  case CPUI_INT_OR:
+-    pushConsumed(outc,op->getIn(0),worklist);
+-    pushConsumed(outc,op->getIn(1),worklist);
+-    break;
+-  case CPUI_INT_AND:
+-    if (op->getIn(1)->isConstant()) {
+-      uintb val = op->getIn(1)->getOffset();
+-      pushConsumed(outc&val,op->getIn(0),worklist);
+-      pushConsumed(outc,op->getIn(1),worklist);
+-    }
+-    else {
+-      pushConsumed(outc,op->getIn(0),worklist);
+-      pushConsumed(outc,op->getIn(1),worklist);
+-    }
+-    break;
+-  case CPUI_MULTIEQUAL:
+-    for(int4 i=0;i<op->numInput();++i)
+-      pushConsumed(outc,op->getIn(i),worklist);
+-    break;
+-  case CPUI_INT_ZEXT:
+-    pushConsumed(outc,op->getIn(0),worklist);
+-    break;
+-  case CPUI_INT_SEXT:
+-    b = calc_mask(op->getIn(0)->getSize());
+-    a = outc & b;
+-    if (outc > b)
+-      a |= (b ^ (b>>1));	// Make sure signbit is marked used
+-    pushConsumed(a,op->getIn(0),worklist);
+-    break;
+-  case CPUI_INT_LEFT:
+-    if (op->getIn(1)->isConstant()) {
+-      sz = vn->getSize();
+-      int4 sa = op->getIn(1)->getOffset();
+-      if (sz > sizeof(uintb)) {	// If there exists bits beyond the precision of the consume field
+-	if (sa >= 8*sizeof(uintb))
+-	  a = ~((uintb)0);	// Make sure we assume one bits where we shift in unrepresented bits
+-	else if (sa == 0) {
+-	  a = outc;
+-	}
+-	else
+-	  a = (outc >> sa) ^ ( (~((uintb)0)) << (8*sizeof(uintb)-sa));
+-	sz = 8*sz -sa;
+-	if (sz < 8*sizeof(uintb)) {
+-	  uintb mask = ~((uintb)0);
+-	  mask <<= sz;
+-	  a = a & ~mask;	// Make sure high bits that are left shifted out are not marked consumed
+-	}
+-      }
+-      else
+-	a = outc >> sa;		// Most cases just do this
+-      b = (outc == 0) ? 0 : ~((uintb)0);
+-      pushConsumed(a,op->getIn(0),worklist);
+-      pushConsumed(b,op->getIn(1),worklist);
+-    }
+-    else {
+-      a = (outc==0) ? 0 : ~((uintb)0);
+-      pushConsumed(a,op->getIn(0),worklist);
+-      pushConsumed(a,op->getIn(1),worklist);
+-    }
+-    break;
+-  case CPUI_INT_RIGHT:
+-    if (op->getIn(1)->isConstant()) {
+-      int4 sa = op->getIn(1)->getOffset();
+-      if (sa >= 8*sizeof(uintb)) // If the shift is beyond the precision of the consume field
+-	a = 0;			// We know nothing about the low order consumption of the input bits
+-      else
+-	a = outc << sa;		// Most cases just do this
+-      b = (outc == 0) ? 0 : ~((uintb)0);
+-      pushConsumed(a,op->getIn(0),worklist);
+-      pushConsumed(b,op->getIn(1),worklist);
+-    }
+-    else {
+-      a = (outc==0) ? 0 : ~((uintb)0);
+-      pushConsumed(a,op->getIn(0),worklist);
+-      pushConsumed(a,op->getIn(1),worklist);
+-    }
+-    break;
+-  case CPUI_INT_LESS:
+-  case CPUI_INT_LESSEQUAL:
+-  case CPUI_INT_EQUAL:
+-  case CPUI_INT_NOTEQUAL:
+-    if (outc==0)
+-      a = 0;
+-    else			// Anywhere we know is zero, is not getting "consumed"
+-      a = op->getIn(0)->getNZMask() | op->getIn(1)->getNZMask();
+-    pushConsumed(a,op->getIn(0),worklist);
+-    pushConsumed(a,op->getIn(1),worklist);
+-    break;
+-  case CPUI_INSERT:
+-    a = 1;
+-    a <<= (int4)op->getIn(3)->getOffset();
+-    a -= 1;	// Insert mask
+-    pushConsumed(a,op->getIn(1),worklist);
+-    a <<= (int4)op->getIn(2)->getOffset();
+-    pushConsumed(outc & ~a, op->getIn(0), worklist);
+-    b = (outc == 0) ? 0 : ~((uintb)0);
+-    pushConsumed(b,op->getIn(2), worklist);
+-    pushConsumed(b,op->getIn(3), worklist);
+-    break;
+-  case CPUI_ZPULL:
+-  case CPUI_SPULL:
+-    a = 1;
+-    a <<= (int4)op->getIn(2)->getOffset();
+-    a -= 1;	// Pull mask
+-    a &= outc;	// Consumed bits of mask
+-    a <<= (int4)op->getIn(1)->getOffset();
+-    pushConsumed(a,op->getIn(0),worklist);
+-    b = (outc == 0) ? 0 : ~((uintb)0);
+-    pushConsumed(b,op->getIn(1), worklist);
+-    pushConsumed(b,op->getIn(2), worklist);
+-    break;
+-  case CPUI_POPCOUNT:
+-  case CPUI_LZCOUNT:
+-    a = 16 * op->getIn(0)->getSize() - 1;	// Mask for possible bits that could be set
+-    a &= outc;					// Of the bits that could be set, which are consumed
+-    b = (a == 0) ? 0 : ~((uintb)0);		// if any consumed, treat all input bits as consumed
+-    pushConsumed(b,op->getIn(0), worklist);
+-    break;
+-  case CPUI_CALL:
+-  case CPUI_CALLIND:
+-    break;		// Call output doesn't indicate consumption of inputs
+-  case CPUI_FLOAT_INT2FLOAT:
+-    a = 0;
+-    if (outc != 0)
+-      a = coveringmask(op->getIn(0)->getNZMask());
+-    pushConsumed(a,op->getIn(0), worklist);
+-    break;
+-  default:
+-    a = (outc==0) ? 0 : ~((uintb)0); // all or nothing
+-    for(int4 i=0;i<op->numInput();++i)
+-      pushConsumed(a,op->getIn(i),worklist);
+-    break;
+   }
+-
+ }
+ 
+ /// \brief Deal with unconsumed Varnodes
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata.hh b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata.hh
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata.hh
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata.hh
+@@ -15,6 +15,7 @@
+  *
+  * Modified for SaturnExplorer: every LOAD and STORE's fate is recorded (patches/0017-access-fates.patch).
+  * Modified for SaturnExplorer: the instructions and jump tables the flow recovered are recorded (patches/0021-flow-instructions.patch).
++ * Modified for SaturnExplorer: an op that changes keeps the cached masks around it a superset of the truth (patches/0054-engine-cached-masks-never-narrower.patch).
+  */
+ #ifndef __FUNCDATA_HH__
+ #define __FUNCDATA_HH__
+@@ -156,6 +157,8 @@
+   bool applyUnionFacet(DynamicEntry *entry,DynamicHash &dhash);
+ 				// Low level op functions
+   void opZeroMulti(PcodeOp *op);		///< Transform trivial CPUI_MULTIEQUAL to CPUI_COPY
++  void opMasksChanged(PcodeOp *op);		///< Keep the cached non-zero and consume masks wide enough after \e op changed
++  uintb inputConsumeNeeded(PcodeOp *op,int4 slot) const;	///< The bits of an input the given op consumes now
+ 				// Low level block functions
+   void blockRemoveInternal(BlockBasic *bb,bool unreachable);
+   void branchRemoveInternal(BlockBasic *bb,int4 num);
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_op.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_op.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_op.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_op.cc
+@@ -18,6 +18,7 @@
+  * Modified for SaturnExplorer: a cloned jump-table is owned from the moment it is made (patches/0040-jumptable-tracedag-allocation-failure.patch).
+  * Modified for SaturnExplorer: replacing an input of an op forgets what was known of its output's non-zero bits (patches/0046-engine-input-replaced-resets-nzmask.patch).
+  * Modified for SaturnExplorer: and of the non-zero bits of what was worked out from that output (patches/0049-engine-nzmask-forgotten-downstream.patch).
++ * Modified for SaturnExplorer: every change to an op keeps the non-zero and consume masks around it a superset of the truth, in place of 0046 and 0049 (patches/0054-engine-cached-masks-never-narrower.patch).
+  */
+ #include "funcdata.hh"
+ #include "flow.hh"
+@@ -36,6 +37,278 @@
+     debugModCheck(op);
+ #endif
+   obank.changeOpcode(op, glb->inst[opc] );
++  opMasksChanged(op);	// SaturnExplorer (patches/0054-engine-cached-masks-never-narrower.patch)
++}
++
++// SaturnExplorer (patches/0054-engine-cached-masks-never-narrower.patch): the cached masks of a Varnode.
++//
++// Two facts are cached on every Varnode and trusted by the rules between the two actions that work them out: the non-zero
++// mask (Varnode::nzm, which bits can be 1: ActionNonzeroMask, a forward analysis) and the consume mask (Varnode::consumed,
++// which bits any reader can see: ActionDeadCode, a backward one). RuleAndMask, RuleOrConsume, RuleAndDistribute, the
++// sub-variable flow and ActionVarnodeProps (which replaces a Varnode by 0 when the two do not meet) take them as facts. A
++// mask narrower than the truth is a wrong text with no warning; a wider one only delays a simplification. So the invariant
++// kept here is:
++//
++//   at every rule application, a cached mask may be wider than the truth, never narrower.
++//
++// It holds when each mask is at least what its neighbours' masks give: for every op, the non-zero mask of the output contains
++// PcodeOp::getNZMaskLocal of the inputs' masks, and the consume mask of every input contains what the op takes of it given
++// its output's consume mask (PcodeOp::getConsumeLocal, the step ActionDeadCode itself takes; a call's operands, a RETURN's
++// and the other roots as in ActionDeadCode::apply). Both actions establish it. It can break only where the graph changes:
++// an op computes something else (opSetOpcode, opSetInput, opSwapInput, opRemoveInput, opInsertInput, opSetAllInput), a
++// Varnode gains a reader (opSetInput, and so totalReplace and every rule that re-points an op), or an op gets an output
++// (opSetOutput, newVarnodeOut, newUniqueOut). Each of those calls this. The non-zero mask of the op's own output is set to
++// what its inputs give (exact for the value it computes now); below it, every mask the new value reaches is widened until
++// one already holds what its inputs give; the consume masks of the op's inputs, and of everything above them, are widened
++// until one already holds what its readers take; and a reader whose input's non-zero mask grew takes its inputs again where
++// that matters (a compare consumes the bits either side can have). Apart from the changed op's own output nothing is
++// narrowed, so the walks end, and a pass costs at most a visit per Varnode for each bit. A new temporary's output starts
++// consumed in no bit (newUniqueOut: nothing reads it yet) and grows by what each reader takes; a new op's output starts
++// with the non-zero mask of what it computes. So a rule's own new ops do not make the masks of what they read wider than
++// the readers need: wider than needed is what 0049 did, and it was enough to start the cycle of A2-59.
++//
++// The rounds before reset the masks they could name: 0046 the output of the op whose input was set, 0049 everything below
++// it (and every mask through a loop, so that RuleAndDistribute and RuleHumptyOr undid each other for ever: ledger A2-59),
++// 0051 the consume mask of a Varnode that takes another's readers in totalReplace and not of one that gains a reader by
++// opSetInput (RulePushMulti pointed an add at the phi of a join whose consume mask was its byte reader's: ledger A2-58).
++// A walk that widens to what the neighbours give forgets nothing that is still true.
++
++namespace {
++
++/// A worklist on the stack: a rule that changes an op allocates nothing unless more than 64 are waiting at once (the
++/// allocations of the engine are what the fault matrix counts, and patch 0049's first version moved 19 of its pins with a vector)
++template<typename T> class MaskWorklist {
++  T items[64];
++  int4 num;
++  vector<T> overflow;
++public:
++  MaskWorklist(void) : num(0) {}
++  void push(T x) { if (num < 64) items[num++] = x; else overflow.push_back(x); }
++  bool pop(T &x) {
++    if (!overflow.empty()) { x = overflow.back(); overflow.pop_back(); return true; }
++    if (num == 0) return false;
++    x = items[--num];
++    return true;
++  }
++};
++
++/// \brief Is the op complete enough for its masks to be worked out
++///
++/// A rule builds and rebuilds ops a slot or an op-code at a time: an op whose input is missing, whose count of inputs is
++/// not its op-code's, whose output is not there yet or whose offset is not a constant is half built, and the call that
++/// completes it does the work.
++bool masksReady(const PcodeOp *op)
++
++{
++  if (op->getOpcode() == (TypeOp *)0) return false;
++  int4 n = op->numInput();
++  for(int4 i=0;i<n;++i)
++    if (op->getIn(i) == (Varnode *)0) return false;
++  OpCode opc = op->code();
++  int4 need = -1;
++  switch(opc) {
++  case CPUI_COPY:
++  case CPUI_INT_ZEXT:
++  case CPUI_INT_SEXT:
++  case CPUI_INT_NEGATE:
++  case CPUI_INT_2COMP:
++  case CPUI_BOOL_NEGATE:
++  case CPUI_POPCOUNT:
++  case CPUI_LZCOUNT:
++  case CPUI_FLOAT_INT2FLOAT:
++    need = 1;
++    break;
++  case CPUI_INT_ADD:
++  case CPUI_INT_SUB:
++  case CPUI_INT_MULT:
++  case CPUI_INT_DIV:
++  case CPUI_INT_SDIV:
++  case CPUI_INT_REM:
++  case CPUI_INT_SREM:
++  case CPUI_INT_AND:
++  case CPUI_INT_OR:
++  case CPUI_INT_XOR:
++  case CPUI_INT_LEFT:
++  case CPUI_INT_RIGHT:
++  case CPUI_INT_SRIGHT:
++  case CPUI_INT_EQUAL:
++  case CPUI_INT_NOTEQUAL:
++  case CPUI_INT_LESS:
++  case CPUI_INT_LESSEQUAL:
++  case CPUI_INT_SLESS:
++  case CPUI_INT_SLESSEQUAL:
++  case CPUI_INT_CARRY:
++  case CPUI_INT_SCARRY:
++  case CPUI_INT_SBORROW:
++  case CPUI_BOOL_AND:
++  case CPUI_BOOL_OR:
++  case CPUI_BOOL_XOR:
++  case CPUI_PIECE:
++  case CPUI_SUBPIECE:
++  case CPUI_INDIRECT:
++    need = 2;
++    break;
++  case CPUI_ZPULL:
++  case CPUI_SPULL:
++    need = 3;
++    break;
++  case CPUI_INSERT:
++    need = 4;
++    break;
++  default:
++    break;
++  }
++  if (need >= 0 && n != need) return false;
++  switch(opc) {
++  case CPUI_SUBPIECE:
++    if (!op->getIn(1)->isConstant()) return false;
++    break;
++  case CPUI_ZPULL:
++  case CPUI_SPULL:
++    if (!op->getIn(1)->isConstant() || !op->getIn(2)->isConstant()) return false;
++    break;
++  case CPUI_INSERT:
++    if (!op->getIn(2)->isConstant() || !op->getIn(3)->isConstant()) return false;
++    break;
++  case CPUI_MULTIEQUAL:
++    if (n == 0) return false;
++    break;
++  default:
++    break;
++  }
++  if (op->getOut() == (Varnode *)0) {	// The op-codes that always write a value, and do not have one yet
++    switch(opc) {
++    case CPUI_STORE:
++    case CPUI_BRANCH:
++    case CPUI_CBRANCH:
++    case CPUI_BRANCHIND:
++    case CPUI_CALL:
++    case CPUI_CALLIND:
++    case CPUI_CALLOTHER:
++    case CPUI_RETURN:
++      break;
++    default:
++      return false;
++    }
++  }
++  return true;
++}
++
++/// Widen the consume mask of \e vn to hold \e need, and remember it if its definition has to take more of its inputs now
++void widenConsume(Varnode *vn,uintb need,MaskWorklist<Varnode *> &above)
++
++{
++  need &= calc_mask(vn->getSize());
++  if ((need & ~vn->getConsume()) == 0) return;
++  vn->setConsume(vn->getConsume() | need);
++  if (vn->isWritten())
++    above.push(vn);
++}
++
++}
++
++/// The consume mask that the given op, as it is now, needs of one of its inputs: the step of ActionDeadCode for an op that
++/// writes a value (PcodeOp::getConsumeLocal), and for the ops it starts from what ActionDeadCode::apply pushes, or every bit
++/// where it decides from the whole function (a switch's index) or from a call specification that may change.
++/// \param op is the reading op
++/// \param slot is the input slot
++/// \return the consume mask the input must hold
++uintb Funcdata::inputConsumeNeeded(PcodeOp *op,int4 slot) const
++
++{
++  Varnode *vn = op->getIn(slot);
++  if (vn->isAutoLive()) return ~((uintb)0);
++  if (op->isCall()) {
++    if (slot == 0 || op->isCallWithoutSpec()) return ~((uintb)0);
++    FuncCallSpecs *fc = getCallSpecs(op);
++    if (fc == (FuncCallSpecs *)0 || fc->isInputLocked() || fc->isInputActive()) return ~((uintb)0);
++    uintb val = minimalmask(vn->getNZMask());	// as ActionDeadCode::markConsumedParameters
++    int4 bytesConsumed = fc->getInputBytesConsumed(slot);
++    if (bytesConsumed != 0)
++      val &= calc_mask(bytesConsumed);
++    return val;
++  }
++  if (!op->isAssignment()) {
++    if (op->code() == CPUI_RETURN && slot > 0) {	// as ActionDeadCode::gatherConsumedReturn, for this one value
++      if (getFuncProto().isOutputLocked() || getActiveOutput() != (ParamActive *)0) return ~((uintb)0);
++      if (vn->getSpace()->getType() == IPTR_JOIN) return ~((uintb)0);	// (patch 0033)
++      uintb val = minimalmask(vn->getNZMask());
++      int4 bytesConsumed = getFuncProto().getReturnBytesConsumed();
++      if (bytesConsumed != 0)
++	val &= calc_mask(bytesConsumed);
++      return val;
++    }
++    return ~((uintb)0);		// a STORE, a branch, a switch's index (its own mask is narrower), the RETURN's address
++  }
++  Varnode *outvn = op->getOut();
++  uintb outc = outvn->isAutoLive() ? ~((uintb)0) : outvn->getConsume();
++  uintb res;
++  if (!op->getConsumeLocal(slot,outc,res)) return 0;
++  return res;
++}
++
++/// \brief Keep the cached masks around the given op a superset of the truth after it changed
++///
++/// Called after every change to the op-code, the inputs or the output of an op (see the comment above). The non-zero mask of
++/// the output is set to what the op gives from its inputs' masks, and that of every Varnode below it is widened to what its
++/// op gives; the consume masks of the inputs of every op whose inputs changed or now have wider non-zero masks, and of every
++/// Varnode above them, are widened to what their readers take. Nothing else is narrowed: the next ActionNonzeroMask and
++/// ActionDeadCode work the exact masks out again.
++/// \param op is the op that changed
++void Funcdata::opMasksChanged(PcodeOp *op)
++
++{
++  if (!masksReady(op)) return;		// Half built: the call that completes it does this
++  MaskWorklist<PcodeOp *> below;	// Ops whose inputs' non-zero masks grew
++  MaskWorklist<Varnode *> above;	// Varnodes whose consume masks grew, or that gained a reader
++  for(int4 i=0;i<op->numInput();++i)
++    widenConsume(op->getIn(i),inputConsumeNeeded(op,i),above);
++  Varnode *outvn = op->getOut();
++  if (outvn != (Varnode *)0) {
++    // The op's own output is what its inputs give now, exactly: the old mask was a fact about what the op computed before
++    // (and a new op's output, which has every bit, is told what it can hold). What is below is only ever widened.
++    uintb mask = op->getNZMaskLocal(false);
++    if (mask != outvn->nzm) {
++      outvn->nzm = mask;
++      list<PcodeOp *>::const_iterator iter;
++      for(iter=outvn->beginDescend();iter!=outvn->endDescend();++iter)
++	below.push(*iter);
++    }
++  }
++  PcodeOp *cur;
++  while(below.pop(cur)) {
++    if (!masksReady(cur)) continue;
++    for(int4 i=0;i<cur->numInput();++i)	// A reader whose input can hold more may take more of its inputs (a compare)
++      widenConsume(cur->getIn(i),inputConsumeNeeded(cur,i),above);
++    Varnode *vn = cur->getOut();
++    if (vn == (Varnode *)0) continue;
++    uintb mask = vn->nzm | cur->getNZMaskLocal(false);
++    if (mask != vn->nzm) {
++      vn->nzm = mask;
++      list<PcodeOp *>::const_iterator iter;
++      for(iter=vn->beginDescend();iter!=vn->endDescend();++iter)
++	below.push(*iter);
++    }
++  }
++  // A Varnode that gains a reader may hold its consume mask from before its definition's inputs were asked for it (a new
++  // output that is not a temporary starts with every bit consumed, and its op may have been completed before it was set):
++  // its definition is asked again.
++  for(int4 i=0;i<op->numInput();++i) {
++    Varnode *vn = op->getIn(i);
++    if (vn->isWritten())
++      above.push(vn);
++  }
++  Varnode *vn;
++  while(above.pop(vn)) {
++    PcodeOp *def = vn->getDef();
++    if (def == (PcodeOp *)0 || !masksReady(def)) continue;
++    uintb outc = vn->isAutoLive() ? ~((uintb)0) : vn->getConsume();
++    for(int4 i=0;i<def->numInput();++i) {
++      uintb need;
++      if (def->getConsumeLocal(i,outc,need))
++	widenConsume(def->getIn(i),need,above);
++    }
++  }
+ }
+ 
+ /// \param op is the given CPUI_RETURN op
+@@ -90,6 +363,7 @@
+   vn = vbank.setDef(vn,op);
+   setVarnodeProperties(vn);
+   op->setOutput(vn);
++  opMasksChanged(op);	// SaturnExplorer (patches/0054-engine-cached-masks-never-narrower.patch)
+ }
+ 
+ /// The input Varnode is unlinked from the op.
+@@ -128,47 +402,10 @@
+ 
+   vn->addDescend(op);		// Add this op to list of vn's descendants
+   op->setInput(vn,slot);	// op must be up to date AFTER calling descend_add
+-  // SaturnExplorer (patches/0046-engine-input-replaced-resets-nzmask.patch): the non-zero mask of the output was worked out
+-  // from the inputs the op had. A rule that rewrites an op in place can change the value of that op while the value of the
+-  // tree it is part of stays (RuleCollectTerms zeroes a coefficient in one inner ADD and puts the sum in another, which was
+-  // a multiple of 4 and is not now), so the old mask is no longer a fact about the new value. A mask that claims clear bits
+-  // the value has lets RuleAndMask drop an AND that is not redundant. ActionNonzeroMask works the real mask out again.
+-  //
+-  // (patches/0049-engine-nzmask-forgotten-downstream.patch) The same holds for every Varnode below the output whose mask was
+-  // worked out from the one forgotten: the ADD between the two that RuleCollectTerms changed read a sum that was a multiple of
+-  // 8 and is not now, and kept the mask 0xfffffffc. The mask of a Varnode is a function of the masks of the inputs of the op that
+-  // defines it, so those are forgotten too, down to the first Varnode that already allows every bit: what is below that was
+-  // worked out from every bit. Each Varnode is forgotten once between two runs of ActionNonzeroMask, so the walk costs a visit
+-  // per Varnode however many inputs a pass changes.
+-  Varnode *outvn = op->getOut();
+-  if (outvn != (Varnode *)0) {
+-    Varnode *pending[32];	// The Varnodes still to walk from: on the stack, so that a rule changing an input allocates nothing
+-    int4 numPending = 0;
+-    vector<Varnode *> overflow;	// (empty, and no allocation, unless more than 32 are waiting at once)
+-    outvn->nzm = ~((uintb)0);
+-    for(;;) {
+-      list<PcodeOp *>::const_iterator diter;
+-      for(diter=outvn->beginDescend();diter!=outvn->endDescend();++diter) {
+-	Varnode *below = (*diter)->getOut();
+-	if (below == (Varnode *)0) continue;
+-	uintb all = calc_mask(below->getSize());
+-	if ((below->nzm & all) == all) continue;	// Already every bit
+-	below->nzm = ~((uintb)0);
+-	if (numPending < 32)
+-	  pending[numPending++] = below;
+-	else
+-	  overflow.push_back(below);
+-      }
+-      if (!overflow.empty()) {
+-	outvn = overflow.back();
+-	overflow.pop_back();
+-      }
+-      else if (numPending > 0)
+-	outvn = pending[--numPending];
+-      else
+-	break;
+-    }
+-  }
++  // SaturnExplorer (patches/0054-engine-cached-masks-never-narrower.patch): op computes something else now, and vn has a
++  // reader it did not have (see opMasksChanged). This replaces patches 0046 and 0049, which forgot the non-zero masks
++  // below the op instead.
++  opMasksChanged(op);
+ }
+ 
+ /// This is convenience method that is more efficient than call opSetInput() twice.
+@@ -185,6 +422,7 @@
+   Varnode *tmp = op->getIn(slot1);
+   op->setInput(op->getIn(slot2),slot1);
+   op->setInput(tmp,slot2);
++  opMasksChanged(op);	// SaturnExplorer (patches/0054-engine-cached-masks-never-narrower.patch): not every op is commutative
+ }
+ 
+ /// \brief Insert the given PcodeOp at specific point in a basic block
+@@ -351,6 +589,7 @@
+ #endif
+   opUnsetInput(op,slot);
+   op->removeInput(slot);
++  opMasksChanged(op);	// SaturnExplorer (patches/0054-engine-cached-masks-never-narrower.patch)
+ }
+ 
+ /// The given Varnode is set into the given operand slot. Any existing input Varnodes
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_varnode.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_varnode.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_varnode.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_varnode.cc
+@@ -17,6 +17,7 @@
+  * Modified for SaturnExplorer: a write of the return register with the value it holds is not a value of its own (patches/0048-engine-identity-write-return.patch).
+  * Modified for SaturnExplorer: a Varnode that takes over the readers of another is consumed in the bits the other was (patches/0051-engine-replaced-varnode-consume-merged.patch).
+  * Modified for SaturnExplorer: the stack pointer on entry is taken to be aligned to a longword, not to 256 (patches/0052-engine-stack-pointer-longword-aligned.patch).
++ * Modified for SaturnExplorer: a new output keeps the cached masks around its op a superset of the truth; totalReplace leaves that to opSetInput (patches/0054-engine-cached-masks-never-narrower.patch).
+  */
+ #include "funcdata.hh"
+ 
+@@ -132,6 +133,7 @@
+   else
+     vn->setFlags(vflags & ~Varnode::typelock); // Typelock set by updateType
+ 
++  opMasksChanged(op);	// SaturnExplorer (patches/0054-engine-cached-masks-never-narrower.patch)
+   return vn;
+ }
+ 
+@@ -145,11 +147,13 @@
+ {
+   Datatype *ct = glb->types->getBase(s,TYPE_UNKNOWN);
+   Varnode *vn = vbank.createDefUnique(s,ct,op);
++  vn->setConsume(0);	// SaturnExplorer (patches/0054-engine-cached-masks-never-narrower.patch): a temporary no op reads yet; each reader widens it
+   op->setOutput(vn);
+   assignHigh(vn);
+   if (s >= minLanedSize)
+     checkForLanedRegister(s, vn->getAddr());
+   // No chance of matching localmap
++  opMasksChanged(op);	// SaturnExplorer (patches/0054-engine-cached-masks-never-narrower.patch)
+   return vn;
+ }
+ 
+@@ -1553,18 +1557,9 @@
+   PcodeOp *op;
+   int4 i;
+ 
+-  // SaturnExplorer (patches/0051-engine-replaced-varnode-consume-merged.patch): the readers of vn are about to read newvn, so
+-  // newvn is consumed in every bit vn was. The consume mask is worked out by ActionDeadCode, once a pass, and what a rule
+-  // does after that has to leave it a superset of what the readers use: ActionVarnodeProps, the first action of the next pass,
+-  // replaces a Varnode whose non-zero mask and consume mask do not meet by a zero before ActionDeadCode runs again. A merge of
+-  // two equal SUBPIECEs (RuleSelectCse, through cseElimination) left the byte of SR read by "& 1" with the consume mask 0x01
+-  // and a reader of the whole byte on it, and the byte was printed as 0.
+-  if (vn != newvn && !newvn->isConstant() && !vn->hasNoDescend()) {
+-    uintb moved = vn->getConsume();
+-    if (vn->getSize() != newvn->getSize())	// not the same bits: no claim can be made, so every bit
+-      moved = ~((uintb)0);
+-    newvn->setConsume((newvn->getConsume() | moved) & calc_mask(newvn->getSize()));
+-  }
++  // SaturnExplorer: newvn is consumed in every bit a reader of vn takes of it. Patch 0051 merged the consume mask of vn into
++  // newvn here; opSetInput now widens newvn's mask by what each reader it gains takes, which is the same fact for each
++  // reader and holds for every other way a Varnode gains one (patches/0054-engine-cached-masks-never-narrower.patch).
+   iter = vn->beginDescend();
+   while(iter != vn->endDescend()) {
+     op = *iter++;	       // Increment before removing descendant
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/op.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/op.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/op.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/op.cc
+@@ -16,6 +16,7 @@
+  * Modified for SaturnExplorer: a load is not moved past another load (patches/0012-load-in-place.patch).
+  * Modified for SaturnExplorer: a PcodeOp that cannot be inserted or moved between lists is not lost (patches/0023-allocation-failure-order.patch).
+  * Modified for SaturnExplorer: a PcodeOp that cannot be put on the final list is not lost; one that cannot be listed is freed (patches/0032-allocation-failure-order-2.patch).
++ * Modified for SaturnExplorer: the backward step of the consume analysis is a function of one op (patches/0054-engine-cached-masks-never-narrower.patch).
+  */
+ #include "op.hh"
+ #include "funcdata.hh"
+@@ -809,6 +810,210 @@
+   return resmask;
+ }
+ 
++/// \brief Calculate the bits of an input that are consumed, from the bits of the output that are consumed
++///
++/// This is the backward step of the dead-code analysis (ActionDeadCode::propagateConsumed) for one input slot of an op
++/// that has an output: \e outc is the consume mask of the output, and the bits of the input in \b slot that can affect
++/// those are returned in \e res. (SaturnExplorer, patches/0054-engine-cached-masks-never-narrower.patch: the step is one
++/// function so that Funcdata can keep consume masks wide enough between two runs of the analysis with the same rules.)
++/// \param slot is the input slot
++/// \param outc is the consume mask of the output
++/// \param res is used to pass back the consume mask of the input
++/// \return \b false if the output says nothing of how the input is consumed (the operands of a call, the effect of an INDIRECT)
++bool PcodeOp::getConsumeLocal(int4 slot,uintb outc,uintb &res) const
++
++{
++  int4 sz;
++  uintb a,b;
++
++  switch(code()) {
++  case CPUI_INT_MULT:
++    b = coveringmask(outc);
++    if (slot == 1) {
++      res = b;
++      return true;
++    }
++    if (getIn(1)->isConstant()) {
++      int4 leastSet = leastsigbit_set(getIn(1)->getOffset());
++      if (leastSet >= 0) {
++	a = calc_mask(output->getSize()) >> leastSet;
++	a &= b;
++      }
++      else
++	a = 0;
++    }
++    else
++      a = b;
++    res = a;
++    return true;
++  case CPUI_INT_ADD:
++  case CPUI_INT_SUB:
++    res = coveringmask(outc);	// Make sure value is filled out as a contiguous mask
++    return true;
++  case CPUI_SUBPIECE:
++    if (slot == 1) {
++      res = (outc == 0) ? 0 : ~((uintb)0);
++      return true;
++    }
++    sz = getIn(1)->getOffset();
++    if (sz >= sizeof(uintb))	// If we are truncating beyond the precision of the consume field
++      a = 0;			// this tells us nothing about consuming bits within the field
++    else
++      a = outc << (sz*8);
++    if ((a==0)&&(outc!=0)&&(getIn(0)->getSize() > sizeof(uintb))) {
++      // If the consumed mask is zero because
++      // it isn't big enough to cover the whole varnode and
++      // there are still upper bits that are consumed
++      a = ~((uintb)0);
++      a = a ^ (a >> 1);		// Set the highest bit possible in the mask to indicate some consumption
++    }
++    res = a;
++    return true;
++  case CPUI_PIECE:
++    sz = getIn(1)->getSize();
++    if (output->getSize() > sizeof(uintb)) { // If the concatenation goes beyond the consume precision
++      if (sz >= sizeof(uintb)) {
++	a = ~((uintb)0);	// Assume the bits not in the consume field are consumed
++	b = outc;
++      }
++      else {
++	a = (outc >> (sz*8)) ^ ( (~((uintb)0)) << 8*(sizeof(uintb)-sz));
++	b = outc ^ (a << (sz*8));
++      }
++    }
++    else {
++      a = outc >> (sz*8);
++      b = outc ^ (a << (sz*8));
++    }
++    res = (slot == 0) ? a : b;
++    return true;
++  case CPUI_INDIRECT:
++    if (slot != 0) return false;	// The effect is an annotation
++    res = outc;
++    return true;
++  case CPUI_COPY:
++  case CPUI_INT_NEGATE:
++  case CPUI_INT_XOR:
++  case CPUI_INT_OR:
++  case CPUI_MULTIEQUAL:
++  case CPUI_INT_ZEXT:
++    res = outc;
++    return true;
++  case CPUI_INT_AND:
++    if (slot == 0 && getIn(1)->isConstant())
++      res = outc & getIn(1)->getOffset();
++    else
++      res = outc;
++    return true;
++  case CPUI_INT_SEXT:
++    b = calc_mask(getIn(0)->getSize());
++    a = outc & b;
++    if (outc > b)
++      a |= (b ^ (b>>1));	// Make sure signbit is marked used
++    res = a;
++    return true;
++  case CPUI_INT_LEFT:
++    if (getIn(1)->isConstant()) {
++      if (slot == 1) {
++	res = (outc == 0) ? 0 : ~((uintb)0);
++	return true;
++      }
++      sz = output->getSize();
++      int4 sa = getIn(1)->getOffset();
++      if (sz > sizeof(uintb)) {	// If there exists bits beyond the precision of the consume field
++	if (sa >= 8*sizeof(uintb))
++	  a = ~((uintb)0);	// Make sure we assume one bits where we shift in unrepresented bits
++	else if (sa == 0) {
++	  a = outc;
++	}
++	else
++	  a = (outc >> sa) ^ ( (~((uintb)0)) << (8*sizeof(uintb)-sa));
++	sz = 8*sz -sa;
++	if (sz < 8*sizeof(uintb)) {
++	  uintb mask = ~((uintb)0);
++	  mask <<= sz;
++	  a = a & ~mask;	// Make sure high bits that are left shifted out are not marked consumed
++	}
++      }
++      else
++	a = outc >> sa;		// Most cases just do this
++      res = a;
++    }
++    else
++      res = (outc==0) ? 0 : ~((uintb)0);
++    return true;
++  case CPUI_INT_RIGHT:
++    if (getIn(1)->isConstant()) {
++      if (slot == 1) {
++	res = (outc == 0) ? 0 : ~((uintb)0);
++	return true;
++      }
++      int4 sa = getIn(1)->getOffset();
++      if (sa >= 8*sizeof(uintb)) // If the shift is beyond the precision of the consume field
++	a = 0;			// We know nothing about the low order consumption of the input bits
++      else
++	a = outc << sa;		// Most cases just do this
++      res = a;
++    }
++    else
++      res = (outc==0) ? 0 : ~((uintb)0);
++    return true;
++  case CPUI_INT_LESS:
++  case CPUI_INT_LESSEQUAL:
++  case CPUI_INT_EQUAL:
++  case CPUI_INT_NOTEQUAL:
++    if (outc==0)
++      res = 0;
++    else			// Anywhere we know is zero, is not getting "consumed"
++      res = getIn(0)->getNZMask() | getIn(1)->getNZMask();
++    return true;
++  case CPUI_INSERT:
++    a = 1;
++    a <<= (int4)getIn(3)->getOffset();
++    a -= 1;	// Insert mask
++    if (slot == 1)
++      res = a;
++    else if (slot == 0) {
++      a <<= (int4)getIn(2)->getOffset();
++      res = outc & ~a;
++    }
++    else
++      res = (outc == 0) ? 0 : ~((uintb)0);
++    return true;
++  case CPUI_ZPULL:
++  case CPUI_SPULL:
++    if (slot != 0) {
++      res = (outc == 0) ? 0 : ~((uintb)0);
++      return true;
++    }
++    a = 1;
++    a <<= (int4)getIn(2)->getOffset();
++    a -= 1;	// Pull mask
++    a &= outc;	// Consumed bits of mask
++    a <<= (int4)getIn(1)->getOffset();
++    res = a;
++    return true;
++  case CPUI_POPCOUNT:
++  case CPUI_LZCOUNT:
++    a = 16 * getIn(0)->getSize() - 1;	// Mask for possible bits that could be set
++    a &= outc;					// Of the bits that could be set, which are consumed
++    res = (a == 0) ? 0 : ~((uintb)0);		// if any consumed, treat all input bits as consumed
++    return true;
++  case CPUI_CALL:
++  case CPUI_CALLIND:
++    return false;		// Call output doesn't indicate consumption of inputs
++  case CPUI_FLOAT_INT2FLOAT:
++    a = 0;
++    if (outc != 0)
++      a = coveringmask(getIn(0)->getNZMask());
++    res = a;
++    return true;
++  default:
++    res = (outc==0) ? 0 : ~((uintb)0); // all or nothing
++    return true;
++  }
++}
++
+ /// Compare the execution order of -this- and -bop-, if -this- executes earlier (dominates) return -1;
+ /// if -bop- executes earlier return 1, otherwise return 0.  Note that 0 is returned if there is no absolute
+ /// execution order.
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/op.hh b/Ghidra/Features/Decompiler/src/decompile/cpp/op.hh
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/op.hh
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/op.hh
+@@ -250,6 +250,7 @@
+   PcodeOp *previousOp(void) const; ///< Return the previous op within this op's basic block or \e null
+   PcodeOp *target(void) const;	///< Return starting op for instruction associated with this op
+   uintb getNZMaskLocal(bool cliploop) const; ///< Calculate known zero bits for output to this op
++  bool getConsumeLocal(int4 slot,uintb outc,uintb &res) const; ///< Calculate the bits of an input that are consumed, from those of the output
+   int4 compareOrder(const PcodeOp *bop) const; ///< Compare the control-flow order of this and \e bop
+   bool verifyMultNegOne(void) const;	///< Check if \b this is CPUI_INT_MULT by -1
+   void printRaw(ostream &s) const { opcode->printRaw(s,this); }	///< Print raw info about this op to stream

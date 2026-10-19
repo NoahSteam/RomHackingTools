@@ -15,6 +15,9 @@
  *
  * Modified for SaturnExplorer: a call output a locked prototype returns is a return value whatever else it is used for (patches/0044-engine-round5-printed-value-fixes.patch).
  * Modified for SaturnExplorer: a write of the return register with the value it holds is not a value of its own (patches/0048-engine-identity-write-return.patch).
+ * Modified for SaturnExplorer: a Varnode that takes over the readers of another is consumed in the bits the other was (patches/0051-engine-replaced-varnode-consume-merged.patch).
+ * Modified for SaturnExplorer: the stack pointer on entry is taken to be aligned to a longword, not to 256 (patches/0052-engine-stack-pointer-longword-aligned.patch).
+ * Modified for SaturnExplorer: a new output keeps the cached masks around its op a superset of the truth; totalReplace leaves that to opSetInput (patches/0054-engine-cached-masks-never-narrower.patch).
  */
 #include "funcdata.hh"
 
@@ -130,6 +133,7 @@ Varnode *Funcdata::newVarnodeOut(int4 s,const Address &m,PcodeOp *op)
   else
     vn->setFlags(vflags & ~Varnode::typelock); // Typelock set by updateType
 
+  opMasksChanged(op);	// SaturnExplorer (patches/0054-engine-cached-masks-never-narrower.patch)
   return vn;
 }
 
@@ -143,11 +147,13 @@ Varnode *Funcdata::newUniqueOut(int4 s,PcodeOp *op)
 {
   Datatype *ct = glb->types->getBase(s,TYPE_UNKNOWN);
   Varnode *vn = vbank.createDefUnique(s,ct,op);
+  vn->setConsume(0);	// SaturnExplorer (patches/0054-engine-cached-masks-never-narrower.patch): a temporary no op reads yet; each reader widens it
   op->setOutput(vn);
   assignHigh(vn);
   if (s >= minLanedSize)
     checkForLanedRegister(s, vn->getAddr());
   // No chance of matching localmap
+  opMasksChanged(op);	// SaturnExplorer (patches/0054-engine-cached-masks-never-narrower.patch)
   return vn;
 }
 
@@ -925,7 +931,7 @@ void Funcdata::calcNZMask(void)
 	else {
 	  vn->nzm = calc_mask(vn->getSize());
 	  if (vn->isSpacebase())
-	    vn->nzm &= ~((uintb)0xff); // Treat spacebase input as aligned
+	    vn->nzm &= ~((uintb)3); // Treat spacebase input as aligned to a longword (patches/0052-engine-stack-pointer-longword-aligned.patch)
 	}
       }
       else if (!vn->getDef()->isMark()) { // If haven't traversed before
@@ -1551,6 +1557,9 @@ void Funcdata::totalReplace(Varnode *vn,Varnode *newvn)
   PcodeOp *op;
   int4 i;
 
+  // SaturnExplorer: newvn is consumed in every bit a reader of vn takes of it. Patch 0051 merged the consume mask of vn into
+  // newvn here; opSetInput now widens newvn's mask by what each reader it gains takes, which is the same fact for each
+  // reader and holds for every other way a Varnode gains one (patches/0054-engine-cached-masks-never-narrower.patch).
   iter = vn->beginDescend();
   while(iter != vn->endDescend()) {
     op = *iter++;	       // Increment before removing descendant
