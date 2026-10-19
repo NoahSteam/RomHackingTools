@@ -11281,6 +11281,9 @@ Timing is below the round 11 review's recorded 10.0 s / 33.6 s because the revie
 
 ### 6. Not done (the engine rows)
 
+**Closed below** ("continued" record): A3-85, A3-88 and A3-86 b are fixed by engine patch 0061, and the instrument gap of section 7 is closed. The paragraphs below are the state at the host-only commit `0fdfdcf`, kept for the record.
+
+
 - **A3-85 (P1).** A frame pointer laundered through memory -- stored to a global and read back, or spilled in halves or bytes and reassembled -- is never recognised as a stack pointer by the engine's `gatherAdditiveBase`, so `AliasChecker::reachesStepDown` is never asked about it and the locals below the walk fold. A trial patch that extended `reachesStepDown` to follow bit-carrying ops and treat an escape to non-stack memory as stepping down gave **no** change to the A3-85 fixtures (the base is not in `addBase` to begin with), so it was reverted. The sound fix is for the engine to recognise a pointer reassembled from memory as possibly a stack pointer, which is a broad change with corpus impact that needs the validation loop.
 - **A3-88 (P1).** A pointer that is the join of a frame address with another pointer (a global, a parameter) and is then stepped below the frame address: the join makes it an indexed stack access whose guard covers the base and above, and the net-negative reach after the join (`p[-2] = v`, a pre-decrement, a counted walk) is not taken by `generateStoreGuard`/the alias analysis. The fix is in the engine's indexed-stack-pointer and guard logic.
 - **A3-86 part b.** A frame address a call returns (`mov r4,r0 ; rts`) is a new value to the engine with no base, so a caller that walks it down folds the locals. The fix is for the engine to take a lent callee's output as a frame address when its `outOrigins` name the register the frame address was passed in; the walk of A3-80 then applies.
@@ -11288,7 +11291,7 @@ Timing is below the round 11 review's recorded 10.0 s / 33.6 s because the revie
 
 ### 7. The instrument gap
 
-Partly closed. The printed-C differential now has the `raw-stack-register` class and the four A3-87/A3-79 pins (section 3), and reverting the host withhold or the excuse fails them (section 4). **Still open** (for the engine rows and a complete close of section 7 of the round 11 review): `storesBelow` is not yet checked against a run in check 10b, and `GenWalkFn`/`GenSpillWalkFn` do not yet draw a callee that steps below its pointer, a wrapper or thunk around one, a laundering step before the walk, or a join of a frame address with another pointer. Those draws exercise the engine rows above, so they are best added with the engine fix that makes them pass.
+**Closed in the continuation below.** Partly closed at `0fdfdcf`: The printed-C differential now has the `raw-stack-register` class and the four A3-87/A3-79 pins (section 3), and reverting the host withhold or the excuse fails them (section 4). **Still open** (for the engine rows and a complete close of section 7 of the round 11 review): `storesBelow` is not yet checked against a run in check 10b, and `GenWalkFn`/`GenSpillWalkFn` do not yet draw a callee that steps below its pointer, a wrapper or thunk around one, a laundering step before the walk, or a join of a frame address with another pointer. Those draws exercise the engine rows above, so they are best added with the engine fix that makes them pass.
 
 ### 8. Matrix (host fix, code `0fdfdcf`)
 
@@ -11306,3 +11309,56 @@ Partly closed. The printed-C differential now has the `raw-stack-register` class
 | corpora 007 / 008 | section 5 |
 
 **Not run this session** (long, additional confidence; no regression expected given the above): `SE_GENERATED_SEEDS=20000`; the reviewer's ranges (grammar 2 1,600,001-1,620,000, specials 1,700,001-1,705,000); the sanitizer and Live jobs (shared socket; CI).
+
+## Area 3, round 11 fix, continued: the engine rows and the instrument
+
+Fixer, same branch, continuing from `da2a0fa` (merged to master). Engine patch `0061` and host commits `0007a99` to `be61b91`, then the re-pin, docs and this record. The three open P1/P2 rows are now fixed: **A3-85, A3-88 (P1) and A3-86 b** by engine patch `0061-engine-stack-frame-escape.patch`; the instrument gap (section 7 above) is closed.
+
+### 9. Engine patch 0061: the escape analysis
+
+The row fixes of 0056, 0057 and 0060 each recognised a frame address through a few more exact forms, and the next reviewer found another: a frame address laundered (a mask, a shift, swap or rotate pair, halves or bytes reassembled), stored to memory and read back, joined with another pointer (A3-88), or returned by a call it was handed to (A3-86 b) was still taken for no frame address, so the locals below it folded. Rather than add forms, `0061` is an **escape analysis that fails closed** (`FrameEscape` in `heritage.cc`). A frame address *escapes* when it, or any value computed from it, (a) is an input to an op other than a copy, an addition, a subtraction of a constant, a join, an INDIRECT, a PTRSUB or a PTRADD; (b) is stored to memory; (c) is joined with a value that is no frame address; (d) is returned by a call it was handed to and reaches a memory access from there. The walk does not follow where the escaped value goes. **If any frame address escapes, every local from the lowest frame offset the function reaches up is aliased** (`AliasChecker::gatherInternal` adds the reach; `ScopeLocal::markUnaliased` turns the alias off at the first mapped local, so the save-area words below the scope do not matter), and **every STORE through a possible frame address the analysis does not model is guarded** with INDIRECTs (`Heritage::markEscapedStores` before the stack is heritaged, `reprocessFreeStores` keeps the mark after the full pass, `widenEscapedStoreGuards` widens a join's store guard to the whole space for A3-88). The lowest offset is taken over both the frame addresses the walk reaches and the function's stack varnodes, so a frame address that is gone once the stack is heritaged still lowers the boundary.
+
+The host completes the caller side: a laundered own frame address (`PossibleFrame`: a value of stack origin, this function's own, not a nothing-known value) handed to an unnamed call exposes the frame; a lent callee's `storesBelow` is carried through a tail jump in a nested `storesBelow` walk (A3-82, a thunk that reassembles a pointer and tail-jumps to a fill-backwards callee). An over-exposing branch that treated any no-base stack value at a call as an escape was dropped: it broke the `trapa` idiom (modelled as a call) by exposing its ordinary save area; the `storesBelow` loop and `0061` cover the real cases without it.
+
+### 10. The instrument, completed
+
+- **Check 10b** (`EffectClaimsContradicted`, `Sh2GeneratedTests.cpp`) now has `storesBelow`: a run that stores below the start value of r4-r7 in that register's arena, through that register, requires the summary to name it, else `claim-wrong:storesBelow`. Unit pins in `TestRound8Pins` break it in the one way a run shows (a store below r5's start through r5, with and without the bit; an at-or-above store needs no bit).
+- **`GenLaunderWalkFn`/`CheckLaunderWalks`** (a stream of its own, one seed in four, printed-C mode): a frame sentinel, a frame address laundered by one of ten steps (none, mask, swap pair, negation pair, shift pair, rotate pair, xor pair, global round trip, halves, bytes), then a store below it (a counted pre-decrement walk or a constant negative displacement); on the self side sometimes joined with a global first (A3-88); on the call side handed to a callee directly, through a wrapper, through a thunk, or through a thunk that lowers it, with the laundering on the caller's or the callee's side (A3-82 to A3-84). The run reads no input, so a constant the text returns is checked against it (`stale-constant`), as `CheckSpillWalks` does. The draws pin (`TestA365Pins`) holds that every step (self and call), every callee form, the caller-side step and the join are drawn in 2,000 seeds.
+
+### 11. Mutation (the generator alone fails seeds)
+
+Each fix reverted in a built-beside tree, the laundered walks of `SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=300` run:
+
+| Reverted | Result |
+|---|---|
+| engine patch `0061` (the whole of `heritage.cc`/`.hh`, `varmap.cc` back to `da2a0fa`) | 29 `stale-constant` seeds, every one a self or join shape (`launder.self.walk.*`, `.join`): A3-85, A3-88 |
+| the host A3-83 `Store` fail-closed (`storesBelow` for a laundered register pointer) | 9 `stale-constant` seeds, every one a call shape (`launder.call.direct.*`): A3-83 |
+| the host tail-jump `storesBelow` (A3-82) | the `launder.call.thunk.walk.bytes` seed (a thunk reassembling a pointer, tail-jumping to a fill-backwards callee) is `stale-constant` |
+| check 10b's `storesBelow` (the unit pins) | the `claim-wrong:storesBelow` pins fail |
+| the raw-register printed-C excuse | the four A3-87/A3-79 pins fail |
+
+### 12. Cost on the corpora (full, with the texts read)
+
+The fixed tree (`be61b91`) against a baseline built from `da2a0fa` (the merged host-only round-11 fix, before patch 0061 and today's host work). **Lending is unchanged on both images** -- 007 lends 655 / 680 (958), 008 lends 1,010 / 1,040 (1,312), identical to the baseline; the escape analysis changes aliasing, not what is lent. The -31 lent drop on 008 recorded in section 5 was the merged `da2a0fa` host fix, not this work. Every function ok, 0 accesses dropped against the reference run, 008's 4 missing-and-said unchanged, the mapping oracle clean, `TestGameCode` 9,275 ms (007) and ~56 s decompiler (008): within budget.
+
+**Texts changed by the escape analysis, read against the code:** 007, 36 of 839 functions (17 a local array declaration kept that was folded before, 19 a layout change -- a scalar local becoming a `[2]` array, a value held in a stack local across an indirect call so the call shows one fewer argument, a variable renumber); 008, 71 of 2,995 (49 declaration-only, 22 layout). A sample read (007 06006C1C, 008 06006C7E, 06021ADE, 0603ED52, 0604080A): each is a sound, more-conservative rendering of the same computation -- a frame region the escape analysis now keeps aliased is a local or an array instead of folded, and no computed value differs. This is the measured, accepted precision cost of failing closed.
+
+### 13. Matrix (fixed tree, code `be61b91`, fault re-pin after)
+
+| Run | Result |
+|---|---|
+| `ctest -E SaturnExplorerLive -j2 --timeout 1200` (93 tests) | 93 of 93 pass |
+| `SaturnExplorerDecompilerFaultTests` | 0 of 94 jobs failed, after re-pinning 8 MOVED allocation pins (patch 0061's `FrameEscape::compute` allocates in the alias gather; the harness printed each new ordinal, A6-10, A6-14, A6-15) |
+| `rowsfix.src` via the reviewer's driver | A3-82 (a-e), A3-83 (a-h), A3-84 (a-d) print the local and agree; A3-85 (a-d), A3-88 (a-d), A3-86 b print the local; A3-86 a withheld and prints the local; A3-87 withheld; 0 stale constants; the only oracle rejects are the evaluator's "no loops" limit, not unsoundness |
+| `SE_GENERATED_SEEDS=3000 SE_GENERATED_GRAMMAR=2` | 0 failing seeds, 0 findings |
+| `SE_GENERATED_GRAMMAR=1 SE_GENERATED_SEEDS=1000` | 0 failing seeds |
+| `SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000` | all passed; laundered walks 765 functions, 0 stale; spill walks 563, 0 stale; the A3-87/A3-79 pins `raw-stack-register` |
+| `SE_GENERATED_SEEDS=20000` | 0 failing seeds |
+| grammar 2, 1,600,001 to 1,620,000 (4 x 5,000) | 0 failing seeds |
+| grammar 2 `specials`, 1,700,001 to 1,705,000 | 0 failing seeds |
+| `TestArea3HiddenInputFuzz` seeds 6 and 7 (5,000 each) | 1,204 and 1,216 lent, 0 findings |
+| corpora 007 / 008 (`SE_GAME_LEND=1`) | section 12 |
+| vendoring | `python3 -I vendor.py <ghidra>` on a copy: exit 0, the `vendored ... 0061-engine-stack-frame-escape.patch` line, `cpp/`, `sources.cmake` and `processors/` identical to the committed tree |
+| sanitizer and Live jobs | not run (shared socket; CI) |
+
+**All seven round-11 rows are now fixed** (A3-82, A3-83, A3-84, A3-85, A3-88 P1; A3-86, A3-87 P2), with A3-79 closed. The next reviewer verifies.
