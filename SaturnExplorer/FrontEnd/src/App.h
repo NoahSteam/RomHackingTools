@@ -39,6 +39,7 @@
 #include "Debug/CallStack.h"      // per-CPU call stack (paused-state workspace)
 #include "Debug/MemoryBackend.h"
 #include "RenderKey.h"
+#include "Vdp1SpriteMove.h"
 #include "Debug/MemorySearch.h"   // Cheat-Engine-style live RAM value scanner
 #include "Debug/MemorySearchRunner.h"   // ...and the worker that keeps its scans off the UI thread
 #include "Debug/AccessLog.h"      // "find what accesses this address" record
@@ -234,6 +235,8 @@ private:
     void DrawCommandScaleCell(const se_command& cmd);
     void PushCommandEditId(const se_command& cmd);   // pushes two IDs; pop both
     void WriteCommandWord(const se_command& cmd, uint32_t fieldOffset, uint16_t value);
+    void MoveSelectedSprite(ImVec2 imagePos, ImVec2 imageSize);
+    ImVec2 Vdp1CoordinateSize() const;
     void DrawSelectedObject();
     void DrawTextureViewer(IPlatform& platform);
     // Add a write watchpoint over the VDP1 VRAM bytes a command's texture occupies, so the
@@ -897,6 +900,12 @@ private:
 
     int              mSelectedCommand = -1;   // primary selection (detail panels)
     std::vector<int> mSelection;              // all selected command indices
+    Vdp1MoveGesture   mSpriteMove;
+    Vdp1CommandBytes  mSpriteMoveOriginal {}, mSpriteMoveLast {};
+    uint64_t         mSpriteMoveSource = 0;
+    uint32_t         mSpriteMoveTable = 0;
+    int              mSpriteMoveCommand = -1, mSpriteMoveFrame = -1;
+    ImVec2           mSpriteMoveImagePos {}, mSpriteMoveImageSize {}, mSpriteMoveUnits {};
     bool             mbLayoutBuilt = false;   // default dock layout applied once
     bool             mForceRebuildLayout = false;  // "Reset Layout" -> rebuild the default
     // Set when an external panel (VDP Output / VRAM Map / References) changes the

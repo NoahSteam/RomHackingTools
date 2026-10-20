@@ -5203,6 +5203,7 @@ void App::DrawVdpOutput(IPlatform& platform)
             const float scaleY = (mFrameHeight > 0) ? fit.y / mFrameHeight : 1.0f;
             ImGui::SetCursorScreenPos(imgPos);
             ImGui::Image(mFrameTexture, fit);
+            MoveSelectedSprite(imgPos, fit);
 
             ImDrawList* dl = ImGui::GetWindowDrawList();
 
@@ -5211,9 +5212,11 @@ void App::DrawVdpOutput(IPlatform& platform)
             std::snprintf(res, sizeof(res), "%dx%d", mFrameWidth, mFrameHeight);
             ImageCornerLabel(imgPos, res);
 
+            const ImVec2 spriteSpace = Vdp1CoordinateSize();
             auto toScreen = [&](const se_vec2& c)
             {
-                return ImVec2(imgPos.x + c.x * scaleX, imgPos.y + c.y * scaleY);
+                return ImVec2(imgPos.x + c.x * fit.x / spriteSpace.x,
+                              imgPos.y + c.y * fit.y / spriteSpace.y);
             };
 
             // Only walk the sprite list when an overlay actually needs it.
@@ -5282,6 +5285,10 @@ void App::DrawVdpOutput(IPlatform& platform)
                     RevealSelectionInTables();
                 }
             }
+            if (mShowTooltips && mSelectedCommand >= 0 &&
+                ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip))
+                ImGui::SetTooltip("Hold Shift and move the mouse to move the selected sprite.\n"
+                                  "Release Shift to leave it in place. Shift-click toggles selection.");
         }
 
         // Transport bar pinned to the bottom of the view: prev / play-pause / scrub / next.
@@ -5294,6 +5301,93 @@ void App::DrawVdpOutput(IPlatform& platform)
         }
     }
     ImGui::End();
+}
+
+void App::MoveSelectedSprite(ImVec2 imagePos, ImVec2 imageSize)
+{
+    const ImGuiIO& io = ImGui::GetIO();
+    const ImVec2 mouse = ImGui::GetMousePos();
+    const int frame = ImGui::GetFrameCount();
+    if (mSpriteMoveFrame != frame - 1)
+    {
+        mSpriteMove.active = false;
+        mSpriteMove.shiftWasDown = io.KeyShift; // don't resume a hidden gesture
+    }
+    mSpriteMoveFrame = frame;
+    se_command command {};
+    const bool haveCommand = mSelectedCommand >= 0 &&
+        se_get_command(mContext, static_cast<size_t>(mSelectedCommand), &command) == SE_OK;
+    bool eligible = haveCommand && ImGui::IsItemHovered() &&
+        ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) &&
+        !io.WantTextInput && !ImGui::IsAnyItemActive() &&
+        !io.MouseDown[0] && !io.MouseDown[1] && !io.MouseDown[2] &&
+        !ImGui::IsKeyPressed(ImGuiKey_Escape) && imageSize.x > 0 && imageSize.y > 0 &&
+        mMemBackend.CanWrite(kVdp1VramBase + command.table_address);
+    Vdp1CommandBytes current {};
+    if (eligible)
+        eligible = se_read_vram(mContext, SE_VRAM_KIND_VDP1_VRAM, command.table_address,
+                                current.data(), current.size()) == current.size() &&
+                   Vdp1MoveAxes(current) != 0;
+    if (mSpriteMove.active)
+    {
+        // A source/frame swap, outside edit or changed command must never redirect
+        // the in-flight edit to whatever happens to occupy the old row/address.
+        eligible = eligible && mSpriteMoveSource == mMemBackend.SourceId() &&
+            mSpriteMoveCommand == mSelectedCommand && mSpriteMoveTable == command.table_address &&
+            current == mSpriteMoveLast && imagePos.x == mSpriteMoveImagePos.x &&
+            imagePos.y == mSpriteMoveImagePos.y && imageSize.x == mSpriteMoveImageSize.x &&
+            imageSize.y == mSpriteMoveImageSize.y;
+    }
+    if (mSpriteMove.Update(io.KeyShift, eligible, mouse.x, mouse.y))
+    {
+        mSpriteMoveSource = mMemBackend.SourceId();
+        mSpriteMoveCommand = mSelectedCommand;
+        mSpriteMoveTable = command.table_address;
+        mSpriteMoveOriginal = mSpriteMoveLast = current;
+        mSpriteMoveImagePos = imagePos;
+        mSpriteMoveImageSize = imageSize;
+        const ImVec2 space = Vdp1CoordinateSize();
+        mSpriteMoveUnits = ImVec2(space.x / imageSize.x, space.y / imageSize.y);
+    }
+    if (!mSpriteMove.active) return;
+    ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
+    const int dx = Vdp1MoveGesture::Delta(mouse.x, mSpriteMove.startX, mSpriteMoveUnits.x);
+    const int dy = Vdp1MoveGesture::Delta(mouse.y, mSpriteMove.startY, mSpriteMoveUnits.y);
+    const Vdp1CommandBytes moved = MoveVdp1Command(mSpriteMoveOriginal, dx, dy);
+    if (moved == mSpriteMoveLast) return;
+    // Submit the coordinate block together, preserving unused words and everything
+    // outside the block. The backend re-derives the view and forwards live pokes.
+    constexpr size_t offset = 0x0C, size = 0x10;
+    const uint32_t address = kVdp1VramBase + mSpriteMoveTable + offset;
+    if (mMemBackend.WriteMemory(address, moved.data() + offset, size) != size)
+    {
+        mSpriteMove.active = false;
+        mLog.Warn("Sprite move was not fully written. " + mMemBackend.WriteRefusal(address));
+        return;
+    }
+    mSpriteMoveLast = moved;
+}
+
+ImVec2 App::Vdp1CoordinateSize() const
+{
+    // Match the core's framebuffer-to-display conversion for movement and
+    // selection overlays. Hi-res doubles columns at scan-out; exclusive modes
+    // double 240 rows to 480. Normal interlace uses the displayed line count.
+    int width = 320;
+    for (size_t i = 0; i < se_command_count(mContext); ++i)
+    {
+        se_command clip {};
+        if (se_get_command(mContext, i, &clip) != SE_OK ||
+            clip.type != SE_CMD_SYSTEM_CLIP || clip.status != SE_CMDSTAT_NORMAL) continue;
+        uint8_t edges[4] = {};
+        if (se_read_vram(mContext, SE_VRAM_KIND_VDP1_VRAM, clip.table_address + 0x14,
+                         edges, sizeof edges) != sizeof edges) continue;
+        const int x = ((edges[0] << 8) | edges[1]) & 0x1FFF;
+        const int y = ((edges[2] << 8) | edges[3]) & 0x1FFF;
+        if (x > 0 && y > 0) width = x + 1;
+    }
+    const bool exclusive = (se_get_vdp2_register(mContext, 0) & 4) != 0;
+    return ImVec2(static_cast<float>(width), static_cast<float>(exclusive ? 240 : mFrameHeight));
 }
 
 // The per-layer viewer tabs. App owns nothing of theirs beyond the visibility flags —

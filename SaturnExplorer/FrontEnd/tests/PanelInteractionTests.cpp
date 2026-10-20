@@ -27,6 +27,7 @@ static inline int se_getpid() { return getpid(); }
 #include "imgui_internal.h"   // ImGuiTable::RowPosY1/2 -- the row rect being asserted on
 #include "ImGuiHarness.h"
 #include "PanelWidgets.h"
+#include "Vdp1SpriteMove.h"
 #include "Settings.h"         // the split height's persistence, round-tripped through an INI
 
 using namespace sfe;
@@ -776,6 +777,53 @@ void TestCommandRowKeyboardSelection()
     }
 }
 
+void TestShiftMoveOverImage()
+{
+    Vdp1MoveGesture move;
+    bool selected = false;
+    ImVec2 center;
+    int dx = 0, dy = 0;
+    ImGuiHarness h([&] {
+        ImGui::SetNextWindowPos(ImVec2(0, 0));
+        ImGui::SetNextWindowSize(ImVec2(600, 400));
+        ImGui::Begin("VDP Output test", nullptr, ImGuiWindowFlags_NoSavedSettings);
+        ImGui::Image(static_cast<ImTextureID>(1), ImVec2(400, 300));
+        center = (ImGui::GetItemRectMin() + ImGui::GetItemRectMax()) * 0.5f;
+        const auto& io = ImGui::GetIO();
+        const auto mouse = ImGui::GetMousePos();
+        move.Update(io.KeyShift, selected && ImGui::IsItemHovered() &&
+            ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) &&
+            !io.WantTextInput && !ImGui::IsAnyItemActive() && !io.MouseDown[0], mouse.x, mouse.y);
+        if (move.active)
+        {
+            dx = Vdp1MoveGesture::Delta(mouse.x, move.startX, 0.5f);
+            dy = Vdp1MoveGesture::Delta(mouse.y, move.startY, 1.0f);
+        }
+        if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) selected = true;
+        ImGui::End();
+    });
+    h.Settle();
+    h.Hover(center);
+    h.Click(center);
+    CHECK(selected);
+    ImGui::GetIO().AddKeyEvent(ImGuiMod_Shift, true);
+    h.Frame(center, false);
+    CHECK(move.active);
+    CHECK(dx == 0 && dy == 0); // no snap when Shift is pressed
+    h.Frame(center + ImVec2(24, -9), false);
+    CHECK(dx == 12 && dy == -9);
+    ImGui::GetIO().AddKeyEvent(ImGuiMod_Shift, false);
+    h.Frame(center + ImVec2(24, -9), false);
+    CHECK(!move.active);
+    h.Frame(center + ImVec2(48, -18), false);
+    CHECK(dx == 12 && dy == -9); // release leaves the final position intact
+    ImGui::GetIO().AddKeyEvent(ImGuiMod_Shift, true);
+    h.Frame(center, false);
+    CHECK(move.active);
+    h.Frame(center, true);
+    CHECK(!move.active); // Shift-click stays available for selection
+}
+
 void TestAppShortcutYieldsToModalDialog()
 {
     CHECK(!F6FiresWithPanelFocused([](ImGuiKeyChord k) { return AppShortcut(k); }, false, true));
@@ -802,6 +850,7 @@ int main()
     TestNameDialogEnterAppliesTypedName();
     TestNameDialogEscapeCancels();
     TestCommandRowKeyboardSelection();
+    TestShiftMoveOverImage();
     TestAppShortcutFiresWhilePanelHasFocus();
     TestDefaultShortcutRoutingMissesPanelFocus();
     TestAppShortcutYieldsToTextInput();
