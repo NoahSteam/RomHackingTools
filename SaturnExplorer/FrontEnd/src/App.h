@@ -40,6 +40,7 @@
 #include "Debug/MemoryBackend.h"
 #include "RenderKey.h"
 #include "Vdp1SpriteMove.h"
+#include "SpritePreviewCache.h"
 #include "Debug/MemorySearch.h"   // Cheat-Engine-style live RAM value scanner
 #include "Debug/MemorySearchRunner.h"   // ...and the worker that keeps its scans off the UI thread
 #include "Debug/AccessLog.h"      // "find what accesses this address" record
@@ -226,7 +227,7 @@ private:
     void SyncTracepointsToLive();           // push the tracepoint set to the emulator (v8)
     void DrainTraceEvents();                // pull fired tracepoint events into the Log
     void DrawWorldView(IPlatform& platform);
-    void DrawCommandList();
+    void DrawCommandList(IPlatform& platform);
     // Inline size/position editing in the Command List: draw an editable integer cell for one
     // command field and, on commit, re-encode it into the command's CMDSIZE/CMDXA/CMDYA word
     // and write it back to VDP1 VRAM (which pokes a live emulator). Returns true if it changed.
@@ -900,6 +901,7 @@ private:
 
     int              mSelectedCommand = -1;   // primary selection (detail panels)
     std::vector<int> mSelection;              // all selected command indices
+    SpritePreviewCache mSpritePreviews;
     Vdp1MoveGesture   mSpriteMove;
     Vdp1CommandBytes  mSpriteMoveOriginal {}, mSpriteMoveLast {};
     uint64_t         mSpriteMoveSource = 0;

@@ -167,6 +167,21 @@ se_result se_render_frame(se_context* ctx, const se_render_opts* opts,
     });
 }
 
+uint64_t se_sprite_preview_key(se_context* ctx, size_t command_index)
+{
+    return Guard(uint64_t(0), [&] { return ctx ? Impl(ctx)->SpritePreviewKey(command_index) : 0; });
+}
+
+se_result se_render_sprite_preview(se_context* ctx, size_t command_index,
+                                   uint32_t max_width, uint32_t max_height,
+                                   se_image* out, size_t* needed)
+{
+    if (!ctx || !out) return SE_ERR_INVALID_ARG;
+    return Guard(SE_ERR_NO_MEMORY, [&] {
+        return Impl(ctx)->RenderSpritePreview(command_index, max_width, max_height, out, needed);
+    });
+}
+
 se_result se_render_3d(se_context* ctx, const se_camera3d* camera,
                        const se_render_opts* opts, se_image* out, size_t* needed)
 {

@@ -78,6 +78,20 @@ se_result   se_get_sprite_3d (se_context* ctx, size_t index, se_sprite_3d* out);
 se_result   se_render_frame(se_context* ctx, const se_render_opts* opts,
                             se_image* out, size_t* needed);
 
+/* One command rendered in isolation over transparency, cropped to its quadrilateral
+   and fitted within max_width/max_height (1..256). Uses the framebuffer rasterizer,
+   including palette, flip, distortion, mesh, shading and clipping. Fitting follows
+   the VDP Output's 4:3 display proportions, with bounded supersampling and
+   premultiplied-alpha filtering rather than a full native-resolution render. Other commands'
+   occlusion and destination-dependent blending are not included. Control/skipped/end
+   commands return SE_ERR_NO_DATA. Same two-call image convention as se_render_frame.
+   The content key is stable across identical captures, and changes with the sprite's
+   geometry, texture, palette or relevant render state; zero means no drawable sprite. */
+uint64_t    se_sprite_preview_key(se_context* ctx, size_t command_index);
+se_result   se_render_sprite_preview(se_context* ctx, size_t command_index,
+                                     uint32_t max_width, uint32_t max_height,
+                                     se_image* out, size_t* needed);
+
 /* --- 3D world view: the same sprites, exploded along Z, software-rendered
        from the host-supplied camera into an image of the camera's viewport
        size. Same two-call size convention as se_render_frame. --- */

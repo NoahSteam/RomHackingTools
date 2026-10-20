@@ -1878,7 +1878,7 @@ void App::BuildUI(IPlatform& platform)
     if (mPanels.vdp2Table)       DrawVdp2Table();
     if (mPanels.colorRam)        DrawColorRam();
     if (mPanels.registers)       DrawRegisters();
-    if (mPanels.commandList)     DrawCommandList();
+    if (mPanels.commandList)     DrawCommandList(platform);
     if (mPanels.textureViewer)   DrawTextureViewer(platform);
     if (mPanels.paletteViewer)   DrawPaletteViewer();
     if (mPanels.references)      DrawReferences();
@@ -5551,8 +5551,9 @@ void App::DrawWorldView(IPlatform& platform)
     ImGui::End();
 }
 
-void App::DrawCommandList()
+void App::DrawCommandList(IPlatform& platform)
 {
+    mSpritePreviews.BeginFrame(platform, static_cast<uint64_t>(ImGui::GetFrameCount()));
     if (ImGui::Begin("VDP1 Command List"))
     {
         if (!mbHasData)
@@ -5566,9 +5567,11 @@ void App::DrawCommandList()
 
             const ImGuiTableFlags flags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
                                           ImGuiTableFlags_ScrollY | ImGuiTableFlags_Resizable;
-            if (ImGui::BeginTable("commands", 7, flags))
+            if (ImGui::BeginTable("commands", 8, flags))
             {
                 ImGui::TableSetupScrollFreeze(0, 1);
+                ImGui::TableSetupColumn("Preview", ImGuiTableColumnFlags_WidthFixed |
+                    ImGuiTableColumnFlags_NoResize, 60.0f);
                 ImGui::TableSetupColumn("#");
                 ImGui::TableSetupColumn("Type");
                 ImGui::TableSetupColumn("Size");
@@ -5608,7 +5611,10 @@ void App::DrawCommandList()
                         ImGui::TableNextRow();
                         ImGui::TableNextColumn();
                         char label[16];
-                        std::snprintf(label, sizeof(label), "%d", row);
+                        std::snprintf(label, sizeof(label), "##preview%d", row);
+                        const ImVec2 previewPos = ImGui::GetCursorScreenPos();
+                        const float previewWidth = ImGui::GetContentRegionAvail().x;
+                        const float previewHeight = editable ? ImGui::GetFrameHeight() : ImGui::GetTextLineHeight();
                         // 'editable' here means framed: the size/position cells hold edit
                         // boxes. RowSelectable handles what that implies for the row --
                         // AllowOverlap so those boxes are reachable, the frame height, and
@@ -5632,6 +5638,14 @@ void App::DrawCommandList()
                         {
                             ImGui::SetScrollHereY(0.5f);
                         }
+                        // Draw directly into the selectable's existing row: even a
+                        // huge sprite cannot change its height or clipper spacing.
+                        if (const auto* preview = mSpritePreviews.Get(mContext, static_cast<size_t>(row), platform))
+                            RowSpritePreview(preview->texture, preview->width, preview->height,
+                                             previewPos, previewWidth, previewHeight);
+                        ImGui::TableNextColumn();
+                        if (editable) ImGui::AlignTextToFramePadding();
+                        ImGui::Text("%d", row);
                         ImGui::TableNextColumn();
                         if (editable) ImGui::AlignTextToFramePadding();
                         ImGui::TextUnformatted(CommandTypeName(cmd.type));

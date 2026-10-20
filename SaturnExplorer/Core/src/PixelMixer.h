@@ -178,6 +178,19 @@ inline void Average(PixDesc& a, uint8_t r, uint8_t g, uint8_t b)
 }
 }  // namespace mixer_detail
 
+// Shared final display-color operations for the composite and isolated previews.
+inline void ApplyDisplayColor(uint8_t* rgb, uint16_t flags, const MixState& mix, bool shadow)
+{
+    if (flags & kOffsetEnable)
+    {
+        const int16_t* o = mix.offset[(flags & kOffsetSelect) ? 1 : 0];
+        for (int i = 0; i < 3; ++i)
+            rgb[i] = static_cast<uint8_t>(std::max(0, std::min(255, rgb[i] + o[i])));
+    }
+    if (shadow)
+        for (int i = 0; i < 3; ++i) rgb[i] = static_cast<uint8_t>(rgb[i] >> 1);
+}
+
 // Resolve one column (the pixel at flat index 'index') to an opaque RGBA pixel, in the order VDP2
 // does it: pick the top image (a shadow marker is replaced by the layer under it), colour-calculate
 // it against what lies below -- optionally through the line colour screen and the extended
@@ -285,18 +298,7 @@ inline bool ResolveColumnAt(const PixColumn& col, const MixState& mix, size_t in
         rgb[0] = dst[0]; rgb[1] = dst[1]; rgb[2] = dst[2];
     }
 
-    if (top.flags & kOffsetEnable)
-    {
-        const int16_t* o = mix.offset[(top.flags & kOffsetSelect) ? 1 : 0];
-        for (int i = 0; i < 3; ++i)
-        {
-            rgb[i] = static_cast<uint8_t>(std::max(0, std::min(255, rgb[i] + o[i])));
-        }
-    }
-    if (shadow)
-    {
-        for (int i = 0; i < 3; ++i) rgb[i] = static_cast<uint8_t>(rgb[i] >> 1);
-    }
+    ApplyDisplayColor(rgb, top.flags, mix, shadow);
     out = Rgba{ rgb[0], rgb[1], rgb[2], 255 };
     return true;
 }

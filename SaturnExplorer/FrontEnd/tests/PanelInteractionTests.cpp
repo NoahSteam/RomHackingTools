@@ -837,6 +837,63 @@ void TestShiftMoveOverImage()
     CHECK(!move.active); // releasing Shift also ends the drag
 }
 
+void TestSpritePreviewRowLayoutAndSelection()
+{
+    for (bool editable : { false, true })
+    {
+        int selected = -1;
+        float heights[2] = {};
+        ImVec2 thumbnail;
+        ImGuiHarness h([&] {
+            ImGui::SetNextWindowPos(ImVec2(0, 0));
+            ImGui::SetNextWindowSize(ImVec2(600, 300));
+            ImGui::Begin("Preview table", nullptr, ImGuiWindowFlags_NoSavedSettings);
+            if (ImGui::BeginTable("commands", 3, ImGuiTableFlags_Borders))
+            {
+                ImGui::TableSetupColumn("Preview", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoResize, 60);
+                ImGui::TableSetupColumn("#");
+                ImGui::TableSetupColumn("Position");
+                ImGui::TableHeadersRow();
+                for (int row = 0; row < 2; ++row)
+                {
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    const ImVec2 pos = ImGui::GetCursorScreenPos();
+                    const float height = editable ? ImGui::GetFrameHeight() : ImGui::GetTextLineHeight();
+                    const float width = ImGui::GetContentRegionAvail().x;
+                    const char* id = row == 0 ? "##preview0" : "##preview1";
+                    if (RowSelectable(id, selected == row, editable, ImGuiSelectableFlags_SelectOnNav)) selected = row;
+                    const ImVec2 after = ImGui::GetCursorScreenPos();
+                    RowSpritePreview(static_cast<ImTextureID>(1), row == 0 ? 2048 : 8, row == 0 ? 1024 : 8,
+                                     pos, width, height);
+                    CHECK(ImGui::GetCursorScreenPos().y == after.y); // never grows the row
+                    if (row == 0) thumbnail = pos + ImVec2(width * 0.5f, height * 0.5f);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%d", row);
+                    ImGui::TableNextColumn();
+                    if (editable)
+                    {
+                        ImGui::PushID(row);
+                        int value = 0;
+                        ImGui::InputInt("##x", &value);
+                        ImGui::PopID();
+                    }
+                    else ImGui::TextUnformatted("(0,0)");
+                    const ImGuiTable* table = ImGui::GetCurrentTable();
+                    heights[row] = table->RowPosY2 - table->RowPosY1;
+                }
+                ImGui::EndTable();
+            }
+            ImGui::End();
+        });
+        h.Settle();
+        CHECK(heights[0] == heights[1]);
+        h.Hover(thumbnail);
+        h.Click(thumbnail);
+        CHECK(selected == 0);
+    }
+}
+
 void TestAppShortcutYieldsToModalDialog()
 {
     CHECK(!F6FiresWithPanelFocused([](ImGuiKeyChord k) { return AppShortcut(k); }, false, true));
@@ -864,6 +921,7 @@ int main()
     TestNameDialogEscapeCancels();
     TestCommandRowKeyboardSelection();
     TestShiftMoveOverImage();
+    TestSpritePreviewRowLayoutAndSelection();
     TestAppShortcutFiresWhilePanelHasFocus();
     TestDefaultShortcutRoutingMissesPanelFocus();
     TestAppShortcutYieldsToTextInput();

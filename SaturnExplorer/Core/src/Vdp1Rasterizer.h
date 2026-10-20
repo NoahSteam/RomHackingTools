@@ -10,6 +10,7 @@
 #include "saturnexplorer/SeTypes.h"
 #include "GeometryBuilder.h"
 #include "SpriteLayer.h"
+#include "PixelMixer.h"
 
 namespace se
 {
@@ -30,6 +31,15 @@ struct LayerPlane
 class Vdp1Rasterizer
 {
 public:
+    // Bounded 4x4 supersampling per output pixel, independent of native quad area.
+    // Reuses the framebuffer texel/coverage/effect paths and filters premultiplied
+    // colors so transparency survives reduction. Returns sample work for tests.
+    static size_t RenderSpritePreview(const Vdp1Scene& scene, size_t sprite,
+                                      const std::vector<uint8_t>& vram, const std::vector<uint8_t>& cram,
+                                      se_cram_mode cramMode, const SpritePriorityTable& prios,
+                                      const MixState& mix, uint16_t colorFlags,
+                                      int x0, int y0, int nativeW, int nativeH,
+                                      uint32_t width, uint32_t height, std::vector<uint8_t>& pixels);
     // The VDP1 framebuffer column (or row) a display column (or row) reads: VDP1 draws at its own
     // size, which in a hi-res mode is half the display's width and in an exclusive monitor mode half
     // its height, and every column or row is doubled at scan-out. The hit test maps clicks back with

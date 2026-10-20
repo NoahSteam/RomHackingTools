@@ -75,6 +75,11 @@ public:
         GeometryBuilder::Build(mSnapshot.Vdp1Vram(), mScene);
         ApplyDisplayResolution();
         ResolveSpritePriorities();
+        mPreviewSprites.assign(mCommands.size(), mScene.sprites.size());
+        for (size_t i = 0; i < mScene.sprites.size(); ++i)
+            mPreviewSprites[mScene.sprites[i].command_index] = i;
+        mPreviewPaletteHash = 14695981039346656037ull;
+        for (uint8_t b : mSnapshot.Cram()) mPreviewPaletteHash = (mPreviewPaletteHash ^ b) * 1099511628211ull;
         BuildVramRegions();
         for (int i = 0; i < SE_LAYER_COUNT; ++i) mbTileMapValid[i] = false;
         ++mDeriveSerial;
@@ -130,6 +135,92 @@ public:
         const int h = mScene.screenHeight;
         return FillImage(static_cast<uint32_t>(w), static_cast<uint32_t>(h), out, needed,
                          [&] { ComposeFrame(opts); });
+    }
+
+    size_t PreviewSprite(size_t command) const
+    {
+        return command < mPreviewSprites.size() ? mPreviewSprites[command] : mScene.sprites.size();
+    }
+
+    uint64_t SpritePreviewKey(size_t command) const
+    {
+        const size_t i = PreviewSprite(command);
+        if (i == mScene.sprites.size() || command >= mCommands.size()) return 0;
+        const auto& s = mScene.sprites[i];
+        const auto& r = mScene.render[i];
+        const auto& vram = mSnapshot.Vdp1Vram();
+        uint64_t hash = 14695981039346656037ull;
+        auto byte = [&](uint8_t b) { hash = (hash ^ b) * 1099511628211ull; };
+        auto number = [&](uint64_t n) { for (int b = 0; b < 8; ++b) { byte(uint8_t(n)); n >>= 8; } };
+        auto bytes = [&](uint32_t address, uint32_t size) {
+            for (uint32_t b = 0; b < size; ++b)
+                byte(address + b < vram.size() ? vram[address + b] : 0);
+        };
+        bytes(mCommands[command].table_address, 32);
+        if (!r.solid)
+        {
+            bytes(s.texture.vram_address, TextureByteSize(mCommands[command]));
+            if (s.texture.color_mode == SE_COLOR_LUT_16) bytes(s.texture.clut_address, 32);
+        }
+        for (const auto& c : s.corners)
+        {
+            uint32_t x, y;
+            std::memcpy(&x, &c.x, 4); std::memcpy(&y, &c.y, 4);
+            number(x); number(y);
+        }
+        number(r.gouraud.on);
+        for (uint16_t c : r.gouraud.corner) number(c);
+        number(r.clip.enable); number(r.clip.mode);
+        number(r.clip.x0); number(r.clip.y0); number(r.clip.x1); number(r.clip.y1);
+        number(r.sysClipX1); number(r.sysClipY1); number(r.spdHidden);
+        number(mScene.vdp1Width); number(mScene.vdp1Height); number(mScene.screenHeight); number(mScene.screenWidth);
+        number(mSnapshot.CramMode()); number(mSnapshot.HasVdp2Regs());
+        // A shared palette hash is computed once per capture/edit, not per row.
+        // Direct-color solid primitives do not depend on CRAM at all.
+        const bool rgbSolid = r.solid && (r.color & 0x8000) && (mSpritePrios.spclmd || !mSpritePrios.valid);
+        if (!rgbSolid) number(mPreviewPaletteHash);
+        for (uint32_t reg : { 0x0E0u, 0x0E2u, 0x0E6u, 0x0ECu, 0x0F0u, 0x0F2u, 0x0F4u, 0x0F6u })
+            number(mSnapshot.Vdp2Reg(reg));
+        for (uint32_t reg = 0x110; reg <= 0x11E; reg += 2) number(mSnapshot.Vdp2Reg(reg));
+        return hash ? hash : 1;
+    }
+
+    se_result RenderSpritePreview(size_t command, uint32_t maxW, uint32_t maxH,
+                                   se_image* out, size_t* needed)
+    {
+        if (!maxW || !maxH || maxW > 256 || maxH > 256) return SE_ERR_INVALID_ARG;
+        const size_t i = PreviewSprite(command);
+        if (i == mScene.sprites.size()) return SE_ERR_NO_DATA;
+        const auto& sprite = mScene.sprites[i];
+        float minX = sprite.corners[0].x, maxX = minX, minY = sprite.corners[0].y, maxY = minY;
+        for (const auto& c : sprite.corners)
+        {
+            minX = std::min(minX, c.x); maxX = std::max(maxX, c.x);
+            minY = std::min(minY, c.y); maxY = std::max(maxY, c.y);
+        }
+        // Even origins preserve the hardware mesh parity when the quad is cropped.
+        const int x0 = static_cast<int>(std::floor(minX / 2)) * 2;
+        const int y0 = static_cast<int>(std::floor(minY / 2)) * 2;
+        const int nativeW = static_cast<int>(std::ceil(maxX)) - x0 + 1;
+        const int nativeH = static_cast<int>(std::ceil(maxY)) - y0 + 1;
+        if (nativeW <= 0 || nativeH <= 0 || nativeW > 2050 || nativeH > 2050) return SE_ERR_NO_DATA;
+        const int fbW = mScene.vdp1Width > 0 ? mScene.vdp1Width : mScene.screenWidth;
+        const int fbH = mScene.vdp1Height > 0 ? mScene.vdp1Height : mScene.screenHeight;
+        // Match VDP Output's 4:3 display, including hi-res column doubling and
+        // exclusive-mode line doubling. Do not treat native VDP1 pixels as square.
+        const float displayedW = nativeW * (4.0f / 3.0f) * fbH / fbW;
+        const float fit = std::min(1.0f, std::min(float(maxW) / displayedW, float(maxH) / nativeH));
+        const uint32_t w = std::min(maxW, std::max(1u, static_cast<uint32_t>(std::ceil(displayedW * fit))));
+        const uint32_t h = std::min(maxH, std::max(1u, static_cast<uint32_t>(std::ceil(nativeH * fit))));
+        return FillImage(w, h, out, needed, [&] {
+            se_render_opts opts {};
+            se_default_render_opts(&opts);
+            const auto mix = Vdp2Compositor::ReadMixState(mSnapshot, opts, 1, 1);
+            uint16_t flags = (mSnapshot.Vdp2Reg(0x110) & 0x40) ? kOffsetEnable : 0;
+            if (mSnapshot.Vdp2Reg(0x112) & 0x40) flags |= kOffsetSelect;
+            Vdp1Rasterizer::RenderSpritePreview(mScene, i, mSnapshot.Vdp1Vram(), mSnapshot.Cram(),
+                mSnapshot.CramMode(), mSpritePrios, mix, flags, x0, y0, nativeW, nativeH, w, h, mRenderBuffer);
+        });
     }
 
     // Composite the frame for 'opts' into mRenderBuffer (screenWidth x screenHeight RGBA).
@@ -1133,6 +1224,8 @@ private:
     HardwareSnapshot        mSnapshot;
     std::vector<se_command> mCommands;
     Vdp1Scene               mScene;
+    std::vector<size_t>     mPreviewSprites;
+    uint64_t                mPreviewPaletteHash = 0;
     std::vector<uint8_t>    mRenderBuffer;
     std::vector<PixColumn>  mColumns;       // per-pixel descriptor mixer (PixelMixer.h)
     SpritePriorityTable     mSpritePrios;   // rebuilt per frame from the VDP2 sprite regs

@@ -22,6 +22,7 @@
 
 #include "FileWrite.h"
 #include "LayerPanels.h"
+#include "SpritePreviewCache.h"
 #include "Settings.h"
 
 using namespace sfe;
@@ -396,6 +397,194 @@ void TestOutOfRangeRequestIsIgnored()
     CHECK(TakeResults(panels).empty());
 }
 
+void TestSpritePreviews()
+{
+    class PreviewPlatform : public StubPlatform
+    {
+    public:
+        int uploads = 0, creates = 0, destroys = 0;
+        TextureHandle CreateTexture(int, int) override { return static_cast<TextureHandle>(++creates); }
+        void UpdateTexture(TextureHandle, const void*, int, int) override { ++uploads; }
+        void DestroyTexture(TextureHandle) override { ++destroys; }
+    } platform;
+    se_test::State state(0x800);
+    se_test::WriteSystemClip(state, 320, 224);
+    se_test::SpritesInFront(state);
+    se_test::PutBE16(state.vdp1, 0x20, 0); // normal sprite, 4bpp palette
+    se_test::PutBE16(state.vdp1, 0x24, 0x80); // end codes disabled
+    se_test::PutBE16(state.vdp1, 0x28, 0x20); // texture byte 0x100
+    se_test::PutBE16(state.vdp1, 0x2A, 0x0108); // 8x8
+    se_test::PutBE16(state.vdp1, 0x2C, 20);
+    se_test::PutBE16(state.vdp1, 0x2E, 20);
+    se_test::PutBE16(state.vdp1, 0x40, 0x8000);
+    std::fill(state.vdp1.begin() + 0x100, state.vdp1.begin() + 0x120, 0x11);
+    state.vdp1[0x100] = 0x01; // transparent first pixel
+    se_test::PutBE16(state.cram, 2, 0x001F); // red
+    se_context* ctx = se_test::CreateContext(state);
+    CHECK(ctx != nullptr);
+    if (!ctx) return;
+    CHECK(se_begin_frame(ctx) == SE_OK);
+    auto render = [&]() {
+        se_image image {};
+        size_t needed = 0;
+        CHECK(se_render_sprite_preview(ctx, 1, 64, 64, &image, &needed) == SE_OK);
+        std::vector<uint8_t> pixels(needed);
+        image.pixels = pixels.data(); image.capacity = needed;
+        CHECK(se_render_sprite_preview(ctx, 1, 64, 64, &image, &needed) == SE_OK);
+        CHECK(image.width == 8 && image.height == 8);
+        return pixels;
+    };
+    const auto pixels = render();
+    CHECK(pixels[3] == 0); // transparency comes from decoded pixels, not a rectangular texture backdrop
+    CHECK(pixels[4] == 255 && pixels[5] == 0 && pixels[7] == 255);
+    CHECK(se_sprite_preview_key(ctx, 0) == 0 && se_sprite_preview_key(ctx, 2) == 0);
+    se_image invalid {};
+    CHECK(se_render_sprite_preview(ctx, 0, 64, 64, &invalid, nullptr) == SE_ERR_NO_DATA);
+    CHECK(se_render_sprite_preview(ctx, 1, 0, 64, &invalid, nullptr) == SE_ERR_INVALID_ARG);
+    SpritePreviewCache cache;
+    cache.BeginFrame(platform, 1);
+    const uint64_t originalKey = se_sprite_preview_key(ctx, 1);
+    CHECK(cache.Get(ctx, 1, platform) != nullptr);
+    CHECK(cache.Get(ctx, 1, platform) != nullptr);
+    CHECK(platform.uploads == 1);
+    CHECK(se_begin_frame(ctx) == SE_OK);
+    CHECK(se_sprite_preview_key(ctx, 1) == originalKey);
+    CHECK(cache.Get(ctx, 1, platform) != nullptr);
+    CHECK(platform.uploads == 1); // identical captures reuse the GPU thumbnail
+    const uint8_t unrelated = 0xAB;
+    CHECK(se_write_vram(ctx, SE_VRAM_KIND_VDP1_VRAM, 0x700, &unrelated, 1) == 1);
+    CHECK(se_sprite_preview_key(ctx, 1) == originalKey);
+    CHECK(cache.Get(ctx, 1, platform) != nullptr && platform.uploads == 1);
+    const uint8_t green[] = { 0x03, 0xE0 };
+    CHECK(se_write_vram(ctx, SE_VRAM_KIND_CRAM, 2, green, 2) == 2);
+    CHECK(se_sprite_preview_key(ctx, 1) != originalKey);
+    CHECK(cache.Get(ctx, 1, platform) != nullptr && platform.uploads == 2);
+    const auto recolored = render();
+    CHECK(recolored[4] == 0 && recolored[5] == 255);
+    const uint64_t paletteKey = se_sprite_preview_key(ctx, 1);
+    const uint8_t flipped[] = { 0, 0x10 };
+    CHECK(se_write_vram(ctx, SE_VRAM_KIND_VDP1_VRAM, 0x20, flipped, 2) == 2);
+    CHECK(se_sprite_preview_key(ctx, 1) != paletteKey);
+    const auto mirrored = render();
+    CHECK(mirrored[3] == 255 && mirrored[7 * 4 + 3] == 0);
+    const uint64_t flipKey = se_sprite_preview_key(ctx, 1);
+    const uint8_t texel = 0;
+    CHECK(se_write_vram(ctx, SE_VRAM_KIND_VDP1_VRAM, 0x101, &texel, 1) == 1);
+    CHECK(se_sprite_preview_key(ctx, 1) != flipKey);
+    // A trapezoid must have transparent pixels outside its sloping edge.
+    const uint8_t distorted[] = { 0, 2 };
+    CHECK(se_write_vram(ctx, SE_VRAM_KIND_VDP1_VRAM, 0x20, distorted, 2) == 2);
+    const uint8_t corners[] = { 0, 27, 0, 20, 0, 24, 0, 27, 0, 20, 0, 27 };
+    CHECK(se_write_vram(ctx, SE_VRAM_KIND_VDP1_VRAM, 0x30, corners, sizeof corners) == sizeof corners);
+    const auto trapezoid = render();
+    CHECK(trapezoid[(7 * 8 + 7) * 4 + 3] == 0);
+    CHECK(trapezoid[(4 * 8 + 2) * 4 + 3] == 255);
+    // A huge quad is bounded by the requested thumbnail dimensions.
+    const uint8_t large[] = { 0, 200, 0, 20, 0, 200, 0, 200, 0, 20, 0, 200 };
+    CHECK(se_write_vram(ctx, SE_VRAM_KIND_VDP1_VRAM, 0x30, large, sizeof large) == sizeof large);
+    size_t needed = 0;
+    CHECK(se_render_sprite_preview(ctx, 1, 56, 18, &invalid, &needed) == SE_OK);
+    CHECK(invalid.width <= 56 && invalid.height <= 18 && needed <= 56 * 18 * 4);
+    // Repeated changing captures stay bounded; eviction never destroys textures
+    // referenced in the current frame's draw list.
+    for (int frame = 2; frame < 270; ++frame)
+    {
+        cache.BeginFrame(platform, static_cast<uint64_t>(frame));
+        const uint8_t color[] = { static_cast<uint8_t>(frame >> 8), static_cast<uint8_t>(frame) };
+        CHECK(se_write_vram(ctx, SE_VRAM_KIND_CRAM, 2, color, 2) == 2);
+        CHECK(cache.Get(ctx, 1, platform) != nullptr);
+    }
+    CHECK(platform.destroys > 0);
+    CHECK(platform.creates - platform.destroys <= 257);
+    se_destroy(ctx);
+}
+
+void TestSpritePreviewRegressions()
+{
+    auto polygon = [](int size, bool mesh) {
+        se_test::State state(0x100);
+        se_test::WriteSystemClip(state, std::max(320, size), std::max(224, size));
+        se_test::SpritesInFront(state);
+        se_test::PutBE16(state.vdp1, 0x20, 4);
+        se_test::PutBE16(state.vdp1, 0x24, mesh ? 0x140 : 0x40);
+        se_test::PutBE16(state.vdp1, 0x26, 0xFFFF);
+        se_test::PutBE16(state.vdp1, 0x30, size - 1);
+        se_test::PutBE16(state.vdp1, 0x34, size - 1);
+        se_test::PutBE16(state.vdp1, 0x36, size - 1);
+        se_test::PutBE16(state.vdp1, 0x3A, size - 1);
+        se_test::PutBE16(state.vdp1, 0x40, 0x8000);
+        return state;
+    };
+    auto render = [](se_context* ctx, se_image& image) {
+        size_t needed = 0;
+        image = {};
+        CHECK(se_render_sprite_preview(ctx, 1, 64, 64, &image, &needed) == SE_OK);
+        std::vector<uint8_t> pixels(needed);
+        image.pixels = pixels.data(); image.capacity = needed;
+        CHECK(se_render_sprite_preview(ctx, 1, 64, 64, &image, &needed) == SE_OK);
+        return pixels;
+    };
+    for (int size : { 128, 2048 })
+    {
+        auto state = polygon(size, true);
+        se_context* ctx = se_test::CreateContext(state);
+        CHECK(ctx != nullptr);
+        if (!ctx) continue;
+        CHECK(se_begin_frame(ctx) == SE_OK);
+        se_image image {};
+        const auto pixels = render(ctx, image);
+        unsigned alpha = 0;
+        for (size_t i = 0; i < pixels.size(); i += 4)
+        {
+            alpha += pixels[i + 3];
+            if (pixels[i + 3]) CHECK(pixels[i] == 255 && pixels[i + 1] == 255 && pixels[i + 2] == 255);
+        }
+        const float mean = float(alpha) / (image.width * image.height);
+        CHECK(mean > 124 && mean < 132); // mesh stays ~50%, not completely opaque
+        CHECK(image.width <= 64 && image.height <= 64);
+        se_destroy(ctx);
+    }
+    auto state = polygon(8, false);
+    se_context* ctx = se_test::CreateContext(state);
+    CHECK(ctx != nullptr);
+    if (!ctx) return;
+    CHECK(se_begin_frame(ctx) == SE_OK);
+    auto key = se_sprite_preview_key(ctx, 1);
+    const uint8_t unrelatedColor[] = { 0, 0x1F };
+    CHECK(se_write_vram(ctx, SE_VRAM_KIND_CRAM, 2, unrelatedColor, 2) == 2);
+    CHECK(key == se_sprite_preview_key(ctx, 1)); // RGB primitives ignore unrelated palette animation
+    CHECK(se_set_vdp2_register(ctx, 0x110, 0x40));
+    CHECK(se_set_vdp2_register(ctx, 0x114, 0x101)); // sprite offset A: red -255
+    CHECK(key != se_sprite_preview_key(ctx, 1));
+    se_image image {};
+    auto pixels = render(ctx, image);
+    CHECK(pixels[0] == 0 && pixels[1] == 255 && pixels[2] == 255 && pixels[3] == 255);
+    key = se_sprite_preview_key(ctx, 1);
+    CHECK(se_set_vdp2_register(ctx, 0x112, 0x40));
+    CHECK(se_set_vdp2_register(ctx, 0x11E, 0x101)); // offset B: blue -255
+    CHECK(key != se_sprite_preview_key(ctx, 1));
+    pixels = render(ctx, image);
+    CHECK(pixels[0] == 255 && pixels[1] == 255 && pixels[2] == 0);
+    CHECK(se_set_vdp2_register(ctx, 0x110, 0));
+    pixels = render(ctx, image);
+    CHECK(pixels[0] == 255 && pixels[1] == 255 && pixels[2] == 255);
+    key = se_sprite_preview_key(ctx, 1);
+    const uint8_t clip[] = { 0x01, 0x5F, 0x01, 0xBF }; // VDP1 352x448
+    CHECK(se_write_vram(ctx, SE_VRAM_KIND_VDP1_VRAM, 0x14, clip, 4) == 4);
+    CHECK(se_set_vdp2_register(ctx, 0, 0xC3)); // VF2 704x448 scan-out
+    CHECK(key != se_sprite_preview_key(ctx, 1));
+    render(ctx, image);
+    const float expected = (4.0f / 3.0f) * 448 / 352;
+    CHECK(std::abs(float(image.width) / image.height - expected) <= 1.0f / image.height);
+    CHECK(image.width > image.height); // an 8x8 VDP1 quad is wider on this display
+    key = se_sprite_preview_key(ctx, 1);
+    CHECK(se_set_vdp2_register(ctx, 0, 4)); // exclusive mode uses 240 native rows
+    CHECK(key != se_sprite_preview_key(ctx, 1));
+    render(ctx, image);
+    CHECK(std::abs(float(image.width) / image.height - (4.0f / 3.0f) * 240 / 352) <= 1.0f / image.height);
+    se_destroy(ctx);
+}
+
 }  // namespace
 
 int main()
@@ -409,6 +598,8 @@ int main()
     TestEveryQueuedRequestIsReported();
     TestUnloadBeforeAQueuedExportRunsIsReportedNotCrashed();
     TestOutOfRangeRequestIsIgnored();
+    TestSpritePreviews();
+    TestSpritePreviewRegressions();
     // The export tests create this root on demand (WriteLayerExport makes the folder); its
     // contents are removed as each result is checked, so only the empty root is left.
     std::remove("se_layer_panel_test");
