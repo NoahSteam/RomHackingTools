@@ -51,7 +51,8 @@ inline ImGuiSelectableFlags RowSelectableFlags(bool hasInteractiveCells)
 }
 
 // The whole-row Selectable itself: submit this as the row's first cell and it both selects
-// the row and lets the cells beside it be clicked. Returns true on click.
+// the row and lets the cells beside it be clicked. Returns true on click or on
+// keyboard selection when extraFlags includes SelectOnNav.
 //
 // 'framed' means the row carries widgets that draw a frame (edit boxes), which makes it a
 // full frame tall. Two things then have to happen together, which is why they live here
@@ -68,12 +69,13 @@ inline ImGuiSelectableFlags RowSelectableFlags(bool hasInteractiveCells)
 //
 // Text cells elsewhere in a framed row still want AlignTextToFramePadding; it is only the
 // row Selectable that must not have it.
-inline bool RowSelectable(const char* label, bool selected, bool framed)
+inline bool RowSelectable(const char* label, bool selected, bool framed,
+                          ImGuiSelectableFlags extraFlags = 0)
 {
     const float height = framed ? ImGui::GetFrameHeight() : 0.0f;
     if (framed)
         ImGui::PushStyleVar(ImGuiStyleVar_SelectableTextAlign, ImVec2(0.0f, 0.5f));
-    const bool pressed = ImGui::Selectable(label, selected, RowSelectableFlags(framed),
+    const bool pressed = ImGui::Selectable(label, selected, RowSelectableFlags(framed) | extraFlags,
                                            ImVec2(0.0f, height));
     if (framed) ImGui::PopStyleVar();
     return pressed;

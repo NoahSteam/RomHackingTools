@@ -5510,7 +5510,8 @@ void App::DrawCommandList()
                         // boxes. RowSelectable handles what that implies for the row --
                         // AllowOverlap so those boxes are reachable, the frame height, and
                         // the label's vertical centring. See PanelWidgets.h.
-                        if (RowSelectable(label, IsSelected(row), editable))
+                        if (RowSelectable(label, IsSelected(row), editable,
+                                          ImGuiSelectableFlags_SelectOnNav))
                         {
                             SelectCommand(row, ImGui::GetIO().KeyShift);
                             mScrollVdp1TableToSelection = true;   // reveal in the VDP1 Table
@@ -10827,8 +10828,8 @@ void App::DrawVdp1Table()
                         ImGui::TableNextColumn();
                         char rowlabel[32];
                         std::snprintf(rowlabel, sizeof(rowlabel), "%d##vt%d", row, row);
-                        if (ImGui::Selectable(rowlabel, IsSelected(row),
-                                              RowSelectableFlags(false)))
+                        if (RowSelectable(rowlabel, IsSelected(row), false,
+                                          ImGuiSelectableFlags_SelectOnNav))
                         {
                             SelectCommand(row, ImGui::GetIO().KeyShift);
                             mScrollCommandListToSelection = true;   // reveal in the Command List

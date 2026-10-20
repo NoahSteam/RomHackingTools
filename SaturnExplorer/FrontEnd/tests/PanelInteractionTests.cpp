@@ -713,6 +713,69 @@ void TestAppShortcutYieldsToTextInput()
     CHECK(!F6FiresWithPanelFocused([](ImGuiKeyChord k) { return AppShortcut(k); }, true));
 }
 
+void TestCommandRowKeyboardSelection()
+{
+    // Both VDP1 tables: plain read-only rows and framed rows with editable cells.
+    // Click first, then navigate far enough to exercise the table's list clipper.
+    for (bool framed : { false, true })
+    {
+        int selected = -1;
+        ImVec2 firstRow;
+        ImGuiHarness h([&] {
+            ImGui::SetNextWindowPos(ImVec2(0, 0));
+            ImGui::SetNextWindowSize(ImVec2(600, 250));
+            ImGui::Begin("Command rows", nullptr, ImGuiWindowFlags_NoSavedSettings);
+            if (ImGui::BeginTable("commands", 2, ImGuiTableFlags_ScrollY))
+            {
+                ImGuiListClipper clipper;
+                clipper.Begin(40);
+                while (clipper.Step())
+                    for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; ++row)
+                    {
+                        ImGui::TableNextRow();
+                        ImGui::TableNextColumn();
+                        char label[16];
+                        std::snprintf(label, sizeof label, "%d", row);
+                        if (RowSelectable(label, selected == row, framed,
+                                          ImGuiSelectableFlags_SelectOnNav))
+                            selected = row;
+                        if (row == 0)
+                            firstRow = (ImGui::GetItemRectMin() + ImGui::GetItemRectMax()) * 0.5f;
+                        ImGui::TableNextColumn();
+                        if (framed)
+                        {
+                            ImGui::PushID(row);
+                            int value = 0;
+                            ImGui::InputInt("##size", &value);
+                            ImGui::PopID();
+                        }
+                        else ImGui::TextUnformatted("texture");
+                    }
+                ImGui::EndTable();
+            }
+            ImGui::End();
+        });
+        ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+        h.Settle();
+        h.Hover(firstRow);
+        h.Click(firstRow);
+        CHECK(selected == 0);
+        auto key = [&](ImGuiKey k) {
+            ImGui::GetIO().AddKeyEvent(k, true);
+            h.Frame(ImVec2(1270, 710), false);
+            ImGui::GetIO().AddKeyEvent(k, false);
+            h.Settle();
+        };
+        for (int row = 1; row <= 20; ++row)
+        {
+            key(ImGuiKey_DownArrow);
+            CHECK(selected == row);
+        }
+        key(ImGuiKey_UpArrow);
+        CHECK(selected == 19);
+    }
+}
+
 void TestAppShortcutYieldsToModalDialog()
 {
     CHECK(!F6FiresWithPanelFocused([](ImGuiKeyChord k) { return AppShortcut(k); }, false, true));
@@ -738,6 +801,7 @@ int main()
     TestBottomDockFraction();
     TestNameDialogEnterAppliesTypedName();
     TestNameDialogEscapeCancels();
+    TestCommandRowKeyboardSelection();
     TestAppShortcutFiresWhilePanelHasFocus();
     TestDefaultShortcutRoutingMissesPanelFocus();
     TestAppShortcutYieldsToTextInput();
