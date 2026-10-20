@@ -384,6 +384,53 @@ void TestRotationCoeffTableOffset()
             CHECK(IsRed(pixels, x, y));
 }
 
+void TestRotationDisplayResolution()
+{
+    // VF2 uses hi-res double-density interlace, but RBG coordinates and
+    // coefficients still advance at 320/352 dots and one step per field line.
+    // Exercise each axis independently as well as the combined VF2 mode.
+    for (uint16_t mode : { uint16_t(0), uint16_t(2), uint16_t(0x80),
+                           uint16_t(0xC0), uint16_t(0xC2) })
+    {
+        for (bool coefficients : { false, true })
+        {
+            State state = MakeTwoParamRotState();
+            se_test::WriteSystemClip(state, 320, (mode & 0xC0) == 0xC0 ? 448 : 224);
+            SetReg(state, 0x000, mode);
+            SetReg(state, 0x02A, 0x1200); // RBG0: 8bpp bitmap, 512x256
+            SetReg(state, 0x03E, 1);      // bitmap starts at byte 0x20000
+            SetReg(state, 0x0B4, coefficients ? 1 : 0);
+            if (coefficients)
+            {
+                // Every other coefficient is transparent; line and dot steps
+                // must both use rotation coordinates rather than display pixels.
+                SetReg(state, 0x0B6, 1);
+                PutRotDword(state.vdp2, 0x802A, 0x8000u << 16);
+                PutRotDword(state.vdp2, 0x802C, 1024u << 6);
+                PutRotDword(state.vdp2, 0x802E, 1024u << 6);
+                for (int i = 0; i < 1024; ++i)
+                    PutRotDword(state.vdp2, 0x30000 + i * 2,
+                                (i & 1) ? 0x80000000u : 0x10000u);
+            }
+            for (int y = 0; y < 256; ++y)
+                for (int x = 0; x < 512; ++x)
+                    state.vdp2[0x20000 + y * 512 + x] = ((x + y) & 1) ? 2 : 1;
+            const int width = (mode & 2) ? 640 : 320;
+            const int height = (mode & 0xC0) == 0xC0 ? 448 : 224;
+            const auto pixels = RenderWith(state, width, height, [](se_render_opts&) {});
+            for (int y = 0; y < 8; ++y)
+                for (int x = 0; x < 8; ++x)
+                {
+                    const int rx = x >> ((mode & 2) ? 1 : 0);
+                    const int ry = y >> (((mode & 0xC0) == 0xC0) ? 1 : 0);
+                    const bool odd = ((rx + ry) & 1) != 0;
+                    CHECK(IsColorAt(pixels, width, x, y, odd && coefficients ? 0 : 255,
+                                    odd ? 0 : 255, odd ? 0 : 255));
+                }
+        }
+    }
+}
+
 void TestBitmapNbg0()
 {
     // NBG0 in 8bpp bitmap mode (512x256): pixel (x,y) is the palette index at VRAM byte
@@ -2399,6 +2446,7 @@ int main()
     TestRotationIdentity();
     TestRotationParamWindow();
     TestRotationCoeffTableOffset();
+    TestRotationDisplayResolution();
     TestBitmapNbg0();
     TestBitmapPaletteNumber();
     TestBitmapRgb888();
