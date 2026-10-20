@@ -1,8 +1,10 @@
 # Decompiled-code inspection: low-effort implementation plan
 
 Status: proposed implementation; no runtime feature is implemented by this document.
+Revision: 2, incorporating source-verification findings.
 Date: 2026-10-20.
-Source inspected: `9984714e9403faa40ac6031bc6e4a0f193e815d8` on master.
+Source inspected: `9984714e9403faa40ac6031bc6e4a0f193e815d8`; rechecked at
+`374f9ae979b88847e4d96696528680a269605afe` on master (production sources unchanged).
 Scope: SaturnExplorer inside NoahSteam/RomHackingTools.
 Paths below are relative to SaturnExplorer unless stated otherwise.
 
@@ -24,8 +26,8 @@ They are follow-on work, not prerequisites or hidden deliverables of this plan.
 | Earlier feature | Decision here | Boundary |
 |---|---|---|
 | Global variable hover | Implement | Absolute, unambiguous object storage; scalar widths 1/2/4 bytes |
-| Pointer inspection | Implement | Captured registers, typed pointer constants, and pointer-valued absolute globals |
-| Registers beside pseudocode | Implement | Collapsible captured-register section using the pseudocode CPU selection |
+| Pointer inspection | Implement | Typed pointer constants and pointer-valued absolute globals; register previews if the optional embedding is implemented |
+| Registers beside pseudocode | Reuse existing Registers window; optional embedding | Share the existing register drawing implementation if embedded |
 | Open in Memory / copy address | Implement | Explicitly distinguish object storage from the pointer target |
 | Pin values | Small final increment | Add a fixed WRAM location to existing Watches |
 | Changed-value highlighting | Reuse existing Watches | No new history/highlight engine in the pseudocode panel |
@@ -36,7 +38,9 @@ They are follow-on work, not prerequisites or hidden deliverables of this plan.
 
 The implementation should be split into the milestones in section 7. Relative effort is an
 architectural estimate, not a promised schedule. Global metadata extraction is the largest
-piece; register display and fixed-address navigation are the first independently useful delivery.
+piece; register access and fixed-address navigation are the first independently useful delivery.
+The existing Registers window already provides register display and several navigation actions.
+Embedding it inside pseudocode is optional presentation work, not a prerequisite for global hovers.
 
 ## 2. Verified implementation starting points
 
@@ -62,11 +66,15 @@ and [known limits](../Codebase/KNOWN_LIMITATIONS.md). Relevant subsystem pages w
 | [prettyprint.cc](../../FrontEnd/third_party/ghidra-decompiler/cpp/prettyprint.cc), `EmitMarkup::tagVariable` | Emits `VARREF = Varnode::getCreateIndex()` when a Varnode exists, and independently emits `OPREF`. |
 | [printlanguage.cc](../../FrontEnd/third_party/ghidra-decompiler/cpp/printlanguage.cc), `pushSymbolDetail`; [printc.cc](../../FrontEnd/third_party/ghidra-decompiler/cpp/printc.cc), `opPtrsub` | Printed names can denote whole symbols, partial symbols or address expressions. The spacebase-global PTRSUB path can print a global with a null Varnode: VARREF-only export misses real cases. |
 | Same `printc.cc` and panel/wrapper provenance handling | Brackets/field syntax need not denote a LOAD result. Do not bind `opref -> output` universally. |
-| [Sh2RegInfo.h](../../FrontEnd/src/Debug/Sh2RegInfo.h) | Existing register names, extraction, descriptions and SR summaries. Its 23-entry UI order differs from the decompiler's 22-register CallEffects bit order; do not interchange indices. |
+| [Sh2RegInfo.h](../../FrontEnd/src/Debug/Sh2RegInfo.h); [App.cpp](../../FrontEnd/src/App.cpp), `DrawSh2Registers` | Existing register names, values, SR summaries, region annotations, Memory/disassembly navigation, PC decompilation and Add to Watch. Reuse this UI rather than implementing a second register viewer. Its 23-entry UI order differs from the decompiler's 22-register CallEffects bit order; do not interchange indices. |
 | [AssemblyPanel.cpp](../../FrontEnd/src/AssemblyPanel.cpp), `MemReaderFor`; [Sh2Operands.cpp](../../FrontEnd/src/Sh2Operands.cpp) | Existing big-endian previews/ASCII formatting are useful examples, but the reader uses the general backend and is not safe to copy unchanged into this feature. |
 | [MemoryBackend.cpp](../../FrontEnd/src/Debug/MemoryBackend.cpp), `ReadOne` | Exposes VDP register images and uses broader address folding than `Sh2Address`. Do not use it as the pseudocode preview reader. |
 | [WatchList.h](../../FrontEnd/src/Debug/WatchList.h), [implementation](../../FrontEnd/src/Debug/WatchList.cpp) | Existing scalar formatting and fixed-address watches. Pointer formatting can probe an optional backend: never pass the App backend into this feature's formatter. |
 | [App.cpp](../../FrontEnd/src/App.cpp), `AddAddressWatch`; [WatchPanel.h](../../FrontEnd/src/WatchPanel.h) | Existing route to add/open a fixed-address watch. Watch refresh and change highlighting already exist. |
+| [FormatString.h](../../FrontEnd/src/Debug/FormatString.h), [implementation](../../FrontEnd/src/Debug/FormatString.cpp); App's `ContextFormat::ReadString` | Existing register/memory formatting and bounded string support. The App adapter reads the general backend, so it cannot be copied unchanged into the snapshot inspector. |
+| [ConditionEval.h](../../FrontEnd/src/Debug/ConditionEval.h), [implementation](../../FrontEnd/src/Debug/ConditionEval.cpp) | Existing register/dereference expression parsing for guards. Its public result is boolean and errors fail open; it is not a typed pseudocode-value evaluator. Consider reuse in a later expression proposal, not a new parser in this release. |
+| [FrontEnd.vcxproj](../../FrontEnd/FrontEnd.vcxproj) | Includes `src\**\*.cpp` and `src\**\*.h` through wildcards. New frontend sources need no explicit MSBuild registration. CMake source/test lists remain explicit. |
+| [LiveDriver.cpp](../../Drivers/Live/src/LiveDriver.cpp), `SameContent`; [CaptureRepeatTracker.h](../../FrontEnd/src/CaptureRepeatTracker.h) | Live content comparison already includes both SH-2 register files. Register-only changes are not intentionally suppressed as identical captures. |
 
 ## 3. User-visible semantics
 
@@ -98,9 +106,23 @@ first reads its storage. Never silently add or remove a dereference.
 
 ### 3.2 Captured registers
 
-Place a collapsible “Captured registers” section above the code child, using the existing
-panel CPU selector. It displays that CPU's `mSnap->regs[cpu]` through `Sh2RegTable` and
-`Sh2RegValue`, with hex and signed/unsigned views and existing SR summaries.
+The minimum delivery provides access to the existing Registers window, selecting the same CPU
+as pseudocode. Existing register values, SR summaries, region notes, Memory/disassembly navigation
+and Add to Watch are reused; they are not new capabilities to rebuild.
+
+An optional collapsible “Captured registers” section above the code child may embed the same
+presentation. If implemented, first extract a small register-drawing widget from
+`App::DrawSh2Registers` that accepts an explicit register file and returns user-action requests.
+App supplies its displayed-context registers to the existing window; DecompilerPanel supplies
+`mSnap->regs[cpu]` to the embedded section. Do not call the App-owned renderer directly from the
+panel or independently sample registers for the embedded view. Reuse `Sh2RegTable`,
+`Sh2RegValue`, SR summaries and existing menus. Preserve PC decompilation and disassembly
+navigation in the existing window during extraction. The new bounded snapshot preview is a
+separate addition, not a reason to duplicate register rendering.
+
+The ordinary Registers window keeps its existing current-view availability and behavior.
+Only the optional embedded inspector uses the stricter matched-output gate in section 4.4;
+opening the existing window does not certify a relationship to a pseudocode variable.
 
 Register values are observations of registers, not aliases for pseudocode names. Do not label
 R4 “param_1” or R8 “local_x”. Preserve calling-convention descriptions as conventions only.
@@ -125,6 +147,9 @@ does not need to change Mednafen's register export.
   emulator's exact BIOS contents.
 - Unsupported scalar types show an address and bounded raw bytes where the binding is valid;
   do not render float/aggregate bits as a known integer type.
+- Captured WRAM remains inspectable even when declared volatile for decompilation. A volatile
+  qualifier means it may change during execution; the tooltip reports sampled capture bytes,
+  not a fixed analysis constant or the result of a historical load.
 - Hardware registers show their existing names/notes and “device value not available from this
   capture”; no hardware/VDP-image fallback is attempted.
 
@@ -201,8 +226,11 @@ Do not reuse `IsReadableAddress(AppBackend,...)`.
 Read policy:
 
 - Restrict this release to captured low/high WRAM and the optional loaded BIOS image.
-- Apply [Sh2Address](../../FrontEnd/src/Sh2Address.h) partition/canonical rules and existing
-  hardware/volatile policy. Reject device areas and user-declared volatile ranges before reads.
+- Apply [Sh2Address](../../FrontEnd/src/Sh2Address.h) partition/canonical rules and reject device
+  areas/register images. Do not reject captured WRAM merely because it is user-declared volatile.
+  `CaptureLoadImage::loadFill` rejects volatile data during engine analysis to prevent treating
+  it as a fixed value; that is a different contract from showing immutable captured bytes.
+  Leave the engine's volatility, load-preservation and constant-folding policy unchanged.
 - Validate the complete access, including address overflow and every spanned alias/range,
   using checked/wider arithmetic before calling `MemorySnapshot::Read`.
 - Require complete scalar bytes; never zero-fill missing data.
@@ -247,9 +275,10 @@ independently selected scrub captures remain labelled captured observations. Pre
 emulator-adoption resets and reject any stale capture after adoption. Do not infer readiness
 from `mbPaused` alone.
 
-Do not introduce a second independently sampled register file. If a register-only change
-proves not to advance the existing capture identity, fix that identity contract narrowly or
-suppress the section; mixing new registers with old memory is not a workaround.
+Do not introduce a second independently sampled register file. LiveDriver::SameContent already
+compares both SH-2 register files, and CaptureRepeatTracker only suppresses repeated content.
+Preserve that existing contract and add a register-only-change regression case; no capture
+identity redesign is planned. Mixing new registers with old memory is not a workaround.
 
 ### 4.5 UI interaction and actions
 
@@ -275,7 +304,19 @@ Actions distinguish:
 - “Copy Storage Address” / “Copy Pointer Value”
 - “Add Object Address to Watch” / “Watch Memory at Pointer Value”
 
-Reuse Request::viewHex/hexAddr and App's existing handler. Preserve “Show in SH-2 Assembly”,
+Reuse Request::viewHex/hexAddr and App's existing handler only for targets the Memory viewer
+can represent. Resolve the full requested WRAM location with CanonicalAddress and send the
+canonical address, retaining the original spelling in tooltips/copy actions. For example,
+0x06101234 must navigate to 0x06001234: HexEditorPanel::GoTo only masks to 27 bits and does
+not itself fold HWRAM repeats. Do not change the general Hex Editor's address policy here.
+
+The optional BIOS image belongs to MemorySnapshot and is not served by ContextBackend or the
+Memory viewer. BIOS tooltips/byte previews and address copying may work, but “View in Memory”
+is disabled for that image in this release. Do not add a BIOS backend/region as an incidental
+change. Disable target navigation for uncaptured/device/unsupported locations and test it
+separately from whether a pointer value can be displayed or copied.
+
+Preserve “Show in SH-2 Assembly”,
 “View in Memory” for the instruction, notes, selection, scrolling, copy and function menus.
 No editable value cells, writes, breakpoint installation or run-control actions are added.
 
@@ -285,7 +326,9 @@ This is the last small increment, not a new expression/watch system.
 
 Extend DecompilerPanel::Request with one address-watch intent (address, supported WatchType,
 display label). App handles it through AddAddressWatch or WatchPanel::AddWatch and opens
-the existing Watch window.
+the existing Watch window. For the minimum register-access action, add a separate
+show-registers intent carrying the selected CPU; App selects that CPU and opens its existing
+Registers window. No new register storage/model is required.
 
 For a scalar global, watch its storage. For a pointer global, clearly offer watching its
 pointer storage separately from watching memory at the captured pointer target. For a register,
@@ -309,10 +352,11 @@ Do not change watch persistence, refresh frequency, parser syntax or history beh
 | FrontEnd/src/Decompiler/Sh2Decompiler.h | Plain inspection descriptor collection and Token reference |
 | FrontEnd/src/Decompiler/Sh2Decompiler.cpp | VARREF lookup and bounded export of supported absolute forms |
 | FrontEnd/src/Debug/CapturedValueInspection.h/.cpp (new) | Snapshot-only read policy, scalar decoding and bounded byte/ASCII preview |
-| FrontEnd/src/DecompilerPanel.h/.cpp | Availability gate, hit test, tooltip, captured-register section and explicit requests |
-| FrontEnd/src/App.cpp | Populate inspection eligibility and route watch requests; reuse current context and Memory navigation |
+| FrontEnd/src/DecompilerPanel.h/.cpp | Availability gate, hit test, tooltip, existing-register-window action, optional embedded register section and explicit requests |
+| FrontEnd/src/App.cpp | Populate inspection eligibility; route register-window/watch requests and canonical Memory navigation; extract existing register drawing only if embedding |
 | FrontEnd/src/App.h | Only if routing/eligibility needs an additional declaration |
-| CMakeLists.txt; FrontEnd/FrontEnd.vcxproj | Register new sources for desktop and affected test targets |
+| CMakeLists.txt | Register new sources for desktop and affected test targets; FrontEnd.vcxproj already discovers frontend sources through wildcards |
+| FrontEnd/src/Sh2RegisterView.h/.cpp (proposed, optional) | Shared snapshot-input register drawing extracted from App::DrawSh2Registers only if embedding is implemented |
 | FrontEnd/tests/CapturedValueInspectionTests.cpp (new) | Pure reader/descriptor/hit-test tests as appropriate |
 | FrontEnd/tests/Sh2DecompilerTests.cpp | Synthetic engine export fixtures |
 | FrontEnd/tests/DecompilerPanelTests.cpp | Real panel interactions and invalidation |
@@ -322,8 +366,9 @@ Do not change watch persistence, refresh frequency, parser syntax or history beh
 
 Keep the feature behind the existing desktop decompiler build boundary.
 Do not make a decompiler-disabled/web build compile engine-dependent code. Update the
-explicit CMake test source lists as well as the desktop frontend list and checked-in MSBuild
-project. New helper files remain independent of Ghidra despite using its host-side snapshot model.
+explicit CMake test source lists as well as the desktop frontend list. Do not add explicit
+entries to the checked-in MSBuild project: its existing source/header wildcards already include
+the new frontend files. New helper files remain independent of Ghidra despite using its host-side snapshot model.
 
 No Core ABI, live protocol, Mednafen patch, vendored engine/spec, extra worker, or cache-key
 redesign is expected. Do not refactor Assembly hover onto the new reader as part of this work;
@@ -341,18 +386,21 @@ it is a separate behavior change with separate compatibility questions.
 Gate: no App/backend/transport read is possible through the helper; all unsupported mappings
 produce no binding. Record any printer-form limitation explicitly.
 
-### P1 — Captured-register section and address preview (small)
+### P1 — Reuse register access; optional embedding (small)
 
-- Render registers from the eligible held snapshot, on the selected pseudocode CPU.
-- Add bounded “memory at value” previews, copy and Memory navigation.
-- Preserve the captured/source labels and uncertain-PC wording.
+- Add “Open Registers” for the pseudocode-selected CPU, using the existing window and actions.
+- If embedding is desired, extract and reuse the register-drawing widget described in section
+  3.2, then add bounded snapshot previews and copy/navigation actions there.
+- Preserve the captured/source labels and uncertain-PC wording in any embedded view.
 
-Gate: changing CPU clears CPU-specific hover/menu state and selects that CPU's captured regs;
-source/frame/edits/restore readiness invalidate unavailable inspection. Running/stale output
-shows no values. Registers exactly equal the fixture snapshot and the
-Memory request uses the clicked register value.
+Gate: the open-window request carries the selected CPU. If embedding is implemented, changing
+CPU clears CPU-specific hover/menu state; source/frame/edits/restore readiness gate inspection;
+running/stale output shows no embedded values; displayed values exactly equal the fixture
+snapshot; register Memory actions use supported canonical targets. Existing Registers-window
+behavior and menus remain unchanged by optional extraction.
 
-This milestone can ship before global metadata is complete.
+The existing-window shortcut can ship before global metadata is complete. Embedding is not a
+release prerequisite, and it does not justify creating a second register viewer.
 
 ### P2 — Absolute global hovers (small-to-medium, largest piece)
 
@@ -372,7 +420,7 @@ Pointer storage and target are tested independently. No local is “resolved” 
 - Update the user guide and affected codebase maps in the implementation change.
 
 Gate: a watch of pointer storage is distinct from a watch of its captured target; no dynamic
-register/local tracking is implied. BIOS/device/invalid actions remain unavailable.
+register/local tracking is implied. BIOS/device/invalid Watch actions remain unavailable.
 All existing line navigation, context menus and HaltHint behavior remain intact.
 
 ## 8. Verification matrix
@@ -382,11 +430,12 @@ Tests below are requirements for implementation, not tests executed during this 
 | Area | Required cases / oracle |
 |---|---|
 | Reader and decoding | Distinct byte patterns at widths 1/2/4; signed extrema; bool; raw unsupported type; complete-read refusal |
-| Address policy | Cached/cache-through WRAM; documented HWRAM repeats; absent/partial regions; null; valid explicit BIOS address zero; purge/cache-array/on-chip; VDP and other hardware; user-volatile overlap; address-space overflow; range crossing |
+| Address policy | Cached/cache-through WRAM; documented HWRAM repeats; absent/partial regions; null; valid explicit BIOS address zero; purge/cache-array/on-chip; VDP and other hardware refusal; user-volatile WRAM still readable as captured bytes; address-space overflow; range crossing |
 | Preview | 16-byte cap, escaped/nonprintable ASCII, truncated prefix explicitly labelled, no recursive pointer chase, no backend read after initial capture |
 | Engine metadata | Whole absolute scalar read and write; pointer global; pointer literal; null-VARREF global; address-of form; negative tests for locals, stack spaces, partial symbols, array/field syntax, dynamic/split mappings and zero-width LOAD provenance |
 | UI hit testing | Indentation, font scaling, horizontal scroll, UTF-8 token ranges, whitespace, adjacent boundaries, zero-width provenance and trailing comments |
-| UI behavior | One tooltip, row selection/navigation retained, correct object/target menu, captured register CPU, absent regs with readable globals |
+| UI behavior | One tooltip, row selection/navigation retained, correct object/target menu, existing Registers-window shortcut selects CPU; optional embedded register CPU; absent regs with readable globals |
+| Memory navigation | HWRAM-repeat target 0x06101234 produces 0x06001234; cached/cache-through aliases; BIOS preview remains readable but Memory action disabled; device/uncaptured target disabled; original address preserved for copy |
 | Freshness | Running, stale while replacement is pending, hidden/reopen, CPU change, memory edit, same-frame changed capture, source replacement, reconnect, scrub, BIOS add/replace/remove and restore transition |
 | Popup lifetime | Open menu, then replace source/result/CPU or edit memory before activation; stale request must not fire |
 | Watches | Correct address/type/label; pointer storage versus target; frozen register address; unsupported BIOS/device action disabled |
@@ -419,8 +468,10 @@ components; such scope expansion is not part of this plan.
 
 ## 9. Completion and follow-on boundary
 
-The release is complete when P0–P3 pass, useful global/register/pointer inspection is available,
-the UI makes capture timing explicit, and source/CPU/capture changes cannot produce a mixed view.
+The release is complete when P0–P3 pass, useful global/pointer inspection and access to the
+existing Registers window are available, the UI makes capture timing explicit, and
+source/CPU/capture changes cannot produce a mixed view. Optional embedded register rendering
+is not required for completion.
 Unknown locals and expressions are an expected limit, not a reason to add guessed mappings.
 
 A subsequent proposal may add proven register-backed variables, fixed stack slots, pure
@@ -437,3 +488,10 @@ tree. New names/files and proposed APIs are labelled as proposed.
 The planning environment had no usable execution runtime. No application build, tests or
 native UI run was performed for this documentation-only task. The checks in section 8 are
 implementation acceptance criteria, not claimed results.
+
+Revision 2 corrects MSBuild wildcard handling, makes existing register presentation/navigation
+reuse explicit, defines canonical WRAM navigation and BIOS navigation refusal, distinguishes
+captured volatile RAM inspection from engine constant-folding policy, and records existing
+formatting/condition/capture-identity support. Global token-binding coverage remains a
+source-supported proposal until the P0/P2 synthetic fixtures pass; neither complete coverage
+nor a guaranteed small implementation is claimed.
