@@ -5203,7 +5203,10 @@ void App::DrawVdpOutput(IPlatform& platform)
             const float scaleY = (mFrameHeight > 0) ? fit.y / mFrameHeight : 1.0f;
             ImGui::SetCursorScreenPos(imgPos);
             ImGui::Image(mFrameTexture, fit);
-            MoveSelectedSprite(imgPos, fit);
+            // Own mouse presses over the image so a drag moves the sprite rather
+            // than treating the image as empty space and moving a floating panel.
+            ImGui::SetCursorScreenPos(imgPos);
+            ImGui::InvisibleButton("##vdp-output-input", fit);
 
             ImDrawList* dl = ImGui::GetWindowDrawList();
 
@@ -5273,6 +5276,7 @@ void App::DrawVdpOutput(IPlatform& platform)
                 }
             }
 
+            bool startSpriteDrag = false;
             if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
             {
                 const ImVec2 mouse = ImGui::GetMousePos();
@@ -5281,14 +5285,19 @@ void App::DrawVdpOutput(IPlatform& platform)
                 size_t hitCommand = 0;
                 if (se_hit_test(mContext, vx, vy, &hitCommand) == SE_OK)
                 {
-                    SelectCommand(static_cast<int>(hitCommand), ImGui::GetIO().KeyShift);
+                    startSpriteDrag = ImGui::GetIO().KeyShift && IsSelected(static_cast<int>(hitCommand));
+                    if (startSpriteDrag)
+                        mSelectedCommand = static_cast<int>(hitCommand);
+                    else
+                        SelectCommand(static_cast<int>(hitCommand), ImGui::GetIO().KeyShift);
                     RevealSelectionInTables();
                 }
             }
+            MoveSelectedSprite(imgPos, fit, startSpriteDrag);
             if (mShowTooltips && mSelectedCommand >= 0 &&
                 ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip))
-                ImGui::SetTooltip("Hold Shift and move the mouse to move the selected sprite.\n"
-                                  "Release Shift to leave it in place. Shift-click toggles selection.");
+                ImGui::SetTooltip("Hold Shift and left-drag a selected sprite to move it.\n"
+                                  "Release the mouse button or Shift to leave it in place.");
         }
 
         // Transport bar pinned to the bottom of the view: prev / play-pause / scrub / next.
@@ -5303,7 +5312,7 @@ void App::DrawVdpOutput(IPlatform& platform)
     ImGui::End();
 }
 
-void App::MoveSelectedSprite(ImVec2 imagePos, ImVec2 imageSize)
+void App::MoveSelectedSprite(ImVec2 imagePos, ImVec2 imageSize, bool startAllowed)
 {
     const ImGuiIO& io = ImGui::GetIO();
     const ImVec2 mouse = ImGui::GetMousePos();
@@ -5311,16 +5320,16 @@ void App::MoveSelectedSprite(ImVec2 imagePos, ImVec2 imageSize)
     if (mSpriteMoveFrame != frame - 1)
     {
         mSpriteMove.active = false;
-        mSpriteMove.shiftWasDown = io.KeyShift; // don't resume a hidden gesture
+        mSpriteMove.leftWasDown = io.MouseDown[0]; // don't resume a hidden gesture
     }
     mSpriteMoveFrame = frame;
     se_command command {};
     const bool haveCommand = mSelectedCommand >= 0 &&
         se_get_command(mContext, static_cast<size_t>(mSelectedCommand), &command) == SE_OK;
-    bool eligible = haveCommand && ImGui::IsItemHovered() &&
+    bool eligible = haveCommand && (mSpriteMove.active || startAllowed) && ImGui::IsItemHovered() &&
         ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) &&
-        !io.WantTextInput && !ImGui::IsAnyItemActive() &&
-        !io.MouseDown[0] && !io.MouseDown[1] && !io.MouseDown[2] &&
+        !io.WantTextInput && (!ImGui::IsAnyItemActive() || ImGui::IsItemActive()) &&
+        !io.MouseDown[1] && !io.MouseDown[2] &&
         !ImGui::IsKeyPressed(ImGuiKey_Escape) && imageSize.x > 0 && imageSize.y > 0 &&
         mMemBackend.CanWrite(kVdp1VramBase + command.table_address);
     Vdp1CommandBytes current {};
@@ -5338,7 +5347,7 @@ void App::MoveSelectedSprite(ImVec2 imagePos, ImVec2 imageSize)
             imagePos.y == mSpriteMoveImagePos.y && imageSize.x == mSpriteMoveImageSize.x &&
             imageSize.y == mSpriteMoveImageSize.y;
     }
-    if (mSpriteMove.Update(io.KeyShift, eligible, mouse.x, mouse.y))
+    if (mSpriteMove.Update(io.KeyShift, io.MouseDown[0], eligible, mouse.x, mouse.y))
     {
         mSpriteMoveSource = mMemBackend.SourceId();
         mSpriteMoveCommand = mSelectedCommand;

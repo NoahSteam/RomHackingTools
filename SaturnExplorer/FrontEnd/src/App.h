@@ -235,7 +235,7 @@ private:
     void DrawCommandScaleCell(const se_command& cmd);
     void PushCommandEditId(const se_command& cmd);   // pushes two IDs; pop both
     void WriteCommandWord(const se_command& cmd, uint32_t fieldOffset, uint16_t value);
-    void MoveSelectedSprite(ImVec2 imagePos, ImVec2 imageSize);
+    void MoveSelectedSprite(ImVec2 imagePos, ImVec2 imageSize, bool startAllowed);
     ImVec2 Vdp1CoordinateSize() const;
     void DrawSelectedObject();
     void DrawTextureViewer(IPlatform& platform);

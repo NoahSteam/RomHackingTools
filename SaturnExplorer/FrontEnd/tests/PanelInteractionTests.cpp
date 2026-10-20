@@ -789,17 +789,24 @@ void TestShiftMoveOverImage()
         ImGui::Begin("VDP Output test", nullptr, ImGuiWindowFlags_NoSavedSettings);
         ImGui::Image(static_cast<ImTextureID>(1), ImVec2(400, 300));
         center = (ImGui::GetItemRectMin() + ImGui::GetItemRectMax()) * 0.5f;
+        ImGui::SetCursorScreenPos(ImGui::GetItemRectMin());
+        ImGui::InvisibleButton("##vdp-output-input", ImVec2(400, 300));
         const auto& io = ImGui::GetIO();
         const auto mouse = ImGui::GetMousePos();
-        move.Update(io.KeyShift, selected && ImGui::IsItemHovered() &&
+        bool start = false;
+        if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+        {
+            start = io.KeyShift && selected;
+            if (!start) selected = io.KeyShift ? !selected : true;
+        }
+        move.Update(io.KeyShift, io.MouseDown[0], selected && (move.active || start) && ImGui::IsItemHovered() &&
             ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) &&
-            !io.WantTextInput && !ImGui::IsAnyItemActive() && !io.MouseDown[0], mouse.x, mouse.y);
+            !io.WantTextInput && (!ImGui::IsAnyItemActive() || ImGui::IsItemActive()), mouse.x, mouse.y);
         if (move.active)
         {
             dx = Vdp1MoveGesture::Delta(mouse.x, move.startX, 0.5f);
             dy = Vdp1MoveGesture::Delta(mouse.y, move.startY, 1.0f);
         }
-        if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) selected = true;
         ImGui::End();
     });
     h.Settle();
@@ -808,20 +815,26 @@ void TestShiftMoveOverImage()
     CHECK(selected);
     ImGui::GetIO().AddKeyEvent(ImGuiMod_Shift, true);
     h.Frame(center, false);
-    CHECK(move.active);
-    CHECK(dx == 0 && dy == 0); // no snap when Shift is pressed
+    CHECK(!move.active); // Shift alone never moves a sprite
     h.Frame(center + ImVec2(24, -9), false);
+    CHECK(dx == 0 && dy == 0);
+    h.Frame(center, true);
+    CHECK(move.active);
+    CHECK(selected); // clicking again with Shift must not deselect the sprite
+    CHECK(dx == 0 && dy == 0); // no snap on mouse-down
+    h.Frame(center + ImVec2(24, -9), true);
     CHECK(dx == 12 && dy == -9);
-    ImGui::GetIO().AddKeyEvent(ImGuiMod_Shift, false);
     h.Frame(center + ImVec2(24, -9), false);
     CHECK(!move.active);
+    CHECK(selected);
     h.Frame(center + ImVec2(48, -18), false);
-    CHECK(dx == 12 && dy == -9); // release leaves the final position intact
-    ImGui::GetIO().AddKeyEvent(ImGuiMod_Shift, true);
-    h.Frame(center, false);
-    CHECK(move.active);
+    CHECK(dx == 12 && dy == -9); // mouse release leaves the final position intact
     h.Frame(center, true);
-    CHECK(!move.active); // Shift-click stays available for selection
+    CHECK(move.active);
+    CHECK(selected); // another drag can begin without releasing Shift
+    ImGui::GetIO().AddKeyEvent(ImGuiMod_Shift, false);
+    h.Frame(center, true);
+    CHECK(!move.active); // releasing Shift also ends the drag
 }
 
 void TestAppShortcutYieldsToModalDialog()

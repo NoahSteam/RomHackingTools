@@ -135,20 +135,25 @@ void TestSpriteMove()
         Check(MoveVdp1Command(bytes, 10, 20) == bytes, "state, skipped and end commands cannot move");
     }
     Vdp1MoveGesture gesture;
-    Check(!gesture.Update(false, true, 50, 60), "mouse motion alone never moves a sprite");
-    Check(gesture.Update(true, true, 50, 60) && gesture.active, "Shift starts from the current cursor");
+    Check(!gesture.Update(false, false, true, 50, 60), "mouse motion alone never moves a sprite");
+    Check(!gesture.Update(true, false, true, 50, 60), "Shift alone never moves a sprite");
+    Check(gesture.Update(true, true, true, 50, 60) && gesture.active, "Shift-left-click starts from the current cursor");
     Check(Vdp1MoveGesture::Delta(70, gesture.startX, 0.5f) == 10,
           "hi-res and scaled views map cursor distance into VDP1 coordinates");
     Check(Vdp1MoveGesture::Delta(50.4f, gesture.startX, 1) == 0 &&
           Vdp1MoveGesture::Delta(50.8f, gesture.startX, 1) == 1,
           "fractional motion accumulates from the anchor without rounding drift");
-    gesture.Update(true, false, 70, 80);
-    Check(!gesture.active, "clicks, loss of hover or source changes stop movement");
-    Check(!gesture.Update(true, true, 70, 80), "holding Shift never restarts a cancelled move");
-    gesture.Update(false, true, 70, 80);
-    Check(gesture.Update(true, true, 70, 80), "a fresh Shift press starts a new move");
-    gesture.Update(false, true, 70, 80);
+    gesture.Update(true, true, false, 70, 80);
+    Check(!gesture.active, "loss of hover or source changes stop movement");
+    Check(!gesture.Update(true, true, true, 70, 80), "a held button never restarts a cancelled move");
+    gesture.Update(true, false, true, 70, 80);
+    Check(gesture.Update(true, true, true, 70, 80), "a fresh click starts another move while Shift stays held");
+    gesture.Update(false, true, true, 70, 80);
     Check(!gesture.active, "releasing Shift stops movement");
+    gesture.Update(false, false, true, 70, 80);
+    gesture.Update(true, true, true, 70, 80);
+    gesture.Update(true, false, true, 70, 80);
+    Check(!gesture.active, "releasing the mouse button stops movement");
 }
 }  // namespace
 

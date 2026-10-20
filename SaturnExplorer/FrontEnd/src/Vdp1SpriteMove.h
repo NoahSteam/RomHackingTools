@@ -65,19 +65,19 @@ inline Vdp1CommandBytes MoveVdp1Command(const Vdp1CommandBytes& original, int dx
     return result;
 }
 
-// A fresh Shift press over an eligible image starts movement. Leaving the image,
-// clicking, or losing the source stops it until Shift is released and pressed again.
+// Shift + a fresh left-button press on a selected sprite starts movement.
+// Releasing either input or losing the target stops it until the next click.
 struct Vdp1MoveGesture
 {
-    bool active = false, shiftWasDown = false;
+    bool active = false, leftWasDown = false;
     float startX = 0, startY = 0;
 
-    bool Update(bool shift, bool eligible, float x, float y)
+    bool Update(bool shift, bool leftDown, bool eligible, float x, float y)
     {
-        if (!shift || !eligible) active = false;
-        const bool started = shift && !shiftWasDown && eligible;
+        if (!shift || !leftDown || !eligible) active = false;
+        const bool started = shift && leftDown && !leftWasDown && eligible;
         if (started) { active = true; startX = x; startY = y; }
-        shiftWasDown = shift;
+        leftWasDown = leftDown;
         return started;
     }
 
