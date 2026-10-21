@@ -55,6 +55,8 @@
 #include "Decompiler/DecompilerRunner.h"
 #include "Decompiler/MemorySnapshot.h"
 #include "Decompiler/RegisterHint.h"
+#include "Decompiler/InspectionTarget.h"
+#include "Debug/WatchList.h"
 #include "Decompiler/Sh2Decompiler.h"
 #include "Decompiler/Sh2FunctionFinder.h"
 
@@ -88,8 +90,15 @@ struct DecompilerView
     uint64_t frameNumber = 0;
     se_sh2_regs regs[2] = {};
     bool haveRegs[2] = { false, false };
+    bool inspectionReady = true;
+    std::string inspectionReason;
     std::shared_ptr<const decomp::BiosImage> bios;   // content hashed once, at load
 };
+
+// Text coordinates use the same origin and font measurement as the draw-list renderer.
+// Returns a token index, or -1 for gaps, invalid byte spans and non-text provenance.
+int TokenAtX(const decomp::Line& line, float x,
+             const std::function<float(const char*, const char*)>& measure);
 
 // What the panel reads from the rest of the app.
 struct DecompilerInputs
@@ -125,6 +134,11 @@ public:
         uint32_t addr = 0;
         bool viewHex = false;        // show 'hexAddr' in Memory
         uint32_t hexAddr = 0;
+        bool showRegisters = false;
+        bool addWatch = false;
+        uint32_t watchAddress = 0;
+        WatchType watchType = WatchType::U8;
+        std::string watchLabel;
         bool rename = false;         // open Rename Function for 'renameAddr'
         uint32_t renameAddr = 0;
         bool boundsChanged = false;  // a function start was set in DecompilerInputs::bounds: save it
@@ -178,6 +192,7 @@ public:
 
     // ---- State, for App's status and for tests -------------------------------------------
     const decomp::DecompileResult* Shown() const { return mShownValid ? &mShown : nullptr; }
+    bool InspectionAvailable(std::string* reason = nullptr) const;
     bool ShownStale() const;                  // shown output is not the answer for the view now
     bool ShownOutdatedByView() const;         // ...because the memory on screen moved on
     // ...and the live emulator on screen is at another frame than the output was made at: the emulator moved on (the badge says
@@ -311,6 +326,9 @@ private:
     // The hint for the output on screen: the followed CPU stopped on a register-target call or
     // jump in it whose target the output does not already name. Invalid otherwise.
     decomp::RegisterHint HaltHint() const;
+    std::string InspectionText(const decomp::InspectionTarget& target) const;
+    bool InspectionMenuCurrent() const;
+    void DrawInspectionMenu(Request& req);
 
     int mCpu = 0;
     Target mTarget;
@@ -329,6 +347,17 @@ private:
     bool HeldIsOnScreen() const;
     uint32_t mViewPc[2] = { 0, 0 };
     bool mViewHavePc[2] = { false, false };
+    bool mInspectionReady = true;
+    std::string mInspectionReason, mInspectionSource;
+    uint64_t mResultRevision = 0;
+    struct InspectionMenu
+    {
+        bool valid = false;
+        decomp::InspectionTarget target;
+        decomp::SnapshotKey key;
+        uint64_t resultRevision = 0;
+        int cpu = 0;
+    } mInspectionMenu;
     std::shared_ptr<const decomp::MemorySnapshot> mSnap;   // the snapshot the panel holds
     ViewId mSnapId;
     uint64_t mTick = 0, mCaptureTick = 0;

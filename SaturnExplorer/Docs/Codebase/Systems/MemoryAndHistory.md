@@ -3,6 +3,8 @@
 Inspected revision: `ff6a3b1fb1c54e4c0344613094ea65292b0023c2` (2026-10-20).
 Evidence status: verified from source unless explicitly qualified.
 
+Pseudocode inspection/navigation integration rechecked against `codex/decompiler-variable-inspection` (2026-10-20).
+
 ## Purpose and responsibilities
 
 This frontend subsystem presents captured Saturn memory, edits appropriate targets, finds numeric values or byte sequences, records recent live frames, restores earlier emulator states, and compares two immutable frame snapshots. It is separate from disc-file search and persistent ROM patching. The [debugger](Debugger.md) uses its memory backend for watches, assembly and call-stack reconstruction; graphics edits also pass through the same write policy.
@@ -67,6 +69,13 @@ The diff owns `shared_ptr<const MemSnapshot>` inputs, so ring eviction cannot al
 `ContextBackend` holds a pointer to App's current context slot, so switching live/scrub/static views does not require reconnecting every panel. The backend itself does not own the context. Recorder scratch outlives its source callbacks and is replaced by the next selection; the core copies it during capture. Worker queue/ring mutexes and generation checks separate ownership; UI scratch/edit sink state belongs to the UI thread. Comparison snapshots own independent copies and may outlive either context or recorded frame.
 
 `StagedEdits` owns one frame-tagged ordered poke batch. A write on a different frame clears the old batch, and retaining the same edited scrub context must retain its edits. Reconstructing from recording clears edits no longer visible. Save slots receive streamed state independently of whether recording is enabled, via `OnStateBlock`. `SavestateSlots::Latest` reconstructs the latest accepted keyframe/delta; `App::DoSaveState` calls `SaveToSlot` to write a versioned `.sestate` under the config states directory. `App::DoLoadState` calls `LoadFromSlot`, checks live restore capabilities, submits `se_load_state` without scrub edits, drops recorded history and begins the restore wait. Native emulator slot actions (`DoLoadEmulatorState` / `DoSaveEmulatorState`) are a separate App path.
+
+Pseudocode inspection is a deliberately narrower memory consumer: `CapturedValueInspection`
+reads only the panel's immutable matched snapshot, never `ContextBackend`. Captured globals and
+pointer targets may open Memory only for complete supported WRAM locations; aliases are folded
+before `HexEditorPanel::GoTo`. A loaded BIOS image can be previewed from the snapshot but is not
+added to the Memory backend. Fixed-address Watch requests reuse the existing Watch refresh and
+change-highlighting behavior after insertion; they are not stored snapshot-expression values.
 
 ## Extension points and reusable abstractions
 

@@ -36,6 +36,7 @@
 #include <vector>
 
 #include "Decompiler/MemorySnapshot.h"
+#include "Decompiler/InspectionTarget.h"
 
 namespace sfe
 {
@@ -165,6 +166,7 @@ struct Token
     uint32_t addr = 0;             // the instruction the token came from; 0 = none
     uint32_t target = 0;           // a called function's entry, for FuncName tokens; 0 = none
     uint32_t calledAt = 0;         // ...and the exact address called (a mirror, if through one); 0 = none
+    uint32_t inspectionTarget = 0; // one-based index into inspectionTargets; zero is unbound
 };
 
 struct Line
@@ -345,6 +347,7 @@ struct DecompileResult
     std::string name;
 
     std::vector<Line> lines;
+    std::vector<InspectionTarget> inspectionTargets; // owned metadata only; never capture values or engine pointers
     std::vector<CallSite> calls;                      // the calls, for the ledger's order checks
     std::vector<std::vector<int>> flowSuccessors;     // the flow's basic blocks before any action: each one's successors
     // How each memory access the flow made that is no longer one in the p-code ended (the engine

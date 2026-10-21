@@ -5,10 +5,12 @@
 #include <cstdio>
 #include <cstdlib>
 #include <iterator>
+#include <limits>
 #include <map>
 #include <set>
 
 #include "Debug/MemoryBackend.h"
+#include "Debug/CapturedValueInspection.h"
 #include "PanelWidgets.h"
 #include "Sh2Address.h"
 
@@ -42,6 +44,36 @@ ImVec4 TokenColour(TokenKind kind)
 }
 
 }  // namespace
+
+int TokenAtX(const Line& line, float x,
+             const std::function<float(const char*, const char*)>& measure)
+{
+    if (!(x >= 0.0f) || !measure) return -1;
+    const char* text = line.text.c_str();
+    size_t previous = 0;
+    float cursor = 0.0f;
+    for (size_t i = 0; i < line.tokens.size(); ++i)
+    {
+        const Token& t = line.tokens[i];
+        const size_t begin = t.begin, end = t.end;
+        if (end <= begin || end > line.text.size() || begin < previous) continue;
+        // The markup exporter saturates uint16_t text offsets. A saturated end on a longer
+        // line does not prove that the printed object ends here.
+        if (end == std::numeric_limits<uint16_t>::max() && line.text.size() > end) continue;
+        // A clamped span or half a UTF-8 codepoint is not a printed token.
+        if ((static_cast<unsigned char>(text[begin]) & 0xc0) == 0x80 ||
+            (end < line.text.size() && (static_cast<unsigned char>(text[end]) & 0xc0) == 0x80)) continue;
+        cursor += measure(text + previous, text + begin);
+        const float width = measure(text + begin, text + end);
+        bool whitespace = true;
+        for (size_t k = begin; k < end; ++k)
+            if (text[k] != ' ' && text[k] != '\t' && text[k] != '\r' && text[k] != '\n') whitespace = false;
+        if (!whitespace && width > 0.0f && x >= cursor && x < cursor + width) return static_cast<int>(i);
+        cursor += width;
+        previous = end;
+    }
+    return -1;
+}
 
 bool DecompilerPanel::ParseHexAddress(const char* text, uint32_t& out)
 {
@@ -126,6 +158,7 @@ void DecompilerPanel::SetCpu(int cpu)
     cpu &= 1;
     if (cpu == mCpu) return;
     mCpu = cpu;
+    mInspectionMenu.valid = false;
     // The output on screen stays: it is a function of the shared RAM, not of a CPU. Only Follow PC
     // reads the CPU, so only it asks again.
     if (mTarget.kind == TargetKind::FollowPc)
@@ -137,6 +170,7 @@ void DecompilerPanel::SetCpu(int cpu)
 
 void DecompilerPanel::ResetSession()
 {
+    mInspectionMenu.valid = false;
     mPending = Outstanding();
     mAsked = Question();
     mStopped = false;
@@ -598,6 +632,8 @@ void DecompilerPanel::CachePut(const Question& q, const DecompileResult& r, cons
 
 void DecompilerPanel::Install(DecompileResult& result, const ViewId& snapId, uint64_t namesGeneration)
 {
+    ++mResultRevision;
+
     // The same function run through another mirror is another answer: the entry box follows it.
     const bool sameFunction = mShownValid && mShown.requestedEntry == result.requestedEntry;
     mShown = std::move(result);
@@ -726,6 +762,9 @@ void DecompilerPanel::Update(const DecompilerView& view, DecompilerRunner& runne
     // completed while the view moved on to C, would be installed before the panel noticed C.
     mViewId = IdOf(view);
     mViewKind = view.kind;
+    mInspectionReady = view.inspectionReady;
+    mInspectionReason = view.inspectionReason;
+    mInspectionSource = view.sourceLabel ? view.sourceLabel : "capture";
     for (int cpu = 0; cpu < 2; ++cpu)
     {
         mViewHavePc[cpu] = view.haveRegs[cpu];
@@ -1016,6 +1055,13 @@ void DecompilerPanel::DrawHeader(const DecompilerView& view, const DecompilerRun
     if (ImGui::Combo("##cpu", &cpu, kCpus, 2)) SetCpu(cpu);
     Remember("cpu");
     ImGui::SetItemTooltip("Whose PC Follow PC reads. The output is the shared RAM's and stays when you switch.");
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Open Registers"))
+    {
+        req.showRegisters = true;
+        req.cpu = mCpu;
+    }
+    Remember("Open Registers");
 
     ImGui::SameLine();
     bool follow = FollowPc();
@@ -1264,6 +1310,131 @@ RegisterHint DecompilerPanel::HaltHint() const
     return inFunction ? h : RegisterHint();
 }
 
+bool DecompilerPanel::InspectionAvailable(std::string* reason) const
+{
+    const char* why = nullptr;
+    if (!mInspectionReady) why = mInspectionReason.empty() ? "capture not ready" : mInspectionReason.c_str();
+    else if (!mViewId.valid || !mSnap || !mShownValid || mShown.status != DecompileStatus::Ok)
+        why = "no matched successful capture";
+    else if (mViewKind != DecompViewKind::Static && mViewKind != DecompViewKind::Scrub &&
+             mViewKind != DecompViewKind::LivePaused) why = "capture is running or closed";
+    else if (ShownStale() || mShownSnapId != mViewId || mSnapId != mViewId || mShown.key != mSnap->key)
+        why = "displayed output and capture do not match";
+    if (reason) *reason = why ? why : "";
+    return why == nullptr;
+}
+
+std::string DecompilerPanel::InspectionText(const InspectionTarget& target) const
+{
+    if (!InspectionAvailable()) return "";
+    const CapturedValue value = InspectCapturedValue(*mSnap, target);
+    char text[256];
+    std::snprintf(text, sizeof text, "%s: 0x%08X%s",
+                  target.kind == InspectionTarget::Kind::AbsoluteObject ? "Storage" : "Object address",
+                  target.address, value.loadedBios ? " (loaded BIOS image)" : "");
+    std::string out = text;
+    if (!target.typeLabel.empty()) out += "\nType: " + target.typeLabel;
+    if (target.kind == InspectionTarget::Kind::AbsoluteObject)
+    {
+        std::snprintf(text, sizeof text, "\nSize: %u bytes\nCaptured memory: ", target.byteSize);
+        out += text;
+        out += value.available ? value.scalarText : value.reason;
+    }
+    if (value.hasPointer)
+    {
+        std::snprintf(text, sizeof text, "\nPointer target: 0x%08X", value.pointer);
+        out += text;
+    }
+    if (!value.preview.bytes.empty())
+    {
+        out += value.preview.loadedBios ? "\nLoaded BIOS image bytes:" : "\nCaptured bytes:";
+        for (uint8_t byte : value.preview.bytes)
+        {
+            std::snprintf(text, sizeof text, " %02X", byte);
+            out += text;
+        }
+        out += "\nASCII: \"" + value.preview.ascii + "\"";
+    }
+    if (value.preview.truncated) out += "\nPreview truncated";
+    if (!value.preview.reason.empty()) out += "\n" + value.preview.reason;
+    std::snprintf(text, sizeof text, "\nSource: %s / %s SH-2 / frame %llu\nCaptured observation, not a recovered value of this occurrence.",
+                  mInspectionSource.c_str(), mCpu == 0 ? "master" : "slave",
+                  static_cast<unsigned long long>(mSnap->key.frameNumber));
+    return out + text;
+}
+
+bool DecompilerPanel::InspectionMenuCurrent() const
+{
+    return mInspectionMenu.valid && InspectionAvailable() && mInspectionMenu.cpu == mCpu &&
+           mInspectionMenu.resultRevision == mResultRevision && mInspectionMenu.key == mSnap->key;
+}
+
+void DecompilerPanel::DrawInspectionMenu(Request& req)
+{
+    if (!mInspectionMenu.valid) return;
+    const InspectionTarget& target = mInspectionMenu.target;
+    const bool current = InspectionMenuCurrent();
+    const CapturedValue value = current ? InspectCapturedValue(*mSnap, target) : CapturedValue();
+    auto item = [&](const char* label, bool enabled) {
+        const bool hit = ImGui::MenuItem(label, nullptr, false, current && enabled);
+        Remember(label);
+        return hit && InspectionMenuCurrent();
+    };
+    auto copy = [](uint32_t address) {
+        char text[16];
+        std::snprintf(text, sizeof text, "0x%08X", address);
+        ImGui::SetClipboardText(text);
+    };
+    uint32_t canonical = 0;
+    const bool object = target.kind == InspectionTarget::Kind::AbsoluteObject;
+    const bool storage = current && object && CanonicalCapturedWram(*mSnap, target.address,
+        target.byteSize, canonical);
+    const uint32_t storageAddress = canonical;
+    if (object)
+    {
+        if (item("View Object Storage in Memory", storage))
+        {
+            req.viewHex = true;
+            req.hexAddr = storageAddress;
+        }
+        if (item("Copy Storage Address", true)) copy(target.address);
+        const bool scalar = target.byteSize == 1 || target.byteSize == 2 || target.byteSize == 4;
+        const bool known = target.display != InspectionTarget::Display::RawBytes;
+        if (item("Add Object Address to Watch", storage && scalar && known))
+        {
+            req.addWatch = true;
+            req.watchAddress = storageAddress;
+            const bool sign = target.display == InspectionTarget::Display::SignedInteger;
+            req.watchType = target.display == InspectionTarget::Display::Pointer ? WatchType::Pointer :
+                target.byteSize == 1 ? (sign ? WatchType::S8 : WatchType::U8) :
+                target.byteSize == 2 ? (sign ? WatchType::S16 : WatchType::U16) :
+                                      (sign ? WatchType::S32 : WatchType::U32);
+            req.watchLabel = "Captured object storage";
+        }
+    }
+    const bool pointerForm = !object || target.display == InspectionTarget::Display::Pointer;
+    if (pointerForm)
+    {
+        const bool pointer = value.hasPointer;
+        const bool readable = current && pointer && value.pointer != 0 &&
+            CanonicalCapturedWram(*mSnap, value.pointer, 1, canonical);
+        if (item("View Pointer Target in Memory", readable))
+        {
+            req.viewHex = true;
+            req.hexAddr = canonical;
+        }
+        if (item("Copy Pointer Value", pointer)) copy(value.pointer);
+        if (item("Watch Memory at Pointer Value", readable))
+        {
+            req.addWatch = true;
+            req.watchAddress = canonical;
+            req.watchType = WatchType::U8;
+            req.watchLabel = "Memory at captured pointer value";
+        }
+    }
+    ImGui::Separator();
+}
+
 void DecompilerPanel::DrawLines(const DecompilerInputs& inputs, Request& req)
 {
     if (!mShownValid || mShown.lines.empty())
@@ -1384,16 +1555,40 @@ void DecompilerPanel::DrawLines(const DecompilerInputs& inputs, Request& req)
             }
             const ImVec2 min = ImGui::GetItemRectMin(), max = ImGui::GetItemRectMax();
             mDrawn.push_back(DrawnLine{ i, min, max });
-            // Says what the number is: it is the address of the instruction the line came from and
-            // where a click goes, not a value in the line (A7-1), and whether the line is several.
-            if (ln.firstAddr && ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip))
+            const bool rowHovered = ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenBlockedByPopup);
+            const int tokenIndex = rowHovered ? TokenAtX(ln, ImGui::GetMousePos().x - min.x,
+                [](const char* a, const char* b) { return ImGui::CalcTextSize(a, b).x; }) : -1;
+            const InspectionTarget* target = nullptr;
+            if (tokenIndex >= 0)
             {
-                mLineTooltip = LineOriginText(ln);
-                ImGui::SetTooltip("%s", mLineTooltip.c_str());
+                const uint32_t binding = ln.tokens[static_cast<size_t>(tokenIndex)].inspectionTarget;
+                if (binding && binding <= mShown.inspectionTargets.size())
+                    target = &mShown.inspectionTargets[binding - 1];
+            }
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip))
+            {
+                if (target && InspectionAvailable()) mLineTooltip = InspectionText(*target);
+                else if (ln.firstAddr) mLineTooltip = LineOriginText(ln);
+                if (!mLineTooltip.empty()) ImGui::SetTooltip("%s", mLineTooltip.c_str());
+            }
+            // The pointer moves into the menu next frame. Freeze owned metadata now; all actions
+            // below revalidate the capture and result rather than reusing the hovered row.
+            if (rowHovered && ImGui::IsMouseReleased(ImGuiMouseButton_Right))
+            {
+                mInspectionMenu = InspectionMenu();
+                if (target && InspectionAvailable())
+                {
+                    mInspectionMenu.valid = true;
+                    mInspectionMenu.target = *target;
+                    mInspectionMenu.key = mSnap->key;
+                    mInspectionMenu.resultRevision = mResultRevision;
+                    mInspectionMenu.cpu = mCpu;
+                }
             }
 
             if (ImGui::BeginPopupContextItem("lnctx"))
             {
+                DrawInspectionMenu(req);
                 auto item = [&](const char* label, bool enabled) {
                     const bool hit = ImGui::MenuItem(label, nullptr, false, enabled);
                     Remember(label);

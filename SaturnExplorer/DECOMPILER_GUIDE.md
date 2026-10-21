@@ -120,6 +120,49 @@ The tooltip of the badge names the reason the output is stale, and only that rea
 | "The emulator has moved on since this was decompiled. Press Refresh." | A running emulator, at another frame than the output's. |
 | "This output is from an earlier state and nothing is being decompiled. Press Enter in the entry box or Refresh to replace it." | Anything else that leaves the output stale with nothing asked, for example a paused emulator's panel that was hidden while the memory changed. |
 
+## Captured globals and pointer targets
+
+Hover a supported absolute global in the pseudocode to inspect its **captured memory**.
+The tooltip reports the object's storage address, proven width and captured bytes; supported
+1-, 2- and 4-byte integer/bool values are decoded in Saturn byte order. Unsupported types
+remain raw bytes. A value on an earlier read or assignment destination is still the memory
+in the displayed capture: it is not a recovered value from when that statement executed.
+
+For a typed pointer global, **object storage** holds the pointer bits and **pointer target**
+is the address those bits name. An address-of form previews its addressed object without
+reading its first word as another pointer. Target previews contain at most 16 bytes, with
+escaped printable ASCII and an explicit truncation label when only a prefix is captured.
+Null pointer values do not automatically preview BIOS address zero.
+
+Inspection requires successful output matched to the displayed, non-running capture. Static
+savestates/dumps, recorded frames and paused live captures are supported with source/frame
+labels; stale output, running execution, closed/replaced sources and unresolved live restores
+hide captured values and disable inspection actions. Captured volatile WRAM is inspectable:
+its bytes are observations, not constants for the decompiler to fold. Device values and VDP
+register images are not read through this inspector. A supplied BIOS is labelled **loaded BIOS
+image**; it does not establish which BIOS the emulator uses.
+
+Right-click a supported token for explicitly separate actions:
+
+- **View Object Storage in Memory** or **View Pointer Target in Memory** opens a captured
+  WRAM location. Documented aliases are canonicalized; for example `0x06101234` opens
+  `0x06001234`. BIOS bytes can be previewed but cannot be opened in Memory here.
+- **Copy Storage Address** or **Copy Pointer Value** keeps the original address spelling.
+- **Add Object Address to Watch** watches the object's storage; **Watch Memory at Pointer
+  Value** watches a supported location at the captured pointer target. These are fixed-address
+  watches refreshed by the ordinary Watch window, including its existing change highlighting.
+  They do not follow a pointer as it changes or track a pseudocode local.
+
+**Open Registers** opens the existing Registers window's SH-2 tab for the CPU selected in
+pseudocode. This reuses its values, SR summaries and navigation menus. That window retains
+its normal current-view behavior; opening it does not certify that a printed local occupies
+any particular register, or that a captured PC is the next instruction to execute.
+
+Only metadata-proven whole absolute objects and typed pointer/address forms get bindings.
+Partial symbols, fields/arrays, register/stack locals and arbitrary expressions remain
+provenance-only. Existing line selection, assembly navigation, notes and instruction menus
+continue to work on those lines.
+
 ## Limits
 
 - The output is pseudocode for reading, not source that compiles.

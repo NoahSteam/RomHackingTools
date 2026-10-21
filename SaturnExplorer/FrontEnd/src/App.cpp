@@ -3042,6 +3042,13 @@ DecompilerView App::BuildDecompilerView()
         const bool still = mbPaused || mStepHalt.HaltActive();
         v.kind = still ? DecompViewKind::LivePaused : DecompViewKind::LiveRunning;
         v.sourceLabel = still ? "live, paused" : "live, running";
+#ifdef SE_ENABLE_LIVE
+        // A timed-out or unconfirmable restore still leaves the captured state unresolved.
+        // Independently selected scrub captures returned above remain inspectable.
+        v.inspectionReady = mRestoreOutstanding == 0 && !mRestoreUnconfirmable;
+        if (!v.inspectionReady)
+            v.inspectionReason = "A restore is unresolved; captured values are unavailable.";
+#endif
     }
     else
     {
@@ -3083,6 +3090,22 @@ void App::UpdateDecompiler(IPlatform& platform)
     mDecompilerPanel.Draw(&mPanels.decompiler, view, *mDecompilerRunner, in, req);
     if (req.jumpAssembly) { mAssemblyPanel.GoTo(req.cpu, req.addr); mPanels.assembly = true; }
     if (req.viewHex) { mHexEditor.GoTo(req.hexAddr); mPanels.hexEditor = true; }
+    if (req.showRegisters)
+    {
+        mRegSh2Cpu = req.cpu == 1 ? 1 : 0;
+        mPanels.registers = true;
+        mSelectSh2RegTab = true;
+        mFocusRegisters = true;
+    }
+    if (req.addWatch)
+    {
+        // The panel has validated a complete captured WRAM location and canonicalized it.
+        // This is a fixed-address Watch under its ordinary current-view refresh semantics.
+        char expression[16];
+        std::snprintf(expression, sizeof expression, "%08X", req.watchAddress);
+        mWatchPanel.AddWatch(req.watchLabel, expression, req.watchType);
+        mPanels.watch = true;
+    }
     if (req.rename)
     {
         mRenameAddr = req.renameAddr;

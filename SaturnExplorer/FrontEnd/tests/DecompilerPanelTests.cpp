@@ -145,6 +145,7 @@ struct Fixture
 
     DecompViewKind kind = DecompViewKind::Static;
     uint64_t sourceId = 7, frame = 1;
+    bool inspectionReady = true;
     bool trackSerial = true;   // the view's serial is the backend's (an edit moves it)
     uint64_t fixedSerial = 0;
     se_sh2_regs regs[2] = {};
@@ -193,6 +194,8 @@ struct Fixture
         DecompilerView v;
         v.backend = const_cast<MockBackend*>(&backend);
         v.kind = kind;
+        v.inspectionReady = inspectionReady;
+        if (!inspectionReady) v.inspectionReason = "restore unresolved";
         v.sourceLabel = "test";
         v.sourceId = sourceId;
         v.deriveSerial = trackSerial ? backend.serial : fixedSerial;
@@ -236,6 +239,14 @@ struct Fixture
         }
         if (r.jumpAssembly) { req.jumpAssembly = true; req.cpu = r.cpu; req.addr = r.addr; }
         if (r.viewHex) { req.viewHex = true; req.hexAddr = r.hexAddr; }
+        if (r.showRegisters) { req.showRegisters = true; req.cpu = r.cpu; }
+        if (r.addWatch)
+        {
+            req.addWatch = true;
+            req.watchAddress = r.watchAddress;
+            req.watchType = r.watchType;
+            req.watchLabel = r.watchLabel;
+        }
         if (r.rename) { req.rename = true; req.renameAddr = r.renameAddr; }
         if (r.boundsChanged) req.boundsChanged = true;
         if (showHex)
@@ -359,6 +370,211 @@ struct Fixture
         return r;
     }
 };
+
+void TestTokenHitTesting()
+{
+    Line line;
+    line.text = "  foo\xce\xbb bar  // note";
+    Token first; first.begin = 2; first.end = 7;
+    Token zero; zero.begin = 7; zero.end = 7;
+    Token last; last.begin = 8; last.end = 11;
+    line.tokens = { first, zero, last };
+    auto measure = [](const char* a, const char* b) {
+        float width = 0;
+        for (; a != b; ++a)
+            if ((static_cast<unsigned char>(*a) & 0xc0) != 0x80) width += 2.0f;
+        return width;
+    };
+    CHECK(TokenAtX(line, -1, measure) == -1);
+    CHECK(TokenAtX(line, 3.9f, measure) == -1); // indentation
+    CHECK(TokenAtX(line, 4, measure) == 0);
+    CHECK(TokenAtX(line, 11.9f, measure) == 0);
+    CHECK(TokenAtX(line, 12, measure) == -1); // half-open end + gap
+    CHECK(TokenAtX(line, 14, measure) == 2);
+    CHECK(TokenAtX(line, 20, measure) == -1); // trailing comment
+    line.tokens[0].end = 6; // middle of UTF-8 codepoint
+    CHECK(TokenAtX(line, 5, measure) == -1);
+    line.tokens[0].end = 100; // invalid spans are not clamped into a binding
+    CHECK(TokenAtX(line, 5, measure) == -1);
+    Line adjacent; adjacent.text = "ab";
+    first.begin = 0; first.end = 1; last.begin = 1; last.end = 2;
+    adjacent.tokens = { first, last };
+    CHECK(TokenAtX(adjacent, 2, measure) == 1);
+    CHECK(TokenAtX(adjacent, 4, measure) == -1);
+    Line saturated; saturated.text.assign(70000, 'x');
+    Token clamped; clamped.begin = 0; clamped.end = 65535; saturated.tokens = { clamped };
+    CHECK(TokenAtX(saturated, 2, measure) == -1);
+}
+
+void TestCapturedInspectionUi()
+{
+    Fixture f;
+    // The real runner establishes a held capture; inject owned display metadata independently of
+    // engine export, so panel policy tests don't accidentally rely on a printer naming decision.
+    f.backend.hw[0x120] = 0x06; f.backend.hw[0x121] = 0x10;
+    f.backend.hw[0x122] = 0x12; f.backend.hw[0x123] = 0x34;
+    f.backend.hw[0x1234] = 'A'; f.backend.hw[0x1235] = 'B';
+    f.panel.ShowFunctionContaining(0, dts::kFixture1Caller);
+    CHECK(f.WaitShown());
+    DecompileResult& shown = *const_cast<DecompileResult*>(f.panel.Shown());
+    InspectionTarget target;
+    target.kind = InspectionTarget::Kind::AbsoluteObject;
+    target.address = 0x26000120; target.byteSize = 4;
+    target.display = InspectionTarget::Display::Pointer;
+    target.typeLabel = "uint8_t *";
+    shown.inspectionTargets = { target };
+    Line line; line.text = "  object"; line.firstAddr = dts::kFixture1Caller;
+    Token token; token.begin = 2; token.end = 8; token.addr = line.firstAddr; token.inspectionTarget = 1;
+    line.tokens = { token }; shown.lines = { line };
+    f.Idle(2);
+    CHECK(f.panel.InspectionAvailable());
+    ImVec2 a, b;
+    CHECK(f.panel.LineRect(0, a, b));
+    const ImVec2 point(a.x + ImGui::CalcTextSize("  obj").x, (a.y + b.y) * .5f);
+    const uint64_t reads = f.backend.reads;
+    for (int i = 0; i < 40; ++i) f.h.Frame(point, false);
+    CHECK(Has(f.panel.LineTooltip(), "Captured memory"));
+    CHECK(Has(f.panel.LineTooltip(), "0x06101234"));
+    CHECK(Has(f.panel.LineTooltip(), "Source: test / master SH-2 / frame 1"));
+    CHECK(Has(f.panel.LineTooltip(), "not a recovered value"));
+    CHECK(f.backend.reads == reads);
+
+    auto open = [&] {
+        f.h.Hover(point); f.h.RightClick(point); f.Idle();
+    };
+    auto pick = [&](const char* name) {
+        ImVec2 ma, mb;
+        CHECK(f.panel.ItemRect(name, ma, mb));
+        f.Take(); f.h.Hover(Centre(ma, mb)); f.h.Click(Centre(ma, mb)); f.Idle();
+        return f.Take();
+    };
+    open();
+    auto request = pick("View Object Storage in Memory");
+    CHECK(request.viewHex && request.hexAddr == 0x06000120);
+    open(); request = pick("View Pointer Target in Memory");
+    CHECK(request.viewHex && request.hexAddr == 0x06001234);
+    open(); request = pick("Add Object Address to Watch");
+    CHECK(request.addWatch && request.watchAddress == 0x06000120 && request.watchType == WatchType::Pointer);
+    open(); request = pick("Watch Memory at Pointer Value");
+    CHECK(request.addWatch && request.watchAddress == 0x06001234 && request.watchType == WatchType::U8);
+    CHECK(Has(request.watchLabel, "captured pointer"));
+    CHECK(f.backend.reads == reads);
+
+    // An already open popup cannot issue an action after App revokes restore readiness.
+    open();
+    f.inspectionReady = false; f.Idle();
+    CHECK(!f.panel.InspectionAvailable());
+    request = pick("View Object Storage in Memory");
+    CHECK(!request.viewHex && !request.addWatch);
+    f.h.Click(ImVec2(1100, 650)); f.Idle(2);
+    f.inspectionReady = true; f.Idle();
+
+    // Memory inspection does not need any register file or a halted PC in this function.
+    f.haveRegs[0] = f.haveRegs[1] = false; f.Idle();
+    CHECK(f.panel.InspectionAvailable());
+    f.panel.SetCpu(1); f.Idle();
+    f.Take(); f.ClickItem("Open Registers"); request = f.Take();
+    CHECK(request.showRegisters && request.cpu == 1);
+    CHECK(f.panel.InspectionAvailable());
+
+    // Hidden/source/frame/edit/BIOS changes have to invalidate even without a new capture.
+    f.visible = false;
+    for (int change = 0; change < 4; ++change)
+    {
+        const uint64_t source = f.sourceId, frame = f.frame, serial = f.backend.serial;
+        if (change == 0) ++f.sourceId;
+        if (change == 1) ++f.frame;
+        if (change == 2) ++f.backend.serial;
+        if (change == 3) f.bios = BiosImage::Make(std::vector<uint8_t>(64, 0));
+        f.Idle(); CHECK(!f.panel.InspectionAvailable());
+        f.sourceId = source; f.frame = frame; f.backend.serial = serial; f.bios.reset();
+        f.Idle(); CHECK(f.panel.InspectionAvailable());
+    }
+    f.kind = DecompViewKind::LiveRunning; f.Idle();
+    CHECK(!f.panel.InspectionAvailable());
+    f.kind = DecompViewKind::None; f.Idle();
+    CHECK(!f.panel.InspectionAvailable());
+    f.kind = DecompViewKind::Scrub; f.Idle();
+    CHECK(f.panel.InspectionAvailable());
+}
+
+void TestCapturedInspectionRefusedActions()
+{
+    Fixture f;
+    f.bios = BiosImage::Make(std::vector<uint8_t>(128, 0x5a));
+    f.panel.ShowFunctionContaining(0, dts::kFixture1Caller);
+    CHECK(f.WaitShown());
+    DecompileResult& shown = *const_cast<DecompileResult*>(f.panel.Shown());
+    InspectionTarget target;
+    target.address = 0; target.byteSize = 4;
+    target.display = InspectionTarget::Display::UnsignedInteger;
+    shown.inspectionTargets = { target };
+    Line line; line.text = "object"; line.firstAddr = dts::kFixture1Caller;
+    Token token; token.begin = 0; token.end = 6; token.addr = line.firstAddr; token.inspectionTarget = 1;
+    line.tokens = { token }; shown.lines = { line };
+    f.Idle(2);
+    ImVec2 a, b;
+    CHECK(f.panel.LineRect(0, a, b));
+    const ImVec2 point(a.x + ImGui::CalcTextSize("obj").x, (a.y + b.y) * .5f);
+    for (int i = 0; i < 40; ++i) f.h.Frame(point, false);
+    CHECK(Has(f.panel.LineTooltip(), "loaded BIOS image"));
+    CHECK(Has(f.panel.LineTooltip(), "0x5A5A5A5A"));
+    const uint64_t reads = f.backend.reads;
+    auto open = [&] { f.h.Hover(point); f.h.RightClick(point); f.Idle(); };
+    auto pick = [&](const char* label) {
+        ImVec2 ma, mb;
+        CHECK(f.panel.ItemRect(label, ma, mb));
+        f.Take(); f.h.Hover(Centre(ma, mb)); f.h.Click(Centre(ma, mb)); f.Idle();
+        return f.Take();
+    };
+    open(); auto request = pick("View Object Storage in Memory");
+    CHECK(!request.viewHex);
+    // Disabled items leave the popup open; test Watch independently, then dismiss it.
+    request = pick("Add Object Address to Watch"); CHECK(!request.addWatch);
+    f.h.Click(ImVec2(1100, 650)); f.Idle(2);
+
+    // Device metadata may report its address, but no numeric value, backend read or action.
+    shown.inspectionTargets[0].address = 0x25d00000;
+    for (int i = 0; i < 40; ++i) f.h.Frame(point, false);
+    CHECK(Has(f.panel.LineTooltip(), "device value not available"));
+    open(); request = pick("View Object Storage in Memory"); CHECK(!request.viewHex);
+    request = pick("Add Object Address to Watch"); CHECK(!request.addWatch);
+    f.h.Click(ImVec2(1100, 650)); f.Idle(2);
+
+    // A captured null pointer can be copied but must not auto-preview or navigate to BIOS zero.
+    shown.inspectionTargets[0].address = 0x06000120;
+    shown.inspectionTargets[0].display = InspectionTarget::Display::Pointer;
+    for (int i = 0; i < 40; ++i) f.h.Frame(point, false);
+    CHECK(Has(f.panel.LineTooltip(), "Pointer target: 0x00000000"));
+    CHECK(!Has(f.panel.LineTooltip(), "Loaded BIOS image bytes"));
+    open(); request = pick("View Pointer Target in Memory"); CHECK(!request.viewHex);
+    request = pick("Watch Memory at Pointer Value"); CHECK(!request.addWatch);
+    f.h.Click(ImVec2(1100, 650)); f.Idle(2);
+
+    // CPU changes invalidate owned popup state even when explicit-entry output remains current.
+    open();
+    ImVec2 ma, mb;
+    CHECK(f.panel.ItemRect("View Object Storage in Memory", ma, mb));
+    f.panel.SetCpu(1); f.Idle();
+    f.Take(); f.h.Click(Centre(ma, mb)); f.Idle(); request = f.Take();
+    CHECK(!request.viewHex && !request.addWatch);
+    CHECK(f.backend.reads == reads);
+    f.h.Click(ImVec2(1100, 650)); f.Idle(2);
+
+    // A fresh successful result for the same capture must not reactivate the old descriptor.
+    // Changing a name requests a replacement without the focus change of ShowFunctionContaining.
+    open();
+    const uint64_t generation = f.Shown().generation;
+    f.names[dts::kFixture1Caller] = "renamed_caller";
+    ++f.namesGeneration;
+    f.Idle();
+    CHECK(f.WaitShown());
+    CHECK(f.panel.InspectionAvailable());
+    CHECK(f.Shown().generation != generation);
+    request = pick("View Object Storage in Memory");
+    CHECK(!request.viewHex && !request.addWatch);
+    f.h.Click(ImVec2(1100, 650)); f.Idle(2);
+}
 
 // A whole-row click navigates to the line's first instruction, on the panel's CPU -- and the row is
 // a RowSelectable, so a click past the end of the text lands too (CLAUDE.md, PanelWidgets.h).
@@ -2661,6 +2877,9 @@ int main(int argc, char** argv)
     CHECK(sfe::MakeDirectory(gConfig));
     try
     {
+        RUN(TestTokenHitTesting());
+        RUN(TestCapturedInspectionUi());
+        RUN(TestCapturedInspectionRefusedActions());
         RUN(TestLineClickNavigates());
         RUN(TestLineOriginText());
 #ifdef SE_DECOMPILER_GUIDE

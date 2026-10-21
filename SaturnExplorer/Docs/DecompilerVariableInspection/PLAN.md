@@ -1,6 +1,6 @@
 # Decompiled-code inspection: low-effort implementation plan
 
-Status: proposed implementation; no runtime feature is implemented by this document.
+Status: P0–P3 implemented on `codex/decompiler-variable-inspection`; see [validation and review record](VALIDATION.md).
 Revision: 2, incorporating source-verification findings.
 Date: 2026-10-20.
 Source inspected: `9984714e9403faa40ac6031bc6e4a0f193e815d8`; rechecked at
@@ -425,7 +425,7 @@ All existing line navigation, context menus and HaltHint behavior remain intact.
 
 ## 8. Verification matrix
 
-Tests below are requirements for implementation, not tests executed during this planning task.
+Tests below are the implementation requirements from the original planning task. Current results are recorded in [VALIDATION.md](VALIDATION.md).
 
 | Area | Required cases / oracle |
 |---|---|
@@ -495,3 +495,18 @@ captured volatile RAM inspection from engine constant-folding policy, and record
 formatting/condition/capture-identity support. Global token-binding coverage remains a
 source-supported proposal until the P0/P2 synthetic fixtures pass; neither complete coverage
 nor a guaranteed small implementation is claimed.
+
+## 11. Implementation coverage
+
+P0–P3 use the existing Registers window; optional register embedding is not implemented.
+The result exports owned absolute-object and constant-address metadata. The engine adapter
+handles whole direct VARREF globals, whole null-VARREF spacebase loads/stores and address
+forms, typed pointer literals, and registered volatile read/write annotations. Explicit
+pointer temporaries preserve address-of semantics. Captured reads remain separate from
+engine volatility and constant-folding policy.
+
+Deterministic tests cover both packed markup forms and reject partial, split, dynamic,
+stack, array and field mappings. Snapshot and real-panel tests cover bounded reads,
+canonical storage/target actions, Watch distinctions, restore and capture freshness, CPU
+selection and popup lifetime. See the validation record for exact executed checks and
+remaining native-platform visual checks.

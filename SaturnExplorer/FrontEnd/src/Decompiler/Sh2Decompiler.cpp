@@ -2,6 +2,7 @@
 
 #include "Decompiler/SaturnArchitecture.h"   // first among the engine headers (Win32 LoadImage)
 #include "Decompiler/SaturnHardwareMap.h"
+#include "Decompiler/InspectionBinding.h"
 
 #include "Debug/Sh2Disasm.h"
 
@@ -2645,17 +2646,200 @@ TokenKind KindForColor(int color)
     }
 }
 
+// Only the printer's whole global forms have a storage identity. Instruction provenance,
+// a register home, and an operator's output are deliberately insufficient evidence.
+bool InspectionType(const ghidra::Datatype* type, InspectionTarget& target)
+{
+    if (!type || type->getSize() <= 0) return false;
+    target.byteSize = static_cast<uint32_t>(type->getSize());
+    target.typeLabel = type->getName();
+    target.display = InspectionTarget::Display::RawBytes;
+    if (target.byteSize == 1 || target.byteSize == 2 || target.byteSize == 4)
+        switch (type->getMetatype())
+        {
+        case ghidra::TYPE_INT: target.display = InspectionTarget::Display::SignedInteger; break;
+        case ghidra::TYPE_UINT: target.display = InspectionTarget::Display::UnsignedInteger; break;
+        case ghidra::TYPE_BOOL: target.display = InspectionTarget::Display::Bool; break;
+        case ghidra::TYPE_PTR:
+            if (target.byteSize == 4) target.display = InspectionTarget::Display::Pointer;
+            break;
+        default: break; // unknown/float/aggregate bits are not integers
+        }
+    return true;
+}
+
+bool InspectionBusAddress(const ghidra::Address& addr, const ghidra::AddrSpaceManager* spaces, uint32_t& out)
+{
+    if (addr.isInvalid() || addr.getSpace() != spaces->getDefaultDataSpace() ||
+        addr.getSpace() != spaces->getDefaultCodeSpace() || addr.getSpace()->getWordSize() != 1 ||
+        addr.getOffset() > UINT32_MAX) return false;
+    out = static_cast<uint32_t>(addr.getOffset());
+    return true;
+}
+
+bool InspectionSymbol(const ghidra::Symbol* symbol, const ghidra::AddrSpaceManager* spaces,
+                      InspectionTarget& target)
+{
+    if (!symbol || !symbol->getScope()->isGlobal() || symbol->numEntries() != 1 ||
+        symbol->hasMergeProblems()) return false;
+    const ghidra::SymbolEntry* entry = symbol->getMapEntry(0);
+    if (!entry->isMapEntry() || entry->isConflict() || !entry->isAddrTied() || entry->isPiece() || entry->getOffset() != 0 ||
+        entry->getSize() != symbol->getType()->getSize()) return false;
+    return InspectionBusAddress(static_cast<const ghidra::MapEntry*>(entry)->getAddr(), spaces, target.address) && InspectionType(symbol->getType(), target);
+}
+
+// PrintC prints volatile reads/writes as address annotations, not ordinary Varnodes.
+// Accept only the registered volatile-memory operators and mirror its whole-symbol check.
+bool InspectionAnnotation(const ghidra::Varnode* vn, const ghidra::PcodeOp* op,
+                          const ghidra::AddrSpaceManager* spaces, InspectionTarget& target)
+{
+    if (!op || op->code() != ghidra::CPUI_CALLOTHER || op->numInput() < 2 ||
+        op->getIn(1) != vn || !op->getIn(0)->isConstant() || !op->getParent() ||
+        !InspectionBusAddress(vn->getAddr(), spaces, target.address)) return false;
+    const ghidra::Funcdata* function = op->getParent()->getFuncdata();
+    const ghidra::UserPcodeOp* userop = function->getArch()->userops.getOp(
+        static_cast<ghidra::uint4>(op->getIn(0)->getOffset()));
+    if (!userop) return false;
+    const bool read = userop->getType() == ghidra::UserPcodeOp::volatile_read;
+    const bool write = userop->getType() == ghidra::UserPcodeOp::volatile_write;
+    if (!read && !write) return false;
+    const ghidra::Varnode* value = read ? op->getOut() : (op->numInput() == 3 ? op->getIn(2) : nullptr);
+    if (!value || !value->getHigh() || value->getSize() <= 0) return false;
+    const uint32_t width = static_cast<uint32_t>(value->getSize());
+    const ghidra::MapEntry* entry = function->getScopeLocal()->queryContainer(vn->getAddr(), 1, op->getAddr());
+    if (entry)
+    {
+        const uint32_t address = target.address;
+        if (entry->getAddr() != vn->getAddr() || static_cast<uint32_t>(entry->getSize()) != width ||
+            !InspectionSymbol(entry->getSymbol(), spaces, target) || target.address != address ||
+            target.byteSize != width) return false;
+    }
+    else if (!InspectionType(read ? value->getHighTypeDefFacing() : value->getHighTypeReadFacing(op), target) ||
+             target.byteSize != width) return false;
+    target.kind = InspectionTarget::Kind::AbsoluteObject;
+    return true;
+}
+
+bool InspectionBinding(const ghidra::Varnode* vn, const ghidra::PcodeOp* op,
+                       const ghidra::AddrSpaceManager* spaces, InspectionTarget& target)
+{
+    if (vn)
+    {
+        if (vn->isAnnotation()) return InspectionAnnotation(vn, op, spaces, target);
+        if (!vn->getHigh()) return false;
+        const ghidra::HighVariable* high = vn->getHigh();
+        const ghidra::Symbol* symbol = high->getSymbol();
+        if (vn->isConstant())
+        {
+            const ghidra::Datatype* type = op ? vn->getHighTypeReadFacing(op) : high->getType();
+            if (op && (op->code() == ghidra::CPUI_PTRADD || op->code() == ghidra::CPUI_PTRSUB ||
+                       op->code() == ghidra::CPUI_INT_ADD || op->code() == ghidra::CPUI_INT_SUB ||
+                       op->code() == ghidra::CPUI_PIECE || op->code() == ghidra::CPUI_SUBPIECE)) return false;
+            if (vn->getSize() != 4 || vn->getOffset() > UINT32_MAX || !type ||
+                type->getMetatype() != ghidra::TYPE_PTR || type->getSize() != 4 || symbol) return false;
+            target.kind = InspectionTarget::Kind::ConstantAddress;
+            target.address = static_cast<uint32_t>(vn->getOffset());
+            InspectionType(type, target);
+            return true;
+        }
+        if (!vn->isAddrTied() || !vn->isPersist() || !InspectionBusAddress(vn->getAddr(), spaces, target.address)) return false;
+        if (symbol)
+        {
+            const uint32_t address = target.address;
+            if (high->getSymbolOffset() != -1 && high->getSymbolOffset() != 0) return false;
+            if (!InspectionSymbol(symbol, spaces, target) || target.address != address ||
+                target.byteSize != static_cast<uint32_t>(vn->getSize())) return false;
+        }
+        else
+        {
+            // This is the location pushSymbolDetail actually names, not any other joined home.
+            if (high->getNameRepresentative()->getAddr() != vn->getAddr() ||
+                !InspectionType(high->getType(), target) || target.byteSize != static_cast<uint32_t>(vn->getSize())) return false;
+        }
+        target.kind = InspectionTarget::Kind::AbsoluteObject;
+        return true;
+    }
+
+    // PrintC::opPtrsub's spacebase-global branch intentionally emits a null VARREF.
+    // Resolve its exact symbol/spacebase mapping, never opref->output for arbitrary syntax.
+    if (!op || op->code() != ghidra::CPUI_PTRSUB || op->numInput() != 2 || !op->getOut() ||
+        !op->getIn(1)->isConstant() || !op->getIn(0)->getHigh() || !op->getIn(1)->getHigh()) return false;
+    const ghidra::Datatype* pointer = op->getIn(0)->getHighTypeReadFacing(op);
+    if (!pointer || pointer->getMetatype() != ghidra::TYPE_PTR) return false;
+    const ghidra::Datatype* base = static_cast<const ghidra::TypePointer*>(pointer)->getPtrTo();
+    if (base->getMetatype() != ghidra::TYPE_SPACEBASE) return false;
+    const ghidra::HighVariable* high = op->getIn(1)->getHigh();
+    const ghidra::Symbol* symbol = high->getSymbol();
+    if (symbol)
+    {
+        if (high->getSymbolOffset() != 0 || !InspectionSymbol(symbol, spaces, target)) return false;
+        // PrintC forces array/code symbols into value syntax: arrays gain an implicit [0],
+        // and a code symbol names a function rather than an absolute data object.
+        if (symbol->getType()->getMetatype() == ghidra::TYPE_ARRAY ||
+            symbol->getType()->getMetatype() == ghidra::TYPE_CODE) return false;
+    }
+    else
+    {
+        const ghidra::Address addr = static_cast<const ghidra::TypeSpacebase*>(base)->getAddress(
+            op->getIn(1)->getOffset(), op->getIn(0)->getSize(), op->getAddr());
+        if (!InspectionBusAddress(addr, spaces, target.address)) return false;
+    }
+    // An explicit temporary is defined as &global even if its later sole use is a load.
+    // Only an implied expression inherits the printer's load/store-value modifier.
+    if (!op->getOut()->isImplied())
+    {
+        if (!symbol) return false;
+        target.kind = InspectionTarget::Kind::ConstantAddress;
+        return true;
+    }
+    // The same expression must not be printed as both an address and a value. Multiple uses,
+    // partial fields/arrays and intermediate pointer operations have ambiguous print modifiers.
+    const ghidra::PcodeOp* use = op->getOut()->loneDescend();
+    if (!use) return false;
+    uint32_t width = 0;
+    const ghidra::Datatype* valueType = nullptr;
+    if (use->code() == ghidra::CPUI_LOAD && use->getIn(1) == op->getOut())
+    {
+        width = static_cast<uint32_t>(use->getOut()->getSize());
+        valueType = use->getOut()->getHighTypeDefFacing();
+    }
+    else if (use->code() == ghidra::CPUI_STORE && use->getIn(1) == op->getOut())
+    {
+        width = static_cast<uint32_t>(use->getIn(2)->getSize());
+        valueType = use->getIn(2)->getHighTypeReadFacing(use);
+    }
+    else
+    {
+        // Only a complete address handed to another expression; not an array/field base.
+        if (use->code() == ghidra::CPUI_PTRADD || use->code() == ghidra::CPUI_PTRSUB ||
+            use->code() == ghidra::CPUI_INT_ADD || use->code() == ghidra::CPUI_INT_SUB || !symbol) return false;
+        target.kind = InspectionTarget::Kind::ConstantAddress;
+        return true;
+    }
+    if (symbol)
+    {
+        if (target.byteSize != width) return false;
+    }
+    else if (!InspectionType(valueType, target) || target.byteSize != width) return false;
+    target.kind = InspectionTarget::Kind::AbsoluteObject;
+    return true;
+}
+
 // Turns the emitter's markup into lines of tokens. Each token's opref names the p-code op it
 // was printed from; that op's address is the SH-2 instruction it came from. The markup is read
 // in Ghidra's packed encoding, not XML: its XML parser drops whitespace-only text, which is every
 // space between tokens.
 std::vector<Line> LinesFromMarkup(const std::string& packed, const ghidra::Funcdata& fd, const ghidra::AddrSpaceManager* spaces,
+                                  std::vector<InspectionTarget>& inspectionTargets,
                                   std::map<const ghidra::PcodeOp*, std::pair<std::set<size_t>, int>>* printed = nullptr)
 {
     std::map<ghidra::uintm, const ghidra::PcodeOp*> ops;
     for (auto it = fd.beginOpAlive(); it != fd.endOpAlive(); ++it) ops[(*it)->getTime()] = *it;
     for (auto it = fd.beginOpDead(); it != fd.endOpDead(); ++it) ops[(*it)->getTime()] = *it;
 
+    std::map<ghidra::uintm, const ghidra::Varnode*> varnodes;
+    for (auto it = fd.beginLoc(); it != fd.endLoc(); ++it) varnodes[(*it)->getCreateIndex()] = *it;
+    std::map<std::tuple<int, uint32_t, uint32_t, int, std::string>, uint32_t> inspectionIds;
     std::vector<Line> lines(1);
     ghidra::PackedDecode decoder(spaces);
     std::istringstream in(packed);
@@ -2670,6 +2854,8 @@ std::vector<Line> LinesFromMarkup(const std::string& packed, const ghidra::Funcd
         bool haveContent = false;
         std::string content;
         const ghidra::PcodeOp* op = nullptr;
+        const ghidra::Varnode* vn = nullptr;
+        bool haveVarref = false;
         for (;;)
         {
             const ghidra::uint4 attr = decoder.getNextAttributeId();
@@ -2680,6 +2866,12 @@ std::vector<Line> LinesFromMarkup(const std::string& packed, const ghidra::Funcd
             {
                 content = decoder.readString();
                 haveContent = true;
+            }
+            else if (attr == ghidra::ATTRIB_VARREF.getId())
+            {
+                haveVarref = true;
+                const auto f = varnodes.find(static_cast<ghidra::uintm>(decoder.readUnsignedInteger()));
+                if (f != varnodes.end()) vn = f->second;
             }
             else if (attr == ghidra::ATTRIB_OPREF.getId())
             {
@@ -2716,6 +2908,25 @@ std::vector<Line> LinesFromMarkup(const std::string& packed, const ghidra::Funcd
                     {
                         t.target = c;   // navigation goes to the canonical entry, whichever mirror was called
                         t.calledAt = static_cast<uint32_t>(cs->getEntryAddress().getOffset());
+                    }
+                }
+            }
+            if (elem == ghidra::ELEM_VARIABLE.getId() && (!haveVarref || vn) && t.begin < t.end && line.text.size() <= 0xFFFF)
+            {
+                InspectionTarget target;
+                if (ResolvePrintedInspection(vn, op, spaces, target))
+                {
+                    // Character/string constants and equates can print only part of a pointer.
+                    // A plain numeric literal retains its engine-proven pointer type and full bits.
+                    const bool literal = !vn || !vn->isConstant() ||
+                        (content[0] >= '0' && content[0] <= '9');
+                    if (literal)
+                    {
+                        const auto key = std::make_tuple(int(target.kind), target.address, target.byteSize,
+                                                         int(target.display), target.typeLabel);
+                        auto inserted = inspectionIds.emplace(key, static_cast<uint32_t>(inspectionTargets.size() + 1));
+                        if (inserted.second) inspectionTargets.push_back(std::move(target));
+                        t.inspectionTarget = inserted.first->second;
                     }
                 }
             }
@@ -2787,6 +2998,15 @@ std::vector<Line> LinesFromMarkup(const std::string& packed, const ghidra::Funcd
             continue;
         }
         if (blank) l.text.clear();
+        // A base name followed by field/array syntax is not the whole printed object.
+        for (Token& t : l.tokens)
+        {
+            size_t next = t.end;
+            while (next < l.text.size() && std::isspace(static_cast<unsigned char>(l.text[next]))) ++next;
+            if (next < l.text.size() && (l.text[next] == '.' || l.text[next] == '[' ||
+                (l.text[next] == '-' && next + 1 < l.text.size() && l.text[next + 1] == '>')))
+                t.inspectionTarget = 0;
+        }
         for (const Token& t : l.tokens)
             if (t.addr && (l.firstAddr == 0 || t.addr < l.firstAddr)) l.firstAddr = t.addr;
         out.push_back(std::move(l));
@@ -2817,6 +3037,23 @@ struct AsmLines : public ghidra::AssemblyEmit
 };
 
 }  // namespace
+
+std::vector<Line> DecodeDecompilerMarkup(const std::string& packed, const ghidra::Funcdata& function,
+                                        const ghidra::AddrSpaceManager* spaces,
+                                        std::vector<InspectionTarget>& targets, PrintedOperations* printed)
+{
+    targets.clear();
+    return LinesFromMarkup(packed, function, spaces, targets, printed);
+}
+
+bool ResolvePrintedInspection(const ghidra::Varnode* variable, const ghidra::PcodeOp* operation,
+                              const ghidra::AddrSpaceManager* spaces, InspectionTarget& target)
+{
+    InspectionTarget resolved;
+    if (!spaces || !InspectionBinding(variable, operation, spaces, resolved)) return false;
+    target = std::move(resolved);
+    return true;
+}
 
 const char* PhaseName(DecompilePhase phase)
 {
@@ -5019,7 +5256,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         // Never read the text of a stream that failed: with the exception mask above nothing
         // reaches here with badbit set, and this says so if that ever stops being true.
         if (markup.bad()) throw std::bad_alloc();
-        r.lines = LinesFromMarkup(markup.str(), *fd, arch.get(), &printed);
+        r.lines = DecodeDecompilerMarkup(markup.str(), *fd, arch.get(), r.inspectionTargets, &printed);
         // A3-87 (closing A3-79): the engine prints a pointer into stack storage no local is mapped to -- a save slot a walk down
         // reaches (A3-65's recorded limit) -- as the raw stack register `register0x0000003c` (BADSPACEBASE), which is no C a caller
         // or the printed-C differential could compile (`'register0x0000003c' undeclared`). The value is right, but the text is not

@@ -207,6 +207,8 @@ const uint32_t kHw = 0x06000000u, kLw = 0x00200000u, kSize = 0x00100000u;
 // words, byte-swapped on this machine) and the driver swaps it back.
 std::vector<uint8_t> gHw(kSize, 0), gLw(kSize, 0);
 std::vector<uint8_t> gHwHost, gLwHost;
+// Exporter input order is Yabause R[16], SR, GBR, VBR, MACH, MACL, PR, PC.
+uint32_t gMasterRegs[23] = {}, gSlaveRegs[23] = {};
 
 std::vector<uint8_t> HostOrder(const std::vector<uint8_t>& be)
 {
@@ -221,8 +223,8 @@ void Sleep(int ms) { std::this_thread::sleep_for(std::chrono::milliseconds(ms));
 void EmulatorTick()
 {
     SeExportGateFrame();
-    SeExportSnapshot(nullptr, nullptr, nullptr, nullptr, nullptr, gLwHost.data(), gHwHost.data(), nullptr, nullptr,
-                     nullptr, nullptr, nullptr, nullptr);
+    SeExportSnapshot(nullptr, nullptr, nullptr, nullptr, nullptr, gLwHost.data(), gHwHost.data(), nullptr,
+                     gMasterRegs, gSlaveRegs, nullptr, nullptr, nullptr);
 }
 
 // A paused emulator publishes nothing: no tick. The driver's poll thread keeps fetching the newest
@@ -531,6 +533,55 @@ void TestRealChangesStillMoveTheIdentity(Live& live)
     CHECK(live.View() == vBack);
 }
 
+// SameContent must include BOTH captured SH-2 files even when frame, stop and all RAM are
+// unchanged. A second independently sampled register file would hide this identity error.
+void TestRegisterOnlyChangesMoveTheIdentity(Live& live)
+{
+    gMasterRegs[22] = dts::kFixture1Caller;
+    gSlaveRegs[22] = dts::kFixture1Caller;
+    SeExportNotifyStop(0, dts::kFixture1Caller);
+    auto publish = [] {
+        SeExportSnapshot(nullptr, nullptr, nullptr, nullptr, nullptr, gLwHost.data(), gHwHost.data(), nullptr,
+                         gMasterRegs, gSlaveRegs, nullptr, nullptr, nullptr);
+    };
+    publish();
+    SettleOnRevision(live);
+    Rig rig(live, true);
+    rig.panel.ShowFunctionContaining(0, dts::kFixture1Caller);
+    CHECK(rig.PumpUntil([&] { return rig.panel.Shown() && !rig.panel.Pending(); }));
+    CHECK(rig.panel.HeldKey() != nullptr);
+    if (!rig.panel.HeldKey()) return;
+    for (int cpu = 0; cpu < 2; ++cpu)
+    {
+        const uint64_t frame = se_frame_number(live.ctx);
+        const uint64_t revision = live.Revision(), view = live.View();
+        const auto oldKey = *rig.panel.HeldKey();
+        const int reg = cpu == 0 ? 4 : 8;
+        const uint32_t expected = cpu == 0 ? 0x12345678u : 0x89ABCDEFu;
+        (cpu == 0 ? gMasterRegs : gSlaveRegs)[reg] = expected;
+        publish();
+        bool observed = false;
+        for (int i = 0; i < 2000 && !observed; ++i)
+        {
+            live.Capture();
+            se_sh2_regs regs{};
+            observed = se_get_sh2_regs(live.ctx, cpu, &regs) == SE_OK && regs.r[reg] == expected;
+            if (!observed) Sleep(2);
+        }
+        CHECK(observed);
+        CHECK(se_frame_number(live.ctx) == frame);
+        CHECK(live.Revision() != revision);
+        CHECK(live.View() != view);
+        rig.Frame();
+        CHECK(rig.panel.HeldKey() && *rig.panel.HeldKey() != oldKey);
+        CHECK(rig.PumpUntil([&] { return !rig.panel.Pending() && !rig.panel.ShownStale(); }));
+        SettleOnRevision(live);
+        const uint64_t stable = live.View();
+        live.Capture();
+        CHECK(live.View() == stable);
+    }
+}
+
 }  // namespace
 
 int main(int argc, char** argv)
@@ -616,6 +667,7 @@ int main(int argc, char** argv)
         CHECK(live.Restore(&d1, &f1) && d1 == done0 && f1 == failed0);   // still unconfirmed throughout
 
         RUN(TestRealChangesStillMoveTheIdentity(live));
+        RUN(TestRegisterOnlyChangesMoveTheIdentity(live));
     }
     catch (std::exception& e)
     {

@@ -1,6 +1,7 @@
 # Debugger execution, assembly, watches, and call stacks
 
 Inspected revision: `ff6a3b1fb1c54e4c0344613094ea65292b0023c2` (2026-10-20).
+Pseudocode navigation/Watch integration rechecked against `codex/decompiler-variable-inspection` (2026-10-20).
 Evidence status: behavior below is verified from source unless explicitly qualified. This is a navigation map; source remains authoritative.
 
 ## Purpose and responsibilities
@@ -46,6 +47,14 @@ The frontend coordinates instruction-level debugging of the two SH-2 CPUs, while
 
 `AssemblyPanel::Draw` reads registers through `se_get_sh2_regs` and code through the backend. It caches decoded pages, distinguishes source changes through `SourceId`, and returns user intentions in `AssemblyPanel::Request`; App performs run-control, hex navigation, disc search and decompiler actions. `GoTo` is browsing navigation; `Reveal` resumes Follow PC without adding browsing history.
 
+The pseudocode panel adds fixed-address shortcuts through `App::UpdateDecompiler` into the same
+Watch window. Storage of a pointer object and memory at its captured target are distinct actions.
+Only complete supported captured WRAM locations pass the inspector's stricter policy, and their
+aliases are canonicalized before requesting a watch. Subsequent Watch samples use the ordinary
+current-view backend and change highlighting; the shortcut neither tracks a source occurrence
+nor follows a changing pointer. **Open Registers** selects the pseudocode CPU, the SH-2 tab and
+focus in the existing Registers window without altering its renderer or current-view behavior.
+
 ### Call stacks
 
 `App::BuildCallStack` uses live shadow frames from `se_live_poll_callstack` when available, then adds `ReconcileHeuristicTail` for callers predating recording. Static sources and scrubbed frames use `Reconstruct`; the current emulator's shadow stack must not be combined with old recorded memory.
@@ -63,7 +72,7 @@ Watches, assembly comments and function names have explicit load/save methods ca
 - Add run-control policy in App and state transitions in `StepHaltMachine`; preserve the observable stop/echo distinction.
 - Extend breakpoint storage/sync through `BreakpointManager` and App's sync path. Tracepoint action types are a separate model; the internal `Normalize` helper in `ExecutionActions.cpp` clears effects that have no implementation.
 - Add address-expression syntax behind `IExpressionResolver`; add boolean guard syntax in `ConditionEval`. Their contracts and cache behavior differ.
-- Reuse `IMemoryBackend` and `FormatWatchValue` for captured memory values; reuse `Sh2RegTable` for register metadata, and `FunctionNames` for shared function naming.
+- Reuse `IMemoryBackend` and `FormatWatchValue` for ordinary Watch memory values; pseudocode previews instead use `CapturedValueInspection` over the matched immutable snapshot. Reuse `Sh2RegTable` for register metadata and `FunctionNames` for shared function naming.
 - For paused pseudocode variable values, first inspect the decompiler mapping/value model, then these register/backend and frame-origin APIs. Existing address watches do not establish a decompiled local's storage or prove an older caller frame's registers.
 
 ## Constraints and confirmed limitations

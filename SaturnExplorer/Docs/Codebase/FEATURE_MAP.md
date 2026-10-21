@@ -1,6 +1,7 @@
 # Functionality → code
 
 Inspected revision: `ff6a3b1fb1c54e4c0344613094ea65292b0023c2`.
+Captured-inspection rows rechecked against `codex/decompiler-variable-inspection` (2026-10-20).
 Start here for a task; then read the linked subsystem and inspect source/call sites.
 Source paths below are relative to `SaturnExplorer/`. Test names identify files under
 `FrontEnd/tests/` unless prefixed `Core/`; the linked subsystem gives CTest selectors and caveats.
@@ -33,7 +34,8 @@ Supporting components are named alongside the primary entry points.
 | SH-2 pseudocode / instruction-linked navigation | Embedded Ghidra analysis; `DecompilerPanel.cpp`, `Decompiler/Sh2Decompiler.cpp` | `App::UpdateDecompiler`, `DecompilerPanel`, `DecompilerRunner`, `SaturnArchitecture`, `CaptureLoadImage` | `Sh2DecompilerTests`, `DecompilerPanelTests`, `DecompilerRunnerTests`, `DecompilerTrustTests` | [Decompiler](Systems/Decompiler.md) |
 | Function discovery / start corrections / names / caller signatures | Bound code and enrich pseudocode; `Decompiler/Sh2FunctionFinder.cpp`, `Decompiler/Sh2Decompiler.cpp`, `DecompilerPanel.cpp`, `Debug/CallStack.cpp` | `FindFunctionContaining`, `RtsScanEntry`, `FunctionBounds`, `FunctionNames`, `DecompilerPanel::Learn`; dependency-invalidated prototype lending | `Sh2FunctionFinderTests`, `DecompilerModelTests`, `Sh2DecompilerTests` | [Decompiler](Systems/Decompiler.md) |
 | Hardware names / volatile access / BIOS pseudocode | Preserve device semantics in captured code; `Decompiler/SaturnHardwareMap.cpp`, `SaturnArchitecture.cpp`, `Sh2Decompiler.cpp` | hardware mapping, volatility, load-image validity, optional BIOS capture; vendored patches | `HardwareWidthTableTests`, `Sh2DecompilerFixtureTests`, `Sh2SemanticsTests`, `MemorySnapshotTests` | [Decompiler](Systems/Decompiler.md) |
-| **Add paused pseudocode variable / expression values** | **Not implemented**; `Decompiler/Sh2Decompiler.h`, `Sh2Decompiler.cpp`, `DecompilerPanel.cpp` | Current `Token` instruction provenance lacks storage/SSA evaluation descriptors; reuse capture/acceptance identity and debugger memory reads only where valid | Extend decompiler/model/panel/trust and memory tests; add semantic fixtures for the proposed mapping | [Implementation route](Systems/Decompiler.md#extension-points-and-task-routing) |
+| Captured pseudocode globals / pointer previews / fixed-address Watch shortcuts | Matched non-running snapshot observations; `Debug/CapturedValueInspection.cpp`, `DecompilerPanel.cpp`, `Decompiler/Sh2Decompiler.cpp` | Owned inspection targets, snapshot-only bounded reads, capture-validity gate, canonical WRAM navigation; existing Registers and Watch windows | `CapturedValueInspectionTests`, `Sh2DecompilerTests`, `DecompilerPanelTests` | [Decompiler](Systems/Decompiler.md#captured-values-and-the-variable-evaluation-boundary) |
+| **Add register-backed/stack-local or arbitrary expression values** | **Deferred**; existing captured globals are not SSA value recovery | Requires proven variable storage/lifetime and execution-point/frame evidence; do not infer from names, OPREF output or a register address | Extend semantic fixtures and capture/model/panel/trust tests for any new analysis | [Capability boundary](Systems/Decompiler.md#captured-values-and-the-variable-evaluation-boundary) |
 
 ## Edit memory, inspect history and patch files
 

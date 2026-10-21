@@ -1,6 +1,7 @@
 # SH-2 pseudocode and embedded decompiler
 
 Inspected revision: `ff6a3b1fb1c54e4c0344613094ea65292b0023c2` (2026-10-20).
+Captured-inspection sections rechecked against `codex/decompiler-variable-inspection` (2026-10-20).
 Unless labelled otherwise, behavior below is verified from the cited implementation.
 
 ## Purpose and responsibilities
@@ -30,6 +31,7 @@ and [`SaturnArchitecture::Initialise`](../../../FrontEnd/src/Decompiler/SaturnAr
 | Architecture and engine load image | [`SaturnArchitecture.cpp`](../../../FrontEnd/src/Decompiler/SaturnArchitecture.cpp): `Initialise`, `StartLibrary`, `buildTranslator`; [`CaptureLoadImage.cpp`](../../../FrontEnd/src/Decompiler/CaptureLoadImage.cpp): `loadFill`, `SetVolatile` |
 | Containing-function discovery | [`Sh2FunctionFinder.cpp`](../../../FrontEnd/src/Decompiler/Sh2FunctionFinder.cpp): `FindFunctionContaining`, `RtsScanEntry`, `CallTargetAt`, `FunctionBounds` |
 | Hardware names, access policies and aliases | [`SaturnHardwareMap.h`](../../../FrontEnd/src/Decompiler/SaturnHardwareMap.h), [`SaturnHardwareMap.cpp`](../../../FrontEnd/src/Decompiler/SaturnHardwareMap.cpp): `SaturnHardwareRegisters`, `HardwareRanges`, `VolatileAliases`; [`Sh2Address.cpp`](../../../FrontEnd/src/Sh2Address.cpp): `CanonicalAddress`, `ClassifyPartition` |
+| Snapshot-only global/pointer inspection | [`Debug/CapturedValueInspection.h`](../../../FrontEnd/src/Debug/CapturedValueInspection.h), [implementation](../../../FrontEnd/src/Debug/CapturedValueInspection.cpp); owned [`InspectionTarget.h`](../../../FrontEnd/src/Decompiler/InspectionTarget.h) |
 | Concrete indirect target at captured halt | [`RegisterHint.cpp`](../../../FrontEnd/src/Decompiler/RegisterHint.cpp): `RegisterTargetAtHalt`; `DecompilerPanel::HaltHint` |
 | Runtime language materialization | [`SpecBundle.cpp`](../../../FrontEnd/src/Decompiler/SpecBundle.cpp): `MaterialiseSh2SpecBundle`; generated [`Sh2SpecData.h`](../../../FrontEnd/src/Decompiler/Sh2SpecData.h) |
 | Names shared with debugger | [`CallStack.h`](../../../FrontEnd/src/Debug/CallStack.h): `FunctionNames` |
@@ -62,7 +64,7 @@ and [`SaturnArchitecture::Initialise`](../../../FrontEnd/src/Decompiler/SaturnAr
    can cause bounded extra passes with those ranges made volatile. This is more than an
    unconditional fixed two-pass pipeline.
 7. `LinesFromMarkup` converts engine markup into plain `Line`/`Token` data, canonical
-   instruction provenance and call targets. The result records flow body ranges, warnings,
+   instruction provenance, call targets and conservative owned inspection bindings. The result records flow body ranges, warnings,
    hardware notes, memory-access provenance and optional recovered prototype/effects.
    `NoteRemovedAccesses` may additionally analyze an all-volatile reference when unreachable
    removal needs checking. Engine objects are destroyed before results reach the UI.
@@ -134,33 +136,49 @@ flowchart TD
 | Improve recovered calls/types | `ApplyPrototype`, `WithholdReason`, `ReturnCheck`, `CallEffects`, panel `Learn/PrototypeHash`; preserve snapshot/dependency/mirror provenance |
 | Add hardware names or semantic notes | `SaturnHardwareMap`, `HardwareNotes`, `HardwareWidthTableTests`, register audit; verify actual widths/aliases/read-write semantics |
 | Fix engine or SH-2 translation | `VENDOR.md`, `patches/`, semantic/generated/differential tests; regenerate spec/header when language files change |
-| Add paused variable/expression values | Start at `Token`, `LinesFromMarkup`, `DecompileResult`, `MemorySnapshot`, `DecompilerPanel::HaltHint/DrawLines`; see the explicit capability boundary below |
+| Extend captured inspection or propose runtime variable recovery | Start at `InspectionTarget`, `CapturedValueInspection`, `LinesFromMarkup`, panel inspection gate/`DrawLines`; preserve the capability boundary below |
 
-### Paused variable/expression values: current boundary
+### Captured values and the variable-evaluation boundary
 
-**Verified current support:** tokens retain text range, color category, originating
-instruction address and resolved call target/actual called address. `LinesFromMarkup`
-consumes `OPREF` while engine objects exist, but the host `Token` does not expose a
-Varnode/high-variable storage identity or an evaluable SSA expression. A line may represent
-several instructions, and extra zero-width tokens carry otherwise-hidden LOAD provenance.
-An instruction origin is not a runtime value location.
+The desktop panel can inspect metadata-proven whole absolute globals and typed address forms
+against its immutable held `MemorySnapshot`. `Token::inspectionTarget` is a one-based reference
+into the result's owned inspection target collection; zero means unbound, so storage address zero
+is representable. Engine metadata is copied while Funcdata/markup exist. No engine pointers,
+memory values or preview strings enter the result cache. The engine-side
+`InspectionBinding` adapter decodes both VARREF whole globals and null-VARREF spacebase
+forms. Explicit `&global` temporaries retain address semantics; implied whole-object loads
+and stores retain storage semantics. Registered volatile read/write annotations use their
+exact bus address and operation width, with the same whole-symbol checks. Partial, split,
+dynamic and ambiguous mappings are refused.
 
-`RegisterTargetAtHalt` reads the captured register for an indirect `jsr/jmp/braf/bsrf` at
-exactly the captured PC; `HaltHint` additionally requires current, non-running output from
-the same execution mirror and a matching displayed instruction. This is a useful existing
-example of separating captured runtime observations from static pseudocode. General
-pseudocode local/parameter/expression evaluation is **not implemented** by this result model.
-The debugger's address-expression/watch mechanisms are separate; they do not establish where
-a printed optimized variable resides.
+`Debug/CapturedValueInspection` owns read/decode/preview policy with no App, transport or Ghidra
+dependency. It permits captured low/high WRAM and optional loaded BIOS, checks complete ranges
+and overflow before reads, and caps target previews at 16 bytes. Hardware/device areas and the
+general backend's broader mappings are excluded. Volatile captured WRAM remains readable here;
+the engine's separate volatile-load/constant-folding policy is unchanged. Unsupported scalar
+types remain raw bytes rather than acquiring an integer interpretation.
 
-**Implementation route (recommendation, not existing architecture):** export any new
-semantic value descriptors while `Funcdata`/markup references are alive, as owned host data
-in `DecompileResult`; retain no engine pointer in the UI. Evaluate against an explicitly
-matched halted capture, reuse snapshot reads/address classification, and expose unknown or
-invalid values when register lifetime/frame/path evidence is insufficient. Extend request
-keys and validity checks if the analysis gains new inputs. Add engine descriptor tests,
-panel tests for stale/running/mirror rejection, and capture/edit/restore tests; caller-frame
-values additionally require proof of frame state beyond the current register file.
+The panel's shared inspection gate requires successful current output, matching shown/held/view
+identities, a matching result/snapshot key and a Static, Scrub or LivePaused view. App supplies
+an additional live-restore readiness reason; unresolved and unconfirmable restores remain
+ineligible even after timeout. Absolute globals do not require registers or a PC inside the
+function. `HaltHint` retains its existing stricter PC/body/mirror checks. Frozen popup targets
+are revalidated against capture/result/CPU state before requests fire.
+
+Memory actions canonicalize complete supported WRAM locations before `Request::viewHex` reaches
+App; original addresses remain available for copying. The optional BIOS lives only in the
+snapshot, so previews/copying may work while Memory and Watch shortcuts remain unavailable.
+Object storage and captured pointer targets have separate actions. `Request::addWatch` routes
+a fixed canonical WRAM address, type and label through App into the existing `WatchPanel`;
+normal current-view refresh/change highlighting applies. `Request::showRegisters` selects the
+same CPU in the existing Registers window, including its SH-2 tab and existing actions. No
+second register renderer or independently sampled register file is introduced.
+
+Register/stack locals, partial or ambiguous global forms, arrays/fields and general expressions
+remain unbound. Instruction origins, OPREF outputs and Varnode register addresses do not prove
+runtime variable storage. A tooltip reports **captured memory**, not the value at a prior read
+or assignment occurrence. General optimized-variable lifetime recovery and historical/frame
+reconstruction remain follow-on work.
 
 ## Constraints and integration contracts
 
@@ -209,6 +227,7 @@ ctest --test-dir build --output-on-failure -R 'Decompiler|MemorySnapshot|Sh2Func
 
 | Change area | Existing tests in `FrontEnd/tests/` |
 |---|---|
+| Captured inspection policy and printer metadata | [`CapturedValueInspectionTests.cpp`](../../../FrontEnd/tests/CapturedValueInspectionTests.cpp), [`CapturedInspectionMetadataTests.cpp`](../../../FrontEnd/tests/CapturedInspectionMetadataTests.cpp) |
 | Snapshot coverage, alias folding, missing data, BIOS | [`MemorySnapshotTests.cpp`](../../../FrontEnd/tests/MemorySnapshotTests.cpp) |
 | Entry heuristics and explicit correction | [`Sh2FunctionFinderTests.cpp`](../../../FrontEnd/tests/Sh2FunctionFinderTests.cpp) |
 | Engine/wrapper, calls, frame effects, hardware reads, warning/prototype policy | [`Sh2DecompilerTests.cpp`](../../../FrontEnd/tests/Sh2DecompilerTests.cpp), [`Sh2DecompilerFixtureTests.cpp`](../../../FrontEnd/tests/Sh2DecompilerFixtureTests.cpp), [`Sh2DecompilerEngineTests.cpp`](../../../FrontEnd/tests/Sh2DecompilerEngineTests.cpp) |

@@ -232,9 +232,20 @@ if(SE_ENABLE_DECOMPILER)
         FrontEnd/src/Decompiler/Sh2FunctionFinder.cpp
         FrontEnd/src/Decompiler/DecompilerRunner.cpp)
     # The panel is UI: it joins the frontends, not the headless engine tests.
-    set(SE_DECOMPILER_UI_SOURCES FrontEnd/src/DecompilerPanel.cpp)
+    set(SE_DECOMPILER_UI_SOURCES
+        FrontEnd/src/DecompilerPanel.cpp
+        FrontEnd/src/Debug/CapturedValueInspection.cpp)
 
     if(BUILD_TESTING)
+        add_executable(SaturnExplorerCapturedValueInspectionTests
+            FrontEnd/tests/CapturedValueInspectionTests.cpp
+            FrontEnd/src/Debug/CapturedValueInspection.cpp
+            FrontEnd/src/Decompiler/MemorySnapshot.cpp
+            FrontEnd/src/Sh2Address.cpp
+            FrontEnd/src/Sha256.cpp)
+        target_include_directories(SaturnExplorerCapturedValueInspectionTests PRIVATE FrontEnd/src include)
+        add_test(NAME SaturnExplorerCapturedValueInspectionTests COMMAND SaturnExplorerCapturedValueInspectionTests)
+
         # The .slaspec sources, the checked-in sh-2.sla and the copy embedded in Sh2SpecData.h
         # must be one spec (PLAN.md A5): compiles the .slaspec afresh and compares all three.
         add_executable(SaturnExplorerSlaFreshnessTests FrontEnd/tests/SlaFreshnessTests.cpp)
@@ -301,6 +312,14 @@ if(SE_ENABLE_DECOMPILER)
                      ${CMAKE_CURRENT_SOURCE_DIR}/FrontEnd/tests/HardwareWidthTable.golden.txt
                      ${CMAKE_CURRENT_SOURCE_DIR}/Docs/Decompiler/HARDWARE_REGISTER_AUDIT.md
                      ${CMAKE_CURRENT_SOURCE_DIR}/FrontEnd/tests/MednafenHandlerCases.txt)
+
+        add_executable(SaturnExplorerCapturedInspectionMetadataTests
+            FrontEnd/tests/CapturedInspectionMetadataTests.cpp ${SE_DECOMPILER_TEST_SOURCES})
+        target_include_directories(SaturnExplorerCapturedInspectionMetadataTests PRIVATE FrontEnd/src FrontEnd/tests include)
+        target_link_libraries(SaturnExplorerCapturedInspectionMetadataTests PRIVATE SaturnExplorerGhidraDecomp Threads::Threads)
+        add_test(NAME SaturnExplorerCapturedInspectionMetadataTests COMMAND SaturnExplorerCapturedInspectionMetadataTests
+                 ${CMAKE_CURRENT_BINARY_DIR}/captured_inspection_metadata_test)
+        set_tests_properties(SaturnExplorerCapturedInspectionMetadataTests PROPERTIES TIMEOUT 60)
 
         # Area 6's oracle (REVIEW_PROGRAM.md): fault injection as a matrix -- allocation k failing for
         # every k, the cancel flag raised at every phase entry, allocation and millisecond, and the
@@ -734,6 +753,7 @@ if(BUILD_TESTING)
         add_executable(SaturnExplorerDecompilerPanelTests
             FrontEnd/tests/DecompilerPanelTests.cpp
             FrontEnd/src/DecompilerPanel.cpp
+            FrontEnd/src/Debug/CapturedValueInspection.cpp
             FrontEnd/src/HexEditorPanel.cpp
             FrontEnd/src/Theme.cpp
             FrontEnd/src/Debug/BytePatternSearch.cpp
@@ -760,6 +780,7 @@ if(BUILD_TESTING)
         add_executable(SaturnExplorerDecompilerModelTests
             FrontEnd/tests/DecompilerModelTests.cpp
             FrontEnd/src/DecompilerPanel.cpp
+            FrontEnd/src/Debug/CapturedValueInspection.cpp
             FrontEnd/src/Theme.cpp
             ${SE_DECOMPILER_TEST_SOURCES}
             ${SE_IMGUI_CORE}
@@ -784,6 +805,7 @@ if(BUILD_TESTING)
         add_executable(SaturnExplorerDecompilerTrustTests
             FrontEnd/tests/DecompilerTrustTests.cpp
             FrontEnd/src/DecompilerPanel.cpp
+            FrontEnd/src/Debug/CapturedValueInspection.cpp
             FrontEnd/src/Theme.cpp
             ${SE_DECOMPILER_TEST_SOURCES}
             ${SE_IMGUI_CORE}
@@ -1324,6 +1346,7 @@ if(NOT EMSCRIPTEN OR SE_WEB_LIVE)
             add_executable(SaturnExplorerLiveDecompilerCaptureTests
                 FrontEnd/tests/LiveDecompilerCaptureTests.cpp
                 FrontEnd/src/DecompilerPanel.cpp
+                FrontEnd/src/Debug/CapturedValueInspection.cpp
                 FrontEnd/src/Theme.cpp
                 FrontEnd/src/Debug/MemoryBackend.cpp
                 Integration/Common/se_export.c
