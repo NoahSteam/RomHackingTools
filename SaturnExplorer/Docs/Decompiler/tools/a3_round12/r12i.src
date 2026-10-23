@@ -1,0 +1,109 @@
+name D1 delay slot of jsr copies the frame pointer r14 (= r15 + 16) into r4
+asm 06009000
+.word 0x082A
+add #-24,r15
+mov #5,r0
+mov.l r0,@r15
+mov r15,r14
+add #16,r14
+mov.l =0x06009040,r1
+jsr @r1
+mov r14,r4
+mov.l @r15,r0
+add #24,r15
+.word 0x482A
+rts
+nop
+endasm
+asm 06009040
+mov #4,r1
+L:
+mov.l r1,@-r4
+dt r1
+bf L
+rts
+nop
+endasm
+lend 06009040
+args 0 0 0 0
+end
+name D2 delay slot of jsr adds 16 to r4 = r15
+asm 06009000
+.word 0x082A
+add #-24,r15
+mov #5,r0
+mov.l r0,@r15
+mov r15,r4
+mov.l =0x06009040,r1
+jsr @r1
+add #16,r4
+mov.l @r15,r0
+add #24,r15
+.word 0x482A
+rts
+nop
+endasm
+asm 06009040
+mov #4,r1
+L:
+mov.l r1,@-r4
+dt r1
+bf L
+rts
+nop
+endasm
+lend 06009040
+args 0 0 0 0
+end
+name D3 bsr delay slot copies the frame pointer
+asm 06009000
+.word 0x082A
+add #-24,r15
+mov #5,r0
+mov.l r0,@r15
+mov r15,r14
+add #16,r14
+bsr F
+mov r14,r4
+mov.l @r15,r0
+add #24,r15
+.word 0x482A
+rts
+nop
+F:
+mov #4,r1
+L:
+mov.l r1,@-r4
+dt r1
+bf L
+rts
+nop
+endasm
+args 0 0 0 0
+end
+name D4 tail call: the frame address set in the jmp slot (a thunk of the caller itself)
+asm 06009000
+add #-24,r15
+mov #5,r0
+mov.l r0,@r15
+mov r15,r14
+add #16,r14
+mov.l =0x06009040,r1
+jsr @r1
+mov r14,r4
+mov.l @r15,r0
+rts
+add #24,r15
+endasm
+asm 06009040
+mov #4,r1
+L:
+mov.l r1,@-r4
+dt r1
+bf L
+rts
+nop
+endasm
+lend 06009040
+args 0 0 0 0
+end

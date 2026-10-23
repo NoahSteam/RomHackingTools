@@ -18,7 +18,7 @@ def walk(reg):
     return wk,['mov #2,r6','O:','mov #2,r1','L:','mov.l r1,@-%s'%reg,'dt r1','bf L','dt r6','bf O']
 out=[]
 for i in range(n):
-    chan=rnd.choice(['global_callee','global_caller','out_caller','out_caller_unlent','global_callee_unlent'])
+    chan=rnd.choice(['global_callee','global_caller','out_caller','out_caller_unlent','global_callee_unlent']+(['control'] if os.environ.get('CONTROL') else []))
     tk,tl=wl.callee_transform('r2','r3') if rnd.random()<0.5 else ('none',[])
     wk,wl_=walk('r2')
     pre=['.word 0x082A','add #-32,r15','mov #5,r0','mov.l r0,@r15']      # sts pr,r8 : PR kept in r8, so the walk's stores cannot hit a saved PR
@@ -30,6 +30,10 @@ for i in range(n):
         g2=['mov.l =%s,r2'%GLOB,'mov.l @r2,r2']+tl+wl_+['rts','nop']
         src+=[('06009000',cal),('06009100',g1),('06009200',g2)]
         lend=['06009100','06009200'] if chan=='global_callee' else ['06009200']
+    elif chan=='control':   # the frame address handed straight to a lent callee that walks down from it (rounds 10 and 11 fixed this: right)
+        cal=pre+['mov r15,r4','add #16,r4','mov.l =0x06009100,r1','jsr @r1','nop']+post
+        g1=['mov r4,r2']+tl+wl_+['rts','nop']
+        src+=[('06009000',cal),('06009100',g1)]; lend=['06009100']
     elif chan=='global_caller':
         cal=pre+['mov r15,r4','add #16,r4','mov.l =0x06009100,r1','jsr @r1','nop','mov.l =%s,r2'%GLOB,'mov.l @r2,r2']+tl+wl_+post
         g1=['mov.l =%s,r1'%GLOB,'rts','mov.l r4,@r1']
