@@ -425,6 +425,11 @@ inline void verify(const std::string& rule, const PcodeOp* op, const Snap& s, in
             const PcodeOp* nx = r.vn->loneDescend();
             if (nx != (const PcodeOp*)0 && nx->code() == CPUI_INT_ADD) { ++t.skipped; continue; }
         }
+        // RuleBoolZext turns `zext(V) * -1 + 1` into `zext(!V)` by negating the zext's own input and letting the final ADD read the zext: the zext's value changes
+        // by design, the ADD's (a root of its own) does not
+        if (rule == "boolzext" && r.vn == op->getOut()) { ++t.skipped; continue; }
+        // a root the rule has left without a reader (and that nothing else keeps alive) has no value to keep
+        if (r.vn->hasNoDescend() && !r.vn->isAddrForce() && !r.vn->isPersist()) { ++t.skipped; continue; }
         const Varnode* v = r.def->getOut();
         Cone ac;
         Memo m2;
