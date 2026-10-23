@@ -11465,3 +11465,144 @@ The fixed tree (`be61b91`) against a baseline built from `da2a0fa` (the merged h
 | sanitizer and Live jobs | not run (shared socket; CI) |
 
 **All seven round-11 rows are now fixed** (A3-82, A3-83, A3-84, A3-85, A3-88 P1; A3-86, A3-87 P2), with A3-79 closed. The next reviewer verifies.
+
+## Area 3, round 12 review
+
+Reviewer, branch `review/3-round12-review`, on the coordinator's head `a648e8d` (patches up to 0061 in the tree). Findings only, no fixes: the code changes are none; the repository gets tools (`Docs/Decompiler/tools/a3_round12/`), the ledger rows, a suite function of controls that pass (`TestArea3Round12`) and this record. New ledger rows **A3-89 (P1)**, **A3-90, A3-91, A3-92, A3-93, A3-94 (P2)** and **A3-95 to A3-99 (P3)**. The generator beyond the nightly range finds one thing for another area (below), routed with its replay line.
+
+**The round is not clean: one row at P1 and five at P2.** Area 3 has no clean round yet and the count of consecutive clean rounds stays 0. The round 11 fixes held where they were aimed -- every `rowsfix.src` fixture of A3-82 to A3-88 prints the local and agrees with the run, the 0061 walk's allowed list is sound for the data flow it can see (below), and 87 hand fixtures (`r12a.src` to `r12z.src`) of the places the brief named were run -- and what the round found is what the brief predicted of a fail-closed rule: it is closed over the values the function computes, and open wherever a value reaches a frame address by a way that is no op of the function. Two ways:
+
+1. **Callee-mediated memory.** A frame address a callee keeps (in a global, in a slot of the caller's frame it was given a pointer to, in a register the default model keeps, in a word of the caller's outgoing area) and a later step that reads it back and stores below it. The walk of patch 0061 follows ops, STOREs of the function and the output of a call it was handed the address in; the host reads registers. Neither sees a pointer a callee wrote (A3-89 P1, A3-91 P2). The same hole one level down in the probe (A3-90 P2): a walked callee does not carry the `storesBelow` of the callee it hands the pointer to unless that one is lent.
+2. **The host's exact-form tests that the round 11 principle did not reach.** `AtOrAboveEntry`, `exact` in `Clobber`'s sparing and `NoteFrameEscapeOf`'s base test are by exact forms; an address that has been through a swap pair or a mask is a `Fuzzy` value of stack origin with no base, and each of them takes it for no frame address (A3-92, A3-93, A3-94, all P2 and hand-written, as the rows of A3-21, A3-24 and A3-39 they extend).
+
+### 1. Instruments
+
+- **The fixture driver** (`bdrv.sh`, `drvmain.inc`, `asm.py`, `mk.py`, `sum.py`, `run.sh`): round 11's, with one repair: the committed `a3_round11/bdrv.sh` does not build (its sed writes `\&` where the matched text is meant, so `RunMachine::Poke` is never added and the driver fails to compile; A3-98). The fixtures are `r12a.src` to `r12t.src`.
+- **`walkfuzz3.py`**: a frame address handed to a call that keeps it, then used by a later step to store below it. Channels: a lent or unlent callee stores r4 to a global and a second callee (lent or not) reads the global and walks down; the same with the caller doing the walk; an out-parameter, a lent or unlent callee stores its second argument through its first (a slot of the caller's frame) and the caller reloads it and walks down. Fourteen laundering steps before the walk and four walk forms (a counted word walk, a counted byte walk, a store at a negative displacement, nested counted walks). `CONTROL=1` adds the direct hand-over as the control.
+- **`walkfuzz4.py`**: the probe's nested walk. P hands a frame address and a hidden counter to a chain of one to five unlent captured functions, each passing r4 on by a call, a tail jump or a call through a callback in r5, the last filling backwards.
+- **`build_emut.sh`, `build_hmut.sh`, `mutate.py`, `run_mut.sh`, `run_pins.sh`**: the mutation harness. A mutated copy of an engine file or of `Sh2Decompiler.cpp` (exact, unique replacements, `mutate.py` refuses a text that is not found once) is compiled with the build's own flags and linked into the generator or the suite in place of its object (7 s for `heritage.cc`, 1 minute for the host); `run_mut.sh` runs 3,000 seeds of printed-C mode on each (and 3,000 of grammar 2 for the host rules check 10b holds), `run_pins.sh` the suite on those the generator did not fail. `build_e0.sh` makes the baseline with patch 0061's walk switched off.
+- **`mkrows.py`, `srcwords.py`**: the ledger rows' fixture words are assembled from the `.src` files.
+
+### 2. What the attack found
+
+All fixtures are in `Docs/Decompiler/tools/a3_round12/` and replay with `OUT=<dir> sh run.sh rNNx.src`; the findings are the rows of the ledger.
+
+| Row | Sev | The class, in a line | Fixtures | Reach |
+|---|---|---|---|---|
+| **A3-89** | **P1** | A frame address a callee keeps -- in a global, through a second argument into a slot of the caller's frame, in a word of the caller's outgoing area -- is read back by a later step that stores below it; neither patch 0061's walk (ops, the function's own STOREs, the output of a call it was handed the address in) nor the host (registers; `leaks` only sets `State::escaped`) sees it | `r12a.src` C1a/C1b, `r12b.src` C4a/C4b/C4c, `r12h.src` RG/SH | `walkfuzz3.py`: **796 of 796** programs stale in four seeds (459 lent); the direct hand-over as control 0 of 103 |
+| A3-90 | P2 | The probe's walk of an unlent callee does not carry the `storesBelow` of a callee it hands the pointer to unless that one is lent (a call, a tail jump or a callback to an unlent one maps frame words only) | `r12a.src` C2a/C2b, `r12g.src` C2c | `walkfuzz4.py`: chains of two or more **216 of 216** stale, of one 0 of 41 |
+| A3-91 | P2 | Clause (d) of 0061 needs the address to be an input of the CALL and the value its output; a lent callee that moves its argument into r9, r1, r10 or MACH (the engine sees no parameter) or GBR hands it back in a register the walk never reaches | `r12e.src` R9/R1, `r12h.src` GB/R10 | the caller is withheld ("it uses r9 after calling ..."), its text is stale |
+| A3-92 | P2 | `AtOrAboveEntry` (A3-21, A3-39, A3-70) is by exact forms: a laundered address of the caller's frame is not one | `r12k.src` S3a/S3c/S3d, `r12l.src` S3f | a callee that writes its caller's outgoing word is lent; the caller prints the word it stored before |
+| A3-93 | P2 | `Clobber`'s sparing of saved registers is keyed on `exact` (`Value::Sp`); a laundered pointer to a saved register's slot spares it | `r12m.src` S4a | f lent with r14 preserved that is not; the caller prints its constant |
+| A3-94 | P2 | `NoteFrameEscapeOf` returns for a value with no base; r2 (the struct-return pointer) with a laundered address is not declared | `r12n.src` S5a/S5c | text of a withheld caller stale |
+| A3-95 | P3 | A frame address rebuilt from constants by compares (the T bit) | `r12q.src` T1 | proposed accepted |
+| A3-96, A3-97 | P3 | Instruments (section 6) | | |
+| A3-98 | P3 | The committed round 11 `bdrv.sh` does not build | | |
+| A3-99 | P3 | Precision: a stack argument shown as a local after an escape (008 0603D5F6) | | |
+
+**What the diagnostic builds say.** Two engine builds of the review (`heritage.cc` only, 7 s each) test the mechanisms the rows name. Adding every stack word defined by an INDIRECT to the post-heritage walk as an unmodeled member makes A3-89 c print the local (`return xStack_18;`, the oracle agrees for the store form); a, b and d of that row are unchanged, so the global needs the host's `leaks` (or a rule on the LOADs after a call that was handed a member). Keeping every marked store marked (never unmarking in `reprocessFreeStores`) changes nothing, so the loss is the alias analysis of the post-heritage walk, not the mark. Adding every INDIRECT output of the function as a member, before and after the stack is heritaged, changes none of A3-91's texts.
+
+**What each of the three P2 host rows costs to close** is the same trade-off the round 11 fix met: a laundered value of stack origin with no base is as likely to be a pointer to a local aligned by a mask (compiled) as an address of the caller's frame; the rows' fix directions keep the information (`callerHigh`, a non-negative base) through the ops that build `Value::From(origins)` rather than withhold on every such value.
+
+### 3. What held
+
+| Attack | Fixtures | Result |
+|---|---|---|
+| Add of a variable to a frame address, a store below the lowest local (0061's INT_ADD, PTRADD) | S1 (`r12a.src`) | The index is taken as non-negative by the engine and the host (A3-9, A3-17; the rounds 4 and 5 notes); the store lands on the sentinel and the text keeps the 5: the accepted convention, no new row |
+| Sources of a frame address: `mov r15,rN` in the delay slot of `jsr`, `bsr` and a tail call; r14 as the frame pointer; a pointer reloaded from a local | D1 to D4 (`r12i.src`), the round 11 `rowsfix.src` (31 cases) | right (the local is read) |
+| `ldc`/`stc` and `lds`/`sts` games: GBR, VBR, MACH, MACL, SR, PR, `dmulu.l`, `mul.l`, `addc`, `subc` | S7 (`r12p.src`) | right |
+| A load of a local through a laundered frame address; a store then a load | S6 (`r12o.src`) | right |
+| The lowest offset: a laundered store up into the incoming stack argument; a push below the locals overwritten by a laundered walk | SA, SB (`r12u.src`), P1a, P1b (`r12t.src`) | right |
+| A comparison selecting a pointer (a join); a frame address and a global or a parameter | J1, J2 (`r12r.src`) | right |
+| A frame address in a stack argument | (b) of 0061, round 11's cases | right |
+| A call through a frame address; a trapa with a frame address in r0 | V1, V2 (`r12v.src`) | V1 withheld, its text keeps the local; V2's handler is the driver's `rte` (no write), so nothing to see: r0 is a hidden register (A3-10) |
+| The cursor-struct API (init stores the buffer end in a local struct, push does `*--ctx->p = v`) | K1, K2 (`r12w.src`) | right: the push callee is handed the struct's address and `storesBelow` names it (A3-83 g, A3-84) |
+| The probe through a LENT middle: an unlent callee that calls or tail-jumps to a lent fill-backwards function; a callee with 300 pushes before the fill | F2, F3 (`r12f.src`), the 300-push fixture (`r12c.src`) | right (F2, F3 and the one-level case pinned in `TestArea3Round12`) |
+| The 8,192-member bound of 0061's walk | `bigframe.py` | not reachable: 6,500 frame copies (19,500 instructions) decompile right, 9,000 exceed the flow's instruction limit first |
+| `storesBelow` in the cache keys | `DecompilerRunner.cpp:76-83`, `DecompilerPanel::ShapeOf` | present in both; `Prototype::operator==` through `CallEffects` |
+| `ShareWalks` | code | the cache and the below map are one pair (`ShareWalks(&walks, &below)` in the printing probe); the lent check passes no map and does not use one |
+
+### 4. The generator beyond the nightly range
+
+Chunks of 5,000 seeds (2,000 for printed-C), each under 3 minutes; `matrix.sh` leaves a marker per chunk, so a restart resumes. Nobody had run these ranges.
+
+| Run | Seeds | Result |
+|---|---|---|
+| grammar 2 | 1,800,001 to 1,820,000 (4 x 5,000) | 1 failing seed, **1804560** (area 5, routed below) |
+| grammar 1 | 1,800,001 to 1,810,000 (2 x 5,000) | 0 |
+| printed-C | 1,800,001 to 1,810,000 (5 x 2,000) | 0 failing seeds |
+| grammar 2 `specials` | 1,900,001 to 1,905,000 | 0 |
+| `TestArea3HiddenInputFuzz` | seeds 8 and 9, 5,000 programs each | 1,176 and 1,168 lent, 15,288 and 15,184 perturbed runs, 0 findings |
+
+**Routed (one seed, another area).** Grammar 2 seed **1804560** (`[n:pointer-effect-unsaid]`, area 5: a 1-byte read and write at 0xFFFFFFC8 "reached through a pointer the output derives from register addresses, and no note says"). Function 1 at 0x06009054 loads a word, ORs it with 0xFFFFFFC0, writes the result to GBR and does `or.b #1,@(8,gbr)` on it; the text is `uVar3 = (int4)*param_2 | 0xffffffc0; Write_GBR(uVar3); ... *(uint1 *)(uVar3 + 8) = *(uint1 *)(uVar3 + 8) | 1;`. It is in A5-82's family (the generator's pointer checks over a number that is an on-chip register's address) and may be a true positive of the note rule instead (every value of `x | 0xffffffc0` lies in the on-chip register page, so the access is an address error whatever is loaded, and no note says so). The cause is not area 3's: the text's values are right. Replay: `SE_GENERATED_GRAMMAR=2 SE_GENERATED_FIRST=1804560 SE_GENERATED_SEEDS=1 build/bin/SaturnExplorerSh2GeneratedTests <dir>`; the raw words are in the log (`SE_GENERATED_WORDS="4F26 6BF6 6AF6 69F6 000B 68F6 2F86 2F96 2FA6 2FB6 4F22 6843 ..."` as the generator prints them).
+
+### 5. Corpus (`SE_GAME_HWRAM=<img> SE_GAME_LEND=1`)
+
+| | 007 | 008 |
+|---|---|---|
+| functions alone | 839 ok | 1,554 ok |
+| lending run | 1,730 ok | 2,995 ok |
+| lent (parameters), unlent / lent run | 655 (901) / **680 (958)** | 1,010 (1,251) / **1,040 (1,312)** |
+| accesses dropped against the reference run; missing and said | 0; 0 | 0; 4 |
+| mapping oracle (fixtures, alone, lent) | clean | clean |
+| `TestGameCode` game-code time | 10.1 s | 34.0 s |
+
+The mapping oracle's violation counts are 0 in every run (the 3 tokens at a delay slot's own address in 008's lent texts are the informational line area 2's record already carries). The ledger counts and the lending figures are the round 11 fix's (`680 (958)` and `1,040 (1,312)`, the 4 missing-and-said); the times are the shared machine's (the other agents' generators ran beside these).
+
+**Patch 0061 on and off in this tree** (`build_e0.sh`: `FrameEscape::compute` returns at once, nothing escapes, no store is marked or widened): the same figures (680 (958), 1,040 (1,312)); the game-code time 10.4 s and 33.2 s against 10.1 s and 34.0 s, so the walk costs nothing measurable. The texts differ in **11 functions of the two corpora** -- image 007 in 5 (06027420, 06032F4A, 06032F9E, 0603313E, 06033252; all in the lending run), image 008 in 6 (06021ADE, 0603D5F6, 0603ED44, 0603ED52, 0604080A, 060670C0) -- not the 36 and 71 of the round 11 fix's record, which compared against the merged host-only tree and so counted the host rules' changes as well. Each read against the code: an array local kept where a scalar was (four siblings), a store to a local kept instead of folded away (`xStack_8 = 0x6029568;` in each case of a switch), a pointer read from its slot before the stores that may reach the slot (`piVar3 = piStack_60 ; ... *piVar3 = 0`), a larger array, a renumbering of variables. No computed value differs. One reads worse, **A3-99** (P3): 008 0603D5F6 shows `xStack_30 = 2;` and the call `func_0x0603cfc4(a,b,c,d)` one argument short, because the function stores `&xStack_2c` in a local, which 0061 takes for an escape of the whole frame, so the outgoing stack word of the call is an aliased local and not an argument.
+
+### 6. Instrument check: do the new instruments miss a mutation?
+
+Each rule reverted alone in a built-beside generator (`run_mut.sh`), printed-C mode at 3,000 seeds (and grammar 2 at 3,000 for the host rules check 10b holds). A mutation that fails 0 seeds is recorded with the suite's answer (`run_pins.sh`).
+
+| Reverted | Printed-C failing findings (3,000 seeds) | Grammar 2 (3,000) | The suite, when the generator did not fail |
+|---|---|---|---|
+| engine: AND, OR, XOR of a frame address taken as modeled (no escape) | 38 | not run |  |
+| engine: SUBPIECE, PIECE, ZEXT, SEXT taken as modeled | 43 | not run |  |
+| engine: INT_2COMP, INT_NEGATE taken as modeled | 0 | not run | passes (0 failed checks) |
+| engine: INT_LEFT, INT_RIGHT, INT_SRIGHT, INT_MULT taken as modeled | 0 | not run | passes (0 failed checks) |
+| engine: (b), a frame address stored to memory, no longer escapes | 23 | not run |  |
+| engine: (c), a join with a non-frame value, no longer unmodeled | 41 | not run |  |
+| engine: (d), the output of a call handed a frame address, no longer unmodeled | 0 | not run | passed before `TestArea3Round12`'s new controls; **fails 1 check** now |
+| engine: `widenEscapedStoreGuards` off | 18 | not run |  |
+| engine: `markEscapedStores` marks nothing | 145 | not run |  |
+| engine: the lowest frame offset ignores the function's stack varnodes | 161 | not run |  |
+| engine: the pre-heritage free stack reads are no members | 64 | not run |  |
+| engine: an unmodeled value no longer makes the values computed from it unmodeled | 179 | not run |  |
+| engine: a LOAD through an unmodeled address no longer escapes | 0 | not run | passes (0 failed checks) |
+| engine: a CALLOTHER handed an unmodeled address no longer escapes (CALL and CALLIND kept) | 0 | not run | passes (0 failed checks) |
+| host: `Store` records no `storesBelow` (tracked and laundered) | 237 | 139 |  |
+| host: `Store` records none for a laundered pointer (A3-83) | 72 | 0 |  |
+| host: `Call` does not carry a lent callee's `storesBelow` into the caller's (A3-82) | 99 | not run |  |
+| host: a lent callee's `storesBelow` register exposes the frame only for an exact address (A3-84) | 109 | not run |  |
+| host: `Load` keeps no parameter provenance (A3-83 c, g) | 37 | not run |  |
+| host: a tail jump in a walked callee carries no `storesBelow` | 18 | not run |  |
+| host: the probe reads no `storesBelow` of an unlent callee (A3-86 a) | 29 | not run |  |
+| host: `PossibleFrame` false for a value with no exact address (the probe's exposure of a laundered address) | 0 | not run | passed before the new controls; **fails 2 checks** now |
+| host: a callee's leak of a frame address sets no `State::escaped` | 0 | not run | passed before `TestArea3Round12`'s new controls; **fails 1 check** now |
+
+**Read.** 16 of the 23 mutations fail seeds. The seven that do not: **E7, H8, H9** are rules of the round 11 fix that nothing held (A3-96: the suite passed with each, and now fails 1, 2 and 1 checks of the new controls in `TestArea3Round12`); **E3 and E4** are inert, the generator's `neg2` and `shift2` pairs being rewritten by the engine before the walk (A3-97); **E18 and E19** change none of the 87 fixtures, the suite or a seed, so they are redundant to the engine's own guards or unreachable (A3-97). Check 10b's `storesBelow` (H1) is held by random seeds, not by its unit pins alone as the round 11 record had it: 139 of 3,000 grammar 2 seeds fail (168 `n:claim-wrong:storesBelow` and 29 `v:`), and the laundered record of `Store` (H2) is held by the printed-C walks (72) and by no grammar 2 seed (check 10b asks that the register was read first and that `storesThrough` names it). H6 first failed to build (the removed statement was a loop body); H6b is it with a `{}`.
+
+### 7. Pins committed
+
+`TestArea3Round12` (`Sh2DecompilerTests.cpp`): seven controls that pass. Three on the probe -- an unlent callee that fills backwards itself, one that tail-jumps to a lent fill-backwards function and one that calls it; the caller is withheld and its text reads the local, not the 5. Two on the probe and a laundered address -- a frame address masked, or sent round a global, before an unlent captured fill-backwards callee (mutation H8). One on clause (d) of patch 0061 -- a lent callee returns its argument and the caller walks down from the returned pointer (mutation E7). One on the host's leak flag -- a callee leaks the address to a global, a second returns it, a lent fill-backwards callee is handed it (mutation H9). The findings have no pin (a pin of a wrong text would fail the suite); their fixtures are the `.src` files and the rows.
+
+### 8. Matrix
+
+| Run | Result |
+|---|---|
+| `ctest -E SaturnExplorerLive -j2 --timeout 1200` (94 tests, `ulimit -v 4000000`) | 94 of 94 pass, 155 s |
+| `SaturnExplorerSh2DecompilerTests` (with `TestArea3Round12`) | all passed, 19 s |
+| the round 11 fixtures (`a3_round11/rowsfix.src`, 31 cases through this round's driver) | all print the local or are withheld as the fix recorded |
+| the 87 fixtures of this round (`fixtures_summary.txt`) | the rows' fixtures print the stale value, their controls the local |
+| generator beyond the nightly range, `TestArea3HiddenInputFuzz` seeds 8 and 9 | section 4 |
+| corpora 007 / 008 (`SE_GAME_LEND=1`) | section 5 |
+| mutations of the new instruments | section 6 |
+| sanitizer and Live jobs | not run (shared socket; CI) |
+
+### Not covered
+
+- The sanitizer and Live jobs (a shared socket; CI).
+- A trapa handler that writes through r0: the driver's handler is a fixed `rte`, so the shape is not drawn; r0 is a hidden register (A3-10, accepted).
+- A probe whose walk is cut off (`kMaxSteps`, 200,000 visits): `ReturnCheck::Run`'s result is ignored at the probe (`probe.Run(unused)`), so a cut-off walk would declare only the alias it had found so far. No input of the review reached the limit, so it is a hardening note, not a row.
+- 0061's 8,192-member bound (`bigframe.py`).
