@@ -3,6 +3,22 @@
 A Sega Saturn ROM-hacking and debugging tool: a portable analysis core, a Dear ImGui
 front end, and a patched Mednafen that talks to it over a local socket.
 
+## Codebase knowledge workflow
+
+Before implementing a task:
+
+1. Read [Docs/Codebase/README.md](Docs/Codebase/README.md).
+2. Consult [FEATURE_MAP.md](Docs/Codebase/FEATURE_MAP.md) to locate the relevant subsystems.
+3. Read the relevant subsystem documents, then inspect actual source and call sites before changing code.
+4. Source takes precedence over documentation; resolve discrepancies rather than assuming the map is authoritative.
+
+After implementing a task, update affected knowledge-base documents in the same change when
+behavior, architecture, APIs, responsibilities, data flow or constraints change. Add significant
+new features to FEATURE_MAP and create/update their subsystem document. Preserve useful existing
+information unless demonstrably obsolete, and keep references and diagrams aligned with the code.
+Insignificant implementation details do not require a knowledge-base update. This is a living map,
+not a historical change log. Each page records its inspected revision; update freshness when rechecking it.
+
 ## Where to read first
 
 | Topic | Doc |

@@ -414,6 +414,10 @@ if(BUILD_TESTING)
     )
     target_link_libraries(SaturnExplorerVdp2Tests PRIVATE SaturnExplorerCore)
     add_test(NAME SaturnExplorerVdp2Tests COMMAND SaturnExplorerVdp2Tests)
+    add_executable(SaturnExplorerVdp1PreviewTests Core/tests/Vdp1PreviewTests.cpp)
+    target_include_directories(SaturnExplorerVdp1PreviewTests PRIVATE Core/src Core/tests)
+    target_link_libraries(SaturnExplorerVdp1PreviewTests PRIVATE SaturnExplorerCore)
+    add_test(NAME SaturnExplorerVdp1PreviewTests COMMAND SaturnExplorerVdp1PreviewTests)
 
     # CRAM index wrapping: exact on the hardware sizes, and still correct on a partially
     # captured CRAM, where power-of-two masking is not modulo.

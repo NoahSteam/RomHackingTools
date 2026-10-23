@@ -8,6 +8,7 @@
 #include "Debug/MemoryBackend.h"
 #include "Debug/PokeReport.h"
 #include "FakeVdpSource.h"
+#include "Vdp1SpriteMove.h"
 
 using namespace sfe;
 
@@ -43,10 +44,122 @@ uint8_t ReadByte(ContextBackend& b, uint32_t addr)
 {
     return b.ReadMemoryBatch({ { addr, 1 } })[0].bytes[0];
 }
+
+void TestSpriteMove()
+{
+    // Exercise the actual parser, geometry and memory backend for every drawable
+    // command, including all sixteen combinations of scaled-sprite zoom axes.
+    std::vector<uint16_t> controls = { 0, 2, 3, 4, 5, 6 };
+    for (int zoom = 0; zoom < 16; ++zoom) controls.push_back(static_cast<uint16_t>(1 | (zoom << 8)));
+    for (uint16_t ctrl : controls)
+    {
+        se_test::State st(0x200);
+        se_test::WriteSystemClip(st, 320, 224);
+        se_test::PutBE16(st.vdp1, 0x20, 0x000A); // local origin must stay intact
+        se_test::PutBE16(st.vdp1, 0x2C, 5);
+        se_test::PutBE16(st.vdp1, 0x2E, 7);
+        se_test::PutBE16(st.vdp1, 0x40, ctrl);
+        se_test::PutBE16(st.vdp1, 0x44, 0x00E8); // RGB555, no end/transparent codes
+        se_test::PutBE16(st.vdp1, 0x46, 0xFFFF);
+        se_test::PutBE16(st.vdp1, 0x48, 0x20);   // texture at byte 0x100
+        se_test::PutBE16(st.vdp1, 0x4A, 0x0108); // 8x8
+        for (int i = 0; i < 8; ++i)
+            se_test::PutBE16(st.vdp1, 0x4C + i * 2, static_cast<uint16_t>(10 + i * 10));
+        se_test::PutBE16(st.vdp1, 0x60, 0x8000);
+        std::fill(st.vdp1.begin() + 0x100, st.vdp1.end(), 0xFF);
+        se_test::SpritesInFront(st);
+        se_context* ctx = Make(st, false);
+        Check(ctx != nullptr, "sprite move context created");
+        if (!ctx) continue;
+        se_sprite_2d before {}, after {};
+        Check(se_get_sprite_2d(ctx, 0, &before) == SE_OK, "original sprite has geometry");
+        auto render = [&]() {
+            se_render_opts opts {};
+            se_default_render_opts(&opts);
+            se_image image {};
+            size_t needed = 0;
+            Check(se_render_frame(ctx, &opts, &image, &needed) == SE_OK, "movement frame size available");
+            std::vector<uint8_t> pixels(needed);
+            image.pixels = pixels.data(); image.capacity = pixels.size();
+            Check(se_render_frame(ctx, &opts, &image, &needed) == SE_OK, "movement frame renders");
+            return pixels;
+        };
+        if (ctrl == 0)
+            Check(render()[(27 * 320 + 15) * 4] == 255, "sprite initially draws at the original position");
+        Vdp1CommandBytes original {};
+        se_read_vram(ctx, SE_VRAM_KIND_VDP1_VRAM, 0x40, original.data(), original.size());
+        const auto moved = MoveVdp1Command(original, 12, -9);
+        ContextBackend backend(&ctx);
+        const auto serial = se_derive_serial(ctx);
+        Check(backend.WriteMemory(kVdp1 + 0x4C, moved.data() + 0x0C, 0x10) == 0x10,
+              "sprite movement writes the coordinate block");
+        Check(se_derive_serial(ctx) != serial, "movement invalidates the rendered output");
+        Check(se_get_sprite_2d(ctx, 0, &after) == SE_OK, "moved sprite has geometry");
+        for (int corner = 0; corner < 4; ++corner)
+        {
+            Check(after.corners[corner].x == before.corners[corner].x + 12,
+                  "every rendered corner moves horizontally without changing shape");
+            Check(after.corners[corner].y == before.corners[corner].y - 9,
+                  "every rendered corner moves vertically without changing shape");
+        }
+        se_command command {};
+        se_get_command(ctx, 2, &command);
+        Check(command.x == 22 && command.y == 11, "Command List sees the updated position");
+        Vdp1CommandBytes actual {};
+        se_read_vram(ctx, SE_VRAM_KIND_VDP1_VRAM, 0x40, actual.data(), actual.size());
+        Check(actual == moved, "VDP1 Table sees the exact updated RAM bytes");
+        Check(std::equal(original.begin(), original.begin() + 0x0C, actual.begin()) &&
+              std::equal(original.begin() + 0x1C, original.end(), actual.begin() + 0x1C),
+              "sprite attributes, texture address and shading are preserved");
+        if (ctrl == 0)
+        {
+            const auto pixels = render();
+            Check(pixels[(18 * 320 + 27) * 4] == 255, "VDP Output draws the moved sprite");
+            Check(pixels[(27 * 320 + 15) * 4] == 0, "VDP Output clears the sprite's previous position");
+        }
+        se_destroy(ctx);
+    }
+    Vdp1CommandBytes limits {};
+    limits[1] = 4; // polygon
+    limits[0x0C] = 0x0F; limits[0x0D] = 0xFE; // A.x = 4094
+    limits[0x10] = 0x0F; limits[0x11] = 0xFF; // B.x = 4095
+    const auto clamped = MoveVdp1Command(limits, 100, -9000);
+    Check(Vdp1MoveCoordinate(clamped, 0x0C) == 4094 &&
+          Vdp1MoveCoordinate(clamped, 0x10) == 4095,
+          "coordinate limits clamp the entire shape, never individual corners");
+    Check(Vdp1MoveCoordinate(clamped, 0x0E) == -4096, "negative coordinate limit is signed 13-bit");
+    for (uint16_t ctrl : { 0x8000, 0x4000, 8, 9, 10, 15 })
+    {
+        Vdp1CommandBytes bytes {};
+        bytes[0] = static_cast<uint8_t>(ctrl >> 8); bytes[1] = static_cast<uint8_t>(ctrl);
+        Check(MoveVdp1Command(bytes, 10, 20) == bytes, "state, skipped and end commands cannot move");
+    }
+    Vdp1MoveGesture gesture;
+    Check(!gesture.Update(false, false, true, 50, 60), "mouse motion alone never moves a sprite");
+    Check(!gesture.Update(true, false, true, 50, 60), "Shift alone never moves a sprite");
+    Check(gesture.Update(true, true, true, 50, 60) && gesture.active, "Shift-left-click starts from the current cursor");
+    Check(Vdp1MoveGesture::Delta(70, gesture.startX, 0.5f) == 10,
+          "hi-res and scaled views map cursor distance into VDP1 coordinates");
+    Check(Vdp1MoveGesture::Delta(50.4f, gesture.startX, 1) == 0 &&
+          Vdp1MoveGesture::Delta(50.8f, gesture.startX, 1) == 1,
+          "fractional motion accumulates from the anchor without rounding drift");
+    gesture.Update(true, true, false, 70, 80);
+    Check(!gesture.active, "loss of hover or source changes stop movement");
+    Check(!gesture.Update(true, true, true, 70, 80), "a held button never restarts a cancelled move");
+    gesture.Update(true, false, true, 70, 80);
+    Check(gesture.Update(true, true, true, 70, 80), "a fresh click starts another move while Shift stays held");
+    gesture.Update(false, true, true, 70, 80);
+    Check(!gesture.active, "releasing Shift stops movement");
+    gesture.Update(false, false, true, 70, 80);
+    gesture.Update(true, true, true, 70, 80);
+    gesture.Update(true, false, true, 70, 80);
+    Check(!gesture.active, "releasing the mouse button stops movement");
+}
 }  // namespace
 
 int main()
 {
+    TestSpriteMove();
     const uint8_t ab[2] = { 0xAB, 0xCD };
 
     // Read-only is a write policy, not just a hint for the UI.

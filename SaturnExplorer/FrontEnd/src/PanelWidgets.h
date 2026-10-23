@@ -4,6 +4,7 @@
 // imgui_internal.h, for the splitter behaviour ImGui keeps there.
 #pragma once
 
+#include <algorithm>
 #include <cstdarg>
 #include <cstdio>
 
@@ -51,7 +52,8 @@ inline ImGuiSelectableFlags RowSelectableFlags(bool hasInteractiveCells)
 }
 
 // The whole-row Selectable itself: submit this as the row's first cell and it both selects
-// the row and lets the cells beside it be clicked. Returns true on click.
+// the row and lets the cells beside it be clicked. Returns true on click or on
+// keyboard selection when extraFlags includes SelectOnNav.
 //
 // 'framed' means the row carries widgets that draw a frame (edit boxes), which makes it a
 // full frame tall. Two things then have to happen together, which is why they live here
@@ -68,15 +70,34 @@ inline ImGuiSelectableFlags RowSelectableFlags(bool hasInteractiveCells)
 //
 // Text cells elsewhere in a framed row still want AlignTextToFramePadding; it is only the
 // row Selectable that must not have it.
-inline bool RowSelectable(const char* label, bool selected, bool framed)
+inline bool RowSelectable(const char* label, bool selected, bool framed,
+                          ImGuiSelectableFlags extraFlags = 0)
 {
     const float height = framed ? ImGui::GetFrameHeight() : 0.0f;
     if (framed)
         ImGui::PushStyleVar(ImGuiStyleVar_SelectableTextAlign, ImVec2(0.0f, 0.5f));
-    const bool pressed = ImGui::Selectable(label, selected, RowSelectableFlags(framed),
+    const bool pressed = ImGui::Selectable(label, selected, RowSelectableFlags(framed) | extraFlags,
                                            ImVec2(0.0f, height));
     if (framed) ImGui::PopStyleVar();
     return pressed;
+}
+
+// Paint a thumbnail inside an existing row without submitting another layout or
+// input item. The row selectable owns clicks, and large sprites cannot grow it.
+inline void RowSpritePreview(ImTextureID texture, int imageWidth, int imageHeight,
+                             ImVec2 origin, float width, float height)
+{
+    if (!texture || imageWidth <= 0 || imageHeight <= 0 || width <= 0 || height <= 0) return;
+    const float scale = std::min(width / imageWidth, height / imageHeight);
+    const ImVec2 size(imageWidth * scale, imageHeight * scale);
+    const ImVec2 pos(origin.x + (width - size.x) * 0.5f, origin.y + (height - size.y) * 0.5f);
+    ImDrawList* draw = ImGui::GetWindowDrawList();
+    for (int y = 0; y < static_cast<int>(size.y); y += 4)
+        for (int x = 0; x < static_cast<int>(size.x); x += 4)
+            draw->AddRectFilled(ImVec2(pos.x + x, pos.y + y),
+                ImVec2(pos.x + std::min(float(x + 4), size.x), pos.y + std::min(float(y + 4), size.y)),
+                ((x / 4 + y / 4) & 1) ? IM_COL32(65, 65, 70, 255) : IM_COL32(40, 40, 45, 255));
+    draw->AddImage(texture, pos, ImVec2(pos.x + size.x, pos.y + size.y));
 }
 
 // Thickness of the draggable band between two stacked sections: wide enough to grab.

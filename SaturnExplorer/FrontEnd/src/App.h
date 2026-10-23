@@ -39,6 +39,8 @@
 #include "Debug/CallStack.h"      // per-CPU call stack (paused-state workspace)
 #include "Debug/MemoryBackend.h"
 #include "RenderKey.h"
+#include "Vdp1SpriteMove.h"
+#include "SpritePreviewCache.h"
 #include "Debug/MemorySearch.h"   // Cheat-Engine-style live RAM value scanner
 #include "Debug/MemorySearchRunner.h"   // ...and the worker that keeps its scans off the UI thread
 #include "Debug/AccessLog.h"      // "find what accesses this address" record
@@ -225,7 +227,7 @@ private:
     void SyncTracepointsToLive();           // push the tracepoint set to the emulator (v8)
     void DrainTraceEvents();                // pull fired tracepoint events into the Log
     void DrawWorldView(IPlatform& platform);
-    void DrawCommandList();
+    void DrawCommandList(IPlatform& platform);
     // Inline size/position editing in the Command List: draw an editable integer cell for one
     // command field and, on commit, re-encode it into the command's CMDSIZE/CMDXA/CMDYA word
     // and write it back to VDP1 VRAM (which pokes a live emulator). Returns true if it changed.
@@ -234,6 +236,8 @@ private:
     void DrawCommandScaleCell(const se_command& cmd);
     void PushCommandEditId(const se_command& cmd);   // pushes two IDs; pop both
     void WriteCommandWord(const se_command& cmd, uint32_t fieldOffset, uint16_t value);
+    void MoveSelectedSprite(ImVec2 imagePos, ImVec2 imageSize, bool startAllowed);
+    ImVec2 Vdp1CoordinateSize() const;
     void DrawSelectedObject();
     void DrawTextureViewer(IPlatform& platform);
     // Add a write watchpoint over the VDP1 VRAM bytes a command's texture occupies, so the
@@ -897,6 +901,13 @@ private:
 
     int              mSelectedCommand = -1;   // primary selection (detail panels)
     std::vector<int> mSelection;              // all selected command indices
+    SpritePreviewCache mSpritePreviews;
+    Vdp1MoveGesture   mSpriteMove;
+    Vdp1CommandBytes  mSpriteMoveOriginal {}, mSpriteMoveLast {};
+    uint64_t         mSpriteMoveSource = 0;
+    uint32_t         mSpriteMoveTable = 0;
+    int              mSpriteMoveCommand = -1, mSpriteMoveFrame = -1;
+    ImVec2           mSpriteMoveImagePos {}, mSpriteMoveImageSize {}, mSpriteMoveUnits {};
     bool             mbLayoutBuilt = false;   // default dock layout applied once
     bool             mForceRebuildLayout = false;  // "Reset Layout" -> rebuild the default
     // Set when an external panel (VDP Output / VRAM Map / References) changes the
@@ -909,6 +920,10 @@ private:
 
     // Scratch buffer for the Color RAM panel, decoded once per frame.
     std::vector<se_palette_entry> mCramColors;
+    // Palette selection and one-shot scroll/focus request from Palette Viewer.
+    uint32_t         mCramPaletteOffset = 0;
+    uint16_t         mCramPaletteCount = 0;
+    bool             mNavigateToCramPalette = false;
 
     // Per-layer viewer tabs. Owns its own textures, export folder and grid toggles;
     // App only hands it the context + render options each frame.

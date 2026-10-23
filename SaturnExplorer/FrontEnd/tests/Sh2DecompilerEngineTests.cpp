@@ -1089,17 +1089,18 @@ void TestRangeAlgebraRound11()
         OpBehaviorIntLeft shl; OpBehaviorIntRight shr; OpBehaviorIntSright sar; OpBehaviorEqual eq; OpBehaviorIntLess lt; OpBehaviorIntSless slt;
         OpBehaviorIntCarry carry; OpBehaviorIntScarry scarry; OpBehaviorIntSborrow sborrow; OpBehaviorIntDiv udiv; OpBehaviorIntSdiv sdiv;
         OpBehaviorIntRem urem; OpBehaviorIntSrem srem; OpBehaviorInt2Comp neg; OpBehaviorIntNegate nt; OpBehaviorIntSext sext;
-        typedef __int128 s128;
         long n = 0;
         for (int sz : { 1, 2, 4, 8 })
         {
             const uint64_t m = PbMask(sz);
-            auto sx = [&](uint64_t v) { return (s128)PbSigned(v, sz); };
+            auto sx = [&](uint64_t v) { return PbSigned(v, sz); };
             std::vector<uint64_t> ed = { 0, 1, 2, 3, 7, 8, 15, 16, 31, 32, 63, 64, 127, 128, 129, 255, 256, m, m - 1, m >> 1, (m >> 1) + 1, (m >> 1) - 1, 0x5555555555555555ull & m, 0xAAAAAAAAAAAAAAAAull & m };
             for (uint64_t& v : ed) v &= m;
             auto pair = [&](uint64_t a, uint64_t b) {
                 ++n;
-                const s128 lo = -((s128)1 << (8 * sz - 1)), hi = ((s128)1 << (8 * sz - 1)) - 1;
+                const uint64_t sign = uint64_t(1) << (8 * sz - 1);
+                const int64_t lo = PbSigned(sign, sz), hi = static_cast<int64_t>(sign - 1);
+                const int64_t sa = sx(a), sb = sx(b);
                 auto bad = [&](const char* nm) { fail(nm, std::to_string(sz) + " bytes " + hex(a) + " " + hex(b)); };
                 if (add.evaluateBinary(sz, sz, a, b) != ((a + b) & m)) bad("INT_ADD");
                 if (sub.evaluateBinary(sz, sz, a, b) != ((a - b) & m)) bad("INT_SUB");
@@ -1107,15 +1108,23 @@ void TestRangeAlgebraRound11()
                 if (andb.evaluateBinary(sz, sz, a, b) != (a & b) || orb.evaluateBinary(sz, sz, a, b) != (a | b) || xorb.evaluateBinary(sz, sz, a, b) != (a ^ b)) bad("bitwise");
                 if (eq.evaluateBinary(1, sz, a, b) != (uint64_t)(a == b) || lt.evaluateBinary(1, sz, a, b) != (uint64_t)(a < b)) bad("compare");
                 if (slt.evaluateBinary(1, sz, a, b) != (uint64_t)(sx(a) < sx(b))) bad("INT_SLESS");
-                if (carry.evaluateBinary(1, sz, a, b) != (uint64_t)(((unsigned __int128)a + b) > (unsigned __int128)m)) bad("INT_CARRY");
-                { const s128 s = sx(a) + sx(b); if (scarry.evaluateBinary(1, sz, a, b) != (uint64_t)(s < lo || s > hi)) bad("INT_SCARRY"); }
-                { const s128 s = sx(a) - sx(b); if (sborrow.evaluateBinary(1, sz, a, b) != (uint64_t)(s < lo || s > hi)) bad("INT_SBORROW"); }
+                // Compare against the remaining range instead of evaluating a sum
+                // or difference that can overflow. This oracle also works on MSVC,
+                // which has no __int128 type.
+                if (carry.evaluateBinary(1, sz, a, b) != (uint64_t)(a > m - b)) bad("INT_CARRY");
+                const bool addOverflow = (sb > 0 && sa > hi - sb) || (sb < 0 && sa < lo - sb);
+                const bool subOverflow = (sb < 0 && sa > hi + sb) || (sb > 0 && sa < lo + sb);
+                if (scarry.evaluateBinary(1, sz, a, b) != (uint64_t)addOverflow) bad("INT_SCARRY");
+                if (sborrow.evaluateBinary(1, sz, a, b) != (uint64_t)subOverflow) bad("INT_SBORROW");
                 if (b != 0)
                 {
                     if (udiv.evaluateBinary(sz, sz, a, b) != a / b || urem.evaluateBinary(sz, sz, a, b) != a % b) bad("INT_DIV/REM");
                     // INT64_MIN s/ -1 trapped in the host (A2-70, patch 0059): it is the value itself, and the remainder 0
                     {
-                        if (sdiv.evaluateBinary(sz, sz, a, b) != (uint64_t)((sx(a) / sx(b)) & (s128)m) || srem.evaluateBinary(sz, sz, a, b) != (uint64_t)((sx(a) % sx(b)) & (s128)m)) bad("INT_SDIV/SREM");
+                        const bool wraps = sa == lo && sb == -1;
+                        const uint64_t quotient = wraps ? a : static_cast<uint64_t>(sa / sb) & m;
+                        const uint64_t remainder = wraps ? 0 : static_cast<uint64_t>(sa % sb) & m;
+                        if (sdiv.evaluateBinary(sz, sz, a, b) != quotient || srem.evaluateBinary(sz, sz, a, b) != remainder) bad("INT_SDIV/SREM");
                     }
                 }
             };

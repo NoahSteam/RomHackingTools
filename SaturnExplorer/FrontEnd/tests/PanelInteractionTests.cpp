@@ -27,6 +27,7 @@ static inline int se_getpid() { return getpid(); }
 #include "imgui_internal.h"   // ImGuiTable::RowPosY1/2 -- the row rect being asserted on
 #include "ImGuiHarness.h"
 #include "PanelWidgets.h"
+#include "Vdp1SpriteMove.h"
 #include "Settings.h"         // the split height's persistence, round-tripped through an INI
 
 using namespace sfe;
@@ -713,6 +714,186 @@ void TestAppShortcutYieldsToTextInput()
     CHECK(!F6FiresWithPanelFocused([](ImGuiKeyChord k) { return AppShortcut(k); }, true));
 }
 
+void TestCommandRowKeyboardSelection()
+{
+    // Both VDP1 tables: plain read-only rows and framed rows with editable cells.
+    // Click first, then navigate far enough to exercise the table's list clipper.
+    for (bool framed : { false, true })
+    {
+        int selected = -1;
+        ImVec2 firstRow;
+        ImGuiHarness h([&] {
+            ImGui::SetNextWindowPos(ImVec2(0, 0));
+            ImGui::SetNextWindowSize(ImVec2(600, 250));
+            ImGui::Begin("Command rows", nullptr, ImGuiWindowFlags_NoSavedSettings);
+            if (ImGui::BeginTable("commands", 2, ImGuiTableFlags_ScrollY))
+            {
+                ImGuiListClipper clipper;
+                clipper.Begin(40);
+                while (clipper.Step())
+                    for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; ++row)
+                    {
+                        ImGui::TableNextRow();
+                        ImGui::TableNextColumn();
+                        char label[16];
+                        std::snprintf(label, sizeof label, "%d", row);
+                        if (RowSelectable(label, selected == row, framed,
+                                          ImGuiSelectableFlags_SelectOnNav))
+                            selected = row;
+                        if (row == 0)
+                            firstRow = (ImGui::GetItemRectMin() + ImGui::GetItemRectMax()) * 0.5f;
+                        ImGui::TableNextColumn();
+                        if (framed)
+                        {
+                            ImGui::PushID(row);
+                            int value = 0;
+                            ImGui::InputInt("##size", &value);
+                            ImGui::PopID();
+                        }
+                        else ImGui::TextUnformatted("texture");
+                    }
+                ImGui::EndTable();
+            }
+            ImGui::End();
+        });
+        ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+        h.Settle();
+        h.Hover(firstRow);
+        h.Click(firstRow);
+        CHECK(selected == 0);
+        auto key = [&](ImGuiKey k) {
+            ImGui::GetIO().AddKeyEvent(k, true);
+            h.Frame(ImVec2(1270, 710), false);
+            ImGui::GetIO().AddKeyEvent(k, false);
+            h.Settle();
+        };
+        for (int row = 1; row <= 20; ++row)
+        {
+            key(ImGuiKey_DownArrow);
+            CHECK(selected == row);
+        }
+        key(ImGuiKey_UpArrow);
+        CHECK(selected == 19);
+    }
+}
+
+void TestShiftMoveOverImage()
+{
+    Vdp1MoveGesture move;
+    bool selected = false;
+    ImVec2 center;
+    int dx = 0, dy = 0;
+    ImGuiHarness h([&] {
+        ImGui::SetNextWindowPos(ImVec2(0, 0));
+        ImGui::SetNextWindowSize(ImVec2(600, 400));
+        ImGui::Begin("VDP Output test", nullptr, ImGuiWindowFlags_NoSavedSettings);
+        ImGui::Image(static_cast<ImTextureID>(1), ImVec2(400, 300));
+        center = (ImGui::GetItemRectMin() + ImGui::GetItemRectMax()) * 0.5f;
+        ImGui::SetCursorScreenPos(ImGui::GetItemRectMin());
+        ImGui::InvisibleButton("##vdp-output-input", ImVec2(400, 300));
+        const auto& io = ImGui::GetIO();
+        const auto mouse = ImGui::GetMousePos();
+        bool start = false;
+        if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+        {
+            start = io.KeyShift && selected;
+            if (!start) selected = io.KeyShift ? !selected : true;
+        }
+        move.Update(io.KeyShift, io.MouseDown[0], selected && (move.active || start) && ImGui::IsItemHovered() &&
+            ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) &&
+            !io.WantTextInput && (!ImGui::IsAnyItemActive() || ImGui::IsItemActive()), mouse.x, mouse.y);
+        if (move.active)
+        {
+            dx = Vdp1MoveGesture::Delta(mouse.x, move.startX, 0.5f);
+            dy = Vdp1MoveGesture::Delta(mouse.y, move.startY, 1.0f);
+        }
+        ImGui::End();
+    });
+    h.Settle();
+    h.Hover(center);
+    h.Click(center);
+    CHECK(selected);
+    ImGui::GetIO().AddKeyEvent(ImGuiMod_Shift, true);
+    h.Frame(center, false);
+    CHECK(!move.active); // Shift alone never moves a sprite
+    h.Frame(center + ImVec2(24, -9), false);
+    CHECK(dx == 0 && dy == 0);
+    h.Frame(center, true);
+    CHECK(move.active);
+    CHECK(selected); // clicking again with Shift must not deselect the sprite
+    CHECK(dx == 0 && dy == 0); // no snap on mouse-down
+    h.Frame(center + ImVec2(24, -9), true);
+    CHECK(dx == 12 && dy == -9);
+    h.Frame(center + ImVec2(24, -9), false);
+    CHECK(!move.active);
+    CHECK(selected);
+    h.Frame(center + ImVec2(48, -18), false);
+    CHECK(dx == 12 && dy == -9); // mouse release leaves the final position intact
+    h.Frame(center, true);
+    CHECK(move.active);
+    CHECK(selected); // another drag can begin without releasing Shift
+    ImGui::GetIO().AddKeyEvent(ImGuiMod_Shift, false);
+    h.Frame(center, true);
+    CHECK(!move.active); // releasing Shift also ends the drag
+}
+
+void TestSpritePreviewRowLayoutAndSelection()
+{
+    for (bool editable : { false, true })
+    {
+        int selected = -1;
+        float heights[2] = {};
+        ImVec2 thumbnail;
+        ImGuiHarness h([&] {
+            ImGui::SetNextWindowPos(ImVec2(0, 0));
+            ImGui::SetNextWindowSize(ImVec2(600, 300));
+            ImGui::Begin("Preview table", nullptr, ImGuiWindowFlags_NoSavedSettings);
+            if (ImGui::BeginTable("commands", 3, ImGuiTableFlags_Borders))
+            {
+                ImGui::TableSetupColumn("Preview", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoResize, 60);
+                ImGui::TableSetupColumn("#");
+                ImGui::TableSetupColumn("Position");
+                ImGui::TableHeadersRow();
+                for (int row = 0; row < 2; ++row)
+                {
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    const ImVec2 pos = ImGui::GetCursorScreenPos();
+                    const float height = editable ? ImGui::GetFrameHeight() : ImGui::GetTextLineHeight();
+                    const float width = ImGui::GetContentRegionAvail().x;
+                    const char* id = row == 0 ? "##preview0" : "##preview1";
+                    if (RowSelectable(id, selected == row, editable, ImGuiSelectableFlags_SelectOnNav)) selected = row;
+                    const ImVec2 after = ImGui::GetCursorScreenPos();
+                    RowSpritePreview(static_cast<ImTextureID>(1), row == 0 ? 2048 : 8, row == 0 ? 1024 : 8,
+                                     pos, width, height);
+                    CHECK(ImGui::GetCursorScreenPos().y == after.y); // never grows the row
+                    if (row == 0) thumbnail = pos + ImVec2(width * 0.5f, height * 0.5f);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%d", row);
+                    ImGui::TableNextColumn();
+                    if (editable)
+                    {
+                        ImGui::PushID(row);
+                        int value = 0;
+                        ImGui::InputInt("##x", &value);
+                        ImGui::PopID();
+                    }
+                    else ImGui::TextUnformatted("(0,0)");
+                    const ImGuiTable* table = ImGui::GetCurrentTable();
+                    heights[row] = table->RowPosY2 - table->RowPosY1;
+                }
+                ImGui::EndTable();
+            }
+            ImGui::End();
+        });
+        h.Settle();
+        CHECK(heights[0] == heights[1]);
+        h.Hover(thumbnail);
+        h.Click(thumbnail);
+        CHECK(selected == 0);
+    }
+}
+
 void TestAppShortcutYieldsToModalDialog()
 {
     CHECK(!F6FiresWithPanelFocused([](ImGuiKeyChord k) { return AppShortcut(k); }, false, true));
@@ -738,6 +919,9 @@ int main()
     TestBottomDockFraction();
     TestNameDialogEnterAppliesTypedName();
     TestNameDialogEscapeCancels();
+    TestCommandRowKeyboardSelection();
+    TestShiftMoveOverImage();
+    TestSpritePreviewRowLayoutAndSelection();
     TestAppShortcutFiresWhilePanelHasFocus();
     TestDefaultShortcutRoutingMissesPanelFocus();
     TestAppShortcutYieldsToTextInput();

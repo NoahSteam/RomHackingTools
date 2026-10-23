@@ -1228,6 +1228,12 @@ void RenderRbg(const HardwareSnapshot& snap, const se_render_opts& opts, uint32_
     LayerWindows windows;
     windows.Begin(snap, rbg1 ? kWinLayerNbg0 : kWinLayerRbg0, applyWindows);
     const WindowConfig rotWindowConfig = ReadWindowConfig(snap, kWinLayerRotParam);
+    // Rotation screens always calculate 320/352 dots per field line. Hi-res
+    // duplicates each dot; double-density interlace weaves two fields with the
+    // same rotation accumulators (unlike the normal scroll screens).
+    const uint16_t tvmd = Reg(snap, kTVMD);
+    const int dotShift = (tvmd & 0x0002) ? 1 : 0;
+    const int lineShift = ((tvmd & 0x00C0) == 0x00C0) ? 1 : 0;
     const uint32_t mosaicH = sets[fixedSet].cfg.mosaicH;
 
     auto coeffAt = [&](const RotSet& s, int msx) -> uint32_t
@@ -1246,8 +1252,8 @@ void RenderRbg(const HardwareSnapshot& snap, const se_render_opts& opts, uint32_
             rotWindowLines[0] = ResolveWindowLine(rotWindowConfig, 0, vram, sy);
             rotWindowLines[1] = ResolveWindowLine(rotWindowConfig, 1, vram, sy);
         }
-        BeginRotLine(sets[fixedSet], sy);
-        if (perDot || rbg1 || rbg0AlsoOn) BeginRotLine(sets[1 - fixedSet], sy);
+        BeginRotLine(sets[fixedSet], sy >> lineShift);
+        if (perDot || rbg1 || rbg0AlsoOn) BeginRotLine(sets[1 - fixedSet], sy >> lineShift);
         // In mode 2 set B contributes only the coefficient sampled at the start of the
         // line; the per-dot walk is done in set A's table alone. RBG1 reads just that one.
         const uint32_t baseCoeffB =
@@ -1257,7 +1263,8 @@ void RenderRbg(const HardwareSnapshot& snap, const se_render_opts& opts, uint32_
         {
             const size_t pixelIndex = static_cast<size_t>(sy) * width + sx;
             // Horizontal mosaic snaps the sampled dot to its block's left edge.
-            const int msx = (mosaicH > 1) ? sx - (sx % static_cast<int>(mosaicH)) : sx;
+            const int rx = sx >> dotShift;
+            const int msx = (mosaicH > 1) ? rx - (rx % static_cast<int>(mosaicH)) : rx;
 
             // Choose the parameter set for this dot, and with it the coefficient.
             int ab = fixedSet;
@@ -1270,7 +1277,7 @@ void RenderRbg(const HardwareSnapshot& snap, const se_render_opts& opts, uint32_
             }
             else if (effRpmd == 3)
             {
-                ab = WindowMasksPixel(rotWindowConfig.control, rotWindowLines, sx) ? 1 : 0;
+                ab = WindowMasksPixel(rotWindowConfig.control, rotWindowLines, rx << dotShift) ? 1 : 0;
             }
             else if (effRpmd == 2 && sets[0].useCoeff)
             {
@@ -1288,7 +1295,7 @@ void RenderRbg(const HardwareSnapshot& snap, const se_render_opts& opts, uint32_
                 const RotSet& lcSet = (effRpmd == 2 || rbg1 || rbg0AlsoOn) ? sets[0] : sets[ab];
                 if (lcSet.lcCoeff)
                 {
-                    (*ex.lineOverride)[pixelIndex] = static_cast<uint8_t>((coeffAt(lcSet, sx) >> 24) & 0x7F);
+                    (*ex.lineOverride)[pixelIndex] = static_cast<uint8_t>((coeffAt(lcSet, rx) >> 24) & 0x7F);
                 }
             }
 

@@ -79,6 +79,11 @@ bool PointInQuad(const V corners[4], float px, float py)
 // The per-primitive draw state threaded into the rasterizer: draw-mode effects, an
 // optional solid fill color (null = textured), and an optional user-clip rect.
 struct EndCodeRows;
+struct PreviewSampling
+{
+    float x0, y0, stepX, stepY;
+    bool averageMesh;
+};
 
 struct DrawAttribs
 {
@@ -90,6 +95,7 @@ struct DrawAttribs
     // own colour word (CMDCOLR) stands in -- which is what the hardware writes to the framebuffer
     // for those pixels.
     uint16_t solidWord = 0;
+    const PreviewSampling* sampling = nullptr;
 };
 
 // End-code handling for one textured primitive (CMDPMOD ECD clear).
@@ -278,10 +284,13 @@ void RasterTriangle(const RVert& p0, const RVert& p1, const RVert& p2,
     }
     const float invArea = 1.0f / area;
 
-    int minX = static_cast<int>(std::floor(std::min({ p0.x, p1.x, p2.x })));
-    int maxX = static_cast<int>(std::ceil (std::max({ p0.x, p1.x, p2.x })));
-    int minY = static_cast<int>(std::floor(std::min({ p0.y, p1.y, p2.y })));
-    int maxY = static_cast<int>(std::ceil (std::max({ p0.y, p1.y, p2.y })));
+    const PreviewSampling* grid = da.sampling;
+    auto gridX = [&](float x) { return grid ? (x - grid->x0) / grid->stepX : x; };
+    auto gridY = [&](float y) { return grid ? (y - grid->y0) / grid->stepY : y; };
+    int minX = static_cast<int>(std::floor(gridX(std::min({ p0.x, p1.x, p2.x }))));
+    int maxX = static_cast<int>(std::ceil (gridX(std::max({ p0.x, p1.x, p2.x }))));
+    int minY = static_cast<int>(std::floor(gridY(std::min({ p0.y, p1.y, p2.y }))));
+    int maxY = static_cast<int>(std::ceil (gridY(std::max({ p0.y, p1.y, p2.y }))));
     minX = ClampInt(minX, 0, width - 1);
     maxX = ClampInt(maxX, 0, width - 1);
     minY = ClampInt(minY, 0, height - 1);
@@ -294,8 +303,10 @@ void RasterTriangle(const RVert& p0, const RVert& p1, const RVert& p2,
     {
         for (int x = minX; x <= maxX; ++x)
         {
-            const float px = x + 0.5f;
-            const float py = y + 0.5f;
+            const float px = grid ? grid->x0 + (x + 0.5f) * grid->stepX : x + 0.5f;
+            const float py = grid ? grid->y0 + (y + 0.5f) * grid->stepY : y + 0.5f;
+            const int screenX = grid ? static_cast<int>(std::floor(px)) : x;
+            const int screenY = grid ? static_cast<int>(std::floor(py)) : y;
             const float w0 = Edge(p1.x, p1.y, p2.x, p2.y, px, py) * invArea;
             const float w1 = Edge(p2.x, p2.y, p0.x, p0.y, px, py) * invArea;
             const float w2 = Edge(p0.x, p0.y, p1.x, p1.y, px, py) * invArea;
@@ -348,11 +359,11 @@ void RasterTriangle(const RVert& p0, const RVert& p1, const RVert& p2,
 
             // Mesh: checkerboard stipple — drop every other screen pixel. Skips the
             // depth write too, so a meshed sprite doesn't occlude what shows through it.
-            if (da.fx.mesh && ((x + y) & 1))
+            if (da.fx.mesh && !(grid && grid->averageMesh) && ((screenX + screenY) & 1))
             {
                 continue;
             }
-            if (ClipRejects(da.clip, x, y))
+            if (ClipRejects(da.clip, screenX, screenY))
             {
                 continue;
             }
@@ -604,6 +615,25 @@ uint16_t AverageWord(uint16_t a, uint16_t b)
                                   ((static_cast<uint32_t>(a) ^ b) & 0x8421)) >> 1);
 }
 
+void WriteFramebufferPixel(FbPixel& d, const DrawFx& fx, uint16_t word)
+{
+    if (fx.msbOn)
+    {
+        d.word = static_cast<uint16_t>(d.word | 0x8000);
+        d.written = true;
+        return;
+    }
+    if (fx.effect == 1)
+    {
+        if (d.written && (d.word & 0x8000)) d.word = HalveWord(d.word);
+        return;
+    }
+    if (fx.effect == 2) word = HalveWord(word);
+    else if (fx.effect == 3 && d.written && (d.word & 0x8000)) word = AverageWord(word, d.word);
+    d.word = word;
+    d.written = true;
+}
+
 }  // namespace
 
 SpritePriorityTable::Pixel SpritePriorityTable::Resolve(uint16_t word,
@@ -726,6 +756,115 @@ SpritePriorityTable::Pixel SpritePriorityTable::Resolve(uint16_t word,
     return out;
 }
 
+size_t Vdp1Rasterizer::RenderSpritePreview(const Vdp1Scene& scene, size_t sprite,
+    const std::vector<uint8_t>& vram, const std::vector<uint8_t>& cram, se_cram_mode cramMode,
+    const SpritePriorityTable& prios, const MixState& mix, uint16_t colorFlags,
+    int x0, int y0, int nativeW, int nativeH, uint32_t width, uint32_t height,
+    std::vector<uint8_t>& pixels)
+{
+    pixels.assign(static_cast<size_t>(width) * height * 4, 0);
+    const auto& s = scene.sprites[sprite];
+    const auto& r = scene.render[sprite];
+    if (r.spdHidden) return 0;
+    const int fbW = scene.vdp1Width > 0 ? scene.vdp1Width : scene.screenWidth;
+    const int fbH = scene.vdp1Height > 0 ? scene.vdp1Height : scene.screenHeight;
+    const ClipRect* clip = r.clip.enable ? &r.clip : nullptr;
+    RVert v[4];
+    for (int k = 0; k < 4; ++k) v[k] = { s.corners[k].x, s.corners[k].y, 0 };
+    auto inFrame = [&](int x, int y) {
+        return x >= 0 && y >= 0 && x < fbW && y < fbH && x <= r.sysClipX1 && y <= r.sysClipY1;
+    };
+    bool haveLast = false;
+    uint16_t lastWord = 0;
+    Rgba lastColor {};
+    auto color = [&](const DrawFx& fx, uint16_t word) -> Rgba {
+        FbPixel pixel;
+        WriteFramebufferPixel(pixel, fx, word);
+        if (!pixel.written) return { 0, 0, 0, 0 };
+        if (!haveLast || lastWord != pixel.word)
+        {
+            const auto p = prios.Resolve(pixel.word, cram, cramMode);
+            uint8_t rgb[3] = { p.color.r, p.color.g, p.color.b };
+            ApplyDisplayColor(rgb, colorFlags, mix, p.shadowSelf);
+            lastColor = { rgb[0], rgb[1], rgb[2], uint8_t(p.visible && !p.shadowMarker ? p.color.a : 0) };
+            lastWord = pixel.word; haveLast = true;
+        }
+        return lastColor;
+    };
+    struct Accum { float r = 0, g = 0, b = 0, a = 0; };
+    std::vector<Accum> filtered(static_cast<size_t>(width) * height);
+    auto accumulate = [&](size_t index, const Rgba& c, float weight) {
+        const float alpha = c.a * (weight / 255.0f);
+        auto& a = filtered[index];
+        a.r += c.r * alpha; a.g += c.g * alpha; a.b += c.b * alpha; a.a += alpha;
+    };
+    size_t work = 0;
+    if (r.primKind)
+    {
+        // Lines have at most a few thousand native pixels, not nativeW*nativeH.
+        // Area-splat those pixels so thin edges retain fractional coverage.
+        auto sink = [&](size_t index, uint8_t, uint8_t, uint8_t, const DrawFx& fx, uint16_t word) {
+            ++work;
+            const int nx = static_cast<int>(index % fbW), ny = static_cast<int>(index / fbW);
+            if (!inFrame(nx, ny)) return;
+            const Rgba c = color(fx, word);
+            const float left = float(nx - x0) * width / nativeW, right = float(nx - x0 + 1) * width / nativeW;
+            const float top = float(ny - y0) * height / nativeH, bottom = float(ny - y0 + 1) * height / nativeH;
+            for (int y = std::max(0, int(std::floor(top))); y < std::min(int(height), int(std::ceil(bottom))); ++y)
+                for (int x = std::max(0, int(std::floor(left))); x < std::min(int(width), int(std::ceil(right))); ++x)
+                    accumulate(static_cast<size_t>(y) * width + x, c,
+                        (std::min(right, float(x + 1)) - std::max(left, float(x))) *
+                        (std::min(bottom, float(y + 1)) - std::max(top, float(y))));
+        };
+        DrawEdges(fbW, fbH, v, r.primKind, Rgb555ToRgba(r.color), r.color, r.fx, r.gouraud, clip, nullptr, sink);
+    }
+    else
+    {
+        constexpr int sub = 4;
+        const int gridW = static_cast<int>(width) * sub, gridH = static_cast<int>(height) * sub;
+        PreviewSampling grid { float(x0), float(y0), float(nativeW) / gridW, float(nativeH) / gridH, false };
+        // Below the native mesh period its exact parity is sampled; above it the
+        // checkerboard contributes 50% coverage instead of aliasing to solid/empty.
+        grid.averageMesh = r.fx.mesh && (grid.stepX >= 2 || grid.stepY >= 2);
+        std::vector<Rgba> samples(static_cast<size_t>(gridW) * gridH, Rgba{ 0, 0, 0, 0 });
+        auto sink = [&](size_t index, uint8_t, uint8_t, uint8_t, const DrawFx& fx, uint16_t word) {
+            ++work;
+            const int nx = int(std::floor(grid.x0 + (index % gridW + 0.5f) * grid.stepX));
+            const int ny = int(std::floor(grid.y0 + (index / gridW + 0.5f) * grid.stepY));
+            if (!inFrame(nx, ny)) return;
+            Rgba c = color(fx, word);
+            if (grid.averageMesh) c.a = static_cast<uint8_t>((unsigned(c.a) + 1) / 2);
+            samples[index] = c;
+        };
+        const Rgba solid = r.solid ? Rgb555ToRgba(r.color) : Rgba{};
+        DrawAttribs da { r.fx, r.solid ? &solid : nullptr, clip, nullptr, r.color, &grid };
+        EndCodeRows endCode;
+        if (!r.solid && r.endCodeEnabled)
+        {
+            endCode.vram = &vram; endCode.mode = s.texture.color_mode; endCode.addr = s.texture.vram_address;
+            endCode.width = s.texture.width; endCode.flipX = s.flip_x != 0;
+            endCode.stop.assign(s.texture.height, -1); da.endCode = &endCode;
+        }
+        ExpandQuadInclusive(v);
+        RasterQuad(v, s.uv, s.texture, s.transparency == SE_TRANSP_NONE, vram, cram, cramMode,
+                   gridW, gridH, nullptr, r.gouraud, da, sink);
+        for (int y = 0; y < gridH; ++y)
+            for (int x = 0; x < gridW; ++x)
+                accumulate(static_cast<size_t>(y / sub) * width + x / sub,
+                           samples[static_cast<size_t>(y) * gridW + x], 1.0f / (sub * sub));
+    }
+    for (size_t i = 0; i < filtered.size(); ++i)
+    {
+        const auto& a = filtered[i];
+        if (a.a <= 0) continue;
+        pixels[i * 4] = static_cast<uint8_t>(std::lround(a.r / a.a));
+        pixels[i * 4 + 1] = static_cast<uint8_t>(std::lround(a.g / a.a));
+        pixels[i * 4 + 2] = static_cast<uint8_t>(std::lround(a.b / a.a));
+        pixels[i * 4 + 3] = static_cast<uint8_t>(std::lround(std::min(1.0f, a.a) * 255));
+    }
+    return work;
+}
+
 bool Vdp1Rasterizer::BuildSpriteLayer(const Vdp1Scene& scene, const std::vector<uint8_t>& vram,
                                       const std::vector<uint8_t>& cram, se_cram_mode cramMode,
                                       const SpritePriorityTable& prios, std::vector<SpritePixel>& layer)
@@ -776,34 +915,7 @@ bool Vdp1Rasterizer::BuildSpriteLayer(const Vdp1Scene& scene, const std::vector<
                 return;
             }
         }
-        FbPixel& d = fb[idx];
-        if (fx.msbOn)
-        {
-            // MSB-on keeps the pixel under it and only sets its MSB (and writes a bare MSB
-            // where nothing was drawn). It is what marks a sprite for VDP2's MSB shadow; it
-            // overrides the colour-calculation mode and draws no colour of its own.
-            d.word = static_cast<uint16_t>(d.word | 0x8000);
-            d.written = true;
-            return;
-        }
-        if (fx.effect == 1)   // shadow
-        {
-            if (d.written && (d.word & 0x8000))
-            {
-                d.word = HalveWord(d.word);
-            }
-            return;
-        }
-        if (fx.effect == 2)   // half-luminance
-        {
-            word = HalveWord(word);
-        }
-        else if (fx.effect == 3 && d.written && (d.word & 0x8000))   // half-transparency
-        {
-            word = AverageWord(word, d.word);
-        }
-        d.word = word;
-        d.written = true;
+        WriteFramebufferPixel(fb[idx], fx, word);
     };
 
     for (size_t i = 0; i < scene.sprites.size(); ++i)

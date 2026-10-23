@@ -612,6 +612,8 @@ void App::CloseData(bool cancelAutoConnect)
     mCallStackDirty = true;
     mSelectedCommand = -1;
     mSelection.clear();
+    mCramPaletteCount = 0;
+    mNavigateToCramPalette = false;
     ResetSessionDebugState();
     // The frame texture is freed lazily (on next size change) or with the
     // platform's device at shutdown; mark it stale so a new dump recreates it.
@@ -1876,7 +1878,7 @@ void App::BuildUI(IPlatform& platform)
     if (mPanels.vdp2Table)       DrawVdp2Table();
     if (mPanels.colorRam)        DrawColorRam();
     if (mPanels.registers)       DrawRegisters();
-    if (mPanels.commandList)     DrawCommandList();
+    if (mPanels.commandList)     DrawCommandList(platform);
     if (mPanels.textureViewer)   DrawTextureViewer(platform);
     if (mPanels.paletteViewer)   DrawPaletteViewer();
     if (mPanels.references)      DrawReferences();
@@ -5201,6 +5203,10 @@ void App::DrawVdpOutput(IPlatform& platform)
             const float scaleY = (mFrameHeight > 0) ? fit.y / mFrameHeight : 1.0f;
             ImGui::SetCursorScreenPos(imgPos);
             ImGui::Image(mFrameTexture, fit);
+            // Own mouse presses over the image so a drag moves the sprite rather
+            // than treating the image as empty space and moving a floating panel.
+            ImGui::SetCursorScreenPos(imgPos);
+            ImGui::InvisibleButton("##vdp-output-input", fit);
 
             ImDrawList* dl = ImGui::GetWindowDrawList();
 
@@ -5209,9 +5215,11 @@ void App::DrawVdpOutput(IPlatform& platform)
             std::snprintf(res, sizeof(res), "%dx%d", mFrameWidth, mFrameHeight);
             ImageCornerLabel(imgPos, res);
 
+            const ImVec2 spriteSpace = Vdp1CoordinateSize();
             auto toScreen = [&](const se_vec2& c)
             {
-                return ImVec2(imgPos.x + c.x * scaleX, imgPos.y + c.y * scaleY);
+                return ImVec2(imgPos.x + c.x * fit.x / spriteSpace.x,
+                              imgPos.y + c.y * fit.y / spriteSpace.y);
             };
 
             // Only walk the sprite list when an overlay actually needs it.
@@ -5268,6 +5276,7 @@ void App::DrawVdpOutput(IPlatform& platform)
                 }
             }
 
+            bool startSpriteDrag = false;
             if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
             {
                 const ImVec2 mouse = ImGui::GetMousePos();
@@ -5276,10 +5285,19 @@ void App::DrawVdpOutput(IPlatform& platform)
                 size_t hitCommand = 0;
                 if (se_hit_test(mContext, vx, vy, &hitCommand) == SE_OK)
                 {
-                    SelectCommand(static_cast<int>(hitCommand), ImGui::GetIO().KeyShift);
+                    startSpriteDrag = ImGui::GetIO().KeyShift && IsSelected(static_cast<int>(hitCommand));
+                    if (startSpriteDrag)
+                        mSelectedCommand = static_cast<int>(hitCommand);
+                    else
+                        SelectCommand(static_cast<int>(hitCommand), ImGui::GetIO().KeyShift);
                     RevealSelectionInTables();
                 }
             }
+            MoveSelectedSprite(imgPos, fit, startSpriteDrag);
+            if (mShowTooltips && mSelectedCommand >= 0 &&
+                ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip))
+                ImGui::SetTooltip("Hold Shift and left-drag a selected sprite to move it.\n"
+                                  "Release the mouse button or Shift to leave it in place.");
         }
 
         // Transport bar pinned to the bottom of the view: prev / play-pause / scrub / next.
@@ -5292,6 +5310,93 @@ void App::DrawVdpOutput(IPlatform& platform)
         }
     }
     ImGui::End();
+}
+
+void App::MoveSelectedSprite(ImVec2 imagePos, ImVec2 imageSize, bool startAllowed)
+{
+    const ImGuiIO& io = ImGui::GetIO();
+    const ImVec2 mouse = ImGui::GetMousePos();
+    const int frame = ImGui::GetFrameCount();
+    if (mSpriteMoveFrame != frame - 1)
+    {
+        mSpriteMove.active = false;
+        mSpriteMove.leftWasDown = io.MouseDown[0]; // don't resume a hidden gesture
+    }
+    mSpriteMoveFrame = frame;
+    se_command command {};
+    const bool haveCommand = mSelectedCommand >= 0 &&
+        se_get_command(mContext, static_cast<size_t>(mSelectedCommand), &command) == SE_OK;
+    bool eligible = haveCommand && (mSpriteMove.active || startAllowed) && ImGui::IsItemHovered() &&
+        ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) &&
+        !io.WantTextInput && (!ImGui::IsAnyItemActive() || ImGui::IsItemActive()) &&
+        !io.MouseDown[1] && !io.MouseDown[2] &&
+        !ImGui::IsKeyPressed(ImGuiKey_Escape) && imageSize.x > 0 && imageSize.y > 0 &&
+        mMemBackend.CanWrite(kVdp1VramBase + command.table_address);
+    Vdp1CommandBytes current {};
+    if (eligible)
+        eligible = se_read_vram(mContext, SE_VRAM_KIND_VDP1_VRAM, command.table_address,
+                                current.data(), current.size()) == current.size() &&
+                   Vdp1MoveAxes(current) != 0;
+    if (mSpriteMove.active)
+    {
+        // A source/frame swap, outside edit or changed command must never redirect
+        // the in-flight edit to whatever happens to occupy the old row/address.
+        eligible = eligible && mSpriteMoveSource == mMemBackend.SourceId() &&
+            mSpriteMoveCommand == mSelectedCommand && mSpriteMoveTable == command.table_address &&
+            current == mSpriteMoveLast && imagePos.x == mSpriteMoveImagePos.x &&
+            imagePos.y == mSpriteMoveImagePos.y && imageSize.x == mSpriteMoveImageSize.x &&
+            imageSize.y == mSpriteMoveImageSize.y;
+    }
+    if (mSpriteMove.Update(io.KeyShift, io.MouseDown[0], eligible, mouse.x, mouse.y))
+    {
+        mSpriteMoveSource = mMemBackend.SourceId();
+        mSpriteMoveCommand = mSelectedCommand;
+        mSpriteMoveTable = command.table_address;
+        mSpriteMoveOriginal = mSpriteMoveLast = current;
+        mSpriteMoveImagePos = imagePos;
+        mSpriteMoveImageSize = imageSize;
+        const ImVec2 space = Vdp1CoordinateSize();
+        mSpriteMoveUnits = ImVec2(space.x / imageSize.x, space.y / imageSize.y);
+    }
+    if (!mSpriteMove.active) return;
+    ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
+    const int dx = Vdp1MoveGesture::Delta(mouse.x, mSpriteMove.startX, mSpriteMoveUnits.x);
+    const int dy = Vdp1MoveGesture::Delta(mouse.y, mSpriteMove.startY, mSpriteMoveUnits.y);
+    const Vdp1CommandBytes moved = MoveVdp1Command(mSpriteMoveOriginal, dx, dy);
+    if (moved == mSpriteMoveLast) return;
+    // Submit the coordinate block together, preserving unused words and everything
+    // outside the block. The backend re-derives the view and forwards live pokes.
+    constexpr size_t offset = 0x0C, size = 0x10;
+    const uint32_t address = kVdp1VramBase + mSpriteMoveTable + offset;
+    if (mMemBackend.WriteMemory(address, moved.data() + offset, size) != size)
+    {
+        mSpriteMove.active = false;
+        mLog.Warn("Sprite move was not fully written. " + mMemBackend.WriteRefusal(address));
+        return;
+    }
+    mSpriteMoveLast = moved;
+}
+
+ImVec2 App::Vdp1CoordinateSize() const
+{
+    // Match the core's framebuffer-to-display conversion for movement and
+    // selection overlays. Hi-res doubles columns at scan-out; exclusive modes
+    // double 240 rows to 480. Normal interlace uses the displayed line count.
+    int width = 320;
+    for (size_t i = 0; i < se_command_count(mContext); ++i)
+    {
+        se_command clip {};
+        if (se_get_command(mContext, i, &clip) != SE_OK ||
+            clip.type != SE_CMD_SYSTEM_CLIP || clip.status != SE_CMDSTAT_NORMAL) continue;
+        uint8_t edges[4] = {};
+        if (se_read_vram(mContext, SE_VRAM_KIND_VDP1_VRAM, clip.table_address + 0x14,
+                         edges, sizeof edges) != sizeof edges) continue;
+        const int x = ((edges[0] << 8) | edges[1]) & 0x1FFF;
+        const int y = ((edges[2] << 8) | edges[3]) & 0x1FFF;
+        if (x > 0 && y > 0) width = x + 1;
+    }
+    const bool exclusive = (se_get_vdp2_register(mContext, 0) & 4) != 0;
+    return ImVec2(static_cast<float>(width), static_cast<float>(exclusive ? 240 : mFrameHeight));
 }
 
 // The per-layer viewer tabs. App owns nothing of theirs beyond the visibility flags —
@@ -5446,8 +5551,9 @@ void App::DrawWorldView(IPlatform& platform)
     ImGui::End();
 }
 
-void App::DrawCommandList()
+void App::DrawCommandList(IPlatform& platform)
 {
+    mSpritePreviews.BeginFrame(platform, static_cast<uint64_t>(ImGui::GetFrameCount()));
     if (ImGui::Begin("VDP1 Command List"))
     {
         if (!mbHasData)
@@ -5461,9 +5567,11 @@ void App::DrawCommandList()
 
             const ImGuiTableFlags flags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
                                           ImGuiTableFlags_ScrollY | ImGuiTableFlags_Resizable;
-            if (ImGui::BeginTable("commands", 7, flags))
+            if (ImGui::BeginTable("commands", 8, flags))
             {
                 ImGui::TableSetupScrollFreeze(0, 1);
+                ImGui::TableSetupColumn("Preview", ImGuiTableColumnFlags_WidthFixed |
+                    ImGuiTableColumnFlags_NoResize, 60.0f);
                 ImGui::TableSetupColumn("#");
                 ImGui::TableSetupColumn("Type");
                 ImGui::TableSetupColumn("Size");
@@ -5503,12 +5611,16 @@ void App::DrawCommandList()
                         ImGui::TableNextRow();
                         ImGui::TableNextColumn();
                         char label[16];
-                        std::snprintf(label, sizeof(label), "%d", row);
+                        std::snprintf(label, sizeof(label), "##preview%d", row);
+                        const ImVec2 previewPos = ImGui::GetCursorScreenPos();
+                        const float previewWidth = ImGui::GetContentRegionAvail().x;
+                        const float previewHeight = editable ? ImGui::GetFrameHeight() : ImGui::GetTextLineHeight();
                         // 'editable' here means framed: the size/position cells hold edit
                         // boxes. RowSelectable handles what that implies for the row --
                         // AllowOverlap so those boxes are reachable, the frame height, and
                         // the label's vertical centring. See PanelWidgets.h.
-                        if (RowSelectable(label, IsSelected(row), editable))
+                        if (RowSelectable(label, IsSelected(row), editable,
+                                          ImGuiSelectableFlags_SelectOnNav))
                         {
                             SelectCommand(row, ImGui::GetIO().KeyShift);
                             mScrollVdp1TableToSelection = true;   // reveal in the VDP1 Table
@@ -5526,6 +5638,14 @@ void App::DrawCommandList()
                         {
                             ImGui::SetScrollHereY(0.5f);
                         }
+                        // Draw directly into the selectable's existing row: even a
+                        // huge sprite cannot change its height or clipper spacing.
+                        if (const auto* preview = mSpritePreviews.Get(mContext, static_cast<size_t>(row), platform))
+                            RowSpritePreview(preview->texture, preview->width, preview->height,
+                                             previewPos, previewWidth, previewHeight);
+                        ImGui::TableNextColumn();
+                        if (editable) ImGui::AlignTextToFramePadding();
+                        ImGui::Text("%d", row);
                         ImGui::TableNextColumn();
                         if (editable) ImGui::AlignTextToFramePadding();
                         ImGui::TextUnformatted(CommandTypeName(cmd.type));
@@ -8018,6 +8138,8 @@ void App::AdoptNewEmulatorInstance()
     mCallStackDirty = true;
     mSelectedCommand = -1;           // indexes into the old frame's VDP1 command list
     mSelection.clear();
+    mCramPaletteCount = 0;
+    mNavigateToCramPalette = false;
     mStepHalt.ResetForNewEmulator();  // no halt is in flight on a process that just started,
                                      // and it holds none of our breakpoints
 
@@ -9414,7 +9536,7 @@ se_result App::PaletteOf(const se_command& cmd, se_palette* pal)
 }
 
 // Draw a grid of palette swatches with per-swatch hover (index / raw / RGB), and a
-// double-click that reveals the palette's bytes in the Memory panel.
+// double-click that reveals the palette's bytes in Memory and, for bank palettes, Color RAM.
 // Swatch size adapts so a 256-colour bank still fits.
 void App::DrawPaletteSwatches(const se_palette& pal, uint32_t baseAddress)
 {
@@ -9455,8 +9577,10 @@ void App::DrawPaletteSwatches(const se_palette& pal, uint32_t baseAddress)
             ImGui::Text("#%d   raw 0x%04X", idx, e.raw);
             ImGui::Text("RGB  %d, %d, %d", e.r, e.g, e.b);
             if (baseAddress != 0)
-                ImGui::Text("Double-click to view this palette at 0x%08X in the Memory panel.",
-                            baseAddress);
+                ImGui::Text("Double-click to view this palette at 0x%08X in %s.",
+                            baseAddress,
+                            baseAddress >= kCramBase && baseAddress < kCramBase + kCramSize
+                                ? "Memory and Color RAM" : "the Memory panel");
             ImGui::EndTooltip();
         }
 
@@ -9468,6 +9592,13 @@ void App::DrawPaletteSwatches(const se_palette& pal, uint32_t baseAddress)
         {
             mHexEditor.GoTo(baseAddress);
             mPanels.hexEditor = true;
+            if (baseAddress >= kCramBase && baseAddress < kCramBase + kCramSize)
+            {
+                mCramPaletteOffset = baseAddress - kCramBase;
+                mCramPaletteCount = pal.count;
+                mNavigateToCramPalette = true;
+                mPanels.colorRam = true;
+            }
         }
     }
 }
@@ -10647,6 +10778,9 @@ void App::DrawSound(IPlatform& platform)
 
 void App::DrawColorRam()
 {
+    // Palette Viewer is submitted after this window, so apply its request next frame.
+    // Focusing before Begin also surfaces an inactive dock tab.
+    if (mNavigateToCramPalette) ImGui::SetNextWindowFocus();
     if (ImGui::Begin("Color RAM"))
     {
         if (!mbHasData)
@@ -10661,11 +10795,25 @@ void App::DrawColorRam()
                                                  mCramColors.data());
             const se_cram_mode mode = se_get_cram_mode(mContext);
             const bool rgb888 = (mode == SE_CRAM_RGB888_1024);
+            const uint32_t entryBytes = rgb888 ? 4u : 2u;
             ImGui::Text("%zu CRAM entries  (%s)", n,
                         rgb888 ? "RGB888" : "RGB555");
             const int cols = 32;
             const float sw = 12.0f;
             ImDrawList* dl = ImGui::GetWindowDrawList();
+            const size_t paletteStart = mCramPaletteOffset / entryBytes;
+            const bool havePalette = mCramPaletteCount != 0 && paletteStart < n;
+            if (mNavigateToCramPalette)
+            {
+                if (havePalette)
+                    // SetScrollFromPosY expects a position relative to the window,
+                    // including the current scroll displacement. GetCursorPosY()
+                    // removes that displacement, causing repeated jumps to overshoot.
+                    // ImGui clamps to the bottom if the row cannot reach the top.
+                    ImGui::SetScrollFromPosY(ImGui::GetCursorScreenPos().y - ImGui::GetWindowPos().y +
+                        static_cast<float>(paletteStart / cols) * sw, 0.0f);
+                mNavigateToCramPalette = false;
+            }
             const ImVec2 origin = ImGui::GetCursorScreenPos();
             for (size_t i = 0; i < n; ++i)
             {
@@ -10675,6 +10823,9 @@ void App::DrawColorRam()
                 const ImVec2 b(a.x + sw - 1.0f, a.y + sw - 1.0f);
                 const se_palette_entry& e = mCramColors[i];
                 dl->AddRectFilled(a, b, IM_COL32(e.r, e.g, e.b, 255));
+                // Match the decoder's wrapping when a palette crosses the end of CRAM.
+                if (havePalette && (i + n - paletteStart) % n < mCramPaletteCount)
+                    dl->AddRect(a, b, ui::SelectionOutline());
             }
             const int rows = (static_cast<int>(n) + cols - 1) / cols;
             ImGui::InvisibleButton("cram", ImVec2(cols * sw, rows * sw));
@@ -10700,6 +10851,8 @@ void App::DrawColorRam()
                         ImGui::Text("CRAM #%d   raw 0x%04X", idx, e.raw);
                     }
                     ImGui::Text("RGB  %d, %d, %d", e.r, e.g, e.b);
+                    ImGui::Text("Address  0x%08X", kCramBase +
+                                static_cast<uint32_t>(idx) * entryBytes);
                     ImGui::EndTooltip();
                 }
             }
@@ -10792,8 +10945,8 @@ void App::DrawVdp1Table()
                         ImGui::TableNextColumn();
                         char rowlabel[32];
                         std::snprintf(rowlabel, sizeof(rowlabel), "%d##vt%d", row, row);
-                        if (ImGui::Selectable(rowlabel, IsSelected(row),
-                                              RowSelectableFlags(false)))
+                        if (RowSelectable(rowlabel, IsSelected(row), false,
+                                          ImGuiSelectableFlags_SelectOnNav))
                         {
                             SelectCommand(row, ImGui::GetIO().KeyShift);
                             mScrollCommandListToSelection = true;   // reveal in the Command List
