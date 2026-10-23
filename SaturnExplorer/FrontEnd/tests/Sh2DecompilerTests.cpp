@@ -12142,6 +12142,26 @@ void TestArea3Round12Fix()
                             { 0x40, { 0x000B, 0x1F41 } } }, { 0x40 });
         CHECK(!e.callees.at(0x40).prototype.known && !e.entry.prototype.known && reads(e, 1));   // g writes its caller's frame (A3-21): withheld
     }
+    // The store is the function's own, after the escaping call, through a pointer it did not compute (loaded, returned by a call it handed
+    // nothing, or an INDIRECT at the call), and the local is written again in between, so the call's own guard no longer stands for it:
+    // only patch 0063's unknown-pointer rule (FrameEscape::markUnknownStores) guards the store (without it each prints `return 5;`, the run 7).
+    {
+        const std::vector<uint16_t> keep = { 0xD101, 0x2142, 0x000B, 0x0009, 0x0600, 0xF100 };
+        const std::vector<uint16_t> load = { 0x4F22, 0x7FEC, 0x64F3, 0xD107, 0x410B, 0x0009, 0xE305, 0x2F32, 0xD105, 0x6112, 0xE207, 0x2122, 0x60F2, 0x7F14, 0x4F26, 0x000B, 0x0009, 0x0009, 0x0600, 0x9040, 0x0600, 0xF100 };
+        const Out a = run("A3-89 load: a lent g keeps the frame address in a global; the caller writes the local, loads the global and stores through it",
+                          { { 0x00, load }, { 0x40, keep } }, { 0x40 });
+        CHECK(a.callees.at(0x40).prototype.known && reads(a, 7));
+        const Out b = run("A3-89 load, g not lent", { { 0x00, load }, { 0x40, keep } }, {});
+        CHECK(!b.entry.prototype.known && reads(b, 7));
+        const Out r = run("A3-89 ret: a lent h, handed nothing, returns the global g kept; the caller writes the local and stores through r0",
+                          { { 0x00, { 0x4F22, 0x7FEC, 0x64F3, 0xD107, 0x410B, 0x0009, 0xD106, 0x410B, 0x0009, 0xE305, 0x2F32, 0xE207, 0x2022, 0x60F2, 0x7F14, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9040, 0x0600, 0x9080 } },
+                            { 0x40, keep }, { 0x80, { 0xD101, 0x000B, 0x6012, 0x0009, 0x0600, 0xF100 } } }, { 0x80, 0x40 });
+        CHECK(r.callees.at(0x80).prototype.known && reads(r, 7));
+        const Out n = run("A3-89 r9: a lent g moves the frame address to r9; the caller writes the local and stores through r9",
+                          { { 0x00, { 0x4F22, 0x7FEC, 0x64F3, 0xD106, 0x410B, 0x0009, 0xE305, 0x2F32, 0xE207, 0x2922, 0x60F2, 0x7F14, 0x4F26, 0x000B, 0x0009, 0x0009, 0x0600, 0x9040 } },
+                            { 0x40, { 0x000B, 0x6943 } } }, { 0x40 });
+        CHECK(n.callees.at(0x40).prototype.known && reads(n, 7));
+    }
 
     // ---- A3-90: the probe's walk carries storesBelow and what a callee is handed up a chain of unlent callees ----
     const std::vector<uint16_t> fillR4 = { 0x6133, 0x2416, 0x4110, 0x8BFC, 0x000B, 0x0009 };   // reads r3: unlent
