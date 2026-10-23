@@ -1174,9 +1174,11 @@ private:
             // handed: an exact frame address in an argument register it reads (r4-r7) exposes the frame from its lowest slot too (fail
             // closed: its storesBelow is unknown, so every register).
             // (area 3 round 12 fix) A frame address handed in a register the callee stores below, lets out or writes through has gone out:
-            // the frame is exposed from its lowest slot (the host alias) and the engine is told it escaped (HandOut), so a store through a
-            // pointer it cannot place is guarded. The registers: a walked callee's own (CalleeStoresBelow, CalleeHanded: transitive to any
-            // depth, every register when the walk could not follow it); a callee the probe cannot name, the convention's (kConvention).
+            // the engine is told it escaped (HandOut, a host escape), so every local is aliased from the frame's lowest slot and a store
+            // through a pointer it cannot place is guarded. (Round 11 declared a host alias from the lowest slot instead, which also took
+            // every outgoing word for a local, and the engine then dropped the stack arguments of the function's calls: A3-99.) The
+            // registers: a walked callee's own (CalleeStoresBelow, CalleeHanded: transitive to any depth, every register when the walk could
+            // not follow it); a callee the probe cannot name, the convention's (kConvention).
             if (mTolerant && !mNested)
             {
                 const uint32_t regs = haveTarget ? CalleeStoresBelow(target) | CalleeHanded(target) : kConvention;
@@ -1185,8 +1187,6 @@ private:
                     if (r == kR15 || !((regs >> r) & 1u)) continue;
                     const Value x = Get(s, mReg[r]);
                     if (!MayBeFrame(s, x)) continue;
-                    mEscaped = true;
-                    mEscapedLow = true;
                     HandOut(s, x);
                     if (r != 2 && (r < 4 || r > 7) && x.Frame()) mHandSites[at] |= 1u << r;   // no argument the engine shows: the note says it
                 }
@@ -1222,12 +1222,8 @@ private:
                     // address, one laundered through an op the interpreter does not track (a mask, a shift or swap pair, halves), or
                     // one read back from memory the frame escaped into. Any of them in a storesBelow register exposes the frame from
                     // its lowest slot, as an exact one does. (Fail closed: the old test asked for an exact Sp or a tracked base.)
-                    // (area 3 round 12 fix: the one predicate, MayBeFrame)
-                    if (MayBeFrame(s, h))
-                    {
-                        mEscaped = true;
-                        mEscapedLow = true;   // from the frame's lowest slot (FrameEscape)
-                    }
+                    // (area 3 round 12 fix: the one predicate, MayBeFrame; the escape is the engine's, from the frame's lowest slot)
+                    if (MayBeFrame(s, h)) HandOut(s, h);
                     // A3-82: storesBelow is transitive. Reached through this function (a wrapper, a thunk, a pointer lowered on the
                     // way, a tail call), the lent callee stores below whatever this function passed in r, so this function stores
                     // below each register that value was made from -- its register origins (the fail-closed mapping, as a store
@@ -1521,11 +1517,9 @@ private:
         {
             if (!MayBeFrame(s, v)) return;
             // (the note says a frame address is there: one this function computed. A pointer nothing is known of, after an address of the frame
-            // went out, may be one, and the alias below holds for it; the note was said where the address went out)
+            // went out, may be one, and the escape holds for it; the note was said where the address went out)
             if (exactToo && v.Frame()) mEscapeSites[at] |= 1u << reg;
-            mEscapedLow = true;
-            mEscaped = true;
-            HandOut(s, v);
+            HandOut(s, v);   // the escape is the engine's, from the frame's lowest slot (not a host alias: A3-99)
             return;
         }
         if (exactToo) mEscapeSites[at] |= 1u << reg;   // the address is in no argument of the call: the text says so (A3-28)
@@ -4949,14 +4943,11 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
             if (probe.FrameOut()) fd->getScopeLocal()->declareHostEscape();
             uint32_t from = 0;
             handSites = probe.HandSites();
-            if (probe.FrameEscape(from))
-            {
-                fd->getScopeLocal()->declareHostAlias(from);
-                // ...and the text says where: the address is in no argument of the call, so a reader of `f(); return xStack_8;`
-                // would take the local for one the callee cannot reach (A3-28). A comment at the call, of a type the function's own
-                // flow warnings do not collect; put below, after the actions, when a `jsr @rN` through a literal is known for what it calls.
-                escapeSites = probe.EscapeSites();
-            }
+            // ...and the text says where: the address is in no argument of the call, so a reader of `f(); return xStack_8;` would take the
+            // local for one the callee cannot reach (A3-28). A comment at the call, of a type the function's own flow warnings do not collect;
+            // put below, after the actions, when a `jsr @rN` through a literal is known for what it calls.
+            escapeSites = probe.EscapeSites();
+            if (probe.FrameEscape(from)) fd->getScopeLocal()->declareHostAlias(from);
         }
         for (const auto& ro : scan.readonly)
             if (!sharedLiteral(ro.first, ro.second))

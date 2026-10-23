@@ -11903,30 +11903,32 @@ void TestArea3Round11Fix()
     const std::vector<uint16_t> k = { 0xE104, 0x2416, 0x4110, 0x8BFC, 0x000B, 0x0009 };   // mov #4,r1 ; L: mov.l r1,@-r4 ; dt r1 ; bf L ; rts
     const std::vector<uint16_t> callerToG = { 0x4F22, 0x7FEC, 0xE005, 0x2F02, 0x64F3, 0x7410, 0xD103, 0x410B, 0x0009, 0x60F2, 0x7F14, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9040 };
     auto lent = [&](const DecompileResult& r) { return r.prototype.known; };
+    // (area 3 round 12 fix: the exposure is the engine's escape now, which aliases the locals without merging them into one array, so the
+    // local is `xStack_18` where it was `axStack_18[0]`: the pins ask that a stack local is read, not the stale 5.)
 
     // A3-82 a: a wrapper g that forwards r4 to the lent fill-backwards k; the caller is lent and must read the local, not 5.
     {
         const std::vector<uint16_t> g = { 0x4F22, 0xD103, 0x410B, 0x0009, 0x4F26, 0x000B, 0x0009, 0x0009, 0x0600, 0x9080 };   // sts.l pr ; call k ; lds.l pr ; rts
         const DecompileResult r = chain("A3-82a wrapper forwards r4 to lent fill-backwards k", callerToG, { g, k });
-        CHECK(lent(r) && Has(r.Text(), "axStack") && !Has(r.Text(), "return 5;"));
+        CHECK(lent(r) && Has(r.Text(), "Stack_") && !Has(r.Text(), "return 5;"));
     }
     // A3-82 b: a thunk that jumps to k.
     {
         const std::vector<uint16_t> g = { 0xD101, 0x412B, 0x0009, 0x0009, 0x0600, 0x9080 };   // mov.l =k,r1 ; jmp @r1 ; nop
         const DecompileResult r = chain("A3-82b thunk jumps to lent fill-backwards k", callerToG, { g, k });
-        CHECK(lent(r) && Has(r.Text(), "axStack") && !Has(r.Text(), "return 5;"));
+        CHECK(lent(r) && Has(r.Text(), "Stack_") && !Has(r.Text(), "return 5;"));
     }
     // A3-82 d: a thunk that lowers r4 by 16 then jumps to a lent k that stores at its pointer.
     {
         const std::vector<uint16_t> g = { 0xD101, 0x412B, 0x74F0, 0x0009, 0x0600, 0x9080 };   // mov.l =k,r1 ; jmp @r1 ; add #-16,r4
         const std::vector<uint16_t> kAt = { 0xE101, 0x2412, 0x000B, 0x0009 };   // mov #1,r1 ; mov.l r1,@r4 ; rts
         const DecompileResult r = chain("A3-82d thunk lowers r4 by 16, lent k stores at its pointer", callerToG, { g, kAt });
-        CHECK(lent(r) && Has(r.Text(), "axStack") && !Has(r.Text(), "return 5;"));
+        CHECK(lent(r) && Has(r.Text(), "Stack_") && !Has(r.Text(), "return 5;"));
     }
     // A3-83: the callee launders the pointer before stepping down. Each is lent and reads the local.
     auto a83 = [&](const char* name, std::vector<uint16_t> g) {
         const DecompileResult r = chain(name, callerToG, { g });
-        CHECK(lent(r) && Has(r.Text(), "axStack") && !Has(r.Text(), "return 5;") && !Has(r.Text(), "register0x"));
+        CHECK(lent(r) && Has(r.Text(), "Stack_") && !Has(r.Text(), "return 5;") && !Has(r.Text(), "register0x"));
     };
     a83("A3-83a callee masks the pointer with shll2/shlr2", { 0x6543, 0x4508, 0x4509, 0xE104, 0x2516, 0x4110, 0x8BFC, 0x000B, 0x0009, 0x0009 });
     a83("A3-83d callee adds a negated constant", { 0xE310, 0x633B, 0x343C, 0xE101, 0x2412, 0x000B, 0x0009, 0x0009 });
@@ -11937,19 +11939,19 @@ void TestArea3Round11Fix()
     {
         const std::vector<uint16_t> g = { 0xD304, 0x2342, 0x6532, 0xE104, 0x2516, 0x4110, 0x8BFC, 0x000B, 0x0009, 0x0009, 0x0600, 0xF100 };
         const DecompileResult r = chain("A3-83c callee stores the pointer to a global and walks the reload", callerToG, { g });
-        CHECK(lent(r) && Has(r.Text(), "axStack") && !Has(r.Text(), "return 5;"));
+        CHECK(lent(r) && Has(r.Text(), "Stack_") && !Has(r.Text(), "return 5;"));
     }
     {
         const std::vector<uint16_t> callerG = { 0x4F22, 0x7FE8, 0xE005, 0x2F02, 0x62F3, 0x7210, 0x1F24, 0x64F3, 0x7410, 0xD104, 0x410B, 0x0009, 0x60F2, 0x7F18, 0x4F26, 0x000B, 0x0009, 0x0009, 0x0600, 0x9040 };
         const std::vector<uint16_t> g = { 0x6542, 0xE104, 0x2516, 0x4110, 0x8BFC, 0x000B, 0x0009, 0x0009 };   // mov.l @r4,r5 ; fill-backwards r5
         const DecompileResult r = chain("A3-83g callee loads the pointer from the word its argument points to", callerG, { g });
-        CHECK(lent(r) && Has(r.Text(), "axStack") && !Has(r.Text(), "return 5;"));
+        CHECK(lent(r) && Has(r.Text(), "Stack_") && !Has(r.Text(), "return 5;"));
     }
     // A3-84: the caller launders the exact frame address before handing it to the lent fill-backwards k (A3-71a).
     // (area 3 round 12 fix, A3-93: a laundered frame address handed to a lent writer may be the saved PR's slot, so the spare of A3-24 is not
     // made and the caller is withheld, "a return not to its caller"; the text still reads the local.)
     auto laundered = [&](const DecompileResult& r) {
-        return Has(r.Text(), "axStack") && !Has(r.Text(), "return 5;") && (lent(r) || Has(r.prototypeWithheld, "a return not to its caller"));
+        return Has(r.Text(), "Stack_") && !Has(r.Text(), "return 5;") && (lent(r) || Has(r.prototypeWithheld, "a return not to its caller"));
     };
     {
         const std::vector<uint16_t> callerMask = { 0x4F22, 0x7FEC, 0xE005, 0x2F02, 0x64F3, 0x7410, 0xE3FC, 0x2439, 0xD103, 0x410B, 0x0009, 0x60F2, 0x7F14, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9040 };
@@ -11959,7 +11961,7 @@ void TestArea3Round11Fix()
     {
         const std::vector<uint16_t> callerGlobal = { 0x4F22, 0x7FEC, 0xE005, 0x2F02, 0x64F3, 0x7410, 0xD305, 0x2342, 0xE400, 0x6432, 0xD104, 0x410B, 0x0009, 0x60F2, 0x7F14, 0x4F26, 0x000B, 0x0009, 0x0600, 0xF100, 0x0600, 0x9040 };
         const DecompileResult r = chain("A3-84b caller passes the frame address through a global", callerGlobal, { k });
-        CHECK(lent(r) && Has(r.Text(), "axStack") && !Has(r.Text(), "return 5;"));
+        CHECK(lent(r) && Has(r.Text(), "Stack_") && !Has(r.Text(), "return 5;"));
     }
     {
         const std::vector<uint16_t> callerSwap = { 0x4F22, 0x7FEC, 0xE005, 0x2F02, 0x64F3, 0x7410, 0x6449, 0x6449, 0xD103, 0x410B, 0x0009, 0x60F2, 0x7F14, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9040 };
@@ -11980,7 +11982,7 @@ void TestArea3Round11Fix()
         const DecompileResult r = d.Decompile(CallSnapshot(f, ++serial), Request(base));
         Print(f.name.c_str(), r);
         CHECK(r.status == DecompileStatus::Ok && !r.prototype.known);   // withheld: it calls an unknown-signature function
-        CHECK(Has(r.Text(), "axStack") && !Has(r.Text(), "return 5;"));
+        CHECK(Has(r.Text(), "Stack_") && !Has(r.Text(), "return 5;"));
     }
 }
 
