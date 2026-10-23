@@ -8288,16 +8288,19 @@ bool GenLaunderWalkFn(uint64_t seed, CCase& c, std::string& shape)
 //   callerframe.<none|swap2|mask>: g writes the word at its entry r15 through a copy of r15, laundered (A3-92)
 //   spare: f pushes r14, hands a swapped copy of r15 to a lent writer h (which overwrites the saved r14), pops r14; checked by f's claim, not
 //        the caller's text (the caller of a withheld f keeps r14 by the model: A3-93)
+//   rewrite.<load|ret|r9>.<lent|unlent>: g keeps p (in the global, or moves it to r9); after the call the caller writes the sentinel again and
+//        stores below a pointer it did not compute: the global loaded, what h (handed nothing) returns, or r9 (patch 0063's unknown-pointer
+//        rule: the call's own guard no longer stands for the local once it is written again)
 //   neg.<not2|sub>, shift.<shll|shal>: a frame address through a negation the engine does not fold back (`not` twice across a loop's passes; `neg`
 //        then a subtraction from 0), or `shll|shal ; shar` (A3-97: the review's mutations E3 and E4, inert before, are held by these)
 static const char* const kEscapeNegShift[] = { "neg.not2", "neg.sub", "shift.shll", "shift.shal" };
-static const char* const kEscapeForms[] = { "keep.global", "keep.arg2", "keep.outgoing", "back", "chain", "struct", "callerframe", "spare", "neg", "shift" };
+static const char* const kEscapeForms[] = { "keep.global", "keep.arg2", "keep.outgoing", "back", "chain", "struct", "callerframe", "spare", "neg", "shift", "rewrite" };
 bool GenEscapeWalkFn(uint64_t seed, CCase& c, std::string& shape)
 {
     Rng rng(seed * 2654435761u + 0x51A7u);
     if (!rng.Chance(25)) return false;
     const int K = 101 + static_cast<int>(rng.Below(27));
-    const std::string form = kEscapeForms[rng.Below(10)];
+    const std::string form = kEscapeForms[rng.Below(11)];
     const bool walk = rng.Chance(60);
     LaunderBuilder b;
     auto prologue = [&]() {
@@ -8502,6 +8505,54 @@ bool GenEscapeWalkFn(uint64_t seed, CCase& c, std::string& shape)
         b.Put(0x000B);
         b.Put(0x2422);   // mov.l r2,@r4
         shape = "escape.spare";
+    }
+    else if (form == "rewrite")
+    {
+        static const char* const kVia[] = { "load", "ret", "r9" };
+        const std::string via = kVia[rng.Below(3)];
+        const bool lent = rng.Chance(50);
+        prologue();
+        b.Put(0x64F3);   // mov r15,r4
+        b.Put(0x7410);   // add #16,r4: p
+        call(0x80);      // g keeps p
+        if (via == "ret")
+        {
+            b.Put(0xE400);   // mov #0,r4: h is handed nothing
+            call(0xC0);
+            b.Put(0x6203);   // mov r0,r2
+        }
+        b.Put(static_cast<uint16_t>(0xE300 | K));   // mov #K,r3
+        b.Put(0x2F32);   // mov.l r3,@r15: the sentinel written again, after the call
+        if (via == "load")
+        {
+            b.Lit(1, kLaunderGlobal);
+            b.Put(0x6212);   // mov.l @r1,r2
+        }
+        else if (via == "r9") b.Put(0x6293);   // mov r9,r2
+        LaunderBelow(b, 2, walk);
+        epilogue(0x60F2);
+        b.at = 0x40;     // g
+        if (!lent) hidden();
+        if (via == "r9")
+        {
+            b.Put(0x000B);
+            b.Put(0x6943);   // mov r4,r9
+        }
+        else
+        {
+            b.Lit(1, kLaunderGlobal);
+            b.Put(0x000B);
+            b.Put(0x2142);   // mov.l r4,@r1
+        }
+        if (via == "ret")
+        {
+            b.at = 0x60;     // h
+            if (!lent) hidden();
+            b.Lit(1, kLaunderGlobal);
+            b.Put(0x000B);
+            b.Put(0x6012);   // mov.l @r1,r0
+        }
+        shape = "escape.rewrite." + via + "." + (lent ? "lent." : "unlent.") + (walk ? "walk" : "disp");
     }
     else   // neg, shift: a frame address through an op the engine keeps, then a store below it
     {
@@ -10150,7 +10201,8 @@ void TestA365Pins(Sh2Decompiler& d)
                                "escape.back.r10", "escape.back.mach", "escape.back.gbr", "escape.chain.r1.call", "escape.chain.r1.jump",
                                "escape.chain.r1.callback", "escape.chain.r4.call", "escape.chain.r4.jump", "escape.chain.r4.callback",
                                "escape.struct.none", "escape.struct.mask", "escape.struct.swap2", "escape.callerframe.none",
-                               "escape.callerframe.swap2", "escape.callerframe.mask", "escape.spare" })
+                               "escape.callerframe.swap2", "escape.callerframe.mask", "escape.spare", "escape.rewrite.load.lent", "escape.rewrite.load.unlent",
+                               "escape.rewrite.ret.lent", "escape.rewrite.ret.unlent", "escape.rewrite.r9.lent", "escape.rewrite.r9.unlent" })
             CHECK(drawn[k] > 0);
         for (const auto& k : kEscapeNegShift)
             CHECK(drawn[std::string("escape.") + k] > 0);
