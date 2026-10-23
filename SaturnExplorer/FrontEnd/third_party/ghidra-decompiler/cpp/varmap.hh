@@ -16,6 +16,7 @@
  * Modified for SaturnExplorer: a host can declare a pointer into the stack the actions cannot see (patches/0030-host-stack-alias.patch).
  * Modified for SaturnExplorer: a pointer a loop steps down from a stack address aliases the locals below that address (patches/0056-engine-stack-walk-down-aliases.patch).
  * Modified for SaturnExplorer: so does one kept in a stack local and read back, across a call too (patches/0060-engine-stack-walk-down-spilled.patch).
+ * Modified for SaturnExplorer: a host can declare that the frame escaped by a way the p-code does not show (patches/0063-engine-frame-escape-unknown-pointers.patch).
  */
 /// \file varmap.hh
 /// \brief Classes for keeping track of local variables and reconstructing stack layout
@@ -162,6 +163,7 @@ private:
   uintb localExtreme;		///< Largest possible offset for a local variable
   uintb localBoundary;		///< Boundary offset separating locals and parameters
   mutable uintb aliasBoundary;	///< Shallowest alias
+  mutable uintb trialBoundary;	///< SaturnExplorer: the shallowest alias but an escape's (patches/0063-engine-frame-escape-unknown-pointers.patch)
   int4 direction;		///< 1=stack grows negative, -1=positive
   void deriveBoundaries(const FuncProto &proto);	///< Set up basic boundaries for the stack layout
   void gatherInternal(void) const;	///< Run through Varnodes looking for pointers into the stack
@@ -240,6 +242,7 @@ class ScopeLocal : public ScopeInternal {
   bool openParamRefs;		///< True if we have seen references into the stack region reserved for parameters
   bool hostAlias;		///< True if the host declared a pointer into the stack that no Varnode shows (SaturnExplorer)
   uintb hostAliasStart;		///< The offset it points to; the lowest if declared more than once (SaturnExplorer)
+  bool hostEscape;		///< True if the host declared that a frame address escaped by a way the p-code does not show (SaturnExplorer, 0063)
   bool adjustFit(RangeHint &a) const;	///< Make the given RangeHint fit in the current Symbol map
   void createEntry(const RangeHint &a);	///< Create a Symbol entry corresponding to the given (fitted) RangeHint
   bool restructure(MapState &state);	///< Merge hints into a formal Symbol layout of the address space
@@ -256,6 +259,8 @@ public:
   AddrSpace *getSpaceId(void) const { return space; }		///< Get the associated (stack) address space
   void declareHostAlias(uintb off);	///< Declare a pointer to offset \b off that the function's p-code does not show (SaturnExplorer)
   bool getHostAlias(uintb &off) const;	///< Get the offset of the lowest pointer the host declared (SaturnExplorer)
+  void declareHostEscape(void) { hostEscape = true; }	///< Declare that a frame address escaped where the p-code does not show it (SaturnExplorer, 0063)
+  bool hasHostEscape(void) const { return hostEscape; }	///< Did the host declare an escape (SaturnExplorer, 0063)
 
   /// \brief Return \b true if \b restructure analysis discovered overlapping variables
   bool hasOverlapProbems(void) const { return overlapProblems; }

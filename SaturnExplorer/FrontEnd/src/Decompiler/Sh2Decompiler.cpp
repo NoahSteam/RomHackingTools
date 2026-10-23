@@ -348,16 +348,24 @@ public:
     // The results of CalleeFrameWrites kept for every probe of one request (A3-81): a walk depends only on the callee's code in the capture and
     // the lent signatures, which no pass of a request changes, and each of the request's probes (two a printing pass, one more pass when a host
     // alias is declared) walked the same callees again, with a budget of its own. Each probe keeps its own budget; a result is reused as found.
-    void ShareWalks(std::map<uint32_t, uint32_t>* walks, std::map<uint32_t, uint32_t>* below = nullptr)
+    void ShareWalks(std::map<uint32_t, uint32_t>* walks, std::map<uint32_t, uint32_t>* below = nullptr,
+                    std::map<uint32_t, uint32_t>* handed = nullptr)
     {
         mOwnCtx.shared = walks;
         mOwnCtx.sharedBelow = below;
+        mOwnCtx.sharedHanded = handed;
     }
 
     // The calls (by the instruction that makes them) a frame address escapes at in a register the call is shown without, and which (bit 2: r2, bit 7: r7).
     const std::map<uint32_t, uint32_t>& EscapeSites() const { return mEscapeSites; }
+    // ...and the calls (bit r: the register, as origin:: numbers them) a frame address went out at in a register that is no argument the engine
+    // shows (area 3 round 12 fix): r0, r1, r3, r8-r14, GBR, MACH, ...
+    const std::map<uint32_t, uint32_t>& HandSites() const { return mHandSites; }
     // After Run(): whether r2 held the address of a local at a call whose signature is not lent (A3-4),
     // and the lowest such offset from r15 on entry as the engine's stack offset (unsigned, 32-bit).
+    // After Run(): whether an address of the frame went out to code that may keep it by a way the engine may not see (HandOut): the probe
+    // declares an escape (ScopeLocal::declareHostEscape), and patch 0063 then guards every store through a pointer it cannot place.
+    bool FrameOut() const { return mFrameOut; }
     bool FrameEscape(uint32_t& offset) const
     {
         if (!mEscaped) return false;
@@ -431,6 +439,8 @@ public:
         mLeaks = 0;
         mFrameValues = 0;
         mLowestSp = 0;
+        mFrameOut = false;
+        mHanded = 0;
         std::map<uint32_t, State> in;
         std::map<uint32_t, int> changes;   // how often the state at an address grew
         std::set<uint32_t> work;
@@ -660,6 +670,12 @@ private:
         // which SLEIGH takes as a smaller varnode of the register): the register's number, else -1. A spill of a held parameter
         // is told from a value computed from it by this (A3-40).
         int8_t part = -1;
+        // Fuzzy: computed by this function, by any op and any data path, from a stack address it made (r15 or a value made from it): a
+        // frame address however laundered (area 3 round 12 fix). The origin bit kStack says less: what a load gives after the state
+        // escaped, what a call returned and a word nothing is known of carry it too, and the frame rules cannot tell those from an
+        // address of this frame. This flag is the data path itself; see MayBeFrame.
+        bool frame = false;
+        bool Frame() const { return kind == Sp || (kind == Fuzzy && frame); }
         static Value From(uint32_t o) { Value x; x.from = o; x.dep = Deps::All(o); return x; }
         static Value From(uint32_t o, uint32_t direct) { Value x; x.from = o; x.dep = Deps::All(direct); return x; }
         static Value From(uint32_t o, const Deps& d) { Value x; x.from = o; x.dep = d; return x; }
@@ -716,14 +732,20 @@ private:
                    exposedAt == o.exposedAt &&
                    (kind != Fuzzy || (from == o.from && dep == o.dep && def == o.def && hole == o.hole && stackBase == o.stackBase && own == o.own &&
                                      usesR0 == o.usesR0 && joined == o.joined && keepsR0 == o.keepsR0 && callerHigh == o.callerHigh && part == o.part &&
-                                     baseReg == o.baseReg && regOff == o.regOff));
+                                     baseReg == o.baseReg && regOff == o.regOff && frame == o.frame));
         }
     };
     using Key = std::tuple<ghidra::AddrSpace*, ghidra::uintb, ghidra::uint4>;
+    // What of this function's frame has gone out to code that may keep it (area 3 round 12 fix): handed to a callee that lets it out, stored
+    // to memory not tracked. After that a pointer nothing is known of may be one of them (MayBeFrame). kOutHigh: an address that may be at or
+    // above the entry r15 (a word of the caller's frame); kOutLoose: one no exact form bounds (laundered, an index that may be negative, the
+    // address of a saved register's slot), which may reach any slot; kOutExact: the exact address of a local, or one based on it.
+    static constexpr uint8_t kOutExact = 1, kOutLoose = 2, kOutHigh = 4;
     struct State
     {
         bool reached = false;
         bool escaped = false;
+        uint8_t out = 0;   // kOut*
         // The inputs (kInputs) a branch taken on the way here was decided by: a condition, or a jump table's index, computed from them (A3-55).
         // The value r0 has at a return is chosen by them when it differs by path, whatever the alternatives are made of.
         uint32_t ctl = 0;
@@ -785,6 +807,7 @@ private:
                 p.keepsR0 = v.second.KeepsR0();
                 p.read = v.second.read;
                 p.own = v.second.Own();
+                p.frame = v.second.Frame();
                 return p;
             }
             const uint64_t whole = std::get<2>(v.first), below = whole - (vn.offset - std::get<1>(v.first)) - vn.size;
@@ -818,13 +841,43 @@ private:
     }
 
     static constexpr uint32_t kAnything = origin::kRegisters | origin::kStack | origin::kMemory;
-    // (area 3 round 11 fix) A possible frame address of this function's own: an exact stack address, or a value it computed with the stack among
-    // its origins (a frame address laundered, or read back from memory the frame escaped to). Not a value nothing is known of (every origin:
-    // a free-stack word, a slot a callee clobbered), which the frame rules take for no address of this frame (round 10), nor what a call returned.
-    static bool PossibleFrame(const Value& x)
+    // (area 3 round 12 fix) THE test of "may this value be an address of this function's frame", for every rule that asks it; it fails closed.
+    // Yes for a stack address the function made, by any data path and through any op (Value::frame: exact, based, laundered, spilled and read
+    // back), and, once some address of the frame has gone out (State::out), for a pointer nothing is known of: what a load gives, what a call
+    // returned, a word nothing is known of. No for a constant (an absolute address is never the stack, as the engine takes it) and a register's
+    // entry value (made before this frame was). Exact forms decide only the other way (MayBeCallerFrame, EscapeClass, the spare in Apply).
+    static bool MayBeFrame(const State& s, const Value& x)
     {
-        if (x.kind == Value::Sp) return true;
-        return x.kind == Value::Fuzzy && x.own && (x.Origins() & origin::kStack) && (x.Origins() & kAnything) != kAnything;
+        if (x.Frame()) return true;
+        return s.out != 0 && x.kind == Value::Fuzzy && (x.Origins() & (origin::kStack | origin::kMemory)) != 0;
+    }
+    // ...and may it be at or above the entry r15, a word of the caller's frame (the hand-back of A3-21, A3-39, A3-70)? An exact stack
+    // address is decided by its offset, and a base by the base (an index the engine takes as non-negative, A3-9; kLowBase: a local array's
+    // address with an index that may be negative, A3-17), unless it was built from one at or above (callerHigh). A frame address with no base
+    // (laundered: a swap or shift pair, a mask, halves) may be anywhere (A3-92); a pointer nothing is known of, whatever has gone out.
+    static bool MayBeCallerFrame(const State& s, const Value& x)
+    {
+        if (x.kind == Value::Sp) return x.v >= 0;
+        if (!MayBeFrame(s, x)) return false;
+        if (!x.Frame()) return (s.out & kOutHigh) != 0;
+        if (x.callerHigh) return true;
+        if (x.stackBase == Value::kLowBase) return false;
+        if (x.stackBase != Value::kNoBase) return x.stackBase >= 0;
+        return true;
+    }
+    // What going out makes of a possible frame address (State::out): see kOut*.
+    static uint8_t EscapeClass(const State& s, const Value& x)
+    {
+        if (!MayBeFrame(s, x)) return 0;
+        if (!x.Frame()) return s.out;
+        uint8_t c = MayBeCallerFrame(s, x) ? kOutHigh : 0;
+        if (x.kind == Value::Sp)
+        {
+            if (x.v >= 0) return c;
+            auto f = s.slots.find(x.v & ~int64_t(3));
+            return c | (f != s.slots.end() && SavedRegister(f->second) ? kOutLoose : kOutExact);
+        }
+        return c | (x.stackBase != Value::kNoBase ? kOutExact : kOutLoose);
     }
 
     // What a load from untracked memory can give.
@@ -867,10 +920,38 @@ private:
     // 'stored' is what the words may now come from (origins); 'storedDep' what they then depend on (the return rule's Deps), which is not the
     // same: a value loaded from a free-stack word may come from anything and depends on memory only. Dependences flow by dependences -- built
     // from origins they put every register in a word a callee may have written and hid real inputs behind a "nothing-known" value (A3-66).
+    // (area 3 round 12 fix) What a store may write, as a frame address: whether it may be one (Value::frame), the lowest base of the ones it may be
+    // (kNoBase when one has none), and whether one was built from an address at or above the entry r15 (callerHigh). A word written over keeps the
+    // base of what it held and of what was written, as a join does (Merge): without it a spilled frame address read back after a call that was
+    // handed another one had no base, and the fail-closed tests took it for a possible word of the caller's frame.
+    struct FrameWrite
+    {
+        bool frame;
+        int64_t base;
+        bool high;
+        FrameWrite() : frame(false), base(Value::kNoBase), high(false) {}
+    };
+    static FrameWrite FrameWriteOf(const Value& v)
+    {
+        FrameWrite w;
+        if (!v.Frame()) return w;
+        w.frame = true;
+        w.base = v.Base();
+        w.high = v.kind == Value::Sp ? v.v >= 0 : v.callerHigh;
+        return w;
+    }
+    static void JoinFrameWrite(FrameWrite& into, const FrameWrite& w)
+    {
+        if (!w.frame) return;
+        if (!into.frame) { into = w; return; }
+        into.base = into.base == Value::kNoBase || w.base == Value::kNoBase ? Value::kNoBase : std::min(into.base, w.base);
+        into.high = into.high || w.high;
+    }
     static void Clobber(State& s, uint32_t stored, uint32_t storedDep, int64_t from = INT64_MIN, int64_t to = INT64_MAX, bool spare = false,
-                        const std::vector<int64_t>* exact = nullptr)
+                        const std::vector<int64_t>* exact = nullptr, int64_t reachFrom = INT64_MAX, const FrameWrite& storedFrame = FrameWrite())
     {
         auto handed = [&](int64_t slot) {
+            if (slot + 4 > reachFrom) return true;   // (area 3 round 12 fix, A3-93) a frame address no exact form bounds reaches it
             if (exact != nullptr)
                 for (int64_t address : *exact)
                     if (Reaches(address, slot)) return true;
@@ -890,6 +971,18 @@ private:
                 slot.second.carried = was.carried;
                 slot.second.joined = was.Joined();
                 slot.second.keepsR0 = was.KeepsR0();
+                slot.second.frame = was.Frame() || storedFrame.frame;
+                if (slot.second.frame)
+                {
+                    // the base of what it held and of what was written (Merge's rule: a side that is no stack address leaves the other's)
+                    const bool wb = was.Base() != Value::kNoBase;
+                    const bool wStack = was.Frame() || (s.out != 0 && was.kind == Value::Fuzzy && (was.Origins() & (origin::kStack | origin::kMemory)) != 0);
+                    const bool sb = storedFrame.frame && storedFrame.base != Value::kNoBase;
+                    if (wb && sb) slot.second.stackBase = std::min(was.Base(), storedFrame.base);
+                    else if (wb && !storedFrame.frame) slot.second.stackBase = was.Base();
+                    else if (sb && !wStack) slot.second.stackBase = storedFrame.base;
+                    slot.second.callerHigh = (was.kind == Value::Fuzzy && was.callerHigh) || (was.kind == Value::Sp && was.v >= 0) || storedFrame.high;
+                }
                 slot.second.hole = hole;
                 slot.second.exposedAt = exposedAt;
             }
@@ -923,7 +1016,7 @@ private:
     // Keeps in 'into' what both states agree on, the rest as its origins; true when 'into' changed.
     // 'b' joined into 'a' (the engine's MULTIEQUAL of two paths, or the returns' values at a common exit): what both agree on, the rest as its
     // origins and dependences, made by a join (Value::kJoin) when the two were made by different ops; true when 'a' changed.
-    static bool Merge(Value& a, const Value& b)
+    static bool Merge(Value& a, const Value& b, uint8_t out = 0)
     {
         if (a == b) return false;
         Deps dep = a.DepsOf();
@@ -940,16 +1033,21 @@ private:
         m.usesR0 = a.usesR0 || b.usesR0;
         m.joined = true;
         m.keepsR0 = a.KeepsR0() || b.KeepsR0();
+        m.frame = a.Frame() || b.Frame();
         // ...at or above r15 on every path, or flagged: an exact address at or above r15 joined with a lower one is a walk (a loop
         // that steps a pointer down from r15, `mov.l r0,@-r1`, A3-16) as often as a choice of two addresses, and is not followed.
         m.callerHigh = (a.kind == Value::Fuzzy && a.callerHigh) || (b.kind == Value::Fuzzy && b.callerHigh) ||
                        (a.AtOrAboveEntry() && b.AtOrAboveEntry());
         // A frame address joined with a value that is no stack address at all (a null pointer, a loaded pointer: `g(c ? &s : 0)`)
         // is still that address on the path that has one (A3-26): its base stands. A side that may be a stack address
-        // whose base is not known leaves the join without one.
+        // whose base is not known leaves the join without one. (area 3 round 12 fix) "May be a stack address" is the one predicate
+        // (MayBeFrame, with the state's 'out'): the origin bit kStack a loaded word carries once the state escaped is not it.
         {
+            auto maybeFrame = [out](const Value& x) {
+                return x.Frame() || (out != 0 && x.kind == Value::Fuzzy && (x.Origins() & (origin::kStack | origin::kMemory)) != 0);
+            };
             const bool ab = a.Base() != Value::kNoBase, bb = b.Base() != Value::kNoBase;
-            const bool aStack = (a.Origins() & origin::kStack) != 0, bStack = (b.Origins() & origin::kStack) != 0;
+            const bool aStack = maybeFrame(a), bStack = maybeFrame(b);
             if (ab && bb) m.stackBase = std::min(a.Base(), b.Base());
             else if (ab && !bStack) m.stackBase = a.Base();
             else if (bb && !aStack) m.stackBase = b.Base();
@@ -974,13 +1072,19 @@ private:
     {
         bool changed = false;
         if (from.escaped && !into.escaped) into.escaped = changed = true;
+        if ((from.out & ~into.out) != 0)
+        {
+            into.out |= from.out;
+            changed = true;
+        }
         if ((from.ctl & ~into.ctl) != 0)
         {
             into.ctl |= from.ctl;
             changed = true;
         }
-        auto merge = [&changed](Value& a, const Value& b) {
-            if (Merge(a, b)) changed = true;
+        const uint8_t out = into.out | from.out;
+        auto merge = [&changed, out](Value& a, const Value& b) {
+            if (Merge(a, b, out)) changed = true;
         };
         // A register or temporary absent from either is anything.
         for (auto it = into.vars.begin(); it != into.vars.end();)
@@ -1062,6 +1166,15 @@ private:
                 for (const KilledRegister& k : kKeptByCall) e.preserved |= 1u << k.bit;
                 e.preserved |= 1u << kR15;
                 e.spDelta = 0;
+                // (area 3 round 12 fix) ...and what it does with what it is handed is the convention's too: it is handed r2 and r4-r7 (kConvention),
+                // memory, and its stack arguments, and what it stores, lets out or returns is made of those. As "anything" every register it
+                // keeps went into every word and value after the call -- the frame pointer r14 among them -- and every later pointer was taken
+                // for a frame address that had gone out (the walk of a captured callee, CalleeFrameWrites and CalleeHanded, says the rest).
+                const uint32_t handed = kConvention | origin::kStack | origin::kMemory;
+                e.storesThrough = handed | origin::kFrame;
+                e.outOrigins = handed;
+                e.leaks = handed;
+                e.frameValues = handed;
             }
             // A3-70: a callee walked for CalleeFrameWrites that itself hands its incoming frame onward -- r15 still at or above its entry (its
             // stack-argument area is this function's frame), or a frame address in an argument register -- may write any word of its caller's
@@ -1075,14 +1188,24 @@ private:
                     // ...and an address of the caller's frame handed to it in a register: what it does through that is no word of its own
                     // frame, so its walk does not count it (A3-70 c).
                     for (int r = 0; r < 8; ++r)
-                        if (Get(s, mReg[r]).AtOrAboveEntry()) MapCalleeWords(CallEffects::kFrameAny, s, sp);
+                        if (MayBeCallerFrame(s, Get(s, mReg[r]))) MapCalleeWords(CallEffects::kFrameAny, s, sp);
+                    // (area 3 round 12 fix, A3-90) ...and what the walked callee does with what it is handed, carried up to any depth: it stores
+                    // below the registers its storesBelow names, so this function stores below what it passed there; and what it lets out or
+                    // writes through, this function lets out. A callee the walk could not follow (the levels, the budget, a cycle, a reason)
+                    // names every register (fail closed).
+                    const uint32_t sb = CalleeStoresBelow(target);
+                    mStoresBelow |= RegOrigins(s, sb) & 0x7FFFu;
+                    mHanded |= RegDeps(s, sb | CalleeHanded(target));
                 }
                 else
                 {
                     // ...a target the walk cannot name: fail closed when the frame is handed on.
                     bool handsFrame = (sp.kind != Value::Sp && sp.kind != Value::Imm) || (sp.kind == Value::Sp && sp.v >= 0);
-                    for (int r = 0; r < 8 && !handsFrame; ++r) handsFrame = Get(s, mReg[r]).AtOrAboveEntry();
+                    for (int r = 0; r < 8 && !handsFrame; ++r) handsFrame = MayBeCallerFrame(s, Get(s, mReg[r]));
                     if (handsFrame) MapCalleeWords(CallEffects::kFrameAny, s, sp);
+                    // (A3-90) ...and a callback: it may store below and keep whatever it is handed by the convention (kConvention).
+                    mStoresBelow |= RegOrigins(s, kConvention) & 0x7FFFu;
+                    mHanded |= RegDeps(s, kConvention);
                 }
             }
             // A3-86 a: the probe (mTolerant, not nested) can name a captured callee that is not lent; it may step its pointer down
@@ -1093,29 +1216,22 @@ private:
             // ...and a callee the probe cannot name (a call through a pointer it does not resolve) may store anywhere through what it is
             // handed: an exact frame address in an argument register it reads (r4-r7) exposes the frame from its lowest slot too (fail
             // closed: its storesBelow is unknown, so every register).
-            if (mTolerant && !mNested && !haveTarget)
-                for (int r = 4; r < 8; ++r)
-                {
-                    const Value x = Get(s, mReg[r]);
-                    if (PossibleFrame(x))
-                    {
-                        mEscaped = true;
-                        mEscapedLow = true;
-                    }
-                }
-            if (mTolerant && !mNested && haveTarget)
+            // (area 3 round 12 fix) A frame address handed in a register the callee stores below, lets out or writes through has gone out:
+            // the engine is told it escaped (HandOut, a host escape), so every local is aliased from the frame's lowest slot and a store
+            // through a pointer it cannot place is guarded. (Round 11 declared a host alias from the lowest slot instead, which also took
+            // every outgoing word for a local, and the engine then dropped the stack arguments of the function's calls: A3-99.) The
+            // registers: a walked callee's own (CalleeStoresBelow, CalleeHanded: transitive to any depth, every register when the walk could
+            // not follow it); a callee the probe cannot name, the convention's (kConvention).
+            if (mTolerant && !mNested)
             {
-                const uint32_t sb = CalleeStoresBelow(target);
-                for (int r = 0; r < 15; ++r)
+                const uint32_t regs = haveTarget ? CalleeStoresBelow(target) | CalleeHanded(target) : kConvention;
+                for (int r = 0; r < kTracked; ++r)
                 {
-                    // (a value only an earlier call returned carries every origin and is not counted here: a frame address a call
-                    // returns is the engine's to follow, patch 0061)
+                    if (r == kR15 || !((regs >> r) & 1u)) continue;
                     const Value x = Get(s, mReg[r]);
-                    if (((sb >> r) & 1u) && PossibleFrame(x))
-                    {
-                        mEscaped = true;
-                        mEscapedLow = true;
-                    }
+                    if (!MayBeFrame(s, x)) continue;
+                    HandOut(s, x);
+                    if (r != 2 && (r < 4 || r > 7) && x.Frame()) mHandSites[at] |= 1u << r;   // no argument the engine shows: the note says it
                 }
             }
         }
@@ -1149,11 +1265,8 @@ private:
                     // address, one laundered through an op the interpreter does not track (a mask, a shift or swap pair, halves), or
                     // one read back from memory the frame escaped into. Any of them in a storesBelow register exposes the frame from
                     // its lowest slot, as an exact one does. (Fail closed: the old test asked for an exact Sp or a tracked base.)
-                    if (h.Origins() & origin::kStack)
-                    {
-                        mEscaped = true;
-                        mEscapedLow = true;   // from the frame's lowest slot (FrameEscape)
-                    }
+                    // (area 3 round 12 fix: the one predicate, MayBeFrame; the escape is the engine's, from the frame's lowest slot)
+                    if (MayBeFrame(s, h)) HandOut(s, h);
                     // A3-82: storesBelow is transitive. Reached through this function (a wrapper, a thunk, a pointer lowered on the
                     // way, a tail call), the lent callee stores below whatever this function passed in r, so this function stores
                     // below each register that value was made from -- its register origins (the fail-closed mapping, as a store
@@ -1164,7 +1277,7 @@ private:
             // r4) writes a word of this function's caller's frame, as a store of its own there would (A3-39). What h stores is not in the
             // effects as a value, so the hand-back is withheld whatever it is.
             for (int r = 0; r < 15; ++r)
-                if (((e.storesThrough >> r) & 1u) && Get(s, mReg[r]).AtOrAboveEntry())
+                if (((e.storesThrough >> r) & 1u) && MayBeCallerFrame(s, Get(s, mReg[r])))
                 {
                     mCallerFrameStores |= origin::kFrame;
                     if (mNested) MapCalleeWords(CallEffects::kFrameAny, s, Get(s, mReg[kR15]));   // the walked callee hands its caller's frame on
@@ -1175,8 +1288,64 @@ private:
             // as the engine takes it (A3-9, A3-17), and an address of the caller's frame it was handed is caught above.
             if (mNested && (e.storesThrough & origin::kFrame) && !(e.frameWords & CallEffects::kFrameAny))
                 MapCalleeWords(e.frameWords, s, Get(s, mReg[kR15]));
+            // (area 3 round 12 fix, A3-89 host side, A3-91) ...and one that lets a frame address out -- stores it to memory it does not
+            // track (leaks), or hands it back in any register (outOrigins: r0, or r1, r9, r10, MACH, GBR, which are no output of the call
+            // the engine shows) -- has let the frame out: HandOut, which the probe tells the engine (a host escape) and which makes a pointer
+            // nothing is known of a possible frame address from here on. What a lent callee can be handed is r4-r7 (a signature's registers,
+            // and one the engine dropped as unused: `mov r4,r9`), a word of this frame, or memory: it is withheld if it reads any other
+            // register for its value (A3-5), and its summary names r8-r14 only as the saved registers its own callees may have written over,
+            // which hand nothing back. Through memory too: what it loads from this frame (the words from the call's r15 up) and lets out.
+            {
+                const uint32_t outBits = e.leaks | e.outOrigins;
+                for (int r = 4; r < 8; ++r)
+                    if ((outBits >> r) & 1u) HandOut(s, Get(s, mReg[r]));
+                if (outBits & origin::kMemory)
+                {
+                    const Value callSp = Get(s, mReg[kR15]);
+                    std::vector<Value> words;
+                    for (const auto& slot : s.slots)
+                        if (callSp.kind != Value::Sp || slot.first >= callSp.v) words.push_back(slot.second);
+                    for (const Value& w : words) HandOut(s, w);
+                }
+                mHanded |= RegDeps(s, (e.leaks | e.outOrigins | e.storesThrough | e.storesBelow) & kLentHanded);
+            }
         }
         Apply(s, e, targetIsR0);
+    }
+
+    // (area 3 round 12 fix) The registers of the calling convention a callee the probe cannot read is taken to be handed: r4-r7, and r2, the
+    // address of a returned structure (SH_STRUCT_VALUE_REGNUM). Not r0, r1, r3 (scratch), r8-r14, GBR (kept by the model, which no callee
+    // reads as an input), nor r15 (the stack pointer itself: what a callee does through it is the stack arguments', A3-61).
+    static constexpr uint32_t kConvention = (1u << 2) | (0xFu << 4);
+    // The registers a callee can be handed (every tracked one but r15, the stack pointer).
+    static constexpr uint32_t kHandedRegs = origin::kRegisters & ~(1u << 15);
+    // ...and those a lent callee can be (r4-r7; see the hand-out in Call).
+    static constexpr uint32_t kLentHanded = 0xF0u;
+    // The registers (as origins: their entry values) the values in 'regs' at this point were made from.
+    uint32_t RegOrigins(const State& s, uint32_t regs) const
+    {
+        uint32_t o = 0;
+        for (int r = 0; r < kTracked; ++r)
+            if (r != kR15 && ((regs >> r) & 1u)) o |= Get(s, mReg[r]).Origins();
+        return o & kHandedRegs;
+    }
+    // ...and what they were computed from by data (Value::DepsOf): the record of a walk (mHanded) is what a value the callee lets out was made
+    // of, not every origin a load after an unknown call or a word its callee may have written over carries.
+    uint32_t RegDeps(const State& s, uint32_t regs) const
+    {
+        uint32_t o = 0;
+        for (int r = 0; r < kTracked; ++r)
+            if (r != kR15 && ((regs >> r) & 1u)) o |= Get(s, mReg[r]).Direct();
+        return o & kHandedRegs;
+    }
+    // A possible frame address has gone out to code that may keep it (area 3 round 12 fix): State::out, and, in the probe, the escape the
+    // engine is told of (FrameOut: ScopeLocal::declareHostEscape), as patch 0063 takes every pointer it cannot place for one from then on.
+    void HandOut(State& s, const Value& x)
+    {
+        const uint8_t c = EscapeClass(s, x);
+        if (c == 0) return;
+        s.out |= c;
+        mFrameOut = true;
     }
 
     // A call whose signature is not lent may read r2: the SH ABI passes the address of a returned
@@ -1187,16 +1356,16 @@ private:
     // lends none that reads r2. Only r2, not the other registers a callee could read: r0, r1 and r3
     // are scratch the compiler leaves a frame address in, and r8-r14 hold the frame pointer, so a
     // rule over them would put every local of every function in an alias.
-    void NoteFrameEscape(const State& s, int reg, bool exactToo, uint32_t at)
+    void NoteFrameEscape(State& s, int reg, bool exactToo, uint32_t at)
     {
-        NoteFrameEscapeOf(Get(s, mReg[reg]), reg, exactToo, at);
+        NoteFrameEscapeOf(s, Get(s, mReg[reg]), reg, exactToo, at);
     }
 
     // The words from the call's r15 up, where a callee reads its stack arguments (the SH calling convention puts the fifth at its entry r15): a
     // frame address stored in one the engine drops is no argument the call shows, as an address in r7 alone is not (A3-48). The engine drops
     // every stack word when r4-r6 or r5-r7 are all unset (A3-51: 'all'), and otherwise the words from the first one not written on every path
     // up, whatever r4-r7 hold (A3-60: held to the engine by TestArea3Round9Fix's two tables). Bit 15 of the site's mask.
-    void NoteStackArguments(const State& s, uint32_t at, bool all)
+    void NoteStackArguments(State& s, uint32_t at, bool all)
     {
         const Value sp = Get(s, mReg[kR15]);
         if (sp.kind != Value::Sp) return;
@@ -1219,7 +1388,7 @@ private:
                     const Value x = Get(s, mReg[r]);
                     shown = shown || (x.kind == Value::Sp && x.v == slot.second.v);
                 }
-            if (!shown) NoteFrameEscapeOf(slot.second, kR15, true, at);
+            if (!shown) NoteFrameEscapeOf(s, slot.second, kR15, true, at);
         }
     }
 
@@ -1288,12 +1457,32 @@ private:
         cache[target] = words;
         // A3-86 a: the registers the walked callee stores below the pointer it was handed (fill backwards), kept beside the
         // frame-words result so the top-level probe can expose this frame when it hands such a callee a frame address. A callee
-        // the walk could not follow (a reason, the entry not captured) is taken to store below any register (fail closed).
-        ctx->Below()[target] = (!why.empty() || callee.mEntryUndecodable) ? 0x7FFFu : callee.mStoresBelow;
+        // the walk could not follow (a reason) is taken to store below any register (fail closed).
+        // (area 3 round 12 fix) A target with no code to read (not captured: the BIOS, another area) is a callee the probe cannot read, taken
+        // as one it cannot name is: handed what the convention hands (kConvention), r2 and r4-r7, which is all the engine's model of it reads.
+        ctx->Below()[target] = !why.empty() ? 0x7FFFu : callee.mEntryUndecodable ? kConvention : callee.mStoresBelow;
+        // (area 3 round 12 fix, A3-90) ...and the registers whose values it lets out or writes through (CalleeHanded), every one when the walk
+        // could not follow it.
+        ctx->Handed()[target] = !why.empty() ? kHandedRegs : callee.mEntryUndecodable ? kConvention : callee.mHanded;
         return words;
     }
+    // (area 3 round 12 fix, A3-90) The registers (bit r: rN, GBR, MACH, ...) whose entry values a captured, unlent callee lets out (stores to
+    // memory it does not track, returns in any register), stores through, or hands to a callee that does any of that, to any depth: the walk's
+    // record (mHanded). Every register when it could not be walked: the levels or the budget exhausted, a cycle, a reason (fail closed).
+    uint32_t CalleeHanded(uint32_t target)
+    {
+        NestedContext* ctx = mNestedCtx != nullptr ? mNestedCtx : &mOwnCtx;
+        auto f = ctx->Handed().find(target);
+        if (f == ctx->Handed().end())
+        {
+            CalleeFrameWrites(target);
+            f = ctx->Handed().find(target);
+        }
+        return f != ctx->Handed().end() ? f->second : kHandedRegs;
+    }
     // A3-86 a: the registers a captured, unlent callee may store below the pointer it was handed, from the frame-words walk's
-    // record (or that walk, run now). 0x7FFF (every register) when the callee could not be walked: fail closed.
+    // record (or that walk, run now). 0x7FFF (every register) when the callee could not be walked: fail closed; kConvention for one whose code
+    // is not captured (area 3 round 12 fix).
     uint32_t CalleeStoresBelow(uint32_t target)
     {
         NestedContext* ctx = mNestedCtx != nullptr ? mNestedCtx : &mOwnCtx;
@@ -1313,7 +1502,7 @@ private:
         if (words == kUnwalked)
         {
             bool handsFrame = (sp.kind != Value::Sp && sp.kind != Value::Imm) || (sp.kind == Value::Sp && sp.v >= 0);
-            for (int r = 0; r < 15 && !handsFrame; ++r) handsFrame = r != kR15 && Get(s, mReg[r]).AtOrAboveEntry();
+            for (int r = 0; r < 15 && !handsFrame; ++r) handsFrame = r != kR15 && MayBeCallerFrame(s, Get(s, mReg[r]));
             if (!handsFrame) return;
             words = CallEffects::kFrameAny;
         }
@@ -1357,18 +1546,25 @@ private:
         mEscaped = true;
     }
 
-    void NoteFrameEscapeOf(const Value& v, int reg, bool exactToo, uint32_t at)
+    void NoteFrameEscapeOf(State& s, const Value& v, int reg, bool exactToo, uint32_t at)
     {
         if (!exactToo && v.kind == Value::Sp) return;
         // An address with an index added to it (a returned structure that is an array element) points at or above
         // the address it was made from: that offset is the alias's lower bound, and every local from it up is aliased
-        // whatever the index (A3-9). An address made from nothing known has none to declare: the whole frame would
-        // make an array of every local.
-        // (area 3 round 11 fix) A value with the stack among its origins and no base (a frame address laundered, or read back from memory the
-        // frame escaped to) escaping to a lent callee is handled by the storesBelow loop and the engine's escape analysis (patch 0061); it is
-        // not exposed here, where it would over-expose the ordinary stack-save area of an idiom modelled as a call (trapa).
+        // whatever the index (A3-9).
+        // (area 3 round 12 fix, A3-94) A possible frame address no exact form places (MayBeFrame with no base: laundered by a swap or shift
+        // pair or a mask, the aligned local aggregate of compiled code, or read back after the frame went out) points anywhere in the frame:
+        // from its lowest slot, and it has gone out (HandOut). A value nothing is known of, before anything went out, is no frame address.
         const int64_t base = v.Base();
-        if (base == Value::kNoBase) return;
+        if (base == Value::kNoBase)
+        {
+            if (!MayBeFrame(s, v)) return;
+            // (the note says a frame address is there: one this function computed. A pointer nothing is known of, after an address of the frame
+            // went out, may be one, and the escape holds for it; the note was said where the address went out)
+            if (exactToo && v.Frame()) mEscapeSites[at] |= 1u << reg;
+            HandOut(s, v);   // the escape is the engine's, from the frame's lowest slot (not a host alias: A3-99)
+            return;
+        }
         if (exactToo) mEscapeSites[at] |= 1u << reg;   // the address is in no argument of the call: the text says so (A3-28)
         if (base == Value::kLowBase) mEscapedLow = true;
         else if (!mEscaped || base < mEscapeLow) mEscapeLow = base;
@@ -1440,26 +1636,35 @@ private:
                     if ((e.frameWords >> k) & 1u)
                     {
                         const int64_t at = Wrap(sp.v + 4 * k);
-                        Clobber(s, framed, framedDep, at, at + 4);
+                        Clobber(s, framed, framedDep, at, at + 4, false, nullptr, INT64_MAX, CalleeStoresFrame(s, e));
                         if (at + 4 > 0) AddFrameWords(at, 4);
                     }
             }
             else
             {
-                Clobber(s, framed, framedDep, sp.kind == Value::Sp ? sp.v : INT64_MIN);
+                Clobber(s, framed, framedDep, sp.kind == Value::Sp ? sp.v : INT64_MIN, INT64_MAX, false, nullptr, INT64_MAX, CalleeStoresFrame(s, e));
                 mFrameWords |= CallEffects::kFrameAny;
             }
         }
         if (e.storesThrough & ~origin::kFrame)
         {
-            std::vector<int64_t> exact;   // frame addresses the callee was handed in the registers it stores through
+            // Frame addresses the callee was handed in the registers it stores through: an exact one reaches the bytes at it (A3-24, A3-42);
+            // one an exact form shows to be the address of a local plus an index (a base: `&a[i]`, read as the engine reads an index, A3-9)
+            // reaches that object, not the saved registers (the spare); any other possible frame address (MayBeFrame with no base: laundered by
+            // a swap or shift pair or a mask, or a pointer nothing is known of once such an address went out) may be a saved register's slot
+            // itself and spares none (area 3 round 12 fix, A3-93).
+            std::vector<int64_t> exact;
+            int64_t reachFrom = INT64_MAX;
             for (int r = 0; r < 15; ++r)
-                if (((e.storesThrough >> r) & 1u) && reg[r] == origin::kStack)
+                if ((e.storesThrough >> r) & 1u)
                 {
                     const Value h = Get(s, mReg[r]);
                     if (h.kind == Value::Sp) exact.push_back(h.v);
+                    else if (!MayBeFrame(s, h)) continue;
+                    else if (!h.Frame()) { if (s.out & (kOutLoose | kOutHigh)) reachFrom = INT64_MIN; }
+                    else if (h.stackBase == Value::kNoBase) reachFrom = INT64_MIN;
                 }
-            StoreThrough(s, Value::From(stores), leaked | framed, leakedDep | framedDep, true, &exact);
+            StoreThrough(s, Value::From(stores), leaked | framed, leakedDep | framedDep, true, &exact, reachFrom, CalleeStoresFrame(s, e));
         }
         // A value this function put in r0 and a callee that keeps r0 leaves there: the engine's call killed it (A3-13). Not
         // the callee's own address in `jsr @r0`, which compiled code leaves there (10 of the corpus's void functions).
@@ -1533,7 +1738,7 @@ private:
                 for (int64_t w = addr.v & ~int64_t(3); w < addr.v + n; w += 4)
                     if (s.slots.count(w) == 0) s.slots[w] = Unwritten(s, w);
             }
-            Clobber(s, v, value.Direct(), addr.v, addr.v + n);
+            Clobber(s, v, value.Direct(), addr.v, addr.v + n, false, nullptr, INT64_MAX, FrameWriteOf(value));
             if (n == 4)
             {
                 Value w = value;
@@ -1555,18 +1760,44 @@ private:
         }
         // An address made of the entry r15 (or a word above it) and an index may be a word of the caller's frame: the same hand-back
         // as the exact store, whatever the register stored (the signature can hold it: `mov r15,r1 ; add r6,r1 ; mov.l r5,@r1`, A3-39).
-        if (addr.AtOrAboveEntry())
+        // (area 3 round 12 fix, A3-92) ...or may be: the one predicate (MayBeCallerFrame), so a laundered address of the caller's frame is one.
+        if (MayBeCallerFrame(s, addr))
         {
             mCallerFrameStores |= v | origin::kFrame;
             mOwnFrameWords |= CallEffects::kFrameAny;
         }
-        StoreThrough(s, addr, v, value.Direct());
+        // A store of a possible frame address to memory not tracked lets it out (HandOut); and what a walked callee stores through, or lets
+        // out, is handed on (mHanded, CalleeHanded).
+        const uint32_t ao = addr.Origins();
+        if (ao == 0 || (ao & ~origin::kStack))
+        {
+            HandOut(s, value);
+            mHanded |= value.Direct() & kHandedRegs;
+        }
+        mHanded |= addr.Direct() & kHandedRegs;
+        StoreThrough(s, addr, v, value.Direct(), false, nullptr, INT64_MAX, FrameWriteOf(value));
+    }
+
+    // Whether a callee's stores into this function's words may write a frame address (area 3 round 12 fix): a register it is handed (the
+    // convention's, kConvention, which holds a lent callee's r4-r7 too) and lets out or writes to its caller's frame holds one, or a word it may
+    // load and store back does. The word then keeps Value::frame. (Not r8-r14: the model's callee keeps them, and with the frame pointer in r14
+    // every saved register's slot became a frame address after the first call.)
+    FrameWrite CalleeStoresFrame(const State& s, const CallEffects& e) const
+    {
+        FrameWrite w;
+        const uint32_t bits = e.leaks | e.frameValues;
+        for (int r = 0; r < 8; ++r)
+            if (((bits & kConvention) >> r) & 1u) JoinFrameWrite(w, FrameWriteOf(Get(s, mReg[r])));
+        if (bits & origin::kMemory)
+            for (const auto& slot : s.slots) JoinFrameWrite(w, FrameWriteOf(slot.second));
+        return w;
     }
 
     // A store through an address not known exactly, made here or by a callee, of a value from
     // 'stored': recorded in this function's summary, and over every slot it may hit. An absolute
     // address is taken never to be in the stack, as the engine's own stack analysis takes it.
-    void StoreThrough(State& s, const Value& addr, uint32_t stored, uint32_t storedDep, bool spare = false, const std::vector<int64_t>* exact = nullptr)
+    void StoreThrough(State& s, const Value& addr, uint32_t stored, uint32_t storedDep, bool spare = false, const std::vector<int64_t>* exact = nullptr,
+                      int64_t reachFrom = INT64_MAX, const FrameWrite& storedFrame = FrameWrite())
     {
         const uint32_t o = addr.Origins();
         // Whether the address may be in the stack is asked before the store lets a stack address out: the store that publishes a frame address
@@ -1581,8 +1812,8 @@ private:
             mFrameValues |= stored;
             mFrameWords |= CallEffects::kFrameAny;
         }
-        if (mayBeStack) Clobber(s, stored, storedDep, INT64_MIN, INT64_MAX, spare, exact);
-        else Clobber(s, stored, storedDep, 0);   // through an entry value: the caller's frame, at most
+        if (mayBeStack) Clobber(s, stored, storedDep, INT64_MIN, INT64_MAX, spare, exact, reachFrom, storedFrame);
+        else Clobber(s, stored, storedDep, 0, INT64_MAX, false, nullptr, INT64_MAX, storedFrame);   // through an entry value: the caller's frame, at most
     }
 
     Value Load(const State& s, const Value& addr, ghidra::uint4 n)
@@ -1615,6 +1846,7 @@ private:
                     r.carried = r.carried || slot.second.carried;
                     r.joined = r.joined || slot.second.Joined();
                     r.keepsR0 = r.keepsR0 || slot.second.KeepsR0();
+                    r.frame = r.frame || slot.second.Frame();
                 }
             // A word nothing wrote: at or above the entry r15, the caller's (a stack argument).
             for (int64_t w = addr.v & ~int64_t(3); w < addr.v + n; w += 4)
@@ -1663,6 +1895,9 @@ private:
             if (same) continue;
             mPreserved &= ~(1u << r);
             mOut |= v.Origins();
+            // (area 3 round 12 fix) handed back in a register (CalleeHanded): what the value was computed from, not the register's own entry
+            // value (a saved register restored from a slot its callee may have written over is that register, not a value moved elsewhere)
+            mHanded |= v.Direct() & kHandedRegs & ~(1u << r);
         }
         return true;
     }
@@ -1869,6 +2104,7 @@ private:
                         r.carried = x.carried;
                         r.usesR0 = x.UsesR0();
                         r.joined = x.Joined();
+                        r.frame = x.Frame();
                         Set(s, op.out, r);
                     }
                 }
@@ -1882,6 +2118,7 @@ private:
                 r.carried = x.carried || y.carried;
                 r.usesR0 = x.UsesR0() || y.UsesR0();
                 r.joined = x.Joined() || y.Joined();
+                r.frame = x.Frame() || y.Frame();
                 if (x.kind == Value::Sp && y.kind == Value::Imm) r = Value::Stack(Wrap(sub ? x.v - y.v : x.v + y.v));
                 else if (!sub && x.kind == Value::Imm && y.kind == Value::Sp) r = Value::Stack(Wrap(x.v + y.v));
                 else if (x.kind == Value::Imm && y.kind == Value::Imm) r = Value::Const(sub ? x.v - y.v : x.v + y.v);
@@ -2077,7 +2314,7 @@ private:
                     {
                         const Value sp = Get(s, mReg[kR15]);
                         handsOn = (sp.kind != Value::Sp && sp.kind != Value::Imm) || (sp.kind == Value::Sp && sp.v >= 0);   // (an absolute r15: another stack)
-                        for (int r = 0; r < 15 && !handsOn; ++r) handsOn = r != kR15 && Get(s, mReg[r]).AtOrAboveEntry();
+                        for (int r = 0; r < 15 && !handsOn; ++r) handsOn = r != kR15 && MayBeCallerFrame(s, Get(s, mReg[r]));
                     }
                     const Value to = Get(s, op.in[0]);
                     if (!isReturn && mNested && to.kind == Value::Imm)
@@ -2088,15 +2325,32 @@ private:
                         // passed in that register (A3-82, through a tail jump). A lent callee's exact storesBelow is in its signature.
                         auto p = mLent.find(static_cast<uint32_t>(to.v));
                         if (p != mLent.end() && p->second.known)
+                        {
                             for (int r = 0; r < 15; ++r)
                                 if ((p->second.effects.storesBelow >> r) & 1u)
                                     mStoresBelow |= Get(s, mReg[r]).Origins() & 0x7FFFu;
+                            const CallEffects& e = p->second.effects;
+                            mHanded |= RegDeps(s, (e.leaks | e.outOrigins | e.storesThrough | e.storesBelow) & kLentHanded);
+                        }
+                        else
+                        {
+                            // (area 3 round 12 fix, A3-90) ...and a tail jump to an unlent captured callee carries its walk's record the same way.
+                            const uint32_t sb = CalleeStoresBelow(static_cast<uint32_t>(to.v));
+                            mStoresBelow |= RegOrigins(s, sb) & 0x7FFFu;
+                            mHanded |= RegDeps(s, sb | CalleeHanded(static_cast<uint32_t>(to.v)));
+                        }
                     }
                     // ...a jump to a register's entry value (a function pointer it was handed) is an onward tail call to code the walk cannot
                     // name. A jump to a value computed here (the switch idiom `mova ; mov.b @(r0,rN),rN ; add rN,r0 ; jmp @r0`) stays in the
                     // callee: its cases are not followed, the walk's limit since A3-61 (no table for a callee's switch), as for `braf`.
                     else if (!isReturn && mNested && handsOn && to.kind != Value::Fuzzy && to.kind != Value::Imm)
                         MapCalleeWords(CallEffects::kFrameAny, s, Get(s, mReg[kR15]));
+                    // (A3-90) ...and a jump to code it cannot name passes on what the convention hands (a callback in a register).
+                    if (!isReturn && mNested && to.kind != Value::Imm && to.kind != Value::Fuzzy)
+                    {
+                        mStoresBelow |= RegOrigins(s, kConvention) & 0x7FFFu;
+                        mHanded |= RegDeps(s, kConvention);
+                    }
                 }
                 falls = false;
                 break;
@@ -2109,7 +2363,7 @@ private:
                 if (op.hasOut)
                 {
                     uint32_t o = 0;
-                    bool carried = false, usesR0 = false, joined = false;
+                    bool carried = false, usesR0 = false, joined = false, frame = false;
                     std::vector<Value> xs;
                     for (const ghidra::VarnodeData& vn : op.in)
                     {
@@ -2118,12 +2372,19 @@ private:
                         carried = carried || x.carried;
                         usesR0 = usesR0 || x.UsesR0();
                         joined = joined || x.Joined();
+                        frame = frame || x.Frame();
                         xs.push_back(x);
                     }
                     Value r = Value::From(o, OpDeps(op, xs));
                     r.carried = carried;
                     r.usesR0 = usesR0;
                     r.joined = joined;
+                    // (a comparison's one bit carries no address: the engine's FrameEscape takes it so too)
+                    r.frame = frame && !(op.code == ghidra::CPUI_INT_EQUAL || op.code == ghidra::CPUI_INT_NOTEQUAL || op.code == ghidra::CPUI_INT_SLESS ||
+                                         op.code == ghidra::CPUI_INT_SLESSEQUAL || op.code == ghidra::CPUI_INT_LESS || op.code == ghidra::CPUI_INT_LESSEQUAL ||
+                                         op.code == ghidra::CPUI_INT_CARRY || op.code == ghidra::CPUI_INT_SCARRY || op.code == ghidra::CPUI_INT_SBORROW ||
+                                         op.code == ghidra::CPUI_BOOL_NEGATE || op.code == ghidra::CPUI_BOOL_XOR || op.code == ghidra::CPUI_BOOL_AND ||
+                                         op.code == ghidra::CPUI_BOOL_OR);
                     // A bitwise op of two constants is a constant, so SLEIGH's `imm_00_07 & 0x000000FF` (the masked immediate of `xor #imm,r0`,
                     // whose `#0` the identity table means to be a nop) folds and the identity check below sees a zero (A3-77).
                     if (xs.size() == 2 && xs[0].kind == Value::Imm && xs[1].kind == Value::Imm &&
@@ -2217,10 +2478,13 @@ private:
         std::map<uint32_t, uint32_t> belowOwn;   // A3-86 a: the registers each walked callee stores below the pointer it was handed
         std::map<uint32_t, uint32_t>* shared = nullptr;   // the request's, when the probe was given it (ShareWalks)
         std::map<uint32_t, uint32_t>* sharedBelow = nullptr;
+        std::map<uint32_t, uint32_t> handedOwn;   // (area 3 round 12 fix) ...and the registers it lets out or writes through (CalleeHanded)
+        std::map<uint32_t, uint32_t>* sharedHanded = nullptr;
         size_t budget = 0;
         bool started = false;
         std::map<uint32_t, uint32_t>& Cache() { return shared != nullptr ? *shared : cache; }
         std::map<uint32_t, uint32_t>& Below() { return sharedBelow != nullptr ? *sharedBelow : belowOwn; }
+        std::map<uint32_t, uint32_t>& Handed() { return sharedHanded != nullptr ? *sharedHanded : handedOwn; }
     };
     NestedContext mOwnCtx;
     NestedContext* mNestedCtx = nullptr;
@@ -2229,10 +2493,13 @@ private:
     size_t mStepsUsed = 0;
     bool mEntryUndecodable = false;    // the entry instruction could not be decoded (memory not captured)
     std::map<uint32_t, uint32_t> mEscapeSites;   // the calls that escape was declared at because of r2 or r7, and which
+    std::map<uint32_t, uint32_t> mHandSites;     // (area 3 round 12 fix) ...and at in another register no argument shows (HandSites)
     bool mEscaped = false;   // r2 held a frame address at a call that may read it
     bool mEscapedLow = false;   // ...of which one with no lower bound than the frame's lowest slot
     int64_t mEscapeLow = 0;     // ...and the lowest exact base (when mEscapedLow, with mLowestSp)
     int64_t mLowestSp = 0;      // the lowest stack offset any register or slot held
+    bool mFrameOut = false;     // (area 3 round 12 fix) a possible frame address went out to code that may keep it (HandOut)
+    uint32_t mHanded = 0;       // ...and, of a walked callee, the registers it lets out or writes through (CalleeHanded)
 
 };
 
@@ -4544,6 +4811,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
     // actions showed memory with two names that is not yet volatile ('aliasRetry').
     std::map<uint32_t, uint32_t> calleeWalks;   // CalleeFrameWrites' results, for every probe of this request's passes (ShareWalks, A3-81)
     std::map<uint32_t, uint32_t> calleeBelow;   // ...and each walked callee's storesBelow (A3-86 a), shared the same way
+    std::map<uint32_t, uint32_t> calleeHanded;  // ...and the registers each lets out or writes through (area 3 round 12 fix, A3-90)
     auto runPass = [&](const CalleeAliases& callees, bool print, CalleeAliases* targets, bool mayRetry) {
         Enter(DecompilePhase::Init);
         std::ostringstream errors;
@@ -4702,24 +4970,27 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         // the engine now, while the code that made it is still there to be found. (Only the pass that
         // prints: the first one learns who is called, and a function without a call has nothing to say.)
         std::map<uint32_t, uint32_t> escapeSites;   // calls the note is for, once the actions have said who is called
+        std::map<uint32_t, uint32_t> handSites;     // ...and the calls a frame address went out at in another register (HandSites)
         if (print && fd->numCalls() > 0)
         {
             ReturnCheck probe(*fd, exec, prototypes, flowTables);
             probe.SetTolerant();
             probe.SetLiterals(scan.literalWords, *snapshot);
             probe.SetCancel(cancel);   // the callee walk can be long for an adversarial callee (A3-74)
-            probe.ShareWalks(&calleeWalks, &calleeBelow);
+            probe.ShareWalks(&calleeWalks, &calleeBelow, &calleeHanded);
             CallEffects unused;
             probe.Run(unused);
+            // (area 3 round 12 fix) An address of the frame went out by a way the engine may not see (a callee that keeps it or hands it back
+            // in a register the call has no output in, a register no input of the call names): the engine takes the frame for escaped (patch
+            // 0063), so every store through a pointer it cannot place may write the frame, and every local stays aliased across it.
+            if (probe.FrameOut()) fd->getScopeLocal()->declareHostEscape();
             uint32_t from = 0;
-            if (probe.FrameEscape(from))
-            {
-                fd->getScopeLocal()->declareHostAlias(from);
-                // ...and the text says where: the address is in no argument of the call, so a reader of `f(); return xStack_8;`
-                // would take the local for one the callee cannot reach (A3-28). A comment at the call, of a type the function's own
-                // flow warnings do not collect; put below, after the actions, when a `jsr @rN` through a literal is known for what it calls.
-                escapeSites = probe.EscapeSites();
-            }
+            handSites = probe.HandSites();
+            // ...and the text says where: the address is in no argument of the call, so a reader of `f(); return xStack_8;` would take the
+            // local for one the callee cannot reach (A3-28). A comment at the call, of a type the function's own flow warnings do not collect;
+            // put below, after the actions, when a `jsr @rN` through a literal is known for what it calls.
+            escapeSites = probe.EscapeSites();
+            if (probe.FrameEscape(from)) fd->getScopeLocal()->declareHostAlias(from);
         }
         for (const auto& ro : scan.readonly)
             if (!sharedLiteral(ro.first, ro.second))
@@ -4746,6 +5017,8 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         arch->allacts.getCurrent()->perform(*fd);
         // The note of A3-28, but not at a call to a callee whose signature is lent: its arguments are what it reads, and r2 is no
         // input (the probe, run before the literals fold, took every `jsr @rN` for a callee that may read r2: A3-32).
+        for (const auto& h : handSites)
+            if (escapeSites.count(h.first) == 0) escapeSites[h.first] = 0;
         for (const auto& siteRegs : escapeSites)
         {
             const uint32_t site = siteRegs.first;
@@ -4763,6 +5036,18 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
             // One note for the register that holds the address (r2, then r7), or for the stack argument slot, or for a local the call may write as
             // one of its stack arguments (A3-61) when that is all.
             const uint32_t m = siteRegs.second;
+            const auto hand = handSites.find(site);
+            if (m == 0 && hand != handSites.end() && hand->second != 0)
+            {
+                // (area 3 round 12 fix) A frame address went out in a register no argument shows: name the lowest such register.
+                static const char* const kRegNames[] = { "r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7", "r8", "r9", "r10",
+                                                         "r11", "r12", "r13", "r14", "r15", "sr", "gbr", "vbr", "mach", "macl", "pr" };
+                int reg = 0;
+                while (reg < 21 && !((hand->second >> reg) & 1u)) ++reg;
+                arch->commentdb->addComment(ghidra::Comment::user2, fd->getAddress(), ghidra::Address(ram, site),
+                                            std::string(kFrameEscapeNoteRegA) + kRegNames[reg] + kFrameEscapeNoteRegB);
+                continue;
+            }
             arch->commentdb->addComment(ghidra::Comment::user2, fd->getAddress(), ghidra::Address(ram, site),
                                         (m & 4u) ? kFrameEscapeNote : (m & 0x80u) ? kFrameEscapeNoteR7 : (m & 0x8000u) ? kFrameEscapeNoteStack : kFrameEscapeNoteSlot);
         }
