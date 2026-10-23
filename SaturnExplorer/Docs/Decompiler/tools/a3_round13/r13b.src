@@ -1,0 +1,188 @@
+name R13-3.0 control: g writes the caller word through an exact copy of r15 (g withheld, text reads the word)
+asm 06009000
+.word 0x4F22
+add #-16,r15
+mov #5,r0
+mov.l r0,@r15
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l @r15,r0
+add #16,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+add #-4,r15
+mov r15,r3
+add #4,r3
+mov #7,r0
+mov.l r0,@r3
+add #4,r15
+rts
+nop
+endasm
+lend 06009100
+args 0 0 0 0
+end
+name R13-3.1 control: pointer to the caller word spilled in a local and reloaded through the exact address of the local (g withheld)
+asm 06009000
+.word 0x4F22
+add #-16,r15
+mov #5,r0
+mov.l r0,@r15
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l @r15,r0
+add #16,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+add #-4,r15
+mov r15,r1
+add #4,r1
+mov.l r1,@r15
+mov.l @r15,r3
+mov #7,r0
+mov.l r0,@r3
+add #4,r15
+rts
+nop
+endasm
+lend 06009100
+args 0 0 0 0
+end
+name R13-3.2 the same reloaded through a swap-pair laundered address of the local: g lent, text returns 5, run gives 7
+asm 06009000
+.word 0x4F22
+add #-16,r15
+mov #5,r0
+mov.l r0,@r15
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l @r15,r0
+add #16,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+add #-4,r15
+mov r15,r1
+add #4,r1
+mov.l r1,@r15
+mov r15,r2
+swap.w r2,r2
+swap.w r2,r2
+mov.l @r2,r3
+mov #7,r0
+mov.l r0,@r3
+add #4,r15
+rts
+nop
+endasm
+lend 06009100
+args 0 0 0 0
+end
+name R13-3.3 the same, the local reached through a masked copy of r15: g lent, text returns 5, run gives 7
+asm 06009000
+.word 0x4F22
+add #-16,r15
+mov #5,r0
+mov.l r0,@r15
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l @r15,r0
+add #16,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+add #-4,r15
+mov r15,r1
+add #4,r1
+mov.l r1,@r15
+mov r15,r2
+mov #-4,r4
+and r4,r2
+mov.l @r2,r3
+mov #7,r0
+mov.l r0,@r3
+add #4,r15
+rts
+nop
+endasm
+lend 06009100
+args 0 0 0 0
+end
+name R13-3.4 control: reloaded through @(r0,r15) (g withheld)
+asm 06009000
+.word 0x4F22
+add #-16,r15
+mov #5,r0
+mov.l r0,@r15
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l @r15,r0
+add #16,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+add #-4,r15
+mov r15,r1
+add #4,r1
+mov.l r1,@r15
+mov #0,r0
+mov.l @(r0,r15),r3
+mov #7,r0
+mov.l r0,@r3
+add #4,r15
+rts
+nop
+endasm
+lend 06009100
+args 0 0 0 0
+end
+name R13-3.5 the local reached through r15 published in a global and read back: g lent, text returns 5, run gives 7
+asm 06009000
+.word 0x4F22
+add #-16,r15
+mov #5,r0
+mov.l r0,@r15
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l @r15,r0
+add #16,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+add #-4,r15
+mov r15,r1
+add #4,r1
+mov.l r1,@r15
+mov.l =0x0600F300,r2
+mov.l r15,@r2
+mov.l @r2,r2
+mov.l @r2,r3
+mov #7,r0
+mov.l r0,@r3
+add #4,r15
+rts
+nop
+endasm
+lend 06009100
+args 0 0 0 0
+end
