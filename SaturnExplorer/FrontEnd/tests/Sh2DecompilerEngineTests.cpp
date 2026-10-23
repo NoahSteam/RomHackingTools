@@ -30,6 +30,7 @@
 #include "rangeutil.hh"
 #include "ruleaction.hh"
 #include "sleigh_arch.hh"
+#include "subflow.hh"
 
 #include <algorithm>
 #include <array>
@@ -38,6 +39,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <map>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -2169,9 +2171,34 @@ uint64_t RcEval(const ghidra::Varnode* vn, const RcEnv& env)
     case CPUI_SUBPIECE: return b >= 8 ? 0 : (a >> (8 * b)) & m;
     case CPUI_PIECE: return ((a << (8 * sb)) | b) & m;
     case CPUI_INT_LEFT: return b >= static_cast<uint64_t>(8 * size) ? 0 : (a << b) & m;
-    case CPUI_INT_RIGHT: return b >= static_cast<uint64_t>(8 * sa) ? 0 : a >> b;
-    case CPUI_INT_SRIGHT: return static_cast<uint64_t>(PbSigned(a, sa) >> (b >= static_cast<uint64_t>(8 * sa) ? 8 * sa - 1 : b)) & m;
+    case CPUI_INT_RIGHT:
+    case CPUI_INT_SRIGHT:
+    {
+        // A shift of the INT_MULT that RuleDivTermAdd or RuleDivTermAdd2 flagged (PcodeOp::isDivProductWide) reads the exact product, as 128 bits: the sum
+        // the rule replaced, not what its multiply would keep (the product is wider than the multiply on the way to RuleDivOpt)
+        const ghidra::Varnode* src = d->getIn(0);
+        if (src->isWritten() && src->getDef()->code() == CPUI_INT_MULT && src->getDef()->isDivProductWide())
+        {
+            const PcodeOp* mult = src->getDef();
+            const uint64_t x = RcEval(mult->getIn(0), env), y = RcEval(mult->getIn(1), env);
+            const bool isSext = mult->getIn(0)->isWritten() && mult->getIn(0)->getDef()->code() == CPUI_INT_SEXT;
+            const int sw = mult->getIn(0)->getSize();
+            unsigned __int128 exact = isSext ? static_cast<unsigned __int128>(static_cast<__int128>(PbSigned(x, sw)) * static_cast<__int128>(y)) : static_cast<unsigned __int128>(x) * y;
+            if (b >= 128) return d->code() == CPUI_INT_SRIGHT && (exact >> 127) ? m : 0;
+            const unsigned __int128 shifted = d->code() == CPUI_INT_SRIGHT ? static_cast<unsigned __int128>(static_cast<__int128>(exact) >> static_cast<int>(b)) : exact >> static_cast<int>(b);
+            return static_cast<uint64_t>(shifted) & m;
+        }
+        if (d->code() == CPUI_INT_RIGHT) return b >= static_cast<uint64_t>(8 * sa) ? 0 : a >> b;
+        return static_cast<uint64_t>(PbSigned(a, sa) >> (b >= static_cast<uint64_t>(8 * sa) ? 8 * sa - 1 : b)) & m;
+    }
     case CPUI_INT_SDIV: return PbSigned(b, sb) == 0 ? 0 : static_cast<uint64_t>(PbSigned(a, sa) / PbSigned(b, sb)) & m;
+    case CPUI_INT_DIV: return b == 0 ? 0 : (a / b) & m;
+    case CPUI_LZCOUNT:
+    {
+        int lz = 0;
+        for (int bit = 8 * sa - 1; bit >= 0 && ((a >> bit) & 1) == 0; --bit) ++lz;
+        return static_cast<uint64_t>(lz) & m;
+    }
     case CPUI_INT_SCARRY:
     {
         const int64_t s = PbSigned(a, sa) + PbSigned(b, sa), lim = static_cast<int64_t>(1) << (8 * sa - 1);   // sizes up to 4
@@ -2788,6 +2815,472 @@ void TestSignHighBitRound13()
     CHECK(rewritten > 100);
 }
 
+
+// ---- Round 13 fix: RuleDivOpt (A2-82), RuleSignForm2 (A2-83), RuleDivChain (A2-84), the shift amounts (A2-85), RuleThreeWayCompare (A2-86),
+// ---- RuleDivTermAdd and RuleDivTermAdd2 (A2-87), by value on a graph in a block ---------------------------------------------------------------------
+
+// What a pool of the three division rules does to a graph: each rule on every op of its list, until nothing changes (at most ten passes).
+std::map<std::string, long> g_r13Applied;
+
+int R13Pool(R13Graph& t, std::vector<ghidra::Rule*> rules)
+{
+    using namespace ghidra;
+    int applied = 0;
+    for (int pass = 0; pass < 10; ++pass)
+    {
+        int changed = 0;
+        std::vector<PcodeOp*> ops(t.bb->beginOp(), t.bb->endOp());
+        for (PcodeOp* op : ops)
+        {
+            if (op->isDead()) continue;
+            for (Rule* rule : rules)
+            {
+                std::vector<uint4> list;
+                rule->getOpList(list);
+                if (std::find(list.begin(), list.end(), static_cast<uint4>(op->code())) == list.end()) continue;
+                if (rule->applyOp(op, *t.fd) > 0) { ++changed; ++applied; ++g_r13Applied[rule->getName()]; }
+                if (op->isDead()) break;
+            }
+        }
+        if (changed == 0) break;
+    }
+    return applied;
+}
+
+// A2-82. A multiply of an extended value by a constant, shifted right and/or cut, in the three forms RuleDivOpt reads (shift of the product, shift of a
+// SUBPIECE of it, SUBPIECE alone), for every pairing of the extension and the shift, the products that fit and those that wrap their width, and a reader
+// that looks at the whole result, at its low half or at a masked part. The rule may rewrite the graph into a division or leave it; the value the reader
+// sees must be the same. The controls are the divisions it must still make (and must make of the product RuleDivTermAdd flags as exact).
+void TestDivOptSignAndWrapRound13()
+{
+    using namespace ghidra;
+    R13Graph t;
+    long graphs = 0, rewritten = 0, values = 0;
+    int shown = 0;
+    const uint64_t consts[] = { 0x10001, 0x8001, 0x01000001, 0xAAAAAAAB, 0xCCCD, 0x5556, 0xAAAB, 0x2AAAAAAB, 0xFFFF, 0x7FFF, 3, 0x101, 0x55555556, 0x66666667, 0x1000001, 0x80000001 };
+    for (int xs : { 1, 2, 4 })
+        for (int w : { 2 * xs, 4 * xs > 8 ? 8 : 4 * xs })
+        {
+            if (w < 2 || w > 8) continue;
+            for (OpCode ext : { CPUI_INT_ZEXT, CPUI_INT_SEXT })
+                for (uint64_t c0 : consts)
+                    for (int form = 0; form < 3; ++form)        // 0: shift of the product, 1: shift of a SUBPIECE, 2: SUBPIECE alone
+                        for (OpCode sh : { CPUI_INT_RIGHT, CPUI_INT_SRIGHT })
+                            for (int amount : { 1, 7, 8, 15, 16, 17, 24, 31, 32, 33 })
+                                for (int reader = 0; reader < 3; ++reader)     // whole, low half, low byte mask
+                                {
+                                    const uint64_t y = c0 & PbMask(w);
+                                    int cut = 0, outSize = w;
+                                    int e = amount;
+                                    if (form == 1 || form == 2)
+                                    {
+                                        cut = amount >= 8 ? amount / 8 : 1;
+                                        if (cut >= w) continue;
+                                        outSize = w - cut;
+                                        e = form == 1 ? amount - 8 * (amount / 8) + 1 : 0;
+                                        if (form == 1 && e >= 8 * outSize) continue;
+                                    }
+                                    else if (amount >= 8 * w) continue;
+                                    if (form == 2 && sh == CPUI_INT_SRIGHT) continue;   // no shift to pair
+                                    t.reset();
+                                    Varnode* x = t.input(xs);
+                                    Varnode* xe = t.op(ext, w, x);
+                                    Varnode* prod = t.op(CPUI_INT_MULT, w, xe, t.k(w, y));
+                                    Varnode* root;
+                                    if (form == 0) root = t.op(sh, w, prod, t.k(4, e));
+                                    else if (form == 1) root = t.op(sh, outSize, t.op(CPUI_SUBPIECE, outSize, prod, t.k(4, cut)), t.k(4, e));
+                                    else root = t.op(CPUI_SUBPIECE, outSize, prod, t.k(4, cut));
+                                    Varnode* read;
+                                    if (reader == 0) read = t.op(CPUI_COPY, outSize, root);
+                                    else if (reader == 1 && outSize >= 2) read = t.op(CPUI_SUBPIECE, outSize / 2, root, t.k(4, 0));
+                                    else read = t.op(CPUI_INT_AND, outSize, root, t.k(outSize, 0xFF));
+                                    t.fd->calcNZMask();
+                                    std::vector<RcEnv> envs;
+                                    for (uint64_t v : RcInputs(xs, y, 5 + w, 24)) envs.push_back({ { x, v } });
+                                    const std::vector<uint64_t> before = RcValues(read, envs);
+                                    RuleDivOpt rule("scratch");
+                                    const int rc = rule.applyOp(root->getDef(), *t.fd);
+                                    const std::vector<uint64_t> after = RcValues(read, envs);
+                                    ++graphs;
+                                    if (rc != 0) ++rewritten;
+                                    for (size_t i = 0; i < envs.size(); ++i)
+                                    {
+                                        ++values;
+                                        if (before[i] != after[i])
+                                        {
+                                            CHECK(false);
+                                            if (shown++ < 10)
+                                                std::printf("RuleDivOpt: %d-byte %s of %d bytes by %llx, form %d, %s by %d, reader %d: %llx before the rule and %llx after for x=%llx (rule returned %d)\n", w, ext == CPUI_INT_SEXT ? "sext" : "zext", xs,
+                                                            static_cast<unsigned long long>(y), form, sh == CPUI_INT_SRIGHT ? "s>>" : ">>", amount, reader, static_cast<unsigned long long>(before[i]),
+                                                            static_cast<unsigned long long>(after[i]), static_cast<unsigned long long>(envs[i][0].second), rc);
+                                            break;
+                                        }
+                                    }
+                                }
+        }
+    std::printf("RuleDivOpt by value: %ld graphs (%ld rewritten), %ld values compared\n", graphs, rewritten, values);
+    CHECK(rewritten > 400);
+
+    // The divisions it must still make: x / 3 by the product of the extended value, and the signed and the SUBPIECE forms
+    struct Control { OpCode ext; int xs, w; uint64_t y; int form; OpCode sh; int amount; uint64_t div; };
+    const Control controls[] = {
+        { CPUI_INT_ZEXT, 4, 8, 0xAAAAAAAB, 0, CPUI_INT_RIGHT, 33, 3 },
+        { CPUI_INT_ZEXT, 2, 4, 0xAAAB, 0, CPUI_INT_RIGHT, 17, 3 },
+        { CPUI_INT_SEXT, 4, 8, 0x55555556, 0, CPUI_INT_SRIGHT, 32, 3 },
+        { CPUI_INT_ZEXT, 4, 8, 0xAAAAAAAB, 1, CPUI_INT_RIGHT, 33, 3 },
+        { CPUI_INT_SEXT, 4, 8, 0x55555556, 2, CPUI_INT_RIGHT, 32, 3 },
+    };
+    for (const Control& c : controls)
+    {
+        t.reset();
+        Varnode* x = t.input(c.xs);
+        Varnode* prod = t.op(CPUI_INT_MULT, c.w, t.op(c.ext, c.w, x), t.k(c.w, c.y));
+        Varnode* root;
+        if (c.form == 0) root = t.op(c.sh, c.w, prod, t.k(4, c.amount));
+        else if (c.form == 1) root = t.op(c.sh, c.w - 4, t.op(CPUI_SUBPIECE, c.w - 4, prod, t.k(4, 4)), t.k(4, c.amount - 32));
+        else root = t.op(CPUI_SUBPIECE, c.w - 4, prod, t.k(4, 4));
+        t.fd->calcNZMask();
+        std::vector<RcEnv> envs;
+        for (uint64_t v : RcInputs(c.xs, 3, 99, 40)) envs.push_back({ { x, v } });
+        const std::vector<uint64_t> before = RcValues(root, envs);
+        RuleDivOpt rule("scratch");
+        CHECK(rule.applyOp(root->getDef(), *t.fd) == 1);
+        const std::vector<uint64_t> after = RcValues(root, envs);
+        for (size_t i = 0; i < envs.size(); ++i)
+            if (before[i] != after[i]) { CHECK(false); std::printf("RuleDivOpt control %s: %llx before and %llx after for x=%llx\n", c.ext == CPUI_INT_SEXT ? "sext" : "zext", static_cast<unsigned long long>(before[i]), static_cast<unsigned long long>(after[i]), static_cast<unsigned long long>(envs[i][0].second)); break; }
+    }
+    // A shift amount of 2^32 + 33 is not a shift by 33
+    {
+        t.reset();
+        Varnode* x = t.input(4);
+        Varnode* prod = t.op(CPUI_INT_MULT, 8, t.op(CPUI_INT_ZEXT, 8, x), t.k(8, 0xAAAAAAAB));
+        Varnode* root = t.op(CPUI_INT_RIGHT, 8, prod, t.fd->newConstant(8, 0x100000021ull));
+        t.fd->calcNZMask();
+        RuleDivOpt rule("scratch");
+        CHECK(rule.applyOp(root->getDef(), *t.fd) == 0);
+    }
+    // The product RuleDivTermAdd flags as exact is divided (x * 0x124924925 >> 35 is x / 7 in the value the sum stands for), the same product unflagged is not
+    for (int flagged = 0; flagged < 2; ++flagged)
+    {
+        t.reset();
+        Varnode* x = t.input(4);
+        Varnode* prod = t.op(CPUI_INT_MULT, 8, t.op(CPUI_INT_ZEXT, 8, x), t.k(8, 0x124924925ull));
+        if (flagged) prod->getDef()->setDivProductWide();
+        Varnode* root = t.op(CPUI_INT_RIGHT, 8, prod, t.k(4, 35));
+        t.fd->calcNZMask();
+        RuleDivOpt rule("scratch");
+        const int rc = rule.applyOp(root->getDef(), *t.fd);
+        CHECK(rc == (flagged ? 1 : 0));
+        if (flagged)
+        {
+            CHECK(root->getDef()->code() == CPUI_INT_DIV);
+            CHECK(root->getDef()->getIn(1)->getOffset() == 7);
+        }
+    }
+}
+
+// A2-83 to A2-87, each by value on a small graph with the rule applied once (or, for the division terms, a pool of the three rules).
+void TestRuleGuardsRound13()
+{
+    using namespace ghidra;
+    R13Graph t;
+    long graphs = 0, values = 0;
+    int shown = 0;
+    auto compare = [&](const char* what, const Varnode* out, const std::vector<RcEnv>& envs, const std::vector<uint64_t>& before) {
+        const std::vector<uint64_t> after = RcValues(out, envs);
+        ++graphs;
+        for (size_t i = 0; i < envs.size(); ++i)
+        {
+            ++values;
+            if (before[i] != after[i])
+            {
+                CHECK(false);
+                if (shown++ < 12) std::printf("%s: %llx before the rule and %llx after for the input %llx\n", what, static_cast<unsigned long long>(before[i]), static_cast<unsigned long long>(after[i]), static_cast<unsigned long long>(envs[i][0].second));
+                return;
+            }
+        }
+    };
+    // A2-83 RuleSignForm2: `sub(sext(V) * small, c) s>> 15` is the sign of V for a positive small and 0 for 0 (and for a zero extension that is 0)
+    for (int size : { 1, 2 })
+        for (int kind = 0; kind < 6; ++kind)       // 0: the constant 0, 1: the constant 1, 2: 5, 3: all ones of the size, 4: zext(b), 5: the constant 0 first in the multiply
+        {
+            t.reset();
+            Varnode* v = t.input(size);
+            Varnode* b = t.input(1);
+            Varnode* ext = t.op(CPUI_INT_SEXT, 2 * size, v);
+            Varnode* other = kind == 4 ? t.op(CPUI_INT_ZEXT, 2 * size, b) : t.k(2 * size, kind == 0 || kind == 5 ? 0 : kind == 1 ? 1 : kind == 2 ? 5 : PbMask(size));
+            Varnode* prod = kind == 5 ? t.op(CPUI_INT_MULT, 2 * size, other, ext) : t.op(CPUI_INT_MULT, 2 * size, ext, other);
+            Varnode* sub = t.op(CPUI_SUBPIECE, size, prod, t.k(4, size));
+            Varnode* sgn = t.op(CPUI_INT_SRIGHT, size, sub, t.k(4, 8 * size - 1));
+            t.fd->calcNZMask();
+            std::vector<RcEnv> envs;
+            for (uint64_t vv : RcInputs(size, 1, 3, 10))
+                for (uint64_t bv : { static_cast<uint64_t>(0), static_cast<uint64_t>(1), static_cast<uint64_t>(0xff) }) envs.push_back({ { v, vv }, { b, bv } });
+            const std::vector<uint64_t> before = RcValues(sgn, envs);
+            RuleSignForm2 rule("scratch");
+            rule.applyOp(sgn->getDef(), *t.fd);
+            compare("RuleSignForm2", sgn, envs, before);
+            if (kind == 1 || kind == 2) CHECK(sgn->getDef()->getIn(0) == v);          // a positive constant is still the sign of V
+        }
+    // A2-84 RuleDivChain: `(x >> k) / c` and `(x / c1) / c2`: an unsigned divisor of the top half of the range is a large number, not its two's complement
+    for (int size : { 4, 8 })
+    {
+        const uint64_t m = PbMask(size), hi = (m >> 1) + 1;
+        for (uint64_t c : std::initializer_list<uint64_t>{ hi, hi + 0x7ff, m - 0x7ff, m, 3, 0x10000, hi >> 1 })
+            for (int k : { 1, 8, 16, 8 * size - 16, 8 * size - 1, 8 * size, 8 * size + 5, 64 })
+                for (int signedChain = 0; signedChain < 2; ++signedChain)
+                {
+                    if (signedChain && (c == 3 || k >= 8 * size)) continue;
+                    t.reset();
+                    Varnode* v = t.input(size);
+                    Varnode* inner = signedChain ? t.op(CPUI_INT_SDIV, size, v, t.k(size, 1ull << (k % 8))) : t.op(CPUI_INT_RIGHT, size, v, t.k(4, k));
+                    if (signedChain && k % 8 == 0) continue;
+                    Varnode* outer = t.op(signedChain ? CPUI_INT_SDIV : CPUI_INT_DIV, size, inner, t.k(size, c));
+                    Varnode* sink = t.op(CPUI_COPY, size, outer);
+                    (void)sink;
+                    std::vector<RcEnv> envs;
+                    for (uint64_t vv : RcInputs(size, c, 17, 30)) envs.push_back({ { v, vv } });
+                    const std::vector<uint64_t> before = RcValues(outer, envs);
+                    RuleDivChain rule("scratch");
+                    rule.applyOp(outer->getDef(), *t.fd);
+                    compare(signedChain ? "RuleDivChain (signed)" : "RuleDivChain (unsigned)", outer, envs, before);
+                }
+    }
+    // A2-85 the shift amounts: 2^31, 2^32 + 1, the width and more
+    const uint64_t amounts[] = { 1, 7, 15, 16, 0x1f, 0x20, 0x40, 0x44, 0x45, 0x80, 0x84, 0x7fffffff, 0x80000000ull, 0xffffffffull, 0x100000000ull, 0x100000001ull, 0x100000004ull, 0x8000000000000000ull };
+    for (int size : { 2, 4 })
+        for (uint64_t a : amounts)
+        {
+            // RuleShiftCompare: x << a == 0 and x >> a == 0 (and != 0)
+            for (OpCode shiftOpc : { CPUI_INT_LEFT, CPUI_INT_RIGHT })
+                for (OpCode cmpOpc : { CPUI_INT_EQUAL, CPUI_INT_NOTEQUAL })
+                {
+                    t.reset();
+                    Varnode* v = t.input(size);
+                    Varnode* sh = t.op(shiftOpc, size, v, t.fd->newConstant(8, a));
+                    Varnode* cmp = t.op(cmpOpc, 1, sh, t.k(size, 0));
+                    t.fd->calcNZMask();
+                    std::vector<RcEnv> envs;
+                    for (uint64_t vv : RcInputs(size, 1, 21, 10)) envs.push_back({ { v, vv } });
+                    const std::vector<uint64_t> before = RcValues(cmp, envs);
+                    RuleShiftCompare rule("scratch");
+                    rule.applyOp(cmp->getDef(), *t.fd);
+                    compare("RuleShiftCompare", cmp, envs, before);
+                }
+            // RuleDoubleArithShift: (x s>> a) s>> a
+            for (uint64_t b : { static_cast<uint64_t>(1), a })
+            {
+                t.reset();
+                Varnode* v = t.input(size);
+                Varnode* s1 = t.op(CPUI_INT_SRIGHT, size, v, t.fd->newConstant(8, a));
+                Varnode* s2 = t.op(CPUI_INT_SRIGHT, size, s1, t.fd->newConstant(8, b));
+                std::vector<RcEnv> envs;
+                for (uint64_t vv : RcInputs(size, 1, 22, 10)) envs.push_back({ { v, vv } });
+                const std::vector<uint64_t> before = RcValues(s2, envs);
+                RuleDoubleArithShift rule("scratch");
+                rule.applyOp(s2->getDef(), *t.fd);
+                compare("RuleDoubleArithShift", s2, envs, before);
+            }
+            // RuleSubNormal and RuleSubRight: sub(x >> a, size/2), alone or with a lone shift reader (each rule on a graph of its own)
+            for (OpCode shiftOpc : { CPUI_INT_RIGHT, CPUI_INT_SRIGHT })
+                for (int which = 0; which < 4; ++which)
+                {
+                    t.reset();
+                    Varnode* v = t.input(size);
+                    Varnode* sh = t.op(shiftOpc, size, v, t.fd->newConstant(8, a));
+                    Varnode* sub = t.op(CPUI_SUBPIECE, size / 2, sh, t.k(4, size / 2));
+                    Varnode* top = (which & 1) ? t.op(CPUI_INT_RIGHT, size / 2, sub, t.fd->newConstant(8, a)) : sub;
+                    t.fd->calcNZMask();
+                    std::vector<RcEnv> envs;
+                    for (uint64_t vv : RcInputs(size, 1, 23, 10)) envs.push_back({ { v, vv } });
+                    const std::vector<uint64_t> before = RcValues(top, envs);
+                    if (which & 2)
+                    {
+                        RuleSubNormal rule("scratch");
+                        rule.applyOp(sub->getDef(), *t.fd);
+                        compare("RuleSubNormal", top, envs, before);
+                    }
+                    else
+                    {
+                        RuleSubRight rule("scratch");
+                        rule.applyOp(sub->getDef(), *t.fd);
+                        compare("RuleSubRight", top, envs, before);
+                    }
+                }
+            // RuleLzcountShiftBool: lzcount(x) >> a
+            {
+                t.reset();
+                Varnode* v = t.input(size);
+                Varnode* lz = t.op(CPUI_LZCOUNT, size, v);
+                Varnode* sh = t.op(CPUI_INT_RIGHT, size, lz, t.fd->newConstant(8, a));
+                std::vector<RcEnv> envs;
+                for (uint64_t vv : RcInputs(size, 1, 24, 10)) envs.push_back({ { v, vv } });
+                const std::vector<uint64_t> before = RcValues(sh, envs);
+                RuleLzcountShiftBool rule("scratch");
+                rule.applyOp(lz->getDef(), *t.fd);
+                compare("RuleLzcountShiftBool", sh, envs, before);
+            }
+        }
+    // The sub-variable flow reads a shift amount of the logical variable's neighbours as the number it is (2^32 + 3 is not a shift by 3): the flow back from a
+    // SUBPIECE through a shift, and the flow forward from the masked value through a shift of it
+    for (uint64_t a : std::initializer_list<uint64_t>{ 3, 0x100000003ull, 0x80000003ull, 0x80000000ull, 0xffffffffull })
+        for (OpCode shiftOpc : { CPUI_INT_LEFT, CPUI_INT_RIGHT, CPUI_INT_SRIGHT })
+            for (int forward = 0; forward < 2; ++forward)
+            {
+                t.reset();
+                Varnode* v = t.input(2);
+                Varnode* z = t.op(forward ? CPUI_COPY : CPUI_INT_ZEXT, 4, v);
+                Varnode* sh = t.op(shiftOpc, 4, forward ? t.input(4) : z, t.fd->newConstant(8, a));
+                Varnode* sink;
+                Varnode* root;
+                std::vector<RcEnv> envs;
+                if (forward)
+                {
+                    // x & 0xff with the other reader x << a: the flow starts at x
+                    Varnode* x = sh->getDef()->getIn(0);
+                    Varnode* masked = t.op(CPUI_INT_AND, 4, x, t.k(4, 0xff));
+                    masked->setConsume(0xff);
+                    Varnode* sink1 = t.op(CPUI_COPY, 4, masked);
+                    Varnode* sink2 = t.op(CPUI_COPY, 4, sh);
+                    t.fd->calcNZMask();
+                    for (uint64_t xv : RcInputs(4, 3, 31, 12)) envs.push_back({ { x, xv } });
+                    const std::vector<uint64_t> before1 = RcValues(sink1, envs), before2 = RcValues(sink2, envs);
+                    RuleSubvarAnd rule("scratch");
+                    rule.applyOp(masked->getDef(), *t.fd);
+                    compare("RuleSubvarAnd (the masked value)", sink1, envs, before1);
+                    compare("RuleSubvarAnd (the shifted value)", sink2, envs, before2);
+                    continue;
+                }
+                root = t.op(CPUI_SUBPIECE, 2, sh, t.k(4, 0));
+                sink = t.op(CPUI_COPY, 2, root);
+                t.fd->calcNZMask();
+                for (uint64_t vv : RcInputs(2, 3, 32, 12)) envs.push_back({ { v, vv } });
+                const std::vector<uint64_t> before = RcValues(sink, envs);
+                RuleSubvarSubpiece rule("scratch");
+                rule.applyOp(root->getDef(), *t.fd);
+                compare("RuleSubvarSubpiece", sink, envs, before);
+            }
+    // RuleSubExtComm: sub(zext(x), c) for a cut of 2^28 + 2 bytes (a constant the SUBPIECE never holds)
+    for (uint64_t cut : std::initializer_list<uint64_t>{ 0, 1, 2, 0xfffffffff0000002ull, 0x100000000ull, 0x80000000ull })
+        for (OpCode ext : { CPUI_INT_ZEXT, CPUI_INT_SEXT })
+        {
+            t.reset();
+            Varnode* v = t.input(4);
+            Varnode* e = t.op(ext, 8, v);
+            Varnode* sub = t.op(CPUI_SUBPIECE, 4, e, t.fd->newConstant(8, cut));
+            t.fd->calcNZMask();
+            std::vector<RcEnv> envs;
+            for (uint64_t vv : RcInputs(4, 1, 25, 10)) envs.push_back({ { v, vv } });
+            const std::vector<uint64_t> before = RcValues(sub, envs);
+            RuleSubExtComm rule("scratch");
+            rule.applyOp(sub->getDef(), *t.fd);
+            compare("RuleSubExtComm", sub, envs, before);
+        }
+    // RuleSubvarSext: the shift of a sign extension by 2^32, kept as a constant of the logical size
+    for (uint64_t a : std::initializer_list<uint64_t>{ 3, 31, 300, 0x100000000ull, 0x100000003ull, 0x80000000ull })
+        for (int lo = 1; lo <= 2; ++lo)
+        {
+            t.reset();
+            Varnode* v = t.input(lo * 2);
+            Varnode* w = t.input(lo * 2);
+            Varnode* piece = t.op(CPUI_PIECE, lo * 4, v, w);
+            Varnode* ext = t.op(CPUI_INT_SEXT, lo * 8, piece);
+            Varnode* sh = t.op(CPUI_INT_SRIGHT, lo * 8, ext, t.fd->newConstant(8, a));
+            Varnode* sub = t.op(CPUI_SUBPIECE, lo * 2, sh, t.k(4, 0));
+            Varnode* sink = t.op(CPUI_COPY, lo * 2, sub);
+            t.fd->calcNZMask();
+            std::vector<RcEnv> envs;
+            for (uint64_t vv : RcInputs(lo * 2, 1, 26, 8))
+                for (uint64_t ww : { static_cast<uint64_t>(0), PbMask(lo * 2), PbMask(lo * 2) >> 1 }) envs.push_back({ { v, vv }, { w, ww } });
+            const std::vector<uint64_t> before = RcValues(sink, envs);
+            RuleSubvarSext rule("scratch");
+            rule.reset(*t.fd);
+            rule.applyOp(ext->getDef(), *t.fd);
+            compare("RuleSubvarSext", sink, envs, before);
+        }
+    // A2-86 RuleThreeWayCompare: (c1 < x) + (c2 <= x) - 1 != 0 is the three-way compare only for one constant; 127 and -128 are no neighbours
+    for (int size : { 1, 2, 4 })
+    {
+        const uint64_t m = PbMask(size), smax = m >> 1, smin = smax + 1;
+        const uint64_t pairs[][2] = { { smax, smin }, { smin, smax }, { smax, smax }, { 5, 5 }, { 5, 6 }, { smax - 1, smax }, { smax, smax - 1 }, { m, 0 }, { 0, m }, { 0, 1 } };
+        for (const auto& pr : pairs)
+            for (int bothLess = 0; bothLess < 2; ++bothLess)
+                for (OpCode lessOpc : { CPUI_INT_SLESS, CPUI_INT_LESS })
+                {
+                    t.reset();
+                    Varnode* v = t.input(size);
+                    Varnode* l1 = t.op(lessOpc, 1, t.k(size, pr[0]), v);
+                    Varnode* l2 = t.op(bothLess ? lessOpc : (lessOpc == CPUI_INT_SLESS ? CPUI_INT_SLESSEQUAL : CPUI_INT_LESSEQUAL), 1, t.k(size, pr[1]), v);
+                    Varnode* z1 = t.op(CPUI_INT_ZEXT, 2, l1);
+                    Varnode* z2 = t.op(CPUI_INT_ZEXT, 2, l2);
+                    Varnode* s1 = t.op(CPUI_INT_ADD, 2, z1, t.k(2, 0xffff));
+                    Varnode* s2 = t.op(CPUI_INT_ADD, 2, s1, z2);
+                    Varnode* cmp = t.op(CPUI_INT_NOTEQUAL, 1, s2, t.k(2, 0));
+                    t.fd->calcNZMask();
+                    std::vector<RcEnv> envs;
+                    if (size == 1) { for (uint64_t vv = 0; vv < 256; ++vv) envs.push_back({ { v, vv } }); }
+                    else for (uint64_t vv : RcInputs(size, pr[0], 27, 30)) envs.push_back({ { v, vv } });
+                    const std::vector<uint64_t> before = RcValues(cmp, envs);
+                    RuleThreeWayCompare rule("scratch");
+                    rule.applyOp(cmp->getDef(), *t.fd);
+                    compare("RuleThreeWayCompare", cmp, envs, before);
+                }
+    }
+    // A2-87 RuleDivTermAdd and RuleDivTermAdd2 (then RuleDivOpt): `sub(ext(x) * c, k) >> s  +  x` is the division only if ext(x) * c did not wrap in its multiply
+    {
+        long applied = 0;
+        const uint64_t cs[] = { 0x7fff, 0x7fffffff, 0xfffffffe, 0xfffe, 0x92492493, 0x24924925, 0xAAAAAAAB, 0x5556, 0x2493, 0x4925, 3, 0x81, 0xff };
+        for (int xs : { 1, 2, 4 })
+            for (OpCode ext : { CPUI_INT_ZEXT, CPUI_INT_SEXT })
+                for (uint64_t c0 : cs)
+                    for (int shape = 0; shape < 3; ++shape)   // 0: sub + shift + x, 1: sub + x (no shift), 2: x + ((x - w) >> 1) (RuleDivTermAdd2, zero extension)
+                        for (int s : { 0, 1, 2, 3, 7, 8 * xs, 8 * xs + 1 })
+                         for (int k2 : { 0, 2, 3 })     // the shift after the sum (what makes the sum a division)
+                        {
+                            if (shape == 1 && s != 0) continue;
+                            if (shape == 2 && (ext == CPUI_INT_SEXT || s != 0)) continue;
+                            const int w = 2 * xs;
+                            t.reset();
+                            Varnode* x = t.input(xs);
+                            Varnode* xe = t.op(ext, w, x);
+                            Varnode* prod = t.op(CPUI_INT_MULT, w, xe, t.k(w, c0 & PbMask(w)));
+                            Varnode* hi = t.op(CPUI_SUBPIECE, xs, prod, t.k(4, xs));
+                            Varnode* out;
+                            if (shape == 2)
+                            {
+                                Varnode* diff = t.op(CPUI_INT_ADD, xs, x, t.op(CPUI_INT_MULT, xs, hi, t.k(xs, PbMask(xs))));       // x - hi, as RuleSub2Add leaves it
+                                Varnode* half = t.op(CPUI_INT_RIGHT, xs, diff, t.k(4, 1));
+                                out = t.op(CPUI_INT_ADD, xs, half, hi);
+                            }
+                            else
+                            {
+                                Varnode* sh = s == 0 ? hi : t.op(ext == CPUI_INT_SEXT ? CPUI_INT_SRIGHT : CPUI_INT_RIGHT, xs, hi, t.k(4, s));
+                                out = t.op(CPUI_INT_ADD, xs, sh, x);
+                            }
+                            if (k2 != 0) out = t.op(ext == CPUI_INT_SEXT ? CPUI_INT_SRIGHT : CPUI_INT_RIGHT, xs, out, t.k(4, k2));
+                            Varnode* sink = t.op(CPUI_COPY, xs, out);
+                            t.fd->calcNZMask();
+                            std::vector<RcEnv> envs;
+                            for (uint64_t vv : RcInputs(xs, c0, 29, 30)) envs.push_back({ { x, vv } });
+                            const std::vector<uint64_t> before = RcValues(sink, envs);
+                            RuleDivTermAdd a("scratch");
+                            RuleDivTermAdd2 b("scratch");
+                            RuleDivOpt c("scratch");
+                            applied += R13Pool(t, { &a, &b, &c });
+                            {
+                                char label[160];
+                                std::snprintf(label, sizeof(label), "RuleDivTermAdd/2 and RuleDivOpt (%d-byte %s, c=%llx, shape %d, shift %d, then >> %d)", xs, ext == CPUI_INT_SEXT ? "sext" : "zext", static_cast<unsigned long long>(c0), shape, s, k2);
+                                compare(label, sink, envs, before);
+                            }
+                        }
+        std::printf("RuleDivTermAdd and RuleDivTermAdd2: %ld rule applications in the pools (divtermadd %ld, divtermadd2 %ld, divopt %ld)\n", applied, g_r13Applied["divtermadd"], g_r13Applied["divtermadd2"], g_r13Applied["divopt"]);
+        CHECK(g_r13Applied["divtermadd"] > 0);
+        CHECK(g_r13Applied["divtermadd2"] > 0);
+        CHECK(g_r13Applied["divopt"] > 0);
+    }
+    std::printf("round 13 rule guards by value: %ld graphs, %ld values compared\n", graphs, values);
+}
+
 }  // namespace
 
 // Each case announces itself first; with stdout unbuffered, the last name printed is where a
@@ -2833,6 +3326,8 @@ int main(int argc, char** argv)
         RUN(TestRulesByValueRound12());
         RUN(TestRangeSetsRound13());
         RUN(TestSignHighBitRound13());
+        RUN(TestDivOptSignAndWrapRound13());
+        RUN(TestRuleGuardsRound13());
         RUN(TestCancelDuringJumpTableRecovery());
         RUN(TestReuseAndRepair(config));
         RUN(TestForeignHashUntouched(config));

@@ -11,8 +11,17 @@
 // SE_RULECHECK=1       print a line for each application whose value changed, and the totals at exit
 // SE_RULECHECK_ONLY=n  check only the rule whose name contains n
 // SE_RULECHECK_MAX=n   print up to n bad applications of a rule (3)
-// SE_RULECHECK_NOWRAP=1  check RuleDivOpt on the samples whose multiply wraps too (they are skipped by default: the steps of RuleDivTermAdd leave a wrapped product on the way
-//                        to RuleDivOpt; a value the machine really computes through a wrapped product is a mismatch of RuleDivOpt itself, see A2-82)
+//
+// Exemptions (what the check does not compare), as of the area 2 round 13 fix. Gone: the samples whose multiply wraps (RuleDivOpt), and RuleDivTermAdd and
+// RuleDivTermAdd2 as a whole; the engine now refuses a product that wraps (A2-82) unless RuleDivTermAdd or RuleDivTermAdd2 built it as the exact product
+// of a division term and flagged it (PcodeOp::isDivProductWide), and this check values a flagged INT_MULT as that exact product (128 bits) for the shifts
+// that read it. Kept, each for a reason:
+//  - RuleSignMod2nOpt2: the adjusted value is read from a MULTIEQUAL and the branch behind it; the leaf is related to V by control flow, not by data
+//  - a root with consume 0 (dead: rules fold it to anything), a root the rule left without a reader, an interior ADD of a RuleCollectTerms tree (the rule moves
+//    a term between the ADDs of the tree; the root is compared), the zext RuleBoolZext negates in place (the final ADD that reads it is compared)
+//  - a sample in which an op takes a value outside its own non-zero mask (counted as maskskip, the first three printed; 0 in every run)
+//  - cones the check cannot value: more than 24 leaves or 400 nodes, an output of more than 8 bytes, ops it does not evaluate (LOAD, CALL, INDIRECT,
+//    MULTIEQUAL, floating point, pointer ops), and a leaf that exists only after the rule (counted as unmatched)
 #ifndef SE_RULECHECK_13_HH
 #define SE_RULECHECK_13_HH
 
@@ -48,6 +57,7 @@ struct Node
     uintb addr;
     int spc;
     uintb nz;            // the varnode's non-zero mask as the engine holds it when the snapshot is taken (a sample whose value has a bit outside it is no input the engine can see)
+    bool wide;           // an INT_MULT flagged PcodeOp::isDivProductWide: the exact product of a division term, wider than the multiply
 };
 struct Cone
 {
@@ -99,7 +109,7 @@ inline int build(const Varnode* vn, Cone& c, Memo& memo, int depth, bool boolUse
 {
     { const int hit = memo.find(vn); if (hit >= 0) return hit; }
     Node nd;
-    nd.nin = 0; nd.opc = CPUI_COPY; nd.size = vn->getSize(); nd.vn = vn; nd.value = 0; nd.nz = vn->getNZMask() & calc_mask(vn->getSize()); nd.addr = vn->getOffset(); nd.spc = vn->getSpace() ? vn->getSpace()->getIndex() : -1;
+    nd.wide = false; nd.nin = 0; nd.opc = CPUI_COPY; nd.size = vn->getSize(); nd.vn = vn; nd.value = 0; nd.nz = vn->getNZMask() & calc_mask(vn->getSize()); nd.addr = vn->getOffset(); nd.spc = vn->getSpace() ? vn->getSpace()->getIndex() : -1;
     int id;
     if (vn->isConstant())
     {
@@ -110,6 +120,7 @@ inline int build(const Varnode* vn, Cone& c, Memo& memo, int depth, bool boolUse
     {
         const PcodeOp* d = vn->getDef();
         nd.kind = 2; nd.opc = d->code(); nd.nin = d->numInput();
+        nd.wide = d->code() == CPUI_INT_MULT && d->isDivProductWide();
         if (nd.nin > 3) { nd.kind = 0; nd.value = vn->getNZMask() & calc_mask(vn->getSize()); id = c.add(nd); }
         else
         {
@@ -180,7 +191,9 @@ struct Eval
     bool undef = false;
     bool maskViol = false;    // an op node took a value with a bit outside its varnode's non-zero mask
     const Node* viol = nullptr;
-    bool wrapped = false;     // an INT_MULT overflowed its width (the unsigned reading when a multiplicand is a ZEXT, the signed one for a SEXT, either otherwise)
+    bool wrapped = false;     // an INT_MULT overflowed its width (the unsigned reading when a multiplicand is a ZEXT, the signed one for a SEXT, either otherwise); informational
+    std::vector<unsigned __int128> exact;   // the exact product of a flagged (wide) INT_MULT, as a 128-bit two's complement number
+    std::vector<char> haveExact;
     const std::map<const Varnode*, uintb>* leafVals;
     uintb get(int id)
     {
@@ -245,6 +258,31 @@ struct Eval
                     else if (sgn && !uns) { if (!fitS) wrapped = true; }
                     else if (!fitU && !fitS) wrapped = true;
                     r = (a * b) & m;
+                    if (n.wide)
+                    {
+                        // the product RuleDivTermAdd and RuleDivTermAdd2 built as the exact one: a sign extension times the multiplier read as the number it is
+                        exact.resize(c->n, 0); haveExact.resize(c->n, 0);
+                        exact[id] = (sgn && !uns) ? (unsigned __int128)((__int128)sa * (__int128)b) : pu;
+                        haveExact[id] = 1;
+                    }
+                    break;
+                }
+                case CPUI_INT_RIGHT:
+                case CPUI_INT_SRIGHT:
+                {
+                    const Node& src = c->nodes[n.in[0]];
+                    if (src.kind == 2 && src.wide && n.nin > 1)
+                    {
+                        get(n.in[0]);
+                        const unsigned __int128 ev = haveExact.size() > (size_t)n.in[0] && haveExact[n.in[0]] ? exact[n.in[0]] : (unsigned __int128)a;
+                        unsigned __int128 sh;
+                        if (b >= 128) sh = (n.opc == CPUI_INT_SRIGHT && (ev >> 127)) ? ~(unsigned __int128)0 : 0;
+                        else if (n.opc == CPUI_INT_SRIGHT) sh = (unsigned __int128)(((__int128)ev) >> (int)b);
+                        else sh = ev >> (int)b;
+                        r = (uintb)sh & m;
+                        break;
+                    }
+                    r = evalBinary(n.opc, n.size, n.insize[0], a, b);
                     break;
                 }
                 default:
@@ -343,7 +381,7 @@ inline std::string text(const Cone& c, int id, int depth = 0)
     return o.str();
 }
 
-inline bool checkOne(const std::string& rule, const Cone& before, int rb, const Cone& after, int ra, uintb consume, std::string& detail, bool& unmatched, long& maskskip, bool skipWrapped = false)
+inline bool checkOne(const std::string& rule, const Cone& before, int rb, const Cone& after, int ra, uintb consume, std::string& detail, bool& unmatched, long& maskskip)
 {
     // the leaves of both cones
     std::map<const Varnode*, uintb> nz;
@@ -391,10 +429,10 @@ inline bool checkOne(const std::string& rule, const Cone& before, int rb, const 
         }
         eb.leafVals = ea.leafVals = &lv;
         eb.val.assign(before.n, 0); eb.have.assign(before.n, 0); eb.undef = false; eb.wrapped = false; eb.maskViol = false; eb.viol = nullptr;
+        eb.exact.assign(before.n, 0); eb.haveExact.assign(before.n, 0); ea.exact.assign(after.n, 0); ea.haveExact.assign(after.n, 0);
         ea.val.assign(after.n, 0); ea.have.assign(after.n, 0); ea.undef = false;
         const uintb vb = eb.get(rb), va = ea.get(ra);
         if (eb.undef || ea.undef) continue;
-        if (skipWrapped && eb.wrapped) continue;
         // a leaf sampled inside its own mask can still give an op a value outside the mask the engine holds for the op's output (the engine's masks are
         // refreshed pass by pass, a rule that rewrites a def can leave an output's mask narrower than its input's has become): not an input the engine can see.
         // Counted, and the first few are printed, so that an unsound mask is not hidden (rulefuzz13 checks the masks themselves).
@@ -421,9 +459,8 @@ inline void verify(const std::string& rule, const PcodeOp* op, const Snap& s, in
 {
     Tally& t = tallies()[rule];
     if (result > 0) ++t.applied;
-    // RuleDivTermAdd's `x*(c+2^n)` is wider than the multiply that holds it, on the way to RuleDivOpt: its steps are not value-preserving one at a time, only end to
-    // end, which the printed-C differential checks. RuleDivOpt is checked for the samples whose multiply does not wrap (the ones a compiler's division has).
-    if (rule == "divtermadd" || rule == "divtermadd2") { if (result > 0) ++t.skipped; return; }
+    // (RuleDivTermAdd's `x*(c+2^n)` is wider than the multiply that holds it, on the way to RuleDivOpt. The engine flags that multiply and this check values it as
+    // the exact product, so the steps of RuleDivTermAdd, RuleDivTermAdd2 and RuleDivOpt are compared like any other rule's.)
     // RuleSignMod2nOpt2's `V - (Vadj & ~(2^n-1))` reads Vadj from a MULTIEQUAL and the branch behind it: the leaf is related to V by the control flow, not by the data
     if (rule == "signmod2nopt2") { if (result > 0) ++t.skipped; return; }
     if (!s.ok) { if (result > 0) ++t.skipped; return; }
@@ -457,7 +494,7 @@ inline void verify(const std::string& rule, const PcodeOp* op, const Snap& s, in
         std::string detail;
         bool unmatched = false;
         ++t.checked;
-        if (!checkOne(rule, s.cone, r.node, ac, ra, r.consume, detail, unmatched, t.maskskip, rule == "divopt" && !std::getenv("SE_RULECHECK_NOWRAP")))
+        if (!checkOne(rule, s.cone, r.node, ac, ra, r.consume, detail, unmatched, t.maskskip))
         {
             ++t.bad;
             if (t.bad <= (std::getenv("SE_RULECHECK_MAX") ? std::atol(std::getenv("SE_RULECHECK_MAX")) : 3) && std::getenv("SE_RULECHECK"))

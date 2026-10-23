@@ -8145,8 +8145,9 @@ int4 RuleDivTermAdd2::applyOp(PcodeOp *op,Funcdata &data)
 
 /// \brief Do all readers of a Varnode look at its low bits only?
 ///
-/// SaturnExplorer (patches/0064-engine-divopt-sign-and-wrap-rule-guards.patch). Either the dead-code analysis has said so (the consume mask), or each
-/// reader is a SUBPIECE from the bottom that is no wider than that.
+/// SaturnExplorer (patches/0064-engine-divopt-sign-and-wrap-rule-guards.patch). Each reader is a SUBPIECE from the bottom, or an INT_AND with a
+/// constant, that is no wider than that. (The consume mask cannot say: dead-code analysis drops the bits the non-zero mask has as zero, and these are
+/// exactly the bits of a logical shift that a read of the whole value needs as zeros.)
 /// \param vn is the Varnode
 /// \param bits is the number of low bits
 /// \return \b true if no reader looks at a bit above them
@@ -8155,16 +8156,22 @@ static bool divReadsLowBits(Varnode *vn,int4 bits)
 {
   int4 total = 8 * vn->getSize();
   if (bits >= total) return true;
-  if (bits <= 0) return false;
-  if (total <= 64 && ((vn->getConsume() & calc_mask(vn->getSize())) >> bits) == 0) return true;
-  if (vn->hasNoDescend()) return false;
+  if (bits <= 0 || total > 64) return false;
+  if (vn->hasNoDescend() || vn->isAddrForce() || vn->isPersist()) return false;
   list<PcodeOp *>::const_iterator iter;
   for(iter=vn->beginDescend();iter!=vn->endDescend();++iter) {
     PcodeOp *rdop = *iter;
-    if (rdop->code() != CPUI_SUBPIECE || rdop->getIn(0) != vn) return false;
-    Varnode *cvn = rdop->getIn(1);
-    if (!cvn->isConstant() || cvn->getOffset() != 0) return false;
-    if (8 * rdop->getOut()->getSize() > bits) return false;
+    if (rdop->code() == CPUI_SUBPIECE && rdop->getIn(0) == vn) {
+      Varnode *cvn = rdop->getIn(1);
+      if (!cvn->isConstant() || cvn->getOffset() != 0) return false;
+      if (8 * rdop->getOut()->getSize() > bits) return false;
+    }
+    else if (rdop->code() == CPUI_INT_AND) {
+      Varnode *mvn = rdop->getIn(1 - rdop->getSlot(vn));
+      if (!mvn->isConstant() || (mvn->getOffset() >> bits) != 0) return false;
+    }
+    else
+      return false;
   }
   return true;
 }
