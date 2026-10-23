@@ -418,6 +418,13 @@ inline void verify(const std::string& rule, const PcodeOp* op, const Snap& s, in
         // the root still exists if its defining op still has it as output (pointer comparison only: the varnode may have been freed)
         if (r.def->isDead()) continue;
         if (r.def->getOut() != r.vn) continue;
+        // RuleCollectTerms moves a term from one INT_ADD of the tree to another; an interior ADD of the tree (its only reader is an ADD, which TermOrder::collect
+        // descends through) keeps no value of its own, the root of the tree does. The loop's phi can make such an interior ADD a reader of the rule's op.
+        if (rule == "collect_terms" && r.def->code() == CPUI_INT_ADD && r.vn != op->getOut())
+        {
+            const PcodeOp* nx = r.vn->loneDescend();
+            if (nx != (const PcodeOp*)0 && nx->code() == CPUI_INT_ADD) { ++t.skipped; continue; }
+        }
         const Varnode* v = r.def->getOut();
         Cone ac;
         Memo m2;
@@ -434,7 +441,10 @@ inline void verify(const std::string& rule, const PcodeOp* op, const Snap& s, in
             {
                 std::ostringstream o;
                 op->printRaw(o);
-                std::fprintf(stderr, "RULECHECK-BAD %s (result %d) at %llx on `%s`: %s\n", rule.c_str(), result, (unsigned long long)op->getAddr().getOffset(), o.str().c_str(), detail.c_str());
+                std::ostringstream rt;
+                r.def->printRaw(rt);
+                rt << " [root consume " << std::hex << r.consume << ", " << std::dec << (int)std::distance(r.vn->beginDescend(), r.vn->endDescend()) << " readers]";
+                std::fprintf(stderr, "RULECHECK-BAD %s (result %d) at %llx on `%s`: %s\n    root: %s\n", rule.c_str(), result, (unsigned long long)op->getAddr().getOffset(), o.str().c_str(), detail.c_str(), rt.str().c_str());
             }
         }
         else if (unmatched) ++t.unmatched;
