@@ -9,7 +9,8 @@
 #                (RuleShiftCompare, RuleSubCommute, RuleDoubleShift with shifts at or beyond the narrowed width)
 #   58 negshift  a negated or sign-extended byte/word shifted right by 7 to 31, with the multiply by -1 read as a division (RuleDivOpt, RuleSignDiv2,
 #                RuleSignForm)
-# usage: dagen13.py <first seed> <count> [family 55..58]   -> one function per seed, ";" joined (SE_GENERATED_PRINTEDC_WORDS)
+#   59 shdiv     a value shifted right (1 to 16), then divided by a constant that is large for the shifted width (RuleDivChain, RuleDivOpt)
+# usage: dagen13.py <first seed> <count> [family 55..59]   -> one function per seed, ";" joined (SE_GENERATED_PRINTEDC_WORDS)
 #        dagen13.py extras <first seed> <count> <family>   -> the comma-joined hex list for SE_GENERATED_PRINTEDC_EXTRA
 import importlib.util, os, random, sys
 
@@ -136,7 +137,21 @@ def fam_negshift(r, f):
     elif k == 2: f.add(mov(1, 4), addi(1, r.choice([1, -1, 0x7F])), add_(1, 0))
     elif k == 3: f.add(tst(0, 0), movt(0))
 
-FAMS13 = {55: fam_soup, 56: fam_lerp, 57: fam_narrow, 58: fam_negshift}
+def fam_shdiv(r, f):
+    # a value shifted right by 1 to 16 (logical or arithmetic), then divided by a constant, signed or unsigned, the divisor from 2 to 2^32-1 with a bias to the large ones:
+    # `(x >> n) / d` where d << n does not fit the width (RuleDivChain, RuleDivOpt, RuleShiftCompare on the quotient)
+    d = r.choice([65537, 70000, 86400, 1000000, 0x7FFFFFFF, 0x80000001, 0xFFFFFFFF, 0xFFFFFFFE, 0x10000, 0x20000, 0x8000, 255, 257, 641, 1000, 10, 100, 3, 7, 12345678, r.randrange(3, 1 << 32)])
+    f.d_hint = None
+    f.add(mov(1, 4))
+    sh = r.choice([SHLR, SHLR2, SHLR8, SHLR16, SHAR])
+    for _ in range(r.choice([1, 1, 2])): f.add(sh | 1 << 8)
+    if r.random() < 0.5: emit_udiv(r, f, d, 1, 0, 2)
+    else: emit_sdiv(r, f, d if d < 0x80000000 else d - (1 << 32), 1, 0, 2)
+    k = r.randrange(0, 3)
+    if k == 1: f.add(mov(1, 0), SHLR | 1 << 8, mov(0, 1))
+    elif k == 2: f.add(cmp_pz(0), movt(0))
+
+FAMS13 = {55: fam_soup, 56: fam_lerp, 57: fam_narrow, 58: fam_negshift, 59: fam_shdiv}
 
 def build(seed, fam=None, want_fn=False):
     r = random.Random(seed * 104729 + 13)
