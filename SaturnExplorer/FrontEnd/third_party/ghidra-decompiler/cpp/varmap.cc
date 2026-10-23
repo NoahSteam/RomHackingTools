@@ -814,7 +814,8 @@ void AliasChecker::gatherInternal(void) const
   // pointer any more.
   uintb hostOffset = 0;
   const bool host = fd->getScopeLocal()->getHostAlias(hostOffset);
-  if (spacebase == (Varnode *)0 && !host) return; // No possible alias
+  // (patches/0063-engine-frame-escape-unknown-pointers.patch) ...and an escape the host declared stands with no pointer at all (below)
+  if (spacebase == (Varnode *)0 && !host && !fd->getScopeLocal()->hasHostEscape()) return; // No possible alias
 
   if (spacebase != (Varnode *)0)
     gatherAdditiveBase(spacebase,addBase);

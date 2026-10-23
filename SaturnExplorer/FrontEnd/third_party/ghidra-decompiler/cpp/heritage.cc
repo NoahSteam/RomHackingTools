@@ -968,7 +968,10 @@ void FrameEscape::compute(const Funcdata *fd,AddrSpace *spc,bool preHeritage)
     offset[in] = 0;
     if (members.insert(in).second) work.push_back(in);
   }
-  if (members.empty()) return;
+  // (0063) The host's declaration of an escape stands when nothing reads the stack pointer any more (every access a direct stack Varnode)
+  if (fd->getScopeLocal() != (const ScopeLocal *)0 && fd->getScopeLocal()->hasHostEscape())
+    hostEscape = true;
+  if (members.empty() && !hostEscape) return;
   if (preHeritage) {
     VarnodeLocSet::const_iterator iter = fd->beginLoc(spc);
     VarnodeLocSet::const_iterator enditer = fd->endLoc(spc);
@@ -1151,10 +1154,7 @@ void FrameEscape::compute(const Funcdata *fd,AddrSpace *spc,bool preHeritage)
   if (handed) escaped = true;	// (e)
   // (0063) ...and the escapes the host knows of and the p-code does not show: a callee that keeps the address it was handed, or hands
   // it back in a register the call has no output in (ledger A3-89, A3-91), a frame address in a register no input of the call names.
-  if (fd->getScopeLocal() != (const ScopeLocal *)0 && fd->getScopeLocal()->hasHostEscape()) {
-    hostEscape = true;
-    escaped = true;
-  }
+  if (hostEscape) escaped = true;
   // The lowest frame offset reached, as a signed offset in the space, for the alias boundary: the lowest a frame address takes, and the
   // lowest stack location the function has (once the frame's own accesses are direct stack varnodes, the frame address that reached the
   // lowest local may be gone, and a local below every frame address left would be no alias).
