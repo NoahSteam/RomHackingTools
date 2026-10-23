@@ -41,25 +41,29 @@ out = []
 for i in range(n):
     F = rnd.choice([16, 24, 32, 40])
     T = rnd.choice([t for t in range(0, F + 1, 4)])
+    wkind = rnd.choice(['loop', 'loop', 'disp', 'idx', 'unroll', 'up'])
+    if wkind == 'up' and T >= F: T = F - 4
     R = rnd.choice(range(0, F, 4))
     steps = rnd.choice([1, 1, 2, 3, 4, 6])
-    med = rnd.choice(['glob', 'glob', 'slot', 'reg', 'ret', 'obj', 'relay', 'none', 'stackarg'])
+    med = rnd.choice(['glob', 'glob', 'slot', 'reg', 'ret', 'obj', 'relay', 'none', 'stackarg', 'own', 'ownslot', 'ownmir'])
     wk = rnd.choice(['caller', 'lent_w', 'unlent_w', 'arg_lent', 'arg_unlent'])
-    wkind = rnd.choice(['loop', 'loop', 'disp', 'idx', 'unroll', 'up'])
     g_lent = rnd.random() < 0.7
     w_lent = wk in ('lent_w', 'arg_lent')
-    lk, LL = launder('r4', 'r1')
+    lk, LL = launder('r4', 'r6')
     rK = rnd.choice(['r1', 'r9', 'r10', 'r11', 'r3'])
     rewrite = rnd.random() < 0.3
+    extra = [r for r in (5, 6, 7) if rnd.random() < 0.4]
+    if med in ('slot', 'obj'): extra = [r for r in extra if r != 5]
     S = rnd.choice([s for s in range(0, F, 4) if s != T]) if med == 'slot' else None
     if S is not None and R == S: R = (S + 4) % F
-    name = 'EF seed=%d i=%d F=%d T=%d R=%d steps=%d med=%s wk=%s wkind=%s g_lent=%d lk=%s rK=%s rewrite=%d' % (
-        seed, i, F, T, R, steps, med, wk, wkind, g_lent, lk, rK, rewrite)
+    name = 'EF seed=%d i=%d F=%d T=%d R=%d steps=%d med=%s wk=%s wkind=%s g_lent=%d lk=%s rK=%s rewrite=%d extra=%s' % (
+        seed, i, F, T, R, steps, med, wk, wkind, g_lent, lk, rK, rewrite, ''.join(str(r) for r in extra) or '-')
     P = ['.word 0x4F22', 'add #-%d,r15' % F]
     for off in range(0, F, 4):
         P += ['mov #%d,r0' % (off // 4 + 1), 'mov.l r0,@(%d,r15)' % off]
     P += ['mov r15,r4', 'add #%d,r4' % T] if T else ['mov r15,r4']
     P += LL
+    P += ['mov #%d,r%d' % (30 + r, r) for r in extra]
     blocks = []
     lend = []
     # --- mediator
@@ -102,6 +106,17 @@ for i in range(n):
         if g_lent: lend.append(A_G)
         P += ['mov.l =%s,r5' % OBJ, 'mov.l =%s,r1' % A_G, 'jsr @r1', 'nop']
         load_q = lambda q: ['mov.l =%s,%s' % (OBJ, q), 'mov.l @(4,%s),%s' % (q, q)]
+    elif med == 'own':
+        P += ['mov.l =%s,r1' % G1, 'mov.l r4,@r1']
+        load_q = lambda q: ['mov.l =%s,%s' % (G1, q), 'mov.l @%s,%s' % (q, q)]
+    elif med == 'ownmir':
+        P += ['mov.l =%s,r1' % G1, 'mov.l r4,@r1']
+        load_q = lambda q: ['mov.l =0x2600F100,%s' % q, 'mov.l @%s,%s' % (q, q)]
+    elif med == 'ownslot':
+        S = rnd.choice([s2 for s2 in range(0, F, 4) if s2 != T])
+        if R == S: R = (S + 4) % F
+        P += ['mov.l r4,@(%d,r15)' % S]
+        load_q = lambda q: ['mov.l @(%d,r15),%s' % (S, q)]
     elif med == 'stackarg':
         # the address goes out as the fifth argument (outgoing word at the call's r15)
         g = ['mov.l @r15,r1', 'mov.l =%s,r2' % G1, 'mov.l r1,@r2', 'rts', 'nop']
@@ -120,7 +135,7 @@ for i in range(n):
     elif wk in ('lent_w', 'unlent_w'):
         w = load_q('r6') if False else None
         # the callee reads the pointer from where the mediator kept it (global/object), or is handed it in r4 when the mediator is register-only
-        if med in ('glob', 'relay', 'obj', 'stackarg'):
+        if med in ('glob', 'relay', 'obj', 'stackarg', 'own', 'ownmir'):
             body = load_q('r1') + walk('r1', steps, wkind, 'r3', 'r2') + ['rts', 'nop']
             blocks.append((A_W, body))
             if w_lent: lend.append(A_W)
