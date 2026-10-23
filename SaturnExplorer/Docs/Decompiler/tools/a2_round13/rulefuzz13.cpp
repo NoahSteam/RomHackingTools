@@ -381,6 +381,240 @@ struct Builder
         if (rng.chance(55)) return input(size);
         return konst(size);
     }
+
+    // ---- templates: the multi-op shapes the rules' own comments describe, with edge constants (random graphs seldom build them) ----------------------
+    Varnode* cst(int size, uint64_t v) { return fd->newConstant(size, v & Mask(size)); }
+    Varnode* ext(OpCode opc, int to, Varnode* x) { return emit(opc, to, x)->getOut(); }
+    Varnode* un(OpCode opc, int size, Varnode* a) { return emit(opc, size, a)->getOut(); }
+    Varnode* bin(OpCode opc, int size, Varnode* a, Varnode* b) { return emit(opc, size, a, b)->getOut(); }
+    uint64_t pick(std::initializer_list<uint64_t> l) { return *(l.begin() + rng.below(static_cast<int>(l.size()))); }
+    int pickInt(std::initializer_list<int> l) { return *(l.begin() + rng.below(static_cast<int>(l.size()))); }
+    Varnode* tmplDiv()
+    {
+        const int xs = pickInt({ 1, 2, 4 });
+        const int es = (xs * 4 <= 8 && rng.chance(30)) ? xs * 4 : xs * 2;
+        const bool sgn = rng.chance(50);
+        Varnode* x = input(xs);
+        Varnode* e = ext(sgn ? CPUI_INT_SEXT : CPUI_INT_ZEXT, es, x);
+        const uint64_t m = Mask(es);
+        uint64_t K = pick({ 1, 2, 3, 5, 7, 0x5556, 0x8001, 0xaaab, 0xcccd, 0x55555556ull, 0x80000001ull, 0xaaaaaaabull, 0xcccccccdull, 0x24924925ull, m, m - 1, (m >> 1) + 1, (m >> 1) + 2, m >> 1 });
+        K &= m;
+        Varnode* mul = rng.chance(50) ? bin(CPUI_INT_MULT, es, e, cst(es, K)) : bin(CPUI_INT_MULT, es, cst(es, K), e);
+        const int form = rng.below(6);
+        const int w = 8 * xs;
+        Varnode* t;
+        switch (form)
+        {
+        case 0: t = bin(sgn ? CPUI_INT_SRIGHT : CPUI_INT_RIGHT, es, mul, cst(4, rng.chance(80) ? w + rng.below(w + 2) : rng.below(2 * w + 4))); break;
+        case 1: t = emit(CPUI_SUBPIECE, xs, mul, cst(4, es - xs))->getOut(); break;                                            // the high part
+        case 2: { Varnode* s1 = emit(CPUI_SUBPIECE, xs, mul, cst(4, es - xs))->getOut(); t = bin(sgn ? CPUI_INT_SRIGHT : CPUI_INT_RIGHT, xs, s1, cst(4, rng.below(w + 1))); break; }
+        case 3: { Varnode* s1 = emit(CPUI_SUBPIECE, xs, mul, cst(4, es - xs))->getOut(); Varnode* sh = rng.chance(50) ? bin(sgn ? CPUI_INT_SRIGHT : CPUI_INT_RIGHT, xs, s1, cst(4, rng.below(w))) : s1; t = bin(CPUI_INT_ADD, xs, sh, x); break; }   // DivTermAdd
+        case 4: { Varnode* s1 = emit(CPUI_SUBPIECE, xs, mul, cst(4, es - xs))->getOut(); Varnode* d = bin(CPUI_INT_SUB, xs, x, s1); Varnode* h = bin(CPUI_INT_RIGHT, xs, d, cst(4, 1)); t = bin(CPUI_INT_ADD, xs, h, s1); break; }   // DivTermAdd2
+        default: { Varnode* s1 = bin(sgn ? CPUI_INT_SRIGHT : CPUI_INT_RIGHT, es, mul, cst(4, w + rng.below(w))); Varnode* sg = bin(CPUI_INT_SRIGHT, es, e, cst(4, 8 * es - 1)); t = bin(CPUI_INT_SUB, es, s1, sg); break; }   // the sign correction of a signed division
+        }
+        return t;
+    }
+    Varnode* tmplSignForm2()
+    {
+        const int xs = pickInt({ 1, 2, 4 });
+        Varnode* a = input(xs);
+        Varnode* e = ext(CPUI_INT_SEXT, 2 * xs, a);
+        Varnode* o;
+        const int k = rng.below(4);
+        if (k == 0) o = cst(2 * xs, pick({ 0, 1, 2, 5, 0x7fff, 0xffff, 0xffffffffull, 0x100000000ull, 0x7fffffffull }));
+        else if (k == 1) o = ext(CPUI_INT_ZEXT, 2 * xs, input(xs));
+        else if (k == 2) o = ext(CPUI_INT_ZEXT, 2 * xs, input(std::max(1, xs / 2)));
+        else o = ext(CPUI_INT_SEXT, 2 * xs, input(xs));
+        Varnode* mul = rng.chance(50) ? bin(CPUI_INT_MULT, 2 * xs, e, o) : bin(CPUI_INT_MULT, 2 * xs, o, e);
+        Varnode* hi = emit(CPUI_SUBPIECE, xs, mul, cst(4, xs))->getOut();
+        return bin(CPUI_INT_SRIGHT, xs, hi, cst(4, 8 * xs - 1));
+    }
+    Varnode* tmplSignMod()
+    {
+        const int xs = pickInt({ 1, 2, 4, 8 });
+        const int w = 8 * xs;
+        Varnode* V = input(xs);
+        Varnode* sign = bin(CPUI_INT_SRIGHT, xs, V, cst(4, w - 1));
+        const int form = rng.below(5);
+        const int n = 1 + rng.below(std::max(1, w - 1));
+        if (form == 0)
+        {   // (V + (sign >>u (w-n))) & (2^n-1)) - (sign >>u (w-n))
+            Varnode* t = bin(CPUI_INT_RIGHT, xs, sign, cst(4, w - n));
+            Varnode* a = bin(CPUI_INT_AND, xs, bin(CPUI_INT_ADD, xs, V, t), cst(xs, (n >= 64 ? ~0ull : ((1ull << n) - 1))));
+            return bin(CPUI_INT_ADD, xs, a, bin(CPUI_INT_MULT, xs, t, cst(xs, Mask(xs))));
+        }
+        if (form == 1)
+        {   // (V - sign) & 1 + sign
+            Varnode* a = bin(CPUI_INT_AND, xs, bin(CPUI_INT_ADD, xs, V, bin(CPUI_INT_MULT, xs, sign, cst(xs, Mask(xs)))), cst(xs, 1));
+            return bin(CPUI_INT_ADD, xs, a, sign);
+        }
+        if (form == 2)
+        {   // V - ((V + (sign >>u (w-n))) & ~(2^n-1))
+            Varnode* t = bin(CPUI_INT_RIGHT, xs, sign, cst(4, w - n));
+            Varnode* adj = bin(CPUI_INT_AND, xs, bin(CPUI_INT_ADD, xs, V, t), cst(xs, (0 - (n >= 64 ? 0 : (1ull << n)))));
+            return bin(CPUI_INT_ADD, xs, V, bin(CPUI_INT_MULT, xs, adj, cst(xs, Mask(xs))));
+        }
+        if (form == 3)
+        {   // the near multiple: (V + (sign >>u (w-n))) & (-1 << n)
+            Varnode* t = bin(CPUI_INT_RIGHT, xs, sign, cst(4, w - n));
+            return bin(CPUI_INT_AND, xs, bin(CPUI_INT_ADD, xs, V, t), cst(xs, (Mask(xs) << n)));
+        }
+        {   // x - (x / c) * c
+            const bool sg = rng.chance(50);
+            uint64_t c = pick({ 2, 3, 5, 7, 10, 16, 0xff, 0x100 }) & Mask(xs);
+            if (c == 0) c = 3;
+            Varnode* q = bin(sg ? CPUI_INT_SDIV : CPUI_INT_DIV, xs, V, cst(xs, c));
+            return bin(CPUI_INT_ADD, xs, V, bin(CPUI_INT_MULT, xs, q, cst(xs, (0 - c))));
+        }
+    }
+    Varnode* tmplThreeWay()
+    {
+        const int s = pickInt({ 1, 2, 4 });
+        Varnode* a = rng.chance(75) ? input(s) : konst(s);
+        Varnode* b = rng.chance(75) ? input(s) : konst(s);
+        if (a->isConstant() && b->isConstant()) a = input(s);
+        const bool sg = rng.chance(50);
+        Varnode* b2 = b;
+        Varnode* a2 = a;
+        if (b->isConstant() && rng.chance(30)) b2 = cst(s, b->getOffset() + (rng.chance(50) ? 1 : -1));
+        if (a->isConstant() && rng.chance(30)) a2 = cst(s, a->getOffset() + (rng.chance(50) ? 1 : -1));
+        Varnode* l1 = emit(sg ? CPUI_INT_SLESS : CPUI_INT_LESS, 1, a, b)->getOut();
+        Varnode* l2 = emit(sg ? CPUI_INT_SLESSEQUAL : CPUI_INT_LESSEQUAL, 1, a2, b2)->getOut();
+        const int os = pickInt({ 1, 2, 4 });
+        Varnode* z1 = os == 1 ? l1 : ext(CPUI_INT_ZEXT, os, l1);
+        Varnode* z2 = os == 1 ? l2 : ext(CPUI_INT_ZEXT, os, l2);
+        if (rng.chance(50)) std::swap(z1, z2);
+        Varnode* sum;
+        const int f = rng.below(3);
+        if (f == 0) sum = bin(CPUI_INT_ADD, os, bin(CPUI_INT_ADD, os, z1, z2), cst(os, Mask(os)));
+        else if (f == 1) sum = bin(CPUI_INT_ADD, os, bin(CPUI_INT_ADD, os, z1, cst(os, Mask(os))), z2);
+        else sum = bin(CPUI_INT_ADD, os, z1, bin(CPUI_INT_ADD, os, z2, cst(os, Mask(os))));
+        static const OpCode cmps[] = { CPUI_INT_SLESS, CPUI_INT_SLESSEQUAL, CPUI_INT_EQUAL, CPUI_INT_NOTEQUAL };
+        Varnode* c = cst(os, pick({ 0, 1, 2, Mask(os), Mask(os) - 1, 3 }));
+        const OpCode oc = cmps[rng.below(4)];
+        return rng.chance(50) ? emit(oc, 1, sum, c)->getOut() : emit(oc, 1, c, sum)->getOut();
+    }
+    Varnode* tmplPieces()
+    {
+        const int hs = pickInt({ 1, 2, 4 }), ls = pickInt({ 1, 2, 4 });
+        const int ts = hs + ls;
+        const int form = rng.below(8);
+        if (form == 0)
+        {   // concat(sub(V,c), sub(V,d))
+            Varnode* V = input(ts);
+            Varnode* hi = emit(CPUI_SUBPIECE, hs, V, cst(4, rng.chance(70) ? ls : rng.below(ts - hs + 1)))->getOut();
+            Varnode* lo = emit(CPUI_SUBPIECE, ls, V, cst(4, rng.chance(70) ? 0 : rng.below(ts - ls + 1)))->getOut();
+            return bin(CPUI_PIECE, ts, hi, lo);
+        }
+        if (form == 1) return emit(CPUI_SUBPIECE, hs, bin(CPUI_PIECE, ts, input(hs), input(ls)), cst(4, rng.below(ts - hs + 1)))->getOut();
+        if (form == 2) return bin(rng.chance(50) ? CPUI_INT_RIGHT : CPUI_INT_SRIGHT, ts, bin(CPUI_PIECE, ts, input(hs), input(ls)), cst(4, pickInt({ 8 * ls, 8 * ls - 1, 8 * ls + 1, 8 * ls + 8, 8 * ts - 1, 8 * ts, 8 * hs })));
+        if (form == 3) return bin(CPUI_INT_AND, ts, bin(CPUI_PIECE, ts, input(hs), input(ls)), cst(ts, pick({ Mask(ls), Mask(hs) << (8 * ls), Mask(ts), Mask(ls) >> 1, 1, Mask(ts) ^ Mask(ls) })));
+        if (form == 4) return bin(CPUI_INT_AND, ts, ext(rng.chance(50) ? CPUI_INT_SEXT : CPUI_INT_ZEXT, ts, input(ls)), cst(ts, pick({ Mask(ls), Mask(ls) >> 1, Mask(ls + 1), Mask(ts) })));
+        if (form == 5) return bin(CPUI_PIECE, ts, bin(rng.chance(50) ? CPUI_INT_AND : (rng.chance(50) ? CPUI_INT_OR : CPUI_INT_XOR), hs, input(hs), konst(hs)), input(ls));
+        if (form == 6) return bin(CPUI_PIECE, ts, input(hs), bin(CPUI_INT_LEFT, ls, ext(CPUI_INT_ZEXT, ls, input(std::max(1, ls / 2))), cst(4, pickInt({ 8 * (ls - std::max(1, ls / 2)), 8, 16, 0 }))));
+        {   // concat(V s>> n, V)
+            Varnode* v = input(hs);
+            return bin(CPUI_PIECE, 2 * hs, bin(CPUI_INT_SRIGHT, hs, rng.chance(85) ? v : input(hs), cst(4, pickInt({ 8 * hs - 1, 8 * hs - 1, 8 * hs - 2, 7, 0 }))), v);
+        }
+    }
+    Varnode* tmplCompare()
+    {
+        const int s = pickInt({ 1, 2, 4, 8 });
+        const int w = 8 * s;
+        Varnode* x = input(s);
+        const int form = rng.below(9);
+        static const OpCode cmps[] = { CPUI_INT_EQUAL, CPUI_INT_NOTEQUAL, CPUI_INT_LESS, CPUI_INT_LESSEQUAL, CPUI_INT_SLESS, CPUI_INT_SLESSEQUAL };
+        const OpCode oc = cmps[rng.below(6)];
+        const uint64_t c = constant(s);
+        switch (form)
+        {
+        case 0: return emit(oc, 1, bin(rng.chance(50) ? CPUI_INT_LEFT : CPUI_INT_RIGHT, s, x, cst(4, pickInt({ 1, 2, 3, 7, 8, 9, 15, 16, 17, 31, 32, 33, w - 1, w, w + 1 }))), cst(s, c))->getOut();
+        case 1: return emit(oc, 1, bin(CPUI_INT_MULT, s, x, cst(s, pick({ 2, 4, 8, 16, 0x100, 0x10000, 3, 6, (Mask(s) >> 1) + 1 }))), cst(s, c))->getOut();
+        case 2: return emit(oc, 1, bin(CPUI_INT_AND, s, x, cst(s, c)), cst(s, rng.chance(60) ? 0 : constant(s)))->getOut();
+        case 3:
+        {
+            const int es = s >= 8 ? 8 : 2 * s;
+            if (es == s) return emit(oc, 1, x, cst(s, c))->getOut();
+            return emit(oc, 1, ext(rng.chance(50) ? CPUI_INT_ZEXT : CPUI_INT_SEXT, es, x), cst(es, constant(es)))->getOut();
+        }
+        case 4: return emit(oc, 1, bin(CPUI_INT_ADD, s, x, cst(s, c)), cst(s, constant(s)))->getOut();
+        case 5: return emit(oc, 1, bin(CPUI_INT_XOR, s, x, cst(s, c)), cst(s, constant(s)))->getOut();
+        case 6: return emit(oc, 1, un(CPUI_INT_NEGATE, s, x), cst(s, c))->getOut();
+        case 7: return emit(oc, 1, bin(CPUI_INT_OR, s, x, cst(s, c)), cst(s, constant(s)))->getOut();
+        default:
+        {   // two comparisons of one value combined
+            Varnode* c1 = emit(oc, 1, x, cst(s, c))->getOut();
+            Varnode* c2 = emit(cmps[rng.below(6)], 1, x, cst(s, rng.chance(40) ? c + 1 : constant(s)))->getOut();
+            return bin(rng.chance(50) ? CPUI_BOOL_AND : CPUI_BOOL_OR, 1, c1, c2);
+        }
+        }
+    }
+    Varnode* tmplBitwise()
+    {
+        const int s = pickInt({ 1, 2, 4, 8 });
+        const int w = 8 * s;
+        Varnode* x = input(s);
+        Varnode* y = input(s);
+        const int form = rng.below(9);
+        switch (form)
+        {
+        case 0: return bin(CPUI_INT_AND, s, bin(CPUI_INT_OR, s, x, y), konst(s));
+        case 1: return bin(CPUI_INT_AND, s, bin(rng.chance(50) ? CPUI_INT_LEFT : CPUI_INT_RIGHT, s, x, cst(4, pickInt({ 1, 8, 16, 24, w - 1, w / 2 }))), konst(s));
+        case 2: return bin(CPUI_INT_AND, s, bin(CPUI_INT_ADD, s, bin(CPUI_INT_ADD, s, x, konst(s)), y), cst(s, Mask(s) << pickInt({ 1, 2, 4, 8, w - 1 })));
+        case 3: return bin(rng.chance(50) ? CPUI_INT_RIGHT : CPUI_INT_SRIGHT, s, bin(CPUI_INT_AND, s, x, konst(s)), cst(4, pickInt({ 0, 1, 7, 8, 15, 16, 24, 31, w - 1, w, w + 1 })));
+        case 4: return bin(CPUI_INT_LEFT, s, bin(rng.chance(50) ? CPUI_INT_AND : (rng.chance(50) ? CPUI_INT_OR : CPUI_INT_ADD), s, x, konst(s)), cst(4, pickInt({ 1, 8, 16, w - 1, w })));
+        case 5: return bin(CPUI_INT_RIGHT, s, bin(CPUI_INT_LEFT, s, x, cst(4, pickInt({ 1, 8, 16, 24, w - 1 }))), cst(4, pickInt({ 1, 8, 16, 24, w - 1 })));
+        case 6: return bin(CPUI_INT_SRIGHT, s, bin(CPUI_INT_LEFT, s, x, cst(4, pickInt({ 1, 8, 16, 24, w - 1 }))), cst(4, pickInt({ 1, 8, 16, 24, w - 1 })));
+        case 7: return bin(CPUI_INT_SRIGHT, s, bin(CPUI_INT_SRIGHT, s, x, cst(4, pickInt({ 1, 8, 16, 24, w - 1, w }))), cst(4, pickInt({ 1, 8, 16, 24, w - 1, w })));
+        default: return bin(rng.chance(50) ? CPUI_INT_OR : CPUI_INT_XOR, s, bin(CPUI_INT_AND, s, x, konst(s)), bin(CPUI_INT_AND, s, y, konst(s)));
+        }
+    }
+    Varnode* tmplBool()
+    {
+        const int s = pickInt({ 1, 2, 4 });
+        Varnode* a = input(s);
+        Varnode* b = rng.chance(60) ? input(s) : konst(s);
+        if (a->isConstant() && b->isConstant()) a = input(s);
+        static const OpCode lt[] = { CPUI_INT_LESS, CPUI_INT_SLESS };
+        const OpCode l = lt[rng.below(2)];
+        Varnode* c1 = emit(rng.chance(50) ? l : (l == CPUI_INT_LESS ? CPUI_INT_LESSEQUAL : CPUI_INT_SLESSEQUAL), 1, a, b)->getOut();
+        Varnode* c2 = emit(rng.chance(50) ? CPUI_INT_EQUAL : CPUI_INT_NOTEQUAL, 1, a, b)->getOut();
+        if (rng.chance(30)) std::swap(c1, c2);
+        Varnode* r = bin(rng.chance(50) ? CPUI_BOOL_AND : CPUI_BOOL_OR, 1, c1, c2);
+        if (rng.chance(30)) r = bin(rng.chance(50) ? CPUI_BOOL_AND : CPUI_BOOL_OR, 1, r, emit(CPUI_INT_EQUAL, 1, a, cst(s, constant(s)))->getOut());
+        return r;
+    }
+    Varnode* tmplArith()
+    {
+        const int s = pickInt({ 1, 2, 4, 8 });
+        Varnode* x = input(s);
+        const int form = rng.below(6);
+        switch (form)
+        {
+        case 0: return bin(CPUI_INT_ADD, s, bin(CPUI_INT_ADD, s, bin(CPUI_INT_MULT, s, x, konst(s)), bin(CPUI_INT_MULT, s, x, konst(s))), konst(s));
+        case 1: return bin(CPUI_INT_MULT, s, bin(CPUI_INT_ADD, s, x, konst(s)), konst(s));
+        case 2: return bin(CPUI_INT_MULT, s, bin(CPUI_INT_MULT, s, x, konst(s)), konst(s));
+        case 3: return bin(CPUI_INT_ADD, s, bin(CPUI_INT_LEFT, s, x, cst(4, pickInt({ 1, 2, 8, 16 }))), x);
+        case 4: return bin(CPUI_INT_SUB, s, bin(CPUI_INT_MULT, s, x, konst(s)), x);
+        default: return bin(CPUI_INT_XOR, s, bin(CPUI_INT_XOR, s, x, konst(s)), konst(s));
+        }
+    }
+    Varnode* tmpl()
+    {
+        switch (rng.below(10))
+        {
+        case 0: return tmplDiv();
+        case 1: return tmplSignForm2();
+        case 2: return tmplSignMod();
+        case 3: return tmplThreeWay();
+        case 4: return tmplPieces();
+        case 5: return tmplCompare();
+        case 6: return tmplBitwise();
+        case 7: return tmplBool();
+        case 8: return tmplArith();
+        default: return tmplDiv();
+        }
+    }
     Varnode* gen(int size, int depth)
     {
         if (depth <= 0 || budget <= 0 || rng.chance(depth == maxDepth ? 0 : 22)) return leaf(size);
@@ -545,7 +779,7 @@ std::string Dump(Funcdata* fd)
     {
         const PcodeOp* op = *it;
         if (op->getOut()) o << VnText(op->getOut(), ids) << " = ";
-        o << op->getOpcode()->getName();
+        o << get_opname(op->code());
         for (int i = 0; i < op->numInput(); ++i) o << (i ? ", " : " ") << VnText(op->getIn(i), ids);
         o << " ; ";
     }
@@ -584,6 +818,8 @@ int main(int argc, char** argv)
     const bool nomask = std::getenv("RF_NOMASK") != nullptr;
     gWide = std::getenv("RF_WIDE") != nullptr;
     gSh2 = std::getenv("RF_SH2") != nullptr;
+    const bool useTemplates = !std::getenv("RF_NOTMPL");
+    const int tmplPercent = std::getenv("RF_TMPL") ? std::atoi(std::getenv("RF_TMPL")) : 35;
     const int showMax = std::getenv("RF_SHOW") ? std::atoi(std::getenv("RF_SHOW")) : 3;
 
     // the engine, with its spec materialised as the app does
@@ -616,9 +852,25 @@ int main(int argc, char** argv)
         BlockBasic* bb = graph.newBlockBasic(fd);
         graph.setStartBlock(bb);
         Builder bld(fd, reg, bb, entry, rng, depth);
-        const int rootSize = 1 << rng.below(4);
         bld.budget = 6 + rng.below(8);
-        Varnode* root = bld.gen(rootSize, depth);
+        Varnode* root;
+        int rootSize;
+        if (useTemplates && rng.chance(tmplPercent))
+        {
+            try { root = bld.tmpl(); } catch (LowlevelError&) { continue; }
+            rootSize = root->getSize();
+            // a template alone, or one more op on it
+            if (rng.chance(25) && rootSize <= 4)
+            {
+                static const OpCode wrap[] = { CPUI_INT_ADD, CPUI_INT_AND, CPUI_INT_XOR, CPUI_INT_OR, CPUI_INT_MULT };
+                root = bld.emit(wrap[rng.below(5)], rootSize, root, bld.konst(rootSize))->getOut();
+            }
+        }
+        else
+        {
+            rootSize = 1 << rng.below(4);
+            root = bld.gen(rootSize, depth);
+        }
         if (root->isConstant() || bld.inputKeys.empty()) continue;
         // the sink
         {
