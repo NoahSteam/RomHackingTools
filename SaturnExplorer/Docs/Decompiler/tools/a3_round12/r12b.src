@@ -1,0 +1,93 @@
+name C4a lent g stores its second argument (a frame address) through its first (a local slot); the caller reloads it and fills backwards
+asm 06009000
+.word 0x082A
+add #-24,r15
+mov #5,r0
+mov.l r0,@r15
+mov r15,r4
+add #20,r4
+mov r15,r5
+add #16,r5
+mov.l =0x06009040,r1
+jsr @r1
+nop
+mov.l @(20,r15),r1
+mov #4,r2
+L:
+mov.l r2,@-r1
+dt r2
+bf L
+mov.l @r15,r0
+add #24,r15
+.word 0x482A
+rts
+nop
+endasm
+asm 06009040
+rts
+mov.l r5,@r4
+endasm
+lend 06009040
+args 0 0 0 0
+end
+name C4b same, g not lent
+asm 06009000
+.word 0x082A
+add #-24,r15
+mov #5,r0
+mov.l r0,@r15
+mov r15,r4
+add #20,r4
+mov r15,r5
+add #16,r5
+mov.l =0x06009040,r1
+jsr @r1
+nop
+mov.l @(20,r15),r1
+mov #4,r2
+L:
+mov.l r2,@-r1
+dt r2
+bf L
+mov.l @r15,r0
+add #24,r15
+.word 0x482A
+rts
+nop
+endasm
+asm 06009040
+rts
+mov.l r5,@r4
+endasm
+args 0 0 0 0
+end
+name C4c lent g stores its second argument through its first; the caller reloads it and stores below at a constant displacement
+asm 06009000
+.word 0x082A
+add #-24,r15
+mov #5,r0
+mov.l r0,@r15
+mov r15,r4
+add #20,r4
+mov r15,r5
+add #16,r5
+mov.l =0x06009040,r1
+jsr @r1
+nop
+mov.l @(20,r15),r1
+mov #1,r2
+add #-16,r1
+mov.l r2,@r1
+mov.l @r15,r0
+add #24,r15
+.word 0x482A
+rts
+nop
+endasm
+asm 06009040
+rts
+mov.l r5,@r4
+endasm
+lend 06009040
+args 0 0 0 0
+end

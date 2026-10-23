@@ -1,0 +1,143 @@
+name F1 g1 lent returns r4; U unlent fills backwards from r4=r0
+asm 06009000
+.word 0x082A
+add #-24,r15
+mov #5,r0
+mov.l r0,@r15
+mov r15,r4
+add #16,r4
+mov.l =0x06009040,r1
+jsr @r1
+nop
+mov r0,r4
+mov #4,r3
+mov.l =0x06009080,r1
+jsr @r1
+nop
+mov.l @r15,r0
+add #24,r15
+.word 0x482A
+rts
+nop
+endasm
+asm 06009040
+rts
+mov r4,r0
+endasm
+asm 06009080
+mov r3,r1
+L:
+mov.l r1,@-r4
+dt r1
+bf L
+rts
+nop
+endasm
+lend 06009040
+args 0 0 0 0
+end
+name F2 U1 unlent (hidden r3) tail-jumps to lent k which fills backwards
+asm 06009000
+.word 0x082A
+add #-24,r15
+mov #5,r0
+mov.l r0,@r15
+mov r15,r4
+add #16,r4
+mov #4,r3
+mov.l =0x06009040,r1
+jsr @r1
+nop
+mov.l @r15,r0
+add #24,r15
+.word 0x482A
+rts
+nop
+endasm
+asm 06009040
+mov r3,r2
+mov.l =0x06009080,r1
+jmp @r1
+nop
+endasm
+asm 06009080
+mov #4,r1
+L:
+mov.l r1,@-r4
+dt r1
+bf L
+rts
+nop
+endasm
+lend 06009080
+args 0 0 0 0
+end
+name F3 U1 unlent (hidden r3) calls lent k which fills backwards
+asm 06009000
+.word 0x082A
+add #-24,r15
+mov #5,r0
+mov.l r0,@r15
+mov r15,r4
+add #16,r4
+mov #4,r3
+mov.l =0x06009040,r1
+jsr @r1
+nop
+mov.l @r15,r0
+add #24,r15
+.word 0x482A
+rts
+nop
+endasm
+asm 06009040
+.word 0x4F22
+mov r3,r2
+mov.l =0x06009080,r1
+jsr @r1
+nop
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009080
+mov #4,r1
+L:
+mov.l r1,@-r4
+dt r1
+bf L
+rts
+nop
+endasm
+lend 06009080
+args 0 0 0 0
+end
+name F4 control U unlent (hidden r3) fills backwards directly
+asm 06009000
+.word 0x082A
+add #-24,r15
+mov #5,r0
+mov.l r0,@r15
+mov r15,r4
+add #16,r4
+mov #4,r3
+mov.l =0x06009040,r1
+jsr @r1
+nop
+mov.l @r15,r0
+add #24,r15
+.word 0x482A
+rts
+nop
+endasm
+asm 06009040
+mov r3,r1
+L:
+mov.l r1,@-r4
+dt r1
+bf L
+rts
+nop
+endasm
+args 0 0 0 0
+end
