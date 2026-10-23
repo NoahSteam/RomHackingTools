@@ -8289,6 +8289,7 @@ bool GenLaunderWalkFn(uint64_t seed, CCase& c, std::string& shape)
 //   spare: f pushes r14, hands a swapped copy of r15 to a lent writer h (which overwrites the saved r14), pops r14; checked by f's claim, not
 //        the caller's text (the caller of a withheld f keeps r14 by the model: A3-93)
 //   neg.<one|sub>, shift.<arith>: a frame address through a negation the engine does not fold back, or `shll ; shar` (A3-97 E3, E4)
+static const char* const kEscapeNegShift[] = { "neg.negc", "neg.sub", "shift.shll", "shift.shal" };
 static const char* const kEscapeForms[] = { "keep.global", "keep.arg2", "keep.outgoing", "back", "chain", "struct", "callerframe", "spare", "neg", "shift" };
 bool GenEscapeWalkFn(uint64_t seed, CCase& c, std::string& shape)
 {
@@ -8681,6 +8682,17 @@ void TestPrintedC()
             std::printf("pin '%s': %s (%s)\n", rr.first, rv[0].cls.c_str(), rv[0].detail.c_str());
             CHECK(rv[0].cls == "raw-stack-register");
             CHECK(!IsFailing(rv[0]));
+        }
+        // A3-102 (area 3 round 12 fix, patch 0063): a pointer stepped up from a local over a slot the function saved GBR in (`stc gbr,r7 ;
+        // mov.l r7,@(8,r15)`, then `mov r15,r7 ; L: mov.l r3,@r7 ; add #4,r7 ; dt r3 ; bf L`) wrote the slot, and the read of it after the loop
+        // printed the saved register (`return CONCAT44(unaff_gbr,param_2);`, a mismatch): the slot was unmapped as a save slot, which only a
+        // pointer stepped down kept mapped (0056). A slot an indexed store's guard covers stays mapped now; the text agrees with the run.
+        {
+            const std::vector<CVerdict> rv = CheckPrintedC(d, { { "A3-102: printed-C walk 2208857", { 0x6043, 0x6153, 0x6263, 0x6373, 0x0712, 0x7FF4, 0x1F21, 0x1F72, 0x67F3, 0xE303,
+                                                                                                         0x2732, 0x7704, 0x4310, 0x8BFB, 0x50F2, 0x7F0C, 0x000B, 0x0009 } } },
+                                                            nIn, cc, 0x51ED, 8995);
+            std::printf("pin 'A3-102: printed-C walk 2208857': %s (%s)\n", rv[0].cls.empty() ? "agrees" : rv[0].cls.c_str(), rv[0].detail.c_str());
+            CHECK(rv[0].cls.empty() && rv[0].compared);
         }
     }
     if (hand)
@@ -9849,6 +9861,51 @@ void TestRoutedPins(Sh2Decompiler& d)
     gSpecialReads = saved;
 }
 
+// ===== Area 3, round 12 fix: the routed seeds that were the oracle's (A3-100, A3-101) =====
+void TestRound12FixPins(Sh2Decompiler& d)
+{
+    auto count = [](const Report& rep, const char* name) {
+        auto it = rep.counts.find(name);
+        return it == rep.counts.end() ? 0 : it->second;
+    };
+    // A3-100 (grammar 2 seed 2007995, shrunk): a callee computes `stc gbr,r2 ; and r5,r2`, and GBR's start 0x06024100 AND r5's 0x06021100 is
+    // r4's start 0x06020100 exactly, so r2 at the caller's return was taken for a pointer from r4 (`claim-wrong:outOrigins`). A value an AND,
+    // OR or XOR of two other start values the run read lands on is no evidence of either (BitwiseOfOthers).
+    {
+        RunOut run;
+        run.init[4] = 0x06020100u;
+        run.init[5] = 0x06021100u;
+        run.initState[0] = 0x06024100u;
+        run.use.readFirst = (1u << 4) | (1u << 5) | (1u << 17);
+        CHECK(PointerRegister(run, 0x06020100u) == -1);   // GBR & r5
+        CHECK(PointerRegister(run, 0x06020104u) == -1);
+        run.use.readFirst = (1u << 4) | (1u << 5);         // GBR not read: r4's start is r4's
+        CHECK(PointerRegister(run, 0x06020100u) == 4);
+        const ModulePin m = { "A3-100 grammar 2 seed 2007995 (shrunk)",
+                              "2F86 2F96 2FA6 2FB6 4F22 6843 6953 6A63 6B73 6043 4F26 6BF6 6AF6 69F6 68F6 000B 0009 2F86 2F96 2FA6 4F22 7FF0 6843 6953 6A63 B00B E69E 6483 6593 66A3 606D 7F10 4F26 6AF6 69F6 68F6 000B 0009 7FFC 0212 E301 2259 4310 8901 AFFB 0009 6033 7F04 000B 0009",
+                              "0/0/22,22/22/4c,4c/4c/64", nullptr, "1,1,1", "20000,0,0", "80000,20000,20000" };
+        const Report rep = EvaluateSubject(d, ModuleSubject(m), true);
+        std::printf("pin '%s': %zu finding(s)\n", m.name, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+    // A3-101 (grammar 1 seed 2126605): `and r0,r0` in the slot of the rts and `mov r0,r0` write r0 with itself, so r0 was "written on every path"
+    // and its final value, the perturbed start value passed through, made r0 an input that changes what the function returns
+    // (`input-dropped:r0`). r0 that ends as it began in both runs is not compared.
+    {
+        const Report rep = EvaluateSubject(d, RawSubject("D605 6213 451B 73B8 621D 6161 C810 8B01 6003 334C 000B 2009 2600 1038"), true);
+        std::printf("pin 'A3-101 grammar 1 seed 2126605': %zu finding(s)\n", rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+        // ...and a function that does compute r0 from r0 is still found (the control: `add #1,r0` in the slot, a void signature lent)
+        const Report cr = EvaluateSubject(d, RawSubject("C810 8B01 6003 334C 000B 7001"), true);
+        std::printf("pin 'A3-101 control: r0 + 1 in the slot of the rts': %zu finding(s), %d withheld\n", cr.findings.size(), count(cr, "proto.withheld"));
+        bool dropped = false;
+        for (const Finding& f : cr.findings) dropped = dropped || f.sig.find("r0") != std::string::npos;
+        CHECK(dropped || count(cr, "proto.withheld") >= 1);
+    }
+}
+
 // ===== Area 3, round 9 fix: the shapes of A3-56 to A3-59 and A3-62 as modules, the grammar's choices, and the claims of A3-63 =====
 void TestRound9Pins(Sh2Decompiler& d)
 {
@@ -10167,6 +10224,7 @@ void TestGenerated()
         RUN(TestRound8Pins(d));
         RUN(TestRoutedPins(d));
         RUN(TestRound9Pins(d));
+        RUN(TestRound12FixPins(d));
         RUN(TestA365Pins(d));
         if (EnvNumber("SE_GENERATED_CANARY", 240) > 0) RUN(TestCanary(d));
     }

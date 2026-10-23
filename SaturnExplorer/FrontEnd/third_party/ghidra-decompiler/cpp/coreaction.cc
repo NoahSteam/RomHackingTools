@@ -21,6 +21,7 @@
  * Modified for SaturnExplorer: a return in the join space is consumed whole, never narrowed to its low half (patches/0033-engine-printed-value-fixes.patch).
  * Modified for SaturnExplorer: the backward step of the consume analysis is PcodeOp::getConsumeLocal (patches/0054-engine-cached-masks-never-narrower.patch).
  * Modified for SaturnExplorer: the entry stack pointer a loop walks down is no reference to a stack parameter, and a save slot it reaches stays mapped (patches/0056-engine-stack-walk-down-aliases.patch).
+ * Modified for SaturnExplorer: so does a save slot an indexed store's guard covers (patches/0063-engine-frame-escape-unknown-pointers.patch).
  */
 #include "coreaction.hh"
 #include "condexe.hh"
@@ -2113,6 +2114,16 @@ int4 ActionRestrictLocal::apply(Funcdata &data)
 	for(int4 k=0;k<spans.size();++k) {
 	  uintb low = spans[k].first, top = spans[k].second, off = outvn->getOffset();
 	  if (outvn->getSpace() == stackSpc && (low <= top ? (off >= low && off <= top) : (off >= low || off <= top)))
+	    walked = true;
+	}
+	// SaturnExplorer (patches/0063-engine-frame-escape-unknown-pointers.patch): ...and a slot an indexed STORE may write, as its guard
+	// (the value set analysis of the pointer) has it: a pointer stepped up from a local over the slot (`*p++ = v` past an array) wrote it,
+	// and unmapped, the slot was one variable with the register saved in it, so a read of it after the walk printed the register
+	// (`return unaff_gbr;`, ledger A3-102). Only a stepped-down pointer's reach was kept (0056).
+	const list<LoadGuard> &guards( data.getStoreGuards() );
+	for(list<LoadGuard>::const_iterator giter=guards.begin();giter!=guards.end() && !walked;++giter) {
+	  if (!(*giter).isValid(CPUI_STORE)) continue;
+	  if ((*giter).isGuarded(outvn->getAddr()))
 	    walked = true;
 	}
 	if (walked) continue;
