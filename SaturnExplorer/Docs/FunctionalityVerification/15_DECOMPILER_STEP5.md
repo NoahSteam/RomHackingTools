@@ -11373,7 +11373,7 @@ Each fix reverted alone in the vendored source or the harness (the pin fails; re
 
 ### 5. The matrix
 
-Own RelWithDebInfo build under the scratch directory (2.5 GB, `-j2`, every run under `ulimit -v 4000000` and `timeout`, one heavy job at a time), on the final engine and harness (code commit `9656c5a`).
+Own RelWithDebInfo build under the scratch directory (2.5 GB, `-j2`, every run under `ulimit -v 4000000` and `timeout`, one heavy job at a time), on the final engine and harness (code commit `3ece699`).
 
 | Run | Result |
 |---|---|
