@@ -172,6 +172,7 @@ struct Eval
     std::vector<uintb> val;
     std::vector<char> have;
     bool undef = false;
+    bool wrapped = false;     // an INT_MULT overflowed its width (the unsigned reading when a multiplicand is a ZEXT, the signed one for a SEXT, either otherwise)
     const std::map<const Varnode*, uintb>* leafVals;
     uintb get(int id)
     {
@@ -217,6 +218,25 @@ struct Eval
                     const intb x = sign_extend(a, n.insize[0] * 8 - 1), y = sign_extend(b, n.insize[1] * 8 - 1);
                     if (y == 0 || (y == -1 && n.insize[0] == 8)) { undef = true; r = 0; }
                     else r = (uintb)(x % y) & m;
+                    break;
+                }
+                case CPUI_INT_MULT:
+                {
+                    const unsigned __int128 pu = (unsigned __int128)a * b;
+                    const intb sa = sign_extend(a, 8 * n.insize[0] - 1), sb = sign_extend(b, 8 * n.insize[1] - 1);
+                    const __int128 ps = (__int128)sa * sb, lim = (__int128)1 << (8 * n.size - 1);
+                    bool uns = false, sgn = false;
+                    for (int i = 0; i < 2; ++i)
+                    {
+                        const Node& ch = c->nodes[n.in[i]];
+                        if (ch.kind == 2 && ch.opc == CPUI_INT_ZEXT) uns = true;
+                        if (ch.kind == 2 && ch.opc == CPUI_INT_SEXT) sgn = true;
+                    }
+                    const bool fitU = pu <= (unsigned __int128)m, fitS = ps >= -lim && ps < lim;
+                    if (uns && !sgn) { if (!fitU) wrapped = true; }
+                    else if (sgn && !uns) { if (!fitS) wrapped = true; }
+                    else if (!fitU && !fitS) wrapped = true;
+                    r = (a * b) & m;
                     break;
                 }
                 default:
@@ -314,7 +334,7 @@ inline std::string text(const Cone& c, int id, int depth = 0)
     return o.str();
 }
 
-inline bool checkOne(const std::string& rule, const Cone& before, int rb, const Cone& after, int ra, uintb consume, std::string& detail, bool& unmatched)
+inline bool checkOne(const std::string& rule, const Cone& before, int rb, const Cone& after, int ra, uintb consume, std::string& detail, bool& unmatched, bool skipWrapped = false)
 {
     // the leaves of both cones
     std::map<const Varnode*, uintb> nz;
@@ -361,10 +381,11 @@ inline bool checkOne(const std::string& rule, const Cone& before, int rb, const 
             lv[l] = v & m & z;
         }
         eb.leafVals = ea.leafVals = &lv;
-        eb.val.assign(before.n, 0); eb.have.assign(before.n, 0); eb.undef = false;
+        eb.val.assign(before.n, 0); eb.have.assign(before.n, 0); eb.undef = false; eb.wrapped = false;
         ea.val.assign(after.n, 0); ea.have.assign(after.n, 0); ea.undef = false;
         const uintb vb = eb.get(rb), va = ea.get(ra);
         if (eb.undef || ea.undef) continue;
+        if (skipWrapped && eb.wrapped) continue;
         if ((vb & consume) != (va & consume))
         {
             std::ostringstream o;
@@ -382,9 +403,9 @@ inline void verify(const std::string& rule, const PcodeOp* op, const Snap& s, in
 {
     Tally& t = tallies()[rule];
     if (result > 0) ++t.applied;
-    // The division recognisers fold a multiply that wraps in its own width into the exact quotient (RuleDivTermAdd's `x*(c+2^n)` is wider than the multiply
-    // that holds it, on the way to RuleDivOpt): their steps are not value-preserving one at a time, only end to end, which the printed-C differential checks.
-    if (rule == "divtermadd" || rule == "divtermadd2" || rule == "divopt") { if (result > 0) ++t.skipped; return; }
+    // RuleDivTermAdd's `x*(c+2^n)` is wider than the multiply that holds it, on the way to RuleDivOpt: its steps are not value-preserving one at a time, only end to
+    // end, which the printed-C differential checks. RuleDivOpt is checked for the samples whose multiply does not wrap (the ones a compiler's division has).
+    if (rule == "divtermadd" || rule == "divtermadd2") { if (result > 0) ++t.skipped; return; }
     // RuleSignMod2nOpt2's `V - (Vadj & ~(2^n-1))` reads Vadj from a MULTIEQUAL and the branch behind it: the leaf is related to V by the control flow, not by the data
     if (rule == "signmod2nopt2") { if (result > 0) ++t.skipped; return; }
     if (!s.ok) { if (result > 0) ++t.skipped; return; }
@@ -406,7 +427,7 @@ inline void verify(const std::string& rule, const PcodeOp* op, const Snap& s, in
         std::string detail;
         bool unmatched = false;
         ++t.checked;
-        if (!checkOne(rule, s.cone, r.node, ac, ra, r.consume, detail, unmatched))
+        if (!checkOne(rule, s.cone, r.node, ac, ra, r.consume, detail, unmatched, rule == "divopt"))
         {
             ++t.bad;
             if (t.bad <= 3 && std::getenv("SE_RULECHECK"))
