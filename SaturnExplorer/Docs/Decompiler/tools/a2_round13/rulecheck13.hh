@@ -10,6 +10,7 @@
 //
 // SE_RULECHECK=1       print a line for each application whose value changed, and the totals at exit
 // SE_RULECHECK_ONLY=n  check only the rule whose name contains n
+// SE_RULECHECK_MAX=n   print up to n bad applications of a rule (3)
 // SE_RULECHECK_NOWRAP=1  check RuleDivOpt on the samples whose multiply wraps too (they are skipped by default: the steps of RuleDivTermAdd leave a wrapped product on the way
 //                        to RuleDivOpt; a value the machine really computes through a wrapped product is a mismatch of RuleDivOpt itself, see A2-82)
 #ifndef SE_RULECHECK_13_HH
@@ -143,6 +144,8 @@ inline void snapshot(const PcodeOp* op, Snap& s)
     Memo memo;
     auto addRoot = [&](const Varnode* v) {
         if (s.nroots >= kMaxRoots || v->getSize() > 8 || !v->isWritten()) return;
+        // a varnode no consumer reads a bit of (consume 0) is dead: rules fold it to anything (RuleAndMask to 0), which is not a change of value anyone can see
+        if ((v->getConsume() & calc_mask(v->getSize())) == 0) return;
         for (int i = 0; i < s.nroots; ++i) if (s.roots[i].vn == v) return;
         Root& r = s.roots[s.nroots++];
         r.vn = v; r.def = v->getDef(); r.consume = v->getConsume() & calc_mask(v->getSize());
@@ -330,10 +333,10 @@ inline std::string text(const Cone& c, int id, int depth = 0)
     const Node& n = c.nodes[id];
     std::ostringstream o;
     if (n.kind == 1) o << "#0x" << std::hex << n.value << ":" << std::dec << n.size;
-    else if (n.kind == 0) o << "L" << (const void*)n.vn << ":" << n.size;
+    else if (n.kind == 0) o << "L" << (const void*)n.vn << ":" << n.size << "{nz " << std::hex << n.value << std::dec << "}";
     else
     {
-        o << get_opname(n.opc) << ":" << n.size << "(";
+        o << get_opname(n.opc) << ":" << n.size << "{nz " << std::hex << n.nz << std::dec << "}(";
         for (int i = 0; i < n.nin; ++i) { if (i) o << ","; o << (depth > 5 ? std::string("..") : text(c, n.in[i], depth + 1)); }
         o << ")";
     }
@@ -457,7 +460,7 @@ inline void verify(const std::string& rule, const PcodeOp* op, const Snap& s, in
         if (!checkOne(rule, s.cone, r.node, ac, ra, r.consume, detail, unmatched, t.maskskip, rule == "divopt" && !std::getenv("SE_RULECHECK_NOWRAP")))
         {
             ++t.bad;
-            if (t.bad <= 3 && std::getenv("SE_RULECHECK"))
+            if (t.bad <= (std::getenv("SE_RULECHECK_MAX") ? std::atol(std::getenv("SE_RULECHECK_MAX")) : 3) && std::getenv("SE_RULECHECK"))
             {
                 std::ostringstream o;
                 op->printRaw(o);

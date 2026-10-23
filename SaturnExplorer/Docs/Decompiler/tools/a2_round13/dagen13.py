@@ -9,8 +9,9 @@
 #                (RuleShiftCompare, RuleSubCommute, RuleDoubleShift with shifts at or beyond the narrowed width)
 #   58 negshift  a negated or sign-extended byte/word shifted right by 7 to 31, with the multiply by -1 read as a division (RuleDivOpt, RuleSignDiv2,
 #                RuleSignForm)
+#   60 mulshift  an extended byte or word times a constant, shifted right (logical or arithmetic), cut or used whole: RuleDivOpt with every pairing of the extension and the shift (A2-82)
 #   59 shdiv     a value shifted right (1 to 16), then divided by a constant that is large for the shifted width (RuleDivChain, RuleDivOpt)
-# usage: dagen13.py <first seed> <count> [family 55..59]   -> one function per seed, ";" joined (SE_GENERATED_PRINTEDC_WORDS)
+# usage: dagen13.py <first seed> <count> [family 55..60]   -> one function per seed, ";" joined (SE_GENERATED_PRINTEDC_WORDS)
 #        dagen13.py extras <first seed> <count> <family>   -> the comma-joined hex list for SE_GENERATED_PRINTEDC_EXTRA
 import importlib.util, os, random, sys
 
@@ -165,7 +166,26 @@ def fam_shdiv(r, f):
     if k == 1: f.add(mov(1, 0), SHLR | 1 << 8, mov(0, 1))
     elif k == 2: f.add(cmp_pz(0), movt(0))
 
-FAMS13 = {55: fam_soup, 56: fam_lerp, 57: fam_narrow, 58: fam_negshift, 59: fam_shdiv}
+def fam_mulshift(r, f):
+    # a value extended (or not) from a byte or a word, multiplied by a constant at 32 bits (mul.l, mulu.w, muls.w), shifted right, logically or arithmetically, and
+    # used whole or cut: the shape of a division by multiplication (RuleDivOpt) with the shift and the extension of either sign, so that the mismatched pairs
+    # (a sign extension with a logical shift, a zero extension with an arithmetic one) are drawn as often as the matched ones
+    ext = r.choice([extsb, extsw, extub, extuw, extsw, extsb])
+    c = r.choice([(1 << k) + 1 for k in (8, 15, 16, 24)] + [(1 << k) - 1 for k in (8, 15, 16)] + [RAND_LITS(r), RAND_LITS(r), 0x55555556, 0x66666667, 0x2AAAAAAB, 0x1000001, 0x10001, 0x8001, 0x101])
+    f.add(ext(1, 4)); f.lit(2, c)
+    k = r.randrange(0, 3)
+    if k == 0: f.add(mull(2, 1), stsmacl(0))
+    elif k == 1: f.add(r.choice([muluw, mulsw])(2, 1), stsmacl(0))
+    else: f.add(mull(2, 1), stsmacl(0), mov(3, 0)); f.add(mov(0, 3))
+    n = r.choice([1, 2, 7, 8, 9, 15, 16, 17, 23, 24, 25, 31])
+    (shr_arith if r.random() < 0.4 else shr_logical)(f, 0, n)
+    t = r.randrange(0, 5)
+    if t == 1: f.add(r.choice([extub, extuw, extsb, extsw])(0, 0))
+    elif t == 2: f.add(andi(r.choice([0xFF, 0x7F, 0x0F, 0x01])))
+    elif t == 3: f.add(add_(1, 0))
+    elif t == 4: f.add(cmp_pz(0), movt(0))
+
+FAMS13 = {55: fam_soup, 56: fam_lerp, 57: fam_narrow, 58: fam_negshift, 59: fam_shdiv, 60: fam_mulshift}
 
 def build(seed, fam=None, want_fn=False):
     r = random.Random(seed * 104729 + 13)
