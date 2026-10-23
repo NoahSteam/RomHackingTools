@@ -18,6 +18,7 @@
  * Modified for SaturnExplorer: an access that runs past the end of its space stays a LOAD or STORE (patches/0031-access-past-space-end.patch).
  * Modified for SaturnExplorer: RuleDivTermAdd and RuleDivTermAdd2 keep a product that overflows only for a division; RulePiecePathology needs the register it names (patches/0037-engine-division-piece-and-input-names.patch).
  * Modified for SaturnExplorer: RuleDivTermAdd and RuleDivTermAdd2 keep an overflowing product only when the shifts that follow stay inside the multiply (patches/0044-engine-round5-printed-value-fixes.patch).
+ * Modified for SaturnExplorer: RuleScarry refuses the minimum for either operand; RuleRightShiftAnd keeps the mask of a shift by the width or more; RuleSLess2Zero takes the high bit of a sum only from an operand when the other has none (patches/0062-engine-range-set-ops-and-rule-guards.patch).
  */
 #include "ruleaction.hh"
 #include "coreaction.hh"
@@ -585,9 +586,15 @@ int4 RuleRightShiftAnd::applyOp(PcodeOp *op,Funcdata &data)
   Varnode *maskVn = andOp->getIn(1);
   if (!maskVn->isConstant()) return 0;
 
-  int4 sa = (int4)constVn->getOffset();
-  uintb mask = maskVn->getOffset() >> sa;
   Varnode *rootVn = andOp->getIn(0);
+  // SaturnExplorer (patches/0062-engine-range-set-ops-and-rule-guards.patch): a shift by the width of the value or more leaves no bit of it to compare the
+  // mask with: both sides of the test below are 0 and the mask looked unnecessary, but an arithmetic shift by the width is the value's sign bit alone,
+  // and the mask can clear it. `(sext(b) & 0x20) s>> 8`, once the sub-variable flow had made the value one byte, was printed `b >> 8`: all the sign of
+  // b, where the code computes 0. The shift amount is read as the 64-bit number it is (an int4 cast made a large amount negative).
+  const uintb saFull = constVn->getOffset();
+  if (saFull >= (uintb)8*rootVn->getSize()) return 0;
+  int4 sa = (int4)saFull;
+  uintb mask = maskVn->getOffset() >> sa;
   uintb full = calc_mask(rootVn->getSize()) >> sa;
   if (full != mask) return 0;
   if (rootVn->isFree()) return 0;
@@ -3404,6 +3411,11 @@ int4 RuleScarry::applyOp(PcodeOp *op,Funcdata &data)
     if (!avn->isConstant()) return 0;
     avn = bvn;
     bvn = op->getIn(0);
+  }
+  // SaturnExplorer (patches/0062-engine-range-set-ops-and-rule-guards.patch): the minimum is refused whichever operand it was. Upstream refused it only
+  // for the operand it had swapped itself, and rewrote scarry(V,min) != (V + min s< 0) to V s< -min = V s< min for a constant second operand:
+  // false for every V, where the original is true for V = min.
+  {
     uintb val = calc_mask(bvn->getSize());
     val = val ^ (val >> 1);	// Calculate integer minimum
     if (val == bvn->getOffset()) return 0;	// Rule does not work if bvn is the integer minimum
@@ -5616,8 +5628,13 @@ Varnode *RuleSLess2Zero::getHiBit(PcodeOp *op)
   if ((nzmask2!=mask)&&((nzmask2 & mask)!=0))
     return (Varnode *)0;
 
-  if (nzmask1 == mask)
+  // SaturnExplorer (patches/0062-engine-range-set-ops-and-rule-guards.patch): the other operand must have no high bit. With both operands able to
+  // set it (a masked sign and the constant 0x80000000: `(x & 0x80000000) + 0x80000000 s< 0`), the high bit of the sum is the exclusive or of the two and
+  // neither operand is it; `(uVar1 + 0x80000000) s< 0` was printed `uVar1 != 0` (its negation), and a subv of a masked sign wrote GBR when it must not.
+  if (nzmask1 == mask) {
+    if ((nzmask2 & mask) != 0) return (Varnode *)0;
     return vn1;
+  }
   if (nzmask2 == mask)
     return vn2;
   return (Varnode *)0;

@@ -6753,6 +6753,7 @@ typedef unsigned long long u64;
 typedef long long s64;
 template <int N> struct Rep { typedef typename std::conditional<(N <= 1), uint8_t, typename std::conditional<(N <= 2), uint16_t, typename std::conditional<(N <= 4), uint32_t, uint64_t>::type>::type>::type type; };
 template <int N, bool S> struct T;
+template <int N> struct Piece;
 template <class I> struct IsInt { static const bool value = std::is_integral<I>::value; };
 static inline u64 B2U(bool x) { return x ? 1 : 0; }
 template <class I> static inline typename std::enable_if<std::is_signed<I>::value && !std::is_same<I, bool>::value, u64>::type B2U(I x) { return (u64)(s64)x; }
@@ -6768,6 +6769,11 @@ template <int N, bool S> struct T {
   // a cast (explicit): a wider target extends by the source's sign, as C does, except the unsigned 8-byte cast of a 4-byte value, which is the
   // zero extension the engine builds a 64-bit product with (`(uint8)x` of a signed x: A2-19)
   template <int M, bool U> explicit T(const T<M, U>& o) : v((R)((N > M ? ((N == 8 && M == 4 && !S) ? o.Zext() : o.Ext()) : o.Zext()) & Mask())) {}
+  // the cast of a piece (CONCATab, the engine's untyped value of a + b bytes): for 5 to 7 bytes, which have no type of their own in C, a cast to an unsigned
+  // 8-byte type is the ZEXT the engine builds (`(uint8)CONCAT14((char)in_r1,in_r1)`: the high word of the run is 0, not the sign: A2-79). The engine prints a
+  // cast to the type of the variable it assigns to, so for sizes with a type (a 2-byte piece read by `mov.w` into a uint4) the extension is by the piece's
+  // sign, as for any other cast
+  template <int M> explicit T(const Piece<M>& o) : v((R)((N > M ? ((!S && M >= 5) ? o.Zext() : ((N == 8 && M == 4 && !S) ? o.Zext() : o.Ext())) : o.Zext()) & Mask())) {}
   // an implicit conversion, the one C does: by the source's sign
   template <int M, bool U> operator T<M, U>() const { return T<M, U>(B2U(Ext())); }
   u64 Zext() const { return (u64)v & Mask(); }
@@ -6780,6 +6786,11 @@ template <int N, bool S, int M, bool U> struct Common {
   static const int size = N > M ? N : M;
   static const bool sign = N == M ? (S && U) : (N > M ? S : U);
   typedef T<size, sign> type;
+};
+// The value of a CONCATab: signed as an xunknown is in this reading, with the cast above for the extension
+template <int N> struct Piece : T<N, true> {
+  Piece() {}
+  template <class I, class = typename std::enable_if<IsInt<I>::value>::type> Piece(I x) : T<N, true>(x) {}
 };
 typedef T<4, false> Bool4;
 // A value narrower than int meeting a plain number (the text's literal has no width of its own) is brought to four bytes first, keeping its sign: the
@@ -6839,8 +6850,10 @@ typedef T<5, true> unkbyte5; typedef T<6, true> unkbyte6; typedef T<7, true> unk
 typedef T<5, true> unkint5; typedef T<6, true> unkint6; typedef T<7, true> unkint7;
 template <class X> static inline u64 RAW(const X& x) { return B2U(x); }
 template <int N, bool S> static inline u64 RAW(const T<N, S>& x) { return x.Zext(); }
+template <int N> static inline u64 RAW(const Piece<N>& x) { return x.Zext(); }
 template <class X> struct SZ { static const int n = sizeof(X); };
 template <int N, bool S> struct SZ<T<N, S> > { static const int n = N; };
+template <int N> struct SZ<Piece<N> > { static const int n = N; };
 #define SIZEOFV(v) (SZ<__typeof__(v)>::n)
 #define FLDMASK(n) ((n) >= 8 ? ~0ULL : ((1ULL << (8 * (n))) - 1))
 #define FLDRAW(v, o, n) ((RAW(v) >> (8 * (SIZEOFV(v) - (o) - (n)))) & FLDMASK(n))
@@ -6922,7 +6935,7 @@ std::string CxxHeader()
     // The piece operations, typed by the size they give (xunknown: signed in this reading).
     for (int a = 1; a <= 7; ++a)
         for (int b = 1; a + b <= 8; ++b)
-            o << "#define CONCAT" << a << b << "(a, b) (T<" << a + b << ", true>(((RAW(a) & " << mask(a) << ") << " << 8 * b << ") | (RAW(b) & " << mask(b) << ")))\n";
+            o << "#define CONCAT" << a << b << "(a, b) (Piece<" << a + b << ">(((RAW(a) & " << mask(a) << ") << " << 8 * b << ") | (RAW(b) & " << mask(b) << ")))\n";
     for (int a = 2; a <= 8; ++a)
         for (int b = 1; b < a; ++b)
             o << "#define SUB" << a << b << "(v, o) (T<" << b << ", true>((RAW(v) >> ((o) * 8)) & " << mask(b) << "))\n";
@@ -7779,7 +7792,18 @@ const PrintedCFixture kPrintedCFixtures[] = {
     { "A3-65 over a freed save slot, a byte of it", { 0x2FD6, 0x6DF6, 0x7FF8, 0x62F3, 0x7208, 0xE102, 0x2216, 0x4110, 0x8BFC, 0x84F5, 0x000B, 0x7F08 } },
     // ...and the controls, walked up (`mov.l r1,@r2 ; add #4,r2`), which the engine always had right
     { "A3-65 control: walked up by longwords", { 0x7FF8, 0xE005, 0x2F02, 0x62F3, 0xE102, 0x2212, 0x7204, 0x4110, 0x8BFB, 0x60F2, 0x000B, 0x7F08 } },
-    { "A3-65 control: walked up by bytes", { 0x7FF8, 0xE005, 0x2F00, 0x62F3, 0xE108, 0x2210, 0x7201, 0x4110, 0x8BFB, 0x60F0, 0x000B, 0x7F08 } },
+    { "A3-65 control: walked up by bytes", { 0x7FF8, 0xE005, 0x2F00, 0x62F3, 0xE108, 0x2210, 0x7201, 0x4110, 0x8BFB, 0x60F0, 0x000B, 0x7F08 } },    // Area 2, round 12 P3 fix. A2-79 (oracle): `(uint8)CONCAT14((char)in_r1,in_r1)` is a zero extension in the engine's reading (narrow-c, not mismatch).
+    { "A2-79 (uint8) of a 5-byte piece", { 0x265C, 0x0329, 0x8B06, 0x4300, 0x223A, 0x6013, 0x600F, 0x600C, 0x000B, 0x0009, 0x200B, 0x4301, 0x7180, 0x6033, 0x600E, 0x000B, 0x0009, 0x0009 } },
+    // A2-80 (engine, found by dagen12.py family 52): RuleRightShiftAnd dropped the mask of `(sext(b) & 0x20) s>> 8` once the value was one byte (a shift by
+    // the width: both sides of its test were 0), and the text read `return param_1 >> 8` (the sign of b) where the code computes 0.
+    { "A2-80 exts.b ; and #0x20 ; shar x8", { 0x604E, 0xC920, 0x4021, 0x4021, 0x4021, 0x4021, 0x4021, 0x4021, 0x4021, 0x4021, 0x000B, 0x0009 } },
+    { "A2-80 exts.b ; and #0x40 ; shar x9", { 0x604E, 0xC940, 0x4021, 0x4021, 0x4021, 0x4021, 0x4021, 0x4021, 0x4021, 0x4021, 0x4021, 0x000B, 0x0009 } },
+    // A2-81 (engine, generator printed-C seed 2223957): RuleSLess2Zero took the high bit of a sum of two values that can both set it for the first of them:
+    // `(uVar1 + 0x80000000) s< 0` of a masked sign was `uVar1 != 0`, its negation, so the subv's T and the GBR write after it were the wrong way round.
+    { "A2-81 subv of a masked sign by 0x80000000, ldc r0,gbr unless T", { 0xE301, 0x4305, 0x2139, 0x313B, 0x8901, 0x401E, 0x0009, 0x000B, 0x0009 } },
+    { "A2-81 subv of a masked sign, the flag moved", { 0xE301, 0x4305, 0x2139, 0x313B, 0x0029, 0x6003, 0x000B, 0x0009 } },
+    { "A2-81 addv of a masked sign by 0x80000000", { 0xE301, 0x4305, 0x2139, 0x313F, 0x0029, 0x6003, 0x000B, 0x0009 } },
+    { "A2-80 exts.b ; and #0x01 ; shar x12", { 0x604E, 0xC901, 0x4021, 0x4021, 0x4021, 0x4021, 0x4021, 0x4021, 0x4021, 0x4021, 0x4021, 0x4021, 0x4021, 0x4021, 0x000B, 0x0009 } },
 };
 
 // The fixtures of area 2, round 4 (A2-21, A2-22, A2-26): the compiler's division by a constant, scaled by the power of two it

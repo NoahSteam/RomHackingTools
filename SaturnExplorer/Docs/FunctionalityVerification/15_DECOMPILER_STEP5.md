@@ -11465,3 +11465,107 @@ The fixed tree (`be61b91`) against a baseline built from `da2a0fa` (the merged h
 | sanitizer and Live jobs | not run (shared socket; CI) |
 
 **All seven round-11 rows are now fixed** (A3-82, A3-83, A3-84, A3-85, A3-88 P1; A3-86, A3-87 P2), with A3-79 closed. The next reviewer verifies.
+
+## Area 2, round 12 P3 fix
+
+Fixer, branch `review/2-round12-p3-fix`, on `ea6c8e9` (the coordinator's head when the round 12 review merged; the corpus diff below is against that head, and master has moved since: patch 0061 is the area 3 fixer's, this branch carries 0062). One engine patch (`patches/0062-engine-range-set-ops-and-rule-guards.patch`: `rangeutil.cc`, `ruleaction.cc`), the harness, the pins, the families, the ledger and this record. **A2-73 to A2-77 and A2-79 are fixed (A2-77's unreachable rules and its one mutant killed by a pin only are accepted, each with its reason in the row).** The fixer's own instruments found two more wrong printed values in upstream rules, both reproducing at `ea6c8e9`, **A2-80 and A2-81 (P2, fixed here)**; the next review round should verify both, and the coordinator should decide whether they restart the count of consecutive clean rounds (the round 12 review itself, which found none, stands as it was).
+
+### 1. Patch 0062 and its rules
+
+> **A set operation, a widened range or a rule's rewrite holds every value of what it replaces, or it fails, or it answers "everything".** The rule of 0058 and 0059 for the three range functions they left, and for the rules the oracle now reaches.
+
+| Row | What was wrong | What it is now |
+|---|---|---|
+| A2-73 `newDomain` | the intersect of ranges of two masks cut the wider range to the narrower mask and read a range that starts above it and ends at the top of the wider domain (right bound 0, or the phase of the top for a stride) as the pieces `[left,top]` and `[0,right)` with the second at the bottom of the narrow domain: `[0x8000,0)` of 2 bytes became all of a byte | the second piece of such a range is empty, so is the intersection (one line: `if (myright == rem) return true;`) |
+| A2-74 `setNZMask` | `int4 step = 1; step <<= leastsigbit_set(nzmask)`: a negative step for a lowest bit of 31 (a range that holds 0 and not the one value the mask allows), a shift modulo 32 beyond | a lowest set bit of 31 or more gives no range, before the range is touched |
+| A2-75 `widen` | the left bound was the landmark's as it was (another phase, and the phase lost at step 8 or 16); a full landmark gave the right bound 0, which cut a wrapped range to its first lap | the left bound is the first element of the range's phase at or above the landmark's; when the new arc is shorter than the old one the answer is all of the phase; the right bound is upstream's (a landmark that contains the range never ends short of its last element: rounding it up is an equivalent change) |
+| A2-76 `RuleScarry` | the minimum was refused only for the operand the rule had swapped itself | refused for either operand |
+| A2-80 `RuleRightShiftAnd` | `(V & mask) >> sa` and `s>> sa` bypassed the AND when `(mask >> sa) == (full >> sa)`; for a shift by the width of V or more both are 0, but an arithmetic shift by the width is the sign bit alone, which the mask can clear: `exts.b r4,r0 ; and #0x20,r0 ;` eight `shar` printed `return param_1 >> 8;` (the sign of the byte) where the code returns 0 | a shift by the width or more returns 0 (the amount is read as the 64-bit number it is) |
+| A2-81 `RuleSLess2Zero::getHiBit` | the high bit of a sum, or or xor was taken from the first operand whose non-zero mask is the high bit alone, without asking the other: with both able to set it, `(x & 0x80000000) + 0x80000000 s< 0` was `x != 0`, the negation, and a `subv` of a masked sign wrote GBR the wrong way round | the bit is taken from an operand only when the other has none |
+
+No printed text of either game image moves with the patch (section 5).
+
+### 2. The pins (`SaturnExplorerSh2DecompilerEngineTests`, 32 s in all)
+
+* `TestIntersectMixedMasksRound12` (0.8 s): the row's fixtures in both orders, and 710,016 pairs of structured one-byte and two-byte ranges (the edges of the byte and of the word, the sign boundaries, the ends; steps 1 to 8), narrow first and wide first; an answer of 0 must be exactly the elements both ranges have in the narrower domain, an answer of 2 leaves the range as it was.
+* `TestSetNZMaskRound12`: every mask of 1 and 2 bytes, every run of bits at 4 and 8 bytes, 8,000 random masks (76,404); no range for a lowest bit of 31 or more, every answered range holds every submask.
+* `TestWidenRound12` (2.4 s): 836,784 widenings of 418,392 sub-ranges of landmarks (step 1 to 8, the sub-range's step up to 32); the old set held, the step and phase kept, well formed, inside a landmark that is not full.
+* `TestScarryMinimumRound12` (A2-76): a Funcdata-level pin with an evaluator of the ops it uses (`RcEval`): 16 forms for each constant (all 256 at one byte), 4,512 graphs, 1,091,008 values compared before and after the rule.
+* `TestRulesByValueRound12` (A2-77, A2-80): the same method for `RuleConcatShift`, `RuleSignDiv2`, `RuleSignForm`, `RulePiece2Sext`, `RuleZextSless`, `RuleSignForm2` and `RuleRightShiftAnd`: 868 graphs, 137,806 values.
+* Printed-C fixtures in `Sh2GeneratedTests` (value-checked against the run): `A2-79` (1), `A2-80` (3), `A2-81` (3).
+* The reviewer's `fwd12` on the fixed engine: `sets 5 100000` extra values 0 of 49,294 (1,946 before), missing 0; `nz 3 200000` BAD 0; `widen 3 20000` BAD 0 (6,990 and 430 before).
+
+### 3. Families and the oracle
+
+`dagen12.py` has ten new families, 45 to 54 (52 `bitpull` found A2-80; 54 `masksign` was written for A2-81): `signbias`, `extshift`, `nonneg`, `boolcomb`, `threeway`, `negneg`, `signmod`, `bitpull`, `prodsign`, `masksign`. They reach, by SH-2 code and with every function agreeing, the rules the census had never seen: `leftright`, `signform`, `positivediv`, `lessnotequal`, `booleandedup`, `booleanundistribute`, `threewaycomp`, `negatenegate`, `signmod2nopt`, `signmod2opt`, `signform2` (the census was blind to it: the rule returns 0 after changing its input). `famcensus.sh` covers 40 to 54.
+
+**The engine's reading of a text** (A2-79): CONCATab is a `Piece<n>` (a `T<n,true>` with a cast of its own); `(uint8)` of a piece of 5 to 7 bytes, which have no C type, is the zero extension. The first version (the target's sign for every size) made two printed-C seeds of the long run `mismatch` (`(uint4)CONCAT11(...)` of the sign-extended word `mov.w` reads: the engine prints the cast to the type of the variable it assigns to, which says nothing of the extension), so sizes with a C type keep the extension by the piece's sign.
+
+### 4. Mutation table
+
+Each fix reverted alone in the vendored source or the harness (the pin fails; restored, it passes), and the A2-77 mutants (`mutate12.py`, `SE_MUT`):
+
+| Mutant | Pin / family that fails |
+|---|---|
+| `newDomain`: the `myright == rem` line removed (A2-73) | `TestIntersectMixedMasksRound12`: 21,268 CHECKs |
+| `setNZMask`: the high-bit guard removed (A2-74) | `TestSetNZMaskRound12`: 958 |
+| `widen`: the all-of-the-phase fallback removed (A2-75) | `TestWidenRound12`: 175 |
+| `widen`: the left bound is the landmark's as it was (A2-75) | `TestWidenRound12`: 134,391 |
+| `widen`: the right bound rounded down | none: equivalent (a landmark that contains the range ends at or after its last element) |
+| `RuleScarry`: the minimum refused only for the swapped operand (A2-76) | `TestScarryMinimumRound12`: 48 |
+| `RuleRightShiftAnd`: the guard removed (A2-80) | `TestRulesByValueRound12`: 433; the three `A2-80` fixtures `mismatch` |
+| `RuleSLess2Zero::getHiBit`: the other operand not asked (A2-81) | the three `A2-81` fixtures `mismatch`; family 54: `mismatch` in 4 of the first 150 functions and more |
+| engine reading: the piece cast by the source's sign (A2-79) | the `A2-79` fixture is `mismatch` again |
+| mutant 6 `RuleConcatShift` exact cancellation, other sign | `TestRulesByValueRound12`: 18; no family function (0 of 1,000 in each of 23, 24, 41, 42): accepted |
+| mutant 9 `RuleSignDiv2` takes a shift by 2 | family 45: 43 of 1,000 `mismatch`; the pin: 12 |
+| mutant 10 `RuleSignForm` one byte short | family 46: 95 of 1,000; the pin: 6 |
+| mutant 8 `RulePiece2Sext` sign of another value | the pin: 6 |
+| mutant 12 `RuleSubvarShift` two bits | none: the rule never applies (accepted, A2-77) |
+
+### 5. The matrix
+
+Own RelWithDebInfo build under the scratch directory (2.5 GB, `-j2`, every run under `ulimit -v 4000000` and `timeout`, one heavy job at a time), on the final engine and harness (code commit `3ece699`).
+
+| Run | Result |
+|---|---|
+| `ctest -E SaturnExplorerLive -j2 --timeout 900` | 93 of 93 pass (159.5 s) |
+| `SaturnExplorerDecompilerFaultTests` | 0 of 94 jobs fail (68.4 s); no MOVED pin |
+| generator, `SE_GENERATED_SEEDS=3000 SE_GENERATED_GRAMMAR=2` | 0 failing seeds (95 s) |
+| generator, `SE_GENERATED_GRAMMAR=1 SE_GENERATED_SEEDS=1000` | 0 failing seeds (30 s) |
+| `SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000` | 0 findings; 3,710 functions (the 7 new fixtures in), 3,430 compared, agrees 3,449, `narrow-c` 10, `void-return` 227, `void-return-lent` 24 (57 s) |
+| `SE_GENERATED_SEEDS=20000` (four runs of 5,000 from seeds 1, 5,001, 10,001, 15,001) | 0 failing seeds (101, 122, 100, 99 s) |
+| corpora hwram007.bin, hwram008.bin, `SE_GAME_LEND=1` | every ledger count 0; missing and said 0 and 4; lending 680 (958 parameters) and 1,071 (1,314); mapping violations 0 (the 'on another line' counts 11 and 21 lent and 3 tokens at a delay slot's own address in hwram008, as at the head); 1,730 and 2,995 functions all ok |
+| **the corpora texts** | `SE_GAME_OUT` of the fixed build against `ea6c8e9`'s engine (the head's `rangeutil.cc` and `ruleaction.cc` compiled into the same host): **4,299 and 7,544 files, byte for byte identical** (`diff -rq` empty), and the logs equal but for timings. Nothing to read. |
+| fresh seeds 50001 to 51600 of all 54 families | 86,400 functions: agrees 84,853, `narrow-c` 432, `void-return` 809, `void-return-lent` 158, `skipped:stack-address` 146, `skipped:memory` 1, `not-compilable` 1 (function 233 of `dagen10.py` family 2, area 5's `&SMPC_IREG0`), **`mismatch` 0** |
+
+### 6. Vendoring
+
+`python3 -I vendor.py <pinned Ghidra checkout>` on a copy of the vendored directory: exit status 0, the 'vendored 84 library sources, 3 compiler sources, 94 headers, 5 spec files' line, all 55 patches applied; `cpp/`, `processors/` and `sources.cmake` identical to the committed ones (`diff -r` empty). `patches/README.md` and `VENDOR.md` have the row and the pin.
+
+### 7. The long run (area 2's 'done': the generator on seeds nobody has run)
+
+Chunks of 5,000 seeds, each under 3 minutes, a marker file per chunk (`gen_range.sh`, the final engine).
+
+| Run | Seeds | Failing seeds |
+|---|---|---|
+| grammar 2 | 2,000,001 to 2,100,000 (100,000) | **4**: 2007995, 2018538, 2029583, 2046314 |
+| grammar 1 | 2,100,001 to 2,150,000 (50,000) | **1**: 2126605 |
+| printed-C | 2,200,001 to 2,250,000 (50,000): 61,112 functions, 56,705 compared; agrees 56,984, `narrow-c` 225, `void-return` 3,533, `void-return-lent` 357, `skipped:stack-address` 6, `skipped:array-local` 4 | **3**: walks 2208857 (`mismatch`), 2211665 and 2245649 (`register0x0000003c` undeclared) |
+| decode oracle with `SE_MEDNAFEN_SS`, seeds 20261023 and 3141592 (`SE_DECODE_CASES=100000`) | 26,000,000 differential executions | 0 differ, 0 could not run, 0 of 130 forms fail, 18 named shapes 0 differ; SLEIGH defines 53,752 words, 0 disagreements with Mednafen |
+
+**No failure is area 2's.** Each was replayed against the engine of `ea6c8e9` as well (same harness, the head's two engine files): the same failure, so none is this branch's. Routed, with the replay lines (the full lines are in the logs named in the row of each):
+
+* **2007995** (grammar 2), `[n:claim-wrong:outOrigins] [function 2 at 0600909C] r2 ends as 06020100, a pointer from r4, and outOrigins names neither it nor memory`: area 3 (`CallEffects::outOrigins`, A3-54/A3-63's claim); `SE_GENERATED_GRAMMAR=2 SE_GENERATED_SEED=2007995 build/bin/SaturnExplorerSh2GeneratedTests <dir>`. Not one of A3-82 to A3-88 or A3-79.
+* **2018538** and **2029583** (grammar 2), `pointer-effect-unsaid` (the read of 2 bytes at 06009074 reached FFFFFF8C, SH2_CHCR0's 'a read arms clearing TE' and 'a 2-byte read returns its low 16 bits' notes; the read of 4 bytes at 0600909A reached E00000F0, 'a 4-byte read at 0xE00000F0 is an address error'): area 5, the A5-82 class (the pointer checks' false positives or a note the printer gives to the wrong access); replays `SE_GENERATED_GRAMMAR=2 SE_GENERATED_SEED=<seed>`.
+* **2046314** (grammar 2), `[n:cache-read-pointer-unsaid] ... the read of 4 byte(s) at 0600908C (05FE0028, the cached partition) ... is not called a cache read`: area 5, the same class.
+* **2126605** (grammar 1), `[n:input-dropped:r0]` and `[v:input-dropped:r0]` (r0 read before it is written, no signature passes it, the prototype is lent): area 3; `SE_GENERATED_WORDS="D605 6213 451B 73B8 621D 6161 C810 8B01 6003 334C 000B 2009 2600 1038"`.
+* **2208857** (printed-C), a walk: `SE_GENERATED_PRINTEDC=only SE_GENERATED_PRINTEDC_WORDS="6043 6153 6263 6373 0712 7FF4 1F21 1F72 67F3 E303 2732 7704 4310 8BFB 50F2 7F0C 000B 0009"` is `mismatch (high-word-only run=00000001:80000001 pseudo=FFFFFFFF:80000001)`: the text returns `CONCAT44(unaff_gbr,param_2)` where the code returns `*(r15 + 8)` after a loop that stored through a copy of r15; shrunk (the words that matter, the rest `nop`): `7FF4 67F3 2732 7704 8BFB 50F2` (`add #-12,r15 ; mov r15,r7 ; mov.l r3,@r7 ; add #4,r7 ; bf ; mov.l @(8,r15),r0`). Area 3, the stack walk of A3-65/72/80.
+* **2211665** and **2245649** (printed-C walks), `'register0x0000003c' undeclared`: A3-87/A3-79's shape; replays in the logs (`SE_GENERATED_PRINTEDC_WORDS="6043 6153 6263 6373 0622 602B 7FF0 1F70 1F61 1F53 61F3 7104 E601 2166 4610 8BFC E601 E300 6216 332C 4610 8BFB 50F3 303C 7F10 7001 000B 0009"` and `"6043 6153 6263 6373 472E 0612 7FF4 1F61 1F62 62F3 7204 E701 2256 4710 8BFC 50F0 7F0C 4001 000B 0009"`).
+
+The first run of this range (before A2-81 and the limit on the piece cast) also had printed-C seeds 2223957 (the GBR write, A2-81) and 2239033 (`(uint4)CONCAT11(...)`, the first version of the A2-79 reading): both are closed above.
+
+### 8. What stays open
+
+* The next review round verifies this one, in particular A2-80 and A2-81 (two wrong printed values in upstream rules found by the fixer's families; the rule-by-rule census of the other `RuleSLess2Zero`/`getHiBit`-like uses of a non-zero mask has not been done).
+* The 16-bit space is still not exhaustive for the push-forwards (2^32 ranges).
+* The routed generator findings above are with the area 3 and area 5 fixers; none is area 2's.
