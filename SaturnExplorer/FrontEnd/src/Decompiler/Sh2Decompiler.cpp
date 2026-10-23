@@ -1188,7 +1188,7 @@ private:
                     mEscaped = true;
                     mEscapedLow = true;
                     HandOut(s, x);
-                    if (r != 2 && (r < 4 || r > 7)) mHandSites[at] |= 1u << r;   // no argument the engine shows: the note says it
+                    if (r != 2 && (r < 4 || r > 7) && x.Frame()) mHandSites[at] |= 1u << r;   // no argument the engine shows: the note says it
                 }
             }
         }
@@ -1520,7 +1520,9 @@ private:
         if (base == Value::kNoBase)
         {
             if (!MayBeFrame(s, v)) return;
-            if (exactToo) mEscapeSites[at] |= 1u << reg;
+            // (the note says a frame address is there: one this function computed. A pointer nothing is known of, after an address of the frame
+            // went out, may be one, and the alias below holds for it; the note was said where the address went out)
+            if (exactToo && v.Frame()) mEscapeSites[at] |= 1u << reg;
             mEscapedLow = true;
             mEscaped = true;
             HandOut(s, v);
