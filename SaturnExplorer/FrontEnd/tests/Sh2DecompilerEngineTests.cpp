@@ -2158,6 +2158,11 @@ uint64_t RcEval(const ghidra::Varnode* vn, const RcEnv& env)
     case CPUI_COPY: return a;
     case CPUI_INT_ADD: return (a + b) & m;
     case CPUI_INT_AND: return a & b;
+    case CPUI_INT_OR: return a | b;
+    case CPUI_INT_XOR: return a ^ b;
+    case CPUI_INT_SUB: return (a - b) & m;
+    case CPUI_INT_NEGATE: return ~a & m;
+    case CPUI_INT_2COMP: return (0 - a) & m;
     case CPUI_INT_MULT: return (a * b) & m;
     case CPUI_INT_ZEXT: return a;
     case CPUI_INT_SEXT: return static_cast<uint64_t>(PbSigned(a, sa)) & m;
@@ -2465,6 +2470,324 @@ void TestRulesByValueRound12()
     std::printf("rules by value: %ld graphs, %ld values compared\n", graphs, values);
 }
 
+
+// ---- Round 13: patch 0062 at every size ------------------------------------------------------------------------------------------------------
+// The set operations of 0062 (the intersect of ranges of two masks, setNZMask, widen) at every size from 1 to 8 bytes, by membership: the sets are written
+// out from the definition (left, right, step, mask) here and a result is judged on a sample taken where an arithmetic error shows (the bounds and their
+// neighbours, the edge of the narrower domain, the ends and the sign boundary of each domain, elements of both ranges). rangeset13.cpp (the round 13 tool)
+// is the wider run; this is the part that is cheap enough for the suite, and it fails against the pre-0062 rangeutil.cc at every one of the three.
+struct R13Rg { uint64_t l, r; int st, sz; };
+
+bool R13Member(uint64_t v, uint64_t l, uint64_t r, int st, uint64_t m)
+{
+    v &= m;
+    if (v % static_cast<uint64_t>(st) != l % static_cast<uint64_t>(st)) return false;
+    if (l == r) return true;
+    return l < r ? (v >= l && v < r) : (v < r || v >= l);
+}
+bool R13Member(uint64_t v, const R13Rg& g) { return R13Member(v, g.l, g.r, g.st, PbMask(g.sz)); }
+bool R13QMember(const ghidra::CircleRange& q, uint64_t v) { return !q.isEmpty() && R13Member(v, q.getMin(), q.getEnd(), q.getStep(), q.getMask()); }
+
+struct R13Rng
+{
+    uint64_t s;
+    explicit R13Rng(uint64_t seed) : s(seed * 0x9E3779B97F4A7C15ull + 99) {}
+    uint64_t next()
+    {
+        uint64_t z = (s += 0x9E3779B97F4A7C15ull);
+        z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ull;
+        z = (z ^ (z >> 27)) * 0x94D049BB133111EBull;
+        return z ^ (z >> 31);
+    }
+};
+
+uint64_t R13Pick(R13Rng& g, int sz)
+{
+    const uint64_t m = PbMask(sz);
+    switch (g.next() % 9)
+    {
+    case 0: return g.next() & m;
+    case 1: return (g.next() % 17) & m;
+    case 2: return (m - g.next() % 17) & m;
+    case 3: return ((m >> 1) + (g.next() % 17) - 8) & m;
+    case 4: { const int k = static_cast<int>(g.next() % (8 * sz)); return ((1ull << k) + (g.next() % 9) - 4) & m; }
+    case 5: { const int k = static_cast<int>(g.next() % (8 * sz)); return ((0 - (1ull << k)) + (g.next() % 9) - 4) & m; }
+    case 6: return (g.next() & g.next() & g.next()) & m;
+    case 7:
+    {   // next to the edge of a narrower domain, where the intersect cuts a wider range
+        const int k = 8 * static_cast<int>(1 + g.next() % static_cast<uint64_t>(sz));
+        return ((k >= 64 ? ~0ull : ((1ull << k) - 1)) + (g.next() % 9) - 4) & m;
+    }
+    default: return (g.next() | g.next() | g.next()) & m;
+    }
+}
+
+R13Rg R13Gen(R13Rng& g, int sz)
+{
+    const uint64_t m = PbMask(sz);
+    static const int steps[] = { 1, 1, 1, 1, 2, 2, 4, 8, 16, 32 };
+    int st = steps[g.next() % 10];
+    while (static_cast<uint64_t>(st) > m) st >>= 1;
+    R13Rg r; r.st = st; r.sz = sz; r.l = R13Pick(g, sz);
+    switch (g.next() % 12)
+    {
+    case 0: r.r = r.l; break;
+    case 1: r.r = (r.l + st) & m; break;
+    case 2: r.r = (r.l + 2 * st) & m; break;
+    case 3: r.r = (r.l - st) & m; break;
+    case 4: r.r = 0; break;                                  // ends at the top of the domain
+    default: r.r = R13Pick(g, sz);
+    }
+    const uint64_t rem = r.l % st;
+    r.r = (r.r - r.r % st + rem) & m;
+    if (r.r % st != rem) r.r = r.l;
+    if (r.l == r.r) r.l = r.r = rem;
+    return r;
+}
+
+void R13Points(const R13Rg& a, R13Rng& g, std::vector<uint64_t>& out)
+{
+    const uint64_t m = PbMask(a.sz);
+    const uint64_t n = a.l == a.r ? m / a.st + 1 : ((a.r - a.l) & m) / a.st;
+    auto elem = [&](uint64_t j) { return (a.l + j * static_cast<uint64_t>(a.st)) & m; };
+    for (uint64_t j = 0; j < std::min<uint64_t>(n, 5); ++j) { out.push_back(elem(j)); out.push_back(elem(n - 1 - j)); }
+    for (int k = 0; k < 10 && n > 0; ++k) out.push_back(elem(g.next() % n));
+    for (uint64_t b : { a.l, a.r })
+        for (int d = -3; d <= 3; ++d) out.push_back((b + static_cast<uint64_t>(static_cast<int64_t>(d) * a.st)) & m);
+}
+
+void R13Edges(int sz, std::vector<uint64_t>& out)
+{
+    const uint64_t m = PbMask(sz);
+    for (uint64_t t : { static_cast<uint64_t>(0), m, m >> 1, (m >> 1) + 1 })
+        for (int d = -3; d <= 3; ++d) out.push_back((t + static_cast<uint64_t>(static_cast<int64_t>(d))) & m);
+}
+
+bool R13WellFormed(const ghidra::CircleRange& q, uint64_t wantMask)
+{
+    if (q.isEmpty()) return true;
+    const int st = q.getStep();
+    return q.getMask() == wantMask && st >= 1 && (st & (st - 1)) == 0 && !((q.getMin() | q.getEnd()) & ~q.getMask()) && q.getMin() % static_cast<uint64_t>(st) == q.getEnd() % static_cast<uint64_t>(st);
+}
+
+void TestRangeSetsRound13()
+{
+    using namespace ghidra;
+    using Clock = std::chrono::steady_clock;
+    const auto t0 = Clock::now();
+    long intersects = 0, answered = 0, nzs = 0, widens = 0;
+    R13Rng g(13);
+    // the intersect of ranges of every pair of sizes (and of one size): an answered 0 is exactly the elements both ranges have in the narrower domain
+    for (int sa = 1; sa <= 8; ++sa)
+        for (int sb = 1; sb <= 8; ++sb)
+            for (int it = 0; it < 2500; ++it)
+            {
+                R13Rg a = R13Gen(g, sa), b = R13Gen(g, sb);
+                CircleRange A(a.l, a.r, sa, a.st), B(b.l, b.r, sb, b.st);
+                const uint64_t mn = PbMask(std::min(sa, sb));
+                CircleRange q = A;
+                const int rc = q.intersect(B);
+                ++intersects;
+                if (rc != 0) { CHECK(q == A); continue; }
+                ++answered;
+                CHECK(R13WellFormed(q, mn));
+                std::vector<uint64_t> pts;
+                R13Points(a, g, pts); R13Points(b, g, pts); R13Edges(std::min(sa, sb), pts); R13Edges(std::max(sa, sb), pts);
+                for (int k = 0; k < 6; ++k) pts.push_back(g.next() & mn);
+                for (uint64_t v : pts)
+                {
+                    if (v > mn) continue;
+                    const bool want = R13Member(v, a) && R13Member(v, b);
+                    if (want != R13QMember(q, v))
+                    {
+                        CHECK(false);
+                        std::printf("  intersect %d/%d bytes: [%llx,%llx)/%d with [%llx,%llx)/%d gives [%llx,%llx)/%d, which %s %llx\n", sa, sb, (unsigned long long)a.l, (unsigned long long)a.r, a.st, (unsigned long long)b.l,
+                                    (unsigned long long)b.r, b.st, (unsigned long long)q.getMin(), (unsigned long long)q.getEnd(), q.getStep(), want ? "misses" : "holds", (unsigned long long)v);
+                        break;
+                    }
+                }
+            }
+    // setNZMask: every run of bits (and the run plus the low bit or the sign) at every size holds every value under the mask; a refusal is for a mask of
+    // more than two transitions or a lowest set bit of 31 or more, nothing else
+    for (int sz = 1; sz <= 8; ++sz)
+    {
+        const uint64_t m = PbMask(sz);
+        for (int lo = 0; lo < 8 * sz; ++lo)
+            for (int hi = lo; hi < 8 * sz; ++hi)
+            {
+                const uint64_t run = ((hi - lo + 1 >= 64 ? ~0ull : ((1ull << (hi - lo + 1)) - 1)) << lo) & m;
+                for (uint64_t nz : std::initializer_list<uint64_t>{ run, (run | 1) & m, (run | (1ull << (8 * sz - 1))) & m })
+                {
+                    CircleRange q;
+                    ++nzs;
+                    if (!q.setNZMask(nz, sz)) continue;
+                    CHECK(R13WellFormed(q, m));
+                    std::vector<uint64_t> vs = { 0, nz, nz & (0 - nz), nz >> 1 };
+                    for (int k = 0; k < 8; ++k) vs.push_back(g.next() & nz);
+                    for (uint64_t v : vs)
+                        if (!R13QMember(q, v & nz) || !q.contains(v & nz)) { CHECK(false); std::printf("  setNZMask(%llx, %d) misses %llx\n", (unsigned long long)nz, sz, (unsigned long long)(v & nz)); break; }
+                    if (q.getStep() > 1) CHECK((nz & static_cast<uint64_t>(q.getStep() - 1)) == 0);
+                }
+            }
+        // the lowest set bit of 31: no range
+        if (sz >= 4) { CircleRange q; CHECK(!q.setNZMask(0x80000000ull & m, sz)); }
+    }
+    // widen: the widened range holds the old one, in its step
+    for (int sz = 1; sz <= 8; ++sz)
+        for (int it = 0; it < 6000; ++it)
+        {
+            const uint64_t m = PbMask(sz);
+            R13Rg b = R13Gen(g, sz), a = R13Gen(g, sz);
+            if (g.next() % 2)
+            {
+                const uint64_t n = b.l == b.r ? m / b.st + 1 : ((b.r - b.l) & m) / b.st;
+                if (n < 2) continue;
+                const uint64_t i0 = g.next() % n, len = 1 + g.next() % (n - i0);
+                a.st = b.st; a.sz = sz; a.l = (b.l + i0 * static_cast<uint64_t>(b.st)) & m; a.r = (b.l + (i0 + len) * static_cast<uint64_t>(b.st)) & m;
+                if (i0 + len >= n && b.l != b.r) a.r = b.r;
+                if (a.l == a.r) a.l = a.r = a.l % a.st;
+            }
+            CircleRange A(a.l, a.r, sz, a.st), B(b.l, b.r, sz, b.st);
+            if (!B.contains(A)) continue;
+            for (int stable = 0; stable < 2; ++stable)
+            {
+                CircleRange q = A;
+                q.widen(B, stable != 0);
+                ++widens;
+                CHECK(R13WellFormed(q, m));
+                CHECK(q.getStep() == a.st);
+                std::vector<uint64_t> pts;
+                R13Points(a, g, pts); R13Points(b, g, pts); R13Edges(sz, pts);
+                for (uint64_t v : pts)
+                    if (R13Member(v, a) && !R13QMember(q, v)) { CHECK(false); std::printf("  widen %d bytes: [%llx,%llx)/%d in [%llx,%llx)/%d (%s stable) misses %llx\n", sz, (unsigned long long)a.l, (unsigned long long)a.r, a.st, (unsigned long long)b.l, (unsigned long long)b.r, b.st, stable ? "left" : "right", (unsigned long long)v); break; }
+            }
+        }
+    std::printf("range sets round 13: %ld intersects (%ld answered), %ld masks, %ld widenings, %.0f ms\n", intersects, answered, nzs, widens, MsSince(t0));
+    CHECK(answered > 50000);
+    CHECK(widens > 20000);
+}
+
+// RuleSLess2Zero and RuleRightShiftAnd on masked signs, with the non-zero masks the graph gives (A2-80, A2-81): `(a OP b) s< 0` and `-1 s< (a OP b)` for OP
+// ADD, OR and XOR where each of a and b is a masked sign (`x & hibit`), the sign constant, a boolean moved up to the sign, zero, the bits under the sign or
+// a whole value, at sizes 1, 2, 4 and 8, in both orders. The graph is put in a block so that Funcdata::calcNZMask gives each varnode the mask the engine's
+// action gives it; the compare is evaluated before and after the rule for the edge values of both inputs. The rule must leave the value alone (the
+// high bit of a sum is taken from an operand only when the other has none).
+struct R13Graph
+{
+    R13Graph() : image(new RegionLoadImage(kImageBase, Fixture1())), arch(image, &errs)
+    {
+        ghidra::DocumentStorage store;
+        arch.init(store);
+        entry = ghidra::Address(arch.getDefaultCodeSpace(), kCaller);
+        std::string name;
+        arch.nameFunction(entry, name);
+        fd = arch.symboltab->getGlobalScope()->addFunction(entry, name)->getFunction();
+        reg = arch.getSpaceByName("register");
+    }
+    void reset()
+    {
+        fd->clear();
+        ghidra::BlockGraph& g = const_cast<ghidra::BlockGraph&>(fd->getBasicBlocks());
+        bb = g.newBlockBasic(fd);
+        g.setStartBlock(bb);
+        nextReg = 0x100;
+    }
+    ghidra::Varnode* input(int size)
+    {
+        ghidra::Varnode* v = fd->newVarnode(size, reg, nextReg);
+        nextReg += 16;
+        return fd->setInputVarnode(v);
+    }
+    ghidra::Varnode* op(ghidra::OpCode opc, int outSize, ghidra::Varnode* a, ghidra::Varnode* b = nullptr)
+    {
+        ghidra::PcodeOp* o = fd->newOp(b ? 2 : 1, entry);
+        fd->opSetOpcode(o, opc);
+        ghidra::Varnode* out = fd->newUniqueOut(outSize, o);
+        fd->opSetInput(o, a, 0);
+        if (b) fd->opSetInput(o, b, 1);
+        fd->opInsertEnd(o, bb);
+        return out;
+    }
+    ghidra::Varnode* k(int size, uint64_t v) { return fd->newConstant(size, v & PbMask(size)); }
+
+    RegionLoadImage* image;
+    std::ostringstream errs;
+    TestArchitecture arch;
+    ghidra::Address entry;
+    ghidra::Funcdata* fd = nullptr;
+    ghidra::AddrSpace* reg = nullptr;
+    ghidra::BlockBasic* bb = nullptr;
+    uint64_t nextReg = 0x100;
+};
+
+void TestSignHighBitRound13()
+{
+    using namespace ghidra;
+    R13Graph t;
+    long graphs = 0, rewritten = 0, values = 0;
+    int shown = 0;
+    for (int size : { 1, 2, 4, 8 })
+    {
+        const uint64_t m = PbMask(size), hib = (m >> 1) + 1;
+        for (int ka = 0; ka < 6; ++ka)
+            for (int kb = 0; kb < 6; ++kb)
+                for (OpCode opc : { CPUI_INT_ADD, CPUI_INT_OR, CPUI_INT_XOR })
+                    for (int form = 0; form < 4; ++form)         // s< 0 and -1 s<, the sum first or second in the ADD
+                    {
+                        t.reset();
+                        Varnode* x = t.input(size);
+                        Varnode* y = t.input(size);
+                        auto operand = [&](int kind, Varnode* src) -> Varnode* {
+                            switch (kind)
+                            {
+                            case 0: return t.op(CPUI_INT_AND, size, src, t.k(size, hib));                                              // x & hibit
+                            case 1: return t.k(size, hib);                                                                              // the sign constant
+                            case 2:
+                            {   // a boolean moved up to the sign
+                                Varnode* b = t.op(CPUI_INT_SLESS, 1, src, t.k(size, 0));
+                                if (size == 1) return t.op(CPUI_INT_LEFT, 1, b, t.k(4, 7));
+                                return t.op(CPUI_INT_LEFT, size, t.op(CPUI_INT_ZEXT, size, b), t.k(4, 8 * size - 1));
+                            }
+                            case 3: return t.k(size, 0);
+                            case 4: return t.op(CPUI_INT_AND, size, src, t.k(size, m >> 1));                                            // the bits under the sign
+                            default: return src;                                                                                        // a whole value
+                            }
+                        };
+                        Varnode* a = operand(ka, x);
+                        Varnode* b = operand(kb, y);
+                        if (a->isConstant() && b->isConstant()) continue;
+                        Varnode* sum = (form & 1) ? t.op(opc, size, b, a) : t.op(opc, size, a, b);
+                        Varnode* cmp = (form & 2) ? t.op(CPUI_INT_SLESS, 1, t.k(size, m), sum) : t.op(CPUI_INT_SLESS, 1, sum, t.k(size, 0));
+                        t.fd->calcNZMask();
+                        PcodeOp* cmpOp = cmp->getDef();
+                        std::vector<RcEnv> envs;
+                        for (uint64_t xv : RcInputs(size, hib, 31, 10))
+                            for (uint64_t yv : { static_cast<uint64_t>(0), static_cast<uint64_t>(1), m, m >> 1, hib, hib + 1, hib - 1 })
+                                envs.push_back({ { x, xv }, { y, yv } });
+                        const std::vector<uint64_t> before = RcValues(cmp, envs);
+                        RuleSLess2Zero rule("scratch");
+                        const int rc = rule.applyOp(cmpOp, *t.fd);
+                        ++graphs;
+                        if (rc != 0) ++rewritten;
+                        const std::vector<uint64_t> after = RcValues(cmpOp->getOut(), envs);
+                        for (size_t i = 0; i < envs.size(); ++i)
+                        {
+                            ++values;
+                            if (before[i] != after[i])
+                            {
+                                CHECK(false);
+                                if (shown++ < 8)
+                                    std::printf("RuleSLess2Zero: %d bytes, operands %d and %d, op %d, form %d: %llu before the rule and %llu after for x=%llx y=%llx (rule returned %d)\n", size, ka, kb, static_cast<int>(opc), form,
+                                                static_cast<unsigned long long>(before[i]), static_cast<unsigned long long>(after[i]), static_cast<unsigned long long>(envs[i][0].second), static_cast<unsigned long long>(envs[i][1].second), rc);
+                                break;
+                            }
+                        }
+                    }
+    }
+    std::printf("RuleSLess2Zero by value: %ld graphs (%ld rewritten), %ld values compared\n", graphs, rewritten, values);
+    CHECK(rewritten > 100);
+}
+
 }  // namespace
 
 // Each case announces itself first; with stdout unbuffered, the last name printed is where a
@@ -2508,6 +2831,8 @@ int main(int argc, char** argv)
         RUN(TestWidenRound12());
         RUN(TestScarryMinimumRound12());
         RUN(TestRulesByValueRound12());
+        RUN(TestRangeSetsRound13());
+        RUN(TestSignHighBitRound13());
         RUN(TestCancelDuringJumpTableRecovery());
         RUN(TestReuseAndRepair(config));
         RUN(TestForeignHashUntouched(config));
