@@ -1730,13 +1730,15 @@ private:
         StoreThrough(s, addr, v, value.Direct(), false, nullptr, INT64_MAX, value.Frame());
     }
 
-    // Whether a callee's stores into this function's words may write a frame address (area 3 round 12 fix): a register it lets out or writes
-    // to its caller's frame holds one, or a word it may load and store back does. The word then keeps Value::frame.
+    // Whether a callee's stores into this function's words may write a frame address (area 3 round 12 fix): a register it is handed (the
+    // convention's, kConvention, which holds a lent callee's r4-r7 too) and lets out or writes to its caller's frame holds one, or a word it may
+    // load and store back does. The word then keeps Value::frame. (Not r8-r14: the model's callee keeps them, and with the frame pointer in r14
+    // every saved register's slot became a frame address after the first call.)
     bool CalleeStoresFrame(const State& s, const CallEffects& e) const
     {
         const uint32_t bits = e.leaks | e.frameValues;
-        for (int r = 0; r < kTracked; ++r)
-            if (r != kR15 && ((bits >> r) & 1u) && Get(s, mReg[r]).Frame()) return true;
+        for (int r = 0; r < 8; ++r)
+            if ((((bits & kConvention) >> r) & 1u) && Get(s, mReg[r]).Frame()) return true;
         if (bits & origin::kMemory)
             for (const auto& slot : s.slots)
                 if (slot.second.Frame()) return true;

@@ -4199,16 +4199,33 @@ uint32_t ArenaBit(int arena) { return arena < 4 ? 1u << (4 + arena) : 1u << 17; 
 // increments stay within 0x80 bytes, a frame within 0x200). r4-r7 and GBR in their own arenas, and only one the run read (an OR of two arena
 // pointers is a third's start by chance: r5 | r6 is r7's, seed 2031); r15 in the stack; -1 for anything else (a value that lands in an arena by
 // arithmetic on another register, `extu.w r5,r1 ; xor r5,r1`, is 0x100 below r4's start, and is not asked about).
+// (area 3 round 12 fix, A3-100) ...and not one an AND, OR or XOR of two other start values the run read lands on: 0x06024100 & 0x06021100 (GBR and
+// r5) is r4's start 0x06020100 exactly, seed 2007995, where the callee computed `stc gbr,r2 ; and r5,r2` and r2 was taken for a pointer from r4.
+bool BitwiseOfOthers(const RunOut& run, uint32_t v, int k)
+{
+    std::vector<uint32_t> others;
+    for (int j = 4; j < 8; ++j)
+        if (j != k && ((run.use.readFirst >> j) & 1u)) others.push_back(run.init[j]);
+    if (k != 17 && ((run.use.readFirst >> 17) & 1u)) others.push_back(run.initState[0]);
+    for (size_t a = 0; a < others.size(); ++a)
+        for (size_t b = a + 1; b < others.size(); ++b)
+            for (uint32_t w : { others[a] & others[b], others[a] | others[b], others[a] ^ others[b] })
+            {
+                const int32_t c = static_cast<int32_t>(v - w);
+                if (c > -0x80 && c < 0x80) return true;
+            }
+    return false;
+}
 int PointerRegister(const RunOut& run, uint32_t v)
 {
     for (int k = 4; k < 8; ++k)
     {
         const int32_t c = static_cast<int32_t>(v - run.init[k]);
-        if (c > -0x80 && c < 0x80 && ArenaOf(v) == k - 4) return (run.use.readFirst >> k) & 1u ? k : -1;
+        if (c > -0x80 && c < 0x80 && ArenaOf(v) == k - 4) return (run.use.readFirst >> k) & 1u && !BitwiseOfOthers(run, v, k) ? k : -1;
     }
     {
         const int32_t c = static_cast<int32_t>(v - run.initState[0]);
-        if (c > -0x80 && c < 0x80 && ArenaOf(v) == 4) return (run.use.readFirst >> 17) & 1u ? 17 : -1;
+        if (c > -0x80 && c < 0x80 && ArenaOf(v) == 4) return (run.use.readFirst >> 17) & 1u && !BitwiseOfOthers(run, v, 17) ? 17 : -1;
     }
     const int32_t c = static_cast<int32_t>(v - run.init[15]);
     const uint32_t m = v & 0x0FFFFFFFu;
@@ -5046,7 +5063,11 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                                 count("excluded.address-error.perturbed-runs");
                                 continue;
                             }
-                            if (!SameBehaviour(base, other, compareR0 || (anyFinished && r0Always), marked))
+                            // (area 3 round 12 fix, A3-101) r0 that ends as it began in both runs was passed through, not computed: `and r0,r0`
+                            // in the slot of the rts, `mov r0,r0` (the identities the host and the engine take for nops, A2-43) write it with
+                            // itself, so "written on every path" held and the perturbed start value came back out (seed 2126605).
+                            const bool r0Through = base.fin[0] == base.init[0] && other.fin[0] == other.init[0];
+                            if (!SameBehaviour(base, other, (compareR0 || (anyFinished && r0Always)) && !r0Through, marked))
                             {
                                 matters = true;
                                 break;
@@ -8248,6 +8269,273 @@ bool GenLaunderWalkFn(uint64_t seed, CCase& c, std::string& shape)
     }
     c.words = b.Finish();
     c.name = "seed" + std::to_string(seed) + "_launder";
+    return true;
+}
+
+// ---- Round 12 fix instrument: a frame address that goes out of the function and comes back by a way that is no op of it (A3-89 to A3-94) ----------
+// The shapes the round 12 review found the escape analysis open to, drawn on a stream of their own (one seed in four), with the same frame,
+// sentinel and store below p = r15 + 16 as the laundered walks, and checked the same way (CheckLaunderWalks: a constant return against the run).
+// A callee that is "unlent" reads r3 on entry (a hidden input no signature passes), so it is withheld and the caller's text is the probe's.
+//   keep.global.<lent|unlent>.<walk|ret>: g stores r4 to a global; h loads it and stores below it (walk), or returns it in r0 and the caller
+//        does (ret) (A3-89 a, b, d)
+//   keep.arg2.<lent|unlent>: g stores its second argument (p) through its first (a slot of the caller's frame); the caller reloads it (A3-89 c)
+//   keep.outgoing: an unlent g writes p to its own r15 + 4, the caller's outgoing word, which the caller reloads (A3-89 e)
+//   back.<r1|r9|r10|mach|gbr>: a lent g moves its argument into another register (`mov r4,r9`, `lds r4,mach`, `ldc r4,gbr`); the caller
+//        reads that and stores below it (A3-91)
+//   chain.<r1|r4>.<call|jump|callback>: P hands p in r1 or r4 to an unlent U1 that passes it on in r4 to an unlent U2 (by a call, a tail
+//        jump, or a call through a pointer in r5) that stores below it (A3-90; r1 is no argument the engine shows)
+//   struct.<none|mask|swap2>: r2 = p, laundered, at a call to an unlent g that writes through r2 (A3-94)
+//   callerframe.<none|swap2|mask>: g writes the word at its entry r15 through a copy of r15, laundered (A3-92)
+//   spare: f pushes r14, hands a swapped copy of r15 to a lent writer h (which overwrites the saved r14), pops r14; checked by f's claim, not
+//        the caller's text (the caller of a withheld f keeps r14 by the model: A3-93)
+//   neg.<one|sub>, shift.<arith>: a frame address through a negation the engine does not fold back, or `shll ; shar` (A3-97 E3, E4)
+static const char* const kEscapeForms[] = { "keep.global", "keep.arg2", "keep.outgoing", "back", "chain", "struct", "callerframe", "spare", "neg", "shift" };
+bool GenEscapeWalkFn(uint64_t seed, CCase& c, std::string& shape)
+{
+    Rng rng(seed * 2654435761u + 0x51A7u);
+    if (!rng.Chance(25)) return false;
+    const int K = 101 + static_cast<int>(rng.Below(27));
+    const std::string form = kEscapeForms[rng.Below(10)];
+    const bool walk = rng.Chance(60);
+    LaunderBuilder b;
+    auto prologue = [&]() {
+        b.Put(0x4F22);   // sts.l pr,@-r15
+        b.Put(0x7FE0);   // add #-32,r15
+        b.Put(static_cast<uint16_t>(0xE000 | K));
+        b.Put(0x2F02);   // mov.l r0,@r15: the sentinel
+    };
+    auto epilogue = [&](uint16_t read) {
+        b.Put(read);     // mov.l @r15,r0 (or another word of the frame)
+        b.Put(0x7F20);   // add #32,r15
+        b.Put(0x4F26);   // lds.l @r15+,pr
+        b.Put(0x000B);
+        b.Put(0x0009);
+    };
+    auto call = [&](uint32_t off) {
+        b.Lit(0, kCode + off);
+        b.Put(0x400B);   // jsr @r0
+        b.Put(0x0009);
+    };
+    auto hidden = [&]() { b.Put(0x2338); };   // tst r3,r3: reads r3 on entry, so the callee is withheld
+    if (form == "keep.global")
+    {
+        const bool lent = rng.Chance(50), ret = rng.Chance(40);
+        prologue();
+        b.Put(0x64F3);   // mov r15,r4
+        b.Put(0x7410);   // add #16,r4
+        call(0x80);
+        call(0xC0);
+        if (ret)
+        {
+            b.Put(0x6203);   // mov r0,r2
+            LaunderBelow(b, 2, walk);
+        }
+        epilogue(0x60F2);
+        b.at = 0x40;     // g
+        if (!lent) hidden();
+        b.Lit(1, kLaunderGlobal);
+        b.Put(0x000B);
+        b.Put(0x2142);   // mov.l r4,@r1
+        b.at = 0x60;     // h
+        if (!lent) hidden();
+        b.Lit(1, kLaunderGlobal);
+        if (ret)
+        {
+            b.Put(0x000B);
+            b.Put(0x6012);   // mov.l @r1,r0
+        }
+        else
+        {
+            b.Put(0x6212);   // mov.l @r1,r2
+            LaunderBelow(b, 2, walk);
+            b.Put(0x000B);
+            b.Put(0x0009);
+        }
+        shape = std::string("escape.keep.global.") + (lent ? "lent." : "unlent.") + (ret ? "ret." : "") + (walk ? "walk" : "disp");
+    }
+    else if (form == "keep.arg2")
+    {
+        const bool lent = rng.Chance(50);
+        prologue();
+        b.Put(0x64F3);   // mov r15,r4
+        b.Put(0x7414);   // add #20,r4: a slot of this frame
+        b.Put(0x65F3);   // mov r15,r5
+        b.Put(0x7510);   // add #16,r5: p
+        call(0x80);
+        b.Put(0x52F5);   // mov.l @(20,r15),r2
+        LaunderBelow(b, 2, walk);
+        epilogue(0x60F2);
+        b.at = 0x40;
+        if (!lent) hidden();
+        b.Put(0x000B);
+        b.Put(0x2452);   // mov.l r5,@r4
+        shape = std::string("escape.keep.arg2.") + (lent ? "lent." : "unlent.") + (walk ? "walk" : "disp");
+    }
+    else if (form == "keep.outgoing")
+    {
+        prologue();
+        b.Put(0x64F3);
+        b.Put(0x7410);
+        call(0x80);
+        b.Put(0x52F1);   // mov.l @(4,r15),r2
+        LaunderBelow(b, 2, walk);
+        epilogue(0x60F2);
+        b.at = 0x40;
+        hidden();
+        b.Put(0x000B);
+        b.Put(0x1F41);   // mov.l r4,@(4,r15): its own r15 + 4, the caller's outgoing word
+        shape = std::string("escape.keep.outgoing.") + (walk ? "walk" : "disp");
+    }
+    else if (form == "back")
+    {
+        static const char* const kRegs[] = { "r1", "r9", "r10", "mach", "gbr" };
+        static const uint16_t kMove[] = { 0x6143, 0x6943, 0x6A43, 0x440A, 0x441E };   // mov r4,r1 ; mov r4,r9 ; mov r4,r10 ; lds r4,mach ; ldc r4,gbr
+        static const uint16_t kRead[] = { 0x6213, 0x6293, 0x62A3, 0x020A, 0x0212 };   // mov r1,r2 ; mov r9,r2 ; mov r10,r2 ; sts mach,r2 ; stc gbr,r2
+        const int k = static_cast<int>(rng.Below(5));
+        prologue();
+        b.Put(0x64F3);
+        b.Put(0x7410);
+        call(0x80);
+        b.Put(kRead[k]);
+        LaunderBelow(b, 2, walk);
+        epilogue(0x60F2);
+        b.at = 0x40;
+        b.Put(0x000B);
+        b.Put(kMove[k]);
+        shape = std::string("escape.back.") + kRegs[k] + "." + (walk ? "walk" : "disp");
+    }
+    else if (form == "chain")
+    {
+        static const char* const kHow[] = { "call", "jump", "callback" };
+        const bool r1 = rng.Chance(50);
+        const std::string how = kHow[rng.Below(3)];
+        prologue();
+        b.Put(static_cast<uint16_t>(r1 ? 0x61F3 : 0x64F3));   // mov r15,r1 / r4
+        b.Put(static_cast<uint16_t>(r1 ? 0x7110 : 0x7410));   // add #16
+        if (how == "callback") b.Lit(5, kCode + 0xC0u);        // U2's address, for U1 to call
+        call(0x80);
+        epilogue(0x60F2);
+        b.at = 0x40;     // U1
+        hidden();
+        if (r1) b.Put(0x6413);   // mov r1,r4
+        if (how == "jump")
+        {
+            b.Lit(0, kCode + 0xC0u);
+            b.Put(0x402B);   // jmp @r0
+            b.Put(0x0009);
+        }
+        else
+        {
+            b.Put(0x4F22);
+            if (how == "call") b.Lit(0, kCode + 0xC0u);
+            else b.Put(0x6053);   // mov r5,r0
+            b.Put(0x400B);
+            b.Put(0x0009);
+            b.Put(0x4F26);
+            b.Put(0x000B);
+            b.Put(0x0009);
+        }
+        b.at = 0x60;     // U2
+        hidden();
+        LaunderBelow(b, 4, walk);
+        b.Put(0x000B);
+        b.Put(0x0009);
+        shape = std::string("escape.chain.") + (r1 ? "r1." : "r4.") + how + "." + (walk ? "walk" : "disp");
+    }
+    else if (form == "struct")
+    {
+        static const char* const kSteps[] = { "none", "mask", "swap2" };
+        const std::string step = kSteps[rng.Below(3)];
+        prologue();
+        b.Put(0x1F04);   // mov.l r0,@(16,r15): the word the callee writes
+        b.Put(0x62F3);   // mov r15,r2
+        b.Put(0x7210);   // add #16,r2
+        LaunderStep(b, step, 2, 3, 5, 24);
+        call(0x80);
+        epilogue(0x50F4);   // mov.l @(16,r15),r0
+        b.at = 0x40;
+        hidden();
+        b.Put(0xE101);   // mov #1,r1
+        b.Put(0x000B);
+        b.Put(0x2212);   // mov.l r1,@r2
+        shape = "escape.struct." + step;
+    }
+    else if (form == "callerframe")
+    {
+        static const char* const kSteps[] = { "none", "swap2", "mask" };
+        const std::string step = kSteps[rng.Below(3)];
+        prologue();
+        call(0x80);
+        epilogue(0x60F2);
+        b.at = 0x40;
+        b.Put(0x61F3);   // mov r15,r1
+        LaunderStep(b, step, 1, 3, 5, 0);
+        b.Put(0xE201);   // mov #1,r2
+        b.Put(0x2122);   // mov.l r2,@r1: the word at its entry r15, its caller's
+        b.Put(0x000B);
+        b.Put(0x0009);
+        shape = "escape.callerframe." + step;
+    }
+    else if (form == "spare")
+    {
+        b.Put(0x4F22);   // sts.l pr,@-r15
+        b.Put(static_cast<uint16_t>(0xEE00 | K));   // mov #K,r14
+        call(0x80);
+        b.Put(0x60E3);   // mov r14,r0
+        b.Put(0x4F26);
+        b.Put(0x000B);
+        b.Put(0x0009);
+        b.at = 0x40;     // f
+        b.Put(0x4F22);
+        b.Put(0x2FE6);   // mov.l r14,@-r15
+        b.Put(0x64F3);   // mov r15,r4: the slot of the saved r14
+        LaunderStep(b, "swap2", 4, 3, 5, 0);
+        call(0xC0);
+        b.Put(0x6EF6);   // mov.l @r15+,r14
+        b.Put(0x4F26);
+        b.Put(0x000B);
+        b.Put(0x0009);
+        b.at = 0x60;     // h
+        b.Put(0xE201);   // mov #1,r2
+        b.Put(0x000B);
+        b.Put(0x2422);   // mov.l r2,@r4
+        shape = "escape.spare";
+    }
+    else   // neg, shift: a frame address through an op the engine keeps, then a store below it
+    {
+        const bool neg = form == "neg";
+        const bool second = rng.Chance(50);
+        prologue();
+        b.Put(0x62F3);   // mov r15,r2
+        b.Put(0x7210);   // add #16,r2
+        if (neg && !second)
+        {
+            b.Put(0x632B);   // neg r2,r3
+            b.Put(0x633A);   // negc r3,r3: 0 - r3 - T (T is 0: `tst` below sets it after)
+            b.Put(0x6233);   // mov r3,r2
+        }
+        else if (neg)
+        {
+            b.Put(0x632B);   // neg r2,r3
+            b.Put(0xE200);   // mov #0,r2
+            b.Put(0x3238);   // sub r3,r2
+        }
+        else if (!second)
+        {
+            b.Put(0x4200);   // shll r2
+            b.Put(0x4221);   // shar r2
+        }
+        else
+        {
+            b.Put(0x4220);   // shal r2
+            b.Put(0x4221);   // shar r2
+        }
+        LaunderBelow(b, 2, walk);
+        epilogue(0x60F2);
+        shape = std::string("escape.") + form + "." + (neg ? (second ? "sub" : "negc") : (second ? "shal" : "shll")) + "." + (walk ? "walk" : "disp");
+    }
+    c.words = b.Finish();
+    c.name = "seed" + std::to_string(seed) + "_escape";
     return true;
 }
 

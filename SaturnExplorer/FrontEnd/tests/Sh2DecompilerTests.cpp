@@ -12071,6 +12071,158 @@ void TestArea3Round12()
              { 0x180, { 0xE104, 0x2416, 0x4110, 0x8BFC, 0x000B, 0x0009 } } }, { 0x180, 0x140, 0x100 });
 }
 
+// ---- Area 3, round 12 fix: the escape semantics of a points-to analysis (patch 0063 and the host's one predicate) ------------------------------
+// The finding fixtures of A3-89 to A3-94 (the review's rows, verbatim), each now reading the local or withheld as the row expects, and the pins that
+// hold each host part alone (a chain whose frame address travels in r1, which no argument shows; a laundered address in a stack argument the
+// engine drops). Functions at given offsets from base; 'lend' lists those decompiled first and lent (deepest first) when their signature is known.
+void TestArea3Round12Fix()
+{
+    Sh2Decompiler d(gConfig);
+    uint64_t serial = 125000;
+    const uint32_t base = 0x06009000u;
+    struct Out
+    {
+        DecompileResult entry;
+        std::map<uint32_t, DecompileResult> callees;
+        uint32_t ran = 0;
+    };
+    auto run = [&](const char* name, std::vector<std::pair<uint32_t, std::vector<uint16_t>>> fns, std::vector<uint32_t> lend) {
+        std::vector<uint16_t> words;
+        for (const auto& f : fns)
+        {
+            if (words.size() < f.first / 2) words.resize(f.first / 2, 0x0009);
+            words.insert(words.end(), f.second.begin(), f.second.end());
+        }
+        const CallFixture f = { name, base, std::move(words) };
+        auto snap = CallSnapshot(f, ++serial);
+        Out o;
+        DecompileRequest q = Request(base);
+        for (uint32_t at : lend)
+        {
+            DecompileRequest cq = Request(base + at);
+            cq.prototypes = q.prototypes;
+            o.callees[at] = d.Decompile(snap, cq);
+            if (o.callees[at].status == DecompileStatus::Ok && o.callees[at].prototype.known) q.prototypes.emplace_back(base + at, o.callees[at].prototype);
+        }
+        o.entry = d.Decompile(snap, q);
+        Print(f.name.c_str(), o.entry);
+        CHECK(o.entry.status == DecompileStatus::Ok);
+        CHECK(CallRunResult(snap, f, { 0, 0, 0, 0 }, o.ran));
+        return o;
+    };
+    // The local is read, not the value stored before (5); the run is the walk's last store (1) or the callee's word (7).
+    auto reads = [&](const Out& o, uint32_t ran) { return o.ran == ran && Has(o.entry.Text(), "Stack") && !Has(o.entry.Text(), "return 5;"); };
+
+    // ---- A3-89: a frame address a callee keeps (a global, a slot of the caller's frame, the outgoing word), read back and stored below ----
+    const std::vector<uint16_t> c89 = { 0x4F22, 0x7FEC, 0xE005, 0x2F02, 0x64F3, 0x7410, 0xD105, 0x410B, 0x0009, 0xD105, 0x410B, 0x0009, 0x60F2, 0x7F14, 0x4F26, 0x000B, 0x0009, 0x0009, 0x0600, 0x9040, 0x0600, 0x9080 };
+    const std::vector<uint16_t> keepG = { 0xD101, 0x2142, 0x000B, 0x0009, 0x0600, 0xF100 }, walkG = { 0xD103, 0x6112, 0xE204, 0x2126, 0x4210, 0x8BFC, 0x000B, 0x0009, 0x0600, 0xF100 };
+    {
+        const Out a = run("A3-89a a lent g keeps the frame address in a global, a lent h walks down from it", { { 0x00, c89 }, { 0x40, keepG }, { 0x80, walkG } }, { 0x80, 0x40 });
+        CHECK(a.entry.prototype.known && reads(a, 1));
+        const Out b = run("A3-89b the same, g not lent", { { 0x00, c89 }, { 0x40, keepG }, { 0x80, walkG } }, { 0x80 });
+        CHECK(!b.entry.prototype.known && reads(b, 1));
+    }
+    {
+        const Out c = run("A3-89c a lent g stores its second argument (the frame address) through its first (a slot); the caller walks down from it",
+                          { { 0x00, { 0x082A, 0x7FE8, 0xE005, 0x2F02, 0x64F3, 0x7414, 0x65F3, 0x7510, 0xD106, 0x410B, 0x0009, 0x51F5, 0xE204, 0x2126, 0x4210, 0x8BFC, 0x60F2, 0x7F18, 0x482A, 0x000B, 0x0009, 0x0009, 0x0600, 0x9040 } },
+                            { 0x40, { 0x000B, 0x2452 } } }, { 0x40 });
+        CHECK(c.entry.prototype.known && reads(c, 1));
+        const Out c2 = run("A3-89c the same, a store at a negative displacement",
+                           { { 0x00, { 0x082A, 0x7FE8, 0xE005, 0x2F02, 0x64F3, 0x7414, 0x65F3, 0x7510, 0xD105, 0x410B, 0x0009, 0x51F5, 0xE201, 0x71F0, 0x2122, 0x60F2, 0x7F18, 0x482A, 0x000B, 0x0009, 0x0600, 0x9040 } },
+                             { 0x40, { 0x000B, 0x2452 } } }, { 0x40 });
+        CHECK(c2.entry.prototype.known && reads(c2, 1));
+        const Out dd = run("A3-89d a lent g keeps it in a global, a lent g2 (handed nothing) returns the global, the caller walks down from r0",
+                           { { 0x00, { 0x082A, 0x7FE8, 0xE005, 0x2F02, 0x64F3, 0x7410, 0xD107, 0x410B, 0x0009, 0xD107, 0x410B, 0x0009, 0x6203, 0xE304, 0x2236, 0x4310, 0x8BFC, 0x60F2, 0x7F18, 0x482A, 0x000B, 0x0009, 0x0600, 0x9040, 0x0600, 0x9080 } },
+                             { 0x40, { 0xD101, 0x000B, 0x2142, 0x0009, 0x0600, 0xF100 } }, { 0x80, { 0xD101, 0x000B, 0x6012, 0x0009, 0x0600, 0xF100 } } }, { 0x80, 0x40 });
+        CHECK(dd.entry.prototype.known && reads(dd, 1));
+        const Out e = run("A3-89e g writes the frame address into its own r15 + 4 (the caller's outgoing word); the caller reloads it and walks down",
+                          { { 0x00, { 0x082A, 0x7FE8, 0xE005, 0x2F02, 0x64F3, 0x7410, 0xD106, 0x410B, 0x0009, 0x52F1, 0xE304, 0x2236, 0x4310, 0x8BFC, 0x60F2, 0x7F18, 0x482A, 0x000B, 0x0009, 0x0009, 0x0600, 0x9040 } },
+                            { 0x40, { 0x000B, 0x1F41 } } }, { 0x40 });
+        CHECK(!e.callees.at(0x40).prototype.known && !e.entry.prototype.known && reads(e, 1));   // g writes its caller's frame (A3-21): withheld
+    }
+
+    // ---- A3-90: the probe's walk carries storesBelow and what a callee is handed up a chain of unlent callees ----
+    const std::vector<uint16_t> fillR4 = { 0x6133, 0x2416, 0x4110, 0x8BFC, 0x000B, 0x0009 };   // reads r3: unlent
+    {
+        const Out a = run("A3-90a P calls unlent U1, which calls unlent U2 that fills backwards",
+                          { { 0x00, { 0x4F22, 0x7FEC, 0xE005, 0x2F02, 0x64F3, 0x7410, 0xE304, 0xD104, 0x410B, 0x0009, 0x60F2, 0x7F14, 0x4F26, 0x000B, 0x0009, 0x0009, 0x0600, 0x9040 } },
+                            { 0x40, { 0x4F22, 0xD103, 0x410B, 0x0009, 0x4F26, 0x000B, 0x0009, 0x0009, 0x0600, 0x9080 } }, { 0x80, fillR4 } }, { 0x80, 0x40 });
+        CHECK(!a.entry.prototype.known && reads(a, 1));
+        const Out b = run("A3-90b U1 calls a callback in r5, passing r4",
+                          { { 0x00, { 0x4F22, 0x7FEC, 0xE005, 0x2F02, 0x64F3, 0x7410, 0xD504, 0xE304, 0xD104, 0x410B, 0x0009, 0x60F2, 0x7F14, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9080, 0x0600, 0x9040 } },
+                            { 0x40, { 0x4F22, 0x450B, 0x0009, 0x4F26, 0x000B, 0x0009 } }, { 0x80, fillR4 } }, { 0x80, 0x40 });
+        CHECK(!b.entry.prototype.known && reads(b, 1));
+        const Out c = run("A3-90c U1 tail-jumps to U2",
+                          { { 0x00, { 0x082A, 0x7FE8, 0xE005, 0x2F02, 0x64F3, 0x7410, 0xE304, 0xD104, 0x410B, 0x0009, 0x60F2, 0x7F18, 0x482A, 0x000B, 0x0009, 0x0009, 0x0600, 0x9040 } },
+                            { 0x40, { 0xD101, 0x412B, 0x0009, 0x0009, 0x0600, 0x9080 } }, { 0x80, fillR4 } }, { 0x80, 0x40 });
+        CHECK(!c.entry.prototype.known && reads(c, 1));
+        // The host's carry alone (the engine sees no hand-over: r1 is no argument of a call): P hands the frame address in r1 to U1, which passes
+        // it on in r4 to U2. Only the walk of U1, carrying U2's storesBelow (and what it is handed) through r4 back to r1, exposes P's frame.
+        const Out r1 = run("A3-90 r1: P hands the frame address in r1 to unlent U1, which passes it in r4 to unlent U2 that fills backwards",
+                           { { 0x00, { 0x4F22, 0x7FEC, 0xE005, 0x2F02, 0x61F3, 0x7110, 0xE304, 0xD004, 0x400B, 0x0009, 0x60F2, 0x7F14, 0x4F26, 0x000B, 0x0009, 0x0009, 0x0600, 0x9040 } },
+                             { 0x40, { 0x6413, 0x4F22, 0xD002, 0x400B, 0x0009, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9080 } }, { 0x80, fillR4 } }, { 0x80, 0x40 });
+        CHECK(!r1.entry.prototype.known && reads(r1, 1) && Has(r1.entry.Text(), "a frame address is in r1 here"));
+    }
+
+    // ---- A3-91: a lent callee hands the address back in a register the call has no output in ----
+    for (const auto& c : std::vector<std::pair<const char*, std::vector<std::vector<uint16_t>>>>{
+             { "A3-91a r9", { { 0x082A, 0x7FE8, 0xE005, 0x2F02, 0x64F3, 0x7410, 0xD105, 0x410B, 0x0009, 0xE104, 0x2916, 0x4110, 0x8BFC, 0x60F2, 0x7F18, 0x482A, 0x000B, 0x0009, 0x0600, 0x9040 }, { 0x000B, 0x6943 } } },
+             { "A3-91b r1", { { 0x082A, 0x7FE8, 0xE005, 0x2F02, 0x64F3, 0x7410, 0xD105, 0x410B, 0x0009, 0xE204, 0x2126, 0x4210, 0x8BFC, 0x60F2, 0x7F18, 0x482A, 0x000B, 0x0009, 0x0600, 0x9040 }, { 0x000B, 0x6143 } } },
+             { "A3-91c gbr", { { 0x082A, 0x7FE8, 0xE005, 0x2F02, 0x64F3, 0x7410, 0xD106, 0x410B, 0x0009, 0x0212, 0xE304, 0x2236, 0x4310, 0x8BFC, 0x60F2, 0x7F18, 0x482A, 0x000B, 0x0009, 0x0009, 0x0600, 0x9040 }, { 0x000B, 0x441E } } },
+             { "A3-91d r10", { { 0x082A, 0x7FE8, 0xE005, 0x2F02, 0x64F3, 0x7410, 0xD106, 0x410B, 0x0009, 0x62A3, 0xE304, 0x2236, 0x4310, 0x8BFC, 0x60F2, 0x7F18, 0x482A, 0x000B, 0x0009, 0x0009, 0x0600, 0x9040 }, { 0x000B, 0x6A43 } } },
+             { "A3-91 mach", { { 0x082A, 0x7FE8, 0xE005, 0x2F02, 0x64F3, 0x7410, 0xD106, 0x410B, 0x0009, 0x020A, 0xE304, 0x2236, 0x4310, 0x8BFC, 0x60F2, 0x7F18, 0x482A, 0x000B, 0x0009, 0x0009, 0x0600, 0x9040 }, { 0x000B, 0x440A } } } })
+    {
+        const Out o = run(c.first, { { 0x00, c.second[0] }, { 0x40, c.second[1] } }, { 0x40 });
+        CHECK(o.callees.at(0x40).prototype.known && reads(o, 1));   // the callee is lent; the caller is withheld ("it uses rN after calling") and reads the local
+    }
+
+    // ---- A3-92: a laundered address of the caller's frame is one (the hand-back of A3-21, A3-39, A3-70) ----
+    {
+        const std::vector<uint16_t> c92 = { 0x082A, 0x7FF0, 0xE005, 0x2F02, 0xD103, 0x410B, 0x0009, 0x60F2, 0x7F10, 0x482A, 0x000B, 0x0009, 0x0600, 0x9040 };
+        const Out a = run("A3-92a g writes its entry r15 through a swapped copy of r15", { { 0x00, c92 }, { 0x40, { 0x61F3, 0x6119, 0x6119, 0xE207, 0x2122, 0x000B, 0x0009, 0x0009 } } }, { 0x40 });
+        CHECK(!a.callees.at(0x40).prototype.known && Has(a.callees.at(0x40).prototypeWithheld, "caller's frame") && reads(a, 7));
+        const Out b = run("A3-92b g writes its entry r15 + 4 through a mask",
+                          { { 0x00, { 0x082A, 0x7FF0, 0xE005, 0x1F01, 0xD103, 0x410B, 0x0009, 0x50F1, 0x7F10, 0x482A, 0x000B, 0x0009, 0x0600, 0x9040 } },
+                            { 0x40, { 0x61F3, 0x7104, 0xE3FC, 0x2139, 0xE207, 0x2122, 0x000B, 0x0009 } } }, { 0x40 });
+        CHECK(!b.callees.at(0x40).prototype.known && reads(b, 7));
+        const std::vector<uint16_t> f92 = { 0x4F22, 0x64F3, 0x7404, 0x6449, 0x6449, 0xD103, 0x410B, 0x0009, 0x4F26, 0x000B, 0x0009, 0x0009, 0x0600, 0x9080 };
+        const Out c = run("A3-92c a lent f hands a swapped address of its caller's slot to a lent writer h", { { 0x00, c92 }, { 0x40, f92 }, { 0x80, { 0xE207, 0x000B, 0x2422, 0x0009 } } }, { 0x80, 0x40 });
+        CHECK(c.callees.at(0x80).prototype.known && !c.callees.at(0x40).prototype.known && reads(c, 7));
+        const Out dd = run("A3-92d the probe: unlent U1 hands a swapped copy of its entry r15 to unlent U2 that writes through r4",
+                           { { 0x00, c92 }, { 0x40, f92 }, { 0x80, { 0xE207, 0x6133, 0x000B, 0x2422 } } }, { 0x80, 0x40 });
+        CHECK(!dd.entry.prototype.known && reads(dd, 7));
+    }
+
+    // ---- A3-93: a laundered pointer to a saved register's slot spares nothing ----
+    {
+        const Out o = run("A3-93 f pushes r14 and hands a swapped copy of r15 to a lent writer h, which overwrites the saved r14",
+                          { { 0x00, { 0x082A, 0xEE05, 0xD103, 0x410B, 0x0009, 0x60E3, 0x482A, 0x000B, 0x0009, 0x0009, 0x0600, 0x9040 } },
+                            { 0x40, { 0x4F22, 0x2FE6, 0x64F3, 0x6449, 0x6449, 0xD103, 0x410B, 0x0009, 0x6EF6, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9080 } },
+                            { 0x80, { 0xE207, 0x000B, 0x2422, 0x0009 } } }, { 0x80, 0x40 });
+        const DecompileResult& f = o.callees.at(0x40);
+        CHECK(o.ran == 7u && o.callees.at(0x80).prototype.known);
+        CHECK(!f.prototype.known || !((f.prototype.effects.preserved >> 14) & 1u));   // r14 is not preserved by f, whatever else
+        CHECK(!o.entry.prototype.known);
+    }
+
+    // ---- A3-94: a laundered frame address in r2 (the address of a returned structure) at a call with no lent signature ----
+    {
+        const std::vector<uint16_t> g94 = { 0xE107, 0x000B, 0x2212, 0x0009 };   // mov #7,r1 ; rts ; mov.l r1,@r2 (not lent: reads r2)
+        const Out a = run("A3-94a r2 = a swapped frame address",
+                          { { 0x00, { 0x082A, 0x7FF0, 0xE005, 0x2F02, 0x62F3, 0x6229, 0x6229, 0xD104, 0x410B, 0x0009, 0x60F2, 0x7F10, 0x482A, 0x000B, 0x0009, 0x0009, 0x0600, 0x9040 } }, { 0x40, g94 } }, { 0x40 });
+        CHECK(!a.entry.prototype.known && reads(a, 7));
+        const Out b = run("A3-94b r2 = the frame address masked with and #-4",
+                          { { 0x00, { 0x082A, 0x7FF0, 0xE005, 0x2F02, 0x62F3, 0xE3FC, 0x2239, 0xD104, 0x410B, 0x0009, 0x60F2, 0x7F10, 0x482A, 0x000B, 0x0009, 0x0009, 0x0600, 0x9040 } }, { 0x40, g94 } }, { 0x40 });
+        CHECK(!b.entry.prototype.known && reads(b, 7));
+        // NoteFrameEscapeOf alone (no register the walked callee is handed holds it, and the engine drops the stack word: r4-r6 unset, A3-51):
+        // a swapped frame address in the call's first stack argument slot, which the callee reads and writes through.
+        const Out st = run("A3-94 stack: a swapped frame address in the first stack argument slot, r4-r7 unset",
+                           { { 0x00, { 0x4F22, 0x7FF8, 0xE05A, 0x1F01, 0x61F3, 0x7104, 0x6119, 0x6119, 0x2F12, 0xB015, 0x0009, 0x50F1, 0x7F08, 0x4F26, 0x000B, 0x0009 } },
+                             { 0x40, { 0x62F2, 0xE337, 0x000B, 0x2232 } } }, { 0x40 });
+        CHECK(st.ran == 0x37u && !Has(st.entry.Text(), "return 0x5a;") && Has(st.entry.Text(), "a frame address is in a stack argument slot here"));
+    }
+}
+
 // ===== A3-65 (P1): a copy of r15 walked down by pre-decrement stores ===========================================================================
 // `*--p = v` over a local array compiles to a copy of r15 (or of the frame pointer r14), moved to the top of the array and walked down by
 // `mov.l Rm,@-Rn`. The engine's alias analysis (AliasChecker, upstream's) takes a pointer into the frame to reach only what lies at or above its base,
@@ -12537,6 +12689,7 @@ int main(int argc, char** argv)
         RUN(TestArea3Round11());
         RUN(TestArea3Round11Fix());
         RUN(TestArea3Round12());
+        RUN(TestArea3Round12Fix());
         RUN(TestArea2Round8());
         RUN(TestArea2Round9());
         RUN(TestArea2Round10());
