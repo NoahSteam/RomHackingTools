@@ -17,9 +17,10 @@
 #   51 signmod   signed remainder by 2^k with bias and mask (RuleSignMod2nOpt, RuleSignMod2Opt)
 #   52 bitpull   a bit or a few high bits of a byte pulled down by masks and shifts (RuleSubvarShift)
 #   53 prodsign  the sign of the high word of a product by a small positive constant (RuleSignForm2)
+#   54 masksign  a masked or shifted sign (0 or the sign bit) added to or subtracted from the sign bit and its neighbours, the flag and the sign read (RuleSLess2Zero)
 #   47 nonneg    a signed division by a constant of a zero-extended or masked dividend (RulePositiveDiv)
 #   43 sameval   a value computed twice or compared with itself (RuleTrivialArith): x ^ x, x == x, (x+y) == (x+y), (x*c) != (x*c), tst r,r
-# usage: dagen12.py <first seed> <count> [family 40..53]   -> one function per seed, ";" joined (SE_GENERATED_PRINTEDC_WORDS)
+# usage: dagen12.py <first seed> <count> [family 40..54]   -> one function per seed, ";" joined (SE_GENERATED_PRINTEDC_WORDS)
 #        dagen12.py extras <first seed> <count> <family>   -> the comma-joined hex list for SE_GENERATED_PRINTEDC_EXTRA
 import importlib.util, os, random, sys
 
@@ -304,7 +305,31 @@ def fam_prodsign(r, f):
     elif k == 1: shr_arith(f, 0, 31); f.add(0x2009 | 0 << 8 | 5 << 4)
     else: f.add(cmp_pz(0), movt(0))
 
-FAMS12 = {40: fam_ovfsign, 41: fam_fixmul, 42: fam_widecmp, 43: fam_sameval, 44: fam_extcmp, 45: fam_signbias, 46: fam_extshift, 47: fam_nonneg, 48: fam_boolcomb, 49: fam_threeway, 50: fam_negneg, 51: fam_signmod, 52: fam_bitpull, 53: fam_prodsign}
+def fam_masksign(r, f):
+    """a value that can only be 0 or the sign bit (a masked sign, a shifted one, a movt shifted up) met by addv / subv / addc / subc / cmp with a
+    constant that is the sign bit or its neighbour, the flag and the sign of the result read (RuleSLess2Zero's high-bit rule: both operands of the sum
+    can set the high bit)"""
+    k = r.randrange(0, 4)
+    f.add(mov(1, 4))
+    if k == 0: f.lit(2, 0x80000000); f.add(and_(2, 1))                           # x & 0x80000000
+    elif k == 1: shl(f, 1, 31)                                                    # x << 31
+    elif k == 2: f.add(0x0029 | 1 << 8); shl(f, 1, 31)                            # movt << 31
+    else: shr_logical(f, 1, 31); shl(f, 1, 31)                                   # (x >> 31) << 31
+    c = r.choice([0x80000000, 0x80000000, 0x7FFFFFFF, 0xFFFFFFFF, 1, 0xC0000000, 0])
+    f.lit(3, c)
+    op = r.choice([addv, subv, addc, subc, add, sub])
+    if op in (addc, subc): f.add(CLRT if r.random() < 0.5 else SETT)
+    f.add(mov(0, 1) if r.random() < 0.5 else mov(2, 1))
+    if r.random() < 0.5: f.add(op(3, 1))                                         # r1 = r1 op r3
+    else: f.add(mov(2, 3), op(1, 2), mov(1, 2))                                 # r3 op r1 (the masked value second)
+    out = r.randrange(0, 4)
+    if out == 0: f.add(movt(0))
+    elif out == 1: f.add(cmp_pz(1), movt(0))
+    elif out == 2: f.add(movt(2), cmp_pl(1), movt(3), xor(2, 3), mov(0, 3))
+    else:
+        f.add(mov(0, 1)); f.br('bt', 'sk'); f.add(movi(0, 5)); f.label('sk')
+
+FAMS12 = {40: fam_ovfsign, 41: fam_fixmul, 42: fam_widecmp, 43: fam_sameval, 44: fam_extcmp, 45: fam_signbias, 46: fam_extshift, 47: fam_nonneg, 48: fam_boolcomb, 49: fam_threeway, 50: fam_negneg, 51: fam_signmod, 52: fam_bitpull, 53: fam_prodsign, 54: fam_masksign}
 
 def build(seed, fam=None, want_fn=False):
     r = random.Random(seed * 104729 + 12)
