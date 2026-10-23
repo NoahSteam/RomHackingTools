@@ -83,6 +83,7 @@ int64_t Signed(uint64_t v, int size)
 }
 
 bool gWide = false;
+bool gSh2 = false;       // only the ops and shift amounts the SH-2 spec emits (no carry/borrow ops, no counts, no division, amounts 1 2 8 16 31 32)
 bool gUndef = false;      // a division by zero or an overflowing division was met: the environment is not used
 bool gUnsupported = false;
 OpCode gUnsupportedOp = CPUI_COPY;
@@ -240,10 +241,15 @@ struct Builder
     }
     uint64_t constant(int size)
     {
+        const uint64_t m = Mask(size);
+        const int r = rng.below(100);
+        if (r < 12) return (m >> 1) + 1;
+        if (r < 17) return m;
+        if (r < 21) return 0;
+        if (r < 25) return 1;
+        if (r < 28) return m >> 1;
         std::vector<uint64_t> e = EdgeConsts(size, rng);
-        // bias toward the same few constants so that patterns meet: remember one
-        const uint64_t c = e[rng.below(static_cast<int>(e.size()))];
-        return c;
+        return e[rng.below(static_cast<int>(e.size()))];
     }
     Varnode* konst(int size)
     {
@@ -253,6 +259,11 @@ struct Builder
     }
     Varnode* shiftAmount()
     {
+        if (gSh2)
+        {
+            static const uint64_t sh2amounts[] = { 1, 1, 2, 8, 16, 31, 32 };
+            return fd->newConstant(4, sh2amounts[rng.below(7)]);
+        }
         static const uint64_t amounts[] = { 0, 1, 1, 2, 3, 4, 7, 8, 8, 9, 15, 16, 16, 17, 23, 24, 31, 31, 32, 32, 33, 40, 48, 56, 63, 64, 65, 100, 255, 0x80000000ull, 0xffffffffull, 0x100000000ull };
         uint64_t a = amounts[rng.below(sizeof(amounts) / sizeof(amounts[0]))];
         // SH-2 code reaches shift amounts up to 32 (shll16, the << 32 of mac) and `rm & 0x1f`; the huge amounts (>= 2^31) are the latent class unless RF_WIDE=1
@@ -293,7 +304,7 @@ struct Builder
         Varnode* out;
         const int k = rng.below(10);
         if (k < 5 || budget <= 0) { --budget; out = genCmp(depth); }
-        else if (k < 6) { --budget; out = genCarry(depth); }
+        else if (k < 6 && !gSh2) { --budget; out = genCarry(depth); }
         else if (k < 7) { Varnode* a = genBool(depth - 1); out = emit(CPUI_BOOL_NEGATE, 1, a)->getOut(); }
         else
         {
@@ -310,9 +321,12 @@ struct Builder
         const int s = 1 << rng.below(4);
         Varnode* a = gen(s, depth - 1);
         Varnode* b = rng.chance(60) ? konst(s) : gen(s, depth - 1);
+        if (rng.chance(30)) b = fd->newConstant(s, rng.chance(60) ? 0 : Mask(s));        // the sign tests
         if (a->isConstant() && b->isConstant()) a = input(s);
         if (rng.chance(25)) std::swap(a, b);
-        return emit(ops[rng.below(6)], 1, a, b)->getOut();
+        OpCode opc = ops[rng.below(6)];
+        if (b->isConstant() && rng.chance(40)) opc = rng.chance(70) ? CPUI_INT_SLESS : CPUI_INT_SLESSEQUAL;
+        return emit(opc, 1, a, b)->getOut();
     }
     Varnode* genCarry(int depth)
     {
@@ -323,8 +337,47 @@ struct Builder
         if (a->isConstant() && b->isConstant()) a = input(s);
         return emit(ops[rng.below(3)], 1, a, b)->getOut();
     }
+    // A leaf that is a small motif over an input: the places where rules look at masks, signs and bits (a masked sign, a shifted sign, a widened bool, ...)
+    Varnode* motif(int size)
+    {
+        const int w = 8 * size;
+        Varnode* x = input(size);
+        const uint64_t m = Mask(size);
+        switch (rng.below(16))
+        {
+        case 0: return emit(CPUI_INT_AND, size, x, fd->newConstant(size, (m >> 1) + 1))->getOut();                   // x & hibit
+        case 1: return emit(CPUI_INT_AND, size, x, fd->newConstant(size, m >> 1))->getOut();                          // x & ~hibit
+        case 2: return emit(CPUI_INT_SRIGHT, size, x, fd->newConstant(4, w - 1))->getOut();                           // sign
+        case 3: return emit(CPUI_INT_RIGHT, size, x, fd->newConstant(4, w - 1))->getOut();                            // 0 or 1
+        case 4:
+        {
+            Varnode* b = genBool(1);
+            if (size == 1) return emit(CPUI_INT_LEFT, 1, b, fd->newConstant(4, 7))->getOut();
+            Varnode* z = emit(CPUI_INT_ZEXT, size, b)->getOut();
+            return emit(CPUI_INT_LEFT, size, z, fd->newConstant(4, w - 1))->getOut();                                  // bool << (w-1)
+        }
+        case 5:
+            if (size >= 2) { Varnode* a = input(size / 2); return emit(rng.chance(50) ? CPUI_INT_SEXT : CPUI_INT_ZEXT, size, a)->getOut(); }
+            return emit(CPUI_INT_AND, size, x, konst(size))->getOut();
+        case 6: return emit(CPUI_INT_AND, size, x, konst(size))->getOut();
+        case 7: return emit(CPUI_INT_OR, size, x, konst(size))->getOut();
+        case 8: return emit(CPUI_INT_NEGATE, size, x)->getOut();
+        case 9: return emit(CPUI_INT_2COMP, size, x)->getOut();
+        case 10: return emit(CPUI_INT_MULT, size, x, konst(size))->getOut();
+        case 11:
+            if (size >= 2) { const int lo = 1 + rng.below(size - 1); return emit(CPUI_PIECE, size, input(size - lo), input(lo))->getOut(); }
+            return x;
+        case 12: return emit(CPUI_INT_LEFT, size, x, shiftAmount())->getOut();
+        case 13: return emit(CPUI_INT_RIGHT, size, x, shiftAmount())->getOut();
+        case 14: return emit(CPUI_INT_SRIGHT, size, x, shiftAmount())->getOut();
+        default:
+            if (size <= 4) return emit(CPUI_SUBPIECE, size, input(size * 2), fd->newConstant(4, rng.below(size + 1)))->getOut();
+            return x;
+        }
+    }
     Varnode* leaf(int size)
     {
+        if (rng.chance(28) && budget > 0) { --budget; return motif(size); }
         if (rng.chance(55)) return input(size);
         return konst(size);
     }
@@ -348,9 +401,8 @@ struct Builder
         kinds[nk++] = UN;
         if (size >= 2) { kinds[nk++] = EXT; kinds[nk++] = EXT; kinds[nk++] = PIECEOP; }
         if (size <= 4) { kinds[nk++] = SUB; kinds[nk++] = SUB; }
-        if (size == 1) { kinds[nk++] = CMP; kinds[nk++] = CMP; kinds[nk++] = CMP; kinds[nk++] = BOOLOP; kinds[nk++] = CARRY; }
-        kinds[nk++] = COUNT;
-        kinds[nk++] = DIVOP;
+        if (size == 1) { kinds[nk++] = CMP; kinds[nk++] = CMP; kinds[nk++] = CMP; kinds[nk++] = BOOLOP; if (!gSh2) kinds[nk++] = CARRY; }
+        if (!gSh2) { kinds[nk++] = COUNT; kinds[nk++] = DIVOP; }
         switch (kinds[rng.below(nk)])
         {
         case BIN:
@@ -358,7 +410,7 @@ struct Builder
             static const OpCode ops[] = { CPUI_INT_ADD, CPUI_INT_ADD, CPUI_INT_SUB, CPUI_INT_AND, CPUI_INT_AND, CPUI_INT_OR, CPUI_INT_XOR, CPUI_INT_MULT };
             const OpCode opc = ops[rng.below(sizeof(ops) / sizeof(ops[0]))];
             Varnode* a = gen(size, depth - 1);
-            Varnode* b = rng.chance(45) ? konst(size) : gen(size, depth - 1);
+            Varnode* b = rng.chance(45) ? konst(size) : (rng.chance(25) ? motif(size) : gen(size, depth - 1));
             if (a->isConstant() && b->isConstant()) a = input(size);
             if (rng.chance(30) && b->isConstant()) std::swap(a, b);
             return emit(opc, size, a, b)->getOut();
@@ -369,7 +421,7 @@ struct Builder
             const OpCode opc = ops[rng.below(3)];
             Varnode* a = gen(size, depth - 1);
             if (a->isConstant()) a = input(size);
-            Varnode* b = rng.chance(88) ? shiftAmount() : gen(rng.chance(50) ? 1 : size, depth - 1);
+            Varnode* b = (gSh2 || rng.chance(88)) ? shiftAmount() : gen(rng.chance(50) ? 1 : size, depth - 1);
             if (b->isConstant() && !gWide && b->getOffset() > 255) b = shiftAmount();
             return emit(opc, size, a, b)->getOut();
         }
@@ -531,6 +583,7 @@ int main(int argc, char** argv)
     const bool verbose = std::getenv("RF_VERBOSE") != nullptr;
     const bool nomask = std::getenv("RF_NOMASK") != nullptr;
     gWide = std::getenv("RF_WIDE") != nullptr;
+    gSh2 = std::getenv("RF_SH2") != nullptr;
     const int showMax = std::getenv("RF_SHOW") ? std::atoi(std::getenv("RF_SHOW")) : 3;
 
     // the engine, with its spec materialised as the app does
@@ -665,67 +718,102 @@ int main(int argc, char** argv)
         uint64_t prevHash = Hash(fd);
         int applications = 0;
         bool stop = false;
-        for (int pass = 0; pass < 14 && !stop; ++pass)
-        {
-            bool changed = false;
-            const bool cleanupPhase = pass >= 12;       // two passes of the cleanup rules, after the fixpoint (or the cap) of the others
-            for (PoolEntry& pe : pool)
+        // one application of one rule to one op; returns false when the graph is finished (a finding, an unsupported op, an exception)
+        auto step = [&](PoolEntry& pe, PcodeOp* op, int& rcOut) -> bool {
+            int rc = 0;
+            ++pe.tested;
+            try { rc = pe.rule->applyOp(op, *fd); }
+            catch (LowlevelError& e)
             {
-                if (stop) break;
-                if (pe.cleanup != cleanupPhase) continue;
-                std::vector<PcodeOp*> cands;
-                for (auto it = fd->beginOpAlive(); it != fd->endOpAlive(); ++it)
-                    for (uint4 opc : pe.ops)
-                        if (static_cast<uint4>((*it)->code()) == opc) { cands.push_back(*it); break; }
-                for (PcodeOp* op : cands)
-                {
-                    if (op->isDead()) continue;
-                    int rc = 0;
-                    ++pe.tested;
-                    try { rc = pe.rule->applyOp(op, *fd); }
-                    catch (LowlevelError& e)
-                    {
-                        ++pe.thrown;
-                        if (e.explain.find("Divide by 0") == std::string::npos && shown["throw:" + pe.name]++ < 1) std::printf("THROW %s seed %llu: %s; graph: %s\n", pe.name.c_str(), (unsigned long long)seed, e.explain.c_str(), prev.c_str());
-                        stop = true;
-                        break;
-                    }
-                    const uint64_t h = Hash(fd);
-                    if (rc > 0) { ++pe.applied; changed = true; fd->calcNZMask(); if (++applications > 150) { ++loops; pass = 11; } }
-                    if (h == prevHash && rc == 0) continue;
-                    if (rc > 0 || h != prevHash) fd->calcNZMask();
-                    gUnsupported = false;
-                    evalAll(cur, def1);
-                    if (gUnsupported)
-                    {
-                        ++unsupportedCount;
-                        unsupported[std::string(get_opname(gUnsupportedOp)) + " after " + pe.name]++;
-                        stop = true;
-                        break;
-                    }
-                    bool bad = false;
-                    size_t at = 0;
-                    for (size_t i = 0; i < envs.size(); ++i)
-                        if (def0[i] && cur[i] != before[i]) { bad = true; at = i; break; }
-                    if (bad)
-                    {
-                        ++pe.bad;
-                        ++findings;
-                        if (shown[pe.name]++ < showMax)
-                        {
-                            std::printf("WRONG %s seed %llu (rc %d): value %llx before, %llx after, for", pe.name.c_str(), (unsigned long long)seed, rc, (unsigned long long)before[at], (unsigned long long)cur[at]);
-                            for (const auto& kv : envs[at].v) std::printf(" in%llx:%d=%llx", (unsigned long long)kv.first.first, kv.first.second, (unsigned long long)kv.second);
-                            std::printf("\n   original: %s\n   before the rule: %s\n   after: %s\n", original.c_str(), prev.c_str(), Dump(fd).c_str());
-                        }
-                        stop = true;
-                        break;
-                    }
-                    checkMasks(pe.name);
-                    prev = Dump(fd);
-                    prevHash = h;
-                }
+                ++pe.thrown;
+                if (e.explain.find("Divide by 0") == std::string::npos && e.explain.find("Remainder by 0") == std::string::npos && shown["throw:" + pe.name]++ < 1)
+                    std::printf("THROW %s seed %llu: %s; graph: %s\n", pe.name.c_str(), (unsigned long long)seed, e.explain.c_str(), prev.c_str());
+                return false;
             }
-            if (!changed && !cleanupPhase) pass = 11;
+            rcOut = rc;
+            const uint64_t h = Hash(fd);
+            if (rc > 0) { ++pe.applied; fd->calcNZMask(); ++applications; }
+            if (h == prevHash && rc == 0) return true;
+            if (rc <= 0) fd->calcNZMask();
+            gUnsupported = false;
+            evalAll(cur, def1);
+            if (gUnsupported)
+            {
+                ++unsupportedCount;
+                unsupported[std::string(get_opname(gUnsupportedOp)) + " after " + pe.name]++;
+                return false;
+            }
+            bool bad = false;
+            size_t at = 0;
+            for (size_t i = 0; i < envs.size(); ++i)
+                if (def0[i] && cur[i] != before[i]) { bad = true; at = i; break; }
+            if (bad)
+            {
+                ++pe.bad;
+                ++findings;
+                if (shown[pe.name]++ < showMax)
+                {
+                    std::printf("WRONG %s seed %llu (rc %d): value %llx before, %llx after, for", pe.name.c_str(), (unsigned long long)seed, rc, (unsigned long long)before[at], (unsigned long long)cur[at]);
+                    for (const auto& kv : envs[at].v) std::printf(" in%llx:%d=%llx", (unsigned long long)kv.first.first, kv.first.second, (unsigned long long)kv.second);
+                    std::printf("\n   original: %s\n   before the rule: %s\n   after: %s\n", original.c_str(), prev.c_str(), Dump(fd).c_str());
+                }
+                return false;
+            }
+            checkMasks(pe.name);
+            prev = Dump(fd);
+            prevHash = h;
+            return true;
+        };
+        auto handles = [](const PoolEntry& pe, OpCode c) {
+            for (uint4 opc : pe.ops) if (opc == static_cast<uint4>(c)) return true;
+            return false;
+        };
+        const bool ruleMajor = std::getenv("RF_RULEMAJOR") != nullptr;
+        for (int phase = 0; phase < 2 && !stop; ++phase)       // the analysis rules to a fixpoint, then the cleanup rules (twice)
+        {
+            for (int pass = 0; pass < (phase == 0 ? 12 : 2) && !stop; ++pass)
+            {
+                const int before_apps = applications;
+                if (ruleMajor)
+                {
+                    for (PoolEntry& pe : pool)
+                    {
+                        if (stop) break;
+                        if (pe.cleanup != (phase == 1)) continue;
+                        std::vector<PcodeOp*> cands;
+                        for (auto it = fd->beginOpAlive(); it != fd->endOpAlive(); ++it)
+                            if (handles(pe, (*it)->code())) cands.push_back(*it);
+                        for (PcodeOp* op : cands)
+                        {
+                            if (op->isDead()) continue;
+                            int rc;
+                            if (!step(pe, op, rc)) { stop = true; break; }
+                        }
+                    }
+                }
+                else
+                {
+                    std::vector<PcodeOp*> ops;
+                    for (auto it = fd->beginOpAlive(); it != fd->endOpAlive(); ++it) ops.push_back(*it);
+                    for (PcodeOp* op : ops)
+                    {
+                        if (stop) break;
+                        size_t ri = 0;
+                        while (ri < pool.size() && !stop)
+                        {
+                            if (op->isDead()) break;
+                            PoolEntry& pe = pool[ri++];
+                            if (pe.cleanup != (phase == 1) || !handles(pe, op->code())) continue;
+                            const OpCode oc = op->code();
+                            int rc = 0;
+                            if (!step(pe, op, rc)) { stop = true; break; }
+                            if (rc > 0 && !op->isDead() && op->code() != oc) ri = 0;
+                        }
+                    }
+                }
+                if (applications > 200) { ++loops; break; }
+                if (applications == before_apps) break;
+            }
         }
         if (verbose && graphs % 1000 == 0) std::printf("seed %llu: %ld graphs\n", (unsigned long long)seed, graphs);
     }
