@@ -51,5 +51,10 @@ for r in pool:
     c = rc.get(n)
     fs = '%d, %d' % (f[0], f[1]) if f else '-'
     cs = '%d, %d, %d' % (c[0], c[1], c[2]) if c else '-'
-    v = verdicts.get(r, 'cleared')
+    v = verdicts.get(r)
+    if v is None:
+        seen = (f is not None and f[0] > 0) or (c is not None and c[1] > 0)
+        v = 'cleared: read, and checked by value where it applies' if seen else 'read; no run applied it, so not checked by value (the workloads do not reach it)'
+        if f is not None and f[1] > 0 or c is not None and c[2] > 0: v = 'WRONG: see the ledger'
+
     print('| `%s` | %s | %s | %s | %s |' % (r, b, fs, cs, v.replace('|', '\\|')))

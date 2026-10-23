@@ -4,7 +4,7 @@
 # applications is above the baseline's. A mutant that no run kills is a rule the fuzzer does not test (a mutant of a rule that is never applied to a graph).
 bin=$1; scratch=$2; out=$3; first=$4; n=$5; depth=$6; shift 6
 ids="$@"; [ -z "$ids" ] && ids="1 2 4 5 6 7 8 9 10 11 12 13 14 15 16 17"
-mkdir -p $out
+mkdir -p $out $scratch
 run() { ( ulimit -v 4000000; SE_MUT=$1 RF_CONSUME=1 RF_SHOW=1 timeout 900 $bin $scratch/m$1 $first $n $depth > $out/mut$1.log 2>&1 ); }
 [ -f $out/mut0.log ] || run 0
 for m in $ids; do
