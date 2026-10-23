@@ -10,6 +10,8 @@
 //
 // SE_RULECHECK=1       print a line for each application whose value changed, and the totals at exit
 // SE_RULECHECK_ONLY=n  check only the rule whose name contains n
+// SE_RULECHECK_NOWRAP=1  check RuleDivOpt on the samples whose multiply wraps too (they are skipped by default: the steps of RuleDivTermAdd leave a wrapped product on the way
+//                        to RuleDivOpt; a value the machine really computes through a wrapped product is a mismatch of RuleDivOpt itself, see A2-82)
 #ifndef SE_RULECHECK_13_HH
 #define SE_RULECHECK_13_HH
 
@@ -44,6 +46,7 @@ struct Node
     const Varnode* vn;   // leaf identity (pointer compared only; a freed varnode's address can be reused: the size and address are compared too)
     uintb addr;
     int spc;
+    uintb nz;            // the varnode's non-zero mask as the engine holds it when the snapshot is taken (a sample whose value has a bit outside it is no input the engine can see)
 };
 struct Cone
 {
@@ -95,7 +98,7 @@ inline int build(const Varnode* vn, Cone& c, Memo& memo, int depth, bool boolUse
 {
     { const int hit = memo.find(vn); if (hit >= 0) return hit; }
     Node nd;
-    nd.nin = 0; nd.opc = CPUI_COPY; nd.size = vn->getSize(); nd.vn = vn; nd.value = 0; nd.addr = vn->getOffset(); nd.spc = vn->getSpace() ? vn->getSpace()->getIndex() : -1;
+    nd.nin = 0; nd.opc = CPUI_COPY; nd.size = vn->getSize(); nd.vn = vn; nd.value = 0; nd.nz = vn->getNZMask() & calc_mask(vn->getSize()); nd.addr = vn->getOffset(); nd.spc = vn->getSpace() ? vn->getSpace()->getIndex() : -1;
     int id;
     if (vn->isConstant())
     {
@@ -172,6 +175,8 @@ struct Eval
     std::vector<uintb> val;
     std::vector<char> have;
     bool undef = false;
+    bool maskViol = false;    // an op node took a value with a bit outside its varnode's non-zero mask
+    const Node* viol = nullptr;
     bool wrapped = false;     // an INT_MULT overflowed its width (the unsigned reading when a multiplicand is a ZEXT, the signed one for a SEXT, either otherwise)
     const std::map<const Varnode*, uintb>* leafVals;
     uintb get(int id)
@@ -251,6 +256,7 @@ struct Eval
             }
             catch (...) { undef = true; }
         }
+        if (n.kind == 2 && (r & ~n.nz & calc_mask(n.size)) != 0 && !maskViol) { maskViol = true; viol = &n; }
         have[id] = 1;
         val[id] = r;
         return r;
@@ -298,7 +304,7 @@ struct Eval
     }
 };
 
-struct Tally { long applied = 0, checked = 0, bad = 0, unmatched = 0, skipped = 0; std::string first; };
+struct Tally { long applied = 0, checked = 0, bad = 0, unmatched = 0, skipped = 0, maskskip = 0; std::string first; };
 inline std::map<std::string, Tally>& tallies()
 {
     static std::map<std::string, Tally>* m = nullptr;
@@ -311,7 +317,7 @@ inline std::map<std::string, Tally>& tallies()
             {
                 if (!std::getenv("SE_RULECHECK")) return;
                 for (auto& kv : tallies())
-                    std::fprintf(stderr, "RULECHECK %-26s applied %8ld checked %8ld bad %5ld unmatched %7ld skipped %7ld\n", kv.first.c_str(), kv.second.applied, kv.second.checked, kv.second.bad, kv.second.unmatched, kv.second.skipped);
+                    std::fprintf(stderr, "RULECHECK %-26s applied %8ld checked %8ld bad %5ld unmatched %7ld skipped %7ld maskskip %7ld\n", kv.first.c_str(), kv.second.applied, kv.second.checked, kv.second.bad, kv.second.unmatched, kv.second.skipped, kv.second.maskskip);
             }
         };
         std::atexit(D::dump);
@@ -334,7 +340,7 @@ inline std::string text(const Cone& c, int id, int depth = 0)
     return o.str();
 }
 
-inline bool checkOne(const std::string& rule, const Cone& before, int rb, const Cone& after, int ra, uintb consume, std::string& detail, bool& unmatched, bool skipWrapped = false)
+inline bool checkOne(const std::string& rule, const Cone& before, int rb, const Cone& after, int ra, uintb consume, std::string& detail, bool& unmatched, long& maskskip, bool skipWrapped = false)
 {
     // the leaves of both cones
     std::map<const Varnode*, uintb> nz;
@@ -381,11 +387,20 @@ inline bool checkOne(const std::string& rule, const Cone& before, int rb, const 
             lv[l] = v & m & z;
         }
         eb.leafVals = ea.leafVals = &lv;
-        eb.val.assign(before.n, 0); eb.have.assign(before.n, 0); eb.undef = false; eb.wrapped = false;
+        eb.val.assign(before.n, 0); eb.have.assign(before.n, 0); eb.undef = false; eb.wrapped = false; eb.maskViol = false; eb.viol = nullptr;
         ea.val.assign(after.n, 0); ea.have.assign(after.n, 0); ea.undef = false;
         const uintb vb = eb.get(rb), va = ea.get(ra);
         if (eb.undef || ea.undef) continue;
         if (skipWrapped && eb.wrapped) continue;
+        // a leaf sampled inside its own mask can still give an op a value outside the mask the engine holds for the op's output (the engine's masks are
+        // refreshed pass by pass, a rule that rewrites a def can leave an output's mask narrower than its input's has become): not an input the engine can see.
+        // Counted, and the first few are printed, so that an unsound mask is not hidden (rulefuzz13 checks the masks themselves).
+        if (eb.maskViol)
+        {
+            if (maskskip++ < 3 && std::getenv("SE_RULECHECK"))
+                std::fprintf(stderr, "RULECHECK-MASK %s: a %s of size %d took a value outside its non-zero mask %llx\n", rule.c_str(), get_opname(eb.viol->opc), eb.viol->size, (unsigned long long)eb.viol->nz);
+            continue;
+        }
         if ((vb & consume) != (va & consume))
         {
             std::ostringstream o;
@@ -439,7 +454,7 @@ inline void verify(const std::string& rule, const PcodeOp* op, const Snap& s, in
         std::string detail;
         bool unmatched = false;
         ++t.checked;
-        if (!checkOne(rule, s.cone, r.node, ac, ra, r.consume, detail, unmatched, rule == "divopt"))
+        if (!checkOne(rule, s.cone, r.node, ac, ra, r.consume, detail, unmatched, t.maskskip, rule == "divopt" && !std::getenv("SE_RULECHECK_NOWRAP")))
         {
             ++t.bad;
             if (t.bad <= 3 && std::getenv("SE_RULECHECK"))

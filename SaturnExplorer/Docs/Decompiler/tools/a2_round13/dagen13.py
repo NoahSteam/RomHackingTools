@@ -5,7 +5,7 @@
 #                the compares, 4 to 12 steps over r0..r3 with the inputs r4 and r5
 #   56 lerp      fixed-point blends: a + ((b - a) * t >> k), (x * c) >> k with the product's high or middle word, plus the original value (RuleDivTermAdd,
 #                RuleDivOpt, RuleSignForm2 on arbitrary multipliers)
-#   57 narrow    a value shifted left by a total of 8 to 32 bits (fixed shifts), cut to a byte or a word, then tested, compared or shifted back
+#   57 narrow    a value shifted left by a total of 8 to 72 bits (fixed shifts, in several steps when 32 or more), cut to a byte or a word, then tested, compared or shifted back
 #                (RuleShiftCompare, RuleSubCommute, RuleDoubleShift with shifts at or beyond the narrowed width)
 #   58 negshift  a negated or sign-extended byte/word shifted right by 7 to 31, with the multiply by -1 read as a division (RuleDivOpt, RuleSignDiv2,
 #                RuleSignForm)
@@ -73,8 +73,8 @@ def fam_soup(r, f):
     f.add(mov(0, r.choice(regs)))
 
 def fam_lerp(r, f):
-    form = r.randrange(0, 6)
-    c = RAND_LITS(r)
+    form = r.randrange(0, 8)
+    c = RAND_LITS(r) if r.random() < 0.7 else r.choice([0x7FFF, 0x7FFFFFFF, 0xFFFF, 0x8001, 0x8000, 0xFFFF8001, 0x10001, 0xFFFFFFFF, 0x80000001])
     if form == 0:   # a + ((b - a) * t) >> k  (16.16)
         f.add(mov(0, 5), sub_(4, 0))                  # r0 = b - a
         f.lit(1, c)
@@ -100,6 +100,18 @@ def fam_lerp(r, f):
         f.add(dmuls(1, 4), stsmach(0), mov(2, 4))
         shr_arith(f, 2, 31)
         f.add(sub_(2, 0))
+    elif form == 6:  # the 16-bit signed value times a 32-bit constant, its high half, the sign of that half, plus the value (RuleDivTermAdd / RuleSignForm2 / RuleDivOpt shapes at 2 and 4 bytes)
+        f.add(extsw(1, 4)); f.lit(2, c)
+        f.add(mull(2, 1), stsmacl(0))
+        shr_logical(f, 0, 16); f.add(extsw(0, 0))
+        shr_arith(f, 0, r.choice([15, 15, 7, 8]))
+        f.add(add_(1, 0))
+    elif form == 7:  # the same with the byte, unsigned or signed
+        f.add(r.choice([extub, extsb])(1, 4)); f.lit(2, c)
+        f.add(mull(2, 1), stsmacl(0))
+        shr_logical(f, 0, r.choice([8, 16, 24])); f.add(r.choice([extub, extuw, extsb, extsw])(0, 0))
+        shr_arith(f, 0, r.choice([7, 15, 31])) if r.random() < 0.5 else shr_logical(f, 0, r.choice([1, 7, 15]))
+        f.add(r.choice([add_, sub_])(1, 0))
     else:           # W + ((x - W) >> 1)
         f.lit(1, c)
         f.add(dmulu(1, 4), stsmach(0), mov(2, 4), sub_(0, 2), SHLR | 2 << 8, add_(0, 2))
@@ -108,13 +120,15 @@ def fam_lerp(r, f):
 
 def fam_narrow(r, f):
     f.add(mov(0, 4))
-    tot = r.choice([8, 9, 15, 16, 17, 24, 25, 28, 30, 31, 32])
+    tot = r.choice([8, 9, 15, 16, 17, 24, 25, 28, 30, 31, 32, 33, 40, 47, 48, 56, 63, 64, 72])
     k = r.choice([0, 0, 1, 2])
     if k == 0: f.add(extub(0, 0))
     elif k == 1: f.add(extuw(0, 0))
     elif k == 2: f.add(extsb(0, 0))
-    shl(f, 0, min(tot, 31))
-    if tot == 32: shl(f, 0, 1)
+    left = tot
+    while left > 0:                      # the engine's RuleDoubleShift merges the shifts: a total of 32 or more is the zero a lone shift by that much would be
+        step = min(left, r.choice([8, 16, 24, 31]))
+        shl(f, 0, step); left -= step
     cut = r.choice([extub, extuw, extsb, extsw])
     f.add(cut(0, 0))
     out = r.randrange(0, 5)

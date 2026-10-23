@@ -1,7 +1,7 @@
 #!/bin/bash
 # usage: mkcast13.sh <SaturnExplorer dir> <scratch dir>
 # Builds a scratch printc.cc object that logs, for every ZEXT, SEXT, SUBPIECE and CAST the printer prints, what the p-code op was and how it was printed
-# (SE_CASTLOG=1: `CASTLOG <op> <in size>:<in metatype> <out size>:<out metatype> <style>`, style cast / hidden / func), so that the printed-C oracle's reading of each
+# (SE_CASTLOG=1: `CASTLOG <op> <in size>:<in metatype> <out size>:<out metatype> <style> <the op that defines the input>`, style cast / hidden / func), so that the printed-C oracle's reading of each
 # form can be compared with the op the engine means. The vendored tree does not change.
 se=$1; out=$2
 d=$se/FrontEnd/third_party/ghidra-decompiler/cpp
@@ -19,7 +19,7 @@ static void seCastLog(const char *what, const PcodeOp *op, const char *style) {
   static const bool on = getenv("SE_CASTLOG") != 0;
   if (!on) return;
   const Varnode *in = op->getIn(0), *out = op->getOut();
-  fprintf(stderr, "CASTLOG %s %d:%s %d:%s %s\n", what, in->getSize(), seMeta(in->getHighTypeReadFacing(op)->getMetatype()), out->getSize(), seMeta(out->getHighTypeDefFacing()->getMetatype()), style);
+  fprintf(stderr, "CASTLOG %s %d:%s %d:%s %s %s\n", what, in->getSize(), seMeta(in->getHighTypeReadFacing(op)->getMetatype()), out->getSize(), seMeta(out->getHighTypeDefFacing()->getMetatype()), style, in->isWritten() ? get_opname(in->getDef()->code()) : (in->isConstant() ? "const" : "leaf"));
 }
 '''
 s = s.replace("namespace ghidra {\n", "#include <cstdio>\n#include <cstdlib>\nnamespace ghidra {\n" + helper, 1)
