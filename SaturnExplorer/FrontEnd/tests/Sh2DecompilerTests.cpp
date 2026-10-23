@@ -11968,9 +11968,12 @@ void TestArea3Round11Fix()
 }
 
 // ===== Area 3, round 12 review: controls that hold ============================================================================================
-// The round's findings (A3-89 to A3-91, Docs/Decompiler/REVIEW_LEDGER.md) are open and have no pin here (a pin of a wrong text would fail the
+// The round's findings (A3-89 to A3-95, Docs/Decompiler/REVIEW_LEDGER.md) are open and have no pin here (a pin of a wrong text would fail the
 // suite). What the review checked and found right is pinned, so a fix of the findings cannot lose it: the probe reads the storesBelow of a
-// callee it walks through a tail jump or a call to a lent fill-backwards function, and of an unlent captured callee that fills backwards itself.
+// callee it walks through a tail jump or a call to a lent fill-backwards function, and of an unlent captured callee that fills backwards itself;
+// a laundered frame address handed to such a callee; the frame address a lent callee returns in r0 (clause (d) of patch 0061); and the leak of
+// a frame address by a lent callee into a global that a second callee returns (the host's `State::escaped`). The review's mutations of those three
+// rules (H8, E7, H9 of the record) failed no seed and no pin before these.
 void TestArea3Round12()
 {
     Sh2Decompiler d(gConfig);
@@ -12005,6 +12008,50 @@ void TestArea3Round12()
     probe("round 12 control: unlent (reads r3) callee fills backwards itself", { caller, { 0x6133, 0x2416, 0x4110, 0x8BFC, 0x000B, 0x0009 } }, 2);
     probe("round 12 control: unlent callee tail-jumps to a lent fill-backwards function", { caller, { 0x6233, 0xD101, 0x412B, 0x0009, 0x0600, 0x9080 }, { 0xE104, 0x2416, 0x4110, 0x8BFC, 0x000B, 0x0009 } }, 2);
     probe("round 12 control: unlent callee calls a lent fill-backwards function", { caller, { 0x4F22, 0x6233, 0xD102, 0x410B, 0x0009, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9080 }, { 0xE104, 0x2416, 0x4110, 0x8BFC, 0x000B, 0x0009 } }, 2);
+    // A frame address laundered (a mask; a round trip through a global) before an unlent captured callee that fills backwards from it: the
+    // probe's `PossibleFrame` exposes the frame (no seed, no earlier pin held it: the review's mutation H8).
+    const std::vector<uint16_t> unlentFill = { 0x6133, 0x2416, 0x4110, 0x8BFC, 0x000B, 0x0009 };   // mov r3,r1 ; L: mov.l r1,@-r4 ; dt r1 ; bf L ; rts (reads r3)
+    probe("round 12 control: a masked frame address handed to an unlent captured fill-backwards callee",
+          { { 0x082A, 0x7FE8, 0xE005, 0x2F02, 0x64F3, 0x7410, 0xE3FC, 0x2439, 0xE304, 0xD104, 0x410B, 0x0009, 0x60F2, 0x7F18, 0x482A, 0x000B, 0x0009, 0x0009, 0x0600, 0x9040 }, unlentFill }, 2);
+    probe("round 12 control: a frame address through a global round trip handed to an unlent captured fill-backwards callee",
+          { { 0x082A, 0x7FE8, 0xE005, 0x2F02, 0x64F3, 0x7410, 0xD205, 0x2242, 0x6422, 0xE304, 0xD104, 0x410B, 0x0009, 0x60F2, 0x7F18, 0x482A, 0x000B, 0x0009, 0x0600, 0xF100, 0x0600, 0x9040 }, unlentFill }, 2);
+
+    // Functions at given offsets, the listed ones decompiled first and lent (deepest first); the entry's text reads the local, not the 5.
+    auto placed = [&](const char* name, std::vector<std::pair<uint32_t, std::vector<uint16_t>>> fns, std::vector<uint32_t> lend) {
+        std::vector<uint16_t> words;
+        for (const auto& f : fns)
+        {
+            if (words.size() < f.first / 2) words.resize(f.first / 2, 0x0009);
+            words.insert(words.end(), f.second.begin(), f.second.end());
+        }
+        const CallFixture f = { name, base, std::move(words) };
+        auto snap = CallSnapshot(f, ++serial);
+        DecompileRequest q = Request(base);
+        for (uint32_t at : lend)
+        {
+            DecompileRequest cq = Request(base + at);
+            cq.prototypes = q.prototypes;
+            const DecompileResult c = d.Decompile(snap, cq);
+            CHECK(c.status == DecompileStatus::Ok && c.prototype.known);
+            q.prototypes.emplace_back(base + at, c.prototype);
+        }
+        const DecompileResult r = d.Decompile(snap, q);
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok && r.prototype.known);
+        CHECK(Has(r.Text(), "xStack") && !Has(r.Text(), "return 5;"));
+    };
+    // Clause (d) of patch 0061 (A3-86 b, held by the reviewer's replay only until now: the review's mutation E7): a lent callee that returns its
+    // argument, the caller walks down from the returned pointer.
+    placed("round 12 control: a lent callee returns the frame address in r0, the caller walks down from it",
+           { { 0x00, { 0x082A, 0x7FE8, 0xE005, 0x2F02, 0x64F3, 0x7410, 0xD106, 0x410B, 0x0009, 0x6203, 0xE104, 0x2216, 0x4110, 0x8BFC, 0x60F2, 0x7F18, 0x482A, 0x000B, 0x0009, 0x0009, 0x0600, 0x9040 } },
+             { 0x40, { 0x000B, 0x6043 } } }, { 0x40 });
+    // The leak of a frame address by a lent callee (`State::escaped`, the review's mutation H9): g stores r4 to a global, g2 returns the global in
+    // r0, the caller hands r0 to a lent fill-backwards function.
+    placed("round 12 control: a callee leaks the frame address to a global, a second returns it, a lent fill-backwards callee is handed it",
+           { { 0x00, { 0x082A, 0x7FE8, 0xE005, 0x2F02, 0x64F3, 0x7410, 0xD107, 0x410B, 0x0009, 0xD107, 0x410B, 0x0009, 0x6403, 0xD106, 0x410B, 0x0009, 0x60F2, 0x7F18, 0x482A, 0x000B, 0x0009, 0x0009, 0x0600, 0x9100, 0x0600, 0x9140, 0x0600, 0x9180 } },
+             { 0x100, { 0xD101, 0x000B, 0x2142, 0x0009, 0x0600, 0xF100 } },
+             { 0x140, { 0xD101, 0x000B, 0x6012, 0x0009, 0x0600, 0xF100 } },
+             { 0x180, { 0xE104, 0x2416, 0x4110, 0x8BFC, 0x000B, 0x0009 } } }, { 0x180, 0x140, 0x100 });
 }
 
 // ===== A3-65 (P1): a copy of r15 walked down by pre-decrement stores ===========================================================================

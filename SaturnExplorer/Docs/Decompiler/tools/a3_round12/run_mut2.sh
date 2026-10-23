@@ -39,3 +39,4 @@ mut E13_freestack engine 0 "  if (preHeritage) {\n    VarnodeLocSet::const_itera
 mut E17_propagate engine 0 "      if (unmodeled.insert(out).second) uwork.push_back(out);===      {}"
 mut E18_loaduse engine 0 "      case CPUI_LOAD:\n\tif (op->getIn(1) == vn) escaped = true;===      case CPUI_LOAD:\n\tif (false) escaped = true;"
 mut E19_calluse engine 0 "      case CPUI_CALLOTHER:\n\tescaped = true;\n\tbreak;===      case CPUI_CALLOTHER:\n\tbreak;"
+mut H6b_tail_jump host 0 "                                    mStoresBelow |= Get(s, mReg[r]).Origins() & 0x7FFFu;\n===                                    {}\n"

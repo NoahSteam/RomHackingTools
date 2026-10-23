@@ -1,0 +1,106 @@
+name K1 cursor struct API: init(ctx, buf_end) stores the pointer in the local struct, push(ctx, v) does *--ctx->p = v; the caller reads buf[0]
+asm 06009000
+.word 0x082A
+add #-32,r15
+mov #5,r0
+mov.l r0,@r15
+mov r15,r4
+add #24,r4
+mov r15,r5
+add #16,r5
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov r15,r4
+add #24,r4
+mov #4,r5
+mov.l =0x06009140,r1
+jsr @r1
+nop
+mov r15,r4
+add #24,r4
+mov #3,r5
+mov.l =0x06009140,r1
+jsr @r1
+nop
+mov r15,r4
+add #24,r4
+mov #2,r5
+mov.l =0x06009140,r1
+jsr @r1
+nop
+mov r15,r4
+add #24,r4
+mov #1,r5
+mov.l =0x06009140,r1
+jsr @r1
+nop
+mov.l @r15,r0
+add #32,r15
+.word 0x482A
+rts
+nop
+endasm
+asm 06009100
+rts
+mov.l r5,@r4
+endasm
+asm 06009140
+mov.l @r4,r1
+add #-4,r1
+mov.l r5,@r1
+rts
+mov.l r1,@r4
+endasm
+lend 06009100 06009140
+args 0 0 0 0
+end
+name K2 the same where init is a macro-like store done by the caller (the struct filled inline)
+asm 06009000
+.word 0x082A
+add #-32,r15
+mov #5,r0
+mov.l r0,@r15
+mov r15,r1
+add #16,r1
+mov.l r1,@(24,r15)
+mov r15,r4
+add #24,r4
+mov #4,r5
+mov.l =0x06009140,r1
+jsr @r1
+nop
+mov r15,r4
+add #24,r4
+mov #3,r5
+mov.l =0x06009140,r1
+jsr @r1
+nop
+mov r15,r4
+add #24,r4
+mov #2,r5
+mov.l =0x06009140,r1
+jsr @r1
+nop
+mov r15,r4
+add #24,r4
+mov #1,r5
+mov.l =0x06009140,r1
+jsr @r1
+nop
+mov.l @r15,r0
+add #32,r15
+.word 0x482A
+rts
+nop
+endasm
+asm 06009140
+mov.l @r4,r1
+add #-4,r1
+mov.l r5,@r1
+rts
+mov.l r1,@r4
+endasm
+lend 06009140
+args 0 0 0 0
+end
