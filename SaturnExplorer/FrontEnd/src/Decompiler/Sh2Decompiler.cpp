@@ -1143,7 +1143,7 @@ private:
                     // names every register (fail closed).
                     const uint32_t sb = CalleeStoresBelow(target);
                     mStoresBelow |= RegOrigins(s, sb) & 0x7FFFu;
-                    mHanded |= RegOrigins(s, sb | CalleeHanded(target));
+                    mHanded |= RegDeps(s, sb | CalleeHanded(target));
                 }
                 else
                 {
@@ -1153,7 +1153,7 @@ private:
                     if (handsFrame) MapCalleeWords(CallEffects::kFrameAny, s, sp);
                     // (A3-90) ...and a callback: it may store below and keep whatever it is handed by the convention (kConvention).
                     mStoresBelow |= RegOrigins(s, kConvention) & 0x7FFFu;
-                    mHanded |= RegOrigins(s, kConvention);
+                    mHanded |= RegDeps(s, kConvention);
                 }
             }
             // A3-86 a: the probe (mTolerant, not nested) can name a captured callee that is not lent; it may step its pointer down
@@ -1243,12 +1243,14 @@ private:
             // (area 3 round 12 fix, A3-89 host side, A3-91) ...and one that lets a frame address out -- stores it to memory it does not
             // track (leaks), or hands it back in any register (outOrigins: r0, or r1, r9, r10, MACH, GBR, which are no output of the call
             // the engine shows) -- has let the frame out: HandOut, which the probe tells the engine (a host escape) and which makes a pointer
-            // nothing is known of a possible frame address from here on. Through memory too: what it loads from this frame (the words
-            // from the call's r15 up) and lets out.
+            // nothing is known of a possible frame address from here on. What a lent callee can be handed is r4-r7 (a signature's registers,
+            // and one the engine dropped as unused: `mov r4,r9`), a word of this frame, or memory: it is withheld if it reads any other
+            // register for its value (A3-5), and its summary names r8-r14 only as the saved registers its own callees may have written over,
+            // which hand nothing back. Through memory too: what it loads from this frame (the words from the call's r15 up) and lets out.
             {
                 const uint32_t outBits = e.leaks | e.outOrigins;
-                for (int r = 0; r < kTracked; ++r)
-                    if (r != kR15 && ((outBits >> r) & 1u)) HandOut(s, Get(s, mReg[r]));
+                for (int r = 4; r < 8; ++r)
+                    if ((outBits >> r) & 1u) HandOut(s, Get(s, mReg[r]));
                 if (outBits & origin::kMemory)
                 {
                     const Value callSp = Get(s, mReg[kR15]);
@@ -1257,7 +1259,7 @@ private:
                         if (callSp.kind != Value::Sp || slot.first >= callSp.v) words.push_back(slot.second);
                     for (const Value& w : words) HandOut(s, w);
                 }
-                mHanded |= RegOrigins(s, (e.leaks | e.outOrigins | e.storesThrough | e.storesBelow) & kHandedRegs);
+                mHanded |= RegDeps(s, (e.leaks | e.outOrigins | e.storesThrough | e.storesBelow) & kLentHanded);
             }
         }
         Apply(s, e, targetIsR0);
@@ -1269,12 +1271,23 @@ private:
     static constexpr uint32_t kConvention = (1u << 2) | (0xFu << 4);
     // The registers a callee can be handed (every tracked one but r15, the stack pointer).
     static constexpr uint32_t kHandedRegs = origin::kRegisters & ~(1u << 15);
+    // ...and those a lent callee can be (r4-r7; see the hand-out in Call).
+    static constexpr uint32_t kLentHanded = 0xF0u;
     // The registers (as origins: their entry values) the values in 'regs' at this point were made from.
     uint32_t RegOrigins(const State& s, uint32_t regs) const
     {
         uint32_t o = 0;
         for (int r = 0; r < kTracked; ++r)
             if (r != kR15 && ((regs >> r) & 1u)) o |= Get(s, mReg[r]).Origins();
+        return o & kHandedRegs;
+    }
+    // ...and what they were computed from by data (Value::DepsOf): the record of a walk (mHanded) is what a value the callee lets out was made
+    // of, not every origin a load after an unknown call or a word its callee may have written over carries.
+    uint32_t RegDeps(const State& s, uint32_t regs) const
+    {
+        uint32_t o = 0;
+        for (int r = 0; r < kTracked; ++r)
+            if (r != kR15 && ((regs >> r) & 1u)) o |= Get(s, mReg[r]).Direct();
         return o & kHandedRegs;
     }
     // A possible frame address has gone out to code that may keep it (area 3 round 12 fix): State::out, and, in the probe, the escape the
@@ -1396,11 +1409,13 @@ private:
         cache[target] = words;
         // A3-86 a: the registers the walked callee stores below the pointer it was handed (fill backwards), kept beside the
         // frame-words result so the top-level probe can expose this frame when it hands such a callee a frame address. A callee
-        // the walk could not follow (a reason, the entry not captured) is taken to store below any register (fail closed).
-        ctx->Below()[target] = (!why.empty() || callee.mEntryUndecodable) ? 0x7FFFu : callee.mStoresBelow;
+        // the walk could not follow (a reason) is taken to store below any register (fail closed).
+        // (area 3 round 12 fix) A target with no code to read (not captured: the BIOS, another area) is a callee the probe cannot read, taken
+        // as one it cannot name is: handed what the convention hands (kConvention), r2 and r4-r7, which is all the engine's model of it reads.
+        ctx->Below()[target] = !why.empty() ? 0x7FFFu : callee.mEntryUndecodable ? kConvention : callee.mStoresBelow;
         // (area 3 round 12 fix, A3-90) ...and the registers whose values it lets out or writes through (CalleeHanded), every one when the walk
         // could not follow it.
-        ctx->Handed()[target] = (!why.empty() || callee.mEntryUndecodable) ? kHandedRegs : callee.mHanded;
+        ctx->Handed()[target] = !why.empty() ? kHandedRegs : callee.mEntryUndecodable ? kConvention : callee.mHanded;
         return words;
     }
     // (area 3 round 12 fix, A3-90) The registers (bit r: rN, GBR, MACH, ...) whose entry values a captured, unlent callee lets out (stores to
@@ -1418,7 +1433,8 @@ private:
         return f != ctx->Handed().end() ? f->second : kHandedRegs;
     }
     // A3-86 a: the registers a captured, unlent callee may store below the pointer it was handed, from the frame-words walk's
-    // record (or that walk, run now). 0x7FFF (every register) when the callee could not be walked: fail closed.
+    // record (or that walk, run now). 0x7FFF (every register) when the callee could not be walked: fail closed; kConvention for one whose code
+    // is not captured (area 3 round 12 fix).
     uint32_t CalleeStoresBelow(uint32_t target)
     {
         NestedContext* ctx = mNestedCtx != nullptr ? mNestedCtx : &mOwnCtx;
@@ -1708,9 +1724,9 @@ private:
         if (ao == 0 || (ao & ~origin::kStack))
         {
             HandOut(s, value);
-            mHanded |= v & kHandedRegs;
+            mHanded |= value.Direct() & kHandedRegs;
         }
-        mHanded |= ao & kHandedRegs;
+        mHanded |= addr.Direct() & kHandedRegs;
         StoreThrough(s, addr, v, value.Direct(), false, nullptr, INT64_MAX, value.Frame());
     }
 
@@ -1829,7 +1845,9 @@ private:
             if (same) continue;
             mPreserved &= ~(1u << r);
             mOut |= v.Origins();
-            if (v.Own()) mHanded |= v.Origins() & kHandedRegs;   // (area 3 round 12 fix) handed back in a register (CalleeHanded)
+            // (area 3 round 12 fix) handed back in a register (CalleeHanded): what the value was computed from, not the register's own entry
+            // value (a saved register restored from a slot its callee may have written over is that register, not a value moved elsewhere)
+            mHanded |= v.Direct() & kHandedRegs & ~(1u << r);
         }
         return true;
     }
@@ -2262,14 +2280,14 @@ private:
                                 if ((p->second.effects.storesBelow >> r) & 1u)
                                     mStoresBelow |= Get(s, mReg[r]).Origins() & 0x7FFFu;
                             const CallEffects& e = p->second.effects;
-                            mHanded |= RegOrigins(s, (e.leaks | e.outOrigins | e.storesThrough | e.storesBelow) & kHandedRegs);
+                            mHanded |= RegDeps(s, (e.leaks | e.outOrigins | e.storesThrough | e.storesBelow) & kLentHanded);
                         }
                         else
                         {
                             // (area 3 round 12 fix, A3-90) ...and a tail jump to an unlent captured callee carries its walk's record the same way.
                             const uint32_t sb = CalleeStoresBelow(static_cast<uint32_t>(to.v));
                             mStoresBelow |= RegOrigins(s, sb) & 0x7FFFu;
-                            mHanded |= RegOrigins(s, sb | CalleeHanded(static_cast<uint32_t>(to.v)));
+                            mHanded |= RegDeps(s, sb | CalleeHanded(static_cast<uint32_t>(to.v)));
                         }
                     }
                     // ...a jump to a register's entry value (a function pointer it was handed) is an onward tail call to code the walk cannot
@@ -2281,7 +2299,7 @@ private:
                     if (!isReturn && mNested && to.kind != Value::Imm && to.kind != Value::Fuzzy)
                     {
                         mStoresBelow |= RegOrigins(s, kConvention) & 0x7FFFu;
-                        mHanded |= RegOrigins(s, kConvention);
+                        mHanded |= RegDeps(s, kConvention);
                     }
                 }
                 falls = false;
