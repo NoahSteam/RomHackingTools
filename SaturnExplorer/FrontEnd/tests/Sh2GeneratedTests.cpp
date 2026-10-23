@@ -8288,8 +8288,9 @@ bool GenLaunderWalkFn(uint64_t seed, CCase& c, std::string& shape)
 //   callerframe.<none|swap2|mask>: g writes the word at its entry r15 through a copy of r15, laundered (A3-92)
 //   spare: f pushes r14, hands a swapped copy of r15 to a lent writer h (which overwrites the saved r14), pops r14; checked by f's claim, not
 //        the caller's text (the caller of a withheld f keeps r14 by the model: A3-93)
-//   neg.<one|sub>, shift.<arith>: a frame address through a negation the engine does not fold back, or `shll ; shar` (A3-97 E3, E4)
-static const char* const kEscapeNegShift[] = { "neg.negc", "neg.sub", "shift.shll", "shift.shal" };
+//   neg.<not2|sub>, shift.<shll|shal>: a frame address through a negation the engine does not fold back (`not` twice across a loop's passes; `neg`
+//        then a subtraction from 0), or `shll|shal ; shar` (A3-97: the review's mutations E3 and E4, inert before, are held by these)
+static const char* const kEscapeNegShift[] = { "neg.not2", "neg.sub", "shift.shll", "shift.shal" };
 static const char* const kEscapeForms[] = { "keep.global", "keep.arg2", "keep.outgoing", "back", "chain", "struct", "callerframe", "spare", "neg", "shift" };
 bool GenEscapeWalkFn(uint64_t seed, CCase& c, std::string& shape)
 {
@@ -8511,9 +8512,12 @@ bool GenEscapeWalkFn(uint64_t seed, CCase& c, std::string& shape)
         b.Put(0x7210);   // add #16,r2
         if (neg && !second)
         {
-            b.Put(0x632B);   // neg r2,r3
-            b.Put(0x633A);   // negc r3,r3: 0 - r3 - T (T is 0: `tst` below sets it after)
-            b.Put(0x6233);   // mov r3,r2
+            // not r2,r2 twice, one in each pass of a loop: the engine cannot fold the pair, so INT_NEGATE of a frame address reaches the walk
+            // (the review's mutation E3 is held by this one)
+            b.Put(0xE302);   // mov #2,r3
+            b.Put(0x6227);   // L: not r2,r2
+            b.Put(0x4310);   //    dt r3
+            b.Put(0x8BFC);   //    bf L
         }
         else if (neg)
         {
@@ -8533,7 +8537,7 @@ bool GenEscapeWalkFn(uint64_t seed, CCase& c, std::string& shape)
         }
         LaunderBelow(b, 2, walk);
         epilogue(0x60F2);
-        shape = std::string("escape.") + form + "." + (neg ? (second ? "sub" : "negc") : (second ? "shal" : "shll")) + "." + (walk ? "walk" : "disp");
+        shape = std::string("escape.") + form + "." + (neg ? (second ? "sub" : "not2") : (second ? "shal" : "shll")) + "." + (walk ? "walk" : "disp");
     }
     c.words = b.Finish();
     c.name = "seed" + std::to_string(seed) + "_escape";
