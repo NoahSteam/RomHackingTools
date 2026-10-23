@@ -358,6 +358,9 @@ public:
 
     // The calls (by the instruction that makes them) a frame address escapes at in a register the call is shown without, and which (bit 2: r2, bit 7: r7).
     const std::map<uint32_t, uint32_t>& EscapeSites() const { return mEscapeSites; }
+    // ...and the calls (bit r: the register, as origin:: numbers them) a frame address went out at in a register that is no argument the engine
+    // shows (area 3 round 12 fix): r0, r1, r3, r8-r14, GBR, MACH, ...
+    const std::map<uint32_t, uint32_t>& HandSites() const { return mHandSites; }
     // After Run(): whether r2 held the address of a local at a call whose signature is not lent (A3-4),
     // and the lowest such offset from r15 on entry as the engine's stack offset (unsigned, 32-bit).
     // After Run(): whether an address of the frame went out to code that may keep it by a way the engine may not see (HandOut): the probe
@@ -874,7 +877,7 @@ private:
             auto f = s.slots.find(x.v & ~int64_t(3));
             return c | (f != s.slots.end() && SavedRegister(f->second) ? kOutLoose : kOutExact);
         }
-        return c | kOutLoose;
+        return c | (x.stackBase != Value::kNoBase ? kOutExact : kOutLoose);
     }
 
     // What a load from untracked memory can give.
@@ -1176,6 +1179,7 @@ private:
                     mEscaped = true;
                     mEscapedLow = true;
                     HandOut(s, x);
+                    if (r != 2 && (r < 4 || r > 7)) mHandSites[at] |= 1u << r;   // no argument the engine shows: the note says it
                 }
             }
         }
@@ -1580,10 +1584,11 @@ private:
         }
         if (e.storesThrough & ~origin::kFrame)
         {
-            // Frame addresses the callee was handed in the registers it stores through: an exact one reaches the bytes at it (A3-24, A3-42),
-            // one based at an offset what lies at or above it, and any other possible frame address (MayBeFrame: laundered, an index that may
-            // be negative, or a pointer nothing is known of once the frame went out loosely) any slot, a saved register's too (area 3 round 12
-            // fix, A3-93: the spare is for a pointer to a local, which only an exact form shows).
+            // Frame addresses the callee was handed in the registers it stores through: an exact one reaches the bytes at it (A3-24, A3-42);
+            // one an exact form shows to be the address of a local plus an index (a base: `&a[i]`, read as the engine reads an index, A3-9)
+            // reaches that object, not the saved registers (the spare); any other possible frame address (MayBeFrame with no base: laundered by
+            // a swap or shift pair or a mask, or a pointer nothing is known of once such an address went out) may be a saved register's slot
+            // itself and spares none (area 3 round 12 fix, A3-93).
             std::vector<int64_t> exact;
             int64_t reachFrom = INT64_MAX;
             for (int r = 0; r < 15; ++r)
@@ -1593,8 +1598,7 @@ private:
                     if (h.kind == Value::Sp) exact.push_back(h.v);
                     else if (!MayBeFrame(s, h)) continue;
                     else if (!h.Frame()) { if (s.out & (kOutLoose | kOutHigh)) reachFrom = INT64_MIN; }
-                    else if (h.stackBase != Value::kNoBase && h.stackBase != Value::kLowBase) reachFrom = std::min(reachFrom, h.stackBase);
-                    else reachFrom = INT64_MIN;
+                    else if (h.stackBase == Value::kNoBase) reachFrom = INT64_MIN;
                 }
             StoreThrough(s, Value::From(stores), leaked | framed, leakedDep | framedDep, true, &exact, reachFrom, CalleeStoresFrame(s, e));
         }
@@ -2421,6 +2425,7 @@ private:
     size_t mStepsUsed = 0;
     bool mEntryUndecodable = false;    // the entry instruction could not be decoded (memory not captured)
     std::map<uint32_t, uint32_t> mEscapeSites;   // the calls that escape was declared at because of r2 or r7, and which
+    std::map<uint32_t, uint32_t> mHandSites;     // (area 3 round 12 fix) ...and at in another register no argument shows (HandSites)
     bool mEscaped = false;   // r2 held a frame address at a call that may read it
     bool mEscapedLow = false;   // ...of which one with no lower bound than the frame's lowest slot
     int64_t mEscapeLow = 0;     // ...and the lowest exact base (when mEscapedLow, with mLowestSp)
@@ -4897,6 +4902,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         // the engine now, while the code that made it is still there to be found. (Only the pass that
         // prints: the first one learns who is called, and a function without a call has nothing to say.)
         std::map<uint32_t, uint32_t> escapeSites;   // calls the note is for, once the actions have said who is called
+        std::map<uint32_t, uint32_t> handSites;     // ...and the calls a frame address went out at in another register (HandSites)
         if (print && fd->numCalls() > 0)
         {
             ReturnCheck probe(*fd, exec, prototypes, flowTables);
@@ -4911,6 +4917,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
             // 0063), so every store through a pointer it cannot place may write the frame, and every local stays aliased across it.
             if (probe.FrameOut()) fd->getScopeLocal()->declareHostEscape();
             uint32_t from = 0;
+            handSites = probe.HandSites();
             if (probe.FrameEscape(from))
             {
                 fd->getScopeLocal()->declareHostAlias(from);
@@ -4945,6 +4952,8 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         arch->allacts.getCurrent()->perform(*fd);
         // The note of A3-28, but not at a call to a callee whose signature is lent: its arguments are what it reads, and r2 is no
         // input (the probe, run before the literals fold, took every `jsr @rN` for a callee that may read r2: A3-32).
+        for (const auto& h : handSites)
+            if (escapeSites.count(h.first) == 0) escapeSites[h.first] = 0;
         for (const auto& siteRegs : escapeSites)
         {
             const uint32_t site = siteRegs.first;
@@ -4962,6 +4971,18 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
             // One note for the register that holds the address (r2, then r7), or for the stack argument slot, or for a local the call may write as
             // one of its stack arguments (A3-61) when that is all.
             const uint32_t m = siteRegs.second;
+            const auto hand = handSites.find(site);
+            if (m == 0 && hand != handSites.end() && hand->second != 0)
+            {
+                // (area 3 round 12 fix) A frame address went out in a register no argument shows: name the lowest such register.
+                static const char* const kRegNames[] = { "r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7", "r8", "r9", "r10",
+                                                         "r11", "r12", "r13", "r14", "r15", "sr", "gbr", "vbr", "mach", "macl", "pr" };
+                int reg = 0;
+                while (reg < 21 && !((hand->second >> reg) & 1u)) ++reg;
+                arch->commentdb->addComment(ghidra::Comment::user2, fd->getAddress(), ghidra::Address(ram, site),
+                                            std::string(kFrameEscapeNoteRegA) + kRegNames[reg] + kFrameEscapeNoteRegB);
+                continue;
+            }
             arch->commentdb->addComment(ghidra::Comment::user2, fd->getAddress(), ghidra::Address(ram, site),
                                         (m & 4u) ? kFrameEscapeNote : (m & 0x80u) ? kFrameEscapeNoteR7 : (m & 0x8000u) ? kFrameEscapeNoteStack : kFrameEscapeNoteSlot);
         }

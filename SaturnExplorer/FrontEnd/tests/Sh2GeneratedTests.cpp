@@ -4121,8 +4121,7 @@ bool CanaryReturned(const std::string& text, uint32_t canary, std::string& offen
             if (end > amp + 1) exposed.insert(line.substr(amp + 1, end - amp - 1));
         }
         const bool callLine = line.find("func_0x") != std::string::npos || line.find("(*") != std::string::npos;
-        if (line.find('&') != std::string::npos || line.find("a frame address is in r") != std::string::npos ||
-            line.find("a frame address is in a stack argument slot") != std::string::npos)
+        if (line.find('&') != std::string::npos || line.find("a frame address is in ") != std::string::npos)
             for (auto it = tainted.begin(); it != tainted.end();)
                 it = it->find("Stack") != std::string::npos ? tainted.erase(it) : std::next(it);
         else if (callLine)

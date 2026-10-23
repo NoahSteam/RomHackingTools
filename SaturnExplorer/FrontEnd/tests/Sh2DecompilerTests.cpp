@@ -5831,9 +5831,13 @@ public:
         Lex(text);
         for (size_t i = 0; i + 1 < mTok.size(); ++i)
             if (mTok[i] == "&") mAddrTaken.insert(mTok[i + 1]);   // a local whose address is taken: a call may write it
-        // The engine's note at a call that a frame address reaches in r2 (A3-28): every stack word may have been written by it.
-        mEscapeNote = text.find("a frame address is in r2 here") != std::string::npos || text.find("a frame address is in r7 here") != std::string::npos ||
-                      text.find("a frame address is in a stack argument slot here") != std::string::npos;
+        // The engine's note at a call that a frame address reaches in r2 (A3-28), r7, a stack argument slot, or (area 3 round 12 fix) another
+        // register no argument shows: every stack word may have been written by it.
+        mEscapeNote = text.find("a frame address is in r") != std::string::npos ||
+                      text.find("a frame address is in a stack argument slot here") != std::string::npos ||
+                      text.find("a frame address is in gbr here") != std::string::npos || text.find("a frame address is in mach here") != std::string::npos ||
+                      text.find("a frame address is in macl here") != std::string::npos || text.find("a frame address is in vbr here") != std::string::npos ||
+                      text.find("a frame address is in sr here") != std::string::npos || text.find("a frame address is in pr here") != std::string::npos;
         // The header: everything up to the body's opening brace.
         while (mPos < mTok.size() && mTok[mPos] != "{") ++mPos;
         if (mPos >= mTok.size())
@@ -8127,8 +8131,11 @@ void TestCallsAndTraps()
         // its parent's frame) is the one other pointer to a frame it puts there, which neither the Hitachi/SN compilers
         // nor game code use. A frame address sits in r3 at 36 and 53 of the call sites the two corpus images have (and
         // in r14 at 852 and 2,068: the frame pointer), so a rule over r3 would alias the locals of those functions to
-        // protect a convention nothing uses. Hand-written code that passes a frame pointer in r3 gets the folded read
-        // (the callee reads r3, so it is not lent and nor is the caller; only the text is wrong). Pinned as a limit.
+        // protect a convention nothing uses. Hand-written code that passes a frame pointer in r3 got the folded read
+        // (the callee reads r3, so it is not lent and nor is the caller; only the text was wrong).
+        // (area 3 round 12 fix) No longer a limit, and with no rule over r3: the probe reads what a captured callee does with every
+        // register it is handed (CalleeHanded), and this one stores through r3, so the frame address there has gone out. The text reads
+        // the local and says why at the call; a callee that does nothing with r3 costs nothing.
         {
             const CallFixture g = { "frame address in r3", base,
                                     withCallee({ 0x4F22, 0x7FF8, 0xE005, 0x2F02, 0x63F3, 0xB009, 0x0009, 0x60F2, 0x7F08, 0x4F26, 0x000B, 0x0009 },
@@ -8136,9 +8143,10 @@ void TestCallsAndTraps()
             auto snap = CallSnapshot(g, ++serial);
             const DecompileResult r = d.Decompile(snap, Request(g.base));
             Print(g.name.c_str(), r);
-            CHECK(Has(r.Text(), "return 5;") && !r.prototype.known);   // the accepted limit
+            CHECK(!Has(r.Text(), "return 5;") && !r.prototype.known && Has(r.Text(), "a frame address is in r3 here"));
             uint32_t ran = 0;
             CHECK(CallRunResult(snap, g, inputs[0], ran) && ran == 7u);   // not 5
+            CHECK(PseudoAgreesWithRun(r, snap, g, inputs));
         }
         // ---- A3-8 (round 4), accepted: T set by the caller reaches a lent SR getter ---------------------------------
         // A callee that returns the status register whole is machine state, not an input (A3-5): it is lent. A caller
@@ -9794,7 +9802,11 @@ void TestArea3Round8()
         auto snap5 = CallSnapshot(f5, ++serial);
         const DecompileResult r5 = d.Decompile(snap5, Request(f5.base));
         Print(f5.name.c_str(), r5);
-        CHECK(Has(r5.Text(), "func_0x06009040(&xStack_8)") && !Has(r5.Text(), kStackNote) && !Has(r5.Text(), "return 0x5a;"));
+        // (area 3 round 12 fix: the frame escapes, so the outgoing word that holds the address is a local, and may be shown as one: `pxStack_c = &xStack_8 ;
+        // func_0x06009040(pxStack_c)`.)
+        CHECK((Has(r5.Text(), "func_0x06009040(&xStack_8)") || (Has(r5.Text(), "= &xStack_8;") && Has(r5.Text(), "func_0x06009040(pxStack_c)"))) &&
+              !Has(r5.Text(), kStackNote) && !Has(r5.Text(), "return 0x5a;"));
+        CHECK(PseudoAgreesWithRun(r5, snap5, f5, { { 1 }, { 2 } }, true));
         // ST6: the address in the second stack word (a callee that reads its sixth argument), the first word unwritten: the same drop
         const std::vector<uint16_t> writer2 = { 0x52F1, 0xE137, 0x000B, 0x2212 };   // mov.l @(4,r15),r2 ; mov #K,r1 ; rts ; mov.l r1,@r2
         const CallFixture f6 = { "a3_51 ST6: the address in the second stack word", 0x06009000u,
@@ -11934,10 +11946,15 @@ void TestArea3Round11Fix()
         CHECK(lent(r) && Has(r.Text(), "axStack") && !Has(r.Text(), "return 5;"));
     }
     // A3-84: the caller launders the exact frame address before handing it to the lent fill-backwards k (A3-71a).
+    // (area 3 round 12 fix, A3-93: a laundered frame address handed to a lent writer may be the saved PR's slot, so the spare of A3-24 is not
+    // made and the caller is withheld, "a return not to its caller"; the text still reads the local.)
+    auto laundered = [&](const DecompileResult& r) {
+        return Has(r.Text(), "axStack") && !Has(r.Text(), "return 5;") && (lent(r) || Has(r.prototypeWithheld, "a return not to its caller"));
+    };
     {
         const std::vector<uint16_t> callerMask = { 0x4F22, 0x7FEC, 0xE005, 0x2F02, 0x64F3, 0x7410, 0xE3FC, 0x2439, 0xD103, 0x410B, 0x0009, 0x60F2, 0x7F14, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9040 };
         const DecompileResult r = chain("A3-84a caller masks the frame address (and #-4, compiled)", callerMask, { k });
-        CHECK(lent(r) && Has(r.Text(), "axStack") && !Has(r.Text(), "return 5;"));
+        CHECK(laundered(r));
     }
     {
         const std::vector<uint16_t> callerGlobal = { 0x4F22, 0x7FEC, 0xE005, 0x2F02, 0x64F3, 0x7410, 0xD305, 0x2342, 0xE400, 0x6432, 0xD104, 0x410B, 0x0009, 0x60F2, 0x7F14, 0x4F26, 0x000B, 0x0009, 0x0600, 0xF100, 0x0600, 0x9040 };
@@ -11947,7 +11964,7 @@ void TestArea3Round11Fix()
     {
         const std::vector<uint16_t> callerSwap = { 0x4F22, 0x7FEC, 0xE005, 0x2F02, 0x64F3, 0x7410, 0x6449, 0x6449, 0xD103, 0x410B, 0x0009, 0x60F2, 0x7F14, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9040 };
         const DecompileResult r = chain("A3-84d caller swaps the frame address twice", callerSwap, { k });
-        CHECK(lent(r) && Has(r.Text(), "axStack") && !Has(r.Text(), "return 5;"));
+        CHECK(laundered(r));
     }
     // A3-86 a: a captured, unlent callee (reads r3 on entry) that fills backwards. The caller is withheld (it calls an unknown-signature
     // function), but the probe walks the callee for storesBelow and exposes the frame, so the text reads the local, not the stale 5.
