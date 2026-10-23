@@ -8282,9 +8282,11 @@ bool GenLaunderWalkFn(uint64_t seed, CCase& c, std::string& shape)
 //   keep.outgoing: an unlent g writes p to its own r15 + 4, the caller's outgoing word, which the caller reloads (A3-89 e)
 //   back.<r1|r9|r10|mach|gbr>: a lent g moves its argument into another register (`mov r4,r9`, `lds r4,mach`, `ldc r4,gbr`); the caller
 //        reads that and stores below it (A3-91)
-//   chain.<r1|r4>.<call|jump|callback>: P hands p in r1 or r4 to an unlent U1 that passes it on in r4 to an unlent U2 (by a call, a tail
-//        jump, or a call through a pointer in r5) that stores below it (A3-90; r1 is no argument the engine shows)
-//   struct.<none|mask|swap2>: r2 = p, laundered, at a call to an unlent g that writes through r2 (A3-94)
+//   chain.<r1|r4>.<call|jump|callback>[.counted]: P hands p in r1 or r4 to an unlent U1 that passes it on in r4 to an unlent U2 (by a call, a
+//        tail jump, or a call through a pointer in r5) that stores below it (A3-90; r1 is no argument the engine shows); counted: U2's walk
+//        counts from r3, which P sets, so no exact offset bounds it and only the probe's carry of U2's storesBelow up through U1 holds it
+//   struct.<none|mask|swap2>: r2 = p, laundered, at a call to an unlent g that writes through r2 (A3-94); struct.stack.<step>: the address of
+//        a local, laundered, in the first stack argument slot with r4-r7 unset (the engine drops it), to a lent g that writes through it
 //   callerframe.<none|swap2|mask>: g writes the word at its entry r15 through a copy of r15, laundered (A3-92)
 //   spare: f pushes r14, hands a swapped copy of r15 to a lent writer h (which overwrites the saved r14), pops r14; checked by f's claim, not
 //        the caller's text (the caller of a withheld f keeps r14 by the model: A3-93)
@@ -8414,9 +8416,11 @@ bool GenEscapeWalkFn(uint64_t seed, CCase& c, std::string& shape)
         static const char* const kHow[] = { "call", "jump", "callback" };
         const bool r1 = rng.Chance(50);
         const std::string how = kHow[rng.Below(3)];
+        const bool counted = rng.Chance(50);   // U2 counts its walk from r3, which P sets: a walk no exact offset bounds
         prologue();
         b.Put(static_cast<uint16_t>(r1 ? 0x61F3 : 0x64F3));   // mov r15,r1 / r4
         b.Put(static_cast<uint16_t>(r1 ? 0x7110 : 0x7410));   // add #16
+        if (counted) b.Put(0xE304);                             // mov #4,r3
         if (how == "callback") b.Lit(5, kCode + 0xC0u);        // U2's address, for U1 to call
         call(0x80);
         epilogue(0x60F2);
@@ -8442,15 +8446,50 @@ bool GenEscapeWalkFn(uint64_t seed, CCase& c, std::string& shape)
         }
         b.at = 0x60;     // U2
         hidden();
-        LaunderBelow(b, 4, walk);
+        if (counted)
+        {
+            b.Put(0x6133);   // mov r3,r1
+            b.Put(0x2416);   // L: mov.l r1,@-r4
+            b.Put(0x4110);   //    dt r1
+            b.Put(0x8BFC);   //    bf L
+        }
+        else LaunderBelow(b, 4, walk);
         b.Put(0x000B);
         b.Put(0x0009);
-        shape = std::string("escape.chain.") + (r1 ? "r1." : "r4.") + how + "." + (walk ? "walk" : "disp");
+        shape = std::string("escape.chain.") + (r1 ? "r1." : "r4.") + how + "." + (counted ? "counted" : walk ? "walk" : "disp");
     }
     else if (form == "struct")
     {
         static const char* const kSteps[] = { "none", "mask", "swap2" };
         const std::string step = kSteps[rng.Below(3)];
+        if (rng.Chance(40))
+        {
+            // stack: p, laundered, in the call's first stack argument slot with r4-r7 unset, so the engine drops the word (A3-51) and only
+            // NoteFrameEscapeOf lets the frame out; the lent g reads the word and writes through it
+            b.Put(0x4F22);   // sts.l pr,@-r15
+            b.Put(0x7FF8);   // add #-8,r15
+            b.Put(static_cast<uint16_t>(0xE000 | K));
+            b.Put(0x1F01);   // mov.l r0,@(4,r15): the word the callee writes
+            b.Put(0x61F3);   // mov r15,r1
+            b.Put(0x7104);   // add #4,r1
+            LaunderStep(b, step, 1, 3, 5, 24);
+            b.Put(0x2F12);   // mov.l r1,@r15: the first stack argument slot
+            call(0x80);
+            b.Put(0x50F1);   // mov.l @(4,r15),r0
+            b.Put(0x7F08);   // add #8,r15
+            b.Put(0x4F26);
+            b.Put(0x000B);
+            b.Put(0x0009);
+            b.at = 0x40;
+            b.Put(0x62F2);   // mov.l @r15,r2
+            b.Put(0xE101);   // mov #1,r1
+            b.Put(0x000B);
+            b.Put(0x2212);   // mov.l r1,@r2
+            shape = "escape.struct.stack." + step;
+            c.words = b.Finish();
+            c.name = "seed" + std::to_string(seed) + "_escape";
+            return true;
+        }
         prologue();
         b.Put(0x1F04);   // mov.l r0,@(16,r15): the word the callee writes
         b.Put(0x62F3);   // mov r15,r2
@@ -10199,8 +10238,9 @@ void TestA365Pins(Sh2Decompiler& d)
         for (const char* k : { "escape.keep.global.lent", "escape.keep.global.unlent", "escape.keep.global.lent.ret", "escape.keep.global.unlent.ret",
                                "escape.keep.arg2.lent", "escape.keep.arg2.unlent", "escape.keep.outgoing", "escape.back.r1", "escape.back.r9",
                                "escape.back.r10", "escape.back.mach", "escape.back.gbr", "escape.chain.r1.call", "escape.chain.r1.jump",
-                               "escape.chain.r1.callback", "escape.chain.r4.call", "escape.chain.r4.jump", "escape.chain.r4.callback",
-                               "escape.struct.none", "escape.struct.mask", "escape.struct.swap2", "escape.callerframe.none",
+                               "escape.chain.r1.callback", "escape.chain.r4.call", "escape.chain.r4.jump", "escape.chain.r4.callback", "escape.chain.r1.call.counted",
+                               "escape.chain.r1.jump.counted", "escape.chain.r1.callback.counted",
+                               "escape.struct.none", "escape.struct.mask", "escape.struct.swap2", "escape.struct.stack.none", "escape.struct.stack.mask", "escape.struct.stack.swap2", "escape.callerframe.none",
                                "escape.callerframe.swap2", "escape.callerframe.mask", "escape.spare", "escape.rewrite.load.lent", "escape.rewrite.load.unlent",
                                "escape.rewrite.ret.lent", "escape.rewrite.ret.unlent", "escape.rewrite.r9.lent", "escape.rewrite.r9.unlent" })
             CHECK(drawn[k] > 0);
