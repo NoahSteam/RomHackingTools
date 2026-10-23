@@ -84,6 +84,8 @@ int64_t Signed(uint64_t v, int size)
 
 bool gWide = false;
 bool gSh2 = false;       // only the ops and shift amounts the SH-2 spec emits (no carry/borrow ops, no counts, no division, amounts 1 2 8 16 31 32)
+AddrSpace* gRegSpace = nullptr;
+bool gWrap = false;       // an INT_MULT overflowed its width under both the unsigned and the signed reading (a division recogniser reasons about the exact product)
 bool gUndef = false;      // a division by zero or an overflowing division was met: the environment is not used
 bool gUnsupported = false;
 OpCode gUnsupportedOp = CPUI_COPY;
@@ -103,8 +105,19 @@ uint64_t Eval(const Varnode* vn, const Env& env, int depth = 0)
     if (d == nullptr)
     {
         auto it = env.v.find({ vn->getOffset(), size });
-        if (it == env.v.end()) { gUnsupported = true; gUnsupportedOp = CPUI_MULTIEQUAL; return 0; }
-        return it->second & m;
+        if (it != env.v.end()) return it->second & m;
+        // a piece of a known input (the sub-variable flow makes a smaller input inside the register): the space is big-endian
+        for (const auto& kv : env.v)
+        {
+            const uint64_t base = kv.first.first;
+            const int rsz = kv.first.second;
+            if (vn->getOffset() >= base && vn->getOffset() + size <= base + rsz && vn->getSpace() == gRegSpace)
+            {
+                const int shift = 8 * (rsz - static_cast<int>(vn->getOffset() - base) - size);
+                return (shift >= 64 ? 0 : (kv.second >> shift)) & m;
+            }
+        }
+        gUnsupported = true; gUnsupportedOp = CPUI_MULTIEQUAL; return 0;
     }
     const int n = d->numInput();
     const uint64_t a = n > 0 ? Eval(d->getIn(0), env, depth + 1) : 0, b = n > 1 ? Eval(d->getIn(1), env, depth + 1) : 0;
@@ -120,7 +133,26 @@ uint64_t Eval(const Varnode* vn, const Env& env, int depth = 0)
     case CPUI_INT_XOR: return a ^ b;
     case CPUI_INT_NEGATE: return ~a & m;
     case CPUI_INT_2COMP: return (0 - a) & m;
-    case CPUI_INT_MULT: return (a * b) & m;
+    case CPUI_INT_MULT:
+    {
+        const unsigned __int128 pu = static_cast<unsigned __int128>(a) * b;
+        const __int128 ps = static_cast<__int128>(Signed(a, size)) * Signed(b, size);
+        const __int128 lim = static_cast<__int128>(1) << (8 * size - 1);
+        {   // the reading of the operands that the graph itself gives: a multiplicand extended by ZEXT is unsigned, by SEXT signed; otherwise either reading may fit
+            bool uns = false, sgn = false;
+            for (int i = 0; i < 2; ++i)
+            {
+                const Varnode* in = d->getIn(i);
+                if (in->isWritten() && in->getDef()->code() == CPUI_INT_ZEXT) uns = true;
+                if (in->isWritten() && in->getDef()->code() == CPUI_INT_SEXT) sgn = true;
+            }
+            const bool fitU = pu <= m, fitS = ps >= -lim && ps < lim;
+            if (uns && !sgn) { if (!fitU) gWrap = true; }
+            else if (sgn && !uns) { if (!fitS) gWrap = true; }
+            else if (!fitU && !fitS) gWrap = true;
+        }
+        return (a * b) & m;
+    }
     case CPUI_INT_ZEXT: return a;
     case CPUI_INT_SEXT: return static_cast<uint64_t>(Signed(a, sa)) & m;
     case CPUI_SUBPIECE: return b >= 8 ? 0 : (a >> (8 * b)) & m;
@@ -599,9 +631,98 @@ struct Builder
         default: return bin(CPUI_INT_XOR, s, bin(CPUI_INT_XOR, s, x, konst(s)), konst(s));
         }
     }
+
+    Varnode* tmplMisc()
+    {
+        const int form = rng.below(9);
+        const int s = pickInt({ 1, 2, 4 });
+        switch (form)
+        {
+        case 0:
+        {   // a common sub-expression: two SUBPIECEs or two shifts of one value (RuleSelectCse)
+            Varnode* a = input(s * 2);
+            const int c1 = rng.below(s + 1);
+            Varnode* x1 = emit(CPUI_SUBPIECE, s, a, cst(4, c1))->getOut();
+            Varnode* x2 = emit(CPUI_SUBPIECE, s, a, cst(4, rng.chance(75) ? c1 : rng.below(s + 1)))->getOut();
+            return bin(rng.chance(50) ? CPUI_INT_ADD : CPUI_INT_XOR, s, x1, x2);
+        }
+        case 1:
+        {   // (zext(V) << sa) + zext(W) (RuleShiftPiece), and the sign-extension form
+            const int vs = pickInt({ 1, 2 }), ws = pickInt({ 1, 2 });
+            const int os = std::min(8, 2 * (vs + ws));
+            Varnode* V = input(vs);
+            Varnode* W = input(ws);
+            Varnode* hi = ext(rng.chance(30) ? CPUI_INT_SEXT : CPUI_INT_ZEXT, os, V);
+            Varnode* lo = ext(CPUI_INT_ZEXT, os, W);
+            Varnode* sh = bin(rng.chance(70) ? CPUI_INT_LEFT : CPUI_INT_MULT, os, hi, rng.chance(70) ? cst(4, 8 * ws) : cst(os, 1ull << (8 * ws)));
+            return bin(pickInt({ 0, 1, 2 }) == 0 ? CPUI_INT_ADD : (rng.chance(50) ? CPUI_INT_OR : CPUI_INT_XOR), os, sh, lo);
+        }
+        case 2:
+        {   // (A && B) || (A && C) and its relatives (RuleBooleanDedup, RuleBooleanUndistribute)
+            Varnode* A = genBool(1);
+            Varnode* B = genBool(1);
+            Varnode* C = genBool(1);
+            const OpCode o1 = rng.chance(50) ? CPUI_BOOL_AND : CPUI_BOOL_OR, o2 = rng.chance(60) ? o1 : (o1 == CPUI_BOOL_AND ? CPUI_BOOL_OR : CPUI_BOOL_AND);
+            Varnode* l = bin(o1, 1, A, B);
+            Varnode* r = bin(o2, 1, rng.chance(25) ? un(CPUI_BOOL_NEGATE, 1, A) : A, C);
+            const int top = rng.below(5);
+            if (top == 0) return bin(CPUI_BOOL_AND, 1, l, r);
+            if (top == 1) return bin(CPUI_BOOL_OR, 1, l, r);
+            return emit(top == 2 ? CPUI_INT_EQUAL : CPUI_INT_NOTEQUAL, 1, l, r)->getOut();
+        }
+        case 3:
+        {   // (zext(b) * -1) + 1, == -1, & (zext(w) * -1) (RuleBoolZext)
+            const int os = pickInt({ 2, 4 });
+            Varnode* b = genBool(1);
+            Varnode* m = bin(CPUI_INT_MULT, os, ext(CPUI_INT_ZEXT, os, b), cst(os, Mask(os)));
+            const int k = rng.below(4);
+            if (k == 0) return bin(CPUI_INT_ADD, os, m, cst(os, 1));
+            if (k == 1) return emit(rng.chance(50) ? CPUI_INT_EQUAL : CPUI_INT_NOTEQUAL, 1, m, cst(os, Mask(os)))->getOut();
+            Varnode* m2 = bin(CPUI_INT_MULT, os, ext(CPUI_INT_ZEXT, os, genBool(1)), cst(os, Mask(os)));
+            return bin(k == 2 ? CPUI_INT_AND : CPUI_INT_OR, os, m, m2);
+        }
+        case 4:
+        {   // (V + (V s>> w-1) * -1) s>> k (RuleSignDiv2)
+            const int os = pickInt({ 1, 2, 4, 8 });
+            Varnode* V = input(os);
+            Varnode* sg = bin(CPUI_INT_SRIGHT, os, V, cst(4, 8 * os - 1));
+            Varnode* sum = rng.chance(50) ? bin(CPUI_INT_ADD, os, V, bin(CPUI_INT_MULT, os, sg, cst(os, Mask(os)))) : bin(CPUI_INT_ADD, os, bin(CPUI_INT_MULT, os, sg, cst(os, Mask(os))), V);
+            return bin(CPUI_INT_SRIGHT, os, sum, cst(4, pickInt({ 1, 1, 1, 2, 3, 8 * os - 1 })));
+        }
+        case 5:
+        {   // (a ^ b) ^ a (RuleXorSwap)
+            const int os = pickInt({ 1, 2, 4 });
+            Varnode* a = input(os);
+            Varnode* b = rng.chance(60) ? input(os) : konst(os);
+            Varnode* x = bin(CPUI_INT_XOR, os, a, b);
+            return rng.chance(50) ? bin(CPUI_INT_XOR, os, x, a) : bin(CPUI_INT_XOR, os, a, x);
+        }
+        case 6:
+        {   // (V | W) == 0 (RuleOrCompare)
+            const int os = pickInt({ 1, 2, 4 });
+            return emit(rng.chance(50) ? CPUI_INT_EQUAL : CPUI_INT_NOTEQUAL, 1, bin(CPUI_INT_OR, os, input(os), rng.chance(50) ? input(os) : konst(os)), cst(os, 0))->getOut();
+        }
+        case 7:
+        {   // popcount(b1 << p1 | b2 << p2) & 1 (RulePopcountBoolXor; not an SH-2 op)
+            if (gSh2) return tmplBitwise();
+            const int os = pickInt({ 2, 4 });
+            Varnode* b1 = ext(CPUI_INT_ZEXT, os, genBool(1));
+            Varnode* b2 = ext(CPUI_INT_ZEXT, os, genBool(1));
+            Varnode* v = bin(CPUI_INT_OR, os, bin(CPUI_INT_LEFT, os, b1, cst(4, 1 + rng.below(8 * os - 1))), bin(CPUI_INT_LEFT, os, b2, cst(4, rng.below(8 * os))));
+            return bin(CPUI_INT_AND, 1, emit(CPUI_POPCOUNT, 1, v)->getOut(), cst(1, 1));
+        }
+        default:
+        {   // (V & mask) | consts feeding a masked consumer, for the sub-variable flow: a masked value widened and shifted
+            const int os = pickInt({ 2, 4, 8 });
+            Varnode* x = input(os);
+            Varnode* m = bin(CPUI_INT_AND, os, bin(rng.chance(50) ? CPUI_INT_RIGHT : CPUI_INT_LEFT, os, x, cst(4, pickInt({ 1, 8, 16, 24, 31 }))), cst(os, pick({ 0xff, 1, 0xffff, 0xff00, 0x80, Mask(os) >> 1 })));
+            return m;
+        }
+        }
+    }
     Varnode* tmpl()
     {
-        switch (rng.below(10))
+        switch (rng.below(13))
         {
         case 0: return tmplDiv();
         case 1: return tmplSignForm2();
@@ -612,6 +733,7 @@ struct Builder
         case 6: return tmplBitwise();
         case 7: return tmplBool();
         case 8: return tmplArith();
+        case 9: case 10: case 11: return tmplMisc();
         default: return tmplDiv();
         }
     }
@@ -836,6 +958,7 @@ int main(int argc, char** argv)
     arch.nameFunction(entry, fname);
     Funcdata* fd = arch.symboltab->getGlobalScope()->addFunction(entry, fname)->getFunction();
     AddrSpace* reg = arch.getSpaceByName("register");
+    gRegSpace = reg;
     if (!reg) { std::printf("no register space\n"); return 2; }
 
     std::vector<PoolEntry> pool = MakePool(only ? only : "");
@@ -882,9 +1005,20 @@ int main(int argc, char** argv)
         }
         PcodeOp* sink = nullptr;
         for (auto it = fd->beginOpAlive(); it != fd->endOpAlive(); ++it) sink = *it;
-        // all ops consume everything
+        // all ops consume everything, but for the root of some graphs: a consumer that reads a low byte or the bits of a mask (what ActionDeadCode would find)
+        uint64_t rootConsume = calc_mask(rootSize);
         for (auto it = fd->beginOpAlive(); it != fd->endOpAlive(); ++it)
             if ((*it)->getOut()) (*it)->getOut()->setConsume(calc_mask((*it)->getOut()->getSize()));
+        if (std::getenv("RF_CONSUME") && rng.chance(25) && root->isWritten())
+        {
+            const PcodeOp* rd = root->getDef();
+            if (rd->code() == CPUI_INT_AND && rd->getIn(1)->isConstant()) rootConsume = rd->getIn(1)->getOffset() & calc_mask(rootSize);
+            else rootConsume = rng.chance(60) ? 0xff : (rng.chance(50) ? 1 : 0xffff);
+            rootConsume &= calc_mask(rootSize);
+            if (rootConsume == 0) rootConsume = calc_mask(rootSize);
+            root->setConsume(rootConsume);
+            sink->getOut()->setConsume(rootConsume);
+        }
         fd->calcNZMask();
 
         // environments
@@ -923,20 +1057,23 @@ int main(int argc, char** argv)
             }
             envs.push_back(env);
         }
-        auto evalAll = [&](std::vector<uint64_t>& out, std::vector<char>& defined) {
+        std::vector<char> wrap0;
+        auto evalAll = [&](std::vector<uint64_t>& out, std::vector<char>& defined, std::vector<char>* wraps = nullptr) {
             out.assign(envs.size(), 0);
             defined.assign(envs.size(), 1);
+            if (wraps) wraps->assign(envs.size(), 0);
             for (size_t i = 0; i < envs.size(); ++i)
             {
-                gUndef = false;
+                gUndef = false; gWrap = false;
                 out[i] = Eval(sink->getIn(0), envs[i]);
                 if (gUndef) defined[i] = 0;
+                if (wraps && gWrap) (*wraps)[i] = 1;
             }
         };
         std::vector<uint64_t> before, cur;
         std::vector<char> def0, def1;
         gUnsupported = false;
-        evalAll(before, def0);
+        evalAll(before, def0, &wrap0);
         if (gUnsupported) continue;
         ++graphs;
         const std::string original = Dump(fd);
@@ -970,6 +1107,7 @@ int main(int argc, char** argv)
         uint64_t prevHash = Hash(fd);
         int applications = 0;
         bool stop = false;
+        bool suspended = false, taintedDiv = false;
         // one application of one rule to one op; returns false when the graph is finished (a finding, an unsupported op, an exception)
         auto step = [&](PoolEntry& pe, PcodeOp* op, int& rcOut) -> bool {
             int rc = 0;
@@ -995,10 +1133,17 @@ int main(int argc, char** argv)
                 unsupported[std::string(get_opname(gUnsupportedOp)) + " after " + pe.name]++;
                 return false;
             }
+            // RuleDivTermAdd and RuleDivTermAdd2 build a product wider than its multiply on the way to RuleDivOpt: only the end of the graph is judged after one
+            // of them has applied. For the division recognisers a graph whose original multiply wraps is not a division: such an environment is not judged.
+            const bool divStep = pe.name == "RuleDivTermAdd" || pe.name == "RuleDivTermAdd2";
+            const bool divRule = divStep || pe.name == "RuleDivOpt";
+            if (divStep && rc > 0) suspended = true;
+            if (pe.name == "RuleDivOpt" && rc > 0) taintedDiv = true;
+            if (suspended) { prev = Dump(fd); prevHash = h; return true; }
             bool bad = false;
             size_t at = 0;
             for (size_t i = 0; i < envs.size(); ++i)
-                if (def0[i] && cur[i] != before[i]) { bad = true; at = i; break; }
+                if (def0[i] && ((cur[i] ^ before[i]) & rootConsume) != 0 && !((divRule || taintedDiv) && wrap0[i])) { bad = true; at = i; break; }
             if (bad)
             {
                 ++pe.bad;
@@ -1065,6 +1210,27 @@ int main(int argc, char** argv)
                 }
                 if (applications > 200) { ++loops; break; }
                 if (applications == before_apps) break;
+            }
+        }
+        if (suspended && !stop)
+        {
+            gUnsupported = false;
+            evalAll(cur, def1);
+            size_t at = 0; bool bad = false;
+            for (size_t i = 0; i < envs.size(); ++i)
+                if (def0[i] && ((cur[i] ^ before[i]) & rootConsume) != 0 && !wrap0[i]) { bad = true; at = i; break; }
+            if (bad && !gUnsupported)
+            {
+                PoolEntry* who = nullptr;
+                for (PoolEntry& pe : pool) if (pe.name == "RuleDivTermAdd") who = &pe;
+                if (who) { ++who->bad; }
+                ++findings;
+                if (shown["divterm-final"]++ < showMax)
+                {
+                    std::printf("WRONG (RuleDivTermAdd / RuleDivTermAdd2 then RuleDivOpt, the end of the graph) seed %llu: value %llx before, %llx after, for", (unsigned long long)seed, (unsigned long long)before[at], (unsigned long long)cur[at]);
+                    for (const auto& kv : envs[at].v) std::printf(" in%llx:%d=%llx", (unsigned long long)kv.first.first, kv.first.second, (unsigned long long)kv.second);
+                    std::printf("\n   original: %s\n   final: %s\n", original.c_str(), Dump(fd).c_str());
+                }
             }
         }
         if (verbose && graphs % 1000 == 0) std::printf("seed %llu: %ld graphs\n", (unsigned long long)seed, graphs);

@@ -27,7 +27,7 @@
 namespace ghidra {
 namespace rc13 {
 
-static const int kMaxNodes = 160;
+static const int kMaxNodes = 400;
 static const int kMaxRoots = 12;
 static const int kMaxLeaves = 24;
 static const int kTrials = 40;
@@ -82,10 +82,18 @@ inline bool evaluable(OpCode c)
     }
 }
 
-inline int build(const Varnode* vn, Cone& c, std::map<const Varnode*, int>& memo, int depth, bool boolUse = false)
+struct Memo
 {
-    auto it = memo.find(vn);
-    if (it != memo.end()) return it->second;
+    const Varnode* key[kMaxNodes];
+    int val[kMaxNodes];
+    int n = 0;
+    int find(const Varnode* v) const { for (int i = 0; i < n; ++i) if (key[i] == v) return val[i]; return -1; }
+    void put(const Varnode* v, int id) { if (n < kMaxNodes) { key[n] = v; val[n] = id; ++n; } }
+};
+
+inline int build(const Varnode* vn, Cone& c, Memo& memo, int depth, bool boolUse = false)
+{
+    { const int hit = memo.find(vn); if (hit >= 0) return hit; }
     Node nd;
     nd.nin = 0; nd.opc = CPUI_COPY; nd.size = vn->getSize(); nd.vn = vn; nd.value = 0; nd.addr = vn->getOffset(); nd.spc = vn->getSpace() ? vn->getSpace()->getIndex() : -1;
     int id;
@@ -116,7 +124,7 @@ inline int build(const Varnode* vn, Cone& c, std::map<const Varnode*, int>& memo
         if (boolUse || (vn->isWritten() && vn->getDef()->isBoolOutput())) nd.value &= 1;     // a boolean is 0 or 1
         id = c.add(nd);
     }
-    memo[vn] = id;
+    memo.put(vn, id);
     return id;
 }
 
@@ -124,26 +132,29 @@ inline void snapshot(const PcodeOp* op, Snap& s)
 {
     s.ok = false;
     s.nroots = 0;
+    s.cone.n = 0;
+    s.cone.overflow = false;
     if (!evaluable(op->code())) return;      // a rule on a phi, a call, a load ... is outside what this check can value
     const Varnode* out = op->getOut();
     if (out == (const Varnode*)0 || out->getSize() > 8) return;
-    std::map<const Varnode*, int> memo;
+    Memo memo;
     auto addRoot = [&](const Varnode* v) {
         if (s.nroots >= kMaxRoots || v->getSize() > 8 || !v->isWritten()) return;
         for (int i = 0; i < s.nroots; ++i) if (s.roots[i].vn == v) return;
         Root& r = s.roots[s.nroots++];
         r.vn = v; r.def = v->getDef(); r.consume = v->getConsume() & calc_mask(v->getSize());
         if (r.consume == 0) r.consume = calc_mask(v->getSize());
-        r.node = build(v, s.cone, memo, 14);
+        r.node = build(v, s.cone, memo, 100000);
     };
     addRoot(out);
     // the readers, and their readers: a rule may rewrite the reader (RuleDivTermAdd changes the ADD that reads the op's result)
-    std::vector<const Varnode*> level1;
-    for (auto it = out->beginDescend(); it != out->endDescend(); ++it)
-        if ((*it)->getOut() != (const Varnode*)0) level1.push_back((*it)->getOut());
-    for (const Varnode* v : level1) addRoot(v);
-    for (const Varnode* v : level1)
-        for (auto it = v->beginDescend(); it != v->endDescend(); ++it)
+    const Varnode* level1[kMaxRoots];
+    int n1 = 0;
+    for (auto it = out->beginDescend(); it != out->endDescend() && n1 < kMaxRoots; ++it)
+        if ((*it)->getOut() != (const Varnode*)0) level1[n1++] = (*it)->getOut();
+    for (int i = 0; i < n1; ++i) addRoot(level1[i]);
+    for (int i = 0; i < n1 && s.nroots < kMaxRoots; ++i)
+        for (auto it = level1[i]->beginDescend(); it != level1[i]->endDescend() && s.nroots < kMaxRoots; ++it)
             if ((*it)->getOut() != (const Varnode*)0) addRoot((*it)->getOut());
     s.ok = !s.cone.overflow && s.nroots > 0;
 }
@@ -371,12 +382,14 @@ inline void verify(const std::string& rule, const PcodeOp* op, const Snap& s, in
 {
     Tally& t = tallies()[rule];
     if (result > 0) ++t.applied;
+    // The division recognisers fold a multiply that wraps in its own width into the exact quotient (RuleDivTermAdd's `x*(c+2^n)` is wider than the multiply
+    // that holds it, on the way to RuleDivOpt): their steps are not value-preserving one at a time, only end to end, which the printed-C differential checks.
+    if (rule == "divtermadd" || rule == "divtermadd2" || rule == "divopt") { if (result > 0) ++t.skipped; return; }
+    // RuleSignMod2nOpt2's `V - (Vadj & ~(2^n-1))` reads Vadj from a MULTIEQUAL and the branch behind it: the leaf is related to V by the control flow, not by the data
+    if (rule == "signmod2nopt2") { if (result > 0) ++t.skipped; return; }
     if (!s.ok) { if (result > 0) ++t.skipped; return; }
     if (const char* only = std::getenv("SE_RULECHECK_ONLY")) if (rule.find(only) == std::string::npos) return;
     // a rule that does not change the graph (result 0) can still change it (RuleSignForm2): check every call, cheaply, by the roots' definitions
-    Snap after;
-    after.ok = false;
-    std::map<const Varnode*, int> memo;
     bool any = false;
     for (int i = 0; i < s.nroots; ++i)
     {
@@ -386,8 +399,8 @@ inline void verify(const std::string& rule, const PcodeOp* op, const Snap& s, in
         if (r.def->getOut() != r.vn) continue;
         const Varnode* v = r.def->getOut();
         Cone ac;
-        std::map<const Varnode*, int> m2;
-        const int ra = build(v, ac, m2, 14);
+        Memo m2;
+        const int ra = build(v, ac, m2, 100000);
         if (ac.overflow) { ++t.skipped; continue; }
         any = true;
         std::string detail;
