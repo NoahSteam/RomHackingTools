@@ -8541,7 +8541,7 @@ bool GenEscapeWalkFn(uint64_t seed, CCase& c, std::string& shape)
 
 // The check of the laundered walks: lend the callees (deepest first: kCode + 0xC0, then kCode + 0x80, when the blob has code there), decompile
 // the entry, run once, and compare every constant return with the run's r0 (as CheckSpillWalks).
-std::vector<CVerdict> CheckLaunderWalks(Sh2Decompiler& d, const std::vector<CCase>& cases)
+std::vector<CVerdict> CheckLaunderWalks(Sh2Decompiler& d, const std::vector<CCase>& cases, const std::vector<std::string>* shapes = nullptr)
 {
     std::vector<CVerdict> out(cases.size());
     static const std::regex ret("\\breturn\\b\\s*([^;]*);");
@@ -8565,6 +8565,19 @@ std::vector<CVerdict> CheckLaunderWalks(Sh2Decompiler& d, const std::vector<CCas
             cq.prototypes = protos;
             const DecompileResult cr = d.Decompile(snap, cq);
             if (cr.status == DecompileStatus::Ok && cr.prototype.known) protos.emplace_back(kCode + off, cr.prototype);
+        }
+        // (area 3 round 12 fix, A3-93) The spare shape is checked by f's claim, not the caller's text: f overwrites the r14 it saved through a
+        // laundered copy of r15 handed to a lent writer, and the run returns what was written there, so a lent f must not preserve r14.
+        if (shapes != nullptr && ci < shapes->size() && (*shapes)[ci] == "escape.spare")
+        {
+            for (const auto& pr : protos)
+                if (pr.first == kCode + 0x80u && ((pr.second.effects.preserved >> 14) & 1u))
+                {
+                    v.cls = "claim-wrong:preserved";
+                    v.detail = "f is lent with r14 preserved, and its writer overwrote the saved r14";
+                }
+            if (v.cls.empty()) v.cls = "escape:spare";
+            continue;
         }
         DecompileRequest q;
         q.entry = kCode;
@@ -8834,9 +8847,18 @@ void TestPrintedC()
         {
             CCase c;
             std::string shape;
-            if (!GenLaunderWalkFn(static_cast<uint64_t>(seed), c, shape)) continue;
-            cases.push_back(c);
-            shapes.push_back(shape);
+            if (GenLaunderWalkFn(static_cast<uint64_t>(seed), c, shape))
+            {
+                cases.push_back(c);
+                shapes.push_back(shape);
+            }
+            // (area 3 round 12 fix) ...and the shapes of A3-89 to A3-94, A3-97, on a stream of their own
+            CCase e;
+            if (GenEscapeWalkFn(static_cast<uint64_t>(seed), e, shape))
+            {
+                cases.push_back(e);
+                shapes.push_back(shape);
+            }
         }
         if (launderWords)
         {
@@ -8848,12 +8870,13 @@ void TestPrintedC()
             cases.push_back(c);
             shapes.push_back("hand");
         }
-        const std::vector<CVerdict> lv = CheckLaunderWalks(d, cases);
+        const std::vector<CVerdict> lv = CheckLaunderWalks(d, cases, &shapes);
         std::map<std::string, int> staleByShape;
         for (size_t i = 0; i < lv.size(); ++i)
         {
             ++launderClasses[lv[i].cls.empty() ? "agrees" : lv[i].cls];
-            const bool bad = lv[i].cls == "stale-constant" || lv[i].cls == "undecompiled" || lv[i].cls == "generator:no-return";
+            const bool bad = lv[i].cls == "stale-constant" || lv[i].cls == "undecompiled" || lv[i].cls == "generator:no-return" ||
+                             lv[i].cls == "claim-wrong:preserved";
             if (launderWords) std::printf("%s: %s %s\n%s\n", cases[i].name.c_str(), lv[i].cls.empty() ? "agrees" : lv[i].cls.c_str(), lv[i].detail.c_str(), lv[i].text.c_str());
             if (!bad) continue;
             ++failing;
@@ -10046,6 +10069,30 @@ void TestA365Pins(Sh2Decompiler& d)
             CHECK(drawn[std::string("call.") + st] > 0);
         }
         for (const char* k : { "direct", "wrapper", "thunk", "lowered", "caller", "join", "walk", "disp" }) CHECK(drawn[k] > 0);
+    }
+    // Round 12 fix: the escape stream draws every shape of A3-89 to A3-94 and A3-97 (each with the variants its rule is held by)
+    {
+        std::map<std::string, int> drawn;
+        int n = 0;
+        for (uint64_t seed = 1; seed <= 2000; ++seed)
+        {
+            CCase c;
+            std::string shape;
+            if (!GenEscapeWalkFn(seed, c, shape)) continue;
+            ++n;
+            ++drawn[shape.substr(0, shape.rfind('.'))];
+            ++drawn[shape];
+        }
+        std::printf("pin 'round 12 escape draws': %d functions in 2000 seeds, %zu kinds\n", n, drawn.size());
+        for (const char* k : { "escape.keep.global.lent", "escape.keep.global.unlent", "escape.keep.global.lent.ret", "escape.keep.global.unlent.ret",
+                               "escape.keep.arg2.lent", "escape.keep.arg2.unlent", "escape.keep.outgoing", "escape.back.r1", "escape.back.r9",
+                               "escape.back.r10", "escape.back.mach", "escape.back.gbr", "escape.chain.r1.call", "escape.chain.r1.jump",
+                               "escape.chain.r1.callback", "escape.chain.r4.call", "escape.chain.r4.jump", "escape.chain.r4.callback",
+                               "escape.struct.none", "escape.struct.mask", "escape.struct.swap2", "escape.callerframe.none",
+                               "escape.callerframe.swap2", "escape.callerframe.mask", "escape.spare" })
+            CHECK(drawn[k] > 0);
+        for (const auto& k : kEscapeNegShift)
+            CHECK(drawn[std::string("escape.") + k] > 0);
     }
 }
 

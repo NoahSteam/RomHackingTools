@@ -1123,6 +1123,15 @@ private:
                 for (const KilledRegister& k : kKeptByCall) e.preserved |= 1u << k.bit;
                 e.preserved |= 1u << kR15;
                 e.spDelta = 0;
+                // (area 3 round 12 fix) ...and what it does with what it is handed is the convention's too: it is handed r2 and r4-r7 (kConvention),
+                // memory, and its stack arguments, and what it stores, lets out or returns is made of those. As "anything" every register it
+                // keeps went into every word and value after the call -- the frame pointer r14 among them -- and every later pointer was taken
+                // for a frame address that had gone out (the walk of a captured callee, CalleeFrameWrites and CalleeHanded, says the rest).
+                const uint32_t handed = kConvention | origin::kStack | origin::kMemory;
+                e.storesThrough = handed | origin::kFrame;
+                e.outOrigins = handed;
+                e.leaks = handed;
+                e.frameValues = handed;
             }
             // A3-70: a callee walked for CalleeFrameWrites that itself hands its incoming frame onward -- r15 still at or above its entry (its
             // stack-argument area is this function's frame), or a frame address in an argument register -- may write any word of its caller's
