@@ -1,0 +1,212 @@
+name C1a callee g leaks the frame address to a global, callee h fills backwards from the global
+asm 06009000
+.word 0x4F22
+add #-20,r15
+mov #5,r0
+mov.l r0,@r15
+mov r15,r4
+add #16,r4
+mov.l =0x06009040,r1
+jsr @r1
+nop
+mov.l =0x06009080,r1
+jsr @r1
+nop
+mov.l @r15,r0
+add #20,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009040
+mov.l =0x0600F100,r1
+mov.l r4,@r1
+rts
+nop
+endasm
+asm 06009080
+mov.l =0x0600F100,r1
+mov.l @r1,r1
+mov #4,r2
+L:
+mov.l r2,@-r1
+dt r2
+bf L
+rts
+nop
+endasm
+lend 06009040 06009080
+args 0 0 0 0
+end
+name C1b like C1a but g is not lent (unknown)
+asm 06009000
+.word 0x4F22
+add #-20,r15
+mov #5,r0
+mov.l r0,@r15
+mov r15,r4
+add #16,r4
+mov.l =0x06009040,r1
+jsr @r1
+nop
+mov.l =0x06009080,r1
+jsr @r1
+nop
+mov.l @r15,r0
+add #20,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009040
+mov.l =0x0600F100,r1
+mov.l r4,@r1
+rts
+nop
+endasm
+asm 06009080
+mov.l =0x0600F100,r1
+mov.l @r1,r1
+mov #4,r2
+L:
+mov.l r2,@-r1
+dt r2
+bf L
+rts
+nop
+endasm
+lend 06009080
+args 0 0 0 0
+end
+name S1 store through sp + variable, variable negative
+asm 06009000
+add #-24,r15
+mov #5,r0
+mov.l r0,@r15
+mov r15,r1
+add #8,r1
+add r4,r1
+mov #1,r2
+mov.l r2,@r1
+mov.l @r15,r0
+add #24,r15
+rts
+nop
+endasm
+args fffffff8
+args 0
+end
+name C2a probe: P calls unlent U1 which calls unlent U2 (fills backwards from r4, hidden r3)
+asm 06009000
+.word 0x4F22
+add #-20,r15
+mov #5,r0
+mov.l r0,@r15
+mov r15,r4
+add #16,r4
+mov #4,r3
+mov.l =0x06009040,r1
+jsr @r1
+nop
+mov.l @r15,r0
+add #20,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009040
+.word 0x4F22
+mov.l =0x06009080,r1
+jsr @r1
+nop
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009080
+mov r3,r1
+L:
+mov.l r1,@-r4
+dt r1
+bf L
+rts
+nop
+endasm
+args 0 0 0 0
+end
+name C2b probe: U1 unlent calls a callback in r5 passing r4
+asm 06009000
+.word 0x4F22
+add #-20,r15
+mov #5,r0
+mov.l r0,@r15
+mov r15,r4
+add #16,r4
+mov.l =0x06009080,r5
+mov #4,r3
+mov.l =0x06009040,r1
+jsr @r1
+nop
+mov.l @r15,r0
+add #20,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009040
+.word 0x4F22
+jsr @r5
+nop
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009080
+mov r3,r1
+L:
+mov.l r1,@-r4
+dt r1
+bf L
+rts
+nop
+endasm
+args 0 0 0 0
+end
+name C3 lent U1 calls a callback in r5 passing r4
+asm 06009000
+.word 0x4F22
+add #-20,r15
+mov #5,r0
+mov.l r0,@r15
+mov r15,r4
+add #16,r4
+mov.l =0x06009080,r5
+mov.l =0x06009040,r1
+jsr @r1
+nop
+mov.l @r15,r0
+add #20,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009040
+.word 0x4F22
+jsr @r5
+nop
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009080
+mov #4,r1
+L:
+mov.l r1,@-r4
+dt r1
+bf L
+rts
+nop
+endasm
+lend 06009040
+args 0 0 0 0
+end
