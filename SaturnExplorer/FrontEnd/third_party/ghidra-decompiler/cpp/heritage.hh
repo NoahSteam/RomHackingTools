@@ -16,6 +16,7 @@
  *
  * Modified for SaturnExplorer: a guard below a pointer stepped down is no array's start (patches/0056-engine-stack-walk-down-aliases.patch).
  * Modified for SaturnExplorer: an escape analysis of the frame addresses, failing closed (patches/0061-engine-stack-frame-escape.patch).
+ * Modified for SaturnExplorer: once the frame escapes, a pointer not proved to be no frame address may be one (patches/0063-engine-frame-escape-unknown-pointers.patch).
  */
 /// \file heritage.hh
 /// \brief Utilities for building Static Single Assignment (SSA) form 
@@ -187,17 +188,31 @@ public:
 /// (b) is stored to memory; (c) is joined with a value that is no frame address; (d) is returned by a call it was handed to, and reaches a
 /// memory access from there. Where the escaped value goes is not followed: once one escapes, every local from the lowest frame offset up
 /// are aliased, and every STORE through a value that may be one is a store to the stack.
+///
+/// SaturnExplorer (patches/0063-engine-frame-escape-unknown-pointers.patch): the escape of 0061 followed the escaped value through the
+/// function's own ops, and every way a frame address came back that was no op of the function -- a callee that keeps it (in a global, in a
+/// slot of the frame it was given a pointer to, in a register the model keeps), a call's output in another register -- was found by a
+/// reviewer one form at a time (ledger A3-89, A3-91). It now uses the escape semantics of a C compiler's points-to analysis instead of a
+/// list: (e) a frame address handed to a call as an argument (a register or stack input, not the stack pointer itself) escapes, and so does
+/// the frame when the host declares an escape the p-code does not show (ScopeLocal::declareHostEscape). Once anything escaped, every
+/// pointer whose origin the analysis cannot prove is no frame address -- a value loaded from memory, any output of a call or a user op,
+/// the value a call or a store may have rewritten (an INDIRECT), a parameter, and anything computed from them -- may point into the frame,
+/// and every STORE through one is a STORE through an unmodeled frame address (guarded). Where the escaped value goes is still not followed:
+/// that is what makes the rule closed.
 class FrameEscape {
+  void markUnknownStores(const Funcdata *fd);	///< Mark the STOREs through a pointer not proved to be no frame address (0063)
 public:
   set<Varnode *> members;		///< The possible frame addresses
   set<Varnode *> unmodeled;		///< ...of which those reached through a form the stack analysis does not model
-  set<PcodeOp *> unmodeledStores;	///< STOREs through an unmodeled possible frame address
+  set<PcodeOp *> unmodeledStores;	///< STOREs through an unmodeled possible frame address, or, once the frame escaped, an unknown pointer
   bool memoryEscape;			///< A frame address was stored to memory
+  bool handed;				///< A frame address was handed to a call as an argument (0063)
+  bool hostEscape;			///< The host declared an escape the p-code does not show (0063)
   bool escaped;				///< Some frame address escaped
   bool gaveUp;				///< The walk passed its bound: everything is taken to have escaped
   bool haveLowest;			///< \b lowest is set
   uintb lowest;				///< The lowest frame offset reached (a byte offset in the stack space)
-  FrameEscape(void) : memoryEscape(false), escaped(false), gaveUp(false), haveLowest(false), lowest(0) {}
+  FrameEscape(void) : memoryEscape(false), handed(false), hostEscape(false), escaped(false), gaveUp(false), haveLowest(false), lowest(0) {}
   void compute(const Funcdata *fd,AddrSpace *spc,bool preHeritage);	///< Run the walk over the given stack space
   /// \brief Is the given STORE made through a possible frame address the stack analysis does not model?
   bool storeIsUnmodeled(PcodeOp *op) const { return gaveUp || unmodeledStores.find(op) != unmodeledStores.end(); }

@@ -16,6 +16,7 @@
  * Modified for SaturnExplorer: an indexed stack access whose pointer is stepped down guards the stack below it (patches/0056-engine-stack-walk-down-aliases.patch).
  * Modified for SaturnExplorer: a STORE through a frame address kept in a stack local and read back is guarded (patches/0060-engine-stack-walk-down-spilled.patch).
  * Modified for SaturnExplorer: a STORE a frame address may have escaped to is guarded, failing closed (patches/0061-engine-stack-frame-escape.patch).
+ * Modified for SaturnExplorer: once the frame escapes, a STORE through a pointer not proved to be no frame address is guarded (patches/0063-engine-frame-escape-unknown-pointers.patch).
  */
 #include "heritage.hh"
 #include "funcdata.hh"
@@ -1051,6 +1052,14 @@ void FrameEscape::compute(const Funcdata *fd,AddrSpace *spc,bool preHeritage)
 	    escaped = true;		// a call through a frame address
 	    continue;
 	  }
+	  // (e) (0063): an argument of a call, in a register or a stack word: the callee may keep it anywhere. Not the placeholder for the
+	  // stack pointer itself, which every call of an unlocked prototype is handed until its stack arguments are known.
+	  {
+	    FuncCallSpecs *fc = (op->code() == CPUI_CALLOTHER) ? (FuncCallSpecs *)0 : fd->getCallSpecs(op);
+	    int4 slot = (fc != (FuncCallSpecs *)0) ? fc->getStackPlaceholderSlot() : -1;
+	    if (slot < 0 || slot >= op->numInput() || op->getIn(slot) != vn)
+	      handed = true;
+	  }
 	  if (out != (Varnode *)0) unmodeled.insert(out);	// (d): what a call handed a frame address returns may be one
 	  break;
 	case CPUI_RETURN:
@@ -1139,6 +1148,13 @@ void FrameEscape::compute(const Funcdata *fd,AddrSpace *spc,bool preHeritage)
     }
   }
   if (memoryEscape) escaped = true;
+  if (handed) escaped = true;	// (e)
+  // (0063) ...and the escapes the host knows of and the p-code does not show: a callee that keeps the address it was handed, or hands
+  // it back in a register the call has no output in (ledger A3-89, A3-91), a frame address in a register no input of the call names.
+  if (fd->getScopeLocal() != (const ScopeLocal *)0 && fd->getScopeLocal()->hasHostEscape()) {
+    hostEscape = true;
+    escaped = true;
+  }
   // The lowest frame offset reached, as a signed offset in the space, for the alias boundary: the lowest a frame address takes, and the
   // lowest stack location the function has (once the frame's own accesses are direct stack varnodes, the frame address that reached the
   // lowest local may be gone, and a local below every frame address left would be no alias).
@@ -1162,6 +1178,75 @@ void FrameEscape::compute(const Funcdata *fd,AddrSpace *spc,bool preHeritage)
       lowest = o;
       haveLowest = true;
     }
+  }
+  if (escaped) markUnknownStores(fd);
+}
+
+/// SaturnExplorer (patches/0063-engine-frame-escape-unknown-pointers.patch): once a frame address has escaped, any pointer whose origin
+/// the analysis cannot prove is no frame address may point into the frame (the escape semantics of a points-to analysis). Those pointers
+/// are the values the function did not compute from constants and frame addresses alone: a parameter (any input but the stack pointer), a
+/// value loaded from memory, any output of a call or a user op, the value a call or a store may have rewritten (an INDIRECT), and anything
+/// computed from one of them by any op but a comparison. Every STORE through one is a STORE through an unmodeled frame address. A frame
+/// address itself is not followed here: the walk above decides it (the modeled ones are the stack analysis's own).
+/// \param fd is the function
+void FrameEscape::markUnknownStores(const Funcdata *fd)
+
+{
+  const int4 maxUnknown = 65536;
+  set<Varnode *> unknown;
+  vector<Varnode *> work;
+  bool all = false;
+  VarnodeDefSet::const_iterator diter = fd->beginDef(Varnode::input);
+  VarnodeDefSet::const_iterator denditer = fd->endDef(Varnode::input);
+  for(;diter!=denditer;++diter) {
+    Varnode *vn = *diter;
+    if (vn->isConstant() || members.find(vn) != members.end()) continue;
+    if (unknown.insert(vn).second) work.push_back(vn);
+  }
+  list<PcodeOp *>::const_iterator iter = fd->beginOpAlive();
+  list<PcodeOp *>::const_iterator enditer = fd->endOpAlive();
+  for(;iter!=enditer;++iter) {
+    PcodeOp *op = *iter;
+    Varnode *out = op->getOut();
+    if (out == (Varnode *)0 || members.find(out) != members.end()) continue;
+    switch(op->code()) {
+    case CPUI_LOAD:
+    case CPUI_CALL:
+    case CPUI_CALLIND:
+    case CPUI_CALLOTHER:
+    case CPUI_INDIRECT:
+    case CPUI_NEW:
+      if (unknown.insert(out).second) work.push_back(out);
+      break;
+    default:
+      break;
+    }
+  }
+  while(!work.empty() && !all) {
+    if (unknown.size() > maxUnknown) {	// too far to follow: every STORE through a computed pointer (fail closed)
+      all = true;
+      break;
+    }
+    Varnode *vn = work.back();
+    work.pop_back();
+    for(list<PcodeOp *>::const_iterator oiter=vn->beginDescend();oiter!=vn->endDescend();++oiter) {
+      PcodeOp *op = *oiter;
+      if (op->code() == CPUI_LOAD || op->code() == CPUI_STORE || frameBooleanOutput(op->code())) continue;
+      if (op->code() == CPUI_INDIRECT && op->getIn(0) != vn) continue;
+      Varnode *out = op->getOut();
+      if (out == (Varnode *)0 || members.find(out) != members.end()) continue;
+      if (unknown.insert(out).second) work.push_back(out);
+    }
+  }
+  iter = fd->beginOp(CPUI_STORE);
+  enditer = fd->endOp(CPUI_STORE);
+  for(;iter!=enditer;++iter) {
+    PcodeOp *op = *iter;
+    if (op->isDead()) continue;
+    Varnode *ptr = op->getIn(1);
+    if (ptr->isConstant()) continue;		// an absolute address is never the stack
+    if (all || unknown.find(ptr) != unknown.end())
+      unmodeledStores.insert(op);
   }
 }
 
