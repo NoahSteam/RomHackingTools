@@ -163,6 +163,7 @@ private:
   uintb localExtreme;		///< Largest possible offset for a local variable
   uintb localBoundary;		///< Boundary offset separating locals and parameters
   mutable uintb aliasBoundary;	///< Shallowest alias
+  mutable uintb trialBoundary;	///< SaturnExplorer: the shallowest alias but an escape's (patches/0063-engine-frame-escape-unknown-pointers.patch)
   int4 direction;		///< 1=stack grows negative, -1=positive
   void deriveBoundaries(const FuncProto &proto);	///< Set up basic boundaries for the stack layout
   void gatherInternal(void) const;	///< Run through Varnodes looking for pointers into the stack

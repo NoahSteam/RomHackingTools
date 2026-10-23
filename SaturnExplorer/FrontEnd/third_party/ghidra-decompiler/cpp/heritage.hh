@@ -209,10 +209,11 @@ public:
   bool handed;				///< A frame address was handed to a call as an argument (0063)
   bool hostEscape;			///< The host declared an escape the p-code does not show (0063)
   bool escaped;				///< Some frame address escaped
+  bool loose;				///< ...by a form the stack analysis does not model (0061's causes, not a hand-over alone: 0063)
   bool gaveUp;				///< The walk passed its bound: everything is taken to have escaped
   bool haveLowest;			///< \b lowest is set
   uintb lowest;				///< The lowest frame offset reached (a byte offset in the stack space)
-  FrameEscape(void) : memoryEscape(false), handed(false), hostEscape(false), escaped(false), gaveUp(false), haveLowest(false), lowest(0) {}
+  FrameEscape(void) : memoryEscape(false), handed(false), hostEscape(false), escaped(false), loose(false), gaveUp(false), haveLowest(false), lowest(0) {}
   void compute(const Funcdata *fd,AddrSpace *spc,bool preHeritage);	///< Run the walk over the given stack space
   /// \brief Is the given STORE made through a possible frame address the stack analysis does not model?
   bool storeIsUnmodeled(PcodeOp *op) const { return gaveUp || unmodeledStores.find(op) != unmodeledStores.end(); }

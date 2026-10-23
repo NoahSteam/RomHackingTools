@@ -988,6 +988,7 @@ void FrameEscape::compute(const Funcdata *fd,AddrSpace *spc,bool preHeritage)
       if (members.size() > maxMembers) {	// too far to follow: everything escaped (fail closed)
 	gaveUp = true;
 	escaped = true;
+	loose = true;
 	return;
       }
       Varnode *vn = work.back();
@@ -1151,6 +1152,7 @@ void FrameEscape::compute(const Funcdata *fd,AddrSpace *spc,bool preHeritage)
     }
   }
   if (memoryEscape) escaped = true;
+  loose = escaped;		// 0061's causes: a form the stack analysis does not model
   if (handed) escaped = true;	// (e)
   // (0063) ...and the escapes the host knows of and the p-code does not show: a callee that keeps the address it was handed, or hands
   // it back in a register the call has no output in (ledger A3-89, A3-91), a frame address in a register no input of the call names.
