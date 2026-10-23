@@ -11346,7 +11346,7 @@ No printed text of either game image moves with the patch (section 5).
 
 ### 3. Families and the oracle
 
-`dagen12.py` has eleven new families, 45 to 54 (and 52 `bitpull`, which found A2-80; 54 `masksign` was written for A2-81): `signbias`, `extshift`, `nonneg`, `boolcomb`, `threeway`, `negneg`, `signmod`, `bitpull`, `prodsign`, `masksign`. They reach, by SH-2 code and with every function agreeing, the rules the census had never seen: `leftright`, `signform`, `positivediv`, `lessnotequal`, `booleandedup`, `booleanundistribute`, `threewaycomp`, `negatenegate`, `signmod2nopt`, `signmod2opt`, `signform2` (the census was blind to it: the rule returns 0 after changing its input). `famcensus.sh` covers 40 to 54.
+`dagen12.py` has ten new families, 45 to 54 (52 `bitpull` found A2-80; 54 `masksign` was written for A2-81): `signbias`, `extshift`, `nonneg`, `boolcomb`, `threeway`, `negneg`, `signmod`, `bitpull`, `prodsign`, `masksign`. They reach, by SH-2 code and with every function agreeing, the rules the census had never seen: `leftright`, `signform`, `positivediv`, `lessnotequal`, `booleandedup`, `booleanundistribute`, `threewaycomp`, `negatenegate`, `signmod2nopt`, `signmod2opt`, `signform2` (the census was blind to it: the rule returns 0 after changing its input). `famcensus.sh` covers 40 to 54.
 
 **The engine's reading of a text** (A2-79): CONCATab is a `Piece<n>` (a `T<n,true>` with a cast of its own); `(uint8)` of a piece of 5 to 7 bytes, which have no C type, is the zero extension. The first version (the target's sign for every size) made two printed-C seeds of the long run `mismatch` (`(uint4)CONCAT11(...)` of the sign-extended word `mov.w` reads: the engine prints the cast to the type of the variable it assigns to, which says nothing of the extension), so sizes with a C type keep the extension by the piece's sign.
 
@@ -11389,7 +11389,7 @@ Own RelWithDebInfo build under the scratch directory (2.5 GB, `-j2`, every run u
 
 ### 6. Vendoring
 
-`python3 -I vendor.py <pinned Ghidra checkout>` on a copy of the vendored directory: exit status 0, the 'vendored 84 library sources, 3 compiler sources, 94 headers, 5 spec files' line, all 56 patches applied; `cpp/`, `processors/` and `sources.cmake` identical to the committed ones (`diff -r` empty). `patches/README.md` and `VENDOR.md` have the row and the pin.
+`python3 -I vendor.py <pinned Ghidra checkout>` on a copy of the vendored directory: exit status 0, the 'vendored 84 library sources, 3 compiler sources, 94 headers, 5 spec files' line, all 55 patches applied; `cpp/`, `processors/` and `sources.cmake` identical to the committed ones (`diff -r` empty). `patches/README.md` and `VENDOR.md` have the row and the pin.
 
 ### 7. The long run (area 2's 'done': the generator on seeds nobody has run)
 
