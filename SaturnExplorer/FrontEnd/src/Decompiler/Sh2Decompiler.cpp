@@ -920,8 +920,35 @@ private:
     // 'stored' is what the words may now come from (origins); 'storedDep' what they then depend on (the return rule's Deps), which is not the
     // same: a value loaded from a free-stack word may come from anything and depends on memory only. Dependences flow by dependences -- built
     // from origins they put every register in a word a callee may have written and hid real inputs behind a "nothing-known" value (A3-66).
+    // (area 3 round 12 fix) What a store may write, as a frame address: whether it may be one (Value::frame), the lowest base of the ones it may be
+    // (kNoBase when one has none), and whether one was built from an address at or above the entry r15 (callerHigh). A word written over keeps the
+    // base of what it held and of what was written, as a join does (Merge): without it a spilled frame address read back after a call that was
+    // handed another one had no base, and the fail-closed tests took it for a possible word of the caller's frame.
+    struct FrameWrite
+    {
+        bool frame;
+        int64_t base;
+        bool high;
+        FrameWrite() : frame(false), base(Value::kNoBase), high(false) {}
+    };
+    static FrameWrite FrameWriteOf(const Value& v)
+    {
+        FrameWrite w;
+        if (!v.Frame()) return w;
+        w.frame = true;
+        w.base = v.Base();
+        w.high = v.kind == Value::Sp ? v.v >= 0 : v.callerHigh;
+        return w;
+    }
+    static void JoinFrameWrite(FrameWrite& into, const FrameWrite& w)
+    {
+        if (!w.frame) return;
+        if (!into.frame) { into = w; return; }
+        into.base = into.base == Value::kNoBase || w.base == Value::kNoBase ? Value::kNoBase : std::min(into.base, w.base);
+        into.high = into.high || w.high;
+    }
     static void Clobber(State& s, uint32_t stored, uint32_t storedDep, int64_t from = INT64_MIN, int64_t to = INT64_MAX, bool spare = false,
-                        const std::vector<int64_t>* exact = nullptr, int64_t reachFrom = INT64_MAX, bool storedFrame = false)
+                        const std::vector<int64_t>* exact = nullptr, int64_t reachFrom = INT64_MAX, const FrameWrite& storedFrame = FrameWrite())
     {
         auto handed = [&](int64_t slot) {
             if (slot + 4 > reachFrom) return true;   // (area 3 round 12 fix, A3-93) a frame address no exact form bounds reaches it
@@ -944,7 +971,18 @@ private:
                 slot.second.carried = was.carried;
                 slot.second.joined = was.Joined();
                 slot.second.keepsR0 = was.KeepsR0();
-                slot.second.frame = was.Frame() || storedFrame;
+                slot.second.frame = was.Frame() || storedFrame.frame;
+                if (slot.second.frame)
+                {
+                    // the base of what it held and of what was written (Merge's rule: a side that is no stack address leaves the other's)
+                    const bool wb = was.Base() != Value::kNoBase;
+                    const bool wStack = was.Frame() || (s.out != 0 && was.kind == Value::Fuzzy && (was.Origins() & (origin::kStack | origin::kMemory)) != 0);
+                    const bool sb = storedFrame.frame && storedFrame.base != Value::kNoBase;
+                    if (wb && sb) slot.second.stackBase = std::min(was.Base(), storedFrame.base);
+                    else if (wb && !storedFrame.frame) slot.second.stackBase = was.Base();
+                    else if (sb && !wStack) slot.second.stackBase = storedFrame.base;
+                    slot.second.callerHigh = (was.kind == Value::Fuzzy && was.callerHigh) || (was.kind == Value::Sp && was.v >= 0) || storedFrame.high;
+                }
                 slot.second.hole = hole;
                 slot.second.exposedAt = exposedAt;
             }
@@ -978,7 +1016,7 @@ private:
     // Keeps in 'into' what both states agree on, the rest as its origins; true when 'into' changed.
     // 'b' joined into 'a' (the engine's MULTIEQUAL of two paths, or the returns' values at a common exit): what both agree on, the rest as its
     // origins and dependences, made by a join (Value::kJoin) when the two were made by different ops; true when 'a' changed.
-    static bool Merge(Value& a, const Value& b)
+    static bool Merge(Value& a, const Value& b, uint8_t out = 0)
     {
         if (a == b) return false;
         Deps dep = a.DepsOf();
@@ -1002,10 +1040,14 @@ private:
                        (a.AtOrAboveEntry() && b.AtOrAboveEntry());
         // A frame address joined with a value that is no stack address at all (a null pointer, a loaded pointer: `g(c ? &s : 0)`)
         // is still that address on the path that has one (A3-26): its base stands. A side that may be a stack address
-        // whose base is not known leaves the join without one.
+        // whose base is not known leaves the join without one. (area 3 round 12 fix) "May be a stack address" is the one predicate
+        // (MayBeFrame, with the state's 'out'): the origin bit kStack a loaded word carries once the state escaped is not it.
         {
+            auto maybeFrame = [out](const Value& x) {
+                return x.Frame() || (out != 0 && x.kind == Value::Fuzzy && (x.Origins() & (origin::kStack | origin::kMemory)) != 0);
+            };
             const bool ab = a.Base() != Value::kNoBase, bb = b.Base() != Value::kNoBase;
-            const bool aStack = (a.Origins() & origin::kStack) != 0, bStack = (b.Origins() & origin::kStack) != 0;
+            const bool aStack = maybeFrame(a), bStack = maybeFrame(b);
             if (ab && bb) m.stackBase = std::min(a.Base(), b.Base());
             else if (ab && !bStack) m.stackBase = a.Base();
             else if (bb && !aStack) m.stackBase = b.Base();
@@ -1040,8 +1082,9 @@ private:
             into.ctl |= from.ctl;
             changed = true;
         }
-        auto merge = [&changed](Value& a, const Value& b) {
-            if (Merge(a, b)) changed = true;
+        const uint8_t out = into.out | from.out;
+        auto merge = [&changed, out](Value& a, const Value& b) {
+            if (Merge(a, b, out)) changed = true;
         };
         // A register or temporary absent from either is anything.
         for (auto it = into.vars.begin(); it != into.vars.end();)
@@ -1695,7 +1738,7 @@ private:
                 for (int64_t w = addr.v & ~int64_t(3); w < addr.v + n; w += 4)
                     if (s.slots.count(w) == 0) s.slots[w] = Unwritten(s, w);
             }
-            Clobber(s, v, value.Direct(), addr.v, addr.v + n, false, nullptr, INT64_MAX, value.Frame());
+            Clobber(s, v, value.Direct(), addr.v, addr.v + n, false, nullptr, INT64_MAX, FrameWriteOf(value));
             if (n == 4)
             {
                 Value w = value;
@@ -1732,29 +1775,29 @@ private:
             mHanded |= value.Direct() & kHandedRegs;
         }
         mHanded |= addr.Direct() & kHandedRegs;
-        StoreThrough(s, addr, v, value.Direct(), false, nullptr, INT64_MAX, value.Frame());
+        StoreThrough(s, addr, v, value.Direct(), false, nullptr, INT64_MAX, FrameWriteOf(value));
     }
 
     // Whether a callee's stores into this function's words may write a frame address (area 3 round 12 fix): a register it is handed (the
     // convention's, kConvention, which holds a lent callee's r4-r7 too) and lets out or writes to its caller's frame holds one, or a word it may
     // load and store back does. The word then keeps Value::frame. (Not r8-r14: the model's callee keeps them, and with the frame pointer in r14
     // every saved register's slot became a frame address after the first call.)
-    bool CalleeStoresFrame(const State& s, const CallEffects& e) const
+    FrameWrite CalleeStoresFrame(const State& s, const CallEffects& e) const
     {
+        FrameWrite w;
         const uint32_t bits = e.leaks | e.frameValues;
         for (int r = 0; r < 8; ++r)
-            if ((((bits & kConvention) >> r) & 1u) && Get(s, mReg[r]).Frame()) return true;
+            if (((bits & kConvention) >> r) & 1u) JoinFrameWrite(w, FrameWriteOf(Get(s, mReg[r])));
         if (bits & origin::kMemory)
-            for (const auto& slot : s.slots)
-                if (slot.second.Frame()) return true;
-        return false;
+            for (const auto& slot : s.slots) JoinFrameWrite(w, FrameWriteOf(slot.second));
+        return w;
     }
 
     // A store through an address not known exactly, made here or by a callee, of a value from
     // 'stored': recorded in this function's summary, and over every slot it may hit. An absolute
     // address is taken never to be in the stack, as the engine's own stack analysis takes it.
     void StoreThrough(State& s, const Value& addr, uint32_t stored, uint32_t storedDep, bool spare = false, const std::vector<int64_t>* exact = nullptr,
-                      int64_t reachFrom = INT64_MAX, bool storedFrame = false)
+                      int64_t reachFrom = INT64_MAX, const FrameWrite& storedFrame = FrameWrite())
     {
         const uint32_t o = addr.Origins();
         // Whether the address may be in the stack is asked before the store lets a stack address out: the store that publishes a frame address
