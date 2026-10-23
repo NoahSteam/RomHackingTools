@@ -1,0 +1,31 @@
+name T1 the frame address rebuilt from constants by a binary search on compares (the T bit), then walked down
+asm 06009000
+add #-24,r15
+mov #5,r0
+mov.l r0,@r15
+mov r15,r1
+add #16,r1
+mov.l =0x0600E000,r2
+mov.w =0x0800,r3
+L:
+mov r2,r4
+add r3,r4
+cmp/hs r4,r1
+bf S
+mov r4,r2
+S:
+shlr r3
+mov r3,r0
+cmp/eq #2,r0
+bf L
+mov #4,r3
+M:
+mov.l r3,@-r2
+dt r3
+bf M
+mov.l @r15,r0
+rts
+add #24,r15
+endasm
+args 0 0 0 0
+end

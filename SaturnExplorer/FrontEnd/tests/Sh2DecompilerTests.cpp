@@ -11967,6 +11967,46 @@ void TestArea3Round11Fix()
     }
 }
 
+// ===== Area 3, round 12 review: controls that hold ============================================================================================
+// The round's findings (A3-89 to A3-91, Docs/Decompiler/REVIEW_LEDGER.md) are open and have no pin here (a pin of a wrong text would fail the
+// suite). What the review checked and found right is pinned, so a fix of the findings cannot lose it: the probe reads the storesBelow of a
+// callee it walks through a tail jump or a call to a lent fill-backwards function, and of an unlent captured callee that fills backwards itself.
+void TestArea3Round12()
+{
+    Sh2Decompiler d(gConfig);
+    uint64_t serial = 120000;
+    const uint32_t base = 0x06009000u;
+    // The functions sit at 0x40-byte slots from base; 'lendFrom' is the slot of the first one lent (the ones after it are lent too, deepest
+    // first). The entry's text must read the local (a frame alias), not the 5 stored before the call.
+    auto probe = [&](const char* name, std::vector<std::vector<uint16_t>> fns, size_t lendFrom) {
+        std::vector<uint16_t> words;
+        for (auto& f : fns)
+        {
+            f.resize(32, 0x0009);
+            words.insert(words.end(), f.begin(), f.end());
+        }
+        const CallFixture f = { name, base, std::move(words) };
+        auto snap = CallSnapshot(f, ++serial);
+        DecompileRequest q = Request(base);
+        for (size_t i = fns.size(); i-- > lendFrom;)
+        {
+            DecompileRequest cq = Request(base + 0x40u * static_cast<uint32_t>(i));
+            cq.prototypes = q.prototypes;
+            const DecompileResult c = d.Decompile(snap, cq);
+            CHECK(c.status == DecompileStatus::Ok && c.prototype.known);
+            q.prototypes.emplace_back(base + 0x40u * static_cast<uint32_t>(i), c.prototype);
+        }
+        const DecompileResult r = d.Decompile(snap, q);
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok && !r.prototype.known);   // the entry calls a function with no lent signature: withheld
+        CHECK(Has(r.Text(), "axStack") && !Has(r.Text(), "return 5;"));
+    };
+    const std::vector<uint16_t> caller = { 0x082A, 0x7FE8, 0xE005, 0x2F02, 0x64F3, 0x7410, 0xE304, 0xD104, 0x410B, 0x0009, 0x60F2, 0x7F18, 0x482A, 0x000B, 0x0009, 0x0009, 0x0600, 0x9040 };
+    probe("round 12 control: unlent (reads r3) callee fills backwards itself", { caller, { 0x6133, 0x2416, 0x4110, 0x8BFC, 0x000B, 0x0009 } }, 2);
+    probe("round 12 control: unlent callee tail-jumps to a lent fill-backwards function", { caller, { 0x6233, 0xD101, 0x412B, 0x0009, 0x0600, 0x9080 }, { 0xE104, 0x2416, 0x4110, 0x8BFC, 0x000B, 0x0009 } }, 2);
+    probe("round 12 control: unlent callee calls a lent fill-backwards function", { caller, { 0x4F22, 0x6233, 0xD102, 0x410B, 0x0009, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9080 }, { 0xE104, 0x2416, 0x4110, 0x8BFC, 0x000B, 0x0009 } }, 2);
+}
+
 // ===== A3-65 (P1): a copy of r15 walked down by pre-decrement stores ===========================================================================
 // `*--p = v` over a local array compiles to a copy of r15 (or of the frame pointer r14), moved to the top of the array and walked down by
 // `mov.l Rm,@-Rn`. The engine's alias analysis (AliasChecker, upstream's) takes a pointer into the frame to reach only what lies at or above its base,
@@ -12432,6 +12472,7 @@ int main(int argc, char** argv)
         RUN(TestArea3HiddenInputFuzz());
         RUN(TestArea3Round11());
         RUN(TestArea3Round11Fix());
+        RUN(TestArea3Round12());
         RUN(TestArea2Round8());
         RUN(TestArea2Round9());
         RUN(TestArea2Round10());

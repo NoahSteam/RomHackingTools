@@ -73,5 +73,6 @@ for b in o.split('\n====  ')[1:]:
         stale+=1; staleLent+=lent
         byc[(re.search(r'chan=(\w+)',name).group(1),'LENT' if lent else 'withheld')]+=1
         print('STALE','LENT' if lent else 'withheld',name,'text',ent[0],'run',hex(r0))
-print('programs',tot,'lent',lentc,'walk reaches the sentinel',reach,'stale',stale,'stale lent',staleLent)
+ctl=sum(1 for b in o.split('\n====  ')[1:] if 'chan=control' in b.split('\n')[0])
+print('programs',tot,'lent',lentc,'walk reaches the sentinel',reach,'stale',stale,'stale lent',staleLent,'control programs',ctl)
 print(dict(byc))

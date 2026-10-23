@@ -1,0 +1,227 @@
+name S7 gbr: frame address through gbr, walked down
+asm 06009000
+add #-24,r15
+mov #5,r0
+mov.l r0,@r15
+mov r15,r1
+add #16,r1
+ldc r1,gbr
+stc gbr,r2
+mov #4,r3
+L:
+mov.l r3,@-r2
+dt r3
+bf L
+mov.l @r15,r0
+rts
+add #24,r15
+endasm
+args 0 0 0 0
+end
+name S7 vbr: frame address through vbr, walked down
+asm 06009000
+add #-24,r15
+mov #5,r0
+mov.l r0,@r15
+mov r15,r1
+add #16,r1
+ldc r1,vbr
+stc vbr,r2
+mov #4,r3
+L:
+mov.l r3,@-r2
+dt r3
+bf L
+mov.l @r15,r0
+rts
+add #24,r15
+endasm
+args 0 0 0 0
+end
+name S7 mach: frame address through mach, walked down
+asm 06009000
+add #-24,r15
+mov #5,r0
+mov.l r0,@r15
+mov r15,r1
+add #16,r1
+lds r1,mach
+sts mach,r2
+mov #4,r3
+L:
+mov.l r3,@-r2
+dt r3
+bf L
+mov.l @r15,r0
+rts
+add #24,r15
+endasm
+args 0 0 0 0
+end
+name S7 macl: frame address through macl, walked down
+asm 06009000
+add #-24,r15
+mov #5,r0
+mov.l r0,@r15
+mov r15,r1
+add #16,r1
+lds r1,macl
+sts macl,r2
+mov #4,r3
+L:
+mov.l r3,@-r2
+dt r3
+bf L
+mov.l @r15,r0
+rts
+add #24,r15
+endasm
+args 0 0 0 0
+end
+name S7 pr: frame address through pr, walked down
+asm 06009000
+add #-24,r15
+mov #5,r0
+mov.l r0,@r15
+mov r15,r1
+add #16,r1
+lds r1,pr
+sts pr,r2
+mov #4,r3
+L:
+mov.l r3,@-r2
+dt r3
+bf L
+mov.l @r15,r0
+rts
+add #24,r15
+endasm
+args 0 0 0 0
+end
+name S7 sr: frame address through sr, walked down
+asm 06009000
+add #-24,r15
+mov #5,r0
+mov.l r0,@r15
+mov r15,r1
+add #16,r1
+ldc r1,sr
+stc sr,r2
+mov #4,r3
+L:
+mov.l r3,@-r2
+dt r3
+bf L
+mov.l @r15,r0
+rts
+add #24,r15
+endasm
+args 0 0 0 0
+end
+name S7 dmul: frame address through dmul, walked down
+asm 06009000
+add #-24,r15
+mov #5,r0
+mov.l r0,@r15
+mov r15,r1
+add #16,r1
+mov #1,r3
+dmulu.l r1,r3
+sts macl,r2
+mov #4,r3
+L:
+mov.l r3,@-r2
+dt r3
+bf L
+mov.l @r15,r0
+rts
+add #24,r15
+endasm
+args 0 0 0 0
+end
+name S7 mull: frame address through mull, walked down
+asm 06009000
+add #-24,r15
+mov #5,r0
+mov.l r0,@r15
+mov r15,r1
+add #16,r1
+mov #1,r3
+mul.l r1,r3
+sts macl,r2
+mov #4,r3
+L:
+mov.l r3,@-r2
+dt r3
+bf L
+mov.l @r15,r0
+rts
+add #24,r15
+endasm
+args 0 0 0 0
+end
+name S7 addc: frame address through addc, walked down
+asm 06009000
+add #-24,r15
+mov #5,r0
+mov.l r0,@r15
+mov r15,r1
+add #16,r1
+clrt
+mov #0,r3
+addc r3,r1
+mov r1,r2
+mov #4,r3
+L:
+mov.l r3,@-r2
+dt r3
+bf L
+mov.l @r15,r0
+rts
+add #24,r15
+endasm
+args 0 0 0 0
+end
+name S7 subc: frame address through subc, walked down
+asm 06009000
+add #-24,r15
+mov #5,r0
+mov.l r0,@r15
+mov r15,r1
+add #16,r1
+clrt
+mov #0,r3
+subc r3,r1
+mov r1,r2
+mov #4,r3
+L:
+mov.l r3,@-r2
+dt r3
+bf L
+mov.l @r15,r0
+rts
+add #24,r15
+endasm
+args 0 0 0 0
+end
+name S7 div1: frame address through div1, walked down
+asm 06009000
+add #-24,r15
+mov #5,r0
+mov.l r0,@r15
+mov r15,r1
+add #16,r1
+mov r1,r2
+mov #0,r3
+div0u
+mov #4,r3
+L:
+mov.l r3,@-r2
+dt r3
+bf L
+mov.l @r15,r0
+rts
+add #24,r15
+endasm
+args 0 0 0 0
+end

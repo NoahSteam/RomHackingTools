@@ -131,7 +131,7 @@ endasm
 lend 06009040
 args 0 0 0 0
 end
-name R8 r8: g moves r4 into r8 (callee-saved by the default model)
+name R10 r10: g moves r4 into r10 (callee-saved by the default model)
 asm 06009000
 .word 0x082A
 add #-24,r15
@@ -142,8 +142,7 @@ add #16,r4
 mov.l =0x06009040,r1
 jsr @r1
 nop
-mov r8,r2
-mov r2,r2
+mov r10,r2
 mov #4,r3
 L:
 mov.l r3,@-r2
@@ -158,7 +157,7 @@ endasm
 
 asm 06009040
 rts
-mov r4,r8
+mov r4,r10
 endasm
 lend 06009040
 args 0 0 0 0

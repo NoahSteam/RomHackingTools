@@ -1,0 +1,45 @@
+name P1a a push below the locals is overwritten by a laundered walk down from a local; the pop reads it
+asm 06009000
+add #-16,r15
+mov #5,r0
+mov.l r0,@r15
+mov.l r14,@-r15
+mov #7,r14
+mov r15,r1
+add #20,r1
+swap.w r1,r1
+swap.w r1,r1
+mov #6,r3
+L:
+mov.l r3,@-r1
+dt r3
+bf L
+mov.l @r15+,r14
+mov r14,r0
+rts
+add #16,r15
+endasm
+args 0 0 0 0
+end
+name P1b the same, then the sentinel read: the walk stops above the push
+asm 06009000
+add #-16,r15
+mov #5,r0
+mov.l r0,@r15
+mov.l r14,@-r15
+mov r15,r1
+add #20,r1
+swap.w r1,r1
+swap.w r1,r1
+mov #4,r3
+L:
+mov.l r3,@-r1
+dt r3
+bf L
+mov.l @r15+,r14
+mov.l @r15,r0
+rts
+add #16,r15
+endasm
+args 0 0 0 0
+end
