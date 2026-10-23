@@ -2616,7 +2616,7 @@ void TestRangeSetsRound13()
             for (int hi = lo; hi < 8 * sz; ++hi)
             {
                 const uint64_t run = ((hi - lo + 1 >= 64 ? ~0ull : ((1ull << (hi - lo + 1)) - 1)) << lo) & m;
-                for (uint64_t nz : { run, (run | 1) & m, (run | (1ull << (8 * sz - 1))) & m })
+                for (uint64_t nz : std::initializer_list<uint64_t>{ run, (run | 1) & m, (run | (1ull << (8 * sz - 1))) & m })
                 {
                     CircleRange q;
                     ++nzs;
