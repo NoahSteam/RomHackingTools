@@ -209,7 +209,8 @@ void WebPlatform::EndFrame()
     int w = 0, h = 0;
     SDL_GL_GetDrawableSize(mWindow, &w, &h);
     glViewport(0, 0, w, h);
-    glClearColor(0.10f, 0.10f, 0.12f, 1.0f);
+    const ImVec4 bg = sfe::ui::AppBackground();
+    glClearColor(bg.x, bg.y, bg.z, bg.w);
     glClear(GL_COLOR_BUFFER_BIT);
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
     SDL_GL_SwapWindow(mWindow);

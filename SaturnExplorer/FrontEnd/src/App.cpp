@@ -400,6 +400,8 @@ const std::vector<App::PanelInfo>& App::PanelList()
 void App::LoadSettings()
 {
     mSettings.Load();
+    mTheme.Load(mSettings);
+    mTheme.ApplyPending();
     for (const PanelInfo& p : PanelList())
         mPanels.*(p.flag) = mSettings.GetBool("panels", p.key, mPanels.*(p.flag));
     mDataDir      = mSettings.Get("data", "dir", mDataDir);
@@ -443,6 +445,7 @@ void App::SaveSettings()
     for (const PanelInfo& p : PanelList())
         mSettings.SetBool("panels", p.key, mPanels.*(p.flag));
     mSettings.Set("data", "dir", mDataDir);
+    mTheme.Store(mSettings);
     mSettings.SetBool("ui", "tooltips", mShowTooltips);
     mSettings.SetBool("debug", "rewind", mRewindEnabled);
     mSettings.Set("diff", "exe", mDiffExe);
@@ -1379,6 +1382,9 @@ bool App::OpenSavestateBuffer(const uint8_t* data, size_t size)
 
 void App::BuildUI(IPlatform& platform)
 {
+    // Menus may have pushed style overrides. Apply their request next frame, before
+    // any windows, so PopStyleColor cannot restore pieces of the old palette.
+    mTheme.ApplyPending();
     g_tooltipsEnabled = mShowTooltips;   // let the free-function panel helpers see the setting
     PollSearchWorker();   // reap a finished data-search worker before drawing its results
 #ifdef SE_ENABLE_LIVE
@@ -2101,7 +2107,7 @@ void App::DrawStatusBar()
         {
             if (mSource.type == SourceType::Live)
             {
-                ImGui::TextColored(ImVec4(0.31f, 0.78f, 0.47f, 1.0f), "Connected to %s", mSource.label.c_str());
+                ImGui::TextColored(ui::Color(ImVec4(0.31f, 0.78f, 0.47f, 1.0f), ImVec4(0.086f,0.459f,0.235f,1.0f)), "Connected to %s", mSource.label.c_str());
                 ImGui::SetItemTooltip("Endpoint: %s", mSource.endpoint.c_str());
             }
             else if (mSource.type == SourceType::Dump)
@@ -2133,7 +2139,7 @@ void App::DrawStatusBar()
             {
                 ImGui::SameLine(rightX);
                 if (mOperationError && !mbLiveSource)
-                    ImGui::TextColored(ImVec4(0.90f, 0.36f, 0.36f, 1.0f), "%s", right);
+                    ImGui::TextColored(ui::Color(ImVec4(0.90f, 0.36f, 0.36f, 1.0f), ImVec4(0.647f,0.114f,0.141f,1)), "%s", right);
                 else
                     ImGui::TextDisabled("%s", right);
             }
@@ -2653,7 +2659,7 @@ void App::DrawCompareRow()
     if (!mCompareStatus.empty())
     {
         ImGui::PushTextWrapPos(0.0f);
-        ImGui::TextColored(ImVec4(0.9f, 0.7f, 0.35f, 1.0f), "%s", mCompareStatus.c_str());
+        ImGui::TextColored(ui::Color(ImVec4(0.9f, 0.7f, 0.35f, 1.0f), ImVec4(0.50f,0.36f,0.0f,1.0f)), "%s", mCompareStatus.c_str());
         ImGui::PopTextWrapPos();
     }
 #endif
@@ -3509,7 +3515,7 @@ void App::DrawTracepointEditor()
     }
     const std::string err = FormatValidate(mTpEdit.format);
     if (!err.empty())
-        ImGui::TextColored(ImVec4(0.95f, 0.5f, 0.4f, 1.0f), "! %s", err.c_str());
+        ImGui::TextColored(ui::Color(ImVec4(0.95f, 0.5f, 0.4f, 1.0f), ImVec4(0.647f,0.114f,0.141f,1)), "! %s", err.c_str());
     else
     {
         const std::string prev = FormatAgainstContext(mTpEdit.format, mTpEdit.cpu);
@@ -3820,7 +3826,7 @@ void App::DrawBreakpoints()
                 }
                 auto ce = mBpCondErrors.find(b.id);
                 if (ce != mBpCondErrors.end() && !ce->second.empty())
-                    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.4f, 1.0f), "  %s", ce->second.c_str());
+                    ImGui::TextColored(ui::Color(ImVec4(1.0f, 0.5f, 0.4f, 1.0f), ImVec4(0.647f,0.114f,0.141f,1)), "  %s", ce->second.c_str());
             }
             else
             {
@@ -4014,7 +4020,7 @@ void App::DrawRamSearch()
         ImGui::SameLine();
         if (mRamSearch.LastScanPartial())
         {
-            ImGui::TextColored(ImVec4(0.9f, 0.7f, 0.35f, 1.0f), "%s", mRamSearchStatus.c_str());
+            ImGui::TextColored(ui::Color(ImVec4(0.9f, 0.7f, 0.35f, 1.0f), ImVec4(0.50f,0.36f,0.0f,1.0f)), "%s", mRamSearchStatus.c_str());
             if (ImGui::IsItemHovered())
             {
                 std::string tip = "These regions could not be read on the last scan:\n";
@@ -4171,7 +4177,7 @@ void App::DrawAccessLog()
     }
 
     if (mAccessLog.Dropped() > 0)
-        ImGui::TextColored(ImVec4(0.9f, 0.7f, 0.35f, 1.0f),
+        ImGui::TextColored(ui::Color(ImVec4(0.9f, 0.7f, 0.35f, 1.0f), ImVec4(0.50f,0.36f,0.0f,1.0f)),
                            "Log full (%zu rows): %zu hit%s from further instructions not recorded. "
                            "Clear to start over.",
                            mAccessLog.Size(), mAccessLog.Dropped(),
@@ -4590,10 +4596,10 @@ void App::DrawCallStack(IPlatform& platform)
     {
         se_sh2_regs r{};
         const bool haveR = mbHasData && se_get_sh2_regs(mContext, mCallStackCpu, &r) == SE_OK;
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.42f, 0.12f, 0.12f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, ui::Color(ImVec4(0.42f, 0.12f, 0.12f, 1.0f), ImVec4(0.988f, 0.886f, 0.886f, 1.0f)));
         ImGui::BeginChild("bphit", ImVec2(0, ImGui::GetFrameHeightWithSpacing() * 2.0f + 6.0f),
                           ImGuiChildFlags_None);
-        ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.4f, 1.0f), "%s",
+        ImGui::TextColored(ui::Color(ImVec4(1.0f, 0.85f, 0.4f, 1.0f), ImVec4(0.647f, 0.114f, 0.141f, 1.0f)), "%s",
                            sfe::StopBannerLabel(mStepHalt.HaltActive(), mHaltFromStep, mHaltDmaWatch, mHaltUserBp,
                                                 mHaltWatchArmed));
         ImGui::SameLine();
@@ -4683,9 +4689,9 @@ void App::DrawCallStack(IPlatform& platform)
         const float rad = ImGui::GetFontSize() * 0.30f;
         ImVec2 p = ImGui::GetCursorScreenPos();
         ImVec2 ctr(p.x + rad + 2.0f, p.y + ImGui::GetTextLineHeight() * 0.5f);
-        ImU32 col = (c == FrameConfidence::Confirmed) ? IM_COL32(90, 200, 110, 255)
-                  : (c == FrameConfidence::Probable)  ? IM_COL32(225, 195, 70, 255)
-                                                      : IM_COL32(150, 150, 150, 255);
+        ImU32 col = (c == FrameConfidence::Confirmed) ? ui::Color(IM_COL32(90, 200, 110, 255), IM_COL32(22,117,60,255))
+                  : (c == FrameConfidence::Probable)  ? ui::Color(IM_COL32(225, 195, 70, 255), IM_COL32(128,91,0,255))
+                                                      : ui::Color(IM_COL32(150, 150, 150, 255), IM_COL32(89,101,121,255));
         if (c == FrameConfidence::Heuristic) dl->AddCircle(ctr, rad, col, 12, 1.5f);
         else                                 dl->AddCircleFilled(ctr, rad, col, 12);
         ImGui::Dummy(ImVec2(rad * 2.0f + 4.0f, ImGui::GetTextLineHeight()));
@@ -6320,7 +6326,7 @@ void App::DrawLocatePopup()
     ImGui::TextDisabled("Search pattern: %u bytes",
                         mLocateBefore + mLocatePending.length + mLocateAfter);
     if (mDataDir.empty())
-        ImGui::TextColored(ImVec4(0.9f, 0.6f, 0.3f, 1.0f),
+        ImGui::TextColored(ui::Color(ImVec4(0.9f, 0.6f, 0.3f, 1.0f), ImVec4(0.50f,0.36f,0.0f,1)),
                            "No Data Directory set - you'll be asked to pick one.");
     ImGui::Separator();
     if (ImGui::Button("Search"))
@@ -7081,7 +7087,7 @@ void App::DrawSearchOptionsModal(IPlatform& platform)
 
     if (mSearchOptions.paths.empty() && mDataDir.empty())
     {
-        ImGui::TextColored(ImVec4(0.90f, 0.55f, 0.35f, 1.0f),
+        ImGui::TextColored(ui::Color(ImVec4(0.90f, 0.55f, 0.35f, 1.0f), ImVec4(0.50f,0.36f,0.0f,1)),
                            "No files/folders chosen and no game data directory is set.");
     }
 
@@ -7237,8 +7243,8 @@ static void DrawLaunchDefaultBadge()
     ImGui::Dummy(size);
 
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    const ImU32 green = ImGui::GetColorU32(ImVec4(0.30f, 0.85f, 0.40f, 1.0f));
-    const ImU32 bg = ImGui::GetColorU32(ImVec4(0.10f, 0.34f, 0.18f, 0.72f));
+    const ImU32 green = ImGui::GetColorU32(ui::Color(ImVec4(0.30f, 0.85f, 0.40f, 1.0f), ImVec4(22/255.0f,117/255.0f,60/255.0f,1)));
+    const ImU32 bg = ImGui::GetColorU32(ui::Color(ImVec4(0.10f, 0.34f, 0.18f, 0.72f), ImVec4(223/255.0f,241/255.0f,229/255.0f,1)));
     dl->AddRectFilled(p, ImVec2(p.x + size.x, p.y + size.y), bg, 4.0f);
     dl->AddRect(p, ImVec2(p.x + size.x, p.y + size.y), green, 4.0f);
 
@@ -7290,7 +7296,7 @@ static bool DrawLaunchIconButton(const char* id, const char* label, LaunchGlyph 
     if (primary)
     {
         ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.15f, 0.43f, 0.78f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.20f, 0.50f, 0.88f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ui::Color(ImVec4(0.20f, 0.50f, 0.88f, 1.0f), ImVec4(0.12f, 0.40f, 0.72f, 1.0f)));
         ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.11f, 0.36f, 0.69f, 1.0f));
     }
     const bool clicked = ImGui::Button(id, size);
@@ -7305,7 +7311,7 @@ static bool DrawLaunchIconButton(const char* id, const char* label, LaunchGlyph 
     const float startX = min.x + ((max.x - min.x) - totalWidth) * 0.5f;
     const float centerY = (min.y + max.y) * 0.5f;
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    const ImU32 color = ImGui::GetColorU32(ImGuiCol_Text);
+    const ImU32 color = ImGui::GetColorU32(primary ? ImVec4(1,1,1,1) : ImGui::GetStyle().Colors[ImGuiCol_Text]);
     const ImVec2 glyphCenter(startX + glyphSize * 0.5f, centerY);
     if (glyph == LaunchGlyph::Play)
         DrawLaunchPlayGlyph(dl, glyphCenter, glyphSize, color);
@@ -7571,6 +7577,14 @@ void App::DrawToolbar(std::vector<TopBarCommand>& commands)
                 ImGui::Separator();
                 if (ImGui::BeginMenu("Settings"))
                 {
+                    if (ImGui::BeginMenu("Appearance"))
+                    {
+                        if (ImGui::MenuItem("Light", nullptr, mTheme.Mode() == ThemeMode::Light))
+                            DispatchNativeMenuAction(NativeMenuAction(MenuCommand::ThemeLight), commands);
+                        if (ImGui::MenuItem("Dark", nullptr, mTheme.Mode() == ThemeMode::Dark))
+                            DispatchNativeMenuAction(NativeMenuAction(MenuCommand::ThemeDark), commands);
+                        ImGui::EndMenu();
+                    }
                     if (ImGui::MenuItem("Diff...")) commands.emplace_back(TopBarCommandType::OpenDiffSettings);
                     ImGui::SetItemTooltip("Choose the program Compare Memory opens the two marked frames in");
                     if (ImGui::MenuItem("Emulator Paths...")) commands.emplace_back(TopBarCommandType::OpenLaunchSettings);
@@ -7609,7 +7623,15 @@ void App::DrawToolbar(std::vector<TopBarCommand>& commands)
             if (ImGui::Button("Settings")) ImGui::OpenPopup("##settings_menu");
             if (ImGui::BeginPopup("##settings_menu"))
             {
-                if (ImGui::MenuItem("Diff...")) commands.emplace_back(TopBarCommandType::OpenDiffSettings);
+                if (ImGui::BeginMenu("Appearance"))
+                    {
+                        if (ImGui::MenuItem("Light", nullptr, mTheme.Mode() == ThemeMode::Light))
+                            DispatchNativeMenuAction(NativeMenuAction(MenuCommand::ThemeLight), commands);
+                        if (ImGui::MenuItem("Dark", nullptr, mTheme.Mode() == ThemeMode::Dark))
+                            DispatchNativeMenuAction(NativeMenuAction(MenuCommand::ThemeDark), commands);
+                        ImGui::EndMenu();
+                    }
+                    if (ImGui::MenuItem("Diff...")) commands.emplace_back(TopBarCommandType::OpenDiffSettings);
                 ImGui::SetItemTooltip("Choose the program Compare Memory opens the two marked frames in");
                 if (ImGui::MenuItem("Emulator Paths...")) commands.emplace_back(TopBarCommandType::OpenLaunchSettings);
                 if (ImGui::MenuItem("Input Settings..."))
@@ -7649,7 +7671,7 @@ void App::DrawToolbar(std::vector<TopBarCommand>& commands)
         if (info[0] && ImGui::GetCursorPosX() + 20.0f < infoX)
         {
             ImGui::SameLine(infoX);
-            ImGui::TextColored(mbLiveSource ? ImVec4(0.31f, 0.78f, 0.47f, 1.0f)
+            ImGui::TextColored(mbLiveSource ? ui::Color(ImVec4(0.31f, 0.78f, 0.47f, 1.0f), ImVec4(0.086f,0.459f,0.235f,1.0f))
                                             : ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled), "%s", info);
         }
     }
@@ -7923,7 +7945,7 @@ void App::DrawDemoOverlay()
                                    ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoInputs;
     if (ImGui::Begin("##demo_overlay", nullptr, flags))
     {
-        ImGui::TextColored(ImVec4(0.98f, 0.74f, 0.25f, 1.0f), "DEMO  %d/%d  %s",
+        ImGui::TextColored(ui::Color(ImVec4(0.98f, 0.74f, 0.25f, 1.0f), ImVec4(0.50f,0.36f,0.0f,1.0f)), "DEMO  %d/%d  %s",
                            mDemo.Index() + 1, mDemo.Count(), beat->id.c_str());
         if (mDemo.Auto())
             ImGui::Text("auto  %.0f/%.0fs", mDemo.Elapsed(), mDemo.CurrentHold());
@@ -8772,6 +8794,7 @@ NativeMenuState App::BuildNativeMenuState(const TopBarViewModel& s) const
     m.layer[NM_LAYER_COLORCALC] = mRenderOpts.show_color_calculation != 0;
     m.layer[NM_LAYER_SHADOW]   = mRenderOpts.show_shadow_highlight != 0;
 
+    m.lightTheme = mTheme.Mode() == ThemeMode::Light;
     m.tooltips = mShowTooltips;
     m.rewind = mRewindEnabled;
 
@@ -8853,6 +8876,11 @@ void App::DispatchNativeMenuAction(const NativeMenuAction& a, std::vector<TopBar
     {
     // --- View-only toggles the ImGui toolbar performs inline (no command queue). ---
     case MenuCommand::LayerToggle:       ToggleMenuLayer(a.index); break;
+    case MenuCommand::ThemeLight:
+    case MenuCommand::ThemeDark:
+        mTheme.Request(a.command);
+        mSettingsDirty = true;
+        break;
     case MenuCommand::ToggleTooltips:    mShowTooltips = !mShowTooltips; mSettingsDirty = true; break;
     case MenuCommand::ToggleRewind:      mRewindEnabled = !mRewindEnabled; mSettingsDirty = true; break;
     case MenuCommand::DemoToggle:        mDemoReqToggle = true; break;
@@ -8922,7 +8950,7 @@ void App::DrawDiffSettingsModal(IPlatform& platform)
     }
     const std::string exe = CleanDiffExe(mDiffExeEdit);
     if (!exe.empty() && DiffExeMissing(exe))
-        ImGui::TextColored(ImVec4(0.9f, 0.7f, 0.35f, 1.0f), "That file was not found.");
+        ImGui::TextColored(ui::Color(ImVec4(0.9f, 0.7f, 0.35f, 1.0f), ImVec4(0.50f,0.36f,0.0f,1.0f)), "That file was not found.");
 
     ImGui::TextUnformatted("Arguments");
     ImGui::SetNextItemWidth(ImGui::GetFontSize() * 30.0f);
@@ -8931,7 +8959,7 @@ void App::DrawDiffSettingsModal(IPlatform& platform)
                           "Keep them in quotes so paths containing spaces are passed correctly. "
                           "Empty means %s.", kDefaultDiffArgs);
     if (mDiffArgsEdit[0] && !DiffArgsUseFrames(mDiffArgsEdit))
-        ImGui::TextColored(ImVec4(0.9f, 0.7f, 0.35f, 1.0f), "The arguments use neither {a} nor {b}, so the tool is not given the frames.");
+        ImGui::TextColored(ui::Color(ImVec4(0.9f, 0.7f, 0.35f, 1.0f), ImVec4(0.50f,0.36f,0.0f,1.0f)), "The arguments use neither {a} nor {b}, so the tool is not given the frames.");
 
     ImGui::Spacing();
     ImGui::TextDisabled("{a}  Folder with frame A's memory, one .bin file per region");
@@ -9112,16 +9140,16 @@ void App::DrawUpdateModal(IPlatform& platform)
             ImGui::TextUnformatted("Checking GitHub\xe2\x80\xa6");
             break;
         case UpdateChecker::State::UpToDate:
-            ImGui::TextColored(ImVec4(0.35f, 0.80f, 0.45f, 1.0f), "Up to date.");
+            ImGui::TextColored(ui::Color(ImVec4(0.35f, 0.80f, 0.45f, 1.0f), ImVec4(0.086f,0.459f,0.235f,1.0f)), "Up to date.");
             ImGui::TextWrapped("%s", mUpdateChecker.Message().c_str());
             break;
         case UpdateChecker::State::UpdateAvailable:
-            ImGui::TextColored(ImVec4(1.0f, 0.80f, 0.35f, 1.0f), "Update available.");
+            ImGui::TextColored(ui::Color(ImVec4(1.0f, 0.80f, 0.35f, 1.0f), ImVec4(0.50f,0.36f,0.0f,1.0f)), "Update available.");
             ImGui::TextWrapped("%s", mUpdateChecker.Message().c_str());
             break;
         case UpdateChecker::State::Unsupported:
         case UpdateChecker::State::Error:
-            ImGui::TextColored(ImVec4(0.90f, 0.45f, 0.40f, 1.0f), "Couldn't check.");
+            ImGui::TextColored(ui::Color(ImVec4(0.90f, 0.45f, 0.40f, 1.0f), ImVec4(0.65f,0.11f,0.14f,1.0f)), "Couldn't check.");
             ImGui::TextWrapped("%s", mUpdateChecker.Message().c_str());
             break;
         case UpdateChecker::State::Idle:
@@ -9326,11 +9354,11 @@ void App::DrawLaunchSettingsModal(IPlatform& platform)
                                                             emus[i].biosPath);
                 const std::string command = PathBasename(mLaunchEdits[i].exe) +
                                             (preview.empty() ? std::string() : " " + preview);
-                ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.035f, 0.045f, 0.060f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ChildBg, ui::Color(ImVec4(0.035f, 0.045f, 0.060f, 1.0f), ImVec4(0.93f,0.95f,0.97f,1.0f)));
                 if (ImGui::BeginChild("##command_preview", ImVec2(0, mednafen ? 96.0f : 110.0f),
                                       ImGuiChildFlags_Borders))
                 {
-                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.55f, 0.82f, 0.58f, 1.0f));
+                    ImGui::PushStyleColor(ImGuiCol_Text, ui::Color(ImVec4(0.55f, 0.82f, 0.58f, 1.0f), ImVec4(0.22f,0.42f,0.16f,1.0f)));
                     ImGui::TextWrapped("%s", command.empty() ? "(not configured)" : command.c_str());
                     ImGui::PopStyleColor();
                 }
@@ -9374,7 +9402,7 @@ void App::DrawLaunchSettingsModal(IPlatform& platform)
         {
             ImGui::TextUnformatted("Available Variables");
             ImGui::Separator();
-            ImGui::TextColored(ImVec4(0.36f, 0.70f, 1.0f, 1.0f), "{rom}");
+            ImGui::TextColored(ui::Color(ImVec4(0.36f, 0.70f, 1.0f, 1.0f), ImVec4(0.12f,0.30f,0.68f,1.0f)), "{rom}");
             ImGui::SameLine(86.0f);
             ImGui::TextWrapped("Full path to the selected ROM file");
         }
@@ -9389,7 +9417,7 @@ void App::DrawLaunchSettingsModal(IPlatform& platform)
             ImGui::Spacing();
             ImGui::TextDisabled("Example:");
             ImGui::SameLine();
-            ImGui::TextColored(ImVec4(0.55f, 0.82f, 0.58f, 1.0f), "-a -i \"{rom}\"");
+            ImGui::TextColored(ui::Color(ImVec4(0.55f, 0.82f, 0.58f, 1.0f), ImVec4(0.22f,0.42f,0.16f,1.0f)), "-a -i \"{rom}\"");
         }
         ImGui::EndChild();
         ImGui::EndTable();
@@ -9714,7 +9742,7 @@ void App::DrawVramMap()
                 default:                return ui::VramUnused();
                 }
             };
-            const ImU32 kBorderCol = IM_COL32(15, 15, 18, 255);
+            const ImU32 kBorderCol = ui::Color(IM_COL32(15, 15, 18, 255), IM_COL32(104,115,134,255));
 
             // Pre-pass: bytes referenced by active commands, as the union of all
             // classified regions. Regions arrive sorted by address, so a running
@@ -9868,7 +9896,7 @@ void App::DrawVramMap()
 
             // Address labels + faint boundary lines every 128 KiB (0..0x80000).
             const ImU32 kLabelCol = ImGui::GetColorU32(ImGuiCol_TextDisabled);
-            const ImU32 kGridCol  = IM_COL32(255, 255, 255, 18);
+            const ImU32 kGridCol  = ui::Color(IM_COL32(255, 255, 255, 18), IM_COL32(36,43,54,28));
             for (uint32_t addr = 0; addr <= kVramSize; addr += 0x20000)
             {
                 const float y = origin.y + (addr / static_cast<float>(kVramSize)) * mapH;

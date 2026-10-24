@@ -1,3 +1,4 @@
+#include "Theme.h"
 #include "AssemblyPanel.h"
 
 #include "AsmCodeWindow.h"
@@ -31,13 +32,13 @@ uint32_t PageRows(const AsmSpan& span, uint32_t first)
     return left < kPageRows ? left : kPageRows;
 }
 
-// Subtle syntax colours for the dark theme.
-const ImU32 kColAddr  = IM_COL32(150, 150, 160, 255);
-const ImU32 kColBytes = IM_COL32(120, 120, 130, 255);
-const ImU32 kColMnem  = IM_COL32(120, 200, 235, 255);   // cyan-ish
-const ImU32 kColCmt   = IM_COL32(110, 130, 110, 255);   // the operand palette: Sh2Operands.cpp
-const ImU32 kColPcRow = IM_COL32(60, 90, 60, 110);      // current-PC row tint
-const ImU32 kColBpHitRow = IM_COL32(150, 45, 45, 110);  // faint red: breakpoint-hit row
+// Resolve syntax colors per draw so existing pages follow live theme switches.
+ImU32 kColAddr() { return ui::Color(IM_COL32(150, 150, 160, 255), IM_COL32(89,101,121,255)); }
+ImU32 kColBytes() { return ui::Color(IM_COL32(120, 120, 130, 255), IM_COL32(89,101,121,255)); }
+ImU32 kColMnem() { return ui::Color(IM_COL32(120, 200, 235, 255), IM_COL32(8,100,130,255)); }   // cyan-ish
+ImU32 kColCmt() { return ui::Color(IM_COL32(110, 130, 110, 255), IM_COL32(74,100,74,255)); }   // the operand palette: Sh2Operands.cpp
+ImU32 kColPcRow() { return ui::Color(IM_COL32(60, 90, 60, 110), IM_COL32(150,210,165,110)); }      // current-PC row tint
+ImU32 kColBpHitRow() { return ui::Color(IM_COL32(150, 45, 45, 110), IM_COL32(235,150,150,110)); }  // faint red: breakpoint-hit row
 
 // Resolve a memory operand's effective address + a natural watch type, from the
 // disassembled instruction text + current registers. Returns false when the
@@ -335,8 +336,8 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
             const bool isBpHit = mBpStopActive && mCpu == mBpStopCpu && ln.addr == mBpStopPc;
             ImGui::TableNextRow();
             // A breakpoint halt tints the hit row faint red; otherwise the live PC row is green.
-            if (isBpHit)   ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, kColBpHitRow);
-            else if (isPc) ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, kColPcRow);
+            if (isBpHit)   ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, kColBpHitRow());
+            else if (isPc) ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, kColPcRow());
             ImGui::PushID((int)ln.addr);
 
             // A context menu belongs to the instruction row, not just its final Comment
@@ -369,13 +370,13 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
             }
             if (tp)   // tracepoint = blue diamond (a distinct SHAPE, not just colour)
             {
-                const ImU32 c = tp->enabled ? IM_COL32(90, 160, 240, 255) : IM_COL32(95, 115, 140, 255);
+                const ImU32 c = tp->enabled ? ui::Color(IM_COL32(90, 160, 240, 255), IM_COL32(30,100,180,255)) : IM_COL32(95, 115, 140, 255);
                 const float x = p.x + 17, r = 5.0f;
                 const ImVec2 pts[4] = {{x, cy - r}, {x + r, cy}, {x, cy + r}, {x - r, cy}};
                 dl->AddConvexPolyFilled(pts, 4, c);
             }
             if (isPc)
-                dl->AddText(ImVec2(p.x + 26, p.y), IM_COL32(230, 230, 90, 255), ">");
+                dl->AddText(ImVec2(p.x + 26, p.y), ui::Color(IM_COL32(230, 230, 90, 255), IM_COL32(128,91,0,255)), ">");
             // Left-click toggles a breakpoint (the common action); tracepoints toggle from
             // the right-click menu so the two don't fight over the same click.
             if (ImGui::InvisibleButton("g", ImVec2(34, h)) && ln.readable)
@@ -400,7 +401,7 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
             {
                 const bool rowSel = mHasSel && ln.addr >= mSelLoAddr && ln.addr <= mSelHiAddr;
                 char al[16]; std::snprintf(al, sizeof(al), "%08X", ln.addr);
-                ImGui::PushStyleColor(ImGuiCol_Text, kColAddr);
+                ImGui::PushStyleColor(ImGuiCol_Text, kColAddr());
                 if (ImGui::Selectable(al, rowSel, ImGuiSelectableFlags_AllowDoubleClick))
                 {
                     if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
@@ -416,11 +417,11 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
             }
             openRowContext();
             ImGui::TableSetColumnIndex(2);
-            if (ln.readable) { ImGui::PushStyleColor(ImGuiCol_Text, kColBytes); ImGui::Text("%04X", ln.op); ImGui::PopStyleColor(); }
+            if (ln.readable) { ImGui::PushStyleColor(ImGuiCol_Text, kColBytes()); ImGui::Text("%04X", ln.op); ImGui::PopStyleColor(); }
             else ImGui::TextDisabled("----");
             openRowContext();
             ImGui::TableSetColumnIndex(3);
-            if (ln.readable) { ImGui::PushStyleColor(ImGuiCol_Text, kColMnem); ImGui::TextUnformatted(ln.ins.Mnemonic.c_str()); ImGui::PopStyleColor(); }
+            if (ln.readable) { ImGui::PushStyleColor(ImGuiCol_Text, kColMnem()); ImGui::TextUnformatted(ln.ins.Mnemonic.c_str()); ImGui::PopStyleColor(); }
             else ImGui::TextDisabled("????");
             openRowContext();
             ImGui::TableSetColumnIndex(4);
@@ -476,7 +477,7 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
                 {
                     const std::string autoCmt = ln.readable ? Sh2Comment(ln.ins, regs, readMem) : std::string();
                     const char* txt = hasUser ? it->second.c_str() : autoCmt.c_str();
-                    ImGui::PushStyleColor(ImGuiCol_Text, hasUser ? IM_COL32(190, 185, 140, 255) : kColCmt);
+                    ImGui::PushStyleColor(ImGuiCol_Text, hasUser ? ui::Color(IM_COL32(190, 185, 140, 255), IM_COL32(112,89,25,255)) : kColCmt());
                     ImGui::TextUnformatted(txt[0] ? txt : " ");
                     ImGui::PopStyleColor();
                     openRowContext();

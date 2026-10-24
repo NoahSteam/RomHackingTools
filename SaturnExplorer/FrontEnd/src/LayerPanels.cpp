@@ -1,3 +1,4 @@
+#include "Theme.h"
 #include "LayerPanels.h"
 
 #include <cstdio>
@@ -195,8 +196,8 @@ void LayerPanels::DrawToolbar(const LayerPanelDesc& desc, const LayerPanelFrame&
     const View& view = mViews[desc.id];
     if (!view.status.empty())
     {
-        const ImVec4 tint = view.statusError ? ImVec4(0.90f, 0.45f, 0.40f, 1.0f)
-                                             : ImVec4(0.55f, 0.85f, 0.55f, 1.0f);
+        const ImVec4 tint = view.statusError ? ui::Color(ImVec4(0.90f, 0.45f, 0.40f, 1.0f), ImVec4(0.647f,0.114f,0.141f,1))
+                                             : ui::Color(ImVec4(0.55f, 0.85f, 0.55f, 1.0f), ImVec4(0.086f,0.459f,0.235f,1));
         ImGui::PushStyleColor(ImGuiCol_Text, tint);
         ImGui::TextWrapped("%s", view.status.c_str());
         ImGui::PopStyleColor();

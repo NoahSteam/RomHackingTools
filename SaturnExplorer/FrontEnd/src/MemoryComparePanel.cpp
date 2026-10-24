@@ -1,3 +1,4 @@
+#include "Theme.h"
 #include "MemoryComparePanel.h"
 
 #include <algorithm>
@@ -13,12 +14,12 @@ namespace sfe
 
 namespace
 {
-const ImU32 kColAddr   = IM_COL32(150, 150, 160, 255);
-const ImU32 kColByte   = IM_COL32(210, 210, 215, 255);
-const ImU32 kColDim    = IM_COL32(110, 110, 120, 255);   // bytes in rows shown only as context
-const ImU32 kColHot    = IM_COL32(255, 255, 255, 255);   // a changed byte
-const ImU32 kColSel    = IM_COL32(70, 110, 90, 170);
-const ImU32 kColHover  = IM_COL32(80, 90, 110, 110);
+ImU32 kColAddr() { return ui::Color(IM_COL32(150, 150, 160, 255), IM_COL32(89,101,121,255)); }
+ImU32 kColByte() { return ui::Color(IM_COL32(210, 210, 215, 255), IM_COL32(36,43,54,255)); }
+ImU32 kColDim() { return ui::Color(IM_COL32(110, 110, 120, 255), IM_COL32(89,101,121,255)); }   // bytes in rows shown only as context
+ImU32 kColHot() { return ui::Color(IM_COL32(255, 255, 255, 255), IM_COL32(105,45,0,255)); }   // a changed byte
+ImU32 kColSel() { return ui::Color(IM_COL32(70, 110, 90, 170), IM_COL32(177,220,224,210)); }
+ImU32 kColHover() { return ui::Color(IM_COL32(80, 90, 110, 110), IM_COL32(150,170,195,65)); }
 // Side colours: A is the baseline (blue), B the comparison (orange). The same two tint the
 // changed bytes in their own columns and the card titles, so a glance says which side is which.
 const ImU32  kTint[2]  = { CompareSideColor(0, 160), CompareSideColor(1, 160) };   // a changed byte, per side
@@ -64,7 +65,7 @@ std::string FormatTime(uint64_t frame)
 
 ImU32 ByteColor(const DiffRow& r, int k)
 {
-    return (r.changedMask & (1u << k)) ? kColHot : (r.isContext ? kColDim : kColByte);
+    return (r.changedMask & (1u << k)) ? kColHot() : (r.isContext ? kColDim() : kColByte());
 }
 
 // Address label for a row. Bus-addressed regions show the address the rest of the app uses; an
@@ -401,7 +402,7 @@ void MemoryComparePanel::DrawCards(const DiffResult& diff)
         if (!attached)
         {
             ImGui::SameLine();
-            ImGui::TextColored(ImVec4(0.85f, 0.65f, 0.3f, 1.0f), "[detached]");
+            ImGui::TextColored(ui::Color(ImVec4(0.85f, 0.65f, 0.3f, 1.0f), ImVec4(0.50f,0.36f,0.0f,1)), "[detached]");
             if (ImGui::IsItemHovered())
                 ImGui::SetTooltip("This frame is no longer in the rewind history. The snapshot is kept\n"
                                   "and still compares, but the timeline cannot go to it.");
@@ -574,10 +575,10 @@ void MemoryComparePanel::DrawGrid(const DiffResult& diff)
                 if (line.kind == Line::Header)
                 {
                     ImGui::TableSetColumnIndex(0);
-                    ImGui::TextColored(ImVec4(0.8f, 0.85f, 0.95f, 1.0f), "%s", Traits(line.region).name);
+                    ImGui::TextColored(ui::Color(ImVec4(0.8f, 0.85f, 0.95f, 1.0f), ImVec4(0.14f,0.17f,0.21f,1.0f)), "%s", Traits(line.region).name);
                     ImGui::TableSetColumnIndex(1);
                     ImGui::TextDisabled("%s changed bytes", Group(line.count).c_str());
-                    ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, IM_COL32(60, 70, 90, 90));
+                    ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, ui::Color(IM_COL32(60, 70, 90, 90), IM_COL32(233,237,242,255)));
                     continue;
                 }
                 if (line.kind == Line::Gap)
@@ -592,7 +593,7 @@ void MemoryComparePanel::DrawGrid(const DiffResult& diff)
                 ImGui::PushID(li);
 
                 ImGui::TableSetColumnIndex(0);
-                ImGui::PushStyleColor(ImGuiCol_Text, kColAddr);
+                ImGui::PushStyleColor(ImGuiCol_Text, kColAddr());
                 ImGui::TextUnformatted(RowLabel(r.ref).c_str());
                 ImGui::PopStyleColor();
 
@@ -635,8 +636,8 @@ void MemoryComparePanel::DrawGrid(const DiffResult& diff)
                         const ImVec2 bp(p.x + k * gm.byteW, p.y);
                         const ImVec2 be(bp.x + gm.byteW - 1.0f, bp.y + lineH);
                         if (r.changedMask & (1u << k)) dl->AddRectFilled(bp, be, kTint[side]);
-                        if (InSelection(r.ref.id, off)) dl->AddRectFilled(bp, be, kColSel);
-                        else if (k == hovByte)          dl->AddRectFilled(bp, be, kColHover);
+                        if (InSelection(r.ref.id, off)) dl->AddRectFilled(bp, be, kColSel());
+                        else if (k == hovByte)          dl->AddRectFilled(bp, be, kColHover());
                         const char digits[2] = { kHex[bytes[off] >> 4], kHex[bytes[off] & 15] };
                         dl->AddText(ImVec2(bp.x + kByteGap * 0.5f, bp.y), ByteColor(r, k), digits, digits + 2);
                     }

@@ -1,3 +1,4 @@
+#include "Theme.h"
 #include "ControllerPanel.h"
 
 #include <algorithm>
@@ -511,8 +512,8 @@ void ControllerPanel::DrawToolbar(bool connected)
     ImGui::EndDisabled();
 
     ImGui::SameLine();
-    ImGui::TextColored(connected ? ImVec4(0.35f, 0.86f, 0.46f, 1.0f)
-                                 : ImVec4(0.92f, 0.38f, 0.34f, 1.0f),
+    ImGui::TextColored(connected ? ui::Color(ImVec4(0.35f, 0.86f, 0.46f, 1.0f), ImVec4(0.086f,0.459f,0.235f,1))
+                                 : ui::Color(ImVec4(0.92f, 0.38f, 0.34f, 1.0f), ImVec4(0.647f,0.114f,0.141f,1)),
                        "%s", connected ? "Connected" : "Disconnected");
     ImGui::Separator();
 }

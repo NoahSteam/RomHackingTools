@@ -100,3 +100,34 @@ UpdateChecker's full network/shutdown behavior was not dynamically verified here
 [Architecture](../ARCHITECTURE.md), [data flow](../DATA_FLOW.md), [build](../../../BUILD.md),
 [existing architecture](../../../ARCHITECTURE.md), [demo scripts](../../../FrontEnd/demo/README.md),
 [debugger](Debugger.md), [graphics](Graphics.md), [state sources](StateSources.md).
+
+## Appearance (inspected on feature/light-theme, 2026-10-24)
+
+`Theme.h/.cpp` owns the shared Dark/Light palettes and base geometry. App owns the requested
+`ThemeMode`, loads `[appearance] theme=light|dark` before the first frame, and saves it through
+the existing retryable Settings path. Missing/invalid values choose Dark. Both ImGui Settings
+entry points and native Windows/macOS menus expose Appearance → Light/Dark through the same
+native action handler. Menu requests apply colors at the next BuildUI entry, before style stacks
+are pushed. `ApplyThemeColors` preserves scaled geometry and fonts; the Windows DPI reset passes
+the active palette back to `ApplyTheme` before scaling once. Custom panel colors resolve per draw
+against an explicit applied-mode value (the application owns one ImGui context). Temporary
+WindowBg overrides cannot change the resolved mode. Game textures and decoded CRAM colors remain unchanged.
+macOS updates NSApp appearance; the OS still controls system-wide menu-bar appearance. Windows
+native chrome uses its existing system appearance. Browser preferences use the existing Settings
+filesystem path; persistence across browser reloads is not established by this implementation.
+
+`SaturnExplorerThemeTests` covers parsing/fallback, repeated palette switches, stable scaled
+geometry, DPI resets and preserved graphics category/selection colors. Native menu/chrome visual
+verification still requires the corresponding OS build.
+
+Review follow-up: shared 1px base frame borders in both modes keep geometry stable while making
+light inputs visible. ImGui scales that border on DPI changes. Light borders and muted text meet
+3:1 control-outline and 4.5:1 header-text contrast checks. Log/status/marker palettes and both
+checkerboard paths resolve light colors per draw. Theme parsing accepts mixed case. The renderer
+clear color preserves the pre-theme Dark value; Light uses the shared app background.
+
+`ThemePreference.h` factors App's preference state into a headless-testable component:
+Load/Store map to Settings, Request accepts the two native theme actions without applying colors,
+and ApplyPending updates the palette at startup or the next BuildUI boundary. ThemeTests covers
+these transitions with a Settings object, including persisting a request while the previous
+palette is still active. Disk I/O remains covered separately by SettingsTests.

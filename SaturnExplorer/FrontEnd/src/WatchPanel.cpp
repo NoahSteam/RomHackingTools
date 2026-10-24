@@ -1,3 +1,4 @@
+#include "Theme.h"
 #include "WatchPanel.h"
 
 #include <cstring>
@@ -174,6 +175,7 @@ void WatchPanel::Draw(IMemoryBackend& backend, IExpressionResolver& resolver,
         ImGui::Checkbox("##en", &e.enabled);
 
         // Name (borderless inline edit).
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
         ImGui::TableSetColumnIndex(1);
         ImGui::PushStyleColor(ImGuiCol_FrameBg, IM_COL32(0, 0, 0, 0));
         ImGui::SetNextItemWidth(-FLT_MIN);
@@ -194,6 +196,8 @@ void WatchPanel::Draw(IMemoryBackend& backend, IExpressionResolver& resolver,
             Refresh(backend, resolver);   // reflect the change immediately
         }
         ImGui::PopStyleColor();
+
+        ImGui::PopStyleVar();
 
         // Type (dropdown; commits on selection).
         ImGui::TableSetColumnIndex(3);
@@ -218,7 +222,11 @@ void WatchPanel::Draw(IMemoryBackend& backend, IExpressionResolver& resolver,
         if (row.highlight > 0.0f)
         {
             const int alpha = (int)(row.highlight * 140.0f);
-            const ImU32 col = (row.highlightCol & 0x00FFFFFFu) |
+            const ImU32 base = !ui::IsLight() ? row.highlightCol
+                : row.highlightCol == kUpCol ? IM_COL32(160,210,170,255)
+                : row.highlightCol == kDownCol ? IM_COL32(235,175,175,255)
+                : IM_COL32(230,210,140,255);
+            const ImU32 col = (base & 0x00FFFFFFu) |
                               ((alpha < 0 ? 0 : alpha) << 24);
             ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, col);
         }
@@ -228,13 +236,13 @@ void WatchPanel::Draw(IMemoryBackend& backend, IExpressionResolver& resolver,
         }
         else if (!row.resolved)
         {
-            ImGui::TextColored(ImVec4(0.85f, 0.4f, 0.4f, 1.0f), "Invalid address");
+            ImGui::TextColored(ui::Color(ImVec4(0.85f, 0.4f, 0.4f, 1.0f), ImVec4(0.647f,0.114f,0.141f,1)), "Invalid address");
             if (ImGui::IsItemHovered() && !row.error.empty())
                 ImGui::SetTooltip("%s", row.error.c_str());
         }
         else if (!row.hasValue || !row.value.valid)
         {
-            ImGui::TextColored(ImVec4(0.8f, 0.55f, 0.35f, 1.0f), "%s",
+            ImGui::TextColored(ui::Color(ImVec4(0.8f, 0.55f, 0.35f, 1.0f), ImVec4(0.50f,0.36f,0.0f,1)), "%s",
                                row.hasValue ? row.value.text.c_str() : "Unavailable");
         }
         else

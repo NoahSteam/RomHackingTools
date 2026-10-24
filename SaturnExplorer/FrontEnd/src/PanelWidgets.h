@@ -9,6 +9,7 @@
 #include <cstdio>
 
 #include "imgui.h"
+#include "Theme.h"
 // Deliberately without IMGUI_DEFINE_MATH_OPERATORS: imgui_internal.h rejects that define
 // arriving after imgui.h, which is the order every panel .cpp already includes them in.
 #include "imgui_internal.h"
@@ -96,7 +97,7 @@ inline void RowSpritePreview(ImTextureID texture, int imageWidth, int imageHeigh
         for (int x = 0; x < static_cast<int>(size.x); x += 4)
             draw->AddRectFilled(ImVec2(pos.x + x, pos.y + y),
                 ImVec2(pos.x + std::min(float(x + 4), size.x), pos.y + std::min(float(y + 4), size.y)),
-                ((x / 4 + y / 4) & 1) ? IM_COL32(65, 65, 70, 255) : IM_COL32(40, 40, 45, 255));
+                ((x / 4 + y / 4) & 1) ? ui::Color(IM_COL32(65, 65, 70, 255), IM_COL32(255,255,255,255)) : ui::Color(IM_COL32(40, 40, 45, 255), IM_COL32(217,222,229,255)));
     draw->AddImage(texture, pos, ImVec2(pos.x + size.x, pos.y + size.y));
 }
 
@@ -253,7 +254,7 @@ inline void Checkerboard(ImVec2 topLeft, ImVec2 size, float cell)
     // Flood the dark tone once and stamp only the light squares on top: a quad per cell
     // either way is about 2,800 for a 480x360 image at cell = 8, and this halves that for
     // one extra full-rect fill. Every visible panel pays it every frame.
-    dl->AddRectFilled(topLeft, br, IM_COL32(48, 48, 54, 255));
+    dl->AddRectFilled(topLeft, br, ui::Color(IM_COL32(48, 48, 54, 255), IM_COL32(217,222,229,255)));
     const int cols = static_cast<int>(size.x / cell) + 1;
     const int rows = static_cast<int>(size.y / cell) + 1;
     for (int r = 0; r < rows; ++r)
@@ -265,7 +266,7 @@ inline void Checkerboard(ImVec2 topLeft, ImVec2 size, float cell)
             if (b.x > br.x) b.x = br.x;
             if (b.y > br.y) b.y = br.y;
             if (b.x <= a.x || b.y <= a.y) continue;
-            dl->AddRectFilled(a, b, IM_COL32(70, 70, 78, 255));
+            dl->AddRectFilled(a, b, ui::Color(IM_COL32(70, 70, 78, 255), IM_COL32(255,255,255,255)));
         }
     }
 }
