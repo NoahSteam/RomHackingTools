@@ -43,55 +43,43 @@ void Funcdata::opSetOpcode(PcodeOp *op,OpCode opc)
 
 /// SaturnExplorer (patches/0068-engine-deadcode-late-stack-reads.patch): an op that stays reads another
 /// Varnode in place of the given one, or no longer reads it (propagation forwarded the value, a rule found it
-/// equal to something, or used it to simplify the op). The value of a LOAD or STORE folded into the stack frame
-/// that wrote it, or wrote an input of the MULTIEQUALs and INDIRECTs it was made through (markers of where a
-/// value may go, not uses), was used: that op is no frame access gone unread when it is destroyed. An op whose
-/// readers were all destroyed as dead never has its value forwarded. The walk through the markers stops after
-/// 64 of them; every fold is then taken as forwarded (the ledger may miss a loss, never report one that is none).
+/// equal to something, folded it into a constant, or used it to simplify the op). What the old value was
+/// computed from was used: every LOAD or STORE folded into the stack frame that it was made from, through any
+/// op (a MULTIEQUAL or INDIRECT, a PIECE the frame's write went into, a constant folded from it), is no frame
+/// access gone unread when it is destroyed. A frame write whose readers were all destroyed as dead never has its
+/// value forwarded. A marker (MULTIEQUAL, INDIRECT) whose input is replaced forwards only that input's own fold:
+/// heritage relinks markers to other versions. The walk back stops after 64 ops; every fold of this generation
+/// of the function is then taken as forwarded (the ledger may miss a loss, never report one that is none).
 /// \param op is the op that read it, or null when a MULTIEQUAL or INDIRECT read it
 /// \param vn is the Varnode no longer read
 void Funcdata::noteFrameFoldForwarded(const PcodeOp *op,Varnode *vn)
 
 {
-  if (!vn->isWritten()) return;
+  if (!vn->isWritten() || frameFoldsAllRead) return;
   PcodeOp *def = vn->getDef();
-  if (def->isFrameFold()) {
-    def->setFrameFoldRead();
+  if (op == (const PcodeOp *)0) {
+    if (def->isFrameFold())
+      def->setFrameFoldRead();
     return;
   }
-  if (op == (const PcodeOp *)0) return;
-  if (def->code() != CPUI_MULTIEQUAL && def->code() != CPUI_INDIRECT) return;
-  vector<PcodeOp *> markers(1,def);
-  for(size_t k=0;k<markers.size();++k) {
-    PcodeOp *m = markers[k];
-    int4 n = (m->code() == CPUI_INDIRECT) ? 1 : m->numInput();
+  vector<PcodeOp *> walked(1,def);
+  for(size_t k=0;k<walked.size();++k) {
+    PcodeOp *d = walked[k];
+    if (d->isFrameFold())
+      d->setFrameFoldRead();
+    int4 n = (d->code() == CPUI_INDIRECT) ? 1 : d->numInput();
     for(int4 i=0;i<n;++i) {
-      Varnode *in = m->getIn(i);
+      Varnode *in = d->getIn(i);
       if (in == (Varnode *)0 || !in->isWritten()) continue;
-      PcodeOp *d = in->getDef();
-      if (d->isFrameFold()) {
-	d->setFrameFoldRead();
-	continue;
-      }
-      if (d->code() != CPUI_MULTIEQUAL && d->code() != CPUI_INDIRECT) continue;
-      if (find(markers.begin(),markers.end(),d) != markers.end()) continue;
-      if (markers.size() >= 64) {
-	markAllFrameFoldsRead();
+      PcodeOp *e = in->getDef();
+      if (find(walked.begin(),walked.end(),e) != walked.end()) continue;
+      if (walked.size() >= 64) {
+	frameFoldsAllRead = true;
 	return;
       }
-      markers.push_back(d);
+      walked.push_back(e);
     }
   }
-}
-
-/// SaturnExplorer (patches/0068-engine-deadcode-late-stack-reads.patch): the walk of noteFrameFoldForwarded
-/// passed its bound. Every frame fold alive is taken as read, so none is recorded as gone unread.
-void Funcdata::markAllFrameFoldsRead(void)
-
-{
-  for(list<PcodeOp *>::const_iterator iter=beginOpAlive();iter!=endOpAlive();++iter)
-    if ((*iter)->isFrameFold())
-      (*iter)->setFrameFoldRead();
 }
 
 // SaturnExplorer (patches/0054-engine-cached-masks-never-narrower.patch): the cached masks of a Varnode.
@@ -557,7 +545,7 @@ void Funcdata::opDestroy(PcodeOp *op)
   Address accaddr;
   if (!accessesRecorded && isMemoryAccess(op,isstore,accsize,accaddr))
     recordAccessFate(op,isstore,accsize,accaddr,op->isJumptableLookup() ? fate_switch_lookup : fate_dead);
-  else if (!accessesRecorded && op->isFrameFold() && !op->isFrameFoldRead())
+  else if (!accessesRecorded && op->isFrameFold() && !op->isFrameFoldRead() && !frameFoldsAllRead)
     recordFrameEnd(op,fate_frame_unread);	// SaturnExplorer (0068): a frame write going with its value unread
   if (op->getOut() != (Varnode *)0)
     destroyVarnode(op->getOut());

@@ -110,6 +110,7 @@ void Funcdata::clear(void)
   clearJumpTables();
   accessFates.clear();		// SaturnExplorer: they describe the ops just destroyed
   frameEscaped = false;		// SaturnExplorer (0068): ...and the escape found in them
+  frameFoldsAllRead = false;
   flowInsns.clear();		// SaturnExplorer: the next flow records its own
   flowTables.clear();
   flowOps = 0;
