@@ -4462,7 +4462,7 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
             if (w.find("Exceeded maximum repeats") != std::string::npos) add("unsettled", w);
         // The frame half of the conservation law (A3-124, patch 0068): a write folded into the frame that went unread while the
         // code reads a byte of it later. The trace cannot show it (a frame access is no bus access the ledger pairs), the record can.
-        for (const dts::FrameLoss& l : dts::FrameLosses(r))
+        for (const dts::FrameLoss& l : dts::FrameLosses(r, dts::SnapshotWords(snap)))
             add("frame-lost:W" + std::to_string(l.size), "the frame write of " + std::to_string(l.size) + " byte(s) at " + Hex(l.write) +
                     " (frame offset " + Hex(l.offset) + ") went unread, and the read at " + Hex(l.read) + " reads it");
         // The canary (A3-34): the function stored fn.canary in a local that a callee overwrote, and no run returned it. A `return` that
@@ -9368,7 +9368,7 @@ int CheckFrame124Ledger(Sh2Decompiler& d, const std::vector<CCase>& cases)
         const DecompileResult r = d.Decompile(snap, q);
         if (EnvNumber("SE_GENERATED_VERBOSE", 0) >= 2)
             std::printf("%s (frame ledger)\n  words: %s\n%s\n", c.name.c_str(), WordsText(c.words).c_str(), r.Text().c_str());
-        for (const dts::FrameLoss& l : dts::FrameLosses(r))
+        for (const dts::FrameLoss& l : dts::FrameLosses(r, dts::SnapshotWords(snap)))
         {
             ++lost;
             std::printf("FINDING [frame-lost] %s\n  detail: the frame write of %u byte(s) at %s (frame offset %s) went unread, and the read at %s reads it\n"

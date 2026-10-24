@@ -825,7 +825,7 @@ bool ReferenceOk(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, 
     // ...and the frame (A3-124): a write folded into the function's own frame is a variable in both
     // runs, so neither lists it; it is lost when it went unread and the code reads a byte of it later
     // (dts::FrameLosses, from patch 0068's records).
-    for (const dts::FrameLoss& l : dts::FrameLosses(r))
+    for (const dts::FrameLoss& l : dts::FrameLosses(r, dts::SnapshotWords(snap)))
     {
         std::printf("  conservation: the frame write of %u bytes at %08X (frame offset %08X) went unread, and the read at %08X "
                     "reads it\n", unsigned(l.size), l.write, l.offset, l.read);
@@ -4080,7 +4080,7 @@ void TestGameCode()
         }
         // The frame (A3-124): neither run lists a write folded into the frame, so a fold that is then
         // removed before its read was found is checked from the records (patch 0068).
-        for (const dts::FrameLoss& l : dts::FrameLosses(r))
+        for (const dts::FrameLoss& l : dts::FrameLosses(r, dts::SnapshotWords(snap)))
             if (++frameLost <= 20)
                 std::printf("  the frame write of %u bytes at %08X (frame offset %08X) went unread, and the read at %08X reads it, "
                             "in %08X\n", unsigned(l.size), l.write, l.offset, l.read, entry);
@@ -5326,7 +5326,7 @@ void TestEngineEdgePaths()
     CHECK(r.status == DecompileStatus::Ok && !warned(r, "Exceeded maximum restarts"));
     for (const FlowWarning& w : r.flowWarnings) CHECK(w.kind != FlowWarning::JumpTable);
     CHECK(Has(r.Text(), "xRam06070000 = param_2;") && Has(r.Text(), "return param_2;"));
-    CHECK(dts::FrameLosses(r).empty());
+    CHECK(dts::FrameLosses(r, dts::SnapshotWords(snap)).empty());
 
     // Never returns. Flow stops at the call, so the data after it is not reached, and ReturnCheck
     // ends the path there too: the caller's signature is lent. Without the mark, the same caller
@@ -12718,7 +12718,7 @@ void TestA3124Fix()
         CHECK(r.status == DecompileStatus::Ok);
         CHECK(Has(r.Text(), p.text));
         CHECK(!Has(r.Text(), "Heritage AFTER dead removal") && !Has(r.Text(), "Exceeded maximum restarts"));
-        CHECK(dts::FrameLosses(r).empty());
+        CHECK(dts::FrameLosses(r, dts::SnapshotWords(snap)).empty());
         CHECK(ReferenceOk(d, snap, Request(base), r));
         if (p.eval) CHECK(PseudoAgreesWithRun(r, snap, f, inputs, true));
     }
@@ -12753,6 +12753,20 @@ void TestA3124Fix()
         CHECK(dts::FrameLosses(fake).size() == 1);   // another byte overwritten: the lost one is still read
         fake.accessFates.push_back(fate(0x110, AccessFate::FrameUnread, false, 0xFFFFFFF4u, 4, 1, 0));
         CHECK(dts::FrameLosses(fake).empty());       // the read's own value was used by nothing (a pop the engine takes for unaffected)
+        // Once a frame address escaped, a call reads every byte (A3-124's struct, handed to a call), but no callee-saved register's save.
+        DecompileResult call;
+        call.flowSuccessors = { {} };
+        call.accessFates = { fate(0x100, AccessFate::FoldedOrdinary, true, 0xFFFFFFF4u, 1, 0, 0), fate(0x100, AccessFate::FrameUnread, true, 0xFFFFFFF4u, 1, 0, 0) };
+        CallSite cs;
+        cs.insn = 0x104;
+        cs.origBlock = 0;
+        cs.origOrder = 1;
+        call.calls = { cs };
+        CHECK(dts::FrameLosses(call).empty());       // the frame did not escape: the call is handed nothing of it
+        call.frameEscaped = true;
+        CHECK(dts::FrameLosses(call).size() == 1);
+        CHECK(dts::FrameLosses(call, [](uint32_t) { return uint16_t(0x2FE6); }).empty());   // mov.l r14,@-r15: a save
+        CHECK(dts::FrameLosses(call, [](uint32_t) { return uint16_t(0x2F46); }).size() == 1);   // mov.l r4,@-r15: a stack argument
     }
 }
 

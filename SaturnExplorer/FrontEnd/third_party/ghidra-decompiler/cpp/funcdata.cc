@@ -109,6 +109,7 @@ void Funcdata::clear(void)
   clearCallSpecs();
   clearJumpTables();
   accessFates.clear();		// SaturnExplorer: they describe the ops just destroyed
+  frameEscaped = false;		// SaturnExplorer (0068): ...and the escape found in them
   flowInsns.clear();		// SaturnExplorer: the next flow records its own
   flowTables.clear();
   flowOps = 0;
@@ -232,31 +233,22 @@ void Funcdata::recordAccessFold(const PcodeOp *op,const Varnode *vn)
   Address addr;
   if (!isMemoryAccess(op,store,size,addr)) return;
   recordAccessFate(op,store,size,vn->getAddr(),fate_folded_ordinary);
-  // (0068) A flow STORE into the stack frame lives on as a variable write. Its fold is no conservation
-  // unless the value reaches what reads it: the op is flagged, opSetInput notes a reader, and opDestroy
-  // records it again (fate_frame_unread) if it goes with no reader (A3-124's stores, removed before
-  // the read was found, were counted as folded and nothing more).
-  if (op->getTime() < flowOps && vn->getSpace()->getType() == IPTR_SPACEBASE) {
+  // (0068) A flow LOAD or STORE of the stack frame lives on as a variable read or write. Its fold is no
+  // conservation unless the value reaches what reads it: the op is flagged, a reader that stays and is given
+  // another value in its place forwards it (noteFrameFoldForwarded), and opDestroy records the op again
+  // (fate_frame_unread) if it goes with its value never forwarded (A3-124's stores, removed before the read
+  // was found, or with the pieces of a wrong collapse, were counted as folded and nothing more).
+  if (op->getTime() < flowOps && vn->getSpace()->getType() == IPTR_SPACEBASE)
     op->setFrameFold();
-    // A LOAD's output has its readers already; a STORE's COPY output is new.
-    const Varnode *out = op->getOut();
-    if (!store && out != (const Varnode *)0) {
-      for(list<PcodeOp *>::const_iterator iter=out->beginDescend();iter!=out->endDescend();++iter)
-	if ((*iter)->code() != CPUI_MULTIEQUAL && (*iter)->code() != CPUI_INDIRECT) {
-	  op->setFrameFoldRead();
-	  break;
-	}
-    }
-  }
 }
 
 /// SaturnExplorer (patches/0068-engine-deadcode-late-stack-reads.patch): a LOAD or STORE that
 /// RuleLoadVarnode or RuleStoreVarnode folded into the stack frame ends a second time. With
-/// \b fate_frame_unread, the op is being destroyed and no op but a MULTIEQUAL or an INDIRECT (a
-/// marker of where a value may go, not a use) read the value it stored or loaded: a host compares a
-/// write with the reads of the frame the code makes, and one that reads a byte of it later, with no
-/// write of the frame between, read a value the analysis dropped; a read whose value nothing used
-/// (a register pop the engine takes for unaffected) is no such read. With \b fate_frame_removed, the read or write
+/// \b fate_frame_unread, the op is being destroyed and its value was never forwarded (noteFrameFoldForwarded):
+/// every op that read it, directly or through MULTIEQUALs and INDIRECTs, was destroyed as dead. A host
+/// compares a write with the reads of the frame the code makes and the calls that may read it: one that
+/// reads a byte of it later, with no write of the frame between, read a value the analysis dropped; a read
+/// whose value nothing used (a register pop the engine takes for unaffected) is no such read. With \b fate_frame_removed, the read or write
 /// went with an unreachable block, so it is no read of the frame the code makes. The record repeats
 /// the frame offset and size of the fold (the COPY's output may have been replaced since).
 /// \param op is the COPY the LOAD or STORE became, still whole

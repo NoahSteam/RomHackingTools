@@ -19,7 +19,7 @@
  * Modified for SaturnExplorer: once the frame escapes, a STORE through a pointer not proved to be no frame address is guarded (patches/0063-engine-frame-escape-unknown-pointers.patch).
  * Modified for SaturnExplorer: the escape's lowest frame offset is the lowest any query saw, so it never rises, and a pointer a loop steps down from an unbounded index is guarded below its base (patches/0065-engine-frame-escape-whole-frame.patch).
  * Modified for SaturnExplorer: a frame address that is no exact offset from the frame base escapes, unless a loop only steps it up, and the guard of an access through one covers the stack space (patches/0066-engine-frame-escape-inexact.patch).
- * Modified for SaturnExplorer: a read found after dead code ran in its space delays dead code past the pass that found it, as often as needed, failing closed (patches/0068-engine-deadcode-late-stack-reads.patch).
+ * Modified for SaturnExplorer: a read found after dead code ran in its space delays dead code past the pass that found it, as often as needed, failing closed; whether a frame address escaped is kept for a host (patches/0068-engine-deadcode-late-stack-reads.patch).
  */
 #include "heritage.hh"
 #include "funcdata.hh"
@@ -1576,6 +1576,7 @@ void FrameEscape::compute(const Funcdata *fd,AddrSpace *spc,bool preHeritage)
   }
   if (haveLowest && scope != (const ScopeLocal *)0) scope->setFrameFloor(lowest);
   if (leftFlow) markUnknownStores(fd);
+  if (escaped) fd->noteFrameEscaped();	// (0068) for a host's frame ledger: any call may read the frame's locals
 }
 
 /// SaturnExplorer (patches/0063-engine-frame-escape-unknown-pointers.patch): once a frame address has escaped, any pointer whose origin

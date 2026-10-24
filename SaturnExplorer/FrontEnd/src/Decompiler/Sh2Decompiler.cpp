@@ -5549,6 +5549,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         }
         r.calls = Calls(*fd, flow, canonicalOf);
         r.flowSuccessors = flow.successors;
+        r.frameEscaped = fd->hasFrameEscaped();
         if (errors.bad()) throw std::bad_alloc();
         const std::string e = errors.str();
         if (!e.empty()) r.warnings.push_back(e);

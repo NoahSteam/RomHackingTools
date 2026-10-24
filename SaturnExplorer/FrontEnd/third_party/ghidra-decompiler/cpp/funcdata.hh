@@ -53,7 +53,7 @@ enum AccessFate {
   fate_dead,			///< Destroyed as dead, or by any transformation that is not one of the others
   fate_unreachable,		///< Destroyed with the unreachable block it was in
   fate_switch_lookup,		///< The read of a recovered switch's table: the switch stands for it
-  fate_frame_unread,		///< (0068) A read or write folded into the stack frame (recorded fate_folded_ordinary first) whose value no op but a MULTIEQUAL or INDIRECT read before it was destroyed
+  fate_frame_unread,		///< (0068) A read or write folded into the stack frame (recorded fate_folded_ordinary first), destroyed with its value never forwarded
   fate_frame_removed		///< (0068) A read or write folded into the stack frame (recorded fate_folded_ordinary first) that went with an unreachable block
 };
 
@@ -134,6 +134,7 @@ class Funcdata {
   vector<FlowInsn> flowInsns;	///< Every instruction the last flow translated, before any action removed code (SaturnExplorer); cleared with the function
   uintm flowOps = 0;		///< The ops with a lower time were made by the flow; the rest by rules and actions (SaturnExplorer)
   bool accessesRecorded = false;	///< Set while a block is removed: its accesses were recorded before any op was destroyed
+  mutable bool frameEscaped = false;	///< SaturnExplorer (0068): a frame address escaped (FrameEscape) in this generation of the function
 
   VarnodeBank vbank;		///< Container of Varnode objects for \b this function
   PcodeOpBank obank;		///< Container of PcodeOp objects for \b this function
@@ -222,12 +223,15 @@ public:
   void recordAccessFate(const PcodeOp *op,bool store,int4 size,const Address &addr,AccessFate fate);	///< Record how a memory access ended (SaturnExplorer)
   void recordAccessFold(const PcodeOp *op,const Varnode *vn);	///< Record a LOAD or STORE made a direct access of ordinary memory (SaturnExplorer)
   void recordFrameEnd(const PcodeOp *op,AccessFate fate);	///< Record how an access folded into the stack frame ended (SaturnExplorer, 0068)
-  void noteFrameFoldReads(PcodeOp *op);	///< Mark the frame folds an op reads as read (SaturnExplorer, 0068)
-  void noteFrameFoldValueRead(Varnode *vn);	///< Mark the frame folds a value read comes from as read (SaturnExplorer, 0068)
-  void markAllFrameFoldsRead(void);	///< Mark every frame fold read (SaturnExplorer, 0068)
+  void noteFrameFoldForwarded(const PcodeOp *op,Varnode *vn);	///< Mark the frame folds a replaced input came from as forwarded (SaturnExplorer, 0068)
+  void markAllFrameFoldsRead(void);	///< Mark every frame fold forwarded (SaturnExplorer, 0068)
+  /// \brief SaturnExplorer (0068): is the op a MULTIEQUAL or INDIRECT, or not yet given an op-code
+  static bool isMarkerOrUnbuilt(const PcodeOp *op) { return op->getOpcode() == (TypeOp *)0 || op->code() == CPUI_MULTIEQUAL || op->code() == CPUI_INDIRECT; }
   const vector<FlowTable> &getFlowTables(void) const { return flowTables; }	///< Every indirect jump the last flow recovered (SaturnExplorer)
   const vector<FlowInsn> &getFlowInsns(void) const { return flowInsns; }	///< Every instruction the last flow translated (SaturnExplorer)
   const vector<AccessRecord> &getAccessFates(void) const { return accessFates; }	///< Every LOAD and STORE that ended, and how (SaturnExplorer)
+  void noteFrameEscaped(void) const { frameEscaped = true; }	///< SaturnExplorer (0068): FrameEscape found a frame address escaped
+  bool hasFrameEscaped(void) const { return frameEscaped; }	///< SaturnExplorer (0068): did a frame address escape, so a call may read the locals
   void warning(const string &txt,const Address &ad) const;	///< Add a warning comment in the function body
   void warningHeader(const string &txt) const;			///< Add a warning comment as part of the function header
   void startProcessing(void);					///< Start processing for this function

@@ -14,12 +14,19 @@
 // used (a pop of a register the engine takes for unaffected is no use), before folded writes of the
 // frame have covered every byte of it. Only folded writes, exact frame offsets the engine itself
 // placed, cover a byte; a store through a pointer that stayed one, or a call, may not write it.
+// Once a frame address escaped (DecompileResult::frameEscaped), every call reads every byte of the
+// frame too (A3-124's struct was handed to a call and read by nothing else), but for the save of a
+// callee-saved register (a push of r8 to r14, or of a control or system register), which no callee
+// is handed.
 #pragma once
 
+#include "Decompiler/MemorySnapshot.h"
 #include "Decompiler/Sh2Decompiler.h"
 
 #include <algorithm>
 #include <cstdint>
+#include <functional>
+#include <memory>
 #include <vector>
 
 namespace dts
@@ -48,7 +55,26 @@ inline const char* FateLabel(sfe::decomp::AccessFate::Kind k)
     }
 }
 
-inline std::vector<FrameLoss> FrameLosses(const sfe::decomp::DecompileResult& r)
+// The instruction words of a snapshot, big-endian, from whichever region holds the address (0 elsewhere).
+inline std::function<uint16_t(uint32_t)> SnapshotWords(const std::shared_ptr<const sfe::decomp::MemorySnapshot>& snap)
+{
+    return [snap](uint32_t a) -> uint16_t {
+        for (const sfe::decomp::MemoryRegion& g : snap->regions)
+            if (a >= g.base && a - g.base + 1 < g.bytes.size())
+                return static_cast<uint16_t>(g.bytes[a - g.base] << 8 | g.bytes[a - g.base + 1]);
+        return 0;
+    };
+}
+
+// Is the instruction a push of a callee-saved register: mov.l Rm,@-r15 with m 8 to 14, or sts.l / stc.l to @-r15.
+inline bool SavesCalleeRegister(uint16_t w)
+{
+    if ((w & 0xFF0F) == 0x2F06) return ((w >> 4) & 15) >= 8 && ((w >> 4) & 15) <= 14;
+    return w == 0x4F02 || w == 0x4F12 || w == 0x4F22 || w == 0x4F03 || w == 0x4F13 || w == 0x4F23;
+}
+
+// 'wordAt' gives the instruction word at an address (nothing given: no write is taken for a save).
+inline std::vector<FrameLoss> FrameLosses(const sfe::decomp::DecompileResult& r, const std::function<uint16_t(uint32_t)>& wordAt = nullptr)
 {
     using sfe::decomp::AccessFate;
     struct Acc
@@ -59,6 +85,7 @@ inline std::vector<FrameLoss> FrameLosses(const sfe::decomp::DecompileResult& r)
         int64_t lo;     // the frame offset, sign-extended (the stack space wraps at 32 bits)
         int64_t hi;     // one past the last byte
         uint32_t insn;
+        bool call;      // a call that may read every byte of the frame
     };
     // Gone with unreachable code, or (a read) its value used by nothing.
     auto removed = [&](const AccessFate& f) {
@@ -73,8 +100,11 @@ inline std::vector<FrameLoss> FrameLosses(const sfe::decomp::DecompileResult& r)
     {
         if (!f.frame || f.fate != AccessFate::FoldedOrdinary || f.origBlock < 0 || removed(f)) continue;
         const int64_t lo = int64_t(int32_t(f.address));
-        accs.push_back(Acc{ f.origBlock, f.origOrder, f.write, lo, lo + f.size, f.insn });
+        accs.push_back(Acc{ f.origBlock, f.origOrder, f.write, lo, lo + f.size, f.insn, false });
     }
+    if (r.frameEscaped)
+        for (const sfe::decomp::CallSite& c : r.calls)
+            if (c.origBlock >= 0) accs.push_back(Acc{ c.origBlock, c.origOrder, false, INT64_MIN / 2, INT64_MAX / 2, c.insn, true });
     std::sort(accs.begin(), accs.end(), [](const Acc& a, const Acc& b) {
         return a.block != b.block ? a.block < b.block : a.order < b.order;
     });
@@ -97,6 +127,7 @@ inline std::vector<FrameLoss> FrameLosses(const sfe::decomp::DecompileResult& r)
             return m;
         };
         const uint32_t all = w.size == 32 ? 0xFFFFFFFFu : ((1u << w.size) - 1);
+        const bool save = wordAt && SavesCalleeRegister(wordAt(w.insn));
         std::vector<uint32_t> seen(nblocks, 0);   // bytes already followed from a block's start
         struct Item
         {
@@ -116,6 +147,7 @@ inline std::vector<FrameLoss> FrameLosses(const sfe::decomp::DecompileResult& r)
             {
                 const Acc& a = accs[k];
                 if (!it.fromStart && a.order <= w.origOrder) continue;
+                if (a.call && save) continue;
                 const uint32_t m = overlap(a) & live;
                 if (!m) continue;
                 if (!a.write)

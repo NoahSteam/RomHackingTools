@@ -126,7 +126,7 @@ public:
     jumptable_lookup = 0x2000,	///< SaturnExplorer: the LOAD that read a recovered switch's table (the switch now stands for it)
     div_product_wide = 0x4000,	///< SaturnExplorer: the INT_MULT of a division term (RuleDivTermAdd, RuleDivTermAdd2) whose exact product is wider than the multiply
     frame_fold = 0x8000,	///< SaturnExplorer (0068): a flow LOAD or STORE that RuleLoadVarnode or RuleStoreVarnode made a COPY of a stack Varnode
-    frame_fold_read = 0x10000	///< SaturnExplorer (0068): ...whose output an op other than a MULTIEQUAL or an INDIRECT has read
+    frame_fold_read = 0x10000	///< SaturnExplorer (0068): ...whose value an op that stays was given in another form (Funcdata::noteFrameFoldForwarded)
   };
 private:
   TypeOp *opcode;		///< Pointer to class providing behavioral details of the operation

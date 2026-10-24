@@ -371,6 +371,8 @@ struct DecompileResult
     std::vector<Line> lines;
     std::vector<CallSite> calls;                      // the calls, for the ledger's order checks
     std::vector<std::vector<int>> flowSuccessors;     // the flow's basic blocks before any action: each one's successors
+    // A frame address escaped (the engine's FrameEscape, patch 0068): a call may read the function's locals. For the frame ledger.
+    bool frameEscaped = false;
     // How each memory access the flow made that is no longer one in the p-code ended (the engine
     // records it, patch 0017). With the printed accesses above, they account for every LOAD and
     // STORE of the flow: an access of the all-volatile reference run (DecompileRequest::
