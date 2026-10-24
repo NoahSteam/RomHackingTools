@@ -18,6 +18,7 @@
  * Modified for SaturnExplorer: a PcodeOp that cannot be put on the final list is not lost; one that cannot be listed is freed (patches/0032-allocation-failure-order-2.patch).
  * Modified for SaturnExplorer: the backward step of the consume analysis is a function of one op (patches/0054-engine-cached-masks-never-narrower.patch).
  * Modified for SaturnExplorer: the non-zero mask of a signed shift by 64 or more is the sign's fill (patches/0059-engine-range-arithmetic-sound.patch).
+ * Modified for SaturnExplorer: the consume steps of PIECE and INT_LEFT shift by less than 64 (patches/0070-engine-defined-shifts.patch).
  */
 #include "op.hh"
 #include "funcdata.hh"
@@ -886,6 +887,10 @@ bool PcodeOp::getConsumeLocal(int4 slot,uintb outc,uintb &res) const
 	b = outc ^ (a << (sz*8));
       }
     }
+    else if (sz >= sizeof(uintb)) {	// a low piece as wide as the output: every consumed bit is the low input's
+      a = outc;			// (the high one, of no bytes, kept as consumed as it was)
+      b = outc;			// x86's shift by 64 made this 0, the low input consumed nothing, and its code could go
+    }
     else {
       a = outc >> (sz*8);
       b = outc ^ (a << (sz*8));
@@ -941,7 +946,7 @@ bool PcodeOp::getConsumeLocal(int4 slot,uintb outc,uintb &res) const
 	}
       }
       else
-	a = outc >> sa;		// Most cases just do this
+	a = outc >> (sa & 63);	// Most cases just do this (a shift by 64 or more taken modulo 64, as x86 did: more consumed, never less)
       res = a;
     }
     else

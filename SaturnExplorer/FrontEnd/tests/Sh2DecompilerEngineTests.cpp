@@ -726,6 +726,7 @@ struct PullBackTally
 uint64_t PbMask(int size) { return size >= 8 ? ~static_cast<uint64_t>(0) : ((static_cast<uint64_t>(1) << (8 * size)) - 1); }
 int64_t PbSigned(uint64_t v, int size)
 {
+    if (size > 8) size = 8;   // a wider value (the rule check meets 16-byte ones) is read at the 64 bits the model has
     const uint64_t sign = static_cast<uint64_t>(1) << (8 * size - 1);
     return static_cast<int64_t>((v ^ sign) - sign);
 }
@@ -2277,7 +2278,7 @@ uint64_t RcEval(const ghidra::Varnode* vn, const RcEnv& env)
             return shifted.lo & m;
         }
         if (d->code() == CPUI_INT_RIGHT) return b >= static_cast<uint64_t>(8 * sa) ? 0 : a >> b;
-        return static_cast<uint64_t>(PbSigned(a, sa) >> (b >= static_cast<uint64_t>(8 * sa) ? 8 * sa - 1 : b)) & m;
+        return static_cast<uint64_t>(PbSigned(a, sa) >> std::min<uint64_t>(b >= static_cast<uint64_t>(8 * sa) ? 8 * sa - 1 : b, 63)) & m;   // at most 63: the model's 64 bits
     }
     case CPUI_INT_SDIV:
         if (PbSigned(b, sb) == 0) return 0;

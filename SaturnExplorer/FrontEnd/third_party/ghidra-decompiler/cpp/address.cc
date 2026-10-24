@@ -12,6 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified for SaturnExplorer: sign_extend's shifts are defined for every size (patches/0070-engine-defined-shifts.patch).
  */
 #include "address.hh"
 #include "translate.hh"
@@ -998,9 +1000,10 @@ uintb sign_extend(uintb in,int4 sizein,int4 sizeout)
 {
   sizein = (sizein < sizeof(uintb)) ? sizein : sizeof(uintb);
   sizeout = (sizeout < sizeof(uintb)) ? sizeout : sizeof(uintb);
-  intb sval = in;
-  sval <<= (sizeof(intb) - sizein) * 8;
-  uintb res = (uintb)(sval >> (sizeout - sizein) * 8);
+  // The left shift is done unsigned (of a negative value it is undefined in C++14), and a sizeout below sizein, a negative count, is
+  // taken modulo 64 as x86 does: the results are the ones this always gave on x86, now defined everywhere.
+  intb sval = (intb)(in << ((sizeof(intb) - sizein) * 8));
+  uintb res = (uintb)(sval >> (((sizeout - sizein) * 8) & 63));
   res >>= (sizeof(uintb) - sizeout)*8;
   return res;
 }
