@@ -3906,6 +3906,19 @@ int MemoryWidth(uint16_t op)
     }
 }
 
+// (area 3 round 13 fix, A3-113) The scan below takes every `sts.l pr,@-r15` for a function's entry, and a function whose prologue pushes other
+// registers first (`mov.l r14,@-r15 ; ... ; sts.l pr,@-r15`) is entered twice: at its first push, and at the `sts.l pr`, a fragment that pops
+// registers it never pushed and reads them as stack words above its entry (about 40% of the entries of both corpora). The fragments stay in
+// the run (they are code the engine must not get wrong either), but the counts are said for the real entries and the fragments apart: a
+// fragment is an entry whose previous word pushes a register onto r15 (`mov.l Rm,@-r15`, 0x2Fm6).
+bool CorpusFragment(const std::vector<uint8_t>& hw, uint32_t entry)
+{
+    const uint32_t off = entry - 0x06000000u;
+    if (off < 2 || off >= hw.size()) return false;
+    const uint16_t w = static_cast<uint16_t>(hw[off - 2] << 8 | hw[off - 1]);
+    return (w & 0xFF0Fu) == 0x2F06u;
+}
+
 // Real game code, when given: SE_GAME_HWRAM names a 1 MiB high work RAM image (big-endian, as the
 // SH-2 sees it). Every function prologue (sts.l pr,@-r15) is decompiled; the summary says how many
 // succeeded, how long they took, and what the hardware handling found. SE_GAME_OUT, if set, is a
@@ -3938,6 +3951,8 @@ void TestGameCode()
     const std::function<bool(uint32_t)> noneMarked = [](uint32_t) { return false; };
     double total = 0, worst = 0;
     uint32_t worstAt = 0;
+    int nReal = 0, nFragments = 0;   // A3-113: real entries and the fragments (CorpusFragment)
+    double msReal = 0, msFragments = 0;
     // Area 7: the pseudocode-to-assembly mapping over every function (MappingOracle.h).
     dts::MappingAudit mapping;
     const std::string mappingMutate = std::getenv("SE_GAME_MAPPING_MUTATE") ? std::getenv("SE_GAME_MAPPING_MUTATE") : "";
@@ -3959,6 +3974,11 @@ void TestGameCode()
             for (const std::string& l : d.Disassemble(snap, from, 64)) std::printf("    %s\n", l.c_str());
         }
         ++n;
+        {
+            const bool frag = CorpusFragment(hw, entry);
+            ++(frag ? nFragments : nReal);
+            (frag ? msFragments : msReal) += r.elapsedMs;
+        }
         if (r.status == DecompileStatus::Ok) ++ok;
         else if (r.status == DecompileStatus::Failed) ++failed;
         else ++other;
@@ -4141,6 +4161,8 @@ void TestGameCode()
     }
     std::printf("  game code: %d functions, %d ok, %d failed, %d other; %.0f ms total, worst %.1f ms at %08X\n", n, ok,
                 failed, other, total, worst, worstAt);
+    std::printf("  game code entries: %d real (%.0f ms), %d fragments (%.0f ms: an entry after a push of r15, A3-113)\n", nReal, msReal,
+                nFragments, msFragments);
     std::printf("  accesses: %d functions with any, %d direct (volatile), %d through pointers, %d not printed "
                 "exactly once; notes %d, cautions %d\n", withAccesses, direct, pointer, twice, notes, cautions);
     std::printf("  %d instructions with more accesses than they make, %d accesses of another width, %d statements "
@@ -4201,6 +4223,9 @@ void TestGameLending()
     for (uint32_t k = 0; k + 1 < hw.size(); k += 2)
         if (hw[k] == 0x4F && hw[k + 1] == 0x22) entries.push_back(0x06000000u + k);
     const std::vector<uint32_t> prologues = entries;
+    // A3-113: which entries are fragments (CorpusFragment); the callees found below are entries a call names, real ones.
+    std::vector<char> fragment;
+    for (uint32_t e : entries) fragment.push_back(CorpusFragment(hw, e) ? 1 : 0);
     std::map<uint32_t, size_t> index;
     for (size_t i = 0; i < entries.size(); ++i) index[entries[i]] = i;
     auto indexOf = [&](uint32_t a) {
@@ -4221,6 +4246,7 @@ void TestGameLending()
                 const uint32_t canonical = 0x06000000u | (c & 0x000FFFFFu);
                 index[canonical] = entries.size();
                 entries.push_back(canonical);
+                fragment.push_back(0);
             }
     }
     // Callees first: a post-order walk.
@@ -4373,6 +4399,21 @@ void TestGameLending()
     };
     summarize(before, "before");
     summarize(after, "after");
+    // A3-113: the same, the real entries and the fragments apart.
+    for (const auto* rowsLabel : { &before, &after })
+    {
+        int known[2] = { 0, 0 }, count[2] = { 0, 0 };
+        size_t params[2] = { 0, 0 };
+        for (size_t i = 0; i < rowsLabel->size(); ++i)
+        {
+            const int k = fragment[i] ? 1 : 0;
+            ++count[k];
+            known[k] += (*rowsLabel)[i].known;
+            params[k] += (*rowsLabel)[i].known ? (*rowsLabel)[i].params : 0;
+        }
+        std::printf("  [%s] real entries %d: signatures lent %d (%zu parameters); fragments %d: lent %d (%zu parameters)\n",
+                    rowsLabel == &before ? "before" : "after", count[0], known[0], params[0], count[1], known[1], params[1]);
+    }
     // A3-3: the registers the model keeps across a call, changed by a lent function. What each caller of one
     // does with it: reads it as the callee's value (extraout_), or is withheld, never lent on the old value.
     {
@@ -4407,11 +4448,13 @@ void TestGameLending()
         for (const auto& kv : reasons) std::printf("    withheld %5d  %s\n", kv.second, kv.first.c_str());
     }
     int textDiffers = 0, gainedSignature = 0, lostSignature = 0, moreParams = 0, fewerParams = 0, lessExtraout = 0, moreExtraout = 0;
+    int textDiffersReal = 0;
     for (size_t i = 0; i < entries.size(); ++i)
     {
         const Row& b = before[i];
         const Row& a = after[i];
         textDiffers += b.text != a.text;
+        textDiffersReal += b.text != a.text && !fragment[i];
         gainedSignature += !b.known && a.known;
         lostSignature += b.known && !a.known;
         moreParams += a.params > b.params;
@@ -4425,6 +4468,7 @@ void TestGameLending()
     std::printf("  lending the proved effects changes the text of %d functions: %d gain a lent signature, %d lose one; %d gain "
                 "parameters, %d lose some; extraout_r4-7 gone from %d, new in %d\n",
                 textDiffers, gainedSignature, lostSignature, moreParams, fewerParams, lessExtraout, moreExtraout);
+    std::printf("  ...of them %d real entries and %d fragments (A3-113)\n", textDiffersReal, textDiffers - textDiffersReal);
     // A callee found by a call can be an address that holds no function (a computed target the first
     // pass took for constant): the engine reports that as a failed result, in both runs alike. The
     // prologue functions TestGameCode decompiles never fail.
