@@ -54,7 +54,7 @@ void Funcdata::noteGuardRead(const Varnode *vn)
   const Varnode *v = vn;
   for(int4 hops=0;hops<64 && v->isWritten();++hops) {
     const PcodeOp *ind = v->getDef();
-    if (ind->code() != CPUI_INDIRECT || ind->numInput() != 2) return;
+    if (ind->code() != CPUI_INDIRECT || ind->numInput() != 2 || ind->getIn(0) == (Varnode *)0 || ind->getIn(1) == (Varnode *)0) return;
     PcodeOp *iop = PcodeOp::getOpFromConst(ind->getIn(1)->getAddr());
     if (iop == (PcodeOp *)0 || iop->code() != CPUI_STORE) return;
     GuardReadRecord rec;
@@ -106,7 +106,8 @@ void Funcdata::noteFrameFoldForwarded(bool walk,Varnode *vn)
     PcodeOp *d = walked[k];
     if (d->isFrameFold())
       d->setFrameFoldRead();
-    if (d->isFrameFold() && d->code() == CPUI_COPY && d->getIn(0)->getSpace()->getType() == IPTR_SPACEBASE)
+    if (d->isFrameFold() && d->code() == CPUI_COPY && d->numInput() == 1 && d->getIn(0) != (Varnode *)0 &&
+	d->getIn(0)->getSpace()->getType() == IPTR_SPACEBASE)
       noteGuardRead(d->getIn(0));
     int4 n = (d->code() == CPUI_INDIRECT) ? 1 : d->numInput();
     for(int4 i=0;i<n;++i) {
