@@ -8743,7 +8743,8 @@ bool GenEscapeWalkFn(uint64_t seed, CCase& c, std::string& shape)
 //        (the engine takes it for the call's fifth argument); the caller loads the kept pointer and stores below it, to r15 + 4 (A3-104)
 //   stackkeep.<lent|unlent>[.r4r7].<walk|disp>: p = r15 + 20 in the call's first stack argument word with r4-r7 unset (the engine drops it);
 //        g reads its incoming stack word and publishes it in a global; the caller loads the global and stores below it (A3-105); r4r7: p in
-//        r4 as well and r7 set, which the engine prints with no argument at all
+//        r4 as well and r7 set, in escfuzz's frame of four written locals (seed 303 i=469), which the engine prints with no argument at all
+//        when g was decompiled first
 //   reload.<swap2|mask|global>: g spills the address of its caller's outgoing word to a local and reloads it through a laundered copy of r15
 //        (a swap pair, a mask) or through r15 published in a global, and writes through it; the caller reads its word back (A3-106)
 bool GenEscape13Fn(uint64_t seed, CCase& c, std::string& shape)
@@ -8801,22 +8802,59 @@ bool GenEscape13Fn(uint64_t seed, CCase& c, std::string& shape)
     {
         // r4r7: p in r4 too and r7 set, r5 and r6 unset (escfuzz seed 303 i=469): the engine prints the call with no argument at all
         const bool r4r7 = rng.Chance(50);
-        prologue();
-        b.Put(0x61F3);   // mov r15,r1
-        b.Put(0x7114);   // add #20,r1: p
         if (r4r7)
         {
-            b.Put(0x6413);   // mov r1,r4
+            // escfuzz's frame: four locals 1 to 4 at r15 + 0 to 12, p = r15 + 8 in r4 and in the stack word, r7 = 37; the store below p
+            // reaches r15 + 4 (2 by the walk, 1 by the displacement), which is read back
+            b.Put(0x4F22);   // sts.l pr,@-r15
+            b.Put(0x7FF0);   // add #-16,r15
+            for (uint16_t k = 0; k < 4; ++k)
+            {
+                b.Put(static_cast<uint16_t>(0xE001 + k));   // mov #k+1,r0
+                b.Put(static_cast<uint16_t>(0x1F00 + k));   // mov.l r0,@(4k,r15)
+            }
+            b.Put(0x64F3);   // mov r15,r4
+            b.Put(0x7408);   // add #8,r4: p
             b.Put(0xE725);   // mov #37,r7
+            b.Put(0x7FFC);   // add #-4,r15
+            b.Put(0x2F42);   // mov.l r4,@r15
+            call(gOff);
+            b.Put(0x7F04);   // add #4,r15
+            b.Lit(2, kLaunderGlobal);
+            b.Put(0x6222);   // mov.l @r2,r2
+            if (walk)
+            {
+                b.Put(0xE102);   // mov #2,r1
+                b.Put(0x2216);   // L: mov.l r1,@-r2
+                b.Put(0x4110);   //    dt r1
+                b.Put(0x8BFC);   //    bf L
+            }
+            else
+            {
+                b.Put(0x72FC);   // add #-4,r2
+                b.Put(0xE101);   // mov #1,r1
+                b.Put(0x2212);   // mov.l r1,@r2
+            }
+            b.Put(0x50F1);   // mov.l @(4,r15),r0
+            b.Put(0x7F10);   // add #16,r15
+            b.Put(0x4F26);   // lds.l @r15+,pr
+            b.Put(0x000B);
+            b.Put(0x0009);
         }
-        b.Put(0x7FFC);   // add #-4,r15
-        b.Put(0x2F12);   // mov.l r1,@r15: the first stack argument word, r4-r7 unset
-        call(gOff);
-        b.Put(0x7F04);   // add #4,r15
-        b.Lit(2, kLaunderGlobal);
-        b.Put(0x6222);   // mov.l @r2,r2
-        LaunderBelow(b, 2, walk);
-        epilogue(0x50F1);
+        else
+        {
+            prologue();
+            b.Put(0x61F3);   // mov r15,r1
+            b.Put(0x7114);   // add #20,r1: p
+            b.Put(0x7FFC);   // add #-4,r15
+            b.Put(0x2F12);   // mov.l r1,@r15: the first stack argument word, r4-r7 unset
+            call(gOff);
+            b.Put(0x7F04);   // add #4,r15
+            b.Lit(2, kLaunderGlobal);
+            b.Put(0x6222);   // mov.l @r2,r2
+            LaunderBelow(b, 2, walk);
+            epilogue(0x50F1);
+        }
         b.at = gOff / 2;   // g
         if (!lent) hidden();
         b.Put(0x61F2);   // mov.l @r15,r1: its incoming stack word
