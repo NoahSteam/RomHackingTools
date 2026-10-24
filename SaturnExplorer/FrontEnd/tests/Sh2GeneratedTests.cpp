@@ -737,7 +737,12 @@ struct Gen
         }
         else if (kind == LitKind::Ram)
         {
-            l.value = (rng.Chance(75) ? 0x26000000u : 0x06000000u) + 0x2000u + 0x80u * rng.Below(8) + 4u * rng.Below(4);
+            // One draw per statement: the order of the operands of + is unspecified, and GCC and Clang draw them differently (the programs of a
+            // seed then differed between Linux and macOS, and the seed pins failed there). This is GCC's order, so the programs are the ones they were.
+            const uint32_t base = rng.Chance(75) ? 0x26000000u : 0x06000000u;
+            const uint32_t word = rng.Below(4);
+            const uint32_t line = rng.Below(8);
+            l.value = base + 0x2000u + 0x80u * line + 4u * word;
             l.width = rng.Chance(50) ? 4 : rng.Chance(50) ? 2 : 1;
         }
         else if (kind == LitKind::Cache)
@@ -1089,7 +1094,11 @@ struct Gen
     Item MakeSimple(int avoid, bool single, bool allowLit)
     {
         const uint32_t r = rng.Below(100);
-        if (allowLit && r < 12) return MakeLitPtr(6 + static_cast<int>(rng.Below(2)), disc ? PickKind2() : PickKind());
+        if (allowLit && r < 12)
+        {
+            const LitKind kind = disc ? PickKind2() : PickKind();   // before the register: GCC's order of the two arguments (see MakeMac's call)
+            return MakeLitPtr(6 + static_cast<int>(rng.Below(2)), kind);
+        }
         return r < 50 ? MakeAlu(avoid) : MakeMem(avoid, single);
     }
 
@@ -1628,7 +1637,7 @@ struct Gen
             case 'a': f.items.push_back(MakeAlu(-1)); break;
             case 'm': f.items.push_back(MakeMem(-1, false)); break;
             case 's': f.items.push_back(MakeStackMem(-1)); break;
-            case 'l': f.items.push_back(MakeLitPtr(6 + static_cast<int>(rng.Below(2)), PickKind2())); break;
+            case 'l': { const LitKind kind = PickKind2(); f.items.push_back(MakeLitPtr(6 + static_cast<int>(rng.Below(2)), kind)); break; }   // kind first: GCC's argument order
             case 'k': f.items.push_back(MakeSkip()); break;
             case 'o': f.items.push_back(MakeLoop()); break;
             case 'b':
@@ -1857,7 +1866,7 @@ struct Gen
             const uint32_t r = rng.Below(100);
             if (r < 22) items.push_back(MakeAlu(-1));
             else if (r < 58) items.push_back(MakeMem(-1, false));
-            else if (r < 64) items.push_back(MakeLitPtr(6 + static_cast<int>(rng.Below(2)), PickKind()));
+            else if (r < 64) { const LitKind kind = PickKind(); items.push_back(MakeLitPtr(6 + static_cast<int>(rng.Below(2)), kind)); }   // kind first: GCC's argument order
             else if (r < 80) items.push_back(MakeSkip());
             else if (r < 87) items.push_back(MakeLoop());
             else if (!polled)
@@ -1870,7 +1879,12 @@ struct Gen
         if (rng.Chance(30)) f.tail.push_back(MakeSimple(-1, true, false));
         // mac, in one program of eight; never ahead of the pointer registers' literals
         if (macRng.Chance(12))
-            items.insert(items.begin() + 1 + macRng.Below(static_cast<uint32_t>(items.size())), MakeMac());
+        {
+            // MakeMac draws from macRng too, and the order of a call's arguments is unspecified (GCC made the mac first, Clang the position): GCC's order.
+            Item mac = MakeMac();
+            const uint32_t at = 1 + macRng.Below(static_cast<uint32_t>(items.size()));
+            items.insert(items.begin() + at, std::move(mac));
+        }
         // A pointer moved between bus partitions with a mask -- `and` 0x1FFFFFFF (to the cached partition) or `or` 0x20000000 (to the
         // cache-through one), the idiom SBL calls CACHE_THROUGH (A5-51) -- in one program of eight, after the pointer's literal. The pointer
         // is then a merge of addresses whenever a skipped reload gave it two values, which the engine does not fold to a constant.
@@ -7061,12 +7075,24 @@ std::string FindCxxCompiler(const std::string& cc)
 // The engine's reading of an unsigned literal (A2-60). The engine prints `U` on a constant whose operation is unsigned where the other operand is
 // signed (`param_1 + 0x80U` of an int4 param_1 is an unsigned sum and `0x7f < param_1 + 0x80U` an unsigned compare); in C++ `0x80U` and a plain
 // `0xffffffff` are both an `unsigned int`, which Promoted brings to the other operand's sign like any plain number, so the U was lost. Here the
-// suffixed literals are made the engine's unsigned types (`uint4(0x80)`, `uint8(...)` for ULL), which Common and Promoted treat as unsigned.
+// suffixed literals are made the engine's unsigned types (`uint4(0x80)`, `uint8(...)` for ULL), which Common and Promoted treat as unsigned. A `U` literal
+// that does not fit four bytes is an unsigned long long in C as well (`x * 0x281 & 0x8000000000000000U`, the sign bit of a 64-bit product, of seed 13677 of
+// the nightly run): it is a uint8, not a uint4 that drops its high word.
 std::string UnsignedLiteralsTyped(const std::string& text)
 {
     static const std::regex wide("\\b(0x[0-9a-fA-F]+|[0-9]+)(?:ULL|LLU|ull|llu)\\b");
     static const std::regex narrow("\\b(0x[0-9a-fA-F]+|[0-9]+)[Uu]\\b");
-    return std::regex_replace(std::regex_replace(text, wide, "uint8($1)"), narrow, "uint4($1)");
+    const std::string t = std::regex_replace(text, wide, "uint8($1)");
+    std::string out;
+    size_t from = 0;
+    for (std::sregex_iterator it(t.begin(), t.end(), narrow), end; it != end; ++it)
+    {
+        const std::string digits = (*it)[1].str();
+        const unsigned long long v = std::strtoull(digits.c_str(), nullptr, 0);
+        out += t.substr(from, it->position() - from) + (v > 0xFFFFFFFFull ? "uint8(" : "uint4(") + digits + ")";
+        from = it->position() + it->length();
+    }
+    return out + t.substr(from);
 }
 
 // The engine's reading of a negative literal (A2-71). The engine prints an 8-byte constant of -2^31 and below, to -(2^32-1), as `-0x80000000`: a
@@ -7191,6 +7217,24 @@ static std::string ShortCircuitExpr(const std::string& s)
     return out;
 }
 
+// A statement's leading keywords (`return a && b;`, `else return a && b;`) are not part of its expression: rewritten with it, `return` became the
+// left operand, LAND(return a, b), and the engine's reading did not compile (seeds 5134, 15286, 18724 of the nightly run).
+static std::string ShortCircuitStatement(const std::string& chunk)
+{
+    size_t i = 0;
+    for (;;)
+    {
+        const size_t a = chunk.find_first_not_of(" \t\r\n", i);
+        if (a == std::string::npos) break;
+        size_t b = a;
+        while (b < chunk.size() && (std::isalnum(static_cast<unsigned char>(chunk[b])) || chunk[b] == '_')) ++b;
+        const std::string word = chunk.substr(a, b - a);
+        if (word != "return" && word != "else" && word != "do") break;
+        i = b;
+    }
+    return chunk.substr(0, i) + ShortCircuitExpr(chunk.substr(i));
+}
+
 std::string ShortCircuitOps(const std::string& text)
 {
     std::string out, chunk;
@@ -7204,13 +7248,13 @@ std::string ShortCircuitOps(const std::string& text)
         else if (c == ')' || c == ']') --depth;
         if (depth <= 0 && (c == ';' || c == '{' || c == '}'))
         {
-            out += ShortCircuitExpr(chunk) + c;
+            out += ShortCircuitStatement(chunk) + c;
             chunk.clear();
             continue;
         }
         chunk += c;
     }
-    return out + ShortCircuitExpr(chunk);
+    return out + ShortCircuitStatement(chunk);
 }
 
 std::string CxxHeader()
@@ -7342,6 +7386,8 @@ void TestOracleOwnDecisions()
     // A2-60: a literal the engine prints with `U` is unsigned in the engine's reading, a plain one takes the other operand's type
     CHECK(UnsignedLiteralsTyped("0x7f < param_1 + 0x80U") == "0x7f < param_1 + uint4(0x80)");
     CHECK(UnsignedLiteralsTyped("x * 3U + 0xfffffffeULL") == "x * uint4(3) + uint8(0xfffffffe)");
+    CHECK(UnsignedLiteralsTyped("(int8)x * 0x281 & 0x8000000000000000U") == "(int8)x * 0x281 & uint8(0x8000000000000000)");
+    CHECK(UnsignedLiteralsTyped("x & 0xffffffffU") == "x & uint4(0xffffffff)");
     CHECK(UnsignedLiteralsTyped("uVar1 = in_r2U + 0xffffffff; uRam0600U = 1;") == "uVar1 = in_r2U + 0xffffffff; uRam0600U = 1;");
     // A2-96: `&&` and `||` of the engine's reading are lazy: the operands at one level are joined left to right, `||` outside `&&`, an assignment's right side is its own
     CHECK(ShortCircuitOps("if (a && b) {") == "if (LAND(a, b)) {");
@@ -7352,6 +7398,9 @@ void TestOracleOwnDecisions()
     CHECK(ShortCircuitOps("x = (char)(a) == '\\x01' && (c != 0);") == "x = LAND((char)(a) == '\\x01', (c != 0));");
     CHECK(ShortCircuitOps("/* it's && here */ x = a;") == "/* it's && here */ x = a;");
     CHECK(ShortCircuitOps("x <<= a >= b && c;") == "x <<= LAND(a >= b, c);");
+    CHECK(ShortCircuitOps("  return -1 < param_2 && -1 < -0x80000000 - param_2;") == "  return LAND(-1 < param_2, -1 < -0x80000000 - param_2);");
+    CHECK(ShortCircuitOps("} else return a || b;") == "} else return LOR(a, b);");
+    CHECK(ShortCircuitOps("returned = a && b;") == "returned = LAND(a, b);");
     CHECK(ShortCircuitOps("x = a & b | c;") == "x = a & b | c;");
     // A2-71: an 8-byte constant of -0x80000000 is negative in the engine's reading; the other literals are as they were
     CHECK(NegativeWideLiteralsTyped("(int8)param_2 * -0x80000000") == "(int8)param_2 * -0x80000000LL");
@@ -8079,7 +8128,8 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
                         std::string log1;
                         bool ok1 = false;
                         compileRun({ i }, "engine_" + prep[i].name, log1, ok1, true);
-                        out[i].detail += " [the engine's reading did not compile: " + log1.substr(0, 160) + "]";
+                        const size_t at = log1.find("error:");   // the error itself, not the "In function" line before it
+                        out[i].detail += " [the engine's reading did not compile: " + log1.substr(at == std::string::npos ? 0 : at, 240) + "]";
                     }
             for (size_t i : cand)
                 if (bad.count(prep[i].name) == 0 && unreadable.count(prep[i].name) == 0)
@@ -9686,6 +9736,28 @@ void TestPrintedC()
             const std::vector<CVerdict> r96b = CheckPrintedC(d, { { "A2-96: the value of && in arithmetic", { 0x6043, 0x6153, 0x6263, 0x6373, 0x0029, 0x6028, 0xD117, 0x0229, 0xE100, 0x7180, 0x4300, 0x0017, 0x001A, 0x4024, 0x0019, 0x0129, 0x73FE, 0x8B02, 0x4018, 0xE201, 0x632D, 0x303C, 0x326D, 0x010A, 0x001A, 0x7104, 0x3252, 0x301B, 0x4229, 0x616D, 0x205E, 0x031A, 0x0129, 0x320B, 0x4110, 0x324E, 0x300B, 0x420A, 0x7202, 0x602F, 0x237F, 0x021A, 0x7302, 0x4101, 0xC880, 0x324C, 0x205C, 0x337C, 0x430A, 0x2249, 0x6303, 0x000B, 0x6023, 0x0009, 0x8000, 0x0000 } } }, nIn, cc, 0x51ED, 8985);
             std::printf("pin 'A2-96 (arithmetic)': %s (%s)\n", r96b[0].cls.empty() ? "agrees" : r96b[0].cls.c_str(), r96b[0].detail.substr(0, 90).c_str());
             CHECK(r96b[0].cls == "narrow-c");
+            // A2-101 (patch 0069): an || that is the first operand of a nested && was printed without parentheses, `A || B && c` for (A || B) && c: the carry or
+            // overflow of addc/subc/addv/subv/negc or cmp/str below an entry-T bt.
+            const std::vector<CVerdict> r101 = CheckPrintedC(d, { { "A2-101: addc below bt", { 0x6153, 0x8903, 0x245C, 0x8B02, 0x3466, 0x8B00, 0x311C, 0x000B, 0x6013 } },
+                                                               { "A2-101: shift below bt", { 0x6153, 0x8903, 0x6C0A, 0x8B02, 0x4011, 0x8900, 0x3178, 0x000B, 0x6013 } },
+                                                               { "A2-101: cmp/str below bt", { 0x6043, 0x6153, 0x2169, 0x8903, 0x3C6E, 0x8B02, 0x3056, 0x8B00, 0x311C, 0x000B, 0x6013, 0x0009 } } },
+                                                             nIn, cc, 0x51ED, 8984);
+            for (size_t k = 0; k < r101.size(); ++k)
+            {
+                std::printf("pin 'A2-101 #%zu': %s (%s)\n", k, r101[k].cls.empty() ? "agrees" : r101[k].cls.c_str(), r101[k].detail.substr(0, 90).c_str());
+                CHECK(r101[k].cls.empty() && r101[k].compared);
+            }
+            // A2-120, A2-121 (the harness; CI's nightly run): `return a && b` was rewritten LAND(return a, b), and `0x8000000000000000U` was read as a uint4. Both texts
+            // are the engine's meaning: narrow-c (C reads -0x80000000 as an unsigned int).
+            const std::vector<CVerdict> r120 = CheckPrintedC(d, { { "A2-120: subv of 0x80000000 returned", { 0xD702, 0x375B, 0x0029, 0x000B, 0x0009, 0x0009, 0x8000, 0x0000 } },
+                                                               { "A2-121: the sign of a dmuls.l product", { 0x7FFC, 0x1F40, 0x2F41, 0x6013, 0x80F0, 0x57F0, 0x7F04, 0xD106, 0x371D, 0x050A, 0x6653,
+                                                                                                             0x4600, 0xE600, 0x356E, 0x4508, 0x4508, 0x6053, 0x000B, 0x0009, 0x0009, 0x0000, 0x0281 } } },
+                                                             nIn, cc, 0x51ED, 8983);
+            for (size_t k = 0; k < r120.size(); ++k)
+            {
+                std::printf("pin 'A2-12%zu': %s (%s)\n", k, r120[k].cls.empty() ? "agrees" : r120[k].cls.c_str(), r120[k].detail.substr(0, 90).c_str());
+                CHECK(r120[k].cls == "narrow-c");
+            }
             // A2-98: a compiled text that does not end is a class of its own, 'timeout', after a CPU limit, and the rest of its batch is kept. A text that spins is made from the
             // A2-92 control through the harness's hook (the generator makes no function whose text does not end once A2-97 is fixed).
             gPrintedCRunSeconds = 1;

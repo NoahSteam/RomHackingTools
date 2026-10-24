@@ -19,6 +19,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <algorithm>
 #include <fstream>
 #include <map>
 #include <sstream>
@@ -214,6 +215,8 @@ bool ReadFile(const std::string& path, std::string& out)
     std::ostringstream s;
     s << f.rdbuf();
     out = s.str();
+    // A Windows checkout (core.autocrlf) has CRLF line ends; the text compared against has LF.
+    out.erase(std::remove(out.begin(), out.end(), '\r'), out.end());
     return true;
 }
 

@@ -304,7 +304,7 @@ void TestFileLock()
         FileLock again(path, false);
         CHECK(again.Held());   // released with its owner
     }
-#ifndef _WIN32
+#if !defined(_WIN32) && !defined(__EMSCRIPTEN__)   // Emscripten has no posix_spawnp
     pid_t child = -1;
     {
         FileLock owner(path);
