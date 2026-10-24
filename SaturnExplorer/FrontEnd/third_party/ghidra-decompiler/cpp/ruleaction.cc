@@ -7940,19 +7940,14 @@ int4 RuleDivTermAdd::applyOp(PcodeOp *op,Funcdata &data)
   Varnode *x = extop->getIn(0);
   uint4 xbits = (opc == CPUI_INT_SEXT) ? x->getSize() * 8 - 1 : 8*sizeof(uintb) - count_leading_zeros(x->getNZMask());
   // SaturnExplorer (patches/0064-engine-divopt-sign-and-wrap-rule-guards.patch): the sum this rule folds is the exact one only if the product it starts
-  // from did not wrap in its multiply (the machine kept the low bits of `sext(x:1) * 0x7fff` in two bytes; the folded product is not those), and the
-  // folded multiplier is the one the new multiply holds: a shift of the width or more does not fit it.
+  // from did not wrap in its multiply (the machine kept the low bits of `sext(x:1) * 0x7fff` in two bytes; the folded product is not those), and a
+  // shift of the width or more has no multiplier of the multiply's width to fold into.
   if (n >= (uint4)8*extvn->getSize()) return 0;
   if (!divTermProductFits(multConst,xbits,extvn->getSize(),opc == CPUI_INT_SEXT)) return 0;
   uint8 power[2];
   set_u128(power, 1);
   leftshift128(power,power,n);		// power = 2^n
   add128(multConst,power,multConst);	// multConst += 2^n
-  if (extvn->getSize() <= 8) {		// The multiply holds the low bytes; the checks below read what it holds
-    if (opc != CPUI_INT_SEXT && (multConst[1] != 0 || (multConst[0] & ~calc_mask(extvn->getSize())) != 0)) return 0;
-    multConst[0] &= calc_mask(extvn->getSize());
-    multConst[1] = 0;
-  }
 
   list<PcodeOp *>::const_iterator iter;
   for(iter=op->getOut()->beginDescend();iter!=op->getOut()->endDescend();++iter) {
@@ -8105,13 +8100,9 @@ int4 RuleDivTermAdd2::applyOp(PcodeOp *op,Funcdata &data)
     uint8 newConst[2];
     uint4 xbits = 8*sizeof(uintb) - count_leading_zeros(x->getNZMask());
     // SaturnExplorer (patches/0064-engine-divopt-sign-and-wrap-rule-guards.patch): the product this rule starts from must not have wrapped in its
-    // multiply (`zext(x:2) * 0xfffffffe` in four bytes), and the new multiplier must be the one the new multiply holds
-    if (n >= (uint4)8*zextvn->getSize()) return 0;
+    // multiply (`zext(x:2) * 0xfffffffe` in four bytes)
     if (!divTermProductFits(multConst,xbits,zextvn->getSize(),false)) return 0;
     add128(multConst, pow, newConst);	// the new multiplier is multConst + 2^n
-    if (zextvn->getSize() <= 8) {
-      if (newConst[1] != 0 || (newConst[0] & ~calc_mask(zextvn->getSize())) != 0) return 0;
-    }
     // The new product may need more bits than the multiply has, which is only acceptable on the way to a division
     bool wide = !divTermProductFits(newConst,xbits,zextvn->getSize(),false);
     if (wide &&
@@ -8638,6 +8629,8 @@ int4 RuleDivChain::applyOp(PcodeOp *op,Funcdata &data)
   // SaturnExplorer (patches/0064-engine-divopt-sign-and-wrap-rule-guards.patch): only a signed divisor is counted by its magnitude. An unsigned divisor
   // of 2^63 or more (2^31 at four bytes) is a large number: `(x >> 0x30) / 0xfffffffffffff800` was counted as 11 bits and became `x / 0xf800000000000000`.
   if (opc2 == CPUI_INT_SDIV) {
+    // ...and the first signed division by -1 is not exact: it wraps for the minimum (`(x s/ -1) s/ 31` is not `x s/ -31` for x = -128 at one byte)
+    if (val1 == calc_mask(sz)) return 0;
     if (signbit_negative(val1, sz))
       val1 = (~val1 + 1) & calc_mask(sz);
     if (signbit_negative(val2, sz))

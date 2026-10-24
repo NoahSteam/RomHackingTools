@@ -194,6 +194,19 @@ struct Eval
     bool wrapped = false;     // an INT_MULT overflowed its width (the unsigned reading when a multiplicand is a ZEXT, the signed one for a SEXT, either otherwise); informational
     std::vector<unsigned __int128> exact;   // the exact product of a flagged (wide) INT_MULT, as a 128-bit two's complement number
     std::vector<char> haveExact;
+    std::vector<char> exactSigned;           // the exact product was made from a sign extension: its right shifts are arithmetic
+    // the exact value (128 bits) of node `id` if it derives from a flagged product through SUBPIECE, right shifts, ZEXT and COPY only
+    bool exactOf(int id, unsigned __int128& v, bool& sgn)
+    {
+        if (haveExact.size() <= (size_t)id || !haveExact[id]) return false;
+        v = exact[id]; sgn = exactSigned[id] != 0;
+        return true;
+    }
+    void setExact(int id, unsigned __int128 v, bool sgn)
+    {
+        exact.resize(c->n, 0); haveExact.resize(c->n, 0); exactSigned.resize(c->n, 0);
+        exact[id] = v; haveExact[id] = 1; exactSigned[id] = sgn ? 1 : 0;
+    }
     const std::map<const Varnode*, uintb>* leafVals;
     uintb get(int id)
     {
@@ -214,10 +227,21 @@ struct Eval
             {
                 switch (n.opc)
                 {
-                case CPUI_COPY: r = a; break;
-                case CPUI_INT_ZEXT: r = a; break;
                 case CPUI_INT_SEXT: r = sign_extend(a, n.insize[0], n.size); break;
-                case CPUI_SUBPIECE: r = b >= 8 ? 0 : (a >> (8 * b)) & m; break;
+                case CPUI_SUBPIECE:
+                {
+                    unsigned __int128 ev; bool sg;
+                    if (n.nin > 1 && b < 16 && exactOf(n.in[0], ev, sg))
+                    {
+                        // the cut RuleDivTermAdd leaves on the way: the exact number shifted down, not yet cut to the varnode
+                        const unsigned __int128 sh = sg ? (unsigned __int128)(((__int128)ev) >> (8 * (int)b)) : ev >> (8 * (int)b);
+                        setExact(id, sh, sg);
+                        r = (uintb)sh & m;
+                        break;
+                    }
+                    r = b >= 8 ? 0 : (a >> (8 * b)) & m;
+                    break;
+                }
                 case CPUI_PIECE: r = ((n.insize[1] >= 8 ? 0 : (a << (8 * n.insize[1]))) | b) & m; break;
                 case CPUI_INT_SUB: r = (a - b) & m; break;
                 case CPUI_INT_2COMP: r = (0 - a) & m; break;
@@ -261,28 +285,33 @@ struct Eval
                     if (n.wide)
                     {
                         // the product RuleDivTermAdd and RuleDivTermAdd2 built as the exact one: a sign extension times the multiplier read as the number it is
-                        exact.resize(c->n, 0); haveExact.resize(c->n, 0);
-                        exact[id] = (sgn && !uns) ? (unsigned __int128)((__int128)sa * (__int128)b) : pu;
-                        haveExact[id] = 1;
+                        setExact(id, (sgn && !uns) ? (unsigned __int128)((__int128)sa * (__int128)b) : pu, sgn && !uns);
                     }
                     break;
                 }
                 case CPUI_INT_RIGHT:
                 case CPUI_INT_SRIGHT:
                 {
-                    const Node& src = c->nodes[n.in[0]];
-                    if (src.kind == 2 && src.wide && n.nin > 1)
+                    unsigned __int128 ev; bool sg;
+                    if (n.nin > 1 && exactOf(n.in[0], ev, sg))
                     {
-                        get(n.in[0]);
-                        const unsigned __int128 ev = haveExact.size() > (size_t)n.in[0] && haveExact[n.in[0]] ? exact[n.in[0]] : (unsigned __int128)a;
                         unsigned __int128 sh;
-                        if (b >= 128) sh = (n.opc == CPUI_INT_SRIGHT && (ev >> 127)) ? ~(unsigned __int128)0 : 0;
-                        else if (n.opc == CPUI_INT_SRIGHT) sh = (unsigned __int128)(((__int128)ev) >> (int)b);
+                        if (b >= 128) sh = (n.opc == CPUI_INT_SRIGHT && sg && (ev >> 127)) ? ~(unsigned __int128)0 : 0;
+                        else if (n.opc == CPUI_INT_SRIGHT || sg) sh = (unsigned __int128)(((__int128)ev) >> (int)b);     // an exact signed number shifts as a signed number
                         else sh = ev >> (int)b;
+                        setExact(id, sh, sg);
                         r = (uintb)sh & m;
                         break;
                     }
                     r = evalBinary(n.opc, n.size, n.insize[0], a, b);
+                    break;
+                }
+                case CPUI_INT_ZEXT:
+                case CPUI_COPY:
+                {
+                    unsigned __int128 ev; bool sg;
+                    if (n.opc == CPUI_COPY) r = a; else r = a;
+                    if (exactOf(n.in[0], ev, sg)) setExact(id, ev, sg);
                     break;
                 }
                 default:

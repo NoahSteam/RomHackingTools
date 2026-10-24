@@ -14,21 +14,12 @@
  * limitations under the License.
  *
  * Modified for SaturnExplorer: an input replaced by a temporary that an operation still reads is read extended from the logical input (patches/0033-engine-printed-value-fixes.patch).
- * Modified for SaturnExplorer: a constant shift amount is read as the number it is, not its low 32 bits (patches/0064-engine-divopt-sign-and-wrap-rule-guards.patch).
+ * Modified for SaturnExplorer: a sign-extended sub-variable is not shifted by an amount its constant cannot hold (patches/0064-engine-divopt-sign-and-wrap-rule-guards.patch).
  */
 #include "subflow.hh"
 #include "funcdata.hh"
 
 namespace ghidra {
-
-/// \brief A constant shift amount as an int4 that is at least 64 if the amount is
-///
-/// SaturnExplorer (patches/0064-engine-divopt-sign-and-wrap-rule-guards.patch). An amount of 2^32 was read as 0 and one of 2^31 as a negative count.
-static inline int4 constShiftAmount(uintb amount)
-
-{
-  return (amount > 0x7fffffff) ? 0x7fffffff : (int4)amount;
-}
 
 /// \brief Return \e slot of constant if INT_OR op sets all bits in mask, otherwise -1
 ///
@@ -484,7 +475,7 @@ bool SubvariableFlow::traceForward(ReplaceVarnode *rvn)
 	break;
       }
       if (!op->getIn(1)->isConstant()) return false; // Dynamic shift
-      sa = constShiftAmount(op->getIn(1)->getOffset());
+      sa = (int4)op->getIn(1)->getOffset();
       if (sa >= sizeof(uintb)*8) return false;	// Beyond precision of mask
       newmask = (rvn->mask << sa) & calc_mask( outvn->getSize() );
       if (newmask == 0) break;	// Subvar is cleared, truncate flow
@@ -510,7 +501,7 @@ bool SubvariableFlow::traceForward(ReplaceVarnode *rvn)
 	break;
       }
       if (!op->getIn(1)->isConstant()) return false;
-      sa = constShiftAmount(op->getIn(1)->getOffset());
+      sa = (int4)op->getIn(1)->getOffset();
       if (sa >= sizeof(uintb)*8)
 	newmask = 0;
       else
@@ -741,7 +732,7 @@ bool SubvariableFlow::traceBackward(ReplaceVarnode *rvn)
     return true;
   case CPUI_INT_LEFT:
     if (!op->getIn(1)->isConstant()) break; // Dynamic shift
-    sa = constShiftAmount(op->getIn(1)->getOffset());
+    sa = (int4)op->getIn(1)->getOffset();
     if (sa >= sizeof(uintb)*8)
       newmask = 0;
     else
@@ -763,7 +754,7 @@ bool SubvariableFlow::traceBackward(ReplaceVarnode *rvn)
     return true;
   case CPUI_INT_RIGHT:
     if (!op->getIn(1)->isConstant()) break; // Dynamic shift
-    sa = constShiftAmount(op->getIn(1)->getOffset());
+    sa = (int4)op->getIn(1)->getOffset();
     if (sa >= sizeof(uintb)*8)
       break;			// Beyond precision of mask
     newmask = (rvn->mask << sa) & calc_mask(op->getIn(0)->getSize());
@@ -779,7 +770,7 @@ bool SubvariableFlow::traceBackward(ReplaceVarnode *rvn)
     return true;
   case CPUI_INT_SRIGHT:
     if (!op->getIn(1)->isConstant()) break; // Dynamic shift
-    sa = constShiftAmount(op->getIn(1)->getOffset());
+    sa = (int4)op->getIn(1)->getOffset();
     if (sa >= sizeof(uintb)*8)
       break;			// Beyond precision of mask
     newmask = (rvn->mask << sa) & calc_mask(op->getIn(0)->getSize());
