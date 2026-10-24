@@ -416,8 +416,14 @@ void Funcdata::opSetInput(PcodeOp *op,Varnode *vn,int4 slot)
   if (opactdbg_active)
     debugModCheck(op);
 #endif
-  if (op->getIn(slot) != (Varnode *)0)
+  if (op->getIn(slot) != (Varnode *)0) {
+    // SaturnExplorer (0068): a reader of a frame fold's value now reads another Varnode in its place
+    // (propagation forwarded the value, a rule found it equal to something else): the value was used.
+    Varnode *old = op->getIn(slot);
+    if (old->isWritten() && old->getDef()->isFrameFold())
+      old->getDef()->setFrameFoldRead();
     opUnsetInput(op,slot);
+  }
 
   vn->addDescend(op);		// Add this op to list of vn's descendants
   op->setInput(vn,slot);	// op must be up to date AFTER calling descend_add
