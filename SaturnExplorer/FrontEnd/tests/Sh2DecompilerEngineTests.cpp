@@ -28,7 +28,9 @@
 #include "loadimage.hh"
 #include "opbehavior.hh"
 #include "rangeutil.hh"
+#include "ruleaction.hh"
 #include "sleigh_arch.hh"
+#include "subflow.hh"
 
 #include <algorithm>
 #include <array>
@@ -37,6 +39,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <map>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -1838,6 +1841,1752 @@ void TestNzMaskShiftRound11()
     std::printf("nz mask of signed shifts: %ld checked\n", checked);
 }
 
+// ---- Area 2 round 12 P3 fix (patches/0062-engine-range-set-ops-and-rule-guards.patch) ----------------------------------------------------------------
+// Three CircleRange operations that patch 0059 did not touch, upstream's, none reached by a workload (ledger A2-73 to A2-75). The rule is 0059's: an
+// answer holds every value, or fails, or is everything.
+
+// A set of the one-byte domain, as 4 words: the elements of a range of the given mask that are at most 255.
+struct RcBits
+{
+    uint64_t w[4] = { 0, 0, 0, 0 };
+    void set(unsigned v) { w[v >> 6] |= static_cast<uint64_t>(1) << (v & 63); }
+    bool get(unsigned v) const { return (w[v >> 6] >> (v & 63)) & 1; }
+    bool operator==(const RcBits& o) const { return w[0] == o.w[0] && w[1] == o.w[1] && w[2] == o.w[2] && w[3] == o.w[3]; }
+};
+
+// Ranges of one size from structured bounds (the edges of the byte and of the word, the sign boundaries, the ends), steps 1 to 8, in the normal form
+// (the bounds congruent modulo the step, a full range written with its phase for both bounds).
+std::vector<FwRange> RcStructuredRanges(int size, const std::vector<uint64_t>& edges)
+{
+    std::vector<FwRange> out;
+    const uint64_t m = PbMask(size);
+    for (int st : { 1, 2, 4, 8 })
+        for (uint64_t l : edges)
+            for (uint64_t r0 : edges)
+            {
+                l &= m;
+                const uint64_t rem = l % st;
+                uint64_t r = ((r0 & m) - (r0 & m) % st + rem) & m;
+                if (r % st != rem) r = l;
+                uint64_t ll = l;
+                if (ll == r) ll = r = rem;
+                out.push_back({ ll, r, st });
+            }
+    return out;
+}
+
+// A2-73: CircleRange::intersect of ranges of two masks. newDomain cuts the wider range to the narrower mask and read a range that starts above the
+// narrower mask and ends at the top of the wider domain (the right bound 0, or the phase of the top for a stride) as the wrapped pair
+// [left,top] + [0,right): its right bound is not a piece at the bottom of the narrow domain, so the intersection is empty and not all of it.
+// An answer of 0 must be exactly the elements of both ranges within the narrower domain (an answer of 2 leaves the range as it was).
+void TestIntersectMixedMasksRound12()
+{
+    using namespace ghidra;
+    const auto t0 = std::chrono::steady_clock::now();
+    uint64_t state = 0x7A2C73;
+    auto next = [&state]() {
+        uint64_t z = (state += 0x9E3779B97F4A7C15ull);
+        z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ull;
+        z = (z ^ (z >> 27)) * 0x94D049BB133111EBull;
+        return z ^ (z >> 31);
+    };
+    int shown = 0;
+    auto fail = [&shown](const std::string& what, const std::string& detail) {
+        CHECK(false);
+        if (shown++ < 14) std::printf("intersect mixed masks round 12: %s: %s\n", what.c_str(), detail.c_str());
+    };
+    // the ledger's three: a one-byte range against a two-byte range that holds values above the byte only (0x8000 to 0xffff, 0x7ffb to 0xfffd step 1,
+    // 0x801 to the top at step 8); the intersection is empty
+    {
+        struct Fx { uint64_t al, ar; int as; uint64_t bl, br; int bs; };
+        const Fx fxs[] = { { 0, 0x10, 1, 0x8000, 0, 1 }, { 0xf8, 0xf4, 4, 0x7ffb, 0xfffe, 1 }, { 0x1, 0x9, 8, 0x801, 0xffff, 1 }, { 0, 0, 1, 0x100, 0, 1 }, { 3, 3, 4, 0x8003, 3, 4 } };
+        for (const Fx& f : fxs)
+            for (int order = 0; order < 2; ++order)
+            {
+                CircleRange a(f.al, f.ar, 1, f.as), b(f.bl, f.br, 2, f.bs);
+                int rc;
+                if (order == 0) { rc = a.intersect(b); CHECK(rc == 0 && a.isEmpty()); }
+                else { rc = b.intersect(a); CHECK(rc == 0 && b.isEmpty()); }
+            }
+    }
+    std::vector<uint64_t> byteEdges = { 0, 1, 2, 3, 4, 5, 7, 8, 0x10, 0x20, 0x3f, 0x40, 0x7e, 0x7f, 0x80, 0x81, 0xc0, 0xf0, 0xf4, 0xf8, 0xfc, 0xfe, 0xff };
+    std::vector<uint64_t> wordEdges = byteEdges;
+    for (uint64_t v : { 0x100, 0x101, 0x103, 0x180, 0x7ff8, 0x7ffb, 0x7fff, 0x8000, 0x8001, 0x8003, 0x801, 0x8100, 0xff00, 0xff03, 0xfff0, 0xfff8, 0xfffc, 0xfffe, 0xffff, 0x1000 })
+        wordEdges.push_back(v);
+    const std::vector<FwRange> bytes = RcStructuredRanges(1, byteEdges), words = RcStructuredRanges(2, wordEdges);
+    auto bitsOf = [](const FwRange& g, int size) {
+        RcBits b;
+        for (unsigned v = 0; v <= 255; ++v)
+            if (FwMember(v, g, PbMask(size))) b.set(v);
+        return b;
+    };
+    std::vector<RcBits> byteBits, wordBits;
+    for (const FwRange& g : bytes) byteBits.push_back(bitsOf(g, 1));
+    for (const FwRange& g : words) wordBits.push_back(bitsOf(g, 2));
+    long pairs = 0, answered = 0, empties = 0;
+    for (size_t wi = 0; wi < words.size(); ++wi)
+        for (int k = 0; k < 48; ++k)
+        {
+            const size_t bi = next() % bytes.size();
+            const FwRange &w = words[wi], &by = bytes[bi];
+            RcBits want;
+            for (int i = 0; i < 4; ++i) want.w[i] = wordBits[wi].w[i] & byteBits[bi].w[i];
+            for (int order = 0; order < 2; ++order)
+            {
+                const CircleRange B(w.l, w.r, 2, w.step), A(by.l, by.r, 1, by.step);
+                CircleRange q = order == 0 ? A : B;
+                const int rc = order == 0 ? q.intersect(B) : q.intersect(A);
+                ++pairs;
+                const std::string both = FwText(by) + "(1 byte) " + FwText(w) + "(2 bytes), " + (order == 0 ? "narrow first" : "wide first");
+                if (rc != 0)
+                {
+                    if (!(q == (order == 0 ? A : B))) fail("an answer of 2 changed the range", both);
+                    continue;
+                }
+                ++answered;
+                if (q.isEmpty()) ++empties;
+                RcBits got;
+                if (!q.isEmpty())
+                {
+                    std::string why;
+                    if (!FwWellFormed(q, 1, why)) { fail("malformed", both + " -> " + FwText(q) + ": " + why); continue; }
+                    for (unsigned v = 0; v <= 255; ++v)
+                        if (q.contains(v)) got.set(v);
+                }
+                if (!(got == want))
+                {
+                    unsigned at = 0;
+                    for (unsigned v = 0; v <= 255; ++v) if (got.get(v) != want.get(v)) { at = v; break; }
+                    fail(want.get(at) ? "an element is missing" : "an element too many", both + " -> " + FwText(q) + " at " + std::to_string(at));
+                }
+            }
+        }
+    std::printf("intersect of two masks round 12: %ld pairs, %ld answered (%ld empty), %.0f ms\n", pairs, answered, empties, MsSince(t0));
+    CHECK(pairs > 400000);
+    CHECK(empties > 1000);
+}
+
+// A2-74: CircleRange::setNZMask built its step as `int4 step = 1; step <<= leastsigbit_set(nzmask)`: for a lowest set bit of 31 or more the shift
+// leaves an int4. 4 bytes, mask 0x80000000: the step was -2^31 and the range [0,0) held 0 and not 0x80000000; 8 bytes, bit 63: the same with a bound
+// 0x7fffffff80000000; a lowest bit of 32 to 62 shifted by its count modulo 32 (a finer step). No range is the answer for a step that does not fit
+// (as for a mask of too many transitions); a range that is answered holds every value under the mask.
+void TestSetNZMaskRound12()
+{
+    using namespace ghidra;
+    const auto t0 = std::chrono::steady_clock::now();
+    uint64_t state = 0x5E7A2C74;
+    auto next = [&state]() {
+        uint64_t z = (state += 0x9E3779B97F4A7C15ull);
+        z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ull;
+        z = (z ^ (z >> 27)) * 0x94D049BB133111EBull;
+        return z ^ (z >> 31);
+    };
+    int shown = 0;
+    auto fail = [&shown](const std::string& what, const std::string& detail) {
+        CHECK(false);
+        if (shown++ < 14) std::printf("setNZMask round 12: %s: %s\n", what.c_str(), detail.c_str());
+    };
+    auto hex = [](uint64_t v) { char b[32]; std::snprintf(b, sizeof b, "%llx", static_cast<unsigned long long>(v)); return std::string(b); };
+    long masks = 0, answered = 0, refusedHigh = 0;
+    auto one = [&](uint64_t nz, int size) {
+        const uint64_t m = PbMask(size);
+        nz &= m;
+        CircleRange q;
+        const bool ok = q.setNZMask(nz, size);
+        ++masks;
+        const int lowest = nz == 0 ? -1 : __builtin_ctzll(nz);
+        if (lowest > 30 && ok) { fail("a step that does not fit", "mask " + hex(nz) + " at " + std::to_string(size) + " bytes -> " + FwText(q)); return; }
+        if (!ok) { if (lowest > 30) ++refusedHigh; return; }
+        ++answered;
+        std::string why;
+        if (!FwWellFormed(q, size, why)) { fail("malformed", "mask " + hex(nz) + " at " + std::to_string(size) + " bytes -> " + FwText(q) + ": " + why); return; }
+        std::vector<uint64_t> vs = { 0, nz, nz & (0 - nz) };
+        if (nz) vs.push_back(static_cast<uint64_t>(1) << (63 - __builtin_clzll(nz)));
+        for (int k = 0; k < 24; ++k) vs.push_back(next() & nz);
+        if (size <= 2)
+            for (uint64_t s = nz;; s = (s - 1) & nz) { vs.push_back(s); if (s == 0 || vs.size() > 4200) break; }
+        for (uint64_t v : vs)
+            if (!q.contains(v)) { fail("a value under the mask is not in the range", "mask " + hex(nz) + " at " + std::to_string(size) + " bytes -> " + FwText(q) + " misses " + hex(v)); return; }
+    };
+    for (uint64_t nz = 0; nz <= 0xffff; ++nz) one(nz, 2);          // every mask of one and two bytes
+    for (uint64_t nz = 0; nz <= 0xff; ++nz) one(nz, 1);
+    for (int size : { 4, 8 })
+    {
+        const int bits = 8 * size;
+        for (int lo = 0; lo < bits; ++lo)                           // a run of bits from lo to hi, and the run to the top
+            for (int hi = lo; hi < bits; ++hi)
+            {
+                const uint64_t run = (hi == 63 ? ~static_cast<uint64_t>(0) : ((static_cast<uint64_t>(1) << (hi + 1)) - 1)) & ~((static_cast<uint64_t>(1) << lo) - 1);
+                one(run, size);
+            }
+        for (int k = 0; k < 4000; ++k)                              // a random mask, with its low bits cleared
+        {
+            const uint64_t r = next() & (next() | next());
+            one(r << (next() % bits), size);
+        }
+    }
+    one(0x80000000u, 4);
+    one(static_cast<uint64_t>(1) << 63, 8);
+    one(static_cast<uint64_t>(1) << 40, 8);
+    one(static_cast<uint64_t>(0xffffffffull) << 32, 8);
+    CircleRange q;
+    CHECK(!q.setNZMask(0x80000000u, 4));
+    CHECK(!q.setNZMask(static_cast<uint64_t>(1) << 63, 8));
+    CHECK(q.setNZMask(0x40000000u, 4));       // the largest step that fits is kept as it was
+    CHECK(q.getStep() == 0x40000000 && q.contains(0) && q.contains(0x40000000u));
+    std::printf("setNZMask round 12: %ld masks, %ld answered, %ld high lowest bits refused, %.0f ms\n", masks, answered, refusedHigh, MsSince(t0));
+    CHECK(refusedHigh > 100);
+}
+
+// A2-75: CircleRange::widen. A range moved to a containing landmark must hold the old range, in the old step and phase. Upstream's left bound was
+// the landmark's as it was (another phase for a stride above the landmark's), its right bound rounded down when the landmark's remainder was above the
+// phase (the last element left out), and a full landmark gave the right bound 0, which cut a wrapped range to its first lap.
+void TestWidenRound12()
+{
+    using namespace ghidra;
+    const auto t0 = std::chrono::steady_clock::now();
+    uint64_t state = 0x5E7A2C75;
+    auto next = [&state]() {
+        uint64_t z = (state += 0x9E3779B97F4A7C15ull);
+        z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ull;
+        z = (z ^ (z >> 27)) * 0x94D049BB133111EBull;
+        return z ^ (z >> 31);
+    };
+    int shown = 0;
+    auto fail = [&shown](const std::string& what, const std::string& detail) {
+        CHECK(false);
+        if (shown++ < 14) std::printf("widen round 12: %s: %s\n", what.c_str(), detail.c_str());
+    };
+    // the ledger's two
+    {
+        CircleRange a(0x34, 0x44, 1, 16), b(0xfa, 0xf9, 1, 1);
+        a.widen(b, false);
+        CHECK(a.contains(0x34) && a.contains(0x44 - 16) && a.getMin() % 16 == a.getEnd() % 16);
+        CircleRange c(0x0e, 0x6e, 1, 8), d(0, 0, 1, 2);
+        c.widen(d, false);
+        CHECK(c.contains(0xe) && c.contains(0x66) && c.getStep() == 8);
+        CircleRange e(0x20, 0x10, 1, 1), f(0, 0, 1, 1);     // a wrapped range to a full landmark, right bound unstable: the whole circle, not [0x20,0)
+        e.widen(f, true);
+        CHECK(e.contains(0x20) && e.contains(0x0f) && e.contains(0x00) && e.contains(0xff));
+    }
+    // every one-byte landmark of a sample, with sub-ranges of it (the elements of the landmark taken as the bounds), both bounds unstable in turn
+    std::vector<FwRange> lands;
+    for (int st : { 1, 2, 4, 8 })
+        for (uint64_t l = 0; l < 256; ++l)
+            for (uint64_t r = 0; r < 256; ++r)
+            {
+                if (l % st != r % st) continue;
+                if (l == r && l >= static_cast<uint64_t>(st)) continue;
+                if (next() % (st == 1 ? 3 : 1) != 0 && st != 8) continue;       // a third of the step 1 landmarks, all of the others
+                lands.push_back({ l, r, st });
+            }
+    long pairs = 0, widened = 0, refusedByContains = 0;
+    for (const FwRange& lm : lands)
+    {
+        const CircleRange B(lm.l, lm.r, 1, lm.step);
+        for (int k = 0; k < 14; ++k)
+        {
+            // the old range: a sub-range of the landmark with the same or a bigger step, drawn from the landmark's elements
+            const uint64_t n = FwCount(lm, 255);
+            if (n == 0) continue;
+            const int mult = 1 << (next() % 3);
+            const int st = lm.step * mult;
+            if (st > 32) continue;
+            const uint64_t i = next() % n, len = 1 + next() % n;
+            FwRange a;
+            a.step = st;
+            const uint64_t first = FwElem(lm, 255, i);
+            a.l = first;
+            a.r = (first + len * static_cast<uint64_t>(lm.step) * mult) & 255;
+            if (a.r % st != a.l % st) a.r = a.l;
+            if (a.l == a.r) a.l = a.r = a.l % st;
+            const CircleRange A(a.l, a.r, 1, a.step);
+            if (!B.contains(A)) { ++refusedByContains; continue; }
+            for (int leftStable = 0; leftStable < 2; ++leftStable)
+            {
+                CircleRange q = A;
+                q.widen(B, leftStable != 0);
+                ++pairs;
+                const std::string both = FwText(a) + " in " + FwText(lm) + (leftStable ? " (left stable)" : " (right stable)");
+                std::string why;
+                if (!FwWellFormed(q, 1, why)) { fail("malformed", both + " -> " + FwText(q) + ": " + why); continue; }
+                if (q.getStep() != a.step) { fail("the step changed", both + " -> " + FwText(q)); continue; }
+                bool holds = true;
+                unsigned at = 0;
+                for (unsigned v = 0; v <= 255 && holds; ++v)
+                    if (FwMember(v, a, 255) && !q.contains(v)) { holds = false; at = v; }
+                if (!holds) { fail("the old range is not held", both + " -> " + FwText(q) + " misses " + std::to_string(at)); continue; }
+                // inside a landmark that is not everything the widened range stays inside it (the fallback to all of the phase is for a full landmark
+                // only, and a bound rounded the wrong way would hide behind it)
+                if (!FwFull(lm))
+                {
+                    unsigned out = 256;
+                    for (unsigned v = 0; v <= 255 && out == 256; ++v)
+                        if (q.contains(v) && !FwMember(v, lm, 255)) out = v;
+                    if (out != 256) { fail("the widened range leaves the landmark", both + " -> " + FwText(q) + " holds " + std::to_string(out)); continue; }
+                }
+                // the bound that is stable stays; the other is the landmark's or the range is everything of its phase
+                if (leftStable ? q.getMin() != A.getMin() : q.getEnd() != A.getEnd())
+                    if (!(q.getMin() == q.getEnd())) fail("the stable bound moved", both + " -> " + FwText(q));
+                ++widened;
+            }
+        }
+    }
+    std::printf("widen round 12: %ld widenings of %ld sub-ranges checked (%ld pairs the containment test refused), %.0f ms\n", widened, pairs / 2, refusedByContains, MsSince(t0));
+    CHECK(widened > 10000);
+}
+
+// ---- Rules checked by value on a Funcdata (A2-76, A2-77) --------------------------------------------------------------------------------------
+// A rule is applied to a small p-code graph built in a Funcdata and the graph is evaluated before and after for a set of inputs: the rule must leave
+// the value of the graph as it was, whatever it rewrites (or not rewrite). The evaluator is the independent definition of each op; it covers only the ops
+// the graphs use.
+typedef std::vector<std::pair<const ghidra::Varnode*, uint64_t>> RcEnv;
+
+uint64_t RcEval(const ghidra::Varnode* vn, const RcEnv& env)
+{
+    using namespace ghidra;
+    const int size = vn->getSize();
+    const uint64_t m = PbMask(size);
+    if (vn->isConstant()) return vn->getOffset() & m;
+    for (const auto& e : env)
+        if (e.first == vn) return e.second & m;
+    const PcodeOp* d = vn->getDef();
+    if (d == nullptr) { CHECK(false); return 0; }
+    const int n = d->numInput();
+    const uint64_t a = n > 0 ? RcEval(d->getIn(0), env) : 0, b = n > 1 ? RcEval(d->getIn(1), env) : 0;
+    const int sa = n > 0 ? d->getIn(0)->getSize() : 0, sb = n > 1 ? d->getIn(1)->getSize() : 0;
+    switch (d->code())
+    {
+    case CPUI_COPY: return a;
+    case CPUI_INT_ADD: return (a + b) & m;
+    case CPUI_INT_AND: return a & b;
+    case CPUI_INT_OR: return a | b;
+    case CPUI_INT_XOR: return a ^ b;
+    case CPUI_INT_SUB: return (a - b) & m;
+    case CPUI_INT_NEGATE: return ~a & m;
+    case CPUI_INT_2COMP: return (0 - a) & m;
+    case CPUI_INT_MULT: return (a * b) & m;
+    case CPUI_INT_ZEXT: return a;
+    case CPUI_INT_SEXT: return static_cast<uint64_t>(PbSigned(a, sa)) & m;
+    case CPUI_SUBPIECE: return b >= 8 ? 0 : (a >> (8 * b)) & m;
+    case CPUI_PIECE: return ((a << (8 * sb)) | b) & m;
+    case CPUI_INT_LEFT: return b >= static_cast<uint64_t>(8 * size) ? 0 : (a << b) & m;
+    case CPUI_INT_RIGHT:
+    case CPUI_INT_SRIGHT:
+    {
+        // A shift of the INT_MULT that RuleDivTermAdd or RuleDivTermAdd2 flagged (PcodeOp::isDivProductWide) reads the exact product, as 128 bits: the sum
+        // the rule replaced, not what its multiply would keep (the product is wider than the multiply on the way to RuleDivOpt)
+        const ghidra::Varnode* src = d->getIn(0);
+        if (src->isWritten() && src->getDef()->code() == CPUI_INT_MULT && src->getDef()->isDivProductWide())
+        {
+            const PcodeOp* mult = src->getDef();
+            const uint64_t x = RcEval(mult->getIn(0), env), y = RcEval(mult->getIn(1), env);
+            const bool isSext = mult->getIn(0)->isWritten() && mult->getIn(0)->getDef()->code() == CPUI_INT_SEXT;
+            const int sw = mult->getIn(0)->getSize();
+            unsigned __int128 exact = isSext ? static_cast<unsigned __int128>(static_cast<__int128>(PbSigned(x, sw)) * static_cast<__int128>(y)) : static_cast<unsigned __int128>(x) * y;
+            if (b >= 128) return d->code() == CPUI_INT_SRIGHT && (exact >> 127) ? m : 0;
+            const unsigned __int128 shifted = d->code() == CPUI_INT_SRIGHT ? static_cast<unsigned __int128>(static_cast<__int128>(exact) >> static_cast<int>(b)) : exact >> static_cast<int>(b);
+            return static_cast<uint64_t>(shifted) & m;
+        }
+        if (d->code() == CPUI_INT_RIGHT) return b >= static_cast<uint64_t>(8 * sa) ? 0 : a >> b;
+        return static_cast<uint64_t>(PbSigned(a, sa) >> (b >= static_cast<uint64_t>(8 * sa) ? 8 * sa - 1 : b)) & m;
+    }
+    case CPUI_INT_SDIV:
+        if (PbSigned(b, sb) == 0) return 0;
+        if (PbSigned(b, sb) == -1) return (0 - a) & m;                  // the minimum divided by -1 wraps to itself (and traps in a C++ division)
+        return static_cast<uint64_t>(PbSigned(a, sa) / PbSigned(b, sb)) & m;
+    case CPUI_INT_DIV: return b == 0 ? 0 : (a / b) & m;
+    case CPUI_LZCOUNT:
+    {
+        int lz = 0;
+        for (int bit = 8 * sa - 1; bit >= 0 && ((a >> bit) & 1) == 0; --bit) ++lz;
+        return static_cast<uint64_t>(lz) & m;
+    }
+    case CPUI_INT_SCARRY:
+    {
+        const int64_t s = PbSigned(a, sa) + PbSigned(b, sa), lim = static_cast<int64_t>(1) << (8 * sa - 1);   // sizes up to 4
+        return (s < -lim || s >= lim) ? 1 : 0;
+    }
+    case CPUI_INT_LESS: return a < b;
+    case CPUI_INT_LESSEQUAL: return a <= b;
+    case CPUI_INT_SLESS: return PbSigned(a, sa) < PbSigned(b, sb);
+    case CPUI_INT_SLESSEQUAL: return PbSigned(a, sa) <= PbSigned(b, sb);
+    case CPUI_INT_EQUAL: return a == b;
+    case CPUI_INT_NOTEQUAL: return a != b;
+    default: break;
+    }
+    CHECK(false);
+    return 0;
+}
+
+// The Funcdata the rules are applied in (no actions run; the graphs are never put in a block).
+struct RcFuncdata
+{
+    RcFuncdata() : image(new RegionLoadImage(kImageBase, Fixture1())), arch(image, &errs)
+    {
+        ghidra::DocumentStorage store;
+        arch.init(store);
+        entry = ghidra::Address(arch.getDefaultCodeSpace(), kCaller);
+        std::string name;
+        arch.nameFunction(entry, name);
+        fd = arch.symboltab->getGlobalScope()->addFunction(entry, name)->getFunction();
+    }
+    ghidra::Varnode* copyOf(int size, uint64_t v)
+    {
+        ghidra::PcodeOp* op = fd->newOp(1, entry);
+        fd->opSetOpcode(op, ghidra::CPUI_COPY);
+        ghidra::Varnode* out = fd->newUniqueOut(size, op);
+        fd->opSetInput(op, fd->newConstant(size, v), 0);
+        return out;
+    }
+    ghidra::PcodeOp* op1(ghidra::OpCode opc, int outSize, ghidra::Varnode* a)
+    {
+        ghidra::PcodeOp* op = fd->newOp(1, entry);
+        fd->opSetOpcode(op, opc);
+        fd->newUniqueOut(outSize, op);
+        fd->opSetInput(op, a, 0);
+        return op;
+    }
+    ghidra::PcodeOp* op2(ghidra::OpCode opc, int outSize, ghidra::Varnode* a, ghidra::Varnode* b)
+    {
+        ghidra::PcodeOp* op = fd->newOp(2, entry);
+        fd->opSetOpcode(op, opc);
+        fd->newUniqueOut(outSize, op);
+        fd->opSetInput(op, a, 0);
+        fd->opSetInput(op, b, 1);
+        return op;
+    }
+    ghidra::Varnode* k(int size, uint64_t v) { return fd->newConstant(size, v); }
+
+    RegionLoadImage* image;
+    std::ostringstream errs;
+    TestArchitecture arch;
+    ghidra::Address entry;
+    ghidra::Funcdata* fd = nullptr;
+};
+
+// The values of a graph's result for every environment, kept to compare after the rule.
+std::vector<uint64_t> RcValues(const ghidra::Varnode* result, const std::vector<RcEnv>& envs)
+{
+    std::vector<uint64_t> out;
+    for (const RcEnv& e : envs) out.push_back(RcEval(result, e));
+    return out;
+}
+
+// The input values of a size that matter: the edges of its sign and width, small ones, and neighbours of the given constant.
+std::vector<uint64_t> RcInputs(int size, uint64_t around, uint64_t seed, int randoms)
+{
+    const uint64_t m = PbMask(size);
+    std::vector<uint64_t> v;
+    if (size == 1) { for (uint64_t x = 0; x <= 255; ++x) v.push_back(x); return v; }
+    for (uint64_t t : { static_cast<uint64_t>(0), m >> 1, (m >> 1) + 1, m, 0 - around, around })
+        for (int d = -3; d <= 3; ++d) v.push_back((t + d) & m);
+    uint64_t state = seed;
+    for (int k = 0; k < randoms; ++k)
+    {
+        uint64_t z = (state += 0x9E3779B97F4A7C15ull);
+        z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ull;
+        z = (z ^ (z >> 27)) * 0x94D049BB133111EBull;
+        v.push_back((z ^ (z >> 31)) & m);
+    }
+    return v;
+}
+
+// A2-76: RuleScarry. `scarry(V,c) != (V + c s< 0)` is `V s< -c` and its three companions for a constant c, and none of the four is right for the
+// minimum (-c is c): upstream refused it only for the operand it had swapped itself. Every constant at one byte, edges at two and four bytes,
+// each of the eight forms (the constant first or second in the scarry, the sum written c + V or V + c, equal or not equal, the zero on either
+// side of the less-than), the value of the compare before and after the rule for every V (one byte) or for edge values and a sample.
+void TestScarryMinimumRound12()
+{
+    using namespace ghidra;
+    RcFuncdata t;
+    long graphs = 0, applied = 0, values = 0;
+    int shown = 0;
+    for (int size : { 1, 2, 4 })
+    {
+        const uint64_t m = PbMask(size), minimum = (m >> 1) + 1;
+        std::vector<uint64_t> consts;
+        if (size == 1) for (uint64_t c = 0; c <= 255; ++c) consts.push_back(c);
+        else consts = { 0, 1, 2, 5, m >> 1, minimum, minimum + 1, minimum - 2, m, m - 1, m - 4, 0x1234 & m, 0x5a5a5a5a & m };
+        for (uint64_t c : consts)
+            for (int form = 0; form < 16; ++form)
+            {
+                const bool constFirst = form & 1, sumConstFirst = form & 2, equal = form & 4, zeroFirst = form & 8;
+                Varnode* a = t.copyOf(size, 0x1234 & m);
+                Varnode* s = constFirst ? t.op2(CPUI_INT_SCARRY, 1, t.k(size, c), a)->getOut() : t.op2(CPUI_INT_SCARRY, 1, a, t.k(size, c))->getOut();
+                Varnode* sum = sumConstFirst ? t.op2(CPUI_INT_ADD, size, t.k(size, c), a)->getOut() : t.op2(CPUI_INT_ADD, size, a, t.k(size, c))->getOut();
+                Varnode* less = zeroFirst ? t.op2(CPUI_INT_SLESS, 1, t.k(size, 0), sum)->getOut() : t.op2(CPUI_INT_SLESS, 1, sum, t.k(size, 0))->getOut();
+                PcodeOp* cmp = t.op2(equal ? CPUI_INT_EQUAL : CPUI_INT_NOTEQUAL, 1, s, less);
+                std::vector<RcEnv> envs;
+                for (uint64_t v : RcInputs(size, c, 77 + c, 60)) envs.push_back({ { a, v } });
+                const std::vector<uint64_t> before = RcValues(cmp->getOut(), envs);
+                RuleScarry rule("scratch");
+                const int rc = rule.applyOp(s->getDef(), *t.fd);
+                const std::vector<uint64_t> after = RcValues(cmp->getOut(), envs);
+                ++graphs;
+                if (rc != 0) ++applied;
+                for (size_t i = 0; i < envs.size(); ++i)
+                {
+                    ++values;
+                    if (before[i] != after[i])
+                    {
+                        CHECK(false);
+                        if (shown++ < 10)
+                            std::printf("RuleScarry: %d-byte constant %llx (form %d): the compare is %llu for V = %llx before the rule and %llu after (rule returned %d)\n", size, static_cast<unsigned long long>(c), form,
+                                        static_cast<unsigned long long>(before[i]), static_cast<unsigned long long>(envs[i][0].second), static_cast<unsigned long long>(after[i]), rc);
+                        break;
+                    }
+                }
+                if (c == minimum) CHECK(rc == 0);          // the minimum is refused, whichever operand it was
+                if (c != minimum && c != 0 && (form & 1) == 0 && (form & 2) == 0) CHECK(rc == 1);   // the plain forms are rewritten
+            }
+    }
+    std::printf("RuleScarry by value: %ld graphs (%ld rewritten), %ld values compared\n", graphs, applied, values);
+    CHECK(applied > 300);
+}
+
+// A2-77: the three rules whose mutants no family killed, by value on a Funcdata. RuleConcatShift `concat(V,W) >> 8k` for the exact cancellation
+// (`zext(V)` for the unsigned shift, `sext(V)` for the signed one: upstream's mutant took the other sign); RuleSignDiv2 `(V + (V s>> 31) * -1) s>> 1`
+// is `V s/ 2` and no other shift amount is (`s>> 2` of the same sum is not `V s/ 4`); RuleSignForm `sub(sext(V),c)` is `V s>> 31` for c at least the
+// size of V (c one short of it takes the top byte of V as well).
+void TestRulesByValueRound12()
+{
+    using namespace ghidra;
+    RcFuncdata t;
+    long graphs = 0, values = 0;
+    int shown = 0;
+    auto compare = [&](const char* rule, const std::string& what, const ghidra::Varnode* result, const std::vector<RcEnv>& envs, const std::vector<uint64_t>& before) {
+        const std::vector<uint64_t> after = RcValues(result, envs);
+        ++graphs;
+        for (size_t i = 0; i < envs.size(); ++i)
+        {
+            ++values;
+            if (before[i] != after[i])
+            {
+                CHECK(false);
+                if (shown++ < 12) std::printf("%s: %s: %llx before the rule and %llx after for the input %llx\n", rule, what.c_str(), static_cast<unsigned long long>(before[i]), static_cast<unsigned long long>(after[i]), static_cast<unsigned long long>(envs[i][0].second));
+                return;
+            }
+        }
+    };
+    // RuleConcatShift: concat(hi,lo) >> 8*size(lo), unsigned and signed, and one bit short of it (not a cancellation)
+    for (int hs : { 1, 2, 4 })
+        for (int ls : { 1, 2, 4 })
+            for (OpCode shiftOpc : { CPUI_INT_RIGHT, CPUI_INT_SRIGHT })
+                for (int delta : { 0, -1 })
+                {
+                    Varnode* hi = t.copyOf(hs, 0);
+                    Varnode* lo = t.copyOf(ls, 0);
+                    PcodeOp* piece = t.op2(CPUI_PIECE, hs + ls, hi, lo);
+                    PcodeOp* sh = t.op2(shiftOpc, hs + ls, piece->getOut(), t.k(4, 8 * ls + delta));
+                    std::vector<RcEnv> envs;
+                    for (uint64_t h : RcInputs(hs, 0, 5, 12))
+                        for (uint64_t l : { static_cast<uint64_t>(0), static_cast<uint64_t>(1), PbMask(ls), PbMask(ls) >> 1, (PbMask(ls) >> 1) + 1 })
+                            envs.push_back({ { hi, h }, { lo, l } });
+                    const std::vector<uint64_t> before = RcValues(sh->getOut(), envs);
+                    RuleConcatShift rule("scratch");
+                    const int rc = rule.applyOp(sh, *t.fd);
+                    CHECK(rc == (delta == 0 ? 1 : 0));
+                    compare("RuleConcatShift", std::to_string(hs) + "+" + std::to_string(ls) + " bytes, " + (shiftOpc == CPUI_INT_RIGHT ? "unsigned" : "signed") + " shift by " + std::to_string(8 * ls + delta), sh->getOut(), envs, before);
+                }
+    // RuleSignDiv2: (V + (V s>> 31) * -1) s>> k, the sum written either way round
+    for (int size : { 1, 2, 4 })
+        for (int k = 1; k <= 5; ++k)
+            for (int swap = 0; swap < 2; ++swap)
+            {
+                Varnode* a = t.copyOf(size, 0);
+                PcodeOp* sign = t.op2(CPUI_INT_SRIGHT, size, a, t.k(4, 8 * size - 1));
+                PcodeOp* neg = t.op2(CPUI_INT_MULT, size, sign->getOut(), t.k(size, PbMask(size)));
+                PcodeOp* add = swap ? t.op2(CPUI_INT_ADD, size, neg->getOut(), a) : t.op2(CPUI_INT_ADD, size, a, neg->getOut());
+                PcodeOp* sh = t.op2(CPUI_INT_SRIGHT, size, add->getOut(), t.k(4, k));
+                std::vector<RcEnv> envs;
+                for (uint64_t v : RcInputs(size, 1, 9, 60)) envs.push_back({ { a, v } });
+                const std::vector<uint64_t> before = RcValues(sh->getOut(), envs);
+                RuleSignDiv2 rule("scratch");
+                const int rc = rule.applyOp(sh, *t.fd);
+                CHECK(rc == (k == 1 ? 1 : 0));
+                compare("RuleSignDiv2", std::to_string(size) + "-byte value, shift by " + std::to_string(k), sh->getOut(), envs, before);
+            }
+    // RuleSignForm: sub(sext(V), c), V of 1, 2 or 4 bytes extended to twice its size, c from 0 to the size of V
+    for (int size : { 1, 2, 4 })
+        for (int c = 0; c <= size; ++c)
+        {
+            Varnode* a = t.copyOf(size, 0);
+            PcodeOp* ext = t.op1(CPUI_INT_SEXT, 2 * size, a);
+            PcodeOp* sub = t.op2(CPUI_SUBPIECE, size, ext->getOut(), t.k(4, c));
+            std::vector<RcEnv> envs;
+            for (uint64_t v : RcInputs(size, 1, 11, 60)) envs.push_back({ { a, v } });
+            const std::vector<uint64_t> before = RcValues(sub->getOut(), envs);
+            RuleSignForm rule("scratch");
+            const int rc = rule.applyOp(sub, *t.fd);
+            CHECK(rc == (c >= size ? 1 : 0));
+            compare("RuleSignForm", std::to_string(size) + "-byte value, SUBPIECE at " + std::to_string(c), sub->getOut(), envs, before);
+        }
+    // RulePiece2Sext: concat(V s>> 31, V) is sext(V) and only for the same V (the mutant took the sign of another value); a shift of one short of the
+    // sign is no sign
+    for (int size : { 1, 2, 4 })
+        for (int variant = 0; variant < 3; ++variant)     // 0: the same value, 1: another value, 2: the shift one short
+        {
+            Varnode* a = t.copyOf(size, 0);
+            Varnode* b = t.copyOf(size, 0);
+            PcodeOp* sign = t.op2(CPUI_INT_SRIGHT, size, variant == 1 ? b : a, t.k(4, 8 * size - 1 - (variant == 2 ? 1 : 0)));
+            PcodeOp* piece = t.op2(CPUI_PIECE, 2 * size, sign->getOut(), a);
+            std::vector<RcEnv> envs;
+            for (uint64_t v : RcInputs(size, 1, 13, 20))
+                for (uint64_t w : { static_cast<uint64_t>(0), PbMask(size), (PbMask(size) >> 1) + 1, static_cast<uint64_t>(3) })
+                    envs.push_back({ { a, v }, { b, w } });
+            const std::vector<uint64_t> before = RcValues(piece->getOut(), envs);
+            RulePiece2Sext rule("scratch");
+            const int rc = rule.applyOp(piece, *t.fd);
+            CHECK(rc == (variant == 0 ? 1 : 0));
+            compare("RulePiece2Sext", std::to_string(size) + "-byte value, variant " + std::to_string(variant), piece->getOut(), envs, before);
+        }
+    // RuleZextSless (shadowed in the pool by RuleSlessToLess, which sees the clear sign bits first: applied directly): zext(V) s< c is V < c when c
+    // has its sign bit clear at the size of V and is left alone otherwise
+    for (int size : { 1, 2 })
+        for (uint64_t c : { static_cast<uint64_t>(0), static_cast<uint64_t>(1), PbMask(size) >> 1, (PbMask(size) >> 1) + 1, PbMask(size), PbMask(size) + 1, static_cast<uint64_t>(0x7fffffff) })
+            for (int slot = 0; slot < 2; ++slot)
+                for (OpCode opc : { CPUI_INT_SLESS, CPUI_INT_SLESSEQUAL })
+                {
+                    Varnode* a = t.copyOf(size, 0);
+                    PcodeOp* ext = t.op1(CPUI_INT_ZEXT, 4, a);
+                    PcodeOp* cmp = slot == 0 ? t.op2(opc, 1, ext->getOut(), t.k(4, c)) : t.op2(opc, 1, t.k(4, c), ext->getOut());
+                    std::vector<RcEnv> envs;
+                    for (uint64_t v : RcInputs(size, c, 17, 20)) envs.push_back({ { a, v } });
+                    const std::vector<uint64_t> before = RcValues(cmp->getOut(), envs);
+                    RuleZextSless rule("scratch");
+                    const int rc = rule.applyOp(cmp, *t.fd);
+                    CHECK(rc == ((c >> (8 * size - 1)) == 0 ? 1 : 0));
+                    compare("RuleZextSless", std::to_string(size) + "-byte value, constant " + std::to_string(c), cmp->getOut(), envs, before);
+                }
+    // RuleSignForm2 (it changes the input and returns 0, so the rule counter never saw it): sub(sext(V) * c, 4) s>> 31 reads V s>> 31 for a constant c of
+    // at most the size of V, and is left alone for a larger one
+    for (uint64_t c : { static_cast<uint64_t>(1), static_cast<uint64_t>(5), static_cast<uint64_t>(0x10001), static_cast<uint64_t>(0x7fffffff), static_cast<uint64_t>(0xffffffffu), static_cast<uint64_t>(0x100000000ull), static_cast<uint64_t>(0x8000000000000000ull) })
+    {
+        Varnode* a = t.copyOf(4, 0);
+        PcodeOp* ext = t.op1(CPUI_INT_SEXT, 8, a);
+        PcodeOp* mult = t.op2(CPUI_INT_MULT, 8, ext->getOut(), t.k(8, c));
+        PcodeOp* high = t.op2(CPUI_SUBPIECE, 4, mult->getOut(), t.k(4, 4));
+        PcodeOp* sh = t.op2(CPUI_INT_SRIGHT, 4, high->getOut(), t.k(4, 31));
+        std::vector<RcEnv> envs;
+        for (uint64_t v : RcInputs(4, 1, 19, 40)) envs.push_back({ { a, v } });
+        const std::vector<uint64_t> before = RcValues(sh->getOut(), envs);
+        RuleSignForm2 rule("scratch");
+        CHECK(rule.applyOp(sh, *t.fd) == 0);                     // it never reports a change
+        CHECK((sh->getIn(0) == a) == (c <= 0xffffffffull));      // but it makes one
+        compare("RuleSignForm2", "constant " + std::to_string(c), sh->getOut(), envs, before);
+    }
+    // RuleRightShiftAnd (A2-80): `(V & mask) >> sa` and `s>> sa` is `V >> sa` when the mask keeps every bit that survives the shift; for a shift by the
+    // width of V or more nothing survives, both sides of the rule's test were 0, and the mask was dropped, which is wrong for the arithmetic shift (its
+    // result is the sign bit, and the mask can clear it): `(b & 0x20) s>> 8` of a byte is 0, not the sign of b
+    for (int size : { 1, 2, 4 })
+        for (uint64_t sa : { 0, 1, 4, 7, 8, 9, 15, 16, 17, 31, 32, 33, 40, 63, 64 })
+            for (OpCode shiftOpc : { CPUI_INT_RIGHT, CPUI_INT_SRIGHT })
+                for (uint64_t mk : { PbMask(size), static_cast<uint64_t>(0x20), static_cast<uint64_t>(0xf0), PbMask(size) & ~static_cast<uint64_t>(0xff), (PbMask(size) >> 1) + 1, PbMask(size) >> 1, static_cast<uint64_t>(0xff00), static_cast<uint64_t>(0x8000) })
+                {
+                    const uint64_t m = PbMask(size);
+                    Varnode* a = t.copyOf(size, 0);
+                    PcodeOp* andOp = t.op2(CPUI_INT_AND, size, a, t.k(size, mk & m));
+                    PcodeOp* sh = t.op2(shiftOpc, size, andOp->getOut(), t.k(4, sa));
+                    std::vector<RcEnv> envs;
+                    for (uint64_t v : RcInputs(size, 1, 23, 30)) envs.push_back({ { a, v } });
+                    const std::vector<uint64_t> before = RcValues(sh->getOut(), envs);
+                    RuleRightShiftAnd rule("scratch");
+                    const int rc = rule.applyOp(sh, *t.fd);
+                    const bool applies = sa < static_cast<uint64_t>(8 * size) && ((mk & m) >> sa) == (m >> sa);
+                    CHECK(rc == (applies ? 1 : 0));
+                    compare("RuleRightShiftAnd", std::to_string(size) + "-byte value, mask " + std::to_string(mk & m) + ", " + (shiftOpc == CPUI_INT_RIGHT ? "unsigned" : "signed") + " shift by " + std::to_string(sa), sh->getOut(), envs, before);
+                }
+    std::printf("rules by value: %ld graphs, %ld values compared\n", graphs, values);
+}
+
+
+// ---- Round 13: patch 0062 at every size ------------------------------------------------------------------------------------------------------
+// The set operations of 0062 (the intersect of ranges of two masks, setNZMask, widen) at every size from 1 to 8 bytes, by membership: the sets are written
+// out from the definition (left, right, step, mask) here and a result is judged on a sample taken where an arithmetic error shows (the bounds and their
+// neighbours, the edge of the narrower domain, the ends and the sign boundary of each domain, elements of both ranges). rangeset13.cpp (the round 13 tool)
+// is the wider run; this is the part that is cheap enough for the suite, and it fails against the pre-0062 rangeutil.cc at every one of the three.
+struct R13Rg { uint64_t l, r; int st, sz; };
+
+bool R13Member(uint64_t v, uint64_t l, uint64_t r, int st, uint64_t m)
+{
+    v &= m;
+    if (v % static_cast<uint64_t>(st) != l % static_cast<uint64_t>(st)) return false;
+    if (l == r) return true;
+    return l < r ? (v >= l && v < r) : (v < r || v >= l);
+}
+bool R13Member(uint64_t v, const R13Rg& g) { return R13Member(v, g.l, g.r, g.st, PbMask(g.sz)); }
+bool R13QMember(const ghidra::CircleRange& q, uint64_t v) { return !q.isEmpty() && R13Member(v, q.getMin(), q.getEnd(), q.getStep(), q.getMask()); }
+
+struct R13Rng
+{
+    uint64_t s;
+    explicit R13Rng(uint64_t seed) : s(seed * 0x9E3779B97F4A7C15ull + 99) {}
+    uint64_t next()
+    {
+        uint64_t z = (s += 0x9E3779B97F4A7C15ull);
+        z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ull;
+        z = (z ^ (z >> 27)) * 0x94D049BB133111EBull;
+        return z ^ (z >> 31);
+    }
+};
+
+uint64_t R13Pick(R13Rng& g, int sz)
+{
+    const uint64_t m = PbMask(sz);
+    switch (g.next() % 9)
+    {
+    case 0: return g.next() & m;
+    case 1: return (g.next() % 17) & m;
+    case 2: return (m - g.next() % 17) & m;
+    case 3: return ((m >> 1) + (g.next() % 17) - 8) & m;
+    case 4: { const int k = static_cast<int>(g.next() % (8 * sz)); return ((1ull << k) + (g.next() % 9) - 4) & m; }
+    case 5: { const int k = static_cast<int>(g.next() % (8 * sz)); return ((0 - (1ull << k)) + (g.next() % 9) - 4) & m; }
+    case 6: return (g.next() & g.next() & g.next()) & m;
+    case 7:
+    {   // next to the edge of a narrower domain, where the intersect cuts a wider range
+        const int k = 8 * static_cast<int>(1 + g.next() % static_cast<uint64_t>(sz));
+        return ((k >= 64 ? ~0ull : ((1ull << k) - 1)) + (g.next() % 9) - 4) & m;
+    }
+    default: return (g.next() | g.next() | g.next()) & m;
+    }
+}
+
+R13Rg R13Gen(R13Rng& g, int sz)
+{
+    const uint64_t m = PbMask(sz);
+    static const int steps[] = { 1, 1, 1, 1, 2, 2, 4, 8, 16, 32 };
+    int st = steps[g.next() % 10];
+    while (static_cast<uint64_t>(st) > m) st >>= 1;
+    R13Rg r; r.st = st; r.sz = sz; r.l = R13Pick(g, sz);
+    switch (g.next() % 12)
+    {
+    case 0: r.r = r.l; break;
+    case 1: r.r = (r.l + st) & m; break;
+    case 2: r.r = (r.l + 2 * st) & m; break;
+    case 3: r.r = (r.l - st) & m; break;
+    case 4: r.r = 0; break;                                  // ends at the top of the domain
+    default: r.r = R13Pick(g, sz);
+    }
+    const uint64_t rem = r.l % st;
+    r.r = (r.r - r.r % st + rem) & m;
+    if (r.r % st != rem) r.r = r.l;
+    if (r.l == r.r) r.l = r.r = rem;
+    return r;
+}
+
+void R13Points(const R13Rg& a, R13Rng& g, std::vector<uint64_t>& out)
+{
+    const uint64_t m = PbMask(a.sz);
+    const uint64_t n = a.l == a.r ? m / a.st + 1 : ((a.r - a.l) & m) / a.st;
+    auto elem = [&](uint64_t j) { return (a.l + j * static_cast<uint64_t>(a.st)) & m; };
+    for (uint64_t j = 0; j < std::min<uint64_t>(n, 5); ++j) { out.push_back(elem(j)); out.push_back(elem(n - 1 - j)); }
+    for (int k = 0; k < 10 && n > 0; ++k) out.push_back(elem(g.next() % n));
+    for (uint64_t b : { a.l, a.r })
+        for (int d = -3; d <= 3; ++d) out.push_back((b + static_cast<uint64_t>(static_cast<int64_t>(d) * a.st)) & m);
+}
+
+void R13Edges(int sz, std::vector<uint64_t>& out)
+{
+    const uint64_t m = PbMask(sz);
+    for (uint64_t t : { static_cast<uint64_t>(0), m, m >> 1, (m >> 1) + 1 })
+        for (int d = -3; d <= 3; ++d) out.push_back((t + static_cast<uint64_t>(static_cast<int64_t>(d))) & m);
+}
+
+bool R13WellFormed(const ghidra::CircleRange& q, uint64_t wantMask)
+{
+    if (q.isEmpty()) return true;
+    const int st = q.getStep();
+    return q.getMask() == wantMask && st >= 1 && (st & (st - 1)) == 0 && !((q.getMin() | q.getEnd()) & ~q.getMask()) && q.getMin() % static_cast<uint64_t>(st) == q.getEnd() % static_cast<uint64_t>(st);
+}
+
+void TestRangeSetsRound13()
+{
+    using namespace ghidra;
+    using Clock = std::chrono::steady_clock;
+    const auto t0 = Clock::now();
+    long intersects = 0, answered = 0, nzs = 0, widens = 0;
+    R13Rng g(13);
+    // the intersect of ranges of every pair of sizes (and of one size): an answered 0 is exactly the elements both ranges have in the narrower domain
+    for (int sa = 1; sa <= 8; ++sa)
+        for (int sb = 1; sb <= 8; ++sb)
+            for (int it = 0; it < 2500; ++it)
+            {
+                R13Rg a = R13Gen(g, sa), b = R13Gen(g, sb);
+                CircleRange A(a.l, a.r, sa, a.st), B(b.l, b.r, sb, b.st);
+                const uint64_t mn = PbMask(std::min(sa, sb));
+                CircleRange q = A;
+                const int rc = q.intersect(B);
+                ++intersects;
+                if (rc != 0) { CHECK(q == A); continue; }
+                ++answered;
+                CHECK(R13WellFormed(q, mn));
+                std::vector<uint64_t> pts;
+                R13Points(a, g, pts); R13Points(b, g, pts); R13Edges(std::min(sa, sb), pts); R13Edges(std::max(sa, sb), pts);
+                for (int k = 0; k < 6; ++k) pts.push_back(g.next() & mn);
+                for (uint64_t v : pts)
+                {
+                    if (v > mn) continue;
+                    const bool want = R13Member(v, a) && R13Member(v, b);
+                    if (want != R13QMember(q, v))
+                    {
+                        CHECK(false);
+                        std::printf("  intersect %d/%d bytes: [%llx,%llx)/%d with [%llx,%llx)/%d gives [%llx,%llx)/%d, which %s %llx\n", sa, sb, (unsigned long long)a.l, (unsigned long long)a.r, a.st, (unsigned long long)b.l,
+                                    (unsigned long long)b.r, b.st, (unsigned long long)q.getMin(), (unsigned long long)q.getEnd(), q.getStep(), want ? "misses" : "holds", (unsigned long long)v);
+                        break;
+                    }
+                }
+            }
+    // setNZMask: every run of bits (and the run plus the low bit or the sign) at every size holds every value under the mask; a refusal is for a mask of
+    // more than two transitions or a lowest set bit of 31 or more, nothing else
+    for (int sz = 1; sz <= 8; ++sz)
+    {
+        const uint64_t m = PbMask(sz);
+        for (int lo = 0; lo < 8 * sz; ++lo)
+            for (int hi = lo; hi < 8 * sz; ++hi)
+            {
+                const uint64_t run = ((hi - lo + 1 >= 64 ? ~0ull : ((1ull << (hi - lo + 1)) - 1)) << lo) & m;
+                for (uint64_t nz : std::initializer_list<uint64_t>{ run, (run | 1) & m, (run | (1ull << (8 * sz - 1))) & m })
+                {
+                    CircleRange q;
+                    ++nzs;
+                    if (!q.setNZMask(nz, sz)) continue;
+                    CHECK(R13WellFormed(q, m));
+                    std::vector<uint64_t> vs = { 0, nz, nz & (0 - nz), nz >> 1 };
+                    for (int k = 0; k < 8; ++k) vs.push_back(g.next() & nz);
+                    for (uint64_t v : vs)
+                        if (!R13QMember(q, v & nz) || !q.contains(v & nz)) { CHECK(false); std::printf("  setNZMask(%llx, %d) misses %llx\n", (unsigned long long)nz, sz, (unsigned long long)(v & nz)); break; }
+                    if (q.getStep() > 1) CHECK((nz & static_cast<uint64_t>(q.getStep() - 1)) == 0);
+                }
+            }
+        // the lowest set bit of 31: no range
+        if (sz >= 4) { CircleRange q; CHECK(!q.setNZMask(0x80000000ull & m, sz)); }
+    }
+    // widen: the widened range holds the old one, in its step
+    for (int sz = 1; sz <= 8; ++sz)
+        for (int it = 0; it < 6000; ++it)
+        {
+            const uint64_t m = PbMask(sz);
+            R13Rg b = R13Gen(g, sz), a = R13Gen(g, sz);
+            if (g.next() % 2)
+            {
+                const uint64_t n = b.l == b.r ? m / b.st + 1 : ((b.r - b.l) & m) / b.st;
+                if (n < 2) continue;
+                const uint64_t i0 = g.next() % n, len = 1 + g.next() % (n - i0);
+                a.st = b.st; a.sz = sz; a.l = (b.l + i0 * static_cast<uint64_t>(b.st)) & m; a.r = (b.l + (i0 + len) * static_cast<uint64_t>(b.st)) & m;
+                if (i0 + len >= n && b.l != b.r) a.r = b.r;
+                if (a.l == a.r) a.l = a.r = a.l % a.st;
+            }
+            CircleRange A(a.l, a.r, sz, a.st), B(b.l, b.r, sz, b.st);
+            if (!B.contains(A)) continue;
+            for (int stable = 0; stable < 2; ++stable)
+            {
+                CircleRange q = A;
+                q.widen(B, stable != 0);
+                ++widens;
+                CHECK(R13WellFormed(q, m));
+                CHECK(q.getStep() == a.st);
+                std::vector<uint64_t> pts;
+                R13Points(a, g, pts); R13Points(b, g, pts); R13Edges(sz, pts);
+                for (uint64_t v : pts)
+                    if (R13Member(v, a) && !R13QMember(q, v)) { CHECK(false); std::printf("  widen %d bytes: [%llx,%llx)/%d in [%llx,%llx)/%d (%s stable) misses %llx\n", sz, (unsigned long long)a.l, (unsigned long long)a.r, a.st, (unsigned long long)b.l, (unsigned long long)b.r, b.st, stable ? "left" : "right", (unsigned long long)v); break; }
+            }
+        }
+    std::printf("range sets round 13: %ld intersects (%ld answered), %ld masks, %ld widenings, %.0f ms\n", intersects, answered, nzs, widens, MsSince(t0));
+    CHECK(answered > 50000);
+    CHECK(widens > 20000);
+}
+
+// RuleSLess2Zero and RuleRightShiftAnd on masked signs, with the non-zero masks the graph gives (A2-80, A2-81): `(a OP b) s< 0` and `-1 s< (a OP b)` for OP
+// ADD, OR and XOR where each of a and b is a masked sign (`x & hibit`), the sign constant, a boolean moved up to the sign, zero, the bits under the sign or
+// a whole value, at sizes 1, 2, 4 and 8, in both orders. The graph is put in a block so that Funcdata::calcNZMask gives each varnode the mask the engine's
+// action gives it; the compare is evaluated before and after the rule for the edge values of both inputs. The rule must leave the value alone (the
+// high bit of a sum is taken from an operand only when the other has none).
+struct R13Graph
+{
+    R13Graph() : image(new RegionLoadImage(kImageBase, Fixture1())), arch(image, &errs)
+    {
+        ghidra::DocumentStorage store;
+        arch.init(store);
+        entry = ghidra::Address(arch.getDefaultCodeSpace(), kCaller);
+        std::string name;
+        arch.nameFunction(entry, name);
+        fd = arch.symboltab->getGlobalScope()->addFunction(entry, name)->getFunction();
+        reg = arch.getSpaceByName("register");
+    }
+    void reset()
+    {
+        fd->clear();
+        ghidra::BlockGraph& g = const_cast<ghidra::BlockGraph&>(fd->getBasicBlocks());
+        bb = g.newBlockBasic(fd);
+        g.setStartBlock(bb);
+        nextReg = 0x100;
+    }
+    ghidra::Varnode* input(int size)
+    {
+        ghidra::Varnode* v = fd->newVarnode(size, reg, nextReg);
+        nextReg += 16;
+        return fd->setInputVarnode(v);
+    }
+    ghidra::Varnode* op(ghidra::OpCode opc, int outSize, ghidra::Varnode* a, ghidra::Varnode* b = nullptr)
+    {
+        ghidra::PcodeOp* o = fd->newOp(b ? 2 : 1, entry);
+        fd->opSetOpcode(o, opc);
+        ghidra::Varnode* out = fd->newUniqueOut(outSize, o);
+        fd->opSetInput(o, a, 0);
+        if (b) fd->opSetInput(o, b, 1);
+        fd->opInsertEnd(o, bb);
+        return out;
+    }
+    ghidra::Varnode* k(int size, uint64_t v) { return fd->newConstant(size, v & PbMask(size)); }
+
+    RegionLoadImage* image;
+    std::ostringstream errs;
+    TestArchitecture arch;
+    ghidra::Address entry;
+    ghidra::Funcdata* fd = nullptr;
+    ghidra::AddrSpace* reg = nullptr;
+    ghidra::BlockBasic* bb = nullptr;
+    uint64_t nextReg = 0x100;
+};
+
+void TestSignHighBitRound13()
+{
+    using namespace ghidra;
+    R13Graph t;
+    long graphs = 0, rewritten = 0, values = 0;
+    int shown = 0;
+    for (int size : { 1, 2, 4, 8 })
+    {
+        const uint64_t m = PbMask(size), hib = (m >> 1) + 1;
+        for (int ka = 0; ka < 6; ++ka)
+            for (int kb = 0; kb < 6; ++kb)
+                for (OpCode opc : { CPUI_INT_ADD, CPUI_INT_OR, CPUI_INT_XOR })
+                    for (int form = 0; form < 4; ++form)         // s< 0 and -1 s<, the sum first or second in the ADD
+                    {
+                        t.reset();
+                        Varnode* x = t.input(size);
+                        Varnode* y = t.input(size);
+                        auto operand = [&](int kind, Varnode* src) -> Varnode* {
+                            switch (kind)
+                            {
+                            case 0: return t.op(CPUI_INT_AND, size, src, t.k(size, hib));                                              // x & hibit
+                            case 1: return t.k(size, hib);                                                                              // the sign constant
+                            case 2:
+                            {   // a boolean moved up to the sign
+                                Varnode* b = t.op(CPUI_INT_SLESS, 1, src, t.k(size, 0));
+                                if (size == 1) return t.op(CPUI_INT_LEFT, 1, b, t.k(4, 7));
+                                return t.op(CPUI_INT_LEFT, size, t.op(CPUI_INT_ZEXT, size, b), t.k(4, 8 * size - 1));
+                            }
+                            case 3: return t.k(size, 0);
+                            case 4: return t.op(CPUI_INT_AND, size, src, t.k(size, m >> 1));                                            // the bits under the sign
+                            default: return src;                                                                                        // a whole value
+                            }
+                        };
+                        Varnode* a = operand(ka, x);
+                        Varnode* b = operand(kb, y);
+                        if (a->isConstant() && b->isConstant()) continue;
+                        Varnode* sum = (form & 1) ? t.op(opc, size, b, a) : t.op(opc, size, a, b);
+                        Varnode* cmp = (form & 2) ? t.op(CPUI_INT_SLESS, 1, t.k(size, m), sum) : t.op(CPUI_INT_SLESS, 1, sum, t.k(size, 0));
+                        t.fd->calcNZMask();
+                        PcodeOp* cmpOp = cmp->getDef();
+                        std::vector<RcEnv> envs;
+                        for (uint64_t xv : RcInputs(size, hib, 31, 10))
+                            for (uint64_t yv : { static_cast<uint64_t>(0), static_cast<uint64_t>(1), m, m >> 1, hib, hib + 1, hib - 1 })
+                                envs.push_back({ { x, xv }, { y, yv } });
+                        const std::vector<uint64_t> before = RcValues(cmp, envs);
+                        RuleSLess2Zero rule("scratch");
+                        const int rc = rule.applyOp(cmpOp, *t.fd);
+                        ++graphs;
+                        if (rc != 0) ++rewritten;
+                        const std::vector<uint64_t> after = RcValues(cmpOp->getOut(), envs);
+                        for (size_t i = 0; i < envs.size(); ++i)
+                        {
+                            ++values;
+                            if (before[i] != after[i])
+                            {
+                                CHECK(false);
+                                if (shown++ < 8)
+                                    std::printf("RuleSLess2Zero: %d bytes, operands %d and %d, op %d, form %d: %llu before the rule and %llu after for x=%llx y=%llx (rule returned %d)\n", size, ka, kb, static_cast<int>(opc), form,
+                                                static_cast<unsigned long long>(before[i]), static_cast<unsigned long long>(after[i]), static_cast<unsigned long long>(envs[i][0].second), static_cast<unsigned long long>(envs[i][1].second), rc);
+                                break;
+                            }
+                        }
+                    }
+    }
+    std::printf("RuleSLess2Zero by value: %ld graphs (%ld rewritten), %ld values compared\n", graphs, rewritten, values);
+    CHECK(rewritten > 100);
+}
+
+
+// ---- Round 13 fix: RuleDivOpt (A2-82), RuleSignForm2 (A2-83), RuleDivChain (A2-84), the shift amounts (A2-85), RuleThreeWayCompare (A2-86),
+// ---- RuleDivTermAdd and RuleDivTermAdd2 (A2-87), by value on a graph in a block ---------------------------------------------------------------------
+
+// What a pool of the three division rules does to a graph: each rule on every op of its list, until nothing changes (at most ten passes).
+std::map<std::string, long> g_r13Applied;
+
+int R13Pool(R13Graph& t, std::vector<ghidra::Rule*> rules)
+{
+    using namespace ghidra;
+    int applied = 0;
+    for (int pass = 0; pass < 10; ++pass)
+    {
+        int changed = 0;
+        std::vector<PcodeOp*> ops(t.bb->beginOp(), t.bb->endOp());
+        for (PcodeOp* op : ops)
+        {
+            if (op->isDead()) continue;
+            for (Rule* rule : rules)
+            {
+                std::vector<uint4> list;
+                rule->getOpList(list);
+                if (std::find(list.begin(), list.end(), static_cast<uint4>(op->code())) == list.end()) continue;
+                if (rule->applyOp(op, *t.fd) > 0) { ++changed; ++applied; ++g_r13Applied[rule->getName()]; }
+                if (op->isDead()) break;
+            }
+        }
+        if (changed == 0) break;
+    }
+    return applied;
+}
+
+// A2-82. A multiply of an extended value by a constant, shifted right and/or cut, in the three forms RuleDivOpt reads (shift of the product, shift of a
+// SUBPIECE of it, SUBPIECE alone), for every pairing of the extension and the shift, the products that fit and those that wrap their width, and a reader
+// that looks at the whole result, at its low half or at a masked part. The rule may rewrite the graph into a division or leave it; the value the reader
+// sees must be the same. The controls are the divisions it must still make (and must make of the product RuleDivTermAdd flags as exact).
+void TestDivOptSignAndWrapRound13()
+{
+    using namespace ghidra;
+    R13Graph t;
+    long graphs = 0, rewritten = 0, values = 0;
+    int shown = 0;
+    const uint64_t consts[] = { 0x10001, 0x8001, 0x01000001, 0xAAAAAAAB, 0xCCCD, 0x5556, 0xAAAB, 0x2AAAAAAB, 0xFFFF, 0x7FFF, 3, 0x101, 0x55555556, 0x66666667, 0x1000001, 0x80000001 };
+    for (int xs : { 1, 2, 4 })
+        for (int w : { 2 * xs, 4 * xs > 8 ? 8 : 4 * xs })
+        {
+            if (w < 2 || w > 8) continue;
+            for (OpCode ext : { CPUI_INT_ZEXT, CPUI_INT_SEXT })
+                for (uint64_t c0 : consts)
+                    for (int form = 0; form < 3; ++form)        // 0: shift of the product, 1: shift of a SUBPIECE, 2: SUBPIECE alone
+                        for (OpCode sh : { CPUI_INT_RIGHT, CPUI_INT_SRIGHT })
+                            for (int amount : { 1, 7, 8, 15, 16, 17, 24, 31, 32, 33 })
+                                for (int reader = 0; reader < 3; ++reader)     // whole, low half, low byte mask
+                                {
+                                    const uint64_t y = c0 & PbMask(w);
+                                    int cut = 0, outSize = w;
+                                    int e = amount;
+                                    if (form == 1 || form == 2)
+                                    {
+                                        cut = amount >= 8 ? amount / 8 : 1;
+                                        if (cut >= w) continue;
+                                        outSize = w - cut;
+                                        e = form == 1 ? amount - 8 * (amount / 8) + 1 : 0;
+                                        if (form == 1 && e >= 8 * outSize) continue;
+                                    }
+                                    else if (amount >= 8 * w) continue;
+                                    if (form == 2 && sh == CPUI_INT_SRIGHT) continue;   // no shift to pair
+                                    t.reset();
+                                    Varnode* x = t.input(xs);
+                                    Varnode* xe = t.op(ext, w, x);
+                                    Varnode* prod = t.op(CPUI_INT_MULT, w, xe, t.k(w, y));
+                                    Varnode* root;
+                                    if (form == 0) root = t.op(sh, w, prod, t.k(4, e));
+                                    else if (form == 1) root = t.op(sh, outSize, t.op(CPUI_SUBPIECE, outSize, prod, t.k(4, cut)), t.k(4, e));
+                                    else root = t.op(CPUI_SUBPIECE, outSize, prod, t.k(4, cut));
+                                    Varnode* read;
+                                    if (reader == 0) read = t.op(CPUI_COPY, outSize, root);
+                                    else if (reader == 1 && outSize >= 2) read = t.op(CPUI_SUBPIECE, outSize / 2, root, t.k(4, 0));
+                                    else read = t.op(CPUI_INT_AND, outSize, root, t.k(outSize, 0xFF));
+                                    t.fd->calcNZMask();
+                                    std::vector<RcEnv> envs;
+                                    for (uint64_t v : RcInputs(xs, y, 5 + w, 24)) envs.push_back({ { x, v } });
+                                    const std::vector<uint64_t> before = RcValues(read, envs);
+                                    RuleDivOpt rule("scratch");
+                                    const int rc = rule.applyOp(root->getDef(), *t.fd);
+                                    const std::vector<uint64_t> after = RcValues(read, envs);
+                                    ++graphs;
+                                    if (rc != 0) ++rewritten;
+                                    for (size_t i = 0; i < envs.size(); ++i)
+                                    {
+                                        ++values;
+                                        if (before[i] != after[i])
+                                        {
+                                            CHECK(false);
+                                            if (shown++ < 10)
+                                                std::printf("RuleDivOpt: %d-byte %s of %d bytes by %llx, form %d, %s by %d, reader %d: %llx before the rule and %llx after for x=%llx (rule returned %d)\n", w, ext == CPUI_INT_SEXT ? "sext" : "zext", xs,
+                                                            static_cast<unsigned long long>(y), form, sh == CPUI_INT_SRIGHT ? "s>>" : ">>", amount, reader, static_cast<unsigned long long>(before[i]),
+                                                            static_cast<unsigned long long>(after[i]), static_cast<unsigned long long>(envs[i][0].second), rc);
+                                            break;
+                                        }
+                                    }
+                                }
+        }
+    std::printf("RuleDivOpt by value: %ld graphs (%ld rewritten), %ld values compared\n", graphs, rewritten, values);
+    CHECK(rewritten > 400);
+
+    // The divisions it must still make: x / 3 by the product of the extended value, and the signed and the SUBPIECE forms
+    struct Control { OpCode ext; int xs, w; uint64_t y; int form; OpCode sh; int amount; uint64_t div; };
+    const Control controls[] = {
+        { CPUI_INT_ZEXT, 4, 8, 0xAAAAAAAB, 0, CPUI_INT_RIGHT, 33, 3 },
+        { CPUI_INT_ZEXT, 2, 4, 0xAAAB, 0, CPUI_INT_RIGHT, 17, 3 },
+        { CPUI_INT_SEXT, 4, 8, 0x55555556, 0, CPUI_INT_SRIGHT, 32, 3 },
+        { CPUI_INT_ZEXT, 4, 8, 0xAAAAAAAB, 1, CPUI_INT_RIGHT, 33, 3 },
+        { CPUI_INT_SEXT, 4, 8, 0x55555556, 2, CPUI_INT_RIGHT, 32, 3 },
+    };
+    for (const Control& c : controls)
+    {
+        t.reset();
+        Varnode* x = t.input(c.xs);
+        Varnode* prod = t.op(CPUI_INT_MULT, c.w, t.op(c.ext, c.w, x), t.k(c.w, c.y));
+        Varnode* root;
+        if (c.form == 0) root = t.op(c.sh, c.w, prod, t.k(4, c.amount));
+        else if (c.form == 1) root = t.op(c.sh, c.w - 4, t.op(CPUI_SUBPIECE, c.w - 4, prod, t.k(4, 4)), t.k(4, c.amount - 32));
+        else root = t.op(CPUI_SUBPIECE, c.w - 4, prod, t.k(4, 4));
+        t.fd->calcNZMask();
+        std::vector<RcEnv> envs;
+        for (uint64_t v : RcInputs(c.xs, 3, 99, 40)) envs.push_back({ { x, v } });
+        const std::vector<uint64_t> before = RcValues(root, envs);
+        RuleDivOpt rule("scratch");
+        CHECK(rule.applyOp(root->getDef(), *t.fd) == 1);
+        const std::vector<uint64_t> after = RcValues(root, envs);
+        for (size_t i = 0; i < envs.size(); ++i)
+            if (before[i] != after[i]) { CHECK(false); std::printf("RuleDivOpt control %s: %llx before and %llx after for x=%llx\n", c.ext == CPUI_INT_SEXT ? "sext" : "zext", static_cast<unsigned long long>(before[i]), static_cast<unsigned long long>(after[i]), static_cast<unsigned long long>(envs[i][0].second)); break; }
+    }
+    // A shift amount of 2^32 + 33 is not a shift by 33
+    {
+        t.reset();
+        Varnode* x = t.input(4);
+        Varnode* prod = t.op(CPUI_INT_MULT, 8, t.op(CPUI_INT_ZEXT, 8, x), t.k(8, 0xAAAAAAAB));
+        Varnode* root = t.op(CPUI_INT_RIGHT, 8, prod, t.fd->newConstant(8, 0x100000021ull));
+        t.fd->calcNZMask();
+        RuleDivOpt rule("scratch");
+        CHECK(rule.applyOp(root->getDef(), *t.fd) == 0);
+    }
+    // The product RuleDivTermAdd flags as exact is divided (x * 0x124924925 >> 35 is x / 7 in the value the sum stands for), the same product unflagged is not
+    for (int flagged = 0; flagged < 2; ++flagged)
+    {
+        t.reset();
+        Varnode* x = t.input(4);
+        Varnode* prod = t.op(CPUI_INT_MULT, 8, t.op(CPUI_INT_ZEXT, 8, x), t.k(8, 0x124924925ull));
+        if (flagged) prod->getDef()->setDivProductWide();
+        Varnode* root = t.op(CPUI_INT_RIGHT, 8, prod, t.k(4, 35));
+        t.fd->calcNZMask();
+        RuleDivOpt rule("scratch");
+        const int rc = rule.applyOp(root->getDef(), *t.fd);
+        CHECK(rc == (flagged ? 1 : 0));
+        if (flagged)
+        {
+            CHECK(root->getDef()->code() == CPUI_INT_DIV);
+            CHECK(root->getDef()->getIn(1)->getOffset() == 7);
+        }
+    }
+}
+
+// Round 14. RuleDivOpt on `ext(x:1) * y` (the multiply 2 bytes wide) for EVERY multiplier y of 0 to 1023 and every 97th above, both extensions, the numerand
+// extended or masked (`x & 0xff` of a 2-byte value, which the rule reads from its non-zero mask), the three forms (shift of the product, shift of a SUBPIECE of
+// it, SUBPIECE alone), both shifts, every amount, five readers (whole, low half, & 0xff, & the widest mask below the bits a mismatched shift fills, & one bit more), and every x of a byte: the value the reader sees after the rule is the one the machine
+// computes, from the definition alone (no graph). The round 13 pin tried sixteen multipliers; the tool `divexh14` runs all 65,536 (and the wider widths): 17 million
+// configurations, 0 wrong, against 4,726 for the head before patch 0064. This is its sample, small enough for the suite.
+void TestDivOptExhaustiveRound14()
+{
+    using namespace ghidra;
+    R13Graph t;
+    long graphs = 0, rewritten = 0, values = 0;
+    int shown = 0;
+    const auto t0 = std::chrono::steady_clock::now();
+    const int xs = 1, w = 2;
+    const uint64_t mw = PbMask(w);
+    for (uint64_t y = 0; y <= mw; y += (y < 1024 ? 1 : 97))
+        for (int ext = 0; ext < 3; ++ext)            // 0 zext, 1 sext, 2 and-masked
+            for (int form = 0; form < 3; ++form)
+                for (int arith = 0; arith < 2; ++arith)
+                {
+                    if (form == 2 && arith) continue;
+                    const int amounts = form == 0 ? 8 * w : (form == 1 ? 8 * (w - 1) : 1);
+                    const int cut = form == 0 ? 0 : 1;
+                    for (int amount = 0; amount < amounts; ++amount)
+                        for (int reader = 0; reader < 5; ++reader)
+                        {
+                            const int outSize = form == 0 ? w : w - cut;
+                            if (reader == 1 && outSize < 2) continue;
+                            // readers 3 and 4: an AND with the widest mask that stays below the bits a shift of the wrong kind fills (8 * size - amount of them), and with one bit more
+                            const int lowBits = 8 * outSize - amount;
+                            if ((reader == 3 || reader == 4) && (form == 2 || lowBits < 1 || lowBits >= 8 * outSize)) continue;
+                            const uint64_t andMask = reader < 3 ? 0 : (reader == 3 ? ((static_cast<uint64_t>(1) << lowBits) - 1) : ((((static_cast<uint64_t>(1) << lowBits) - 1) << 1) | 1) & PbMask(outSize));
+                            t.reset();
+                            Varnode* x = t.input(ext == 2 ? w : xs);
+                            Varnode* xe = ext == 2 ? t.op(CPUI_INT_AND, w, x, t.k(w, PbMask(xs))) : t.op(ext == 1 ? CPUI_INT_SEXT : CPUI_INT_ZEXT, w, x);
+                            Varnode* prod = t.op(CPUI_INT_MULT, w, xe, t.k(w, y));
+                            Varnode* root;
+                            if (form == 0) root = t.op(arith ? CPUI_INT_SRIGHT : CPUI_INT_RIGHT, w, prod, t.k(4, amount));
+                            else
+                            {
+                                Varnode* sp = t.op(CPUI_SUBPIECE, outSize, prod, t.k(4, cut));
+                                root = form == 1 ? t.op(arith ? CPUI_INT_SRIGHT : CPUI_INT_RIGHT, outSize, sp, t.k(4, amount)) : sp;
+                            }
+                            Varnode* read;
+                            if (reader == 0) read = t.op(CPUI_COPY, outSize, root);
+                            else if (reader == 1) read = t.op(CPUI_SUBPIECE, outSize / 2, root, t.k(4, 0));
+                            else if (reader == 2) read = t.op(CPUI_INT_AND, outSize, root, t.k(outSize, 0xFF));
+                            else read = t.op(CPUI_INT_AND, outSize, root, t.k(outSize, andMask));
+                            t.fd->calcNZMask();
+                            RuleDivOpt rule("scratch");
+                            const int rc = rule.applyOp(root->getDef(), *t.fd);
+                            ++graphs;
+                            if (rc == 0) continue;
+                            ++rewritten;
+                            for (uint64_t xv = 0; xv < 256; ++xv)
+                            {
+                                // the machine's value, from the definition
+                                const uint64_t xin = ext == 2 ? (xv | ((xv * 0x9E37u) & 0xFF00u)) : xv;
+                                const uint64_t X = ext == 1 ? (static_cast<uint64_t>(PbSigned(xv, xs)) & mw) : xv;
+                                const uint64_t P = (X * y) & mw;
+                                auto shr = [&](uint64_t v, int size, int a) -> uint64_t {
+                                    if (a >= 8 * size) return arith ? (static_cast<uint64_t>(PbSigned(v, size) >> (8 * size - 1)) & PbMask(size)) : 0;
+                                    return arith ? (static_cast<uint64_t>(PbSigned(v, size) >> a) & PbMask(size)) : (v >> a);
+                                };
+                                uint64_t R;
+                                if (form == 0) R = shr(P, w, amount);
+                                else { const uint64_t S = (P >> (8 * cut)) & PbMask(outSize); R = form == 1 ? shr(S, outSize, amount) : S; }
+                                const uint64_t want = reader == 0 ? R : (reader == 1 ? (R & PbMask(outSize / 2)) : (reader == 2 ? (R & 0xFF) : (R & andMask)));
+                                const uint64_t got = RcEval(read, { { x, xin } });
+                                ++values;
+                                if (got != want)
+                                {
+                                    CHECK(false);
+                                    if (shown++ < 10)
+                                        std::printf("RuleDivOpt exhaustive: %d bytes %s of %d by %llx, form %d, %s, cut %d, amount %d, reader %d: %llx after the rule, %llx from the definition, x=%llx\n", w,
+                                                    ext == 1 ? "sext" : (ext == 2 ? "and" : "zext"), xs, static_cast<unsigned long long>(y), form, arith ? "s>>" : ">>", cut, amount, reader,
+                                                    static_cast<unsigned long long>(got), static_cast<unsigned long long>(want), static_cast<unsigned long long>(xv));
+                                    break;
+                                }
+                            }
+                        }
+                }
+    std::printf("RuleDivOpt exhaustive (1-byte numerand): %ld graphs, %ld rewritten, %ld values compared (%.0f ms)\n", graphs, rewritten, values, MsSince(t0));
+    CHECK(rewritten >= 5200);       // 5,256 on patch 0064: a guard that refuses a division the corpora use fails here
+}
+
+// Round 14 fix. A2-92: RuleSignMod2nOpt2 reads `V - (((W s< 0) ? V + (2^n - 1) : V) & ~(2^n - 1))` as the signed remainder of V only when the compared W is V itself
+// (checkMultiequalForm; the sign form beside it, checkSignExtForm, always tested that). The graph is built with real blocks: a decision block with the CBRANCH on
+// `W s< 0`, the block that biases V (the arm taken for a negative W), and the join with the MULTIEQUAL of the biased and the plain value, for the sizes 2 and 4, the
+// masks 2^1 to 2^5, a plain W and the sign of another register, the CBRANCH as written and flipped. W = V is rewritten to INT_SREM, any other W is left an ADD. The
+// sibling rules that read a sign (RuleSignDiv2, RuleSignMod2Opt, RuleSignMod2nOpt) are run on the same shapes with the sign of another register: all refuse.
+// A3-style by-value checks of the rewritten graph are the printed-C differential's (family 73 form 8 of dagen14.py).
+void TestSignModIdentityRound14()
+{
+    using namespace ghidra;
+    R13Graph t;
+    int rewritten = 0, refused = 0, siblings = 0;
+    for (int size : { 2, 4 })
+        for (int n = 1; n <= 5; ++n)
+            for (int other = 0; other < 2; ++other)
+                for (int flip = 0; flip < 2; ++flip)
+                {
+                    const uint64_t npow = uint64_t(1) << n;
+                    t.reset();
+                    BlockGraph& g = const_cast<BlockGraph&>(t.fd->getBasicBlocks());
+                    BlockBasic* dec = t.bb;
+                    BlockBasic* inner = g.newBlockBasic(t.fd);
+                    BlockBasic* join = g.newBlockBasic(t.fd);
+                    Varnode* v = t.input(size);
+                    Varnode* w = other ? t.input(size) : v;
+                    Varnode* neg = t.op(CPUI_INT_SLESS, 1, w, t.k(size, 0));
+                    PcodeOp* cb = t.fd->newOp(2, t.entry);
+                    t.fd->opSetOpcode(cb, CPUI_CBRANCH);
+                    t.fd->opSetInput(cb, t.fd->newCodeRef(t.entry), 0);
+                    t.fd->opSetInput(cb, neg, 1);
+                    t.fd->opInsertEnd(cb, dec);
+                    if (flip) t.fd->opFlipCondition(cb);
+                    // out(1) is the block the branch is taken to, out(0) the one it falls into; the biased arm is the one a negative W reaches
+                    if (flip) { g.addEdge(dec, inner); g.addEdge(dec, join); }
+                    else { g.addEdge(dec, join); g.addEdge(dec, inner); }
+                    g.addEdge(inner, join);
+                    t.bb = inner;
+                    Varnode* biased = t.op(CPUI_INT_ADD, size, v, t.k(size, npow - 1));
+                    t.bb = join;
+                    PcodeOp* me = t.fd->newOp(2, t.entry);
+                    t.fd->opSetOpcode(me, CPUI_MULTIEQUAL);
+                    Varnode* adj = t.fd->newUniqueOut(size, me);
+                    t.fd->opSetInput(me, v, 0);               // the join's first in-edge is the decision block (the plain value), the second the biased arm
+                    t.fd->opSetInput(me, biased, 1);
+                    t.fd->opInsertBegin(me, join);
+                    Varnode* masked = t.op(CPUI_INT_AND, size, adj, t.k(size, ~(npow - 1)));
+                    Varnode* negm = t.op(CPUI_INT_MULT, size, masked, t.k(size, PbMask(size)));
+                    Varnode* rem = t.op(CPUI_INT_ADD, size, v, negm);
+                    t.fd->calcNZMask();
+                    RuleSignMod2nOpt2 rule("scratch");
+                    const int4 res = rule.applyOp(negm->getDef(), *t.fd);
+                    if (other)
+                    {
+                        CHECK(res == 0);
+                        CHECK(rem->getDef()->code() == CPUI_INT_ADD);
+                        ++refused;
+                    }
+                    else
+                    {
+                        CHECK(res == 1);
+                        CHECK(rem->getDef()->code() == CPUI_INT_SREM);
+                        CHECK(rem->getDef()->getIn(0) == v);
+                        CHECK(rem->getDef()->getIn(1)->isConstant() && rem->getDef()->getIn(1)->getOffset() == npow);
+                        ++rewritten;
+                    }
+                }
+    CHECK(rewritten == 20 && refused == 20);
+    // The siblings: the same sign taken from another register (w) steering a quotient or a remainder of v.
+    for (int size : { 2, 4 })
+        for (int other = 0; other < 2; ++other)
+        {
+            Varnode* v;
+            Varnode* w;
+            // RuleSignDiv2: (v + -1 * (w s>> 8*size-1)) s>> 1
+            t.reset();
+            v = t.input(size);
+            w = other ? t.input(size) : v;
+            {
+                Varnode* sgn = t.op(CPUI_INT_SRIGHT, size, w, t.k(4, 8 * size - 1));
+                Varnode* negs = t.op(CPUI_INT_MULT, size, sgn, t.k(size, PbMask(size)));
+                Varnode* sum = t.op(CPUI_INT_ADD, size, v, negs);
+                Varnode* half = t.op(CPUI_INT_SRIGHT, size, sum, t.k(4, 1));
+                RuleSignDiv2 rule("scratch");
+                CHECK(rule.applyOp(half->getDef(), *t.fd) == (other ? 0 : 1));
+                ++siblings;
+            }
+            // RuleSignMod2Opt: ((v + -1 * sign(w)) & 1) + sign(w)
+            t.reset();
+            v = t.input(size);
+            w = other ? t.input(size) : v;
+            {
+                Varnode* sgn = t.op(CPUI_INT_SRIGHT, size, w, t.k(4, 8 * size - 1));
+                Varnode* negs = t.op(CPUI_INT_MULT, size, sgn, t.k(size, PbMask(size)));
+                Varnode* sum = t.op(CPUI_INT_ADD, size, v, negs);
+                Varnode* low = t.op(CPUI_INT_AND, size, sum, t.k(size, 1));
+                Varnode* rem = t.op(CPUI_INT_ADD, size, low, sgn);
+                RuleSignMod2Opt rule("scratch");
+                CHECK(rule.applyOp(low->getDef(), *t.fd) == (other ? 0 : 1));
+                CHECK(rem->getDef()->code() == (other ? CPUI_INT_ADD : CPUI_INT_SREM));
+                ++siblings;
+            }
+            // RuleSignMod2nOpt: ((v + (sign(w) >> k)) & mask) - (sign(w) >> k), k = 8*size - 3 (mod 8)
+            t.reset();
+            v = t.input(size);
+            w = other ? t.input(size) : v;
+            {
+                const int k = 8 * size - 3;
+                Varnode* sgn = t.op(CPUI_INT_SRIGHT, size, w, t.k(4, 8 * size - 1));
+                Varnode* corr = t.op(CPUI_INT_RIGHT, size, sgn, t.k(4, k));
+                Varnode* corr2 = t.op(CPUI_INT_RIGHT, size, sgn, t.k(4, k));
+                Varnode* sum = t.op(CPUI_INT_ADD, size, v, corr2);
+                Varnode* masked = t.op(CPUI_INT_AND, size, sum, t.k(size, 7));
+                Varnode* negc = t.op(CPUI_INT_MULT, size, corr, t.k(size, PbMask(size)));
+                Varnode* rem = t.op(CPUI_INT_ADD, size, masked, negc);
+                RuleSignMod2nOpt rule("scratch");
+                CHECK(rule.applyOp(corr->getDef(), *t.fd) == (other ? 0 : 1));
+                CHECK(rem->getDef()->code() == (other ? CPUI_INT_ADD : CPUI_INT_SREM));
+                ++siblings;
+            }
+        }
+    CHECK(siblings == 12);
+    std::printf("TestSignModIdentityRound14: %d rewritten, %d refused, %d sibling graphs\n", rewritten, refused, siblings);
+}
+
+// Round 14 fix. A2-94: RuleThreeWayCompare took `(x u< 0) + (x u< 2^64 - 1) - 1` of an 8-byte x for a three-way compare: the constants are neighbours
+// modulo 2^64 (`offset + 1` wraps in the 64-bit uintb) and not in order. The same pair of compares at one byte, and the neighbours 5 and 6 and 0 and 1 at eight bytes,
+// are still rewritten (the guard refuses only the pair that wraps). A2-99: RuleShiftSub rewrote `sub(V << 24, 3)` read 2 bytes wide (a read past the top of the
+// shifted value, which reads zeros there) as `sub(V, 0)`, which reads two bytes of V; the in-bounds read of the same shift (`sub(V << 16, 2)`) is still rewritten.
+void TestThreeWayAndShiftSubRound14()
+{
+    using namespace ghidra;
+    R13Graph t;
+    int refused = 0, rewritten = 0;
+    struct Pair { int size; uint64_t c1, c2; bool signedPair; bool expect; };
+    const Pair pairs[] = {
+        { 8, 0, 0xFFFFFFFFFFFFFFFFull, false, false },       // the wrap: refused
+        { 8, 0xFFFFFFFFFFFFFFFFull, 0, false, false },       // and the other way round
+        { 8, 5, 6, false, true }, { 8, 6, 5, false, true }, { 8, 0, 1, false, true }, { 8, 0xFFFFFFFFFFFFFFFEull, 0xFFFFFFFFFFFFFFFFull, false, true },
+        { 4, 0, 0xFFFFFFFFull, false, false },               // never neighbours at 4 bytes (the compare of the width, not the uintb): refused as before
+        { 1, 0, 0xFF, false, false },
+        { 8, 0xFFFFFFFFFFFFFFFFull, 0, true, true },         // signed: -1 and 0 are neighbours in order
+    };
+    for (const Pair& p : pairs)
+        for (int form = 0; form < 2; ++form)
+        {
+            t.reset();
+            Varnode* x = t.input(p.size);
+            const OpCode lt = p.signedPair ? CPUI_INT_SLESS : CPUI_INT_LESS;
+            Varnode* z1 = t.op(CPUI_INT_ZEXT, 4, t.op(lt, 1, x, t.k(p.size, p.c1)));
+            Varnode* z2 = t.op(CPUI_INT_ZEXT, 4, t.op(lt, 1, x, t.k(p.size, p.c2)));
+            Varnode* sum = t.op(CPUI_INT_ADD, 4, t.op(CPUI_INT_ADD, 4, z1, z2), t.k(4, 0xFFFFFFFFull));
+            Varnode* root = form ? t.op(CPUI_INT_SLESS, 1, t.k(4, 0), sum) : t.op(CPUI_INT_SLESS, 1, sum, t.k(4, 0));
+            t.fd->calcNZMask();
+            RuleThreeWayCompare rule("scratch");
+            const int4 res = rule.applyOp(root->getDef(), *t.fd);
+            if (p.expect) { CHECK(res == 1); ++rewritten; }
+            else { CHECK(res == 0); CHECK(root->getDef()->code() == CPUI_INT_SLESS); ++refused; }
+        }
+    CHECK(refused == 8 && rewritten == 10);
+    // RuleShiftSub
+    int shiftRefused = 0, shiftDone = 0;
+    for (int k : { 1, 2, 3 })
+        for (int c = 0; c < 4; ++c)
+            for (int outsize : { 1, 2 })
+            {
+                t.reset();
+                Varnode* v = t.input(4);
+                Varnode* sh = t.op(CPUI_INT_LEFT, 4, v, t.k(4, 8 * k));
+                Varnode* sub = t.op(CPUI_SUBPIECE, outsize, sh, t.k(4, c));
+                RuleShiftSub rule("scratch");
+                const int4 res = rule.applyOp(sub->getDef(), *t.fd);
+                const bool inBounds = c + outsize <= 4;          // a SUBPIECE inside its source
+                const bool natural = c >= k;                     // and above the zero bytes the shift made
+                if (inBounds && natural) { CHECK(res == 1); CHECK(sub->getDef()->getIn(0) == v); CHECK(sub->getDef()->getIn(1)->getOffset() == (uintb)(c - k)); ++shiftDone; }
+                else { CHECK(res == 0); CHECK(sub->getDef()->getIn(0) == sh); ++shiftRefused; }
+            }
+    CHECK(shiftDone > 0 && shiftRefused > 0);
+    std::printf("TestThreeWayAndShiftSubRound14: three-way %d refused, %d rewritten; shift-sub %d refused, %d rewritten\n", refused, rewritten, shiftRefused, shiftDone);
+}
+
+// A2-83 to A2-87, each by value on a small graph with the rule applied once (or, for the division terms, a pool of the three rules).
+void TestRuleGuardsRound13()
+{
+    using namespace ghidra;
+    R13Graph t;
+    long graphs = 0, values = 0;
+    int shown = 0;
+    auto compare = [&](const char* what, const Varnode* out, const std::vector<RcEnv>& envs, const std::vector<uint64_t>& before) {
+        const std::vector<uint64_t> after = RcValues(out, envs);
+        ++graphs;
+        for (size_t i = 0; i < envs.size(); ++i)
+        {
+            ++values;
+            if (before[i] != after[i])
+            {
+                CHECK(false);
+                if (shown++ < 12) std::printf("%s: %llx before the rule and %llx after for the input %llx\n", what, static_cast<unsigned long long>(before[i]), static_cast<unsigned long long>(after[i]), static_cast<unsigned long long>(envs[i][0].second));
+                return;
+            }
+        }
+    };
+    // A2-83 RuleSignForm2: `sub(sext(V) * small, c) s>> 15` is the sign of V for a positive small and 0 for 0 (and for a zero extension that is 0)
+    for (int size : { 1, 2 })
+        for (int kind = 0; kind < 6; ++kind)       // 0: the constant 0, 1: the constant 1, 2: 5, 3: all ones of the size, 4: zext(b), 5: the constant 0 first in the multiply
+        {
+            t.reset();
+            Varnode* v = t.input(size);
+            Varnode* b = t.input(1);
+            Varnode* ext = t.op(CPUI_INT_SEXT, 2 * size, v);
+            Varnode* other = kind == 4 ? t.op(CPUI_INT_ZEXT, 2 * size, b) : t.k(2 * size, kind == 0 || kind == 5 ? 0 : kind == 1 ? 1 : kind == 2 ? 5 : PbMask(size));
+            Varnode* prod = kind == 5 ? t.op(CPUI_INT_MULT, 2 * size, other, ext) : t.op(CPUI_INT_MULT, 2 * size, ext, other);
+            Varnode* sub = t.op(CPUI_SUBPIECE, size, prod, t.k(4, size));
+            Varnode* sgn = t.op(CPUI_INT_SRIGHT, size, sub, t.k(4, 8 * size - 1));
+            t.fd->calcNZMask();
+            std::vector<RcEnv> envs;
+            for (uint64_t vv : RcInputs(size, 1, 3, 10))
+                for (uint64_t bv : { static_cast<uint64_t>(0), static_cast<uint64_t>(1), static_cast<uint64_t>(0xff) }) envs.push_back({ { v, vv }, { b, bv } });
+            const std::vector<uint64_t> before = RcValues(sgn, envs);
+            RuleSignForm2 rule("scratch");
+            rule.applyOp(sgn->getDef(), *t.fd);
+            compare("RuleSignForm2", sgn, envs, before);
+            if (kind == 1 || kind == 2) CHECK(sgn->getDef()->getIn(0) == v);          // a positive constant is still the sign of V
+        }
+    // A2-84 RuleDivChain: `(x >> k) / c` and `(x / c1) / c2`: an unsigned divisor of the top half of the range is a large number, not its two's complement
+    for (int size : { 4, 8 })
+    {
+        const uint64_t m = PbMask(size), hi = (m >> 1) + 1;
+        for (uint64_t c : std::initializer_list<uint64_t>{ hi, hi + 0x7ff, m - 0x7ff, m, 3, 0x10000, hi >> 1, 31 })
+            for (int k : { 1, 8, 16, 8 * size - 16, 8 * size - 1, 8 * size, 8 * size + 5, 64 })
+                for (int signedChain = 0; signedChain < 3; ++signedChain)       // 2: the first signed division is by -1 (the minimum wraps)
+                {
+                    if (signedChain && (c == 3 || k >= 8 * size)) continue;
+                    t.reset();
+                    Varnode* v = t.input(size);
+                    Varnode* inner = signedChain == 2 ? t.op(CPUI_INT_SDIV, size, v, t.k(size, m)) : signedChain ? t.op(CPUI_INT_SDIV, size, v, t.k(size, 1ull << (k % 8))) : t.op(CPUI_INT_RIGHT, size, v, t.k(4, k));
+                    if (signedChain == 1 && k % 8 == 0) continue;
+                    Varnode* outer = t.op(signedChain ? CPUI_INT_SDIV : CPUI_INT_DIV, size, inner, t.k(size, c));
+                    Varnode* sink = t.op(CPUI_COPY, size, outer);
+                    (void)sink;
+                    std::vector<RcEnv> envs;
+                    for (uint64_t vv : RcInputs(size, c, 17, 30)) envs.push_back({ { v, vv } });
+                    if (signedChain == 2) envs.push_back({ { v, hi } });          // the minimum
+                    const std::vector<uint64_t> before = RcValues(outer, envs);
+                    RuleDivChain rule("scratch");
+                    rule.applyOp(outer->getDef(), *t.fd);
+                    compare(signedChain ? "RuleDivChain (signed)" : "RuleDivChain (unsigned)", outer, envs, before);
+                }
+    }
+    // A2-85 the shift amounts: 2^31, 2^32 + 1, the width and more
+    const uint64_t amounts[] = { 1, 7, 15, 16, 0x1f, 0x20, 0x40, 0x44, 0x45, 0x80, 0x84, 0x7fffffff, 0x80000000ull, 0xffffffffull, 0x100000000ull, 0x100000001ull, 0x100000004ull, 0x8000000000000000ull };
+    for (int size : { 2, 4 })
+        for (uint64_t a : amounts)
+        {
+            // RuleShiftCompare: x << a == 0 and x >> a == 0 (and != 0)
+            for (OpCode shiftOpc : { CPUI_INT_LEFT, CPUI_INT_RIGHT })
+                for (OpCode cmpOpc : { CPUI_INT_EQUAL, CPUI_INT_NOTEQUAL })
+                {
+                    t.reset();
+                    Varnode* v = t.input(size);
+                    Varnode* sh = t.op(shiftOpc, size, v, t.fd->newConstant(8, a));
+                    Varnode* cmp = t.op(cmpOpc, 1, sh, t.k(size, 0));
+                    t.fd->calcNZMask();
+                    std::vector<RcEnv> envs;
+                    for (uint64_t vv : RcInputs(size, 1, 21, 10)) envs.push_back({ { v, vv } });
+                    const std::vector<uint64_t> before = RcValues(cmp, envs);
+                    RuleShiftCompare rule("scratch");
+                    rule.applyOp(cmp->getDef(), *t.fd);
+                    compare("RuleShiftCompare", cmp, envs, before);
+                }
+            // RuleDoubleArithShift: (x s>> a) s>> a
+            for (uint64_t b : { static_cast<uint64_t>(1), a })
+            {
+                t.reset();
+                Varnode* v = t.input(size);
+                Varnode* s1 = t.op(CPUI_INT_SRIGHT, size, v, t.fd->newConstant(8, a));
+                Varnode* s2 = t.op(CPUI_INT_SRIGHT, size, s1, t.fd->newConstant(8, b));
+                std::vector<RcEnv> envs;
+                for (uint64_t vv : RcInputs(size, 1, 22, 10)) envs.push_back({ { v, vv } });
+                const std::vector<uint64_t> before = RcValues(s2, envs);
+                RuleDoubleArithShift rule("scratch");
+                rule.applyOp(s2->getDef(), *t.fd);
+                compare("RuleDoubleArithShift", s2, envs, before);
+            }
+            // RuleSubNormal and RuleSubRight: sub(x >> a, size/2), alone or with a lone shift reader (each rule on a graph of its own)
+            for (OpCode shiftOpc : { CPUI_INT_RIGHT, CPUI_INT_SRIGHT })
+                for (int which = 0; which < 4; ++which)
+                {
+                    t.reset();
+                    Varnode* v = t.input(size);
+                    Varnode* sh = t.op(shiftOpc, size, v, t.fd->newConstant(8, a));
+                    Varnode* sub = t.op(CPUI_SUBPIECE, size / 2, sh, t.k(4, size / 2));
+                    Varnode* top = (which & 1) ? t.op(CPUI_INT_RIGHT, size / 2, sub, t.fd->newConstant(8, a)) : sub;
+                    t.fd->calcNZMask();
+                    std::vector<RcEnv> envs;
+                    for (uint64_t vv : RcInputs(size, 1, 23, 10)) envs.push_back({ { v, vv } });
+                    const std::vector<uint64_t> before = RcValues(top, envs);
+                    if (which & 2)
+                    {
+                        RuleSubNormal rule("scratch");
+                        rule.applyOp(sub->getDef(), *t.fd);
+                        compare("RuleSubNormal", top, envs, before);
+                    }
+                    else
+                    {
+                        RuleSubRight rule("scratch");
+                        rule.applyOp(sub->getDef(), *t.fd);
+                        compare("RuleSubRight", top, envs, before);
+                    }
+                }
+            // RuleLzcountShiftBool: lzcount(x) >> a
+            {
+                t.reset();
+                Varnode* v = t.input(size);
+                Varnode* lz = t.op(CPUI_LZCOUNT, size, v);
+                Varnode* sh = t.op(CPUI_INT_RIGHT, size, lz, t.fd->newConstant(8, a));
+                std::vector<RcEnv> envs;
+                for (uint64_t vv : RcInputs(size, 1, 24, 10)) envs.push_back({ { v, vv } });
+                const std::vector<uint64_t> before = RcValues(sh, envs);
+                RuleLzcountShiftBool rule("scratch");
+                rule.applyOp(lz->getDef(), *t.fd);
+                compare("RuleLzcountShiftBool", sh, envs, before);
+            }
+        }
+    // RuleSubExtComm: sub(zext(x), c) for a cut of 2^28 + 2 bytes (a constant the SUBPIECE never holds)
+    for (uint64_t cut : std::initializer_list<uint64_t>{ 0, 1, 2, 0xfffffffff0000002ull, 0x100000000ull, 0x80000000ull })
+        for (OpCode ext : { CPUI_INT_ZEXT, CPUI_INT_SEXT })
+        {
+            t.reset();
+            Varnode* v = t.input(4);
+            Varnode* e = t.op(ext, 8, v);
+            Varnode* sub = t.op(CPUI_SUBPIECE, 4, e, t.fd->newConstant(8, cut));
+            t.fd->calcNZMask();
+            std::vector<RcEnv> envs;
+            for (uint64_t vv : RcInputs(4, 1, 25, 10)) envs.push_back({ { v, vv } });
+            const std::vector<uint64_t> before = RcValues(sub, envs);
+            RuleSubExtComm rule("scratch");
+            rule.applyOp(sub->getDef(), *t.fd);
+            compare("RuleSubExtComm", sub, envs, before);
+        }
+    // RuleSubvarSext: the shift of a sign extension by 2^32, kept as a constant of the logical size
+    for (uint64_t a : std::initializer_list<uint64_t>{ 3, 31, 300, 0x100000000ull, 0x100000003ull, 0x80000000ull })
+        for (int lo = 1; lo <= 2; ++lo)
+        {
+            t.reset();
+            Varnode* v = t.input(lo * 2);
+            Varnode* w = t.input(lo * 2);
+            Varnode* piece = t.op(CPUI_PIECE, lo * 4, v, w);
+            Varnode* ext = t.op(CPUI_INT_SEXT, lo * 8, piece);
+            Varnode* sh = t.op(CPUI_INT_SRIGHT, lo * 8, ext, t.fd->newConstant(8, a));
+            Varnode* sub = t.op(CPUI_SUBPIECE, lo * 2, sh, t.k(4, 0));
+            Varnode* sink = t.op(CPUI_COPY, lo * 2, sub);
+            t.fd->calcNZMask();
+            std::vector<RcEnv> envs;
+            for (uint64_t vv : RcInputs(lo * 2, 1, 26, 8))
+                for (uint64_t ww : { static_cast<uint64_t>(0), PbMask(lo * 2), PbMask(lo * 2) >> 1 }) envs.push_back({ { v, vv }, { w, ww } });
+            const std::vector<uint64_t> before = RcValues(sink, envs);
+            RuleSubvarSext rule("scratch");
+            rule.reset(*t.fd);
+            rule.applyOp(ext->getDef(), *t.fd);
+            compare("RuleSubvarSext", sink, envs, before);
+        }
+    // A2-86 RuleThreeWayCompare: (c1 < x) + (c2 <= x) - 1 != 0 is the three-way compare only for one constant; 127 and -128 are no neighbours
+    for (int size : { 1, 2, 4 })
+    {
+        const uint64_t m = PbMask(size), smax = m >> 1, smin = smax + 1;
+        const uint64_t pairs[][2] = { { smax, smin }, { smin, smax }, { smax, smax }, { 5, 5 }, { 5, 6 }, { smax - 1, smax }, { smax, smax - 1 }, { m, 0 }, { 0, m }, { 0, 1 } };
+        for (const auto& pr : pairs)
+            for (int bothLess = 0; bothLess < 2; ++bothLess)
+                for (OpCode lessOpc : { CPUI_INT_SLESS, CPUI_INT_LESS })
+                {
+                    t.reset();
+                    Varnode* v = t.input(size);
+                    Varnode* l1 = t.op(lessOpc, 1, t.k(size, pr[0]), v);
+                    Varnode* l2 = t.op(bothLess ? lessOpc : (lessOpc == CPUI_INT_SLESS ? CPUI_INT_SLESSEQUAL : CPUI_INT_LESSEQUAL), 1, t.k(size, pr[1]), v);
+                    Varnode* z1 = t.op(CPUI_INT_ZEXT, 2, l1);
+                    Varnode* z2 = t.op(CPUI_INT_ZEXT, 2, l2);
+                    Varnode* s1 = t.op(CPUI_INT_ADD, 2, z1, t.k(2, 0xffff));
+                    Varnode* s2 = t.op(CPUI_INT_ADD, 2, s1, z2);
+                    Varnode* cmp = t.op(CPUI_INT_NOTEQUAL, 1, s2, t.k(2, 0));
+                    t.fd->calcNZMask();
+                    std::vector<RcEnv> envs;
+                    if (size == 1) { for (uint64_t vv = 0; vv < 256; ++vv) envs.push_back({ { v, vv } }); }
+                    else for (uint64_t vv : RcInputs(size, pr[0], 27, 30)) envs.push_back({ { v, vv } });
+                    const std::vector<uint64_t> before = RcValues(cmp, envs);
+                    RuleThreeWayCompare rule("scratch");
+                    rule.applyOp(cmp->getDef(), *t.fd);
+                    compare("RuleThreeWayCompare", cmp, envs, before);
+                }
+    }
+    // A2-87 RuleDivTermAdd and RuleDivTermAdd2 (then RuleDivOpt): `sub(ext(x) * c, k) >> s  +  x` is the division only if ext(x) * c did not wrap in its multiply
+    {
+        long applied = 0;
+        const uint64_t cs[] = { 0x7fff, 0x7fffffff, 0xfffffffe, 0xfffe, 0x92492493, 0x24924925, 0xAAAAAAAB, 0x5556, 0x2493, 0x4925, 3, 0x81, 0xff };
+        auto runCase = [&](int xs, OpCode ext, uint64_t c0, int shape, int s, int k2, int limited) {
+            const int w = 2 * xs;
+            t.reset();
+            Varnode* in = t.input(xs);
+            Varnode* x = limited ? t.op(CPUI_INT_AND, xs, in, t.k(xs, 0xff)) : in;
+            Varnode* xe = t.op(ext, w, x);
+            Varnode* prod = t.op(CPUI_INT_MULT, w, xe, t.k(w, c0 & PbMask(w)));
+            Varnode* hi = t.op(CPUI_SUBPIECE, xs, prod, t.k(4, xs));
+            Varnode* out;
+            if (shape == 2)
+            {
+                Varnode* diff = t.op(CPUI_INT_ADD, xs, x, t.op(CPUI_INT_MULT, xs, hi, t.k(xs, PbMask(xs))));       // x - hi, as RuleSub2Add leaves it
+                Varnode* half = t.op(CPUI_INT_RIGHT, xs, diff, t.k(4, 1));
+                out = t.op(CPUI_INT_ADD, xs, half, hi);
+            }
+            else
+            {
+                Varnode* sh = s == 0 ? hi : t.op(ext == CPUI_INT_SEXT ? CPUI_INT_SRIGHT : CPUI_INT_RIGHT, xs, hi, t.k(4, s));
+                out = t.op(CPUI_INT_ADD, xs, sh, x);
+            }
+            if (k2 != 0) out = t.op(ext == CPUI_INT_SEXT ? CPUI_INT_SRIGHT : CPUI_INT_RIGHT, xs, out, t.k(4, k2));
+            Varnode* sink = t.op(CPUI_COPY, xs, out);
+            t.fd->calcNZMask();
+            std::vector<RcEnv> envs;
+            for (uint64_t vv : RcInputs(xs, c0, 29, 30)) envs.push_back({ { in, vv } });
+            const std::vector<uint64_t> before = RcValues(sink, envs);
+            RuleDivTermAdd a("scratch");
+            RuleDivTermAdd2 b("scratch");
+            RuleDivOpt c("scratch");
+            applied += R13Pool(t, { &a, &b, &c });
+            {
+                char label[160];
+                std::snprintf(label, sizeof(label), "RuleDivTermAdd/2 and RuleDivOpt (%d-byte %s%s, c=%llx, shape %d, shift %d, then >> %d)", xs, limited ? "masked " : "", ext == CPUI_INT_SEXT ? "sext" : "zext", static_cast<unsigned long long>(c0), shape, s, k2);
+                compare(label, sink, envs, before);
+            }
+        };
+        for (int xs : { 1, 2, 4 })
+            for (OpCode ext : { CPUI_INT_ZEXT, CPUI_INT_SEXT })
+                for (int cIndex = 0; cIndex < 13 + 34; ++cIndex)
+                    for (int shape = 0; shape < 3; ++shape)   // 0: sub + shift + x, 1: sub + x (no shift), 2: x + ((x - w) >> 1) (RuleDivTermAdd2, zero extension)
+                        for (int s : { 0, 1, 2, 3, 7, 8 * xs - 4, 8 * xs - 1, 8 * xs, 8 * xs + 1 })
+                         for (int k2 : { 0, 2, 3, 4 * xs })     // the shift after the sum (what makes the sum a division)
+                          for (int limited = 0; limited < 2; ++limited)     // 1: x is a byte in a longword (the sum fits its add, the product may still wrap its multiply)
+                        {
+                            if (limited && (xs != 4 || ext != CPUI_INT_ZEXT)) continue;
+                            // the multipliers: the table, and for each of sixteen divisors the one whose sum with 2^n is that division's (so that the folded product is a
+                            // division on the way, whether or not the product it started from fitted its multiply; 53771 with a shift of 16 after the sum is
+                            // A2-89's `(mulhu(x, 0x38032949) + x) >> 16`, whose sum wraps its add)
+                            const int nBits = 8 * xs + (shape == 2 ? 0 : s);
+                            const int totalShift = nBits + (shape == 2 ? 1 : 0) + k2;
+                            uint64_t c0;
+                            if (cIndex < 13) c0 = cs[cIndex];
+                            else
+                            {
+                                const uint64_t divisors[] = { 3, 5, 6, 7, 9, 10, 11, 12, 13, 14, 25, 100, 641, 1000, 3000, 65537, 53771 };
+                                if (totalShift > 100 || nBits >= 64) continue;
+                                const unsigned __int128 one = 1;
+                                const unsigned __int128 y = ((one << totalShift) / divisors[(cIndex - 13) / 2]) + 1 + ((cIndex - 13) & 1);
+                                if (y <= (one << nBits) || ((y - (one << nBits)) >> 64) != 0) continue;
+                                c0 = static_cast<uint64_t>(y - (one << nBits));
+                            }
+                            if (shape == 1 && s != 0) continue;
+                            if (shape == 2 && (ext == CPUI_INT_SEXT || s != 0)) continue;
+                            runCase(xs, ext, c0, shape, s, k2, limited);
+                        }
+
+        // SE_R13_EXPLORE=<n>: n more cases with random shapes, shifts and multipliers (a random width of bits, or a division's), for a longer search than the grid
+        if (const char* ex = std::getenv("SE_R13_EXPLORE"))
+        {
+            const long n = std::atol(ex);
+            uint64_t state = 0x13579bdf2468ace1ull;
+            auto rnd = [&]() { uint64_t z = (state += 0x9E3779B97F4A7C15ull); z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ull; z = (z ^ (z >> 27)) * 0x94D049BB133111EBull; return z ^ (z >> 31); };
+            long ran = 0;
+            for (long i = 0; i < n; ++i)
+            {
+                const int xs = 1 << (rnd() % 3);
+                const OpCode ext = (rnd() & 1) ? CPUI_INT_SEXT : CPUI_INT_ZEXT;
+                const int shape = static_cast<int>(rnd() % 3);
+                const int s = (shape == 0) ? static_cast<int>(rnd() % (8 * xs + 2)) : 0;
+                const int k2 = (rnd() & 1) ? 0 : static_cast<int>(rnd() % (8 * xs + 1));
+                const int limited = (xs == 4 && ext == CPUI_INT_ZEXT) ? static_cast<int>(rnd() & 1) : 0;
+                if (shape == 2 && ext == CPUI_INT_SEXT) continue;
+                uint64_t c0;
+                if (rnd() & 1) c0 = rnd() >> (rnd() % 64);
+                else
+                {
+                    const int nBits = 8 * xs + s;
+                    const int totalShift = nBits + (shape == 2 ? 1 : 0) + k2;
+                    if (totalShift > 100 || nBits >= 64) continue;
+                    const unsigned __int128 one = 1;
+                    const unsigned __int128 y = ((one << totalShift) / (2 + rnd() % 70000)) + 1 + (rnd() & 1);
+                    if (y <= (one << nBits) || ((y - (one << nBits)) >> 64) != 0) continue;
+                    c0 = static_cast<uint64_t>(y - (one << nBits));
+                }
+                runCase(xs, ext, c0, shape, s, k2, limited);
+                ++ran;
+            }
+            std::printf("round 13 exploration: %ld random division-term graphs\n", ran);
+        }
+        // A2-89: `(mulhu(x, c) + x) >> 16` of a 32-bit unsigned x: the sum wraps the 32-bit add for a large x and RuleDivTermAdd must leave it; with x of 16 bits (an AND
+        // mask) the sum fits and the rule still folds it
+        for (int masked = 0; masked < 2; ++masked)
+        {
+            t.reset();
+            Varnode* in = t.input(4);
+            Varnode* x = masked ? t.op(CPUI_INT_AND, 4, in, t.k(4, 0xffff)) : in;
+            Varnode* prod = t.op(CPUI_INT_MULT, 8, t.op(CPUI_INT_ZEXT, 8, x), t.k(8, 0x38032949));
+            Varnode* hi = t.op(CPUI_SUBPIECE, 4, prod, t.k(4, 4));
+            Varnode* sum = t.op(CPUI_INT_ADD, 4, hi, x);
+            Varnode* res = t.op(CPUI_INT_RIGHT, 4, sum, t.k(4, 16));
+            t.fd->calcNZMask();
+            std::vector<RcEnv> envs;
+            for (uint64_t vv : RcInputs(4, 0x38032949, 41, 40)) envs.push_back({ { in, vv } });
+            envs.push_back({ { in, 0xffffffff } });
+            const std::vector<uint64_t> before = RcValues(res, envs);
+            RuleDivTermAdd rule("scratch");
+            const int rc = rule.applyOp(hi->getDef(), *t.fd);
+            CHECK(rc == (masked ? 1 : 0));
+            compare("RuleDivTermAdd (the sum wraps its add)", res, envs, before);
+        }
+        std::printf("RuleDivTermAdd and RuleDivTermAdd2: %ld rule applications in the pools (divtermadd %ld, divtermadd2 %ld, divopt %ld)\n", applied, g_r13Applied["divtermadd"], g_r13Applied["divtermadd2"], g_r13Applied["divopt"]);
+        CHECK(g_r13Applied["divtermadd"] > 0);
+        CHECK(g_r13Applied["divtermadd2"] > 0);
+        CHECK(g_r13Applied["divopt"] > 0);
+    }
+    std::printf("round 13 rule guards by value: %ld graphs, %ld values compared\n", graphs, values);
+}
+
 }  // namespace
 
 // Each case announces itself first; with stdout unbuffered, the last name printed is where a
@@ -1876,6 +3625,18 @@ int main(int argc, char** argv)
         RUN(TestSha256KnownAnswers());
         RUN(TestDecompileThroughBundle(config));
         RUN(TestNzMaskShiftRound11());
+        RUN(TestIntersectMixedMasksRound12());
+        RUN(TestSetNZMaskRound12());
+        RUN(TestWidenRound12());
+        RUN(TestScarryMinimumRound12());
+        RUN(TestRulesByValueRound12());
+        RUN(TestRangeSetsRound13());
+        RUN(TestSignHighBitRound13());
+        RUN(TestDivOptSignAndWrapRound13());
+        RUN(TestRuleGuardsRound13());
+        RUN(TestDivOptExhaustiveRound14());
+        RUN(TestSignModIdentityRound14());
+        RUN(TestThreeWayAndShiftSubRound14());
         RUN(TestCancelDuringJumpTableRecovery());
         RUN(TestReuseAndRepair(config));
         RUN(TestForeignHashUntouched(config));

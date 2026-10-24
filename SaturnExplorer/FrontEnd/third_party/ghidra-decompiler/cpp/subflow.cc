@@ -14,6 +14,7 @@
  * limitations under the License.
  *
  * Modified for SaturnExplorer: an input replaced by a temporary that an operation still reads is read extended from the logical input (patches/0033-engine-printed-value-fixes.patch).
+ * Modified for SaturnExplorer: a sign-extended sub-variable is not shifted by an amount its constant cannot hold (patches/0064-engine-divopt-sign-and-wrap-rule-guards.patch).
  */
 #include "subflow.hh"
 #include "funcdata.hh"
@@ -904,6 +905,9 @@ bool SubvariableFlow::traceForwardSext(ReplaceVarnode *rvn)
       break;
     case CPUI_INT_SRIGHT:
       if (!op->getIn(1)->isConstant()) return false; // Right now we only deal with constant shifts
+      // SaturnExplorer (patches/0064-engine-divopt-sign-and-wrap-rule-guards.patch): the amount is kept in a constant of the logical size; one that
+      // does not fit it (a shift by 2^32 of an eight byte value, by 300 of a one byte flow) would be cut
+      if (op->getIn(1)->getOffset() > calc_mask(flowsize)) return false;
       rop = createOpDown(CPUI_INT_SRIGHT,2,op,rvn,0);
       if (!createLink(rop,rvn->mask,-1,outvn)) return false; // Keep the same mask size
       addConstant(rop,calc_mask(op->getIn(1)->getSize()),1,op->getIn(1)); // Preserve the shift amount
@@ -994,6 +998,7 @@ bool SubvariableFlow::traceBackwardSext(ReplaceVarnode *rvn)
     // A sign-extended logical value is arithmetically right-shifted
     // we can replace with the logical value, keeping the same shift amount
     if (!op->getIn(1)->isConstant()) return false;
+    if (op->getIn(1)->getOffset() > calc_mask(flowsize)) return false;	// SaturnExplorer (0064): see the forward case
     rop = createOp(CPUI_INT_SRIGHT,2,rvn);
     if (!createLink(rop,rvn->mask,0,op->getIn(0))) return false; // Keep the same mask
     if (rop->input.size()==1)

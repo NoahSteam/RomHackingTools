@@ -1,0 +1,316 @@
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc
+@@ -21,6 +21,7 @@
+  * Modified for SaturnExplorer: a return in the join space is consumed whole, never narrowed to its low half (patches/0033-engine-printed-value-fixes.patch).
+  * Modified for SaturnExplorer: the backward step of the consume analysis is PcodeOp::getConsumeLocal (patches/0054-engine-cached-masks-never-narrower.patch).
+  * Modified for SaturnExplorer: the entry stack pointer a loop walks down is no reference to a stack parameter, and a save slot it reaches stays mapped (patches/0056-engine-stack-walk-down-aliases.patch).
++ * Modified for SaturnExplorer: so does a save slot an indexed store's guard covers (patches/0063-engine-frame-escape-unknown-pointers.patch).
+  */
+ #include "coreaction.hh"
+ #include "condexe.hh"
+@@ -2115,6 +2116,16 @@ int4 ActionRestrictLocal::apply(Funcdata &data)
+ 	  if (outvn->getSpace() == stackSpc && (low <= top ? (off >= low && off <= top) : (off >= low || off <= top)))
+ 	    walked = true;
+ 	}
++	// SaturnExplorer (patches/0063-engine-frame-escape-unknown-pointers.patch): ...and a slot an indexed STORE may write, as its guard
++	// (the value set analysis of the pointer) has it: a pointer stepped up from a local over the slot (`*p++ = v` past an array) wrote it,
++	// and unmapped, the slot was one variable with the register saved in it, so a read of it after the walk printed the register
++	// (`return unaff_gbr;`, ledger A3-102). Only a stepped-down pointer's reach was kept (0056).
++	const list<LoadGuard> &guards( data.getStoreGuards() );
++	for(list<LoadGuard>::const_iterator giter=guards.begin();giter!=guards.end() && !walked;++giter) {
++	  if (!(*giter).isValid(CPUI_STORE)) continue;
++	  if ((*giter).isGuarded(outvn->getAddr()))
++	    walked = true;
++	}
+ 	if (walked) continue;
+ 	data.getScopeLocal()->markNotMapped(outvn->getSpace(),outvn->getOffset(),outvn->getSize(),false);
+       }
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.cc
+@@ -16,6 +16,7 @@
+  * Modified for SaturnExplorer: an indexed stack access whose pointer is stepped down guards the stack below it (patches/0056-engine-stack-walk-down-aliases.patch).
+  * Modified for SaturnExplorer: a STORE through a frame address kept in a stack local and read back is guarded (patches/0060-engine-stack-walk-down-spilled.patch).
+  * Modified for SaturnExplorer: a STORE a frame address may have escaped to is guarded, failing closed (patches/0061-engine-stack-frame-escape.patch).
++ * Modified for SaturnExplorer: once the frame escapes, a STORE through a pointer not proved to be no frame address is guarded (patches/0063-engine-frame-escape-unknown-pointers.patch).
+  */
+ #include "heritage.hh"
+ #include "funcdata.hh"
+@@ -967,7 +968,10 @@ void FrameEscape::compute(const Funcdata *fd,AddrSpace *spc,bool preHeritage)
+     offset[in] = 0;
+     if (members.insert(in).second) work.push_back(in);
+   }
+-  if (members.empty()) return;
++  // (0063) The host's declaration of an escape stands when nothing reads the stack pointer any more (every access a direct stack Varnode)
++  if (fd->getScopeLocal() != (const ScopeLocal *)0 && fd->getScopeLocal()->hasHostEscape())
++    hostEscape = true;
++  if (members.empty() && !hostEscape) return;
+   if (preHeritage) {
+     VarnodeLocSet::const_iterator iter = fd->beginLoc(spc);
+     VarnodeLocSet::const_iterator enditer = fd->endLoc(spc);
+@@ -984,6 +988,7 @@ void FrameEscape::compute(const Funcdata *fd,AddrSpace *spc,bool preHeritage)
+       if (members.size() > maxMembers) {	// too far to follow: everything escaped (fail closed)
+ 	gaveUp = true;
+ 	escaped = true;
++	loose = true;
+ 	return;
+       }
+       Varnode *vn = work.back();
+@@ -1051,6 +1056,14 @@ void FrameEscape::compute(const Funcdata *fd,AddrSpace *spc,bool preHeritage)
+ 	    escaped = true;		// a call through a frame address
+ 	    continue;
+ 	  }
++	  // (e) (0063): an argument of a call, in a register or a stack word: the callee may keep it anywhere. Not the placeholder for the
++	  // stack pointer itself, which every call of an unlocked prototype is handed until its stack arguments are known.
++	  {
++	    FuncCallSpecs *fc = (op->code() == CPUI_CALLOTHER) ? (FuncCallSpecs *)0 : fd->getCallSpecs(op);
++	    int4 slot = (fc != (FuncCallSpecs *)0) ? fc->getStackPlaceholderSlot() : -1;
++	    if (slot < 0 || slot >= op->numInput() || op->getIn(slot) != vn)
++	      handed = true;
++	  }
+ 	  if (out != (Varnode *)0) unmodeled.insert(out);	// (d): what a call handed a frame address returns may be one
+ 	  break;
+ 	case CPUI_RETURN:
+@@ -1139,6 +1152,11 @@ void FrameEscape::compute(const Funcdata *fd,AddrSpace *spc,bool preHeritage)
+     }
+   }
+   if (memoryEscape) escaped = true;
++  loose = escaped;		// 0061's causes: a form the stack analysis does not model
++  if (handed) escaped = true;	// (e)
++  // (0063) ...and the escapes the host knows of and the p-code does not show: a callee that keeps the address it was handed, or hands
++  // it back in a register the call has no output in (ledger A3-89, A3-91), a frame address in a register no input of the call names.
++  if (hostEscape) escaped = true;
+   // The lowest frame offset reached, as a signed offset in the space, for the alias boundary: the lowest a frame address takes, and the
+   // lowest stack location the function has (once the frame's own accesses are direct stack varnodes, the frame address that reached the
+   // lowest local may be gone, and a local below every frame address left would be no alias).
+@@ -1163,6 +1181,75 @@ void FrameEscape::compute(const Funcdata *fd,AddrSpace *spc,bool preHeritage)
+       haveLowest = true;
+     }
+   }
++  if (escaped) markUnknownStores(fd);
++}
++
++/// SaturnExplorer (patches/0063-engine-frame-escape-unknown-pointers.patch): once a frame address has escaped, any pointer whose origin
++/// the analysis cannot prove is no frame address may point into the frame (the escape semantics of a points-to analysis). Those pointers
++/// are the values the function did not compute from constants and frame addresses alone: a parameter (any input but the stack pointer), a
++/// value loaded from memory, any output of a call or a user op, the value a call or a store may have rewritten (an INDIRECT), and anything
++/// computed from one of them by any op but a comparison. Every STORE through one is a STORE through an unmodeled frame address. A frame
++/// address itself is not followed here: the walk above decides it (the modeled ones are the stack analysis's own).
++/// \param fd is the function
++void FrameEscape::markUnknownStores(const Funcdata *fd)
++
++{
++  const int4 maxUnknown = 65536;
++  set<Varnode *> unknown;
++  vector<Varnode *> work;
++  bool all = false;
++  VarnodeDefSet::const_iterator diter = fd->beginDef(Varnode::input);
++  VarnodeDefSet::const_iterator denditer = fd->endDef(Varnode::input);
++  for(;diter!=denditer;++diter) {
++    Varnode *vn = *diter;
++    if (vn->isConstant() || members.find(vn) != members.end()) continue;
++    if (unknown.insert(vn).second) work.push_back(vn);
++  }
++  list<PcodeOp *>::const_iterator iter = fd->beginOpAlive();
++  list<PcodeOp *>::const_iterator enditer = fd->endOpAlive();
++  for(;iter!=enditer;++iter) {
++    PcodeOp *op = *iter;
++    Varnode *out = op->getOut();
++    if (out == (Varnode *)0 || members.find(out) != members.end()) continue;
++    switch(op->code()) {
++    case CPUI_LOAD:
++    case CPUI_CALL:
++    case CPUI_CALLIND:
++    case CPUI_CALLOTHER:
++    case CPUI_INDIRECT:
++    case CPUI_NEW:
++      if (unknown.insert(out).second) work.push_back(out);
++      break;
++    default:
++      break;
++    }
++  }
++  while(!work.empty() && !all) {
++    if (unknown.size() > maxUnknown) {	// too far to follow: every STORE through a computed pointer (fail closed)
++      all = true;
++      break;
++    }
++    Varnode *vn = work.back();
++    work.pop_back();
++    for(list<PcodeOp *>::const_iterator oiter=vn->beginDescend();oiter!=vn->endDescend();++oiter) {
++      PcodeOp *op = *oiter;
++      if (op->code() == CPUI_LOAD || op->code() == CPUI_STORE || frameBooleanOutput(op->code())) continue;
++      if (op->code() == CPUI_INDIRECT && op->getIn(0) != vn) continue;
++      Varnode *out = op->getOut();
++      if (out == (Varnode *)0 || members.find(out) != members.end()) continue;
++      if (unknown.insert(out).second) work.push_back(out);
++    }
++  }
++  iter = fd->beginOp(CPUI_STORE);
++  enditer = fd->endOp(CPUI_STORE);
++  for(;iter!=enditer;++iter) {
++    PcodeOp *op = *iter;
++    if (op->isDead()) continue;
++    Varnode *ptr = op->getIn(1);
++    if (ptr->isConstant()) continue;		// an absolute address is never the stack
++    if (all || unknown.find(ptr) != unknown.end())
++      unmodeledStores.insert(op);
++  }
+ }
+ 
+ /// SaturnExplorer (patches/0061-engine-stack-frame-escape.patch): before the stack space is heritaged, mark every STORE made through a
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.hh b/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.hh
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.hh
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.hh
+@@ -16,6 +16,7 @@
+  *
+  * Modified for SaturnExplorer: a guard below a pointer stepped down is no array's start (patches/0056-engine-stack-walk-down-aliases.patch).
+  * Modified for SaturnExplorer: an escape analysis of the frame addresses, failing closed (patches/0061-engine-stack-frame-escape.patch).
++ * Modified for SaturnExplorer: once the frame escapes, a pointer not proved to be no frame address may be one (patches/0063-engine-frame-escape-unknown-pointers.patch).
+  */
+ /// \file heritage.hh
+ /// \brief Utilities for building Static Single Assignment (SSA) form 
+@@ -187,17 +188,32 @@ public:
+ /// (b) is stored to memory; (c) is joined with a value that is no frame address; (d) is returned by a call it was handed to, and reaches a
+ /// memory access from there. Where the escaped value goes is not followed: once one escapes, every local from the lowest frame offset up
+ /// are aliased, and every STORE through a value that may be one is a store to the stack.
++///
++/// SaturnExplorer (patches/0063-engine-frame-escape-unknown-pointers.patch): the escape of 0061 followed the escaped value through the
++/// function's own ops, and every way a frame address came back that was no op of the function -- a callee that keeps it (in a global, in a
++/// slot of the frame it was given a pointer to, in a register the model keeps), a call's output in another register -- was found by a
++/// reviewer one form at a time (ledger A3-89, A3-91). It now uses the escape semantics of a C compiler's points-to analysis instead of a
++/// list: (e) a frame address handed to a call as an argument (a register or stack input, not the stack pointer itself) escapes, and so does
++/// the frame when the host declares an escape the p-code does not show (ScopeLocal::declareHostEscape). Once anything escaped, every
++/// pointer whose origin the analysis cannot prove is no frame address -- a value loaded from memory, any output of a call or a user op,
++/// the value a call or a store may have rewritten (an INDIRECT), a parameter, and anything computed from them -- may point into the frame,
++/// and every STORE through one is a STORE through an unmodeled frame address (guarded). Where the escaped value goes is still not followed:
++/// that is what makes the rule closed.
+ class FrameEscape {
++  void markUnknownStores(const Funcdata *fd);	///< Mark the STOREs through a pointer not proved to be no frame address (0063)
+ public:
+   set<Varnode *> members;		///< The possible frame addresses
+   set<Varnode *> unmodeled;		///< ...of which those reached through a form the stack analysis does not model
+-  set<PcodeOp *> unmodeledStores;	///< STOREs through an unmodeled possible frame address
++  set<PcodeOp *> unmodeledStores;	///< STOREs through an unmodeled possible frame address, or, once the frame escaped, an unknown pointer
+   bool memoryEscape;			///< A frame address was stored to memory
++  bool handed;				///< A frame address was handed to a call as an argument (0063)
++  bool hostEscape;			///< The host declared an escape the p-code does not show (0063)
+   bool escaped;				///< Some frame address escaped
++  bool loose;				///< ...by a form the stack analysis does not model (0061's causes, not a hand-over alone: 0063)
+   bool gaveUp;				///< The walk passed its bound: everything is taken to have escaped
+   bool haveLowest;			///< \b lowest is set
+   uintb lowest;				///< The lowest frame offset reached (a byte offset in the stack space)
+-  FrameEscape(void) : memoryEscape(false), escaped(false), gaveUp(false), haveLowest(false), lowest(0) {}
++  FrameEscape(void) : memoryEscape(false), handed(false), hostEscape(false), escaped(false), loose(false), gaveUp(false), haveLowest(false), lowest(0) {}
+   void compute(const Funcdata *fd,AddrSpace *spc,bool preHeritage);	///< Run the walk over the given stack space
+   /// \brief Is the given STORE made through a possible frame address the stack analysis does not model?
+   bool storeIsUnmodeled(PcodeOp *op) const { return gaveUp || unmodeledStores.find(op) != unmodeledStores.end(); }
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/varmap.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/varmap.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/varmap.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/varmap.cc
+@@ -18,6 +18,7 @@
+  * Modified for SaturnExplorer: a pointer a loop steps down from a stack address aliases the locals below that address (patches/0056-engine-stack-walk-down-aliases.patch).
+  * Modified for SaturnExplorer: so does one kept in a stack local and read back, across a call too (patches/0060-engine-stack-walk-down-spilled.patch).
+  * Modified for SaturnExplorer: once a frame address escapes, every local from the lowest frame offset up is aliased (patches/0061-engine-stack-frame-escape.patch).
++ * Modified for SaturnExplorer: a host can declare that the frame escaped by a way the p-code does not show (patches/0063-engine-frame-escape-unknown-pointers.patch).
+  */
+ #include "varmap.hh"
+ #include "funcdata.hh"
+@@ -414,6 +415,7 @@ ScopeLocal::ScopeLocal(uint8 id,AddrSpace *spc,Funcdata *fd,Architecture *g) : S
+   openParamRefs = false;
+   hostAlias = false;
+   hostAliasStart = 0;
++  hostEscape = false;
+   restrictScope(fd);
+ } 
+ 
+@@ -803,6 +805,7 @@ void AliasChecker::gatherInternal(void) const
+ {
+   calculated = true;
+   aliasBoundary = localExtreme;
++  trialBoundary = localExtreme;
+   Varnode *spacebase = fd->findSpacebaseInput(space);
+   // SaturnExplorer: a pointer the host knows of and the p-code does not show. The code hands the
+   // address of a local to a callee in a register no call input names (a returned structure's
+@@ -812,7 +815,8 @@ void AliasChecker::gatherInternal(void) const
+   // pointer any more.
+   uintb hostOffset = 0;
+   const bool host = fd->getScopeLocal()->getHostAlias(hostOffset);
+-  if (spacebase == (Varnode *)0 && !host) return; // No possible alias
++  // (patches/0063-engine-frame-escape-unknown-pointers.patch) ...and an escape the host declared stands with no pointer at all (below)
++  if (spacebase == (Varnode *)0 && !host && !fd->getScopeLocal()->hasHostEscape()) return; // No possible alias
+ 
+   if (spacebase != (Varnode *)0)
+     gatherAdditiveBase(spacebase,addBase);
+@@ -864,13 +868,24 @@ void AliasChecker::gatherInternal(void) const
+   // frame offset the function reaches up. Where the escaped value is used is not followed. Every local lies at or above the lowest offset
+   // the stack pointer or a frame address takes, so the alias starts there (an alias started 0xffff below it, as a pointer stepped down's
+   // is, lies in the unmapped stack below the scope's range, and ScopeLocal::markUnaliased turns such an alias off at the first local).
++  // (patches/0063-engine-frame-escape-unknown-pointers.patch) The escape's alias is not asked whether a word written before a call is
++  // the call's stack argument (hasLocalAlias, FuncCallSpecs::checkInputTrialUse): from the frame's lowest slot it would take every
++  // outgoing argument word for a local, drop the arguments from every call of a function whose frame escaped -- the frame address
++  // handed in a stack argument among them, so the escape that dropped it was gone too and the local it reached was folded -- and leave
++  // the value the callee reads as a store to a local on the line before (ledger A3-99). An argument shown is a use the escape walk
++  // follows; the locals stay aliased by the boundary below.
++  trialBoundary = aliasBoundary;
+   {
+     FrameEscape escape;
+     escape.compute(fd,space,false);
+     if (escape.escaped) {
+       uintb low = (escape.haveLowest ? escape.lowest : 0) & calc_mask(space->getAddrSize());
+       downReach.push_back(low);
+-      downSpan.push_back(pair<uintb,uintb>(low,calc_mask(space->getAddrSize())));	// the whole frame, its save slots included
++      // (0063) A frame address that escaped only by being handed over (to a call, or as the host declared) is a pointer to a local: the
++      // locals are aliased, the save slots are not reached through it and stay unmapped. One that escaped through a form the stack
++      // analysis does not model may be anywhere, the save slots included.
++      if (escape.loose)
++	downSpan.push_back(pair<uintb,uintb>(low,calc_mask(space->getAddrSize())));	// the whole frame, its save slots included
+       bool param = (direction == 1) ? (low < localBoundary) : (low > localBoundary);
+       if (!param && low < aliasBoundary)
+ 	aliasBoundary = low;
+@@ -1042,7 +1057,7 @@ bool AliasChecker::hasLocalAlias(Varnode *vn) const
+   // local variables on the stack
+   if (direction == -1)
+     return false;
+-  return (vn->getOffset() >= aliasBoundary);
++  return (vn->getOffset() >= trialBoundary);	// SaturnExplorer (0063): not the escape's boundary, see gatherInternal
+ }
+ 
+ void AliasChecker::sortAlias(void) const
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/varmap.hh b/Ghidra/Features/Decompiler/src/decompile/cpp/varmap.hh
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/varmap.hh
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/varmap.hh
+@@ -16,6 +16,7 @@
+  * Modified for SaturnExplorer: a host can declare a pointer into the stack the actions cannot see (patches/0030-host-stack-alias.patch).
+  * Modified for SaturnExplorer: a pointer a loop steps down from a stack address aliases the locals below that address (patches/0056-engine-stack-walk-down-aliases.patch).
+  * Modified for SaturnExplorer: so does one kept in a stack local and read back, across a call too (patches/0060-engine-stack-walk-down-spilled.patch).
++ * Modified for SaturnExplorer: a host can declare that the frame escaped by a way the p-code does not show (patches/0063-engine-frame-escape-unknown-pointers.patch).
+  */
+ /// \file varmap.hh
+ /// \brief Classes for keeping track of local variables and reconstructing stack layout
+@@ -162,6 +163,7 @@ private:
+   uintb localExtreme;		///< Largest possible offset for a local variable
+   uintb localBoundary;		///< Boundary offset separating locals and parameters
+   mutable uintb aliasBoundary;	///< Shallowest alias
++  mutable uintb trialBoundary;	///< SaturnExplorer: the shallowest alias but an escape's (patches/0063-engine-frame-escape-unknown-pointers.patch)
+   int4 direction;		///< 1=stack grows negative, -1=positive
+   void deriveBoundaries(const FuncProto &proto);	///< Set up basic boundaries for the stack layout
+   void gatherInternal(void) const;	///< Run through Varnodes looking for pointers into the stack
+@@ -240,6 +242,7 @@ class ScopeLocal : public ScopeInternal {
+   bool openParamRefs;		///< True if we have seen references into the stack region reserved for parameters
+   bool hostAlias;		///< True if the host declared a pointer into the stack that no Varnode shows (SaturnExplorer)
+   uintb hostAliasStart;		///< The offset it points to; the lowest if declared more than once (SaturnExplorer)
++  bool hostEscape;		///< True if the host declared that a frame address escaped by a way the p-code does not show (SaturnExplorer, 0063)
+   bool adjustFit(RangeHint &a) const;	///< Make the given RangeHint fit in the current Symbol map
+   void createEntry(const RangeHint &a);	///< Create a Symbol entry corresponding to the given (fitted) RangeHint
+   bool restructure(MapState &state);	///< Merge hints into a formal Symbol layout of the address space
+@@ -256,6 +259,8 @@ public:
+   AddrSpace *getSpaceId(void) const { return space; }		///< Get the associated (stack) address space
+   void declareHostAlias(uintb off);	///< Declare a pointer to offset \b off that the function's p-code does not show (SaturnExplorer)
+   bool getHostAlias(uintb &off) const;	///< Get the offset of the lowest pointer the host declared (SaturnExplorer)
++  void declareHostEscape(void) { hostEscape = true; }	///< Declare that a frame address escaped where the p-code does not show it (SaturnExplorer, 0063)
++  bool hasHostEscape(void) const { return hostEscape; }	///< Did the host declare an escape (SaturnExplorer, 0063)
+ 
+   /// \brief Return \b true if \b restructure analysis discovered overlapping variables
+   bool hasOverlapProbems(void) const { return overlapProblems; }

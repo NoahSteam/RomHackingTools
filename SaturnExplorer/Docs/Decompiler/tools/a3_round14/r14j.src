@@ -1,0 +1,167 @@
+name R14-12a lent g(p) stores 0x55 at p + r5 with r5 = -8 from a literal pool long (callee-side stride)
+asm 06009000
+.word 0x4F22
+add #-24,r15
+mov #5,r0
+mov.l r0,@r15
+mov #6,r0
+mov.l r0,@(4,r15)
+mov r15,r4
+add #8,r4
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l @r15,r0
+add #24,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+mov.l =0xFFFFFFF8,r5
+add r5,r4
+mov #0x55,r0
+mov.l r0,@r4
+rts
+nop
+endasm
+lend 06009100
+quiet
+args 0 0 0 0
+end
+
+name R14-12b control: r5 = -8 by mov #-8
+asm 06009000
+.word 0x4F22
+add #-24,r15
+mov #5,r0
+mov.l r0,@r15
+mov #6,r0
+mov.l r0,@(4,r15)
+mov r15,r4
+add #8,r4
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l @r15,r0
+add #24,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+mov #-8,r5
+add r5,r4
+mov #0x55,r0
+mov.l r0,@r4
+rts
+nop
+endasm
+lend 06009100
+quiet
+args 0 0 0 0
+end
+
+name R14-12c lent g(p) steps p down by a pool-halfword stride in a loop, stores
+asm 06009000
+.word 0x4F22
+add #-24,r15
+mov #5,r0
+mov.l r0,@r15
+mov #6,r0
+mov.l r0,@(4,r15)
+mov r15,r4
+add #8,r4
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l @r15,r0
+add #24,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+mov.w =0xFFFC,r5
+mov #2,r3
+mov #0x55,r0
+L:
+add r5,r4
+mov.l r0,@r4
+dt r3
+bf L
+rts
+nop
+endasm
+lend 06009100
+quiet
+args 0 0 0 0
+end
+
+name R14-12d lent g(p) with the stride reloaded from its own frame slot
+asm 06009000
+.word 0x4F22
+add #-24,r15
+mov #5,r0
+mov.l r0,@r15
+mov #6,r0
+mov.l r0,@(4,r15)
+mov r15,r4
+add #8,r4
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l @r15,r0
+add #24,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+add #-4,r15
+mov #-4,r5
+mov.l r5,@r15
+mov.l @r15,r5
+add r5,r4
+mov #0x55,r0
+mov.l r0,@r4
+add #4,r15
+rts
+nop
+endasm
+lend 06009100
+quiet
+args 0 0 0 0
+end
+
+name R14-12e lent g(p, stride in r5 = literal in the caller) caller passes the stride loaded from a pool
+asm 06009000
+.word 0x4F22
+add #-24,r15
+mov #5,r0
+mov.l r0,@r15
+mov #6,r0
+mov.l r0,@(4,r15)
+mov r15,r4
+add #8,r4
+mov.l =0xFFFFFFF8,r5
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l @r15,r0
+add #24,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+add r5,r4
+mov #0x55,r0
+mov.l r0,@r4
+rts
+nop
+endasm
+lend 06009100
+quiet
+args 0 0 0 0
+end

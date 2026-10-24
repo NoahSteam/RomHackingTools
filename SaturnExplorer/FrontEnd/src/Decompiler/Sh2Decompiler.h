@@ -64,15 +64,32 @@ struct TypeShape
 // worst.
 // The comment printed at a call that a frame address reaches in a register its arguments do not show (the address of a returned
 // structure, in r2: A3-4). The pseudocode alone would read as a call that cannot touch the local.
-constexpr const char* kFrameEscapeNote = "a frame address is in r2 here, in none of the arguments: the call may write the locals from there up";
+// (area 3 round 13 fix, A3-105) "may keep it and write any local": the address goes out (the engine's escape, the whole frame), and what a callee
+// keeps a later step may walk down from; "from there up" was the alias of A3-48, which reached only the locals at and above it.
+constexpr const char* kFrameEscapeNote = "a frame address is in r2 here, in none of the arguments: the call may keep it and write any local";
 // ...and the same for r7 (A3-48): the engine fills in at most two unset registers before an argument it sees, so a frame address in r7 with r4-r6 all
 // untouched is dropped from the call's arguments.
-constexpr const char* kFrameEscapeNoteR7 = "a frame address is in r7 here, in none of the arguments: the call may write the locals from there up";
+constexpr const char* kFrameEscapeNoteR7 = "a frame address is in r7 here, in none of the arguments: the call may keep it and write any local";
 // ...and for the call's stack argument slots (A3-51): the engine drops an argument that follows three unset registers, the stack word with it.
-constexpr const char* kFrameEscapeNoteStack = "a frame address is in a stack argument slot here, in none of the arguments: the call may write the locals from there up";
+constexpr const char* kFrameEscapeNoteStack = "a frame address is in a stack argument slot here, in none of the arguments: the call may keep it and write any local";
 // ...and for a local the function wrote at or above the stack pointer before a call to a function with no lent signature and reads after it (A3-61):
 // the callee's stack arguments are those words, and a hand-written one may hand a value back in its own argument slot.
 constexpr const char* kFrameEscapeNoteSlot = "a local at or above the stack pointer is read after this call, which may write it as one of its stack arguments";
+// ...(area 3 round 13 fix, A3-108) and the same for a word that holds a saved register's entry value, which is no local: the epilogue's pop reads it.
+constexpr const char* kFrameEscapeNoteSaved = "a saved register's word at or above the stack pointer is read after this call, which may write it as one of its stack arguments";
+// (A3-108) A note that holds at more calls than the first is said once, at the first, with this added.
+constexpr const char* kFrameEscapeNoteLikewise = "; likewise at the calls below";
+// ...and for a frame address in another register a callee with no lent signature stores through, lets out or hands back (area 3 round 12 fix:
+// r0, r1, r3, r8-r14, GBR, MACH, ..., which the engine never takes for an argument). The register's name goes between the two parts.
+constexpr const char* kFrameEscapeNoteRegA = "a frame address is in ";
+constexpr const char* kFrameEscapeNoteRegB = " here, in none of the arguments: the call may keep it and write any local";
+// (area 3 round 14 fix, A3-120) ...and the same where the host knows only that a frame address may be there (a word a callee handed the frame may
+// have written, a pointer loaded once an address of the frame went out): "is" is kept for a frame address this function made from r15 and holds
+// there on every path (the probe's Value::Sure).
+constexpr const char* kFrameEscapeNoteMay = "a frame address may be in r2 here, in none of the arguments: the call may keep it and write any local";
+constexpr const char* kFrameEscapeNoteMayR7 = "a frame address may be in r7 here, in none of the arguments: the call may keep it and write any local";
+constexpr const char* kFrameEscapeNoteMayStack = "a frame address may be in a stack argument slot here, in none of the arguments: the call may keep it and write any local";
+constexpr const char* kFrameEscapeNoteMayRegA = "a frame address may be in ";
 
 namespace origin
 {

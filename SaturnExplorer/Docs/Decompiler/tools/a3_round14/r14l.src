@@ -1,0 +1,106 @@
+name R14-13h control 13f plus an unrelated pool literal loaded before the loop and used as the stored value
+asm 06009000
+add #-127,r15
+add #-127,r15
+add #-127,r15
+add #-127,r15
+add #-4,r15
+mov r15,r2
+add #127,r2
+add #127,r2
+add #127,r2
+add #67,r2
+mov r15,r3
+add #64,r3
+mov #5,r0
+mov.l r0,@r3
+mov.l =0x1234,r6
+mov #3,r1
+L:
+add #-128,r2
+mov.l r6,@r2
+dt r1
+bf L
+mov.l @r3,r0
+add #127,r15
+add #127,r15
+add #127,r15
+add #127,r15
+add #4,r15
+rts
+nop
+endasm
+args 0 0 0 0
+end
+
+name R14-13i control 13f plus a pool literal in r6 that is never used
+asm 06009000
+add #-127,r15
+add #-127,r15
+add #-127,r15
+add #-127,r15
+add #-4,r15
+mov r15,r2
+add #127,r2
+add #127,r2
+add #127,r2
+add #67,r2
+mov r15,r3
+add #64,r3
+mov #5,r0
+mov.l r0,@r3
+mov.l =0x1234,r6
+mov #3,r1
+L:
+add #-128,r2
+mov.l r1,@r2
+dt r1
+bf L
+mov.l @r3,r0
+add #127,r15
+add #127,r15
+add #127,r15
+add #127,r15
+add #4,r15
+rts
+nop
+endasm
+args 0 0 0 0
+end
+
+name R14-13j pool +128 stride, sub, then the register is clobbered by extu.w (no change to the value)
+asm 06009000
+add #-127,r15
+add #-127,r15
+add #-127,r15
+add #-127,r15
+add #-4,r15
+mov r15,r2
+add #127,r2
+add #127,r2
+add #127,r2
+add #67,r2
+mov r15,r3
+add #64,r3
+mov #5,r0
+mov.l r0,@r3
+mov.w =0x0080,r5
+extu.w r5,r5
+mov #3,r1
+L:
+sub r5,r2
+mov.l r1,@r2
+dt r1
+bf L
+mov.l @r3,r0
+add #127,r15
+add #127,r15
+add #127,r15
+add #127,r15
+add #4,r15
+rts
+nop
+endasm
+args 0 0 0 0
+end
+

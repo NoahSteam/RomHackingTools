@@ -11384,6 +11384,9 @@ Timing is below the round 11 review's recorded 10.0 s / 33.6 s because the revie
 
 ### 6. Not done (the engine rows)
 
+**Closed below** ("continued" record): A3-85, A3-88 and A3-86 b are fixed by engine patch 0061, and the instrument gap of section 7 is closed. The paragraphs below are the state at the host-only commit `0fdfdcf`, kept for the record.
+
+
 - **A3-85 (P1).** A frame pointer laundered through memory -- stored to a global and read back, or spilled in halves or bytes and reassembled -- is never recognised as a stack pointer by the engine's `gatherAdditiveBase`, so `AliasChecker::reachesStepDown` is never asked about it and the locals below the walk fold. A trial patch that extended `reachesStepDown` to follow bit-carrying ops and treat an escape to non-stack memory as stepping down gave **no** change to the A3-85 fixtures (the base is not in `addBase` to begin with), so it was reverted. The sound fix is for the engine to recognise a pointer reassembled from memory as possibly a stack pointer, which is a broad change with corpus impact that needs the validation loop.
 - **A3-88 (P1).** A pointer that is the join of a frame address with another pointer (a global, a parameter) and is then stepped below the frame address: the join makes it an indexed stack access whose guard covers the base and above, and the net-negative reach after the join (`p[-2] = v`, a pre-decrement, a counted walk) is not taken by `generateStoreGuard`/the alias analysis. The fix is in the engine's indexed-stack-pointer and guard logic.
 - **A3-86 part b.** A frame address a call returns (`mov r4,r0 ; rts`) is a new value to the engine with no base, so a caller that walks it down folds the locals. The fix is for the engine to take a lent callee's output as a frame address when its `outOrigins` name the register the frame address was passed in; the walk of A3-80 then applies.
@@ -11391,7 +11394,7 @@ Timing is below the round 11 review's recorded 10.0 s / 33.6 s because the revie
 
 ### 7. The instrument gap
 
-Partly closed. The printed-C differential now has the `raw-stack-register` class and the four A3-87/A3-79 pins (section 3), and reverting the host withhold or the excuse fails them (section 4). **Still open** (for the engine rows and a complete close of section 7 of the round 11 review): `storesBelow` is not yet checked against a run in check 10b, and `GenWalkFn`/`GenSpillWalkFn` do not yet draw a callee that steps below its pointer, a wrapper or thunk around one, a laundering step before the walk, or a join of a frame address with another pointer. Those draws exercise the engine rows above, so they are best added with the engine fix that makes them pass.
+**Closed in the continuation below.** Partly closed at `0fdfdcf`: The printed-C differential now has the `raw-stack-register` class and the four A3-87/A3-79 pins (section 3), and reverting the host withhold or the excuse fails them (section 4). **Still open** (for the engine rows and a complete close of section 7 of the round 11 review): `storesBelow` is not yet checked against a run in check 10b, and `GenWalkFn`/`GenSpillWalkFn` do not yet draw a callee that steps below its pointer, a wrapper or thunk around one, a laundering step before the walk, or a join of a frame address with another pointer. Those draws exercise the engine rows above, so they are best added with the engine fix that makes them pass.
 
 ### 8. Matrix (host fix, code `0fdfdcf`)
 
@@ -11409,3 +11412,1787 @@ Partly closed. The printed-C differential now has the `raw-stack-register` class
 | corpora 007 / 008 | section 5 |
 
 **Not run this session** (long, additional confidence; no regression expected given the above): `SE_GENERATED_SEEDS=20000`; the reviewer's ranges (grammar 2 1,600,001-1,620,000, specials 1,700,001-1,705,000); the sanitizer and Live jobs (shared socket; CI).
+
+## Area 3, round 11 fix, continued: the engine rows and the instrument
+
+Fixer, same branch, continuing from `da2a0fa` (merged to master). Engine patch `0061` and host commits `0007a99` to `be61b91`, then the re-pin, docs and this record. The three open P1/P2 rows are now fixed: **A3-85, A3-88 (P1) and A3-86 b** by engine patch `0061-engine-stack-frame-escape.patch`; the instrument gap (section 7 above) is closed.
+
+### 9. Engine patch 0061: the escape analysis
+
+The row fixes of 0056, 0057 and 0060 each recognised a frame address through a few more exact forms, and the next reviewer found another: a frame address laundered (a mask, a shift, swap or rotate pair, halves or bytes reassembled), stored to memory and read back, joined with another pointer (A3-88), or returned by a call it was handed to (A3-86 b) was still taken for no frame address, so the locals below it folded. Rather than add forms, `0061` is an **escape analysis that fails closed** (`FrameEscape` in `heritage.cc`). A frame address *escapes* when it, or any value computed from it, (a) is an input to an op other than a copy, an addition, a subtraction of a constant, a join, an INDIRECT, a PTRSUB or a PTRADD; (b) is stored to memory; (c) is joined with a value that is no frame address; (d) is returned by a call it was handed to and reaches a memory access from there. The walk does not follow where the escaped value goes. **If any frame address escapes, every local from the lowest frame offset the function reaches up is aliased** (`AliasChecker::gatherInternal` adds the reach; `ScopeLocal::markUnaliased` turns the alias off at the first mapped local, so the save-area words below the scope do not matter), and **every STORE through a possible frame address the analysis does not model is guarded** with INDIRECTs (`Heritage::markEscapedStores` before the stack is heritaged, `reprocessFreeStores` keeps the mark after the full pass, `widenEscapedStoreGuards` widens a join's store guard to the whole space for A3-88). The lowest offset is taken over both the frame addresses the walk reaches and the function's stack varnodes, so a frame address that is gone once the stack is heritaged still lowers the boundary.
+
+The host completes the caller side: a laundered own frame address (`PossibleFrame`: a value of stack origin, this function's own, not a nothing-known value) handed to an unnamed call exposes the frame; a lent callee's `storesBelow` is carried through a tail jump in a nested `storesBelow` walk (A3-82, a thunk that reassembles a pointer and tail-jumps to a fill-backwards callee). An over-exposing branch that treated any no-base stack value at a call as an escape was dropped: it broke the `trapa` idiom (modelled as a call) by exposing its ordinary save area; the `storesBelow` loop and `0061` cover the real cases without it.
+
+### 10. The instrument, completed
+
+- **Check 10b** (`EffectClaimsContradicted`, `Sh2GeneratedTests.cpp`) now has `storesBelow`: a run that stores below the start value of r4-r7 in that register's arena, through that register, requires the summary to name it, else `claim-wrong:storesBelow`. Unit pins in `TestRound8Pins` break it in the one way a run shows (a store below r5's start through r5, with and without the bit; an at-or-above store needs no bit).
+- **`GenLaunderWalkFn`/`CheckLaunderWalks`** (a stream of its own, one seed in four, printed-C mode): a frame sentinel, a frame address laundered by one of ten steps (none, mask, swap pair, negation pair, shift pair, rotate pair, xor pair, global round trip, halves, bytes), then a store below it (a counted pre-decrement walk or a constant negative displacement); on the self side sometimes joined with a global first (A3-88); on the call side handed to a callee directly, through a wrapper, through a thunk, or through a thunk that lowers it, with the laundering on the caller's or the callee's side (A3-82 to A3-84). The run reads no input, so a constant the text returns is checked against it (`stale-constant`), as `CheckSpillWalks` does. The draws pin (`TestA365Pins`) holds that every step (self and call), every callee form, the caller-side step and the join are drawn in 2,000 seeds.
+
+### 11. Mutation (the generator alone fails seeds)
+
+Each fix reverted in a built-beside tree, the laundered walks of `SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=300` run:
+
+| Reverted | Result |
+|---|---|
+| engine patch `0061` (the whole of `heritage.cc`/`.hh`, `varmap.cc` back to `da2a0fa`) | 29 `stale-constant` seeds, every one a self or join shape (`launder.self.walk.*`, `.join`): A3-85, A3-88 |
+| the host A3-83 `Store` fail-closed (`storesBelow` for a laundered register pointer) | 9 `stale-constant` seeds, every one a call shape (`launder.call.direct.*`): A3-83 |
+| the host tail-jump `storesBelow` (A3-82) | the `launder.call.thunk.walk.bytes` seed (a thunk reassembling a pointer, tail-jumping to a fill-backwards callee) is `stale-constant` |
+| check 10b's `storesBelow` (the unit pins) | the `claim-wrong:storesBelow` pins fail |
+| the raw-register printed-C excuse | the four A3-87/A3-79 pins fail |
+
+### 12. Cost on the corpora (full, with the texts read)
+
+The fixed tree (`be61b91`) against a baseline built from `da2a0fa` (the merged host-only round-11 fix, before patch 0061 and today's host work). **Lending is unchanged on both images** -- 007 lends 655 / 680 (958), 008 lends 1,010 / 1,040 (1,312), identical to the baseline; the escape analysis changes aliasing, not what is lent. The -31 lent drop on 008 recorded in section 5 was the merged `da2a0fa` host fix, not this work. Every function ok, 0 accesses dropped against the reference run, 008's 4 missing-and-said unchanged, the mapping oracle clean, `TestGameCode` 9,275 ms (007) and ~56 s decompiler (008): within budget.
+
+**Texts changed by the escape analysis, read against the code:** 007, 36 of 839 functions (17 a local array declaration kept that was folded before, 19 a layout change -- a scalar local becoming a `[2]` array, a value held in a stack local across an indirect call so the call shows one fewer argument, a variable renumber); 008, 71 of 2,995 (49 declaration-only, 22 layout). A sample read (007 06006C1C, 008 06006C7E, 06021ADE, 0603ED52, 0604080A): each is a sound, more-conservative rendering of the same computation -- a frame region the escape analysis now keeps aliased is a local or an array instead of folded, and no computed value differs. This is the measured, accepted precision cost of failing closed.
+
+### 13. Matrix (fixed tree, code `be61b91`, fault re-pin after)
+
+| Run | Result |
+|---|---|
+| `ctest -E SaturnExplorerLive -j2 --timeout 1200` (93 tests) | 93 of 93 pass |
+| `SaturnExplorerDecompilerFaultTests` | 0 of 94 jobs failed, after re-pinning 8 MOVED allocation pins (patch 0061's `FrameEscape::compute` allocates in the alias gather; the harness printed each new ordinal, A6-10, A6-14, A6-15) |
+| `rowsfix.src` via the reviewer's driver | A3-82 (a-e), A3-83 (a-h), A3-84 (a-d) print the local and agree; A3-85 (a-d), A3-88 (a-d), A3-86 b print the local; A3-86 a withheld and prints the local; A3-87 withheld; 0 stale constants; the only oracle rejects are the evaluator's "no loops" limit, not unsoundness |
+| `SE_GENERATED_SEEDS=3000 SE_GENERATED_GRAMMAR=2` | 0 failing seeds, 0 findings |
+| `SE_GENERATED_GRAMMAR=1 SE_GENERATED_SEEDS=1000` | 0 failing seeds |
+| `SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000` | all passed; laundered walks 765 functions, 0 stale; spill walks 563, 0 stale; the A3-87/A3-79 pins `raw-stack-register` |
+| `SE_GENERATED_SEEDS=20000` | 0 failing seeds |
+| grammar 2, 1,600,001 to 1,620,000 (4 x 5,000) | 0 failing seeds |
+| grammar 2 `specials`, 1,700,001 to 1,705,000 | 0 failing seeds |
+| `TestArea3HiddenInputFuzz` seeds 6 and 7 (5,000 each) | 1,204 and 1,216 lent, 0 findings |
+| corpora 007 / 008 (`SE_GAME_LEND=1`) | section 12 |
+| vendoring | `python3 -I vendor.py <ghidra>` on a copy: exit 0, the `vendored ... 0061-engine-stack-frame-escape.patch` line, `cpp/`, `sources.cmake` and `processors/` identical to the committed tree |
+| sanitizer and Live jobs | not run (shared socket; CI) |
+
+**All seven round-11 rows are now fixed** (A3-82, A3-83, A3-84, A3-85, A3-88 P1; A3-86, A3-87 P2), with A3-79 closed. The next reviewer verifies.
+
+## Area 2, round 12 P3 fix
+
+Fixer, branch `review/2-round12-p3-fix`, on `ea6c8e9` (the coordinator's head when the round 12 review merged; the corpus diff below is against that head, and master has moved since: patch 0061 is the area 3 fixer's, this branch carries 0062). One engine patch (`patches/0062-engine-range-set-ops-and-rule-guards.patch`: `rangeutil.cc`, `ruleaction.cc`), the harness, the pins, the families, the ledger and this record. **A2-73 to A2-77 and A2-79 are fixed (A2-77's unreachable rules and its one mutant killed by a pin only are accepted, each with its reason in the row).** The fixer's own instruments found two more wrong printed values in upstream rules, both reproducing at `ea6c8e9`, **A2-80 and A2-81 (P2, fixed here)**; the next review round should verify both, and the coordinator should decide whether they restart the count of consecutive clean rounds (the round 12 review itself, which found none, stands as it was).
+
+### 1. Patch 0062 and its rules
+
+> **A set operation, a widened range or a rule's rewrite holds every value of what it replaces, or it fails, or it answers "everything".** The rule of 0058 and 0059 for the three range functions they left, and for the rules the oracle now reaches.
+
+| Row | What was wrong | What it is now |
+|---|---|---|
+| A2-73 `newDomain` | the intersect of ranges of two masks cut the wider range to the narrower mask and read a range that starts above it and ends at the top of the wider domain (right bound 0, or the phase of the top for a stride) as the pieces `[left,top]` and `[0,right)` with the second at the bottom of the narrow domain: `[0x8000,0)` of 2 bytes became all of a byte | the second piece of such a range is empty, so is the intersection (one line: `if (myright == rem) return true;`) |
+| A2-74 `setNZMask` | `int4 step = 1; step <<= leastsigbit_set(nzmask)`: a negative step for a lowest bit of 31 (a range that holds 0 and not the one value the mask allows), a shift modulo 32 beyond | a lowest set bit of 31 or more gives no range, before the range is touched |
+| A2-75 `widen` | the left bound was the landmark's as it was (another phase, and the phase lost at step 8 or 16); a full landmark gave the right bound 0, which cut a wrapped range to its first lap | the left bound is the first element of the range's phase at or above the landmark's; when the new arc is shorter than the old one the answer is all of the phase; the right bound is upstream's (a landmark that contains the range never ends short of its last element: rounding it up is an equivalent change) |
+| A2-76 `RuleScarry` | the minimum was refused only for the operand the rule had swapped itself | refused for either operand |
+| A2-80 `RuleRightShiftAnd` | `(V & mask) >> sa` and `s>> sa` bypassed the AND when `(mask >> sa) == (full >> sa)`; for a shift by the width of V or more both are 0, but an arithmetic shift by the width is the sign bit alone, which the mask can clear: `exts.b r4,r0 ; and #0x20,r0 ;` eight `shar` printed `return param_1 >> 8;` (the sign of the byte) where the code returns 0 | a shift by the width or more returns 0 (the amount is read as the 64-bit number it is) |
+| A2-81 `RuleSLess2Zero::getHiBit` | the high bit of a sum, or or xor was taken from the first operand whose non-zero mask is the high bit alone, without asking the other: with both able to set it, `(x & 0x80000000) + 0x80000000 s< 0` was `x != 0`, the negation, and a `subv` of a masked sign wrote GBR the wrong way round | the bit is taken from an operand only when the other has none |
+
+No printed text of either game image moves with the patch (section 5).
+
+### 2. The pins (`SaturnExplorerSh2DecompilerEngineTests`, 32 s in all)
+
+* `TestIntersectMixedMasksRound12` (0.8 s): the row's fixtures in both orders, and 710,016 pairs of structured one-byte and two-byte ranges (the edges of the byte and of the word, the sign boundaries, the ends; steps 1 to 8), narrow first and wide first; an answer of 0 must be exactly the elements both ranges have in the narrower domain, an answer of 2 leaves the range as it was.
+* `TestSetNZMaskRound12`: every mask of 1 and 2 bytes, every run of bits at 4 and 8 bytes, 8,000 random masks (76,404); no range for a lowest bit of 31 or more, every answered range holds every submask.
+* `TestWidenRound12` (2.4 s): 836,784 widenings of 418,392 sub-ranges of landmarks (step 1 to 8, the sub-range's step up to 32); the old set held, the step and phase kept, well formed, inside a landmark that is not full.
+* `TestScarryMinimumRound12` (A2-76): a Funcdata-level pin with an evaluator of the ops it uses (`RcEval`): 16 forms for each constant (all 256 at one byte), 4,512 graphs, 1,091,008 values compared before and after the rule.
+* `TestRulesByValueRound12` (A2-77, A2-80): the same method for `RuleConcatShift`, `RuleSignDiv2`, `RuleSignForm`, `RulePiece2Sext`, `RuleZextSless`, `RuleSignForm2` and `RuleRightShiftAnd`: 868 graphs, 137,806 values.
+* Printed-C fixtures in `Sh2GeneratedTests` (value-checked against the run): `A2-79` (1), `A2-80` (3), `A2-81` (3).
+* The reviewer's `fwd12` on the fixed engine: `sets 5 100000` extra values 0 of 49,294 (1,946 before), missing 0; `nz 3 200000` BAD 0; `widen 3 20000` BAD 0 (6,990 and 430 before).
+
+### 3. Families and the oracle
+
+`dagen12.py` has ten new families, 45 to 54 (52 `bitpull` found A2-80; 54 `masksign` was written for A2-81): `signbias`, `extshift`, `nonneg`, `boolcomb`, `threeway`, `negneg`, `signmod`, `bitpull`, `prodsign`, `masksign`. They reach, by SH-2 code and with every function agreeing, the rules the census had never seen: `leftright`, `signform`, `positivediv`, `lessnotequal`, `booleandedup`, `booleanundistribute`, `threewaycomp`, `negatenegate`, `signmod2nopt`, `signmod2opt`, `signform2` (the census was blind to it: the rule returns 0 after changing its input). `famcensus.sh` covers 40 to 54.
+
+**The engine's reading of a text** (A2-79): CONCATab is a `Piece<n>` (a `T<n,true>` with a cast of its own); `(uint8)` of a piece of 5 to 7 bytes, which have no C type, is the zero extension. The first version (the target's sign for every size) made two printed-C seeds of the long run `mismatch` (`(uint4)CONCAT11(...)` of the sign-extended word `mov.w` reads: the engine prints the cast to the type of the variable it assigns to, which says nothing of the extension), so sizes with a C type keep the extension by the piece's sign.
+
+### 4. Mutation table
+
+Each fix reverted alone in the vendored source or the harness (the pin fails; restored, it passes), and the A2-77 mutants (`mutate12.py`, `SE_MUT`):
+
+| Mutant | Pin / family that fails |
+|---|---|
+| `newDomain`: the `myright == rem` line removed (A2-73) | `TestIntersectMixedMasksRound12`: 21,268 CHECKs |
+| `setNZMask`: the high-bit guard removed (A2-74) | `TestSetNZMaskRound12`: 958 |
+| `widen`: the all-of-the-phase fallback removed (A2-75) | `TestWidenRound12`: 175 |
+| `widen`: the left bound is the landmark's as it was (A2-75) | `TestWidenRound12`: 134,391 |
+| `widen`: the right bound rounded down | none: equivalent (a landmark that contains the range ends at or after its last element) |
+| `RuleScarry`: the minimum refused only for the swapped operand (A2-76) | `TestScarryMinimumRound12`: 48 |
+| `RuleRightShiftAnd`: the guard removed (A2-80) | `TestRulesByValueRound12`: 433; the three `A2-80` fixtures `mismatch` |
+| `RuleSLess2Zero::getHiBit`: the other operand not asked (A2-81) | the three `A2-81` fixtures `mismatch`; family 54: `mismatch` in 4 of the first 150 functions and more |
+| engine reading: the piece cast by the source's sign (A2-79) | the `A2-79` fixture is `mismatch` again |
+| mutant 6 `RuleConcatShift` exact cancellation, other sign | `TestRulesByValueRound12`: 18; no family function (0 of 1,000 in each of 23, 24, 41, 42): accepted |
+| mutant 9 `RuleSignDiv2` takes a shift by 2 | family 45: 43 of 1,000 `mismatch`; the pin: 12 |
+| mutant 10 `RuleSignForm` one byte short | family 46: 95 of 1,000; the pin: 6 |
+| mutant 8 `RulePiece2Sext` sign of another value | the pin: 6 |
+| mutant 12 `RuleSubvarShift` two bits | none: the rule never applies (accepted, A2-77) |
+
+### 5. The matrix
+
+Own RelWithDebInfo build under the scratch directory (2.5 GB, `-j2`, every run under `ulimit -v 4000000` and `timeout`, one heavy job at a time), on the final engine and harness (code commit `3ece699`).
+
+| Run | Result |
+|---|---|
+| `ctest -E SaturnExplorerLive -j2 --timeout 900` | 93 of 93 pass (159.5 s) |
+| `SaturnExplorerDecompilerFaultTests` | 0 of 94 jobs fail (68.4 s); no MOVED pin |
+| generator, `SE_GENERATED_SEEDS=3000 SE_GENERATED_GRAMMAR=2` | 0 failing seeds (95 s) |
+| generator, `SE_GENERATED_GRAMMAR=1 SE_GENERATED_SEEDS=1000` | 0 failing seeds (30 s) |
+| `SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000` | 0 findings; 3,710 functions (the 7 new fixtures in), 3,430 compared, agrees 3,449, `narrow-c` 10, `void-return` 227, `void-return-lent` 24 (57 s) |
+| `SE_GENERATED_SEEDS=20000` (four runs of 5,000 from seeds 1, 5,001, 10,001, 15,001) | 0 failing seeds (101, 122, 100, 99 s) |
+| corpora hwram007.bin, hwram008.bin, `SE_GAME_LEND=1` | every ledger count 0; missing and said 0 and 4; lending 680 (958 parameters) and 1,071 (1,314); mapping violations 0 (the 'on another line' counts 11 and 21 lent and 3 tokens at a delay slot's own address in hwram008, as at the head); 1,730 and 2,995 functions all ok |
+| **the corpora texts** | `SE_GAME_OUT` of the fixed build against `ea6c8e9`'s engine (the head's `rangeutil.cc` and `ruleaction.cc` compiled into the same host): **4,299 and 7,544 files, byte for byte identical** (`diff -rq` empty), and the logs equal but for timings. Nothing to read. |
+| fresh seeds 50001 to 51600 of all 54 families | 86,400 functions: agrees 84,853, `narrow-c` 432, `void-return` 809, `void-return-lent` 158, `skipped:stack-address` 146, `skipped:memory` 1, `not-compilable` 1 (function 233 of `dagen10.py` family 2, area 5's `&SMPC_IREG0`), **`mismatch` 0** |
+
+### 6. Vendoring
+
+`python3 -I vendor.py <pinned Ghidra checkout>` on a copy of the vendored directory: exit status 0, the 'vendored 84 library sources, 3 compiler sources, 94 headers, 5 spec files' line, all 55 patches applied; `cpp/`, `processors/` and `sources.cmake` identical to the committed ones (`diff -r` empty). `patches/README.md` and `VENDOR.md` have the row and the pin.
+
+### 7. The long run (area 2's 'done': the generator on seeds nobody has run)
+
+Chunks of 5,000 seeds, each under 3 minutes, a marker file per chunk (`gen_range.sh`, the final engine).
+
+| Run | Seeds | Failing seeds |
+|---|---|---|
+| grammar 2 | 2,000,001 to 2,100,000 (100,000) | **4**: 2007995, 2018538, 2029583, 2046314 |
+| grammar 1 | 2,100,001 to 2,150,000 (50,000) | **1**: 2126605 |
+| printed-C | 2,200,001 to 2,250,000 (50,000): 61,112 functions, 56,705 compared; agrees 56,984, `narrow-c` 225, `void-return` 3,533, `void-return-lent` 357, `skipped:stack-address` 6, `skipped:array-local` 4 | **3**: walks 2208857 (`mismatch`), 2211665 and 2245649 (`register0x0000003c` undeclared) |
+| decode oracle with `SE_MEDNAFEN_SS`, seeds 20261023 and 3141592 (`SE_DECODE_CASES=100000`) | 26,000,000 differential executions | 0 differ, 0 could not run, 0 of 130 forms fail, 18 named shapes 0 differ; SLEIGH defines 53,752 words, 0 disagreements with Mednafen |
+
+**No failure is area 2's.** Each was replayed against the engine of `ea6c8e9` as well (same harness, the head's two engine files): the same failure, so none is this branch's. Routed, with the replay lines (the full lines are in the logs named in the row of each):
+
+* **2007995** (grammar 2), `[n:claim-wrong:outOrigins] [function 2 at 0600909C] r2 ends as 06020100, a pointer from r4, and outOrigins names neither it nor memory`: area 3 (`CallEffects::outOrigins`, A3-54/A3-63's claim); `SE_GENERATED_GRAMMAR=2 SE_GENERATED_SEED=2007995 build/bin/SaturnExplorerSh2GeneratedTests <dir>`. Not one of A3-82 to A3-88 or A3-79.
+* **2018538** and **2029583** (grammar 2), `pointer-effect-unsaid` (the read of 2 bytes at 06009074 reached FFFFFF8C, SH2_CHCR0's 'a read arms clearing TE' and 'a 2-byte read returns its low 16 bits' notes; the read of 4 bytes at 0600909A reached E00000F0, 'a 4-byte read at 0xE00000F0 is an address error'): area 5, the A5-82 class (the pointer checks' false positives or a note the printer gives to the wrong access); replays `SE_GENERATED_GRAMMAR=2 SE_GENERATED_SEED=<seed>`.
+* **2046314** (grammar 2), `[n:cache-read-pointer-unsaid] ... the read of 4 byte(s) at 0600908C (05FE0028, the cached partition) ... is not called a cache read`: area 5, the same class.
+* **2126605** (grammar 1), `[n:input-dropped:r0]` and `[v:input-dropped:r0]` (r0 read before it is written, no signature passes it, the prototype is lent): area 3; `SE_GENERATED_WORDS="D605 6213 451B 73B8 621D 6161 C810 8B01 6003 334C 000B 2009 2600 1038"`.
+* **2208857** (printed-C), a walk: `SE_GENERATED_PRINTEDC=only SE_GENERATED_PRINTEDC_WORDS="6043 6153 6263 6373 0712 7FF4 1F21 1F72 67F3 E303 2732 7704 4310 8BFB 50F2 7F0C 000B 0009"` is `mismatch (high-word-only run=00000001:80000001 pseudo=FFFFFFFF:80000001)`: the text returns `CONCAT44(unaff_gbr,param_2)` where the code returns `*(r15 + 8)` after a loop that stored through a copy of r15; shrunk (the words that matter, the rest `nop`): `7FF4 67F3 2732 7704 8BFB 50F2` (`add #-12,r15 ; mov r15,r7 ; mov.l r3,@r7 ; add #4,r7 ; bf ; mov.l @(8,r15),r0`). Area 3, the stack walk of A3-65/72/80.
+* **2211665** and **2245649** (printed-C walks), `'register0x0000003c' undeclared`: A3-87/A3-79's shape; replays in the logs (`SE_GENERATED_PRINTEDC_WORDS="6043 6153 6263 6373 0622 602B 7FF0 1F70 1F61 1F53 61F3 7104 E601 2166 4610 8BFC E601 E300 6216 332C 4610 8BFB 50F3 303C 7F10 7001 000B 0009"` and `"6043 6153 6263 6373 472E 0612 7FF4 1F61 1F62 62F3 7204 E701 2256 4710 8BFC 50F0 7F0C 4001 000B 0009"`).
+
+The first run of this range (before A2-81 and the limit on the piece cast) also had printed-C seeds 2223957 (the GBR write, A2-81) and 2239033 (`(uint4)CONCAT11(...)`, the first version of the A2-79 reading): both are closed above.
+
+### 8. What stays open
+
+* The next review round verifies this one, in particular A2-80 and A2-81 (two wrong printed values in upstream rules found by the fixer's families; the rule-by-rule census of the other `RuleSLess2Zero`/`getHiBit`-like uses of a non-zero mask has not been done).
+* The 16-bit space is still not exhaustive for the push-forwards (2^32 ranges).
+* The routed generator findings above are with the area 3 and area 5 fixers; none is area 2's.
+
+## Area 3, round 12 review
+
+Reviewer, branch `review/3-round12-review`, on the coordinator's head `a648e8d` (patches up to 0061 in the tree). Findings only, no fixes: the code changes are none; the repository gets tools (`Docs/Decompiler/tools/a3_round12/`), the ledger rows, a suite function of controls that pass (`TestArea3Round12`) and this record. New ledger rows **A3-89 (P1)**, **A3-90, A3-91, A3-92, A3-93, A3-94 (P2)** and **A3-95 to A3-99 (P3)**. The generator beyond the nightly range finds one thing for another area (below), routed with its replay line.
+
+**The round is not clean: one row at P1 and five at P2.** Area 3 has no clean round yet and the count of consecutive clean rounds stays 0. The round 11 fixes held where they were aimed -- every `rowsfix.src` fixture of A3-82 to A3-88 prints the local and agrees with the run, the 0061 walk's allowed list is sound for the data flow it can see (below), and 87 hand fixtures (`r12a.src` to `r12z.src`) of the places the brief named were run -- and what the round found is what the brief predicted of a fail-closed rule: it is closed over the values the function computes, and open wherever a value reaches a frame address by a way that is no op of the function. Two ways:
+
+1. **Callee-mediated memory.** A frame address a callee keeps (in a global, in a slot of the caller's frame it was given a pointer to, in a register the default model keeps, in a word of the caller's outgoing area) and a later step that reads it back and stores below it. The walk of patch 0061 follows ops, STOREs of the function and the output of a call it was handed the address in; the host reads registers. Neither sees a pointer a callee wrote (A3-89 P1, A3-91 P2). The same hole one level down in the probe (A3-90 P2): a walked callee does not carry the `storesBelow` of the callee it hands the pointer to unless that one is lent.
+2. **The host's exact-form tests that the round 11 principle did not reach.** `AtOrAboveEntry`, `exact` in `Clobber`'s sparing and `NoteFrameEscapeOf`'s base test are by exact forms; an address that has been through a swap pair or a mask is a `Fuzzy` value of stack origin with no base, and each of them takes it for no frame address (A3-92, A3-93, A3-94, all P2 and hand-written, as the rows of A3-21, A3-24 and A3-39 they extend).
+
+### 1. Instruments
+
+- **The fixture driver** (`bdrv.sh`, `drvmain.inc`, `asm.py`, `mk.py`, `sum.py`, `run.sh`): round 11's, with one repair: the committed `a3_round11/bdrv.sh` does not build (its sed writes `\&` where the matched text is meant, so `RunMachine::Poke` is never added and the driver fails to compile; A3-98). The fixtures are `r12a.src` to `r12t.src`.
+- **`walkfuzz3.py`**: a frame address handed to a call that keeps it, then used by a later step to store below it. Channels: a lent or unlent callee stores r4 to a global and a second callee (lent or not) reads the global and walks down; the same with the caller doing the walk; an out-parameter, a lent or unlent callee stores its second argument through its first (a slot of the caller's frame) and the caller reloads it and walks down. Fourteen laundering steps before the walk and four walk forms (a counted word walk, a counted byte walk, a store at a negative displacement, nested counted walks). `CONTROL=1` adds the direct hand-over as the control.
+- **`walkfuzz4.py`**: the probe's nested walk. P hands a frame address and a hidden counter to a chain of one to five unlent captured functions, each passing r4 on by a call, a tail jump or a call through a callback in r5, the last filling backwards.
+- **`build_emut.sh`, `build_hmut.sh`, `mutate.py`, `run_mut.sh`, `run_pins.sh`**: the mutation harness. A mutated copy of an engine file or of `Sh2Decompiler.cpp` (exact, unique replacements, `mutate.py` refuses a text that is not found once) is compiled with the build's own flags and linked into the generator or the suite in place of its object (7 s for `heritage.cc`, 1 minute for the host); `run_mut.sh` runs 3,000 seeds of printed-C mode on each (and 3,000 of grammar 2 for the host rules check 10b holds), `run_pins.sh` the suite on those the generator did not fail. `build_e0.sh` makes the baseline with patch 0061's walk switched off.
+- **`mkrows.py`, `srcwords.py`**: the ledger rows' fixture words are assembled from the `.src` files.
+
+### 2. What the attack found
+
+All fixtures are in `Docs/Decompiler/tools/a3_round12/` and replay with `OUT=<dir> sh run.sh rNNx.src`; the findings are the rows of the ledger.
+
+| Row | Sev | The class, in a line | Fixtures | Reach |
+|---|---|---|---|---|
+| **A3-89** | **P1** | A frame address a callee keeps -- in a global, through a second argument into a slot of the caller's frame, in a word of the caller's outgoing area -- is read back by a later step that stores below it; neither patch 0061's walk (ops, the function's own STOREs, the output of a call it was handed the address in) nor the host (registers; `leaks` only sets `State::escaped`) sees it | `r12a.src` C1a/C1b, `r12b.src` C4a/C4b/C4c, `r12h.src` RG/SH | `walkfuzz3.py`: **796 of 796** programs stale in four seeds (459 lent); the direct hand-over as control 0 of 103 |
+| A3-90 | P2 | The probe's walk of an unlent callee does not carry the `storesBelow` of a callee it hands the pointer to unless that one is lent (a call, a tail jump or a callback to an unlent one maps frame words only) | `r12a.src` C2a/C2b, `r12g.src` C2c | `walkfuzz4.py`: chains of two or more **216 of 216** stale, of one 0 of 41 |
+| A3-91 | P2 | Clause (d) of 0061 needs the address to be an input of the CALL and the value its output; a lent callee that moves its argument into r9, r1, r10 or MACH (the engine sees no parameter) or GBR hands it back in a register the walk never reaches | `r12e.src` R9/R1, `r12h.src` GB/R10 | the caller is withheld ("it uses r9 after calling ..."), its text is stale |
+| A3-92 | P2 | `AtOrAboveEntry` (A3-21, A3-39, A3-70) is by exact forms: a laundered address of the caller's frame is not one | `r12k.src` S3a/S3c/S3d, `r12l.src` S3f | a callee that writes its caller's outgoing word is lent; the caller prints the word it stored before |
+| A3-93 | P2 | `Clobber`'s sparing of saved registers is keyed on `exact` (`Value::Sp`); a laundered pointer to a saved register's slot spares it | `r12m.src` S4a | f lent with r14 preserved that is not; the caller prints its constant |
+| A3-94 | P2 | `NoteFrameEscapeOf` returns for a value with no base; r2 (the struct-return pointer) with a laundered address is not declared | `r12n.src` S5a/S5c | text of a withheld caller stale |
+| A3-95 | P3 | A frame address rebuilt from constants by compares (the T bit) | `r12q.src` T1 | proposed accepted |
+| A3-96, A3-97 | P3 | Instruments (section 6) | | |
+| A3-98 | P3 | The committed round 11 `bdrv.sh` does not build | | |
+| A3-99 | P3 | Precision: a stack argument shown as a local after an escape (008 0603D5F6) | | |
+
+**What the diagnostic builds say.** Two engine builds of the review (`heritage.cc` only, 7 s each) test the mechanisms the rows name. Adding every stack word defined by an INDIRECT to the post-heritage walk as an unmodeled member makes A3-89 c print the local (`return xStack_18;`, the oracle agrees for the store form); a, b and d of that row are unchanged, so the global needs the host's `leaks` (or a rule on the LOADs after a call that was handed a member). Keeping every marked store marked (never unmarking in `reprocessFreeStores`) changes nothing, so the loss is the alias analysis of the post-heritage walk, not the mark. Adding every INDIRECT output of the function as a member, before and after the stack is heritaged, changes none of A3-91's texts.
+
+**What each of the three P2 host rows costs to close** is the same trade-off the round 11 fix met: a laundered value of stack origin with no base is as likely to be a pointer to a local aligned by a mask (compiled) as an address of the caller's frame; the rows' fix directions keep the information (`callerHigh`, a non-negative base) through the ops that build `Value::From(origins)` rather than withhold on every such value.
+
+### 3. What held
+
+| Attack | Fixtures | Result |
+|---|---|---|
+| Add of a variable to a frame address, a store below the lowest local (0061's INT_ADD, PTRADD) | S1 (`r12a.src`) | The index is taken as non-negative by the engine and the host (A3-9, A3-17; the rounds 4 and 5 notes); the store lands on the sentinel and the text keeps the 5: the accepted convention, no new row |
+| Sources of a frame address: `mov r15,rN` in the delay slot of `jsr`, `bsr` and a tail call; r14 as the frame pointer; a pointer reloaded from a local | D1 to D4 (`r12i.src`), the round 11 `rowsfix.src` (31 cases) | right (the local is read) |
+| `ldc`/`stc` and `lds`/`sts` games: GBR, VBR, MACH, MACL, SR, PR, `dmulu.l`, `mul.l`, `addc`, `subc` | S7 (`r12p.src`) | right |
+| A load of a local through a laundered frame address; a store then a load | S6 (`r12o.src`) | right |
+| The lowest offset: a laundered store up into the incoming stack argument; a push below the locals overwritten by a laundered walk | SA, SB (`r12u.src`), P1a, P1b (`r12t.src`) | right |
+| A comparison selecting a pointer (a join); a frame address and a global or a parameter | J1, J2 (`r12r.src`) | right |
+| A frame address in a stack argument | (b) of 0061, round 11's cases | right |
+| A call through a frame address; a trapa with a frame address in r0 | V1, V2 (`r12v.src`) | V1 withheld, its text keeps the local; V2's handler is the driver's `rte` (no write), so nothing to see: r0 is a hidden register (A3-10) |
+| The cursor-struct API (init stores the buffer end in a local struct, push does `*--ctx->p = v`) | K1, K2 (`r12w.src`) | right: the push callee is handed the struct's address and `storesBelow` names it (A3-83 g, A3-84) |
+| The probe through a LENT middle: an unlent callee that calls or tail-jumps to a lent fill-backwards function; a callee with 300 pushes before the fill | F2, F3 (`r12f.src`), the 300-push fixture (`r12c.src`) | right (F2, F3 and the one-level case pinned in `TestArea3Round12`) |
+| The 8,192-member bound of 0061's walk | `bigframe.py` | not reachable: 6,500 frame copies (19,500 instructions) decompile right, 9,000 exceed the flow's instruction limit first |
+| `storesBelow` in the cache keys | `DecompilerRunner.cpp:76-83`, `DecompilerPanel::ShapeOf` | present in both; `Prototype::operator==` through `CallEffects` |
+| `ShareWalks` | code | the cache and the below map are one pair (`ShareWalks(&walks, &below)` in the printing probe); the lent check passes no map and does not use one |
+
+### 4. The generator beyond the nightly range
+
+Chunks of 5,000 seeds (2,000 for printed-C), each under 3 minutes; `matrix.sh` leaves a marker per chunk, so a restart resumes. Nobody had run these ranges.
+
+| Run | Seeds | Result |
+|---|---|---|
+| grammar 2 | 1,800,001 to 1,820,000 (4 x 5,000) | 1 failing seed, **1804560** (area 5, routed below) |
+| grammar 1 | 1,800,001 to 1,810,000 (2 x 5,000) | 0 |
+| printed-C | 1,800,001 to 1,810,000 (5 x 2,000) | 0 failing seeds |
+| grammar 2 `specials` | 1,900,001 to 1,905,000 | 0 |
+| `TestArea3HiddenInputFuzz` | seeds 8 and 9, 5,000 programs each | 1,176 and 1,168 lent, 15,288 and 15,184 perturbed runs, 0 findings |
+
+**Routed (one seed, another area).** Grammar 2 seed **1804560** (`[n:pointer-effect-unsaid]`, area 5: a 1-byte read and write at 0xFFFFFFC8 "reached through a pointer the output derives from register addresses, and no note says"). Function 1 at 0x06009054 loads a word, ORs it with 0xFFFFFFC0, writes the result to GBR and does `or.b #1,@(8,gbr)` on it; the text is `uVar3 = (int4)*param_2 | 0xffffffc0; Write_GBR(uVar3); ... *(uint1 *)(uVar3 + 8) = *(uint1 *)(uVar3 + 8) | 1;`. It is in A5-82's family (the generator's pointer checks over a number that is an on-chip register's address) and may be a true positive of the note rule instead (every value of `x | 0xffffffc0` lies in the on-chip register page, so the access is an address error whatever is loaded, and no note says so). The cause is not area 3's: the text's values are right. Replay: `SE_GENERATED_GRAMMAR=2 SE_GENERATED_FIRST=1804560 SE_GENERATED_SEEDS=1 build/bin/SaturnExplorerSh2GeneratedTests <dir>`; the raw words are in the log (`SE_GENERATED_WORDS="4F26 6BF6 6AF6 69F6 000B 68F6 2F86 2F96 2FA6 2FB6 4F22 6843 ..."` as the generator prints them).
+
+### 5. Corpus (`SE_GAME_HWRAM=<img> SE_GAME_LEND=1`)
+
+| | 007 | 008 |
+|---|---|---|
+| functions alone | 839 ok | 1,554 ok |
+| lending run | 1,730 ok | 2,995 ok |
+| lent (parameters), unlent / lent run | 655 (901) / **680 (958)** | 1,010 (1,251) / **1,040 (1,312)** |
+| accesses dropped against the reference run; missing and said | 0; 0 | 0; 4 |
+| mapping oracle (fixtures, alone, lent) | clean | clean |
+| `TestGameCode` game-code time | 10.1 s | 34.0 s |
+
+The mapping oracle's violation counts are 0 in every run (the 3 tokens at a delay slot's own address in 008's lent texts are the informational line area 2's record already carries). The ledger counts and the lending figures are the round 11 fix's (`680 (958)` and `1,040 (1,312)`, the 4 missing-and-said); the times are the shared machine's (the other agents' generators ran beside these).
+
+**Patch 0061 on and off in this tree** (`build_e0.sh`: `FrameEscape::compute` returns at once, nothing escapes, no store is marked or widened): the same figures (680 (958), 1,040 (1,312)); the game-code time 10.4 s and 33.2 s against 10.1 s and 34.0 s, so the walk costs nothing measurable. The texts differ in **11 functions of the two corpora** -- image 007 in 5 (06027420, 06032F4A, 06032F9E, 0603313E, 06033252; all in the lending run), image 008 in 6 (06021ADE, 0603D5F6, 0603ED44, 0603ED52, 0604080A, 060670C0) -- not the 36 and 71 of the round 11 fix's record, which compared against the merged host-only tree and so counted the host rules' changes as well. Each read against the code: an array local kept where a scalar was (four siblings), a store to a local kept instead of folded away (`xStack_8 = 0x6029568;` in each case of a switch), a pointer read from its slot before the stores that may reach the slot (`piVar3 = piStack_60 ; ... *piVar3 = 0`), a larger array, a renumbering of variables. No computed value differs. One reads worse, **A3-99** (P3): 008 0603D5F6 shows `xStack_30 = 2;` and the call `func_0x0603cfc4(a,b,c,d)` one argument short, because the function stores `&xStack_2c` in a local, which 0061 takes for an escape of the whole frame, so the outgoing stack word of the call is an aliased local and not an argument.
+
+### 6. Instrument check: do the new instruments miss a mutation?
+
+Each rule reverted alone in a built-beside generator (`run_mut.sh`), printed-C mode at 3,000 seeds (and grammar 2 at 3,000 for the host rules check 10b holds). A mutation that fails 0 seeds is recorded with the suite's answer (`run_pins.sh`).
+
+| Reverted | Printed-C failing findings (3,000 seeds) | Grammar 2 (3,000) | The suite, when the generator did not fail |
+|---|---|---|---|
+| engine: AND, OR, XOR of a frame address taken as modeled (no escape) | 38 | not run |  |
+| engine: SUBPIECE, PIECE, ZEXT, SEXT taken as modeled | 43 | not run |  |
+| engine: INT_2COMP, INT_NEGATE taken as modeled | 0 | not run | passes (0 failed checks) |
+| engine: INT_LEFT, INT_RIGHT, INT_SRIGHT, INT_MULT taken as modeled | 0 | not run | passes (0 failed checks) |
+| engine: (b), a frame address stored to memory, no longer escapes | 23 | not run |  |
+| engine: (c), a join with a non-frame value, no longer unmodeled | 41 | not run |  |
+| engine: (d), the output of a call handed a frame address, no longer unmodeled | 0 | not run | passed before `TestArea3Round12`'s new controls; **fails 1 check** now |
+| engine: `widenEscapedStoreGuards` off | 18 | not run |  |
+| engine: `markEscapedStores` marks nothing | 145 | not run |  |
+| engine: the lowest frame offset ignores the function's stack varnodes | 161 | not run |  |
+| engine: the pre-heritage free stack reads are no members | 64 | not run |  |
+| engine: an unmodeled value no longer makes the values computed from it unmodeled | 179 | not run |  |
+| engine: a LOAD through an unmodeled address no longer escapes | 0 | not run | passes (0 failed checks) |
+| engine: a CALLOTHER handed an unmodeled address no longer escapes (CALL and CALLIND kept) | 0 | not run | passes (0 failed checks) |
+| host: `Store` records no `storesBelow` (tracked and laundered) | 237 | 139 |  |
+| host: `Store` records none for a laundered pointer (A3-83) | 72 | 0 |  |
+| host: `Call` does not carry a lent callee's `storesBelow` into the caller's (A3-82) | 99 | not run |  |
+| host: a lent callee's `storesBelow` register exposes the frame only for an exact address (A3-84) | 109 | not run |  |
+| host: `Load` keeps no parameter provenance (A3-83 c, g) | 37 | not run |  |
+| host: a tail jump in a walked callee carries no `storesBelow` | 18 | not run |  |
+| host: the probe reads no `storesBelow` of an unlent callee (A3-86 a) | 29 | not run |  |
+| host: `PossibleFrame` false for a value with no exact address (the probe's exposure of a laundered address) | 0 | not run | passed before the new controls; **fails 2 checks** now |
+| host: a callee's leak of a frame address sets no `State::escaped` | 0 | not run | passed before `TestArea3Round12`'s new controls; **fails 1 check** now |
+
+**Read.** 16 of the 23 mutations fail seeds. The seven that do not: **E7, H8, H9** are rules of the round 11 fix that nothing held (A3-96: the suite passed with each, and now fails 1, 2 and 1 checks of the new controls in `TestArea3Round12`); **E3 and E4** are inert, the generator's `neg2` and `shift2` pairs being rewritten by the engine before the walk (A3-97); **E18 and E19** change none of the 87 fixtures, the suite or a seed, so they are redundant to the engine's own guards or unreachable (A3-97). Check 10b's `storesBelow` (H1) is held by random seeds, not by its unit pins alone as the round 11 record had it: 139 of 3,000 grammar 2 seeds fail (168 `n:claim-wrong:storesBelow` and 29 `v:`), and the laundered record of `Store` (H2) is held by the printed-C walks (72) and by no grammar 2 seed (check 10b asks that the register was read first and that `storesThrough` names it). H6 first failed to build (the removed statement was a loop body); H6b is it with a `{}`.
+
+### 7. Pins committed
+
+`TestArea3Round12` (`Sh2DecompilerTests.cpp`): seven controls that pass. Three on the probe -- an unlent callee that fills backwards itself, one that tail-jumps to a lent fill-backwards function and one that calls it; the caller is withheld and its text reads the local, not the 5. Two on the probe and a laundered address -- a frame address masked, or sent round a global, before an unlent captured fill-backwards callee (mutation H8). One on clause (d) of patch 0061 -- a lent callee returns its argument and the caller walks down from the returned pointer (mutation E7). One on the host's leak flag -- a callee leaks the address to a global, a second returns it, a lent fill-backwards callee is handed it (mutation H9). The findings have no pin (a pin of a wrong text would fail the suite); their fixtures are the `.src` files and the rows.
+
+### 8. Matrix
+
+| Run | Result |
+|---|---|
+| `ctest -E SaturnExplorerLive -j2 --timeout 1200` (94 tests, `ulimit -v 4000000`) | 94 of 94 pass, 155 s |
+| `SaturnExplorerSh2DecompilerTests` (with `TestArea3Round12`) | all passed, 19 s |
+| the round 11 fixtures (`a3_round11/rowsfix.src`, 31 cases through this round's driver) | all print the local or are withheld as the fix recorded |
+| the 87 fixtures of this round (`fixtures_summary.txt`) | the rows' fixtures print the stale value, their controls the local |
+| generator beyond the nightly range, `TestArea3HiddenInputFuzz` seeds 8 and 9 | section 4 |
+| corpora 007 / 008 (`SE_GAME_LEND=1`) | section 5 |
+| mutations of the new instruments | section 6 |
+| sanitizer and Live jobs | not run (shared socket; CI) |
+
+### Not covered
+
+- The sanitizer and Live jobs (a shared socket; CI).
+- A trapa handler that writes through r0: the driver's handler is a fixed `rte`, so the shape is not drawn; r0 is a hidden register (A3-10, accepted).
+- A probe whose walk is cut off (`kMaxSteps`, 200,000 visits): `ReturnCheck::Run`'s result is ignored at the probe (`probe.Run(unused)`), so a cut-off walk would declare only the alias it had found so far. No input of the review reached the limit, so it is a hardening note, not a row.
+- 0061's 8,192-member bound (`bigframe.py`).
+
+## Coordinator: integration notes after area 2's round 12 P3 fix and area 3's round 12 review
+
+- **Area 2's count of clean rounds goes back to 0.** The round 12 P3 fix found and fixed two wrong printed values with its own families (A2-80, `RuleRightShiftAnd`; A2-81, `RuleSLess2Zero`, P2). Neither round 11 nor round 12 saw them, so those rounds can't count as proof that no P1 or P2 is left. Rounds 13 and 14 must both be clean, and round 13 verifies both fixes and patch 0062.
+- **Merge of 0061 and 0062:** the patch tables are unioned in number order. `vendor.py` applies all 57 patches with exit 0 and gives a tree identical to the committed one (matrix m44 on c79b663: ctest 94 and 6 Live, fault suite 0 of 94, generator 0 failing at every size, printed-C clean, corpora lending 680 (958) and 1,040 (1,312), missing-and-said 0 and 4, mapping violations 0, `TestGameCode` 9.7 s and 32.0 s).
+- **Routed seeds replayed on c79b663.** The P3 fix's long run worked on the ea6c8e9 engine, before patches 0061 and 0062 and the host fail-closed rules:
+  - printed-C walks 2211665 and 2245649 are now `raw-stack-register` (withheld, A3-87): fixed.
+  - 2007995 → A3-100, 2126605 → A3-101 and 2208857 → A3-102 (P1, a wrong printed value) still fail.
+  - 2018538, 2029583 and 2046314 still fail, with area 3 round 12's 1804560 → A5-87 (provisional P2 until triaged). Area 5 is reopened until A5-87 is triaged.
+
+## Area 2, round 13 review
+
+Reviewer, branch `review/2-round13-review`, on the coordinator's head `79906c2` (patches up to 0062 in the tree). Tools, two pins, the ledger and this record only; no spec, engine or host file changed (every engine trial below is a scratch object linked beside the tree, `git status` shows none). New ledger rows **A2-82 to A2-88**: one **P2** (A2-82), five open latent P3 rows (A2-83 to A2-87) and A2-88, an instrument row closed here. **This round is not clean: `RuleDivOpt` prints a value the code does not compute, with no warning, for ordinary SH-2 code (A2-82), so area 2's count of consecutive clean rounds stays 0.**
+
+Patch 0062 held. `newDomain`, `setNZMask` and `widen` are right at every size from 1 to 8 bytes in 133 million membership checks, `RuleRightShiftAnd` and `getHiBit` print what they should, and neither fix made another fold wrong (the in-situ check of every rule application, 1.77 million applications, found no new wrong value on any family and the two images except through `RuleDivOpt`). The new defect is in a rule the 0062 fixes did not touch and round 12 read as right: the claim of round 12 that 'the arithmetic of `RuleDivOpt::findForm` and `calcDivisor` is right where the engine can reach it' was wrong. No family before this round built a sign extension, a constant multiply at 32 bits and a logical shift together.
+
+### 1. What I ran
+
+Own RelWithDebInfo build under the scratch directory (`-j2`; every run under `ulimit -v 4000000` and `timeout`, one heavy job at a time, chunks of 20 minutes or less with markers).
+
+| Run | Result |
+|---|---|
+| `ctest -E SaturnExplorerLive -j2 --timeout 900` (the two new pins in) | 94 of 94 pass (158 s); `SaturnExplorerSh2DecompilerEngineTests` 42 s |
+| `SaturnExplorerDecompilerFaultTests` | 0 of 94 jobs fail (72 s) |
+| decode oracle with `SE_MEDNAFEN_SS`, seeds 60221023 and 11235813 (new; `SE_DECODE_CASES=100000` each) | 26,000,000 differential executions: 0 differ, 0 could not run, 0 of 130 forms fail, 18 named shapes 0 differ; SLEIGH defines 53,752 words, 0 disagreements with Mednafen |
+| generator, grammar 2, `SE_GENERATED_FIRST=2300001`, 20,000 seeds (four runs of 5,000: 126, 127, 163, 131 s) | **2 failing seeds, 2310198 and 2317870** (`n:input-dropped:r1` and `n:return-dropped`: signature notes, area 3's; routed, section 5); the other 19,998 clean |
+| generator, grammar 1, `SE_GENERATED_FIRST=2300001`, 10,000 seeds (95, 96 s) | 0 failing seeds |
+| printed-C differential, `SE_GENERATED_PRINTEDC=only SE_GENERATED_FIRST=2300001`, 15,000 seeds (three runs of 5,000, 121 to 131 s) | 0 findings (18,383 functions, 17,031 compared, agrees 17,114, `narrow-c` 74) |
+| standard matrix: grammar 2 3,000 seeds, grammar 1 1,000 seeds, printed-C 3,000 seeds from seed 1 | 0 failing seeds; printed-C 3,710 functions, 3,430 compared, agrees 3,449, `narrow-c` 10, `void-return` 227, `void-return-lent` 24, 0 findings |
+| corpora hwram007.bin, hwram008.bin, `SE_GAME_LEND=1` | 839 and 1,554 functions, all ok; 0 accesses dropped against the reference run; missing and said 0 and 4; every ledger count 0; lending 680 (958 parameters) and 1,040 (1,312); mapping violations 0 ('on another line' 4 and 4 alone, 11 and 21 lent) |
+| in-situ rule check (`rulecheck13.hh`), families 0 to 60 except 23, 300 functions each, seeds from 2380001 | 17,700 functions, 17,459 compared: agrees 17,370, `narrow-c` 83, `void-return` 170, `void-return-lent` 43, `skipped` 27, **`mismatch` 7 (all A2-82: families 56 and 60)**; 69.8 million value checks of 1.77 million rule applications, 12 wrong (all `RuleDivOpt`, A2-82) |
+| in-situ rule check, the two images, no lending | 31 and 102 million value checks of 1.06 and 2.73 million applications (first build of the check): 0 wrong; with the wrap filter off for `RuleDivOpt`, 4 flagged samples in each image, all the `x / 7` fixture's widened product (DivTermAdd's step) and the printed texts unchanged |
+| rule fuzzer (`rulefuzz13`), about 14 million graphs (SH-2 shapes, wide shift amounts, consume masks, templates of the engine's rewrites) | the defects A2-82 to A2-87; 0 unsound masks in SH-2 mode; against round 12's 16 environment-gated mutants (300,000 graphs each): 13 killed, 11, 12 and 15 live (11 and 15 are equivalent, round 12; 12 is `RuleSubvarShift`, a subflow rule the one-pass graphs do not build) |
+| patch 0062's range sets (`rangeset13`), four seeds, sizes 1 to 8 | 133.5 million membership checks, 0 bad; the pre-0062 `rangeutil.cc`: 4,147 bad |
+
+### 2. Patch 0062 itself
+
+**`rangeset13.cpp`** writes the sets out from the definition (left, right, step, mask) and judges a result by membership on a sample taken where an error shows (the bounds and their neighbours, both sides of the narrower domain, the ends, the sign boundary, elements of both ranges, random values): the intersect of two ranges of one size and of every pair of sizes (`newDomain`) for the values extra and missing, the well-formedness of the result and that a refusal leaves `this` alone; `circleUnion`, `minimalContainer`, `contains(range)`; `setNZMask` at every size from 1 to 8 for every run of bits and the run with the low bit or the sign (a refusal only for more than two transitions or a lowest set bit of 31 or more); `widen` with each side stable (2.55 million cases a seed). Four seeds: **0 bad in 133.5 million checks**. Linked against the pre-0062 `rangeutil.cc` it reports 4,147.
+
+**The rules of 0062.** `RuleRightShiftAnd` (A2-80): refuses a shift by the width or more and reads the amount as a 64-bit number; `RuleSLess2Zero::getHiBit` (A2-81): no bit when both operands can set the high bit; `RuleScarry` (A2-76): refuses INT_MIN whichever operand. Each was checked by value at sizes 1, 2, 4 and 8 and at the edges (0, 1, the top bit, all ones, width - 1, width, width + 1, 2 * width), by `rulefuzz13` and by the in-situ check of the real engine: 0 wrong applications of the three (the fuzzer applied `RuleRightShiftAnd` 4,241 times, `RuleSLess2Zero` 14,830, `RuleScarry` 4,863; in the engine `RuleRightShiftAnd` 358 times in 1.24 million comparisons and `RuleSLess2Zero` 478 times in 0.51 million). Reverting either fix, the fuzzer and the in-situ check find it again (`ra_a280`, `ra_a281`), as do the two new pins.
+
+**The pins** (committed, `ctest` green): `TestRangeSetsRound13` (160,000 intersects over every pair of sizes 1 to 8, 20,016 masks at every size, 49,072 widenings, 0.4 s) fails against the pre-0062 `rangeutil.cc` (169,539 CHECKs); `TestSignHighBitRound13` (the high bit of ADD, OR and XOR with both operands able to set it, at every size, as `RuleSLess2Zero` sees it) fails when A2-81's condition is reverted (352 CHECKs); A2-80's revert is caught by round 12's pin and by `rulefuzz13` (433 CHECKs).
+
+### 3. The rules
+
+**Method.** (1) Every rule of the pool (162; the table below) read against its documentation, with each arithmetic on a constant, a mask, a shift amount or a high bit written down with its precondition and its rewrite. (2) `rulefuzz13`, an independent evaluator that applies one rule to a random graph and compares the value of the root before and after for the edge environments (0, 1, the top bit, all ones, width - 1, width, width + 1, 2 * width) and random ones: 1-byte graphs exhaustively by the rule's own edges, 2- and 4-byte grids by the edge values. (3) `rulecheck13.hh` in a scratch `action.cc.o`: the same comparison on every rule application the real engine makes, on the cone of the op, of its readers and of theirs, over the families and the images, so a rule is judged on the graphs the SH-2 code gives it. (4) printed-C fixtures for every rule that could not be cleared. A wrongly folding rule is P1 if SH-2 code reaches it, otherwise a latent P3; `census12.patch`'s counters say which rules the families reach (here the in-situ 'applied' column of the table).
+
+**The in-situ check hides what it skips, and it hid A2-82 for a while.** By default it does not compare `RuleDivOpt` where the product wraps (RuleDivTermAdd leaves such a product on the way, and the steps of `RuleDivTermAdd` and `RuleDivTermAdd2` are not value-preserving one at a time, so they are not compared at all). The sign-mismatched samples of A2-82 (a) were flagged; the wrap cases of (b) were found only by the printed-C differential of the new family 60, and `SE_RULECHECK_NOWRAP=1` shows them. The other exemptions are narrower and are in the code: the interior ADDs of a `RuleCollectTerms` tree and the zext `RuleBoolZext` negates (the root is compared), a root with consume 0 (dead), and a sample in which an op takes a value outside its own non-zero mask (counted as `maskskip`: 0 in every run).
+
+**A2-82 (P2), `RuleDivOpt`.** Two missing conditions of one rule, both reached by plain SH-2 code:
+
+* (a) the signed-mismatch test of `findForm` takes `INT_SEXT` with `INT_RIGHT` and `INT_ZEXT` with `INT_SRIGHT` for a division whenever `8*outsize - n == xsize`; the division it builds is full width and sign filled, the shift filled the top n bits with zero. `(unsigned)((short)x * 65537) >> 16` (`extsw ; mov.l ; mul.l ; sts macl ; shlr16`) is printed `(int4)param_1 / 1 + ((int4)param_1 >> 0x1f)`: x = -1 gives 0x0000FFFE and -2.
+* (b) no check that the multiply fits its width: `(x16 * 0x01000001 >> 24) & 0xff` is `x & 0xff` and is printed `param_1 / 1`.
+
+Family 60 `mulshift` (an extended byte or word times a constant, shifted, cut or whole): 27 of its first 1,500 functions are `mismatch`; family 56's forms 6 and 7 the same; the in-situ check without the wrap filter finds 94 bad applications of 260 in the 1,500 functions. Neither families 0 to 54 of rounds 10 to 12 nor the two images (220 `RuleDivOpt` applications, texts unchanged) contain the shape, which is why the earlier rounds could read the rule as right: compilers' own divisions never wrap and never shift a signed product logically. The fixtures and the replay lines are in the ledger row.
+
+**The latent rows.** Each has a `rulefuzz13` replay seed in its row and, for the SH-2 side, the family that applies the rule on SH-2 code and agrees:
+
+| Row | Rule | Defect | SH-2 side |
+|---|---|---|---|
+| A2-83 | `RuleSignForm2` | multiplier W of `sext(V) * zext(W)` may be 0 | called 684,472 times in situ, never a different value; the one SH-2 fixture of the shape agrees |
+| A2-84 | `RuleDivChain` | overflow test treats an unsigned divisor of 2^63 or more as a small number | applies 198 times in families 55 to 60 (80 of them in family 59), all right |
+| A2-85 | `RuleShiftCompare`, `RuleDoubleArithShift`, `RuleSubNormal`, `RuleSubRight`, `RuleSubExtComm`, `RuleSubvarSext`, `RuleLzcountShiftBool` | a shift amount of 2^31 or more read as an `int4`, or of the width or more used as a C++ shift count | the spec's shift constants are at most 32; family 57 (totals of 8 to 72 bits, then a cut and a compare) applies `RuleShiftCompare` 20 times in families 55 to 60 in situ and is right |
+| A2-86 | `RuleThreeWayCompare` | the pair of compares (INT_MAX, INT_MIN) taken for neighbours | no workload builds a three-way compare of an extreme constant |
+| A2-87 | `RuleDivTermAdd`, `RuleDivTermAdd2` | wrong for a multiplier that is a sign-extended small literal in a product wider than any SH-2 multiply builds | 32 SH-2 functions of the shape and families 21, 22, 24, 56, 59, 60 agree except through A2-82 |
+
+`RuleSignMod2nOpt2` is not compared in situ (its adjusted value is read from a MULTIEQUAL and the branch behind it); `x s% 2^k` for k = 1 to 5 and 8 as `cmp/pz ; bt ; add #(2^k-1) ; and ~(2^k-1) ; sub` agrees in the printed-C differential. `RuleCollapseConstants` throws on a division or remainder by a constant 0 in the fuzzer's graphs (as upstream does; no SH-2 op divides).
+
+**Everything else** (the rules of the brief that do arithmetic on a constant: `RuleCollectTerms`, `RuleTrivialArith`, `RuleShift2Mult`, `RuleConcatShift`, `RuleZextEliminate`, `RulePiece2Zext`/`Sext`, `RuleSignDiv2`, `RuleSignForm`, `RuleSubvarAnd`, `RuleSubvarShift`, `RuleSborrow`, `RuleScarry`, `RuleCarryElim`, `RuleDoubleShift`, `RuleAndCompare`, `RuleAndMask`, `RuleOrMask`, `RuleBoolZext`, ...) is cleared by value; the table has every rule with its counts and verdict. The 'by value' column adds up overlapping runs of the fuzzer, and for `RuleDivOpt`, `RuleDivTermAdd` and `RuleDivTermAdd2` it counts steps of a wrapped product that the chain repairs (the rows say which wrong values survive).
+
+**New families** (`dagen13.py`):
+
+| Family | Shapes | Result |
+|---|---|---|
+| 55 soup | straight-line shifts, rotates, extensions, negation, swaps, immediates, the multiplies with magic-like and random literals and the compares, 4 to 12 steps | agrees |
+| 56 lerp | fixed-point blends `a + ((b - a) * t >> k)`, the high or middle word plus the value; forms 6 and 7: a 16-bit signed value times a 32-bit constant, the high half, its sign, plus the value | agrees except A2-82 |
+| 57 narrow | a value shifted left by a total of 8 to 72 bits (several steps from 32), cut to a byte or word, tested, compared or shifted back | agrees |
+| 58 negshift | a negated or sign-extended byte/word shifted right by 7 to 31, with the multiply by -1 read as a division | agrees |
+| 59 shdiv | a value shifted right by 1 to 16, then divided by a constant, signed or unsigned, large divisors preferred | agrees (300 functions in situ: `divchain` applied 80 times) |
+| 60 mulshift | an extension (byte or word, either sign) times a constant at 32 bits, shifted right logically or arithmetically, cut or whole | **27 of 1,500 `mismatch` (A2-82)** |
+
+### 4. The oracle (item 3 of the brief)
+
+The printed-C differential reads a text twice: as C, and for a text that disagrees, as the engine means it (`CxxHeader`: `(uint8)x` of a signed 4-byte x is a zero extension (A2-19), the cast of a 5 to 7 byte CONCAT piece is one (A2-79), every other widening cast is by the source's sign). Three checks:
+
+* **`castmodel13`** takes the header out of `Sh2GeneratedTests.cpp` and compares its cast with C's conversion for every (target size and sign, source size and sign) over the edge values: **one cell differs, `(uint8)` of a signed 4-byte value (A2-19's)**; the pieces of 2 and 3 bytes read as sign extensions, those of 4 to 7 bytes as zero extensions for an unsigned 8-byte target (`(uint8)`) and as sign extensions for `(int8)`.
+* **`mkcast13.sh`** (a scratch `printc.cc.o` that logs every ZEXT, SEXT and SUBPIECE the printer prints with the type of its input and output, how it was printed and the op that defines the input): 8,798 prints in 45 families of 300 functions. Every ZEXT cast has an unsigned or bool input, every SEXT cast a signed one (the printer's own test); no ZEXT of a signed input exists; 5 and 6 byte pieces occur as ZEXT of an unsigned piece into `uint8` (124 times) and never 7, 2, 3 or 4 bytes; the one piece with a signed input is a 2-byte SEXT, as the reading has it. So the reading is the engine's meaning in every print.
+* **`oraclevar13.sh`** with C's reading for `(uint8)` of a signed 4-byte value: 6 of 10,000 printed-C seeds (2300001 to 2310000, and the suite's two fixtures A2-12 and A2-79) turn from `narrow-c` to `mismatch`, so the special case is used; in all eight the op is a ZEXT of a uint4 arithmetic result (`INT_ADD`, `INT_SUB`, `INT_AND`, `INT_XOR`) printed over an `int4` declaration, which is what A2-19 accepts. It cannot excuse a sign extension: the printer prints a SEXT with `(int8)` (a signed output), and a scratch mutant that builds a SEXT where `RulePiece2Zext` builds a ZEXT gives 15 findings in 1,000 printed-C seeds.
+
+No misreading in either direction was found (row A2-88). A reader of the C text is misled by `(uint8)(param_1 + 1)` with an `int4` `param_1` (C sign-extends); the guide says what the cast means.
+
+### 5. Routed
+
+* Grammar 2 seed **2310198**: `[n:input-dropped:r1] [function 1 at 06009088] the function reads r1 before writing it and its value changes what the function does (or what it returns in r0), but no signature passes it: the prototype is lent`. Replay: `SE_GENERATED_GRAMMAR=2 SE_GENERATED_SEED=2310198 build/bin/SaturnExplorerSh2GeneratedTests <scratch>`; reproduces alone on `79906c2`. The class is A3-101's (`input-dropped`, still open as provisional P2).
+* Grammar 2 seed **2317870**: `[n:return-dropped] [function 1 at 06009060] the function writes r0 as its result on every path and the prototype returns nothing`; `SE_GENERATED_GRAMMAR=2 SE_GENERATED_SEED=2317870 ...`; reproduces alone. Area 3's signature notes.
+* Nothing for A3-89 to A3-102 (with the area 3 fixer) or A5-87; none of the 15,000 printed-C seeds or the 20,000 grammar-2 seeds otherwise fails.
+
+### 6. Every rule of the pool and its verdict
+
+Columns: 'by value' is the rule fuzzer (applications, wrong; overlapping runs added), 'in the engine' is the in-situ check over families 0 to 60 and the two images (applications, comparisons, wrong; the first build of the check for the images). '-' means no run reached the rule.
+
+| Rule | What it does | By value, graphs (applied, wrong) | In the engine (applied, checked, wrong) | Verdict |
+|---|---|---|---|---|
+| `RuleEarlyRemoval` | Get rid of unused PcodeOp objects where we can guarantee the output is unused | - | 2049611, 29352011, 0 | not arithmetic: it moves or removes ops (phi, indirect, branch, dead-code); checked end to end by the generators and the corpora, and in situ where the op is arithmetic |
+| `RuleTermOrder` | Order the inputs to commutative operations | 1298642, 0 | 184329, 15530705, 0 | cleared: read, and checked by value where it applies |
+| `RuleSelectCse` | Look for common sub-expressions (built out of a restricted set of ops) | 0, 0 | 3034, 1407512, 0 | not arithmetic: it moves or removes ops (phi, indirect, branch, dead-code); checked end to end by the generators and the corpora, and in situ where the op is arithmetic |
+| `RuleCollectTerms` | Collect terms in a sum: `V * c + V * d   =>  V * (c + d)` | 137609, 0 | 35687, 9356295, 0 | cleared; the check does not look at an interior INT_ADD of the tree (the rule moves a term from one ADD to another), the root of the tree is checked |
+| `RulePullsubMulti` | Pull SUBPIECE back through MULTIEQUAL | 0, 0 | 1048, 719462, 0 | not arithmetic: it moves or removes ops (phi, indirect, branch, dead-code); checked end to end by the generators and the corpora, and in situ where the op is arithmetic |
+| `RulePullsubIndirect` | Pull-back SUBPIECE through INDIRECT | 0, 0 | 3024, 717958, 0 | not arithmetic: it moves or removes ops (phi, indirect, branch, dead-code); checked end to end by the generators and the corpora, and in situ where the op is arithmetic |
+| `RulePushMulti` | Simplify MULTIEQUAL operations where the branches hold the same value | - | 3986, 0, 0 | not arithmetic: it moves or removes ops (phi, indirect, branch, dead-code); checked end to end by the generators and the corpora, and in situ where the op is arithmetic |
+| `RuleSborrow` | Simplify signed comparisons using INT_SBORROW | 2510, 0 | - | read and checked by value; the SH-2 spec builds no INT_CARRY / SCARRY / SBORROW / POPCOUNT / LZCOUNT, so no SH-2 code reaches it (A2-76 fixed; the by-value runs find it right at 1, 2, 4 and 8 bytes) |
+| `RuleScarry` | Simplify signed comparisons using INT_SCARRY | 4863, 0 | - | read and checked by value; the SH-2 spec builds no INT_CARRY / SCARRY / SBORROW / POPCOUNT / LZCOUNT, so no SH-2 code reaches it (A2-76 fixed; the by-value runs find it right at 1, 2, 4 and 8 bytes) |
+| `RuleIntLessEqual` | Convert LESSEQUAL to LESS:  `V <= c  =>  V < (c+1)` | 393430, 0 | 25404, 173631, 0 | cleared: read, and checked by value where it applies |
+| `RuleTrivialArith` | Simplify trivial arithmetic expressions | 235575, 0 | 22665, 4964917, 0 | cleared: read, and checked by value where it applies |
+| `RuleTrivialBool` | Simplify boolean expressions when one side is constant | 35147, 0 | 1442, 155454, 0 | cleared: read, and checked by value where it applies |
+| `RuleTrivialShift` | Simplify trivial shifts:  `V << 0  =>  V,  V << #64  =>  0` | 835944, 0 | 84, 1548443, 0 | cleared: read, and checked by value where it applies |
+| `RuleSignShift` | Normalize sign-bit extraction:  `V >> 0x1f   =>  (V s>> 0x1f) * -1` | 61742, 0 | 2750, 556913, 0 | cleared: read, and checked by value where it applies |
+| `RuleTestSign` | Convert sign-bit test to signed comparison:  `(V s>> 0x1f) != 0   =>  V s< 0` | 5131, 0 | 356, 690262, 0 | cleared: read, and checked by value where it applies |
+| `RuleIdentityEl` | Collapse operations using identity element:  `V + 0  =>  V` | 599942, 0 | 198080, 12465055, 0 | cleared: read, and checked by value where it applies |
+| `RuleOrMask` | Simplify INT_OR with full mask:  `V = W \| 0xffff  =>  V = W` | 52506, 0 | 22, 371912, 0 | cleared: read, and checked by value where it applies |
+| `RuleAndMask` | Collapse unnecessary INT_AND | 432227, 0 | 205636, 1712348, 0 | cleared; a root with consume 0 is dead and not compared |
+| `RuleOrConsume` | Simply OR with unconsumed input:  `V = A \| B  =>  V = B  if  nzm(A) & consume(V) == 0 | 49514, 0 | 6460, 498032, 0 | cleared: read, and checked by value where it applies |
+| `RuleOrCollapse` | Collapse unnecessary INT_OR | 18251, 0 | 48, 349532, 0 | cleared: read, and checked by value where it applies |
+| `RuleAndOrLump` | Collapse constants in logical expressions:  `(V & c) & d  =>  V & (c & d)` | 29052, 0 | 2500, 1637761, 0 | cleared: read, and checked by value where it applies |
+| `RuleShiftBitops` | Shifting away all non-zero bits of one-side of a logical/arithmetic op | 146116, 0 | 2360, 3642490, 0 | cleared: read, and checked by value where it applies |
+| `RuleRightShiftAnd` | Simplify INT_RIGHT and INT_SRIGHT ops where an INT_AND mask becomes unnecessary | 4241, 0 | 358, 1239033, 0 | cleared: read, and checked by value where it applies |
+| `RuleNotDistribute` | Distribute BOOL_NEGATE:  `!(V && W)  =>  !V \|\| !W` | 4338, 0 | 3318, 156207, 0 | cleared: read, and checked by value where it applies |
+| `RuleHighOrderAnd` | Simplify INT_AND when applied to aligned INT_ADD:  `(V + c) & 0xfff0  =>  V + (c & 0xfff0)` | 455, 0 | 44, 1162077, 0 | cleared: read, and checked by value where it applies |
+| `RuleAndDistribute` | Distribute INT_AND through INT_OR if result is simpler | 12081, 0 | 3010, 1161949, 0 | cleared: read, and checked by value where it applies |
+| `RuleAndCommute` | Commute INT_AND with INT_LEFT and INT_RIGHT: `(V << W) & d  =>  (V & (W >> c)) << c` | 15423, 0 | 696, 1154105, 0 | cleared: read, and checked by value where it applies |
+| `RuleAndPiece` | Convert PIECE to INT_ZEXT where appropriate: `V & concat(W,X)  =>  zext(X)` | 26149, 0 | 16, 1152197, 0 | cleared: read, and checked by value where it applies |
+| `RuleAndZext` | Convert INT_AND to INT_ZEXT where appropriate: `sext(X) & 0xffff  =>  zext(X)` | 895, 0 | 408, 1152197, 0 | cleared: read, and checked by value where it applies |
+| `RuleAndCompare` | Simplify INT_ZEXT and SUBPIECE in masked comparison: `zext(V) & c == 0  =>  V & (c & mask) == 0` | 574, 0 | 930, 1210557, 0 | cleared: read, and checked by value where it applies |
+| `RuleDoubleSub` | Simplify chained SUBPIECE:  `sub( sub(V,c), d)  =>  sub(V, c+d)` | 103764, 0 | 114, 711521, 0 | cleared: read, and checked by value where it applies |
+| `RuleDoubleShift` | Simplify chained shifts INT_LEFT and INT_RIGHT | 87916, 0 | 38490, 2930923, 0 | cleared: read, and checked by value where it applies |
+| `RuleDoubleArithShift` | Simplify two sequential INT_SRIGHT: `(x s>> c) s>> d   =>  x s>> saturate(c + d)` | 49861, 1 | 124378, 689532, 0 | Latent (A2-85): a shift amount of 2^31 or more read as an `int4` (or of the width or more used as a C++ shift count); the SH-2 spec's shift constants are at most 32 and no rule sums them past that |
+| `RuleConcatShift` | Simplify INT_RIGHT canceling PIECE: `concat(V,W) >> c  =>  zext(V)` | 21901, 0 | 0, 1236047, 0 | cleared: read, and checked by value where it applies |
+| `RuleLeftRight` | Transform canceling INT_RIGHT or INT_SRIGHT of INT_LEFT | 573, 0 | 34, 1236047, 0 | cleared: read, and checked by value where it applies |
+| `RuleShiftCompare` | Transform shifts in comparisons:  `V >> c == d  =>  V == (d << c)` | 7762, 23 | 314, 1210557, 0 | Latent (A2-85): a shift amount of 2^31 or more read as an `int4` (or of the width or more used as a C++ shift count); the SH-2 spec's shift constants are at most 32 and no rule sums them past that |
+| `RuleShift2Mult` | Convert INT_LEFT to INT_MULT:  `V << 2  =>  V * 4` | 182764, 0 | 10650, 295450, 0 | cleared: read, and checked by value where it applies |
+| `RuleShiftPiece` | Convert "shift and add" to PIECE:  (zext(V) << 16) + zext(W)  =>  concat(V,W) | 872, 0 | 1666, 9725341, 0 | cleared: read, and checked by value where it applies |
+| `RuleMultiCollapse` | Collapse MULTIEQUAL whose inputs all trace to the same value | 0, 0 | 44682, 0, 0 | not arithmetic: it moves or removes ops (phi, indirect, branch, dead-code); checked end to end by the generators and the corpora, and in situ where the op is arithmetic |
+| `RuleAliasUpdate` | Collapse INDIRECTs when there is no longer a possible alias of its output | 0, 0 | 44210, 0, 0 | not arithmetic: it moves or removes ops (phi, indirect, branch, dead-code); checked end to end by the generators and the corpora, and in situ where the op is arithmetic |
+| `Rule2Comp2Mult` | Eliminate INT_2COMP:  `-V  =>  V * -1` | 905148, 0 | 3970, 11792, 0 | cleared: read, and checked by value where it applies |
+| `RuleSub2Add` | Eliminate INT_SUB:  `V - W  =>  V + W * -1` | 565823, 0 | 42166, 186456, 0 | cleared: read, and checked by value where it applies |
+| `RuleCarryElim` | Transform INT_CARRY using a constant:  `carry(V,c)  =>  -c <= V` | 27615, 0 | - | read and checked by value; the SH-2 spec builds no INT_CARRY / SCARRY / SBORROW / POPCOUNT / LZCOUNT, so no SH-2 code reaches it (A2-76 fixed; the by-value runs find it right at 1, 2, 4 and 8 bytes) |
+| `RuleBxor2NotEqual` | Eliminate BOOL_XOR:  `V ^^ W  =>  V != W` | 34598, 0 | 740, 1250, 0 | cleared: read, and checked by value where it applies |
+| `RuleLess2Zero` | Simplify INT_LESS applied to extremal constants | 98698, 0 | 680, 316904, 0 | cleared: read, and checked by value where it applies |
+| `RuleLessEqual2Zero` | Simplify INT_LESSEQUAL applied to extremal constants | 34689, 0 | 44, 49146, 0 | cleared: read, and checked by value where it applies |
+| `RuleSLess2Zero` | Simplify INT_SLESS applied to 0 or -1 | 14830, 0 | 478, 509863, 0 | cleared: read, and checked by value where it applies |
+| `RuleEqual2Zero` | Simplify INT_EQUAL applied to 0: `0 == V + W * -1  =>  V == W  or  0 == V + c  =>  V == -c` | 5056, 0 | 647, 1210557, 0 | cleared: read, and checked by value where it applies |
+| `RuleEqual2Constant` | Simplify INT_EQUAL applied to arithmetic expressions | 35642, 0 | 1462, 1210557, 0 | cleared: read, and checked by value where it applies |
+| `RuleThreeWayCompare` | Simplify expressions involving \e three-way comparisons | 5905, 5 | 520, 1791555, 0 | Latent (A2-86): the two compares of the three-way form may be of different constants that differ by one in unsigned arithmetic only (INT_MAX against INT_MIN); the rule treats them as one pair |
+| `RuleXorCollapse` | Eliminate INT_XOR in comparisons: `(V ^ W) == 0  =>  V == W` | 5094, 0 | 14, 1210317, 0 | cleared: read, and checked by value where it applies |
+| `RuleAddMultCollapse` | Collapse constants in an additive or multiplicative expression | 186532, 0 | 107416, 11330041, 0 | cleared: read, and checked by value where it applies |
+| `RuleCollapseConstants` | Collapse constant expressions | 1275347, 0 | 139689, 21049867, 0 | cleared: read, and checked by value where it applies |
+| `RuleTransformCpool` | Transform CPOOLREF operations by looking up the value in the constant pool | - | - | out of the integer audit: pointer, type, storage-layout or double-precision rule (areas 3, 5 and 7 and the corpora cover what reaches it); not wrong in the by-value checks it was given where an op of it is arithmetic |
+| `RulePropagateCopy` | Propagate the input of a COPY to all the places that read the output | 3786495, 0 | 1559366, 5224191, 0 | cleared: read, and checked by value where it applies |
+| `RuleZextEliminate` | Eliminate INT_ZEXT in comparisons:  `zext(V) == c  =>  V == c` | 13503, 0 | 5282, 1567955, 0 | cleared: read, and checked by value where it applies |
+| `RuleSlessToLess` | Convert INT_SLESS to INT_LESS when comparing positive values | 68701, 0 | 1410, 573298, 0 | cleared: read, and checked by value where it applies |
+| `RuleZextSless` | Transform INT_ZEXT and INT_SLESS:  `zext(V) s< c  =>  V < c` | 0, 0 | 2, 568594, 0 | cleared: read, and checked by value where it applies |
+| `RuleBitUndistribute` | Undo distributed operations through INT_AND, INT_OR, and INT_XOR | 4621, 0 | 2302, 1617845, 0 | cleared: read, and checked by value where it applies |
+| `RuleBooleanUndistribute` | Undo distributed BOOL_AND through INT_NOTEQUAL | 335, 0 | 194, 1204091, 0 | cleared: read, and checked by value where it applies |
+| `RuleBooleanDedup` | Remove duplicate clauses in boolean expressions | 277, 0 | 436, 150190, 0 | cleared: read, and checked by value where it applies |
+| `RuleBoolZext` | Simplify boolean expressions of the form zext(V) * -1 | 780, 0 | 0, 762944, 0 | cleared; the check does not look at the zext the rule negates in place (the final ADD, which reads it, is checked) |
+| `RuleBooleanNegate` | Simplify comparisons with boolean values:  `V == false  =>  !V,  V == true  =>  V` | 10050, 0 | 58671, 1203229, 0 | cleared: read, and checked by value where it applies |
+| `RuleLogic2Bool` | Convert logical to boolean operations:  `V & W  =>  V && W,  V \| W  => V \|\| W` | 8158, 0 | 5430, 1613995, 0 | cleared: read, and checked by value where it applies |
+| `RuleSubExtComm` | Commute SUBPIECE and INT_ZEXT:  `sub(zext(V),c)  =>  zext(sub(V,c))` | 106308, 0 | 13042, 632639, 0 | Latent (A2-85): a shift amount of 2^31 or more read as an `int4` (or of the width or more used as a C++ shift count); the SH-2 spec's shift constants are at most 32 and no rule sums them past that |
+| `RuleSubCommute` | Commute SUBPIECE operations with earlier operations where possible | 290878, 0 | 15318, 586437, 0 | cleared: read, and checked by value where it applies |
+| `RuleConcatCommute` | Commute PIECE with INT_AND, INT_OR, and INT_XOR | 127475, 0 | 1374, 134532, 0 | cleared: read, and checked by value where it applies |
+| `RuleConcatZext` | Commute PIECE with INT_ZEXT:  `concat(zext(V),W)  =>  zext(concat(V,W))` | 28063, 0 | 272, 133010, 0 | cleared: read, and checked by value where it applies |
+| `RuleZextCommute` | Commute INT_ZEXT with INT_RIGHT: `zext(V) >> W  =>  zext(V >> W)` | 37980, 0 | 1338, 531315, 0 | cleared: read, and checked by value where it applies |
+| `RuleZextShiftZext` | Simplify multiple INT_ZEXT operations: `zext( zext(V) << c )  => zext(V) << c` | 30388, 0 | 426, 1184348, 0 | cleared: read, and checked by value where it applies |
+| `RuleShiftAnd` | Eliminate any INT_AND when the bits it zeroes out are discarded by a shift | 20284, 0 | 876, 2726622, 0 | cleared: read, and checked by value where it applies |
+| `RuleConcatZero` | Simplify concatenation with zero:  `concat(V,0)  =>  zext(V) << c` | 77339, 0 | 502, 132706, 0 | cleared: read, and checked by value where it applies |
+| `RuleConcatLeftShift` | Simplify concatenation of extended value: `concat(V, zext(W) << c)  =>  concat( concat(V,W), 0)` | 2960, 0 | 18, 131558, 0 | cleared: read, and checked by value where it applies |
+| `RuleSubZext` | Simplify INT_ZEXT applied to SUBPIECE expressions | 58353, 0 | 9118, 1184306, 0 | cleared: read, and checked by value where it applies |
+| `RuleSubCancel` | Simplify composition of SUBPIECE with INT_ZEXT, INT_SEXT, and INT_AND | 68996, 0 | 150, 571239, 0 | cleared: read, and checked by value where it applies |
+| `RuleShiftSub` | Simplify SUBPIECE applied to INT_LEFT: `sub( V << 8*k, c)  =>  sub(V,c-k)` | 16339, 0 | 186, 571175, 0 | cleared: read, and checked by value where it applies |
+| `RuleHumptyDumpty` | Simplify break and rejoin:  `concat( sub(V,c), sub(V,0) )  =>  V` | 3324, 0 | 68, 131558, 0 | cleared: read, and checked by value where it applies |
+| `RuleDumptyHump` | Simplify join and break apart: `sub( concat(V,W), c)  =>  sub(W,c)` | 101581, 0 | 58, 571175, 0 | cleared: read, and checked by value where it applies |
+| `RuleHumptyOr` | Simplify masked pieces INT_ORed together:  `(V & ff00) \| (V & 00ff)  =>  V` | 1539, 0 | 258, 335416, 0 | cleared: read, and checked by value where it applies |
+| `RuleNegateIdentity` | Apply INT_NEGATE identities:  `V & ~V  => #0,  V \| ~V  ->  #-1` | 7398, 0 | 26, 28710, 0 | cleared: read, and checked by value where it applies |
+| `RuleSubNormal` | Pull-back SUBPIECE through INT_RIGHT and INT_SRIGHT | 157510, 3 | 3038, 571013, 0 | Latent (A2-85): a shift amount of 2^31 or more read as an `int4` (or of the width or more used as a C++ shift count); the SH-2 spec's shift constants are at most 32 and no rule sums them past that |
+| `RulePositiveDiv` | Signed division of positive values is unsigned division | 30874, 0 | 750, 59990, 0 | cleared: read, and checked by value where it applies |
+| `RuleDivTermAdd` | Simplify expressions associated with optimized division expressions | 813, 62 | 502, 0, 0 | Not value-preserving a step at a time (the widened product on the way to RuleDivOpt), so the in-situ check does not look at the step; end to end every SH-2 family agrees (21, 22, 24, 56, 59, 60, both images) except through RuleDivOpt (A2-82). By value wrong only for a multiplier of 2^(8n) - 2 or the like, a sign-extended literal in a product wider than any SH-2 multiply builds (A2-87, latent) |
+| `RuleDivTermAdd2` | Simplify another expression associated with optimized division | 674, 507 | 660, 0, 0 | Not value-preserving a step at a time (the widened product on the way to RuleDivOpt), so the in-situ check does not look at the step; end to end every SH-2 family agrees (21, 22, 24, 56, 59, 60, both images) except through RuleDivOpt (A2-82). By value wrong only for a multiplier of 2^(8n) - 2 or the like, a sign-extended literal in a product wider than any SH-2 multiply builds (A2-87, latent) |
+| `RuleDivOpt` | Convert INT_MULT and shift forms into INT_DIV or INT_SDIV | 9830, 2211 | 4474, 1779956, 12 | WRONG, reached by SH-2 code: A2-82 (P2). No check that the multiply fits its width, and a sign-mismatched shift (`ext`/`>>` of the other sign) taken as a division whenever `8*size - n == xsize`, though the output's top n bits are read. Printed-C: family 60 27 of 1,500 `mismatch`, family 56 forms 6 and 7; in situ (wrapped samples skipped) 12 applications |
+| `RuleSignForm` | Normalize sign extraction:  `sub(sext(V),c)  =>  V s>> 31` | 31542, 0 | 172, 565013, 0 | cleared: read, and checked by value where it applies |
+| `RuleSignForm2` | Normalize sign extraction:  `sub(sext(V) * small,c) s>> 31  =>  V s>> 31` | 0, 8830 | 0, 684472, 0 | Latent (A2-83): the multiplier W of `sext(V) * zext(W)` may be 0 (the product 0, the rewrite the sign of V). The rule is called 33,000 times in the SH-2 families and changes nothing there |
+| `RuleSignDiv2` | Convert INT_SRIGHT form into INT_SDIV:  `(V + -1*(V s>> 31)) s>> 1  =>  V s/ 2` | 684, 0 | 216, 684472, 0 | cleared: read, and checked by value where it applies |
+| `RuleDivChain` | Collapse two consecutive divisions:  `(x / c1) / c2  =>  x / (c1*c2)` | 2080, 279 | 418, 118724, 0 | Latent (A2-84): the overflow test negates the divisor of an unsigned division as if it were signed; `(x >> 48) / 0xfffffffffffff800` becomes `x / 0xf800000000000000`. In situ it applies 80 times in family 59 and agrees |
+| `RuleSignNearMult` | Simplify division form: `(V + (V s>> 0x1f)>>(32-n)) & (-1<<n)  =>  (V s/ 2^n) * 2^n` | 14653, 0 | 264, 1142493, 0 | cleared: read, and checked by value where it applies |
+| `RuleModOpt` | Simplify expressions that optimize INT_REM and INT_SREM | 14995, 0 | 558, 118166, 0 | cleared: read, and checked by value where it applies |
+| `RuleSignMod2nOpt` | Convert INT_SREM forms:  `(V + (sign >> (64-n)) & (2^n-1)) - (sign >> (64-n)  =>  V s% 2^n` | 7307, 0 | 266, 519305, 0 | cleared: read, and checked by value where it applies |
+| `RuleSignMod2nOpt2` | Convert INT_SREM form:  `V - (Vadj & ~(2^n-1)) =>  V s% 2^n` | 481, 0 | 8, 0, 0 | cleared end to end, not in situ (the adjusted value is read from a MULTIEQUAL): `x s% 2^k` for k = 1 to 5 and 8 as `cmp/pz ; bt ; add #(2^k-1) ; and ~(2^k-1) ; sub` agrees in the printed-C differential |
+| `RuleSignMod2Opt` | Convert INT_SREM form:  `(V - sign)&1 + sign  =>  V s% 2` | 8379, 0 | 268, 1141639, 0 | cleared: read, and checked by value where it applies |
+| `RuleSwitchSingle` | Convert BRANCHIND with only one computed destination to a BRANCH | - | 70, 0, 0 | not arithmetic: it moves or removes ops (phi, indirect, branch, dead-code); checked end to end by the generators and the corpora, and in situ where the op is arithmetic |
+| `RuleCondNegate` | Flip conditions to match structuring cues | - | 31247, 0, 0 | not arithmetic: it moves or removes ops (phi, indirect, branch, dead-code); checked end to end by the generators and the corpora, and in situ where the op is arithmetic |
+| `RuleBoolNegate` | Apply a set of identities involving BOOL_NEGATE | 26126, 0 | 37987, 151033, 0 | cleared: read, and checked by value where it applies |
+| `RuleLessEqual` | Simplify 'less than or equal':  `V < W \|\| V == W  =>  V <= W` | 5684, 0 | 486, 78560, 0 | cleared: read, and checked by value where it applies |
+| `RuleLessNotEqual` | Simplify INT_LESSEQUAL && INT_NOTEQUAL:  `V <= W && V != W  =>  V < W` | 1143, 0 | 44, 71226, 0 | cleared: read, and checked by value where it applies |
+| `RuleLessOne` | Transform INT_LESS of 0 or 1:  `V < 1  =>  V == 0,  V <= 0  =>  V == 0` | 38528, 0 | 338, 363864, 0 | cleared: read, and checked by value where it applies |
+| `RuleRangeMeld` | Merge range conditions of the form: `V s< c, c s< V, V == c, V != c` | 17226, 0 | 544, 148514, 0 | cleared: read, and checked by value where it applies |
+| `RuleFloatRange` | Merge range conditions of the form: `V f< c, c f< V, V f== c` etc. | - | 0, 147338, 0 | out of reach: the SH-2 spec has no floating-point op (no FLOAT_ p-code is built) |
+| `RulePiece2Zext` | Concatenation with 0 becomes an extension:  `V = concat(#0,W)  =>  V = zext(W)` | 70563, 0 | 716, 131486, 0 | cleared: read, and checked by value where it applies |
+| `RulePiece2Sext` | Concatenation with sign bits becomes an extension: `concat( V s>> #0x1f , V)  => sext(V)` | 3194, 0 | 0, 130258, 0 | cleared: read, and checked by value where it applies |
+| `RulePopcountBoolXor` | Simplify boolean expressions that are combined through POPCOUNT | 640, 0 | - | read and checked by value; the SH-2 spec builds no INT_CARRY / SCARRY / SBORROW / POPCOUNT / LZCOUNT, so no SH-2 code reaches it (A2-76 fixed; the by-value runs find it right at 1, 2, 4 and 8 bytes) |
+| `RuleXorSwap` | Simplify limited chains of XOR operations | 391, 0 | 68, 122660, 0 | cleared: read, and checked by value where it applies |
+| `RuleLzcountShiftBool` | Simplify equality checks that use lzcount:  `lzcount(X) >> c  =>  X == 0` if X is 2^c bits wide | 190, 6 | - | Latent (A2-85): a shift amount of 2^31 or more read as an `int4` (or of the width or more used as a C++ shift count); the SH-2 spec's shift constants are at most 32 and no rule sums them past that |
+| `RuleFloatSign` | Convert floating-point \e sign bit manipulation into FLOAT_ABS or FLOAT_NEG | - | - | out of reach: the SH-2 spec has no floating-point op (no FLOAT_ p-code is built) |
+| `RuleOrCompare` | Simplify INT_OR in comparisons with 0. | 868, 0 | 84, 334544, 0 | cleared: read, and checked by value where it applies |
+| `RuleSubvarAnd` |  | 2, 0 | - | cleared: read, and checked by value where it applies |
+| `RuleSubvarSubpiece` |  | 0, 0 | - | read; a subvariable-flow rule (it narrows a chain of ops), which the graph fuzzer's one-pass graphs do not build; its effect on values is checked end to end by every family and both images |
+| `RuleSplitFlow` |  | - | 0, 553099, 0 | not arithmetic: it moves or removes ops (phi, indirect, branch, dead-code); checked end to end by the generators and the corpora, and in situ where the op is arithmetic |
+| `RulePtrFlow` | Mark Varnode and PcodeOp objects that are carrying or operating on pointers | - | - | out of the integer audit: pointer, type, storage-layout or double-precision rule (areas 3, 5 and 7 and the corpora cover what reaches it); not wrong in the by-value checks it was given where an op of it is arithmetic |
+| `RuleSubvarCompZero` |  | 1474, 0 | - | cleared: read, and checked by value where it applies |
+| `RuleSubvarShift` |  | 10, 0 | - | cleared: read, and checked by value where it applies |
+| `RuleSubvarZext` |  | 13, 0 | - | cleared: read, and checked by value where it applies |
+| `RuleSubvarSext` |  | 48917, 0 | - | Latent (A2-85): a shift amount of 2^31 or more read as an `int4` (or of the width or more used as a C++ shift count); the SH-2 spec's shift constants are at most 32 and no rule sums them past that |
+| `RuleNegateNegate` | Simplify INT_NEGATE chains:  `~~V  =>  V` | 23311, 0 | 748, 28658, 0 | cleared: read, and checked by value where it applies |
+| `RuleConditionalMove` | Simplify various conditional move situations | - | 1189, 0, 0 | not arithmetic: it moves or removes ops (phi, indirect, branch, dead-code); checked end to end by the generators and the corpora, and in situ where the op is arithmetic |
+| `RuleOrPredicate` |  | - | 0, 456918, 0 | not arithmetic: it moves or removes ops (phi, indirect, branch, dead-code); checked end to end by the generators and the corpora, and in situ where the op is arithmetic |
+| `RuleFuncPtrEncoding` | Eliminate ARM/THUMB style masking of the low order bits on function pointers | - | 0, 0, 0 | out of the integer audit: pointer, type, storage-layout or double-precision rule (areas 3, 5 and 7 and the corpora cover what reaches it); not wrong in the by-value checks it was given where an op of it is arithmetic |
+| `RuleSubfloatConvert` |  | - | - | out of reach: the SH-2 spec has no floating-point op (no FLOAT_ p-code is built) |
+| `RuleFloatCast` | Replace (casttosmall)(casttobig)V with identity or with single cast | - | - | out of reach: the SH-2 spec has no floating-point op (no FLOAT_ p-code is built) |
+| `RuleIgnoreNan` | Remove certain NaN operations by assuming their result is always \b false | - | - | out of reach: the SH-2 spec has no floating-point op (no FLOAT_ p-code is built) |
+| `RuleUnsigned2Float` | Simplify conversion:  `T = int2float((X >> 1) \| X & #1);  T + T   =>  int2float( zext(X) )` | - | - | out of reach: the SH-2 spec has no floating-point op (no FLOAT_ p-code is built) |
+| `RuleInt2FloatCollapse` | Collapse equivalent FLOAT_INT2FLOAT computations along converging data-flow paths | - | - | out of reach: the SH-2 spec has no floating-point op (no FLOAT_ p-code is built) |
+| `RulePtraddUndo` | Remove PTRADD operations with mismatched data-type information | - | 0, 0, 0 | out of the integer audit: pointer, type, storage-layout or double-precision rule (areas 3, 5 and 7 and the corpora cover what reaches it); not wrong in the by-value checks it was given where an op of it is arithmetic |
+| `RulePtrsubUndo` | Remove PTRSUB operations with mismatched data-type information | - | 8, 0, 0 | out of the integer audit: pointer, type, storage-layout or double-precision rule (areas 3, 5 and 7 and the corpora cover what reaches it); not wrong in the by-value checks it was given where an op of it is arithmetic |
+| `RuleSegment` | Propagate constants through a SEGMENTOP | - | - | out of the integer audit: pointer, type, storage-layout or double-precision rule (areas 3, 5 and 7 and the corpora cover what reaches it); not wrong in the by-value checks it was given where an op of it is arithmetic |
+| `RulePiecePathology` | Search for concatenations with unlikely things to inform return/parameter consumption calculation | - | 0, 129852, 0 | out of the integer audit: pointer, type, storage-layout or double-precision rule (areas 3, 5 and 7 and the corpora cover what reaches it); not wrong in the by-value checks it was given where an op of it is arithmetic |
+| `RuleDoubleLoad` |  | - | - | out of the integer audit: pointer, type, storage-layout or double-precision rule (areas 3, 5 and 7 and the corpora cover what reaches it); not wrong in the by-value checks it was given where an op of it is arithmetic |
+| `RuleDoubleStore` |  | - | - | out of the integer audit: pointer, type, storage-layout or double-precision rule (areas 3, 5 and 7 and the corpora cover what reaches it); not wrong in the by-value checks it was given where an op of it is arithmetic |
+| `RuleDoubleIn` |  | - | 842, 537559, 0 | out of the integer audit: pointer, type, storage-layout or double-precision rule (areas 3, 5 and 7 and the corpora cover what reaches it); not wrong in the by-value checks it was given where an op of it is arithmetic |
+| `RuleDoubleOut` |  | - | 0, 129852, 0 | out of the integer audit: pointer, type, storage-layout or double-precision rule (areas 3, 5 and 7 and the corpora cover what reaches it); not wrong in the by-value checks it was given where an op of it is arithmetic |
+| `RulePushPtr` | Push a Varnode with known pointer data-type to the bottom of its additive expression | - | 776, 3390197, 0 | out of the integer audit: pointer, type, storage-layout or double-precision rule (areas 3, 5 and 7 and the corpora cover what reaches it); not wrong in the by-value checks it was given where an op of it is arithmetic |
+| `RuleStructOffset0` | Convert a LOAD or STORE to the first element of a structure to a PTRSUB. | - | 0, 0, 0 | out of the integer audit: pointer, type, storage-layout or double-precision rule (areas 3, 5 and 7 and the corpora cover what reaches it); not wrong in the by-value checks it was given where an op of it is arithmetic |
+| `RulePtrArith` | Transform pointer arithmetic | - | 24288, 3367247, 0 | out of the integer audit: pointer, type, storage-layout or double-precision rule (areas 3, 5 and 7 and the corpora cover what reaches it); not wrong in the by-value checks it was given where an op of it is arithmetic |
+| `RuleIndirectConcat` |  | - | - | not arithmetic: it moves or removes ops (phi, indirect, branch, dead-code); checked end to end by the generators and the corpora, and in situ where the op is arithmetic |
+| `RuleLoadVarnode` | Convert LOAD operations using a constant offset to COPY | - | 263401, 0, 0 | out of the integer audit: pointer, type, storage-layout or double-precision rule (areas 3, 5 and 7 and the corpora cover what reaches it); not wrong in the by-value checks it was given where an op of it is arithmetic |
+| `RuleStoreVarnode` | Convert STORE operations using a constant offset to COPY | - | 65608, 0, 0 | out of the integer audit: pointer, type, storage-layout or double-precision rule (areas 3, 5 and 7 and the corpora cover what reaches it); not wrong in the by-value checks it was given where an op of it is arithmetic |
+| `RuleMultNegOne` | Cleanup: Convert INT_2COMP from INT_MULT:  `V * -1  =>  -V` | 1233059, 0 | 10772, 136516, 0 | cleared: read, and checked by value where it applies |
+| `RuleAddUnsigned` | Cleanup:  Convert INT_ADD of constants to INT_SUB:  `V + 0xff...  =>  V - 0x00...` | 0, 0 | 2056, 439166, 0 | cleared: read, and checked by value where it applies |
+| `Rule2Comp2Sub` | Cleanup: Convert INT_ADD back to INT_SUB: `V + -W  ==> V - W` | 338267, 0 | 7090, 35290, 0 | cleared: read, and checked by value where it applies |
+| `RuleDumptyHumpLate` |  | 472, 0 | 44, 53828, 0 | cleared: read, and checked by value where it applies |
+| `RuleSubRight` | Cleanup: Convert truncation to cast: `sub(V,c)  =>  sub(V>>c*8,0)` | 1425751, 0 | 5818, 53314, 0 | Latent (A2-85): a shift amount of 2^31 or more read as an `int4` (or of the width or more used as a C++ shift count); the SH-2 spec's shift constants are at most 32 and no rule sums them past that |
+| `RuleFloatSignCleanup` | Convert floating-point \e sign bit manipulation into FLOAT_ABS or FLOAT_NEG | - | 0, 107345, 0 | out of reach: the SH-2 spec has no floating-point op (no FLOAT_ p-code is built) |
+| `RuleExpandLoad` | Convert LOAD size to match pointer data-type | - | - | out of the integer audit: pointer, type, storage-layout or double-precision rule (areas 3, 5 and 7 and the corpora cover what reaches it); not wrong in the by-value checks it was given where an op of it is arithmetic |
+| `RulePtrsubCharConstant` | Cleanup: Set-up to print string constants | - | 0, 0, 0 | out of the integer audit: pointer, type, storage-layout or double-precision rule (areas 3, 5 and 7 and the corpora cover what reaches it); not wrong in the by-value checks it was given where an op of it is arithmetic |
+| `RuleExtensionPush` | Duplicate CPUI_INT_ZEXT and CPUI_INT_SEXT operations if the result is used in multiple pointer calculations | 0, 0 | 8, 156664, 0 | cleared: read, and checked by value where it applies |
+| `RulePieceStructure` | Concatenating structure pieces gets printed as explicit write statements | 0, 0 | 32, 76002, 0 | out of the integer audit: pointer, type, storage-layout or double-precision rule (areas 3, 5 and 7 and the corpora cover what reaches it); not wrong in the by-value checks it was given where an op of it is arithmetic |
+| `RuleAndStructure` | Convert `and(x,#mask) => zext(sub(x,#c)` when the mask corresponds to a field access | 0, 0 | 0, 94377, 0 | out of the integer audit: pointer, type, storage-layout or double-precision rule (areas 3, 5 and 7 and the corpora cover what reaches it); not wrong in the by-value checks it was given where an op of it is arithmetic |
+| `RuleSplitCopy` |  | - | 0, 241917, 0 | out of the integer audit: pointer, type, storage-layout or double-precision rule (areas 3, 5 and 7 and the corpora cover what reaches it); not wrong in the by-value checks it was given where an op of it is arithmetic |
+| `RuleSplitLoad` |  | - | - | out of the integer audit: pointer, type, storage-layout or double-precision rule (areas 3, 5 and 7 and the corpora cover what reaches it); not wrong in the by-value checks it was given where an op of it is arithmetic |
+| `RuleSplitStore` |  | - | - | out of the integer audit: pointer, type, storage-layout or double-precision rule (areas 3, 5 and 7 and the corpora cover what reaches it); not wrong in the by-value checks it was given where an op of it is arithmetic |
+| `RuleStringCopy` |  | - | 0, 241917, 0 | out of the integer audit: pointer, type, storage-layout or double-precision rule (areas 3, 5 and 7 and the corpora cover what reaches it); not wrong in the by-value checks it was given where an op of it is arithmetic |
+| `RuleStringStore` |  | - | - | out of the integer audit: pointer, type, storage-layout or double-precision rule (areas 3, 5 and 7 and the corpora cover what reaches it); not wrong in the by-value checks it was given where an op of it is arithmetic |
+| `RuleBitFieldStore` |  | - | - | out of the integer audit: pointer, type, storage-layout or double-precision rule (areas 3, 5 and 7 and the corpora cover what reaches it); not wrong in the by-value checks it was given where an op of it is arithmetic |
+| `RuleBitFieldOut` |  | - | - | out of the integer audit: pointer, type, storage-layout or double-precision rule (areas 3, 5 and 7 and the corpora cover what reaches it); not wrong in the by-value checks it was given where an op of it is arithmetic |
+| `RuleBitFieldLoad` |  | - | - | out of the integer audit: pointer, type, storage-layout or double-precision rule (areas 3, 5 and 7 and the corpora cover what reaches it); not wrong in the by-value checks it was given where an op of it is arithmetic |
+| `RuleBitFieldIn` |  | - | - | out of the integer audit: pointer, type, storage-layout or double-precision rule (areas 3, 5 and 7 and the corpora cover what reaches it); not wrong in the by-value checks it was given where an op of it is arithmetic |
+| `RulePullAbsorb` |  | - | - | out of the integer audit: pointer, type, storage-layout or double-precision rule (areas 3, 5 and 7 and the corpora cover what reaches it); not wrong in the by-value checks it was given where an op of it is arithmetic |
+| `RuleInsertAbsorb` |  | - | - | out of the integer audit: pointer, type, storage-layout or double-precision rule (areas 3, 5 and 7 and the corpora cover what reaches it); not wrong in the by-value checks it was given where an op of it is arithmetic |
+
+### 7. What I did not do
+
+* Family 23 (`div1` chains, 1 to 32 steps) is too slow with the in-situ check (a chunk of 20 functions did not finish in 10 minutes, a chunk of 100 hit the 15-minute cap); it is covered by the earlier rounds' runs without the check.
+* The in-situ check is blind where the engine is (the exemptions above), and does not look at a rule that rewrites a phi, a load, a call or a pointer; those are area 3's and 5's and are covered by the corpora and the generators.
+* A2-83 to A2-87 have no SH-2 way in that I could build; they are latent because of the families that apply the rules and agree, not because of a proof.
+* Tools are in `Docs/Decompiler/tools/a2_round13/`; the scratch objects (`mkrc13.sh`, `mkcast13.sh`, `mutbuild13.sh`, `oraclevar13.sh`) leave the vendored tree alone.
+
+## Area 3, round 12 fix
+
+Fixer, branch `review/3-round12-fix`, on the coordinator's head `79906c2`. Code commits `b781c9e` to `1c1d069` (engine patch `0063`, the host, the generator, the pins, the tools), then the ledger and this record. Own RelWithDebInfo build under the scratch directory, `-j2`, every run under `ulimit -v 4000000`.
+
+**The rows.** A3-89 (P1), A3-90, A3-91, A3-92, A3-93, A3-94 (P2) and A3-102 (P1) are fixed; A3-99 (P3) is fixed with them; A3-96, A3-97 and A3-98 (P3, instrument and tool) are fixed; A3-95 (P3) is accepted; A3-100 and A3-101, routed as provisional P2, are oracle false positives, set to P3 and fixed in the generator. The reasons and the pins are in the rows.
+
+### 1. The design: escape semantics instead of a list of paths
+
+Three rounds found a frame address that left the function by a way the code did not list (wrappers, laundering, globals, joins, and in round 12 callees that keep it and odd return registers), and the host's exact-form tests that the round 11 principle had not reached. This round stops listing ways.
+
+**Engine (patch `0063-engine-frame-escape-unknown-pointers.patch`, amending 0061).** `FrameEscape` now uses the escape semantics of a C compiler's points-to analysis:
+
+- (e) A frame address that is an argument of any call, in a register or a stack input, escapes. The stack-pointer placeholder of an unlocked call is not counted: every such call has one until its stack arguments are known. A frame address the host knows went out by a way the p-code does not show escapes as well (`ScopeLocal::declareHostEscape`). That declaration is read even when nothing reads the stack pointer any more. In A3-91 the address went out through a callee that moved r4 to r9, which no call output names, so the gather used to return before looking.
+- Once anything has escaped, every pointer whose origin the analysis cannot prove is no frame address may point into the frame. Those pointers are a parameter (any input but the stack pointer), a LOAD's output, any output of a CALL, CALLIND or CALLOTHER, an INDIRECT's output (the value a call or a store may have rewritten), and anything computed from them by any op except a comparison. Every STORE through one is an unmodeled STORE and so guarded (`FrameEscape::markUnknownStores`, before the stack is heritaged and again after it). Every local from the lowest frame offset up stays aliased (0061's boundary). Where the escaped value goes is not followed, which is what makes the rule closed.
+- Two consequences are kept narrow, each because the wide form was unsound or lost precision for no gain:
+  - An escape by hand-over alone aliases the locals but leaves the save slots unmapped (`FrameEscape::loose`: only 0061's causes keep them mapped). A pointer to a local reaches the locals, and mapping the save slots merged every frame into one array (`axStack_8[2]` for A3-24's `xStack_8`).
+  - The escape's alias is not the boundary `AliasChecker::hasLocalAlias` gives `FuncCallSpecs::checkInputTrialUse` (`trialBoundary`). With it, every outgoing word was taken for an aliased local, and the engine dropped the stack arguments of every call in a function whose frame escaped. That included the frame address handed in a stack argument, so the escape that dropped it was gone too, and the local it reached was folded: `a3_51` subsets 2 and 3 printed `return 0x5a;` until this was found. This is also A3-99's cause.
+- A3-102 is a different shape with the same root decision, taken by the engine's save-slot model rather than by escape. The slot a function saves a register in is unmapped (`ActionRestrictLocal`), so it is no local and no alias reaches it. A pointer stepped up from a local over the slot wrote it, and the read of the slot after the loop was printed as the saved register (`return CONCAT44(unaff_gbr,param_2);`). The store's guard covered the slot (the value-set range [-12, -1]); `nolocalalias` overruled it. Patch 0056 keeps a save slot mapped when a pointer stepped down may reach it. 0063 keeps one mapped when an indexed STORE's guard covers it.
+
+**Host: one predicate.** The interpreter (`ReturnCheck`) gains an exact data-flow flag and an escape state, and every frame-address decision goes through one test:
+
+- `Value::frame` is set on a value computed from a stack address the function made, by any op and any data path: through a copy, an addition, a mask, a swap pair, a join, a spill and its reload, a part of a register. The origin bit `kStack` says less. A load after the state escaped, what a call returned, and a word nothing is known of carry it too, and the frame rules cannot tell those from an address of the frame.
+- `State::out` records what of the frame has gone out to code that may keep it. `kOutExact` is the address of a local or one based on it. `kOutLoose` is an address no exact form bounds: laundered, an index that may be negative, or a saved register's slot. `kOutHigh` is an address that may be at or above the entry r15.
+- **`MayBeFrame(s, x)`** is the predicate: yes for a frame-flagged value, and, once something has gone out, for a pointer nothing is known of (what a load gives, what a call returned). No for a constant (an absolute address is never the stack, as the engine takes it) and for a register's entry value, which was made before this frame was. Exact forms decide only the other way:
+  - `MayBeCallerFrame` decides "at or above the entry r15" by an exact address's offset or by a base. A frame address with no base is yes.
+  - `EscapeClass` classifies what goes out.
+  - The spare in `Apply` keeps the bytes an exact address reaches, and a based address's object.
+- `HandOut` is where a possible frame address goes out. Its sources:
+  - a store of it to memory not tracked;
+  - a lent callee whose `leaks` or `outOrigins` name a register of r4-r7 that holds one, or memory holding one;
+  - in the probe, a register a callee can use that holds one. The registers are a walked callee's own (`CalleeStoresBelow`, `CalleeHanded`), and the convention's (r2, r4-r7) for a callee the probe cannot read.
+
+  It sets `State::out`, and in the probe `FrameOut`, which `runPass` turns into `declareHostEscape`. Round 11's probe rules declared a host alias from the frame's lowest slot instead. That alias also took every outgoing word for a local, which is A3-99 in the alone run, so they now declare only the escape. The engine's escape aliases the same locals.
+
+The sites, changed and left (every place in `ReturnCheck`, `Clobber`, `AtOrAboveEntry`, the hand-back rule, `NoteFrameEscapeOf` and the probe that decided "is this a frame address", "is this exact" or "does this have a base"):
+
+| Site | Decision | Now |
+|---|---|---|
+| `PossibleFrame` (the probe: an unnamed callee's r4-r7, an unlent walked callee's `storesBelow` registers) | frame | removed; `MayBeFrame` and `HandOut` over the walked callee's `CalleeStoresBelow \| CalleeHanded` (the convention's for one it cannot read) |
+| `Store`: `addr.AtOrAboveEntry()`, the hand-back of A3-21 and A3-39 | frame (the caller's) | `MayBeCallerFrame` (A3-92 a, b) |
+| `Call`, lent branch: `storesThrough` register `AtOrAboveEntry` (A3-39 b) | frame (the caller's) | `MayBeCallerFrame` (A3-92 c) |
+| `Call`, nested walk: a register `AtOrAboveEntry` at a named or unnamed call (A3-70) | frame (the caller's) | `MayBeCallerFrame` (A3-92 d) |
+| `MapCalleeWords` (`kUnwalked`) and the tail jump's `handsOn` | frame (the caller's) | `MayBeCallerFrame` |
+| `Apply`: `Clobber`'s spare, `exact` (`Value::Sp` only, A3-24, A3-42) | exact | an exact address spares all but its bytes; a based one (`&a[i]`) its object; any other `MayBeFrame` value, or an unknown pointer once a loose or high address went out, spares nothing (A3-93) |
+| `NoteFrameEscapeOf`: `if (base == kNoBase) return;` | base | a `MayBeFrame` value with no base goes out (`HandOut`) and the note is said if it is one this function computed (A3-94) |
+| `Call`, lent branch: `storesBelow` register with `kStack` among its origins (A3-84) | frame | `MayBeFrame` and `HandOut` |
+| `Merge`: "a side that may be a stack address" by `kStack` origin (A3-26) | frame | `MayBeFrame`'s test with the joined states' `out`: a loaded pointer is no stack address unless something went out |
+| `Clobber`: a word a callee may have written lost its base | base | keeps the lower base of what it held and what may be written (`FrameWrite`, as `Merge`) |
+| `Apply` (the lent callee's `leaks` / `outOrigins`, A3-89 host side, A3-91) and `Store`'s leak | escape state | `HandOut` |
+| the nested walk: a call or tail jump to an unlent callee, a callback (A3-90) | frame (carried) | `CalleeStoresBelow` and `CalleeHanded` mapped through the registers passed, to any depth; a walk that could not follow a callee (the levels, the budget, a cycle) names every register |
+| `CalleeStoresFrame` (new): which words a callee's stores leave frame-flagged | frame | the handed registers (r2, r4-r7) and the frame's words, not r8-r14 (with the frame pointer in r14 every save slot became a frame address after the first call) |
+| the probe's model of an unread callee (`Apply` with "anything") | frame (what it stores and returns) | the convention's: it is handed r2, r4-r7, memory and its stack arguments (as "anything", every register it keeps went into every word after the call) |
+
+Left as they were, with why:
+
+| Site | Why it stays |
+|---|---|
+| `Merge` and `INT_ADD` computing `callerHigh` from `AtOrAboveEntry` | They set the flag `MayBeCallerFrame` reads, and only ever towards "may be the caller's". |
+| `Store` / `Load` on an exact `Value::Sp` | An exact address places the bytes it writes or reads. Saying the other slots are untouched is a non-frame decision. |
+| `Store`'s and `Call`'s `storesBelow` record (`Base() == kNoBase && baseReg < 0`) | A parameter pointer's claim, not a frame address's. |
+| `NoteFrameEscape(s, r, false)` for r4-r7 (skips an exact address) | The engine shows that argument, and now escapes on it by (e). |
+| `NoteStackArguments`' `shown` (the same exact address in r4-r7) | A non-frame decision: the address is in an argument the call shows. |
+| `ExposeStackArguments` needs an exact r15 | With r15 unplaced the words cannot be named. r15 is exact at every call but after a user op modelled as a call with unknown effects, whose function is withheld for its unknown r15. |
+| `MayBeStack` in `StoreThrough` and `Load` | Already wider than the predicate (a `kStack` origin, or memory once escaped). |
+| An index taken as non-negative (`kLowBase`, `stackBase`) | The accepted convention of A3-9 and A3-17, as the engine takes it. |
+
+### 2. A3-90 to A3-94 and A3-102, one line each
+
+- **A3-90**: r4 chains are now the engine's: (e) escapes on the hand-over to U1. The host carries what a walked callee stores below and hands on up the chain, to any depth, and fails closed at the depth limit. A chain through r1 (no argument the engine shows) is held by the host alone.
+- **A3-91**: the lent callee's `outOrigins` names r4. The probe's `HandOut` declares the escape, and the store through `extraout_r9` (an INDIRECT output) is guarded. r1, r9, r10, MACH and GBR alike.
+- **A3-92**: a store through a laundered copy of the entry r15 is a hand-back. g is withheld; the probe's walk exposes the caller's word.
+- **A3-93**: f is withheld ("a return not to its caller": h may overwrite the saved PR as well). Its caller is withheld.
+- **A3-94**: the laundered r2 goes out; the call writes the local. A laundered address in a dropped stack argument is held by `NoteFrameEscapeOf` alone.
+- **A3-102**: the slot stays mapped, and the text reads `aiStack_c[2]`, which agrees with the run.
+
+### 3. A3-100, A3-101: the oracle
+
+- **A3-100** (grammar 2, seed 2007995). The callee computes `stc gbr,r2 ; and r5,r2`. GBR's start 0x06024100 AND r5's start 0x06021100 is r4's start 0x06020100 exactly, so r2 at the caller's return was taken for a pointer from r4. The claim is right: r2 is computed from GBR and r5. `PointerRegister` now refuses a value that an AND, OR or XOR of two other start values the run read lands within 0x80 of (`BitwiseOfOthers`).
+- **A3-101** (grammar 1, seed 2126605). `and r0,r0` in the slot of the `rts`, and `mov r0,r0`, write r0 with itself. So r0 was "written on every path", and its final value, the perturbed start value passed straight through, made r0 an input of the return. The host and the engine both take these identities for no-ops (A2-43, patch 0048), and the host's `preserved` claims r0, which the run agrees with. r0 that ends as it began in both runs is no longer compared.
+- Both are P3 (instrument), fixed in `Sh2GeneratedTests.cpp`. `TestRound12FixPins` holds the replays, a unit pin of the attribution, and a control.
+
+### 4. The instrument (A3-96, A3-97)
+
+`GenEscapeWalkFn` is a stream of its own, one seed in four, checked by `CheckLaunderWalks`. It draws:
+
+- callees that keep the address: a global, with a second lent or unlent callee walking down or returning it; a second argument, the caller's slot; the outgoing word;
+- the store the function makes itself after the escaping call, through a pointer it did not compute (the global loaded, what a call handed nothing returns, r9), with the local written again in between (`escape.rewrite.*`). Without the rewrite the call's own guard already stands for the local, and the unknown-pointer rule was untested. The first mutation run found this: reverting `markUnknownStores` alone failed no seed and no pin. These shapes and four pins in `TestArea3Round12Fix` now hold it;
+- hand-back in r1, r9, r10, MACH and GBR;
+- a chain of unlent callees, through r1 or r4, by a call, a tail jump or a callback, and one whose last walk counts from an input the caller sets (`.counted`: no exact offset bounds it, so only the probe's carry holds it);
+- r2 laundered (none, mask, swap pair), and the same address in the first stack argument slot with r4-r7 unset, which the engine drops (`struct.stack.*`: only `NoteFrameEscapeOf` holds it);
+- the caller's frame laundered;
+- the spare, checked by f's `preserved` claim, not the caller's text (the model keeps r14 across an unlent call);
+- `not` twice across a loop's passes and `neg` then a subtraction;
+- `shll`/`shal` then `shar`.
+
+`TestA365Pins` holds that each kind is drawn: 486 functions in 2,000 seeds, 103 kinds. Before this, E3 and E4 failed no seed. Now E4 fails 53 printed-C seeds (the two shift shapes) and E3 fails 32 (the `not2` shape). E18 and E19 stay as they are, redundant guards that cost nothing. E19's CALLOTHER case is now subsumed by (e): a frame address handed to any call escapes before the unmodeled-use loop is reached. E18's LOAD is covered because the alias checker takes the based address the laundering started from as an alias, as the review found. Neither has a fixture that fails without it, and the reason is recorded here.
+
+### 5. Mutation
+
+Each part reverted alone (`mutate.py` on a copy: the worktree untouched), against the final tree. Each mutant ran printed-C seeds 1 to 3,000 with the generator's pins, and the suite (where the part has pins there). The parts the review asked about were added (its E3, E4, E7 and H9 in this tree), and the generator's two oracle changes as well. "Held" means seeds or pins fail with the part reverted. Restored, the tree passes: printed-C 0 of 3,000 failing, the generator's pins, the suite.
+
+| Part reverted alone | Printed-C 3000 (failing seeds, top shapes) | Suite pins failing (lines) | Reading |
+|---|---|---|---|
+| E_handed: engine (e): a frame address handed to a call escapes | 68 (escape.keep.outgoing 68); generator pins 1 | 1 (12143(x1)) | held |
+| E_hostescape: engine: the host's declared escape is an escape | 160 (escape.back.r9 17, escape.back.mach 17, escape.rewrite.r9.lent 16, escape.struct.mask 13, escape.chain.r1.callback.counted 13, escape.back.r10 11); generator pins 1 | 11 (8146(x1) 8149(x1) 12163(x1) 12186(x1) 12198(x4) 12235(x1) 12238(x1) 12244(x1)) | held |
+| E_hostempty: engine: `FrameEscape::compute` reads the host's escape with no frame address left | 141 (escape.back.r9 17, escape.back.mach 17, escape.rewrite.r9.lent 16, escape.struct.mask 13, escape.chain.r1.callback.counted 13, escape.back.r10 11); generator pins 1 | 10 (8146(x1) 8149(x1) 12163(x1) 12186(x1) 12198(x4) 12235(x1) 12238(x1)) | held |
+| E_hostgather: engine: the gather reads the host's escape with no spacebase input | 141 (escape.back.r9 17, escape.back.mach 17, escape.rewrite.r9.lent 16, escape.struct.mask 13, escape.chain.r1.callback.counted 13, escape.back.r10 11); generator pins 1 | 10 (8146(x1) 8149(x1) 12163(x1) 12186(x1) 12198(x4) 12235(x1) 12238(x1)) | held |
+| E_unknown: engine: `markUnknownStores` (a store through a pointer not proved no frame address) | 77 (escape.rewrite.ret.lent 16, escape.rewrite.r9.lent 16, escape.rewrite.load.lent 13, escape.rewrite.ret.unlent 12, escape.rewrite.load.unlent 11, escape.rewrite.r9.unlent 9); generator pins 1 | 4 (12153(x1) 12155(x1) 12159(x1) 12163(x1)) | held |
+| E_loose: engine: save slots stay mapped only for 0061's causes (`loose`) | 0 | 3 (8613(x1) 8718(x1) 9807(x1)) | precision |
+| E_trial: engine: the stack-argument trial keeps its own boundary (`trialBoundary`, A3-99) | 0 | 70 (9797(x1) 9798(x1) 9852(x13) 9854(x13) 10456(x2) 10457(x2) 10788(x19) 10790(x19)) | held |
+| E_savemap: engine: a save slot an indexed STORE's guard covers stays mapped (A3-102) | 0; generator pins 1 | 0 | held |
+| H_pred: host: `MayBeCallerFrame` says yes for a frame value with no base | 155 (escape.spare 65, escape.callerframe.swap2 25, escape.callerframe.mask 25, escape.struct.mask 13, escape.struct.stack.swap2 10, escape.struct.stack.mask 9); generator pins 1 | 17 (8922(x2) 8923(x2) 8926(x2) 8927(x2) 12205(x1) 12209(x1) 12212(x1) 12215(x1) 12226(x1) 12227(x1) 12235(x1) 12238(x1) 12244(x1)) | held |
+| H_store92: host: `Store`'s hand-back by the predicate (A3-92 a, b) | 50 (escape.callerframe.swap2 25, escape.callerframe.mask 25); generator pins 1; grammar 2 (1,000): 0 | 2 (12205(x1) 12209(x1)) | held |
+| H_lent92: host: the lent `storesThrough` hand-back by the predicate (A3-92 c) | 0; grammar 2 (1,000): 0 | 2 (12212(x1) 12215(x1)) | held |
+| H_nested92: host: the nested walk's call site by the predicate (A3-92 d) | 0 | 0 | redundant |
+| H_spare93: host: no spare for a laundered frame address (A3-93) | 0; grammar 2 (1,000): 0 | 2 (11959(x1) 11969(x1)) | held |
+| H_note94: host: `NoteFrameEscapeOf` lets out a frame value with no base (A3-94) | 19 (escape.struct.stack.swap2 10, escape.struct.stack.mask 9); generator pins 1 | 1 (12244(x1)) | held |
+| H_lentbelow: host: a lent `storesBelow` register holding a frame value goes out | 0 | 0 | redundant |
+| H_lent91: host: a lent callee's `leaks`/`outOrigins` r4-r7 holding a frame value go out (A3-89, A3-91) | 81 (escape.back.r9 17, escape.back.mach 17, escape.rewrite.r9.lent 16, escape.back.r10 11, escape.back.r1 11, escape.rewrite.r9.unlent 9); generator pins 1; grammar 2 (1,000): 0 | 5 (12163(x1) 12198(x4)) | held |
+| H_probe90: host: the probe lets out a walked callee's registers holding a frame value | 39 (escape.chain.r1.callback.counted 13, escape.chain.r1.call 8, escape.chain.r1.callback 7, escape.chain.r1.jump.counted 5, escape.chain.r1.jump 4, escape.chain.r1.call.counted 2); generator pins 1 | 3 (8146(x1) 8149(x1) 12186(x1)) | held |
+| H_carry90: host: the nested walk carries `storesBelow` and `CalleeHanded` up (A3-90) | 2 (escape.chain.r1.call.counted 2); generator pins 1 | 1 (12186(x1)) | held |
+| H_hostescape: host: `runPass` declares the probe's escape to the engine | 160 (escape.back.r9 17, escape.back.mach 17, escape.rewrite.r9.lent 16, escape.struct.mask 13, escape.chain.r1.callback.counted 13, escape.back.r10 11); generator pins 1 | 11 (8146(x1) 8149(x1) 12163(x1) 12186(x1) 12198(x4) 12235(x1) 12238(x1) 12244(x1)) | held |
+| H_handnote: host: the note at a hand-over in a register no argument shows | 0 | 2 (8146(x1) 12186(x1)) | held |
+| H_storesframe: host: a callee's stores flag only the convention's registers (`CalleeStoresFrame`) | 0 | 0 | precision |
+| H_clobberbase: host: `Clobber` keeps the lower base | 0 | 0 | precision |
+| H_mergepred: host: `Merge` asks the predicate | 0 | 0 | precision |
+| H_convention: host: an unread callee is the convention's, not "anything" | 0 | 0 | precision |
+| R_E7: review E7 (0061 (d): a handed call's output) | 0 | 0 | redundant |
+| R_H9: review H9 (round 11: `leaks` sets the escape) | 0 | 0 | redundant |
+| R_E3: review E3 (INT_2COMP/INT_NEGATE followed) | 32 (escape.neg.not2 32); generator pins 1 | not run | held |
+| R_E4: review E4 (shifts and multiplication followed) | 53 (escape.shift.shal 31, escape.shift.shll 22); generator pins 1 | not run | held |
+| G_100: generator: `BitwiseOfOthers` (A3-100) | 0 | generator default mode: pins CHECK failed 3 [9975 9976 9985 ]; replay A3-100 findings 1 (claim-wrong:outOrigins ); replay A3-101 findings 0 () | held |
+| G_101: generator: `r0Through` (A3-101) | 0 | generator default mode: pins CHECK failed 1 [9993 ]; replay A3-100 findings 0 (); replay A3-101 findings 1 (input-dropped ) | held |
+
+The readings:
+
+- **Held by both the generator and the pins:** (e), the host's escape in all three places, `markUnknownStores`, the predicate, `Store`'s hand-back, `NoteFrameEscapeOf`, the lent hand-out, the probe, the carry, and the declaration in `runPass`. The review's E3 and E4 are held by the generator alone, as A3-97 asked: the `not` pair across a loop fails 32 seeds, the shifts 53.
+- **Held by pins only:**
+  - the trial boundary: 70 checks, the `a3_51` subsets and A3-99's stack arguments. The stream draws no stack-argument trial.
+  - A3-102's save slot: its printed-C pin, the reviewer's walk.
+  - the lent `storesThrough` hand-back: A3-92 c. The stream's callee writes its caller's frame itself.
+  - the spare: A3-84 a and d, a laundered address handed to a lent writer that may reach the saved PR. f in A3-93 is also withheld by the caller-frame predicate.
+  - the hand-over note: a note, not a value; the generator compares values.
+- **Found by this table.** In its first run, reverting `markUnknownStores` alone failed no seed and no pin. Every drawn shape stored after the call through a pointer the call had already made unknown, and the call's own guard stood for the local. The stream now draws `escape.rewrite.<load|ret|r9>.<lent|unlent>`, with the local written again after the call. `TestArea3Round12Fix` pins four such fixtures; without the rule each prints `return 5;` where the run gives 7. The carry (H_carry90) and `NoteFrameEscapeOf` (H_note94) were also held by one pin each at first. The stream now draws `chain.*.counted`, a walk counted from an input that no exact offset bounds: without the carry the host prints `return 0x65`, the run 1. It also draws `struct.stack.*`, a laundered address in a dropped stack argument.
+- **Precision, not soundness** (no test should fail; the corpus shows them):
+  - `loose`: without it the save slots merge every frame into one array; the three pins that fail check `xStack_8` and the like, not a value.
+  - `CalleeStoresFrame` restricted to the convention, `Clobber`'s base, `Merge`'s predicate, and the convention's model of an unread callee: each was added to cut the round's notes (section 6), and each reverted only widens what is taken for a frame address.
+- **Redundant, kept as fail-closed guards:**
+  - The nested walk's call-site test (A3-92 d): the carry already maps U2's record (r4 stored through) back to U1's laundered r15, and the probe lets the frame out from it.
+  - The lent `storesBelow` exposure: a lent callee's inputs are r4-r7, so the address it stores below is a call argument and (e) escapes on it.
+  - The review's E7 (0061's (d)): once a call is handed the address, the frame has escaped and `markUnknownStores` guards a store through any call output.
+  - The review's H9 (round 11's `leaks`): the lent hand-out (H_lent91) carries it.
+- **The oracle (A3-100, A3-101).** In the generator's default mode, without `BitwiseOfOthers` three pins fail and the row's seed (grammar 2, 2007995) finds `claim-wrong:outOrigins` again. Without `r0Through` one pin fails and seed 2126605 (grammar 1) finds `input-dropped` again. Printed-C mode runs neither check.
+
+### 6. Cost on the corpora
+
+`SE_GAME_HWRAM=<img> SE_GAME_LEND=1 SaturnExplorerSh2DecompilerTests <dir>` on the final tree, against the base `79906c2` (the same build directory and load, one run each):
+
+| | hwram007 | hwram008 |
+|---|---|---|
+| lent signatures (parameters), base | 680 (958) | 1,040 (1,312) |
+| lent signatures (parameters), this round | 678 (956) | 1,038 (1,310) |
+| newly withheld | 2, "a return not to its caller" (06021C20, 06021C24) | 2, the same (060610FC, 06061100) |
+| texts changed, lending run | 601 of 1,730 (173 by notes only) | 1,237 of 2,995 (272 by notes only) |
+| texts changed, alone run | 430 of 839 (151 by notes only) | 874 of 1,554 (185 by notes only) |
+| `TestGameCode` | 9,564 ms (base run 9,534; master's record 9.7 s) | 32,753 ms (base run 31,564; master's record 32.0 s) |
+| accesses dropped against the run / missing and said / mapping violations | 0 / 0 / 0 | 0 / 4 / 0 |
+
+The time is within the noise of one run, 1.0x of the base: far inside the 1.5x allowed. The texts of this run are byte for byte those of the run before the last test-only commits (4,299 and 7,544 files).
+
+What changed, hwram007's lending run by kind (a text can be in several):
+
+| Kind | Texts |
+|---|---|
+| declarations only (the locals an escape keeps aliased stay variables) | 273 |
+| statements (a read of a local where the constant was folded, a store kept) | 155 |
+| a frame array (`[128]` and the like, the locals at and above the escaped offset in one array) | 116 |
+| signature text | 103 |
+| `in_stack_` | 96 |
+
+The notes in hwram007's lending run:
+
+- 273 stack-argument notes;
+- 526 r14 notes;
+- 67 r2 notes;
+- 248 slot notes (A3-61).
+
+These follow from the fail-closed rules: a laundered or unknown frame address is now one, the round 11 `storesBelow` exposure says what may be reached, and A3-61 exposes the slot. They are the cost recorded, not a claim the text gets wrong.
+
+A sample read against the code, hwram007 06021C20, newly withheld. The function spills a frame pointer to a local, reloads it after a call, and hands it to a lent writer. The reloaded word is a pointer nothing is known of once the frame has gone out, so the writer may reach the saved PR: "a return not to its caller". It was lent before. Only 06021C20 was read one by one. The other three give the same reason.
+
+### 7. Matrix
+
+On the final tree (`1c1d069` for the code), own RelWithDebInfo build, `-j2`, every binary under `ulimit -v 4000000`, one heavy job at a time:
+
+| Run | Result |
+|---|---|
+| `ctest -E SaturnExplorerLive -j2 --timeout 900` | 94 of 94 pass (154 s) |
+| fault suite (`SaturnExplorerDecompilerFaultTests` alone) | fault matrix 0 of 94 jobs failed (74 s); no MOVED pin |
+| generator, grammar 2, seeds 1-3,000 | 0 failing |
+| generator, grammar 1, seeds 1-1,000 | 0 failing |
+| generator, printed-C, seeds 1-3,000 | 0 failing (laundered and escape walks 1,486: agrees 79, `escape:spare` 65, `launder:local` 1,342) |
+| generator, seeds 1-20,000 (four runs of 5,000) | 0 failing |
+| generator, grammar 2, 1,800,001-1,820,000 (four runs of 5,000) | 1 failing: 1804560, A5-87's (`pointer-effect-unsaid`, area 5) |
+| generator, specials (`SE_GENERATED_ALPHABET=specials`), 1,900,001-1,905,000 | 0 failing |
+| generator pins | pass; "round 12 escape draws": 486 functions in 2,000 seeds, 103 kinds |
+| `TestArea3HiddenInputFuzz`, `SE_A3FUZZ_PROGRAMS=5000`, seeds 8 and 9 | 1,176 and 1,168 lent, 15,288 and 15,184 perturbed runs, 0 findings |
+| fixtures through the driver (`a3_round11/rowsfix.src`, every `a3_round12/r12*.src`, this round's own) | 151 fixtures, 50 lent: each gives the right text or is withheld, but S1 (`r12a.src`, the non-negative index convention of A3-9 and A3-17) and T1 (`r12q.src`, A3-95, accepted) |
+| corpora | section 6: every ledger count 0, missing and said 0 and 4, mapping violations 0 |
+| vendoring: `python3 -I vendor.py <ghidra>` on a copy | exit 0, "vendored 84 library sources, 3 compiler sources, 94 headers, 5 spec files", 0063 applied, the tree identical to the committed one |
+
+**A3-103** (filed on master during this round, provisional P2): its two seeds reproduce on this tree, and A3-101's triage does not cover them, so the row stays open.
+
+- Grammar 2, seed 2310198 (`input-dropped:r1`): function 2 reads a byte of its own frame that it has not written (`mov.b @r15,r2`, printed `cStack_c`) and then stores r1 into that slot. The second call of it from function 1 runs at the same r15 and reads what the first call left there. r1 reaches the output only through a stale word below the caller's r15: an indeterminate value in C, which the text shows as an uninitialised local. This looks like an oracle false positive of a different class from A3-101: the oracle should not count a dependence carried only by a read of a stack word nothing in the run wrote first.
+- Grammar 2, seed 2317870 (`return-dropped`): function 1 calls function 2, which returns `extu.w r4,r0`. Function 1 never writes r0 again, so the callee's result is in r0 at its return; the generator drew it as returning (`fn.ret_call`) and the prototype says void. This one may be a real return-recovery claim.
+
+Neither is in this round's scope or its triage.
+
+
+## Area 3, round 13 review
+
+Reviewer, branch `review/3-round13-review`, on the coordinator's head `8dcbb70` (patches up to 0063 in the tree; the round 12 fix and the host rule `MayBeFrame`). Findings only: no code changed; the repository gets tools (`Docs/Decompiler/tools/a3_round13/`), the ledger rows **A3-104 to A3-114** and this record. Own RelWithDebInfo build and a build of the round 12 base `79906c2` beside it, `-j2`, every run under `ulimit -v 4000000`, one heavy job at a time.
+
+**The round is not clean: three rows at P2 (A3-104, A3-105, A3-106) and eight at P3.** Area 3 has no clean round yet and the count of consecutive clean rounds stays 0. The three P2 rows are what the brief expected of a fail-closed rule: each is a site the round 12 table left "as it was" with a reason, and each of the three reasons fails on a fixture. All three give a wrong printed value with no valid note, in a caller that is withheld (the callee is not lent, or the lent claim is the wrong one), and all three were wrong on `79906c2` as well: round 12 fixed the shapes around them (A3-89, A3-92) and the residue stays.
+
+| Row | P | What | Round 12 site it comes from |
+|---|---|---|---|
+| A3-104 | P2 | A frame address kept by an unlent callee and walked down from later: a local under the passed address is folded when the call has two register arguments and a written word at its r15. The escape's boundary is the lowest stack varnode left when it is asked; the locals the engine uses up (the call's fifth argument) and folds are not in it. | patch 0061/0063 `lowest` (the surviving stack varnodes) |
+| A3-105 | P2 | A frame address in a stack word the engine drops (r5-r7 unset) is an alias from its own offset up, not an escape; a callee that reads the word and keeps it, and a walk down, fold the locals under it. | `NoteStackArguments` on an exact address ("left as it was") |
+| A3-106 | P2 | A caller-frame pointer reloaded through an address the interpreter cannot place (a swap pair, a mask, r15 published in a global) loses `frame` and `callerHigh`: g writes its caller's word and is lent; the caller prints the old value. 378 of 378 fixtures of the three channels; the ten other channels 0 of 1,022. | `MayBeCallerFrame` / `Load` through an unplaced pointer ("exact `Value::Sp` loads and stores" and `callerHigh`) |
+| A3-107 | P3 | An indirect call with no nameable target does not expose the caller's outgoing words (A3-61 for a known callee); same as A3-10's reason for registers. | `ExposeStackArguments` needs a target |
+| A3-108 | P3 | The added notes: true, but 64 of 307 r14-note functions have no local, the fact is repeated at every call, and the slot note says "a local" for the epilogue's pops of saved registers. | notes |
+| A3-109 | P3 | Text noise: parameter spills, partial stores, arrays that absorb the save slots (`[8]` to `[40]`). | round 12 texts |
+| A3-110 | P3 | Two functions of 999 (007) and two of 1,543 (008) newly withheld by an exact pointer reloaded in a loop. | A3-93 spare |
+| A3-111 | P3 | Triage of A3-103, seed 2310198: oracle, a dependence through a stale stack word. | oracle |
+| A3-112 | P3 | Triage of A3-103, seed 2317870: oracle, A3-41's shape with a store of the call's r0. | oracle |
+| A3-113 | P3 | The corpus runs the middle of a function as a function (42% and 48% of the entries). | instrument |
+| A3-114 | P3 | The generator draws none of the three P2 shapes. | instrument |
+
+### 1. How the round attacked the rule
+
+The rule is fail-closed only if its "proved non-frame" side and its "left as they were" list are right. Four instruments, each a generator of fixtures whose expected answer is the emulator's (`drv`, the suite's own driver: `bdrv.sh` builds it from `Sh2DecompilerTests.cpp`; the text is read with `PseudoEval` and by comparing a single constant return with the run's r0):
+
+- `escfuzz.py`: a frame of eight locals with distinct values, a frame address p = r15 + T (laundered or not), a **mediator** that keeps p (a global, a slot of the frame, a register the model keeps, r0, an object in RAM, a relay, the caller's own store, the outgoing stack word, a mirror address), and a **walker** that writes 0x55 below the kept pointer (a loop, a displacement, a negative r0 index, unrolled, upward) in the caller, in a lent or an unlent callee, or in one handed the pointer; callees lent or not, extra register arguments set or not. 15,400 fixtures (seeds 301 to 306, 401 to 408, 501 to 506), 334 wrong constants, all in A3-104 and A3-105.
+- `hbfuzz.py`: the hand-back (A3-21/39/70/92). g makes a pointer to its caller's outgoing word 0 or 1 (exactly, masked, swapped, by an index sum), round-trips it through one of 13 channels and writes through it by one of 5 stores. 1,400 fixtures; the three channels that reload through an unplaced address fail in 378 of 378 (A3-106), the other ten in 0 of 1,022.
+- `spfuzz.py`: the spare (A3-93). f pushes r14, makes the address of that slot, round-trips it, hands it to a lent writer. 400 fixtures: f is never lent with r14 in its preserved set; the callers' texts follow the model's keep of r14 across an unlent f and are withheld (not a finding).
+- `sbfuzz.py`: the `storesBelow` record (A3-71 to A3-88). A lent g handed p = r15 + 8 makes p - 4k by six forms, round-trips it by eight channels. 700 fixtures: 0 stale, g always lent.
+
+And hand fixtures for the sites: `r13a.src` (A3-104, A3-105 and their controls), `r13b.src` (A3-106), `micro_*.py`.
+
+### 2. The sites left, each attacked
+
+| Site (round 12 table) | Attack | Result |
+|---|---|---|
+| `callerHigh` set by `Merge`/`INT_ADD` | a join of a high and a low address; a high address laundered, spilled, reloaded | the join of high and low is A3-43 (accepted); laundered and spilled forms are followed except the reload through an unplaced pointer: **A3-106** |
+| `Store` / `Load` on an exact `Value::Sp` | the same reload; exact slots, `@(r0,r15)` | exact slots and `@(r0,r15)` hold (hbfuzz 0 of 1,022); `Load` through an unplaced stack address returns `FreeStack()` with no `frame` flag: **A3-106** |
+| `storesBelow` record (`Base() == kNoBase && baseReg < 0`) | six forms of p - 4k by eight channels (sbfuzz) | held, 0 of 700 |
+| `NoteFrameEscape(s, r, false)` for r4-r7 | an exact address in r4 beside a dropped stack word; two register arguments | the address is a call input and (e) escapes on it, but the boundary it escapes with can rise: **A3-104** |
+| `NoteStackArguments`' `shown` (an exact address) | an exact address in a stack word with r5-r7 unset, kept by a callee | the engine drops the word and the note is an alias, not an escape: **A3-105** |
+| `ExposeStackArguments` | an unknown-target call (`jsr @r1`, r1 loaded) whose callee writes the outgoing word | not exposed: **A3-107** (P3, A3-10's reason) |
+| `kLowBase` / an index taken as non-negative | the walker `idx` (a negative r0 index) and `disp` | held; the parameter-sign convention stays A3-9/A3-17's |
+| `markUnknownStores`: a constant pointer | not attacked beyond the convention (an absolute address is never the stack, A3-6) | accepted |
+| `markUnknownStores`: a pointer from a global the function wrote | `own`, `ownmir` (a mirror address of the same RAM), `ownslot`, `relay` mediators | held (0 wrong constants) |
+| the stack-pointer placeholder exception | `mov r15,r4` (the call's r15 itself) beside the placeholder in the same CALL | no counterexample: the engine may miss (e) there after copy propagation, and the host's `HandOut` (a lent callee's `leaks`/`outOrigins`, a walked callee's `CalleeHanded`, the convention for an unnamed one) declares the escape |
+| stores before the escape read after it | a loop with the walker before and after the escaping call (`mkv7`), 4 variants | held |
+| a register the convention does not hand (`kConvention`) | r1, r3, r9, MACH in an unknown-target call | A3-10's accepted reason (GBR held: I read it as (e) on the `Write_GBR` CALLOTHER that takes the address) |
+
+The mechanism of A3-104, read with temporary prints in `heritage.cc`/`varmap.cc` (reverted): `markUnknownStores` finds the walk's three stores unknown in every query (the runs print `unknown=1`), `handed=1` and `escaped=1` throughout, and the alias boundary that decides which locals keep their guard is `FrameEscape::lowest`, the lowest offset of a frame address or **a stack varnode still in the function**. In R13-1a it is -20 (`ffffffec`) in the first two queries and -12 (`fffffff4`) in every later one: the word at the call's r15 has been taken for the call's fifth argument and the local at -16 for the constant it holds, so nothing below the passed address is left to be the boundary, and the last queries collapse the guard that was there. In the control with r5 unset the lowest stays -20 to the end and the text is right. The shape needs no kept pointer to be a hazard: any unlent call with two register arguments uses the first written local of the frame up.
+
+### 3. The changed texts
+
+Round 12 changed 601 of 1,730 lending texts on hwram007 and 1,237 of 2,995 on hwram008 (the record's numbers: reproduced exactly, 173 and 272 by notes only). They were read in four ways.
+
+- **The two builds' texts compared** (`textdiff.py`, `stmtscreen.py`, `realentry.py`): the lend_after text of every function with `SE_GAME_OUT`, 79906c2 against 8dcbb70. Kinds (a text can be in several): hwram007 notes 475, declarations 410, frame array 253, statements 208, signature 107, `in_stack_` 98; hwram008 notes 1,024, declarations 922, array 629, statements 353, `in_stack_` 352, signature 195. **Of the 601 and 1,237 changed texts, 597 and 1,232 are withheld both before and after; 2 and 3 are lent both before and after; 2 and 2 were lent and are withheld since (A3-110).** So the change is in the text of functions whose signature is not claimed: five lent texts changed in all (2 + 3), and four of the lent functions became withheld.
+- **The call multiset of every changed text is equal** (`func_0x...` and indirect calls, 1,838 texts): no call is added or lost.
+- **A returned expression changed in 40 texts of hwram007** (29 are `xVar1` to a local, 5 the other way, 2 + 2 constants to a variable/local and back): all read; see the table.
+- **37 functions read one by one** against the disassembly (the table below; `showfn.py` prints the disassembly of the entry and the diff of the texts). Every one is right against the code; none changed meaning. The verdicts "noisier" and "harder to read" are the precision row (A3-109); one case where the base was the wrong one (06008518: the read of a stack argument moved to where the code reads it).
+
+**Mid-function entries.** The corpus runs `sts.l pr,@-r15` as an entry, so a function whose prologue pushes other registers first is run twice, and the second run (the "function" 06008836 for 06008830) pops registers it never pushed. 731 of the 1,730 entries of hwram007 and 1,452 of the 2,995 of hwram008 are such fragments (the previous word is `mov.l Rm,@-r15`); 339 of the 601 and 786 of the 1,237 changed texts are fragments, and the 305 and 557 "phantom parameters" the changed texts gain (301 and 544 never used in the body) are the stack words the fragment pops (A3-113). On the real entries the numbers are 262 and 451 changed, one extra parameter in one text each. The counts the record quotes (lent signatures, texts changed, the two newly withheld functions, which are one function entered twice) mix the two.
+
+| # | Image | Function | Kinds of change | What the new text does | Against the code | Verdict |
+|---|---|---|---|---|---|---|
+| 1 | 007 | 06022A98 | decl, sig, stmt | spills of r4/r5 kept as locals (`iStack_30 = param_1`), `param_1` uint1 to int4, the call result kept in `xStack_28` | prologue spills at r14+0/+4, the byte read of the spilled word at r14+3 is `(xunknown1)` of the spill; same calls, same order | right, noisier |
+| 2 | 007 | 060226CC | decl, sig, stmt | gains `param_4` (the spilled r7), `param_2 & 0xffff` explicit | r7 is stored at r14+12 and never read: an input the code takes, as an unread spill | right, more precise |
+| 3 | 007 | 06022304 | decl, sig, stmt | `xStack_20._3_1_ = (xunknown1)param_1` before the full spill `xStack_20 = param_1` | the code spills r4 first and reads byte 3 (the low byte, big-endian) of the spill; the text reads the same byte | right, harder to read |
+| 4 | 007 | 06021B10 | decl, stmt | `return xStack_28` for `return xVar1`, `pxStack_2c = param_1` | `mov.l r0,@(4,r14)` after the call, returned from the slot | right, noisier |
+| 5 | 007 | 06021C20 | sig, stmt | lent to withheld ("a return not to its caller"); `xStack_24 = 0xfffffffd` kept, `return xStack_24` | the local at r14+4 holds -3 and is returned from the slot; the hand of `&aiStack_18` to a lent writer in a loop is the cause | right, precision (A3-111) |
+| 6 | 007 | 06024720 | decl, stmt | `pxStack_10 = param_1` gone | `mov.l r4,@-r15` is a push whose pop restores r4 | right |
+| 7 | 007 | 060247B0 | decl, sig, stmt | `param_1` gone, `xStack_10 = param_1` gone | r4 is only pushed and popped | right |
+| 8 | 007 | 0602FD46 | array, decl, stmt | `_axStackY_30 = (int4)(char)(uVar2 + 1)` and the array gone | the word is the sixth stack argument, which the call already prints | right (A3-99) |
+| 9 | 007 | 06023D52 | decl, stmt | four locals and spills gone, registers kept | the callee is an indirect call through RAM; no frame address is handed (r2, r4-r7 hold values) | right, cleaner |
+| 10 | 007 | 06023E68 | decl, stmt | the same | the same | right, cleaner |
+| 11 | 007 | 06006D14 | array, decl, notes, stmt | `func_0x06019a48(2,0xc,5,0x604e8a0,0)`: the pushed 0 is the fifth argument; `axStackY_90 [128]`; slot note | `mov.l r0,@-r15` before the `jsr` | right (the note names the saved-register pops, A3-109) |
+| 12 | 007 | 06027420 | array, decl, notes, stmt | about 92 `xStack_8 = <return address>` lines gone; one call gains `0x602a566` as the fifth argument | the pushes are words the callees read | right |
+| 13 | 007 | 06008378 | sig, notes | 8 phantom parameters (param_3 to param_10), 5 r14 notes | the function reads r4 and r5 only | text right; header wrong (A3-108) |
+| 14 | 007 | 06008836 | sig, notes | 7 phantom parameters, a slot note | reads r4, r5 | text right; header wrong (A3-108) |
+| 15 | 007 | 06021BA8 | sig, stmt | withheld reason changed, `[8]` array, slot note | calls 06021C20 | right (A3-109, A3-111: the cascade) |
+| 16 | 007 | 0602C4AC | sig, notes | 5 phantom parameters, 2 notes | | text right; header wrong |
+| 17 | 007 | 0601EBB6 | sig, notes | 7 phantom parameters | | text right; header wrong |
+| 18 | 007 | 06023500 | decl, notes, stmt | the result of an indirect call kept in `iStack_8` | `mov.l r0,@r14` after the call, reloaded | right |
+| 19 | 007 | 0601DFA8 | decl, notes, stmt | `&uStack_18` printed as the fifth argument, `pxStack_1c` gone | the pointer is pushed before the `jsr` | right |
+| 20 | 007 | 06021A58 | decl, notes, stmt | `pxStack_18 = param_1`, a stack-argument note | the second call's words beyond the first unwritten one are dropped by the engine; the slot at +16 holds `&xStack_10` | right |
+| 21 | 007 | 060278C4 | decl, stmt | three loads kept as locals | three `mov.l r?,@(n,r14)` stores | right |
+| 22 | 007 | 06008518 | sig, decl, notes, stmt | `iVar1 = param_11` before the first call, used at the end | `mov.l @(0x1c,r14),r12` in the delay slot of the first `jsr`, stored at the end; the base read the stack word after the calls (wrong order) | right, and the base was not |
+| 23 | 007 | 06021AB8 | decl, stmt | partial store `xStack_18._3_1_` | as 3 | right, harder to read |
+| 24 | 007 | 06022118 | decl, sig, stmt | as 23 | as 23 | right, harder to read |
+| 25 | 007 | 0601F6FC | sig, notes | 7 phantom parameters | | text right; header wrong |
+| 26 | 007 | 06030ED6 | sig, notes | 8 phantom parameters | | text right; header wrong |
+| 27 | 007 | 0601E4C0 | sig, notes | 8 phantom parameters | | text right; header wrong |
+| 28 | 007 | 06021630 | decl, stmt (lent to lent) | `xStack_24 = param_1` and `~xStack_24._2_2_` for `~(uint2)param_1` | the spill of r4 and the low half read | right, noisier |
+| 29 | 007 | 0600D308 | array | `acStack_28 [8]` to `[40]` | the 8 locals plus 32 bytes of saved registers (the indexed store's guard covers them: A3-102) | right, misleading size |
+| 30 | 008 | 06022208 | array | `aiStack_14 [4]` to `[10]` | 8 local bytes plus 12 of saved registers | right, misleading size |
+| 31 | 008 | 06060B0C | decl, stmt (lent to lent) | as 28 | as 28 | right, noisier |
+| 32 | 008 | 060610FC | sig, stmt | lent to withheld; as 5 | as 5 | right, precision |
+| 33 | 008 | 060614D8 | decl, notes, stmt | the call result and the spill of r4 kept in locals | as 4 | right, noisier |
+| 34 | 008 | 0605A418 | decl, stmt | three spills of parameters, three stores move up | independent stores of different locals | right, noisier |
+| 35 | 008 | 06046640 | array, decl, notes, stmt | `func_0x0604ae60(...,xVar16)` and `func_0x06047dd0(...,iVar13,iVar8)` gain stack arguments | `mov.l r1,@-r15` (the 0xf) before the `bra` to the call | right, more precise |
+| 36 | 008 | 06061AA4 | decl, sig, stmt | as 2 | as 2 | right |
+| 37 | 008 | 0600FA2E | sig, notes | 7 phantom parameters | | text right; header wrong |
+
+Reading the table: no changed text is wrong; the new texts keep more locals as variables where the engine now aliases them (35 of 262 real-entry texts of hwram007 and 43 of 451 of hwram008 gain a parameter-spill statement, 73 and 84 statements; net locals +66 and +28; 73 and 160 texts have fewer locals) and one signature display (phantom parameters of fragments) changes for the reason above. The P3 row is A3-109.
+
+### 4. The added notes (hwram007 lending run)
+
+| Note | Count | Functions | Read against the code |
+|---|---|---|---|
+| r14 ("a frame address is in r14 here, in none of the arguments") | 526 | 307 | all 307 have `mov r15,r14` (disassembled); true. 64 of the 307 declare no stack local; the fact is said at every call (193 functions with one note, at most 10). |
+| stack argument | 273 | 113 | the word named holds a frame address in the function's own model (06021A58's second call: the word at +16 holds `&xStack_10`, the words from +4 on are dropped by the engine because +4 is written only after the call); true; at most 20 in one function. |
+| slot ("a local ... is read after this call") | 248 | 248 | said in functions with no local (06006D50, 06008836): the words read after the call are the epilogue's pops of the saved registers. |
+| r2 | 67 | 62 | A3-4's note, 4 more than the base's 63. |
+
+hwram008: 1,420 r14 notes in 772 functions (at most 46), 436 stack-argument in 162, 408 slot in 408, 148 r2 in 130. No note says something the code contradicts; the rows are the redundancy and the wording (A3-108). The base's slot notes were 0, its r14 notes 0, its stack-argument notes 4: all of these are round 12's.
+
+### 5. A3-103 (open): both seeds triaged
+
+Both reproduce alone on 8dcbb70 and on 79906c2 (`SE_GENERATED_GRAMMAR=2 SE_GENERATED_FIRST=<seed> SE_GENERATED_SEEDS=1`).
+
+- **2310198** (`input-dropped:r1`): oracle false positive, a new class: function 2 (060090F4) reads a byte of its own frame it has not written (`mov.b @r15,r2`, an uninitialised local in the text) and stores r1 into that slot (`mov.w r1,@r15`); the second call runs at the same r15 and reads what the first left. The dependence on r1 goes through a stale stack word. Proposed P3: A3-111, with a generator fix (re-run the pair with the bytes below the entry r15 filled differently; a function whose output changes reads a stale word).
+- **2317870** (`return-dropped`): not a real return-recovery claim. Function 1 (06009060) leaves the call's r0 in place, but both arms of its branch store r0 (`mov.b r0,@(1,r5)`; `mov.l r0,@-r4 ; mov.b r0,@r5`) before the `rts`: a result used and left as scratch, A3-19/A3-41/A3-53's accepted shape; `ComparesCallResult` excludes a compare of it, not a store. Proposed P3: A3-112.
+
+### 6. The generator beyond the nightly range
+
+| Range | Seeds | Result |
+|---|---|---|
+| grammar 2, 2,400,001 to 2,420,000 (four pieces of 5,000) | 20,000 | 0 findings |
+| grammar 1, 2,400,001 to 2,410,000 (two pieces) | 10,000 | 1: **2408172** (`pointer-effect-unsaid`, a 2-byte write through a pointer reaching FFFFFF1E / FFFFFF10, SH2_DVDNTL_SHADOW / SH2_DVDNTH), area 5, the class of A5-87; reproduces alone on 79906c2 too; routed with `SE_GENERATED_GRAMMAR=1 SE_GENERATED_FIRST=2408172 SE_GENERATED_SEEDS=1` |
+| printed-C, 2,400,001 to 2,410,000 (five pieces of 2,000) | 10,000 | 0 findings (12,543 functions generated, 11,637 compared; classes `agrees`, `narrow-c`, `void-return`, one `skipped:stack-piece`) |
+| specials, 2,500,001 to 2,505,000 | 5,000 | 0 findings |
+| `TestArea3HiddenInputFuzz`, `SE_A3FUZZ_PROGRAMS=5000`, seeds 10 and 11 | 10,000 programs | 1,195 and 1,201 lent, 15,535 and 15,613 perturbed runs, 0 findings |
+
+`matrix.sh` runs the pieces (each at most 3 minutes), resumable.
+
+### 7. Corpora and matrix
+
+`SE_GAME_HWRAM=<img> SE_GAME_LEND=1 SaturnExplorerSh2DecompilerTests <dir>` on 8dcbb70 and, beside it, on 79906c2:
+
+| | hwram007 | hwram008 |
+|---|---|---|
+| lent signatures (parameters), 79906c2 | 680 (958) | 1,040 (1,312) |
+| lent signatures (parameters), 8dcbb70 | 678 (956) | 1,038 (1,310) |
+| every ledger count | 0 (0 accesses dropped) | 0 |
+| missing and said | 0 | 4 |
+| mapping violations | 0 of every class (the 4 and 11 "on another line than firstLine says" of the lending run, as the record) | 0 of every class (4 and 21) |
+| texts changed, lending run | 601 of 1,730 | 1,237 of 2,995 |
+| `TestGameCode` | 9,760 ms (79906c2: 8,730 ms) | 31,288 ms (79906c2: 30,240 ms) |
+| whole suite | all passed, 98 s | all passed, 234 s |
+
+The timing is 1.1x and 1.03x of the base in one run each.
+
+`ctest -E SaturnExplorerLive` over the nine decompiler suites built here (Sh2DecompilerEngineTests, Sh2DecompilerTests, DecompilerRunnerTests, Sh2GeneratedTests, DecompilerFaultTests, Sh2DecompilerFixtureTests, DecompilerPanelTests, DecompilerModelTests, DecompilerTrustTests): 9 of 9 pass (about 4 minutes). The other suites of the 94 were not built: this branch changes no code, only the ledger, this record and the tools.
+
+### 8. Not done, and limits
+
+- The 36 or so functions of the table were read against the disassembly of the entry; a function the disassembler stops in (data after a `bra`) was read to the stop and its text checked at the changed lines only (06046640, 06027420). Nothing was run on the emulator for the corpus functions: a text with calls cannot be evaluated by `PseudoEval`.
+- A3-110's cause is the round 12 record's, not traced; a hand copy stays lent.
+- No pins were added: every fixture of the three P2 rows prints a wrong text today, and a pin that passes would pin the wrong text. The fixers move `r13a.src`/`r13b.src` into the suite, with the controls (R13-1b, 1c, 1d, 3.0, 3.1, 3.4), which are right today.
+- The root causes in A3-104 to A3-106 are read from temporary prints; the fix directions in the rows are directions.
+
+## Area 2, round 13 fix
+
+Fixer, branch `review/2-round13-fix`, on `73b0450` (the coordinator's head after the round 13 review merged; every "before" below is that head, with patches up to 0062). One engine patch, **`patches/0064-engine-divopt-sign-and-wrap-rule-guards.patch`** (`ruleaction.cc`, `subflow.cc`, one flag in `op.hh`; 0063 is the area 3 fixer's), two engine pins, nine printed-C fixtures, family 61 of the generator, a replay script for the fuzzer seeds of the rows, and the in-situ checker without its `RuleDivOpt` wrap filter and its `RuleDivTermAdd` exemption. Code commit `038d038`. **A2-82 (P2) and A2-83 to A2-87 are fixed.** The fixer's own instruments found three more rows, all fixed here: **A2-89 (P2: a wrong printed value reachable from ordinary SH-2 code, in `RuleDivTermAdd`)**, **A2-90 and A2-91 (latent P3: `RuleDivChain`, `RuleDivTermAdd2`)**. Area 2's count of clean rounds is 0 and stays 0 (this round found A2-89 with its own instruments); the next review round should verify A2-82 and A2-89 first.
+
+### 1. Patch 0064 and its guards
+
+> **A division term is exact or it is left alone.** `RuleDivOpt` makes an exact division of the product it reads; the machine keeps the low bits of the product and shifts it the way its opcode says. Where the two can differ in a bit someone reads, the rule does not fire. The one product that is wider than its multiply on purpose, the exact sum `RuleDivTermAdd` and `RuleDivTermAdd2` build, is flagged (`PcodeOp::div_product_wide`, a new `addlflags` bit) and is the only wrapped product `RuleDivOpt` takes.
+
+| Row | What was wrong | What it is now |
+|---|---|---|
+| A2-82 (a) `RuleDivOpt::findForm` | a sign extension with a logical shift, or a zero extension with an arithmetic one, was taken whenever `8*outsize - n == xsize` ("all the extension bits are truncated"); the division is as wide as the output and sign filled, the shift filled the top bits with zeros (or ones): `(unsigned)((short)x * 65537) >> 16` read whole was `(int4)x / 1 + (x >> 31)`, -2 for x = -1 where the code gives 0xfffe | taken only if every reader of the result looks below the differing bits (a SUBPIECE from the bottom, as `RuleDivTermAdd` builds, or an AND with a constant that fits there). **The consume mask cannot say so**: dead-code analysis drops the bits the non-zero mask has as zero, and these are exactly the bits a logical shift fills with zeros, so the first version of the guard (the row's own suggestion, the consume mask) passed `extsb ; * 0x8001 ; >> 24` read whole |
+| A2-82 (b) `findForm` | nothing asked that the multiply not wrap: `(x16 * 0x01000001 >> 24) & 0xff` is the low byte of x and was `x / 1`; `uint1 / 3` for `extub ; * 0x2AAAAAAB ; >> 31` | the largest numerand times the multiplier must fit the INT_MULT (unsigned for a zero extension; for a sign extension `y <= 2^(width - xsize)`, so a multiplier of the top half of the range, a negative number, never fits), unless the multiply is the flagged exact product |
+| A2-82 (c), found while fixing it | `calcDivisor` was right, `applyOp` then built the divisor as a constant of the division's size: `sext(x:2) * 0xffff >> 31` is a division by 0x8001, which two bytes read as -32767 (rule fuzzer seeds 1059 and 34219, which the row lists as the rule-level fixtures of (a) and (b); they are this third condition). Also `n = cvn->getOffset()` cut a shift by 2^32 + 33 to 33 | the divisor must fit the size the division is made at (signed: not negative there); a shift amount over 127 is refused |
+| A2-87 `RuleDivTermAdd`, `RuleDivTermAdd2` | the folded sum `hi + x = (x * (c + 2^n)) >> n` is the machine's only if `x * c` did not wrap in its multiply: `sext(x:1) * 0x7fff` in two bytes, `zext(x:2) * 0xfffffffe` in four | refused unless the bits of x plus the bits of the multiplier fit the multiply (`divTermProductFits`, now applied to the product the rule starts from; for `RuleDivTermAdd2` the multiplier test of A2-91 implies it); `RuleDivTermAdd` also refuses a shift of the width or more |
+| A2-89 `RuleDivTermAdd` (new, P2) | the add the rule replaces keeps the low bytes of the sum, and the division `RuleDivOpt` makes of the folded product is the exact one: `dmulu.l r2,r4 ; sts mach,r0 ; add r4,r0 ; shlr16 r0` with r2 = 0x38032949 (`(mulhu(x, c) + x) >> 16`; the sum is 33 bits for x = 0xffffffff) was printed `return param_1 / 0xd20b;`, 0x13803 where the code gives 0x3803 | the exact sum must fit the add: below `2^xbits + 2^k`, k the bits of `x * c` beyond the shift; a negative multiplier of a sign extension (the signed divisions' `hi + x`, the high word of `x * (m - 2^32)`) is x less a part of it and fits as x does. An unsigned `hi + x` of a full-range x is left alone (the compilers' unsigned forms use `RuleDivTermAdd2`'s `t + ((x - t) >> 1)`, which cannot wrap) |
+| A2-91 `RuleDivTermAdd2` (new, latent P3) | `W + ((x - W) >> 1)` is `(x * (c + 2^n)) >> (n + 1)` only while W, the high part of `x * c`, is not above x: the difference is taken in the width of x. With a multiplier above 2^n and a narrow x it is (`zext(x & 0xff : 4) * 0x1aaaaaaab`: 0x20000054 before, 0x54 after) | the multiplier must be at most 2^n (every SH-2 multiply that gives the rule its zero extension meets it: `dmulu.l`'s 32-bit literal against its 32-bit shift, `mulu.w`'s 16 bits) |
+| A2-83 `RuleSignForm2` | the multiplier was any constant up to the mask or any zero extension; a product by 0 has the sign 0, not the sign of V | a non-zero constant only (the zero extension of a value is 0 when the value is, and nothing here knows it is not) |
+| A2-84 `RuleDivChain` | a divisor with the top bit set was made its two's complement magnitude for the unsigned division too, so it counted as a small number and the product wrapped: `(x >> 0x30) / 0xfffffffffffff800` became `x / 0xf800000000000000` | only the signed division counts magnitudes; a shift of the width or more is no power of two (a C++ shift by 64 is not 0) |
+| A2-90 `RuleDivChain` (new, latent P3) | found by the fuzzer in wide-amount mode (seed 301341, 8 wrong applications in 1.5 million graphs): `(x s/ -1) s/ 31` was `x s/ -31`; the first division wraps for the minimum | a signed first division by -1 is not collapsed |
+| A2-85 the shift amounts | seven rules cast an amount of 2^31 or more to `int4`, or shifted by it: `RuleShiftCompare` (`x:2 << 0x1f == 0`), `RuleDoubleArithShift`, `RuleSubNormal`, `RuleSubRight`, `RuleSubExtComm`, `RuleLzcountShiftBool` (`max_return >> 0x84`) and `RuleSubvarSext` | each reads the 64-bit amount before it casts (`RuleShiftCompare` and `RuleSubNormal` refuse a shift of the width or more; `RuleDoubleArithShift` saturates each amount at the width less one before it adds; `RuleSubRight` adds in 64 bits; `RuleSubExtComm` refuses a cut outside the value; `RuleLzcountShiftBool` needs a shift under 64). `RuleSubvarSext`'s failure was not the cast: the flow kept `x s>> 0x100000000` as a constant of the logical size (4 bytes), which holds 0; `SubvariableFlow::traceForward` and `traceBackward` of `INT_SRIGHT` now refuse an amount the logical size cannot hold. The other `(int4)` reads of `subflow.cc` (`INT_LEFT`, `INT_RIGHT`, `SUBPIECE`) were tried the same way and are not changed: no graph distinguishes them (section 4) |
+| A2-86 `RuleThreeWayCompare` | `(127 s< x) + (-128 s<= x) - 1` was a three-way compare: the two constants were taken as one when they differed and the second compare was a LESSEQUAL (not the INT_MAX / INT_MIN pair of the row's diagnosis, which is a second defect of the same code) | constants that differ are no pair of one compare unless both compares are LESSTHANs, and the signed pair (INT_MAX, INT_MIN) is not a pair of neighbours |
+
+Whether `RuleDivTermAdd`, `RuleDivTermAdd2` and `RuleDivChain` share the two missing conditions of A2-82: **(a)** no. `RuleDivTermAdd` and `RuleDivTermAdd2` refuse the mismatched pair of a shift root themselves; `RuleDivTermAdd` builds a logical shift of a sign extension when its root is a SUBPIECE, which is the mismatched pair `RuleDivOpt` now accepts because the only reader is the SUBPIECE it makes; `RuleDivChain` has no extension. **(b)** yes: both term rules reasoned about a product, and a sum, that the machine had wrapped (A2-87, A2-89), and `RuleDivTermAdd2` about a difference that wraps (A2-91). `RuleDivChain` has its own overflow test, which was wrong for large unsigned divisors (A2-84) and for the division by -1 (A2-90).
+
+### 2. The pins and the fixtures
+
+* `TestDivOptSignAndWrapRound13` (A2-82): a multiply of an extended value by one of 16 constants, in the three forms `RuleDivOpt` reads (shift of the product, shift of a SUBPIECE, SUBPIECE alone), both extensions, both shifts, extended sizes 1, 2 and 4 into 2 to 8 bytes, products that fit and that wrap, and a reader that looks at the whole result, at its low half or at a masked part: **23,232 graphs (1,387 rewritten), 2,518,272 values**, the value the reader sees the same before and after the rule. Controls: five divisions it must still make (`x / 3` four ways, signed and by the SUBPIECE form), a shift by 2^32 + 33 refused, and the product `RuleDivTermAdd` flags divided where the same product unflagged is left.
+* `TestRuleGuardsRound13` (A2-83 to A2-87, A2-89 to A2-91): **7,106 graphs, 834,188 values** compared before and after: `RuleSignForm2` (constant 0, 1, 5, all ones, a zero extension, at sizes 1 and 2), `RuleDivChain` (unsigned and signed chains, divisors of the top half, shifts to 64, the first division by -1 and the minimum), the shift rules (18 amounts from 1 to 2^63, at sizes 2 and 4: `RuleShiftCompare`, `RuleDoubleArithShift`, `RuleSubNormal`, `RuleSubRight`, `RuleLzcountShiftBool`), `RuleSubExtComm` (cuts up to 0xfffffffff0000002), `RuleSubvarSext` (sign-extended pieces shifted by 3, 31, 300, 2^32, 2^32 + 3, 2^31), `RuleThreeWayCompare` (ten pairs of constants at sizes 1, 2 and 4, LESS and SLESS, both compares LESSTHAN or one LESSEQUAL), and a pool of `RuleDivTermAdd`, `RuleDivTermAdd2` and `RuleDivOpt` over the multipliers of 13 table constants and of 17 divisors at two total shifts, both extensions, a full-range x and a byte in a longword, three shapes of the sum, shifts of the product up to the width plus one and a shift after the sum (1,044 rule applications: `RuleDivTermAdd` 596, `RuleDivTermAdd2` 108, `RuleDivOpt` 340), plus the A2-89 graph by itself (the rule refuses the full-range sum and folds it when x has 16 bits). The evaluator reads a shift of a flagged product as the exact 128-bit number, as the engine does. `SE_R13_EXPLORE=200000` adds 91,897 random division-term graphs (random multipliers and divisors, shapes, shifts): 0 wrong.
+* Printed-C fixtures in `Sh2GeneratedTests` (value-checked against the run): `A2-82 (a)` x4, `A2-82 (b)` x2, `A2-82 control` (`extuw ; * 0xAAAB ; >> 17` is `x / 3`), `A2-89` and its control (nine in all; the matrix's printed-C run is 3,719 functions). The row's first two fixtures are protected by both guards (their product wraps as well); the third `(a)` fixture (`extsb ; * 0x8001 ; >> 24`) and the zero-extension one (`extuw ; * 0x10001 ; shar x16`, found by a search of constants on the head) fail only without (a), the two `(b)` fixtures only without (b). **On the head the first six and the A2-89 fixture are `mismatch`.**
+* Family 61 `mulhsum` in `dagen13.py`: `(mulh(x, c) +- x) >> n`, unsigned and signed, shifts of either kind: **17 of 1,000 functions `mismatch` on the head** (A2-89), 0 of 1,500 with the patch. Families 0 to 60 never built an add followed by a shift (family 56 shifts before it adds), which is why the class stayed out of sight.
+* `tools/a2_round13/replayfix13.sh <rulefuzz13> <scratch>`: the 16 rule-level seeds of the rows (`rulefuzz13`, one graph each): **16 wrong applications on the head, 0 with the patch.** The fuzzer itself on the patched engine: 6 million graphs in six modes (plain, consume masks, templates, wide amounts, wide with consume masks, the SH-2 spec's shapes; seeds 3,000,001 to 4,000,000 each), 0 wrong applications and 0 unsound masks; the wide mode over seeds 300,001 to 1,800,000 (8 wrong, all `RuleDivChain`, before the A2-90 guard): 0 wrong.
+* The row's five fixtures and **family 60 at 1,500 functions (seeds 2,350,001 to 2,351,500): 0 `mismatch`** (13, 6 and 8 on the head).
+
+### 3. The in-situ rule checker's exemptions (`rulecheck13.hh`)
+
+The reviewer warned that the default filter hid part of A2-82. Every exemption of the checker, and what the fixed engine needs of it:
+
+| Exemption | Now |
+|---|---|
+| `RuleDivOpt` samples whose multiply wraps (`SE_RULECHECK_NOWRAP` off) | **removed** (the option is gone). The engine refuses a wrapped product unless it is flagged; the check values a flagged `INT_MULT` as the exact product (128 bits) and follows it through `SUBPIECE`, right shifts, `ZEXT` and `COPY` without cutting it to the varnode, as the engine does until the division is made, and reads every other op with the machine's value |
+| `RuleDivTermAdd` and `RuleDivTermAdd2` not compared at all ("their steps are not value-preserving one at a time") | **removed**: with the flagged product valued exactly their steps are compared like any rule's (1,379,958 and 443,206 value checks over families 0 to 61, 0 wrong) |
+| `RuleSignMod2nOpt2` | **kept**: the adjusted value is read from a MULTIEQUAL and the branch behind it; the leaf is related to V by control flow, not by data, so a local comparison would fabricate differences |
+| a root with consume 0 (dead) | kept: rules fold a dead value to anything (`RuleAndMask` to 0), which nobody can see |
+| a root the rule left without a reader | kept: it has no value to keep |
+| the interior `INT_ADD` of a `RuleCollectTerms` tree | kept: the rule moves a term from one ADD of the tree to another; the root is compared |
+| the zext `RuleBoolZext` negates in place | kept: the zext changes by design, the final ADD that reads it is compared |
+| a sample where an op takes a value outside its own non-zero mask (`maskskip`) | kept, counted and the first three printed: 0 in every run (the `rulefuzz13` mask check, 6 million graphs, says the masks are right) |
+| cones the check cannot value (more than 24 leaves or 400 nodes, an output over 8 bytes, LOAD, CALL, INDIRECT, MULTIEQUAL, floating point, pointer ops, a leaf that exists only after the rule) | kept: inherent; the generators, the corpora and the printed-C differential cover those |
+
+The checker without the filter is sensitive to both parts of A2-82 and to A2-89: linked with the engine without guard (a) it finds bad applications in family 56's first 200 functions, without guard (b) in family 60's, and without the A2-89 guard it finds 4 bad `RuleDivTermAdd` applications in the first 200 functions of family 61 (the printed-C differential: 2 `mismatch`). **The model has one blind spot, named here:** it values the exact product through the cut a division term makes, which is right for `RuleDivTermAdd2`'s `t + ((x - t) >> 1)` (the quotient's top bit is the product's bit 64) and is why `RuleDivOpt` can be compared at all, but it takes the sum of `RuleDivTermAdd` as not wrapping its add, which is what A2-89's guard establishes: a regression of that guard shows in the checker only through family 61's `RuleDivTermAdd` step, and in the printed-C differential. While the exemption was dropped and the model was only half there (through the shift but not the cut) the checker flagged 106 `RuleDivOpt` applications in families 21 and 59: those are divisions by 53771 and its kin whose virtual quotient was cut to its varnode by the model; looking at why led to the 33rd bit of the sum, and to A2-89.
+
+Over families 0 to 61 except 23 (300 functions each from seed 2,380,001, 60 families, one hour): **18,000 functions, 17,759 compared (agrees 17674, void-return 170, narrow-c 86, void-return-lent 43, skipped:stack-address 26, skipped:call-or-stack 1), 0 `mismatch`; 1,780,774 rule applications, 72,723,518 value checks, 0 wrong.** `RuleDivOpt` 4,258 applications and 1,376,924 value checks, `RuleDivTermAdd` 378 applications and 1,379,958 value checks, `RuleDivTermAdd2` 656 applications and 443,206 value checks, `RuleDivChain` 418 applications and 104,956 value checks, `RuleSignForm2` 0 applications and 632,892 value checks, `RuleThreeWayCompare` 520 applications and 628,842 value checks. The two images (no lending): **1,059,512 and 2,733,481 applications, 31,571,608 and 102,769,524 value checks, 0 wrong**; the 220 `RuleDivOpt` applications of the images (16 and 204) are compared like all the others.
+
+### 4. What changed while fixing, and what was left
+
+* The consume mask was the first guard of (a) and does not work (section 1). The guard that works is on the readers.
+* The first version also folded a "multiplier cut to the multiply's width" and a carry check into `RuleDivTermAdd`/`RuleDivTermAdd2` (the row's "sign-extended literal width"), and a saturating read of every shift amount in `subflow.cc`. No pin can reach any of them: the original-product fit and the shift guard leave no carry out of the width for a zero extension; for a sign extension the cut changes only the prediction of an unfit folded product, and no graph of the grid, of 91,897 random graphs or of the families differs; the `INT_LEFT`/`INT_RIGHT`/`SUBPIECE` reads of `subflow.cc` with an amount of 2^32 + k behave the same read as k or as a large number (the mutant lived through the pins and 1.8 million wide-amount graphs). They are not in the patch, which holds only guards a mutant of which a pin kills.
+* `RuleDivTermAdd2` needs no shift guard (its `n` is the SUBPIECE's cut, below the width by construction) and its sum cannot wrap (`t + ((x - t) >> 1)` is below x once the multiplier is at most 2^n); both guards are in `RuleDivTermAdd` only.
+* The engine pin first compared the pool of the three rules without `RuleSubNormal`; adding it (the form the sum takes in the engine before `RuleDivOpt` reads it) made the intermediate graph inconsistent under both readings (`sub(P >> 9, 0)` becomes `sub(P, 1) >> 1`, valid for the machine's product and not for the exact one) and it was left out: the pool is the three rules, and the A2-89 pin is the rule itself on the graph, not a value after a chain.
+
+### 5. Mutation table
+
+Each guard reverted alone in a scratch copy of the vendored source (`tools/a2_round13/mutdrv13.py` with `mutants13.py`: the mutated object linked in place of the engine's into the engine test; restored, the pins pass):
+
+| Mutant | Row | Reverted | Pin that fails |
+|---|---|---|---|
+| 01 | A2-82 (a) | `findForm`: a sign extension with a logical shift (or a zero extension with an arithmetic one) taken whatever the readers | `TestDivOptSignAndWrapRound13`: 32 CHECKs |
+| 02 | A2-82 (b) | `findForm`: a product that can wrap taken | `TestDivOptSignAndWrapRound13`: 573 CHECKs |
+| 03 | A2-82 | the flag never exempts: the exact product `RuleDivTermAdd` builds is refused (the control fails) | `TestDivOptSignAndWrapRound13`: 3 CHECKs |
+| 04 | A2-82 | `applyOp`: the divisor not checked to fit the size of the division | `TestDivOptSignAndWrapRound13`: 46 CHECKs |
+| 05 | A2-82 | `findForm`: a shift amount over 127 cut to its low 32 bits | `TestDivOptSignAndWrapRound13`: 1 CHECKs |
+| 06 | A2-87 | `RuleDivTermAdd`: the product it starts from may wrap its multiply | `TestRuleGuardsRound13`: 10 CHECKs |
+| 07 | A2-87 | `RuleDivTermAdd`: a shift of the width or more | `TestRuleGuardsRound13`: 110 CHECKs |
+| 08 | A2-87 | `RuleDivTermAdd2`: the product it starts from may wrap its multiply | **none: equivalent.** With the multiplier at most 2^n (the test of A2-91, mutant 29) the product of a value of at most 8*xs bits stays below 2^W, so this fit test is implied; it stays as the stated condition |
+| 28 | A2-89 | `RuleDivTermAdd`: the exact sum may wrap its add | `TestRuleGuardsRound13`: 1 CHECKs |
+| 29 | A2-91 | `RuleDivTermAdd2`: a multiplier above 2^n | `TestRuleGuardsRound13`: 42 CHECKs |
+| 11 | A2-84 | `RuleDivChain`: an unsigned divisor counted by its magnitude | `TestRuleGuardsRound13`: 16 CHECKs |
+| 12 | A2-84 | `RuleDivChain`: a shift of the width or more as a power of two | `TestRuleGuardsRound13`: 15 CHECKs |
+| 27 | A2-90 | `RuleDivChain`: the first signed division by -1 | `TestRuleGuardsRound13`: 30 CHECKs |
+| 13 | A2-83 | `RuleSignForm2`: the multiplier 0 | `TestRuleGuardsRound13`: 4 CHECKs |
+| 14 | A2-83 | `RuleSignForm2`: the zero extension of a value as the multiplier | `TestRuleGuardsRound13`: 2 CHECKs |
+| 15 | A2-86 | `RuleThreeWayCompare`: different constants of a LESS and a LESSEQUAL | `TestRuleGuardsRound13`: 48 CHECKs |
+| 16 | A2-86 | `RuleThreeWayCompare`: INT_MAX and INT_MIN as neighbours (the four tests) | `TestRuleGuardsRound13`: 6 CHECKs |
+| 17 | A2-85 | `RuleShiftCompare`: a shift of the width or more | `TestRuleGuardsRound13`: 56 CHECKs |
+| 18 | A2-85 | `RuleDoubleArithShift`: the amounts as int4 | `TestRuleGuardsRound13`: 12 CHECKs |
+| 19 | A2-85 | `RuleSubNormal`: the amounts as int4 | `TestRuleGuardsRound13`: 18 CHECKs |
+| 20 | A2-85 | `RuleSubRight`: the sum as int4 | `TestRuleGuardsRound13`: 10 CHECKs |
+| 21 | A2-85 | `RuleSubExtComm`: the cut as int4 | `TestRuleGuardsRound13`: 6 CHECKs |
+| 22 | A2-85 | `RuleLzcountShiftBool`: a shift of 64 or more | `TestRuleGuardsRound13`: 4 CHECKs |
+| 24 | A2-85 | `SubvariableFlow` of `INT_SRIGHT`: an amount the logical size cannot hold (both directions) | `TestRuleGuardsRound13`: 2 CHECKs |
+
+Every mutant is killed except 08, which is equivalent (stated in its row). Two guards of the first design were dropped because no pin could reach them (section 4), not because a pin lived: a multiplier cut to the width and a carry check in `RuleDivTermAdd`/`RuleDivTermAdd2`, and the saturating read of every shift amount in `subflow.cc` (`constShiftAmount`: its mutant lived through the pins, 1.8 million wide-amount graphs and the 17,700 functions).
+
+The printed-C fixtures with the same mutants (the mutant's engine objects linked into the generator): on the head (`73b0450`) fixtures 1 to 6 and the `A2-89` fixture are `mismatch` (the two controls agree); on the fixed engine all nine agree; without guard (a) the third `(a)` fixture (`extsb ; * 0x8001 ; >> 24`) and the zero-extension one (`extuw ; * 0x10001 ; shar x16`) are `mismatch`; without guard (b) the two `(b)` fixtures; without the A2-89 guard the `A2-89` fixture (and not its control)
+
+
+### 6. The matrix
+
+Own RelWithDebInfo build under the scratch directory (2.5 GB, `-j2`, every run under `ulimit -v 4000000` and `timeout`, one heavy job at a time), on the final engine and harness (code commit `038d038`).
+
+| Run | Result |
+|---|---|
+| `ctest -E SaturnExplorerLive -j2 --timeout 900` | 94 of 94 pass (140.14 s); `SaturnExplorerSh2DecompilerEngineTests` 36 s |
+| `SaturnExplorerDecompilerFaultTests` | 0 of 94 jobs fail (70.3 s); no MOVED pin |
+| generator, `SE_GENERATED_SEEDS=3000 SE_GENERATED_GRAMMAR=2` | 0 failing seeds (77 s) |
+| generator, `SE_GENERATED_GRAMMAR=1 SE_GENERATED_SEEDS=1000` | 0 failing seeds (18 s) |
+| `SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000` | 0 findings; 3,719 functions (the 9 new fixtures in), 3,439 compared, agrees=3457 narrow-c=11 void-return=227 void-return-lent=24 (65 s) |
+| `SE_GENERATED_SEEDS=20000` (four runs of 5,000 from seeds 1, 5,001, 10,001, 15,001) | 0 failing seeds (115, 116, 113, 114 s) |
+| the same with `SE_GENERATED_GRAMMAR=2` (additional) | 3 of 4 runs 0 failing seeds; **1 failing seed, 18759** (section 8): the head fails it as well |
+| `rulefuzz13`, 6 million graphs, six modes; wide mode 1.5 million | 0 wrong applications, 0 unsound masks |
+| families 60 x1500, 61 x1500, 56, 21, 22, 24, 59 x500 (fresh seeds 2,410,001) | 0 findings (`mismatch` 0 in all 4,500 functions) |
+| `replayfix13.sh` | 16 seeds, 0 wrong (head: 16) |
+| in-situ checker, families 0 to 61 except 23, and the two images | section 3: 0 wrong |
+
+### 7. Corpora and vendoring
+
+* `SE_GAME_HWRAM=<img> SE_GAME_LEND=1 SaturnExplorerSh2DecompilerTests` on hwram007.bin and hwram008.bin: 839 and 1,554 functions, all ok; every ledger count 0 (0 accesses dropped against the reference run); missing and said 0 and 4; lending 680 (958 parameters) and 1,040 (1,312); mapping violations 0 ('on another line' 4 and 4 alone, 11 and 21 lent); 1,730 and 2,995 functions with lending, all ok.
+* **The corpora texts:** `SE_GAME_OUT` of the fixed build against the head's build (the same two images, with and without lending): **4,299 and 7,544 files, byte for byte identical** (`diff -rq` empty), and the two logs equal but for timings. The reviewer's 220 `RuleDivOpt` applications (16 and 204) are all still divisions with the same text; nothing to read.
+* Vendoring: `python3 -I vendor.py <pinned Ghidra checkout>` on a copy of the vendored directory: exit status 0, the 'vendored 84 library sources, 3 compiler sources, 94 headers, 5 spec files' line, all 57 patches applied (0063 is not in this tree); `cpp/`, `processors/` and `sources.cmake` identical to the committed ones (`diff -r` empty). `patches/README.md` and `VENDOR.md` have the row and the pin. A merge with 0063 can conflict in the `Modified for SaturnExplorer` header of `ruleaction.cc` and in nothing else that this fixer touched.
+
+### 8. Routed and open
+
+* **Routed to the coordinator:** generator seed **18759** (grammar 2, in the additional 20,000 of grammar 2): `[n:claim-wrong:outOrigins] r1 ends as 06020111, a pointer from r4, and outOrigins names neither it nor memory`; `SE_GENERATED_GRAMMAR=2 SE_GENERATED_SEED=18759 build/bin/SaturnExplorerSh2GeneratedTests <dir>` (or `SE_GENERATED_WORDS="6041 6054 6158 E068 000B 0009" SE_GENERATED_FUNCS="0/0/c" SE_GENERATED_RETURNS="1"`); it fails on the head as well: area 3, the A3-100 class (`CallEffects::outOrigins`). Nothing for A3-89 to A3-103 or A5-87 beyond that.
+* The next review round verifies A2-82 and A2-89, patch 0064, and the one thing the in-situ model cannot see by itself (a flagged product's sum wrapping its add): the printed-C differential and family 61 are the oracle there.
+* Accepted, none: every row is fixed. The `(int4)` shift reads of `subflow.cc` other than the one that failed are untouched (section 4).
+
+## Area 3, round 13 fix
+
+Fixer, branch `review/3-round13-fix`, on the coordinator's head `f54d140`. Code commits `bfe9ca2` to `9ed1161` (engine patch `0065`, the host, the corpus, the generator, the pins), then the ledger and this record. Own RelWithDebInfo build under the scratch directory, `-j2`, every run under `ulimit -v 4000000`, one heavy job at a time.
+
+**The rows.**
+
+- Fixed: A3-104, A3-105, A3-106 (P2); A3-108, A3-111, A3-112, A3-113, A3-114 (P3).
+- Fixed with them: A3-103, whose two seeds are A3-111 and A3-112.
+- Accepted with a reason: A3-107, A3-109, A3-110. The reasons are in the rows.
+- Triaged on request: A3-115 (filed on master during the round, provisional P2). It is an oracle false positive, P3, fixed in the generator (section 3). The row is not on this branch: its status is for the coordinator to set at merge, as section 3 says.
+- One more defect was found by this round's matrix and fixed in 0065: the round 11 review's `a3_round11/s5.src` S17 to S19, lent with a wrong value on `f54d140` too (section 1). It has no row; the coordinator may file it.
+
+### 1. The design
+
+**A3-104 (engine, patch `0065-engine-frame-escape-whole-frame.patch`, amending 0061 and 0063).** Temporary prints in `ScopeLocal::markUnaliased` showed two things, and the review's reading of the rising `lowest` was one of them:
+
+- `markUnaliased` turns an alias off at the first mapped range above an unmapped one ("aliases shouldn't go thru unmapped regions"). The word at a call's r15 that the engine takes for the call's fifth argument is unmapped (`markNotMapped` from `FuncCallSpecs` and `ActionRestrictLocal`). So in R13-1a the alias that started at the lowest word (-20) was off again at the local above it (-16).
+- Once that local was folded, `FrameEscape::lowest` (the frame addresses and stack locations still there) rose to the escaped address (-12), and the later queries did not even start the alias below it.
+
+The fix:
+
+- **Once a frame address escaped, every Symbol from the frame's lowest offset up is aliased, across unmapped ranges and at any distance.** The rule is `AliasChecker::getEscapeLow`, which `ScopeLocal::restructureVarnode` passes to `markUnaliased`. A pointer to a local that escaped reaches the whole frame (`&buf[2]` walked down to `buf[0]`). The save slots are as 0063 left them: unmapped for a hand-over, mapped for 0061's causes. The trial boundary of A3-99 is untouched.
+- **The lowest offset is the lowest any query of the function saw** (`ScopeLocal::setFrameFloor`, kept with the scope as the host's declarations are). That also gives the walk that passed its bound (`gaveUp`) a lowest offset; it had none, and offset 0 aliases no local.
+
+Of the two rules the brief offered, this is the whole-frame one. The other, a boundary from the escaped addresses as the walk first saw them, cannot hold R13-1a: its walk goes below the address that escaped (-12) to the local at -16. Measured as mutations (section 5): without the whole-frame rule, escfuzz has 342 wrong constants and printed-C has 112 failing seeds, with the floor in place. Without the floor alone nothing fails, because with the gap rule the local stays aliased and stays a stack location, so `lowest` does not rise. The floor is kept as a fail-closed guard. Lending is unchanged on both corpora (section 6).
+
+**Found by the matrix, fixed in 0065: a walk down from a frame address plus an unbounded index.** `p = sp + 16 + r4` (or `+ @(20,r15)`, or `- r4`), then `L: mov.l r1,@-p ; dt r1 ; bf L`, was lent `return 5;`; the code returns 1. That is S17 to S19 of `a3_round11/s5.src`, and they were wrong on `f54d140` too.
+
+The cause is in `LoadGuard::establishRange`. The value set analysis cannot bound the pointer, so upstream guards the access from the pointer's base up (the index taken for non-negative: A3-9, A3-17). 0056 had widened only the case where the analysis saw the range move down. A loop that steps the pointer down reaches below the base whatever the index is.
+
+Now a pointer that is, back through copies and constant additions, a join `AliasChecker::stepsDown` takes for a walk down (`LoadGuard::pointerSteppedDown`) is guarded 0xffff below its base as well. S1 of `r12a.src` (a store through sp plus a negative variable, with no walk) stays A3-9's accepted convention.
+
+**A3-105 (host).** There are three sites where a frame address is handed to an unlent callee by a way the engine may not show. Each now lets it out (`HandOut`, which the probe declares to the engine as `declareHostEscape`):
+
+- `NoteFrameEscapeOf` for an exact address in r2, in r7 alone, or in a dropped stack word. The note's alias from the address up stays, and the note now says "the call may keep it and write any local".
+- `NoteStackArguments` for a word whose address is "shown" in r4-r7. The engine shows r4 only when its trial takes it. In escfuzz seed 303 i=469 (r4 and r7 set, r5 and r6 unset, the callee decompiled first and withheld) the call is printed `func_0x06009100();` with no argument at all.
+- In the probe, at every unlent call: the convention's registers (r2, r4-r7) and every word from the call's r15 up.
+
+The three overlap. The third alone fails escfuzz (9) and the generator (46). All three together fail the stack-word shapes (181 seeds).
+
+**A3-106 (host).**
+
+- `Load` through an address that may be a stack address the interpreter cannot place joins the frame flag, the lowest base and `callerHigh` of every slot it may reach (`JoinFrameWrite`, as `Clobber` does for a store). "May reach" means its object and up for a based address, and every slot for any other. This holds R13-3.2 and 3.3: 176 seeds alone.
+- `HandOut` of a frame address also lets out what the frame's slots hold. A slot with an address of the caller's frame then sets `kOutHigh`, and R13-3.5's pointer read back from the global is a possible word of the caller's frame. This is redundant with the first on every fixture: the global's load is a `MayBeStack` address too. Both together fail 243 seeds and 454 hbfuzz fixtures.
+- The brief's wider rule (a store through an unplaceable pointer after anything went out is a word of the caller's frame: `MayBeCallerFrame` true for every unknown pointer once `out != 0`) was built and measured. Lending is 676 (950) and 1,034 (1,304) against 678 (956) and 1,038 (1,310). Four precision pins of rounds 11 and 12 fail (lines 12008, 12103, 12175, 12179 of the suite: lent functions that hand `&local` out and store through a loaded pointer become withheld). It was not taken; hbfuzz is 0 of 1,400 with the precise rule.
+
+### 2. The P3 rows
+
+- **A3-107: accepted.** A callee the probe cannot name is taken to follow the convention (A3-10), which hands it no word of its caller's frame to write back. The lazy exposure would declare a host alias (`ReadExposed`, `declareHostAlias`), which the stack-argument trial reads (`trialBoundary`): A3-99's regression.
+- **A3-108: fixed.** Each frame fact is said once per function, at the first call it holds at, with "; likewise at the calls below":
+  - a register's note, once per register;
+  - a stack-argument note, again only at a call where a word the function itself filled holds a frame address it was not said for (a word a callee may have written over is no new fact);
+  - a word that held a saved register's entry value when the call exposed it, which is now "a saved register's word at or above the stack pointer", not "a local".
+
+  Not done: leaving out the r14 note when the text declares no local; the note is still true. The counts are in section 6.
+- **A3-109: accepted**, with this round's numbers (section 6). No call or returned value changes in any text.
+- **A3-110: accepted.** One function per corpus, entered twice by the corpus, is withheld "a return not to its caller", and its text is right. The exactness rule proposed needs each write to the reloaded slot proved the function's own across the lent calls in the loop, which `CalleeStoresFrame` does not separate.
+- **A3-111: fixed (generator).** Each finished run is repeated with the 512 bytes below the entry r15 refilled, and every word refilled as the stack pointer rises past it (`RunSpec::stackFill`, `Machine::SetScrub`; the run's memory is the `Env`'s). A function whose behaviour changes reads a stale word, and its `input-dropped` and `param-dropped` are not counted (`excluded.stale-stack-read.*`). The refill the row proposed does not see this seed: function 1 pushes and pops r1, then function 2 reads the freed word.
+- **A3-112: fixed (generator).** `UsesCallResult`: a read of r0 after the last call (a store, a compare, a move) with no write of it after the call is A3-19's accepted shape (`excluded.call-result-used.return-dropped`).
+- **A3-113: fixed (corpus).** `CorpusFragment` marks an entry whose previous word is `mov.l Rm,@-r15`. `TestGameCode` and `TestGameLending` keep the fragments (code the engine must not get wrong either) and print every count for the real entries and the fragments apart.
+- **A3-114: fixed (generator).** `GenEscape13Fn` draws `escape13.twoargs.<lent|unlent>.<walk|disp>`, `escape13.stackkeep.<lent|unlent>[.r4r7].<walk|disp>` and `escape13.reload.<swap2|mask|global>`. `GenIndexWalk13Fn` draws `escape13.index.<add|sub>`. Each is a stream of its own, checked by `CheckLaunderWalks`, with its draws pinned in `TestA365Pins` (every kind and variant drawn in 2,000 seeds).
+  - An unlent callee sits at kCode + 0xA0, where the check does not decompile it first. A callee decompiled first and withheld makes the engine show the call with that callee's own reading of its arguments, and A3-104's argument word is then no argument.
+  - The r4r7 variant is escfuzz's frame.
+  - The review's controls R13-1b, 1c, 1d, 3.0, 3.1 and 3.4 are pins in `TestArea3Round13Fix`, with the row fixtures.
+
+### 3. A3-115 (triage on request)
+
+Grammar 2 seed 18759, `n:claim-wrong:outOrigins`, shrunk to `mov.w @r4,r0 ; mov.b @r5+,r0 ; swap.b r5,r1 ; mov #0x68,r0 ; rts`:
+
+- r1 is r5's start 0x06021100 plus 1 with its low bytes swapped, 0x06020111. That lies 0x11 past r4's start, and the oracle took it for a pointer from r4.
+- r1 is computed from r5, which `outOrigins` names: the claim is right.
+
+This is an oracle false positive of A3-100's kind, P3. `BitwiseOfOthers` now also refuses a value whose byte or halfword swap lies within a step of another start value the run read.
+
+Pinned in `TestRound13FixPins`: the shrunk words find nothing, `PointerRegister` gives -1 for the swap, and r4 + 4 is still r4's. With the swap check removed, 2 pins fail and the seed fails again. Proposed status for the row: fixed `9ed1161` (oracle false positive, P3: a byte swap of r5's start lands near r4's; `BitwiseOfOthers`).
+
+### 4. The pins
+
+- `TestArea3Round13Fix` (`Sh2DecompilerTests.cpp`):
+  - R13-1a to 1d;
+  - R13-2a, 2b and escfuzz 303/469;
+  - R13-3.0 to 3.5;
+  - the two A3-108 note fixtures;
+  - S17 to S19.
+- `TestRound13FixPins` (`Sh2GeneratedTests.cpp`): A3-111, A3-112, A3-115.
+- `TestA365Pins`: the round 13 draws.
+
+### 5. Mutation
+
+Each part reverted alone in the worktree, built, run, and restored (`git checkout`). The checks:
+
+- the decompiler suite;
+- the generator's default mode (its pins);
+- printed-C seeds 1 to 3,000 (the escape streams);
+- escfuzz (the review's 20 seeds, 15,400 fixtures: a constant return that differs from the run);
+- hbfuzz (seeds 1 and 2, 1,400 fixtures).
+
+Restored, every check passes. The host and note rows were run before the indexed-walk stream existed; that stream has no callee, so they do not reach it. The engine rows were run on the final engine.
+
+| Part reverted | Suite pins failing | Generator pins | Printed-C 3000 (failing seeds, shapes) | escfuzz | hbfuzz | Reading |
+|---|---|---|---|---|---|---|
+| E_gap: the whole-frame alias across unmapped ranges (A3-104) | 1 (R13-1a) | 0 | 112 (twoargs.unlent walk 69, disp 43) | 342 | 0 | held |
+| E_floor: the lowest offset any query saw (A3-104) | 0 | 0 | 0 | 0 | 0 | redundant (fail-closed guard) |
+| E_both104: both | 1 | 0 | 112 | 342 | 0 | held |
+| E_index: the guard below a stepped-down unbounded pointer | 3 (S17-S19) | 0 | 359 (index.add 192, index.sub 167) | 0 | 0 | held |
+| H_note105: `NoteFrameEscapeOf` lets the exact address out | 0 | 0 | 0 | 0 | 0 | redundant (covered by H_conv) |
+| H_shown105: a "shown" stack word goes out | 0 | 0 | 0 | 0 | 0 | redundant (covered by H_conv) |
+| H_conv: the probe lets the convention's registers and the outgoing words out | 1 (escfuzz 303/469) | 0 | 46 (stackkeep.*.r4r7.disp) | 9 | 0 | held |
+| H_all105: the three A3-105 sites | 3 (R13-2a, 2b, 303/469) | 0 | 181 (stackkeep, all variants) | 36 | 0 | held |
+| H_load106: a load through an unplaced stack address carries the slots' frame flags | 4 (R13-3.2, 3.3) | 0 | 176 (reload.swap2 92, mask 84) | 0 | 319 | held |
+| H_high106: a frame address's hand-out lets out the slots' addresses | 0 | 0 | 0 | 0 | 0 | redundant (covered by H_load106) |
+| H_both106: both A3-106 parts | 6 (R13-3.2, 3.3, 3.5) | 0 | 243 (reload, all three) | 0 | 454 | held |
+| N_once: notes said once | 2 (A3-108 once) | 0 | 0 | 0 | 0 | held (pins; a note, not a value) |
+| N_saved: the saved-register note | 2 (A3-108 saved) | 0 | 0 | 0 | 0 | held (pins) |
+| G_stale: the stale-stack exclusion (A3-111) | 0 | 2 (A3-111) | 0 | 0 | 0 | held |
+| G_used: the call-result-used exclusion (A3-112) | 0 | 2 (A3-112) | 0 | 0 | 0 | held |
+| G_115: the swap check in `BitwiseOfOthers` (A3-115) | 0 | 2 (A3-115); seed 18759 fails | not run | not run | not run | held |
+
+Each P2 fix reverted as a whole (E_both104, H_all105, H_both106) fails printed-C seeds and the review's fuzzers. The redundant parts are kept as fail-closed guards; each is a site where the round 12 table had said "left as it was".
+
+### 6. The corpora
+
+`SE_GAME_HWRAM=<img> SE_GAME_LEND=1 SaturnExplorerSh2DecompilerTests <dir>`, the final tree against `f54d140` (the same build directory and load, one run each; the base build was made beside it from `git archive f54d140`):
+
+| | hwram007 | hwram008 |
+|---|---|---|
+| lent signatures (parameters), `f54d140` | 678 (956) | 1,038 (1,310) |
+| lent signatures (parameters), this round | 678 (956) | 1,038 (1,310) |
+| ...real entries | 474 (645) of 999 | 724 (975) of 1,543 |
+| ...fragments | 204 (311) of 731 | 314 (335) of 1,452 |
+| a lent status that changed against `f54d140` | none | none |
+| texts changed against `f54d140` (lending run), real entries | 155 of 999: 142 by notes only, 13 by declarations (1 also the header) | 254 of 1,543: 235 by notes only, 19 by declarations (2 the header, 1 a renamed return) |
+| ...fragments | 288 of 731 | 712 of 1,452 |
+| `TestGameCode` | 9,270 ms (base 9,857); 108 real entries, 731 fragments of 839 | 32,761 ms (base 32,507); 102 and 1,452 of 1,554 |
+| every ledger count / missing and said / mapping violations | 0 / 0 / 0 | 0 / 4 / 0 |
+
+The timing is 0.94x and 1.01x of the base, in one run each.
+
+The notes on the real entries of the lending run, `f54d140` then this round:
+
+| Note | hwram007 | hwram008 |
+|---|---|---|
+| r14 | 216 → 121 | 442 → 255 |
+| any register | 239 → 148 | 496 → 329 |
+| stack argument | 122 → 55 | 193 → 78 |
+| slot ("a local") | 101 → 38 | 154 → 58 |
+| saved-register word | 0 → 85 | 0 → 119 |
+| r2 | 23 → 27 | 54 → 74 |
+| with "likewise at the calls below" | 0 → 71 | 0 → 117 |
+
+The r2 notes grow because a pointer reloaded from the frame now carries the frame flag (A3-106), so r2 holding one is said.
+
+The changed texts beyond notes on real entries were read; all 32 have the same calls and the same returned values:
+
+- **An unused frame array declared** (`xunknown1 axStack_8c [128];`, 007 06012E10, 06017478, 0602CC38; 008 06042BBC `axStack_1a [2]`). These are the locals the whole-frame alias now keeps aliased.
+- **A spill kept** (007 06008CC0: `xStack_24 = param_2;` where it was an array local).
+- **A stack argument read at its use** instead of copied at the top. 008 0600B614 is `func_0x0600b204(param_3,param_5)` for `xVar3 = param_5; ...(param_3,xVar3)`. In 008 0603BBE4 the stores `*(puVar2 + 2) = param_5;` replace a copy made before the first call; the code reads `@(0x20,r14)` and `@(0x24,r14)` before the first `jsr` into r12 and r13. That is the same value: a stack parameter is an input, which a callee can change only through a pointer to the caller's frame it is not handed. The only "return" change in either corpus is that function's variable renamed (`pxVar5` to `pxVar3`).
+
+Precision (A3-109); right.
+
+### 7. Matrix
+
+On the final tree (`24e38dc` for the engine, the host and the suite; `9ed1161` changes only the generator), own RelWithDebInfo build, `-j2`, every binary under `ulimit -v 4000000`, one heavy job at a time:
+
+| Run | Result |
+|---|---|
+| `ctest -E SaturnExplorerLive -j2 --timeout 900` | 94 of 94 pass (150 s, on `24e38dc`; `SaturnExplorerSh2GeneratedTests` again on `9ed1161`) |
+| fault suite (`SaturnExplorerDecompilerFaultTests` alone) | 0 of 94 jobs failed (71 s); no MOVED pin |
+| generator, grammar 2, seeds 1-3,000 | 0 failing |
+| generator, grammar 1, seeds 1-1,000 | 0 failing |
+| generator, printed-C, seeds 1-3,000 | 0 failing (laundered and escape walks 2,592: agrees 79, `escape:spare` 65, `launder:local` 2,448) |
+| generator, seeds 1-20,000 (four runs of 5,000) | 0 failing |
+| generator, grammar 2, 2,400,001-2,420,000 (four runs of 5,000) | 0 failing |
+| generator, specials, 2,500,001-2,505,000 | 0 failing |
+| `TestArea3HiddenInputFuzz`, `SE_A3FUZZ_PROGRAMS=5000`, seeds 10 and 11 | 1,195 and 1,201 lent, 15,535 and 15,613 perturbed runs, 0 findings |
+| escfuzz (the review's seeds 301-306 at 700, 401-408 and 501-506 at 800) | 0 wrong constants of 15,400 (378 on `f54d140`) |
+| hbfuzz seeds 1 (600) and 2 (800) | 0 stale of 1,400; g never lent |
+| every `a3_round11/*.src`, `a3_round12/*.src`, `a3_round13/r13*.src` through the driver | 193 fixtures, 92 lent. Each is right or withheld, but S1 (`r12a.src`, A3-9's accepted convention) and T1 (`r12q.src`, A3-95, accepted), as in round 12. S17-S19 of `s5.src` were wrong and lent on `f54d140` and are right now |
+| corpora | section 6 |
+| vendoring: `python3 -I vendor.py <ghidra>` on a copy | exit 0, "vendored 84 library sources, 3 compiler sources, 94 headers, 5 spec files", 0065 applied, the tree identical to the committed one |
+
+The generator ranges, the printed-C run and the generator's ctest were run again after `9ed1161`, the A3-115 oracle change, which only refuses a claim.
+
+### 8. Not done, and limits
+
+- The A3-108 r14 note is still said in a function with no stack local; it is true.
+- The precision proposals of A3-109 and A3-110 are accepted, not built.
+- The fragments stay in the corpus run; the counts say them apart.
+- S17 to S19 have no ledger row. They are the stack-walk class of A3-65 with an unbounded index, wrong on `f54d140`, found by this round's matrix (the fixture rule of the brief), and fixed in 0065 with pins and a generator stream.
+- Patch 0064 (area 2) is on master and not on this branch. 0065 touches `heritage.cc/.hh` and `varmap.cc/.hh` only.
+
+## Area 3, round 14 review
+
+Reviewer, branch `review/3-round14-review`, on the coordinator's head `73f13e6` (patches up to 0065 in the tree; the round 13 fix and the host rules of round 13). Findings only: no engine, host or suite code changed; the repository gets tools (`Docs/Decompiler/tools/a3_round14/`), the ledger rows **A3-117 to A3-122** and this record. Own RelWithDebInfo build of `73f13e6` and a build of `8dcbb70` (the round 12 fix, for the text comparison and for "wrong on the base too") beside it, `-j2`, every run under `ulimit -v 4000000`, one heavy job at a time.
+
+**The round is not clean: two rows at P1 (A3-118, A3-119), two at P2 (A3-117, A3-122) and one at P2 by the brief's rule that a false note is P2 (A3-120, which is P3 if the notes are read as hazards), one P3 (A3-121, the instrument).** Area 3 still has no clean round: the count of consecutive clean rounds stays 0. None of A3-117 to A3-119 and A3-122 is a regression of round 13: every fixture is wrong on `8dcbb70` as well (A3-118 and A3-119 print the same `return 5;` there, and so did S17 to S19, which 0065 fixed). A3-120's notes were printed by the base in the same form. They are what a fail-closed rule that is a list of forms leaves: each is a form the round 13 fix's tools did not draw.
+
+| Row | P | What | Where it comes from |
+|---|---|---|---|
+| A3-117 | P2 | The words at an unlent call's r15 that the engine prints as the call's stack arguments are no Symbol, so the whole-frame alias does not reach them: a callee that writes them through an escaped pointer, and a read of the word after the call, give the value stored before (`return xVar2;` for 0x55). 531 of 15,000 fixtures of the extended escape fuzzer. | A3-104's fix (aliases the Symbols; the argument words stay out of it by A3-99) |
+| A3-118 | P1 | A walk down by an index a loop steps down (`mov.l r1,@(r0,r2)` with r0 counting down, `p - i` with i counting up) is not guarded below the frame address: lent, `return 5;`, the code returns 1. | `LoadGuard::pointerSteppedDown` (A3-116's fix) gives up at an add of a non-constant |
+| A3-119 | P1 | A pointer walked down by a register stride the value-set analysis cannot read (a pool long or halfword, a frame reload, a global; `add` and `sub`) is not guarded below: lent, `return 5;`. A stride over 127 bytes is a pool load in compiled code. | the same helper, from the other side |
+| A3-120 | P2 | A frame-fact note says "is" of a word or register the host only proves possible (a word a callee handed `&buf` may have written; a register loaded from memory once anything went out). Corpus: 008 06042BBC (r2 holds an object pointer), 007 0601B914. | round 12's fail-closed `MayBeFrame`, round 13's note rules |
+| A3-121 | P3 | Instrument: none of the above is drawn by the generator or counted by round 13's fuzzer summary (59 of the old fuzzer's 1,500 fixtures were rejected by the oracle and never read). | |
+| A3-122 | P2 | `AliasChecker::stepsDown` gives up at 4,096 values and answers "no walk" (fails open); `reachesStepDown` gives up at 1,024 and answers "walk". A loop body of 4,100 accesses through the pointer, S18's unbounded index: lent, `return 5;`. | 0056/0057, reached by 0065 |
+
+### 1. The tools
+
+`Docs/Decompiler/tools/a3_round14/`, on the round 13 driver (`bdrv.sh`, `run.sh`, `sum.py`, built from the suite's own source):
+
+- `escfuzz14.py`: `escfuzz.py` with 20 new launderings of the frame address (MACH/MACL, `mul.l`, `dmulu.l`, `mac.l` through memory, GBR and VBR by register and by `ldc.l`/`stc.l`, `xtrct`, the T bit by `shll`/`rotcl`, `addc`, `subc`, `negc`, `rotcl`/`rotcr`, PR, `movt`), the same again on the walker's side, mediators in MACH, MACL, GBR, VBR and r8 to r14, and eight new walks (a register stride by `add` and `sub`, an index counting down `@(r0,p)` and `p - i`, GBR `mov.l`/`or.b`/`xor.b`, `tas.b`, byte stores). `ESC_LK`, `ESC_WLK`, `ESC_WKIND`, `ESC_MED`, `ESC_WK` pin a dimension. About 34,500 fixtures on the clean tree (seeds 1101 to 1110, 1201 to 1203, 1001, and the pinned batches).
+- `escsum14.py`: `escsum.py` plus the texts the oracle rejects that return a register-like variable (`xVar`, `iVar`, `in_`), split by whether a call in the text shows a stack argument. Round 13's summary counted wrong constants only.
+- `hbfuzz14.py` and `hbsum14.py`: the hand-back fuzzer with a 12-byte frame in g, six ways to obtain the pointer to the caller's word (the five of round 13 and `via_r14`, each then laundered 12 ways), 19 channels (round 13's 13 and halves, bytes, two hops, a published slot address, a far slot, two slots) and 7 writes (`tas.b`, a read-modify-write byte, a halfword). 4,200 fixtures.
+- `stride14.py`, `cap14.py`, `hops14.py`, `bigframe14.py`: the number and stride tables; `r14*.src`: about 130 hand fixtures; `mut/*.py`, `mutant.sh`, `relink.sh`: the reverts of section 3; `changed14.py`, `facts14.py`: the text comparison of section 6; `matrix14.sh`, `hidden14.sh`, `fuzzrun.sh`: the ranges.
+
+### 2. The guards that are numbers
+
+| Bound | Where | Reading | Result |
+|---|---|---|---|
+| 64 hops | `pointerSteppedDown` (0065) | `return false` after 64 constant additions, copies and INDIRECTs | R14-3: 20, 60, 63, 64, 65, 66, 70, 100 constant additions between the join and the store, a frame of 2N+8 bytes, S18's unbounded base: all `return xStack_...`. The rule passes fold constant additions before the stack space is heritaged, and a chain of 64 INDIRECTs needs 64 calls that may write the slot, which the escape's own guards cover. Not exploitable; not built with a chain of calls. |
+| 0xffff below the base | `establishRange` (0056, 0065) | the guard reaches 64 KB below the pointer | R14-4: frames of 0x1A000 and 0x30000, a walk of three steps of 0x8000 by `sub r5` or `add`, the sentinel 0x18000 and 0x28000 below the base, constant and unbounded base: the sentinel is not folded (`return xStack_...`), all right. A walk with a stride over 64 KB needs a frame over 64 KB. |
+| 4,096 values | `AliasChecker::stepsDown` (0056, 0057) | `seen.size() < 4096`, then `return false` | **A3-122**: fails open; `reachesStepDown`'s 1,024 fails closed. |
+| 8,192 members, 65,536 unknown | `FrameEscape::compute`, `markUnknownStores` (0061, 0063) | give up to "everything escaped" / "every store" | closed. R14-19 (`gaveup14.py`: 10 to 5,000 copies of the frame address, i.e. up to 10,000 members, then an unlent `g` that keeps `r15+16` and an unlent walker that writes over the sentinel): all `return xStack_24`, so the first-query case (the walk gives up before any floor is recorded and `low` is 0) is covered by the guards on the stores and the call. |
+| 31 words | `AddFrameWords`, `ExposeStackArguments` | a callee's write beyond the 31st word of the caller's frame is `kFrameAny` | closed. |
+| 4,096 steps, nested depth, budgets | the host's interpreter and walks | withheld "too many paths", `kFrameAny` | closed. |
+
+A walk without a loop: an unrolled `mov.l r1,@-r2` four times from `sp+16+r4` (R14-5) is right, a recursive lent `g(p,n)` that stores at p and calls itself with `p-4` and a chain of four lent functions that each lower the pointer by 4 (R14-17a, 17b) are right (the host's `storesBelow`, A3-82). A lent callee that steps its parameter down by a pool stride (R14-12a to 12e) is right: the host fails closed for an add of a variable. Two walks the number does not reach but the mechanism does are A3-118 and A3-119.
+
+### 3. The three "redundant" sites and the frame floor
+
+Each reverted alone in the worktree (`mut/m_note.py`, `m_shown.py`, `m_slots.py`, `m_conv.py`, `m_floor.py`), built, run, and restored (`git checkout`):
+
+| Reverted | `r13a`, `r13b`, `r14c` (the review's and the fixer's controls, and four nested cases: a walked unlent callee that keeps `&caller_word`, its own local holding it, a stack word, r2) | `escfuzz14` seeds 1201 to 1203 (4,500) |
+|---|---|---|
+| `NoteFrameEscapeOf` lets the exact address out | no text changes | 0 flags differ |
+| the "shown" stack word goes out | no text changes | 0 |
+| a frame address's hand-out lets out the slots' addresses | no text changes | 0 |
+| the probe's convention registers and outgoing words (H_conv) | no text changes | 1 differs (a stack-word fixture), as the fixer says it fails alone |
+| the engine's frame floor (`m_floor.py`: the candidate, `setFrameFloor`, `getFrameFloor`) | no text changes (`r13a`, `r13b`, `r14*`) | 0 |
+
+The coverage is structural. At the top level of a probe `H_conv` hands out the same set (r2, r4 to r7, every word from the call's r15 up) as the three sites do for one call, so each of the three is a subset of it. In a walked callee (`mNested`, which is tolerant too) `H_conv` does not run and the three do, and the four nested fixtures (R14-6a to 6d: a walked `c` that keeps `&caller_word` in a local and hands `&L` in r4 or r2, or the address in its outgoing stack word, to an unlent `d` that keeps it) print `return axStack_c[0];` with each site reverted; by reading, what covers them there is the walk's own rules (`handsFrame` over r0 to r7 for a caller-frame address, and the unlent call's `e.storesThrough = handed | kFrame`), which I did not instrument. The floor is redundant because with the whole-frame alias the locals stay stack locations, so the lowest left does not rise (the fixer's reading); the case that would need it is a local that vanishes from the stack space between two queries while still being reached, and I found none. No instrument row: the sites are guards, the fixture that distinguishes them would have to be one the other rule also catches.
+
+### 4. A3-106's narrower rule, and the predicates once more
+
+Built to defeat "unplaceable loads carry the flag, plus the slot hand-out": `hbfuzz14.py`, 4,200 fixtures (seeds 1 to 6), the pointer to the caller's word made 6 ways, laundered 12 ways (none, MACL, MACH, `mul.l`, `dmulu.l`, `mac.l` through memory, GBR, VBR, `xtrct`, the T bit, `addc`, `rotcl`/`rotcr`), sent through 19 channels, written 7 ways: **only the T-bit laundering is stale (333 of 333)**, every other cell 0 of 3,867. That is A3-95 (accepted: a frame address rebuilt from comparisons is no data flow). The cases the narrower rule could still let through need a caller-frame address that is neither made from r15 by the function (the `frame` flag) nor in a slot or register it hands out (`kOutHigh`): an address the caller passed in a register (the caller's own pointer: the caller sees it), one read from a global the caller filled (the caller escaped it), one the function builds from comparisons (A3-95). I found no fourth source.
+
+The fail-closed predicates themselves, fixtures and fuzz:
+
+| Attack | Result |
+|---|---|
+| `mac.l @Rm+,@Rn+` auto-increment with a frame address in the slot or the pointer; `mac.w` is 16 bits and cannot carry one | right (launder `macmem`: 0 stale in 339 hand-back and 4,500+ escape fixtures) |
+| `ldc`/`stc` GBR and VBR as a base and as a channel; `ldc.l @r15+,gbr`; GBR-relative `mov.l r0,@(disp,gbr)`, `or.b`, `xor.b` as the walk | right (walkers `gbrmov`, `gbrrmw`, launderings `gbr`, `vbr`, `gbrl`, `vbrl`) |
+| `trapa`: the handler keeps r4 (vector 5 at `vbr+20`, `rte`) | right (R14-9d) |
+| `trapa`: the handler writes the caller's word through the exception frame (`mov.l r0,@(8,r15)`, `rte`) | `return 5;` where the code returns 0x55, withheld "an indirect call it does not resolve", no note: A3-107's shape (a callee the probe cannot name is taken to follow the convention), accepted there (R14-9f) |
+| a delay slot that pushes the address as the fifth argument (`jsr @r1 ; mov.l r4,@-r15`), moves it to r8, or moves r15 (`jsr @r1 ; add #-4,r15`) | right (R14-9a to 9c) |
+| `movt`-built pointers (`clrt ; movt r1 ; add r1,r4`), `xtrct`, `clrmac`/`dmulu.l`, `mul.l`, PR as a register and by `lds.l`/`sts.l`, MACH and MACL by `lds.l`/`sts.l`, `subc`, `negc` | right |
+| an address through the T bit (`shll r4 ; rotcl r1` 32 times, `addc` of a T built from a comparison) | stale, lent: A3-95's class, accepted (not a compiled shape, no sound rule that costs less than every comparison of a frame pointer). The new instructions rebuild the whole address bit by bit, which A3-95's text says; nothing new. |
+| `rte` as a return, a delay-slot write to r15 | withheld ("a return not to its caller"), right |
+
+### 5. What the extended fuzzer found
+
+`escfuzz14.py` seeds 1101 to 1110 (15,000 fixtures, clean tree): 12,152 withheld, 2,848 lent; 531 texts return a register variable of a frame the escape reaches (A3-117), 88 withheld and 20 lent stale constants. Every stale constant is the T bit (A3-95) or the caller's index walks (A3-118: `idxdown` 12, `subidx` 10); no other launder, mediator or walker gives one. The 531 are all calls that show a stack argument. The old `escfuzz.py` has the same rate (seed 301: 59 of 1,500 rejected, 56 returning a register variable). Round 13's "0 wrong constants of 15,400" is right as far as it goes; the rejected texts were not counted.
+
+Mechanisms, by reading and by the measurements (not instrumented; no temporary prints):
+
+- **A3-117.** `ScopeLocal::markUnaliased` aliases Symbols; the call's argument words are unmapped (`markNotMapped`), so `escapeLow`'s "from there up" never names them, and A3-99 keeps the argument trial from asking the escape's alias. R14-7a (no stack argument shown) and 7f to 7i (the local above the argument words) are right; 7b to 7e (r6, r7, r6+r7, r5 to r7 set: the call shows one or two stack arguments) read the word at the call's r15 as the constant. The old fix's fixtures (R13-1a, 1b, 1c, 1d) never read that word.
+- **A3-118, A3-119.** `pointerSteppedDown` follows the store's pointer through constant additions and copies; at an `INT_ADD`/`INT_SUB` with a non-constant operand it returns false. The value-set analysis catches a stride it can evaluate (R14-1a, the `shll2`, `neg`, `not` strides of R14-11), and a stride loaded from the pool or a slot or a global is a LOAD it cannot; the range is full and the guard stays from the base up. `sub r5,r2` is a step in `stepsDown` and is still missed, because the helper never reaches the join. 14 of the 20 cells of R14-14 are wrong, 6 right (the constant copy and `sub #127`, two bases each, and the `shll`-of-pool stride that does not reach the sentinel).
+- **A3-122.** The cap in `stepsDown` counts the values the join's descendants produce in one pass, and the loop over the first varnode's descendants is not capped, so one pass with 4,100 stores through the pointer ends the search before the step, one hop away, is followed.
+
+### 6. The texts: 8dcbb70 against 73f13e6
+
+`SE_GAME_HWRAM=<img> SE_GAME_LEND=1 SE_GAME_OUT=<dir>` of both builds (`corp2.sh`-style, one run at a time), the `lend_after` texts compared by `textdiff.py` and `changed14.py` (real entries only: the word before the entry is not a push of r15, A3-113). Real entries changed: hwram007 **13 beyond notes, 142 by notes only**; hwram008 **19 beyond notes, 235 by notes only** (the round 13 record's numbers against `f54d140`; the same here, since 0064 and the round 13 fix change nothing else). `facts14.py` checks the mechanical part of every one: the multiset of calls (`func_0x...` and indirect) is equal in all 32 and in the 6 notes-only texts read, and every returned expression is the same (one variable renamed, `pxVar5` to `pxVar3`). The reading against the disassembly (`drv --dis`) is below. A wrong text is P1 and a false note P2: **none of the 38 texts has a wrong value; one note (06042BBC) is the A3-120 over-claim, and 0601B914 is its second instance.**
+
+| Image | Function | Change | Against the code | Verdict |
+|---|---|---|---|---|
+| 007 | 06008CC0 | gains `param_2`, `xStack_24 = param_2` for an array | `mov.l r5,@r14` spills r5, `mov.l @r14,r12` at 06008DB4 reads it back; r14 note once | right, more precise |
+| 007 | 0600BFEC | `xVar3 = param_5` copy gone, `param_5` at the second call | `mov.l @(0x18,r14),r8` reads the fifth argument at entry, `mov r8,r5` before the second call; the first call is unlent and cannot write the caller's argument word (A3-107's convention) | right (equivalent under the convention) |
+| 007 | 06012E10 | unused `axStack_8c [128]`, the r14 note becomes a saved-register note | `mov r15,r14` in the prologue; the epilogue pops r14, PR and the saved registers after the last call (`mov r14,r15 ; lds.l @r15+,pr ...`): the note is true as a hazard; the array is never used in the text. A script over the disassembly confirms the prologue copy for all 22 functions of this kind and the pop after a call for the 18 that fit in 400 instructions | right, precision (A3-109) |
+| 007 | 06017478 | the same | the same | right, precision |
+| 007 | 06017730 | the same | the same | right, precision |
+| 007 | 06017898 | the same; the r14 note moves to the second call | `mov r15,r14` in the prologue, `mov r14,r15` in the epilogue; no local; first call hands `0x6057314,0x6057330` | right, precision |
+| 007 | 060179DC | the same, a "local at or above the stack pointer" note | the words read after the first call are the epilogue's pops | right, precision (A3-108's wording) |
+| 007 | 06017CB0 | the same | the same | right, precision |
+| 007 | 0601CF40 | the same | the same | right, precision |
+| 007 | 06020D68 | the same, `return CONCAT44(xVar2,iVar1)` unchanged | as above | right, precision |
+| 007 | 0602CC38 | the same | the same | right, precision |
+| 007 | 0603142C | the same, the two returns unchanged | as above | right, precision |
+| 007 | 060329C8 | gains `xStack_4 = param_4`, the call `func_0x06031a60(&uStack_20)` unchanged | `mov.l r7,@(0x1c,r14)` spills r7 into the word the prologue reserved (`add -0x4,r15`), read back at `@(0x1c,r14)` and stored at `@(0xc,r14)`; the block whose address is passed is r4 to r7 and the fifth argument | right, noisier |
+| 008 | 06008714 | `iVar1 = param_5` copy gone, `param_1[6] = param_5` | `mov.l @(0x1c,r14),r12` in the delay slot of the first `jsr`, stored at `@(0x18,r8)` at the end; no callee of this function can write that word of its caller's frame | right |
+| 008 | 06008F8C | `xStack_24 = param_2`, the two compares of it | `mov.l r5,@r14` is the only access of the slot; the code compares a register copy, the text compares the spill variable, which holds the same value (nothing writes the slot) | right, noisier |
+| 008 | 0600B614 | as 0600BFEC | the same code shape | right |
+| 008 | 0600D278, 0601303C, 06013138, 060131E4 | unused 128-byte array, note changes | as the 007 group | right, precision |
+| 008 | 0603BA94 | `param_9`, `param_10` typed `uint2`, the copies `uVar4 = (uint2)param_9` gone | the code reads the stack words with `mov.w` and stores the halfword; same stores | right |
+| 008 | 0603BBE4 | `xVar1 = param_5`, `xVar2 = param_6` copies gone, a renamed pointer | `mov.l @(0x20,r14)` and `@(0x24,r14)` read before the first call into callee-saved registers, stored after; same value | right |
+| 008 | 0603D358 | array replaced by locals, a spill of `param_1` | the code spills r4 and `*(param_1+0x10)` and reads them back across calls | right, noisier |
+| 008 | 06041EE8 | unused 128-byte array, note changes | as the 007 group | right, precision |
+| 008 | 06042BBC | unused `axStack_1a [2]`; the final call's note "stack argument slot" becomes "r2" | `jsr` at 06042D9A with r4 = `[r10+0x18]+0x34`; r2 was last written by `mov.l @(0x18,r10),r2` or `add 0x44,r2` on every path, not by `mov r14,r2` | text right; **the r2 note is not supported (A3-120)** |
+| 008 | 06045EB4 | `uint1 param_2` becomes `uint4`, `param_2 & 0xff` explicit, `xStack_24 = xStack_24 - 7` | `extu.b r5,r9 ; mov.l r9,@r14`; in the else branch `mov.l @r14,r2 ; add -7,r2 ; mov.l r2,@r14 ; mov.b @r3,r3` (r3 = r14+3, the low byte) `; extu.b`; the call gets `uVar1 & 0xff` | right |
+| 008 | 06047DD0 | `iStack_c` becomes `xStack_c`, a saved-register note | `mov.l r..,@(..,r14)` spill of the fifth argument; the epilogue pops | right |
+| 008 | 060584E8, 0605C41C, 06060244, 0606D6FC, 06071040 | unused 128-byte array, note changes | as the 007 group | right, precision |
+| 007 | 06019A48 (notes only) | the stack-argument note | it stores `auStack_70`'s address in locals (`mov.l r14,@r13`, `mov.l r12,@(0x14,r14)`) that sit at the call's r15 | right |
+| 007 | 0601B914 (notes only) | the stack-argument note at the indirect calls | the buffer at r14+0 was handed to `func_0x0602382c`; nothing writes an address there | note over-claims (A3-120); the base printed it too |
+| 007 | 06009E96, 0600A070 (notes only) | r14 note once with "likewise", saved-register note | `mov r15,r14`, the epilogue pops | right |
+| 008 | 0600B474, 06037074 (notes only) | the stack-argument note once, "may keep it and write any local" | same fact; the base's sentence "the call may write the locals from there up" became "may keep it and write any local" (A3-105's wording) | right |
+
+### 7. The generator beyond the nightly range
+
+`matrix14.sh` (pieces of at most 20 minutes, resumable) on the clean tree, own build, `ulimit -v 4000000`:
+
+| Run | Result |
+|---|---|
+| grammar 2, 2,700,001 to 2,720,000 (four pieces of 5,000) | 0 findings; 238, 190, 182 and 171 s |
+| grammar 1, 2,700,001 to 2,710,000 (two pieces) | 0 findings; 112 and 132 s |
+| printed-C, 2,700,001 to 2,710,000 (five pieces of 2,000) | 0 findings; 2,493 to 2,520 functions per piece, 2,307 to 2,349 compared; 76 to 87 s |
+| specials, 2,800,001 to 2,805,000 | 0 findings; 255 s |
+| `TestArea3HiddenInputFuzz`, `SE_A3FUZZ_PROGRAMS=5000`, seeds 12 and 13 | 1,176 and 1,172 lent, 15,288 and 15,236 perturbed runs, 0 findings |
+| `ctest -E SaturnExplorerLive -j2 --timeout 900` (no code changed) | 94 of 94 pass, 168 s |
+| `escfuzz14.py` seeds 1101 to 1110 (1,500 each) | A3-117 (531), A3-118 (22), the T bit (A3-95), nothing else |
+| `hbfuzz14.py` seeds 1 to 6 (700 each) | the T bit only (333 of 4,200) |
+
+The generator finds nothing for any area in these ranges; there is nothing to route. A5-87 (pointer-effect and cache notes) was not touched. The three classes above are drawn by no seed of the generator's escape streams (A3-121).
+
+### 8. The corpora
+
+`SE_GAME_HWRAM=<img> SE_GAME_LEND=1 SaturnExplorerSh2DecompilerTests <scratch>`, own build of `73f13e6`:
+
+| | hwram007 | hwram008 |
+|---|---|---|
+| `TestGameCode` | 839 functions, 839 ok, 10.5 s (108 real entries, 731 fragments) | 1,554 ok, 34.2 s (102 and 1,452) |
+| every ledger count / missing and said / mapping violations | 0 / 0 / 0 | 0 / 4 / 0 |
+| lent signatures (parameters), `8dcbb70` | 678 (956) | 1,038 (1,310) |
+| lent signatures (parameters), `73f13e6` | 678 (956) | 1,038 (1,310) |
+| ...real entries | 474 (645) of 999 | 724 (975) of 1,543 |
+| ...fragments | 204 (311) of 731 | 314 (335) of 1,452 |
+
+The numbers are the round 13 fix's. The `8dcbb70` run lends the same 678 and 1,038: the round 13 fix changes no lent status, as the record says.
+
+### 9. Not done, limits, and for the next round
+
+- A3-117 to A3-119 and A3-122 are open and have no pins: a pin that fails is not committed. The fixtures are in `r14a.src`, `r14e.src`, `r14i.src`, `r14m.src` (`stride14.py`), `r14k.src`, `r14cap.src` (`cap14.py`), `r14o.src`/`r14q.src`, ready to be moved into the suite verbatim; the expected text of each is in its row.
+- The mechanisms of A3-117 to A3-119 and A3-122 are from reading the engine code and from the measurements above; I put no print into the engine this round.
+- A chain of 64 INDIRECTs between the join and the store (the other way to pass `pointerSteppedDown`'s 64 hops) was not built; I could not make 64 calls that may write the pointer's slot without the escape's guards covering the walk.
+- The T-bit family (A3-95) is accepted; I did not find a cheaper sound rule, and none of the new instructions (`shll`/`rotcl`, `addc`, `movt`) changes the argument.
+- A3-107's shape (a callee the probe cannot name writes the caller's word through its own r15) now has the exception frame of `trapa` as a second compiled-looking carrier (R14-9f); it stays accepted there.
+- The next reviewer should read the old fuzzers' oracle rejections (`escsum14.py`) and pin a lent-callee case with a stack argument shown (A3-117 has none lent: a lent callee reads no stack word).
+
+## Area 2, round 14 review
+
+Reviewer, branch `review/2-round14-review`, on the coordinator's head `8cf615b` (patches up to 0064 in the tree). Tools, one engine pin, the ledger and this record only; no spec, engine or host file changed (every engine trial below is a scratch object linked beside the tree). New ledger rows **A2-92 to A2-100**: **two P2** (A2-92, `RuleSignMod2nOpt2`; A2-97, a printed endless loop), six P3 (A2-93 an engine failure of a whole function, A2-94 a latent `RuleThreeWayCompare`, A2-95, A2-96 and A2-98 three oracle rows, A2-99 a wrong `RuleShiftSub` in both images, masked there) and A2-100, the instrument row, closed here. **This round is not clean: two plain instruction sequences print a text that does not compute what the code computes, with no warning, so area 2's count of consecutive clean rounds stays 0.**
+
+Patch 0064 held. Every guard was checked by value at 1, 2, 4 and 8 bytes and at the edges against a description of the machine that has no graph in it, over every constant a small width has, not over a sample (section 2): no wrong value in 25.6 million configurations at one byte, 301 million at two (the multipliers up to 2^17 and the structured list above them) and 569 million at four; the head before 0064 is wrong in 6,757, 3.05 million (of the first 132 million) and 11.8 million of the same. The guards refuse a right fold only where the product wraps its multiply and a reader cuts the wrapped bits (a hash, not a division), or in about twenty borderline sign-extension cases. The `div_product_wide` flag does not survive onto an op it does not describe, and no later rule treats a flagged product as an ordinary one (section 2.3). Both P2 defects are in code the earlier rounds had cleared **without checking it in situ**: A2-92 is in a rule the in-situ check exempted because its meaning lives in the control flow, and a checker that runs the whole function after every rule application finds it at once (section 3); A2-97 is in the structure of a function the harness could not finish (the compiled text never ends), which the harness itself could not report (A2-98).
+
+### 1. What I ran
+
+Own RelWithDebInfo build under the scratch directory (`-j2`; every run under `ulimit -v 4000000` and `timeout`, chunks of 20 minutes or less with markers; the sweeps of sections 2 to 4 overlapped, two to four at a time, load up to 6.6 on four cores, and no run died of memory).
+
+| Run | Result |
+|---|---|
+| `ctest -E SaturnExplorerLive -j2 --timeout 900` (the new pin in) | 94 of 94 pass (158 s); `SaturnExplorerSh2DecompilerEngineTests` 50 s of its 60 s ceiling (the pin is 3 s of it; round 13 recorded 42 s without it) |
+| `SaturnExplorerDecompilerFaultTests` | 0 of 94 jobs fail (156 s when run alone; 83 s in the ctest run) |
+| decode oracle with `SE_MEDNAFEN_SS`, seeds 71230451 and 40916227 (new; `SE_DECODE_CASES=100000`) | section 6 |
+| generator, grammar 2 / grammar 1 / printed-C beyond the nightly range | section 6: 1 failing seed (2616394, routed), A2-95 |
+| standard matrix: grammar 2 3,000 seeds, grammar 1 1,000 seeds, printed-C 3,000 seeds from seed 1 | 0 failing seeds; printed-C 3,719 functions, 3,439 compared, agrees 3,457, `narrow-c` 11, `void-return` 227, `void-return-lent` 24, 0 findings |
+| corpora hwram007.bin, hwram008.bin, `SE_GAME_LEND=1` | 839 and 1,554 functions, all ok; 0 accesses dropped against the reference run; missing and said 0 and 4; every ledger count 0; lending 678 (956 parameters) and 1,038 (1,310); mapping violations 0 ('on another line' 4 and 4 alone, 11 and 21 lent); the printed texts of both images are unchanged under the A2-92 and the A2-99 fixes (839 and 1,554 files compared, 0 differ) |
+| patch 0064 by value (`divexh14`, `edge14`, `rulefuzz14`) | section 2: 895 million configurations, 0 wrong; 6.5 million fuzz graphs, 0 wrong; the head before 0064 is wrong in 6,757, 3.05 million and 11.8 million of the same |
+| in-situ checks, families 0 to 78 (14,840 functions) | section 3: 1.6 million rule applications, 4.1 million leaf-action runs, 0 wrong; the images (cone check): 12 wrong in each, all `RuleShiftSub` (A2-99); the first image's whole-function check (rules): 0 wrong |
+| new families 62 to 78, printed-C differential | section 4: A2-93, A2-96, A2-97, and A2-92 (family 73 form 8) |
+
+### 2. Patch 0064 by value
+
+**Method.** `divexh14` writes the machine out from the definition (a numerand of `xs` bytes, extended zero, signed or masked, times a constant, shifted, cut, read by five kinds of reader) and applies `RuleDivOpt` (or, in term mode, the pool of `RuleDivTermAdd` and `RuleDivTermAdd2`) to the same graph in the real engine; a rewritten graph is evaluated and compared with the definition for **every** value of the numerand. It runs the engine of the tree and, linked with `ruleaction.cc` of the head before 0064 (`73b0450`), the old one, so each configuration has two verdicts. Chunks of at most 20 minutes each, with `.done` files; the lists of constants are every multiplier up to 2^16 (1 byte) or 2^17, then the structured values above (magics of `2^k / d` and neighbours, `2^k +- 1`, sign-extended small values, all-ones runs).
+
+| Run | Configurations | Rewritten by the tree | Wrong (tree) | Wrong (head before 0064) |
+|---|---|---|---|---|
+| `RuleDivOpt`, 1-byte numerand, all 65,536 multipliers, 3 extensions | 25,559,040 | 2,949 | **0** | 6,757 (of 9,726 rewritten) |
+| `RuleDivOpt`, 2 bytes, 363,663 constants | 301,112,964 | 985,805 | **0** | 3,053,476 in the first 132 million (the old object was run on 4 of the 10 chunks) |
+| `RuleDivOpt`, 4 bytes, the first 400,000 of 488,247 constants | 568,800,000 | 838,057 | **0** | 11,783,564 (the last chunk on a list of 517,127 constants) |
+| term mode, 1 byte | 786,432 | 76 divided | **0** | not run |
+| term mode, 2 bytes | 3,633,516 | 1,541 divided | **0** | not run |
+| term mode, 4 bytes | 5,026,488 | 22,582 divided | **0** | not run |
+
+**Guards too narrow: none** (the table: no wrong value in 895 million configurations). **Guards too wide.** The same runs list what the tree refuses and the old head folded right (the old and the new object on the same list, positional comparison; the lists of constants were extended after the first two chunks, so only chunks with matching lists are used): in constants 40,000 to 79,999 of the 2-byte list 972 configurations, 3 of them with a product that fits (one degenerate fold, `x * 0x10001 >> 16` of a 16-bit x, which is `x`, a division by 1); in 80,000 to 119,999 83,629, none with a product that fits; in 120,000 to 159,999 133,118, none (132,983 of them a division by 3 or more). Everything refused with a product that fits is that one fold and about twenty sign-extension cases at the edge (1 byte, multipliers 0x101 and 0x102, where the signed product just fits). The rest is a product that wraps its multiply and is read only by readers that cut the wrapped bits (`(x16 & 0xffff) * 0x1d4c0 >> 17` cut to two bytes: a hash, which the old head turned into a division that is right for these readers), so the cost is a missed fold of a shape no division makes. The corpora's 220 `RuleDivOpt` applications print as before.
+
+**2.3 The flag.** `PcodeOp::div_product_wide` (`addlflags` 0x4000) is set by `RuleDivTermAdd` and `RuleDivTermAdd2` on the multiply they build and never cleared; `CloneBlockOps` does not copy it (conservative: the clone is an ordinary product). Rules that could carry it onto another op were read one by one: the only way a flagged multiply is shared with an op that is not the product of a division term is common-subexpression merging with a twin multiply, and a twin needs a constant of 33 bits or more beside a 32-bit numerand, which no SH-2 code builds (`dmulu` has a 32-bit literal; the 64-bit product is a PIECE of two registers). `RuleDivOpt` reads the flag to decide that the multiply has not wrapped; no other rule reads it. The check of the flagged product in the in-situ tool (`maskwide`, 14,626 samples over the families) is the model's own, not a mask violation of the engine: the exact product is wider than the wrapped multiply's non-zero mask by design.
+
+**The pin.** `TestDivOptExhaustiveRound14` (`Sh2DecompilerEngineTests.cpp`; 1,105,260 graphs, 5,256 rewritten, all 256 values of x, 3 s) puts the 1-byte numerand's sample in the suite: every multiplier 0 to 1,023 and every 97th above, 3 extensions, 3 forms, both shifts, every amount, 5 readers. Mutation, each mutant a reversal or a loosening of one guard of patch 0064, defined in `mutants14.py` and run against the engine test alone by `mutdrv14.py`:
+
+| Mutant | Killed by | CHECKs |
+|---|---|---|
+| c: `divReadsLowBits`, an AND mask one bit wider | the new pin only | 5 |
+| d: `divReadsLowBits`, a SUBPIECE one byte wider | round 13's pin only | 7 |
+| b: `divProductFits` (signed), one too many | both pins | 89 |
+| e: divisor limit doubled | both pins | 332 |
+| f: `divProductFits` (unsigned), one too few (refuses a right fold) | the new pin through its count of rewritten graphs (5,106 < 5,200) | 1 |
+| a: `divProductFits` (unsigned), one too many | lives: no wrong value in 25 million, 301 million and 569 million configurations | 0 |
+| g: the mismatched pair's width test loosened | lives: no wrong value in the same runs | 0 |
+| h: `divProductFits` without the numerand-wider-than-multiply test | lives: dead code (that case returns earlier) | 0 |
+
+Round 13's own mutants 01, 02, 04 and 05 fail the new pin as before (37, 5,281, 198 and 1 CHECKs).
+
+**Other rules of patch 0064 by value (`edge14`).** `RuleDivChain` at 1, 2, 4 and 8 bytes with every first divisor including -1: 0 wrong (the old head: 4,967 at one byte); `RuleSignForm2` at 1 and 2 bytes: 0 wrong (the old head: 1 at one byte); `RuleThreeWayCompare`: **592 wrong in 3 million seeds, all 8-byte unsigned with the constants 0 and 0xFFFFFFFFFFFFFFFF** (A2-94: the neighbour test wraps in the 64-bit `uintb`; sizes 1, 2 and 4 are clean; the old head: 20,663 wrong in 300,000). `rulefuzz14` (round 13's fuzzer with `RF_JUDGEWRAP=1`, which removes its exemption of environments where the original multiply wraps) over **6.5 million graphs** in seven modes (plain, consume masks, templates of the engine's rewrites, wide shift amounts, SH-2 shapes, wide with consume masks, depth 4): **0 wrong applications, 0 unsound masks**; the 16 seeds of round 13's replay list (`replayfix14.sh`) are right on the tree and wrong on the old head (16 of 16).
+
+### 3. The in-situ checker: its blind spots, and a stricter one
+
+`rulecheck13.hh` compared the value of a cone (the op's output, its readers and theirs) before and after every rule application, exempting what it could not value. Every exemption was attacked, and the checker made stricter (`rulecheck14.hh`, the same hook; `mkrc14.sh`, `relink14.sh`):
+
+| Exemption of round 13 | What I built | Result |
+|---|---|---|
+| `RuleSignMod2nOpt2` (value read from a MULTIEQUAL and the branch behind it) | a second checker, **`wholefn14.hh`**, that runs the *whole function* (blocks, MULTIEQUAL by incoming edge, CBRANCH taken, RETURN inputs as the observations, LOAD at an address of the loaded image, the flagged exact product in 128 bits) before and after every rule application, and, with `SE_WHOLEFN_ACTIONS=1`, before and after every leaf action once heritage has run; 6 assignments of the inputs per function (`SE_WHOLEFN_TRIALS`) | **A2-92** (the shape built with the test on another register: 3 of 4 variants flagged at once); `RuleOrPredicate`, which the cone check had to be told to skip (a false BAD: it replaces a predicate by one that is equal only under the branch), is judged here too: 40 applications, 0 bad |
+| a root with consume 0 (dead) | compared on the non-zero mask it keeps; counted as `deadchg` | 0 changes of a dead value in every run |
+| a root the rule left without a reader / readers with no output (STORE, RETURN, CALL, CBRANCH) | the output-less reader is a root (`slot` kind, CBRANCH with its flip flag); the other readers of the rule's inputs are roots too (`sibling` kind); a root on an input of the rule (`input` kind) was tried and removed: it gave false BADs (`RuleBooleanNegate` folds a negation into the compare that feeds it) | 0 wrong in 1.6 million applications; the extra roots found nothing the first kind did not |
+| the interior ADD of a `RuleCollectTerms` tree; the zext `RuleBoolZext` negates in place | kept (the root and the final ADD are compared) | no change |
+| cones over 24 leaves / 400 nodes, outputs over 8 bytes, ops it does not value | limits raised (40 roots, 600 nodes, a hashed memo: the checker was quadratic, 40 s to 7 s on a 32-step division function), a root whose cone overflows is dropped alone (`dropped`: 0 in every run); the whole-function checker values MULTIEQUAL and the CBRANCH conditions | `uncompared` (applications with no root compared) is now a printed metric: 318,972 of 1,607,396 (19.8 percent): `RuleEarlyRemoval` 275,254, `RuleLoadVarnode` 21,898, `RulePropagateCopy` 10,546, `RuleCondNegate` 6,098, `RulePushMulti` 1,928, `RuleStoreVarnode` 1,630, `RuleMultiCollapse` 918, `RuleConditionalMove` 632: all but the store rule are judged by the whole-function checker (section 5) |
+| a sample outside an op's own non-zero mask (`maskskip`) | kept | 0 in every run; `maskwide` (the exact flagged product, the model's own) 14,626 |
+
+**The whole-function checker's own exemptions**, each with its count: a rule application whose function it cannot run (a STORE or a LOAD through a pointer, a varnode with no value, a call, a floating-point op, a global read before heritage that is an input after it) is `unsupported` and not compared: the reasons are printed (`WHOLEFN-WHY`; the top ones: a varnode with no value, 49,366 + 13,716 + 3,192 of the applications of `RuleEarlyRemoval`, `RulePropagateCopy` and `RuleAndMask`; STORE, 18,972 + 14,112 + 11,688 + 9,780 + 4,908 + 3,084). **Narrowing** the return (`act:returnrecovery`) is accepted if the removed bits are zero or sign extension of the kept ones; `act:returnrecovery` itself is not compared. The memory and pointer rules (`RuleStoreVarnode` 1,630 applications, `RulePtrArith` 40, the pointer flow) are left to areas 3, 5 and 7.
+
+**Sensitivity (the checker is only worth what it finds).** Round 13's mutants (`mutants13.py`, the guards of patch 0064 reverted one at a time; `mutrc14.py`: the scratch engine with the mutant, the printed-C differential, the cone check and the whole-function check over families 56, 60, 61, 21, 59, 67 and 22, 100 functions each, from seed 2,381,001): the A2-82 (a) mutant is found by all three (1 `mismatch`, 3 cone BAD, 2 whole-function BAD), the A2-82 (b) mutant by all three (4, 3, 3), the A2-89 mutant (the exact sum may wrap its add) **by the cone check alone** (0, 2, 0); the three A2-87 and A2-91 mutants, the divisor limit and the shift-amount mutant are found by none (the families do not build their shapes; the pins of rounds 13 and 14 kill them). The whole-function check is the only one to see A2-92; the cone check is the only one to see a sum that wraps.
+
+**Runs.** Families 0 to 78 except 23, 39 (no such family), 68 and 72 (they do not finish in 15 minutes under the checks: see the limits), 200 functions each (family 78: 40), from seed 2,680,001: **14,840 functions, 14,664 compared (agrees 14,600, `narrow-c` 64, `void-return` 134, `void-return-lent` 22, `skipped:stack-address` 20), 0 `mismatch`; 1,607,396 rule applications of 134 rules, 3,283,394 roots compared by the cone check, 0 wrong; the whole-function check observed 1,607,396 rule applications (1,607,216 changed the function, 9,489,136 observations) and 4,128,284 leaf-action runs (90,604 changed the function, 394,308 observations), 0 wrong.** The two images, cone check (the whole-function check on the first image, rules only: 1,062,139 applications, 237,005 observations, 0 wrong, 3 minutes; on the second image and with leaf actions on it did not finish in 19 minutes): 1,062,139 applications (2,292,516 roots) in 007 and 2,739,471 (5,904,245 roots) in 008: **12 wrong in each, all `RuleShiftSub` (A2-99), and no other rule**. The printed-C seeds 2,620,001 to 2,629,000 (three runs of 3,000 seeds, cone and whole-function checks both on, leaf actions on): 11,125 functions, 10,347 compared, 0 `mismatch`, 0 wrong; the three `WHOLEFN-BAD act:heritage` lines each run printed (a global read that was an image read before heritage and an input after it) were the checker's own and are gone with the exemption above.
+
+**A2-92 (P2), `RuleSignMod2nOpt2`.** The rule reads `V - (((W s< 0) ? V + 2^n-1 : V) & ~(2^n-1))`, with the MULTIEQUAL of the biased and the plain value behind the signed compare, as the signed remainder of V. It never tests that the compared W is V (`checkSignExtForm`, the sign-extension form of the same rule, does). `mov r4,r0 ; mov r4,r1 ; cmp/pz r5 ; bt ; add #3,r1 ; and ~3,r1 ; sub r1,r0` is printed `return param_1 % 4;` (the test is on r5; for r4 = 1, r5 = 0xFFFFFFFE the code returns 0xFFFFFFFD, the text 1). With the missing test (`lessOp->getIn(0) == base`, a scratch object) the fixture agrees, the same-register form still prints `param_1 % 4`, and 300 functions of family 73 agree; the images' printed texts do not change under it (839 and 1,554 files compared). Family 73 `signmod` now builds the shape (form 8: the sign test on r5, r6 or r7; 30 of 300 functions are `mismatch` on the tree and 0 with the test added) beside the forms with the test on V, which agree.
+
+**A2-97 (P2), the text of a function without a loop has an endless one.** Found by the 40,000-function scan of family 78 below; the data flow is right (no rule or action application changes the function's value as `wholefn14.hh` runs it), so the structure is at fault, or the printing of it. Row A2-97 has the 21-word fixture (reduced from the 51-word original by `reduce14.py`).
+
+### 4. New families (`dagen14.py`, families 62 to 78)
+
+Register-only functions for the printed-C differential and the in-situ checks, on SH-2 idioms no family of rounds 10 to 13 builds. Families 62 to 74: three thousand functions each from seed 3,100,001 through the printed-C differential (`pcsweep14.sh`); families 62 to 77 except 68 and 72 were also run in situ (section 3, 200 functions each, family 78 40). Family 78 was run on 39,800 more functions from seed 3,300,001, and the batch the harness lost (a text that never ends, A2-98) of 200 again.
+
+| Family | Shapes | Printed-C differential (functions, compared, classes) |
+|---|---|---|
+| 62 shmul | a constant multiply as shift-and-add chains (Horner, canonical signed digits, `shll2/8/16` steps) of a register or an extended byte or word, read as a shift, a mask, an add, a compare, or subtracted from the same product made by `mul.l` | 3,000, 3,000: agrees 2,976, `narrow-c` 24 |
+| 63 muldi | 64x64 to 64 from `dmulu.l` and two `mul.l`, a signed 32x32 to 64 from the unsigned product and the sign corrections, the high word of a signed product, a 64x32 product by a constant | 3,000, 2,967: agrees 2,967, `void-return` 33 |
+| 64 shift64 | constant shifts of a register pair by 1 to 63 (single-bit chains, shift-and-or, `xtrct`, a move for 32 or more) | 3,000, 3,000: agrees |
+| 65 cmpstr | `cmp/str`: a zero byte in a word, a byte equal to a pattern, the index of the first zero byte, T combined with other tests | 3,000, 3,000: agrees 2,993, `narrow-c` 7 |
+| 66 bitops | parity, the SWAR population count with its multiply, bit and byte reversal, the lowest set bit, a power-of-two test, rotate by two shifts, bit-field extract and insert, `(x ^ m) - m` | 3,000, 3,000: agrees 2,994, `narrow-c` 6 |
+| 67 divterm | the division terms of `RuleDivTermAdd`, `RuleDivTermAdd2` and `RuleDivOpt` on constants that are no divisor's, and the CSE twin (the same product with the folded multiplier made by `mul.l`) | 3,000, 3,000: agrees 2,999, `narrow-c` 1 |
+| 68 div1len | `div0u/div0s` and `div1` chains of every length from 1 to 32, 16-bit and 64/32 setups, signed fix-ups | 3,000, 3,000: agrees |
+| 69 cmov | a diamond or triangle that picks between two constants or registers, of a byte, word or longword | 3,000, 3,000: agrees 2,939, `narrow-c` 61 |
+| 70 divdiv | `(x / d1) / d2`, `(x % d1) % d2`, `(x >> a) / d`, `x / 2^k / d`, negative divisors | 3,000, 3,000: agrees 2,982, `narrow-c` 18 |
+| 71 varshift | variable shifts and rotates of a register and of a pair by a counted loop over `r5 & 31` | 3,000, 3,000: agrees |
+| 72 mix | two or three blocks of the families above in a row | 3,000, 2,791: agrees 2,781, `void-return` 39, `void-return-lent` 167, `narrow-c` 12, **`unsettled` 1** (a long straight-line chain of `rotcl`/`subc` pairs: patch 0055's cap on the repeats stops it with the warning `Exceeded maximum repeats of oppool1` in the text; A2-59's class, not a new row) |
+| 73 signmod | `x % 2^k` and `x / 2^k` of a signed byte, word or longword for every k, in nine forms (the bias by a branch or without, the sign by `shar` or `cmp/pz`; forms 5 to 7 the sign-based rules, form 8 the remainder with the sign test on another register, A2-92) | 3,000, 3,000: agrees 2,996, `narrow-c` 4 (the run predates form 8; with form 8, 300 functions: agrees 270, **`mismatch` 30**, 0 with the A2-92 test added) |
+| 74 deepsoup | 15 to 45 steps over r0..r3 with T produced and consumed in every way (`cmp`, `tst`, `dt`, `addc/subc/negc/addv/subv`, `div0/div1`, `rotcl/rotcr`, `movt`), multiplies and their mach/macl reads, forward branches | 3,000, 2,916: agrees 2,898, `narrow-c` 18, `void-return` 72, `void-return-lent` 12 |
+| 75 delaybr | delayed branches with working slots (`bf/s` closing a counted loop, forward `bt/s` and `bf/s` with T consumers in the slot, two chained delayed branches) | in situ only (200): agrees |
+| 76 condprop | one condition read by several branches with T-preserving code between (`ConditionalExecution`), `x == c` with x used in the true arm, chains of equality tests, forms for `RuleOrPredicate` | in situ only (200): agrees |
+| 77 multiword | 96- and 128-bit values in r4..r7 (a constant added through the carries, added to itself, negated, a rotated copy subtracted, the borrow as a compare, shifted through T) | in situ only (200): agrees |
+| 78 randprog | a random structured program over r0 and r1: arithmetic, triangles, diamonds and bounded loops up to three levels deep on random compares | 5,800 (seeds 3,100,001 on) and 39,800 (3,300,001 on) + 200: agrees 45,784, `narrow-c` 12, **`undecompiled` 2 (A2-93), `mismatch` 1 (A2-96), `crashed` 1 (A2-97)** |
+
+The `void-return` classes are the documented A2-34 trade-off (a result left in r0 by a loop with a `nop` slot prints `return;`): the families use the `mov Rx,r0` slot wherever the result is compared.
+
+### 5. The rules round 13's table calls cleared with a weak verdict
+
+Round 13's table rates a rule 'not arithmetic: it moves or removes ops' where the in-situ check could not value it, and lists rules with no run at all. The whole-function checker values them; applications over the 14,840 functions of section 3 (cone check: applications, roots compared, wrong; whole-function check: applications, observations, wrong):
+
+| Rule | Cone check (applications, roots, wrong) | Whole-function check (applications, observations, wrong) | Verdict |
+|---|---|---|---|
+| `RuleEarlyRemoval` | 648,920, 517,808 (275,254 uncompared), 0 | 648,920, 3,825,182, 0 (68,338 unsupported: a free varnode) | cleared |
+| `RulePropagateCopy` | 387,978, 968,258, 0 | 387,978, 2,300,040, 0 | cleared |
+| `RuleSelectCse` | 1,736, 6,460, 0 | 1,736, 10,056, 0 | cleared |
+| `RulePullsubMulti` | 194, 588, 0 | 194, 1,154, 0 | cleared; `RulePullsubIndirect` never applied on SH-2 code |
+| `RulePushMulti` | 1,928, uncompared | 1,928, 11,568, 0 | cleared |
+| `RuleMultiCollapse` | 918, uncompared | 918, 5,504, 0 | cleared |
+| `RuleLoadVarnode` | 21,898, uncompared | 21,898, 126,408, 0 | cleared (4,980 loads through a pointer not valued) |
+| `RuleCondNegate` | 6,098, uncompared | 6,098, 36,588, 0 | cleared |
+| `RuleConditionalMove` | 632, uncompared | 632, 3,504, 0 | cleared |
+| `RuleSignMod2nOpt`, `RuleSignMod2Opt` | 156 and 188, 468 and 376, 0 | 156 and 188, 936 and 1,128, 0 | cleared |
+| `RuleSignMod2nOpt2` | exempt | 70, 420, 0 on the corpus of families | **A2-92** (the 70 applications are on a test of V; the defect needs another register) |
+| `RuleOrPredicate` | exempt | 40, 240, 0 | cleared |
+| `RuleThreeWayCompare` | 346, 1,384, 0 | 346, 2,076, 0 | the SH-2 side agrees; A2-94 is the 8-byte unsigned case |
+| `RuleDivChain`, `RuleSignForm`, `RuleSignDiv2`, `RuleDivOpt`, `RuleDivTermAdd`, `RuleDivTermAdd2`, `RuleModOpt`, `RulePositiveDiv`, `RuleSignNearMult` | 428 / 266 / 142 / 3,206 / 288 / 444 / 484 / 526 / 208 | the same, 0 wrong in each | cleared |
+| `RuleStoreVarnode`, `RulePtrArith`, `RulePtrFlow` | 1,630 and 40 applied, not valued | memory and pointers are not run | left to areas 3, 5 and 7 (the generator, the corpora and the conservation oracle cover them) |
+| `RuleSplitFlow`, `RulePieceStructure`, `RuleDoubleOut`, `RuleAliasUpdate`, `RulePullsubIndirect`, `RuleSborrow`, `RuleScarry`, `RuleCarryElim`, `RuleTransformCpool` | never applied | never applied | no SH-2 code reaches them (the spec builds no INT_CARRY, INT_SCARRY or INT_SBORROW; the by-value runs of round 13 and 14 find the arithmetic ones right) |
+
+### 6. The generator beyond the nightly range
+
+`genranges14.sh`, chunks of 5,000 seeds, 20 minutes at most each, `.done` markers:
+
+| Run | Result |
+|---|---|
+| grammar 2, `SE_GENERATED_FIRST=2600001`, 20,000 seeds (four runs: 231, 197, 215, 174 s) | **1 failing seed, 2616394** (`n:claim-wrong:storesThrough`: area 3's, routed, section 8); the other 19,999 clean |
+| grammar 1, `SE_GENERATED_FIRST=2600001`, 10,000 seeds (118, 141 s) | 0 failing seeds |
+| printed-C differential, `SE_GENERATED_FIRST=2600001`, 15,000 seeds (three runs: 222, 203, 197 s) | **1 finding, seed 2604765 #0 (A2-95, an oracle row)**; 18,302 functions, 16,883 compared, 0 other findings |
+| decode oracle with `SE_MEDNAFEN_SS`, seeds 71230451 and 40916227 (new; `SE_DECODE_CASES=100000`) | 26,000,000 differential executions: 0 differ, 0 could not run, 0 of 130 forms fail, 18 named shapes 0 differ; SLEIGH defines 53,752 words, 0 disagreements with Mednafen |
+
+### 7. The rows
+
+* **A2-92 (P2)**, `RuleSignMod2nOpt2` prints `x % 2^n` for a bias steered by the sign of another register (section 3). The fix is one test, `lessOp->getIn(0) == base`, in `checkMultiequalForm`; checked on a scratch object: the fixture and 300 functions of family 73 agree, the same-register form still prints `%`, and the printed texts of the two images do not change.
+* **A2-93 (P3)**, the engine fails a whole function (`Could not finish collapsing block structure`): a 15-instruction fixture; 2 of 45,800 functions of family 78.
+* **A2-94 (P3, latent)**, `RuleThreeWayCompare`: the neighbour test wraps for 8-byte unsigned constants 0 and 2^64 - 1 (592 of 3 million seeds of `edge14`).
+* **A2-95, A2-96, A2-98 (P3, oracle)**: the harness reads a wide and a narrow name of one stack offset as two variables (a right text is a `mismatch`); the engine's reading evaluates both operands of `&&` and `||` (a right text with an assignment in the right operand is a `mismatch` instead of `narrow-c`); the harness runs the compiled text with no time limit (a text that does not end hangs the generator job).
+* **A2-97 (P2)**, an endless loop in the text of a function without one (the structure of a diamond whose join is a loop header, with the entry T bit tested twice): the 21-word fixture; 1 of 45,800 functions of family 78. Not isolated further; the whole-function check finds nothing in the data flow.
+* **A2-99 (P3, masked in the corpora)**, `RuleShiftSub` rewrites `sub(V << 8k, c)` without testing that the original read lies inside the shifted value: 12 wrong samples in the one application per image in the two images (the `-O0` byte-copy function, `060228B4` and `06061D90`); the printed text of that function is wrong for another reason (section 8) and does not change under the fix (`if (c + outsize > insize) return 0;` before `c -= n/8;`; 839 and 1,554 texts compared, 0 differ).
+* **A2-100 (P3, closed here)**, the instrument row: the tools of the round.
+
+### 8. Routed
+
+* Grammar 2 seed **2616394**: `[n:claim-wrong:storesThrough] [function 0 at 06009010] a run stores at 06020011, in the arena of r4, and storesThrough names neither that register nor memory`. Replay: `SE_GENERATED_GRAMMAR=2 SE_GENERATED_SEED=2616394 build/bin/SaturnExplorerSh2GeneratedTests <scratch>`; reproduces alone on `8cf615b`. Area 3's claims (A3-54, A3-63, A3-93; not among A3-104 to A3-115).
+* **The `-O0` byte-copy function of both images prints 6 of its 8 byte stores.** `060228B4` of hwram007 and `06061D90` of hwram008: a struct built on the frame byte by byte through a pointer kept in a frame slot (`mov r14,r1 ; add #12,r1 ; mov.l r1,@(5,r14)` and `mov.l @(5,r14),r1 ; mov.b r2,@r1` eight times) and passed to a call; the text keeps `uStack_10 = (uint4)(uint1)param_2[4];` and `uStack_c = (uint4)(uint1)param_2[5];` and drops the 0x42, the low byte of `param_1` and the bytes of `param_2[0..3]` (they print as unused loads, `xVar1 = param_2[1];`), with no warning. Replay: `SE_GAME_HWRAM=<hwram007.bin> SE_GAME_ONLY=60228B4 build/bin/SaturnExplorerSh2DecompilerTests <scratch>` (and `SE_GAME_HWRAM=<hwram008.bin> SE_GAME_ONLY=6061D90`). The same engine behaviour on a function the generator can run: `SE_GENERATED_PRINTEDC=only SE_GENERATED_PRINTEDC_WORDS="2F86 2FE6 4F22 7FE8 6EF3 2E42 1E51 61E3 710C 1E15 51E5 E200 2122 51E5 E200 1121 51E5 E242 2120 51E5 6213 7101 6253 2120 51E5 6213 7102 6263 2120 51E5 6213 7103 6273 2120 51E5 6213 7104 62E3 63E3 7303 6230 2120 51E5 6213 7105 6353 2130 51E5 6213 7106 6263 2120 51E5 6213 7107 6273 2120 51E5 6513 6052 5151 7E18 6FE3 4F26 6EF6 68F6 000B 0009"`: `mismatch (f0 r4=00000000 r5=80000001 r6=000000FF r7=FF7FFFFF size=8 run=4201FFFF:0001FFFF pseudo=00000000:00000000)`, text `return CONCAT44(xStack_18,xStack_14);` with the warnings `Heritage AFTER dead removal` and `Restarted to delay deadcode elimination for space: stack`. The record of an earlier round names the function (the section on dead flow loads: "four of its six byte reads through `param_2` ended dead and the output shows two ... the next input for area 5, and a ledger row") and no row holds it. Area 3's frame-escape rows are about reads after a call (A3-104 to A3-106); this is the stores before it. I record no row for it (not area 2's).
+* Nothing for A3-104 to A3-115 (with the area 3 fixer) or A5-87; none of the 15,000 printed-C seeds or the 20,000 grammar-2 seeds otherwise fails.
+
+### 9. Not done, and limits
+
+* Families 23, 68 and 72 do not finish under the checks (the whole-function check at 40 functions: more than 15 minutes); they ran through the printed-C differential alone (3,000 each from seed 3,100,001 for 68 and 72, round 11's runs for 23), clean.
+* The whole-function check ran on the first image's rules only (leaf actions on, or the second image, with the cone check also on: more than 19 minutes, stopped); the second image ran under the cone check only.
+* `RuleDivOpt` is enumerated at 1, 2 and 4 bytes over the structured lists of constants, not over every constant of 2 and 4 bytes; 8-byte numerands are covered by `rulefuzz14` and `edge14` only. The old head was run on the first four of ten 2-byte chunks and all four 4-byte chunks.
+* The memory and pointer rules are not valued by either checker.
+* A2-97 and A2-93 are structure failures; the cause of neither was determined. The cone and whole-function checkers are blind to the structuring (after the last action the basic blocks are unchanged).
+* Everything above ran on a loaded machine (load up to 6.6 on four cores), so no timing in this section is a measurement.
+
+## Area 3, round 14 fix
+
+Fixer, branch `review/3-round14-fix`, on the coordinator's head `76a43f0`. Code commits `63d40b6` to `cc83a0c` (engine patch `0066`, the host, the generator stream and oracle, the pins, the fault re-pins), then the ledger, the patch docs and this record. Own RelWithDebInfo build under the scratch directory, `-j2`, every run under `ulimit -v 4000000` with a timeout, one heavy job at a time. The container did not restart; every long run was a resumable piece.
+
+**The rows.**
+
+- Fixed: A3-118, A3-119 (P1); A3-117, A3-120, A3-122 (P2); A3-121 (P3, the instrument); A3-123 (routed P2, triaged to a P3 oracle false positive); A3-126 (found this round, P1).
+- Open, not fixed, with a reason in the row: A3-124 (routed P1). It is not the inexact-frame-address class: its pointer is an exact constant offset from r14, which patch 0066 deliberately does not escape, and the dead stores drop even in the printed-C copy that makes no call, so there is no escape to hang the rule on. It is a subword dead-store-elimination bug on a stack struct built through a reloaded exact frame pointer -- a distinct heritage/mixed-width class that needs its own fix. Left open for a dedicated round (the status cell says so).
+- The coordinator's numbering note was honoured: the one new wrong value I found is **A3-126** (A3-123 to A3-125 are the coordinator's).
+
+### 1. The design
+
+Since round 9, area 3's step-down detection recognised the walk below a frame address by its **form**: a constant add then a conditional step (0057), a spill (0060), an index (A3-116/0065), and the review's new non-constant strides (A3-118, A3-119). Each pattern list failed open on the next shape. This round stops recognising walks.
+
+**Engine, patch `0066-engine-frame-escape-inexact.patch` (amends 0056 to 0065).** A frame address the stack analysis cannot place as an **exact compile-time constant offset from the frame base** now *escapes*, using 0065's whole-frame alias. `FrameEscape::classifyExact` runs over the possible frame addresses by strongly-connected component (Tarjan, iterative) and gives each one of:
+
+- **an exact offset** -- the stack pointer's input, or a value built from one by copy, INDIRECT, addition or subtraction of a constant, PTRSUB, PTRADD of constants, or a join whose inputs all have the same exact offset;
+- **"up only from an offset"** -- a value a loop carries whose every step on the loop adds a constant that is not negative, entered with exact or up values (it is at or above the loop's lowest entry, which is then aliased);
+- **none** -- anything else: a register or an index added or subtracted, a stride loaded from a pool, a frame slot or a global, a join of two different offsets, a loop with a negative step or a step that is no constant, or a value whose inputs have none. A component too large to follow (4,096 members) gets none, failing closed.
+
+An access through a member with no exact offset, or a call it is handed to, makes the frame escape; the access's own guard is widened to the whole stack space (`Heritage::widenEscapedStoreGuards`, now for LOAD guards as well as STORE guards). A3-118 (an index a loop steps), A3-119 (a register stride the value-set analysis cannot read) and A3-126 (a loop-stepped index walking up from a negative start) are all this one cause.
+
+**The pattern detectors are demoted to precision helpers that may only add aliasing, never remove it:**
+
+- `AliasChecker::stepsDown` takes an `atCap` argument and returns it at its 4,096-value and 65,536-op bounds, where it used to `return false` ("no walk") -- the A3-122 bug class, a cap answering "no walk" and failing open. The callers that widen an alias pass `true` (fail closed); `ActionInputPrototype`'s stack-parameter check passes `false` (a cap there keeps a parameter reference).
+- `LoadGuard::pointerSteppedDown` returns `true` at its 64-hop bound.
+- `reachesStepDown` is unchanged (it already failed closed at 1,024).
+
+These still add the 0xffff-below guard where they recognise a walk, but the escape now catches whatever they miss, so no shape fails open.
+
+**A3-117 (host, `fspec.cc`).** The words at an unlent call's r15 that the engine prints as the call's fifth and later stack arguments are unmapped (`markNotMapped`), so 0065's whole-frame alias, which aliases Symbols, never reached them: a callee that wrote one through an escaped pointer, read back after the call, printed the value stored before (`xVar2 = 1; ...; return xVar2;` for 0x55). Now `FuncCallSpecs::buildInputFromTrials` skips `markNotMapped` for a stack-argument word when a frame address of the calling function has escaped (`FrameEscape::escaped`): the word stays a mapped local the whole-frame alias covers, and the read after the call is a read of the local.
+
+**A3-120 (host, the notes).** A frame-fact note said "is" of a word or register the host only proves *possible*. The probe now carries `Value::Sure` -- a frame address made from r15 by the function's own register operations and held there on every path, not a value a callee may have written over a slot and not a load taken for a possible frame address once the frame went out. A note says "a frame address is in ..." only when the bit it reports is `Sure`, and "a frame address may be in ..." otherwise (`kFrameEscapeNoteMay*`). R14-16e (nothing writes a frame address anywhere) now says "may"; R13-2a (the function itself stored the address in the word) keeps "is".
+
+**A3-121 (generator, the instrument).** `GenWalk14Fn` (one seed in eight, a stream of its own) draws: loop-stepped index walks down (`@(r0,p)` with r0 counting down, `p - i`, a scaled index, the index in r0 over r14) and up from a negative start; register strides from a pool long or halfword, a frame reload or a global, added or subtracted, over a constant or an unbounded base; the stack-argument word a callee keeps and writes (A3-117's frame, r6/r7/r6r7 set so the call shows a stack argument), with the caller walking down from the kept pointer or the callee writing its own first stack-argument word; and a loop body of 4,100 to 4,300 stores through the pointer that passes the cap (A3-122). `CheckLaunderWalks` now resolves a returned temporary written exactly once with a constant, so A3-117's `return xVar2;` is compared against the run instead of being dropped as "a local" -- round 13's oracle counted such a text as a local and never read it. 44 shape kinds are pinned in `TestA365Pins`.
+
+**A3-123 (triage, the generator oracle).** Grammar 2 seed 2616394, `n:claim-wrong:storesThrough`: function 0 byte-swaps r5's start 0x06021100 to 0x06020011 and hands it to a callee that stores a byte through it. 0x06020011 lands in r4's 4 KiB arena by chance, and the `storesThrough` arena check attributed the store to r4, which `storesThrough` does not name (the store is through r5). This is the oracle false positive of A3-100 and A3-115, in the `storesThrough` path rather than `outOrigins`; those two added a `BitwiseOfOthers` guard to `PointerRegister`, and the `storesThrough` arena check lacked it. The guard is added there; the seed is clean. P3 (an oracle false positive, no wrong engine output).
+
+With each fix reverted, the generator alone fails seeds (section 3). The 59 fuzz fixtures the old oracle rejected unread (escfuzz.py seed 301): 56 are A3-117 (a text returning a frame register variable at a call that shows a stack argument), and 3 are the caller index walks (A3-118); `escsum14.py` counts both, and on the fixed tree there are 0 of either (section 4).
+
+### 2. The engine's determinism
+
+`classifyExact` first broke the allocation-failure matrix: its temporaries (the `std::map`/`std::set` keyed by `Varnode *`) were built in the pointer order of the member set, so the *sequence* of allocations in a decompile depended on where the allocator had placed each Varnode, and six fault fixtures' counts did not settle between two runs of one function (the decompiled text was identical; only the allocation order moved). It now takes the members in **creation-index order** (`Varnode::getCreateIndex`) for the component walk and emits the inexact set in that order, so the allocation sequence is reproducible. Eight area-6 fault pins then reported `MOVED` (0066 adds allocations ahead of them); each was re-pinned to the ordinal the harness printed (`fixture1` A6-10 x2 -> 84; `stack` A6-14 x6). The fault suite is 0 of 94 (section 4).
+
+### 3. Mutation
+
+Each part reverted alone in the worktree (`mut/apply.py <name>`), built, run, and restored (`git checkout SaturnExplorer/FrontEnd`). The checks: the decompiler suite's round-14 pins; printed-C seeds 1 to 3,000 (the `walk14.*` streams); the generator's default pins; escfuzz14 seed 1101 (600 fixtures); hbfuzz14 seed 1 (300). Restored, every check passes.
+
+| Part reverted | Suite pins failing | Printed-C 3000 (failing shapes) | escfuzz14 (600) | Reading |
+|---|---|---|---|---|
+| E_inexact: `classifyExact` marks no member inexact | 31 (R14-2a to 2e, 2f, R14-11, R14-14) | all `walk14.idx.*` and `walk14.stride.*` (~260) | 0 new in seed 1101 (the index walkers are rare in one 600-fixture seed; the printed-C stream is the decisive signal) | held: the whole inexact-escape |
+| E_inexact + E_cap together | 31 | the above and `walk14.cap` | | held: the cap pair is load-bearing |
+| E_stackarg: the stack-argument word is unmapped again | 8 (R14-7b to 7e, and the controls stay) | `walk14.stackarg.*.walk` (73) | +18 `REG-var stackarg-shown` (A3-117) | held |
+| H_sure: a note always says "is" | 2 (R14-16e) | 0 | 0 | held (notes, not values) |
+| E_loadguard: LOAD guards not widened for an inexact pointer | 0 | 0 | 0 | redundant fail-closed guard (the store guard and the whole-frame alias cover the fixtures); kept |
+| E_cap: `stepsDown` returns false at its bound | 0 | 0 | 0 | redundant given E_inexact (the cap walk is also inexact); kept as the fail-closed answer the brief requires; load-bearing only with E_inexact also reverted |
+| E_hops: `pointerSteppedDown` returns false at 64 hops | 0 | 0 | 0 | redundant (an exact chain stays exact); kept |
+| E_uplows: a loop that steps up only is not aliased from its entry | 0 | 0 | 0 | redundant (the whole-frame alias from the floor covers it); kept |
+
+Each P1/P2 fix reverted as a whole (E_inexact, E_stackarg) fails the pins and the generator; H_sure fails the note pins. The redundant parts are fail-closed guards the brief asked for ("every cap must fail closed"); each is kept.
+
+The A3-123 oracle pin and the A3-115 pin in `TestRound13FixPins` were run with the `BitwiseOfOthers` guard reverted (not in the mutation script above): the A3-123 seed fails again and the pin's synthetic case reports `claim-wrong:storesThrough`; restored, both pass.
+
+### 4. Matrix
+
+On the final tree (`cc83a0c`), own RelWithDebInfo build, `-j2`, every binary under `ulimit -v 4000000`, one heavy job at a time, runs split into pieces of 20 minutes or less with a `.done` per piece:
+
+| Run | Result |
+|---|---|
+| `ctest -E SaturnExplorerLive -j2 --timeout 900` | 94 of 94 pass (166 s) |
+| fault suite (`SaturnExplorerDecompilerFaultTests` alone) | 0 of 94 jobs failed (77 s); 8 MOVED pins re-pinned as printed (section 2) |
+| generator grammar 2, seeds 1-3,000 | 0 failing |
+| generator grammar 1, seeds 1-1,000 | 0 failing |
+| generator printed-C, seeds 1-3,000 | 0 failing (laundered/escape walks 2,951; the `walk14.*` stream drawn, each shape compared) |
+| generator seeds 1-20,000 (four runs of 5,000) | 0 failing |
+| generator grammar 2, 2,700,001-2,720,000 (four runs of 5,000) | 0 failing |
+| generator specials, 2,800,001-2,805,000 | 0 failing |
+| `TestArea3HiddenInputFuzz`, `SE_A3FUZZ_PROGRAMS=5000`, seeds 12 and 13 | 1,176 and 1,172 lent, 15,288 and 15,236 perturbed runs, 0 findings |
+| `escfuzz14.py` seeds 1101-1110 (15,000 fixtures) | 81 stale constants, every one the T bit (A3-95, accepted); 0 `REG-var stackarg-shown` (A3-117), 0 `idxdown`/`subidx` (A3-118) |
+| `hbfuzz14.py` seeds 1-6 (4,200 fixtures) | 333 stale, every one the T bit; g never lent |
+| every `a3_round11/*.src`, `a3_round12/*.src`, `a3_round13/*.src`, `a3_round14/*.src` through the driver | 315 fixtures; each right or withheld, but S1 (`r12a.src`, A3-9's accepted convention), T1 (`r12q.src`, A3-95), and the A3-107 shapes (R14-9f `trapa`, D4, S7, V1, S4a) which stay accepted |
+| corpora (`SE_GAME_HWRAM=<img> SE_GAME_LEND=1`) | section 5 |
+| vendoring: `python3 -I vendor.py <ghidra>` on a copy | exit 0, "vendored 84 library sources, 3 compiler sources, 94 headers, 5 spec files", 0066 applied, the tree identical to the committed one |
+
+The review's fixtures R14-2a to 2e (index walks down), R14-11 and R14-14 (register strides), R14-7b to 7e (the stack-argument word), R14-18 N=4,100 to 4,300 (the cap), and R14-16e (the note) all print the local or "may" now; R14-2f (A3-126) too.
+
+### 5. The corpora
+
+`SE_GAME_HWRAM=<img> SE_GAME_LEND=1 SaturnExplorerSh2DecompilerTests <dir>`, the final tree against `76a43f0` (the base built from `git archive 76a43f0` beside it, one run each):
+
+| | hwram007 | hwram008 |
+|---|---|---|
+| lent signatures (parameters), base `76a43f0` | 678 (956) | 1,038 (1,310) |
+| lent signatures (parameters), this round | 678 (956) | 1,038 (1,310) |
+| ...real entries | 474 (645) of 999 | 724 (975) of 1,543 |
+| ...fragments | 204 (311) of 731 | 314 (335) of 1,452 |
+| a lent status that changed against the base | none | none |
+| texts changed, real entries | 53 of 999: 16 beyond notes, 37 by notes only | 83 of 1,543: 31 beyond notes, 52 by notes only |
+| `TestGameCode` | 12.8 s (base 10.7 s, 1.20x); 108 real entries, 731 fragments | 35.7 s (base 34.2 s, 1.05x); 102 and 1,452 |
+| every ledger count / missing and said / mapping violations | 0 / 0 / 0 | 0 / 4 / 0 |
+
+Lending is unchanged on both corpora: more aliasing keeps more locals live but lends no new signature and withdraws none (the escape widens aliasing, which the lending trial does not read since 0063's `trialBoundary`). The 47 beyond-notes changes on real entries were checked mechanically by `facts14.py`: the multiset of calls and every returned expression are equal in all of them (one variable renamed in `0602F118`/`0606E08C`). 15 were read against the disassembly (`drv --dis`):
+
+- **An unused frame array declared as plain locals** (007 06006D14, 0600D6AC, 06027420; 008 0600DB78, 0603A584, 0603ADC8, 0603CE58): the whole-frame alias now keeps the locals under an escaped address aliased, so the engine lays them out as named words/pointers instead of one `axStackY_90 [128]`. 06006D14: `mov r15,r14` prologue, `xStack_10 = 0` then `func_0x06019a48(2,0xc,5,0x604e8a0,0)` -- the call's fifth argument is the word at its r15, a saved-register note; the value is right.
+- **A stack argument read at its use** instead of copied before the call (007 0600C4E8; 008 06045EB4, 0603BBE4): 06045EB4 stores `0xe`/`0xf` to the word at the call's r15 and passes it; the code's `mov.l r1,@-r15` before the `jsr` writes exactly that word; same value.
+- **A pointer kept across calls declared as a local** (007 0601C4F0, 0602F118; 008 060574C8, 0605E900, 0606E08C): 0601C4F0 keeps `&uStack_1c` through `func_0x0601c2f4(...,&uStack_1c)`; 0602F118 reads `*(param_1 + 0x88)` into `pcStack_14` and calls through it -- the call multiset is identical.
+- **A spill or struct field kept** (007 06008CC0, 060329C8; 008 0600D54C, 0603D358, 06041AA0, 060331B4): 060331B4 spills `param_4`/`param_5` to `iStack_14`/`uStack_10` and passes them, the code reading `@(0xc,r14)` and the halfword; 06041AA0 reads `param_1` back from `iStack_44` where the prologue spilled it (`mov.l r4,@(0x30,r14)`); same values.
+- **A frame-fact note changed to "may"** (007 0601B914; 008 06042BBC): no instruction of these functions or their callees writes a frame address at the slot the note names (A3-120). The text is right either way; only the note's wording changed.
+
+The reading found no wrong value. The one note over-claim the review flagged (06042BBC r2, 0601B914 stack-argument) now says "may".
+
+### 6. Not done, and limits
+
+- A3-124 (routed P1) is open: it is a subword dead-store bug on a reloaded exact frame pointer, outside the inexact-escape class patch 0066 fixes (its pointer is an exact offset the design does not escape, and the stores drop with no call). It needs its own round.
+- The T-bit family (A3-95) stays accepted; the new strides and launderings add no cheaper sound rule.
+- The A3-107 shapes (a callee the probe cannot name writes the caller's word through its own r15, including `trapa`'s exception frame) stay accepted.
+- The redundant fail-closed guards (E_loadguard, E_cap, E_hops, E_uplows) are kept though reverting each alone fails nothing; each is a bound the brief required to fail closed.
+- Patches 0064 and 0065 are on the base; 0066 touches `coreaction.cc`, `fspec.cc`, `heritage.cc/.hh` and `varmap.cc/.hh`.
+
+## Area 2, round 14 fix
+
+Fixer, branch `review/2-round14-fix`, on `00aa42e`. Rows **A2-92 to A2-99 are fixed** (the two P2, A2-92 and A2-97, and the six P3); no row is accepted. **One new patch, 0067** (`0067-engine-round14-sign-mod-late-donothing-three-way-shift-sub.patch`: `ruleaction.cc` and `coreaction.cc`), pinned in the engine test and in the printed-C pins; the harness rows (A2-95, A2-96, A2-98) are test-file changes. The printed text of neither game image changes (839 and 1,554 functions, and the lent-prototype texts of the second pass: identical files). No new wrong printed value was found (one oracle regression of my own, section 3, was found by the sweeps and fixed before the commit that the rows cite). Commits: `a277e53` (engine edits and engine pins), `a1fd648` (A2-95, A2-98, printed-C pins), `0add2cb`, `867ba7c` (patch 0067, `patches/README.md`, `VENDOR.md`), `12cfca2` (A2-96 as a rewriting).
+
+### 1. A2-92: the condition, and the siblings
+
+The test is `lessOp->getIn(0) != base` in `RuleSignMod2nOpt2::checkMultiequalForm`, after the checks that the compare is `W s< 0`. **It is the complete condition.** The rule has five facts to establish for `V - (((W s< 0) ? V + (2^n - 1) : V) & ~(2^n - 1))`: the plain arm of the MULTIEQUAL is V (`otherBase == base`), the biased arm is `V + (2^n - 1)` of that same V (the ADD's input 0 is `base`), the join is reached from the decision block directly and through the one-in-one-out arm (`bl->getIn(1 - innerSlot) == decision`), the arm taken for `W s< 0` is the biased one (`negSlot == slot`, the flip flag included), and the final ADD adds V (`getIn(1 - slot) == base` in `applyOp`). W was the one value left free, and a different varnode that holds V's value is not a loss: after copy propagation the compare reads V itself (the same-register form still prints `param_1 % 4`, 300 functions of family 73 form 8 and the 839 and 1,554 texts show no refusal that mattered). Fixture `6043 6143 4511 8900 7103 D202 2129 3018 000B 0009 FFFF FFFC`: `mismatch` before, `agrees` after.
+
+**Family 73 form 8** (`python3 -I tools/a2_round14/dagen14.py 3000001 300 73` through the printed-C differential): **300 of 300 agree** (270 agreed and 30 were `mismatch` on `00aa42e`).
+
+**The sibling rules** (`RuleSignMod2nOpt`, `RuleSignMod2Opt`, `RuleSignDiv2`), read for the same missing identity: each ties the sign it reads to the value it rewrites. `RuleSignMod2nOpt` takes `a` from the sign extraction of its own shift and requires `a == vn` in the ADD (`aSlot` loop) and `a == extVn` for the shifted sign; `RuleSignMod2Opt` requires `base == otherBase`, or a SUBPIECE of the high part of it; `RuleSignDiv2` requires `a == addop->getIn(1 - i)`. Checked by construction (`TestSignModIdentityRound14`, the second part: each rule on the shape with the sign of a second register: all refuse, and all rewrite when the register is the same) and by value: `dagen14.py` family 73 form 8 now has three more variants (the sign of another register in the shapes of forms 5 to 7), 600 functions from seed 3,000,001 through the printed-C differential: 600 agree. No sibling needed a change.
+
+### 2. A2-97 and A2-93: one root cause, in upstream's `ActionLateDoNothing`
+
+The dump (a scratch copy of `blockaction.cc` printing the block graph before the structuring and after every rule that applied; not committed) of the 21-word fixture. The graph given to the last `CollapseStructure` (6 blocks; the earlier passes, with 12, 10, 9 and 8 blocks, are right):
+
+```
+[0] block 0 (0x06009000, bt: T != 1)        out: 2 1
+[1] block 1 (0x06009004, bt: T == 1)        in: 0   out: 2 2        <- both edges to block 2
+[2] block 2 (0x06009012, the loop header)   in: 0 4 1 1  out: 4 3
+...
+after collapseConditions:   Condition block(||) 0   in: 0   out: 2 0(back)      <- an edge to itself
+after ruleBlockDoWhile:     Dowhile block 0         (the empty do { } while)
+```
+
+Block 1 is a branch whose two arms were empty blocks (`shll r0` and `add r0,r0`, dead once the constant `bf` was decided and the sum unused) that **both** were removed. The cause is in `ActionLateDoNothing::apply` (`coreaction.cc`, run just before the last structuring): it tests `removingCreatesRedundancy(bb)` (would removing this block leave a branch with both edges to one block?) for every block of the list **against the graph before any block of the list is removed**; each arm of the branch passes, because the other arm still stands between, and then both are removed. A CBRANCH with both edges to one block is what `ActionRedundBranch` removes, but it runs earlier in the main loop, never after the late removal. `CollapseStructure::collapseConditions` then merges the branch (`ruleBlockOr`: its other exit is the clause) with the branch before it into a `BlockCondition`: `BlockGraph::selfIdentify` deduplicates the identical out edges to one, and `forceOutputNum(2)` ("all conditions must have two outputs") gives the block a second out edge **to itself** (`addInEdge(this, f_loop_edge | f_back_edge)`). That self edge is structured as `do { } while (c1 || c2)`: the endless loop of A2-97. When the branch cannot be merged (the A2-93 fixture: the 4-block graph has block 1 with both edges to the exit block 3 and block 0's other exit going to block 2, which reaches 3 as well: `ruleBlockOr` finds no clause shared with the branch's exits), no rule takes the degenerate pair of edges and `selectGoto` ends in `Could not finish collapsing block structure` (status 3): **A2-93 is the same defect**, the reviewer's 'why the structurer fails was not determined' answered. The data flow was never wrong (the whole-function checker was right to find nothing): the failure is the control-flow graph after the last block removal.
+
+The fix is in the engine (0067), in the removal: each block is tested again, live, just before it is removed (`isDoNothing()`, `removingCreatesRedundancy`, `unblockedMulti(0)`), so the second arm of a branch whose first arm has gone stays, an empty `if`, which is what any `nop` in the place of one of the instructions gave the reviewer. The fixtures: A2-97 prints `if (((in_sr & 1) != 1) && ((in_sr & 1) != 1)) { }` and then the real loop, and agrees (on the 6 inputs whose runs the emulator finishes); A2-93 prints `if ((in_sr & 1) == 1) { if (in_r0 == -0x80) { } } else { in_r1 = in_r1 + param_2; }` and agrees. The fix does not change any of the 2,393 printed texts of the images, nor the lent ones. It was **not** a matter for area 4's structuring: `blockaction.cc` is unchanged, and so is `selfIdentify`'s deduplication (upstream; the degenerate branch it was never meant to see is no longer made). A defence in `ruleBlockOr` (refuse an `orblock` whose two exits are equal) was considered and left out: it would turn the endless loop into the A2-93 failure on a graph the late removal no longer makes.
+
+### 3. The P3 rows
+
+* **A2-94 (`RuleThreeWayCompare`)**: `testCompareEquivalence` now refuses an unsigned pair whose smaller constant is the largest value of the width (`unsignedMax`), as the signed pair is refused at INT_MAX; only 8 bytes can wrap the 64-bit `uintb` (sizes 1, 2 and 4 cannot reach a neighbour of their own maximum). `edge14 <scratch> threeway 704 1 out` no longer reports seed 704.
+* **A2-99 (`RuleShiftSub`)**: `if (c + outsize > insize) return 0;` before `c -= n/8;` is right: for a well-formed SUBPIECE it is always true (`c + outsize <= insize` is what makes the op valid), so it refuses only the ill-formed read past the top of the shifted value, whose bytes above the top are zeros while the rewritten read of V reads its bytes. It is a `no printed effect` fix, as the row said.
+* **A2-95 (harness)**: the text writes `_xStack_4 = CONCAT13(...)` and reads `xStack_4`, declared `xunknown2` beside `xunknown2 xStack_2`: the high half and the low half of the write, the stack being big-endian. `StackAliasUnions` declares the wide name and every narrower local inside its bytes as members of one union (members laid out so the first bytes are the high ones on the little-endian host, a `uint8_t pad[]` before a member that is not at the end; in the C++ reading the union has a constructor, and `uint8_t` because the reading defines `char` as a class); the names are macros for the members and their declarations are removed. A name whose pieces are of no known size or not on their own alignment, and the frame mode (the names are memory of the frame there), keep the old declaration.
+* **A2-96 (harness)**: the engine's reading overloaded `&&` and `||`, which evaluates both operands in C++. The text is now rewritten for that reading (`ShortCircuitOps`): every `a && b` and `a || b` of one nesting level becomes `LAND(a, b)` / `LOR(a, b)` (`||` outside `&&`, left to right, `,` `?` `:` and assignment ending an operand, parentheses, comments and constants respected), macros that evaluate the right operand only when the left does not decide and give the four-byte unsigned `Bool4` every other logical operator gives. **A first version** removed the overloads and let the built-in `&&` give a plain `bool`; that made `(a && b) - 1 >> 1` a signed `-1 >> 1` and the sweep of family 74 reported it at once (seed 3,601,817: `mismatch`, `run=7FFFFFFF pseudo=FFFFFFFF`), which is neither an engine defect nor A2-101 but an oracle regression of mine; the rewriting replaced it before any commit that the rows cite, and the function is the pin `A2-96 (arithmetic)`.
+* **A2-98 (harness)**: the compiled text sets its own `RLIMIT_CPU` (`SE_GENERATED_PRINTEDC_TIMEOUT` seconds, default 30; the system headers of the guard come before the reading's own typedefs), catches `SIGXCPU`, writes `TIMEOUT` and exits 124. A batch that does not finish is run function by function as before, and a function that times out is class **`timeout`** (a finding: `IsFailing`), the rest of its batch kept. The A2-97 fixture on `00aa42e` with a 5 s limit: `timeout`, the text printed, 10 s for the batch and the single run.
+
+### 4. Mutation check
+
+Each fix reverted alone (the engine ones as scratch objects of `ruleaction.cc` or `coreaction.cc` relinked into the two test programs; the harness ones as a source edit), its pin run, the fix restored:
+
+| Fix reverted | Pin that fails | How it fails |
+|---|---|---|
+| A2-92, `lessOp->getIn(0) != base` removed | `TestSignModIdentityRound14` (engine tests); printed-C pin `A2-92` | 40 CHECKs (the 20 graphs with the sign of another register are rewritten: `res == 0` and `code == INT_ADD` fail); `mismatch (r4 = 00000001 r5 = FFFFFFFE run = FFFFFFFD pseudo = 00000001)` |
+| A2-93 and A2-97, the live test in `ActionLateDoNothing` removed | printed-C pins `A2-97`, `A2-93` | `A2-97`: class `timeout` (30 s of CPU, the A2-98 limit at work), `A2-93`: `undecompiled (status 3)`; the engine tests pass (they do not pin it) |
+| A2-94, the unsigned guard removed | `TestThreeWayAndShiftSubRound14` | 8 CHECKs (the pair 0 and 2^64 - 1 in both orders, both forms, rewritten) |
+| A2-99, `c + outsize > insize` removed | `TestThreeWayAndShiftSubRound14` | 6 CHECKs (the reads past the top of the shifted value are rewritten) |
+| A2-95, `StackAliasUnions` not called | printed-C pin `A2-95` | `mismatch (size = 8 high-word-only run = FF0300FF:00000002 pseudo = 000000FF:00000002)` |
+| A2-96, `ShortCircuitOps` not applied | printed-C pin `A2-96` | `mismatch` where `narrow-c` is expected; `A2-96 (arithmetic)` still passes (it needs the plain-`bool` version to fail, the first version of the fix) |
+| A2-98, `RunGuard` a no-op | printed-C pin `A2-98` | the run does not return (killed at 60 s); with the limit the pin takes 1 s |
+
+All seven pass restored. The unit checks of `ShortCircuitOps` (9) and the engine test's 40 + 12 graphs are part of the suite.
+
+### 5. The matrix
+
+* `ctest -E SaturnExplorerLive -j2 --timeout 900`: **94 of 94 pass** (163 s). `Sh2DecompilerEngineTests` 46 s against its 60 s ceiling (it was 50), `Sh2GeneratedTests` 22 s, `Sh2PrintedCTests` 15 s.
+* Fault suite (`SaturnExplorerDecompilerFaultTests`, the default subset): **0 of 94 jobs failed**, 77 s, no MOVED and no STALE pin (the allocation order of the engine is not changed by the patch).
+* Generator (`gen_range.sh`, one run at a time under `ulimit -v 4000000`): grammar 2 3,000 seeds (121 s) 0 failing; grammar 1 1,000 (32 s) 0; printed-C 3,000 seeds (98 s; 3,719 functions, 3,439 compared: agrees 3,457, `narrow-c` 11, `void-return` 227, `void-return-lent` 24) 0 findings; **20,000 seeds in four runs of 5,000** (112, 153, 158, 155 s) 0 failing, the canary 240 programs 0 failing each run.
+* **Families 62 to 78 through the printed-C differential at fresh seeds** (`pcsweep14.sh`, 3,000 each from seed 3,600,001, 51,000 functions, 50,483 compared): agrees 50,351, `narrow-c` 134, `void-return` 329, `void-return-lent` 184, **`mismatch` 0**, `unsettled` 2 (family 72, seeds 3,602,155 and 3,602,926, long chains of `rotcl`/`subc`: patch 0055's report of A2-59's class, the same the review met).
+* **Family 78 over the review's ranges** (the 45,800 functions that found A2-93 and A2-97 and A2-96: seeds 3,100,001 for 5,800 and 3,300,001 for 40,000, `pcsweep14.sh`): **45,800 functions, 45,800 compared: 45,787 agree, 13 `narrow-c`, 0 `undecompiled`, 0 `crashed`, 0 `timeout`, 0 `mismatch`** (on `00aa42e` the same ranges gave 2 `undecompiled`, 1 endless text and 1 `mismatch`).
+* **Corpora** (`SE_GAME_HWRAM=<img> SE_GAME_LEND=1 build/bin/SaturnExplorerSh2DecompilerTests <dir>`, `hwram007.bin` and `hwram008.bin`, `ulimit -v 4000000`, base and new on the same images, each run 110 s and 290 s): every ledger count 0 (0 accesses not printed exactly once, 0 instructions with more accesses than they make, 0 dropped against the reference run, 0 pairs out of the code's order, **0 mapping violations** (`odd`, `outside the body`, `not an instruction`, `firstAddr wrong`, ... `click does not lead back`: all 0; the one count that is not 0, 'on another line than firstLine says' 4 and 11, is the same in the base build's log and the oracle passes with it)); **missing and said 0 and 4**; lending **678 (956 parameters) and 1,038 (1,310)**; 839 and 1,554 functions, all ok. **The output texts are byte for byte identical to the base build's** (`SE_GAME_OUT`: 841 and 1,556 files in each directory and the `lend_*` directories under them, `diff -r`: no difference; the logs differ in nothing but the times). Nothing changed, so there is nothing to explain: no function of the images has a conditional whose two empty arms are both removed late (A2-97) and the one SUBPIECE past the top of a shifted value per image (A2-99) sits in a function whose text is wrong for another reason and unchanged.
+* **Vendoring**: `python3 -I vendor.py <ghidra checkout at the pinned commit>` on a copy of the vendored directory: exit 0, prints its `vendored 84 library sources, 3 compiler sources, 94 headers, 5 spec files; patches: ... 0065-..., 0067-...` line (0066 is area 3's and not in this tree), and `diff -r` of the copy against the committed directory (the build product `sh-2.sla` aside) is empty. `patches/README.md` and `VENDOR.md` have the 0067 rows and the 'pinned by' line.
+
+### 6. Instrument changes
+
+* `tools/a2_round14/dagen14.py`: family 73 form 8 has three more variants (`sib` 1 to 3: the shapes of forms 5 to 7, `RuleSignMod2nOpt`, `RuleSignMod2Opt` and the sign-based quotient, with the sign taken from r5, r6 or r7); the form 8 stream of a seed changes with it (the 300-function count above is from the generator before the change, the 600 from after it).
+* `Sh2GeneratedTests.cpp`: `SE_GENERATED_PRINTEDC_TIMEOUT`, class `timeout`, `StackAliasUnions`, `ShortCircuitOps` with their unit checks, the printed-C pins `A2-92`, `A2-93`, `A2-95`, `A2-96` (and its arithmetic control), `A2-97`, `A2-98`.
+* `Sh2DecompilerEngineTests.cpp`: `TestSignModIdentityRound14`, `TestThreeWayAndShiftSubRound14` (about 1 s together).
+
+### 7. Routed, and limits
+
+* Nothing is routed to another area. A2-97 and A2-93 are not area 4's: `blockaction.cc` is unchanged; the defect is in the removal of empty blocks that precedes the structuring (an upstream action, patched in 0067). Area 3 rows A3-117 to A3-124 and A5-87 are untouched.
+* `unsettled` in family 72 (2 of 3,000): A2-59's designed report, not a new row (the reviewer's run had one).
+* The cause of A2-97 and A2-93 is isolated and fixed; whether the same removal can create a degenerate branch in a form the generators do not build (a `switch`'s arms, more than two empty arms) was not exhausted: a branch with more than two edges is a `BRANCHIND`, which `ActionLateDoNothing` does not treat (`unblockedMulti`, `isSwitchOut`); the structure is otherwise unchanged by the live test, which only declines a removal.
+* By-value coverage of round 14 (`divexh14`, `rulefuzz14`, the whole-function checker) was not rerun: none of the rules it covers was touched. For the three rules patched here: the engine pins; `edge14 threeway` (`tools/a2_round14/edge14.cpp` linked with this tree and, for the comparison, with the pre-0067 `ruleaction.cc.o`): 3,000,000 seeds, **0 wrong** of 245,464 rewritten (the pre-0067 object: 592 wrong of 246,196, the review's count); the in-situ cone check (`mkrc14.sh`, `relink14.sh`) on the first image: **1,067,889 rule applications, 2,297,154 roots compared, 0 bad** (`RuleShiftSub`: 24 applications, 76 roots, 0 bad); on the pre-0067 object the function `060228B4` alone prints the review's three `RULECHECK-BAD shiftsub ... at 6022920` samples (`ff` to `ffff`, `ff00` to `ffff00`, `d004` to `c5d004`) and with this tree none. The second image was not run under the cone check (about 15 minutes in the review).
+
+#### Coordinator: integration note for area 2's round 14 fix
+
+* The merge (`0cd41aa`) kept both header lines in `cpp/coreaction.cc`, but patch 0067's header hunk had been cut against a tree without 0066's line, so `vendor.py` stopped at 0067 (`VENDOR_EXIT 1`). The hunk was rebased onto 0066's line (context only; no code change). After that, vendoring from the pinned Ghidra source gives `VENDOR_EXIT 0` and an empty diff against the checked-in `cpp`, `processors` and `sources.cmake` (the fixer's `sh-2.sla` note does not reproduce).
+* Full matrix on the merge: build ok; ctest 94 of 94 and 6 of 6 Live; fault matrix 0 of 94; generator 0 failing (g2 3,000, g1 1,000, printed C 3,000, 20,000); both images with lending: 839 and 1,554 functions ok, 0 accesses dropped, missing and said 0 and 4, lending 678 (956) and 1,038 (1,310), real entries 474 (645) of 999 and 724 (975) of 1,543, `TestGameCode` 12.1 s and 35.3 s.

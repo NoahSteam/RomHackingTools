@@ -17,6 +17,10 @@
  * Modified for SaturnExplorer: a RangeHint the list cannot take is freed (patches/0032-allocation-failure-order-2.patch).
  * Modified for SaturnExplorer: a pointer a loop steps down from a stack address aliases the locals below that address (patches/0056-engine-stack-walk-down-aliases.patch).
  * Modified for SaturnExplorer: so does one kept in a stack local and read back, across a call too (patches/0060-engine-stack-walk-down-spilled.patch).
+ * Modified for SaturnExplorer: once a frame address escapes, every local from the lowest frame offset up is aliased (patches/0061-engine-stack-frame-escape.patch).
+ * Modified for SaturnExplorer: a host can declare that the frame escaped by a way the p-code does not show (patches/0063-engine-frame-escape-unknown-pointers.patch).
+ * Modified for SaturnExplorer: once the frame escapes, every local of it is aliased, across the unmapped words between them (patches/0065-engine-frame-escape-whole-frame.patch).
+ * Modified for SaturnExplorer: the walks down are helpers that only add aliasing and fail closed at their bounds; a loop that steps a frame address up aliases from its lowest entry (patches/0066-engine-frame-escape-inexact.patch).
  */
 #include "varmap.hh"
 #include "funcdata.hh"
@@ -413,6 +417,9 @@ ScopeLocal::ScopeLocal(uint8 id,AddrSpace *spc,Funcdata *fd,Architecture *g) : S
   openParamRefs = false;
   hostAlias = false;
   hostAliasStart = 0;
+  hostEscape = false;
+  haveFrameFloor = false;
+  frameFloor = 0;
   restrictScope(fd);
 } 
 
@@ -802,6 +809,9 @@ void AliasChecker::gatherInternal(void) const
 {
   calculated = true;
   aliasBoundary = localExtreme;
+  trialBoundary = localExtreme;
+  escapeAll = false;
+  escapeLow = 0;
   Varnode *spacebase = fd->findSpacebaseInput(space);
   // SaturnExplorer: a pointer the host knows of and the p-code does not show. The code hands the
   // address of a local to a callee in a register no call input names (a returned structure's
@@ -811,7 +821,8 @@ void AliasChecker::gatherInternal(void) const
   // pointer any more.
   uintb hostOffset = 0;
   const bool host = fd->getScopeLocal()->getHostAlias(hostOffset);
-  if (spacebase == (Varnode *)0 && !host) return; // No possible alias
+  // (patches/0063-engine-frame-escape-unknown-pointers.patch) ...and an escape the host declared stands with no pointer at all (below)
+  if (spacebase == (Varnode *)0 && !host && !fd->getScopeLocal()->hasHostEscape()) return; // No possible alias
 
   if (spacebase != (Varnode *)0)
     gatherAdditiveBase(spacebase,addBase);
@@ -856,6 +867,55 @@ void AliasChecker::gatherInternal(void) const
     if (low < aliasBoundary)
       aliasBoundary = low;
   }
+  // SaturnExplorer (patches/0061-engine-stack-frame-escape.patch): the walks above follow a frame address through the forms they model.
+  // Any other form -- an op that is no copy, addition, subtraction of a constant, join, INDIRECT, PTRSUB or PTRADD; a store of it to memory;
+  // a join with a value that is no frame address; a call it was handed to returning it -- failed open, and the locals below it were folded
+  // (ledger A3-85, A3-88, A3-86 b). Fail closed: if any frame address escapes (FrameEscape), alias everything from the lowest
+  // frame offset the function reaches up. Where the escaped value is used is not followed. Every local lies at or above the lowest offset
+  // the stack pointer or a frame address takes, so the alias starts there (an alias started 0xffff below it, as a pointer stepped down's
+  // is, lies in the unmapped stack below the scope's range, and ScopeLocal::markUnaliased turns such an alias off at the first local).
+  // (patches/0063-engine-frame-escape-unknown-pointers.patch) The escape's alias is not asked whether a word written before a call is
+  // the call's stack argument (hasLocalAlias, FuncCallSpecs::checkInputTrialUse): from the frame's lowest slot it would take every
+  // outgoing argument word for a local, drop the arguments from every call of a function whose frame escaped -- the frame address
+  // handed in a stack argument among them, so the escape that dropped it was gone too and the local it reached was folded -- and leave
+  // the value the callee reads as a store to a local on the line before (ledger A3-99). An argument shown is a use the escape walk
+  // follows; the locals stay aliased by the boundary below.
+  trialBoundary = aliasBoundary;
+  {
+    FrameEscape escape;
+    escape.compute(fd,space,false);
+    if (escape.escaped) {
+      uintb low = (escape.haveLowest ? escape.lowest : 0) & calc_mask(space->getAddrSize());
+      downReach.push_back(low);
+      // (0063) A frame address that escaped only by being handed over (to a call, or as the host declared) is a pointer to a local: the
+      // locals are aliased, the save slots are not reached through it and stay unmapped. One that escaped through a form the stack
+      // analysis does not model may be anywhere, the save slots included.
+      if (escape.loose)
+	downSpan.push_back(pair<uintb,uintb>(low,calc_mask(space->getAddrSize())));	// the whole frame, its save slots included
+      bool param = (direction == 1) ? (low < localBoundary) : (low > localBoundary);
+      if (!param && low < aliasBoundary)
+	aliasBoundary = low;
+      // (patches/0065-engine-frame-escape-whole-frame.patch) ...and from there every local is aliased, whatever lies between: the
+      // words the function's calls take as stack arguments and the save slots are unmapped, and ScopeLocal::markUnaliased turns an
+      // alias off at the first mapped range above such a word. With the call's fifth argument at the frame's lowest word, the
+      // local above it was taken for one no pointer reaches and folded (ledger A3-104). A pointer to a local reaches the whole frame
+      // once it has escaped (an escaped `&buf[2]` is walked down to `buf[0]`), so the escape stops at no gap.
+      if (!param && direction == 1) {
+	escapeAll = true;
+	escapeLow = low;
+      }
+    }
+    // (patches/0066-engine-frame-escape-inexact.patch) a loop that steps a frame address up only is at or above its lowest entry: the alias starts
+    // there (the entry may be no base the walk above gathered, made after an INDIRECT or a join)
+    for(int4 i=0;i<escape.upLows.size();++i) {
+      uintb low = escape.upLows[i] & calc_mask(space->getAddrSize());
+      bool param = (direction == 1) ? (low < localBoundary) : (low > localBoundary);
+      if (param) continue;
+      downReach.push_back(low);
+      if (low < aliasBoundary)
+	aliasBoundary = low;
+    }
+  }
 }
 
 /// SaturnExplorer (patches/0060-engine-stack-walk-down-spilled.patch): does the pointer \b base reach a loop that steps it down?
@@ -865,6 +925,7 @@ void AliasChecker::gatherInternal(void) const
 /// the one written (the call can write there only an address it was given, or one of its own frame below ours), so the
 /// walk fails closed: the base is taken to reach below itself (ledger A3-80). Patches 0056 and 0057 looked only at the
 /// MULTIEQUALs that read the base itself.
+/// (patches/0066-engine-frame-escape-inexact.patch) A precision helper that only adds aliasing: the escape of FrameEscape decides the rest.
 /// \param base is a pointer into the stack (one of the AddBase records)
 /// \return \b true if a loop the pointer reaches steps it down
 bool AliasChecker::reachesStepDown(Varnode *base)
@@ -910,7 +971,11 @@ bool AliasChecker::reachesStepDown(Varnode *base)
 /// value that is added is taken to be non-negative, as the rest of the alias analysis takes it.
 /// \param multi is the MULTIEQUAL joining a pointer with its stepped value
 /// \return \b true if some loop through \b multi lowers the pointer
-bool AliasChecker::stepsDown(PcodeOp *multi)
+/// (patches/0066-engine-frame-escape-inexact.patch) A precision helper: FrameEscape takes a frame address a loop carries for an escape unless
+/// every step adds a constant that is not negative, so a "no" here removes no alias; a "yes" adds the reach below the base.
+/// \param atCap is the answer when the walk passes its bound: \b true where a walk adds aliasing (fail closed), \b false where it would
+/// drop a stack parameter reference (ActionInputPrototype)
+bool AliasChecker::stepsDown(PcodeOp *multi,bool atCap)
 
 {
   // SaturnExplorer (patches/0057-engine-stack-walk-down-conditional.patch): the forward walk is keyed on (varnode, offset), not the varnode
@@ -922,12 +987,18 @@ bool AliasChecker::stepsDown(PcodeOp *multi)
   vector<pair<Varnode *,uintb> > seen;
   work.push_back(pair<Varnode *,uintb>(multi->getOut(),0));
   seen.push_back(pair<Varnode *,uintb>(multi->getOut(),0));
-  while(!work.empty() && seen.size() < 4096) {
+  // (patches/0066-engine-frame-escape-inexact.patch) The cap fails closed: a loop whose values are too many to follow is answered \b atCap
+  // (a walk, for the alias), not "no walk", which left the locals below an unbounded base unguarded under a body of 4,100 accesses (ledger
+  // A3-122). The bound is on every op visited, the descendants of one varnode too.
+  int4 visits = 0;
+  while(!work.empty()) {
+    if (seen.size() >= 4096) return atCap;
     Varnode *vn = work.back().first;
     uintb off = work.back().second;
     work.pop_back();
     uintb mask = calc_mask(vn->getSize());
     for(list<PcodeOp *>::const_iterator iter=vn->beginDescend();iter!=vn->endDescend();++iter) {
+      if (++visits > 65536) return atCap;
       PcodeOp *op = *iter;
       uintb next = off;
       switch(op->code()) {
@@ -1022,7 +1093,7 @@ bool AliasChecker::hasLocalAlias(Varnode *vn) const
   // local variables on the stack
   if (direction == -1)
     return false;
-  return (vn->getOffset() >= aliasBoundary);
+  return (vn->getOffset() >= trialBoundary);	// SaturnExplorer (0063): not the escape's boundary, see gatherInternal
 }
 
 void AliasChecker::sortAlias(void) const
@@ -1653,7 +1724,9 @@ void ScopeLocal::restructureVarnode(bool aliasyes)
 
   state.sortAlias();
   if (aliasyes) {
-    markUnaliased(state.getAlias());
+    uintb escapeLow = 0;
+    bool escapeAll = state.getEscapeLow(escapeLow);
+    markUnaliased(state.getAlias(),escapeAll,escapeLow);
     checkUnaliasedReturn(state.getAlias());
   }
   if (!state.getAlias().empty() && state.getAlias()[0] == 0)	// If a zero offset use of the stack pointer exists
@@ -1706,8 +1779,12 @@ bool ScopeLocal::restructure(MapState &state)
 /// aliased by a pointer.  The method uses locked Symbol information when available to determine
 /// how far an alias start might extend.  Otherwise a heuristic is used to determine if the Symbol
 /// is far enough away from the start of the alias to be considered unaliased.
+/// SaturnExplorer (patches/0065-engine-frame-escape-whole-frame.patch): once a frame address escaped, every Symbol at or above the
+/// frame's lowest offset is aliased, across unmapped ranges and at any distance (AliasChecker::gatherInternal).
 /// \param alias is the given set of alias starting offsets
-void ScopeLocal::markUnaliased(const vector<uintb> &alias)
+/// \param escapeAll is \b true if a frame address escaped
+/// \param escapeLow is the frame's lowest offset, when \b escapeAll
+void ScopeLocal::markUnaliased(const vector<uintb> &alias,bool escapeAll,uintb escapeLow)
 
 {
   EntryMap *rangemap = maptable[space->getIndex()];
@@ -1751,6 +1828,8 @@ void ScopeLocal::markUnaliased(const vector<uintb> &alias)
     // NOTE: this is primarily to reset aliasing between
     // stack parameters and stack locals
     if (aliason && (curoff - curalias > 0xffff)) aliason = false;
+    // SaturnExplorer (0065): an escaped frame address reaches every local of the frame
+    if (escapeAll && curoff >= escapeLow) aliason = true;
     if (!aliason) symbol->getScope()->setAttribute(symbol,Varnode::nolocalalias);
     if (symbol->isTypeLocked() && alias_block_level != 0) {
       if (alias_block_level == 3)

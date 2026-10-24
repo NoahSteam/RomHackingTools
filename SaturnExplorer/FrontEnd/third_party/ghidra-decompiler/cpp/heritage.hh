@@ -15,6 +15,10 @@
  * limitations under the License.
  *
  * Modified for SaturnExplorer: a guard below a pointer stepped down is no array's start (patches/0056-engine-stack-walk-down-aliases.patch).
+ * Modified for SaturnExplorer: an escape analysis of the frame addresses, failing closed (patches/0061-engine-stack-frame-escape.patch).
+ * Modified for SaturnExplorer: once the frame escapes, a pointer not proved to be no frame address may be one (patches/0063-engine-frame-escape-unknown-pointers.patch).
+ * Modified for SaturnExplorer: the escape's lowest frame offset never rises over the queries of a function (patches/0065-engine-frame-escape-whole-frame.patch).
+ * Modified for SaturnExplorer: a frame address that is not an exact offset from the frame base escapes, unless a loop only steps it up (patches/0066-engine-frame-escape-inexact.patch).
  */
 /// \file heritage.hh
 /// \brief Utilities for building Static Single Assignment (SSA) form 
@@ -153,6 +157,7 @@ class LoadGuard {
   int4 analysisState;	///< 0=unanalyzed, 1=analyzed(partial result), 2=analyzed(full result)
   bool guessedBelow;	///< SaturnExplorer: minimumOffset is a guess below a pointer stepped down, not where an array starts (patches/0056-engine-stack-walk-down-aliases.patch)
   void establishRange(const ValueSetRead &valueSet);	///< Convert partial value set analysis into guard range
+  static bool pointerSteppedDown(Varnode *vn);	///< SaturnExplorer (0065): is the pointer the join of a loop that steps it down
   void finalizeRange(const ValueSetRead &valueSet);	///< Convert value set analysis to final guard range
 
   /// \brief Set a new unanalyzed LOAD guard that initially guards everything
@@ -172,6 +177,64 @@ public:
   bool isGuarded(const Address &addr) const;		///< Does \b this guard apply to the given address
   bool isRangeLocked(void) const { return (analysisState == 2); }	///< Return \b true if the range is fully determined
   bool isValid(OpCode opc) const { return (!op->isDead() && op->code() == opc); }	///< Return \b true if the record still describes an active LOAD
+};
+
+/// \brief SaturnExplorer (patches/0061-engine-stack-frame-escape.patch): the escape analysis of a function's frame addresses
+///
+/// The stack analysis (AliasChecker, discoverIndexedStackPointers, and the walks of patches 0056, 0057 and 0060) knows a pointer into the
+/// frame only through a list of exact forms, and every other form failed open: a frame address laundered through an op it does not model
+/// (a mask, a shift or swap pair, halves reassembled), stored to memory and read back, joined with another pointer, or returned by a call it
+/// was handed to was taken for no frame address, so the stores through it were no stores to the stack and the locals below it were folded
+/// (ledger A3-85, A3-88, A3-86 b). This walk fails closed instead. A frame address \e escapes when it, or a value computed from it by any
+/// op, (a) is an input to an op other than a copy, an addition, a subtraction of a constant, a join, an INDIRECT, a PTRSUB or a PTRADD (an
+/// address operand of a LOAD or STORE is an access, a comparison's one-bit output cannot carry an address, a return leaves the frame);
+/// (b) is stored to memory; (c) is joined with a value that is no frame address; (d) is returned by a call it was handed to, and reaches a
+/// memory access from there. Where the escaped value goes is not followed: once one escapes, every local from the lowest frame offset up
+/// are aliased, and every STORE through a value that may be one is a store to the stack.
+///
+/// SaturnExplorer (patches/0063-engine-frame-escape-unknown-pointers.patch): the escape of 0061 followed the escaped value through the
+/// function's own ops, and every way a frame address came back that was no op of the function -- a callee that keeps it (in a global, in a
+/// slot of the frame it was given a pointer to, in a register the model keeps), a call's output in another register -- was found by a
+/// reviewer one form at a time (ledger A3-89, A3-91). It now uses the escape semantics of a C compiler's points-to analysis instead of a
+/// list: (e) a frame address handed to a call as an argument (a register or stack input, not the stack pointer itself) escapes, and so does
+/// the frame when the host declares an escape the p-code does not show (ScopeLocal::declareHostEscape). Once anything escaped, every
+/// pointer whose origin the analysis cannot prove is no frame address -- a value loaded from memory, any output of a call or a user op,
+/// the value a call or a store may have rewritten (an INDIRECT), a parameter, and anything computed from them -- may point into the frame,
+/// and every STORE through one is a STORE through an unmodeled frame address (guarded). Where the escaped value goes is still not followed:
+/// that is what makes the rule closed.
+///
+/// SaturnExplorer (patches/0066-engine-frame-escape-inexact.patch): the walk down below a frame address was recognised by its form since
+/// 0056 (a constant step, a conditional step, a spill, an index, a register stride), and each list failed open on the next form (ledger
+/// A3-65, A3-72, A3-80, A3-116, A3-118, A3-119). Now a frame address the stack analysis cannot place exactly is an escape as well: one whose
+/// value is not the frame base plus a constant (a register or an index added or subtracted, a join of two different offsets, a value loaded
+/// or computed by any op the walk does not model), or one a loop carries, unless every step of the loop adds a constant that is not
+/// negative (then it is at or above the loop's lowest entry, which is aliased). An access through such an address, or a call it is handed
+/// to, makes the frame escape, with the whole-frame alias of 0065, and the access's guard covers the whole stack space. The forms of 0056
+/// to 0065 stay only as helpers that add aliasing.
+class FrameEscape {
+  void markUnknownStores(const Funcdata *fd);	///< Mark the STOREs through a pointer not proved to be no frame address (0063)
+  void classifyExact(AddrSpace *spc,const map<Varnode *,uintb> &offset,vector<Varnode *> &inexactSet);	///< (0066) Which members are no exact offset
+public:
+  set<Varnode *> members;		///< The possible frame addresses
+  set<Varnode *> unmodeled;		///< ...of which those reached through a form the stack analysis does not model
+  set<PcodeOp *> unmodeledStores;	///< STOREs through an unmodeled possible frame address, or, once the frame escaped, an unknown pointer
+  set<PcodeOp *> inexactLoads;		///< LOADs through a frame address that is no exact offset (0066)
+  vector<uintb> upLows;			///< The lowest entry offset of each loop that only steps a frame address up (0066)
+  bool inexact;				///< A frame address that is no exact offset reaches an access or a call (0066)
+  bool memoryEscape;			///< A frame address was stored to memory
+  bool handed;				///< A frame address was handed to a call as an argument (0063)
+  bool hostEscape;			///< The host declared an escape the p-code does not show (0063)
+  bool escaped;				///< Some frame address escaped
+  bool loose;				///< ...by a form the stack analysis does not model (0061's causes, not a hand-over alone: 0063)
+  bool gaveUp;				///< The walk passed its bound: everything is taken to have escaped
+  bool haveLowest;			///< \b lowest is set
+  uintb lowest;				///< The lowest frame offset reached (a byte offset in the stack space), or any earlier query of the function reached (0065)
+  FrameEscape(void) : inexact(false), memoryEscape(false), handed(false), hostEscape(false), escaped(false), loose(false), gaveUp(false), haveLowest(false), lowest(0) {}
+  void compute(const Funcdata *fd,AddrSpace *spc,bool preHeritage);	///< Run the walk over the given stack space
+  /// \brief Is the given STORE made through a possible frame address the stack analysis does not model?
+  bool storeIsUnmodeled(PcodeOp *op) const { return gaveUp || unmodeledStores.find(op) != unmodeledStores.end(); }
+  /// \brief Is the given LOAD made through a frame address that is no exact offset? (0066)
+  bool loadIsInexact(PcodeOp *op) const { return gaveUp || inexactLoads.find(op) != inexactLoads.end(); }
 };
 
 /// \brief Manage the construction of Static Single Assignment (SSA) form
@@ -288,6 +351,8 @@ class Heritage {
   bool protectFreeStores(AddrSpace *spc,vector<PcodeOp *> &freeStores);
   bool discoverIndexedStackPointers(AddrSpace *spc,vector<PcodeOp *> &freeStores,bool checkFreeStores);
   void reprocessFreeStores(AddrSpace *spc,vector<PcodeOp *> &freeStores);
+  bool markEscapedStores(AddrSpace *spc,vector<PcodeOp *> &freeStores);	///< SaturnExplorer: mark the STOREs a frame address may have escaped to (patches/0061-engine-stack-frame-escape.patch)
+  void widenEscapedStoreGuards(void);	///< SaturnExplorer: a STORE guard through an escaped frame address guards the whole stack (patches/0061-engine-stack-frame-escape.patch)
   void guard(const Address &addr,int4 size,bool guardPerformed,
 	     vector<Varnode *> &read,vector<Varnode *> &write,vector<Varnode *> &inputvars);
   void guardInput(const Address &addr,int4 size,vector<Varnode *> &input);

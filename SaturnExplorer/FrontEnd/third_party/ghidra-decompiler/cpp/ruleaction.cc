@@ -18,6 +18,9 @@
  * Modified for SaturnExplorer: an access that runs past the end of its space stays a LOAD or STORE (patches/0031-access-past-space-end.patch).
  * Modified for SaturnExplorer: RuleDivTermAdd and RuleDivTermAdd2 keep a product that overflows only for a division; RulePiecePathology needs the register it names (patches/0037-engine-division-piece-and-input-names.patch).
  * Modified for SaturnExplorer: RuleDivTermAdd and RuleDivTermAdd2 keep an overflowing product only when the shifts that follow stay inside the multiply (patches/0044-engine-round5-printed-value-fixes.patch).
+ * Modified for SaturnExplorer: RuleScarry refuses the minimum for either operand; RuleRightShiftAnd keeps the mask of a shift by the width or more; RuleSLess2Zero takes the high bit of a sum only from an operand when the other has none (patches/0062-engine-range-set-ops-and-rule-guards.patch).
+ * Modified for SaturnExplorer: RuleDivOpt refuses a multiply that wraps and a sign extension shifted logically (or a zero extension shifted arithmetically) whose difference is read; RuleDivTermAdd and RuleDivTermAdd2 need the original product not to wrap, RuleDivTermAdd the sum not to wrap its add and RuleDivTermAdd2 the multiplier to be at most 2^n; RuleDivChain, RuleSignForm2, RuleThreeWayCompare and the rules that read a shift amount check what they read (patches/0064-engine-divopt-sign-and-wrap-rule-guards.patch).
+ * Modified for SaturnExplorer: RuleSignMod2nOpt2 tests that the sign steering its bias is V's own; RuleThreeWayCompare refuses unsigned constants that are neighbours only modulo 2^64; RuleShiftSub refuses a SUBPIECE that reads past the top of the shifted value (patches/0067-engine-round14-sign-mod-late-donothing-three-way-shift-sub.patch).
  */
 #include "ruleaction.hh"
 #include "coreaction.hh"
@@ -585,9 +588,15 @@ int4 RuleRightShiftAnd::applyOp(PcodeOp *op,Funcdata &data)
   Varnode *maskVn = andOp->getIn(1);
   if (!maskVn->isConstant()) return 0;
 
-  int4 sa = (int4)constVn->getOffset();
-  uintb mask = maskVn->getOffset() >> sa;
   Varnode *rootVn = andOp->getIn(0);
+  // SaturnExplorer (patches/0062-engine-range-set-ops-and-rule-guards.patch): a shift by the width of the value or more leaves no bit of it to compare the
+  // mask with: both sides of the test below are 0 and the mask looked unnecessary, but an arithmetic shift by the width is the value's sign bit alone,
+  // and the mask can clear it. `(sext(b) & 0x20) s>> 8`, once the sub-variable flow had made the value one byte, was printed `b >> 8`: all the sign of
+  // b, where the code computes 0. The shift amount is read as the 64-bit number it is (an int4 cast made a large amount negative).
+  const uintb saFull = constVn->getOffset();
+  if (saFull >= (uintb)8*rootVn->getSize()) return 0;
+  int4 sa = (int4)saFull;
+  uintb mask = maskVn->getOffset() >> sa;
   uintb full = calc_mask(rootVn->getSize()) >> sa;
   if (full != mask) return 0;
   if (rootVn->isFree()) return 0;
@@ -1948,7 +1957,13 @@ int4 RuleDoubleArithShift::applyOp(PcodeOp *op,Funcdata &data)
   Varnode *inVn = shift2op->getIn(0);
   if (inVn->isFree()) return 0;
   int4 max = op->getOut()->getSize() * 8 - 1;	// This is maximum possible shift.
-  int4 sa = (int4)constC->getOffset() + (int4)constD->getOffset();
+  // SaturnExplorer (patches/0064-engine-divopt-sign-and-wrap-rule-guards.patch): the amounts are the 64-bit numbers they are, each saturated at the
+  // maximum (a shift of the width or more is the sign bit alone, as is a shift of the width less one); (int4) of an amount of 2^31 or more was negative
+  uintb amtC = constC->getOffset();
+  uintb amtD = constD->getOffset();
+  if (amtC > (uintb)max) amtC = max;
+  if (amtD > (uintb)max) amtD = max;
+  int4 sa = (int4)amtC + (int4)amtD;
   if (sa <= 0) return 0;	// Something is wrong
   if (sa > max)
     sa = max;			// Shift amount has saturated
@@ -2088,12 +2103,16 @@ int4 RuleShiftCompare::applyOp(PcodeOp *op,Funcdata &data)
     isleft = true;
     savn = shiftop->getIn(1);
     if (!savn->isConstant()) return 0;
+    // SaturnExplorer (patches/0064-engine-divopt-sign-and-wrap-rule-guards.patch): a shift of the width or more (`x:2 << 0x1f == 0`) leaves nothing of x to
+    // compare, and the mask built below would shift by a negative count
+    if (savn->getOffset() >= (uintb)8*shiftvn->getSize()) return 0;
     sa = savn->getOffset();
   }
   else if (opc == CPUI_INT_RIGHT) {
     isleft = false;
     savn = shiftop->getIn(1);
     if (!savn->isConstant()) return 0;
+    if (savn->getOffset() >= (uintb)8*shiftvn->getSize()) return 0;
     sa = savn->getOffset();
   // There are definitely some situations where you don't want this rule to apply, like jump
   // table analysis where the switch variable is a bit field.
@@ -3404,6 +3423,11 @@ int4 RuleScarry::applyOp(PcodeOp *op,Funcdata &data)
     if (!avn->isConstant()) return 0;
     avn = bvn;
     bvn = op->getIn(0);
+  }
+  // SaturnExplorer (patches/0062-engine-range-set-ops-and-rule-guards.patch): the minimum is refused whichever operand it was. Upstream refused it only
+  // for the operand it had swapped itself, and rewrote scarry(V,min) != (V + min s< 0) to V s< -min = V s< min for a constant second operand:
+  // false for every V, where the original is true for V = min.
+  {
     uintb val = calc_mask(bvn->getSize());
     val = val ^ (val >> 1);	// Calculate integer minimum
     if (val == bvn->getOffset()) return 0;	// Rule does not work if bvn is the integer minimum
@@ -4424,6 +4448,8 @@ int4 RuleSubExtComm::applyOp(PcodeOp *op,Funcdata &data)
     return 0;
   Varnode *invn = extop->getIn(0);
   if (invn->isFree()) return 0;
+  // SaturnExplorer (patches/0064-engine-divopt-sign-and-wrap-rule-guards.patch): the cut is a byte count inside the extended value
+  if (op->getIn(1)->getOffset() >= (uintb)base->getSize()) return 0;
   int4 subcut = (int4)op->getIn(1)->getOffset();
   if (op->getOut()->getSize() + subcut <= invn->getSize()) {
     // SUBPIECE doesn't hit the extended bits at all
@@ -5161,6 +5187,9 @@ int4 RuleShiftSub::applyOp(PcodeOp *op,Funcdata &data)
   if (vn->isFree()) return 0;
   int4 insize = vn->getSize();
   int4 outsize = op->getOut()->getSize();
+  // SaturnExplorer (patches/0067-engine-round14-sign-mod-late-donothing-three-way-shift-sub.patch): the read must lie inside the shifted value as it stands: a SUBPIECE
+  // that reads past its top reads zeros there, which the rewritten read of V (whose bytes are there) does not
+  if (c + outsize > insize) return 0;
   c -= n/8;
   if (c < 0 || c + outsize > insize)	// Check if this is a natural truncation
     return 0;
@@ -5616,8 +5645,13 @@ Varnode *RuleSLess2Zero::getHiBit(PcodeOp *op)
   if ((nzmask2!=mask)&&((nzmask2 & mask)!=0))
     return (Varnode *)0;
 
-  if (nzmask1 == mask)
+  // SaturnExplorer (patches/0062-engine-range-set-ops-and-rule-guards.patch): the other operand must have no high bit. With both operands able to
+  // set it (a masked sign and the constant 0x80000000: `(x & 0x80000000) + 0x80000000 s< 0`), the high bit of the sum is the exclusive or of the two and
+  // neither operand is it; `(uVar1 + 0x80000000) s< 0` was printed `uVar1 != 0` (its negation), and a subv of a masked sign wrote GBR when it must not.
+  if (nzmask1 == mask) {
+    if ((nzmask2 & mask) != 0) return (Varnode *)0;
     return vn1;
+  }
   if (nzmask2 == mask)
     return vn2;
   return (Varnode *)0;
@@ -7194,7 +7228,12 @@ int4 RuleSubRight::applyOp(PcodeOp *op,Funcdata &data)
       if (lone->getIn(1)->isConstant()) { // Shift by constant
 	if (outvn->getSize() + c == a->getSize()) {
 	  // If SUB is "hi" lump the SUB and shift together
-	  d += lone->getIn(1)->getOffset();
+	  // SaturnExplorer (patches/0064-engine-divopt-sign-and-wrap-rule-guards.patch): the sum is made of 64-bit numbers (an amount of 2^31 or more made d negative)
+	  uintb loneAmount = lone->getIn(1)->getOffset();
+	  if (loneAmount >= (uintb)a->getSize() * 8)
+	    d = a->getSize() * 8;
+	  else
+	    d += (int4)loneAmount;
 	  if (d >= a->getSize() * 8) {
 	    if (opc2 == CPUI_INT_RIGHT)
 	      return 0;		// Result should have been 0
@@ -7703,6 +7742,9 @@ int4 RuleSubNormal::applyOp(PcodeOp *op,Funcdata &data)
   if (a->isFree()) return 0;
   Varnode *outvn = op->getOut();
   if (outvn->isPrecisHi() || outvn->isPrecisLo()) return 0;
+  // SaturnExplorer (patches/0064-engine-divopt-sign-and-wrap-rule-guards.patch): the amounts are read before they are made int4 (2^31 or more was negative)
+  if (shiftop->getIn(1)->getOffset() >= (uintb)8*a->getSize()) return 0;
+  if (op->getIn(1)->getOffset() >= (uintb)a->getSize()) return 0;
   int4 n = shiftop->getIn(1)->getOffset();
   int4 c = op->getIn(1)->getOffset();
   int4 k = (n/8);
@@ -7899,12 +7941,38 @@ int4 RuleDivTermAdd::applyOp(PcodeOp *op,Funcdata &data)
     if (op->code()==CPUI_INT_RIGHT) return 0;
   }
 
+  Varnode *x = extop->getIn(0);
+  uint4 xbits = (opc == CPUI_INT_SEXT) ? x->getSize() * 8 - 1 : 8*sizeof(uintb) - count_leading_zeros(x->getNZMask());
+  // SaturnExplorer (patches/0064-engine-divopt-sign-and-wrap-rule-guards.patch): the sum this rule folds is the exact one only if the product it starts
+  // from did not wrap in its multiply (the machine kept the low bits of `sext(x:1) * 0x7fff` in two bytes; the folded product is not those), and a
+  // shift of the width or more has no multiplier of the multiply's width to fold into.
+  if (n >= (uint4)8*extvn->getSize()) return 0;
+  if (!divTermProductFits(multConst,xbits,extvn->getSize(),opc == CPUI_INT_SEXT)) return 0;
+  // ...and the sum must not wrap the add it replaces: the add keeps the low bytes of the exact sum, and the division RuleDivOpt makes of the folded product is
+  // the exact one. `hi + x` of an unsigned x (mulhu, then add) wraps for a large x, and `(hi + x) >> 16` was printed `x / 0xd20b`, a quotient of 17 bits where the
+  // code keeps 16 (the multiply by 0x38032949, the high word, the sum). The exact sum is below 2^xbits + 2^k, k the bits of x * c beyond n. A negative multiplier
+  // of a sign extension (the signed divisions' `hi + x` with hi the high word of x * (m - 2^32)) is the exception: the sum is x less a part of it, and fits as x does.
+  if (extvn->getSize() <= 8) {
+    const int4 addBits = 8 * x->getSize();
+    const uintb cmask = calc_mask(extvn->getSize());
+    const uintb cv = multConst[0] & cmask;
+    bool sumFits;
+    if (opc == CPUI_INT_SEXT && signbit_negative(cv,extvn->getSize())) {
+      uintb magnitude = (~cv + 1) & cmask;
+      sumFits = magnitude <= (((uintb)1) << n);
+    }
+    else {
+      int4 cbits = 64 - count_leading_zeros(cv);
+      int4 k = ((int4)xbits + cbits > (int4)n) ? (int4)xbits + cbits - (int4)n : 0;
+      int4 top = ((int4)xbits > k ? (int4)xbits : k) + 1;
+      sumFits = (opc == CPUI_INT_SEXT) ? (top <= addBits - 1) : (top <= addBits);
+    }
+    if (!sumFits) return 0;
+  }
   uint8 power[2];
   set_u128(power, 1);
   leftshift128(power,power,n);		// power = 2^n
   add128(multConst,power,multConst);	// multConst += 2^n
-  Varnode *x = extop->getIn(0);
-  uint4 xbits = (opc == CPUI_INT_SEXT) ? x->getSize() * 8 - 1 : 8*sizeof(uintb) - count_leading_zeros(x->getNZMask());
 
   list<PcodeOp *>::const_iterator iter;
   for(iter=op->getOut()->beginDescend();iter!=op->getOut()->endDescend();++iter) {
@@ -7913,7 +7981,8 @@ int4 RuleDivTermAdd::applyOp(PcodeOp *op,Funcdata &data)
     if ((addop->getIn(0)!=x)&&(addop->getIn(1)!=x))
       continue;
     // The new product may need more bits than the multiply has, which is only acceptable on the way to a division
-    if (!divTermProductFits(multConst,xbits,extvn->getSize(),opc == CPUI_INT_SEXT) &&
+    bool wide = !divTermProductFits(multConst,xbits,extvn->getSize(),opc == CPUI_INT_SEXT);
+    if (wide &&
 	!divTermIsDivided(addop->getOut(),n,multConst,xbits,(opc == CPUI_INT_SEXT) ? CPUI_INT_SRIGHT : CPUI_INT_RIGHT,extvn->getSize()))
       continue;
 
@@ -7927,6 +7996,7 @@ int4 RuleDivTermAdd::applyOp(PcodeOp *op,Funcdata &data)
     data.opSetInput(newmultop,extvn,0);
     data.opSetInput(newmultop,newConstVn,1);
     data.opInsertBefore(newmultop,op);
+    if (wide) newmultop->setDivProductWide();	// RuleDivOpt takes this product as the exact value it stands for
 
     PcodeOp *newshiftop = data.newOp(2,op->getAddr());
     if (shiftopc == CPUI_MAX)
@@ -8053,10 +8123,16 @@ int4 RuleDivTermAdd2::applyOp(PcodeOp *op,Funcdata &data)
     set_u128(pow, 1);
     leftshift128(pow,pow,n);		// Calculate 2^n
     uint8 newConst[2];
+    uint4 xbits = 8*sizeof(uintb) - count_leading_zeros(x->getNZMask());
+    // SaturnExplorer (patches/0064-engine-divopt-sign-and-wrap-rule-guards.patch): the product this rule starts from must not have wrapped in its
+    // multiply (`zext(x:2) * 0xfffffffe` in four bytes), and the multiplier must be at most 2^n: `W + ((x - W) >> 1)` is `(x * (c + 2^n)) >> (n + 1)` only
+    // while W, the high part of x * c, is not above x (x - W is taken in the width of x, where a larger W wraps)
+    if (!divTermProductFits(multConst,xbits,zextvn->getSize(),false)) return 0;
+    if (uless128(pow,multConst)) return 0;
     add128(multConst, pow, newConst);	// the new multiplier is multConst + 2^n
     // The new product may need more bits than the multiply has, which is only acceptable on the way to a division
-    uint4 xbits = 8*sizeof(uintb) - count_leading_zeros(x->getNZMask());
-    if (!divTermProductFits(newConst,xbits,zextvn->getSize(),false) &&
+    bool wide = !divTermProductFits(newConst,xbits,zextvn->getSize(),false);
+    if (wide &&
 	!divTermIsDivided(addop->getOut(),n+1,newConst,xbits,CPUI_INT_RIGHT,zextvn->getSize()))
       continue;
     multConst[0] = newConst[0];
@@ -8068,6 +8144,7 @@ int4 RuleDivTermAdd2::applyOp(PcodeOp *op,Funcdata &data)
     Varnode *newConstVn = data.newExtendedConstant(zextvn->getSize(), multConst, op);
     data.opSetInput(newmultop,newConstVn,1);
     data.opInsertBefore(newmultop,op);
+    if (wide) newmultop->setDivProductWide();	// RuleDivOpt takes this product as the exact value it stands for
 
     PcodeOp *newshiftop = data.newOp(2,op->getAddr());
     data.opSetOpcode(newshiftop,CPUI_INT_RIGHT);
@@ -8082,6 +8159,67 @@ int4 RuleDivTermAdd2::applyOp(PcodeOp *op,Funcdata &data)
     return 1;
   }
   return 0;
+}
+
+/// \brief Do all readers of a Varnode look at its low bits only?
+///
+/// SaturnExplorer (patches/0064-engine-divopt-sign-and-wrap-rule-guards.patch). Each reader is a SUBPIECE from the bottom, or an INT_AND with a
+/// constant, that is no wider than that. (The consume mask cannot say: dead-code analysis drops the bits the non-zero mask has as zero, and these are
+/// exactly the bits of a logical shift that a read of the whole value needs as zeros.)
+/// \param vn is the Varnode
+/// \param bits is the number of low bits
+/// \return \b true if no reader looks at a bit above them
+static bool divReadsLowBits(Varnode *vn,int4 bits)
+
+{
+  int4 total = 8 * vn->getSize();
+  if (bits >= total) return true;
+  if (bits <= 0 || total > 64) return false;
+  if (vn->hasNoDescend() || vn->isAddrForce() || vn->isPersist()) return false;
+  list<PcodeOp *>::const_iterator iter;
+  for(iter=vn->beginDescend();iter!=vn->endDescend();++iter) {
+    PcodeOp *rdop = *iter;
+    if (rdop->code() == CPUI_SUBPIECE && rdop->getIn(0) == vn) {
+      Varnode *cvn = rdop->getIn(1);
+      if (!cvn->isConstant() || cvn->getOffset() != 0) return false;
+      if (8 * rdop->getOut()->getSize() > bits) return false;
+    }
+    else if (rdop->code() == CPUI_INT_AND) {
+      Varnode *mvn = rdop->getIn(1 - rdop->getSlot(vn));
+      if (!mvn->isConstant() || (mvn->getOffset() >> bits) != 0) return false;
+    }
+    else
+      return false;
+  }
+  return true;
+}
+
+/// \brief Can the product of the numerand and the multiplier of a division not wrap its multiply?
+///
+/// SaturnExplorer (patches/0064-engine-divopt-sign-and-wrap-rule-guards.patch). The largest numerand times the multiplier, unsigned for a zero
+/// extension, signed for a sign extension (the multiplier is the unsigned number the rule works with, so a negative one never fits), must fit the
+/// width of the INT_MULT.
+/// \param y is the (up to 128-bit) multiplier
+/// \param xsize is the number of bits of the numerand (all the bits of the input of a sign extension)
+/// \param size is the size of the INT_MULT in bytes
+/// \param isSigned is \b true for a sign extension
+/// \return \b true if the product cannot wrap
+static bool divProductFits(const uint8 *y,uint4 xsize,int4 size,bool isSigned)
+
+{
+  uint4 width = 8 * size;
+  if (xsize == 0 || xsize > width) return false;
+  if (size > 8) {		// Beyond 64 bits count the bits of the multiplier (it is at most a factor of two too strict)
+    int4 bits = (y[1] != 0) ? 128 - count_leading_zeros((uintb)y[1]) : 64 - count_leading_zeros((uintb)y[0]);
+    return (int4)xsize + bits <= (int4)width;
+  }
+  if (y[1] != 0) return false;
+  uintb mask = calc_mask(size);
+  if (y[0] > mask) return false;
+  if (isSigned)
+    return y[0] <= ((uintb)1 << (width - xsize));	// |x| <= 2^(xsize-1), and the product must stay in [-2^(width-1),2^(width-1))
+  uintb maxx = (xsize >= 64) ? ~((uintb)0) : (((uintb)1 << xsize) - 1);
+  return y[0] <= mask / maxx;
 }
 
 /// \brief Check for INT_(S)RIGHT and/or SUBPIECE followed by INT_MULT
@@ -8110,12 +8248,16 @@ Varnode *RuleDivOpt::findForm(PcodeOp *op,uint4 &n,uint8 *y,uint4 &xsize,OpCode 
 {
   PcodeOp *curOp = op;
   OpCode shiftopc = curOp->code();
+  uint4 shiftAmount = 0;	// The explicit right shift (n also holds the bytes the SUBPIECE cuts)
   if (shiftopc == CPUI_INT_RIGHT || shiftopc == CPUI_INT_SRIGHT) {
     Varnode *vn = curOp->getIn(0);
     if (!vn->isWritten()) return (Varnode *)0;
     Varnode *cvn = curOp->getIn(1);
     if (!cvn->isConstant()) return (Varnode *)0;
+    // SaturnExplorer (patches/0064-engine-divopt-sign-and-wrap-rule-guards.patch): the amount is read as the number it is; a shift of 2^32 + k was read as k
+    if (cvn->getOffset() > 127) return (Varnode *)0;
     n = cvn->getOffset();
+    shiftAmount = n;
     curOp = vn->getDef();
   }
   else {
@@ -8177,7 +8319,20 @@ Varnode *RuleDivOpt::findForm(PcodeOp *op,uint4 &n,uint8 *y,uint4 &xsize,OpCode 
       return (Varnode *)0;
     // op's signedness does not matter because all the extension
     // bits are truncated
+    // SaturnExplorer (patches/0064-engine-divopt-sign-and-wrap-rule-guards.patch): only if they are. The division is as wide as the output and sign
+    // filled where the logical shift filled the top bits of the output with zeros (a sign extension, a negative product), or the arithmetic shift
+    // filled them with ones (a zero extension, a product with its top bit set): the two differ in those shiftAmount bits, and nothing here
+    // truncates them. `(unsigned)((short)x * 65537) >> 16` read whole was printed `(int4)x / 1 + (x >> 31)`: -2 for x = -1, where the code computes 0xfffe.
+    // They are not read if every reader of the result looks at the bits below them only (a SUBPIECE to the low half, as RuleDivTermAdd builds).
+    int4 outBits = 8*op->getOut()->getSize();
+    if ((int4)shiftAmount >= outBits || !divReadsLowBits(op->getOut(),outBits - (int4)shiftAmount))
+      return (Varnode *)0;
   }
+  // SaturnExplorer (patches/0064-engine-divopt-sign-and-wrap-rule-guards.patch): the division is exact and the machine keeps the low bits of the product.
+  // `x16 * 0x01000001 >> 24` is the low byte of x, not x / 1. A product that can wrap is left alone, except the exact product RuleDivTermAdd and
+  // RuleDivTermAdd2 built on purpose (flagged), which stands for the value of the sum it replaced.
+  if (!curOp->isDivProductWide() && !divProductFits(y,xsize,curOp->getOut()->getSize(),extopc == CPUI_INT_SEXT))
+    return (Varnode *)0;
   return resVn;
 }
 
@@ -8345,6 +8500,14 @@ int4 RuleDivOpt::applyOp(PcodeOp *op,Funcdata &data)
   uintb divisor = calcDivisor(n,y,xsize);
   if (divisor == 0) return 0;
   int4 outSize = op->getOut()->getSize();
+  // SaturnExplorer (patches/0064-engine-divopt-sign-and-wrap-rule-guards.patch): the divisor is a constant of the size the division is made at, and a
+  // signed one is not negative there (`sext(x:2) * 0xffff >> 31` is a division by 0x8001, which two bytes read as -32767)
+  {
+    int4 divSize = (inVn->getSize() > outSize) ? inVn->getSize() : outSize;
+    uintb limit = calc_mask(divSize);
+    if (extOpc == CPUI_INT_SEXT) limit >>= 1;
+    if (divisor > limit) return 0;
+  }
 
   if (inVn->getSize() < outSize) {	// Do we need an extension to get to final size
     PcodeOp *inExt = data.newOp(1,op->getAddr());
@@ -8477,6 +8640,9 @@ int4 RuleDivChain::applyOp(PcodeOp *op,Funcdata &data)
     val1 = constVn1->getOffset();
   }
   else {	// Unsigned case with INT_RIGHT
+    // SaturnExplorer (patches/0064-engine-divopt-sign-and-wrap-rule-guards.patch): a shift of the width or more is no power of 2 of that width (and a C++ shift
+    // by 64 is not 0)
+    if (constVn1->getOffset() >= (uintb)8*vn->getSize()) return 0;
     int4 sa = constVn1->getOffset();
     val1 = 1;
     val1 <<= sa;
@@ -8487,10 +8653,16 @@ int4 RuleDivChain::applyOp(PcodeOp *op,Funcdata &data)
   uintb val2 = constVn2->getOffset();
   uintb resval = (val1 * val2) & calc_mask(sz);
   if (resval == 0) return 0;
-  if (signbit_negative(val1, sz))
-    val1 = (~val1 + 1) & calc_mask(sz);
-  if (signbit_negative(val2, sz))
-    val2 = (~val2 + 1) & calc_mask(sz);
+  // SaturnExplorer (patches/0064-engine-divopt-sign-and-wrap-rule-guards.patch): only a signed divisor is counted by its magnitude. An unsigned divisor
+  // of 2^63 or more (2^31 at four bytes) is a large number: `(x >> 0x30) / 0xfffffffffffff800` was counted as 11 bits and became `x / 0xf800000000000000`.
+  if (opc2 == CPUI_INT_SDIV) {
+    // ...and the first signed division by -1 is not exact: it wraps for the minimum (`(x s/ -1) s/ 31` is not `x s/ -31` for x = -128 at one byte)
+    if (val1 == calc_mask(sz)) return 0;
+    if (signbit_negative(val1, sz))
+      val1 = (~val1 + 1) & calc_mask(sz);
+    if (signbit_negative(val2, sz))
+      val2 = (~val2 + 1) & calc_mask(sz);
+  }
   int4 bitcount = mostsigbit_set(val1) + mostsigbit_set(val2) + 2;
   if (opc2 == CPUI_INT_DIV && bitcount > sz * 8 ) return 0;	// Unsigned overflow
   if (opc2 == CPUI_INT_SDIV && bitcount > sz * 8 - 2) return 0;	// Signed overflow
@@ -8573,14 +8745,12 @@ int4 RuleSignForm2::applyOp(PcodeOp *op,Funcdata &data)
   if (a->isFree() || a->getSize() != sizeout) return 0;
   Varnode *otherVn = multOp->getIn(1-slot);
   // otherVn must be a positive integer and small enough so the INT_MULT can't overflow into the sign-bit
+  // SaturnExplorer (patches/0064-engine-divopt-sign-and-wrap-rule-guards.patch): positive means not 0: a product by 0 has the sign 0, not the sign of V.
+  // The zero extension of a value is 0 when the value is, and nothing here knows it is not, so only a constant is taken.
   if (otherVn->isConstant()) {
+    if (otherVn->getOffset() == 0) return 0;
     if (otherVn->getOffset() > calc_mask(sizeout)) return 0;
     if (2 * sizeout > multSize) return 0;
-  }
-  else if (otherVn->isWritten()) {
-    PcodeOp *zextOp = otherVn->getDef();
-    if (zextOp->code() != CPUI_INT_ZEXT) return 0;
-    if (zextOp->getIn(0)->getSize() + sizeout > multSize) return 0;
   }
   else
     return 0;
@@ -9036,6 +9206,9 @@ Varnode *RuleSignMod2nOpt2::checkMultiequalForm(PcodeOp *op,uintb npow)
   if (lessOp->code() != CPUI_INT_SLESS) return (Varnode *)0;
   if (!lessOp->getIn(1)->isConstant()) return (Varnode *)0;
   if (lessOp->getIn(1)->getOffset() != 0) return (Varnode *)0;
+  // SaturnExplorer (patches/0067-engine-round14-sign-mod-late-donothing-three-way-shift-sub.patch): the sign that steers the bias must be the sign of V itself; the
+  // sign of another value choosing whether V is biased is no remainder (checkSignExtForm tests the same identity)
+  if (lessOp->getIn(0) != base) return (Varnode *)0;
   FlowBlock *negBlock = cbranch->isBooleanFlip() ? decision->getFalseOut() : decision->getTrueOut();
   int4 negSlot = (negBlock == inner) ? innerSlot : (1-innerSlot);
   if (negSlot != slot) return (Varnode *)0;
@@ -10073,13 +10246,24 @@ int4 RuleThreeWayCompare::testCompareEquivalence(PcodeOp *lessop,PcodeOp *lesseq
   Varnode *b1 = lessop->getIn(1);
   Varnode *b2 = lessequalop->getIn(1);
   int4 res = 0;
+  // SaturnExplorer (patches/0064-engine-divopt-sign-and-wrap-rule-guards.patch): a signed pair of neighbours does not wrap: the offsets 0x7f and 0x80 of one
+  // byte are the constants 127 and -128, and `(127 s< x) + (-128 s<= x) - 1 == 0` was taken for the three-way compare of x and 127. Constants
+  // that differ are no pair of one compare when one of the two is not a LESSTHAN either.
+  const bool signedPair = (lessop->code() == CPUI_INT_SLESS);
+  const uintb unsignedMax = calc_mask(lessop->getIn(0)->getSize());
+  const uintb signedMax = unsignedMax >> 1;
+  // (patches/0067-engine-round14-sign-mod-late-donothing-three-way-shift-sub.patch) An unsigned pair does not wrap either: at 8 bytes the constants 0 and 2^64 - 1
+  // are neighbours modulo 2^64 (`offset + 1` wraps in the 64-bit uintb) and not in order, so `(x u< 0) + (x u< 2^64 - 1) - 1` was taken for a three-way compare.
   if (a1 != a2) {	// Make sure a1 and a2 are equivalent
     if ((!a1->isConstant())||(!a2->isConstant())) return -1;
+    if (a1->getOffset() != a2->getOffset() && !twoLessThan) return -1;
     if ((a1->getOffset() != a2->getOffset())&&twoLessThan) {
       if (a2->getOffset() + 1 == a1->getOffset()) {
+	if (signedPair ? a2->getOffset() == signedMax : a2->getOffset() == unsignedMax) return -1;
 	twoLessThan = false;		// -lessequalop- is LESSTHAN, equivalent to LESSEQUAL
       }
       else if (a1->getOffset() + 1 == a2->getOffset()) {
+	if (signedPair ? a1->getOffset() == signedMax : a1->getOffset() == unsignedMax) return -1;
 	twoLessThan = false;		// -lessop- is LESSTHAN, equivalent to LESSEQUAL
 	res = 1;			// we need to swap
       }
@@ -10091,9 +10275,11 @@ int4 RuleThreeWayCompare::testCompareEquivalence(PcodeOp *lessop,PcodeOp *lesseq
     if ((!b1->isConstant())||(!b2->isConstant())) return -1;
     if ((b1->getOffset() != b2->getOffset())&&twoLessThan) {
       if (b1->getOffset() + 1 == b2->getOffset()) {
+	if (signedPair ? b1->getOffset() == signedMax : b1->getOffset() == unsignedMax) return -1;
 	twoLessThan = false;
       }
       else if (b2->getOffset() + 1 == b1->getOffset()) {
+	if (signedPair ? b2->getOffset() == signedMax : b2->getOffset() == unsignedMax) return -1;
 	twoLessThan = false;
 	res = 1;			// we need to swap
       }
@@ -10771,7 +10957,8 @@ int4 RuleLzcountShiftBool::applyOp(PcodeOp *op,Funcdata &data)
     Varnode *vn1 = baseOp->getIn(1);
     if (!vn1->isConstant()) continue;
     uintb shift = vn1->getOffset();
-    if ((max_return >> shift) == 1) {
+    // SaturnExplorer (patches/0064-engine-divopt-sign-and-wrap-rule-guards.patch): a C++ shift by 64 or more is not 0
+    if (shift < 64 && (max_return >> shift) == 1) {
       // Becomes a comparison with zero
       PcodeOp* newOp = data.newOp(2, baseOp->getAddr());
       data.opSetOpcode(newOp, CPUI_INT_EQUAL);
