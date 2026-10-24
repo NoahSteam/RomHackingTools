@@ -19,6 +19,7 @@
  * Modified for SaturnExplorer: replacing an input of an op forgets what was known of its output's non-zero bits (patches/0046-engine-input-replaced-resets-nzmask.patch).
  * Modified for SaturnExplorer: and of the non-zero bits of what was worked out from that output (patches/0049-engine-nzmask-forgotten-downstream.patch).
  * Modified for SaturnExplorer: every change to an op keeps the non-zero and consume masks around it a superset of the truth, in place of 0046 and 0049 (patches/0054-engine-cached-masks-never-narrower.patch).
+ * Modified for SaturnExplorer: a STORE made a COPY splits the INDIRECT it covered in the middle of with the right first piece (patches/0068-engine-deadcode-late-stack-reads.patch).
  */
 #include "funcdata.hh"
 #include "flow.hh"
@@ -1672,7 +1673,10 @@ void Funcdata::opCollapseIndirectsForCopy(PcodeOp *copyOp)
 	  int4 byteOff = (vn2->getSpace()->isBigEndian()) ? vn2->getSize() - bytesBefore : 0;
 	  PcodeOp *subBefore = newOp(2,op->getAddr());
 	  opSetOpcode(subBefore,CPUI_SUBPIECE);
-	  frontVn = newVarnodeOut(bytesAfter,vn2->getAddr(),subBefore);
+	  // SaturnExplorer (0068): the piece before the COPY's bytes is bytesBefore long. Upstream made it
+	  // bytesAfter long, so a byte stored at offset 1 or 2 of a guarded word (one before, two after) read
+	  // back as the word's top two bytes, the stored byte a byte late and five bytes in all (A3-124)
+	  frontVn = newVarnodeOut(bytesBefore,vn2->getAddr(),subBefore);
 	  opSetInput(subBefore,invn,0);
 	  opSetInput(subBefore,newConstant(4,byteOff),1);
 	  opInsertAfter(subBefore, insertPoint);

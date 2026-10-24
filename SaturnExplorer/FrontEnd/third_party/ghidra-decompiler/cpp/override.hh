@@ -12,6 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified for SaturnExplorer: the dead code delay installed for a space, and how many times one was raised (patches/0068-engine-deadcode-late-stack-reads.patch).
  */
 /// \file override.hh
 /// \brief A system for sending override commands to the decompiler
@@ -151,16 +153,21 @@ private:
   map<Address,Record *> pcodeover;	///< Raw p-code overrides for instructions
   map<Address,Address> forcegoto;	///< Force goto on jump at \b targetpc to \b destpc
   vector<int4> deadcodedelay;		///< Delay count indexed by address space
+  int4 deadcodeBumps;			///< SaturnExplorer (0068): times Heritage raised a delay, for the restarts it may ask for
   map<Address,Address> deindirect;	///< Convert CALLIND into CALL with recovered direct \b addr
   map<Address,FuncProto *> protoover;	///< Override prototype at \b call-point
   vector<Address> multistagejump;	///< Addresses of indirect jumps that need multistage recovery
   void clear(void);			///< Clear the entire set of overrides
   static string generateDeadcodeDelayMessage(int4 index,Architecture *glb);
 public:
+  Override(void) : deadcodeBumps(0) {}	///< Constructor (SaturnExplorer: 0068's count starts at 0)
   ~Override(void) { clear(); }		///< Destructor
   void insertForceGoto(const Address &targetpc,const Address &destpc);
   void insertDeadcodeDelay(AddrSpace *spc,int4 delay);
   bool hasDeadcodeDelay(AddrSpace *spc) const;
+  int4 getDeadcodeDelay(AddrSpace *spc) const;	///< SaturnExplorer (0068): the delay installed for a space, or -1
+  void noteDeadcodeBump(void) { deadcodeBumps += 1; }	///< SaturnExplorer (0068): Heritage raised a delay
+  int4 numDeadcodeBumps(void) const { return deadcodeBumps; }	///< SaturnExplorer (0068): times a delay was raised
   void insertDeindirect(const Address &callPoint,const Address &directAddr);
   void insertProtoOverride(const Address &callpoint,FuncProto *p);
   void insertMultistageJump(const Address &addr);
