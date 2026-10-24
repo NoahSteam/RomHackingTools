@@ -768,6 +768,22 @@ std::vector<uint64_t> YList(int w, uint64_t seed, size_t randoms)
             s.insert((static_cast<uint64_t>(p / d) + 1) & m);
             s.insert((static_cast<uint64_t>((p + d - 1) / d)) & m);
         }
+    // the multipliers of the two-instruction divisions a compiler writes for a half-width numerand: the low word of the add-form magic number (the 33-bit magic of
+    // an unsigned division loses its top bit in a 32-bit register: RuleDivTermAdd and RuleDivTermAdd2 meet exactly these), and the signed magics sign-extended
+    {
+        const int hb = 4 * w;                                          // the numerand's bits
+        for (uint64_t d = 2; d <= 70000; d += (d < 3000 ? 1 : 7))
+            for (int l = 1; l <= hb; ++l)
+            {
+                const unsigned __int128 mm = ((static_cast<unsigned __int128>(1) << (hb + l)) / d) + 1;
+                const unsigned __int128 top = static_cast<unsigned __int128>(1) << hb;
+                if (mm >= top && mm < (top << 1)) s.insert(static_cast<uint64_t>(mm - top) & m);
+                if (mm >= (top >> 1) && mm < top) s.insert((static_cast<uint64_t>(mm) | (m & ~((static_cast<uint64_t>(1) << hb) - 1))) & m);   // a negative signed magic, extended
+            }
+        std::vector<uint64_t> more;
+        for (uint64_t v : s) if (v >= (static_cast<uint64_t>(1) << (hb - 1)) && v < (static_cast<uint64_t>(1) << hb)) more.push_back((v | (m & ~((static_cast<uint64_t>(1) << hb) - 1))) & m);
+        for (uint64_t v : more) s.insert(v);
+    }
     for (int k = 0; k < 8 * w; ++k) for (int dv = -3; dv <= 3; ++dv) s.insert(((static_cast<uint64_t>(1) << k) + dv) & m);
     Rng r(seed);
     for (size_t i = 0; i < randoms; ++i) { const int bits = 1 + static_cast<int>(r.next() % (8 * w)); s.insert(r.next() & Mask(bits > 8 * w ? w : bits) & m); }
@@ -809,7 +825,7 @@ int main(int argc, char** argv)
             const std::vector<uint64_t> ys = YList(2 * xs, 0xC0FFEE, 200000);
             std::string out;
             long rewritten = 0, wrong = 0, total = 0;
-            int shown = 0, refusedShown = 0;
+            int shown = 0, refusedShown = 0; long refusedAll = 0, refusedDiv = 0;
             std::string oldOut;
             if (const char* op = std::getenv("DX_OLD")) { FILE* of = std::fopen(op, "rb"); if (of) { char buf[65536]; size_t k; while ((k = std::fread(buf, 1, sizeof buf, of)) > 0) oldOut.append(buf, k); std::fclose(of); } }
             std::vector<uint64_t> xv;
@@ -844,7 +860,15 @@ int main(int argc, char** argv)
                                                 std::printf("WRONG RuleDivOpt: %d bytes %s of %d by %llx, form %d, %s, cut %d, amount %d, reader %d\n", w, sext == 1 ? "sext" : (sext == 2 ? "and" : "zext"), xs, (unsigned long long)y, form, arith ? "s>>" : ">>", cut, amount, reader);
                                         }
                                         // DX_OLD=<outcome file of another engine for the same range>: the configurations that engine rewrote correctly and this one refuses
-                                        if (oldOut.size() > out.size() && oldOut[out.size()] == 'C' && ch == '0' && refusedShown++ < (std::getenv("DX_SHOW") ? std::atoi(std::getenv("DX_SHOW")) : 40))
+                                        // only those a division by 3 or more stands for: the divisor is 2^n / (y - 1) (n the bits the shifts and the SUBPIECE cut)
+                                        bool plausible = false;
+                                        if (oldOut.size() > out.size() && oldOut[out.size()] == 'C' && ch == '0')
+                                        {
+                                            const int nbits = (form == 0 ? 0 : 8 * cut) + (form == 2 ? 0 : amount);
+                                            if (y > 1 && nbits < 127) plausible = ((static_cast<unsigned __int128>(1) << nbits) / (y - 1)) >= 3;
+                                            ++refusedAll; if (plausible) ++refusedDiv;
+                                        }
+                                        if (plausible && refusedShown++ < (std::getenv("DX_SHOW") ? std::atoi(std::getenv("DX_SHOW")) : 40))
                                             std::printf("REFUSED (the other engine was right): %d bytes %s of %d by %llx, form %d, %s, cut %d, amount %d, reader %d\n", w, sext == 1 ? "sext" : (sext == 2 ? "and" : "zext"), xs, (unsigned long long)y, form, arith ? "s>>" : ">>", cut, amount, reader);
                                         out.push_back(ch);
                                     }
@@ -855,6 +879,7 @@ int main(int argc, char** argv)
             FILE* fp = std::fopen(argv[6], "wb");
             if (fp) { std::fwrite(out.data(), 1, out.size(), fp); std::fclose(fp); }
             std::printf("divexh14 opt xs=%d constants %llu..%llu of %zu: %ld configurations, %ld rewritten, %ld wrong\n", xs, (unsigned long long)first, (unsigned long long)(first + count - 1), ys.size(), total, rewritten, wrong);
+            if (!oldOut.empty()) std::printf("divexh14 vs the other engine: %ld configurations it rewrote right that this one refuses, %ld of them a division by 3 or more\n", refusedAll, refusedDiv);
         }
     }
     else if (mode == "term")
