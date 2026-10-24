@@ -2993,6 +2993,7 @@ void TestDivOptExhaustiveRound14()
     R13Graph t;
     long graphs = 0, rewritten = 0, values = 0;
     int shown = 0;
+    const auto t0 = std::chrono::steady_clock::now();
     const int xs = 1, w = 2;
     const uint64_t mw = PbMask(w);
     for (uint64_t y = 0; y <= mw; y += (y < 1024 ? 1 : 97))
@@ -3062,7 +3063,7 @@ void TestDivOptExhaustiveRound14()
                             }
                         }
                 }
-    std::printf("RuleDivOpt exhaustive (1-byte numerand): %ld graphs, %ld rewritten, %ld values compared\n", graphs, rewritten, values);
+    std::printf("RuleDivOpt exhaustive (1-byte numerand): %ld graphs, %ld rewritten, %ld values compared (%.0f ms)\n", graphs, rewritten, values, MsSince(t0));
     CHECK(rewritten >= 5200);       // 5,256 on patch 0064: a guard that refuses a division the corpora use fails here
 }
 
