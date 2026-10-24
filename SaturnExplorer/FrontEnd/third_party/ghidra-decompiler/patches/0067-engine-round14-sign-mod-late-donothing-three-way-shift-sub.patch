@@ -1,10 +1,10 @@
 diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc
 --- a/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc
 +++ b/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc
-@@ -22,6 +22,7 @@
-  * Modified for SaturnExplorer: the backward step of the consume analysis is PcodeOp::getConsumeLocal (patches/0054-engine-cached-masks-never-narrower.patch).
+@@ -23,6 +23,7 @@
   * Modified for SaturnExplorer: the entry stack pointer a loop walks down is no reference to a stack parameter, and a save slot it reaches stays mapped (patches/0056-engine-stack-walk-down-aliases.patch).
   * Modified for SaturnExplorer: so does a save slot an indexed store's guard covers (patches/0063-engine-frame-escape-unknown-pointers.patch).
+  * Modified for SaturnExplorer: the walk down's bound keeps a stack parameter reference (patches/0066-engine-frame-escape-inexact.patch).
 + * Modified for SaturnExplorer: ActionLateDoNothing tests each block again against the graph the earlier removals left, so the two empty arms of one branch are not both removed (patches/0067-engine-round14-sign-mod-late-donothing-three-way-shift-sub.patch).
   */
  #include "coreaction.hh"
