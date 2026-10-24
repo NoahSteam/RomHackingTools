@@ -1692,10 +1692,11 @@ elseif(EMSCRIPTEN)
         ${SE_IMGUI_DIR}/backends/imgui_impl_sdl2.cpp
         ${SE_IMGUI_DIR}/backends/imgui_impl_opengl3.cpp
     )
+    # App.cpp's sound export calls ScspMixVoices and ScspResampleMono in every build (pure code, no live dependency).
+    list(APPEND SE_WEB_SRC FrontEnd/src/ScspMix.cpp)
     if(SE_WEB_LIVE)
         list(APPEND SE_WEB_SRC FrontEnd/src/FrameRecorder.cpp FrontEnd/src/FrameLz.cpp
                                FrontEnd/src/SavestateSlots.cpp
-            FrontEnd/src/ScspMix.cpp
                                FrontEnd/src/PatchLibrary.cpp)
     endif()
     add_executable(SaturnExplorerFrontEnd ${SE_WEB_SRC})
