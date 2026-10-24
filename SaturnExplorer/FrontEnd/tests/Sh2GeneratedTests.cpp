@@ -737,7 +737,12 @@ struct Gen
         }
         else if (kind == LitKind::Ram)
         {
-            l.value = (rng.Chance(75) ? 0x26000000u : 0x06000000u) + 0x2000u + 0x80u * rng.Below(8) + 4u * rng.Below(4);
+            // One draw per statement: the order of the operands of + is unspecified, and GCC and Clang draw them differently (the programs of a
+            // seed then differed between Linux and macOS, and the seed pins failed there). This is GCC's order, so the programs are the ones they were.
+            const uint32_t base = rng.Chance(75) ? 0x26000000u : 0x06000000u;
+            const uint32_t word = rng.Below(4);
+            const uint32_t line = rng.Below(8);
+            l.value = base + 0x2000u + 0x80u * line + 4u * word;
             l.width = rng.Chance(50) ? 4 : rng.Chance(50) ? 2 : 1;
         }
         else if (kind == LitKind::Cache)
@@ -1870,7 +1875,12 @@ struct Gen
         if (rng.Chance(30)) f.tail.push_back(MakeSimple(-1, true, false));
         // mac, in one program of eight; never ahead of the pointer registers' literals
         if (macRng.Chance(12))
-            items.insert(items.begin() + 1 + macRng.Below(static_cast<uint32_t>(items.size())), MakeMac());
+        {
+            // MakeMac draws from macRng too, and the order of a call's arguments is unspecified (GCC made the mac first, Clang the position): GCC's order.
+            Item mac = MakeMac();
+            const uint32_t at = 1 + macRng.Below(static_cast<uint32_t>(items.size()));
+            items.insert(items.begin() + at, std::move(mac));
+        }
         // A pointer moved between bus partitions with a mask -- `and` 0x1FFFFFFF (to the cached partition) or `or` 0x20000000 (to the
         // cache-through one), the idiom SBL calls CACHE_THROUGH (A5-51) -- in one program of eight, after the pointer's literal. The pointer
         // is then a merge of addresses whenever a skipped reload gave it two values, which the engine does not fold to a constant.
