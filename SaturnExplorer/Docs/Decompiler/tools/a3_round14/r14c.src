@@ -1,0 +1,169 @@
+name R14-6a nested: unlent c keeps &caller_word in its local L, hands &L (r4) to unlent d, which keeps *r4 in a global; c reloads it and writes 7 through it
+asm 06009000
+.word 0x4F22
+add #-8,r15
+mov #5,r0
+mov.l r0,@r15
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l @r15,r0
+add #8,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+.word 0x4F22
+add #-4,r15
+mov r15,r1
+add #8,r1
+mov.l r1,@r15
+mov r15,r4
+mov.l =0x06009200,r2
+jsr @r2
+nop
+mov.l =0x0600F300,r1
+mov.l @r1,r1
+mov #7,r0
+mov.l r0,@r1
+add #4,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009200
+mov.l @r4,r1
+mov.l =0x0600F300,r2
+mov.l r1,@r2
+rts
+nop
+endasm
+args 0 0 0 0
+end
+
+name R14-6b nested control: c hands &caller_word itself in r4 (the register rule catches it)
+asm 06009000
+.word 0x4F22
+add #-8,r15
+mov #5,r0
+mov.l r0,@r15
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l @r15,r0
+add #8,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+.word 0x4F22
+mov r15,r4
+add #4,r4
+mov.l =0x06009200,r2
+jsr @r2
+nop
+mov.l =0x0600F300,r1
+mov.l @r1,r1
+mov #7,r0
+mov.l r0,@r1
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009200
+mov.l =0x0600F300,r2
+mov.l r4,@r2
+rts
+nop
+endasm
+args 0 0 0 0
+end
+
+name R14-6c nested: &caller_word in c's outgoing stack word (the fifth argument), kept by d
+asm 06009000
+.word 0x4F22
+add #-8,r15
+mov #5,r0
+mov.l r0,@r15
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l @r15,r0
+add #8,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+.word 0x4F22
+mov r15,r1
+add #4,r1
+add #-4,r15
+mov.l r1,@r15
+mov.l =0x06009200,r2
+jsr @r2
+nop
+add #4,r15
+mov.l =0x0600F300,r1
+mov.l @r1,r1
+mov #7,r0
+mov.l r0,@r1
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009200
+mov.l @r15,r1
+mov.l =0x0600F300,r2
+mov.l r1,@r2
+rts
+nop
+endasm
+args 0 0 0 0
+end
+
+name R14-6d nested: &L in r2 (the structure-return register) instead of r4
+asm 06009000
+.word 0x4F22
+add #-8,r15
+mov #5,r0
+mov.l r0,@r15
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l @r15,r0
+add #8,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+.word 0x4F22
+add #-4,r15
+mov r15,r1
+add #8,r1
+mov.l r1,@r15
+mov r15,r2
+mov.l =0x06009200,r3
+jsr @r3
+nop
+mov.l =0x0600F300,r1
+mov.l @r1,r1
+mov #7,r0
+mov.l r0,@r1
+add #4,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009200
+mov.l @r2,r1
+mov.l =0x0600F300,r3
+mov.l r1,@r3
+rts
+nop
+endasm
+args 0 0 0 0
+end

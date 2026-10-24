@@ -1,0 +1,166 @@
+name R14-4a frame 0x1A000 B=0x19000 S=0x1000 stride 0x8000 unbounded sub
+asm 06009000
+mov.l =106496,r1
+sub r1,r15
+mov.l =102400,r3
+mov r15,r2
+add r3,r2
+mov.l =4096,r3
+add r15,r3
+mov #5,r0
+mov.l r0,@r3
+add r4,r2
+mov.l =32768,r5
+mov #3,r1
+L:
+sub r5,r2
+mov.l r1,@r2
+dt r1
+bf L
+mov.l @r3,r0
+mov.l =106496,r1
+add r1,r15
+rts
+nop
+endasm
+args 0 0 0 0
+end
+
+name R14-4b same, constant base
+asm 06009000
+mov.l =106496,r1
+sub r1,r15
+mov.l =102400,r3
+mov r15,r2
+add r3,r2
+mov.l =4096,r3
+add r15,r3
+mov #5,r0
+mov.l r0,@r3
+mov.l =32768,r5
+mov #3,r1
+L:
+sub r5,r2
+mov.l r1,@r2
+dt r1
+bf L
+mov.l @r3,r0
+mov.l =106496,r1
+add r1,r15
+rts
+nop
+endasm
+args 0 0 0 0
+end
+
+name R14-4c frame 0x30000 B=0x2C000 S=0x4000 stride 0x8000 unbounded (0x28000 below)
+asm 06009000
+mov.l =196608,r1
+sub r1,r15
+mov.l =114688,r3
+mov r15,r2
+add r3,r2
+mov.l =16384,r3
+add r15,r3
+mov #5,r0
+mov.l r0,@r3
+add r4,r2
+mov.l =32768,r5
+mov #3,r1
+L:
+sub r5,r2
+mov.l r1,@r2
+dt r1
+bf L
+mov.l @r3,r0
+mov.l =196608,r1
+add r1,r15
+rts
+nop
+endasm
+args 0 0 0 0
+end
+
+name R14-4d same with add of -stride
+asm 06009000
+mov.l =196608,r1
+sub r1,r15
+mov.l =114688,r3
+mov r15,r2
+add r3,r2
+mov.l =16384,r3
+add r15,r3
+mov #5,r0
+mov.l r0,@r3
+add r4,r2
+mov.l =4294934528,r5
+mov #3,r1
+L:
+add r5,r2
+mov.l r1,@r2
+dt r1
+bf L
+mov.l @r3,r0
+mov.l =196608,r1
+add r1,r15
+rts
+nop
+endasm
+args 0 0 0 0
+end
+
+name R14-4e same constant base add
+asm 06009000
+mov.l =196608,r1
+sub r1,r15
+mov.l =114688,r3
+mov r15,r2
+add r3,r2
+mov.l =16384,r3
+add r15,r3
+mov #5,r0
+mov.l r0,@r3
+mov.l =4294934528,r5
+mov #3,r1
+L:
+add r5,r2
+mov.l r1,@r2
+dt r1
+bf L
+mov.l @r3,r0
+mov.l =196608,r1
+add r1,r15
+rts
+nop
+endasm
+args 0 0 0 0
+end
+
+name R14-4f control: small frame 0x400 B=0x300 S=0x100 stride 0x80 unbounded
+asm 06009000
+mov.l =1024,r1
+sub r1,r15
+mov.l =640,r3
+mov r15,r2
+add r3,r2
+mov.l =256,r3
+add r15,r3
+mov #5,r0
+mov.l r0,@r3
+add r4,r2
+mov.l =128,r5
+mov #3,r1
+L:
+sub r5,r2
+mov.l r1,@r2
+dt r1
+bf L
+mov.l @r3,r0
+mov.l =1024,r1
+add r1,r15
+rts
+nop
+endasm
+args 0 0 0 0
+end
+

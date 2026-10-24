@@ -1,0 +1,63 @@
+name R14-15a notes: r14 holds a frame address at the first unlent call and is overwritten before the second and third
+asm 06009000
+.word 0x4F22
+add #-16,r15
+mov #5,r0
+mov.l r0,@r15
+mov r15,r14
+add #4,r14
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov #0,r14
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l @r15,r0
+add #16,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+rts
+nop
+endasm
+args 0 0 0 0
+end
+
+name R14-15b notes: r14 holds a frame address at the first and third call, not the second
+asm 06009000
+.word 0x4F22
+add #-16,r15
+mov #5,r0
+mov.l r0,@r15
+mov r15,r14
+add #4,r14
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov r14,r5
+mov #0,r14
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov r5,r14
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l @r15,r0
+add #16,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+rts
+nop
+endasm
+args 0 0 0 0
+end

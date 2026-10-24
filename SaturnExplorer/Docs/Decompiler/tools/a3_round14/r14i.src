@@ -1,0 +1,378 @@
+name R14-11 stride=shll2 of -1 unbounded=1 (add r5,r2)
+asm 06009000
+add #-24,r15
+mov r15,r2
+add #16,r2
+mov #5,r0
+mov.l r0,@r15
+add r4,r2
+mov #-1,r5
+shll2 r5
+mov #4,r1
+L:
+add r5,r2
+mov.l r1,@r2
+dt r1
+bf L
+mov.l @r15,r0
+add #24,r15
+rts
+nop
+endasm
+args 0 0 0 0
+end
+
+name R14-11 stride=neg of 4 unbounded=1 (add r5,r2)
+asm 06009000
+add #-24,r15
+mov r15,r2
+add #16,r2
+mov #5,r0
+mov.l r0,@r15
+add r4,r2
+mov #4,r5
+neg r5,r5
+mov #4,r1
+L:
+add r5,r2
+mov.l r1,@r2
+dt r1
+bf L
+mov.l @r15,r0
+add #24,r15
+rts
+nop
+endasm
+args 0 0 0 0
+end
+
+name R14-11 stride=literal -4 unbounded=1 (add r5,r2)
+asm 06009000
+add #-24,r15
+mov r15,r2
+add #16,r2
+mov #5,r0
+mov.l r0,@r15
+add r4,r2
+mov.l =0xFFFFFFFC,r5
+mov #4,r1
+L:
+add r5,r2
+mov.l r1,@r2
+dt r1
+bf L
+mov.l @r15,r0
+add #24,r15
+rts
+nop
+endasm
+args 0 0 0 0
+end
+
+name R14-11 stride=spilled -4 unbounded=1 (add r5,r2)
+asm 06009000
+add #-24,r15
+mov r15,r2
+add #16,r2
+mov #5,r0
+mov.l r0,@r15
+add r4,r2
+mov #-4,r5
+mov.l r5,@(20,r15)
+mov.l @(20,r15),r5
+mov #4,r1
+L:
+add r5,r2
+mov.l r1,@r2
+dt r1
+bf L
+mov.l @r15,r0
+add #24,r15
+rts
+nop
+endasm
+args 0 0 0 0
+end
+
+name R14-11 stride=not of 3 unbounded=1 (add r5,r2)
+asm 06009000
+add #-24,r15
+mov r15,r2
+add #16,r2
+mov #5,r0
+mov.l r0,@r15
+add r4,r2
+mov #3,r5
+not r5,r5
+mov #4,r1
+L:
+add r5,r2
+mov.l r1,@r2
+dt r1
+bf L
+mov.l @r15,r0
+add #24,r15
+rts
+nop
+endasm
+args 0 0 0 0
+end
+
+name R14-11 stride=sub from 0 unbounded=1 (add r5,r2)
+asm 06009000
+add #-24,r15
+mov r15,r2
+add #16,r2
+mov #5,r0
+mov.l r0,@r15
+add r4,r2
+mov #0,r5
+mov #4,r3
+sub r3,r5
+mov #4,r1
+L:
+add r5,r2
+mov.l r1,@r2
+dt r1
+bf L
+mov.l @r15,r0
+add #24,r15
+rts
+nop
+endasm
+args 0 0 0 0
+end
+
+name R14-11 stride=xor unbounded=1 (add r5,r2)
+asm 06009000
+add #-24,r15
+mov r15,r2
+add #16,r2
+mov #5,r0
+mov.l r0,@r15
+add r4,r2
+mov #-1,r5
+mov #3,r3
+xor r3,r5
+mov #4,r1
+L:
+add r5,r2
+mov.l r1,@r2
+dt r1
+bf L
+mov.l @r15,r0
+add #24,r15
+rts
+nop
+endasm
+args 0 0 0 0
+end
+
+name R14-11 stride=shll2 of -1 unbounded=0 (add r5,r2)
+asm 06009000
+add #-24,r15
+mov r15,r2
+add #16,r2
+mov #5,r0
+mov.l r0,@r15
+mov #-1,r5
+shll2 r5
+mov #4,r1
+L:
+add r5,r2
+mov.l r1,@r2
+dt r1
+bf L
+mov.l @r15,r0
+add #24,r15
+rts
+nop
+endasm
+args 0 0 0 0
+end
+
+name R14-11 stride=neg of 4 unbounded=0 (add r5,r2)
+asm 06009000
+add #-24,r15
+mov r15,r2
+add #16,r2
+mov #5,r0
+mov.l r0,@r15
+mov #4,r5
+neg r5,r5
+mov #4,r1
+L:
+add r5,r2
+mov.l r1,@r2
+dt r1
+bf L
+mov.l @r15,r0
+add #24,r15
+rts
+nop
+endasm
+args 0 0 0 0
+end
+
+name R14-11 stride=literal -4 unbounded=0 (add r5,r2)
+asm 06009000
+add #-24,r15
+mov r15,r2
+add #16,r2
+mov #5,r0
+mov.l r0,@r15
+mov.l =0xFFFFFFFC,r5
+mov #4,r1
+L:
+add r5,r2
+mov.l r1,@r2
+dt r1
+bf L
+mov.l @r15,r0
+add #24,r15
+rts
+nop
+endasm
+args 0 0 0 0
+end
+
+name R14-11 stride=spilled -4 unbounded=0 (add r5,r2)
+asm 06009000
+add #-24,r15
+mov r15,r2
+add #16,r2
+mov #5,r0
+mov.l r0,@r15
+mov #-4,r5
+mov.l r5,@(20,r15)
+mov.l @(20,r15),r5
+mov #4,r1
+L:
+add r5,r2
+mov.l r1,@r2
+dt r1
+bf L
+mov.l @r15,r0
+add #24,r15
+rts
+nop
+endasm
+args 0 0 0 0
+end
+
+name R14-11 stride=not of 3 unbounded=0 (add r5,r2)
+asm 06009000
+add #-24,r15
+mov r15,r2
+add #16,r2
+mov #5,r0
+mov.l r0,@r15
+mov #3,r5
+not r5,r5
+mov #4,r1
+L:
+add r5,r2
+mov.l r1,@r2
+dt r1
+bf L
+mov.l @r15,r0
+add #24,r15
+rts
+nop
+endasm
+args 0 0 0 0
+end
+
+name R14-11 stride=sub from 0 unbounded=0 (add r5,r2)
+asm 06009000
+add #-24,r15
+mov r15,r2
+add #16,r2
+mov #5,r0
+mov.l r0,@r15
+mov #0,r5
+mov #4,r3
+sub r3,r5
+mov #4,r1
+L:
+add r5,r2
+mov.l r1,@r2
+dt r1
+bf L
+mov.l @r15,r0
+add #24,r15
+rts
+nop
+endasm
+args 0 0 0 0
+end
+
+name R14-11 stride=xor unbounded=0 (add r5,r2)
+asm 06009000
+add #-24,r15
+mov r15,r2
+add #16,r2
+mov #5,r0
+mov.l r0,@r15
+mov #-1,r5
+mov #3,r3
+xor r3,r5
+mov #4,r1
+L:
+add r5,r2
+mov.l r1,@r2
+dt r1
+bf L
+mov.l @r15,r0
+add #24,r15
+rts
+nop
+endasm
+args 0 0 0 0
+end
+
+name R14-11 sub of 4 from literal, unbounded=1 (sub r5,r2 with r5=4 via shll2 of 1)
+asm 06009000
+add #-24,r15
+mov r15,r2
+add #16,r2
+mov #5,r0
+mov.l r0,@r15
+add r4,r2
+mov #1,r5
+shll2 r5
+mov #4,r1
+L:
+sub r5,r2
+mov.l r1,@r2
+dt r1
+bf L
+mov.l @r15,r0
+add #24,r15
+rts
+nop
+endasm
+args 0 0 0 0
+end
+
+name R14-11 stride param r5=-4 at run, unbounded (sign unknown: the A3-9 convention)
+asm 06009000
+add #-24,r15
+mov r15,r2
+add #16,r2
+mov #5,r0
+mov.l r0,@r15
+add r4,r2
+mov #4,r1
+L:
+add r5,r2
+mov.l r1,@r2
+dt r1
+bf L
+mov.l @r15,r0
+add #24,r15
+rts
+nop
+endasm
+args 0 fffffffc 0 0
+end

@@ -1,0 +1,233 @@
+name R14-13a frame 0x200, p = sp+0x1c0, stride mov.w =-128 (pool halfword), 3 stores reach sp+0x40
+asm 06009000
+add #-127,r15
+add #-127,r15
+add #-127,r15
+add #-127,r15
+add #-4,r15
+mov r15,r2
+add #127,r2
+add #127,r2
+add #127,r2
+add #67,r2
+mov r15,r3
+add #64,r3
+mov #5,r0
+mov.l r0,@r3
+mov.w =0xFF80,r5
+mov #3,r1
+L:
+add r5,r2
+mov.l r1,@r2
+dt r1
+bf L
+mov.l @r3,r0
+add #127,r15
+add #127,r15
+add #127,r15
+add #127,r15
+add #4,r15
+rts
+nop
+endasm
+args 0 0 0 0
+end
+
+name R14-13b same, unbounded index added
+asm 06009000
+add #-127,r15
+add #-127,r15
+add #-127,r15
+add #-127,r15
+add #-4,r15
+mov r15,r2
+add #127,r2
+add #127,r2
+add #127,r2
+add #67,r2
+mov r15,r3
+add #64,r3
+mov #5,r0
+mov.l r0,@r3
+add r4,r2
+mov.w =0xFF80,r5
+mov #3,r1
+L:
+add r5,r2
+mov.l r1,@r2
+dt r1
+bf L
+mov.l @r3,r0
+add #127,r15
+add #127,r15
+add #127,r15
+add #127,r15
+add #4,r15
+rts
+nop
+endasm
+args 0 0 0 0
+end
+
+name R14-13c same with the stride by pool long
+asm 06009000
+add #-127,r15
+add #-127,r15
+add #-127,r15
+add #-127,r15
+add #-4,r15
+mov r15,r2
+add #127,r2
+add #127,r2
+add #127,r2
+add #67,r2
+mov r15,r3
+add #64,r3
+mov #5,r0
+mov.l r0,@r3
+mov.l =0xFFFFFF80,r5
+mov #3,r1
+L:
+add r5,r2
+mov.l r1,@r2
+dt r1
+bf L
+mov.l @r3,r0
+add #127,r15
+add #127,r15
+add #127,r15
+add #127,r15
+add #4,r15
+rts
+nop
+endasm
+args 0 0 0 0
+end
+
+name R14-13d control: stride by sub of +128 (mov.w =0x0080)
+asm 06009000
+add #-127,r15
+add #-127,r15
+add #-127,r15
+add #-127,r15
+add #-4,r15
+mov r15,r2
+add #127,r2
+add #127,r2
+add #127,r2
+add #67,r2
+mov r15,r3
+add #64,r3
+mov #5,r0
+mov.l r0,@r3
+mov.w =0x0080,r5
+mov #3,r1
+L:
+sub r5,r2
+mov.l r1,@r2
+dt r1
+bf L
+mov.l @r3,r0
+add #127,r15
+add #127,r15
+add #127,r15
+add #127,r15
+add #4,r15
+rts
+nop
+endasm
+args 0 0 0 0
+end
+
+name R14-13e control: stride mov #-128 (imm8) in a register
+asm 06009000
+add #-127,r15
+add #-127,r15
+add #-127,r15
+add #-127,r15
+add #-4,r15
+mov r15,r2
+add #127,r2
+add #127,r2
+add #127,r2
+add #67,r2
+mov r15,r3
+add #64,r3
+mov #5,r0
+mov.l r0,@r3
+mov #-128,r5
+mov #3,r1
+L:
+add r5,r2
+mov.l r1,@r2
+dt r1
+bf L
+mov.l @r3,r0
+add #127,r15
+add #127,r15
+add #127,r15
+add #127,r15
+add #4,r15
+rts
+nop
+endasm
+args 0 0 0 0
+end
+
+name R14-13f control: add #-128 in the body
+asm 06009000
+add #-127,r15
+add #-127,r15
+add #-127,r15
+add #-127,r15
+add #-4,r15
+mov r15,r2
+add #127,r2
+add #127,r2
+add #127,r2
+add #67,r2
+mov r15,r3
+add #64,r3
+mov #5,r0
+mov.l r0,@r3
+mov #3,r1
+L:
+add #-128,r2
+mov.l r1,@r2
+dt r1
+bf L
+mov.l @r3,r0
+add #127,r15
+add #127,r15
+add #127,r15
+add #127,r15
+add #4,r15
+rts
+nop
+endasm
+args 0 0 0 0
+end
+
+name R14-13g small frame, stride mov.w =-4 (pool)
+asm 06009000
+add #-64,r15
+mov r15,r2
+add #48,r2
+mov r15,r3
+add #36,r3
+mov #5,r0
+mov.l r0,@r3
+mov.w =0xFFFC,r5
+mov #3,r1
+L:
+add r5,r2
+mov.l r1,@r2
+dt r1
+bf L
+mov.l @r3,r0
+add #64,r15
+rts
+nop
+endasm
+args 0 0 0 0
+end

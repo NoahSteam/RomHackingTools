@@ -1,0 +1,107 @@
+name R14-17a lent recursive g(p,n) stores at p then recurses with p-4, n-1; the caller passes &local[3] and n = 3
+asm 06009000
+.word 0x4F22
+add #-24,r15
+mov #5,r0
+mov.l r0,@r15
+mov #6,r0
+mov.l r0,@(4,r15)
+mov r15,r4
+add #12,r4
+mov #3,r5
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l @r15,r0
+add #24,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+.word 0x4F22
+mov #0x55,r0
+mov.l r0,@r4
+tst r5,r5
+bt DONE
+add #-4,r4
+add #-1,r5
+mov.l =0x06009100,r1
+jsr @r1
+nop
+DONE:
+.word 0x4F26
+rts
+nop
+endasm
+lend 06009100
+quiet
+args 0 0 0 0
+end
+
+name R14-17b chain of four lent functions, each stores at its pointer and passes p-4 to the next; the caller passes &local[3]
+asm 06009000
+.word 0x4F22
+add #-24,r15
+mov #5,r0
+mov.l r0,@r15
+mov #6,r0
+mov.l r0,@(4,r15)
+mov r15,r4
+add #12,r4
+mov #3,r5
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l @r15,r0
+add #24,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+.word 0x4F22
+mov #0x55,r0
+mov.l r0,@r4
+add #-4,r4
+mov.l =0x06009180,r1
+jsr @r1
+nop
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009180
+.word 0x4F22
+mov #0x55,r0
+mov.l r0,@r4
+add #-4,r4
+mov.l =0x06009200,r1
+jsr @r1
+nop
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009200
+.word 0x4F22
+mov #0x55,r0
+mov.l r0,@r4
+add #-4,r4
+mov.l =0x06009280,r1
+jsr @r1
+nop
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009280
+mov #0x55,r0
+mov.l r0,@r4
+rts
+nop
+endasm
+lend 06009280 06009200 06009180 06009100
+quiet
+args 0 0 0 0
+end
