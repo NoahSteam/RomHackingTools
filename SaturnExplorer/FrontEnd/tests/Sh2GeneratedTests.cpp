@@ -9722,6 +9722,28 @@ void TestPrintedC()
             const std::vector<CVerdict> r96b = CheckPrintedC(d, { { "A2-96: the value of && in arithmetic", { 0x6043, 0x6153, 0x6263, 0x6373, 0x0029, 0x6028, 0xD117, 0x0229, 0xE100, 0x7180, 0x4300, 0x0017, 0x001A, 0x4024, 0x0019, 0x0129, 0x73FE, 0x8B02, 0x4018, 0xE201, 0x632D, 0x303C, 0x326D, 0x010A, 0x001A, 0x7104, 0x3252, 0x301B, 0x4229, 0x616D, 0x205E, 0x031A, 0x0129, 0x320B, 0x4110, 0x324E, 0x300B, 0x420A, 0x7202, 0x602F, 0x237F, 0x021A, 0x7302, 0x4101, 0xC880, 0x324C, 0x205C, 0x337C, 0x430A, 0x2249, 0x6303, 0x000B, 0x6023, 0x0009, 0x8000, 0x0000 } } }, nIn, cc, 0x51ED, 8985);
             std::printf("pin 'A2-96 (arithmetic)': %s (%s)\n", r96b[0].cls.empty() ? "agrees" : r96b[0].cls.c_str(), r96b[0].detail.substr(0, 90).c_str());
             CHECK(r96b[0].cls == "narrow-c");
+            // A2-101 (patch 0069): an || that is the first operand of a nested && was printed without parentheses, `A || B && c` for (A || B) && c: the carry or
+            // overflow of addc/subc/addv/subv/negc or cmp/str below an entry-T bt.
+            const std::vector<CVerdict> r101 = CheckPrintedC(d, { { "A2-101: addc below bt", { 0x6153, 0x8903, 0x245C, 0x8B02, 0x3466, 0x8B00, 0x311C, 0x000B, 0x6013 } },
+                                                               { "A2-101: shift below bt", { 0x6153, 0x8903, 0x6C0A, 0x8B02, 0x4011, 0x8900, 0x3178, 0x000B, 0x6013 } },
+                                                               { "A2-101: cmp/str below bt", { 0x6043, 0x6153, 0x2169, 0x8903, 0x3C6E, 0x8B02, 0x3056, 0x8B00, 0x311C, 0x000B, 0x6013, 0x0009 } } },
+                                                             nIn, cc, 0x51ED, 8984);
+            for (size_t k = 0; k < r101.size(); ++k)
+            {
+                std::printf("pin 'A2-101 #%zu': %s (%s)\n", k, r101[k].cls.empty() ? "agrees" : r101[k].cls.c_str(), r101[k].detail.substr(0, 90).c_str());
+                CHECK(r101[k].cls.empty() && r101[k].compared);
+            }
+            // A2-120, A2-121 (the harness; CI's nightly run): `return a && b` was rewritten LAND(return a, b), and `0x8000000000000000U` was read as a uint4. Both texts
+            // are the engine's meaning: narrow-c (C reads -0x80000000 as an unsigned int).
+            const std::vector<CVerdict> r120 = CheckPrintedC(d, { { "A2-120: subv of 0x80000000 returned", { 0xD702, 0x375B, 0x0029, 0x000B, 0x0009, 0x0009, 0x8000, 0x0000 } },
+                                                               { "A2-121: the sign of a dmuls.l product", { 0x7FFC, 0x1F40, 0x2F41, 0x6013, 0x80F0, 0x57F0, 0x7F04, 0xD106, 0x371D, 0x050A, 0x6653,
+                                                                                                             0x4600, 0xE600, 0x356E, 0x4508, 0x4508, 0x6053, 0x000B, 0x0009, 0x0009, 0x0000, 0x0281 } } },
+                                                             nIn, cc, 0x51ED, 8983);
+            for (size_t k = 0; k < r120.size(); ++k)
+            {
+                std::printf("pin 'A2-12%zu': %s (%s)\n", k, r120[k].cls.empty() ? "agrees" : r120[k].cls.c_str(), r120[k].detail.substr(0, 90).c_str());
+                CHECK(r120[k].cls == "narrow-c");
+            }
             // A2-98: a compiled text that does not end is a class of its own, 'timeout', after a CPU limit, and the rest of its batch is kept. A text that spins is made from the
             // A2-92 control through the harness's hook (the generator makes no function whose text does not end once A2-97 is fixed).
             gPrintedCRunSeconds = 1;

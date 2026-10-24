@@ -1,0 +1,25 @@
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/printc.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/printc.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/printc.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/printc.cc
+@@ -14,6 +14,7 @@
+  * limitations under the License.
+  *
+  * Modified for SaturnExplorer: a boolean-typed constant other than 0 and 1 is printed as the integer it is (patches/0033-engine-printed-value-fixes.patch).
++ * Modified for SaturnExplorer: the first operand of a nested && or || is parenthesized like the second (patches/0069-engine-nested-condition-parens.patch).
+  */
+ #include "printc.hh"
+ #include "funcdata.hh"
+@@ -2987,7 +2988,13 @@
+   }
+   if (isSet(only_branch) || isSet(comma_separate)) {
+     int4 id = emit->openParen(OPEN_PAREN);
++    // Nested (comma_separate inherited), the first block's condition is printed without its own parentheses (opCbranch), so an
++    // || there read as the left operand of this && binds looser than it: `A || B && c` for (A || B) && c (A2-101).
++    const bool nested = isSet(comma_separate);
++    int4 id1 = nested ? emit->openParen(OPEN_PAREN) : 0;
+     bl->getBlock(0)->emit(this);
++    if (nested)
++      emit->closeParen(CLOSE_PAREN,id1);
+     pushMod();
+     unsetMod(only_branch);
+ 				// Notice comma_separate placed only on second block
