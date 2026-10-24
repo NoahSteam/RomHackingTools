@@ -12832,3 +12832,122 @@ The numbers are the round 13 fix's. The `8dcbb70` run lends the same 678 and 1,0
 - The T-bit family (A3-95) is accepted; I did not find a cheaper sound rule, and none of the new instructions (`shll`/`rotcl`, `addc`, `movt`) changes the argument.
 - A3-107's shape (a callee the probe cannot name writes the caller's word through its own r15) now has the exception frame of `trapa` as a second compiled-looking carrier (R14-9f); it stays accepted there.
 - The next reviewer should read the old fuzzers' oracle rejections (`escsum14.py`) and pin a lent-callee case with a stack argument shown (A3-117 has none lent: a lent callee reads no stack word).
+
+## Area 3, round 14 fix
+
+Fixer, branch `review/3-round14-fix`, on the coordinator's head `76a43f0`. Code commits `63d40b6` to `cc83a0c` (engine patch `0066`, the host, the generator stream and oracle, the pins, the fault re-pins), then the ledger, the patch docs and this record. Own RelWithDebInfo build under the scratch directory, `-j2`, every run under `ulimit -v 4000000` with a timeout, one heavy job at a time. The container did not restart; every long run was a resumable piece.
+
+**The rows.**
+
+- Fixed: A3-118, A3-119 (P1); A3-117, A3-120, A3-122 (P2); A3-121 (P3, the instrument); A3-123 (routed P2, triaged to a P3 oracle false positive); A3-126 (found this round, P1).
+- Open, not fixed, with a reason in the row: A3-124 (routed P1). It is not the inexact-frame-address class: its pointer is an exact constant offset from r14, which patch 0066 deliberately does not escape, and the dead stores drop even in the printed-C copy that makes no call, so there is no escape to hang the rule on. It is a subword dead-store-elimination bug on a stack struct built through a reloaded exact frame pointer -- a distinct heritage/mixed-width class that needs its own fix. Left open for a dedicated round (the status cell says so).
+- The coordinator's numbering note was honoured: the one new wrong value I found is **A3-126** (A3-123 to A3-125 are the coordinator's).
+
+### 1. The design
+
+Since round 9, area 3's step-down detection recognised the walk below a frame address by its **form**: a constant add then a conditional step (0057), a spill (0060), an index (A3-116/0065), and the review's new non-constant strides (A3-118, A3-119). Each pattern list failed open on the next shape. This round stops recognising walks.
+
+**Engine, patch `0066-engine-frame-escape-inexact.patch` (amends 0056 to 0065).** A frame address the stack analysis cannot place as an **exact compile-time constant offset from the frame base** now *escapes*, using 0065's whole-frame alias. `FrameEscape::classifyExact` runs over the possible frame addresses by strongly-connected component (Tarjan, iterative) and gives each one of:
+
+- **an exact offset** -- the stack pointer's input, or a value built from one by copy, INDIRECT, addition or subtraction of a constant, PTRSUB, PTRADD of constants, or a join whose inputs all have the same exact offset;
+- **"up only from an offset"** -- a value a loop carries whose every step on the loop adds a constant that is not negative, entered with exact or up values (it is at or above the loop's lowest entry, which is then aliased);
+- **none** -- anything else: a register or an index added or subtracted, a stride loaded from a pool, a frame slot or a global, a join of two different offsets, a loop with a negative step or a step that is no constant, or a value whose inputs have none. A component too large to follow (4,096 members) gets none, failing closed.
+
+An access through a member with no exact offset, or a call it is handed to, makes the frame escape; the access's own guard is widened to the whole stack space (`Heritage::widenEscapedStoreGuards`, now for LOAD guards as well as STORE guards). A3-118 (an index a loop steps), A3-119 (a register stride the value-set analysis cannot read) and A3-126 (a loop-stepped index walking up from a negative start) are all this one cause.
+
+**The pattern detectors are demoted to precision helpers that may only add aliasing, never remove it:**
+
+- `AliasChecker::stepsDown` takes an `atCap` argument and returns it at its 4,096-value and 65,536-op bounds, where it used to `return false` ("no walk") -- the A3-122 bug class, a cap answering "no walk" and failing open. The callers that widen an alias pass `true` (fail closed); `ActionInputPrototype`'s stack-parameter check passes `false` (a cap there keeps a parameter reference).
+- `LoadGuard::pointerSteppedDown` returns `true` at its 64-hop bound.
+- `reachesStepDown` is unchanged (it already failed closed at 1,024).
+
+These still add the 0xffff-below guard where they recognise a walk, but the escape now catches whatever they miss, so no shape fails open.
+
+**A3-117 (host, `fspec.cc`).** The words at an unlent call's r15 that the engine prints as the call's fifth and later stack arguments are unmapped (`markNotMapped`), so 0065's whole-frame alias, which aliases Symbols, never reached them: a callee that wrote one through an escaped pointer, read back after the call, printed the value stored before (`xVar2 = 1; ...; return xVar2;` for 0x55). Now `FuncCallSpecs::buildInputFromTrials` skips `markNotMapped` for a stack-argument word when a frame address of the calling function has escaped (`FrameEscape::escaped`): the word stays a mapped local the whole-frame alias covers, and the read after the call is a read of the local.
+
+**A3-120 (host, the notes).** A frame-fact note said "is" of a word or register the host only proves *possible*. The probe now carries `Value::Sure` -- a frame address made from r15 by the function's own register operations and held there on every path, not a value a callee may have written over a slot and not a load taken for a possible frame address once the frame went out. A note says "a frame address is in ..." only when the bit it reports is `Sure`, and "a frame address may be in ..." otherwise (`kFrameEscapeNoteMay*`). R14-16e (nothing writes a frame address anywhere) now says "may"; R13-2a (the function itself stored the address in the word) keeps "is".
+
+**A3-121 (generator, the instrument).** `GenWalk14Fn` (one seed in eight, a stream of its own) draws: loop-stepped index walks down (`@(r0,p)` with r0 counting down, `p - i`, a scaled index, the index in r0 over r14) and up from a negative start; register strides from a pool long or halfword, a frame reload or a global, added or subtracted, over a constant or an unbounded base; the stack-argument word a callee keeps and writes (A3-117's frame, r6/r7/r6r7 set so the call shows a stack argument), with the caller walking down from the kept pointer or the callee writing its own first stack-argument word; and a loop body of 4,100 to 4,300 stores through the pointer that passes the cap (A3-122). `CheckLaunderWalks` now resolves a returned temporary written exactly once with a constant, so A3-117's `return xVar2;` is compared against the run instead of being dropped as "a local" -- round 13's oracle counted such a text as a local and never read it. 44 shape kinds are pinned in `TestA365Pins`.
+
+**A3-123 (triage, the generator oracle).** Grammar 2 seed 2616394, `n:claim-wrong:storesThrough`: function 0 byte-swaps r5's start 0x06021100 to 0x06020011 and hands it to a callee that stores a byte through it. 0x06020011 lands in r4's 4 KiB arena by chance, and the `storesThrough` arena check attributed the store to r4, which `storesThrough` does not name (the store is through r5). This is the oracle false positive of A3-100 and A3-115, in the `storesThrough` path rather than `outOrigins`; those two added a `BitwiseOfOthers` guard to `PointerRegister`, and the `storesThrough` arena check lacked it. The guard is added there; the seed is clean. P3 (an oracle false positive, no wrong engine output).
+
+With each fix reverted, the generator alone fails seeds (section 3). The 59 fuzz fixtures the old oracle rejected unread (escfuzz.py seed 301): 56 are A3-117 (a text returning a frame register variable at a call that shows a stack argument), and 3 are the caller index walks (A3-118); `escsum14.py` counts both, and on the fixed tree there are 0 of either (section 4).
+
+### 2. The engine's determinism
+
+`classifyExact` first broke the allocation-failure matrix: its temporaries (the `std::map`/`std::set` keyed by `Varnode *`) were built in the pointer order of the member set, so the *sequence* of allocations in a decompile depended on where the allocator had placed each Varnode, and six fault fixtures' counts did not settle between two runs of one function (the decompiled text was identical; only the allocation order moved). It now takes the members in **creation-index order** (`Varnode::getCreateIndex`) for the component walk and emits the inexact set in that order, so the allocation sequence is reproducible. Eight area-6 fault pins then reported `MOVED` (0066 adds allocations ahead of them); each was re-pinned to the ordinal the harness printed (`fixture1` A6-10 x2 -> 84; `stack` A6-14 x6). The fault suite is 0 of 94 (section 4).
+
+### 3. Mutation
+
+Each part reverted alone in the worktree (`mut/apply.py <name>`), built, run, and restored (`git checkout SaturnExplorer/FrontEnd`). The checks: the decompiler suite's round-14 pins; printed-C seeds 1 to 3,000 (the `walk14.*` streams); the generator's default pins; escfuzz14 seed 1101 (600 fixtures); hbfuzz14 seed 1 (300). Restored, every check passes.
+
+| Part reverted | Suite pins failing | Printed-C 3000 (failing shapes) | escfuzz14 (600) | Reading |
+|---|---|---|---|---|
+| E_inexact: `classifyExact` marks no member inexact | 31 (R14-2a to 2e, 2f, R14-11, R14-14) | all `walk14.idx.*` and `walk14.stride.*` (~260) | 0 new in seed 1101 (the index walkers are rare in one 600-fixture seed; the printed-C stream is the decisive signal) | held: the whole inexact-escape |
+| E_inexact + E_cap together | 31 | the above and `walk14.cap` | | held: the cap pair is load-bearing |
+| E_stackarg: the stack-argument word is unmapped again | 8 (R14-7b to 7e, and the controls stay) | `walk14.stackarg.*.walk` (73) | +18 `REG-var stackarg-shown` (A3-117) | held |
+| H_sure: a note always says "is" | 2 (R14-16e) | 0 | 0 | held (notes, not values) |
+| E_loadguard: LOAD guards not widened for an inexact pointer | 0 | 0 | 0 | redundant fail-closed guard (the store guard and the whole-frame alias cover the fixtures); kept |
+| E_cap: `stepsDown` returns false at its bound | 0 | 0 | 0 | redundant given E_inexact (the cap walk is also inexact); kept as the fail-closed answer the brief requires; load-bearing only with E_inexact also reverted |
+| E_hops: `pointerSteppedDown` returns false at 64 hops | 0 | 0 | 0 | redundant (an exact chain stays exact); kept |
+| E_uplows: a loop that steps up only is not aliased from its entry | 0 | 0 | 0 | redundant (the whole-frame alias from the floor covers it); kept |
+
+Each P1/P2 fix reverted as a whole (E_inexact, E_stackarg) fails the pins and the generator; H_sure fails the note pins. The redundant parts are fail-closed guards the brief asked for ("every cap must fail closed"); each is kept.
+
+The A3-123 oracle pin and the A3-115 pin in `TestRound13FixPins` were run with the `BitwiseOfOthers` guard reverted (not in the mutation script above): the A3-123 seed fails again and the pin's synthetic case reports `claim-wrong:storesThrough`; restored, both pass.
+
+### 4. Matrix
+
+On the final tree (`cc83a0c`), own RelWithDebInfo build, `-j2`, every binary under `ulimit -v 4000000`, one heavy job at a time, runs split into pieces of 20 minutes or less with a `.done` per piece:
+
+| Run | Result |
+|---|---|
+| `ctest -E SaturnExplorerLive -j2 --timeout 900` | 94 of 94 pass (166 s) |
+| fault suite (`SaturnExplorerDecompilerFaultTests` alone) | 0 of 94 jobs failed (77 s); 8 MOVED pins re-pinned as printed (section 2) |
+| generator grammar 2, seeds 1-3,000 | 0 failing |
+| generator grammar 1, seeds 1-1,000 | 0 failing |
+| generator printed-C, seeds 1-3,000 | 0 failing (laundered/escape walks 2,951; the `walk14.*` stream drawn, each shape compared) |
+| generator seeds 1-20,000 (four runs of 5,000) | 0 failing |
+| generator grammar 2, 2,700,001-2,720,000 (four runs of 5,000) | 0 failing |
+| generator specials, 2,800,001-2,805,000 | 0 failing |
+| `TestArea3HiddenInputFuzz`, `SE_A3FUZZ_PROGRAMS=5000`, seeds 12 and 13 | 1,176 and 1,172 lent, 15,288 and 15,236 perturbed runs, 0 findings |
+| `escfuzz14.py` seeds 1101-1110 (15,000 fixtures) | 81 stale constants, every one the T bit (A3-95, accepted); 0 `REG-var stackarg-shown` (A3-117), 0 `idxdown`/`subidx` (A3-118) |
+| `hbfuzz14.py` seeds 1-6 (4,200 fixtures) | 333 stale, every one the T bit; g never lent |
+| every `a3_round11/*.src`, `a3_round12/*.src`, `a3_round13/*.src`, `a3_round14/*.src` through the driver | 315 fixtures; each right or withheld, but S1 (`r12a.src`, A3-9's accepted convention), T1 (`r12q.src`, A3-95), and the A3-107 shapes (R14-9f `trapa`, D4, S7, V1, S4a) which stay accepted |
+| corpora (`SE_GAME_HWRAM=<img> SE_GAME_LEND=1`) | section 5 |
+| vendoring: `python3 -I vendor.py <ghidra>` on a copy | exit 0, "vendored 84 library sources, 3 compiler sources, 94 headers, 5 spec files", 0066 applied, the tree identical to the committed one |
+
+The review's fixtures R14-2a to 2e (index walks down), R14-11 and R14-14 (register strides), R14-7b to 7e (the stack-argument word), R14-18 N=4,100 to 4,300 (the cap), and R14-16e (the note) all print the local or "may" now; R14-2f (A3-126) too.
+
+### 5. The corpora
+
+`SE_GAME_HWRAM=<img> SE_GAME_LEND=1 SaturnExplorerSh2DecompilerTests <dir>`, the final tree against `76a43f0` (the base built from `git archive 76a43f0` beside it, one run each):
+
+| | hwram007 | hwram008 |
+|---|---|---|
+| lent signatures (parameters), base `76a43f0` | 678 (956) | 1,038 (1,310) |
+| lent signatures (parameters), this round | 678 (956) | 1,038 (1,310) |
+| ...real entries | 474 (645) of 999 | 724 (975) of 1,543 |
+| ...fragments | 204 (311) of 731 | 314 (335) of 1,452 |
+| a lent status that changed against the base | none | none |
+| texts changed, real entries | 53 of 999: 16 beyond notes, 37 by notes only | 83 of 1,543: 31 beyond notes, 52 by notes only |
+| `TestGameCode` | 12.8 s (base 10.7 s, 1.20x); 108 real entries, 731 fragments | 35.7 s (base 34.2 s, 1.05x); 102 and 1,452 |
+| every ledger count / missing and said / mapping violations | 0 / 0 / 0 | 0 / 4 / 0 |
+
+Lending is unchanged on both corpora: more aliasing keeps more locals live but lends no new signature and withdraws none (the escape widens aliasing, which the lending trial does not read since 0063's `trialBoundary`). The 47 beyond-notes changes on real entries were checked mechanically by `facts14.py`: the multiset of calls and every returned expression are equal in all of them (one variable renamed in `0602F118`/`0606E08C`). 15 were read against the disassembly (`drv --dis`):
+
+- **An unused frame array declared as plain locals** (007 06006D14, 0600D6AC, 06027420; 008 0600DB78, 0603A584, 0603ADC8, 0603CE58): the whole-frame alias now keeps the locals under an escaped address aliased, so the engine lays them out as named words/pointers instead of one `axStackY_90 [128]`. 06006D14: `mov r15,r14` prologue, `xStack_10 = 0` then `func_0x06019a48(2,0xc,5,0x604e8a0,0)` -- the call's fifth argument is the word at its r15, a saved-register note; the value is right.
+- **A stack argument read at its use** instead of copied before the call (007 0600C4E8; 008 06045EB4, 0603BBE4): 06045EB4 stores `0xe`/`0xf` to the word at the call's r15 and passes it; the code's `mov.l r1,@-r15` before the `jsr` writes exactly that word; same value.
+- **A pointer kept across calls declared as a local** (007 0601C4F0, 0602F118; 008 060574C8, 0605E900, 0606E08C): 0601C4F0 keeps `&uStack_1c` through `func_0x0601c2f4(...,&uStack_1c)`; 0602F118 reads `*(param_1 + 0x88)` into `pcStack_14` and calls through it -- the call multiset is identical.
+- **A spill or struct field kept** (007 06008CC0, 060329C8; 008 0600D54C, 0603D358, 06041AA0, 060331B4): 060331B4 spills `param_4`/`param_5` to `iStack_14`/`uStack_10` and passes them, the code reading `@(0xc,r14)` and the halfword; 06041AA0 reads `param_1` back from `iStack_44` where the prologue spilled it (`mov.l r4,@(0x30,r14)`); same values.
+- **A frame-fact note changed to "may"** (007 0601B914; 008 06042BBC): no instruction of these functions or their callees writes a frame address at the slot the note names (A3-120). The text is right either way; only the note's wording changed.
+
+The reading found no wrong value. The one note over-claim the review flagged (06042BBC r2, 0601B914 stack-argument) now says "may".
+
+### 6. Not done, and limits
+
+- A3-124 (routed P1) is open: it is a subword dead-store bug on a reloaded exact frame pointer, outside the inexact-escape class patch 0066 fixes (its pointer is an exact offset the design does not escape, and the stores drop with no call). It needs its own round.
+- The T-bit family (A3-95) stays accepted; the new strides and launderings add no cheaper sound rule.
+- The A3-107 shapes (a callee the probe cannot name writes the caller's word through its own r15, including `trapa`'s exception frame) stay accepted.
+- The redundant fail-closed guards (E_loadguard, E_cap, E_hops, E_uplows) are kept though reverting each alone fails nothing; each is a bound the brief required to fail closed.
+- Patches 0064 and 0065 are on the base; 0066 touches `coreaction.cc`, `fspec.cc`, `heritage.cc/.hh` and `varmap.cc/.hh`.
