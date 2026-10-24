@@ -8741,8 +8741,9 @@ bool GenEscapeWalkFn(uint64_t seed, CCase& c, std::string& shape)
 // stream's; the sentinel is also at r15 + 4, the word above the call's r15, and that is what is read back.
 //   twoargs.<lent|unlent>.<walk|disp>: g(p, obj) keeps p = r15 + 20 in an object (`mov.l r4,@(4,r5)`), with the word at the call's r15 written
 //        (the engine takes it for the call's fifth argument); the caller loads the kept pointer and stores below it, to r15 + 4 (A3-104)
-//   stackkeep.<lent|unlent>.<walk|disp>: p = r15 + 20 in the call's first stack argument word with r4-r7 unset (the engine drops it); g reads
-//        its incoming stack word and publishes it in a global; the caller loads the global and stores below it (A3-105)
+//   stackkeep.<lent|unlent>[.r4r7].<walk|disp>: p = r15 + 20 in the call's first stack argument word with r4-r7 unset (the engine drops it);
+//        g reads its incoming stack word and publishes it in a global; the caller loads the global and stores below it (A3-105); r4r7: p in
+//        r4 as well and r7 set, which the engine prints with no argument at all
 //   reload.<swap2|mask|global>: g spills the address of its caller's outgoing word to a local and reloads it through a laundered copy of r15
 //        (a swap pair, a mask) or through r15 published in a global, and writes through it; the caller reads its word back (A3-106)
 bool GenEscape13Fn(uint64_t seed, CCase& c, std::string& shape)
@@ -8798,9 +8799,16 @@ bool GenEscape13Fn(uint64_t seed, CCase& c, std::string& shape)
     }
     else if (form == "stackkeep")
     {
+        // r4r7: p in r4 too and r7 set, r5 and r6 unset (escfuzz seed 303 i=469): the engine prints the call with no argument at all
+        const bool r4r7 = rng.Chance(50);
         prologue();
         b.Put(0x61F3);   // mov r15,r1
         b.Put(0x7114);   // add #20,r1: p
+        if (r4r7)
+        {
+            b.Put(0x6413);   // mov r1,r4
+            b.Put(0xE725);   // mov #37,r7
+        }
         b.Put(0x7FFC);   // add #-4,r15
         b.Put(0x2F12);   // mov.l r1,@r15: the first stack argument word, r4-r7 unset
         call(gOff);
@@ -8815,7 +8823,7 @@ bool GenEscape13Fn(uint64_t seed, CCase& c, std::string& shape)
         b.Lit(2, kLaunderGlobal);
         b.Put(0x000B);
         b.Put(0x2212);   // mov.l r1,@r2
-        shape = std::string("escape13.stackkeep.") + (lent ? "lent." : "unlent.") + (walk ? "walk" : "disp");
+        shape = std::string("escape13.stackkeep.") + (lent ? "lent." : "unlent.") + (r4r7 ? "r4r7." : "") + (walk ? "walk" : "disp");
     }
     else
     {
@@ -10534,6 +10542,7 @@ void TestA365Pins(Sh2Decompiler& d)
         }
         std::printf("pin 'round 13 escape draws': %d functions in 2000 seeds, %zu kinds\n", n, drawn.size());
         for (const char* k : { "escape13.twoargs.lent", "escape13.twoargs.unlent", "escape13.stackkeep.lent", "escape13.stackkeep.unlent",
+                               "escape13.stackkeep.lent.r4r7", "escape13.stackkeep.unlent.r4r7",
                                "escape13.reload.swap2", "escape13.reload.mask", "escape13.reload.global" })
             CHECK(drawn[k] > 0);
     }
