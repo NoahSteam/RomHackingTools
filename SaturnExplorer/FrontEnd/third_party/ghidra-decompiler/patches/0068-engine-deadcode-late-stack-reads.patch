@@ -1,0 +1,405 @@
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/action.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/action.cc
+index 66bacfe..191ebfb 100644
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/action.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/action.cc
+@@ -16,6 +16,7 @@
+  * Modified for SaturnExplorer: host cancellation check-points (patches/0001-cancel-flag.patch).
+  * Modified for SaturnExplorer: a cloned action tree that cannot be completed or registered is freed (patches/0032-allocation-failure-order-2.patch).
+  * Modified for SaturnExplorer: a repeating action stops, with a warning, after a bounded number of passes (patches/0055-engine-action-repeats-bounded.patch).
++ * Modified for SaturnExplorer: a restart group allows one more restart for each raise of a dead code delay (patches/0068-engine-deadcode-late-stack-reads.patch).
+  */
+ #include "action.hh"
+ #include "funcdata.hh"
+@@ -612,7 +613,10 @@ int4 ActionRestartGroup::apply(Funcdata &data)
+     if (data.isJumptableRecoveryOn()) // Don't restart within jumptable recovery
+       return 0;
+     curstart += 1;
+-    if (curstart > maxrestarts) {
++    // SaturnExplorer (patches/0068-engine-deadcode-late-stack-reads.patch): each raise of a dead code delay
++    // (Heritage::bumpDeadcodeDelay, itself bounded) is a restart the output needs to be right; not taking
++    // it leaves a write removed before its read was found.
++    if (curstart > maxrestarts + data.getOverride().numDeadcodeBumps()) {
+       data.warningHeader("Exceeded maximum restarts with more pending");
+       curstart = -1;
+       return 0;
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata.cc
+index fc87778..e7639a7 100644
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata.cc
+@@ -16,6 +16,7 @@
+  * Modified for SaturnExplorer: the destructor frees the return-recovery state (patches/0004-funcdata-frees-active-output.patch).
+  * Modified for SaturnExplorer: every LOAD and STORE's fate is recorded (patches/0017-access-fates.patch).
+  * Modified for SaturnExplorer: the instructions and jump tables the flow recovered are recorded (patches/0021-flow-instructions.patch).
++ * Modified for SaturnExplorer: an access folded into the stack frame is flagged, and recorded again if a write goes with its value unread or the access with an unreachable block (patches/0068-engine-deadcode-late-stack-reads.patch).
+  */
+ #include "funcdata.hh"
+ 
+@@ -231,6 +232,45 @@ void Funcdata::recordAccessFold(const PcodeOp *op,const Varnode *vn)
+   Address addr;
+   if (!isMemoryAccess(op,store,size,addr)) return;
+   recordAccessFate(op,store,size,vn->getAddr(),fate_folded_ordinary);
++  // (0068) A flow STORE into the stack frame lives on as a variable write. Its fold is no conservation
++  // unless the value reaches what reads it: the op is flagged, opSetInput notes a reader, and opDestroy
++  // records it again (fate_frame_unread) if it goes with no reader (A3-124's stores, removed before
++  // the read was found, were counted as folded and nothing more).
++  if (op->getTime() < flowOps && vn->getSpace()->getType() == IPTR_SPACEBASE) {
++    op->setFrameFold();
++    // A LOAD's output has its readers already; a STORE's COPY output is new.
++    const Varnode *out = op->getOut();
++    if (!store && out != (const Varnode *)0) {
++      for(list<PcodeOp *>::const_iterator iter=out->beginDescend();iter!=out->endDescend();++iter)
++	if ((*iter)->code() != CPUI_MULTIEQUAL && (*iter)->code() != CPUI_INDIRECT) {
++	  op->setFrameFoldRead();
++	  break;
++	}
++    }
++  }
++}
++
++/// SaturnExplorer (patches/0068-engine-deadcode-late-stack-reads.patch): a LOAD or STORE that
++/// RuleLoadVarnode or RuleStoreVarnode folded into the stack frame ends a second time. With
++/// \b fate_frame_unread, the op is being destroyed and no op but a MULTIEQUAL or an INDIRECT (a
++/// marker of where a value may go, not a use) read the value it stored or loaded: a host compares a
++/// write with the reads of the frame the code makes, and one that reads a byte of it later, with no
++/// write of the frame between, read a value the analysis dropped; a read whose value nothing used
++/// (a register pop the engine takes for unaffected) is no such read. With \b fate_frame_removed, the read or write
++/// went with an unreachable block, so it is no read of the frame the code makes. The record repeats
++/// the frame offset and size of the fold (the COPY's output may have been replaced since).
++/// \param op is the COPY the LOAD or STORE became, still whole
++/// \param fate is how it ended
++void Funcdata::recordFrameEnd(const PcodeOp *op,AccessFate fate)
++
++{
++  for(vector<AccessRecord>::const_iterator iter=accessFates.begin();iter!=accessFates.end();++iter) {
++    if ((*iter).time != op->getTime() || (*iter).fate != fate_folded_ordinary) continue;
++    AccessRecord rec(*iter);
++    rec.fate = fate;
++    accessFates.push_back(rec);
++    return;
++  }
+ }
+ 
+ /// The comment is added to the global database, indexed via its placement address and
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata.hh b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata.hh
+index c563d90..22c5d20 100644
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata.hh
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata.hh
+@@ -16,6 +16,7 @@
+  * Modified for SaturnExplorer: every LOAD and STORE's fate is recorded (patches/0017-access-fates.patch).
+  * Modified for SaturnExplorer: the instructions and jump tables the flow recovered are recorded (patches/0021-flow-instructions.patch).
+  * Modified for SaturnExplorer: an op that changes keeps the cached masks around it a superset of the truth (patches/0054-engine-cached-masks-never-narrower.patch).
++ * Modified for SaturnExplorer: a write folded into the stack frame whose value nothing read is recorded when it goes (patches/0068-engine-deadcode-late-stack-reads.patch).
+  */
+ #ifndef __FUNCDATA_HH__
+ #define __FUNCDATA_HH__
+@@ -51,7 +52,9 @@ enum AccessFate {
+   fate_folded_ordinary,		///< Made a direct read or write (a COPY) of ordinary memory: a variable, not a volatile location
+   fate_dead,			///< Destroyed as dead, or by any transformation that is not one of the others
+   fate_unreachable,		///< Destroyed with the unreachable block it was in
+-  fate_switch_lookup		///< The read of a recovered switch's table: the switch stands for it
++  fate_switch_lookup,		///< The read of a recovered switch's table: the switch stands for it
++  fate_frame_unread,		///< (0068) A read or write folded into the stack frame (recorded fate_folded_ordinary first) whose value no op but a MULTIEQUAL or INDIRECT read before it was destroyed
++  fate_frame_removed		///< (0068) A read or write folded into the stack frame (recorded fate_folded_ordinary first) that went with an unreachable block
+ };
+ 
+ /// \brief One memory access of the flow and how it ended (SaturnExplorer)
+@@ -218,6 +221,8 @@ public:
+   bool isMemoryAccess(const PcodeOp *op,bool &store,int4 &size,Address &addr) const;	///< Is the op a memory access, and of what (SaturnExplorer)
+   void recordAccessFate(const PcodeOp *op,bool store,int4 size,const Address &addr,AccessFate fate);	///< Record how a memory access ended (SaturnExplorer)
+   void recordAccessFold(const PcodeOp *op,const Varnode *vn);	///< Record a LOAD or STORE made a direct access of ordinary memory (SaturnExplorer)
++  void recordFrameEnd(const PcodeOp *op,AccessFate fate);	///< Record how an access folded into the stack frame ended (SaturnExplorer, 0068)
++  void noteFrameFoldReads(PcodeOp *op);	///< Mark the frame folds an op reads as read (SaturnExplorer, 0068)
+   const vector<FlowTable> &getFlowTables(void) const { return flowTables; }	///< Every indirect jump the last flow recovered (SaturnExplorer)
+   const vector<FlowInsn> &getFlowInsns(void) const { return flowInsns; }	///< Every instruction the last flow translated (SaturnExplorer)
+   const vector<AccessRecord> &getAccessFates(void) const { return accessFates; }	///< Every LOAD and STORE that ended, and how (SaturnExplorer)
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_block.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_block.cc
+index 66404b2..1e06e7f 100644
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_block.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_block.cc
+@@ -16,6 +16,7 @@
+  * Modified for SaturnExplorer: host cancellation check-points (patches/0001-cancel-flag.patch).
+  * Modified for SaturnExplorer: every LOAD and STORE's fate is recorded (patches/0017-access-fates.patch).
+  * Modified for SaturnExplorer: a jump-table is owned from the moment it is made (patches/0040-jumptable-tracedag-allocation-failure.patch).
++ * Modified for SaturnExplorer: an access folded into the stack frame that goes with an unreachable block is recorded (patches/0068-engine-deadcode-late-stack-reads.patch).
+  */
+ #include "funcdata.hh"
+ #include "flow.hh"
+@@ -327,6 +328,8 @@ void Funcdata::blockRemoveInternal(BlockBasic *bb,bool unreachable)
+     Address accaddr;
+     if (isMemoryAccess(*iter,isstore,accsize,accaddr))
+       recordAccessFate(*iter,isstore,accsize,accaddr,unreachable ? fate_unreachable : fate_dead);
++    else if ((*iter)->isFrameFold() && unreachable)
++      recordFrameEnd(*iter,fate_frame_removed);	// (0068) an access of the frame the code no longer makes
+   }
+   accessesRecorded = true;
+   desc_warning = false;
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_op.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_op.cc
+index 49ee63a..f43fb7f 100644
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_op.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_op.cc
+@@ -19,6 +19,7 @@
+  * Modified for SaturnExplorer: replacing an input of an op forgets what was known of its output's non-zero bits (patches/0046-engine-input-replaced-resets-nzmask.patch).
+  * Modified for SaturnExplorer: and of the non-zero bits of what was worked out from that output (patches/0049-engine-nzmask-forgotten-downstream.patch).
+  * Modified for SaturnExplorer: every change to an op keeps the non-zero and consume masks around it a superset of the truth, in place of 0046 and 0049 (patches/0054-engine-cached-masks-never-narrower.patch).
++ * Modified for SaturnExplorer: a STORE made a COPY splits the INDIRECT it covered in the middle of with the right first piece (patches/0068-engine-deadcode-late-stack-reads.patch).
+  */
+ #include "funcdata.hh"
+ #include "flow.hh"
+@@ -38,6 +39,24 @@ void Funcdata::opSetOpcode(PcodeOp *op,OpCode opc)
+ #endif
+   obank.changeOpcode(op, glb->inst[opc] );
+   opMasksChanged(op);	// SaturnExplorer (patches/0054-engine-cached-masks-never-narrower.patch)
++  // SaturnExplorer (0068): a marker that becomes a real op (an INDIRECT or MULTIEQUAL collapsed into a COPY) reads what it
++  // marked, without a new opSetInput.
++  if (opc != CPUI_MULTIEQUAL && opc != CPUI_INDIRECT)
++    noteFrameFoldReads(op);
++}
++
++/// SaturnExplorer (patches/0068-engine-deadcode-late-stack-reads.patch): the op, which is no MULTIEQUAL or
++/// INDIRECT, reads its inputs. Each that a LOAD or STORE folded into the stack frame wrote is marked
++/// read, so that op is no frame access gone unread when it is destroyed.
++/// \param op is the reading op
++void Funcdata::noteFrameFoldReads(PcodeOp *op)
++
++{
++  for(int4 i=0;i<op->numInput();++i) {
++    Varnode *vn = op->getIn(i);
++    if (vn != (Varnode *)0 && vn->isWritten() && vn->getDef()->isFrameFold())
++      vn->getDef()->setFrameFoldRead();
++  }
+ }
+ 
+ // SaturnExplorer (patches/0054-engine-cached-masks-never-narrower.patch): the cached masks of a Varnode.
+@@ -397,11 +416,21 @@ void Funcdata::opSetInput(PcodeOp *op,Varnode *vn,int4 slot)
+   if (opactdbg_active)
+     debugModCheck(op);
+ #endif
+-  if (op->getIn(slot) != (Varnode *)0)
++  if (op->getIn(slot) != (Varnode *)0) {
++    // SaturnExplorer (0068): a reader of a frame fold's value now reads another Varnode in its place
++    // (propagation forwarded the value, a rule found it equal to something else): the value was used.
++    Varnode *old = op->getIn(slot);
++    if (old->isWritten() && old->getDef()->isFrameFold())
++      old->getDef()->setFrameFoldRead();
+     opUnsetInput(op,slot);
++  }
+ 
+   vn->addDescend(op);		// Add this op to list of vn's descendants
+   op->setInput(vn,slot);	// op must be up to date AFTER calling descend_add
++  // SaturnExplorer (0068): the value a STORE folded into the frame wrote is read. A MULTIEQUAL or an
++  // INDIRECT only marks where the value may go; what reads their output reads it.
++  if (vn->isWritten() && vn->getDef()->isFrameFold() && op->code() != CPUI_MULTIEQUAL && op->code() != CPUI_INDIRECT)
++    vn->getDef()->setFrameFoldRead();	// (opSetOpcode notes a marker that becomes a real op)
+   // SaturnExplorer (patches/0054-engine-cached-masks-never-narrower.patch): op computes something else now, and vn has a
+   // reader it did not have (see opMasksChanged). This replaces patches 0046 and 0049, which forgot the non-zero masks
+   // below the op instead.
+@@ -500,6 +529,8 @@ void Funcdata::opDestroy(PcodeOp *op)
+   Address accaddr;
+   if (!accessesRecorded && isMemoryAccess(op,isstore,accsize,accaddr))
+     recordAccessFate(op,isstore,accsize,accaddr,op->isJumptableLookup() ? fate_switch_lookup : fate_dead);
++  else if (!accessesRecorded && op->isFrameFold() && !op->isFrameFoldRead())
++    recordFrameEnd(op,fate_frame_unread);	// SaturnExplorer (0068): a frame write going with its value unread
+   if (op->getOut() != (Varnode *)0)
+     destroyVarnode(op->getOut());
+   for(int4 i=0;i<op->numInput();++i) {
+@@ -1672,7 +1703,10 @@ void Funcdata::opCollapseIndirectsForCopy(PcodeOp *copyOp)
+ 	  int4 byteOff = (vn2->getSpace()->isBigEndian()) ? vn2->getSize() - bytesBefore : 0;
+ 	  PcodeOp *subBefore = newOp(2,op->getAddr());
+ 	  opSetOpcode(subBefore,CPUI_SUBPIECE);
+-	  frontVn = newVarnodeOut(bytesAfter,vn2->getAddr(),subBefore);
++	  // SaturnExplorer (0068): the piece before the COPY's bytes is bytesBefore long. Upstream made it
++	  // bytesAfter long, so a byte stored at offset 1 or 2 of a guarded word (one before, two after) read
++	  // back as the word's top two bytes, the stored byte a byte late and five bytes in all (A3-124)
++	  frontVn = newVarnodeOut(bytesBefore,vn2->getAddr(),subBefore);
+ 	  opSetInput(subBefore,invn,0);
+ 	  opSetInput(subBefore,newConstant(4,byteOff),1);
+ 	  opInsertAfter(subBefore, insertPoint);
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.cc
+index ab0e55e..8d5508b 100644
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.cc
+@@ -19,6 +19,7 @@
+  * Modified for SaturnExplorer: once the frame escapes, a STORE through a pointer not proved to be no frame address is guarded (patches/0063-engine-frame-escape-unknown-pointers.patch).
+  * Modified for SaturnExplorer: the escape's lowest frame offset is the lowest any query saw, so it never rises, and a pointer a loop steps down from an unbounded index is guarded below its base (patches/0065-engine-frame-escape-whole-frame.patch).
+  * Modified for SaturnExplorer: a frame address that is no exact offset from the frame base escapes, unless a loop only steps it up, and the guard of an access through one covers the stack space (patches/0066-engine-frame-escape-inexact.patch).
++ * Modified for SaturnExplorer: a read found after dead code ran in its space delays dead code past the pass that found it, as often as needed, failing closed (patches/0068-engine-deadcode-late-stack-reads.patch).
+  */
+ #include "heritage.hh"
+ #include "funcdata.hh"
+@@ -3411,20 +3412,37 @@ void Heritage::renameRecurse(BlockBasic *bl,VariableStack &varstack)
+ /// \brief Increase the heritage delay for the given AddrSpace and request a restart
+ ///
+ /// If applicable, look up the heritage stats for the address space
+-/// and increment the delay.  The address space must allow an additional
+-/// delay and can only be incremented once.  If the increment succeeds, the
++/// and increment the delay.  If the increment succeeds, the
+ /// function is marked as having a \e restart pending.
++///
++/// SaturnExplorer (patches/0068-engine-deadcode-late-stack-reads.patch): this is called when a read
++/// is linked in after dead code already ran in its space, so a write it reads may be gone (it had no
++/// reader when dead code looked). Upstream bumped the delay once, by one pass, and not at all when a
++/// delay was installed or the space had a global one; a read found two passes late -- a LOAD whose
++/// pointer is a frame address kept in a stack slot, which resolves a pass after the slot is linked
++/// and another pass after each STORE whose guard covers the slot -- was linked to the frame's input
++/// on the restart, and the bytes stored there were lost with no warning in the text (ledger A3-124).
++/// Now the delay is raised past the pass that found the read (dead code runs only after that pass
++/// is linked), whenever the delay in force is not already past it. After \b maxDeadcodeBumps raises
++/// it is set so that dead code never runs in the space (failing closed: the writes stay). The
++/// restart group allows one more restart per raise (ActionRestartGroup::apply).
+ /// \param spc is the given AddrSpace
+ void Heritage::bumpDeadcodeDelay(AddrSpace *spc)
+ 
+ {
+   if ((spc->getType() != IPTR_PROCESSOR)&&(spc->getType() != IPTR_SPACEBASE))
+     return;			// Not the right kind of space
+-  if (spc->getDelay() != spc->getDeadcodeDelay())
+-    return;			// there is already a global delay
+-  if (fd->getOverride().hasDeadcodeDelay(spc))
+-    return;			// A delay has already been installed
+-  fd->getOverride().insertDeadcodeDelay(spc,spc->getDeadcodeDelay()+1);
++  Override &over(fd->getOverride());
++  int4 have = getInfo(spc)->deadcodedelay;	// the delay this pass runs with
++  int4 installed = over.getDeadcodeDelay(spc);	// ...or one this pass already asked for
++  if (installed > have) have = installed;
++  int4 want = (pass > have) ? pass : have + 1;	// no dead code in the space until this pass is linked
++  if (over.numDeadcodeBumps() >= maxDeadcodeBumps)
++    want = noDeadcodeDelay;
++  if (want <= have)
++    return;			// dead code never runs in the space already
++  over.insertDeadcodeDelay(spc,want);
++  over.noteDeadcodeBump();
+   fd->setRestartPending(true);
+ }
+ 
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.hh b/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.hh
+index 734d971..fedbaab 100644
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.hh
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.hh
+@@ -19,6 +19,7 @@
+  * Modified for SaturnExplorer: once the frame escapes, a pointer not proved to be no frame address may be one (patches/0063-engine-frame-escape-unknown-pointers.patch).
+  * Modified for SaturnExplorer: the escape's lowest frame offset never rises over the queries of a function (patches/0065-engine-frame-escape-whole-frame.patch).
+  * Modified for SaturnExplorer: a frame address that is not an exact offset from the frame base escapes, unless a loop only steps it up (patches/0066-engine-frame-escape-inexact.patch).
++ * Modified for SaturnExplorer: the dead code delay a late read asks for, and its bound (patches/0068-engine-deadcode-late-stack-reads.patch).
+  */
+ /// \file heritage.hh
+ /// \brief Utilities for building Static Single Assignment (SSA) form 
+@@ -380,6 +381,9 @@ class Heritage {
+   void visitIncr(FlowBlock *qnode,FlowBlock *vnode);
+   void calcMultiequals(const vector<Varnode *> &write);
+   void renameRecurse(BlockBasic *bl,VariableStack &varstack);
++  /// SaturnExplorer (0068): raises of a dead code delay before dead code never runs in the space
++  static const int4 maxDeadcodeBumps = 3;
++  static const int4 noDeadcodeDelay = 0x10000;	///< SaturnExplorer (0068): a delay no count of heritage passes reaches
+   void bumpDeadcodeDelay(AddrSpace *spc);
+   void placeMultiequals(void);
+   void rename(void);
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/op.hh b/Ghidra/Features/Decompiler/src/decompile/cpp/op.hh
+index 538b0f6..083825d 100644
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/op.hh
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/op.hh
+@@ -15,6 +15,7 @@
+  *
+  * Modified for SaturnExplorer: a recovered switch's table lookup is flagged (patches/0014-keep-unused-loads-late.patch).
+  * Modified for SaturnExplorer: the multiply of a division term that is wider than its width is flagged (patches/0064-engine-divopt-sign-and-wrap-rule-guards.patch).
++ * Modified for SaturnExplorer: a LOAD or STORE folded into the stack frame is flagged, and so is its value being read (patches/0068-engine-deadcode-late-stack-reads.patch).
+  */
+ /// \file op.hh
+ /// \brief The PcodeOp and PcodeOpBank classes
+@@ -123,7 +124,9 @@ public:
+     immed_copy = 0x800,		///< Copy has propagated into input of \b this op
+     store_aliasupdate = 0x1000,	///< If alias information for \b this STORE has been changed
+     jumptable_lookup = 0x2000,	///< SaturnExplorer: the LOAD that read a recovered switch's table (the switch now stands for it)
+-    div_product_wide = 0x4000	///< SaturnExplorer: the INT_MULT of a division term (RuleDivTermAdd, RuleDivTermAdd2) whose exact product is wider than the multiply
++    div_product_wide = 0x4000,	///< SaturnExplorer: the INT_MULT of a division term (RuleDivTermAdd, RuleDivTermAdd2) whose exact product is wider than the multiply
++    frame_fold = 0x8000,	///< SaturnExplorer (0068): a flow LOAD or STORE that RuleLoadVarnode or RuleStoreVarnode made a COPY of a stack Varnode
++    frame_fold_read = 0x10000	///< SaturnExplorer (0068): ...whose output an op other than a MULTIEQUAL or an INDIRECT has read
+   };
+ private:
+   TypeOp *opcode;		///< Pointer to class providing behavioral details of the operation
+@@ -209,6 +212,10 @@ public:
+   bool isIndirectSource(void) const { return ((flags&PcodeOp::indirect_source)!=0); } ///< Return \b true if this causes an INDIRECT
+   bool isJumptableLookup(void) const { return ((addlflags&PcodeOp::jumptable_lookup)!=0); }	///< SaturnExplorer: did this LOAD read a recovered switch's table
+   void setJumptableLookup(void) { addlflags |= PcodeOp::jumptable_lookup; }	///< SaturnExplorer: mark the LOAD that read a recovered switch's table
++  bool isFrameFold(void) const { return ((addlflags&PcodeOp::frame_fold)!=0); }	///< SaturnExplorer (0068): is this a flow LOAD or STORE folded into the stack frame
++  void setFrameFold(void) const { addlflags |= PcodeOp::frame_fold; }	///< SaturnExplorer (0068): mark a flow LOAD or STORE folded into the stack frame
++  bool isFrameFoldRead(void) const { return ((addlflags&PcodeOp::frame_fold_read)!=0); }	///< SaturnExplorer (0068): has the value it stored or loaded been read
++  void setFrameFoldRead(void) const { addlflags |= PcodeOp::frame_fold_read; }	///< SaturnExplorer (0068): the value it stored or loaded has been read
+   bool isDivProductWide(void) const { return ((addlflags&PcodeOp::div_product_wide)!=0); }	///< SaturnExplorer: is this multiply the exact (wider) product of a division term
+   void setDivProductWide(void) { addlflags |= PcodeOp::div_product_wide; }	///< SaturnExplorer: mark the multiply of a division term whose exact product is wider than the multiply
+   void setIndirectSource(void) { flags |= PcodeOp::indirect_source; } ///< Mark this op as source of INDIRECT
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/override.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/override.cc
+index 0560e93..23ec616 100644
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/override.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/override.cc
+@@ -12,6 +12,8 @@
+  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
++ *
++ * Modified for SaturnExplorer: the dead code delay installed for a space, and how many times one was raised (patches/0068-engine-deadcode-late-stack-reads.patch).
+  */
+ #include "override.hh"
+ #include "funcdata.hh"
+@@ -39,6 +41,7 @@ void Override::clear(void)
+   pcodeover.clear();
+   forcegoto.clear();
+   deadcodedelay.clear();
++  deadcodeBumps = 0;
+   deindirect.clear();
+   protoover.clear();
+   multistagejump.clear();
+@@ -102,6 +105,19 @@ bool Override::hasDeadcodeDelay(AddrSpace *spc) const
+   return (val != spc->getDeadcodeDelay());
+ }
+ 
++/// SaturnExplorer (patches/0068-engine-deadcode-late-stack-reads.patch): Heritage raises an installed
++/// delay again when a read is found later than it covers, so it reads the value.
++/// \param spc is the address space
++/// \return the delay installed for the space, or -1 if there is none
++int4 Override::getDeadcodeDelay(AddrSpace *spc) const
++
++{
++  int4 index = spc->getIndex();
++  if (index >= deadcodedelay.size())
++    return -1;
++  return deadcodedelay[index];
++}
++
+ /// \brief Override an indirect call turning it into a direct call
+ ///
+ /// The command consists of the address of the indirect call instruction and
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/override.hh b/Ghidra/Features/Decompiler/src/decompile/cpp/override.hh
+index 9696fc8..164d497 100644
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/override.hh
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/override.hh
+@@ -12,6 +12,8 @@
+  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
++ *
++ * Modified for SaturnExplorer: the dead code delay installed for a space, and how many times one was raised (patches/0068-engine-deadcode-late-stack-reads.patch).
+  */
+ /// \file override.hh
+ /// \brief A system for sending override commands to the decompiler
+@@ -151,16 +153,21 @@ private:
+   map<Address,Record *> pcodeover;	///< Raw p-code overrides for instructions
+   map<Address,Address> forcegoto;	///< Force goto on jump at \b targetpc to \b destpc
+   vector<int4> deadcodedelay;		///< Delay count indexed by address space
++  int4 deadcodeBumps;			///< SaturnExplorer (0068): times Heritage raised a delay, for the restarts it may ask for
+   map<Address,Address> deindirect;	///< Convert CALLIND into CALL with recovered direct \b addr
+   map<Address,FuncProto *> protoover;	///< Override prototype at \b call-point
+   vector<Address> multistagejump;	///< Addresses of indirect jumps that need multistage recovery
+   void clear(void);			///< Clear the entire set of overrides
+   static string generateDeadcodeDelayMessage(int4 index,Architecture *glb);
+ public:
++  Override(void) : deadcodeBumps(0) {}	///< Constructor (SaturnExplorer: 0068's count starts at 0)
+   ~Override(void) { clear(); }		///< Destructor
+   void insertForceGoto(const Address &targetpc,const Address &destpc);
+   void insertDeadcodeDelay(AddrSpace *spc,int4 delay);
+   bool hasDeadcodeDelay(AddrSpace *spc) const;
++  int4 getDeadcodeDelay(AddrSpace *spc) const;	///< SaturnExplorer (0068): the delay installed for a space, or -1
++  void noteDeadcodeBump(void) { deadcodeBumps += 1; }	///< SaturnExplorer (0068): Heritage raised a delay
++  int4 numDeadcodeBumps(void) const { return deadcodeBumps; }	///< SaturnExplorer (0068): times a delay was raised
+   void insertDeindirect(const Address &callPoint,const Address &directAddr);
+   void insertProtoOverride(const Address &callpoint,FuncProto *p);
+   void insertMultistageJump(const Address &addr);
