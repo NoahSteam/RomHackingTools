@@ -12661,13 +12661,17 @@ void TestArea3Round14Fix()
 }
 
 // A3-124 (patch 0068): a struct built on the frame through a pointer kept in a frame slot and read back, the `-O0` byte copy of
-// the corpus (hwram007 060228B4, hwram008 06061D90). Two engine bugs, each pinned:
+// the corpus (hwram007 060228B4, hwram008 06061D90). The engine bugs, each pinned:
 //   - a read through the reloaded pointer resolves a pass after the slot is linked, and one more per STORE whose guard covers the
 //     slot; dead code had removed the stores it reads by then, and upstream's remedy (one restart, the dead code delay raised by one
-//     pass, once) was too short: the read was linked to the frame's input. Pins A, B, D to H.
-//   - a STORE made a COPY in the middle of a wider guarded local collapsed its INDIRECT with a first piece bytesAfter long instead of
-//     bytesBefore (upstream funcdata_op.cc): a byte at offset 1 or 2 of a word read back a byte late. Pins C (alone), A, B, E, F.
-// Each text is evaluated against the code on the emulator for several inputs, and the frame ledger (dts::FrameLosses) is empty.
+//     pass, once) was too short: the read was linked to the frame's input. Pins A, B, E, F and the restart pair of TestEngineEdgePaths.
+//   - A3-127: a STORE made a COPY in the middle of a wider guarded local collapsed its INDIRECT with a first piece bytesAfter long
+//     instead of bytesBefore (upstream funcdata_op.cc): a byte at offset 1 or 2 of a word read back a byte late; the corpus function's
+//     own cause. Pins C (alone), A, B, E, F.
+//   - A3-128: a call's guard on a local of an escaped frame lost its address force before the STORE through the reloaded pointer
+//     became a direct write, and the store before the call went (hwram008 060554B6). Pin I.
+// Each text without a call is evaluated against the code on the emulator for several inputs, and the frame ledger
+// (dts::FrameLosses) and ReferenceOk (which runs it, and counts malformed pieces) pass.
 void TestA3124Fix()
 {
     Sh2Decompiler d(gConfig);
@@ -12680,6 +12684,7 @@ void TestA3124Fix()
         bool call;           // a callee at +0x100 (rts ; nop): the text is not evaluated, its parts are checked
         bool eval;           // PseudoEval reads the text (it has no `x._0_3_` piece; the generator's printed-C differential compiles it)
         const char* text;    // a fragment the text prints now
+        std::vector<uint16_t> callee = {};   // the callee's words, when not rts ; nop
     };
     static const Pin kPins[] = {
         { "A word -1, byte r5 at +1, word read, all through a pointer reloaded from a slot",
@@ -12708,6 +12713,11 @@ void TestA3124Fix()
         { "H with a call: word -1, byte r5 at +1, halfword r6 at +2 through the reloaded pointer, the pointer handed to a callee, the word read after",
           { 0x4F22, 0x7FE8, 0x61F3, 0x710C, 0x1F15, 0x51F5, 0xE2FF, 0x2122, 0x51F5, 0x7101, 0x2150, 0x51F5, 0x7102, 0x2161, 0x54F5, 0xD004,
             0x400B, 0x0009, 0x51F5, 0x6012, 0x7F18, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9100 }, true, false, "CONCAT11(0xff,param_2),param_3)" },
+        // A3-128: S+4 = 0 through the reloaded pointer (the corpus' 060554B6: `mov.l r2,@(4,r7)`), &S handed to an unlent callee that
+        // reads S+4, then S+4 = 5 written directly. The head dropped the store before the call (the call's guard lost its force).
+        { "I A3-128: S+4 = 0 through the reloaded pointer, &S handed to a callee that reads S+4, S+4 = 5 after the call",
+          { 0x4F22, 0x7FE8, 0x61F3, 0x7108, 0x1F15, 0xE307, 0x1F32, 0x57F5, 0xE200, 0x1721, 0x54F5, 0xD005, 0x400B, 0x0009, 0xE205, 0x1F23,
+            0x50F3, 0x7F18, 0x4F26, 0x000B, 0x0009, 0x0009, 0x0600, 0x9100 }, true, false, "xStack_10 = 0;", { 0x5041, 0x000B, 0x0009 } },
     };
     const std::vector<std::vector<uint32_t>> inputs = {
         { 0, 0, 0, 0 }, { 0x11223344u, 0x55667788u, 0x99AABBCCu, 0xDDEEFF00u }, { 0xFFFFFFFFu, 0x80000001u, 0x000000FFu, 0xFF7FFFFFu } };
@@ -12717,8 +12727,13 @@ void TestA3124Fix()
         if (p.call)
         {
             words.resize(0x100 / 2, 0x0009);
-            words.push_back(0x000B);
-            words.push_back(0x0009);
+            if (p.callee.empty())
+            {
+                words.push_back(0x000B);
+                words.push_back(0x0009);
+            }
+            else
+                words.insert(words.end(), p.callee.begin(), p.callee.end());
         }
         const CallFixture f = { p.name, base, words };
         auto snap = CallSnapshot(f, ++serial);
