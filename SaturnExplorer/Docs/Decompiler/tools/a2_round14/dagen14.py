@@ -720,9 +720,29 @@ def nt_op(r, a, b):
 def fam_condprop(r, f):
     # one condition computed once and read by several branches with T-preserving code between them (the later branches are redundant), or recomputed with a
     # related constant; equality tests whose true arm uses the tested register (a constant there); chains of equality tests
-    form = r.randrange(0, 5)
+    form = r.randrange(0, 10)
     f.add(mov_(0, 4), mov_(1, 5), mov_(2, 6))
-    if form == 0:         # the same T read by two or three branches
+    if form >= 8:         # tmp = (z == 0) ? v : 0 ; tmp | z (and the two-diamond form): RuleOrPredicate, the shape of a 64-bit shift library routine
+        op_ = r.choice([or__, xor_])
+        f.add(movi(3, 0), tstr(2, 2)); f.br(r.choice(['bf', 'bf', 'bt']), 'm1'); f.add(mov_(3, 1)); f.label('m1')
+        if form == 8: f.add(op_(2, 3), mov_(0, 3))
+        else:
+            f.add(movi(0, 0), tstr(2, 2)); f.br('bt', 'm2'); f.add(mov_(0, 5)); f.label('m2'); f.add(op_(3, 0))
+    elif form >= 5:         # a flag materialised by a diamond of constants, then tested: the second branch is decided by the first (ConditionalExecution, RuleOrPredicate)
+        c0, c1 = r.choice([(0, 1), (1, 0), (0, 5), (0, 0xFF), (3, 0), (0, 0x80), (2, 4), (0, 0)])
+        f.add(r.choice([cmpeq, cmphi, cmpgt, cmpge, cmphs, tstr])(1, 0))
+        f.br('bt', 'one'); f.add(movi(3, c0)); f.br('bra', 'join'); f.add(0x0009); f.label('one'); f.add(movi(3, c1)); f.label('join')
+        if form == 5:
+            f.add(tstr(3, 3)); f.br(r.choice(['bt', 'bf']), 'skip')
+            for _ in range(r.randrange(1, 3)): f.add(*nt_op(r, r.choice([0, 2]), r.choice([0, 1, 2, 4, 5])))
+            f.label('skip')
+        elif form == 6:    # the flag tested together with another condition
+            f.add(tstr(3, 3)); f.br('bt', 'skip'); f.add(cmpgt(2, 1)); f.br('bf', 'skip')
+            f.add(*nt_op(r, 0, 2)); f.label('skip')
+        else:              # the flag or'ed with an input (tmp = cond ? v : 0; tmp | other)
+            f.add(or__(3, 2) if r.random() < 0.5 else xor_(3, 2), tstr(2, 2)); f.br('bt', 'skip'); f.add(add__(3, 0)); f.label('skip')
+        f.add(add__(3, 2) if r.random() < 0.5 else xor_(3, 0))
+    elif form == 0:         # the same T read by two or three branches
         f.add(r.choice([cmpeq, cmphi, cmpgt, cmpge, cmphs, tstr])(1, 0))
         for i in range(r.randrange(2, 4)):
             f.br(r.choice(['bt', 'bf']), 'j%d' % i)

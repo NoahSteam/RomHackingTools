@@ -16,7 +16,8 @@
 // RuleDivTermAdd2 as a whole; the engine now refuses a product that wraps (A2-82) unless RuleDivTermAdd or RuleDivTermAdd2 built it as the exact product
 // of a division term and flagged it (PcodeOp::isDivProductWide), and this check values a flagged INT_MULT as that exact product (128 bits) for the shifts
 // that read it. Kept, each for a reason:
-//  - RuleSignMod2nOpt2: the adjusted value is read from a MULTIEQUAL and the branch behind it; the leaf is related to V by control flow, not by data
+//  - RuleSignMod2nOpt2 and RuleOrPredicate: the value is read from a MULTIEQUAL and the branch behind it; the leaf is related to the operands by control flow, not by data
+//    (round 14: both are judged by wholefn14.hh, which runs the function; it finds A2-92 in RuleSignMod2nOpt2)
 //  - a root with consume 0 (dead: rules fold it to anything), a root the rule left without a reader, an interior ADD of a RuleCollectTerms tree (the rule moves
 //    a term between the ADDs of the tree; the root is compared), the zext RuleBoolZext negates in place (the final ADD that reads it is compared)
 //  - a sample in which an op takes a value outside its own non-zero mask (counted as maskskip, the first three printed; 0 in every run)
@@ -612,7 +613,8 @@ inline void verify(const std::string& rule, const PcodeOp* op, const Snap& s, in
     // (RuleDivTermAdd's `x*(c+2^n)` is wider than the multiply that holds it, on the way to RuleDivOpt. The engine flags that multiply and this check values it as
     // the exact product, so the steps of RuleDivTermAdd, RuleDivTermAdd2 and RuleDivOpt are compared like any other rule's.)
     // RuleSignMod2nOpt2's `V - (Vadj & ~(2^n-1))` reads Vadj from a MULTIEQUAL and the branch behind it: the leaf is related to V by the control flow, not by the data
-    if (rule == "signmod2nopt2") { if (result > 0) ++t.skipped; return; }
+    // (round 14: RuleOrPredicate is the same kind: it rewrites a MULTIEQUAL by the condition of the branch behind it. wholefn14.hh runs the function for both)
+    if (rule == "signmod2nopt2" || rule == "orpredicate") { if (result > 0) ++t.skipped; return; }
     if (!s.ok) { if (result > 0) { ++t.skipped; ++t.uncompared; } return; }
     if (const char* only = std::getenv("SE_RULECHECK_ONLY")) if (rule.find(only) == std::string::npos) return;
     if (result <= 0)
