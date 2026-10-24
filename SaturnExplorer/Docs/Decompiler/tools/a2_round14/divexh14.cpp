@@ -825,7 +825,7 @@ int main(int argc, char** argv)
             const std::vector<uint64_t> ys = YList(2 * xs, 0xC0FFEE, 200000);
             std::string out;
             long rewritten = 0, wrong = 0, total = 0;
-            int shown = 0, refusedShown = 0; long refusedAll = 0, refusedDiv = 0;
+            int shown = 0, refusedShown = 0; long refusedAll = 0, refusedDiv = 0, refusedFit = 0;
             std::string oldOut;
             if (const char* op = std::getenv("DX_OLD")) { FILE* of = std::fopen(op, "rb"); if (of) { char buf[65536]; size_t k; while ((k = std::fread(buf, 1, sizeof buf, of)) > 0) oldOut.append(buf, k); std::fclose(of); } }
             std::vector<uint64_t> xv;
@@ -867,6 +867,12 @@ int main(int argc, char** argv)
                                             const int nbits = (form == 0 ? 0 : 8 * cut) + (form == 2 ? 0 : amount);
                                             if (y > 1 && nbits < 127) plausible = ((static_cast<unsigned __int128>(1) << nbits) / (y - 1)) >= 3;
                                             ++refusedAll; if (plausible) ++refusedDiv;
+                                            // the product cannot wrap for any numerand (the engine's own test, written out): then the refusal is not about the wrap
+                                            const int wbits = 8 * w, xb = 8 * xs;
+                                            const unsigned __int128 maxx = sext == 1 ? 0 : ((static_cast<unsigned __int128>(1) << xb) - 1);
+                                            const bool fits = sext == 1 ? (static_cast<unsigned __int128>(y) <= (static_cast<unsigned __int128>(1) << (wbits - xb)))
+                                                                        : (static_cast<unsigned __int128>(y) * maxx <= ((static_cast<unsigned __int128>(1) << wbits) - 1));
+                                            if (fits) { ++refusedFit; if (refusedFit <= 25) std::printf("REFUSED although the product fits: %d bytes %s of %d by %llx, form %d, %s, cut %d, amount %d, reader %d\n", w, sext == 1 ? "sext" : (sext == 2 ? "and" : "zext"), xs, (unsigned long long)y, form, arith ? "s>>" : ">>", cut, amount, reader); }
                                         }
                                         if (plausible && refusedShown++ < (std::getenv("DX_SHOW") ? std::atoi(std::getenv("DX_SHOW")) : 40))
                                             std::printf("REFUSED (the other engine was right): %d bytes %s of %d by %llx, form %d, %s, cut %d, amount %d, reader %d\n", w, sext == 1 ? "sext" : (sext == 2 ? "and" : "zext"), xs, (unsigned long long)y, form, arith ? "s>>" : ">>", cut, amount, reader);
@@ -879,7 +885,7 @@ int main(int argc, char** argv)
             FILE* fp = std::fopen(argv[6], "wb");
             if (fp) { std::fwrite(out.data(), 1, out.size(), fp); std::fclose(fp); }
             std::printf("divexh14 opt xs=%d constants %llu..%llu of %zu: %ld configurations, %ld rewritten, %ld wrong\n", xs, (unsigned long long)first, (unsigned long long)(first + count - 1), ys.size(), total, rewritten, wrong);
-            if (!oldOut.empty()) std::printf("divexh14 vs the other engine: %ld configurations it rewrote right that this one refuses, %ld of them a division by 3 or more\n", refusedAll, refusedDiv);
+            if (!oldOut.empty()) std::printf("divexh14 vs the other engine: %ld configurations it rewrote right that this one refuses, %ld of them a division by 3 or more, %ld although the product cannot wrap\n", refusedAll, refusedDiv, refusedFit);
         }
     }
     else if (mode == "term")

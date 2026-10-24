@@ -75,7 +75,9 @@ struct Root
     bool dead;               // round 14: consume 0 when the snapshot was taken (a varnode a rule made in this pass, or one dead code will remove): compared on its non-zero mask, a change is counted apart (deadchg), not a bad application
     const PcodeOp* reader;   // round 14: a slot root: the value an op without an output reads (STORE, RETURN, CALL, CBRANCH ...), compared through the reader's input slot
     int slot;
-    int kind;                // 0 the op's output, 1 a reader's output, 2 a reader's reader, 3 an input of the op (its definition may be changed in place), 4 another reader of an input (a sibling), 5 slot root
+    uint64_t fp;             // rootFp when the snapshot was taken
+    bool flip;               // a slot root of a CBRANCH: its boolean_flip flag when the snapshot was taken (a rule may flip the condition and negate the input in one step)
+    int kind;                // 0 the op's output, 1 a reader's output, 2 a reader's reader, 3 (unused), 4 another reader of an input (a sibling: a rule that changes the definition of an input in place changes what it reads), 5 slot root
 };
 struct Snap
 {
@@ -103,11 +105,39 @@ inline bool evaluable(OpCode c)
 
 struct Memo
 {
+    // (round 14: a hash index over the entries; the linear scan this replaces made every snapshot quadratic in the cone, and the check cost 40 seconds on one
+    // 32-step division)
+    static const int kSlots = 2048;
     const Varnode* key[kMaxNodes];
     int val[kMaxNodes];
+    short slot[kSlots];
     int n = 0;
-    int find(const Varnode* v) const { for (int i = 0; i < n; ++i) if (key[i] == v) return val[i]; return -1; }
-    void put(const Varnode* v, int id) { if (n < kMaxNodes) { key[n] = v; val[n] = id; ++n; } }
+    Memo() { std::memset(slot, 0xFF, sizeof(slot)); }
+    static unsigned hashOf(const Varnode* v) { return (unsigned)(((uintptr_t)v >> 4) * 2654435761u) & (kSlots - 1); }
+    int find(const Varnode* v) const
+    {
+        for (unsigned h = hashOf(v); slot[h] >= 0; h = (h + 1) & (kSlots - 1))
+            if (key[slot[h]] == v) return val[slot[h]];
+        return -1;
+    }
+    void put(const Varnode* v, int id)
+    {
+        if (n >= kMaxNodes) return;
+        unsigned h = hashOf(v);
+        while (slot[h] >= 0) h = (h + 1) & (kSlots - 1);
+        key[n] = v; val[n] = id; slot[h] = (short)n; ++n;
+    }
+    // drop the entries after the first m (the last ones put)
+    void truncate(int m)
+    {
+        for (int i = n - 1; i >= m; --i)
+        {
+            unsigned h = hashOf(key[i]);
+            while (slot[h] != i) h = (h + 1) & (kSlots - 1);
+            slot[h] = -1;
+        }
+        n = m;
+    }
 };
 
 inline int build(const Varnode* vn, Cone& c, Memo& memo, int depth, bool boolUse = false)
@@ -148,6 +178,8 @@ inline int build(const Varnode* vn, Cone& c, Memo& memo, int depth, bool boolUse
     return id;
 }
 
+inline uint64_t rootFp(const Root& r);
+
 inline void snapshot(const PcodeOp* op, Snap& s)
 {
     s.ok = false;
@@ -165,6 +197,8 @@ inline void snapshot(const PcodeOp* op, Snap& s)
     // and an op the rule destroys takes its output's root with it). A root whose cone does not fit is dropped alone (counted), the others stay.
     auto addNode = [&](const Varnode* v, int kind, const PcodeOp* reader, int slot) {
         if (s.nroots >= kMaxRoots || v->getSize() > 8) return;
+        // a long chain (the 32 steps of an inline division) makes every cone large: past a few roots of a big cone the rest are left out, or the check is quadratic in the chain
+        if (s.nroots >= 8 && s.cone.n > 120) return;
         if (!v->isWritten() && kind != 5) return;
         if (kind == 5 && v->isConstant()) return;
         if (kind != 5) { for (int i = 0; i < s.nroots; ++i) if (s.roots[i].vn == v && s.roots[i].kind != 5) return; }
@@ -172,19 +206,23 @@ inline void snapshot(const PcodeOp* op, Snap& s)
         const int saveN = s.cone.n, saveM = memo.n;
         Root& r = s.roots[s.nroots];
         r.vn = v; r.def = v->isWritten() ? v->getDef() : (const PcodeOp*)0; r.kind = kind; r.reader = reader; r.slot = slot;
+        r.flip = (kind == 5 && reader->code() == CPUI_CBRANCH) ? reader->isBooleanFlip() : false;
         const uintb full = calc_mask(v->getSize());
         r.consume = v->getConsume() & full;
         // a varnode no consumer reads a bit of (consume 0) is dead as the engine stands: rules fold it to anything (RuleAndMask to 0). A varnode made by an earlier
         // rule of this pass has consume 0 as well (dead code analysis has not run since): such a root is compared on its non-zero mask and a change counted as deadchg
         r.dead = (r.consume == 0);
+        static const bool noDead = std::getenv("SE_RC14_NODEAD") != nullptr;
+        if (r.dead && noDead) return;
         if (r.dead) r.consume = v->getNZMask() & full;
         if (r.consume == 0) r.consume = full;
         r.node = build(v, s.cone, memo, 100000);
         if (s.cone.overflow)
         {
-            s.cone.n = saveN; memo.n = saveM; s.cone.overflow = false; ++s.dropped;
+            s.cone.n = saveN; memo.truncate(saveM); s.cone.overflow = false; ++s.dropped;
             return;
         }
+        r.fp = rootFp(r);
         ++s.nroots;
     };
     addNode(out, 0, (const PcodeOp*)0, 0);
@@ -210,11 +248,13 @@ inline void snapshot(const PcodeOp* op, Snap& s)
         }
     }
     // the inputs, and the other readers of the inputs
-    for (int k = 0; k < op->numInput(); ++k)
+    static const bool noSib = std::getenv("SE_RC14_NOSIB") != nullptr;
+    for (int k = 0; k < op->numInput() && !noSib; ++k)
     {
         const Varnode* in = op->getIn(k);
         if (in->isConstant()) continue;
-        addNode(in, 3, (const PcodeOp*)0, 0);
+        // (not the input itself: a rule may fold a negation into the compare that defines its input, which changes that value and keeps the op's; if the input has
+        // another reader it sees the change, and that reader is a root below)
         int n3 = 0;
         for (auto it = in->beginDescend(); it != in->endDescend() && n3 < 8; ++it, ++n3)
         {
@@ -225,6 +265,31 @@ inline void snapshot(const PcodeOp* op, Snap& s)
         }
     }
     s.ok = s.nroots > 0;
+}
+
+// round 14: a cheap fingerprint of what a root stands on (its defining op, or the varnode a reader reads through its slot): a rule that returns 0 and leaves every
+// fingerprint alone has changed nothing any root can see, and the cones are not valued again (the check ran on every failed attempt of every rule, which is
+// quadratic on a long chain)
+inline uint64_t rootFp(const Root& r)
+{
+    uint64_t h = 1469598103934665603ull;
+    auto add = [&](uint64_t x) { h = (h ^ x) * 1099511628211ull; };
+    if (r.kind == 5)
+    {
+        if (r.reader->isDead() || r.slot >= r.reader->numInput()) { add(1); return h; }
+        const Varnode* v = r.reader->getIn(r.slot);
+        add(v->isConstant() ? v->getOffset() * 31 + v->getSize() : (uint64_t)(uintptr_t)v);
+        return h;
+    }
+    if (r.def == (const PcodeOp*)0 || r.def->isDead() || r.def->getOut() != r.vn) { add(2); return h; }
+    add((uint64_t)r.def->code() + (r.def->isDivProductWide() ? 1000 : 0));
+    add((uint64_t)(uintptr_t)r.vn);
+    for (int k = 0; k < r.def->numInput(); ++k)
+    {
+        const Varnode* v = r.def->getIn(k);
+        add(v->isConstant() ? v->getOffset() * 31 + v->getSize() : (uint64_t)(uintptr_t)v);
+    }
+    return h;
 }
 
 struct Rng
@@ -465,7 +530,7 @@ inline std::string text(const Cone& c, int id, int depth = 0)
     return o.str();
 }
 
-inline bool checkOne(const std::string& rule, const Cone& before, int rb, const Cone& after, int ra, uintb consume, std::string& detail, bool& unmatched, long& maskskip)
+inline bool checkOne(const std::string& rule, const Cone& before, int rb, const Cone& after, int ra, uintb consume, std::string& detail, bool& unmatched, long& maskskip, uintb xorAfter = 0)
 {
     // the leaves of both cones
     std::map<const Varnode*, uintb> nz;
@@ -527,7 +592,7 @@ inline bool checkOne(const std::string& rule, const Cone& before, int rb, const 
                 std::fprintf(stderr, "RULECHECK-MASK %s: a %s of size %d took a value outside its non-zero mask %llx\n", rule.c_str(), get_opname(eb.viol->opc), eb.viol->size, (unsigned long long)eb.viol->nz);
             continue;
         }
-        if ((vb & consume) != (va & consume))
+        if ((vb & consume) != ((va ^ xorAfter) & consume))
         {
             std::ostringstream o;
             o << "value " << std::hex << vb << " before, " << va << " after (consume " << consume << ") for";
@@ -550,6 +615,12 @@ inline void verify(const std::string& rule, const PcodeOp* op, const Snap& s, in
     if (rule == "signmod2nopt2") { if (result > 0) ++t.skipped; return; }
     if (!s.ok) { if (result > 0) { ++t.skipped; ++t.uncompared; } return; }
     if (const char* only = std::getenv("SE_RULECHECK_ONLY")) if (rule.find(only) == std::string::npos) return;
+    if (result <= 0)
+    {
+        bool changed = false;
+        for (int i = 0; i < s.nroots && !changed; ++i) changed = rootFp(s.roots[i]) != s.roots[i].fp;
+        if (!changed) return;
+    }
     t.dropped += s.dropped;
     long compared = 0;
     for (int i = 0; i < s.nroots; ++i)
@@ -596,7 +667,9 @@ inline void verify(const std::string& rule, const PcodeOp* op, const Snap& s, in
         ++compared;
         if (!r.dead) ++t.checked;
         long dummyMask = 0;
-        const bool same = checkOne(rule, s.cone, r.node, ac, ra, r.consume, detail, unmatched, r.dead ? dummyMask : t.maskskip);
+        // a CBRANCH condition is read with its boolean_flip flag: a rule that flips the flag and negates the condition leaves the branch alone
+        const uintb xorAfter = (r.kind == 5 && r.reader->code() == CPUI_CBRANCH && r.reader->isBooleanFlip() != r.flip) ? 1 : 0;
+        const bool same = checkOne(rule, s.cone, r.node, ac, ra, r.consume, detail, unmatched, r.dead ? dummyMask : t.maskskip, xorAfter);
         if (!same)
         {
             if (r.dead)
