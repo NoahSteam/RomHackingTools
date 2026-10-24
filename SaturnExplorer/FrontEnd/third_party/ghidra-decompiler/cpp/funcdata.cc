@@ -16,6 +16,7 @@
  * Modified for SaturnExplorer: the destructor frees the return-recovery state (patches/0004-funcdata-frees-active-output.patch).
  * Modified for SaturnExplorer: every LOAD and STORE's fate is recorded (patches/0017-access-fates.patch).
  * Modified for SaturnExplorer: the instructions and jump tables the flow recovered are recorded (patches/0021-flow-instructions.patch).
+ * Modified for SaturnExplorer: an access folded into the stack frame is flagged, and recorded again if a write goes with its value unread or the access with an unreachable block (patches/0068-engine-deadcode-late-stack-reads.patch).
  */
 #include "funcdata.hh"
 
@@ -231,6 +232,35 @@ void Funcdata::recordAccessFold(const PcodeOp *op,const Varnode *vn)
   Address addr;
   if (!isMemoryAccess(op,store,size,addr)) return;
   recordAccessFate(op,store,size,vn->getAddr(),fate_folded_ordinary);
+  // (0068) A flow STORE into the stack frame lives on as a variable write. Its fold is no conservation
+  // unless the value reaches what reads it: the op is flagged, opSetInput notes a reader, and opDestroy
+  // records it again (fate_frame_unread) if it goes with no reader (A3-124's stores, removed before
+  // the read was found, were counted as folded and nothing more).
+  if (op->getTime() < flowOps && vn->getSpace()->getType() == IPTR_SPACEBASE)
+    op->setFrameFold();
+}
+
+/// SaturnExplorer (patches/0068-engine-deadcode-late-stack-reads.patch): a LOAD or STORE that
+/// RuleLoadVarnode or RuleStoreVarnode folded into the stack frame ends a second time. With
+/// \b fate_frame_unread, a write is being destroyed and no op but a MULTIEQUAL or an INDIRECT (a
+/// marker of where a value may go, not a use) read the value it stored: a host compares this with
+/// the reads of the frame the code makes, and one that reads a byte of it later, with no write of
+/// the frame between, read a value the analysis dropped. With \b fate_frame_removed, the read or write
+/// went with an unreachable block, so it is no read of the frame the code makes. The record repeats
+/// the frame offset and size of the fold (the COPY's output may have been replaced since).
+/// \param op is the COPY the LOAD or STORE became, still whole
+/// \param fate is how it ended
+void Funcdata::recordFrameEnd(const PcodeOp *op,AccessFate fate)
+
+{
+  for(vector<AccessRecord>::const_iterator iter=accessFates.begin();iter!=accessFates.end();++iter) {
+    if ((*iter).time != op->getTime() || (*iter).fate != fate_folded_ordinary) continue;
+    if (fate == fate_frame_unread && !(*iter).store) return;
+    AccessRecord rec(*iter);
+    rec.fate = fate;
+    accessFates.push_back(rec);
+    return;
+  }
 }
 
 /// The comment is added to the global database, indexed via its placement address and

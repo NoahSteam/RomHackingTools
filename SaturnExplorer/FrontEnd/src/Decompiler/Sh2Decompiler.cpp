@@ -5525,7 +5525,17 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
             case ghidra::fate_folded_ordinary: f.fate = AccessFate::FoldedOrdinary; break;
             case ghidra::fate_unreachable: f.fate = AccessFate::Unreachable; break;
             case ghidra::fate_switch_lookup: f.fate = AccessFate::SwitchLookup; break;
+            case ghidra::fate_frame_unread: f.fate = AccessFate::FrameUnread; break;
+            case ghidra::fate_frame_removed: f.fate = AccessFate::FrameRemoved; break;
             default: f.fate = AccessFate::Dead; break;
+            }
+            {
+                auto pos = flow.ops.find(rec.time);
+                if (pos != flow.ops.end())
+                {
+                    f.origBlock = pos->second.first;
+                    f.origOrder = pos->second.second;
+                }
             }
             // A fold into the stack frame records the Varnode's address in the stack space: an
             // offset (-4 for a pop), which no bus address is (A5-5).

@@ -12,6 +12,7 @@
 //
 // usage: SaturnExplorerSh2DecompilerTests <scratch dir>
 #include "DecompilerTestSupport.h"
+#include "FrameLedger.h"
 #include "MappingOracle.h"
 
 #include "AllocFailure.h"
@@ -60,7 +61,8 @@ void Print(const char* label, const DecompileResult& r)
                     m.returned ? " returned" : "", m.printed, m.printedLines, m.printedTokens);
     for (const AccessFate& f : r.accessFates)
     {
-        static const char* const names[] = { "folded into ordinary memory", "dead", "removed with unreachable code", "the switch's table" };
+        static const char* const names[] = { "folded into ordinary memory", "dead", "removed with unreachable code", "the switch's table",
+                                              "a frame write gone unread", "a frame access removed with unreachable code" };
         std::printf("  ended: %s of %u bytes at %08X (%s%08X): %s\n", f.write ? "write" : "read", unsigned(f.size), f.insn,
                     f.constantAddress ? "" : "through a pointer; ", f.address, names[int(f.fate)]);
     }
@@ -820,6 +822,15 @@ bool ReferenceOk(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, 
                         f.address);
             ok = false;
         }
+    // ...and the frame (A3-124): a write folded into the function's own frame is a variable in both
+    // runs, so neither lists it; it is lost when it went unread and the code reads a byte of it later
+    // (dts::FrameLosses, from patch 0068's records).
+    for (const dts::FrameLoss& l : dts::FrameLosses(r))
+    {
+        std::printf("  conservation: the frame write of %u bytes at %08X (frame offset %08X) went unread, and the read at %08X "
+                    "reads it\n", unsigned(l.size), l.write, l.offset, l.read);
+        ok = false;
+    }
     return ok;
 }
 
@@ -3944,7 +3955,8 @@ void TestGameCode()
         noReference = 0, droppedSaid = 0;
     // The conservation law over the corpus: the engine's records by fate, and the reference run's
     // accesses by how the shown output accounts for them.
-    int fateCount[4] = { 0, 0, 0, 0 };
+    int fateCount[6] = { 0, 0, 0, 0, 0, 0 };
+    int frameLost = 0;   // A3-124: frame writes that went unread though the code reads them (dts::FrameLosses)
     int accountCount[4] = { 0, 0, 0, 0 };   // Printed, Folded, Removed, Dropped
     int foldedLookup = 0, removedOrdinary = 0;
     int deadPointerReads = 0, deadHardwareReads = 0, deadConstantReads = 0, deadWrites = 0, deadLost = 0;
@@ -4066,6 +4078,12 @@ void TestGameCode()
                 std::printf("  fate %d: %s of %u bytes at %08X (%s%08X) in %08X\n", int(f.fate), f.write ? "write" : "read",
                             unsigned(f.size), f.insn, f.constantAddress ? "" : "through a pointer; ", f.address, entry);
         }
+        // The frame (A3-124): neither run lists a write folded into the frame, so a fold that is then
+        // removed before its read was found is checked from the records (patch 0068).
+        for (const dts::FrameLoss& l : dts::FrameLosses(r))
+            if (++frameLost <= 20)
+                std::printf("  the frame write of %u bytes at %08X (frame offset %08X) went unread, and the read at %08X reads it, "
+                            "in %08X\n", unsigned(l.size), l.write, l.offset, l.read, entry);
         {
             DecompileRequest ref = Request(entry);
             ref.allMemoryVolatile = true;
@@ -4171,8 +4189,10 @@ void TestGameCode()
                 "order, %d joined into a switch across a branch\n", moved, shortCircuit, outOfOrder, folded);
     std::printf("  %d accesses dropped against the reference run, %d missing and said (code removed as unreachable); "
                 "%d functions without a reference\n", dropped, droppedSaid, noReference);
-    std::printf("  the engine's records: %d folded into ordinary memory, %d dead, %d unreachable, %d switch lookups\n",
-                fateCount[0], fateCount[1], fateCount[2], fateCount[3]);
+    std::printf("  the engine's records: %d folded into ordinary memory, %d dead, %d unreachable, %d switch lookups; "
+                "frame: %d writes went unread, %d accesses removed with unreachable code\n",
+                fateCount[0], fateCount[1], fateCount[2], fateCount[3], fateCount[4], fateCount[5]);
+    std::printf("  %d frame writes lost: unread, and read by the code later (A3-124)\n", frameLost);
     std::printf("  the reference run's accesses: %d printed, %d folded (%d of them a switch lookup), %d removed (%d of ordinary "
                 "memory, %d said), %d dropped\n", accountCount[int(Account::Printed)], accountCount[int(Account::Folded)],
                 foldedLookup, accountCount[int(Account::Removed)], removedOrdinary, droppedSaid, accountCount[int(Account::Dropped)]);
@@ -4183,6 +4203,7 @@ void TestGameCode()
     CHECK(mapping.Violations() == 0);
     CHECK(dropped == 0);
     CHECK(deadLost == 0);
+    CHECK(frameLost == 0);
     CHECK(noReference == 0);
     CHECK(folded == 0);
     CHECK(outOfOrder == 0);
@@ -5272,9 +5293,12 @@ void TestEngineEdgePaths()
         return false;
     };
 
-    // Restart limit. A pointer to a stack slot, spilled and reloaded, is found only after the stack's
-    // dead code was removed (restart one); the global it leads to, whose first store was dead, only
-    // after that (restart two, past the limit of one).
+    // Formerly the restart limit alone. A pointer to a stack slot, spilled and reloaded, is found only
+    // after the stack's dead code was removed (restart one); the global it leads to, whose first store
+    // was dead, only after that (restart two, past the limit of one). Since patch 0068 (A3-124) each
+    // raise of a dead code delay is a restart the output needs, the delay is raised past the pass that
+    // found the read, and the text shows the global's write and the read of it. The restart limit end
+    // to end is the truncated switch's (TestFlowUncertainty), its warning's classification below.
     std::vector<uint8_t> hw;
     Place(hw, 0x06060300u, { 0x7FF8,      // add #-8,r15
                              0xD206,      // mov.l @(lit,pc),r2   (0x06070000)
@@ -5298,10 +5322,11 @@ void TestEngineEdgePaths()
     auto snap = MakeSnapshot(hw);
 
     DecompileResult r = d.Decompile(snap, Request(0x06060300u));
-    Print("restart limit", r);
-    CHECK(r.status == DecompileStatus::Ok && warned(r, "Exceeded maximum restarts"));
+    Print("two late reads, two restarts", r);
+    CHECK(r.status == DecompileStatus::Ok && !warned(r, "Exceeded maximum restarts"));
     for (const FlowWarning& w : r.flowWarnings) CHECK(w.kind != FlowWarning::JumpTable);
-    CHECK(!r.prototype.known && Has(r.prototypeWithheld, "restart limit"));
+    CHECK(Has(r.Text(), "xRam06070000 = param_2;") && Has(r.Text(), "return param_2;"));
+    CHECK(dts::FrameLosses(r).empty());
 
     // Never returns. Flow stops at the call, so the data after it is not reached, and ReturnCheck
     // ends the path there too: the caller's signature is lent. Without the mark, the same caller
@@ -12626,6 +12651,108 @@ void TestArea3Round14Fix()
     }
 }
 
+// A3-124 (patch 0068): a struct built on the frame through a pointer kept in a frame slot and read back, the `-O0` byte copy of
+// the corpus (hwram007 060228B4, hwram008 06061D90). Two engine bugs, each pinned:
+//   - a read through the reloaded pointer resolves a pass after the slot is linked, and one more per STORE whose guard covers the
+//     slot; dead code had removed the stores it reads by then, and upstream's remedy (one restart, the dead code delay raised by one
+//     pass, once) was too short: the read was linked to the frame's input. Pins A, B, D to H.
+//   - a STORE made a COPY in the middle of a wider guarded local collapsed its INDIRECT with a first piece bytesAfter long instead of
+//     bytesBefore (upstream funcdata_op.cc): a byte at offset 1 or 2 of a word read back a byte late. Pins C (alone), A, B, E, F.
+// Each text is evaluated against the code on the emulator for several inputs, and the frame ledger (dts::FrameLosses) is empty.
+void TestA3124Fix()
+{
+    Sh2Decompiler d(gConfig);
+    uint64_t serial = 128000;
+    const uint32_t base = 0x06009000u;
+    struct Pin
+    {
+        const char* name;
+        std::vector<uint16_t> words;
+        bool call;           // a callee at +0x100 (rts ; nop): the text is not evaluated, its parts are checked
+        const char* text;    // a fragment the text prints now
+    };
+    static const Pin kPins[] = {
+        { "A word -1, byte r5 at +1, word read, all through a pointer reloaded from a slot",
+          { 0x7FE8, 0x61F3, 0x710C, 0x1F15, 0x51F5, 0xE2FF, 0x2122, 0x51F5, 0x7101, 0x2150, 0x51F5, 0x6012, 0x000B, 0x7F18 }, false,
+          "CONCAT11(0xff,param_2)" },
+        { "B the same with the byte at +2",
+          { 0x7FE8, 0x61F3, 0x710C, 0x1F15, 0x51F5, 0xE2FF, 0x2122, 0x51F5, 0x7102, 0x2150, 0x51F5, 0x6012, 0x000B, 0x7F18 }, false,
+          "CONCAT21(0xffff,param_2)" },
+        { "C word -1 stored and read directly, byte r5 at +1 through the reloaded pointer (the INDIRECT collapse alone)",
+          { 0x7FE8, 0xE2FF, 0x1F23, 0x61F3, 0x710C, 0x1F15, 0x51F5, 0x7101, 0x2150, 0x50F3, 0x000B, 0x7F18 }, false,
+          "CONCAT11(0xff,param_2)" },
+        { "D word r5 stored directly, byte read narrower at +1 through the reloaded pointer",
+          { 0x7FE8, 0x1F53, 0x61F3, 0x710C, 0x1F15, 0x51F5, 0x7101, 0x6010, 0x000B, 0x7F18 }, false, "param_2 >> 0x10" },
+        { "E -O0 frame (r14): two words 0, halfword r5 at +0, byte r6 at +3, byte r7 at +5, halfword r4 at +6, two words and a halfword read",
+          { 0x2FE6, 0x7FE8, 0x6EF3, 0x61E3, 0x7108, 0x1E15, 0x51E5, 0xE200, 0x2122, 0x51E5, 0x1121, 0x51E5, 0x2151, 0x51E5, 0x7103, 0x2160,
+            0x51E5, 0x7105, 0x2170, 0x51E5, 0x7106, 0x2141, 0x51E5, 0x6012, 0x5111, 0x63E3, 0x730E, 0x6231, 0x302C, 0x201A, 0x7E18, 0x6FE3,
+            0x000B, 0x6EF6 }, false, "param_3" },
+        { "F the row's printed-C copy: eight byte stores into two words through the reloaded pointer, returned as eight bytes",
+          { 0x2F86, 0x2FE6, 0x4F22, 0x7FE8, 0x6EF3, 0x2E42, 0x1E51, 0x61E3, 0x710C, 0x1E15, 0x51E5, 0xE200, 0x2122, 0x51E5, 0xE200, 0x1121,
+            0x51E5, 0xE242, 0x2120, 0x51E5, 0x6213, 0x7101, 0x6253, 0x2120, 0x51E5, 0x6213, 0x7102, 0x6263, 0x2120, 0x51E5, 0x6213, 0x7103,
+            0x6273, 0x2120, 0x51E5, 0x6213, 0x7104, 0x62E3, 0x63E3, 0x7303, 0x6230, 0x2120, 0x51E5, 0x6213, 0x7105, 0x6353, 0x2130, 0x51E5,
+            0x6213, 0x7106, 0x6263, 0x2120, 0x51E5, 0x6213, 0x7107, 0x6273, 0x2120, 0x51E5, 0x6513, 0x6052, 0x5151, 0x7E18, 0x6FE3, 0x4F26,
+            0x6EF6, 0x68F6, 0x000B, 0x0009 }, false, "CONCAT11(0x42,param_2)" },
+        { "G control: the pointer kept in a register (the engine always had it right)",
+          { 0x7FE8, 0x61F3, 0x710C, 0xE2FF, 0x2122, 0x6313, 0x7301, 0x2350, 0x6012, 0x000B, 0x7F18, 0x0009 }, false, "param_2" },
+        { "H with a call: word -1, byte r5 at +1, halfword r6 at +2 through the reloaded pointer, the pointer handed to a callee, the word read after",
+          { 0x4F22, 0x7FE8, 0x61F3, 0x710C, 0x1F15, 0x51F5, 0xE2FF, 0x2122, 0x51F5, 0x7101, 0x2150, 0x51F5, 0x7102, 0x2161, 0x54F5, 0xD004,
+            0x400B, 0x0009, 0x51F5, 0x6012, 0x7F18, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9100 }, true, "CONCAT11(0xff,param_2),param_3)" },
+    };
+    const std::vector<std::vector<uint32_t>> inputs = {
+        { 0, 0, 0, 0 }, { 0x11223344u, 0x55667788u, 0x99AABBCCu, 0xDDEEFF00u }, { 0xFFFFFFFFu, 0x80000001u, 0x000000FFu, 0xFF7FFFFFu } };
+    for (const Pin& p : kPins)
+    {
+        std::vector<uint16_t> words = p.words;
+        if (p.call)
+        {
+            words.resize(0x100 / 2, 0x0009);
+            words.push_back(0x000B);
+            words.push_back(0x0009);
+        }
+        const CallFixture f = { p.name, base, words };
+        auto snap = CallSnapshot(f, ++serial);
+        const DecompileResult r = d.Decompile(snap, Request(base));
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(Has(r.Text(), p.text));
+        CHECK(!Has(r.Text(), "Heritage AFTER dead removal") && !Has(r.Text(), "Exceeded maximum restarts"));
+        CHECK(dts::FrameLosses(r).empty());
+        CHECK(ReferenceOk(d, snap, Request(base), r));
+        if (!p.call) CHECK(PseudoAgreesWithRun(r, snap, f, inputs, true));
+    }
+    // The frame ledger itself (dts::FrameLosses), on records made up as the engine makes them: a write that went unread, read later in its
+    // block, is a loss; covered first by a folded write of the same bytes, or read only by an access removed with unreachable code, it is not.
+    {
+        auto fate = [](uint32_t insn, AccessFate::Kind kind, bool write, uint32_t off, uint8_t size, int block, uint32_t order) {
+            AccessFate f;
+            f.insn = insn;
+            f.write = write;
+            f.size = size;
+            f.fate = kind;
+            f.address = off;
+            f.frame = true;
+            f.origBlock = block;
+            f.origOrder = order;
+            return f;
+        };
+        DecompileResult fake;
+        fake.flowSuccessors = { { 1 }, {} };
+        fake.accessFates = { fate(0x100, AccessFate::FoldedOrdinary, true, 0xFFFFFFF4u, 1, 0, 1),
+                             fate(0x100, AccessFate::FrameUnread, true, 0xFFFFFFF4u, 1, 0, 1),
+                             fate(0x110, AccessFate::FoldedOrdinary, false, 0xFFFFFFF4u, 4, 1, 0) };
+        CHECK(dts::FrameLosses(fake).size() == 1);   // a byte of the word read in the next block
+        fake.accessFates.insert(fake.accessFates.begin() + 2, fate(0x104, AccessFate::FoldedOrdinary, true, 0xFFFFFFF4u, 4, 0, 2));
+        CHECK(dts::FrameLosses(fake).empty());       // overwritten whole before the read
+        fake.accessFates.erase(fake.accessFates.begin() + 2);
+        fake.accessFates.push_back(fate(0x110, AccessFate::FrameRemoved, false, 0xFFFFFFF4u, 4, 1, 0));
+        CHECK(dts::FrameLosses(fake).empty());       // the read went with unreachable code
+        fake.accessFates.pop_back();
+        fake.accessFates.push_back(fate(0x108, AccessFate::FoldedOrdinary, true, 0xFFFFFFF5u, 1, 0, 3));
+        CHECK(dts::FrameLosses(fake).size() == 1);   // another byte overwritten: the lost one is still read
+    }
+}
+
 void TestFetchAndDataRefusals()
 {
     Sh2Decompiler d(gConfig);
@@ -13007,6 +13134,7 @@ int main(int argc, char** argv)
         RUN(TestArea3Round12Fix());
         RUN(TestArea3Round13Fix());
         RUN(TestArea3Round14Fix());
+        RUN(TestA3124Fix());
         RUN(TestArea2Round8());
         RUN(TestArea2Round9());
         RUN(TestArea2Round10());

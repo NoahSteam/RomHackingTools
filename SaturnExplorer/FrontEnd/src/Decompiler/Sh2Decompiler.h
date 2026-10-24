@@ -296,8 +296,11 @@ struct AccessFate
     // FoldedOrdinary: made a direct read or write of ordinary memory, a variable the analysis may
     // forward or drop. Dead: removed as unused (or by a transformation that is none of the others).
     // Unreachable: removed with the unreachable block it was in. SwitchLookup: the read of a
-    // recovered switch's table; the switch stands for it.
-    enum Kind : uint8_t { FoldedOrdinary, Dead, Unreachable, SwitchLookup };
+    // recovered switch's table; the switch stands for it. Patch 0068, for an access folded into the
+    // function's own frame (recorded FoldedOrdinary first, 'frame' set): FrameUnread, a write went
+    // with its value read by nothing but the engine's markers -- it is lost if the code reads one of
+    // its bytes later (A3-124); FrameRemoved, the access went with an unreachable block.
+    enum Kind : uint8_t { FoldedOrdinary, Dead, Unreachable, SwitchLookup, FrameUnread, FrameRemoved };
     uint32_t insn = 0;      // the instruction, canonical
     bool write = false;
     uint8_t size = 0;
@@ -309,6 +312,10 @@ struct AccessFate
     // reaches -- and constantAddress is false. It accounts for no bus access (A5-5: the offset -4 of
     // a pop was read as a register, and a pop was taken for the read in an rte's delay slot).
     bool frame = false;
+    // Where the access was when the flow was first followed (as MemoryAccess::origBlock and
+    // origOrder): -1 when the op is not one of the flow's LOADs or STOREs.
+    int origBlock = -1;
+    uint32_t origOrder = 0;
 };
 
 // A call in the final p-code: an access's order relative to it matters as much as to another access.

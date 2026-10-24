@@ -403,6 +403,10 @@ void Funcdata::opSetInput(PcodeOp *op,Varnode *vn,int4 slot)
 
   vn->addDescend(op);		// Add this op to list of vn's descendants
   op->setInput(vn,slot);	// op must be up to date AFTER calling descend_add
+  // SaturnExplorer (0068): the value a STORE folded into the frame wrote is read. A MULTIEQUAL or an
+  // INDIRECT only marks where the value may go; what reads their output reads it.
+  if (vn->isWritten() && vn->getDef()->isFrameFold() && op->code() != CPUI_MULTIEQUAL && op->code() != CPUI_INDIRECT)
+    vn->getDef()->setFrameFoldRead();
   // SaturnExplorer (patches/0054-engine-cached-masks-never-narrower.patch): op computes something else now, and vn has a
   // reader it did not have (see opMasksChanged). This replaces patches 0046 and 0049, which forgot the non-zero masks
   // below the op instead.
@@ -501,6 +505,8 @@ void Funcdata::opDestroy(PcodeOp *op)
   Address accaddr;
   if (!accessesRecorded && isMemoryAccess(op,isstore,accsize,accaddr))
     recordAccessFate(op,isstore,accsize,accaddr,op->isJumptableLookup() ? fate_switch_lookup : fate_dead);
+  else if (!accessesRecorded && op->isFrameFold() && !op->isFrameFoldRead())
+    recordFrameEnd(op,fate_frame_unread);	// SaturnExplorer (0068): a frame write going with its value unread
   if (op->getOut() != (Varnode *)0)
     destroyVarnode(op->getOut());
   for(int4 i=0;i<op->numInput();++i) {

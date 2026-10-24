@@ -213,6 +213,7 @@
 //                            SE_GENERATED_TABLES="jmp:sel:n:default:entry,...;...", SE_GENERATED_DATA and
 //                            SE_GENERATED_RETURNS="1,0,2,..." (the generator's intent per function: 1 returns r0, 0 leaves it alone, 2 copies a parameter to r0 on one path only)
 #include "DecompilerTestSupport.h"
+#include "FrameLedger.h"
 #include "MappingOracle.h"
 
 #include "Decompiler/SaturnArchitecture.h"
@@ -4459,6 +4460,11 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
         // ran until the host cancelled): a finding whatever the text, since a cycle is an engine defect.
         for (const std::string& w : r.warnings)
             if (w.find("Exceeded maximum repeats") != std::string::npos) add("unsettled", w);
+        // The frame half of the conservation law (A3-124, patch 0068): a write folded into the frame that went unread while the
+        // code reads a byte of it later. The trace cannot show it (a frame access is no bus access the ledger pairs), the record can.
+        for (const dts::FrameLoss& l : dts::FrameLosses(r))
+            add("frame-lost:W" + std::to_string(l.size), "the frame write of " + std::to_string(l.size) + " byte(s) at " + Hex(l.write) +
+                    " (frame offset " + Hex(l.offset) + ") went unread, and the read at " + Hex(l.read) + " reads it");
         // The canary (A3-34): the function stored fn.canary in a local that a callee overwrote, and no run returned it. A `return` that
         // contains it (as 0x5a, or in decimal) is the local folded across the call, the value from before the callee wrote it.
         if (fn.canary != 0)
@@ -4612,8 +4618,7 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
             std::string fate;
             for (const AccessFate& f : r.accessFates)
                 if (f.insn == insn && f.write == write && f.size == size)
-                    fate = f.fate == AccessFate::Unreachable ? "removed-unsaid" : f.fate == AccessFate::Dead ? "dead" :
-                           f.fate == AccessFate::FoldedOrdinary ? "folded" : "switch-lookup";
+                    fate = f.fate == AccessFate::Unreachable ? "removed-unsaid" : dts::FateLabel(f.fate);
             add(std::string("dropped:") + (write ? "W" : "R") + std::to_string(size) + ":" + provenance + (fate.empty() ? "" : ":" + fate),
                 std::string("the ") + (write ? "write" : "read") + " of " + std::to_string(size) + " byte(s) at " + Hex(insn) + " (" +
                     Hex(addrs[0]) + (addrs.size() > 1 ? ", ..." : "") + "; " + provenance + ") has no access in the output" +
@@ -5401,8 +5406,7 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
             o << "  fates:";
             for (const AccessFate& f : r.accessFates)
                 o << " " << Hex(f.insn) << (f.write ? "W" : "R") << int(f.size) << "="
-                  << (f.fate == AccessFate::Unreachable ? "unreachable" : f.fate == AccessFate::Dead ? "dead" :
-                      f.fate == AccessFate::FoldedOrdinary ? "folded" : "switch-lookup");
+                  << dts::FateLabel(f.fate);
             o << "\n";
         }
         o << "  prototype: " << (r.prototype.known ? "known, " + std::to_string(r.prototype.params.size()) + " param(s), " +

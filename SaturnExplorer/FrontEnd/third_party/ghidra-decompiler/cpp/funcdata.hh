@@ -16,6 +16,7 @@
  * Modified for SaturnExplorer: every LOAD and STORE's fate is recorded (patches/0017-access-fates.patch).
  * Modified for SaturnExplorer: the instructions and jump tables the flow recovered are recorded (patches/0021-flow-instructions.patch).
  * Modified for SaturnExplorer: an op that changes keeps the cached masks around it a superset of the truth (patches/0054-engine-cached-masks-never-narrower.patch).
+ * Modified for SaturnExplorer: a write folded into the stack frame whose value nothing read is recorded when it goes (patches/0068-engine-deadcode-late-stack-reads.patch).
  */
 #ifndef __FUNCDATA_HH__
 #define __FUNCDATA_HH__
@@ -51,7 +52,9 @@ enum AccessFate {
   fate_folded_ordinary,		///< Made a direct read or write (a COPY) of ordinary memory: a variable, not a volatile location
   fate_dead,			///< Destroyed as dead, or by any transformation that is not one of the others
   fate_unreachable,		///< Destroyed with the unreachable block it was in
-  fate_switch_lookup		///< The read of a recovered switch's table: the switch stands for it
+  fate_switch_lookup,		///< The read of a recovered switch's table: the switch stands for it
+  fate_frame_unread,		///< (0068) A write folded into the stack frame (recorded fate_folded_ordinary first) whose value no op but a MULTIEQUAL or INDIRECT read before it was destroyed
+  fate_frame_removed		///< (0068) A read or write folded into the stack frame (recorded fate_folded_ordinary first) that went with an unreachable block
 };
 
 /// \brief One memory access of the flow and how it ended (SaturnExplorer)
@@ -218,6 +221,7 @@ public:
   bool isMemoryAccess(const PcodeOp *op,bool &store,int4 &size,Address &addr) const;	///< Is the op a memory access, and of what (SaturnExplorer)
   void recordAccessFate(const PcodeOp *op,bool store,int4 size,const Address &addr,AccessFate fate);	///< Record how a memory access ended (SaturnExplorer)
   void recordAccessFold(const PcodeOp *op,const Varnode *vn);	///< Record a LOAD or STORE made a direct access of ordinary memory (SaturnExplorer)
+  void recordFrameEnd(const PcodeOp *op,AccessFate fate);	///< Record how an access folded into the stack frame ended (SaturnExplorer, 0068)
   const vector<FlowTable> &getFlowTables(void) const { return flowTables; }	///< Every indirect jump the last flow recovered (SaturnExplorer)
   const vector<FlowInsn> &getFlowInsns(void) const { return flowInsns; }	///< Every instruction the last flow translated (SaturnExplorer)
   const vector<AccessRecord> &getAccessFates(void) const { return accessFates; }	///< Every LOAD and STORE that ended, and how (SaturnExplorer)
