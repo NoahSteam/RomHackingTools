@@ -1412,7 +1412,9 @@ private:
             if (!shown)
             {
                 NoteFrameEscapeOf(s, slot.second, kR15, true, at);
-                if (slot.second.Frame()) mEscapeWords[at].insert(slot.first);   // (A3-108) the note is said once per word
+                // (A3-108) the note is said once per word: a word holding a frame address this function made (not one a callee may have
+                // written over it, which every later call would see as a new fact)
+                if (slot.second.kind == Value::Sp || (slot.second.Frame() && slot.second.def != 0)) mEscapeWords[at].insert(slot.first);
             }
             // (area 3 round 13 fix, A3-105) ...but shown or not, the word goes out to a callee that may keep it: the engine shows r4 only when
             // its trial takes it (a callee with no locked prototype may be printed with none), so the escape does not wait for it (HandOut).
@@ -1437,7 +1439,11 @@ private:
             if (slot.first >= sp.v && slot.second.exposedAt == 0 && !(slot.second.kind == Value::Fuzzy && slot.second.hole))
             {
                 const int64_t k = (slot.first - sp.v) / 4;
-                if ((words & CallEffects::kFrameAny) || (k >= 0 && k < 31 && ((words >> k) & 1u))) slot.second.exposedAt = at;
+                if ((words & CallEffects::kFrameAny) || (k >= 0 && k < 31 && ((words >> k) & 1u)))
+                {
+                    slot.second.exposedAt = at;
+                    if (SavedRegister(slot.second)) mExposedSaved.insert(std::make_pair(at, slot.first));   // (A3-108)
+                }
             }
     }
     // The words of its caller's frame that the function at 'target' writes itself, as CallEffects::frameWords has them (A3-21's stores, an
@@ -1569,8 +1575,8 @@ private:
     void ReadExposed(const Value& slot, int64_t offset)
     {
         if (!mTolerant || slot.exposedAt == 0) return;
-        // (A3-108) bit 17: the word holds a saved register's entry value, which the note does not call a local
-        mEscapeSites[slot.exposedAt] |= SavedRegister(slot) ? 1u << 17 : 1u << 16;
+        // (A3-108) bit 17: the word held a saved register's entry value when the call was made, which the note does not call a local
+        mEscapeSites[slot.exposedAt] |= mExposedSaved.count(std::make_pair(slot.exposedAt, offset)) ? 1u << 17 : 1u << 16;
         if (!mEscaped || offset < mEscapeLow) mEscapeLow = offset;
         mEscaped = true;
     }
@@ -2546,6 +2552,7 @@ private:
     bool mEntryUndecodable = false;    // the entry instruction could not be decoded (memory not captured)
     std::map<uint32_t, uint32_t> mEscapeSites;   // the calls that escape was declared at because of r2 or r7, and which
     std::map<uint32_t, uint32_t> mHandSites;     // (area 3 round 12 fix) ...and at in another register no argument shows (HandSites)
+    std::set<std::pair<uint32_t, int64_t>> mExposedSaved;   // (A3-108) the words a call exposed that held a saved register (call, offset)
     std::map<uint32_t, std::set<int64_t>> mEscapeWords;   // (area 3 round 13 fix, A3-108) the stack words (offsets) the stack note of a call is for
     bool mEscaped = false;   // r2 held a frame address at a call that may read it
     bool mEscapedLow = false;   // ...of which one with no lower bound than the frame's lowest slot
@@ -5076,10 +5083,10 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
             if (escapeSites.count(h.first) == 0) escapeSites[h.first] = 0;
         // (area 3 round 13 fix, A3-108) A frame fact is said once per function, at the first call it holds at, with "likewise at the calls
         // below" when it holds at others: a frame address in r14 is one fact (a function that keeps a frame pointer said it at every call, up to
-        // 46 times), and a stack word that holds one is one fact per word. The notes the text needs at the first call are still all there.
-        std::map<uint32_t, std::string> noteAt;   // the site and its note, as said before the "likewise" pass
-        std::map<std::string, std::vector<uint32_t>> factSites;   // a fact and the sites it holds at, in address order
-        std::map<uint32_t, std::string> factOf;
+        // 46 times), and the stack words that hold one are a fact per word, said again only at a call one more word holds one at (the words
+        // a callee may have written over are no new fact). The notes the text needs at the first call are all there.
+        std::map<uint32_t, std::string> noteAt;   // the site and its note
+        std::map<uint32_t, int> regOf;           // a register note's register
         for (const auto& siteRegs : escapeSites)
         {
             const uint32_t site = siteRegs.first;
@@ -5105,37 +5112,54 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
                                                          "r11", "r12", "r13", "r14", "r15", "sr", "gbr", "vbr", "mach", "macl", "pr" };
                 int reg = 0;
                 while (reg < 21 && !((hand->second >> reg) & 1u)) ++reg;
-                const std::string fact = std::string("reg ") + kRegNames[reg];
                 noteAt[site] = std::string(kFrameEscapeNoteRegA) + kRegNames[reg] + kFrameEscapeNoteRegB;
-                factOf[site] = fact;
-                factSites[fact].push_back(site);
+                regOf[site] = reg;
                 continue;
             }
-            const char* note = (m & 4u) ? kFrameEscapeNote : (m & 0x80u) ? kFrameEscapeNoteR7 : (m & 0x8000u) ? kFrameEscapeNoteStack
-                               : (m & (1u << 16)) ? kFrameEscapeNoteSlot : (m & (1u << 17)) ? kFrameEscapeNoteSaved : kFrameEscapeNoteSlot;
-            noteAt[site] = note;
-            // the stack note of a call whose words were all said at an earlier call is that fact again (the words, as one fact)
-            if (note == kFrameEscapeNoteStack)
-            {
-                const auto w = escapeWords.find(site);
-                std::string fact = "stack";
-                if (w != escapeWords.end())
-                    for (int64_t off : w->second) fact += " " + std::to_string(off);
-                factOf[site] = fact;
-                factSites[fact].push_back(site);
-            }
+            noteAt[site] = (m & 4u) ? kFrameEscapeNote : (m & 0x80u) ? kFrameEscapeNoteR7 : (m & 0x8000u) ? kFrameEscapeNoteStack
+                           : (m & (1u << 17)) && !(m & (1u << 16)) ? kFrameEscapeNoteSaved : kFrameEscapeNoteSlot;
         }
-        for (const auto& sn : noteAt)
         {
-            std::string text = sn.second;
-            const auto f = factOf.find(sn.first);
-            if (f != factOf.end())
+            std::map<int, uint32_t> regSaid;       // a register's note: the call it was said at
+            std::set<int64_t> wordsSaid;            // the stack words a stack note was said for
+            uint32_t lastStack = 0;                 // the call the last stack note was said at
+            std::set<uint32_t> skipped, likewise;
+            for (const auto& sn : noteAt)
             {
-                const std::vector<uint32_t>& sites = factSites[f->second];
-                if (sites.front() != sn.first) continue;   // said at the first call it holds at
-                if (sites.size() > 1) text += kFrameEscapeNoteLikewise;
+                const auto r = regOf.find(sn.first);
+                if (r != regOf.end())
+                {
+                    const auto said = regSaid.find(r->second);
+                    if (said == regSaid.end()) regSaid[r->second] = sn.first;
+                    else
+                    {
+                        skipped.insert(sn.first);
+                        likewise.insert(said->second);
+                    }
+                    continue;
+                }
+                if (sn.second != std::string(kFrameEscapeNoteStack)) continue;
+                const auto w = escapeWords.find(sn.first);
+                bool fresh = lastStack == 0;
+                if (w != escapeWords.end())
+                    for (int64_t off : w->second) fresh = fresh || wordsSaid.count(off) == 0;
+                if (fresh)
+                {
+                    if (w != escapeWords.end()) wordsSaid.insert(w->second.begin(), w->second.end());
+                    lastStack = sn.first;
+                }
+                else
+                {
+                    skipped.insert(sn.first);
+                    likewise.insert(lastStack);
+                }
             }
-            arch->commentdb->addComment(ghidra::Comment::user2, fd->getAddress(), ghidra::Address(ram, sn.first), text);
+            for (const auto& sn : noteAt)
+            {
+                if (skipped.count(sn.first)) continue;
+                arch->commentdb->addComment(ghidra::Comment::user2, fd->getAddress(), ghidra::Address(ram, sn.first),
+                                            likewise.count(sn.first) ? sn.second + kFrameEscapeNoteLikewise : sn.second);
+            }
         }
 
         if (!request.allMemoryVolatile)
