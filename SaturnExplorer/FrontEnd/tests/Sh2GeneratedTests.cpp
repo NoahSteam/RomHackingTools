@@ -8754,6 +8754,10 @@ bool GenEscape13Fn(uint64_t seed, CCase& c, std::string& shape)
     const std::string form = kForms[rng.Below(3)];
     const bool walk = rng.Chance(60);
     const bool lent = rng.Chance(50);
+    // An unlent callee sits where CheckLaunderWalks does not decompile it first (kCode + 0xA0), as a callee the panel has not decompiled: a
+    // callee decompiled first is withheld, and the caller's call is then shown with the callee's own reading of its arguments (r4 and r5),
+    // so the word at the call's r15 is no argument and A3-104's boundary is not reached.
+    const uint32_t gOff = lent ? 0x80u : 0xA0u;
     LaunderBuilder b;
     auto prologue = [&]() {
         b.Put(0x4F22);   // sts.l pr,@-r15
@@ -8781,12 +8785,12 @@ bool GenEscape13Fn(uint64_t seed, CCase& c, std::string& shape)
         b.Put(0x64F3);   // mov r15,r4
         b.Put(0x7414);   // add #20,r4: p
         b.Lit(5, kLaunderGlobal);   // obj
-        call(0x80);
+        call(gOff);
         b.Lit(2, kLaunderGlobal);
         b.Put(0x5221);   // mov.l @(4,r2),r2: the kept pointer
         LaunderBelow(b, 2, walk);
         epilogue(0x50F1);   // mov.l @(4,r15),r0
-        b.at = 0x40;     // g
+        b.at = gOff / 2;   // g
         if (!lent) hidden();
         b.Put(0x000B);
         b.Put(0x1541);   // mov.l r4,@(4,r5)
@@ -8799,13 +8803,13 @@ bool GenEscape13Fn(uint64_t seed, CCase& c, std::string& shape)
         b.Put(0x7114);   // add #20,r1: p
         b.Put(0x7FFC);   // add #-4,r15
         b.Put(0x2F12);   // mov.l r1,@r15: the first stack argument word, r4-r7 unset
-        call(0x80);
+        call(gOff);
         b.Put(0x7F04);   // add #4,r15
         b.Lit(2, kLaunderGlobal);
         b.Put(0x6222);   // mov.l @r2,r2
         LaunderBelow(b, 2, walk);
         epilogue(0x50F1);
-        b.at = 0x40;     // g
+        b.at = gOff / 2;   // g
         if (!lent) hidden();
         b.Put(0x61F2);   // mov.l @r15,r1: its incoming stack word
         b.Lit(2, kLaunderGlobal);
