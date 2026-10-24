@@ -7442,6 +7442,17 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
         // is left undeclared: the text cannot be run, and fails.
         std::set<std::string> frameNames;
         std::string frameDefines, frameUndefs;
+        // The stack locals the text declares, with their offsets and the widths of their types, for the names wider than a symbol below (A3-124).
+        std::map<std::string, std::pair<int64_t, int>> stackLocals;
+        {
+            static const std::regex localRe("^\\s*(xunknown|int|uint|undefined)([1248])\\s+([A-Za-z]*Stack(?:_[0-9a-f]+|[0-9a-f]{8}));\\s*$");
+            std::istringstream in(rebuilt);
+            std::string l;
+            int64_t off = 0;
+            std::smatch lm;
+            while (std::getline(in, l))
+                if (std::regex_match(l, lm, localRe) && StackNameOffset(lm[3].str(), off)) stackLocals[lm[3].str()] = std::make_pair(off, std::atoi(lm[2].str().c_str()));
+        }
         if (frameMode)
         {
             static const std::regex declRe("^\\s*([A-Za-z_][\\w ]*?[\\w*])\\s*\\b(_?[A-Za-z]*Stack(?:_[0-9a-f]+|[0-9a-f]{8}))(\\s*\\[(\\d+)\\])?;\\s*$");
@@ -7480,6 +7491,29 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
             for (const std::string& n : names)
                 if (n.compare(0, 2, "__") != 0 && frameNames.count(n) == 0) decls += "  " + UnderscoreNameType(rebuilt, n) + " " + n + ";\n";
             if (!decls.empty() && brace != std::string::npos) rebuilt.insert(brace + 2, decls);
+            // Such a name covers the declared locals inside its bytes (`_xStack_14 = CONCAT31(...)` over `xStack_14` and `xStack_12`, both two
+            // bytes): the text then reads `xStack_12`, bytes 2 and 3 of the write (A3-124: the struct built byte by byte through a pointer,
+            // read a halfword at a time). The harness's names are separate variables, so after each such write every local wholly inside it is
+            // given its bytes, the machine's order: the first byte the most significant.
+            for (const std::string& n : names)
+            {
+                int64_t at = 0;
+                const std::string ty = UnderscoreNameType(rebuilt, n);
+                const int width = ty == "xunknown1" ? 1 : ty == "xunknown2" ? 2 : ty == "xunknown4" ? 4 : ty == "xunknown8" ? 8 : 0;
+                if (width == 0 || n.compare(0, 2, "__") == 0 || frameNames.count(n) || !StackNameOffset(n, at)) continue;
+                std::string follow;
+                for (const auto& s : stackLocals)
+                    if (s.second.first >= at && s.second.first + s.second.second <= at + width)
+                        follow += " " + s.first + " = (xunknown" + std::to_string(s.second.second) + ")((unsigned long long)" + n + " >> " +
+                                  std::to_string(8 * (at + width - s.second.first - s.second.second)) + ");";
+                if (follow.empty()) continue;
+                const std::regex assign("^(\\s*" + n + " = [^\\n]*;)$");
+                std::string out;
+                std::istringstream lines(rebuilt);
+                std::string l;
+                while (std::getline(lines, l)) out += (std::regex_match(l, assign) ? l + follow : l) + "\n";
+                rebuilt = out;
+            }
         }
         pr.cText = frameDefines + rebuilt + frameUndefs;
         pr.frame = frameMode;
