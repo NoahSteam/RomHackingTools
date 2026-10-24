@@ -9140,13 +9140,21 @@ bool GenWalk14Fn(uint64_t seed, CCase& c, std::string& shape)
     else
     {
         // A3-122: segments of up to 1,000 stores with trampolines between them (bf reaches 256 bytes, bra 4 KB), as cap14.py builds them
+        // The body is past the reach of the pool at kCode + 0x100, so the index's global is a literal at kCode + 8, jumped over.
         const int n = 4100 + static_cast<int>(rng.Below(201));
+        b.Put(0xD301);   // mov.l @(kCode + 8),r3
+        b.Put(0xA003);   // bra kCode + 12
+        b.Put(0x0009);
+        b.Put(0x0009);
+        b.Put(static_cast<uint16_t>(kLaunderGlobal >> 16));
+        b.Put(static_cast<uint16_t>(kLaunderGlobal));
+        b.Put(0x6332);   // mov.l @r3,r3: an index, 0 in the run
         b.Put(0x7FE8);   // add #-24,r15
         b.Put(0x62F3);   // mov r15,r2
         b.Put(0x7210);   // add #16,r2
         b.Put(static_cast<uint16_t>(0xE000 | K));
         b.Put(0x2F02);   // mov.l r0,@r15
-        b.Put(0x324C);   // add r4,r2: an unbounded index (0 in the run)
+        b.Put(0x323C);   // add r3,r2: an unbounded index
         b.Put(0xE104);   // mov #4,r1
         size_t prev = b.at;   // L
         int left = n;
@@ -9595,6 +9603,20 @@ void TestPrintedC()
             ++staleByShape[shapes[i]];
             std::printf("FINDING [%s] %s (%s)\n  detail: %s\n  replay: SE_GENERATED_PRINTEDC=only SE_GENERATED_LAUNDER_WORDS=\"%s\"\n%s\n", lv[i].cls.c_str(),
                         cases[i].name.c_str(), shapes[i].c_str(), lv[i].detail.c_str(), WordsText(cases[i].words).c_str(), lv[i].text.c_str());
+        }
+        // (area 3 round 14 fix) the round 14 stream's draws, each with how many texts were compared by value (a constant or a resolved temporary)
+        std::map<std::string, std::pair<int, int>> walk14;
+        for (size_t i = 0; i < lv.size(); ++i)
+            if (shapes[i].compare(0, 7, "walk14.") == 0)
+            {
+                ++walk14[shapes[i]].first;
+                if (lv[i].compared) ++walk14[shapes[i]].second;
+            }
+        if (!walk14.empty())
+        {
+            std::printf("round 14 walks (drawn/compared):");
+            for (const auto& k : walk14) std::printf(" %s=%d/%d", k.first.c_str(), k.second.first, k.second.second);
+            std::printf("\n");
         }
         std::printf("laundered walks: functions=%zu classes:", lv.size());
         for (const auto& k : launderClasses) std::printf(" %s=%d", k.first.c_str(), k.second);
