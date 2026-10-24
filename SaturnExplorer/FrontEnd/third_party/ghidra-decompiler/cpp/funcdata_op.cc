@@ -48,16 +48,17 @@ void Funcdata::opSetOpcode(PcodeOp *op,OpCode opc)
 /// op (a MULTIEQUAL or INDIRECT, a PIECE the frame's write went into, a constant folded from it), is no frame
 /// access gone unread when it is destroyed. A frame write whose readers were all destroyed as dead never has its
 /// value forwarded. A marker (MULTIEQUAL, INDIRECT) whose input is replaced forwards only that input's own fold:
-/// heritage relinks markers to other versions. The walk back stops after 64 ops; every fold of this generation
+/// heritage relinks markers to other versions; totalReplace and totalReplaceConstant, which give every reader an
+/// equal value, walk for markers too. The walk back stops after 64 ops; every fold of this generation
 /// of the function is then taken as forwarded (the ledger may miss a loss, never report one that is none).
-/// \param op is the op that read it, or null when a MULTIEQUAL or INDIRECT read it
+/// \param walk is \b false when a MULTIEQUAL or INDIRECT read it and had it replaced (only its own fold is forwarded)
 /// \param vn is the Varnode no longer read
-void Funcdata::noteFrameFoldForwarded(const PcodeOp *op,Varnode *vn)
+void Funcdata::noteFrameFoldForwarded(bool walk,Varnode *vn)
 
 {
   if (!vn->isWritten() || frameFoldsAllRead) return;
   PcodeOp *def = vn->getDef();
-  if (op == (const PcodeOp *)0) {
+  if (!walk) {
     if (def->isFrameFold())
       def->setFrameFoldRead();
     return;
@@ -441,7 +442,7 @@ void Funcdata::opSetInput(PcodeOp *op,Varnode *vn,int4 slot)
 #endif
   if (op->getIn(slot) != (Varnode *)0) {
     // SaturnExplorer (0068): a reader of a frame fold's value now reads another Varnode in its place
-    noteFrameFoldForwarded(isMarkerOrUnbuilt(op) ? (const PcodeOp *)0 : op,op->getIn(slot));
+    noteFrameFoldForwarded(!isMarkerOrUnbuilt(op),op->getIn(slot));
     opUnsetInput(op,slot);
   }
 
@@ -614,7 +615,7 @@ void Funcdata::opSetAllInput(PcodeOp *op,const vector<Varnode *> &vvec)
 #endif
   for(i=0;i<op->numInput();++i)
     if (op->getIn(i) != (Varnode *)0) {
-      noteFrameFoldForwarded(isMarkerOrUnbuilt(op) ? (const PcodeOp *)0 : op,op->getIn(i));	// SaturnExplorer (0068)
+      noteFrameFoldForwarded(!isMarkerOrUnbuilt(op),op->getIn(i));	// SaturnExplorer (0068)
       opUnsetInput(op,i);
     }
 
@@ -637,7 +638,7 @@ void Funcdata::opRemoveInput(PcodeOp *op,int4 slot)
     debugModCheck(op);
 #endif
   if (op->getIn(slot) != (Varnode *)0)	// SaturnExplorer (0068): the op stays, simplified without it
-    noteFrameFoldForwarded(isMarkerOrUnbuilt(op) ? (const PcodeOp *)0 : op,op->getIn(slot));
+    noteFrameFoldForwarded(!isMarkerOrUnbuilt(op),op->getIn(slot));
   opUnsetInput(op,slot);
   op->removeInput(slot);
   opMasksChanged(op);	// SaturnExplorer (patches/0054-engine-cached-masks-never-narrower.patch)

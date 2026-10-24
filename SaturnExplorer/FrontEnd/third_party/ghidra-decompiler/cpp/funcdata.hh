@@ -224,7 +224,7 @@ public:
   void recordAccessFate(const PcodeOp *op,bool store,int4 size,const Address &addr,AccessFate fate);	///< Record how a memory access ended (SaturnExplorer)
   void recordAccessFold(const PcodeOp *op,const Varnode *vn);	///< Record a LOAD or STORE made a direct access of ordinary memory (SaturnExplorer)
   void recordFrameEnd(const PcodeOp *op,AccessFate fate);	///< Record how an access folded into the stack frame ended (SaturnExplorer, 0068)
-  void noteFrameFoldForwarded(const PcodeOp *op,Varnode *vn);	///< Mark the frame folds a replaced input came from as forwarded (SaturnExplorer, 0068)
+  void noteFrameFoldForwarded(bool walk,Varnode *vn);	///< Mark the frame folds a replaced input came from as forwarded (SaturnExplorer, 0068)
   /// \brief SaturnExplorer (0068): is the op a MULTIEQUAL or INDIRECT, or not yet given an op-code
   static bool isMarkerOrUnbuilt(const PcodeOp *op) { return op->getOpcode() == (TypeOp *)0 || op->code() == CPUI_MULTIEQUAL || op->code() == CPUI_INDIRECT; }
   const vector<FlowTable> &getFlowTables(void) const { return flowTables; }	///< Every indirect jump the last flow recovered (SaturnExplorer)
