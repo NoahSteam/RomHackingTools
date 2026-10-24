@@ -1,5 +1,5 @@
 import sys,os,re,collections
-sys.path.insert(0,'/home/user/RomHackingTools/.claude/worktrees/a3r13rev/SaturnExplorer/Docs/Decompiler/tools/a3_round13')
+sys.path.insert(0,os.path.dirname(os.path.abspath(__file__)))
 import textdiff
 def canon(l):
     l=re.sub(r'\b[a-z]{0,3}[a-z]Stack_[0-9a-f]+\b','S',l)

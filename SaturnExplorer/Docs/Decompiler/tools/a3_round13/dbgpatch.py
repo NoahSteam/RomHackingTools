@@ -1,5 +1,7 @@
 import sys
-p='/home/user/RomHackingTools/.claude/worktrees/a3r13rev/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/heritage.cc'
+import os
+# usage: ENGINE_SRC=<SaturnExplorer dir> python3 dbgpatch.py   (a temporary env-gated print in markUnknownStores; revert with git checkout)
+p=os.environ['ENGINE_SRC']+'/FrontEnd/third_party/ghidra-decompiler/cpp/heritage.cc'
 s=open(p).read()
 old="""  iter = fd->beginOp(CPUI_STORE);
   enditer = fd->endOp(CPUI_STORE);

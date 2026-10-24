@@ -1,6 +1,7 @@
 import os,re,subprocess,sys
-R='/tmp/claude-0/-home-user-RomHackingTools/aae0ae36-3afa-5288-8786-5063bd965426/scratchpad/a3r13rev'
-H='/tmp/claude-0/-home-user-RomHackingTools/aae0ae36-3afa-5288-8786-5063bd965426/scratchpad/h'
+import os
+R=os.environ.get('A3R13_OUT','.')   # the directory with drv/drv, out_base_<img>/, out_new_<img>/
+H=os.environ.get('A3R13_IMG','.')   # the directory with hwram007.bin and hwram008.bin
 img=sys.argv[1]
 d='%s/out_new_%s/lend_after'%(R,img)
 res={'fp':0,'other':0}; other=[]

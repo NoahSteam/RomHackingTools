@@ -1,6 +1,6 @@
 #!/bin/bash
 # usage: corp.sh <label> <test binary>   (runs both images, texts in $R/out_<label>_<img>)
-R=/tmp/claude-0/-home-user-RomHackingTools/aae0ae36-3afa-5288-8786-5063bd965426/scratchpad/a3r13rev; H=/tmp/claude-0/-home-user-RomHackingTools/aae0ae36-3afa-5288-8786-5063bd965426/scratchpad/h
+R=${A3R13_OUT:?}; H=${A3R13_IMG:?}   # R: output directory, H: the directory with hwram007.bin and hwram008.bin
 lab=$1; bin=$2
 for img in 007 008; do
   o=$R/out_${lab}_$img; rm -rf $o; mkdir -p $o

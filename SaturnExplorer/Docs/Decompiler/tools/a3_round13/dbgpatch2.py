@@ -1,4 +1,6 @@
-p='/home/user/RomHackingTools/.claude/worktrees/a3r13rev/SaturnExplorer/FrontEnd/src/Decompiler/Sh2Decompiler.cpp'
+import os
+# usage: ENGINE_SRC=<SaturnExplorer dir> python3 dbgpatch2.py   (temporary env-gated prints in the callee walk; SE_DBG_CFW=1 enables; revert with git checkout)
+p=os.environ['ENGINE_SRC']+'/FrontEnd/src/Decompiler/Sh2Decompiler.cpp'
 s=open(p).read()
 old="""        cache[target] = words;
         // A3-86 a: the registers the walked callee stores below"""

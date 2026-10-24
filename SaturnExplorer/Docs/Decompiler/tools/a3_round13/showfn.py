@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """showfn.py img(007|008) ADDR [-a]: the disassembly (to the last address the text names + a few), then the diff of base and new text (-a: both whole)"""
 import sys,re,subprocess,difflib,os
-R='/tmp/claude-0/-home-user-RomHackingTools/aae0ae36-3afa-5288-8786-5063bd965426/scratchpad/a3r13rev'
-H='/tmp/claude-0/-home-user-RomHackingTools/aae0ae36-3afa-5288-8786-5063bd965426/scratchpad/h'
+import os
+R=os.environ.get('A3R13_OUT','.')   # the directory with drv/drv, out_base_<img>/, out_new_<img>/
+H=os.environ.get('A3R13_IMG','.')   # the directory with hwram007.bin and hwram008.bin
 img,addr=sys.argv[1],sys.argv[2].upper()
 a=open('%s/out_base_%s/lend_after/%s.c'%(R,img,addr)).read(); b=open('%s/out_new_%s/lend_after/%s.c'%(R,img,addr)).read()
 adds=[int(x,16) for x in re.findall(r';\s*([0-9A-F]{8})\s*$',a+b,re.M)]
