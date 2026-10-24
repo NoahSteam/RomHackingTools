@@ -111,6 +111,7 @@ void Funcdata::clear(void)
   accessFates.clear();		// SaturnExplorer: they describe the ops just destroyed
   frameEscaped = false;		// SaturnExplorer (0068): ...and the escape found in them
   frameCalls.clear();
+  guardReads.clear();
   frameFoldsAllRead = false;
   flowInsns.clear();		// SaturnExplorer: the next flow records its own
   flowTables.clear();
@@ -240,8 +241,15 @@ void Funcdata::recordAccessFold(const PcodeOp *op,const Varnode *vn)
   // another value in its place forwards it (noteFrameFoldForwarded), and opDestroy records the op again
   // (fate_frame_unread) if it goes with its value never forwarded (A3-124's stores, removed before the read
   // was found, or with the pieces of a wrong collapse, were counted as folded and nothing more).
-  if (op->getTime() < flowOps && vn->getSpace()->getType() == IPTR_SPACEBASE)
+  if (op->getTime() < flowOps && vn->getSpace()->getType() == IPTR_SPACEBASE) {
     op->setFrameFold();
+    // A STORE whose guard on these bytes was read (and the reader forwarded) before it was folded: its value was read.
+    for(vector<GuardReadRecord>::const_iterator iter=guardReads.begin();iter!=guardReads.end();++iter) {
+      if ((*iter).store != op || (*iter).space != vn->getSpace()) continue;
+      if ((*iter).offset < vn->getOffset() + vn->getSize() && vn->getOffset() < (*iter).offset + (*iter).size)
+	op->setFrameFoldRead();
+    }
+  }
 }
 
 /// SaturnExplorer (patches/0068-engine-deadcode-late-stack-reads.patch): heritage guards a stack local at the

@@ -75,6 +75,14 @@ struct FrameCallRecord {
   int4 size;			///< ...and its size
 };
 
+/// \brief A range read through the guard a STORE put on it, before the STORE was folded (SaturnExplorer, 0068)
+struct GuardReadRecord {
+  const PcodeOp *store;		///< The STORE
+  AddrSpace *space;		///< The space of the range read
+  uintb offset;			///< The range's offset
+  int4 size;			///< ...and its size
+};
+
 /// \brief One instruction the flow translated (SaturnExplorer)
 struct FlowInsn {
   Address addr;			///< The address of the instruction
@@ -143,6 +151,7 @@ class Funcdata {
   uintm flowOps = 0;		///< The ops with a lower time were made by the flow; the rest by rules and actions (SaturnExplorer)
   bool accessesRecorded = false;	///< Set while a block is removed: its accesses were recorded before any op was destroyed
   mutable bool frameEscaped = false;	///< SaturnExplorer (0068): a frame address escaped (FrameEscape) in this generation of the function
+  vector<GuardReadRecord> guardReads;	///< SaturnExplorer (0068): ranges read through a STORE's guard, for its fold
   vector<FrameCallRecord> frameCalls;	///< SaturnExplorer (0068): the flow's calls heritage guarded a stack local at, in this generation
   bool frameFoldsAllRead = false;	///< SaturnExplorer (0068): a walk of noteFrameFoldForwarded passed its bound: no fold is recorded unread
 
