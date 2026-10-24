@@ -231,7 +231,7 @@ const char* DrawModeName(se_draw_mode mode)
 
 // Whether hover help is enabled (Settings > Tooltips). App mirrors mShowTooltips here each
 // frame so the free-function panel helpers don't have to thread a bool through every call.
-bool g_tooltipsEnabled = false;
+bool g_tooltipsEnabled = true;
 
 // What the Rewind menu item does and what it costs. Unconditional, not gated on the "hover help"
 // preference: this is the only place the feature is explained, and it is the one setting with a
@@ -403,7 +403,7 @@ void App::LoadSettings()
         mPanels.*(p.flag) = mSettings.GetBool("panels", p.key, mPanels.*(p.flag));
     mDataDir      = mSettings.Get("data", "dir", mDataDir);
     mLayerPanels.Load(mSettings);   // export folder + per-layer tile-grid toggles
-    mShowTooltips = mSettings.GetBool("ui", "tooltips", false);
+    mShowTooltips = mSettings.GetBool("ui", "tooltips", true);
     mRewindEnabled = mSettings.GetBool("debug", "rewind", true);
     mDiffExe  = mSettings.Get("diff", "exe", "");
     mDiffArgs = mSettings.Get("diff", "args", kDefaultDiffArgs);

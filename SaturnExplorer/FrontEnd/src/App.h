@@ -851,12 +851,12 @@ private:
     LaunchValidation mLaunchValidation;
     bool             mbLaunchedEmulator = false;  // SE started the current emulator (so a
                                                   // relaunch stops it first, then reconnects)
-    bool             mShowTooltips = false;       // hover help on field/register/header labels
+    bool             mShowTooltips = true;        // hover help on field/register/header labels
     // Rewind capture (Settings). The emulator saves a full state every frame to feed the
     // rewind timeline, which costs real frame rate, so the user owns the switch. Pushed to the
     // emulator over the live protocol (REW, v18) rather than just ignored on this side.
     bool                     mRewindEnabled = true;
-                                                  // (Settings > Tooltips; persisted, default off)
+                                                  // (Settings > Tooltips; persisted, default on)
     bool             mOpenLaunchSettings = false;    // request to open the Launch Settings modal
     bool             mLaunchSettingsInit = false;    // (re)load edit buffers on modal open
     bool             mOpenRecordingSettings = false;
