@@ -67,6 +67,9 @@ and the request settings (volatile ranges, lent prototypes). With it: the expect
 (`Ledger(r, {...})`), expected text fragments or notes, and the oracle verdict. Reviewers put
 fixtures in the ledger row; fixers move them into the suite verbatim.
 
+Scripts a round needs go under `tools/` (see `tools/README.md`): scripts only, never the output they
+generate, and only the latest round per area plus what it still calls is kept.
+
 ## Findings ledger
 
 `Docs/Decompiler/REVIEW_LEDGER.md`: one row per finding. `id` is `A<area>-<n>`. Status is
