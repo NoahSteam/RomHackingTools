@@ -156,6 +156,7 @@ class LoadGuard {
   int4 analysisState;	///< 0=unanalyzed, 1=analyzed(partial result), 2=analyzed(full result)
   bool guessedBelow;	///< SaturnExplorer: minimumOffset is a guess below a pointer stepped down, not where an array starts (patches/0056-engine-stack-walk-down-aliases.patch)
   void establishRange(const ValueSetRead &valueSet);	///< Convert partial value set analysis into guard range
+  static bool pointerSteppedDown(Varnode *vn);	///< SaturnExplorer (0065): is the pointer the join of a loop that steps it down
   void finalizeRange(const ValueSetRead &valueSet);	///< Convert value set analysis to final guard range
 
   /// \brief Set a new unanalyzed LOAD guard that initially guards everything

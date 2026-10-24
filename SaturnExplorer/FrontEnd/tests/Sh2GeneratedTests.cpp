@@ -8906,6 +8906,38 @@ bool GenEscape13Fn(uint64_t seed, CCase& c, std::string& shape)
     return true;
 }
 
+// ...and the walk the round 13 matrix found open (the round 11 review's s5.src S17 to S19): the frame address p = r15 + 16 with a variable
+// index added or subtracted (a word of ordinary memory that holds 0: the guard's value set analysis cannot bound it), then stepped down by a
+// loop to the sentinel at r15. On a stream of its own (one seed in eight), checked as the others are.
+//   index.<add|sub>: p + idx or p - idx, then `L: mov.l r1,@-p ; dt r1 ; bf L`
+bool GenIndexWalk13Fn(uint64_t seed, CCase& c, std::string& shape)
+{
+    Rng rng(seed * 2246822507u + 0x13B5u);
+    if (!rng.Chance(12)) return false;
+    const int K = 101 + static_cast<int>(rng.Below(27));
+    const bool sub = rng.Chance(50);
+    LaunderBuilder b;
+    b.Put(0x4F22);   // sts.l pr,@-r15
+    b.Put(0x7FE0);   // add #-32,r15
+    b.Put(static_cast<uint16_t>(0xE000 | K));
+    b.Put(0x2F02);   // mov.l r0,@r15: the sentinel
+    b.Put(0x62F3);   // mov r15,r2
+    b.Put(0x7210);   // add #16,r2: p
+    b.Lit(3, kLaunderGlobal);
+    b.Put(0x6332);   // mov.l @r3,r3: the index, 0 in the run
+    b.Put(static_cast<uint16_t>(sub ? 0x3238 : 0x323C));   // sub r3,r2 / add r3,r2
+    LaunderBelow(b, 2, true);
+    b.Put(0x60F2);   // mov.l @r15,r0
+    b.Put(0x7F20);   // add #32,r15
+    b.Put(0x4F26);   // lds.l @r15+,pr
+    b.Put(0x000B);
+    b.Put(0x0009);
+    shape = std::string("escape13.index.") + (sub ? "sub" : "add");
+    c.words = b.Finish();
+    c.name = "seed" + std::to_string(seed) + "_index13";
+    return true;
+}
+
 // The check of the laundered walks: lend the callees (deepest first: kCode + 0xC0, then kCode + 0x80, when the blob has code there), decompile
 // the entry, run once, and compare every constant return with the run's r0 (as CheckSpillWalks).
 std::vector<CVerdict> CheckLaunderWalks(Sh2Decompiler& d, const std::vector<CCase>& cases, const std::vector<std::string>* shapes = nullptr)
@@ -9237,11 +9269,17 @@ void TestPrintedC()
                 cases.push_back(e);
                 shapes.push_back(shape);
             }
-            // (area 3 round 13 fix, A3-114) ...and those of A3-104 to A3-106, on another
+            // (area 3 round 13 fix, A3-114) ...and those of A3-104 to A3-106, on another, and the indexed walk on a third
             CCase e13;
             if (GenEscape13Fn(static_cast<uint64_t>(seed), e13, shape))
             {
                 cases.push_back(e13);
+                shapes.push_back(shape);
+            }
+            CCase i13;
+            if (GenIndexWalk13Fn(static_cast<uint64_t>(seed), i13, shape))
+            {
+                cases.push_back(i13);
                 shapes.push_back(shape);
             }
         }
@@ -10579,7 +10617,13 @@ void TestA365Pins(Sh2Decompiler& d)
             ++drawn[shape];
         }
         std::printf("pin 'round 13 escape draws': %d functions in 2000 seeds, %zu kinds\n", n, drawn.size());
-        for (const char* k : { "escape13.twoargs.lent", "escape13.twoargs.unlent", "escape13.stackkeep.lent", "escape13.stackkeep.unlent",
+        for (uint64_t seed = 1; seed <= 2000; ++seed)
+        {
+            CCase c;
+            std::string shape;
+            if (GenIndexWalk13Fn(seed, c, shape)) ++drawn[shape];
+        }
+        for (const char* k : { "escape13.index.add", "escape13.index.sub", "escape13.twoargs.lent", "escape13.twoargs.unlent", "escape13.stackkeep.lent", "escape13.stackkeep.unlent",
                                "escape13.stackkeep.lent.r4r7", "escape13.stackkeep.unlent.r4r7",
                                "escape13.reload.swap2", "escape13.reload.mask", "escape13.reload.global" })
             CHECK(drawn[k] > 0);

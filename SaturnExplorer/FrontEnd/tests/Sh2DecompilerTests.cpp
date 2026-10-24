@@ -12414,6 +12414,28 @@ void TestArea3Round13Fix()
         CHECK(!Has(s.entry.Text(), "a local at or above the stack pointer"));
         CHECK(Has(s.entry.Text(), "a saved register's word at or above"));
     }
+    // ---- Found by this round's matrix (the round 11 review's tools/a3_round11/s5.src, wrong on f54d140 as well): a frame address with a
+    // variable index added (a word loaded from the frame, r4, or r4 subtracted), then stepped down by a loop. The value set analysis cannot
+    // bound the pointer, so the store's guard covered the stack from its base up only (the index taken as non-negative, A3-9, A3-17), and
+    // the sentinel the walk overwrote at the base - 16 was folded: lent, `return 5;`, the code returns 1. Patch 0065 guards 0xffff below a
+    // pointer a loop steps down whatever its range. (S1 of tools/a3_round12/r12a.src, a store through sp plus a negative variable with no
+    // walk, stays A3-9's accepted convention.)
+    {
+        const struct
+        {
+            const char* name;
+            std::vector<uint16_t> words;
+        } walks[] = {
+            { "S17 a frame address plus a word loaded from the frame, walked down", { 0x7FE8, 0x62F3, 0x7210, 0xE005, 0x2F02, 0x53F5, 0x323C, 0xE104, 0x2216, 0x4110, 0x8BFC, 0x60F2, 0x7F18, 0x000B, 0x0009, 0x0009 } },
+            { "S18 a frame address plus r4, walked down", { 0x7FE8, 0x62F3, 0x7210, 0xE005, 0x2F02, 0x324C, 0xE104, 0x2216, 0x4110, 0x8BFC, 0x60F2, 0x7F18, 0x000B, 0x0009 } },
+            { "S19 a frame address minus r4, walked down", { 0x7FE8, 0x62F3, 0x7210, 0xE005, 0x2F02, 0x3248, 0xE104, 0x2216, 0x4110, 0x8BFC, 0x60F2, 0x7F18, 0x000B, 0x0009 } },
+        };
+        for (const auto& w : walks)
+        {
+            const Out o = run(w.name, { { 0x0, w.words } }, {});
+            CHECK(o.ran == 1 && Has(o.entry.Text(), "Stack_") && !Has(o.entry.Text(), "return 5;"));
+        }
+    }
 }
 
 
