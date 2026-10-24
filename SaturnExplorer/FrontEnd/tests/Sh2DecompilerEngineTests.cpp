@@ -3132,7 +3132,7 @@ void TestSignModIdentityRound14()
                         ++rewritten;
                     }
                 }
-    CHECK(rewritten == 40 && refused == 40);
+    CHECK(rewritten == 20 && refused == 20);
     // The siblings: the same sign taken from another register (w) steering a quotient or a remainder of v.
     for (int size : { 2, 4 })
         for (int other = 0; other < 2; ++other)

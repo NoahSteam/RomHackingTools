@@ -7249,6 +7249,93 @@ bool StackNameOffset(const std::string& name, int64_t& off)
     return false;
 }
 
+// The size in bytes of a type name the engine prints for a stack local (0: not one of the sized names).
+int StackTypeSize(std::string type)
+{
+    type.erase(std::remove(type.begin(), type.end(), ' '), type.end());
+    static const std::pair<const char*, int> names[] = { { "char", 1 }, { "byte", 1 }, { "uchar", 1 }, { "bool", 1 }, { "short", 2 }, { "ushort", 2 }, { "word", 2 },
+                                                         { "int", 4 }, { "uint", 4 }, { "dword", 4 }, { "longlong", 8 }, { "ulonglong", 8 }, { "qword", 8 } };
+    for (const auto& n : names)
+        if (type == n.first) return n.second;
+    for (const char* prefix : { "xunknown", "undefined", "uint", "int" })
+    {
+        const size_t len = std::strlen(prefix);
+        if (type.size() == len + 1 && type.compare(0, len, prefix) == 0 && std::strchr("1248", type[len]) != nullptr) return type[len] - '0';
+    }
+    return 0;
+}
+
+// A2-95: the engine writes a local wider than its symbol under a name of its own (`_xStack_4 = CONCAT13(...)`) and reads the symbol the write starts at
+// (`xStack_4`, the first two bytes of it: the HIGH half, the stack being big-endian). The harness declared the two as unrelated variables, so the text read a
+// local nothing had set. The wide name and every narrower local of the same text inside its bytes become members of one union, laid out so that the
+// narrower local is the part of the wide value the engine means (on a little-endian host the first bytes are the high ones), and the names become macros
+// for the members; the declarations of the narrow locals are removed from the text. Returns the macro definitions and their #undefs; `decls` gets the unions
+// (to be placed at the top of the function body). A name whose pieces do not fall on their own alignment, or are of no known size, stays as it was.
+// In the C++ reading the union has a constructor, as its members are classes.
+void StackAliasUnions(std::string& text, const std::set<std::string>& wideNames, std::string& decls, std::string& defines, std::string& undefs)
+{
+    static const std::regex declRe("^\\s*([A-Za-z_][\\w ]*?[\\w*])\\s*\\b(_?[A-Za-z]*Stack(?:_[0-9a-f]+|[0-9a-f]{8}))\\s*;\\s*$");
+    struct Local { std::string line, type, name; int64_t off; int size; };
+    std::vector<Local> locals;
+    {
+        std::istringstream in(text);
+        std::string l;
+        while (std::getline(in, l))
+        {
+            std::smatch dm;
+            int64_t off = 0;
+            if (std::regex_match(l, dm, declRe) && dm[1].str().compare(0, 6, "return") != 0 && StackNameOffset(dm[2].str(), off))
+            {
+                const int sz = StackTypeSize(dm[1].str());
+                if (sz != 0 && dm[2].str()[0] != '_') locals.push_back({ l, dm[1].str(), dm[2].str(), off, sz });
+            }
+        }
+    }
+    for (const std::string& wide : wideNames)
+    {
+        int64_t woff = 0;
+        if (!StackNameOffset(wide, woff)) continue;
+        const std::string wtype = UnderscoreNameType(text, wide);
+        const int w = StackTypeSize(wtype);
+        if (w < 2) continue;
+        std::vector<const Local*> parts;
+        bool ok = true;
+        for (const Local& lc : locals)
+        {
+            if (lc.off < woff || lc.off >= woff + w) continue;
+            const int64_t pos = w - (lc.off - woff) - lc.size;      // bytes from the low end of the wide value, on a little-endian host
+            if (pos < 0 || pos % lc.size != 0) { ok = false; break; }
+            parts.push_back(&lc);
+        }
+        if (!ok || parts.empty()) continue;
+        const std::string u = "uni" + wide;
+        std::string members, cppMembers;
+        int k = 0;
+        for (const Local* lc : parts)
+        {
+            const int64_t pos = w - (lc->off - woff) - lc->size;
+            const std::string pad = pos > 0 ? "uint8_t pad[" + std::to_string(pos) + "]; " : std::string();
+            members += " struct { " + pad + lc->type + " v; } f" + std::to_string(k) + ";";
+            defines += "#define " + lc->name + " (" + u + ".f" + std::to_string(k) + ".v)\n";
+            undefs += "#undef " + lc->name + "\n";
+            ++k;
+        }
+        defines += "#define " + wide + " (" + u + ".w)\n";
+        undefs += "#undef " + wide + "\n";
+        decls += "#ifdef __cplusplus\n  union U" + wide + " { U" + wide + "() : w() {} " + wtype + " w;" + members + " } " + u + ";\n#else\n  union { " + wtype + " w;" + members + " } " + u + ";\n#endif\n";
+        // the narrow declarations go
+        std::istringstream in(text);
+        std::string kept, l;
+        while (std::getline(in, l))
+        {
+            bool drop = false;
+            for (const Local* lc : parts) if (l == lc->line) drop = true;
+            if (!drop) kept += l + "\n";
+        }
+        text = kept;
+    }
+}
+
 // Decompiles each case, runs it on the emulator for 'nIn' inputs, compiles every text together and runs the
 // comparison. A text that does not compile alone is told apart by compiling the cases one by one.
 std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& cases, int nIn, const std::string& cc, uint64_t inputSeed,
@@ -7481,10 +7568,21 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
             static const std::regex under("\\b(_[A-Za-z]\\w*)\\b");
             std::set<std::string> names;
             for (std::sregex_iterator it(rebuilt.begin(), rebuilt.end(), under), end; it != end; ++it) names.insert((*it)[1].str());
-            const size_t brace = rebuilt.find("{\n");
-            std::string decls;
+            std::string decls, aliasDefs, aliasUndefs;
+            std::set<std::string> plain;
             for (const std::string& n : names)
-                if (n.compare(0, 2, "__") != 0 && frameNames.count(n) == 0) decls += "  " + UnderscoreNameType(rebuilt, n) + " " + n + ";\n";
+                if (n.compare(0, 2, "__") != 0 && frameNames.count(n) == 0) plain.insert(n);
+            // A2-95: a wide name and the narrower locals inside its bytes are one variable (not in frame mode: there the names are memory of the frame already)
+            if (!frameMode)
+            {
+                StackAliasUnions(rebuilt, plain, decls, aliasDefs, aliasUndefs);
+                for (auto it = plain.begin(); it != plain.end();)
+                    it = aliasDefs.find("#define " + *it + " (") != std::string::npos ? plain.erase(it) : std::next(it);
+                frameDefines += aliasDefs;
+                frameUndefs += aliasUndefs;
+            }
+            const size_t brace = rebuilt.find("{\n");
+            for (const std::string& n : plain) decls += "  " + UnderscoreNameType(rebuilt, n) + " " + n + ";\n";
             if (!decls.empty() && brace != std::string::npos) rebuilt.insert(brace + 2, decls);
         }
         pr.cText = frameDefines + rebuilt + frameUndefs;
@@ -7710,9 +7808,9 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
     const std::string cxx = FindCxxCompiler(cc);
     auto compileRun = [&](const std::vector<size_t>& which, const std::string& tag, std::string& log, bool& compiled, bool engine = false) -> std::string {
         std::ostringstream src;
-        src << (engine ? CxxHeader() : CHeader());
+        src << RunGuardSource() << (engine ? CxxHeader() : CHeader());   // the guard's system headers first: the headers below define names (byte, word, uint, bool) they use
         for (size_t i : which) src << "static int bad_" << prep[i].name << ";\n" << (engine ? NegativeWideLiteralsTyped(UnsignedLiteralsTyped(prep[i].cText)) : prep[i].cText) << "\n";
-        src << RunGuardSource() << "int main(void) {\n  RunGuard();\n  FrameInit();\n";
+        src << "int main(void) {\n  RunGuard();\n  FrameInit();\n";
         for (size_t i : which) src << prep[i].mainText;
         int total = 0;
         (void)total;
@@ -9137,6 +9235,48 @@ void TestPrintedC()
                                                             nIn, cc, 0x51ED, 8995);
             std::printf("pin 'A3-102: printed-C walk 2208857': %s (%s)\n", rv[0].cls.empty() ? "agrees" : rv[0].cls.c_str(), rv[0].detail.c_str());
             CHECK(rv[0].cls.empty() && rv[0].compared);
+        }
+        // Area 2 round 14 fix. Each pin is the ledger row's replay; reverting its fix makes it fail (the table is in 15_DECOMPILER_STEP5.md).
+        {
+            // A2-92 (patch 0067, RuleSignMod2nOpt2): the sign of r5 steering the bias of r4 is no remainder of r4. Was `return param_1 % 4;`.
+            const std::vector<CVerdict> r92 = CheckPrintedC(d, { { "A2-92: the sign of another register", { 0x6043, 0x6143, 0x4511, 0x8900, 0x7103, 0xD202, 0x2129, 0x3018, 0x000B, 0x0009, 0xFFFF, 0xFFFC } } },
+                                                            nIn, cc, 0x51ED, 8990);
+            std::printf("pin 'A2-92': %s (%s)\n", r92[0].cls.empty() ? "agrees" : r92[0].cls.c_str(), r92[0].detail.c_str());
+            CHECK(r92[0].cls.empty() && r92[0].compared);
+            // A2-97 (patch 0067, ActionLateDoNothing): the two empty arms of one branch were both removed; the structuring made a self loop of the branch: the text
+            // had `do { } while (c || !c)` and never ended. A2-93: the same graph, a function the structuring failed to finish (status 3, no text).
+            const std::vector<CVerdict> r97 = CheckPrintedC(d, { { "A2-97: endless loop in the text", { 0x6153, 0x8906, 0x8904, 0x3000, 0x8B00, 0x4000, 0xA001, 0x0009, 0x300C, 0x3163, 0x8900, 0x614C,
+                                                                                                         0x4210, 0x8BFA, 0x2048, 0x8B01, 0xA000, 0x0009, 0x000B, 0x6013, 0x0009 } },
+                                                              { "A2-93: collapsing the block structure failed", { 0x8902, 0x315C, 0xA008, 0x0009, 0x8880, 0x8B04, 0x88FF, 0x8B00, 0x011A, 0xA001, 0x0009, 0x211B, 0x000B, 0x6013, 0x0009 } } },
+                                                            nIn, cc, 0x51ED, 8989);
+            std::printf("pin 'A2-97': %s (%s)\n", r97[0].cls.empty() ? "agrees" : r97[0].cls.c_str(), r97[0].detail.c_str());
+            std::printf("pin 'A2-93': %s (%s)\n", r97[1].cls.empty() ? "agrees" : r97[1].cls.c_str(), r97[1].detail.c_str());
+            CHECK(r97[0].cls.empty() && r97[0].compared && r97[0].text.find("do {\n  } while") == std::string::npos);
+            CHECK(r97[1].cls.empty() && r97[1].compared);
+            // A2-95: the wide name and the narrow local inside it are one variable (the high half of `_xStack_4` is `xStack_4`).
+            const std::vector<CVerdict> r95 = CheckPrintedC(d, { { "A2-95: wide and narrow stack names", { 0x4318, 0x212A, 0x7FFC, 0x2F72, 0x2F60, 0x6023, 0x80F1, 0x6033, 0x80F2, 0x50F0, 0x7F04, 0x000B, 0x0009 } } },
+                                                            nIn, cc, 0x51ED, 8988);
+            std::printf("pin 'A2-95': %s (%s)\n", r95[0].cls.empty() ? "agrees" : r95[0].cls.c_str(), r95[0].detail.c_str());
+            CHECK(r95[0].cls.empty() && r95[0].compared);
+            // A2-96: the engine's reading short-circuits `&&` and `||`: the text is C's value only up to the 16-bit negation (narrow-c), and was `mismatch`.
+            const std::vector<CVerdict> r96 = CheckPrintedC(d, { { "A2-96: assignment in the right operand of &&", { 0x6043, 0x6153, 0x8800, 0x8B0E, 0x887F, 0x8B06, 0x3157, 0x8901, 0x707F, 0x2009, 0x4018, 0xA005, 0x0009, 0x204A,
+                                                                                                                 0x4115, 0x8B01, 0x4119, 0x4118, 0x301C, 0x211B, 0x616B, 0x210F, 0x011A, 0x000B, 0x6013, 0x0009 } } },
+                                                            nIn, cc, 0x51ED, 8987);
+            std::printf("pin 'A2-96': %s (%s)\n", r96[0].cls.empty() ? "agrees" : r96[0].cls.c_str(), r96[0].detail.substr(0, 90).c_str());
+            CHECK(r96[0].cls == "narrow-c");
+            // A2-98: a compiled text that does not end is a class of its own, 'timeout', after a CPU limit, and the rest of its batch is kept. A text that spins is made from the
+            // A2-92 control through the harness's hook (the generator makes no function whose text does not end once A2-97 is fixed).
+            gPrintedCRunSeconds = 1;
+            gPrintedCTextHook = [](const std::string& t) {
+                const size_t brace = t.find("{\n");
+                return brace == std::string::npos ? t : t.substr(0, brace + 2) + "  volatile int spin = 1;\n  while (spin) { }\n" + t.substr(brace + 2);
+            };
+            const std::vector<CVerdict> r98 = CheckPrintedC(d, { { "A2-98: a text that never ends", { 0x6043, 0x6153, 0x000B, 0x6013, 0x0009 } } }, nIn, cc, 0x51ED, 8986);
+            gPrintedCTextHook = nullptr;
+            gPrintedCRunSeconds = static_cast<int>(EnvNumber("SE_GENERATED_PRINTEDC_TIMEOUT", 30));
+            std::printf("pin 'A2-98': %s (%s)\n", r98[0].cls.c_str(), r98[0].detail.c_str());
+            CHECK(r98[0].cls == "timeout");
+            CHECK(IsFailing(r98[0]));
         }
     }
     if (hand)
