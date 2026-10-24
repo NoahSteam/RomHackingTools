@@ -178,6 +178,88 @@ void TestPointerArgumentAddressForm(Sh2Decompiler& d)
     CHECK(address);
 }
 
+// The text of every bound token with the given kind and address, as the real printer emitted it.
+std::vector<std::string> BoundTexts(const DecompileResult& r, InspectionTarget::Kind kind, uint32_t address)
+{
+    std::vector<std::string> out;
+    for (const Line& line : r.lines)
+        for (const Token& token : line.tokens)
+        {
+            if (!token.inspectionTarget || token.inspectionTarget > r.inspectionTargets.size()) continue;
+            const InspectionTarget& t = r.inspectionTargets[token.inspectionTarget - 1];
+            if (t.kind == kind && t.address == address)
+                out.push_back(line.text.substr(token.begin, token.end - token.begin));
+        }
+    return out;
+}
+
+// The engine registers the Saturn's hardware registers as named global symbols, so real code
+// reaches the printer's symbol paths: the token must be the register's name, and the metadata
+// must name the same object.
+void TestRealPrinterNamedGlobals(Sh2Decompiler& d)
+{
+    constexpr uint32_t kTvmd = 0x25F80000u;
+    // mov.l @(4,pc),r1; mov.w @r1,r0; rts; nop; .long VDP2_TVMD
+    DecompileResult load = d.Decompile(Snapshot({ 0xD101, 0x6011, 0x000B, 0x0009 }, kTvmd), Request());
+    Dump("real printer named register load", load);
+    CHECK(load.status == DecompileStatus::Ok);
+    CheckReferences(load);
+    const auto loadTexts = BoundTexts(load, InspectionTarget::Kind::AbsoluteObject, kTvmd);
+    CHECK(loadTexts.size() == 1 && !loadTexts.empty() && loadTexts[0] == "VDP2_TVMD");
+    // mov.l @(4,pc),r1; mov.w r4,@r1; rts; nop; .long VDP2_TVMD
+    DecompileResult store = d.Decompile(Snapshot({ 0xD101, 0x2141, 0x000B, 0x0009 }, kTvmd), Request());
+    Dump("real printer named register store", store);
+    CHECK(store.status == DecompileStatus::Ok);
+    CheckReferences(store);
+    const auto storeTexts = BoundTexts(store, InspectionTarget::Kind::AbsoluteObject, kTvmd);
+    CHECK(storeTexts.size() == 1 && !storeTexts.empty() && storeTexts[0] == "VDP2_TVMD");
+    for (const DecompileResult* r : { &load, &store })
+        for (const auto& t : r->inspectionTargets)
+            if (t.address == kTvmd)
+                CHECK(t.byteSize == 2 && t.display == InspectionTarget::Display::UnsignedInteger);
+}
+
+// A named register passed where a pointer is expected prints as &name; that is an address, and
+// must never be offered as the register's value. (The engine registers only volatile hardware
+// symbols, so an implied load or store through the same spacebase PTRSUB form needs the native
+// fixtures below: a volatile access prints through the annotation path instead.)
+void TestRealPrinterAddressOfNamedGlobal(Sh2Decompiler& d)
+{
+    constexpr uint32_t callee = 0x06005000u, kTvmd = 0x25F80000u;
+    std::vector<uint8_t> hw(0x100000u, 0);
+    const uint16_t caller[] = { 0x4F22, 0xD403, 0xB7FC, 0x0009, 0x4F26, 0x000B, 0x0009, 0x0009 };
+    for (size_t i = 0; i < sizeof caller / sizeof *caller; ++i) dts::Put16(hw, 0x4000 + i * 2, caller[i]);
+    dts::Put32(hw, 0x4010, kTvmd);
+    dts::Put16(hw, 0x5000, 0x6042); // mov.l @r4,r0
+    dts::Put16(hw, 0x5002, 0x000B);
+    dts::Put16(hw, 0x5004, 0x0009);
+    auto snap = dts::MakeSnapshot(hw);
+    auto q = Request(); q.entry = callee;
+    const DecompileResult c = d.Decompile(snap, q);
+    CHECK(c.prototype.known && c.prototype.params.size() == 1);
+    if (!c.prototype.known || c.prototype.params.size() != 1) return;
+    q = Request();
+    q.knownFunctions.push_back(callee);
+    q.prototypes.emplace_back(callee, c.prototype);
+    const DecompileResult r = d.Decompile(snap, q);
+    Dump("real printer address of named register", r);
+    CHECK(r.status == DecompileStatus::Ok);
+    CheckReferences(r);
+    // The real printer emits "(T *)&VDP2_TVMD": the token is the register's name, the binding is
+    // its address, and nothing offers the register's stored value for this occurrence.
+    const auto address = BoundTexts(r, InspectionTarget::Kind::ConstantAddress, kTvmd);
+    CHECK(address.size() == 1 && !address.empty() && address[0] == "VDP2_TVMD");
+    CHECK(BoundTexts(r, InspectionTarget::Kind::AbsoluteObject, kTvmd).empty());
+    bool amp = false;
+    for (const Line& line : r.lines)
+        for (const Token& token : line.tokens)
+            if (token.inspectionTarget && token.begin > 0 && line.text[token.begin - 1] == '&') amp = true;
+    CHECK(amp);
+    for (const auto& t : r.inspectionTargets)
+        if (t.address == kTvmd)
+            CHECK(t.typeLabel.size() > 2 && t.typeLabel.compare(t.typeLabel.size() - 2, 2, " *") == 0);
+}
+
 void TestGlobalArrayBaseStaysUnbound(Sh2Decompiler& d)
 {
     // mov.l @(8,pc),r1; add r4,r1; mov.l @r1,r0; rts; nop; nop; .long kGlobal
@@ -387,6 +469,64 @@ void TestNativeNullVarrefGlobalsAndAddress()
     CHECK(target.address == kGlobal && target.byteSize == 4);
 }
 
+// Emits one packed variable token followed by plain text, then runs the production decoder.
+// Returns the first token's binding: the final filters in LinesFromMarkup are what is under test,
+// so the candidate itself is one the resolver accepts.
+bool BoundWithSuffix(NativeInspectionFixture& f, const ghidra::Varnode* variable, const char* name,
+                     const char* suffix)
+{
+    std::ostringstream stream;
+    {
+        ghidra::EmitMarkup emitter;
+        emitter.setPackedOutput(true);
+        emitter.setOutputStream(&stream);
+        emitter.tagVariable(name, ghidra::EmitMarkup::global_color, variable, nullptr);
+        if (*suffix) emitter.print(suffix);
+        emitter.flush();
+    }
+    std::vector<InspectionTarget> targets;
+    const auto lines = DecodeDecompilerMarkup(stream.str(), *f.fd, &f.arch, targets);
+    CHECK(lines.size() == 1);
+    if (lines.size() != 1 || lines[0].tokens.empty()) return false;
+    CHECK(lines[0].text == std::string(name) + suffix);
+    const bool bound = lines[0].tokens[0].inspectionTarget != 0;
+    // A filtered token drops its reference; the unreferenced descriptor is never reachable.
+    CHECK(!bound || (targets.size() == 1 && lines[0].tokens[0].inspectionTarget == 1));
+    return bound;
+}
+
+void TestNativeFieldArrayAndLiteralFiltersRefused()
+{
+    {
+        NativeInspectionFixture f;
+        f.Symbol(kGlobal, f.scalar, "whole_global");
+        auto whole = f.Variable(kGlobal, f.scalar);
+        InspectionTarget candidate;
+        CHECK(ResolvePrintedInspection(whole, nullptr, &f.arch, candidate));
+        // The candidate is bindable alone and before ordinary punctuation...
+        for (const char* ok : { "", ";", " = 0;", ")", " + 1", " ," })
+            CHECK(BoundWithSuffix(f, whole, "whole_global", ok));
+        // ...but a base followed by member or element syntax is not the whole printed object.
+        for (const char* base : { ".x", " .x", "\t.x", "[0]", " [1]", "->x", " ->x" })
+            CHECK(!BoundWithSuffix(f, whole, "whole_global", base));
+    }
+    {
+        // A pointer-typed literal: only a plain number is the complete address. A character,
+        // string or named representation may print part of it.
+        NativeInspectionFixture f;
+        auto pointer = f.arch.types->getTypePointer(4, f.scalar, 1);
+        auto literal = f.fd->newConstant(4, kGlobal);
+        literal->updateType(pointer, true, true);
+        InspectionTarget target;
+        CHECK(ResolvePrintedInspection(literal, nullptr, &f.arch, target));
+        CHECK(target.kind == InspectionTarget::Kind::ConstantAddress && target.address == kGlobal);
+        CHECK(BoundWithSuffix(f, literal, "0x6010000", ""));
+        CHECK(BoundWithSuffix(f, literal, "0", ""));
+        for (const char* text : { "'A'", "\"A\"", "L'A'", "SOME_EQUATE", "-1" })
+            CHECK(!BoundWithSuffix(f, literal, text, ""));
+    }
+}
+
 void TestNativeAmbiguousPrinterFormsRefused()
 {
     // Partial-symbol PTRSUB, plus a valid global used as an array/field base.
@@ -493,11 +633,14 @@ int main(int argc, char** argv)
         RUN(TestScalarLoadsAndStores(d));
         RUN(TestPointerGlobal(d));
         RUN(TestPointerArgumentAddressForm(d));
+        RUN(TestRealPrinterNamedGlobals(d));
+        RUN(TestRealPrinterAddressOfNamedGlobal(d));
         RUN(TestGlobalArrayBaseStaysUnbound(d));
         RUN(TestDynamicAndLocalFormsStayUnbound(d));
         RUN(TestNativeDirectWholeAndPartialMappings());
         RUN(TestNativeNullVarrefGlobalsAndAddress());
         RUN(TestNativeAmbiguousPrinterFormsRefused());
+        RUN(TestNativeFieldArrayAndLiteralFiltersRefused());
         RUN(TestNativeArrayStructAndDynamicMappingsRefused());
     }
     catch (const ghidra::LowlevelError& e) { std::fprintf(stderr, "FATAL: %s\n", e.explain.c_str()); return 3; }

@@ -83,3 +83,16 @@ Windows/macOS native visual checks for scrolling, menu ownership and clipboard a
 were not executable in this Linux environment. Linux real-panel interaction tests cover
 hit testing, action routing and popup ownership; they are not a claim that those native
 platform checks ran. Optional embedded register presentation was deliberately omitted.
+
+## Follow-up coverage (post-review)
+
+- Real-printer fixtures: a named hardware register load/store prints `VDP2_TVMD` and binds the
+  object; a register passed as a pointer prints `(T *)&VDP2_TVMD` and binds the address only. The
+  engine registers only volatile hardware symbols, so an implied load/store through the
+  null-VARREF PTRSUB form stays covered by the native fixtures.
+- The final decoder filters (member/array/`->` suffixes, character/string/named literals) have
+  direct tests; disabling each filter fails them.
+- App's restore gate, selected-CPU Registers routing and Watch expression are
+  `Debug/InspectionRouting.h` helpers with unit tests. App's call sites are thin and still
+  untested; `App.cpp` was only syntax-checked here (no SDL).
+

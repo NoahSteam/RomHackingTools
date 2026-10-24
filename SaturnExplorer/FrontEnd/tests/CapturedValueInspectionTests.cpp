@@ -1,4 +1,5 @@
 #include "Debug/CapturedValueInspection.h"
+#include "Debug/InspectionRouting.h"
 #include "Decompiler/MemorySnapshot.h"
 #include <cstdio>
 #include <limits>
@@ -95,6 +96,32 @@ void TestUntypedAndWideObjects()
     s.regions.push_back(std::move(big));
     r = InspectCapturedValue(s, Object(0x00080000, 4, D::UnsignedInteger));
     CHECK(!r.available && r.reason.find("512 KiB") != std::string::npos);
+}
+void TestAppRoutingDecisions()
+{
+    // Live: any unresolved restore (outstanding, or one the emulator cannot confirm -- a timeout
+    // does not clear it) withholds inspection, with a reason the panel can show.
+    auto r = sfe::InspectionReadinessFor(true, 0, false);
+    CHECK(r.ready && *r.reason == '\0');
+    r = sfe::InspectionReadinessFor(true, 1, false);
+    CHECK(!r.ready && *r.reason);
+    r = sfe::InspectionReadinessFor(true, 3, false);
+    CHECK(!r.ready);
+    r = sfe::InspectionReadinessFor(true, 0, true);
+    CHECK(!r.ready && *r.reason);
+    r = sfe::InspectionReadinessFor(true, 2, true);
+    CHECK(!r.ready);
+    // A recorded frame or a static dump is its own capture: the live restore state is irrelevant.
+    for (int outstanding : {0, 1, 5})
+        for (bool unconfirmable : {false, true})
+            CHECK(sfe::InspectionReadinessFor(false, outstanding, unconfirmable).ready);
+    // The Registers window opens on the pseudocode panel's CPU.
+    CHECK(sfe::RegistersWindowCpu(0) == 0 && sfe::RegistersWindowCpu(1) == 1);
+    CHECK(sfe::RegistersWindowCpu(2) == 0 && sfe::RegistersWindowCpu(-1) == 0);
+    // Watch expressions are the bare canonical hex the other Add-to-Watch routes use.
+    CHECK(sfe::WatchExpressionFor(0x06001234) == "06001234");
+    CHECK(sfe::WatchExpressionFor(0x00200000) == "00200000");
+    CHECK(sfe::WatchExpressionFor(0x060FFFFF) == "060FFFFF");
 }
 void TestPolicyAndBounds()
 {
@@ -212,7 +239,7 @@ void TestPointerAndAscii()
 }
 int main()
 {
-    TestDecode(); TestUntypedAndWideObjects(); TestPolicyAndBounds(); TestRepeatedBoundaries(); TestPointerAndAscii();
+    TestDecode(); TestUntypedAndWideObjects(); TestAppRoutingDecisions(); TestPolicyAndBounds(); TestRepeatedBoundaries(); TestPointerAndAscii();
     if (failures) { std::fprintf(stderr, "%d failures\n", failures); return 1; }
     std::puts("CapturedValueInspectionTests: all passed");
     return 0;

@@ -37,6 +37,7 @@
 #include "Debug/ConditionEval.h"  // conditional-breakpoint / gated-tracepoint guards
 #include "Debug/Sh2Disasm.h"      // disassemble the accessing instruction in the Access Log
 #include "Debug/Sh2RegInfo.h"     // SH-2 register names / meanings + the SR decode
+#include "Debug/InspectionRouting.h"  // pseudocode inspection: restore gate and request routing
 #include "Sh2Operands.h"          // Sh2MayAccessRange: could the halting instruction touch a watchpoint
 #include "ScspMix.h"              // mix the frame's sounding voices into one preview
 #include "Debug/M68kDisasm.h"     // SCSP 68000 sound-CPU disassembly
@@ -3045,9 +3046,9 @@ DecompilerView App::BuildDecompilerView()
 #ifdef SE_ENABLE_LIVE
         // A timed-out or unconfirmable restore still leaves the captured state unresolved.
         // Independently selected scrub captures returned above remain inspectable.
-        v.inspectionReady = mRestoreOutstanding == 0 && !mRestoreUnconfirmable;
-        if (!v.inspectionReady)
-            v.inspectionReason = "A restore is unresolved; captured values are unavailable.";
+        const InspectionReadiness readiness = InspectionReadinessFor(true, mRestoreOutstanding, mRestoreUnconfirmable);
+        v.inspectionReady = readiness.ready;
+        v.inspectionReason = readiness.reason;
 #endif
     }
     else
@@ -3092,7 +3093,7 @@ void App::UpdateDecompiler(IPlatform& platform)
     if (req.viewHex) { mHexEditor.GoTo(req.hexAddr); mPanels.hexEditor = true; }
     if (req.showRegisters)
     {
-        mRegSh2Cpu = req.cpu == 1 ? 1 : 0;
+        mRegSh2Cpu = RegistersWindowCpu(req.cpu);
         mPanels.registers = true;
         mSelectSh2RegTab = true;
         mFocusRegisters = true;
@@ -3101,9 +3102,7 @@ void App::UpdateDecompiler(IPlatform& platform)
     {
         // The panel has validated a complete captured WRAM location and canonicalized it.
         // This is a fixed-address Watch under its ordinary current-view refresh semantics.
-        char expression[16];
-        std::snprintf(expression, sizeof expression, "%08X", req.watchAddress);
-        mWatchPanel.AddWatch(req.watchLabel, expression, req.watchType);
+        mWatchPanel.AddWatch(req.watchLabel, WatchExpressionFor(req.watchAddress), req.watchType);
         mPanels.watch = true;
     }
     if (req.rename)
