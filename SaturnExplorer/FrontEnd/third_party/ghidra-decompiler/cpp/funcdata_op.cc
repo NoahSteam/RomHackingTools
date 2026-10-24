@@ -51,6 +51,8 @@ void Funcdata::opSetOpcode(PcodeOp *op,OpCode opc)
 /// heritage relinks markers to other versions; totalReplace and totalReplaceConstant, which give every reader an
 /// equal value, walk for markers too. The walk back stops after 64 ops; every fold of this generation
 /// of the function is then taken as forwarded (the ledger may miss a loss, never report one that is none).
+/// A frame fold destroyed with its value forwarded passes the mark on to what it reads: a pop forwarded (into
+/// `r1 & 0`, made a constant) while the stack was not yet linked is later linked to its push, which is then read.
 /// \param walk is \b false when a MULTIEQUAL or INDIRECT read it and had it replaced (only its own fold is forwarded)
 /// \param vn is the Varnode no longer read
 void Funcdata::noteFrameFoldForwarded(bool walk,Varnode *vn)
@@ -548,6 +550,8 @@ void Funcdata::opDestroy(PcodeOp *op)
     recordAccessFate(op,isstore,accsize,accaddr,op->isJumptableLookup() ? fate_switch_lookup : fate_dead);
   else if (!accessesRecorded && op->isFrameFold() && !op->isFrameFoldRead() && !frameFoldsAllRead)
     recordFrameEnd(op,fate_frame_unread);	// SaturnExplorer (0068): a frame write going with its value unread
+  else if (!accessesRecorded && op->isFrameFold() && op->numInput() == 1 && op->getIn(0) != (Varnode *)0)
+    noteFrameFoldForwarded(true,op->getIn(0));	// (0068) a frame read whose value was used: so was what it read (see there)
   if (op->getOut() != (Varnode *)0)
     destroyVarnode(op->getOut());
   for(int4 i=0;i<op->numInput();++i) {
