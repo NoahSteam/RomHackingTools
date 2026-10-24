@@ -1494,7 +1494,7 @@ private:
         callee.mNestedCtx = ctx;
         callee.mDepth = mDepth + 1;
         callee.mFoldPcLoads = true;
-        callee.mMaxSteps = std::min(kNestedMaxSteps, ctx->budget);
+        callee.mMaxSteps = std::min(static_cast<size_t>(kNestedMaxSteps), ctx->budget);   // a copy: std::min binds a reference, which needs a definition in C++14
         callee.mCancel = mCancel;
         callee.SetTolerant();
         CallEffects unused;

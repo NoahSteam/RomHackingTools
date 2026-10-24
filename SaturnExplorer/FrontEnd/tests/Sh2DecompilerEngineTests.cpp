@@ -730,6 +730,94 @@ int64_t PbSigned(uint64_t v, int size)
     return static_cast<int64_t>((v ^ sign) - sign);
 }
 
+// 128-bit arithmetic for the oracles below, in place of __int128 and the GCC bit-scan builtins, which MSVC does not have.
+struct U128
+{
+    uint64_t hi = 0, lo = 0;
+    U128() = default;
+    U128(uint64_t v) : lo(v) {}
+    static U128 Sext(int64_t v) { U128 r(static_cast<uint64_t>(v)); r.hi = v < 0 ? ~static_cast<uint64_t>(0) : 0; return r; }
+    friend U128 operator-(U128 a, U128 b) { U128 r; r.lo = a.lo - b.lo; r.hi = a.hi - b.hi - (a.lo < b.lo ? 1 : 0); return r; }
+    friend U128 operator+(U128 a, U128 b) { U128 r; r.lo = a.lo + b.lo; r.hi = a.hi + b.hi + (r.lo < a.lo ? 1 : 0); return r; }
+    friend U128 operator*(U128 a, U128 b)   // the low 128 bits of the product
+    {
+        const uint64_t x0 = a.lo & 0xffffffffu, x1 = a.lo >> 32, y0 = b.lo & 0xffffffffu, y1 = b.lo >> 32;
+        const uint64_t p00 = x0 * y0, p01 = x0 * y1, p10 = x1 * y0, p11 = x1 * y1;
+        const uint64_t mid = (p00 >> 32) + (p01 & 0xffffffffu) + (p10 & 0xffffffffu);
+        U128 r;
+        r.lo = (mid << 32) | (p00 & 0xffffffffu);
+        r.hi = p11 + (p01 >> 32) + (p10 >> 32) + (mid >> 32) + a.hi * b.lo + a.lo * b.hi;
+        return r;
+    }
+    friend U128 operator<<(U128 a, int s)   // 0 <= s < 128
+    {
+        if (s == 0) return a;
+        U128 r;
+        if (s >= 64) r.hi = a.lo << (s - 64);
+        else { r.hi = (a.hi << s) | (a.lo >> (64 - s)); r.lo = a.lo << s; }
+        return r;
+    }
+    friend U128 operator>>(U128 a, int s)   // logical, 0 <= s < 128
+    {
+        if (s == 0) return a;
+        U128 r;
+        if (s >= 64) r.lo = a.hi >> (s - 64);
+        else { r.lo = (a.lo >> s) | (a.hi << (64 - s)); r.hi = a.hi >> s; }
+        return r;
+    }
+    U128 Sar(int s) const   // arithmetic, 0 <= s < 128
+    {
+        U128 r = *this >> s;
+        if ((hi >> 63) && s > 0) r = r | (~U128() << (128 - s));
+        return r;
+    }
+    U128 operator~() const { U128 r; r.hi = ~hi; r.lo = ~lo; return r; }
+    friend U128 operator|(U128 a, U128 b) { U128 r; r.hi = a.hi | b.hi; r.lo = a.lo | b.lo; return r; }
+    friend bool operator<=(U128 a, U128 b) { return a.hi != b.hi ? a.hi < b.hi : a.lo <= b.lo; }
+    U128 Div(uint64_t d) const   // the quotient, by long division
+    {
+        U128 q, r;
+        for (int i = 127; i >= 0; --i)
+        {
+            r = (r << 1) | U128((i >= 64 ? hi >> (i - 64) : lo >> i) & 1);
+            if (U128(d) <= r) { r = r - U128(d); q = q | (U128(1) << i); }
+        }
+        return q;
+    }
+};
+int Ctz64(uint64_t v) { int n = 0; while (!(v & 1)) { v >>= 1; ++n; } return n; }   // v != 0
+int Clz64(uint64_t v) { int n = 0; while (!(v >> 63)) { v <<= 1; ++n; } return n; }   // v != 0
+
+// U128 against the compiler's own 128-bit type, where there is one (not MSVC).
+void TestU128()
+{
+#ifdef __SIZEOF_INT128__
+    typedef unsigned __int128 N;
+    uint64_t st = 0x2545F4914F6CDD1Dull;
+    auto rnd = [&]() { st ^= st << 13; st ^= st >> 7; st ^= st << 17; return st; };
+    auto same = [](U128 a, N b) { return a.lo == static_cast<uint64_t>(b) && a.hi == static_cast<uint64_t>(b >> 64); };
+    for (int i = 0; i < 20000; ++i)
+    {
+        const uint64_t a = rnd() >> (rnd() % 64), b = rnd() >> (rnd() % 64), d = (rnd() >> (rnd() % 64)) | 1;
+        const int64_t sa = static_cast<int64_t>(a);
+        const int k = static_cast<int>(rnd() % 128);
+        const N wide = static_cast<N>(static_cast<__int128>(sa) * static_cast<__int128>(b));
+        const U128 uw = U128::Sext(sa) * U128(b);
+        CHECK(same(U128(a) * U128(b), static_cast<N>(a) * b));
+        CHECK(same(uw, wide));
+        CHECK(same(uw << k, wide << k));
+        CHECK(same(uw >> k, wide >> k));
+        CHECK(same(uw.Sar(k), static_cast<N>(static_cast<__int128>(wide) >> k)));
+        CHECK(same(uw - U128(b), wide - b));
+        CHECK(same(uw + U128(b), wide + b));
+        CHECK((uw <= U128(a)) == (wide <= static_cast<N>(a)));
+        CHECK(same((U128(1) << (k % 101)).Div(d), (static_cast<N>(1) << (k % 101)) / d));
+        CHECK(same(uw.Div(d), wide / d));
+        if (a) { CHECK(Ctz64(a) == __builtin_ctzll(a)); CHECK(Clz64(a) == __builtin_clzll(a)); }
+    }
+#endif
+}
+
 bool PbEvalBinary(ghidra::OpCode opc, uint64_t x, uint64_t val, int slot, int size, uint64_t& out)
 {
     const uint64_t m = PbMask(size);
@@ -1994,14 +2082,14 @@ void TestSetNZMaskRound12()
         CircleRange q;
         const bool ok = q.setNZMask(nz, size);
         ++masks;
-        const int lowest = nz == 0 ? -1 : __builtin_ctzll(nz);
+        const int lowest = nz == 0 ? -1 : Ctz64(nz);
         if (lowest > 30 && ok) { fail("a step that does not fit", "mask " + hex(nz) + " at " + std::to_string(size) + " bytes -> " + FwText(q)); return; }
         if (!ok) { if (lowest > 30) ++refusedHigh; return; }
         ++answered;
         std::string why;
         if (!FwWellFormed(q, size, why)) { fail("malformed", "mask " + hex(nz) + " at " + std::to_string(size) + " bytes -> " + FwText(q) + ": " + why); return; }
         std::vector<uint64_t> vs = { 0, nz, nz & (0 - nz) };
-        if (nz) vs.push_back(static_cast<uint64_t>(1) << (63 - __builtin_clzll(nz)));
+        if (nz) vs.push_back(static_cast<uint64_t>(1) << (63 - Clz64(nz)));
         for (int k = 0; k < 24; ++k) vs.push_back(next() & nz);
         if (size <= 2)
             for (uint64_t s = nz;; s = (s - 1) & nz) { vs.push_back(s); if (s == 0 || vs.size() > 4200) break; }
@@ -2183,10 +2271,10 @@ uint64_t RcEval(const ghidra::Varnode* vn, const RcEnv& env)
             const uint64_t x = RcEval(mult->getIn(0), env), y = RcEval(mult->getIn(1), env);
             const bool isSext = mult->getIn(0)->isWritten() && mult->getIn(0)->getDef()->code() == CPUI_INT_SEXT;
             const int sw = mult->getIn(0)->getSize();
-            unsigned __int128 exact = isSext ? static_cast<unsigned __int128>(static_cast<__int128>(PbSigned(x, sw)) * static_cast<__int128>(y)) : static_cast<unsigned __int128>(x) * y;
-            if (b >= 128) return d->code() == CPUI_INT_SRIGHT && (exact >> 127) ? m : 0;
-            const unsigned __int128 shifted = d->code() == CPUI_INT_SRIGHT ? static_cast<unsigned __int128>(static_cast<__int128>(exact) >> static_cast<int>(b)) : exact >> static_cast<int>(b);
-            return static_cast<uint64_t>(shifted) & m;
+            const U128 exact = isSext ? U128::Sext(PbSigned(x, sw)) * U128(y) : U128(x) * U128(y);
+            if (b >= 128) return d->code() == CPUI_INT_SRIGHT && (exact.hi >> 63) ? m : 0;
+            const U128 shifted = d->code() == CPUI_INT_SRIGHT ? exact.Sar(static_cast<int>(b)) : exact >> static_cast<int>(b);
+            return shifted.lo & m;
         }
         if (d->code() == CPUI_INT_RIGHT) return b >= static_cast<uint64_t>(8 * sa) ? 0 : a >> b;
         return static_cast<uint64_t>(PbSigned(a, sa) >> (b >= static_cast<uint64_t>(8 * sa) ? 8 * sa - 1 : b)) & m;
@@ -3515,10 +3603,10 @@ void TestRuleGuardsRound13()
                             {
                                 const uint64_t divisors[] = { 3, 5, 6, 7, 9, 10, 11, 12, 13, 14, 25, 100, 641, 1000, 3000, 65537, 53771 };
                                 if (totalShift > 100 || nBits >= 64) continue;
-                                const unsigned __int128 one = 1;
-                                const unsigned __int128 y = ((one << totalShift) / divisors[(cIndex - 13) / 2]) + 1 + ((cIndex - 13) & 1);
-                                if (y <= (one << nBits) || ((y - (one << nBits)) >> 64) != 0) continue;
-                                c0 = static_cast<uint64_t>(y - (one << nBits));
+                                const U128 one = 1;
+                                const U128 y = (one << totalShift).Div(divisors[(cIndex - 13) / 2]) + U128(1 + ((cIndex - 13) & 1));
+                                if (y <= (one << nBits) || (y - (one << nBits)).hi != 0) continue;
+                                c0 = (y - (one << nBits)).lo;
                             }
                             if (shape == 1 && s != 0) continue;
                             if (shape == 2 && (ext == CPUI_INT_SEXT || s != 0)) continue;
@@ -3548,10 +3636,11 @@ void TestRuleGuardsRound13()
                     const int nBits = 8 * xs + s;
                     const int totalShift = nBits + (shape == 2 ? 1 : 0) + k2;
                     if (totalShift > 100 || nBits >= 64) continue;
-                    const unsigned __int128 one = 1;
-                    const unsigned __int128 y = ((one << totalShift) / (2 + rnd() % 70000)) + 1 + (rnd() & 1);
-                    if (y <= (one << nBits) || ((y - (one << nBits)) >> 64) != 0) continue;
-                    c0 = static_cast<uint64_t>(y - (one << nBits));
+                    const U128 one = 1;
+                    const uint64_t divisor = 2 + rnd() % 70000;
+                    const U128 y = (one << totalShift).Div(divisor) + U128(1 + (rnd() & 1));
+                    if (y <= (one << nBits) || (y - (one << nBits)).hi != 0) continue;
+                    c0 = (y - (one << nBits)).lo;
                 }
                 runCase(xs, ext, c0, shape, s, k2, limited);
                 ++ran;
@@ -3626,6 +3715,7 @@ int main(int argc, char** argv)
         RUN(TestDecompileThroughBundle(config));
         RUN(TestNzMaskShiftRound11());
         RUN(TestIntersectMixedMasksRound12());
+        RUN(TestU128());
         RUN(TestSetNZMaskRound12());
         RUN(TestWidenRound12());
         RUN(TestScarryMinimumRound12());
