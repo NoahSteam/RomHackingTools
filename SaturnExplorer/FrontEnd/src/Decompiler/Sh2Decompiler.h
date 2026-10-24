@@ -82,6 +82,13 @@ constexpr const char* kFrameEscapeNoteLikewise = "; likewise at the calls below"
 // r0, r1, r3, r8-r14, GBR, MACH, ..., which the engine never takes for an argument). The register's name goes between the two parts.
 constexpr const char* kFrameEscapeNoteRegA = "a frame address is in ";
 constexpr const char* kFrameEscapeNoteRegB = " here, in none of the arguments: the call may keep it and write any local";
+// (area 3 round 14 fix, A3-120) ...and the same where the host knows only that a frame address may be there (a word a callee handed the frame may
+// have written, a pointer loaded once an address of the frame went out): "is" is kept for a frame address this function made from r15 and holds
+// there on every path (the probe's Value::Sure).
+constexpr const char* kFrameEscapeNoteMay = "a frame address may be in r2 here, in none of the arguments: the call may keep it and write any local";
+constexpr const char* kFrameEscapeNoteMayR7 = "a frame address may be in r7 here, in none of the arguments: the call may keep it and write any local";
+constexpr const char* kFrameEscapeNoteMayStack = "a frame address may be in a stack argument slot here, in none of the arguments: the call may keep it and write any local";
+constexpr const char* kFrameEscapeNoteMayRegA = "a frame address may be in ";
 
 namespace origin
 {

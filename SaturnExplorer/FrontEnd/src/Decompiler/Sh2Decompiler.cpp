@@ -361,6 +361,8 @@ public:
     // ...and the calls (bit r: the register, as origin:: numbers them) a frame address went out at in a register that is no argument the engine
     // shows (area 3 round 12 fix): r0, r1, r3, r8-r14, GBR, MACH, ...
     const std::map<uint32_t, uint32_t>& HandSites() const { return mHandSites; }
+    const std::map<uint32_t, uint32_t>& EscapeSure() const { return mEscapeSure; }   // (A3-120)
+    const std::map<uint32_t, uint32_t>& HandSure() const { return mHandSure; }
     // ...and the stack words, by their offset from r15 on entry, whose frame address the stack-argument note of a call is for (A3-108).
     const std::map<uint32_t, std::set<int64_t>>& EscapeWords() const { return mEscapeWords; }
     // After Run(): whether r2 held the address of a local at a call whose signature is not lent (A3-4),
@@ -678,6 +680,12 @@ private:
         // address of this frame. This flag is the data path itself; see MayBeFrame.
         bool frame = false;
         bool Frame() const { return kind == Sp || (kind == Fuzzy && frame); }
+        // (area 3 round 14 fix, A3-120) Fuzzy: a frame address on every path, made from r15 by this function's own register operations and the
+        // words it wrote itself and read back whole -- not a value a callee may have written over a slot (CalleeStoresFrame), not a load the
+        // probe cannot place (MayBeFrame's fail-closed reading, A3-106), not a join with anything else. The notes say "is" of such a value and
+        // "may" of every other one the frame flag is set for: the flag is the hazard, this is the fact.
+        bool sure = false;
+        bool Sure() const { return kind == Sp || (kind == Fuzzy && frame && sure); }
         static Value From(uint32_t o) { Value x; x.from = o; x.dep = Deps::All(o); return x; }
         static Value From(uint32_t o, uint32_t direct) { Value x; x.from = o; x.dep = Deps::All(direct); return x; }
         static Value From(uint32_t o, const Deps& d) { Value x; x.from = o; x.dep = d; return x; }
@@ -734,7 +742,7 @@ private:
                    exposedAt == o.exposedAt &&
                    (kind != Fuzzy || (from == o.from && dep == o.dep && def == o.def && hole == o.hole && stackBase == o.stackBase && own == o.own &&
                                      usesR0 == o.usesR0 && joined == o.joined && keepsR0 == o.keepsR0 && callerHigh == o.callerHigh && part == o.part &&
-                                     baseReg == o.baseReg && regOff == o.regOff && frame == o.frame));
+                                     baseReg == o.baseReg && regOff == o.regOff && frame == o.frame && sure == o.sure));
         }
     };
     using Key = std::tuple<ghidra::AddrSpace*, ghidra::uintb, ghidra::uint4>;
@@ -810,6 +818,7 @@ private:
                 p.read = v.second.read;
                 p.own = v.second.Own();
                 p.frame = v.second.Frame();
+                p.sure = v.second.Sure();
                 return p;
             }
             const uint64_t whole = std::get<2>(v.first), below = whole - (vn.offset - std::get<1>(v.first)) - vn.size;
@@ -931,7 +940,8 @@ private:
         bool frame;
         int64_t base;
         bool high;
-        FrameWrite() : frame(false), base(Value::kNoBase), high(false) {}
+        bool sure;   // (A3-120) what is written is a frame address the function made (Value::Sure), not one it may be
+        FrameWrite() : frame(false), base(Value::kNoBase), high(false), sure(false) {}
     };
     static FrameWrite FrameWriteOf(const Value& v)
     {
@@ -940,6 +950,7 @@ private:
         w.frame = true;
         w.base = v.Base();
         w.high = v.kind == Value::Sp ? v.v >= 0 : v.callerHigh;
+        w.sure = v.Sure();
         return w;
     }
     static void JoinFrameWrite(FrameWrite& into, const FrameWrite& w)
@@ -948,6 +959,7 @@ private:
         if (!into.frame) { into = w; return; }
         into.base = into.base == Value::kNoBase || w.base == Value::kNoBase ? Value::kNoBase : std::min(into.base, w.base);
         into.high = into.high || w.high;
+        into.sure = into.sure && w.sure;
     }
     static void Clobber(State& s, uint32_t stored, uint32_t storedDep, int64_t from = INT64_MIN, int64_t to = INT64_MAX, bool spare = false,
                         const std::vector<int64_t>* exact = nullptr, int64_t reachFrom = INT64_MAX, const FrameWrite& storedFrame = FrameWrite())
@@ -974,6 +986,8 @@ private:
                 slot.second.joined = was.Joined();
                 slot.second.keepsR0 = was.KeepsR0();
                 slot.second.frame = was.Frame() || storedFrame.frame;
+                // (A3-120) the word may hold what it held or what was written: a fact only when both are frame addresses the function made
+                slot.second.sure = was.Sure() && storedFrame.frame && storedFrame.sure;
                 if (slot.second.frame)
                 {
                     // the base of what it held and of what was written (Merge's rule: a side that is no stack address leaves the other's)
@@ -1036,6 +1050,7 @@ private:
         m.joined = true;
         m.keepsR0 = a.KeepsR0() || b.KeepsR0();
         m.frame = a.Frame() || b.Frame();
+        m.sure = a.Sure() && b.Sure();   // (A3-120) a frame address on both paths
         // ...at or above r15 on every path, or flagged: an exact address at or above r15 joined with a lower one is a walk (a loop
         // that steps a pointer down from r15, `mov.l r0,@-r1`, A3-16) as often as a choice of two addresses, and is not followed.
         m.callerHigh = (a.kind == Value::Fuzzy && a.callerHigh) || (b.kind == Value::Fuzzy && b.callerHigh) ||
@@ -1247,6 +1262,7 @@ private:
                     if (!MayBeFrame(s, x)) continue;
                     HandOut(s, x);
                     if (r != 2 && (r < 4 || r > 7) && x.Frame()) mHandSites[at] |= 1u << r;   // no argument the engine shows: the note says it
+                    if (r != 2 && (r < 4 || r > 7) && x.Sure()) mHandSure[at] |= 1u << r;     // (A3-120) ...with "is" only of a fact
                 }
             }
         }
@@ -1597,12 +1613,14 @@ private:
             // (the note says a frame address is there: one this function computed. A pointer nothing is known of, after an address of the frame
             // went out, may be one, and the escape holds for it; the note was said where the address went out)
             if (exactToo && v.Frame()) mEscapeSites[at] |= 1u << reg;
+            if (exactToo && v.Sure()) mEscapeSure[at] |= 1u << reg;   // (A3-120) the note says "is" of it, else "may"
             HandOut(s, v);   // the escape is the engine's, from the frame's lowest slot (not a host alias: A3-99)
             return;
         }
         if (exactToo)
         {
             mEscapeSites[at] |= 1u << reg;   // the address is in no argument of the call: the text says so (A3-28)
+            if (v.Sure()) mEscapeSure[at] |= 1u << reg;   // (A3-120) ...as a fact, or as a possibility (a based value a load gave)
             // (area 3 round 13 fix, A3-105) ...and it has gone out: a callee handed an address in no argument the engine shows (r2, r7 alone, a
             // stack word the engine drops) may keep it, and a later step may walk down from what it kept. The alias from the address up (the
             // note's "from there up") reaches only the locals at and above it; the escape is the engine's, of the whole frame (HandOut).
@@ -2163,6 +2181,7 @@ private:
                         r.usesR0 = x.UsesR0();
                         r.joined = x.Joined();
                         r.frame = x.Frame();
+                        r.sure = x.Sure();
                         Set(s, op.out, r);
                     }
                 }
@@ -2177,6 +2196,7 @@ private:
                 r.usesR0 = x.UsesR0() || y.UsesR0();
                 r.joined = x.Joined() || y.Joined();
                 r.frame = x.Frame() || y.Frame();
+                r.sure = x.Sure() || y.Sure();   // (A3-120) made from a frame address the function made
                 if (x.kind == Value::Sp && y.kind == Value::Imm) r = Value::Stack(Wrap(sub ? x.v - y.v : x.v + y.v));
                 else if (!sub && x.kind == Value::Imm && y.kind == Value::Sp) r = Value::Stack(Wrap(x.v + y.v));
                 else if (x.kind == Value::Imm && y.kind == Value::Imm) r = Value::Const(sub ? x.v - y.v : x.v + y.v);
@@ -2421,7 +2441,7 @@ private:
                 if (op.hasOut)
                 {
                     uint32_t o = 0;
-                    bool carried = false, usesR0 = false, joined = false, frame = false;
+                    bool carried = false, usesR0 = false, joined = false, frame = false, sure = false;
                     std::vector<Value> xs;
                     for (const ghidra::VarnodeData& vn : op.in)
                     {
@@ -2431,6 +2451,7 @@ private:
                         usesR0 = usesR0 || x.UsesR0();
                         joined = joined || x.Joined();
                         frame = frame || x.Frame();
+                        sure = sure || x.Sure();
                         xs.push_back(x);
                     }
                     Value r = Value::From(o, OpDeps(op, xs));
@@ -2443,6 +2464,7 @@ private:
                                          op.code == ghidra::CPUI_INT_CARRY || op.code == ghidra::CPUI_INT_SCARRY || op.code == ghidra::CPUI_INT_SBORROW ||
                                          op.code == ghidra::CPUI_BOOL_NEGATE || op.code == ghidra::CPUI_BOOL_XOR || op.code == ghidra::CPUI_BOOL_AND ||
                                          op.code == ghidra::CPUI_BOOL_OR);
+                    r.sure = r.frame && sure;   // (A3-120)
                     // A bitwise op of two constants is a constant, so SLEIGH's `imm_00_07 & 0x000000FF` (the masked immediate of `xor #imm,r0`,
                     // whose `#0` the identity table means to be a nop) folds and the identity check below sees a zero (A3-77).
                     if (xs.size() == 2 && xs[0].kind == Value::Imm && xs[1].kind == Value::Imm &&
@@ -2550,6 +2572,8 @@ private:
     bool mFoldPcLoads = false;         // a walked callee folds its own PC-relative literal loads from the capture
     size_t mStepsUsed = 0;
     bool mEntryUndecodable = false;    // the entry instruction could not be decoded (memory not captured)
+    std::map<uint32_t, uint32_t> mEscapeSure;    // (area 3 round 14 fix, A3-120) ...and of those bits, the ones a fact holds for (Value::Sure)
+    std::map<uint32_t, uint32_t> mHandSure;      // ...and the same for HandSites
     std::map<uint32_t, uint32_t> mEscapeSites;   // the calls that escape was declared at because of r2 or r7, and which
     std::map<uint32_t, uint32_t> mHandSites;     // (area 3 round 12 fix) ...and at in another register no argument shows (HandSites)
     std::set<std::pair<uint32_t, int64_t>> mExposedSaved;   // (A3-108) the words a call exposed that held a saved register (call, offset)
@@ -5031,6 +5055,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         // prints: the first one learns who is called, and a function without a call has nothing to say.)
         std::map<uint32_t, uint32_t> escapeSites;   // calls the note is for, once the actions have said who is called
         std::map<uint32_t, uint32_t> handSites;     // ...and the calls a frame address went out at in another register (HandSites)
+        std::map<uint32_t, uint32_t> escapeSure, handSure;   // (A3-120) ...and of those, the registers and words a frame address is in as a fact
         std::map<uint32_t, std::set<int64_t>> escapeWords;   // ...and the stack words of the stack-argument notes (EscapeWords, A3-108)
         if (print && fd->numCalls() > 0)
         {
@@ -5047,6 +5072,8 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
             if (probe.FrameOut()) fd->getScopeLocal()->declareHostEscape();
             uint32_t from = 0;
             handSites = probe.HandSites();
+            escapeSure = probe.EscapeSure();
+            handSure = probe.HandSure();
             // ...and the text says where: the address is in no argument of the call, so a reader of `f(); return xStack_8;` would take the
             // local for one the callee cannot reach (A3-28). A comment at the call, of a type the function's own flow warnings do not collect;
             // put below, after the actions, when a `jsr @rN` through a literal is known for what it calls.
@@ -5112,11 +5139,19 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
                                                          "r11", "r12", "r13", "r14", "r15", "sr", "gbr", "vbr", "mach", "macl", "pr" };
                 int reg = 0;
                 while (reg < 21 && !((hand->second >> reg) & 1u)) ++reg;
-                noteAt[site] = std::string(kFrameEscapeNoteRegA) + kRegNames[reg] + kFrameEscapeNoteRegB;
+                const auto hs = handSure.find(site);
+                const bool sure = hs != handSure.end() && ((hs->second >> reg) & 1u);
+                noteAt[site] = std::string(sure ? kFrameEscapeNoteRegA : kFrameEscapeNoteMayRegA) + kRegNames[reg] + kFrameEscapeNoteRegB;
                 regOf[site] = reg;
                 continue;
             }
-            noteAt[site] = (m & 4u) ? kFrameEscapeNote : (m & 0x80u) ? kFrameEscapeNoteR7 : (m & 0x8000u) ? kFrameEscapeNoteStack
+            // (area 3 round 14 fix, A3-120) "is" where the probe knows a frame address this function made is there (Value::Sure), "may" where it
+            // knows only that one may be: a word a callee handed the frame may have written, a pointer loaded once the frame went out
+            const auto es = escapeSure.find(site);
+            const uint32_t sure = es != escapeSure.end() ? es->second : 0;
+            noteAt[site] = (m & 4u) ? ((sure & 4u) ? kFrameEscapeNote : kFrameEscapeNoteMay)
+                           : (m & 0x80u) ? ((sure & 0x80u) ? kFrameEscapeNoteR7 : kFrameEscapeNoteMayR7)
+                           : (m & 0x8000u) ? ((sure & 0x8000u) ? kFrameEscapeNoteStack : kFrameEscapeNoteMayStack)
                            : (m & (1u << 17)) && !(m & (1u << 16)) ? kFrameEscapeNoteSaved : kFrameEscapeNoteSlot;
         }
         {
@@ -5138,7 +5173,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
                     }
                     continue;
                 }
-                if (sn.second != std::string(kFrameEscapeNoteStack)) continue;
+                if (sn.second != std::string(kFrameEscapeNoteStack) && sn.second != std::string(kFrameEscapeNoteMayStack)) continue;
                 const auto w = escapeWords.find(sn.first);
                 bool fresh = lastStack == 0;
                 if (w != escapeWords.end())

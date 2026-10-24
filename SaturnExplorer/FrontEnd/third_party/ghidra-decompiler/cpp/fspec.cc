@@ -16,6 +16,7 @@
  * Modified for SaturnExplorer: a parameter's replacement is allocated before the old one is freed (patches/0015-proto-param-replace-order.patch);
  * a host can set a function's side-effect overrides (patches/0028-funcproto-set-effects.patch).
  * Modified for SaturnExplorer: a prototype is copied, and its store replaced, with the allocation first and the old object freed after (patches/0032-allocation-failure-order-2.patch).
+ * Modified for SaturnExplorer: a call's stack argument words stay mapped once a frame address escaped (patches/0066-engine-frame-escape-inexact.patch).
  */
 #include "fspec.hh"
 #include "funcdata.hh"
@@ -5701,6 +5702,19 @@ void FuncCallSpecs::checkOutputTrialUse(Funcdata &data,vector<Varnode *> &trialv
 /// are filled in. Other Varnode inputs may be truncated or extended.  This prototype
 /// itself is unchanged.
 /// \param data is the calling function
+/// SaturnExplorer (patches/0066-engine-frame-escape-inexact.patch): has a frame address of the calling function escaped (FrameEscape)?
+/// \param data is the calling function
+/// \param spc is the stack space
+/// \return \b true if it escaped, by any of FrameEscape's causes
+static bool frameEscaped(Funcdata &data,AddrSpace *spc)
+
+{
+  if (data.getScopeLocal() == (ScopeLocal *)0 || data.getScopeLocal()->getSpaceId() != spc) return false;
+  FrameEscape escape;
+  escape.compute(&data,spc,false);
+  return escape.escaped;
+}
+
 void FuncCallSpecs::buildInputFromTrials(Funcdata &data)
 
 {
@@ -5752,7 +5766,12 @@ void FuncCallSpecs::buildInputFromTrials(Funcdata &data)
     }
     newparam.push_back(vn);
     // Mark the stack range used to pass this parameter as unmapped
-    if (isspacebase)
+    // SaturnExplorer (patches/0066-engine-frame-escape-inexact.patch): ...unless a frame address escaped. The word is then no Symbol, so
+    // the whole-frame alias of 0065 (ScopeLocal::markUnaliased) does not reach it, and a read of it after the call -- which a callee that kept
+    // the address may have written through it, or a walk through an inexact frame address may have -- was printed as a temporary holding
+    // the value stored before (`xVar2 = 1; ... return xVar2;` where the code returns what the callee wrote: ledger A3-117). Kept mapped, the
+    // word is a local the alias covers, the call's argument and the read after it are reads of the local.
+    if (isspacebase && !frameEscaped(data,spc))
       data.getScopeLocal()->markNotMapped(spc,off,sz,true);
   }
   data.opSetAllInput(op,newparam); // Set final parameter list

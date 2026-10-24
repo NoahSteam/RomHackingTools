@@ -18,6 +18,7 @@
  * Modified for SaturnExplorer: so does one kept in a stack local and read back, across a call too (patches/0060-engine-stack-walk-down-spilled.patch).
  * Modified for SaturnExplorer: a host can declare that the frame escaped by a way the p-code does not show (patches/0063-engine-frame-escape-unknown-pointers.patch).
  * Modified for SaturnExplorer: the escape's whole-frame alias and the function's lowest frame offset (patches/0065-engine-frame-escape-whole-frame.patch).
+ * Modified for SaturnExplorer: the walk down's answer at its bound (patches/0066-engine-frame-escape-inexact.patch).
  */
 /// \file varmap.hh
 /// \brief Classes for keeping track of local variables and reconstructing stack layout
@@ -181,7 +182,7 @@ public:
   bool getEscapeLow(uintb &low) const { low = escapeLow; return escapeAll; }	///< SaturnExplorer: did the frame escape, and from where is every local aliased (0065)
   static void gatherAdditiveBase(Varnode *startvn,vector<AddBase> &addbase);
   static uintb gatherOffset(Varnode *vn);
-  static bool stepsDown(PcodeOp *multi);	///< SaturnExplorer: does a loop step the pointer joined by \b multi down (patches/0056-engine-stack-walk-down-aliases.patch)
+  static bool stepsDown(PcodeOp *multi,bool atCap=true);	///< SaturnExplorer: does a loop step the pointer joined by \b multi down (patches/0056-engine-stack-walk-down-aliases.patch)
   static bool reachesStepDown(Varnode *base);	///< SaturnExplorer: does \b base reach a loop that steps it down, through a spill and its reload too (patches/0060-engine-stack-walk-down-spilled.patch)
 };
 

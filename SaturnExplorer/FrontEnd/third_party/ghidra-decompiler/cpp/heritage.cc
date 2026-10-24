@@ -18,6 +18,7 @@
  * Modified for SaturnExplorer: a STORE a frame address may have escaped to is guarded, failing closed (patches/0061-engine-stack-frame-escape.patch).
  * Modified for SaturnExplorer: once the frame escapes, a STORE through a pointer not proved to be no frame address is guarded (patches/0063-engine-frame-escape-unknown-pointers.patch).
  * Modified for SaturnExplorer: the escape's lowest frame offset is the lowest any query saw, so it never rises, and a pointer a loop steps down from an unbounded index is guarded below its base (patches/0065-engine-frame-escape-whole-frame.patch).
+ * Modified for SaturnExplorer: a frame address that is no exact offset from the frame base escapes, unless a loop only steps it up, and the guard of an access through one covers the stack space (patches/0066-engine-frame-escape-inexact.patch).
  */
 #include "heritage.hh"
 #include "funcdata.hh"
@@ -737,6 +738,9 @@ void Heritage::handleNewLoadCopies(void)
 
 /// SaturnExplorer (patches/0065-engine-frame-escape-whole-frame.patch): is the given pointer, back through copies, INDIRECTs and additions
 /// of a constant, the join of a loop that steps it down (AliasChecker::stepsDown)?
+/// (patches/0066-engine-frame-escape-inexact.patch) A precision helper only: it may widen a guard, never narrow one. A pointer it does not
+/// follow (an addition of a register, a stride loaded from memory: ledger A3-118, A3-119) is no exact frame offset, which FrameEscape takes
+/// for an escape, and the guard of an access through it is widened there (Heritage::widenEscapedStoreGuards).
 /// \param vn is the pointer of a LOAD or STORE
 /// \return \b true if a loop steps it down
 bool LoadGuard::pointerSteppedDown(Varnode *vn)
@@ -763,7 +767,7 @@ bool LoadGuard::pointerSteppedDown(Varnode *vn)
       return false;
     }
   }
-  return false;
+  return true;	// (patches/0066-engine-frame-escape-inexact.patch) too far to follow: taken to step down (fail closed)
 }
 
 /// Make some determination of the range of possible values for a LOAD based
@@ -999,6 +1003,285 @@ static bool frameBooleanOutput(OpCode opc)
   return false;
 }
 
+/// SaturnExplorer (patches/0066-engine-frame-escape-inexact.patch): the value of \b vn as a constant, through copies of one
+/// \param vn is the given Varnode
+/// \param val receives the constant
+/// \return \b true if \b vn is a constant or a copy of one
+static bool frameConstant(Varnode *vn,uintb &val)
+
+{
+  for(int4 k=0;k<8;++k) {
+    if (vn->isConstant()) {
+      val = vn->getOffset();
+      return true;
+    }
+    if (!vn->isWritten() || vn->getDef()->code() != CPUI_COPY) return false;
+    vn = vn->getDef()->getIn(0);
+  }
+  return false;
+}
+
+/// SaturnExplorer (patches/0066-engine-frame-escape-inexact.patch): read a constant step as a signed value of the given size
+static intb frameSigned(uintb val,int4 size)
+
+{
+  if (size >= 8) return (intb)val;
+  val &= calc_mask(size);
+  if (((val >> (8 * size - 1)) & 1) != 0) val |= ~calc_mask(size);
+  return (intb)val;
+}
+
+/// SaturnExplorer (patches/0066-engine-frame-escape-inexact.patch): is the given member written by an op that keeps it the frame base plus a
+/// constant when its inputs are (a copy, an INDIRECT, an addition or subtraction of a constant, a PTRSUB, a PTRADD of constants, a join of
+/// members), and with which inputs and steps?
+/// \param vn is the member
+/// \param members are the possible frame addresses
+/// \param in receives each member input and the constant it adds
+/// \return \b true if the op is one of those forms
+static bool frameAffine(Varnode *vn,const set<Varnode *> &members,vector<pair<Varnode *,intb> > &in)
+
+{
+  in.clear();
+  if (!vn->isWritten()) return false;
+  PcodeOp *def = vn->getDef();
+  int4 sz = vn->getSize();
+  uintb c,c2;
+  switch(def->code()) {
+  case CPUI_COPY:
+  case CPUI_INDIRECT:
+    in.push_back(pair<Varnode *,intb>(def->getIn(0),0));
+    break;
+  case CPUI_INT_ADD:
+    if (frameConstant(def->getIn(1),c))
+      in.push_back(pair<Varnode *,intb>(def->getIn(0),frameSigned(c,sz)));
+    else if (frameConstant(def->getIn(0),c))
+      in.push_back(pair<Varnode *,intb>(def->getIn(1),frameSigned(c,sz)));
+    else
+      return false;		// a register, an index: no exact offset
+    break;
+  case CPUI_INT_SUB:
+    if (!frameConstant(def->getIn(1),c)) return false;
+    in.push_back(pair<Varnode *,intb>(def->getIn(0),-frameSigned(c,sz)));
+    break;
+  case CPUI_PTRSUB:
+    if (!frameConstant(def->getIn(1),c)) return false;
+    in.push_back(pair<Varnode *,intb>(def->getIn(0),frameSigned(c,sz)));
+    break;
+  case CPUI_PTRADD:
+    if (!frameConstant(def->getIn(1),c) || !frameConstant(def->getIn(2),c2)) return false;
+    in.push_back(pair<Varnode *,intb>(def->getIn(0),frameSigned(c * c2,sz)));
+    break;
+  case CPUI_MULTIEQUAL:
+    for(int4 i=0;i<def->numInput();++i)
+      in.push_back(pair<Varnode *,intb>(def->getIn(i),0));
+    break;
+  default:
+    return false;
+  }
+  for(int4 i=0;i<in.size();++i)
+    if (members.find(in[i].first) == members.end()) return false;	// a constant added to another value, a join with one: no frame offset
+  return true;
+}
+
+/// SaturnExplorer (patches/0066-engine-frame-escape-inexact.patch): which members are no exact offset from the frame base? Each member is
+/// given one of: an exact offset (the stack pointer's input, or a value made from one by the forms of frameAffine whose inputs have the same
+/// exact offset on every path), \e up from an offset (a value a loop carries whose every step on the loop adds a constant that is not
+/// negative, entered with exact or up values: it is at or above the lowest of them), or none. Anything else -- an op of another form, a
+/// join of two different offsets, a loop with a negative step or a step that is no constant, a value whose inputs have none -- has none and
+/// is put in \b inexactSet. The members are taken in the order of their strongly connected components (Tarjan's walk, iterative, over the
+/// edges from a value to its inputs, which yields each component after the components of its inputs). A component too large to follow has
+/// none (fail closed). The lowest entry offset of each loop that only steps up is kept in \b upLows, so the alias starts there.
+/// \param spc is the stack space
+/// \param offset holds the stack pointer's inputs (offset 0)
+/// \param inexactSet receives the members with no exact offset
+void FrameEscape::classifyExact(AddrSpace *spc,const map<Varnode *,uintb> &offset,vector<Varnode *> &inexactSet)
+
+{
+  const int4 maxComponent = 4096;
+  enum { kNone = 0, kExact = 1, kUp = 2, kTop = 3 };
+  struct Pos { int4 kind; intb off; Pos(void) : kind(kNone), off(0) {} };
+  map<Varnode *,Pos> pos;
+  map<Varnode *,vector<pair<Varnode *,intb> > > edges;
+  set<Varnode *> affine;
+  // Everything here is built in the members' creation-index order, never the pointer order of the set, so the
+  // order in which temporaries are allocated does not depend on where the allocator placed a Varnode (the fault
+  // matrix requires the allocation sequence of a decompile to be identical between two runs of the same function).
+  vector<Varnode *> ordered(members.begin(),members.end());
+  sort(ordered.begin(),ordered.end(),[](Varnode *a,Varnode *b){ return a->getCreateIndex() < b->getCreateIndex(); });
+  for(vector<Varnode *>::const_iterator iter=ordered.begin();iter!=ordered.end();++iter) {
+    vector<pair<Varnode *,intb> > in;
+    if (frameAffine(*iter,members,in)) {
+      affine.insert(*iter);
+      edges[*iter] = in;
+    }
+  }
+  // Tarjan's strongly connected components, iterative. The members are taken in creation-index order, not the
+  // pointer order of the set: the walk's own order must not depend on where the allocator placed a Varnode, or the
+  // escape decision (and the number of guards it makes) is not reproducible between two decompiles of one function.
+  map<Varnode *,int4> index,low;
+  set<Varnode *> onStack;
+  vector<Varnode *> stack;
+  int4 counter = 0;
+  for(vector<Varnode *>::const_iterator rootiter=ordered.begin();rootiter!=ordered.end();++rootiter) {
+    Varnode * const *root = &(*rootiter);
+    if (index.find(*root) != index.end()) continue;
+    vector<pair<Varnode *,int4> > call;	// the node and the next edge to visit
+    call.push_back(pair<Varnode *,int4>(*root,0));
+    index[*root] = low[*root] = counter++;
+    stack.push_back(*root);
+    onStack.insert(*root);
+    while(!call.empty()) {
+      Varnode *v = call.back().first;
+      int4 &next( call.back().second );
+      map<Varnode *,vector<pair<Varnode *,intb> > >::const_iterator eiter = edges.find(v);
+      const int4 nEdges = (eiter == edges.end()) ? 0 : (*eiter).second.size();
+      if (next < nEdges) {
+	Varnode *w = (*eiter).second[next].first;
+	next += 1;
+	if (index.find(w) == index.end()) {
+	  index[w] = low[w] = counter++;
+	  stack.push_back(w);
+	  onStack.insert(w);
+	  call.push_back(pair<Varnode *,int4>(w,0));
+	}
+	else if (onStack.find(w) != onStack.end() && index[w] < low[v])
+	  low[v] = index[w];
+	continue;
+      }
+      call.pop_back();
+      if (!call.empty()) {
+	Varnode *parent = call.back().first;
+	if (low[v] < low[parent]) low[parent] = low[v];
+      }
+      if (low[v] != index[v]) continue;
+      // v roots a component: its inputs' components are all decided
+      vector<Varnode *> comp;
+      for(;;) {
+	Varnode *w = stack.back();
+	stack.pop_back();
+	onStack.erase(w);
+	comp.push_back(w);
+	if (w == v) break;
+      }
+      bool cyclic = comp.size() > 1;
+      if (!cyclic) {
+	map<Varnode *,vector<pair<Varnode *,intb> > >::const_iterator self = edges.find(v);
+	if (self != edges.end())
+	  for(int4 i=0;i<(*self).second.size();++i)
+	    if ((*self).second[i].first == v) cyclic = true;
+      }
+      Pos res;
+      if (!cyclic) {
+	if (!v->isWritten() && offset.find(v) != offset.end()) {
+	  res.kind = kExact;		// the stack pointer's input
+	  res.off = 0;
+	}
+	else if (affine.find(v) == affine.end())
+	  res.kind = kTop;
+	else {
+	  const vector<pair<Varnode *,intb> > &in( edges[v] );
+	  bool join = v->getDef()->code() == CPUI_MULTIEQUAL;
+	  bool anyUp = false, same = true;
+	  intb minOff = 0;
+	  res.kind = kExact;
+	  for(int4 i=0;i<in.size();++i) {
+	    const Pos &p( pos[in[i].first] );
+	    if (p.kind != kExact && p.kind != kUp) {
+	      res.kind = kTop;
+	      break;
+	    }
+	    intb o = p.off + in[i].second;
+	    if (p.kind == kUp) {
+	      anyUp = true;
+	      if (in[i].second < 0) {	// a step below a value known only to be at or above its entry
+		res.kind = kTop;
+		break;
+	      }
+	    }
+	    if (i == 0) minOff = o;
+	    else {
+	      if (o != minOff) same = false;
+	      if (o < minOff) minOff = o;
+	    }
+	  }
+	  if (res.kind != kTop) {
+	    if (anyUp) {
+	      res.kind = kUp;
+	      if (join) upLows.push_back(spc->wrapOffset((uintb)minOff));
+	    }
+	    else if (!same)
+	      res.kind = kTop;	// a join of two different offsets: no single one
+	    res.off = minOff;
+	  }
+	}
+	pos[v] = res;
+	continue;
+      }
+      // A loop: every node is a join or a constant step of another node of it (a node with one input outside cannot be on a cycle)
+      res.kind = kExact;
+      bool haveEntry = false, sameEntry = true, flat = true;
+      intb minEntry = 0;
+      set<Varnode *> inComp(comp.begin(),comp.end());
+      if (comp.size() > maxComponent)
+	res.kind = kTop;		// too large to follow (fail closed)
+      for(int4 c=0;c<comp.size() && res.kind != kTop;++c) {
+	Varnode *w = comp[c];
+	if (affine.find(w) == affine.end()) {
+	  res.kind = kTop;
+	  break;
+	}
+	const vector<pair<Varnode *,intb> > &in( edges[w] );
+	for(int4 i=0;i<in.size();++i) {
+	  if (inComp.find(in[i].first) != inComp.end()) {
+	    if (in[i].second < 0) {	// a step down, or one of unknown sign read as one
+	      res.kind = kTop;
+	      break;
+	    }
+	    if (in[i].second != 0) flat = false;
+	    continue;
+	  }
+	  const Pos &p( pos[in[i].first] );
+	  if (p.kind != kExact && p.kind != kUp) {
+	    res.kind = kTop;
+	    break;
+	  }
+	  if (p.kind == kUp) {
+	    sameEntry = false;
+	    if (in[i].second < 0) {
+	      res.kind = kTop;
+	      break;
+	    }
+	  }
+	  intb o = p.off + in[i].second;
+	  if (!haveEntry) {
+	    minEntry = o;
+	    haveEntry = true;
+	  }
+	  else {
+	    if (o != minEntry) sameEntry = false;
+	    if (o < minEntry) minEntry = o;
+	  }
+	}
+      }
+      if (!haveEntry) res.kind = kTop;
+      if (res.kind != kTop) {
+	res.off = minEntry;
+	if (!flat || !sameEntry) {
+	  res.kind = kUp;		// stepped up only: at or above its lowest entry
+	  upLows.push_back(spc->wrapOffset((uintb)minEntry));
+	}
+      }
+      for(int4 c=0;c<comp.size();++c)
+	pos[comp[c]] = res;
+    }
+  }
+  for(vector<Varnode *>::const_iterator iter=ordered.begin();iter!=ordered.end();++iter) {
+    map<Varnode *,Pos>::const_iterator f = pos.find(*iter);
+    if (f != pos.end() && (*f).second.kind != kExact && (*f).second.kind != kUp)
+      inexactSet.push_back(*iter);
+  }
+}
+
 /// SaturnExplorer (patches/0061-engine-stack-frame-escape.patch): walk forward from the stack pointer's input over every value computed from
 /// it, by any op, and record which possible frame addresses the stack analysis models (copies, additions, subtractions of a constant, joins,
 /// INDIRECTs, PTRSUB and PTRADD), which it does not, and whether any escaped (see FrameEscape). Before the stack space is heritaged a read of
@@ -1157,6 +1440,9 @@ void FrameEscape::compute(const Funcdata *fd,AddrSpace *spc,bool preHeritage)
     }
     break;
   }
+  // (patches/0066-engine-frame-escape-inexact.patch) the members that are no exact offset from the frame base (classifyExact)
+  vector<Varnode *> inexactSet;
+  classifyExact(spc,offset,inexactSet);
   // (c): a join with a value that is no frame address
   for(set<Varnode *>::const_iterator iter=members.begin();iter!=members.end();++iter) {
     Varnode *vn = *iter;
@@ -1188,7 +1474,10 @@ void FrameEscape::compute(const Funcdata *fd,AddrSpace *spc,bool preHeritage)
       PcodeOp *op = *diter;
       switch(op->code()) {
       case CPUI_LOAD:
-	if (op->getIn(1) == vn) escaped = true;
+	if (op->getIn(1) == vn) {
+	  escaped = true;
+	  inexactLoads.insert(op);	// (0066) its guard covers the stack space
+	}
 	break;
       case CPUI_STORE:
 	if (op->getIn(1) == vn) {
@@ -1212,6 +1501,43 @@ void FrameEscape::compute(const Funcdata *fd,AddrSpace *spc,bool preHeritage)
   // (0063) ...and the escapes the host knows of and the p-code does not show: a callee that keeps the address it was handed, or hands
   // it back in a register the call has no output in (ledger A3-89, A3-91), a frame address in a register no input of the call names.
   if (hostEscape) escaped = true;
+  // (patches/0066-engine-frame-escape-inexact.patch) ...and a frame address that is no exact offset from the frame base (a register or an index
+  // added or subtracted, a loop that steps it by anything but a constant that is not negative, a join of two offsets) reaches an access or a
+  // call: it may reach any word of the frame, below the address it was made from too (`*--p` from `sp + 16 + r4`, `p[-i]`, `p += stride` with
+  // the stride loaded: ledger A3-116, A3-118, A3-119). Recognising those walks by their form failed open on each form the list did not have; an
+  // exact offset is the one form the stack analysis places, so every other form escapes, with the whole-frame alias (AliasChecker), and the
+  // guard of each access through one covers the stack space (Heritage::widenEscapedStoreGuards). Such an address has not left the function's
+  // own data flow, so the pointers it did not make are not taken to be frame addresses on its account (markUnknownStores is for the causes
+  // above), and the save slots stay as 0063 has them (not loose).
+  bool leftFlow = escaped;
+  for(vector<Varnode *>::const_iterator iter=inexactSet.begin();iter!=inexactSet.end();++iter) {
+    Varnode *vn = *iter;
+    for(list<PcodeOp *>::const_iterator diter=vn->beginDescend();diter!=vn->endDescend();++diter) {
+      PcodeOp *op = *diter;
+      switch(op->code()) {
+      case CPUI_LOAD:
+	if (op->getIn(1) == vn) {
+	  inexact = true;
+	  inexactLoads.insert(op);
+	}
+	break;
+      case CPUI_STORE:
+	if (op->getIn(1) == vn) {
+	  inexact = true;
+	  unmodeledStores.insert(op);
+	}
+	break;
+      case CPUI_CALL:
+      case CPUI_CALLIND:
+      case CPUI_CALLOTHER:
+	inexact = true;
+	break;
+      default:
+	break;
+      }
+    }
+  }
+  if (inexact) escaped = true;
   // The lowest frame offset reached, as a signed offset in the space, for the alias boundary: the lowest a frame address takes, and the
   // lowest stack location the function has (once the frame's own accesses are direct stack varnodes, the frame address that reached the
   // lowest local may be gone, and a local below every frame address left would be no alias).
@@ -1248,7 +1574,7 @@ void FrameEscape::compute(const Funcdata *fd,AddrSpace *spc,bool preHeritage)
     }
   }
   if (haveLowest && scope != (const ScopeLocal *)0) scope->setFrameFloor(lowest);
-  if (escaped) markUnknownStores(fd);
+  if (leftFlow) markUnknownStores(fd);
 }
 
 /// SaturnExplorer (patches/0063-engine-frame-escape-unknown-pointers.patch): once a frame address has escaped, any pointer whose origin
@@ -1352,11 +1678,25 @@ bool Heritage::markEscapedStores(AddrSpace *spc,vector<PcodeOp *> &freeStores)
 void Heritage::widenEscapedStoreGuards(void)
 
 {
-  if (storeGuard.empty()) return;
+  if (storeGuard.empty() && loadGuard.empty()) return;
   AddrSpace *stackSpc = fd->getArch()->getStackSpace();
   if (stackSpc == (AddrSpace *)0) return;
   FrameEscape escape;
   escape.compute(fd,stackSpc,false);
+  // (patches/0066-engine-frame-escape-inexact.patch) ...and a LOAD guard on a LOAD through a frame address that is no exact offset: the value
+  // set analysis guarded what it saw, or the pointer's base up, and a local below that was taken for one the LOAD does not read
+  for(list<LoadGuard>::iterator iter=loadGuard.begin();iter!=loadGuard.end();++iter) {
+    LoadGuard &guard(*iter);
+    if (!guard.isValid(CPUI_LOAD)) continue;
+    if (guard.analysisState == 0) continue;
+    if (!escape.loadIsInexact(guard.op)) continue;
+    if (guard.minimumOffset == 0 && guard.maximumOffset == guard.spc->getHighest() && guard.guessedBelow) continue;
+    guard.minimumOffset = 0;
+    guard.maximumOffset = guard.spc->getHighest();
+    guard.step = 0;
+    guard.analysisState = 2;
+    guard.guessedBelow = true;
+  }
   for(list<LoadGuard>::iterator iter=storeGuard.begin();iter!=storeGuard.end();++iter) {
     LoadGuard &guard(*iter);
     if (!guard.isValid(CPUI_STORE)) continue;

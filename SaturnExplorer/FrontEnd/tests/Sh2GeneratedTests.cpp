@@ -4341,7 +4341,12 @@ std::string EffectClaimsContradicted(const CallEffects& e, const RunOut& run, st
                 return fail("claim-wrong:frameWords", "a run stores at " + Hex(a) + ", word " + std::to_string(word) + " from the entry r15, and frameWords does not name it");
             continue;
         }
-        const int arena = ArenaOf(a);
+        int arena = ArenaOf(a);
+        // (area 3 round 14 fix, A3-123) ...but not an address that is a byte/halfword swap (or bitwise combination) of other start values the
+        // run read, which lands in a register's arena by chance (the byte swap of r5's start 0x06021100 is 0x06020011, in r4's arena: grammar 2
+        // seed 2616394, the same oracle false positive as A3-100 and A3-115, here in the storesThrough path). The store is through the register
+        // the swapped value came from, which storesThrough names, not r4.
+        if (arena >= 0 && arena < 4 && BitwiseOfOthers(run, a, 4 + arena)) arena = -1;
         if (arena >= 0 && !(e.storesThrough & (ArenaBit(arena) | origin::kMemory)))
             return fail("claim-wrong:storesThrough", "a run stores at " + Hex(a) + ", in the arena of " + (arena < 4 ? "r" + std::to_string(4 + arena) : std::string("gbr")) +
                                                          ", and storesThrough names neither that register nor memory");
@@ -8962,6 +8967,245 @@ bool GenIndexWalk13Fn(uint64_t seed, CCase& c, std::string& shape)
     return true;
 }
 
+// ---- Round 14 fix instrument (A3-121): the walks and words the round 14 review found open (A3-117 to A3-119, A3-122, and A3-126 of the fix), on
+// a stream of their own (one seed in eight), checked as the others are (CheckLaunderWalks: a constant return against the run, and a returned
+// temporary written once with a constant). Frame of 32 bytes, the sentinel K at r15 + 0, p = r15 + 16; the walk's four stores of the counter
+// (4, 3, 2, 1) reach r15 + 12 down to r15 + 0, so the code returns 1 (4 for the walk up from a negative index).
+//   walk14.idx.<down|subup|negup>.<c|u>: an index stepped by a loop: `@(r0,p)` with r0 counting down from 0 (down), `p - i` with i counting up
+//        (subup), `@(r0,p)` with r0 counting up from -16 (negup, A3-126); u: p also has an index added that is 0 in the run (a word of memory)
+//   walk14.stride.<pool|poolw|reload|global>.<add|sub>.<c|u>: p stepped by a register the value-set analysis cannot read: a long or a halfword
+//        of the literal pool, a frame slot the stride was spilled to, a global (-4 added, or 4 subtracted)
+//   walk14.stackarg.<r6|r7|r6r7>.<walk|callee>: A3-117's frame (locals 1 to 4 at r15 + 0 to 12, &local[2] in r4, an object in r5, and
+//        the registers named set, so the engine shows the call with stack arguments) and an unlent callee that keeps r4 in the object; then the
+//        caller walks down from the kept pointer to r15 + 0 (walk), or the callee writes its own first stack argument word, the caller's
+//        r15 + 0 (callee), and the caller returns that word (0x55)
+//   walk14.cap: S18's walk with 4,100 to 4,300 stores through the pointer before the walking store in the loop body (A3-122: the walk down's
+//        bound), drawn one seed in a hundred of the stream (a decompile of about 30 s)
+bool GenWalk14Fn(uint64_t seed, CCase& c, std::string& shape)
+{
+    Rng rng(seed * 2654435761u + 0x14A3u);
+    if (!rng.Chance(12)) return false;
+    const int K = 101 + static_cast<int>(rng.Below(27));
+    LaunderBuilder b;
+    const uint32_t kStrideWord = 0x1F8u;   // a word of the blob past the literal pool: a global the stride is read from
+    auto prologue = [&]() {
+        b.Put(0x4F22);   // sts.l pr,@-r15
+        b.Put(0x7FE0);   // add #-32,r15
+        b.Put(static_cast<uint16_t>(0xE000 | K));
+        b.Put(0x2F02);   // mov.l r0,@r15: the sentinel
+        b.Put(0x62F3);   // mov r15,r2
+        b.Put(0x7210);   // add #16,r2: p
+    };
+    auto unbounded = [&]() {
+        b.Lit(3, kLaunderGlobal);
+        b.Put(0x6332);   // mov.l @r3,r3: an index, 0 in the run
+        b.Put(0x323C);   // add r3,r2
+    };
+    auto epilogue = [&]() {
+        b.Put(0x60F2);   // mov.l @r15,r0
+        b.Put(0x7F20);   // add #32,r15
+        b.Put(0x4F26);   // lds.l @r15+,pr
+        b.Put(0x000B);
+        b.Put(0x0009);
+    };
+    auto loopBack = [&](size_t loop) {
+        b.Put(0x4110);   // dt r1
+        b.Put(static_cast<uint16_t>(0x8B00 | ((static_cast<int>(loop) - static_cast<int>(b.at) - 2) & 0xFF)));   // bf L
+    };
+    std::vector<std::pair<size_t, uint32_t>> data;   // words of the blob to set after Finish (word index, value)
+    const int form = static_cast<int>(rng.Below(100)) == 0 ? 3 : static_cast<int>(rng.Below(3));
+    if (form == 0)
+    {
+        static const char* const kIdx[] = { "down", "subup", "negup" };
+        const std::string idx = kIdx[rng.Below(3)];
+        const bool u = rng.Chance(50);
+        prologue();
+        if (u) unbounded();
+        b.Put(0xE104);   // mov #4,r1
+        if (idx == "down")
+        {
+            b.Put(0xE300);   // mov #0,r3
+            const size_t loop = b.at;
+            b.Put(0x73FC);   // L: add #-4,r3
+            b.Put(0x6033);   //    mov r3,r0
+            b.Put(0x0216);   //    mov.l r1,@(r0,r2)
+            loopBack(loop);
+        }
+        else if (idx == "subup")
+        {
+            b.Put(0xE300);   // mov #0,r3
+            const size_t loop = b.at;
+            b.Put(0x7304);   // L: add #4,r3
+            b.Put(0x6523);   //    mov r2,r5
+            b.Put(0x3538);   //    sub r3,r5
+            b.Put(0x2512);   //    mov.l r1,@r5
+            loopBack(loop);
+        }
+        else
+        {
+            b.Put(0xE3F0);   // mov #-16,r3
+            const size_t loop = b.at;
+            b.Put(0x6033);   // L: mov r3,r0
+            b.Put(0x0216);   //    mov.l r1,@(r0,r2)
+            b.Put(0x7304);   //    add #4,r3
+            loopBack(loop);
+        }
+        epilogue();
+        shape = "walk14.idx." + idx + (u ? ".u" : ".c");
+    }
+    else if (form == 1)
+    {
+        static const char* const kSrc[] = { "pool", "poolw", "reload", "global" };
+        const std::string src = kSrc[rng.Below(4)];
+        const bool sub = rng.Chance(50);
+        const bool u = rng.Chance(50);
+        const uint32_t stride = sub ? 4u : 0xFFFFFFFCu;
+        prologue();
+        if (u) unbounded();
+        if (src == "pool") b.Lit(5, stride);
+        else if (src == "poolw")
+        {
+            // mov.w @(disp,pc),r5 of the low half of a pool longword (big-endian: at its address + 2), sign-extended
+            b.Lit(0, stride);   // reserve the longword (r0 is overwritten below)
+            size_t k = 0;
+            while (b.lits[k] != stride) ++k;
+            const uint32_t pc = kCode + 2u * static_cast<uint32_t>(b.at);
+            const uint32_t ea = kCode + 0x100u + 4u * static_cast<uint32_t>(k) + 2u;
+            b.Put(static_cast<uint16_t>(0x9500 | ((ea - (pc + 4u)) / 2u)));
+        }
+        else if (src == "reload")
+        {
+            b.Put(sub ? 0xE504 : 0xE5FC);   // mov #4,r5 / mov #-4,r5
+            b.Put(0x1F57);   // mov.l r5,@(28,r15): spilled to a slot the walk does not reach
+            b.Put(0xE500);   // mov #0,r5
+            b.Put(0x55F7);   // mov.l @(28,r15),r5: read back
+        }
+        else
+        {
+            b.Lit(5, kCode + kStrideWord);
+            b.Put(0x6552);   // mov.l @r5,r5
+            data.emplace_back(kStrideWord / 2, stride);
+        }
+        b.Put(0xE104);   // mov #4,r1
+        const size_t loop = b.at;
+        b.Put(static_cast<uint16_t>(sub ? 0x3258 : 0x325C));   // L: sub r5,r2 / add r5,r2
+        b.Put(0x2212);   //    mov.l r1,@r2
+        loopBack(loop);
+        epilogue();
+        shape = "walk14.stride." + src + (sub ? ".sub" : ".add") + (u ? ".u" : ".c");
+    }
+    else if (form == 2)
+    {
+        static const char* const kRegs[] = { "r6", "r7", "r6r7" };
+        const std::string regs = kRegs[rng.Below(3)];
+        const bool callee = rng.Chance(40);
+        const uint32_t gOff = 0xA0u;   // not decompiled first by the check, and withheld (it reads r3): A3-117 is an unlent callee's
+        b.Put(0x4F22);   // sts.l pr,@-r15
+        b.Put(0x7FF0);   // add #-16,r15
+        for (uint16_t k = 0; k < 4; ++k)
+        {
+            b.Put(static_cast<uint16_t>(0xE001 + k));   // mov #k+1,r0
+            b.Put(static_cast<uint16_t>(0x1F00 + k));   // mov.l r0,@(4k,r15)
+        }
+        b.Put(0x64F3);   // mov r15,r4
+        b.Put(0x7408);   // add #8,r4: &local[2]
+        b.Lit(5, kLaunderGlobal);   // the object
+        if (regs != "r7") b.Put(0xE61F);   // mov #31,r6
+        if (regs != "r6") b.Put(0xE725);   // mov #37,r7
+        b.Lit(0, kCode + gOff);
+        b.Put(0x400B);   // jsr @r0
+        b.Put(0x0009);
+        if (!callee)
+        {
+            b.Lit(6, kLaunderGlobal);
+            b.Put(0x5661);   // mov.l @(4,r6),r6: the kept pointer
+            b.Put(0xE255);   // mov #0x55,r2
+            b.Put(0x2626);   // mov.l r2,@-r6
+            b.Put(0x2626);
+            b.Put(0x2626);   // three stores, the last at r15 + 0
+        }
+        b.Put(0x60F2);   // mov.l @r15,r0: the word at the call's r15
+        b.Put(0x7F10);   // add #16,r15
+        b.Put(0x4F26);   // lds.l @r15+,pr
+        b.Put(0x000B);
+        b.Put(0x0009);
+        b.at = gOff / 2;   // g
+        b.Put(0x2338);   // tst r3,r3: reads r3 on entry, so g is withheld
+        b.Lit(1, kLaunderGlobal);
+        b.Put(0x1141);   // mov.l r4,@(4,r1): keeps the pointer
+        if (callee)
+        {
+            b.Put(0xE055);   // mov #0x55,r0
+            b.Put(0x2F02);   // mov.l r0,@r15: its first stack argument word, the caller's r15 + 0
+        }
+        b.Put(0x000B);
+        b.Put(0x0009);
+        shape = "walk14.stackarg." + regs + (callee ? ".callee" : ".walk");
+    }
+    else
+    {
+        // A3-122: segments of up to 1,000 stores with trampolines between them (bf reaches 256 bytes, bra 4 KB), as cap14.py builds them
+        // The body is past the reach of the pool at kCode + 0x100, so the index's global is a literal at kCode + 8, jumped over.
+        const int n = 4100 + static_cast<int>(rng.Below(201));
+        b.Put(0xD301);   // mov.l @(kCode + 8),r3
+        b.Put(0xA003);   // bra kCode + 12
+        b.Put(0x0009);
+        b.Put(0x0009);
+        b.Put(static_cast<uint16_t>(kLaunderGlobal >> 16));
+        b.Put(static_cast<uint16_t>(kLaunderGlobal));
+        b.Put(0x6332);   // mov.l @r3,r3: an index, 0 in the run
+        b.Put(0x7FE8);   // add #-24,r15
+        b.Put(0x62F3);   // mov r15,r2
+        b.Put(0x7210);   // add #16,r2
+        b.Put(static_cast<uint16_t>(0xE000 | K));
+        b.Put(0x2F02);   // mov.l r0,@r15
+        b.Put(0x323C);   // add r3,r2: an unbounded index
+        b.Put(0xE104);   // mov #4,r1
+        size_t prev = b.at;   // L
+        int left = n;
+        while (left > 0)
+        {
+            const int seg = std::min(1000, left);
+            left -= seg;
+            for (int i = 0; i < seg; ++i) b.Put(0x1211);   // mov.l r1,@(4,r2)
+            if (left > 0)
+            {
+                const size_t braOver = b.at;
+                b.Put(0xA000);   // bra OVER (patched)
+                b.Put(0x0009);
+                const size_t m = b.at;   // M: bra prev
+                b.Put(static_cast<uint16_t>(0xA000 | ((static_cast<int>(prev) - static_cast<int>(b.at) - 2) & 0xFFF)));
+                b.Put(0x0009);
+                b.w[braOver] = static_cast<uint16_t>(0xA000 | ((static_cast<int>(b.at) - static_cast<int>(braOver) - 2) & 0xFFF));
+                prev = m;
+            }
+        }
+        b.Put(0x2216);   // mov.l r1,@-r2
+        b.Put(0x4110);   // dt r1
+        b.Put(0x8902);   // bt EXIT
+        b.Put(0x0009);
+        b.Put(static_cast<uint16_t>(0xA000 | ((static_cast<int>(prev) - static_cast<int>(b.at) - 2) & 0xFFF)));   // bra prev
+        b.Put(0x0009);
+        b.Put(0x60F2);   // EXIT: mov.l @r15,r0
+        b.Put(0x7F18);   // add #24,r15
+        b.Put(0x000B);
+        b.Put(0x0009);
+        shape = "walk14.cap";
+        c.words = b.w;
+        c.name = "seed" + std::to_string(seed) + "_walk14";
+        return true;
+    }
+    c.words = b.Finish();
+    for (const auto& d : data)
+    {
+        if (c.words.size() < d.first + 2) c.words.resize(d.first + 2, 0x0009);
+        c.words[d.first] = static_cast<uint16_t>(d.second >> 16);
+        c.words[d.first + 1] = static_cast<uint16_t>(d.second);
+    }
+    c.name = "seed" + std::to_string(seed) + "_walk14";
+    return true;
+}
+
 // The check of the laundered walks: lend the callees (deepest first: kCode + 0xC0, then kCode + 0x80, when the blob has code there), decompile
 // the entry, run once, and compare every constant return with the run's r0 (as CheckSpillWalks).
 std::vector<CVerdict> CheckLaunderWalks(Sh2Decompiler& d, const std::vector<CCase>& cases, const std::vector<std::string>* shapes = nullptr)
@@ -8979,8 +9223,11 @@ std::vector<CVerdict> CheckLaunderWalks(Sh2Decompiler& d, const std::vector<CCas
         dts::Put16(hw, kSentinel - 0x06000000u + 2, 0x0009);
         auto snap = dts::MakeSnapshot(hw, 7000 + ci);
         std::vector<std::pair<uint32_t, Prototype>> protos;
+        // (area 3 round 14 fix) A3-122's body is one function of 8 KB: nothing at kCode + 0x80 or 0xC0 is a callee, and its loop runs 17,000 steps
+        const bool cap = shapes != nullptr && ci < shapes->size() && (*shapes)[ci] == "walk14.cap";
         for (uint32_t off : { 0xC0u, 0x80u })
         {
+            if (cap) break;
             const size_t wi = off / 2;
             if (c.words.size() <= wi || c.words[wi] == 0x0009) continue;
             DecompileRequest cq;
@@ -9019,7 +9266,7 @@ std::vector<CVerdict> CheckLaunderWalks(Sh2Decompiler& d, const std::vector<CCas
         machine->Set("r15", kStackTop);
         machine->Set("pr", kSentinel);
         RunOut run;
-        if (!machine->Run(kCode, kSentinel, kStepLimit, run, env))
+        if (!machine->Run(kCode, kSentinel, cap ? 40000 : kStepLimit, run, env))
         {
             v.cls = "generator:no-return";
             continue;
@@ -9028,12 +9275,33 @@ std::vector<CVerdict> CheckLaunderWalks(Sh2Decompiler& d, const std::vector<CCas
         for (std::sregex_iterator it(v.text.begin(), v.text.end(), ret), e; it != e; ++it)
         {
             any = true;
-            const std::string what = (*it)[1].str();
+            std::string what = (*it)[1].str();
+            std::string folded;   // (outlives the match below)
             std::smatch m;
+            // (area 3 round 14 fix, A3-121) A temporary the text writes once, with a constant, and returns is that constant: a register or an
+            // unmapped stack word (`xVar2 = 1; f(...); return xVar2;`, A3-117), which no call or store of the text can change. A stack local
+            // (`xStack_14`) is memory a call may write, and is not resolved. Round 13's check counted such a text as a local and never read it.
             if (!std::regex_match(what, m, literal))
             {
-                local = true;
-                continue;
+                static const std::regex temp("^(?:xVar|iVar|uVar|in_)\\w*$");
+                if (std::regex_match(what, temp) && v.text.find("&" + what) == std::string::npos)
+                {
+                    const std::regex assign("\\b" + what + " = ([^;]*);");
+                    int writes = 0;
+                    for (std::sregex_iterator a(v.text.begin(), v.text.end(), assign), ae; a != ae; ++a)
+                    {
+                        ++writes;
+                        folded = (*a)[1].str();
+                    }
+                    if (writes != 1 || !std::regex_match(folded, literal)) folded.clear();
+                }
+                if (folded.empty())
+                {
+                    local = true;
+                    continue;
+                }
+                what = what + " (= " + folded + ")";
+                std::regex_match(folded, m, literal);
             }
             const std::string n = m[1].str();
             const bool neg = n[0] == '-';
@@ -9101,8 +9369,11 @@ void TestPrintedC()
         for (const auto& rr : kRawRegister)
         {
             const std::vector<CVerdict> rv = CheckPrintedC(d, { { rr.first, rr.second } }, nIn, cc, 0x51ED, 8996);
-            std::printf("pin '%s': %s (%s)\n", rr.first, rv[0].cls.c_str(), rv[0].detail.c_str());
-            CHECK(rv[0].cls == "raw-stack-register");
+            std::printf("pin '%s': %s (%s)\n", rr.first, rv[0].cls.empty() ? "agrees" : rv[0].cls.c_str(), rv[0].detail.c_str());
+            // (area 3 round 14 fix, patch 0066) Each walk's pointer is stepped down, so it is no exact frame offset: the frame escapes, the
+            // walk's guard covers the stack space, and the save slot it reaches stays mapped (ActionRestrictLocal). The text names the slot as a
+            // local where it named the raw register, and agrees with the run; the excuse stays for a raw register another way may leave.
+            CHECK(rv[0].cls.empty() && rv[0].compared);
             CHECK(!IsFailing(rv[0]));
         }
         // A3-102 (area 3 round 12 fix, patch 0063): a pointer stepped up from a local over a slot the function saved GBR in (`stc gbr,r7 ;
@@ -9306,6 +9577,13 @@ void TestPrintedC()
                 cases.push_back(i13);
                 shapes.push_back(shape);
             }
+            // (area 3 round 14 fix, A3-121) ...and the walks and words of A3-117 to A3-119, A3-122 and A3-126 on a fourth
+            CCase w14;
+            if (GenWalk14Fn(static_cast<uint64_t>(seed), w14, shape))
+            {
+                cases.push_back(w14);
+                shapes.push_back(shape);
+            }
         }
         if (launderWords)
         {
@@ -9330,6 +9608,20 @@ void TestPrintedC()
             ++staleByShape[shapes[i]];
             std::printf("FINDING [%s] %s (%s)\n  detail: %s\n  replay: SE_GENERATED_PRINTEDC=only SE_GENERATED_LAUNDER_WORDS=\"%s\"\n%s\n", lv[i].cls.c_str(),
                         cases[i].name.c_str(), shapes[i].c_str(), lv[i].detail.c_str(), WordsText(cases[i].words).c_str(), lv[i].text.c_str());
+        }
+        // (area 3 round 14 fix) the round 14 stream's draws, each with how many texts were compared by value (a constant or a resolved temporary)
+        std::map<std::string, std::pair<int, int>> walk14;
+        for (size_t i = 0; i < lv.size(); ++i)
+            if (shapes[i].compare(0, 7, "walk14.") == 0)
+            {
+                ++walk14[shapes[i]].first;
+                if (lv[i].compared) ++walk14[shapes[i]].second;
+            }
+        if (!walk14.empty())
+        {
+            std::printf("round 14 walks (drawn/compared):");
+            for (const auto& k : walk14) std::printf(" %s=%d/%d", k.first.c_str(), k.second.first, k.second.second);
+            std::printf("\n");
         }
         std::printf("laundered walks: functions=%zu classes:", lv.size());
         for (const auto& k : launderClasses) std::printf(" %s=%d", k.first.c_str(), k.second);
@@ -10393,6 +10685,28 @@ void TestRound13FixPins(Sh2Decompiler& d)
         CHECK(rep.findings.empty());
         CHECK(count(rep, "excluded.call-result-used.return-dropped") >= 1);
     }
+    // A3-123 (grammar 2 seed 2616394): function 0 byte-swaps r5's low 16 bits (`char *param_2`, 0x06021100 -> 0x06020011) and hands the result
+    // to a callee that stores a byte through it. 0x06020011 lands in r4's arena (0x06020xxx) by chance, and the storesThrough arena check took
+    // the store for one through r4, which storesThrough does not name (the store is through r5). The same oracle false positive as A3-100 and
+    // A3-115, in the storesThrough path instead of outOrigins: BitwiseOfOthers now clears the arena attribution there too.
+    {
+        RunOut run;
+        run.init[4] = 0x06020100u;
+        run.init[5] = 0x06021100u;
+        run.use.readFirst = (1u << 4) | (1u << 5);
+        CallEffects viaR5 = CallEffects();
+        viaR5.storesThrough = 1u << 5;
+        viaR5.spDelta = 0;
+        run.trace.push_back(TraceRec{ 0x0u, true, 1, 0x06020011u, 0x42u });   // a byte store at the swapped address
+        std::string sig;
+        const std::string why = EffectClaimsContradicted(viaR5, run, &sig);
+        std::printf("pin 'A3-123 grammar 2 seed 2616394 (swap into r4 arena)': %s\n", why.empty() ? "no contradiction" : (sig + ": " + why).c_str());
+        CHECK(why.empty());
+        // ...and a genuine store through r4 is still demanded (not a swap of r5)
+        RunOut r4run = run;
+        r4run.trace.back() = TraceRec{ 0x0u, true, 1, 0x06020104u, 0x42u };
+        CHECK(!EffectClaimsContradicted(viaR5, r4run, &sig).empty() && sig == std::string("claim-wrong:storesThrough"));
+    }
 }
 
 // ===== Area 3, round 9 fix: the shapes of A3-56 to A3-59 and A3-62 as modules, the grammar's choices, and the claims of A3-63 =====
@@ -10665,6 +10979,27 @@ void TestA365Pins(Sh2Decompiler& d)
         for (const char* k : { "escape13.index.add", "escape13.index.sub", "escape13.twoargs.lent", "escape13.twoargs.unlent", "escape13.stackkeep.lent", "escape13.stackkeep.unlent",
                                "escape13.stackkeep.lent.r4r7", "escape13.stackkeep.unlent.r4r7",
                                "escape13.reload.swap2", "escape13.reload.mask", "escape13.reload.global" })
+            CHECK(drawn[k] > 0);
+    }
+    // Round 14 fix (A3-121): the stream of A3-117 to A3-119, A3-122 and A3-126 draws each shape and variant (the cap one seed in about 800)
+    {
+        std::map<std::string, int> drawn;
+        int n = 0;
+        for (uint64_t seed = 1; seed <= 40000; ++seed)
+        {
+            CCase c;
+            std::string shape;
+            if (!GenWalk14Fn(seed, c, shape)) continue;
+            ++n;
+            ++drawn[shape];
+            ++drawn[shape.substr(0, shape.rfind('.'))];
+        }
+        std::printf("pin 'round 14 walk draws': %d functions in 40000 seeds, %zu kinds, %d of the cap\n", n, drawn.size(), drawn["walk14.cap"]);
+        for (const char* k : { "walk14.idx.down.c", "walk14.idx.down.u", "walk14.idx.subup.c", "walk14.idx.subup.u", "walk14.idx.negup.c", "walk14.idx.negup.u",
+                               "walk14.stride.pool.add", "walk14.stride.pool.sub", "walk14.stride.poolw.add", "walk14.stride.poolw.sub",
+                               "walk14.stride.reload.add", "walk14.stride.reload.sub", "walk14.stride.global.add", "walk14.stride.global.sub",
+                               "walk14.stackarg.r6.walk", "walk14.stackarg.r7.walk", "walk14.stackarg.r6r7.walk",
+                               "walk14.stackarg.r6.callee", "walk14.stackarg.r7.callee", "walk14.stackarg.r6r7.callee", "walk14.cap" })
             CHECK(drawn[k] > 0);
     }
 }
