@@ -541,11 +541,122 @@ void RunThreeWay(Gr& t, uint64_t seedBase, uint64_t count, const char* outFile)
     std::printf("edge14 threeway: %ld graphs, %ld rewritten, %ld wrong\n", graphs, rewritten, wrong);
 }
 
+
+// ---- RuleDivChain (A2-84, A2-90) ---------------------------------------------------------------------------------------------------------------
+// `(x / c1) / c2` and `(x s/ c1) s/ c2` and `(x >> n) / c` at 1 byte for every pair of constants (the whole 256 x 256 grid) and every x, at 2 and 4 bytes for the
+// pairs of edge values and random ones. The value of the outer division must not change when the rule is applied.
+void RunDivChain(Gr& t, int size, uint64_t first, uint64_t count, const char* outFile)
+{
+    long graphs = 0, rewritten = 0, wrong = 0;
+    int shown = 0;
+    std::string out;
+    const uint64_t m = Mask(size);
+    std::vector<uint64_t> cs;
+    if (size == 1) for (uint64_t i = 0; i < 256; ++i) cs.push_back(i);
+    else
+    {
+        Rng r(77 + size);
+        const uint64_t hib = (m >> 1) + 1;
+        for (uint64_t e : { (uint64_t)0, (uint64_t)1, (uint64_t)2, (uint64_t)3, (uint64_t)5, (uint64_t)7, (uint64_t)10, (uint64_t)255, (uint64_t)256, (uint64_t)257, (uint64_t)65535, (uint64_t)65536, (uint64_t)65537, m, m - 1, m - 2, hib, hib - 1, hib + 1, hib + 2, m >> 2, (m >> 2) + 1, (m >> 3) + 1 }) cs.push_back(e & m);
+        for (int i = 0; i < 40; ++i) cs.push_back(r.next() & m);
+        for (int k = 1; k < 8 * size; ++k) cs.push_back(((uint64_t)1 << k) & m), cs.push_back((((uint64_t)1 << k) + 1) & m), cs.push_back((((uint64_t)1 << k) - 1) & m);
+    }
+    const uint64_t n1 = cs.size();
+    for (uint64_t idx = first; idx < first + count && idx < n1 * n1 * 3; ++idx)
+    {
+        const int kind = static_cast<int>(idx % 3);        // 0 unsigned/unsigned, 1 signed/signed, 2 (x >> n) / c
+        const uint64_t pair = idx / 3;
+        const uint64_t c1 = cs[pair / n1], c2 = cs[pair % n1];
+        if (c2 == 0 || (kind != 2 && c1 == 0)) { out.push_back('-'); continue; }
+        t.reset();
+        Varnode* x = t.input(size);
+        Varnode* d1;
+        int sa = 0;
+        if (kind == 0) d1 = t.op(CPUI_INT_DIV, size, x, t.k(size, c1));
+        else if (kind == 1) d1 = t.op(CPUI_INT_SDIV, size, x, t.k(size, c1));
+        else { sa = static_cast<int>(c1 % (8 * size + 3)); d1 = t.op(CPUI_INT_RIGHT, size, x, t.k(4, sa)); }
+        Varnode* d2 = t.op(kind == 1 ? CPUI_INT_SDIV : CPUI_INT_DIV, size, d1, t.k(size, c2));
+        Varnode* rd = t.op(CPUI_COPY, size, d2);       // d1 has this one reader only (the rule asks that)
+        (void)rd;
+        t.consumeAll();
+        t.fd->calcNZMask();
+        std::vector<uint64_t> xs;
+        if (size == 1) for (uint64_t i = 0; i < 256; ++i) xs.push_back(i);
+        else { Rng r(idx); xs = Edges(size, r); for (uint64_t c : { c1, c2, c1 * c2 }) for (int d = -2; d <= 2; ++d) xs.push_back((c + d) & m); for (int i = 0; i < 100; ++i) xs.push_back(r.next() & m); }
+        gXSize = size; gXOff = x->getOffset();
+        std::vector<uint64_t> before; std::vector<char> def;
+        for (uint64_t xv : xs) { gX = xv; gUndefined = false; gUnsup = false; before.push_back(Val(d2)); def.push_back(gUndefined ? 0 : 1); }
+        RuleDivChain rule("scratch");
+        int rc;
+        try { rc = rule.applyOp(d2->getDef(), *t.fd); } catch (LowlevelError&) { out.push_back('X'); continue; }
+        ++graphs;
+        if (rc) ++rewritten;
+        bool bad = false;
+        for (size_t i = 0; i < xs.size() && !bad; ++i)
+        {
+            gX = xs[i]; gUndefined = false; gUnsup = false;
+            const uint64_t got = Val(d2);
+            if (def[i] && !gUndefined && got != before[i]) bad = true;
+        }
+        out.push_back(bad ? 'W' : (rc ? 'C' : '0'));
+        if (bad)
+        {
+            ++wrong;
+            if (shown++ < (std::getenv("DX_SHOW") ? std::atoi(std::getenv("DX_SHOW")) : 20))
+                std::printf("WRONG RuleDivChain: size %d kind %d c1 %llx (sa %d) c2 %llx\n", size, kind, (unsigned long long)c1, sa, (unsigned long long)c2);
+        }
+    }
+    FILE* fp = std::fopen(outFile, "wb");
+    if (fp) { std::fwrite(out.data(), 1, out.size(), fp); std::fclose(fp); }
+    std::printf("edge14 divchain size %d: %ld graphs, %ld rewritten, %ld wrong (grid %llu x %llu x 3)\n", size, graphs, rewritten, wrong, (unsigned long long)n1, (unsigned long long)n1);
+}
+
+// ---- RuleSignForm2 (A2-83) -----------------------------------------------------------------------------------------------------------------------
+// `sub(sext(V) * C, c) s>> (8*size - 1)`: V of 1 byte with every multiplier of the 2-byte multiply, V of 2 bytes with the edge multipliers of 4 and 8 bytes.
+void RunSignForm2(Gr& t, int vs, uint64_t first, uint64_t count, const char* outFile)
+{
+    long graphs = 0, rewritten = 0, wrong = 0;
+    int shown = 0;
+    std::string out;
+    for (uint64_t idx = first; idx < first + count; ++idx)
+    {
+        const int ms = vs == 1 ? 2 : (idx & 1 ? 4 : 8);
+        uint64_t C;
+        Rng r(idx);
+        if (vs == 1) C = idx & 0xFFFF;
+        else { std::vector<uint64_t> e = Edges(ms, r); C = e[(idx >> 1) % e.size()]; }
+        t.reset();
+        Varnode* x = t.input(vs);
+        Varnode* ext = t.op(CPUI_INT_SEXT, ms, x);
+        Varnode* prod = t.op(CPUI_INT_MULT, ms, ext, t.k(ms, C));
+        Varnode* hi = t.op(CPUI_SUBPIECE, vs, prod, t.k(4, ms - vs));
+        Varnode* sgn = t.op(CPUI_INT_SRIGHT, vs, hi, t.k(4, 8 * vs - 1));
+        t.consumeAll();
+        t.fd->calcNZMask();
+        std::vector<uint64_t> xs;
+        if (vs == 1) for (uint64_t i = 0; i < 256; ++i) xs.push_back(i); else xs = Edges(vs, r);
+        gXSize = vs; gXOff = x->getOffset();
+        std::vector<uint64_t> before;
+        for (uint64_t xv : xs) { gX = xv; gUndefined = false; gUnsup = false; before.push_back(Val(sgn)); }
+        RuleSignForm2 rule("scratch");
+        const int rc = rule.applyOp(sgn->getDef(), *t.fd);
+        ++graphs;
+        if (rc) ++rewritten;
+        bool bad = false;
+        for (size_t i = 0; i < xs.size() && !bad; ++i) { gX = xs[i]; gUndefined = false; gUnsup = false; if (Val(sgn) != before[i]) bad = true; }
+        out.push_back(bad ? 'W' : (rc ? 'C' : '0'));
+        if (bad) { ++wrong; if (shown++ < 20) std::printf("WRONG RuleSignForm2: V %d bytes, multiply %d bytes, C %llx\n", vs, ms, (unsigned long long)C); }
+    }
+    FILE* fp = std::fopen(outFile, "wb");
+    if (fp) { std::fwrite(out.data(), 1, out.size(), fp); std::fclose(fp); }
+    std::printf("edge14 signform2 V %d: %ld graphs, %ld rewritten, %ld wrong\n", vs, graphs, rewritten, wrong);
+}
+
 }  // namespace
 
 int main(int argc, char** argv)
 {
-    if (argc < 6) { std::printf("usage: %s <scratch dir> <threeway> <first seed> <count> <out file>\n", argv[0]); return 2; }
+    if (argc < 6) { std::printf("usage: %s <scratch dir> <threeway|divchain1|divchain2|divchain4|divchain8|signform1|signform2> <first seed> <count> <out file>\n", argv[0]); return 2; }
     std::setvbuf(stdout, nullptr, _IOLBF, 0);
     const std::string scratch = argv[1], mode = argv[2];
     const uint64_t first = std::strtoull(argv[3], nullptr, 10), count = std::strtoull(argv[4], nullptr, 10);
@@ -565,5 +676,11 @@ int main(int argc, char** argv)
     t.reg = arch.getSpaceByName("register");
     gReg = t.reg;
     if (mode == "threeway") RunThreeWay(t, first, count, argv[5]);
+    else if (mode == "divchain1") RunDivChain(t, 1, first, count, argv[5]);
+    else if (mode == "divchain2") RunDivChain(t, 2, first, count, argv[5]);
+    else if (mode == "divchain4") RunDivChain(t, 4, first, count, argv[5]);
+    else if (mode == "divchain8") RunDivChain(t, 8, first, count, argv[5]);
+    else if (mode == "signform1") RunSignForm2(t, 1, first, count, argv[5]);
+    else if (mode == "signform2") RunSignForm2(t, 2, first, count, argv[5]);
     return 0;
 }

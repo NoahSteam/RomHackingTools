@@ -20,8 +20,10 @@
 #   70 divdiv   (x / d1) / d2, (x % d1) % d2, (x >> a) / d, x / (power of two) / d and negative divisors, signed and unsigned (RuleDivChain, RuleSignDiv2)
 #   71 varshift variable shifts and rotates of a register and of a pair by a counted loop over (r5 & 31), the amount 0 skipped
 #   73 signmod  x % 2^k and x / 2^k of a signed byte, word or longword for every k (the bias added to a negative x by a branch or without one; RuleSignMod2nOpt2)
+#   74 deepsoup 15 to 45 steps over r0..r3 with the T flag produced and consumed in every way (compares, tst, cmp/str, dt, addc/subc/negc/addv/subv, div0/div1, rotcl/rotcr, movt),
+#               the multiplies and their mach/macl reads, extensions, swaps, forward branches over one to three steps
 #   72 mix      two or three blocks of the families above in a row (the result of one the input of the next)
-# usage: dagen14.py <first seed> <count> [family 62..73]   -> one function per seed, ";" joined (SE_GENERATED_PRINTEDC_WORDS)
+# usage: dagen14.py <first seed> <count> [family 62..74]   -> one function per seed, ";" joined (SE_GENERATED_PRINTEDC_WORDS)
 #        dagen14.py extras <first seed> <count> <family>   -> the comma-joined hex list for SE_GENERATED_PRINTEDC_EXTRA
 import importlib.util, os, random, sys
 
@@ -271,6 +273,7 @@ def fam_cmpstr(r, f):
         f.add(cmp_eq(0, 0) if False else 0x8800 | 4)       # cmp/eq #4,r0
         f.br('bf', 'top')
         f.label('out')
+        f.add(mov_(1, 0)); f.rts_slot = mov_(0, 1)
     elif form == 4:                     # null-terminated byte count in a word by tests of the bytes in turn (swap.b / shifts)
         f.add(movi(0, 0), mov_(2, 4))
         f.add(extub(3, 2), tstr(3, 3)); f.br('bt', 'e')
@@ -279,6 +282,7 @@ def fam_cmpstr(r, f):
         f.add(addi(0, 1), SHLR8 | 2 << 8, extub(3, 2), tstr(3, 3)); f.br('bt', 'e')
         f.add(addi(0, 1))
         f.label('e')
+        f.add(mov_(1, 0)); f.rts_slot = mov_(0, 1)
     else:                               # cmp/str of a word against a sign-extended byte pattern, the T read after another test
         f.add(extsb(1, 5), cmp_str(1, 4), movt(0), cmppz(4), movt(1), xor_(1, 0))
     if r.random() < 0.3: tail_common(r, f, 0, 3)
@@ -526,26 +530,28 @@ def fam_divdiv(r, f):
 
 # ------------------------------------------------------------------------------------------------------------------------------------ 71 varshift
 def fam_varshift(r, f):
+    # the accumulator is r1 (r0 holds the high word of a pair) and the result is handed back by the rts slot `mov r1,r0`, the compiled idiom for `return r1`: the
+    # engine takes r0 for a return only then (A2-34), and a loop whose result is left in r0 by a `nop` slot is printed as `return;` by design
     form = r.randrange(0, 4)
     if form == 0:                               # rotate left by (r5 & 31), the amount 0 skipped
-        f.add(mov_(0, 4), mov_(2, 5)); f.lit(3, 0x1F); f.add(and__(3, 2), tstr(2, 2)); f.br('bt', 'e')
-        f.label('top'); f.add(ROTL | 0 << 8, dt(2)); f.br('bf', 'top'); f.label('e')
+        f.add(mov_(1, 4), mov_(2, 5)); f.lit(3, 0x1F); f.add(and__(3, 2), tstr(2, 2)); f.br('bt', 'e')
+        f.label('top'); f.add(ROTL | 1 << 8, dt(2)); f.br('bf', 'top'); f.label('e')
     elif form == 1:                             # a 64-bit shift left by (r6 & 63) of r4:r5, one bit at a time
-        f.add(mov_(1, 4), mov_(0, 5), mov_(2, 6)); f.lit(3, 0x3F); f.add(and__(3, 2), tstr(2, 2)); f.br('bt', 'e')
-        f.label('top'); f.add(SHLL | 0 << 8, ROTCL | 1 << 8, dt(2)); f.br('bf', 'top'); f.label('e')
-        if r.random() < 0.5: f.add(mov_(0, 1))
-    elif form == 2:                             # a logical right shift by a loop that counts down, the result tested
-        f.add(mov_(0, 4), mov_(2, 5)); f.lit(3, 0x1F); f.add(and__(3, 2), tstr(2, 2)); f.br('bt', 'e')
-        f.label('top'); f.add((SHLR if r.random() < 0.5 else SHAR) | 0 << 8, dt(2)); f.br('bf', 'top'); f.label('e')
-        if r.random() < 0.4: f.add(tstr(0, 0), movt(0))
+        f.add(mov_(0, 4), mov_(1, 5), mov_(2, 6)); f.lit(3, 0x3F); f.add(and__(3, 2), tstr(2, 2)); f.br('bt', 'e')
+        f.label('top'); f.add(SHLL | 1 << 8, ROTCL | 0 << 8, dt(2)); f.br('bf', 'top'); f.label('e')
+        if r.random() < 0.5: f.add(mov_(1, 0))
+    elif form == 2:                             # a right shift (logical or arithmetic) by a loop that counts down, the result tested
+        f.add(mov_(1, 4), mov_(2, 5)); f.lit(3, 0x1F); f.add(and__(3, 2), tstr(2, 2)); f.br('bt', 'e')
+        f.label('top'); f.add((SHLR if r.random() < 0.5 else SHAR) | 1 << 8, dt(2)); f.br('bf', 'top'); f.label('e')
+        if r.random() < 0.4: f.add(tstr(1, 1), movt(1))
     else:                                       # shift by a variable amount through shifts of 8 and 1: (n >> 3) bytes then n & 7 bits
-        f.add(mov_(0, 4), mov_(2, 5)); f.lit(3, 0x1F); f.add(and__(3, 2), mov_(3, 2)); shr_logical(f, 3, 3)
+        f.add(mov_(1, 4), mov_(2, 5)); f.lit(3, 0x1F); f.add(and__(3, 2), mov_(3, 2)); shr_logical(f, 3, 3)
         f.add(tstr(3, 3)); f.br('bt', 'l1')
-        f.label('l0'); f.add(SHLR8 | 0 << 8, dt(3)); f.br('bf', 'l0')
-        f.label('l1'); f.add(andi(0xFF) if False else mov_(3, 2)); f.add(0xE000 | 1 << 8 | 7); f.add(and__(1, 3), tstr(3, 3)); f.br('bt', 'e')
-        f.label('l2'); f.add(SHLR | 0 << 8, dt(3)); f.br('bf', 'l2')
+        f.label('l0'); f.add(SHLR8 | 1 << 8, dt(3)); f.br('bf', 'l0')
+        f.label('l1'); f.add(mov_(3, 2)); f.add(movi(0, 7)); f.add(and__(0, 3), tstr(3, 3)); f.br('bt', 'e')
+        f.label('l2'); f.add(SHLR | 1 << 8, dt(3)); f.br('bf', 'l2')
         f.label('e')
-
+    f.rts_slot = mov_(0, 1)
 
 # ------------------------------------------------------------------------------------------------------------------------------------ 73 signmod
 def fam_signmod(r, f):
@@ -583,6 +589,57 @@ def fam_signmod(r, f):
         f.add(cmppz(src)); f.br('bt', 'q'); f.add(tstr(0, 0)); f.br('bt', 'q'); f.lit(3, (~bias) & M32); f.add(or__(3, 0)); f.label('q')
     if r.random() < 0.3: tail_common(r, f, 0, 3)
 
+# ------------------------------------------------------------------------------------------------------------------------------------ 74 deepsoup
+def fam_deepsoup(r, f):
+    # 15 to 45 steps over r0..r3 (r4..r7 are read-only inputs), the T flag produced and consumed in every way the SH-2 has (compares, tst, cmp/str, dt, shifts and
+    # rotates through T, addc/subc/negc, addv/subv, div0u/div0s/div1, movt), the multiplies with their mach/macl reads, extensions and swaps, and forward
+    # branches over one to three steps; the result is handed back by the rts slot `mov rX,r0`
+    R = [0, 1, 2, 3]
+    f.add(mov_(0, 4), mov_(1, 5), mov_(2, 6), mov_(3, 7))
+    if r.random() < 0.3: f.add(0x0028)                               # clrmac
+    if r.random() < 0.5: f.add(r.choice([0x0008, 0x0018]))             # clrt / sett
+    n = r.randrange(15, 46)
+    lab = 0
+    pending = []                                                       # (label name, steps left)
+    def src(): return r.choice(R + [4, 5, 6, 7])
+    for _ in range(n):
+        k = r.randrange(0, 44)
+        a, b = r.choice(R), src()
+        if k < 8: f.add(r.choice([add__, sub__, and__, or__, xor_, mov_, neg_, not_, swapb_, swapw_, xtrct, extub, extuw, extsb, extsw][r.randrange(0, 15)])(b, a)) if False else f.add(r.choice([0x300C, 0x3008, 0x2009, 0x200B, 0x200A, 0x6003, 0x600B, 0x6007, 0x6008, 0x6009, 0x200D, 0x600C, 0x600D, 0x600E, 0x600F]) | a << 8 | b << 4)
+        elif k < 12: f.add(r.choice([SHLL, SHLR, SHAR, ROTL, ROTR, SHLL2, SHLR2, SHLL8, SHLR8, SHLL16, SHLR16]) | a << 8)
+        elif k < 14: f.add(addi(a, r.choice([1, 2, -1, -2, 4, 0x7F, -0x80])))
+        elif k < 15: f.add(movi(a, r.choice([0, 1, -1, 0x7F, -0x80, 0x55])))
+        elif k < 17: f.lit(a, r.choice([0xFFFF, 0x10000, 0x80000000, 0x7FFFFFFF, 0xFF00FF00, r.getrandbits(32)]))
+        elif k < 20: f.add(r.choice([cmpeq, cmphi, cmphs, cmpgt, cmpge, cmp_str, tstr])(b, a))
+        elif k < 21: f.add(r.choice([cmppz, cmppl, dt])(a))
+        elif k < 22: f.add(r.choice([0x8800 | r.choice([0, 1, 0x7F, 0x80, 0xFF]), 0xC800 | r.choice([1, 0x80, 0xFF, 0x0F])]))      # cmp/eq #imm,r0 ; tst #imm,r0
+        elif k < 24: f.add(movt(a))
+        elif k < 28: f.add(r.choice([addc, subc, addv, subv])(b, a))
+        elif k < 30: f.add(negc(b, a))
+        elif k < 33: f.add(r.choice([ROTCL, ROTCR, SHLL, SHLR]) | a << 8)
+        elif k < 34: f.add(r.choice([0x0008, 0x0018]))
+        elif k < 36: f.add(r.choice([div0u()]) if r.random() < 0.5 else div0s(src(), a))
+        elif k < 38: f.add(div1(b, a))
+        elif k < 40: f.add(r.choice([mulL, muluw, mulsw])(b, a), stsmacl(r.choice(R)))
+        elif k < 41: f.add(r.choice([dmulu, dmuls])(b, a), stsmach(r.choice(R)), stsmacl(r.choice(R)))
+        elif k < 42: f.add(0x401A | a << 8)                           # lds Rn,macl
+        elif k < 43: f.add(0x400A | a << 8)                           # lds Rn,mach
+        else:
+            lab += 1
+            nm = 'sk%d' % lab
+            f.br(r.choice(['bt', 'bf']), nm)
+            pending.append([nm, r.randrange(1, 4)])
+            continue
+        for p in pending: p[1] -= 1
+        for p in [p for p in pending if p[1] <= 0]:
+            f.label(p[0]); pending.remove(p)
+    for p in pending: f.label(p[0])
+    x, y = r.choice(R), r.choice(R)
+    kind = r.randrange(0, 3)
+    if kind == 1: f.add(r.choice([xor_, add__, or__])(y, x))
+    f.rts_slot = mov_(0, x)
+
+
 # ------------------------------------------------------------------------------------------------------------------------------------ 72 mix
 MIXFAMS = None
 
@@ -605,7 +662,7 @@ def fam_mix(r, f):
             f.add(mov_(r.choice([4, 4, 5]), 0))
 
 FAMS14 = {62: fam_shmul, 63: fam_muldi, 64: fam_shift64, 65: fam_cmpstr, 66: fam_bitops, 67: fam_divterm, 68: fam_div1len, 69: fam_cmov, 70: fam_divdiv,
-          71: fam_varshift, 72: fam_mix, 73: fam_signmod}
+          71: fam_varshift, 72: fam_mix, 73: fam_signmod, 74: fam_deepsoup}
 
 def build(seed, fam=None, want_fn=False):
     r = random.Random(seed * 104729 + 14)
@@ -613,7 +670,7 @@ def build(seed, fam=None, want_fn=False):
     f.d_hint = None
     fm = FAMS14[fam] if fam is not None else FAMS14[r.choice(sorted(FAMS14))]
     fm(r, f)
-    f.add(0x000B, 0x0009)
+    f.add(0x000B, getattr(f, 'rts_slot', 0x0009))
     if want_fn: return f
     return finish(f)
 
