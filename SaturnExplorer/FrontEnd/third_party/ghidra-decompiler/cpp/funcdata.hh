@@ -53,7 +53,7 @@ enum AccessFate {
   fate_dead,			///< Destroyed as dead, or by any transformation that is not one of the others
   fate_unreachable,		///< Destroyed with the unreachable block it was in
   fate_switch_lookup,		///< The read of a recovered switch's table: the switch stands for it
-  fate_frame_unread,		///< (0068) A write folded into the stack frame (recorded fate_folded_ordinary first) whose value no op but a MULTIEQUAL or INDIRECT read before it was destroyed
+  fate_frame_unread,		///< (0068) A read or write folded into the stack frame (recorded fate_folded_ordinary first) whose value no op but a MULTIEQUAL or INDIRECT read before it was destroyed
   fate_frame_removed		///< (0068) A read or write folded into the stack frame (recorded fate_folded_ordinary first) that went with an unreachable block
 };
 
@@ -222,6 +222,7 @@ public:
   void recordAccessFate(const PcodeOp *op,bool store,int4 size,const Address &addr,AccessFate fate);	///< Record how a memory access ended (SaturnExplorer)
   void recordAccessFold(const PcodeOp *op,const Varnode *vn);	///< Record a LOAD or STORE made a direct access of ordinary memory (SaturnExplorer)
   void recordFrameEnd(const PcodeOp *op,AccessFate fate);	///< Record how an access folded into the stack frame ended (SaturnExplorer, 0068)
+  void noteFrameFoldReads(PcodeOp *op);	///< Mark the frame folds an op reads as read (SaturnExplorer, 0068)
   const vector<FlowTable> &getFlowTables(void) const { return flowTables; }	///< Every indirect jump the last flow recovered (SaturnExplorer)
   const vector<FlowInsn> &getFlowInsns(void) const { return flowInsns; }	///< Every instruction the last flow translated (SaturnExplorer)
   const vector<AccessRecord> &getAccessFates(void) const { return accessFates; }	///< Every LOAD and STORE that ended, and how (SaturnExplorer)

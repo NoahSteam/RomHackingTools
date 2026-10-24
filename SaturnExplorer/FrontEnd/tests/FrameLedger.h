@@ -7,10 +7,11 @@
 // FoldedOrdinary, 'frame' set) pairs with nothing: the fold was taken for conservation. A3-124's
 // stores were folded, and the variable writes they became were then removed before the read of
 // them was found -- an access lost with "0 dropped against the reference run". Patch 0068 records
-// what the fold can still lose: a write whose value nothing but the engine's markers read when it
+// what the fold can still lose: an access whose value nothing but the engine's markers read when it
 // went (FrameUnread), and a frame access that went with an unreachable block (FrameRemoved). A
 // FrameUnread write is a loss when the code reads a byte of it later: some path of the flow as
-// first followed reaches a folded read of the frame that overlaps it before folded writes of the
+// first followed reaches a folded read of the frame that overlaps it, whose own value something
+// used (a pop of a register the engine takes for unaffected is no use), before folded writes of the
 // frame have covered every byte of it. Only folded writes, exact frame offsets the engine itself
 // placed, cover a byte; a store through a pointer that stayed one, or a call, may not write it.
 #pragma once
@@ -59,9 +60,11 @@ inline std::vector<FrameLoss> FrameLosses(const sfe::decomp::DecompileResult& r)
         int64_t hi;     // one past the last byte
         uint32_t insn;
     };
+    // Gone with unreachable code, or (a read) its value used by nothing.
     auto removed = [&](const AccessFate& f) {
         for (const AccessFate& g : r.accessFates)
-            if (g.fate == AccessFate::FrameRemoved && g.origBlock == f.origBlock && g.origOrder == f.origOrder && g.write == f.write)
+            if ((g.fate == AccessFate::FrameRemoved || (g.fate == AccessFate::FrameUnread && !f.write)) && g.origBlock == f.origBlock &&
+                g.origOrder == f.origOrder && g.write == f.write)
                 return true;
         return false;
     };

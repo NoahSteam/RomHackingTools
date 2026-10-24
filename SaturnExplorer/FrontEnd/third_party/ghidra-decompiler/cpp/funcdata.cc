@@ -236,16 +236,27 @@ void Funcdata::recordAccessFold(const PcodeOp *op,const Varnode *vn)
   // unless the value reaches what reads it: the op is flagged, opSetInput notes a reader, and opDestroy
   // records it again (fate_frame_unread) if it goes with no reader (A3-124's stores, removed before
   // the read was found, were counted as folded and nothing more).
-  if (op->getTime() < flowOps && vn->getSpace()->getType() == IPTR_SPACEBASE)
+  if (op->getTime() < flowOps && vn->getSpace()->getType() == IPTR_SPACEBASE) {
     op->setFrameFold();
+    // A LOAD's output has its readers already; a STORE's COPY output is new.
+    const Varnode *out = op->getOut();
+    if (!store && out != (const Varnode *)0) {
+      for(list<PcodeOp *>::const_iterator iter=out->beginDescend();iter!=out->endDescend();++iter)
+	if ((*iter)->code() != CPUI_MULTIEQUAL && (*iter)->code() != CPUI_INDIRECT) {
+	  op->setFrameFoldRead();
+	  break;
+	}
+    }
+  }
 }
 
 /// SaturnExplorer (patches/0068-engine-deadcode-late-stack-reads.patch): a LOAD or STORE that
 /// RuleLoadVarnode or RuleStoreVarnode folded into the stack frame ends a second time. With
-/// \b fate_frame_unread, a write is being destroyed and no op but a MULTIEQUAL or an INDIRECT (a
-/// marker of where a value may go, not a use) read the value it stored: a host compares this with
-/// the reads of the frame the code makes, and one that reads a byte of it later, with no write of
-/// the frame between, read a value the analysis dropped. With \b fate_frame_removed, the read or write
+/// \b fate_frame_unread, the op is being destroyed and no op but a MULTIEQUAL or an INDIRECT (a
+/// marker of where a value may go, not a use) read the value it stored or loaded: a host compares a
+/// write with the reads of the frame the code makes, and one that reads a byte of it later, with no
+/// write of the frame between, read a value the analysis dropped; a read whose value nothing used
+/// (a register pop the engine takes for unaffected) is no such read. With \b fate_frame_removed, the read or write
 /// went with an unreachable block, so it is no read of the frame the code makes. The record repeats
 /// the frame offset and size of the fold (the COPY's output may have been replaced since).
 /// \param op is the COPY the LOAD or STORE became, still whole
@@ -255,7 +266,6 @@ void Funcdata::recordFrameEnd(const PcodeOp *op,AccessFate fate)
 {
   for(vector<AccessRecord>::const_iterator iter=accessFates.begin();iter!=accessFates.end();++iter) {
     if ((*iter).time != op->getTime() || (*iter).fate != fate_folded_ordinary) continue;
-    if (fate == fate_frame_unread && !(*iter).store) return;
     AccessRecord rec(*iter);
     rec.fate = fate;
     accessFates.push_back(rec);
