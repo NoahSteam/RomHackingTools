@@ -3195,13 +3195,51 @@ void TestRuleGuardsRound13()
     {
         long applied = 0;
         const uint64_t cs[] = { 0x7fff, 0x7fffffff, 0xfffffffe, 0xfffe, 0x92492493, 0x24924925, 0xAAAAAAAB, 0x5556, 0x2493, 0x4925, 3, 0x81, 0xff };
+        auto runCase = [&](int xs, OpCode ext, uint64_t c0, int shape, int s, int k2, int limited) {
+            const int w = 2 * xs;
+            t.reset();
+            Varnode* in = t.input(xs);
+            Varnode* x = limited ? t.op(CPUI_INT_AND, xs, in, t.k(xs, 0xff)) : in;
+            Varnode* xe = t.op(ext, w, x);
+            Varnode* prod = t.op(CPUI_INT_MULT, w, xe, t.k(w, c0 & PbMask(w)));
+            Varnode* hi = t.op(CPUI_SUBPIECE, xs, prod, t.k(4, xs));
+            Varnode* out;
+            if (shape == 2)
+            {
+                Varnode* diff = t.op(CPUI_INT_ADD, xs, x, t.op(CPUI_INT_MULT, xs, hi, t.k(xs, PbMask(xs))));       // x - hi, as RuleSub2Add leaves it
+                Varnode* half = t.op(CPUI_INT_RIGHT, xs, diff, t.k(4, 1));
+                out = t.op(CPUI_INT_ADD, xs, half, hi);
+            }
+            else
+            {
+                Varnode* sh = s == 0 ? hi : t.op(ext == CPUI_INT_SEXT ? CPUI_INT_SRIGHT : CPUI_INT_RIGHT, xs, hi, t.k(4, s));
+                out = t.op(CPUI_INT_ADD, xs, sh, x);
+            }
+            if (k2 != 0) out = t.op(ext == CPUI_INT_SEXT ? CPUI_INT_SRIGHT : CPUI_INT_RIGHT, xs, out, t.k(4, k2));
+            Varnode* sink = t.op(CPUI_COPY, xs, out);
+            t.fd->calcNZMask();
+            std::vector<RcEnv> envs;
+            for (uint64_t vv : RcInputs(xs, c0, 29, 30)) envs.push_back({ { in, vv } });
+            const std::vector<uint64_t> before = RcValues(sink, envs);
+            RuleDivTermAdd a("scratch");
+            RuleDivTermAdd2 b("scratch");
+            RuleDivOpt c("scratch");
+            applied += R13Pool(t, { &a, &b, &c });
+            {
+                char label[160];
+                std::snprintf(label, sizeof(label), "RuleDivTermAdd/2 and RuleDivOpt (%d-byte %s%s, c=%llx, shape %d, shift %d, then >> %d)", xs, limited ? "masked " : "", ext == CPUI_INT_SEXT ? "sext" : "zext", static_cast<unsigned long long>(c0), shape, s, k2);
+                compare(label, sink, envs, before);
+            }
+        };
         for (int xs : { 1, 2, 4 })
             for (OpCode ext : { CPUI_INT_ZEXT, CPUI_INT_SEXT })
                 for (int cIndex = 0; cIndex < 13 + 34; ++cIndex)
                     for (int shape = 0; shape < 3; ++shape)   // 0: sub + shift + x, 1: sub + x (no shift), 2: x + ((x - w) >> 1) (RuleDivTermAdd2, zero extension)
-                        for (int s : { 0, 1, 2, 3, 7, 8 * xs, 8 * xs + 1 })
+                        for (int s : { 0, 1, 2, 3, 7, 8 * xs - 4, 8 * xs - 1, 8 * xs, 8 * xs + 1 })
                          for (int k2 : { 0, 2, 3, 4 * xs })     // the shift after the sum (what makes the sum a division)
+                          for (int limited = 0; limited < 2; ++limited)     // 1: x is a byte in a longword (the sum fits its add, the product may still wrap its multiply)
                         {
+                            if (limited && (xs != 4 || ext != CPUI_INT_ZEXT)) continue;
                             // the multipliers: the table, and for each of sixteen divisors the one whose sum with 2^n is that division's (so that the folded product is a
                             // division on the way, whether or not the product it started from fitted its multiply; 53771 with a shift of 16 after the sum is
                             // A2-89's `(mulhu(x, 0x38032949) + x) >> 16`, whose sum wraps its add)
@@ -3212,47 +3250,50 @@ void TestRuleGuardsRound13()
                             else
                             {
                                 const uint64_t divisors[] = { 3, 5, 6, 7, 9, 10, 11, 12, 13, 14, 25, 100, 641, 1000, 3000, 65537, 53771 };
-                                if (totalShift > 62) continue;
-                                const uint64_t y = ((static_cast<uint64_t>(1) << totalShift) / divisors[(cIndex - 13) / 2]) + 1 + ((cIndex - 13) & 1);
-                                if (y <= (static_cast<uint64_t>(1) << nBits)) continue;
-                                c0 = y - (static_cast<uint64_t>(1) << nBits);
+                                if (totalShift > 100 || nBits >= 64) continue;
+                                const unsigned __int128 one = 1;
+                                const unsigned __int128 y = ((one << totalShift) / divisors[(cIndex - 13) / 2]) + 1 + ((cIndex - 13) & 1);
+                                if (y <= (one << nBits) || ((y - (one << nBits)) >> 64) != 0) continue;
+                                c0 = static_cast<uint64_t>(y - (one << nBits));
                             }
                             if (shape == 1 && s != 0) continue;
                             if (shape == 2 && (ext == CPUI_INT_SEXT || s != 0)) continue;
-                            const int w = 2 * xs;
-                            t.reset();
-                            Varnode* x = t.input(xs);
-                            Varnode* xe = t.op(ext, w, x);
-                            Varnode* prod = t.op(CPUI_INT_MULT, w, xe, t.k(w, c0 & PbMask(w)));
-                            Varnode* hi = t.op(CPUI_SUBPIECE, xs, prod, t.k(4, xs));
-                            Varnode* out;
-                            if (shape == 2)
-                            {
-                                Varnode* diff = t.op(CPUI_INT_ADD, xs, x, t.op(CPUI_INT_MULT, xs, hi, t.k(xs, PbMask(xs))));       // x - hi, as RuleSub2Add leaves it
-                                Varnode* half = t.op(CPUI_INT_RIGHT, xs, diff, t.k(4, 1));
-                                out = t.op(CPUI_INT_ADD, xs, half, hi);
-                            }
-                            else
-                            {
-                                Varnode* sh = s == 0 ? hi : t.op(ext == CPUI_INT_SEXT ? CPUI_INT_SRIGHT : CPUI_INT_RIGHT, xs, hi, t.k(4, s));
-                                out = t.op(CPUI_INT_ADD, xs, sh, x);
-                            }
-                            if (k2 != 0) out = t.op(ext == CPUI_INT_SEXT ? CPUI_INT_SRIGHT : CPUI_INT_RIGHT, xs, out, t.k(4, k2));
-                            Varnode* sink = t.op(CPUI_COPY, xs, out);
-                            t.fd->calcNZMask();
-                            std::vector<RcEnv> envs;
-                            for (uint64_t vv : RcInputs(xs, c0, 29, 30)) envs.push_back({ { x, vv } });
-                            const std::vector<uint64_t> before = RcValues(sink, envs);
-                            RuleDivTermAdd a("scratch");
-                            RuleDivTermAdd2 b("scratch");
-                            RuleDivOpt c("scratch");
-                            applied += R13Pool(t, { &a, &b, &c });
-                            {
-                                char label[160];
-                                std::snprintf(label, sizeof(label), "RuleDivTermAdd/2 and RuleDivOpt (%d-byte %s, c=%llx, shape %d, shift %d, then >> %d)", xs, ext == CPUI_INT_SEXT ? "sext" : "zext", static_cast<unsigned long long>(c0), shape, s, k2);
-                                compare(label, sink, envs, before);
-                            }
+                            runCase(xs, ext, c0, shape, s, k2, limited);
                         }
+
+        // SE_R13_EXPLORE=<n>: n more cases with random shapes, shifts and multipliers (a random width of bits, or a division's), for a longer search than the grid
+        if (const char* ex = std::getenv("SE_R13_EXPLORE"))
+        {
+            const long n = std::atol(ex);
+            uint64_t state = 0x13579bdf2468ace1ull;
+            auto rnd = [&]() { uint64_t z = (state += 0x9E3779B97F4A7C15ull); z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ull; z = (z ^ (z >> 27)) * 0x94D049BB133111EBull; return z ^ (z >> 31); };
+            long ran = 0;
+            for (long i = 0; i < n; ++i)
+            {
+                const int xs = 1 << (rnd() % 3);
+                const OpCode ext = (rnd() & 1) ? CPUI_INT_SEXT : CPUI_INT_ZEXT;
+                const int shape = static_cast<int>(rnd() % 3);
+                const int s = (shape == 0) ? static_cast<int>(rnd() % (8 * xs + 2)) : 0;
+                const int k2 = (rnd() & 1) ? 0 : static_cast<int>(rnd() % (8 * xs + 1));
+                const int limited = (xs == 4 && ext == CPUI_INT_ZEXT) ? static_cast<int>(rnd() & 1) : 0;
+                if (shape == 2 && ext == CPUI_INT_SEXT) continue;
+                uint64_t c0;
+                if (rnd() & 1) c0 = rnd() >> (rnd() % 64);
+                else
+                {
+                    const int nBits = 8 * xs + s;
+                    const int totalShift = nBits + (shape == 2 ? 1 : 0) + k2;
+                    if (totalShift > 100 || nBits >= 64) continue;
+                    const unsigned __int128 one = 1;
+                    const unsigned __int128 y = ((one << totalShift) / (2 + rnd() % 70000)) + 1 + (rnd() & 1);
+                    if (y <= (one << nBits) || ((y - (one << nBits)) >> 64) != 0) continue;
+                    c0 = static_cast<uint64_t>(y - (one << nBits));
+                }
+                runCase(xs, ext, c0, shape, s, k2, limited);
+                ++ran;
+            }
+            std::printf("round 13 exploration: %ld random division-term graphs\n", ran);
+        }
         // A2-89: `(mulhu(x, c) + x) >> 16` of a 32-bit unsigned x: the sum wraps the 32-bit add for a large x and RuleDivTermAdd must leave it; with x of 16 bits (an AND
         // mask) the sum fits and the rule still folds it
         for (int masked = 0; masked < 2; ++masked)

@@ -19,7 +19,7 @@
  * Modified for SaturnExplorer: RuleDivTermAdd and RuleDivTermAdd2 keep a product that overflows only for a division; RulePiecePathology needs the register it names (patches/0037-engine-division-piece-and-input-names.patch).
  * Modified for SaturnExplorer: RuleDivTermAdd and RuleDivTermAdd2 keep an overflowing product only when the shifts that follow stay inside the multiply (patches/0044-engine-round5-printed-value-fixes.patch).
  * Modified for SaturnExplorer: RuleScarry refuses the minimum for either operand; RuleRightShiftAnd keeps the mask of a shift by the width or more; RuleSLess2Zero takes the high bit of a sum only from an operand when the other has none (patches/0062-engine-range-set-ops-and-rule-guards.patch).
- * Modified for SaturnExplorer: RuleDivOpt refuses a multiply that wraps and a sign extension shifted logically (or a zero extension shifted arithmetically) whose difference is read; RuleDivTermAdd and RuleDivTermAdd2 need the original product not to wrap, and RuleDivTermAdd the sum not to wrap its add; RuleDivChain, RuleSignForm2, RuleThreeWayCompare and the rules that read a shift amount check what they read (patches/0064-engine-divopt-sign-and-wrap-rule-guards.patch).
+ * Modified for SaturnExplorer: RuleDivOpt refuses a multiply that wraps and a sign extension shifted logically (or a zero extension shifted arithmetically) whose difference is read; RuleDivTermAdd and RuleDivTermAdd2 need the original product not to wrap, RuleDivTermAdd the sum not to wrap its add and RuleDivTermAdd2 the multiplier to be at most 2^n; RuleDivChain, RuleSignForm2, RuleThreeWayCompare and the rules that read a shift amount check what they read (patches/0064-engine-divopt-sign-and-wrap-rule-guards.patch).
  */
 #include "ruleaction.hh"
 #include "coreaction.hh"
@@ -8121,8 +8121,10 @@ int4 RuleDivTermAdd2::applyOp(PcodeOp *op,Funcdata &data)
     uint8 newConst[2];
     uint4 xbits = 8*sizeof(uintb) - count_leading_zeros(x->getNZMask());
     // SaturnExplorer (patches/0064-engine-divopt-sign-and-wrap-rule-guards.patch): the product this rule starts from must not have wrapped in its
-    // multiply (`zext(x:2) * 0xfffffffe` in four bytes)
+    // multiply (`zext(x:2) * 0xfffffffe` in four bytes), and the multiplier must be at most 2^n: `W + ((x - W) >> 1)` is `(x * (c + 2^n)) >> (n + 1)` only
+    // while W, the high part of x * c, is not above x (x - W is taken in the width of x, where a larger W wraps)
     if (!divTermProductFits(multConst,xbits,zextvn->getSize(),false)) return 0;
+    if (uless128(pow,multConst)) return 0;
     add128(multConst, pow, newConst);	// the new multiplier is multConst + 2^n
     // The new product may need more bits than the multiply has, which is only acceptable on the way to a division
     bool wide = !divTermProductFits(newConst,xbits,zextvn->getSize(),false);
