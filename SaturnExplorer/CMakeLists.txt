@@ -1250,6 +1250,10 @@ if(BUILD_TESTING)
     add_test(NAME SaturnExplorerShadowCallStackTests COMMAND SaturnExplorerShadowCallStackTests)
     find_package(Python3 COMPONENTS Interpreter)
     if(Python3_FOUND)
+        # Release packaging, offline: the MSYS2 library manifest against canned pacman output, the rule that a
+        # shipped copyleft library needs a findable source, credential scrubbing, and (macOS) @rpath bundling.
+        add_test(NAME SaturnExplorerPackageRelease
+                 COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/Integration/tests/check_package_release.py)
         add_test(NAME SaturnExplorerMednafenHaltOrdering
                  COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/Integration/tests/check_halt_ordering.py
                          ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Mednafen/apply.py)

@@ -1,0 +1,144 @@
+name: Saturn Explorer Release
+
+# Builds the downloadable archives: Saturn Explorer plus the patched Mednafen it launches, laid out by
+# SaturnExplorer/Integration/package_release.py (and with the GPL source offer + patched-source tarball
+# from make_source_offer.py). A v* tag creates a DRAFT release for a person to review, sign and publish;
+# a manual run only uploads the archives as workflow artifacts.
+#
+# What this does not do: Developer ID signing and notarization of the macOS .dmg (needs the certificate;
+# see SaturnExplorer/Integration/DISTRIBUTION.md), and Windows code signing. The archives are ad hoc /
+# unsigned until that is done by hand.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      label:
+        description: 'Release label used in the archive names (default: the short commit)'
+        required: false
+
+# Build jobs only read the repository; the one job that creates the release asks for write access itself.
+permissions:
+  contents: read
+
+jobs:
+  macos:
+    name: macOS archive
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: SaturnExplorer
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install build dependencies
+        run: brew install sdl2 flac gettext autoconf automake libtool pkg-config
+
+      # The label comes from a typed input or a tag name, so it reaches the shell only through the
+      # environment and only after it matches a filename-safe pattern.
+      - name: Label
+        id: label
+        shell: bash
+        env:
+          INPUT_LABEL: ${{ github.event.inputs.label }}
+        run: |
+          LABEL="$INPUT_LABEL"
+          [ -z "$LABEL" ] && [ "$GITHUB_REF_TYPE" = "tag" ] && LABEL="$GITHUB_REF_NAME"
+          [ -z "$LABEL" ] && LABEL="$(git rev-parse --short=10 HEAD)"
+          if ! printf '%s' "$LABEL" | grep -Eq '^[A-Za-z0-9._-]+$'; then
+            echo "release label must contain only letters, digits, '.', '_' and '-'" >&2
+            exit 1
+          fi
+          echo "label=$LABEL" >> "$GITHUB_OUTPUT"
+
+      # Pinned to the commit in Integration/Mednafen/UPSTREAM.json; Saturn core only.
+      - name: Build the patched Mednafen
+        run: python3 Integration/install.py --yes --no-se --mednafen-saturn-only
+
+      - name: Build the self-contained app
+        run: |
+          cmake -S . -B build-release -DCMAKE_BUILD_TYPE=Release -DSE_MACOS_BUNDLE_LIBS=ON
+          cmake --build build-release --parallel 4
+          cmake --install build-release --prefix "$PWD/stage"
+
+      - name: Package
+        env:
+          LABEL: ${{ steps.label.outputs.label }}
+        run: |
+          python3 Integration/package_release.py --se-app stage/SaturnExplorer.app \
+            --mednafen _emu/mednafen/src/mednafen --ref "$LABEL" --out dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: SaturnExplorer/dist/*.dmg
+          if-no-files-found: error
+
+  windows:
+    name: Windows archive
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: SaturnExplorer
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # The label comes from a typed input or a tag name, so it reaches the shell only through the
+      # environment and only after it matches a filename-safe pattern.
+      - name: Label
+        id: label
+        shell: bash
+        env:
+          INPUT_LABEL: ${{ github.event.inputs.label }}
+        run: |
+          LABEL="$INPUT_LABEL"
+          [ -z "$LABEL" ] && [ "$GITHUB_REF_TYPE" = "tag" ] && LABEL="$GITHUB_REF_NAME"
+          [ -z "$LABEL" ] && LABEL="$(git rev-parse --short=10 HEAD)"
+          if ! printf '%s' "$LABEL" | grep -Eq '^[A-Za-z0-9._-]+$'; then
+            echo "release label must contain only letters, digits, '.', '_' and '-'" >&2
+            exit 1
+          fi
+          echo "label=$LABEL" >> "$GITHUB_OUTPUT"
+
+      # Builds Saturn Explorer (Release, with its licenses\ folder) and, through MSYS2, the patched
+      # Mednafen at the commit pinned in Integration/Mednafen/UPSTREAM.json.
+      - name: Build Saturn Explorer and the patched Mednafen
+        run: python Integration\install.py --yes --mednafen-saturn-only
+
+      - name: Package
+        env:
+          LABEL: ${{ steps.label.outputs.label }}
+        run: >
+          python Integration\package_release.py --se-app build\bin\Release --mednafen _emu\mednafen
+          --ref "$env:LABEL" --out dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: SaturnExplorer/dist/*.zip
+          if-no-files-found: error
+
+  draft-release:
+    name: Draft GitHub release
+    if: github.ref_type == 'tag'
+    needs: [macos, windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: archives
+
+      - name: Create the draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft \
+            --title "Saturn Explorer $GITHUB_REF_NAME" --generate-notes \
+            --notes "Includes mednafen-se, a modified Mednafen build (not an official release); its source is in each archive (SOURCE.txt and mednafen-se-source.tar.xz). You supply the Saturn BIOS." \
+            archives/*/*

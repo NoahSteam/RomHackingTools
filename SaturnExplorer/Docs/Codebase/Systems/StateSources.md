@@ -22,7 +22,7 @@ It does **not** own the frontend breakpoint model, recorded-frame browser, expre
 | Mednafen adapter | [se_mednafen_glue.c](../../../Integration/Mednafen/se_mednafen_glue.c): `SeMednafenFrameHook`, `SeMednafenEndFrameHook`, `SeMednafenSnapshot`; [apply.py](../../../Integration/Mednafen/apply.py): generated emulator accessors/hooks |
 | Yabause adapter | [apply.py](../../../Integration/Yabause/apply.py): patches emulator frame loop/debugger integration and copies the common server |
 | App adoption | [App.cpp](../../../FrontEnd/src/App.cpp): `CreateContextFromSource`, `App::OpenSavestate`, `OpenSavestateBuffer`, `OpenFullDump`, `OpenLive`, `AttachLiveSource`, `CloseData`, `AdoptNewEmulatorInstance` |
-| Emulator installation/launch | [install.py](../../../Integration/install.py); [Launcher.cpp](../../../FrontEnd/src/Launcher.cpp): `BuildLaunchArgs`, `BuildLaunchArgv`, `Launcher::Validate`; process/platform launch details are outside this document's traced scope |
+| Emulator installation/launch | [install.py](../../../Integration/install.py) (Mednafen pinned via [UPSTREAM.json](../../../Integration/Mednafen/UPSTREAM.json)); [Launcher.cpp](../../../FrontEnd/src/Launcher.cpp): `BuildLaunchArgs`, `BuildLaunchArgv`, `Launcher::Validate`, `BundledMednafenPath` (a release's `mednafen-se/` beside the app, used when no path is recorded), `MednafenFirmwareDir` (also passed as `-filesys.path_firmware` by `App::LaunchSession`); release packaging in [DISTRIBUTION.md](../../../Integration/DISTRIBUTION.md); process/platform launch details are outside this document's traced scope |
 
 ## Execution flow
 

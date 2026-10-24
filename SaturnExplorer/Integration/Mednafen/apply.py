@@ -38,6 +38,7 @@ Target layout assumed: <mednafen>/src/ss/{vdp1.cpp,vdp2.cpp,ss.cpp}. Pass the re
 root; the script also accepts the src/ss dir directly.
 """
 
+import json
 import os
 import re
 import sys
@@ -1425,6 +1426,23 @@ def revert(src_dir, root):
     print("Reverted: removed SE_EXPORT edits and copied files.")
 
 
+def check_upstream_version(root):
+    """Warn when the checkout is not the Mednafen version this patch is recorded against
+    (UPSTREAM.json). A warning, not an error: --mednafen-rev exists to try a newer base, and
+    the anchors below fail loudly on their own if that base moved them."""
+    try:
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "UPSTREAM.json"), encoding="utf-8") as f:
+            want = json.load(f)["upstream_version"]
+        with open(os.path.join(root, "configure.ac"), encoding="utf-8", errors="replace") as f:
+            m = re.search(r"^MEDNAFEN_VERSION='([^']+)'", f.read(), re.M)
+    except (OSError, ValueError, KeyError):
+        return
+    have = m.group(1) if m else None
+    if have and have != want:
+        print(f"warning: checkout is Mednafen {have}, but UPSTREAM.json records {want}. "
+              f"Update UPSTREAM.json (and re-verify the hooks) if this is a deliberate bump.\n")
+
+
 def main():
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     flags = {a for a in sys.argv[1:] if a.startswith("--")}
@@ -1444,6 +1462,8 @@ def main():
     if "--revert" in flags:
         revert(src_dir, root)
         return
+
+    check_upstream_version(root)
 
     do_write = "--check" not in flags
     with_pause = "--with-pause" in flags

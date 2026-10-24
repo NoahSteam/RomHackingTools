@@ -36,6 +36,7 @@ Override per emulator with --mednafen-rev / --yabause-rev (or edit EMULATORS).
 
 import argparse
 import configparser
+import json
 import os
 import shutil
 import subprocess
@@ -70,6 +71,16 @@ def fork_url(name):
     return f"https://github.com/{FORK_OWNER}/{name}.git"
 
 
+def _mednafen_pin():
+    """The fork commit the SE patch is built on, from Integration/Mednafen/UPSTREAM.json.
+    "master" only if the file is missing, so a damaged checkout still installs."""
+    try:
+        with open(os.path.join(SE_ROOT, "Integration", "Mednafen", "UPSTREAM.json"), encoding="utf-8") as f:
+            return json.load(f)["fork_base_commit"]
+    except (OSError, ValueError, KeyError):
+        return "master"
+
+
 EMULATORS = {
     "mednafen": {
         "fork_name": "mednafen-git",
@@ -78,7 +89,7 @@ EMULATORS = {
         # official repo is Mercurial, so not git-cloneable) — it is the standalone
         # emulator we patch via ss.cpp's Emulate(), not beetle-saturn-libretro.
         "upstream":  "https://github.com/libretro-mirrors/mednafen-git.git",
-        "rev":  "master",
+        "rev":  _mednafen_pin(),   # a commit, so a release is reproducible; see UPSTREAM.json
         "patch_subdir": os.path.join("Integration", "Mednafen", "apply.py"),
         "patch_args": ["--with-pause"],           # inject the pause/step gate too
         "toolchain": "msys2",
@@ -857,6 +868,8 @@ def main():
     ap.add_argument("--mednafen-repo", help="explicit Mednafen git URL (overrides fork/upstream)")
     ap.add_argument("--yabause-repo", help="explicit Yabause-fork git URL (overrides fork/upstream)")
     ap.add_argument("--se-only", action="store_true", help="build only Saturn Explorer")
+    ap.add_argument("--no-se", action="store_true",
+                    help="skip building Saturn Explorer (the release job builds it separately, with its bundle options)")
     ap.add_argument("--incremental", "--update", dest="incremental", action="store_true",
                     help="iterative rebuild: keep the existing emulator checkout, re-apply "
                          "the idempotent content-aware patch, and rebuild only what changed "
@@ -922,8 +935,9 @@ def main():
 
     # --- build Saturn Explorer ---------------------------------------------
     results = []
-    se_ok, se_exe = build_saturn_explorer(rn, args.generator)
-    results.append(("Saturn Explorer", se_ok, se_exe))
+    if not args.no_se:
+        se_ok, se_exe = build_saturn_explorer(rn, args.generator)
+        results.append(("Saturn Explorer", se_ok, se_exe))
 
     # --- Mednafen -----------------------------------------------------------
     if do_mednafen:

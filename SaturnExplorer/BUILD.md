@@ -55,6 +55,9 @@ On **macOS** the frontend is built as a double-clickable `SaturnExplorer.app` bu
 `brew install sdl2`). A plain `cmake --build` links it against Homebrew's SDL2, which is fine
 on your own machine but not portable.
 
+Shipping Saturn Explorer together with the patched Mednafen (archives, licences, source offer) is covered in
+`Integration/DISTRIBUTION.md` → "Cutting a release"; the steps below produce just the app.
+
 ### macOS packaging — a self-contained, signed .app / .dmg
 To ship the app to another Mac, make the bundle self-contained (copy SDL2 and any other dylibs
 inside it and rewrite their install names), optionally code-sign it, then wrap it in a `.dmg`:
