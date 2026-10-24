@@ -255,31 +255,38 @@ void Funcdata::checkPieceSizes(void)
 {
   for(int4 pass=0;pass<2;++pass) {
     OpCode opc = (pass == 0) ? CPUI_PIECE : CPUI_SUBPIECE;
-    for(list<PcodeOp *>::const_iterator iter=beginOp(opc);iter!=endOp(opc);++iter) {
-      const PcodeOp *op = *iter;
-      if (op->isDead() || op->getOut() == (Varnode *)0 || op->numInput() != 2) continue;
-      const Varnode *a = op->getIn(0);
-      const Varnode *b = op->getIn(1);
-      if (a == (Varnode *)0 || b == (Varnode *)0) continue;
-      bool bad;
-      if (opc == CPUI_PIECE)
-	bad = (a->getSize() + b->getSize() != op->getOut()->getSize());
-      else
-	bad = !b->isConstant() || b->getOffset() + (uintb)op->getOut()->getSize() > (uintb)a->getSize();
-      if (!bad) continue;
-      bool seen = false;
-      for(vector<AccessRecord>::const_iterator r=accessFates.begin();r!=accessFates.end();++r)
-	if ((*r).fate == fate_malformed_piece && (*r).time == op->getTime()) { seen = true; break; }
-      if (seen) continue;
-      AccessRecord rec;
-      rec.time = op->getTime();
-      rec.pc = op->getAddr();
-      rec.store = false;
-      rec.size = op->getOut()->getSize();
-      rec.fate = fate_malformed_piece;
-      accessFates.push_back(rec);
-    }
+    for(list<PcodeOp *>::const_iterator iter=beginOp(opc);iter!=endOp(opc);++iter)
+      checkPieceSize(*iter);
   }
+}
+
+/// SaturnExplorer (patches/0068-engine-deadcode-late-stack-reads.patch): checkPieceSizes for one op, which may
+/// be of any kind (only a PIECE or SUBPIECE is checked). opCollapseIndirectsForCopy checks the pieces it makes as it
+/// makes them: the rules after it may simplify a malformed one away before the next heritage pass.
+/// \param op is the op
+void Funcdata::checkPieceSize(const PcodeOp *op)
+
+{
+  if (op->isDead() || op->getOut() == (Varnode *)0 || op->numInput() != 2) return;
+  if (op->code() != CPUI_PIECE && op->code() != CPUI_SUBPIECE) return;
+  const Varnode *a = op->getIn(0);
+  const Varnode *b = op->getIn(1);
+  if (a == (Varnode *)0 || b == (Varnode *)0) return;
+  bool bad;
+  if (op->code() == CPUI_PIECE)
+    bad = (a->getSize() + b->getSize() != op->getOut()->getSize());
+  else
+    bad = !b->isConstant() || b->getOffset() + (uintb)op->getOut()->getSize() > (uintb)a->getSize();
+  if (!bad) return;
+  for(vector<AccessRecord>::const_iterator r=accessFates.begin();r!=accessFates.end();++r)
+    if ((*r).fate == fate_malformed_piece && (*r).time == op->getTime()) return;
+  AccessRecord rec;
+  rec.time = op->getTime();
+  rec.pc = op->getAddr();
+  rec.store = false;
+  rec.size = op->getOut()->getSize();
+  rec.fate = fate_malformed_piece;
+  accessFates.push_back(rec);
 }
 
 /// SaturnExplorer (patches/0068-engine-deadcode-late-stack-reads.patch): a LOAD or STORE that

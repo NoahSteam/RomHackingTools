@@ -226,7 +226,8 @@ public:
   void recordAccessFold(const PcodeOp *op,const Varnode *vn);	///< Record a LOAD or STORE made a direct access of ordinary memory (SaturnExplorer)
   void recordFrameEnd(const PcodeOp *op,AccessFate fate);	///< Record how an access folded into the stack frame ended (SaturnExplorer, 0068)
   void noteFrameFoldForwarded(bool walk,Varnode *vn);
-  void checkPieceSizes(void);	///< Record each PIECE and SUBPIECE whose sizes do not add up (SaturnExplorer, 0068)	///< Mark the frame folds a replaced input came from as forwarded (SaturnExplorer, 0068)
+  void checkPieceSizes(void);	///< Record each PIECE and SUBPIECE whose sizes do not add up (SaturnExplorer, 0068)
+  void checkPieceSize(const PcodeOp *op);	///< ...for one op (SaturnExplorer, 0068)	///< Mark the frame folds a replaced input came from as forwarded (SaturnExplorer, 0068)
   /// \brief SaturnExplorer (0068): is the op a MULTIEQUAL or INDIRECT, or not yet given an op-code
   static bool isMarkerOrUnbuilt(const PcodeOp *op) { return op->getOpcode() == (TypeOp *)0 || op->code() == CPUI_MULTIEQUAL || op->code() == CPUI_INDIRECT; }
   const vector<FlowTable> &getFlowTables(void) const { return flowTables; }	///< Every indirect jump the last flow recovered (SaturnExplorer)

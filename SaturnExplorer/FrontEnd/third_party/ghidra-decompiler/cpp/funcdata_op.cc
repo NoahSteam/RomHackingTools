@@ -1783,6 +1783,16 @@ void Funcdata::opCollapseIndirectsForCopy(PcodeOp *copyOp)
 	opSetInput(op,frontVn,frontSlot);
 	opSetInput(op,backVn,1-frontSlot);
 	opInsertAfter(op, insertPoint);
+	// SaturnExplorer (0068): the pieces made here add up (A3-127 was a front piece of the wrong size)
+	checkPieceSize(op);
+	for(int4 k=0;k<op->numInput();++k) {
+	  const Varnode *piece = op->getIn(k);
+	  if (!piece->isWritten()) continue;
+	  const PcodeOp *pop = piece->getDef();
+	  checkPieceSize(pop);
+	  for(int4 j=0;j<pop->numInput();++j)
+	    if (pop->getIn(j) != (Varnode *)0 && pop->getIn(j)->isWritten()) checkPieceSize(pop->getIn(j)->getDef());
+	}
 	continue;
       }
       // Convert INDIRECT to COPY
