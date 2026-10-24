@@ -125,3 +125,9 @@ light inputs visible. ImGui scales that border on DPI changes. Light borders and
 3:1 control-outline and 4.5:1 header-text contrast checks. Log/status/marker palettes and both
 checkerboard paths resolve light colors per draw. Theme parsing accepts mixed case. The renderer
 clear color preserves the pre-theme Dark value; Light uses the shared app background.
+
+`ThemePreference.h` factors App's preference state into a headless-testable component:
+Load/Store map to Settings, Request accepts the two native theme actions without applying colors,
+and ApplyPending updates the palette at startup or the next BuildUI boundary. ThemeTests covers
+these transitions with a Settings object, including persisting a request while the previous
+palette is still active. Disk I/O remains covered separately by SettingsTests.

@@ -175,6 +175,7 @@ void WatchPanel::Draw(IMemoryBackend& backend, IExpressionResolver& resolver,
         ImGui::Checkbox("##en", &e.enabled);
 
         // Name (borderless inline edit).
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
         ImGui::TableSetColumnIndex(1);
         ImGui::PushStyleColor(ImGuiCol_FrameBg, IM_COL32(0, 0, 0, 0));
         ImGui::SetNextItemWidth(-FLT_MIN);
@@ -195,6 +196,8 @@ void WatchPanel::Draw(IMemoryBackend& backend, IExpressionResolver& resolver,
             Refresh(backend, resolver);   // reflect the change immediately
         }
         ImGui::PopStyleColor();
+
+        ImGui::PopStyleVar();
 
         // Type (dropdown; commits on selection).
         ImGui::TableSetColumnIndex(3);

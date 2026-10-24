@@ -184,3 +184,15 @@ real Log panel in Light and checks the contrast of rendered font vertices (exclu
 and ImGui's textured lines). That test also caught an unreadable disabled category-filter label,
 which now uses the shared disabled-text color. App and the modified UI-only panels passed direct
 C++14 syntax checks; native platform execution remains unverified.
+
+Second review follow-up: Hex Editor queued/write/search messages use the Light error red;
+the Default badge uses opaque `#DFF1E5` with `#16753C` text/border. Watch Name/Expression
+fields explicitly push a zero frame-border width and restore it before the Type dropdown.
+Heuristic and tracepoint markers use darker Light variants.
+
+`ThemePreference.h` now owns the requested mode, Settings load/store mapping, native menu
+request mapping and deferred palette application. App calls this same component at startup,
+save, menu dispatch and the next BuildUI boundary. ThemeTests exercises these paths with a
+real Settings object, including an unrelated setting and saving a pending request. SettingsTests
+continues to cover disk writes/failures separately; this does not replace a full App/native-menu
+integration test or prove browser persistence.

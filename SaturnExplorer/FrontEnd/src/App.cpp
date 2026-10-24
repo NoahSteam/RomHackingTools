@@ -399,8 +399,8 @@ const std::vector<App::PanelInfo>& App::PanelList()
 void App::LoadSettings()
 {
     mSettings.Load();
-    mThemeMode = ParseThemeMode(mSettings.Get("appearance", "theme", "dark").c_str());
-    ApplyThemeColors(ImGui::GetStyle(), mThemeMode);
+    mTheme.Load(mSettings);
+    mTheme.ApplyPending();
     for (const PanelInfo& p : PanelList())
         mPanels.*(p.flag) = mSettings.GetBool("panels", p.key, mPanels.*(p.flag));
     mDataDir      = mSettings.Get("data", "dir", mDataDir);
@@ -444,7 +444,7 @@ void App::SaveSettings()
     for (const PanelInfo& p : PanelList())
         mSettings.SetBool("panels", p.key, mPanels.*(p.flag));
     mSettings.Set("data", "dir", mDataDir);
-    mSettings.Set("appearance", "theme", ThemeModeName(mThemeMode));
+    mTheme.Store(mSettings);
     mSettings.SetBool("ui", "tooltips", mShowTooltips);
     mSettings.SetBool("debug", "rewind", mRewindEnabled);
     mSettings.Set("diff", "exe", mDiffExe);
@@ -1383,7 +1383,7 @@ void App::BuildUI(IPlatform& platform)
 {
     // Menus may have pushed style overrides. Apply their request next frame, before
     // any windows, so PopStyleColor cannot restore pieces of the old palette.
-    if (GetThemeMode() != mThemeMode) ApplyThemeColors(ImGui::GetStyle(), mThemeMode);
+    mTheme.ApplyPending();
     g_tooltipsEnabled = mShowTooltips;   // let the free-function panel helpers see the setting
     PollSearchWorker();   // reap a finished data-search worker before drawing its results
 #ifdef SE_ENABLE_LIVE
@@ -4692,7 +4692,7 @@ void App::DrawCallStack(IPlatform& platform)
         ImVec2 ctr(p.x + rad + 2.0f, p.y + ImGui::GetTextLineHeight() * 0.5f);
         ImU32 col = (c == FrameConfidence::Confirmed) ? ui::Color(IM_COL32(90, 200, 110, 255), IM_COL32(22,117,60,255))
                   : (c == FrameConfidence::Probable)  ? ui::Color(IM_COL32(225, 195, 70, 255), IM_COL32(128,91,0,255))
-                                                      : IM_COL32(150, 150, 150, 255);
+                                                      : ui::Color(IM_COL32(150, 150, 150, 255), IM_COL32(89,101,121,255));
         if (c == FrameConfidence::Heuristic) dl->AddCircle(ctr, rad, col, 12, 1.5f);
         else                                 dl->AddCircleFilled(ctr, rad, col, 12);
         ImGui::Dummy(ImVec2(rad * 2.0f + 4.0f, ImGui::GetTextLineHeight()));
@@ -7244,8 +7244,8 @@ static void DrawLaunchDefaultBadge()
     ImGui::Dummy(size);
 
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    const ImU32 green = ImGui::GetColorU32(ImVec4(0.30f, 0.85f, 0.40f, 1.0f));
-    const ImU32 bg = ImGui::GetColorU32(ImVec4(0.10f, 0.34f, 0.18f, 0.72f));
+    const ImU32 green = ImGui::GetColorU32(ui::Color(ImVec4(0.30f, 0.85f, 0.40f, 1.0f), ImVec4(22/255.0f,117/255.0f,60/255.0f,1)));
+    const ImU32 bg = ImGui::GetColorU32(ui::Color(ImVec4(0.10f, 0.34f, 0.18f, 0.72f), ImVec4(223/255.0f,241/255.0f,229/255.0f,1)));
     dl->AddRectFilled(p, ImVec2(p.x + size.x, p.y + size.y), bg, 4.0f);
     dl->AddRect(p, ImVec2(p.x + size.x, p.y + size.y), green, 4.0f);
 
@@ -7580,9 +7580,9 @@ void App::DrawToolbar(std::vector<TopBarCommand>& commands)
                 {
                     if (ImGui::BeginMenu("Appearance"))
                     {
-                        if (ImGui::MenuItem("Light", nullptr, mThemeMode == ThemeMode::Light))
+                        if (ImGui::MenuItem("Light", nullptr, mTheme.Mode() == ThemeMode::Light))
                             DispatchNativeMenuAction(NativeMenuAction(MenuCommand::ThemeLight), commands);
-                        if (ImGui::MenuItem("Dark", nullptr, mThemeMode == ThemeMode::Dark))
+                        if (ImGui::MenuItem("Dark", nullptr, mTheme.Mode() == ThemeMode::Dark))
                             DispatchNativeMenuAction(NativeMenuAction(MenuCommand::ThemeDark), commands);
                         ImGui::EndMenu();
                     }
@@ -7626,9 +7626,9 @@ void App::DrawToolbar(std::vector<TopBarCommand>& commands)
             {
                 if (ImGui::BeginMenu("Appearance"))
                     {
-                        if (ImGui::MenuItem("Light", nullptr, mThemeMode == ThemeMode::Light))
+                        if (ImGui::MenuItem("Light", nullptr, mTheme.Mode() == ThemeMode::Light))
                             DispatchNativeMenuAction(NativeMenuAction(MenuCommand::ThemeLight), commands);
-                        if (ImGui::MenuItem("Dark", nullptr, mThemeMode == ThemeMode::Dark))
+                        if (ImGui::MenuItem("Dark", nullptr, mTheme.Mode() == ThemeMode::Dark))
                             DispatchNativeMenuAction(NativeMenuAction(MenuCommand::ThemeDark), commands);
                         ImGui::EndMenu();
                     }
@@ -8795,7 +8795,7 @@ NativeMenuState App::BuildNativeMenuState(const TopBarViewModel& s) const
     m.layer[NM_LAYER_COLORCALC] = mRenderOpts.show_color_calculation != 0;
     m.layer[NM_LAYER_SHADOW]   = mRenderOpts.show_shadow_highlight != 0;
 
-    m.lightTheme = mThemeMode == ThemeMode::Light;
+    m.lightTheme = mTheme.Mode() == ThemeMode::Light;
     m.tooltips = mShowTooltips;
     m.rewind = mRewindEnabled;
 
@@ -8879,7 +8879,7 @@ void App::DispatchNativeMenuAction(const NativeMenuAction& a, std::vector<TopBar
     case MenuCommand::LayerToggle:       ToggleMenuLayer(a.index); break;
     case MenuCommand::ThemeLight:
     case MenuCommand::ThemeDark:
-        mThemeMode = a.command == MenuCommand::ThemeLight ? ThemeMode::Light : ThemeMode::Dark;
+        mTheme.Request(a.command);
         mSettingsDirty = true;
         break;
     case MenuCommand::ToggleTooltips:    mShowTooltips = !mShowTooltips; mSettingsDirty = true; break;

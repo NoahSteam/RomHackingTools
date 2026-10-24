@@ -1,4 +1,5 @@
 #include "Theme.h"
+#include "ThemePreference.h"
 #include "LogPanel.h"
 #include "ImGuiHarness.h"
 #include <cstdio>
@@ -73,6 +74,38 @@ int main()
         CHECK(GetThemeMode() == ThemeMode::Dark);
         CHECK(style.Colors[ImGuiCol_Text].x == darkText.x);
     }
+    Settings settings;
+    settings.Set("unrelated", "keep", "value");
+    ThemePreference preference;
+    preference.Load(settings);
+    CHECK(preference.Mode() == ThemeMode::Dark);
+    settings.Set("appearance", "theme", "invalid");
+    preference.Load(settings);
+    CHECK(preference.Mode() == ThemeMode::Dark);
+    settings.Set("appearance", "theme", "Light");
+    preference.Load(settings);
+    CHECK(preference.Mode() == ThemeMode::Light);
+    CHECK(GetThemeMode() == ThemeMode::Dark);  // Load only requests; startup explicitly applies.
+    preference.ApplyPending();
+    CHECK(GetThemeMode() == ThemeMode::Light);
+    CHECK(preference.Request(MenuCommand::ThemeDark));
+    CHECK(preference.Mode() == ThemeMode::Dark);
+    CHECK(GetThemeMode() == ThemeMode::Light); // Menu dispatch leaves this frame unchanged.
+    preference.Store(settings);               // Save the request, not the old applied palette.
+    CHECK(settings.Get("appearance", "theme") == "dark");
+    CHECK(settings.Get("unrelated", "keep") == "value");
+    preference.ApplyPending();                // Next frame boundary.
+    CHECK(GetThemeMode() == ThemeMode::Dark);
+    CHECK(!preference.Request(MenuCommand::ToggleTooltips));
+    CHECK(preference.Mode() == ThemeMode::Dark);
+    CHECK(preference.Request(MenuCommand::ThemeLight));
+    preference.Store(settings);
+    ThemePreference reloaded;
+    reloaded.Load(settings);
+    CHECK(reloaded.Mode() == ThemeMode::Light);
+    CHECK(GetThemeMode() == ThemeMode::Dark);
+    reloaded.ApplyPending();
+    CHECK(GetThemeMode() == ThemeMode::Light);
     ImGui::DestroyContext();
     // Exercise the real Log panel in Light. Font quads have atlas UVs distinct
     // from the white pixel used by backgrounds/borders; check their actual colors.

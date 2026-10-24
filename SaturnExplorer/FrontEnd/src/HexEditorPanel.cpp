@@ -803,13 +803,13 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
             // Play From Here and no emulator has it yet; one the source never sees changes this view
             // only. Each says which.
             using Dest = IMemoryBackend::WriteDest;
-            ImGui::TextColored(ImVec4(0.92f, 0.35f, 0.30f, 1.0f),
+            ImGui::TextColored(ui::Color(ImVec4(0.92f, 0.35f, 0.30f, 1.0f), ImVec4(0.647f,0.114f,0.141f,1.0f)),
                                mModifiedDest == Dest::Emulator ? "Queued for emulator"
                              : mModifiedDest == Dest::Staged   ? "Staged for Play From Here"
                                                                : "Modified (this view only)");
         }
         if (!mWriteError.empty())
-            ImGui::TextColored(ImVec4(0.95f, 0.45f, 0.35f, 1.0f), "Not written: %s", mWriteError.c_str());
+            ImGui::TextColored(ui::Color(ImVec4(0.95f, 0.45f, 0.35f, 1.0f), ImVec4(0.647f,0.114f,0.141f,1.0f)), "Not written: %s", mWriteError.c_str());
         else if (selLo == selHi && !backend.CanWrite((uint32_t)selLo))
         {
             // Read-only here, and why -- the registers on a live emulator, a recorded frame the
@@ -847,7 +847,7 @@ void HexEditorPanel::DrawFindResultsPopup()
 
     if (!mFindError.empty())
     {
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.95f, 0.55f, 0.45f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_Text, ui::Color(ImVec4(0.95f, 0.55f, 0.45f, 1.0f), ImVec4(0.647f,0.114f,0.141f,1.0f)));
         ImGui::TextWrapped("%s", mFindError.c_str());
         ImGui::PopStyleColor();
     }

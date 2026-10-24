@@ -370,7 +370,7 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
             }
             if (tp)   // tracepoint = blue diamond (a distinct SHAPE, not just colour)
             {
-                const ImU32 c = tp->enabled ? IM_COL32(90, 160, 240, 255) : IM_COL32(95, 115, 140, 255);
+                const ImU32 c = tp->enabled ? ui::Color(IM_COL32(90, 160, 240, 255), IM_COL32(30,100,180,255)) : IM_COL32(95, 115, 140, 255);
                 const float x = p.x + 17, r = 5.0f;
                 const ImVec2 pts[4] = {{x, cy - r}, {x + r, cy}, {x, cy + r}, {x - r, cy}};
                 dl->AddConvexPolyFilled(pts, 4, c);
