@@ -1387,9 +1387,13 @@ void DecompilerPanel::DrawInspectionMenu(Request& req)
     };
     uint32_t canonical = 0;
     const bool object = target.kind == InspectionTarget::Kind::AbsoluteObject;
-    const bool storage = current && object && CanonicalCapturedWram(*mSnap, target.address,
+    // Memory can show an object of any size; a Watch needs a scalar the existing backend can read.
+    const bool storage = current && object && CanonicalCapturedWramRange(*mSnap, target.address,
         target.byteSize, canonical);
     const uint32_t storageAddress = canonical;
+    uint32_t watchable = 0;
+    const bool storageWatch = current && object && CanonicalCapturedWram(*mSnap, target.address,
+        target.byteSize, watchable);
     if (object)
     {
         if (item("View Object Storage in Memory", storage))
@@ -1400,16 +1404,18 @@ void DecompilerPanel::DrawInspectionMenu(Request& req)
         if (item("Copy Storage Address", true)) copy(target.address);
         const bool scalar = target.byteSize == 1 || target.byteSize == 2 || target.byteSize == 4;
         const bool known = target.display != InspectionTarget::Display::RawBytes;
-        if (item("Add Object Address to Watch", storage && scalar && known))
+        if (item("Add Object Address to Watch", storageWatch && scalar && known))
         {
             req.addWatch = true;
-            req.watchAddress = storageAddress;
+            req.watchAddress = watchable;
             const bool sign = target.display == InspectionTarget::Display::SignedInteger;
             req.watchType = target.display == InspectionTarget::Display::Pointer ? WatchType::Pointer :
                 target.byteSize == 1 ? (sign ? WatchType::S8 : WatchType::U8) :
                 target.byteSize == 2 ? (sign ? WatchType::S16 : WatchType::U16) :
                                       (sign ? WatchType::S32 : WatchType::U32);
-            req.watchLabel = "Captured object storage";
+            char label[64];
+            std::snprintf(label, sizeof label, "Captured object storage %08X", watchable);
+            req.watchLabel = label;
         }
     }
     const bool pointerForm = !object || target.display == InspectionTarget::Display::Pointer;
@@ -1429,7 +1435,9 @@ void DecompilerPanel::DrawInspectionMenu(Request& req)
             req.addWatch = true;
             req.watchAddress = canonical;
             req.watchType = WatchType::U8;
-            req.watchLabel = "Memory at captured pointer value";
+            char label[64];
+            std::snprintf(label, sizeof label, "Memory at captured pointer value %08X", canonical);
+            req.watchLabel = label;
         }
     }
     ImGui::Separator();

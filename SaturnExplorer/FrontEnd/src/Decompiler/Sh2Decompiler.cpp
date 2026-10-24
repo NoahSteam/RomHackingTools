@@ -2663,7 +2663,8 @@ bool InspectionType(const ghidra::Datatype* type, InspectionTarget& target)
         case ghidra::TYPE_PTR:
             if (target.byteSize == 4) target.display = InspectionTarget::Display::Pointer;
             break;
-        default: break; // unknown/float/aggregate bits are not integers
+        case ghidra::TYPE_UNKNOWN: target.display = InspectionTarget::Display::Untyped; break;
+        default: break; // float/aggregate bits are not integers
         }
     return true;
 }
@@ -2790,6 +2791,7 @@ bool InspectionBinding(const ghidra::Varnode* vn, const ghidra::PcodeOp* op,
     {
         if (!symbol) return false;
         target.kind = InspectionTarget::Kind::ConstantAddress;
+        target.typeLabel += " *";
         return true;
     }
     // The same expression must not be printed as both an address and a value. Multiple uses,
@@ -2814,6 +2816,7 @@ bool InspectionBinding(const ghidra::Varnode* vn, const ghidra::PcodeOp* op,
         if (use->code() == ghidra::CPUI_PTRADD || use->code() == ghidra::CPUI_PTRSUB ||
             use->code() == ghidra::CPUI_INT_ADD || use->code() == ghidra::CPUI_INT_SUB || !symbol) return false;
         target.kind = InspectionTarget::Kind::ConstantAddress;
+        target.typeLabel += " *";   // the token is &symbol: a pointer to the symbol's type
         return true;
     }
     if (symbol)
@@ -4306,18 +4309,21 @@ DecompileResult Sh2Decompiler::Decompile(const std::shared_ptr<const MemorySnaps
         r.status = DecompileStatus::Cancelled;
         r.cancelledIn = mWorkPhase;
         r.lines.clear();
+        r.inspectionTargets.clear();
         SetError(r, "cancelled");
     }
     catch (ghidra::LowlevelError& e)
     {
         r.status = DecompileStatus::Failed;
         r.lines.clear();
+        r.inspectionTargets.clear();
         SetError(r, e.explain);
     }
     catch (std::bad_alloc&)
     {
         r.status = DecompileStatus::Failed;
         r.lines.clear();
+        r.inspectionTargets.clear();
         if (mWorkPhase != DecompilePhase::Idle) gEngineDamaged = true;   // inside the engine
         SetError(r, "out of memory");
     }
@@ -4325,6 +4331,7 @@ DecompileResult Sh2Decompiler::Decompile(const std::shared_ptr<const MemorySnaps
     {
         r.status = DecompileStatus::Failed;
         r.lines.clear();
+        r.inspectionTargets.clear();
         if (mWorkPhase != DecompilePhase::Idle) gEngineDamaged = true;
         SetError(r, e.what());
     }
@@ -4332,6 +4339,7 @@ DecompileResult Sh2Decompiler::Decompile(const std::shared_ptr<const MemorySnaps
     {
         r.status = DecompileStatus::Failed;
         r.lines.clear();
+        r.inspectionTargets.clear();
         if (mWorkPhase != DecompilePhase::Idle) gEngineDamaged = true;
         SetError(r, "unexpected exception");
     }

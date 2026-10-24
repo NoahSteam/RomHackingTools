@@ -68,6 +68,34 @@ void TestDecode()
     raw = InspectCapturedValue(s, Object(0x06000000, 2, D::Pointer));
     CHECK(raw.available && !raw.hasPointer);
 }
+void TestUntypedAndWideObjects()
+{
+    auto s = Snapshot();
+    using D = InspectionTarget::Display;
+    auto r = InspectCapturedValue(s, Object(0x06000011, 4, D::Untyped));
+    CHECK(r.available && r.bits == 0x11121314 && r.scalarText == "0x11121314   (untyped)");
+    CHECK(InspectCapturedValue(s, Object(0x06000011, 1, D::Untyped)).scalarText == "0x00000011   (untyped)");
+    // No scalar interpretation without a supported width.
+    r = InspectCapturedValue(s, Object(0x06000011, 8, D::Untyped));
+    CHECK(r.available && r.scalarText == "raw captured bytes" && r.bytes.size() == 8);
+    // Memory navigation for an object of any size, separate from scalar Watch widths.
+    uint32_t c = 0;
+    CHECK(CanonicalCapturedWramRange(s, 0x06101234, 8, c) && c == 0x06001234);
+    CHECK(CanonicalCapturedWramRange(s, 0x26000000, 0x100000, c) && c == 0x06000000);
+    CHECK(!CanonicalCapturedWramRange(s, 0x06000000, 0x100001, c));
+    CHECK(!CanonicalCapturedWramRange(s, 0x060FFFF8, 16, c));   // crosses the HWRAM repeat
+    CHECK(!CanonicalCapturedWramRange(s, 0x06000000, 0, c));
+    CHECK(!CanonicalCapturedWramRange(s, 0xFFFFFFF8u, 16, c));  // wraps the address space
+    CHECK(!CanonicalCapturedWramRange(s, 0x05F80000, 4, c));    // device
+    CHECK(!CanonicalCapturedWramRange(s, 0x00000000, 4, c));    // BIOS bytes are previewable only
+    CHECK(!CanonicalCapturedWramRange(s, 0x00200000, 8, c));    // the fixture holds 4 LWRAM bytes
+    CHECK(CanonicalCapturedWramRange(s, 0x00200000, 4, c) && c == 0x00200000);
+    // An oversized BIOS image is not readable past the 512 KiB ROM, and says so.
+    MemoryRegion big; big.name = "BIOS2"; big.base = 0x00080000; big.bytes.assign(16, 0x77);
+    s.regions.push_back(std::move(big));
+    r = InspectCapturedValue(s, Object(0x00080000, 4, D::UnsignedInteger));
+    CHECK(!r.available && r.reason.find("512 KiB") != std::string::npos);
+}
 void TestPolicyAndBounds()
 {
     auto s = Snapshot();
@@ -184,7 +212,7 @@ void TestPointerAndAscii()
 }
 int main()
 {
-    TestDecode(); TestPolicyAndBounds(); TestRepeatedBoundaries(); TestPointerAndAscii();
+    TestDecode(); TestUntypedAndWideObjects(); TestPolicyAndBounds(); TestRepeatedBoundaries(); TestPointerAndAscii();
     if (failures) { std::fprintf(stderr, "%d failures\n", failures); return 1; }
     std::puts("CapturedValueInspectionTests: all passed");
     return 0;

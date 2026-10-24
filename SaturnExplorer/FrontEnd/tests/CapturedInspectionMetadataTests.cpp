@@ -102,6 +102,14 @@ void TestScalarLoadsAndStores(Sh2Decompiler& d)
         CHECK(read.status == DecompileStatus::Ok);
         CheckReferences(read);
         CHECK(BoundObject(read, kGlobal, bytes, kEntry + 2));
+        // An engine "undefined" scalar is shown as an untyped hex word, never a guessed integer.
+        if (!userVolatile && bytes == 4)
+        {
+            bool untyped = false;
+            for (const auto& t : read.inspectionTargets)
+                untyped = untyped || (t.address == kGlobal && t.display == InspectionTarget::Display::Untyped);
+            CHECK(untyped);
+        }
         // mov.l @(4,pc),r1; mov.[b/w/l] r4,@r1; rts; nop; .long kGlobal
         const auto store = Snapshot({ 0xD101, uint16_t(0x2140 | width), 0x000B, 0x0009 });
         DecompileResult write = d.Decompile(store, q);
@@ -352,6 +360,8 @@ void TestNativeNullVarrefGlobalsAndAddress()
         CHECK(ResolvePrintedInspection(nullptr, pointer, &f.arch, target));
         CHECK(target.address == kGlobal && target.byteSize == 4);
         CHECK(target.kind == (form == 2 ? InspectionTarget::Kind::ConstantAddress : InspectionTarget::Kind::AbsoluteObject));
+        // &global names a pointer to the symbol's type; the stored value keeps the plain type.
+        CHECK((target.typeLabel.size() > 2 && target.typeLabel.compare(target.typeLabel.size() - 2, 2, " *") == 0) == (form == 2));
         CheckPackedVariable(f, nullptr, pointer, true, target.kind);
     }
     // An explicitly named pointer temporary prints &global in its definition even

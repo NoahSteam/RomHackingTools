@@ -124,8 +124,9 @@ The tooltip of the badge names the reason the output is stale, and only that rea
 
 Hover a supported absolute global in the pseudocode to inspect its **captured memory**.
 The tooltip reports the object's storage address, proven width and captured bytes; supported
-1-, 2- and 4-byte integer/bool values are decoded in Saturn byte order. Unsupported types
-remain raw bytes. A value on an earlier read or assignment destination is still the memory
+1-, 2- and 4-byte integer/bool values are decoded in Saturn byte order. A 1-, 2- or 4-byte
+global the decompiler has not typed (`undefined`) shows one hex word marked *(untyped)* and
+can be watched as an unsigned value; float, aggregate and other widths remain raw bytes. A value on an earlier read or assignment destination is still the memory
 in the displayed capture: it is not a recovered value from when that statement executed.
 
 For a typed pointer global, **object storage** holds the pointer bits and **pointer target**
@@ -145,7 +146,7 @@ image**; it does not establish which BIOS the emulator uses.
 Right-click a supported token for explicitly separate actions:
 
 - **View Object Storage in Memory** or **View Pointer Target in Memory** opens a captured
-  WRAM location. Documented aliases are canonicalized; for example `0x06101234` opens
+  WRAM location (an object of any size, if it lies within one captured region). Documented aliases are canonicalized; for example `0x06101234` opens
   `0x06001234`. BIOS bytes can be previewed but cannot be opened in Memory here.
 - **Copy Storage Address** or **Copy Pointer Value** keeps the original address spelling.
 - **Add Object Address to Watch** watches the object's storage; **Watch Memory at Pointer

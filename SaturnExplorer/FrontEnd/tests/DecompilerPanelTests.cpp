@@ -576,6 +576,55 @@ void TestCapturedInspectionRefusedActions()
     f.h.Click(ImVec2(1100, 650)); f.Idle(2);
 }
 
+void TestCapturedInspectionUntypedAndWide()
+{
+    Fixture f;
+    f.backend.hw[0x40] = 0xDE; f.backend.hw[0x41] = 0xAD; f.backend.hw[0x42] = 0xBE; f.backend.hw[0x43] = 0xEF;
+    f.panel.ShowFunctionContaining(0, dts::kFixture1Caller);
+    CHECK(f.WaitShown());
+    DecompileResult& shown = *const_cast<DecompileResult*>(f.panel.Shown());
+    InspectionTarget target;
+    target.address = 0x26100040; target.byteSize = 4;
+    target.display = InspectionTarget::Display::Untyped;
+    shown.inspectionTargets = { target };
+    Line line; line.text = "object"; line.firstAddr = dts::kFixture1Caller;
+    Token token; token.begin = 0; token.end = 6; token.addr = line.firstAddr; token.inspectionTarget = 1;
+    line.tokens = { token }; shown.lines = { line };
+    f.Idle(2);
+    ImVec2 a, b;
+    CHECK(f.panel.LineRect(0, a, b));
+    const ImVec2 point(a.x + ImGui::CalcTextSize("obj").x, (a.y + b.y) * .5f);
+    for (int i = 0; i < 40; ++i) f.h.Frame(point, false);
+    CHECK(Has(f.panel.LineTooltip(), "0xDEADBEEF   (untyped)"));
+    auto open = [&] { f.h.Hover(point); f.h.RightClick(point); f.Idle(); };
+    auto pick = [&](const char* name) {
+        ImVec2 ma, mb;
+        CHECK(f.panel.ItemRect(name, ma, mb));
+        f.Take(); f.h.Hover(Centre(ma, mb)); f.h.Click(Centre(ma, mb)); f.Idle();
+        return f.Take();
+    };
+    // An untyped word is watchable as an unsigned value, labelled with the watched address.
+    open();
+    auto request = pick("Add Object Address to Watch");
+    CHECK(request.addWatch && request.watchAddress == 0x06000040 && request.watchType == WatchType::U32);
+    CHECK(Has(request.watchLabel, "06000040"));
+
+    // An object wider than any scalar can still be opened in Memory, but not watched.
+    shown.inspectionTargets[0].byteSize = 8;
+    open();
+    request = pick("View Object Storage in Memory");
+    CHECK(request.viewHex && request.hexAddr == 0x06000040);
+    open();
+    request = pick("Add Object Address to Watch");
+    CHECK(!request.addWatch);
+    f.h.Click(ImVec2(1100, 650)); f.Idle(2);
+    // ...unless it leaves the captured region.
+    shown.inspectionTargets[0].address = 0x060FFFF8; shown.inspectionTargets[0].byteSize = 16;
+    open();
+    request = pick("View Object Storage in Memory");
+    CHECK(!request.viewHex);
+}
+
 // A whole-row click navigates to the line's first instruction, on the panel's CPU -- and the row is
 // a RowSelectable, so a click past the end of the text lands too (CLAUDE.md, PanelWidgets.h).
 void TestLineClickNavigates()
@@ -2880,6 +2929,7 @@ int main(int argc, char** argv)
         RUN(TestTokenHitTesting());
         RUN(TestCapturedInspectionUi());
         RUN(TestCapturedInspectionRefusedActions());
+        RUN(TestCapturedInspectionUntypedAndWide());
         RUN(TestLineClickNavigates());
         RUN(TestLineOriginText());
 #ifdef SE_DECOMPILER_GUIDE

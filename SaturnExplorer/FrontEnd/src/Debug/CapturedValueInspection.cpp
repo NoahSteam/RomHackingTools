@@ -31,6 +31,13 @@ bool ReadByte(const MemorySnapshot& snapshot, uint64_t address, uint8_t& value,
     uint32_t c = 0;
     if (!CanonicalAddress(a, c, &why)) return false;
     const bool isBios = c < 0x00080000u;
+    if (c < 0x00100000u && !isBios)
+    {
+        // BusAreaName calls this BIOS, but the ROM is 512 KiB: bytes of an oversized image past
+        // it are not something the machine reads there.
+        why = "BIOS: beyond the 512 KiB ROM";
+        return false;
+    }
     if (!Wram(c) && !isBios)
     {
         why = std::string(BusAreaName(c)) + ": device value not available from this capture";
@@ -112,6 +119,38 @@ bool CanonicalCapturedWram(const MemorySnapshot& snapshot, uint32_t address, uin
     return false;
 }
 
+bool CanonicalCapturedWramRange(const MemorySnapshot& snapshot, uint32_t address, uint32_t size,
+                                uint32_t& canonical, std::string* reason)
+{
+    std::string why;
+    uint32_t start = 0;
+    if (size == 0)
+        why = "empty range";
+    else if (uint64_t(address) + size - 1 > std::numeric_limits<uint32_t>::max())
+        why = "address overflow";
+    else if (CanonicalAddress(address, start, &why) && !Wram(start))
+        why = "location is not captured work RAM";
+    else if (why.empty())
+    {
+        // One captured region covers the whole range: the first byte's canonical offset plus the
+        // size stays inside it, so a repeated-HWRAM boundary is never crossed and no byte is
+        // missing. No per-byte walk: an object may be large.
+        const MemoryRegion* region = snapshot.RegionAt(start);
+        if (!region)
+            why = "uncaptured memory at " + Hex(start);
+        else if (uint64_t(start - region->base) + size > region->bytes.size())
+            why = "access crosses a canonical memory boundary";
+        else
+        {
+            canonical = start;
+            if (reason) reason->clear();
+            return true;
+        }
+    }
+    if (reason) *reason = why;
+    return false;
+}
+
 CapturedValue InspectCapturedValue(const MemorySnapshot& snapshot, const InspectionTarget& target)
 {
     CapturedValue result;
@@ -168,6 +207,9 @@ CapturedValue InspectCapturedValue(const MemorySnapshot& snapshot, const Inspect
         result.scalarText = text;
         break;
     }
+    case InspectionTarget::Display::Untyped:
+        result.scalarText = Hex(result.bits) + "   (untyped)";
+        break;
     case InspectionTarget::Display::Bool:
         result.scalarText = Hex(result.bits) + (result.bits ? "   true" : "   false");
         break;

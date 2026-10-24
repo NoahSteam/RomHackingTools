@@ -34,4 +34,8 @@ CapturedPreview PreviewCapturedMemory(const MemorySnapshot& snapshot, uint32_t a
 // A repeated-HWRAM boundary may be previewed but cannot be navigated as a contiguous scalar.
 bool CanonicalCapturedWram(const MemorySnapshot& snapshot, uint32_t address, uint32_t width,
                           uint32_t& canonical, std::string* reason = nullptr);
+// The same for a whole object of any size (Memory navigation only; never a scalar read): the
+// range must lie in one captured WRAM region without crossing a repeated-HWRAM boundary.
+bool CanonicalCapturedWramRange(const MemorySnapshot& snapshot, uint32_t address, uint32_t size,
+                                uint32_t& canonical, std::string* reason = nullptr);
 } }
