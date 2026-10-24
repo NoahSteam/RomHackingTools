@@ -3656,6 +3656,7 @@ void Heritage::heritage(void)
   analyzeNewLoadGuards();
   widenEscapedStoreGuards();	// SaturnExplorer (patches/0061-engine-stack-frame-escape.patch)
   handleNewLoadCopies();
+  fd->checkPieceSizes();	// SaturnExplorer (patches/0068-engine-deadcode-late-stack-reads.patch)
   if (pass == 0)
     splitmanage.splitAdditional();
   pass += 1;

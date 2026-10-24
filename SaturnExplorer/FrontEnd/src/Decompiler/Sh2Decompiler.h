@@ -299,8 +299,9 @@ struct AccessFate
     // recovered switch's table; the switch stands for it. Patch 0068, for an access folded into the
     // function's own frame (recorded FoldedOrdinary first, 'frame' set): FrameUnread, a write went
     // with its value read by nothing but the engine's markers -- it is lost if the code reads one of
-    // its bytes later (A3-124); FrameRemoved, the access went with an unreachable block.
-    enum Kind : uint8_t { FoldedOrdinary, Dead, Unreachable, SwitchLookup, FrameUnread, FrameRemoved };
+    // its bytes later (A3-124); FrameRemoved, the access went with an unreachable block. MalformedPiece: no access, a
+    // PIECE or SUBPIECE whose sizes do not add up (its instruction in 'insn'): the values through it are no code's (A3-127).
+    enum Kind : uint8_t { FoldedOrdinary, Dead, Unreachable, SwitchLookup, FrameUnread, FrameRemoved, MalformedPiece };
     uint32_t insn = 0;      // the instruction, canonical
     bool write = false;
     uint8_t size = 0;

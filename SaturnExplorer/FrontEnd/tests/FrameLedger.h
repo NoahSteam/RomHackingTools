@@ -51,7 +51,8 @@ inline const char* FateLabel(sfe::decomp::AccessFate::Kind k)
     case AccessFate::Unreachable: return "unreachable";
     case AccessFate::SwitchLookup: return "switch-lookup";
     case AccessFate::FrameUnread: return "frame-unread";
-    default: return "frame-removed";
+    case AccessFate::FrameRemoved: return "frame-removed";
+    default: return "malformed-piece";
     }
 }
 

@@ -54,7 +54,8 @@ enum AccessFate {
   fate_unreachable,		///< Destroyed with the unreachable block it was in
   fate_switch_lookup,		///< The read of a recovered switch's table: the switch stands for it
   fate_frame_unread,		///< (0068) A read or write folded into the stack frame (recorded fate_folded_ordinary first), destroyed with its value never forwarded
-  fate_frame_removed		///< (0068) A read or write folded into the stack frame (recorded fate_folded_ordinary first) that went with an unreachable block
+  fate_frame_removed,		///< (0068) A read or write folded into the stack frame (recorded fate_folded_ordinary first) that went with an unreachable block
+  fate_malformed_piece		///< (0068) A PIECE or SUBPIECE whose sizes do not add up: what flows through it is no value of the code's
 };
 
 /// \brief One memory access of the flow and how it ended (SaturnExplorer)
@@ -224,7 +225,8 @@ public:
   void recordAccessFate(const PcodeOp *op,bool store,int4 size,const Address &addr,AccessFate fate);	///< Record how a memory access ended (SaturnExplorer)
   void recordAccessFold(const PcodeOp *op,const Varnode *vn);	///< Record a LOAD or STORE made a direct access of ordinary memory (SaturnExplorer)
   void recordFrameEnd(const PcodeOp *op,AccessFate fate);	///< Record how an access folded into the stack frame ended (SaturnExplorer, 0068)
-  void noteFrameFoldForwarded(bool walk,Varnode *vn);	///< Mark the frame folds a replaced input came from as forwarded (SaturnExplorer, 0068)
+  void noteFrameFoldForwarded(bool walk,Varnode *vn);
+  void checkPieceSizes(void);	///< Record each PIECE and SUBPIECE whose sizes do not add up (SaturnExplorer, 0068)	///< Mark the frame folds a replaced input came from as forwarded (SaturnExplorer, 0068)
   /// \brief SaturnExplorer (0068): is the op a MULTIEQUAL or INDIRECT, or not yet given an op-code
   static bool isMarkerOrUnbuilt(const PcodeOp *op) { return op->getOpcode() == (TypeOp *)0 || op->code() == CPUI_MULTIEQUAL || op->code() == CPUI_INDIRECT; }
   const vector<FlowTable> &getFlowTables(void) const { return flowTables; }	///< Every indirect jump the last flow recovered (SaturnExplorer)

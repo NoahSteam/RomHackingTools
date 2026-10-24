@@ -62,7 +62,8 @@ void Print(const char* label, const DecompileResult& r)
     for (const AccessFate& f : r.accessFates)
     {
         static const char* const names[] = { "folded into ordinary memory", "dead", "removed with unreachable code", "the switch's table",
-                                              "a frame write gone unread", "a frame access removed with unreachable code" };
+                                              "a frame write gone unread", "a frame access removed with unreachable code",
+                                              "a malformed piece" };
         std::printf("  ended: %s of %u bytes at %08X (%s%08X): %s\n", f.write ? "write" : "read", unsigned(f.size), f.insn,
                     f.constantAddress ? "" : "through a pointer; ", f.address, names[int(f.fate)]);
     }
@@ -825,6 +826,12 @@ bool ReferenceOk(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, 
     // ...and the frame (A3-124): a write folded into the function's own frame is a variable in both
     // runs, so neither lists it; it is lost when it went unread and the code reads a byte of it later
     // (dts::FrameLosses, from patch 0068's records).
+    for (const AccessFate& f : r.accessFates)
+        if (f.fate == AccessFate::MalformedPiece)
+        {
+            std::printf("  conservation: a piece of %u bytes at %08X has sizes that do not add up (A3-127)\n", unsigned(f.size), f.insn);
+            ok = false;
+        }
     for (const dts::FrameLoss& l : dts::FrameLosses(r, dts::SnapshotWords(snap)))
     {
         std::printf("  conservation: the frame write of %u bytes at %08X (frame offset %08X) went unread, and the read at %08X "
@@ -3955,7 +3962,7 @@ void TestGameCode()
         noReference = 0, droppedSaid = 0;
     // The conservation law over the corpus: the engine's records by fate, and the reference run's
     // accesses by how the shown output accounts for them.
-    int fateCount[6] = { 0, 0, 0, 0, 0, 0 };
+    int fateCount[7] = { 0, 0, 0, 0, 0, 0, 0 };
     int frameLost = 0;   // A3-124: frame writes that went unread though the code reads them (dts::FrameLosses)
     int accountCount[4] = { 0, 0, 0, 0 };   // Printed, Folded, Removed, Dropped
     int foldedLookup = 0, removedOrdinary = 0;
@@ -4192,7 +4199,8 @@ void TestGameCode()
     std::printf("  the engine's records: %d folded into ordinary memory, %d dead, %d unreachable, %d switch lookups; "
                 "frame: %d writes went unread, %d accesses removed with unreachable code\n",
                 fateCount[0], fateCount[1], fateCount[2], fateCount[3], fateCount[4], fateCount[5]);
-    std::printf("  %d frame writes lost: unread, and read by the code later (A3-124)\n", frameLost);
+    std::printf("  %d frame writes lost: unread, and read by the code later (A3-124); %d malformed pieces (A3-127)\n", frameLost,
+                fateCount[int(AccessFate::MalformedPiece)]);
     std::printf("  the reference run's accesses: %d printed, %d folded (%d of them a switch lookup), %d removed (%d of ordinary "
                 "memory, %d said), %d dropped\n", accountCount[int(Account::Printed)], accountCount[int(Account::Folded)],
                 foldedLookup, accountCount[int(Account::Removed)], removedOrdinary, droppedSaid, accountCount[int(Account::Dropped)]);
@@ -4204,6 +4212,7 @@ void TestGameCode()
     CHECK(dropped == 0);
     CHECK(deadLost == 0);
     CHECK(frameLost == 0);
+    CHECK(fateCount[int(AccessFate::MalformedPiece)] == 0);
     CHECK(noReference == 0);
     CHECK(folded == 0);
     CHECK(outOfOrder == 0);

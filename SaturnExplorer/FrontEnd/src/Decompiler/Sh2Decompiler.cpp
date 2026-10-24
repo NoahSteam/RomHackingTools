@@ -5527,6 +5527,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
             case ghidra::fate_switch_lookup: f.fate = AccessFate::SwitchLookup; break;
             case ghidra::fate_frame_unread: f.fate = AccessFate::FrameUnread; break;
             case ghidra::fate_frame_removed: f.fate = AccessFate::FrameRemoved; break;
+            case ghidra::fate_malformed_piece: f.fate = AccessFate::MalformedPiece; break;
             default: f.fate = AccessFate::Dead; break;
             }
             {

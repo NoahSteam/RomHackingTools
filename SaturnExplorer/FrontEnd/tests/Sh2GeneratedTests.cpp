@@ -4462,6 +4462,9 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
             if (w.find("Exceeded maximum repeats") != std::string::npos) add("unsettled", w);
         // The frame half of the conservation law (A3-124, patch 0068): a write folded into the frame that went unread while the
         // code reads a byte of it later. The trace cannot show it (a frame access is no bus access the ledger pairs), the record can.
+        for (const AccessFate& f : r.accessFates)
+            if (f.fate == AccessFate::MalformedPiece)
+                add("malformed-piece", "a piece of " + std::to_string(f.size) + " byte(s) at " + Hex(f.insn) + " has sizes that do not add up (A3-127)");
         for (const dts::FrameLoss& l : dts::FrameLosses(r, dts::SnapshotWords(snap)))
             add("frame-lost:W" + std::to_string(l.size), "the frame write of " + std::to_string(l.size) + " byte(s) at " + Hex(l.write) +
                     " (frame offset " + Hex(l.offset) + ") went unread, and the read at " + Hex(l.read) + " reads it");
@@ -9368,6 +9371,14 @@ int CheckFrame124Ledger(Sh2Decompiler& d, const std::vector<CCase>& cases)
         const DecompileResult r = d.Decompile(snap, q);
         if (EnvNumber("SE_GENERATED_VERBOSE", 0) >= 2)
             std::printf("%s (frame ledger)\n  words: %s\n%s\n", c.name.c_str(), WordsText(c.words).c_str(), r.Text().c_str());
+        for (const AccessFate& f : r.accessFates)
+            if (f.fate == AccessFate::MalformedPiece)
+            {
+                ++lost;
+                std::printf("FINDING [malformed-piece] %s\n  detail: a piece of %u byte(s) at %s has sizes that do not add up (A3-127)\n  words: %s\n%s\n",
+                            c.name.c_str(), unsigned(f.size), Hex(f.insn).c_str(), WordsText(c.words).c_str(), r.Text().c_str());
+                break;
+            }
         for (const dts::FrameLoss& l : dts::FrameLosses(r, dts::SnapshotWords(snap)))
         {
             ++lost;

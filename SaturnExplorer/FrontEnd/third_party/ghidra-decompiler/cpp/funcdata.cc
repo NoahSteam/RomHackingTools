@@ -16,7 +16,7 @@
  * Modified for SaturnExplorer: the destructor frees the return-recovery state (patches/0004-funcdata-frees-active-output.patch).
  * Modified for SaturnExplorer: every LOAD and STORE's fate is recorded (patches/0017-access-fates.patch).
  * Modified for SaturnExplorer: the instructions and jump tables the flow recovered are recorded (patches/0021-flow-instructions.patch).
- * Modified for SaturnExplorer: an access folded into the stack frame is flagged, and recorded again if a write goes with its value unread or the access with an unreachable block (patches/0068-engine-deadcode-late-stack-reads.patch).
+ * Modified for SaturnExplorer: an access folded into the stack frame is flagged, and recorded again if a write goes with its value unread or the access with an unreachable block; a PIECE or SUBPIECE whose sizes do not add up is recorded (patches/0068-engine-deadcode-late-stack-reads.patch).
  */
 #include "funcdata.hh"
 
@@ -241,6 +241,45 @@ void Funcdata::recordAccessFold(const PcodeOp *op,const Varnode *vn)
   // was found, or with the pieces of a wrong collapse, were counted as folded and nothing more).
   if (op->getTime() < flowOps && vn->getSpace()->getType() == IPTR_SPACEBASE)
     op->setFrameFold();
+}
+
+/// SaturnExplorer (patches/0068-engine-deadcode-late-stack-reads.patch): the PIECEs and SUBPIECEs now in the
+/// function are checked for sizes that add up -- a PIECE's inputs to its output, a SUBPIECE's output and truncation
+/// within its input. One that does not is a value no instruction computed, and the accesses whose values flow
+/// through it are not conserved however the conservation records read: each is recorded once (fate_malformed_piece).
+/// Upstream's INDIRECT collapse made a PIECE of five bytes for a four-byte local when a byte was stored at offset 1 or 2
+/// of it (A3-124's corpus function, ledger A3-127), and the stores it held were later dropped with no record of a loss.
+/// Called after each heritage pass.
+void Funcdata::checkPieceSizes(void)
+
+{
+  for(int4 pass=0;pass<2;++pass) {
+    OpCode opc = (pass == 0) ? CPUI_PIECE : CPUI_SUBPIECE;
+    for(list<PcodeOp *>::const_iterator iter=beginOp(opc);iter!=endOp(opc);++iter) {
+      const PcodeOp *op = *iter;
+      if (op->isDead() || op->getOut() == (Varnode *)0 || op->numInput() != 2) continue;
+      const Varnode *a = op->getIn(0);
+      const Varnode *b = op->getIn(1);
+      if (a == (Varnode *)0 || b == (Varnode *)0) continue;
+      bool bad;
+      if (opc == CPUI_PIECE)
+	bad = (a->getSize() + b->getSize() != op->getOut()->getSize());
+      else
+	bad = !b->isConstant() || b->getOffset() + (uintb)op->getOut()->getSize() > (uintb)a->getSize();
+      if (!bad) continue;
+      bool seen = false;
+      for(vector<AccessRecord>::const_iterator r=accessFates.begin();r!=accessFates.end();++r)
+	if ((*r).fate == fate_malformed_piece && (*r).time == op->getTime()) { seen = true; break; }
+      if (seen) continue;
+      AccessRecord rec;
+      rec.time = op->getTime();
+      rec.pc = op->getAddr();
+      rec.store = false;
+      rec.size = op->getOut()->getSize();
+      rec.fate = fate_malformed_piece;
+      accessFates.push_back(rec);
+    }
+  }
 }
 
 /// SaturnExplorer (patches/0068-engine-deadcode-late-stack-reads.patch): a LOAD or STORE that
