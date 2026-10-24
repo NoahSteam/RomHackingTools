@@ -1094,7 +1094,7 @@ static bool frameAffine(Varnode *vn,const set<Varnode *> &members,vector<pair<Va
 /// \param spc is the stack space
 /// \param offset holds the stack pointer's inputs (offset 0)
 /// \param inexactSet receives the members with no exact offset
-void FrameEscape::classifyExact(AddrSpace *spc,const map<Varnode *,uintb> &offset,set<Varnode *> &inexactSet)
+void FrameEscape::classifyExact(AddrSpace *spc,const map<Varnode *,uintb> &offset,vector<Varnode *> &inexactSet)
 
 {
   const int4 maxComponent = 4096;
@@ -1103,19 +1103,27 @@ void FrameEscape::classifyExact(AddrSpace *spc,const map<Varnode *,uintb> &offse
   map<Varnode *,Pos> pos;
   map<Varnode *,vector<pair<Varnode *,intb> > > edges;
   set<Varnode *> affine;
-  for(set<Varnode *>::const_iterator iter=members.begin();iter!=members.end();++iter) {
+  // Everything here is built in the members' creation-index order, never the pointer order of the set, so the
+  // order in which temporaries are allocated does not depend on where the allocator placed a Varnode (the fault
+  // matrix requires the allocation sequence of a decompile to be identical between two runs of the same function).
+  vector<Varnode *> ordered(members.begin(),members.end());
+  sort(ordered.begin(),ordered.end(),[](Varnode *a,Varnode *b){ return a->getCreateIndex() < b->getCreateIndex(); });
+  for(vector<Varnode *>::const_iterator iter=ordered.begin();iter!=ordered.end();++iter) {
     vector<pair<Varnode *,intb> > in;
     if (frameAffine(*iter,members,in)) {
       affine.insert(*iter);
       edges[*iter] = in;
     }
   }
-  // Tarjan's strongly connected components, iterative
+  // Tarjan's strongly connected components, iterative. The members are taken in creation-index order, not the
+  // pointer order of the set: the walk's own order must not depend on where the allocator placed a Varnode, or the
+  // escape decision (and the number of guards it makes) is not reproducible between two decompiles of one function.
   map<Varnode *,int4> index,low;
   set<Varnode *> onStack;
   vector<Varnode *> stack;
   int4 counter = 0;
-  for(set<Varnode *>::const_iterator root=members.begin();root!=members.end();++root) {
+  for(vector<Varnode *>::const_iterator rootiter=ordered.begin();rootiter!=ordered.end();++rootiter) {
+    Varnode * const *root = &(*rootiter);
     if (index.find(*root) != index.end()) continue;
     vector<pair<Varnode *,int4> > call;	// the node and the next edge to visit
     call.push_back(pair<Varnode *,int4>(*root,0));
@@ -1267,9 +1275,11 @@ void FrameEscape::classifyExact(AddrSpace *spc,const map<Varnode *,uintb> &offse
 	pos[comp[c]] = res;
     }
   }
-  for(map<Varnode *,Pos>::const_iterator iter=pos.begin();iter!=pos.end();++iter)
-    if ((*iter).second.kind != kExact && (*iter).second.kind != kUp)
-      inexactSet.insert((*iter).first);
+  for(vector<Varnode *>::const_iterator iter=ordered.begin();iter!=ordered.end();++iter) {
+    map<Varnode *,Pos>::const_iterator f = pos.find(*iter);
+    if (f != pos.end() && (*f).second.kind != kExact && (*f).second.kind != kUp)
+      inexactSet.push_back(*iter);
+  }
 }
 
 /// SaturnExplorer (patches/0061-engine-stack-frame-escape.patch): walk forward from the stack pointer's input over every value computed from
@@ -1431,7 +1441,7 @@ void FrameEscape::compute(const Funcdata *fd,AddrSpace *spc,bool preHeritage)
     break;
   }
   // (patches/0066-engine-frame-escape-inexact.patch) the members that are no exact offset from the frame base (classifyExact)
-  set<Varnode *> inexactSet;
+  vector<Varnode *> inexactSet;
   classifyExact(spc,offset,inexactSet);
   // (c): a join with a value that is no frame address
   for(set<Varnode *>::const_iterator iter=members.begin();iter!=members.end();++iter) {
@@ -1500,7 +1510,7 @@ void FrameEscape::compute(const Funcdata *fd,AddrSpace *spc,bool preHeritage)
   // own data flow, so the pointers it did not make are not taken to be frame addresses on its account (markUnknownStores is for the causes
   // above), and the save slots stay as 0063 has them (not loose).
   bool leftFlow = escaped;
-  for(set<Varnode *>::const_iterator iter=inexactSet.begin();iter!=inexactSet.end();++iter) {
+  for(vector<Varnode *>::const_iterator iter=inexactSet.begin();iter!=inexactSet.end();++iter) {
     Varnode *vn = *iter;
     for(list<PcodeOp *>::const_iterator diter=vn->beginDescend();diter!=vn->endDescend();++diter) {
       PcodeOp *op = *diter;

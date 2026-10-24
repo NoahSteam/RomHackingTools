@@ -213,7 +213,7 @@ public:
 /// to 0065 stay only as helpers that add aliasing.
 class FrameEscape {
   void markUnknownStores(const Funcdata *fd);	///< Mark the STOREs through a pointer not proved to be no frame address (0063)
-  void classifyExact(AddrSpace *spc,const map<Varnode *,uintb> &offset,set<Varnode *> &inexactSet);	///< (0066) Which members are no exact offset
+  void classifyExact(AddrSpace *spc,const map<Varnode *,uintb> &offset,vector<Varnode *> &inexactSet);	///< (0066) Which members are no exact offset
 public:
   set<Varnode *> members;		///< The possible frame addresses
   set<Varnode *> unmodeled;		///< ...of which those reached through a form the stack analysis does not model
