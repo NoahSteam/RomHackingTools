@@ -6939,20 +6939,23 @@ template <int N> struct Piece : T<N, true> {
   template <class I, class = typename std::enable_if<IsInt<I>::value>::type> Piece(I x) : T<N, true>(x) {}
 };
 typedef T<4, false> Bool4;
+// `&&` and `||` of the text (A2-96) arrive as LAND(a, b) and LOR(a, b) (ShortCircuitOps): the right operand is evaluated only when the left does not decide,
+// as in the engine's and in C's reading, and the value is the four-byte unsigned Bool4 that every other logical operator gives here. (The operators below,
+// which evaluate both operands, are kept for a text the rewriting left alone.) Truth is declared before the header turns `bool` into a class.
+template <class X> static inline bool Truth(const X& x) { return static_cast<bool>(x); }
+#define LAND(a, b) (Truth(a) ? Bool4(Truth(b)) : Bool4(0))
+#define LOR(a, b) (Truth(a) ? Bool4(1) : Bool4(Truth(b)))
 // A value narrower than int meeting a plain number (the text's literal has no width of its own) is brought to four bytes first, keeping its sign: the
 // engine extends it where C's promotion would, invisibly, so `(in_sr & 1) - 1 >> 2` of a uint1 is a four-byte unsigned subtraction and a logical shift
 template <int N, bool S> struct Promoted { typedef T<(N < 4 ? 4 : N), S> type; };
-template <class I> struct IsPlainInt { static const bool value = std::is_integral<I>::value && !std::is_same<I, bool>::value; };
 #define BINARY(op, body) \
   template <int N, bool S, int M, bool U> typename Common<N, S, M, U>::type operator op(const T<N, S>& a, const T<M, U>& b) { \
     typedef typename Common<N, S, M, U>::type C; \
     C x, y; x.v = (typename C::R)(a.Ext() & C::Mask()); y.v = (typename C::R)(b.Ext() & C::Mask()); \
     const bool sg = C::sign; (void)sg; \
     body } \
-  template <int N, bool S, class I, class = typename std::enable_if<IsPlainInt<I>::value>::type> typename Promoted<N, S>::type operator op(const T<N, S>& a, I b) { typedef typename Promoted<N, S>::type P; return P(a) op P(b); } \
-  template <int N, bool S, class I, class = typename std::enable_if<IsPlainInt<I>::value>::type> typename Promoted<N, S>::type operator op(I a, const T<N, S>& b) { typedef typename Promoted<N, S>::type P; return P(a) op P(b); } \
-  template <int N, bool S> typename Common<N, S, 4, false>::type operator op(const T<N, S>& a, bool b) { return a op Bool4(b); } \
-  template <int N, bool S> typename Common<4, false, N, S>::type operator op(bool a, const T<N, S>& b) { return Bool4(a) op b; }
+  template <int N, bool S, class I, class = typename std::enable_if<IsInt<I>::value>::type> typename Promoted<N, S>::type operator op(const T<N, S>& a, I b) { typedef typename Promoted<N, S>::type P; return P(a) op P(b); } \
+  template <int N, bool S, class I, class = typename std::enable_if<IsInt<I>::value>::type> typename Promoted<N, S>::type operator op(I a, const T<N, S>& b) { typedef typename Promoted<N, S>::type P; return P(a) op P(b); }
 BINARY(+, return C((x.Zext() + y.Zext()) & C::Mask());)
 BINARY(-, return C((x.Zext() - y.Zext()) & C::Mask());)
 BINARY(*, return C((x.Zext() * y.Zext()) & C::Mask());)
@@ -6966,10 +6969,8 @@ BINARY(%, if (y.Zext() == 0) return C(0); if (sg && (s64)y.Sext() == -1) return 
     typedef typename Common<N, S, M, U>::type C; \
     C x, y; x.v = (typename C::R)(a.Ext() & C::Mask()); y.v = (typename C::R)(b.Ext() & C::Mask()); \
     return Bool4(C::sign ? ((s64)x.Sext() op (s64)y.Sext()) : (x.Zext() op y.Zext())); } \
-  template <int N, bool S, class I, class = typename std::enable_if<IsPlainInt<I>::value>::type> Bool4 operator op(const T<N, S>& a, I b) { typedef typename Promoted<N, S>::type P; return P(a) op P(b); } \
-  template <int N, bool S, class I, class = typename std::enable_if<IsPlainInt<I>::value>::type> Bool4 operator op(I a, const T<N, S>& b) { typedef typename Promoted<N, S>::type P; return P(a) op P(b); } \
-  template <int N, bool S> Bool4 operator op(const T<N, S>& a, bool b) { return a op Bool4(b); } \
-  template <int N, bool S> Bool4 operator op(bool a, const T<N, S>& b) { return Bool4(a) op b; }
+  template <int N, bool S, class I, class = typename std::enable_if<IsInt<I>::value>::type> Bool4 operator op(const T<N, S>& a, I b) { typedef typename Promoted<N, S>::type P; return P(a) op P(b); } \
+  template <int N, bool S, class I, class = typename std::enable_if<IsInt<I>::value>::type> Bool4 operator op(I a, const T<N, S>& b) { typedef typename Promoted<N, S>::type P; return P(a) op P(b); }
 CMP(==) CMP(!=) CMP(<) CMP(<=) CMP(>) CMP(>=)
 // shifts take the type of the left operand
 template <int N, bool S, int M, bool U> T<N, S> operator<<(const T<N, S>& a, const T<M, U>& b) { u64 c = b.Zext(); return T<N, S>(c >= 8 * N ? 0 : (a.Zext() << c)); }
@@ -6983,10 +6984,12 @@ template <int N, bool S> T<N, S> operator-(const T<N, S>& a) { return T<N, S>((0
 template <int N, bool S> T<N, S> operator~(const T<N, S>& a) { return T<N, S>(~a.Zext() & T<N, S>::Mask()); }
 template <int N, bool S> T<N, S> operator+(const T<N, S>& a) { return a; }
 template <int N, bool S> Bool4 operator!(const T<N, S>& a) { return Bool4(a.Zext() == 0); }
-// No overload of && and || (A2-96): the engine's `&&` and `||` short-circuit as C's do, and an overloaded operator evaluates both operands (the text
-// writes a condition that sets a variable as `(a == 0) && (param_1 = param_2, 0 < (int4)param_2)`, whose right operand must not run when the left is
-// false). A T converts to bool explicitly, which the built-in operators do contextually; the result is a plain bool, which every operator above
-// takes as the four-byte unsigned Bool4 (the overloads for bool below).
+template <int N, bool S, int M, bool U> Bool4 operator&&(const T<N, S>& a, const T<M, U>& b) { return Bool4(a.Zext() != 0 && b.Zext() != 0); }
+template <int N, bool S, int M, bool U> Bool4 operator||(const T<N, S>& a, const T<M, U>& b) { return Bool4(a.Zext() != 0 || b.Zext() != 0); }
+template <int N, bool S, class I, class = typename std::enable_if<IsInt<I>::value>::type> Bool4 operator&&(const T<N, S>& a, I b) { return Bool4(a.Zext() != 0 && b != 0); }
+template <int N, bool S, class I, class = typename std::enable_if<IsInt<I>::value>::type> Bool4 operator&&(I a, const T<N, S>& b) { return Bool4(a != 0 && b.Zext() != 0); }
+template <int N, bool S, class I, class = typename std::enable_if<IsInt<I>::value>::type> Bool4 operator||(const T<N, S>& a, I b) { return Bool4(a.Zext() != 0 || b != 0); }
+template <int N, bool S, class I, class = typename std::enable_if<IsInt<I>::value>::type> Bool4 operator||(I a, const T<N, S>& b) { return Bool4(a != 0 || b.Zext() != 0); }
 // the names the engine prints (xunknown: no sign, read as signed)
 typedef T<1, false> undefined; typedef T<1, false> undefined1; typedef T<2, false> undefined2; typedef T<3, false> undefined3; typedef T<4, false> undefined4; typedef T<8, false> undefined8;
 typedef T<1, false> byte; typedef T<1, false> uchar; typedef T<2, false> ushort; typedef T<4, false> uint; typedef T<3, false> uint3; typedef T<8, true> longlong; typedef T<8, false> ulonglong;
@@ -7070,6 +7073,139 @@ std::string NegativeWideLiteralsTyped(const std::string& text)
 {
     static const std::regex neg("-(0x[89a-fA-F][0-9a-fA-F]{7})\\b");
     return std::regex_replace(text, neg, "-$1LL");
+}
+
+// A2-96: the engine's reading short-circuits `&&` and `||` as C does. An overloaded operator in C++ evaluates both operands, so a text whose right operand
+// assigns (`(param_1 == 0) && (param_1 = param_2, 0 < (int4)param_2)`, how the printer writes a condition that sets a variable) ran the assignment on every
+// path. The text is rewritten for the engine's reading: every `a && b` and `a || b` at one nesting level becomes LAND(a, b) / LOR(a, b) (left to right, `||`
+// binding looser than `&&`, and the operators below them, `,` `?` `:` and assignment, ending an operand), the operands rewritten in turn. A comment, a
+// string and a character constant are left as they are.
+static bool SkipLiteralOrComment(const std::string& s, size_t& i)
+{
+    const char c = s[i];
+    if (c == '\'' || c == '"')
+    {
+        for (++i; i < s.size() && s[i] != c; ++i)
+            if (s[i] == '\\') ++i;
+        return true;
+    }
+    if (c == '/' && i + 1 < s.size() && s[i + 1] == '*')
+    {
+        const size_t e = s.find("*/", i + 2);
+        i = e == std::string::npos ? s.size() - 1 : e + 1;
+        return true;
+    }
+    if (c == '/' && i + 1 < s.size() && s[i + 1] == '/')
+    {
+        const size_t e = s.find('\n', i);
+        i = e == std::string::npos ? s.size() - 1 : e - 1;
+        return true;
+    }
+    return false;
+}
+
+static std::string ShortCircuitExpr(const std::string& s)
+{
+    std::vector<std::pair<size_t, size_t>> low, ors, ands;   // (position, length) at nesting depth 0
+    int depth = 0;
+    for (size_t i = 0; i < s.size(); ++i)
+    {
+        if (SkipLiteralOrComment(s, i)) continue;
+        const char c = s[i];
+        if (c == '(' || c == '[') ++depth;
+        else if (c == ')' || c == ']') --depth;
+        else if (depth == 0)
+        {
+            if (c == ',' || c == '?' || c == ':') low.push_back({ i, 1 });
+            else if (c == '=')
+            {
+                if (i + 1 < s.size() && s[i + 1] == '=') { ++i; continue; }                                     // ==
+                const char prev = i > 0 ? s[i - 1] : ' ';
+                if (prev == '=' || prev == '!') continue;                                                         // ==, !=
+                if ((prev == '<' || prev == '>') && !(i >= 2 && s[i - 2] == prev)) continue;                       // <=, >= (but <<=, >>= assign)
+                low.push_back({ i, 1 });
+            }
+            else if (c == '|' && i + 1 < s.size() && s[i + 1] == '|') { ors.push_back({ i, 2 }); ++i; }
+            else if (c == '&' && i + 1 < s.size() && s[i + 1] == '&') { ands.push_back({ i, 2 }); ++i; }
+        }
+    }
+    auto split = [&](const std::vector<std::pair<size_t, size_t>>& seps, const char* macro) {
+        auto trim = [](const std::string& t, std::string& lead, std::string& trail) {
+            const size_t a = t.find_first_not_of(" \t\r\n"), b = t.find_last_not_of(" \t\r\n");
+            lead = a == std::string::npos ? t : t.substr(0, a);
+            trail = a == std::string::npos ? std::string() : t.substr(b + 1);
+            return a == std::string::npos ? std::string() : t.substr(a, b - a + 1);
+        };
+        std::string lead, trail, acc;
+        size_t from = 0;
+        for (size_t k = 0; k <= seps.size(); ++k)
+        {
+            const size_t to = k < seps.size() ? seps[k].first : s.size();
+            std::string l, t;
+            const std::string part = ShortCircuitExpr(trim(s.substr(from, to - from), l, t));
+            if (k == 0) lead = l;
+            if (k == seps.size()) trail = t;
+            acc = k == 0 ? part : std::string(macro) + "(" + acc + ", " + part + ")";
+            if (k < seps.size()) from = seps[k].first + seps[k].second;
+        }
+        return lead + acc + trail;
+    };
+    if (!low.empty())
+    {
+        std::string out;
+        size_t from = 0;
+        for (const auto& sep : low)
+        {
+            out += ShortCircuitExpr(s.substr(from, sep.first - from)) + s.substr(sep.first, sep.second);
+            from = sep.first + sep.second;
+        }
+        return out + ShortCircuitExpr(s.substr(from));
+    }
+    if (!ors.empty()) return split(ors, "LOR");
+    if (!ands.empty()) return split(ands, "LAND");
+    std::string out;
+    for (size_t i = 0; i < s.size(); ++i)
+    {
+        const size_t start = i;
+        if (SkipLiteralOrComment(s, i)) { out += s.substr(start, i - start + 1); continue; }
+        const char c = s[i];
+        if (c != '(' && c != '[') { out += c; continue; }
+        int d = 0;
+        size_t j = i;
+        for (; j < s.size(); ++j)
+        {
+            size_t k = j;
+            if (SkipLiteralOrComment(s, k)) { j = k; continue; }
+            if (s[j] == '(' || s[j] == '[') ++d;
+            else if ((s[j] == ')' || s[j] == ']') && --d == 0) break;
+        }
+        if (j >= s.size()) { out += s.substr(i); break; }
+        out += c + ShortCircuitExpr(s.substr(i + 1, j - i - 1)) + s[j];
+        i = j;
+    }
+    return out;
+}
+
+std::string ShortCircuitOps(const std::string& text)
+{
+    std::string out, chunk;
+    int depth = 0;
+    for (size_t i = 0; i < text.size(); ++i)
+    {
+        const size_t start = i;
+        if (SkipLiteralOrComment(text, i)) { chunk += text.substr(start, i - start + 1); continue; }
+        const char c = text[i];
+        if (c == '(' || c == '[') ++depth;
+        else if (c == ')' || c == ']') --depth;
+        if (depth <= 0 && (c == ';' || c == '{' || c == '}'))
+        {
+            out += ShortCircuitExpr(chunk) + c;
+            chunk.clear();
+            continue;
+        }
+        chunk += c;
+    }
+    return out + ShortCircuitExpr(chunk);
 }
 
 std::string CxxHeader()
@@ -7202,6 +7338,16 @@ void TestOracleOwnDecisions()
     CHECK(UnsignedLiteralsTyped("0x7f < param_1 + 0x80U") == "0x7f < param_1 + uint4(0x80)");
     CHECK(UnsignedLiteralsTyped("x * 3U + 0xfffffffeULL") == "x * uint4(3) + uint8(0xfffffffe)");
     CHECK(UnsignedLiteralsTyped("uVar1 = in_r2U + 0xffffffff; uRam0600U = 1;") == "uVar1 = in_r2U + 0xffffffff; uRam0600U = 1;");
+    // A2-96: `&&` and `||` of the engine's reading are lazy: the operands at one level are joined left to right, `||` outside `&&`, an assignment's right side is its own
+    CHECK(ShortCircuitOps("if (a && b) {") == "if (LAND(a, b)) {");
+    CHECK(ShortCircuitOps("x = a || b && c;") == "x = LOR(a, LAND(b, c));");
+    CHECK(ShortCircuitOps("if ((param_1 == 0) && (param_1 = param_2, 0 < (int4)param_2)) {") == "if (LAND((param_1 == 0), (param_1 = param_2, 0 < (int4)param_2))) {");
+    CHECK(ShortCircuitOps("y = (p ? a && b : c) || d;") == "y = LOR((p ? LAND(a, b) : c), d);");
+    CHECK(ShortCircuitOps("f(a, b && c);") == "f(a, LAND(b, c));");
+    CHECK(ShortCircuitOps("x = (char)(a) == '\\x01' && (c != 0);") == "x = LAND((char)(a) == '\\x01', (c != 0));");
+    CHECK(ShortCircuitOps("/* it's && here */ x = a;") == "/* it's && here */ x = a;");
+    CHECK(ShortCircuitOps("x <<= a >= b && c;") == "x <<= LAND(a >= b, c);");
+    CHECK(ShortCircuitOps("x = a & b | c;") == "x = a & b | c;");
     // A2-71: an 8-byte constant of -0x80000000 is negative in the engine's reading; the other literals are as they were
     CHECK(NegativeWideLiteralsTyped("(int8)param_2 * -0x80000000") == "(int8)param_2 * -0x80000000LL");
     CHECK(NegativeWideLiteralsTyped("x + -0xfffffffe;") == "x + -0xfffffffeLL;");
@@ -7809,7 +7955,7 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
     auto compileRun = [&](const std::vector<size_t>& which, const std::string& tag, std::string& log, bool& compiled, bool engine = false) -> std::string {
         std::ostringstream src;
         src << RunGuardSource() << (engine ? CxxHeader() : CHeader());   // the guard's system headers first: the headers below define names (byte, word, uint, bool) they use
-        for (size_t i : which) src << "static int bad_" << prep[i].name << ";\n" << (engine ? NegativeWideLiteralsTyped(UnsignedLiteralsTyped(prep[i].cText)) : prep[i].cText) << "\n";
+        for (size_t i : which) src << "static int bad_" << prep[i].name << ";\n" << (engine ? ShortCircuitOps(NegativeWideLiteralsTyped(UnsignedLiteralsTyped(prep[i].cText))) : prep[i].cText) << "\n";
         src << "int main(void) {\n  RunGuard();\n  FrameInit();\n";
         for (size_t i : which) src << prep[i].mainText;
         int total = 0;
@@ -9264,6 +9410,11 @@ void TestPrintedC()
                                                             nIn, cc, 0x51ED, 8987);
             std::printf("pin 'A2-96': %s (%s)\n", r96[0].cls.empty() ? "agrees" : r96[0].cls.c_str(), r96[0].detail.substr(0, 90).c_str());
             CHECK(r96[0].cls == "narrow-c");
+            // ...and the value of a logical operator in arithmetic stays the four-byte unsigned (family 74 seed 3601817: '(a && b) - 1 >> 1' is 0x7FFFFFFF when the
+            // operator is false; a plain C bool gave the signed -1 >> 1, a 'mismatch' that the first version of this fix introduced)
+            const std::vector<CVerdict> r96b = CheckPrintedC(d, { { "A2-96: the value of && in arithmetic", { 0x6043, 0x6153, 0x6263, 0x6373, 0x0029, 0x6028, 0xD117, 0x0229, 0xE100, 0x7180, 0x4300, 0x0017, 0x001A, 0x4024, 0x0019, 0x0129, 0x73FE, 0x8B02, 0x4018, 0xE201, 0x632D, 0x303C, 0x326D, 0x010A, 0x001A, 0x7104, 0x3252, 0x301B, 0x4229, 0x616D, 0x205E, 0x031A, 0x0129, 0x320B, 0x4110, 0x324E, 0x300B, 0x420A, 0x7202, 0x602F, 0x237F, 0x021A, 0x7302, 0x4101, 0xC880, 0x324C, 0x205C, 0x337C, 0x430A, 0x2249, 0x6303, 0x000B, 0x6023, 0x0009, 0x8000, 0x0000 } } }, nIn, cc, 0x51ED, 8985);
+            std::printf("pin 'A2-96 (arithmetic)': %s (%s)\n", r96b[0].cls.empty() ? "agrees" : r96b[0].cls.c_str(), r96b[0].detail.substr(0, 90).c_str());
+            CHECK(r96b[0].cls == "narrow-c");
             // A2-98: a compiled text that does not end is a class of its own, 'timeout', after a CPU limit, and the rest of its batch is kept. A text that spins is made from the
             // A2-92 control through the harness's hook (the generator makes no function whose text does not end once A2-97 is fixed).
             gPrintedCRunSeconds = 1;
