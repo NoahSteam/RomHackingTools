@@ -12718,6 +12718,24 @@ void TestA3124Fix()
         { "I A3-128: S+4 = 0 through the reloaded pointer, &S handed to a callee that reads S+4, S+4 = 5 after the call",
           { 0x4F22, 0x7FE8, 0x61F3, 0x7108, 0x1F15, 0xE307, 0x1F32, 0x57F5, 0xE200, 0x1721, 0x54F5, 0xD005, 0x400B, 0x0009, 0xE205, 0x1F23,
             0x50F3, 0x7F18, 0x4F26, 0x000B, 0x0009, 0x0009, 0x0600, 0x9100 }, true, false, "xStack_10 = 0;", { 0x5041, 0x000B, 0x0009 } },
+        // The ledger's own false losses, found by the generator (each pins one part of patch 0068's records; the text was right).
+        // Grammar 2 seed 572: a push popped into r1, read by `tst r1,r3` with r3 0 (made `r1 & 0`, a constant) while the stack was not
+        // yet linked; the pop was marked read, the push it was later linked to was not (a read destroyed passes its mark on).
+        { "J ledger: a pop forwarded into a constant before it was linked to its push",
+          { 0x2F16, 0x61F6, 0xE301, 0xA000, 0x0009, 0x4310, 0x8BFD, 0x2318, 0x8BFF, 0x000B, 0x0009 }, false, false, "while (" },
+        // Grammar 2 seed 996: a byte stored to the frame, a call the engine guarded it at, the guard later removed as the byte has no
+        // alias at the call (RuleAliasUpdate): the call is no read of it.
+        { "K ledger: a call guard on a local that the alias analysis removes",
+          { 0x2F86, 0x2F96, 0x2FA6, 0x2FB6, 0x4F22, 0x7FF4, 0x6843, 0x6953, 0x6A63, 0x6B73, 0xE301, 0x4310, 0x8901, 0xAFFC, 0x0009, 0xE000,
+            0x0F34, 0xB00F, 0x0009, 0x6483, 0x6593, 0x66A3, 0x67B3, 0xD204, 0x7F0C, 0x4F26, 0x6BF6, 0x6AF6, 0x69F6, 0x68F6, 0x422B, 0x0009,
+            0x0600, 0x9044, 0x2FE6, 0x7FF0, 0x6EF3, 0x85E1, 0x4715, 0x8D00, 0x140C, 0x6043, 0x7E10, 0x6FE3, 0x6EF6, 0x000B, 0x0009 },
+          false, false, "func_0x06009044(" },
+        // frame124 seed 2595: the struct's halfword at +4 read twice and xored with itself, made 0 while the word store at +4 still went
+        // through the reloaded pointer; the reads were of the store's guard, the store was folded after they went (marked through it).
+        { "L ledger: a halfword read twice and xored, made 0 before the word store it reads was folded",
+          { 0x2FE6, 0x7FE0, 0x6EF3, 0x61E3, 0x710C, 0x1E17, 0x51E7, 0xE292, 0x1120, 0x51E7, 0xE27E, 0x1121, 0x51E7, 0x6313, 0x7306, 0x2360,
+            0x6313, 0x7305, 0x2360, 0x51E7, 0xE29C, 0x6313, 0x7305, 0x2320, 0xE216, 0x6313, 0x7301, 0x2320, 0x51E7, 0x6313, 0x7306, 0x2340,
+            0x63E3, 0x7310, 0x6231, 0x6023, 0x63E3, 0x7310, 0x6231, 0x202A, 0x7E20, 0x6FE3, 0x000B, 0x6EF6 }, false, true, "return 0;" },
     };
     const std::vector<std::vector<uint32_t>> inputs = {
         { 0, 0, 0, 0 }, { 0x11223344u, 0x55667788u, 0x99AABBCCu, 0xDDEEFF00u }, { 0xFFFFFFFFu, 0x80000001u, 0x000000FFu, 0xFF7FFFFFu } };
