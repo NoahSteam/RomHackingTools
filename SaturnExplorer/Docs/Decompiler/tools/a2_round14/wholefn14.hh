@@ -459,6 +459,8 @@ inline void after(Funcdata& data, const State& pre, const std::string& what, int
     const uint64_t h = graphHash(data);
     if (h == pre.hash) return;
     ++t.changed;
+    // ActionReturnRecovery gives the RETURN its inputs (the function's outputs appear): nothing to compare
+    if (what == "act:returnrecovery") { State p; p.hash = h; runAll(data, p); p.valid = true; cache() = p; return; }
     State post;
     post.hash = h;
     runAll(data, post);

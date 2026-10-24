@@ -14,7 +14,7 @@ for fam in $fams; do
   for ((s=first; s<first+n; s+=100)); do
     m=100; ((s+m>first+n)) && m=$((first+n-s))
     W=$(python3 -I $(fam_script $fam) $s $m $fam)
-    ( ulimit -v 4000000; SE_RULECHECK=1 SE_WHOLEFN=1 SE_GENERATED_PRINTEDC=only SE_GENERATED_PRINTEDC_WORDS="$W" timeout 900 nice $gen $out/w$fam >> $out/fam$fam.log 2>&1 )
+    ( ulimit -v 4000000; SE_RULECHECK=1 SE_WHOLEFN=1 SE_WHOLEFN_ACTIONS=1 SE_GENERATED_PRINTEDC=only SE_GENERATED_PRINTEDC_WORDS="$W" timeout 900 nice $gen $out/w$fam >> $out/fam$fam.log 2>&1 )
   done
   echo "fam $fam: $(grep 'printed-C:' $out/fam$fam.log | cut -c1-150 | head -3 | tr '\n' ' ') BAD=$(grep -c 'RULECHECK-BAD' $out/fam$fam.log) WFBAD=$(grep -c 'WHOLEFN-BAD' $out/fam$fam.log)" >> $out/summary.txt
   touch $out/fam$fam.done

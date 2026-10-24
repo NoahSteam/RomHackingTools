@@ -809,7 +809,9 @@ int main(int argc, char** argv)
             const std::vector<uint64_t> ys = YList(2 * xs, 0xC0FFEE, 200000);
             std::string out;
             long rewritten = 0, wrong = 0, total = 0;
-            int shown = 0;
+            int shown = 0, refusedShown = 0;
+            std::string oldOut;
+            if (const char* op = std::getenv("DX_OLD")) { FILE* of = std::fopen(op, "rb"); if (of) { char buf[65536]; size_t k; while ((k = std::fread(buf, 1, sizeof buf, of)) > 0) oldOut.append(buf, k); std::fclose(of); } }
             std::vector<uint64_t> xv;
             const int w = 2 * xs;
             for (uint64_t yi = first; yi < first + count && yi < ys.size(); ++yi)
@@ -841,6 +843,9 @@ int main(int argc, char** argv)
                                             if (shown++ < 20)
                                                 std::printf("WRONG RuleDivOpt: %d bytes %s of %d by %llx, form %d, %s, cut %d, amount %d, reader %d\n", w, sext == 1 ? "sext" : (sext == 2 ? "and" : "zext"), xs, (unsigned long long)y, form, arith ? "s>>" : ">>", cut, amount, reader);
                                         }
+                                        // DX_OLD=<outcome file of another engine for the same range>: the configurations that engine rewrote correctly and this one refuses
+                                        if (oldOut.size() > out.size() && oldOut[out.size()] == 'C' && ch == '0' && refusedShown++ < (std::getenv("DX_SHOW") ? std::atoi(std::getenv("DX_SHOW")) : 40))
+                                            std::printf("REFUSED (the other engine was right): %d bytes %s of %d by %llx, form %d, %s, cut %d, amount %d, reader %d\n", w, sext == 1 ? "sext" : (sext == 2 ? "and" : "zext"), xs, (unsigned long long)y, form, arith ? "s>>" : ">>", cut, amount, reader);
                                         out.push_back(ch);
                                     }
                                 }

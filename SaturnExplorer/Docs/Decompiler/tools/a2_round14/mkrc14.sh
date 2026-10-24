@@ -24,6 +24,21 @@ new = ("    rl->count_tests += 1;\n#ifdef SE_RULECHECK\n"
        "    if (wfsnap) wf14::after(data,*wfsnap,rl->getName(),res,op->isDead() ? (const PcodeOp *)0 : op);\n#endif\n")
 assert old in s
 s = s.replace(old, new, 1)
+# round 14: the leaf actions, whole function before and after (SE_WHOLEFN_ACTIONS=1): not groups and not pools (their rules are checked one by one); only once heritage has run
+old2 = "      res = apply(data);\t// Start or continue action\n"
+new2 = ("      {\n#ifdef SE_RULECHECK\n"
+        "      static const bool wfAct = getenv(\"SE_WHOLEFN_ACTIONS\") != 0 && getenv(\"SE_WHOLEFN\") != 0;\n"
+        "      wf14::State wfActState;\n"
+        "      const bool wfLeaf = wfAct && data.getHeritagePass() >= 1 && !data.isHighOn() && data.getBasicBlocks().getSize() > 0 &&\n"
+        "                          dynamic_cast<ActionGroup *>(this) == (ActionGroup *)0 && dynamic_cast<ActionPool *>(this) == (ActionPool *)0;\n"
+        "      if (wfLeaf) wf14::before(data,wfActState);\n"
+        "#endif\n"
+        "      res = apply(data);\t// Start or continue action\n"
+        "#ifdef SE_RULECHECK\n"
+        "      if (wfLeaf) wf14::after(data,wfActState,\"act:\" + getName(),res < 0 ? 0 : 1,(const PcodeOp *)0);\n"
+        "#endif\n      }\n")
+assert old2 in s
+s = s.replace(old2, new2, 1)
 open(sys.argv[2], 'w').write(s)
 PY
 g++ -O2 -g -std=gnu++14 -DSE_RULECHECK -I"$d" -I"$here" -c "$out/action_rc.cc" -o "$out/action.cc.o" || exit 1
