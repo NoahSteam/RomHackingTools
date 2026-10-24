@@ -23,6 +23,7 @@
  * Modified for SaturnExplorer: the entry stack pointer a loop walks down is no reference to a stack parameter, and a save slot it reaches stays mapped (patches/0056-engine-stack-walk-down-aliases.patch).
  * Modified for SaturnExplorer: so does a save slot an indexed store's guard covers (patches/0063-engine-frame-escape-unknown-pointers.patch).
  * Modified for SaturnExplorer: the walk down's bound keeps a stack parameter reference (patches/0066-engine-frame-escape-inexact.patch).
+ * Modified for SaturnExplorer: a call's INDIRECT on a local of an escaped frame keeps its address force (patches/0068-engine-deadcode-late-stack-reads.patch).
  */
 #include "coreaction.hh"
 #include "condexe.hh"
@@ -4056,6 +4057,23 @@ bool ActionDeadCode::lastChanceLoad(Funcdata &data,vector<Varnode *> &worklist)
   return res;
 }
 
+/// SaturnExplorer (patches/0068-engine-deadcode-late-stack-reads.patch): is the Varnode the INDIRECT a call
+/// puts on a local of a frame whose address escaped? The call may read the value before it, so its address force
+/// stays whether or not the value is a direct write yet: a STORE through a pointer kept in a frame slot is
+/// folded into a direct write passes later, and the force cleared before then was never set again.
+/// \param data is the function
+/// \param vn is the Varnode
+/// \return \b true if its address force must stay
+bool ActionDeadCode::callMayReadFrame(const Funcdata &data,const Varnode *vn)
+
+{
+  if (!data.hasFrameEscaped() || !vn->isWritten() || vn->getSpace()->getType() != IPTR_SPACEBASE) return false;
+  const PcodeOp *op = vn->getDef();
+  if (op->code() != CPUI_INDIRECT || op->isIndirectStore()) return false;
+  const PcodeOp *iop = PcodeOp::getOpFromConst(op->getIn(1)->getAddr());
+  return iop != (const PcodeOp *)0 && iop->isCall();
+}
+
 int4 ActionDeadCode::apply(Funcdata &data)
 
 {
@@ -4075,7 +4093,7 @@ int4 ActionDeadCode::apply(Funcdata &data)
     vn->clearConsumeList();
     vn->clearConsumeVacuous();
     vn->setConsume(0);
-    if (vn->isAddrForce()&&(!vn->isDirectWrite()))
+    if (vn->isAddrForce()&&(!vn->isDirectWrite())&&!callMayReadFrame(data,vn))
       vn->clearAddrForce();
   }
 
