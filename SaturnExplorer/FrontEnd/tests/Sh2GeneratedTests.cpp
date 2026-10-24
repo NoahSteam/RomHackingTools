@@ -1094,7 +1094,11 @@ struct Gen
     Item MakeSimple(int avoid, bool single, bool allowLit)
     {
         const uint32_t r = rng.Below(100);
-        if (allowLit && r < 12) return MakeLitPtr(6 + static_cast<int>(rng.Below(2)), disc ? PickKind2() : PickKind());
+        if (allowLit && r < 12)
+        {
+            const LitKind kind = disc ? PickKind2() : PickKind();   // before the register: GCC's order of the two arguments (see MakeMac's call)
+            return MakeLitPtr(6 + static_cast<int>(rng.Below(2)), kind);
+        }
         return r < 50 ? MakeAlu(avoid) : MakeMem(avoid, single);
     }
 
@@ -1633,7 +1637,7 @@ struct Gen
             case 'a': f.items.push_back(MakeAlu(-1)); break;
             case 'm': f.items.push_back(MakeMem(-1, false)); break;
             case 's': f.items.push_back(MakeStackMem(-1)); break;
-            case 'l': f.items.push_back(MakeLitPtr(6 + static_cast<int>(rng.Below(2)), PickKind2())); break;
+            case 'l': { const LitKind kind = PickKind2(); f.items.push_back(MakeLitPtr(6 + static_cast<int>(rng.Below(2)), kind)); break; }   // kind first: GCC's argument order
             case 'k': f.items.push_back(MakeSkip()); break;
             case 'o': f.items.push_back(MakeLoop()); break;
             case 'b':
@@ -1862,7 +1866,7 @@ struct Gen
             const uint32_t r = rng.Below(100);
             if (r < 22) items.push_back(MakeAlu(-1));
             else if (r < 58) items.push_back(MakeMem(-1, false));
-            else if (r < 64) items.push_back(MakeLitPtr(6 + static_cast<int>(rng.Below(2)), PickKind()));
+            else if (r < 64) { const LitKind kind = PickKind(); items.push_back(MakeLitPtr(6 + static_cast<int>(rng.Below(2)), kind)); }   // kind first: GCC's argument order
             else if (r < 80) items.push_back(MakeSkip());
             else if (r < 87) items.push_back(MakeLoop());
             else if (!polled)
