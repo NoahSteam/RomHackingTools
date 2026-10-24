@@ -28,6 +28,19 @@ include(CTest)
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# The decompiler suites' ctest ceilings only catch hangs (no millisecond gate, A7). They were sized on
+# optimised builds; a Debug build runs those suites several times slower (the engine tests: about 50 s
+# in RelWithDebInfo, 110 s in Debug on Linux, more on CI's macOS, Rosetta and Windows runners). Where the
+# build may be Debug (a Debug or untyped single-config build, or a multi-config generator), scale them.
+if(CMAKE_CONFIGURATION_TYPES OR NOT CMAKE_BUILD_TYPE OR CMAKE_BUILD_TYPE STREQUAL "Debug")
+    set(SE_DECOMP_TIMEOUT_SCALE 10)
+else()
+    set(SE_DECOMP_TIMEOUT_SCALE 1)
+endif()
+foreach(seconds 60 120 300 600)
+    math(EXPR SE_DECOMP_TIMEOUT_${seconds} "${seconds} * ${SE_DECOMP_TIMEOUT_SCALE}")
+endforeach()
+
 # Put binaries in one place regardless of generator.
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
@@ -323,7 +336,7 @@ if(SE_ENABLE_DECOMPILER)
             # The leak check of a child that leaves through _Exit is made by the test itself, which
             # needs LeakSanitizer on in a sanitizer build (it is harmless in any other).
             # SKIP_RETURN_CODE: where the matrix cannot run (it prints SKIPPED) ctest reports it skipped, not passed.
-            set_tests_properties(SaturnExplorerDecompilerFaultTests PROPERTIES TIMEOUT 600 SKIP_RETURN_CODE 77
+            set_tests_properties(SaturnExplorerDecompilerFaultTests PROPERTIES TIMEOUT ${SE_DECOMP_TIMEOUT_600} SKIP_RETURN_CODE 77
                                  ENVIRONMENT "ASAN_OPTIONS=detect_leaks=1")
             # The default subset pins cells for each finding of the sweep (kPins in
             # DecompilerFaultTests.cpp; REVIEW_LEDGER.md, rows A6-1 .. A6-15), each with the name of the
@@ -364,8 +377,8 @@ if(SE_ENABLE_DECOMPILER)
         set_tests_properties(SaturnExplorerSlaFreshnessTests SaturnExplorerSh2DecompilerEngineTests
                              SaturnExplorerSh2DecompilerTests SaturnExplorerMemorySnapshotTests
                              SaturnExplorerSh2FunctionFinderTests SaturnExplorerSh2DecompilerFixtureTests
-                             PROPERTIES TIMEOUT 60)
-        set_tests_properties(SaturnExplorerDecompilerRunnerTests PROPERTIES TIMEOUT 120)
+                             PROPERTIES TIMEOUT ${SE_DECOMP_TIMEOUT_60})
+        set_tests_properties(SaturnExplorerDecompilerRunnerTests PROPERTIES TIMEOUT ${SE_DECOMP_TIMEOUT_120})
         # Random SH-2 functions against the emulator's access trace (REVIEW_PROGRAM.md, Phase 0), in two
         # grammars: version 1, one function with loads, stores, branches, loops and polls; version 2, modules
         # of functions with a stack, calls with lent prototypes, tail calls, jump tables, shared exits and
@@ -376,7 +389,7 @@ if(SE_ENABLE_DECOMPILER)
         # 400 version 2 seeds) by patches 0021 and 0024, so a failure now is a regression or a new class.
         # Version 1 also has mac.l / mac.w, and its "dropped" check spends one ledger entry per access. The
         # nightly CI job runs 20000 seeds.
-        set_tests_properties(SaturnExplorerSh2GeneratedTests PROPERTIES TIMEOUT 120)
+        set_tests_properties(SaturnExplorerSh2GeneratedTests PROPERTIES TIMEOUT ${SE_DECOMP_TIMEOUT_120})
         # The printed-C differential (15_DECOMPILER_STEP5.md, "Area 2, round 3: ..."): register-only generated
         # functions, decompiled, their text compiled with the system C compiler and its return value compared with
         # the emulator's. The same executable, told by the environment to run only that. SE_GENERATED_SEEDS=<n>
@@ -384,7 +397,7 @@ if(SE_ENABLE_DECOMPILER)
         if(UNIX)
             add_test(NAME SaturnExplorerSh2PrintedCTests
                      COMMAND SaturnExplorerSh2GeneratedTests ${CMAKE_CURRENT_BINARY_DIR}/decompiler_PrintedC_test)
-            set_tests_properties(SaturnExplorerSh2PrintedCTests PROPERTIES TIMEOUT 300 SKIP_RETURN_CODE 77
+            set_tests_properties(SaturnExplorerSh2PrintedCTests PROPERTIES TIMEOUT ${SE_DECOMP_TIMEOUT_300} SKIP_RETURN_CODE 77
                                  ENVIRONMENT "SE_GENERATED_PRINTEDC=only")
         endif()
         # Area 2's oracle: all 65,536 words decoded three ways, and every instruction form run against
@@ -393,7 +406,7 @@ if(SE_ENABLE_DECOMPILER)
         # A2-5 (the parse-tree cache) and A2-6, A2-7 (Sh2Disasm) are fixed. A2-4, the PC a slot reads
         # after a taken branch other than bra and bsr, is not: the oracle reports those cases as a known
         # limit and fails if the decompiler stops marking such a function unsupported.
-        set_tests_properties(SaturnExplorerSh2DecodeTests PROPERTIES TIMEOUT 120)
+        set_tests_properties(SaturnExplorerSh2DecodeTests PROPERTIES TIMEOUT ${SE_DECOMP_TIMEOUT_120})
     endif()
 endif()
 
@@ -751,7 +764,7 @@ if(BUILD_TESTING)
             SE_DECOMPILER_GUIDE="${CMAKE_CURRENT_SOURCE_DIR}/DECOMPILER_GUIDE.md")
         add_test(NAME SaturnExplorerDecompilerPanelTests
                  COMMAND SaturnExplorerDecompilerPanelTests ${CMAKE_CURRENT_BINARY_DIR}/decompiler_panel_test)
-        set_tests_properties(SaturnExplorerDecompilerPanelTests PROPERTIES TIMEOUT 60)
+        set_tests_properties(SaturnExplorerDecompilerPanelTests PROPERTIES TIMEOUT ${SE_DECOMP_TIMEOUT_60})
 
         # Area 1 of the review program (REVIEW_PROGRAM.md): random sequences of edit, scrub, Refresh,
         # reconnect, source replacement and prototype change against the real panel, runner and
@@ -774,7 +787,7 @@ if(BUILD_TESTING)
         # Stop), kept as regression pins. A finding the model makes later that is not yet fixed goes
         # in kPinned with WILL_FAIL TRUE here, so ctest stays green until the fix lands and goes red
         # the day it does -- the signal to remove WILL_FAIL and keep the line.
-        set_tests_properties(SaturnExplorerDecompilerModelTests PROPERTIES TIMEOUT 120)
+        set_tests_properties(SaturnExplorerDecompilerModelTests PROPERTIES TIMEOUT ${SE_DECOMP_TIMEOUT_120})
 
         # Area 8 of the review program: the trust indicators. The area 1 rig (it includes DecompilerModelTests.cpp, which
         # brings no main of its own here) run through outcome mixes -- truncated, unsupported, too large, unavailable,
@@ -796,7 +809,7 @@ if(BUILD_TESTING)
             SE_DECOMPILER_GUIDE="${CMAKE_CURRENT_SOURCE_DIR}/DECOMPILER_GUIDE.md")
         add_test(NAME SaturnExplorerDecompilerTrustTests
                  COMMAND SaturnExplorerDecompilerTrustTests ${CMAKE_CURRENT_BINARY_DIR}/decompiler_trust_test)
-        set_tests_properties(SaturnExplorerDecompilerTrustTests PROPERTIES TIMEOUT 300)
+        set_tests_properties(SaturnExplorerDecompilerTrustTests PROPERTIES TIMEOUT ${SE_DECOMP_TIMEOUT_300})
     endif()
 
     # Frame identity in the scrub view: what a refresh shows as the ring evicts, and which frame staged
