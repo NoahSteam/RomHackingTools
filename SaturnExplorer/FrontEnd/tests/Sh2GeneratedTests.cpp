@@ -6075,6 +6075,7 @@ Subject RawSubject(const char* raw)
 // equal to Mednafen op by op.
 //   SE_GENERATED_PRINTEDC=1|only   run it (only: and nothing else; ctest's entry for it sets 'only')
 //   SE_GENERATED_PRINTEDC_INPUTS=n inputs per function (default 32: the first 26 walk the edge values through r4-r7)
+//   SE_GENERATED_PRINTEDC_TIMEOUT=s CPU seconds a compiled text may run (default 30); one that does not finish is the class 'timeout' (A2-98)
 //   SE_GENERATED_PRINTEDC_PER=n    functions per seed (default 1)
 //   SE_GENERATED_PRINTEDC_WORDS="6153 E000 000B 0009;..."  check hand-written functions, text printed
 //   SE_C_COMPILER=<cc>             the compiler (default: cc, gcc, clang found on PATH)
@@ -6808,6 +6809,20 @@ static void FrameInit(void)
 }
 )FRAME";
 
+// A limit on the CPU time of a compiled text (A2-98): the harness used to run it with none, and a text that does not end (A2-97) hung the sweep with every
+// other result of its batch. The program sets its own limit and, when it is reached, says TIMEOUT and ends (a class of its own: 'timeout'); the limit is
+// SE_GENERATED_PRINTEDC_TIMEOUT seconds of CPU (default 30; the whole batch of 200 functions takes a fraction of a second).
+static int gPrintedCRunSeconds = 30;
+// A pin's hook (A2-98): the text of every function is passed through it before it is compiled, so that a text which never ends can be made from one that does.
+static std::string (*gPrintedCTextHook)(const std::string&) = nullptr;
+static std::string RunGuardSource()
+{
+    return "#if defined(__unix__) || defined(__APPLE__)\n#include <signal.h>\n#include <unistd.h>\n#include <sys/resource.h>\n"
+           "static void RunTimedOut(int sig) { (void)sig; (void)!write(1, \"TIMEOUT\\n\", 8); _exit(124); }\n"
+           "static void RunGuard(void) { struct rlimit rl; rl.rlim_cur = " + std::to_string(gPrintedCRunSeconds) + "; rl.rlim_max = " + std::to_string(gPrintedCRunSeconds + 2) +
+           "; signal(SIGXCPU, RunTimedOut); setrlimit(RLIMIT_CPU, &rl); }\n#else\nstatic void RunGuard(void) {}\n#endif\n";
+}
+
 // The names the engine prints for C, as C: sized integer types and the piece operations
 // (the engine's own definitions, `ghidra/Ghidra/Features/Decompiler/src/decompile/datatests/` style).
 std::string CHeader()
@@ -6927,14 +6942,17 @@ typedef T<4, false> Bool4;
 // A value narrower than int meeting a plain number (the text's literal has no width of its own) is brought to four bytes first, keeping its sign: the
 // engine extends it where C's promotion would, invisibly, so `(in_sr & 1) - 1 >> 2` of a uint1 is a four-byte unsigned subtraction and a logical shift
 template <int N, bool S> struct Promoted { typedef T<(N < 4 ? 4 : N), S> type; };
+template <class I> struct IsPlainInt { static const bool value = std::is_integral<I>::value && !std::is_same<I, bool>::value; };
 #define BINARY(op, body) \
   template <int N, bool S, int M, bool U> typename Common<N, S, M, U>::type operator op(const T<N, S>& a, const T<M, U>& b) { \
     typedef typename Common<N, S, M, U>::type C; \
     C x, y; x.v = (typename C::R)(a.Ext() & C::Mask()); y.v = (typename C::R)(b.Ext() & C::Mask()); \
     const bool sg = C::sign; (void)sg; \
     body } \
-  template <int N, bool S, class I, class = typename std::enable_if<IsInt<I>::value>::type> typename Promoted<N, S>::type operator op(const T<N, S>& a, I b) { typedef typename Promoted<N, S>::type P; return P(a) op P(b); } \
-  template <int N, bool S, class I, class = typename std::enable_if<IsInt<I>::value>::type> typename Promoted<N, S>::type operator op(I a, const T<N, S>& b) { typedef typename Promoted<N, S>::type P; return P(a) op P(b); }
+  template <int N, bool S, class I, class = typename std::enable_if<IsPlainInt<I>::value>::type> typename Promoted<N, S>::type operator op(const T<N, S>& a, I b) { typedef typename Promoted<N, S>::type P; return P(a) op P(b); } \
+  template <int N, bool S, class I, class = typename std::enable_if<IsPlainInt<I>::value>::type> typename Promoted<N, S>::type operator op(I a, const T<N, S>& b) { typedef typename Promoted<N, S>::type P; return P(a) op P(b); } \
+  template <int N, bool S> typename Common<N, S, 4, false>::type operator op(const T<N, S>& a, bool b) { return a op Bool4(b); } \
+  template <int N, bool S> typename Common<4, false, N, S>::type operator op(bool a, const T<N, S>& b) { return Bool4(a) op b; }
 BINARY(+, return C((x.Zext() + y.Zext()) & C::Mask());)
 BINARY(-, return C((x.Zext() - y.Zext()) & C::Mask());)
 BINARY(*, return C((x.Zext() * y.Zext()) & C::Mask());)
@@ -6948,8 +6966,10 @@ BINARY(%, if (y.Zext() == 0) return C(0); if (sg && (s64)y.Sext() == -1) return 
     typedef typename Common<N, S, M, U>::type C; \
     C x, y; x.v = (typename C::R)(a.Ext() & C::Mask()); y.v = (typename C::R)(b.Ext() & C::Mask()); \
     return Bool4(C::sign ? ((s64)x.Sext() op (s64)y.Sext()) : (x.Zext() op y.Zext())); } \
-  template <int N, bool S, class I, class = typename std::enable_if<IsInt<I>::value>::type> Bool4 operator op(const T<N, S>& a, I b) { typedef typename Promoted<N, S>::type P; return P(a) op P(b); } \
-  template <int N, bool S, class I, class = typename std::enable_if<IsInt<I>::value>::type> Bool4 operator op(I a, const T<N, S>& b) { typedef typename Promoted<N, S>::type P; return P(a) op P(b); }
+  template <int N, bool S, class I, class = typename std::enable_if<IsPlainInt<I>::value>::type> Bool4 operator op(const T<N, S>& a, I b) { typedef typename Promoted<N, S>::type P; return P(a) op P(b); } \
+  template <int N, bool S, class I, class = typename std::enable_if<IsPlainInt<I>::value>::type> Bool4 operator op(I a, const T<N, S>& b) { typedef typename Promoted<N, S>::type P; return P(a) op P(b); } \
+  template <int N, bool S> Bool4 operator op(const T<N, S>& a, bool b) { return a op Bool4(b); } \
+  template <int N, bool S> Bool4 operator op(bool a, const T<N, S>& b) { return Bool4(a) op b; }
 CMP(==) CMP(!=) CMP(<) CMP(<=) CMP(>) CMP(>=)
 // shifts take the type of the left operand
 template <int N, bool S, int M, bool U> T<N, S> operator<<(const T<N, S>& a, const T<M, U>& b) { u64 c = b.Zext(); return T<N, S>(c >= 8 * N ? 0 : (a.Zext() << c)); }
@@ -6963,12 +6983,10 @@ template <int N, bool S> T<N, S> operator-(const T<N, S>& a) { return T<N, S>((0
 template <int N, bool S> T<N, S> operator~(const T<N, S>& a) { return T<N, S>(~a.Zext() & T<N, S>::Mask()); }
 template <int N, bool S> T<N, S> operator+(const T<N, S>& a) { return a; }
 template <int N, bool S> Bool4 operator!(const T<N, S>& a) { return Bool4(a.Zext() == 0); }
-template <int N, bool S, int M, bool U> Bool4 operator&&(const T<N, S>& a, const T<M, U>& b) { return Bool4(a.Zext() != 0 && b.Zext() != 0); }
-template <int N, bool S, int M, bool U> Bool4 operator||(const T<N, S>& a, const T<M, U>& b) { return Bool4(a.Zext() != 0 || b.Zext() != 0); }
-template <int N, bool S, class I, class = typename std::enable_if<IsInt<I>::value>::type> Bool4 operator&&(const T<N, S>& a, I b) { return Bool4(a.Zext() != 0 && b != 0); }
-template <int N, bool S, class I, class = typename std::enable_if<IsInt<I>::value>::type> Bool4 operator&&(I a, const T<N, S>& b) { return Bool4(a != 0 && b.Zext() != 0); }
-template <int N, bool S, class I, class = typename std::enable_if<IsInt<I>::value>::type> Bool4 operator||(const T<N, S>& a, I b) { return Bool4(a.Zext() != 0 || b != 0); }
-template <int N, bool S, class I, class = typename std::enable_if<IsInt<I>::value>::type> Bool4 operator||(I a, const T<N, S>& b) { return Bool4(a != 0 || b.Zext() != 0); }
+// No overload of && and || (A2-96): the engine's `&&` and `||` short-circuit as C's do, and an overloaded operator evaluates both operands (the text
+// writes a condition that sets a variable as `(a == 0) && (param_1 = param_2, 0 < (int4)param_2)`, whose right operand must not run when the left is
+// false). A T converts to bool explicitly, which the built-in operators do contextually; the result is a plain bool, which every operator above
+// takes as the four-byte unsigned Bool4 (the overloads for bool below).
 // the names the engine prints (xunknown: no sign, read as signed)
 typedef T<1, false> undefined; typedef T<1, false> undefined1; typedef T<2, false> undefined2; typedef T<3, false> undefined3; typedef T<4, false> undefined4; typedef T<8, false> undefined8;
 typedef T<1, false> byte; typedef T<1, false> uchar; typedef T<2, false> ushort; typedef T<4, false> uint; typedef T<3, false> uint3; typedef T<8, true> longlong; typedef T<8, false> ulonglong;
@@ -7470,6 +7488,7 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
             if (!decls.empty() && brace != std::string::npos) rebuilt.insert(brace + 2, decls);
         }
         pr.cText = frameDefines + rebuilt + frameUndefs;
+        if (gPrintedCTextHook) pr.cText = gPrintedCTextHook(pr.cText);
         pr.frame = frameMode;
         // The signature: the return type and how many parameters.
         const size_t at = pr.cText.find(pr.name + "(");
@@ -7693,7 +7712,7 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
         std::ostringstream src;
         src << (engine ? CxxHeader() : CHeader());
         for (size_t i : which) src << "static int bad_" << prep[i].name << ";\n" << (engine ? NegativeWideLiteralsTyped(UnsignedLiteralsTyped(prep[i].cText)) : prep[i].cText) << "\n";
-        src << "int main(void) {\n  FrameInit();\n";
+        src << RunGuardSource() << "int main(void) {\n  RunGuard();\n  FrameInit();\n";
         for (size_t i : which) src << prep[i].mainText;
         int total = 0;
         (void)total;
@@ -7724,7 +7743,9 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
         // The program ends with "BAD <n>"; without it the run died (a signal) or never finished. The exit status is kept for the message only:
         // the marker is the verdict, since a program that printed it and then died in exit would still have compared every function.
         if (ss.str().find("\nBAD ") == std::string::npos && ss.str().compare(0, 4, "BAD ") != 0)
-            compiled = false, log = "the compiled program did not finish (status " + std::to_string(runStatus) + "): " + ss.str().substr(0, 200);
+            compiled = false, log = std::string("the compiled program did not finish (") +
+                                    (ss.str().find("TIMEOUT") != std::string::npos ? "timeout after " + std::to_string(gPrintedCRunSeconds) + " s of CPU, " : std::string()) +
+                                    "status " + std::to_string(runStatus) + "): " + ss.str().substr(0, 200);
         return ss.str();
     };
     std::vector<size_t> all;
@@ -7764,7 +7785,7 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
             else
             {
                 const bool died = one.compare(0, 19, "the compiled progra") == 0;
-                out[i].cls = died ? "crashed" : "not-compilable";
+                out[i].cls = died ? (one.find("(timeout after") != std::string::npos ? "timeout" : "crashed") : "not-compilable";
                 std::istringstream l(one);
                 std::string first;
                 while (std::getline(l, first))
@@ -9064,6 +9085,7 @@ void TestPrintedC()
     TestOracleOwnDecisions();
     Sh2Decompiler d(gConfig);
     const int nIn = static_cast<int>(EnvNumber("SE_GENERATED_PRINTEDC_INPUTS", 32));
+    gPrintedCRunSeconds = static_cast<int>(EnvNumber("SE_GENERATED_PRINTEDC_TIMEOUT", 30));
     std::vector<CCase> cases;
     std::vector<RegFn> fns;
     const bool hand = std::getenv("SE_GENERATED_PRINTEDC_WORDS") != nullptr;

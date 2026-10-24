@@ -3067,6 +3067,185 @@ void TestDivOptExhaustiveRound14()
     CHECK(rewritten >= 5200);       // 5,256 on patch 0064: a guard that refuses a division the corpora use fails here
 }
 
+// Round 14 fix. A2-92: RuleSignMod2nOpt2 reads `V - (((W s< 0) ? V + (2^n - 1) : V) & ~(2^n - 1))` as the signed remainder of V only when the compared W is V itself
+// (checkMultiequalForm; the sign form beside it, checkSignExtForm, always tested that). The graph is built with real blocks: a decision block with the CBRANCH on
+// `W s< 0`, the block that biases V (the arm taken for a negative W), and the join with the MULTIEQUAL of the biased and the plain value, for the sizes 2 and 4, the
+// masks 2^1 to 2^5, a plain W and the sign of another register, the CBRANCH as written and flipped. W = V is rewritten to INT_SREM, any other W is left an ADD. The
+// sibling rules that read a sign (RuleSignDiv2, RuleSignMod2Opt, RuleSignMod2nOpt) are run on the same shapes with the sign of another register: all refuse.
+// A3-style by-value checks of the rewritten graph are the printed-C differential's (family 73 form 8 of dagen14.py).
+void TestSignModIdentityRound14()
+{
+    using namespace ghidra;
+    R13Graph t;
+    int rewritten = 0, refused = 0, siblings = 0;
+    for (int size : { 2, 4 })
+        for (int n = 1; n <= 5; ++n)
+            for (int other = 0; other < 2; ++other)
+                for (int flip = 0; flip < 2; ++flip)
+                {
+                    const uint64_t npow = uint64_t(1) << n;
+                    t.reset();
+                    BlockGraph& g = const_cast<BlockGraph&>(t.fd->getBasicBlocks());
+                    BlockBasic* dec = t.bb;
+                    BlockBasic* inner = g.newBlockBasic(t.fd);
+                    BlockBasic* join = g.newBlockBasic(t.fd);
+                    Varnode* v = t.input(size);
+                    Varnode* w = other ? t.input(size) : v;
+                    Varnode* neg = t.op(CPUI_INT_SLESS, 1, w, t.k(size, 0));
+                    PcodeOp* cb = t.fd->newOp(2, t.entry);
+                    t.fd->opSetOpcode(cb, CPUI_CBRANCH);
+                    t.fd->opSetInput(cb, t.fd->newCodeRef(t.entry), 0);
+                    t.fd->opSetInput(cb, neg, 1);
+                    t.fd->opInsertEnd(cb, dec);
+                    if (flip) t.fd->opFlipCondition(cb);
+                    // out(1) is the block the branch is taken to, out(0) the one it falls into; the biased arm is the one a negative W reaches
+                    if (flip) { g.addEdge(dec, inner); g.addEdge(dec, join); }
+                    else { g.addEdge(dec, join); g.addEdge(dec, inner); }
+                    g.addEdge(inner, join);
+                    t.bb = inner;
+                    Varnode* biased = t.op(CPUI_INT_ADD, size, v, t.k(size, npow - 1));
+                    t.bb = join;
+                    PcodeOp* me = t.fd->newOp(2, t.entry);
+                    t.fd->opSetOpcode(me, CPUI_MULTIEQUAL);
+                    Varnode* adj = t.fd->newUniqueOut(size, me);
+                    t.fd->opSetInput(me, v, 0);               // the join's first in-edge is the decision block (the plain value), the second the biased arm
+                    t.fd->opSetInput(me, biased, 1);
+                    t.fd->opInsertBegin(me, join);
+                    Varnode* masked = t.op(CPUI_INT_AND, size, adj, t.k(size, ~(npow - 1)));
+                    Varnode* negm = t.op(CPUI_INT_MULT, size, masked, t.k(size, PbMask(size)));
+                    Varnode* rem = t.op(CPUI_INT_ADD, size, v, negm);
+                    t.fd->calcNZMask();
+                    RuleSignMod2nOpt2 rule("scratch");
+                    const int4 res = rule.applyOp(negm->getDef(), *t.fd);
+                    if (other)
+                    {
+                        CHECK(res == 0);
+                        CHECK(rem->getDef()->code() == CPUI_INT_ADD);
+                        ++refused;
+                    }
+                    else
+                    {
+                        CHECK(res == 1);
+                        CHECK(rem->getDef()->code() == CPUI_INT_SREM);
+                        CHECK(rem->getDef()->getIn(0) == v);
+                        CHECK(rem->getDef()->getIn(1)->isConstant() && rem->getDef()->getIn(1)->getOffset() == npow);
+                        ++rewritten;
+                    }
+                }
+    CHECK(rewritten == 40 && refused == 40);
+    // The siblings: the same sign taken from another register (w) steering a quotient or a remainder of v.
+    for (int size : { 2, 4 })
+        for (int other = 0; other < 2; ++other)
+        {
+            Varnode* v;
+            Varnode* w;
+            // RuleSignDiv2: (v + -1 * (w s>> 8*size-1)) s>> 1
+            t.reset();
+            v = t.input(size);
+            w = other ? t.input(size) : v;
+            {
+                Varnode* sgn = t.op(CPUI_INT_SRIGHT, size, w, t.k(4, 8 * size - 1));
+                Varnode* negs = t.op(CPUI_INT_MULT, size, sgn, t.k(size, PbMask(size)));
+                Varnode* sum = t.op(CPUI_INT_ADD, size, v, negs);
+                Varnode* half = t.op(CPUI_INT_SRIGHT, size, sum, t.k(4, 1));
+                RuleSignDiv2 rule("scratch");
+                CHECK(rule.applyOp(half->getDef(), *t.fd) == (other ? 0 : 1));
+                ++siblings;
+            }
+            // RuleSignMod2Opt: ((v + -1 * sign(w)) & 1) + sign(w)
+            t.reset();
+            v = t.input(size);
+            w = other ? t.input(size) : v;
+            {
+                Varnode* sgn = t.op(CPUI_INT_SRIGHT, size, w, t.k(4, 8 * size - 1));
+                Varnode* negs = t.op(CPUI_INT_MULT, size, sgn, t.k(size, PbMask(size)));
+                Varnode* sum = t.op(CPUI_INT_ADD, size, v, negs);
+                Varnode* low = t.op(CPUI_INT_AND, size, sum, t.k(size, 1));
+                Varnode* rem = t.op(CPUI_INT_ADD, size, low, sgn);
+                RuleSignMod2Opt rule("scratch");
+                CHECK(rule.applyOp(low->getDef(), *t.fd) == (other ? 0 : 1));
+                CHECK(rem->getDef()->code() == (other ? CPUI_INT_ADD : CPUI_INT_SREM));
+                ++siblings;
+            }
+            // RuleSignMod2nOpt: ((v + (sign(w) >> k)) & mask) - (sign(w) >> k), k = 8*size - 3 (mod 8)
+            t.reset();
+            v = t.input(size);
+            w = other ? t.input(size) : v;
+            {
+                const int k = 8 * size - 3;
+                Varnode* sgn = t.op(CPUI_INT_SRIGHT, size, w, t.k(4, 8 * size - 1));
+                Varnode* corr = t.op(CPUI_INT_RIGHT, size, sgn, t.k(4, k));
+                Varnode* corr2 = t.op(CPUI_INT_RIGHT, size, sgn, t.k(4, k));
+                Varnode* sum = t.op(CPUI_INT_ADD, size, v, corr2);
+                Varnode* masked = t.op(CPUI_INT_AND, size, sum, t.k(size, 7));
+                Varnode* negc = t.op(CPUI_INT_MULT, size, corr, t.k(size, PbMask(size)));
+                Varnode* rem = t.op(CPUI_INT_ADD, size, masked, negc);
+                RuleSignMod2nOpt rule("scratch");
+                CHECK(rule.applyOp(corr->getDef(), *t.fd) == (other ? 0 : 1));
+                CHECK(rem->getDef()->code() == (other ? CPUI_INT_ADD : CPUI_INT_SREM));
+                ++siblings;
+            }
+        }
+    CHECK(siblings == 12);
+    std::printf("TestSignModIdentityRound14: %d rewritten, %d refused, %d sibling graphs\n", rewritten, refused, siblings);
+}
+
+// Round 14 fix. A2-94: RuleThreeWayCompare took `(x u< 0) + (x u< 2^64 - 1) - 1` of an 8-byte x for a three-way compare: the constants are neighbours
+// modulo 2^64 (`offset + 1` wraps in the 64-bit uintb) and not in order. The same pair of compares at one byte, and the neighbours 5 and 6 and 0 and 1 at eight bytes,
+// are still rewritten (the guard refuses only the pair that wraps). A2-99: RuleShiftSub rewrote `sub(V << 24, 3)` read 2 bytes wide (a read past the top of the
+// shifted value, which reads zeros there) as `sub(V, 0)`, which reads two bytes of V; the in-bounds read of the same shift (`sub(V << 16, 2)`) is still rewritten.
+void TestThreeWayAndShiftSubRound14()
+{
+    using namespace ghidra;
+    R13Graph t;
+    int refused = 0, rewritten = 0;
+    struct Pair { int size; uint64_t c1, c2; bool signedPair; bool expect; };
+    const Pair pairs[] = {
+        { 8, 0, 0xFFFFFFFFFFFFFFFFull, false, false },       // the wrap: refused
+        { 8, 0xFFFFFFFFFFFFFFFFull, 0, false, false },       // and the other way round
+        { 8, 5, 6, false, true }, { 8, 6, 5, false, true }, { 8, 0, 1, false, true }, { 8, 0xFFFFFFFFFFFFFFFEull, 0xFFFFFFFFFFFFFFFFull, false, true },
+        { 4, 0, 0xFFFFFFFFull, false, false },               // never neighbours at 4 bytes (the compare of the width, not the uintb): refused as before
+        { 1, 0, 0xFF, false, false },
+        { 8, 0xFFFFFFFFFFFFFFFFull, 0, true, true },         // signed: -1 and 0 are neighbours in order
+    };
+    for (const Pair& p : pairs)
+        for (int form = 0; form < 2; ++form)
+        {
+            t.reset();
+            Varnode* x = t.input(p.size);
+            const OpCode lt = p.signedPair ? CPUI_INT_SLESS : CPUI_INT_LESS;
+            Varnode* z1 = t.op(CPUI_INT_ZEXT, 4, t.op(lt, 1, x, t.k(p.size, p.c1)));
+            Varnode* z2 = t.op(CPUI_INT_ZEXT, 4, t.op(lt, 1, x, t.k(p.size, p.c2)));
+            Varnode* sum = t.op(CPUI_INT_ADD, 4, t.op(CPUI_INT_ADD, 4, z1, z2), t.k(4, 0xFFFFFFFFull));
+            Varnode* root = form ? t.op(CPUI_INT_SLESS, 1, t.k(4, 0), sum) : t.op(CPUI_INT_SLESS, 1, sum, t.k(4, 0));
+            t.fd->calcNZMask();
+            RuleThreeWayCompare rule("scratch");
+            const int4 res = rule.applyOp(root->getDef(), *t.fd);
+            if (p.expect) { CHECK(res == 1); ++rewritten; }
+            else { CHECK(res == 0); CHECK(root->getDef()->code() == CPUI_INT_SLESS); ++refused; }
+        }
+    CHECK(refused == 8 && rewritten == 10);
+    // RuleShiftSub
+    int shiftRefused = 0, shiftDone = 0;
+    for (int k : { 1, 2, 3 })
+        for (int c = 0; c < 4; ++c)
+            for (int outsize : { 1, 2 })
+            {
+                t.reset();
+                Varnode* v = t.input(4);
+                Varnode* sh = t.op(CPUI_INT_LEFT, 4, v, t.k(4, 8 * k));
+                Varnode* sub = t.op(CPUI_SUBPIECE, outsize, sh, t.k(4, c));
+                RuleShiftSub rule("scratch");
+                const int4 res = rule.applyOp(sub->getDef(), *t.fd);
+                const bool inBounds = c + outsize <= 4;          // a SUBPIECE inside its source
+                const bool natural = c >= k;                     // and above the zero bytes the shift made
+                if (inBounds && natural) { CHECK(res == 1); CHECK(sub->getDef()->getIn(0) == v); CHECK(sub->getDef()->getIn(1)->getOffset() == (uintb)(c - k)); ++shiftDone; }
+                else { CHECK(res == 0); CHECK(sub->getDef()->getIn(0) == sh); ++shiftRefused; }
+            }
+    CHECK(shiftDone > 0 && shiftRefused > 0);
+    std::printf("TestThreeWayAndShiftSubRound14: three-way %d refused, %d rewritten; shift-sub %d refused, %d rewritten\n", refused, rewritten, shiftRefused, shiftDone);
+}
+
 // A2-83 to A2-87, each by value on a small graph with the rule applied once (or, for the division terms, a pool of the three rules).
 void TestRuleGuardsRound13()
 {
@@ -3456,6 +3635,8 @@ int main(int argc, char** argv)
         RUN(TestDivOptSignAndWrapRound13());
         RUN(TestRuleGuardsRound13());
         RUN(TestDivOptExhaustiveRound14());
+        RUN(TestSignModIdentityRound14());
+        RUN(TestThreeWayAndShiftSubRound14());
         RUN(TestCancelDuringJumpTableRecovery());
         RUN(TestReuseAndRepair(config));
         RUN(TestForeignHashUntouched(config));

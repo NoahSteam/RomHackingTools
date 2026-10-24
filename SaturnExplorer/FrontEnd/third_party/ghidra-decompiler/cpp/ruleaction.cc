@@ -20,6 +20,7 @@
  * Modified for SaturnExplorer: RuleDivTermAdd and RuleDivTermAdd2 keep an overflowing product only when the shifts that follow stay inside the multiply (patches/0044-engine-round5-printed-value-fixes.patch).
  * Modified for SaturnExplorer: RuleScarry refuses the minimum for either operand; RuleRightShiftAnd keeps the mask of a shift by the width or more; RuleSLess2Zero takes the high bit of a sum only from an operand when the other has none (patches/0062-engine-range-set-ops-and-rule-guards.patch).
  * Modified for SaturnExplorer: RuleDivOpt refuses a multiply that wraps and a sign extension shifted logically (or a zero extension shifted arithmetically) whose difference is read; RuleDivTermAdd and RuleDivTermAdd2 need the original product not to wrap, RuleDivTermAdd the sum not to wrap its add and RuleDivTermAdd2 the multiplier to be at most 2^n; RuleDivChain, RuleSignForm2, RuleThreeWayCompare and the rules that read a shift amount check what they read (patches/0064-engine-divopt-sign-and-wrap-rule-guards.patch).
+ * Modified for SaturnExplorer: RuleSignMod2nOpt2 tests that the sign steering its bias is V's own; RuleThreeWayCompare refuses unsigned constants that are neighbours only modulo 2^64; RuleShiftSub refuses a SUBPIECE that reads past the top of the shifted value (patches/0067-engine-round14-sign-mod-late-donothing-three-way-shift-sub.patch).
  */
 #include "ruleaction.hh"
 #include "coreaction.hh"
@@ -5186,6 +5187,9 @@ int4 RuleShiftSub::applyOp(PcodeOp *op,Funcdata &data)
   if (vn->isFree()) return 0;
   int4 insize = vn->getSize();
   int4 outsize = op->getOut()->getSize();
+  // SaturnExplorer (patches/0067-engine-round14-sign-mod-late-donothing-three-way-shift-sub.patch): the read must lie inside the shifted value as it stands: a SUBPIECE
+  // that reads past its top reads zeros there, which the rewritten read of V (whose bytes are there) does not
+  if (c + outsize > insize) return 0;
   c -= n/8;
   if (c < 0 || c + outsize > insize)	// Check if this is a natural truncation
     return 0;
@@ -9202,6 +9206,9 @@ Varnode *RuleSignMod2nOpt2::checkMultiequalForm(PcodeOp *op,uintb npow)
   if (lessOp->code() != CPUI_INT_SLESS) return (Varnode *)0;
   if (!lessOp->getIn(1)->isConstant()) return (Varnode *)0;
   if (lessOp->getIn(1)->getOffset() != 0) return (Varnode *)0;
+  // SaturnExplorer (patches/0067-engine-round14-sign-mod-late-donothing-three-way-shift-sub.patch): the sign that steers the bias must be the sign of V itself; the
+  // sign of another value choosing whether V is biased is no remainder (checkSignExtForm tests the same identity)
+  if (lessOp->getIn(0) != base) return (Varnode *)0;
   FlowBlock *negBlock = cbranch->isBooleanFlip() ? decision->getFalseOut() : decision->getTrueOut();
   int4 negSlot = (negBlock == inner) ? innerSlot : (1-innerSlot);
   if (negSlot != slot) return (Varnode *)0;
@@ -10243,17 +10250,20 @@ int4 RuleThreeWayCompare::testCompareEquivalence(PcodeOp *lessop,PcodeOp *lesseq
   // byte are the constants 127 and -128, and `(127 s< x) + (-128 s<= x) - 1 == 0` was taken for the three-way compare of x and 127. Constants
   // that differ are no pair of one compare when one of the two is not a LESSTHAN either.
   const bool signedPair = (lessop->code() == CPUI_INT_SLESS);
-  const uintb signedMax = calc_mask(lessop->getIn(0)->getSize()) >> 1;
+  const uintb unsignedMax = calc_mask(lessop->getIn(0)->getSize());
+  const uintb signedMax = unsignedMax >> 1;
+  // (patches/0067-engine-round14-sign-mod-late-donothing-three-way-shift-sub.patch) An unsigned pair does not wrap either: at 8 bytes the constants 0 and 2^64 - 1
+  // are neighbours modulo 2^64 (`offset + 1` wraps in the 64-bit uintb) and not in order, so `(x u< 0) + (x u< 2^64 - 1) - 1` was taken for a three-way compare.
   if (a1 != a2) {	// Make sure a1 and a2 are equivalent
     if ((!a1->isConstant())||(!a2->isConstant())) return -1;
     if (a1->getOffset() != a2->getOffset() && !twoLessThan) return -1;
     if ((a1->getOffset() != a2->getOffset())&&twoLessThan) {
       if (a2->getOffset() + 1 == a1->getOffset()) {
-	if (signedPair && a2->getOffset() == signedMax) return -1;
+	if (signedPair ? a2->getOffset() == signedMax : a2->getOffset() == unsignedMax) return -1;
 	twoLessThan = false;		// -lessequalop- is LESSTHAN, equivalent to LESSEQUAL
       }
       else if (a1->getOffset() + 1 == a2->getOffset()) {
-	if (signedPair && a1->getOffset() == signedMax) return -1;
+	if (signedPair ? a1->getOffset() == signedMax : a1->getOffset() == unsignedMax) return -1;
 	twoLessThan = false;		// -lessop- is LESSTHAN, equivalent to LESSEQUAL
 	res = 1;			// we need to swap
       }
@@ -10265,11 +10275,11 @@ int4 RuleThreeWayCompare::testCompareEquivalence(PcodeOp *lessop,PcodeOp *lesseq
     if ((!b1->isConstant())||(!b2->isConstant())) return -1;
     if ((b1->getOffset() != b2->getOffset())&&twoLessThan) {
       if (b1->getOffset() + 1 == b2->getOffset()) {
-	if (signedPair && b1->getOffset() == signedMax) return -1;
+	if (signedPair ? b1->getOffset() == signedMax : b1->getOffset() == unsignedMax) return -1;
 	twoLessThan = false;
       }
       else if (b2->getOffset() + 1 == b1->getOffset()) {
-	if (signedPair && b2->getOffset() == signedMax) return -1;
+	if (signedPair ? b2->getOffset() == signedMax : b2->getOffset() == unsignedMax) return -1;
 	twoLessThan = false;
 	res = 1;			// we need to swap
       }
