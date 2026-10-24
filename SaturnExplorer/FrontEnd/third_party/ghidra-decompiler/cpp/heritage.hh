@@ -313,6 +313,7 @@ class Heritage {
   vector<int4> depth;		///< Dominator depth of individual blocks
   int4 maxdepth;		///< Maximum depth of the dominator tree
   int4 pass;			///< Current pass being executed
+  bool deadcodeBumped;		///< SaturnExplorer (0068): a dead code delay was raised in this generation (one restart's worth)
 
   PriorityQueue pq;		///< Priority queue for phi-node placement
   vector<FlowBlock *> merge;	///< Calculate merge points (blocks containing phi-nodes)
@@ -385,6 +386,7 @@ class Heritage {
   static const int4 maxDeadcodeBumps = 3;
   static const int4 noDeadcodeDelay = 0x10000;	///< SaturnExplorer (0068): a delay no count of heritage passes reaches
   void bumpDeadcodeDelay(AddrSpace *spc);
+  static bool lateStoreWrite(const Varnode *vn);	///< SaturnExplorer (0068): a write a STORE became that no guard linked
   void placeMultiequals(void);
   void rename(void);
 public:
