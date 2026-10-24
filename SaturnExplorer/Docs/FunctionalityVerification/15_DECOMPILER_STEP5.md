@@ -12045,7 +12045,7 @@ Over families 0 to 61 except 23 (300 functions each from seed 2,380,001, 60 fami
 
 ### 5. Mutation table
 
-Each guard reverted alone in a scratch copy of the vendored source (`mutdrv.py`: the mutated object linked in place of the engine's into the engine test; restored, the pins pass):
+Each guard reverted alone in a scratch copy of the vendored source (`tools/a2_round13/mutdrv13.py` with `mutants13.py`: the mutated object linked in place of the engine's into the engine test; restored, the pins pass):
 
 | Mutant | Row | Reverted | Pin that fails |
 |---|---|---|---|
