@@ -12360,3 +12360,194 @@ The timing is 1.1x and 1.03x of the base in one run each.
 - A3-110's cause is the round 12 record's, not traced; a hand copy stays lent.
 - No pins were added: every fixture of the three P2 rows prints a wrong text today, and a pin that passes would pin the wrong text. The fixers move `r13a.src`/`r13b.src` into the suite, with the controls (R13-1b, 1c, 1d, 3.0, 3.1, 3.4), which are right today.
 - The root causes in A3-104 to A3-106 are read from temporary prints; the fix directions in the rows are directions.
+
+## Area 3, round 13 fix
+
+Fixer, branch `review/3-round13-fix`, on the coordinator's head `f54d140`. Code commits `bfe9ca2` to `9ed1161` (engine patch `0065`, the host, the corpus, the generator, the pins), then the ledger and this record. Own RelWithDebInfo build under the scratch directory, `-j2`, every run under `ulimit -v 4000000`, one heavy job at a time.
+
+**The rows.**
+
+- Fixed: A3-104, A3-105, A3-106 (P2); A3-108, A3-111, A3-112, A3-113, A3-114 (P3).
+- Fixed with them: A3-103, whose two seeds are A3-111 and A3-112.
+- Accepted with a reason: A3-107, A3-109, A3-110. The reasons are in the rows.
+- Triaged on request: A3-115 (filed on master during the round, provisional P2). It is an oracle false positive, P3, fixed in the generator (section 3). The row is not on this branch: its status is for the coordinator to set at merge, as section 3 says.
+- One more defect was found by this round's matrix and fixed in 0065: the round 11 review's `a3_round11/s5.src` S17 to S19, lent with a wrong value on `f54d140` too (section 1). It has no row; the coordinator may file it.
+
+### 1. The design
+
+**A3-104 (engine, patch `0065-engine-frame-escape-whole-frame.patch`, amending 0061 and 0063).** Temporary prints in `ScopeLocal::markUnaliased` showed two things, and the review's reading of the rising `lowest` was one of them:
+
+- `markUnaliased` turns an alias off at the first mapped range above an unmapped one ("aliases shouldn't go thru unmapped regions"). The word at a call's r15 that the engine takes for the call's fifth argument is unmapped (`markNotMapped` from `FuncCallSpecs` and `ActionRestrictLocal`). So in R13-1a the alias that started at the lowest word (-20) was off again at the local above it (-16).
+- Once that local was folded, `FrameEscape::lowest` (the frame addresses and stack locations still there) rose to the escaped address (-12), and the later queries did not even start the alias below it.
+
+The fix:
+
+- **Once a frame address escaped, every Symbol from the frame's lowest offset up is aliased, across unmapped ranges and at any distance.** The rule is `AliasChecker::getEscapeLow`, which `ScopeLocal::restructureVarnode` passes to `markUnaliased`. A pointer to a local that escaped reaches the whole frame (`&buf[2]` walked down to `buf[0]`). The save slots are as 0063 left them: unmapped for a hand-over, mapped for 0061's causes. The trial boundary of A3-99 is untouched.
+- **The lowest offset is the lowest any query of the function saw** (`ScopeLocal::setFrameFloor`, kept with the scope as the host's declarations are). That also gives the walk that passed its bound (`gaveUp`) a lowest offset; it had none, and offset 0 aliases no local.
+
+Of the two rules the brief offered, this is the whole-frame one. The other, a boundary from the escaped addresses as the walk first saw them, cannot hold R13-1a: its walk goes below the address that escaped (-12) to the local at -16. Measured as mutations (section 5): without the whole-frame rule, escfuzz has 342 wrong constants and printed-C has 112 failing seeds, with the floor in place. Without the floor alone nothing fails, because with the gap rule the local stays aliased and stays a stack location, so `lowest` does not rise. The floor is kept as a fail-closed guard. Lending is unchanged on both corpora (section 6).
+
+**Found by the matrix, fixed in 0065: a walk down from a frame address plus an unbounded index.** `p = sp + 16 + r4` (or `+ @(20,r15)`, or `- r4`), then `L: mov.l r1,@-p ; dt r1 ; bf L`, was lent `return 5;`; the code returns 1. That is S17 to S19 of `a3_round11/s5.src`, and they were wrong on `f54d140` too.
+
+The cause is in `LoadGuard::establishRange`. The value set analysis cannot bound the pointer, so upstream guards the access from the pointer's base up (the index taken for non-negative: A3-9, A3-17). 0056 had widened only the case where the analysis saw the range move down. A loop that steps the pointer down reaches below the base whatever the index is.
+
+Now a pointer that is, back through copies and constant additions, a join `AliasChecker::stepsDown` takes for a walk down (`LoadGuard::pointerSteppedDown`) is guarded 0xffff below its base as well. S1 of `r12a.src` (a store through sp plus a negative variable, with no walk) stays A3-9's accepted convention.
+
+**A3-105 (host).** There are three sites where a frame address is handed to an unlent callee by a way the engine may not show. Each now lets it out (`HandOut`, which the probe declares to the engine as `declareHostEscape`):
+
+- `NoteFrameEscapeOf` for an exact address in r2, in r7 alone, or in a dropped stack word. The note's alias from the address up stays, and the note now says "the call may keep it and write any local".
+- `NoteStackArguments` for a word whose address is "shown" in r4-r7. The engine shows r4 only when its trial takes it. In escfuzz seed 303 i=469 (r4 and r7 set, r5 and r6 unset, the callee decompiled first and withheld) the call is printed `func_0x06009100();` with no argument at all.
+- In the probe, at every unlent call: the convention's registers (r2, r4-r7) and every word from the call's r15 up.
+
+The three overlap. The third alone fails escfuzz (9) and the generator (46). All three together fail the stack-word shapes (181 seeds).
+
+**A3-106 (host).**
+
+- `Load` through an address that may be a stack address the interpreter cannot place joins the frame flag, the lowest base and `callerHigh` of every slot it may reach (`JoinFrameWrite`, as `Clobber` does for a store). "May reach" means its object and up for a based address, and every slot for any other. This holds R13-3.2 and 3.3: 176 seeds alone.
+- `HandOut` of a frame address also lets out what the frame's slots hold. A slot with an address of the caller's frame then sets `kOutHigh`, and R13-3.5's pointer read back from the global is a possible word of the caller's frame. This is redundant with the first on every fixture: the global's load is a `MayBeStack` address too. Both together fail 243 seeds and 454 hbfuzz fixtures.
+- The brief's wider rule (a store through an unplaceable pointer after anything went out is a word of the caller's frame: `MayBeCallerFrame` true for every unknown pointer once `out != 0`) was built and measured. Lending is 676 (950) and 1,034 (1,304) against 678 (956) and 1,038 (1,310). Four precision pins of rounds 11 and 12 fail (lines 12008, 12103, 12175, 12179 of the suite: lent functions that hand `&local` out and store through a loaded pointer become withheld). It was not taken; hbfuzz is 0 of 1,400 with the precise rule.
+
+### 2. The P3 rows
+
+- **A3-107: accepted.** A callee the probe cannot name is taken to follow the convention (A3-10), which hands it no word of its caller's frame to write back. The lazy exposure would declare a host alias (`ReadExposed`, `declareHostAlias`), which the stack-argument trial reads (`trialBoundary`): A3-99's regression.
+- **A3-108: fixed.** Each frame fact is said once per function, at the first call it holds at, with "; likewise at the calls below":
+  - a register's note, once per register;
+  - a stack-argument note, again only at a call where a word the function itself filled holds a frame address it was not said for (a word a callee may have written over is no new fact);
+  - a word that held a saved register's entry value when the call exposed it, which is now "a saved register's word at or above the stack pointer", not "a local".
+
+  Not done: leaving out the r14 note when the text declares no local; the note is still true. The counts are in section 6.
+- **A3-109: accepted**, with this round's numbers (section 6). No call or returned value changes in any text.
+- **A3-110: accepted.** One function per corpus, entered twice by the corpus, is withheld "a return not to its caller", and its text is right. The exactness rule proposed needs each write to the reloaded slot proved the function's own across the lent calls in the loop, which `CalleeStoresFrame` does not separate.
+- **A3-111: fixed (generator).** Each finished run is repeated with the 512 bytes below the entry r15 refilled, and every word refilled as the stack pointer rises past it (`RunSpec::stackFill`, `Machine::SetScrub`; the run's memory is the `Env`'s). A function whose behaviour changes reads a stale word, and its `input-dropped` and `param-dropped` are not counted (`excluded.stale-stack-read.*`). The refill the row proposed does not see this seed: function 1 pushes and pops r1, then function 2 reads the freed word.
+- **A3-112: fixed (generator).** `UsesCallResult`: a read of r0 after the last call (a store, a compare, a move) with no write of it after the call is A3-19's accepted shape (`excluded.call-result-used.return-dropped`).
+- **A3-113: fixed (corpus).** `CorpusFragment` marks an entry whose previous word is `mov.l Rm,@-r15`. `TestGameCode` and `TestGameLending` keep the fragments (code the engine must not get wrong either) and print every count for the real entries and the fragments apart.
+- **A3-114: fixed (generator).** `GenEscape13Fn` draws `escape13.twoargs.<lent|unlent>.<walk|disp>`, `escape13.stackkeep.<lent|unlent>[.r4r7].<walk|disp>` and `escape13.reload.<swap2|mask|global>`. `GenIndexWalk13Fn` draws `escape13.index.<add|sub>`. Each is a stream of its own, checked by `CheckLaunderWalks`, with its draws pinned in `TestA365Pins` (every kind and variant drawn in 2,000 seeds).
+  - An unlent callee sits at kCode + 0xA0, where the check does not decompile it first. A callee decompiled first and withheld makes the engine show the call with that callee's own reading of its arguments, and A3-104's argument word is then no argument.
+  - The r4r7 variant is escfuzz's frame.
+  - The review's controls R13-1b, 1c, 1d, 3.0, 3.1 and 3.4 are pins in `TestArea3Round13Fix`, with the row fixtures.
+
+### 3. A3-115 (triage on request)
+
+Grammar 2 seed 18759, `n:claim-wrong:outOrigins`, shrunk to `mov.w @r4,r0 ; mov.b @r5+,r0 ; swap.b r5,r1 ; mov #0x68,r0 ; rts`:
+
+- r1 is r5's start 0x06021100 plus 1 with its low bytes swapped, 0x06020111. That lies 0x11 past r4's start, and the oracle took it for a pointer from r4.
+- r1 is computed from r5, which `outOrigins` names: the claim is right.
+
+This is an oracle false positive of A3-100's kind, P3. `BitwiseOfOthers` now also refuses a value whose byte or halfword swap lies within a step of another start value the run read.
+
+Pinned in `TestRound13FixPins`: the shrunk words find nothing, `PointerRegister` gives -1 for the swap, and r4 + 4 is still r4's. With the swap check removed, 2 pins fail and the seed fails again. Proposed status for the row: fixed `9ed1161` (oracle false positive, P3: a byte swap of r5's start lands near r4's; `BitwiseOfOthers`).
+
+### 4. The pins
+
+- `TestArea3Round13Fix` (`Sh2DecompilerTests.cpp`):
+  - R13-1a to 1d;
+  - R13-2a, 2b and escfuzz 303/469;
+  - R13-3.0 to 3.5;
+  - the two A3-108 note fixtures;
+  - S17 to S19.
+- `TestRound13FixPins` (`Sh2GeneratedTests.cpp`): A3-111, A3-112, A3-115.
+- `TestA365Pins`: the round 13 draws.
+
+### 5. Mutation
+
+Each part reverted alone in the worktree, built, run, and restored (`git checkout`). The checks:
+
+- the decompiler suite;
+- the generator's default mode (its pins);
+- printed-C seeds 1 to 3,000 (the escape streams);
+- escfuzz (the review's 20 seeds, 15,400 fixtures: a constant return that differs from the run);
+- hbfuzz (seeds 1 and 2, 1,400 fixtures).
+
+Restored, every check passes. The host and note rows were run before the indexed-walk stream existed; that stream has no callee, so they do not reach it. The engine rows were run on the final engine.
+
+| Part reverted | Suite pins failing | Generator pins | Printed-C 3000 (failing seeds, shapes) | escfuzz | hbfuzz | Reading |
+|---|---|---|---|---|---|---|
+| E_gap: the whole-frame alias across unmapped ranges (A3-104) | 1 (R13-1a) | 0 | 112 (twoargs.unlent walk 69, disp 43) | 342 | 0 | held |
+| E_floor: the lowest offset any query saw (A3-104) | 0 | 0 | 0 | 0 | 0 | redundant (fail-closed guard) |
+| E_both104: both | 1 | 0 | 112 | 342 | 0 | held |
+| E_index: the guard below a stepped-down unbounded pointer | 3 (S17-S19) | 0 | 359 (index.add 192, index.sub 167) | 0 | 0 | held |
+| H_note105: `NoteFrameEscapeOf` lets the exact address out | 0 | 0 | 0 | 0 | 0 | redundant (covered by H_conv) |
+| H_shown105: a "shown" stack word goes out | 0 | 0 | 0 | 0 | 0 | redundant (covered by H_conv) |
+| H_conv: the probe lets the convention's registers and the outgoing words out | 1 (escfuzz 303/469) | 0 | 46 (stackkeep.*.r4r7.disp) | 9 | 0 | held |
+| H_all105: the three A3-105 sites | 3 (R13-2a, 2b, 303/469) | 0 | 181 (stackkeep, all variants) | 36 | 0 | held |
+| H_load106: a load through an unplaced stack address carries the slots' frame flags | 4 (R13-3.2, 3.3) | 0 | 176 (reload.swap2 92, mask 84) | 0 | 319 | held |
+| H_high106: a frame address's hand-out lets out the slots' addresses | 0 | 0 | 0 | 0 | 0 | redundant (covered by H_load106) |
+| H_both106: both A3-106 parts | 6 (R13-3.2, 3.3, 3.5) | 0 | 243 (reload, all three) | 0 | 454 | held |
+| N_once: notes said once | 2 (A3-108 once) | 0 | 0 | 0 | 0 | held (pins; a note, not a value) |
+| N_saved: the saved-register note | 2 (A3-108 saved) | 0 | 0 | 0 | 0 | held (pins) |
+| G_stale: the stale-stack exclusion (A3-111) | 0 | 2 (A3-111) | 0 | 0 | 0 | held |
+| G_used: the call-result-used exclusion (A3-112) | 0 | 2 (A3-112) | 0 | 0 | 0 | held |
+| G_115: the swap check in `BitwiseOfOthers` (A3-115) | 0 | 2 (A3-115); seed 18759 fails | not run | not run | not run | held |
+
+Each P2 fix reverted as a whole (E_both104, H_all105, H_both106) fails printed-C seeds and the review's fuzzers. The redundant parts are kept as fail-closed guards; each is a site where the round 12 table had said "left as it was".
+
+### 6. The corpora
+
+`SE_GAME_HWRAM=<img> SE_GAME_LEND=1 SaturnExplorerSh2DecompilerTests <dir>`, the final tree against `f54d140` (the same build directory and load, one run each; the base build was made beside it from `git archive f54d140`):
+
+| | hwram007 | hwram008 |
+|---|---|---|
+| lent signatures (parameters), `f54d140` | 678 (956) | 1,038 (1,310) |
+| lent signatures (parameters), this round | 678 (956) | 1,038 (1,310) |
+| ...real entries | 474 (645) of 999 | 724 (975) of 1,543 |
+| ...fragments | 204 (311) of 731 | 314 (335) of 1,452 |
+| a lent status that changed against `f54d140` | none | none |
+| texts changed against `f54d140` (lending run), real entries | 155 of 999: 142 by notes only, 13 by declarations (1 also the header) | 254 of 1,543: 235 by notes only, 19 by declarations (2 the header, 1 a renamed return) |
+| ...fragments | 288 of 731 | 712 of 1,452 |
+| `TestGameCode` | 9,270 ms (base 9,857); 108 real entries, 731 fragments of 839 | 32,761 ms (base 32,507); 102 and 1,452 of 1,554 |
+| every ledger count / missing and said / mapping violations | 0 / 0 / 0 | 0 / 4 / 0 |
+
+The timing is 0.94x and 1.01x of the base, in one run each.
+
+The notes on the real entries of the lending run, `f54d140` then this round:
+
+| Note | hwram007 | hwram008 |
+|---|---|---|
+| r14 | 216 → 121 | 442 → 255 |
+| any register | 239 → 148 | 496 → 329 |
+| stack argument | 122 → 55 | 193 → 78 |
+| slot ("a local") | 101 → 38 | 154 → 58 |
+| saved-register word | 0 → 85 | 0 → 119 |
+| r2 | 23 → 27 | 54 → 74 |
+| with "likewise at the calls below" | 0 → 71 | 0 → 117 |
+
+The r2 notes grow because a pointer reloaded from the frame now carries the frame flag (A3-106), so r2 holding one is said.
+
+The changed texts beyond notes on real entries were read; all 32 have the same calls and the same returned values:
+
+- **An unused frame array declared** (`xunknown1 axStack_8c [128];`, 007 06012E10, 06017478, 0602CC38; 008 06042BBC `axStack_1a [2]`). These are the locals the whole-frame alias now keeps aliased.
+- **A spill kept** (007 06008CC0: `xStack_24 = param_2;` where it was an array local).
+- **A stack argument read at its use** instead of copied at the top. 008 0600B614 is `func_0x0600b204(param_3,param_5)` for `xVar3 = param_5; ...(param_3,xVar3)`. In 008 0603BBE4 the stores `*(puVar2 + 2) = param_5;` replace a copy made before the first call; the code reads `@(0x20,r14)` and `@(0x24,r14)` before the first `jsr` into r12 and r13. That is the same value: a stack parameter is an input, which a callee can change only through a pointer to the caller's frame it is not handed. The only "return" change in either corpus is that function's variable renamed (`pxVar5` to `pxVar3`).
+
+Precision (A3-109); right.
+
+### 7. Matrix
+
+On the final tree (`24e38dc` for the engine, the host and the suite; `9ed1161` changes only the generator), own RelWithDebInfo build, `-j2`, every binary under `ulimit -v 4000000`, one heavy job at a time:
+
+| Run | Result |
+|---|---|
+| `ctest -E SaturnExplorerLive -j2 --timeout 900` | 94 of 94 pass (150 s, on `24e38dc`; `SaturnExplorerSh2GeneratedTests` again on `9ed1161`) |
+| fault suite (`SaturnExplorerDecompilerFaultTests` alone) | 0 of 94 jobs failed (71 s); no MOVED pin |
+| generator, grammar 2, seeds 1-3,000 | 0 failing |
+| generator, grammar 1, seeds 1-1,000 | 0 failing |
+| generator, printed-C, seeds 1-3,000 | 0 failing (laundered and escape walks 2,592: agrees 79, `escape:spare` 65, `launder:local` 2,448) |
+| generator, seeds 1-20,000 (four runs of 5,000) | 0 failing |
+| generator, grammar 2, 2,400,001-2,420,000 (four runs of 5,000) | 0 failing |
+| generator, specials, 2,500,001-2,505,000 | 0 failing |
+| `TestArea3HiddenInputFuzz`, `SE_A3FUZZ_PROGRAMS=5000`, seeds 10 and 11 | 1,195 and 1,201 lent, 15,535 and 15,613 perturbed runs, 0 findings |
+| escfuzz (the review's seeds 301-306 at 700, 401-408 and 501-506 at 800) | 0 wrong constants of 15,400 (378 on `f54d140`) |
+| hbfuzz seeds 1 (600) and 2 (800) | 0 stale of 1,400; g never lent |
+| every `a3_round11/*.src`, `a3_round12/*.src`, `a3_round13/r13*.src` through the driver | 193 fixtures, 92 lent. Each is right or withheld, but S1 (`r12a.src`, A3-9's accepted convention) and T1 (`r12q.src`, A3-95, accepted), as in round 12. S17-S19 of `s5.src` were wrong and lent on `f54d140` and are right now |
+| corpora | section 6 |
+| vendoring: `python3 -I vendor.py <ghidra>` on a copy | exit 0, "vendored 84 library sources, 3 compiler sources, 94 headers, 5 spec files", 0065 applied, the tree identical to the committed one |
+
+The generator ranges, the printed-C run and the generator's ctest were run again after `9ed1161`, the A3-115 oracle change, which only refuses a claim.
+
+### 8. Not done, and limits
+
+- The A3-108 r14 note is still said in a function with no stack local; it is true.
+- The precision proposals of A3-109 and A3-110 are accepted, not built.
+- The fragments stay in the corpus run; the counts say them apart.
+- S17 to S19 have no ledger row. They are the stack-walk class of A3-65 with an unbounded index, wrong on `f54d140`, found by this round's matrix (the fixture rule of the brief), and fixed in 0065 with pins and a generator stream.
+- Patch 0064 (area 2) is on master and not on this branch. 0065 touches `heritage.cc/.hh` and `varmap.cc/.hh` only.
