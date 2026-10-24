@@ -4341,7 +4341,12 @@ std::string EffectClaimsContradicted(const CallEffects& e, const RunOut& run, st
                 return fail("claim-wrong:frameWords", "a run stores at " + Hex(a) + ", word " + std::to_string(word) + " from the entry r15, and frameWords does not name it");
             continue;
         }
-        const int arena = ArenaOf(a);
+        int arena = ArenaOf(a);
+        // (area 3 round 14 fix, A3-123) ...but not an address that is a byte/halfword swap (or bitwise combination) of other start values the
+        // run read, which lands in a register's arena by chance (the byte swap of r5's start 0x06021100 is 0x06020011, in r4's arena: grammar 2
+        // seed 2616394, the same oracle false positive as A3-100 and A3-115, here in the storesThrough path). The store is through the register
+        // the swapped value came from, which storesThrough names, not r4.
+        if (arena >= 0 && arena < 4 && BitwiseOfOthers(run, a, 4 + arena)) arena = -1;
         if (arena >= 0 && !(e.storesThrough & (ArenaBit(arena) | origin::kMemory)))
             return fail("claim-wrong:storesThrough", "a run stores at " + Hex(a) + ", in the arena of " + (arena < 4 ? "r" + std::to_string(4 + arena) : std::string("gbr")) +
                                                          ", and storesThrough names neither that register nor memory");
@@ -8962,12 +8967,12 @@ bool GenIndexWalk13Fn(uint64_t seed, CCase& c, std::string& shape)
     return true;
 }
 
-// ---- Round 14 fix instrument (A3-121): the walks and words the round 14 review found open (A3-117 to A3-119, A3-122, and A3-123 of the fix), on
+// ---- Round 14 fix instrument (A3-121): the walks and words the round 14 review found open (A3-117 to A3-119, A3-122, and A3-126 of the fix), on
 // a stream of their own (one seed in eight), checked as the others are (CheckLaunderWalks: a constant return against the run, and a returned
 // temporary written once with a constant). Frame of 32 bytes, the sentinel K at r15 + 0, p = r15 + 16; the walk's four stores of the counter
 // (4, 3, 2, 1) reach r15 + 12 down to r15 + 0, so the code returns 1 (4 for the walk up from a negative index).
 //   walk14.idx.<down|subup|negup>.<c|u>: an index stepped by a loop: `@(r0,p)` with r0 counting down from 0 (down), `p - i` with i counting up
-//        (subup), `@(r0,p)` with r0 counting up from -16 (negup, A3-123); u: p also has an index added that is 0 in the run (a word of memory)
+//        (subup), `@(r0,p)` with r0 counting up from -16 (negup, A3-126); u: p also has an index added that is 0 in the run (a word of memory)
 //   walk14.stride.<pool|poolw|reload|global>.<add|sub>.<c|u>: p stepped by a register the value-set analysis cannot read: a long or a halfword
 //        of the literal pool, a frame slot the stride was spilled to, a global (-4 added, or 4 subtracted)
 //   walk14.stackarg.<r6|r7|r6r7>.<walk|callee>: A3-117's frame (locals 1 to 4 at r15 + 0 to 12, &local[2] in r4, an object in r5, and
@@ -9572,7 +9577,7 @@ void TestPrintedC()
                 cases.push_back(i13);
                 shapes.push_back(shape);
             }
-            // (area 3 round 14 fix, A3-121) ...and the walks and words of A3-117 to A3-119, A3-122 and A3-123 on a fourth
+            // (area 3 round 14 fix, A3-121) ...and the walks and words of A3-117 to A3-119, A3-122 and A3-126 on a fourth
             CCase w14;
             if (GenWalk14Fn(static_cast<uint64_t>(seed), w14, shape))
             {
@@ -10680,6 +10685,28 @@ void TestRound13FixPins(Sh2Decompiler& d)
         CHECK(rep.findings.empty());
         CHECK(count(rep, "excluded.call-result-used.return-dropped") >= 1);
     }
+    // A3-123 (grammar 2 seed 2616394): function 0 byte-swaps r5's low 16 bits (`char *param_2`, 0x06021100 -> 0x06020011) and hands the result
+    // to a callee that stores a byte through it. 0x06020011 lands in r4's arena (0x06020xxx) by chance, and the storesThrough arena check took
+    // the store for one through r4, which storesThrough does not name (the store is through r5). The same oracle false positive as A3-100 and
+    // A3-115, in the storesThrough path instead of outOrigins: BitwiseOfOthers now clears the arena attribution there too.
+    {
+        RunOut run;
+        run.init[4] = 0x06020100u;
+        run.init[5] = 0x06021100u;
+        run.use.readFirst = (1u << 4) | (1u << 5);
+        CallEffects viaR5 = CallEffects();
+        viaR5.storesThrough = 1u << 5;
+        viaR5.spDelta = 0;
+        run.trace.push_back(TraceRec{ 0x0u, true, 1, 0x06020011u, 0x42u });   // a byte store at the swapped address
+        std::string sig;
+        const std::string why = EffectClaimsContradicted(viaR5, run, &sig);
+        std::printf("pin 'A3-123 grammar 2 seed 2616394 (swap into r4 arena)': %s\n", why.empty() ? "no contradiction" : (sig + ": " + why).c_str());
+        CHECK(why.empty());
+        // ...and a genuine store through r4 is still demanded (not a swap of r5)
+        RunOut r4run = run;
+        r4run.trace.back() = TraceRec{ 0x0u, true, 1, 0x06020104u, 0x42u };
+        CHECK(!EffectClaimsContradicted(viaR5, r4run, &sig).empty() && sig == std::string("claim-wrong:storesThrough"));
+    }
 }
 
 // ===== Area 3, round 9 fix: the shapes of A3-56 to A3-59 and A3-62 as modules, the grammar's choices, and the claims of A3-63 =====
@@ -10954,7 +10981,7 @@ void TestA365Pins(Sh2Decompiler& d)
                                "escape13.reload.swap2", "escape13.reload.mask", "escape13.reload.global" })
             CHECK(drawn[k] > 0);
     }
-    // Round 14 fix (A3-121): the stream of A3-117 to A3-119, A3-122 and A3-123 draws each shape and variant (the cap one seed in about 800)
+    // Round 14 fix (A3-121): the stream of A3-117 to A3-119, A3-122 and A3-126 draws each shape and variant (the cap one seed in about 800)
     {
         std::map<std::string, int> drawn;
         int n = 0;
