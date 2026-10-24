@@ -1224,6 +1224,19 @@ private:
             // not follow it); a callee the probe cannot name, the convention's (kConvention).
             if (mTolerant && !mNested)
             {
+                // (area 3 round 13 fix, A3-104, A3-105) ...and whatever the walk says, the convention's registers and the words from the call's
+                // r15 up are what a callee is handed: a frame address in one goes out, as the engine's (e) takes it for an argument it shows.
+                // The engine does not show every one: a callee with no locked prototype may be printed with no argument at all, r4 and the
+                // stack word included, and the walk of a callee that publishes its incoming stack word names no register (CalleeHanded).
+                for (int r = 2; r < 8; ++r)
+                    if (((kConvention >> r) & 1u)) HandOut(s, Get(s, mReg[r]));
+                {
+                    const Value callSp = Get(s, mReg[kR15]);
+                    std::vector<Value> words;
+                    for (const auto& slot : s.slots)
+                        if (callSp.kind != Value::Sp || slot.first >= callSp.v) words.push_back(slot.second);
+                    for (const Value& w : words) HandOut(s, w);
+                }
                 const uint32_t regs = haveTarget ? CalleeStoresBelow(target) | CalleeHanded(target) : kConvention;
                 for (int r = 0; r < kTracked; ++r)
                 {
@@ -1346,6 +1359,12 @@ private:
         if (c == 0) return;
         s.out |= c;
         mFrameOut = true;
+        // (area 3 round 13 fix, A3-106) A pointer into the frame reaches the frame's words, and what they hold goes out with it: a slot that
+        // holds an address of the caller's frame (or a laundered one) makes a pointer later read back from memory a possible word of the
+        // caller's frame (kOutHigh), not only a local.
+        if (!x.Frame()) return;
+        for (const auto& slot : s.slots)
+            if (slot.second.Frame()) s.out |= EscapeClass(s, slot.second);
     }
 
     // A call whose signature is not lent may read r2: the SH ABI passes the address of a returned
@@ -1389,6 +1408,9 @@ private:
                     shown = shown || (x.kind == Value::Sp && x.v == slot.second.v);
                 }
             if (!shown) NoteFrameEscapeOf(s, slot.second, kR15, true, at);
+            // (area 3 round 13 fix, A3-105) ...but shown or not, the word goes out to a callee that may keep it: the engine shows r4 only when
+            // its trial takes it (a callee with no locked prototype may be printed with none), so the escape does not wait for it (HandOut).
+            else HandOut(s, slot.second);
         }
     }
 
@@ -1565,7 +1587,14 @@ private:
             HandOut(s, v);   // the escape is the engine's, from the frame's lowest slot (not a host alias: A3-99)
             return;
         }
-        if (exactToo) mEscapeSites[at] |= 1u << reg;   // the address is in no argument of the call: the text says so (A3-28)
+        if (exactToo)
+        {
+            mEscapeSites[at] |= 1u << reg;   // the address is in no argument of the call: the text says so (A3-28)
+            // (area 3 round 13 fix, A3-105) ...and it has gone out: a callee handed an address in no argument the engine shows (r2, r7 alone, a
+            // stack word the engine drops) may keep it, and a later step may walk down from what it kept. The alias from the address up (the
+            // note's "from there up") reaches only the locals at and above it; the escape is the engine's, of the whole frame (HandOut).
+            HandOut(s, v);
+        }
         if (base == Value::kLowBase) mEscapedLow = true;
         else if (!mEscaped || base < mEscapeLow) mEscapeLow = base;
         mEscaped = true;
@@ -1870,6 +1899,22 @@ private:
         Value f = FreeStack();
         f.dep = Deps::All(origin::kMemory | origin::kStack | kDepArgs);
         f.from |= taint;
+        // (area 3 round 13 fix, A3-106) ...and it may be a word of the frame the interpreter tracks: what one of those holds. A frame address
+        // spilled to a slot and read back through a laundered copy of r15 (a swap or shift pair, a mask) or through r15 published in a global
+        // is still that address -- of the caller's frame, it is a hand-back -- so the read carries the frame flag, the lowest base and
+        // callerHigh of every slot the address may reach (a based address: its object and up; any other: every slot), as Clobber does for a
+        // store. FreeStack alone carried none, and MayBeCallerFrame took the pointer for one nothing is known of.
+        FrameWrite w;
+        const int64_t from = addr.kind == Value::Fuzzy && addr.Frame() && addr.stackBase != Value::kNoBase && addr.stackBase != Value::kLowBase
+                                 ? addr.stackBase : INT64_MIN;
+        for (const auto& slot : s.slots)
+            if (slot.first + 4 > from) JoinFrameWrite(w, FrameWriteOf(slot.second));
+        if (w.frame)
+        {
+            f.frame = true;
+            f.stackBase = w.base;
+            f.callerHigh = w.high;
+        }
         return f;
     }
 
