@@ -9220,8 +9220,9 @@ bool GenWalk14Fn(uint64_t seed, CCase& c, std::string& shape)
 // r4 to r7, or constants), each through the pointer reloaded from the slot (one in five through the r1 of the previous store), then 1 to 3
 // reads of S, byte, halfword or word wide (wider or narrower than the stores), through the reloaded pointer or directly at the frame
 // offset, added or xored into r0.
-//   frame124.<r15|r14>.<words|bytes>.<nocall|call>.<b|w|l|mixed>: the frame base, the fill, whether &S is handed to a lent callee at
-//        kCode + 0xC0 (rts ; nop) between the stores and the reads, and the stores' widths. A function without a call is checked by the
+//   frame124.<r15|r14>.<words|bytes>.<nocall|call|callr>.<b|w|l|mixed>: the frame base, the fill, whether &S is handed to a lent callee
+//        at kCode + 0xC0 (rts ; nop) between the stores and the reads, or (callr, A3-128) to a withheld one that reads a word of S, which
+//        the caller writes again after the call, and the stores' widths. A function without a call is checked by the
 //        printed-C differential (its text compiled and run beside the code for each input), which skips a text with a call; every one, with
 //        a call or not, is checked by the frame ledger (dts::FrameLosses, CheckFrame124Ledger). A text with a call reads S through the kept
 //        pointer after it (the frame escaped), which no constant check resolves: the ledger is its check.
@@ -9231,6 +9232,8 @@ bool GenFrame124Fn(uint64_t seed, CCase& c, std::string& shape)
     if (!rng.Chance(25)) return false;
     const bool r14 = rng.Chance(50);
     const bool call = rng.Chance(35);
+    // (A3-128) the callee reads S (`mov.l @(off,r4),r0`) and is withheld (it reads r3), and S is written again after the call
+    const bool reader = call && rng.Chance(50);
     const bool byteFill = !call && rng.Chance(50);   // (a call's function must end before its callee at kCode + 0xC0)
     const uint32_t fb = r14 ? 14u : 15u;
     const uint32_t sOff = 8u + 4u * rng.Below(3);
@@ -9292,12 +9295,19 @@ bool GenFrame124Fn(uint64_t seed, CCase& c, std::string& shape)
         const uint32_t size = wk == 0 ? 1 : wk == 1 ? 2 : wk == 2 ? 4 : (1u << rng.Below(3));
         store(size, rng.Below(8 / size) * size, true);
     }
+    const uint32_t readOff = rng.Below(2);           // the word of S the reading callee reads
     if (call)
     {
         put(0x5400 | fb << 4 | kSlotDisp);           // mov.l @(28,fb),r4: &S
         b.Lit(0, kCode + 0xC0u);
         put(0x400B);                                 // jsr @r0
         put(0x0009);
+        if (reader)
+        {
+            put(0xE200 | rng.Below(256));            // mov #imm,r2
+            reload();
+            put(0x1120 | readOff);                   // mov.l r2,@(4*readOff,r1): the word the callee read, written again
+        }
     }
     const uint32_t nReads = 1 + rng.Below(3);
     for (uint32_t i = 0; i < nReads; ++i)
@@ -9337,10 +9347,16 @@ bool GenFrame124Fn(uint64_t seed, CCase& c, std::string& shape)
     {
         if (b.at > 0xC0u / 2) return false;          // (not drawn: the bound above keeps it under)
         b.at = 0xC0u / 2;                            // the callee
+        if (reader)
+        {
+            put(0x2338);                             // tst r3,r3: reads r3 on entry, so it is withheld (not lent)
+            put(0x5040 | readOff);                   // mov.l @(4*readOff,r4),r0
+        }
         put(0x000B);
         put(0x0009);
     }
-    shape = std::string("frame124.") + (r14 ? "r14" : "r15") + (byteFill ? ".bytes" : ".words") + (call ? ".call." : ".nocall.") + kWidths[wk];
+    shape = std::string("frame124.") + (r14 ? "r14" : "r15") + (byteFill ? ".bytes" : ".words") + (reader ? ".callr." : call ? ".call." : ".nocall.") +
+            kWidths[wk];
     c.words = call ? b.Finish() : b.w;
     c.name = "frame124_" + std::to_string(seed);
     return true;
@@ -9620,7 +9636,7 @@ void TestPrintedC()
             {
                 CCase f;
                 std::string shape;
-                if (!GenFrame124Fn(static_cast<uint64_t>(seed), f, shape) || shape.find(".call.") != std::string::npos) continue;
+                if (!GenFrame124Fn(static_cast<uint64_t>(seed), f, shape) || shape.find(".call") != std::string::npos) continue;
                 fns.push_back(RegFn());
                 cases.push_back(f);
             }
@@ -11256,10 +11272,10 @@ void TestA365Pins(Sh2Decompiler& d)
         std::printf("pin 'frame124 draws': %d functions in 4000 seeds, %zu kinds\n", n, drawn.size());
         for (const char* base : { "r15", "r14" })
             for (const char* fill : { "words", "bytes" })
-                for (const char* call : { "nocall", "call" })
+                for (const char* call : { "nocall", "call", "callr" })
                     for (const char* w : { "b", "w", "l", "mixed" })
                     {
-                        if (std::string(fill) == "bytes" && std::string(call) == "call") continue;
+                        if (std::string(fill) == "bytes" && std::string(call) != "nocall") continue;
                         CHECK(drawn[std::string("frame124.") + base + "." + fill + "." + call + "." + w] > 0);
                     }
     }
