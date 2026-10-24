@@ -12497,7 +12497,10 @@ void TestA365WalkDown()
     {
         const DecompileResult r = check("A3-65 from the frame pointer r14", { 0x2FE6, 0x7FF8, 0x6EF3, 0xE005, 0x2E02, 0x62E3, 0x7208, 0xE102, 0x2216, 0x4110, 0x8BFC, 0x60E2, 0x6FE3, 0x7F08, 0x000B, 0x6EF6 },
               8, true, "return xStack_c;");
-        CHECK(!r.prototype.known);   // A3-87: withheld for the raw register (lent at the head)
+        // (area 3 round 14 fix, patch 0066) The walk's pointer is stepped down, so it is no exact frame offset: the frame escapes and the
+        // walk's guard covers the stack space, the save slot of r14 with it, which stays mapped (ActionRestrictLocal): the text names it as a
+        // local (`&iStack_4`) where it named the raw register, and the function is lent again with that text (A3-87's raw register is gone).
+        CHECK(!Has(r.Text(), "register0x"));
     }
     // ...and from r14 + 8 of a 12-byte frame, inside it: the pointer is a local's address
     check("A3-65 from the frame pointer r14, inside the frame", { 0x2FE6, 0x7FF4, 0x6EF3, 0xE005, 0x2E02, 0x62E3, 0x7208, 0xE102, 0x2216, 0x4110, 0x8BFC, 0x60E2, 0x6FE3, 0x7F0C, 0x000B, 0x6EF6 },
@@ -12523,7 +12526,9 @@ void TestA365WalkDown()
         const DecompileResult r = check("A3-65 a walk down from the entry r15 has no stack argument",
                                         { 0x7FF8, 0x6073, 0x81F0, 0x64F3, 0x7408, 0xE102, 0x2455, 0x4110, 0x8BFC, 0xE102, 0xE200, 0x6645, 0x326C, 0x4110, 0x8BFB, 0x85F3, 0x302C, 0x7F08, 0x000B, 0x0009 },
                                         6, false, "return iStack_2 + iVar3;");
-        CHECK(!Has(r.Text(), "param_3") && !Has(r.Text(), "in_stack"));
+        // (area 3 round 14 fix, patch 0066) The read walk's guard covers the stack space, so the store of r7 at r15 is kept (`xStack_8 =
+        // param_4`) and r4 to r7 are the register parameters: a stack parameter would be the fifth.
+        CHECK(!Has(r.Text(), "param_5") && !Has(r.Text(), "in_stack"));
     }
 }
 
