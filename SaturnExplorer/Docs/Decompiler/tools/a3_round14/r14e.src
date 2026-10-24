@@ -1,0 +1,318 @@
+name R14-7b R13-1a with r6 set, reads local at 0
+asm 06009000
+.word 0x4F22
+add #-16,r15
+mov #1,r0
+mov.l r0,@(0,r15)
+mov #2,r0
+mov.l r0,@(4,r15)
+mov #3,r0
+mov.l r0,@(8,r15)
+mov #4,r0
+mov.l r0,@(12,r15)
+mov r15,r4
+add #8,r4
+mov.l =0x0600F200,r5
+mov #31,r6
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l =0x0600F200,r6
+mov.l @(4,r6),r6
+mov #0x55,r2
+mov.l r2,@-r6
+mov.l r2,@-r6
+mov.l r2,@-r6
+mov.l @(0,r15),r0
+add #16,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+mov.l =0x0600F200,r1
+mov.l r4,@(4,r1)
+rts
+nop
+endasm
+args 0 0 0 0
+end
+name R14-7c R13-1a with r7 set, reads local at 0
+asm 06009000
+.word 0x4F22
+add #-16,r15
+mov #1,r0
+mov.l r0,@(0,r15)
+mov #2,r0
+mov.l r0,@(4,r15)
+mov #3,r0
+mov.l r0,@(8,r15)
+mov #4,r0
+mov.l r0,@(12,r15)
+mov r15,r4
+add #8,r4
+mov.l =0x0600F200,r5
+mov #32,r7
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l =0x0600F200,r6
+mov.l @(4,r6),r6
+mov #0x55,r2
+mov.l r2,@-r6
+mov.l r2,@-r6
+mov.l r2,@-r6
+mov.l @(0,r15),r0
+add #16,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+mov.l =0x0600F200,r1
+mov.l r4,@(4,r1)
+rts
+nop
+endasm
+args 0 0 0 0
+end
+name R14-7d R13-1a with r6r7 set, reads local at 0
+asm 06009000
+.word 0x4F22
+add #-16,r15
+mov #1,r0
+mov.l r0,@(0,r15)
+mov #2,r0
+mov.l r0,@(4,r15)
+mov #3,r0
+mov.l r0,@(8,r15)
+mov #4,r0
+mov.l r0,@(12,r15)
+mov r15,r4
+add #8,r4
+mov.l =0x0600F200,r5
+mov #31,r6
+mov #32,r7
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l =0x0600F200,r6
+mov.l @(4,r6),r6
+mov #0x55,r2
+mov.l r2,@-r6
+mov.l r2,@-r6
+mov.l r2,@-r6
+mov.l @(0,r15),r0
+add #16,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+mov.l =0x0600F200,r1
+mov.l r4,@(4,r1)
+rts
+nop
+endasm
+args 0 0 0 0
+end
+name R14-7e R13-1a with r5r6r7 set, reads local at 0
+asm 06009000
+.word 0x4F22
+add #-16,r15
+mov #1,r0
+mov.l r0,@(0,r15)
+mov #2,r0
+mov.l r0,@(4,r15)
+mov #3,r0
+mov.l r0,@(8,r15)
+mov #4,r0
+mov.l r0,@(12,r15)
+mov r15,r4
+add #8,r4
+mov.l =0x0600F200,r5
+mov #30,r5
+mov #31,r6
+mov #32,r7
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l =0x0600F200,r6
+mov.l @(4,r6),r6
+mov #0x55,r2
+mov.l r2,@-r6
+mov.l r2,@-r6
+mov.l r2,@-r6
+mov.l @(0,r15),r0
+add #16,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+mov.l =0x0600F200,r1
+mov.l r4,@(4,r1)
+rts
+nop
+endasm
+args 0 0 0 0
+end
+name R14-7f R13-1a with r6 set, reads local at 4
+asm 06009000
+.word 0x4F22
+add #-16,r15
+mov #1,r0
+mov.l r0,@(0,r15)
+mov #2,r0
+mov.l r0,@(4,r15)
+mov #3,r0
+mov.l r0,@(8,r15)
+mov #4,r0
+mov.l r0,@(12,r15)
+mov r15,r4
+add #8,r4
+mov.l =0x0600F200,r5
+mov #31,r6
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l =0x0600F200,r6
+mov.l @(4,r6),r6
+mov #0x55,r2
+mov.l r2,@-r6
+mov.l r2,@-r6
+mov.l r2,@-r6
+mov.l @(4,r15),r0
+add #16,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+mov.l =0x0600F200,r1
+mov.l r4,@(4,r1)
+rts
+nop
+endasm
+args 0 0 0 0
+end
+name R14-7g R13-1a with r7 set, reads local at 4
+asm 06009000
+.word 0x4F22
+add #-16,r15
+mov #1,r0
+mov.l r0,@(0,r15)
+mov #2,r0
+mov.l r0,@(4,r15)
+mov #3,r0
+mov.l r0,@(8,r15)
+mov #4,r0
+mov.l r0,@(12,r15)
+mov r15,r4
+add #8,r4
+mov.l =0x0600F200,r5
+mov #32,r7
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l =0x0600F200,r6
+mov.l @(4,r6),r6
+mov #0x55,r2
+mov.l r2,@-r6
+mov.l r2,@-r6
+mov.l r2,@-r6
+mov.l @(4,r15),r0
+add #16,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+mov.l =0x0600F200,r1
+mov.l r4,@(4,r1)
+rts
+nop
+endasm
+args 0 0 0 0
+end
+name R14-7h R13-1a with r6r7 set, reads local at 4
+asm 06009000
+.word 0x4F22
+add #-16,r15
+mov #1,r0
+mov.l r0,@(0,r15)
+mov #2,r0
+mov.l r0,@(4,r15)
+mov #3,r0
+mov.l r0,@(8,r15)
+mov #4,r0
+mov.l r0,@(12,r15)
+mov r15,r4
+add #8,r4
+mov.l =0x0600F200,r5
+mov #31,r6
+mov #32,r7
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l =0x0600F200,r6
+mov.l @(4,r6),r6
+mov #0x55,r2
+mov.l r2,@-r6
+mov.l r2,@-r6
+mov.l r2,@-r6
+mov.l @(4,r15),r0
+add #16,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+mov.l =0x0600F200,r1
+mov.l r4,@(4,r1)
+rts
+nop
+endasm
+args 0 0 0 0
+end
+name R14-7i R13-1a with r5r6r7 set, reads local at 4
+asm 06009000
+.word 0x4F22
+add #-16,r15
+mov #1,r0
+mov.l r0,@(0,r15)
+mov #2,r0
+mov.l r0,@(4,r15)
+mov #3,r0
+mov.l r0,@(8,r15)
+mov #4,r0
+mov.l r0,@(12,r15)
+mov r15,r4
+add #8,r4
+mov.l =0x0600F200,r5
+mov #30,r5
+mov #31,r6
+mov #32,r7
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l =0x0600F200,r6
+mov.l @(4,r6),r6
+mov #0x55,r2
+mov.l r2,@-r6
+mov.l r2,@-r6
+mov.l r2,@-r6
+mov.l @(4,r15),r0
+add #16,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+mov.l =0x0600F200,r1
+mov.l r4,@(4,r1)
+rts
+nop
+endasm
+args 0 0 0 0
+end

@@ -1,0 +1,38 @@
+name R14-7a R13-1a with the lowest local (the call's fifth-argument word) read back instead of buf[1]: nlent g(ptr, obj) keeps the end pointer of a local buffer in an object; the caller fills the buffer backwards through the kept pointer and reads buf[1]
+asm 06009000
+.word 0x4F22
+add #-16,r15
+mov #1,r0
+mov.l r0,@(0,r15)
+mov #2,r0
+mov.l r0,@(4,r15)
+mov #3,r0
+mov.l r0,@(8,r15)
+mov #4,r0
+mov.l r0,@(12,r15)
+mov r15,r4
+add #8,r4
+mov.l =0x0600F200,r5
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l =0x0600F200,r6
+mov.l @(4,r6),r6
+mov #0x55,r2
+mov.l r2,@-r6
+mov.l r2,@-r6
+mov.l r2,@-r6
+mov.l @(0,r15),r0
+add #16,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+mov.l =0x0600F200,r1
+mov.l r4,@(4,r1)
+rts
+nop
+endasm
+args 0 0 0 0
+end
