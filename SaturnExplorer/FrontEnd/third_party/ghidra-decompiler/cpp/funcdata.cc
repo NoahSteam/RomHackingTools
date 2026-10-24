@@ -245,8 +245,8 @@ void Funcdata::recordAccessFold(const PcodeOp *op,const Varnode *vn)
 }
 
 /// SaturnExplorer (patches/0068-engine-deadcode-late-stack-reads.patch): heritage guards a stack local at the
-/// call (its effect on the local is unknown), so the call may read it: a host's frame ledger takes the call for a
-/// read of those bytes. Only the flow's calls are kept, each range once.
+/// call (its effect on the local is unknown) and a frame address escaped, so the call may read it: a host's frame
+/// ledger takes the call for a read of those bytes. Only the flow's calls are kept, each range once.
 /// \param op is the call
 /// \param off is the local's offset in the stack space
 /// \param size is its size

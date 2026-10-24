@@ -2373,9 +2373,10 @@ void Heritage::guardCalls(uint4 fl,const Address &addr,int4 size,vector<Varnode 
     }
     // We do not guard the call if the effect is "unaffected" or "reload"
     if ((effecttype == EffectRecord::unknown_effect)||(effecttype == EffectRecord::return_address)) {
-      // SaturnExplorer (0068): for a host's frame ledger, this call may read the local, unless it lies wholly below the
-      // stack pointer the callee is entered with (the callee's own space: what was pushed and popped there is gone)
-      if (spc->getType() == IPTR_SPACEBASE) {
+      // SaturnExplorer (0068): for a host's frame ledger, this call may read the local once a frame address escaped
+      // (before that a callee reads the caller's frame only through its stack parameters, which the trials decide),
+      // unless the local lies wholly below the stack pointer the callee is entered with (the callee's own space)
+      if (spc->getType() == IPTR_SPACEBASE && fd->hasFrameEscaped()) {
 	bool below = false;
 	if (fc->getSpacebaseOffset() != FuncCallSpecs::offset_unknown) {
 	  intb rel = (intb)off;

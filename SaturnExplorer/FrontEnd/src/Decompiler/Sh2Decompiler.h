@@ -373,8 +373,8 @@ struct DecompileResult
     std::vector<CallSite> calls;                      // the calls, for the ledger's order checks
     std::vector<std::vector<int>> flowSuccessors;     // the flow's basic blocks before any action: each one's successors
     // The calls (their place in the flow as first followed, as MemoryAccess::origBlock and origOrder) the engine guarded a local
-    // of the frame at, with the local (its offset in the stack space, as AccessFate::address, and size): the call's effect on it
-    // is unknown, so it may read it (patch 0068). For the frame ledger.
+    // of the frame at once a frame address escaped, with the local (its offset in the stack space, as AccessFate::address, and
+    // size): the call's effect on it is unknown and it may reach the frame, so it may read it (patch 0068). For the frame ledger.
     struct FrameCall
     {
         int origBlock = -1;

@@ -14,8 +14,9 @@
 // used (a pop of a register the engine takes for unaffected is no use), before folded writes of the
 // frame have covered every byte of it. Only folded writes, exact frame offsets the engine itself
 // placed, cover a byte; a store through a pointer that stayed one, or a call, may not write it.
-// A call the engine guarded a local of the frame at (DecompileResult::frameCalls: its effect on the
-// local is unknown, a lent callee's is known) reads the local's bytes too (A3-124's struct was handed
+// A call the engine guarded a local of the frame at once a frame address escaped
+// (DecompileResult::frameCalls: its effect on the local is unknown, a lent callee's is known) reads the
+// local's bytes too (A3-124's struct was handed
 // to a call and read by nothing else), but for the save of a callee-saved register (a push of r8 to
 // r14, or of a control or system register), which no callee is handed.
 #pragma once
