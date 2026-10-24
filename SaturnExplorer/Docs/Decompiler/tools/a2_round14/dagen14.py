@@ -19,8 +19,9 @@
 #               registers, arms that compute (RuleConditionalMove)
 #   70 divdiv   (x / d1) / d2, (x % d1) % d2, (x >> a) / d, x / (power of two) / d and negative divisors, signed and unsigned (RuleDivChain, RuleSignDiv2)
 #   71 varshift variable shifts and rotates of a register and of a pair by a counted loop over (r5 & 31), the amount 0 skipped
+#   73 signmod  x % 2^k and x / 2^k of a signed byte, word or longword for every k (the bias added to a negative x by a branch or without one; RuleSignMod2nOpt2)
 #   72 mix      two or three blocks of the families above in a row (the result of one the input of the next)
-# usage: dagen14.py <first seed> <count> [family 62..72]   -> one function per seed, ";" joined (SE_GENERATED_PRINTEDC_WORDS)
+# usage: dagen14.py <first seed> <count> [family 62..73]   -> one function per seed, ";" joined (SE_GENERATED_PRINTEDC_WORDS)
 #        dagen14.py extras <first seed> <count> <family>   -> the comma-joined hex list for SE_GENERATED_PRINTEDC_EXTRA
 import importlib.util, os, random, sys
 
@@ -545,13 +546,50 @@ def fam_varshift(r, f):
         f.label('l2'); f.add(SHLR | 0 << 8, dt(3)); f.br('bf', 'l2')
         f.label('e')
 
+
+# ------------------------------------------------------------------------------------------------------------------------------------ 73 signmod
+def fam_signmod(r, f):
+    # x % 2^k and x / 2^k for a signed x, the way the SH-2 compilers write them: the bias added to a negative x, masked or shifted, and for the remainder subtracted
+    # (RuleSignMod2nOpt, RuleSignMod2nOpt2, RuleSignMod2Opt, RuleSignDiv2); the operand a byte, a word or a longword, every k from 1 to 30
+    k = r.choice([1, 2, 3, 4, 5, 6, 7, 8, 9, 15, 16, 17, 23, 24, 30, r.randrange(1, 31)])
+    pre = r.choice([0, 0, 1, 2, 3, 4])
+    src = 4
+    if pre == 1: f.add(extsb(1, 4)); src = 1
+    elif pre == 2: f.add(extsw(1, 4)); src = 1
+    elif pre == 3: f.add(extub(1, 4)); src = 1
+    elif pre == 4: f.add(extuw(1, 4)); src = 1
+    form = r.randrange(0, 5)
+    bias = (1 << k) - 1
+    def ld_bias(reg):
+        if bias < 0x80: f.add(movi(reg, bias))
+        else: f.lit(reg, bias)
+    if form == 0:                      # x % 2^k with the branch: if x < 0: t = x + bias else t = x ; r = x - (t & ~bias)
+        f.add(mov_(0, src), mov_(2, src), cmppz(2)); f.br('bt', 'p')
+        ld_bias(3); f.add(add__(3, 2)); f.label('p')
+        f.lit(3, (~bias) & M32); f.add(and__(3, 2), sub__(2, 0))
+    elif form == 1:                    # x / 2^k with the branch
+        f.add(mov_(0, src), cmppz(0)); f.br('bt', 'p')
+        ld_bias(3); f.add(add__(3, 0)); f.label('p')
+        shr_arith(f, 0, k)
+    elif form == 2:                    # the branch-free bias: (x >> 31) >>> (32 - k)
+        f.add(mov_(2, src)); shr_arith(f, 2, 31); shr_logical(f, 2, 32 - k)
+        f.add(mov_(0, src), add__(0, 2)) if False else f.add(mov_(0, src), add__(2, 0))
+        shr_arith(f, 0, k)
+    elif form == 3:                    # x % 2^k branch-free
+        f.add(mov_(2, src)); shr_arith(f, 2, 31); shr_logical(f, 2, 32 - k)
+        f.add(mov_(3, src), add__(2, 3)); f.lit(2, (~bias) & M32); f.add(and__(2, 3), mov_(0, src), sub__(3, 0))
+    else:                              # the remainder by the mask directly when x is known non-negative, after a test
+        f.add(mov_(0, src)); f.lit(2, bias); f.add(and__(2, 0))
+        f.add(cmppz(src)); f.br('bt', 'q'); f.add(tstr(0, 0)); f.br('bt', 'q'); f.lit(3, (~bias) & M32); f.add(or__(3, 0)); f.label('q')
+    if r.random() < 0.3: tail_common(r, f, 0, 3)
+
 # ------------------------------------------------------------------------------------------------------------------------------------ 72 mix
 MIXFAMS = None
 
 def fam_mix(r, f):
     global MIXFAMS
     if MIXFAMS is None:
-        MIXFAMS = [fam_shmul, fam_muldi, fam_shift64, fam_cmpstr, fam_bitops, fam_divterm, fam_div1len, fam_cmov, fam_divdiv, fam_varshift,
+        MIXFAMS = [fam_shmul, fam_muldi, fam_shift64, fam_cmpstr, fam_bitops, fam_divterm, fam_div1len, fam_cmov, fam_divdiv, fam_varshift, fam_signmod,
                    d13.fam_lerp, d13.fam_mulhsum, d13.fam_mulshift, d13.fam_negshift, d13.fam_shdiv, d13.fam_narrow]
     nb = r.choice([2, 2, 3])
     for b in range(nb):
@@ -567,7 +605,7 @@ def fam_mix(r, f):
             f.add(mov_(r.choice([4, 4, 5]), 0))
 
 FAMS14 = {62: fam_shmul, 63: fam_muldi, 64: fam_shift64, 65: fam_cmpstr, 66: fam_bitops, 67: fam_divterm, 68: fam_div1len, 69: fam_cmov, 70: fam_divdiv,
-          71: fam_varshift, 72: fam_mix}
+          71: fam_varshift, 72: fam_mix, 73: fam_signmod}
 
 def build(seed, fam=None, want_fn=False):
     r = random.Random(seed * 104729 + 14)

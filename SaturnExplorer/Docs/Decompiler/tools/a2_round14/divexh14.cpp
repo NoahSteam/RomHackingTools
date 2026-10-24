@@ -407,6 +407,8 @@ uint64_t Val(const Varnode* vn, int depth = 0)
     case CPUI_INT_NOTEQUAL: return a != b;
     case CPUI_INT_LESS: return a < b;
     case CPUI_INT_SLESS: return Signed(a, sa) < Signed(b, sb);
+    case CPUI_INT_LESSEQUAL: return a <= b;
+    case CPUI_INT_SLESSEQUAL: return Signed(a, sa) <= Signed(b, sb);
     default: break;
     }
     gUnsup = true;
@@ -448,7 +450,7 @@ std::vector<uint64_t> XValues(int xs, uint64_t y, uint64_t seed)
 struct OptCfg
 {
     int xs, w;
-    bool sext;
+    int sext;          // 0 zext, 1 sext, 2 the value masked to xs bytes and not extended (the engine takes its extension from the non-zero mask)
     int form;          // 0 shift of the product, 1 shift of SUBPIECE(product), 2 SUBPIECE alone
     bool arith;        // SRIGHT
     int cut;           // bytes cut by the SUBPIECE (forms 1, 2)
@@ -460,7 +462,7 @@ struct OptCfg
 uint64_t OptOrig(const OptCfg& c, uint64_t y, uint64_t x)
 {
     const uint64_t mw = Mask(c.w);
-    const uint64_t X = c.sext ? (static_cast<uint64_t>(Signed(x, c.xs)) & mw) : x;
+    const uint64_t X = c.sext == 1 ? (static_cast<uint64_t>(Signed(x, c.xs)) & mw) : (c.sext == 2 ? (x & Mask(c.xs)) : x);
     const uint64_t P = (X * y) & mw;
     uint64_t R;
     int outSize;
@@ -484,8 +486,8 @@ uint64_t OptOrig(const OptCfg& c, uint64_t y, uint64_t x)
 char OptOne(Gr& t, const OptCfg& c, uint64_t y, uint64_t seed, std::vector<uint64_t>& xvals)
 {
     t.reset();
-    Varnode* x = t.input(c.xs);
-    Varnode* xe = t.op(c.sext ? CPUI_INT_SEXT : CPUI_INT_ZEXT, c.w, x);
+    Varnode* x = t.input(c.sext == 2 ? c.w : c.xs);
+    Varnode* xe = c.sext == 2 ? t.op(CPUI_INT_AND, c.w, x, t.k(c.w, Mask(c.xs))) : t.op(c.sext ? CPUI_INT_SEXT : CPUI_INT_ZEXT, c.w, x);
     Varnode* prod = t.op(CPUI_INT_MULT, c.w, xe, t.k(c.w, y));
     Varnode* root;
     int outSize = c.w;
@@ -508,7 +510,14 @@ char OptOne(Gr& t, const OptCfg& c, uint64_t y, uint64_t seed, std::vector<uint6
     catch (LowlevelError&) { return 'X'; }
     if (rc == 0) return '0';
     xvals = XValues(c.xs, y, seed);
-    gXSize = c.xs; gXOff = x->getOffset();
+    if (c.sext == 2)
+    {
+        // the masked value: the xs low bytes as above, the rest of the register random (the mask must drop it)
+        Rng hr(seed ^ y);
+        const size_t n0 = xvals.size();
+        for (size_t i = 0; i < n0; ++i) xvals[i] |= (hr.next() << (8 * c.xs)) & Mask(c.w);
+    }
+    gXSize = x->getSize(); gXOff = x->getOffset();
     for (uint64_t xv : xvals)
     {
         gX = xv; gUndefined = false; gUnsup = false;
@@ -532,7 +541,7 @@ void RunOpt(Gr& t, int xs, uint64_t first, uint64_t count, const char* outFile)
     {
         // xs 1: every constant; xs 2 and 4: the constants are a list, y is the index (see YList)
         const uint64_t yy = y;
-        for (int sext = 0; sext < 2; ++sext)
+        for (int sext = 0; sext < 3; ++sext)
             for (int form = 0; form < 3; ++form)
                 for (int arith = 0; arith < 2; ++arith)
                 {
@@ -547,7 +556,7 @@ void RunOpt(Gr& t, int xs, uint64_t first, uint64_t count, const char* outFile)
                             if (w > 2 && amount > 3 && amount < amounts - 3 && (amount % 3) != 0) continue;
                             for (int reader = 0; reader < 3; ++reader)
                             {
-                                OptCfg c{ xs, w, sext != 0, form, arith != 0, cut, amount, reader };
+                                OptCfg c{ xs, w, sext, form, arith != 0, cut, amount, reader };
                                 if (form != 0 && reader == 1 && (w - cut) < 2) { out.push_back('-'); continue; }
                                 if (form == 0 && reader == 1 && w < 2) { out.push_back('-'); continue; }
                                 if (form == 2) c.amount = 0;
@@ -558,7 +567,7 @@ void RunOpt(Gr& t, int xs, uint64_t first, uint64_t count, const char* outFile)
                                 {
                                     ++wrong;
                                     if (shown++ < 20)
-                                        std::printf("WRONG RuleDivOpt: %d bytes %s of %d by %llx, form %d, %s, cut %d, amount %d, reader %d\n", w, sext ? "sext" : "zext", xs, (unsigned long long)yy, form, arith ? "s>>" : ">>", cut, amount, reader);
+                                        std::printf("WRONG RuleDivOpt: %d bytes %s of %d by %llx, form %d, %s, cut %d, amount %d, reader %d\n", w, sext == 1 ? "sext" : (sext == 2 ? "and" : "zext"), xs, (unsigned long long)yy, form, arith ? "s>>" : ">>", cut, amount, reader);
                                 }
                                 out.push_back(ch);
                             }
@@ -806,7 +815,7 @@ int main(int argc, char** argv)
             for (uint64_t yi = first; yi < first + count && yi < ys.size(); ++yi)
             {
                 const uint64_t y = ys[yi];
-                for (int sext = 0; sext < 2; ++sext)
+                for (int sext = 0; sext < 3; ++sext)
                     for (int form = 0; form < 3; ++form)
                         for (int arith = 0; arith < 2; ++arith)
                         {
@@ -820,7 +829,7 @@ int main(int argc, char** argv)
                                     if (amount > 3 && amount < amounts - 3 && (amount % 3) != 0 && amount != 8 * xs && amount != 8 * xs + 1 && amount != 8 * xs - 1) continue;
                                     for (int reader = 0; reader < 3; ++reader)
                                     {
-                                        OptCfg c{ xs, w, sext != 0, form, arith != 0, cut, amount, reader };
+                                        OptCfg c{ xs, w, sext, form, arith != 0, cut, amount, reader };
                                         if (form == 2) c.amount = 0;
                                         if (c.reader == 1 && (form == 0 ? w : w - cut) < 2) { out.push_back('-'); continue; }
                                         const char ch = OptOne(t, c, y, 0x5eed, xv);
@@ -830,7 +839,7 @@ int main(int argc, char** argv)
                                         {
                                             ++wrong;
                                             if (shown++ < 20)
-                                                std::printf("WRONG RuleDivOpt: %d bytes %s of %d by %llx, form %d, %s, cut %d, amount %d, reader %d\n", w, sext ? "sext" : "zext", xs, (unsigned long long)y, form, arith ? "s>>" : ">>", cut, amount, reader);
+                                                std::printf("WRONG RuleDivOpt: %d bytes %s of %d by %llx, form %d, %s, cut %d, amount %d, reader %d\n", w, sext == 1 ? "sext" : (sext == 2 ? "and" : "zext"), xs, (unsigned long long)y, form, arith ? "s>>" : ">>", cut, amount, reader);
                                         }
                                         out.push_back(ch);
                                     }
