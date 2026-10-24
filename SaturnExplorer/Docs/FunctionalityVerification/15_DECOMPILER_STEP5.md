@@ -12200,3 +12200,163 @@ On the final tree (`1c1d069` for the code), own RelWithDebInfo build, `-j2`, eve
 - Grammar 2, seed 2317870 (`return-dropped`): function 1 calls function 2, which returns `extu.w r4,r0`. Function 1 never writes r0 again, so the callee's result is in r0 at its return; the generator drew it as returning (`fn.ret_call`) and the prototype says void. This one may be a real return-recovery claim.
 
 Neither is in this round's scope or its triage.
+
+
+## Area 3, round 13 review
+
+Reviewer, branch `review/3-round13-review`, on the coordinator's head `8dcbb70` (patches up to 0063 in the tree; the round 12 fix and the host rule `MayBeFrame`). Findings only: no code changed; the repository gets tools (`Docs/Decompiler/tools/a3_round13/`), the ledger rows **A3-104 to A3-114** and this record. Own RelWithDebInfo build and a build of the round 12 base `79906c2` beside it, `-j2`, every run under `ulimit -v 4000000`, one heavy job at a time.
+
+**The round is not clean: three rows at P2 (A3-104, A3-105, A3-106) and eight at P3.** Area 3 has no clean round yet and the count of consecutive clean rounds stays 0. The three P2 rows are what the brief expected of a fail-closed rule: each is a site the round 12 table left "as it was" with a reason, and each of the three reasons fails on a fixture. All three give a wrong printed value with no valid note, in a caller that is withheld (the callee is not lent, or the lent claim is the wrong one), and all three were wrong on `79906c2` as well: round 12 fixed the shapes around them (A3-89, A3-92) and the residue stays.
+
+| Row | P | What | Round 12 site it comes from |
+|---|---|---|---|
+| A3-104 | P2 | A frame address kept by an unlent callee and walked down from later: a local under the passed address is folded when the call has two register arguments and a written word at its r15. The escape's boundary is the lowest stack varnode left when it is asked; the locals the engine uses up (the call's fifth argument) and folds are not in it. | patch 0061/0063 `lowest` (the surviving stack varnodes) |
+| A3-105 | P2 | A frame address in a stack word the engine drops (r5-r7 unset) is an alias from its own offset up, not an escape; a callee that reads the word and keeps it, and a walk down, fold the locals under it. | `NoteStackArguments` on an exact address ("left as it was") |
+| A3-106 | P2 | A caller-frame pointer reloaded through an address the interpreter cannot place (a swap pair, a mask, r15 published in a global) loses `frame` and `callerHigh`: g writes its caller's word and is lent; the caller prints the old value. 378 of 378 fixtures of the three channels; the ten other channels 0 of 1,022. | `MayBeCallerFrame` / `Load` through an unplaced pointer ("exact `Value::Sp` loads and stores" and `callerHigh`) |
+| A3-107 | P3 | An indirect call with no nameable target does not expose the caller's outgoing words (A3-61 for a known callee); same as A3-10's reason for registers. | `ExposeStackArguments` needs a target |
+| A3-108 | P3 | The added notes: true, but 64 of 307 r14-note functions have no local, the fact is repeated at every call, and the slot note says "a local" for the epilogue's pops of saved registers. | notes |
+| A3-109 | P3 | Text noise: parameter spills, partial stores, arrays that absorb the save slots (`[8]` to `[40]`). | round 12 texts |
+| A3-110 | P3 | Two functions of 999 (007) and two of 1,543 (008) newly withheld by an exact pointer reloaded in a loop. | A3-93 spare |
+| A3-111 | P3 | Triage of A3-103, seed 2310198: oracle, a dependence through a stale stack word. | oracle |
+| A3-112 | P3 | Triage of A3-103, seed 2317870: oracle, A3-41's shape with a store of the call's r0. | oracle |
+| A3-113 | P3 | The corpus runs the middle of a function as a function (42% and 48% of the entries). | instrument |
+| A3-114 | P3 | The generator draws none of the three P2 shapes. | instrument |
+
+### 1. How the round attacked the rule
+
+The rule is fail-closed only if its "proved non-frame" side and its "left as they were" list are right. Four instruments, each a generator of fixtures whose expected answer is the emulator's (`drv`, the suite's own driver: `bdrv.sh` builds it from `Sh2DecompilerTests.cpp`; the text is read with `PseudoEval` and by comparing a single constant return with the run's r0):
+
+- `escfuzz.py`: a frame of eight locals with distinct values, a frame address p = r15 + T (laundered or not), a **mediator** that keeps p (a global, a slot of the frame, a register the model keeps, r0, an object in RAM, a relay, the caller's own store, the outgoing stack word, a mirror address), and a **walker** that writes 0x55 below the kept pointer (a loop, a displacement, a negative r0 index, unrolled, upward) in the caller, in a lent or an unlent callee, or in one handed the pointer; callees lent or not, extra register arguments set or not. 15,400 fixtures (seeds 301 to 306, 401 to 408, 501 to 506), 334 wrong constants, all in A3-104 and A3-105.
+- `hbfuzz.py`: the hand-back (A3-21/39/70/92). g makes a pointer to its caller's outgoing word 0 or 1 (exactly, masked, swapped, by an index sum), round-trips it through one of 13 channels and writes through it by one of 5 stores. 1,400 fixtures; the three channels that reload through an unplaced address fail in 378 of 378 (A3-106), the other ten in 0 of 1,022.
+- `spfuzz.py`: the spare (A3-93). f pushes r14, makes the address of that slot, round-trips it, hands it to a lent writer. 400 fixtures: f is never lent with r14 in its preserved set; the callers' texts follow the model's keep of r14 across an unlent f and are withheld (not a finding).
+- `sbfuzz.py`: the `storesBelow` record (A3-71 to A3-88). A lent g handed p = r15 + 8 makes p - 4k by six forms, round-trips it by eight channels. 700 fixtures: 0 stale, g always lent.
+
+And hand fixtures for the sites: `r13a.src` (A3-104, A3-105 and their controls), `r13b.src` (A3-106), `micro_*.py`.
+
+### 2. The sites left, each attacked
+
+| Site (round 12 table) | Attack | Result |
+|---|---|---|
+| `callerHigh` set by `Merge`/`INT_ADD` | a join of a high and a low address; a high address laundered, spilled, reloaded | the join of high and low is A3-43 (accepted); laundered and spilled forms are followed except the reload through an unplaced pointer: **A3-106** |
+| `Store` / `Load` on an exact `Value::Sp` | the same reload; exact slots, `@(r0,r15)` | exact slots and `@(r0,r15)` hold (hbfuzz 0 of 1,022); `Load` through an unplaced stack address returns `FreeStack()` with no `frame` flag: **A3-106** |
+| `storesBelow` record (`Base() == kNoBase && baseReg < 0`) | six forms of p - 4k by eight channels (sbfuzz) | held, 0 of 700 |
+| `NoteFrameEscape(s, r, false)` for r4-r7 | an exact address in r4 beside a dropped stack word; two register arguments | the address is a call input and (e) escapes on it, but the boundary it escapes with can rise: **A3-104** |
+| `NoteStackArguments`' `shown` (an exact address) | an exact address in a stack word with r5-r7 unset, kept by a callee | the engine drops the word and the note is an alias, not an escape: **A3-105** |
+| `ExposeStackArguments` | an unknown-target call (`jsr @r1`, r1 loaded) whose callee writes the outgoing word | not exposed: **A3-107** (P3, A3-10's reason) |
+| `kLowBase` / an index taken as non-negative | the walker `idx` (a negative r0 index) and `disp` | held; the parameter-sign convention stays A3-9/A3-17's |
+| `markUnknownStores`: a constant pointer | not attacked beyond the convention (an absolute address is never the stack, A3-6) | accepted |
+| `markUnknownStores`: a pointer from a global the function wrote | `own`, `ownmir` (a mirror address of the same RAM), `ownslot`, `relay` mediators | held (0 wrong constants) |
+| the stack-pointer placeholder exception | `mov r15,r4` (the call's r15 itself) beside the placeholder in the same CALL | no counterexample: the engine may miss (e) there after copy propagation, and the host's `HandOut` (a lent callee's `leaks`/`outOrigins`, a walked callee's `CalleeHanded`, the convention for an unnamed one) declares the escape |
+| stores before the escape read after it | a loop with the walker before and after the escaping call (`mkv7`), 4 variants | held |
+| a register the convention does not hand (`kConvention`) | r1, r3, r9, MACH in an unknown-target call | A3-10's accepted reason (GBR held: I read it as (e) on the `Write_GBR` CALLOTHER that takes the address) |
+
+The mechanism of A3-104, read with temporary prints in `heritage.cc`/`varmap.cc` (reverted): `markUnknownStores` finds the walk's three stores unknown in every query (the runs print `unknown=1`), `handed=1` and `escaped=1` throughout, and the alias boundary that decides which locals keep their guard is `FrameEscape::lowest`, the lowest offset of a frame address or **a stack varnode still in the function**. In R13-1a it is -20 (`ffffffec`) in the first two queries and -12 (`fffffff4`) in every later one: the word at the call's r15 has been taken for the call's fifth argument and the local at -16 for the constant it holds, so nothing below the passed address is left to be the boundary, and the last queries collapse the guard that was there. In the control with r5 unset the lowest stays -20 to the end and the text is right. The shape needs no kept pointer to be a hazard: any unlent call with two register arguments uses the first written local of the frame up.
+
+### 3. The changed texts
+
+Round 12 changed 601 of 1,730 lending texts on hwram007 and 1,237 of 2,995 on hwram008 (the record's numbers: reproduced exactly, 173 and 272 by notes only). They were read in four ways.
+
+- **The two builds' texts compared** (`textdiff.py`, `stmtscreen.py`, `realentry.py`): the lend_after text of every function with `SE_GAME_OUT`, 79906c2 against 8dcbb70. Kinds (a text can be in several): hwram007 notes 475, declarations 410, frame array 253, statements 208, signature 107, `in_stack_` 98; hwram008 notes 1,024, declarations 922, array 629, statements 353, `in_stack_` 352, signature 195. **Of the 601 and 1,237 changed texts, 597 and 1,232 are withheld both before and after; 2 and 3 are lent both before and after; 2 and 2 were lent and are withheld since (A3-110).** So the change is in the text of functions whose signature is not claimed: five lent texts changed in all (2 + 3), and four of the lent functions became withheld.
+- **The call multiset of every changed text is equal** (`func_0x...` and indirect calls, 1,838 texts): no call is added or lost.
+- **A returned expression changed in 40 texts of hwram007** (29 are `xVar1` to a local, 5 the other way, 2 + 2 constants to a variable/local and back): all read; see the table.
+- **37 functions read one by one** against the disassembly (the table below; `showfn.py` prints the disassembly of the entry and the diff of the texts). Every one is right against the code; none changed meaning. The verdicts "noisier" and "harder to read" are the precision row (A3-109); one case where the base was the wrong one (06008518: the read of a stack argument moved to where the code reads it).
+
+**Mid-function entries.** The corpus runs `sts.l pr,@-r15` as an entry, so a function whose prologue pushes other registers first is run twice, and the second run (the "function" 06008836 for 06008830) pops registers it never pushed. 731 of the 1,730 entries of hwram007 and 1,452 of the 2,995 of hwram008 are such fragments (the previous word is `mov.l Rm,@-r15`); 339 of the 601 and 786 of the 1,237 changed texts are fragments, and the 305 and 557 "phantom parameters" the changed texts gain (301 and 544 never used in the body) are the stack words the fragment pops (A3-113). On the real entries the numbers are 262 and 451 changed, one extra parameter in one text each. The counts the record quotes (lent signatures, texts changed, the two newly withheld functions, which are one function entered twice) mix the two.
+
+| # | Image | Function | Kinds of change | What the new text does | Against the code | Verdict |
+|---|---|---|---|---|---|---|
+| 1 | 007 | 06022A98 | decl, sig, stmt | spills of r4/r5 kept as locals (`iStack_30 = param_1`), `param_1` uint1 to int4, the call result kept in `xStack_28` | prologue spills at r14+0/+4, the byte read of the spilled word at r14+3 is `(xunknown1)` of the spill; same calls, same order | right, noisier |
+| 2 | 007 | 060226CC | decl, sig, stmt | gains `param_4` (the spilled r7), `param_2 & 0xffff` explicit | r7 is stored at r14+12 and never read: an input the code takes, as an unread spill | right, more precise |
+| 3 | 007 | 06022304 | decl, sig, stmt | `xStack_20._3_1_ = (xunknown1)param_1` before the full spill `xStack_20 = param_1` | the code spills r4 first and reads byte 3 (the low byte, big-endian) of the spill; the text reads the same byte | right, harder to read |
+| 4 | 007 | 06021B10 | decl, stmt | `return xStack_28` for `return xVar1`, `pxStack_2c = param_1` | `mov.l r0,@(4,r14)` after the call, returned from the slot | right, noisier |
+| 5 | 007 | 06021C20 | sig, stmt | lent to withheld ("a return not to its caller"); `xStack_24 = 0xfffffffd` kept, `return xStack_24` | the local at r14+4 holds -3 and is returned from the slot; the hand of `&aiStack_18` to a lent writer in a loop is the cause | right, precision (A3-111) |
+| 6 | 007 | 06024720 | decl, stmt | `pxStack_10 = param_1` gone | `mov.l r4,@-r15` is a push whose pop restores r4 | right |
+| 7 | 007 | 060247B0 | decl, sig, stmt | `param_1` gone, `xStack_10 = param_1` gone | r4 is only pushed and popped | right |
+| 8 | 007 | 0602FD46 | array, decl, stmt | `_axStackY_30 = (int4)(char)(uVar2 + 1)` and the array gone | the word is the sixth stack argument, which the call already prints | right (A3-99) |
+| 9 | 007 | 06023D52 | decl, stmt | four locals and spills gone, registers kept | the callee is an indirect call through RAM; no frame address is handed (r2, r4-r7 hold values) | right, cleaner |
+| 10 | 007 | 06023E68 | decl, stmt | the same | the same | right, cleaner |
+| 11 | 007 | 06006D14 | array, decl, notes, stmt | `func_0x06019a48(2,0xc,5,0x604e8a0,0)`: the pushed 0 is the fifth argument; `axStackY_90 [128]`; slot note | `mov.l r0,@-r15` before the `jsr` | right (the note names the saved-register pops, A3-109) |
+| 12 | 007 | 06027420 | array, decl, notes, stmt | about 92 `xStack_8 = <return address>` lines gone; one call gains `0x602a566` as the fifth argument | the pushes are words the callees read | right |
+| 13 | 007 | 06008378 | sig, notes | 8 phantom parameters (param_3 to param_10), 5 r14 notes | the function reads r4 and r5 only | text right; header wrong (A3-108) |
+| 14 | 007 | 06008836 | sig, notes | 7 phantom parameters, a slot note | reads r4, r5 | text right; header wrong (A3-108) |
+| 15 | 007 | 06021BA8 | sig, stmt | withheld reason changed, `[8]` array, slot note | calls 06021C20 | right (A3-109, A3-111: the cascade) |
+| 16 | 007 | 0602C4AC | sig, notes | 5 phantom parameters, 2 notes | | text right; header wrong |
+| 17 | 007 | 0601EBB6 | sig, notes | 7 phantom parameters | | text right; header wrong |
+| 18 | 007 | 06023500 | decl, notes, stmt | the result of an indirect call kept in `iStack_8` | `mov.l r0,@r14` after the call, reloaded | right |
+| 19 | 007 | 0601DFA8 | decl, notes, stmt | `&uStack_18` printed as the fifth argument, `pxStack_1c` gone | the pointer is pushed before the `jsr` | right |
+| 20 | 007 | 06021A58 | decl, notes, stmt | `pxStack_18 = param_1`, a stack-argument note | the second call's words beyond the first unwritten one are dropped by the engine; the slot at +16 holds `&xStack_10` | right |
+| 21 | 007 | 060278C4 | decl, stmt | three loads kept as locals | three `mov.l r?,@(n,r14)` stores | right |
+| 22 | 007 | 06008518 | sig, decl, notes, stmt | `iVar1 = param_11` before the first call, used at the end | `mov.l @(0x1c,r14),r12` in the delay slot of the first `jsr`, stored at the end; the base read the stack word after the calls (wrong order) | right, and the base was not |
+| 23 | 007 | 06021AB8 | decl, stmt | partial store `xStack_18._3_1_` | as 3 | right, harder to read |
+| 24 | 007 | 06022118 | decl, sig, stmt | as 23 | as 23 | right, harder to read |
+| 25 | 007 | 0601F6FC | sig, notes | 7 phantom parameters | | text right; header wrong |
+| 26 | 007 | 06030ED6 | sig, notes | 8 phantom parameters | | text right; header wrong |
+| 27 | 007 | 0601E4C0 | sig, notes | 8 phantom parameters | | text right; header wrong |
+| 28 | 007 | 06021630 | decl, stmt (lent to lent) | `xStack_24 = param_1` and `~xStack_24._2_2_` for `~(uint2)param_1` | the spill of r4 and the low half read | right, noisier |
+| 29 | 007 | 0600D308 | array | `acStack_28 [8]` to `[40]` | the 8 locals plus 32 bytes of saved registers (the indexed store's guard covers them: A3-102) | right, misleading size |
+| 30 | 008 | 06022208 | array | `aiStack_14 [4]` to `[10]` | 8 local bytes plus 12 of saved registers | right, misleading size |
+| 31 | 008 | 06060B0C | decl, stmt (lent to lent) | as 28 | as 28 | right, noisier |
+| 32 | 008 | 060610FC | sig, stmt | lent to withheld; as 5 | as 5 | right, precision |
+| 33 | 008 | 060614D8 | decl, notes, stmt | the call result and the spill of r4 kept in locals | as 4 | right, noisier |
+| 34 | 008 | 0605A418 | decl, stmt | three spills of parameters, three stores move up | independent stores of different locals | right, noisier |
+| 35 | 008 | 06046640 | array, decl, notes, stmt | `func_0x0604ae60(...,xVar16)` and `func_0x06047dd0(...,iVar13,iVar8)` gain stack arguments | `mov.l r1,@-r15` (the 0xf) before the `bra` to the call | right, more precise |
+| 36 | 008 | 06061AA4 | decl, sig, stmt | as 2 | as 2 | right |
+| 37 | 008 | 0600FA2E | sig, notes | 7 phantom parameters | | text right; header wrong |
+
+Reading the table: no changed text is wrong; the new texts keep more locals as variables where the engine now aliases them (35 of 262 real-entry texts of hwram007 and 43 of 451 of hwram008 gain a parameter-spill statement, 73 and 84 statements; net locals +66 and +28; 73 and 160 texts have fewer locals) and one signature display (phantom parameters of fragments) changes for the reason above. The P3 row is A3-109.
+
+### 4. The added notes (hwram007 lending run)
+
+| Note | Count | Functions | Read against the code |
+|---|---|---|---|
+| r14 ("a frame address is in r14 here, in none of the arguments") | 526 | 307 | all 307 have `mov r15,r14` (disassembled); true. 64 of the 307 declare no stack local; the fact is said at every call (193 functions with one note, at most 10). |
+| stack argument | 273 | 113 | the word named holds a frame address in the function's own model (06021A58's second call: the word at +16 holds `&xStack_10`, the words from +4 on are dropped by the engine because +4 is written only after the call); true; at most 20 in one function. |
+| slot ("a local ... is read after this call") | 248 | 248 | said in functions with no local (06006D50, 06008836): the words read after the call are the epilogue's pops of the saved registers. |
+| r2 | 67 | 62 | A3-4's note, 4 more than the base's 63. |
+
+hwram008: 1,420 r14 notes in 772 functions (at most 46), 436 stack-argument in 162, 408 slot in 408, 148 r2 in 130. No note says something the code contradicts; the rows are the redundancy and the wording (A3-108). The base's slot notes were 0, its r14 notes 0, its stack-argument notes 4: all of these are round 12's.
+
+### 5. A3-103 (open): both seeds triaged
+
+Both reproduce alone on 8dcbb70 and on 79906c2 (`SE_GENERATED_GRAMMAR=2 SE_GENERATED_FIRST=<seed> SE_GENERATED_SEEDS=1`).
+
+- **2310198** (`input-dropped:r1`): oracle false positive, a new class: function 2 (060090F4) reads a byte of its own frame it has not written (`mov.b @r15,r2`, an uninitialised local in the text) and stores r1 into that slot (`mov.w r1,@r15`); the second call runs at the same r15 and reads what the first left. The dependence on r1 goes through a stale stack word. Proposed P3: A3-111, with a generator fix (re-run the pair with the bytes below the entry r15 filled differently; a function whose output changes reads a stale word).
+- **2317870** (`return-dropped`): not a real return-recovery claim. Function 1 (06009060) leaves the call's r0 in place, but both arms of its branch store r0 (`mov.b r0,@(1,r5)`; `mov.l r0,@-r4 ; mov.b r0,@r5`) before the `rts`: a result used and left as scratch, A3-19/A3-41/A3-53's accepted shape; `ComparesCallResult` excludes a compare of it, not a store. Proposed P3: A3-112.
+
+### 6. The generator beyond the nightly range
+
+| Range | Seeds | Result |
+|---|---|---|
+| grammar 2, 2,400,001 to 2,420,000 (four pieces of 5,000) | 20,000 | 0 findings |
+| grammar 1, 2,400,001 to 2,410,000 (two pieces) | 10,000 | 1: **2408172** (`pointer-effect-unsaid`, a 2-byte write through a pointer reaching FFFFFF1E / FFFFFF10, SH2_DVDNTL_SHADOW / SH2_DVDNTH), area 5, the class of A5-87; reproduces alone on 79906c2 too; routed with `SE_GENERATED_GRAMMAR=1 SE_GENERATED_FIRST=2408172 SE_GENERATED_SEEDS=1` |
+| printed-C, 2,400,001 to 2,410,000 (five pieces of 2,000) | 10,000 | 0 findings (12,543 functions generated, 11,637 compared; classes `agrees`, `narrow-c`, `void-return`, one `skipped:stack-piece`) |
+| specials, 2,500,001 to 2,505,000 | 5,000 | 0 findings |
+| `TestArea3HiddenInputFuzz`, `SE_A3FUZZ_PROGRAMS=5000`, seeds 10 and 11 | 10,000 programs | 1,195 and 1,201 lent, 15,535 and 15,613 perturbed runs, 0 findings |
+
+`matrix.sh` runs the pieces (each at most 3 minutes), resumable.
+
+### 7. Corpora and matrix
+
+`SE_GAME_HWRAM=<img> SE_GAME_LEND=1 SaturnExplorerSh2DecompilerTests <dir>` on 8dcbb70 and, beside it, on 79906c2:
+
+| | hwram007 | hwram008 |
+|---|---|---|
+| lent signatures (parameters), 79906c2 | 680 (958) | 1,040 (1,312) |
+| lent signatures (parameters), 8dcbb70 | 678 (956) | 1,038 (1,310) |
+| every ledger count | 0 (0 accesses dropped) | 0 |
+| missing and said | 0 | 4 |
+| mapping violations | 0 of every class (the 4 and 11 "on another line than firstLine says" of the lending run, as the record) | 0 of every class (4 and 21) |
+| texts changed, lending run | 601 of 1,730 | 1,237 of 2,995 |
+| `TestGameCode` | 9,760 ms (79906c2: 8,730 ms) | 31,288 ms (79906c2: 30,240 ms) |
+| whole suite | all passed, 98 s | all passed, 234 s |
+
+The timing is 1.1x and 1.03x of the base in one run each.
+
+`ctest -E SaturnExplorerLive` over the nine decompiler suites built here (Sh2DecompilerEngineTests, Sh2DecompilerTests, DecompilerRunnerTests, Sh2GeneratedTests, DecompilerFaultTests, Sh2DecompilerFixtureTests, DecompilerPanelTests, DecompilerModelTests, DecompilerTrustTests): 9 of 9 pass (about 4 minutes). The other suites of the 94 were not built: this branch changes no code, only the ledger, this record and the tools.
+
+### 8. Not done, and limits
+
+- The 36 or so functions of the table were read against the disassembly of the entry; a function the disassembler stops in (data after a `bra`) was read to the stop and its text checked at the changed lines only (06046640, 06027420). Nothing was run on the emulator for the corpus functions: a text with calls cannot be evaluated by `PseudoEval`.
+- A3-110's cause is the round 12 record's, not traced; a hand copy stays lent.
+- No pins were added: every fixture of the three P2 rows prints a wrong text today, and a pin that passes would pin the wrong text. The fixers move `r13a.src`/`r13b.src` into the suite, with the controls (R13-1b, 1c, 1d, 3.0, 3.1, 3.4), which are right today.
+- The root causes in A3-104 to A3-106 are read from temporary prints; the fix directions in the rows are directions.
