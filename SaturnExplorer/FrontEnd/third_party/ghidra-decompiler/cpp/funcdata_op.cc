@@ -41,6 +41,41 @@ void Funcdata::opSetOpcode(PcodeOp *op,OpCode opc)
   opMasksChanged(op);	// SaturnExplorer (patches/0054-engine-cached-masks-never-narrower.patch)
 }
 
+/// SaturnExplorer (patches/0068-engine-deadcode-late-stack-reads.patch): a frame read whose value is forwarded read
+/// the bytes through the guards STOREs put on them while their pointers were unresolved (a chain of INDIRECTs, each
+/// guarding a STORE, back from the read's input): each such STORE may be folded into those bytes later, after its
+/// reader went, and recordAccessFold then marks it read (frame124 seed 2595, a halfword read twice and xored with
+/// itself). Only that chain: the guard of a call between, or another reader's walk, is no read of the STORE's value
+/// (A3-128's store before a call, whose guard was read by the call's).
+/// \param vn is the stack Varnode the read reads
+void Funcdata::noteGuardRead(const Varnode *vn)
+
+{
+  const Varnode *v = vn;
+  for(int4 hops=0;hops<64 && v->isWritten();++hops) {
+    const PcodeOp *ind = v->getDef();
+    if (ind->code() != CPUI_INDIRECT || ind->numInput() != 2) return;
+    PcodeOp *iop = PcodeOp::getOpFromConst(ind->getIn(1)->getAddr());
+    if (iop == (PcodeOp *)0 || iop->code() != CPUI_STORE) return;
+    GuardReadRecord rec;
+    rec.store = iop;
+    rec.space = vn->getSpace();
+    rec.offset = vn->getOffset();
+    rec.size = vn->getSize();
+    bool have = false;
+    for(vector<GuardReadRecord>::const_iterator g=guardReads.begin();g!=guardReads.end();++g)
+      if ((*g).store == iop && (*g).space == rec.space && (*g).offset == rec.offset && (*g).size == rec.size) { have = true; break; }
+    if (!have) {
+      if (guardReads.size() >= 4096) {
+	frameFoldsAllRead = true;	// too many to keep: every fold is taken for read (the ledger may miss, never invent)
+	return;
+      }
+      guardReads.push_back(rec);
+    }
+    v = ind->getIn(0);
+  }
+}
+
 /// SaturnExplorer (patches/0068-engine-deadcode-late-stack-reads.patch): an op that stays reads another
 /// Varnode in place of the given one, or no longer reads it (propagation forwarded the value, a rule found it
 /// equal to something, folded it into a constant, or used it to simplify the op). What the old value was
@@ -53,9 +88,7 @@ void Funcdata::opSetOpcode(PcodeOp *op,OpCode opc)
 /// of the function is then taken as forwarded (the ledger may miss a loss, never report one that is none).
 /// A frame fold destroyed with its value forwarded passes the mark on to what it reads: a pop forwarded (into
 /// `r1 & 0`, made a constant) while the stack was not yet linked is later linked to its push, which is then read.
-/// A walk through the INDIRECT a STORE put on a range of the frame notes the range: the STORE may be folded into
-/// those bytes only after its readers went (a halfword read twice and xored with itself, made 0 while the store's
-/// pointer was unresolved), and recordAccessFold then marks it read. Its guard on other bytes is no read of it.
+/// A frame read the walk meets notes the STOREs whose guards it read through (noteGuardRead).
 /// \param walk is \b false when a MULTIEQUAL or INDIRECT read it and had it replaced (only its own fold is forwarded)
 /// \param vn is the Varnode no longer read
 void Funcdata::noteFrameFoldForwarded(bool walk,Varnode *vn)
@@ -73,27 +106,8 @@ void Funcdata::noteFrameFoldForwarded(bool walk,Varnode *vn)
     PcodeOp *d = walked[k];
     if (d->isFrameFold())
       d->setFrameFoldRead();
-    if (d->code() == CPUI_INDIRECT && d->numInput() == 2) {
-      // The guard of a STORE through a pointer not yet resolved: the bytes read may be the store's, if it is folded
-      // into them later (recordAccessFold); a guard on other bytes (the slot the STORE's pointer is reloaded from) is
-      // no read of its value.
-      PcodeOp *iop = PcodeOp::getOpFromConst(d->getIn(1)->getAddr());
-      const Varnode *out = d->getOut();
-      if (iop != (PcodeOp *)0 && iop->code() == CPUI_STORE && out != (Varnode *)0 && out->getSpace()->getType() == IPTR_SPACEBASE) {
-	GuardReadRecord rec;
-	rec.store = iop;
-	rec.space = out->getSpace();
-	rec.offset = out->getOffset();
-	rec.size = out->getSize();
-	bool have = false;
-	for(vector<GuardReadRecord>::const_iterator g=guardReads.begin();g!=guardReads.end();++g)
-	  if ((*g).store == iop && (*g).space == rec.space && (*g).offset == rec.offset && (*g).size == rec.size) { have = true; break; }
-	if (!have && guardReads.size() < 4096)
-	  guardReads.push_back(rec);
-	else if (!have)
-	  frameFoldsAllRead = true;	// too many to keep: every fold is taken for read (the ledger may miss, never invent)
-      }
-    }
+    if (d->isFrameFold() && d->code() == CPUI_COPY && d->getIn(0)->getSpace()->getType() == IPTR_SPACEBASE)
+      noteGuardRead(d->getIn(0));
     int4 n = (d->code() == CPUI_INDIRECT) ? 1 : d->numInput();
     for(int4 i=0;i<n;++i) {
       Varnode *in = d->getIn(i);

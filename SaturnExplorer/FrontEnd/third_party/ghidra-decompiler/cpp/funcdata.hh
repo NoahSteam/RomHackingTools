@@ -252,6 +252,7 @@ public:
   const vector<AccessRecord> &getAccessFates(void) const { return accessFates; }	///< Every LOAD and STORE that ended, and how (SaturnExplorer)
   void noteFrameEscaped(void) const { frameEscaped = true; }	///< SaturnExplorer (0068): FrameEscape found a frame address escaped
   void noteFrameCall(const PcodeOp *op,uintb off,int4 size);	///< SaturnExplorer (0068): the call has a guard on a stack local (it may read it)
+  void noteGuardRead(const Varnode *vn);	///< SaturnExplorer (0068): a frame read through STOREs' guards
   void dropFrameCall(const PcodeOp *op,uintb off,int4 size);	///< SaturnExplorer (0068): the guard went with the local's alias
   const vector<FrameCallRecord> &getFrameCalls(void) const { return frameCalls; }	///< SaturnExplorer (0068): the flow's calls with a guard on a stack local
   bool hasFrameEscaped(void) const { return frameEscaped; }	///< SaturnExplorer (0068): did a frame address escape, so a call may read the locals
