@@ -576,7 +576,7 @@ def fam_signmod(r, f):
     elif pre == 2: f.add(extsw(1, 4)); src = 1
     elif pre == 3: f.add(extub(1, 4)); src = 1
     elif pre == 4: f.add(extuw(1, 4)); src = 1
-    form = r.randrange(0, 5)
+    form = r.randrange(0, 8)
     bias = (1 << k) - 1
     def ld_bias(reg):
         if bias < 0x80: f.add(movi(reg, bias))
@@ -596,6 +596,13 @@ def fam_signmod(r, f):
     elif form == 3:                    # x % 2^k branch-free
         f.add(mov_(2, src)); shr_arith(f, 2, 31); shr_logical(f, 2, 32 - k)
         f.add(mov_(3, src), add__(2, 3)); f.lit(2, (~bias) & M32); f.add(and__(2, 3), mov_(0, src), sub__(3, 0))
+    elif form == 5:                    # (V + adj) & (2^k - 1) - adj with adj = (V s>> 31) >>> (32 - k): RuleSignMod2nOpt
+        f.add(mov_(2, src)); shr_arith(f, 2, 31); shr_logical(f, 2, 32 - k)
+        f.add(mov_(3, src), add__(2, 3)); f.lit(0, bias); f.add(and__(0, 3), sub__(2, 3), mov_(0, 3))
+    elif form == 6:                    # the mod 2 form (V - sign) & 1 + sign, sign = V s>> 31: RuleSignMod2Opt
+        f.add(mov_(2, src)); shr_arith(f, 2, 31); f.add(mov_(3, src), sub__(2, 3), andi(1) if False else mov_(0, 3), andi(1), add__(2, 0))
+    elif form == 7:                    # x / 2^k from the sign: (V + ((V s>> 31) >>> (32 - k))) s>> k
+        f.add(mov_(2, src)); shr_arith(f, 2, 31); shr_logical(f, 2, 32 - k); f.add(add__(src, 2), mov_(0, 2)); shr_arith(f, 0, k)
     else:                              # the remainder by the mask directly when x is known non-negative, after a test
         f.add(mov_(0, src)); f.lit(2, bias); f.add(and__(2, 0))
         f.add(cmppz(src)); f.br('bt', 'q'); f.add(tstr(0, 0)); f.br('bt', 'q'); f.lit(3, (~bias) & M32); f.add(or__(3, 0)); f.label('q')
