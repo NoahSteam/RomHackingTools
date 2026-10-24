@@ -22,8 +22,12 @@
 #   73 signmod  x % 2^k and x / 2^k of a signed byte, word or longword for every k (the bias added to a negative x by a branch or without one; RuleSignMod2nOpt2)
 #   74 deepsoup 15 to 45 steps over r0..r3 with the T flag produced and consumed in every way (compares, tst, cmp/str, dt, addc/subc/negc/addv/subv, div0/div1, rotcl/rotcr, movt),
 #               the multiplies and their mach/macl reads, extensions, swaps, forward branches over one to three steps
+#   75 delaybr  delayed branches with working slots: bf/s closing a counted loop (the slot's T read after), forward bt/s and bf/s with T consumers in the slot,
+#               bra with a slot, two chained delayed branches
+#   76 condprop one condition read by several branches with T-preserving code between (ConditionalExecution), x == c with x used in the true arm
+#               (ActionConditionalConst), a chain of equality tests, a loop whose exit test is repeated
 #   72 mix      two or three blocks of the families above in a row (the result of one the input of the next)
-# usage: dagen14.py <first seed> <count> [family 62..74]   -> one function per seed, ";" joined (SE_GENERATED_PRINTEDC_WORDS)
+# usage: dagen14.py <first seed> <count> [family 62..76]   -> one function per seed, ";" joined (SE_GENERATED_PRINTEDC_WORDS)
 #        dagen14.py extras <first seed> <count> <family>   -> the comma-joined hex list for SE_GENERATED_PRINTEDC_EXTRA
 import importlib.util, os, random, sys
 
@@ -640,6 +644,119 @@ def fam_deepsoup(r, f):
     f.rts_slot = mov_(0, x)
 
 
+# ------------------------------------------------------------------------------------------------------------------------------------ 75 delaybr
+def slot_word(r, regs=(0, 1, 2, 3)):
+    """one instruction fit for a delay slot (no branch, no PC-relative load): arithmetic, moves, T producers and consumers, shifts, extensions, movt, dt"""
+    a = r.choice(regs); b = r.choice(list(regs) + [4, 5, 6, 7])
+    k = r.randrange(0, 14)
+    if k == 0: return 0x300C | a << 8 | b << 4                 # add
+    if k == 1: return 0x3008 | a << 8 | b << 4                 # sub
+    if k == 2: return 0x6003 | a << 8 | b << 4                 # mov
+    if k == 3: return 0x2009 | a << 8 | b << 4                 # and
+    if k == 4: return 0x200A | a << 8 | b << 4                 # xor
+    if k == 5: return r.choice([SHLL, SHLR, SHAR, ROTL, ROTR, ROTCL, ROTCR]) | a << 8
+    if k == 6: return 0x7000 | a << 8 | r.choice([1, 2, 0xFF, 0xFE, 0x7F])      # add #imm
+    if k == 7: return 0x0029 | a << 8                          # movt
+    if k == 8: return r.choice([0x300E, 0x300A, 0x300F, 0x300B]) | a << 8 | b << 4   # addc subc addv subv
+    if k == 9: return 0x4010 | a << 8                          # dt
+    if k == 10: return r.choice([0x3000, 0x3006, 0x3003]) | a << 8 | b << 4           # cmp/eq cmp/hi cmp/ge (T after the branch decided)
+    if k == 11: return r.choice([0x600C, 0x600E, 0x600D, 0x600F, 0x6008, 0x6009]) | a << 8 | b << 4
+    if k == 12: return 0x600B | a << 8 | b << 4               # neg
+    return 0x200D | a << 8 | b << 4                            # xtrct
+
+def fam_delaybr(r, f):
+    form = r.randrange(0, 6)
+    if form == 0:         # counted loop closed by bf/s with a working slot; the slot's T is read after the loop
+        f.add(mov_(0, 4), mov_(1, 5), movi(2, r.randrange(1, 9)))
+        f.label('top')
+        for _ in range(r.randrange(1, 3)): f.add(slot_word(r, (0, 1)))
+        f.add(dt(2)); f.br('bfs', 'top'); f.add(slot_word(r, (0, 1)))
+        if r.random() < 0.6: f.add(movt(3), xor_(3, 0))
+    elif form == 1:       # forward bt/s over an add, the slot executes on both paths
+        f.add(mov_(0, 4), mov_(1, 5), r.choice([cmpeq, cmphi, cmpgt, cmpge, cmphs])(1, 0))
+        f.br('bts', 'done'); f.add(slot_word(r, (0, 1)))
+        f.add(add__(1, 0), slot_word(r, (0,)) if r.random() < 0.5 else 0x0009)
+        f.label('done')
+        if r.random() < 0.5: f.add(movt(1), add__(1, 0))
+    elif form == 2:       # bf/s forward, slot a T consumer
+        f.add(mov_(0, 4), mov_(1, 5), mov_(2, 6), r.choice([cmpeq, cmphi, cmpgt])(1, 0))
+        f.br('bfs', 'skip'); f.add(r.choice([addc(2, 0), subc(2, 0), negc(0, 0), ROTCL | 0 << 8, movt(0)]))
+        f.add(add__(2, 0), xor_(1, 0))
+        f.label('skip')
+    elif form == 3:       # bra with a slot, a backward loop of two exits
+        f.add(mov_(0, 4), mov_(1, 5), movi(2, r.randrange(1, 6)))
+        f.br('bra', 'enter'); f.add(slot_word(r, (0, 1)))
+        f.label('body'); f.add(slot_word(r, (0, 1)), slot_word(r, (0, 1)))
+        f.label('enter'); f.add(dt(2)); f.br('bfs', 'body'); f.add(slot_word(r, (0, 1, 3)))
+        f.add(add__(3, 0)) if r.random() < 0.5 else None
+    elif form == 4:       # two chained delayed branches, the second taken only if the first was not
+        f.add(mov_(0, 4), mov_(1, 5), cmpeq(1, 0))
+        f.br('bts', 'a'); f.add(slot_word(r, (0, 1, 2)))
+        f.add(cmpgt(1, 0)); f.br('bfs', 'b'); f.add(slot_word(r, (0, 1, 2)))
+        f.add(slot_word(r, (0, 1)))
+        f.label('a'); f.add(slot_word(r, (0, 1)))
+        f.label('b'); f.add(add__(2, 0), add__(1, 0))
+    else:                 # a loop with bt/s and the exit test on the value, slot decrementing the count
+        f.add(mov_(0, 4), movi(2, 0), mov_(1, 5), r.choice([SHLR | 1 << 8, SHAR | 1 << 8]))
+        f.label('top'); f.add(add__(1, 2), SHLL | 0 << 8, tstr(0, 0), r.choice([cmppz(0), cmppl(0), tstr(1, 1)]))
+        f.br(r.choice(['bts', 'bfs']), 'out'); f.add(addi(2, 1))
+        f.add(cmpgt(1, 2)); f.br('bfs', 'top'); f.add(slot_word(r, (0, 1)))
+        f.label('out'); f.add(add__(2, 0))
+    f.rts_slot = mov_(0, r.choice([0, 1, 2])) if False else 0x0009
+
+
+# ------------------------------------------------------------------------------------------------------------------------------------ 76 condprop
+def nt_op(r, a, b):
+    """an instruction that leaves T alone: add, sub, and, or, xor, mov, neg, not, extensions, swaps, mul.l + sts macl"""
+    k = r.randrange(0, 10)
+    if k < 6: return [r.choice([0x300C, 0x3008, 0x2009, 0x200B, 0x200A, 0x6003]) | a << 8 | b << 4]
+    if k == 6: return [r.choice([0x600B, 0x6007, 0x600C, 0x600D, 0x600E, 0x600F, 0x6008, 0x6009]) | a << 8 | b << 4]
+    if k == 7: return [0x7000 | a << 8 | r.choice([1, 2, 3, 0xFF, 0xFE, 0x10])]
+    if k == 8: return [mulL(b, a), stsmacl(a)]
+    return [0xE000 | a << 8 | r.choice([0, 1, 5, 0x7F, 0x80, 0xFF])]
+
+def fam_condprop(r, f):
+    # one condition computed once and read by several branches with T-preserving code between them (the later branches are redundant), or recomputed with a
+    # related constant; equality tests whose true arm uses the tested register (a constant there); chains of equality tests
+    form = r.randrange(0, 5)
+    f.add(mov_(0, 4), mov_(1, 5), mov_(2, 6))
+    if form == 0:         # the same T read by two or three branches
+        f.add(r.choice([cmpeq, cmphi, cmpgt, cmpge, cmphs, tstr])(1, 0))
+        for i in range(r.randrange(2, 4)):
+            f.br(r.choice(['bt', 'bf']), 'j%d' % i)
+            for _ in range(r.randrange(1, 3)): f.add(*nt_op(r, r.choice([0, 2, 3]), r.choice([0, 1, 2, 4, 5])))
+            f.label('j%d' % i)
+            for _ in range(r.randrange(0, 2)): f.add(*nt_op(r, r.choice([0, 2, 3]), r.choice([0, 1, 2, 4, 5])))
+    elif form == 1:       # x == c, then x used in the true arm
+        c = r.choice([0, 1, 5, 0x7F, 0x80, 0xFF, 2, 0x10])
+        f.add(0x8800 | (c & 0xFF)) if c < 0x80 or c == 0xFF else f.add(0x8800 | (c & 0xFF))
+        f.br(r.choice(['bf', 'bt']), 'e')
+        f.add(add__(0, 2), mov_(3, 0)); shl(f, 3, r.choice([1, 2, 8])); f.add(xor_(3, 2), extub(2, 2) if r.random() < 0.5 else 0x6003 | 2 << 8 | 2 << 4)
+        f.label('e')
+        f.add(add__(2, 0))
+    elif form == 2:       # a chain of equality tests of the same register
+        cs = r.sample([0, 1, 2, 3, 5, 7, 0x10, 0x40, 0x7F, 0x80], 3)
+        for i, c in enumerate(cs):
+            f.add(0x8800 | (c & 0xFF)); f.br('bf', 'n%d' % i)
+            f.add(movi(3, (i + 1) * 11), add__(3, 2))
+            f.br('bra', 'end'); f.add(0x0009)
+            f.label('n%d' % i)
+        f.add(mov_(3, 0)); f.add(add__(1, 3))
+        f.label('end')
+        f.add(mov_(2, 3))
+    elif form == 3:       # a test, code that recomputes T from a nearby constant, a second test
+        f.add(cmphi(1, 0)); f.br('bf', 'a'); f.add(*nt_op(r, 2, 0)); f.label('a')
+        f.add(addi(1, 1), cmphs(1, 0)); f.br('bt', 'b'); f.add(*nt_op(r, 2, 1)); f.label('b')
+        f.add(cmpgt(1, 0)); f.br('bf', 'c'); f.add(*nt_op(r, 2, 4)); f.label('c')
+    else:                 # a loop whose exit test is repeated in its body
+        f.add(movi(3, r.randrange(2, 7)))
+        f.label('top'); f.add(dt(3), movt(1))
+        f.br('bt', 'out'); f.add(*nt_op(r, 0, 3)); f.add(tstr(3, 3)); f.br('bt', 'out'); f.add(*nt_op(r, 2, 0))
+        f.br('bra', 'top'); f.add(0x0009)
+        f.label('out'); f.add(add__(1, 2))
+    f.add(*nt_op(r, 0, 2)) if r.random() < 0.5 else f.add(xor_(2, 0))
+
+
 # ------------------------------------------------------------------------------------------------------------------------------------ 72 mix
 MIXFAMS = None
 
@@ -662,7 +779,7 @@ def fam_mix(r, f):
             f.add(mov_(r.choice([4, 4, 5]), 0))
 
 FAMS14 = {62: fam_shmul, 63: fam_muldi, 64: fam_shift64, 65: fam_cmpstr, 66: fam_bitops, 67: fam_divterm, 68: fam_div1len, 69: fam_cmov, 70: fam_divdiv,
-          71: fam_varshift, 72: fam_mix, 73: fam_signmod, 74: fam_deepsoup}
+          71: fam_varshift, 72: fam_mix, 73: fam_signmod, 74: fam_deepsoup, 75: fam_delaybr, 76: fam_condprop}
 
 def build(seed, fam=None, want_fn=False):
     r = random.Random(seed * 104729 + 14)
