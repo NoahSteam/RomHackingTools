@@ -13265,3 +13265,45 @@ Found by family 79 (random control-flow graphs): two of its first 20,000 functio
 * A two-block cycle of empty blocks cannot be made from SH-2 code; the `ActionLateDoNothing` re-test of the infinite-loop branch is argued, not run.
 * Families 79 to 85 draw register-only code; a switch inside a loop, nested switches and the frame/memory shapes belong to the generator's grammars (0 failing in 30,000 seeds).
 * The corpus comparison is of printed texts (stock against scratch objects), not a run with the matrix.
+
+## Area 2, round 15 fix, and CI
+
+Coordinator, branch `review/2-nightly-fix` (on `ci/fix-builds`, which is on `16940af`), merged with `review/2-round15-review`. Patch **0069**; ledger rows A2-101 (fixed), A2-102 (a duplicate of A2-120), A2-120 and A2-121 (new, fixed).
+
+### 1. CI had been red since 13 October
+
+None of the three workflows had passed for the whole program: every merge was checked by the local matrix only, which builds RelWithDebInfo with GCC on Linux. What CI builds and the matrix does not:
+
+| Failure | Where | Cause | Fix |
+|---|---|---|---|
+| link error, `ReturnCheck::kNestedMaxSteps` undefined | every Debug build (Linux sanitizer job, macOS, Rosetta) | `std::min(kNestedMaxSteps, ...)` binds a reference to a `static constexpr` member, which needs a definition in C++14; an optimised build folds it | a copy: `std::min(static_cast<size_t>(kNestedMaxSteps), ...)` |
+| `__int128`, `__builtin_ctzll`, `__builtin_clzll` | MSVC (Windows) | `Sh2DecompilerEngineTests.cpp` (rounds 11 to 13) | a portable `U128` and `Ctz64`/`Clz64` in the test, checked against `__int128` and the builtins where the compiler has them (`TestU128`, 20,000 random cases) |
+| `posix_spawnp` undefined | Emscripten (the web build) | `FileWriteTests.cpp` (13 October) | the spawned-owner part of `TestFileLock` is skipped under Emscripten |
+| ctest timeouts | Debug builds | the ceilings were sized on optimised builds; the engine tests take 110 s in a Linux Debug build against 60 s | the decompiler suites' ceilings are ten times as long where the build may be Debug (`SE_DECOMP_TIMEOUT_SCALE`) |
+| `HardwareWidthTableTests` | Windows | the golden file and the audit document are read in binary, and a Windows checkout has CRLF | CR is dropped on reading |
+| the A5-82 seed pins | macOS | the order of a call's arguments and of the operands of `+` is unspecified, and GCC and Clang draw them in opposite orders, so the generator made other programs for the same seed under Clang | one draw per statement at the three places a draw-trace comparison found (the RAM literal, the mac's position, the literal kind against its register), in GCC's order: a Clang build's default and printed-C runs are now identical to GCC's, and GCC's are unchanged |
+| four printed-C mismatches | the nightly long run (it had not run since 18 October) | the harness (section 2) | A2-120, A2-121 |
+
+The local checks: a Debug build of every target links; the full Debug ctest passes; an Emscripten 3.1.61 build of every target but the front end links (the front end needs the SDL2 port, which this container cannot download); a Clang build of the generator gives the GCC run line for line.
+
+### 2. The nightly's four printed-C failures: the harness
+
+* **A2-120.** `ShortCircuitOps` (A2-96, round 14) rewrote `return a && b;` as `LAND(return a, b)`, which does not compile; the text (`-1 < param_2 && -1 < -0x80000000 - param_2`, the overflow of `subv` from 0x80000000) is the engine's meaning (`-0x80000000` is INT_MIN at four bytes; C reads an `unsigned int`), so with the reading compiled it is `narrow-c`. Seeds 5134, 15286 and 18724; the round 15 review found it as well (A2-102, seeds 3805902 and 3810006).
+* **A2-121.** `UnsignedLiteralsTyped` (A2-60) made every `U` literal a `uint4`, so `& 0x8000000000000000U`, the sign bit of a `dmuls.l` product that rounds a signed division, was 0 in the engine's reading. A `U` literal wider than four bytes is now a `uint8`, as C has it. Seed 13677.
+* The detail of a reading that does not compile shows its first `error:` line (it showed the `In function` line before it).
+* The nightly's job on the fixed harness (`SE_GENERATED_SEEDS=20000 SE_GENERATED_PRINTEDC=only`, the CI command): 24,103 functions, 22,377 compared, **0 mismatch** (agrees 22,490, narrow-c 70).
+
+### 3. A2-101: patch 0069
+
+`PrintC::emitBlockCondition` gives the second operand of a nested `&&`/`||` its own parentheses and not the first; `opCbranch` opens none in comma mode. The fix is the review's wide variant: the first operand is parenthesized whenever the condition is nested (`comma_separate` set on entry), so no operator of the first block can bind looser than the `&&` or `||` it is under, whatever it is (an `||`, a comma, a ternary). The cost is redundant parentheses where the first operand is a single comparison (the review counted 17 and 34 texts of the two images). Pins: `A2-101 #0` to `#2` in the printed-C differential (the review's three fixtures; `mismatch` without the patch, the review's run on `215d303`), and `A2-120`, `A2-121` (`narrow-c`).
+
+### 4. The matrix on the merge (`fa5ddcf`, master `393d30c` with this branch)
+
+Build ok; ctest 97 of 97 (the light-theme merge on master added three) and 6 of 6 Live; fault matrix 0 of 94; generator 0 failing (grammar 2 3,000, grammar 1 1,000, 20,000); printed C 3,000 seeds: 3,719 functions, 0 mismatch (narrow-c 11); vendoring from the pinned Ghidra source `VENDOR_EXIT 0` and an empty diff; both images with lending: 839 and 1,554 functions ok, 0 accesses dropped, missing and said 0 and 4, lending 678 (956) and 1,038 (1,310), real entries 474 (645) of 999 and 724 (975) of 1,543, `TestGameCode` 11.4 s and 35.4 s.
+
+### 5. Limits
+
+* Area 2's clean count stays 0: round 15 had a P2 (A2-101). Rounds 16 and 17 must both be clean.
+* Patch 0069 was not mutation-checked on this tree; the three pins are the review's fixtures, which were `mismatch` on `215d303` without it (the review's record, section 3).
+* The web build was checked locally without the front end (no SDL2 port in this container); CI builds it.
+* The draw-order fix was found by comparing draw traces of 15 seeds and the default and printed-C runs; a draw site that neither reaches could still differ between compilers.
