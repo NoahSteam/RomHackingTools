@@ -5,11 +5,76 @@ diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.cc b/Ghidra/F
   * Modified for SaturnExplorer: a STORE through a frame address kept in a stack local and read back is guarded (patches/0060-engine-stack-walk-down-spilled.patch).
   * Modified for SaturnExplorer: a STORE a frame address may have escaped to is guarded, failing closed (patches/0061-engine-stack-frame-escape.patch).
   * Modified for SaturnExplorer: once the frame escapes, a STORE through a pointer not proved to be no frame address is guarded (patches/0063-engine-frame-escape-unknown-pointers.patch).
-+ * Modified for SaturnExplorer: the escape's lowest frame offset is the lowest any query saw, so it never rises (patches/0065-engine-frame-escape-whole-frame.patch).
++ * Modified for SaturnExplorer: the escape's lowest frame offset is the lowest any query saw, so it never rises, and a pointer a loop steps down from an unbounded index is guarded below its base (patches/0065-engine-frame-escape-whole-frame.patch).
   */
  #include "heritage.hh"
  #include "funcdata.hh"
-@@ -989,6 +990,9 @@ void FrameEscape::compute(const Funcdata *fd,AddrSpace *spc,bool preHeritage)
+@@ -734,6 +735,37 @@ void Heritage::handleNewLoadCopies(void)
+   loadCopyOps.clear();		// We have handled all the load guard COPY ops
+ }
+ 
++/// SaturnExplorer (patches/0065-engine-frame-escape-whole-frame.patch): is the given pointer, back through copies, INDIRECTs and additions
++/// of a constant, the join of a loop that steps it down (AliasChecker::stepsDown)?
++/// \param vn is the pointer of a LOAD or STORE
++/// \return \b true if a loop steps it down
++bool LoadGuard::pointerSteppedDown(Varnode *vn)
++
++{
++  for(int4 k=0;k<64 && vn->isWritten();++k) {
++    PcodeOp *def = vn->getDef();
++    switch(def->code()) {
++    case CPUI_MULTIEQUAL:
++      return AliasChecker::stepsDown(def);
++    case CPUI_COPY:
++    case CPUI_INDIRECT:
++      vn = def->getIn(0);
++      break;
++    case CPUI_INT_ADD:
++    case CPUI_PTRADD:
++    case CPUI_PTRSUB:
++    case CPUI_INT_SUB:
++      if (def->getIn(1)->isConstant()) vn = def->getIn(0);
++      else if (def->code() == CPUI_INT_ADD && def->getIn(0)->isConstant()) vn = def->getIn(1);
++      else return false;
++      break;
++    default:
++      return false;
++    }
++  }
++  return false;
++}
++
+ /// Make some determination of the range of possible values for a LOAD based
+ /// an partial value set analysis. This can sometimes get
+ ///   - minimumOffset - otherwise the original constant pulled with the LOAD is used
+@@ -756,6 +788,26 @@ void LoadGuard::establishRange(const ValueSetRead &valueSet)
+     minimumOffset = pointerBase;
+     size = 0x1000;
+     analysisState = 1;	// Don't bother doing more analysis
++    // SaturnExplorer (patches/0065-engine-frame-escape-whole-frame.patch): a range the analysis cannot bound (a variable index added to
++    // the frame address: `p = &buf[n]`, `p = sp + 16 - r4`) was guarded from the pointer's base up, as an index the engine takes for
++    // non-negative (ledger A3-9, A3-17). A loop that steps the pointer down from there (`*--p = v`) reaches below the base whatever the
++    // index is, and the stack under it went unguarded: the sentinel the walk overwrote was folded to the value stored before (the round 11
++    // review's fixtures S17 to S19, lent with `return 5;`, the code returns 1). Guard 0xffff below the base as well, as 0056 does for a walk
++    // whose range the analysis did see move down.
++    if (pointerSteppedDown(op->getIn(1))) {
++      guessedBelow = true;
++      uintb highest = spc->getHighest();
++      if (pointerBase >= 0xffff) {
++	minimumOffset = pointerBase - 0xffff;
++	size = 0xffff + 0x1000;
++	if (minimumOffset + size - 1 > highest || minimumOffset + size - 1 < minimumOffset)
++	  size = highest - minimumOffset + 1;
++      }
++      else {
++	minimumOffset = 0;
++	size = highest + 1;
++      }
++    }
+   }
+   else {
+     step = (rangeSize == 3) ? range.getStep() : 0;	// Check for consistent step
+@@ -989,6 +1041,9 @@ void FrameEscape::compute(const Funcdata *fd,AddrSpace *spc,bool preHeritage)
  	gaveUp = true;
  	escaped = true;
  	loose = true;
@@ -19,7 +84,7 @@ diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.cc b/Ghidra/F
  	return;
        }
        Varnode *vn = work.back();
-@@ -1163,6 +1167,17 @@ void FrameEscape::compute(const Funcdata *fd,AddrSpace *spc,bool preHeritage)
+@@ -1163,6 +1218,17 @@ void FrameEscape::compute(const Funcdata *fd,AddrSpace *spc,bool preHeritage)
    vector<uintb> candidates;
    for(map<Varnode *,uintb>::const_iterator iter=offset.begin();iter!=offset.end();++iter)
      candidates.push_back((*iter).second);
@@ -37,7 +102,7 @@ diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.cc b/Ghidra/F
    {
      VarnodeLocSet::const_iterator liter = fd->beginLoc(spc);
      VarnodeLocSet::const_iterator lenditer = fd->endLoc(spc);
-@@ -1181,6 +1196,7 @@ void FrameEscape::compute(const Funcdata *fd,AddrSpace *spc,bool preHeritage)
+@@ -1181,6 +1247,7 @@ void FrameEscape::compute(const Funcdata *fd,AddrSpace *spc,bool preHeritage)
        haveLowest = true;
      }
    }
@@ -56,7 +121,15 @@ diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.hh b/Ghidra/F
   */
  /// \file heritage.hh
  /// \brief Utilities for building Static Single Assignment (SSA) form 
-@@ -212,7 +213,7 @@ public:
+@@ -155,6 +156,7 @@ class LoadGuard {
+   int4 analysisState;	///< 0=unanalyzed, 1=analyzed(partial result), 2=analyzed(full result)
+   bool guessedBelow;	///< SaturnExplorer: minimumOffset is a guess below a pointer stepped down, not where an array starts (patches/0056-engine-stack-walk-down-aliases.patch)
+   void establishRange(const ValueSetRead &valueSet);	///< Convert partial value set analysis into guard range
++  static bool pointerSteppedDown(Varnode *vn);	///< SaturnExplorer (0065): is the pointer the join of a loop that steps it down
+   void finalizeRange(const ValueSetRead &valueSet);	///< Convert value set analysis to final guard range
+ 
+   /// \brief Set a new unanalyzed LOAD guard that initially guards everything
+@@ -212,7 +214,7 @@ public:
    bool loose;				///< ...by a form the stack analysis does not model (0061's causes, not a hand-over alone: 0063)
    bool gaveUp;				///< The walk passed its bound: everything is taken to have escaped
    bool haveLowest;			///< \b lowest is set
