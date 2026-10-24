@@ -22,6 +22,7 @@
  * Modified for SaturnExplorer: the backward step of the consume analysis is PcodeOp::getConsumeLocal (patches/0054-engine-cached-masks-never-narrower.patch).
  * Modified for SaturnExplorer: the entry stack pointer a loop walks down is no reference to a stack parameter, and a save slot it reaches stays mapped (patches/0056-engine-stack-walk-down-aliases.patch).
  * Modified for SaturnExplorer: so does a save slot an indexed store's guard covers (patches/0063-engine-frame-escape-unknown-pointers.patch).
+ * Modified for SaturnExplorer: the walk down's bound keeps a stack parameter reference (patches/0066-engine-frame-escape-inexact.patch).
  */
 #include "coreaction.hh"
 #include "condexe.hh"
@@ -4909,7 +4910,7 @@ void ActionInputPrototype::gatherParamSpacebaseRefs(list<InputRef> &refs,Funcdat
       if (vn->getOffset() == 0 && !op->getOut()->hasNoDescend()) {
 	bool walk = true;
 	for(list<PcodeOp *>::const_iterator diter=op->getOut()->beginDescend();diter!=op->getOut()->endDescend();++diter) {
-	  if ((*diter)->code() != CPUI_MULTIEQUAL || !AliasChecker::stepsDown(*diter)) {
+	  if ((*diter)->code() != CPUI_MULTIEQUAL || !AliasChecker::stepsDown(*diter,false)) {	// (0066) at its bound: a parameter reference kept
 	    walk = false;
 	    break;
 	  }

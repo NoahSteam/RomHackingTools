@@ -20,6 +20,7 @@
  * Modified for SaturnExplorer: once a frame address escapes, every local from the lowest frame offset up is aliased (patches/0061-engine-stack-frame-escape.patch).
  * Modified for SaturnExplorer: a host can declare that the frame escaped by a way the p-code does not show (patches/0063-engine-frame-escape-unknown-pointers.patch).
  * Modified for SaturnExplorer: once the frame escapes, every local of it is aliased, across the unmapped words between them (patches/0065-engine-frame-escape-whole-frame.patch).
+ * Modified for SaturnExplorer: the walks down are helpers that only add aliasing and fail closed at their bounds; a loop that steps a frame address up aliases from its lowest entry (patches/0066-engine-frame-escape-inexact.patch).
  */
 #include "varmap.hh"
 #include "funcdata.hh"
@@ -904,6 +905,16 @@ void AliasChecker::gatherInternal(void) const
 	escapeLow = low;
       }
     }
+    // (patches/0066-engine-frame-escape-inexact.patch) a loop that steps a frame address up only is at or above its lowest entry: the alias starts
+    // there (the entry may be no base the walk above gathered, made after an INDIRECT or a join)
+    for(int4 i=0;i<escape.upLows.size();++i) {
+      uintb low = escape.upLows[i] & calc_mask(space->getAddrSize());
+      bool param = (direction == 1) ? (low < localBoundary) : (low > localBoundary);
+      if (param) continue;
+      downReach.push_back(low);
+      if (low < aliasBoundary)
+	aliasBoundary = low;
+    }
   }
 }
 
@@ -914,6 +925,7 @@ void AliasChecker::gatherInternal(void) const
 /// the one written (the call can write there only an address it was given, or one of its own frame below ours), so the
 /// walk fails closed: the base is taken to reach below itself (ledger A3-80). Patches 0056 and 0057 looked only at the
 /// MULTIEQUALs that read the base itself.
+/// (patches/0066-engine-frame-escape-inexact.patch) A precision helper that only adds aliasing: the escape of FrameEscape decides the rest.
 /// \param base is a pointer into the stack (one of the AddBase records)
 /// \return \b true if a loop the pointer reaches steps it down
 bool AliasChecker::reachesStepDown(Varnode *base)
@@ -959,7 +971,11 @@ bool AliasChecker::reachesStepDown(Varnode *base)
 /// value that is added is taken to be non-negative, as the rest of the alias analysis takes it.
 /// \param multi is the MULTIEQUAL joining a pointer with its stepped value
 /// \return \b true if some loop through \b multi lowers the pointer
-bool AliasChecker::stepsDown(PcodeOp *multi)
+/// (patches/0066-engine-frame-escape-inexact.patch) A precision helper: FrameEscape takes a frame address a loop carries for an escape unless
+/// every step adds a constant that is not negative, so a "no" here removes no alias; a "yes" adds the reach below the base.
+/// \param atCap is the answer when the walk passes its bound: \b true where a walk adds aliasing (fail closed), \b false where it would
+/// drop a stack parameter reference (ActionInputPrototype)
+bool AliasChecker::stepsDown(PcodeOp *multi,bool atCap)
 
 {
   // SaturnExplorer (patches/0057-engine-stack-walk-down-conditional.patch): the forward walk is keyed on (varnode, offset), not the varnode
@@ -971,12 +987,18 @@ bool AliasChecker::stepsDown(PcodeOp *multi)
   vector<pair<Varnode *,uintb> > seen;
   work.push_back(pair<Varnode *,uintb>(multi->getOut(),0));
   seen.push_back(pair<Varnode *,uintb>(multi->getOut(),0));
-  while(!work.empty() && seen.size() < 4096) {
+  // (patches/0066-engine-frame-escape-inexact.patch) The cap fails closed: a loop whose values are too many to follow is answered \b atCap
+  // (a walk, for the alias), not "no walk", which left the locals below an unbounded base unguarded under a body of 4,100 accesses (ledger
+  // A3-122). The bound is on every op visited, the descendants of one varnode too.
+  int4 visits = 0;
+  while(!work.empty()) {
+    if (seen.size() >= 4096) return atCap;
     Varnode *vn = work.back().first;
     uintb off = work.back().second;
     work.pop_back();
     uintb mask = calc_mask(vn->getSize());
     for(list<PcodeOp *>::const_iterator iter=vn->beginDescend();iter!=vn->endDescend();++iter) {
+      if (++visits > 65536) return atCap;
       PcodeOp *op = *iter;
       uintb next = off;
       switch(op->code()) {
