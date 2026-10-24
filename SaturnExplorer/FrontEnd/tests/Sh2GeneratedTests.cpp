@@ -4289,6 +4289,15 @@ bool BitwiseOfOthers(const RunOut& run, uint32_t v, int k)
                 const int32_t c = static_cast<int32_t>(v - w);
                 if (c > -0x80 && c < 0x80) return true;
             }
+    // (area 3 round 13 fix, A3-115) ...or a byte or halfword swap of another, give or take a step: `mov.b @r5+,r0 ; swap.b r5,r1` makes
+    // r5's start 0x06021100 plus 1, swapped, 0x06020111, which lies 0x11 past r4's start (grammar 2 seed 18759, `claim-wrong:outOrigins`).
+    // The value is computed from r5, which outOrigins names. Undone, the swap lands within a step of the other start value.
+    for (uint32_t w : { (v & 0xFFFF0000u) | ((v & 0xFFu) << 8) | ((v >> 8) & 0xFFu), (v << 16) | (v >> 16) })
+        for (uint32_t o : others)
+        {
+            const int32_t c = static_cast<int32_t>(w - o);
+            if (c > -0x80 && c < 0x80) return true;
+        }
     return false;
 }
 int PointerRegister(const RunOut& run, uint32_t v)
@@ -10317,13 +10326,28 @@ void TestRound12FixPins(Sh2Decompiler& d)
     }
 }
 
-// ===== Area 3, round 13 fix: A3-103's two seeds (A3-111, A3-112), oracle false positives =====
+// ===== Area 3, round 13 fix: A3-103's two seeds (A3-111, A3-112) and A3-115, oracle false positives =====
 void TestRound13FixPins(Sh2Decompiler& d)
 {
     auto count = [](const Report& rep, const char* name) {
         auto it = rep.counts.find(name);
         return it == rep.counts.end() ? 0 : it->second;
     };
+    // A3-115 (grammar 2 seed 18759, shrunk): `mov.w @r4,r0 ; mov.b @r5+,r0 ; swap.b r5,r1 ; mov #0x68,r0 ; rts`: r1 = r5's start + 1 with its
+    // low bytes swapped, 0x06020111, 0x11 past r4's start, was taken for a pointer from r4 (`claim-wrong:outOrigins`). r1 is computed from r5,
+    // which outOrigins names: a swap of another start value the run read is no evidence (BitwiseOfOthers).
+    {
+        RunOut run;
+        run.init[4] = 0x06020100u;
+        run.init[5] = 0x06021100u;
+        run.use.readFirst = (1u << 4) | (1u << 5);
+        CHECK(PointerRegister(run, 0x06020111u) == -1);   // swap.b of r5 + 1
+        CHECK(PointerRegister(run, 0x06020104u) == 4);    // r4 + 4 is still r4's
+        const Report rep = EvaluateSubject(d, RawSubject("6041 6054 6158 E068 000B 0009"), true);
+        std::printf("pin 'A3-115 grammar 2 seed 18759 (shrunk)': %zu finding(s)\n", rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
     // A3-111 (grammar 2 seed 2310198): function 1 pushes and pops r1, and function 2, which it calls after, reads that freed word as an
     // uninitialised byte of its frame (`mov.b @r15,r2`); the run depends on r1 through a stale stack word (`input-dropped:r1`). The stack
     // refilled and scrubbed (RunSpec::stackFill) shows the function reads a stale word, and its dependences are not counted.
