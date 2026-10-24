@@ -223,6 +223,8 @@ public:
   void recordAccessFold(const PcodeOp *op,const Varnode *vn);	///< Record a LOAD or STORE made a direct access of ordinary memory (SaturnExplorer)
   void recordFrameEnd(const PcodeOp *op,AccessFate fate);	///< Record how an access folded into the stack frame ended (SaturnExplorer, 0068)
   void noteFrameFoldReads(PcodeOp *op);	///< Mark the frame folds an op reads as read (SaturnExplorer, 0068)
+  void noteFrameFoldValueRead(Varnode *vn);	///< Mark the frame folds a value read comes from as read (SaturnExplorer, 0068)
+  void markAllFrameFoldsRead(void);	///< Mark every frame fold read (SaturnExplorer, 0068)
   const vector<FlowTable> &getFlowTables(void) const { return flowTables; }	///< Every indirect jump the last flow recovered (SaturnExplorer)
   const vector<FlowInsn> &getFlowInsns(void) const { return flowInsns; }	///< Every instruction the last flow translated (SaturnExplorer)
   const vector<AccessRecord> &getAccessFates(void) const { return accessFates; }	///< Every LOAD and STORE that ended, and how (SaturnExplorer)

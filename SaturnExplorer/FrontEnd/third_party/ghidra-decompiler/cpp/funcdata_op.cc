@@ -46,17 +46,67 @@ void Funcdata::opSetOpcode(PcodeOp *op,OpCode opc)
 }
 
 /// SaturnExplorer (patches/0068-engine-deadcode-late-stack-reads.patch): the op, which is no MULTIEQUAL or
-/// INDIRECT, reads its inputs. Each that a LOAD or STORE folded into the stack frame wrote is marked
-/// read, so that op is no frame access gone unread when it is destroyed.
+/// INDIRECT, reads its inputs (noteFrameFoldValueRead for each).
 /// \param op is the reading op
 void Funcdata::noteFrameFoldReads(PcodeOp *op)
 
 {
   for(int4 i=0;i<op->numInput();++i) {
     Varnode *vn = op->getIn(i);
-    if (vn != (Varnode *)0 && vn->isWritten() && vn->getDef()->isFrameFold())
-      vn->getDef()->setFrameFoldRead();
+    if (vn != (Varnode *)0)
+      noteFrameFoldValueRead(vn);
   }
+}
+
+/// SaturnExplorer (patches/0068-engine-deadcode-late-stack-reads.patch): an op that is no MULTIEQUAL or
+/// INDIRECT reads the given Varnode, or read it and now reads another in its place (propagation forwarded
+/// the value, a rule found it equal to something). If a LOAD or STORE folded into the stack frame wrote it,
+/// or wrote an input of the MULTIEQUALs and INDIRECTs it was made through (markers of where a value may go,
+/// not uses), that op's value is used and it is no frame access gone unread when it is destroyed. The walk
+/// through the markers stops after 64 of them; what lies beyond is taken as read (the ledger may then miss a
+/// loss, never report one that is none).
+/// \param vn is the Varnode read
+void Funcdata::noteFrameFoldValueRead(Varnode *vn)
+
+{
+  if (!vn->isWritten()) return;
+  PcodeOp *def = vn->getDef();
+  if (def->isFrameFold()) {
+    def->setFrameFoldRead();
+    return;
+  }
+  if (def->code() != CPUI_MULTIEQUAL && def->code() != CPUI_INDIRECT) return;
+  vector<PcodeOp *> markers(1,def);
+  for(size_t k=0;k<markers.size();++k) {
+    PcodeOp *m = markers[k];
+    int4 n = (m->code() == CPUI_INDIRECT) ? 1 : m->numInput();
+    for(int4 i=0;i<n;++i) {
+      Varnode *in = m->getIn(i);
+      if (in == (Varnode *)0 || !in->isWritten()) continue;
+      PcodeOp *d = in->getDef();
+      if (d->isFrameFold()) {
+	d->setFrameFoldRead();
+	continue;
+      }
+      if (d->code() != CPUI_MULTIEQUAL && d->code() != CPUI_INDIRECT) continue;
+      if (find(markers.begin(),markers.end(),d) != markers.end()) continue;
+      if (markers.size() >= 64) {
+	markAllFrameFoldsRead();
+	return;
+      }
+      markers.push_back(d);
+    }
+  }
+}
+
+/// SaturnExplorer (patches/0068-engine-deadcode-late-stack-reads.patch): the walk of noteFrameFoldValueRead
+/// passed its bound. Every frame fold alive is taken as read, so none is recorded as gone unread.
+void Funcdata::markAllFrameFoldsRead(void)
+
+{
+  for(list<PcodeOp *>::const_iterator iter=beginOpAlive();iter!=endOpAlive();++iter)
+    if ((*iter)->isFrameFold())
+      (*iter)->setFrameFoldRead();
 }
 
 // SaturnExplorer (patches/0054-engine-cached-masks-never-narrower.patch): the cached masks of a Varnode.
@@ -422,6 +472,8 @@ void Funcdata::opSetInput(PcodeOp *op,Varnode *vn,int4 slot)
     Varnode *old = op->getIn(slot);
     if (old->isWritten() && old->getDef()->isFrameFold())
       old->getDef()->setFrameFoldRead();
+    else if (op->getOpcode() != (TypeOp *)0 && op->code() != CPUI_MULTIEQUAL && op->code() != CPUI_INDIRECT)
+      noteFrameFoldValueRead(old);
     opUnsetInput(op,slot);
   }
 
@@ -429,8 +481,9 @@ void Funcdata::opSetInput(PcodeOp *op,Varnode *vn,int4 slot)
   op->setInput(vn,slot);	// op must be up to date AFTER calling descend_add
   // SaturnExplorer (0068): the value a STORE folded into the frame wrote is read. A MULTIEQUAL or an
   // INDIRECT only marks where the value may go; what reads their output reads it.
-  if (vn->isWritten() && vn->getDef()->isFrameFold() && op->code() != CPUI_MULTIEQUAL && op->code() != CPUI_INDIRECT)
-    vn->getDef()->setFrameFoldRead();	// (opSetOpcode notes a marker that becomes a real op)
+  // (An op still being built has no op-code yet: opSetOpcode notes its reads, as it does a marker that becomes a real op.)
+  if (op->getOpcode() != (TypeOp *)0 && op->code() != CPUI_MULTIEQUAL && op->code() != CPUI_INDIRECT)
+    noteFrameFoldValueRead(vn);
   // SaturnExplorer (patches/0054-engine-cached-masks-never-narrower.patch): op computes something else now, and vn has a
   // reader it did not have (see opMasksChanged). This replaces patches 0046 and 0049, which forgot the non-zero masks
   // below the op instead.
