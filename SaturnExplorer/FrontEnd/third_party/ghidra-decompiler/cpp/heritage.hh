@@ -386,7 +386,6 @@ class Heritage {
   static const int4 maxDeadcodeBumps = 3;
   static const int4 noDeadcodeDelay = 0x10000;	///< SaturnExplorer (0068): a delay no count of heritage passes reaches
   void bumpDeadcodeDelay(AddrSpace *spc);
-  static bool lateStoreWrite(const Varnode *vn);	///< SaturnExplorer (0068): a write a STORE became that no guard linked
   void placeMultiequals(void);
   void rename(void);
 public:

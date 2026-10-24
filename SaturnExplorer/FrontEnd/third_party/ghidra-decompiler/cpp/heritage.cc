@@ -19,7 +19,7 @@
  * Modified for SaturnExplorer: once the frame escapes, a STORE through a pointer not proved to be no frame address is guarded (patches/0063-engine-frame-escape-unknown-pointers.patch).
  * Modified for SaturnExplorer: the escape's lowest frame offset is the lowest any query saw, so it never rises, and a pointer a loop steps down from an unbounded index is guarded below its base (patches/0065-engine-frame-escape-whole-frame.patch).
  * Modified for SaturnExplorer: a frame address that is no exact offset from the frame base escapes, unless a loop only steps it up, and the guard of an access through one covers the stack space (patches/0066-engine-frame-escape-inexact.patch).
- * Modified for SaturnExplorer: a read, or a STORE's write no guard linked, found after dead code ran in its space delays dead code past the pass that found it, as often as needed, failing closed; whether a frame address escaped forces a call's guard on a local, and the calls guarded at a local are kept for a host (patches/0068-engine-deadcode-late-stack-reads.patch).
+ * Modified for SaturnExplorer: a read found after dead code ran in its space delays dead code past the pass that found it, as often as needed, failing closed; whether a frame address escaped forces a call's guard on a local, and the calls guarded at a local are kept for a host (patches/0068-engine-deadcode-late-stack-reads.patch).
  */
 #include "heritage.hh"
 #include "funcdata.hh"
@@ -3430,18 +3430,6 @@ void Heritage::renameRecurse(BlockBasic *bl,VariableStack &varstack)
   }
 }
 
-/// \brief SaturnExplorer (patches/0068-engine-deadcode-late-stack-reads.patch): is the Varnode a write a STORE became
-///
-/// RuleStoreVarnode made the STORE a COPY to it, and nothing reads it: the INDIRECT that guarded its range at the
-/// STORE would have become its reader (opCollapseIndirectsForCopy), so none was there.
-/// \param vn is the given Varnode
-/// \return \b true if it is such a write
-bool Heritage::lateStoreWrite(const Varnode *vn)
-
-{
-  return vn->isWritten() && vn->isStackStore() && vn->hasNoDescend() && vn->getDef()->code() == CPUI_COPY;
-}
-
 /// \brief Increase the heritage delay for the given AddrSpace and request a restart
 ///
 /// If applicable, look up the heritage stats for the address space
@@ -3611,20 +3599,7 @@ void Heritage::heritage(void)
       if (prev == 0)		// All new location being heritaged, or intersecting with something new
 	disjoint.add((*liter).first,(*liter).second.size,MemRange::new_addresses);
       else if (prev==2) { // If completely contained in range from previous pass
-	if (vn->isHeritageKnown()) {
-	  // SaturnExplorer (0068): a write a STORE became (RuleStoreVarnode) in a range heritaged before has no reader
-	  // only if the INDIRECT that guarded the range at the STORE, which opCollapseIndirectsForCopy would have made
-	  // its reader, is gone: dead code removed it while the STORE's pointer was unresolved (a pointer kept in a
-	  // frame slot), and the readers after it were linked to the value before. Heritage never links a write here,
-	  // so the write is lost (hwram008 060554B6: `mov.l r2,@(4,r7)`, r7 reloaded from the slot holding &S). As for
-	  // a read found late: the dead code delay is raised past this pass and the function restarted.
-	  if ((!needwarning)&&(info->deadremoved>0)&&!fd->isJumptableRecoveryOn()&&lateStoreWrite(vn)) {
-	    needwarning = true;
-	    bumpDeadcodeDelay(vn->getSpace());
-	    warnvn = vn;
-	  }
-	  continue; // Don't heritage if we don't have to
-	}
+	if (vn->isHeritageKnown()) continue; // Don't heritage if we don't have to 
 	if (vn->hasNoDescend()) continue;
 	if ((!needwarning)&&(info->deadremoved>0)&&!fd->isJumptableRecoveryOn()) {
 	  needwarning = true;
@@ -3637,7 +3612,7 @@ void Heritage::heritage(void)
 	disjoint.add((*liter).first,(*liter).second.size,MemRange::old_addresses | MemRange::new_addresses);
 	if ((!needwarning)&&(info->deadremoved>0)&&!fd->isJumptableRecoveryOn()) {
 	  // TODO: We should check if this varnode is tiled by previously heritaged ranges
-	  if (vn->isHeritageKnown() && !lateStoreWrite(vn)) continue;		// Assume that it is tiled and produced by merging (SaturnExplorer, 0068: unless a STORE's write no guard linked, as above)
+	  if (vn->isHeritageKnown()) continue;		// Assume that it is tiled and produced by merging
 		  // In most cases, a truly new overlapping read will hit the bumpDeadcodeDelay either here or in prev==2
 	  needwarning = true;
 	  bumpDeadcodeDelay(vn->getSpace());
