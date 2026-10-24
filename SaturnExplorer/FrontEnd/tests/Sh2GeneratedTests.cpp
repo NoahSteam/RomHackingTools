@@ -9210,6 +9210,176 @@ bool GenWalk14Fn(uint64_t seed, CCase& c, std::string& shape)
     return true;
 }
 
+// ---- A3-124 fix instrument (patch 0068): a struct built on the frame through a pointer kept in a frame slot and reloaded before each access
+// (the `-O0` byte copy of the corpus, hwram007 060228B4), on a stream of its own (one seed in four). Frame of 32 bytes on r15 or, `-O0`
+// style, on r14 (pushed, r15 copied); an 8-byte struct S at frame + 8, 12 or 16, &S in the slot at frame + 28. S is first filled whole (two
+// words of constants, or eight byte stores in a random order), then 1 to 8 byte, halfword and word stores at aligned offsets (the values
+// r4 to r7, or constants), each through the pointer reloaded from the slot (one in five through the r1 of the previous store), then 1 to 3
+// reads of S, byte, halfword or word wide (wider or narrower than the stores), through the reloaded pointer or directly at the frame
+// offset, added or xored into r0.
+//   frame124.<r15|r14>.<words|bytes>.<nocall|call>.<b|w|l|mixed>: the frame base, the fill, whether &S is handed to a lent callee at
+//        kCode + 0xC0 (rts ; nop) between the stores and the reads, and the stores' widths. A function without a call is checked by the
+//        printed-C differential (its text compiled and run beside the code for each input), which skips a text with a call; every one, with
+//        a call or not, is checked by the frame ledger (dts::FrameLosses, CheckFrame124Ledger). A text with a call reads S through the kept
+//        pointer after it (the frame escaped), which no constant check resolves: the ledger is its check.
+bool GenFrame124Fn(uint64_t seed, CCase& c, std::string& shape)
+{
+    Rng rng(seed * 2654435761u + 0x124A3u);
+    if (!rng.Chance(25)) return false;
+    const bool r14 = rng.Chance(50);
+    const bool call = rng.Chance(35);
+    const bool byteFill = !call && rng.Chance(50);   // (a call's function must end before its callee at kCode + 0xC0)
+    const uint32_t fb = r14 ? 14u : 15u;
+    const uint32_t sOff = 8u + 4u * rng.Below(3);
+    const uint32_t kSlotDisp = 7;   // the slot at frame + 28
+    LaunderBuilder b;
+    auto put = [&](uint32_t x) { b.Put(static_cast<uint16_t>(x)); };
+    if (r14) put(0x2FE6);                            // mov.l r14,@-r15
+    if (call) put(0x4F22);                           // sts.l pr,@-r15
+    put(0x7FE0);                                     // add #-32,r15
+    if (r14) put(0x6EF3);                            // mov r15,r14
+    put(0x6103 | fb << 4);                           // mov fb,r1
+    put(0x7100 | sOff);                              // add #sOff,r1: &S
+    put(0x1010 | fb << 8 | kSlotDisp);               // mov.l r1,@(28,fb): the slot
+    bool kept = false;                               // r1 holds &S from the last store
+    auto reload = [&]() {
+        put(0x5100 | fb << 4 | kSlotDisp);           // mov.l @(28,fb),r1
+        kept = true;
+    };
+    // The value stored: a register parameter, or a constant in r2.
+    auto value = [&]() -> uint32_t {
+        if (rng.Chance(30))
+        {
+            put(0xE200 | rng.Below(256));            // mov #imm,r2
+            return 2;
+        }
+        return 4 + rng.Below(4);
+    };
+    // A store of 'size' bytes at S + off through the reloaded pointer (r1 is never stepped: the address is built in r3).
+    auto store = [&](uint32_t size, uint32_t off, bool mayKeep) {
+        if (!(mayKeep && kept && rng.Chance(20))) reload();
+        const uint32_t v = value();
+        if (size == 4)
+        {
+            put(0x1100 | v << 4 | (off / 4));        // mov.l v,@(off,r1)
+            return;
+        }
+        put(0x6313);                                 // mov r1,r3
+        if (off) put(0x7300 | off);                  // add #off,r3
+        put(0x2300 | v << 4 | (size == 1 ? 0u : 1u));   // mov.b / mov.w v,@r3
+    };
+    if (byteFill)
+    {
+        uint32_t order[8] = { 0, 1, 2, 3, 4, 5, 6, 7 };
+        for (uint32_t i = 7; i > 0; --i) std::swap(order[i], order[rng.Below(i + 1)]);
+        for (uint32_t i = 0; i < 8; ++i) store(1, order[i], false);
+    }
+    else
+        for (uint32_t k = 0; k < 2; ++k)
+        {
+            reload();
+            put(0xE200 | rng.Below(256));            // mov #imm,r2
+            put(0x1120 | k);                         // mov.l r2,@(4k,r1)
+        }
+    static const char* const kWidths[] = { "b", "w", "l", "mixed" };
+    const uint32_t wk = rng.Below(4);
+    const uint32_t nStores = 1 + rng.Below(call ? 6 : 8);
+    for (uint32_t i = 0; i < nStores; ++i)
+    {
+        const uint32_t size = wk == 0 ? 1 : wk == 1 ? 2 : wk == 2 ? 4 : (1u << rng.Below(3));
+        store(size, rng.Below(8 / size) * size, true);
+    }
+    if (call)
+    {
+        put(0x5400 | fb << 4 | kSlotDisp);           // mov.l @(28,fb),r4: &S
+        b.Lit(0, kCode + 0xC0u);
+        put(0x400B);                                 // jsr @r0
+        put(0x0009);
+    }
+    const uint32_t nReads = 1 + rng.Below(3);
+    for (uint32_t i = 0; i < nReads; ++i)
+    {
+        const uint32_t size = 1u << rng.Below(3);
+        const uint32_t off = rng.Below(8 / size) * size;
+        if (rng.Chance(70))
+        {
+            put(0x5100 | fb << 4 | kSlotDisp);       // mov.l @(28,fb),r1
+            put(0x6313);                             // mov r1,r3
+            if (off) put(0x7300 | off);              // add #off,r3
+        }
+        else
+        {
+            put(0x6303 | fb << 4);                   // mov fb,r3: S at its frame offset
+            put(0x7300 | (sOff + off));              // add #sOff+off,r3
+        }
+        put(0x6230 | (size == 1 ? 0u : size == 2 ? 1u : 2u));   // mov.b / .w / .l @r3,r2
+        put(i == 0 ? 0x6023u : rng.Chance(50) ? 0x302Cu : 0x202Au);   // mov r2,r0 / add r2,r0 / xor r2,r0
+    }
+    if (r14)
+    {
+        put(0x7E20);                                 // add #32,r14
+        put(0x6FE3);                                 // mov r14,r15
+        if (call) put(0x4F26);                       // lds.l @r15+,pr
+        put(0x000B);                                 // rts
+        put(0x6EF6);                                 //   mov.l @r15+,r14
+    }
+    else
+    {
+        put(0x7F20);                                 // add #32,r15
+        if (call) put(0x4F26);                       // lds.l @r15+,pr
+        put(0x000B);                                 // rts
+        put(0x0009);
+    }
+    if (call)
+    {
+        if (b.at > 0xC0u / 2) return false;          // (not drawn: the bound above keeps it under)
+        b.at = 0xC0u / 2;                            // the callee
+        put(0x000B);
+        put(0x0009);
+    }
+    shape = std::string("frame124.") + (r14 ? "r14" : "r15") + (byteFill ? ".bytes" : ".words") + (call ? ".call." : ".nocall.") + kWidths[wk];
+    c.words = call ? b.Finish() : b.w;
+    c.name = "frame124_" + std::to_string(seed);
+    return true;
+}
+
+// The frame ledger over the frame124 stream (A3-124): each function decompiled as CheckLaunderWalks does (the callee at kCode + 0xC0 lent
+// first when there is one), and every frame write that went unread while the code reads it is a finding (dts::FrameLosses).
+int CheckFrame124Ledger(Sh2Decompiler& d, const std::vector<CCase>& cases)
+{
+    int lost = 0;
+    for (size_t ci = 0; ci < cases.size(); ++ci)
+    {
+        const CCase& c = cases[ci];
+        std::vector<uint8_t> hw;
+        for (size_t i = 0; i < c.words.size(); ++i) dts::Put16(hw, kCode - 0x06000000u + 2 * i, c.words[i]);
+        dts::Put16(hw, kSentinel - 0x06000000u, 0x0009);
+        dts::Put16(hw, kSentinel - 0x06000000u + 2, 0x0009);
+        auto snap = dts::MakeSnapshot(hw, 9100 + ci);
+        DecompileRequest q;
+        q.entry = kCode;
+        if (c.words.size() > 0xC0u / 2 && c.words[0xC0u / 2] != 0x0009)
+        {
+            DecompileRequest cq;
+            cq.entry = kCode + 0xC0u;
+            const DecompileResult cr = d.Decompile(snap, cq);
+            if (cr.status == DecompileStatus::Ok && cr.prototype.known) q.prototypes.emplace_back(kCode + 0xC0u, cr.prototype);
+        }
+        const DecompileResult r = d.Decompile(snap, q);
+        if (EnvNumber("SE_GENERATED_VERBOSE", 0) >= 2)
+            std::printf("%s (frame ledger)\n  words: %s\n%s\n", c.name.c_str(), WordsText(c.words).c_str(), r.Text().c_str());
+        for (const dts::FrameLoss& l : dts::FrameLosses(r))
+        {
+            ++lost;
+            std::printf("FINDING [frame-lost] %s\n  detail: the frame write of %u byte(s) at %s (frame offset %s) went unread, and the read at %s reads it\n"
+                        "  words: %s\n%s\n", c.name.c_str(), unsigned(l.size), Hex(l.write).c_str(), Hex(l.offset).c_str(), Hex(l.read).c_str(),
+                        WordsText(c.words).c_str(), r.Text().c_str());
+            break;
+        }
+    }
+    return lost;
+}
+
 // The check of the laundered walks: lend the callees (deepest first: kCode + 0xC0, then kCode + 0x80, when the blob has code there), decompile
 // the entry, run once, and compare every constant return with the run's r0 (as CheckSpillWalks).
 std::vector<CVerdict> CheckLaunderWalks(Sh2Decompiler& d, const std::vector<CCase>& cases, const std::vector<std::string>* shapes = nullptr)
@@ -9432,6 +9602,17 @@ void TestPrintedC()
                 fns.push_back(walk);
                 cases.push_back({ "seed" + std::to_string(seed) + "_walk", walk.Words() });
             }
+        // (A3-124 fix, patch 0068) The frame structs without a call (GenFrame124Fn), after those: compiled and run beside the code like the rest.
+        // SE_GENERATED_PRINTEDC_FRAME124=0 leaves them out.
+        if (EnvNumber("SE_GENERATED_PRINTEDC_FRAME124", 1) != 0)
+            for (long seed = first; seed < first + seeds; ++seed)
+            {
+                CCase f;
+                std::string shape;
+                if (!GenFrame124Fn(static_cast<uint64_t>(seed), f, shape) || shape.find(".call.") != std::string::npos) continue;
+                fns.push_back(RegFn());
+                cases.push_back(f);
+            }
     }
     if (EnvNumber("SE_GENERATED_COVERAGE", 0) != 0)
     {
@@ -9468,7 +9649,8 @@ void TestPrintedC()
         if (grammarLeak) v.cls = "grammar-leak";
         // A ledger fixture exists to be compared: one the harness skips (an input it cannot give a value, a stack piece) checks nothing, and is a failure,
         // not a quiet class (A2-37: `unaff_r8_00` was `skipped:unknown-input`).
-        if (!hand && cases[i].name.compare(0, 4, "seed") != 0 && v.cls.compare(0, 8, "skipped:") == 0)
+        // A frame124 function (A3-124) is drawn, not written: one the harness skips (a text that takes a local's address) is counted below.
+        if (!hand && cases[i].name.compare(0, 4, "seed") != 0 && cases[i].name.compare(0, 9, "frame124_") != 0 && v.cls.compare(0, 8, "skipped:") == 0)
         {
             v.detail = "the fixture was skipped (" + v.cls + "): " + v.detail;
             v.cls = "fixture-skipped";
@@ -9631,6 +9813,48 @@ void TestPrintedC()
         for (const auto& k : launderClasses) std::printf(" %s=%d", k.first.c_str(), k.second);
         std::printf(" failing by shape:");
         for (const auto& k : staleByShape) std::printf(" %s=%d", k.first.c_str(), k.second);
+        std::printf("\n");
+    }
+    // (A3-124 fix, patch 0068) The frame ledger over the frame124 stream, with and without a call: a frame write that went unread while the
+    // code reads it is a finding whatever the text's value (SE_GENERATED_FRAME124_WORDS replays one).
+    const char* frame124Words = std::getenv("SE_GENERATED_FRAME124_WORDS");
+    if ((!hand || frame124Words) && EnvNumber("SE_GENERATED_PRINTEDC_FRAME124", 1) != 0)
+    {
+        const long single = EnvNumber("SE_GENERATED_SEED", 0);
+        const long seeds = single ? 1 : EnvNumber("SE_GENERATED_SEEDS", 300);
+        const long first = single ? single : EnvNumber("SE_GENERATED_FIRST", 1);
+        std::vector<CCase> f124;
+        std::map<std::string, int> drawn;
+        for (long seed = first; seed < first + seeds && !frame124Words; ++seed)
+        {
+            CCase c;
+            std::string shape;
+            if (!GenFrame124Fn(static_cast<uint64_t>(seed), c, shape)) continue;
+            ++drawn[shape.substr(0, shape.rfind('.'))];
+            f124.push_back(c);
+        }
+        if (frame124Words)
+        {
+            CCase c;
+            c.name = "frame124-hand";
+            std::istringstream in(frame124Words);
+            std::string tok;
+            while (in >> tok) c.words.push_back(static_cast<uint16_t>(std::strtoul(tok.c_str(), nullptr, 16)));
+            f124.push_back(c);
+        }
+        const int lost = CheckFrame124Ledger(d, f124);
+        failing += lost;
+        int compared124 = 0, skipped124 = 0, n124 = 0;
+        for (size_t i = 0; i < verdicts.size(); ++i)
+            if (cases[i].name.compare(0, 9, "frame124_") == 0)
+            {
+                ++n124;
+                compared124 += verdicts[i].compared ? 1 : 0;
+                skipped124 += verdicts[i].cls.compare(0, 8, "skipped:") == 0 ? 1 : 0;
+            }
+        std::printf("frame124 structs: %zu drawn, %d without a call through the differential (%d compared, %d skipped), %d frame writes lost; kinds:",
+                    f124.size(), n124, compared124, skipped124, lost);
+        for (const auto& k : drawn) std::printf(" %s=%d", k.first.c_str(), k.second);
         std::printf("\n");
     }
     std::printf("printed-C: functions=%zu compared=%d inputs each=%d (%.0f ms) classes:", verdicts.size(), compared, nIn, dts::MsSince(t0));
@@ -11005,6 +11229,28 @@ void TestA365Pins(Sh2Decompiler& d)
                                "walk14.stackarg.r6.walk", "walk14.stackarg.r7.walk", "walk14.stackarg.r6r7.walk",
                                "walk14.stackarg.r6.callee", "walk14.stackarg.r7.callee", "walk14.stackarg.r6r7.callee", "walk14.cap" })
             CHECK(drawn[k] > 0);
+    }
+    // A3-124 fix (patch 0068): the frame124 stream draws each frame base, fill, call and width (the bytes fill has no call)
+    {
+        std::map<std::string, int> drawn;
+        int n = 0;
+        for (uint64_t seed = 1; seed <= 4000; ++seed)
+        {
+            CCase c;
+            std::string shape;
+            if (!GenFrame124Fn(seed, c, shape)) continue;
+            ++n;
+            ++drawn[shape];
+        }
+        std::printf("pin 'frame124 draws': %d functions in 4000 seeds, %zu kinds\n", n, drawn.size());
+        for (const char* base : { "r15", "r14" })
+            for (const char* fill : { "words", "bytes" })
+                for (const char* call : { "nocall", "call" })
+                    for (const char* w : { "b", "w", "l", "mixed" })
+                    {
+                        if (std::string(fill) == "bytes" && std::string(call) == "call") continue;
+                        CHECK(drawn[std::string("frame124.") + base + "." + fill + "." + call + "." + w] > 0);
+                    }
     }
 }
 
