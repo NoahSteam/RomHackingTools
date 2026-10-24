@@ -19,6 +19,7 @@
  * Modified for SaturnExplorer: so does one kept in a stack local and read back, across a call too (patches/0060-engine-stack-walk-down-spilled.patch).
  * Modified for SaturnExplorer: once a frame address escapes, every local from the lowest frame offset up is aliased (patches/0061-engine-stack-frame-escape.patch).
  * Modified for SaturnExplorer: a host can declare that the frame escaped by a way the p-code does not show (patches/0063-engine-frame-escape-unknown-pointers.patch).
+ * Modified for SaturnExplorer: once the frame escapes, every local of it is aliased, across the unmapped words between them (patches/0065-engine-frame-escape-whole-frame.patch).
  */
 #include "varmap.hh"
 #include "funcdata.hh"
@@ -416,6 +417,8 @@ ScopeLocal::ScopeLocal(uint8 id,AddrSpace *spc,Funcdata *fd,Architecture *g) : S
   hostAlias = false;
   hostAliasStart = 0;
   hostEscape = false;
+  haveFrameFloor = false;
+  frameFloor = 0;
   restrictScope(fd);
 } 
 
@@ -806,6 +809,8 @@ void AliasChecker::gatherInternal(void) const
   calculated = true;
   aliasBoundary = localExtreme;
   trialBoundary = localExtreme;
+  escapeAll = false;
+  escapeLow = 0;
   Varnode *spacebase = fd->findSpacebaseInput(space);
   // SaturnExplorer: a pointer the host knows of and the p-code does not show. The code hands the
   // address of a local to a callee in a register no call input names (a returned structure's
@@ -889,6 +894,15 @@ void AliasChecker::gatherInternal(void) const
       bool param = (direction == 1) ? (low < localBoundary) : (low > localBoundary);
       if (!param && low < aliasBoundary)
 	aliasBoundary = low;
+      // (patches/0065-engine-frame-escape-whole-frame.patch) ...and from there every local is aliased, whatever lies between: the
+      // words the function's calls take as stack arguments and the save slots are unmapped, and ScopeLocal::markUnaliased turns an
+      // alias off at the first mapped range above such a word. With the call's fifth argument at the frame's lowest word, the
+      // local above it was taken for one no pointer reaches and folded (ledger A3-104). A pointer to a local reaches the whole frame
+      // once it has escaped (an escaped `&buf[2]` is walked down to `buf[0]`), so the escape stops at no gap.
+      if (!param && direction == 1) {
+	escapeAll = true;
+	escapeLow = low;
+      }
     }
   }
 }
@@ -1688,7 +1702,9 @@ void ScopeLocal::restructureVarnode(bool aliasyes)
 
   state.sortAlias();
   if (aliasyes) {
-    markUnaliased(state.getAlias());
+    uintb escapeLow = 0;
+    bool escapeAll = state.getEscapeLow(escapeLow);
+    markUnaliased(state.getAlias(),escapeAll,escapeLow);
     checkUnaliasedReturn(state.getAlias());
   }
   if (!state.getAlias().empty() && state.getAlias()[0] == 0)	// If a zero offset use of the stack pointer exists
@@ -1741,8 +1757,12 @@ bool ScopeLocal::restructure(MapState &state)
 /// aliased by a pointer.  The method uses locked Symbol information when available to determine
 /// how far an alias start might extend.  Otherwise a heuristic is used to determine if the Symbol
 /// is far enough away from the start of the alias to be considered unaliased.
+/// SaturnExplorer (patches/0065-engine-frame-escape-whole-frame.patch): once a frame address escaped, every Symbol at or above the
+/// frame's lowest offset is aliased, across unmapped ranges and at any distance (AliasChecker::gatherInternal).
 /// \param alias is the given set of alias starting offsets
-void ScopeLocal::markUnaliased(const vector<uintb> &alias)
+/// \param escapeAll is \b true if a frame address escaped
+/// \param escapeLow is the frame's lowest offset, when \b escapeAll
+void ScopeLocal::markUnaliased(const vector<uintb> &alias,bool escapeAll,uintb escapeLow)
 
 {
   EntryMap *rangemap = maptable[space->getIndex()];
@@ -1786,6 +1806,8 @@ void ScopeLocal::markUnaliased(const vector<uintb> &alias)
     // NOTE: this is primarily to reset aliasing between
     // stack parameters and stack locals
     if (aliason && (curoff - curalias > 0xffff)) aliason = false;
+    // SaturnExplorer (0065): an escaped frame address reaches every local of the frame
+    if (escapeAll && curoff >= escapeLow) aliason = true;
     if (!aliason) symbol->getScope()->setAttribute(symbol,Varnode::nolocalalias);
     if (symbol->isTypeLocked() && alias_block_level != 0) {
       if (alias_block_level == 3)

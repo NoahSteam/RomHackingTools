@@ -17,6 +17,7 @@
  * Modified for SaturnExplorer: a STORE through a frame address kept in a stack local and read back is guarded (patches/0060-engine-stack-walk-down-spilled.patch).
  * Modified for SaturnExplorer: a STORE a frame address may have escaped to is guarded, failing closed (patches/0061-engine-stack-frame-escape.patch).
  * Modified for SaturnExplorer: once the frame escapes, a STORE through a pointer not proved to be no frame address is guarded (patches/0063-engine-frame-escape-unknown-pointers.patch).
+ * Modified for SaturnExplorer: the escape's lowest frame offset is the lowest any query saw, so it never rises (patches/0065-engine-frame-escape-whole-frame.patch).
  */
 #include "heritage.hh"
 #include "funcdata.hh"
@@ -989,6 +990,9 @@ void FrameEscape::compute(const Funcdata *fd,AddrSpace *spc,bool preHeritage)
 	gaveUp = true;
 	escaped = true;
 	loose = true;
+	// (0065) ...from the lowest frame offset any query saw (no lowest is offset 0, which aliases no local)
+	if (fd->getScopeLocal() != (const ScopeLocal *)0 && fd->getScopeLocal()->getSpaceId() == spc)
+	  haveLowest = fd->getScopeLocal()->getFrameFloor(lowest);
 	return;
       }
       Varnode *vn = work.back();
@@ -1163,6 +1167,17 @@ void FrameEscape::compute(const Funcdata *fd,AddrSpace *spc,bool preHeritage)
   vector<uintb> candidates;
   for(map<Varnode *,uintb>::const_iterator iter=offset.begin();iter!=offset.end();++iter)
     candidates.push_back((*iter).second);
+  // (patches/0065-engine-frame-escape-whole-frame.patch) ...and the lowest any earlier query of this function saw. The frame addresses and
+  // stack locations left shrink as the actions fold: the word at a call's stack pointer becomes the call's argument, the local above it a
+  // constant, and the lowest left rose to the address that escaped, so a local below that address lost its alias in the later queries and
+  // was folded (ledger A3-104). The frame does not shrink: the lowest offset is kept with the function (ScopeLocal::setFrameFloor).
+  const ScopeLocal *scope = fd->getScopeLocal();
+  if (scope != (const ScopeLocal *)0 && scope->getSpaceId() != spc) scope = (const ScopeLocal *)0;
+  {
+    uintb floor;
+    if (scope != (const ScopeLocal *)0 && scope->getFrameFloor(floor))
+      candidates.push_back(floor);
+  }
   {
     VarnodeLocSet::const_iterator liter = fd->beginLoc(spc);
     VarnodeLocSet::const_iterator lenditer = fd->endLoc(spc);
@@ -1181,6 +1196,7 @@ void FrameEscape::compute(const Funcdata *fd,AddrSpace *spc,bool preHeritage)
       haveLowest = true;
     }
   }
+  if (haveLowest && scope != (const ScopeLocal *)0) scope->setFrameFloor(lowest);
   if (escaped) markUnknownStores(fd);
 }
 
