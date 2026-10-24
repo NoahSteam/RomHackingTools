@@ -88,7 +88,7 @@ index 1b60d67..c09d4a9 100644
    ActionDeadCode(const string &g) : Action(0,"deadcode",g) {}	///< Constructor
    virtual Action *clone(const ActionGroupList &grouplist) const {
 diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata.cc
-index fc87778..a397dfa 100644
+index fc87778..7e73682 100644
 --- a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata.cc
 +++ b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata.cc
 @@ -16,6 +16,7 @@
@@ -99,16 +99,17 @@ index fc87778..a397dfa 100644
   */
  #include "funcdata.hh"
  
-@@ -108,6 +109,8 @@ void Funcdata::clear(void)
+@@ -108,6 +109,9 @@ void Funcdata::clear(void)
    clearCallSpecs();
    clearJumpTables();
    accessFates.clear();		// SaturnExplorer: they describe the ops just destroyed
 +  frameEscaped = false;		// SaturnExplorer (0068): ...and the escape found in them
++  frameCalls.clear();
 +  frameFoldsAllRead = false;
    flowInsns.clear();		// SaturnExplorer: the next flow records its own
    flowTables.clear();
    flowOps = 0;
-@@ -231,6 +234,75 @@ void Funcdata::recordAccessFold(const PcodeOp *op,const Varnode *vn)
+@@ -231,6 +235,101 @@ void Funcdata::recordAccessFold(const PcodeOp *op,const Varnode *vn)
    Address addr;
    if (!isMemoryAccess(op,store,size,addr)) return;
    recordAccessFate(op,store,size,vn->getAddr(),fate_folded_ordinary);
@@ -119,6 +120,25 @@ index fc87778..a397dfa 100644
 +  // was found, or with the pieces of a wrong collapse, were counted as folded and nothing more).
 +  if (op->getTime() < flowOps && vn->getSpace()->getType() == IPTR_SPACEBASE)
 +    op->setFrameFold();
++}
++
++/// SaturnExplorer (patches/0068-engine-deadcode-late-stack-reads.patch): heritage guards a stack local at the
++/// call (its effect on the local is unknown) and a frame address escaped, so the call may read it: a host's frame
++/// ledger takes the call for a read of those bytes. Only the flow's calls are kept, each range once.
++/// \param op is the call
++/// \param off is the local's offset in the stack space
++/// \param size is its size
++void Funcdata::noteFrameCall(const PcodeOp *op,uintb off,int4 size)
++
++{
++  if (op->getTime() >= flowOps) return;
++  for(vector<FrameCallRecord>::const_iterator iter=frameCalls.begin();iter!=frameCalls.end();++iter)
++    if ((*iter).time == op->getTime() && (*iter).offset == off && (*iter).size == size) return;
++  FrameCallRecord rec;
++  rec.time = op->getTime();
++  rec.offset = off;
++  rec.size = size;
++  frameCalls.push_back(rec);
 +}
 +
 +/// SaturnExplorer (patches/0068-engine-deadcode-late-stack-reads.patch): the PIECEs and SUBPIECEs now in the
@@ -133,31 +153,38 @@ index fc87778..a397dfa 100644
 +{
 +  for(int4 pass=0;pass<2;++pass) {
 +    OpCode opc = (pass == 0) ? CPUI_PIECE : CPUI_SUBPIECE;
-+    for(list<PcodeOp *>::const_iterator iter=beginOp(opc);iter!=endOp(opc);++iter) {
-+      const PcodeOp *op = *iter;
-+      if (op->isDead() || op->getOut() == (Varnode *)0 || op->numInput() != 2) continue;
-+      const Varnode *a = op->getIn(0);
-+      const Varnode *b = op->getIn(1);
-+      if (a == (Varnode *)0 || b == (Varnode *)0) continue;
-+      bool bad;
-+      if (opc == CPUI_PIECE)
-+	bad = (a->getSize() + b->getSize() != op->getOut()->getSize());
-+      else
-+	bad = !b->isConstant() || b->getOffset() + (uintb)op->getOut()->getSize() > (uintb)a->getSize();
-+      if (!bad) continue;
-+      bool seen = false;
-+      for(vector<AccessRecord>::const_iterator r=accessFates.begin();r!=accessFates.end();++r)
-+	if ((*r).fate == fate_malformed_piece && (*r).time == op->getTime()) { seen = true; break; }
-+      if (seen) continue;
-+      AccessRecord rec;
-+      rec.time = op->getTime();
-+      rec.pc = op->getAddr();
-+      rec.store = false;
-+      rec.size = op->getOut()->getSize();
-+      rec.fate = fate_malformed_piece;
-+      accessFates.push_back(rec);
-+    }
++    for(list<PcodeOp *>::const_iterator iter=beginOp(opc);iter!=endOp(opc);++iter)
++      checkPieceSize(*iter);
 +  }
++}
++
++/// SaturnExplorer (patches/0068-engine-deadcode-late-stack-reads.patch): checkPieceSizes for one op, which may
++/// be of any kind (only a PIECE or SUBPIECE is checked). opCollapseIndirectsForCopy checks the pieces it makes as it
++/// makes them: the rules after it may simplify a malformed one away before the next heritage pass.
++/// \param op is the op
++void Funcdata::checkPieceSize(const PcodeOp *op)
++
++{
++  if (op->isDead() || op->getOut() == (Varnode *)0 || op->numInput() != 2) return;
++  if (op->code() != CPUI_PIECE && op->code() != CPUI_SUBPIECE) return;
++  const Varnode *a = op->getIn(0);
++  const Varnode *b = op->getIn(1);
++  if (a == (Varnode *)0 || b == (Varnode *)0) return;
++  bool bad;
++  if (op->code() == CPUI_PIECE)
++    bad = (a->getSize() + b->getSize() != op->getOut()->getSize());
++  else
++    bad = !b->isConstant() || b->getOffset() + (uintb)op->getOut()->getSize() > (uintb)a->getSize();
++  if (!bad) return;
++  for(vector<AccessRecord>::const_iterator r=accessFates.begin();r!=accessFates.end();++r)
++    if ((*r).fate == fate_malformed_piece && (*r).time == op->getTime()) return;
++  AccessRecord rec;
++  rec.time = op->getTime();
++  rec.pc = op->getAddr();
++  rec.store = false;
++  rec.size = op->getOut()->getSize();
++  rec.fate = fate_malformed_piece;
++  accessFates.push_back(rec);
 +}
 +
 +/// SaturnExplorer (patches/0068-engine-deadcode-late-stack-reads.patch): a LOAD or STORE that
@@ -185,7 +212,7 @@ index fc87778..a397dfa 100644
  
  /// The comment is added to the global database, indexed via its placement address and
 diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata.hh b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata.hh
-index c563d90..cf4a8c8 100644
+index c563d90..ebb2f9f 100644
 --- a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata.hh
 +++ b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata.hh
 @@ -16,6 +16,7 @@
@@ -208,28 +235,46 @@ index c563d90..cf4a8c8 100644
  };
  
  /// \brief One memory access of the flow and how it ended (SaturnExplorer)
-@@ -131,6 +135,8 @@ class Funcdata {
+@@ -64,6 +68,13 @@ struct AccessRecord {
+   AccessFate fate;		///< How it ended
+ };
+ 
++/// \brief A call of the flow that heritage guarded a stack local at: it may read it (SaturnExplorer, 0068)
++struct FrameCallRecord {
++  uintm time;			///< PcodeOp::getTime() of the call
++  uintb offset;			///< The local's offset in the stack space
++  int4 size;			///< ...and its size
++};
++
+ /// \brief One instruction the flow translated (SaturnExplorer)
+ struct FlowInsn {
+   Address addr;			///< The address of the instruction
+@@ -131,6 +142,9 @@ class Funcdata {
    vector<FlowInsn> flowInsns;	///< Every instruction the last flow translated, before any action removed code (SaturnExplorer); cleared with the function
    uintm flowOps = 0;		///< The ops with a lower time were made by the flow; the rest by rules and actions (SaturnExplorer)
    bool accessesRecorded = false;	///< Set while a block is removed: its accesses were recorded before any op was destroyed
 +  mutable bool frameEscaped = false;	///< SaturnExplorer (0068): a frame address escaped (FrameEscape) in this generation of the function
++  vector<FrameCallRecord> frameCalls;	///< SaturnExplorer (0068): the flow's calls heritage guarded a stack local at, in this generation
 +  bool frameFoldsAllRead = false;	///< SaturnExplorer (0068): a walk of noteFrameFoldForwarded passed its bound: no fold is recorded unread
  
    VarnodeBank vbank;		///< Container of Varnode objects for \b this function
    PcodeOpBank obank;		///< Container of PcodeOp objects for \b this function
-@@ -218,9 +224,16 @@ public:
+@@ -218,9 +232,19 @@ public:
    bool isMemoryAccess(const PcodeOp *op,bool &store,int4 &size,Address &addr) const;	///< Is the op a memory access, and of what (SaturnExplorer)
    void recordAccessFate(const PcodeOp *op,bool store,int4 size,const Address &addr,AccessFate fate);	///< Record how a memory access ended (SaturnExplorer)
    void recordAccessFold(const PcodeOp *op,const Varnode *vn);	///< Record a LOAD or STORE made a direct access of ordinary memory (SaturnExplorer)
 +  void recordFrameEnd(const PcodeOp *op,AccessFate fate);	///< Record how an access folded into the stack frame ended (SaturnExplorer, 0068)
 +  void noteFrameFoldForwarded(bool walk,Varnode *vn);
-+  void checkPieceSizes(void);	///< Record each PIECE and SUBPIECE whose sizes do not add up (SaturnExplorer, 0068)	///< Mark the frame folds a replaced input came from as forwarded (SaturnExplorer, 0068)
++  void checkPieceSizes(void);	///< Record each PIECE and SUBPIECE whose sizes do not add up (SaturnExplorer, 0068)
++  void checkPieceSize(const PcodeOp *op);	///< ...for one op (SaturnExplorer, 0068)	///< Mark the frame folds a replaced input came from as forwarded (SaturnExplorer, 0068)
 +  /// \brief SaturnExplorer (0068): is the op a MULTIEQUAL or INDIRECT, or not yet given an op-code
 +  static bool isMarkerOrUnbuilt(const PcodeOp *op) { return op->getOpcode() == (TypeOp *)0 || op->code() == CPUI_MULTIEQUAL || op->code() == CPUI_INDIRECT; }
    const vector<FlowTable> &getFlowTables(void) const { return flowTables; }	///< Every indirect jump the last flow recovered (SaturnExplorer)
    const vector<FlowInsn> &getFlowInsns(void) const { return flowInsns; }	///< Every instruction the last flow translated (SaturnExplorer)
    const vector<AccessRecord> &getAccessFates(void) const { return accessFates; }	///< Every LOAD and STORE that ended, and how (SaturnExplorer)
 +  void noteFrameEscaped(void) const { frameEscaped = true; }	///< SaturnExplorer (0068): FrameEscape found a frame address escaped
++  void noteFrameCall(const PcodeOp *op,uintb off,int4 size);	///< SaturnExplorer (0068): the call has a guard on a stack local (it may read it)
++  const vector<FrameCallRecord> &getFrameCalls(void) const { return frameCalls; }	///< SaturnExplorer (0068): the flow's calls with a guard on a stack local
 +  bool hasFrameEscaped(void) const { return frameEscaped; }	///< SaturnExplorer (0068): did a frame address escape, so a call may read the locals
    void warning(const string &txt,const Address &ad) const;	///< Add a warning comment in the function body
    void warningHeader(const string &txt) const;			///< Add a warning comment as part of the function header
@@ -256,7 +301,7 @@ index 66404b2..1e06e7f 100644
    accessesRecorded = true;
    desc_warning = false;
 diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_op.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_op.cc
-index 49ee63a..098d4c0 100644
+index 49ee63a..c66da2f 100644
 --- a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_op.cc
 +++ b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_op.cc
 @@ -19,6 +19,7 @@
@@ -371,6 +416,23 @@ index 49ee63a..098d4c0 100644
  	  opSetInput(subBefore,invn,0);
  	  opSetInput(subBefore,newConstant(4,byteOff),1);
  	  opInsertAfter(subBefore, insertPoint);
+@@ -1728,6 +1783,16 @@ void Funcdata::opCollapseIndirectsForCopy(PcodeOp *copyOp)
+ 	opSetInput(op,frontVn,frontSlot);
+ 	opSetInput(op,backVn,1-frontSlot);
+ 	opInsertAfter(op, insertPoint);
++	// SaturnExplorer (0068): the pieces made here add up (A3-127 was a front piece of the wrong size)
++	checkPieceSize(op);
++	for(int4 k=0;k<op->numInput();++k) {
++	  const Varnode *piece = op->getIn(k);
++	  if (!piece->isWritten()) continue;
++	  const PcodeOp *pop = piece->getDef();
++	  checkPieceSize(pop);
++	  for(int4 j=0;j<pop->numInput();++j)
++	    if (pop->getIn(j) != (Varnode *)0 && pop->getIn(j)->isWritten()) checkPieceSize(pop->getIn(j)->getDef());
++	}
+ 	continue;
+       }
+       // Convert INDIRECT to COPY
 diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_varnode.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_varnode.cc
 index c8412bd..3a8cee2 100644
 --- a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_varnode.cc
@@ -404,14 +466,14 @@ index c8412bd..3a8cee2 100644
    while(iter != vn->endDescend()) {
      op = *iter++;		// Increment before removing descendant
 diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.cc
-index ab0e55e..9e55ef4 100644
+index ab0e55e..641f6f5 100644
 --- a/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.cc
 +++ b/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.cc
 @@ -19,6 +19,7 @@
   * Modified for SaturnExplorer: once the frame escapes, a STORE through a pointer not proved to be no frame address is guarded (patches/0063-engine-frame-escape-unknown-pointers.patch).
   * Modified for SaturnExplorer: the escape's lowest frame offset is the lowest any query saw, so it never rises, and a pointer a loop steps down from an unbounded index is guarded below its base (patches/0065-engine-frame-escape-whole-frame.patch).
   * Modified for SaturnExplorer: a frame address that is no exact offset from the frame base escapes, unless a loop only steps it up, and the guard of an access through one covers the stack space (patches/0066-engine-frame-escape-inexact.patch).
-+ * Modified for SaturnExplorer: a read, or a STORE's write no guard linked, found after dead code ran in its space delays dead code past the pass that found it, as often as needed, failing closed; whether a frame address escaped is kept for a host and forces a call's guard on a local (patches/0068-engine-deadcode-late-stack-reads.patch).
++ * Modified for SaturnExplorer: a read, or a STORE's write no guard linked, found after dead code ran in its space delays dead code past the pass that found it, as often as needed, failing closed; whether a frame address escaped forces a call's guard on a local, and the calls guarded at a local are kept for a host (patches/0068-engine-deadcode-late-stack-reads.patch).
   */
  #include "heritage.hh"
  #include "funcdata.hh"
@@ -443,7 +505,28 @@ index ab0e55e..9e55ef4 100644
    for(int4 i=0;i<fd->numCalls();++i) {
      fc = fd->getCallSpecs(i);
      if (fc->getOp()->isAssignment()) {
-@@ -3408,23 +3416,56 @@ void Heritage::renameRecurse(BlockBasic *bl,VariableStack &varstack)
+@@ -2365,6 +2373,20 @@ void Heritage::guardCalls(uint4 fl,const Address &addr,int4 size,vector<Varnode
+     }
+     // We do not guard the call if the effect is "unaffected" or "reload"
+     if ((effecttype == EffectRecord::unknown_effect)||(effecttype == EffectRecord::return_address)) {
++      // SaturnExplorer (0068): for a host's frame ledger, this call may read the local once a frame address escaped
++      // (before that a callee reads the caller's frame only through its stack parameters, which the trials decide),
++      // unless the local lies wholly below the stack pointer the callee is entered with (the callee's own space)
++      if (spc->getType() == IPTR_SPACEBASE && fd->hasFrameEscaped()) {
++	bool below = false;
++	if (fc->getSpacebaseOffset() != FuncCallSpecs::offset_unknown) {
++	  intb rel = (intb)off;
++	  int4 bits = 8 * spc->getAddrSize();
++	  if (bits < 64 && ((off >> (bits - 1)) & 1) != 0) rel = (intb)(off | (~(uintb)0 << bits));
++	  below = rel + size <= 0;
++	}
++	if (!below)
++	  fd->noteFrameCall(fc->getOp(),addr.getOffset(),size);
++      }
+       indop = fd->newIndirectOp(fc->getOp(),addr,size,0);
+       indop->getIn(0)->setActiveHeritage();
+       indop->getOut()->setActiveHeritage();
+@@ -3408,23 +3430,56 @@ void Heritage::renameRecurse(BlockBasic *bl,VariableStack &varstack)
    }
  }
  
@@ -507,7 +590,7 @@ index ab0e55e..9e55ef4 100644
    fd->setRestartPending(true);
  }
  
-@@ -3556,7 +3597,20 @@ void Heritage::heritage(void)
+@@ -3556,7 +3611,20 @@ void Heritage::heritage(void)
        if (prev == 0)		// All new location being heritaged, or intersecting with something new
  	disjoint.add((*liter).first,(*liter).second.size,MemRange::new_addresses);
        else if (prev==2) { // If completely contained in range from previous pass
@@ -529,7 +612,7 @@ index ab0e55e..9e55ef4 100644
  	if (vn->hasNoDescend()) continue;
  	if ((!needwarning)&&(info->deadremoved>0)&&!fd->isJumptableRecoveryOn()) {
  	  needwarning = true;
-@@ -3569,7 +3623,7 @@ void Heritage::heritage(void)
+@@ -3569,7 +3637,7 @@ void Heritage::heritage(void)
  	disjoint.add((*liter).first,(*liter).second.size,MemRange::old_addresses | MemRange::new_addresses);
  	if ((!needwarning)&&(info->deadremoved>0)&&!fd->isJumptableRecoveryOn()) {
  	  // TODO: We should check if this varnode is tiled by previously heritaged ranges
@@ -538,7 +621,7 @@ index ab0e55e..9e55ef4 100644
  		  // In most cases, a truly new overlapping read will hit the bumpDeadcodeDelay either here or in prev==2
  	  needwarning = true;
  	  bumpDeadcodeDelay(vn->getSpace());
-@@ -3602,6 +3656,7 @@ void Heritage::heritage(void)
+@@ -3602,6 +3670,7 @@ void Heritage::heritage(void)
    analyzeNewLoadGuards();
    widenEscapedStoreGuards();	// SaturnExplorer (patches/0061-engine-stack-frame-escape.patch)
    handleNewLoadCopies();
@@ -546,7 +629,7 @@ index ab0e55e..9e55ef4 100644
    if (pass == 0)
      splitmanage.splitAdditional();
    pass += 1;
-@@ -3728,6 +3783,7 @@ void Heritage::clear(void)
+@@ -3728,6 +3797,7 @@ void Heritage::clear(void)
    storeGuard.clear();
    maxdepth = -1;
    pass = 0;
