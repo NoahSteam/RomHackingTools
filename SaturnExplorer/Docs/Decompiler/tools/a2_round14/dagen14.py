@@ -26,8 +26,10 @@
 #               bra with a slot, two chained delayed branches
 #   76 condprop one condition read by several branches with T-preserving code between (ConditionalExecution), x == c with x used in the true arm
 #               (ActionConditionalConst), a chain of equality tests, a loop whose exit test is repeated
+#   77 multiword 96- and 128-bit values in r4..r7: a constant added through the carries, added to itself, negated, a rotated copy subtracted, the borrow as a compare,
+#               shifted one bit through T
 #   72 mix      two or three blocks of the families above in a row (the result of one the input of the next)
-# usage: dagen14.py <first seed> <count> [family 62..76]   -> one function per seed, ";" joined (SE_GENERATED_PRINTEDC_WORDS)
+# usage: dagen14.py <first seed> <count> [family 62..77]   -> one function per seed, ";" joined (SE_GENERATED_PRINTEDC_WORDS)
 #        dagen14.py extras <first seed> <count> <family>   -> the comma-joined hex list for SE_GENERATED_PRINTEDC_EXTRA
 import importlib.util, os, random, sys
 
@@ -757,6 +759,48 @@ def fam_condprop(r, f):
     f.add(*nt_op(r, 0, 2)) if r.random() < 0.5 else f.add(xor_(2, 0))
 
 
+# ------------------------------------------------------------------------------------------------------------------------------------ 77 multiword
+def fam_multiword(r, f):
+    # a 96- or 128-bit value (r5..r7 or r4..r7, high word first) copied to r1..r3 or r0..r3: a 32-bit constant added through the carries, the value added to itself,
+    # negated, a rotated copy of its words subtracted, the borrow of that read as a compare, shifted one bit right or left through T; the words combined to one result
+    nw = r.choice([3, 4])
+    srcs = [4, 5, 6, 7][4 - nw:]
+    dst = [0, 1, 2, 3][4 - nw:]
+    for d_, s_ in zip(dst, srcs): f.add(mov_(d_, s_))
+    op = r.randrange(0, 7)
+    rot = srcs[1:] + srcs[:1]
+    if op == 0:             # += a 32-bit constant, the carry through the other words
+        f.lit(7, r.choice([1, 0xFFFFFFFF, 0x80000000, 0x7FFFFFFF, r.getrandbits(32)])); f.add(movi(6, 0), 0x0008, addc(7, dst[-1]))
+        for d_ in reversed(dst[:-1]): f.add(addc(6, d_))
+    elif op == 1:           # the value added to itself
+        f.add(0x0008)
+        for d_ in reversed(dst): f.add(addc(d_, d_))
+    elif op == 2:           # negated
+        f.add(0x0008)
+        for d_ in reversed(dst): f.add(negc(d_, d_))
+    elif op == 3 or op == 4:   # minus a rotated copy of its own words; the borrow read for the compare
+        f.add(0x0008)
+        for d_, s_ in zip(reversed(dst), reversed(rot)): f.add(subc(s_, d_))
+        if op == 4:
+            f.add(movt(7))
+            f.add(mov_(0, 7))
+            return
+    elif op == 5:           # shifted right one bit through T (arithmetic or logical on the top word)
+        f.add((SHAR if r.random() < 0.4 else SHLR) | dst[0] << 8)
+        for d_ in dst[1:]: f.add(ROTCR | d_ << 8)
+    else:                   # shifted left one bit through T
+        f.add(SHLL | dst[-1] << 8)
+        for d_ in reversed(dst[:-1]): f.add(ROTCL | d_ << 8)
+    k = r.randrange(0, 4)
+    if k == 0: f.add(mov_(0, dst[0])) if dst[0] != 0 else None
+    elif k == 1:
+        for d_ in dst:
+            if d_ != 0: f.add(xor_(d_, 0)) if 0 not in dst else f.add(xor_(d_, dst[0]))
+    elif k == 2:
+        for d_ in dst[1:]: f.add(add__(d_, dst[0]))
+        if dst[0] != 0: f.add(mov_(0, dst[0]))
+    else: f.add(mov_(0, dst[-1]))
+
 # ------------------------------------------------------------------------------------------------------------------------------------ 72 mix
 MIXFAMS = None
 
@@ -779,7 +823,7 @@ def fam_mix(r, f):
             f.add(mov_(r.choice([4, 4, 5]), 0))
 
 FAMS14 = {62: fam_shmul, 63: fam_muldi, 64: fam_shift64, 65: fam_cmpstr, 66: fam_bitops, 67: fam_divterm, 68: fam_div1len, 69: fam_cmov, 70: fam_divdiv,
-          71: fam_varshift, 72: fam_mix, 73: fam_signmod, 74: fam_deepsoup, 75: fam_delaybr, 76: fam_condprop}
+          71: fam_varshift, 72: fam_mix, 73: fam_signmod, 74: fam_deepsoup, 75: fam_delaybr, 76: fam_condprop, 77: fam_multiword}
 
 def build(seed, fam=None, want_fn=False):
     r = random.Random(seed * 104729 + 14)
