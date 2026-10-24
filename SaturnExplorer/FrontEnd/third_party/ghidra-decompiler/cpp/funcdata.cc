@@ -263,6 +263,22 @@ void Funcdata::noteFrameCall(const PcodeOp *op,uintb off,int4 size)
   frameCalls.push_back(rec);
 }
 
+/// SaturnExplorer (patches/0068-engine-deadcode-late-stack-reads.patch): the guard heritage put on a stack local at a
+/// call is removed because the local has no alias there (RuleAliasUpdate: no pointer to it can reach the call), so the
+/// call is no read of it: the records of the call that overlap the local go.
+/// \param op is the call
+/// \param off is the local's offset in the stack space
+/// \param size is its size
+void Funcdata::dropFrameCall(const PcodeOp *op,uintb off,int4 size)
+
+{
+  for(size_t i=frameCalls.size();i>0;--i) {
+    const FrameCallRecord &rec(frameCalls[i-1]);
+    if (rec.time != op->getTime() || rec.offset >= off + size || off >= rec.offset + rec.size) continue;
+    frameCalls.erase(frameCalls.begin() + (i-1));
+  }
+}
+
 /// SaturnExplorer (patches/0068-engine-deadcode-late-stack-reads.patch): the PIECEs and SUBPIECEs now in the
 /// function are checked for sizes that add up -- a PIECE's inputs to its output, a SUBPIECE's output and truncation
 /// within its input. One that does not is a value no instruction computed, and the accesses whose values flow

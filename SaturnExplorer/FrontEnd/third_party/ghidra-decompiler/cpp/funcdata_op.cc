@@ -1837,6 +1837,8 @@ void Funcdata::opCollapseIndirectsForAlias(PcodeOp *effectOp)
       shouldDestroy = true;
 
     if (shouldDestroy) {
+      if (op->getOut()->getSpace()->getType() == IPTR_SPACEBASE)
+	dropFrameCall(effectOp,op->getOut()->getOffset(),op->getOut()->getSize());	// SaturnExplorer (0068): no read of it
       totalReplace(op->getOut(),op->getIn(0));
       if (iter == bb->beginOp()) {
 	opDestroy(op);		// Get rid of the INDIRECT
