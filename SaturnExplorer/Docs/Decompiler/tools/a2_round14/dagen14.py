@@ -20,7 +20,7 @@
 #   70 divdiv   (x / d1) / d2, (x % d1) % d2, (x >> a) / d, x / (power of two) / d and negative divisors, signed and unsigned (RuleDivChain, RuleSignDiv2)
 #   71 varshift variable shifts and rotates of a register and of a pair by a counted loop over (r5 & 31), the amount 0 skipped
 #   73 signmod  x % 2^k and x / 2^k of a signed byte, word or longword for every k (the bias added to a negative x by a branch or without one; RuleSignMod2nOpt2);
-#               forms 5 to 7: RuleSignMod2nOpt, RuleSignMod2Opt and the sign-based quotient; form 8: the remainder's shape with the sign test on another register (A2-92: not a remainder; a mismatch until fixed)
+#               forms 5 to 7: RuleSignMod2nOpt, RuleSignMod2Opt and the sign-based quotient; form 8: the remainder's shape with the sign test on another register (A2-92: not a remainder; a mismatch until fixed), and, from round 14's fix, the same for the sign-based forms 5 to 7 (the sign taken from another register)
 #   74 deepsoup 15 to 45 steps over r0..r3 with the T flag produced and consumed in every way (compares, tst, cmp/str, dt, addc/subc/negc/addv/subv, div0/div1, rotcl/rotcr, movt),
 #               the multiplies and their mach/macl reads, extensions, swaps, forward branches over one to three steps
 #   75 delaybr  delayed branches with working slots: bf/s closing a counted loop (the slot's T read after), forward bt/s and bf/s with T consumers in the slot,
@@ -606,9 +606,18 @@ def fam_signmod(r, f):
         f.add(mov_(2, src)); shr_arith(f, 2, 31); shr_logical(f, 2, 32 - k); f.add(add__(src, 2), mov_(0, 2)); shr_arith(f, 0, k)
     elif form == 8:                    # A2-92: x % 2^k with the sign test on ANOTHER register (the bias is added when that register is negative): not a remainder
         other = r.choice([5, 6, 7])
-        f.add(mov_(0, src), mov_(1, src), cmppz(other)); f.br('bt', 'p')
-        ld_bias(3); f.add(add__(3, 1)); f.label('p')
-        f.lit(2, (~bias) & M32); f.add(and__(2, 1), sub__(1, 0))
+        sib = r.randrange(0, 4)        # round 14 fix: 0 the branch form (RuleSignMod2nOpt2), 1 to 3 the sign-based rules of forms 5 to 7 with the sign of the other register
+        if sib == 0:
+            f.add(mov_(0, src), mov_(1, src), cmppz(other)); f.br('bt', 'p')
+            ld_bias(3); f.add(add__(3, 1)); f.label('p')
+            f.lit(2, (~bias) & M32); f.add(and__(2, 1), sub__(1, 0))
+        elif sib == 1:                 # RuleSignMod2nOpt: adj = (W s>> 31) >>> (32 - k) of ANOTHER register W, (V + adj) & mask - adj
+            f.add(mov_(2, other)); shr_arith(f, 2, 31); shr_logical(f, 2, 32 - k)
+            f.add(mov_(3, src), add__(2, 3)); f.lit(0, bias); f.add(and__(0, 3), sub__(2, 3), mov_(0, 3))
+        elif sib == 2:                 # RuleSignMod2Opt: sign = W s>> 31 of another register, (V - sign) & 1 + sign
+            f.add(mov_(2, other)); shr_arith(f, 2, 31); f.add(mov_(3, src), sub__(2, 3), mov_(0, 3), andi(1), add__(2, 0))
+        else:                          # RuleSignDiv2 and the sign-based quotient: (V + ((W s>> 31) >>> (32 - k))) s>> k
+            f.add(mov_(2, other)); shr_arith(f, 2, 31); shr_logical(f, 2, 32 - k); f.add(add__(src, 2), mov_(0, 2)); shr_arith(f, 0, k)
     else:                              # the remainder by the mask directly when x is known non-negative, after a test
         f.add(mov_(0, src)); f.lit(2, bias); f.add(and__(2, 0))
         f.add(cmppz(src)); f.br('bt', 'q'); f.add(tstr(0, 0)); f.br('bt', 'q'); f.lit(3, (~bias) & M32); f.add(or__(3, 0)); f.label('q')

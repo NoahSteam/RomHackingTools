@@ -23,6 +23,7 @@
  * Modified for SaturnExplorer: the entry stack pointer a loop walks down is no reference to a stack parameter, and a save slot it reaches stays mapped (patches/0056-engine-stack-walk-down-aliases.patch).
  * Modified for SaturnExplorer: so does a save slot an indexed store's guard covers (patches/0063-engine-frame-escape-unknown-pointers.patch).
  * Modified for SaturnExplorer: the walk down's bound keeps a stack parameter reference (patches/0066-engine-frame-escape-inexact.patch).
+ * Modified for SaturnExplorer: ActionLateDoNothing tests each block again against the graph the earlier removals left, so the two empty arms of one branch are not both removed (patches/0067-engine-round14-sign-mod-late-donothing-three-way-shift-sub.patch).
  */
 #include "coreaction.hh"
 #include "condexe.hh"
@@ -3784,6 +3785,12 @@ int4 ActionLateDoNothing::apply(Funcdata &data)
     }
   }
   for(int4 i=0;i<removeList.size();++i) {
+    // SaturnExplorer (patches/0067-engine-round14-sign-mod-late-donothing-three-way-shift-sub.patch): the test above looked at the graph before any block of the list was
+    // removed, so the two empty arms of one conditional each passed it (neither edge led to the other's exit yet) and both were removed: a CBRANCH
+    // with both edges to the same block, which no ActionRedundBranch follows this late. The structuring then folded the branch into a condition block with
+    // one out edge and gave it a second, to itself (printed as an endless `do { } while (c || !c)`), or failed to finish. Each block is tested again against the
+    // graph the earlier removals left.
+    if (!removeList[i]->isDoNothing() || removingCreatesRedundancy(removeList[i]) || !removeList[i]->unblockedMulti(0)) continue;
     data.removeDoNothingBlock(removeList[i]);
     count += 1;
   }
