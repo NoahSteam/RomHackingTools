@@ -28,8 +28,9 @@
 #               (ActionConditionalConst), a chain of equality tests, a loop whose exit test is repeated
 #   77 multiword 96- and 128-bit values in r4..r7: a constant added through the carries, added to itself, negated, a rotated copy subtracted, the borrow as a compare,
 #               shifted one bit through T
+#   78 randprog a random structured program over r0 and r1: arithmetic, triangles, diamonds and bounded loops up to three levels deep on random compares
 #   72 mix      two or three blocks of the families above in a row (the result of one the input of the next)
-# usage: dagen14.py <first seed> <count> [family 62..77]   -> one function per seed, ";" joined (SE_GENERATED_PRINTEDC_WORDS)
+# usage: dagen14.py <first seed> <count> [family 62..78]   -> one function per seed, ";" joined (SE_GENERATED_PRINTEDC_WORDS)
 #        dagen14.py extras <first seed> <count> <family>   -> the comma-joined hex list for SE_GENERATED_PRINTEDC_EXTRA
 import importlib.util, os, random, sys
 
@@ -38,6 +39,11 @@ spec = importlib.util.spec_from_file_location("dagen13", os.path.join(here, ".."
 d13 = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(d13)
 globals().update({k: v for k, v in vars(d13).items() if not k.startswith('__')})
+
+_s10 = importlib.util.spec_from_file_location("dagen10", os.path.join(here, "..", "a2_round10", "dagen10.py"))
+_d10 = importlib.util.module_from_spec(_s10)
+_s10.loader.exec_module(_d10)
+op2 = _d10.op2        # one register-register or unary op writing rd (the generic step of the round 10 families)
 
 def cmp_str(m, n): return 0x200C | n << 8 | m << 4
 def div0u(): return 0x0019
@@ -821,6 +827,53 @@ def fam_multiword(r, f):
         if dst[0] != 0: f.add(mov_(0, dst[0]))
     else: f.add(mov_(0, dst[-1]))
 
+# ------------------------------------------------------------------------------------------------------------------------------------ 78 randprog
+def fam_randprog(r, f):
+    # a random structured program over r0 and r1 (r4..r7 read-only, r2 and r3 the counters of up to two nested loops of 1 to 4 turns): arithmetic (the op2 of
+    # dagen10), triangles and diamonds on a random compare of two registers or a register and a constant, bounded loops, up to three levels deep, 6 to 22 statements;
+    # the result is handed back by the rts slot. Builds the shapes the structural rules (conditional move, push/collapse of a MULTIEQUAL, the predicate rules, the
+    # conditional execution) see, at random, with the T flag produced by one statement and consumed by the next.
+    f.add(mov_(0, 4), mov_(1, 5))
+    cnt = [0]
+    budget = [r.randrange(6, 23)]
+    def newl():
+        cnt[0] += 1
+        return 'R%d' % cnt[0]
+    def regs(): return r.choice([0, 1]), r.choice([0, 1, 4, 5, 6, 7])
+    def arith():
+        a, b = regs()
+        f.add(*op2(r, a, b))
+    def cond():
+        a, b = regs()
+        k = r.randrange(0, 9)
+        if k < 5: f.add([cmpeq, cmphi, cmphs, cmpgt, cmpge][k](b, a))
+        elif k == 5: f.add(cmppz(a))
+        elif k == 6: f.add(cmppl(a))
+        elif k == 7: f.add(tstr(b, a))
+        else: f.add(0x8800 | r.choice([0, 1, 0x7F, 0x80, 0xFF])) if True else None
+    def block(depth, n):
+        for _ in range(n):
+            if budget[0] <= 0: return
+            budget[0] -= 1
+            k = r.random()
+            if depth < 3 and k < 0.22:                     # diamond
+                cond(); a, b = newl(), newl()
+                f.br(r.choice(['bt', 'bf']), a); block(depth + 1, r.randrange(1, 3))
+                f.br('bra', b); f.add(0x0009); f.label(a); block(depth + 1, r.randrange(1, 3)); f.label(b)
+            elif depth < 3 and k < 0.40:                   # triangle
+                cond(); a = newl()
+                f.br(r.choice(['bt', 'bf']), a); block(depth + 1, r.randrange(1, 3)); f.label(a)
+            elif depth < 2 and k < 0.50:                   # a bounded loop
+                ctr = 2 + depth
+                f.add(movi(ctr, r.randrange(1, 5))); top = newl(); f.label(top)
+                block(depth + 1, r.randrange(1, 3)); f.add(dt(ctr)); f.br('bf', top)
+            else:
+                arith()
+    block(0, r.randrange(3, 9))
+    f.add(r.choice([xor_, add__, or__, and__, sub__])(1, 0)) if r.random() < 0.4 else None
+    f.rts_slot = mov_(0, 1)          # `return r1`, the compiled idiom the printed-C oracle reads as a result
+
+
 # ------------------------------------------------------------------------------------------------------------------------------------ 72 mix
 MIXFAMS = None
 
@@ -843,7 +896,7 @@ def fam_mix(r, f):
             f.add(mov_(r.choice([4, 4, 5]), 0))
 
 FAMS14 = {62: fam_shmul, 63: fam_muldi, 64: fam_shift64, 65: fam_cmpstr, 66: fam_bitops, 67: fam_divterm, 68: fam_div1len, 69: fam_cmov, 70: fam_divdiv,
-          71: fam_varshift, 72: fam_mix, 73: fam_signmod, 74: fam_deepsoup, 75: fam_delaybr, 76: fam_condprop, 77: fam_multiword}
+          71: fam_varshift, 72: fam_mix, 73: fam_signmod, 74: fam_deepsoup, 75: fam_delaybr, 76: fam_condprop, 77: fam_multiword, 78: fam_randprog}
 
 def build(seed, fam=None, want_fn=False):
     r = random.Random(seed * 104729 + 14)
