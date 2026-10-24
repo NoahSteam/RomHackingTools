@@ -1,6 +1,6 @@
 #!/bin/bash
 # usage: replayfix13.sh <rulefuzz13 built by build13.sh against the engine under test> <scratch dir>
-# Replays the rule-level seeds of ledger rows A2-82 to A2-87 and A2-89 (one graph each, depth 3) with the environment each was found with. On an engine with patch 0064
+# Replays the rule-level seeds of ledger rows A2-82 to A2-87 and A2-90 (one graph each, depth 3) with the environment each was found with. On an engine with patch 0064
 # every seed has 0 wrong applications; on the engine of round 13's head (0062 only) each of the 16 has 1. Exit status 1 if any seed is wrong.
 bin=$1; scratch=$2; mkdir -p "$scratch"; bad=0
 run() { # row, environment, seed
@@ -26,5 +26,5 @@ run A2-85 "RF_WIDE=1" 102166
 run A2-86 "RF_CONSUME=1" 685387
 run A2-87 "RF_CONSUME=1" 304378
 run A2-87 "RF_CONSUME=1" 411738
-run A2-89 "RF_WIDE=1" 301341
+run A2-90 "RF_WIDE=1" 301341
 exit $bad

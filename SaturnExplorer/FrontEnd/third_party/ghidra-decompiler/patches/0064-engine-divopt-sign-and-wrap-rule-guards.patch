@@ -35,7 +35,7 @@ diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/ruleaction.cc b/Ghidra
   * Modified for SaturnExplorer: RuleDivTermAdd and RuleDivTermAdd2 keep a product that overflows only for a division; RulePiecePathology needs the register it names (patches/0037-engine-division-piece-and-input-names.patch).
   * Modified for SaturnExplorer: RuleDivTermAdd and RuleDivTermAdd2 keep an overflowing product only when the shifts that follow stay inside the multiply (patches/0044-engine-round5-printed-value-fixes.patch).
   * Modified for SaturnExplorer: RuleScarry refuses the minimum for either operand; RuleRightShiftAnd keeps the mask of a shift by the width or more; RuleSLess2Zero takes the high bit of a sum only from an operand when the other has none (patches/0062-engine-range-set-ops-and-rule-guards.patch).
-+ * Modified for SaturnExplorer: RuleDivOpt refuses a multiply that wraps and a sign extension shifted logically (or a zero extension shifted arithmetically) whose difference is read; RuleDivTermAdd and RuleDivTermAdd2 need the original product not to wrap; RuleDivChain, RuleSignForm2, RuleThreeWayCompare and the rules that read a shift amount check what they read (patches/0064-engine-divopt-sign-and-wrap-rule-guards.patch).
++ * Modified for SaturnExplorer: RuleDivOpt refuses a multiply that wraps and a sign extension shifted logically (or a zero extension shifted arithmetically) whose difference is read; RuleDivTermAdd and RuleDivTermAdd2 need the original product not to wrap, and RuleDivTermAdd the sum not to wrap its add; RuleDivChain, RuleSignForm2, RuleThreeWayCompare and the rules that read a shift amount check what they read (patches/0064-engine-divopt-sign-and-wrap-rule-guards.patch).
   */
  #include "ruleaction.hh"
  #include "coreaction.hh"
@@ -104,7 +104,7 @@ diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/ruleaction.cc b/Ghidra
    int4 n = shiftop->getIn(1)->getOffset();
    int4 c = op->getIn(1)->getOffset();
    int4 k = (n/8);
-@@ -7916,12 +7937,17 @@ int4 RuleDivTermAdd::applyOp(PcodeOp *op,Funcdata &data)
+@@ -7916,12 +7937,38 @@ int4 RuleDivTermAdd::applyOp(PcodeOp *op,Funcdata &data)
      if (op->code()==CPUI_INT_RIGHT) return 0;
    }
  
@@ -115,6 +115,27 @@ diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/ruleaction.cc b/Ghidra
 +  // shift of the width or more has no multiplier of the multiply's width to fold into.
 +  if (n >= (uint4)8*extvn->getSize()) return 0;
 +  if (!divTermProductFits(multConst,xbits,extvn->getSize(),opc == CPUI_INT_SEXT)) return 0;
++  // ...and the sum must not wrap the add it replaces: the add keeps the low bytes of the exact sum, and the division RuleDivOpt makes of the folded product is
++  // the exact one. `hi + x` of an unsigned x (mulhu, then add) wraps for a large x, and `(hi + x) >> 16` was printed `x / 0xd20b`, a quotient of 17 bits where the
++  // code keeps 16 (the multiply by 0x38032949, the high word, the sum). The exact sum is below 2^xbits + 2^k, k the bits of x * c beyond n. A negative multiplier
++  // of a sign extension (the signed divisions' `hi + x` with hi the high word of x * (m - 2^32)) is the exception: the sum is x less a part of it, and fits as x does.
++  if (extvn->getSize() <= 8) {
++    const int4 addBits = 8 * x->getSize();
++    const uintb cmask = calc_mask(extvn->getSize());
++    const uintb cv = multConst[0] & cmask;
++    bool sumFits;
++    if (opc == CPUI_INT_SEXT && signbit_negative(cv,extvn->getSize())) {
++      uintb magnitude = (~cv + 1) & cmask;
++      sumFits = magnitude <= (((uintb)1) << n);
++    }
++    else {
++      int4 cbits = 64 - count_leading_zeros(cv);
++      int4 k = ((int4)xbits + cbits > (int4)n) ? (int4)xbits + cbits - (int4)n : 0;
++      int4 top = ((int4)xbits > k ? (int4)xbits : k) + 1;
++      sumFits = (opc == CPUI_INT_SEXT) ? (top <= addBits - 1) : (top <= addBits);
++    }
++    if (!sumFits) return 0;
++  }
    uint8 power[2];
    set_u128(power, 1);
    leftshift128(power,power,n);		// power = 2^n
@@ -124,7 +145,7 @@ diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/ruleaction.cc b/Ghidra
  
    list<PcodeOp *>::const_iterator iter;
    for(iter=op->getOut()->beginDescend();iter!=op->getOut()->endDescend();++iter) {
-@@ -7930,7 +7956,8 @@ int4 RuleDivTermAdd::applyOp(PcodeOp *op,Funcdata &data)
+@@ -7930,7 +7977,8 @@ int4 RuleDivTermAdd::applyOp(PcodeOp *op,Funcdata &data)
      if ((addop->getIn(0)!=x)&&(addop->getIn(1)!=x))
        continue;
      // The new product may need more bits than the multiply has, which is only acceptable on the way to a division
@@ -134,7 +155,7 @@ diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/ruleaction.cc b/Ghidra
  	!divTermIsDivided(addop->getOut(),n,multConst,xbits,(opc == CPUI_INT_SEXT) ? CPUI_INT_SRIGHT : CPUI_INT_RIGHT,extvn->getSize()))
        continue;
  
-@@ -7944,6 +7971,7 @@ int4 RuleDivTermAdd::applyOp(PcodeOp *op,Funcdata &data)
+@@ -7944,6 +7992,7 @@ int4 RuleDivTermAdd::applyOp(PcodeOp *op,Funcdata &data)
      data.opSetInput(newmultop,extvn,0);
      data.opSetInput(newmultop,newConstVn,1);
      data.opInsertBefore(newmultop,op);
@@ -142,7 +163,7 @@ diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/ruleaction.cc b/Ghidra
  
      PcodeOp *newshiftop = data.newOp(2,op->getAddr());
      if (shiftopc == CPUI_MAX)
-@@ -8070,10 +8098,14 @@ int4 RuleDivTermAdd2::applyOp(PcodeOp *op,Funcdata &data)
+@@ -8070,10 +8119,14 @@ int4 RuleDivTermAdd2::applyOp(PcodeOp *op,Funcdata &data)
      set_u128(pow, 1);
      leftshift128(pow,pow,n);		// Calculate 2^n
      uint8 newConst[2];
@@ -159,7 +180,7 @@ diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/ruleaction.cc b/Ghidra
  	!divTermIsDivided(addop->getOut(),n+1,newConst,xbits,CPUI_INT_RIGHT,zextvn->getSize()))
        continue;
      multConst[0] = newConst[0];
-@@ -8085,6 +8117,7 @@ int4 RuleDivTermAdd2::applyOp(PcodeOp *op,Funcdata &data)
+@@ -8085,6 +8138,7 @@ int4 RuleDivTermAdd2::applyOp(PcodeOp *op,Funcdata &data)
      Varnode *newConstVn = data.newExtendedConstant(zextvn->getSize(), multConst, op);
      data.opSetInput(newmultop,newConstVn,1);
      data.opInsertBefore(newmultop,op);
@@ -167,7 +188,7 @@ diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/ruleaction.cc b/Ghidra
  
      PcodeOp *newshiftop = data.newOp(2,op->getAddr());
      data.opSetOpcode(newshiftop,CPUI_INT_RIGHT);
-@@ -8101,6 +8134,67 @@ int4 RuleDivTermAdd2::applyOp(PcodeOp *op,Funcdata &data)
+@@ -8101,6 +8155,67 @@ int4 RuleDivTermAdd2::applyOp(PcodeOp *op,Funcdata &data)
    return 0;
  }
  
@@ -235,7 +256,7 @@ diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/ruleaction.cc b/Ghidra
  /// \brief Check for INT_(S)RIGHT and/or SUBPIECE followed by INT_MULT
  ///
  /// Look for the forms:
-@@ -8127,12 +8221,16 @@ Varnode *RuleDivOpt::findForm(PcodeOp *op,uint4 &n,uint8 *y,uint4 &xsize,OpCode
+@@ -8127,12 +8242,16 @@ Varnode *RuleDivOpt::findForm(PcodeOp *op,uint4 &n,uint8 *y,uint4 &xsize,OpCode
  {
    PcodeOp *curOp = op;
    OpCode shiftopc = curOp->code();
@@ -252,7 +273,7 @@ diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/ruleaction.cc b/Ghidra
      curOp = vn->getDef();
    }
    else {
-@@ -8194,7 +8292,20 @@ Varnode *RuleDivOpt::findForm(PcodeOp *op,uint4 &n,uint8 *y,uint4 &xsize,OpCode
+@@ -8194,7 +8313,20 @@ Varnode *RuleDivOpt::findForm(PcodeOp *op,uint4 &n,uint8 *y,uint4 &xsize,OpCode
        return (Varnode *)0;
      // op's signedness does not matter because all the extension
      // bits are truncated
@@ -273,7 +294,7 @@ diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/ruleaction.cc b/Ghidra
    return resVn;
  }
  
-@@ -8362,6 +8473,14 @@ int4 RuleDivOpt::applyOp(PcodeOp *op,Funcdata &data)
+@@ -8362,6 +8494,14 @@ int4 RuleDivOpt::applyOp(PcodeOp *op,Funcdata &data)
    uintb divisor = calcDivisor(n,y,xsize);
    if (divisor == 0) return 0;
    int4 outSize = op->getOut()->getSize();
@@ -288,7 +309,7 @@ diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/ruleaction.cc b/Ghidra
  
    if (inVn->getSize() < outSize) {	// Do we need an extension to get to final size
      PcodeOp *inExt = data.newOp(1,op->getAddr());
-@@ -8494,6 +8613,9 @@ int4 RuleDivChain::applyOp(PcodeOp *op,Funcdata &data)
+@@ -8494,6 +8634,9 @@ int4 RuleDivChain::applyOp(PcodeOp *op,Funcdata &data)
      val1 = constVn1->getOffset();
    }
    else {	// Unsigned case with INT_RIGHT
@@ -298,7 +319,7 @@ diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/ruleaction.cc b/Ghidra
      int4 sa = constVn1->getOffset();
      val1 = 1;
      val1 <<= sa;
-@@ -8504,10 +8626,16 @@ int4 RuleDivChain::applyOp(PcodeOp *op,Funcdata &data)
+@@ -8504,10 +8647,16 @@ int4 RuleDivChain::applyOp(PcodeOp *op,Funcdata &data)
    uintb val2 = constVn2->getOffset();
    uintb resval = (val1 * val2) & calc_mask(sz);
    if (resval == 0) return 0;
@@ -319,7 +340,7 @@ diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/ruleaction.cc b/Ghidra
    int4 bitcount = mostsigbit_set(val1) + mostsigbit_set(val2) + 2;
    if (opc2 == CPUI_INT_DIV && bitcount > sz * 8 ) return 0;	// Unsigned overflow
    if (opc2 == CPUI_INT_SDIV && bitcount > sz * 8 - 2) return 0;	// Signed overflow
-@@ -8590,15 +8718,13 @@ int4 RuleSignForm2::applyOp(PcodeOp *op,Funcdata &data)
+@@ -8590,15 +8739,13 @@ int4 RuleSignForm2::applyOp(PcodeOp *op,Funcdata &data)
    if (a->isFree() || a->getSize() != sizeout) return 0;
    Varnode *otherVn = multOp->getIn(1-slot);
    // otherVn must be a positive integer and small enough so the INT_MULT can't overflow into the sign-bit
@@ -338,7 +359,7 @@ diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/ruleaction.cc b/Ghidra
    else
      return 0;
    data.opSetInput(op, a, 0);
-@@ -10090,13 +10216,21 @@ int4 RuleThreeWayCompare::testCompareEquivalence(PcodeOp *lessop,PcodeOp *lesseq
+@@ -10090,13 +10237,21 @@ int4 RuleThreeWayCompare::testCompareEquivalence(PcodeOp *lessop,PcodeOp *lesseq
    Varnode *b1 = lessop->getIn(1);
    Varnode *b2 = lessequalop->getIn(1);
    int4 res = 0;
@@ -360,7 +381,7 @@ diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/ruleaction.cc b/Ghidra
  	twoLessThan = false;		// -lessop- is LESSTHAN, equivalent to LESSEQUAL
  	res = 1;			// we need to swap
        }
-@@ -10108,9 +10242,11 @@ int4 RuleThreeWayCompare::testCompareEquivalence(PcodeOp *lessop,PcodeOp *lesseq
+@@ -10108,9 +10263,11 @@ int4 RuleThreeWayCompare::testCompareEquivalence(PcodeOp *lessop,PcodeOp *lesseq
      if ((!b1->isConstant())||(!b2->isConstant())) return -1;
      if ((b1->getOffset() != b2->getOffset())&&twoLessThan) {
        if (b1->getOffset() + 1 == b2->getOffset()) {
@@ -372,7 +393,7 @@ diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/ruleaction.cc b/Ghidra
  	twoLessThan = false;
  	res = 1;			// we need to swap
        }
-@@ -10788,7 +10924,8 @@ int4 RuleLzcountShiftBool::applyOp(PcodeOp *op,Funcdata &data)
+@@ -10788,7 +10945,8 @@ int4 RuleLzcountShiftBool::applyOp(PcodeOp *op,Funcdata &data)
      Varnode *vn1 = baseOp->getIn(1);
      if (!vn1->isConstant()) continue;
      uintb shift = vn1->getOffset();

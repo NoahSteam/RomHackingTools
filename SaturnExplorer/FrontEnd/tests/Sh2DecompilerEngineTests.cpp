@@ -3197,20 +3197,21 @@ void TestRuleGuardsRound13()
         const uint64_t cs[] = { 0x7fff, 0x7fffffff, 0xfffffffe, 0xfffe, 0x92492493, 0x24924925, 0xAAAAAAAB, 0x5556, 0x2493, 0x4925, 3, 0x81, 0xff };
         for (int xs : { 1, 2, 4 })
             for (OpCode ext : { CPUI_INT_ZEXT, CPUI_INT_SEXT })
-                for (int cIndex = 0; cIndex < 13 + 32; ++cIndex)
+                for (int cIndex = 0; cIndex < 13 + 34; ++cIndex)
                     for (int shape = 0; shape < 3; ++shape)   // 0: sub + shift + x, 1: sub + x (no shift), 2: x + ((x - w) >> 1) (RuleDivTermAdd2, zero extension)
                         for (int s : { 0, 1, 2, 3, 7, 8 * xs, 8 * xs + 1 })
-                         for (int k2 : { 0, 2, 3 })     // the shift after the sum (what makes the sum a division)
+                         for (int k2 : { 0, 2, 3, 4 * xs })     // the shift after the sum (what makes the sum a division)
                         {
                             // the multipliers: the table, and for each of sixteen divisors the one whose sum with 2^n is that division's (so that the folded product is a
-                            // division on the way, whether or not the product it started from fitted its multiply)
+                            // division on the way, whether or not the product it started from fitted its multiply; 53771 with a shift of 16 after the sum is
+                            // A2-89's `(mulhu(x, 0x38032949) + x) >> 16`, whose sum wraps its add)
                             const int nBits = 8 * xs + (shape == 2 ? 0 : s);
                             const int totalShift = nBits + (shape == 2 ? 1 : 0) + k2;
                             uint64_t c0;
                             if (cIndex < 13) c0 = cs[cIndex];
                             else
                             {
-                                const uint64_t divisors[] = { 3, 5, 6, 7, 9, 10, 11, 12, 13, 14, 25, 100, 641, 1000, 3000, 65537 };
+                                const uint64_t divisors[] = { 3, 5, 6, 7, 9, 10, 11, 12, 13, 14, 25, 100, 641, 1000, 3000, 65537, 53771 };
                                 if (totalShift > 62) continue;
                                 const uint64_t y = ((static_cast<uint64_t>(1) << totalShift) / divisors[(cIndex - 13) / 2]) + 1 + ((cIndex - 13) & 1);
                                 if (y <= (static_cast<uint64_t>(1) << nBits)) continue;
@@ -3252,6 +3253,27 @@ void TestRuleGuardsRound13()
                                 compare(label, sink, envs, before);
                             }
                         }
+        // A2-89: `(mulhu(x, c) + x) >> 16` of a 32-bit unsigned x: the sum wraps the 32-bit add for a large x and RuleDivTermAdd must leave it; with x of 16 bits (an AND
+        // mask) the sum fits and the rule still folds it
+        for (int masked = 0; masked < 2; ++masked)
+        {
+            t.reset();
+            Varnode* in = t.input(4);
+            Varnode* x = masked ? t.op(CPUI_INT_AND, 4, in, t.k(4, 0xffff)) : in;
+            Varnode* prod = t.op(CPUI_INT_MULT, 8, t.op(CPUI_INT_ZEXT, 8, x), t.k(8, 0x38032949));
+            Varnode* hi = t.op(CPUI_SUBPIECE, 4, prod, t.k(4, 4));
+            Varnode* sum = t.op(CPUI_INT_ADD, 4, hi, x);
+            Varnode* res = t.op(CPUI_INT_RIGHT, 4, sum, t.k(4, 16));
+            t.fd->calcNZMask();
+            std::vector<RcEnv> envs;
+            for (uint64_t vv : RcInputs(4, 0x38032949, 41, 40)) envs.push_back({ { in, vv } });
+            envs.push_back({ { in, 0xffffffff } });
+            const std::vector<uint64_t> before = RcValues(res, envs);
+            RuleDivTermAdd rule("scratch");
+            const int rc = rule.applyOp(hi->getDef(), *t.fd);
+            CHECK(rc == (masked ? 1 : 0));
+            compare("RuleDivTermAdd (the sum wraps its add)", res, envs, before);
+        }
         std::printf("RuleDivTermAdd and RuleDivTermAdd2: %ld rule applications in the pools (divtermadd %ld, divtermadd2 %ld, divopt %ld)\n", applied, g_r13Applied["divtermadd"], g_r13Applied["divtermadd2"], g_r13Applied["divopt"]);
         CHECK(g_r13Applied["divtermadd"] > 0);
         CHECK(g_r13Applied["divtermadd2"] > 0);

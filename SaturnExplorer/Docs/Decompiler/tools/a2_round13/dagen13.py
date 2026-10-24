@@ -11,7 +11,9 @@
 #                RuleSignForm)
 #   60 mulshift  an extended byte or word times a constant, shifted right (logical or arithmetic), cut or used whole: RuleDivOpt with every pairing of the extension and the shift (A2-82)
 #   59 shdiv     a value shifted right (1 to 16), then divided by a constant that is large for the shifted width (RuleDivChain, RuleDivOpt)
-# usage: dagen13.py <first seed> <count> [family 55..60]   -> one function per seed, ";" joined (SE_GENERATED_PRINTEDC_WORDS)
+#   61 mulhsum   the high word of x times a constant (dmulu.l or dmuls.l), plus or minus x, THEN shifted right (logical or arithmetic), cut or whole: the sum of
+#                RuleDivTermAdd wraps its 32-bit add for a large x, and the quotient RuleDivOpt makes of it must not (A2-89; family 56 shifts before it adds)
+# usage: dagen13.py <first seed> <count> [family 55..61]   -> one function per seed, ";" joined (SE_GENERATED_PRINTEDC_WORDS)
 #        dagen13.py extras <first seed> <count> <family>   -> the comma-joined hex list for SE_GENERATED_PRINTEDC_EXTRA
 import importlib.util, os, random, sys
 
@@ -185,7 +187,23 @@ def fam_mulshift(r, f):
     elif t == 3: f.add(add_(1, 0))
     elif t == 4: f.add(cmp_pz(0), movt(0))
 
-FAMS13 = {55: fam_soup, 56: fam_lerp, 57: fam_narrow, 58: fam_negshift, 59: fam_shdiv, 60: fam_mulshift}
+def fam_mulhsum(r, f):
+    # (mulh(x, c) +- x) >> n with the multiplier of a division (33-bit magic numbers' low words among them), unsigned and signed, so that the sum wraps its add for the
+    # large x the inputs include and the shift is of either kind
+    c = r.choice([0x38032949, 0x24924925, 0x92492493, 0xAAAAAAAB, 0x55555556, 0x80000001, 0x7FFFFFFF, 0xFFFFFFFF, 0x3, 0x51EB851F, 0xCCCCCCCD]) if r.random() < 0.5 else RAND_LITS(r)
+    f.lit(1, c)
+    f.add((dmuls if r.random() < 0.4 else dmulu)(1, 4), stsmach(0))
+    k = r.randrange(0, 3)
+    if k == 0: f.add(add_(4, 0))                       # hi + x
+    elif k == 1: f.add(sub_(4, 0))                     # hi - x
+    else: f.add(mov(2, 4), sub_(0, 2), mov(0, 2))      # x - hi
+    n = r.choice([0, 1, 2, 3, 7, 8, 15, 16, 17, 24, 31])
+    if n: (shr_arith if r.random() < 0.4 else shr_logical)(f, 0, n)
+    t = r.randrange(0, 4)
+    if t == 1: f.add(r.choice([extub, extuw, extsb, extsw])(0, 0))
+    elif t == 2: f.add(andi(r.choice([0xFF, 0x7F, 0x0F, 0x01])))
+
+FAMS13 = {55: fam_soup, 56: fam_lerp, 57: fam_narrow, 58: fam_negshift, 59: fam_shdiv, 60: fam_mulshift, 61: fam_mulhsum}
 
 def build(seed, fam=None, want_fn=False):
     r = random.Random(seed * 104729 + 13)

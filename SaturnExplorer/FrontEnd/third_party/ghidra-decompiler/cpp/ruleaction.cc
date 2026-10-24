@@ -19,7 +19,7 @@
  * Modified for SaturnExplorer: RuleDivTermAdd and RuleDivTermAdd2 keep a product that overflows only for a division; RulePiecePathology needs the register it names (patches/0037-engine-division-piece-and-input-names.patch).
  * Modified for SaturnExplorer: RuleDivTermAdd and RuleDivTermAdd2 keep an overflowing product only when the shifts that follow stay inside the multiply (patches/0044-engine-round5-printed-value-fixes.patch).
  * Modified for SaturnExplorer: RuleScarry refuses the minimum for either operand; RuleRightShiftAnd keeps the mask of a shift by the width or more; RuleSLess2Zero takes the high bit of a sum only from an operand when the other has none (patches/0062-engine-range-set-ops-and-rule-guards.patch).
- * Modified for SaturnExplorer: RuleDivOpt refuses a multiply that wraps and a sign extension shifted logically (or a zero extension shifted arithmetically) whose difference is read; RuleDivTermAdd and RuleDivTermAdd2 need the original product not to wrap; RuleDivChain, RuleSignForm2, RuleThreeWayCompare and the rules that read a shift amount check what they read (patches/0064-engine-divopt-sign-and-wrap-rule-guards.patch).
+ * Modified for SaturnExplorer: RuleDivOpt refuses a multiply that wraps and a sign extension shifted logically (or a zero extension shifted arithmetically) whose difference is read; RuleDivTermAdd and RuleDivTermAdd2 need the original product not to wrap, and RuleDivTermAdd the sum not to wrap its add; RuleDivChain, RuleSignForm2, RuleThreeWayCompare and the rules that read a shift amount check what they read (patches/0064-engine-divopt-sign-and-wrap-rule-guards.patch).
  */
 #include "ruleaction.hh"
 #include "coreaction.hh"
@@ -7944,6 +7944,27 @@ int4 RuleDivTermAdd::applyOp(PcodeOp *op,Funcdata &data)
   // shift of the width or more has no multiplier of the multiply's width to fold into.
   if (n >= (uint4)8*extvn->getSize()) return 0;
   if (!divTermProductFits(multConst,xbits,extvn->getSize(),opc == CPUI_INT_SEXT)) return 0;
+  // ...and the sum must not wrap the add it replaces: the add keeps the low bytes of the exact sum, and the division RuleDivOpt makes of the folded product is
+  // the exact one. `hi + x` of an unsigned x (mulhu, then add) wraps for a large x, and `(hi + x) >> 16` was printed `x / 0xd20b`, a quotient of 17 bits where the
+  // code keeps 16 (the multiply by 0x38032949, the high word, the sum). The exact sum is below 2^xbits + 2^k, k the bits of x * c beyond n. A negative multiplier
+  // of a sign extension (the signed divisions' `hi + x` with hi the high word of x * (m - 2^32)) is the exception: the sum is x less a part of it, and fits as x does.
+  if (extvn->getSize() <= 8) {
+    const int4 addBits = 8 * x->getSize();
+    const uintb cmask = calc_mask(extvn->getSize());
+    const uintb cv = multConst[0] & cmask;
+    bool sumFits;
+    if (opc == CPUI_INT_SEXT && signbit_negative(cv,extvn->getSize())) {
+      uintb magnitude = (~cv + 1) & cmask;
+      sumFits = magnitude <= (((uintb)1) << n);
+    }
+    else {
+      int4 cbits = 64 - count_leading_zeros(cv);
+      int4 k = ((int4)xbits + cbits > (int4)n) ? (int4)xbits + cbits - (int4)n : 0;
+      int4 top = ((int4)xbits > k ? (int4)xbits : k) + 1;
+      sumFits = (opc == CPUI_INT_SEXT) ? (top <= addBits - 1) : (top <= addBits);
+    }
+    if (!sumFits) return 0;
+  }
   uint8 power[2];
   set_u128(power, 1);
   leftshift128(power,power,n);		// power = 2^n
