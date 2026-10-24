@@ -12352,6 +12352,8 @@ Both reproduce alone on 8dcbb70 and on 79906c2 (`SE_GENERATED_GRAMMAR=2 SE_GENER
 
 The timing is 1.1x and 1.03x of the base in one run each.
 
+`ctest -E SaturnExplorerLive` over the nine decompiler suites built here (Sh2DecompilerEngineTests, Sh2DecompilerTests, DecompilerRunnerTests, Sh2GeneratedTests, DecompilerFaultTests, Sh2DecompilerFixtureTests, DecompilerPanelTests, DecompilerModelTests, DecompilerTrustTests): 9 of 9 pass (about 4 minutes). The other suites of the 94 were not built: this branch changes no code, only the ledger, this record and the tools.
+
 ### 8. Not done, and limits
 
 - The 36 or so functions of the table were read against the disassembly of the entry; a function the disassembler stops in (data after a `bra`) was read to the stop and its text checked at the changed lines only (06046640, 06027420). Nothing was run on the emulator for the corpus functions: a text with calls cannot be evaluated by `PseudoEval`.
