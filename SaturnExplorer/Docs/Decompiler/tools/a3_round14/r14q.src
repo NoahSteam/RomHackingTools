@@ -1,0 +1,67 @@
+name R14-16e no store of the result: the stack-argument note says a frame address is in a slot that holds the result of an unlent call (made after a frame address went out)
+asm 06009000
+.word 0x4F22
+add #-12,r15
+mov r15,r4
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l =0x06009180,r1
+jsr @r1
+nop
+mov.l =0x06009200,r1
+jsr @r1
+nop
+mov.l @(8,r15),r0
+add #12,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+rts
+nop
+endasm
+asm 06009180
+mov #7,r0
+rts
+nop
+endasm
+asm 06009200
+rts
+nop
+endasm
+args 0 0 0 0
+end
+
+
+name R14-16f only the first call: the stack-argument note says a frame address is in a slot that holds the result of an unlent call (made after a frame address went out)
+asm 06009000
+.word 0x4F22
+add #-12,r15
+mov r15,r4
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l @(8,r15),r0
+add #12,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+rts
+nop
+endasm
+asm 06009180
+mov #7,r0
+rts
+nop
+endasm
+asm 06009200
+rts
+nop
+endasm
+args 0 0 0 0
+end
+
