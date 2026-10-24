@@ -2982,6 +2982,91 @@ void TestDivOptSignAndWrapRound13()
     }
 }
 
+// Round 14. RuleDivOpt on `ext(x:1) * y` (the multiply 2 bytes wide) for EVERY multiplier y of 0 to 1023 and every 97th above, both extensions, the numerand
+// extended or masked (`x & 0xff` of a 2-byte value, which the rule reads from its non-zero mask), the three forms (shift of the product, shift of a SUBPIECE of
+// it, SUBPIECE alone), both shifts, every amount, five readers (whole, low half, & 0xff, & the widest mask below the bits a mismatched shift fills, & one bit more), and every x of a byte: the value the reader sees after the rule is the one the machine
+// computes, from the definition alone (no graph). The round 13 pin tried sixteen multipliers; the tool `divexh14` runs all 65,536 (and the wider widths): 17 million
+// configurations, 0 wrong, against 4,726 for the head before patch 0064. This is its sample, small enough for the suite.
+void TestDivOptExhaustiveRound14()
+{
+    using namespace ghidra;
+    R13Graph t;
+    long graphs = 0, rewritten = 0, values = 0;
+    int shown = 0;
+    const auto t0 = std::chrono::steady_clock::now();
+    const int xs = 1, w = 2;
+    const uint64_t mw = PbMask(w);
+    for (uint64_t y = 0; y <= mw; y += (y < 1024 ? 1 : 97))
+        for (int ext = 0; ext < 3; ++ext)            // 0 zext, 1 sext, 2 and-masked
+            for (int form = 0; form < 3; ++form)
+                for (int arith = 0; arith < 2; ++arith)
+                {
+                    if (form == 2 && arith) continue;
+                    const int amounts = form == 0 ? 8 * w : (form == 1 ? 8 * (w - 1) : 1);
+                    const int cut = form == 0 ? 0 : 1;
+                    for (int amount = 0; amount < amounts; ++amount)
+                        for (int reader = 0; reader < 5; ++reader)
+                        {
+                            const int outSize = form == 0 ? w : w - cut;
+                            if (reader == 1 && outSize < 2) continue;
+                            // readers 3 and 4: an AND with the widest mask that stays below the bits a shift of the wrong kind fills (8 * size - amount of them), and with one bit more
+                            const int lowBits = 8 * outSize - amount;
+                            if ((reader == 3 || reader == 4) && (form == 2 || lowBits < 1 || lowBits >= 8 * outSize)) continue;
+                            const uint64_t andMask = reader < 3 ? 0 : (reader == 3 ? ((static_cast<uint64_t>(1) << lowBits) - 1) : ((((static_cast<uint64_t>(1) << lowBits) - 1) << 1) | 1) & PbMask(outSize));
+                            t.reset();
+                            Varnode* x = t.input(ext == 2 ? w : xs);
+                            Varnode* xe = ext == 2 ? t.op(CPUI_INT_AND, w, x, t.k(w, PbMask(xs))) : t.op(ext == 1 ? CPUI_INT_SEXT : CPUI_INT_ZEXT, w, x);
+                            Varnode* prod = t.op(CPUI_INT_MULT, w, xe, t.k(w, y));
+                            Varnode* root;
+                            if (form == 0) root = t.op(arith ? CPUI_INT_SRIGHT : CPUI_INT_RIGHT, w, prod, t.k(4, amount));
+                            else
+                            {
+                                Varnode* sp = t.op(CPUI_SUBPIECE, outSize, prod, t.k(4, cut));
+                                root = form == 1 ? t.op(arith ? CPUI_INT_SRIGHT : CPUI_INT_RIGHT, outSize, sp, t.k(4, amount)) : sp;
+                            }
+                            Varnode* read;
+                            if (reader == 0) read = t.op(CPUI_COPY, outSize, root);
+                            else if (reader == 1) read = t.op(CPUI_SUBPIECE, outSize / 2, root, t.k(4, 0));
+                            else if (reader == 2) read = t.op(CPUI_INT_AND, outSize, root, t.k(outSize, 0xFF));
+                            else read = t.op(CPUI_INT_AND, outSize, root, t.k(outSize, andMask));
+                            t.fd->calcNZMask();
+                            RuleDivOpt rule("scratch");
+                            const int rc = rule.applyOp(root->getDef(), *t.fd);
+                            ++graphs;
+                            if (rc == 0) continue;
+                            ++rewritten;
+                            for (uint64_t xv = 0; xv < 256; ++xv)
+                            {
+                                // the machine's value, from the definition
+                                const uint64_t xin = ext == 2 ? (xv | ((xv * 0x9E37u) & 0xFF00u)) : xv;
+                                const uint64_t X = ext == 1 ? (static_cast<uint64_t>(PbSigned(xv, xs)) & mw) : xv;
+                                const uint64_t P = (X * y) & mw;
+                                auto shr = [&](uint64_t v, int size, int a) -> uint64_t {
+                                    if (a >= 8 * size) return arith ? (static_cast<uint64_t>(PbSigned(v, size) >> (8 * size - 1)) & PbMask(size)) : 0;
+                                    return arith ? (static_cast<uint64_t>(PbSigned(v, size) >> a) & PbMask(size)) : (v >> a);
+                                };
+                                uint64_t R;
+                                if (form == 0) R = shr(P, w, amount);
+                                else { const uint64_t S = (P >> (8 * cut)) & PbMask(outSize); R = form == 1 ? shr(S, outSize, amount) : S; }
+                                const uint64_t want = reader == 0 ? R : (reader == 1 ? (R & PbMask(outSize / 2)) : (reader == 2 ? (R & 0xFF) : (R & andMask)));
+                                const uint64_t got = RcEval(read, { { x, xin } });
+                                ++values;
+                                if (got != want)
+                                {
+                                    CHECK(false);
+                                    if (shown++ < 10)
+                                        std::printf("RuleDivOpt exhaustive: %d bytes %s of %d by %llx, form %d, %s, cut %d, amount %d, reader %d: %llx after the rule, %llx from the definition, x=%llx\n", w,
+                                                    ext == 1 ? "sext" : (ext == 2 ? "and" : "zext"), xs, static_cast<unsigned long long>(y), form, arith ? "s>>" : ">>", cut, amount, reader,
+                                                    static_cast<unsigned long long>(got), static_cast<unsigned long long>(want), static_cast<unsigned long long>(xv));
+                                    break;
+                                }
+                            }
+                        }
+                }
+    std::printf("RuleDivOpt exhaustive (1-byte numerand): %ld graphs, %ld rewritten, %ld values compared (%.0f ms)\n", graphs, rewritten, values, MsSince(t0));
+    CHECK(rewritten >= 5200);       // 5,256 on patch 0064: a guard that refuses a division the corpora use fails here
+}
+
 // A2-83 to A2-87, each by value on a small graph with the rule applied once (or, for the division terms, a pool of the three rules).
 void TestRuleGuardsRound13()
 {
@@ -3370,6 +3455,7 @@ int main(int argc, char** argv)
         RUN(TestSignHighBitRound13());
         RUN(TestDivOptSignAndWrapRound13());
         RUN(TestRuleGuardsRound13());
+        RUN(TestDivOptExhaustiveRound14());
         RUN(TestCancelDuringJumpTableRecovery());
         RUN(TestReuseAndRepair(config));
         RUN(TestForeignHashUntouched(config));

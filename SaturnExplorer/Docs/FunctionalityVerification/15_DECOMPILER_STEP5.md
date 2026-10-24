@@ -12832,3 +12832,167 @@ The numbers are the round 13 fix's. The `8dcbb70` run lends the same 678 and 1,0
 - The T-bit family (A3-95) is accepted; I did not find a cheaper sound rule, and none of the new instructions (`shll`/`rotcl`, `addc`, `movt`) changes the argument.
 - A3-107's shape (a callee the probe cannot name writes the caller's word through its own r15) now has the exception frame of `trapa` as a second compiled-looking carrier (R14-9f); it stays accepted there.
 - The next reviewer should read the old fuzzers' oracle rejections (`escsum14.py`) and pin a lent-callee case with a stack argument shown (A3-117 has none lent: a lent callee reads no stack word).
+
+## Area 2, round 14 review
+
+Reviewer, branch `review/2-round14-review`, on the coordinator's head `8cf615b` (patches up to 0064 in the tree). Tools, one engine pin, the ledger and this record only; no spec, engine or host file changed (every engine trial below is a scratch object linked beside the tree). New ledger rows **A2-92 to A2-100**: **two P2** (A2-92, `RuleSignMod2nOpt2`; A2-97, a printed endless loop), six P3 (A2-93 an engine failure of a whole function, A2-94 a latent `RuleThreeWayCompare`, A2-95, A2-96 and A2-98 three oracle rows, A2-99 a wrong `RuleShiftSub` in both images, masked there) and A2-100, the instrument row, closed here. **This round is not clean: two plain instruction sequences print a text that does not compute what the code computes, with no warning, so area 2's count of consecutive clean rounds stays 0.**
+
+Patch 0064 held. Every guard was checked by value at 1, 2, 4 and 8 bytes and at the edges against a description of the machine that has no graph in it, over every constant a small width has, not over a sample (section 2): no wrong value in 25.6 million configurations at one byte, 301 million at two (the multipliers up to 2^17 and the structured list above them) and 569 million at four; the head before 0064 is wrong in 6,757, 3.05 million (of the first 132 million) and 11.8 million of the same. The guards refuse a right fold only where the product wraps its multiply and a reader cuts the wrapped bits (a hash, not a division), or in about twenty borderline sign-extension cases. The `div_product_wide` flag does not survive onto an op it does not describe, and no later rule treats a flagged product as an ordinary one (section 2.3). Both P2 defects are in code the earlier rounds had cleared **without checking it in situ**: A2-92 is in a rule the in-situ check exempted because its meaning lives in the control flow, and a checker that runs the whole function after every rule application finds it at once (section 3); A2-97 is in the structure of a function the harness could not finish (the compiled text never ends), which the harness itself could not report (A2-98).
+
+### 1. What I ran
+
+Own RelWithDebInfo build under the scratch directory (`-j2`; every run under `ulimit -v 4000000` and `timeout`, chunks of 20 minutes or less with markers; the sweeps of sections 2 to 4 overlapped, two to four at a time, load up to 6.6 on four cores, and no run died of memory).
+
+| Run | Result |
+|---|---|
+| `ctest -E SaturnExplorerLive -j2 --timeout 900` (the new pin in) | 94 of 94 pass (158 s); `SaturnExplorerSh2DecompilerEngineTests` 50 s of its 60 s ceiling (the pin is 3 s of it; round 13 recorded 42 s without it) |
+| `SaturnExplorerDecompilerFaultTests` | 0 of 94 jobs fail (156 s when run alone; 83 s in the ctest run) |
+| decode oracle with `SE_MEDNAFEN_SS`, seeds 71230451 and 40916227 (new; `SE_DECODE_CASES=100000`) | section 6 |
+| generator, grammar 2 / grammar 1 / printed-C beyond the nightly range | section 6: 1 failing seed (2616394, routed), A2-95 |
+| standard matrix: grammar 2 3,000 seeds, grammar 1 1,000 seeds, printed-C 3,000 seeds from seed 1 | 0 failing seeds; printed-C 3,719 functions, 3,439 compared, agrees 3,457, `narrow-c` 11, `void-return` 227, `void-return-lent` 24, 0 findings |
+| corpora hwram007.bin, hwram008.bin, `SE_GAME_LEND=1` | 839 and 1,554 functions, all ok; 0 accesses dropped against the reference run; missing and said 0 and 4; every ledger count 0; lending 678 (956 parameters) and 1,038 (1,310); mapping violations 0 ('on another line' 4 and 4 alone, 11 and 21 lent); the printed texts of both images are unchanged under the A2-92 and the A2-99 fixes (839 and 1,554 files compared, 0 differ) |
+| patch 0064 by value (`divexh14`, `edge14`, `rulefuzz14`) | section 2: 895 million configurations, 0 wrong; 6.5 million fuzz graphs, 0 wrong; the head before 0064 is wrong in 6,757, 3.05 million and 11.8 million of the same |
+| in-situ checks, families 0 to 78 (14,840 functions) | section 3: 1.6 million rule applications, 4.1 million leaf-action runs, 0 wrong; the images (cone check): 12 wrong in each, all `RuleShiftSub` (A2-99); the first image's whole-function check (rules): 0 wrong |
+| new families 62 to 78, printed-C differential | section 4: A2-93, A2-96, A2-97, and A2-92 (family 73 form 8) |
+
+### 2. Patch 0064 by value
+
+**Method.** `divexh14` writes the machine out from the definition (a numerand of `xs` bytes, extended zero, signed or masked, times a constant, shifted, cut, read by five kinds of reader) and applies `RuleDivOpt` (or, in term mode, the pool of `RuleDivTermAdd` and `RuleDivTermAdd2`) to the same graph in the real engine; a rewritten graph is evaluated and compared with the definition for **every** value of the numerand. It runs the engine of the tree and, linked with `ruleaction.cc` of the head before 0064 (`73b0450`), the old one, so each configuration has two verdicts. Chunks of at most 20 minutes each, with `.done` files; the lists of constants are every multiplier up to 2^16 (1 byte) or 2^17, then the structured values above (magics of `2^k / d` and neighbours, `2^k +- 1`, sign-extended small values, all-ones runs).
+
+| Run | Configurations | Rewritten by the tree | Wrong (tree) | Wrong (head before 0064) |
+|---|---|---|---|---|
+| `RuleDivOpt`, 1-byte numerand, all 65,536 multipliers, 3 extensions | 25,559,040 | 2,949 | **0** | 6,757 (of 9,726 rewritten) |
+| `RuleDivOpt`, 2 bytes, 363,663 constants | 301,112,964 | 985,805 | **0** | 3,053,476 in the first 132 million (the old object was run on 4 of the 10 chunks) |
+| `RuleDivOpt`, 4 bytes, the first 400,000 of 488,247 constants | 568,800,000 | 838,057 | **0** | 11,783,564 (the last chunk on a list of 517,127 constants) |
+| term mode, 1 byte | 786,432 | 76 divided | **0** | not run |
+| term mode, 2 bytes | 3,633,516 | 1,541 divided | **0** | not run |
+| term mode, 4 bytes | 5,026,488 | 22,582 divided | **0** | not run |
+
+**Guards too narrow: none** (the table: no wrong value in 895 million configurations). **Guards too wide.** The same runs list what the tree refuses and the old head folded right (the old and the new object on the same list, positional comparison; the lists of constants were extended after the first two chunks, so only chunks with matching lists are used): in constants 40,000 to 79,999 of the 2-byte list 972 configurations, 3 of them with a product that fits (one degenerate fold, `x * 0x10001 >> 16` of a 16-bit x, which is `x`, a division by 1); in 80,000 to 119,999 83,629, none with a product that fits; in 120,000 to 159,999 133,118, none (132,983 of them a division by 3 or more). Everything refused with a product that fits is that one fold and about twenty sign-extension cases at the edge (1 byte, multipliers 0x101 and 0x102, where the signed product just fits). The rest is a product that wraps its multiply and is read only by readers that cut the wrapped bits (`(x16 & 0xffff) * 0x1d4c0 >> 17` cut to two bytes: a hash, which the old head turned into a division that is right for these readers), so the cost is a missed fold of a shape no division makes. The corpora's 220 `RuleDivOpt` applications print as before.
+
+**2.3 The flag.** `PcodeOp::div_product_wide` (`addlflags` 0x4000) is set by `RuleDivTermAdd` and `RuleDivTermAdd2` on the multiply they build and never cleared; `CloneBlockOps` does not copy it (conservative: the clone is an ordinary product). Rules that could carry it onto another op were read one by one: the only way a flagged multiply is shared with an op that is not the product of a division term is common-subexpression merging with a twin multiply, and a twin needs a constant of 33 bits or more beside a 32-bit numerand, which no SH-2 code builds (`dmulu` has a 32-bit literal; the 64-bit product is a PIECE of two registers). `RuleDivOpt` reads the flag to decide that the multiply has not wrapped; no other rule reads it. The check of the flagged product in the in-situ tool (`maskwide`, 14,626 samples over the families) is the model's own, not a mask violation of the engine: the exact product is wider than the wrapped multiply's non-zero mask by design.
+
+**The pin.** `TestDivOptExhaustiveRound14` (`Sh2DecompilerEngineTests.cpp`; 1,105,260 graphs, 5,256 rewritten, all 256 values of x, 3 s) puts the 1-byte numerand's sample in the suite: every multiplier 0 to 1,023 and every 97th above, 3 extensions, 3 forms, both shifts, every amount, 5 readers. Mutation, each mutant a reversal or a loosening of one guard of patch 0064, defined in `mutants14.py` and run against the engine test alone by `mutdrv14.py`:
+
+| Mutant | Killed by | CHECKs |
+|---|---|---|
+| c: `divReadsLowBits`, an AND mask one bit wider | the new pin only | 5 |
+| d: `divReadsLowBits`, a SUBPIECE one byte wider | round 13's pin only | 7 |
+| b: `divProductFits` (signed), one too many | both pins | 89 |
+| e: divisor limit doubled | both pins | 332 |
+| f: `divProductFits` (unsigned), one too few (refuses a right fold) | the new pin through its count of rewritten graphs (5,106 < 5,200) | 1 |
+| a: `divProductFits` (unsigned), one too many | lives: no wrong value in 25 million, 301 million and 569 million configurations | 0 |
+| g: the mismatched pair's width test loosened | lives: no wrong value in the same runs | 0 |
+| h: `divProductFits` without the numerand-wider-than-multiply test | lives: dead code (that case returns earlier) | 0 |
+
+Round 13's own mutants 01, 02, 04 and 05 fail the new pin as before (37, 5,281, 198 and 1 CHECKs).
+
+**Other rules of patch 0064 by value (`edge14`).** `RuleDivChain` at 1, 2, 4 and 8 bytes with every first divisor including -1: 0 wrong (the old head: 4,967 at one byte); `RuleSignForm2` at 1 and 2 bytes: 0 wrong (the old head: 1 at one byte); `RuleThreeWayCompare`: **592 wrong in 3 million seeds, all 8-byte unsigned with the constants 0 and 0xFFFFFFFFFFFFFFFF** (A2-94: the neighbour test wraps in the 64-bit `uintb`; sizes 1, 2 and 4 are clean; the old head: 20,663 wrong in 300,000). `rulefuzz14` (round 13's fuzzer with `RF_JUDGEWRAP=1`, which removes its exemption of environments where the original multiply wraps) over **6.5 million graphs** in seven modes (plain, consume masks, templates of the engine's rewrites, wide shift amounts, SH-2 shapes, wide with consume masks, depth 4): **0 wrong applications, 0 unsound masks**; the 16 seeds of round 13's replay list (`replayfix14.sh`) are right on the tree and wrong on the old head (16 of 16).
+
+### 3. The in-situ checker: its blind spots, and a stricter one
+
+`rulecheck13.hh` compared the value of a cone (the op's output, its readers and theirs) before and after every rule application, exempting what it could not value. Every exemption was attacked, and the checker made stricter (`rulecheck14.hh`, the same hook; `mkrc14.sh`, `relink14.sh`):
+
+| Exemption of round 13 | What I built | Result |
+|---|---|---|
+| `RuleSignMod2nOpt2` (value read from a MULTIEQUAL and the branch behind it) | a second checker, **`wholefn14.hh`**, that runs the *whole function* (blocks, MULTIEQUAL by incoming edge, CBRANCH taken, RETURN inputs as the observations, LOAD at an address of the loaded image, the flagged exact product in 128 bits) before and after every rule application, and, with `SE_WHOLEFN_ACTIONS=1`, before and after every leaf action once heritage has run; 6 assignments of the inputs per function (`SE_WHOLEFN_TRIALS`) | **A2-92** (the shape built with the test on another register: 3 of 4 variants flagged at once); `RuleOrPredicate`, which the cone check had to be told to skip (a false BAD: it replaces a predicate by one that is equal only under the branch), is judged here too: 40 applications, 0 bad |
+| a root with consume 0 (dead) | compared on the non-zero mask it keeps; counted as `deadchg` | 0 changes of a dead value in every run |
+| a root the rule left without a reader / readers with no output (STORE, RETURN, CALL, CBRANCH) | the output-less reader is a root (`slot` kind, CBRANCH with its flip flag); the other readers of the rule's inputs are roots too (`sibling` kind); a root on an input of the rule (`input` kind) was tried and removed: it gave false BADs (`RuleBooleanNegate` folds a negation into the compare that feeds it) | 0 wrong in 1.6 million applications; the extra roots found nothing the first kind did not |
+| the interior ADD of a `RuleCollectTerms` tree; the zext `RuleBoolZext` negates in place | kept (the root and the final ADD are compared) | no change |
+| cones over 24 leaves / 400 nodes, outputs over 8 bytes, ops it does not value | limits raised (40 roots, 600 nodes, a hashed memo: the checker was quadratic, 40 s to 7 s on a 32-step division function), a root whose cone overflows is dropped alone (`dropped`: 0 in every run); the whole-function checker values MULTIEQUAL and the CBRANCH conditions | `uncompared` (applications with no root compared) is now a printed metric: 318,972 of 1,607,396 (19.8 percent): `RuleEarlyRemoval` 275,254, `RuleLoadVarnode` 21,898, `RulePropagateCopy` 10,546, `RuleCondNegate` 6,098, `RulePushMulti` 1,928, `RuleStoreVarnode` 1,630, `RuleMultiCollapse` 918, `RuleConditionalMove` 632: all but the store rule are judged by the whole-function checker (section 5) |
+| a sample outside an op's own non-zero mask (`maskskip`) | kept | 0 in every run; `maskwide` (the exact flagged product, the model's own) 14,626 |
+
+**The whole-function checker's own exemptions**, each with its count: a rule application whose function it cannot run (a STORE or a LOAD through a pointer, a varnode with no value, a call, a floating-point op, a global read before heritage that is an input after it) is `unsupported` and not compared: the reasons are printed (`WHOLEFN-WHY`; the top ones: a varnode with no value, 49,366 + 13,716 + 3,192 of the applications of `RuleEarlyRemoval`, `RulePropagateCopy` and `RuleAndMask`; STORE, 18,972 + 14,112 + 11,688 + 9,780 + 4,908 + 3,084). **Narrowing** the return (`act:returnrecovery`) is accepted if the removed bits are zero or sign extension of the kept ones; `act:returnrecovery` itself is not compared. The memory and pointer rules (`RuleStoreVarnode` 1,630 applications, `RulePtrArith` 40, the pointer flow) are left to areas 3, 5 and 7.
+
+**Sensitivity (the checker is only worth what it finds).** Round 13's mutants (`mutants13.py`, the guards of patch 0064 reverted one at a time; `mutrc14.py`: the scratch engine with the mutant, the printed-C differential, the cone check and the whole-function check over families 56, 60, 61, 21, 59, 67 and 22, 100 functions each, from seed 2,381,001): the A2-82 (a) mutant is found by all three (1 `mismatch`, 3 cone BAD, 2 whole-function BAD), the A2-82 (b) mutant by all three (4, 3, 3), the A2-89 mutant (the exact sum may wrap its add) **by the cone check alone** (0, 2, 0); the three A2-87 and A2-91 mutants, the divisor limit and the shift-amount mutant are found by none (the families do not build their shapes; the pins of rounds 13 and 14 kill them). The whole-function check is the only one to see A2-92; the cone check is the only one to see a sum that wraps.
+
+**Runs.** Families 0 to 78 except 23, 39 (no such family), 68 and 72 (they do not finish in 15 minutes under the checks: see the limits), 200 functions each (family 78: 40), from seed 2,680,001: **14,840 functions, 14,664 compared (agrees 14,600, `narrow-c` 64, `void-return` 134, `void-return-lent` 22, `skipped:stack-address` 20), 0 `mismatch`; 1,607,396 rule applications of 134 rules, 3,283,394 roots compared by the cone check, 0 wrong; the whole-function check observed 1,607,396 rule applications (1,607,216 changed the function, 9,489,136 observations) and 4,128,284 leaf-action runs (90,604 changed the function, 394,308 observations), 0 wrong.** The two images, cone check (the whole-function check on the first image, rules only: 1,062,139 applications, 237,005 observations, 0 wrong, 3 minutes; on the second image and with leaf actions on it did not finish in 19 minutes): 1,062,139 applications (2,292,516 roots) in 007 and 2,739,471 (5,904,245 roots) in 008: **12 wrong in each, all `RuleShiftSub` (A2-99), and no other rule**. The printed-C seeds 2,620,001 to 2,629,000 (three runs of 3,000 seeds, cone and whole-function checks both on, leaf actions on): 11,125 functions, 10,347 compared, 0 `mismatch`, 0 wrong; the three `WHOLEFN-BAD act:heritage` lines each run printed (a global read that was an image read before heritage and an input after it) were the checker's own and are gone with the exemption above.
+
+**A2-92 (P2), `RuleSignMod2nOpt2`.** The rule reads `V - (((W s< 0) ? V + 2^n-1 : V) & ~(2^n-1))`, with the MULTIEQUAL of the biased and the plain value behind the signed compare, as the signed remainder of V. It never tests that the compared W is V (`checkSignExtForm`, the sign-extension form of the same rule, does). `mov r4,r0 ; mov r4,r1 ; cmp/pz r5 ; bt ; add #3,r1 ; and ~3,r1 ; sub r1,r0` is printed `return param_1 % 4;` (the test is on r5; for r4 = 1, r5 = 0xFFFFFFFE the code returns 0xFFFFFFFD, the text 1). With the missing test (`lessOp->getIn(0) == base`, a scratch object) the fixture agrees, the same-register form still prints `param_1 % 4`, and 300 functions of family 73 agree; the images' printed texts do not change under it (839 and 1,554 files compared). Family 73 `signmod` now builds the shape (form 8: the sign test on r5, r6 or r7; 30 of 300 functions are `mismatch` on the tree and 0 with the test added) beside the forms with the test on V, which agree.
+
+**A2-97 (P2), the text of a function without a loop has an endless one.** Found by the 40,000-function scan of family 78 below; the data flow is right (no rule or action application changes the function's value as `wholefn14.hh` runs it), so the structure is at fault, or the printing of it. Row A2-97 has the 21-word fixture (reduced from the 51-word original by `reduce14.py`).
+
+### 4. New families (`dagen14.py`, families 62 to 78)
+
+Register-only functions for the printed-C differential and the in-situ checks, on SH-2 idioms no family of rounds 10 to 13 builds. Families 62 to 74: three thousand functions each from seed 3,100,001 through the printed-C differential (`pcsweep14.sh`); families 62 to 77 except 68 and 72 were also run in situ (section 3, 200 functions each, family 78 40). Family 78 was run on 39,800 more functions from seed 3,300,001, and the batch the harness lost (a text that never ends, A2-98) of 200 again.
+
+| Family | Shapes | Printed-C differential (functions, compared, classes) |
+|---|---|---|
+| 62 shmul | a constant multiply as shift-and-add chains (Horner, canonical signed digits, `shll2/8/16` steps) of a register or an extended byte or word, read as a shift, a mask, an add, a compare, or subtracted from the same product made by `mul.l` | 3,000, 3,000: agrees 2,976, `narrow-c` 24 |
+| 63 muldi | 64x64 to 64 from `dmulu.l` and two `mul.l`, a signed 32x32 to 64 from the unsigned product and the sign corrections, the high word of a signed product, a 64x32 product by a constant | 3,000, 2,967: agrees 2,967, `void-return` 33 |
+| 64 shift64 | constant shifts of a register pair by 1 to 63 (single-bit chains, shift-and-or, `xtrct`, a move for 32 or more) | 3,000, 3,000: agrees |
+| 65 cmpstr | `cmp/str`: a zero byte in a word, a byte equal to a pattern, the index of the first zero byte, T combined with other tests | 3,000, 3,000: agrees 2,993, `narrow-c` 7 |
+| 66 bitops | parity, the SWAR population count with its multiply, bit and byte reversal, the lowest set bit, a power-of-two test, rotate by two shifts, bit-field extract and insert, `(x ^ m) - m` | 3,000, 3,000: agrees 2,994, `narrow-c` 6 |
+| 67 divterm | the division terms of `RuleDivTermAdd`, `RuleDivTermAdd2` and `RuleDivOpt` on constants that are no divisor's, and the CSE twin (the same product with the folded multiplier made by `mul.l`) | 3,000, 3,000: agrees 2,999, `narrow-c` 1 |
+| 68 div1len | `div0u/div0s` and `div1` chains of every length from 1 to 32, 16-bit and 64/32 setups, signed fix-ups | 3,000, 3,000: agrees |
+| 69 cmov | a diamond or triangle that picks between two constants or registers, of a byte, word or longword | 3,000, 3,000: agrees 2,939, `narrow-c` 61 |
+| 70 divdiv | `(x / d1) / d2`, `(x % d1) % d2`, `(x >> a) / d`, `x / 2^k / d`, negative divisors | 3,000, 3,000: agrees 2,982, `narrow-c` 18 |
+| 71 varshift | variable shifts and rotates of a register and of a pair by a counted loop over `r5 & 31` | 3,000, 3,000: agrees |
+| 72 mix | two or three blocks of the families above in a row | 3,000, 2,791: agrees 2,781, `void-return` 39, `void-return-lent` 167, `narrow-c` 12, **`unsettled` 1** (a long straight-line chain of `rotcl`/`subc` pairs: patch 0055's cap on the repeats stops it with the warning `Exceeded maximum repeats of oppool1` in the text; A2-59's class, not a new row) |
+| 73 signmod | `x % 2^k` and `x / 2^k` of a signed byte, word or longword for every k, in nine forms (the bias by a branch or without, the sign by `shar` or `cmp/pz`; forms 5 to 7 the sign-based rules, form 8 the remainder with the sign test on another register, A2-92) | 3,000, 3,000: agrees 2,996, `narrow-c` 4 (the run predates form 8; with form 8, 300 functions: agrees 270, **`mismatch` 30**, 0 with the A2-92 test added) |
+| 74 deepsoup | 15 to 45 steps over r0..r3 with T produced and consumed in every way (`cmp`, `tst`, `dt`, `addc/subc/negc/addv/subv`, `div0/div1`, `rotcl/rotcr`, `movt`), multiplies and their mach/macl reads, forward branches | 3,000, 2,916: agrees 2,898, `narrow-c` 18, `void-return` 72, `void-return-lent` 12 |
+| 75 delaybr | delayed branches with working slots (`bf/s` closing a counted loop, forward `bt/s` and `bf/s` with T consumers in the slot, two chained delayed branches) | in situ only (200): agrees |
+| 76 condprop | one condition read by several branches with T-preserving code between (`ConditionalExecution`), `x == c` with x used in the true arm, chains of equality tests, forms for `RuleOrPredicate` | in situ only (200): agrees |
+| 77 multiword | 96- and 128-bit values in r4..r7 (a constant added through the carries, added to itself, negated, a rotated copy subtracted, the borrow as a compare, shifted through T) | in situ only (200): agrees |
+| 78 randprog | a random structured program over r0 and r1: arithmetic, triangles, diamonds and bounded loops up to three levels deep on random compares | 5,800 (seeds 3,100,001 on) and 39,800 (3,300,001 on) + 200: agrees 45,784, `narrow-c` 12, **`undecompiled` 2 (A2-93), `mismatch` 1 (A2-96), `crashed` 1 (A2-97)** |
+
+The `void-return` classes are the documented A2-34 trade-off (a result left in r0 by a loop with a `nop` slot prints `return;`): the families use the `mov Rx,r0` slot wherever the result is compared.
+
+### 5. The rules round 13's table calls cleared with a weak verdict
+
+Round 13's table rates a rule 'not arithmetic: it moves or removes ops' where the in-situ check could not value it, and lists rules with no run at all. The whole-function checker values them; applications over the 14,840 functions of section 3 (cone check: applications, roots compared, wrong; whole-function check: applications, observations, wrong):
+
+| Rule | Cone check (applications, roots, wrong) | Whole-function check (applications, observations, wrong) | Verdict |
+|---|---|---|---|
+| `RuleEarlyRemoval` | 648,920, 517,808 (275,254 uncompared), 0 | 648,920, 3,825,182, 0 (68,338 unsupported: a free varnode) | cleared |
+| `RulePropagateCopy` | 387,978, 968,258, 0 | 387,978, 2,300,040, 0 | cleared |
+| `RuleSelectCse` | 1,736, 6,460, 0 | 1,736, 10,056, 0 | cleared |
+| `RulePullsubMulti` | 194, 588, 0 | 194, 1,154, 0 | cleared; `RulePullsubIndirect` never applied on SH-2 code |
+| `RulePushMulti` | 1,928, uncompared | 1,928, 11,568, 0 | cleared |
+| `RuleMultiCollapse` | 918, uncompared | 918, 5,504, 0 | cleared |
+| `RuleLoadVarnode` | 21,898, uncompared | 21,898, 126,408, 0 | cleared (4,980 loads through a pointer not valued) |
+| `RuleCondNegate` | 6,098, uncompared | 6,098, 36,588, 0 | cleared |
+| `RuleConditionalMove` | 632, uncompared | 632, 3,504, 0 | cleared |
+| `RuleSignMod2nOpt`, `RuleSignMod2Opt` | 156 and 188, 468 and 376, 0 | 156 and 188, 936 and 1,128, 0 | cleared |
+| `RuleSignMod2nOpt2` | exempt | 70, 420, 0 on the corpus of families | **A2-92** (the 70 applications are on a test of V; the defect needs another register) |
+| `RuleOrPredicate` | exempt | 40, 240, 0 | cleared |
+| `RuleThreeWayCompare` | 346, 1,384, 0 | 346, 2,076, 0 | the SH-2 side agrees; A2-94 is the 8-byte unsigned case |
+| `RuleDivChain`, `RuleSignForm`, `RuleSignDiv2`, `RuleDivOpt`, `RuleDivTermAdd`, `RuleDivTermAdd2`, `RuleModOpt`, `RulePositiveDiv`, `RuleSignNearMult` | 428 / 266 / 142 / 3,206 / 288 / 444 / 484 / 526 / 208 | the same, 0 wrong in each | cleared |
+| `RuleStoreVarnode`, `RulePtrArith`, `RulePtrFlow` | 1,630 and 40 applied, not valued | memory and pointers are not run | left to areas 3, 5 and 7 (the generator, the corpora and the conservation oracle cover them) |
+| `RuleSplitFlow`, `RulePieceStructure`, `RuleDoubleOut`, `RuleAliasUpdate`, `RulePullsubIndirect`, `RuleSborrow`, `RuleScarry`, `RuleCarryElim`, `RuleTransformCpool` | never applied | never applied | no SH-2 code reaches them (the spec builds no INT_CARRY, INT_SCARRY or INT_SBORROW; the by-value runs of round 13 and 14 find the arithmetic ones right) |
+
+### 6. The generator beyond the nightly range
+
+`genranges14.sh`, chunks of 5,000 seeds, 20 minutes at most each, `.done` markers:
+
+| Run | Result |
+|---|---|
+| grammar 2, `SE_GENERATED_FIRST=2600001`, 20,000 seeds (four runs: 231, 197, 215, 174 s) | **1 failing seed, 2616394** (`n:claim-wrong:storesThrough`: area 3's, routed, section 8); the other 19,999 clean |
+| grammar 1, `SE_GENERATED_FIRST=2600001`, 10,000 seeds (118, 141 s) | 0 failing seeds |
+| printed-C differential, `SE_GENERATED_FIRST=2600001`, 15,000 seeds (three runs: 222, 203, 197 s) | **1 finding, seed 2604765 #0 (A2-95, an oracle row)**; 18,302 functions, 16,883 compared, 0 other findings |
+| decode oracle with `SE_MEDNAFEN_SS`, seeds 71230451 and 40916227 (new; `SE_DECODE_CASES=100000`) | 26,000,000 differential executions: 0 differ, 0 could not run, 0 of 130 forms fail, 18 named shapes 0 differ; SLEIGH defines 53,752 words, 0 disagreements with Mednafen |
+
+### 7. The rows
+
+* **A2-92 (P2)**, `RuleSignMod2nOpt2` prints `x % 2^n` for a bias steered by the sign of another register (section 3). The fix is one test, `lessOp->getIn(0) == base`, in `checkMultiequalForm`; checked on a scratch object: the fixture and 300 functions of family 73 agree, the same-register form still prints `%`, and the printed texts of the two images do not change.
+* **A2-93 (P3)**, the engine fails a whole function (`Could not finish collapsing block structure`): a 15-instruction fixture; 2 of 45,800 functions of family 78.
+* **A2-94 (P3, latent)**, `RuleThreeWayCompare`: the neighbour test wraps for 8-byte unsigned constants 0 and 2^64 - 1 (592 of 3 million seeds of `edge14`).
+* **A2-95, A2-96, A2-98 (P3, oracle)**: the harness reads a wide and a narrow name of one stack offset as two variables (a right text is a `mismatch`); the engine's reading evaluates both operands of `&&` and `||` (a right text with an assignment in the right operand is a `mismatch` instead of `narrow-c`); the harness runs the compiled text with no time limit (a text that does not end hangs the generator job).
+* **A2-97 (P2)**, an endless loop in the text of a function without one (the structure of a diamond whose join is a loop header, with the entry T bit tested twice): the 21-word fixture; 1 of 45,800 functions of family 78. Not isolated further; the whole-function check finds nothing in the data flow.
+* **A2-99 (P3, masked in the corpora)**, `RuleShiftSub` rewrites `sub(V << 8k, c)` without testing that the original read lies inside the shifted value: 12 wrong samples in the one application per image in the two images (the `-O0` byte-copy function, `060228B4` and `06061D90`); the printed text of that function is wrong for another reason (section 8) and does not change under the fix (`if (c + outsize > insize) return 0;` before `c -= n/8;`; 839 and 1,554 texts compared, 0 differ).
+* **A2-100 (P3, closed here)**, the instrument row: the tools of the round.
+
+### 8. Routed
+
+* Grammar 2 seed **2616394**: `[n:claim-wrong:storesThrough] [function 0 at 06009010] a run stores at 06020011, in the arena of r4, and storesThrough names neither that register nor memory`. Replay: `SE_GENERATED_GRAMMAR=2 SE_GENERATED_SEED=2616394 build/bin/SaturnExplorerSh2GeneratedTests <scratch>`; reproduces alone on `8cf615b`. Area 3's claims (A3-54, A3-63, A3-93; not among A3-104 to A3-115).
+* **The `-O0` byte-copy function of both images prints 6 of its 8 byte stores.** `060228B4` of hwram007 and `06061D90` of hwram008: a struct built on the frame byte by byte through a pointer kept in a frame slot (`mov r14,r1 ; add #12,r1 ; mov.l r1,@(5,r14)` and `mov.l @(5,r14),r1 ; mov.b r2,@r1` eight times) and passed to a call; the text keeps `uStack_10 = (uint4)(uint1)param_2[4];` and `uStack_c = (uint4)(uint1)param_2[5];` and drops the 0x42, the low byte of `param_1` and the bytes of `param_2[0..3]` (they print as unused loads, `xVar1 = param_2[1];`), with no warning. Replay: `SE_GAME_HWRAM=<hwram007.bin> SE_GAME_ONLY=60228B4 build/bin/SaturnExplorerSh2DecompilerTests <scratch>` (and `SE_GAME_HWRAM=<hwram008.bin> SE_GAME_ONLY=6061D90`). The same engine behaviour on a function the generator can run: `SE_GENERATED_PRINTEDC=only SE_GENERATED_PRINTEDC_WORDS="2F86 2FE6 4F22 7FE8 6EF3 2E42 1E51 61E3 710C 1E15 51E5 E200 2122 51E5 E200 1121 51E5 E242 2120 51E5 6213 7101 6253 2120 51E5 6213 7102 6263 2120 51E5 6213 7103 6273 2120 51E5 6213 7104 62E3 63E3 7303 6230 2120 51E5 6213 7105 6353 2130 51E5 6213 7106 6263 2120 51E5 6213 7107 6273 2120 51E5 6513 6052 5151 7E18 6FE3 4F26 6EF6 68F6 000B 0009"`: `mismatch (f0 r4=00000000 r5=80000001 r6=000000FF r7=FF7FFFFF size=8 run=4201FFFF:0001FFFF pseudo=00000000:00000000)`, text `return CONCAT44(xStack_18,xStack_14);` with the warnings `Heritage AFTER dead removal` and `Restarted to delay deadcode elimination for space: stack`. The record of an earlier round names the function (the section on dead flow loads: "four of its six byte reads through `param_2` ended dead and the output shows two ... the next input for area 5, and a ledger row") and no row holds it. Area 3's frame-escape rows are about reads after a call (A3-104 to A3-106); this is the stores before it. I record no row for it (not area 2's).
+* Nothing for A3-104 to A3-115 (with the area 3 fixer) or A5-87; none of the 15,000 printed-C seeds or the 20,000 grammar-2 seeds otherwise fails.
+
+### 9. Not done, and limits
+
+* Families 23, 68 and 72 do not finish under the checks (the whole-function check at 40 functions: more than 15 minutes); they ran through the printed-C differential alone (3,000 each from seed 3,100,001 for 68 and 72, round 11's runs for 23), clean.
+* The whole-function check ran on the first image's rules only (leaf actions on, or the second image, with the cone check also on: more than 19 minutes, stopped); the second image ran under the cone check only.
+* `RuleDivOpt` is enumerated at 1, 2 and 4 bytes over the structured lists of constants, not over every constant of 2 and 4 bytes; 8-byte numerands are covered by `rulefuzz14` and `edge14` only. The old head was run on the first four of ten 2-byte chunks and all four 4-byte chunks.
+* The memory and pointer rules are not valued by either checker.
+* A2-97 and A2-93 are structure failures; the cause of neither was determined. The cone and whole-function checkers are blind to the structuring (after the last action the basic blocks are unchanged).
+* Everything above ran on a loaded machine (load up to 6.6 on four cores), so no timing in this section is a measurement.
