@@ -97,7 +97,7 @@ inline void RowSpritePreview(ImTextureID texture, int imageWidth, int imageHeigh
         for (int x = 0; x < static_cast<int>(size.x); x += 4)
             draw->AddRectFilled(ImVec2(pos.x + x, pos.y + y),
                 ImVec2(pos.x + std::min(float(x + 4), size.x), pos.y + std::min(float(y + 4), size.y)),
-                ((x / 4 + y / 4) & 1) ? IM_COL32(65, 65, 70, 255) : IM_COL32(40, 40, 45, 255));
+                ((x / 4 + y / 4) & 1) ? ui::Color(IM_COL32(65, 65, 70, 255), IM_COL32(255,255,255,255)) : ui::Color(IM_COL32(40, 40, 45, 255), IM_COL32(217,222,229,255)));
     draw->AddImage(texture, pos, ImVec2(pos.x + size.x, pos.y + size.y));
 }
 

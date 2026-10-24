@@ -16,8 +16,8 @@ namespace
 {
 ImU32 kColAddr() { return ui::Color(IM_COL32(150, 150, 160, 255), IM_COL32(89,101,121,255)); }
 ImU32 kColByte() { return ui::Color(IM_COL32(210, 210, 215, 255), IM_COL32(36,43,54,255)); }
-ImU32 kColDim() { return ui::Color(IM_COL32(110, 110, 120, 255), IM_COL32(104,115,134,255)); }   // bytes in rows shown only as context
-ImU32 kColHot() { return ui::Color(IM_COL32(255, 255, 255, 255), IM_COL32(128,60,0,255)); }   // a changed byte
+ImU32 kColDim() { return ui::Color(IM_COL32(110, 110, 120, 255), IM_COL32(89,101,121,255)); }   // bytes in rows shown only as context
+ImU32 kColHot() { return ui::Color(IM_COL32(255, 255, 255, 255), IM_COL32(105,45,0,255)); }   // a changed byte
 ImU32 kColSel() { return ui::Color(IM_COL32(70, 110, 90, 170), IM_COL32(177,220,224,210)); }
 ImU32 kColHover() { return ui::Color(IM_COL32(80, 90, 110, 110), IM_COL32(150,170,195,65)); }
 // Side colours: A is the baseline (blue), B the comparison (orange). The same two tint the
@@ -402,7 +402,7 @@ void MemoryComparePanel::DrawCards(const DiffResult& diff)
         if (!attached)
         {
             ImGui::SameLine();
-            ImGui::TextColored(ImVec4(0.85f, 0.65f, 0.3f, 1.0f), "[detached]");
+            ImGui::TextColored(ui::Color(ImVec4(0.85f, 0.65f, 0.3f, 1.0f), ImVec4(0.50f,0.36f,0.0f,1)), "[detached]");
             if (ImGui::IsItemHovered())
                 ImGui::SetTooltip("This frame is no longer in the rewind history. The snapshot is kept\n"
                                   "and still compares, but the timeline cannot go to it.");
@@ -578,7 +578,7 @@ void MemoryComparePanel::DrawGrid(const DiffResult& diff)
                     ImGui::TextColored(ui::Color(ImVec4(0.8f, 0.85f, 0.95f, 1.0f), ImVec4(0.14f,0.17f,0.21f,1.0f)), "%s", Traits(line.region).name);
                     ImGui::TableSetColumnIndex(1);
                     ImGui::TextDisabled("%s changed bytes", Group(line.count).c_str());
-                    ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, IM_COL32(60, 70, 90, 90));
+                    ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, ui::Color(IM_COL32(60, 70, 90, 90), IM_COL32(233,237,242,255)));
                     continue;
                 }
                 if (line.kind == Line::Gap)

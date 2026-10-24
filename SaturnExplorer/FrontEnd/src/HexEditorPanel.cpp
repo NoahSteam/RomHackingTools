@@ -21,8 +21,8 @@ namespace
 {
 ImU32 kColAddr() { return ui::Color(IM_COL32(150, 150, 160, 255), IM_COL32(89,101,121,255)); }
 ImU32 kColByte() { return ui::Color(IM_COL32(210, 210, 215, 255), IM_COL32(36,43,54,255)); }
-ImU32 kColZero() { return ui::Color(IM_COL32(110, 110, 120, 255), IM_COL32(104,115,134,255)); }   // dim 00 bytes
-ImU32 kColUnmapped() { return ui::Color(IM_COL32(80, 80, 90, 255), IM_COL32(104,115,134,255)); }     // "--" outside any region
+ImU32 kColZero() { return ui::Color(IM_COL32(110, 110, 120, 255), IM_COL32(89,101,121,255)); }   // dim 00 bytes
+ImU32 kColUnmapped() { return ui::Color(IM_COL32(80, 80, 90, 255), IM_COL32(89,101,121,255)); }     // "--" outside any region
 ImU32 kColChanged() { return ui::Color(IM_COL32(235, 170, 70, 255), IM_COL32(128,91,0,255)); }    // amber (Highlight Changes)
 ImU32 kColText() { return ui::Color(IM_COL32(180, 195, 170, 255), IM_COL32(55,95,55,255)); }
 ImU32 kColJp() { return ui::Color(IM_COL32(130, 190, 210, 255), IM_COL32(8,100,115,255)); }   // double-byte (Shift-JIS) marker

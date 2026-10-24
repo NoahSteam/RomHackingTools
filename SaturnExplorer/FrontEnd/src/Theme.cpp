@@ -1,6 +1,8 @@
 #include "Theme.h"
 
 #include <cstring>
+#include <cctype>
+#include <string>
 #include <initializer_list>
 
 #include "../third_party/fonts/LiberationSans.h"
@@ -35,7 +37,9 @@ inline ImVec4 WithAlpha(const ImVec4& c, float a) { return ImVec4(c.x, c.y, c.z,
 
 ThemeMode ParseThemeMode(const char* value)
 {
-    return value && std::strcmp(value, "light") == 0 ? ThemeMode::Light : ThemeMode::Dark;
+    std::string normalized = value ? value : "";
+    for (char& c : normalized) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    return normalized == "light" ? ThemeMode::Light : ThemeMode::Dark;
 }
 const char* ThemeModeName(ThemeMode mode) { return mode == ThemeMode::Light ? "light" : "dark"; }
 ThemeMode GetThemeMode() { return ui::IsLight() ? ThemeMode::Light : ThemeMode::Dark; }
@@ -51,6 +55,7 @@ void ApplyThemeColors(ImGuiStyle& style, ThemeMode mode)
 void ApplyTheme(ImGuiStyle& style) { ApplyTheme(style, ThemeMode::Dark); }
 void ApplyTheme(ImGuiStyle& style, ThemeMode mode)
 {
+    ui::AppliedThemeMode() = mode;
     // Start from the stock dark theme, then override — so any ImGuiCol we don't
     // name explicitly still has a sensible value.
     ImGui::StyleColorsDark(&style);
@@ -110,10 +115,10 @@ void ApplyTheme(ImGuiStyle& style, ThemeMode mode)
         ImGui::StyleColorsLight(&style);
         const ImVec4 panel = Rgb(247,248,250), raised = Rgb(233,237,242);
         const ImVec4 input = Rgb(255,255,255), hover = Rgb(223,231,238);
-        const ImVec4 border = Rgb(205,211,220), accent = Rgb(8,127,140);
+        const ImVec4 border = Rgb(125,136,152), accent = Rgb(8,127,140);
         const ImVec4 selection = Rgb(209,238,240);
         c[ImGuiCol_Text] = Rgb(36,43,54);
-        c[ImGuiCol_TextDisabled] = Rgb(104,115,134);
+        c[ImGuiCol_TextDisabled] = Rgb(89,101,121);
         c[ImGuiCol_WindowBg] = panel;
         c[ImGuiCol_ChildBg] = ImVec4(0,0,0,0);
         c[ImGuiCol_PopupBg] = panel;
@@ -135,7 +140,7 @@ void ApplyTheme(ImGuiStyle& style, ThemeMode mode)
                           ImGuiCol_SeparatorActive, ImGuiCol_SeparatorHovered }) c[slot] = accent;
         c[ImGuiCol_ScrollbarBg] = ImVec4(0,0,0,0);
         c[ImGuiCol_ScrollbarGrab] = border;
-        c[ImGuiCol_ScrollbarGrabHovered] = Rgb(104,115,134);
+        c[ImGuiCol_ScrollbarGrabHovered] = Rgb(89,101,121);
         c[ImGuiCol_ScrollbarGrabActive] = accent;
         c[ImGuiCol_TabHovered] = hover;
         c[ImGuiCol_TabSelected] = c[ImGuiCol_TabDimmedSelected] = panel;
@@ -167,7 +172,7 @@ void ApplyTheme(ImGuiStyle& style, ThemeMode mode)
     style.ScrollbarRounding = 6.0f;
     style.WindowBorderSize  = 1.0f;
     style.ChildBorderSize   = 1.0f;
-    style.FrameBorderSize   = 0.0f;
+    style.FrameBorderSize   = 1.0f;
     style.PopupBorderSize   = 1.0f;
     style.WindowPadding     = ImVec2(10.0f, 10.0f);
     style.FramePadding      = ImVec2(9.0f, 5.0f);

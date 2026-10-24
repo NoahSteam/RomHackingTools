@@ -2138,7 +2138,7 @@ void App::DrawStatusBar()
             {
                 ImGui::SameLine(rightX);
                 if (mOperationError && !mbLiveSource)
-                    ImGui::TextColored(ImVec4(0.90f, 0.36f, 0.36f, 1.0f), "%s", right);
+                    ImGui::TextColored(ui::Color(ImVec4(0.90f, 0.36f, 0.36f, 1.0f), ImVec4(0.647f,0.114f,0.141f,1)), "%s", right);
                 else
                     ImGui::TextDisabled("%s", right);
             }
@@ -3516,7 +3516,7 @@ void App::DrawTracepointEditor()
     }
     const std::string err = FormatValidate(mTpEdit.format);
     if (!err.empty())
-        ImGui::TextColored(ImVec4(0.95f, 0.5f, 0.4f, 1.0f), "! %s", err.c_str());
+        ImGui::TextColored(ui::Color(ImVec4(0.95f, 0.5f, 0.4f, 1.0f), ImVec4(0.647f,0.114f,0.141f,1)), "! %s", err.c_str());
     else
     {
         const std::string prev = FormatAgainstContext(mTpEdit.format, mTpEdit.cpu);
@@ -3827,7 +3827,7 @@ void App::DrawBreakpoints()
                 }
                 auto ce = mBpCondErrors.find(b.id);
                 if (ce != mBpCondErrors.end() && !ce->second.empty())
-                    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.4f, 1.0f), "  %s", ce->second.c_str());
+                    ImGui::TextColored(ui::Color(ImVec4(1.0f, 0.5f, 0.4f, 1.0f), ImVec4(0.647f,0.114f,0.141f,1)), "  %s", ce->second.c_str());
             }
             else
             {
@@ -4690,8 +4690,8 @@ void App::DrawCallStack(IPlatform& platform)
         const float rad = ImGui::GetFontSize() * 0.30f;
         ImVec2 p = ImGui::GetCursorScreenPos();
         ImVec2 ctr(p.x + rad + 2.0f, p.y + ImGui::GetTextLineHeight() * 0.5f);
-        ImU32 col = (c == FrameConfidence::Confirmed) ? IM_COL32(90, 200, 110, 255)
-                  : (c == FrameConfidence::Probable)  ? IM_COL32(225, 195, 70, 255)
+        ImU32 col = (c == FrameConfidence::Confirmed) ? ui::Color(IM_COL32(90, 200, 110, 255), IM_COL32(22,117,60,255))
+                  : (c == FrameConfidence::Probable)  ? ui::Color(IM_COL32(225, 195, 70, 255), IM_COL32(128,91,0,255))
                                                       : IM_COL32(150, 150, 150, 255);
         if (c == FrameConfidence::Heuristic) dl->AddCircle(ctr, rad, col, 12, 1.5f);
         else                                 dl->AddCircleFilled(ctr, rad, col, 12);
@@ -6327,7 +6327,7 @@ void App::DrawLocatePopup()
     ImGui::TextDisabled("Search pattern: %u bytes",
                         mLocateBefore + mLocatePending.length + mLocateAfter);
     if (mDataDir.empty())
-        ImGui::TextColored(ImVec4(0.9f, 0.6f, 0.3f, 1.0f),
+        ImGui::TextColored(ui::Color(ImVec4(0.9f, 0.6f, 0.3f, 1.0f), ImVec4(0.50f,0.36f,0.0f,1)),
                            "No Data Directory set - you'll be asked to pick one.");
     ImGui::Separator();
     if (ImGui::Button("Search"))
@@ -7088,7 +7088,7 @@ void App::DrawSearchOptionsModal(IPlatform& platform)
 
     if (mSearchOptions.paths.empty() && mDataDir.empty())
     {
-        ImGui::TextColored(ImVec4(0.90f, 0.55f, 0.35f, 1.0f),
+        ImGui::TextColored(ui::Color(ImVec4(0.90f, 0.55f, 0.35f, 1.0f), ImVec4(0.50f,0.36f,0.0f,1)),
                            "No files/folders chosen and no game data directory is set.");
     }
 
@@ -7297,7 +7297,7 @@ static bool DrawLaunchIconButton(const char* id, const char* label, LaunchGlyph 
     if (primary)
     {
         ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.15f, 0.43f, 0.78f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.20f, 0.50f, 0.88f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ui::Color(ImVec4(0.20f, 0.50f, 0.88f, 1.0f), ImVec4(0.12f, 0.40f, 0.72f, 1.0f)));
         ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.11f, 0.36f, 0.69f, 1.0f));
     }
     const bool clicked = ImGui::Button(id, size);
@@ -7312,7 +7312,7 @@ static bool DrawLaunchIconButton(const char* id, const char* label, LaunchGlyph 
     const float startX = min.x + ((max.x - min.x) - totalWidth) * 0.5f;
     const float centerY = (min.y + max.y) * 0.5f;
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    const ImU32 color = ImGui::GetColorU32(ImGuiCol_Text);
+    const ImU32 color = ImGui::GetColorU32(primary ? ImVec4(1,1,1,1) : ImGui::GetStyle().Colors[ImGuiCol_Text]);
     const ImVec2 glyphCenter(startX + glyphSize * 0.5f, centerY);
     if (glyph == LaunchGlyph::Play)
         DrawLaunchPlayGlyph(dl, glyphCenter, glyphSize, color);

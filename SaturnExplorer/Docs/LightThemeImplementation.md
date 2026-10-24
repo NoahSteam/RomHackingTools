@@ -163,3 +163,24 @@ Validation in this Linux environment:
 - Direct C++14 syntax checks passed for App with live support enabled and decompiler disabled,
   and separately for the modified decompiler panel. These do not establish a full decompiler build.
 - Native Windows/macOS compilation, browser persistence, and visual comparison remain unverified.
+
+## Claude review corrections
+
+The follow-up fixes the Log panel's message/category colors, remaining reported status text,
+watch highlight backgrounds, current-PC/confidence markers, primary Launch glyph/text, inline
+sprite checkerboards, comparison-header text and changed bytes. Border color is now `#7D8898`;
+muted text is `#596579`. Shared 1px base frame borders apply to both themes and scale with DPI.
+This intentionally adds subtle outlines in Dark too, keeping color-only switching geometry stable.
+Contrary to the review's note, the vendored ImGui does scale `FrameBorderSize` in `ScaleAllSizes`.
+
+Applied mode is stored explicitly for the application's single ImGui context, rather than inferred
+from a background channel. Theme parsing accepts mixed case. Dark renderer clear color remains
+its original `(0.10, 0.10, 0.12)`. Tests cover contrast for light control outlines/header labels,
+mode detection under background overrides, border scaling, and both native theme action mappings.
+Native visual checks and browser persistence remain platform verification gaps.
+
+Follow-up validation: the headless rebuild and 10 affected tests pass. ThemeTests now draws the
+real Log panel in Light and checks the contrast of rendered font vertices (excluding solid fills
+and ImGui's textured lines). That test also caught an unreadable disabled category-filter label,
+which now uses the shared disabled-text color. App and the modified UI-only panels passed direct
+C++14 syntax checks; native platform execution remains unverified.

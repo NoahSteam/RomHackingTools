@@ -1,7 +1,24 @@
 #include "Theme.h"
+#include "LogPanel.h"
+#include "ImGuiHarness.h"
 #include <cstdio>
 #include <cstring>
+#include <cmath>
+#include <algorithm>
 
+namespace
+{
+float Luminance(const ImVec4& c)
+{
+    auto linear = [](float v) { return v <= 0.04045f ? v / 12.92f : std::pow((v + 0.055f) / 1.055f, 2.4f); };
+    return 0.2126f * linear(c.x) + 0.7152f * linear(c.y) + 0.0722f * linear(c.z);
+}
+float Contrast(const ImVec4& a, const ImVec4& b)
+{
+    float x = Luminance(a), y = Luminance(b);
+    return (std::max(x,y) + 0.05f) / (std::min(x,y) + 0.05f);
+}
+}
 int main()
 {
     int failures = 0;
@@ -11,6 +28,8 @@ int main()
     CHECK(ParseThemeMode(nullptr) == ThemeMode::Dark);
     CHECK(ParseThemeMode("") == ThemeMode::Dark);
     CHECK(ParseThemeMode("invalid") == ThemeMode::Dark);
+    CHECK(ParseThemeMode("Light") == ThemeMode::Light);
+    CHECK(ParseThemeMode("LIGHT") == ThemeMode::Light);
     CHECK(ParseThemeMode("light") == ThemeMode::Light);
     CHECK(ParseThemeMode("dark") == ThemeMode::Dark);
     CHECK(std::strcmp(ThemeModeName(ThemeMode::Light), "light") == 0);
@@ -20,6 +39,7 @@ int main()
     style.FontScaleDpi = 2.0f;
     const ImVec2 padding = style.FramePadding;
     const float rounding = style.WindowRounding;
+    const float frameBorder = style.FrameBorderSize;
     const ImVec4 darkText = style.Colors[ImGuiCol_Text];
     const ImU32 darkUnused = ui::VramUnused();
     const ImU32 texture = ui::VramTexture();
@@ -28,6 +48,14 @@ int main()
     {
         ApplyThemeColors(style, ThemeMode::Light);
         CHECK(GetThemeMode() == ThemeMode::Light);
+        CHECK(style.FrameBorderSize == frameBorder && frameBorder >= 1.0f);
+        CHECK(Contrast(style.Colors[ImGuiCol_Border], style.Colors[ImGuiCol_FrameBg]) >= 3.0f);
+        CHECK(Contrast(style.Colors[ImGuiCol_Border], style.Colors[ImGuiCol_WindowBg]) >= 3.0f);
+        CHECK(Contrast(style.Colors[ImGuiCol_TextDisabled], style.Colors[ImGuiCol_TableHeaderBg]) >= 4.5f);
+        ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0,0,0,1));
+        CHECK(GetThemeMode() == ThemeMode::Light);
+        CHECK(ui::IsLight());
+        ImGui::PopStyleColor();
         CHECK(style.Colors[ImGuiCol_Text].x < 0.2f);
         CHECK(style.Colors[ImGuiCol_WindowBg].x > 0.9f);
         CHECK(ui::VramUnused() != darkUnused);
@@ -46,5 +74,41 @@ int main()
         CHECK(style.Colors[ImGuiCol_Text].x == darkText.x);
     }
     ImGui::DestroyContext();
+    // Exercise the real Log panel in Light. Font quads have atlas UVs distinct
+    // from the white pixel used by backgrounds/borders; check their actual colors.
+    LogPanel log;
+    for (int i = 0; i < static_cast<int>(LogCategory::Count); ++i)
+        log.Push(static_cast<LogCategory>(i), "Readable event message", 42);
+    {
+        ImGuiHarness harness([&] {
+            ImGui::SetNextWindowPos(ImVec2(0,0));
+            ImGui::SetNextWindowSize(ImVec2(1280,720));
+            ImGui::Begin("Log contrast");
+            LogPanel::Request req;
+            log.Draw(req);
+            ImGui::End();
+        });
+        ApplyTheme(ImGui::GetStyle(), ThemeMode::Light);
+        harness.Settle();
+        const ImVec2 white = ImGui::GetIO().Fonts->TexUvWhitePixel;
+        const ImVec4 background = ImGui::GetStyle().Colors[ImGuiCol_WindowBg];
+        auto isGlyph = [&](const ImVec2& uv) {
+            if (uv.x == white.x && uv.y == white.y) return false;
+            // ImGui also uses atlas UVs for anti-aliased lines, not just text.
+            for (const ImVec4& line : ImGui::GetIO().Fonts->TexUvLines)
+                if (uv.y == line.y && uv.x >= line.x && uv.x <= line.z) return false;
+            return true;
+        };
+        int textVertices = 0;
+        const ImDrawData* data = ImGui::GetDrawData();
+        for (int i = 0; i < data->CmdListsCount; ++i)
+            for (const ImDrawVert& v : data->CmdLists[i]->VtxBuffer)
+                if (isGlyph(v.uv) && (v.col >> 24) == 255)
+                {
+                    ++textVertices;
+                    CHECK(Contrast(ImGui::ColorConvertU32ToFloat4(v.col), background) >= 4.5f);
+                }
+        CHECK(textVertices > 100);
+    }
     return failures ? 1 : 0;
 }

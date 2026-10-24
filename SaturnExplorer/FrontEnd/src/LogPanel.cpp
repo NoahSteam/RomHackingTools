@@ -16,19 +16,19 @@ namespace
 
 struct CatStyle { const char* name; ImU32 color; };
 
-const CatStyle& Style(LogCategory c)
+CatStyle Style(LogCategory c)
 {
-    static const CatStyle kStyles[static_cast<int>(LogCategory::Count)] = {
-        {"INFO",   IM_COL32(170, 176, 188, 255)},
-        {"WARN",   IM_COL32(232, 176,  84, 255)},
-        {"ERROR",  IM_COL32(232, 104,  92, 255)},
-        {"CPU",    IM_COL32(150, 190, 240, 255)},
-        {"DMA",    IM_COL32(120, 200, 170, 255)},
-        {"VDP",    IM_COL32(200, 160, 230, 255)},
-        {"CD",     IM_COL32(180, 190, 120, 255)},
-        {"SCRIPT", IM_COL32(150, 200, 150, 255)},
-        {"TRACE",  IM_COL32(110, 180, 250, 255)},
-        {"INPUT",  IM_COL32(230, 150, 190, 255)},
+    const CatStyle kStyles[static_cast<int>(LogCategory::Count)] = {
+        {"INFO",   ui::Color(IM_COL32(170, 176, 188, 255), IM_COL32(89,101,121,255))},
+        {"WARN",   ui::Color(IM_COL32(232, 176,  84, 255), IM_COL32(128,91,0,255))},
+        {"ERROR",  ui::Color(IM_COL32(232, 104,  92, 255), IM_COL32(165,29,36,255))},
+        {"CPU",    ui::Color(IM_COL32(150, 190, 240, 255), IM_COL32(30,80,150,255))},
+        {"DMA",    ui::Color(IM_COL32(120, 200, 170, 255), IM_COL32(20,104,75,255))},
+        {"VDP",    ui::Color(IM_COL32(200, 160, 230, 255), IM_COL32(115,55,150,255))},
+        {"CD",     ui::Color(IM_COL32(180, 190, 120, 255), IM_COL32(97,101,20,255))},
+        {"SCRIPT", ui::Color(IM_COL32(150, 200, 150, 255), IM_COL32(35,105,45,255))},
+        {"TRACE",  ui::Color(IM_COL32(110, 180, 250, 255), IM_COL32(20,90,160,255))},
+        {"INPUT",  ui::Color(IM_COL32(230, 150, 190, 255), IM_COL32(145,45,95,255))},
     };
     return kStyles[static_cast<int>(c)];
 }
@@ -119,7 +119,7 @@ void LogPanel::Draw(Request& req)
         const CatStyle& st = Style(static_cast<LogCategory>(i));
         const bool on = mShow[i];
         if (!on) ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_FrameBg));
-        ImGui::PushStyleColor(ImGuiCol_Text, on ? st.color : IM_COL32(120, 120, 120, 255));
+        ImGui::PushStyleColor(ImGuiCol_Text, on ? st.color : ImGui::GetColorU32(ImGuiCol_TextDisabled));
         if (ImGui::SmallButton(st.name)) mShow[i] = !mShow[i];
         ImGui::PopStyleColor(on ? 1 : 2);
     }
@@ -178,7 +178,7 @@ void LogPanel::Draw(Request& req)
             ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(st.color), "%s", st.name);
             ImGui::TableSetColumnIndex(3);
             ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(
-                e.category == LogCategory::Tracepoint ? st.color : IM_COL32(215, 217, 222, 255)),
+                e.category == LogCategory::Tracepoint ? st.color : ImGui::GetColorU32(ImGuiCol_Text)),
                 "%s", e.message.c_str());
             ImGui::PopID();
         }

@@ -34,7 +34,7 @@ uint32_t PageRows(const AsmSpan& span, uint32_t first)
 
 // Resolve syntax colors per draw so existing pages follow live theme switches.
 ImU32 kColAddr() { return ui::Color(IM_COL32(150, 150, 160, 255), IM_COL32(89,101,121,255)); }
-ImU32 kColBytes() { return ui::Color(IM_COL32(120, 120, 130, 255), IM_COL32(104,115,134,255)); }
+ImU32 kColBytes() { return ui::Color(IM_COL32(120, 120, 130, 255), IM_COL32(89,101,121,255)); }
 ImU32 kColMnem() { return ui::Color(IM_COL32(120, 200, 235, 255), IM_COL32(8,100,130,255)); }   // cyan-ish
 ImU32 kColCmt() { return ui::Color(IM_COL32(110, 130, 110, 255), IM_COL32(74,100,74,255)); }   // the operand palette: Sh2Operands.cpp
 ImU32 kColPcRow() { return ui::Color(IM_COL32(60, 90, 60, 110), IM_COL32(150,210,165,110)); }      // current-PC row tint
@@ -376,7 +376,7 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
                 dl->AddConvexPolyFilled(pts, 4, c);
             }
             if (isPc)
-                dl->AddText(ImVec2(p.x + 26, p.y), IM_COL32(230, 230, 90, 255), ">");
+                dl->AddText(ImVec2(p.x + 26, p.y), ui::Color(IM_COL32(230, 230, 90, 255), IM_COL32(128,91,0,255)), ">");
             // Left-click toggles a breakpoint (the common action); tracepoints toggle from
             // the right-click menu so the two don't fight over the same click.
             if (ImGui::InvisibleButton("g", ImVec2(34, h)) && ln.readable)

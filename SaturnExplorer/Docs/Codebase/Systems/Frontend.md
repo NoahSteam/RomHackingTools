@@ -110,7 +110,8 @@ entry points and native Windows/macOS menus expose Appearance → Light/Dark thr
 native action handler. Menu requests apply colors at the next BuildUI entry, before style stacks
 are pushed. `ApplyThemeColors` preserves scaled geometry and fonts; the Windows DPI reset passes
 the active palette back to `ApplyTheme` before scaling once. Custom panel colors resolve per draw
-against the current context's palette. Game textures and decoded CRAM colors remain unchanged.
+against an explicit applied-mode value (the application owns one ImGui context). Temporary
+WindowBg overrides cannot change the resolved mode. Game textures and decoded CRAM colors remain unchanged.
 macOS updates NSApp appearance; the OS still controls system-wide menu-bar appearance. Windows
 native chrome uses its existing system appearance. Browser preferences use the existing Settings
 filesystem path; persistence across browser reloads is not established by this implementation.
@@ -118,3 +119,9 @@ filesystem path; persistence across browser reloads is not established by this i
 `SaturnExplorerThemeTests` covers parsing/fallback, repeated palette switches, stable scaled
 geometry, DPI resets and preserved graphics category/selection colors. Native menu/chrome visual
 verification still requires the corresponding OS build.
+
+Review follow-up: shared 1px base frame borders in both modes keep geometry stable while making
+light inputs visible. ImGui scales that border on DPI changes. Light borders and muted text meet
+3:1 control-outline and 4.5:1 header-text contrast checks. Log/status/marker palettes and both
+checkerboard paths resolve light colors per draw. Theme parsing accepts mixed case. The renderer
+clear color preserves the pre-theme Dark value; Light uses the shared app background.

@@ -23,14 +23,17 @@ void ApplyThemeColors(ImGuiStyle& style, ThemeMode mode);
 
 namespace ui
 {
-// Resolve against the current context, including in headless panel tests.
-inline bool IsLight()
+// The application owns one ImGui context. Store the applied mode explicitly so
+// temporary WindowBg overrides cannot change the meaning of semantic colors.
+inline ThemeMode& AppliedThemeMode()
 {
-    return ImGui::GetStyle().Colors[ImGuiCol_WindowBg].x > 0.5f;
+    static ThemeMode mode = ThemeMode::Dark;
+    return mode;
 }
+inline bool IsLight() { return AppliedThemeMode() == ThemeMode::Light; }
 inline ImU32 Color(ImU32 dark, ImU32 light) { return IsLight() ? light : dark; }
 inline ImVec4 Color(const ImVec4& dark, const ImVec4& light) { return IsLight() ? light : dark; }
-inline ImVec4 AppBackground() { return ImGui::GetStyle().Colors[ImGuiCol_DockingEmptyBg]; }
+inline ImVec4 AppBackground() { return IsLight() ? ImVec4(233/255.0f,237/255.0f,242/255.0f,1) : ImVec4(0.10f,0.10f,0.12f,1); }
 }
 
 // Load the embedded UI font (a clean proportional sans-serif) and make it the

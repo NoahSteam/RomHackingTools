@@ -230,6 +230,8 @@ static void TestNativeMenuActionMapping()
     CHECK(cmd.type == TopBarCommandType::OpenDiffSettings);
 
     // View-only toggles are not command-backed.
+    CHECK(!NativeMenuActionToCommand(NativeMenuAction(MenuCommand::ThemeLight), cmd));
+    CHECK(!NativeMenuActionToCommand(NativeMenuAction(MenuCommand::ThemeDark), cmd));
     CHECK(!NativeMenuActionToCommand(NativeMenuAction(MenuCommand::LayerToggle, NM_LAYER_NBG0), cmd));
     CHECK(!NativeMenuActionToCommand(NativeMenuAction(MenuCommand::ToggleTooltips), cmd));
     CHECK(!NativeMenuActionToCommand(NativeMenuAction(MenuCommand::ToggleRewind), cmd));
