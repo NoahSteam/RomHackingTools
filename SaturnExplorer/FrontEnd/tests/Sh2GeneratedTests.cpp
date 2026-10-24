@@ -7061,12 +7061,24 @@ std::string FindCxxCompiler(const std::string& cc)
 // The engine's reading of an unsigned literal (A2-60). The engine prints `U` on a constant whose operation is unsigned where the other operand is
 // signed (`param_1 + 0x80U` of an int4 param_1 is an unsigned sum and `0x7f < param_1 + 0x80U` an unsigned compare); in C++ `0x80U` and a plain
 // `0xffffffff` are both an `unsigned int`, which Promoted brings to the other operand's sign like any plain number, so the U was lost. Here the
-// suffixed literals are made the engine's unsigned types (`uint4(0x80)`, `uint8(...)` for ULL), which Common and Promoted treat as unsigned.
+// suffixed literals are made the engine's unsigned types (`uint4(0x80)`, `uint8(...)` for ULL), which Common and Promoted treat as unsigned. A `U` literal
+// that does not fit four bytes is an unsigned long long in C as well (`x * 0x281 & 0x8000000000000000U`, the sign bit of a 64-bit product, of seed 13677 of
+// the nightly run): it is a uint8, not a uint4 that drops its high word.
 std::string UnsignedLiteralsTyped(const std::string& text)
 {
     static const std::regex wide("\\b(0x[0-9a-fA-F]+|[0-9]+)(?:ULL|LLU|ull|llu)\\b");
     static const std::regex narrow("\\b(0x[0-9a-fA-F]+|[0-9]+)[Uu]\\b");
-    return std::regex_replace(std::regex_replace(text, wide, "uint8($1)"), narrow, "uint4($1)");
+    const std::string t = std::regex_replace(text, wide, "uint8($1)");
+    std::string out;
+    size_t from = 0;
+    for (std::sregex_iterator it(t.begin(), t.end(), narrow), end; it != end; ++it)
+    {
+        const std::string digits = (*it)[1].str();
+        const unsigned long long v = std::strtoull(digits.c_str(), nullptr, 0);
+        out += t.substr(from, it->position() - from) + (v > 0xFFFFFFFFull ? "uint8(" : "uint4(") + digits + ")";
+        from = it->position() + it->length();
+    }
+    return out + t.substr(from);
 }
 
 // The engine's reading of a negative literal (A2-71). The engine prints an 8-byte constant of -2^31 and below, to -(2^32-1), as `-0x80000000`: a
@@ -7191,6 +7203,24 @@ static std::string ShortCircuitExpr(const std::string& s)
     return out;
 }
 
+// A statement's leading keywords (`return a && b;`, `else return a && b;`) are not part of its expression: rewritten with it, `return` became the
+// left operand, LAND(return a, b), and the engine's reading did not compile (seeds 5134, 15286, 18724 of the nightly run).
+static std::string ShortCircuitStatement(const std::string& chunk)
+{
+    size_t i = 0;
+    for (;;)
+    {
+        const size_t a = chunk.find_first_not_of(" \t\r\n", i);
+        if (a == std::string::npos) break;
+        size_t b = a;
+        while (b < chunk.size() && (std::isalnum(static_cast<unsigned char>(chunk[b])) || chunk[b] == '_')) ++b;
+        const std::string word = chunk.substr(a, b - a);
+        if (word != "return" && word != "else" && word != "do") break;
+        i = b;
+    }
+    return chunk.substr(0, i) + ShortCircuitExpr(chunk.substr(i));
+}
+
 std::string ShortCircuitOps(const std::string& text)
 {
     std::string out, chunk;
@@ -7204,13 +7234,13 @@ std::string ShortCircuitOps(const std::string& text)
         else if (c == ')' || c == ']') --depth;
         if (depth <= 0 && (c == ';' || c == '{' || c == '}'))
         {
-            out += ShortCircuitExpr(chunk) + c;
+            out += ShortCircuitStatement(chunk) + c;
             chunk.clear();
             continue;
         }
         chunk += c;
     }
-    return out + ShortCircuitExpr(chunk);
+    return out + ShortCircuitStatement(chunk);
 }
 
 std::string CxxHeader()
@@ -7342,6 +7372,8 @@ void TestOracleOwnDecisions()
     // A2-60: a literal the engine prints with `U` is unsigned in the engine's reading, a plain one takes the other operand's type
     CHECK(UnsignedLiteralsTyped("0x7f < param_1 + 0x80U") == "0x7f < param_1 + uint4(0x80)");
     CHECK(UnsignedLiteralsTyped("x * 3U + 0xfffffffeULL") == "x * uint4(3) + uint8(0xfffffffe)");
+    CHECK(UnsignedLiteralsTyped("(int8)x * 0x281 & 0x8000000000000000U") == "(int8)x * 0x281 & uint8(0x8000000000000000)");
+    CHECK(UnsignedLiteralsTyped("x & 0xffffffffU") == "x & uint4(0xffffffff)");
     CHECK(UnsignedLiteralsTyped("uVar1 = in_r2U + 0xffffffff; uRam0600U = 1;") == "uVar1 = in_r2U + 0xffffffff; uRam0600U = 1;");
     // A2-96: `&&` and `||` of the engine's reading are lazy: the operands at one level are joined left to right, `||` outside `&&`, an assignment's right side is its own
     CHECK(ShortCircuitOps("if (a && b) {") == "if (LAND(a, b)) {");
@@ -7352,6 +7384,9 @@ void TestOracleOwnDecisions()
     CHECK(ShortCircuitOps("x = (char)(a) == '\\x01' && (c != 0);") == "x = LAND((char)(a) == '\\x01', (c != 0));");
     CHECK(ShortCircuitOps("/* it's && here */ x = a;") == "/* it's && here */ x = a;");
     CHECK(ShortCircuitOps("x <<= a >= b && c;") == "x <<= LAND(a >= b, c);");
+    CHECK(ShortCircuitOps("  return -1 < param_2 && -1 < -0x80000000 - param_2;") == "  return LAND(-1 < param_2, -1 < -0x80000000 - param_2);");
+    CHECK(ShortCircuitOps("} else return a || b;") == "} else return LOR(a, b);");
+    CHECK(ShortCircuitOps("returned = a && b;") == "returned = LAND(a, b);");
     CHECK(ShortCircuitOps("x = a & b | c;") == "x = a & b | c;");
     // A2-71: an 8-byte constant of -0x80000000 is negative in the engine's reading; the other literals are as they were
     CHECK(NegativeWideLiteralsTyped("(int8)param_2 * -0x80000000") == "(int8)param_2 * -0x80000000LL");
@@ -8079,7 +8114,8 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
                         std::string log1;
                         bool ok1 = false;
                         compileRun({ i }, "engine_" + prep[i].name, log1, ok1, true);
-                        out[i].detail += " [the engine's reading did not compile: " + log1.substr(0, 160) + "]";
+                        const size_t at = log1.find("error:");   // the error itself, not the "In function" line before it
+                        out[i].detail += " [the engine's reading did not compile: " + log1.substr(at == std::string::npos ? 0 : at, 240) + "]";
                     }
             for (size_t i : cand)
                 if (bad.count(prep[i].name) == 0 && unreadable.count(prep[i].name) == 0)
