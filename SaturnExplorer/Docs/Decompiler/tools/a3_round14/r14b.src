@@ -1,0 +1,137 @@
+name R14-2c end[-i]: p = sp+16, index i counts up, address = p - i (sub of a register)
+asm 06009000
+add #-24,r15
+mov r15,r2
+add #16,r2
+mov #5,r0
+mov.l r0,@r15
+mov #4,r1
+mov #0,r3
+L:
+add #4,r3
+mov r2,r5
+sub r3,r5
+mov.l r1,@r5
+dt r1
+bf L
+mov.l @r15,r0
+add #24,r15
+rts
+nop
+endasm
+args 0 0 0 0
+end
+
+name R14-2d end[-i] with element index scaled: i counts up from 1, address = p + (-i << 2)
+asm 06009000
+add #-24,r15
+mov r15,r2
+add #16,r2
+mov #5,r0
+mov.l r0,@r15
+mov #4,r1
+mov #0,r3
+L:
+add #-1,r3
+mov r3,r5
+shll2 r5
+add r2,r5
+mov.l r1,@r5
+dt r1
+bf L
+mov.l @r15,r0
+add #24,r15
+rts
+nop
+endasm
+args 0 0 0 0
+end
+
+name R14-2e index walk with the index in r0 itself, p = r14 = frame pointer copy
+asm 06009000
+add #-24,r15
+mov r15,r14
+add #16,r14
+mov #5,r0
+mov.l r0,@r15
+mov #4,r1
+mov #0,r0
+L:
+add #-4,r0
+mov.l r1,@(r0,r14)
+dt r1
+bf L
+mov.l @r15,r0
+add #24,r15
+rts
+nop
+endasm
+args 0 0 0 0
+end
+
+name R14-2f control: index walk up from -16 (negative start, constant base)
+asm 06009000
+add #-24,r15
+mov r15,r2
+add #16,r2
+mov #5,r0
+mov.l r0,@r15
+mov #4,r1
+mov #-16,r3
+L:
+mov r3,r0
+mov.l r1,@(r0,r2)
+add #4,r3
+dt r1
+bf L
+mov.l @r15,r0
+add #24,r15
+rts
+nop
+endasm
+args 0 0 0 0
+end
+
+name R14-2g control: the same index walk with the pointer decremented instead (S-form, A3-65)
+asm 06009000
+add #-24,r15
+mov r15,r2
+add #16,r2
+mov #5,r0
+mov.l r0,@r15
+mov #4,r1
+L:
+add #-4,r2
+mov.l r1,@r2
+dt r1
+bf L
+mov.l @r15,r0
+add #24,r15
+rts
+nop
+endasm
+args 0 0 0 0
+end
+
+name R14-2h index walk with a byte store, i steps -1
+asm 06009000
+add #-24,r15
+mov r15,r2
+add #16,r2
+mov #5,r0
+mov.l r0,@r15
+mov #4,r1
+mov #0,r3
+L:
+add #-1,r3
+mov r3,r0
+mov.b r1,@(r0,r2)
+dt r1
+bf L
+mov.l @r15,r0
+add #24,r15
+rts
+nop
+endasm
+args 0 0 0 0
+end

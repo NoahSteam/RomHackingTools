@@ -1,0 +1,251 @@
+name R14-1a walk down by add of a register holding -4 from sp+16+r4 (unbounded index)
+asm 06009000
+add #-24,r15
+mov r15,r2
+add #16,r2
+mov #5,r0
+mov.l r0,@r15
+add r4,r2
+mov #-4,r5
+mov #4,r1
+L:
+add r5,r2
+mov.l r1,@r2
+dt r1
+bf L
+mov.l @r15,r0
+add #24,r15
+rts
+nop
+endasm
+args 0 0 0 0
+end
+
+name R14-1b control: same with add #-4 (S18 form)
+asm 06009000
+add #-24,r15
+mov r15,r2
+add #16,r2
+mov #5,r0
+mov.l r0,@r15
+add r4,r2
+mov #4,r1
+L:
+add #-4,r2
+mov.l r1,@r2
+dt r1
+bf L
+mov.l @r15,r0
+add #24,r15
+rts
+nop
+endasm
+args 0 0 0 0
+end
+
+name R14-1c constant base sp+16, walk by add of a register -4 (no unbounded index)
+asm 06009000
+add #-24,r15
+mov r15,r2
+add #16,r2
+mov #5,r0
+mov.l r0,@r15
+mov #-4,r5
+mov #4,r1
+L:
+add r5,r2
+mov.l r1,@r2
+dt r1
+bf L
+mov.l @r15,r0
+add #24,r15
+rts
+nop
+endasm
+args 0 0 0 0
+end
+
+name R14-2a index walk: r0 steps down in a loop, store @(r0,p), p = sp+16+r4
+asm 06009000
+add #-24,r15
+mov r15,r2
+add #16,r2
+mov #5,r0
+mov.l r0,@r15
+add r4,r2
+mov #4,r1
+mov #0,r3
+L:
+add #-4,r3
+mov r3,r0
+mov.l r1,@(r0,r2)
+dt r1
+bf L
+mov.l @r15,r0
+add #24,r15
+rts
+nop
+endasm
+args 0 0 0 0
+end
+
+name R14-2b index walk, constant base sp+16
+asm 06009000
+add #-24,r15
+mov r15,r2
+add #16,r2
+mov #5,r0
+mov.l r0,@r15
+mov #4,r1
+mov #0,r3
+L:
+add #-4,r3
+mov r3,r0
+mov.l r1,@(r0,r2)
+dt r1
+bf L
+mov.l @r15,r0
+add #24,r15
+rts
+nop
+endasm
+args 0 0 0 0
+end
+
+name R14-3a 70 byte-steps in the loop body before the store (hop chain over 64), p = sp+140+r4
+asm 06009000
+add #-127,r15
+add #-33,r15
+mov r15,r2
+add #127,r2
+add #13,r2
+mov #5,r0
+mov.l r0,@r15
+add r4,r2
+mov #2,r1
+L:
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+add #-1,r2
+mov.b r1,@r2
+dt r1
+bf L
+mov.l @r15,r0
+add #127,r15
+add #33,r15
+rts
+nop
+endasm
+args 0 0 0 0
+end
+
+name R14-3b control: same with 20 steps of -3 (fewer hops)
+asm 06009000
+add #-127,r15
+add #-33,r15
+mov r15,r2
+add #127,r2
+add #13,r2
+mov #5,r0
+mov.l r0,@r15
+add r4,r2
+mov #2,r1
+L:
+add #-70,r2
+mov.b r1,@r2
+dt r1
+bf L
+mov.l @r15,r0
+add #127,r15
+add #33,r15
+rts
+nop
+endasm
+args 0 0 0 0
+end
+
+name R14-5 unrolled predecrement stores from sp+16+r4 (no loop)
+asm 06009000
+add #-24,r15
+mov r15,r2
+add #16,r2
+mov #5,r0
+mov.l r0,@r15
+add r4,r2
+mov #4,r1
+mov.l r1,@-r2
+mov.l r1,@-r2
+mov.l r1,@-r2
+mov.l r1,@-r2
+mov.l @r15,r0
+add #24,r15
+rts
+nop
+endasm
+args 0 0 0 0
+end
