@@ -17,6 +17,7 @@
  * Modified for SaturnExplorer: a guard below a pointer stepped down is no array's start (patches/0056-engine-stack-walk-down-aliases.patch).
  * Modified for SaturnExplorer: an escape analysis of the frame addresses, failing closed (patches/0061-engine-stack-frame-escape.patch).
  * Modified for SaturnExplorer: once the frame escapes, a pointer not proved to be no frame address may be one (patches/0063-engine-frame-escape-unknown-pointers.patch).
+ * Modified for SaturnExplorer: the escape's lowest frame offset never rises over the queries of a function (patches/0065-engine-frame-escape-whole-frame.patch).
  */
 /// \file heritage.hh
 /// \brief Utilities for building Static Single Assignment (SSA) form 
@@ -155,6 +156,7 @@ class LoadGuard {
   int4 analysisState;	///< 0=unanalyzed, 1=analyzed(partial result), 2=analyzed(full result)
   bool guessedBelow;	///< SaturnExplorer: minimumOffset is a guess below a pointer stepped down, not where an array starts (patches/0056-engine-stack-walk-down-aliases.patch)
   void establishRange(const ValueSetRead &valueSet);	///< Convert partial value set analysis into guard range
+  static bool pointerSteppedDown(Varnode *vn);	///< SaturnExplorer (0065): is the pointer the join of a loop that steps it down
   void finalizeRange(const ValueSetRead &valueSet);	///< Convert value set analysis to final guard range
 
   /// \brief Set a new unanalyzed LOAD guard that initially guards everything
@@ -212,7 +214,7 @@ public:
   bool loose;				///< ...by a form the stack analysis does not model (0061's causes, not a hand-over alone: 0063)
   bool gaveUp;				///< The walk passed its bound: everything is taken to have escaped
   bool haveLowest;			///< \b lowest is set
-  uintb lowest;				///< The lowest frame offset reached (a byte offset in the stack space)
+  uintb lowest;				///< The lowest frame offset reached (a byte offset in the stack space), or any earlier query of the function reached (0065)
   FrameEscape(void) : memoryEscape(false), handed(false), hostEscape(false), escaped(false), loose(false), gaveUp(false), haveLowest(false), lowest(0) {}
   void compute(const Funcdata *fd,AddrSpace *spc,bool preHeritage);	///< Run the walk over the given stack space
   /// \brief Is the given STORE made through a possible frame address the stack analysis does not model?

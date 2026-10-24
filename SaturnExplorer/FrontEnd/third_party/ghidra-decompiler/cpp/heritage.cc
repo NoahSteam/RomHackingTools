@@ -17,6 +17,7 @@
  * Modified for SaturnExplorer: a STORE through a frame address kept in a stack local and read back is guarded (patches/0060-engine-stack-walk-down-spilled.patch).
  * Modified for SaturnExplorer: a STORE a frame address may have escaped to is guarded, failing closed (patches/0061-engine-stack-frame-escape.patch).
  * Modified for SaturnExplorer: once the frame escapes, a STORE through a pointer not proved to be no frame address is guarded (patches/0063-engine-frame-escape-unknown-pointers.patch).
+ * Modified for SaturnExplorer: the escape's lowest frame offset is the lowest any query saw, so it never rises, and a pointer a loop steps down from an unbounded index is guarded below its base (patches/0065-engine-frame-escape-whole-frame.patch).
  */
 #include "heritage.hh"
 #include "funcdata.hh"
@@ -734,6 +735,37 @@ void Heritage::handleNewLoadCopies(void)
   loadCopyOps.clear();		// We have handled all the load guard COPY ops
 }
 
+/// SaturnExplorer (patches/0065-engine-frame-escape-whole-frame.patch): is the given pointer, back through copies, INDIRECTs and additions
+/// of a constant, the join of a loop that steps it down (AliasChecker::stepsDown)?
+/// \param vn is the pointer of a LOAD or STORE
+/// \return \b true if a loop steps it down
+bool LoadGuard::pointerSteppedDown(Varnode *vn)
+
+{
+  for(int4 k=0;k<64 && vn->isWritten();++k) {
+    PcodeOp *def = vn->getDef();
+    switch(def->code()) {
+    case CPUI_MULTIEQUAL:
+      return AliasChecker::stepsDown(def);
+    case CPUI_COPY:
+    case CPUI_INDIRECT:
+      vn = def->getIn(0);
+      break;
+    case CPUI_INT_ADD:
+    case CPUI_PTRADD:
+    case CPUI_PTRSUB:
+    case CPUI_INT_SUB:
+      if (def->getIn(1)->isConstant()) vn = def->getIn(0);
+      else if (def->code() == CPUI_INT_ADD && def->getIn(0)->isConstant()) vn = def->getIn(1);
+      else return false;
+      break;
+    default:
+      return false;
+    }
+  }
+  return false;
+}
+
 /// Make some determination of the range of possible values for a LOAD based
 /// an partial value set analysis. This can sometimes get
 ///   - minimumOffset - otherwise the original constant pulled with the LOAD is used
@@ -756,6 +788,26 @@ void LoadGuard::establishRange(const ValueSetRead &valueSet)
     minimumOffset = pointerBase;
     size = 0x1000;
     analysisState = 1;	// Don't bother doing more analysis
+    // SaturnExplorer (patches/0065-engine-frame-escape-whole-frame.patch): a range the analysis cannot bound (a variable index added to
+    // the frame address: `p = &buf[n]`, `p = sp + 16 - r4`) was guarded from the pointer's base up, as an index the engine takes for
+    // non-negative (ledger A3-9, A3-17). A loop that steps the pointer down from there (`*--p = v`) reaches below the base whatever the
+    // index is, and the stack under it went unguarded: the sentinel the walk overwrote was folded to the value stored before (the round 11
+    // review's fixtures S17 to S19, lent with `return 5;`, the code returns 1). Guard 0xffff below the base as well, as 0056 does for a walk
+    // whose range the analysis did see move down.
+    if (pointerSteppedDown(op->getIn(1))) {
+      guessedBelow = true;
+      uintb highest = spc->getHighest();
+      if (pointerBase >= 0xffff) {
+	minimumOffset = pointerBase - 0xffff;
+	size = 0xffff + 0x1000;
+	if (minimumOffset + size - 1 > highest || minimumOffset + size - 1 < minimumOffset)
+	  size = highest - minimumOffset + 1;
+      }
+      else {
+	minimumOffset = 0;
+	size = highest + 1;
+      }
+    }
   }
   else {
     step = (rangeSize == 3) ? range.getStep() : 0;	// Check for consistent step
@@ -989,6 +1041,9 @@ void FrameEscape::compute(const Funcdata *fd,AddrSpace *spc,bool preHeritage)
 	gaveUp = true;
 	escaped = true;
 	loose = true;
+	// (0065) ...from the lowest frame offset any query saw (no lowest is offset 0, which aliases no local)
+	if (fd->getScopeLocal() != (const ScopeLocal *)0 && fd->getScopeLocal()->getSpaceId() == spc)
+	  haveLowest = fd->getScopeLocal()->getFrameFloor(lowest);
 	return;
       }
       Varnode *vn = work.back();
@@ -1163,6 +1218,17 @@ void FrameEscape::compute(const Funcdata *fd,AddrSpace *spc,bool preHeritage)
   vector<uintb> candidates;
   for(map<Varnode *,uintb>::const_iterator iter=offset.begin();iter!=offset.end();++iter)
     candidates.push_back((*iter).second);
+  // (patches/0065-engine-frame-escape-whole-frame.patch) ...and the lowest any earlier query of this function saw. The frame addresses and
+  // stack locations left shrink as the actions fold: the word at a call's stack pointer becomes the call's argument, the local above it a
+  // constant, and the lowest left rose to the address that escaped, so a local below that address lost its alias in the later queries and
+  // was folded (ledger A3-104). The frame does not shrink: the lowest offset is kept with the function (ScopeLocal::setFrameFloor).
+  const ScopeLocal *scope = fd->getScopeLocal();
+  if (scope != (const ScopeLocal *)0 && scope->getSpaceId() != spc) scope = (const ScopeLocal *)0;
+  {
+    uintb floor;
+    if (scope != (const ScopeLocal *)0 && scope->getFrameFloor(floor))
+      candidates.push_back(floor);
+  }
   {
     VarnodeLocSet::const_iterator liter = fd->beginLoc(spc);
     VarnodeLocSet::const_iterator lenditer = fd->endLoc(spc);
@@ -1181,6 +1247,7 @@ void FrameEscape::compute(const Funcdata *fd,AddrSpace *spc,bool preHeritage)
       haveLowest = true;
     }
   }
+  if (haveLowest && scope != (const ScopeLocal *)0) scope->setFrameFloor(lowest);
   if (escaped) markUnknownStores(fd);
 }
 

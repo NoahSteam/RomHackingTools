@@ -17,6 +17,7 @@
  * Modified for SaturnExplorer: a pointer a loop steps down from a stack address aliases the locals below that address (patches/0056-engine-stack-walk-down-aliases.patch).
  * Modified for SaturnExplorer: so does one kept in a stack local and read back, across a call too (patches/0060-engine-stack-walk-down-spilled.patch).
  * Modified for SaturnExplorer: a host can declare that the frame escaped by a way the p-code does not show (patches/0063-engine-frame-escape-unknown-pointers.patch).
+ * Modified for SaturnExplorer: the escape's whole-frame alias and the function's lowest frame offset (patches/0065-engine-frame-escape-whole-frame.patch).
  */
 /// \file varmap.hh
 /// \brief Classes for keeping track of local variables and reconstructing stack layout
@@ -164,17 +165,20 @@ private:
   uintb localBoundary;		///< Boundary offset separating locals and parameters
   mutable uintb aliasBoundary;	///< Shallowest alias
   mutable uintb trialBoundary;	///< SaturnExplorer: the shallowest alias but an escape's (patches/0063-engine-frame-escape-unknown-pointers.patch)
+  mutable bool escapeAll;	///< SaturnExplorer: a frame address escaped, and every local from \b escapeLow up is aliased (patches/0065-engine-frame-escape-whole-frame.patch)
+  mutable uintb escapeLow;	///< SaturnExplorer: the frame's lowest offset, when \b escapeAll
   int4 direction;		///< 1=stack grows negative, -1=positive
   void deriveBoundaries(const FuncProto &proto);	///< Set up basic boundaries for the stack layout
   void gatherInternal(void) const;	///< Run through Varnodes looking for pointers into the stack
 public:
-  AliasChecker() { fd = (const Funcdata *)0; space = (AddrSpace *)0; calculated=false; }	///< Constructor
+  AliasChecker() { fd = (const Funcdata *)0; space = (AddrSpace *)0; calculated=false; escapeAll=false; escapeLow=0; }	///< Constructor
   void gather(const Funcdata *f,AddrSpace *spc,bool defer);		///< Gather Varnodes that point on the stack
   bool hasLocalAlias(Varnode *vn) const;	///< Return \b true if it looks like the given Varnode is aliased by a pointer
   void sortAlias(void) const;			///< Sort the alias starting offsets
   const vector<AddBase> &getAddBase(void) const { return addBase; }	///< Get the collection of pointer Varnodes
   const vector<uintb> &getAlias(void) const { return alias; }		///< Get the list of alias starting offsets
   const vector<pair<uintb,uintb> > &getDownSpans(void) const { return downSpan; }	///< SaturnExplorer: the stack a pointer stepped down may reach
+  bool getEscapeLow(uintb &low) const { low = escapeLow; return escapeAll; }	///< SaturnExplorer: did the frame escape, and from where is every local aliased (0065)
   static void gatherAdditiveBase(Varnode *startvn,vector<AddBase> &addbase);
   static uintb gatherOffset(Varnode *vn);
   static bool stepsDown(PcodeOp *multi);	///< SaturnExplorer: does a loop step the pointer joined by \b multi down (patches/0056-engine-stack-walk-down-aliases.patch)
@@ -215,6 +219,7 @@ public:
   bool hasParamRangeHit(void) const { return paramRangeHit; }	///< Return \b true if reference into parameter stack region has been seen
   void sortAlias(void) { checker.sortAlias(); }		///< Sort the alias starting offsets
   const vector<uintb> &getAlias(void) { return checker.getAlias(); }	///< Get the list of alias starting offsets
+  bool getEscapeLow(uintb &low) const { return checker.getEscapeLow(low); }	///< SaturnExplorer: the escape's whole-frame alias (0065)
   void gatherSymbols(const EntryMap *rangemap);		///< Add Symbol information as hints to the collection
   void gatherVarnodes(const Funcdata &fd);		///< Add stack Varnodes as hints to the collection
   void gatherOpen(const Funcdata &fd);			///< Add pointer references as hints to the collection
@@ -243,10 +248,12 @@ class ScopeLocal : public ScopeInternal {
   bool hostAlias;		///< True if the host declared a pointer into the stack that no Varnode shows (SaturnExplorer)
   uintb hostAliasStart;		///< The offset it points to; the lowest if declared more than once (SaturnExplorer)
   bool hostEscape;		///< True if the host declared that a frame address escaped by a way the p-code does not show (SaturnExplorer, 0063)
+  mutable bool haveFrameFloor;	///< True if \b frameFloor is set (SaturnExplorer, 0065)
+  mutable uintb frameFloor;	///< The lowest frame offset the escape walk has seen in this function, over every query (SaturnExplorer, 0065)
   bool adjustFit(RangeHint &a) const;	///< Make the given RangeHint fit in the current Symbol map
   void createEntry(const RangeHint &a);	///< Create a Symbol entry corresponding to the given (fitted) RangeHint
   bool restructure(MapState &state);	///< Merge hints into a formal Symbol layout of the address space
-  void markUnaliased(const vector<uintb> &alias);	///< Mark all local symbols for which there are no aliases
+  void markUnaliased(const vector<uintb> &alias,bool escapeAll,uintb escapeLow);	///< Mark all local symbols for which there are no aliases
   void fakeInputSymbols(void);		///< Make sure all stack inputs have an associated Symbol
   void addRecommendName(Symbol *sym);	///< Convert the given symbol to a name recommendation
   void collectNameRecs(void);		///< Collect names of unlocked Symbols on the stack
@@ -261,6 +268,9 @@ public:
   bool getHostAlias(uintb &off) const;	///< Get the offset of the lowest pointer the host declared (SaturnExplorer)
   void declareHostEscape(void) { hostEscape = true; }	///< Declare that a frame address escaped where the p-code does not show it (SaturnExplorer, 0063)
   bool hasHostEscape(void) const { return hostEscape; }	///< Did the host declare an escape (SaturnExplorer, 0063)
+  /// \brief The lowest frame offset the escape walk has seen in this function, over every query (SaturnExplorer, 0065)
+  bool getFrameFloor(uintb &off) const { off = frameFloor; return haveFrameFloor; }
+  void setFrameFloor(uintb off) const { frameFloor = off; haveFrameFloor = true; }	///< Record a new lowest frame offset (SaturnExplorer, 0065)
 
   /// \brief Return \b true if \b restructure analysis discovered overlapping variables
   bool hasOverlapProbems(void) const { return overlapProblems; }

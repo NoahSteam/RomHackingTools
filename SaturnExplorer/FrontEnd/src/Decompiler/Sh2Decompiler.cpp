@@ -361,6 +361,8 @@ public:
     // ...and the calls (bit r: the register, as origin:: numbers them) a frame address went out at in a register that is no argument the engine
     // shows (area 3 round 12 fix): r0, r1, r3, r8-r14, GBR, MACH, ...
     const std::map<uint32_t, uint32_t>& HandSites() const { return mHandSites; }
+    // ...and the stack words, by their offset from r15 on entry, whose frame address the stack-argument note of a call is for (A3-108).
+    const std::map<uint32_t, std::set<int64_t>>& EscapeWords() const { return mEscapeWords; }
     // After Run(): whether r2 held the address of a local at a call whose signature is not lent (A3-4),
     // and the lowest such offset from r15 on entry as the engine's stack offset (unsigned, 32-bit).
     // After Run(): whether an address of the frame went out to code that may keep it by a way the engine may not see (HandOut): the probe
@@ -1224,6 +1226,19 @@ private:
             // not follow it); a callee the probe cannot name, the convention's (kConvention).
             if (mTolerant && !mNested)
             {
+                // (area 3 round 13 fix, A3-104, A3-105) ...and whatever the walk says, the convention's registers and the words from the call's
+                // r15 up are what a callee is handed: a frame address in one goes out, as the engine's (e) takes it for an argument it shows.
+                // The engine does not show every one: a callee with no locked prototype may be printed with no argument at all, r4 and the
+                // stack word included, and the walk of a callee that publishes its incoming stack word names no register (CalleeHanded).
+                for (int r = 2; r < 8; ++r)
+                    if (((kConvention >> r) & 1u)) HandOut(s, Get(s, mReg[r]));
+                {
+                    const Value callSp = Get(s, mReg[kR15]);
+                    std::vector<Value> words;
+                    for (const auto& slot : s.slots)
+                        if (callSp.kind != Value::Sp || slot.first >= callSp.v) words.push_back(slot.second);
+                    for (const Value& w : words) HandOut(s, w);
+                }
                 const uint32_t regs = haveTarget ? CalleeStoresBelow(target) | CalleeHanded(target) : kConvention;
                 for (int r = 0; r < kTracked; ++r)
                 {
@@ -1346,6 +1361,12 @@ private:
         if (c == 0) return;
         s.out |= c;
         mFrameOut = true;
+        // (area 3 round 13 fix, A3-106) A pointer into the frame reaches the frame's words, and what they hold goes out with it: a slot that
+        // holds an address of the caller's frame (or a laundered one) makes a pointer later read back from memory a possible word of the
+        // caller's frame (kOutHigh), not only a local.
+        if (!x.Frame()) return;
+        for (const auto& slot : s.slots)
+            if (slot.second.Frame()) s.out |= EscapeClass(s, slot.second);
     }
 
     // A call whose signature is not lent may read r2: the SH ABI passes the address of a returned
@@ -1388,7 +1409,16 @@ private:
                     const Value x = Get(s, mReg[r]);
                     shown = shown || (x.kind == Value::Sp && x.v == slot.second.v);
                 }
-            if (!shown) NoteFrameEscapeOf(s, slot.second, kR15, true, at);
+            if (!shown)
+            {
+                NoteFrameEscapeOf(s, slot.second, kR15, true, at);
+                // (A3-108) the note is said once per word: a word holding a frame address this function made (not one a callee may have
+                // written over it, which every later call would see as a new fact)
+                if (slot.second.kind == Value::Sp || (slot.second.Frame() && slot.second.def != 0)) mEscapeWords[at].insert(slot.first);
+            }
+            // (area 3 round 13 fix, A3-105) ...but shown or not, the word goes out to a callee that may keep it: the engine shows r4 only when
+            // its trial takes it (a callee with no locked prototype may be printed with none), so the escape does not wait for it (HandOut).
+            else HandOut(s, slot.second);
         }
     }
 
@@ -1409,7 +1439,11 @@ private:
             if (slot.first >= sp.v && slot.second.exposedAt == 0 && !(slot.second.kind == Value::Fuzzy && slot.second.hole))
             {
                 const int64_t k = (slot.first - sp.v) / 4;
-                if ((words & CallEffects::kFrameAny) || (k >= 0 && k < 31 && ((words >> k) & 1u))) slot.second.exposedAt = at;
+                if ((words & CallEffects::kFrameAny) || (k >= 0 && k < 31 && ((words >> k) & 1u)))
+                {
+                    slot.second.exposedAt = at;
+                    if (SavedRegister(slot.second)) mExposedSaved.insert(std::make_pair(at, slot.first));   // (A3-108)
+                }
             }
     }
     // The words of its caller's frame that the function at 'target' writes itself, as CallEffects::frameWords has them (A3-21's stores, an
@@ -1541,7 +1575,8 @@ private:
     void ReadExposed(const Value& slot, int64_t offset)
     {
         if (!mTolerant || slot.exposedAt == 0) return;
-        mEscapeSites[slot.exposedAt] |= 1u << 16;
+        // (A3-108) bit 17: the word held a saved register's entry value when the call was made, which the note does not call a local
+        mEscapeSites[slot.exposedAt] |= mExposedSaved.count(std::make_pair(slot.exposedAt, offset)) ? 1u << 17 : 1u << 16;
         if (!mEscaped || offset < mEscapeLow) mEscapeLow = offset;
         mEscaped = true;
     }
@@ -1565,7 +1600,14 @@ private:
             HandOut(s, v);   // the escape is the engine's, from the frame's lowest slot (not a host alias: A3-99)
             return;
         }
-        if (exactToo) mEscapeSites[at] |= 1u << reg;   // the address is in no argument of the call: the text says so (A3-28)
+        if (exactToo)
+        {
+            mEscapeSites[at] |= 1u << reg;   // the address is in no argument of the call: the text says so (A3-28)
+            // (area 3 round 13 fix, A3-105) ...and it has gone out: a callee handed an address in no argument the engine shows (r2, r7 alone, a
+            // stack word the engine drops) may keep it, and a later step may walk down from what it kept. The alias from the address up (the
+            // note's "from there up") reaches only the locals at and above it; the escape is the engine's, of the whole frame (HandOut).
+            HandOut(s, v);
+        }
         if (base == Value::kLowBase) mEscapedLow = true;
         else if (!mEscaped || base < mEscapeLow) mEscapeLow = base;
         mEscaped = true;
@@ -1870,6 +1912,22 @@ private:
         Value f = FreeStack();
         f.dep = Deps::All(origin::kMemory | origin::kStack | kDepArgs);
         f.from |= taint;
+        // (area 3 round 13 fix, A3-106) ...and it may be a word of the frame the interpreter tracks: what one of those holds. A frame address
+        // spilled to a slot and read back through a laundered copy of r15 (a swap or shift pair, a mask) or through r15 published in a global
+        // is still that address -- of the caller's frame, it is a hand-back -- so the read carries the frame flag, the lowest base and
+        // callerHigh of every slot the address may reach (a based address: its object and up; any other: every slot), as Clobber does for a
+        // store. FreeStack alone carried none, and MayBeCallerFrame took the pointer for one nothing is known of.
+        FrameWrite w;
+        const int64_t from = addr.kind == Value::Fuzzy && addr.Frame() && addr.stackBase != Value::kNoBase && addr.stackBase != Value::kLowBase
+                                 ? addr.stackBase : INT64_MIN;
+        for (const auto& slot : s.slots)
+            if (slot.first + 4 > from) JoinFrameWrite(w, FrameWriteOf(slot.second));
+        if (w.frame)
+        {
+            f.frame = true;
+            f.stackBase = w.base;
+            f.callerHigh = w.high;
+        }
         return f;
     }
 
@@ -2494,6 +2552,8 @@ private:
     bool mEntryUndecodable = false;    // the entry instruction could not be decoded (memory not captured)
     std::map<uint32_t, uint32_t> mEscapeSites;   // the calls that escape was declared at because of r2 or r7, and which
     std::map<uint32_t, uint32_t> mHandSites;     // (area 3 round 12 fix) ...and at in another register no argument shows (HandSites)
+    std::set<std::pair<uint32_t, int64_t>> mExposedSaved;   // (A3-108) the words a call exposed that held a saved register (call, offset)
+    std::map<uint32_t, std::set<int64_t>> mEscapeWords;   // (area 3 round 13 fix, A3-108) the stack words (offsets) the stack note of a call is for
     bool mEscaped = false;   // r2 held a frame address at a call that may read it
     bool mEscapedLow = false;   // ...of which one with no lower bound than the frame's lowest slot
     int64_t mEscapeLow = 0;     // ...and the lowest exact base (when mEscapedLow, with mLowestSp)
@@ -4971,6 +5031,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         // prints: the first one learns who is called, and a function without a call has nothing to say.)
         std::map<uint32_t, uint32_t> escapeSites;   // calls the note is for, once the actions have said who is called
         std::map<uint32_t, uint32_t> handSites;     // ...and the calls a frame address went out at in another register (HandSites)
+        std::map<uint32_t, std::set<int64_t>> escapeWords;   // ...and the stack words of the stack-argument notes (EscapeWords, A3-108)
         if (print && fd->numCalls() > 0)
         {
             ReturnCheck probe(*fd, exec, prototypes, flowTables);
@@ -4990,6 +5051,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
             // local for one the callee cannot reach (A3-28). A comment at the call, of a type the function's own flow warnings do not collect;
             // put below, after the actions, when a `jsr @rN` through a literal is known for what it calls.
             escapeSites = probe.EscapeSites();
+            escapeWords = probe.EscapeWords();
             if (probe.FrameEscape(from)) fd->getScopeLocal()->declareHostAlias(from);
         }
         for (const auto& ro : scan.readonly)
@@ -5019,6 +5081,12 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         // input (the probe, run before the literals fold, took every `jsr @rN` for a callee that may read r2: A3-32).
         for (const auto& h : handSites)
             if (escapeSites.count(h.first) == 0) escapeSites[h.first] = 0;
+        // (area 3 round 13 fix, A3-108) A frame fact is said once per function, at the first call it holds at, with "likewise at the calls
+        // below" when it holds at others: a frame address in r14 is one fact (a function that keeps a frame pointer said it at every call, up to
+        // 46 times), and the stack words that hold one are a fact per word, said again only at a call one more word holds one at (the words
+        // a callee may have written over are no new fact). The notes the text needs at the first call are all there.
+        std::map<uint32_t, std::string> noteAt;   // the site and its note
+        std::map<uint32_t, int> regOf;           // a register note's register
         for (const auto& siteRegs : escapeSites)
         {
             const uint32_t site = siteRegs.first;
@@ -5044,12 +5112,54 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
                                                          "r11", "r12", "r13", "r14", "r15", "sr", "gbr", "vbr", "mach", "macl", "pr" };
                 int reg = 0;
                 while (reg < 21 && !((hand->second >> reg) & 1u)) ++reg;
-                arch->commentdb->addComment(ghidra::Comment::user2, fd->getAddress(), ghidra::Address(ram, site),
-                                            std::string(kFrameEscapeNoteRegA) + kRegNames[reg] + kFrameEscapeNoteRegB);
+                noteAt[site] = std::string(kFrameEscapeNoteRegA) + kRegNames[reg] + kFrameEscapeNoteRegB;
+                regOf[site] = reg;
                 continue;
             }
-            arch->commentdb->addComment(ghidra::Comment::user2, fd->getAddress(), ghidra::Address(ram, site),
-                                        (m & 4u) ? kFrameEscapeNote : (m & 0x80u) ? kFrameEscapeNoteR7 : (m & 0x8000u) ? kFrameEscapeNoteStack : kFrameEscapeNoteSlot);
+            noteAt[site] = (m & 4u) ? kFrameEscapeNote : (m & 0x80u) ? kFrameEscapeNoteR7 : (m & 0x8000u) ? kFrameEscapeNoteStack
+                           : (m & (1u << 17)) && !(m & (1u << 16)) ? kFrameEscapeNoteSaved : kFrameEscapeNoteSlot;
+        }
+        {
+            std::map<int, uint32_t> regSaid;       // a register's note: the call it was said at
+            std::set<int64_t> wordsSaid;            // the stack words a stack note was said for
+            uint32_t lastStack = 0;                 // the call the last stack note was said at
+            std::set<uint32_t> skipped, likewise;
+            for (const auto& sn : noteAt)
+            {
+                const auto r = regOf.find(sn.first);
+                if (r != regOf.end())
+                {
+                    const auto said = regSaid.find(r->second);
+                    if (said == regSaid.end()) regSaid[r->second] = sn.first;
+                    else
+                    {
+                        skipped.insert(sn.first);
+                        likewise.insert(said->second);
+                    }
+                    continue;
+                }
+                if (sn.second != std::string(kFrameEscapeNoteStack)) continue;
+                const auto w = escapeWords.find(sn.first);
+                bool fresh = lastStack == 0;
+                if (w != escapeWords.end())
+                    for (int64_t off : w->second) fresh = fresh || wordsSaid.count(off) == 0;
+                if (fresh)
+                {
+                    if (w != escapeWords.end()) wordsSaid.insert(w->second.begin(), w->second.end());
+                    lastStack = sn.first;
+                }
+                else
+                {
+                    skipped.insert(sn.first);
+                    likewise.insert(lastStack);
+                }
+            }
+            for (const auto& sn : noteAt)
+            {
+                if (skipped.count(sn.first)) continue;
+                arch->commentdb->addComment(ghidra::Comment::user2, fd->getAddress(), ghidra::Address(ram, sn.first),
+                                            likewise.count(sn.first) ? sn.second + kFrameEscapeNoteLikewise : sn.second);
+            }
         }
 
         if (!request.allMemoryVolatile)

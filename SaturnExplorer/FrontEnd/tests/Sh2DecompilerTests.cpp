@@ -3906,6 +3906,19 @@ int MemoryWidth(uint16_t op)
     }
 }
 
+// (area 3 round 13 fix, A3-113) The scan below takes every `sts.l pr,@-r15` for a function's entry, and a function whose prologue pushes other
+// registers first (`mov.l r14,@-r15 ; ... ; sts.l pr,@-r15`) is entered twice: at its first push, and at the `sts.l pr`, a fragment that pops
+// registers it never pushed and reads them as stack words above its entry (about 40% of the entries of both corpora). The fragments stay in
+// the run (they are code the engine must not get wrong either), but the counts are said for the real entries and the fragments apart: a
+// fragment is an entry whose previous word pushes a register onto r15 (`mov.l Rm,@-r15`, 0x2Fm6).
+bool CorpusFragment(const std::vector<uint8_t>& hw, uint32_t entry)
+{
+    const uint32_t off = entry - 0x06000000u;
+    if (off < 2 || off >= hw.size()) return false;
+    const uint16_t w = static_cast<uint16_t>(hw[off - 2] << 8 | hw[off - 1]);
+    return (w & 0xFF0Fu) == 0x2F06u;
+}
+
 // Real game code, when given: SE_GAME_HWRAM names a 1 MiB high work RAM image (big-endian, as the
 // SH-2 sees it). Every function prologue (sts.l pr,@-r15) is decompiled; the summary says how many
 // succeeded, how long they took, and what the hardware handling found. SE_GAME_OUT, if set, is a
@@ -3938,6 +3951,8 @@ void TestGameCode()
     const std::function<bool(uint32_t)> noneMarked = [](uint32_t) { return false; };
     double total = 0, worst = 0;
     uint32_t worstAt = 0;
+    int nReal = 0, nFragments = 0;   // A3-113: real entries and the fragments (CorpusFragment)
+    double msReal = 0, msFragments = 0;
     // Area 7: the pseudocode-to-assembly mapping over every function (MappingOracle.h).
     dts::MappingAudit mapping;
     const std::string mappingMutate = std::getenv("SE_GAME_MAPPING_MUTATE") ? std::getenv("SE_GAME_MAPPING_MUTATE") : "";
@@ -3959,6 +3974,11 @@ void TestGameCode()
             for (const std::string& l : d.Disassemble(snap, from, 64)) std::printf("    %s\n", l.c_str());
         }
         ++n;
+        {
+            const bool frag = CorpusFragment(hw, entry);
+            ++(frag ? nFragments : nReal);
+            (frag ? msFragments : msReal) += r.elapsedMs;
+        }
         if (r.status == DecompileStatus::Ok) ++ok;
         else if (r.status == DecompileStatus::Failed) ++failed;
         else ++other;
@@ -4141,6 +4161,8 @@ void TestGameCode()
     }
     std::printf("  game code: %d functions, %d ok, %d failed, %d other; %.0f ms total, worst %.1f ms at %08X\n", n, ok,
                 failed, other, total, worst, worstAt);
+    std::printf("  game code entries: %d real (%.0f ms), %d fragments (%.0f ms: an entry after a push of r15, A3-113)\n", nReal, msReal,
+                nFragments, msFragments);
     std::printf("  accesses: %d functions with any, %d direct (volatile), %d through pointers, %d not printed "
                 "exactly once; notes %d, cautions %d\n", withAccesses, direct, pointer, twice, notes, cautions);
     std::printf("  %d instructions with more accesses than they make, %d accesses of another width, %d statements "
@@ -4201,6 +4223,9 @@ void TestGameLending()
     for (uint32_t k = 0; k + 1 < hw.size(); k += 2)
         if (hw[k] == 0x4F && hw[k + 1] == 0x22) entries.push_back(0x06000000u + k);
     const std::vector<uint32_t> prologues = entries;
+    // A3-113: which entries are fragments (CorpusFragment); the callees found below are entries a call names, real ones.
+    std::vector<char> fragment;
+    for (uint32_t e : entries) fragment.push_back(CorpusFragment(hw, e) ? 1 : 0);
     std::map<uint32_t, size_t> index;
     for (size_t i = 0; i < entries.size(); ++i) index[entries[i]] = i;
     auto indexOf = [&](uint32_t a) {
@@ -4221,6 +4246,7 @@ void TestGameLending()
                 const uint32_t canonical = 0x06000000u | (c & 0x000FFFFFu);
                 index[canonical] = entries.size();
                 entries.push_back(canonical);
+                fragment.push_back(0);
             }
     }
     // Callees first: a post-order walk.
@@ -4373,6 +4399,21 @@ void TestGameLending()
     };
     summarize(before, "before");
     summarize(after, "after");
+    // A3-113: the same, the real entries and the fragments apart.
+    for (const auto* rowsLabel : { &before, &after })
+    {
+        int known[2] = { 0, 0 }, count[2] = { 0, 0 };
+        size_t params[2] = { 0, 0 };
+        for (size_t i = 0; i < rowsLabel->size(); ++i)
+        {
+            const int k = fragment[i] ? 1 : 0;
+            ++count[k];
+            known[k] += (*rowsLabel)[i].known;
+            params[k] += (*rowsLabel)[i].known ? (*rowsLabel)[i].params : 0;
+        }
+        std::printf("  [%s] real entries %d: signatures lent %d (%zu parameters); fragments %d: lent %d (%zu parameters)\n",
+                    rowsLabel == &before ? "before" : "after", count[0], known[0], params[0], count[1], known[1], params[1]);
+    }
     // A3-3: the registers the model keeps across a call, changed by a lent function. What each caller of one
     // does with it: reads it as the callee's value (extraout_), or is withheld, never lent on the old value.
     {
@@ -4407,11 +4448,13 @@ void TestGameLending()
         for (const auto& kv : reasons) std::printf("    withheld %5d  %s\n", kv.second, kv.first.c_str());
     }
     int textDiffers = 0, gainedSignature = 0, lostSignature = 0, moreParams = 0, fewerParams = 0, lessExtraout = 0, moreExtraout = 0;
+    int textDiffersReal = 0;
     for (size_t i = 0; i < entries.size(); ++i)
     {
         const Row& b = before[i];
         const Row& a = after[i];
         textDiffers += b.text != a.text;
+        textDiffersReal += b.text != a.text && !fragment[i];
         gainedSignature += !b.known && a.known;
         lostSignature += b.known && !a.known;
         moreParams += a.params > b.params;
@@ -4425,6 +4468,7 @@ void TestGameLending()
     std::printf("  lending the proved effects changes the text of %d functions: %d gain a lent signature, %d lose one; %d gain "
                 "parameters, %d lose some; extraout_r4-7 gone from %d, new in %d\n",
                 textDiffers, gainedSignature, lostSignature, moreParams, fewerParams, lessExtraout, moreExtraout);
+    std::printf("  ...of them %d real entries and %d fragments (A3-113)\n", textDiffersReal, textDiffers - textDiffersReal);
     // A callee found by a call can be an address that holds no function (a computed target the first
     // pass took for constant): the engine reports that as a failed result, in both runs alike. The
     // prologue functions TestGameCode decompiles never fail.
@@ -12245,6 +12289,156 @@ void TestArea3Round12Fix()
     }
 }
 
+// ===== Area 3, round 13 fix: the escape's boundary (A3-104), a frame address in a dropped stack word (A3-105), a caller-frame pointer
+// reloaded through an address the interpreter cannot place (A3-106), and the notes said once (A3-108) =====
+// The review's fixtures (Docs/Decompiler/tools/a3_round13/r13a.src, r13b.src) verbatim, with its controls.
+void TestArea3Round13Fix()
+{
+    Sh2Decompiler d(gConfig);
+    uint64_t serial = 126000;
+    const uint32_t base = 0x06009000u;
+    struct Out
+    {
+        DecompileResult entry;
+        std::map<uint32_t, DecompileResult> callees;
+        uint32_t ran = 0;
+    };
+    auto run = [&](const char* name, std::vector<std::pair<uint32_t, std::vector<uint16_t>>> fns, std::vector<uint32_t> lend) {
+        std::vector<uint16_t> words;
+        for (const auto& f : fns)
+        {
+            if (words.size() < f.first / 2) words.resize(f.first / 2, 0x0009);
+            words.insert(words.end(), f.second.begin(), f.second.end());
+        }
+        const CallFixture f = { name, base, std::move(words) };
+        auto snap = CallSnapshot(f, ++serial);
+        Out o;
+        DecompileRequest q = Request(base);
+        for (uint32_t at : lend)
+        {
+            DecompileRequest cq = Request(base + at);
+            cq.prototypes = q.prototypes;
+            o.callees[at] = d.Decompile(snap, cq);
+            if (o.callees[at].status == DecompileStatus::Ok && o.callees[at].prototype.known) q.prototypes.emplace_back(base + at, o.callees[at].prototype);
+        }
+        o.entry = d.Decompile(snap, q);
+        Print(f.name.c_str(), o.entry);
+        CHECK(o.entry.status == DecompileStatus::Ok);
+        CHECK(CallRunResult(snap, f, { 0, 0, 0, 0 }, o.ran));
+        return o;
+    };
+
+    // ---- A3-104: g(&buf[2], obj) keeps the end pointer in an object, with the word at the call's r15 written (the call's fifth argument to
+    // the engine); the caller walks down from the kept pointer to buf[0] and returns buf[1]. The escape's lowest frame offset rose with the
+    // folding (the word at the call's r15 became the argument, buf[1] a constant) and buf[1] lost its alias: `return 2;`, the run 0x55.
+    const std::vector<uint16_t> keepObj = { 0xD101, 0x1141, 0x000B, 0x0009, 0x0600, 0xF200 };   // g: mov.l r4,@(4,r1)
+    {
+        const Out a = run("R13-1a unlent g(ptr, obj) keeps the end pointer of a local buffer; the caller fills the buffer backwards through it",
+                          { { 0x0, { 0x4F22, 0x7FF0, 0xE001, 0x1F00, 0xE002, 0x1F01, 0xE003, 0x1F02, 0xE004, 0x1F03, 0x64F3, 0x7408, 0xD507, 0xD108, 0x410B, 0x0009, 0xD605, 0x5661, 0xE255, 0x2626, 0x2626, 0x2626, 0x50F1, 0x7F10, 0x4F26, 0x000B, 0x0009, 0x0009, 0x0600, 0xF200, 0x0600, 0x9100 } },
+                            { 0x100, keepObj } }, {});
+        CHECK(a.ran == 0x55 && !a.entry.prototype.known && Has(a.entry.Text(), "return xStack_10;") && !Has(a.entry.Text(), "return 2;"));
+        const Out b = run("R13-1b control: r5 unset (one register argument)",
+                          { { 0x0, { 0x4F22, 0x7FF0, 0xE001, 0x1F00, 0xE002, 0x1F01, 0xE003, 0x1F02, 0xE004, 0x1F03, 0x64F3, 0x7408, 0xD106, 0x410B, 0x0009, 0xD606, 0x5661, 0xE255, 0x2626, 0x2626, 0x2626, 0x50F1, 0x7F10, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9100, 0x0600, 0xF200 } },
+                            { 0x100, keepObj } }, {});
+        CHECK(b.ran == 0x55 && Has(b.entry.Text(), "return xStack_10;"));
+        const Out c = run("R13-1c control: the word at the call's r15 not written",
+                          { { 0x0, { 0x4F22, 0x7FF0, 0xE002, 0x1F01, 0xE003, 0x1F02, 0xE004, 0x1F03, 0x64F3, 0x7408, 0xD507, 0xD108, 0x410B, 0x0009, 0xD605, 0x5661, 0xE255, 0x2626, 0x2626, 0x2626, 0x50F1, 0x7F10, 0x4F26, 0x000B, 0x0009, 0x0009, 0x0600, 0xF200, 0x0600, 0x9100 } },
+                            { 0x100, keepObj } }, {});
+        CHECK(c.ran == 0x55 && Has(c.entry.Text(), "return xStack_10;"));
+        const Out dd = run("R13-1d control: g lent",
+                           { { 0x0, { 0x4F22, 0x7FF0, 0xE001, 0x1F00, 0xE002, 0x1F01, 0xE003, 0x1F02, 0xE004, 0x1F03, 0x64F3, 0x7408, 0xD507, 0xD108, 0x410B, 0x0009, 0xD605, 0x5661, 0xE255, 0x2626, 0x2626, 0x2626, 0x50F1, 0x7F10, 0x4F26, 0x000B, 0x0009, 0x0009, 0x0600, 0xF200, 0x0600, 0x9100 } },
+                             { 0x100, keepObj } }, { 0x100 });
+        CHECK(dd.ran == 0x55 && Has(dd.entry.Text(), "return xStack_10;"));
+    }
+    // ---- A3-105: the frame address in the stack argument word of an unlent call with r5-r7 unset (the engine drops the word); g reads its
+    // incoming stack word and publishes it, w walks down from it. The host declared an alias from the address up, no escape: `return 5;`.
+    {
+        const std::vector<uint16_t> pub = { 0x61F2, 0xD202, 0x2212, 0x000B, 0x0009, 0x0009, 0x0600, 0xF100 };                   // g: mov.l @r15,r1 ; mov.l r1,@global
+        const std::vector<uint16_t> walk = { 0xD103, 0x6112, 0xE255, 0x2126, 0x2126, 0x000B, 0x0009, 0x0009, 0x0600, 0xF100 };   // w: two stores below the global's pointer
+        const Out a = run("R13-2a a frame address in the dropped stack argument word; g publishes it, w walks down from it",
+                          { { 0x0, { 0x4F22, 0x7FF0, 0xE005, 0x2F02, 0x61F3, 0x7108, 0x7FFC, 0x2F12, 0xD105, 0x410B, 0x0009, 0x7F04, 0xD104, 0x410B, 0x0009, 0x60F2, 0x7F10, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9100, 0x0600, 0x9180 } },
+                            { 0x100, pub }, { 0x180, walk } }, {});
+        CHECK(a.ran == 0x55 && Has(a.entry.Text(), "return xStack_14;") && !Has(a.entry.Text(), "return 5;"));
+        CHECK(Has(a.entry.Text(), "a frame address is in a stack argument slot here"));
+        const Out b = run("R13-2b the same with the address also in r4",
+                          { { 0x0, { 0x4F22, 0x7FF0, 0xE005, 0x2F02, 0x64F3, 0x7408, 0x6143, 0x7FFC, 0x2F12, 0xD106, 0x410B, 0x0009, 0x7F04, 0xD105, 0x410B, 0x0009, 0x60F2, 0x7F10, 0x4F26, 0x000B, 0x0009, 0x0009, 0x0600, 0x9100, 0x0600, 0x9180 } },
+                            { 0x100, pub }, { 0x180, walk } }, {});
+        CHECK(b.ran == 0x55 && Has(b.entry.Text(), "return xStack_14;") && !Has(b.entry.Text(), "return 5;"));
+        // escfuzz seed 303 i=469: r4 and r7 set, r5 and r6 unset, the address in the stack word and in r4; the engine prints the call with no
+        // argument at all (`func_0x06009100();`), so neither (e) nor the A3-60 rule ("shown") lets it out: the probe does (HandOut)
+        const Out c = run("A3-105 escfuzz 303/469: the address in r4 and the stack word, the call printed with no argument",
+                          { { 0x0, { 0x4F22, 0x7FF0, 0xE001, 0x1F00, 0xE002, 0x1F01, 0xE003, 0x1F02, 0xE004, 0x1F03, 0x64F3, 0x7408, 0xE725, 0x7FFC, 0x2F42, 0xD107, 0x410B, 0x0009, 0x7F04, 0xD606, 0x6662, 0xE255, 0x76FC, 0x2622, 0x50F1, 0x7F10, 0x4F26, 0x000B, 0x0009, 0x0009, 0x0600, 0x9100, 0x0600, 0xF100 } },
+                            { 0x100, pub } }, { 0x100 });
+        CHECK(c.ran == 0x55 && !Has(c.entry.Text(), "return 2;"));
+    }
+    // ---- A3-106: g spills the address of its caller's outgoing word to a local and reloads it, then writes 7 through it. Through the exact
+    // address (3.1) or @(r0,r15) (3.4) g is withheld; through a laundered copy of r15 (3.2 a swap pair, 3.3 a mask) or r15 published in a
+    // global (3.5) the reload was FreeStack (no frame flag), g lent `void()` and the caller printed `return 5;`, the run 7.
+    {
+        const std::vector<uint16_t> caller = { 0x4F22, 0x7FF0, 0xE005, 0x2F02, 0xD103, 0x410B, 0x0009, 0x60F2, 0x7F10, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9100 };
+        const struct
+        {
+            const char* name;
+            std::vector<uint16_t> g;
+        } cases[] = {
+            { "R13-3.0 control: g writes the caller word through an exact copy of r15", { 0x7FFC, 0x63F3, 0x7304, 0xE007, 0x2302, 0x7F04, 0x000B, 0x0009 } },
+            { "R13-3.1 control: the pointer spilled to a local, reloaded through the local's exact address", { 0x7FFC, 0x61F3, 0x7104, 0x2F12, 0x63F2, 0xE007, 0x2302, 0x7F04, 0x000B, 0x0009 } },
+            { "R13-3.2 reloaded through a swap-pair laundered address of the local", { 0x7FFC, 0x61F3, 0x7104, 0x2F12, 0x62F3, 0x6229, 0x6229, 0x6322, 0xE007, 0x2302, 0x7F04, 0x000B, 0x0009, 0x0009 } },
+            { "R13-3.3 reloaded through a masked copy of r15", { 0x7FFC, 0x61F3, 0x7104, 0x2F12, 0x62F3, 0xE4FC, 0x2249, 0x6322, 0xE007, 0x2302, 0x7F04, 0x000B, 0x0009, 0x0009 } },
+            { "R13-3.4 control: reloaded through @(r0,r15)", { 0x7FFC, 0x61F3, 0x7104, 0x2F12, 0xE000, 0x03FE, 0xE007, 0x2302, 0x7F04, 0x000B, 0x0009, 0x0009 } },
+            { "R13-3.5 reloaded through r15 published in a global", { 0x7FFC, 0x61F3, 0x7104, 0x2F12, 0xD204, 0x22F2, 0x6222, 0x6322, 0xE007, 0x2302, 0x7F04, 0x000B, 0x0009, 0x0009, 0x0600, 0xF300 } },
+        };
+        for (const auto& k : cases)
+        {
+            const Out o = run(k.name, { { 0x0, caller }, { 0x100, k.g } }, { 0x100 });
+            CHECK(!o.callees.at(0x100).prototype.known && Has(o.callees.at(0x100).prototypeWithheld, "a word of its caller's frame"));
+            CHECK(o.ran == 7 && Has(o.entry.Text(), "return axStack_14[0];") && !Has(o.entry.Text(), "return 5;"));
+        }
+    }
+    // ---- A3-108: a frame fact said once per function. The same stack word holds a frame address at two unlent calls (r4-r7 unset, so the
+    // engine drops it at both): the note at the first, with "likewise at the calls below", none at the second. And a saved register's word
+    // the callee writes as its stack argument, read back by the epilogue's pop, is no local: its note says so.
+    {
+        const Out o = run("A3-108 one stack word holding a frame address at two calls",
+                          { { 0x0, { 0x4F22, 0x7FF0, 0xE005, 0x1F01, 0x61F3, 0x7104, 0x2F12, 0xD105, 0x410B, 0x0009, 0xD103, 0x410B, 0x0009, 0x50F1, 0x7F10, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9100 } },
+                            { 0x100, { 0x000B, 0x0009 } } }, {});
+        const std::string t = o.entry.Text();
+        CHECK(Count(t, "a frame address is in a stack argument slot here") == 1);
+        CHECK(Has(t, "likewise at the calls below"));
+        // P: mov.l r14,@-r15 ; sts.l pr,@-r15 ; jsr g ; nop ; lds.l @r15+,pr ; mov.l @r15+,r14 ; rts ; mov r14,r0. g writes its entry r15 + 4,
+        // P's saved r14 (a hand-back of A3-21's channel, which withholds g; the probe exposes the word).
+        const Out s = run("A3-108 a saved register's word written as the callee's stack argument",
+                          { { 0x0, { 0x2FE6, 0x4F22, 0xD103, 0x410B, 0x0009, 0x4F26, 0x6EF6, 0x000B, 0x60E3, 0x0009, 0x0600, 0x9100 } },
+                            { 0x100, { 0xE007, 0x000B, 0x1F01, 0x0009 } } }, {});
+        CHECK(s.ran == 7);
+        CHECK(!Has(s.entry.Text(), "a local at or above the stack pointer"));
+        CHECK(Has(s.entry.Text(), "a saved register's word at or above"));
+    }
+    // ---- Found by this round's matrix (the round 11 review's tools/a3_round11/s5.src, wrong on f54d140 as well): a frame address with a
+    // variable index added (a word loaded from the frame, r4, or r4 subtracted), then stepped down by a loop. The value set analysis cannot
+    // bound the pointer, so the store's guard covered the stack from its base up only (the index taken as non-negative, A3-9, A3-17), and
+    // the sentinel the walk overwrote at the base - 16 was folded: lent, `return 5;`, the code returns 1. Patch 0065 guards 0xffff below a
+    // pointer a loop steps down whatever its range. (S1 of tools/a3_round12/r12a.src, a store through sp plus a negative variable with no
+    // walk, stays A3-9's accepted convention.)
+    {
+        const struct
+        {
+            const char* name;
+            std::vector<uint16_t> words;
+        } walks[] = {
+            { "S17 a frame address plus a word loaded from the frame, walked down", { 0x7FE8, 0x62F3, 0x7210, 0xE005, 0x2F02, 0x53F5, 0x323C, 0xE104, 0x2216, 0x4110, 0x8BFC, 0x60F2, 0x7F18, 0x000B, 0x0009, 0x0009 } },
+            { "S18 a frame address plus r4, walked down", { 0x7FE8, 0x62F3, 0x7210, 0xE005, 0x2F02, 0x324C, 0xE104, 0x2216, 0x4110, 0x8BFC, 0x60F2, 0x7F18, 0x000B, 0x0009 } },
+            { "S19 a frame address minus r4, walked down", { 0x7FE8, 0x62F3, 0x7210, 0xE005, 0x2F02, 0x3248, 0xE104, 0x2216, 0x4110, 0x8BFC, 0x60F2, 0x7F18, 0x000B, 0x0009 } },
+        };
+        for (const auto& w : walks)
+        {
+            const Out o = run(w.name, { { 0x0, w.words } }, {});
+            CHECK(o.ran == 1 && Has(o.entry.Text(), "Stack_") && !Has(o.entry.Text(), "return 5;"));
+        }
+    }
+}
+
+
 // ===== A3-65 (P1): a copy of r15 walked down by pre-decrement stores ===========================================================================
 // `*--p = v` over a local array compiles to a copy of r15 (or of the frame pointer r14), moved to the top of the array and walked down by
 // `mov.l Rm,@-Rn`. The engine's alias analysis (AliasChecker, upstream's) takes a pointer into the frame to reach only what lies at or above its base,
@@ -12712,6 +12906,7 @@ int main(int argc, char** argv)
         RUN(TestArea3Round11Fix());
         RUN(TestArea3Round12());
         RUN(TestArea3Round12Fix());
+        RUN(TestArea3Round13Fix());
         RUN(TestArea2Round8());
         RUN(TestArea2Round9());
         RUN(TestArea2Round10());
