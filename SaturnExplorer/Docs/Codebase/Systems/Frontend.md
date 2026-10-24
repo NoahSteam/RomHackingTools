@@ -100,3 +100,21 @@ UpdateChecker's full network/shutdown behavior was not dynamically verified here
 [Architecture](../ARCHITECTURE.md), [data flow](../DATA_FLOW.md), [build](../../../BUILD.md),
 [existing architecture](../../../ARCHITECTURE.md), [demo scripts](../../../FrontEnd/demo/README.md),
 [debugger](Debugger.md), [graphics](Graphics.md), [state sources](StateSources.md).
+
+## Appearance (inspected on feature/light-theme, 2026-10-24)
+
+`Theme.h/.cpp` owns the shared Dark/Light palettes and base geometry. App owns the requested
+`ThemeMode`, loads `[appearance] theme=light|dark` before the first frame, and saves it through
+the existing retryable Settings path. Missing/invalid values choose Dark. Both ImGui Settings
+entry points and native Windows/macOS menus expose Appearance → Light/Dark through the same
+native action handler. Menu requests apply colors at the next BuildUI entry, before style stacks
+are pushed. `ApplyThemeColors` preserves scaled geometry and fonts; the Windows DPI reset passes
+the active palette back to `ApplyTheme` before scaling once. Custom panel colors resolve per draw
+against the current context's palette. Game textures and decoded CRAM colors remain unchanged.
+macOS updates NSApp appearance; the OS still controls system-wide menu-bar appearance. Windows
+native chrome uses its existing system appearance. Browser preferences use the existing Settings
+filesystem path; persistence across browser reloads is not established by this implementation.
+
+`SaturnExplorerThemeTests` covers parsing/fallback, repeated palette switches, stable scaled
+geometry, DPI resets and preserved graphics category/selection colors. Native menu/chrome visual
+verification still requires the corresponding OS build.

@@ -73,6 +73,8 @@ enum : int
     ID_COMPARE,
 
     // Settings
+    ID_THEME_LIGHT,
+    ID_THEME_DARK,
     ID_DIFF_SETTINGS,
     ID_EMU_PATHS,
     ID_INPUT_SETTINGS,
@@ -171,6 +173,12 @@ struct MacMenuBarImpl
         // NSCAssert, not NSAssert: this is a C++ member function, and NSAssert expands to
         // reference the self/_cmd that only exist inside an Objective-C method body.
         NSCAssert([NSThread isMainThread], @"MacMenuBar::Sync must run on the main thread (AppKit)");
+        if (!mHaveState || mState.lightTheme != state.lightTheme)
+        {
+            if (@available(macOS 10.14, *))
+                [NSApp setAppearance:[NSAppearance appearanceNamed:state.lightTheme
+                    ? NSAppearanceNameAqua : NSAppearanceNameDarkAqua]];
+        }
         mState = state;
         mHaveState = true;
         // Only the *structure* (labels + list contents) forces a rebuild; enable/check flags are
@@ -249,7 +257,9 @@ struct MacMenuBarImpl
             case ID_RESET_LAYOUT:      c = MenuCommand::ResetLayout; break;
             case ID_SAVE_LAYOUT:       c = MenuCommand::SaveLayout; break;
             case ID_SCREENSHOT:        c = MenuCommand::TakeScreenshot; break;
-            case ID_DIFF_SETTINGS:     c = MenuCommand::OpenDiffSettings; break;
+            case ID_THEME_LIGHT: c = MenuCommand::ThemeLight; break;
+        case ID_THEME_DARK: c = MenuCommand::ThemeDark; break;
+        case ID_DIFF_SETTINGS:     c = MenuCommand::OpenDiffSettings; break;
             case ID_EMU_PATHS:         c = MenuCommand::OpenLaunchSettings; break;
             case ID_INPUT_SETTINGS:    c = MenuCommand::ShowInputSettings; break;
             case ID_TOOLTIPS:          c = MenuCommand::ToggleTooltips; break;
@@ -496,6 +506,9 @@ struct MacMenuBarImpl
         // ---- Settings ----
         {
             NSMenu* settings = AddSub(bar, @"Settings");
+            NSMenu* appearance = AddSub(settings, @"Appearance");
+            AddItem(appearance, ID_THEME_LIGHT, @"Light");
+            AddItem(appearance, ID_THEME_DARK, @"Dark");
             AddItem(settings, ID_DIFF_SETTINGS, @"Diff…");
             AddItem(settings, ID_EMU_PATHS, @"Emulator Paths…");
             AddItem(settings, ID_INPUT_SETTINGS, @"Input Settings…");
@@ -580,6 +593,8 @@ struct MacMenuBarImpl
             CheckTag(ID_PANEL_BASE + (int)i, s.panels[i].visible);
 
         // Settings
+        CheckTag(ID_THEME_LIGHT, s.lightTheme);
+        CheckTag(ID_THEME_DARK, !s.lightTheme);
         CheckTag(ID_TOOLTIPS, s.tooltips);
         CheckTag(ID_REWIND, s.rewind);
 

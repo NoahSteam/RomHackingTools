@@ -17,6 +17,7 @@
 #include "saturnexplorer/SaturnExplorer.h"
 
 #include "Platform/IPlatform.h"
+#include "Theme.h"
 #include "Settings.h"            // persistent per-user config (INI)
 #include "Launcher.h"            // "Launch Session": emulator + ROM selection
 #include "TopBar.h"              // top-bar view state + side-effect-free commands
@@ -839,6 +840,7 @@ private:
     // directory). mIniPath backs ImGuiIO::IniFilename, so it must outlive the
     // ImGui context — hence a member, not a local. mSettingsDirty triggers a save
     // at end of frame after the user changes a persisted preference.
+    ThemeMode        mThemeMode = ThemeMode::Dark;
     Settings         mSettings;
     std::string      mIniPath;
     bool             mSettingsDirty = false;

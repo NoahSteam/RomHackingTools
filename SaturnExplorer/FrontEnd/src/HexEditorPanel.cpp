@@ -1,3 +1,4 @@
+#include "Theme.h"
 #include "HexEditorPanel.h"
 
 #include <algorithm>
@@ -18,16 +19,16 @@ namespace sfe
 
 namespace
 {
-const ImU32 kColAddr    = IM_COL32(150, 150, 160, 255);
-const ImU32 kColByte    = IM_COL32(210, 210, 215, 255);
-const ImU32 kColZero    = IM_COL32(110, 110, 120, 255);   // dim 00 bytes
-const ImU32 kColUnmapped = IM_COL32(80, 80, 90, 255);     // "--" outside any region
-const ImU32 kColChanged = IM_COL32(235, 170, 70, 255);    // amber (Highlight Changes)
-const ImU32 kColText    = IM_COL32(180, 195, 170, 255);
-const ImU32 kColJp      = IM_COL32(130, 190, 210, 255);   // double-byte (Shift-JIS) marker
-const ImU32 kColSelBg   = IM_COL32(70, 110, 90, 150);     // selection tint
-const ImU32 kColHoverBg = IM_COL32(80, 90, 110, 90);      // hovered-cell tint (no per-byte widget)
-const ImU32 kColEditBg  = IM_COL32(120, 95, 40, 170);     // byte with a typed first digit pending
+ImU32 kColAddr() { return ui::Color(IM_COL32(150, 150, 160, 255), IM_COL32(89,101,121,255)); }
+ImU32 kColByte() { return ui::Color(IM_COL32(210, 210, 215, 255), IM_COL32(36,43,54,255)); }
+ImU32 kColZero() { return ui::Color(IM_COL32(110, 110, 120, 255), IM_COL32(104,115,134,255)); }   // dim 00 bytes
+ImU32 kColUnmapped() { return ui::Color(IM_COL32(80, 80, 90, 255), IM_COL32(104,115,134,255)); }     // "--" outside any region
+ImU32 kColChanged() { return ui::Color(IM_COL32(235, 170, 70, 255), IM_COL32(128,91,0,255)); }    // amber (Highlight Changes)
+ImU32 kColText() { return ui::Color(IM_COL32(180, 195, 170, 255), IM_COL32(55,95,55,255)); }
+ImU32 kColJp() { return ui::Color(IM_COL32(130, 190, 210, 255), IM_COL32(8,100,115,255)); }   // double-byte (Shift-JIS) marker
+ImU32 kColSelBg() { return ui::Color(IM_COL32(70, 110, 90, 150), IM_COL32(177,220,224,210)); }     // selection tint
+ImU32 kColHoverBg() { return ui::Color(IM_COL32(80, 90, 110, 90), IM_COL32(150,170,195,65)); }      // hovered-cell tint (no per-byte widget)
+ImU32 kColEditBg() { return ui::Color(IM_COL32(120, 95, 40, 170), IM_COL32(245,211,138,200)); }     // byte with a typed first digit pending
 
 // Grid geometry. The byte column is sized from the edit box so the box always fits it:
 // column content = edit box + a small gap, edit box = two digits + its own padding + room for
@@ -536,7 +537,7 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
 
                 ImGui::TableNextRow();
                 ImGui::TableSetColumnIndex(0);
-                ImGui::PushStyleColor(ImGuiCol_Text, kColAddr);
+                ImGui::PushStyleColor(ImGuiCol_Text, kColAddr());
                 ImGui::Text("%08X", rowAddr);
                 ImGui::PopStyleColor();
 
@@ -548,11 +549,11 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
 
                     const bool selected = selLo >= 0 && (int64_t)addr >= selLo && (int64_t)addr <= selHi;
                     if (selected)
-                        ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, kColSelBg);
+                        ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, kColSelBg());
 
                     if (!rowMapped[c])
                     {
-                        ImGui::PushStyleColor(ImGuiCol_Text, kColUnmapped);
+                        ImGui::PushStyleColor(ImGuiCol_Text, kColUnmapped());
                         ImGui::TextUnformatted("--");
                         ImGui::PopStyleColor();
                         continue;
@@ -569,7 +570,7 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
                         ImVec2(cur.x - kCellPadX, cur.y - cellPadY),
                         ImVec2(cur.x + editW + kCellPadX, cur.y + lineH + cellPadY));
                     if (cellHovered && !selected)
-                        ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, kColHoverBg);
+                        ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, kColHoverBg());
 
                     if (mEditAddr == (int64_t)addr)
                     {
@@ -577,9 +578,9 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
                         if (mEditFlow)
                         {
                             // First digit typed, second pending: shown in the cell itself.
-                            ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, kColEditBg);
+                            ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, kColEditBg());
                             char pending[3] = { (char)std::toupper((unsigned char)mEditBuf[0]), '_', '\0' };
-                            ImGui::PushStyleColor(ImGuiCol_Text, kColChanged);
+                            ImGui::PushStyleColor(ImGuiCol_Text, kColChanged());
                             ImGui::TextUnformatted(pending);
                             ImGui::PopStyleColor();
                             cellMouse(addr, v, cellHovered);
@@ -614,8 +615,8 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
                         continue;
                     }
 
-                    const ImU32 col = (mChangeAge.count(addr)) ? kColChanged
-                                     : (v == 0 ? kColZero : kColByte);
+                    const ImU32 col = (mChangeAge.count(addr)) ? kColChanged()
+                                     : (v == 0 ? kColZero() : kColByte());
                     char b[3]; std::snprintf(b, sizeof(b), "%02X", v);
                     ImGui::PushStyleColor(ImGuiCol_Text, col);
                     ImGui::TextUnformatted(b);
@@ -637,7 +638,7 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
                     {
                         const uint32_t cp = SjisDecode(v, rowBytes[c + 1]);
                         char u[5]; if (cp) Utf8Encode(cp, u); else { u[0] = u[1] = '.'; u[2] = '\0'; }
-                        ImGui::PushStyleColor(ImGuiCol_Text, kColJp);
+                        ImGui::PushStyleColor(ImGuiCol_Text, kColJp());
                         ImGui::TextUnformatted(u);
                         ImGui::PopStyleColor();
                         c += 2;
@@ -646,14 +647,14 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
                     if (mp && mEncoding == 1 && SjisIsHalfKana(v))
                     {
                         char u[5]; Utf8Encode(SjisHalfKana(v), u);
-                        ImGui::PushStyleColor(ImGuiCol_Text, kColJp);
+                        ImGui::PushStyleColor(ImGuiCol_Text, kColJp());
                         ImGui::TextUnformatted(u);
                         ImGui::PopStyleColor();
                         c += 1;
                         continue;
                     }
                     const char disp = (mp && v >= 0x20 && v <= 0x7E) ? (char)v : '.';
-                    ImGui::PushStyleColor(ImGuiCol_Text, mp ? kColText : kColUnmapped);
+                    ImGui::PushStyleColor(ImGuiCol_Text, mp ? kColText() : kColUnmapped());
                     ImGui::Text("%c", disp);
                     ImGui::PopStyleColor();
                     c += 1;

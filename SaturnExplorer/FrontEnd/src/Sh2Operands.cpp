@@ -1,3 +1,4 @@
+#include "Theme.h"
 #include "Sh2Operands.h"
 
 #include <cctype>
@@ -15,10 +16,10 @@ namespace
 {
 // Syntax colours for the operand cell. The rest of the Assembly panel's palette (address,
 // bytes, mnemonic, comment) stays in AssemblyPanel.cpp, which is where those are drawn.
-const ImU32 kColReg    = IM_COL32(220, 200, 130, 255);   // amber
-const ImU32 kColImm    = IM_COL32(180, 205, 150, 255);   // green
-const ImU32 kColTarget = IM_COL32(130, 175, 255, 255);   // link blue
-const ImU32 kColPunct  = IM_COL32(140, 140, 150, 255);
+ImU32 kColReg() { return ui::Color(IM_COL32(220, 200, 130, 255), IM_COL32(128,91,0,255)); }   // amber
+ImU32 kColImm() { return ui::Color(IM_COL32(180, 205, 150, 255), IM_COL32(55,105,45,255)); }   // green
+ImU32 kColTarget() { return ui::Color(IM_COL32(130, 175, 255, 255), IM_COL32(30,80,175,255)); }   // link blue
+ImU32 kColPunct() { return ui::Color(IM_COL32(140, 140, 150, 255), IM_COL32(89,101,121,255)); }
 
 bool IsTokenChar(char c) { return std::isalnum((unsigned char)c) != 0 || c == '.'; }
 
@@ -390,17 +391,17 @@ Sh2OperandsDrawn DrawSh2Operands(const DisassembledInstruction& ins)
             while (j < s.size() && IsTokenChar(s[j])) ++j;
             const std::string tok = s.substr(i, j - i);
             i = j;
-            if (ins.HasBranchTarget && tok == targetStr)      seg(tok, operand, kColTarget, true);
-            else if (tok.rfind("0x", 0) == 0)                 seg(tok, operand, kColImm, false);
-            else if (Sh2RegIndexFromName(tok) >= 0)           seg(tok, operand, kColReg, false);
-            else                                              seg(tok, operand, kColPunct, false);
+            if (ins.HasBranchTarget && tok == targetStr)      seg(tok, operand, kColTarget(), true);
+            else if (tok.rfind("0x", 0) == 0)                 seg(tok, operand, kColImm(), false);
+            else if (Sh2RegIndexFromName(tok) >= 0)           seg(tok, operand, kColReg(), false);
+            else                                              seg(tok, operand, kColPunct(), false);
         }
         else if (c == '#')
         {
             // immediate: '#', then the following number token
             size_t j = i + 1;
             while (j < s.size() && IsTokenChar(s[j])) ++j;
-            seg(s.substr(i, j - i), operand, kColImm, false);
+            seg(s.substr(i, j - i), operand, kColImm(), false);
             i = j;
         }
         else
@@ -408,7 +409,7 @@ Sh2OperandsDrawn DrawSh2Operands(const DisassembledInstruction& ins)
             if (c == '(') ++depth;
             else if (c == ')') { if (depth > 0) --depth; }
             const bool separator = c == ',' && depth == 0;
-            seg(std::string(1, c), separator ? -1 : operand, kColPunct, false);
+            seg(std::string(1, c), separator ? -1 : operand, kColPunct(), false);
             if (separator) ++operand;
             ++i;
         }

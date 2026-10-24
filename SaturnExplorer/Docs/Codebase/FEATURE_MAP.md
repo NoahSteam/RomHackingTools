@@ -11,6 +11,7 @@ Supporting components are named alongside the primary entry points.
 
 | Feature / task | Behavior and primary source | Key entry points and supporting components | Existing tests | Detail |
 |---|---|---|---|---|
+| Light / dark appearance | Shared palette and saved preference; `FrontEnd/src/Theme.cpp`, `App.cpp`, native menu backends | `ApplyThemeColors`, `ThemeMode`, Settings → Appearance | `ThemeTests.cpp`; native visual verification | [Frontend](Systems/Frontend.md) |
 | Open savestate / dump / browser upload | Capture offline state; `Drivers/Savestate/src/SavestateDriver.cpp`, `FrontEnd/src/App.cpp` | `se_savestate_open`, `se_savestate_open_buffer`, `App::OpenSavestateBuffer`; shared state decoders | `Drivers/Savestate/tests/`, `Drivers/Common/tests/StateSharedTests.cpp` | [State sources](Systems/StateSources.md) |
 | Connect to emulator / add a source | Live memory and controls; `Drivers/Live/src/LiveDriver.cpp` | `se_live_open`, `PollLoop`, `ReadSnapshot`; Seam A `begin_capture`/`end_capture`, shared protocol | `LiveReconnectTests`, `LiveDecompilerCaptureTests`, `LiveExporterRobustnessTests` | [State sources](Systems/StateSources.md) |
 | Reconstructed VDP output / layer toggles | Software composite; `Core/src/Context.h`, `Vdp1Rasterizer.cpp`, `Vdp2Compositor.cpp` | `Context::ComposeFrame`, `se_render_frame`; `PixelMixer`, `App::RenderFrameToTexture` | `Core/tests/Vdp2CompositorTests.cpp`, `CramWrapTests.cpp` | [Graphics](Systems/Graphics.md) |

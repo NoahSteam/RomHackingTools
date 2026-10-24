@@ -1,5 +1,8 @@
 #include "Theme.h"
 
+#include <cstring>
+#include <initializer_list>
+
 #include "../third_party/fonts/LiberationSans.h"
 #include "../third_party/fonts/IpaGothicJP.h"
 
@@ -30,7 +33,23 @@ const ImVec4 kSelection  = Rgb(0xF2, 0xC1, 0x4E);   // warm amber — selection 
 inline ImVec4 WithAlpha(const ImVec4& c, float a) { return ImVec4(c.x, c.y, c.z, a); }
 }  // namespace
 
-void ApplyTheme(ImGuiStyle& style)
+ThemeMode ParseThemeMode(const char* value)
+{
+    return value && std::strcmp(value, "light") == 0 ? ThemeMode::Light : ThemeMode::Dark;
+}
+const char* ThemeModeName(ThemeMode mode) { return mode == ThemeMode::Light ? "light" : "dark"; }
+ThemeMode GetThemeMode() { return ui::IsLight() ? ThemeMode::Light : ThemeMode::Dark; }
+
+void ApplyThemeColors(ImGuiStyle& style, ThemeMode mode)
+{
+    // Build in a temporary style: stock palette functions must never reset live geometry.
+    ImGuiStyle palette;
+    ApplyTheme(palette, mode);
+    for (int i = 0; i < ImGuiCol_COUNT; ++i) style.Colors[i] = palette.Colors[i];
+}
+
+void ApplyTheme(ImGuiStyle& style) { ApplyTheme(style, ThemeMode::Dark); }
+void ApplyTheme(ImGuiStyle& style, ThemeMode mode)
 {
     // Start from the stock dark theme, then override — so any ImGuiCol we don't
     // name explicitly still has a sensible value.
@@ -85,6 +104,57 @@ void ApplyTheme(ImGuiStyle& style)
     c[ImGuiCol_TableRowBgAlt]        = WithAlpha(ImVec4(1, 1, 1, 1), 0.02f);
     c[ImGuiCol_TextSelectedBg]       = WithAlpha(kAccent, 0.35f);
     c[ImGuiCol_NavCursor]            = kAccent;
+
+    if (mode == ThemeMode::Light)
+    {
+        ImGui::StyleColorsLight(&style);
+        const ImVec4 panel = Rgb(247,248,250), raised = Rgb(233,237,242);
+        const ImVec4 input = Rgb(255,255,255), hover = Rgb(223,231,238);
+        const ImVec4 border = Rgb(205,211,220), accent = Rgb(8,127,140);
+        const ImVec4 selection = Rgb(209,238,240);
+        c[ImGuiCol_Text] = Rgb(36,43,54);
+        c[ImGuiCol_TextDisabled] = Rgb(104,115,134);
+        c[ImGuiCol_WindowBg] = panel;
+        c[ImGuiCol_ChildBg] = ImVec4(0,0,0,0);
+        c[ImGuiCol_PopupBg] = panel;
+        c[ImGuiCol_Border] = border;
+        c[ImGuiCol_BorderShadow] = ImVec4(0,0,0,0);
+        c[ImGuiCol_FrameBg] = input;
+        c[ImGuiCol_FrameBgHovered] = hover;
+        c[ImGuiCol_FrameBgActive] = selection;
+        for (int slot : { ImGuiCol_TitleBg, ImGuiCol_TitleBgActive, ImGuiCol_TitleBgCollapsed,
+                          ImGuiCol_MenuBarBg, ImGuiCol_TableHeaderBg, ImGuiCol_Tab, ImGuiCol_TabDimmed,
+                          ImGuiCol_Button }) c[slot] = raised;
+        c[ImGuiCol_ButtonHovered] = hover;
+        c[ImGuiCol_ButtonActive] = selection;
+        c[ImGuiCol_Header] = selection;
+        c[ImGuiCol_HeaderHovered] = Rgb(185,226,230);
+        c[ImGuiCol_HeaderActive] = Rgb(163,215,221);
+        for (int slot : { ImGuiCol_CheckMark, ImGuiCol_SliderGrab, ImGuiCol_SliderGrabActive,
+                          ImGuiCol_NavCursor, ImGuiCol_TabSelectedOverline,
+                          ImGuiCol_SeparatorActive, ImGuiCol_SeparatorHovered }) c[slot] = accent;
+        c[ImGuiCol_ScrollbarBg] = ImVec4(0,0,0,0);
+        c[ImGuiCol_ScrollbarGrab] = border;
+        c[ImGuiCol_ScrollbarGrabHovered] = Rgb(104,115,134);
+        c[ImGuiCol_ScrollbarGrabActive] = accent;
+        c[ImGuiCol_TabHovered] = hover;
+        c[ImGuiCol_TabSelected] = c[ImGuiCol_TabDimmedSelected] = panel;
+        c[ImGuiCol_TabDimmedSelectedOverline] = WithAlpha(accent, 0.5f);
+        c[ImGuiCol_Separator] = border;
+        c[ImGuiCol_DockingEmptyBg] = raised;
+        c[ImGuiCol_DockingPreview] = WithAlpha(accent, 0.35f);
+        c[ImGuiCol_TableBorderStrong] = border;
+        c[ImGuiCol_TableBorderLight] = WithAlpha(border, 0.5f);
+        c[ImGuiCol_TableRowBg] = ImVec4(0,0,0,0);
+        c[ImGuiCol_TableRowBgAlt] = Rgb(238,242,246);
+        c[ImGuiCol_TextSelectedBg] = WithAlpha(accent, 0.25f);
+        c[ImGuiCol_ResizeGrip] = WithAlpha(accent, 0.2f);
+        c[ImGuiCol_ResizeGripHovered] = WithAlpha(accent, 0.4f);
+        c[ImGuiCol_ResizeGripActive] = WithAlpha(accent, 0.6f);
+        c[ImGuiCol_PlotLines] = Rgb(8,100,115);
+        c[ImGuiCol_PlotHistogram] = Rgb(128,91,0);
+        c[ImGuiCol_DragDropTarget] = Rgb(128,91,0);
+    }
 
     // Geometry — rounded "cards" + airier spacing. Backends call ScaleAllSizes()
     // after this, so these are the base (1x) values.
@@ -143,7 +213,7 @@ ImU32 VramTexture()      { return IM_COL32(0x5A, 0xBE, 0x78, 0xFF); }
 ImU32 VramClut()         { return IM_COL32(0xDC, 0xC8, 0x5A, 0xFF); }
 ImU32 VramCmdTable()     { return IM_COL32(0x35, 0xC6, 0xD6, 0xFF); }
 ImU32 VramGouraud()      { return IM_COL32(0xC8, 0x78, 0xD2, 0xFF); }
-ImU32 VramUnused()       { return IM_COL32(0x3A, 0x40, 0x4C, 0xFF); }
+ImU32 VramUnused()       { return Color(IM_COL32(0x3A, 0x40, 0x4C, 0xFF), IM_COL32(217,222,229,255)); }
 }  // namespace ui
 
 }  // namespace sfe

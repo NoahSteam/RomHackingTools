@@ -56,6 +56,8 @@ enum : UINT
     ID_COMPARE,
 
     // Settings
+    ID_THEME_LIGHT,
+    ID_THEME_DARK,
     ID_DIFF_SETTINGS,
     ID_EMU_PATHS,
     ID_INPUT_SETTINGS,
@@ -208,6 +210,8 @@ bool Win32MenuBar::OnCommand(int id)
         case ID_RESET_LAYOUT:      c = MenuCommand::ResetLayout; break;
         case ID_SAVE_LAYOUT:       c = MenuCommand::SaveLayout; break;
         case ID_SCREENSHOT:        c = MenuCommand::TakeScreenshot; break;
+        case ID_THEME_LIGHT: c = MenuCommand::ThemeLight; break;
+        case ID_THEME_DARK: c = MenuCommand::ThemeDark; break;
         case ID_DIFF_SETTINGS:     c = MenuCommand::OpenDiffSettings; break;
         case ID_EMU_PATHS:         c = MenuCommand::OpenLaunchSettings; break;
         case ID_INPUT_SETTINGS:    c = MenuCommand::ShowInputSettings; break;
@@ -315,6 +319,8 @@ void Win32MenuBar::RefreshState()
         CheckById(mMenu, ID_PANEL_BASE + (UINT)i, s.panels[i].visible);
 
     // Settings
+    CheckById(mMenu, ID_THEME_LIGHT, s.lightTheme);
+    CheckById(mMenu, ID_THEME_DARK, !s.lightTheme);
     CheckById(mMenu, ID_TOOLTIPS, s.tooltips);
     CheckById(mMenu, ID_REWIND, s.rewind);
 
@@ -551,6 +557,10 @@ void Win32MenuBar::Rebuild()
     // ---- Settings ----
     {
         HMENU settings = ::CreatePopupMenu();
+        HMENU appearance = ::CreatePopupMenu();
+        AddItem(appearance, ID_THEME_LIGHT, L"Light");
+        AddItem(appearance, ID_THEME_DARK, L"Dark");
+        AddSub(settings, appearance, L"Appearance");
         AddItem(settings, ID_DIFF_SETTINGS, L"Diff...");
         AddItem(settings, ID_EMU_PATHS, L"Emulator Paths...");
         AddItem(settings, ID_INPUT_SETTINGS, L"Input Settings...");

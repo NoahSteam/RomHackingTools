@@ -132,6 +132,8 @@ enum class MenuCommand
     // Tools
     TakeScreenshot,
     // Settings
+    ThemeLight,
+    ThemeDark,
     OpenDiffSettings,
     ShowInputSettings,
     // Help
@@ -200,6 +202,7 @@ struct NativeMenuState
     bool layer[NM_LAYER_COUNT] = {};
 
     // --- Settings ---
+    bool lightTheme = false;
     bool tooltips = false;
     bool rewind = false;
 

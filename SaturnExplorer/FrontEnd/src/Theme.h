@@ -10,9 +10,28 @@
 namespace sfe
 {
 
-// Apply the Saturn Explorer dark theme (colors + rounding + spacing) to 'style'.
-// Call in place of ImGui::StyleColorsDark(), before ScaleAllSizes(dpiScale).
+// Shared light/dark palettes. ApplyTheme resets base geometry; scale once afterward.
+// The one-argument overload preserves the historical dark default.
+enum class ThemeMode { Dark, Light };
+ThemeMode ParseThemeMode(const char* value);
+const char* ThemeModeName(ThemeMode mode);
+ThemeMode GetThemeMode();
 void ApplyTheme(ImGuiStyle& style);
+void ApplyTheme(ImGuiStyle& style, ThemeMode mode);
+// Colors only: preserve DPI-scaled geometry and font settings during live switches.
+void ApplyThemeColors(ImGuiStyle& style, ThemeMode mode);
+
+namespace ui
+{
+// Resolve against the current context, including in headless panel tests.
+inline bool IsLight()
+{
+    return ImGui::GetStyle().Colors[ImGuiCol_WindowBg].x > 0.5f;
+}
+inline ImU32 Color(ImU32 dark, ImU32 light) { return IsLight() ? light : dark; }
+inline ImVec4 Color(const ImVec4& dark, const ImVec4& light) { return IsLight() ? light : dark; }
+inline ImVec4 AppBackground() { return ImGui::GetStyle().Colors[ImGuiCol_DockingEmptyBg]; }
+}
 
 // Load the embedded UI font (a clean proportional sans-serif) and make it the
 // default. Call once after ApplyTheme, before the first frame. DPI is handled by

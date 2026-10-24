@@ -1,3 +1,4 @@
+#include "Theme.h"
 // DecompilerPanel — see the header for the refresh policy and the install rule.
 #include "DecompilerPanel.h"
 
@@ -28,16 +29,16 @@ ImVec4 TokenColour(TokenKind kind)
 {
     switch (kind)
     {
-    case TokenKind::Keyword:  return ImVec4(0.42f, 0.62f, 0.95f, 1.0f);
-    case TokenKind::Type:     return ImVec4(0.36f, 0.80f, 0.75f, 1.0f);
-    case TokenKind::FuncName: return ImVec4(0.93f, 0.84f, 0.45f, 1.0f);
-    case TokenKind::Variable: return ImVec4(0.75f, 0.85f, 0.98f, 1.0f);
-    case TokenKind::Param:    return ImVec4(0.96f, 0.68f, 0.45f, 1.0f);
-    case TokenKind::Const:    return ImVec4(0.60f, 0.85f, 0.52f, 1.0f);
-    case TokenKind::Comment:  return ImVec4(0.50f, 0.56f, 0.50f, 1.0f);
-    case TokenKind::Global:   return ImVec4(0.80f, 0.60f, 0.92f, 1.0f);
-    case TokenKind::Label:    return ImVec4(0.85f, 0.70f, 0.85f, 1.0f);
-    case TokenKind::Error:    return ImVec4(0.95f, 0.40f, 0.40f, 1.0f);
+    case TokenKind::Keyword:  return ui::Color(ImVec4(0.42f, 0.62f, 0.95f, 1.0f), ImVec4(0.12f,0.3f,0.68f, 1.0f));
+    case TokenKind::Type:     return ui::Color(ImVec4(0.36f, 0.80f, 0.75f, 1.0f), ImVec4(0.02f,0.39f,0.39f, 1.0f));
+    case TokenKind::FuncName: return ui::Color(ImVec4(0.93f, 0.84f, 0.45f, 1.0f), ImVec4(0.5f,0.34f,0.0f, 1.0f));
+    case TokenKind::Variable: return ui::Color(ImVec4(0.75f, 0.85f, 0.98f, 1.0f), ImVec4(0.14f,0.22f,0.33f, 1.0f));
+    case TokenKind::Param:    return ui::Color(ImVec4(0.96f, 0.68f, 0.45f, 1.0f), ImVec4(0.58f,0.28f,0.08f, 1.0f));
+    case TokenKind::Const:    return ui::Color(ImVec4(0.60f, 0.85f, 0.52f, 1.0f), ImVec4(0.22f,0.42f,0.16f, 1.0f));
+    case TokenKind::Comment:  return ui::Color(ImVec4(0.50f, 0.56f, 0.50f, 1.0f), ImVec4(0.31f,0.38f,0.31f, 1.0f));
+    case TokenKind::Global:   return ui::Color(ImVec4(0.80f, 0.60f, 0.92f, 1.0f), ImVec4(0.42f,0.22f,0.6f, 1.0f));
+    case TokenKind::Label:    return ui::Color(ImVec4(0.85f, 0.70f, 0.85f, 1.0f), ImVec4(0.5f,0.28f,0.5f, 1.0f));
+    case TokenKind::Error:    return ui::Color(ImVec4(0.95f, 0.40f, 0.40f, 1.0f), ImVec4(0.65f,0.11f,0.14f, 1.0f));
     case TokenKind::Plain:
     default:                  return ImGui::GetStyleColorVec4(ImGuiCol_Text);
     }
@@ -103,8 +104,8 @@ bool DecompilerPanel::ParseHexAddress(const char* text, uint32_t& out)
 namespace
 {
 
-const ImVec4 kAmber(0.95f, 0.75f, 0.30f, 1.0f);
-const ImVec4 kRed(0.95f, 0.42f, 0.42f, 1.0f);
+ImVec4 kAmber() { return ui::Color(ImVec4(0.95f, 0.75f, 0.30f, 1.0f), ImVec4(0.50f,0.36f,0.0f,1.0f)); }
+ImVec4 kRed() { return ui::Color(ImVec4(0.95f, 0.42f, 0.42f, 1.0f), ImVec4(0.65f,0.11f,0.14f,1.0f)); }
 // The instructions after the first that a line's menu lists (the tooltip lists eight; a menu can be longer).
 const size_t kMenuInstructions = 24;
 
@@ -1039,7 +1040,7 @@ void DecompilerPanel::DrawUnavailable(bool* open, const std::string& why)
     mItems.clear();
     if (ImGui::Begin(kTitle, open))
     {
-        ImGui::TextColored(kRed, "Decompiler unavailable: %s", why.c_str());
+        ImGui::TextColored(kRed(), "Decompiler unavailable: %s", why.c_str());
         Remember("unavailable");
         ImGui::TextDisabled("The rest of Saturn Explorer is unaffected. Restart to try again.");
     }
@@ -1180,7 +1181,7 @@ void DecompilerPanel::DrawHeader(const DecompilerView& view, const DecompilerRun
                 ImGui::CloseCurrentPopup();
             }
         }
-        if (!mVolatileError.empty()) ImGui::TextColored(kAmber, "%s", mVolatileError.c_str());
+        if (!mVolatileError.empty()) ImGui::TextColored(kAmber(), "%s", mVolatileError.c_str());
         ImGui::EndPopup();
     }
 }
@@ -1212,22 +1213,22 @@ void DecompilerPanel::DrawStatus(const DecompilerView& view, const DecompilerRun
         ImGui::SameLine();
         // Stop was pressed: the request is outstanding until the runner acknowledges the cancel (up to its deadline, when it
         // does not), but no replacement is coming from it, and "decompiling" would say one is (A8-6).
-        ImGui::TextColored(kAmber, mPending.cancelled ? "stopping\xe2\x80\xa6" : "decompiling\xe2\x80\xa6");
+        ImGui::TextColored(kAmber(), mPending.cancelled ? "stopping\xe2\x80\xa6" : "decompiling\xe2\x80\xa6");
     }
     if (ShownStale())
     {
         ImGui::SameLine();
         if (EmulatorMovedOn())
-            ImGui::TextColored(kAmber, "[stale: frame %llu]", static_cast<unsigned long long>(mShown.key.frameNumber));
+            ImGui::TextColored(kAmber(), "[stale: frame %llu]", static_cast<unsigned long long>(mShown.key.frameNumber));
         else
-            ImGui::TextColored(kAmber, "[stale]");
+            ImGui::TextColored(kAmber(), "[stale]");
         Remember("stale");   // the badge's rectangle, for the tests that hover it
         ImGui::SetItemTooltip("%s", StaleTooltip().c_str());
     }
 
     if (runner.Disabled())
-        ImGui::TextColored(kRed, "Decompiler disabled for this session: %s", runner.DisabledReason().c_str());
-    if (mResolved && !mEntryOk && !mEntryError.empty()) ImGui::TextColored(kRed, "%s", mEntryError.c_str());
+        ImGui::TextColored(kRed(), "Decompiler disabled for this session: %s", runner.DisabledReason().c_str());
+    if (mResolved && !mEntryOk && !mEntryError.empty()) ImGui::TextColored(kRed(), "%s", mEntryError.c_str());
     if (!mNote.empty()) ImGui::TextDisabled("%s", mNote.c_str());
     if (!mShownValid) return;
 
@@ -1236,13 +1237,13 @@ void DecompilerPanel::DrawStatus(const DecompilerView& view, const DecompilerRun
     case DecompileStatus::Ok:
         break;
     case DecompileStatus::TooLarge:
-        ImGui::TextColored(kAmber, "0x%08X: %s", mShown.entry, mShown.error.c_str());
+        ImGui::TextColored(kAmber(), "0x%08X: %s", mShown.entry, mShown.error.c_str());
         break;
     case DecompileStatus::Disabled:
-        ImGui::TextColored(kRed, "Decompiler disabled for this session: %s", mShown.error.c_str());
+        ImGui::TextColored(kRed(), "Decompiler disabled for this session: %s", mShown.error.c_str());
         break;
     default:
-        ImGui::TextColored(kRed, "%s", mShown.error.empty() ? "Decompilation failed." : mShown.error.c_str());
+        ImGui::TextColored(kRed(), "%s", mShown.error.empty() ? "Decompilation failed." : mShown.error.c_str());
         break;
     }
     // Uncertainty is said, never left to look like a complete function: the first few in full, the
@@ -1250,10 +1251,10 @@ void DecompilerPanel::DrawStatus(const DecompilerView& view, const DecompilerRun
     const std::vector<std::string> uncertain = Uncertainties();
     const size_t kShownUncertainties = 4;
     for (size_t i = 0; i < uncertain.size() && i < kShownUncertainties; ++i)
-        ImGui::TextColored(kAmber, "%s", uncertain[i].c_str());
+        ImGui::TextColored(kAmber(), "%s", uncertain[i].c_str());
     if (uncertain.size() > kShownUncertainties)
     {
-        ImGui::TextColored(kAmber, "%zu more warnings", uncertain.size() - kShownUncertainties);
+        ImGui::TextColored(kAmber(), "%zu more warnings", uncertain.size() - kShownUncertainties);
         if (ImGui::BeginItemTooltip())
         {
             for (size_t i = kShownUncertainties; i < uncertain.size(); ++i) ImGui::TextUnformatted(uncertain[i].c_str());
@@ -1262,7 +1263,7 @@ void DecompilerPanel::DrawStatus(const DecompilerView& view, const DecompilerRun
     }
     if (!mHintText.empty())
     {
-        ImGui::TextColored(kAmber, "%s 0x%08X: %s", mHint.mnemonic, mHint.insn, mHintText.c_str());
+        ImGui::TextColored(kAmber(), "%s 0x%08X: %s", mHint.mnemonic, mHint.insn, mHintText.c_str());
         ImGui::SetItemTooltip("Where this call goes this time, read from the register file at the halt. "
                               "The target is computed, so another call may go elsewhere.");
     }
@@ -1707,7 +1708,7 @@ void DecompilerPanel::DrawLines(const DecompilerInputs& inputs, Request& req)
                 for (const Token& t : ln.tokens)
                     if (t.addr == mHint.insn)
                     {
-                        trailing(mHintText, kAmber);
+                        trailing(mHintText, kAmber());
                         break;
                     }
             if (!mLineNotes[static_cast<size_t>(i)].empty())

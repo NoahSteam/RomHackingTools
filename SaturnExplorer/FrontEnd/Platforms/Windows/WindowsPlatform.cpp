@@ -178,7 +178,8 @@ void WindowsPlatform::EndFrame()
 {
     ImGui::Render();
 
-    const float clearColor[4] = { 0.10f, 0.10f, 0.12f, 1.0f };
+    const ImVec4 bg = sfe::ui::AppBackground();
+    const float clearColor[4] = { bg.x, bg.y, bg.z, bg.w };
     mDeviceContext->OMSetRenderTargets(1, &mRenderTargetView, nullptr);
     mDeviceContext->ClearRenderTargetView(mRenderTargetView, clearColor);
     ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
@@ -591,7 +592,7 @@ LRESULT WINAPI WindowsPlatform::WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPAR
                 ImGuiStyle& style = ImGui::GetStyle();
                 // Reapply base geometry before scaling so repeated monitor changes
                 // never compound the previous monitor's scale.
-                sfe::ApplyTheme(style);
+                sfe::ApplyTheme(style, sfe::GetThemeMode());
                 style.ScaleAllSizes(dpiScale);
                 style.FontScaleDpi = dpiScale;
             }

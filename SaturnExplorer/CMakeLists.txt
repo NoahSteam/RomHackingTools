@@ -428,6 +428,11 @@ set(SE_IMGUI_CORE
 )
 
 if(BUILD_TESTING)
+    add_executable(SaturnExplorerThemeTests
+        FrontEnd/tests/ThemeTests.cpp FrontEnd/src/Theme.cpp ${SE_IMGUI_CORE})
+    target_include_directories(SaturnExplorerThemeTests PRIVATE FrontEnd/src ${SE_IMGUI_DIR})
+    add_test(NAME SaturnExplorerThemeTests COMMAND SaturnExplorerThemeTests)
+
     add_executable(SaturnExplorerVdp2Tests
         Core/tests/Vdp2CompositorTests.cpp
     )
