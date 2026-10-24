@@ -83,6 +83,9 @@ inline Val readVn(Funcdata& data, const Varnode* vn, uint64_t seed, const std::u
     {
         const AddrSpace* spc = vn->getSpace();
         if (spc == (const AddrSpace*)0 || spc->getType() == IPTR_CONSTANT) { st = ST_UNSUP; why = "input in odd space"; return r; }
+        // a global the function reads is an input only after heritage, a read of the image before it (the loader holds the bytes): the two models differ
+        // by construction, so neither is compared (the seeds 2620001 and its neighbours: a read of 0x0600F100)
+        if (spc == data.getArch()->getDefaultCodeSpace()) { st = ST_UNSUP; why = "input in the code space"; return r; }
         uint64_t acc = 0;
         for (int i = 0; i < size; ++i)
             acc = (acc << 8) | (mix(seed * 0x10001 + spc->getIndex() * 0x1000193ull + (vn->getOffset() + i) * 0x9E3779B1ull) & 0xFF);
