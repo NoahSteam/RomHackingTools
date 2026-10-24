@@ -1,0 +1,211 @@
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.cc
+@@ -17,6 +17,7 @@
+  * Modified for SaturnExplorer: a STORE through a frame address kept in a stack local and read back is guarded (patches/0060-engine-stack-walk-down-spilled.patch).
+  * Modified for SaturnExplorer: a STORE a frame address may have escaped to is guarded, failing closed (patches/0061-engine-stack-frame-escape.patch).
+  * Modified for SaturnExplorer: once the frame escapes, a STORE through a pointer not proved to be no frame address is guarded (patches/0063-engine-frame-escape-unknown-pointers.patch).
++ * Modified for SaturnExplorer: the escape's lowest frame offset is the lowest any query saw, so it never rises (patches/0065-engine-frame-escape-whole-frame.patch).
+  */
+ #include "heritage.hh"
+ #include "funcdata.hh"
+@@ -989,6 +990,9 @@ void FrameEscape::compute(const Funcdata *fd,AddrSpace *spc,bool preHeritage)
+ 	gaveUp = true;
+ 	escaped = true;
+ 	loose = true;
++	// (0065) ...from the lowest frame offset any query saw (no lowest is offset 0, which aliases no local)
++	if (fd->getScopeLocal() != (const ScopeLocal *)0 && fd->getScopeLocal()->getSpaceId() == spc)
++	  haveLowest = fd->getScopeLocal()->getFrameFloor(lowest);
+ 	return;
+       }
+       Varnode *vn = work.back();
+@@ -1163,6 +1167,17 @@ void FrameEscape::compute(const Funcdata *fd,AddrSpace *spc,bool preHeritage)
+   vector<uintb> candidates;
+   for(map<Varnode *,uintb>::const_iterator iter=offset.begin();iter!=offset.end();++iter)
+     candidates.push_back((*iter).second);
++  // (patches/0065-engine-frame-escape-whole-frame.patch) ...and the lowest any earlier query of this function saw. The frame addresses and
++  // stack locations left shrink as the actions fold: the word at a call's stack pointer becomes the call's argument, the local above it a
++  // constant, and the lowest left rose to the address that escaped, so a local below that address lost its alias in the later queries and
++  // was folded (ledger A3-104). The frame does not shrink: the lowest offset is kept with the function (ScopeLocal::setFrameFloor).
++  const ScopeLocal *scope = fd->getScopeLocal();
++  if (scope != (const ScopeLocal *)0 && scope->getSpaceId() != spc) scope = (const ScopeLocal *)0;
++  {
++    uintb floor;
++    if (scope != (const ScopeLocal *)0 && scope->getFrameFloor(floor))
++      candidates.push_back(floor);
++  }
+   {
+     VarnodeLocSet::const_iterator liter = fd->beginLoc(spc);
+     VarnodeLocSet::const_iterator lenditer = fd->endLoc(spc);
+@@ -1181,6 +1196,7 @@ void FrameEscape::compute(const Funcdata *fd,AddrSpace *spc,bool preHeritage)
+       haveLowest = true;
+     }
+   }
++  if (haveLowest && scope != (const ScopeLocal *)0) scope->setFrameFloor(lowest);
+   if (escaped) markUnknownStores(fd);
+ }
+ 
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.hh b/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.hh
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.hh
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.hh
+@@ -17,6 +17,7 @@
+  * Modified for SaturnExplorer: a guard below a pointer stepped down is no array's start (patches/0056-engine-stack-walk-down-aliases.patch).
+  * Modified for SaturnExplorer: an escape analysis of the frame addresses, failing closed (patches/0061-engine-stack-frame-escape.patch).
+  * Modified for SaturnExplorer: once the frame escapes, a pointer not proved to be no frame address may be one (patches/0063-engine-frame-escape-unknown-pointers.patch).
++ * Modified for SaturnExplorer: the escape's lowest frame offset never rises over the queries of a function (patches/0065-engine-frame-escape-whole-frame.patch).
+  */
+ /// \file heritage.hh
+ /// \brief Utilities for building Static Single Assignment (SSA) form 
+@@ -212,7 +213,7 @@ public:
+   bool loose;				///< ...by a form the stack analysis does not model (0061's causes, not a hand-over alone: 0063)
+   bool gaveUp;				///< The walk passed its bound: everything is taken to have escaped
+   bool haveLowest;			///< \b lowest is set
+-  uintb lowest;				///< The lowest frame offset reached (a byte offset in the stack space)
++  uintb lowest;				///< The lowest frame offset reached (a byte offset in the stack space), or any earlier query of the function reached (0065)
+   FrameEscape(void) : memoryEscape(false), handed(false), hostEscape(false), escaped(false), loose(false), gaveUp(false), haveLowest(false), lowest(0) {}
+   void compute(const Funcdata *fd,AddrSpace *spc,bool preHeritage);	///< Run the walk over the given stack space
+   /// \brief Is the given STORE made through a possible frame address the stack analysis does not model?
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/varmap.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/varmap.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/varmap.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/varmap.cc
+@@ -19,6 +19,7 @@
+  * Modified for SaturnExplorer: so does one kept in a stack local and read back, across a call too (patches/0060-engine-stack-walk-down-spilled.patch).
+  * Modified for SaturnExplorer: once a frame address escapes, every local from the lowest frame offset up is aliased (patches/0061-engine-stack-frame-escape.patch).
+  * Modified for SaturnExplorer: a host can declare that the frame escaped by a way the p-code does not show (patches/0063-engine-frame-escape-unknown-pointers.patch).
++ * Modified for SaturnExplorer: once the frame escapes, every local of it is aliased, across the unmapped words between them (patches/0065-engine-frame-escape-whole-frame.patch).
+  */
+ #include "varmap.hh"
+ #include "funcdata.hh"
+@@ -416,6 +417,8 @@ ScopeLocal::ScopeLocal(uint8 id,AddrSpace *spc,Funcdata *fd,Architecture *g) : S
+   hostAlias = false;
+   hostAliasStart = 0;
+   hostEscape = false;
++  haveFrameFloor = false;
++  frameFloor = 0;
+   restrictScope(fd);
+ } 
+ 
+@@ -806,6 +809,8 @@ void AliasChecker::gatherInternal(void) const
+   calculated = true;
+   aliasBoundary = localExtreme;
+   trialBoundary = localExtreme;
++  escapeAll = false;
++  escapeLow = 0;
+   Varnode *spacebase = fd->findSpacebaseInput(space);
+   // SaturnExplorer: a pointer the host knows of and the p-code does not show. The code hands the
+   // address of a local to a callee in a register no call input names (a returned structure's
+@@ -889,6 +894,15 @@ void AliasChecker::gatherInternal(void) const
+       bool param = (direction == 1) ? (low < localBoundary) : (low > localBoundary);
+       if (!param && low < aliasBoundary)
+ 	aliasBoundary = low;
++      // (patches/0065-engine-frame-escape-whole-frame.patch) ...and from there every local is aliased, whatever lies between: the
++      // words the function's calls take as stack arguments and the save slots are unmapped, and ScopeLocal::markUnaliased turns an
++      // alias off at the first mapped range above such a word. With the call's fifth argument at the frame's lowest word, the
++      // local above it was taken for one no pointer reaches and folded (ledger A3-104). A pointer to a local reaches the whole frame
++      // once it has escaped (an escaped `&buf[2]` is walked down to `buf[0]`), so the escape stops at no gap.
++      if (!param && direction == 1) {
++	escapeAll = true;
++	escapeLow = low;
++      }
+     }
+   }
+ }
+@@ -1688,7 +1702,9 @@ void ScopeLocal::restructureVarnode(bool aliasyes)
+ 
+   state.sortAlias();
+   if (aliasyes) {
+-    markUnaliased(state.getAlias());
++    uintb escapeLow = 0;
++    bool escapeAll = state.getEscapeLow(escapeLow);
++    markUnaliased(state.getAlias(),escapeAll,escapeLow);
+     checkUnaliasedReturn(state.getAlias());
+   }
+   if (!state.getAlias().empty() && state.getAlias()[0] == 0)	// If a zero offset use of the stack pointer exists
+@@ -1741,8 +1757,12 @@ bool ScopeLocal::restructure(MapState &state)
+ /// aliased by a pointer.  The method uses locked Symbol information when available to determine
+ /// how far an alias start might extend.  Otherwise a heuristic is used to determine if the Symbol
+ /// is far enough away from the start of the alias to be considered unaliased.
++/// SaturnExplorer (patches/0065-engine-frame-escape-whole-frame.patch): once a frame address escaped, every Symbol at or above the
++/// frame's lowest offset is aliased, across unmapped ranges and at any distance (AliasChecker::gatherInternal).
+ /// \param alias is the given set of alias starting offsets
+-void ScopeLocal::markUnaliased(const vector<uintb> &alias)
++/// \param escapeAll is \b true if a frame address escaped
++/// \param escapeLow is the frame's lowest offset, when \b escapeAll
++void ScopeLocal::markUnaliased(const vector<uintb> &alias,bool escapeAll,uintb escapeLow)
+ 
+ {
+   EntryMap *rangemap = maptable[space->getIndex()];
+@@ -1786,6 +1806,8 @@ void ScopeLocal::markUnaliased(const vector<uintb> &alias)
+     // NOTE: this is primarily to reset aliasing between
+     // stack parameters and stack locals
+     if (aliason && (curoff - curalias > 0xffff)) aliason = false;
++    // SaturnExplorer (0065): an escaped frame address reaches every local of the frame
++    if (escapeAll && curoff >= escapeLow) aliason = true;
+     if (!aliason) symbol->getScope()->setAttribute(symbol,Varnode::nolocalalias);
+     if (symbol->isTypeLocked() && alias_block_level != 0) {
+       if (alias_block_level == 3)
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/varmap.hh b/Ghidra/Features/Decompiler/src/decompile/cpp/varmap.hh
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/varmap.hh
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/varmap.hh
+@@ -17,6 +17,7 @@
+  * Modified for SaturnExplorer: a pointer a loop steps down from a stack address aliases the locals below that address (patches/0056-engine-stack-walk-down-aliases.patch).
+  * Modified for SaturnExplorer: so does one kept in a stack local and read back, across a call too (patches/0060-engine-stack-walk-down-spilled.patch).
+  * Modified for SaturnExplorer: a host can declare that the frame escaped by a way the p-code does not show (patches/0063-engine-frame-escape-unknown-pointers.patch).
++ * Modified for SaturnExplorer: the escape's whole-frame alias and the function's lowest frame offset (patches/0065-engine-frame-escape-whole-frame.patch).
+  */
+ /// \file varmap.hh
+ /// \brief Classes for keeping track of local variables and reconstructing stack layout
+@@ -164,17 +165,20 @@ private:
+   uintb localBoundary;		///< Boundary offset separating locals and parameters
+   mutable uintb aliasBoundary;	///< Shallowest alias
+   mutable uintb trialBoundary;	///< SaturnExplorer: the shallowest alias but an escape's (patches/0063-engine-frame-escape-unknown-pointers.patch)
++  mutable bool escapeAll;	///< SaturnExplorer: a frame address escaped, and every local from \b escapeLow up is aliased (patches/0065-engine-frame-escape-whole-frame.patch)
++  mutable uintb escapeLow;	///< SaturnExplorer: the frame's lowest offset, when \b escapeAll
+   int4 direction;		///< 1=stack grows negative, -1=positive
+   void deriveBoundaries(const FuncProto &proto);	///< Set up basic boundaries for the stack layout
+   void gatherInternal(void) const;	///< Run through Varnodes looking for pointers into the stack
+ public:
+-  AliasChecker() { fd = (const Funcdata *)0; space = (AddrSpace *)0; calculated=false; }	///< Constructor
++  AliasChecker() { fd = (const Funcdata *)0; space = (AddrSpace *)0; calculated=false; escapeAll=false; escapeLow=0; }	///< Constructor
+   void gather(const Funcdata *f,AddrSpace *spc,bool defer);		///< Gather Varnodes that point on the stack
+   bool hasLocalAlias(Varnode *vn) const;	///< Return \b true if it looks like the given Varnode is aliased by a pointer
+   void sortAlias(void) const;			///< Sort the alias starting offsets
+   const vector<AddBase> &getAddBase(void) const { return addBase; }	///< Get the collection of pointer Varnodes
+   const vector<uintb> &getAlias(void) const { return alias; }		///< Get the list of alias starting offsets
+   const vector<pair<uintb,uintb> > &getDownSpans(void) const { return downSpan; }	///< SaturnExplorer: the stack a pointer stepped down may reach
++  bool getEscapeLow(uintb &low) const { low = escapeLow; return escapeAll; }	///< SaturnExplorer: did the frame escape, and from where is every local aliased (0065)
+   static void gatherAdditiveBase(Varnode *startvn,vector<AddBase> &addbase);
+   static uintb gatherOffset(Varnode *vn);
+   static bool stepsDown(PcodeOp *multi);	///< SaturnExplorer: does a loop step the pointer joined by \b multi down (patches/0056-engine-stack-walk-down-aliases.patch)
+@@ -215,6 +219,7 @@ public:
+   bool hasParamRangeHit(void) const { return paramRangeHit; }	///< Return \b true if reference into parameter stack region has been seen
+   void sortAlias(void) { checker.sortAlias(); }		///< Sort the alias starting offsets
+   const vector<uintb> &getAlias(void) { return checker.getAlias(); }	///< Get the list of alias starting offsets
++  bool getEscapeLow(uintb &low) const { return checker.getEscapeLow(low); }	///< SaturnExplorer: the escape's whole-frame alias (0065)
+   void gatherSymbols(const EntryMap *rangemap);		///< Add Symbol information as hints to the collection
+   void gatherVarnodes(const Funcdata &fd);		///< Add stack Varnodes as hints to the collection
+   void gatherOpen(const Funcdata &fd);			///< Add pointer references as hints to the collection
+@@ -243,10 +248,12 @@ class ScopeLocal : public ScopeInternal {
+   bool hostAlias;		///< True if the host declared a pointer into the stack that no Varnode shows (SaturnExplorer)
+   uintb hostAliasStart;		///< The offset it points to; the lowest if declared more than once (SaturnExplorer)
+   bool hostEscape;		///< True if the host declared that a frame address escaped by a way the p-code does not show (SaturnExplorer, 0063)
++  mutable bool haveFrameFloor;	///< True if \b frameFloor is set (SaturnExplorer, 0065)
++  mutable uintb frameFloor;	///< The lowest frame offset the escape walk has seen in this function, over every query (SaturnExplorer, 0065)
+   bool adjustFit(RangeHint &a) const;	///< Make the given RangeHint fit in the current Symbol map
+   void createEntry(const RangeHint &a);	///< Create a Symbol entry corresponding to the given (fitted) RangeHint
+   bool restructure(MapState &state);	///< Merge hints into a formal Symbol layout of the address space
+-  void markUnaliased(const vector<uintb> &alias);	///< Mark all local symbols for which there are no aliases
++  void markUnaliased(const vector<uintb> &alias,bool escapeAll,uintb escapeLow);	///< Mark all local symbols for which there are no aliases
+   void fakeInputSymbols(void);		///< Make sure all stack inputs have an associated Symbol
+   void addRecommendName(Symbol *sym);	///< Convert the given symbol to a name recommendation
+   void collectNameRecs(void);		///< Collect names of unlocked Symbols on the stack
+@@ -261,6 +268,9 @@ public:
+   bool getHostAlias(uintb &off) const;	///< Get the offset of the lowest pointer the host declared (SaturnExplorer)
+   void declareHostEscape(void) { hostEscape = true; }	///< Declare that a frame address escaped where the p-code does not show it (SaturnExplorer, 0063)
+   bool hasHostEscape(void) const { return hostEscape; }	///< Did the host declare an escape (SaturnExplorer, 0063)
++  /// \brief The lowest frame offset the escape walk has seen in this function, over every query (SaturnExplorer, 0065)
++  bool getFrameFloor(uintb &off) const { off = frameFloor; return haveFrameFloor; }
++  void setFrameFloor(uintb off) const { frameFloor = off; haveFrameFloor = true; }	///< Record a new lowest frame offset (SaturnExplorer, 0065)
+ 
+   /// \brief Return \b true if \b restructure analysis discovered overlapping variables
+   bool hasOverlapProbems(void) const { return overlapProblems; }
