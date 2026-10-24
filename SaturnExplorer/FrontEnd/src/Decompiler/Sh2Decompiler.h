@@ -372,8 +372,17 @@ struct DecompileResult
     std::vector<Line> lines;
     std::vector<CallSite> calls;                      // the calls, for the ledger's order checks
     std::vector<std::vector<int>> flowSuccessors;     // the flow's basic blocks before any action: each one's successors
-    // A frame address escaped (the engine's FrameEscape, patch 0068): a call may read the function's locals. For the frame ledger.
-    bool frameEscaped = false;
+    // The calls (their place in the flow as first followed, as MemoryAccess::origBlock and origOrder) the engine guarded a local
+    // of the frame at, with the local (its offset in the stack space, as AccessFate::address, and size): the call's effect on it
+    // is unknown, so it may read it (patch 0068). For the frame ledger.
+    struct FrameCall
+    {
+        int origBlock = -1;
+        uint32_t origOrder = 0;
+        uint32_t offset = 0;
+        uint32_t size = 0;
+    };
+    std::vector<FrameCall> frameCalls;
     // How each memory access the flow made that is no longer one in the p-code ended (the engine
     // records it, patch 0017). With the printed accesses above, they account for every LOAD and
     // STORE of the flow: an access of the all-volatile reference run (DecompileRequest::

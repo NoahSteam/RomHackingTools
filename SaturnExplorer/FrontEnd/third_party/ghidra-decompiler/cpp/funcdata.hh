@@ -68,6 +68,13 @@ struct AccessRecord {
   AccessFate fate;		///< How it ended
 };
 
+/// \brief A call of the flow that heritage guarded a stack local at: it may read it (SaturnExplorer, 0068)
+struct FrameCallRecord {
+  uintm time;			///< PcodeOp::getTime() of the call
+  uintb offset;			///< The local's offset in the stack space
+  int4 size;			///< ...and its size
+};
+
 /// \brief One instruction the flow translated (SaturnExplorer)
 struct FlowInsn {
   Address addr;			///< The address of the instruction
@@ -136,6 +143,7 @@ class Funcdata {
   uintm flowOps = 0;		///< The ops with a lower time were made by the flow; the rest by rules and actions (SaturnExplorer)
   bool accessesRecorded = false;	///< Set while a block is removed: its accesses were recorded before any op was destroyed
   mutable bool frameEscaped = false;	///< SaturnExplorer (0068): a frame address escaped (FrameEscape) in this generation of the function
+  vector<FrameCallRecord> frameCalls;	///< SaturnExplorer (0068): the flow's calls heritage guarded a stack local at, in this generation
   bool frameFoldsAllRead = false;	///< SaturnExplorer (0068): a walk of noteFrameFoldForwarded passed its bound: no fold is recorded unread
 
   VarnodeBank vbank;		///< Container of Varnode objects for \b this function
@@ -234,6 +242,8 @@ public:
   const vector<FlowInsn> &getFlowInsns(void) const { return flowInsns; }	///< Every instruction the last flow translated (SaturnExplorer)
   const vector<AccessRecord> &getAccessFates(void) const { return accessFates; }	///< Every LOAD and STORE that ended, and how (SaturnExplorer)
   void noteFrameEscaped(void) const { frameEscaped = true; }	///< SaturnExplorer (0068): FrameEscape found a frame address escaped
+  void noteFrameCall(const PcodeOp *op,uintb off,int4 size);	///< SaturnExplorer (0068): the call has a guard on a stack local (it may read it)
+  const vector<FrameCallRecord> &getFrameCalls(void) const { return frameCalls; }	///< SaturnExplorer (0068): the flow's calls with a guard on a stack local
   bool hasFrameEscaped(void) const { return frameEscaped; }	///< SaturnExplorer (0068): did a frame address escape, so a call may read the locals
   void warning(const string &txt,const Address &ad) const;	///< Add a warning comment in the function body
   void warningHeader(const string &txt) const;			///< Add a warning comment as part of the function header

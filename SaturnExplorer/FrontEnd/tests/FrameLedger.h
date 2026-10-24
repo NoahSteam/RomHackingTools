@@ -14,10 +14,10 @@
 // used (a pop of a register the engine takes for unaffected is no use), before folded writes of the
 // frame have covered every byte of it. Only folded writes, exact frame offsets the engine itself
 // placed, cover a byte; a store through a pointer that stayed one, or a call, may not write it.
-// Once a frame address escaped (DecompileResult::frameEscaped), every call reads every byte of the
-// frame too (A3-124's struct was handed to a call and read by nothing else), but for the save of a
-// callee-saved register (a push of r8 to r14, or of a control or system register), which no callee
-// is handed.
+// A call the engine guarded a local of the frame at (DecompileResult::frameCalls: its effect on the
+// local is unknown, a lent callee's is known) reads the local's bytes too (A3-124's struct was handed
+// to a call and read by nothing else), but for the save of a callee-saved register (a push of r8 to
+// r14, or of a control or system register), which no callee is handed.
 #pragma once
 
 #include "Decompiler/MemorySnapshot.h"
@@ -86,7 +86,7 @@ inline std::vector<FrameLoss> FrameLosses(const sfe::decomp::DecompileResult& r,
         int64_t lo;     // the frame offset, sign-extended (the stack space wraps at 32 bits)
         int64_t hi;     // one past the last byte
         uint32_t insn;
-        bool call;      // a call that may read every byte of the frame
+        bool call;      // a call that may read the bytes
     };
     // Gone with unreachable code, or (a read) its value used by nothing.
     auto removed = [&](const AccessFate& f) {
@@ -103,9 +103,12 @@ inline std::vector<FrameLoss> FrameLosses(const sfe::decomp::DecompileResult& r,
         const int64_t lo = int64_t(int32_t(f.address));
         accs.push_back(Acc{ f.origBlock, f.origOrder, f.write, lo, lo + f.size, f.insn, false });
     }
-    if (r.frameEscaped)
-        for (const sfe::decomp::CallSite& c : r.calls)
-            if (c.origBlock >= 0) accs.push_back(Acc{ c.origBlock, c.origOrder, false, INT64_MIN / 2, INT64_MAX / 2, c.insn, true });
+    for (const auto& c : r.frameCalls)
+        if (c.origBlock >= 0)
+        {
+            const int64_t lo = int64_t(int32_t(c.offset));
+            accs.push_back(Acc{ c.origBlock, c.origOrder, false, lo, lo + c.size, 0, true });
+        }
     std::sort(accs.begin(), accs.end(), [](const Acc& a, const Acc& b) {
         return a.block != b.block ? a.block < b.block : a.order < b.order;
     });

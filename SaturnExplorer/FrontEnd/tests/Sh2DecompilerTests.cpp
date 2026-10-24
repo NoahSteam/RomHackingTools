@@ -12762,17 +12762,17 @@ void TestA3124Fix()
         CHECK(dts::FrameLosses(fake).size() == 1);   // another byte overwritten: the lost one is still read
         fake.accessFates.push_back(fate(0x110, AccessFate::FrameUnread, false, 0xFFFFFFF4u, 4, 1, 0));
         CHECK(dts::FrameLosses(fake).empty());       // the read's own value was used by nothing (a pop the engine takes for unaffected)
-        // Once a frame address escaped, a call reads every byte (A3-124's struct, handed to a call), but no callee-saved register's save.
+        // A call the engine guarded a local at reads its bytes (A3-124's struct, handed to a call), but no callee-saved register's save.
         DecompileResult call;
         call.flowSuccessors = { {} };
         call.accessFates = { fate(0x100, AccessFate::FoldedOrdinary, true, 0xFFFFFFF4u, 1, 0, 0), fate(0x100, AccessFate::FrameUnread, true, 0xFFFFFFF4u, 1, 0, 0) };
-        CallSite cs;
-        cs.insn = 0x104;
-        cs.origBlock = 0;
-        cs.origOrder = 1;
-        call.calls = { cs };
-        CHECK(dts::FrameLosses(call).empty());       // the frame did not escape: the call is handed nothing of it
-        call.frameEscaped = true;
+        CHECK(dts::FrameLosses(call).empty());       // no call the engine guarded a local at
+        DecompileResult::FrameCall fc;
+        fc.origBlock = 0;
+        fc.origOrder = 1;
+        fc.offset = 0xFFFFFFF4u;
+        fc.size = 4;
+        call.frameCalls = { fc };
         CHECK(dts::FrameLosses(call).size() == 1);
         CHECK(dts::FrameLosses(call, [](uint32_t) { return uint16_t(0x2FE6); }).empty());   // mov.l r14,@-r15: a save
         CHECK(dts::FrameLosses(call, [](uint32_t) { return uint16_t(0x2F46); }).size() == 1);   // mov.l r4,@-r15: a stack argument

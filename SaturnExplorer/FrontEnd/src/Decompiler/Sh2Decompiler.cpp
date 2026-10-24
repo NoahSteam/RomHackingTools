@@ -5550,7 +5550,17 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         }
         r.calls = Calls(*fd, flow, canonicalOf);
         r.flowSuccessors = flow.successors;
-        r.frameEscaped = fd->hasFrameEscaped();
+        for (const ghidra::FrameCallRecord& c : fd->getFrameCalls())
+        {
+            auto pos = flow.ops.find(c.time);
+            if (pos == flow.ops.end()) continue;
+            DecompileResult::FrameCall fc;
+            fc.origBlock = pos->second.first;
+            fc.origOrder = pos->second.second;
+            fc.offset = static_cast<uint32_t>(c.offset);
+            fc.size = static_cast<uint32_t>(c.size);
+            r.frameCalls.push_back(fc);
+        }
         if (errors.bad()) throw std::bad_alloc();
         const std::string e = errors.str();
         if (!e.empty()) r.warnings.push_back(e);

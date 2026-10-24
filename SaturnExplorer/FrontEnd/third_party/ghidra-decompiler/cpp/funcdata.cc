@@ -110,6 +110,7 @@ void Funcdata::clear(void)
   clearJumpTables();
   accessFates.clear();		// SaturnExplorer: they describe the ops just destroyed
   frameEscaped = false;		// SaturnExplorer (0068): ...and the escape found in them
+  frameCalls.clear();
   frameFoldsAllRead = false;
   flowInsns.clear();		// SaturnExplorer: the next flow records its own
   flowTables.clear();
@@ -241,6 +242,25 @@ void Funcdata::recordAccessFold(const PcodeOp *op,const Varnode *vn)
   // was found, or with the pieces of a wrong collapse, were counted as folded and nothing more).
   if (op->getTime() < flowOps && vn->getSpace()->getType() == IPTR_SPACEBASE)
     op->setFrameFold();
+}
+
+/// SaturnExplorer (patches/0068-engine-deadcode-late-stack-reads.patch): heritage guards a stack local at the
+/// call (its effect on the local is unknown), so the call may read it: a host's frame ledger takes the call for a
+/// read of those bytes. Only the flow's calls are kept, each range once.
+/// \param op is the call
+/// \param off is the local's offset in the stack space
+/// \param size is its size
+void Funcdata::noteFrameCall(const PcodeOp *op,uintb off,int4 size)
+
+{
+  if (op->getTime() >= flowOps) return;
+  for(vector<FrameCallRecord>::const_iterator iter=frameCalls.begin();iter!=frameCalls.end();++iter)
+    if ((*iter).time == op->getTime() && (*iter).offset == off && (*iter).size == size) return;
+  FrameCallRecord rec;
+  rec.time = op->getTime();
+  rec.offset = off;
+  rec.size = size;
+  frameCalls.push_back(rec);
 }
 
 /// SaturnExplorer (patches/0068-engine-deadcode-late-stack-reads.patch): the PIECEs and SUBPIECEs now in the

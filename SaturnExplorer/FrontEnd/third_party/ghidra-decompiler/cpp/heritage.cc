@@ -19,7 +19,7 @@
  * Modified for SaturnExplorer: once the frame escapes, a STORE through a pointer not proved to be no frame address is guarded (patches/0063-engine-frame-escape-unknown-pointers.patch).
  * Modified for SaturnExplorer: the escape's lowest frame offset is the lowest any query saw, so it never rises, and a pointer a loop steps down from an unbounded index is guarded below its base (patches/0065-engine-frame-escape-whole-frame.patch).
  * Modified for SaturnExplorer: a frame address that is no exact offset from the frame base escapes, unless a loop only steps it up, and the guard of an access through one covers the stack space (patches/0066-engine-frame-escape-inexact.patch).
- * Modified for SaturnExplorer: a read, or a STORE's write no guard linked, found after dead code ran in its space delays dead code past the pass that found it, as often as needed, failing closed; whether a frame address escaped is kept for a host and forces a call's guard on a local (patches/0068-engine-deadcode-late-stack-reads.patch).
+ * Modified for SaturnExplorer: a read, or a STORE's write no guard linked, found after dead code ran in its space delays dead code past the pass that found it, as often as needed, failing closed; whether a frame address escaped forces a call's guard on a local, and the calls guarded at a local are kept for a host (patches/0068-engine-deadcode-late-stack-reads.patch).
  */
 #include "heritage.hh"
 #include "funcdata.hh"
@@ -2373,6 +2373,19 @@ void Heritage::guardCalls(uint4 fl,const Address &addr,int4 size,vector<Varnode 
     }
     // We do not guard the call if the effect is "unaffected" or "reload"
     if ((effecttype == EffectRecord::unknown_effect)||(effecttype == EffectRecord::return_address)) {
+      // SaturnExplorer (0068): for a host's frame ledger, this call may read the local, unless it lies wholly below the
+      // stack pointer the callee is entered with (the callee's own space: what was pushed and popped there is gone)
+      if (spc->getType() == IPTR_SPACEBASE) {
+	bool below = false;
+	if (fc->getSpacebaseOffset() != FuncCallSpecs::offset_unknown) {
+	  intb rel = (intb)off;
+	  int4 bits = 8 * spc->getAddrSize();
+	  if (bits < 64 && ((off >> (bits - 1)) & 1) != 0) rel = (intb)(off | (~(uintb)0 << bits));
+	  below = rel + size <= 0;
+	}
+	if (!below)
+	  fd->noteFrameCall(fc->getOp(),addr.getOffset(),size);
+      }
       indop = fd->newIndirectOp(fc->getOp(),addr,size,0);
       indop->getIn(0)->setActiveHeritage();
       indop->getOut()->setActiveHeritage();
