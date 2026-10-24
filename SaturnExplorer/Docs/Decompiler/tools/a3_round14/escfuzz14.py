@@ -71,6 +71,17 @@ def walk(q, steps, kind, cnt='r3', val='r2'):
         L += ['mov #0,r5', 'mov #%d,%s' % (steps, cnt), 'WL:', 'add #-4,r5', 'mov r5,r0', 'mov.l %s,@(r0,%s)' % (val, q), 'dt %s' % cnt, 'bf WL']
     elif kind == 'subidx':
         L += ['mov #0,r5', 'mov #%d,%s' % (steps, cnt), 'WL:', 'add #4,r5', 'mov %s,r0' % q, 'sub r5,r0', 'mov.l %s,@r0' % val, 'dt %s' % cnt, 'bf WL']
+    elif kind == 'gbrrmw':
+        # GBR-based read-modify-write: and.b/or.b/xor.b #imm,@(r0,gbr) at q - 4*steps (the top byte of the word)
+        op = rnd.choice([0xCF40, 0xCE40])
+        L += ['stc gbr,r5', 'ldc %s,gbr' % q, 'mov #%d,r0' % (-4 * steps), '.word 0x%04X' % op, 'ldc r5,gbr']
+    elif kind == 'gbrmov':
+        # mov.l r0,@(disp,gbr) with gbr = q - 4*steps
+        L += ['stc gbr,r5', 'add #%d,%s' % (-4 * steps, q), 'ldc %s,gbr' % q, 'mov %s,r0' % val, 'mov.l r0,@(0,gbr)', 'ldc r5,gbr']
+    elif kind == 'tas':
+        L += ['add #%d,%s' % (-4 * steps, q), 'tas.b @%s' % q]
+    elif kind == 'movbw':
+        L += ['mov #%d,%s' % (steps, cnt), 'WL:', 'mov.b %s,@-%s' % (val, q), 'mov.b %s,@-%s' % (val, q), 'mov.b %s,@-%s' % (val, q), 'mov.b %s,@-%s' % (val, q), 'dt %s' % cnt, 'bf WL']
     elif kind == 'unroll':
         for i in range(steps): L += ['mov.l %s,@-%s' % (val, q)]
     return L
@@ -79,7 +90,7 @@ out = []
 for i in range(n):
     F = rnd.choice([16, 24, 32, 40])
     T = rnd.choice([t for t in range(0, F + 1, 4)])
-    wkind = rnd.choice(['loop', 'loop', 'disp', 'idx', 'unroll', 'up', 'subreg', 'addreg', 'idxdown', 'subidx'])
+    wkind = rnd.choice(['loop', 'loop', 'disp', 'idx', 'unroll', 'up', 'subreg', 'addreg', 'idxdown', 'subidx', 'gbrrmw', 'gbrmov', 'tas', 'movbw'])
     wkind = os.environ.get('ESC_WKIND', wkind)
     if wkind == 'up' and T >= F: T = F - 4
     R = rnd.choice(range(0, F, 4))

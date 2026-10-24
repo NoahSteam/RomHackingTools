@@ -1,0 +1,142 @@
+name R14-10a lent h(5 params, the fifth read from the stack) walks down from a pointer the caller stored in a global; the caller returns local 0, the fifth argument word
+asm 06009000
+.word 0x4F22
+add #-16,r15
+mov #1,r0
+mov.l r0,@(0,r15)
+mov #2,r0
+mov.l r0,@(4,r15)
+mov #3,r0
+mov.l r0,@(8,r15)
+mov #4,r0
+mov.l r0,@(12,r15)
+mov r15,r4
+add #12,r4
+mov.l =0x0600F100,r1
+mov.l r4,@r1
+mov #34,r4
+mov #35,r5
+mov #36,r6
+mov #37,r7
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l @(0,r15),r0
+add #16,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+mov.l @r15,r0
+add r5,r4
+add r6,r4
+add r7,r4
+mov.l =0x0600F100,r1
+mov.l @r1,r1
+mov #0x55,r2
+mov.l r2,@-r1
+mov.l r2,@-r1
+mov.l r2,@-r1
+rts
+add r0,r4
+endasm
+lend 06009100
+quiet
+args 0 0 0 0
+end
+
+name R14-10b the same, caller returns local 1
+asm 06009000
+.word 0x4F22
+add #-16,r15
+mov #1,r0
+mov.l r0,@(0,r15)
+mov #2,r0
+mov.l r0,@(4,r15)
+mov #3,r0
+mov.l r0,@(8,r15)
+mov #4,r0
+mov.l r0,@(12,r15)
+mov r15,r4
+add #12,r4
+mov.l =0x0600F100,r1
+mov.l r4,@r1
+mov #34,r4
+mov #35,r5
+mov #36,r6
+mov #37,r7
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l @(4,r15),r0
+add #16,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+mov.l @r15,r0
+add r5,r4
+add r6,r4
+add r7,r4
+mov.l =0x0600F100,r1
+mov.l @r1,r1
+mov #0x55,r2
+mov.l r2,@-r1
+mov.l r2,@-r1
+mov.l r2,@-r1
+rts
+add r0,r4
+endasm
+lend 06009100
+quiet
+args 0 0 0 0
+end
+
+name R14-10c control: h has four parameters (no stack read), caller returns local 0
+asm 06009000
+.word 0x4F22
+add #-16,r15
+mov #1,r0
+mov.l r0,@(0,r15)
+mov #2,r0
+mov.l r0,@(4,r15)
+mov #3,r0
+mov.l r0,@(8,r15)
+mov #4,r0
+mov.l r0,@(12,r15)
+mov r15,r4
+add #12,r4
+mov.l =0x0600F100,r1
+mov.l r4,@r1
+mov #34,r4
+mov #35,r5
+mov #36,r6
+mov #37,r7
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l @(0,r15),r0
+add #16,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+add r5,r4
+add r6,r4
+add r7,r4
+mov.l =0x0600F100,r1
+mov.l @r1,r1
+mov #0x55,r2
+mov.l r2,@-r1
+mov.l r2,@-r1
+mov.l r2,@-r1
+rts
+add r0,r4
+endasm
+lend 06009100
+quiet
+args 0 0 0 0
+end

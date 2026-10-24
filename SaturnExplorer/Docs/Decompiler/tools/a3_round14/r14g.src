@@ -1,0 +1,248 @@
+name R14-9a delay slot pushes the frame address as the fifth argument (jsr ; mov.l r4,@-r15), g keeps it
+asm 06009000
+.word 0x4F22
+add #-24,r15
+mov #1,r0
+mov.l r0,@(0,r15)
+mov #2,r0
+mov.l r0,@(4,r15)
+mov #3,r0
+mov.l r0,@(8,r15)
+mov #4,r0
+mov.l r0,@(12,r15)
+mov #5,r0
+mov.l r0,@(16,r15)
+mov #6,r0
+mov.l r0,@(20,r15)
+mov r15,r4
+add #12,r4
+mov.l =0x06009100,r1
+jsr @r1
+mov.l r4,@-r15
+add #4,r15
+mov.l =0x0600F100,r6
+mov.l @r6,r6
+mov #0x55,r2
+mov.l r2,@-r6
+mov.l r2,@-r6
+mov.l r2,@-r6
+mov.l @(4,r15),r0
+add #24,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+mov.l @r15,r1
+mov.l =0x0600F100,r2
+mov.l r1,@r2
+rts
+nop
+endasm
+quiet
+args 0 0 0 0
+end
+
+name R14-9b delay slot of the call moves r4 to r8 (callee-saved) : jsr ; mov r4,r8, g reads r8 and keeps it
+asm 06009000
+.word 0x4F22
+add #-24,r15
+mov #1,r0
+mov.l r0,@(0,r15)
+mov #2,r0
+mov.l r0,@(4,r15)
+mov #3,r0
+mov.l r0,@(8,r15)
+mov #4,r0
+mov.l r0,@(12,r15)
+mov #5,r0
+mov.l r0,@(16,r15)
+mov #6,r0
+mov.l r0,@(20,r15)
+mov r15,r4
+add #12,r4
+mov.l =0x06009100,r1
+jsr @r1
+mov r4,r8
+mov.l =0x0600F100,r6
+mov.l @r6,r6
+mov #0x55,r2
+mov.l r2,@-r6
+mov.l r2,@-r6
+mov.l r2,@-r6
+mov.l @(4,r15),r0
+add #24,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+mov.l =0x0600F100,r1
+mov.l r8,@r1
+rts
+nop
+endasm
+quiet
+args 0 0 0 0
+end
+
+name R14-9c delay slot adds to r15 (jsr ; add #-4,r15) with the address stored in the new word before the call
+asm 06009000
+.word 0x4F22
+add #-24,r15
+mov #1,r0
+mov.l r0,@(0,r15)
+mov #2,r0
+mov.l r0,@(4,r15)
+mov #3,r0
+mov.l r0,@(8,r15)
+mov #4,r0
+mov.l r0,@(12,r15)
+mov #5,r0
+mov.l r0,@(16,r15)
+mov #6,r0
+mov.l r0,@(20,r15)
+mov r15,r4
+add #12,r4
+mov.l =0x06009100,r1
+add #-4,r15
+mov.l r4,@r15
+jsr @r1
+add #-4,r15
+add #8,r15
+mov.l =0x0600F100,r6
+mov.l @r6,r6
+mov #0x55,r2
+mov.l r2,@-r6
+mov.l r2,@-r6
+mov.l r2,@-r6
+mov.l @(4,r15),r0
+add #24,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+mov.l @(4,r15),r1
+mov.l =0x0600F100,r2
+mov.l r1,@r2
+rts
+nop
+endasm
+quiet
+args 0 0 0 0
+end
+
+name R14-9d trapa: the handler keeps r4 (vector 5 at vbr+20), rte
+asm 06009000
+.word 0x4F22
+add #-24,r15
+mov #1,r0
+mov.l r0,@(0,r15)
+mov #2,r0
+mov.l r0,@(4,r15)
+mov #3,r0
+mov.l r0,@(8,r15)
+mov #4,r0
+mov.l r0,@(12,r15)
+mov #5,r0
+mov.l r0,@(16,r15)
+mov #6,r0
+mov.l r0,@(20,r15)
+mov r15,r4
+add #12,r4
+mov.l =0x0600F000,r1
+ldc r1,vbr
+.word 0xC305
+mov.l =0x06009000,r1
+mov.l =0x0600F100,r6
+mov.l @r6,r6
+mov #0x55,r2
+mov.l r2,@-r6
+mov.l r2,@-r6
+mov.l r2,@-r6
+mov.l @(4,r15),r0
+add #24,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+mov.l =0x0600F100,r1
+mov.l r4,@r1
+rte
+nop
+endasm
+long 0600F014 06009100
+quiet
+args 0 0 0 0
+end
+
+name R14-9e trapa control: jsr to the same handler body (rts)
+asm 06009000
+.word 0x4F22
+add #-24,r15
+mov #1,r0
+mov.l r0,@(0,r15)
+mov #2,r0
+mov.l r0,@(4,r15)
+mov #3,r0
+mov.l r0,@(8,r15)
+mov #4,r0
+mov.l r0,@(12,r15)
+mov #5,r0
+mov.l r0,@(16,r15)
+mov #6,r0
+mov.l r0,@(20,r15)
+mov r15,r4
+add #12,r4
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l =0x0600F100,r6
+mov.l @r6,r6
+mov #0x55,r2
+mov.l r2,@-r6
+mov.l r2,@-r6
+mov.l r2,@-r6
+mov.l @(4,r15),r0
+add #24,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+mov.l =0x0600F100,r1
+mov.l r4,@r1
+rts
+nop
+endasm
+quiet
+args 0 0 0 0
+end
+
+name R14-9f trapa handler reads the exception frame: writes 0x55 at its r15+8 (the caller word) through the frame
+asm 06009000
+.word 0x4F22
+add #-8,r15
+mov #5,r0
+mov.l r0,@r15
+mov.l =0x0600F000,r1
+ldc r1,vbr
+.word 0xC305
+mov.l @r15,r0
+add #8,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+mov #0x55,r0
+mov.l r0,@(8,r15)
+rte
+nop
+endasm
+long 0600F014 06009100
+quiet
+args 0 0 0 0
+end
