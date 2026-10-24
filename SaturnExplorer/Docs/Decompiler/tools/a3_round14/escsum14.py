@@ -7,7 +7,7 @@ from collections import Counter
 t = open(sys.argv[1]).read().split('==== ')[1:]
 cnt = Counter(); shown = 0
 def nargs(line):
-    m = re.search(r'func_0x[0-9a-f]+\((.*)\);', line)
+    m = re.search(r'func_0x[0-9a-f]+\((.*)\)\s*;', line)
     if not m: return 0
     s = m.group(1); d = 0; n = 1 if s.strip() else 0
     for ch in s:
@@ -29,8 +29,10 @@ for b in t:
     if len(rets) == 1 and const and runs:
         stale = int(const[0].split()[1], 0) != int(runs[0][3], 16)
     regvar = len(rets) == 1 and re.fullmatch(r'return (xVar|iVar|uVar|pxVar|puVar|in_)\w*', rets[0]) is not None
-    body = ' '.join(re.sub(r';\s+[0-9A-F]{8}\s*$', ';', l.rstrip()).strip() for l in lines)
-    calls = [nargs(m.group(0)) for m in re.finditer(r'func_0x[0-9a-f]+\(.*?\);', body)]
+    body = ' '.join(l.rstrip().strip() for l in lines)
+    body = re.sub(r';\s+[0-9A-F]{8}\s+;', ';', body)    # a call that wraps: `...) ; 0600904A` then a line with only `;`
+    body = re.sub(r';\s+[0-9A-F]{8}\b', ';', body)
+    calls = [nargs(m.group(0)) for m in re.finditer(r'func_0x[0-9a-f]+\(.*?\)\s*;', body)]
     stackargs = any(n > 4 for n in calls)
     key = ('lent' if lent else 'withheld')
     if stale: cnt[key + ' STALE-const'] += 1; tag = 'STALE'

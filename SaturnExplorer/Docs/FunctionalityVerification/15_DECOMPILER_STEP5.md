@@ -12677,3 +12677,158 @@ The generator ranges, the printed-C run and the generator's ctest were run again
 - The fragments stay in the corpus run; the counts say them apart.
 - S17 to S19 have no ledger row. They are the stack-walk class of A3-65 with an unbounded index, wrong on `f54d140`, found by this round's matrix (the fixture rule of the brief), and fixed in 0065 with pins and a generator stream.
 - Patch 0064 (area 2) is on master and not on this branch. 0065 touches `heritage.cc/.hh` and `varmap.cc/.hh` only.
+
+## Area 3, round 14 review
+
+Reviewer, branch `review/3-round14-review`, on the coordinator's head `73f13e6` (patches up to 0065 in the tree; the round 13 fix and the host rules of round 13). Findings only: no engine, host or suite code changed; the repository gets tools (`Docs/Decompiler/tools/a3_round14/`), the ledger rows **A3-117 to A3-122** and this record. Own RelWithDebInfo build of `73f13e6` and a build of `8dcbb70` (the round 12 fix, for the text comparison and for "wrong on the base too") beside it, `-j2`, every run under `ulimit -v 4000000`, one heavy job at a time.
+
+**The round is not clean: two rows at P1 (A3-118, A3-119), two at P2 (A3-117, A3-122) and one at P2 by the brief's rule that a false note is P2 (A3-120, which is P3 if the notes are read as hazards), one P3 (A3-121, the instrument).** Area 3 still has no clean round: the count of consecutive clean rounds stays 0. None of A3-117 to A3-119 and A3-122 is a regression of round 13: every fixture is wrong on `8dcbb70` as well (A3-118 and A3-119 print the same `return 5;` there, and so did S17 to S19, which 0065 fixed). A3-120's notes were printed by the base in the same form. They are what a fail-closed rule that is a list of forms leaves: each is a form the round 13 fix's tools did not draw.
+
+| Row | P | What | Where it comes from |
+|---|---|---|---|
+| A3-117 | P2 | The words at an unlent call's r15 that the engine prints as the call's stack arguments are no Symbol, so the whole-frame alias does not reach them: a callee that writes them through an escaped pointer, and a read of the word after the call, give the value stored before (`return xVar2;` for 0x55). 531 of 15,000 fixtures of the extended escape fuzzer. | A3-104's fix (aliases the Symbols; the argument words stay out of it by A3-99) |
+| A3-118 | P1 | A walk down by an index a loop steps down (`mov.l r1,@(r0,r2)` with r0 counting down, `p - i` with i counting up) is not guarded below the frame address: lent, `return 5;`, the code returns 1. | `LoadGuard::pointerSteppedDown` (A3-116's fix) gives up at an add of a non-constant |
+| A3-119 | P1 | A pointer walked down by a register stride the value-set analysis cannot read (a pool long or halfword, a frame reload, a global; `add` and `sub`) is not guarded below: lent, `return 5;`. A stride over 127 bytes is a pool load in compiled code. | the same helper, from the other side |
+| A3-120 | P2 | A frame-fact note says "is" of a word or register the host only proves possible (a word a callee handed `&buf` may have written; a register loaded from memory once anything went out). Corpus: 008 06042BBC (r2 holds an object pointer), 007 0601B914. | round 12's fail-closed `MayBeFrame`, round 13's note rules |
+| A3-121 | P3 | Instrument: none of the above is drawn by the generator or counted by round 13's fuzzer summary (59 of the old fuzzer's 1,500 fixtures were rejected by the oracle and never read). | |
+| A3-122 | P2 | `AliasChecker::stepsDown` gives up at 4,096 values and answers "no walk" (fails open); `reachesStepDown` gives up at 1,024 and answers "walk". A loop body of 4,100 accesses through the pointer, S18's unbounded index: lent, `return 5;`. | 0056/0057, reached by 0065 |
+
+### 1. The tools
+
+`Docs/Decompiler/tools/a3_round14/`, on the round 13 driver (`bdrv.sh`, `run.sh`, `sum.py`, built from the suite's own source):
+
+- `escfuzz14.py`: `escfuzz.py` with 20 new launderings of the frame address (MACH/MACL, `mul.l`, `dmulu.l`, `mac.l` through memory, GBR and VBR by register and by `ldc.l`/`stc.l`, `xtrct`, the T bit by `shll`/`rotcl`, `addc`, `subc`, `negc`, `rotcl`/`rotcr`, PR, `movt`), the same again on the walker's side, mediators in MACH, MACL, GBR, VBR and r8 to r14, and eight new walks (a register stride by `add` and `sub`, an index counting down `@(r0,p)` and `p - i`, GBR `mov.l`/`or.b`/`xor.b`, `tas.b`, byte stores). `ESC_LK`, `ESC_WLK`, `ESC_WKIND`, `ESC_MED`, `ESC_WK` pin a dimension. About 34,500 fixtures on the clean tree (seeds 1101 to 1110, 1201 to 1203, 1001, and the pinned batches).
+- `escsum14.py`: `escsum.py` plus the texts the oracle rejects that return a register-like variable (`xVar`, `iVar`, `in_`), split by whether a call in the text shows a stack argument. Round 13's summary counted wrong constants only.
+- `hbfuzz14.py` and `hbsum14.py`: the hand-back fuzzer with a 12-byte frame in g, six ways to obtain the pointer to the caller's word (the five of round 13 and `via_r14`, each then laundered 12 ways), 19 channels (round 13's 13 and halves, bytes, two hops, a published slot address, a far slot, two slots) and 7 writes (`tas.b`, a read-modify-write byte, a halfword). 4,200 fixtures.
+- `stride14.py`, `cap14.py`, `hops14.py`, `bigframe14.py`: the number and stride tables; `r14*.src`: about 130 hand fixtures; `mut/*.py`, `mutant.sh`, `relink.sh`: the reverts of section 3; `changed14.py`, `facts14.py`: the text comparison of section 6; `matrix14.sh`, `hidden14.sh`, `fuzzrun.sh`: the ranges.
+
+### 2. The guards that are numbers
+
+| Bound | Where | Reading | Result |
+|---|---|---|---|
+| 64 hops | `pointerSteppedDown` (0065) | `return false` after 64 constant additions, copies and INDIRECTs | R14-3: 20, 60, 63, 64, 65, 66, 70, 100 constant additions between the join and the store, a frame of 2N+8 bytes, S18's unbounded base: all `return xStack_...`. The rule passes fold constant additions before the stack space is heritaged, and a chain of 64 INDIRECTs needs 64 calls that may write the slot, which the escape's own guards cover. Not exploitable; not built with a chain of calls. |
+| 0xffff below the base | `establishRange` (0056, 0065) | the guard reaches 64 KB below the pointer | R14-4: frames of 0x1A000 and 0x30000, a walk of three steps of 0x8000 by `sub r5` or `add`, the sentinel 0x18000 and 0x28000 below the base, constant and unbounded base: the sentinel is not folded (`return xStack_...`), all right. A walk with a stride over 64 KB needs a frame over 64 KB. |
+| 4,096 values | `AliasChecker::stepsDown` (0056, 0057) | `seen.size() < 4096`, then `return false` | **A3-122**: fails open; `reachesStepDown`'s 1,024 fails closed. |
+| 8,192 members, 65,536 unknown | `FrameEscape::compute`, `markUnknownStores` (0061, 0063) | give up to "everything escaped" / "every store" | closed. R14-19 (`gaveup14.py`: 10 to 5,000 copies of the frame address, i.e. up to 10,000 members, then an unlent `g` that keeps `r15+16` and an unlent walker that writes over the sentinel): all `return xStack_24`, so the first-query case (the walk gives up before any floor is recorded and `low` is 0) is covered by the guards on the stores and the call. |
+| 31 words | `AddFrameWords`, `ExposeStackArguments` | a callee's write beyond the 31st word of the caller's frame is `kFrameAny` | closed. |
+| 4,096 steps, nested depth, budgets | the host's interpreter and walks | withheld "too many paths", `kFrameAny` | closed. |
+
+A walk without a loop: an unrolled `mov.l r1,@-r2` four times from `sp+16+r4` (R14-5) is right, a recursive lent `g(p,n)` that stores at p and calls itself with `p-4` and a chain of four lent functions that each lower the pointer by 4 (R14-17a, 17b) are right (the host's `storesBelow`, A3-82). A lent callee that steps its parameter down by a pool stride (R14-12a to 12e) is right: the host fails closed for an add of a variable. Two walks the number does not reach but the mechanism does are A3-118 and A3-119.
+
+### 3. The three "redundant" sites and the frame floor
+
+Each reverted alone in the worktree (`mut/m_note.py`, `m_shown.py`, `m_slots.py`, `m_conv.py`, `m_floor.py`), built, run, and restored (`git checkout`):
+
+| Reverted | `r13a`, `r13b`, `r14c` (the review's and the fixer's controls, and four nested cases: a walked unlent callee that keeps `&caller_word`, its own local holding it, a stack word, r2) | `escfuzz14` seeds 1201 to 1203 (4,500) |
+|---|---|---|
+| `NoteFrameEscapeOf` lets the exact address out | no text changes | 0 flags differ |
+| the "shown" stack word goes out | no text changes | 0 |
+| a frame address's hand-out lets out the slots' addresses | no text changes | 0 |
+| the probe's convention registers and outgoing words (H_conv) | no text changes | 1 differs (a stack-word fixture), as the fixer says it fails alone |
+| the engine's frame floor (`m_floor.py`: the candidate, `setFrameFloor`, `getFrameFloor`) | no text changes (`r13a`, `r13b`, `r14*`) | 0 |
+
+The coverage is structural. At the top level of a probe `H_conv` hands out the same set (r2, r4 to r7, every word from the call's r15 up) as the three sites do for one call, so each of the three is a subset of it. In a walked callee (`mNested`, which is tolerant too) `H_conv` does not run and the three do, and the four nested fixtures (R14-6a to 6d: a walked `c` that keeps `&caller_word` in a local and hands `&L` in r4 or r2, or the address in its outgoing stack word, to an unlent `d` that keeps it) print `return axStack_c[0];` with each site reverted; by reading, what covers them there is the walk's own rules (`handsFrame` over r0 to r7 for a caller-frame address, and the unlent call's `e.storesThrough = handed | kFrame`), which I did not instrument. The floor is redundant because with the whole-frame alias the locals stay stack locations, so the lowest left does not rise (the fixer's reading); the case that would need it is a local that vanishes from the stack space between two queries while still being reached, and I found none. No instrument row: the sites are guards, the fixture that distinguishes them would have to be one the other rule also catches.
+
+### 4. A3-106's narrower rule, and the predicates once more
+
+Built to defeat "unplaceable loads carry the flag, plus the slot hand-out": `hbfuzz14.py`, 4,200 fixtures (seeds 1 to 6), the pointer to the caller's word made 6 ways, laundered 12 ways (none, MACL, MACH, `mul.l`, `dmulu.l`, `mac.l` through memory, GBR, VBR, `xtrct`, the T bit, `addc`, `rotcl`/`rotcr`), sent through 19 channels, written 7 ways: **only the T-bit laundering is stale (333 of 333)**, every other cell 0 of 3,867. That is A3-95 (accepted: a frame address rebuilt from comparisons is no data flow). The cases the narrower rule could still let through need a caller-frame address that is neither made from r15 by the function (the `frame` flag) nor in a slot or register it hands out (`kOutHigh`): an address the caller passed in a register (the caller's own pointer: the caller sees it), one read from a global the caller filled (the caller escaped it), one the function builds from comparisons (A3-95). I found no fourth source.
+
+The fail-closed predicates themselves, fixtures and fuzz:
+
+| Attack | Result |
+|---|---|
+| `mac.l @Rm+,@Rn+` auto-increment with a frame address in the slot or the pointer; `mac.w` is 16 bits and cannot carry one | right (launder `macmem`: 0 stale in 339 hand-back and 4,500+ escape fixtures) |
+| `ldc`/`stc` GBR and VBR as a base and as a channel; `ldc.l @r15+,gbr`; GBR-relative `mov.l r0,@(disp,gbr)`, `or.b`, `xor.b` as the walk | right (walkers `gbrmov`, `gbrrmw`, launderings `gbr`, `vbr`, `gbrl`, `vbrl`) |
+| `trapa`: the handler keeps r4 (vector 5 at `vbr+20`, `rte`) | right (R14-9d) |
+| `trapa`: the handler writes the caller's word through the exception frame (`mov.l r0,@(8,r15)`, `rte`) | `return 5;` where the code returns 0x55, withheld "an indirect call it does not resolve", no note: A3-107's shape (a callee the probe cannot name is taken to follow the convention), accepted there (R14-9f) |
+| a delay slot that pushes the address as the fifth argument (`jsr @r1 ; mov.l r4,@-r15`), moves it to r8, or moves r15 (`jsr @r1 ; add #-4,r15`) | right (R14-9a to 9c) |
+| `movt`-built pointers (`clrt ; movt r1 ; add r1,r4`), `xtrct`, `clrmac`/`dmulu.l`, `mul.l`, PR as a register and by `lds.l`/`sts.l`, MACH and MACL by `lds.l`/`sts.l`, `subc`, `negc` | right |
+| an address through the T bit (`shll r4 ; rotcl r1` 32 times, `addc` of a T built from a comparison) | stale, lent: A3-95's class, accepted (not a compiled shape, no sound rule that costs less than every comparison of a frame pointer). The new instructions rebuild the whole address bit by bit, which A3-95's text says; nothing new. |
+| `rte` as a return, a delay-slot write to r15 | withheld ("a return not to its caller"), right |
+
+### 5. What the extended fuzzer found
+
+`escfuzz14.py` seeds 1101 to 1110 (15,000 fixtures, clean tree): 12,152 withheld, 2,848 lent; 531 texts return a register variable of a frame the escape reaches (A3-117), 88 withheld and 20 lent stale constants. Every stale constant is the T bit (A3-95) or the caller's index walks (A3-118: `idxdown` 12, `subidx` 10); no other launder, mediator or walker gives one. The 531 are all calls that show a stack argument. The old `escfuzz.py` has the same rate (seed 301: 59 of 1,500 rejected, 56 returning a register variable). Round 13's "0 wrong constants of 15,400" is right as far as it goes; the rejected texts were not counted.
+
+Mechanisms, by reading and by the measurements (not instrumented; no temporary prints):
+
+- **A3-117.** `ScopeLocal::markUnaliased` aliases Symbols; the call's argument words are unmapped (`markNotMapped`), so `escapeLow`'s "from there up" never names them, and A3-99 keeps the argument trial from asking the escape's alias. R14-7a (no stack argument shown) and 7f to 7i (the local above the argument words) are right; 7b to 7e (r6, r7, r6+r7, r5 to r7 set: the call shows one or two stack arguments) read the word at the call's r15 as the constant. The old fix's fixtures (R13-1a, 1b, 1c, 1d) never read that word.
+- **A3-118, A3-119.** `pointerSteppedDown` follows the store's pointer through constant additions and copies; at an `INT_ADD`/`INT_SUB` with a non-constant operand it returns false. The value-set analysis catches a stride it can evaluate (R14-1a, the `shll2`, `neg`, `not` strides of R14-11), and a stride loaded from the pool or a slot or a global is a LOAD it cannot; the range is full and the guard stays from the base up. `sub r5,r2` is a step in `stepsDown` and is still missed, because the helper never reaches the join. 14 of the 20 cells of R14-14 are wrong, 6 right (the constant copy and `sub #127`, two bases each, and the `shll`-of-pool stride that does not reach the sentinel).
+- **A3-122.** The cap in `stepsDown` counts the values the join's descendants produce in one pass, and the loop over the first varnode's descendants is not capped, so one pass with 4,100 stores through the pointer ends the search before the step, one hop away, is followed.
+
+### 6. The texts: 8dcbb70 against 73f13e6
+
+`SE_GAME_HWRAM=<img> SE_GAME_LEND=1 SE_GAME_OUT=<dir>` of both builds (`corp2.sh`-style, one run at a time), the `lend_after` texts compared by `textdiff.py` and `changed14.py` (real entries only: the word before the entry is not a push of r15, A3-113). Real entries changed: hwram007 **13 beyond notes, 142 by notes only**; hwram008 **19 beyond notes, 235 by notes only** (the round 13 record's numbers against `f54d140`; the same here, since 0064 and the round 13 fix change nothing else). `facts14.py` checks the mechanical part of every one: the multiset of calls (`func_0x...` and indirect) is equal in all 32 and in the 6 notes-only texts read, and every returned expression is the same (one variable renamed, `pxVar5` to `pxVar3`). The reading against the disassembly (`drv --dis`) is below. A wrong text is P1 and a false note P2: **none of the 38 texts has a wrong value; one note (06042BBC) is the A3-120 over-claim, and 0601B914 is its second instance.**
+
+| Image | Function | Change | Against the code | Verdict |
+|---|---|---|---|---|
+| 007 | 06008CC0 | gains `param_2`, `xStack_24 = param_2` for an array | `mov.l r5,@r14` spills r5, `mov.l @r14,r12` at 06008DB4 reads it back; r14 note once | right, more precise |
+| 007 | 0600BFEC | `xVar3 = param_5` copy gone, `param_5` at the second call | `mov.l @(0x18,r14),r8` reads the fifth argument at entry, `mov r8,r5` before the second call; the first call is unlent and cannot write the caller's argument word (A3-107's convention) | right (equivalent under the convention) |
+| 007 | 06012E10 | unused `axStack_8c [128]`, the r14 note becomes a saved-register note | `mov r15,r14` in the prologue; the epilogue pops r14, PR and the saved registers after the last call (`mov r14,r15 ; lds.l @r15+,pr ...`): the note is true as a hazard; the array is never used in the text. A script over the disassembly confirms the prologue copy for all 22 functions of this kind and the pop after a call for the 18 that fit in 400 instructions | right, precision (A3-109) |
+| 007 | 06017478 | the same | the same | right, precision |
+| 007 | 06017730 | the same | the same | right, precision |
+| 007 | 06017898 | the same; the r14 note moves to the second call | `mov r15,r14` in the prologue, `mov r14,r15` in the epilogue; no local; first call hands `0x6057314,0x6057330` | right, precision |
+| 007 | 060179DC | the same, a "local at or above the stack pointer" note | the words read after the first call are the epilogue's pops | right, precision (A3-108's wording) |
+| 007 | 06017CB0 | the same | the same | right, precision |
+| 007 | 0601CF40 | the same | the same | right, precision |
+| 007 | 06020D68 | the same, `return CONCAT44(xVar2,iVar1)` unchanged | as above | right, precision |
+| 007 | 0602CC38 | the same | the same | right, precision |
+| 007 | 0603142C | the same, the two returns unchanged | as above | right, precision |
+| 007 | 060329C8 | gains `xStack_4 = param_4`, the call `func_0x06031a60(&uStack_20)` unchanged | `mov.l r7,@(0x1c,r14)` spills r7 into the word the prologue reserved (`add -0x4,r15`), read back at `@(0x1c,r14)` and stored at `@(0xc,r14)`; the block whose address is passed is r4 to r7 and the fifth argument | right, noisier |
+| 008 | 06008714 | `iVar1 = param_5` copy gone, `param_1[6] = param_5` | `mov.l @(0x1c,r14),r12` in the delay slot of the first `jsr`, stored at `@(0x18,r8)` at the end; no callee of this function can write that word of its caller's frame | right |
+| 008 | 06008F8C | `xStack_24 = param_2`, the two compares of it | `mov.l r5,@r14` is the only access of the slot; the code compares a register copy, the text compares the spill variable, which holds the same value (nothing writes the slot) | right, noisier |
+| 008 | 0600B614 | as 0600BFEC | the same code shape | right |
+| 008 | 0600D278, 0601303C, 06013138, 060131E4 | unused 128-byte array, note changes | as the 007 group | right, precision |
+| 008 | 0603BA94 | `param_9`, `param_10` typed `uint2`, the copies `uVar4 = (uint2)param_9` gone | the code reads the stack words with `mov.w` and stores the halfword; same stores | right |
+| 008 | 0603BBE4 | `xVar1 = param_5`, `xVar2 = param_6` copies gone, a renamed pointer | `mov.l @(0x20,r14)` and `@(0x24,r14)` read before the first call into callee-saved registers, stored after; same value | right |
+| 008 | 0603D358 | array replaced by locals, a spill of `param_1` | the code spills r4 and `*(param_1+0x10)` and reads them back across calls | right, noisier |
+| 008 | 06041EE8 | unused 128-byte array, note changes | as the 007 group | right, precision |
+| 008 | 06042BBC | unused `axStack_1a [2]`; the final call's note "stack argument slot" becomes "r2" | `jsr` at 06042D9A with r4 = `[r10+0x18]+0x34`; r2 was last written by `mov.l @(0x18,r10),r2` or `add 0x44,r2` on every path, not by `mov r14,r2` | text right; **the r2 note is not supported (A3-120)** |
+| 008 | 06045EB4 | `uint1 param_2` becomes `uint4`, `param_2 & 0xff` explicit, `xStack_24 = xStack_24 - 7` | `extu.b r5,r9 ; mov.l r9,@r14`; in the else branch `mov.l @r14,r2 ; add -7,r2 ; mov.l r2,@r14 ; mov.b @r3,r3` (r3 = r14+3, the low byte) `; extu.b`; the call gets `uVar1 & 0xff` | right |
+| 008 | 06047DD0 | `iStack_c` becomes `xStack_c`, a saved-register note | `mov.l r..,@(..,r14)` spill of the fifth argument; the epilogue pops | right |
+| 008 | 060584E8, 0605C41C, 06060244, 0606D6FC, 06071040 | unused 128-byte array, note changes | as the 007 group | right, precision |
+| 007 | 06019A48 (notes only) | the stack-argument note | it stores `auStack_70`'s address in locals (`mov.l r14,@r13`, `mov.l r12,@(0x14,r14)`) that sit at the call's r15 | right |
+| 007 | 0601B914 (notes only) | the stack-argument note at the indirect calls | the buffer at r14+0 was handed to `func_0x0602382c`; nothing writes an address there | note over-claims (A3-120); the base printed it too |
+| 007 | 06009E96, 0600A070 (notes only) | r14 note once with "likewise", saved-register note | `mov r15,r14`, the epilogue pops | right |
+| 008 | 0600B474, 06037074 (notes only) | the stack-argument note once, "may keep it and write any local" | same fact; the base's sentence "the call may write the locals from there up" became "may keep it and write any local" (A3-105's wording) | right |
+
+### 7. The generator beyond the nightly range
+
+`matrix14.sh` (pieces of at most 20 minutes, resumable) on the clean tree, own build, `ulimit -v 4000000`:
+
+| Run | Result |
+|---|---|
+| grammar 2, 2,700,001 to 2,720,000 (four pieces of 5,000) | 0 findings; 238, 190, 182 and 171 s |
+| grammar 1, 2,700,001 to 2,710,000 (two pieces) | 0 findings; 112 and 132 s |
+| printed-C, 2,700,001 to 2,710,000 (five pieces of 2,000) | 0 findings; 2,493 to 2,520 functions per piece, 2,307 to 2,349 compared; 76 to 87 s |
+| specials, 2,800,001 to 2,805,000 | 0 findings; 255 s |
+| `TestArea3HiddenInputFuzz`, `SE_A3FUZZ_PROGRAMS=5000`, seeds 12 and 13 | 1,176 and 1,172 lent, 15,288 and 15,236 perturbed runs, 0 findings |
+| `ctest -E SaturnExplorerLive -j2 --timeout 900` (no code changed) | 94 of 94 pass, 168 s |
+| `escfuzz14.py` seeds 1101 to 1110 (1,500 each) | A3-117 (531), A3-118 (22), the T bit (A3-95), nothing else |
+| `hbfuzz14.py` seeds 1 to 6 (700 each) | the T bit only (333 of 4,200) |
+
+The generator finds nothing for any area in these ranges; there is nothing to route. A5-87 (pointer-effect and cache notes) was not touched. The three classes above are drawn by no seed of the generator's escape streams (A3-121).
+
+### 8. The corpora
+
+`SE_GAME_HWRAM=<img> SE_GAME_LEND=1 SaturnExplorerSh2DecompilerTests <scratch>`, own build of `73f13e6`:
+
+| | hwram007 | hwram008 |
+|---|---|---|
+| `TestGameCode` | 839 functions, 839 ok, 10.5 s (108 real entries, 731 fragments) | 1,554 ok, 34.2 s (102 and 1,452) |
+| every ledger count / missing and said / mapping violations | 0 / 0 / 0 | 0 / 4 / 0 |
+| lent signatures (parameters), `8dcbb70` | 678 (956) | 1,038 (1,310) |
+| lent signatures (parameters), `73f13e6` | 678 (956) | 1,038 (1,310) |
+| ...real entries | 474 (645) of 999 | 724 (975) of 1,543 |
+| ...fragments | 204 (311) of 731 | 314 (335) of 1,452 |
+
+The numbers are the round 13 fix's. The `8dcbb70` run lends the same 678 and 1,038: the round 13 fix changes no lent status, as the record says.
+
+### 9. Not done, limits, and for the next round
+
+- A3-117 to A3-119 and A3-122 are open and have no pins: a pin that fails is not committed. The fixtures are in `r14a.src`, `r14e.src`, `r14i.src`, `r14m.src` (`stride14.py`), `r14k.src`, `r14cap.src` (`cap14.py`), `r14o.src`/`r14q.src`, ready to be moved into the suite verbatim; the expected text of each is in its row.
+- The mechanisms of A3-117 to A3-119 and A3-122 are from reading the engine code and from the measurements above; I put no print into the engine this round.
+- A chain of 64 INDIRECTs between the join and the store (the other way to pass `pointerSteppedDown`'s 64 hops) was not built; I could not make 64 calls that may write the pointer's slot without the escape's guards covering the walk.
+- The T-bit family (A3-95) is accepted; I did not find a cheaper sound rule, and none of the new instructions (`shll`/`rotcl`, `addc`, `movt`) changes the argument.
+- A3-107's shape (a callee the probe cannot name writes the caller's word through its own r15) now has the exception frame of `trapa` as a second compiled-looking carrier (R14-9f); it stays accepted there.
+- The next reviewer should read the old fuzzers' oracle rejections (`escsum14.py`) and pin a lent-callee case with a stack argument shown (A3-117 has none lent: a lent callee reads no stack word).
