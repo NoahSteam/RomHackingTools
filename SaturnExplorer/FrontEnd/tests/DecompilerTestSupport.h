@@ -53,6 +53,14 @@ inline double MsSince(std::chrono::steady_clock::time_point t0)
     return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
 }
 
+// How long a test waits for a decompile before it gives up: a guard against a hang, not a time limit. An unoptimised build (no NDEBUG:
+// CMake's Debug, MSVC's Debug CRT) decompiles the large fixtures several times slower, past 30 s on CI's Windows runner.
+#ifdef NDEBUG
+const double kWaitMs = 30000.0;
+#else
+const double kWaitMs = 300000.0;
+#endif
+
 // ---- Dying loudly -------------------------------------------------------------------------
 // Under ctest stdout is a pipe and fully buffered, so a test killed by its timeout would show
 // nothing; unbuffered, the last line says how far it got. On Windows a crash, a Debug-CRT

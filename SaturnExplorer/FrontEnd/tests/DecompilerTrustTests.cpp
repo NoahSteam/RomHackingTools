@@ -975,7 +975,7 @@ struct MiniRig
         int calm = 0;
         while (calm < 3)
         {
-            if (dts::MsSince(t0) > 30000.0) return false;
+            if (dts::MsSince(t0) > dts::kWaitMs) return false;
             Idle();
             if (!runner.Busy() && !panel.Pending()) ++calm; else { calm = 0; std::this_thread::yield(); }
         }
@@ -1366,7 +1366,7 @@ struct FRig
         uint64_t subs = panel.Submissions();
         while (calm < 3)
         {
-            if (dts::MsSince(t0) > 30000.0) return false;
+            if (dts::MsSince(t0) > dts::kWaitMs) return false;
             Idle();
             if (panel.Submissions() != subs) calm = 0;
             else if (!runner.Busy() && !panel.Pending()) ++calm;

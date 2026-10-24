@@ -634,7 +634,6 @@ private:
     // Notice that the live driver reconnected to a different emulator process and drop
     // everything derived from the run that ended. See the definition.
     void AdoptNewEmulatorInstance();
-    uint64_t         mSourceSerial = 0;          // bumped by CloseData: every source change passes through it
     uint32_t         mLiveConnGeneration = 0;   // se_live_connection_generation last seen
     void ClearRecordedFrames();   // empty the ring and detach the compare markers
     void DropRecordedHistory();
@@ -661,9 +660,6 @@ private:
     // Emulator pokes: tell the user when one the view shows did not reach the emulator, and feed the
     // server's VDP-write capability to the recorder (see FrameRecorder::SetVdpBusEditsAccepted).
     void ReconcilePokes();
-    // Whether the connected emulator build really has 'cap' (SE_LIVE_CAP_*). A server older than
-    // SE_LIVE_MINVER_CAPS cannot say, and is assumed to have it, as before.
-    bool LiveHas(uint32_t cap) const;
     uint32_t         mPokeDroppedSeen = 0;     // the emulator's dropped-poke count already reported
     uint32_t         mPokeLostSeen = 0;        // the driver's lost-poke count already reported
     uint32_t         mPokeUnconfirmedSeen = 0; // ...and its unconfirmed-poke count
@@ -754,6 +750,11 @@ private:
     std::string        mBuildResultText;             // outcome text for the result modal
     bool               mShowBuildResult = false;
 #endif
+    // Outside SE_ENABLE_LIVE: CloseData bumps the serial and LiveHas answers 'yes' in every build (the web build has no live source).
+    uint64_t         mSourceSerial = 0;          // bumped by CloseData: every source change passes through it
+    // Whether the connected emulator build really has 'cap' (SE_LIVE_CAP_*). A server older than
+    // SE_LIVE_MINVER_CAPS cannot say, and is assumed to have it, as before.
+    bool LiveHas(uint32_t cap) const;
 
     // Game data directory (a folder of the game's extracted files, or an ISO/disc
     // image) that the texture "Find in game data" search scans. Persisted only in

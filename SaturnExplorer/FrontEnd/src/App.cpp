@@ -7419,7 +7419,9 @@ TopBarViewModel App::BuildTopBarViewModel() const
     // loading a dump while Saturn Explorer waits for an emulator to appear.
     vm.operationBusy = false;
     // Patch feature enablement inputs — consulted by TopBarCommandEnabled for the Patch items.
+#ifdef SE_ENABLE_LIVE   // the Patch feature (PatchLibrary.h) is in the live build only
     vm.patchLocationCount = static_cast<int>(mPatchLib.Count());
+#endif
     vm.hasDataDir = !mDataDir.empty();
     return vm;
 }

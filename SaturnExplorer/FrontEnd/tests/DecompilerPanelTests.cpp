@@ -269,7 +269,7 @@ struct Fixture
         const auto t0 = std::chrono::steady_clock::now();
         while (!done())
         {
-            if (dts::MsSince(t0) > 30000.0) return false;
+            if (dts::MsSince(t0) > dts::kWaitMs) return false;
             Idle();
             std::this_thread::yield();
         }
