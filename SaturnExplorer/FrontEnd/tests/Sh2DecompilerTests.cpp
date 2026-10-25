@@ -12788,6 +12788,23 @@ void TestA3124Fix()
         CHECK(dts::FrameLosses(r, dts::SnapshotWords(snap)).empty());
         CHECK(ReferenceOk(d, snap, Request(base), r));
     }
+    // O: the same with the call in a loop (hwram007 0600894A): the save reaches the call's guard through the loop's join.
+    {
+        std::vector<uint16_t> words = { 0x4F22, 0x7FF8, 0x64F3, 0xE503, 0xD004, 0x400B, 0x0009, 0x4510, 0x8BFA, 0x7F08, 0x4F26, 0x000B,
+                                        0x0009, 0x0009, 0x0600, 0x9100 };
+        words.resize(0x100 / 2, 0x0009);
+        words.push_back(0x000B);
+        words.push_back(0x0009);
+        const CallFixture f = { "O a callee-saved push before a call in a loop in an escaped frame", base, words };
+        auto snap = CallSnapshot(f, ++serial);
+        const DecompileResult r = d.Decompile(snap, Request(base));
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(Has(r.Text(), "func_0x06009100("));
+        CHECK(!Has(r.Text(), "= unaff_retaddr;"));
+        CHECK(dts::FrameLosses(r, dts::SnapshotWords(snap)).empty());
+        CHECK(ReferenceOk(d, snap, Request(base), r));
+    }
     // The frame ledger itself (dts::FrameLosses), on records made up as the engine makes them: a write that went unread, read later in its
     // block, is a loss; covered first by a folded write of the same bytes, or read only by an access removed with unreachable code, it is not.
     {

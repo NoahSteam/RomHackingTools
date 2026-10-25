@@ -4062,7 +4062,7 @@ bool ActionDeadCode::lastChanceLoad(Funcdata &data,vector<Varnode *> &worklist)
 /// stays whether or not the value is a direct write yet: a STORE through a pointer kept in a frame slot is
 /// folded into a direct write passes later, and the force cleared before then was never set again.
 /// But for the save of a callee-saved register (the word holds the whole entry value of r8 to r14, PR, SR, GBR, MACH or
-/// MACL, written before the calls and the stores that may reach it): no callee is handed the save area, and keeping every push as a local write
+/// MACL, written before the calls, the stores that may reach it and the joins of the paths): no callee is handed the save area, and keeping every push as a local write
 /// would also have the lending trials take the function for one that reads those registers.
 /// \param data is the function
 /// \param vn is the Varnode
@@ -4075,12 +4075,26 @@ bool ActionDeadCode::callMayReadFrame(const Funcdata &data,const Varnode *vn)
   if (op->code() != CPUI_INDIRECT || op->isIndirectStore()) return false;
   const PcodeOp *iop = PcodeOp::getOpFromConst(op->getIn(1)->getAddr());
   if (iop == (const PcodeOp *)0 || !iop->isCall()) return false;
-  // Back through the guards before (of calls, and of STOREs whose pointers may reach the local), to its write.
-  const Varnode *val = op->getIn(0);
-  for(int4 hops=0;hops<64 && val != (const Varnode *)0 && val->isWritten();++hops) {
+  // Back through the guards before (of calls, and of STOREs whose pointers may reach the local) and the joins of the
+  // paths (a loop), to its writes: every one must be such a save.
+  static const char *const saved[] = { "r8","r9","r10","r11","r12","r13","r14","pr","sr","gbr","mach","macl" };
+  vector<const Varnode *> todo(1,op->getIn(0));
+  vector<const PcodeOp *> seen;
+  while(!todo.empty()) {
+    const Varnode *val = todo.back();
+    todo.pop_back();
+    if (val == (const Varnode *)0 || !val->isWritten()) return true;
     const PcodeOp *def = val->getDef();
+    if (find(seen.begin(),seen.end(),def) != seen.end()) continue;
+    if (seen.size() >= 256) return true;
+    seen.push_back(def);
     if (def->code() == CPUI_INDIRECT) {
-      val = def->getIn(0);
+      todo.push_back(def->getIn(0));
+      continue;
+    }
+    if (def->code() == CPUI_MULTIEQUAL) {
+      for(int4 k=0;k<def->numInput();++k)
+	todo.push_back(def->getIn(k));
       continue;
     }
     if (def->code() != CPUI_COPY || def->numInput() != 1) return true;
@@ -4088,12 +4102,12 @@ bool ActionDeadCode::callMayReadFrame(const Funcdata &data,const Varnode *vn)
     if (src == (const Varnode *)0 || !src->isInput() || src->getSpace()->getType() != IPTR_PROCESSOR) return true;
     if (src->getSize() != 4 || def->getOut()->getSize() != 4) return true;	// a whole register in a whole word, as a push writes it
     string name = data.getArch()->translate->getRegisterName(src->getSpace(),src->getOffset(),src->getSize());
-    static const char *const saved[] = { "r8","r9","r10","r11","r12","r13","r14","pr","sr","gbr","mach","macl" };
+    bool isSave = false;
     for(size_t k=0;k<sizeof(saved)/sizeof(saved[0]);++k)
-      if (name == saved[k]) return false;
-    return true;
+      if (name == saved[k]) isSave = true;
+    if (!isSave) return true;
   }
-  return true;
+  return false;
 }
 
 int4 ActionDeadCode::apply(Funcdata &data)
