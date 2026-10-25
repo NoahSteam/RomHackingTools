@@ -12741,11 +12741,11 @@ void TestA3124Fix()
         { "N half of MACL's entry value stored to a local before a call handed the frame",
           { 0x2F86, 0x4F22, 0x7FF8, 0x011A, 0x2F11, 0x64F3, 0x7404, 0xD004, 0x400B, 0x0009, 0x7F08, 0x4F26, 0x68F6, 0x000B, 0x0009, 0x0009,
             0x0600, 0x9100 }, true, false, "func_0x06009100(" },
-        // Grammar 2 seed 11612 (shrunk): GBR's whole entry value stored with `mov.l r2,@(4,r15)`, not pushed, the frame address published
-        // and a call: no save (a save is a push, pin M), the call's guard keeps it.
+        // Grammar 2 seed 11612 (shrunk): GBR's whole entry value stored with `stc gbr,r2 ; mov.l r2,@(4,r14)`, not pushed, the frame
+        // address published and a call: no save (a save is a push, pin M), the call's guard keeps it.
         { "P GBR's entry value stored to a local, not pushed, before a call in an escaped frame",
-          { 0x4F22, 0x7FF8, 0x0212, 0x1F21, 0x64F3, 0xD304, 0x2342, 0xD004, 0x400B, 0x0009, 0x7F08, 0x4F26, 0x000B, 0x0009, 0x0600, 0xF100,
-            0x0600, 0x9100 }, true, false, "func_0x06009100(" },
+          { 0x2FE6, 0x4F22, 0x7FF8, 0x6EF3, 0x0212, 0x1E21, 0x64E3, 0xD305, 0x2342, 0xD005, 0x400B, 0x0009, 0x7F08, 0x4F26, 0x6EF6, 0x000B,
+            0x0009, 0x0009, 0x0600, 0xF100, 0x0600, 0x9100 }, true, false, "func_0x06009100(" },
     };
     const std::vector<std::vector<uint32_t>> inputs = {
         { 0, 0, 0, 0 }, { 0x11223344u, 0x55667788u, 0x99AABBCCu, 0xDDEEFF00u }, { 0xFFFFFFFFu, 0x80000001u, 0x000000FFu, 0xFF7FFFFFu } };
