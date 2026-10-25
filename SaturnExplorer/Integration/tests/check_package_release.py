@@ -37,10 +37,12 @@ def compare_trees(fresh, root, binary):
     return [p.replace(os.sep, "/") for p in pr.compare_trees(fresh, root, binary)]
 
 
-def check(cond, what):
+def check(cond, what, got=None):
     global failures
     if not cond:
         print("FAIL:", what)
+        if got is not None:
+            print("  got:", got)
         failures += 1
 
 
@@ -235,16 +237,18 @@ try:
         for f in fs:
             if f != "mednafen":
                 os.utime(os.path.join(dp, f), (now - 100, now - 100))
-    check(compare_trees(fresh, co, binary) == [], "a faithful nested copy of the linked directory passes")
+    got = compare_trees(fresh, co, binary)
+    check(got == [], "a faithful nested copy of the linked directory passes", got)
     put2(co, "include/mednafen/ss/state.h", "stale")
-    check(any("ss/state.h" in p and "differs" in p for p in compare_trees(fresh, co, binary)),
-          "a stale header deep inside the copied directory is reported")
+    got = compare_trees(fresh, co, binary)
+    check(any("ss/state.h" in p and "differs" in p for p in got), "a stale header deep inside the copied directory is reported", got)
     put2(co, "include/mednafen/ss/state.h", "current")
     put2(co, "include/mednafen/ss/extra.h", "extra")
     check(any("extra.h" in p for p in compare_trees(fresh, co, binary)), "an extra header inside the copy is reported")
     os.remove(os.path.join(co, "include/mednafen/ss/extra.h"))
     os.remove(os.path.join(co, "include/mednafen/top.h"))
-    check(any("top.h" in p and "missing" in p for p in compare_trees(fresh, co, binary)), "a header missing from the copy is reported")
+    got = compare_trees(fresh, co, binary)
+    check(any("top.h" in p and "missing" in p for p in got), "a header missing from the copy is reported", got)
 except Skip as e:
     print("skipped the copied-directory checks:", e)
 finally:
