@@ -12788,10 +12788,11 @@ void TestA3124Fix()
         CHECK(dts::FrameLosses(r, dts::SnapshotWords(snap)).empty());
         CHECK(ReferenceOk(d, snap, Request(base), r));
     }
-    // O: the same with the call in a loop (hwram007 0600894A): the save reaches the call's guard through the loop's join.
+    // O: PR pushed, the frame address published, the call in a loop (hwram007 0600894A): the save reaches the call's guard through the
+    // loop's join.
     {
-        std::vector<uint16_t> words = { 0x4F22, 0x7FF8, 0x64F3, 0xE503, 0xD004, 0x400B, 0x0009, 0x4510, 0x8BFA, 0x7F08, 0x4F26, 0x000B,
-                                        0x0009, 0x0009, 0x0600, 0x9100 };
+        std::vector<uint16_t> words = { 0x4F22, 0x7FF8, 0x64F3, 0xD306, 0x2342, 0xE503, 0xD005, 0x400B, 0x0009, 0x4510, 0x8BFA, 0x7F08,
+                                        0x4F26, 0x000B, 0x0009, 0x0009, 0x0600, 0xF100, 0x0600, 0x9100 };
         words.resize(0x100 / 2, 0x0009);
         words.push_back(0x000B);
         words.push_back(0x0009);
