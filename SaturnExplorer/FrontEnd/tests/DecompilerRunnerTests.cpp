@@ -57,16 +57,7 @@ const Fixture kFixtures[] = {
     { "jumptable", dts::kJumpTableBase },
 };
 
-// The spike's sizes, except in an MSVC Debug build. There the Debug CRT's checked iterators run
-// inside every STL call the engine inlines -- the engine is built /O2, but _ITERATOR_DEBUG_LEVEL
-// must match across the whole executable -- and the 6k-instruction fixture takes over 20 s
-// instead of about one. A tenth of each fixture keeps every phase long enough to cancel inside
-// (followFlow tens of ms, actions over a second there) within the ctest timeout.
-#if defined(_MSC_VER) && defined(_DEBUG)
-const int kFixtureDivisor = 10;
-#else
-const int kFixtureDivisor = 1;
-#endif
+const int kFixtureDivisor = dts::kFixtureDivisor;   // DecompilerTestSupport.h: a tenth in an MSVC Debug build
 
 std::shared_ptr<const MemorySnapshot> BuildSnapshot()
 {

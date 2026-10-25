@@ -2277,7 +2277,7 @@ void TestDisabledAndBudget()
         o.budgetSeconds = 0.05;
         Fixture f(o);
         std::vector<uint8_t> image(f.backend.hw.begin(), f.backend.hw.end());
-        dts::PlaceDiamonds(image, 1000);
+        dts::PlaceDiamonds(image, 1000 / dts::kFixtureDivisor);
         std::copy(image.begin(), image.end(), f.backend.hw.begin());
         ++f.backend.serial;
         f.Idle(3);
@@ -2620,7 +2620,7 @@ void TestAutoRefreshTooLargeFunctionIsNotRerun()
     o.budgetSeconds = 0.3;
     Fixture f(o);
     std::vector<uint8_t> image(f.backend.hw.begin(), f.backend.hw.end());
-    dts::PlaceDiamonds(image, 1000);
+    dts::PlaceDiamonds(image, 1000 / dts::kFixtureDivisor);
     std::copy(image.begin(), image.end(), f.backend.hw.begin());
     f.PutWord(dts::kDiamondsBase - 4, 0x000B);   // the end of the function before it, so the rts scan finds the entry
     f.PutWord(dts::kDiamondsBase - 2, 0x0009);

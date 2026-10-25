@@ -61,6 +61,16 @@ const double kWaitMs = 30000.0;
 const double kWaitMs = 300000.0;
 #endif
 
+// The spike's sizes, except in an MSVC Debug build. There the Debug CRT's checked iterators run inside every STL call the
+// engine inlines -- the engine is built /O2, but _ITERATOR_DEBUG_LEVEL must match across the whole executable -- and the
+// 6k-instruction fixture takes over 20 s instead of about one (and with patch 0068's later dead code, a phase between two
+// budget checks ran past a panel test's wait). A tenth of each fixture keeps every phase long enough to cancel inside.
+#if defined(_MSC_VER) && defined(_DEBUG)
+const int kFixtureDivisor = 10;
+#else
+const int kFixtureDivisor = 1;
+#endif
+
 // ---- Dying loudly -------------------------------------------------------------------------
 // Under ctest stdout is a pipe and fully buffered, so a test killed by its timeout would show
 // nothing; unbuffered, the last line says how far it got. On Windows a crash, a Debug-CRT
