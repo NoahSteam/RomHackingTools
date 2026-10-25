@@ -23,7 +23,7 @@ index 66bacfe..191ebfb 100644
        curstart = -1;
        return 0;
 diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc
-index 999c7d4..2f9cd1a 100644
+index 999c7d4..13c8ba8 100644
 --- a/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc
 +++ b/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc
 @@ -23,6 +23,7 @@
@@ -34,7 +34,7 @@ index 999c7d4..2f9cd1a 100644
   */
  #include "coreaction.hh"
  #include "condexe.hh"
-@@ -4056,6 +4057,44 @@ bool ActionDeadCode::lastChanceLoad(Funcdata &data,vector<Varnode *> &worklist)
+@@ -4056,6 +4057,45 @@ bool ActionDeadCode::lastChanceLoad(Funcdata &data,vector<Varnode *> &worklist)
    return res;
  }
  
@@ -42,7 +42,7 @@ index 999c7d4..2f9cd1a 100644
 +/// puts on a local of a frame whose address escaped? The call may read the value before it, so its address force
 +/// stays whether or not the value is a direct write yet: a STORE through a pointer kept in a frame slot is
 +/// folded into a direct write passes later, and the force cleared before then was never set again.
-+/// But for the save of a callee-saved register (the local holds the entry value of r8 to r14, PR, SR, GBR, MACH or
++/// But for the save of a callee-saved register (the word holds the whole entry value of r8 to r14, PR, SR, GBR, MACH or
 +/// MACL, written before the calls and the stores that may reach it): no callee is handed the save area, and keeping every push as a local write
 +/// would also have the lending trials take the function for one that reads those registers.
 +/// \param data is the function
@@ -67,6 +67,7 @@ index 999c7d4..2f9cd1a 100644
 +    if (def->code() != CPUI_COPY || def->numInput() != 1) return true;
 +    const Varnode *src = def->getIn(0);
 +    if (src == (const Varnode *)0 || !src->isInput() || src->getSpace()->getType() != IPTR_PROCESSOR) return true;
++    if (src->getSize() != 4 || def->getOut()->getSize() != 4) return true;	// a whole register in a whole word, as a push writes it
 +    string name = data.getArch()->translate->getRegisterName(src->getSpace(),src->getOffset(),src->getSize());
 +    static const char *const saved[] = { "r8","r9","r10","r11","r12","r13","r14","pr","sr","gbr","mach","macl" };
 +    for(size_t k=0;k<sizeof(saved)/sizeof(saved[0]);++k)
@@ -79,7 +80,7 @@ index 999c7d4..2f9cd1a 100644
  int4 ActionDeadCode::apply(Funcdata &data)
  
  {
-@@ -4075,7 +4114,7 @@ int4 ActionDeadCode::apply(Funcdata &data)
+@@ -4075,7 +4115,7 @@ int4 ActionDeadCode::apply(Funcdata &data)
      vn->clearConsumeList();
      vn->clearConsumeVacuous();
      vn->setConsume(0);
