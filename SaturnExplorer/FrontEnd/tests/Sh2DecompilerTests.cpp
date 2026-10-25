@@ -12741,13 +12741,6 @@ void TestA3124Fix()
         { "N half of MACL's entry value stored to a local before a call handed the frame",
           { 0x2F86, 0x4F22, 0x7FF8, 0x011A, 0x2F11, 0x64F3, 0x7404, 0xD004, 0x400B, 0x0009, 0x7F08, 0x4F26, 0x68F6, 0x000B, 0x0009, 0x0009,
             0x0600, 0x9100 }, true, false, "func_0x06009100(" },
-        // Grammar 2 seed 11612 (shrunk): GBR's whole entry value stored with `stc gbr,r2 ; mov.l r2,@(12,r14)`, not pushed, a call, a walk
-        // down from a frame address after it (the frame escapes): no save (a save is a push, pin M), the call's guard keeps it.
-        { "P GBR's entry value stored to a local, not pushed, before a call in an escaped frame",
-          { 0x2F86, 0x2F96, 0x2FA6, 0x2FB6, 0x2FE6, 0x4F22, 0x7FF0, 0x6EF3, 0x6843, 0x6953, 0x6A63, 0x6B73, 0x0212, 0x1E23, 0xB015, 0x0009,
-            0x6483, 0x6593, 0x66A3, 0x67B3, 0x62F3, 0x7210, 0xE103, 0x2216, 0x4110, 0x8BFC, 0xE200, 0x7E10, 0x6FE3, 0x4F26, 0x6EF6, 0x6BF6,
-            0x6AF6, 0x69F6, 0x68F6, 0x000B, 0x0009, 0x2FE6, 0x7FF4, 0x6EF3, 0x7E0C, 0x6FE3, 0x6EF6, 0x000B, 0x0009 }, false, false,
-          "func_0x0600904a(" },
     };
     const std::vector<std::vector<uint32_t>> inputs = {
         { 0, 0, 0, 0 }, { 0x11223344u, 0x55667788u, 0x99AABBCCu, 0xDDEEFF00u }, { 0xFFFFFFFFu, 0x80000001u, 0x000000FFu, 0xFF7FFFFFu } };
@@ -12812,6 +12805,27 @@ void TestA3124Fix()
         CHECK(!Has(r.Text(), "= unaff_retaddr;"));
         CHECK(dts::FrameLosses(r, dts::SnapshotWords(snap)).empty());
         CHECK(ReferenceOk(d, snap, Request(base), r));
+    }
+    // P: grammar 2 seed 11612 (shrunk). GBR's whole entry value stored with `stc gbr,r2 ; mov.l r2,@(12,r14)`, not pushed, a call to a
+    // lent callee, a walk down from a frame address after it (the frame escapes): no save (a save is a push, pin M), the call's guard
+    // keeps the store.
+    {
+        const std::vector<uint16_t> words = { 0x2F86, 0x2F96, 0x2FA6, 0x2FB6, 0x2FE6, 0x4F22, 0x7FF0, 0x6EF3, 0x6843, 0x6953, 0x6A63, 0x6B73,
+                                              0x0212, 0x1E23, 0xB015, 0x0009, 0x6483, 0x6593, 0x66A3, 0x67B3, 0x62F3, 0x7210, 0xE103, 0x2216,
+                                              0x4110, 0x8BFC, 0xE200, 0x7E10, 0x6FE3, 0x4F26, 0x6EF6, 0x6BF6, 0x6AF6, 0x69F6, 0x68F6, 0x000B,
+                                              0x0009, 0x2FE6, 0x7FF4, 0x6EF3, 0x7E0C, 0x6FE3, 0x6EF6, 0x000B, 0x0009 };
+        const CallFixture f = { "P GBR's entry value stored to a local, not pushed, before a call in an escaped frame", base, words };
+        auto snap = CallSnapshot(f, ++serial);
+        const DecompileResult callee = d.Decompile(snap, Request(base + 0x4A));
+        CHECK(callee.status == DecompileStatus::Ok && callee.prototype.known);
+        DecompileRequest q = Request(base);
+        q.prototypes = { std::make_pair(base + 0x4A, callee.prototype) };
+        const DecompileResult r = d.Decompile(snap, q);
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(Has(r.Text(), "= unaff_gbr;"));
+        CHECK(dts::FrameLosses(r, dts::SnapshotWords(snap)).empty());
+        CHECK(ReferenceOk(d, snap, q, r));
     }
     // The frame ledger itself (dts::FrameLosses), on records made up as the engine makes them: a write that went unread, read later in its
     // block, is a loss; covered first by a folded write of the same bytes, or read only by an access removed with unreachable code, it is not.
