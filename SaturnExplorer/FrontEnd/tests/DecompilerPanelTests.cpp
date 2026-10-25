@@ -2620,7 +2620,8 @@ void TestAutoRefreshTooLargeFunctionIsNotRerun()
     o.budgetSeconds = 0.3;
     Fixture f(o);
     std::vector<uint8_t> image(f.backend.hw.begin(), f.backend.hw.end());
-    dts::PlaceDiamonds(image, 1000 / dts::kFixtureDivisor);
+    const int diamonds = 1000 / dts::kFixtureDivisor;   // the PC positions below stay inside these
+    dts::PlaceDiamonds(image, diamonds);
     std::copy(image.begin(), image.end(), f.backend.hw.begin());
     f.PutWord(dts::kDiamondsBase - 4, 0x000B);   // the end of the function before it, so the rts scan finds the entry
     f.PutWord(dts::kDiamondsBase - 2, 0x0009);
@@ -2646,7 +2647,7 @@ void TestAutoRefreshTooLargeFunctionIsNotRerun()
     const uint64_t runs0 = f.runner.RunsStarted(), caps0 = f.panel.Captures(), subs0 = f.panel.Submissions();
     for (int i = 0; i < 4 * DecompilerPanel::kAutoRefreshFrames; ++i)
     {
-        f.regs[0].pc = dts::kDiamondsBase + 12u * static_cast<uint32_t>((i * 7) % 900);
+        f.regs[0].pc = dts::kDiamondsBase + 12u * static_cast<uint32_t>((i * 7) % (diamonds * 9 / 10));
         tick(1);
         std::this_thread::sleep_for(std::chrono::milliseconds(16));
     }
@@ -2663,7 +2664,7 @@ void TestAutoRefreshTooLargeFunctionIsNotRerun()
     CHECK(f.Shown().entry == dts::kFixture1Caller);
 
     // ...and coming back is a new look at the big one, which runs out of budget again.
-    f.regs[0].pc = dts::kDiamondsBase + 12 * 450;
+    f.regs[0].pc = dts::kDiamondsBase + 12 * static_cast<uint32_t>(diamonds * 45 / 100);
     tick(DecompilerPanel::kAutoRefreshFrames + 1);
     CHECK(f.panel.Captures() == caps0 + 2);
     CHECK(f.PumpUntil([&] { return f.panel.Shown() && !f.panel.Pending() && f.Shown().status == DecompileStatus::TooLarge; }));
