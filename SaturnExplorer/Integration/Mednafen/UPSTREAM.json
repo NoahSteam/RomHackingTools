@@ -1,0 +1,9 @@
+{
+  "_comment": "The Mednafen base the SE patch (apply.py) is built on. install.py pins the clone to fork_base_commit; apply.py warns when the checkout's version differs; release SOURCE.txt is generated from this file. Change it deliberately, in the same commit as any fork bump (see Integration/Mednafen/README.md). An existing checkout is not moved by install.py --incremental; re-run install.py without it (or git checkout the commit) after changing the pin.",
+  "upstream_version": "1.32.1",
+  "upstream_tarball": "https://mednafen.github.io/releases/files/mednafen-1.32.1.tar.xz",
+  "upstream_tarball_sha256": "de7eb94ab66212ae7758376524368a8ab208234b33796625ca630547dbc83832",
+  "fork_repo": "https://github.com/NoahSteam/mednafen-git.git",
+  "fork_base_commit": "783518d9f596fe2d363bd5c3904f9a02ec39c897",
+  "fork_base_tag": "v1.32.1"
+}

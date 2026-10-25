@@ -66,6 +66,19 @@ std::string AbsolutePath(const std::string& path);
 // Basename of a path (component after the last '/' or '\\'), for display.
 std::string PathBasename(const std::string& path);
 
+// The running program's own path, or "" when the OS will not say.
+std::string ExecutablePath();
+
+// The Mednafen that a release ships, found from the running program's path: <install dir>/mednafen-se/
+// mednafen (mednafen.exe on Windows), where <install dir> is the program's folder -- or, inside a
+// macOS bundle, the folder holding the .app. "" when there is no such file (a developer build).
+std::string BundledMednafenPath(const std::string& executablePath);
+
+// The folder Mednafen is told to read the Saturn BIOS from: firmware/ beside its executable. The launch
+// check, the Launch Settings status marks and the command line all use this one answer, so a BIOS the
+// panel reports as present is the one the emulator is actually given.
+std::string MednafenFirmwareDir(const std::string& exePath);
+
 // The launcher's persisted state: the known emulators (with per-emulator overrides),
 // which emulator + ROM are selected, a most-recently-used ROM list, and whether
 // launching should also use the ROM's containing folder as the Data Directory.
@@ -77,7 +90,9 @@ public:
 
     // Populate the known emulators (built-in defaults), overlay any saved overrides
     // (exe path, args template, working dir), and restore the selection + recent list.
-    void Load(const Settings& s);
+    // `executablePath` locates a Mednafen shipped beside the program (see BundledMednafenPath); the
+    // default is this program's own path, a test passes a made-up one.
+    void Load(const Settings& s, const std::string& executablePath = ExecutablePath());
     // Persist emulator overrides, the current selection, the recent list, and the
     // set-data-dir coupling back into settings.
     void Save(Settings& s) const;
@@ -88,6 +103,10 @@ public:
     int  SelectedIndex() const { return mSel; }
     void Select(int i);
     const EmulatorSpec* Selected() const;   // nullptr if the index is out of range
+
+    // True when Mednafen's path is the copy a release ships beside this program (not one the user
+    // or the installer pointed at).
+    bool UsesBundledMednafen() const;
 
     const std::string& Rom() const { return mRom; }
     void SetRom(const std::string& rom);    // sets current + promotes it in the recent list
@@ -110,6 +129,7 @@ public:
 
 private:
     std::vector<EmulatorSpec> mEmus;
+    std::string               mBundledMednafen;   // BundledMednafenPath at Load time ("" = none)
     int                       mSel = 0;
     std::string               mRom;
     std::vector<std::string>  mRecent;

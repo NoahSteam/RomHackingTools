@@ -147,6 +147,7 @@ private:
     void LaunchExternalDiff(IPlatform& platform);      // frames A and B -> folders -> the tool
     void DrawHelpModal();
     void DrawAboutModal();
+    void DrawBundledMednafenNotice();   // one-time: BIOS is yours to add; the live endpoint is local-only
     void DrawUpdateModal(IPlatform& platform);   // "Check for Updates" result (polls mUpdateChecker)
     void SaveScreenshot(IPlatform& platform);
     bool mScreenshotRequested = false;   // taken once the displayed context is selected
@@ -871,6 +872,7 @@ private:
     char             mDiffArgsEdit[256] = {};
     bool             mOpenHelp = false;
     bool             mOpenAbout = false;
+    bool             mOpenBundledNotice = false;
     bool             mOpenUpdate = false;   // request to open the "Check for Updates" modal
     UpdateChecker    mUpdateChecker;
     // Edit buffers for the Launch Settings dialog (ImGui InputText needs char storage;

@@ -50,7 +50,7 @@ and hook sites (`retro_run` instead of `Emulate()`), so its accessors would port
 the build wiring + lifecycle hooks need a separate Beetle patcher. Pick one to support
 first; standalone Mednafen is the tested one.
 
-## Prebuilt binaries: Yabause yes (with source), Mednafen no
+## Prebuilt binaries: Yabause and Mednafen, both with source
 
 Both emulators are GPLv2, so *legally* you may distribute a modified binary **as long as
 you also provide the corresponding modified source** (which you already do — the patch
@@ -58,17 +58,21 @@ is public). But policy and practicality differ:
 
 - **Yabause** — fine to ship a prebuilt patched binary alongside a link to the patched
   source. Standard GPL compliance.
-- **Mednafen** — the project **explicitly discourages redistributing modified "Mednafen"
-  builds** (an author's-wish / naming concern), even though GPL permits it with source.
-  The community-accepted path is what this repo does: **ship the patch, let users build.**
+- **Mednafen** — GPLv2, so a prebuilt patched binary is fine with the corresponding source. Upstream's
+  own `README` ("Distributing a separate patch set or an outright fork, with branding that clearly
+  conveys the forkiness, is recommended") is the stance to follow: **do not present the binary as an
+  official Mednafen release.** Brand it as a Saturn Explorer build -- a distinct archive/binary name,
+  the existing window-title suffix (`apply.py` appends `SaturnExplorer Enabled …`), and a release note
+  saying it is a modified fork and that problems with it do not go to upstream.
 - **The blocker that hits both:** a Saturn emulator needs a **Saturn BIOS**, which is
   copyrighted and **cannot be redistributed**. A "double-click this exe" bundle still
   can't include the one file users must supply themselves (plus disc images). So the
   BIOS step is the real user friction, not the build.
 
-**Recommendation:** ship the **patch + one-command setup** (below), optionally a prebuilt
-**Yabause** binary (GPL-clean, with a source link) to lower friction; keep Mednafen
-patch-only. Document the BIOS-is-yours-to-supply step prominently either way.
+**Recommendation:** ship prebuilt, clearly branded binaries of both (Mednafen is the tested one) so most
+users never need a toolchain, **and** keep the patch + one-command setup below for anyone who would
+rather build. Document the BIOS-is-yours-to-supply step prominently either way, and warn about the
+live endpoint (see "What you are shipping, security-wise") since users did not choose to start a server.
 
 ## The one-command setup users run
 
@@ -124,21 +128,71 @@ Ghidra specifics:
 - **No new runtime dependency.** The engine is compiled into the executable, and its SLEIGH files are embedded (`Sh2SpecData.h`) and written to the config directory at first use. No dynamic libraries were added, so macOS bundling (`SE_MACOS_BUNDLE_LIBS`) and signing are unchanged.
 - **No Java and no Ghidra install** on the user's machine.
 
+### If a release bundles a patched Mednafen
+
+The list above covers only what is compiled into Saturn Explorer. A package that also carries a
+patched Mednafen adds Mednafen's own GPL and bundled-code notices and the licences of the
+libraries shipped beside it (SDL, FLAC, libogg, gettext, libiconv, winpthreads, the GCC runtime).
+`Licenses/` holds those texts, with an index of which component needs which file and the source-offer
+obligation; merge it with the build's `licenses/` folder when assembling the archive. A bundled binary
+also carries the GPL source offer and the fork branding described under "Prebuilt binaries" above.
+
+### Cutting a release
+
+A release is one archive per platform: Saturn Explorer plus `mednafen-se/` (the patched Mednafen,
+Saturn core only) beside it, the licences, and the GPL source offer.
+
+| File | Role |
+|---|---|
+| `Integration/Mednafen/UPSTREAM.json` | The Mednafen base: upstream version and tarball hash, and the fork commit `install.py` pins. Edit it with any fork bump. |
+| `Integration/make_source_offer.py` | Writes `SOURCE.txt` and `mednafen-se-source.tar.xz` (the fork base with `apply.py` already run on it), from `UPSTREAM.json` and the same patch arguments and defines `install.py` builds with. |
+| `Integration/package_release.py` | Lays out the archive from the two existing builds, relinks Mednafen's dylibs into `mednafen-se/lib` (macOS), merges the licences, smoke-tests the result, then makes the `.dmg` / `.zip`. |
+| `.github/workflows/saturn-explorer-release.yml` | Runs the above on both platforms for a `v*` tag and leaves a DRAFT GitHub release. |
+
+`mednafen-se/` sits beside the app (beside the `.app` on macOS) because a signed bundle cannot be
+written to and the user adds the BIOS to `mednafen-se/firmware/`. Saturn Explorer finds that copy when no
+other Mednafen path is recorded (`BundledMednafenPath` in `Launcher.cpp`), tells Mednafen to read the
+BIOS from that `firmware/` folder (`-filesys.path_firmware`), and shows a one-time notice about the BIOS
+and the local-only debugging endpoint. On macOS the user must keep the app and the folder together;
+an app run straight from a downloaded, still-quarantined location will not see the folder.
+
+Still manual: Developer ID signing and notarisation (below), Windows signing, and running the
+workflow on a Windows runner for the first time. The Windows job has not been exercised yet.
+
 ### macOS Developer ID signing and notarisation
 
-CI's bundle is not Developer ID signed, so Gatekeeper quarantines a downloaded copy. A release for
-others is signed (hardened runtime, timestamped: the install step does this when
-`SE_MACOS_SIGN_IDENTITY` is set, and fails if the signature does not verify) and notarised by hand
-on a Mac that holds the Developer ID certificate; see also `BUILD.md` "macOS packaging". Record each release in `Docs/FunctionalityVerification/`: the version, the commit, and the
-`spctl` output.
+CI's archive is ad hoc signed, so Gatekeeper quarantines a downloaded copy. A release for others is
+signed with a Developer ID (hardened runtime, timestamped) and notarised **after** it has been
+assembled, so the thing Apple approves is the thing users download -- the app *and* the sibling
+`mednafen-se/` folder together. Do it by hand on a Mac that holds the certificate, in this order, and
+record each release in `Docs/FunctionalityVerification/` (version, commit, `spctl` output):
 
 ```sh
-cmake -S . -B build-release -DCMAKE_BUILD_TYPE=Release -DSE_MACOS_BUNDLE_LIBS=ON \
-      -DSE_MACOS_SIGN_IDENTITY="Developer ID Application: <name> (<team>)"
+ID="Developer ID Application: <name> (<team>)"
+# 1. The app, signed (the install step fails if the signature does not verify).
+cmake -S . -B build-release -DCMAKE_BUILD_TYPE=Release -DSE_MACOS_BUNDLE_LIBS=ON -DSE_MACOS_SIGN_IDENTITY="$ID"
 cmake --build build-release --parallel
 cmake --install build-release --prefix "$PWD/stage"
-(cd build-release && cpack -G DragNDrop)
-xcrun notarytool submit build-release/SaturnExplorer-macos.dmg --keychain-profile <profile> --wait
-xcrun stapler staple build-release/SaturnExplorer-macos.dmg
-spctl -a -vvv -t install build-release/SaturnExplorer-macos.dmg   # expect: accepted, Notarized Developer ID
+# 2. The patched Mednafen (built by install.py, see above), then the combined, smoke-tested image with
+#    Mednafen's relinked libraries signed by the same identity. Not the CPack .dmg: that holds only the app.
+python3 Integration/package_release.py --se-app stage/SaturnExplorer.app --mednafen _emu/mednafen/src/mednafen \
+        --ref v1.0 --out dist --sign-identity "$ID"
+# 3. Notarise and staple that image, then check it.
+xcrun notarytool submit dist/SaturnExplorer-v1.0-macos.dmg --keychain-profile <profile> --wait
+xcrun stapler staple dist/SaturnExplorer-v1.0-macos.dmg
+spctl -a -vvv -t install dist/SaturnExplorer-v1.0-macos.dmg   # expect: accepted, Notarized Developer ID
 ```
+
+`package_release.py` refuses to run when the Mednafen binary does not match the source offer it would
+publish. The checkout must be at the commit in `UPSTREAM.json`; every source file in it must be identical to a
+freshly made copy of that commit with `apply.py` run on it (so a stale `se_export.c` or a local edit is caught;
+the autotools-generated files are ignored) and none may be newer than the binary; it must have been built
+Saturn-only with rewind; `Integration/` must have no uncommitted changes; and the bundled Homebrew libraries
+must be the versions Homebrew currently publishes source for (`brew upgrade` and rebuild Mednafen first if not).
+This shows nothing newer or different sits beside the binary, not that it was compiled from that tree.
+`--allow-mismatch` overrides for local trials only. A copyleft library whose source cannot be found (MSYS2:
+`repo.msys2.org/mingw/sources`, Homebrew: the formula's tarball) also stops the run.
+
+On Windows the frontend uses the dynamic Visual C++ runtime, so the packager copies the app-local
+`vcruntime140*.dll` / `msvcp140*.dll` redistributables (from the Visual Studio that built it, or `--crt-dir`)
+beside the exe; verify on a machine without Visual Studio installed.

@@ -722,12 +722,14 @@ or to force a guaranteed-clean rebuild.
 
 ## Build / patch workflow + caveats
 
-- **You need Mednafen's `ss` source and a local build.** Mednafen discourages
-  redistributing modified binaries; patching a **local** build for your own
-  reverse-engineering is fine under its license, but don't ship a patched "Mednafen".
-  (Same personal-patch model as the Yabause tap.) See
-  [`../DISTRIBUTION.md`](../DISTRIBUTION.md) for the full fork-and-pin + prebuilt-binary
-  guidance (and why the Mednafen-vs-Beetle build split matters).
+- **You need Mednafen's `ss` source and a build.** Which source is recorded in
+  [`UPSTREAM.json`](UPSTREAM.json): the upstream release (1.32.1), its tarball hash, and the
+  commit in our fork `NoahSteam/mednafen-git` that is byte-identical to it. `install.py` pins its
+  clone to that commit, `apply.py` warns if the checkout is a different version, and a release's
+  `SOURCE.txt` is generated from it. **Bumping the base means editing that file in the same commit
+  as the fork bump and the re-anchoring.** Releases ship a prebuilt, clearly branded patched binary
+  with the source; see [`../DISTRIBUTION.md`](../DISTRIBUTION.md) ("Prebuilt binaries" and "Cutting a
+  release") for the terms and the fork-and-pin guidance (and why the Mednafen-vs-Beetle build split matters).
 - Add `se_export.c` to Mednafen's `ss` build, `#include "se_export.h"` at the hook
   sites, and wire the five calls (init / per-frame snapshot / frame gate / deinit /
   bridge registration) — see `se_mednafen_glue.c` for the exact bodies.

@@ -430,6 +430,7 @@ void App::LoadSettings()
     // Launch Session: emulator specs (exe from the installer's [emulators]), selection,
     // recent ROMs, and the set-data-dir coupling.
     mLauncher.Load(mSettings);
+    mOpenBundledNotice = mLauncher.UsesBundledMednafen() && mSettings.Get("notice", "bundledmednafen", "") != "1";
     RefreshLaunchValidation();
     mController.Load(mSettings);
 #ifdef SE_ENABLE_LIVE
@@ -1952,6 +1953,7 @@ void App::BuildUI(IPlatform& platform)
     DrawDiffSettingsModal(platform);
     DrawHelpModal();
     DrawAboutModal();
+    DrawBundledMednafenNotice();
     DrawUpdateModal(platform);
     DrawDataSearchResults(platform);
 #ifdef SE_ENABLE_LIVE
@@ -9048,6 +9050,8 @@ void App::DrawHelpModal()
         mOpenHelp = false;
     }
     if (!ImGui::BeginPopupModal("Saturn Explorer Help", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) return;
+    ImGui::TextUnformatted("Created by Noah Steam");
+    ImGui::Separator();
     ImGui::TextWrapped("Source controls the debugger's current data. Emulator and Game select what the next Launch will start.");
     ImGui::Separator();
     ImGui::TextUnformatted("Ctrl+O  Load dump");
@@ -9056,6 +9060,41 @@ void App::DrawHelpModal()
     ImGui::TextUnformatted("F10     Step one frame");
     ImGui::TextUnformatted("F12     Screenshot");
     if (ImGui::Button("Close")) ImGui::CloseCurrentPopup();
+    ImGui::EndPopup();
+}
+
+void App::DrawBundledMednafenNotice()
+{
+    static const char* kTitle = "Before you launch";
+    if (mOpenBundledNotice)
+    {
+        ImGui::OpenPopup(kTitle);
+        mOpenBundledNotice = false;
+    }
+    if (!ImGui::BeginPopupModal(kTitle, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) return;
+    const EmulatorSpec* mednafen = nullptr;
+    for (const EmulatorSpec& e : mLauncher.Emulators())
+        if (e.key == "mednafen") mednafen = &e;
+    ImGui::PushTextWrapPos(ImGui::GetFontSize() * 34.0f);
+    ImGui::TextWrapped("This download includes a modified build of Mednafen (mednafen-se). It is not an "
+                       "official Mednafen release; its source and licences are in SOURCE.txt and the "
+                       "licenses folder.");
+    ImGui::Spacing();
+    ImGui::TextWrapped("The Saturn BIOS is not included. Put your own sega_101.bin and mpr-17933.bin in:");
+    ImGui::TextDisabled("%s", mednafen ? MednafenFirmwareDir(mednafen->exePath).c_str() : "mednafen-se/firmware");
+    ImGui::Spacing();
+    ImGui::TextWrapped("While it runs, this Mednafen lets Saturn Explorer read and write the emulated machine "
+                       "over a local connection (a Unix socket or named pipe, and loopback TCP port 6845). "
+                       "Anything on this computer that can connect can do the same, so do not expose that "
+                       "port to a network.");
+    ImGui::PopTextWrapPos();
+    ImGui::Spacing();
+    if (ImGui::Button("OK"))
+    {
+        mSettings.Set("notice", "bundledmednafen", "1");
+        SaveSettings();
+        ImGui::CloseCurrentPopup();
+    }
     ImGui::EndPopup();
 }
 
@@ -9068,6 +9107,7 @@ void App::DrawAboutModal()
     }
     if (!ImGui::BeginPopupModal("About Saturn Explorer", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) return;
     ImGui::TextUnformatted("Saturn Explorer");
+    ImGui::TextUnformatted("Created by Noah Steam");
     ImGui::TextDisabled("Sega Saturn graphics and live-debugging workspace");
     ImGui::Spacing();
     ImGui::TextWrapped("Source selects the debugger's active data provider. Emulator and Game select the next launch configuration.");
@@ -9338,7 +9378,7 @@ void App::DrawLaunchSettingsModal(IPlatform& platform)
 #else
                     const char sep = '/';
 #endif
-                    const std::string firmware = base.empty() ? std::string() : base + sep + "firmware" + sep;
+                    const std::string firmware = base.empty() ? std::string() : MednafenFirmwareDir(exe) + sep;
                     const char* required[] = {"sega_101.bin", "mpr-17933.bin"};
                     ImGui::TextUnformatted("Firmware");
                     for (const char* name : required)
@@ -9525,6 +9565,13 @@ bool App::LaunchSession(IPlatform& platform, const std::string& romOverride)
     {
         const std::vector<std::string> overrides = SplitCommandLine(mController.MednafenPort1Args());
         argv.insert(argv.begin(), overrides.begin(), overrides.end());
+        // Read the BIOS from the folder the launch check looked in. Left alone, macOS/Linux Mednafen
+        // reads ~/.mednafen/firmware instead, so a BIOS placed beside the emulator (as a release's
+        // mednafen-se/ folder asks) would pass the check and then not be found.
+        // Absolute, like the exe the platform launches: a relative "emu/firmware" would be resolved again
+        // against Mednafen's own base directory.
+        const std::string firmwareDir = MednafenFirmwareDir(AbsolutePath(sel->exePath));
+        if (!firmwareDir.empty()) argv.insert(argv.begin(), {"-filesys.path_firmware", firmwareDir});
     }
     const char* wd = sel->workDir.empty() ? nullptr : sel->workDir.c_str();
     std::string launchError;

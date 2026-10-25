@@ -37,3 +37,6 @@ assembly_comments.txt
 saturn_explorer_watches.json
 # Call Stack function-name renames
 saturn_functions.txt
+
+# release packaging output (Integration/package_release.py --out dist)
+dist/

@@ -4,6 +4,7 @@
 // the file the user picked is the file the emulator is given -- including POSIX names that look like
 // Windows paths (a leading backslash, a "C:" prefix).
 #include "Launcher.h"
+#include "Settings.h"
 #include "PosixSpawn.h"
 
 #include <chrono>
@@ -86,6 +87,58 @@ int main()
 
     // The control: handed over as picked, the emulator looks in its own folder and does not find it.
     CHECK(Launch(se, emu, "disc.cue", false) == "missing");
+
+    // The Mednafen a release ships: beside the program, or beside the .app when the program sits inside one.
+    std::system(("mkdir -p '" + dir + "/plain/mednafen-se' '" + dir + "/mac/mednafen-se' '" + dir +
+                 "/mac/SaturnExplorer.app/Contents/MacOS' '" + dir + "/bare'").c_str());
+    Write(dir + "/plain/mednafen-se/mednafen", "x", 0755);
+    Write(dir + "/mac/mednafen-se/mednafen", "x", 0755);
+    CHECK(BundledMednafenPath(dir + "/plain/SaturnExplorerFrontEnd") == dir + "/plain/mednafen-se/mednafen");
+    CHECK(BundledMednafenPath(dir + "/mac/SaturnExplorer.app/Contents/MacOS/SaturnExplorer") ==
+          dir + "/mac/mednafen-se/mednafen");
+    CHECK(BundledMednafenPath(dir + "/bare/SaturnExplorerFrontEnd").empty());   // developer build: nothing beside it
+    CHECK(BundledMednafenPath("SaturnExplorerFrontEnd").empty());               // no folder to look in
+    CHECK(BundledMednafenPath("").empty());
+    // An .app further up the path is not the bundle the program sits in.
+    std::system(("mkdir -p '" + dir + "/outer/Outer.app/Contents/Tools/Inner/mednafen-se' '" + dir + "/outer/mednafen-se'").c_str());
+    Write(dir + "/outer/mednafen-se/mednafen", "x", 0755);
+    Write(dir + "/outer/Outer.app/Contents/Tools/Inner/mednafen-se/mednafen", "x", 0755);
+    CHECK(BundledMednafenPath(dir + "/outer/Outer.app/Contents/Tools/Inner/Tool") ==
+          dir + "/outer/Outer.app/Contents/Tools/Inner/mednafen-se/mednafen");
+
+    // Load and Save: the bundled copy is used when no path is recorded and is not written back; a recorded
+    // path -- present or not -- is never replaced.
+    {
+        const std::string exe = dir + "/plain/SaturnExplorerFrontEnd", bundled = dir + "/plain/mednafen-se/mednafen";
+        Settings none;
+        Launcher a;
+        a.Load(none, exe);
+        CHECK(a.Emulators()[0].exePath == bundled);
+        CHECK(a.UsesBundledMednafen());
+        Settings out;
+        a.Save(out);
+        CHECK(out.Get("emulators", "mednafen", "x").empty());
+        Launcher again;
+        again.Load(out, dir + "/mac/SaturnExplorer.app/Contents/MacOS/SaturnExplorer");   // moved elsewhere
+        CHECK(again.Emulators()[0].exePath == dir + "/mac/mednafen-se/mednafen");
+
+        Settings custom;
+        custom.Set("emulators", "mednafen", "/Volumes/gone/mednafen");
+        Launcher b;
+        b.Load(custom, exe);
+        CHECK(b.Emulators()[0].exePath == "/Volumes/gone/mednafen");
+        CHECK(!b.UsesBundledMednafen());
+        Settings kept;
+        b.Save(kept);
+        CHECK(kept.Get("emulators", "mednafen", "") == "/Volumes/gone/mednafen");
+
+        Launcher dev;
+        dev.Load(none, dir + "/bare/SaturnExplorerFrontEnd");   // developer build: nothing beside it
+        CHECK(dev.Emulators()[0].exePath.empty());
+        CHECK(!dev.UsesBundledMednafen());
+    }
+    CHECK(MednafenFirmwareDir("/opt/se/mednafen-se/mednafen") == "/opt/se/mednafen-se/firmware");
+    CHECK(MednafenFirmwareDir("mednafen").empty());
 
     CHECK(::chdir(here) == 0);
     std::free(here);

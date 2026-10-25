@@ -1,12 +1,24 @@
 #include "Launcher.h"
 
 #include <algorithm>
+#include <cstdint>
 #include <fstream>
 
 #ifdef _WIN32
 #include <direct.h>
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
 #else
+#include <limits.h>
 #include <unistd.h>
+#ifdef __APPLE__
+#include <mach-o/dyld.h>
+#endif
 #endif
 
 #include "Settings.h"
@@ -154,14 +166,66 @@ std::string AbsolutePath(const std::string& path)
 #endif
 }
 
+std::string ExecutablePath()
+{
+#if defined(_WIN32)
+    // The ANSI form, on purpose: every file and process call this program makes (ifstream, ShellExecuteExA)
+    // takes narrow paths in the active code page, so a UTF-8 string here would name a different file for
+    // any non-ASCII folder.
+    char buf[MAX_PATH * 2];
+    const DWORD n = GetModuleFileNameA(nullptr, buf, static_cast<DWORD>(sizeof(buf)));
+    return (n == 0 || n >= sizeof(buf)) ? std::string() : std::string(buf, n);
+#elif defined(__APPLE__)
+    uint32_t size = 0;
+    _NSGetExecutablePath(nullptr, &size);
+    std::string out(size, '\0');
+    if (_NSGetExecutablePath(&out[0], &size) != 0) return std::string();
+    out.resize(out.find('\0'));
+    char real[PATH_MAX];
+    return ::realpath(out.c_str(), real) ? std::string(real) : out;
+#else
+    char buf[PATH_MAX];
+    const ssize_t n = ::readlink("/proc/self/exe", buf, sizeof(buf) - 1);
+    return n > 0 ? std::string(buf, static_cast<size_t>(n)) : std::string();
+#endif
+}
+
+std::string BundledMednafenPath(const std::string& executablePath)
+{
+    std::string root = DirectoryOf(executablePath);
+    // Inside a macOS bundle the program is Foo.app/Contents/MacOS/Foo; the release puts mednafen-se/
+    // beside the .app, because the bundle is sealed by its signature and the user must be able to add
+    // the firmware folder to the emulator's directory. Only the bundle the program itself sits in counts:
+    // its folder must END in .app/Contents/MacOS, so an .app somewhere further up the path is not mistaken
+    // for it.
+    static const std::string kInBundle = ".app/Contents/MacOS";
+    if (root.size() > kInBundle.size() &&
+        root.compare(root.size() - kInBundle.size(), kInBundle.size(), kInBundle) == 0)
+        root = DirectoryOf(root.substr(0, root.size() - kInBundle.size() + 4));   // keep ".app", then step out of it
+    if (root.empty()) return std::string();
+#ifdef _WIN32
+    const char* leaf = "mednafen.exe";
+#else
+    const char* leaf = "mednafen";
+#endif
+    const std::string candidate = JoinPath(JoinPath(root, "mednafen-se"), leaf);
+    return FileExists(candidate) ? candidate : std::string();
+}
+
+std::string MednafenFirmwareDir(const std::string& exePath)
+{
+    return JoinPath(DirectoryOf(exePath), "firmware");
+}
+
 std::string PathBasename(const std::string& path)
 {
     const size_t slash = path.find_last_of("/\\");
     return (slash == std::string::npos) ? path : path.substr(slash + 1);
 }
 
-void Launcher::Load(const Settings& s)
+void Launcher::Load(const Settings& s, const std::string& executablePath)
 {
+    mBundledMednafen = BundledMednafenPath(executablePath);
     mEmus.clear();
     for (const Known& k : kKnown)
     {
@@ -171,7 +235,15 @@ void Launcher::Load(const Settings& s)
         // Exe path is written by the installer under [emulators] <key>; Launch Settings
         // edits that same key so an override persists there.
         e.exePath      = s.Get("emulators", k.key, "");
-        if (e.key == "mednafen") e.exePath = MigrateMednafenExe(e.exePath);
+        if (e.key == "mednafen")
+        {
+            e.exePath = MigrateMednafenExe(e.exePath);
+            // A release ships its own patched Mednafen beside the program: with no path recorded, use it.
+            // Save() leaves the path empty while the bundled copy is in use, so a download that is moved
+            // keeps finding the copy beside it, and a path the user did record -- even one that is missing
+            // right now, on an unmounted volume -- is never replaced.
+            if (e.exePath.empty()) e.exePath = mBundledMednafen;
+        }
         const std::string sect = std::string("launch.") + k.key;
         e.argsTemplate = s.Get(sect, "args", k.args);
         e.workDir      = s.Get(sect, "workdir", "");
@@ -203,7 +275,9 @@ void Launcher::Save(Settings& s) const
 {
     for (const EmulatorSpec& e : mEmus)
     {
-        s.Set("emulators", e.key, e.exePath);   // keep the installer's key in sync with overrides
+        // keep the installer's key in sync with overrides; the bundled copy is found again at every start
+        const bool bundled = e.key == "mednafen" && !mBundledMednafen.empty() && e.exePath == mBundledMednafen;
+        s.Set("emulators", e.key, bundled ? std::string() : e.exePath);
         const std::string sect = std::string("launch.") + e.key;
         s.Set(sect, "args", e.argsTemplate);
         s.Set(sect, "workdir", e.workDir);
@@ -222,6 +296,14 @@ void Launcher::Save(Settings& s) const
 void Launcher::Select(int i)
 {
     if (i >= 0 && i < static_cast<int>(mEmus.size())) mSel = i;
+}
+
+bool Launcher::UsesBundledMednafen() const
+{
+    if (mBundledMednafen.empty()) return false;
+    for (const EmulatorSpec& e : mEmus)
+        if (e.key == "mednafen") return e.exePath == mBundledMednafen;
+    return false;
 }
 
 const EmulatorSpec* Launcher::Selected() const
@@ -282,7 +364,7 @@ LaunchValidation Launcher::Validate() const
     }
     if (e->key == "mednafen")
     {
-        const std::string firmwareDir = JoinPath(DirectoryOf(e->exePath), "firmware");
+        const std::string firmwareDir = MednafenFirmwareDir(e->exePath);
         if (!PathExists(JoinPath(firmwareDir, "sega_101.bin")))
         {
             result.message = "Missing firmware/sega_101.bin beside Mednafen.";
