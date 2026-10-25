@@ -9050,6 +9050,8 @@ void App::DrawHelpModal()
         mOpenHelp = false;
     }
     if (!ImGui::BeginPopupModal("Saturn Explorer Help", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) return;
+    ImGui::TextUnformatted("Created by Noah Steam");
+    ImGui::Separator();
     ImGui::TextWrapped("Source controls the debugger's current data. Emulator and Game select what the next Launch will start.");
     ImGui::Separator();
     ImGui::TextUnformatted("Ctrl+O  Load dump");
@@ -9105,6 +9107,7 @@ void App::DrawAboutModal()
     }
     if (!ImGui::BeginPopupModal("About Saturn Explorer", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) return;
     ImGui::TextUnformatted("Saturn Explorer");
+    ImGui::TextUnformatted("Created by Noah Steam");
     ImGui::TextDisabled("Sega Saturn graphics and live-debugging workspace");
     ImGui::Spacing();
     ImGui::TextWrapped("Source selects the debugger's active data provider. Emulator and Game select the next launch configuration.");
