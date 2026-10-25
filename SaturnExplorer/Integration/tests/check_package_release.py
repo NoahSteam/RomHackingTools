@@ -25,6 +25,8 @@ class Skip(Exception):
 
 def symlink(target, path):
     # Windows makes a link to a directory a file link unless told otherwise, and a file link to a directory does not resolve.
+    # And it does not resolve a relative target written with '/': the target takes the native separator.
+    target = target.replace("/", os.sep)
     is_dir = os.path.isdir(os.path.join(os.path.dirname(path), target))
     try:
         os.symlink(target, path, target_is_directory=is_dir)
