@@ -12764,6 +12764,25 @@ void TestA3124Fix()
         CHECK(ReferenceOk(d, snap, Request(base), r));
         if (p.eval) CHECK(PseudoAgreesWithRun(r, snap, f, inputs, true));
     }
+    // M: the call's guard holds no callee-saved register's save. r8 and PR pushed, a frame address published in a global (the frame
+    // escapes), a call: the pushes stay saves (`unaff_r8` restored, not written to a local), as the head printed them; held, they were
+    // printed as local writes and the lending trial took the function for one that reads r8 (hwram007 060322D4, 06032490).
+    {
+        std::vector<uint16_t> words = { 0x4F22, 0x2F86, 0x7FEC, 0xE005, 0x2F02, 0x64F3, 0x7410, 0xD305, 0x2342, 0xD005, 0x400B, 0x0009,
+                                        0x60F2, 0x7F14, 0x68F6, 0x4F26, 0x000B, 0x0009, 0x0600, 0xF100, 0x0600, 0x9100 };
+        words.resize(0x100 / 2, 0x0009);
+        words.push_back(0x000B);
+        words.push_back(0x0009);
+        const CallFixture f = { "M a callee-saved push before a call in an escaped frame", base, words };
+        auto snap = CallSnapshot(f, ++serial);
+        const DecompileResult r = d.Decompile(snap, Request(base));
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(Has(r.Text(), "func_0x06009100("));
+        CHECK(!Has(r.Text(), "= unaff_r8;") && !Has(r.Text(), "= unaff_retaddr;"));
+        CHECK(dts::FrameLosses(r, dts::SnapshotWords(snap)).empty());
+        CHECK(ReferenceOk(d, snap, Request(base), r));
+    }
     // The frame ledger itself (dts::FrameLosses), on records made up as the engine makes them: a write that went unread, read later in its
     // block, is a loss; covered first by a folded write of the same bytes, or read only by an access removed with unreachable code, it is not.
     {
