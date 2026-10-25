@@ -574,6 +574,7 @@ class ActionDeadCode : public Action {
   static void markConsumedParameters(FuncCallSpecs *fc,vector<Varnode *> &worklist);
   static uintb gatherConsumedReturn(Funcdata &data);
   static bool lastChanceLoad(Funcdata &data,vector<Varnode *> &worklist);
+  static bool isSavePush(const Funcdata &data,const Address &addr,const Varnode *src);	///< SaturnExplorer (0068): a push of a callee-saved register
   static bool callMayReadFrame(const Funcdata &data,const Varnode *vn);	///< SaturnExplorer (0068): a call's INDIRECT on an escaped frame's local
 public:
   ActionDeadCode(const string &g) : Action(0,"deadcode",g) {}	///< Constructor
