@@ -24,10 +24,17 @@ class Skip(Exception):
 
 
 def symlink(target, path):
+    # Windows makes a link to a directory a file link unless told otherwise, and a file link to a directory does not resolve.
+    is_dir = os.path.isdir(os.path.join(os.path.dirname(path), target))
     try:
-        os.symlink(target, path)
+        os.symlink(target, path, target_is_directory=is_dir)
     except (OSError, NotImplementedError):
         raise Skip("symlinks are not available here")
+
+
+def compare_trees(fresh, root, binary):
+    """pr.compare_trees with '/' in its messages: they are built with os.path, so Windows writes '\\', and the checks below match '/'."""
+    return [p.replace(os.sep, "/") for p in pr.compare_trees(fresh, root, binary)]
 
 
 def check(cond, what):
@@ -184,21 +191,21 @@ try:
     for rel in ("src/ss/a.cpp", "src/ss/Makefile.am", "src/header.h"):
         os.utime(os.path.join(co, rel), (now - 100, now - 100))
     binary = os.path.join(co, "src", "mednafen")
-    check(pr.compare_trees(fresh, co, binary) == [], "an identical checkout, with only generated files differing, passes")
+    check(compare_trees(fresh, co, binary) == [], "an identical checkout, with only generated files differing, passes")
     put(co, "src/ss/extra.cpp", "compiled in")
-    check(any("extra.cpp" in p for p in pr.compare_trees(fresh, co, binary)), "an extra source file is reported")
+    check(any("extra.cpp" in p for p in compare_trees(fresh, co, binary)), "an extra source file is reported")
     os.remove(os.path.join(co, "src/ss/extra.cpp"))
     put(co, "src/ss/a.cpp", "edited")
-    check(any("a.cpp" in p and "differs" in p for p in pr.compare_trees(fresh, co, binary)), "an edited source file is reported")
+    check(any("a.cpp" in p and "differs" in p for p in compare_trees(fresh, co, binary)), "an edited source file is reported")
     put(co, "src/ss/a.cpp", "a")
     os.utime(os.path.join(co, "src/ss/a.cpp"), (now - 100, now - 100))
     os.remove(os.path.join(co, "include/mednafen"))
     symlink("../elsewhere", os.path.join(co, "include/mednafen"))
-    check(any("include/mednafen" in p for p in pr.compare_trees(fresh, co, binary)), "a redirected symlink is reported")
+    check(any("include/mednafen" in p for p in compare_trees(fresh, co, binary)), "a redirected symlink is reported")
     os.remove(os.path.join(co, "include/mednafen"))
     symlink("../src", os.path.join(co, "include/mednafen"))
     os.utime(os.path.join(co, "src/header.h"), (now + 50, now + 50))
-    check(any("newer than the binary" in p for p in pr.compare_trees(fresh, co, binary)), "a source newer than the binary is reported, with no grace period")
+    check(any("newer than the binary" in p for p in compare_trees(fresh, co, binary)), "a source newer than the binary is reported, with no grace period")
 except Skip as e:
     print("skipped the source-comparison checks:", e)
 finally:
@@ -228,16 +235,16 @@ try:
         for f in fs:
             if f != "mednafen":
                 os.utime(os.path.join(dp, f), (now - 100, now - 100))
-    check(pr.compare_trees(fresh, co, binary) == [], "a faithful nested copy of the linked directory passes")
+    check(compare_trees(fresh, co, binary) == [], "a faithful nested copy of the linked directory passes")
     put2(co, "include/mednafen/ss/state.h", "stale")
-    check(any("ss/state.h" in p and "differs" in p for p in pr.compare_trees(fresh, co, binary)),
+    check(any("ss/state.h" in p and "differs" in p for p in compare_trees(fresh, co, binary)),
           "a stale header deep inside the copied directory is reported")
     put2(co, "include/mednafen/ss/state.h", "current")
     put2(co, "include/mednafen/ss/extra.h", "extra")
-    check(any("extra.h" in p for p in pr.compare_trees(fresh, co, binary)), "an extra header inside the copy is reported")
+    check(any("extra.h" in p for p in compare_trees(fresh, co, binary)), "an extra header inside the copy is reported")
     os.remove(os.path.join(co, "include/mednafen/ss/extra.h"))
     os.remove(os.path.join(co, "include/mednafen/top.h"))
-    check(any("top.h" in p and "missing" in p for p in pr.compare_trees(fresh, co, binary)), "a header missing from the copy is reported")
+    check(any("top.h" in p and "missing" in p for p in compare_trees(fresh, co, binary)), "a header missing from the copy is reported")
 except Skip as e:
     print("skipped the copied-directory checks:", e)
 finally:
