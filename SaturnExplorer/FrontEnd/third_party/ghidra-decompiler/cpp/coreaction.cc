@@ -4061,7 +4061,7 @@ bool ActionDeadCode::lastChanceLoad(Funcdata &data,vector<Varnode *> &worklist)
 /// puts on a local of a frame whose address escaped? The call may read the value before it, so its address force
 /// stays whether or not the value is a direct write yet: a STORE through a pointer kept in a frame slot is
 /// folded into a direct write passes later, and the force cleared before then was never set again.
-/// But for the save of a callee-saved register (the local holds the entry value of r8 to r14, PR, SR, GBR, MACH or
+/// But for the save of a callee-saved register (the word holds the whole entry value of r8 to r14, PR, SR, GBR, MACH or
 /// MACL, written before the calls and the stores that may reach it): no callee is handed the save area, and keeping every push as a local write
 /// would also have the lending trials take the function for one that reads those registers.
 /// \param data is the function
@@ -4086,6 +4086,7 @@ bool ActionDeadCode::callMayReadFrame(const Funcdata &data,const Varnode *vn)
     if (def->code() != CPUI_COPY || def->numInput() != 1) return true;
     const Varnode *src = def->getIn(0);
     if (src == (const Varnode *)0 || !src->isInput() || src->getSpace()->getType() != IPTR_PROCESSOR) return true;
+    if (src->getSize() != 4 || def->getOut()->getSize() != 4) return true;	// a whole register in a whole word, as a push writes it
     string name = data.getArch()->translate->getRegisterName(src->getSpace(),src->getOffset(),src->getSize());
     static const char *const saved[] = { "r8","r9","r10","r11","r12","r13","r14","pr","sr","gbr","mach","macl" };
     for(size_t k=0;k<sizeof(saved)/sizeof(saved[0]);++k)
