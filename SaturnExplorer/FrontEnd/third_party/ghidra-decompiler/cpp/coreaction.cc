@@ -4062,7 +4062,7 @@ bool ActionDeadCode::lastChanceLoad(Funcdata &data,vector<Varnode *> &worklist)
 /// stays whether or not the value is a direct write yet: a STORE through a pointer kept in a frame slot is
 /// folded into a direct write passes later, and the force cleared before then was never set again.
 /// But for the save of a callee-saved register (the local holds the entry value of r8 to r14, PR, SR, GBR, MACH or
-/// MACL, written before the calls): no callee is handed the save area, and keeping every push as a local write
+/// MACL, written before the calls and the stores that may reach it): no callee is handed the save area, and keeping every push as a local write
 /// would also have the lending trials take the function for one that reads those registers.
 /// \param data is the function
 /// \param vn is the Varnode
@@ -4075,13 +4075,11 @@ bool ActionDeadCode::callMayReadFrame(const Funcdata &data,const Varnode *vn)
   if (op->code() != CPUI_INDIRECT || op->isIndirectStore()) return false;
   const PcodeOp *iop = PcodeOp::getOpFromConst(op->getIn(1)->getAddr());
   if (iop == (const PcodeOp *)0 || !iop->isCall()) return false;
-  // Back through the guards of the calls before, to the write of the local.
+  // Back through the guards before (of calls, and of STOREs whose pointers may reach the local), to its write.
   const Varnode *val = op->getIn(0);
   for(int4 hops=0;hops<64 && val != (const Varnode *)0 && val->isWritten();++hops) {
     const PcodeOp *def = val->getDef();
     if (def->code() == CPUI_INDIRECT) {
-      const PcodeOp *prev = PcodeOp::getOpFromConst(def->getIn(1)->getAddr());
-      if (prev == (const PcodeOp *)0 || !prev->isCall()) return true;
       val = def->getIn(0);
       continue;
     }
