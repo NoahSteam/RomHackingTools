@@ -13516,3 +13516,9 @@ The lending run's texts (`lend_after`) change in 66 and 80 files: the functions 
 - **Mutation rows.** All but the call guard's were measured on `e20866e`, whose engine differs from the final one only in the save rule (section 6).
 - **A3-127 is upstream's bug**; it is not filed upstream from here.
 
+
+#### Coordinator: integration note for the A3-124 fix
+
+* The branch was cut at `f3c13b0`, before patches 0067, 0069 and 0070; its `coreaction.cc` header hunk had 0066's line as its last context and did not apply after 0067's (`VENDOR_EXIT 1`), and was rebased onto 0067's line (context only). The patch tables and the header lines are in number order. Vendoring the 70 patches: `VENDOR_EXIT 0`, empty diff.
+* Matrix on the merge (`3f9a13d`, with master's two later commits): build ok; ctest 98 of 98 and 6 of 6 Live; fault matrix 0 of 94; generator 0 failing (3,000, 1,000, 20,000); printed C 0 mismatch (agrees 3,893, narrow-c 94); both images 839 and 1,554 ok, 0 accesses dropped, missing and said 0 and 4, **0 frame writes lost and 0 malformed pieces** (the new counts), lending 678 (956) and 1,038 (1,310), real entries 474 (645) of 999 and 724 (975) of 1,543, `TestGameCode` 10.1 s and 32.1 s.
+* Area 3's clean count stays 0 (round 14's fix found A3-124; this fix found A3-127 to A3-129). Next: the round 15 review.
