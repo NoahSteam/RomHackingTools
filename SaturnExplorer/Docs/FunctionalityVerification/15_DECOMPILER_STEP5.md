@@ -13115,3 +13115,205 @@ The reading found no wrong value. The one note over-claim the review flagged (06
 - The A3-107 shapes (a callee the probe cannot name writes the caller's word through its own r15, including `trapa`'s exception frame) stay accepted.
 - The redundant fail-closed guards (E_loadguard, E_cap, E_hops, E_uplows) are kept though reverting each alone fails nothing; each is a bound the brief required to fail closed.
 - Patches 0064 and 0065 are on the base; 0066 touches `coreaction.cc`, `fspec.cc`, `heritage.cc/.hh` and `varmap.cc/.hh`.
+
+## A3-124 fix
+
+Fixer, branch `review/3-a3124-fix`, on `f3c13b0`. Engine patch `0068-engine-deadcode-late-stack-reads.patch` (0067 is area 2's; master's 0069 and 0070 came after the base, and 0068 touches neither `printc.cc`, `address.cc` nor `op.cc`, only `op.hh`). Own RelWithDebInfo build under the scratch directory, `-j2`, every test binary under `ulimit -v 4000000` with a timeout, one heavy job at a time, runs split into pieces of 20 minutes or less with a `.done` per piece.
+
+**The rows.**
+
+- Fixed: A3-124 (P1, the row).
+- Found and fixed: A3-127 (P1: upstream's INDIRECT collapse built a 5-byte piece for a 4-byte local; the corpus function's own cause, and 12 more `-O0` struct builders in each save state), A3-128 (P1: a call's guard lost its force before a STORE through a reloaded pointer was folded; hwram008 060554B6), A3-129 (P1, the instrument: the conservation ledger took every frame fold for conserved). A3-125 is reserved and A3-126 was area 3's; the numbering starts at A3-127 as asked.
+
+### 1. The cause
+
+**Shrunk.** Fourteen words drop a store with no call and no frame pointer (`TestA3124Fix` pin A):
+
+```
+add #-24,r15 ; mov r15,r1 ; add #12,r1 ; mov.l r1,@(20,r15)     ; the slot holds &S
+mov.l @(20,r15),r1 ; mov #-1,r2 ; mov.l r2,@r1                  ; S = 0xFFFFFFFF
+mov.l @(20,r15),r1 ; add #1,r1 ; mov.b r5,@r1                   ; S.b[1] = r5
+mov.l @(20,r15),r1 ; mov.l @r1,r0 ; rts ; add #24,r15           ; return S
+```
+
+The head printed `Stack_b = CONCAT12(param_2,Stack_b._1_2_); return Stack_b;` (an `unkbyte3` read of three bytes of the frame's input), a mismatch on the run. Kept in a register instead of the slot (pin G), the same stores were always right. A trace of every action, rule and heritage range (a temporary, environment-gated build, not committed) gave the sequence:
+
+1. Pass 0 folds the slot's store and its three reloads into stack Varnodes (`RuleStoreVarnode`, `RuleLoadVarnode`).
+2. Pass 1 heritages the slot. The word STORE is unmodeled (its pointer is a frame-slot read, 0061), so it and the byte STORE carry INDIRECT guards on the slot; the first reload resolves to `sp-12` at once, the second only once the word STORE's guard collapses (it is folded in the same rule pass), the third only once the byte STORE's guard collapses: **each STORE whose guard covers the slot costs the reload after it one more pass**.
+3. Heritage pass 2 links `sp-12` with the word store as its only access (reads 0). Dead code is allowed in the stack space after heritage pass 1 (`deadcodedelay` 1): the word store's COPY, and the INDIRECT the byte STORE had put on `sp-12`, have no reader and are removed.
+4. The byte STORE and the final LOAD are folded; heritage pass 3 finds the LOAD's read in a range linked before, after dead code ran in the space: upstream's check (`Heritage::heritage`, "Heritage AFTER dead removal") bumps the dead code delay and restarts. But `bumpDeadcodeDelay` raised it **once, by one pass** (to 2): the restarted run allowed dead code after heritage pass 2 and removed the store again, the read was linked in pass 3 again, and the second detection did nothing (an override was installed, and the restart group allows one restart). The read was linked to the frame's input.
+
+So the dead-store elimination is not wrong in itself: dead code ran in the stack space before every read of the stack had been found, and upstream's remedy for exactly that was bounded too low. The row's printed-C copy (pin F, eight byte stores through the reload) needs as many passes as it has stores.
+
+**The corpus function is a second engine bug (ledger A3-127).** With the dead code fix alone reverted (mutant `E_bump`), hwram007 060228B4 and hwram008 06061D90 are right; with the second fix alone reverted (`E_front`) the head's text comes back, 2 of 8 byte stores. `Funcdata::opCollapseIndirectsForCopy` (upstream's, `funcdata_op.cc`) turns the INDIRECT a STORE put on a wider local into pieces when the STORE becomes a COPY. For a COPY in the middle of the local (bytes before and after it), the front piece was made `bytesAfter` long instead of `bytesBefore`: a byte stored at offset 1 of a word (1 before, 2 after) or 2 (2 before, 1 after) built a 5-byte PIECE for a 4-byte local, `SUB42(x,3)` reading past its input. Pin C shows it alone: a word -1 stored and read directly, a byte through the reloaded pointer; the head printed `axStack_c._0_2_ = 0xff; axStack_c[2] = param_2; axStack_c._3_2_ = 0xffff;`, the byte a byte late. In the `-O0` copy every word gets bytes at offsets 1 and 2, the malformed pieces were simplified away, and six stores went with them.
+
+**One more way of the same class, found by the ledger once it counted (section 3).**
+
+- A call that may read a local of an escaped frame keeps the store before it through the address force on its INDIRECT (`guardCalls`' `holdind`, kept by `ActionDeadCode` only for a direct write). Both conditions are decided too early for a STORE through a reloaded pointer: the scope may not call the range address-tied yet when the guard is made, and the value is a direct write only once the STORE folds, by which time `ActionDeadCode` had cleared the force for good. hwram008 060554B6 stores 0 at `S+4` through the slot's pointer (`mov.l r2,@(4,r7)`), calls three functions that may read S (the frame escaped), then writes `S+4` again: the head dropped `xStack_3c = 0`. Ledger A3-128.
+
+### 2. The fix: engine patch `0068-engine-deadcode-late-stack-reads.patch`
+
+The rule held: a STORE is removed only once every access that may read a byte of it has been found and linked. In the engine that is "dead code does not run in a space before every read of it has been found", and Ghidra's own remedy for a read found late (raise the dead code delay, restart) is made complete instead of replaced:
+
+- **The delay is raised past the pass that found the read** (`Heritage::bumpDeadcodeDelay`): to that pass when it is beyond the delay in force (or one more), and again whenever a later generation finds a read later still. The raises of one generation are one restart (the latest pass any of them asked for); after three restarts the delay is set so that dead code never runs in the space (`noDeadcodeDelay`): the writes stay, the text is longer, nothing is lost. The upstream early returns (an override installed, a global delay) are gone. `ActionRestartGroup` allows one more restart per raise (`Override::numDeadcodeBumps`).
+- **A STORE folded late into a range heritaged before needs no check of its own.** An earlier draft raised the delay for such a write too (a COPY `RuleStoreVarnode` made, with no reader, in a range linked before). It was dropped: dead code removes the guard the STORE put on the range only when nothing read it, so a read of the range after the store either does not exist (the write is dead in fact) or was found late itself, and that read raises the delay already. Without it the pins, the generator matrix and the corpora find no loss (sections 5 to 7).
+- **A call's INDIRECT on a local of an escaped frame keeps its address force** (`guardCalls` sets it once `FrameEscape` found an escape; `ActionDeadCode::callMayReadFrame` keeps it when the value is not a direct write yet). A3-128. Not for the save of a callee-saved register (`ActionDeadCode::isSavePush`: the local's word, back through the guards and the joins of paths before it, was written by a push -- `mov.l Rm,@-r15` for r8 to r14, `sts.l`/`stc.l` of MACH, MACL, PR, SR, GBR or VBR to `@-r15`, the frame ledger's own list -- of that register's whole entry value; half of MACL stored with `mov.w` is data, pin N, grammar 2 seed 10032, and so is GBR's word stored with `mov.l r2,@(12,r14)`, pin P, seed 11612): no callee is handed the save area (the frame ledger's own rule), and a first version that held every push printed them as local writes (`xStack_4 = unaff_r8;`) and cost hwram007 two lent signatures (060322D4, 06032490: "it reads r8 on entry"); pins M to P hold it (O: the call in a loop, the save reaching its guard through the loop's join, as in hwram007 0600894A).
+- **The INDIRECT collapse's front piece is `bytesBefore` long** (`opCollapseIndirectsForCopy`). A3-127; the bug is upstream's (not filed upstream from here).
+
+The fix is not a shape: it does not look for a pointer kept in a frame slot. A read through any pointer the analysis resolves late (a slot, a chain of guarded stores, a join that settles late) delays dead code until it is linked, and the bound fails closed.
+
+**Cost.** A function with a late read was restarted once before and may now be restarted up to four times; the restarts are where the warning "Restarted to delay deadcode elimination for space: stack" already stood. The "Heritage AFTER dead removal" header the head printed on such functions is gone from their final text, since the last generation finds nothing late: two fixtures carried it at the head (`r12o.src`, `r13b.src`, section 7) and carry it no more; the corpora had none, and their restarted functions (2 and 12) are the same at both.
+
+### 3. Why the ledger missed it, and the frame ledger
+
+**Why.** The conservation oracle pairs each access of the reference run (the same request with every address volatile) with what the shown run did with it. The frame is no memory the request can mark volatile: in **both** runs a LOAD or STORE through a frame address is folded into a stack Varnode, a variable, so the reference run's list never holds it; and the shown run's record of the fold (`fate_folded_ordinary`, `frame` set) pairs with nothing and was taken for conservation. What happened to the variable write after the fold was recorded nowhere: patch 0017 records a destroyed op only while it is still a LOAD, STORE or volatile access, and the COPY a STORE becomes is none. `DeadIsLoss` skips frame records too. So "0 accesses dropped against the reference run" was true and said nothing about the frame: A3-124's stores were folded, then removed, and both runs agreed. The step 5 note ("four of six byte reads ended dead") was the same function seen from its reads.
+
+**The frame ledger** (`FrontEnd/tests/FrameLedger.h`, `dts::FrameLosses`, from patch 0068's records), in `ReferenceOk`, `TestGameCode` (its own count, "frame writes lost", and a CHECK) and the generator (a finding, `frame-lost`):
+
+- The engine records how a frame fold ends a second time: `fate_frame_unread` when the COPY is destroyed and its value was never *forwarded* (a reader that stays given it in another form: propagation, a rule finding it equal to something or folding it into a constant, a `totalReplace`; walked back through any op, 64 at most; an op whose readers all died as dead never forwarded its value), `fate_frame_removed` when it goes with an unreachable block. A PIECE or SUBPIECE whose sizes do not add up is recorded too (`fate_malformed_piece`): what flows through it is no value the code computed, so no record of the accesses in it can be trusted (A3-127's 5-byte pieces).
+- The host turns them into `AccessFate::FrameUnread`, `FrameRemoved`, `MalformedPiece` (with the flow position of each), and `DecompileResult::frameCalls`: the calls heritage guarded a stack local at (their effect on it is unknown; a lent callee's is known), with the local, unless it lies wholly below the stack pointer the callee is entered with.
+- Three refinements, each a false loss the generator matrix found on the fixed tree (the text right) and each pinned (`TestA3124Fix` J to L): a frame read destroyed with its value forwarded passes the mark on to what it read (grammar 2 seed 572: a pop forwarded into `r1 & 0`, a constant, before the stack was linked to its push); a frame read whose value is forwarded notes the STOREs whose guards it read through (the chain of INDIRECTs, each guarding a STORE whose pointer was still unresolved, back from the read's input), and each is marked read when it is folded into the bytes read (`Funcdata::noteGuardRead`; frame124 seed 2595: a halfword read twice and xored with itself while the word store under it still went through the reloaded pointer, the store folded after its readers went). Only that chain and those bytes. The first version marked a STORE through any guard any walk passed; the mutation table caught it twice: every reload of A3-124's pointer reads the slot through the guards of the STOREs before it, so with the delay's raise reverted the ledger found none of the 14 losses in the pins, and A3-128's store was marked through the guard of the call after it, so with the call fix reverted pin I's loss went unseen; and a call's guard that `RuleAliasUpdate` later removes, because no pointer to the local reaches the call, takes the call's record with it (`Funcdata::dropFrameCall`; grammar 2 seeds 996, 2191, 4666, 19596).
+- `FrameLosses` decides, byte by byte over the flow's blocks as first followed: a write that went unread is a loss when some path from it reaches a byte read before folded writes of the frame have covered it. A read is a folded read of the frame whose own value something used (a pop of a register the engine takes for unaffected is no use), or a guarded call over the bytes, but for the save of a callee-saved register (a push of r8 to r14, `sts.l`/`stc.l` to `@-r15`), which no callee is handed. Only folded writes (frame offsets the engine placed) cover a byte. A malformed piece is counted apart ("malformed pieces"); both counts must be 0.
+
+What it does not see: a value forwarded in an equal form to a reader that dies later counts as used (the walk back marks every fold the value was made from: it can hide a loss, never invent one), and a store kept but read back wrong is a value error for the value oracles (the printed-C differential, the pins), not an access lost.
+
+**What it counts with each fix reverted** (section 6): with the delay's raise reverted, 14 frame losses in the pins' lines and 31 frame-lost seeds in 300; with the collapse reverted, 47 malformed pieces in each save state (060228B4's eight among them) and 28 malformed-piece seeds; with the call guard's force reverted, pin I's loss, 1 frame write lost in hwram008 (060554B6) and 2 frame-lost seeds in 3,000. On the fixed tree: 0 and 0 in both save states.
+
+### 4. The generator: the frame124 stream
+
+`GenFrame124Fn` (`Sh2GeneratedTests.cpp`, one seed in four, a stream of its own) draws the class: a frame of 32 bytes on r15 or, `-O0` style, on r14 (pushed, r15 copied); an 8-byte struct S at frame + 8, 12 or 16; &S in the slot at frame + 28. S is filled whole first (two words of constants, or eight byte stores in a random order), then 1 to 8 byte, halfword and word stores at aligned offsets (r4 to r7, or a constant), each through the pointer reloaded from the slot (one in five through the previous store's r1); then 1 to 3 reads of S, byte, halfword or word wide (wider or narrower than the stores), through the reloaded pointer or directly at S's frame offset, added or xored into r0. Some hand &S to a callee between the stores and the reads: a lent `rts ; nop` (`call`), or a withheld one that reads a word of S through r4 (`callr`, A3-128's shape: the caller writes that word again after the call, so only the call reads the store before it). Shapes `frame124.<r15|r14>.<words|bytes>.<nocall|call|callr>.<b|w|l|mixed>`, 32 kinds, each pinned to be drawn (`TestA365Pins`, "frame124 draws"; the bytes fill has no call). Each draw is a statement of its own (the generator's rule for an order GCC and Clang agree on).
+
+- A function without a call goes through the printed-C differential with the rest (its text compiled and run beside the code for every input): a value the text lost is a `mismatch`.
+- Every one, with a call or not, goes through the frame ledger (`CheckFrame124Ledger`: the callee decompiled and lent first): a frame write lost or a malformed piece is a finding (`frame-lost`, `malformed-piece`). A text with a call reads S through the kept pointer after it (the frame escaped), which no constant check resolves; the ledger is its check.
+- The grammar 1 and 2 functions (`TestGenerated`) go through the frame ledger too, beside the trace-based ledger.
+
+`SE_GENERATED_PRINTEDC_FRAME124=0` leaves the stream out; `SE_GENERATED_FRAME124_WORDS` replays one function through the ledger, `SE_GENERATED_PRINTEDC_WORDS` through the differential. A `frame124_` function the differential skips (a text that takes a local's address) is counted, not failed; in printed-C seeds 1 to 3,000 the stream drew 786 functions, 521 without a call: 518 compared, 3 skipped.
+
+The printed-C harness learned one thing for this stream: a name the engine makes for a write wider than the symbol it starts at (`_xStack_14 = CONCAT31(...)` over the two-byte `xStack_14` and `xStack_12`) is a separate variable in the harness's C, so a later read of `xStack_12` read nothing (frame124 seeds 1529, 1651, 2229: mismatches of right texts). After each such write the harness now gives every declared local inside it its bytes, the machine's order (`Sh2GeneratedTests.cpp`, the underscore-name block; a printed-C pin, `A3-124 _xStack_14 over xStack_12`).
+
+### 5. The pins
+
+`TestA3124Fix` (`Sh2DecompilerTests.cpp`), each function at 06009000, each text checked for a fragment (pins J to L are the ledger's own false losses, texts that are right), for no "Heritage AFTER dead removal" or "Exceeded maximum restarts", for an empty frame ledger and `ReferenceOk` (which runs the ledger and the malformed-piece count), and, where PseudoEval reads it, evaluated against the code on the emulator for three inputs:
+
+| pin | the code | the head | now |
+|---|---|---|---|
+| A | word -1, byte r5 at +1, word read, all through the pointer reloaded from the slot (14 words) | `Stack_b = CONCAT12(param_2,Stack_b._1_2_); return Stack_b;` | `xStack_c = CONCAT22(CONCAT11(0xff,param_2),0xffff);` |
+| B | the same with the byte at +2 | mismatch | `CONCAT31(CONCAT21(0xffff,param_2),0xff)` |
+| C | word -1 stored and read directly, the byte through the reloaded pointer (A3-127 alone) | `axStack_c._0_2_ = 0xff; axStack_c[2] = param_2; ...` | `CONCAT22(CONCAT11(0xff,param_2),0xffff)` |
+| D | word r5 stored directly, a byte read narrower through the reloaded pointer (control) | right | right |
+| E | `-O0` frame on r14: two words 0, halfword r5 at +0, bytes r6 at +3 and r7 at +5, halfword r4 at +6, two words and a halfword read | stores dropped | all stores (PseudoEval has no `x._0_3_`; the printed-C differential compiles it: agrees) |
+| F | the row's printed-C copy, eight byte stores | `return CONCAT44(xStack_18,xStack_14);` (0) | `CONCAT31(CONCAT21(CONCAT11(0x42,param_2),param_3),param_4)` and the second word |
+| G | the pointer kept in a register (control) | right | right |
+| H | with a call: word -1, byte r5 at +1, halfword r6 at +2 through the reloaded pointer, &S handed to a callee, the word read after | | `CONCAT22(CONCAT11(0xff,param_2),param_3)` before the call |
+| I | A3-128: S+4 = 0 through the reloaded pointer, &S handed to a callee that reads S+4, S+4 = 5 after | no S+4 = 0 before the call | `xStack_10 = 0;` before the call |
+| J | the ledger: a push popped into r1, read by `tst r1,r3` with r3 0 (grammar 2 seed 572, shrunk) | no frame ledger | right; no frame loss (the pop was forwarded into a constant before it was linked to its push) |
+| K | the ledger: a byte stored to the frame, a call guarded at it, the guard removed by `RuleAliasUpdate` (grammar 2 seed 996, shrunk) | no frame ledger | right; no frame loss |
+| L | the ledger: S's halfword at +4 read twice and xored with itself while the word store at +4 went through the reloaded pointer (frame124 seed 2595) | no frame ledger | `return 0;`; no frame loss |
+| M | r8 and PR pushed, a frame address published in a global (the frame escapes), a call | (with every push held: `xStack_4 = unaff_r8;`) | right: the pushes are no local writes (a call's guard holds no save) |
+| N | half of MACL's entry value stored (`sts macl,r1 ; mov.w r1,@r15`), a call handed a frame address beside it (grammar 2 seed 10032, shrunk) | (with the guard's force reverted: the store dropped before a call that may read it, A3-128's class) | right: the halfword store stays (no save) |
+| O | PR pushed, the frame address published, the call in a loop (hwram007 0600894A's kind) | (with the joins not followed: `xStack_4 = unaff_retaddr;`) | right: the push is no local write |
+| P | GBR's entry value stored with `stc gbr,r2 ; mov.l r2,@(12,r14)`, a call to a lent callee, a walk down from a frame address (grammar 2 seed 11612, shrunk) | (with the guard's force reverted: the store dropped) | right: the store stays (no push, no save) |
+
+The ledger itself, on made-up records: a write that went unread and is read in the next block is a loss; covered whole first by a folded write, or read only by an access removed with unreachable code, or by a read whose value nothing used, it is not; another byte covered leaves the loss; a call the engine guarded a local at reads it, but not a callee-saved register's push (`mov.l r14,@-r15`), and a stack argument's push (`mov.l r4,@-r15`) is read.
+
+`TestEngineEdgePaths`' "restart limit alone" fixture (a pointer to a slot spilled and reloaded, a global whose first store was dead, found two passes late) was the restart limit's only end-to-end pin: it now restarts twice and prints `xRam06070000 = param_2; return param_2;`, right, and is pinned so; the limit itself stays pinned end to end by the truncated switch (`TestFlowUncertainty`) and its warning's classification.
+
+### 6. Mutation
+
+Each part reverted alone in the worktree (`mut/apply.py <name>`), built, run and restored (`git checkout SaturnExplorer/FrontEnd`), on the final engine. The checks: the decompiler suite (its failing CHECKs, all in `TestA3124Fix` and `TestEngineEdgePaths`); printed-C seeds 1 to 300 (the frame124 stream and the rest); `TestGameCode` on both save states (frame writes lost, malformed pieces). The three ledger refinements were also replayed on the grammar 2 seeds and the frame124 function that found them, and the call guard's fix over printed-C seeds 1 to 3,000. Restored, every check passes. The call guard's rows (E_hold, E_keep, E_saves, E_wide, E_joins, E_push, L_calls, L_saves) were run on the final engine (`b2877b4`); the others on `e20866e`, which differs from it only in the save exemption (since narrowed to pushes of a whole register's word and widened through the joins of paths), a part none of those rows touches.
+
+| Part reverted | Suite CHECKs failing | Printed-C 300 (findings) | `TestGameCode` 007 / 008 (lost, malformed) | Reading |
+|---|---|---|---|---|
+| E_bump: upstream's raise (once, by one pass) | 19 (pins A, B, E, F; the edge fixture), 14 frame losses among their lines | 65: 31 frame-lost, 34 mismatch | 0, 0 / 0, 0 (the corpus function is A3-127's) | held: the dead code fix |
+| E_bumpone: raised past the pass, never again | 7 (pins E, F) | 11: 3 frame-lost, 8 mismatch | 0 / 0 | held: later generations must raise again |
+| E_restarts: no extra restart per raise | 1 (the edge fixture: "Exceeded maximum restarts") | 0 | 0 / 0 | held by its pin |
+| E_never: past the bound no further raise | 0 | 0 | 0 / 0 | the fail-closed terminal; no fixture reaches three raises, kept as the bound's closed answer |
+| E_front: upstream's front piece | 18 (pins A, B, C, E, F, H) | 43: 28 malformed-piece, 2 mismatch, 13 undecompiled | 0, 47 / 0, 47 | held: A3-127 |
+| E_hold + E_keep: the call guard's force | 8 (pins I, N and P) | 0 | 0 / 1 (060554B6) | held: A3-128 |
+| E_hold: not forced when made | 0 | 0 | 0 / 0 | redundant with E_keep's hold on the pins and corpora; kept (the scope may not call the range address-tied when the guard is made) |
+| E_keep: force cleared before a direct write | 8 (pins I, N and P) | 0 (3,000 seeds: 2 frame-lost) | 0 / 1 | load-bearing alone |
+| E_saves: a call's guard holds a callee-saved register's push too | 2 (pins M and O) | 0 | 0 / 0 | held; on the corpora it printed the pushes as local writes and cost hwram007 two lent signatures (060322D4, 06032490: "it reads r8 on entry") |
+| E_wide: any part of a saved register's entry value is a save | 0 | 0 | 0 / 0 | redundant since the push test (a push writes the whole word); pin N and seed 10032 failed with it before that test existed; kept |
+| E_joins: the save is not followed through a join of paths | 1 (pin O) | 0 | 0 / 0 | held: a save before a call in a loop (hwram007 0600894A and its kind printed `xStack_4 = unaff_retaddr;`) |
+| E_push: a saved register's whole entry value stored by any instruction is a save | 3 (pin P) | 0; grammar 2 seed 11612 fails | 0 / 0 | held |
+| E_bump + L_record: no frame-unread record | 11 (A, B, E, F, the edge fixture), none a frame loss | 34 mismatch, 0 frame-lost | 0 / 0 | the records are the ledger's only signal |
+| E_bump + L_check: the ledger ignores the frame | 15 (the 11, and the synthetic records), none a frame loss | 34 mismatch, 0 frame-lost | 0 / 0 | held |
+| E_hold + E_keep + L_calls: no call is a reader | 4 (the texts of pins I and P; the synthetic call records; the losses unseen) | 0 | 0 / 0 (060554B6 unseen) | held: the calls are A3-128's only reader |
+| L_saves: a callee-saved push is handed to calls | 3 (pin P's pushes taken for lost; the synthetic record) | 29 frame-lost | 0 / 0 | held: false losses (the pushes before a call, no longer held) |
+| L_unused: a read nothing used is a read | 3 (the synthetic records) | 34 frame-lost | 7, 0 / 7, 0 | held: false losses (pops) |
+| L_walk: forwarding marks only the replaced input's own fold | 4 (pin I; the synthetic records) | 3 frame-lost | 6 / 5 | held: false losses |
+| L_total: equal-value replacement walks no marker | 2 (pin I) | 3 frame-lost | 1 / 2 | held: false losses |
+| E_front + L_malformed: no check of piece sizes | 14 (A, B, C, E, F, H: values only, no malformed count) | 15: 2 mismatch, 13 undecompiled, 0 malformed-piece | 0, 0 / 0, 0 | held: the malformed-piece count is the ledger's only sight of A3-127 |
+| L_destroy: a destroyed frame read passes no mark | 2 (pin J) | 0; grammar 2 seeds 572, 2853, 3534 fail | 0 / 0 | held: false losses |
+| L_alias: a guard the alias analysis removes stays a read | 2 (pin K) | 0; grammar 2 seeds 996, 2191, 4666, 19596 fail | 0 / 0 | held: false losses |
+| L_guard: a STORE read through its guard is never marked | 2 (pin L) | 0; frame124 seed 2595 (1 frame write lost) | 0 / 0 | held: a false loss |
+| H_cover: the harness gives no bytes to the locals inside a wider underscore write | 0 | 1 mismatch (the pin `A3-124 _xStack_14 over xStack_12`) | 0 / 0 | held: frame124 seeds 1529, 1651, 2229 were this |
+
+With the fix reverted the generator alone fails seeds: 65 of 300 for the delay (31 of them the ledger's), 43 for the collapse, 2 of 3,000 for the call guard.
+
+### 7. Matrix
+
+On the final engine (`b2877b4`; the commits after it are documents), own RelWithDebInfo build, `-j2`, every binary under `ulimit -v 4000000`, one heavy job at a time, each run a piece of 20 minutes or less:
+
+| Run | Result |
+|---|---|
+| `ctest -E SaturnExplorerLive -j2 --timeout 900` | 94 of 94 pass (142 s) |
+| fault suite (`SaturnExplorerDecompilerFaultTests` alone) | 0 of 94 jobs failed (71 s); 17 MOVED pins re-pinned as printed earlier in the round (patch 0068 adds allocations ahead of them), none moved since |
+| generator grammar 2, seeds 1-3,000 | 0 failing |
+| generator grammar 1, seeds 1-1,000 | 0 failing |
+| generator printed-C, seeds 1-3,000 | 0 failing (the frame124 stream: 786 drawn, 518 compared, 0 frame writes lost) |
+| generator seeds 1-20,000 (four runs of 5,000) | 0 failing |
+| every `a3_round11/*.src` to `a3_round14/*.src` (and the round 11/12 `.spec`) through the driver, base and fix | 319 fixtures; every run line and oracle verdict identical to the base; the texts identical but for three, each right (below) |
+| corpora (`SE_GAME_HWRAM=<img> SE_GAME_LEND=1`) | section 9 |
+| vendoring: `python3 -I vendor.py <ghidra>` on a copy | exit 0, "vendored 84 library sources, 3 compiler sources, 94 headers, 5 spec files", 0068 applied, the tree identical to the committed one |
+
+The matrix found five things on the way, each fixed before this run: the three ledger false losses (pins J to L), the printed-C harness's underscore names (frame124 seeds 1529, 1651, 2229), and two of the save rule's edges (grammar 2 seeds 10032 and 11612, pins N and P).
+
+The three fixture texts that changed: `r12o.src` S6 global (r15 published in a global, reloaded, a local read through it) prints `return 5;` where the head printed `return axStack_10[0];` under "Heritage AFTER dead removal" (both right; the warning is gone); `r13b.src` R13-3.5's callee (the pointer to the caller's word spilled to a local and reloaded through a global) no longer prints `*in_stack_fffffffc = 7;`, a store through a stack input the head read because the spill had been removed (A3-124's class), and prints `return;` as its siblings R13-3.2 to 3.4 did at the head (the callee writes its caller's word; its signature is withheld for that, as before); `r14g.src` R14-9d (`trapa`) prints `xStack_20 = in_sr;`, the SR word the exception frame pushes, which the handler may read (the frame address is in r4).
+
+### 8. The corpus scan: every function whose text dropped a store
+
+The head has no frame records, so the scan runs the frame ledger over both save states with each engine fix reverted (the head's behaviour for that part, the records kept) and reads every function it names against the code; then the fixed tree.
+
+- **The collapse reverted (`E_front`, A3-127): 17 functions in each image built malformed pieces, 47 pieces in each.** hwram008 holds the same code as hwram007 at other addresses (the texts are equal but for the callee's address). All 17 are `-O0` struct builders: r4 to r7 spilled to the frame, an 8-byte struct S zeroed through a pointer kept in a frame slot, a constant byte at S+0, then bytes and halfwords of the spilled arguments at offsets 1 to 7, S handed to a call. Read against the code (the disassembly beside both texts): in **13 the head's text was wrong** -- 007 06021E54, 060223D0, 0602243C, 060224C0, 06022544, 060225C8, 06022638, 060226CC, 060228B4 (the row), 06022B10, 06022D88, 06022EC0, 06022F88; 008 06061330, 060618AC, 06061918, 0606199C, 06061A20, 06061AA4, 06061B14, 06061BA8, 06061D90, 06061FEC, 06062264, 0606239C, 06062464. 0602243C builds `61 00 r5.lo16 | r4.lo 00 r6.lo16` and the head printed `uStack_10 = param_2 & 0xffff; uStack_c = param_3 & 0xffff;` (the 0x61 and r4's byte lost); 06022B10 builds `46 r5.b r6.b r7.b | r4.b 00 00 00` and printed `uStack_10 = param_4 & 0xff;`; 060225C8 kept its constant word but lost r4's byte of the second. In **4 the malformed pieces simplified to the right value** (06021AB8, 06021DE4, 06022A30, 06022C24 and their copies 06060F94, 060612C0, 06061F0C, 06062100: `CONCAT13(0,CONCAT21(0x12,b)) << 0x10` is `12 b 00 00`). On the fixed tree all 34 print every byte (0602243C: `_xStack_10 = CONCAT22(0x6100,xStack_1c._2_2_); xStack_c = param_1 << 0x18; xStack_c = CONCAT22(xStack_c._0_2_,xStack_18._2_2_);`), checked byte by byte against the stores. They are A3-127's row.
+- **The delay's raise reverted (`E_bump`): 0 frame writes lost in either image.** The corpus function is A3-127's; no corpus function needs more than the one pass upstream raised.
+- **The call guard's force reverted (`E_hold` + `E_keep`, A3-128): 1, hwram008 060554B6** (`mov.l r2,@(4,r7)`, S+4 = 0 through the slot's pointer, three calls that may read S, S+4 written again after them): the head dropped `xStack_3c = 0`. Its row is A3-128.
+- **The fixed tree: 0 frame writes lost and 0 malformed pieces in both images.** The engine's frame records hold 3,191 (007) and 5,768 (008) writes that went unread, every one of them overwritten or never read by any later access of the flow (the ledger's byte-precise reach), and 0 and 2 frame accesses removed with unreachable code.
+
+### 9. The corpora
+
+`SE_GAME_HWRAM=<img> SE_GAME_LEND=1 SaturnExplorerSh2DecompilerTests <dir>`, the final tree against the base `f3c13b0` (built from the base's tree beside it, the decompiler suite only), one run each:
+
+| | hwram007 | hwram008 |
+|---|---|---|
+| lent signatures (parameters), base | 678 (956) | 1,038 (1,310) |
+| lent signatures (parameters), this fix | 678 (956) | 1,038 (1,310) |
+| ...real entries | 474 (645) of 999 | 724 (975) of 1,543 |
+| ...fragments | 204 (311) of 731 | 314 (335) of 1,452 |
+| a lent status that changed against the base | none | none |
+| `TestGameCode` texts changed | 39 of 839 | 48 of 1,554 |
+| `TestGameCode` | 9.7 s (base 10.5 s, 0.93x) | 31.9 s (base 33.7 s, 0.94x) |
+| ledger: accesses dropped / frame writes lost / malformed pieces | 0 / 0 / 0 | 0 / 0 / 0 |
+| missing and said / mapping violations | 0 / 0 | 4 / 0 |
+
+Every changed text was put in a class by a script and the classes read against the code (more than ten functions disassembled beside both texts):
+
+- **The A3-127 struct builders, 17 in each image** (section 8): 13 wrong at the base, now right; 4 right at both, the base's malformed pieces simplified away.
+- **060554B6 (hwram008, A3-128)**: `xStack_3c = 0;` before the calls that may read S, which the base dropped.
+- **A local the base merged with a register, printed as a frame write the code does not make** (007 0601D98A, 0602C886, 06030BAE, 060310DA; 008 their copies 0605CE66, 0606D34A, 060707C6, 06070CF2, and 06021ADE, 0605781A, 06057E5A, 06074054, 0600F898, 0600FF9C, 060731E2, 06073D58): the fix prints a register variable and the frame write only where the code makes it. 0601D98A: the head printed `xStack_c = 8;` and `return xStack_c;` for `mov #0x8,r0` (r0, never stored); 0602C886: `xStack_8 = xStack_8 + 0x7ff;` for `mov.l @r14,r7` and an add into r7; 060310DA: `iStack_c = iStack_c - *(param_1 + 8)` for `mov.l @r14,r1 ; sub r2,r1` (r1 stored to the object, not the frame). Same values either way at the return; the fix's are the code's.
+- **A store placed where the code makes it** (007 0601C9A6, 0601CA0A, 0601CA76, 0601CADA, 0601F42A; 008 their copies and 06047DD2, 0600D90E): 0601F42A's `iStack_18 = iVar2;` is now just before the call it is the fifth argument of (`mov.l r0,@-r15` before the `jsr`), where the head printed it at an earlier call on a path that never pushes it; 0601C9A6's `pxStack_c = &uStack_8;` moved into the branch whose call is handed the frame; 0600D90E's return value (`extu.b r9,r0` on four paths to the return) is copied after the calls that may write a local, not before them.
+- **Stores kept before a call that may read the escaped frame** (007 06019A56, 060126DA; 008 06058662): 06019A56 now prints `uStack_52 = param_2; auStack_50[0] = param_3; axStack_48[0] = in_stack_0000001f;`, the spills of its arguments into the locals whose addresses it keeps in frame slots, before calls the frame address reaches; the head dropped them.
+- **A frame word given a symbol of its own, declared and unused** (11 in 007, 10 in 008: 060218FC, 06031F86, ...; no statement changed): the layout of locals around a guarded word.
+
+The lending run's texts (`lend_after`) change in 66 and 80 files: the functions above, or the same code from a neighbouring entry (06022438 for 0602243C), in the same classes; and hwram007 06027420 (its flow halts at bad instruction data), whose SR word, written again after each of its calls, is printed at each one (`piStack_4 = extraout_sr_12;`): the frame escaped and every call may read it, so the guards hold them (more text, no value changed). The 2 lent signatures hwram007 lost with the first version of the save rule (060322D4, 06032490) are back: the base's and the fix's lending are identical in both images.
+
+### 10. Limits
+
+- **The frame ledger's forwarding is an approximation.** A value forwarded in another form marks every fold it was made from (walked back through any op, 64 at most): the walk can hide a loss, never invent one. Three false losses came from where the marks did not reach (a read forwarded before the stack was linked, a read through a STORE's guard, a call guard the alias analysis removed); each is fixed and pinned (J to L). A write destroyed by dead code before a marked reader of it could still be reported; the matrix and both corpora show none.
+- **The save rule is the SH-2's.** `isSavePush` reads the instruction word for the push forms; a callee that read its caller's save area through an escaped frame address would see a save the text dropped; none of the fixtures, generator seeds or corpus functions read here does. The frame ledger exempts the same pushes, so the two agree.
+- **Jumptable recovery takes no restart** (upstream's `ActionRestartGroup` returns at once during it): a read found late inside a jumptable's recovery is not restarted there; the function's own decompile has its own raises. No fixture reaches it.
+- **Kept though no test fails without them:** `E_hold` (the hold when the guard is made; `E_keep` alone covers the pins and corpora), `E_never` (the fail-closed delay after three raises; nothing raises three times), `E_wide` (whole words only; the push test implies it).
+- **More text where a frame escapes.** Stores before a call that may read the frame are printed (06019A56, 06027420's lending text); some locals the head folded into arrays are separate symbols. No lent signature changed.
+- **Mutation rows.** All but the call guard's were measured on `e20866e`, whose engine differs from the final one only in the save rule (section 6).
+- **A3-127 is upstream's bug**; it is not filed upstream from here.
+
