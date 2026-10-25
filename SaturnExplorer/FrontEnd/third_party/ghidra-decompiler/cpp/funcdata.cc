@@ -16,6 +16,7 @@
  * Modified for SaturnExplorer: the destructor frees the return-recovery state (patches/0004-funcdata-frees-active-output.patch).
  * Modified for SaturnExplorer: every LOAD and STORE's fate is recorded (patches/0017-access-fates.patch).
  * Modified for SaturnExplorer: the instructions and jump tables the flow recovered are recorded (patches/0021-flow-instructions.patch).
+ * Modified for SaturnExplorer: an access folded into the stack frame is flagged, and recorded again if a write goes with its value unread or the access with an unreachable block; a PIECE or SUBPIECE whose sizes do not add up is recorded (patches/0068-engine-deadcode-late-stack-reads.patch).
  */
 #include "funcdata.hh"
 
@@ -108,6 +109,10 @@ void Funcdata::clear(void)
   clearCallSpecs();
   clearJumpTables();
   accessFates.clear();		// SaturnExplorer: they describe the ops just destroyed
+  frameEscaped = false;		// SaturnExplorer (0068): ...and the escape found in them
+  frameCalls.clear();
+  guardReads.clear();
+  frameFoldsAllRead = false;
   flowInsns.clear();		// SaturnExplorer: the next flow records its own
   flowTables.clear();
   flowOps = 0;
@@ -231,6 +236,124 @@ void Funcdata::recordAccessFold(const PcodeOp *op,const Varnode *vn)
   Address addr;
   if (!isMemoryAccess(op,store,size,addr)) return;
   recordAccessFate(op,store,size,vn->getAddr(),fate_folded_ordinary);
+  // (0068) A flow LOAD or STORE of the stack frame lives on as a variable read or write. Its fold is no
+  // conservation unless the value reaches what reads it: the op is flagged, a reader that stays and is given
+  // another value in its place forwards it (noteFrameFoldForwarded), and opDestroy records the op again
+  // (fate_frame_unread) if it goes with its value never forwarded (A3-124's stores, removed before the read
+  // was found, or with the pieces of a wrong collapse, were counted as folded and nothing more).
+  if (op->getTime() < flowOps && vn->getSpace()->getType() == IPTR_SPACEBASE) {
+    op->setFrameFold();
+    // A STORE whose guard on these bytes was read (and the reader forwarded) before it was folded: its value was read.
+    for(vector<GuardReadRecord>::const_iterator iter=guardReads.begin();iter!=guardReads.end();++iter) {
+      if ((*iter).store != op || (*iter).space != vn->getSpace()) continue;
+      if ((*iter).offset < vn->getOffset() + vn->getSize() && vn->getOffset() < (*iter).offset + (*iter).size)
+	op->setFrameFoldRead();
+    }
+  }
+}
+
+/// SaturnExplorer (patches/0068-engine-deadcode-late-stack-reads.patch): heritage guards a stack local at the
+/// call (its effect on the local is unknown) and a frame address escaped, so the call may read it: a host's frame
+/// ledger takes the call for a read of those bytes. Only the flow's calls are kept, each range once.
+/// \param op is the call
+/// \param off is the local's offset in the stack space
+/// \param size is its size
+void Funcdata::noteFrameCall(const PcodeOp *op,uintb off,int4 size)
+
+{
+  if (op->getTime() >= flowOps) return;
+  for(vector<FrameCallRecord>::const_iterator iter=frameCalls.begin();iter!=frameCalls.end();++iter)
+    if ((*iter).time == op->getTime() && (*iter).offset == off && (*iter).size == size) return;
+  FrameCallRecord rec;
+  rec.time = op->getTime();
+  rec.offset = off;
+  rec.size = size;
+  frameCalls.push_back(rec);
+}
+
+/// SaturnExplorer (patches/0068-engine-deadcode-late-stack-reads.patch): the guard heritage put on a stack local at a
+/// call is removed because the local has no alias there (RuleAliasUpdate: no pointer to it can reach the call), so the
+/// call is no read of it: the records of the call that overlap the local go.
+/// \param op is the call
+/// \param off is the local's offset in the stack space
+/// \param size is its size
+void Funcdata::dropFrameCall(const PcodeOp *op,uintb off,int4 size)
+
+{
+  for(size_t i=frameCalls.size();i>0;--i) {
+    const FrameCallRecord &rec(frameCalls[i-1]);
+    if (rec.time != op->getTime() || rec.offset >= off + size || off >= rec.offset + rec.size) continue;
+    frameCalls.erase(frameCalls.begin() + (i-1));
+  }
+}
+
+/// SaturnExplorer (patches/0068-engine-deadcode-late-stack-reads.patch): the PIECEs and SUBPIECEs now in the
+/// function are checked for sizes that add up -- a PIECE's inputs to its output, a SUBPIECE's output and truncation
+/// within its input. One that does not is a value no instruction computed, and the accesses whose values flow
+/// through it are not conserved however the conservation records read: each is recorded once (fate_malformed_piece).
+/// Upstream's INDIRECT collapse made a PIECE of five bytes for a four-byte local when a byte was stored at offset 1 or 2
+/// of it (A3-124's corpus function, ledger A3-127), and the stores it held were later dropped with no record of a loss.
+/// Called after each heritage pass.
+void Funcdata::checkPieceSizes(void)
+
+{
+  for(int4 pass=0;pass<2;++pass) {
+    OpCode opc = (pass == 0) ? CPUI_PIECE : CPUI_SUBPIECE;
+    for(list<PcodeOp *>::const_iterator iter=beginOp(opc);iter!=endOp(opc);++iter)
+      checkPieceSize(*iter);
+  }
+}
+
+/// SaturnExplorer (patches/0068-engine-deadcode-late-stack-reads.patch): checkPieceSizes for one op, which may
+/// be of any kind (only a PIECE or SUBPIECE is checked). opCollapseIndirectsForCopy checks the pieces it makes as it
+/// makes them: the rules after it may simplify a malformed one away before the next heritage pass.
+/// \param op is the op
+void Funcdata::checkPieceSize(const PcodeOp *op)
+
+{
+  if (op->isDead() || op->getOut() == (Varnode *)0 || op->numInput() != 2) return;
+  if (op->code() != CPUI_PIECE && op->code() != CPUI_SUBPIECE) return;
+  const Varnode *a = op->getIn(0);
+  const Varnode *b = op->getIn(1);
+  if (a == (Varnode *)0 || b == (Varnode *)0) return;
+  bool bad;
+  if (op->code() == CPUI_PIECE)
+    bad = (a->getSize() + b->getSize() != op->getOut()->getSize());
+  else
+    bad = !b->isConstant() || b->getOffset() + (uintb)op->getOut()->getSize() > (uintb)a->getSize();
+  if (!bad) return;
+  for(vector<AccessRecord>::const_iterator r=accessFates.begin();r!=accessFates.end();++r)
+    if ((*r).fate == fate_malformed_piece && (*r).time == op->getTime()) return;
+  AccessRecord rec;
+  rec.time = op->getTime();
+  rec.pc = op->getAddr();
+  rec.store = false;
+  rec.size = op->getOut()->getSize();
+  rec.fate = fate_malformed_piece;
+  accessFates.push_back(rec);
+}
+
+/// SaturnExplorer (patches/0068-engine-deadcode-late-stack-reads.patch): a LOAD or STORE that
+/// RuleLoadVarnode or RuleStoreVarnode folded into the stack frame ends a second time. With
+/// \b fate_frame_unread, the op is being destroyed and its value was never forwarded (noteFrameFoldForwarded):
+/// every op that read it, directly or through MULTIEQUALs and INDIRECTs, was destroyed as dead. A host
+/// compares a write with the reads of the frame the code makes and the calls that may read it: one that
+/// reads a byte of it later, with no write of the frame between, read a value the analysis dropped; a read
+/// whose value nothing used (a register pop the engine takes for unaffected) is no such read. With \b fate_frame_removed, the read or write
+/// went with an unreachable block, so it is no read of the frame the code makes. The record repeats
+/// the frame offset and size of the fold (the COPY's output may have been replaced since).
+/// \param op is the COPY the LOAD or STORE became, still whole
+/// \param fate is how it ended
+void Funcdata::recordFrameEnd(const PcodeOp *op,AccessFate fate)
+
+{
+  for(vector<AccessRecord>::const_iterator iter=accessFates.begin();iter!=accessFates.end();++iter) {
+    if ((*iter).time != op->getTime() || (*iter).fate != fate_folded_ordinary) continue;
+    AccessRecord rec(*iter);
+    rec.fate = fate;
+    accessFates.push_back(rec);
+    return;
+  }
 }
 
 /// The comment is added to the global database, indexed via its placement address and

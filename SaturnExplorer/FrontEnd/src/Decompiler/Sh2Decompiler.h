@@ -298,8 +298,12 @@ struct AccessFate
     // FoldedOrdinary: made a direct read or write of ordinary memory, a variable the analysis may
     // forward or drop. Dead: removed as unused (or by a transformation that is none of the others).
     // Unreachable: removed with the unreachable block it was in. SwitchLookup: the read of a
-    // recovered switch's table; the switch stands for it.
-    enum Kind : uint8_t { FoldedOrdinary, Dead, Unreachable, SwitchLookup };
+    // recovered switch's table; the switch stands for it. Patch 0068, for an access folded into the
+    // function's own frame (recorded FoldedOrdinary first, 'frame' set): FrameUnread, a write went
+    // with its value read by nothing but the engine's markers -- it is lost if the code reads one of
+    // its bytes later (A3-124); FrameRemoved, the access went with an unreachable block. MalformedPiece: no access, a
+    // PIECE or SUBPIECE whose sizes do not add up (its instruction in 'insn'): the values through it are no code's (A3-127).
+    enum Kind : uint8_t { FoldedOrdinary, Dead, Unreachable, SwitchLookup, FrameUnread, FrameRemoved, MalformedPiece };
     uint32_t insn = 0;      // the instruction, canonical
     bool write = false;
     uint8_t size = 0;
@@ -311,6 +315,10 @@ struct AccessFate
     // reaches -- and constantAddress is false. It accounts for no bus access (A5-5: the offset -4 of
     // a pop was read as a register, and a pop was taken for the read in an rte's delay slot).
     bool frame = false;
+    // Where the access was when the flow was first followed (as MemoryAccess::origBlock and
+    // origOrder): -1 when the op is not one of the flow's LOADs or STOREs.
+    int origBlock = -1;
+    uint32_t origOrder = 0;
 };
 
 // A call in the final p-code: an access's order relative to it matters as much as to another access.
@@ -367,6 +375,17 @@ struct DecompileResult
     std::vector<InspectionTarget> inspectionTargets; // owned metadata only; never capture values or engine pointers
     std::vector<CallSite> calls;                      // the calls, for the ledger's order checks
     std::vector<std::vector<int>> flowSuccessors;     // the flow's basic blocks before any action: each one's successors
+    // The calls (their place in the flow as first followed, as MemoryAccess::origBlock and origOrder) the engine guarded a local
+    // of the frame at once a frame address escaped, with the local (its offset in the stack space, as AccessFate::address, and
+    // size): the call's effect on it is unknown and it may reach the frame, so it may read it (patch 0068). For the frame ledger.
+    struct FrameCall
+    {
+        int origBlock = -1;
+        uint32_t origOrder = 0;
+        uint32_t offset = 0;
+        uint32_t size = 0;
+    };
+    std::vector<FrameCall> frameCalls;
     // How each memory access the flow made that is no longer one in the p-code ended (the engine
     // records it, patch 0017). With the printed accesses above, they account for every LOAD and
     // STORE of the flow: an access of the all-volatile reference run (DecompileRequest::

@@ -19,6 +19,7 @@
  * Modified for SaturnExplorer: replacing an input of an op forgets what was known of its output's non-zero bits (patches/0046-engine-input-replaced-resets-nzmask.patch).
  * Modified for SaturnExplorer: and of the non-zero bits of what was worked out from that output (patches/0049-engine-nzmask-forgotten-downstream.patch).
  * Modified for SaturnExplorer: every change to an op keeps the non-zero and consume masks around it a superset of the truth, in place of 0046 and 0049 (patches/0054-engine-cached-masks-never-narrower.patch).
+ * Modified for SaturnExplorer: a STORE made a COPY splits the INDIRECT it covered in the middle of with the right first piece (patches/0068-engine-deadcode-late-stack-reads.patch).
  */
 #include "funcdata.hh"
 #include "flow.hh"
@@ -38,6 +39,89 @@ void Funcdata::opSetOpcode(PcodeOp *op,OpCode opc)
 #endif
   obank.changeOpcode(op, glb->inst[opc] );
   opMasksChanged(op);	// SaturnExplorer (patches/0054-engine-cached-masks-never-narrower.patch)
+}
+
+/// SaturnExplorer (patches/0068-engine-deadcode-late-stack-reads.patch): a frame read whose value is forwarded read
+/// the bytes through the guards STOREs put on them while their pointers were unresolved (a chain of INDIRECTs, each
+/// guarding a STORE, back from the read's input): each such STORE may be folded into those bytes later, after its
+/// reader went, and recordAccessFold then marks it read (frame124 seed 2595, a halfword read twice and xored with
+/// itself). Only that chain: the guard of a call between, or another reader's walk, is no read of the STORE's value
+/// (A3-128's store before a call, whose guard was read by the call's).
+/// \param vn is the stack Varnode the read reads
+void Funcdata::noteGuardRead(const Varnode *vn)
+
+{
+  const Varnode *v = vn;
+  for(int4 hops=0;hops<64 && v->isWritten();++hops) {
+    const PcodeOp *ind = v->getDef();
+    if (ind->code() != CPUI_INDIRECT || ind->numInput() != 2 || ind->getIn(0) == (Varnode *)0 || ind->getIn(1) == (Varnode *)0) return;
+    PcodeOp *iop = PcodeOp::getOpFromConst(ind->getIn(1)->getAddr());
+    if (iop == (PcodeOp *)0 || iop->code() != CPUI_STORE) return;
+    GuardReadRecord rec;
+    rec.store = iop;
+    rec.space = vn->getSpace();
+    rec.offset = vn->getOffset();
+    rec.size = vn->getSize();
+    bool have = false;
+    for(vector<GuardReadRecord>::const_iterator g=guardReads.begin();g!=guardReads.end();++g)
+      if ((*g).store == iop && (*g).space == rec.space && (*g).offset == rec.offset && (*g).size == rec.size) { have = true; break; }
+    if (!have) {
+      if (guardReads.size() >= 4096) {
+	frameFoldsAllRead = true;	// too many to keep: every fold is taken for read (the ledger may miss, never invent)
+	return;
+      }
+      guardReads.push_back(rec);
+    }
+    v = ind->getIn(0);
+  }
+}
+
+/// SaturnExplorer (patches/0068-engine-deadcode-late-stack-reads.patch): an op that stays reads another
+/// Varnode in place of the given one, or no longer reads it (propagation forwarded the value, a rule found it
+/// equal to something, folded it into a constant, or used it to simplify the op). What the old value was
+/// computed from was used: every LOAD or STORE folded into the stack frame that it was made from, through any
+/// op (a MULTIEQUAL or INDIRECT, a PIECE the frame's write went into, a constant folded from it), is no frame
+/// access gone unread when it is destroyed. A frame write whose readers were all destroyed as dead never has its
+/// value forwarded. A marker (MULTIEQUAL, INDIRECT) whose input is replaced forwards only that input's own fold:
+/// heritage relinks markers to other versions; totalReplace and totalReplaceConstant, which give every reader an
+/// equal value, walk for markers too. The walk back stops after 64 ops; every fold of this generation
+/// of the function is then taken as forwarded (the ledger may miss a loss, never report one that is none).
+/// A frame fold destroyed with its value forwarded passes the mark on to what it reads: a pop forwarded (into
+/// `r1 & 0`, made a constant) while the stack was not yet linked is later linked to its push, which is then read.
+/// A frame read the walk meets notes the STOREs whose guards it read through (noteGuardRead).
+/// \param walk is \b false when a MULTIEQUAL or INDIRECT read it and had it replaced (only its own fold is forwarded)
+/// \param vn is the Varnode no longer read
+void Funcdata::noteFrameFoldForwarded(bool walk,Varnode *vn)
+
+{
+  if (!vn->isWritten() || frameFoldsAllRead) return;
+  PcodeOp *def = vn->getDef();
+  if (!walk) {
+    if (def->isFrameFold())
+      def->setFrameFoldRead();
+    return;
+  }
+  vector<PcodeOp *> walked(1,def);
+  for(size_t k=0;k<walked.size();++k) {
+    PcodeOp *d = walked[k];
+    if (d->isFrameFold())
+      d->setFrameFoldRead();
+    if (d->isFrameFold() && d->code() == CPUI_COPY && d->numInput() == 1 && d->getIn(0) != (Varnode *)0 &&
+	d->getIn(0)->getSpace()->getType() == IPTR_SPACEBASE)
+      noteGuardRead(d->getIn(0));
+    int4 n = (d->code() == CPUI_INDIRECT) ? 1 : d->numInput();
+    for(int4 i=0;i<n;++i) {
+      Varnode *in = d->getIn(i);
+      if (in == (Varnode *)0 || !in->isWritten()) continue;
+      PcodeOp *e = in->getDef();
+      if (find(walked.begin(),walked.end(),e) != walked.end()) continue;
+      if (walked.size() >= 64) {
+	frameFoldsAllRead = true;
+	return;
+      }
+      walked.push_back(e);
+    }
+  }
 }
 
 // SaturnExplorer (patches/0054-engine-cached-masks-never-narrower.patch): the cached masks of a Varnode.
@@ -397,8 +481,11 @@ void Funcdata::opSetInput(PcodeOp *op,Varnode *vn,int4 slot)
   if (opactdbg_active)
     debugModCheck(op);
 #endif
-  if (op->getIn(slot) != (Varnode *)0)
+  if (op->getIn(slot) != (Varnode *)0) {
+    // SaturnExplorer (0068): a reader of a frame fold's value now reads another Varnode in its place
+    noteFrameFoldForwarded(!isMarkerOrUnbuilt(op),op->getIn(slot));
     opUnsetInput(op,slot);
+  }
 
   vn->addDescend(op);		// Add this op to list of vn's descendants
   op->setInput(vn,slot);	// op must be up to date AFTER calling descend_add
@@ -500,6 +587,10 @@ void Funcdata::opDestroy(PcodeOp *op)
   Address accaddr;
   if (!accessesRecorded && isMemoryAccess(op,isstore,accsize,accaddr))
     recordAccessFate(op,isstore,accsize,accaddr,op->isJumptableLookup() ? fate_switch_lookup : fate_dead);
+  else if (!accessesRecorded && op->isFrameFold() && !op->isFrameFoldRead() && !frameFoldsAllRead)
+    recordFrameEnd(op,fate_frame_unread);	// SaturnExplorer (0068): a frame write going with its value unread
+  else if (!accessesRecorded && op->isFrameFold() && op->numInput() == 1 && op->getIn(0) != (Varnode *)0)
+    noteFrameFoldForwarded(true,op->getIn(0));	// (0068) a frame read whose value was used: so was what it read (see there)
   if (op->getOut() != (Varnode *)0)
     destroyVarnode(op->getOut());
   for(int4 i=0;i<op->numInput();++i) {
@@ -566,8 +657,10 @@ void Funcdata::opSetAllInput(PcodeOp *op,const vector<Varnode *> &vvec)
     debugModCheck(op);
 #endif
   for(i=0;i<op->numInput();++i)
-    if (op->getIn(i) != (Varnode *)0)
+    if (op->getIn(i) != (Varnode *)0) {
+      noteFrameFoldForwarded(!isMarkerOrUnbuilt(op),op->getIn(i));	// SaturnExplorer (0068)
       opUnsetInput(op,i);
+    }
 
   op->setNumInputs( vvec.size() );
 
@@ -587,6 +680,8 @@ void Funcdata::opRemoveInput(PcodeOp *op,int4 slot)
   if (opactdbg_active)
     debugModCheck(op);
 #endif
+  if (op->getIn(slot) != (Varnode *)0)	// SaturnExplorer (0068): the op stays, simplified without it
+    noteFrameFoldForwarded(!isMarkerOrUnbuilt(op),op->getIn(slot));
   opUnsetInput(op,slot);
   op->removeInput(slot);
   opMasksChanged(op);	// SaturnExplorer (patches/0054-engine-cached-masks-never-narrower.patch)
@@ -1672,7 +1767,10 @@ void Funcdata::opCollapseIndirectsForCopy(PcodeOp *copyOp)
 	  int4 byteOff = (vn2->getSpace()->isBigEndian()) ? vn2->getSize() - bytesBefore : 0;
 	  PcodeOp *subBefore = newOp(2,op->getAddr());
 	  opSetOpcode(subBefore,CPUI_SUBPIECE);
-	  frontVn = newVarnodeOut(bytesAfter,vn2->getAddr(),subBefore);
+	  // SaturnExplorer (0068): the piece before the COPY's bytes is bytesBefore long. Upstream made it
+	  // bytesAfter long, so a byte stored at offset 1 or 2 of a guarded word (one before, two after) read
+	  // back as the word's top two bytes, the stored byte a byte late and five bytes in all (A3-124)
+	  frontVn = newVarnodeOut(bytesBefore,vn2->getAddr(),subBefore);
 	  opSetInput(subBefore,invn,0);
 	  opSetInput(subBefore,newConstant(4,byteOff),1);
 	  opInsertAfter(subBefore, insertPoint);
@@ -1728,6 +1826,16 @@ void Funcdata::opCollapseIndirectsForCopy(PcodeOp *copyOp)
 	opSetInput(op,frontVn,frontSlot);
 	opSetInput(op,backVn,1-frontSlot);
 	opInsertAfter(op, insertPoint);
+	// SaturnExplorer (0068): the pieces made here add up (A3-127 was a front piece of the wrong size)
+	checkPieceSize(op);
+	for(int4 k=0;k<op->numInput();++k) {
+	  const Varnode *piece = op->getIn(k);
+	  if (!piece->isWritten()) continue;
+	  const PcodeOp *pop = piece->getDef();
+	  checkPieceSize(pop);
+	  for(int4 j=0;j<pop->numInput();++j)
+	    if (pop->getIn(j) != (Varnode *)0 && pop->getIn(j)->isWritten()) checkPieceSize(pop->getIn(j)->getDef());
+	}
 	continue;
       }
       // Convert INDIRECT to COPY
@@ -1768,6 +1876,8 @@ void Funcdata::opCollapseIndirectsForAlias(PcodeOp *effectOp)
       shouldDestroy = true;
 
     if (shouldDestroy) {
+      if (op->getOut()->getSpace()->getType() == IPTR_SPACEBASE)
+	dropFrameCall(effectOp,op->getOut()->getOffset(),op->getOut()->getSize());	// SaturnExplorer (0068): no read of it
       totalReplace(op->getOut(),op->getIn(0));
       if (iter == bb->beginOp()) {
 	opDestroy(op);		// Get rid of the INDIRECT

@@ -18,6 +18,7 @@
  * Modified for SaturnExplorer: a Varnode that takes over the readers of another is consumed in the bits the other was (patches/0051-engine-replaced-varnode-consume-merged.patch).
  * Modified for SaturnExplorer: the stack pointer on entry is taken to be aligned to a longword, not to 256 (patches/0052-engine-stack-pointer-longword-aligned.patch).
  * Modified for SaturnExplorer: a new output keeps the cached masks around its op a superset of the truth; totalReplace leaves that to opSetInput (patches/0054-engine-cached-masks-never-narrower.patch).
+ * Modified for SaturnExplorer: a Varnode replaced everywhere by an equal value forwards the frame folds it was made from (patches/0068-engine-deadcode-late-stack-reads.patch).
  */
 #include "funcdata.hh"
 
@@ -1560,6 +1561,9 @@ void Funcdata::totalReplace(Varnode *vn,Varnode *newvn)
   // SaturnExplorer: newvn is consumed in every bit a reader of vn takes of it. Patch 0051 merged the consume mask of vn into
   // newvn here; opSetInput now widens newvn's mask by what each reader it gains takes, which is the same fact for each
   // reader and holds for every other way a Varnode gains one (patches/0054-engine-cached-masks-never-narrower.patch).
+  // SaturnExplorer (0068): every reader, a marker too, now reads an equal value: what vn was made from is used.
+  if (!vn->hasNoDescend())
+    noteFrameFoldForwarded(true,vn);
   iter = vn->beginDescend();
   while(iter != vn->endDescend()) {
     op = *iter++;	       // Increment before removing descendant
@@ -1584,6 +1588,9 @@ void Funcdata::totalReplaceConstant(Varnode *vn,uintb val)
   Varnode *newrep;
   int4 i;
 
+  // SaturnExplorer (0068): every reader, a marker too, now reads the constant vn equals: what vn was made from is used.
+  if (!vn->hasNoDescend())
+    noteFrameFoldForwarded(true,vn);
   iter = vn->beginDescend();
   while(iter != vn->endDescend()) {
     op = *iter++;		// Increment before removing descendant

@@ -16,6 +16,7 @@
  * Modified for SaturnExplorer: every LOAD and STORE's fate is recorded (patches/0017-access-fates.patch).
  * Modified for SaturnExplorer: the instructions and jump tables the flow recovered are recorded (patches/0021-flow-instructions.patch).
  * Modified for SaturnExplorer: an op that changes keeps the cached masks around it a superset of the truth (patches/0054-engine-cached-masks-never-narrower.patch).
+ * Modified for SaturnExplorer: a write folded into the stack frame whose value nothing read is recorded when it goes (patches/0068-engine-deadcode-late-stack-reads.patch).
  */
 #ifndef __FUNCDATA_HH__
 #define __FUNCDATA_HH__
@@ -51,7 +52,10 @@ enum AccessFate {
   fate_folded_ordinary,		///< Made a direct read or write (a COPY) of ordinary memory: a variable, not a volatile location
   fate_dead,			///< Destroyed as dead, or by any transformation that is not one of the others
   fate_unreachable,		///< Destroyed with the unreachable block it was in
-  fate_switch_lookup		///< The read of a recovered switch's table: the switch stands for it
+  fate_switch_lookup,		///< The read of a recovered switch's table: the switch stands for it
+  fate_frame_unread,		///< (0068) A read or write folded into the stack frame (recorded fate_folded_ordinary first), destroyed with its value never forwarded
+  fate_frame_removed,		///< (0068) A read or write folded into the stack frame (recorded fate_folded_ordinary first) that went with an unreachable block
+  fate_malformed_piece		///< (0068) A PIECE or SUBPIECE whose sizes do not add up: what flows through it is no value of the code's
 };
 
 /// \brief One memory access of the flow and how it ended (SaturnExplorer)
@@ -62,6 +66,21 @@ struct AccessRecord {
   bool store;			///< \b true for a write, \b false for a read
   int4 size;			///< Number of bytes accessed
   AccessFate fate;		///< How it ended
+};
+
+/// \brief A call of the flow that heritage guarded a stack local at: it may read it (SaturnExplorer, 0068)
+struct FrameCallRecord {
+  uintm time;			///< PcodeOp::getTime() of the call
+  uintb offset;			///< The local's offset in the stack space
+  int4 size;			///< ...and its size
+};
+
+/// \brief A range read through the guard a STORE put on it, before the STORE was folded (SaturnExplorer, 0068)
+struct GuardReadRecord {
+  const PcodeOp *store;		///< The STORE
+  AddrSpace *space;		///< The space of the range read
+  uintb offset;			///< The range's offset
+  int4 size;			///< ...and its size
 };
 
 /// \brief One instruction the flow translated (SaturnExplorer)
@@ -131,6 +150,10 @@ class Funcdata {
   vector<FlowInsn> flowInsns;	///< Every instruction the last flow translated, before any action removed code (SaturnExplorer); cleared with the function
   uintm flowOps = 0;		///< The ops with a lower time were made by the flow; the rest by rules and actions (SaturnExplorer)
   bool accessesRecorded = false;	///< Set while a block is removed: its accesses were recorded before any op was destroyed
+  mutable bool frameEscaped = false;	///< SaturnExplorer (0068): a frame address escaped (FrameEscape) in this generation of the function
+  vector<GuardReadRecord> guardReads;	///< SaturnExplorer (0068): ranges read through a STORE's guard, for its fold
+  vector<FrameCallRecord> frameCalls;	///< SaturnExplorer (0068): the flow's calls heritage guarded a stack local at, in this generation
+  bool frameFoldsAllRead = false;	///< SaturnExplorer (0068): a walk of noteFrameFoldForwarded passed its bound: no fold is recorded unread
 
   VarnodeBank vbank;		///< Container of Varnode objects for \b this function
   PcodeOpBank obank;		///< Container of PcodeOp objects for \b this function
@@ -218,9 +241,21 @@ public:
   bool isMemoryAccess(const PcodeOp *op,bool &store,int4 &size,Address &addr) const;	///< Is the op a memory access, and of what (SaturnExplorer)
   void recordAccessFate(const PcodeOp *op,bool store,int4 size,const Address &addr,AccessFate fate);	///< Record how a memory access ended (SaturnExplorer)
   void recordAccessFold(const PcodeOp *op,const Varnode *vn);	///< Record a LOAD or STORE made a direct access of ordinary memory (SaturnExplorer)
+  void recordFrameEnd(const PcodeOp *op,AccessFate fate);	///< Record how an access folded into the stack frame ended (SaturnExplorer, 0068)
+  void noteFrameFoldForwarded(bool walk,Varnode *vn);
+  void checkPieceSizes(void);	///< Record each PIECE and SUBPIECE whose sizes do not add up (SaturnExplorer, 0068)
+  void checkPieceSize(const PcodeOp *op);	///< ...for one op (SaturnExplorer, 0068)	///< Mark the frame folds a replaced input came from as forwarded (SaturnExplorer, 0068)
+  /// \brief SaturnExplorer (0068): is the op a MULTIEQUAL or INDIRECT, or not yet given an op-code
+  static bool isMarkerOrUnbuilt(const PcodeOp *op) { return op->getOpcode() == (TypeOp *)0 || op->code() == CPUI_MULTIEQUAL || op->code() == CPUI_INDIRECT; }
   const vector<FlowTable> &getFlowTables(void) const { return flowTables; }	///< Every indirect jump the last flow recovered (SaturnExplorer)
   const vector<FlowInsn> &getFlowInsns(void) const { return flowInsns; }	///< Every instruction the last flow translated (SaturnExplorer)
   const vector<AccessRecord> &getAccessFates(void) const { return accessFates; }	///< Every LOAD and STORE that ended, and how (SaturnExplorer)
+  void noteFrameEscaped(void) const { frameEscaped = true; }	///< SaturnExplorer (0068): FrameEscape found a frame address escaped
+  void noteFrameCall(const PcodeOp *op,uintb off,int4 size);	///< SaturnExplorer (0068): the call has a guard on a stack local (it may read it)
+  void noteGuardRead(const Varnode *vn);	///< SaturnExplorer (0068): a frame read through STOREs' guards
+  void dropFrameCall(const PcodeOp *op,uintb off,int4 size);	///< SaturnExplorer (0068): the guard went with the local's alias
+  const vector<FrameCallRecord> &getFrameCalls(void) const { return frameCalls; }	///< SaturnExplorer (0068): the flow's calls with a guard on a stack local
+  bool hasFrameEscaped(void) const { return frameEscaped; }	///< SaturnExplorer (0068): did a frame address escape, so a call may read the locals
   void warning(const string &txt,const Address &ad) const;	///< Add a warning comment in the function body
   void warningHeader(const string &txt) const;			///< Add a warning comment as part of the function header
   void startProcessing(void);					///< Start processing for this function

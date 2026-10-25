@@ -16,6 +16,7 @@
  * Modified for SaturnExplorer: host cancellation check-points (patches/0001-cancel-flag.patch).
  * Modified for SaturnExplorer: a cloned action tree that cannot be completed or registered is freed (patches/0032-allocation-failure-order-2.patch).
  * Modified for SaturnExplorer: a repeating action stops, with a warning, after a bounded number of passes (patches/0055-engine-action-repeats-bounded.patch).
+ * Modified for SaturnExplorer: a restart group allows one more restart for each raise of a dead code delay (patches/0068-engine-deadcode-late-stack-reads.patch).
  */
 #include "action.hh"
 #include "funcdata.hh"
@@ -612,7 +613,10 @@ int4 ActionRestartGroup::apply(Funcdata &data)
     if (data.isJumptableRecoveryOn()) // Don't restart within jumptable recovery
       return 0;
     curstart += 1;
-    if (curstart > maxrestarts) {
+    // SaturnExplorer (patches/0068-engine-deadcode-late-stack-reads.patch): each raise of a dead code delay
+    // (Heritage::bumpDeadcodeDelay, itself bounded) is a restart the output needs to be right; not taking
+    // it leaves a write removed before its read was found.
+    if (curstart > maxrestarts + data.getOverride().numDeadcodeBumps()) {
       data.warningHeader("Exceeded maximum restarts with more pending");
       curstart = -1;
       return 0;

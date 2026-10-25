@@ -24,6 +24,7 @@
  * Modified for SaturnExplorer: so does a save slot an indexed store's guard covers (patches/0063-engine-frame-escape-unknown-pointers.patch).
  * Modified for SaturnExplorer: the walk down's bound keeps a stack parameter reference (patches/0066-engine-frame-escape-inexact.patch).
  * Modified for SaturnExplorer: ActionLateDoNothing tests each block again against the graph the earlier removals left, so the two empty arms of one branch are not both removed (patches/0067-engine-round14-sign-mod-late-donothing-three-way-shift-sub.patch).
+ * Modified for SaturnExplorer: a call's INDIRECT on a local of an escaped frame keeps its address force (patches/0068-engine-deadcode-late-stack-reads.patch).
  */
 #include "coreaction.hh"
 #include "condexe.hh"
@@ -4063,6 +4064,92 @@ bool ActionDeadCode::lastChanceLoad(Funcdata &data,vector<Varnode *> &worklist)
   return res;
 }
 
+/// SaturnExplorer (patches/0068-engine-deadcode-late-stack-reads.patch): is the Varnode the INDIRECT a call
+/// puts on a local of a frame whose address escaped? The call may read the value before it, so its address force
+/// stays whether or not the value is a direct write yet: a STORE through a pointer kept in a frame slot is
+/// folded into a direct write passes later, and the force cleared before then was never set again.
+/// But for the save of a callee-saved register (a push of the whole entry value of r8 to r14, PR, SR, GBR, VBR, MACH or
+/// MACL: isSavePush, written before the calls, the stores that may reach it and the joins of the paths): no callee is handed the save area, and keeping every push as a local write
+/// would also have the lending trials take the function for one that reads those registers.
+/// \param data is the function
+/// \param vn is the Varnode
+/// \return \b true if its address force must stay
+/// SaturnExplorer (patches/0068-engine-deadcode-late-stack-reads.patch): is the instruction at the address a push of
+/// the given register's whole entry value to the stack, and the register one a callee saves? The SH-2's push forms:
+/// `mov.l Rm,@-r15` for r8 to r14, `sts.l` MACH, MACL or PR and `stc.l` SR, GBR or VBR to `@-r15` (the frame ledger's
+/// own list of saves). A copy of the register stored with another instruction is data.
+/// \param data is the function
+/// \param addr is the instruction's address
+/// \param src is the register's entry value
+/// \return \b true for such a push
+bool ActionDeadCode::isSavePush(const Funcdata &data,const Address &addr,const Varnode *src)
+
+{
+  uint1 buf[2];
+  try {
+    data.getArch()->loader->loadFill(buf,2,addr);
+  }
+  catch(DataUnavailError &err) {
+    return false;
+  }
+  uint4 w = ((uint4)buf[0] << 8) | buf[1];
+  string want;
+  if ((w & 0xFF0F) == 0x2F06) {
+    uint4 m = (w >> 4) & 15;
+    if (m < 8 || m > 14) return false;
+    ostringstream s;
+    s << 'r' << m;
+    want = s.str();
+  }
+  else if (w == 0x4F02) want = "mach";
+  else if (w == 0x4F12) want = "macl";
+  else if (w == 0x4F22) want = "pr";
+  else if (w == 0x4F03) want = "sr";
+  else if (w == 0x4F13) want = "gbr";
+  else if (w == 0x4F23) want = "vbr";
+  else
+    return false;
+  return data.getArch()->translate->getRegisterName(src->getSpace(),src->getOffset(),src->getSize()) == want;
+}
+
+bool ActionDeadCode::callMayReadFrame(const Funcdata &data,const Varnode *vn)
+
+{
+  if (!data.hasFrameEscaped() || !vn->isWritten() || vn->getSpace()->getType() != IPTR_SPACEBASE) return false;
+  const PcodeOp *op = vn->getDef();
+  if (op->code() != CPUI_INDIRECT || op->isIndirectStore()) return false;
+  const PcodeOp *iop = PcodeOp::getOpFromConst(op->getIn(1)->getAddr());
+  if (iop == (const PcodeOp *)0 || !iop->isCall()) return false;
+  // Back through the guards before (of calls, and of STOREs whose pointers may reach the local) and the joins of the
+  // paths (a loop), to its writes: every one must be such a save.
+  vector<const Varnode *> todo(1,op->getIn(0));
+  vector<const PcodeOp *> seen;
+  while(!todo.empty()) {
+    const Varnode *val = todo.back();
+    todo.pop_back();
+    if (val == (const Varnode *)0 || !val->isWritten()) return true;
+    const PcodeOp *def = val->getDef();
+    if (find(seen.begin(),seen.end(),def) != seen.end()) continue;
+    if (seen.size() >= 256) return true;
+    seen.push_back(def);
+    if (def->code() == CPUI_INDIRECT) {
+      todo.push_back(def->getIn(0));
+      continue;
+    }
+    if (def->code() == CPUI_MULTIEQUAL) {
+      for(int4 k=0;k<def->numInput();++k)
+	todo.push_back(def->getIn(k));
+      continue;
+    }
+    if (def->code() != CPUI_COPY || def->numInput() != 1) return true;
+    const Varnode *src = def->getIn(0);
+    if (src == (const Varnode *)0 || !src->isInput() || src->getSpace()->getType() != IPTR_PROCESSOR) return true;
+    if (src->getSize() != 4 || def->getOut()->getSize() != 4) return true;	// a whole register in a whole word, as a push writes it
+    if (!isSavePush(data,def->getAddr(),src)) return true;
+  }
+  return false;
+}
+
 int4 ActionDeadCode::apply(Funcdata &data)
 
 {
@@ -4082,7 +4169,7 @@ int4 ActionDeadCode::apply(Funcdata &data)
     vn->clearConsumeList();
     vn->clearConsumeVacuous();
     vn->setConsume(0);
-    if (vn->isAddrForce()&&(!vn->isDirectWrite()))
+    if (vn->isAddrForce()&&(!vn->isDirectWrite())&&!callMayReadFrame(data,vn))
       vn->clearAddrForce();
   }
 

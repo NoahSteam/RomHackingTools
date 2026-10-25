@@ -16,6 +16,7 @@
  * Modified for SaturnExplorer: host cancellation check-points (patches/0001-cancel-flag.patch).
  * Modified for SaturnExplorer: every LOAD and STORE's fate is recorded (patches/0017-access-fates.patch).
  * Modified for SaturnExplorer: a jump-table is owned from the moment it is made (patches/0040-jumptable-tracedag-allocation-failure.patch).
+ * Modified for SaturnExplorer: an access folded into the stack frame that goes with an unreachable block is recorded (patches/0068-engine-deadcode-late-stack-reads.patch).
  */
 #include "funcdata.hh"
 #include "flow.hh"
@@ -327,6 +328,8 @@ void Funcdata::blockRemoveInternal(BlockBasic *bb,bool unreachable)
     Address accaddr;
     if (isMemoryAccess(*iter,isstore,accsize,accaddr))
       recordAccessFate(*iter,isstore,accsize,accaddr,unreachable ? fate_unreachable : fate_dead);
+    else if ((*iter)->isFrameFold() && unreachable)
+      recordFrameEnd(*iter,fate_frame_removed);	// (0068) an access of the frame the code no longer makes
   }
   accessesRecorded = true;
   desc_warning = false;

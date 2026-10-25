@@ -19,6 +19,7 @@
  * Modified for SaturnExplorer: once the frame escapes, a pointer not proved to be no frame address may be one (patches/0063-engine-frame-escape-unknown-pointers.patch).
  * Modified for SaturnExplorer: the escape's lowest frame offset never rises over the queries of a function (patches/0065-engine-frame-escape-whole-frame.patch).
  * Modified for SaturnExplorer: a frame address that is not an exact offset from the frame base escapes, unless a loop only steps it up (patches/0066-engine-frame-escape-inexact.patch).
+ * Modified for SaturnExplorer: the dead code delay a late read asks for, and its bound (patches/0068-engine-deadcode-late-stack-reads.patch).
  */
 /// \file heritage.hh
 /// \brief Utilities for building Static Single Assignment (SSA) form 
@@ -312,6 +313,7 @@ class Heritage {
   vector<int4> depth;		///< Dominator depth of individual blocks
   int4 maxdepth;		///< Maximum depth of the dominator tree
   int4 pass;			///< Current pass being executed
+  bool deadcodeBumped;		///< SaturnExplorer (0068): a dead code delay was raised in this generation (one restart's worth)
 
   PriorityQueue pq;		///< Priority queue for phi-node placement
   vector<FlowBlock *> merge;	///< Calculate merge points (blocks containing phi-nodes)
@@ -380,6 +382,9 @@ class Heritage {
   void visitIncr(FlowBlock *qnode,FlowBlock *vnode);
   void calcMultiequals(const vector<Varnode *> &write);
   void renameRecurse(BlockBasic *bl,VariableStack &varstack);
+  /// SaturnExplorer (0068): raises of a dead code delay before dead code never runs in the space
+  static const int4 maxDeadcodeBumps = 3;
+  static const int4 noDeadcodeDelay = 0x10000;	///< SaturnExplorer (0068): a delay no count of heritage passes reaches
   void bumpDeadcodeDelay(AddrSpace *spc);
   void placeMultiequals(void);
   void rename(void);

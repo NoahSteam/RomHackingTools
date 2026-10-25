@@ -19,6 +19,7 @@
  * Modified for SaturnExplorer: once the frame escapes, a STORE through a pointer not proved to be no frame address is guarded (patches/0063-engine-frame-escape-unknown-pointers.patch).
  * Modified for SaturnExplorer: the escape's lowest frame offset is the lowest any query saw, so it never rises, and a pointer a loop steps down from an unbounded index is guarded below its base (patches/0065-engine-frame-escape-whole-frame.patch).
  * Modified for SaturnExplorer: a frame address that is no exact offset from the frame base escapes, unless a loop only steps it up, and the guard of an access through one covers the stack space (patches/0066-engine-frame-escape-inexact.patch).
+ * Modified for SaturnExplorer: a read found after dead code ran in its space delays dead code past the pass that found it, as often as needed, failing closed; whether a frame address escaped forces a call's guard on a local, and the calls guarded at a local are kept for a host (patches/0068-engine-deadcode-late-stack-reads.patch).
  */
 #include "heritage.hh"
 #include "funcdata.hh"
@@ -227,6 +228,7 @@ Heritage::Heritage(Funcdata *data)
 {
   fd = data;
   pass = 0;
+  deadcodeBumped = false;
   maxdepth = -1;
 }
 
@@ -1575,6 +1577,7 @@ void FrameEscape::compute(const Funcdata *fd,AddrSpace *spc,bool preHeritage)
   }
   if (haveLowest && scope != (const ScopeLocal *)0) scope->setFrameFloor(lowest);
   if (leftFlow) markUnknownStores(fd);
+  if (escaped) fd->noteFrameEscaped();	// (0068) for a host's frame ledger: any call may read the frame's locals
 }
 
 /// SaturnExplorer (patches/0063-engine-frame-escape-unknown-pointers.patch): once a frame address has escaped, any pointer whose origin
@@ -2304,6 +2307,11 @@ void Heritage::guardCalls(uint4 fl,const Address &addr,int4 size,vector<Varnode 
   uint4 effecttype;
 
   bool holdind = ((fl&Varnode::addrtied)!=0);
+  // SaturnExplorer (0068): once a frame address escaped, a call may read any local, whatever the scope says of the
+  // range yet (a STORE through a pointer kept in a frame slot resolves passes later, and the store before the call
+  // went with the call's INDIRECT when nothing forced it: hwram008 060554B6)
+  if (addr.getSpace()->getType() == IPTR_SPACEBASE && fd->hasFrameEscaped())
+    holdind = true;
   for(int4 i=0;i<fd->numCalls();++i) {
     fc = fd->getCallSpecs(i);
     if (fc->getOp()->isAssignment()) {
@@ -2365,6 +2373,20 @@ void Heritage::guardCalls(uint4 fl,const Address &addr,int4 size,vector<Varnode 
     }
     // We do not guard the call if the effect is "unaffected" or "reload"
     if ((effecttype == EffectRecord::unknown_effect)||(effecttype == EffectRecord::return_address)) {
+      // SaturnExplorer (0068): for a host's frame ledger, this call may read the local once a frame address escaped
+      // (before that a callee reads the caller's frame only through its stack parameters, which the trials decide),
+      // unless the local lies wholly below the stack pointer the callee is entered with (the callee's own space)
+      if (spc->getType() == IPTR_SPACEBASE && fd->hasFrameEscaped()) {
+	bool below = false;
+	if (fc->getSpacebaseOffset() != FuncCallSpecs::offset_unknown) {
+	  intb rel = (intb)off;
+	  int4 bits = 8 * spc->getAddrSize();
+	  if (bits < 64 && ((off >> (bits - 1)) & 1) != 0) rel = (intb)(off | (~(uintb)0 << bits));
+	  below = rel + size <= 0;
+	}
+	if (!below)
+	  fd->noteFrameCall(fc->getOp(),addr.getOffset(),size);
+      }
       indop = fd->newIndirectOp(fc->getOp(),addr,size,0);
       indop->getIn(0)->setActiveHeritage();
       indop->getOut()->setActiveHeritage();
@@ -3411,20 +3433,41 @@ void Heritage::renameRecurse(BlockBasic *bl,VariableStack &varstack)
 /// \brief Increase the heritage delay for the given AddrSpace and request a restart
 ///
 /// If applicable, look up the heritage stats for the address space
-/// and increment the delay.  The address space must allow an additional
-/// delay and can only be incremented once.  If the increment succeeds, the
+/// and increment the delay.  If the increment succeeds, the
 /// function is marked as having a \e restart pending.
+///
+/// SaturnExplorer (patches/0068-engine-deadcode-late-stack-reads.patch): this is called when a read
+/// is linked in after dead code already ran in its space, so a write it reads may be gone (it had no
+/// reader when dead code looked). Upstream bumped the delay once, by one pass, and not at all when a
+/// delay was installed or the space had a global one; a read found two passes late -- a LOAD whose
+/// pointer is a frame address kept in a stack slot, which resolves a pass after the slot is linked
+/// and another pass after each STORE whose guard covers the slot -- was linked to the frame's input
+/// on the restart, and the bytes stored there were lost with no warning in the text (ledger A3-124).
+/// Now the delay is raised past the pass that found the read (dead code runs only after that pass
+/// is linked), whenever the delay in force is not already past it. The raises of one generation of the
+/// function are one restart's (the delay is the latest pass any of them asked for). After
+/// \b maxDeadcodeBumps restarts it is set so that dead code never runs in the space (failing closed:
+/// the writes stay). The restart group allows one more restart per raise (ActionRestartGroup::apply).
 /// \param spc is the given AddrSpace
 void Heritage::bumpDeadcodeDelay(AddrSpace *spc)
 
 {
   if ((spc->getType() != IPTR_PROCESSOR)&&(spc->getType() != IPTR_SPACEBASE))
     return;			// Not the right kind of space
-  if (spc->getDelay() != spc->getDeadcodeDelay())
-    return;			// there is already a global delay
-  if (fd->getOverride().hasDeadcodeDelay(spc))
-    return;			// A delay has already been installed
-  fd->getOverride().insertDeadcodeDelay(spc,spc->getDeadcodeDelay()+1);
+  Override &over(fd->getOverride());
+  int4 have = getInfo(spc)->deadcodedelay;	// the delay this pass runs with
+  int4 installed = over.getDeadcodeDelay(spc);	// ...or one this pass already asked for
+  if (installed > have) have = installed;
+  int4 want = (pass > have) ? pass : have + 1;	// no dead code in the space until this pass is linked
+  // Raises in one generation are one restart: the bound counts generations, the delay is the latest pass asked for
+  if (over.numDeadcodeBumps() >= maxDeadcodeBumps + (deadcodeBumped ? 1 : 0))
+    want = noDeadcodeDelay;
+  if (want <= have)
+    return;			// dead code never runs in the space already
+  over.insertDeadcodeDelay(spc,want);
+  if (!deadcodeBumped)
+    over.noteDeadcodeBump();
+  deadcodeBumped = true;
   fd->setRestartPending(true);
 }
 
@@ -3602,6 +3645,7 @@ void Heritage::heritage(void)
   analyzeNewLoadGuards();
   widenEscapedStoreGuards();	// SaturnExplorer (patches/0061-engine-stack-frame-escape.patch)
   handleNewLoadCopies();
+  fd->checkPieceSizes();	// SaturnExplorer (patches/0068-engine-deadcode-late-stack-reads.patch)
   if (pass == 0)
     splitmanage.splitAdditional();
   pass += 1;
@@ -3728,6 +3772,7 @@ void Heritage::clear(void)
   storeGuard.clear();
   maxdepth = -1;
   pass = 0;
+  deadcodeBumped = false;
 }
 
 } // End namespace ghidra

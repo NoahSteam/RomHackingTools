@@ -12,6 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified for SaturnExplorer: the dead code delay installed for a space, and how many times one was raised (patches/0068-engine-deadcode-late-stack-reads.patch).
  */
 #include "override.hh"
 #include "funcdata.hh"
@@ -39,6 +41,7 @@ void Override::clear(void)
   pcodeover.clear();
   forcegoto.clear();
   deadcodedelay.clear();
+  deadcodeBumps = 0;
   deindirect.clear();
   protoover.clear();
   multistagejump.clear();
@@ -100,6 +103,19 @@ bool Override::hasDeadcodeDelay(AddrSpace *spc) const
   int4 val = deadcodedelay[index];
   if (val == -1) return false;
   return (val != spc->getDeadcodeDelay());
+}
+
+/// SaturnExplorer (patches/0068-engine-deadcode-late-stack-reads.patch): Heritage raises an installed
+/// delay again when a read is found later than it covers, so it reads the value.
+/// \param spc is the address space
+/// \return the delay installed for the space, or -1 if there is none
+int4 Override::getDeadcodeDelay(AddrSpace *spc) const
+
+{
+  int4 index = spc->getIndex();
+  if (index >= deadcodedelay.size())
+    return -1;
+  return deadcodedelay[index];
 }
 
 /// \brief Override an indirect call turning it into a direct call

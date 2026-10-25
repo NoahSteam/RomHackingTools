@@ -213,6 +213,7 @@
 //                            SE_GENERATED_TABLES="jmp:sel:n:default:entry,...;...", SE_GENERATED_DATA and
 //                            SE_GENERATED_RETURNS="1,0,2,..." (the generator's intent per function: 1 returns r0, 0 leaves it alone, 2 copies a parameter to r0 on one path only)
 #include "DecompilerTestSupport.h"
+#include "FrameLedger.h"
 #include "MappingOracle.h"
 
 #include "Decompiler/SaturnArchitecture.h"
@@ -4473,6 +4474,14 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
         // ran until the host cancelled): a finding whatever the text, since a cycle is an engine defect.
         for (const std::string& w : r.warnings)
             if (w.find("Exceeded maximum repeats") != std::string::npos) add("unsettled", w);
+        // The frame half of the conservation law (A3-124, patch 0068): a write folded into the frame that went unread while the
+        // code reads a byte of it later. The trace cannot show it (a frame access is no bus access the ledger pairs), the record can.
+        for (const AccessFate& f : r.accessFates)
+            if (f.fate == AccessFate::MalformedPiece)
+                add("malformed-piece", "a piece of " + std::to_string(f.size) + " byte(s) at " + Hex(f.insn) + " has sizes that do not add up (A3-127)");
+        for (const dts::FrameLoss& l : dts::FrameLosses(r, dts::SnapshotWords(snap)))
+            add("frame-lost:W" + std::to_string(l.size), "the frame write of " + std::to_string(l.size) + " byte(s) at " + Hex(l.write) +
+                    " (frame offset " + Hex(l.offset) + ") went unread, and the read at " + Hex(l.read) + " reads it");
         // The canary (A3-34): the function stored fn.canary in a local that a callee overwrote, and no run returned it. A `return` that
         // contains it (as 0x5a, or in decimal) is the local folded across the call, the value from before the callee wrote it.
         if (fn.canary != 0)
@@ -4626,8 +4635,7 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
             std::string fate;
             for (const AccessFate& f : r.accessFates)
                 if (f.insn == insn && f.write == write && f.size == size)
-                    fate = f.fate == AccessFate::Unreachable ? "removed-unsaid" : f.fate == AccessFate::Dead ? "dead" :
-                           f.fate == AccessFate::FoldedOrdinary ? "folded" : "switch-lookup";
+                    fate = f.fate == AccessFate::Unreachable ? "removed-unsaid" : dts::FateLabel(f.fate);
             add(std::string("dropped:") + (write ? "W" : "R") + std::to_string(size) + ":" + provenance + (fate.empty() ? "" : ":" + fate),
                 std::string("the ") + (write ? "write" : "read") + " of " + std::to_string(size) + " byte(s) at " + Hex(insn) + " (" +
                     Hex(addrs[0]) + (addrs.size() > 1 ? ", ..." : "") + "; " + provenance + ") has no access in the output" +
@@ -5415,8 +5423,7 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
             o << "  fates:";
             for (const AccessFate& f : r.accessFates)
                 o << " " << Hex(f.insn) << (f.write ? "W" : "R") << int(f.size) << "="
-                  << (f.fate == AccessFate::Unreachable ? "unreachable" : f.fate == AccessFate::Dead ? "dead" :
-                      f.fate == AccessFate::FoldedOrdinary ? "folded" : "switch-lookup");
+                  << dts::FateLabel(f.fate);
             o << "\n";
         }
         o << "  prototype: " << (r.prototype.known ? "known, " + std::to_string(r.prototype.params.size()) + " param(s), " +
@@ -7735,6 +7742,17 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
         // is left undeclared: the text cannot be run, and fails.
         std::set<std::string> frameNames;
         std::string frameDefines, frameUndefs;
+        // The stack locals the text declares, with their offsets and the widths of their types, for the names wider than a symbol below (A3-124).
+        std::map<std::string, std::pair<int64_t, int>> stackLocals;
+        {
+            static const std::regex localRe("^\\s*(xunknown|int|uint|undefined)([1248])\\s+([A-Za-z]*Stack(?:_[0-9a-f]+|[0-9a-f]{8}));\\s*$");
+            std::istringstream in(rebuilt);
+            std::string l;
+            int64_t off = 0;
+            std::smatch lm;
+            while (std::getline(in, l))
+                if (std::regex_match(l, lm, localRe) && StackNameOffset(lm[3].str(), off)) stackLocals[lm[3].str()] = std::make_pair(off, std::atoi(lm[2].str().c_str()));
+        }
         if (frameMode)
         {
             static const std::regex declRe("^\\s*([A-Za-z_][\\w ]*?[\\w*])\\s*\\b(_?[A-Za-z]*Stack(?:_[0-9a-f]+|[0-9a-f]{8}))(\\s*\\[(\\d+)\\])?;\\s*$");
@@ -7784,6 +7802,29 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
             const size_t brace = rebuilt.find("{\n");
             for (const std::string& n : plain) decls += "  " + UnderscoreNameType(rebuilt, n) + " " + n + ";\n";
             if (!decls.empty() && brace != std::string::npos) rebuilt.insert(brace + 2, decls);
+            // Such a name covers the declared locals inside its bytes (`_xStack_14 = CONCAT31(...)` over `xStack_14` and `xStack_12`, both two
+            // bytes): the text then reads `xStack_12`, bytes 2 and 3 of the write (A3-124: the struct built byte by byte through a pointer,
+            // read a halfword at a time). The harness's names are separate variables, so after each such write every local wholly inside it is
+            // given its bytes, the machine's order: the first byte the most significant.
+            for (const std::string& n : names)
+            {
+                int64_t at = 0;
+                const std::string ty = UnderscoreNameType(rebuilt, n);
+                const int width = ty == "xunknown1" ? 1 : ty == "xunknown2" ? 2 : ty == "xunknown4" ? 4 : ty == "xunknown8" ? 8 : 0;
+                if (width == 0 || n.compare(0, 2, "__") == 0 || frameNames.count(n) || !StackNameOffset(n, at)) continue;
+                std::string follow;
+                for (const auto& s : stackLocals)
+                    if (s.second.first >= at && s.second.first + s.second.second <= at + width)
+                        follow += " " + s.first + " = (xunknown" + std::to_string(s.second.second) + ")((unsigned long long)" + n + " >> " +
+                                  std::to_string(8 * (at + width - s.second.first - s.second.second)) + ");";
+                if (follow.empty()) continue;
+                const std::regex assign("^(\\s*" + n + " = [^\\n]*;)$");
+                std::string out;
+                std::istringstream lines(rebuilt);
+                std::string l;
+                while (std::getline(lines, l)) out += (std::regex_match(l, assign) ? l + follow : l) + "\n";
+                rebuilt = out;
+            }
         }
         pr.cText = frameDefines + rebuilt + frameUndefs;
         if (gPrintedCTextHook) pr.cText = gPrintedCTextHook(pr.cText);
@@ -8213,6 +8254,9 @@ const PrintedCFixture kPrintedCFixtures[] = {
     { "A2-56 cmp/str on the SR byte after addc", { 0x346F, 0x0529, 0x340F, 0x0202, 0x262C, 0x8B01, 0x0502, 0x041A, 0x000B, 0x6053 } },
     // A2-57 (seed 968411): the engine's `_Stack_4 = CONCAT31(...)`, a name declared at the width of the write, read as a signed compare.
     { "A2-57 _Stack_4 written by CONCAT31", { 0x246B, 0x7FF8, 0x1F30, 0x1F41, 0x6053, 0x80F7, 0x6073, 0x80F2, 0x6013, 0x80F1, 0x55F1, 0x7F08, 0x350F, 0x312A, 0x000B, 0x6053 } },
+    // A3-124 (frame124 seed 1529): `_xStack_14 = CONCAT31(...)` over the two-byte `xStack_14` and `xStack_12`, then `xStack_12` read: the
+    // harness gives the locals inside the wider write their bytes (it read `xStack_12` unset).
+    { "A3-124 _xStack_14 over xStack_12, xStack_12 read", { 0x2FE6, 0x7FE0, 0x6EF3, 0x61E3, 0x7110, 0x1E17, 0x51E7, 0xE2A1, 0x1120, 0x51E7, 0xE20B, 0x1121, 0x51E7, 0xE253, 0x6313, 0x2320, 0x51E7, 0x6313, 0x7306, 0x2360, 0x51E7, 0x6313, 0x7306, 0x2370, 0x51E7, 0xE2EF, 0x6313, 0x7305, 0x2320, 0x51E7, 0xE213, 0x6313, 0x7301, 0x2320, 0x51E7, 0x6313, 0x7302, 0x2370, 0x51E7, 0xE2F9, 0x6313, 0x7307, 0x2320, 0x51E7, 0x6313, 0x7302, 0x6231, 0x6023, 0x51E7, 0x6313, 0x7304, 0x6231, 0x302C, 0x7E20, 0x6FE3, 0x000B, 0x6EF6 } },
     // A2-52 (the A2-47 family beyond patch 0046): sums of scaled terms over shared variables, `c + 8x + 4y + 14x` through `shlr2 ; shll2`.
     { "A2-52 c + 8x + 4y + 14x, shlr2 ; shll2", { 0xD008, 0xD309, 0x0347, 0x031A, 0x303C, 0xD308, 0x0367, 0x031A, 0x303C, 0xD307, 0x0347, 0x031A, 0x303C, 0x4009, 0x4008, 0x000B, 0x0009, 0x0009, 0x0000, 0x0100, 0x0000, 0x0008, 0x0000, 0x0004, 0x0000, 0x000E } },
     { "A2-52 termgen 2", { 0x2468, 0x0129, 0xD00A, 0x6343, 0x4308, 0x4308, 0x303C, 0x6313, 0x4308, 0x4308, 0x303C, 0xD307, 0x0367, 0x031A, 0x303C, 0xD306, 0x0347, 0x031A, 0x303C, 0xD305, 0x2039, 0x000B, 0x0009, 0x0009, 0x0000, 0x0000, 0x0000, 0x0008, 0xFFFF, 0xFFFA, 0xFFFF, 0xFFFC } },
@@ -9521,6 +9565,200 @@ bool GenWalk14Fn(uint64_t seed, CCase& c, std::string& shape)
     return true;
 }
 
+// ---- A3-124 fix instrument (patch 0068): a struct built on the frame through a pointer kept in a frame slot and reloaded before each access
+// (the `-O0` byte copy of the corpus, hwram007 060228B4), on a stream of its own (one seed in four). Frame of 32 bytes on r15 or, `-O0`
+// style, on r14 (pushed, r15 copied); an 8-byte struct S at frame + 8, 12 or 16, &S in the slot at frame + 28. S is first filled whole (two
+// words of constants, or eight byte stores in a random order), then 1 to 8 byte, halfword and word stores at aligned offsets (the values
+// r4 to r7, or constants), each through the pointer reloaded from the slot (one in five through the r1 of the previous store), then 1 to 3
+// reads of S, byte, halfword or word wide (wider or narrower than the stores), through the reloaded pointer or directly at the frame
+// offset, added or xored into r0.
+//   frame124.<r15|r14>.<words|bytes>.<nocall|call|callr>.<b|w|l|mixed>: the frame base, the fill, whether &S is handed to a lent callee
+//        at kCode + 0xC0 (rts ; nop) between the stores and the reads, or (callr, A3-128) to a withheld one that reads a word of S, which
+//        the caller writes again after the call, and the stores' widths. A function without a call is checked by the
+//        printed-C differential (its text compiled and run beside the code for each input), which skips a text with a call; every one, with
+//        a call or not, is checked by the frame ledger (dts::FrameLosses, CheckFrame124Ledger). A text with a call reads S through the kept
+//        pointer after it (the frame escaped), which no constant check resolves: the ledger is its check.
+bool GenFrame124Fn(uint64_t seed, CCase& c, std::string& shape)
+{
+    Rng rng(seed * 2654435761u + 0x124A3u);
+    if (!rng.Chance(25)) return false;
+    const bool r14 = rng.Chance(50);
+    const bool call = rng.Chance(35);
+    // (A3-128) the callee reads S (`mov.l @(off,r4),r0`) and is withheld (it reads r3), and S is written again after the call
+    const bool reader = call && rng.Chance(50);
+    const bool byteFill = !call && rng.Chance(50);   // (a call's function must end before its callee at kCode + 0xC0)
+    const uint32_t fb = r14 ? 14u : 15u;
+    const uint32_t sOff = 8u + 4u * rng.Below(3);
+    const uint32_t kSlotDisp = 7;   // the slot at frame + 28
+    LaunderBuilder b;
+    auto put = [&](uint32_t x) { b.Put(static_cast<uint16_t>(x)); };
+    if (r14) put(0x2FE6);                            // mov.l r14,@-r15
+    if (call) put(0x4F22);                           // sts.l pr,@-r15
+    put(0x7FE0);                                     // add #-32,r15
+    if (r14) put(0x6EF3);                            // mov r15,r14
+    put(0x6103 | fb << 4);                           // mov fb,r1
+    put(0x7100 | sOff);                              // add #sOff,r1: &S
+    put(0x1010 | fb << 8 | kSlotDisp);               // mov.l r1,@(28,fb): the slot
+    bool kept = false;                               // r1 holds &S from the last store
+    auto reload = [&]() {
+        put(0x5100 | fb << 4 | kSlotDisp);           // mov.l @(28,fb),r1
+        kept = true;
+    };
+    // The value stored: a register parameter, or a constant in r2.
+    auto value = [&]() -> uint32_t {
+        if (rng.Chance(30))
+        {
+            put(0xE200 | rng.Below(256));            // mov #imm,r2
+            return 2;
+        }
+        return 4 + rng.Below(4);
+    };
+    // A store of 'size' bytes at S + off through the reloaded pointer (r1 is never stepped: the address is built in r3).
+    auto store = [&](uint32_t size, uint32_t off, bool mayKeep) {
+        if (!(mayKeep && kept && rng.Chance(20))) reload();
+        const uint32_t v = value();
+        if (size == 4)
+        {
+            put(0x1100 | v << 4 | (off / 4));        // mov.l v,@(off,r1)
+            return;
+        }
+        put(0x6313);                                 // mov r1,r3
+        if (off) put(0x7300 | off);                  // add #off,r3
+        put(0x2300 | v << 4 | (size == 1 ? 0u : 1u));   // mov.b / mov.w v,@r3
+    };
+    if (byteFill)
+    {
+        uint32_t order[8] = { 0, 1, 2, 3, 4, 5, 6, 7 };
+        for (uint32_t i = 7; i > 0; --i) std::swap(order[i], order[rng.Below(i + 1)]);
+        for (uint32_t i = 0; i < 8; ++i) store(1, order[i], false);
+    }
+    else
+        for (uint32_t k = 0; k < 2; ++k)
+        {
+            reload();
+            put(0xE200 | rng.Below(256));            // mov #imm,r2
+            put(0x1120 | k);                         // mov.l r2,@(4k,r1)
+        }
+    static const char* const kWidths[] = { "b", "w", "l", "mixed" };
+    const uint32_t wk = rng.Below(4);
+    const uint32_t nStores = 1 + rng.Below(call ? 6 : 8);
+    for (uint32_t i = 0; i < nStores; ++i)
+    {
+        const uint32_t size = wk == 0 ? 1 : wk == 1 ? 2 : wk == 2 ? 4 : (1u << rng.Below(3));
+        store(size, rng.Below(8 / size) * size, true);
+    }
+    const uint32_t readOff = rng.Below(2);           // the word of S the reading callee reads
+    if (call)
+    {
+        put(0x5400 | fb << 4 | kSlotDisp);           // mov.l @(28,fb),r4: &S
+        b.Lit(0, kCode + 0xC0u);
+        put(0x400B);                                 // jsr @r0
+        put(0x0009);
+        if (reader)
+        {
+            put(0xE200 | rng.Below(256));            // mov #imm,r2
+            reload();
+            put(0x1120 | readOff);                   // mov.l r2,@(4*readOff,r1): the word the callee read, written again
+        }
+    }
+    const uint32_t nReads = 1 + rng.Below(3);
+    for (uint32_t i = 0; i < nReads; ++i)
+    {
+        const uint32_t size = 1u << rng.Below(3);
+        const uint32_t off = rng.Below(8 / size) * size;
+        if (rng.Chance(70))
+        {
+            put(0x5100 | fb << 4 | kSlotDisp);       // mov.l @(28,fb),r1
+            put(0x6313);                             // mov r1,r3
+            if (off) put(0x7300 | off);              // add #off,r3
+        }
+        else
+        {
+            put(0x6303 | fb << 4);                   // mov fb,r3: S at its frame offset
+            put(0x7300 | (sOff + off));              // add #sOff+off,r3
+        }
+        put(0x6230 | (size == 1 ? 0u : size == 2 ? 1u : 2u));   // mov.b / .w / .l @r3,r2
+        put(i == 0 ? 0x6023u : rng.Chance(50) ? 0x302Cu : 0x202Au);   // mov r2,r0 / add r2,r0 / xor r2,r0
+    }
+    if (r14)
+    {
+        put(0x7E20);                                 // add #32,r14
+        put(0x6FE3);                                 // mov r14,r15
+        if (call) put(0x4F26);                       // lds.l @r15+,pr
+        put(0x000B);                                 // rts
+        put(0x6EF6);                                 //   mov.l @r15+,r14
+    }
+    else
+    {
+        put(0x7F20);                                 // add #32,r15
+        if (call) put(0x4F26);                       // lds.l @r15+,pr
+        put(0x000B);                                 // rts
+        put(0x0009);
+    }
+    if (call)
+    {
+        if (b.at > 0xC0u / 2) return false;          // (not drawn: the bound above keeps it under)
+        b.at = 0xC0u / 2;                            // the callee
+        if (reader)
+        {
+            put(0x2338);                             // tst r3,r3: reads r3 on entry, so it is withheld (not lent)
+            put(0x5040 | readOff);                   // mov.l @(4*readOff,r4),r0
+        }
+        put(0x000B);
+        put(0x0009);
+    }
+    shape = std::string("frame124.") + (r14 ? "r14" : "r15") + (byteFill ? ".bytes" : ".words") + (reader ? ".callr." : call ? ".call." : ".nocall.") +
+            kWidths[wk];
+    c.words = call ? b.Finish() : b.w;
+    c.name = "frame124_" + std::to_string(seed);
+    return true;
+}
+
+// The frame ledger over the frame124 stream (A3-124): each function decompiled as CheckLaunderWalks does (the callee at kCode + 0xC0 lent
+// first when there is one), and every frame write that went unread while the code reads it is a finding (dts::FrameLosses).
+int CheckFrame124Ledger(Sh2Decompiler& d, const std::vector<CCase>& cases)
+{
+    int lost = 0;
+    for (size_t ci = 0; ci < cases.size(); ++ci)
+    {
+        const CCase& c = cases[ci];
+        std::vector<uint8_t> hw;
+        for (size_t i = 0; i < c.words.size(); ++i) dts::Put16(hw, kCode - 0x06000000u + 2 * i, c.words[i]);
+        dts::Put16(hw, kSentinel - 0x06000000u, 0x0009);
+        dts::Put16(hw, kSentinel - 0x06000000u + 2, 0x0009);
+        auto snap = dts::MakeSnapshot(hw, 9100 + ci);
+        DecompileRequest q;
+        q.entry = kCode;
+        if (c.words.size() > 0xC0u / 2 && c.words[0xC0u / 2] != 0x0009)
+        {
+            DecompileRequest cq;
+            cq.entry = kCode + 0xC0u;
+            const DecompileResult cr = d.Decompile(snap, cq);
+            if (cr.status == DecompileStatus::Ok && cr.prototype.known) q.prototypes.emplace_back(kCode + 0xC0u, cr.prototype);
+        }
+        const DecompileResult r = d.Decompile(snap, q);
+        if (EnvNumber("SE_GENERATED_VERBOSE", 0) >= 2)
+            std::printf("%s (frame ledger)\n  words: %s\n%s\n", c.name.c_str(), WordsText(c.words).c_str(), r.Text().c_str());
+        for (const AccessFate& f : r.accessFates)
+            if (f.fate == AccessFate::MalformedPiece)
+            {
+                ++lost;
+                std::printf("FINDING [malformed-piece] %s\n  detail: a piece of %u byte(s) at %s has sizes that do not add up (A3-127)\n  words: %s\n%s\n",
+                            c.name.c_str(), unsigned(f.size), Hex(f.insn).c_str(), WordsText(c.words).c_str(), r.Text().c_str());
+                break;
+            }
+        for (const dts::FrameLoss& l : dts::FrameLosses(r, dts::SnapshotWords(snap)))
+        {
+            ++lost;
+            std::printf("FINDING [frame-lost] %s\n  detail: the frame write of %u byte(s) at %s (frame offset %s) went unread, and the read at %s reads it\n"
+                        "  words: %s\n%s\n", c.name.c_str(), unsigned(l.size), Hex(l.write).c_str(), Hex(l.offset).c_str(), Hex(l.read).c_str(),
+                        WordsText(c.words).c_str(), r.Text().c_str());
+            break;
+        }
+    }
+    return lost;
+}
+
 // The check of the laundered walks: lend the callees (deepest first: kCode + 0xC0, then kCode + 0x80, when the blob has code there), decompile
 // the entry, run once, and compare every constant return with the run's r0 (as CheckSpillWalks).
 std::vector<CVerdict> CheckLaunderWalks(Sh2Decompiler& d, const std::vector<CCase>& cases, const std::vector<std::string>* shapes = nullptr)
@@ -9813,6 +10051,17 @@ void TestPrintedC()
                 fns.push_back(walk);
                 cases.push_back({ "seed" + std::to_string(seed) + "_walk", walk.Words() });
             }
+        // (A3-124 fix, patch 0068) The frame structs without a call (GenFrame124Fn), after those: compiled and run beside the code like the rest.
+        // SE_GENERATED_PRINTEDC_FRAME124=0 leaves them out.
+        if (EnvNumber("SE_GENERATED_PRINTEDC_FRAME124", 1) != 0)
+            for (long seed = first; seed < first + seeds; ++seed)
+            {
+                CCase f;
+                std::string shape;
+                if (!GenFrame124Fn(static_cast<uint64_t>(seed), f, shape) || shape.find(".call") != std::string::npos) continue;
+                fns.push_back(RegFn());
+                cases.push_back(f);
+            }
     }
     if (EnvNumber("SE_GENERATED_COVERAGE", 0) != 0)
     {
@@ -9849,7 +10098,8 @@ void TestPrintedC()
         if (grammarLeak) v.cls = "grammar-leak";
         // A ledger fixture exists to be compared: one the harness skips (an input it cannot give a value, a stack piece) checks nothing, and is a failure,
         // not a quiet class (A2-37: `unaff_r8_00` was `skipped:unknown-input`).
-        if (!hand && cases[i].name.compare(0, 4, "seed") != 0 && v.cls.compare(0, 8, "skipped:") == 0)
+        // A frame124 function (A3-124) is drawn, not written: one the harness skips (a text that takes a local's address) is counted below.
+        if (!hand && cases[i].name.compare(0, 4, "seed") != 0 && cases[i].name.compare(0, 9, "frame124_") != 0 && v.cls.compare(0, 8, "skipped:") == 0)
         {
             v.detail = "the fixture was skipped (" + v.cls + "): " + v.detail;
             v.cls = "fixture-skipped";
@@ -10012,6 +10262,48 @@ void TestPrintedC()
         for (const auto& k : launderClasses) std::printf(" %s=%d", k.first.c_str(), k.second);
         std::printf(" failing by shape:");
         for (const auto& k : staleByShape) std::printf(" %s=%d", k.first.c_str(), k.second);
+        std::printf("\n");
+    }
+    // (A3-124 fix, patch 0068) The frame ledger over the frame124 stream, with and without a call: a frame write that went unread while the
+    // code reads it is a finding whatever the text's value (SE_GENERATED_FRAME124_WORDS replays one).
+    const char* frame124Words = std::getenv("SE_GENERATED_FRAME124_WORDS");
+    if ((!hand || frame124Words) && EnvNumber("SE_GENERATED_PRINTEDC_FRAME124", 1) != 0)
+    {
+        const long single = EnvNumber("SE_GENERATED_SEED", 0);
+        const long seeds = single ? 1 : EnvNumber("SE_GENERATED_SEEDS", 300);
+        const long first = single ? single : EnvNumber("SE_GENERATED_FIRST", 1);
+        std::vector<CCase> f124;
+        std::map<std::string, int> drawn;
+        for (long seed = first; seed < first + seeds && !frame124Words; ++seed)
+        {
+            CCase c;
+            std::string shape;
+            if (!GenFrame124Fn(static_cast<uint64_t>(seed), c, shape)) continue;
+            ++drawn[shape.substr(0, shape.rfind('.'))];
+            f124.push_back(c);
+        }
+        if (frame124Words)
+        {
+            CCase c;
+            c.name = "frame124-hand";
+            std::istringstream in(frame124Words);
+            std::string tok;
+            while (in >> tok) c.words.push_back(static_cast<uint16_t>(std::strtoul(tok.c_str(), nullptr, 16)));
+            f124.push_back(c);
+        }
+        const int lost = CheckFrame124Ledger(d, f124);
+        failing += lost;
+        int compared124 = 0, skipped124 = 0, n124 = 0;
+        for (size_t i = 0; i < verdicts.size(); ++i)
+            if (cases[i].name.compare(0, 9, "frame124_") == 0)
+            {
+                ++n124;
+                compared124 += verdicts[i].compared ? 1 : 0;
+                skipped124 += verdicts[i].cls.compare(0, 8, "skipped:") == 0 ? 1 : 0;
+            }
+        std::printf("frame124 structs: %zu drawn, %d without a call through the differential (%d compared, %d skipped), %d frame writes lost; kinds:",
+                    f124.size(), n124, compared124, skipped124, lost);
+        for (const auto& k : drawn) std::printf(" %s=%d", k.first.c_str(), k.second);
         std::printf("\n");
     }
     std::printf("printed-C: functions=%zu compared=%d inputs each=%d (%.0f ms) classes:", verdicts.size(), compared, nIn, dts::MsSince(t0));
@@ -11386,6 +11678,28 @@ void TestA365Pins(Sh2Decompiler& d)
                                "walk14.stackarg.r6.walk", "walk14.stackarg.r7.walk", "walk14.stackarg.r6r7.walk",
                                "walk14.stackarg.r6.callee", "walk14.stackarg.r7.callee", "walk14.stackarg.r6r7.callee", "walk14.cap" })
             CHECK(drawn[k] > 0);
+    }
+    // A3-124 fix (patch 0068): the frame124 stream draws each frame base, fill, call and width (the bytes fill has no call)
+    {
+        std::map<std::string, int> drawn;
+        int n = 0;
+        for (uint64_t seed = 1; seed <= 4000; ++seed)
+        {
+            CCase c;
+            std::string shape;
+            if (!GenFrame124Fn(seed, c, shape)) continue;
+            ++n;
+            ++drawn[shape];
+        }
+        std::printf("pin 'frame124 draws': %d functions in 4000 seeds, %zu kinds\n", n, drawn.size());
+        for (const char* base : { "r15", "r14" })
+            for (const char* fill : { "words", "bytes" })
+                for (const char* call : { "nocall", "call", "callr" })
+                    for (const char* w : { "b", "w", "l", "mixed" })
+                    {
+                        if (std::string(fill) == "bytes" && std::string(call) != "nocall") continue;
+                        CHECK(drawn[std::string("frame124.") + base + "." + fill + "." + call + "." + w] > 0);
+                    }
     }
 }
 
