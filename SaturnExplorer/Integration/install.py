@@ -707,12 +707,16 @@ def build_mednafen(rn, msys2, dest, configure_flags="", reconfigure=True):
     # Copy the real dependency closure (per `ldd`) next to the exe; Windows searches the
     # exe's own directory first, so it then runs anywhere with no MSYS2 on PATH.
     # Several passes so dependencies-of-dependencies are picked up as well.
+    # The DLLs in src/ are only ever copies from MSYS2 (the build makes none), and after an MSYS2 upgrade
+    # they are older than what MSYS2 now has. They are removed first because ldd resolves a dependency to
+    # the copy beside the exe, so a stale one hides the /mingw64/bin path this loop looks for and would be
+    # shipped as is (package_release.py then refuses it).
     bundle = (
-        'cd src && for i in 1 2 3 4; do '
+        'cd src && rm -f *.dll && for i in 1 2 3 4; do '
         'for b in mednafen.exe *.dll; do '
         '[ -e "$b" ] && ldd "$b" 2>/dev/null '
         r"| grep -io '/mingw64/bin/[^ ]*\.dll' "
-        '| while read d; do [ -e "$(basename "$d")" ] || cp "$d" .; done; '
+        '| while read d; do cp -f "$d" .; done; '
         'done; done; '
         # Autotools links in src/, but Saturn Explorer treats the checkout root as
         # the portable Mednafen install directory (firmware/, config, saves). Keep
