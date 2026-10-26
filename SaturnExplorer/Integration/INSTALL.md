@@ -141,7 +141,7 @@ against fresh upstream tells you if an anchor drifted (see `DISTRIBUTION.md`,
 --mednafen-saturn-only build only the Saturn core (--disable-* every other console; faster)
 --msys2 DIR            use an existing MSYS2 install (e.g. C:\msys64)
 --qt-path DIR          Qt dir for the Yabause build (CMAKE_PREFIX_PATH)
---generator G          CMake generator (default "Visual Studio 17 2022"; "...16 2019")
+--generator G          CMake generator (default: CMake's own pick, the newest Visual Studio installed; e.g. "Visual Studio 16 2019")
 --dry-run              print the plan; change nothing
 --yes                  don't prompt before installs/builds
 ```

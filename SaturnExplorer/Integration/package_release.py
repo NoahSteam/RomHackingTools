@@ -52,6 +52,7 @@ IS_MAC = sys.platform == "darwin"
 IS_WIN = os.name == "nt"
 
 FIRMWARE_FILES = ("sega_101.bin", "mpr-17933.bin")
+SHIPPED_PROGRAMS = ("SaturnExplorerFrontEnd.exe",)      # the Windows/Linux build folder's other programs are tests and tools
 
 
 def run(cmd, **kw):
@@ -323,13 +324,27 @@ def compare_trees(fresh, root, binary):
                 problems.append(f"{rel} differs from the pinned base plus the current patch")
             else:
                 newest = max(newest, os.path.getmtime(have))
+    # config.status links include/trio/*.h and friends to the sources they name; where ln -s fails (MSYS2
+    # without symlink privilege) it copies instead. A copy of a file the pinned tree has holds no code the
+    # pinned tree lacks, so an extra file is only reported when no file of that name has its contents.
+    pinned = {}                  # file name -> its paths in `fresh`, filled on first use
+
+    def is_copy_of_pinned(have, name):
+        if not pinned:
+            for dp, _dns, fns in os.walk(fresh):
+                for g in fns:
+                    pinned.setdefault(g, []).append(os.path.join(dp, g))
+        digest = sha256_file(have)
+        return any(sha256_file(p) == digest for p in pinned.get(name, ()) if os.path.isfile(p))
+
     for dirpath, dirs, files in os.walk(root):
         dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
         for f in files:
             have = os.path.join(dirpath, f)
             rel = os.path.relpath(have, root)
             if (f.endswith(SOURCE_SUFFIXES) and f not in GENERATED_NAMES and not os.path.islink(have)
-                    and rel not in known and not os.path.exists(os.path.join(fresh, rel))):
+                    and rel not in known and not os.path.exists(os.path.join(fresh, rel))
+                    and not is_copy_of_pinned(have, f)):
                 problems.append(f"{rel} is in the build checkout but not in the pinned base plus the patch")
     if os.path.exists(binary) and newest > os.path.getmtime(binary):
         problems.append("a source file is newer than the binary, so the binary may predate it; rebuild")
@@ -597,9 +612,11 @@ def main():
         copied = bundle_dylibs(exe, os.path.abspath(args.mednafen), os.path.join(emu, "lib"), args.sign_identity)
         libs = brew_manifest(copied, args.allow_mismatch)
     else:
+        # Only the program: the build folder also holds every test executable and the developer tools
+        # (se-render, se-sleighc), which the macOS bundle does not ship either.
         for f in os.listdir(args.se_app):
             src = os.path.join(args.se_app, f)
-            if f.lower().endswith((".exe", ".dll")) or f == "licenses":
+            if f in SHIPPED_PROGRAMS or f.lower().endswith(".dll") or f == "licenses":
                 (shutil.copytree if os.path.isdir(src) else shutil.copy2)(src, os.path.join(stage, f))
         crt = copy_msvc_runtime(stage, args.crt_dir) if IS_WIN else []
         exe_name = "mednafen.exe" if IS_WIN else "mednafen"
@@ -661,7 +678,9 @@ def smoke_test(stage, mednafen):
     scratch = tempfile.mkdtemp(prefix="se_smoke_")          # Mednafen writes its config and lock under HOME
     # macOS: a bare environment, so nothing from Homebrew can leak in through the search paths. Windows needs
     # its own variables (SystemRoot and friends) for any program to start, so it inherits them.
-    env = ({**os.environ, "HOME": scratch, "MEDNAFEN_HOME": scratch} if IS_WIN
+    # MEDNAFEN_NOSTDREDIR: on Windows Mednafen sends stdout and stderr to stdout.txt/stderr.txt beside the exe,
+    # so without it the pipes below stay empty and the staged folder gains two files that would be zipped.
+    env = ({**os.environ, "HOME": scratch, "MEDNAFEN_HOME": scratch, "MEDNAFEN_NOSTDREDIR": "1"} if IS_WIN
            else {"PATH": "/usr/bin:/bin", "HOME": scratch, "MEDNAFEN_HOME": scratch})
     try:
         if IS_MAC:

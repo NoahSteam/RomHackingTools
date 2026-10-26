@@ -148,7 +148,11 @@ def make_patched_tree(up, mednafen_dir, tree, work):
     binary's checkout matches it."""
     repo = fork_repo(up, mednafen_dir, work)
     os.makedirs(tree)
-    archive = subprocess.Popen(["git", "archive", up["fork_base_commit"]], cwd=repo, stdout=subprocess.PIPE)
+    # autocrlf off: `git archive` applies the checkout's line-ending conversion, and a Windows user's global
+    # core.autocrlf=true would turn the whole tree CRLF, so it would match neither the LF build checkout
+    # (install.py clones with it off) nor the sources the binary was built from.
+    archive = subprocess.Popen(["git", "-c", "core.autocrlf=false", "archive", up["fork_base_commit"]],
+                               cwd=repo, stdout=subprocess.PIPE)
     run(["tar", "-x", "-C", tree], stdin=archive.stdout)
     archive.stdout.close()
     if archive.wait() != 0:

@@ -529,7 +529,9 @@ def build_saturn_explorer(rn, generator):
     build = os.path.join(SE_ROOT, "build")
     if IS_WIN:
         # Multi-config MSVC generator: pick the config at build time, not configure time.
-        configure = [CMAKE, "-B", build, "-S", SE_ROOT, "-G", generator, "-A", "x64"]
+        # No -G unless asked for: CMake then takes the newest Visual Studio installed, which is what a
+        # runner image or a machine with only a newer Visual Studio has (a fixed "17 2022" found none there).
+        configure = [CMAKE, "-B", build, "-S", SE_ROOT, *(["-G", generator] if generator else []), "-A", "x64"]
         compile_ = [CMAKE, "--build", build, "--config", "Release", "--parallel"]
         exe = os.path.join(build, "bin", "Release", "SaturnExplorerFrontEnd.exe")
     else:
@@ -877,8 +879,9 @@ def main():
                          "tree is already configured). Use after editing the Integration/ folder.")
     ap.add_argument("--msys2", help="path to an existing MSYS2 install (e.g. C:\\msys64)")
     ap.add_argument("--qt-path", help="Qt install dir for the Yabause build (CMAKE_PREFIX_PATH)")
-    ap.add_argument("--generator", default="Visual Studio 17 2022",
-                    help='CMake generator (default "Visual Studio 17 2022"; use "...16 2019")')
+    ap.add_argument("--generator", default=None,
+                    help='CMake generator (default: CMake\'s own pick, the newest Visual Studio installed; '
+                         'e.g. "Visual Studio 16 2019")')
     ap.add_argument("--dry-run", action="store_true", help="print the plan; change nothing")
     ap.add_argument("--verbose", action="store_true",
                     help="print complete commands (including generated MSYS2 scripts)")
@@ -917,9 +920,15 @@ def main():
                 bash = os.path.join(msys2, "usr", "bin", "bash.exe") if msys2 else None
                 if bash and not args.incremental:
                     print("  Installing MSYS2 build packages (SDL2, zlib, FLAC, gcc, autotools)...")
-                    rn.run([bash, "-lc",
-                            f"pacman -Syu --noconfirm && pacman -S --needed --noconfirm {MSYS2_PACKAGES}"],
-                           description="Install MSYS2 build packages")
+                    # An MSYS2 that has not been updated for a while (a fresh CI image) first upgrades pacman
+                    # itself, then closes every MSYS2 process -- the shell running this command included -- so
+                    # nothing after the upgrade in the same command runs. The first pass is allowed to end that
+                    # way; the second, in a new shell, finishes the upgrade and installs the packages.
+                    rn.run([bash, "-lc", "pacman -Syu --noconfirm"], description="Update MSYS2 (first pass)")
+                    if rn.run([bash, "-lc",
+                               f"pacman -Syu --noconfirm && pacman -S --needed --noconfirm {MSYS2_PACKAGES}"],
+                              description="Install MSYS2 build packages") != 0:
+                        ok = False
             else:
                 ok = False
             # After a fresh winget install (or in --dry-run) detection can't see it yet;

@@ -256,6 +256,67 @@ except Skip as e:
 finally:
     shutil.rmtree(cp_root, ignore_errors=True)
 
+# --- a copy of a pinned source (config.status copies where it cannot link, as under MSYS2) is not an extra source
+cc_root = tempfile.mkdtemp(prefix="se_cmpcopy_")
+try:
+    def put3(base, rel, text):
+        path = os.path.join(base, rel)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w") as f:
+            f.write(text)
+    fresh, co = os.path.join(cc_root, "fresh"), os.path.join(cc_root, "co")
+    for base in (fresh, co):
+        put3(base, "src/trio/trio.h", "trio")
+    put3(co, "src/mednafen", "binary")
+    binary = os.path.join(co, "src", "mednafen")
+    now = os.path.getmtime(binary)
+    os.utime(os.path.join(co, "src/trio/trio.h"), (now - 100, now - 100))
+    put3(co, "include/trio/trio.h", "trio")
+    check(compare_trees(fresh, co, binary) == [], "an identical copy of a pinned header, elsewhere in the checkout, passes", compare_trees(fresh, co, binary))
+    put3(co, "include/trio/trio.h", "trio, edited")
+    check(any("include/trio/trio.h" in p for p in compare_trees(fresh, co, binary)), "an edited copy of a pinned header is reported")
+    put3(co, "include/trio/other.h", "trio")
+    os.remove(os.path.join(co, "include/trio/trio.h"))
+    check(any("include/trio/other.h" in p for p in compare_trees(fresh, co, binary)), "a copy under a name the pinned tree lacks is reported")
+finally:
+    shutil.rmtree(cc_root, ignore_errors=True)
+
+# --- the patched tree is built with LF endings even where the user's git converts to CRLF on output
+crlf_root = tempfile.mkdtemp(prefix="se_crlf_")
+try:
+    repo = os.path.join(crlf_root, "repo")
+    os.makedirs(repo)
+    gitconf = os.path.join(crlf_root, "gitconfig")
+    with open(gitconf, "w") as f:
+        f.write("[core]\n\tautocrlf = true\n[user]\n\tname = t\n\temail = t@example.com\n")
+    env = {**os.environ, "GIT_CONFIG_GLOBAL": gitconf, "GIT_CONFIG_NOSYSTEM": "1"}
+    git = lambda *a: subprocess.run(["git", *a], cwd=repo, env=env, check=True, capture_output=True)
+    git("-c", "core.autocrlf=false", "init", "-q")
+    with open(os.path.join(repo, "a.txt"), "wb") as f:
+        f.write(b"one\ntwo\n")
+    git("add", "a.txt")
+    git("-c", "core.autocrlf=false", "commit", "-q", "-m", "x")
+    sha = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo, env=env, check=True, capture_output=True, text=True).stdout.strip()
+    probe = subprocess.run(["git", "archive", sha], cwd=repo, env=env, check=True, capture_output=True).stdout
+    if b"\r\n" not in probe:
+        print("skipped the line-ending check: this git does not convert on archive")
+    else:
+        os.environ.update(GIT_CONFIG_GLOBAL=gitconf, GIT_CONFIG_NOSYSTEM="1")
+        real_run = mso.run
+        mso.run = lambda cmd, **kw: None if any("apply.py" in str(c) for c in cmd) else real_run(cmd, **kw)
+        try:
+            tree = os.path.join(crlf_root, "tree")
+            mso.make_patched_tree({"fork_base_commit": sha}, repo, tree, crlf_root)
+            with open(os.path.join(tree, "a.txt"), "rb") as f:
+                got = f.read()
+            check(got == b"one\ntwo\n", "the patched tree keeps the commit's LF endings under core.autocrlf=true", got)
+        finally:
+            mso.run = real_run
+            for k in ("GIT_CONFIG_GLOBAL", "GIT_CONFIG_NOSYSTEM"):
+                os.environ.pop(k, None)
+finally:
+    shutil.rmtree(crlf_root, ignore_errors=True)
+
 # --- no credentials in SOURCE.txt, whatever the remote's scheme
 for remote, want in (("http://user:FAKE_TOKEN@server.example/org/repo.git", "http://server.example/org/repo"),
                      ("https://NoahSteam@github.com/NoahSteam/RomHackingTools.git", "https://github.com/NoahSteam/RomHackingTools"),
