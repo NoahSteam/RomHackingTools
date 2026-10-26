@@ -666,7 +666,11 @@ def build_mednafen(rn, msys2, dest, configure_flags="", reconfigure=True):
     # change silently does nothing (see mednafen_configure_stale).
     if mednafen_configure_stale(dest, signature):
         reconfigure = True
-    bootstrap = "([ -x ./configure ] || (autoreconf -i || ./autogen.sh))"
+    # The pinned fork commit stores configure and autogen.sh without the executable bit, so on a fresh clone the
+    # -x test is false and autoreconf runs. gettext >= 0.23 makes its autopoint step fail on Mednafen's
+    # AM_GNU_GETTEXT, and autopoint is not needed (m4/ and intl/ are committed): AUTOPOINT=true skips just that
+    # step. `sh ./autogen.sh` as the fallback does not depend on the executable bit.
+    bootstrap = "([ -x ./configure ] || (AUTOPOINT=true autoreconf -i || sh ./autogen.sh))"
     if reconfigure:
         # `make` tracks source timestamps, NOT compiler-flag changes: after a reconfigure
         # that changes defines (e.g. adding -DUNICODE), every .o still looks "up to date"
@@ -770,7 +774,9 @@ def build_mednafen_unix(rn, dest, configure_flags="", reconfigure=True):
         reconfigure = True
     # A git checkout ships no generated ./configure; bootstrap it first. glibtoolize (from
     # Homebrew's libtool) is what autoreconf calls on macOS.
-    bootstrap = "([ -x ./configure ] || autoreconf -i || ./autogen.sh)"
+    # See the Windows copy of this line: AUTOPOINT=true because gettext >= 0.23's autopoint rejects Mednafen's
+    # AM_GNU_GETTEXT, and `sh ./autogen.sh` because the pinned commit's scripts are not executable.
+    bootstrap = "([ -x ./configure ] || AUTOPOINT=true autoreconf -i || sh ./autogen.sh)"
     if reconfigure:
         # `make` tracks source mtimes, not flag changes, so a changed --disable-* set would
         # otherwise relink stale objects; clean to force the rebuild (mirrors the Win path).

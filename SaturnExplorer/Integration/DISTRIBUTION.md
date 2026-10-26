@@ -182,7 +182,7 @@ cmake -S . -B build-release -DCMAKE_BUILD_TYPE=Release -DSE_MACOS_BUNDLE_LIBS=ON
 cmake --build build-release --parallel
 cmake --install build-release --prefix "$PWD/stage"
 # 2. The patched Mednafen (built by install.py, see above), then the combined, smoke-tested image with
-#    Mednafen's relinked libraries signed by the same identity. Not the CPack .dmg: that holds only the app.
+#    Mednafen's relinked libraries and the .dmg itself signed by the same identity. Not the CPack .dmg: that holds only the app.
 python3 Integration/package_release.py --se-app stage/SaturnExplorer.app --mednafen _emu/mednafen/src/mednafen \
         --ref v1.0 --out dist --sign-identity "$ID"
 # 3. Notarise and staple that image, then check it.

@@ -661,6 +661,8 @@ def main():
     if IS_MAC:
         run(["hdiutil", "create", "-quiet", "-volname", "Saturn Explorer", "-srcfolder", stage,
              "-format", "UDZO", archive])
+        if args.sign_identity != "-":
+            codesign(archive, args.sign_identity)      # the image itself is signed too, then notarised as a whole
     else:
         shutil.make_archive(archive[:-4], "zip", os.path.dirname(stage), name)
     print(f"wrote {archive}")
