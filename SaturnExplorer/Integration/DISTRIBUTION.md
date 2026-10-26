@@ -156,8 +156,16 @@ BIOS from that `firmware/` folder (`-filesys.path_firmware`), and shows a one-ti
 and the local-only debugging endpoint. On macOS the user must keep the app and the folder together;
 an app run straight from a downloaded, still-quarantined location will not see the folder.
 
+On Windows the archive holds `SaturnExplorerFrontEnd.exe` (not the test executables the build folder also
+has), the app-local Visual C++ runtime, `mednafen-se/` with the MSYS2 DLLs it needs, and `licenses/`.
+Saturn Explorer reads its own path in the active ANSI code page, so a folder name with characters outside
+that page (for example Japanese on a Western-European Windows) hides the bundled Mednafen (measured, not
+fixed); an accented Latin-1 name is found but its path is drawn garbled. Windows packaging was checked on a real machine and on a
+`windows-latest` runner (workflow_dispatch, label only, no tag); the macOS job still fails in
+`autoreconf` (gettext's `autopoint` rejects Mednafen's `AM_GNU_GETTEXT`).
+
 Still manual: Developer ID signing and notarisation (below), Windows signing, and running the
-workflow on a Windows runner for the first time. The Windows job has not been exercised yet.
+Windows archive on a machine that has no Visual Studio or MSYS2.
 
 ### macOS Developer ID signing and notarisation
 
