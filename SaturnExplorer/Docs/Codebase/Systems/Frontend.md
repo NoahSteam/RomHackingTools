@@ -1,6 +1,8 @@
 # Application shell, platform bridge and ancillary tools
 
 Baseline: `ff6a3b1fb1c54e4c0344613094ea65292b0023c2`. Verified from source except stated gaps.
+The Updates row and the update-check notes were rechecked against the source at `de6c3bd3`; the rest of the page
+stands at the baseline.
 
 ## Purpose and responsibilities
 
@@ -21,7 +23,7 @@ settings, demo and sound tools; specialized systems own their own algorithms.
 | Common widgets | [PanelWidgets.h](../../../FrontEnd/src/PanelWidgets.h): `RowSelectable`, `HorizontalSplitter`, `ComboWidth` |
 | Sound previews | [ScspMix.cpp](../../../FrontEnd/src/ScspMix.cpp): `ScspMixVoices`, `ScspResampleMono`, `ScspAttenuate`; App's `DecodeSlotSample`, `PlaySound`, `PlaySoundFrame`, `ExportSound`, `DrawSound` |
 | Feature tour | [DemoPlayer.cpp](../../../FrontEnd/src/Demo/DemoPlayer.cpp): `DemoPlayer::Tick`, `ConsumeDirty`; [DemoScript.cpp](../../../FrontEnd/src/Demo/DemoScript.cpp): `DemoParseText`; `App::UpdateDemo`, `ApplyDemoBeat` |
-| Updates | [UpdateChecker.cpp](../../../FrontEnd/src/UpdateChecker.cpp): `UpdateChecker::Start`, `Run`, `EvaluateLatestRelease`, `ExtractReleaseTag`, `CompareReleaseTags`; `App::DrawUpdateModal` |
+| Updates | [UpdateChecker.cpp](../../../FrontEnd/src/UpdateChecker.cpp): `UpdateChecker::Start`, `Run`, `EvaluateLatestRelease`, `EvaluateSourceBuild`, `ExtractReleaseTag`, `CompareReleaseTags`; `App::DrawUpdateModal` |
 
 ## Execution flow and interactions
 

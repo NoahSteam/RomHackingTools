@@ -68,7 +68,11 @@ void TestCompareReleaseTags()
     Check(CompareReleaseTags("1.0", "v1.1") == ReleaseOrder::RemoteNewer, "the leading v is optional");
     Check(CompareReleaseTags("v1.0-rc1", "v1.1") == ReleaseOrder::RemoteNewer, "a pre-release suffix is ignored for the number");
     Check(CompareReleaseTags("v1.0-rc1", "v1.0") == ReleaseOrder::Unknown, "the same number with different text is not comparable");
-    Check(CompareReleaseTags("v1.0", "v1.0.0") == ReleaseOrder::Unknown, "v1.0 against v1.0.0 is not comparable");
+    Check(CompareReleaseTags("v1.0", "v1.0.0") == ReleaseOrder::Same, "v1.0 and v1.0.0 are the same release");
+    Check(CompareReleaseTags("V1.0", "v1.0") == ReleaseOrder::Same && CompareReleaseTags("1.2", "v1.2.0") == ReleaseOrder::Same,
+          "a capital V, a missing v and trailing zeros do not make a different release");
+    Check(CompareReleaseTags("v1.0-rc1", "V1.0-rc1") == ReleaseOrder::Same, "the same suffix on equal numbers is the same release");
+    Check(CompareReleaseTags("v1.0+b5", "v1.0") == ReleaseOrder::Unknown, "a build suffix against none is not comparable");
     Check(CompareReleaseTags("nightly", "v1.0") == ReleaseOrder::Unknown, "a tag that is not a version is not comparable");
     Check(CompareReleaseTags("v1.0", "release-2") == ReleaseOrder::Unknown, "a word suffix is not a version");
     Check(CompareReleaseTags("v99999999999", "v1") == ReleaseOrder::Unknown, "an enormous number is not a version");
@@ -84,6 +88,10 @@ void TestReleasePageUrl()
 
 void TestEvaluate()
 {
+    // Differently written, numerically equal tags are not an update.
+    UpdateResult same = EvaluateLatestRelease(true, Reply(200, Release("v1.0.0")), kRepo, "v1.0", "abc");
+    Check(same.state == State::UpToDate, "v1.0.0 published and v1.0 built is up to date");
+
     // A tagged build against what GitHub reports.
     UpdateResult r = EvaluateLatestRelease(true, Reply(200, Release("v1.0")), kRepo, "v1.0", "abc");
     Check(r.state == State::UpToDate && r.tag == "v1.0", "the same release is up to date");
@@ -125,6 +133,49 @@ void TestEvaluate()
     r = EvaluateLatestRelease(false, IPlatform::HttpResponse(), kRepo, "v1.0", "abc");
     Check(r.state == State::Error && !r.message.empty(), "a failure with no reason still says something");
 }
+std::string Head(const std::string& sha)
+{
+    // /commits/HEAD: the commit's own sha first, then each parent's sha further down.
+    return "{\"sha\":\"" + sha + "\",\"commit\":{\"message\":\"m\"},\"parents\":[{\"sha\":\"" + std::string(40, 'f') + "\"}]}";
+}
+
+void TestSourceBuild()
+{
+    const std::string a(40, 'a'), b = std::string(10, 'b') + std::string(30, '1');
+    Check(ExtractLatestCommitSha(Head(a)) == a, "the commit's own sha is read, not a parent's");
+    Check(ExtractLatestCommitSha("{\"parents\":[{\"sha\":\"" + a + "\"}]}").empty(), "a sha only inside a nested value is not the commit's");
+    Check(ExtractLatestCommitSha(Head("zzzz")).empty() && ExtractLatestCommitSha(Head(std::string(39, 'a'))).empty(),
+          "a sha that is not 40 hex characters is refused");
+    Check(ExtractLatestCommitSha("").empty(), "no JSON, no sha");
+
+    // The release result an untagged build gets first: its tag and page, state UnreleasedBuild.
+    const UpdateResult release = EvaluateLatestRelease(true, Reply(200, Release("v1.0")), kRepo, "", "abc1234567");
+    UpdateResult r = EvaluateSourceBuild(release, true, Reply(200, Head(a)), a, "aaaaaaaaaa");
+    Check(r.state == State::UpToDate && r.message.find("latest source") != std::string::npos &&
+          r.message.find("v1.0") != std::string::npos && r.tag == "v1.0" && !r.url.empty(),
+          "a source build on the latest commit is up to date and is shown the latest release");
+    r = EvaluateSourceBuild(release, true, Reply(200, Head(a)), a + "-dirty", "aaaaaaaaaa-dirty");
+    Check(r.state == State::UpToDate, "a modified tree is compared by its commit");
+    r = EvaluateSourceBuild(release, true, Reply(200, Head(a)), "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "aaaaaaaaaa");
+    Check(r.state == State::UpToDate, "the commit comparison ignores case");
+    r = EvaluateSourceBuild(release, true, Reply(200, Head(b)), a, "aaaaaaaaaa");
+    Check(r.state == State::UpdateAvailable && r.message.find(b.substr(0, 10)) != std::string::npos &&
+          r.message.find("aaaaaaaaaa") != std::string::npos && r.message.find("Pull") != std::string::npos,
+          "a source build on another commit is told what is latest and to pull");
+    r = EvaluateSourceBuild(UpdateResult(), true, Reply(200, Head(b)), a, "aaaaaaaaaa");
+    Check(r.state == State::UpdateAvailable && r.tag.empty() && r.url.empty() && r.message.find("latest release") == std::string::npos,
+          "with no release known the verdict says nothing of one and offers no page");
+
+    // Unusable commit replies leave the release result alone.
+    Check(EvaluateSourceBuild(release, true, Reply(200, Head(a)), "unknown", "unknown").state == State::UnreleasedBuild,
+          "a build with no recorded commit keeps the release result");
+    Check(EvaluateSourceBuild(release, true, Reply(403, "{}"), a, "aaaaaaaaaa").state == State::UnreleasedBuild, "a rate-limited commit reply keeps it");
+    Check(EvaluateSourceBuild(release, false, IPlatform::HttpResponse(), a, "aaaaaaaaaa").state == State::UnreleasedBuild, "a failed commit request keeps it");
+    Check(EvaluateSourceBuild(release, true, Reply(200, "{\"x\":1}"), a, "aaaaaaaaaa").state == State::UnreleasedBuild, "a commit reply with no sha keeps it");
+    const UpdateResult none = EvaluateLatestRelease(true, Reply(404, "{}"), kRepo, "", "abc");
+    Check(EvaluateSourceBuild(none, true, Reply(200, Head(b)), a, "aaaaaaaaaa").state == State::UpdateAvailable,
+          "no release yet does not stop a source build from learning the branch moved");
+}
 }  // namespace
 
 int main()
@@ -133,6 +184,7 @@ int main()
     TestCompareReleaseTags();
     TestReleasePageUrl();
     TestEvaluate();
+    TestSourceBuild();
     if (gFail == 0) std::printf("UpdateChecker: all checks passed\n");
     return gFail == 0 ? 0 : 1;
 }

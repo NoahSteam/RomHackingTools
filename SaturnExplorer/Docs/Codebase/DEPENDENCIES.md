@@ -1,6 +1,7 @@
 # Dependencies and modification boundaries
 
-Inspected revision: `ff6a3b1fb1c54e4c0344613094ea65292b0023c2`.
+Inspected revision: `ff6a3b1fb1c54e4c0344613094ea65292b0023c2` (the update-checker paragraph under
+"External services and programs" was rechecked at `de6c3bd3`).
 Integration facts are verified against [CMakeLists.txt](../../CMakeLists.txt) and linked contracts.
 This is a navigation map, not a complete license audit or software bill of materials.
 
@@ -60,8 +61,10 @@ it compiles. Distribution obligations differ between SE and emulator binaries; c
 ## External services and programs
 
 The update checker calls GitHub's `releases/latest` API through `IPlatform::HttpsGet` and compares the
-build's baked-in release tag (`kBuildVersion`; empty for a build that is not a tagged release) with the
-latest published release's tag. It compares releases, not commits, and never downloads anything. There is no AI
+build's baked-in release tag (`kBuildVersion`) with the latest published release's tag. A build with no
+tag (built from source, or an untagged CI run) is instead compared with the latest commit on the default
+branch (`commits/HEAD`), which indicates difference, not ancestry, and is shown the latest release. It
+never downloads anything. There is no AI
 provider/network integration in M0. Live state is an emulator connection, not a hosted service.
 External diff programs and generated patch scripts are launched through platform process APIs;
 their availability, exit/completion and tool-specific output are separate from launch success.

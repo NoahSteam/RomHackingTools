@@ -166,10 +166,13 @@ fixed); an accented Latin-1 name is found but its path is drawn garbled. Windows
 Mednafen bootstrap was changed (`Docs/MacReleaseSteps.md`).
 
 The in-app **Check for Updates** compares the build's release tag with GitHub's latest published release
-(`releases/latest`) and offers the release page; it never looks at commits. The tag is baked in at build
-time (`cmake/GenerateBuildInfo.cmake`, and `FrontEnd.vcxproj` for the MSBuild project) from `SE_RELEASE_VERSION`,
-which the release workflow sets to the tag it builds, else from a `v*` tag exactly on HEAD. A build with no
-tag (a local build, a manual workflow run, a modified tree) is told it is not a tagged release. So tag releases
+(`releases/latest`) and offers the release page. The tag is baked in at build time
+(`cmake/GenerateBuildInfo.cmake`, and `FrontEnd.vcxproj` for the MSBuild project) from `SE_RELEASE_VERSION`,
+which the release workflow sets to the tag it builds (and which stands even if the tree reads as modified;
+the tag jobs fail if it did not get baked in), else from a `v*` tag exactly on HEAD of an unmodified tree.
+A build with no tag (built from source, a manual workflow run) has no release to compare, so it is compared
+with the latest commit on the default branch instead ("pull and rebuild") and shown the latest release.
+So tag releases
 `v<number>[.<number>...]` (`v1.0`, `v1.2.3`): the check orders tags as dotted numbers, and a release must be
 *published* (a draft does not count) before users can see it.
 

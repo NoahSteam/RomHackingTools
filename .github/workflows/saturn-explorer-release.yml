@@ -67,6 +67,16 @@ jobs:
           cmake --build build-release --parallel 4
           cmake --install build-release --prefix "$PWD/stage"
 
+      # A tag build must have its tag baked into the app, or "Check for Updates" in the shipped build would call
+      # itself "not a tagged release". Fail here rather than ship that.
+      - name: Check the release version is baked in
+        if: github.ref_type == 'tag'
+        shell: bash
+        run: |
+          grep -F "kBuildVersion = \"$GITHUB_REF_NAME\"" build-release/generated/BuildInfo.h || {
+            echo "build-release/generated/BuildInfo.h does not carry $GITHUB_REF_NAME:"; grep kBuildVersion build-release/generated/BuildInfo.h; exit 1
+          }
+
       - name: Package
         env:
           LABEL: ${{ steps.label.outputs.label }}
@@ -116,6 +126,16 @@ jobs:
       # Mednafen at the commit pinned in Integration/Mednafen/UPSTREAM.json.
       - name: Build Saturn Explorer and the patched Mednafen
         run: python Integration\install.py --yes --mednafen-saturn-only
+
+      # A tag build must have its tag baked into the app, or "Check for Updates" in the shipped build would call
+      # itself "not a tagged release". Fail here rather than ship that.
+      - name: Check the release version is baked in
+        if: github.ref_type == 'tag'
+        shell: bash
+        run: |
+          grep -F "kBuildVersion = \"$GITHUB_REF_NAME\"" build/generated/BuildInfo.h || {
+            echo "build/generated/BuildInfo.h does not carry $GITHUB_REF_NAME:"; grep kBuildVersion build/generated/BuildInfo.h; exit 1
+          }
 
       - name: Package
         env:

@@ -874,6 +874,7 @@ private:
     bool             mOpenAbout = false;
     bool             mOpenBundledNotice = false;
     bool             mOpenUpdate = false;   // request to open the "Check for Updates" modal
+    bool             mUpdateOpenFailed = false;   // the platform could not open the release page; the modal then shows its address
     UpdateChecker    mUpdateChecker;
     // Edit buffers for the Launch Settings dialog (ImGui InputText needs char storage;
     // no imgui_stdlib here). Parallel to mLauncher.Emulators(); copied in on open,

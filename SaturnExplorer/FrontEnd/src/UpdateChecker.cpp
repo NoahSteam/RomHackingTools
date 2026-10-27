@@ -83,11 +83,12 @@ bool ValidTag(const std::string& tag)
     return true;
 }
 
-// "v1.2.3" / "1.2.3-rc1" -> {1,2,3}. False for anything else, including a suffix that does not start
-// with '-' or '+' ("release-2").
-bool ParseVersion(const std::string& tag, std::vector<long>& out)
+// "v1.2.3" / "1.2.3-rc1" -> {1,2,3}, with "-rc1" in `suffix`. False for anything else, including a
+// suffix that does not start with '-' or '+' ("release-2").
+bool ParseVersion(const std::string& tag, std::vector<long>& out, std::string& suffix)
 {
     out.clear();
+    suffix.clear();
     std::string::size_type i = 0;
     if (i < tag.size() && (tag[i] == 'v' || tag[i] == 'V')) ++i;
     for (;;)
@@ -109,15 +110,21 @@ bool ParseVersion(const std::string& tag, std::vector<long>& out)
         }
         break;
     }
-    return i == tag.size() || tag[i] == '-' || tag[i] == '+';
+    if (i == tag.size()) return true;
+    if (tag[i] != '-' && tag[i] != '+') return false;
+    suffix = tag.substr(i);
+    return true;
 }
 }  // namespace
 
-std::string ExtractReleaseTag(const std::string& json)
+namespace
 {
-    // Walk the document tracking brace depth and only look at keys of the root object, so the
-    // "tag_name" of nothing nested can be returned. Deliberately dependency-free (no JSON lib):
-    // this is the one field the check needs.
+// The string value of `want` among the keys of the root object, or "" if it is absent, not a string, or the
+// document is malformed. Walks the document tracking brace depth and only looks at keys of the root object,
+// so a same-named key inside anything nested is never returned. Deliberately dependency-free (no JSON lib):
+// the check needs two fields of two replies.
+std::string RootString(const std::string& json, const char* want)
+{
     int depth = 0;
     std::string key, value;
     for (std::string::size_type i = 0; i < json.size(); ++i)
@@ -139,22 +146,41 @@ std::string ExtractReleaseTag(const std::string& json)
             if (depth != 1) continue;
             std::string::size_type j = i + 1;
             while (j < json.size() && std::isspace(static_cast<unsigned char>(json[j]))) ++j;
-            if (j >= json.size() || json[j] != ':' || key != "tag_name") continue;
+            if (j >= json.size() || json[j] != ':' || key != want) continue;
             ++j;
             while (j < json.size() && std::isspace(static_cast<unsigned char>(json[j]))) ++j;
             if (j >= json.size() || json[j] != '"') return "";
             if (!ReadJsonString(json, j, value, end)) return "";
-            return ValidTag(value) ? value : "";
+            return value;
         }
     }
     return "";
+}
+}  // namespace
+
+std::string ExtractReleaseTag(const std::string& json)
+{
+    const std::string tag = RootString(json, "tag_name");
+    return ValidTag(tag) ? tag : "";
+}
+
+std::string ExtractLatestCommitSha(const std::string& json)
+{
+    // GitHub's /commits/<ref> reply opens with {"sha":"<40 hex>", ...} and lists each parent's "sha" further
+    // down, which RootString does not look at.
+    const std::string sha = RootString(json, "sha");
+    if (sha.size() != 40) return "";
+    for (char c : sha)
+        if (!std::isxdigit(static_cast<unsigned char>(c))) return "";
+    return sha;
 }
 
 ReleaseOrder CompareReleaseTags(const std::string& local, const std::string& remote)
 {
     if (local == remote) return ReleaseOrder::Same;
     std::vector<long> a, b;
-    if (!ParseVersion(local, a) || !ParseVersion(remote, b)) return ReleaseOrder::Unknown;
+    std::string sa, sb;
+    if (!ParseVersion(local, a, sa) || !ParseVersion(remote, b, sb)) return ReleaseOrder::Unknown;
     const std::size_t n = a.size() > b.size() ? a.size() : b.size();
     for (std::size_t i = 0; i < n; ++i)
     {
@@ -162,7 +188,9 @@ ReleaseOrder CompareReleaseTags(const std::string& local, const std::string& rem
         const long y = i < b.size() ? b[i] : 0;
         if (x != y) return y > x ? ReleaseOrder::RemoteNewer : ReleaseOrder::RemoteOlder;
     }
-    return ReleaseOrder::Unknown;   // equal numbers, different text (v1.0 against v1.0-rc1)
+    // Equal numbers: the same release however it is written (v1.0, V1.0, v1.0.0), unless a suffix says
+    // otherwise (v1.0-rc1 against v1.0 is not comparable).
+    return sa == sb ? ReleaseOrder::Same : ReleaseOrder::Unknown;
 }
 
 std::string ReleasePageUrl(const std::string& repo, const std::string& tag)
@@ -299,13 +327,51 @@ UpdateResult EvaluateLatestRelease(bool transportOk, const IPlatform::HttpRespon
     return r;
 }
 
+UpdateResult EvaluateSourceBuild(const UpdateResult& release, bool headOk, const IPlatform::HttpResponse& head,
+                                 const std::string& localCommit, const std::string& localCommitShort)
+{
+    auto lower = [](std::string s) {
+        for (char& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        return s;
+    };
+    std::string local = lower(localCommit);
+    const std::string::size_type dash = local.find("-dirty");
+    if (dash != std::string::npos) local.erase(dash);
+    if (!headOk || head.status != 200 || local.empty() || local == "unknown") return release;
+    const std::string remote = lower(ExtractLatestCommitSha(head.body));
+    if (remote.empty()) return release;
+
+    UpdateResult r;
+    r.tag = release.tag;
+    r.url = release.url;
+    const std::string latestRelease = release.tag.empty() ? std::string() : " The latest release is " + release.tag + ".";
+    if (remote == local)
+    {
+        r.state = UpdateChecker::State::UpToDate;
+        r.message = "This build (" + localCommitShort + ") is the latest source on GitHub." + latestRelease;
+    }
+    else
+    {
+        r.state = UpdateChecker::State::UpdateAvailable;
+        r.message = "The latest source on GitHub is " + remote.substr(0, 10) + "; this build is " + localCommitShort +
+                    ". Pull the repo and rebuild to update (a different commit does not mean yours is older)." + latestRelease;
+    }
+    return r;
+}
+
 void UpdateChecker::Run(std::shared_ptr<Shared> shared, IPlatform* platform)
 {
     const std::string repo = kBuildRepo;
+    const std::string api = "https://api.github.com/repos/" + repo;
     IPlatform::HttpResponse resp;
-    const bool ok = platform->HttpsGet("https://api.github.com/repos/" + repo + "/releases/latest",
-                                       "SaturnExplorer-UpdateCheck", resp);
+    const bool ok = platform->HttpsGet(api + "/releases/latest", "SaturnExplorer-UpdateCheck", resp);
     UpdateResult r = EvaluateLatestRelease(ok, resp, repo, kBuildVersion, kBuildCommitShort);
+    if (std::string(kBuildVersion).empty() && r.state != State::Unsupported)
+    {
+        IPlatform::HttpResponse head;
+        const bool headOk = platform->HttpsGet(api + "/commits/HEAD", "SaturnExplorer-UpdateCheck", head);
+        r = EvaluateSourceBuild(r, headOk, head, kBuildCommit, kBuildCommitShort);
+    }
 
     std::lock_guard<std::mutex> lock(shared->mutex);
     shared->state = r.state;

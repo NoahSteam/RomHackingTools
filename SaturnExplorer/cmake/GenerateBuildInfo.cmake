@@ -32,11 +32,15 @@ endif()
 # The release this build is, for the update check's comparison with the latest GitHub release: the
 # tag the release workflow is building (SE_RELEASE_VERSION in the environment, set from the tag),
 # else a v* tag sitting exactly on HEAD. Empty for anything else, which the update check reports as
-# "not a tagged release" rather than guessing. A modified tree is not the release, and only a
-# filename-safe tag is baked in because it ends up inside a C++ string literal.
+# "not a tagged release" rather than guessing. SE_RELEASE_VERSION is a statement by whoever runs the
+# build (the release workflow) that this IS that release, so it stands even if the tree reads as
+# modified; a tag merely found on HEAD does not count for a modified tree. Only a filename-safe name
+# is baked in because it ends up inside a C++ string literal.
 set(SE_BUILD_VERSION "")
+set(SE_VERSION_EXPLICIT FALSE)
 if(DEFINED ENV{SE_RELEASE_VERSION} AND NOT "$ENV{SE_RELEASE_VERSION}" STREQUAL "")
     set(SE_BUILD_VERSION "$ENV{SE_RELEASE_VERSION}")
+    set(SE_VERSION_EXPLICIT TRUE)
 elseif(GIT_FOUND)
     execute_process(
         COMMAND "${GIT_EXECUTABLE}" describe --tags --exact-match --match "v[0-9]*" HEAD
@@ -49,7 +53,9 @@ elseif(GIT_FOUND)
         set(SE_BUILD_VERSION "")
     endif()
 endif()
-if(NOT SE_BUILD_VERSION MATCHES "^[A-Za-z0-9._+-]+$" OR NOT SE_GIT_DIRTY STREQUAL "")
+if(NOT SE_BUILD_VERSION MATCHES "^[A-Za-z0-9._+-]+$")
+    set(SE_BUILD_VERSION "")
+elseif(NOT SE_VERSION_EXPLICIT AND NOT SE_GIT_DIRTY STREQUAL "")
     set(SE_BUILD_VERSION "")
 endif()
 

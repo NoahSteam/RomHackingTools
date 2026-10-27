@@ -5,9 +5,11 @@
 // workflow builds or a v* tag on HEAD); the check fetches the repository's latest published
 // release and compares the two tags.
 //
-// It compares releases, not commits: a push to the default branch is not an update, and a build
-// that is not a tagged release (a local build, a CI run with no tag) is told so instead of being
-// called out of date.
+// A tagged build is compared with the latest release, not with commits: a push to the default
+// branch is not an update for it. A build that is not a tagged release (built from source, or a CI run
+// with no tag) has no release to compare, so it is compared with the latest commit on the default branch
+// instead -- the only signal a source build has that its checkout is behind -- and is also shown the
+// latest release.
 //
 // The HTTPS GET blocks, so it runs on a worker thread; the UI polls State()/Message()
 // each frame. No ImGui, no platform code here.
@@ -83,11 +85,14 @@ private:
 std::string ExtractReleaseTag(const std::string& json);
 
 // How the `remote` release tag relates to the `local` one. Tags are compared as dotted numbers
-// after an optional leading 'v' ("v1.10" is newer than "v1.9"); a "-rc1"-style suffix is allowed
-// but ignored. Unknown when either side is not of that form, or when the numbers are equal and the
-// tags differ (v1.0 against v1.0-rc1).
+// after an optional leading 'v' ("v1.10" is newer than "v1.9"; v1.0, V1.0 and v1.0.0 are the same
+// release). A "-rc1"-style suffix is allowed and does not count in the ordering, but equal numbers with
+// different suffixes (v1.0-rc1 against v1.0) are Unknown, as is anything not of that form.
 enum class ReleaseOrder { Unknown, RemoteNewer, Same, RemoteOlder };
 ReleaseOrder CompareReleaseTags(const std::string& local, const std::string& remote);
+
+// The latest commit SHA (40 hex characters) from GitHub's /commits/<ref> JSON, or "" if the reply has none.
+std::string ExtractLatestCommitSha(const std::string& json);
 
 // What the check concludes from one HttpsGet outcome. Everything Run decides lives here, apart from the
 // network call, so each branch can be tested with a canned reply.
@@ -103,6 +108,14 @@ struct UpdateResult
 UpdateResult EvaluateLatestRelease(bool transportOk, const IPlatform::HttpResponse& resp,
                                    const std::string& repo, const std::string& localVersion,
                                    const std::string& localCommitShort);
+
+// For a build that is not a tagged release: the release result refined by the default branch's latest commit
+// (`head` is HttpsGet's reply for /commits/HEAD). The same commit is up to date; a different one is "update
+// available" (a difference, not proof that this build is older), told to pull and rebuild; the latest release's
+// tag and page ride along. Returns `release` unchanged when the commit reply is unusable or this build has no
+// recorded commit ("unknown"). `localCommit` may end in the "-dirty" marker, which is ignored.
+UpdateResult EvaluateSourceBuild(const UpdateResult& release, bool headOk, const IPlatform::HttpResponse& head,
+                                 const std::string& localCommit, const std::string& localCommitShort);
 
 // https://github.com/<repo>/releases/tag/<tag>. Built here rather than taken from the reply, so the page
 // the user is sent to is always on github.com under our repo; `tag` must already have passed

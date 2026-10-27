@@ -214,7 +214,7 @@
       <Output TaskParameter="ConsoleOutput" PropertyName="SeGitDirty" />
     </Exec>
     <!-- The release this build is (see cmake/GenerateBuildInfo.cmake): the SE_RELEASE_VERSION environment
-         variable, else a v* tag exactly on HEAD. Empty for a modified tree or an unsafe name. -->
+         variable, else a v* tag exactly on HEAD of an unmodified tree. Empty for an unsafe name. -->
     <Exec Command="git describe --tags --exact-match --match &quot;v[0-9]*&quot; HEAD" WorkingDirectory="$(ProjectDir).." ConsoleToMSBuild="true"
           IgnoreExitCode="true" EchoOff="true" StandardOutputImportance="low" StandardErrorImportance="low"
           Condition="'$(SeGitHeadExit)' == '0' And '$(SE_RELEASE_VERSION)' == ''">
@@ -224,9 +224,8 @@
     <PropertyGroup>
       <SeVersion></SeVersion>
       <SeVersion Condition="'$(SE_RELEASE_VERSION)' != ''">$(SE_RELEASE_VERSION)</SeVersion>
-      <SeVersion Condition="'$(SeVersion)' == '' And '$(SeGitTagExit)' == '0'">$(SeGitTag)</SeVersion>
+      <SeVersion Condition="'$(SeVersion)' == '' And '$(SeGitTagExit)' == '0' And '$(SeGitDirty)' == ''">$(SeGitTag)</SeVersion>
       <SeVersion Condition="'$(SeVersion)' != '' And !$([System.Text.RegularExpressions.Regex]::IsMatch('$(SeVersion)', '^[A-Za-z0-9._+-]+$'))"></SeVersion>
-      <SeVersion Condition="'$(SeGitDirty)' != ''"></SeVersion>
     </PropertyGroup>
     <PropertyGroup>
       <SeCommit>unknown</SeCommit>

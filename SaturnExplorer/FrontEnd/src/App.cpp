@@ -8741,6 +8741,7 @@ void App::ExecuteTopBarCommand(const TopBarCommand& command, IPlatform& platform
         break;
     case TopBarCommandType::CheckForUpdates:
         mOpenUpdate = true;
+        mUpdateOpenFailed = false;
         mUpdateChecker.Start(platform);   // kicks off the worker; the modal polls it
         break;
     case TopBarCommandType::None:
@@ -9210,7 +9211,11 @@ void App::DrawUpdateModal(IPlatform& platform)
 
     ImGui::Separator();
     ImGui::BeginDisabled(mUpdateChecker.Busy());
-    if (ImGui::Button("Check Again")) mUpdateChecker.Start(platform);
+    if (ImGui::Button("Check Again"))
+    {
+        mUpdateOpenFailed = false;
+        mUpdateChecker.Start(platform);
+    }
     ImGui::EndDisabled();
     // The page is built by UpdateChecker from our own repository and a validated tag, never taken from
     // GitHub's reply, so it is safe to hand to the system browser.
@@ -9218,10 +9223,16 @@ void App::DrawUpdateModal(IPlatform& platform)
     if (!releaseUrl.empty() && !mUpdateChecker.Busy())
     {
         ImGui::SameLine();
-        if (ImGui::Button("Open Release Page")) platform.OpenURL(releaseUrl.c_str());
+        if (ImGui::Button("Open Release Page") && !platform.OpenURL(releaseUrl.c_str())) mUpdateOpenFailed = true;
     }
     ImGui::SameLine();
     if (ImGui::Button("Close")) ImGui::CloseCurrentPopup();
+    if (mUpdateOpenFailed && !releaseUrl.empty())
+    {
+        // A platform with no way to open a browser: give the address to copy instead of a button that does nothing.
+        ImGui::TextUnformatted("Couldn't open a browser. The release page is:");
+        ImGui::TextDisabled("%s", releaseUrl.c_str());
+    }
     ImGui::EndPopup();
 }
 

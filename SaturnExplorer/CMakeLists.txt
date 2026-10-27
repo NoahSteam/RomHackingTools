@@ -1264,6 +1264,10 @@ if(BUILD_TESTING)
         # shipped copyleft library needs a findable source, credential scrubbing, and (macOS) @rpath bundling.
         add_test(NAME SaturnExplorerPackageRelease
                  COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/Integration/tests/check_package_release.py)
+        # The release version baked into the app for the update check (cmake/GenerateBuildInfo.cmake), per way it can arise.
+        add_test(NAME SaturnExplorerBuildInfo
+                 COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/Integration/tests/check_build_info.py
+                         ${CMAKE_COMMAND} ${CMAKE_CURRENT_SOURCE_DIR})
         add_test(NAME SaturnExplorerMednafenHaltOrdering
                  COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/Integration/tests/check_halt_ordering.py
                          ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Mednafen/apply.py)
