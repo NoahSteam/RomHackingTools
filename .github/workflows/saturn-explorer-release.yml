@@ -25,6 +25,10 @@ jobs:
   macos:
     name: macOS archive
     runs-on: macos-latest
+    env:
+      # The tag being built, baked into the app (cmake/GenerateBuildInfo.cmake) so "Check for Updates"
+      # can compare it with the latest GitHub release. Empty for a manual run, which is not a release.
+      SE_RELEASE_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
     defaults:
       run:
         working-directory: SaturnExplorer
@@ -79,6 +83,10 @@ jobs:
   windows:
     name: Windows archive
     runs-on: windows-latest
+    env:
+      # The tag being built, baked into the app (cmake/GenerateBuildInfo.cmake) so "Check for Updates"
+      # can compare it with the latest GitHub release. Empty for a manual run, which is not a release.
+      SE_RELEASE_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
     defaults:
       run:
         working-directory: SaturnExplorer

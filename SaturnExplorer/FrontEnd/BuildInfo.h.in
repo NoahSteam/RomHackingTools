@@ -5,5 +5,7 @@ namespace sfe
 {
 constexpr const char* kBuildCommit = "@SE_BUILD_COMMIT@";
 constexpr const char* kBuildCommitShort = "@SE_BUILD_COMMIT_SHORT@";
+// The release this build is, e.g. "v1.0"; empty for any build that is not a tagged release.
+constexpr const char* kBuildVersion = "@SE_BUILD_VERSION@";
 constexpr const char* kBuildRepo = "NoahSteam/RomHackingTools";
 }

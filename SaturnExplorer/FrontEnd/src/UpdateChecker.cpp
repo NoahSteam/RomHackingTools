@@ -1,6 +1,7 @@
 #include "UpdateChecker.h"
 
 #include <cctype>
+#include <vector>
 
 #include "Platform/IPlatform.h"
 
@@ -13,6 +14,7 @@ namespace sfe
 {
 constexpr const char* kBuildCommit = "unknown";
 constexpr const char* kBuildCommitShort = "unknown";
+constexpr const char* kBuildVersion = "";
 constexpr const char* kBuildRepo = "NoahSteam/RomHackingTools";
 }
 #endif
@@ -22,46 +24,163 @@ namespace sfe
 
 namespace
 {
-std::string LowerHex(const std::string& s)
+// Reads the JSON string whose opening quote is at json[i]; on success returns true, sets `value` to
+// its contents with the escapes a tag can legitimately carry decoded, and leaves `end` at the closing
+// quote. Any other escape makes it fail: nothing we look for contains one.
+bool ReadJsonString(const std::string& json, std::string::size_type i, std::string& value,
+                    std::string::size_type& end)
 {
-    std::string out = s;
-    for (char& c : out) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-    return out;
+    value.clear();
+    for (++i; i < json.size(); ++i)
+    {
+        const char c = json[i];
+        if (c == '"')
+        {
+            end = i;
+            return true;
+        }
+        if (c != '\\')
+        {
+            value += c;
+            continue;
+        }
+        if (++i >= json.size()) return false;
+        const char e = json[i];
+        if (e == '"' || e == '\\' || e == '/') value += e;
+        else if (e == 'u')
+        {
+            // \uXXXX: kept only for the ASCII range, so a non-ASCII value fails the tag check later.
+            if (i + 4 >= json.size()) return false;
+            unsigned code = 0;
+            for (int k = 1; k <= 4; ++k)
+            {
+                const char h = json[i + k];
+                if (!std::isxdigit(static_cast<unsigned char>(h))) return false;
+                code = code * 16 + static_cast<unsigned>(std::isdigit(static_cast<unsigned char>(h))
+                                                             ? h - '0'
+                                                             : std::tolower(static_cast<unsigned char>(h)) - 'a' + 10);
+            }
+            value += code < 0x80 ? static_cast<char>(code) : '?';
+            i += 4;
+        }
+        else
+        {
+            // \n, \t and friends: skip them in strings we do not read, refuse them in ones we do.
+            value += '?';
+        }
+    }
+    return false;
 }
 
-// The commit whose newness we compare against, minus a "-dirty" working-tree marker.
-std::string LocalCommitClean()
+bool ValidTag(const std::string& tag)
 {
-    std::string c = kBuildCommit;
-    const std::string::size_type dash = c.find("-dirty");
-    if (dash != std::string::npos) c.erase(dash);
-    return LowerHex(c);
+    if (tag.empty() || tag.size() > 64) return false;
+    for (char c : tag)
+    {
+        const unsigned char u = static_cast<unsigned char>(c);
+        if (!(std::isalnum(u) || c == '.' || c == '_' || c == '+' || c == '-')) return false;
+    }
+    return true;
+}
+
+// "v1.2.3" / "1.2.3-rc1" -> {1,2,3}. False for anything else, including a suffix that does not start
+// with '-' or '+' ("release-2").
+bool ParseVersion(const std::string& tag, std::vector<long>& out)
+{
+    out.clear();
+    std::string::size_type i = 0;
+    if (i < tag.size() && (tag[i] == 'v' || tag[i] == 'V')) ++i;
+    for (;;)
+    {
+        if (i >= tag.size() || !std::isdigit(static_cast<unsigned char>(tag[i]))) return false;
+        long n = 0;
+        int digits = 0;
+        while (i < tag.size() && std::isdigit(static_cast<unsigned char>(tag[i])))
+        {
+            if (++digits > 9) return false;   // not a version number; keeps the arithmetic in range
+            n = n * 10 + (tag[i] - '0');
+            ++i;
+        }
+        out.push_back(n);
+        if (i < tag.size() && tag[i] == '.')
+        {
+            ++i;
+            continue;
+        }
+        break;
+    }
+    return i == tag.size() || tag[i] == '-' || tag[i] == '+';
 }
 }  // namespace
 
-std::string ExtractLatestCommitSha(const std::string& json)
+std::string ExtractReleaseTag(const std::string& json)
 {
-    // GitHub's /commits/<ref> reply opens with {"sha":"<40 hex>",... — grab the first
-    // "sha" string value. Deliberately dependency-free (no JSON lib) since we need exactly
-    // one well-known field.
-    std::string::size_type key = json.find("\"sha\"");
-    if (key == std::string::npos) return "";
-    std::string::size_type colon = json.find(':', key + 5);
-    if (colon == std::string::npos) return "";
-    std::string::size_type open = json.find('"', colon + 1);
-    if (open == std::string::npos) return "";
-    std::string::size_type close = json.find('"', open + 1);
-    if (close == std::string::npos) return "";
-    std::string sha = json.substr(open + 1, close - open - 1);
-    // Sanity: a commit SHA is 40 hex chars.
-    if (sha.size() < 7) return "";
-    for (char c : sha)
-        if (!std::isxdigit(static_cast<unsigned char>(c))) return "";
-    return sha;
+    // Walk the document tracking brace depth and only look at keys of the root object, so the
+    // "tag_name" of nothing nested can be returned. Deliberately dependency-free (no JSON lib):
+    // this is the one field the check needs.
+    int depth = 0;
+    std::string key, value;
+    for (std::string::size_type i = 0; i < json.size(); ++i)
+    {
+        const char c = json[i];
+        if (c == '{' || c == '[')
+        {
+            ++depth;
+        }
+        else if (c == '}' || c == ']')
+        {
+            --depth;
+        }
+        else if (c == '"')
+        {
+            std::string::size_type end = 0;
+            if (!ReadJsonString(json, i, key, end)) return "";
+            i = end;
+            if (depth != 1) continue;
+            std::string::size_type j = i + 1;
+            while (j < json.size() && std::isspace(static_cast<unsigned char>(json[j]))) ++j;
+            if (j >= json.size() || json[j] != ':' || key != "tag_name") continue;
+            ++j;
+            while (j < json.size() && std::isspace(static_cast<unsigned char>(json[j]))) ++j;
+            if (j >= json.size() || json[j] != '"') return "";
+            if (!ReadJsonString(json, j, value, end)) return "";
+            return ValidTag(value) ? value : "";
+        }
+    }
+    return "";
+}
+
+ReleaseOrder CompareReleaseTags(const std::string& local, const std::string& remote)
+{
+    if (local == remote) return ReleaseOrder::Same;
+    std::vector<long> a, b;
+    if (!ParseVersion(local, a) || !ParseVersion(remote, b)) return ReleaseOrder::Unknown;
+    const std::size_t n = a.size() > b.size() ? a.size() : b.size();
+    for (std::size_t i = 0; i < n; ++i)
+    {
+        const long x = i < a.size() ? a[i] : 0;
+        const long y = i < b.size() ? b[i] : 0;
+        if (x != y) return y > x ? ReleaseOrder::RemoteNewer : ReleaseOrder::RemoteOlder;
+    }
+    return ReleaseOrder::Unknown;   // equal numbers, different text (v1.0 against v1.0-rc1)
+}
+
+std::string ReleasePageUrl(const std::string& repo, const std::string& tag)
+{
+    // The tag is already limited to characters that need no percent-encoding in a path.
+    return "https://github.com/" + repo + "/releases/tag/" + tag;
 }
 
 const char* UpdateChecker::BuildCommit() { return kBuildCommit; }
 const char* UpdateChecker::BuildCommitShort() { return kBuildCommitShort; }
+const char* UpdateChecker::BuildVersion() { return kBuildVersion; }
+
+std::string UpdateChecker::BuildDescription()
+{
+    const std::string version = kBuildVersion;
+    if (!version.empty()) return version + " (" + kBuildCommitShort + ")";
+    return std::string(kBuildCommitShort) + " (not a tagged release)";
+}
 
 UpdateChecker::~UpdateChecker()
 {
@@ -77,8 +196,9 @@ void UpdateChecker::Start(IPlatform& platform)
         std::lock_guard<std::mutex> lock(mShared->mutex);
         if (mShared->state == State::Checking) return;   // one in flight already
         mShared->state = State::Checking;
-        mShared->message = "Checking GitHub for a newer build\xe2\x80\xa6";
-        mShared->latestShort.clear();
+        mShared->message = "Checking GitHub for the latest release\xe2\x80\xa6";
+        mShared->latestTag.clear();
+        mShared->latestUrl.clear();
     }
     if (mThread.joinable()) mThread.join();   // reap the previous (finished) run
     mThread = std::thread(&UpdateChecker::Run, mShared, &platform);
@@ -96,74 +216,102 @@ std::string UpdateChecker::Message() const
     return mShared->message;
 }
 
-std::string UpdateChecker::LatestShort() const
+std::string UpdateChecker::LatestTag() const
 {
     std::lock_guard<std::mutex> lock(mShared->mutex);
-    return mShared->latestShort;
+    return mShared->latestTag;
 }
 
-void UpdateChecker::Run(std::shared_ptr<Shared> shared, IPlatform* platform)
+std::string UpdateChecker::LatestUrl() const
 {
-    auto finish = [&shared](State s, std::string msg, std::string latestShort = {}) {
-        std::lock_guard<std::mutex> lock(shared->mutex);
-        shared->state = s;
-        shared->message = std::move(msg);
-        shared->latestShort = std::move(latestShort);
-    };
+    std::lock_guard<std::mutex> lock(mShared->mutex);
+    return mShared->latestUrl;
+}
 
-    const std::string local = LocalCommitClean();
-    if (local.empty() || local == "unknown")
-    {
-        finish(State::Error,
-               "This is a development build (no recorded commit), so it can't be compared "
-               "against GitHub.");
-        return;
-    }
-
-    const std::string url =
-        std::string("https://api.github.com/repos/") + kBuildRepo + "/commits/HEAD";
-
-    IPlatform::HttpResponse resp;
-    const bool ok = platform->HttpsGet(url, "SaturnExplorer-UpdateCheck", resp);
-    if (!ok)
+UpdateResult EvaluateLatestRelease(bool transportOk, const IPlatform::HttpResponse& resp,
+                                   const std::string& repo, const std::string& localVersion,
+                                   const std::string& localCommitShort)
+{
+    using State = UpdateChecker::State;
+    UpdateResult r;
+    if (!transportOk)
     {
         // Distinguish "this build can't do HTTPS" from a real network failure so the UI
         // can word it correctly.
         const bool unsupported = resp.error.find("not available") != std::string::npos;
-        finish(unsupported ? State::Unsupported : State::Error,
-               resp.error.empty() ? "Could not reach GitHub." : resp.error);
-        return;
+        r.state = unsupported ? State::Unsupported : State::Error;
+        r.message = resp.error.empty() ? "Could not reach GitHub." : resp.error;
+        return r;
+    }
+    if (resp.status == 404)
+    {
+        // /releases/latest answers 404 until a release is published (drafts and pre-releases do
+        // not count), and for a repository that moved.
+        r.state = State::NoRelease;
+        r.message = "No release has been published on GitHub yet.";
+        return r;
     }
     if (resp.status != 200)
     {
-        finish(State::Error,
-               "GitHub returned HTTP " + std::to_string(resp.status) +
-                   " (rate-limited, or the repo/branch moved).");
-        return;
+        r.state = State::Error;
+        r.message = "GitHub returned HTTP " + std::to_string(resp.status) + " (rate-limited, or the repo moved).";
+        return r;
     }
 
-    const std::string remote = LowerHex(ExtractLatestCommitSha(resp.body));
-    if (remote.empty())
+    const std::string tag = ExtractReleaseTag(resp.body);
+    if (tag.empty())
     {
-        finish(State::Error, "Couldn't read the latest commit from GitHub's reply.");
-        return;
+        r.state = State::Error;
+        r.message = "Couldn't read the latest release from GitHub's reply.";
+        return r;
     }
-    const std::string remoteShort = remote.substr(0, 10);
+    r.tag = tag;
+    r.url = ReleasePageUrl(repo, tag);
 
-    if (remote == local)
+    if (localVersion.empty())
     {
-        finish(State::UpToDate,
-               std::string("You're on the latest build (") + kBuildCommitShort + ").",
-               remoteShort);
+        r.state = State::UnreleasedBuild;
+        r.message = "This build (" + localCommitShort + ") is not a tagged release, so it can't be compared. "
+                    "The latest release is " + tag + ".";
+        return r;
     }
-    else
+
+    switch (CompareReleaseTags(localVersion, tag))
     {
-        finish(State::UpdateAvailable,
-               std::string("A different build is on GitHub. You have ") + kBuildCommitShort +
-                   ", latest is " + remoteShort +
-                   ". Pull the repo and rebuild (or grab the new binary) to update.",
-               remoteShort);
+        case ReleaseOrder::Same:
+            r.state = State::UpToDate;
+            r.message = "You have the latest release (" + tag + ").";
+            break;
+        case ReleaseOrder::RemoteOlder:
+            r.state = State::UpToDate;
+            r.message = "This build (" + localVersion + ") is newer than the latest published release (" + tag + ").";
+            break;
+        case ReleaseOrder::RemoteNewer:
+            r.state = State::UpdateAvailable;
+            r.message = "A newer release is available: " + tag + " (you have " + localVersion + ").";
+            break;
+        case ReleaseOrder::Unknown:
+        default:
+            r.state = State::UpdateAvailable;
+            r.message = "A different release is published: " + tag + " (you have " + localVersion + ").";
+            break;
     }
+    return r;
+}
+
+void UpdateChecker::Run(std::shared_ptr<Shared> shared, IPlatform* platform)
+{
+    const std::string repo = kBuildRepo;
+    IPlatform::HttpResponse resp;
+    const bool ok = platform->HttpsGet("https://api.github.com/repos/" + repo + "/releases/latest",
+                                       "SaturnExplorer-UpdateCheck", resp);
+    UpdateResult r = EvaluateLatestRelease(ok, resp, repo, kBuildVersion, kBuildCommitShort);
+
+    std::lock_guard<std::mutex> lock(shared->mutex);
+    shared->state = r.state;
+    shared->message = std::move(r.message);
+    shared->latestTag = std::move(r.tag);
+    shared->latestUrl = std::move(r.url);
 }
 
 }  // namespace sfe

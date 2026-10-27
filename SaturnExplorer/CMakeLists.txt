@@ -1078,6 +1078,16 @@ if(BUILD_TESTING)
     target_include_directories(SaturnExplorerSha256Tests PRIVATE FrontEnd/src)
     add_test(NAME SaturnExplorerSha256Tests COMMAND SaturnExplorerSha256Tests)
 
+    # The "Check for Updates" verdict from a canned /releases/latest reply: tag extraction, version
+    # ordering and each outcome. No network, no platform (IPlatform is header-only).
+    add_executable(SaturnExplorerUpdateCheckerTests
+        FrontEnd/tests/UpdateCheckerTests.cpp
+        FrontEnd/src/UpdateChecker.cpp
+    )
+    target_include_directories(SaturnExplorerUpdateCheckerTests PRIVATE FrontEnd/src ${SE_IMGUI_DIR})   # IPlatform.h names ImGui types
+    find_package(Threads REQUIRED)   # UpdateChecker runs its request on a worker thread
+    target_link_libraries(SaturnExplorerUpdateCheckerTests PRIVATE Threads::Threads)
+    add_test(NAME SaturnExplorerUpdateCheckerTests COMMAND SaturnExplorerUpdateCheckerTests)
     # The strict JSON reader/writer behind the AI investigation formats: duplicate keys, exact
     # 64-bit integers and the size limits (FrontEnd/third_party/nlohmann-json/VENDOR.md says why
     # the tokenizer is nlohmann/json).

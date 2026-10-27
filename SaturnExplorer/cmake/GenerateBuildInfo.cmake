@@ -7,6 +7,7 @@
 find_package(Git QUIET)
 
 set(SE_BUILD_COMMIT "unknown")
+set(SE_GIT_DIRTY "")
 if(GIT_FOUND)
     execute_process(
         COMMAND "${GIT_EXECUTABLE}" rev-parse HEAD
@@ -26,6 +27,30 @@ if(GIT_FOUND)
         OUTPUT_VARIABLE SE_GIT_DIRTY
         OUTPUT_STRIP_TRAILING_WHITESPACE
         ERROR_QUIET)
+endif()
+
+# The release this build is, for the update check's comparison with the latest GitHub release: the
+# tag the release workflow is building (SE_RELEASE_VERSION in the environment, set from the tag),
+# else a v* tag sitting exactly on HEAD. Empty for anything else, which the update check reports as
+# "not a tagged release" rather than guessing. A modified tree is not the release, and only a
+# filename-safe tag is baked in because it ends up inside a C++ string literal.
+set(SE_BUILD_VERSION "")
+if(DEFINED ENV{SE_RELEASE_VERSION} AND NOT "$ENV{SE_RELEASE_VERSION}" STREQUAL "")
+    set(SE_BUILD_VERSION "$ENV{SE_RELEASE_VERSION}")
+elseif(GIT_FOUND)
+    execute_process(
+        COMMAND "${GIT_EXECUTABLE}" describe --tags --exact-match --match "v[0-9]*" HEAD
+        WORKING_DIRECTORY "${SRC_DIR}"
+        OUTPUT_VARIABLE SE_BUILD_VERSION
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        RESULT_VARIABLE SE_DESCRIBE_RESULT
+        ERROR_QUIET)
+    if(NOT SE_DESCRIBE_RESULT EQUAL 0)
+        set(SE_BUILD_VERSION "")
+    endif()
+endif()
+if(NOT SE_BUILD_VERSION MATCHES "^[A-Za-z0-9._+-]+$" OR NOT SE_GIT_DIRTY STREQUAL "")
+    set(SE_BUILD_VERSION "")
 endif()
 
 if(SE_BUILD_COMMIT STREQUAL "unknown")

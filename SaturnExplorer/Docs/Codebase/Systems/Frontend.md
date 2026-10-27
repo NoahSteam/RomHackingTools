@@ -21,7 +21,7 @@ settings, demo and sound tools; specialized systems own their own algorithms.
 | Common widgets | [PanelWidgets.h](../../../FrontEnd/src/PanelWidgets.h): `RowSelectable`, `HorizontalSplitter`, `ComboWidth` |
 | Sound previews | [ScspMix.cpp](../../../FrontEnd/src/ScspMix.cpp): `ScspMixVoices`, `ScspResampleMono`, `ScspAttenuate`; App's `DecodeSlotSample`, `PlaySound`, `PlaySoundFrame`, `ExportSound`, `DrawSound` |
 | Feature tour | [DemoPlayer.cpp](../../../FrontEnd/src/Demo/DemoPlayer.cpp): `DemoPlayer::Tick`, `ConsumeDirty`; [DemoScript.cpp](../../../FrontEnd/src/Demo/DemoScript.cpp): `DemoParseText`; `App::UpdateDemo`, `ApplyDemoBeat` |
-| Updates | [UpdateChecker.cpp](../../../FrontEnd/src/UpdateChecker.cpp): `UpdateChecker::Start`, `Run`, `ExtractLatestCommitSha`; `App::DrawUpdateModal` |
+| Updates | [UpdateChecker.cpp](../../../FrontEnd/src/UpdateChecker.cpp): `UpdateChecker::Start`, `Run`, `EvaluateLatestRelease`, `ExtractReleaseTag`, `CompareReleaseTags`; `App::DrawUpdateModal` |
 
 ## Execution flow and interactions
 

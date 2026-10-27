@@ -59,8 +59,9 @@ it compiles. Distribution obligations differ between SE and emulator binaries; c
 
 ## External services and programs
 
-The update checker calls GitHub's commits API through `IPlatform::HttpsGet`; it compares the
-build commit to the returned HEAD, which indicates difference, not ancestry. There is no AI
+The update checker calls GitHub's `releases/latest` API through `IPlatform::HttpsGet` and compares the
+build's baked-in release tag (`kBuildVersion`; empty for a build that is not a tagged release) with the
+latest published release's tag. It compares releases, not commits, and never downloads anything. There is no AI
 provider/network integration in M0. Live state is an emulator connection, not a hosted service.
 External diff programs and generated patch scripts are launched through platform process APIs;
 their availability, exit/completion and tool-specific output are separate from launch success.

@@ -165,6 +165,14 @@ fixed); an accented Latin-1 name is found but its path is drawn garbled. Windows
 `windows-latest` runner (workflow_dispatch, label only, no tag). The macOS job was not re-run after its
 Mednafen bootstrap was changed (`Docs/MacReleaseSteps.md`).
 
+The in-app **Check for Updates** compares the build's release tag with GitHub's latest published release
+(`releases/latest`) and offers the release page; it never looks at commits. The tag is baked in at build
+time (`cmake/GenerateBuildInfo.cmake`, and `FrontEnd.vcxproj` for the MSBuild project) from `SE_RELEASE_VERSION`,
+which the release workflow sets to the tag it builds, else from a `v*` tag exactly on HEAD. A build with no
+tag (a local build, a manual workflow run, a modified tree) is told it is not a tagged release. So tag releases
+`v<number>[.<number>...]` (`v1.0`, `v1.2.3`): the check orders tags as dotted numbers, and a release must be
+*published* (a draft does not count) before users can see it.
+
 Still manual: Developer ID signing and notarisation (below), Windows signing, and running the
 Windows archive on a machine that has no Visual Studio or MSYS2.
 

@@ -9112,7 +9112,7 @@ void App::DrawAboutModal()
     ImGui::Spacing();
     ImGui::TextWrapped("Source selects the debugger's active data provider. Emulator and Game select the next launch configuration.");
     ImGui::Spacing();
-    ImGui::TextDisabled("Build: %s", UpdateChecker::BuildCommitShort());
+    ImGui::TextDisabled("Build: %s", UpdateChecker::BuildDescription().c_str());
     ImGui::Spacing();
 
     // Third-party code compiled or embedded into this binary. Each licence text ships beside it
@@ -9172,7 +9172,7 @@ void App::DrawUpdateModal(IPlatform& platform)
     if (!ImGui::BeginPopupModal("Check for Updates", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
         return;
 
-    ImGui::Text("This build: %s", UpdateChecker::BuildCommitShort());
+    ImGui::Text("This build: %s", UpdateChecker::BuildDescription().c_str());
     ImGui::Separator();
 
     const UpdateChecker::State st = mUpdateChecker.GetState();
@@ -9187,6 +9187,14 @@ void App::DrawUpdateModal(IPlatform& platform)
             break;
         case UpdateChecker::State::UpdateAvailable:
             ImGui::TextColored(ui::Color(ImVec4(1.0f, 0.80f, 0.35f, 1.0f), ImVec4(0.50f,0.36f,0.0f,1.0f)), "Update available.");
+            ImGui::TextWrapped("%s", mUpdateChecker.Message().c_str());
+            break;
+        case UpdateChecker::State::NoRelease:
+            ImGui::TextUnformatted("No release yet.");
+            ImGui::TextWrapped("%s", mUpdateChecker.Message().c_str());
+            break;
+        case UpdateChecker::State::UnreleasedBuild:
+            ImGui::TextUnformatted("Not a release build.");
             ImGui::TextWrapped("%s", mUpdateChecker.Message().c_str());
             break;
         case UpdateChecker::State::Unsupported:
@@ -9204,6 +9212,14 @@ void App::DrawUpdateModal(IPlatform& platform)
     ImGui::BeginDisabled(mUpdateChecker.Busy());
     if (ImGui::Button("Check Again")) mUpdateChecker.Start(platform);
     ImGui::EndDisabled();
+    // The page is built by UpdateChecker from our own repository and a validated tag, never taken from
+    // GitHub's reply, so it is safe to hand to the system browser.
+    const std::string releaseUrl = mUpdateChecker.LatestUrl();
+    if (!releaseUrl.empty() && !mUpdateChecker.Busy())
+    {
+        ImGui::SameLine();
+        if (ImGui::Button("Open Release Page")) platform.OpenURL(releaseUrl.c_str());
+    }
     ImGui::SameLine();
     if (ImGui::Button("Close")) ImGui::CloseCurrentPopup();
     ImGui::EndPopup();
