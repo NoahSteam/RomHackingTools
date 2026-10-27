@@ -148,6 +148,7 @@ Saturn core only) beside it, the licences, and the GPL source offer.
 | `Integration/make_source_offer.py` | Writes `SOURCE.txt` and `mednafen-se-source.tar.xz` (the fork base with `apply.py` already run on it), from `UPSTREAM.json` and the same patch arguments and defines `install.py` builds with. |
 | `Integration/package_release.py` | Lays out the archive from the two existing builds, relinks Mednafen's dylibs into `mednafen-se/lib` (macOS), merges the licences, smoke-tests the result, then makes the `.dmg` / `.zip`. |
 | `.github/workflows/saturn-explorer-release.yml` | Runs the above on both platforms for a `v*` tag and leaves a DRAFT GitHub release. |
+| `make-release.bat` | Windows, on your own machine: `install.py --yes --mednafen-saturn-only`, then `package_release.py`, giving `dist\SaturnExplorer-<label>-windows.zip` (label = the argument, else the short commit hash). For trying a build; a release for others should come from the workflow, whose clean runner cannot carry over a stale DLL or setting from a developer's machine. |
 
 `mednafen-se/` sits beside the app (beside the `.app` on macOS) because a signed bundle cannot be
 written to and the user adds the BIOS to `mednafen-se/firmware/`. Saturn Explorer finds that copy when no
@@ -161,8 +162,8 @@ has), the app-local Visual C++ runtime, `mednafen-se/` with the MSYS2 DLLs it ne
 Saturn Explorer reads its own path in the active ANSI code page, so a folder name with characters outside
 that page (for example Japanese on a Western-European Windows) hides the bundled Mednafen (measured, not
 fixed); an accented Latin-1 name is found but its path is drawn garbled. Windows packaging was checked on a real machine and on a
-`windows-latest` runner (workflow_dispatch, label only, no tag); the macOS job still fails in
-`autoreconf` (gettext's `autopoint` rejects Mednafen's `AM_GNU_GETTEXT`).
+`windows-latest` runner (workflow_dispatch, label only, no tag). The macOS job was not re-run after its
+Mednafen bootstrap was changed (`Docs/MacReleaseSteps.md`).
 
 Still manual: Developer ID signing and notarisation (below), Windows signing, and running the
 Windows archive on a machine that has no Visual Studio or MSYS2.
