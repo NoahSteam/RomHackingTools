@@ -203,6 +203,15 @@ expose that port to a network.
 """
 
 
+# Windows builds are not code-signed (see Integration/DISTRIBUTION.md), so say what the user will see.
+UNSIGNED_NOTE = """
+This download is not code-signed. The first time you run it, Windows SmartScreen may show "Windows
+protected your PC": choose "More info", then "Run anyway". Windows 11's Smart App Control, if it is
+switched on, may refuse unsigned programs outright. To check that the zip is the one GitHub built,
+compare its SHA-256 (certutil -hashfile <zip> SHA256) with SHA256SUMS-windows.txt on the release page.
+"""
+
+
 def readme_top(ref, mac):
     where = "Keep SaturnExplorer.app and the mednafen-se folder side by side (for example both in\nApplications)." if mac else \
             ("Keep SaturnExplorerFrontEnd.exe and the mednafen-se folder side by side, in a folder whose path\n"
@@ -216,7 +225,7 @@ def readme_top(ref, mac):
 
 mednafen-se is a modified Mednafen build, not an official release. Its source and the licences of
 everything in this download are in SOURCE.txt, mednafen-se-source.tar.xz and Licenses/.
-"""
+{UNSIGNED_NOTE if not mac else ''}"""
 
 
 # --------------------------------------------------------------------------- assembly

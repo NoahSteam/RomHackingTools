@@ -326,6 +326,12 @@ for remote, want in (("http://user:FAKE_TOKEN@server.example/org/repo.git", "htt
     got = mso.se_repo_url()
     check(got == want and "FAKE_TOKEN" not in got and "token" not in got, f"remote {remote!r} -> {got!r}")
 
+# --- the Windows archive's README says it is unsigned and how to check it; the macOS one does not say that
+win_readme, mac_readme = pr.readme_top("v1.0", False), pr.readme_top("v1.0", True)
+check("not code-signed" in win_readme and "SmartScreen" in win_readme and "SHA256SUMS-windows.txt" in win_readme,
+      "the Windows README warns that the build is unsigned and names the checksum file")
+check("SmartScreen" not in mac_readme and win_readme.startswith("Saturn Explorer v1.0"), "the macOS README does not carry the Windows note")
+
 # --- the library section names what was copied
 text = mso.libraries_text([{"name": "gettext", "version": "1.0", "license": "LGPL-2.1-or-later", "files": ["libintl.8.dylib"],
                             "source": "https://example/gettext-1.0.tar.gz", "sha256": "ab", "included": "third-party-source/gettext-1.0.tar.gz"}])

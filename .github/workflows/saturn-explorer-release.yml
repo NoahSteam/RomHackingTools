@@ -84,10 +84,16 @@ jobs:
           python3 Integration/package_release.py --se-app stage/SaturnExplorer.app \
             --mednafen _emu/mednafen/src/mednafen --ref "$LABEL" --out dist
 
+      # Published beside the archive so a download can be checked against what this run built.
+      - name: Checksum
+        run: cd dist && shasum -a 256 *.dmg > SHA256SUMS-macos.txt && cat SHA256SUMS-macos.txt
+
       - uses: actions/upload-artifact@v4
         with:
           name: macos
-          path: SaturnExplorer/dist/*.dmg
+          path: |
+            SaturnExplorer/dist/*.dmg
+            SaturnExplorer/dist/SHA256SUMS-macos.txt
           if-no-files-found: error
 
   windows:
@@ -144,10 +150,17 @@ jobs:
           python Integration\package_release.py --se-app build\bin\Release --mednafen _emu\mednafen
           --ref "$env:LABEL" --out dist
 
+      # Published beside the archive so a download can be checked against what this run built.
+      - name: Checksum
+        shell: bash
+        run: cd dist && sha256sum *.zip > SHA256SUMS-windows.txt && cat SHA256SUMS-windows.txt
+
       - uses: actions/upload-artifact@v4
         with:
           name: windows
-          path: SaturnExplorer/dist/*.zip
+          path: |
+            SaturnExplorer/dist/*.zip
+            SaturnExplorer/dist/SHA256SUMS-windows.txt
           if-no-files-found: error
 
   draft-release:
@@ -168,5 +181,5 @@ jobs:
         run: |
           gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft \
             --title "Saturn Explorer $GITHUB_REF_NAME" --generate-notes \
-            --notes "Includes mednafen-se, a modified Mednafen build (not an official release); its source is in each archive (SOURCE.txt and mednafen-se-source.tar.xz). You supply the Saturn BIOS." \
+            --notes "Includes mednafen-se, a modified Mednafen build (not an official release); its source is in each archive (SOURCE.txt and mednafen-se-source.tar.xz). You supply the Saturn BIOS. The Windows zip is not code-signed, so SmartScreen may warn the first time you run it (More info, then Run anyway). Check a download against the SHA256SUMS-windows.txt / SHA256SUMS-macos.txt attached here." \
             archives/*/*

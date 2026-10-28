@@ -176,6 +176,16 @@ So tag releases
 `v<number>[.<number>...]` (`v1.0`, `v1.2.3`): the check orders tags as dotted numbers, and a release must be
 *published* (a draft does not count) before users can see it.
 
+The Windows archive is **not code-signed** (a deliberate choice for now; see the options below). What stands in for it:
+the archive is built by the workflow from the tagged commit, each archive is published with a `SHA256SUMS-<platform>.txt`
+(also in the draft release's notes and attachments), and the README in the zip, the project `ReadMe.txt` and the release
+notes tell users to expect a SmartScreen prompt and how to get past it. After the macOS image is notarised by hand and
+replaces the CI one, regenerate its checksum (`shasum -a 256`) before uploading. If people report blocked or flagged
+downloads, sign: Azure Artifact Signing (about $10/month; individuals in the USA and Canada) or SignPath Foundation
+(free for open source, publisher shown as the Foundation) both work from GitHub Actions; sign `SaturnExplorerFrontEnd.exe`
+and `mednafen.exe` (and the MSYS2 DLLs if wanted) after the build and before `package_release.py`, with an RFC 3161
+timestamp. A key file in a repository secret is not an option with current CA rules: keys live on hardware or in a cloud HSM.
+
 Still manual: Developer ID signing and notarisation (below), Windows signing, and running the
 Windows archive on a machine that has no Visual Studio or MSYS2.
 

@@ -77,6 +77,23 @@ Input it understands:
 
 
 -------------------------------------------------------------------------------
+  DOWNLOADING A RELEASE  (Windows)
+-------------------------------------------------------------------------------
+
+Releases are on the GitHub Releases page, built by GitHub Actions from the tagged
+commit. The Windows zip is NOT code-signed, so Windows SmartScreen may say
+"Windows protected your PC" the first time you run it: click "More info", then
+"Run anyway". Windows 11's Smart App Control, if it is switched on, may block an
+unsigned program outright; turning it off is a system-wide change Windows does not
+let you easily undo, so if you hit that, build from source instead (next section).
+
+To check a download is what GitHub built, compare its SHA-256 with the
+SHA256SUMS-windows.txt posted beside it:
+
+    certutil -hashfile SaturnExplorer-<release>-windows.zip SHA256
+
+
+-------------------------------------------------------------------------------
   INSTALLING  (Windows -- the easy path)
 -------------------------------------------------------------------------------
 
