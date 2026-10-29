@@ -32,9 +32,9 @@ namespace
 // Built-in emulators and how each takes a Saturn disc on its command line. These are
 // the defaults; the user can edit args in Launch Settings if a fork differs.
 //   Mednafen : positional filename           -> mednafen.exe "<rom>"
-//   Yabause  : -a (autostart) -i <iso>        -> yabause-qt.exe -a -i "<rom>"
-//              (shared by the Qt-lineage forks Yaba Sanshiro / Kronos, all recorded
-//               under the "yabause" key by the installer)
+// Yabause is not offered (it was "-a -i <iso>", recorded under the "yabause" key). A settings file that
+// still names it as the selected emulator falls back to the first entry in Launcher::Load, and its old
+// [emulators]/[launch.yabause] keys are left in the file untouched.
 struct Known
 {
     const char* key;
@@ -43,7 +43,6 @@ struct Known
 };
 const Known kKnown[] = {
     {"mednafen", "Mednafen", "\"{rom}\""},
-    {"yabause",  "Yabause",  "-a -i \"{rom}\""},
 };
 
 const char* kRomToken  = "{rom}";

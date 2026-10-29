@@ -985,6 +985,27 @@ if(BUILD_TESTING)
         add_test(NAME SaturnExplorerLaunchPathTests COMMAND SaturnExplorerLaunchPathTests)
     endif()
 
+    # The emulators the Emulator menu and Launch Settings offer (Mednafen only), and that a settings file from when
+    # Yabause was offered still loads. Portable: no spawning, no POSIX calls.
+    if(NOT EMSCRIPTEN)
+        add_executable(SaturnExplorerLauncherEmulatorsTests
+            FrontEnd/tests/LauncherEmulatorsTests.cpp
+            FrontEnd/src/Launcher.cpp
+            FrontEnd/src/Settings.cpp
+            FrontEnd/src/FileWrite.cpp
+            FrontEnd/src/DataSearch.cpp
+            FrontEnd/src/DataSearchRunner.cpp
+            FrontEnd/src/Prs.cpp
+        )
+        if(NOT WIN32)
+            target_sources(SaturnExplorerLauncherEmulatorsTests PRIVATE FrontEnd/src/PosixSpawn.cpp)
+        endif()
+        target_include_directories(SaturnExplorerLauncherEmulatorsTests PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
+        find_package(Threads REQUIRED)
+        target_link_libraries(SaturnExplorerLauncherEmulatorsTests PRIVATE Threads::Threads)
+        add_test(NAME SaturnExplorerLauncherEmulatorsTests COMMAND SaturnExplorerLauncherEmulatorsTests)
+    endif()
+
     # Settings::Save is all-or-nothing and reports a failed write (POSIX paths: it uses chmod and /dev/full).
     if(NOT WIN32 AND NOT EMSCRIPTEN)
         add_executable(SaturnExplorerSettingsTests
