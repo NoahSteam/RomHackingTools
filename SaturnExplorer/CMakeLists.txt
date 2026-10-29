@@ -787,7 +787,7 @@ if(BUILD_TESTING)
         target_link_libraries(SaturnExplorerDecompilerPanelTests PRIVATE SaturnExplorerGhidraDecomp Threads::Threads)
         # The guide quotes the line tooltip (A7-1); the test reads it to keep the two the same.
         target_compile_definitions(SaturnExplorerDecompilerPanelTests PRIVATE
-            SE_DECOMPILER_GUIDE="${CMAKE_CURRENT_SOURCE_DIR}/DECOMPILER_GUIDE.md")
+            SE_DECOMPILER_GUIDE="${CMAKE_CURRENT_SOURCE_DIR}/Docs/DECOMPILER_GUIDE.md")
         add_test(NAME SaturnExplorerDecompilerPanelTests
                  COMMAND SaturnExplorerDecompilerPanelTests ${CMAKE_CURRENT_BINARY_DIR}/decompiler_panel_test)
         set_tests_properties(SaturnExplorerDecompilerPanelTests PROPERTIES TIMEOUT ${SE_DECOMP_TIMEOUT_60})
@@ -834,7 +834,7 @@ if(BUILD_TESTING)
         target_link_libraries(SaturnExplorerDecompilerTrustTests PRIVATE SaturnExplorerGhidraDecomp Threads::Threads)
         # The model's phrases are the guide's: the test reads the guide and fails if one is not in it.
         target_compile_definitions(SaturnExplorerDecompilerTrustTests PRIVATE
-            SE_DECOMPILER_GUIDE="${CMAKE_CURRENT_SOURCE_DIR}/DECOMPILER_GUIDE.md")
+            SE_DECOMPILER_GUIDE="${CMAKE_CURRENT_SOURCE_DIR}/Docs/DECOMPILER_GUIDE.md")
         add_test(NAME SaturnExplorerDecompilerTrustTests
                  COMMAND SaturnExplorerDecompilerTrustTests ${CMAKE_CURRENT_BINARY_DIR}/decompiler_trust_test)
         set_tests_properties(SaturnExplorerDecompilerTrustTests PROPERTIES TIMEOUT ${SE_DECOMP_TIMEOUT_300})
@@ -1895,7 +1895,7 @@ else()
             # Distributable, self-contained .app: at `cmake --install` (or `cpack`) copy the
             # dynamic deps (SDL2, …) into the bundle and rewrite their install names, then
             # optionally code-sign. Off by default (a plain build stays fast + Homebrew-linked);
-            # enable with -DSE_MACOS_BUNDLE_LIBS=ON. See BUILD.md "macOS packaging".
+            # enable with -DSE_MACOS_BUNDLE_LIBS=ON. See Docs/BUILD.md "macOS packaging".
             option(SE_MACOS_BUNDLE_LIBS "macOS: bundle dylibs into the .app (self-contained)" OFF)
             if(SE_MACOS_BUNDLE_LIBS)
                 # Default "-" (ad hoc), never "skip": fixup_bundle's install_name_tool edits and the

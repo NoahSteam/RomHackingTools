@@ -70,7 +70,7 @@ the web). The entry point constructs one `App` + one `IPlatform` and runs
 If your app has a processing core you'd want to embed elsewhere (as Saturn Explorer's
 emulator-embeddable renderer does), keep it behind a **flat C ABI** the way that project
 does: versioned POD structs, a capability bitmask, size-in/size-out buffer filling, no STL
-or exceptions across the boundary. See `SaturnExplorer/ARCHITECTURE.md` for the full seam
+or exceptions across the boundary. See `SaturnExplorer/Docs/ARCHITECTURE.md` for the full seam
 model (Seam A data-source drivers, Seam B host/embed API) — AppKit is that project's Seam C.
 
 ## Provenance & notes

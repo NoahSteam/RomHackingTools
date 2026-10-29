@@ -267,7 +267,7 @@ CMake and their headers; a skipped test is not evidence that its behavior passed
 ## Related documentation
 
 - [Knowledge-base index](../README.md), [feature map](../FEATURE_MAP.md).
-- [User guide](../../../DECOMPILER_GUIDE.md), [demo](../../Decompiler/DEMO.md).
+- [User guide](../../DECOMPILER_GUIDE.md), [demo](../../Decompiler/DEMO.md).
 - [Design](../../Decompiler/DESIGN.md), [implementation plan](../../Decompiler/PLAN.md).
 - [Review program](../../Decompiler/REVIEW_PROGRAM.md), [review ledger](../../Decompiler/REVIEW_LEDGER.md).
 - [Hardware-register audit](../../Decompiler/HARDWARE_REGISTER_AUDIT.md).

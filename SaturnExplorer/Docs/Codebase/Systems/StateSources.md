@@ -88,7 +88,7 @@ Memory returned by drivers is Saturn-order bytes. Metadata framing and individua
 
 ## Testing
 
-From `SaturnExplorer/`, configure/build as described in [BUILD.md](../../../BUILD.md), then use `ctest --test-dir build --output-on-failure` or focused filters:
+From `SaturnExplorer/`, configure/build as described in [BUILD.md](../../BUILD.md), then use `ctest --test-dir build --output-on-failure` or focused filters:
 
 ```sh
 ctest --test-dir build --output-on-failure -R 'SavestateShape|YssFixture|StateShared|LiveReconnect|LivePoke|LiveRestoreSignal|LiveExporter|LiveHaltRace|ExportAttach|ExportShutdown|ShadowCallStack'
@@ -111,7 +111,7 @@ The parser/client/server main paths and capture/restore ownership were traced. E
 
 Two older descriptions disagree with this revision's code:
 
-- `LiveDriver.h`'s opening comment calls the client native-only, and [BUILD.md](../../../BUILD.md)'s live section says web is savestate-only. CMake actually supports opt-in `SE_WEB_LIVE=ON` using pthreads and a WebSocket-to-TCP bridge; ordinary web builds still omit it.
+- `LiveDriver.h`'s opening comment calls the client native-only, and [BUILD.md](../../BUILD.md)'s live section says web is savestate-only. CMake actually supports opt-in `SE_WEB_LIVE=ON` using pthreads and a WebSocket-to-TCP bridge; ordinary web builds still omit it.
 - [Mednafen README](../../../Integration/Mednafen/README.md)'s hook-site overview describes init/deinit in `Load`/`CloseGame`. The maintained glue instead lazily initializes in `SeMednafenFrameHook`; it exposes `SeMednafenEndFrameHook`, and its lifecycle comment says explicit per-game shutdown would require an additional `CloseGame` hook. Treat current `apply.py`/glue as the implementation authority. A stale comment in `SeGateDecide` says restore leaves execution paused; `SeStateAfterRestore` actually clears `sPaused` and resumes.
 
 ## Related documentation

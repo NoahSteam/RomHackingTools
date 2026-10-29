@@ -98,7 +98,7 @@ change-highlighting behavior after insertion; they are not stored snapshot-expre
 
 ## Testing and verification
 
-From `SaturnExplorer/`, build according to [BUILD.md](../../../BUILD.md), then run registered tests:
+From `SaturnExplorer/`, build according to [BUILD.md](../../BUILD.md), then run registered tests:
 
 ```sh
 ctest --test-dir build --output-on-failure -R 'MemoryBackend|HexEditorPanel|MemorySearch|BytePatternSearch|MemoryCompare|CompareMarkers|DiffTool|ScrubState|FrameRecorder|RewindPipeline|SavestateSlots|MemoryRoundTrip|AccessLog|LivePoke|LiveRestoreSignal'

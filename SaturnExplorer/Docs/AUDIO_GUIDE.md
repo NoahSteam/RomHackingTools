@@ -5,7 +5,7 @@
 > to GitHub Pages.
 
 - **Read it online:** https://noahsteam.github.io/RomHackingTools/guides/audio.html
-- **Source (single source of truth):** [`web/guides/audio.html`](web/guides/audio.html)
+- **Source (single source of truth):** [`web/guides/audio.html`](../web/guides/audio.html)
 
 A plain-English tour of the Sega Saturn's audio hardware (the SCSP sound chip, sound RAM,
 PCM samples, streaming vs. CD-DA, FAD/LBA disc addressing) and how Saturn Explorer's audio

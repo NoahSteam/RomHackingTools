@@ -86,7 +86,7 @@ Verified limits:
 
 ## Testing
 
-From `SaturnExplorer`, configure/build with the commands in [BUILD.md](../../../BUILD.md), then run:
+From `SaturnExplorer`, configure/build with the commands in [BUILD.md](../../BUILD.md), then run:
 
 ```sh
 ctest --test-dir build --output-on-failure -R 'SaturnExplorer(IsoFs|IsoBuilder|DiscBuilder|CdSector|CueSheet|PatchLibrary|PrsSearch|DataSearchRunner|DataSearchWalk|FileWrite)Tests'
@@ -109,6 +109,6 @@ Tests were inspected, not executed as part of this subsystem investigation. A ma
 
 ## Related documentation and investigation limits
 
-Read [ARCHITECTURE.md](../../../ARCHITECTURE.md) for the original component split and [06_MEDIA_DISC.md](../../FunctionalityVerification/06_MEDIA_DISC.md) for historical media verification. Source is authoritative over those records. [MemoryAndHistory.md](MemoryAndHistory.md) covers memory reads/edits and [StateSources.md](StateSources.md) covers emulator transport.
+Read [ARCHITECTURE.md](../../ARCHITECTURE.md) for the original component split and [06_MEDIA_DISC.md](../../FunctionalityVerification/06_MEDIA_DISC.md) for historical media verification. Source is authoritative over those records. [MemoryAndHistory.md](MemoryAndHistory.md) covers memory reads/edits and [StateSources.md](StateSources.md) covers emulator transport.
 
 This pass traced the principal App flows, algorithms, ownership, and representative regression tests. It did not validate a real game's bootability, the launched Python process's runtime UI/reporting, or every platform's filesystem failure behavior. The PRS compressor is present/reused in tests; no general compression/extraction UI was established from this investigation. Asset search is content matching plus accepted mappings, not a complete provenance graph.

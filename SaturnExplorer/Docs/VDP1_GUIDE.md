@@ -5,7 +5,7 @@
 > to GitHub Pages.
 
 - **Read it online:** https://noahsteam.github.io/RomHackingTools/guides/vdp1.html
-- **Source (single source of truth):** [`web/guides/vdp1.html`](web/guides/vdp1.html)
+- **Source (single source of truth):** [`web/guides/vdp1.html`](../web/guides/vdp1.html)
 
 A plain-English tour of the Saturn's VDP1 drawing engine — the "everything is a four-cornered
 quad" model, the command table, texture color modes, the VDP2-shared palette, Gouraud/draw

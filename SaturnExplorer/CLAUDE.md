@@ -23,11 +23,11 @@ not a historical change log. Each page records its inspected revision; update fr
 
 | Topic | Doc |
 |---|---|
-| Layout, the two seams, what lives where | `ARCHITECTURE.md` |
-| Building (CMake, three ImGui backends, web) | `BUILD.md` |
-| VDP1 / VDP2 rendering semantics | `VDP1_GUIDE.md`, `VDP2_GUIDE.md` |
-| Log panel, tracepoints, execution actions | `EXECUTION_ACTIONS.md` |
-| SH-2 decompiler panel: using it, demo | `DECOMPILER_GUIDE.md`, `Docs/Decompiler/DEMO.md` |
+| Layout, the two seams, what lives where | `Docs/ARCHITECTURE.md` |
+| Building (CMake, three ImGui backends, web) | `Docs/BUILD.md` |
+| VDP1 / VDP2 rendering semantics | `Docs/VDP1_GUIDE.md`, `Docs/VDP2_GUIDE.md` |
+| Log panel, tracepoints, execution actions | `Docs/EXECUTION_ACTIONS.md` |
+| SH-2 decompiler panel: using it, demo | `Docs/DECOMPILER_GUIDE.md`, `Docs/Decompiler/DEMO.md` |
 | SH-2 decompiler: design, plan, spike | `Docs/Decompiler/DESIGN.md`, `Docs/Decompiler/PLAN.md`, `Docs/Decompiler/SPIKE_RESULTS.md` |
 | SH-2 decompiler: the review program (areas, oracles, roles, done) | `Docs/Decompiler/REVIEW_PROGRAM.md`, `Docs/Decompiler/REVIEW_LEDGER.md` |
 | Bumping the vendored Ghidra decompiler | `FrontEnd/third_party/ghidra-decompiler/VENDOR.md` → "Bumping Ghidra — checklist" |

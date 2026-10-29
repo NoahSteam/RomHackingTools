@@ -28,9 +28,9 @@ Detailed source evidence and test navigation are in the linked subsystem pages.
 
 These discrepancies are documented here rather than rewriting broader historical/design documents.
 
-- [ARCHITECTURE.md](../../ARCHITECTURE.md) describes a host GPU geometry path for the 3D view.
+- [ARCHITECTURE.md](../ARCHITECTURE.md) describes a host GPU geometry path for the 3D view.
   The bundled frontend actually calls `se_render_3d`, receives software RGBA, and uploads it.
-- [BUILD.md](../../BUILD.md) and the live-driver header contain native-only live descriptions.
+- [BUILD.md](../BUILD.md) and the live-driver header contain native-only live descriptions.
   [CMakeLists.txt](../../CMakeLists.txt) has optional `SE_WEB_LIVE`; the default web build remains viewer-only.
   CMake's opening comment also predates the non-Windows frontend targets.
 - The [Mednafen README](../../Integration/Mednafen/README.md) initialization table describes

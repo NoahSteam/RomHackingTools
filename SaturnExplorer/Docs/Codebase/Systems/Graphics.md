@@ -93,7 +93,7 @@ Raw VDP bytes are big-endian; reuse [ByteOrder.h](../../../Core/src/ByteOrder.h)
 
 ## Testing and verification
 
-Configure/build from `SaturnExplorer/` using [BUILD.md](../../../BUILD.md); test targets are declared in [CMakeLists.txt](../../../CMakeLists.txt).
+Configure/build from `SaturnExplorer/` using [BUILD.md](../../BUILD.md); test targets are declared in [CMakeLists.txt](../../../CMakeLists.txt).
 
 ```sh
 cmake -S . -B build
@@ -117,7 +117,7 @@ ctest --test-dir build --output-on-failure -R 'SaturnExplorer(Vdp2|Vdp1Preview|C
 
 ## Related documentation
 
-- [Architecture](../../../ARCHITECTURE.md): seams and historical module rationale.
-- [VDP1 guide](../../../VDP1_GUIDE.md), [VDP2 guide](../../../VDP2_GUIDE.md): hardware semantics and user workflow.
-- [Build instructions](../../../BUILD.md).
+- [Architecture](../../ARCHITECTURE.md): seams and historical module rationale.
+- [VDP1 guide](../../VDP1_GUIDE.md), [VDP2 guide](../../VDP2_GUIDE.md): hardware semantics and user workflow.
+- [Build instructions](../../BUILD.md).
 - [Knowledge-base index](../README.md), [feature map](../FEATURE_MAP.md).

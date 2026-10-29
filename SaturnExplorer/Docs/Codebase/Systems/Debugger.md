@@ -86,7 +86,7 @@ Watches, assembly comments and function names have explicit load/save methods ca
 
 ## Testing and verification
 
-From `SaturnExplorer/`, configure/build as described in [BUILD.md](../../../BUILD.md), then select relevant registered tests:
+From `SaturnExplorer/`, configure/build as described in [BUILD.md](../../BUILD.md), then select relevant registered tests:
 
 ```sh
 ctest --test-dir build --output-on-failure -R 'StepHaltMachine|BreakpointManager|ExecutionActions|ConditionEval|ExpressionResolver|CallStack|FunctionNames|AssemblyPanel|Sh2Decode|Sh2OperandHover|Sh2RegInfo|PanelInteraction'
@@ -98,4 +98,4 @@ Investigation coverage: frontend orchestration and models were traced; real Wind
 
 ## Related documentation
 
-[Execution actions](../../../EXECUTION_ACTIONS.md), [call stack design](../../../CALL_STACK.md), [memory and history](MemoryAndHistory.md), [state sources](StateSources.md), [feature map](../FEATURE_MAP.md).
+[Execution actions](../../EXECUTION_ACTIONS.md), [call stack design](../../CALL_STACK.md), [memory and history](MemoryAndHistory.md), [state sources](StateSources.md), [feature map](../FEATURE_MAP.md).

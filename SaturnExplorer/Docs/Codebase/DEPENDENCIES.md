@@ -42,7 +42,7 @@ ordinary executable-file decompilation. [Decompiler](Systems/Decompiler.md) expl
 | Build identity header | [BuildInfo.h.in](../../FrontEnd/BuildInfo.h.in), [GenerateBuildInfo.cmake](../../cmake/GenerateBuildInfo.cmake); generated in build tree |
 | AI schema/action list | [ActionRegistry.cpp](../../FrontEnd/src/AIInvestigation/ActionRegistry.cpp); `SaturnExplorerActionRegistryTests` freshness/write mode, see [AI investigation](Systems/AIInvestigation.md) |
 | Patched emulator working copy | `Integration/Mednafen/apply.py` and integration scripts, not manual edits under `_emu/` |
-| Bundled macOS dylibs/signatures | CMake install/packaging steps in [BUILD.md](../../BUILD.md); rewriting library paths requires re-signing |
+| Bundled macOS dylibs/signatures | CMake install/packaging steps in [BUILD.md](../BUILD.md); rewriting library paths requires re-signing |
 
 ## Integration contracts
 

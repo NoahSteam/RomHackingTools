@@ -99,8 +99,8 @@ UpdateChecker's full network/shutdown behavior was not dynamically verified here
 
 ## Related documentation
 
-[Architecture](../ARCHITECTURE.md), [data flow](../DATA_FLOW.md), [build](../../../BUILD.md),
-[existing architecture](../../../ARCHITECTURE.md), [demo scripts](../../../FrontEnd/demo/README.md),
+[Architecture](../ARCHITECTURE.md), [data flow](../DATA_FLOW.md), [build](../../BUILD.md),
+[existing architecture](../../ARCHITECTURE.md), [demo scripts](../../../FrontEnd/demo/README.md),
 [debugger](Debugger.md), [graphics](Graphics.md), [state sources](StateSources.md).
 
 ## Appearance (inspected on feature/light-theme, 2026-10-24)

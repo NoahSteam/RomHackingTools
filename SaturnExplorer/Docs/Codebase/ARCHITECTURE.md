@@ -30,7 +30,7 @@ transport workers, and the decompiler owns a separate worker; neither directly d
 | Debug models to emulator | [App.cpp](../../FrontEnd/src/App.cpp): `SyncBreakpointsToLive`, `SyncTracepointsToLive`, `StepInto`, `Continue`; live C APIs | [Debugger](Systems/Debugger.md) for policy, [StateSources](Systems/StateSources.md) for protocol |
 
 The C ABI boundary keeps UI/OS types out of the reusable engine and makes driver/host adapters
-replaceable (rationale: [existing architecture](../../ARCHITECTURE.md), sections 2–5). The actual
+replaceable (rationale: [existing architecture](../ARCHITECTURE.md), sections 2–5). The actual
 frontend directly uses live-driver control APIs as well as Seam B: the generic core is not the
 owner of stepping policy, file search, patch projects or recording.
 

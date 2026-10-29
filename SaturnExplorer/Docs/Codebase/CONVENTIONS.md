@@ -89,7 +89,7 @@ or `.sedump` is the reproducible rendering oracle; a socket fixture tests protoc
 without proving an actual emulator hook is correct. Fresh hardware/platform verification is
 still needed for those integration changes.
 
-From `SaturnExplorer/`: configure/build with [BUILD.md](../../BUILD.md), then
+From `SaturnExplorer/`: configure/build with [BUILD.md](../BUILD.md), then
 `ctest --test-dir build --output-on-failure`; select the relevant family from subsystem pages.
 Documentation-only changes require reference/link/scope validation, not a full native application
 build. Keep the feature map, subsystem descriptions and changed APIs/flows consistent in the same

@@ -8,7 +8,7 @@ guides (audio, VDP1, VDP2). Edit the content here.
   requests, theme-aware via `prefers-color-scheme`).
 - `features.html` — a tour of the Saturn Explorer app itself: every panel, tool, and workflow.
 
-The top-level `../../AUDIO_GUIDE.md`, `../../VDP1_GUIDE.md`, and `../../VDP2_GUIDE.md` are
+The `../../Docs/AUDIO_GUIDE.md`, `../../Docs/VDP1_GUIDE.md`, and `../../Docs/VDP2_GUIDE.md` are
 thin pointer stubs, not copies — so there is nothing to keep in sync.
 
 ## Publishing

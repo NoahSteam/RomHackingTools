@@ -143,7 +143,7 @@ Saturn Explorer builds with CMake. From the SaturnExplorer folder:
 You can also open the checked-in Visual Studio solution at the repository root
 (RomHackingTools.sln), set FrontEnd as the startup project, and press F5.
 
-Full details, prerequisites, and the component split are in BUILD.md.
+Full details, prerequisites, and the component split are in Docs/BUILD.md.
 
 
 -------------------------------------------------------------------------------
@@ -175,8 +175,8 @@ the controller panel drives the game.
   FrontEnd/      The app window (Dear ImGui) and its three platform backends.
   Integration/   The emulator taps + the Windows installer (install.py).
   include/        Public headers for the two ABI seams.
-  BUILD.md       How to build, in detail.
-  ARCHITECTURE.md The component split and the three interface seams.
-  EXECUTION_ACTIONS.md, SCRIPTING.md  Design notes for tracepoints & scripting.
+  Docs/BUILD.md  How to build, in detail.
+  Docs/ARCHITECTURE.md The component split and the three interface seams.
+  Docs/EXECUTION_ACTIONS.md, Docs/SCRIPTING.md  Design notes for tracepoints & scripting.
 
 ===============================================================================

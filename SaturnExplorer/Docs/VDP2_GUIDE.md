@@ -5,7 +5,7 @@
 > to GitHub Pages.
 
 - **Read it online:** https://noahsteam.github.io/RomHackingTools/guides/vdp2.html
-- **Source (single source of truth):** [`web/guides/vdp2.html`](web/guides/vdp2.html)
+- **Source (single source of truth):** [`web/guides/vdp2.html`](../web/guides/vdp2.html)
 
 A plain-English tour of the Saturn's VDP2 layer engine — the layer stack (NBG0–3 + RBG0 +
 sprite + back screen), plane→page→pattern→cell backgrounds, the shared Color RAM, priority

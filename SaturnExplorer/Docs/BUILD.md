@@ -100,14 +100,14 @@ Pages via `.github/workflows/web.yml`.
 ### Live mode — inspect a running emulator (native builds)
 The Windows and native-SDL2 builds can read a **running** Yabause in realtime
 instead of a savestate. Apply the small patch in
-[`Integration/Yabause/`](Integration/Yabause/README.md) to your Yabause build, run
+[`Integration/Yabause/`](../Integration/Yabause/README.md) to your Yabause build, run
 a game, then launch Saturn Explorer with `--live` (or use **Open ▸ Connect to
 Yabause**). Every panel then tracks the live game. (The web build is savestate-only
 — live mode needs sockets/threads.)
 
 ### Decompiler — Ghidra's SH-2 engine (desktop builds)
 The desktop builds (Windows and SDL2) compile Ghidra's native decompiler, vendored with the
-SuperH SLEIGH spec in [`FrontEnd/third_party/ghidra-decompiler/`](FrontEnd/third_party/ghidra-decompiler/VENDOR.md),
+SuperH SLEIGH spec in [`FrontEnd/third_party/ghidra-decompiler/`](../FrontEnd/third_party/ghidra-decompiler/VENDOR.md),
 as the library `SaturnExplorerGhidraDecomp`. It is on by default and needs nothing
 installed: zlib, which it and the savestate driver's gzip path use, is vendored too
 (`FrontEnd/third_party/zlib`, target `SaturnExplorerZlib`). `-DSE_ENABLE_DECOMPILER=OFF`
@@ -117,7 +117,7 @@ files are embedded in the app (`FrontEnd/src/Decompiler/Sh2SpecData.h`) and writ
 `<config dir>/decompiler/<hash>/` on first use. After a Ghidra bump or a change to the
 `.slaspec`, `cmake --build build --target se-regen-sla` regenerates the checked-in `sh-2.sla`
 and that header; `SaturnExplorerSlaFreshnessTests` fails until you do. The design and plan are
-in [`Docs/Decompiler/`](Docs/Decompiler/PLAN.md).
+in [`Docs/Decompiler/`](Decompiler/PLAN.md).
 
 ---
 

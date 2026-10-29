@@ -102,7 +102,7 @@ Targets and CTest registrations are in [CMakeLists.txt](../../../CMakeLists.txt)
 | [AIInvestigationEndToEndTests.cpp](../../../FrontEnd/tests/AIInvestigationEndToEndTests.cpp) | Synthetic captures → manifest → response → preview, observing unchanged debugger models and capture bytes |
 | [AIInvestigationLintTests.cpp](../../../FrontEnd/tests/AIInvestigationLintTests.cpp) | Current M0 source isolation, no UI/network/file-I/O/provider integration, C++14 and build wiring; POSIX hosts only |
 
-From `SaturnExplorer/`, after configuring/building as in [BUILD.md](../../../BUILD.md):
+From `SaturnExplorer/`, after configuring/building as in [BUILD.md](../../BUILD.md):
 
 ```sh
 ctest --test-dir build --output-on-failure -R 'SaturnExplorer(AI|ActionRegistry|CanonicalTarget|ResponseValidator|SourceKey|WriteInterval|PackageManifest|Json|Sha256)'
