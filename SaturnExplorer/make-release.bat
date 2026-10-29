@@ -56,7 +56,7 @@ if not defined LABEL (
 
 echo.
 echo === 1/2  Building Saturn Explorer and the patched Mednafen ===
-%PY% "Integration\install.py" --yes --mednafen-saturn-only
+%PY% "Integration\install.py" --yes --mednafen-saturn-only --no-demo-menu
 if errorlevel 1 goto :fail
 
 echo.

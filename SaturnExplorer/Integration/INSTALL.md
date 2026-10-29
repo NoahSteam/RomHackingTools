@@ -137,6 +137,7 @@ against fresh upstream tells you if an anchor drifted (see `DISTRIBUTION.md`,
 --mednafen-repo URL    explicit Mednafen git URL (overrides fork/upstream)
 --yabause-repo  URL    explicit Yabause-fork git URL (overrides fork/upstream)
 --se-only              build only Saturn Explorer
+--no-demo-menu         build without the Demo menu (what a release does; it is for recording demos)
 --incremental          iterative rebuild: only what changed (alias: --update; see below)
 --mednafen-saturn-only build only the Saturn core (--disable-* every other console; faster)
 --msys2 DIR            use an existing MSYS2 install (e.g. C:\msys64)

@@ -7496,10 +7496,12 @@ void App::CollectToolbarShortcuts(std::vector<TopBarCommand>& commands, const To
         TopBarCommandEnabled(TopBarCommandType::DumpMemory, state))
         commands.emplace_back(TopBarCommandType::DumpMemory);
     if (AppShortcut(ImGuiKey_F12)) commands.emplace_back(TopBarCommandType::TakeScreenshot);
+#ifndef SE_NO_DEMO_MENU
     // Demo Mode: F7 start/stop, F8 next beat, Shift+F8 previous beat. Applied in UpdateDemo.
     if (AppShortcut(ImGuiKey_F7)) mDemoReqToggle = true;
     if (AppShortcut(ImGuiMod_Shift | ImGuiKey_F8)) mDemoReqPrev = true;
     else if (AppShortcut(ImGuiKey_F8)) mDemoReqNext = true;
+#endif
 }
 
 void App::DrawToolbar(std::vector<TopBarCommand>& commands)
@@ -7566,8 +7568,10 @@ void App::DrawToolbar(std::vector<TopBarCommand>& commands)
         ImGui::SameLine();
         DrawWindowsMenu(commands);
 
+#ifndef SE_NO_DEMO_MENU
         ImGui::SameLine();
         DrawDemoMenu();   // feature-tour playback (drives panels for a screen recording)
+#endif
         const bool compact = ImGui::GetWindowWidth() < 1450.0f;
         if (compact)
         {

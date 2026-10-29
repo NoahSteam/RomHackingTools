@@ -176,6 +176,10 @@ So tag releases
 `v<number>[.<number>...]` (`v1.0`, `v1.2.3`): the check orders tags as dotted numbers, and a release must be
 *published* (a draft does not count) before users can see it.
 
+Release builds are made **without the Demo menu** (scripted feature-tour playback, for recording demos of the tool):
+`install.py --no-demo-menu`, which `make-release.bat` and the release workflow pass, sets CMake's `SE_DEMO_MENU=OFF`, and both
+workflow jobs fail if the build directory says otherwise. An ordinary `install.bat`/CMake build keeps the menu.
+
 The Windows archive is **not code-signed** (a deliberate choice for now; see the options below). What stands in for it:
 the archive is built by the workflow from the tagged commit, each archive is published with a `SHA256SUMS-<platform>.txt`
 (also in the draft release's notes and attachments), and the README in the zip, the project `ReadMe.txt` and the release

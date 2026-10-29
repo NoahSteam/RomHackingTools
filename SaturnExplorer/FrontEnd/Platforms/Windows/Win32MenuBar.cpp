@@ -530,6 +530,7 @@ void Win32MenuBar::Rebuild()
         AddSub(bar, windows, L"&Windows");
     }
 
+#ifndef SE_NO_DEMO_MENU
     // ---- Demo ----
     {
         HMENU demo = ::CreatePopupMenu();
@@ -543,6 +544,7 @@ void Win32MenuBar::Rebuild()
         AddItem(demo, ID_DEMO_NOTE, L"Overlay Shows Narration");
         AddSub(bar, demo, L"De&mo");
     }
+#endif
 
     // ---- Tools (Screenshot + the disabled Bookmarks/Compare placeholders) ----
     {

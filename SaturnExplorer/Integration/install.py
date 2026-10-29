@@ -524,7 +524,7 @@ def ensure_cmake(rn):
 # ---------------------------------------------------------------------------
 # Steps
 # ---------------------------------------------------------------------------
-def build_saturn_explorer(rn, generator):
+def build_saturn_explorer(rn, generator, demo_menu=True):
     print("\n== Saturn Explorer ==")
     build = os.path.join(SE_ROOT, "build")
     if IS_WIN:
@@ -542,6 +542,9 @@ def build_saturn_explorer(rn, generator):
         # Linux builds a bare SaturnExplorerFrontEnd executable.
         exe = (os.path.join(build, "bin", "SaturnExplorer.app") if IS_MAC
                else os.path.join(build, "bin", "SaturnExplorerFrontEnd"))
+    # Always stated, so a build directory last configured for a release is switched back by an ordinary run
+    # (the CMake cache would otherwise keep SE_DEMO_MENU=OFF).
+    configure.append(f"-DSE_DEMO_MENU={'ON' if demo_menu else 'OFF'}")
     if rn.run(configure, description="Configure Saturn Explorer") != 0:
         return False, None
     if rn.run(compile_, description="Build Saturn Explorer (Release)") != 0:
@@ -880,6 +883,8 @@ def main():
     ap.add_argument("--mednafen-repo", help="explicit Mednafen git URL (overrides fork/upstream)")
     ap.add_argument("--yabause-repo", help="explicit Yabause-fork git URL (overrides fork/upstream)")
     ap.add_argument("--se-only", action="store_true", help="build only Saturn Explorer")
+    ap.add_argument("--no-demo-menu", action="store_true",
+                    help="build Saturn Explorer without its Demo menu (what a release does; the Demo menu is for recording demos)")
     ap.add_argument("--no-se", action="store_true",
                     help="skip building Saturn Explorer (the release job builds it separately, with its bundle options)")
     ap.add_argument("--incremental", "--update", dest="incremental", action="store_true",
@@ -955,7 +960,7 @@ def main():
     # --- build Saturn Explorer ---------------------------------------------
     results = []
     if not args.no_se:
-        se_ok, se_exe = build_saturn_explorer(rn, args.generator)
+        se_ok, se_exe = build_saturn_explorer(rn, args.generator, not args.no_demo_menu)
         results.append(("Saturn Explorer", se_ok, se_exe))
 
     # --- Mednafen -----------------------------------------------------------

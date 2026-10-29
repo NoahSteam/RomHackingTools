@@ -481,6 +481,7 @@ struct MacMenuBarImpl
             AddItem(windows, ID_SAVE_LAYOUT, @"Save Layout");
         }
 
+#ifndef SE_NO_DEMO_MENU
         // ---- Demo ----
         {
             NSMenu* demo = AddSub(bar, @"Demo");
@@ -493,6 +494,7 @@ struct MacMenuBarImpl
             AddItem(demo, ID_DEMO_OVERLAY, @"Operator Overlay");
             AddItem(demo, ID_DEMO_NOTE, @"Overlay Shows Narration");
         }
+#endif
 
         // ---- Tools ----
         {

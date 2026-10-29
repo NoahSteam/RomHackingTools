@@ -22,7 +22,7 @@ settings, demo and sound tools; specialized systems own their own algorithms.
 | Settings | [Settings.cpp](../../../FrontEnd/src/Settings.cpp): `Settings::Load`, `SaveTo`, `ConfigDir`, `ConfigSubPath` |
 | Common widgets | [PanelWidgets.h](../../../FrontEnd/src/PanelWidgets.h): `RowSelectable`, `HorizontalSplitter`, `ComboWidth` |
 | Sound previews | [ScspMix.cpp](../../../FrontEnd/src/ScspMix.cpp): `ScspMixVoices`, `ScspResampleMono`, `ScspAttenuate`; App's `DecodeSlotSample`, `PlaySound`, `PlaySoundFrame`, `ExportSound`, `DrawSound` |
-| Feature tour | [DemoPlayer.cpp](../../../FrontEnd/src/Demo/DemoPlayer.cpp): `DemoPlayer::Tick`, `ConsumeDirty`; [DemoScript.cpp](../../../FrontEnd/src/Demo/DemoScript.cpp): `DemoParseText`; `App::UpdateDemo`, `ApplyDemoBeat` |
+| Feature tour (compiled out of release builds: `SE_DEMO_MENU=OFF` defines `SE_NO_DEMO_MENU`, which drops the Demo menu in the Win32, macOS and ImGui menus and the F7/F8 keys) | [DemoPlayer.cpp](../../../FrontEnd/src/Demo/DemoPlayer.cpp): `DemoPlayer::Tick`, `ConsumeDirty`; [DemoScript.cpp](../../../FrontEnd/src/Demo/DemoScript.cpp): `DemoParseText`; `App::UpdateDemo`, `ApplyDemoBeat` |
 | Updates | [UpdateChecker.cpp](../../../FrontEnd/src/UpdateChecker.cpp): `UpdateChecker::Start`, `Run`, `EvaluateLatestRelease`, `EvaluateSourceBuild`, `ExtractReleaseTag`, `CompareReleaseTags`; `App::DrawUpdateModal` |
 
 ## Execution flow and interactions

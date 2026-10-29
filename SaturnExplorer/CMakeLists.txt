@@ -61,6 +61,14 @@ if(EMSCRIPTEN AND SE_ENABLE_DECOMPILER)
     set(SE_ENABLE_DECOMPILER OFF CACHE BOOL "Build the SH-2 decompiler engine (desktop)" FORCE)
 endif()
 
+# The Demo menu (scripted feature-tour playback, F7/F8) is for recording demos of the tool, not for users:
+# release builds turn it off (Integration/install.py --no-demo-menu, the release workflow, make-release.bat).
+# It is a compile definition for every target, so the app and the tests that build App.cpp agree.
+option(SE_DEMO_MENU "Include the Demo menu and its F7/F8 shortcuts" ON)
+if(NOT SE_DEMO_MENU)
+    add_compile_definitions(SE_NO_DEMO_MENU)
+endif()
+
 # Header-only JSON tokenizer for the AI investigation formats (FrontEnd/third_party/nlohmann-json).
 set(SE_NLOHMANN_JSON_DIR ${CMAKE_CURRENT_SOURCE_DIR}/FrontEnd/third_party/nlohmann-json/include)
 
