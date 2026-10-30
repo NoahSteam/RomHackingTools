@@ -377,6 +377,38 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
     return a;
 }
 
+// Area 7 round 2 instrument (SE_GAME_TOKEN_DUMP=<file prefix>): every token of every text, with the instruction its address names, as
+// tab separated rows for tools/a7_round2/*.py to read. F = a function (label, entry, status of its body), L = a line, T = a token with
+// an address (line, begin, end, kind, address, in body, previous instruction has a delay slot, the instruction, the token's text).
+inline void DumpMappingTokens(std::FILE* out, const sfe::decomp::DecompileResult& r, const std::function<bool(uint32_t, uint16_t&)>& word,
+                              const char* label)
+{
+    using namespace sfe::decomp;
+    if (!out) return;
+    std::fprintf(out, "F\t%s\t%08X\t%zu\t%zu\n", label, r.entry, r.lines.size(), r.body.size());
+    for (size_t li = 0; li < r.lines.size(); ++li)
+    {
+        const Line& l = r.lines[li];
+        std::fprintf(out, "L\t%zu\t%08X\t%s\n", li, l.firstAddr, l.text.c_str());
+        for (size_t ti = 0; ti < l.tokens.size(); ++ti)
+        {
+            const Token& t = l.tokens[ti];
+            if (!t.addr) continue;
+            uint16_t w = 0, pw = 0;
+            std::string insn = "?";
+            if (word(t.addr, w))
+            {
+                const sfe::DisassembledInstruction d = sfe::Sh2Decode(t.addr, w);
+                insn = d.IsValid ? d.Mnemonic + " " + d.Operands : "(bad) " + MappingHex(w);
+            }
+            const bool slot = word(t.addr - 2, pw) && sfe::Sh2Decode(t.addr - 2, pw).HasDelaySlot && r.InBody(t.addr - 2);
+            const std::string text = t.begin <= t.end && t.end <= l.text.size() ? l.text.substr(t.begin, t.end - t.begin) : std::string("?");
+            std::fprintf(out, "T\t%zu\t%zu\t%u\t%u\t%d\t%08X\t%d\t%d\t%s\t%s\n", li, ti, unsigned(t.begin), unsigned(t.end), int(t.kind), t.addr,
+                         r.InBody(t.addr) ? 1 : 0, slot ? 1 : 0, insn.c_str(), text.c_str());
+        }
+    }
+}
+
 inline void PrintMappingAudit(const MappingAudit& a, const char* label)
 {
     std::printf("  mapping (%s): %d functions, %d lines (%d from one instruction, %d from several [%d not adjacent, widest %d], "

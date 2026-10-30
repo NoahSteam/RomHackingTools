@@ -175,6 +175,56 @@ void TestMappingOracleOnFixtures()
           Has(LineOriginText(*guard), "0x06004008, 0x0600400A"));
 }
 
+// Area 7 round 2: the same functions asked for through the cache-through mirror (0x2...) and a later repeat of the 1 MiB window (0x07F0...)
+// give the lines the same instructions, all canonical (a token address is the instruction's canonical address; the body, the flow
+// warnings and the hover text are keyed by it). The panel decompiles at the mirror the PC is in, so a mirror run is the usual case
+// while stopped in cache-through code.
+void TestMappingOracleAtMirrors()
+{
+    std::vector<uint8_t> hw(0x100000u, 0);
+    dts::PlaceFixture1(hw);
+    dts::PlaceFixture3(hw);
+    dts::PlaceDiamonds(hw, 3);
+    dts::PlaceStraight(hw, 4);
+    dts::PlaceJumpTable(hw, 4, 2);
+    auto snap = MakeSnapshot(hw);
+    Sh2Decompiler d(gConfig);
+    const std::function<bool(uint32_t, uint16_t&)> wordAt = [&hw](uint32_t a, uint16_t& w) {
+        if (a < 0x06000000u || a - 0x06000000u + 1 >= hw.size()) return false;
+        w = static_cast<uint16_t>(hw[a - 0x06000000u] << 8 | hw[a - 0x06000000u + 1]);
+        return true;
+    };
+    std::vector<uint32_t> entries = { dts::kFixture1Caller, dts::kFixture3Bra, dts::kFixture3Bfs, dts::kFixture3BsrMova, dts::kFixture3BsrLoad,
+                                      dts::kFixture3BraTarget, dts::kFixture3SlotJumped, dts::kFixture3SwitchSlot, dts::kDiamondsBase,
+                                      dts::kStraightBase, dts::kJumpTableBase };
+    int compared = 0;
+    for (uint32_t entry : entries)
+    {
+        const DecompileResult base = d.Decompile(snap, Request(entry));
+        CHECK(base.status == DecompileStatus::Ok);
+        for (uint32_t mirror : { entry | 0x20000000u, entry + 0x01F00000u, entry + 0x21F00000u })
+        {
+            const DecompileResult m = d.Decompile(snap, Request(mirror));
+            char where[48];
+            std::snprintf(where, sizeof where, "mirror %08X of %08X", mirror, entry);
+            CHECK(m.status == DecompileStatus::Ok);
+            const dts::MappingAudit a = dts::AuditMapping(m, wordAt, where);
+            if (a.Violations()) dts::PrintMappingAudit(a, where);
+            CHECK(a.Violations() == 0);
+            CHECK(m.lines.size() == base.lines.size());
+            for (size_t i = 0; i < m.lines.size() && i < base.lines.size(); ++i)
+            {
+                CHECK(m.lines[i].text == base.lines[i].text);
+                CHECK(LineInstructions(m.lines[i]) == LineInstructions(base.lines[i]));
+                CHECK(m.lines[i].firstAddr == base.lines[i].firstAddr);
+                ++compared;
+            }
+            CHECK(m.body == base.body);
+        }
+    }
+    CHECK(compared > 100);
+}
+
 void TestFixture1()
 {
     Sh2Decompiler d(gConfig);
@@ -3975,6 +4025,9 @@ void TestGameCode()
     // Area 7: the pseudocode-to-assembly mapping over every function (MappingOracle.h).
     dts::MappingAudit mapping;
     const std::string mappingMutate = std::getenv("SE_GAME_MAPPING_MUTATE") ? std::getenv("SE_GAME_MAPPING_MUTATE") : "";
+    // SE_GAME_TOKEN_DUMP=<prefix> (area 7 round 2): every token with an address, to <prefix>_alone.tsv (DumpMappingTokens).
+    std::FILE* tokenDump = nullptr;
+    if (const char* prefix = std::getenv("SE_GAME_TOKEN_DUMP")) tokenDump = std::fopen((std::string(prefix) + "_alone.tsv").c_str(), "w");
     const std::function<bool(uint32_t, uint16_t&)> wordAt = [&hw](uint32_t a, uint16_t& w) {
         if (a < 0x06000000u || a - 0x06000000u + 1 >= hw.size()) return false;
         w = static_cast<uint16_t>(hw[a - 0x06000000u] << 8 | hw[a - 0x06000000u + 1]);
@@ -4009,6 +4062,7 @@ void TestGameCode()
             DecompileResult damaged = r;
             if (!mappingMutate.empty()) dts::MutateMapping(damaged, mappingMutate);
             mapping.Add(dts::AuditMapping(damaged, wordAt, where, [&](const Line& l) { return dts::MutatedOriginText(mappingMutate, l); }));
+            if (tokenDump) dts::DumpMappingTokens(tokenDump, r, wordAt, "alone");
         }
         total += r.elapsedMs;
         if (r.elapsedMs > worst) { worst = r.elapsedMs; worstAt = entry; }
@@ -4208,6 +4262,7 @@ void TestGameCode()
                 "hardware, %d writes; %d of them are no direct access of ordinary memory\n", deadPointerReads, deadConstantReads,
                 deadHardwareReads, deadWrites, deadLost);
     dts::PrintMappingAudit(mapping, "alone");
+    if (tokenDump) std::fclose(tokenDump);
     CHECK(mapping.Violations() == 0);
     CHECK(dropped == 0);
     CHECK(deadLost == 0);
@@ -4232,6 +4287,92 @@ void TestGameCode()
 // broken where it is entered) and does the same, twice: without the effects each signature proved
 // (what lending was before patch 0028) and with them, then compares. SE_GAME_LEND=1 with
 // SE_GAME_HWRAM; SE_GAME_OUT also receives lend_before/ and lend_after/ with each function's text.
+// Area 7 round 2, the instrument for A7-8: does a line name the instructions whose effect it shows? SE_GAME_PERTURB=<n> with
+// SE_GAME_HWRAM: for each prologue function, up to n instructions that carry an immediate (mov #i,Rn; add #i,Rn; cmp/eq #i,r0;
+// and, or, xor, tst #i,r0) have the immediate changed (bit 5 flipped), the function is decompiled again, and the lines whose text
+// changed are compared with the instruction: it is attributed when it is among LineInstructions of a changed line (before or after).
+// A text change on lines that do not list it is the instruction's effect shown where its hover text does not say so (A7-7 says a
+// folded operation has no token of its own; this measures how often the hover text of the line that shows its effect is silent).
+// Counted by mnemonic; SE_GAME_PERTURB_LIST=1 prints the unattributed ones.
+void TestGamePerturb()
+{
+    const char* path = std::getenv("SE_GAME_HWRAM");
+    const char* perEnv = std::getenv("SE_GAME_PERTURB");
+    if (!path || !perEnv) return;
+    const int per = std::max(1, std::atoi(perEnv));
+    const bool list = std::getenv("SE_GAME_PERTURB_LIST") != nullptr;
+    std::vector<uint8_t> hw(0x100000u);
+    FILE* f = std::fopen(path, "rb");
+    CHECK(f != nullptr);
+    if (!f) return;
+    CHECK(std::fread(hw.data(), 1, hw.size(), f) == hw.size());
+    std::fclose(f);
+    Sh2Decompiler d(gConfig);
+    auto base = MakeSnapshot(hw);
+    struct Tally { int attributed = 0, unattributed = 0, same = 0, shape = 0, failed = 0, ownedButSame = 0; };
+    std::map<std::string, Tally> byKind;
+    int functions = 0, shown = 0;
+    for (uint32_t k = 0; k + 1 < hw.size(); k += 2)
+    {
+        if (hw[k] != 0x4F || hw[k + 1] != 0x22) continue;
+        const uint32_t entry = 0x06000000u + k;
+        const DecompileResult r0 = d.Decompile(base, Request(entry));
+        if (r0.status != DecompileStatus::Ok) continue;
+        ++functions;
+        // candidates: immediate instructions in the body, evenly spread
+        std::vector<uint32_t> cand;
+        for (const auto& range : r0.body)
+            for (uint32_t a = range.first; a < range.second; a += 2)
+            {
+                const uint16_t w = static_cast<uint16_t>(hw[a - 0x06000000u] << 8 | hw[a - 0x06000000u + 1]);
+                const uint16_t hi = w >> 12;
+                if (hi == 0xE || hi == 0x7 || (w >> 8) == 0x88 || (w >> 8) == 0xC9 || (w >> 8) == 0xCB || (w >> 8) == 0xCA || (w >> 8) == 0xC8)
+                    cand.push_back(a);
+            }
+        std::vector<uint32_t> pick;
+        for (int i = 0; i < per && !cand.empty(); ++i) pick.push_back(cand[(cand.size() * (2 * i + 1)) / (2 * per)]);
+        std::sort(pick.begin(), pick.end());
+        pick.erase(std::unique(pick.begin(), pick.end()), pick.end());
+        for (uint32_t a : pick)
+        {
+            std::vector<uint8_t> copy = hw;
+            copy[a - 0x06000000u + 1] ^= 0x20;
+            const uint16_t w = static_cast<uint16_t>(hw[a - 0x06000000u] << 8 | hw[a - 0x06000000u + 1]);
+            char kind[16];
+            std::snprintf(kind, sizeof kind, "%X", unsigned((w >> 12) == 0xE || (w >> 12) == 0x7 ? (w >> 12) : (w >> 8)));
+            Tally& t = byKind[kind];
+            const DecompileResult r1 = d.Decompile(MakeSnapshot(copy), Request(entry));
+            if (r1.status != DecompileStatus::Ok) { ++t.failed; continue; }
+            bool owns = false;
+            for (const Line& l : r0.lines)
+                for (uint32_t x : LineInstructions(l)) owns = owns || x == a;
+            if (r1.lines.size() != r0.lines.size()) { ++t.shape; continue; }
+            bool changed = false, attributed = false;
+            for (size_t i = 0; i < r0.lines.size(); ++i)
+            {
+                if (r0.lines[i].text == r1.lines[i].text) continue;
+                changed = true;
+                for (uint32_t x : LineInstructions(r0.lines[i])) attributed = attributed || x == a;
+                for (uint32_t x : LineInstructions(r1.lines[i])) attributed = attributed || x == a;
+            }
+            if (!changed) { ++t.same; if (owns) ++t.ownedButSame; continue; }
+            if (attributed) { ++t.attributed; continue; }
+            ++t.unattributed;
+            if (list && shown++ < 60)
+            {
+                std::printf("  unattributed: %08X (%04X) in %08X, owns a token: %s\n", a, w, entry, owns ? "yes, on another line" : "no");
+                for (size_t i = 0; i < r0.lines.size(); ++i)
+                    if (r0.lines[i].text != r1.lines[i].text)
+                        std::printf("      - %s\n      + %s\n", r0.lines[i].text.c_str(), r1.lines[i].text.c_str());
+            }
+        }
+    }
+    std::printf("perturbation: %d functions\n", functions);
+    for (const auto& kv : byKind)
+        std::printf("  opcode %-3s attributed %d, unattributed %d, text unchanged %d (of them the instruction owns a token %d), shape changed %d, failed %d\n",
+                    kv.first.c_str(), kv.second.attributed, kv.second.unattributed, kv.second.same, kv.second.ownedButSame, kv.second.shape, kv.second.failed);
+}
+
 void TestGameLending()
 {
     const char* path = std::getenv("SE_GAME_HWRAM");
@@ -4324,6 +4465,8 @@ void TestGameLending()
     constexpr uint32_t kModelKept = (0x7Fu << 8) | (1u << 17) | (1u << 18);   // r8-r14, GBR, VBR
     // Area 7: the mapping of the texts the panel shows, with lent signatures (MappingOracle.h).
     dts::MappingAudit mappingLent;
+    std::FILE* tokenDump = nullptr;   // SE_GAME_TOKEN_DUMP=<prefix> (area 7 round 2): <prefix>_lent.tsv
+    if (const char* prefix = std::getenv("SE_GAME_TOKEN_DUMP")) tokenDump = std::fopen((std::string(prefix) + "_lent.tsv").c_str(), "w");
     const std::function<bool(uint32_t, uint16_t&)> wordAt = [&hw](uint32_t a, uint16_t& w) {
         if (a < 0x06000000u || a - 0x06000000u + 1 >= hw.size()) return false;
         w = static_cast<uint16_t>(hw[a - 0x06000000u] << 8 | hw[a - 0x06000000u + 1]);
@@ -4357,6 +4500,7 @@ void TestGameLending()
                 char where[32];
                 std::snprintf(where, sizeof where, "lent function %08X", entries[i]);
                 mappingLent.Add(dts::AuditMapping(r, wordAt, where));
+                if (tokenDump) dts::DumpMappingTokens(tokenDump, r, wordAt, "lent");
             }
             Row& row = rows[i];
             row.ok = r.status == DecompileStatus::Ok;
@@ -4399,6 +4543,7 @@ void TestGameLending()
     const std::vector<Row> after = pass(true, "after");
     Sh2Decompiler::SetLendEffectsForTests(true);
     dts::PrintMappingAudit(mappingLent, "lent");
+    if (tokenDump) std::fclose(tokenDump);
     CHECK(mappingLent.Violations() == 0);
 
     auto summarize = [&](const std::vector<Row>& rows, const char* label) {
@@ -13211,6 +13356,7 @@ int main(int argc, char** argv)
     {
         RUN(TestFixture1());
         RUN(TestMappingOracleOnFixtures());
+        RUN(TestMappingOracleAtMirrors());
         RUN(TestFixture1b());
         RUN(TestNoCodeAndMirror());
         RUN(TestMovaFollowsExecutionAddress());
@@ -13223,6 +13369,7 @@ int main(int argc, char** argv)
         RUN(TestVolatileRangesAgainstModel());
         RUN(TestGameCode());
         RUN(TestGameLending());
+        RUN(TestGamePerturb());
         RUN(TestTruncatedFlow());
         RUN(TestCancelledBeforeStart());
         RUN(TestManyUncapturedBranches());
