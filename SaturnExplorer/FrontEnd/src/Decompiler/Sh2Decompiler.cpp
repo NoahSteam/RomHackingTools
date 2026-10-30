@@ -3557,6 +3557,24 @@ bool IsRegisterArea(uint32_t address)
     return HardwareAlias(address, canonical);
 }
 
+// An address that is not memory: a register area, or the associative purge (partitions 2 and 5) or the cache address array (partition 3),
+// where an access has an effect of its own (NarrowAccessEffects says it). The cache data array (partitions 4 and 6) is memory.
+bool IsHardwareRegion(uint32_t address)
+{
+    const uint32_t partition = address >> 29;
+    return IsRegisterArea(address) || partition == 2 || partition == 3 || partition == 5;
+}
+
+// What an address of IsHardwareRegion is, in a note.
+std::string HardwareRegionName(uint32_t address)
+{
+    const uint32_t partition = address >> 29;
+    if (partition == 7) return "an on-chip register address";
+    if (partition == 2 || partition == 5) return "the associative purge";
+    if (partition == 3) return "the cache address array";
+    return "a register area";
+}
+
 // The addresses a pointer varnode can hold, as far as the analysis proves them: the values the printed code shows as `&REG` (`puVar2 =
 // &VDP2_TVSTAT; if (c) puVar2 = &VDP2_VCNT;`), as numbers (`pxVar1 = (xunknown4 *)0x25fe0110;`: a register's alias, A5-38) or as such a
 // base plus a constant offset (`puVar1[4]`, `add #-4,Rn`; A5-37: the access is at base + offset, a different register). Every path to the
@@ -3604,6 +3622,16 @@ struct PointerValues
     // 0x25F80004 reads 0x05F80008 next): one such address, for the cache caution the stepped note then gives (A5-70).
     bool steppedCached = false;
     uint32_t steppedCachedAt = 0;
+    // A pointer stepped in a loop whose first values are no hardware (a cache data array cell, work RAM) and whose later ones are: one such
+    // address (A5-91). `p = (p + 4) ^ 0x20000000` from 0xFFFFFF08 holds 0xDFFFFF0C, then 0xFFFFFF10: the store after the loop writes the on-chip
+    // register the later turns come to.
+    bool steppedHw = false;
+    uint32_t steppedHwAt = 0;
+    // An unknown value ORed with a constant that sets the top three bits of the address: the pointer is somewhere in [rangeLo, rangeHi], all in
+    // the partition 7, the SH-2's on-chip registers, whose low 9 address bits decide the register (A5-90). The value is unknown, so no register
+    // is named: the access is said to "may reach on-chip registers".
+    bool ranged = false;
+    int64_t rangeLo = 0, rangeHi = 0;
 };
 
 class PointerResolver
@@ -3691,6 +3719,7 @@ private:
                     const bool loops = !x.back.empty() || !y.back.empty();
                     Merge(out, x);
                     Merge(out, y);
+                    out.ranged = false;   // (a span plus an unknown is no span)
                     out.others = true;
                     if (loops) out.steps = true;
                 }
@@ -3750,6 +3779,17 @@ private:
             into.steppedCached = true;
             into.steppedCachedAt = from.steppedCachedAt;
         }
+        if (!into.steppedHw && from.steppedHw)
+        {
+            into.steppedHw = true;
+            into.steppedHwAt = from.steppedHwAt;
+        }
+        if (from.ranged)
+        {
+            into.rangeLo = into.ranged ? std::min(into.rangeLo, from.rangeLo) : from.rangeLo;
+            into.rangeHi = into.ranged ? std::max(into.rangeHi, from.rangeHi) : from.rangeHi;
+            into.ranged = true;
+        }
     }
 
     // The values a pointer takes round a loop: the closure of the values it holds at 'node' under the paths from the node back to itself. A path
@@ -3791,24 +3831,37 @@ private:
         }
         if (stepped.empty()) return;
         v.steps = v.others = true;
-        if (overflow || v.steppedCached) return;
-        bool cachedKnown = false;
-        for (uint32_t a : all) cachedKnown |= (a >> 29) == 0 && IsRegisterArea(a);
-        if (cachedKnown) return;   // (the caution is made for that address already)
+        if (overflow) return;
+        // Which of the two cautions the walk looks for: the cache caution, when no first value is a register of the cached partition already (the
+        // caution is made for that address), and the hardware one (A5-91), when no first value is hardware (the notes of that address are made).
+        bool cachedKnown = false, hwKnown = false;
+        for (uint32_t a : all)
+        {
+            cachedKnown |= (a >> 29) == 0 && IsRegisterArea(a);
+            hwKnown |= IsHardwareRegion(a);
+        }
+        const bool needCached = !v.steppedCached && !cachedKnown;
+        const bool needHw = !v.steppedHw && !hwKnown;
+        if (!needCached && !needHw) return;
         std::set<uint32_t> seen = all;
         std::vector<uint32_t> queue(all.begin(), all.end());
         size_t derived = 0;
-        for (size_t i = 0; i < queue.size() && derived < kMaxValues && !v.steppedCached; ++i)
+        for (size_t i = 0; i < queue.size() && derived < kMaxValues && ((needCached && !v.steppedCached) || (needHw && !v.steppedHw)); ++i)
             for (const SelfPath& p : mine)
                 for (uint32_t r : Eval(p, queue[i]))
                 {
                     if (!seen.insert(r).second) continue;
                     ++derived;
                     queue.push_back(r);
-                    if (!v.steppedCached && (r >> 29) == 0 && IsRegisterArea(r))
+                    if (needCached && !v.steppedCached && (r >> 29) == 0 && IsRegisterArea(r))
                     {
                         v.steppedCached = true;
                         v.steppedCachedAt = r;
+                    }
+                    if (needHw && !v.steppedHw && IsHardwareRegion(r))
+                    {
+                        v.steppedHw = true;
+                        v.steppedHwAt = r;
                     }
                 }
     }
@@ -3835,6 +3888,20 @@ private:
         out.steps = v.steps;
         out.steppedCached = v.steppedCached;
         out.steppedCachedAt = v.steppedCachedAt + k;
+        out.steppedHw = v.steppedHw;
+        out.steppedHwAt = v.steppedHwAt + k;
+        if (v.ranged)
+        {
+            // (the span moved by a signed offset; what falls off either end of the address space is another value the pointer may hold)
+            const int64_t d = static_cast<int32_t>(k);
+            const int64_t lo = std::max<int64_t>(v.rangeLo + d, 0), hi = std::min<int64_t>(v.rangeHi + d, 0xFFFFFFFFll);
+            if (lo <= hi)
+            {
+                out.ranged = true;
+                out.rangeLo = lo;
+                out.rangeHi = hi;
+            }
+        }
         for (SelfPath p : v.back)
         {
             if (k != 0) p.steps.push_back(SelfStep{ ghidra::CPUI_INT_ADD, { k } });
@@ -3885,10 +3952,25 @@ private:
         }
         const PointerValues* mask = known(y) ? &y : known(x) ? &x : nullptr;
         const PointerValues* set = mask == &y ? &x : &y;
+        // An unknown value ORed with a constant that sets the top three bits is somewhere in the on-chip registers' partition whatever the value
+        // is (A5-90): `r1 | 0xFFFFFFC0`, the idiom for a register of the CPU's own page reached by an index.
+        auto spanOfOr = [&](PointerValues& into) {
+            if (!mask || code != ghidra::CPUI_INT_OR || !set->others) return;
+            uint32_t lowest = 0xFFFFFFFFu;
+            for (const auto& m : mask->constants)
+            {
+                if ((m.first & 0xE0000000u) != 0xE0000000u) return;
+                lowest = std::min(lowest, m.first);
+            }
+            into.ranged = true;
+            into.rangeLo = lowest;
+            into.rangeHi = 0xFFFFFFFFll;
+        };
         if (!mask || (set->constants.empty() && set->bases.empty()) ||
             mask->constants.size() * (set->constants.size() + set->bases.size()) > kMaxPairs)
         {
             out.others = true;
+            spanOfOr(out);
             return out;
         }
         for (const auto& s : set->constants)
@@ -3900,6 +3982,7 @@ private:
             for (const auto& m : mask->constants)
                 out.bases.insert(Apply(code, base, m.first));
         out.others = set->others;
+        spanOfOr(out);
         // The pointer's own value round a loop, moved by the operation: a path that the node it comes back to closes (A5-60, A5-70).
         if (!set->back.empty())
         {
@@ -4015,6 +4098,28 @@ std::string ColorRamByteNote(uint32_t at)
            "data bus, not the entry's old byte (Mednafen vdp2.c RW_W8)";
 }
 
+// The note for an access through a pointer that lies in [lo, hi] of the on-chip registers' partition, 0xE0000000-0xFFFFFFFF, without its value being
+// known (A5-90). Mednafen decodes the partition by the address's low 9 bits (sh7095.inc MemRead / MemWrite case 7), and the two halves of that page
+// take different widths: the registers at 0xFFFFFE00-0xFFFFFEFF take byte and word accesses (a long is an address error), those at 0xFFFFFF00-0xFFFFFFFF
+// word and long ones (a byte is an address error).
+std::string OnChipSpanNote(uint32_t lo, uint32_t hi, uint32_t size, bool write)
+{
+    const uint32_t a = lo & 0x1FFu, b = hi & 0x1FFu;
+    const bool wraps = hi - lo >= 0x1FFu || a > b;
+    const bool hasHigh = wraps || b >= 0x100u;
+    const bool hasLow = wraps || a < 0x100u;
+    std::string text = "may reach on-chip registers: the pointer is an unknown value ORed with a constant that sets the top bits of the address, so it lies in " +
+                       Hex8(lo) + "-" + Hex8(hi) + ", the SH-2's on-chip register partition (decoded by the low 9 bits of the address); which register this " +
+                       std::to_string(size) + "-byte " + (write ? "write" : "read") + " reaches is not known, and none of the registers' effects is said";
+    if (size == 1 && hasHigh)
+        text += "; a 1-byte access at an address with bit 8 set (0xFFFFFF00-0xFFFFFFFF) is an address error on the SH-2: those registers take word and "
+                "longword accesses only";
+    if (size == 4 && hasLow)
+        text += "; a 4-byte access at an address with bit 8 clear (0xFFFFFE00-0xFFFFFEFF) is an address error on the SH-2: those registers take byte "
+                "and word accesses only";
+    return text;
+}
+
 std::vector<HardwareNote> HardwareNotes(const ghidra::Funcdata& fd, const std::function<uint32_t(uint32_t)>& canonicalOf)
 {
     std::set<std::pair<uint32_t, std::string>> seen;
@@ -4114,14 +4219,16 @@ std::vector<HardwareNote> HardwareNotes(const ghidra::Funcdata& fd, const std::f
             const ghidra::Varnode* value = write ? o->getIn(2) : o->getOut();
             if (!value) continue;
             const PointerValues pv = PointerResolver().Resolve(ptr);
+            if (std::getenv("SE_DBG_PV")) { std::fprintf(stderr, "PV insn %08X size %u: constants", (unsigned)o->getAddr().getOffset(), (unsigned)value->getSize()); for (auto& c : pv.constants) std::fprintf(stderr, " %08X", c.first); std::fprintf(stderr, " bases %zu others %d steps %d hw %d at %08X cached %d ranged %d [%lld,%lld]\n", pv.bases.size(), pv.others, pv.steps, pv.steppedHw, pv.steppedHwAt, pv.steppedCached, pv.ranged, (long long)pv.rangeLo, (long long)pv.rangeHi); }
             const uint32_t size = static_cast<uint32_t>(value->getSize());
             // The addresses the pointer can hold that are a register's, by its symbol or by an alias the engine prints as a number
             // (A5-38); a pointer that starts at one and is indexed is said for the register itself, as "if the index is 0".
             // (an address the bus decodes to a register area, named or not: the cache caution and the width cautions are about the access,
             // and an unnamed register in a SCSP or VDP2 block is read through the cache as a named one is)
+            // ...and the associative purge and the cache address array (A5-92): an access there is not a memory access, as a direct one says.
             auto isRegister = [&](uint32_t address) {
                 uint32_t canonical = 0;
-                return HardwareAlias(AccessAddress(address, size), canonical);
+                return HardwareAlias(AccessAddress(address, size), canonical) || IsHardwareRegion(address);
             };
             struct Candidate { uint32_t address; bool indexed; bool shifted; };
             std::vector<Candidate> registers;
@@ -4147,7 +4254,17 @@ std::vector<HardwareNote> HardwareNotes(const ghidra::Funcdata& fd, const std::f
                 for (uint32_t b : pv.bases)
                     if (!pv.constants.count(b) && InColorRam(b))
                         noteRaw(insn, "if the index is 0 (the pointer is based at " + Hex8(b) + "): " + ColorRamByteNote(b), true);
-            if (registers.empty()) continue;
+            // A pointer proved to lie in the on-chip registers' partition without its value known (A5-90): the register the access reaches is not
+            // named, and what a register does is not said; the partition and the width rules of the page are, as the access can reach any of it.
+            if (pv.ranged)
+            {
+                const int64_t lo = std::max<int64_t>(pv.rangeLo, 0xE0000000ll), hi = std::min<int64_t>(pv.rangeHi, 0xFFFFFFFFll);
+                if (lo <= hi) noteRaw(insn, OnChipSpanNote(static_cast<uint32_t>(lo), static_cast<uint32_t>(hi), size, write), true);
+            }
+            // (A5-91) A pointer stepped in a loop from an address that is no hardware, whose later values are: said under the same words as the
+            // stepped note of a register's pointer, with the address the walk came to.
+            const bool laterHardware = pv.steps && pv.steppedHw;
+            if (registers.empty() && !laterHardware) continue;
             // (an address the pointer holds that is no register's is another value it may hold, as a parameter's is)
             bool otherValues = pv.others;
             for (const auto& c : pv.constants) otherValues |= !isRegister(c.first);
@@ -4171,6 +4288,10 @@ std::vector<HardwareNote> HardwareNotes(const ghidra::Funcdata& fd, const std::f
             // ...or, whatever is near, when the later values read through the cached partition: that caution is about the partition, and an
             // unnamed register (an SCSP slot's, 0x05B00000-0x05B003FF) is read through the cache as a named one is (A5-83: `p = (p + 4) ^
             // 0x20000000` from 0x35B000C8 reads 0x15B000CC next, a cached read of a register no name is near).
+            const std::string cacheCaution = "a read of a register through the cached partition is a cache read when the cache is on (SH2_CCR.CE): a hit "
+                                             "returns the cached bytes without reading the hardware, so a poll of it may never see it change; read it through "
+                                             "0x2xxxxxxx to bypass the cache";
+            bool steppedSaid = false;
             if (pv.steps)
                 for (const Candidate& rc : registers)
                 {
@@ -4181,13 +4302,20 @@ std::vector<HardwareNote> HardwareNotes(const ghidra::Funcdata& fd, const std::f
                     // but a read of a register through that partition is a cache read, whichever register it is.
                     noteRaw(insn, "the pointer is stepped in a loop from " + Hex8(rc.address) + ": the iterations after the first reach other addresses, "
                             "other registers perhaps, which are not said" +
-                            (cached ? std::string("; they read through the cached partition (" + Hex8(pv.steppedCachedAt) + " is one) too, and a read of a "
-                                    "register through the cached partition is a cache read when the cache is on (SH2_CCR.CE): a hit returns the cached bytes "
-                                    "without reading the hardware, so a poll of it may never see it change; read it through 0x2xxxxxxx to bypass the cache")
-                                    : std::string()),
+                            (cached ? "; they read through the cached partition (" + Hex8(pv.steppedCachedAt) + " is one) too, and " + cacheCaution : std::string()),
                             cached);
+                    steppedSaid = true;
                     break;
                 }
+            // (A5-91) ...and one that starts at no hardware: its first values are said nowhere, and the later ones reach a register area, the associative
+            // purge or the cache address array (a pointer stepped from a cache data array cell, `p = (p + 4) ^ 0x20000000`, comes to the on-chip
+            // registers on the second turn).
+            if (pv.steps && !steppedSaid && laterHardware)
+                noteRaw(insn, "the pointer is stepped in a loop from addresses that are no hardware's: the iterations after the first reach other addresses, "
+                        "which are not said, among them " + Hex8(pv.steppedHwAt) + " (" + HardwareRegionName(pv.steppedHwAt) + "): a " + std::to_string(size) +
+                        "-byte " + (write ? "write" : "read") + " there has the effects and is subject to the width rules of that hardware" +
+                        (pv.steppedCached && !write ? "; and " + cacheCaution : std::string()),
+                        true);
             continue;
         }
         if (o->code() != ghidra::CPUI_CALLOTHER || o->numInput() < 2 || !o->getIn(0)->isConstant()) continue;

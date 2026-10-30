@@ -3259,13 +3259,23 @@ std::string DerefOperands(const std::string& text)
     return out;
 }
 
+// A name the engine gives a value that no statement of the function assigns: a parameter (`param_1`), a register at entry (`in_r1`, `unaff_r13`), a
+// callee's output (`extraout_r6`). What the pointer is when it is one of these, the text does not know (A5-58: a callee-returned pointer is not followed).
+bool IsFreeValue(const std::string& id)
+{
+    return id.compare(0, 6, "param_") == 0 || id.compare(0, 3, "in_") == 0 || id.compare(0, 6, "unaff_") == 0 || id.compare(0, 9, "extraout_") == 0;
+}
+
 // The read at 'insn' goes through a pointer that the output derives from a hardware base: the statement holding it names one, or a
 // variable in it is assigned one, through assignments of variables to variables that can reach it (A5-82: an assignment further down the text,
 // outside every loop and backward goto the statement is in, is made after the read on every path, however it may name `&REG`). 'unrelated' is set when it does not but the output
 // names the register somewhere else (the argument of a call, another statement): counted apart, not folded into anonymous reads.
-bool PointerPrintsFromHardware(const DecompileResult& r, uint32_t insn, const std::vector<const HardwareRegister*>& covering, uint32_t reached, bool& unrelated)
+bool PointerPrintsFromHardware(const DecompileResult& r, uint32_t insn, const std::vector<const HardwareRegister*>& covering, uint32_t reached, bool& unrelated,
+                               bool* open = nullptr)
 {
     unrelated = false;
+    if (open) *open = false;
+    bool openSource = false;   // (A5-89) some value the pointer can hold is no address the text names: a parameter, a callee's output, a loaded value
     bool tooFar = false;   // the derivation names register addresses, none within reach of the one the emulator came to (A5-82)
     // The read's own tokens on each line that has some: what the instruction contributes to the statement, not the whole statement (a
     // comparison's other operand, `... != &VDP2_CYCB0U`, comes from another instruction and is not the pointer, seed 347).
@@ -3318,67 +3328,92 @@ bool PointerPrintsFromHardware(const DecompileResult& r, uint32_t insn, const st
     // reads through param_1, and xVar1, the other half of the value returned, was assigned a number that is an on-chip address within reach of the
     // one the run read (0xffffffd3, 41 bytes from 0xFFFFFFFC). The derivation is followed from the operands first; one that names a base only
     // outside them is counted as not the pointer.
+    // The dereference operands of a statement that name something of the read's own tokens (`text`, the statement without the variable assigned
+    // to and the calls): empty when the statement dereferences nothing of the read's.
+    auto ownOperands = [&](const std::pair<std::string, size_t>& statement, const std::string& text) {
+        // (the read's own tokens hold no parentheses or casts of other instructions, so the dereferences are found in the whole line,
+        // and the operands kept are those that name something of the read's own tokens)
+        const std::string all = DerefOperands(r.lines[statement.second].text);
+        std::set<std::string> own;
+        for (const std::string& id : Identifiers(text)) own.insert(id);
+        std::string ops;
+        size_t from = 0;
+        while (from < all.size())
+        {
+            const size_t to = all.find(" ; ", from);
+            const std::string one = all.substr(from, to == std::string::npos ? std::string::npos : to - from);
+            bool mine = false;
+            for (const std::string& id : Identifiers(one)) mine |= own.count(id) != 0;
+            if (mine) ops += one + " ; ";
+            if (to == std::string::npos) break;
+            from = to + 3;
+        }
+        return ops;
+    };
+    auto statementText = [&](const std::pair<std::string, size_t>& statement) {
+        std::string text = statement.first;
+        const size_t b = text.find_first_not_of(' ');
+        size_t e = b == std::string::npos ? 0 : b;
+        while (e < text.size() && (std::isalnum(static_cast<unsigned char>(text[e])) || text[e] == '_')) ++e;
+        if (b != std::string::npos && e > b && text.compare(e, 3, " = ") == 0) text = text.substr(e + 3);   // (not the variable assigned to)
+        return WithoutCalls(text);
+    };
     auto derive = [&](bool operandsOnly, bool& narrowed) {
         std::set<std::pair<std::string, size_t>> seen;
         std::vector<std::pair<std::string, size_t>> todo;   // (variable, the line of the statement that reads it)
+        // (A5-89) One instruction can have two lines of text (a delay slot's store and the `return` the printer gives it too): when one of them
+        // dereferences what the read's tokens name, the other is not the access.
+        bool anyOperands = false;
+        if (operandsOnly)
+            for (const auto& statement : statements) anyOperands |= !ownOperands(statement, statementText(statement)).empty();
         for (const auto& statement : statements)
         {
-            std::string text = statement.first;
-            const size_t b = text.find_first_not_of(' ');
-            size_t e = b == std::string::npos ? 0 : b;
-            while (e < text.size() && (std::isalnum(static_cast<unsigned char>(text[e])) || text[e] == '_')) ++e;
-            if (b != std::string::npos && e > b && text.compare(e, 3, " = ") == 0) text = text.substr(e + 3);   // (not the variable assigned to)
-            text = WithoutCalls(text);
+            std::string text = statementText(statement);
             if (operandsOnly)
             {
-                // (the read's own tokens hold no parentheses or casts of other instructions, so the dereferences are found in the whole line,
-                // and the operands kept are those that name something of the read's own tokens)
-                const std::string all = DerefOperands(r.lines[statement.second].text);
-                std::set<std::string> own;
-                for (const std::string& id : Identifiers(text)) own.insert(id);
-                std::string ops;
-                size_t from = 0;
-                while (from < all.size())
-                {
-                    const size_t to = all.find(" ; ", from);
-                    const std::string one = all.substr(from, to == std::string::npos ? std::string::npos : to - from);
-                    bool mine = false;
-                    for (const std::string& id : Identifiers(one)) mine |= own.count(id) != 0;
-                    if (mine) ops += one + " ; ";
-                    if (to == std::string::npos) break;
-                    from = to + 3;
-                }
+                const std::string ops = ownOperands(statement, text);
                 if (!ops.empty())
                 {
                     text = ops;
                     narrowed = true;
                 }
+                else if (anyOperands) continue;
             }
             if (NamesHardwareBase(text, reached, tooFar)) return true;
             for (const std::string& id : Identifiers(text)) todo.emplace_back(id, statement.second);
         }
+        bool found = false;
         while (!todo.empty() && seen.size() < 256)
         {
             const std::pair<std::string, size_t> item = todo.back();
             todo.pop_back();
             if (!seen.insert(item).second) continue;
+            bool assigned = false;
             for (const Assign& a : assigns)
             {
                 if (a.name != item.first) continue;
+                assigned = true;
                 const std::string rhs = WithoutCalls(a.rhs);
                 if (!reaches(a.line, item.second))
                 {
                     if (NamesHardwareBase(rhs, reached, tooFar)) tooFar = true;   // (named, but made after the read: counted as not the pointer)
                     continue;
                 }
-                if (NamesHardwareBase(rhs, reached, tooFar)) return true;
+                // (A5-89) a callee's output or a loaded value is no address the text names
+                if (rhs != a.rhs || !DerefOperands(rhs).empty()) openSource = true;
+                if (NamesHardwareBase(rhs, reached, tooFar)) found = true;
                 for (const std::string& q : Identifiers(rhs)) todo.emplace_back(q, a.line);
             }
+            if (!assigned && IsFreeValue(item.first)) openSource = true;
         }
-        return false;
+        return found;
     };
     bool narrowed = false;
-    if (derive(true, narrowed)) return true;
+    if (derive(true, narrowed))
+    {
+        if (open) *open = openSource;
+        return true;
+    }
     if (narrowed)
     {
         bool again = false;
@@ -4645,7 +4680,20 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
         // The emulator below has no cache, so a cached-partition register literal behaves like its 0x2xxxxxxx twin in the
         // trace; Mednafen does not: with CCR.CE a hit reads nothing and a miss reads the whole line. The decompiler must
         // say so on the instruction (a caution "... a cache read ..."), whichever way the literal was written.
-        for (const TraceRec& t : trace)
+        // (A5-88) The pointer rules ask about the accesses the output is the author of: a run that the output hands to code it does not hold
+        // (an indirect jump it treats as a call, whose cases set the registers the pointer is made of) reaches addresses no text of this function
+        // can know. Seeds 2029583 and 2046314: the read after the jump, through a pointer the cases loaded, is the callee's.
+        std::set<TraceRec> ownSet;
+        for (const RunOut& run : runs)
+        {
+            const size_t handed = HandedOverAt(r, run);
+            const size_t limit = handed == SIZE_MAX ? SIZE_MAX : handed + 2;
+            for (const TraceRec& t : run.trace)
+                if (t.depth == 0 && static_cast<size_t>(t.step) < limit) ownSet.insert(t);
+        }
+        const std::vector<TraceRec> ownTrace(ownSet.begin(), ownSet.end());
+        count("pointer.trace.handed-over", static_cast<int>(trace.size() - ownTrace.size()));
+        for (const TraceRec& t : ownTrace)
         {
             uint32_t canon = 0;
             if (t.write || t.addr >= 0x20000000u || !r.InBody(t.insn) || !HardwareAlias(t.addr, canon) || canon >= 0xFFFFFE00u) continue;
@@ -4692,7 +4740,7 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                     n.text.find("if the index is 0") != std::string::npos)
                     excused.insert(n.address);
             std::set<std::tuple<uint32_t, uint32_t, int, bool>> checked;
-            for (const TraceRec& t : trace)
+            for (const TraceRec& t : ownTrace)
             {
                 uint32_t canon = 0;
                 if (t.depth != 0 || !r.InBody(t.insn) || excused.count(t.insn) || SaidMissing(r, t.insn) || !HardwareAlias(t.addr, canon)) continue;
@@ -4700,11 +4748,25 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                 if ((word & 0xF000) == 0xD000 || (word & 0xF000) == 0x9000) continue;
                 bool shown = false;
                 for (const MemoryAccess& m : r.accesses) shown |= m.insn == t.insn && m.direct && m.address == t.addr && m.write == t.write;
-                bool unrelated = false;
+                bool unrelated = false, open = false;
                 if (shown || !checked.insert(std::make_tuple(t.insn, t.addr, t.size, t.write)).second) continue;
-                if (!PointerPrintsFromHardware(r, t.insn, allRegs, canon, unrelated))
+                // (the registers within reach of the one the run came to: an access the output shows no text for is judged by those it names)
+                std::vector<const HardwareRegister*> nearRegs;
+                for (const HardwareRegister* reg : allRegs)
+                    if ((canon > reg->address ? canon - reg->address : reg->address - canon) <= kPointerReach) nearRegs.push_back(reg);
+                if (!PointerPrintsFromHardware(r, t.insn, nearRegs, canon, unrelated, &open))
                 {
                     if (unrelated) count("pointer.effect.unrelated");   // (A5-82) the registers the output names are not the one reached
+                    continue;
+                }
+                // (A5-89) The pointer is also something the text does not know (a parameter, a callee's output, a loaded value, merged with the
+                // register address it names): the run may have come to the register by that other value, and no note can say what the text does
+                // not hold. The notes for a register the pointer is proved to hold say so themselves ("it may hold other values too") when
+                // there is anything to say about it; there is not for a register without a note, and the rule must not ask for the next one.
+                if (open)
+                {
+                    if (std::getenv("SE_DBG_OPEN")) { std::fprintf(stderr, "OPEN insn %08X addr %08X:", t.insn, t.addr); for (const Line& l : r.lines) for (const Token& k : l.tokens) if (k.addr == t.insn) { std::fprintf(stderr, " [%s]", l.text.c_str()); break; } std::fprintf(stderr, "\n"); }
+                    count("pointer.effect.open");
                     continue;
                 }
                 count("pointer.effect.derived");
@@ -10525,17 +10587,17 @@ void TestA582Pins(Sh2Decompiler& d)
         { { "A5-82, seed 64293", "2FD6 6013 6DF6 000B 0009 2F86 2F96 2FA6 2FE6 4F22 7FF0 6EF3 6843 6953 6A63 B02D 0009 6483 6593 66A3 E105 3616 8916 4608 C701 016E 412B 0009 0600 9050 0600 9050 0600 9054 0600 905C 0600 9058 0600 9058 A005 0009 A003 0009 A001 0009 D705 D106 7E10 6FE3 4F26 6EF6 6AF6 69F6 68F6 412B 0009 0009 25B0 0428 0600 907C 7FE8 E103 3616 8913 4608 C702 016E 412B 0009 0009 0600 90A0 0600 90A4 0600 90A8 0600 90AC A006 0009 A004 0009 A002 0009 8577 D702 E07D 7F18 000B 0009 05F8 0066",
             "0/0/a,a/a/72,7c/7c/b8", "34:6:6:5c:50,50,54,5c,58,58;8a:6:4:ac:a0,a4,a8,ac", "1,1,1", "0,121000,101000", "20000,40000,800" }, "cache.read.pointer.unrelated" },
         { { "A5-82, seed 303290", "2F86 2F96 2FA6 4F22 6843 6953 6A63 E104 3417 8918 4408 C703 014E 412B 0009 0009 0600 903E 0600 9038 0600 903E 0600 9046 0600 9042 0600 9046 D60A A004 0009 A002 0009 A000 0009 1613 2558 8901 A003 E32B D605 A000 0009 6060 4F26 6AF6 69F6 68F6 000B 0009 25B0 0404 05F8 00D0",
-            "0/0/64", "1a:4:5:46:38,3e,46,42,46:3e", "1", nullptr, nullptr }, "pointer.effect.unrelated" },
+            "0/0/64", "1a:4:5:46:38,3e,46,42,46:3e", "1", nullptr, nullptr }, "pointer.trace.handed-over" },
         { { "A5-82, seed 310654", "2F86 2F96 2FA6 2FC6 2FD6 0C2A 6843 6953 6A63 B00F 6593 6483 6593 66A3 D104 4C2A 6DF6 6CF6 6AF6 69F6 68F6 412B 0009 0009 0600 9034 2FD6 E29D 2722 D702 6DF6 000B 0009 0009 25F8 006C",
             "0/0/2e,34/34/42", nullptr, "0,0", "100000,100000", "0,0" }, "pointer.effect.unrelated" },
         { { "A5-82, seed 313937", "E103 3517 8914 4508 C702 015E 412B 0009 0600 9028 0600 9030 0600 9024 0600 9028 0600 902C A004 0009 A002 0009 A000 0009 2678 8F00 E1A5 000B 6050",
-            "0/0/30,30/30/3a", "c:5:4:30:30,24,28,2c:28", "1,1", "80000,80000", "2,0" }, "pointer.effect.unrelated" },
+            "0/0/30,30/30/3a", "c:5:4:30:30,24,28,2c:28", "1,1", "80000,80000", "2,0" }, "pointer.trace.handed-over" },
         { { "A5-82, seed 405136", "2F86 2F96 4F22 7FD0 6843 6953 B00C 0009 6483 6593 D103 7F30 4F26 69F6 68F6 412B 0009 0009 0600 9028 E1E6 E008 0616 E106 3712 8919 4708 C702 017E 412B 0009 0009 0600 9058 0600 9068 0600 905C 0600 9068 0600 9060 0600 9064 A007 0009 A005 0009 A003 0009 A001 0009 D601 6013 000B 0009 05F8 007C",
             "0/0/22,28/28/70", "3a:7:6:68:58,68,5c,68,60,64", "1,1", "0,0", "20000,20000" }, "pointer.effect.unrelated" },
         { { "A5-85, seed 910697", "E105 3413 8916 4408 C702 014E 412B 0009 0600 902C 0600 9028 0600 9028 0600 902C 0600 902C 0600 9030 A004 0009 A002 0009 A000 0009 E103 3512 890F 4508 C701 015E 412B 0009 0600 9050 0600 9050 0600 9056 E1D3 A002 0009 A000 0009 000B 6040",
-            "0/0/34,34/34/5e", "c:4:5:34:28,28,2c,2c,30:2c;40:5:3:5a:50,50,56", "1,1", "180000,180000", "0,20000" }, "pointer.effect.unrelated" },
+            "0/0/34,34/34/5e", "c:4:5:34:28,28,2c,2c,30:2c;40:5:3:5a:50,50,56", "1,1", "180000,180000", "0,20000" }, "pointer.trace.handed-over" },
         { { "A5-82, seed 202350 (specials)", "2F86 2F96 2FA6 2FB6 4F22 6843 6953 6A63 6B73 E106 3613 891A 4608 C703 016E 412B 0009 0009 0600 904A 0600 904E 0600 9040 0600 9046 0600 9046 0600 9046 0600 904A D70B A004 0009 A002 0009 A000 0009 6072 2448 8B01 A003 E11D D706 A000 E1C8 6073 4F26 6BF6 6AF6 69F6 68F6 000B 0009 0009 1DFE 0064 25F8 00D2",
-            "0/0/6e", "1e:6:6:4e:4e,40,46,46,46,4a:4a", "1", "1000", "60000" }, "cache.read.pointer.unrelated" },
+            "0/0/6e", "1e:6:6:4e:4e,40,46,46,46,4a:4a", "1", "1000", "60000" }, "pointer.trace.handed-over" },
     };
     for (const A582Pin& p : kPins)
     {
@@ -10554,11 +10616,11 @@ void TestA582Pins(Sh2Decompiler& d)
     struct SeedPin { const char* name; bool v2; uint64_t seed; const char* seen; const char* notSeen; };
     static const SeedPin kSeeds[] = {
         { "A5-82, grammar 2 seed 64293", true, 64293, "cache.read.pointer.unrelated", nullptr },
-        { "A5-82, grammar 2 seed 303290", true, 303290, "pointer.effect.unrelated", nullptr },
+        { "A5-82, grammar 2 seed 303290", true, 303290, "pointer.trace.handed-over", nullptr },
         { "A5-82, grammar 2 seed 310654", true, 310654, "pointer.effect.unrelated", nullptr },
-        { "A5-82, grammar 2 seed 313937", true, 313937, "pointer.effect.unrelated", nullptr },
+        { "A5-82, grammar 2 seed 313937", true, 313937, "pointer.trace.handed-over", nullptr },
         { "A5-82, grammar 2 seed 405136", true, 405136, "pointer.effect.unrelated", nullptr },
-        { "A5-85, grammar 2 seed 910697", true, 910697, "pointer.effect.unrelated", nullptr },
+        { "A5-85, grammar 2 seed 910697", true, 910697, "pointer.trace.handed-over", nullptr },
         { "A5-82, grammar 1 seed 69 (control: a register merged with an unmapped address)", false, 69, "cache.read.pointer.said", "cache.read.pointer.unrelated" },
         { "A5-82, grammar 1 seed 179 (control: the same)", false, 179, "pointer.effect.derived", nullptr },
     };
