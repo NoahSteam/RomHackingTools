@@ -3,6 +3,7 @@
 #include "DecompilerPanel.h"
 
 #include <algorithm>
+#include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
 #include <iterator>
@@ -106,6 +107,68 @@ namespace
 
 ImVec4 kAmber() { return ui::Color(ImVec4(0.95f, 0.75f, 0.30f, 1.0f), ImVec4(0.50f,0.36f,0.0f,1.0f)); }
 ImVec4 kRed() { return ui::Color(ImVec4(0.95f, 0.42f, 0.42f, 1.0f), ImVec4(0.65f,0.11f,0.14f,1.0f)); }
+
+// Text that wraps at the window's edge instead of running past it: the window has no horizontal scrollbar and ImGui draws no glyph
+// beyond its clip rectangle, so a long line of the status area is cut off at the edge with nothing to say so (A8-17).
+void WrappedColored(const ImVec4& colour, const std::string& text)
+{
+    ImGui::PushTextWrapPos(0.0f);
+    ImGui::TextColored(colour, "%s", text.c_str());
+    ImGui::PopTextWrapPos();
+}
+
+void WrappedDisabled(const std::string& text)
+{
+    ImGui::PushTextWrapPos(0.0f);
+    ImGui::TextDisabled("%s", text.c_str());
+    ImGui::PopTextWrapPos();
+}
+
+// The status row is words laid out like text: a piece goes beside the one before it when it fits in the window and starts the next
+// line when it does not (and wraps, when it is wider than a line by itself). The pieces that matter most -- "decompiling...", the stale
+// badge -- come last, so on a narrow panel (537 px at the default layout on a 1280 px window; the row is 760 to 790 px) they used to be
+// the ones cut off (A8-17).
+class StatusRow
+{
+public:
+    void Piece(const std::string& text, const ImVec4* colour = nullptr, bool grey = false)
+    {
+        if (!mFirst)
+        {
+            const float startX = ImGui::GetItemRectMax().x + ImGui::GetStyle().ItemSpacing.x;
+            const float rightX = ImGui::GetCursorScreenPos().x + ImGui::GetContentRegionAvail().x;
+            if (startX + ImGui::CalcTextSize(text.c_str()).x <= rightX) ImGui::SameLine();
+        }
+        mFirst = false;
+        ImGui::PushTextWrapPos(0.0f);
+        if (colour) ImGui::TextColored(*colour, "%s", text.c_str());
+        else if (grey) ImGui::TextDisabled("%s", text.c_str());
+        else ImGui::TextUnformatted(text.c_str());
+        ImGui::PopTextWrapPos();
+    }
+
+private:
+    bool mFirst = true;
+};
+
+std::string Fmt(const char* fmt, ...)
+#if defined(__GNUC__)
+    __attribute__((format(printf, 1, 2)))
+#endif
+    ;
+std::string Fmt(const char* fmt, ...)
+{
+    va_list args;
+    va_start(args, fmt);
+    va_list again;
+    va_copy(again, args);
+    const int n = std::vsnprintf(nullptr, 0, fmt, args);
+    va_end(args);
+    std::string out(n > 0 ? static_cast<size_t>(n) : 0, '\0');
+    if (n > 0) std::vsnprintf(&out[0], out.size() + 1, fmt, again);
+    va_end(again);
+    return out;
+}
 // The instructions after the first that a line's menu lists (the tooltip lists eight; a menu can be longer).
 const size_t kMenuInstructions = 24;
 
@@ -137,7 +200,9 @@ DecompilerPanel::ViewId DecompilerPanel::IdOf(const DecompilerView& view)
 void DecompilerPanel::SetTarget(const Target& target)
 {
     mTarget = target;
-    // Another question: a refusal belonged to the one before it, and so did a Stop.
+    // Another question: a refusal belonged to the one before it, and so did a Stop. The refused text goes from the box with the
+    // refusal: when the new target is the function already shown nothing installs, so nothing else would reset it (A8-20).
+    if (mEntryRefused) mSyncEntryBox = true;
     mEntryRefused = false;
     ForgetStop();
     mResolved = false;
@@ -151,6 +216,9 @@ void DecompilerPanel::ShowFunctionContaining(int cpu, uint32_t addr)
     t.kind = TargetKind::Containing;
     t.address = addr;
     SetTarget(t);
+    // "Decompile" is a request, like Enter in the entry box: it is answered even when the same question was asked before, so a Stop
+    // or a failure does not leave the old output on screen with nothing coming (A8-18).
+    mAskAgain = true;
     mFocus = true;
 }
 
@@ -346,8 +414,13 @@ std::string DecompilerPanel::StaleTooltip() const
     case StaleReason::Pending:
         return "This output is from an earlier state; its replacement is shown when it is ready.";
     case StaleReason::Stopped:
-        return "This output is from an earlier state. You stopped its replacement; press Enter in the\n"
-               "entry box or Refresh to ask for it again.";
+        // Enter in the entry box asks for the function the box holds, as an Entry target: under Follow PC or Decompile that is not
+        // the question that was stopped (A8-19).
+        if (mTarget.kind == TargetKind::Entry)
+            return "This output is from an earlier state. You stopped its replacement; press Enter in the\n"
+                   "entry box or Refresh to ask for it again.";
+        return "This output is from an earlier state. You stopped its replacement; press Refresh to ask\n"
+               "for it again.";
     case StaleReason::Disabled:
         return "This output is from an earlier state. Decompiling is disabled for this session (see\n"
                "the message below), so no replacement will come.";
@@ -391,6 +464,9 @@ std::string DecompilerPanel::StaleTooltip() const
     }
     if (mViewKind == DecompViewKind::LiveRunning && EmulatorMovedOn())
         return "The emulator has moved on since this was decompiled. Press Refresh.";
+    if (mTarget.kind != TargetKind::Entry)
+        return "This output is from an earlier state and nothing is being decompiled. Press Refresh to\n"
+               "replace it.";
     return "This output is from an earlier state and nothing is being decompiled. Press Enter in the\n"
            "entry box or Refresh to replace it.";
 }
@@ -504,6 +580,33 @@ void DecompilerPanel::Resolve(const DecompilerInputs& inputs)
     mEntryDoubt = g.doubt;
     mHaveAnchor = true;
     mAnchor = anchorCanonical;
+}
+
+// What the screen says about the output that the text alone would not: the stale badge with its reason, and each amber line (unsupported,
+// truncated, bad data, unimplemented, the engine's cautions, an address the flow does not reach, the entry's doubt). They are the marks
+// a reader had in front of them when choosing Copy; pasted, the text is read where they are not, so they go first as C comments (A8-21).
+// Nothing for output that is current and certain: the copy is then the pseudocode and nothing else.
+std::string DecompilerPanel::CopyMarks() const
+{
+    if (!mShownValid || mShown.status != DecompileStatus::Ok) return std::string();
+    auto comment = [](std::string text) {
+        for (char& c : text)
+            if (c == '\n' || c == '\r') c = ' ';
+        for (size_t at; (at = text.find("*/")) != std::string::npos;) text.replace(at, 2, "* /");   // a comment cannot hold its own end
+        return "/* " + text + " */\n";
+    };
+    std::string out;
+    if (ShownStale())
+        out += comment(std::string(EmulatorMovedOn() ? Fmt("[stale: frame %llu] ", static_cast<unsigned long long>(mShown.key.frameNumber))
+                                                       : std::string("[stale] ")) + StaleTooltip());
+    bool unimplemented = false;
+    for (const std::string& u : Uncertainties())
+    {
+        out += comment("WARNING: " + u);
+        unimplemented |= u.find("nimplemented") != std::string::npos;
+    }
+    if (mShown.unimplemented && !unimplemented) out += comment("WARNING: the SH-2 spec has no semantics for an instruction here");
+    return out;
 }
 
 std::vector<std::string> DecompilerPanel::Uncertainties() const
@@ -1040,7 +1143,7 @@ void DecompilerPanel::DrawUnavailable(bool* open, const std::string& why)
     mItems.clear();
     if (ImGui::Begin(kTitle, open))
     {
-        ImGui::TextColored(kRed(), "Decompiler unavailable: %s", why.c_str());
+        WrappedColored(kRed(), "Decompiler unavailable: " + why);
         Remember("unavailable");
         ImGui::TextDisabled("The rest of Saturn Explorer is unaffected. Restart to try again.");
     }
@@ -1101,6 +1204,8 @@ void DecompilerPanel::DrawHeader(const DecompilerView& view, const DecompilerRun
             t.address = v;
             t.source = EntrySource::User;
             SetTarget(t);
+            // The box holds what was typed: the reset of a refusal's text (SetTarget) is for the targets that did not come from it.
+            mSyncEntryBox = false;
             // Typing an entry and pressing Enter is a request, not a state the panel drifted into: it
             // is answered even when the same question was asked before (after Stop, or after a
             // failure, the old function would otherwise stay on screen with nothing coming).
@@ -1188,48 +1293,37 @@ void DecompilerPanel::DrawHeader(const DecompilerView& view, const DecompilerRun
 
 void DecompilerPanel::DrawStatus(const DecompilerView& view, const DecompilerRunner& runner)
 {
+    // One row of pieces that wrap as text does (StatusRow): the badge and "decompiling..." are on screen at any width (A8-17).
+    StatusRow row;
+    const ImVec4 amber = kAmber();
     if (view.kind == DecompViewKind::None)
-        ImGui::TextDisabled("No source");
+        row.Piece("No source", nullptr, true);
     else
-        ImGui::TextDisabled("%s \xc2\xb7 frame %llu", view.sourceLabel,
-                            static_cast<unsigned long long>(view.frameNumber));
+        row.Piece(Fmt("%s \xc2\xb7 frame %llu", view.sourceLabel, static_cast<unsigned long long>(view.frameNumber)), nullptr, true);
     if (mShownValid)
     {
-        ImGui::SameLine();
-        ImGui::Text("\xc2\xb7 %s @ 0x%08X", mShown.name.empty() ? "?" : mShown.name.c_str(), mShown.entry);
-        if (mShown.requestedEntry != mShown.entry)
-        {
-            ImGui::SameLine();
-            ImGui::TextDisabled("(run at 0x%08X)", mShown.requestedEntry);
-        }
-        if (!mShownEntrySource.empty())
-        {
-            ImGui::SameLine();
-            ImGui::TextDisabled("(entry from %s)", mShownEntrySource.c_str());
-        }
+        row.Piece(Fmt("\xc2\xb7 %s @ 0x%08X", mShown.name.empty() ? "?" : mShown.name.c_str(), mShown.entry));
+        if (mShown.requestedEntry != mShown.entry) row.Piece(Fmt("(run at 0x%08X)", mShown.requestedEntry), nullptr, true);
+        if (!mShownEntrySource.empty()) row.Piece(Fmt("(entry from %s)", mShownEntrySource.c_str()), nullptr, true);
     }
     if (RequestWanted())
-    {
-        ImGui::SameLine();
         // Stop was pressed: the request is outstanding until the runner acknowledges the cancel (up to its deadline, when it
         // does not), but no replacement is coming from it, and "decompiling" would say one is (A8-6).
-        ImGui::TextColored(kAmber(), mPending.cancelled ? "stopping\xe2\x80\xa6" : "decompiling\xe2\x80\xa6");
-    }
+        row.Piece(mPending.cancelled ? "stopping\xe2\x80\xa6" : "decompiling\xe2\x80\xa6", &amber);
     if (ShownStale())
     {
-        ImGui::SameLine();
         if (EmulatorMovedOn())
-            ImGui::TextColored(kAmber(), "[stale: frame %llu]", static_cast<unsigned long long>(mShown.key.frameNumber));
+            row.Piece(Fmt("[stale: frame %llu]", static_cast<unsigned long long>(mShown.key.frameNumber)), &amber);
         else
-            ImGui::TextColored(kAmber(), "[stale]");
+            row.Piece("[stale]", &amber);
         Remember("stale");   // the badge's rectangle, for the tests that hover it
         ImGui::SetItemTooltip("%s", StaleTooltip().c_str());
     }
 
     if (runner.Disabled())
-        ImGui::TextColored(kRed(), "Decompiler disabled for this session: %s", runner.DisabledReason().c_str());
-    if (mResolved && !mEntryOk && !mEntryError.empty()) ImGui::TextColored(kRed(), "%s", mEntryError.c_str());
-    if (!mNote.empty()) ImGui::TextDisabled("%s", mNote.c_str());
+        WrappedColored(kRed(), "Decompiler disabled for this session: " + runner.DisabledReason());
+    if (mResolved && !mEntryOk && !mEntryError.empty()) WrappedColored(kRed(), mEntryError);
+    if (!mNote.empty()) WrappedDisabled(mNote);
     if (!mShownValid) return;
 
     switch (mShown.status)
@@ -1237,13 +1331,13 @@ void DecompilerPanel::DrawStatus(const DecompilerView& view, const DecompilerRun
     case DecompileStatus::Ok:
         break;
     case DecompileStatus::TooLarge:
-        ImGui::TextColored(kAmber(), "0x%08X: %s", mShown.entry, mShown.error.c_str());
+        WrappedColored(amber, Fmt("0x%08X: ", mShown.entry) + mShown.error);
         break;
     case DecompileStatus::Disabled:
-        ImGui::TextColored(kRed(), "Decompiler disabled for this session: %s", mShown.error.c_str());
+        WrappedColored(kRed(), "Decompiler disabled for this session: " + mShown.error);
         break;
     default:
-        ImGui::TextColored(kRed(), "%s", mShown.error.empty() ? "Decompilation failed." : mShown.error.c_str());
+        WrappedColored(kRed(), mShown.error.empty() ? "Decompilation failed." : mShown.error);
         break;
     }
     // Uncertainty is said, never left to look like a complete function: the first few in full, the
@@ -1251,10 +1345,10 @@ void DecompilerPanel::DrawStatus(const DecompilerView& view, const DecompilerRun
     const std::vector<std::string> uncertain = Uncertainties();
     const size_t kShownUncertainties = 4;
     for (size_t i = 0; i < uncertain.size() && i < kShownUncertainties; ++i)
-        ImGui::TextColored(kAmber(), "%s", uncertain[i].c_str());
+        WrappedColored(amber, uncertain[i]);
     if (uncertain.size() > kShownUncertainties)
     {
-        ImGui::TextColored(kAmber(), "%zu more warnings", uncertain.size() - kShownUncertainties);
+        ImGui::TextColored(amber, "%zu more warnings", uncertain.size() - kShownUncertainties);
         if (ImGui::BeginItemTooltip())
         {
             for (size_t i = kShownUncertainties; i < uncertain.size(); ++i) ImGui::TextUnformatted(uncertain[i].c_str());
@@ -1263,7 +1357,7 @@ void DecompilerPanel::DrawStatus(const DecompilerView& view, const DecompilerRun
     }
     if (!mHintText.empty())
     {
-        ImGui::TextColored(kAmber(), "%s 0x%08X: %s", mHint.mnemonic, mHint.insn, mHintText.c_str());
+        WrappedColored(amber, Fmt("%s 0x%08X: ", mHint.mnemonic, mHint.insn) + mHintText);
         ImGui::SetItemTooltip("Where this call goes this time, read from the register file at the halt. "
                               "The target is computed, so another call may go elsewhere.");
     }
@@ -1678,8 +1772,8 @@ void DecompilerPanel::DrawLines(const DecompilerInputs& inputs, Request& req)
                     req.hexAddr = ln.firstAddr;
                 }
                 ImGui::Separator();
-                if (item("Copy Line", true)) ImGui::SetClipboardText(ln.text.c_str());
-                if (item("Copy Function", true)) ImGui::SetClipboardText(mShown.Text().c_str());
+                if (item("Copy Line", true)) ImGui::SetClipboardText((CopyMarks() + ln.text).c_str());
+                if (item("Copy Function", true)) ImGui::SetClipboardText((CopyMarks() + mShown.Text()).c_str());
                 ImGui::EndPopup();
             }
 

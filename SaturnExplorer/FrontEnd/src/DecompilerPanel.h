@@ -224,6 +224,8 @@ public:
     // reaches, an entry the finder doubts. Empty when nothing is uncertain.
     std::vector<std::string> Uncertainties() const;
     const char* EntryText() const { return mEntryBuf; }
+    // The marks Copy Line and Copy Function put in front of the text (A8-21): C comments, "" when the output is current and certain.
+    std::string CopyMarks() const;
     // The register hint the last Draw showed for a register-target call at the halt, or "".
     const std::string& HintText() const { return mHintText; }
     // The user notes the last Draw attached to each shown line ("" for none), by line index.
