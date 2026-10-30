@@ -24,6 +24,7 @@ _s11 = importlib.util.spec_from_file_location("swtab11", os.path.join(HERE16, "s
 sw11 = importlib.util.module_from_spec(_s11)
 _s11.loader.exec_module(sw11)
 
+W16 = int(os.environ.get('DAGEN16_W', '4'))      # the one width of every access of the memory families 91 to 93 (see mkptr16.py)
 SINK = [12]
 LIVE = [0, 1]
 SRC = [0, 1, 4, 5, 6, 7]
@@ -226,7 +227,7 @@ def build_swloop(seed):
         if y < 0.25: a.ref('bra', 'cont'); a.w(0x0009)           # continue
         elif y < 0.40: a.ref('bra', 'out'); a.w(0x0009)          # break
         elif y < 0.50: a.w(0x6003 | 0 << 8 | 1 << 4); a.w(0x000B); a.w(0x0009)   # return inside the loop
-        elif y < 0.60: a.w(0xC800 | r.choice([1, 2])); a.ref('bt', 'out'); a.w(0x0009)   # break if the low index bits (of r0) are set; falls to the join
+        elif y < 0.60: a.w(r.choice([0x4011, 0x4015]) | 1 << 8); a.ref(r.choice(['bt', 'bf']), 'out'); a.w(0x0009)   # break on the sign of r1; falls to the join
         else: a.ref('bra', 'join'); a.w(0x0009)
     a.label('default')
     a.w(0x7100 | r.choice([0x7F, 1, 0]))
@@ -362,6 +363,190 @@ def fam_loopcond(r):
 
 
 FAMS16 = {86: fam_loopbrk, 87: fam_gotomess, 89: fam_condtree, 90: fam_loopcond}
+
+
+# ------------------------------------------------------------------------------------------------------------------------------------ 91..93 memory
+# Functions that read and write memory through r4 and r5 (pointers into a 16 KiB arena; r5 is r4, a neighbour of r4, or a second area), r6 and r7 data. They are
+# run only by the memory mode of the printed-C differential (mkptr16.py, SE_GENERATED_PRINTEDC_PTR=1): the value returned and the arena's bytes afterwards
+# must be the emulator's. Every access is aligned for its width (an address error is outside the domain), by a static offset tracker per pointer register.
+class Mem:
+    def __init__(self, r):
+        self.r = r
+        self.g = Gen(r)
+        self.f = self.g.f
+        self.off = {4: 0, 5: 0}          # the offset added to the base since the entry, bytes
+        self.f.add(mov_(1, 6), mov_(2, 7), mov_(3, 7))
+
+    def width(self):
+        return W16
+
+    def disp_ok(self, base, w, lim=15):
+        """a displacement d (a multiple of w, in units of w up to lim) at which base + off + d*w is aligned"""
+        for _ in range(8):
+            d = self.r.randrange(0, lim + 1)
+            if (self.off[base] + d * w) % w == 0 and self.off[base] % 4 == 0 or w == 1:
+                return d
+        return 0
+
+    def load(self, dst=None):
+        r = self.r; f = self.f
+        base = r.choice([4, 5]); w = self.width()
+        form = r.randrange(0, 10)
+        if dst is None: dst = r.choice([0, 1, 2, 3])
+        ext = {1: 0x6000, 2: 0x6001, 4: 0x6002}
+        if form < 4:        # @(disp,Rm)
+            if w == 4:
+                d = r.randrange(0, 16)
+                f.add(0x5000 | dst << 8 | base << 4 | d)
+            else:
+                d = r.randrange(0, 16) if w == 1 else r.randrange(0, 16)
+                f.add({1: 0x8400, 2: 0x8500}[w] | base << 4 | d); dst = 0
+        elif form < 6:      # @Rm
+            f.add(ext[w] | dst << 8 | base << 4)
+        elif form < 8:      # @(r0,Rm): r0 an index that keeps the alignment
+            f.add(movi(0, r.choice([0, 4, 8, 12, 16, 20, 24, 28, 32])))
+            f.add({1: 0x000C, 2: 0x000D, 4: 0x000E}[w] | dst << 8 | base << 4)
+        elif form < 9:      # @Rm+ : the pointer moves by the width (kept 4-aligned by the caller using w=4, otherwise followed by a repair)
+            f.add(ext[w] | dst << 8 | base << 4 | 4)
+            self.off[base] += w
+            self.fix(base)
+        else:               # @-Rn is a store only; use the plain form
+            f.add(ext[w] | dst << 8 | base << 4)
+        return dst
+
+    def fix(self, base):
+        # bring the pointer back to a 4-aligned offset with add #imm (the engine sees an offset ADD)
+        m = self.off[base] % 4
+        if m:
+            f = self.f
+            f.add(0x7000 | base << 8 | ((4 - m) & 0xFF)); self.off[base] += 4 - m
+
+    def store(self, src=None):
+        r = self.r; f = self.f
+        base = r.choice([4, 5]); w = self.width()
+        form = r.randrange(0, 10)
+        if src is None: src = r.choice([0, 1, 2, 3, 6, 7])
+        if form < 4:        # @(disp,Rn)
+            if w == 4:
+                d = r.randrange(0, 16)
+                f.add(0x1000 | base << 8 | src << 4 | d)
+            else:
+                d = r.randrange(0, 16)
+                f.add({1: 0x8000, 2: 0x8100}[w] | base << 4 | d)
+                # these store r0 only
+        elif form < 6:      # @Rn
+            f.add({1: 0x2000, 2: 0x2001, 4: 0x2002}[w] | base << 8 | src << 4)
+        elif form < 8:
+            f.add(movi(0, r.choice([0, 4, 8, 12, 16, 20, 24, 28, 32])))
+            if src == 0: src = 1
+            f.add({1: 0x0004, 2: 0x0005, 4: 0x0006}[w] | base << 8 | src << 4)
+        elif form < 9:      # @-Rn
+            f.add({1: 0x2004, 2: 0x2005, 4: 0x2006}[w] | base << 8 | src << 4)
+            self.off[base] -= w
+            self.fix(base)
+        else:
+            f.add({1: 0x2000, 2: 0x2001, 4: 0x2002}[w] | base << 8 | src << 4)
+
+    def alu(self):
+        r = self.r
+        d = r.choice([0, 1, 2, 3]); s = r.choice([0, 1, 2, 3, 6, 7])
+        self.f.add(*op2(r, d, s))
+
+    def finish(self):
+        r = self.r; f = self.f
+        f.add(mov_(0, r.choice([1, 2, 3])))
+        if r.random() < 0.5: f.add(add__(r.choice([1, 2, 3]), 0))
+        f.rts_slot = NOP
+
+
+def fam_memstraight(r):
+    m = Mem(r)
+    for _ in range(r.randrange(3, 10)):
+        x = r.random()
+        if x < 0.35: m.load()
+        elif x < 0.65: m.store()
+        elif x < 0.85: m.alu()
+        else:
+            # a conditional store or load: bt/bf over one to two memory ops
+            m.f.add(cmp_word(r, r.choice([1, 2, 3]), r.choice([1, 2, 3, 6, 7])))
+            l = m.g.lab('Z')
+            m.f.br(r.choice(['bt', 'bf']), l)
+            for _ in range(r.randrange(1, 3)):
+                (m.store if r.random() < 0.5 else m.load)()
+            m.f.label(l)
+            # a pointer moved inside a conditional arm would have an unknown offset; the arms above use no post-increment of different widths
+            m.off = {4: 0, 5: 0} if any(o != 0 for o in m.off.values()) and False else m.off
+    m.finish()
+    return m.f
+
+
+def fam_memloop(r):
+    # array loops: a counted walk of r4 (and r5) with a post-increment or pre-decrement of the element width, summing, copying, filling, or updating in place
+    m = Mem(r); f = m.f
+    w = W16
+    n = r.randrange(2, 7)
+    f.add(movi(8, n))
+    form = r.randrange(0, 6)
+    ld = {1: 0x6004, 2: 0x6005, 4: 0x6006}[w]            # mov.X @Rm+,Rn
+    st = {1: 0x2000, 2: 0x2001, 4: 0x2002}[w]            # mov.X Rm,@Rn
+    stdec = {1: 0x2004, 2: 0x2005, 4: 0x2006}[w]         # mov.X Rm,@-Rn
+    if form == 3 or form == 4:
+        f.add(0x7000 | 4 << 8 | (n * w) & 0xFF)          # start at the end: walk down
+    f.add(movi(1, 0))
+    top = m.g.lab('T'); f.label(top)
+    if form == 0:           # sum: r1 += *p++
+        f.add(ld | 2 << 8 | 4 << 4, add__(2, 1))
+    elif form == 1:         # copy: *q++ = *p++
+        f.add(ld | 2 << 8 | 4 << 4, st | 5 << 8 | 2 << 4, 0x7500 | w)
+    elif form == 2:         # update in place: *p = *p + r6 (or ^ r7), then advance
+        ldn = {1: 0x6000, 2: 0x6001, 4: 0x6002}[w]
+        f.add(ldn | 2 << 8 | 4 << 4)
+        f.add(add__(6, 2)) if r.random() < 0.5 else f.add(xor_(7, 2))
+        f.add(st | 4 << 8 | 2 << 4, 0x7400 | w, add__(2, 1))
+    elif form == 3:         # backwards sum with pre-decrement store of the sum
+        f.add(0x7400 | (-w & 0xFF), {1: 0x6000, 2: 0x6001, 4: 0x6002}[w] | 2 << 8 | 4 << 4, add__(2, 1))
+    elif form == 4:         # backwards store: *--q = i
+        f.add(stdec | 4 << 8 | 8 << 4)
+        f.add(add__(8, 1))
+    else:                   # sum of products of two arrays
+        f.add(ld | 2 << 8 | 4 << 4, ld | 3 << 8 | 5 << 4, 0x0007 | 2 << 8 | 3 << 4, 0x001A | 3 << 8, add__(3, 1))
+    f.add(dt(8)); f.br('bf', top)
+    m.f.add(mov_(0, 1))
+    if r.random() < 0.4: m.load(); f.add(add__(r.choice([0, 1, 2, 3]), 0)) if False else None
+    f.rts_slot = NOP
+    return f
+
+
+def fam_memstruct(r):
+    # read-modify-write of the fields of a record at r4 (and a second record at r5): p->a += p->b; swap two fields; a flag updated by a mask; a field copied
+    # from the other record (which may be the same record: the aliasing inputs). Every access has the width W16.
+    m = Mem(r); f = m.f
+    w = W16
+    ldr0 = {1: 0x8400, 2: 0x8500}.get(w); str0 = {1: 0x8000, 2: 0x8100}.get(w)
+    def ld(reg, p, idx):         # reg = p->field[idx] (idx in units of w, 0..15)
+        return [0x5000 | reg << 8 | p << 4 | idx] if w == 4 else ([ldr0 | p << 4 | idx] + ([mov_(reg, 0)] if reg != 0 else []))
+    def st(reg, p, idx):
+        return [0x1000 | p << 8 | reg << 4 | idx] if w == 4 else ([mov_(0, reg)] if reg != 0 else []) + [str0 | p << 4 | idx]
+    for _ in range(r.randrange(2, 7)):
+        x = r.random()
+        a = r.randrange(0, 8); b = r.randrange(0, 8)
+        pa, pb = r.choice([4, 5]), r.choice([4, 5])
+        if x < 0.35:         # pa->a += pb->b
+            f.add(*ld(1, pb, b)); f.add(*ld(2, pa, a)); f.add(add__(1, 2)); f.add(*st(2, pa, a))
+        elif x < 0.55:       # swap fields
+            f.add(*ld(1, pa, a)); f.add(*ld(2, pb, b)); f.add(*st(2, pa, a)); f.add(*st(1, pb, b))
+        elif x < 0.75:       # flags: read-modify-write with a mask
+            f.add(*ld(2, pa, a)); f.add(r.choice([and__(6, 2), or__(7, 2), xor_(6, 2)])); f.add(*st(2, pa, a))
+        elif x < 0.9:        # *pa = r6 ; accumulate pb->b
+            f.add(*st(6, pa, a)); f.add(*ld(2, pb, b)); f.add(add__(2, 3))
+        else:                # a pair of stores then a load of the first (an alias when pa == pb)
+            f.add(*st(7, pa, a)); f.add(*st(6, pb, a)); f.add(*ld(2, pa, a)); f.add(add__(2, 3))
+    f.add(mov_(0, 3), add__(1, 0)) if r.random() < 0.5 else f.add(mov_(0, 3))
+    f.rts_slot = NOP
+    return f
+
+
+FAMS16.update({91: fam_memstraight, 92: fam_memloop, 93: fam_memstruct})
 
 
 def build(seed, fam=None, want_fn=False):
