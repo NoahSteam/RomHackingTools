@@ -107,8 +107,10 @@ void StatusCheck(Rig& r, const char* where)
         const bool mirror = s->requestedEntry != s->entry;
         const auto it = r.shown.names.find(canon);
         // the name: the user's, as it was when the output was made (a rename since marks it stale, it does not rewrite it), else the engine's
-        if (it != r.shown.names.end()) parts.push_back(it->second);
-        else if (s->name.compare(0, 5, "func_") != 0 && s->name.compare(0, 4, "FUN_") != 0 && !s->name.empty() && s->status == DecompileStatus::Ok)
+        // (only for the answers an engine made: an injected result carries a name of its own)
+        const bool real = s->status == DecompileStatus::Ok && r.injectedGens.count(s->generation) == 0;
+        if (real && it != r.shown.names.end()) parts.push_back(it->second);
+        else if (real && s->name.compare(0, 5, "func_") != 0 && s->name.compare(0, 4, "FUN_") != 0 && s->name.compare(0, 5, "bios_") != 0 && !s->name.empty())
             why = "the name '" + s->name + "' is neither the user's name then nor the engine's";
         char b[32];
         std::snprintf(b, sizeof b, "@0x%08X", canon);
@@ -126,10 +128,44 @@ void StatusCheck(Rig& r, const char* where)
     if (!why.empty()) r.Fail(std::string("STATUS LINE (") + where + "): " + why);
 }
 
+// The engine's notes that no amber line carries (A8-15 (f)): tallied by shape (digits and hex addresses folded), over every settled step.
+std::map<std::string, uint64_t> gGreyOnly;
+std::string Shape(std::string w)
+{
+    std::string o;
+    for (size_t i = 0; i < w.size(); ++i)
+    {
+        if (w.compare(i, 2, "0x") == 0) { o += "0x#"; i += 2; while (i < w.size() && std::isxdigit(static_cast<unsigned char>(w[i]))) ++i; --i; }
+        else if (std::isdigit(static_cast<unsigned char>(w[i]))) { o += '#'; while (i + 1 < w.size() && std::isdigit(static_cast<unsigned char>(w[i + 1]))) ++i; }
+        else o += w[i];
+    }
+    return o;
+}
+void TallyGreyOnly(Rig& r)
+{
+    const DecompileResult* s = r.panel.Shown();
+    if (!s || s->status != DecompileStatus::Ok || r.injectedGens.count(s->generation)) return;
+    const std::vector<std::string> amber = r.panel.Uncertainties();
+    for (const std::string& w : s->warnings)
+    {
+        bool carried = false;
+        const std::string tail = w.size() > 12 ? w.substr(w.find(": ") == std::string::npos ? 0 : w.find(": ") + 2) : w;
+        for (const std::string& a : amber) carried |= a.find(tail.substr(0, std::min<size_t>(tail.size(), 40))) != std::string::npos;
+        if (!carried) ++gGreyOnly[Shape(w).substr(0, 110)];
+    }
+}
+
 void ProbeCheck(Rig& r, const char* where)
 {
     CheckTrust(r, where);
     StatusCheck(r, where);
+    TallyGreyOnly(r);
+    if (std::getenv("SE_PROBE_REASONS") && r.visible && r.panel.ShownStale() && r.panel.GetStaleReason() == DecompilerPanel::StaleReason::NeedsRefresh)
+    {
+        std::printf("REASON NeedsRefresh at %s: view kind %d, last operations:", where, static_cast<int>(r.ViewNow().kind));
+        for (size_t i = r.done.size() > 3 ? r.done.size() - 3 : 0; i < r.done.size(); ++i) std::printf(" | %s", r.done[i].c_str());
+        std::printf("\n");
+    }
 }
 
 void SetupProbe(Rig& rig)
@@ -179,19 +215,32 @@ Program MakeLong(uint64_t seed, int mix, int concat)
         for (const Op& o : q.ops) ops.push_back(o);
     }
     std::vector<Op> out;
-    bool held = false;
+    bool held = false, hidden = false;
     std::map<int, int> nameOf;   // function -> the name option it has now: the undo
-    for (const Op& o : ops)
+    int containFn = -1;
+    auto emitContain = [&](int k) {
+        out.push_back(Mk(OpKind::Custom, 0, 0, 0, ("contain " + std::to_string(k)).c_str()));
+        containFn = k % static_cast<int>(p.placed.size());
+    };   // the function the Containing target is on: its start is not toggled off (the finder would answer another entry: area 4's)
+    for (const Op& o0 : ops)
     {
+        Op o = o0;
+        if (o.kind == OpKind::Bound && o.b == 0 && containFn >= 0 && o.a % static_cast<int>(p.placed.size()) == containFn) o = Mk(OpKind::Refresh);
+        if (o.kind == OpKind::Custom && o.text.compare(0, 8, "contain ") == 0) containFn = std::atoi(o.text.c_str() + 8) % static_cast<int>(p.placed.size());
+        if (o.kind == OpKind::Custom && (o.text.compare(0, 8, "badentry") == 0 || o.text.compare(0, 11, "containbad") == 0)) {}
         out.push_back(o);
         if (o.kind == OpKind::Hold) held = true;
         if (o.kind == OpKind::Wait || o.kind == OpKind::Finish) held = false;
+        if (o.kind == OpKind::Hide) hidden = true;
+        if (o.kind == OpKind::Show) hidden = false;
         const int fn = o.a % static_cast<int>(p.placed.size());
         if (o.kind == OpKind::Rename && !held)
         {
             const int before = nameOf.count(fn) ? nameOf[fn] : 0;
             nameOf[fn] = o.b;
-            if (rng.Chance(35))
+            // (not while the panel is hidden: it asks nothing then, and area 1's STALE FOREVER check does not excuse the names generation of a
+            // rename undone -- A8-14 -- for a panel that is not asked; R2-I1 in the record)
+            if (!hidden && rng.Chance(35))
             {
                 // rename, something else, and the rename undone
                 out.push_back(Mk(OpKind::Refresh));
@@ -210,7 +259,7 @@ Program MakeLong(uint64_t seed, int mix, int concat)
                 case 1: out.push_back(Mk(OpKind::Reconnect, rng.Below(2))); break;
                 case 2: out.push_back(Mk(OpKind::Rename, rng.Below(1000), rng.Below(4))); break;
                 case 3: out.push_back(Mk(OpKind::Edit, rng.Below(1000), rng.Below(1000), rng.Below(1000))); break;
-                case 4: out.push_back(Mk(OpKind::Custom, 0, 0, 0, ("contain " + std::to_string(rng.Below(1000))).c_str())); break;
+                case 4: emitContain(rng.Below(1000)); break;
                 case 5: out.push_back(Mk(OpKind::Hide)); out.push_back(Mk(OpKind::Show)); break;
                 case 6: out.push_back(Mk(OpKind::Select, rng.Below(1000))); break;
                 case 7: out.push_back(Mk(OpKind::Volatile, rng.Below(4))); break;
@@ -220,7 +269,7 @@ Program MakeLong(uint64_t seed, int mix, int concat)
         }
         // Decompile on a function now and then, as the SH-2 Assembly menu does.
         if (!held && o.kind == OpKind::Select && rng.Chance(12))
-            out.push_back(Mk(OpKind::Custom, 0, 0, 0, ("contain " + std::to_string(rng.Below(1000))).c_str()));
+            emitContain(rng.Below(1000));
     }
     p.ops = out;
     return p;
@@ -245,6 +294,7 @@ int RunLong(const char* scratch, int mix, uint64_t first, int programs, int conc
         }
     }
     std::printf("status line checks: %llu\n", static_cast<unsigned long long>(gStatusChecks));
+    for (const auto& g : gGreyOnly) std::printf("grey-only engine note: %8llu  %s\n", static_cast<unsigned long long>(g.second), g.first.c_str());
     std::printf("long mix %d: seeds %llu..%llu, concat %d: %d programs, %d failed, %llu operations, %.1f s\n", mix,
                 static_cast<unsigned long long>(first), static_cast<unsigned long long>(first + programs - 1), concat, programs, failed,
                 static_cast<unsigned long long>(gT.steps - before), dts::MsSince(t0) / 1000.0);
@@ -485,12 +535,147 @@ void D8()
         m.Idle(2);
         const char* clip = ImGui::GetClipboardText();
         const std::string text = clip ? clip : "";
+        if (!stale) std::printf("---- clipboard ----\n%s\n---- end ----\n", text.c_str());
         const bool says = text.find("trustworthy") != std::string::npos || text.find("stale") != std::string::npos || text.find("unsupported") != std::string::npos;
         std::printf("      %s output (stale %d, unsupported %d): Copy Function put %zu bytes on the clipboard, first line '%s'\n", stale ? "stale" : "current",
                     m.panel.ShownStale(), m.panel.Shown() && m.panel.Shown()->unsupported, text.size(), text.substr(0, text.find('\n')).c_str());
         Report(stale ? "D8b Copy Function on stale output says so" : "D8a Copy Function on unsupported output says so", says, "");
         m.gate.Open();
     }
+}
+
+
+std::string DoubtOf(const DecompilerPanel& p)
+{
+    for (const std::string& u : p.Uncertainties())
+        if (u.compare(0, 7, "Entry: ") == 0 && u.size() > 8) return u.substr(7, u.size() - 8);
+    return "";
+}
+
+// D9. Auto-refresh on a running emulator (A8-15 (e)): the PC leaves the function, the debounce passes, the panel asks by itself. Held to
+// the model with the engine holding that request, and after it.
+void D9()
+{
+    const uint32_t cEntry = Defs()[FnC].entry, aEntry = Defs()[FnA].entry;
+    MiniRig m;
+    m.kind = DecompViewKind::LiveRunning;
+    m.regs[0].pc = cEntry + 4;
+    m.haveRegs[0] = true;
+    m.panel.SetAutoRefresh(true);
+    m.Idle(3);
+    CHECK(m.Settle());
+    m.gate.Close();
+    m.regs[0].pc = aEntry + 4;
+    bool held = false;
+    for (int i = 0; i < 120 && !held; ++i)
+    {
+        ++m.frame;
+        ++m.serial;
+        m.Idle(1);
+        held = m.runner.Busy() && m.gate.Held() > 0;
+        if (!held && m.runner.Busy()) std::this_thread::yield();
+    }
+    if (!held) { Report("D9 auto-refresh asked nothing within 120 frames", false); m.gate.Open(); return; }
+    ++m.frame; ++m.serial; m.Idle(2);
+    trust::TrueState t;
+    t.liveEmulator = true;
+    t.running = true;
+    t.inputsDiffer = true;
+    t.frameMoved = true;
+    t.outstanding = true;
+    t.entryDoubt = DoubtOf(m.panel);
+    t.entryDoubt.clear();   // the shown output is still C's: its entry is not the one the finder now doubts
+    std::string err = Verify(m.panel, t, [&](ImVec2 p) { m.Frame(p, false); }, true);
+    Report("D9a auto-refresh in flight: [stale: frame N] and decompiling", err.empty(), err);
+    m.gate.Open();
+    for (int i = 0; i < 400 && (m.runner.Busy() || m.panel.Pending()); ++i)
+    {
+        ++m.frame; ++m.serial;
+        m.Idle(1);
+        std::this_thread::yield();
+    }
+    ++m.frame; ++m.serial; m.Idle(2);
+    const DecompileResult* s = m.panel.Shown();
+    std::printf("      after the answer: shown entry %08X, stale %d, reason %d, pending %d\n", s ? s->requestedEntry : 0, m.panel.ShownStale(),
+                static_cast<int>(m.panel.GetStaleReason()), m.panel.Pending());
+    t.outstanding = false;
+    t.entryDoubt = DoubtOf(m.panel);
+    err = Verify(m.panel, t, [&](ImVec2 p) { m.Frame(p, false); }, true);
+    Report("D9b auto-refresh answered, the emulator running on: [stale: frame N], press Refresh", err.empty() && s && s->requestedEntry == aEntry, err);
+}
+
+
+// D10. Is the badge on screen on a narrow panel? The badge is the last item of the status row; ImGui clips what does not fit and the window has
+// no horizontal scrollbar. Width of the row up to and after the badge, against the window, for a running emulator (function name, entry,
+// "(entry from ...)", "decompiling...", "[stale: frame N]").
+void D10()
+{
+    gMiniLabel = "live, running";
+    // the default layout's panel: 42% of the work area (bottom strip: Watch 40%, Breakpoints 30% of the rest), at four common widths
+    for (float screen : { 1280.0f, 1600.0f, 1920.0f, 2560.0f })
+    {
+        const float w = std::floor(screen * 0.60f * 0.70f);
+        for (int frames : { 1234, 123456 })
+        {
+            gMiniWinW = w;
+            MiniRig m;
+            m.kind = DecompViewKind::LiveRunning;
+            m.regs[0].pc = Defs()[FnC].entry + 4;
+            m.haveRegs[0] = true;
+            m.frame = static_cast<uint64_t>(frames);
+            m.Idle(3);
+            CHECK(m.Settle());
+            m.gate.Close();
+            ++m.frame; ++m.serial;
+            ClickMini(m, "refresh");
+            WaitHeldOrBusy(m);
+            ++m.frame; ++m.serial;
+            m.Idle(3);
+            ImVec2 a, b;
+            const bool have = m.panel.ItemRect("stale", a, b);
+            ImGuiWindow* win = ImGui::FindWindowByName(DecompilerPanel::kTitle);
+            const float right = win ? win->Pos.x + win->Size.x : 0;
+            bool badgeDrawn = false, badgeCut = false, pendingDrawn = false;
+            for (const drawn::Run& r : drawn::WindowRuns(DecompilerPanel::kTitle))
+            {
+                const std::string n = Norm(r.text);
+                if (n.find("[stale") != std::string::npos)
+                {
+                    if (n.back() == ']') badgeDrawn = true; else badgeCut = true;
+                }
+                if (n.find("decompiling") != std::string::npos) pendingDrawn = true;
+            }
+            std::printf("      screen %4.0f px -> panel %4.0f px, frame %6d: badge item ends at %.0f, badge whole %d (cut %d), 'decompiling...' drawn %d, scroll range %.0f\n",
+                        screen, w, frames, have ? b.x : 0.0f, badgeDrawn, badgeCut, pendingDrawn, win ? win->ScrollMax.x : -1.0f);
+            Report((std::string("D10 stale badge and decompiling... are on screen: panel ") + std::to_string(static_cast<int>(w)) + " px, frame " +
+                    std::to_string(frames)).c_str(), badgeDrawn && pendingDrawn, "");
+            m.gate.Open();
+        }
+    }
+    gMiniWinW = 1250.0f;
+    gMiniLabel = "mini";
+}
+
+// D11. The amber lines of a narrow panel: the unsupported line is the longest sentence the panel draws in amber; which of it is on screen?
+void D11()
+{
+    for (float w : { 538.0f, 672.0f, 806.0f })
+    {
+        gMiniWinW = w;
+        MiniRig m;
+        m.placed = { FnC, FnU };
+        m.backend.content = BuildImage(m.placed, 0);
+        m.panel.ShowFunctionContaining(0, Defs()[FnU].entry + 4);
+        m.Idle(3);
+        CHECK(m.Settle());
+        std::string amber;
+        for (const drawn::Run& r : drawn::WindowRuns(DecompilerPanel::kTitle))
+            if (InkOf(r.col) == 1 && HasParts(r.text, { "PC-relative" })) amber = r.text;
+        const bool whole = Norm(amber).find("nottrustworthy") != std::string::npos;
+        std::printf("      panel %4.0f px: the unsupported line as drawn: '%s'\n", w, amber.c_str());
+        Report((std::string("D11 the whole unsupported sentence is on screen: panel ") + std::to_string(static_cast<int>(w)) + " px").c_str(), whole, "");
+    }
+    gMiniWinW = 1250.0f;
 }
 
 // ---- D4: a real allocation failure inside the engine ------------------------------------------------------------------------------
@@ -638,6 +823,9 @@ int main(int argc, char** argv)
             D5();
             D6();
             D8();
+            D9();
+            D10();
+            D11();
             bad = gDirectedBad;
         }
         else if (mode == "oom")

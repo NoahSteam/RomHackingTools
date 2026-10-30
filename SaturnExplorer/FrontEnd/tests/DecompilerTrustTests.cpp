@@ -908,6 +908,9 @@ bool RunTrust(Oracle& oracle, const Program& p, uint64_t seed, bool verbose, con
 //
 // The area 1 rig types its entries and has no registers. These small panels have both; the true state is written out
 // by hand for each, and held to the model by the same Verify.
+float gMiniWinW = 1250.0f;
+const char* gMiniLabel = "mini";   // ...and its source label ("live, running" in the app)   // the mini panel's window width (area 8 round 2: the status row on a narrow panel)
+
 struct MiniRig
 {
     Gate gate;   // before the runner: it must outlive the worker that waits on it
@@ -938,7 +941,7 @@ struct MiniRig
         DecompilerView d;
         d.backend = const_cast<ContentBackend*>(&backend);
         d.kind = kind;
-        d.sourceLabel = "mini";
+        d.sourceLabel = gMiniLabel;
         d.sourceId = source;
         d.deriveSerial = serial;
         d.frameNumber = frame;
@@ -959,7 +962,7 @@ struct MiniRig
         panel.Update(v, runner, in, true);
         DecompilerPanel::Request r;
         ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
-        ImGui::SetNextWindowSize(ImVec2(1250, 700), ImGuiCond_Always);
+        ImGui::SetNextWindowSize(ImVec2(gMiniWinW, 700), ImGuiCond_Always);
         panel.Draw(nullptr, v, runner, in, r);
     }
     void Frame(ImVec2 mouse = ImVec2(1270, 710), bool down = false) { h.Frame(mouse, down); }
