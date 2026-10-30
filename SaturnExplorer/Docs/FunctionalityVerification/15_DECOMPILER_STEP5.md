@@ -13702,3 +13702,40 @@ Area 2 round 16 review (printed-C 3,800,001 to 3,820,000 and grammar 2 3822530),
 ### 4. A3-137 accepted
 
 The engine's values are right in the texts read; what is wrong is the C: a byte array assigned as a value (whole, by a piece, a piece of an element, or under an underscore name of its own), and an underscore name printed for two widths of the same bytes (`_xStack_14 = CONCAT22(...)` then `CONCAT31(_xStack_14,0x8d)`, a three-byte piece of the word). A text a reader can take literally needs the variable recovery to give such a word one scalar symbol; that is left for a later round. Until then the printed-C differential counts these in frame mode as `skipped:array-local` (as it already did outside frame mode) and `skipped:piece-name`, instead of a finding.
+
+### 5. Validation
+
+| Run | Result |
+|---|---|
+| `ctest -E SaturnExplorerLive -j2 --timeout 900` | 101 of 101 pass (`SaturnExplorerSh2DecompilerEngineTests`, whose limit is 60 s, timed out twice at load 6 on the shared machine and passed alone in 48 s and in the final run at load 2: its range and rule tests do not reach the code 0072 changes) |
+| `ctest -R SaturnExplorerLive` | 6 of 6 pass |
+| fault suite (`SaturnExplorerDecompilerFaultTests` alone) | 0 of 94 jobs failed (125 s); six `stack` pins re-pinned as above |
+| printed-C, `SE_GENERATED_FIRST=4100001`, five chunks of 1,000 | 0 findings in 8,543 functions (each chunk 48 to 166 s): the chunk 4,103,001 first had one, `frame124_4103408.chain` (`_iStack_2c = CONCAT21(...)` across the two-byte `iStack_2c` and one byte of `xStack_2a`, read by hand right: A3-137), now `skipped:piece-name`; the chunk 4,101,001 had A3-142 (fixed, pinned) before it; skipped by the A3-137 rules: 11 `array-local`, 1 `piece-name` |
+| grammar 2, 4,100,001 to 4,110,000 (two chunks of 5,000) | 0 failing seeds |
+| grammar 1, 4,100,001 to 4,110,000 (two chunks of 5,000) | 0 failing seeds |
+| `frame15.py` (the review's configurations: seed 1 x 200 with every fill and level, seed 5 x 60 two levels no fill, 7 x 100 three levels, 11 x 150 `fill=save`, 13 x 100 `cover`, 17 x 100 lent call, 19 x 100 unlent call) | 810 fixtures, **0 `LEDGER BAD`** (seed 1: 31 of 200 on 2598c9b); 10 oracle mismatches, each PseudoEval reading a local or array it cannot (`return xStack_24;` read as 0) or a `fill=save` input the driver gives no value for, read by hand |
+| the review's R15 fixtures (`r15a.src` to `r15s.src`, the driver on 2598c9b and the fix) | 0 `LEDGER BAD` but R15-6a (A3-141); on 2598c9b 26 |
+| vendoring: `python3 -I vendor.py <ghidra>` on a copy | `VENDOR_EXIT 0`, 0072 applied, the tree identical to the committed one |
+
+### 6. The corpora
+
+`SE_GAME_HWRAM=<img> SE_GAME_LEND=1 SE_GAME_OUT=<dir>`, the whole decompiler suite each (exit 0), 2598c9b and the fix:
+
+| | hwram007 | hwram008 |
+|---|---|---|
+| `TestGameCode` | 839 functions, 839 ok, 11.7 s | 1,554 ok, 35.0 s |
+| every ledger count / missing and said / mapping violations | 0 / 0 / 0 | 0 / 4 / 0 |
+| frame writes lost / malformed pieces / functions with the frame unchecked (new, A3-133) | 0 / 0 / 0 | 0 / 0 / 0 |
+| lent signatures (parameters) | 678 (956) | 1,038 (1,310) |
+| ...real entries | 474 (645) of 999 | 724 (975) of 1,543 |
+| `lend_after` texts that differ from 2598c9b | 0 of 1,730 | 0 of 2,995 |
+
+No number changed and no text: none of the corpus functions has A3-130 to A3-132's shapes, and the 90 and 228 functions the old bound blinded (A3-133) are now checked, with no frame write lost. The texts read against the base were those of the first version of the A3-132 fix (100 and 121 texts with the pushes printed as local writes: wrong in kind, a precision loss, no value wrong); the version committed changes none.
+
+### 7. Limits
+
+- A3-137 is accepted, not fixed: the C is still not what a reader can take literally for a byte array or an underscore name written wider or narrower than its symbol; the differential counts those forms apart. `frame124_3805863` (a piece's sign extension, `(int4)xStack_10._2_2_`) is still a `mismatch` of the harness, value right by hand.
+- A3-141 (R15-6a) is open.
+- A STORE kept pending has its guards until its pointer is settled; where the analysis never places it (a pointer that stays a LOAD through the frame) the guards stay, as for any unmodeled STORE. In both corpora no text changed.
+- The frame ledger may still miss a loss in the pieces of a split frame COPY (A3-138: the pieces carry no record of their own).
+- No full mutation table: each fixed row's pins were checked on 2598c9b (the base build's driver and generator), not with each part of 0072 reverted alone.
