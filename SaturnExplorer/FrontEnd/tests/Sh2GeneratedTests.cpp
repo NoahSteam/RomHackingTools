@@ -10637,6 +10637,22 @@ void TestLeftoverSeedPins(Sh2Decompiler& d)
             std::printf("pin 'A3-138: frame124 3907314': %d frame writes lost\n", lost);
             CHECK(lost == 0);
         }
+        // A3-142: the frame124 chain stream's seed 4101580: r11's entry value at S+4, the word r7 stored at S+12 through the reloaded pointer,
+        // the byte S+15 read twice and xored (0): the read's value went into a SUBPIECE of the word's guard chain, which noteGuardRead did not
+        // follow, and the word was reported lost.
+        {
+            CCase c;
+            c.name = "frame124_4101580.chain";
+            std::istringstream in(
+                                  "7FD0 61F3 7104 1F18 1FA1 1FB2 1F83 1FE4 51F8 6313 7308 2372 51F8 6313 730C 2372 51F8 6313 7302 2361 E23C 51F8 6313 7308 "
+                                  "2321 51F8 6313 7305 2350 51F8 6313 730D 2360 E20F 51F8 6313 7306 2320 51F8 6313 2360 63F3 7313 6230 6023 63F3 7313 6230 "
+                                  "202A 63F3 730B 6230 302C 7F30 000B 0009");
+            std::string tok;
+            while (in >> tok) c.words.push_back(static_cast<uint16_t>(std::strtoul(tok.c_str(), nullptr, 16)));
+            const int lost = CheckFrame124Ledger(d, { c });
+            std::printf("pin 'A3-142: frame124 4101580.chain': %d frame writes lost\n", lost);
+            CHECK(lost == 0);
+        }
         std::printf("pin '%s': %zu finding(s)\n", kA3136.name, rep.findings.size());
         for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
         CHECK(rep.findings.empty());

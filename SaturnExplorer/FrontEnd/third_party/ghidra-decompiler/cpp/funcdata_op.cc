@@ -20,7 +20,7 @@
  * Modified for SaturnExplorer: and of the non-zero bits of what was worked out from that output (patches/0049-engine-nzmask-forgotten-downstream.patch).
  * Modified for SaturnExplorer: every change to an op keeps the non-zero and consume masks around it a superset of the truth, in place of 0046 and 0049 (patches/0054-engine-cached-masks-never-narrower.patch).
  * Modified for SaturnExplorer: a STORE made a COPY splits the INDIRECT it covered in the middle of with the right first piece (patches/0068-engine-deadcode-late-stack-reads.patch).
- * Modified for SaturnExplorer: a STORE guard is kept against the alias analysis while the STORE is aimed at its local or pending (patches/0072-engine-frame-chains-and-save-slots.patch).
+ * Modified for SaturnExplorer: a STORE guard is kept against the alias analysis while the STORE is aimed at its local or pending; the frame records walk to 4,096 ops and follow a guard read through a piece (patches/0072-engine-frame-chains-and-save-slots.patch).
  */
 #include "funcdata.hh"
 #include "flow.hh"
@@ -55,6 +55,13 @@ void Funcdata::noteGuardRead(const Varnode *vn)
   const Varnode *v = vn;
   for(int4 hops=0;hops<64 && v->isWritten();++hops) {
     const PcodeOp *ind = v->getDef();
+    // (patches/0072-engine-frame-chains-and-save-slots.patch) a read of part of a guarded word is a SUBPIECE of the word's chain: the
+    // STOREs guarded there are read in the read's own bytes too (frame124 seed 4101580.chain: a byte of a word read twice and xored, the
+    // word stored through the reloaded pointer, was a false loss: ledger A3-142)
+    if (ind->code() == CPUI_SUBPIECE && ind->getIn(0) != (Varnode *)0 && ind->getIn(0)->getSpace() == vn->getSpace()) {
+      v = ind->getIn(0);
+      continue;
+    }
     if (ind->code() != CPUI_INDIRECT || ind->numInput() != 2 || ind->getIn(0) == (Varnode *)0 || ind->getIn(1) == (Varnode *)0) return;
     PcodeOp *iop = PcodeOp::getOpFromConst(ind->getIn(1)->getAddr());
     if (iop == (PcodeOp *)0 || iop->code() != CPUI_STORE) return;

@@ -199,18 +199,32 @@ index 1e06e7f..95b3dd9 100644
    accessesRecorded = true;
    desc_warning = false;
 diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_op.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_op.cc
-index 0e4cc0d..13ed348 100644
+index 0e4cc0d..27dd84b 100644
 --- a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_op.cc
 +++ b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_op.cc
 @@ -20,6 +20,7 @@
   * Modified for SaturnExplorer: and of the non-zero bits of what was worked out from that output (patches/0049-engine-nzmask-forgotten-downstream.patch).
   * Modified for SaturnExplorer: every change to an op keeps the non-zero and consume masks around it a superset of the truth, in place of 0046 and 0049 (patches/0054-engine-cached-masks-never-narrower.patch).
   * Modified for SaturnExplorer: a STORE made a COPY splits the INDIRECT it covered in the middle of with the right first piece (patches/0068-engine-deadcode-late-stack-reads.patch).
-+ * Modified for SaturnExplorer: a STORE guard is kept against the alias analysis while the STORE is aimed at its local or pending (patches/0072-engine-frame-chains-and-save-slots.patch).
++ * Modified for SaturnExplorer: a STORE guard is kept against the alias analysis while the STORE is aimed at its local or pending; the frame records walk to 4,096 ops and follow a guard read through a piece (patches/0072-engine-frame-chains-and-save-slots.patch).
   */
  #include "funcdata.hh"
  #include "flow.hh"
-@@ -63,14 +64,19 @@ void Funcdata::noteGuardRead(const Varnode *vn)
+@@ -54,6 +55,13 @@ void Funcdata::noteGuardRead(const Varnode *vn)
+   const Varnode *v = vn;
+   for(int4 hops=0;hops<64 && v->isWritten();++hops) {
+     const PcodeOp *ind = v->getDef();
++    // (patches/0072-engine-frame-chains-and-save-slots.patch) a read of part of a guarded word is a SUBPIECE of the word's chain: the
++    // STOREs guarded there are read in the read's own bytes too (frame124 seed 4101580.chain: a byte of a word read twice and xored, the
++    // word stored through the reloaded pointer, was a false loss: ledger A3-142)
++    if (ind->code() == CPUI_SUBPIECE && ind->getIn(0) != (Varnode *)0 && ind->getIn(0)->getSpace() == vn->getSpace()) {
++      v = ind->getIn(0);
++      continue;
++    }
+     if (ind->code() != CPUI_INDIRECT || ind->numInput() != 2 || ind->getIn(0) == (Varnode *)0 || ind->getIn(1) == (Varnode *)0) return;
+     PcodeOp *iop = PcodeOp::getOpFromConst(ind->getIn(1)->getAddr());
+     if (iop == (PcodeOp *)0 || iop->code() != CPUI_STORE) return;
+@@ -63,14 +71,19 @@ void Funcdata::noteGuardRead(const Varnode *vn)
      rec.offset = vn->getOffset();
      rec.size = vn->getSize();
      bool have = false;
@@ -235,7 +249,7 @@ index 0e4cc0d..13ed348 100644
      }
      v = ind->getIn(0);
    }
-@@ -84,8 +90,9 @@ void Funcdata::noteGuardRead(const Varnode *vn)
+@@ -84,8 +97,9 @@ void Funcdata::noteGuardRead(const Varnode *vn)
  /// access gone unread when it is destroyed. A frame write whose readers were all destroyed as dead never has its
  /// value forwarded. A marker (MULTIEQUAL, INDIRECT) whose input is replaced forwards only that input's own fold:
  /// heritage relinks markers to other versions; totalReplace and totalReplaceConstant, which give every reader an
@@ -247,7 +261,7 @@ index 0e4cc0d..13ed348 100644
  /// A frame fold destroyed with its value forwarded passes the mark on to what it reads: a pop forwarded (into
  /// `r1 & 0`, made a constant) while the stack was not yet linked is later linked to its push, which is then read.
  /// A frame read the walk meets notes the STOREs whose guards it read through (noteGuardRead).
-@@ -102,6 +109,7 @@ void Funcdata::noteFrameFoldForwarded(bool walk,Varnode *vn)
+@@ -102,6 +116,7 @@ void Funcdata::noteFrameFoldForwarded(bool walk,Varnode *vn)
      return;
    }
    vector<PcodeOp *> walked(1,def);
@@ -255,7 +269,7 @@ index 0e4cc0d..13ed348 100644
    for(size_t k=0;k<walked.size();++k) {
      PcodeOp *d = walked[k];
      if (d->isFrameFold())
-@@ -114,11 +122,21 @@ void Funcdata::noteFrameFoldForwarded(bool walk,Varnode *vn)
+@@ -114,11 +129,21 @@ void Funcdata::noteFrameFoldForwarded(bool walk,Varnode *vn)
        Varnode *in = d->getIn(i);
        if (in == (Varnode *)0 || !in->isWritten()) continue;
        PcodeOp *e = in->getDef();
@@ -279,7 +293,7 @@ index 0e4cc0d..13ed348 100644
        walked.push_back(e);
      }
    }
-@@ -1852,6 +1870,126 @@ void Funcdata::opCollapseIndirectsForCopy(PcodeOp *copyOp)
+@@ -1852,6 +1877,126 @@ void Funcdata::opCollapseIndirectsForCopy(PcodeOp *copyOp)
    }
  }
  
@@ -406,7 +420,7 @@ index 0e4cc0d..13ed348 100644
  /// For the given op with indirect effects, run through its INDIRECTs, and
  /// if there is no longer a possible alias for an INDIRECT address, remove the INDIRECT.
  /// \param effectOp is the given op with indirect effects
-@@ -1872,6 +2010,13 @@ void Funcdata::opCollapseIndirectsForAlias(PcodeOp *effectOp)
+@@ -1872,6 +2017,13 @@ void Funcdata::opCollapseIndirectsForAlias(PcodeOp *effectOp)
      bool shouldDestroy = false;
      if (op->getOut()->hasNoLocalAlias() && !op->isIndirectCreation() && !op->noIndirectCollapse())
        shouldDestroy = true;

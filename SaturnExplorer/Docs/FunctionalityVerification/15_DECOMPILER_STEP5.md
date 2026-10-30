@@ -13654,3 +13654,50 @@ The timings are 20 to 30% above the fixer's on a machine with two other builds r
 - The fourth raise of the dead code delay (the terminal fail-closed state) was not reached by any function I drew.
 - The frame ledger on the A3-124 shapes was run through the corpora; the cap of A3-133 means 5% to 15% of the corpus functions were not checked for lost frame writes.
 - The next reviewer should draw two things: **a stack input under a partly written word** (the high piece of a returned word is a free input) and **a chain of pointers through the frame** (the `FrameEscape` walk past a LOAD of a frame slot). The fix for A3-130 is probably a rule in `FrameEscape::compute` that a LOAD through a modeled frame address is a stack read in waiting (a member, unmodeled, as every free stack read is before the stack is heritaged); for A3-131 the return recovery's treatment of a SUBPIECE of a free stack input; for A3-132 `markNotMapped` for a save slot only where the store pointer is a modeled address.
+
+## Area 3 fixer (A3-130 to A3-138)
+
+Fixer, branch `review/3-a3130-fix`, cut at `2598c9b`; patch **0072** (`0072-engine-frame-chains-and-save-slots.patch`, 11 engine files) and the host, suite and generator changes below. Own RelWithDebInfo build under the scratch directory, `-j2`, every test binary under `ulimit -v 3500000` and `timeout`, one heavy job at a time. Engine traces were made with temporary prints behind environment variables (never committed; each commit was checked free of them).
+
+| Row | P | Status | What changed |
+|---|---|---|---|
+| A3-130 | P1 | fixed | `FrameEscape` takes what a LOAD through a frame address reads, and what is computed from it, for a frame address in waiting (`pendingStores`); `reprocessFreeStores` keeps such a STORE marked with its guards; `Heritage::reprocessPendingStores` settles it again after each later pass (pending or unmodeled: guarded; placed by the analysis: marked; anything else, e.g. a parameter the slot held: unguarded) |
+| A3-131 | P1 | fixed | not the return recovery: `RulePiecePathology` took the collapse's `CONCAT(SUB(word_before,2),half)` over a never-written frame word for a partial register write and set the return's bytes consumed to 2; a stack word is no register and is left alone. 0068's `bytesBefore` stays (A3-127's pins pass) |
+| A3-132 | P1 | fixed | a callee-saved register's save slot stays mapped while a marked STORE is aimed at it (`Funcdata::storeAimedAt`) or its pointer is a frame read not linked yet (`Funcdata::pointerFromFrame`); `opCollapseIndirectsForAlias` keeps such a STORE's guard; `callMayReadFrame` takes such a guard before a call for data, not a save |
+| A3-133 | P2 | fixed | the walk's bound 4,096 ops (64 before; a set past 64), the guard records 65,536 (by STORE); reaching either marks the function capped, which `ReferenceOk`, `TestGameCode` and the generator (`frame-unchecked`) count as unchecked, not clean |
+| A3-134 | P3 | fixed | the frame124 stream's chain draws (`GenFrame130Fn`, `frame124_<seed>.chain`: 1 to 3 slots, fill none, save or words, no call); pin `frame124 chain draws` |
+| A3-135 | P3 | accepted | a function that hands its own save area to a callee; R15-1d (the slot overwritten with data first) is right since A3-132's fix |
+| A3-136 | P3 | fixed | a call removed with an unreachable block drops its frame call records |
+| A3-137 | P3 | accepted | a print limit; the printed-C differential counts the frame-mode forms apart (below) |
+| A3-138 | P3 | fixed | `SplitDatatype::splitCopy` marks a frame-fold COPY it splits read (its bytes live in the pieces) |
+| A3-139 | P1 | new, fixed | `PcodeOp::isCseMatch` took constants of different sizes for one value (`SEXT24(#0xda:2)`, `SEXT14(#0xda:1)`): `return 0;` for 0xFFFFFF00 |
+| A3-140 | P1 | new, fixed | `RulePullsubIndirect` built its INDIRECT's input piece from one reader's truncation instead of the readers' lowest byte: `return 0x88;` for 0xEB. Exposed by 0072's kept guards (2598c9b lost the store instead, A3-130) |
+| A3-141 | P3 | new, open | the review's control R15-6a is `LEDGER BAD` (the access ledger: a store through a pointer read back from a global is printed nowhere) on 2598c9b and the fix alike; not in either image |
+
+### 1. How the P1s were found to work
+
+- **A3-130.** The trace confirmed the review: at the first stack pass `reprocessFreeStores` unmarked the STORE (the LOAD through the linked slot address was "memory") and destroyed its guards. Keeping it marked was not enough for a pointer that becomes a parameter once the slot read is linked (`-O0` code spills its pointer parameters), hence the re-settling each pass; and in an escaped frame the same STORE is also "unmodeled", so pending takes precedence there (F15.11.74).
+- **A3-131.** The return was cut by `ActionDeadCode::gatherConsumedReturn` (`getReturnBytesConsumed` = 2), set by `RulePiecePathology::tracePathologyForward` through the next STORE's guard to the RETURN. 0037 had already excluded one stack form of this rule.
+- **A3-132.** Two mechanisms, both found by trace: the save slot unmapped by `ActionRestrictLocal` after the first stack pass (with the STORE's guard already there, pointer exact: `discoverIndexedStackPointers` marks it with no guard record), and, in the printing pass of a function with an escaped frame, every save slot taken for unaliased while the STORE's pointer was still a LOAD through two slots. A first version (pointerFromFrame true for any stack Varnode, linked or not) kept every push slot mapped in 100 hwram007 and 121 hwram008 texts (`xStack_4 = unaff_r8;`, lending unchanged): read, corrected, the corpora run again with no text changed.
+
+### 2. Fixtures and pins
+
+`TestA3130Fix` (`Sh2DecompilerTests.cpp`): R15-7a, 7c, 7d, 18a, 15c (A3-130); R15-12a, 12b, 13d, 16b and R15-12a's 4-byte return (A3-131); R15-5a, 5c, 6c, 18b, 1d and F15.11.74 (A3-132); frame124 3807191 (A3-139) and 4100399.chain (A3-140); each with the frame ledger and `ReferenceOk` empty, `frameLedgerCapped` false, the call-free ones evaluated against the run; and a frame read with 200 `div1` after it, which is capped and fails `ReferenceOk` (A3-133). `Sh2GeneratedTests.cpp`: `A3-136, seed 3901693`, `A3-138: frame124 3907314`, `frame124 chain draws`. Every pin but the cap's (whose field does not exist there) fails on 2598c9b: checked with the base build's driver on the fixtures (`LEDGER BAD` or the stale text) and with the base generator on the replays. The fault suite's six `stack` pins moved by `FrameEscape`'s pending set and were re-pinned as the suite printed (a first version's walk allocated a set for every walk and moved five more; it now allocates only past 64 ops, as many as before).
+
+### 3. Routed seeds
+
+Area 2 round 16 review (printed-C 3,800,001 to 3,820,000 and grammar 2 3822530), and the area 2 fixer's run (4,200,001 to 4,215,000), replayed one seed at a time on 2598c9b and on the fix:
+
+| Seeds | 2598c9b | Fix | Row |
+|---|---|---|---|
+| mismatch 3801229, 3805879, 3806515, 3806749, 3808874, 3809361, 3816992, 3817764 (and the review's 3902022) | mismatch | agree | A3-130 to A3-132 (patch 0072) |
+| mismatch 4201621, 4202027, 4202935, 4207979, 4209001, 4211419, 4214513 | mismatch | agree | A3-131 (byte fills through the reloaded pointer over never-written bytes) and 0072 |
+| mismatch 3807191 | mismatch | agree | A3-139 |
+| mismatch 3801622, 3809216, 3810844, 3811782, 3909309, 4202664, 4209678; not-compilable 3802394, 3805162, 3805195, 3808529, 3809038, 3814406, 3815258, 3817270, 3900950 | finding | `skipped:array-local` or `skipped:piece-name` | A3-137 (values read by hand right in 3801622, 3809216, 3810844) |
+| mismatch 3805863 | mismatch | mismatch | A3-137's family: `(int4)xStack_10._2_2_`, the engine's sign extension of a piece, which the harness reads unsigned; the value is right by hand (0xFFB1FE94) |
+| frame-lost 3801836, 3808627, 3907314, 3907962, 4201060, 4201746, 4211399, 4214301 | frame-lost | none | A3-138 (the word written before a call split into halves) |
+| grammar 2 3822530 (`frame-lost:W2`, a halfword stored to the frame of a function with a jump table) | `n:frame-lost:W2` | no finding | a false loss of the frame ledger, fixed by 0072's records (A3-136 or A3-138; not separated) |
+
+### 4. A3-137 accepted
+
+The engine's values are right in the texts read; what is wrong is the C: a byte array assigned as a value (whole, by a piece, a piece of an element, or under an underscore name of its own), and an underscore name printed for two widths of the same bytes (`_xStack_14 = CONCAT22(...)` then `CONCAT31(_xStack_14,0x8d)`, a three-byte piece of the word). A text a reader can take literally needs the variable recovery to give such a word one scalar symbol; that is left for a later round. Until then the printed-C differential counts these in frame mode as `skipped:array-local` (as it already did outside frame mode) and `skipped:piece-name`, instead of a finding.
