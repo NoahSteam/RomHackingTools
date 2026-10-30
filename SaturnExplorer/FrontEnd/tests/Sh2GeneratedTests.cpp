@@ -127,6 +127,20 @@
 //      Grammar 1 puts a mask (and / or / xor with 0x1FFFFFFF, 0xFFFFFFF0, 0xFFFFFFF9, 0x20000000 or 4) and a step of the pointer's alignment
 //      inside a loop body, alone or under a skip (`loop.mask.*`, `loop.step`): the loop then moves the pointer between partitions on some turns,
 //      by two operations in a turn, or by a step and a mask.
+//      (A5-88) The rules ask about the accesses the output is the author of: a run that the output hands to code it does not hold (an indirect jump it
+//      treats as a call; HandedOverAt) reaches addresses no text of this function can know, and what it does after the jump is not asked
+//      (`pointer.trace.handed-over`). (A5-89) A pointer that is also something the text does not know -- a parameter, a register at entry, a callee's
+//      output, a loaded value, a call's result -- is `open`: the run may have come to the register by the other value, and the rule asks nothing of the
+//      registers it names (`pointer.effect.open`; `.open.said` / `.open.unsaid` count what would have been asked). (A5-92) The associative purge and the
+//      cache address array through a pointer are hardware as a register area is: the same rule asks for their note, for a pointer that names one.
+//   3f. (A5-90) An access in the on-chip registers' partition (0xE0000000 and up) through a pointer the output makes by ORing a constant that sets the
+//      top three bits of the address (`in_r1 | 0xffffffc0`) has a note that it "may reach on-chip registers" (`onchip.span.said` / `.unsaid`): the text
+//      proves the partition and not the register, which rule 3c cannot ask for. (A5-91) The notes of a pointer stepped in a loop say so even when its
+//      first values are no hardware and a later one is (`p = (p + 4) ^ 0x20000000` from 0xFFFFFF08: the first value is in the cache data array, the second
+//      a register); rule 3c asks for the register's effects otherwise (`pointer.effect.excused` counts the ones the note excuses).
+//      The grammars draw such pointers (A5-92, `regionRng`): a literal in the purge, the cache address array or the on-chip page (`litptr.region`), a
+//      pointer register ORed or XORed with a constant of those partitions (`region.mask.*`, one function in seven), and the loop masks of rule 3c start
+//      from an on-chip address as well as a cached one.
 //   3d. (round 9, A5-73) A store the engine folds in the A-bus cartridge areas (0x02000000-0x04FFFFFF) has the caution that the cartridge decides
 //      what a write does, on its instruction (`litptr.cart`; counted `cart.write.said`).
 //   2c. (round 9, A5-71, A5-72) The cache data array (partitions 4 and 6, 4 KiB: `litptr.cache`) is one memory under all its names, like work RAM,
@@ -10133,6 +10147,18 @@ void TestPrintedC()
             // local where it named the raw register, and agrees with the run; the excuse stays for a raw register another way may leave.
             CHECK(rv[0].cls.empty() && rv[0].compared);
             CHECK(!IsFailing(rv[0]));
+        }
+        // A5-86 (area 2 round 12 review, family 2 function 233): `0x06009008 << 17` is 0x20100000, the word view of SMPC_IREG0, and a concatenation
+        // that returns it printed `CONCAT44(&SMPC_IREG0,~in_r7)`, which is no C (the register's name is not declared in a text that touches no
+        // hardware, and is the byte register at 0x20100001 besides). A number is a register's address where the data flow uses it as one
+        // (patches/0073): the text says 0x20100000, compiles, and agrees with the run.
+        {
+            const std::vector<uint16_t> words = { 0x6043, 0x6153, 0x6263, 0x6373, 0x4715, 0x0329, 0xD208, 0x312C, 0x3043, 0x8905, 0x3138, 0x6117, 0x312C, 0x637F, 0xA002, 0x0009,
+                                                  0x4200, 0x4228, 0x6177, 0x6023, 0x4009, 0x4008, 0x000B, 0x6003, 0x0600, 0x9008 };
+            const std::vector<CVerdict> av = CheckPrintedC(d, { { "A5-86: a number that is the word view of SMPC_IREG0, concatenated", words } }, nIn, cc, 0x51ED, 8995);
+            std::printf("pin 'A5-86: a number that is the word view of SMPC_IREG0, concatenated': %s (%s)\n", av[0].cls.empty() ? "agrees" : av[0].cls.c_str(), av[0].detail.c_str());
+            CHECK(av[0].cls.empty() && av[0].compared);
+            CHECK(!IsFailing(av[0]));
         }
         // A3-102 (area 3 round 12 fix, patch 0063): a pointer stepped up from a local over a slot the function saved GBR in (`stc gbr,r7 ;
         // mov.l r7,@(8,r15)`, then `mov r15,r7 ; L: mov.l r3,@r7 ; add #4,r7 ; dt r3 ; bf L`) wrote the slot, and the read of it after the loop
