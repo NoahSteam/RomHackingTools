@@ -33,7 +33,7 @@ summary="$logs/timings.txt"
 # SE_SANITIZER_ONLY=<extended regex> runs only the matching binaries (for a quick local check).
 # run <name> <command...>   gating: its log lands in <log-dir>, where check-sanitizer-logs.sh looks.
 # run_info <name> <command...>   informational: same, but in <log-dir>/informational/, which the
-#                                check does not read. See the SlaFreshness note below.
+#                                check does not read. Nothing uses it now; kept for the next tool that is not clean.
 run_in() {
   local dest="$1" name="$2"; shift 2
   if [ -n "${SE_SANITIZER_ONLY:-}" ] && ! [[ "$name" =~ $SE_SANITIZER_ONLY ]]; then return; fi
@@ -52,12 +52,12 @@ run_info() { run_in "$logs/informational" "$@"; }
 
 scratch() { rm -rf "$build/$1"; echo "$build/$1"; }
 
-# Informational, not gating: this test runs se-sleighc, the SLEIGH compiler, as a child process,
-# and the sanitizer build instruments it too. Upstream's compiler is not clean under them (an
-# invalid downcast to LabelSymbol at slgh_compile.cc:2340, a load of an out-of-range enum at
-# semantics.hh:88, a few leaked bytes), so the child exits non-zero and the test fails for a
-# reason that has nothing to do with the engine the job is about. Its log is kept to watch.
-run_info SaturnExplorerSlaFreshnessTests \
+# Gating since patch 0074 (area 10, A10-1 to A10-3): this test runs se-sleighc, the SLEIGH compiler, as a child process,
+# and the sanitizer build instruments it too. Upstream's compiler was not clean under them (an invalid downcast to
+# LabelSymbol at slgh_compile.cc:2340, a load of an out-of-range enum at semantics.hh:88, and four leaked blocks that were
+# the sanitizer runtime's own diagnostic printing), which made the test fail for a reason outside the engine and had it
+# run as informational. Patch 0074 fixes the sources, so a compiler that is unclean again fails this job.
+run SaturnExplorerSlaFreshnessTests \
   "$build/bin/SaturnExplorerSlaFreshnessTests" "$build/bin/se-sleighc" "$build"
 run SaturnExplorerSh2DecompilerEngineTests \
   "$build/bin/SaturnExplorerSh2DecompilerEngineTests" "$(scratch decompiler_engine_test)"

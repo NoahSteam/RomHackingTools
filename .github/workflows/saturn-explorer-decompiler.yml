@@ -57,13 +57,13 @@ jobs:
   # sleigh compiler and the tests alike; the engine's CMakeLists only adds -O2 to Debug, so the
   # sanitizer flags survive. UBSan here includes -fsanitize=vptr (part of "undefined" in C++).
   #
-  # SaturnExplorerSlaFreshnessTests is built and run, but its result is informational: it runs
-  # se-sleighc (upstream's SLEIGH compiler) as a child, and that compiler is not clean under the
-  # sanitizers (an invalid downcast, an out-of-range enum load, a few leaked bytes), which makes
-  # the test fail for reasons outside the engine. The other binaries gate the job, SaturnExplorerDecompilerFaultTests
-  # (the allocation-failure and cancel matrix, its default subset: deterministic, about a few minutes under ASan) among
-  # them: its leak check is a no-op without AddressSanitizer, so an unsanitized ctest run cannot stand in for it. The log is
-  # uploaded in the artifact under informational/.
+  # SaturnExplorerSlaFreshnessTests gates like the rest. It runs se-sleighc (upstream's SLEIGH compiler) as a
+  # child, and that compiler was not clean under the sanitizers (an invalid downcast, an out-of-range enum load, and
+  # four leaked blocks that were the sanitizer runtime's own diagnostics), so the test was informational until patch
+  # 0074 (area 10, A10-1 to A10-3) fixed the sources. SaturnExplorerDecompilerFaultTests
+  # (the allocation-failure and cancel matrix, its default subset: deterministic, about a few minutes under ASan) gates
+  # too: its leak check is a no-op without AddressSanitizer, so an unsanitized ctest run cannot stand in for it. The
+  # logs are uploaded in the artifact.
   #
   # Time: an ASan build of the engine is a few minutes; the runner test is the slow one under
   # ASan (about 6 minutes on a local machine). The step summary lists each binary's wall time.
@@ -124,7 +124,7 @@ jobs:
       - name: Check the logs for sanitizer reports
         run: bash ../.github/scripts/check-sanitizer-logs.sh sanitizer-logs
 
-      - name: Upload sanitizer logs (including informational/)
+      - name: Upload sanitizer logs
         if: always()
         uses: actions/upload-artifact@v4
         with:

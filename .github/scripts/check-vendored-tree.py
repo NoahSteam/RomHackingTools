@@ -12,7 +12,8 @@ check passes, 1 otherwise (the errors are printed, one per line).
 lint     The bookkeeping, which needs no upstream checkout:
            * patch names are NNNN-name.patch, strictly increasing, and the numbers missing
              below the highest are exactly the ones patches/README.md lists on its
-             "Unused numbers:" line;
+             "Unused numbers:" line (a "Reserved numbers:" line names numbers branches in
+             flight will use: they may be missing or present);
            * every patch has one row in patches/README.md (three cells, none empty: why, and
              what pins it) and one in VENDOR.md, in ascending order, and no row names a patch
              that does not exist;
@@ -111,9 +112,11 @@ def lint(vend, tests_dir=None):
     declared = set(int(x) for x in re.findall(r"\d{4}", m.group(1))) if m else set()
     if not m:
         errs.append('patches/README.md: no "Unused numbers: NNNN, NNNN." line')
+    mr = re.search(r"^Reserved numbers: ([0-9, ]+)\.?\s*$", readme, re.M)
+    reserved = set(int(x) for x in re.findall(r"\d{4}", mr.group(1))) if mr else set()
     if nums:
         gaps = set(range(1, max(nums) + 1)) - set(nums)
-        for g in sorted(gaps - declared):
+        for g in sorted(gaps - declared - reserved):
             errs.append("patches/: number %04d is missing and README.md does not list it under Unused numbers" % g)
         for g in sorted(declared - gaps):
             errs.append("patches/README.md: %04d is listed as unused but a patch uses it (or it is above the highest)" % g)

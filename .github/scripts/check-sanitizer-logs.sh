@@ -36,6 +36,7 @@ allow_re="$(IFS='|'; echo "${ALLOWED[*]}")"
 # run-decompiler-sanitizers.sh. SE_SANITIZER_ONLY (an extended regex, as for the runner) narrows
 # the list for a local partial run.
 EXPECTED=(
+  SaturnExplorerSlaFreshnessTests
   SaturnExplorerSh2DecompilerEngineTests
   SaturnExplorerSh2SemanticsTests
   SaturnExplorerSh2DecodeTests
@@ -57,6 +58,7 @@ pass_re() {
   case "$1" in
     SaturnExplorerDecompilerFaultTests) echo '^fault matrix: 0 of [0-9]+ job\(s\) failed' ;;
     SaturnExplorerLiveRestoreSignalTests) echo '^LiveRestoreSignalTests passed$' ;;
+    SaturnExplorerSlaFreshnessTests) echo '^SlaFreshnessTests: \.slaspec, checked-in \.sla and embedded spec agree' ;;
     *) echo '^all passed$' ;;
   esac
 }
