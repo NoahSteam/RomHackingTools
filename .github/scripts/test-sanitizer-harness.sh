@@ -25,6 +25,7 @@ NAMES=(
   SaturnExplorerSh2GeneratedTests SaturnExplorerSh2DecompilerTests SaturnExplorerSh2DecompilerFixtureTests
   SaturnExplorerDecompilerPanelTests SaturnExplorerDecompilerRunnerTests SaturnExplorerSlaFreshnessTests
   SaturnExplorerDecompilerModelTests SaturnExplorerLiveRestoreSignalTests SaturnExplorerLiveDecompilerCaptureTests
+  SaturnExplorerLoaderFuzzTests
 )
 
 SLA_PASS="SlaFreshnessTests: .slaspec, checked-in .sla and embedded spec agree (2460 bytes of .sla)"
@@ -52,6 +53,7 @@ one() {
     if [ "$n" = SaturnExplorerSh2DecompilerTests ]; then stub "$build" "$n" 0 "$other"
     elif [ "$n" = SaturnExplorerLiveRestoreSignalTests ]; then stub "$build" "$n" 0 "LiveRestoreSignalTests passed"
     elif [ "$n" = SaturnExplorerSlaFreshnessTests ]; then stub "$build" "$n" 0 "$sla"
+    elif [ "$n" = SaturnExplorerLoaderFuzzTests ]; then stub "$build" "$n" 0 "LoaderFuzzTests: 2108 cases in 12 s, 0 violation classes not in the ledger (seed 1)"
     else stub "$build" "$n" 0 "all passed"; fi
   done
   stub "$build" se-sleighc 0

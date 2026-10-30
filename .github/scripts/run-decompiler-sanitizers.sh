@@ -84,6 +84,9 @@ run SaturnExplorerDecompilerRunnerTests \
 # engine (its default seeds and pinned sequences), under the sanitizers like the panel and runner tests.
 run SaturnExplorerDecompilerModelTests \
   "$build/bin/SaturnExplorerDecompilerModelTests" "$(scratch decompiler_model_test)"
+# The loaders the decompiler reads (area 9): no engine, about 36 s under the sanitizers.
+run SaturnExplorerLoaderFuzzTests \
+  "$build/bin/SaturnExplorerLoaderFuzzTests" "$(scratch loader_fuzz_test)"
 # The two live tests drive the real exporter against the real driver over the default socket (and TCP port 6845), so they
 # share it with each other and with a running emulator: keep them in sequence here, never in parallel (ctest holds the
 # live_tap_socket lock for the same reason). LiveRestoreSignalTests takes no argument.

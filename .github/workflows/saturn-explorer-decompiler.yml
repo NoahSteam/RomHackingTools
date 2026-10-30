@@ -107,7 +107,7 @@ jobs:
           SaturnExplorerSh2DecodeTests SaturnExplorerSh2GeneratedTests
           SaturnExplorerDecompilerFaultTests SaturnExplorerSlaFreshnessTests
           SaturnExplorerDecompilerModelTests SaturnExplorerLiveRestoreSignalTests
-          SaturnExplorerLiveDecompilerCaptureTests
+          SaturnExplorerLiveDecompilerCaptureTests SaturnExplorerLoaderFuzzTests
 
       # The gate itself, against stub binaries: the runner invokes the fault matrix, and the checker fails on its non-zero
       # exit, on an ASan / LSan report, on an unaccepted UBSan error, and on a binary the runner never ran (A12-11).

@@ -48,6 +48,7 @@ EXPECTED=(
   SaturnExplorerDecompilerRunnerTests
   SaturnExplorerDecompilerFaultTests
   SaturnExplorerDecompilerModelTests
+  SaturnExplorerLoaderFuzzTests
   SaturnExplorerLiveRestoreSignalTests
   SaturnExplorerLiveDecompilerCaptureTests
 )
@@ -58,6 +59,7 @@ pass_re() {
   case "$1" in
     SaturnExplorerDecompilerFaultTests) echo '^fault matrix: 0 of [0-9]+ job\(s\) failed' ;;
     SaturnExplorerLiveRestoreSignalTests) echo '^LiveRestoreSignalTests passed$' ;;
+    SaturnExplorerLoaderFuzzTests) echo '^LoaderFuzzTests: [0-9]+ cases in [0-9]+ s, 0 violation classes not in the ledger' ;;
     SaturnExplorerSlaFreshnessTests) echo '^SlaFreshnessTests: \.slaspec, checked-in \.sla and embedded spec agree' ;;
     *) echo '^all passed$' ;;
   esac

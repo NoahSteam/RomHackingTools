@@ -119,6 +119,7 @@ private:
     // dialog picks the columns and memory; the job then runs a slice per frame under a progress
     // modal, and the finished text goes to the platform's save dialog.
     void DrawDumpSh2Modal(IPlatform& platform);
+    void SaveFunctionNames();
     void BeginDumpSh2();
     void RenderFrameToTexture(IPlatform& platform);
     void BuildDefaultLayout(unsigned int dockspaceId);

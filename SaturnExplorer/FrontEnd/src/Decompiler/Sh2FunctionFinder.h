@@ -96,13 +96,19 @@ public:
     void SetEntry(uint32_t address);           // canonicalised
     void ClearEntry(uint32_t address);
 
-    // Replaces the set from 'path'; a missing file is an empty set. Lines that are not a hex
-    // address (comments, blanks) are skipped.
-    bool Load(const std::string& path = kDefaultFile);
+    // Replaces the set from 'path'; a missing file is an empty set. A line is an address (one to eight hex digits,
+    // optionally 0x-prefixed, then anything after white space) or a comment (; # // or blank); any other line is skipped
+    // and counted (SkippedLines), not read as the address its first characters spell. False, with 'error', and the set
+    // left as it was, when the file is there and was not read: not a regular file, over 4 MiB, unreadable.
+    bool Load(const std::string& path = kDefaultFile, std::string* error = nullptr);
     bool Save(const std::string& path = kDefaultFile) const;
+
+    size_t SkippedLines() const { return mSkipped; }
+    size_t FirstSkippedLine() const { return mFirstSkipped; }
 
 private:
     std::set<uint32_t> mEntries;
+    size_t mSkipped = 0, mFirstSkipped = 0;
 };
 
 }  // namespace decomp

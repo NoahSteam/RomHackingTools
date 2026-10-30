@@ -13793,6 +13793,47 @@ decode: the entry is probably not code", odd destinations, 1,659 lines of table 
 callees found through a literal, which the lending run decompiles and the alone run does not (checked: no `F alone 060670C0` in the dump), which is why the count is 0 "alone". It is present at the area 5 matrices for the same reason. Not a mapping
 defect; the proposal is to close A7-9 as accepted and to count these in the oracle under their own name (a token at a slot address whose line begins with a case label) so that a real one stands out.
 
+## Area 9, round 1: loader fuzzing
+
+Branch `review/9-round1` from `0f5a5c9`. The first round of area 9, BIOS and external files: every file the decompiler's path reads, and the two things that go with them (several instances on one file, and a path that is a link). The round mapped the loaders, built the area's oracle (`FrontEnd/tests/LoaderFuzzTests.cpp`, `SaturnExplorerLoaderFuzzTests` in `ctest`), ran it long under AddressSanitizer and UBSan, and filed **A9-1 to A9-17** in `Docs/Decompiler/REVIEW_LEDGER.md`: **one P1 (A9-7), six P2 (A9-1, A9-2, A9-3, A9-4, A9-6, A9-10), nine P3 and one instrument row**. A9-1 to A9-14 are fixed (code commit `1338f12`, with `71c81a6` for the build and ledger), A9-15 is accepted, A9-16 (the menu's raw dump has no base address) and A9-17 (the instrument) are open. **No engine patch** (no `vendor.py` run): the changes are in the host (`FileRead.h`, `AddressNameLine.h`, `Decompiler/BiosImageFile.cpp`, `Decompiler/AddressRanges.cpp`, `Debug/CallStack.cpp`, `Settings.cpp`, `AssemblyPanel.cpp`, `Decompiler/Sh2FunctionFinder.cpp`, `Decompiler/SpecBundle.cpp`, `App.cpp`) and the savestate driver (`SavestateDriver.cpp`).
+
+### The loaders
+
+Read from the code, not from the documentation. "Feeds the decompiler" means the panel's output depends on it.
+
+| Loader | Reads | Feeds the decompiler through | Shared with another instance |
+|---|---|---|---|
+| `LoadBiosImageFile` (new; was inline in `App::LoadBiosImage`) | the BIOS image the user chose (`settings.ini` `[decompiler] bios`) | `BiosImage` (hash in the snapshot key), the BIOS region of `MemorySnapshot` | the user's file; read-only |
+| `Settings::Load` / `Save` | `<config>/settings.ini`: `[decompiler] bios`, `volatile`, `autorefresh` | BIOS path, the volatile list, auto-refresh | yes (config folder); atomic save |
+| `ParseAddressRanges` (moved to `Decompiler/AddressRanges.cpp`) | the volatile list text, from `settings.ini` and the panel's box | the engine's volatile memory | no |
+| `FunctionNames::Load` / `Import` / `Save` | `saturn_functions.txt`, `saturn_symbols.txt`, Load Symbols (a user file) in the working folder | function names, engine input (`namesGeneration`) | yes (the folder the instances start in) |
+| `FunctionBounds::Load` / `Save` | `saturn_function_bounds.txt`, the working folder | function starts the finder and panel use | yes |
+| `AssemblyPanel::LoadComments` / `SaveComments` | `assembly_comments.txt`, the working folder | notes drawn beside the pseudocode | yes |
+| `se_savestate_open` / `_buffer` | a `.yss` (Yabause family), an MDFNSVST (Mednafen, Beetle; gzip or raw) | work RAM, VDP regions, both CPUs' registers | read-only |
+| `se_savestate_open_full_dump` / `_buffer` | a linear memory dump at a base address (Data > Load Raw Dump, base 0) | work RAM, as above | read-only |
+| `se_savestate_open_region_dir` | a folder of `wram_low.bin` ... (not called by the application) | as above | read-only |
+| `MemorySnapshot::Capture` over `ContextBackend` | what the core holds | the snapshot the worker reads | no |
+| `MaterialiseSh2SpecBundle` | the engine's language files, `<config>/decompiler/<hash>/`, written and verified at start | the engine opens them by path | yes; lock file, staging directory per process |
+| `ReadSnapshot` (`LiveDriver.cpp`) | a socket, not a file | live memory and registers | not fuzzed (A9-17) |
+
+Not in the decompiler's path, checked by search: disc images, cue sheets and tracks (`Disc/` is reached from `Decompiler/` and the panel only for `Disc/PathUtil.h`, a string and file helper), `SavestateSlots` and the recorder's rewind blocks, `WatchPanel`'s session file, the patch library, PRS, the demo scripts. The `hwram*.bin` files of the corpus runs are read by the test (`SE_GAME_HWRAM`, `fopen`), not by the product; the product's way to a raw dump is Load Raw Dump at base 0, which cannot open one (A9-16).
+
+Link handling and reopened files in the path: the BIOS path (a link to the file, a chain, dangling, a loop, a folder, a FIFO, `/dev/zero`), Reload BIOS reading the same path again (the hash follows the bytes; a file that went bad drops the image, A9-9), the language-file folder (a link in place of the folder or of a file; `SpecBundle` removes a link itself and never follows it), `settings.ini` and the other files as links (`WriteFileAtomically` replaces a link, A9-15), the working-folder files that two instances share only when started in the same folder.
+
+### The oracle
+
+`FrontEnd/tests/LoaderFuzzTests.cpp`, one executable with no engine linked (the volatile-list parser and the BIOS loader were moved out of `Sh2Decompiler.cpp` and `MemorySnapshot.cpp` into files of their own for this, with no change of behaviour: commit `78e0bc0`), so it builds under the sanitizers in about a minute.
+
+**Invariants**, held after every case. **I1** no crash (a signal or a sanitizer report ends the process through a handler that prints the case and saves the input under `<scratch>/repro`), no hang (a case that takes more than 5 s is `HANG`; a watchdog `alarm` ends a real one), no unbounded allocation (the global `operator new` is replaced; each case declares what its loader may hold, and a request past it is refused with `std::bad_alloc` and recorded as `UNBOUNDED_ALLOC` whether or not the loader survives it; an exception that leaves the loader is `BAD_ALLOC_ESCAPED`, since nothing in the application catches it). **I2** a rejected file is rejected with an error: a result code from the known set and the output zeroed (savestates), a sentence that names the path (BIOS), a returned false with a reason (the text loaders). **I3** nothing partly loaded is shown as valid: a savestate region is whole or absent; the core's snapshot and `MemorySnapshot::Capture` over what opened hold a work RAM only if the source's is whole, and then its bytes; an entry comes from a line that is one (a reference reading of the documented line, written apart from the code, is compared with what the loader loaded: an entry the reference does not have is `ADDR_TRUNCATED`, `SIGNED_ADDR`, `ACCEPTS_MALFORMED` or `PROSE_AS_ADDRESS`, one it has that the loader lacks `DROPS_VALID`); Save then Load gives back what was loaded; the path opener and the buffer opener agree on the same bytes. **I4** two instances on one file do not corrupt each other: writers and readers in separate processes (`fork`), a reader that sees a file none of the writers wrote is `TORN_READ`.
+
+**Modules and inputs.** `savestate` (a `.yss` with VDP1, VDP2, both CPUs and work RAM, three variants; MDFNSVST little- and big-endian, with a preview image, without video; each gzipped, damaged inside and outside the stream; a dump of high work RAM, low work RAM, the video blocks and both, at the right base and at 0, 1, 0x7FFFFFFF, 0x06000001 ...; short headers), `regiondir` (seven files, each present, absent, damaged, a folder, a dangling link or a link to itself), `bios` (four sizes, 2 bytes to 512 KiB), `settings`, `names`, `bounds`, `comments` (a generated text and the byte mutations, then lines from a dictionary of malformed ones: 64-bit addresses, signs, a bare `0x`, digits glued to a name, prose that begins like hex, BOM, NUL and control characters, CRLF, comments), `ranges` (a grammar of the volatile list's pieces against an independent reading), `specbundle` (a published directory with one or two of 16 damages: a file deleted, cut, flipped, grown, replaced by a folder, a link to a file outside (which must not be written through), a dangling link, a link to a valid copy, a FIFO, a link to `/dev/zero`, the manifest damaged or gone, a stray file, the directory itself replaced by a link to somebody's folder (which must not be emptied) or by a file, a stale staging folder; the two that block or never end run in a child process with the allocation bound set there). The **mutations** are a truncation (at a section or field boundary, 7 bytes either side, or anywhere), bit flips, a byte set to 00 FF 7F 80, a 32-bit field set to a value from a list (0, 1, 0x7FFFFFFF, 0xFFFFFFFF, the length of the file, the rest of it, one more, one less ...) in either byte order, an insert, a delete, a range zeroed, a range duplicated, an append of up to 200 KB; positions are drawn from the header fields 65% of the time; one case in four has two. **Directed cases** (run once, with the first piece of a long run): 37 `.yss` pins (a cut 1 to 11 bytes into each section header of a state with VDP1, VDP2 and the CPUs, and four section sizes that wrap a 32-bit `size_t`), settings values with a line feed, a carriage return, blanks; a 48 MiB file for each text loader and the BIOS loader (with and without line ends); 17 link and file-kind cases; the concurrent cases (settings, bounds, names and notes with 3 writers and 2 readers on 2,000 entries each, a BIOS file replaced by rename under 2 readers, the language files started by 4 instances together over an empty folder, a damaged copy and a stale one).
+
+**Determinism.** A case is `(module, seed, index)`: `Rng(Mix(seed, module, index))` makes everything of it, and the failing line prints `seed=9 index=122 <mutation>`. `SE_LOADFUZZ_ONLY=names SE_LOADFUZZ_CASE=122` replays one. The default run is a fixed 2,108 cases and the directed ones (36 s under ASan and UBSan, 12 s in the ordinary build, which is what `ctest` runs; the scratch folder is made absolute, because the cases change into it). `SE_LOADFUZZ_CASES=<n>` (per module, scaled by each module's share), `_SEED`, `_FROM` (a long run in pieces, `Docs/Decompiler/tools/a9_round1/run_pieces.sh`), `_PROCS`, `_ROUNDS`. A violation class with an open ledger row goes in `Known()` and is counted, not failed; it is empty now, every class is fixed or was never a loader's.
+
+### Before the fixes
+
+The first run of the oracle on the tree with only the seams (`78e0bc0`) found, in 2 minutes 47 seconds under ASan and UBSan, every class of A9-1 to A9-5, A9-8, A9-12 and A9-13 (the log is quoted in the rows' fixture cells), and the pins found A9-6 on the next run. A9-7 and A9-9 need a 32-bit build and the application and are not in that run: A9-7 is `wasm32_yss_wrap.sh 0f5a5c9` (before: "NO RETURN within 20 s"; after: refused), A9-9 was found by reading `App.cpp`'s Reload branch and its fix compiled with `-fsyntax-only` against the desktop flags. No sanitizer report and no UBSan error was found in any run (the Mednafen big-endian reads `file[o] << 24` look like signed overflow and are not: C++14 defines the shift when the result fits the unsigned type).
+
 ### Findings
 
 | Row | Sev | What | Status |
@@ -14195,3 +14236,76 @@ Pins: (a) `2462 6052 000B 0009` at width 4 `agrees`; (b) the same words at width
 
 * frame124 stream (area 3, A3-124's builders), printed-C `SE_GENERATED_PRINTEDC=only SE_GENERATED_FIRST=4200001`, 5,000 seeds a chunk: `mismatch` 4201621, 4202027, 4202664, 4202935, 4207979, 4209001, 4209678, 4211419, 4214513; `frame-lost` 4201060, 4201746, 4211399, 4214301 (names `frame124_<seed>`).
 * grammar 2, area 5's hardware register notes: seeds 4211181 (a 2-byte write to `SH2_RTCOR` through a pointer derived from register addresses, `n:pointer-effect-unsaid`) and 4215904 (a 2-byte read at +2 of `SH2_CHCR1`, same class); `SE_GENERATED_GRAMMAR=2 SE_GENERATED_FIRST=<seed> SE_GENERATED_SEEDS=1`. Both fail on the area 3 fixer's build, which has no part of this branch, and pass on the area 5 fixer's build (A5-87).
+
+| A9-1 | P2 | BIOS loader reads the whole file before it checks the size; a FIFO blocks, `/dev/zero` never ends | fixed |
+| A9-2 | P2 | names / symbol map: an address of more than 32 bits, a sign, or digits followed by anything is read as an address | fixed |
+| A9-3 | P2 | names and notes saved in place: a second instance or a crash leaves a half list read as the whole; failures unreported | fixed |
+| A9-4 | P2 | function-starts file: prose that begins with hex digits is an address (`Dead function` is 0xDEAD); the same truncation and sign | fixed |
+| A9-5 | P3 | language-file verification reads a FIFO for ever and `/dev/zero` without end | fixed |
+| A9-6 | P2 | a `.yss` cut inside a section header opens as a whole state | fixed |
+| A9-7 | **P1** | `.yss` section size wraps a 32-bit `size_t` (the web build): out-of-bounds reads, a walk that never ends | fixed |
+| A9-8 | P3 | region directory serves a file of any size as its region | fixed |
+| A9-9 | P3 | Reload BIOS keeps the old image when the file no longer loads | fixed |
+| A9-10 | P2 | the notes' file has A9-2's address reading | fixed |
+| A9-11 | P3 | the text loaders read any size (settings, names, bounds, notes) | fixed |
+| A9-12 | P3 | a line feed in a setting's value becomes another setting | fixed |
+| A9-13 | P3 | `nan` / `inf` accepted as a number | fixed |
+| A9-14 | P3 | the driver header says a dump holds regions "fully contained"; the code and a test keep a partial one | fixed (header) |
+| A9-15 | P3 | a save replaces a link at the path | accepted |
+| A9-16 | P3 | Load Raw Dump has no base address, so a one-region dump cannot be opened | open |
+| A9-17 | P3 | instrument: the live wire, rewind data, Windows semantics, other 32-bit sums, a file rewritten in place | open |
+
+Severity as the program fixes it: A9-7 is memory unsafety (and a hang), P1; the P2s show data as valid that is not (a name or note on another address, a half list, a truncated state) or cost the user a crash or hang through a file they can pick (A9-1); the rest are a message, a ceiling or a contract that was wrong. A9-2 and A9-4 do not need a hostile file: a symbol map written by a 64-bit tool carries 16-digit addresses, and a person's remark in the bounds file begins with a word.
+
+### Fixes
+
+* **`FileRead.h`, `ReadFileCapped`** (A9-1, A9-5, A9-11): a regular file only (`stat` first, so a FIFO is never opened), its size against the caller's ceiling, and a read that stops one byte past it. Used by the BIOS loader (512 KiB), settings and the bounds file (4 MiB), the names and notes files (8 MiB) and the language-file verification (the file's own size plus one). Header only, so no CMake target needed a new source for it.
+* **`AddressNameLine.h`** (A9-2, A9-10): one to eight hex digits, optional `0x`, all of the first word, then white space and a name; comments are blank, `;`, `#`, `//`. Other lines are skipped and counted (`SkippedLines`), and `App` logs the count and the first line. `FunctionBounds::Load` takes the same address rule with a remark allowed after it (A9-4).
+* **Atomic saves** (A9-3): `FunctionNames::Save` and `AssemblyPanel::SaveComments` write through `WriteFileAtomically` and return false with a reason; `App::SaveFunctionNames` logs a failed save. `Load` of each returns false with a reason for a file that is there and was not read, and leaves the state as it was.
+* **`Settings`** (A9-12, A9-13): a line feed in a key, section or value is written as a space; a non-finite float keeps the default.
+* **Savestate driver** (A9-6, A9-7, A9-8, A9-14): `ParseYssBuffer` refuses bytes left over that cannot hold a section header and compares `size > file.size() - data`; the region directory refuses a file that is not its region's size; the header describes the dump.
+* **`App`** (A9-9): a Reload that fails drops the image. The guide says so, and says what a BIOS file must be.
+* **Build:** `FileWrite.cpp` joins the five test targets that compile `CallStack.cpp` or `AssemblyPanel.cpp` and did not link it.
+
+### Mutation checks
+
+"Before" is the first run above for the classes the seams-only tree showed. The two fixes that run did not exercise were undone on the final tree and the oracle rerun: `AssemblyPanel::SaveComments` back to an `ofstream` (`concurrent.comments` `TORN_READ`, 72 torn reads), and the address length check taken out of `ParseAddressNameLine` (`names` `ADDR_TRUNCATED`, `ACCEPTS_MALFORMED`, `SIGNED_ADDR`; `comments` `ADDR_TRUNCATED`, `ACCEPTS_MALFORMED`). Restored, both are clean. The fix for A9-7 is checked by the wasm32 script, not by `ctest`.
+
+### Sequences run
+
+The final binary (`asan/bin/SaturnExplorerLoaderFuzzTests`, Debug, `-fsanitize=address,undefined -fno-omit-frame-pointer`, `detect_leaks=1`), seed 9, in 12 pieces of 500 case indices (`run_pieces.sh`: `SE_LOADFUZZ_FROM=k*500`, `SE_LOADFUZZ_CASES=500`, each piece under `timeout 1200`; the pieces took 64 to 95 s each, the whole run 15 minutes). The directed cases run in piece 0. A module's number of cases per piece is its share of 500 (the ordinary run's 160): the case indices therefore reach 6,000 in each.
+
+| Module | Cases | Accepted (opened / loaded) |
+|---|---|---|
+| savestate | 5,616 | 1,955 |
+| regiondir | 1,116 | 433 |
+| bios | 7,500 | 6,670 |
+| settings | 5,616 | 5,563 |
+| names (Load and Import) | 9,372 | 9,040 |
+| bounds | 9,372 | 8,451 |
+| comments | 5,616 | 5,424 |
+| ranges | 30,000 | 3,840 |
+| specbundle | 1,500 | 1,271 |
+| all, with the directed cases | 75,708 | |
+
+Violations 0, sanitizer reports 0, UBSan runtime errors 0, in every piece of the final run. Three earlier attempts stopped on the oracle's own defects, which are fixed and not findings: a piece of 1,500 indices ran past its 20 minutes because the harness read a FIFO it had planted (`ReadBytes` was unbounded; it is `ReadFileCapped` now); the same read of a link to `/dev/zero` ran the sanitizer out of memory; and one case (`specbundle` index 1041) wrote through a link that an earlier damage step had left, so the harness, not the repair, changed the file outside (damage steps now remove a file before they rewrite it). A relative scratch folder made the first direct run report eleven classes, since the cases change into it; it is made absolute. `ctest` passes an absolute folder and was never affected.
+
+### Matrix (RelWithDebInfo, gcc 13, own build, `-j2`, every test binary under `ulimit -v 3500000`)
+
+| Run | Result |
+|---|---|
+| `ctest -E SaturnExplorerLive -j1 --timeout 900` | 102 of 102 passed, 327 s (the loader fuzz test 5.4 s; the engine test 46 s, which includes `SpecBundle`'s repair, foreign-hash and concurrent-repair cases; the fault test 92 s; the trust test 45 s). The master tree has 107 tests with the Live ones; this branch has 108, the one new being `SaturnExplorerLoaderFuzzTests`. An earlier `-j2` run showed two failures that were not the code: a `se-sleighc` left half-linked by an interrupted build (no execute bit), and the engine test over its 60 s limit under load (52 s alone); both pass when rerun. |
+| `ctest -R SaturnExplorerLive` | 6 of 6 passed, 29 s |
+| `build/bin/SaturnExplorerDecompilerFaultTests` (the full matrix, product code as committed in `1338f12`; later commits changed tests, build files and documents only) | 0 of 94 jobs failed, 162.7 s |
+| `SaturnExplorerLoaderFuzzTests` default run | 2,108 cases and the directed ones, 0 violation classes; 36 s under ASan and UBSan, 12 s ordinary |
+| the long run above | 75,708 cases, 0 violations, 0 sanitizer reports |
+| `wasm32_yss_wrap.sh` | before the fix (`0f5a5c9`): no return in 20 s; after: refused |
+| `App.cpp` and `AssemblyPanel.cpp` | `g++ -std=gnu++14 -fsyntax-only` with `-DSE_ENABLE_DECOMPILER=1 -DSE_ENABLE_LIVE` and without: clean (the desktop application is not built here: no SDL2) |
+
+Not run: the sanitizer job's list (`.github/scripts/run-decompiler-sanitizers.sh`) does not include `SaturnExplorerLoaderFuzzTests`; adding it is the coordinator's call (it needs no engine, runs in about 40 s under ASan, and gives its own scratch directory as the argument). The game corpora (no engine change), the generator.
+
+### For the next round
+
+* A9-16: the base address for Load Raw Dump. A9-17: the live wire, which is a socket parser fed by whatever answers on the port, deserves its own module (`FakeLiveServer.h` can serve raw bytes); and an audit of the other `offset + length` sums in the drivers for a 32-bit `size_t` (the web build): A9-7 was one and `LiveDriver.cpp` was not read for it.
+* The reviewer of round 2 should read `ReadFileCapped`'s callers for a loader that still uses `ReadWholeFile` (`grep ReadWholeFile` finds the disc code and the IP.BIN read in `App`, outside the path), try a symbol map with CRLF and a BOM (a BOM before the first address makes that line malformed and counted, which is right but unfriendly), and the Windows side of A9-3 (a rename over a file another instance has open).
+* Fixed rows A9-1 to A9-14 are pinned by the oracle itself: the classes stay in the run, so a regression is a `VIOLATION` line and a non-zero exit.

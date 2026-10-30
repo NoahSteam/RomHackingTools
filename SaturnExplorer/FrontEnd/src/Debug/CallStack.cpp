@@ -4,6 +4,11 @@
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
+#include <map>
+
+#include "AddressNameLine.h"
+#include "FileRead.h"
+#include "FileWrite.h"
 
 namespace sfe
 {
@@ -20,32 +25,8 @@ bool BeU32(const std::vector<uint8_t>& b, size_t off, uint32_t& out)
     return true;
 }
 
-// Parse one "<hex-addr> <name>" line: the address (optionally 0x-prefixed) then the name,
-// separated by any run of spaces or tabs. Leading whitespace, blank lines, and ';' / '#' /
-// '//' comments are tolerated so hand-made lists and simple map dumps load. Returns false
-// when the line carries no address+name. Shared by FunctionNames::Load and ::Import.
-bool ParseSymbolLine(const std::string& line, uint32_t& addr, std::string& name)
-{
-    auto space = [](char c) { return std::isspace(static_cast<unsigned char>(c)) != 0; };
-    size_t b = 0;
-    while (b < line.size() && space(line[b])) ++b;
-    if (b >= line.size()) return false;
-    if (line[b] == ';' || line[b] == '#' ||
-        (line[b] == '/' && b + 1 < line.size() && line[b + 1] == '/')) return false;
-
-    char* end = nullptr;
-    const unsigned long a = std::strtoul(line.c_str() + b, &end, 16);
-    if (end == line.c_str() + b) return false;   // no hex digits where the address should be
-
-    size_t np = static_cast<size_t>(end - line.c_str());
-    while (np < line.size() && space(line[np])) ++np;   // skip to the name
-    std::string nm = line.substr(np);
-    while (!nm.empty() && space(nm.back())) nm.pop_back();   // trim CR / trailing ws
-    if (nm.empty()) return false;
-    addr = static_cast<uint32_t>(a);
-    name = std::move(nm);
-    return true;
-}
+// The largest names file or symbol map read: 8 MiB is some 200,000 entries.
+const size_t kMaxNamesFileBytes = 8u * 1024u * 1024u;
 }  // namespace
 
 bool IsPlausibleCodeAddress(uint32_t addr)
@@ -112,37 +93,99 @@ void FunctionNames::Rename(uint32_t address, const std::string& name)
     ++mGeneration;
 }
 
-void FunctionNames::Load()
+namespace
 {
-    std::ifstream f(kFunctionFile);
-    if (!f) return;
-    mNames.clear();
+// A names file's text into 'names'. Returns false, with 'error', for a file that is there and was not read.
+bool ReadNames(const std::string& path, std::map<uint32_t, std::string>& names, size_t& entries, size_t& skipped,
+               size_t& firstSkipped, std::string& error, bool& missing)
+{
+    missing = false;
+    std::string text;
+    switch (ReadFileCapped(path, kMaxNamesFileBytes, text))
+    {
+    case CappedRead::Ok: break;
+    case CappedRead::Missing: missing = true; return true;
+    case CappedRead::TooLarge: error = path + " is larger than " + std::to_string(kMaxNamesFileBytes >> 20) + " MiB; not read"; return false;
+    case CappedRead::NotRegular: error = path + " is not a regular file; not read"; return false;
+    case CappedRead::Unreadable: error = "could not read " + path; return false;
+    }
+    entries = skipped = firstSkipped = 0;
+    size_t lineNo = 0, p = 0;
+    uint32_t addr = 0;
+    std::string name;
+    while (p <= text.size())
+    {
+        size_t e = text.find('\n', p);
+        if (e == std::string::npos) e = text.size();
+        const std::string line = text.substr(p, e - p);
+        const bool last = e == text.size();
+        p = e + 1;
+        if (last && line.empty()) break;
+        ++lineNo;
+        switch (ParseAddressNameLine(line, addr, name))
+        {
+        case AddressNameLine::Entry: names[addr] = name; ++entries; break;
+        case AddressNameLine::Comment: break;
+        case AddressNameLine::Malformed: if (!skipped++) firstSkipped = lineNo; break;
+        }
+    }
+    return true;
+}
+}  // namespace
+
+bool FunctionNames::Load(std::string* error)
+{
+    std::map<uint32_t, std::string> names;
+    size_t entries = 0;
+    bool missing = false;
+    std::string why;
+    mSkipped = mFirstSkipped = 0;
+    if (!ReadNames(kFunctionFile, names, entries, mSkipped, mFirstSkipped, why, missing))
+    {
+        if (error) *error = why;
+        return false;
+    }
+    if (missing) return true;
+    mNames = std::move(names);
     ++mGeneration;
-    std::string line, name;
-    uint32_t addr = 0;
-    while (std::getline(f, line))
-        if (ParseSymbolLine(line, addr, name)) mNames[addr] = name;
+    return true;
 }
 
-void FunctionNames::Save() const
+bool FunctionNames::Save(std::string* error) const
 {
-    std::ofstream f(kFunctionFile);
-    if (!f) return;
+    std::string text;
+    char b[16];
     for (const auto& kv : mNames)
-        if (!kv.second.empty()) f << std::hex << kv.first << " " << kv.second << "\n";
+    {
+        if (kv.second.empty()) continue;
+        std::snprintf(b, sizeof b, "%x ", kv.first);
+        text += b;
+        text += kv.second;
+        text += '\n';
+    }
+    // Staged and renamed: written in place, a second instance (or a crash) read half of it as the whole list (A9-3).
+    std::string why;
+    if (WriteFileAtomically(kFunctionFile, text.data(), text.size(), why)) return true;
+    if (error) *error = std::string(kFunctionFile) + ": " + why;
+    return false;
 }
 
-size_t FunctionNames::Import(const char* path)
+size_t FunctionNames::Import(const char* path, std::string* error)
 {
-    std::ifstream f(path);
-    if (!f) return 0;
-    size_t n = 0;
-    std::string line, name;
-    uint32_t addr = 0;
-    while (std::getline(f, line))
-        if (ParseSymbolLine(line, addr, name)) { mNames[addr] = name; ++n; }
-    if (n) ++mGeneration;
-    return n;
+    std::map<uint32_t, std::string> names;
+    size_t entries = 0;
+    bool missing = false;
+    std::string why;
+    mSkipped = mFirstSkipped = 0;
+    if (!path || !ReadNames(path, names, entries, mSkipped, mFirstSkipped, why, missing))
+    {
+        if (error) *error = why;
+        return 0;
+    }
+    if (missing) return 0;
+    for (auto& kv : names) mNames[kv.first] = std::move(kv.second);
+    if (entries) ++mGeneration;
+    return entries;
 }
 
 // ---- CallStack -----------------------------------------------------------------
