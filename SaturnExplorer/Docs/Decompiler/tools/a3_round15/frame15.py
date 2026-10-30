@@ -58,6 +58,16 @@ for k in range(count):
                 store(4, 4*wi, regs[wi], rnd.choice(['direct', 'direct', 'ptr']))
             else:
                 A('mov #-1,r2'); store(4, 4*wi, 'r2', 'ptr')
+    elif fillmode == 'cover':
+        # S is tiled exactly by stores of random widths (bytes, halfwords, words) in a random order, with no earlier fill
+        tiles = []; o = 0
+        while o < 16:
+            w = rnd.choice([1, 1, 2, 4])
+            while o % w or o + w > 16: w //= 2
+            tiles.append((w, o)); o += w
+        rnd.shuffle(tiles)
+        for (w, o) in tiles:
+            store(w, o, rnd.choice(['r4', 'r5', 'r6', 'r7']), rnd.choice(['ptr', 'ptr', 'ptr', 'direct']))
     elif fillmode == 'halves':
         for o in rnd.sample(range(0, 16, 2), 8):
             A('mov #%d,r2' % rnd.randint(1, 120)); store(2, o, 'r2', 'ptr')
