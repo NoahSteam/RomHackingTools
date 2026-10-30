@@ -13714,7 +13714,7 @@ The engine's values are right in the texts read; what is wrong is the C: a byte 
 | grammar 2, 4,100,001 to 4,110,000 (two chunks of 5,000) | 0 failing seeds |
 | grammar 1, 4,100,001 to 4,110,000 (two chunks of 5,000) | 0 failing seeds |
 | `frame15.py` (the review's configurations: seed 1 x 200 with every fill and level, seed 5 x 60 two levels no fill, 7 x 100 three levels, 11 x 150 `fill=save`, 13 x 100 `cover`, 17 x 100 lent call, 19 x 100 unlent call) | 810 fixtures, **0 `LEDGER BAD`** (seed 1: 31 of 200 on 2598c9b); 10 oracle mismatches, each PseudoEval reading a local or array it cannot (`return xStack_24;` read as 0) or a `fill=save` input the driver gives no value for, read by hand |
-| the review's R15 fixtures (`r15a.src` to `r15s.src`, the driver on 2598c9b and the fix) | 0 `LEDGER BAD` but R15-6a (A3-141); on 2598c9b 26 |
+| the review's R15 fixtures (`r15a.src` to `r15s.src`, 81, the driver on 2598c9b and the fix) | 1 `LEDGER BAD`, R15-6a (A3-141); on 2598c9b 23 |
 | vendoring: `python3 -I vendor.py <ghidra>` on a copy | `VENDOR_EXIT 0`, 0072 applied, the tree identical to the committed one |
 
 ### 6. The corpora
