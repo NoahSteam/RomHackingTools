@@ -32,7 +32,9 @@
 // Default: a fixed number of cases per module, seeded, a few seconds. Long runs:
 //   SE_LOADFUZZ_CASES=<n>      cases per module (default 160; modules scale it)
 //   SE_LOADFUZZ_SEED=<n>       base seed (default 9)
-//   SE_LOADFUZZ_FROM=<k>       first case index (a long run in pieces: FROM=0 CASES=5000, FROM=5000 ...)
+//   SE_LOADFUZZ_FROM=<k>       first case index (a long run in pieces: FROM=0 CASES=5000, FROM=5000 ...; the directed
+//                              cases run only when FROM is 0)
+//   SE_LOADFUZZ_NOFIXED=1      skip the directed cases (pins, oversize, links, concurrent)
 //   SE_LOADFUZZ_ONLY=<name>    one module
 //   SE_LOADFUZZ_CASE=<k>       one case, with the mutation printed (with ONLY)
 //   SE_LOADFUZZ_PROCS=<n>      writers and readers in the concurrency module (default 3)
@@ -2340,7 +2342,8 @@ int main(int argc, char** argv)
         std::fflush(stdout);
     }
     auto fixed = [&](const char* name) { return !only || std::strcmp(only, name) == 0; };
-    if (!oneCase)
+    // The directed cases (pins, oversize files, links, concurrent instances) run once, with the first piece of a long run.
+    if (!oneCase && from == 0 && !std::getenv("SE_LOADFUZZ_NOFIXED"))
     {
         if (fixed("savestate")) RunSavestatePins();
         if (fixed("settings")) RunSettingsValueCases();

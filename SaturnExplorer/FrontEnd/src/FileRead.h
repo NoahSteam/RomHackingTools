@@ -4,7 +4,7 @@
 // ReadWholeFile (Disc/PathUtil.h) reads until the file ends. That is right for a file whose size is trusted and wrong for
 // the files a user points the application at or that sit in a folder anything can write to: a mistyped path at a disc
 // image held the whole image in memory before the size was looked at, a FIFO blocked the opening thread for ever, and
-// /dev/zero never ended (A9-1, A9-4, A9-5). The file's size is checked first, and the read itself stops one byte past
+// /dev/zero never ended (A9-1, A9-5, A9-11). The file's size is checked first, and the read itself stops one byte past
 // the ceiling, so a file that grows after the check is still bounded.
 //
 // Header only and free of the application's other modules, so every target that reads such a file can use it.

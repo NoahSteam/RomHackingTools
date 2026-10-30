@@ -923,6 +923,7 @@ if(BUILD_TESTING)
     add_executable(SaturnExplorerAssemblyPanelTests
         FrontEnd/tests/AssemblyPanelTests.cpp
         FrontEnd/src/AssemblyPanel.cpp
+        FrontEnd/src/FileWrite.cpp   # AssemblyPanel::SaveComments stages through WriteFileAtomically
         FrontEnd/src/Sh2Operands.cpp
         FrontEnd/src/WatchPanel.cpp
         FrontEnd/src/Debug/Sh2Disasm.cpp

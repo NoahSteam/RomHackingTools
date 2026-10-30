@@ -198,7 +198,7 @@ bool Settings::Save(std::string* error) const
 bool Settings::SaveTo(const std::string& path, std::string* error) const
 {
     // One line per setting. A value with a line feed in it (a path can have one) would end its line and begin another
-    // that the next start reads as a setting of its own: a BIOS path could set the volatile list (A9-5). Each line
+    // that the next start reads as a setting of its own: a BIOS path could set the volatile list (A9-12). Each line
     // feed is written as a space, so what comes back is a value that fails visibly (a path that does not exist), not a
     // different setting.
     auto oneLine = [](std::string v) {
@@ -261,7 +261,7 @@ float Settings::GetFloat(const std::string& section, const std::string& key, flo
     const std::string s = Trim(Get(section, key));
     char* end = nullptr;
     const float v = std::strtof(s.c_str(), &end);
-    // "nan" and "inf" are numbers to strtof and a layout size that breaks every frame after it (A9-6).
+    // "nan" and "inf" are numbers to strtof and a layout size that breaks every frame after it (A9-13).
     return (!s.empty() && end == s.c_str() + s.size() && std::isfinite(v)) ? v : def;
 }
 
