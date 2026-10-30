@@ -895,6 +895,59 @@ struct Gen
         items.insert(items.begin() + static_cast<std::ptrdiff_t>(at), m);
     }
 
+    // A literal pointer to hardware stepped in a loop and flipped between partitions by an xor, then written through (A5-91): `p = (p + 4) ^ 0x20000000`
+    // from 0xFFFFFF08 holds 0xDFFFFF0C (the cache data array: memory), 0xFFFFFF10, 0xDFFFFF14 ..., and the store after the loop is made at whichever the
+    // count leaves. The pointer's first values are no hardware and a later one is: the output must say it (the pointer rules ask for the register's
+    // effects otherwise). The xor is with the bit of partition 1, 2 or 3 or of a pair, so the walk meets the register areas, the associative purge, the cache
+    // address array and the on-chip page. Drawn from the stream of the regions, in one function in eleven, after the pointer's literal.
+    void AddRegionWalk(std::vector<Item>& items, int avoidReg, uint32_t avoidScratch)
+    {
+        if (!regionRng.Chance(9)) return;
+        if ((avoidScratch >> 3) & 1u) return;   // the loop counts in r3
+        std::vector<size_t> cands;
+        for (size_t i = 0; i < items.size(); ++i)
+            if (items[i].type == Item::LitPtr && (items[i].reg == 6 || items[i].reg == 7) && items[i].reg != avoidReg &&
+                (p.lits[items[i].lit].kind == LitKind::Hw || p.lits[items[i].lit].kind == LitKind::Region))
+                cands.push_back(i);
+        if (cands.empty()) return;
+        const size_t at = cands[regionRng.Below(static_cast<uint32_t>(cands.size()))];
+        const int reg = items[at].reg;
+        const uint32_t start = p.lits[items[at].lit].value;
+        int jsr = 1 + static_cast<int>(regionRng.Below(2));
+        if ((avoidScratch >> jsr) & 1u) jsr = 3 - jsr;
+        if ((avoidScratch >> jsr) & 1u) return;
+        static const uint32_t kFlip[] = { 0x20000000u, 0x20000000u, 0x40000000u, 0x80000000u, 0x60000000u };
+        Item step;
+        step.type = Item::Alu;
+        step.shape = "region.walk.step";
+        step.words = { static_cast<uint16_t>(0x7000 | reg << 8 | 4) };   // add #4,Rn
+        Item flip;
+        flip.type = Item::Mask;
+        flip.reg = reg;
+        flip.jsrReg = jsr;
+        flip.xorOp = true;
+        flip.shape = "region.walk.xor";
+        Lit l;
+        l.kind = LitKind::Mask;
+        l.value = kFlip[regionRng.Below(5)];
+        flip.lit = static_cast<int>(p.lits.size());
+        p.lits.push_back(l);
+        Item loop;
+        loop.type = Item::Loop;
+        loop.shape = "region.walk";
+        loop.count = 2 + static_cast<int>(regionRng.Below(3));
+        loop.kids = { step, flip };
+        const int align = Alignment(start);
+        Item store;
+        store.type = Item::Mem;
+        store.shape = "region.walk.store";
+        store.base = reg;
+        store.width = align >= 4 ? 4 : align;
+        store.words = { static_cast<uint16_t>(0x2000 | reg << 8 | reg << 4 | (align >= 4 ? 2 : align == 2 ? 1 : 0)) };   // mov.x Rn,@Rn
+        items.insert(items.begin() + static_cast<std::ptrdiff_t>(at + 1), store);
+        items.insert(items.begin() + static_cast<std::ptrdiff_t>(at + 1), loop);
+    }
+
     int PickWidth(int base)
     {
         int w = 1 << rng.Below(3);
@@ -1783,6 +1836,7 @@ struct Gen
             }
         }
         AddRegionMask(f.items, f.sel, convDefined | leftScratch);
+        AddRegionWalk(f.items, f.sel, convDefined | leftScratch);
         if (hasConvRead) f.items.insert(f.items.begin(), convRead);   // first: before anything can write what it reads
         // A return chosen by an input (A3-64), from a stream of its own and after every other draw, so no program a seed made before it changes but
         // for this item: in a function that returns, makes no call (a callee may leave anything in r0), and has no table (mova writes r0) and no
@@ -1958,6 +2012,7 @@ struct Gen
             items.insert(items.begin() + at, std::move(mac));
         }
         AddRegionMask(items, -1, 0);
+        AddRegionWalk(items, -1, 0);
         // A pointer moved between bus partitions with a mask -- `and` 0x1FFFFFFF (to the cached partition) or `or` 0x20000000 (to the
         // cache-through one), the idiom SBL calls CACHE_THROUGH (A5-51) -- in one program of eight, after the pointer's literal. The pointer
         // is then a merge of addresses whenever a skipped reload gave it two values, which the engine does not fold to a constant.
