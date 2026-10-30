@@ -1,0 +1,125 @@
+name R15-6a pointer published in a global, reloaded from it, store r5, direct read (frame escaped, no call)
+asm 06009000
+.word 0x4F22
+add #-16,r15
+mov.l r8,@(8,r15)
+mov r15,r1
+add #8,r1
+mov.l =0x0600F000,r3
+mov.l r1,@r3
+mov.l @r3,r2
+mov.l r5,@r2
+mov.l @(8,r15),r0
+add #16,r15
+.word 0x4F26
+rts
+nop
+endasm
+
+args 0 0 0 0 r8=11
+args 1 2 3 4 r8=66
+end
+
+name R15-6b pointer in a callee-saved register r12 (no slot)
+asm 06009000
+.word 0x4F22
+add #-16,r15
+mov.l r8,@(8,r15)
+mov r15,r12
+add #8,r12
+mov.l r5,@r12
+mov.l @(8,r15),r0
+add #16,r15
+.word 0x4F26
+rts
+nop
+endasm
+
+args 0 0 0 0 r8=11
+args 1 2 3 4 r8=66
+end
+
+name R15-6c pointer in slot, store a halfword pair via reload, direct read
+asm 06009000
+.word 0x4F22
+add #-16,r15
+mov.l r8,@(8,r15)
+mov r15,r1
+add #8,r1
+mov.l r1,@r15
+mov.l @r15,r2
+mov.w r5,@r2
+add #2,r2
+mov.w r5,@r2
+mov.l @(8,r15),r0
+add #16,r15
+.word 0x4F26
+rts
+nop
+endasm
+
+args 0 0 0 0 r8=11
+args 1 2 3 4 r8=66
+end
+
+name R15-6d pointer in slot, store byte at +0..3 via reload, direct read
+asm 06009000
+.word 0x4F22
+add #-16,r15
+mov.l r8,@(8,r15)
+mov r15,r1
+add #8,r1
+mov.l r1,@r15
+mov.l @r15,r2
+mov.b r5,@r2
+mov.l @r15,r2
+add #1,r2
+mov.b r5,@r2
+mov.l @r15,r2
+add #2,r2
+mov.b r5,@r2
+mov.l @r15,r2
+add #3,r2
+mov.b r5,@r2
+mov.l @(8,r15),r0
+add #16,r15
+.word 0x4F26
+rts
+nop
+endasm
+
+args 0 0 0 0 r8=11
+args 1 2 3 4 r8=66
+end
+
+name R15-6e pointer in slot, store r5 via reload, read via reload
+asm 06009000
+.word 0x4F22
+add #-16,r15
+mov.l r8,@(8,r15)
+mov r15,r1
+add #8,r1
+mov.l r1,@r15
+mov.l @r15,r2
+mov.l r5,@r2
+mov.l @r15,r2
+mov.l @r2,r0
+add #16,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009f00
+rts
+nop
+mov.l @(8,r15),r0
+add #16,r15
+.word 0x4F26
+rts
+nop
+endasm
+
+args 0 0 0 0 r8=11
+args 1 2 3 4 r8=66
+end
+

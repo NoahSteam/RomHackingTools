@@ -1,0 +1,158 @@
+name R15-1a push r8, hand the push slot's address to a lent callee that reads it, return what it read (the entry r8)
+lend 06009100
+asm 06009000
+mov.l r8,@-r15
+.word 0x4F22
+mov r15,r4
+add #4,r4
+mov.l =0x06009100,r1
+jsr @r1
+nop
+.word 0x4F26
+add #4,r15
+rts
+nop
+endasm
+asm 06009100
+mov.l @r4,r0
+rts
+nop
+endasm
+args 0 0 0 0 r8=12345678
+args 1 2 3 4 r8=9abcdef0
+end
+
+name R15-1b push r8, publish the frame address in a global, call a lent callee that reads the push through the global
+lend 06009100
+asm 06009000
+mov.l r8,@-r15
+.word 0x4F22
+mov r15,r1
+add #4,r1
+mov.l =0x0600F000,r2
+mov.l r1,@r2
+mov.l =0x06009100,r1
+jsr @r1
+nop
+.word 0x4F26
+add #4,r15
+rts
+nop
+endasm
+asm 06009100
+mov.l =0x0600F000,r1
+mov.l @r1,r1
+mov.l @r1,r0
+rts
+nop
+endasm
+args 0 0 0 0 r8=12345678
+args 1 2 3 4 r8=9abcdef0
+end
+
+name R15-1c push r8 as the fifth argument of a lent callee that reads its stack argument
+lend 06009100
+asm 06009000
+.word 0x4F22
+mov.l r8,@-r15
+mov.l =0x06009100,r1
+jsr @r1
+nop
+add #4,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+mov.l @r15,r0
+rts
+nop
+endasm
+args 0 0 0 0 r8=12345678
+args 1 2 3 4 r8=9abcdef0
+end
+
+name R15-1d push r8; a data store through the reloaded pointer overwrites the push slot; the slot's address is handed to a lent callee that reads it
+lend 06009100
+asm 06009000
+.word 0x4F22
+mov.l r8,@-r15
+add #-8,r15
+mov r15,r1
+add #8,r1
+mov.l r1,@r15
+mov.l @r15,r2
+mov.l r5,@r2
+mov.l @r15,r4
+mov.l =0x06009100,r1
+jsr @r1
+nop
+add #8,r15
+add #4,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+mov.l @r4,r0
+rts
+nop
+endasm
+args 0 0 0 0 r8=12345678
+args 1 2 3 4 r8=9abcdef0
+end
+
+name R15-1e same as 1d without the call being lent (unlent callee)
+asm 06009000
+.word 0x4F22
+mov.l r8,@-r15
+add #-8,r15
+mov r15,r1
+add #8,r1
+mov.l r1,@r15
+mov.l @r15,r2
+mov.l r5,@r2
+mov.l @r15,r4
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l @(8,r15),r0
+add #8,r15
+add #4,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+mov.l @r4,r0
+rts
+nop
+endasm
+args 0 0 0 0 r8=12345678
+args 1 2 3 4 r8=9abcdef0
+end
+
+name R15-1f push r8; the same slot written by a data store through a pointer in r3 (frame address in a register, exact offset, no reload); the slot's address handed to a lent callee
+lend 06009100
+asm 06009000
+.word 0x4F22
+mov.l r8,@-r15
+mov r15,r3
+mov r15,r4
+mov.l r5,@r3
+mov.l =0x06009100,r1
+jsr @r1
+nop
+add #4,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+mov.l @r4,r0
+rts
+nop
+endasm
+args 0 0 0 0 r8=12345678
+args 1 2 3 4 r8=9abcdef0
+end
