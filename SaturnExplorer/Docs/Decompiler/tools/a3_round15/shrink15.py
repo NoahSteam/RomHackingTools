@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """shrink15.py GENBIN SRC NAME : delta-debug a call-free fixture of SRC by dropping store groups while the printed-C differential still finds a mismatch."""
-import sys, subprocess, os, re
+import sys, subprocess, os, re, tempfile, shutil
 import asm
 genbin, src, name = sys.argv[1:4]
+WORK = os.path.join(tempfile.gettempdir(), 'shrink15_%d' % os.getpid())
 blocks = open(src).read().split('\nname ')
 for b in blocks:
     b = b[5:] if b.startswith('name ') else b
@@ -22,8 +23,8 @@ tail = groups.pop() if groups else []
 def test(gs):
     w = ' '.join('%04X' % x for x in asm.assemble(head + [l for g in gs for l in g] + tail))
     env = dict(os.environ, SE_GENERATED_PRINTEDC='only', SE_GENERATED_PRINTEDC_WORDS=w)
-    p = subprocess.run(['bash', '-c', 'ulimit -v 3500000; exec timeout 60 %s /tmp/claude-0/shr_w' % genbin], env=env, capture_output=True, text=True)
-    subprocess.run(['rm', '-rf', '/tmp/claude-0/shr_w'])
+    p = subprocess.run(['bash', '-c', 'ulimit -v 3500000; exec timeout 60 %s %s' % (genbin, WORK)], env=env, capture_output=True, text=True)
+    shutil.rmtree(WORK, ignore_errors=True)
     return 'FINDING' in (p.stdout + p.stderr)
 cur = groups[:]
 assert test(cur), 'not failing'
