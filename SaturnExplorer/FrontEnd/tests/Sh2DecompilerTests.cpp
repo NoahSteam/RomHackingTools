@@ -269,6 +269,41 @@ void TestSlotMadeLineIsAddressedToItsBranch()
     CHECK(a.slotMadeLines >= 1 && a.accessAtBranch == 1);   // the counters of MappingOracle.h see it
 }
 
+// Area 7 round 2, A7-11 (open): a frame local the code stores and a later call may read is printed again before the call
+// (`xStack_18 = param_1;`), and the statement is addressed to the call (the call-effect's copy carries the call's address), while the
+// store that wrote the word, `mov.l r4,@r14`, is on no line of the text. The words are the function at 0x06021AB8 of the second corpus
+// image (a 5-argument-free wrapper: spill r4, build a small structure in the frame, call 0x060231DC), moved to 0x06071000. This pins the
+// state as it is; when A7-11 is fixed the line names the store (base + 6), and the test says so.
+void TestFrameStoreMaterialisedAtCall()
+{
+    std::vector<uint8_t> hw(0x100000u, 0);
+    const uint32_t base = 0x06071000u;
+    const uint16_t words[] = { 0x4F22, 0x7FEC, 0x6EF3, 0x2E42, 0x61E3, 0x7108, 0x1E14, 0x51E4, 0xE200, 0x2122, 0x51E4, 0xE200, 0x1121, 0x51E4,
+                               0xE212, 0x2120, 0x51E4, 0x6213, 0x7101, 0x62E3, 0x63E3, 0x7303, 0x6230, 0x2120, 0x51E4, 0x6513, 0xE400, 0xD807,
+                               0x480B, 0x0009, 0x1E01, 0x50E1, 0xA000, 0x0009, 0x7E14, 0x6FE3, 0x4F26, 0x6EF6, 0x68F6, 0x000B, 0x0009, 0x0009,
+                               0x0602, 0x31DC };
+    for (size_t i = 0; i < sizeof words / sizeof words[0]; ++i) dts::Put16(hw, base - 0x06000000u + 2 * i, words[i]);
+    auto snap = MakeSnapshot(hw);
+    Sh2Decompiler d(gConfig);
+    const DecompileResult r = d.Decompile(snap, Request(base));
+    Print("A7-11 frame store at a call", r);
+    CHECK(r.status == DecompileStatus::Ok);
+    const uint32_t kJsr = base + 0x38, kStore = base + 6;   // jsr @r8 and mov.l r4,@r14
+    const Line* line = LineWith(r, "xStack_18 = param_1;");
+    CHECK(line != nullptr);
+    if (line) CHECK(LineInstructions(*line) == std::vector<uint32_t>{ kJsr });   // A7-11: should name kStore
+    bool storeNamed = false;
+    for (const Line& l : r.lines)
+        for (const Token& t : l.tokens) storeNamed = storeNamed || t.addr == kStore;
+    CHECK(!storeNamed);   // A7-11: the store that wrote xStack_18 is on no line
+    dts::MappingAudit a = dts::AuditMapping(r, [&hw](uint32_t x, uint16_t& w) {
+        if (x < 0x06000000u || x - 0x06000000u + 1 >= hw.size()) return false;
+        w = static_cast<uint16_t>(hw[x - 0x06000000u] << 8 | hw[x - 0x06000000u + 1]);
+        return true;
+    }, "a7_11");
+    CHECK(a.Violations() == 0);
+}
+
 void TestFixture1()
 {
     Sh2Decompiler d(gConfig);
@@ -13404,6 +13439,7 @@ int main(int argc, char** argv)
         RUN(TestMappingOracleOnFixtures());
         RUN(TestMappingOracleAtMirrors());
         RUN(TestSlotMadeLineIsAddressedToItsBranch());
+        RUN(TestFrameStoreMaterialisedAtCall());
         RUN(TestFixture1b());
         RUN(TestNoCodeAndMirror());
         RUN(TestMovaFollowsExecutionAddress());
