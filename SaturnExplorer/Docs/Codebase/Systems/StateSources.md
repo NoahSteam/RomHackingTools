@@ -29,11 +29,11 @@ It does **not** own the frontend breakpoint model, recorded-frame browser, expre
 ### Open an offline capture
 
 1. `App::OpenSavestate` calls `se_savestate_open`. File and buffer factories converge at `DispatchBuffer`, which optionally gunzips input and selects `YSS` or `MDFNSVST` by magic. Unknown formats return `SE_ERR_UNSUPPORTED`.
-2. `ParseYssBuffer` or `ParseMednafenBuffer` fills owned `Savestate` vectors and SH-2 records. `BuildDataSource` exposes callbacks/capabilities for the regions actually present. `HasAnyRegion` allows partial captures; VDP1 VRAM is not a universal prerequisite.
+2. `ParseYssBuffer` or `ParseMednafenBuffer` (both refuse a chain cut inside a section header, and compare a section's size with what remains of the file, never with `data + size`: A9-6, A9-7) fills owned `Savestate` vectors and SH-2 records. `BuildDataSource` exposes callbacks/capabilities for the regions actually present. `HasAnyRegion` allows partial captures; VDP1 VRAM is not a universal prerequisite.
 3. `CreateContextFromSource` calls `se_create`, then `se_begin_frame`. On creation failure it closes the newly opened driver. The app replaces its existing source only after the new context is created.
 4. The core queries callbacks to build its own snapshot. Offline work-RAM edits update the driver's memory only; they do not rewrite the source savestate file (`BuildDataSource`, `CbWriteMainRam`).
 
-Linear dumps use `ParseFullDumpBuffer` to extract fully contained hardware regions relative to a supplied bus base. Region directories recognize named files such as `vdp1_vram.bin`, `wram_low.bin`, and `vdp2_regs.bin`. Reuse these factories rather than teaching the frontend format layouts.
+Linear dumps use `ParseFullDumpBuffer` to extract the hardware regions that start inside the dump relative to a supplied bus base (a region the dump ends inside is kept as far as it goes; `MemorySnapshot::Capture` leaves out a work RAM that is not complete). The menu's Load Raw Dump supplies base 0 only (A9-16). A region directory refuses a file that is not exactly its region's size (A9-8). Region directories recognize named files such as `vdp1_vram.bin`, `wram_low.bin`, and `vdp2_regs.bin`. Reuse these factories rather than teaching the frontend format layouts.
 
 ### Capture a live frame
 

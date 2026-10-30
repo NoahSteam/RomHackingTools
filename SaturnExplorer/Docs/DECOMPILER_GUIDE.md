@@ -46,7 +46,7 @@ The combo picks **Master SH-2** or **Slave SH-2**. That only decides whose PC Fo
 
 ## The BIOS
 
-Calls into the BIOS stop at the BIOS boundary unless you give the panel an image. Click the **BIOS** button in the panel's toolbar → **Choose BIOS Image...** and pick your own dump; it is never shipped, and it must be 512 KiB or smaller. The image is mapped at `0x00000000`, so BIOS functions decompile and are named `bios_0x…` until you rename them. The path is saved in `settings.ini` under `[decompiler]`.
+Calls into the BIOS stop at the BIOS boundary unless you give the panel an image. Click the **BIOS** button in the panel's toolbar → **Choose BIOS Image...** and pick your own dump; it is never shipped, and it must be a regular file of 512 KiB or smaller (a larger file, a folder, a pipe or a device is refused, with the reason in the Log, before anything is read). **Reload BIOS** reads the same path again: if the file no longer loads the panel drops the image it held rather than go on using bytes the file no longer has, and the path stays, so the next Reload or start tries it again. The image is mapped at `0x00000000`, so BIOS functions decompile and are named `bios_0x…` until you rename them. The path is saved in `settings.ini` under `[decompiler]`.
 
 ## When the output is stale or missing
 

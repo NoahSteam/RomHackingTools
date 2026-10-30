@@ -244,6 +244,8 @@ if(SE_ENABLE_DECOMPILER)
     set(SE_DECOMPILER_SOURCES
         FrontEnd/src/Decompiler/SpecBundle.cpp
         FrontEnd/src/Decompiler/MemorySnapshot.cpp
+        FrontEnd/src/Decompiler/BiosImageFile.cpp
+        FrontEnd/src/Decompiler/AddressRanges.cpp
         FrontEnd/src/Sh2Address.cpp   # the A2 partition/fold rule MemorySnapshot shares with the AI investigation
         FrontEnd/src/Decompiler/CaptureLoadImage.cpp
         FrontEnd/src/Decompiler/SaturnArchitecture.cpp
@@ -652,6 +654,7 @@ if(BUILD_TESTING)
     add_executable(SaturnExplorerFunctionNamesTests
         FrontEnd/tests/FunctionNamesTests.cpp
         FrontEnd/src/Debug/CallStack.cpp
+        FrontEnd/src/FileWrite.cpp   # FunctionNames::Save stages through WriteFileAtomically
     )
     target_include_directories(SaturnExplorerFunctionNamesTests
         PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -662,6 +665,7 @@ if(BUILD_TESTING)
     add_executable(SaturnExplorerCallStackHeuristicTests
         FrontEnd/tests/CallStackHeuristicTests.cpp
         FrontEnd/src/Debug/CallStack.cpp
+        FrontEnd/src/FileWrite.cpp   # FunctionNames::Save stages through WriteFileAtomically
     )
     target_include_directories(SaturnExplorerCallStackHeuristicTests
         PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -846,6 +850,39 @@ if(BUILD_TESTING)
         add_test(NAME SaturnExplorerDecompilerTrustTests
                  COMMAND SaturnExplorerDecompilerTrustTests ${CMAKE_CURRENT_BINARY_DIR}/decompiler_trust_test)
         set_tests_properties(SaturnExplorerDecompilerTrustTests PROPERTIES TIMEOUT ${SE_DECOMP_TIMEOUT_300})
+
+        # Area 9 of the review program: every loader the decompiler's path depends on (savestates and dumps, the BIOS
+        # image, settings.ini, the function-name, symbol and bounds files, the volatile list, the language files)
+        # fed truncated, oversized, bit-flipped and malformed input, two instances at once, and links. No engine
+        # linked, so the whole target builds under the sanitizers cheaply. A fixed, seeded run by default;
+        # SE_LOADFUZZ_CASES, _SEED, _FROM, _ONLY, _CASE, _PROCS and _ROUNDS make a long one (see the file's header).
+        add_executable(SaturnExplorerLoaderFuzzTests
+            FrontEnd/tests/LoaderFuzzTests.cpp
+            FrontEnd/src/Settings.cpp
+            FrontEnd/src/FileWrite.cpp
+            FrontEnd/src/Sha256.cpp
+            FrontEnd/src/Sh2Address.cpp
+            FrontEnd/src/Debug/CallStack.cpp
+            FrontEnd/src/Debug/MemoryBackend.cpp
+            FrontEnd/src/Debug/Sh2Disasm.cpp
+            FrontEnd/src/Decompiler/MemorySnapshot.cpp
+            FrontEnd/src/Decompiler/BiosImageFile.cpp
+            FrontEnd/src/Decompiler/AddressRanges.cpp
+            FrontEnd/src/Decompiler/Sh2FunctionFinder.cpp
+            FrontEnd/src/Decompiler/SpecBundle.cpp
+            FrontEnd/src/AssemblyPanel.cpp       # the notes file (LoadComments / SaveComments)
+            FrontEnd/src/Sh2Operands.cpp
+            FrontEnd/src/WatchPanel.cpp
+            FrontEnd/src/Debug/BreakpointManager.cpp
+            FrontEnd/src/Debug/ExecutionActions.cpp
+            FrontEnd/src/Debug/WatchList.cpp
+            ${SE_IMGUI_CORE})
+        target_include_directories(SaturnExplorerLoaderFuzzTests PRIVATE FrontEnd/src FrontEnd/tests include ${SE_IMGUI_DIR}
+            ${CMAKE_CURRENT_SOURCE_DIR}/Drivers/Savestate/src)
+        target_link_libraries(SaturnExplorerLoaderFuzzTests PRIVATE SaturnExplorerSavestateDriver SaturnExplorerCore)
+        add_test(NAME SaturnExplorerLoaderFuzzTests
+                 COMMAND SaturnExplorerLoaderFuzzTests ${CMAKE_CURRENT_BINARY_DIR}/loader_fuzz_test)
+        set_tests_properties(SaturnExplorerLoaderFuzzTests PROPERTIES TIMEOUT ${SE_DECOMP_TIMEOUT_120})
     endif()
 
     # Frame identity in the scrub view: what a refresh shows as the ring evicts, and which frame staged
@@ -886,6 +923,7 @@ if(BUILD_TESTING)
     add_executable(SaturnExplorerAssemblyPanelTests
         FrontEnd/tests/AssemblyPanelTests.cpp
         FrontEnd/src/AssemblyPanel.cpp
+        FrontEnd/src/FileWrite.cpp   # AssemblyPanel::SaveComments stages through WriteFileAtomically
         FrontEnd/src/Sh2Operands.cpp
         FrontEnd/src/WatchPanel.cpp
         FrontEnd/src/Debug/Sh2Disasm.cpp
@@ -1189,6 +1227,7 @@ if(BUILD_TESTING)
         ${SE_AI_CORE_SOURCES}
         FrontEnd/src/Debug/BreakpointManager.cpp
         FrontEnd/src/Debug/CallStack.cpp
+        FrontEnd/src/FileWrite.cpp   # FunctionNames::Save stages through WriteFileAtomically
         FrontEnd/src/Debug/ExecutionActions.cpp
         FrontEnd/src/Debug/WatchList.cpp
     )
@@ -1212,6 +1251,7 @@ if(BUILD_TESTING)
         ${SE_AI_CORE_SOURCES}
         FrontEnd/src/Debug/BreakpointManager.cpp
         FrontEnd/src/Debug/CallStack.cpp
+        FrontEnd/src/FileWrite.cpp   # FunctionNames::Save stages through WriteFileAtomically
         FrontEnd/src/Debug/ExecutionActions.cpp
         FrontEnd/src/Debug/WatchList.cpp
     )

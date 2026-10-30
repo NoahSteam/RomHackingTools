@@ -1,0 +1,32 @@
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/cast.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/cast.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/cast.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/cast.cc
+@@ -12,6 +12,8 @@
+  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
++ *
++ * Modified for SaturnExplorer: a compare of a narrow value with a constant of the other sign is cast, as C promotes both (patches/0071-engine-narrow-compare-constant-sign.patch).
+  */
+ #include "cast.hh"
+ #include "op.hh"
+@@ -112,7 +114,18 @@
+   if (exttype1 == NO_PROMOTION) return false;
+   if (exttype1 == UNKNOWN_PROMOTION) return true;	// If there is promotion and we don't know type, we need a cast
+ 
+-  int4 exttype2 = intPromotionType(op->getIn(1-slot));
++  const Varnode *othervn = op->getIn(1-slot);
++  int4 exttype2 = intPromotionType(othervn);
++  if (exttype2 == NO_PROMOTION && vn->isConstant() && !othervn->isConstant() && othervn->getSize() < promoteSize) {
++    // The other side is a named variable or a cast, which intPromotionType does not take to be promoted, but C promotes it by its type:
++    // a \b uint2 against the constant -1 (an \b int2 in the engine's compare of two bytes) is never equal, so the constant has to be cast to its type
++    // (printed 0xffff), as is done when the other side is an expression.
++    type_metatype meta = othervn->getHighTypeReadFacing(op)->getMetatype();
++    if (meta == TYPE_UINT)
++      exttype2 = UNSIGNED_EXTENSION;
++    else if (meta == TYPE_INT)
++      exttype2 = SIGNED_EXTENSION;
++  }
+   if ((exttype1 & exttype2) != 0)	// If both sides share a common extension, then these bits aren't determining factor
+     return false;
+   if (exttype2 == NO_PROMOTION) {

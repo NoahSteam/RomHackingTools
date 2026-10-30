@@ -69,13 +69,22 @@ public:
     bool        HasName(uint32_t address) const;
     void        Rename(uint32_t address, const std::string& name);  // empty clears
 
-    void Load();
-    void Save() const;
+    // Load replaces the names from saturn_functions.txt (a missing file leaves them as they are and is not an error).
+    // False, with 'error', when the file is there and was not read: not a regular file, over 8 MiB, unreadable.
+    // Lines that are not "<address> <name>" are skipped and counted (SkippedLines).
+    bool Load(std::string* error = nullptr);
+    // Written whole or not at all, so a reader never sees half a list. False, with 'error', when it could not be written.
+    bool Save(std::string* error = nullptr) const;
 
     // Merge an external symbol map ("<hex-addr> <name>" per line) into the store without
     // clearing existing names. Returns the number imported (0 if the file is missing).
     // Lets a user bring in a disassembler / map-file symbol table to name functions.
-    size_t Import(const char* path);
+    size_t Import(const char* path, std::string* error = nullptr);
+
+    // What the last Load or Import left out: lines that were neither entries nor comments, and the number (from 1) of
+    // the first. The caller says so, rather than the names quietly missing.
+    size_t SkippedLines() const { return mSkipped; }
+    size_t FirstSkippedLine() const { return mFirstSkipped; }
 
     // Every stored name (address -> name). The decompiler hands them to the engine as input.
     const std::map<uint32_t, std::string>& All() const { return mNames; }
@@ -87,6 +96,7 @@ public:
 private:
     std::map<uint32_t, std::string> mNames;
     uint64_t mGeneration = 0;
+    size_t mSkipped = 0, mFirstSkipped = 0;
 };
 
 class CallStack

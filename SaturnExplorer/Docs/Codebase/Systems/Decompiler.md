@@ -36,6 +36,25 @@ and [`SaturnArchitecture::Initialise`](../../../FrontEnd/src/Decompiler/SaturnAr
 | Runtime language materialization | [`SpecBundle.cpp`](../../../FrontEnd/src/Decompiler/SpecBundle.cpp): `MaterialiseSh2SpecBundle`; generated [`Sh2SpecData.h`](../../../FrontEnd/src/Decompiler/Sh2SpecData.h) |
 | Names shared with debugger | [`CallStack.h`](../../../FrontEnd/src/Debug/CallStack.h): `FunctionNames` |
 
+## External files and their loaders (area 9)
+
+Every file the decompiler's path reads is read through a loader with a ceiling, a verdict and a message; the oracle that
+holds them is `LoaderFuzzTests` (see `Docs/FunctionalityVerification/15_DECOMPILER_STEP5.md`, "Area 9, round 1").
+
+| File | Loader | Rule |
+|---|---|---|
+| BIOS image (path in `settings.ini` `[decompiler] bios`) | `LoadBiosImageFile` (`Decompiler/BiosImageFile.cpp`), called by `App::LoadBiosImage` | A regular file of 1 byte to 512 KiB; stat first, read to one byte past the ceiling. A failed Reload drops the image. |
+| `settings.ini` | `Settings::Load` / `Save` | Up to 4 MiB; saved atomically; a line feed in a value is written as a space. |
+| `saturn_functions.txt`, `saturn_symbols.txt`, Load Symbols | `FunctionNames::Load` / `Import` / `Save` | `<hex-address> <name>` (`AddressNameLine.h`), up to 8 MiB; other lines are skipped and counted; saved atomically. |
+| `saturn_function_bounds.txt` | `FunctionBounds::Load` / `Save` (`Sh2FunctionFinder.cpp`) | An address as the first word, a remark after it allowed; up to 4 MiB. |
+| `assembly_comments.txt` | `AssemblyPanel::LoadComments` / `SaveComments` | As the names file, up to 8 MiB. |
+| Volatile list text | `ParseAddressRanges` (`Decompiler/AddressRanges.cpp`) | Capped at 2047 characters by `SetVolatileMemory`. |
+| Language files | `MaterialiseSh2SpecBundle` | Each file read to one byte past its embedded size, regular files only. |
+| Savestates, dumps | `se_savestate_open*` (`StateSources.md`) | A region of a state is whole or absent; a dump may hold a region in part, and `MemorySnapshot::Capture` then leaves it out. |
+
+`FileRead.h` (`ReadFileCapped`) is the one bounded reader; use it for a new file rather than `ReadWholeFile`, which reads to
+the end of whatever it is given.
+
 ## Entry points and execution flow
 
 1. `App` starts its single runner with `DecompilerRunner::Start`. `App::UpdateDecompiler`

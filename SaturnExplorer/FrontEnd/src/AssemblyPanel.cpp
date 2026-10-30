@@ -12,6 +12,9 @@
 
 #include "imgui.h"
 
+#include "AddressNameLine.h"
+#include "FileRead.h"
+#include "FileWrite.h"
 #include "Sh2Operands.h"
 #include "WatchPanel.h"
 
@@ -605,31 +608,57 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
 // Best-effort comment store: one fixed file in the working directory, each line
 // "ADDRHEX <note>". Mirrors WatchPanel's session persistence (a native-desktop
 // stopgap that no-ops on the web build's ephemeral MEMFS).
-namespace { const char* kCommentFile = "assembly_comments.txt"; }
-
-void AssemblyPanel::LoadComments()
+namespace
 {
-    std::ifstream f(kCommentFile);
-    if (!f) return;
-    mComments.clear();
-    std::string line;
-    while (std::getline(f, line))
-    {
-        while (!line.empty() && (line.back() == '\r' || line.back() == '\n')) line.pop_back();
-        unsigned addr = 0;
-        const size_t sp = line.find(' ');
-        if (sp == std::string::npos || std::sscanf(line.c_str(), "%x", &addr) != 1) continue;
-        std::string note = line.substr(sp + 1);
-        if (!note.empty()) mComments[addr] = note;
-    }
+const char* kCommentFile = "assembly_comments.txt";
+const size_t kMaxCommentFileBytes = 8u * 1024u * 1024u;
 }
 
-void AssemblyPanel::SaveComments() const
+bool AssemblyPanel::LoadComments(std::string* error)
 {
-    std::ofstream f(kCommentFile);
-    if (!f) return;
+    std::string text;
+    switch (ReadFileCapped(kCommentFile, kMaxCommentFileBytes, text))
+    {
+    case CappedRead::Ok: break;
+    case CappedRead::Missing: return true;
+    case CappedRead::TooLarge: if (error) *error = std::string(kCommentFile) + " is larger than 8 MiB; not read"; return false;
+    case CappedRead::NotRegular: if (error) *error = std::string(kCommentFile) + " is not a regular file; not read"; return false;
+    case CappedRead::Unreadable: if (error) *error = std::string("could not read ") + kCommentFile; return false;
+    }
+    mComments.clear();
+    mSkippedCommentLines = 0;
+    std::istringstream in(text);
+    std::string line, note;
+    uint32_t addr = 0;
+    while (std::getline(in, line))
+    {
+        switch (ParseAddressNameLine(line, addr, note))
+        {
+        case AddressNameLine::Entry: mComments[addr] = note; break;
+        case AddressNameLine::Comment: break;
+        case AddressNameLine::Malformed: ++mSkippedCommentLines; break;
+        }
+    }
+    return true;
+}
+
+bool AssemblyPanel::SaveComments(std::string* error) const
+{
+    // Staged and renamed: written in place, a second instance (or a crash) read half of the notes as all of them (A9-3).
+    std::string text;
+    char b[16];
     for (const auto& kv : mComments)
-        if (!kv.second.empty()) f << std::hex << kv.first << " " << kv.second << "\n";
+    {
+        if (kv.second.empty()) continue;
+        std::snprintf(b, sizeof b, "%x ", kv.first);
+        text += b;
+        text += kv.second;
+        text += '\n';
+    }
+    std::string why;
+    if (WriteFileAtomically(kCommentFile, text.data(), text.size(), why)) return true;
+    if (error) *error = std::string(kCommentFile) + ": " + why;
+    return false;
 }
 
 }  // namespace sfe

@@ -2,6 +2,7 @@
 
 #include "Debug/Sh2Disasm.h"
 #include "Disc/PathUtil.h"   // ReadWholeFile
+#include "FileRead.h"
 #include "FileWrite.h"
 
 #include <algorithm>
@@ -533,22 +534,61 @@ void FunctionBounds::ClearEntry(uint32_t address)
     if (CanonicalAddress(address, c)) mEntries.erase(c);
 }
 
-bool FunctionBounds::Load(const std::string& path)
+// The largest bounds file read. An entry is nine bytes: 4 MiB is some 460,000 of them.
+static const size_t kMaxBoundsFileBytes = 4u * 1024u * 1024u;
+
+bool FunctionBounds::Load(const std::string& path, std::string* error)
 {
-    mEntries.clear();
+    mSkipped = mFirstSkipped = 0;
     std::string text;
-    if (!ReadWholeFile(path, text)) return !PathEntryExists(path);
+    switch (ReadFileCapped(path, kMaxBoundsFileBytes, text))
+    {
+    case CappedRead::Ok: break;
+    case CappedRead::Missing: mEntries.clear(); return true;   // no file is no corrections
+    case CappedRead::TooLarge:
+        if (error) *error = path + " is larger than " + std::to_string(kMaxBoundsFileBytes >> 20) + " MiB; not read";
+        return false;
+    case CappedRead::NotRegular:
+        if (error) *error = path + " is not a regular file; not read";
+        return false;
+    case CappedRead::Unreadable:
+        if (error) *error = "could not read " + path;
+        return false;
+    }
+    // A line is "<address>" with anything after white space (a remark), or a comment (; # // or blank). The address is one
+    // to eight hex digits, optionally 0x-prefixed, and all of the first word: the line "Dead function" used to be the
+    // address 0xDEAD, "100000000" the address 0, and "-1" 0xFFFFFFFF, because strtoul read the front of whatever came (A9-4).
+    std::set<uint32_t> entries;
     std::istringstream in(text);
     std::string line;
+    size_t lineNo = 0;
     while (std::getline(in, line))
     {
+        ++lineNo;
         size_t b = 0;
         while (b < line.size() && std::isspace(static_cast<unsigned char>(line[b]))) ++b;
-        char* end = nullptr;
-        const unsigned long v = std::strtoul(line.c_str() + b, &end, 16);
-        if (end == line.c_str() + b) continue;
-        SetEntry(static_cast<uint32_t>(v));
+        if (b >= line.size() || line[b] == ';' || line[b] == '#' || (line[b] == '/' && b + 1 < line.size() && line[b + 1] == '/')) continue;
+        size_t e = b;
+        while (e < line.size() && !std::isspace(static_cast<unsigned char>(line[e]))) ++e;
+        size_t d = b;
+        if (e - b > 2 && line[b] == '0' && (line[b + 1] == 'x' || line[b + 1] == 'X')) d = b + 2;
+        bool ok = d < e && e - d <= 8;
+        uint32_t v = 0;
+        for (size_t i = d; ok && i < e; ++i)
+        {
+            const char c = line[i];
+            ok = std::isxdigit(static_cast<unsigned char>(c)) != 0;
+            if (ok) v = (v << 4) | static_cast<uint32_t>(std::isdigit(static_cast<unsigned char>(c)) ? c - '0' : std::tolower(static_cast<unsigned char>(c)) - 'a' + 10);
+        }
+        if (!ok)
+        {
+            if (!mSkipped++) mFirstSkipped = lineNo;
+            continue;
+        }
+        uint32_t c = 0;
+        if (CanonicalAddress(v, c)) entries.insert(c);
     }
+    mEntries = std::move(entries);
     return true;
 }
 

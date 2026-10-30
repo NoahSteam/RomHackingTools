@@ -79,6 +79,21 @@ struct BiosImage
     static std::shared_ptr<const BiosImage> Make(std::vector<uint8_t> bytes);
 };
 
+// The BIOS occupies 512 KiB at 0x00000000; a file larger than that is not a Saturn BIOS image.
+const size_t kMaxBiosImageBytes = 0x80000;
+
+// What reading a BIOS image file gave: the image, or why there is none (a sentence for the Log, naming the
+// path). Exactly one of the two is set.
+struct BiosLoadResult
+{
+    std::shared_ptr<const BiosImage> image;
+    std::string error;
+};
+
+// Read and hash the BIOS image at 'path' (App::LoadBiosImage; a function of its own so the loader can be
+// tested without the application).
+BiosLoadResult LoadBiosImageFile(const std::string& path);
+
 class MemorySnapshot
 {
 public:

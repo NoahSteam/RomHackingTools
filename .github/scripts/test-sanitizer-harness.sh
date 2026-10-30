@@ -25,7 +25,10 @@ NAMES=(
   SaturnExplorerSh2GeneratedTests SaturnExplorerSh2DecompilerTests SaturnExplorerSh2DecompilerFixtureTests
   SaturnExplorerDecompilerPanelTests SaturnExplorerDecompilerRunnerTests SaturnExplorerSlaFreshnessTests
   SaturnExplorerDecompilerModelTests SaturnExplorerLiveRestoreSignalTests SaturnExplorerLiveDecompilerCaptureTests
+  SaturnExplorerLoaderFuzzTests
 )
+
+SLA_PASS="SlaFreshnessTests: .slaspec, checked-in .sla and embedded spec agree (2460 bytes of .sla)"
 
 # stub <build> <name> <exit code> [output line]
 stub() {
@@ -36,12 +39,12 @@ stub() {
   chmod +x "$build/bin/$name"
 }
 
-# one <label> <fault stub exit> <fault stub output> <omit the fault stub: 0|1> <expected checker result: pass|fail> [<output of SaturnExplorerSh2DecompilerTests> [<another binary to leave out>]]
+# one <label> <fault stub exit> <fault stub output> <omit the fault stub: 0|1> <expected checker result: pass|fail> [<output of SaturnExplorerSh2DecompilerTests> [<another binary to leave out> [<output of SaturnExplorerSlaFreshnessTests>]]]]
 # A stub prints its binary's pass line unless told otherwise; the fault stub's output given here comes after it, and "-"
 # means no pass line at all.
 failures=0
 one() {
-  local label="$1" frc="$2" fout="$3" omit="$4" want="$5" other="${6-all passed}" leave="${7-}"
+  local label="$1" frc="$2" fout="$3" omit="$4" want="$5" other="${6-all passed}" leave="${7-}" sla="${8-$SLA_PASS}"
   local build="$tmp/$label/build" logs="$tmp/$label/logs"
   mkdir -p "$build" "$logs"
   for n in "${NAMES[@]}"; do
@@ -49,6 +52,8 @@ one() {
     # Each binary prints its own pass line: dts::Finish's, except LiveRestoreSignalTests' (check-sanitizer-logs.sh).
     if [ "$n" = SaturnExplorerSh2DecompilerTests ]; then stub "$build" "$n" 0 "$other"
     elif [ "$n" = SaturnExplorerLiveRestoreSignalTests ]; then stub "$build" "$n" 0 "LiveRestoreSignalTests passed"
+    elif [ "$n" = SaturnExplorerSlaFreshnessTests ]; then stub "$build" "$n" 0 "$sla"
+    elif [ "$n" = SaturnExplorerLoaderFuzzTests ]; then stub "$build" "$n" 0 "LoaderFuzzTests: 2108 cases in 12 s, 0 violation classes not in the ledger (seed 1)"
     else stub "$build" "$n" 0 "all passed"; fi
   done
   stub "$build" se-sleighc 0
@@ -92,6 +97,14 @@ one other-no-pass-line   0  "$FM"                                               
 one model-omitted        0  "$FM"                                                                        0 fail "all passed" SaturnExplorerDecompilerModelTests
 one live-restore-omitted 0  "$FM"                                                                        0 fail "all passed" SaturnExplorerLiveRestoreSignalTests
 one live-capture-omitted 0  "$FM"                                                                        0 fail "all passed" SaturnExplorerLiveDecompilerCaptureTests
+# The freshness test is gating (A10-3): never run, a compiler error the sanitizer saw while it ran se-sleighc, a leak, or a
+# missing pass line each fail the check.
+one sla-omitted          0  "$FM"                                                                        0 fail "all passed" SaturnExplorerSlaFreshnessTests
+one sla-compiler-ubsan   0  "$FM"                                                                        0 fail "all passed" "" "slgh_compile.cc:2340:24: runtime error: downcast of address 0x1 which does not point to an object of type 'LabelSymbol'
+$SLA_PASS"
+one sla-compiler-leak    0  "$FM"                                                                        0 fail "all passed" "" "==1==ERROR: LeakSanitizer: detected memory leaks
+$SLA_PASS"
+one sla-no-pass-line     0  "$FM"                                                                        0 fail "all passed" "" "CHECK failed at line 90: rc == 0"
 
 if [ "$failures" -ne 0 ]; then
   echo "Sanitizer harness self-test FAILED ($failures wrong outcome(s))."

@@ -1930,6 +1930,82 @@ void TestNzMaskShiftRound11()
     std::printf("nz mask of signed shifts: %ld checked\n", checked);
 }
 
+// ---- Area 10 round 1 (patches/0070-engine-defined-shifts.patch) ------------------------------------------------------------------------------------
+// 0070 made three shifts defined that UBSan reported (a negative value shifted left in sign_extend, a negative count when the output is the
+// narrower, a count of 64 in getConsumeLocal), and changed one result: a PIECE whose low input is as wide as the output consumes every output bit
+// where x86's shift by 64 made it nothing. Until this test only the sanitizers job reached them; these are the values, so a change of any is a
+// failure in the unit suite as well.
+void TestDefinedShiftsArea10()
+{
+    using ghidra::sign_extend;
+    CHECK(sign_extend(0x80, 1, 4) == 0xffffff80ull);
+    CHECK(sign_extend(0x7f, 1, 4) == 0x7full);
+    CHECK(sign_extend(0xff, 1, 8) == ~0ull);
+    CHECK(sign_extend(0x80000000ull, 4, 8) == 0xffffffff80000000ull);
+    CHECK(sign_extend(0x7fffffffull, 4, 8) == 0x7fffffffull);
+    CHECK(sign_extend(0x8000000000000000ull, 8, 8) == 0x8000000000000000ull);
+    // The output narrower than the input is a negative shift count; taken modulo 64 as x86 did. 0xf0 of 4 bytes to 1: (0xf0 << 32) >> 40 = 0.
+    CHECK(sign_extend(0xf0, 4, 1) == 0ull);
+    // 0x80000000 of 4 bytes to 2: (0x80000000 << 32) >> 48 (arithmetic) = 0xffffffffffff8000, then the top 2 bytes: 0xffff.
+    CHECK(sign_extend(0x80000000ull, 4, 2) == 0xffffull);
+
+    auto* image = new RegionLoadImage(kImageBase, Fixture1());
+    std::ostringstream errs;
+    TestArchitecture arch(image, &errs);
+    ghidra::DocumentStorage store;
+    try
+    {
+        arch.init(store);
+    }
+    catch (ghidra::LowlevelError& e)
+    {
+        std::printf("  Architecture::init failed: %s\n  %s\n", e.explain.c_str(), errs.str().c_str());
+        CHECK(false);
+        return;
+    }
+    ghidra::AddrSpace* ram = arch.getDefaultCodeSpace();
+    const ghidra::Address entry(ram, kCaller);
+    std::string name;
+    arch.nameFunction(entry, name);
+    ghidra::Funcdata* fd = arch.symboltab->getGlobalScope()->addFunction(entry, name)->getFunction();
+
+    // A PIECE of 4 and 4 bytes: the high input has the high half of what is consumed, the low one the low half (the control, unchanged).
+    {
+        ghidra::PcodeOp* op = fd->newOp(2, entry);
+        fd->opSetOpcode(op, ghidra::CPUI_PIECE);
+        fd->newUniqueOut(8, op);
+        fd->opSetInput(op, fd->newConstant(4, 0x11223344), 0);
+        fd->opSetInput(op, fd->newConstant(4, 0x55667788), 1);
+        ghidra::uintb hi = 0, lo = 0;
+        CHECK(op->getConsumeLocal(0, 0x0000ffff0000ff00ull, hi) && op->getConsumeLocal(1, 0x0000ffff0000ff00ull, lo));
+        CHECK(hi == 0xffffull && lo == 0xff00ull);
+    }
+    // A PIECE whose low input is 8 bytes and whose output is 8 (a transient shape while a rule resizes an input): every consumed bit is the low
+    // input's, and the high one keeps what is consumed. x86's shift by 64 gave the low input nothing, so its code could be removed.
+    {
+        ghidra::PcodeOp* op = fd->newOp(2, entry);
+        fd->opSetOpcode(op, ghidra::CPUI_PIECE);
+        fd->newUniqueOut(8, op);
+        fd->opSetInput(op, fd->newConstant(1, 0x11), 0);
+        fd->opSetInput(op, fd->newConstant(8, 0x5566778899aabbccull), 1);
+        ghidra::uintb hi = 0, lo = 0;
+        CHECK(op->getConsumeLocal(0, 0xff00ull, hi) && op->getConsumeLocal(1, 0xff00ull, lo));
+        CHECK(hi == 0xff00ull && lo == 0xff00ull);
+    }
+    // INT_LEFT by a constant of 64 or more on a value of 4 bytes: a count taken modulo 64, so more is consumed, never less.
+    for (uint64_t sa : { 64ull, 65ull, 96ull })
+    {
+        ghidra::PcodeOp* op = fd->newOp(2, entry);
+        fd->opSetOpcode(op, ghidra::CPUI_INT_LEFT);
+        fd->newUniqueOut(4, op);
+        fd->opSetInput(op, fd->newConstant(4, 0x12345678), 0);
+        fd->opSetInput(op, fd->newConstant(4, sa), 1);
+        ghidra::uintb in = 0;
+        CHECK(op->getConsumeLocal(0, 0xf0ull, in));
+        CHECK(in == (0xf0ull >> (sa & 63)));
+    }
+}
+
 // ---- Area 2 round 12 P3 fix (patches/0062-engine-range-set-ops-and-rule-guards.patch) ----------------------------------------------------------------
 // Three CircleRange operations that patch 0059 did not touch, upstream's, none reached by a workload (ledger A2-73 to A2-75). The rule is 0059's: an
 // answer holds every value, or fails, or is everything.
@@ -3715,6 +3791,7 @@ int main(int argc, char** argv)
         RUN(TestSha256KnownAnswers());
         RUN(TestDecompileThroughBundle(config));
         RUN(TestNzMaskShiftRound11());
+        RUN(TestDefinedShiftsArea10());
         RUN(TestIntersectMixedMasksRound12());
         RUN(TestU128());
         RUN(TestSetNZMaskRound12());
