@@ -13534,7 +13534,7 @@ Reviewer, branch `review/3-round15-review`, on `ec93ad3` (patches up to 0070 in 
 | A3-130 | P1 | A STORE through a pointer reached by two or more frame slots is lost while the frame has not escaped: lent `int4 f(void)`, `return 0;`, the code returns 0xFFD3. | `Heritage::reprocessFreeStores` destroys the STORE's guards once the first reload is a modeled frame address and the LOAD through it is "memory" (`FrameEscape::compute`); the late item is a write, which 0068's delay does not look for |
 | A3-131 | P1 | A word built by stores through a slot-reloaded pointer over never-written bytes, then returned, is returned as its low piece: lent, `return param_2;`, the code returns 0x66664444. Regression: the base is right. | 0068's `bytesBefore` front piece builds `SUB42(in_stack,2)`; the return recovery shrinks the return to the low piece (`r0+2 = r5+2` after heritage pass 4) |
 | A3-132 | P1 | The entry value of a callee-saved register stored into a frame word and overwritten through a slot-reloaded pointer is read back as the register: `return unaff_r8;`. | the save slot is "not mapped" (`markNotMapped`), so its guard is collapsed as "no local alias" (`opCollapseIndirectsForAlias`); 0063's exception does not hold this pointer |
-| A3-133 | P2 | The frame ledger's own caps fail open: a 64-op expression blinds it for the whole function; 90 of 839 (hwram007) and 228 of 1,554 (hwram008) functions. | `noteFrameFoldForwarded`, `frameFoldsAllRead` |
+| A3-133 | P2 | The frame ledger's own caps fail open: a 64-op expression blinds it for the whole function; 90 functions of hwram007 and 228 of hwram008 hit it. | `noteFrameFoldForwarded`, `frameFoldsAllRead` |
 | A3-134 | P3 | Instrument: the generator draws none of the three; the ledger cannot see A3-131. | `GenFrame124Fn` |
 | A3-135 | P3 | A lent prototype drops r8 when the address of r8's push slot is handed to a callee that reads it. Same on the base. | the save is "no read" (lending, `isSavePush`) |
 | A3-136 | P3 | Frame ledger false loss: a call removed with an unreachable block still counts as a read of the frame (generator, grammar 2 seed 3901693). | `noteFrameCall` without a `dropFrameCall` for a removed block |
@@ -13577,7 +13577,7 @@ No store was dropped because of the exemption itself: the cases it exempts are e
 
 ### 4. The frame ledger's blind spot
 
-"The walk back from a forwarded value can hide a loss but never invent one": it can hide a loss in two ways, one is the cap. `noteFrameFoldForwarded` stops after 64 ops and then takes every fold of the function as forwarded (`frameFoldsAllRead`), and 4,096 guard records do the same. A3-130's function with a long expression on the result (R15-15a to 15d: 0, 10, 40, 80 xor/add operations) is `LEDGER BAD` at 0 and 10 and `LEDGER ok` at 40 and 80, with the same lost store (printed-C: `mismatch` in all four). Counted with the temporary print: **90 of the 839 functions of hwram007 and 228 of the 1,554 of hwram008** (11% and 15%) hit the cap, so "0 frame writes lost" holds for the rest only (A3-133, P2). The other hiding place I looked for, a value forwarded in an equal form to a reader that dies later, I did not build a loss for. Not found is not shown absent.
+"The walk back from a forwarded value can hide a loss but never invent one": it can hide a loss in two ways, one is the cap. `noteFrameFoldForwarded` stops after 64 ops and then takes every fold of the function as forwarded (`frameFoldsAllRead`), and 4,096 guard records do the same. A3-130's function with a long expression on the result (R15-15a to 15d: 0, 10, 40, 80 xor/add operations) is `LEDGER BAD` at 0 and 10 and `LEDGER ok` at 40 and 80, with the same lost store (printed-C: `mismatch` in all four). Counted with the temporary print: **90 distinct functions of hwram007 and 228 of hwram008** hit the cap in a whole-suite run (of 1,730 and 2,995 entries decompiled with lending: 5% and 8%; at most 11% and 15% of `TestGameCode`'s 839 and 1,554, whose functions are inside those), so "0 frame writes lost" holds for the rest only (A3-133, P2). The other hiding place I looked for, a value forwarded in an equal form to a reader that dies later, I did not build a loss for. Not found is not shown absent.
 
 ### 5. A3-127's class: piece and collapse arithmetic
 
@@ -13643,7 +13643,7 @@ The generator finds, in ranges no one has run, one P1 (A3-131) and four oracle o
 | lent signatures (parameters), `f3c13b0` | 678 (956) | 1,038 (1,310) |
 | lent signatures (parameters), `ec93ad3` | 678 (956) | 1,038 (1,310) |
 | ...real entries | 474 (645) of 999 | 724 (975) of 1,543 |
-| functions the frame ledger cannot check (cap, A3-133) | 90 | 228 |
+| distinct functions that hit the frame ledger's cap (A3-133), whole suite | 90 | 228 |
 
 The timings are 20 to 30% above the fixer's on a machine with two other builds running.
 
@@ -13652,5 +13652,5 @@ The timings are 20 to 30% above the fixer's on a machine with two other builds r
 - None of A3-130 to A3-132 has a pin: a pin that fails is not committed. The fixtures are in `r15h.src`, `r15m.src`, `r15n.src`, `r15q.src`, `r15f.src`, `r15e.src` and `r15g.src`, ready to be moved into the suite verbatim, with the printed-C replay lines in the rows.
 - A3-130's and A3-132's mechanisms are from a temporary instrumented engine (prints behind environment variables, reverted); A3-131's is by reading the return recovery after the traces; the ledger of this build catches A3-130 and A3-132 (`LEDGER BAD`) and not A3-131.
 - The fourth raise of the dead code delay (the terminal fail-closed state) was not reached by any function I drew.
-- The frame ledger on the A3-124 shapes was run through the corpora; the cap of A3-133 means 11% to 15% of the corpus was not checked for lost frame writes.
+- The frame ledger on the A3-124 shapes was run through the corpora; the cap of A3-133 means 5% to 15% of the corpus functions were not checked for lost frame writes.
 - The next reviewer should draw two things: **a stack input under a partly written word** (the high piece of a returned word is a free input) and **a chain of pointers through the frame** (the `FrameEscape` walk past a LOAD of a frame slot). The fix for A3-130 is probably a rule in `FrameEscape::compute` that a LOAD through a modeled frame address is a stack read in waiting (a member, unmodeled, as every free stack read is before the stack is heritaged); for A3-131 the return recovery's treatment of a SUBPIECE of a free stack input; for A3-132 `markNotMapped` for a save slot only where the store pointer is a modeled address.
