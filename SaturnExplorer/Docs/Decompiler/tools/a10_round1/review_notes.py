@@ -392,6 +392,6 @@ N["0069"] = dict(
 N["0070"] = dict(
     what="`sign_extend` defined shifts; `getConsumeLocal` for PIECE of a full-width low input and shifts of 64.",
     holds="Yes: UBSan reported them; the PIECE case changes the result (x86 gave consumed nothing).",
-    test="Only the CI `sanitizers` job; no value-level test of the results.",
+    test="Before this round only the CI `sanitizers` job; now `Sh2DecompilerEngineTests` `TestDefinedShiftsArea10` (ledger A10-5).",
     overlap="One line of 0054 rewritten.",
     up="yes")
