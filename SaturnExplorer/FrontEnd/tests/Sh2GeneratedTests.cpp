@@ -262,6 +262,7 @@ const uint32_t kScratch5 = 0x06021100u;
 const uint32_t kScratch6 = 0x06022100u;   // r6/r7 before any literal is loaded into them
 const uint32_t kScratch7 = 0x06023100u;
 const uint32_t kScratchGbr = 0x06024100u;  // GBR on entry: the base of the @(disp,GBR) and @(r0,GBR) accesses
+const uint32_t kPtrBase = 0x06080000u;   // memory mode (A2-106): the arena r4 and r5 point into (16 KiB, work RAM)
 const uint32_t kStackTop = 0x06040000u;   // r15 on entry (version 2 uses the stack)
 const uint32_t kStackLo = 0x0603E000u;    // the stack area: every access in [kStackLo, kStackHi) through r15 or the frame
 const uint32_t kStackHi = 0x06041000u;    // pointer is a local, folded by design (A11-1)
@@ -6104,6 +6105,8 @@ Subject RawSubject(const char* raw)
 //   SE_GENERATED_PRINTEDC_TIMEOUT=s CPU seconds a compiled text may run (default 30); one that does not finish is the class 'timeout' (A2-98)
 //   SE_GENERATED_PRINTEDC_PER=n    functions per seed (default 1)
 //   SE_GENERATED_PRINTEDC_WORDS="6153 E000 000B 0009;..."  check hand-written functions, text printed
+//   SE_GENERATED_PRINTEDC_PTR=w    with _WORDS: the memory mode (A2-106), every function with the access width w (1, 2 or 4): r4 and r5 point into an arena, the
+//                                  value returned and the arena afterwards are compared (CCase::ptrWidth; the fixtures of MemoryPrintedCFixtures set it themselves)
 //   SE_C_COMPILER=<cc>             the compiler (default: cc, gcc, clang found on PATH)
 //   SE_CXX_COMPILER=<c++>          the C++ compiler of the engine reading of a text that disagrees as C (default: the one that goes with the C compiler)
 // Without a C compiler the run says so loudly and exits 77, which ctest reports as skipped.
@@ -6825,6 +6828,8 @@ static const char kFrameHeader[] = R"FRAME(
 #endif
 static unsigned long long g_frame_base;
 static unsigned char g_frame_static[0x10000];
+/* memory mode (A2-106): unit a of the arena at the start of input k holds this (the harness's own table fills the emulator's RAM with the same) */
+#define PTRPAT(k, a) ((((unsigned)(a) * 2654435761u) ^ ((unsigned)(k) * 40503u)) >> 13)
 static void FrameInit(void)
 {
 #if defined(__linux__) && defined(MAP_32BIT)
@@ -7306,6 +7311,12 @@ struct CCase
 {
     std::string name;
     std::vector<uint16_t> words;
+    // Memory mode (A2-106): 1, 2 or 4 runs a text that dereferences its parameters. r4 is a pointer into a 16 KiB arena (kPtrBase + 0x1000 plus a multiple
+    // of 4 in the emulator, the frame block's middle in the compiled text) and r5 is r4, a neighbour of it (4 to 16 bytes either side) or a pointer into a
+    // second area; both sides start from the same pattern of the input row, and the value returned and the arena afterwards must be the run's. The machine is
+    // big-endian and the host is not, so every access of the function must have this width (the arena is compared in units of it, which cancels the order);
+    // mixed-width access to the same bytes is not covered. 0: the register-only run (a dereference is `skipped:memory`, unless it is of the frame).
+    uint32_t ptrWidth = 0;
 };
 
 // The type a name the engine makes for an access wider than its symbol (`_Stack_4`) is declared with in the printed-C harness (A2-57): the
@@ -7618,7 +7629,9 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
         // is not run (the host's pointers are 64-bit and its memory is not the machine's). But for its own frame (A3-65): a function whose code
         // reaches memory through a register other than r15 (a copy of it walked over the locals) has its stack locals mapped onto memory
         // (frame mode, below), and a dereference in it is of a frame address: it is run.
-        const bool frameMode = UsesFrameMemory(c.words);
+        const uint32_t ptrW = c.ptrWidth == 1 || c.ptrWidth == 2 || c.ptrWidth == 4 ? c.ptrWidth : 4u;
+        const bool ptrMode = c.ptrWidth != 0;
+        const bool frameMode = UsesFrameMemory(c.words) || ptrMode;
         static const std::regex memoryRe("\\*[A-Za-z_(]");
         if (!frameMode && std::regex_search(text, memoryRe))
         {
@@ -7858,7 +7871,7 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
         Env env;
         env.ram = snap->regions[1].bytes;
         std::unique_ptr<Machine> machine(new Machine(snap, &env));
-        std::ostringstream rows;
+        std::ostringstream rows, mcs;
         int kept = 0;
         uint32_t baseIn[13] = {};   // the first row's inputs (area 2 round 11: SE_GENERATED_PRINTEDC_SWEEP16 varies r4 from it)
         bool r0Changed = false;
@@ -7927,6 +7940,17 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
                 if ((k - (nIn + 44)) & 1) { in[5] = extraVals[xi]; in[4] = extraVals[(xi * 5 + 1) % n]; }
                 else { in[4] = extraVals[xi]; in[5] = extraVals[(xi * 7 + 3) % n]; }
             }
+            if (ptrMode)
+            {
+                in[4] = kPtrBase + 0x1000 + 4 * ir.Below(64);
+                const uint32_t al = ir.Below(6);
+                in[5] = al == 0 ? in[4] : al == 1 ? in[4] + 4 * (1 + ir.Below(4)) : al == 2 ? in[4] - 4 * (1 + ir.Below(4)) : al == 3 ? in[4] + 8 : kPtrBase + 0x2000 + 4 * ir.Below(64);
+                for (uint32_t u = 0; u < 0x4000u / ptrW; ++u)
+                {
+                    const uint32_t v = ((u * 2654435761u) ^ (static_cast<uint32_t>(kept) * 40503u)) >> 13;
+                    for (uint32_t b = 0; b < ptrW; ++b) env.ram[((kPtrBase - 0x06000000u) + u * ptrW + b) & 0xFFFFFu] = static_cast<uint8_t>(v >> (8 * (ptrW - 1 - b)));
+                }
+            }
             for (int i = 0; i < 8; ++i) machine->Set(("r" + std::to_string(i)).c_str(), in[i]);
             for (int i = 8; i < 15; ++i) machine->Set(("r" + std::to_string(i)).c_str(), CalleeSaved(i));
             machine->Set("r15", kStackTop);
@@ -7945,6 +7969,18 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
                           in[0], in[1], in[2], in[3], in[4], in[5], in[6], in[7], in[8], in[9], in[10], run.fin[0], run.fin[1], run.finSr,
                           machine->Get("gbr"), machine->Get("vbr"), in[11], in[12]);
             rows << buf;
+            if (ptrMode)
+            {
+                // the arena the run left, as a checksum of ptrW-byte units (FNV-1a over the units as numbers: the host reads them in its own order)
+                uint32_t cs = 2166136261u;
+                for (uint32_t u = 0; u < 0x4000u / ptrW; ++u)
+                {
+                    uint32_t unit = 0;
+                    for (uint32_t b = 0; b < ptrW; ++b) unit = (unit << 8) | env.ram[((kPtrBase - 0x06000000u) + u * ptrW + b) & 0xFFFFFu];
+                    cs = (cs * 16777619u) ^ unit;
+                }
+                mcs << cs << "u,";
+            }
             if (kept == 0) std::memcpy(baseIn, in, sizeof baseIn);
             ++kept;
         }
@@ -7954,12 +7990,35 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
             continue;
         }
         std::ostringstream m;
-        m << "  { /* " << pr.name << " */\n    static const unsigned int D[][18] = {\n" << rows.str() << "    };\n    for (unsigned k = 0; k < " << kept << "; ++k) {\n";
+        const std::string ptrU = ptrW == 1 ? "unsigned char" : ptrW == 2 ? "unsigned short" : "unsigned int";
+        m << "  { /* " << pr.name << " */\n    static const unsigned int D[][18] = {\n" << rows.str() << "    };\n";
+        if (ptrMode) m << "    static const unsigned int MC[] = { " << mcs.str() << " 0 };\n";
+        m << "    for (unsigned k = 0; k < " << kept << "; ++k) {\n";
         m << "      memcpy(g_in, D[k], sizeof g_in[0] * 11);\n      g_in[11] = D[k][16]; g_in[12] = D[k][17];\n";
         std::ostringstream call;
         call << pr.name << "(";
-        for (int i = 0; i < nParams && i < 4; ++i) call << (i ? ", " : "") << "(int)g_in[" << 4 + i << "]";
+        for (int i = 0; i < nParams && i < 4; ++i)
+        {
+            if (ptrMode && i < 2)
+            {
+                // r4 and r5 are addresses in the arena: the emulator's offset into it, in the frame block (a pointer parameter gets a host pointer, an integer one the number)
+                size_t b = 0;
+                for (int j = 0; j < i; ++j) b = plist.find(',', b) + 1;
+                const size_t e = plist.find(',', b);
+                const std::string decl = plist.substr(b, e == std::string::npos ? std::string::npos : e - b);
+                const std::string addr = "(g_frame_base + 0x8000 + (g_in[" + std::to_string(4 + i) + "] - 0x06080000u))";
+                call << (i ? ", " : "") << (decl.find('*') != std::string::npos ? "(void *)(uintptr_t)" + addr : "(int)" + addr);
+            }
+            else call << (i ? ", " : "") << "(int)g_in[" << 4 + i << "]";
+        }
         call << ")";
+        if (ptrMode && ret.find('*') != std::string::npos)
+        {
+            // a pointer result is compared as the 32-bit number it stands for (the host's pointer is 64 bits wide)
+            const std::string t = "(unsigned int)(uintptr_t)" + call.str();
+            call.str("");
+            call << t;
+        }
         // The control registers: the last SR, GBR, VBR written through Write_*, or what they were, against the run's.
         // (SR is compared in its S and interrupt-mask bits, which only ldc changes.)
         const std::string ctl = "      if ((g_wsr & 0xF2u) != (D[k][13] & 0xF2u) || g_wgbr != D[k][14] || g_wvbr != D[k][15]) { printf(\"MISMATCH " + pr.name +
@@ -7967,6 +8026,7 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
             pr.name + "; }\n";
         m << "      g_wsr = g_in[8]; g_wgbr = g_in[11]; g_wvbr = g_in[12];\n";
         if (frameMode) m << "      memset((void *)(uintptr_t)g_frame_base, 0, 0x10000);\n";
+        if (ptrMode) m << "      { " << ptrU << " *ar = (" << ptrU << " *)(uintptr_t)(g_frame_base + 0x8000); for (unsigned a = 0; a < 0x4000 / " << ptrW << "; ++a) ar[a] = (" << ptrU << ")PTRPAT(k, a); }\n";
         if (v.voidReturn) m << "      " << call.str() << ";\n" << ctl;
         else
         {
@@ -7985,6 +8045,10 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
                  "got, rsz == 8 ? (unsigned int)g64 : 0u); ++bad_" << pr.name << "; }\n";
             m << ctl;
         }
+        if (ptrMode)
+            m << "      { " << ptrU << " *ar = (" << ptrU << " *)(uintptr_t)(g_frame_base + 0x8000); unsigned cs = 2166136261u; for (unsigned a = 0; a < 0x4000 / " << ptrW
+              << "; ++a) cs = (cs * 16777619u) ^ ar[a];\n        if (cs != MC[k]) { printf(\"MISMATCH " << pr.name
+              << " memory r4=%08X r5=%08X r6=%08X r7=%08X after the call\\n\", g_in[4], g_in[5], g_in[6], g_in[7]); ++bad_" << pr.name << "; } }\n";
         m << "    }\n";
         // Area 2 round 11 instrument (SE_GENERATED_PRINTEDC_SWEEP16=1): r4 = every value 0..65535, the other inputs those of the first row,
         // the run's r0 kept in compact tables and each value compared as the rows above are (the 16-bit domain of a function that reduces r4).
@@ -10020,6 +10084,7 @@ void TestPrintedC()
         {
             CCase c;
             c.name = "hand" + std::to_string(k++);
+            c.ptrWidth = static_cast<uint32_t>(EnvNumber("SE_GENERATED_PRINTEDC_PTR", 0));   // the memory mode (A2-106) for the words given: 1, 2 or 4
             std::istringstream in(one);
             std::string tok;
             while (in >> tok) c.words.push_back(static_cast<uint16_t>(std::strtoul(tok.c_str(), nullptr, 16)));
