@@ -12,6 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified for SaturnExplorer: the range-arithmetic fixes of patches/0059 carried no notice; this adds it (patches/0074-sleighc-sanitizer-clean.patch).
  */
 #include "opbehavior.hh"
 #include "translate.hh"

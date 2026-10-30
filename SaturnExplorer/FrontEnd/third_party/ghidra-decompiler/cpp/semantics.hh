@@ -12,6 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified for SaturnExplorer: ConstTpl constructors initialize every field (patches/0074-sleighc-sanitizer-clean.patch).
  */
 /// \file semantics.hh
 /// \brief Classes describing p-code operations as parsed from a SLEIGH specification
@@ -83,7 +85,7 @@ private:
   uintb value_real;		///< An immediate constant value or other constant offset a ConstTpl represents
   v_field select;		///< Assuming ConstTpl is a \b handle, the part of the \b handle to use as constant
 public:
-  ConstTpl(void) { type = real; value_real = 0; }	///< Construct a zero constant
+  ConstTpl(void) { type = real; value.spaceid = (AddrSpace *)0; value_real = 0; select = v_space; }	///< Construct a zero constant
   ConstTpl(const ConstTpl &op2) {
     type=op2.type; value=op2.value; value_real=op2.value_real; select=op2.select; }	///< Copy constructor
   ConstTpl(const_type tp,uintb val);					///< Constructor for real constants or relative offsets

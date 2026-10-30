@@ -12,6 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified for SaturnExplorer: ConstTpl constructors initialize every field (patches/0074-sleighc-sanitizer-clean.patch).
  */
 #include "semantics.hh"
 #include "translate.hh"
@@ -23,6 +25,9 @@ ConstTpl::ConstTpl(const_type tp)
 
 {
   type = tp;
+  value.spaceid = (AddrSpace *)0;	// The copy constructor copies all three fields; copying an unset enum is undefined
+  value_real = 0;
+  select = v_space;
 }
 
 /// \param tp is constant type: either \b real or \b j_relative
@@ -67,6 +72,8 @@ ConstTpl::ConstTpl(AddrSpace *sid)
 {
   type = spaceid;
   value.spaceid = sid;
+  value_real = 0;
+  select = v_space;
 }
 
 bool ConstTpl::isConstSpace(void) const
