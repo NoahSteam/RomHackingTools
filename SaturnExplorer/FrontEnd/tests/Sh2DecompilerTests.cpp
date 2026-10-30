@@ -1915,6 +1915,27 @@ void TestHardwareVolatility()
         add("a5_83", { 0xD104, 0xD305, 0xE403, 0x6012, 0x7104, 0x213A, 0x4410, 0x8BFA, 0x000B, 0x0009, 0x35B0, 0x00C8, 0x2000, 0x0000 }, 0x14, 0x35B000C8u);
         add("a5_83_step", { 0xD103, 0xE403, 0x6012, 0x7104, 0x4410, 0x8BFB, 0x000B, 0x0009, 0x35B0, 0x00C8 }, 0x10, 0x35B000C8u);
         add("a5_83_write", { 0xD104, 0xD305, 0xE403, 0x2102, 0x7104, 0x213A, 0x4410, 0x8BFA, 0x000B, 0x0009, 0x35B0, 0x00C8, 0x2000, 0x0000 }, 0x14, 0x35B000C8u);
+        // A5-86: a number that equals the word view of an SMPC register, in a concatenation (the return pair r0:r1): `0x06009008 << 17` is 0x20100000.
+        // The controls: the same number returned alone, a register's address stored (a value kept in memory may be read back as an address), and a
+        // pointer the data flow dereferences (a5_28, a5_37 and a5_45 hold those; this one adds a merge of the word view and a RAM address, indexed).
+        add("a5_86", { 0x6043, 0x6153, 0x6263, 0x6373, 0x4715, 0x0329, 0xD208, 0x312C, 0x3043, 0x8905, 0x3138, 0x6117, 0x312C, 0x637F, 0xA002, 0x0009, 0x4200, 0x4228, 0x6177, 0x6023, 0x4009, 0x4008, 0x000B, 0x6003, 0x0600, 0x9008 }, 0x30, 0x06009008u);
+        add("a5_86_return", { 0xD001, 0x000B, 0x0009, 0x0009, 0x2010, 0x0000 }, 0x08, 0x20100000u);
+        add("a5_86_store", { 0xD101, 0x2412, 0x000B, 0x0009, 0x25F8, 0x0000 }, 0x08, 0x25F80000u);
+        // A5-90: `x | 0xFFFFFFC0` (mov #-64,r2 ; or r2,r4) read as a byte at +8 is somewhere in the on-chip registers' partition, where the register
+        // is not known: the note says so, and that a byte at 0xFFFFFF00 and up is an address error. The mask 0xFFFFFE00 (loaded from the pool) spans both
+        // halves of the page, and a long read there is an address error in the lower one. The controls: a mask that does not set the top bits, and AND.
+        add("a5_90_byte", { 0xE2C0, 0x242B, 0x8448, 0x000B, 0x0009, 0x0009 }, 0x08, 0x00000000u);
+        add("a5_90_long", { 0xD202, 0x242B, 0x6042, 0x000B, 0x0009, 0x0009, 0xFFFF, 0xFE00 }, 0x0C, 0xFFFFFE00u);
+        add("a5_90_small", { 0xE240, 0x242B, 0x8448, 0x000B, 0x0009, 0x0009 }, 0x08, 0x00000000u);
+        add("a5_90_and", { 0xE2C0, 0x2429, 0x8448, 0x000B, 0x0009, 0x0009 }, 0x08, 0x00000000u);
+        // A5-91 (generator grammar 1 seed 2408172): `p = (p + 4) ^ 0x20000000` from 0xFFFFFF08, twice, then a word write at p + 14: the first value is
+        // 0xDFFFFF0C (the cache data array: memory), the next 0xFFFFFF10, so the write after the loop is at 0xDFFFFF1A, or 0xFFFFFF1E on a third turn.
+        // The control starts in work RAM, which the walk never leaves.
+        add("a5_91", { 0xD705, 0xE302, 0x7704, 0xD105, 0x271A, 0x4310, 0x8BFA, 0xE00E, 0x0735, 0x000B, 0x0009, 0x0009, 0xFFFF, 0xFF08, 0x2000, 0x0000 }, 0x18, 0xFFFFFF08u);
+        add("a5_91_ram", { 0xD705, 0xE302, 0x7704, 0xD105, 0x271A, 0x4310, 0x8BFA, 0xE00E, 0x0735, 0x000B, 0x0009, 0x0009, 0x0600, 0x0108, 0x2000, 0x0000 }, 0x18, 0x06000108u);
+        // A5-92: a pointer merged from an address of the associative purge and one of the cache address array says what the direct access says.
+        add("a5_92", { 0xD604, 0x2448, 0x8901, 0xD604, 0x0009, 0x6062, 0x000B, 0x0009, 0x0009, 0x0009, 0x6000, 0x1000, 0x4000, 0x1000 }, 0x14, 0x60001000u);
+        add("a5_92_ram", { 0xD604, 0x2448, 0x8901, 0xD604, 0x0009, 0x6062, 0x000B, 0x0009, 0x0009, 0x0009, 0x0600, 0x1000, 0x0600, 0x2000 }, 0x14, 0x06001000u);
         // A5-79: a frame buffer store, a frame change (VDP1_FBCR = 3), a wait for the frame end, the load of the same address
         add("a5_79", { 0xD807, 0x900B, 0x2801, 0xD107, 0xE203, 0x2121, 0xD306, 0x6031, 0xC808, 0x89FC, 0x6081, 0x000B, 0x0009, 0x0009, 0x1234, 0x0009, 0x25C8, 0x0200, 0x25D0, 0x0002, 0x25F8, 0x0004 }, 0x20, 0x25C80200u);
     }
@@ -3343,6 +3364,44 @@ void TestHardwareVolatility()
         CHECK(!HasNote(r, "stepped in a loop", false) && !HasNote(r, "stepped in a loop", true));
         r = R9("a5_83_write", "control: the same walk with a write: the cache is not read by a write");
         CHECK(!HasNote(r, "cache read", true) && !HasNote(r, "cache read", false));
+
+        // A5-86: a number is a register's address where the data flow uses it as an address, not in a concatenation, a copy that returns it, or a compare.
+        r = R9("a5_86", "return CONCAT44(0x20100000, ~r7): a number that is the word view of SMPC_IREG0");
+        CHECK(Has(r.Text(), "CONCAT44(0x20100000,~in_r7)") && !Has(r.Text(), "&SMPC_IREG0"));
+        r = R9("a5_86_return", "return 0x20100000");
+        CHECK(Has(r.Text(), "return 0x20100000;") && !Has(r.Text(), "&SMPC_IREG0"));
+        r = R9("a5_86_store", "*param_1 = 0x25F80000: stored, it may be read back as an address");
+        CHECK(Has(r.Text(), "&VDP2_TVMD"));
+
+        // A5-90: an unknown value ORed with a constant that sets the top bits of the address is in the on-chip registers' partition.
+        r = R9("a5_90_byte", "r4 | 0xFFFFFFC0, a byte read at +8");
+        CHECK(Has(r.Text(), "| 0xffffffc0") &&
+              HasNote(r, "may reach on-chip registers: the pointer is an unknown value ORed with a constant that sets the top bits of the address, so it lies in "
+                         "0xFFFFFFC8-0xFFFFFFFF, the SH-2's on-chip register partition (decoded by the low 9 bits of the address); which register this 1-byte read reaches "
+                         "is not known, and none of the registers' effects is said; a 1-byte access at an address with bit 8 set (0xFFFFFF00-0xFFFFFFFF) is an address error "
+                         "on the SH-2: those registers take word and longword accesses only", true));
+        r = R9("a5_90_long", "r4 | 0xFFFFFE00, a long read");
+        CHECK(HasNote(r, "so it lies in 0xFFFFFE00-0xFFFFFFFF, the SH-2's on-chip register partition", true) &&
+              HasNote(r, "a 4-byte access at an address with bit 8 clear (0xFFFFFE00-0xFFFFFEFF) is an address error on the SH-2: those registers take byte and word accesses only", true) &&
+              !HasNote(r, "a 1-byte access", true));
+        r = R9("a5_90_small", "control: r4 | 0xFFFFFFC0 is not a mask of the top bits: r4 | 0x40");
+        CHECK(!HasNote(r, "may reach on-chip registers", true));
+        r = R9("a5_90_and", "control: r4 & 0xFFFFFFC0 stays anywhere");
+        CHECK(!HasNote(r, "may reach on-chip registers", true));
+
+        // A5-91: the later values of a stepped pointer reach hardware that its first values do not.
+        r = R9("a5_91", "p = 0xFFFFFF08; loop 2: p = (p + 4) ^ 0x20000000; write.w @(14,p)");
+        CHECK(HasNote(r, "the pointer is stepped in a loop from addresses that are no hardware's: the iterations after the first reach other addresses, which are not said, "
+                         "among them 0xFFFFFF1E (an on-chip register address): a 2-byte write there has the effects and is subject to the width rules of that hardware", true));
+        r = R9("a5_91_ram", "control: the same walk from work RAM");
+        CHECK(!HasNote(r, "stepped in a loop", true) && r.hardwareNotes.empty());
+
+        // A5-92: the associative purge and the cache address array through a pointer, as direct accesses.
+        r = R9("a5_92", "p = 0x60001000 or 0x40001000; read @p");
+        CHECK(HasNote(r, "if the pointer holds 0x40001000: an access at 0x40001000 is an associative purge, not a memory access: it invalidates the cache line for 0x00001000 (a read returns all ones)", false) &&
+              HasNote(r, "if the pointer holds 0x60001000: an access at 0x60001000 is the cache address array, not a memory access: entry 0 of the way SH2_CCR selects", false));
+        r = R9("a5_92_ram", "control: p = 0x06001000 or 0x06002000");
+        CHECK(r.hardwareNotes.empty());
 
         // A5-71: the cache data array is 4 KiB under both partitions: the names of one cell are one memory.
         r = R9("a5_71a", "xRamc0000000 = 5; xRamc0001000 = 7; return xRamc0000000");
