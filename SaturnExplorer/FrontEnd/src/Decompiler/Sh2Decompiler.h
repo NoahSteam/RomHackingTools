@@ -29,6 +29,7 @@
 #include <atomic>
 #include <cstdint>
 #include <functional>
+#include <map>
 #include <memory>
 #include <set>
 #include <string>
@@ -180,7 +181,8 @@ struct Token
 {
     uint16_t begin = 0, end = 0;   // byte range in Line::text
     TokenKind kind = TokenKind::Plain;
-    uint32_t addr = 0;             // the instruction the token came from; 0 = none
+    uint32_t addr = 0;             // the instruction the token came from; 0 = none. A delay slot's instruction is its own (A7-10, patch 0075)
+    bool haltsFlow = false;        // ...but 'addr' is the word flow halted at as bad data (DecompileResult::badDataAt): no instruction (A7-12)
     uint32_t target = 0;           // a called function's entry, for FuncName tokens; 0 = none
     uint32_t calledAt = 0;         // ...and the exact address called (a mirror, if through one); 0 = none
     uint32_t inspectionTarget = 0; // one-based index into inspectionTargets; zero is unbound
@@ -202,9 +204,12 @@ std::vector<uint32_t> LineInstructions(const Line& line);
 
 // What hovering a line says (A7-1): that the number is the address of the SH-2 instruction the
 // line came from -- not a value in the line -- that a click shows it in SH-2 Assembly, and, when
-// the line is several instructions, how many and which. Empty for a line with no address (a
-// declaration, a brace), where a click does nothing.
+// the line is several instructions, how many and which. Not always all of them: a constant or a
+// move folded into the line may come from an instruction no token names (A7-14), and the text says
+// so. A word flow halted at is no instruction (A7-12): the text says it is bytes that do not
+// decode. Empty for a line with no address (a declaration, a brace), where a click does nothing.
 std::string LineOriginText(const Line& line);
+
 
 // Where the engine is within one decompilation. Two passes repeat Init..Actions; only the last
 // prints. The cancel check-points are in Flow and Actions; Init, Print and Teardown have none
@@ -442,6 +447,34 @@ struct DecompileResult
     double elapsedMs = 0.0;
 
     std::string Text() const;      // the lines joined with '\n'
+};
+
+// Which line shows an SH-2 instruction: the way back from SH-2 Assembly (A7-5). 'Exact': the instruction owns the lines in 'lines' (a token of
+// it, an empty one included), in the order to offer them: a line whose first (lowest) address it is, which is the line a click on that
+// instruction's own row would have come from; then the lines with a token that draws something, in text order; then the others.
+// 'Folded': the instruction is in the function's body and no token names it (a move or an operation folded into the expression that
+// uses it, a literal load, a nop): 'via' is the nearest instruction of the same run that has one, the next before the previous, and
+// 'lines' are its. 'Outside': the instruction is not in the body, and 'lines' is empty.
+struct LineLookup
+{
+    enum Kind : uint8_t { Exact, Folded, Outside };
+    Kind kind = Outside;
+    std::vector<size_t> lines;
+    uint32_t via = 0;
+};
+LineLookup LineForInstruction(const DecompileResult& result, uint32_t instruction);
+
+// The same, for many instructions of one result: the index of the token addresses is made once. Holds the result by reference.
+class InstructionLineIndex
+{
+public:
+    explicit InstructionLineIndex(const DecompileResult& result);
+    LineLookup Find(uint32_t instruction) const;
+private:
+    std::vector<size_t> Ordered(uint32_t instruction) const;
+    const DecompileResult& mResult;
+    std::map<uint32_t, std::vector<size_t>> mOwners;          // the lines holding a token of the instruction, in text order
+    std::map<uint32_t, std::set<size_t>> mDrawn;              // ...of which a token that draws something
 };
 
 struct PassSeed;   // what a printed pass followed its flow with: the reference run follows the same

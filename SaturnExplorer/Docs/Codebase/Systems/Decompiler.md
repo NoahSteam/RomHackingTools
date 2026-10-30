@@ -1,6 +1,6 @@
 # SH-2 pseudocode and embedded decompiler
 
-Inspected revision: `ff6a3b1fb1c54e4c0344613094ea65292b0023c2` (2026-10-20).
+Inspected revision: `ff6a3b1fb1c54e4c0344613094ea65292b0023c2` (2026-10-20); the pseudocode-to-assembly mapping (steps 7 and 9) rechecked at the area 7 fixer branch `review/7-a710-fix` (2026-10-30).
 Captured-inspection sections rechecked against `codex/decompiler-variable-inspection` (2026-10-20).
 Unless labelled otherwise, behavior below is verified from the cited implementation.
 
@@ -83,7 +83,13 @@ the end of whatever it is given.
    can cause bounded extra passes with those ranges made volatile. This is more than an
    unconditional fixed two-pass pipeline.
 7. `LinesFromMarkup` converts engine markup into plain `Line`/`Token` data, canonical
-   instruction provenance, call targets and conservative owned inspection bindings. The result records flow body ranges, warnings,
+   instruction provenance, call targets and conservative owned inspection bindings. A token's
+   address is `InstructionOf(op)`: the translator gives a delayed branch and the instruction in its
+   delay slot one address, so the engine marks the ops the slot built (and the ops made for them;
+   `PcodeOp::isFromDelaySlot`, patch 0075) and the host addresses them at the branch + 2.
+   `AddFrameStoreTokens` gives a line that prints a frame local at a call or a load an empty token
+   carrying the folded store that wrote it (the engine's `AccessRecord`s). Tokens at a word flow
+   halted at carry `haltsFlow`. The result records flow body ranges, warnings,
    hardware notes, memory-access provenance and optional recovered prototype/effects.
    `NoteRemovedAccesses` may additionally analyze an all-volatile reference when unreachable
    removal needs checking. Engine objects are destroyed before results reach the UI.
@@ -96,7 +102,11 @@ the end of whatever it is given.
    a narrowly applicable captured-register target hint. A click navigates to the first
    originating instruction; the context menu exposes additional contributing instructions,
    function navigation/corrections, rename and memory navigation through `Request` values
-   that App handles.
+   that App handles. The way back is `AssemblyPanel`'s **Show in Pseudocode** (`Request::showPseudocode`)
+   -> `DecompilerPanel::ShowInstruction`, which waits for the function to be shown and then
+   selects and scrolls to the line `LineForInstruction`/`InstructionLineIndex` (Sh2Decompiler.h) names;
+   an instruction folded into another's line gets that line and a note. With Follow PC at a stop
+   each installed result selects the PC's line.
 
 ```mermaid
 flowchart TD

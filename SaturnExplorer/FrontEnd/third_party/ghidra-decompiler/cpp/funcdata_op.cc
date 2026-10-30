@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
+ * Modified for SaturnExplorer: an op built by the instruction in a delay slot is flagged, as are the ops made in its place (patches/0075-engine-delay-slot-ops-marked.patch).
  * Modified for SaturnExplorer: every LOAD and STORE's fate is recorded (patches/0017-access-fates.patch).
  * Modified for SaturnExplorer: the instructions and jump tables the flow recovered are recorded (patches/0021-flow-instructions.patch).
  * Modified for SaturnExplorer: a cloned jump-table is owned from the moment it is made (patches/0040-jumptable-tracedag-allocation-failure.patch).
@@ -710,7 +711,10 @@ void Funcdata::opInsertInput(PcodeOp *op,Varnode *vn,int4 slot)
 PcodeOp *Funcdata::newOp(int4 inputs,const Address &pc)
 
 {
-  return obank.create(inputs,pc);
+  PcodeOp *op = obank.create(inputs,pc);
+  if (slotSource && slotSourceAddr == pc)
+    op->setFromDelaySlot();	// SaturnExplorer (0075): made for the rewrite of an op that a delay slot's instruction built
+  return op;
 }
 
 /// This method is typically used for cloning.
@@ -1022,6 +1026,8 @@ PcodeOp *Funcdata::cloneOp(const PcodeOp *op,const SeqNum &seq)
   opSetOpcode(newop,op->code());
   uint4 fl = op->flags & (PcodeOp::startmark | PcodeOp::startbasic);
   newop->setFlag(fl);
+  if (op->isFromDelaySlot())
+    newop->setFromDelaySlot();	// SaturnExplorer (0075)
   if (op->getOut() != (Varnode *)0)
     opSetOutput(newop,cloneVarnode(op->getOut()));
   for(int4 i=0;i<op->numInput();++i)
@@ -1063,6 +1069,8 @@ PcodeOp *Funcdata::newOpBefore(PcodeOp *follow,OpCode opc,Varnode *in1,Varnode *
 
   sz = (in3 == (Varnode *)0) ? 2 : 3;
   newop = newOp(sz,follow->getAddr());
+  if (follow->isFromDelaySlot())
+    newop->setFromDelaySlot();	// SaturnExplorer (0075)
   opSetOpcode(newop,opc);
   newUniqueOut(in1->getSize(),newop);
   opSetInput(newop,in1,0);

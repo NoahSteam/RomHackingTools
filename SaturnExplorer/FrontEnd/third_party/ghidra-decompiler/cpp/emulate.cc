@@ -12,6 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified for SaturnExplorer: a raw op says whether the instruction in a delay slot built it (patches/0075-engine-delay-slot-ops-marked.patch).
  */
 #include "emulate.hh"
 
@@ -125,6 +127,7 @@ void PcodeEmitCache::dump(const Address &addr,OpCode opc,VarnodeData *outvar,Var
 {
   PcodeOpRaw *op = new PcodeOpRaw();
   op->setSeqNum(addr,uniq);
+  op->setDelaySlot(fromDelaySlot);	// SaturnExplorer (0075)
   opcache.push_back(op);
   op->setBehavior( inst[opc] );
   uniq += 1;

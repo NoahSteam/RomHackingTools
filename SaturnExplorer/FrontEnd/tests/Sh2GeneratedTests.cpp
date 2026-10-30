@@ -179,7 +179,7 @@
 //       (LineOriginText) and lists them; every access the ledger lists has a token of its instruction on its first line; every
 //       call in the final p-code has a token at its instruction; every executed instruction in the body is counted by what carries
 //       it (`map.executed.*`: a token, or none because the instruction is a delay slot, a move or an operation folded into its user).
-//       SE_GENERATED_MUTATE=tokodd|tokoutside|tokfirst|tokdrop|tokcall|tokunmark|tokhover damages a result as the defect would.
+//       SE_GENERATED_MUTATE=tokodd|tokoutside|tokfirst|tokdrop|tokcall|tokunmark|tokhover|tokslot|tokframe damages a result as the defect would.
 //   And the generator's own contract (not the decompiler's): a version 2 function returns, restores
 //   r8-r15 and ends with PR as it began (but what it was generated to change: Func::clobbers).
 // The ground truth is emulator runs with different inputs (registers, what hardware reads
@@ -197,7 +197,7 @@
 //   SE_GENERATED_SHRINK=<n>  how many findings to reduce (default 3; 0 none; large: all)
 //   SE_GENERATED_VERBOSE=1   print the full report of every failing seed, not just the first few
 //   SE_GENERATED_TOKENS=1    print each output line with the addresses its tokens came from
-//   SE_GENERATED_MUTATE=1|ledger|second|alias|params|ret|body|cases|warn|preserved|claims|lent|data|honour|kept|tokodd|tokoutside|tokfirst|tokdrop|tokcall|tokunmark|tokhover
+//   SE_GENERATED_MUTATE=1|ledger|second|alias|params|ret|body|cases|warn|preserved|claims|lent|data|honour|kept|tokodd|tokoutside|tokfirst|tokdrop|tokcall|tokunmark|tokhover|tokslot|tokframe
 //                            damage every result as one defect would (1: delete the first ledger entry) and
 //                            pass only if the check reports it: the checks checked
 //   SE_GENERATED_COVERAGE=1  print the mnemonics of the generated programs and how often each was emitted
@@ -2668,7 +2668,7 @@ struct RegUse
 };
 
 // LOAD and STORE are where the memory accesses happen; hooking them gives the exact width and the
-// p-code op's instruction (a delay slot's own address, as the decompiler's ops carry), which a
+// p-code op's instruction (a delay slot's own address: the engine marks the ops a slot built, patch 0075), which a
 // MemoryBank cannot: it sees aligned words. Every op's register inputs and output are noted too.
 class TracingEmulate : public ghidra::EmulatePcodeCache
 {
@@ -2764,7 +2764,7 @@ protected:
         off = ghidra::AddrSpace::addressToByte(off, spc->getWordSize());
         const int size = currentOp->getOutput()->size;
         memstate->setValue(currentOp->getOutput(),
-                           mEnv->Read(static_cast<uint32_t>(off), size, static_cast<uint32_t>(currentOp->getAddr().getOffset())));
+                           mEnv->Read(static_cast<uint32_t>(off), size, InsnOf(currentOp)));
     }
     void executeStore() override
     {
@@ -2772,11 +2772,16 @@ protected:
         ghidra::uintb off = memstate->getValue(currentOp->getInput(1));
         ghidra::AddrSpace* spc = currentOp->getInput(0)->getSpaceFromConst();
         off = ghidra::AddrSpace::addressToByte(off, spc->getWordSize());
-        mEnv->Write(static_cast<uint32_t>(off), currentOp->getInput(2)->size, val,
-                    static_cast<uint32_t>(currentOp->getAddr().getOffset()));
+        mEnv->Write(static_cast<uint32_t>(off), currentOp->getInput(2)->size, val, InsnOf(currentOp));
     }
 
 private:
+    // The instruction an op belongs to: the translator gives a delayed branch and the instruction in its slot one address, the branch's, and
+    // the engine marks the slot's ops (patch 0075, A7-10), so a slot's access is traced at the slot, as the decompiler's ledger names it.
+    static uint32_t InsnOf(const ghidra::PcodeOpRaw* op)
+    {
+        return static_cast<uint32_t>(op->getAddr().getOffset()) + (op->isDelaySlot() ? 2u : 0u);
+    }
     Env* mEnv;
     ghidra::AddrSpace* mRegSpace = nullptr;
     static constexpr int kUse = 21;   // r0-r15, SR, GBR, VBR, MACH, MACL
@@ -4090,7 +4095,11 @@ void Mutate(DecompileResult& r, const Subject& s, int fi)
         l.text = "  return unaff_r8 + unaff_r9 + unaff_r10 + unaff_r11 + unaff_r12 + unaff_r13 + unaff_r14 + unaff_gbr + unaff_vbr;";
         r.lines.push_back(l);
     }
-    else if (dts::MutateMapping(r, gMutateKind)) {}
+    else if (dts::MutateMapping(r, gMutateKind, [&s](uint32_t pc, uint16_t& w) {
+                 if (s.UnitOf(pc) < 0) return false;
+                 w = s.WordAt(pc);
+                 return true;
+             })) {}
     else if (gMutateKind == "data")
         for (const FnInfo& f : s.fns)
             if (!f.layout.data.empty()) r.body.push_back(f.layout.data[0]);
@@ -4928,6 +4937,8 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
             flag("map-call-unmapped", audit.callUnmapped);
             flag("map-call-removed", audit.callGoneUnsaid);
             flag("map-round-trip", audit.roundTrip);
+            flag("map-access-at-branch", audit.accessAtBranch);
+            flag("map-frame-store", audit.frameStoreMissing);
             count("map.lines", audit.lines);
             count("map.lines.one", audit.single);
             count("map.lines.several", audit.multi);

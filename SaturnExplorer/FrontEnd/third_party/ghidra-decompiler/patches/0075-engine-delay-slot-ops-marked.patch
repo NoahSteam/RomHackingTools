@@ -1,0 +1,385 @@
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/action.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/action.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/action.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/action.cc
+@@ -13,6 +13,7 @@
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
+  *
++ * Modified for SaturnExplorer: the ops a rule makes for an op of a delay slot's instruction are the slot's too (patches/0075-engine-delay-slot-ops-marked.patch).
+  * Modified for SaturnExplorer: host cancellation check-points (patches/0001-cancel-flag.patch).
+  * Modified for SaturnExplorer: a cloned action tree that cannot be completed or registered is freed (patches/0032-allocation-failure-order-2.patch).
+  * Modified for SaturnExplorer: a repeating action stops, with a warning, after a bounded number of passes (patches/0055-engine-action-repeats-bounded.patch).
+@@ -878,7 +879,9 @@ int4 ActionPool::processOp(PcodeOp *op,Funcdata &data)
+     data.debugActivate();
+ #endif
+     rl->count_tests += 1;
++    data.setSlotSource(op);	// SaturnExplorer (0075)
+     res = rl->applyOp(op,data);
++    data.clearSlotSource();
+ #ifdef OPACTION_DEBUG
+     data.debugModPrint(rl->getName());
+ #endif
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc
+@@ -13,6 +13,7 @@
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
+  *
++ * Modified for SaturnExplorer: the casts made for an op of a delay slot's instruction are the slot's too (patches/0075-engine-delay-slot-ops-marked.patch).
+  * Modified for SaturnExplorer: unused loads kept until shown to be ordinary memory (patches/0009-keep-unused-loads.patch).
+  * Modified for SaturnExplorer: a load is read once and in place, never duplicated or moved past another memory operation (patches/0010-load-not-duplicated.patch).
+  * Modified for SaturnExplorer: a load is printed in the block it is made in (patches/0012-load-in-place.patch).
+@@ -2906,6 +2907,7 @@ int4 ActionSetCasts::apply(Funcdata &data)
+       if (op->notPrinted()) continue;
+       OpCode opc = op->code();
+       if (opc == CPUI_CAST) continue;
++      data.setSlotSource(op);	// SaturnExplorer (0075): the casts made for an op of a delay slot's instruction are the slot's too
+       if (opc == CPUI_PTRADD) {	// Check for PTRADD that no longer fits its pointer
+ 	int4 sz = (int4)op->getIn(2)->getOffset();
+ 	Datatype *ct = op->getIn(0)->getHighTypeReadFacing(op);
+@@ -2947,6 +2949,7 @@ int4 ActionSetCasts::apply(Funcdata &data)
+ 	count += castOutput(op,data,castStrategy);
+     }
+   }
++  data.clearSlotSource();
+   return 0;			// Indicate full completion
+ }
+ 
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/emulate.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/emulate.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/emulate.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/emulate.cc
+@@ -12,6 +12,8 @@
+  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
++ *
++ * Modified for SaturnExplorer: a raw op says whether the instruction in a delay slot built it (patches/0075-engine-delay-slot-ops-marked.patch).
+  */
+ #include "emulate.hh"
+ 
+@@ -125,6 +127,7 @@ void PcodeEmitCache::dump(const Address &addr,OpCode opc,VarnodeData *outvar,Var
+ {
+   PcodeOpRaw *op = new PcodeOpRaw();
+   op->setSeqNum(addr,uniq);
++  op->setDelaySlot(fromDelaySlot);	// SaturnExplorer (0075)
+   opcache.push_back(op);
+   op->setBehavior( inst[opc] );
+   uniq += 1;
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata.cc
+@@ -13,6 +13,7 @@
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
+  *
++ * Modified for SaturnExplorer: an op built by the instruction in a delay slot is flagged, as are the ops made in its place (patches/0075-engine-delay-slot-ops-marked.patch).
+  * Modified for SaturnExplorer: the destructor frees the return-recovery state (patches/0004-funcdata-frees-active-output.patch).
+  * Modified for SaturnExplorer: every LOAD and STORE's fate is recorded (patches/0017-access-fates.patch).
+  * Modified for SaturnExplorer: the instructions and jump tables the flow recovered are recorded (patches/0021-flow-instructions.patch).
+@@ -213,6 +214,7 @@ void Funcdata::recordAccessFate(const PcodeOp *op,bool store,int4 size,const Add
+   AccessRecord rec;
+   rec.time = op->getTime();
+   rec.pc = op->getAddr();
++  rec.slot = op->isFromDelaySlot();	// SaturnExplorer (0075)
+   rec.addr = addr;
+   rec.store = store;
+   rec.size = size;
+@@ -327,6 +329,7 @@ void Funcdata::checkPieceSize(const PcodeOp *op)
+   AccessRecord rec;
+   rec.time = op->getTime();
+   rec.pc = op->getAddr();
++  rec.slot = op->isFromDelaySlot();	// SaturnExplorer (0075)
+   rec.store = false;
+   rec.size = op->getOut()->getSize();
+   rec.fate = fate_malformed_piece;
+@@ -1128,6 +1131,7 @@ void PcodeEmitFd::dump(const Address &addr,OpCode opc,VarnodeData *outvar,Varnod
+   PcodeOp *op;
+   Varnode *vn;
+ 
++  fd->clearSlotSource();	// SaturnExplorer (0075): not the rewrite of another op
+   if (outvar != (VarnodeData *)0) {
+     Address oaddr(outvar->space,outvar->offset);
+     op = fd->newOp(isize,addr);
+@@ -1136,6 +1140,8 @@ void PcodeEmitFd::dump(const Address &addr,OpCode opc,VarnodeData *outvar,Varnod
+   else
+     op = fd->newOp(isize,addr);
+   fd->opSetOpcode(op,opc);
++  if (fromDelaySlot)
++    op->setFromDelaySlot();	// SaturnExplorer (0075)
+   int4 i=0;
+   if (op->isCodeRef()) { // Is the first input parameter a code reference
+     Address addrcode(vars[0].space,vars[0].offset);
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata.hh b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata.hh
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata.hh
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata.hh
+@@ -13,6 +13,7 @@
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
+  *
++ * Modified for SaturnExplorer: an op built by the instruction in a delay slot is flagged, as are the ops made in its place (patches/0075-engine-delay-slot-ops-marked.patch).
+  * Modified for SaturnExplorer: every LOAD and STORE's fate is recorded (patches/0017-access-fates.patch).
+  * Modified for SaturnExplorer: the instructions and jump tables the flow recovered are recorded (patches/0021-flow-instructions.patch).
+  * Modified for SaturnExplorer: an op that changes keeps the cached masks around it a superset of the truth (patches/0054-engine-cached-masks-never-narrower.patch).
+@@ -66,6 +67,7 @@ struct AccessRecord {
+   bool store;			///< \b true for a write, \b false for a read
+   int4 size;			///< Number of bytes accessed
+   AccessFate fate;		///< How it ended
++  bool slot = false;		///< SaturnExplorer (0075): the op was built by the instruction in a delay slot; \b pc is its branch's
+ };
+ 
+ /// \brief A call of the flow that heritage guarded a stack local at: it may read it (SaturnExplorer, 0068)
+@@ -142,6 +144,8 @@ class Funcdata {
+   Address baseaddr;		///< Starting code address of binary data
+   FuncProto funcp;		///< Prototype of this function
+   ScopeLocal *localmap;		///< Local variables (symbols in the function scope)
++  bool slotSource = false;	///< SaturnExplorer (0075): the op being rewritten was built by a delay slot's instruction
++  Address slotSourceAddr;	///< ...and this is its address: an op made at it for the rewrite is the slot's too
+ 
+   vector<FuncCallSpecs *> qlst;	///< List of calls this function makes
+   vector<JumpTable *> jumpvec;	///< List of jump-tables for this function
+@@ -537,6 +541,9 @@ public:
+   // op routines
+   PcodeOp *newOp(int4 inputs,const Address &pc);		/// Allocate a new PcodeOp with Address
+   PcodeOp *newOp(int4 inputs,const SeqNum &sq);			/// Allocate a new PcodeOp with sequence number
++  /// SaturnExplorer (0075): the ops made until clearSlotSource() at the address of a delay slot's op are the slot's too
++  void setSlotSource(const PcodeOp *op) { slotSource = op->isFromDelaySlot(); if (slotSource) slotSourceAddr = op->getAddr(); }
++  void clearSlotSource(void) { slotSource = false; }	///< SaturnExplorer (0075): end setSlotSource()
+   PcodeOp *newOpBefore(PcodeOp *follow,OpCode opc,Varnode *in1,Varnode *in2,Varnode *in3=(Varnode *)0);
+   PcodeOp *cloneOp(const PcodeOp *op,const SeqNum &seq);	/// Clone a PcodeOp into \b this function
+   PcodeOp *newIndirect(PcodeOp *target);			///< Allocate a new CPUI_INDIRECT
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_block.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_block.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_block.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_block.cc
+@@ -13,6 +13,7 @@
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
+  *
++ * Modified for SaturnExplorer: an op built by the instruction in a delay slot is flagged, as are the ops made in its place (patches/0075-engine-delay-slot-ops-marked.patch).
+  * Modified for SaturnExplorer: host cancellation check-points (patches/0001-cancel-flag.patch).
+  * Modified for SaturnExplorer: every LOAD and STORE's fate is recorded (patches/0017-access-fates.patch).
+  * Modified for SaturnExplorer: a jump-table is owned from the moment it is made (patches/0040-jumptable-tracedag-allocation-failure.patch).
+@@ -1012,7 +1013,7 @@ PcodeOp *CloneBlockOps::buildOpClone(PcodeOp *op)
+       PcodeOp::no_indirect_collapse | PcodeOp::calculated_bool | PcodeOp::ptrflow);
+   dup->setFlag(fl);
+   fl = op->addlflags & (PcodeOp::special_prop | PcodeOp::special_print | PcodeOp::incidental_copy |
+-      PcodeOp::is_cpool_transformed | PcodeOp::stop_type_propagation | PcodeOp::store_unmapped);
++      PcodeOp::is_cpool_transformed | PcodeOp::stop_type_propagation | PcodeOp::store_unmapped | PcodeOp::from_delay_slot);
+   dup->setAdditionalFlag(fl);
+ 
+   cloneList.emplace_back(dup,op);	// Map from clone to orig
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_op.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_op.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_op.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_op.cc
+@@ -13,6 +13,7 @@
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
+  *
++ * Modified for SaturnExplorer: an op built by the instruction in a delay slot is flagged, as are the ops made in its place (patches/0075-engine-delay-slot-ops-marked.patch).
+  * Modified for SaturnExplorer: every LOAD and STORE's fate is recorded (patches/0017-access-fates.patch).
+  * Modified for SaturnExplorer: the instructions and jump tables the flow recovered are recorded (patches/0021-flow-instructions.patch).
+  * Modified for SaturnExplorer: a cloned jump-table is owned from the moment it is made (patches/0040-jumptable-tracedag-allocation-failure.patch).
+@@ -710,7 +711,10 @@ void Funcdata::opInsertInput(PcodeOp *op,Varnode *vn,int4 slot)
+ PcodeOp *Funcdata::newOp(int4 inputs,const Address &pc)
+ 
+ {
+-  return obank.create(inputs,pc);
++  PcodeOp *op = obank.create(inputs,pc);
++  if (slotSource && slotSourceAddr == pc)
++    op->setFromDelaySlot();	// SaturnExplorer (0075): made for the rewrite of an op that a delay slot's instruction built
++  return op;
+ }
+ 
+ /// This method is typically used for cloning.
+@@ -1022,6 +1026,8 @@ PcodeOp *Funcdata::cloneOp(const PcodeOp *op,const SeqNum &seq)
+   opSetOpcode(newop,op->code());
+   uint4 fl = op->flags & (PcodeOp::startmark | PcodeOp::startbasic);
+   newop->setFlag(fl);
++  if (op->isFromDelaySlot())
++    newop->setFromDelaySlot();	// SaturnExplorer (0075)
+   if (op->getOut() != (Varnode *)0)
+     opSetOutput(newop,cloneVarnode(op->getOut()));
+   for(int4 i=0;i<op->numInput();++i)
+@@ -1063,6 +1069,8 @@ PcodeOp *Funcdata::newOpBefore(PcodeOp *follow,OpCode opc,Varnode *in1,Varnode *
+ 
+   sz = (in3 == (Varnode *)0) ? 2 : 3;
+   newop = newOp(sz,follow->getAddr());
++  if (follow->isFromDelaySlot())
++    newop->setFromDelaySlot();	// SaturnExplorer (0075)
+   opSetOpcode(newop,opc);
+   newUniqueOut(in1->getSize(),newop);
+   opSetInput(newop,in1,0);
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_varnode.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_varnode.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_varnode.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_varnode.cc
+@@ -13,6 +13,7 @@
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
+  *
++ * Modified for SaturnExplorer: an op built by the instruction in a delay slot is flagged, as are the ops made in its place (patches/0075-engine-delay-slot-ops-marked.patch).
+  * Modified for SaturnExplorer: a call output a locked prototype returns is a return value whatever else it is used for (patches/0044-engine-round5-printed-value-fixes.patch).
+  * Modified for SaturnExplorer: a write of the return register with the value it holds is not a value of its own (patches/0048-engine-identity-write-return.patch).
+  * Modified for SaturnExplorer: a Varnode that takes over the readers of another is consumed in the bits the other was (patches/0051-engine-replaced-varnode-consume-merged.patch).
+@@ -761,6 +762,8 @@ bool Funcdata::replaceVolatile(Varnode *vn)
+     if (!vn->hasNoDescend()) throw LowlevelError("Volatile memory was propagated");
+     PcodeOp *defop = vn->getDef();
+     newop = newOp(3,defop->getAddr());
++    if (defop->isFromDelaySlot())
++      newop->setFromDelaySlot();	// SaturnExplorer (0075)
+     opSetOpcode(newop,CPUI_CALLOTHER);
+     // Create a userop of type specified by vw_op
+     opSetInput(newop,newConstant(4,vw_op->getIndex()),0);
+@@ -782,6 +785,8 @@ bool Funcdata::replaceVolatile(Varnode *vn)
+     if (readop == (PcodeOp *)0)
+       throw LowlevelError("Volatile memory value used more than once");
+     newop = newOp(2,readop->getAddr());
++    if (readop->isFromDelaySlot())
++      newop->setFromDelaySlot();	// SaturnExplorer (0075)
+     opSetOpcode(newop,CPUI_CALLOTHER);
+     // Create a temp to replace the volatile variable
+     Varnode *tmp = newUniqueOut(vn->getSize(),newop);
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/op.hh b/Ghidra/Features/Decompiler/src/decompile/cpp/op.hh
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/op.hh
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/op.hh
+@@ -13,6 +13,7 @@
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
+  *
++ * Modified for SaturnExplorer: an op built by the instruction in a delay slot is flagged, as are the ops made in its place (patches/0075-engine-delay-slot-ops-marked.patch).
+  * Modified for SaturnExplorer: a recovered switch's table lookup is flagged (patches/0014-keep-unused-loads-late.patch).
+  * Modified for SaturnExplorer: the multiply of a division term that is wider than its width is flagged (patches/0064-engine-divopt-sign-and-wrap-rule-guards.patch).
+  * Modified for SaturnExplorer: a LOAD or STORE folded into the stack frame is flagged, and so is its value being read (patches/0068-engine-deadcode-late-stack-reads.patch).
+@@ -123,6 +124,7 @@ public:
+     store_unmapped = 0x400,	///< If STORE collapses to a stack Varnode, force it to be unmapped
+     immed_copy = 0x800,		///< Copy has propagated into input of \b this op
+     store_aliasupdate = 0x1000,	///< If alias information for \b this STORE has been changed
++    from_delay_slot = 0x400000,	///< SaturnExplorer (0075): the op was built by the instruction in a delay slot, which the translator gives its branch's address
+     jumptable_lookup = 0x2000,	///< SaturnExplorer: the LOAD that read a recovered switch's table (the switch now stands for it)
+     div_product_wide = 0x4000,	///< SaturnExplorer: the INT_MULT of a division term (RuleDivTermAdd, RuleDivTermAdd2) whose exact product is wider than the multiply
+     frame_fold = 0x8000,	///< SaturnExplorer (0068): a flow LOAD or STORE that RuleLoadVarnode or RuleStoreVarnode made a COPY of a stack Varnode
+@@ -246,6 +248,8 @@ public:
+   bool hasCopyImmed(int4 slot) const;	///< Return \b true if a COPY propagation from an immediate input block has happened
+   bool hasAliasUpdate(void) const { return ((addlflags & store_aliasupdate)!=0); }	///< Has alias information for \b this been updated
+   void setAliasUpdate(void) { addlflags |= store_aliasupdate; }		///< Mark that there is new alias information for \b this op
++  bool isFromDelaySlot(void) const { return ((addlflags&PcodeOp::from_delay_slot)!=0); }	///< SaturnExplorer (0075): was this built by the instruction in a delay slot
++  void setFromDelaySlot(void) { addlflags |= from_delay_slot; }	///< SaturnExplorer (0075): mark an op built by the instruction in a delay slot
+   /// \brief Return \b true if this LOADs or STOREs from a dynamic \e spacebase pointer
+   bool usesSpacebasePtr(void) const { return ((flags&PcodeOp::spacebase_ptr)!=0); }
+   uintm getCseHash(void) const;	///< Return hash indicating possibility of common subexpression elimination
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/pcoderaw.hh b/Ghidra/Features/Decompiler/src/decompile/cpp/pcoderaw.hh
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/pcoderaw.hh
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/pcoderaw.hh
+@@ -12,6 +12,8 @@
+  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
++ *
++ * Modified for SaturnExplorer: a raw op says whether the instruction in a delay slot built it (patches/0075-engine-delay-slot-ops-marked.patch).
+  */
+ /// \file pcoderaw.hh
+ /// \brief Raw descriptions of varnodes and p-code ops
+@@ -125,7 +127,10 @@ class PcodeOpRaw {
+   SeqNum seq;	                ///< Identifying address and index of this operation
+   VarnodeData *out;		///< Output varnode triple
+   vector<VarnodeData *> in;	///< Raw varnode inputs to this op
++  bool slot = false;		///< SaturnExplorer (0075): built by the instruction in a delay slot
+ public:
++  void setDelaySlot(bool val) { slot = val; }	///< SaturnExplorer (0075): mark an op built by the instruction in a delay slot
++  bool isDelaySlot(void) const { return slot; }	///< SaturnExplorer (0075): was this op built by the instruction in a delay slot
+   void setBehavior(OpBehavior *be); ///< Set the opcode for this op
+   OpBehavior *getBehavior(void) const; ///< Retrieve the behavior for this op
+   OpCode getOpcode(void) const;	///< Get the opcode for this op
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/sleigh.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/sleigh.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/sleigh.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/sleigh.cc
+@@ -13,6 +13,7 @@
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
+  *
++ * Modified for SaturnExplorer: the p-code of a delay slot's instruction is marked as it is built (patches/0075-engine-delay-slot-ops-marked.patch).
+  * Modified for SaturnExplorer: cache pointers cleared after delete (patches/0002-sleigh-reset-null-caches.patch).
+  * Modified for SaturnExplorer: the parse-tree cache is least recently used (patches/0020-sleigh-cache-lru.patch).
+  * Modified for SaturnExplorer: a parse-tree cache that fails to initialise frees what it made (patches/0023-allocation-failure-order.patch).
+@@ -146,8 +147,12 @@ void PcodeCacher::emit(const Address &addr,PcodeEmit *emt) const
+ {
+   deque<PcodeData>::const_iterator iter;
+ 
+-  for(iter=issued.begin();iter!=issued.end();++iter)
++  emt->fromDelaySlot = false;
++  for(iter=issued.begin();iter!=issued.end();++iter) {
++    emt->fromDelaySlot = (*iter).delaySlot;	// SaturnExplorer (0075)
+     emt->dump(addr,(*iter).opc,(*iter).outvar,(*iter).invar,(*iter).isize);
++  }
++  emt->fromDelaySlot = false;
+ }
+ 
+ /// \brief Generate a concrete VarnodeData object from the given template (VarnodeTpl)
+@@ -382,6 +387,7 @@ void SleighBuilder::delaySlot(OpTpl *op)
+   int4 fallOffset = tmp->getLength();
+   int4 delaySlotByteCnt = tmp->getParserContext()->getDelaySlot();
+   int4 bytecount = 0;
++  size_t firstSlotOp = cache->numIssued();	// SaturnExplorer (0075): what is issued from here to the end of the slot is the slot's
+   do {
+     Address newaddr = baseaddr + fallOffset;
+     setUniqueOffset(newaddr);
+@@ -397,6 +403,7 @@ void SleighBuilder::delaySlot(OpTpl *op)
+     fallOffset += len;
+     bytecount += len;
+   } while(bytecount < delaySlotByteCnt);
++  cache->markDelaySlot(firstSlotOp);
+   walker = tmp;			// Restore original context
+   uniqueoffset = olduniqueoffset;
+ }
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/sleigh.hh b/Ghidra/Features/Decompiler/src/decompile/cpp/sleigh.hh
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/sleigh.hh
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/sleigh.hh
+@@ -12,6 +12,8 @@
+  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
++ *
++ * Modified for SaturnExplorer: the p-code of a delay slot's instruction is marked as it is built (patches/0075-engine-delay-slot-ops-marked.patch).
+  */
+ /// \file sleigh.hh
+ /// \brief Classes and utilities for the main SLEIGH engine
+@@ -46,6 +48,7 @@ struct PcodeData {
+   VarnodeData *invar;		///< Array of input Varnode data
+   OpCode opc;			///< The op code
+   int4 isize;			///< Number of input Varnodes
++  bool delaySlot;		///< SaturnExplorer (0075): built by the instruction in a delay slot, not by the delayed branch
+ };
+ 
+ /// \brief Class for caching a chunk of p-code, prior to emitting
+@@ -89,8 +92,11 @@ public:
+     PcodeData *res = &issued.back();
+     res->outvar = (VarnodeData *)0;
+     res->invar = (VarnodeData *)0;
++    res->delaySlot = false;
+     return res;
+   }
++  size_t numIssued(void) const { return issued.size(); }	///< SaturnExplorer (0075): the number of ops issued so far
++  void markDelaySlot(size_t first) { for(size_t i=first;i<issued.size();++i) issued[i].delaySlot = true; }	///< SaturnExplorer (0075): the ops issued from the \b first-th on were built by a delay slot
+   void addLabelRef(VarnodeData *ptr);	///< Denote a Varnode holding a \e relative \e branch offset
+   void addLabel(uint4 id);		///< Attach a label to the \e next p-code instruction
+   void clear(void);			///< Reset the cache so that all objects are unallocated
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/translate.hh b/Ghidra/Features/Decompiler/src/decompile/cpp/translate.hh
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/translate.hh
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/translate.hh
+@@ -12,6 +12,8 @@
+  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
++ *
++ * Modified for SaturnExplorer: an emitter is told which ops a delay slot's instruction built (patches/0075-engine-delay-slot-ops-marked.patch).
+  */
+ /// \file translate.hh
+ /// \brief Classes for disassembly and pcode generation
+@@ -93,6 +95,8 @@ public:
+ /// instruction to the application using this class.
+ class PcodeEmit {
+ public:
++  bool fromDelaySlot;		///< SaturnExplorer (0075): the op passed to dump() was built by the instruction in a delay slot
++  PcodeEmit(void) { fromDelaySlot = false; }	///< Constructor
+   virtual ~PcodeEmit(void) {}	///< Virtual destructor
+ 
+   /// \brief The main pcode emit method.

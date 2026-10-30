@@ -165,6 +165,13 @@ public:
     // 'cpu'. Turns Follow PC off and brings the window forward.
     void ShowFunctionContaining(int cpu, uint32_t addr);
 
+    // "Show in Pseudocode" from SH-2 Assembly (A7-5): the function containing 'addr' on 'cpu', as ShowFunctionContaining, and then the line
+    // that instruction became selected and scrolled into view. When the function is not the one shown the request waits for its answer;
+    // any other navigation (a typed entry, Decompile from elsewhere) drops it. An instruction no line names (a move or an operation folded
+    // into the expression that uses it) selects the line of the nearest one that has a line and says so; one outside the function says that.
+    // A second request for the same instruction offers the next line that holds it.
+    void ShowInstruction(int cpu, uint32_t addr);
+
     // The session ended (source closed or replaced, emulator reconnected). App has already bumped
     // the runner's epoch; this forgets what belonged to the old session. Shown output stays, stale.
     void ResetSession();
@@ -229,7 +236,7 @@ public:
     // The user notes the last Draw attached to each shown line ("" for none), by line index.
     const std::vector<std::string>& LineNotes() const { return mLineNotes; }
     // ...and the notes inside the function's body whose instruction no line came from (a folded
-    // literal load, a delay slot), listed under the code so they are not lost: "0x06008218: note".
+    // literal load, a nop), listed under the code so they are not lost: "0x06008218: note".
     const std::vector<std::string>& UnplacedNotes() const { return mUnplacedNotes; }
     uint64_t Captures() const { return mCaptures; }
     uint64_t Submissions() const { return mSubmissions; }
@@ -243,6 +250,11 @@ public:
     bool ItemRect(const char* name, ImVec2& min, ImVec2& max) const;
     // The tooltip the last Draw showed over a line (LineOriginText), or "" when none was open.
     const std::string& LineTooltip() const { return mLineTooltip; }
+    // The line selected (-1 none), what the last "Show in Pseudocode" said when it could not select the instruction's own line, and whether a
+    // request for an instruction is still waiting for its function.
+    int SelectedLine() const { return mSelectedLine; }
+    const std::string& InstructionNote() const { return mInsnNote; }
+    bool WantsInstruction() const { return mWantInsn; }
 
 private:
     enum class TargetKind : uint8_t { FollowPc, Containing, Entry };
@@ -323,6 +335,7 @@ private:
     void DrawHeader(const DecompilerView& view, const decomp::DecompilerRunner& runner, Request& req);
     void DrawStatus(const DecompilerView& view, const decomp::DecompilerRunner& runner);
     void DrawLines(const DecompilerInputs& inputs, Request& req);
+    void ApplyWantedInstruction();   // A7-5: select and scroll to the line of the instruction asked for, once its function is shown
     // The hint for the output on screen: the followed CPU stopped on a register-target call or
     // jump in it whose target the output does not already name. Invalid otherwise.
     decomp::RegisterHint HaltHint() const;
@@ -455,6 +468,15 @@ private:
     std::string mShownEntrySource;
     float mShownWidth = 0.0f;        // widest line, for the horizontal scroll range
     int mSelectedLine = -1;
+    // A7-5: "Show in Pseudocode". The instruction asked for (canonical once applied) waits here for its function to be shown; the line to bring into view
+    // is scrolled to by the next Draw.
+    bool mWantInsn = false;
+    uint32_t mWantInsnAddr = 0;
+    int mScrollToLine = -1;
+    std::string mInsnNote;
+    uint32_t mLastInsn = 0;          // the instruction the last request selected a line for, and which of its lines (the next request offers the next)
+    size_t mLastInsnIndex = 0;
+    uint64_t mLastInsnRevision = ~0ull;
 
     std::list<CacheEntry> mCache;    // most recent first
 

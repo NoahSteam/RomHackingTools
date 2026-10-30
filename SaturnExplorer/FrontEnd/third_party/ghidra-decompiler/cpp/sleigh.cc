@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
+ * Modified for SaturnExplorer: the p-code of a delay slot's instruction is marked as it is built (patches/0075-engine-delay-slot-ops-marked.patch).
  * Modified for SaturnExplorer: cache pointers cleared after delete (patches/0002-sleigh-reset-null-caches.patch).
  * Modified for SaturnExplorer: the parse-tree cache is least recently used (patches/0020-sleigh-cache-lru.patch).
  * Modified for SaturnExplorer: a parse-tree cache that fails to initialise frees what it made (patches/0023-allocation-failure-order.patch).
@@ -146,8 +147,12 @@ void PcodeCacher::emit(const Address &addr,PcodeEmit *emt) const
 {
   deque<PcodeData>::const_iterator iter;
 
-  for(iter=issued.begin();iter!=issued.end();++iter)
+  emt->fromDelaySlot = false;
+  for(iter=issued.begin();iter!=issued.end();++iter) {
+    emt->fromDelaySlot = (*iter).delaySlot;	// SaturnExplorer (0075)
     emt->dump(addr,(*iter).opc,(*iter).outvar,(*iter).invar,(*iter).isize);
+  }
+  emt->fromDelaySlot = false;
 }
 
 /// \brief Generate a concrete VarnodeData object from the given template (VarnodeTpl)
@@ -382,6 +387,7 @@ void SleighBuilder::delaySlot(OpTpl *op)
   int4 fallOffset = tmp->getLength();
   int4 delaySlotByteCnt = tmp->getParserContext()->getDelaySlot();
   int4 bytecount = 0;
+  size_t firstSlotOp = cache->numIssued();	// SaturnExplorer (0075): what is issued from here to the end of the slot is the slot's
   do {
     Address newaddr = baseaddr + fallOffset;
     setUniqueOffset(newaddr);
@@ -397,6 +403,7 @@ void SleighBuilder::delaySlot(OpTpl *op)
     fallOffset += len;
     bytecount += len;
   } while(bytecount < delaySlotByteCnt);
+  cache->markDelaySlot(firstSlotOp);
   walker = tmp;			// Restore original context
   uniqueoffset = olduniqueoffset;
 }

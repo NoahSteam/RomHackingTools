@@ -437,6 +437,7 @@ void TestCapturedInspectionUi()
     CHECK(Has(f.panel.LineTooltip(), "0x06101234"));
     CHECK(Has(f.panel.LineTooltip(), "Source: test / master SH-2 / frame 1"));
     CHECK(Has(f.panel.LineTooltip(), "not a recovered value"));
+    CHECK(Has(f.panel.LineTooltip(), "Decompiled from the SH-2 instruction at 0x06004000"));   // A7-13: the origin follows the value
     CHECK(f.backend.reads == reads);
 
     auto open = [&] {
@@ -739,6 +740,151 @@ void TestGuideQuotesTheTooltip()
     CHECK(Has(guide, "Show Other Instructions"));
 }
 #endif
+
+// A7-5: the way back from SH-2 Assembly. "Show in Pseudocode" selects and scrolls to the line the instruction became; both instructions of
+// `0 < param_1` (the compare and the branch) lead to its line, an instruction folded into another's line says so, one the function does not hold
+// says that, and Follow PC at a stop selects the line the PC is at.
+void TestAssemblyBackToLine()
+{
+    Fixture f;
+    // Follow PC at a stop: the master's PC is the `add #1,r0`; its line is selected without a click.
+    CHECK(f.WaitShown("+ 1"));
+    f.Idle(3);
+    const int plusOne = f.LineContaining("+ 1");
+    CHECK(plusOne >= 0 && f.panel.SelectedLine() == plusOne);
+
+    const uint32_t kCmp = 0x06004008u, kBranch = 0x0600400Au, kMovR4 = 0x06004004u;
+    f.panel.ShowInstruction(0, kBranch);
+    f.Idle(4);
+    const int guard = f.LineContaining("0 < param_1");
+    CHECK(guard >= 0);
+    CHECK(f.panel.SelectedLine() == guard);
+    CHECK(!f.panel.WantsInstruction());
+    f.panel.ShowInstruction(0, kCmp);
+    f.Idle(4);
+    CHECK(f.panel.SelectedLine() == guard);
+    CHECK(f.panel.InstructionNote().empty());
+
+    // an instruction no line names: its neighbour's line, and the note says so
+    const LineLookup folded = LineForInstruction(f.Shown(), kMovR4);
+    if (folded.kind == LineLookup::Folded)
+    {
+        f.panel.ShowInstruction(0, kMovR4);
+        f.Idle(4);
+        CHECK(Has(f.panel.InstructionNote(), "folded into the expression"));
+        CHECK(f.panel.SelectedLine() == static_cast<int>(folded.lines[0]));
+    }
+    else
+        CHECK(folded.kind == LineLookup::Exact);   // (the engine may keep a token for it)
+
+    // an address in no function this one holds: the literal pool word the caller loads (data, outside the body)
+    f.panel.ShowInstruction(0, dts::kFixture1Literal);
+    f.Idle(6);
+    CHECK(Has(f.panel.InstructionNote(), "not in the function shown"));
+    CHECK(!f.panel.WantsInstruction());
+}
+
+// A7-5: a long function: the line is brought into view even though the clipper would not have drawn it.
+void TestShowInstructionScrolls()
+{
+    Fixture f;
+    const uint32_t base = 0x06010000u;
+    f.PutWord(base - 4, 0x000B);
+    f.PutWord(base - 2, 0x0009);
+    uint32_t at = base;
+    uint32_t lastStore = 0;
+    for (int group = 0; group < 10; ++group)
+    {
+        for (int d = 0; d < 16; ++d)
+        {
+            f.PutWord(at, static_cast<uint16_t>(0x1450 | d));   // mov.l r5,@(4*d,r4)
+            lastStore = at;
+            at += 2;
+        }
+        f.PutWord(at, 0x7440);   // add #64,r4
+        at += 2;
+    }
+    f.PutWord(at, 0x000B);       // rts
+    f.PutWord(at + 2, 0x0009);   //   nop
+    f.panel.ShowFunctionContaining(0, base);
+    CHECK(f.WaitShown());
+    f.Idle(3);
+    CHECK(f.Shown().lines.size() > 100);
+    f.panel.ShowInstruction(0, lastStore);
+    f.Idle(6);
+    const LineLookup k = LineForInstruction(f.Shown(), lastStore);
+    CHECK(k.kind == LineLookup::Exact && !k.lines.empty());
+    if (k.lines.empty()) return;
+    const int line = static_cast<int>(k.lines[0]);
+    CHECK(line > 100);
+    CHECK(f.panel.SelectedLine() == line);
+    ImVec2 a, b;
+    CHECK(f.panel.LineRect(line, a, b));   // drawn, so it is in the clip rectangle
+    CHECK(a.y >= 0.0f && b.y <= 380.0f);
+    // ...and asking for an instruction near the top scrolls back
+    f.panel.ShowInstruction(0, base);
+    f.Idle(6);
+    const LineLookup top = LineForInstruction(f.Shown(), base);
+    CHECK(!top.lines.empty() && f.panel.SelectedLine() == static_cast<int>(top.lines[0]));
+    CHECK(f.panel.LineRect(static_cast<int>(top.lines[0]), a, b) && a.y >= 0.0f && b.y <= 380.0f);
+}
+
+// A7-12 and A7-14: the hover text of a halt word is not an instruction's, and a list of instructions says it may not be the whole list.
+void TestOriginTextHaltWordAndFolded()
+{
+    Token halt;
+    halt.addr = 0x060670F5;
+    halt.haltsFlow = true;
+    Line only;
+    only.tokens = { halt };
+    const std::string h = LineOriginText(only);
+    CHECK(Has(h, "do not decode") && Has(h, "0x060670F5") && !Has(h, "SH-2 instruction at"));
+    Token insn;
+    insn.addr = 0x06067000;
+    Line mixed;
+    mixed.tokens = { insn, halt };
+    const std::string m = LineOriginText(mixed);
+    CHECK(Has(m, "SH-2 instruction at 0x06067000") && Has(m, "also stopped at the bytes at 0x060670F5") && !Has(m, " SH-2 instructions"));
+    CHECK(Has(LineOriginText(mixed), "may come from others"));
+    Line two;
+    Token second = insn;
+    second.addr = 0x06067004;
+    two.tokens = { insn, second };
+    CHECK(Has(LineOriginText(two), "2 SH-2 instructions") && Has(LineOriginText(two), "may come from others"));
+}
+
+// A7-5: the order LineForInstruction offers the lines of an instruction: the line it begins, then a line a token that draws something is on,
+// then an empty token's line; a folded instruction takes its neighbour's.
+void TestLineForInstructionOrder()
+{
+    DecompileResult r;
+    r.status = DecompileStatus::Ok;
+    r.body = { { 0x06000000u, 0x06000010u } };
+    auto line = [&](uint32_t first, std::initializer_list<std::pair<uint32_t, bool>> toks) {
+        Line l;
+        l.text = "x";
+        for (const auto& t : toks)
+        {
+            Token k;
+            k.addr = t.first;
+            if (t.second) { k.begin = 0; k.end = 1; }
+            l.tokens.push_back(k);
+        }
+        l.firstAddr = first;
+        r.lines.push_back(l);
+    };
+    line(0x06000002u, { { 0x06000002u, true }, { 0x06000004u, true } });   // 0: begins with 2
+    line(0x06000000u, { { 0x06000000u, true }, { 0x06000004u, false } });  // 1: 4 has an empty token here
+    line(0x06000004u, { { 0x06000004u, true } });                          // 2: begins with 4
+    line(0x06000000u, { { 0x06000000u, true }, { 0x06000006u, true }, { 0x06000004u, true } });   // 3: 4 drawn, not first
+    const LineLookup four = LineForInstruction(r, 0x06000004u);
+    CHECK(four.kind == LineLookup::Exact && four.lines == std::vector<size_t>({ 2, 0, 3, 1 }));
+    const LineLookup eight = LineForInstruction(r, 0x06000008u);   // folded: the next with a line is none; the one before is 6
+    CHECK(eight.kind == LineLookup::Folded && eight.via == 0x06000006u && eight.lines == std::vector<size_t>({ 3 }));
+    const LineLookup after = LineForInstruction(r, 0x0600000Eu);
+    CHECK(after.kind == LineLookup::Folded && after.via == 0x06000006u);
+    CHECK(LineForInstruction(r, 0x06000020u).kind == LineLookup::Outside && LineForInstruction(r, 0x06000020u).lines.empty());
+}
 
 // A7-1 on the panel: hovering a line opens that text over it, and only for a line with an
 // instruction behind it. A line from several instructions says so. Clicking a line without an
@@ -2937,6 +3083,10 @@ int main(int argc, char** argv)
         RUN(TestGuideQuotesTheTooltip());
 #endif
         RUN(TestLineHoverAndNoAddress());
+        RUN(TestAssemblyBackToLine());
+        RUN(TestShowInstructionScrolls());
+        RUN(TestOriginTextHaltWordAndFolded());
+        RUN(TestLineForInstructionOrder());
         RUN(TestOtherInstructionsMenu());
         RUN(TestCpuSwitchKeepsOutput());
         RUN(TestHexWriteReRequests());

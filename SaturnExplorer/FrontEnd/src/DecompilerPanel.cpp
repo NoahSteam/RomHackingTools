@@ -106,7 +106,7 @@ namespace
 
 ImVec4 kAmber() { return ui::Color(ImVec4(0.95f, 0.75f, 0.30f, 1.0f), ImVec4(0.50f,0.36f,0.0f,1.0f)); }
 ImVec4 kRed() { return ui::Color(ImVec4(0.95f, 0.42f, 0.42f, 1.0f), ImVec4(0.65f,0.11f,0.14f,1.0f)); }
-// The instructions after the first that a line's menu lists (the tooltip lists eight; a menu can be longer).
+// The rows of "Show Other Instructions" in view at once (the tooltip lists eight); a line from more scrolls the menu.
 const size_t kMenuInstructions = 24;
 
 // FNV-1a, a 64-bit value at a time: the fingerprints of engine and finder inputs.
@@ -137,6 +137,7 @@ DecompilerPanel::ViewId DecompilerPanel::IdOf(const DecompilerView& view)
 void DecompilerPanel::SetTarget(const Target& target)
 {
     mTarget = target;
+    mWantInsn = false;   // (ShowInstruction asks for it again after) any other navigation drops a request for an instruction
     // Another question: a refusal belonged to the one before it, and so did a Stop.
     mEntryRefused = false;
     ForgetStop();
@@ -152,6 +153,65 @@ void DecompilerPanel::ShowFunctionContaining(int cpu, uint32_t addr)
     t.address = addr;
     SetTarget(t);
     mFocus = true;
+}
+
+void DecompilerPanel::ShowInstruction(int cpu, uint32_t addr)
+{
+    ShowFunctionContaining(cpu, addr);
+    mWantInsn = true;
+    mWantInsnAddr = addr;
+    mInsnNote.clear();
+}
+
+// A7-5. Once the function that holds the instruction is the one shown (not stale), its line is selected and scrolled to. Called by DrawLines
+// every frame; does nothing without a request.
+void DecompilerPanel::ApplyWantedInstruction()
+{
+    if (!mWantInsn) return;
+    // The question found no function: the request cannot be answered, and the entry error says why.
+    if (mResolved && !mEntryOk)
+    {
+        mWantInsn = false;
+        return;
+    }
+    if (!mShownValid || ShownStale() || mShown.status != DecompileStatus::Ok) return;
+    mWantInsn = false;
+    uint32_t insn = mWantInsnAddr;
+    CanonicalAddress(mWantInsnAddr, insn);
+    insn &= ~1u;   // a row address is even; an odd PC is the instruction it is in
+    char b[160];
+    const LineLookup k = LineForInstruction(mShown, insn);
+    if (k.lines.empty())
+    {
+        if (k.kind == LineLookup::Outside)
+            std::snprintf(b, sizeof b, "0x%08X is not in the function shown (outside the instructions flow reached from 0x%08X).", insn, mShown.entry);
+        else
+            std::snprintf(b, sizeof b, "0x%08X is in the function, but no line shows it or a neighbour of it.", insn);
+        mInsnNote = b;
+        return;
+    }
+    // A second request for the same instruction on the same output offers the next line that holds it.
+    size_t pick = 0;
+    if (mLastInsn == insn && mLastInsnRevision == mResultRevision && k.lines.size() > 1 &&
+        mSelectedLine == static_cast<int>(k.lines[std::min(mLastInsnIndex, k.lines.size() - 1)]))
+        pick = (mLastInsnIndex + 1) % k.lines.size();
+    mLastInsn = insn;
+    mLastInsnIndex = pick;
+    mLastInsnRevision = mResultRevision;
+    mSelectedLine = static_cast<int>(k.lines[pick]);
+    mScrollToLine = mSelectedLine;
+    if (k.kind == LineLookup::Folded)
+    {
+        std::snprintf(b, sizeof b, "0x%08X was folded into the expression of another instruction; the line shown is 0x%08X's.", insn, k.via);
+        mInsnNote = b;
+    }
+    else if (k.lines.size() > 1)
+    {
+        std::snprintf(b, sizeof b, "0x%08X is on %zu lines (this is %zu of them; ask again for the next).", insn, k.lines.size(), pick + 1);
+        mInsnNote = b;
+    }
+    else
+        mInsnNote.clear();
 }
 
 void DecompilerPanel::SetCpu(int cpu)
@@ -663,6 +723,14 @@ void DecompilerPanel::Install(DecompileResult& result, const ViewId& snapId, uin
     }
     Learn(mShown);
     mStopped = false;
+    mInsnNote.clear();
+    // Follow PC at a stop (A7-5): the line the PC is at is the one to look at.
+    if (mTarget.kind == TargetKind::FollowPc && mViewHavePc[mCpu & 1] &&
+        (mViewKind == DecompViewKind::LivePaused || mViewKind == DecompViewKind::Static || mViewKind == DecompViewKind::Scrub))
+    {
+        mWantInsn = true;
+        mWantInsnAddr = mViewPc[mCpu & 1];
+    }
     mShownWidth = -1.0f;   // measured at the next Draw, which has a font
     if (!sameFunction)
     {
@@ -1230,6 +1298,7 @@ void DecompilerPanel::DrawStatus(const DecompilerView& view, const DecompilerRun
         ImGui::TextColored(kRed(), "Decompiler disabled for this session: %s", runner.DisabledReason().c_str());
     if (mResolved && !mEntryOk && !mEntryError.empty()) ImGui::TextColored(kRed(), "%s", mEntryError.c_str());
     if (!mNote.empty()) ImGui::TextDisabled("%s", mNote.c_str());
+    if (!mInsnNote.empty()) ImGui::TextDisabled("%s", mInsnNote.c_str());
     if (!mShownValid) return;
 
     switch (mShown.status)
@@ -1460,6 +1529,7 @@ void DecompilerPanel::DrawLines(const DecompilerInputs& inputs, Request& req)
     }
     // A3: shown, because the rest of the function is usually fine, but greyed; stale output dimmed.
     const float alpha = mShown.unsupported ? 0.5f : (ShownStale() ? 0.7f : 1.0f);
+    ApplyWantedInstruction();
 
     // User notes: each on the first line decompiled from its instruction, so a note shows once
     // even when the instruction feeds several lines. Notes are written at whatever mirror the
@@ -1496,7 +1566,7 @@ void DecompilerPanel::DrawLines(const DecompilerInputs& inputs, Request& req)
             }
         }
         // The rest of the body's notes: their instruction feeds a line (a literal load folded into
-        // a constant, a delay slot) without being one, so they have no line of their own.
+        // a constant, a nop) without being one, so they have no line of their own.
         for (const auto& range : mShown.body)
             for (auto it = notes.lower_bound(range.first); it != notes.end() && it->first < range.second; ++it)
                 if (placed.count(it->first) == 0)
@@ -1545,6 +1615,9 @@ void DecompilerPanel::DrawLines(const DecompilerInputs& inputs, Request& req)
     ImDrawList* dl = ImGui::GetWindowDrawList();
     ImGuiListClipper clipper;
     clipper.Begin(static_cast<int>(mShown.lines.size()));
+    // The line a "Show in Pseudocode" selected is scrolled to: it must be submitted, clipped or not.
+    if (mScrollToLine >= 0 && mScrollToLine < static_cast<int>(mShown.lines.size())) clipper.IncludeItemByIndex(mScrollToLine);
+    else mScrollToLine = -1;
     while (clipper.Step())
     {
         for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; ++i)
@@ -1554,6 +1627,7 @@ void DecompilerPanel::DrawLines(const DecompilerInputs& inputs, Request& req)
             if (RowSelectable("##ln", i == mSelectedLine, false))
             {
                 mSelectedLine = i;
+                mInsnNote.clear();
                 // A line navigates to the first SH-2 instruction it was decompiled from.
                 if (ln.firstAddr)
                 {
@@ -1563,6 +1637,11 @@ void DecompilerPanel::DrawLines(const DecompilerInputs& inputs, Request& req)
                 }
             }
             const ImVec2 min = ImGui::GetItemRectMin(), max = ImGui::GetItemRectMax();
+            if (i == mScrollToLine)
+            {
+                ImGui::SetScrollHereY(0.3f);
+                mScrollToLine = -1;
+            }
             mDrawn.push_back(DrawnLine{ i, min, max });
             const bool rowHovered = ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenBlockedByPopup);
             const int tokenIndex = rowHovered ? TokenAtX(ln, ImGui::GetMousePos().x - min.x,
@@ -1576,7 +1655,12 @@ void DecompilerPanel::DrawLines(const DecompilerInputs& inputs, Request& req)
             }
             if (ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip))
             {
-                if (target && InspectionAvailable()) mLineTooltip = InspectionText(*target);
+                if (target && InspectionAvailable())
+                {
+                    // The value first, and then where the line came from: a line several instructions contribute to is marked on every token (A7-13).
+                    mLineTooltip = InspectionText(*target);
+                    if (ln.firstAddr) mLineTooltip += "\n\n" + LineOriginText(ln);
+                }
                 else if (ln.firstAddr) mLineTooltip = LineOriginText(ln);
                 if (!mLineTooltip.empty()) ImGui::SetTooltip("%s", mLineTooltip.c_str());
             }
@@ -1621,11 +1705,15 @@ void DecompilerPanel::DrawLines(const DecompilerInputs& inputs, Request& req)
                     const std::vector<uint32_t> at = LineInstructions(ln);
                     if (at.size() > 1)
                     {
+                        // Every other instruction is reachable (A7-13); the list scrolls past kMenuInstructions rows.
+                        ImGui::SetNextWindowSizeConstraints(ImVec2(0.0f, 0.0f),
+                                                            ImVec2(FLT_MAX, ImGui::GetTextLineHeightWithSpacing() * static_cast<float>(kMenuInstructions) +
+                                                                                ImGui::GetStyle().WindowPadding.y * 2.0f));
                         const bool open = ImGui::BeginMenu("Show Other Instructions");
                         Remember("Show Other Instructions");
                         if (open)
                         {
-                            for (size_t k = 1; k < at.size() && k <= kMenuInstructions; ++k)
+                            for (size_t k = 1; k < at.size(); ++k)
                             {
                                 char b[24];
                                 std::snprintf(b, sizeof b, "0x%08X", at[k]);
@@ -1636,7 +1724,6 @@ void DecompilerPanel::DrawLines(const DecompilerInputs& inputs, Request& req)
                                     req.addr = at[k];
                                 }
                             }
-                            if (at.size() > kMenuInstructions + 1) ImGui::TextDisabled("and %zu more", at.size() - kMenuInstructions - 1);
                             ImGui::EndMenu();
                         }
                     }

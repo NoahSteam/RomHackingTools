@@ -94,6 +94,7 @@ The embedded copy of the runtime files is `FrontEnd/src/Decompiler/Sh2SpecData.h
 | `0070-engine-defined-shifts.patch` | `sign_extend` and `PcodeOp::getConsumeLocal` (`PIECE`, `INT_LEFT`) shift by less than 64 and never a negative value left: x86's results kept, except that the low input of a `PIECE` as wide as its output consumes the output's bits instead of none. |
 | `0071-engine-narrow-compare-constant-sign.patch` | `CastStrategyC::checkIntPromotionForCompare` (`cast.cc`): a constant compared with a narrow named variable or cast takes the variable's signedness into account, so `(uint2)x == -1` (the engine's two-byte compare with 0xFFFF) prints `== 0xffff`, true in C. |
 | `0074-sleighc-sanitizer-clean.patch` | `se-sleighc` is clean under ASan, UBSan and LSan: `SleighCompile::checkSymbols` tests a symbol's type before the `LabelSymbol` downcast, the `ConstTpl` constructors initialize every field (the copy constructor loaded an unset enum), and `opbehavior.cc` gets the notice patch 0059 omitted. The freshness test is a gating run in the sanitizers job again. `sh-2.sla` is unchanged. |
+| `0075-engine-delay-slot-ops-marked.patch` | The ops the instruction in a delay slot builds are flagged (`PcodeOp::from_delay_slot`, set from `SleighBuilder::delaySlot` through `PcodeCacher`/`PcodeEmit::fromDelaySlot`) and so are the ops made for them (`Funcdata::newOp` at the address of the op a rule or `ActionSetCasts` is rewriting, `cloneOp`, `newOpBefore`, `buildOpClone`, `replaceVolatile`); addresses and sequence numbers stay the branch's. The host addresses a flagged op at the branch + 2, so a delay slot's instruction is its own in tokens, the access ledger and the notes. |
 
 MSVC and Apple clang needed no patch beyond these.
 
@@ -195,6 +196,7 @@ applies 0005 to 0008) must run before `se-regen-sla`.
   - 0069: the printed-C pins `A2-101 #0` to `#2` (`SaturnExplorerSh2GeneratedTests`); without the patch all three are `mismatch`.
   - 0070: the UBSan job (`check-sanitizer-logs.sh`): no `runtime error` outside the two accepted SLEIGH sites; the matrix's corpora unchanged.
   - 0071: the printed-C pins `A2-104` and `A2-104 control` (`SaturnExplorerSh2GeneratedTests`; the pin is `mismatch` without the patch) and families 98 and 99 of `dagen16.py` (0 `mismatch` in 26,000 functions; 256 before); the corpora's printed texts unchanged.
+  - 0075: `TestSlotMadeLineIsAddressedToItsBranch`, `TestFrameStoreMaterialisedAtCall` and the access-note fixtures of `TestHardwareVolatility` (`Sh2DecompilerTests.cpp`), the mapping oracle over both corpora and the generator (`map-access-at-branch`: 0; the mutation `tokslot` is seen), the fault suite unchanged; reverting the flag puts every slot access back on its branch.
 
 
   If upstream's Makefile source groups changed, update the lists in `vendor.py`.

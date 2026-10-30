@@ -50,11 +50,13 @@ public:
         bool     stepOut = false;
         bool     decompile = false;       // show the function containing decompileAddr in SH-2 Pseudocode
         uint32_t decompileAddr = 0;
+        bool     showPseudocode = false;  // show the line of the instruction at pseudoAddr in SH-2 Pseudocode (A7-5)
+        uint32_t pseudoAddr = 0;
     };
     void Draw(se_context* ctx, IMemoryBackend& backend, BreakpointManager& bps,
               ExecutionActions& actions, WatchPanel& watch, bool live, Request& req);
 
-    // Offer "Decompile Here" in the row menu: only builds with the decompiler have the panel it opens.
+    // Offer "Decompile Here" and "Show in Pseudocode" in the row menu: only builds with the decompiler have the panel they open.
     void SetOfferDecompile(bool offer) { mOfferDecompile = offer; }
 
     // The CPU the panel is currently viewing (0 master, 1 slave) — used by the App
