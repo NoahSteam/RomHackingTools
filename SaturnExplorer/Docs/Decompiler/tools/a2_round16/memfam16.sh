@@ -1,5 +1,5 @@
 #!/bin/bash
-# usage: memfam16.sh <generator built from mkptr16.py's output> <out dir> <functions per family and width> <first seed> [families (default 91 92 93)]
+# usage: memfam16.sh <SaturnExplorerSh2GeneratedTests (the memory mode is part of it since A2-106; mkptr16.py's scratch copy is no longer needed)> <out dir> <functions per family and width> <first seed> [families (default 91 92 93)]
 # The memory mode of the printed-C differential: families 91 to 93 of dagen16.py at each access width (4, 2, 1), 200 functions per run. <out>/summary.txt gets one line per
 # family, width and chunk of 2,000; a finished chunk leaves a .done and is skipped on a restart.
 here=$(cd "$(dirname "$0")" && pwd)

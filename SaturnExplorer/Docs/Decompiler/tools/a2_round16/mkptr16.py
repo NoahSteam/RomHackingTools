@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 # usage: mkptr16.py <Sh2GeneratedTests.cpp of the tree> <output .cpp>
+# (Superseded: A2-106's fix adopted these edits into FrontEnd/tests/Sh2GeneratedTests.cpp as CCase::ptrWidth, SE_GENERATED_PRINTEDC_PTR=<w> with
+# SE_GENERATED_PRINTEDC_WORDS and MemoryPrintedCFixtures. This script applies to the tree of round 16 only; kept as the record of the scratch version.)
 # The memory mode of the printed-C differential (area 2 round 16). The harness skips every text that dereferences a pointer (the class 'skipped:memory'; the
 # generated register-only functions never make one), so the value flow through memory (a load after a store, the order and the width of accesses, a
 # post-increment, aliasing pointers) has had no by-value oracle in the printed text. With SE_GENERATED_PRINTEDC_PTR=<w> (w = 1, 2 or 4) and

@@ -7990,7 +7990,7 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
             continue;
         }
         std::ostringstream m;
-        const std::string ptrU = ptrW == 1 ? "unsigned char" : ptrW == 2 ? "unsigned short" : "unsigned int";
+        const std::string ptrU = ptrW == 1 ? "uint8_t" : ptrW == 2 ? "uint16_t" : "uint32_t";   // (`char` is a macro in the engine's reading)
         m << "  { /* " << pr.name << " */\n    static const unsigned int D[][18] = {\n" << rows.str() << "    };\n";
         if (ptrMode) m << "    static const unsigned int MC[] = { " << mcs.str() << " 0 };\n";
         m << "    for (unsigned k = 0; k < " << kept << "; ++k) {\n";
@@ -8007,7 +8007,8 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
                 const size_t e = plist.find(',', b);
                 const std::string decl = plist.substr(b, e == std::string::npos ? std::string::npos : e - b);
                 const std::string addr = "(g_frame_base + 0x8000 + (g_in[" + std::to_string(4 + i) + "] - 0x06080000u))";
-                call << (i ? ", " : "") << (decl.find('*') != std::string::npos ? "(void *)(uintptr_t)" + addr : "(int)" + addr);
+                const size_t star = decl.rfind('*');   // `xunknown4 *param_1`: the cast is to `xunknown4 *` (C++ takes no void * for it)
+                call << (i ? ", " : "") << (star != std::string::npos ? "(" + decl.substr(0, star + 1) + ")(uintptr_t)" + addr : "(int)" + addr);
             }
             else call << (i ? ", " : "") << "(int)g_in[" << 4 + i << "]";
         }
@@ -8382,6 +8383,45 @@ const PrintedCFixture kPrintedCFixtures[] = {
 
 // The fixtures of area 2, round 4 (A2-21, A2-22, A2-26): the compiler's division by a constant, scaled by the power of two it
 // was shifted by, and a byte or word put into a stacked longword; with their neighbours that were always right.
+// Memory mode (A2-106, CCase::ptrWidth): functions that dereference r4 and r5, which point into an arena, run by value: the value returned and the arena afterwards
+// are the emulator's. The first fifteen are the shortest of the generator's memory families (Docs/Decompiler/tools/a2_round16/dagen16.py, families 91 to 94 and 97,
+// DAGEN16_W the access width), the last are written for the pins: a store through one pointer read back through the other, which is r4 itself, a neighbour of it or
+// another area (the aliasing the register-only run never had), and a post-increment and a pre-decrement.
+std::vector<CCase> MemoryPrintedCFixtures()
+{
+    std::vector<CCase> out;
+    auto add = [&](const std::string& name, uint32_t width, std::vector<uint16_t> words) {
+        CCase c;
+        c.name = name;
+        c.words = std::move(words);
+        c.ptrWidth = width;
+        out.push_back(c);
+    };
+    add("A2-106 memstraight, width 4 (dagen16 family 91, seed 5000020)", 4, { 0x6163, 0x6273, 0x6373, 0x1406, 0x6152, 0x633E, 0x6013, 0x000B, 0x0009, 0x0009 });
+    add("A2-106 memstraight, width 2 (dagen16 family 91, seed 5000020)", 2, { 0x6163, 0x6273, 0x6373, 0x8146, 0x6151, 0x633E, 0x6013, 0x000B, 0x0009, 0x0009 });
+    add("A2-106 memstraight, width 1 (dagen16 family 91, seed 5000020)", 1, { 0x6163, 0x6273, 0x6373, 0x8046, 0x6150, 0x633E, 0x6013, 0x000B, 0x0009, 0x0009 });
+    add("A2-106 memloop, width 4 (dagen16 family 92, seed 5000001)", 4, { 0x6163, 0x6273, 0x6373, 0xE806, 0xE100, 0x6246, 0x312C, 0x4810, 0x8BFB, 0x6013, 0x000B, 0x0009 });
+    add("A2-106 memloop, width 2 (dagen16 family 92, seed 5000001)", 2, { 0x6163, 0x6273, 0x6373, 0xE806, 0xE100, 0x6245, 0x312C, 0x4810, 0x8BFB, 0x6013, 0x000B, 0x0009 });
+    add("A2-106 memloop, width 1 (dagen16 family 92, seed 5000001)", 1, { 0x6163, 0x6273, 0x6373, 0xE806, 0xE100, 0x6244, 0x312C, 0x4810, 0x8BFB, 0x6013, 0x000B, 0x0009 });
+    add("A2-106 memstruct, width 4 (dagen16 family 93, seed 5000033)", 4, { 0x6163, 0x6273, 0x6373, 0x1462, 0x5243, 0x332C, 0x5254, 0x2269, 0x1524, 0x6033, 0x000B, 0x0009 });
+    add("A2-106 memstruct, width 2 (dagen16 family 93, seed 5000033)", 2, { 0x6163, 0x6273, 0x6373, 0x6063, 0x8142, 0x8543, 0x6203, 0x332C, 0x8554, 0x6203, 0x2269, 0x6023, 0x8154, 0x6033, 0x000B, 0x0009 });
+    add("A2-106 memstruct, width 1 (dagen16 family 93, seed 5000033)", 1, { 0x6163, 0x6273, 0x6373, 0x6063, 0x8042, 0x8443, 0x6203, 0x332C, 0x8454, 0x6203, 0x2269, 0x6023, 0x8054, 0x6033, 0x000B, 0x0009 });
+    add("A2-106 memarr, width 4 (dagen16 family 94, seed 5000035)", 4, { 0x6163, 0x6273, 0x6373, 0x6843, 0x3546, 0x8900, 0x2562, 0x3540, 0x8B00, 0x2562, 0x6043, 0x3088, 0x000B, 0x0009 });
+    add("A2-106 memarr, width 2 (dagen16 family 94, seed 5000035)", 2, { 0x6163, 0x6273, 0x6373, 0x6843, 0x3546, 0x8900, 0x2561, 0x3540, 0x8B00, 0x2561, 0x6043, 0x3088, 0x000B, 0x0009 });
+    add("A2-106 memarr, width 1 (dagen16 family 94, seed 5000035)", 1, { 0x6163, 0x6273, 0x6373, 0x6843, 0x3546, 0x8900, 0x2560, 0x3540, 0x8B00, 0x2560, 0x6043, 0x3088, 0x000B, 0x0009 });
+    add("A2-106 memmac, width 4 (dagen16 family 97, seed 5000014)", 4, { 0x6163, 0x6273, 0x6373, 0x054F, 0x001A, 0x000B, 0x0009, 0x0009 });
+    add("A2-106 memmac, width 2 (dagen16 family 97, seed 5000014)", 2, { 0x6163, 0x6273, 0x6373, 0x454F, 0x001A, 0x000B, 0x0009, 0x0009 });
+    // mov.l r6,@r4 ; mov.l @r5,r0: the load reads what the store wrote when r5 is r4 (a quarter of the inputs), the pattern otherwise
+    add("A2-106 store through r4, load through r5", 4, { 0x2462, 0x6052, 0x000B, 0x0009 });
+    add("A2-106 store through r4, load through r5 (word)", 2, { 0x2461, 0x6051, 0x000B, 0x0009 });
+    add("A2-106 store through r4, load through r5 (byte)", 1, { 0x2460, 0x6050, 0x000B, 0x0009 });
+    // mov.l @r4+,r1 ; mov.l @r4+,r2 ; add r2,r1 ; mov.l r1,@r5 ; mov r1,r0: a post-increment pair and a store to the other pointer
+    add("A2-106 post-increment loads, store through r5", 4, { 0x6146, 0x6246, 0x312C, 0x2512, 0x6013, 0x000B, 0x0009 });
+    // mov.l r6,@-r4 ; mov.l r7,@-r4 ; mov.l @r5,r0: a pre-decrement pair (the loaded word is one of the two stored, or the pattern)
+    add("A2-106 pre-decrement stores, load through r5", 4, { 0x2466, 0x2476, 0x6052, 0x000B, 0x0009 });
+    return out;
+}
+
 std::vector<CCase> WidePrintedCFixtures()
 {
     std::vector<CCase> out;
@@ -10073,6 +10113,43 @@ void TestPrintedC()
             std::printf("pin 'A2-98': %s (%s)\n", r98[0].cls.c_str(), r98[0].detail.c_str());
             CHECK(r98[0].cls == "timeout");
             CHECK(IsFailing(r98[0]));
+            // A2-104 (patch 0071): `(uint2)(param_1 + (uint2)(in_sr & 1)) == -1` is never true read as C (a uint2 widens to int, the constant is the int -1); the engine means a
+            // two-byte compare with 0xFFFF, and the constant is now cast to the compare's type and printed 0xffff. The same code with exts.w and no carry compares an int2 with -1 (control).
+            {
+                const std::vector<CVerdict> r104 = CheckPrintedC(d, { { "A2-104: a uint2 sum with the carry against 0xffff", { 0x6143, 0x6243, 0x0329, 0x313C, 0x611D, 0xD302, 0x3130, 0x0029, 0x000B, 0x0009, 0x0000, 0xFFFF } },
+                                                                     { "A2-104 control: int2 against -1", { 0x6143, 0x611D, 0xD302, 0x3130, 0x0029, 0x000B, 0x0009, 0x0000, 0xFFFF } } },
+                                                                  nIn, cc, 0x51ED, 8991);
+                std::printf("pin 'A2-104': %s (%s)\n", r104[0].cls.empty() ? "agrees" : r104[0].cls.c_str(), r104[0].detail.substr(0, 90).c_str());
+                std::printf("pin 'A2-104 control': %s\n", r104[1].cls.empty() ? "agrees" : r104[1].cls.c_str());
+                CHECK(r104[0].cls.empty() && r104[0].compared && r104[0].text.find("== 0xffff") != std::string::npos);   // agrees as C, not narrow-c
+                CHECK(r104[1].cls.empty() && r104[1].compared);
+            }
+            // A2-106: the memory mode compares the value returned and the arena afterwards. (a) The fixtures agree at their width (MemoryPrintedCFixtures, in the default run
+            // above); (b) a width-4 function run as bytes is a mismatch (the byte order of the host is not the machine's, which only units of the access width cancel);
+            // (c) a text whose store is dropped (the hook) agrees on the value it returns, and differs in the memory alone: "memory" in the finding.
+            {
+                auto mem = [](const char* name, uint32_t width, std::vector<uint16_t> words) {
+                    CCase c;
+                    c.name = name;
+                    c.words = std::move(words);
+                    c.ptrWidth = width;
+                    return c;
+                };
+                const std::vector<CVerdict> m106 = CheckPrintedC(d, { mem("A2-106 (a): store through r4, load through r5", 4, { 0x2462, 0x6052, 0x000B, 0x0009 }),
+                                                                      mem("A2-106 (b): the same as bytes", 1, { 0x2462, 0x6052, 0x000B, 0x0009 }) },
+                                                                  nIn, cc, 0x51ED, 8992);
+                std::printf("pin 'A2-106 (a)': %s, (b): %s (%s)\n", m106[0].cls.empty() ? "agrees" : m106[0].cls.c_str(), m106[1].cls.c_str(), m106[1].detail.substr(0, 60).c_str());
+                CHECK(m106[0].cls.empty() && m106[0].compared);
+                CHECK(m106[1].cls == "mismatch" && IsFailing(m106[1]));
+                gPrintedCTextHook = [](const std::string& t) {
+                    const size_t at = t.find("*param_1 = param_3;");
+                    return at == std::string::npos ? t : t.substr(0, at) + t.substr(at + 19);
+                };
+                const std::vector<CVerdict> m106c = CheckPrintedC(d, { mem("A2-106 (c): the store dropped", 4, { 0x2462, 0x000B, 0x0009 }) }, nIn, cc, 0x51ED, 8993);
+                gPrintedCTextHook = nullptr;
+                std::printf("pin 'A2-106 (c)': %s (%s)\n", m106c[0].cls.c_str(), m106c[0].detail.substr(0, 90).c_str());
+                CHECK(m106c[0].cls == "mismatch" && m106c[0].detail.find(" memory ") != std::string::npos);
+            }
         }
     }
     if (hand)
@@ -10095,6 +10172,7 @@ void TestPrintedC()
     {
         for (const PrintedCFixture& f : kPrintedCFixtures) cases.push_back({ f.name, f.words });
         for (const CCase& f : WidePrintedCFixtures()) cases.push_back(f);
+        for (const CCase& f : MemoryPrintedCFixtures()) cases.push_back(f);
         fns.resize(cases.size());   // fixtures have no item list (not shrunk)
         const long single = EnvNumber("SE_GENERATED_SEED", 0);
         const long seeds = single ? 1 : EnvNumber("SE_GENERATED_SEEDS", 300);
