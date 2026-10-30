@@ -128,6 +128,10 @@ trust::NoEntry NoEntryOf(int code)
     }
 }
 
+// A hook for an instrument that knows a fact of the true state the rig does not keep (area 8, round 2: the target is Decompile, with its
+// anchor); empty in the default run.
+std::function<void(Rig&, trust::TrueState&)> gStateHook;
+
 // The true state, from the rig's own bookkeeping of what it did to the world (never from the panel's view of it, but for
 // the two facts only the panel has: that a request is outstanding, and which one).
 trust::TrueState StateOf(Rig& r)
@@ -154,6 +158,7 @@ trust::TrueState StateOf(Rig& r)
     t.disabledReason = r.runner.DisabledReason();
     t.noEntry = NoEntryOf(r.noEntry);
     t.askedAddress = 0x00001FF0u;
+    if (gStateHook) gStateHook(r, t);
     return t;
 }
 

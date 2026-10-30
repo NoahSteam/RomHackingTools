@@ -48,15 +48,96 @@ std::string ProbeOp(Rig& r, const Op& o)
     r.mirrorSel = false;
     r.explicitPending = true;
     r.noEntry = 0;
-    // r.haveStopped is left alone: by the guide a Stop belongs to the question stopped, and this is the same question.
+    // r.haveStopped is left alone: by the guide a Stop belongs to the question stopped, and this is the same question (A8-17: the
+    // panel forgets it). SE_PROBE_CONTAIN_FORGETS_STOP=1 models what the panel does today, to look for what lies behind it.
+    if (std::getenv("SE_PROBE_CONTAIN_FORGETS_STOP")) r.haveStopped = false;
     r.Frame();
     return "";
+}
+
+
+// The Containing target (t-contain) is the last thing that chose the question: the anchor is the function's entry, and the finder's own
+// words about it (area 4's) are taken as the panel gives them, so that what is held is their presence and place, not their text.
+void ContainHook(Rig& r, trust::TrueState& t)
+{
+    bool containing = false;
+    for (size_t i = r.done.size(); i-- > 0;)
+    {
+        const std::string& d = r.done[i];
+        if (d.find("  (") != std::string::npos) continue;   // it had no effect (the panel was hidden, the engine held)
+        if (d.find("area 8: contain ") != std::string::npos) { containing = true; break; }
+        if (d.find("] select ") != std::string::npos || d.find("initial selection") != std::string::npos ||
+            d.find("badentry") != std::string::npos || d.find("containbad") != std::string::npos)
+            break;
+    }
+    if (!containing || r.selected < 0) return;
+    // The lines belong to the answer to the question on screen: output for another function carries neither.
+    const uint32_t entry = Defs()[r.placed[static_cast<size_t>(r.selected)]].entry;
+    if (!r.haveShown || r.shown.entry != entry) return;
+    t.anchorKnown = true;
+    t.anchor = entry;
+    for (const std::string& u : r.panel.Uncertainties())
+        if (u.compare(0, 7, "Entry: ") == 0 && u.size() > 8) t.entryDoubt = u.substr(7, u.size() - 8);
+}
+
+// The status line (A8-15 (a), closed here): "<source label> . frame N" is the VIEW's, "<name> @ 0x<entry>" and "(run at 0x...)" are the
+// SHOWN result's. Read from the glyphs of the row, not asked of the panel.
+uint64_t gStatusChecks = 0;
+void StatusCheck(Rig& r, const char* where)
+{
+    if (r.failed || !r.visible) return;
+    const std::vector<drawn::Run> runs = drawn::WindowRuns(DecompilerPanel::kTitle);
+    const Rig::ViewState vs = r.ViewNow();
+    // the row of the source label
+    float y = -1;
+    for (const drawn::Run& d : runs)
+        if (HasParts(d.text, { vs.kind == DecompViewKind::None ? "No source" : "model" })) { y = d.y0; break; }
+    if (y < 0) { r.Fail(std::string("STATUS LINE (") + where + "): no row names the source"); return; }
+    std::string row;
+    for (const drawn::Run& d : runs)
+        if (std::fabs(d.y0 - y) < 1.0f && !InkOf(d.col)) row += d.text + " ";
+    std::vector<std::string> parts;
+    if (vs.kind == DecompViewKind::None) parts = { "No source" };
+    else parts = { "model", "frame" + std::to_string(vs.frame) };
+    std::string why;
+    const DecompileResult* s = r.panel.Shown();
+    if (s)
+    {
+        const uint32_t canon = s->entry;
+        const bool mirror = s->requestedEntry != s->entry;
+        const auto it = r.shown.names.find(canon);
+        // the name: the user's, as it was when the output was made (a rename since marks it stale, it does not rewrite it), else the engine's
+        if (it != r.shown.names.end()) parts.push_back(it->second);
+        else if (s->name.compare(0, 5, "func_") != 0 && s->name.compare(0, 4, "FUN_") != 0 && !s->name.empty() && s->status == DecompileStatus::Ok)
+            why = "the name '" + s->name + "' is neither the user's name then nor the engine's";
+        char b[32];
+        std::snprintf(b, sizeof b, "@0x%08X", canon);
+        parts.push_back(b);
+        if (mirror) { std::snprintf(b, sizeof b, "(runat0x%08X)", s->requestedEntry); parts.push_back(b); }
+        else if (Norm(row).find("(runat") != std::string::npos) why = "'(run at ...)' is drawn for a function run at its own address";
+    }
+    ++gStatusChecks;
+    if (why.empty() && !HasParts(row, parts))
+    {
+        std::string want;
+        for (const std::string& p : parts) want += "[" + p + "]";
+        why = "the status row is '" + row + "' and should hold " + want;
+    }
+    if (!why.empty()) r.Fail(std::string("STATUS LINE (") + where + "): " + why);
+}
+
+void ProbeCheck(Rig& r, const char* where)
+{
+    CheckTrust(r, where);
+    StatusCheck(r, where);
 }
 
 void SetupProbe(Rig& rig)
 {
     Setup(rig);
     rig.custom = ProbeOp;
+    rig.trustCheck = ProbeCheck;
+    gStateHook = ContainHook;
 }
 
 bool RunProbe(Oracle& oracle, const Program& p, uint64_t seed, bool verbose)
@@ -163,6 +244,7 @@ int RunLong(const char* scratch, int mix, uint64_t first, int programs, int conc
             std::printf("FAILED: long mix %d seed %llu concat %d (%zu operations)\n", mix, static_cast<unsigned long long>(seed), concat, p.ops.size());
         }
     }
+    std::printf("status line checks: %llu\n", static_cast<unsigned long long>(gStatusChecks));
     std::printf("long mix %d: seeds %llu..%llu, concat %d: %d programs, %d failed, %llu operations, %.1f s\n", mix,
                 static_cast<unsigned long long>(first), static_cast<unsigned long long>(first + programs - 1), concat, programs, failed,
                 static_cast<unsigned long long>(gT.steps - before), dts::MsSince(t0) / 1000.0);
@@ -369,6 +451,48 @@ void D6()
     Report("D6 the entry box does not keep a refused draft beside current output", std::string(m.panel.EntryText()) != "zz", "");
 }
 
+
+// D8. Copy Function / Copy Line on output the panel says is unsupported or stale: does the text that leaves the panel say so?
+void D8()
+{
+    for (int stale = 0; stale < 2; ++stale)
+    {
+        MiniRig m;
+        m.placed = { FnC, FnU };
+        m.backend.content = BuildImage(m.placed, 0);
+        m.panel.ShowFunctionContaining(0, Defs()[FnU].entry + 4);
+        m.Idle(3);
+        CHECK(m.Settle());
+        if (stale)
+        {
+            m.gate.Close();
+            Edit(m);
+            m.Idle(3);
+            CHECK(WaitHeldOrBusy(m));
+            m.Idle(2);
+        }
+        ImVec2 a, b;
+        CHECK(m.panel.LineRect(1, a, b));
+        const ImVec2 point((a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f);
+        m.h.Hover(point);
+        m.h.RightClick(point);
+        m.Idle(2);
+        ImVec2 ma, mb;
+        if (!m.panel.ItemRect("Copy Function", ma, mb)) { Report("D8 no Copy Function item", false); m.gate.Open(); continue; }
+        const ImVec2 c((ma.x + mb.x) * 0.5f, (ma.y + mb.y) * 0.5f);
+        m.h.Hover(c);
+        m.h.Click(c);
+        m.Idle(2);
+        const char* clip = ImGui::GetClipboardText();
+        const std::string text = clip ? clip : "";
+        const bool says = text.find("trustworthy") != std::string::npos || text.find("stale") != std::string::npos || text.find("unsupported") != std::string::npos;
+        std::printf("      %s output (stale %d, unsupported %d): Copy Function put %zu bytes on the clipboard, first line '%s'\n", stale ? "stale" : "current",
+                    m.panel.ShownStale(), m.panel.Shown() && m.panel.Shown()->unsupported, text.size(), text.substr(0, text.find('\n')).c_str());
+        Report(stale ? "D8b Copy Function on stale output says so" : "D8a Copy Function on unsupported output says so", says, "");
+        m.gate.Open();
+    }
+}
+
 // ---- D4: a real allocation failure inside the engine ------------------------------------------------------------------------------
 
 // One cell: allocation k (counted from the moment the engine is released) fails. The result is held to the model, then Refresh is
@@ -513,6 +637,7 @@ int main(int argc, char** argv)
             D3();
             D5();
             D6();
+            D8();
             bad = gDirectedBad;
         }
         else if (mode == "oom")

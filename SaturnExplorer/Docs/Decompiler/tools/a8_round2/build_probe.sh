@@ -13,12 +13,9 @@ INCS=$(grep '^CXX_INCLUDES' $D/flags.make | sed 's/^CXX_INCLUDES = //')
 mkdir -p $B/probe
 cd $B
 # the probe's own object, in place of the trust test's translation unit
-g++ $DEFS $INCS $FLAGS -I$SRC/FrontEnd/tests -I$HERE -c $HERE/a8r2_probe.cpp -o $B/probe/a8r2_probe.o
-LINK=$(cat $D/link.txt)
-OBJS=$(echo "$LINK" | tr ' ' '\n' | grep '\.o$' | grep -v 'DecompilerTrustTests.cpp.o' | tr '\n' ' ')
-RESTSTART=$(echo "$LINK" | tr ' ' '\n' | grep -v '\.o$' | tr '\n' ' ')
-# link line: compiler, flags (non-object words), objects but the trust test's, the probe's object
-CXX=$(echo "$LINK" | awk '{print $1}')
-LIBS=$(echo "$LINK" | tr ' ' '\n' | grep -E '^(-l|-Wl|-pthread|.*\.a$)' | tr '\n' ' ')
-$CXX $FLAGS $OBJS $B/probe/a8r2_probe.o -o $B/probe/a8r2_probe $LIBS
+eval g++ $DEFS $INCS $FLAGS -I$SRC/FrontEnd/tests -I$HERE -c $HERE/a8r2_probe.cpp -o $B/probe/a8r2_probe.o
+# link line of the trust test, with its own translation unit replaced by the probe's
+sed -e 's|CMakeFiles/SaturnExplorerDecompilerTrustTests.dir/FrontEnd/tests/DecompilerTrustTests.cpp.o|probe/a8r2_probe.o|' \
+    -e 's|bin/SaturnExplorerDecompilerTrustTests|probe/a8r2_probe|' $D/link.txt > $B/probe/link.sh
+bash $B/probe/link.sh
 echo built $B/probe/a8r2_probe
