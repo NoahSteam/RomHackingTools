@@ -244,6 +244,8 @@ if(SE_ENABLE_DECOMPILER)
     set(SE_DECOMPILER_SOURCES
         FrontEnd/src/Decompiler/SpecBundle.cpp
         FrontEnd/src/Decompiler/MemorySnapshot.cpp
+        FrontEnd/src/Decompiler/BiosImageFile.cpp
+        FrontEnd/src/Decompiler/AddressRanges.cpp
         FrontEnd/src/Sh2Address.cpp   # the A2 partition/fold rule MemorySnapshot shares with the AI investigation
         FrontEnd/src/Decompiler/CaptureLoadImage.cpp
         FrontEnd/src/Decompiler/SaturnArchitecture.cpp
@@ -398,6 +400,32 @@ if(SE_ENABLE_DECOMPILER)
             add_test(NAME SaturnExplorer${name}Tests
                      COMMAND SaturnExplorer${name}Tests ${CMAKE_CURRENT_BINARY_DIR}/decompiler_${name}_test)
         endforeach()
+
+        # Area 9 of the review program: every loader the decompiler's path depends on (savestates and dumps, the BIOS
+        # image, settings.ini, the function-name, symbol and bounds files, the volatile list, the language files)
+        # fed truncated, oversized, bit-flipped and malformed input, two instances at once, and links. No engine
+        # linked, so the whole target builds under the sanitizers cheaply. A fixed, seeded run by default;
+        # SE_LOADFUZZ_CASES, _SEED, _FROM, _ONLY, _CASE, _PROCS and _ROUNDS make a long one (see the file's header).
+        add_executable(SaturnExplorerLoaderFuzzTests
+            FrontEnd/tests/LoaderFuzzTests.cpp
+            FrontEnd/src/Settings.cpp
+            FrontEnd/src/FileWrite.cpp
+            FrontEnd/src/Sha256.cpp
+            FrontEnd/src/Sh2Address.cpp
+            FrontEnd/src/Debug/CallStack.cpp
+            FrontEnd/src/Debug/MemoryBackend.cpp
+            FrontEnd/src/Debug/Sh2Disasm.cpp
+            FrontEnd/src/Decompiler/MemorySnapshot.cpp
+            FrontEnd/src/Decompiler/BiosImageFile.cpp
+            FrontEnd/src/Decompiler/AddressRanges.cpp
+            FrontEnd/src/Decompiler/Sh2FunctionFinder.cpp
+            FrontEnd/src/Decompiler/SpecBundle.cpp)
+        target_include_directories(SaturnExplorerLoaderFuzzTests PRIVATE FrontEnd/src FrontEnd/tests include
+            ${CMAKE_CURRENT_SOURCE_DIR}/Drivers/Savestate/src)
+        target_link_libraries(SaturnExplorerLoaderFuzzTests PRIVATE SaturnExplorerSavestateDriver)
+        add_test(NAME SaturnExplorerLoaderFuzzTests
+                 COMMAND SaturnExplorerLoaderFuzzTests ${CMAKE_CURRENT_BINARY_DIR}/loader_fuzz_test)
+        set_tests_properties(SaturnExplorerLoaderFuzzTests PROPERTIES TIMEOUT ${SE_DECOMP_TIMEOUT_120})
 
         # No hard millisecond gate (A7): a generous ceiling, and the tests print their timings.
         # The runner test decompiles the cancellation spike's large fixtures several times (A4).

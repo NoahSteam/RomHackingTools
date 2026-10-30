@@ -3144,19 +3144,13 @@ void App::UpdateDecompiler(IPlatform& platform)
 // Read and hash a BIOS image once, here; the panel's per-frame key uses the stored hash (A1).
 bool App::LoadBiosImage(const std::string& path)
 {
-    std::string bytes;
-    if (!ReadWholeFile(path, bytes) || bytes.empty())
+    decomp::BiosLoadResult loaded = decomp::LoadBiosImageFile(path);
+    if (!loaded.image)
     {
-        mLog.Error("Decompiler: could not read the BIOS image " + path);
+        mLog.Error("Decompiler: " + loaded.error);
         return false;
     }
-    // The BIOS occupies 512 KiB at 0x00000000; anything larger is not a Saturn BIOS image.
-    if (bytes.size() > 0x80000)
-    {
-        mLog.Error("Decompiler: " + path + " is larger than a Saturn BIOS (512 KiB); not used");
-        return false;
-    }
-    mBiosImage = decomp::BiosImage::Make(std::vector<uint8_t>(bytes.begin(), bytes.end()));
+    mBiosImage = std::move(loaded.image);
     mLog.Info("Decompiler: BIOS image " + path + " mapped at 0x00000000");
     return true;
 }
