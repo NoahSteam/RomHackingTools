@@ -1,0 +1,76 @@
+name R15-9a halfword 0x11 at S+4 then halfword r7 at S+6, both through the reloaded pointer; S+4 word returned (read directly)
+asm 06009000
+.word 0x4F22
+add #-48,r15
+mov r15,r1
+add #12,r1
+mov.l r1,@(32,r15)
+mov #17,r2
+mov.l @(32,r15),r1
+add #4,r1
+mov.w r2,@r1
+mov.l @(32,r15),r1
+add #6,r1
+mov.w r7,@r1
+mov.l @(16,r15),r0
+add #48,r15
+.word 0x4F26
+rts
+nop
+endasm
+args 0 0 0 7fffffff
+args 0 0 0 1
+end
+
+name R15-9b same with the S+4 word zeroed first by a direct store
+asm 06009000
+.word 0x4F22
+add #-48,r15
+mov r15,r1
+add #12,r1
+mov.l r1,@(32,r15)
+mov #0,r3
+mov.l r3,@(16,r15)
+mov #17,r2
+mov.l @(32,r15),r1
+add #4,r1
+mov.w r2,@r1
+mov.l @(32,r15),r1
+add #6,r1
+mov.w r7,@r1
+mov.l @(16,r15),r0
+add #48,r15
+.word 0x4F26
+rts
+nop
+endasm
+args 0 0 0 7fffffff
+args 0 0 0 1
+end
+
+name R15-9c 9b with the word store r7 at S+4 first
+asm 06009000
+.word 0x4F22
+add #-48,r15
+mov r15,r1
+add #12,r1
+mov.l r1,@(32,r15)
+mov.l @(32,r15),r1
+add #4,r1
+mov.l r4,@r1
+mov #17,r2
+mov.l @(32,r15),r1
+add #4,r1
+mov.w r2,@r1
+mov.l @(32,r15),r1
+add #6,r1
+mov.w r7,@r1
+mov.l @(16,r15),r0
+add #48,r15
+.word 0x4F26
+rts
+nop
+endasm
+args 0 0 0 7fffffff
+args 0 0 0 1
+end

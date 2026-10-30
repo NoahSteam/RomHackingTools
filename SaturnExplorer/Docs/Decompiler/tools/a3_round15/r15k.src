@@ -1,0 +1,30 @@
+name R15-10a two halfword stores of r2 (S+6, S+4) through the reloaded pointer, a word store of r5 at S+8, S+4 word read directly
+asm 06009000
+.word 0x4F22
+add #-48,r15
+mov r15,r1
+add #12,r1
+mov.l r1,@(32,r15)
+mov.l @(32,r15),r1
+add #6,r1
+mov.w r2,@r1
+mov.l @(32,r15),r1
+add #4,r1
+mov.w r2,@r1
+mov.l @(32,r15),r1
+add #8,r1
+mov.l r5,@r1
+mov #0,r0
+mov r15,r1
+add #12,r1
+add #4,r1
+mov.l @r1,r3
+xor r3,r0
+add #48,r15
+.word 0x4F26
+rts
+nop
+endasm
+args 0 0 0 0 r2=12345678
+args 0 0 0 0 r2=0000ffff
+end

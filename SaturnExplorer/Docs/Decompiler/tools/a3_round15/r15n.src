@@ -1,0 +1,69 @@
+name R15-13a direct halfword stores r5 @+2, r6 @+0 into an uninitialised frame word, word read (no pointer)
+asm 06009000
+.word 0x4F22
+add #-48,r15
+mov r15,r1
+add #18,r1
+mov.w r5,@r1
+mov r15,r1
+add #16,r1
+mov.w r6,@r1
+mov.l @(16,r15),r0
+add #48,r15
+.word 0x4F26
+rts
+nop
+endasm
+args 11112222 33334444 55556666 77778888
+args ffff0001 00008000 12345678 0000ffff
+end
+
+
+name R15-13c pointer in a register r12 (not a slot): h r5 @+2, h r6 @+0 via r12, word read direct
+asm 06009000
+.word 0x4F22
+add #-48,r15
+mov r15,r12
+add #16,r12
+mov r12,r1
+add #2,r1
+mov.w r5,@r1
+mov.w r6,@r12
+mov.l @(16,r15),r0
+add #48,r15
+.word 0x4F26
+rts
+nop
+endasm
+args 11112222 33334444 55556666 77778888
+args ffff0001 00008000 12345678 0000ffff
+end
+
+name R15-13d slot pointer, b r5@+3,b r6@+2,b r7@+1,b r4@+0 over an uninitialised word, word read direct
+asm 06009000
+.word 0x4F22
+add #-48,r15
+mov r15,r1
+add #12,r1
+mov.l r1,@(32,r15)
+mov.l @(32,r15),r1
+add #7,r1
+mov.b r5,@r1
+mov.l @(32,r15),r1
+add #6,r1
+mov.b r6,@r1
+mov.l @(32,r15),r1
+add #5,r1
+mov.b r7,@r1
+mov.l @(32,r15),r1
+add #4,r1
+mov.b r4,@r1
+mov.l @(16,r15),r0
+add #48,r15
+.word 0x4F26
+rts
+nop
+endasm
+args 11112222 33334444 55556666 77778888
+args ffff0001 00008000 12345678 0000ffff
+end

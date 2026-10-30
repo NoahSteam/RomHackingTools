@@ -15,7 +15,7 @@ for k in range(count):
     L = pick('F15_LEVELS', 1, 3)
     N = pick('F15_NST', 1, 24)
     call = os.environ.get('F15_CALL') or rnd.choice(['none', 'none', 'lent', 'unlent'])
-    fillmode = os.environ.get('F15_FILL') or rnd.choice(['words', 'bytes', 'halves', 'none', 'save', 'save'])
+    fillmode = rnd.choice((os.environ.get('F15_FILL') or 'words,bytes,halves,none,save,save').split(','))
     sOff = rnd.choice([0, 4, 8, 12, 16])
     base = 32          # pointer slots at 32.. (frame 48 bytes)
     F = 48
