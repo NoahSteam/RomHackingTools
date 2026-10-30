@@ -212,6 +212,16 @@ def tree_files(root):
     return out
 
 
+ROOT_FILES = {".gitattributes", "CMakeLists.txt", "LICENSE", "NOTICE", "SaturnExplorerGhidraDecomp.vcxproj", "VENDOR.md",
+              "sources.cmake", "vendor.py"}
+
+
+def _spec_files(vend):
+    """SPEC_FILES of the vendor.py in vend, read without importing it."""
+    m = re.search(r"^SPEC_FILES = \[([^\]]*)\]", read(os.path.join(vend, "vendor.py")), re.M)
+    return re.findall(r'"([^"]+)"', m.group(1)) if m else []
+
+
 def rebuild(vend, ghidra, work):
     errs = []
     os.makedirs(work, exist_ok=True)
@@ -231,6 +241,31 @@ def rebuild(vend, ghidra, work):
     if d.returncode != 0:
         errs.append("the committed tree differs from vendor.py's output (left side of %s is the rebuilt tree):\n%s"
                     % (diff_path, d.stdout.decode(errors="replace")[:6000]))
+    # vendor.py replaces cpp/ and the five spec files but cleans nothing else, so a file left or
+    # added anywhere else survives into the copy and the diff cannot see it: list what may exist.
+    spec_files = _spec_files(rebuilt)
+    allowed = {"processors": None, "cpp": None, "patches": None}
+    for name in sorted(os.listdir(vend)):
+        full = os.path.join(vend, name)
+        if os.path.isdir(full):
+            if name not in allowed:
+                errs.append("%s/: not part of the vendored tree" % name)
+        elif name not in ROOT_FILES:
+            errs.append("%s: not part of the vendored tree (a file the vendor directory may hold is listed in ROOT_FILES of check-vendored-tree.py)" % name)
+    sup = os.path.join(vend, "processors")
+    if os.path.isdir(sup):
+        if sorted(os.listdir(sup)) != ["SuperH"]:
+            errs.append("processors/: holds %s, expected only SuperH" % sorted(os.listdir(sup)))
+        else:
+            have = sorted(os.listdir(os.path.join(sup, "SuperH")))
+            want = sorted(list(spec_files) + ["sh-2.sla"])
+            for f in sorted(set(have) - set(want)):
+                errs.append("processors/SuperH/%s: not one of the files vendor.py copies (or sh-2.sla)" % f)
+            for f in sorted(set(want) - set(have)):
+                errs.append("processors/SuperH/%s: missing" % f)
+    for f in sorted(os.listdir(os.path.join(vend, "patches"))):
+        if f != "README.md" and not PATCH_RE.match(f):
+            errs.append("patches/%s: neither a patch nor the README" % f)
     a, b = tree_files(rebuilt), tree_files(vend)
     for rel in sorted(set(a) | set(b)):
         if rel.endswith("processors/SuperH/sh-2.sla") or rel == os.path.join("processors", "SuperH", "sh-2.sla"):
