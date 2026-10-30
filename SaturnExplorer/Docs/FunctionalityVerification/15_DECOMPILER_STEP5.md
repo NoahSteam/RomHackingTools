@@ -13672,6 +13672,7 @@ Fixer, branch `review/3-a3130-fix`, cut at `2598c9b`; patch **0072** (`0072-engi
 | A3-138 | P3 | fixed | `SplitDatatype::splitCopy` marks a frame-fold COPY it splits read (its bytes live in the pieces) |
 | A3-139 | P1 | new, fixed | `PcodeOp::isCseMatch` took constants of different sizes for one value (`SEXT24(#0xda:2)`, `SEXT14(#0xda:1)`): `return 0;` for 0xFFFFFF00 |
 | A3-140 | P1 | new, fixed | `RulePullsubIndirect` built its INDIRECT's input piece from one reader's truncation instead of the readers' lowest byte: `return 0x88;` for 0xEB. Exposed by 0072's kept guards (2598c9b lost the store instead, A3-130) |
+| A3-142 | P3 | new, fixed | a frame ledger false loss (the third class): `noteGuardRead` did not follow a SUBPIECE of a guarded word, so a byte read twice and xored left the word's STORE unread (the chain stream, seed 4101580; the same on 2598c9b) |
 | A3-141 | P3 | new, open | the review's control R15-6a is `LEDGER BAD` (the access ledger: a store through a pointer read back from a global is printed nowhere) on 2598c9b and the fix alike; not in either image |
 
 ### 1. How the P1s were found to work
@@ -13682,7 +13683,7 @@ Fixer, branch `review/3-a3130-fix`, cut at `2598c9b`; patch **0072** (`0072-engi
 
 ### 2. Fixtures and pins
 
-`TestA3130Fix` (`Sh2DecompilerTests.cpp`): R15-7a, 7c, 7d, 18a, 15c (A3-130); R15-12a, 12b, 13d, 16b and R15-12a's 4-byte return (A3-131); R15-5a, 5c, 6c, 18b, 1d and F15.11.74 (A3-132); frame124 3807191 (A3-139) and 4100399.chain (A3-140); each with the frame ledger and `ReferenceOk` empty, `frameLedgerCapped` false, the call-free ones evaluated against the run; and a frame read with 200 `div1` after it, which is capped and fails `ReferenceOk` (A3-133). `Sh2GeneratedTests.cpp`: `A3-136, seed 3901693`, `A3-138: frame124 3907314`, `frame124 chain draws`. Every pin but the cap's (whose field does not exist there) fails on 2598c9b: checked with the base build's driver on the fixtures (`LEDGER BAD` or the stale text) and with the base generator on the replays. The fault suite's six `stack` pins moved by `FrameEscape`'s pending set and were re-pinned as the suite printed (a first version's walk allocated a set for every walk and moved five more; it now allocates only past 64 ops, as many as before).
+`TestA3130Fix` (`Sh2DecompilerTests.cpp`): R15-7a, 7c, 7d, 18a, 15c (A3-130); R15-12a, 12b, 13d, 16b and R15-12a's 4-byte return (A3-131); R15-5a, 5c, 6c, 18b, 1d and F15.11.74 (A3-132); frame124 3807191 (A3-139) and 4100399.chain (A3-140); each with the frame ledger and `ReferenceOk` empty, `frameLedgerCapped` false, the call-free ones evaluated against the run; and a frame read with 200 `div1` after it, which is capped and fails `ReferenceOk` (A3-133). `Sh2GeneratedTests.cpp`: `A3-136, seed 3901693`, `A3-138: frame124 3907314`, `A3-142: frame124 4101580.chain`, `frame124 chain draws`. Every pin but the cap's (whose field does not exist there) fails on 2598c9b: checked with the base build's driver on the fixtures (`LEDGER BAD` or the stale text) and with the base generator on the replays. The fault suite's six `stack` pins moved by `FrameEscape`'s pending set and were re-pinned as the suite printed (a first version's walk allocated a set for every walk and moved five more; it now allocates only past 64 ops, as many as before).
 
 ### 3. Routed seeds
 

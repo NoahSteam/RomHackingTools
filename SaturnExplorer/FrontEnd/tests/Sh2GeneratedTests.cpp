@@ -7674,6 +7674,35 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
                 widths[(*it)[3].str()].insert(std::stoi((*it)[2].str()));
             bool twoWidths = false;
             for (const auto& w : widths) twoWidths = twoWidths || w.second.size() > 1;
+            // ...or one whose write covers only part of a declared local (`_iStack_2c = CONCAT21(...)`, three bytes over the two-byte
+            // `iStack_2c` and the first byte of `xStack_2a`): the harness gives the local inside it its bytes, not one it cuts across
+            static const std::regex localDecl("^\\s*([A-Za-z_][\\w ]*?[\\w*])\\s+([A-Za-z]*Stack_[0-9a-f]+)\\s*;\\s*$");
+            std::vector<std::pair<int64_t, int>> declared;
+            {
+                std::istringstream in(text);
+                std::string l;
+                while (std::getline(in, l))
+                {
+                    std::smatch m;
+                    int64_t off = 0;
+                    if (std::regex_match(l, m, localDecl) && StackNameOffset(m[2].str(), off))
+                    {
+                        const int sz = StackTypeSize(m[1].str());
+                        if (sz) declared.emplace_back(off, sz);
+                    }
+                }
+            }
+            for (const auto& w : widths)
+            {
+                int64_t at = 0;
+                if (w.second.size() != 1 || !StackNameOffset(w.first, at)) continue;
+                const int64_t end = at + *w.second.begin();
+                for (const auto& dl : declared)
+                {
+                    const int64_t lo = dl.first, hi = dl.first + dl.second;
+                    if (lo < end && at < hi && !(lo >= at && hi <= end)) twoWidths = true;
+                }
+            }
             if (twoWidths)
             {
                 v.cls = "skipped:piece-name";
