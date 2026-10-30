@@ -14147,3 +14147,51 @@ The status row is one line made of `SameLine` pieces and the badge and "decompil
 * The width probes use the harness's font, which is the app's (`LoadFonts`), but not the app's DPI scaling; a high-DPI setup scales both the font and the work area. The default layout's 42% is computed from `BuildDefaultLayout`, not read from a running app.
 * A8-21 is filed P3 because the screen carried the marks when Copy was chosen; a program that counts the clipboard as the panel's output reads it as P2.
 * The instrument's Decompile op gives the finder a user start at the function's entry first, so the finder's answer and its doubt are not the subject; Decompile at an address inside a function is area 4's.
+
+## Area 2 fixer (A2-104 to A2-106)
+
+Branch `review/2-a2104-fix`, base `0f5a5c9`. One engine patch (0071), the harness (memory mode, a skip class), a repaired tool import, ledger rows A2-104 to A2-106 closed and two new rows (A2-108 fixed, A2-109 accepted). Own RelWithDebInfo build under the scratch directory, `-j2`, every run under `ulimit -v 3500000` and `timeout`, one heavy job at a time.
+
+### 1. A2-104 (P3): patch 0071
+
+`TypeOpEqual::getInputCast` (and the ordered compares) cast the side that `checkIntPromotionForCompare` says is promoted to the lower-ordered of the two types, and a cast of a constant retypes it (`ActionSetCasts::castInput`: `vn->updateType(ct)`). The constant `-1` of `(uint2)(param_1 + (uint2)(in_sr & 1)) == -1` never got there: for the constant's slot the function asked `intPromotionType` about the other side, which takes a cast (`CPUI_CAST`) and any named variable for **no promotion** and returned `false` ("both sides get extended in the same way"), although C widens a `uint2` and an `int2` differently. Now, for a constant against a narrow (below `int`) non-constant side that `intPromotionType` calls `NO_PROMOTION`, the extension is taken from the side's type (`TYPE_UINT` is an unsigned extension, `TYPE_INT` a signed one, any other type unchanged), so the constant of the other sign is cast: the text is `(uint2)(...) == 0xffff`, true in C where the old `== -1` never was. The change is in the one function, in `cast.cc`; an expression on the other side, a constant of the same sign, and the arithmetic casts are as they were.
+
+| Check | Result |
+|---|---|
+| the 12-word fixture `6143 6243 0329 313C 611D D302 3130 0029 000B 0009 0000 FFFF` | `agrees`, text `== 0xffff` (`mismatch` before) |
+| family 99 `tnarrow` (`dagen16.py 13000001 6000 99`, `fam16.sh`) | 0 `mismatch`, 161 `narrow-c` (255 `mismatch` before) |
+| family 98 `edgeconst` (20,000 from 13100001) | 0 `mismatch`, 506 `narrow-c` (1 before) |
+| pins `A2-104`, `A2-104 control` (`Sh2GeneratedTests.cpp`, next to A2-98's) | pass; with `cast.cc` reverted in a scratch build `A2-104` is `mismatch` and the run fails |
+| hwram007 and hwram008, alone and lent (`SE_GAME_OUT`), with and without the patch | `diff -r`: 0 of 841 and 0 of 1,556 files differ |
+| `vendor.py` on the Ghidra checkout at `918d44e` (a copy of the directory) | applies 0001 to 0071, `diff -r` against the tree empty |
+
+### 2. A2-105 (P3, tooling)
+
+`a2_round15/dagen15.py` loads `../a2_round16/swtab11.py` (the copy round 16 kept; the file `16940af` removed is the same). `python3 -I dagen15.py <seed> <n> <family>` makes 79 to 85 again; `pcsweep15.sh` over 79 to 85 (400 functions each from 15000001): 2,800 functions, every family `agrees` except 1 `narrow-c` in 84, 0 findings; `famrc15.sh` for 79 and 85 (100 each, the plain binary: the rule check is off): 100 agree each, `BAD=0 WFBAD=0`. `genranges15.sh` calls `gen_range.sh`, not `dagen15.py`, and never failed.
+
+### 3. A2-106 (P3, oracle): the memory mode in the committed harness
+
+`mkptr16.py`'s edits are in `Sh2GeneratedTests.cpp`, as a property of the case and not of the run: `CCase::ptrWidth` (0 off; 1, 2 or 4 the width of every access of the function). With it, `CheckPrintedC` runs the text in frame mode with r4 a pointer into a 16 KiB arena (`kPtrBase` 0x06080000 + 0x1000 + a multiple of 4 in the emulator, the middle of the frame block in the compiled text) and r5 r4, a neighbour of it (4 to 16 bytes either side), r4 + 8 or a pointer into a second area; both sides start from the same pattern of the input row (`PTRPAT`, in the frame header of both readings), a pointer parameter is passed as a host pointer into the block (cast to the parameter's declared type: the engine's reading takes no `void *`), a pointer result is compared as its low 32 bits, and after the call the arena, as a checksum of units of the access width (which cancels the host's byte order), must be the emulator's: `MISMATCH fN memory ... after the call` otherwise. Two things differ from the scratch version: the arena's types are `uint8_t`, `uint16_t`, `uint32_t` (`char` is a macro in the engine's reading, so `unsigned char` did not compile there), and the pointer casts above. Where it is on: `SE_GENERATED_PRINTEDC_PTR=<w>` with `SE_GENERATED_PRINTEDC_WORDS` (every hand function), and `MemoryPrintedCFixtures()` (18 fixtures in the default run: the shortest of families 91 to 94 and 97 at each width from `dagen16.py` seed 5000001, and four written for the pins: a store through r4 read through r5 at three widths, a post-increment pair, a pre-decrement pair; a fixture the harness skips is a failure there as for the others).
+
+Pins: (a) `2462 6052 000B 0009` at width 4 `agrees`; (b) the same words at width 1 are `mismatch` in both readings (the host's byte order is not the machine's); (c) the same store dropped from the text by the harness's hook (`gPrintedCTextHook`) is a `mismatch` whose detail says `memory` (the value returned agrees; the arena does not). By value, 30,000 functions through the committed binary (`memfam16.sh`, families 91, 92, 93, 94, 97 at widths 4, 2, 1, 2,000 each from 5000001): 29,999 `agrees` or `void-return-lent`, 1 `mismatch` (family 91, width 1: the C++ reading cannot cast `(char *)(param_2 + 0x18)`; the row's known gap, now A2-109). Adopting it changed no existing result: the default run (300 seeds) is 521 functions, 485 agree, 13 `narrow-c`, 21 `void-return`, none `skipped:memory`; the register-only grammar never drew a dereference of a parameter. The limit stays: accesses of different widths to the same bytes are not compared.
+
+### 4. New rows
+
+* **A2-108 (P3, fixed).** A hand-written store through a parameter pointer without the mode was `crashed`: `UsesFrameMemory` (A3-65's "memory through a register other than r15") put it in frame mode, where `memoryRe` is not applied, and the random inputs were dereferenced as host pointers. `CheckPrintedC` now says `skipped:memory` for a signature with a pointer parameter when no `ptrWidth` is set (pin `A2-108`; the default run's classes did not change).
+* **A2-109 (P3, accepted).** The engine's reading cannot take some pointer casts of the memory mode (1 in 30,000), an oracle gap that hides nothing: the first reading's `mismatch` is shown with the reason.
+
+### 5. Validation
+
+| Run | Result |
+|---|---|
+| `ctest` (whole tree built, `-j2`) | 101 of 101 non-Live and 6 of 6 Live pass. `SaturnExplorerSh2DecompilerEngineTests` is the one test that takes close to its 60 s limit (47 to 55 s of CPU): it timed out twice while three agents shared the four cores (load 11 to 12) and passed alone by `ctest` (56 s) and run directly (102 s wall, 48 s CPU; the same test of an unrelated branch takes 55 s CPU) |
+| fault suite (`SaturnExplorerDecompilerFaultTests`) | `fault matrix: 0 of 94 job(s) failed`, 207 s |
+| grammar 2, 4,200,001 to 4,220,000 (four chunks) | 2 failing seeds, both `n:pointer-effect-unsaid` of area 5 (see the routing below); 0 others |
+| grammar 1, 4,200,001 to 4,210,000 | 0 failing seeds |
+| printed-C differential, 4,200,001 to 4,215,000 (three chunks, 6,992 + 6,931 + 6,897 functions, 6,549 + 6,488 + 6,448 compared) | 13 findings, all in the `frame124` stream (9 `mismatch`, 4 `frame-lost`); none outside it (`narrow-c` 472, `void-return` 1,069) |
+| corpora, `SE_GAME_HWRAM` and `SE_GAME_LEND=1`, hwram007 and hwram008 | 839 and 1,554 functions ok; every ledger count 0; 0 accesses dropped; missing and said 0 and 4; 0 frame writes lost, 0 malformed pieces; lending 678 (956) and 1,038 (1,310); mapping violations 0 (the 4 `on another line than firstLine says` of the alone pass are the baseline's) |
+
+### 6. Routed, not fixed
+
+* frame124 stream (area 3, A3-124's builders), printed-C `SE_GENERATED_PRINTEDC=only SE_GENERATED_FIRST=4200001`, 5,000 seeds a chunk: `mismatch` 4201621, 4202027, 4202664, 4202935, 4207979, 4209001, 4209678, 4211419, 4214513; `frame-lost` 4201060, 4201746, 4211399, 4214301 (names `frame124_<seed>`).
+* grammar 2, area 5's hardware register notes: seeds 4211181 (a 2-byte write to `SH2_RTCOR` through a pointer derived from register addresses, `n:pointer-effect-unsaid`) and 4215904 (a 2-byte read at +2 of `SH2_CHCR1`, same class); `SE_GENERATED_GRAMMAR=2 SE_GENERATED_FIRST=<seed> SE_GENERATED_SEEDS=1`. Both fail on the area 3 fixer's build, which has no part of this branch, and pass on the area 5 fixer's build (A5-87).
