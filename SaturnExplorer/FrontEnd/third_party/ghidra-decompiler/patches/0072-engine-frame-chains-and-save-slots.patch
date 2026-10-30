@@ -199,7 +199,7 @@ index 1e06e7f..95b3dd9 100644
    accessesRecorded = true;
    desc_warning = false;
 diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_op.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_op.cc
-index 0e4cc0d..03eed0d 100644
+index 0e4cc0d..13ed348 100644
 --- a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_op.cc
 +++ b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_op.cc
 @@ -20,6 +20,7 @@
@@ -247,22 +247,27 @@ index 0e4cc0d..03eed0d 100644
  /// A frame fold destroyed with its value forwarded passes the mark on to what it reads: a pop forwarded (into
  /// `r1 & 0`, made a constant) while the stack was not yet linked is later linked to its push, which is then read.
  /// A frame read the walk meets notes the STOREs whose guards it read through (noteGuardRead).
-@@ -102,6 +109,8 @@ void Funcdata::noteFrameFoldForwarded(bool walk,Varnode *vn)
+@@ -102,6 +109,7 @@ void Funcdata::noteFrameFoldForwarded(bool walk,Varnode *vn)
      return;
    }
    vector<PcodeOp *> walked(1,def);
-+  set<PcodeOp *> seen;		// (0072) what the walk reached, looked up in log time: the bound is 4,096 ops, not 64
-+  seen.insert(def);
++  set<PcodeOp *> seen;		// (0072) past 64 ops, what the walk reached, looked up in log time: the bound is 4,096 ops, not 64
    for(size_t k=0;k<walked.size();++k) {
      PcodeOp *d = walked[k];
      if (d->isFrameFold())
-@@ -114,11 +123,15 @@ void Funcdata::noteFrameFoldForwarded(bool walk,Varnode *vn)
+@@ -114,11 +122,21 @@ void Funcdata::noteFrameFoldForwarded(bool walk,Varnode *vn)
        Varnode *in = d->getIn(i);
        if (in == (Varnode *)0 || !in->isWritten()) continue;
        PcodeOp *e = in->getDef();
 -      if (find(walked.begin(),walked.end(),e) != walked.end()) continue;
 -      if (walked.size() >= 64) {
-+      if (seen.find(e) != seen.end()) continue;
++      if (walked.size() <= 64) {
++	if (find(walked.begin(),walked.end(),e) != walked.end()) continue;
++      }
++      else {
++	if (seen.empty()) seen.insert(walked.begin(),walked.end());
++	if (seen.find(e) != seen.end()) continue;
++      }
 +      if (walked.size() >= 4096) {
 +	// (0072) the walk's bound: every fold is taken for read, and the records say so (a host's ledger counts the function unchecked:
 +	// ledger A3-133, where 64 ops were reached by 5% to 8% of the corpus' functions, which were then reported clean)
@@ -270,11 +275,11 @@ index 0e4cc0d..03eed0d 100644
 +	frameLedgerCapped = true;
  	return;
        }
-+      seen.insert(e);
++      if (!seen.empty()) seen.insert(e);
        walked.push_back(e);
      }
    }
-@@ -1852,6 +1865,126 @@ void Funcdata::opCollapseIndirectsForCopy(PcodeOp *copyOp)
+@@ -1852,6 +1870,126 @@ void Funcdata::opCollapseIndirectsForCopy(PcodeOp *copyOp)
    }
  }
  
@@ -401,7 +406,7 @@ index 0e4cc0d..03eed0d 100644
  /// For the given op with indirect effects, run through its INDIRECTs, and
  /// if there is no longer a possible alias for an INDIRECT address, remove the INDIRECT.
  /// \param effectOp is the given op with indirect effects
-@@ -1872,6 +2005,13 @@ void Funcdata::opCollapseIndirectsForAlias(PcodeOp *effectOp)
+@@ -1872,6 +2010,13 @@ void Funcdata::opCollapseIndirectsForAlias(PcodeOp *effectOp)
      bool shouldDestroy = false;
      if (op->getOut()->hasNoLocalAlias() && !op->isIndirectCreation() && !op->noIndirectCollapse())
        shouldDestroy = true;
