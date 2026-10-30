@@ -549,6 +549,51 @@ def fam_memstruct(r):
 FAMS16.update({91: fam_memstraight, 92: fam_memloop, 93: fam_memstruct})
 
 
+def fam_memarr(r):
+    # computed addresses: an index from data (masked to the arena, a multiple of the width), r0-indexed loads and stores, a pointer bumped by a variable amount,
+    # the distance between two pointers (the same number for the emulator and for the compiled text, unlike a pointer), pointer compares and a pointer walked by a loop
+    # that is read back as a count (the pointer minus its start)
+    m = Mem(r); f = m.f
+    w = W16
+    mask = {4: 0x3C, 2: 0x3E, 1: 0x3F}[w]
+    ldx = {1: 0x000C, 2: 0x000D, 4: 0x000E}[w]          # mov.X @(r0,Rm),Rn
+    stx = {1: 0x0004, 2: 0x0005, 4: 0x0006}[w]          # mov.X Rm,@(r0,Rn)
+    ldp = {1: 0x6000, 2: 0x6001, 4: 0x6002}[w]          # mov.X @Rm,Rn
+    stp = {1: 0x2000, 2: 0x2001, 4: 0x2002}[w]          # mov.X Rm,@Rn
+    f.add(mov_(8, 4))                                   # the start of the walk, for the count
+    def index(reg, src):                                # reg = (src & mask), an offset that keeps the alignment
+        f.add(mov_(reg, src), mov_(0, reg), andi(mask), mov_(reg, 0))
+    for _ in range(r.randrange(2, 7)):
+        x = r.random()
+        base = r.choice([4, 5])
+        if x < 0.25:        # r3 = base[idx]
+            index(1, r.choice([6, 7, 2, 3])); f.add(mov_(0, 1), ldx | 3 << 8 | base << 4)
+        elif x < 0.45:      # base[idx] = data
+            index(1, r.choice([6, 7, 2, 3])); f.add(mov_(0, 1), stx | base << 8 | r.choice([2, 6, 7]) << 4)
+        elif x < 0.6:       # bump the pointer by a computed amount: r4 += (data & mask), loads through it
+            index(1, r.choice([6, 7, 3])); f.add(add__(1, base))
+            f.add(ldp | 2 << 8 | base << 4)
+        elif x < 0.72:      # load through the pointer then store a neighbour
+            f.add(ldp | 3 << 8 | base << 4, add__(3, 2), 0x7000 | base << 8 | w, stp | base << 8 | 2 << 4)
+        elif x < 0.84:      # compare the two pointers and branch around a store
+            f.add(r.choice([cmphi, cmphs, cmpgt, cmpeq])(4, 5))
+            l = m.g.lab('Z'); f.br(r.choice(['bt', 'bf']), l)
+            f.add(stp | 5 << 8 | 6 << 4)
+            f.label(l)
+        else:               # data from the distance between the pointers
+            f.add(mov_(3, 5), sub__(4, 3), add__(3, 2))
+    # the result: the pointer's walk, data, or both
+    k = r.randrange(0, 3)
+    if k == 0: f.add(mov_(0, 4), sub__(8, 0))                # r4 - start
+    elif k == 1: f.add(mov_(0, 3), add__(2, 0))
+    else: f.add(mov_(0, 4), sub__(8, 0), add__(3, 0))
+    f.rts_slot = NOP
+    return f
+
+
+FAMS16[94] = fam_memarr
+
+
 def build(seed, fam=None, want_fn=False):
     if fam == 88:
         return build_swloop(seed)

@@ -87,4 +87,13 @@ rep('''            m << ctl;
               << "; ++a) cs = (cs * 16777619u) ^ ar[a];\n        if (cs != MC[k]) { printf(\"MISMATCH " << pr.name
               << " memory r4=%08X r5=%08X r6=%08X r7=%08X after the call\\n\", g_in[4], g_in[5], g_in[6], g_in[7]); ++bad_" << pr.name << "; } }\n";
         m << "    }\n";''')
+rep("        call << \")\";\n", r'''        call << ")";
+        if (ptrMode && ret.find('*') != std::string::npos)
+        {
+            // a pointer result is compared as the 32-bit number it stands for (the host's pointer is 64 bits wide)
+            const std::string t = "(unsigned int)(uintptr_t)" + call.str();
+            call.str("");
+            call << t;
+        }
+''')
 open(sys.argv[2], 'w').write(src)
