@@ -594,6 +594,81 @@ def fam_memarr(r):
 FAMS16[94] = fam_memarr
 
 
+def fam_ptree(r):
+    # Expression trees for the printer (depth 2 to 6, each temporary used once so that the engine inlines the whole tree into one expression and the printer decides
+    # every parenthesis, cast and negative constant): the binary add, sub, and, or, xor, mul, muls.w, mulu.w, the high word of dmuls/dmulu, xtrct, the unary neg, not,
+    # extensions, swaps, constant shifts and rotates, add #imm, T-valued nodes (compares of two subtrees, tst, cmp/str, cmp/pz and cmp/pl, then movt or negc) combined with
+    # and, or, xor and neg, and selects (a diamond whose arms are subtrees, picked by a compare of two subtrees: the mid-tree branch). Constants are the signed edge values.
+    g = Gen(r); f = g.f
+    pool = [1, 2, 3, 8, 9, 10, 11, 12, 13, 14]
+    BIN = [add__, sub__, and__, or__, xor_, add__, sub__]
+    EDGE = [0, 1, 2, 3, 0x7F, 0x80, 0xFF, 0x100, 0x7FFF, 0x8000, 0xFFFF, 0x10000, 0x7FFFFFFF, 0x80000000, 0xFFFFFFFF, 0xFFFFFFFE, 0xFFFFFF80, 0xFFFF8000, 0x55555555, r.getrandbits(32)]
+    CMP = [cmpeq, cmphi, cmphs, cmpgt, cmpge]
+    def leaf(d):
+        x = r.random()
+        if x < 0.3: f.lit(d, r.choice(EDGE))
+        elif x < 0.4: f.add(movi(d, r.choice([0, 1, 2, 7, 0xFF, 0x80, 0xFE])))
+        else: f.add(mov_(d, r.choice([4, 5, 6, 7])))
+    def gen(depth, k):
+        d = pool[k]
+        if depth == 0 or r.random() < 0.12 or k + 2 >= len(pool):
+            leaf(d); return
+        x = r.random()
+        if x < 0.40:
+            gen(depth - 1, k); gen(depth - 1, k + 1)
+            e = pool[k + 1]; y = r.random()
+            if y < 0.55: f.add(r.choice(BIN)(e, d))
+            elif y < 0.65: f.add(mulL(e, d), stsmacl(d))
+            elif y < 0.72: f.add(r.choice([0x200F, 0x200E]) | d << 8 | e << 4, stsmacl(d))
+            elif y < 0.80: f.add(r.choice([dmulu, dmuls])(e, d), stsmach(d))
+            elif y < 0.86: f.add(xtrct(e, d))
+            else: f.add(r.choice(CMP)(e, d), movt(d))
+        elif x < 0.60:        # unary
+            gen(depth - 1, k); y = r.random()
+            if y < 0.2: f.add(neg_(d, d))
+            elif y < 0.35: f.add(not_(d, d))
+            elif y < 0.55: f.add(r.choice([extub, extuw, extsb, extsw, swapw_, swapb_])(d, d))
+            elif y < 0.8: f.add(r.choice([SHLL, SHLR, SHAR, 0x4008, 0x4009, 0x4018, 0x4019, 0x4028, 0x4029, ROTL, ROTR]) | d << 8)
+            else: f.add(addi(d, r.choice([1, 0xFF, 0xFE, 2, 0x7F, 0x80])))
+        elif x < 0.75:        # a T-valued node
+            y = r.random()
+            if y < 0.5:
+                gen(depth - 1, k); gen(depth - 1, k + 1); e = pool[k + 1]
+                f.add(r.choice(CMP + [tstr, cmp_str])(e, d))
+            else:
+                gen(depth - 1, k); f.add(r.choice([cmppz, cmppl])(d))
+            z = r.random()
+            if z < 0.7: f.add(movt(d))
+            elif z < 0.85: f.add(movt(d), neg_(d, d))
+            else: f.add(movt(d), 0x4010 | d << 8)         # dt: T = (d - 1 == 0)
+        elif x < 0.88 and k + 3 < len(pool):   # a boolean combination of two T values
+            gen(depth - 1, k); f.add(r.choice(CMP)(r.choice([4, 5, 6, 7]), d), movt(d))
+            gen(depth - 1, k + 1); e = pool[k + 1]; f.add(r.choice(CMP)(r.choice([4, 5, 6, 7]), e), movt(e))
+            f.add(r.choice([and__, or__, xor_])(e, d))
+        else:                  # select: (c1 cmp c2) ? a : b
+            if k + 4 >= len(pool): leaf(d); return
+            gen(depth - 1, k + 1); gen(depth - 1, k + 2)
+            f.add(r.choice(CMP)(pool[k + 2], pool[k + 1]))
+            a, b = g.lab('S'), g.lab('E')
+            f.br(r.choice(['bt', 'bf']), a)
+            gen(depth - 1, k + 3 if k + 3 < len(pool) else k); f.add(mov_(d, pool[k + 3 if k + 3 < len(pool) else k]))
+            f.br('bra', b); f.add(NOP)
+            f.label(a)
+            gen(depth - 1, k + 3 if k + 3 < len(pool) else k); f.add(mov_(d, pool[k + 3 if k + 3 < len(pool) else k]))
+            f.label(b)
+    gen(r.randrange(2, 7), 0)
+    if r.random() < 0.35:       # the tree as the condition of a branch whose arms return different things
+        f.add(cmppz(pool[0]) if r.random() < 0.5 else r.choice(CMP)(4, pool[0]))
+        l = g.lab('Q'); f.br(r.choice(['bt', 'bf']), l)
+        f.add(mov_(pool[0], 5)); f.label(l)
+    f.add(mov_(1, pool[0]))
+    f.rts_slot = mov_(0, 1)
+    return f
+
+
+FAMS16[95] = fam_ptree
+
+
 def build(seed, fam=None, want_fn=False):
     if fam == 88:
         return build_swloop(seed)
