@@ -16,6 +16,7 @@ import shutil
 import subprocess
 import sys
 
+sys.dont_write_bytecode = True    # importing vendor.py must not leave a __pycache__ in the vendored directory
 HERE = os.path.dirname(os.path.abspath(__file__))
 VENDOR_DIR = os.path.normpath(os.path.join(HERE, "..", "..", "..", "..", "FrontEnd",
                                            "third_party", "ghidra-decompiler"))
