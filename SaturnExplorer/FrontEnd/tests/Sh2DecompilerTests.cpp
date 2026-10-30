@@ -230,6 +230,45 @@ void TestMappingOracleAtMirrors()
     (void)textDiffs;   // a name or a literal that is an address differs by design; the instructions per line do not
 }
 
+// Area 7 round 2, A7-10 (open): the instruction in a delay slot is addressed to its branch. `mov.l @(2,pc),r1 ; mov #-1,r0 ; rts ;
+// mov.w r0,@r1` stores to SINIT (0x21800000) in the slot of the rts, and the line that shows the store names the rts (0x06070104), the ledger
+// names it as the store's instruction, and nothing names 0x06070106, the instruction that makes the store. This pins the state as it
+// is; when A7-10 is fixed the three addresses below become 0x06070106 and the test says so.
+void TestSlotMadeLineIsAddressedToItsBranch()
+{
+    std::vector<uint8_t> hw(0x100000u, 0);
+    const uint32_t base = 0x06070100u;
+    const uint16_t words[] = { 0xD102, 0xE0FF, 0x000B, 0x2101, 0x0009, 0x0009, 0x2180, 0x0000 };
+    for (size_t i = 0; i < 8; ++i) dts::Put16(hw, base - 0x06000000u + 2 * i, words[i]);
+    auto snap = MakeSnapshot(hw);
+    Sh2Decompiler d(gConfig);
+    const DecompileResult r = d.Decompile(snap, Request(base));
+    Print("A7-10 slot store", r);
+    CHECK(r.status == DecompileStatus::Ok);
+    const Line* store = LineWith(r, "SINIT = ");
+    CHECK(store != nullptr);
+    const uint32_t kRts = base + 4, kStore = base + 6;
+    if (store)
+    {
+        CHECK(LineInstructions(*store) == std::vector<uint32_t>{ kRts });   // A7-10: should be { kStore }
+        CHECK(store->firstAddr == kRts);
+    }
+    bool ledger = false;
+    for (const MemoryAccess& m : r.accesses) ledger = ledger || (m.write && m.address == 0x21800000u && m.insn == kRts);   // should be kStore
+    CHECK(ledger);
+    bool anyStoreToken = false;
+    for (const Line& l : r.lines)
+        for (const Token& t : l.tokens) anyStoreToken = anyStoreToken || t.addr == kStore;
+    CHECK(!anyStoreToken);   // A7-10: no token names the slot
+    dts::MappingAudit a = dts::AuditMapping(r, [&hw](uint32_t x, uint16_t& w) {
+        if (x < 0x06000000u || x - 0x06000000u + 1 >= hw.size()) return false;
+        w = static_cast<uint16_t>(hw[x - 0x06000000u] << 8 | hw[x - 0x06000000u + 1]);
+        return true;
+    }, "a7_10");
+    CHECK(a.Violations() == 0);
+    CHECK(a.slotMadeLines >= 1 && a.accessAtBranch == 1);   // the counters of MappingOracle.h see it
+}
+
 void TestFixture1()
 {
     Sh2Decompiler d(gConfig);
@@ -4040,7 +4079,9 @@ void TestGameCode()
     };
     for (uint32_t k = 0; k + 1 < hw.size(); k += 2)
     {
-        if (hw[k] != 0x4F || hw[k + 1] != 0x22) continue;
+        // SE_GAME_ONLY may name an entry that is no prologue (area 7 round 2: a callee found through a literal, as the lending run has them)
+        const bool named = only && 0x06000000u + k == static_cast<uint32_t>(std::strtoul(only, nullptr, 16));
+        if (!named && (hw[k] != 0x4F || hw[k + 1] != 0x22)) continue;
         const uint32_t entry = 0x06000000u + k;
         if (only && entry != static_cast<uint32_t>(std::strtoul(only, nullptr, 16))) continue;
         const DecompileResult r = d.Decompile(snap, Request(entry));
@@ -13362,6 +13403,7 @@ int main(int argc, char** argv)
         RUN(TestFixture1());
         RUN(TestMappingOracleOnFixtures());
         RUN(TestMappingOracleAtMirrors());
+        RUN(TestSlotMadeLineIsAddressedToItsBranch());
         RUN(TestFixture1b());
         RUN(TestNoCodeAndMirror());
         RUN(TestMovaFollowsExecutionAddress());
