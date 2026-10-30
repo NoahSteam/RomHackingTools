@@ -367,7 +367,7 @@ def mutations(v):
         _edit(p(d, "patches", "README.md"), f)
 
     def strip_notice(d):
-        _edit(p(d, "cpp", "action.cc"), lambda s: re.sub(r"\n \*\n \* Modified for SaturnExplorer[^\n]*", "", s, count=1))
+        _edit(p(d, "cpp", "action.cc"), lambda s: re.sub(r"\n \* Modified for SaturnExplorer[^\n]*", "", s))
 
     def stale_notice(d):
         # a file no patch changes claims to be modified
