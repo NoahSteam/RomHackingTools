@@ -21,7 +21,7 @@
  * Modified for SaturnExplorer: RuleScarry refuses the minimum for either operand; RuleRightShiftAnd keeps the mask of a shift by the width or more; RuleSLess2Zero takes the high bit of a sum only from an operand when the other has none (patches/0062-engine-range-set-ops-and-rule-guards.patch).
  * Modified for SaturnExplorer: RuleDivOpt refuses a multiply that wraps and a sign extension shifted logically (or a zero extension shifted arithmetically) whose difference is read; RuleDivTermAdd and RuleDivTermAdd2 need the original product not to wrap, RuleDivTermAdd the sum not to wrap its add and RuleDivTermAdd2 the multiplier to be at most 2^n; RuleDivChain, RuleSignForm2, RuleThreeWayCompare and the rules that read a shift amount check what they read (patches/0064-engine-divopt-sign-and-wrap-rule-guards.patch).
  * Modified for SaturnExplorer: RuleSignMod2nOpt2 tests that the sign steering its bias is V's own; RuleThreeWayCompare refuses unsigned constants that are neighbours only modulo 2^64; RuleShiftSub refuses a SUBPIECE that reads past the top of the shifted value (patches/0067-engine-round14-sign-mod-late-donothing-three-way-shift-sub.patch).
- * Modified for SaturnExplorer: RulePiecePathology leaves a word of the stack frame alone, which is no register a partial write fills in (patches/0072-engine-frame-chains-and-save-slots.patch).
+ * Modified for SaturnExplorer: RulePiecePathology leaves a word of the stack frame alone, which is no register a partial write fills in; RulePullsubIndirect takes the piece of the INDIRECT's input from the lowest byte its readers take (patches/0072-engine-frame-chains-and-save-slots.patch).
  */
 #include "ruleaction.hh"
 #include "coreaction.hh"
@@ -1010,9 +1010,13 @@ int4 RulePullsubIndirect::applyOp(PcodeOp *op,Funcdata &data)
   }
   else {
     Varnode *basevn = indir->getIn(0);
-    Varnode *small1 = RulePullsubMulti::findSubpiece(basevn,newSize,op->getIn(1)->getOffset());
+    // SaturnExplorer (patches/0072-engine-frame-chains-and-save-slots.patch): the piece of the input is the bytes every reader takes,
+    // from minByte, as the output's (smalladdr2) and RulePullsubMulti's are; upstream took the truncation of the one SUBPIECE the rule
+    // was applied to, so with two readers (`SUB41(w,1)`, `SUB41(w,0)`) the new INDIRECT read bytes 1 and 2 of w for bytes 0 and 1, and
+    // both readers took the same byte (ledger A3-140: `return 0x88;` for the xor of two different bytes of a frame word)
+    Varnode *small1 = RulePullsubMulti::findSubpiece(basevn,newSize,minByte);
     if (small1 == (Varnode *)0)
-      small1 = RulePullsubMulti::buildSubpiece(basevn,newSize,op->getIn(1)->getOffset(),data);
+      small1 = RulePullsubMulti::buildSubpiece(basevn,newSize,minByte,data);
     // Create new indirect near original indirect
     new_ind = data.newIndirect(targ_op);
     small2 = data.newVarnodeOut(newSize,smalladdr2,new_ind);

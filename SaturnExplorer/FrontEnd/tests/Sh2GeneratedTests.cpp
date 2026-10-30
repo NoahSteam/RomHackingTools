@@ -9716,6 +9716,84 @@ bool GenFrame124Fn(uint64_t seed, CCase& c, std::string& shape)
     return true;
 }
 
+// ---- A3-134 (area 3 round 15 fix, patch 0072): the shapes of A3-130 to A3-132 on the frame124 stream (one seed in four, a draw of its own,
+// named frame124_<seed>.chain so it is checked as a frame124 function): a 16-byte struct S at sp + 0 to 12 in a 48-byte frame on r15, &S
+// behind a chain of 1 to 3 pointer slots (slot 0 at sp + 32 holds &S, slot k the address of slot k - 1: A3-130), S filled first by nothing
+// (bytes never written under the stores: A3-131), by the entry values of r8 to r14 stored whole (A3-132) or by constant words; then 1 to 8
+// byte, halfword and word stores at aligned offsets (r4 to r7 or a constant) each through the chain reloaded, and 1 to 3 reads of S at its
+// frame offset (byte, halfword or word) added or xored into r0. No call: the printed-C differential compares every one (a text that reads a
+// callee-saved register's entry value is skipped by it, the frame ledger still checks it).
+//   frame124.chain.L<1|2|3>.<none|save|words>
+bool GenFrame130Fn(uint64_t seed, CCase& c, std::string& shape)
+{
+    Rng rng(seed * 2654435761u + 0x130A3u);
+    if (!rng.Chance(25)) return false;
+    const uint32_t levels = 1 + rng.Below(3);
+    const uint32_t fill = rng.Below(3);
+    const uint32_t sOff = 4u * rng.Below(4);
+    LaunderBuilder b;
+    auto put = [&](uint32_t x) { b.Put(static_cast<uint16_t>(x)); };
+    put(0x7FD0);                                     // add #-48,r15
+    put(0x61F3);                                     // mov r15,r1
+    if (sOff) put(0x7100 | sOff);                    // add #sOff,r1: &S
+    put(0x1F18);                                     // mov.l r1,@(32,r15): slot 0
+    for (uint32_t k = 1; k < levels; ++k)
+    {
+        put(0x61F3);                                 // mov r15,r1
+        put(0x7100 | (32u + 4u * (k - 1)));          // add #slot(k-1),r1
+        put(0x1F10 | (8u + k));                      // mov.l r1,@(slot k,r15)
+    }
+    auto reload = [&]() {
+        put(0x51F0 | (8u + levels - 1));             // mov.l @(slot L-1,r15),r1
+        for (uint32_t k = 1; k < levels; ++k) put(0x6112);   // mov.l @r1,r1
+    };
+    for (uint32_t j = 0; j < 4 && fill != 0; ++j)
+    {
+        const uint32_t disp = (sOff + 4u * j) / 4u;
+        if (fill == 1)
+            put(0x1F00 | (8u + rng.Below(7)) << 4 | disp);   // mov.l r8..r14,@(S+4j,r15)
+        else
+        {
+            put(0xE200 | rng.Below(256));            // mov #imm,r2
+            put(0x1F20 | disp);                      // mov.l r2,@(S+4j,r15)
+        }
+    }
+    const uint32_t nStores = 1 + rng.Below(8);
+    for (uint32_t i = 0; i < nStores; ++i)
+    {
+        const uint32_t size = 1u << rng.Below(3);
+        const uint32_t off = rng.Below(16 / size) * size;
+        uint32_t v = 4 + rng.Below(4);
+        if (rng.Chance(30))
+        {
+            put(0xE200 | rng.Below(256));            // mov #imm,r2
+            v = 2;
+        }
+        reload();
+        put(0x6313);                                 // mov r1,r3
+        if (off) put(0x7300 | off);                  // add #off,r3
+        put(0x2300 | v << 4 | (size == 1 ? 0u : size == 2 ? 1u : 2u));   // mov.b / .w / .l v,@r3
+    }
+    const uint32_t nReads = 1 + rng.Below(3);
+    for (uint32_t i = 0; i < nReads; ++i)
+    {
+        const uint32_t size = 1u << rng.Below(3);
+        const uint32_t off = rng.Below(16 / size) * size;
+        put(0x63F3);                                 // mov r15,r3
+        if (sOff + off) put(0x7300 | (sOff + off));  // add #S+off,r3
+        put(0x6230 | (size == 1 ? 0u : size == 2 ? 1u : 2u));   // mov.b / .w / .l @r3,r2
+        put(i == 0 ? 0x6023u : rng.Chance(50) ? 0x302Cu : 0x202Au);   // mov r2,r0 / add r2,r0 / xor r2,r0
+    }
+    put(0x7F30);                                     // add #48,r15
+    put(0x000B);                                     // rts
+    put(0x0009);
+    static const char* const kFill[] = { "none", "save", "words" };
+    shape = std::string("frame124.chain.L") + std::to_string(levels) + "." + kFill[fill];
+    c.words = b.w;
+    c.name = "frame124_" + std::to_string(seed) + ".chain";
+    return true;
+}
+
 // The frame ledger over the frame124 stream (A3-124): each function decompiled as CheckLaunderWalks does (the callee at kCode + 0xC0 lent
 // first when there is one), and every frame write that went unread while the code reads it is a finding (dts::FrameLosses).
 int CheckFrame124Ledger(Sh2Decompiler& d, const std::vector<CCase>& cases)
@@ -10066,9 +10144,18 @@ void TestPrintedC()
             {
                 CCase f;
                 std::string shape;
-                if (!GenFrame124Fn(static_cast<uint64_t>(seed), f, shape) || shape.find(".call") != std::string::npos) continue;
-                fns.push_back(RegFn());
-                cases.push_back(f);
+                if (GenFrame124Fn(static_cast<uint64_t>(seed), f, shape) && shape.find(".call") == std::string::npos)
+                {
+                    fns.push_back(RegFn());
+                    cases.push_back(f);
+                }
+                // (A3-134, patch 0072) the chained slots, the fills and the save stores of A3-130 to A3-132: none has a call
+                CCase g;
+                if (GenFrame130Fn(static_cast<uint64_t>(seed), g, shape))
+                {
+                    fns.push_back(RegFn());
+                    cases.push_back(g);
+                }
             }
     }
     if (EnvNumber("SE_GENERATED_COVERAGE", 0) != 0)
@@ -10286,9 +10373,17 @@ void TestPrintedC()
         {
             CCase c;
             std::string shape;
-            if (!GenFrame124Fn(static_cast<uint64_t>(seed), c, shape)) continue;
-            ++drawn[shape.substr(0, shape.rfind('.'))];
-            f124.push_back(c);
+            if (GenFrame124Fn(static_cast<uint64_t>(seed), c, shape))
+            {
+                ++drawn[shape.substr(0, shape.rfind('.'))];
+                f124.push_back(c);
+            }
+            CCase g;   // (A3-134, patch 0072)
+            if (GenFrame130Fn(static_cast<uint64_t>(seed), g, shape))
+            {
+                ++drawn[shape];
+                f124.push_back(g);
+            }
         }
         if (frame124Words)
         {
@@ -11721,6 +11816,23 @@ void TestA365Pins(Sh2Decompiler& d)
                         if (std::string(fill) == "bytes" && std::string(call) != "nocall") continue;
                         CHECK(drawn[std::string("frame124.") + base + "." + fill + "." + call + "." + w] > 0);
                     }
+    }
+    // A3-134 (patch 0072): the chain draws of the frame124 stream: each number of slots with each fill
+    {
+        std::map<std::string, int> drawn;
+        int n = 0;
+        for (uint64_t seed = 1; seed <= 4000; ++seed)
+        {
+            CCase c;
+            std::string shape;
+            if (!GenFrame130Fn(seed, c, shape)) continue;
+            ++n;
+            ++drawn[shape];
+        }
+        std::printf("pin 'frame124 chain draws': %d functions in 4000 seeds, %zu kinds\n", n, drawn.size());
+        for (const char* l : { "L1", "L2", "L3" })
+            for (const char* fill : { "none", "save", "words" })
+                CHECK(drawn[std::string("frame124.chain.") + l + "." + fill] > 0);
     }
 }
 
