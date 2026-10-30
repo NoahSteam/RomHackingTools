@@ -386,6 +386,9 @@ struct DecompileResult
         uint32_t size = 0;
     };
     std::vector<FrameCall> frameCalls;
+    // The engine's frame records reached a bound (patch 0072: a walk of 4,096 ops, 65,536 guard records) and took every frame write
+    // for read: the frame ledger cannot show a loss in this function, which is then unchecked, not clean (ledger A3-133).
+    bool frameLedgerCapped = false;
     // How each memory access the flow made that is no longer one in the p-code ended (the engine
     // records it, patch 0017). With the printed accesses above, they account for every LOAD and
     // STORE of the flow: an access of the all-volatile reference run (DecompileRequest::
