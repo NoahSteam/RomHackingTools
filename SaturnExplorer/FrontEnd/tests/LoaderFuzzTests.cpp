@@ -46,7 +46,7 @@
 #include "Decompiler/Sh2Decompiler.h"
 #include "Decompiler/Sh2FunctionFinder.h"
 #include "Decompiler/SpecBundle.h"
-#include "Disc/PathUtil.h"
+#include "FileRead.h"
 #include "FileWrite.h"
 #include "Settings.h"
 #include "Sha256.h"
@@ -209,8 +209,10 @@ bool WriteText(const std::string& path, const std::string& s) { return WriteByte
 
 bool ReadBytes(const std::string& path, Bytes& out)
 {
+    // Bounded and regular files only: the cases leave a FIFO and a link to /dev/zero where a file was, and the harness reads
+    // the damaged directory too.
     std::string s;
-    if (!sfe::ReadWholeFile(path, s)) return false;
+    if (sfe::ReadFileCapped(path, 64u << 20, s) != sfe::CappedRead::Ok) return false;
     out.assign(s.begin(), s.end());
     return true;
 }
@@ -1678,7 +1680,8 @@ bool DirIsExact(const std::string& dir, std::string& why)
     return true;
 }
 
-// Damage the published directory. 'dangerous' is set for the shapes that block or never end when read.
+// Damage the published directory. A step that rewrites a file removes it first: the cases must not write through a link a
+// step before left there, or the sentinel outside would be changed by the harness and not by the repair. 'dangerous' is set for the shapes that block or never end when read.
 std::string Damage(const std::string& dir, Rng& rng, bool& dangerous, std::string& sentinelPath, Bytes& sentinel)
 {
     const std::vector<sfe::decomp::SpecFileData>& files = sfe::decomp::Sh2SpecFiles();
@@ -1689,9 +1692,9 @@ std::string Damage(const std::string& dir, Rng& rng, bool& dangerous, std::strin
     switch (k)
     {
     case 0: ::unlink(victim.c_str()); return "delete a file";
-    case 1: if (!b.empty()) b.resize(rng.Below(static_cast<uint32_t>(b.size()))); WriteBytes(victim, b); return "truncate a file";
-    case 2: if (!b.empty()) b[rng.Below(static_cast<uint32_t>(b.size()))] ^= 1u << rng.Below(8); WriteBytes(victim, b); return "flip a bit";
-    case 3: b.insert(b.end(), 16, 0); WriteBytes(victim, b); return "append to a file";
+    case 1: if (!b.empty()) b.resize(rng.Below(static_cast<uint32_t>(b.size()))); ::unlink(victim.c_str()); WriteBytes(victim, b); return "truncate a file";
+    case 2: if (!b.empty()) b[rng.Below(static_cast<uint32_t>(b.size()))] ^= 1u << rng.Below(8); ::unlink(victim.c_str()); WriteBytes(victim, b); return "flip a bit";
+    case 3: b.insert(b.end(), 16, 0); ::unlink(victim.c_str()); WriteBytes(victim, b); return "append to a file";
     case 4: ::unlink(victim.c_str()); MakeDir(victim); return "a directory in place of a file";
     case 5:
     {
@@ -2307,6 +2310,13 @@ int main(int argc, char** argv)
     {
         RemoveTree(root + "/repro");
         MakeDir(root);
+    }
+    // Absolute: the names, bounds and notes loaders read files in the working folder, so the cases change into the scratch
+    // folder and a relative path would no longer lead to it.
+    if (root[0] != '/')
+    {
+        char cwd[4096];
+        if (::getcwd(cwd, sizeof cwd)) root = std::string(cwd) + "/" + root;
     }
     gScratch = root;
     for (const char* d : { "savestate", "bios", "bounds", "names", "spec", "cfg", "cfg/SaturnExplorer", "concurrent", "links", "oversize" }) MakeDir(gScratch + "/" + d);

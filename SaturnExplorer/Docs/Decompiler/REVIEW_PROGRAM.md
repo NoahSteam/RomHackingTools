@@ -91,7 +91,7 @@ violation; no open P1 or P2 rows.
 | 6 | Worker lifecycle and exhaustion | Fault injection as a matrix: allocation k fails for every k across a run; cancel at every phase boundary and every thousand ops; under ASan and LSan. Invariant: no crash, no damaged engine without a report, no result for a stale generation. | Fixtures, the largest game functions |
 | 7 | Pseudocode-to-assembly mapping | Every token address lies in the body; a line several instructions contribute to is marked; navigation round-trips. | Game corpus |
 | 8 | Trust indicators | A state model of stale, unsupported, truncated, unimplemented, unavailable and too-large, driven by area 1's sequences (built in round 1: `FrontEnd/tests/DecompilerTrustModel.h` and `DecompilerTrustTests.cpp`, which compare the model with what the panel drew; see `15_DECOMPILER_STEP5.md`). | Generated sequences |
-| 9 | BIOS and external files | Loaders fuzzed with truncated and malformed inputs; concurrent instances; link handling. | Generated files |
+| 9 | BIOS and external files | Loaders fuzzed with truncated and malformed inputs; concurrent instances; link handling (built in round 1: `FrontEnd/tests/LoaderFuzzTests.cpp`, a seeded run in `ctest`, `SE_LOADFUZZ_*` for long ones; see `15_DECOMPILER_STEP5.md`). | Generated files |
 | 10 | Vendored patches | The reproduction job; one review per patch against pinned upstream; upstream bugs filed. | CI |
 | 11 | Validation and test strength | Mutation score per oracle; no skipped tests; the generator covers its grammar. | The suites themselves |
 | 12 | Platforms and release | The CI matrix, a release checklist on a tagged build. | CI |
