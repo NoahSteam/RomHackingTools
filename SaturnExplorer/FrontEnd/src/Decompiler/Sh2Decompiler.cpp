@@ -3622,11 +3622,10 @@ struct PointerValues
     // 0x25F80004 reads 0x05F80008 next): one such address, for the cache caution the stepped note then gives (A5-70).
     bool steppedCached = false;
     uint32_t steppedCachedAt = 0;
-    // A pointer stepped in a loop whose first values are no hardware (a cache data array cell, work RAM) and whose later ones are: one such
-    // address (A5-91). `p = (p + 4) ^ 0x20000000` from 0xFFFFFF08 holds 0xDFFFFF0C, then 0xFFFFFF10: the store after the loop writes the on-chip
-    // register the later turns come to.
-    bool steppedHw = false;
-    uint32_t steppedHwAt = 0;
+    // The values a pointer stepped in a loop comes to after its first ones, as far as a bounded walk worked them out (A5-91): `p = (p + 4) ^
+    // 0x20000000` from 0xFFFFFF08 holds 0xDFFFFF0C, then 0xFFFFFF10, 0xDFFFFF14 ...; the store after the loop writes the on-chip register the later
+    // turns come to. Moved with the pointer by every offset added to it, so that whether one is hardware is asked of the address the access is at.
+    std::vector<uint32_t> later;
     // An unknown value ORed with a constant that sets the top three bits of the address: the pointer is somewhere in [rangeLo, rangeHi], all in
     // the partition 7, the SH-2's on-chip registers, whose low 9 address bits decide the register (A5-90). The value is unknown, so no register
     // is named: the access is said to "may reach on-chip registers".
@@ -3779,11 +3778,8 @@ private:
             into.steppedCached = true;
             into.steppedCachedAt = from.steppedCachedAt;
         }
-        if (!into.steppedHw && from.steppedHw)
-        {
-            into.steppedHw = true;
-            into.steppedHwAt = from.steppedHwAt;
-        }
+        for (uint32_t l : from.later)
+            if (into.later.size() < 64 && std::find(into.later.begin(), into.later.end(), l) == into.later.end()) into.later.push_back(l);
         if (from.ranged)
         {
             into.rangeLo = into.ranged ? std::min(into.rangeLo, from.rangeLo) : from.rangeLo;
@@ -3832,36 +3828,27 @@ private:
         if (stepped.empty()) return;
         v.steps = v.others = true;
         if (overflow) return;
-        // Which of the two cautions the walk looks for: the cache caution, when no first value is a register of the cached partition already (the
-        // caution is made for that address), and the hardware one (A5-91), when no first value is hardware (the notes of that address are made).
-        bool cachedKnown = false, hwKnown = false;
-        for (uint32_t a : all)
-        {
-            cachedKnown |= (a >> 29) == 0 && IsRegisterArea(a);
-            hwKnown |= IsHardwareRegion(a);
-        }
+        // The walk of the later values: the cache caution is looked for when no first value is a register of the cached partition already (the
+        // caution is made for that address), and every later value is kept (A5-91) for HardwareNotes to ask, of the address an access is at, whether it
+        // is hardware.
+        bool cachedKnown = false;
+        for (uint32_t a : all) cachedKnown |= (a >> 29) == 0 && IsRegisterArea(a);
         const bool needCached = !v.steppedCached && !cachedKnown;
-        const bool needHw = !v.steppedHw && !hwKnown;
-        if (!needCached && !needHw) return;
         std::set<uint32_t> seen = all;
         std::vector<uint32_t> queue(all.begin(), all.end());
         size_t derived = 0;
-        for (size_t i = 0; i < queue.size() && derived < kMaxValues && ((needCached && !v.steppedCached) || (needHw && !v.steppedHw)); ++i)
+        for (size_t i = 0; i < queue.size() && derived < kMaxValues; ++i)
             for (const SelfPath& p : mine)
                 for (uint32_t r : Eval(p, queue[i]))
                 {
                     if (!seen.insert(r).second) continue;
                     ++derived;
                     queue.push_back(r);
+                    if (v.later.size() < 64) v.later.push_back(r);
                     if (needCached && !v.steppedCached && (r >> 29) == 0 && IsRegisterArea(r))
                     {
                         v.steppedCached = true;
                         v.steppedCachedAt = r;
-                    }
-                    if (needHw && !v.steppedHw && IsHardwareRegion(r))
-                    {
-                        v.steppedHw = true;
-                        v.steppedHwAt = r;
                     }
                 }
     }
@@ -3888,8 +3875,7 @@ private:
         out.steps = v.steps;
         out.steppedCached = v.steppedCached;
         out.steppedCachedAt = v.steppedCachedAt + k;
-        out.steppedHw = v.steppedHw;
-        out.steppedHwAt = v.steppedHwAt + k;
+        for (uint32_t l : v.later) out.later.push_back(l + k);
         if (v.ranged)
         {
             // (the span moved by a signed offset; what falls off either end of the address space is another value the pointer may hold)
@@ -4283,7 +4269,11 @@ std::vector<HardwareNote> HardwareNotes(const ghidra::Funcdata& fd, const std::f
             }
             // (A5-91) A pointer stepped in a loop from an address that is no hardware, whose later values are: said under the same words as the
             // stepped note of a register's pointer, with the address the walk came to.
-            const bool laterHardware = pv.steps && pv.steppedHw;
+            uint32_t laterAt = 0;
+            bool laterHardware = false;
+            if (pv.steps)
+                for (uint32_t l : pv.later)
+                    if (IsHardwareRegion(l)) { laterHardware = true; laterAt = l; break; }
             if (registers.empty() && !laterHardware) continue;
             // (an address the pointer holds that is no register's is another value it may hold, as a parameter's is)
             bool otherValues = pv.others;
@@ -4330,9 +4320,9 @@ std::vector<HardwareNote> HardwareNotes(const ghidra::Funcdata& fd, const std::f
             // (A5-91) ...and one that starts at no hardware: its first values are said nowhere, and the later ones reach a register area, the associative
             // purge or the cache address array (a pointer stepped from a cache data array cell, `p = (p + 4) ^ 0x20000000`, comes to the on-chip
             // registers on the second turn).
-            if (pv.steps && !steppedSaid && laterHardware)
+            if (pv.steps && !steppedSaid && laterHardware && registers.empty())
                 noteRaw(insn, "the pointer is stepped in a loop from addresses that are no hardware's: the iterations after the first reach other addresses, "
-                        "which are not said, among them " + Hex8(pv.steppedHwAt) + " (" + HardwareRegionName(pv.steppedHwAt) + "): a " + std::to_string(size) +
+                        "which are not said, among them " + Hex8(laterAt) + " (" + HardwareRegionName(laterAt) + "): a " + std::to_string(size) +
                         "-byte " + (write ? "write" : "read") + " there has the effects and is subject to the width rules of that hardware" +
                         (pv.steppedCached && !write ? "; and " + cacheCaution : std::string()),
                         true);
