@@ -7851,6 +7851,14 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
         }
         const size_t close = pr.cText.find(')', at);
         const std::string plist = pr.cText.substr(at + pr.name.size() + 1, close - at - pr.name.size() - 1);
+        // A2-108: a parameter that is a pointer (`xunknown4 *param_1`) is an address the inputs do not hold: without the memory mode (ptrWidth) the compiled text would
+        // dereference a random number and die (`crashed`), whatever the frame mode the stores through r4 put the text in. Said as the memory it is.
+        if (!ptrMode && plist.find('*') != std::string::npos)
+        {
+            v.cls = "skipped:memory";
+            v.detail = "a parameter is a pointer; the memory mode (CCase::ptrWidth) runs it";
+            continue;
+        }
         int nParams = 0;
         if (plist.find_first_not_of(" \t") != std::string::npos && plist != "void") nParams = 1 + static_cast<int>(std::count(plist.begin(), plist.end(), ','));
         const size_t lineStart = pr.cText.rfind('\n', at);
@@ -10149,6 +10157,10 @@ void TestPrintedC()
                 gPrintedCTextHook = nullptr;
                 std::printf("pin 'A2-106 (c)': %s (%s)\n", m106c[0].cls.c_str(), m106c[0].detail.substr(0, 90).c_str());
                 CHECK(m106c[0].cls == "mismatch" && m106c[0].detail.find(" memory ") != std::string::npos);
+                // A2-108: the same dereference without the mode is said to be memory, not run on random numbers as host pointers (it was `crashed`)
+                const std::vector<CVerdict> m108 = CheckPrintedC(d, { mem("A2-108: a pointer parameter without the mode", 0, { 0x2462, 0x6052, 0x000B, 0x0009 }) }, nIn, cc, 0x51ED, 8994);
+                std::printf("pin 'A2-108': %s\n", m108[0].cls.c_str());
+                CHECK(m108[0].cls == "skipped:memory");
             }
         }
     }
