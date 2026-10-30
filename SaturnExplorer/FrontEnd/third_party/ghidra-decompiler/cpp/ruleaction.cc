@@ -21,6 +21,7 @@
  * Modified for SaturnExplorer: RuleScarry refuses the minimum for either operand; RuleRightShiftAnd keeps the mask of a shift by the width or more; RuleSLess2Zero takes the high bit of a sum only from an operand when the other has none (patches/0062-engine-range-set-ops-and-rule-guards.patch).
  * Modified for SaturnExplorer: RuleDivOpt refuses a multiply that wraps and a sign extension shifted logically (or a zero extension shifted arithmetically) whose difference is read; RuleDivTermAdd and RuleDivTermAdd2 need the original product not to wrap, RuleDivTermAdd the sum not to wrap its add and RuleDivTermAdd2 the multiplier to be at most 2^n; RuleDivChain, RuleSignForm2, RuleThreeWayCompare and the rules that read a shift amount check what they read (patches/0064-engine-divopt-sign-and-wrap-rule-guards.patch).
  * Modified for SaturnExplorer: RuleSignMod2nOpt2 tests that the sign steering its bias is V's own; RuleThreeWayCompare refuses unsigned constants that are neighbours only modulo 2^64; RuleShiftSub refuses a SUBPIECE that reads past the top of the shifted value (patches/0067-engine-round14-sign-mod-late-donothing-three-way-shift-sub.patch).
+ * Modified for SaturnExplorer: RulePiecePathology leaves a word of the stack frame alone, which is no register a partial write fills in (patches/0072-engine-frame-chains-and-save-slots.patch).
  */
 #include "ruleaction.hh"
 #include "coreaction.hh"
@@ -10860,6 +10861,13 @@ int4 RulePiecePathology::applyOp(PcodeOp *op,Funcdata &data)
     // register stored to the stack, a byte put into them, the longword loaded back -- is not one, and calling it so
     // truncated the function's return to the small piece (patches/0037-engine-division-piece-and-input-names.patch).
     if (op->getOut()->characterizeOverlap(*subOp->getIn(0)) == 0) return 0;
+    // SaturnExplorer (patches/0072-engine-frame-chains-and-save-slots.patch): ...and a word of the stack frame is no register a partial
+    // write fills in. A STORE through a pointer the heritage could not place yet (one reloaded from a frame slot) is guarded at the word, and
+    // when it is folded into the word's low half, the collapse of its guard makes `word = CONCAT(SUBPIECE(word_before,#2),half)`: with the
+    // word never written before, word_before is the frame's input, which isPathology takes for the garbage of a partial register write. The
+    // trace below then followed the next store's guard to the RETURN and cut the function's return to the half (`return param_2;` for a
+    // word built of two halfword stores: ledger A3-131, exposed by 0068's front piece, whose length had been 0).
+    if (op->getOut()->getSpace()->getType() == IPTR_SPACEBASE) return 0;
     if (!isPathology(subOp->getIn(0),data)) return 0;
   }
   else if (opc == CPUI_INDIRECT) {
