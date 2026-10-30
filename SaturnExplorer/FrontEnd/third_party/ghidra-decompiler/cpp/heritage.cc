@@ -230,6 +230,7 @@ Heritage::Heritage(Funcdata *data)
   fd = data;
   pass = 0;
   deadcodeBumped = false;
+  pendingSpace = (AddrSpace *)0;
   maxdepth = -1;
 }
 
@@ -2016,8 +2017,14 @@ void Heritage::reprocessFreeStores(AddrSpace *spc,vector<PcodeOp *> &freeStores)
     escape.compute(fd,spc,false);
     for(int4 i=0;i<freeStores.size();++i) {
       PcodeOp *op = freeStores[i];
-      if (!op->isDead() && !op->usesSpacebasePtr() && (escape.storeIsUnmodeled(op) || escape.storeIsPending(op)))
+      if (op->isDead() || op->usesSpacebasePtr()) continue;
+      if (escape.storeIsUnmodeled(op))
 	fd->opMarkSpacebasePtr(op);
+      else if (escape.storeIsPending(op)) {
+	fd->opMarkSpacebasePtr(op);
+	pendingStores.push_back(op->getSeqNum());	// (0072) settled again after the next pass (reprocessPendingStores)
+	pendingSpace = spc;
+      }
     }
   }
 
@@ -2029,19 +2036,62 @@ void Heritage::reprocessFreeStores(AddrSpace *spc,vector<PcodeOp *> &freeStores)
     if (op->usesSpacebasePtr()) continue;
 
     // If not the STORE may have triggered INDIRECTs that are unnecessary
-    PcodeOp *indOp = op->previousOp();
-    while(indOp != (PcodeOp *)0) {
-      if (indOp->code() != CPUI_INDIRECT) break;
-      Varnode *iopVn = indOp->getIn(1);
-      if (iopVn->getSpace()->getType()!=IPTR_IOP) break;
-      if (op != PcodeOp::getOpFromConst(iopVn->getAddr())) break;
-      PcodeOp *nextOp = indOp->previousOp();
-      if (indOp->getOut()->getSpace() == spc) {
-	fd->totalReplace(indOp->getOut(),indOp->getIn(0));
-	fd->opDestroy(indOp);		// Get rid of the INDIRECT
-      }
-      indOp = nextOp;
+    unguardStore(spc,op);
+  }
+}
+
+/// The STORE is no longer marked as using a stack pointer: the INDIRECTs it put on the given space are removed, each output replaced by
+/// its input.
+/// \param spc is the stack space
+/// \param op is the STORE
+void Heritage::unguardStore(AddrSpace *spc,PcodeOp *op)
+
+{
+  PcodeOp *indOp = op->previousOp();
+  while(indOp != (PcodeOp *)0) {
+    if (indOp->code() != CPUI_INDIRECT) break;
+    Varnode *iopVn = indOp->getIn(1);
+    if (iopVn->getSpace()->getType()!=IPTR_IOP) break;
+    if (op != PcodeOp::getOpFromConst(iopVn->getAddr())) break;
+    PcodeOp *nextOp = indOp->previousOp();
+    if (indOp->getOut()->getSpace() == spc) {
+      fd->totalReplace(indOp->getOut(),indOp->getIn(0));
+      fd->opDestroy(indOp);		// Get rid of the INDIRECT
     }
+    indOp = nextOp;
+  }
+}
+
+/// SaturnExplorer (patches/0072-engine-frame-chains-and-save-slots.patch): a STORE kept guarded only because its pointer was read through a
+/// frame address (FrameEscape::storeIsPending) is settled again after each later heritage pass, once that read has become a direct stack read
+/// linked to the word's write: a pointer still pending, or now a possible frame address the analysis does not model, keeps the guards; one
+/// the analysis models (a frame address it walks to: the STORE is folded into the frame, or guarded by its own range) keeps the mark; any
+/// other pointer (a parameter the slot held, a global's address) is no frame address, and the STORE loses the mark and its guards, as one
+/// settled on the first pass does (reprocessFreeStores). A STORE already folded or removed is gone from the list.
+void Heritage::reprocessPendingStores(void)
+
+{
+  if (pendingStores.empty() || pendingSpace == (AddrSpace *)0) return;
+  vector<PcodeOp *> ops;
+  for(vector<SeqNum>::const_iterator iter=pendingStores.begin();iter!=pendingStores.end();++iter) {
+    PcodeOp *op = fd->findOp(*iter);
+    if (op == (PcodeOp *)0 || op->isDead() || op->code() != CPUI_STORE || !op->usesSpacebasePtr()) continue;
+    ops.push_back(op);
+  }
+  pendingStores.clear();
+  if (ops.empty()) return;
+  FrameEscape escape;
+  escape.compute(fd,pendingSpace,false);
+  for(int4 i=0;i<ops.size();++i) {
+    PcodeOp *op = ops[i];
+    if (escape.storeIsUnmodeled(op)) continue;
+    if (escape.storeIsPending(op)) {
+      pendingStores.push_back(op->getSeqNum());
+      continue;
+    }
+    if (escape.members.find(op->getIn(1)) != escape.members.end()) continue;
+    fd->opClearSpacebasePtr(op);
+    unguardStore(pendingSpace,op);
   }
 }
 
@@ -3686,6 +3736,9 @@ void Heritage::heritage(void)
     placeMultiequals();
     rename();
   }
+  // (patches/0072-engine-frame-chains-and-save-slots.patch) the STOREs kept as pending by an earlier pass first: this pass linked the reads
+  // their pointers came through
+  reprocessPendingStores();
   if (reprocessStackCount > 0)
     reprocessFreeStores(stackSpace, freeStores);
   analyzeNewLoadGuards();
@@ -3819,6 +3872,8 @@ void Heritage::clear(void)
   maxdepth = -1;
   pass = 0;
   deadcodeBumped = false;
+  pendingStores.clear();
+  pendingSpace = (AddrSpace *)0;
 }
 
 } // End namespace ghidra

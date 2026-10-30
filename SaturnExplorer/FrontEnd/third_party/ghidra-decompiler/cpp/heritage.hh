@@ -318,6 +318,8 @@ class Heritage {
   int4 maxdepth;		///< Maximum depth of the dominator tree
   int4 pass;			///< Current pass being executed
   bool deadcodeBumped;		///< SaturnExplorer (0068): a dead code delay was raised in this generation (one restart's worth)
+  vector<SeqNum> pendingStores;	///< SaturnExplorer (0072): STOREs kept guarded only as pending (FrameEscape::storeIsPending), settled again each pass
+  AddrSpace *pendingSpace;	///< SaturnExplorer (0072): ...in this stack space
 
   PriorityQueue pq;		///< Priority queue for phi-node placement
   vector<FlowBlock *> merge;	///< Calculate merge points (blocks containing phi-nodes)
@@ -357,6 +359,8 @@ class Heritage {
   bool protectFreeStores(AddrSpace *spc,vector<PcodeOp *> &freeStores);
   bool discoverIndexedStackPointers(AddrSpace *spc,vector<PcodeOp *> &freeStores,bool checkFreeStores);
   void reprocessFreeStores(AddrSpace *spc,vector<PcodeOp *> &freeStores);
+  void reprocessPendingStores(void);	///< SaturnExplorer (0072): settle the STOREs kept guarded as pending again
+  void unguardStore(AddrSpace *spc,PcodeOp *op);	///< Remove the INDIRECTs a free STORE put in the given space
   bool markEscapedStores(AddrSpace *spc,vector<PcodeOp *> &freeStores);	///< SaturnExplorer: mark the STOREs a frame address may have escaped to (patches/0061-engine-stack-frame-escape.patch)
   void widenEscapedStoreGuards(void);	///< SaturnExplorer: a STORE guard through an escaped frame address guards the whole stack (patches/0061-engine-stack-frame-escape.patch)
   void guard(const Address &addr,int4 size,bool guardPerformed,
@@ -415,6 +419,8 @@ public:
   void heritage(void);				    ///< Perform one pass of heritage
   const list<LoadGuard> &getLoadGuards(void) const { return loadGuard; }	///< Get list of LOAD ops that are guarded
   const list<LoadGuard> &getStoreGuards(void) const { return storeGuard; }	///< Get list of STORE ops that are guarded
+  bool hasPendingStores(void) const { return !pendingStores.empty(); }	///< SaturnExplorer (0072): is a STORE guarded as pending?
+  bool isPendingStore(const PcodeOp *op) const { return find(pendingStores.begin(),pendingStores.end(),op->getSeqNum()) != pendingStores.end(); }	///< SaturnExplorer (0072): is the STORE guarded as pending?
   const LoadGuard *getStoreGuard(PcodeOp *op) const;	///< Get LoadGuard record associated with given PcodeOp
 };
 

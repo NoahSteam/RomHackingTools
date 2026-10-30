@@ -17,6 +17,7 @@
  * Modified for SaturnExplorer: the instructions and jump tables the flow recovered are recorded (patches/0021-flow-instructions.patch).
  * Modified for SaturnExplorer: an op that changes keeps the cached masks around it a superset of the truth (patches/0054-engine-cached-masks-never-narrower.patch).
  * Modified for SaturnExplorer: a write folded into the stack frame whose value nothing read is recorded when it goes (patches/0068-engine-deadcode-late-stack-reads.patch).
+ * Modified for SaturnExplorer: whether a STORE is guarded as pending, for the save slots (patches/0072-engine-frame-chains-and-save-slots.patch).
  */
 #ifndef __FUNCDATA_HH__
 #define __FUNCDATA_HH__
@@ -358,6 +359,8 @@ public:
 
   const list<LoadGuard> &getLoadGuards(void) const { return heritage.getLoadGuards(); }		///< Get the list of guarded LOADs
   const list<LoadGuard> &getStoreGuards(void) const { return heritage.getStoreGuards(); }	///< Get the list of guarded STOREs
+  bool hasPendingFrameStores(void) const { return heritage.hasPendingStores(); }	///< SaturnExplorer (0072): is a STORE through a pointer read through a frame address guarded?
+  bool isPendingFrameStore(const PcodeOp *op) const { return heritage.isPendingStore(op); }	///< SaturnExplorer (0072): ...is the given one?
   const LoadGuard *getStoreGuard(PcodeOp *op) const { return heritage.getStoreGuard(op); }	///< Get LoadGuard associated with STORE op
 
   // Function prototype and call specification routines

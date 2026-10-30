@@ -25,6 +25,7 @@
  * Modified for SaturnExplorer: the walk down's bound keeps a stack parameter reference (patches/0066-engine-frame-escape-inexact.patch).
  * Modified for SaturnExplorer: ActionLateDoNothing tests each block again against the graph the earlier removals left, so the two empty arms of one branch are not both removed (patches/0067-engine-round14-sign-mod-late-donothing-three-way-shift-sub.patch).
  * Modified for SaturnExplorer: a call's INDIRECT on a local of an escaped frame keeps its address force (patches/0068-engine-deadcode-late-stack-reads.patch).
+ * Modified for SaturnExplorer: a save slot a STORE is aimed at, or that a pending STORE may reach, stays mapped (patches/0072-engine-frame-chains-and-save-slots.patch).
  */
 #include "coreaction.hh"
 #include "condexe.hh"
@@ -2052,6 +2053,56 @@ int4 ActionReturnRecovery::apply(Funcdata &data)
   return 0;
 }
 
+/// SaturnExplorer (patches/0072-engine-frame-chains-and-save-slots.patch): the frame offset a STORE's pointer is, when it is the stack
+/// pointer's input plus constants through copies (a frame word holding it included, once linked) and INDIRECTs: the pointer
+/// discoverIndexedStackPointers marks with no guard record ("resolved in the next heritage pass").
+/// \param vn is the pointer
+/// \param spc is the stack space
+/// \param off is set to the offset in the stack space
+/// \return \b true if the pointer is such an offset
+static bool exactStackPointer(const Varnode *vn,AddrSpace *spc,uintb &off)
+
+{
+  uintb add = 0;
+  for(int4 hops=0;hops<64;++hops) {
+    if (vn->isInput()) {
+      for(int4 i=0;i<spc->numSpacebase();++i) {
+	const VarnodeData &sp(spc->getSpacebase(i));
+	if (vn->getSpace() == sp.space && vn->getOffset() == sp.offset && vn->getSize() == sp.size) {
+	  off = spc->wrapOffset(add);
+	  return true;
+	}
+      }
+      return false;
+    }
+    if (!vn->isWritten()) return false;
+    const PcodeOp *op = vn->getDef();
+    switch(op->code()) {
+    case CPUI_COPY:
+      vn = op->getIn(0);
+      break;
+    case CPUI_INDIRECT:
+      vn = op->getIn(0);
+      break;
+    case CPUI_INT_ADD:
+      if (op->getIn(1)->isConstant()) {
+	add += op->getIn(1)->getOffset();
+	vn = op->getIn(0);
+      }
+      else if (op->getIn(0)->isConstant()) {
+	add += op->getIn(0)->getOffset();
+	vn = op->getIn(1);
+      }
+      else
+	return false;
+      break;
+    default:
+      return false;
+    }
+  }
+  return false;
+}
+
 int4 ActionRestrictLocal::apply(Funcdata &data)
 
 {
@@ -2127,6 +2178,24 @@ int4 ActionRestrictLocal::apply(Funcdata &data)
 	for(list<LoadGuard>::const_iterator giter=guards.begin();giter!=guards.end() && !walked;++giter) {
 	  if (!(*giter).isValid(CPUI_STORE)) continue;
 	  if ((*giter).isGuarded(outvn->getAddr()))
+	    walked = true;
+	}
+	// SaturnExplorer (patches/0072-engine-frame-chains-and-save-slots.patch): ...and a slot a STORE is aimed at (its pointer the stack
+	// pointer plus constants, through a frame word holding it: discoverIndexedStackPointers keeps such a STORE's guards for the next
+	// pass to fold it), or, while a STORE through a pointer read through a frame address is guarded (Heritage::reprocessPendingStores),
+	// any slot. Unmapped, the slot had no local alias and opCollapseIndirectsForAlias removed the STORE's guard on it at once; the STORE
+	// was folded a pass later into a write nothing read, and the slot's read was the register (`return unaff_r8;` for `*p = r5` with p =
+	// &slot kept in a frame word: ledger A3-132; a local that starts as a callee-saved register's entry value is the same word).
+	if (!walked && data.hasPendingFrameStores())
+	  walked = true;
+	for(list<PcodeOp *>::const_iterator siter=data.beginOp(CPUI_STORE);siter!=data.endOp(CPUI_STORE) && !walked;++siter) {
+	  PcodeOp *sop = *siter;
+	  if (sop->isDead() || !sop->usesSpacebasePtr() || outvn->getSpace() != stackSpc) continue;
+	  uintb soff;
+	  if (!exactStackPointer(sop->getIn(1),stackSpc,soff)) continue;
+	  uintb ssz = (uintb)sop->getIn(2)->getSize();
+	  uintb ooff = outvn->getOffset();
+	  if (stackSpc->wrapOffset(soff - ooff) < (uintb)outvn->getSize() || stackSpc->wrapOffset(ooff - soff) < ssz)
 	    walked = true;
 	}
 	if (walked) continue;
@@ -4112,6 +4181,24 @@ bool ActionDeadCode::isSavePush(const Funcdata &data,const Address &addr,const V
   return data.getArch()->translate->getRegisterName(src->getSpace(),src->getOffset(),src->getSize()) == want;
 }
 
+/// SaturnExplorer (patches/0072-engine-frame-chains-and-save-slots.patch): may the STORE, not folded yet, write data into the given stack
+/// local? Its pointer is the stack pointer plus constants overlapping the local, or it was read through a frame address (pending).
+/// \param data is the function
+/// \param sop is the STORE
+/// \param local is the stack local
+/// \return \b true if the STORE may write it
+bool ActionDeadCode::storeMayWrite(const Funcdata &data,const PcodeOp *sop,const Varnode *local)
+
+{
+  if (data.isPendingFrameStore(sop)) return true;
+  AddrSpace *spc = local->getSpace();
+  uintb soff;
+  if (!exactStackPointer(sop->getIn(1),spc,soff)) return false;
+  uintb ssz = (uintb)sop->getIn(2)->getSize();
+  uintb loff = local->getOffset();
+  return spc->wrapOffset(soff - loff) < (uintb)local->getSize() || spc->wrapOffset(loff - soff) < ssz;
+}
+
 bool ActionDeadCode::callMayReadFrame(const Funcdata &data,const Varnode *vn)
 
 {
@@ -4133,6 +4220,15 @@ bool ActionDeadCode::callMayReadFrame(const Funcdata &data,const Varnode *vn)
     if (seen.size() >= 256) return true;
     seen.push_back(def);
     if (def->code() == CPUI_INDIRECT) {
+      // (patches/0072-engine-frame-chains-and-save-slots.patch) ...but for the guard of a STORE aimed at the local (its pointer the stack
+      // pointer plus constants, not folded yet) or one whose pointer was read through a frame address (pending): it writes data there,
+      // which the call may read (ledger A3-132 with a call: the push slot overwritten through a pointer kept in a frame word and handed to
+      // the callee; the store went with the guard of the call)
+      if (def->isIndirectStore()) {
+	const PcodeOp *sop = PcodeOp::getOpFromConst(def->getIn(1)->getAddr());
+	if (sop != (const PcodeOp *)0 && sop->code() == CPUI_STORE && !sop->isDead() && storeMayWrite(data,sop,def->getOut()))
+	  return true;
+      }
       todo.push_back(def->getIn(0));
       continue;
     }

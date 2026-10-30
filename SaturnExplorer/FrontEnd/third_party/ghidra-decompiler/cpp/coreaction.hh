@@ -15,6 +15,7 @@
  *
  * Modified for SaturnExplorer: a load is read once and in place, never duplicated or moved past another memory operation (patches/0010-load-not-duplicated.patch).
  * Modified for SaturnExplorer: a call's INDIRECT on a local of an escaped frame keeps its address force (patches/0068-engine-deadcode-late-stack-reads.patch).
+ * Modified for SaturnExplorer: a STORE not folded yet and aimed at a local is data a call may read there (patches/0072-engine-frame-chains-and-save-slots.patch).
  */
 /// \file coreaction.hh
 /// \brief Core decompilation actions which are indepedent of any particular architecture
@@ -576,6 +577,7 @@ class ActionDeadCode : public Action {
   static bool lastChanceLoad(Funcdata &data,vector<Varnode *> &worklist);
   static bool isSavePush(const Funcdata &data,const Address &addr,const Varnode *src);	///< SaturnExplorer (0068): a push of a callee-saved register
   static bool callMayReadFrame(const Funcdata &data,const Varnode *vn);	///< SaturnExplorer (0068): a call's INDIRECT on an escaped frame's local
+  static bool storeMayWrite(const Funcdata &data,const PcodeOp *sop,const Varnode *local);	///< SaturnExplorer (0072): a STORE not folded yet aimed at the local
 public:
   ActionDeadCode(const string &g) : Action(0,"deadcode",g) {}	///< Constructor
   virtual Action *clone(const ActionGroupList &grouplist) const {
