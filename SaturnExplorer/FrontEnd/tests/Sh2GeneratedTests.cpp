@@ -7641,6 +7641,45 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
             v.cls = "skipped:array-local";
             continue;
         }
+        // (A3-137, area 3 round 15 fix: accepted as a print limit) In frame mode a byte array is memory and is compared, but not one the text
+        // assigns as a value: whole (`axStack_14 = (xunknown1  [2])CONCAT11(...)`, no C), by a piece (`axStack_14._0_2_ = ...`, no lvalue), or
+        // under an underscore name of its own (`_axStack_13 = CONCAT12(...)`, whose width the text never says). And an underscore name the text
+        // uses at two widths (`_xStack_14 = CONCAT22(...)` then `CONCAT31(_xStack_14,0x8d)`: the engine prints a three-byte piece of the word under
+        // the word's name) has no meaning either. Both are counted apart; the engine's values are right in the ones read by hand (the frame124
+        // seeds of the area 2 round 16 review, 15_DECOMPILER_STEP5.md "Area 3 fixer (A3-130 to A3-138)").
+        if (frameMode)
+        {
+            static const std::regex arrayDecl("\\b(\\w+) \\[\\d+\\];");
+            bool assigned = false;
+            for (std::sregex_iterator it(text.begin(), text.end(), arrayDecl), end; it != end && !assigned; ++it)
+            {
+                const std::string n = (*it)[1].str();
+                const std::regex use("(\\b_" + n + "\\b)|(\\b" + n + "(\\._\\d+_\\d+_)?\\s*=[^=])");
+                assigned = std::regex_search(text, use);
+            }
+            if (assigned)
+            {
+                v.cls = "skipped:array-local";
+                continue;
+            }
+            static const std::regex wideWrite("\\b(_[A-Za-z]*Stack_[0-9a-f]+) = CONCAT(\\d)(\\d)\\(");
+            static const std::regex wideRead("CONCAT(\\d)(\\d)\\((_[A-Za-z]*Stack_[0-9a-f]+)[,)]");
+            static const std::regex wideRead2("CONCAT(\\d)(\\d)\\([^()]*,(_[A-Za-z]*Stack_[0-9a-f]+)\\)");
+            std::map<std::string, std::set<int>> widths;
+            for (std::sregex_iterator it(text.begin(), text.end(), wideWrite), end; it != end; ++it)
+                widths[(*it)[1].str()].insert(std::stoi((*it)[2].str()) + std::stoi((*it)[3].str()));
+            for (std::sregex_iterator it(text.begin(), text.end(), wideRead), end; it != end; ++it)
+                widths[(*it)[3].str()].insert(std::stoi((*it)[1].str()));
+            for (std::sregex_iterator it(text.begin(), text.end(), wideRead2), end; it != end; ++it)
+                widths[(*it)[3].str()].insert(std::stoi((*it)[2].str()));
+            bool twoWidths = false;
+            for (const auto& w : widths) twoWidths = twoWidths || w.second.size() > 1;
+            if (twoWidths)
+            {
+                v.cls = "skipped:piece-name";
+                continue;
+            }
+        }
         // The address of a local (`return &xStack_1;`, `(uint4)&xStack00000000 & 0xff`): the run's is an address in the machine's stack, the C's one in
         // the host's, so the two cannot be compared by value (A2-61: the harness took it for 0, a mismatch where the text is right).
         // In frame mode (A3-65) a local's address is a pointer into the mapped frame and the walk's own: only one returned as a value is
