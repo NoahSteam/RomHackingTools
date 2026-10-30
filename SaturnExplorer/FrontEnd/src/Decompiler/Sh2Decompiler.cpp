@@ -4219,7 +4219,6 @@ std::vector<HardwareNote> HardwareNotes(const ghidra::Funcdata& fd, const std::f
             const ghidra::Varnode* value = write ? o->getIn(2) : o->getOut();
             if (!value) continue;
             const PointerValues pv = PointerResolver().Resolve(ptr);
-            if (std::getenv("SE_DBG_PV")) { std::fprintf(stderr, "PV insn %08X size %u: constants", (unsigned)o->getAddr().getOffset(), (unsigned)value->getSize()); for (auto& c : pv.constants) std::fprintf(stderr, " %08X", c.first); std::fprintf(stderr, " bases %zu others %d steps %d hw %d at %08X cached %d ranged %d [%lld,%lld]\n", pv.bases.size(), pv.others, pv.steps, pv.steppedHw, pv.steppedHwAt, pv.steppedCached, pv.ranged, (long long)pv.rangeLo, (long long)pv.rangeHi); }
             const uint32_t size = static_cast<uint32_t>(value->getSize());
             // The addresses the pointer can hold that are a register's, by its symbol or by an alias the engine prints as a number
             // (A5-38); a pointer that starts at one and is indexed is said for the register itself, as "if the index is 0".
