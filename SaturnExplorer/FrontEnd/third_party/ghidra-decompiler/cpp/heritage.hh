@@ -20,6 +20,7 @@
  * Modified for SaturnExplorer: the escape's lowest frame offset never rises over the queries of a function (patches/0065-engine-frame-escape-whole-frame.patch).
  * Modified for SaturnExplorer: a frame address that is not an exact offset from the frame base escapes, unless a loop only steps it up (patches/0066-engine-frame-escape-inexact.patch).
  * Modified for SaturnExplorer: the dead code delay a late read asks for, and its bound (patches/0068-engine-deadcode-late-stack-reads.patch).
+ * Modified for SaturnExplorer: a STORE through a value read through a frame address is a STORE through a frame address in waiting (patches/0072-engine-frame-chains-and-save-slots.patch).
  */
 /// \file heritage.hh
 /// \brief Utilities for building Static Single Assignment (SSA) form 
@@ -220,6 +221,7 @@ public:
   set<Varnode *> unmodeled;		///< ...of which those reached through a form the stack analysis does not model
   set<PcodeOp *> unmodeledStores;	///< STOREs through an unmodeled possible frame address, or, once the frame escaped, an unknown pointer
   set<PcodeOp *> inexactLoads;		///< LOADs through a frame address that is no exact offset (0066)
+  set<PcodeOp *> pendingStores;		///< STOREs through a value read from the frame through a frame address (0072)
   vector<uintb> upLows;			///< The lowest entry offset of each loop that only steps a frame address up (0066)
   bool inexact;				///< A frame address that is no exact offset reaches an access or a call (0066)
   bool memoryEscape;			///< A frame address was stored to memory
@@ -236,6 +238,8 @@ public:
   bool storeIsUnmodeled(PcodeOp *op) const { return gaveUp || unmodeledStores.find(op) != unmodeledStores.end(); }
   /// \brief Is the given LOAD made through a frame address that is no exact offset? (0066)
   bool loadIsInexact(PcodeOp *op) const { return gaveUp || inexactLoads.find(op) != inexactLoads.end(); }
+  /// \brief Is the given STORE made through a value a LOAD through a frame address read, which may itself be a frame address? (0072)
+  bool storeIsPending(PcodeOp *op) const { return gaveUp || pendingStores.find(op) != pendingStores.end(); }
 };
 
 /// \brief Manage the construction of Static Single Assignment (SSA) form
