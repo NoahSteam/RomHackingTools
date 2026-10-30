@@ -20,6 +20,7 @@
  * Modified for SaturnExplorer: and of the non-zero bits of what was worked out from that output (patches/0049-engine-nzmask-forgotten-downstream.patch).
  * Modified for SaturnExplorer: every change to an op keeps the non-zero and consume masks around it a superset of the truth, in place of 0046 and 0049 (patches/0054-engine-cached-masks-never-narrower.patch).
  * Modified for SaturnExplorer: a STORE made a COPY splits the INDIRECT it covered in the middle of with the right first piece (patches/0068-engine-deadcode-late-stack-reads.patch).
+ * Modified for SaturnExplorer: a STORE guard is kept against the alias analysis while the STORE is aimed at its local or pending (patches/0072-engine-frame-chains-and-save-slots.patch).
  */
 #include "funcdata.hh"
 #include "flow.hh"
@@ -1852,6 +1853,74 @@ void Funcdata::opCollapseIndirectsForCopy(PcodeOp *copyOp)
   }
 }
 
+/// SaturnExplorer (patches/0072-engine-frame-chains-and-save-slots.patch): the frame offset a STORE's pointer is, when it is the stack
+/// pointer's input plus constants through copies (a frame word holding it included, once linked) and INDIRECTs: the pointer
+/// discoverIndexedStackPointers marks with no guard record ("resolved in the next heritage pass").
+/// \param vn is the pointer
+/// \param spc is the stack space
+/// \param off is set to the offset in the stack space
+/// \return \b true if the pointer is such an offset
+static bool exactStackPointer(const Varnode *vn,AddrSpace *spc,uintb &off)
+
+{
+  uintb add = 0;
+  for(int4 hops=0;hops<64;++hops) {
+    if (vn->isInput()) {
+      for(int4 i=0;i<spc->numSpacebase();++i) {
+	const VarnodeData &sp(spc->getSpacebase(i));
+	if (vn->getSpace() == sp.space && vn->getOffset() == sp.offset && vn->getSize() == sp.size) {
+	  off = spc->wrapOffset(add);
+	  return true;
+	}
+      }
+      return false;
+    }
+    if (!vn->isWritten()) return false;
+    const PcodeOp *op = vn->getDef();
+    switch(op->code()) {
+    case CPUI_COPY:
+      vn = op->getIn(0);
+      break;
+    case CPUI_INDIRECT:
+      vn = op->getIn(0);
+      break;
+    case CPUI_INT_ADD:
+      if (op->getIn(1)->isConstant()) {
+	add += op->getIn(1)->getOffset();
+	vn = op->getIn(0);
+      }
+      else if (op->getIn(0)->isConstant()) {
+	add += op->getIn(0)->getOffset();
+	vn = op->getIn(1);
+      }
+      else
+	return false;
+      break;
+    default:
+      return false;
+    }
+  }
+  return false;
+}
+
+/// SaturnExplorer (patches/0072-engine-frame-chains-and-save-slots.patch): is the STORE, not folded yet, aimed at the given stack local: its
+/// pointer the stack pointer plus constants (exactStackPointer) and its bytes overlapping the local's?
+/// \param sop is the STORE
+/// \param local is the stack local
+/// \return \b true if it writes bytes of the local
+bool Funcdata::storeAimedAt(const PcodeOp *sop,const Varnode *local) const
+
+{
+  if (sop->code() != CPUI_STORE || sop->numInput() < 3) return false;
+  AddrSpace *spc = local->getSpace();
+  if (spc->getType() != IPTR_SPACEBASE) return false;
+  uintb soff;
+  if (!exactStackPointer(sop->getIn(1),spc,soff)) return false;
+  uintb ssz = (uintb)sop->getIn(2)->getSize();
+  uintb loff = local->getOffset();
+  return spc->wrapOffset(soff - loff) < (uintb)local->getSize() || spc->wrapOffset(loff - soff) < ssz;
+}
+
 /// For the given op with indirect effects, run through its INDIRECTs, and
 /// if there is no longer a possible alias for an INDIRECT address, remove the INDIRECT.
 /// \param effectOp is the given op with indirect effects
@@ -1872,6 +1941,13 @@ void Funcdata::opCollapseIndirectsForAlias(PcodeOp *effectOp)
     bool shouldDestroy = false;
     if (op->getOut()->hasNoLocalAlias() && !op->isIndirectCreation() && !op->noIndirectCollapse())
       shouldDestroy = true;
+    // SaturnExplorer (patches/0072-engine-frame-chains-and-save-slots.patch): a STORE not folded yet whose pointer is the stack pointer plus
+    // constants aimed at the local (or read through a frame address: pending) writes it, whatever the alias analysis says of pointers to
+    // it: the guard stays until the STORE is folded into a COPY (opCollapseIndirectsForCopy). Removed, the local's read took the value
+    // before the STORE (a save slot taken for unaliased and overwritten through a pointer kept in a frame word: ledger A3-132)
+    if (shouldDestroy && effectOp->code() == CPUI_STORE && op->getOut()->getSpace()->getType() == IPTR_SPACEBASE &&
+	(isPendingFrameStore(effectOp) || storeAimedAt(effectOp,op->getOut())))
+      shouldDestroy = false;
     else if (guard != (const LoadGuard *)0 && !guard->isGuarded(op->getOut()->getAddr()))
       shouldDestroy = true;
 

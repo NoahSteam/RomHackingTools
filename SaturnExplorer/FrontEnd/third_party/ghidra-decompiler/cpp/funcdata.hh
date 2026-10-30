@@ -361,6 +361,7 @@ public:
   const list<LoadGuard> &getStoreGuards(void) const { return heritage.getStoreGuards(); }	///< Get the list of guarded STOREs
   bool hasPendingFrameStores(void) const { return heritage.hasPendingStores(); }	///< SaturnExplorer (0072): is a STORE through a pointer read through a frame address guarded?
   bool isPendingFrameStore(const PcodeOp *op) const { return heritage.isPendingStore(op); }	///< SaturnExplorer (0072): ...is the given one?
+  bool storeAimedAt(const PcodeOp *sop,const Varnode *local) const;	///< SaturnExplorer (0072): a STORE through the stack pointer plus constants writing the local
   const LoadGuard *getStoreGuard(PcodeOp *op) const { return heritage.getStoreGuard(op); }	///< Get LoadGuard associated with STORE op
 
   // Function prototype and call specification routines

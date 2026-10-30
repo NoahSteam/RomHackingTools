@@ -2053,56 +2053,6 @@ int4 ActionReturnRecovery::apply(Funcdata &data)
   return 0;
 }
 
-/// SaturnExplorer (patches/0072-engine-frame-chains-and-save-slots.patch): the frame offset a STORE's pointer is, when it is the stack
-/// pointer's input plus constants through copies (a frame word holding it included, once linked) and INDIRECTs: the pointer
-/// discoverIndexedStackPointers marks with no guard record ("resolved in the next heritage pass").
-/// \param vn is the pointer
-/// \param spc is the stack space
-/// \param off is set to the offset in the stack space
-/// \return \b true if the pointer is such an offset
-static bool exactStackPointer(const Varnode *vn,AddrSpace *spc,uintb &off)
-
-{
-  uintb add = 0;
-  for(int4 hops=0;hops<64;++hops) {
-    if (vn->isInput()) {
-      for(int4 i=0;i<spc->numSpacebase();++i) {
-	const VarnodeData &sp(spc->getSpacebase(i));
-	if (vn->getSpace() == sp.space && vn->getOffset() == sp.offset && vn->getSize() == sp.size) {
-	  off = spc->wrapOffset(add);
-	  return true;
-	}
-      }
-      return false;
-    }
-    if (!vn->isWritten()) return false;
-    const PcodeOp *op = vn->getDef();
-    switch(op->code()) {
-    case CPUI_COPY:
-      vn = op->getIn(0);
-      break;
-    case CPUI_INDIRECT:
-      vn = op->getIn(0);
-      break;
-    case CPUI_INT_ADD:
-      if (op->getIn(1)->isConstant()) {
-	add += op->getIn(1)->getOffset();
-	vn = op->getIn(0);
-      }
-      else if (op->getIn(0)->isConstant()) {
-	add += op->getIn(0)->getOffset();
-	vn = op->getIn(1);
-      }
-      else
-	return false;
-      break;
-    default:
-      return false;
-    }
-  }
-  return false;
-}
-
 int4 ActionRestrictLocal::apply(Funcdata &data)
 
 {
@@ -2191,11 +2141,7 @@ int4 ActionRestrictLocal::apply(Funcdata &data)
 	for(list<PcodeOp *>::const_iterator siter=data.beginOp(CPUI_STORE);siter!=data.endOp(CPUI_STORE) && !walked;++siter) {
 	  PcodeOp *sop = *siter;
 	  if (sop->isDead() || !sop->usesSpacebasePtr() || outvn->getSpace() != stackSpc) continue;
-	  uintb soff;
-	  if (!exactStackPointer(sop->getIn(1),stackSpc,soff)) continue;
-	  uintb ssz = (uintb)sop->getIn(2)->getSize();
-	  uintb ooff = outvn->getOffset();
-	  if (stackSpc->wrapOffset(soff - ooff) < (uintb)outvn->getSize() || stackSpc->wrapOffset(ooff - soff) < ssz)
+	  if (data.storeAimedAt(sop,outvn))
 	    walked = true;
 	}
 	if (walked) continue;
@@ -4191,12 +4137,7 @@ bool ActionDeadCode::storeMayWrite(const Funcdata &data,const PcodeOp *sop,const
 
 {
   if (data.isPendingFrameStore(sop)) return true;
-  AddrSpace *spc = local->getSpace();
-  uintb soff;
-  if (!exactStackPointer(sop->getIn(1),spc,soff)) return false;
-  uintb ssz = (uintb)sop->getIn(2)->getSize();
-  uintb loff = local->getOffset();
-  return spc->wrapOffset(soff - loff) < (uintb)local->getSize() || spc->wrapOffset(loff - soff) < ssz;
+  return data.storeAimedAt(sop,local);
 }
 
 bool ActionDeadCode::callMayReadFrame(const Funcdata &data,const Varnode *vn)
