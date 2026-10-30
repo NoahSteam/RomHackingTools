@@ -1926,6 +1926,7 @@ void TestHardwareVolatility()
         // halves of the page, and a long read there is an address error in the lower one. The controls: a mask that does not set the top bits, and AND.
         add("a5_90_byte", { 0xE2C0, 0x242B, 0x8448, 0x000B, 0x0009, 0x0009 }, 0x08, 0x00000000u);
         add("a5_90_long", { 0xD202, 0x242B, 0x6042, 0x000B, 0x0009, 0x0009, 0xFFFF, 0xFE00 }, 0x0C, 0xFFFFFE00u);
+        add("a5_90_chain", { 0xE2C0, 0x242B, 0x245B, 0x8448, 0x000B, 0x0009 }, 0x0A, 0x00000000u);   // (r4 | 0xFFFFFFC0) | r5: still in the page
         add("a5_90_small", { 0xE240, 0x242B, 0x8448, 0x000B, 0x0009, 0x0009 }, 0x08, 0x00000000u);
         add("a5_90_and", { 0xE2C0, 0x2429, 0x8448, 0x000B, 0x0009, 0x0009 }, 0x08, 0x00000000u);
         // A5-91 (generator grammar 1 seed 2408172): `p = (p + 4) ^ 0x20000000` from 0xFFFFFF08, twice, then a word write at p + 14: the first value is
@@ -3384,6 +3385,9 @@ void TestHardwareVolatility()
         CHECK(HasNote(r, "so it lies in 0xFFFFFE00-0xFFFFFFFF, the SH-2's on-chip register partition", true) &&
               HasNote(r, "a 4-byte access at an address with bit 8 clear (0xFFFFFE00-0xFFFFFEFF) is an address error on the SH-2: those registers take byte and word accesses only", true) &&
               !HasNote(r, "a 1-byte access", true));
+        r = R9("a5_90_chain", "(r4 | 0xFFFFFFC0) | r5, a byte read at +8");
+        CHECK(HasNote(r, "may reach on-chip registers: the pointer is an unknown value ORed with a constant that sets the top bits of the address, so it lies in "
+                         "0xFFFFFFC8-0xFFFFFFFF", true));
         r = R9("a5_90_small", "control: r4 | 0xFFFFFFC0 is not a mask of the top bits: r4 | 0x40");
         CHECK(!HasNote(r, "may reach on-chip registers", true));
         r = R9("a5_90_and", "control: r4 & 0xFFFFFFC0 stays anywhere");

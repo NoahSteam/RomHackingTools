@@ -3921,6 +3921,27 @@ private:
     // (A5-70), so `p = p and mask` is a fixed point only when the first value already is one.
     static PointerValues Bitwise(ghidra::OpCode code, const PointerValues& x, const PointerValues& y)
     {
+        PointerValues out = BitwiseOf(code, x, y);
+        // An OR is at least each of its operands: whatever else is ORed with a value in [lo, 0xFFFFFFFF], the result is in it too (`(r4 | 0xFFFFFF00) |
+        // r5`, A5-90).
+        if (code == ghidra::CPUI_INT_OR)
+        {
+            int64_t lo = -1;
+            for (const PointerValues* v : { &x, &y })
+                if (v->ranged && v->rangeHi == 0xFFFFFFFFll) lo = std::max(lo, v->rangeLo);
+            if (lo >= 0)
+            {
+                out.rangeLo = out.ranged ? std::max(out.rangeLo, lo) : lo;
+                out.rangeHi = 0xFFFFFFFFll;
+                out.ranged = true;
+                out.others = true;
+            }
+        }
+        return out;
+    }
+
+    static PointerValues BitwiseOf(ghidra::OpCode code, const PointerValues& x, const PointerValues& y)
+    {
         PointerValues out;
         constexpr size_t kMaxPairs = 64;   // (a pointer merged from more addresses than this is not worked out)
         auto known = [](const PointerValues& v) { return !v.constants.empty() && v.bases.empty() && !v.others && v.back.empty(); };

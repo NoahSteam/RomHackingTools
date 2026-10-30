@@ -134,8 +134,9 @@
 //      registers it names (`pointer.effect.open`; `.open.said` / `.open.unsaid` count what would have been asked). (A5-92) The associative purge and the
 //      cache address array through a pointer are hardware as a register area is: the same rule asks for their note, for a pointer that names one.
 //   3f. (A5-90) An access in the on-chip registers' partition (0xE0000000 and up) through a pointer the output makes by ORing a constant that sets the
-//      top three bits of the address (`in_r1 | 0xffffffc0`) has a note that it "may reach on-chip registers" (`onchip.span.said` / `.unsaid`): the text
-//      proves the partition and not the register, which rule 3c cannot ask for. (A5-91) The notes of a pointer stepped in a loop say so even when its
+//      top three bits of the address (`in_r1 | 0xffffffc0`) has a note that it "may reach on-chip registers" (`onchip.span.said` / `.unsaid`), unless a
+//      note names the address the run came to (`onchip.span.named`): the text proves the partition and not the register, which rule 3c cannot ask
+//      for, and a note of that kind excuses rule 3c's asking for the register's effects. (A5-91) The notes of a pointer stepped in a loop say so even when its
 //      first values are no hardware and a later one is (`p = (p + 4) ^ 0x20000000` from 0xFFFFFF08: the first value is in the cache data array, the second
 //      a register); rule 3c asks for the register's effects otherwise (`pointer.effect.excused` counts the ones the note excuses).
 //      The grammars draw such pointers (A5-92, `regionRng`): a literal in the purge, the cache address array or the on-chip page (`litptr.region`), a
@@ -3345,10 +3346,10 @@ std::vector<std::pair<size_t, size_t>> BackEdgeSpans(const std::vector<Line>& li
 // The operands of the dereferences in a statement's text: what follows a unary `*` (up to the end of its operand: a `,`, a `;`, a `)` that closes
 // nothing, ` = `), and the name before a `[` (A5-85). A `*` is unary at the start, after an operator or an opening parenthesis, or after a cast
 // (`(int4)*p`, `(xunknown4 *)`); after a name, a number or another closing parenthesis it multiplies. Empty when the text dereferences nothing.
-std::string DerefOperands(const std::string& text)
+std::vector<std::pair<std::string, size_t>> DerefOperandList(const std::string& text)
 {
     static const std::regex castRe("^\\s*(?:[A-Za-z_]\\w*\\s*)+\\*+\\s*$|^\\s*(?:u?int\\d|xunknown\\d|undefined\\d?|char|uchar|short|ushort|bool|byte|word|dword|qword|long|ulong|float\\d*|code|void|unkbyte\\d+|unkuint\\d+|unkint\\d+)\\s*$");
-    std::string out;
+    std::vector<std::pair<std::string, size_t>> out;   // (the operand, where its `*` or `[` stands in the text)
     for (size_t i = 0; i < text.size(); ++i)
     {
         if (text[i] == '[')
@@ -3357,7 +3358,7 @@ std::string DerefOperands(const std::string& text)
             while (e > 0 && text[e - 1] == ' ') --e;
             size_t b = e;
             while (b > 0 && (std::isalnum(static_cast<unsigned char>(text[b - 1])) || text[b - 1] == '_')) --b;
-            if (b < e) out += text.substr(b, e - b) + " ; ";
+            if (b < e) out.emplace_back(text.substr(b, e - b), i);
             continue;
         }
         if (text[i] != '*') continue;
@@ -3391,8 +3392,15 @@ std::string DerefOperands(const std::string& text)
             else if (depth == 0 && (c == ',' || c == ';' || text.compare(j, 3, " = ") == 0)) break;
         }
         const std::string operand = text.substr(i + 1, j - i - 1);
-        if (operand.find_first_not_of(" *") != std::string::npos) out += operand + " ; ";
+        if (operand.find_first_not_of(" *") != std::string::npos) out.emplace_back(operand, i);
     }
+    return out;
+}
+
+std::string DerefOperands(const std::string& text)
+{
+    std::string out;
+    for (const auto& one : DerefOperandList(text)) out += one.first + " ; ";
     return out;
 }
 
@@ -3496,21 +3504,19 @@ bool PointerPrintsFromHardware(const DecompileResult& r, uint32_t insn, const st
     // to and the calls): empty when the statement dereferences nothing of the read's.
     auto ownOperands = [&](const std::pair<std::string, size_t>& statement, const std::string& text) {
         // (the read's own tokens hold no parentheses or casts of other instructions, so the dereferences are found in the whole line,
-        // and the operands kept are those that name something of the read's own tokens)
-        const std::string all = DerefOperands(r.lines[statement.second].text);
+        // and the operands kept are those that name something of the read's own tokens, or whose `*` is one of them: a store's own tokens are
+        // the `*`, the `=` and the value, the address being the instructions' before it)
+        const Line& line = r.lines[statement.second];
         std::set<std::string> own;
         for (const std::string& id : Identifiers(text)) own.insert(id);
         std::string ops;
-        size_t from = 0;
-        while (from < all.size())
+        for (const auto& one : DerefOperandList(line.text))
         {
-            const size_t to = all.find(" ; ", from);
-            const std::string one = all.substr(from, to == std::string::npos ? std::string::npos : to - from);
             bool mine = false;
-            for (const std::string& id : Identifiers(one)) mine |= own.count(id) != 0;
-            if (mine) ops += one + " ; ";
-            if (to == std::string::npos) break;
-            from = to + 3;
+            for (const std::string& id : Identifiers(one.first)) mine |= own.count(id) != 0;
+            for (const Token& t : line.tokens)
+                if (t.addr == insn && one.second >= t.begin && one.second < t.end) mine = true;
+            if (mine) ops += one.first + " ; ";
         }
         return ops;
     };
@@ -3527,7 +3533,7 @@ bool PointerPrintsFromHardware(const DecompileResult& r, uint32_t insn, const st
         std::vector<std::pair<std::string, size_t>> todo;   // (variable, the line of the statement that reads it)
         // (A5-89) One instruction can have two lines of text (a delay slot's store and the `return` the printer gives it too): when one of them
         // dereferences what the read's tokens name, the other is not the access.
-        bool anyOperands = false;
+        bool anyOperands = false, namedHere = false;
         if (operandsOnly)
             for (const auto& statement : statements) anyOperands |= !ownOperands(statement, statementText(statement)).empty();
         for (const auto& statement : statements)
@@ -3545,14 +3551,12 @@ bool PointerPrintsFromHardware(const DecompileResult& r, uint32_t insn, const st
             }
             maskSeen |= OrsIntoOnChip(text);
             for (const std::string& id : Identifiers(text)) openSource |= IsFreeValue(id);   // (`*(param_4 | 0xffffffe0)`: a parameter in the operand itself)
-            if (NamesHardwareBase(text, reached, tooFar))
-            {
-                report();
-                return true;
-            }
+            // (the walk goes on after a base is named in the statement itself: what the other names in it were assigned says whether the pointer is
+            // open, and whether a mask of the top bits made it)
+            if (NamesHardwareBase(text, reached, tooFar)) namedHere = true;
             for (const std::string& id : Identifiers(text)) todo.emplace_back(id, statement.second);
         }
-        bool found = false;
+        bool found = namedHere;
         while (!todo.empty() && seen.size() < 256)
         {
             const std::pair<std::string, size_t> item = todo.back();
@@ -4909,7 +4913,7 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
             std::set<uint32_t> excused;   // instructions whose notes leave the other values of the pointer unsaid
             for (const HardwareNote& n : r.hardwareNotes)
                 if (n.text.find("it may hold other values too") != std::string::npos || n.text.find("is stepped in a loop") != std::string::npos ||
-                    n.text.find("if the index is 0") != std::string::npos)
+                    n.text.find("if the index is 0") != std::string::npos || n.text.find("may reach on-chip registers") != std::string::npos)
                     excused.insert(n.address);
             std::set<std::tuple<uint32_t, uint32_t, int, bool>> checked;
             for (const TraceRec& t : ownTrace)
@@ -4993,10 +4997,21 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                 if (shown || !seenSpan.insert(std::make_tuple(t.insn, t.addr, t.size, t.write)).second) continue;
                 bool unrelated = false, open = false, masked = false;
                 PointerPrintsFromHardware(r, t.insn, none, t.addr, unrelated, &open, &masked);
-                if (!masked || !open) continue;
-                bool said = false;
+                if (!masked) continue;
+                // (a note that names the address the run came to -- the pointer is also a constant the engine knows, or based at one -- says it
+                // exactly, and the span is for the values it does not name)
+                bool named = false, said = false;
                 for (const HardwareNote& n : r.hardwareNotes)
+                {
+                    named |= n.address == t.insn && (n.text.find("if the pointer holds 0x" + Hex(t.addr)) != std::string::npos ||
+                                                       n.text.find("the pointer is based at 0x" + Hex(t.addr)) != std::string::npos);
                     said |= n.address == t.insn && n.caution && n.text.find("may reach on-chip registers") != std::string::npos;
+                }
+                if (named)
+                {
+                    count("onchip.span.named");
+                    continue;
+                }
                 count(said ? "onchip.span.said" : "onchip.span.unsaid");
                 if (!said)
                     add("onchip-span-unsaid", "the " + std::string(t.write ? "write" : "read") + " of " + std::to_string(t.size) + " byte(s) at " + Hex(t.insn) + " reached " + Hex(t.addr) +
@@ -10945,7 +10960,21 @@ void TestA587Pins(Sh2Decompiler& d)
         { { "A5-89, seed 2018538 shrunk", "2F86 2F96 2FD6 4F22 6843 6953 B014 0009 6483 6593 2458 8B02 D605 A002 0009 A000 0009 D204 4F26 6DF6 69F6 68F6 422B 0009 FFFF FF62 0600 9038 2F86 2F96 2FE6 4F22 7FE0 6EF3 6843 6953 6361 E416 6533 E68C B00A 0009 6483 6593 7E20 6FE3 4F26 6EF6 69F6 68F6 000B 0009 7FF4 E04D 7F0C 000B 0009",
             "0/0/30,38/38/68,68/68/72", nullptr, "0,0,1", nullptr, nullptr }, "pointer.effect.open", nullptr },
         { { "A5-90, seed 1804560 shrunk", "2F86 2F96 2FA6 2FB6 4F22 6843 6953 6A63 6B73 4F26 6BF6 6AF6 69F6 68F6 000B 0009 7FD0 E2C0 212B 411E E104 3412 8914 4408 C701 014E 412B 0009 0600 9048 0600 904C 0600 904C 0600 9050 A006 0009 A004 0009 E008 CF01 A000 0009 6071 7F30 000B 0009",
-            "0/0/20,20/20/60", "34:4:4:58:48,4c,4c,50", "0,1", "1a0000,1a0000", "0,20000" }, "pointer.effect.open", "onchip.span.said" },
+            "0/0/20,20/20/60", "34:4:4:58:48,4c,4c,50", "0,1", "1a0000,1a0000", "0,20000" }, "pointer.effect.excused", "onchip.span.said" },
+        // The seeds of the 2,000,001-2,050,000 sweep (grammar 2) that the first version of rule 3f reported: a pointer ORed with a mask of the top bits
+        // that is also a constant the engine names (2007998: the note names E0000068 exactly); a free value behind a local (2020865: `uVar2 =
+        // extraout_r7`); a stepped pointer (2007165: the span excuses rule 3c); an XOR mask and a stored value that has an OR (2034584: the store's own
+        // tokens are the `*`, the `=` and the value); and a second OR with a literal outside the body (2047534: `p | 0xffffff00 | uRam06009050`).
+        { { "A5-90, sweep seed 2007998 shrunk", "D20C 272B E103 3616 890F 4608 C701 016E 412B 0009 0600 9024 0600 9024 0600 9024 0600 902A D704 A000 0009 170B E0BF 000B 0009 0009 FFFF FFF0 E000 003C",
+            "0/0/32", "10:6:4:2a:24,24,24,2a", "1", nullptr, nullptr }, "onchip.span.named", nullptr },
+        { { "A5-90, sweep seed 2020865 shrunk", "2F86 2F96 2FA6 2FC6 0C2A 6843 6953 6A63 B014 0009 6483 6593 66A3 C810 8904 B00D 0009 6483 6593 66A3 D303 4C2A 6CF6 6AF6 69F6 68F6 432B 0009 0600 903C 7FD0 D303 273B 6070 7F30 000B 0009 0009 FFFF FFC0",
+            "0/0/38,3c/3c/4a", nullptr, "1,1", "180000,0", "0,20000" }, "onchip.span.said", nullptr },
+        { { "A5-90, sweep seed 2007165 shrunk", "D711 E303 7704 4310 8BFC D210 272B E102 3516 8913 4508 C702 015E 412B 0009 0009 0600 902C 0600 9030 0600 9036 A006 0009 8479 A003 0009 D706 A000 0009 E003 007C 6063 000B 0009 0009 2010 003B FFFF FFE0 FFFF FF44",
+            "0/0/46", "1a:5:3:3c:2c,30,36", "1", "120000", "0" }, "pointer.effect.excused", "onchip.span.said" },
+        { { "A5-90, sweep seed 2034584 shrunk", "2F86 2F96 2FA6 2FB6 4F22 7FF8 6843 6953 6A63 6B73 D304 7F08 4F26 6BF6 6AF6 69F6 68F6 432B 0009 0009 0600 902C 2FD6 2FE6 7FC0 6EF3 D215 262A E3CA E105 3416 891C 4408 C702 014E 412B 0009 0009 0600 9064 0600 9068 0600 907A 0600 906E 0600 9072 0600 9076 A009 0009 213B A006 0009 A004 0009 A002 0009 A000 0009 2612 6063 7E40 6FE3 6EF6 6DF6 000B 0009 0009 E000 0000",
+            "0/0/26,2c/2c/8a", "46:4:6:7a:64,68,7a,6e,72,76", "1,1", "61000,21000", "0,0" }, nullptr, nullptr },
+        { { "A5-90, sweep seed 2047534 shrunk", "D102 241B 1621 D302 432B 0009 FFFF FF00 0600 9014 2F86 2F96 2FA6 2FB6 2FC6 0C2A 6843 6953 6A63 6B73 D104 4C2A 6CF6 6BF6 6AF6 69F6 68F6 412B 0009 0009 0600 9040 7FFC D303 243B 6242 7F04 000B 0009 0009 6000 0000",
+            "0/0/c,14/14/3a,40/40/4e", nullptr, "0,0,0", "180000,180000,0", "0,0,800" }, "onchip.span.said", nullptr },
         { { "A5-91, grammar 1 seed 2408172 shrunk", "D706 6072 C801 8BFC E302 7704 D104 271A 4310 8BFA E00E 0735 000B 0009 FFFF FF08 2000 0000",
             nullptr, nullptr, nullptr, nullptr, nullptr }, "pointer.effect.excused", nullptr },
     };
@@ -10956,10 +10985,10 @@ void TestA587Pins(Sh2Decompiler& d)
             const auto it = rep.counts.find(name);
             return it == rep.counts.end() ? 0 : it->second;
         };
-        std::printf("pin '%s': %zu finding(s), %s %d, %s %d\n", p.module.name, rep.findings.size(), p.count, count(p.count), p.count2 ? p.count2 : "-", p.count2 ? count(p.count2) : 0);
+        std::printf("pin '%s': %zu finding(s), %s %d, %s %d\n", p.module.name, rep.findings.size(), p.count ? p.count : "-", p.count ? count(p.count) : 0, p.count2 ? p.count2 : "-", p.count2 ? count(p.count2) : 0);
         for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
         CHECK(rep.findings.empty());
-        CHECK(count(p.count) > 0);
+        if (p.count) CHECK(count(p.count) > 0);
         if (p.count2) CHECK(count(p.count2) > 0);
     }
     // Grammar 2 seed 1804560 as a program (the new draws leave it as it was): the engine's span note is what the rule asks for.
@@ -11002,6 +11031,25 @@ void TestA587Pins(Sh2Decompiler& d)
     derive("& 0xffffffc0 is no top-bits mask (control)", { "uVar1 = in_r1 & 0xffffffc0;", "uVar2 = *(uint1 *)(uVar1 + 8);" }, 1, 0xFFFFFFC8u, true, true, false);
     derive("| 0x40 sets no top bits (control)", { "uVar1 = in_r1 | 0x40;", "uVar2 = *(uint1 *)(uVar1 + 8);" }, 1, 0x48u, false, true, false);
     derive("|| is no OR of bits (control)", { "bVar1 = in_r1 != 0 || 0xffffffc0 != 0;", "uVar2 = *(uint1 *)(bVar1 + 8);" }, 1, 0x48u, false, true, false);
+    // a store's own tokens are the `*`, the `=` and the value; the address is the expression before it, and what the value was assigned is not the pointer
+    {
+        DecompileResult r = FakeOutput({ "uVar1 = uVar1 | 0xffffffca;", "*(uint4 *)(param_3 ^ 0xe0000000) = uVar1;" });
+        Line& l = r.lines.back();
+        l.tokens.clear();
+        for (const char* piece : { "*", "=", "uVar1", ";" })
+        {
+            const size_t at = piece[0] == 'u' ? l.text.rfind(piece) : l.text.find(piece);
+            Token t;
+            t.begin = static_cast<uint16_t>(at);
+            t.end = static_cast<uint16_t>(at + std::strlen(piece));
+            t.addr = 0x06009002u;
+            l.tokens.push_back(t);
+        }
+        bool unrelated = false, open = false, masked = true;
+        PointerPrintsFromHardware(r, 0x06009002u, none, 0xE6022100u, unrelated, &open, &masked);
+        std::printf("pin 'A5-90 derivation: a store's value is not the pointer': open %s, masked %s\n", open ? "yes" : "no", masked ? "yes" : "no");
+        CHECK(open && !masked);
+    }
     CHECK(OrsIntoOnChip("in_r1 | 0xffffffc0") && OrsIntoOnChip("0xe0000000 | param_1") && OrsIntoOnChip("x|0xffffff00"));
     CHECK(!OrsIntoOnChip("in_r1 & 0xffffffc0") && !OrsIntoOnChip("in_r1 | 0x1fffffc0") && !OrsIntoOnChip("a || 0xffffffc0") && !OrsIntoOnChip("in_r1 | 0xdfffffc0"));
     // a read whose instruction has two lines (the delay slot's store and the `return` the printer gives it too): the line that dereferences is the access
