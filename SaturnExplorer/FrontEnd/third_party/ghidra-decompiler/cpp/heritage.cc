@@ -2018,13 +2018,13 @@ void Heritage::reprocessFreeStores(AddrSpace *spc,vector<PcodeOp *> &freeStores)
     for(int4 i=0;i<freeStores.size();++i) {
       PcodeOp *op = freeStores[i];
       if (op->isDead() || op->usesSpacebasePtr()) continue;
-      if (escape.storeIsUnmodeled(op))
-	fd->opMarkSpacebasePtr(op);
-      else if (escape.storeIsPending(op)) {
+      if (escape.storeIsPending(op)) {
 	fd->opMarkSpacebasePtr(op);
 	pendingStores.push_back(op->getSeqNum());	// (0072) settled again after the next pass (reprocessPendingStores)
 	pendingSpace = spc;
       }
+      else if (escape.storeIsUnmodeled(op))
+	fd->opMarkSpacebasePtr(op);
     }
   }
 
@@ -2065,8 +2065,8 @@ void Heritage::unguardStore(AddrSpace *spc,PcodeOp *op)
 /// SaturnExplorer (patches/0072-engine-frame-chains-and-save-slots.patch): a STORE kept guarded only because its pointer was read through a
 /// frame address (FrameEscape::storeIsPending) is settled again after each later heritage pass, once that read has become a direct stack read
 /// linked to the word's write: a pointer still pending, or now a possible frame address the analysis does not model, keeps the guards; one
-/// the analysis models (a frame address it walks to: the STORE is folded into the frame, or guarded by its own range) keeps the mark; any
-/// other pointer (a parameter the slot held, a global's address) is no frame address, and the STORE loses the mark and its guards, as one
+/// the analysis models (a frame address it walks to: the STORE is folded into the frame) keeps the mark and stays pending until it is
+/// folded (the save slots stay mapped and its guards stay against the alias analysis meanwhile); any other pointer (a parameter the slot held, a global's address) is no frame address, and the STORE loses the mark and its guards, as one
 /// settled on the first pass does (reprocessFreeStores). A STORE already folded or removed is gone from the list.
 void Heritage::reprocessPendingStores(void)
 
@@ -2084,12 +2084,15 @@ void Heritage::reprocessPendingStores(void)
   escape.compute(fd,pendingSpace,false);
   for(int4 i=0;i<ops.size();++i) {
     PcodeOp *op = ops[i];
-    if (escape.storeIsUnmodeled(op)) continue;
     if (escape.storeIsPending(op)) {
       pendingStores.push_back(op->getSeqNum());
       continue;
     }
-    if (escape.members.find(op->getIn(1)) != escape.members.end()) continue;
+    if (escape.storeIsUnmodeled(op)) continue;
+    if (escape.members.find(op->getIn(1)) != escape.members.end()) {
+      pendingStores.push_back(op->getSeqNum());	// a frame address the analysis places: pending until it is folded
+      continue;
+    }
     fd->opClearSpacebasePtr(op);
     unguardStore(pendingSpace,op);
   }

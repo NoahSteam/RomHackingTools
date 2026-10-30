@@ -1908,6 +1908,54 @@ static bool exactStackPointer(const Varnode *vn,AddrSpace *spc,uintb &off)
 /// \param sop is the STORE
 /// \param local is the stack local
 /// \return \b true if it writes bytes of the local
+/// SaturnExplorer (patches/0072-engine-frame-chains-and-save-slots.patch): is the value read from the stack frame: a word of the frame (a
+/// stack Varnode, linked or not), or a LOAD through the stack pointer plus constants or through such a value, through copies, INDIRECTs,
+/// joins and the addition of constants? A pointer kept in a frame word, or behind a chain of them, before the analysis has linked it to
+/// what was put there (a frame address, a parameter): until then it may point anywhere into the frame.
+/// \param vn is the value
+/// \return \b true if it was read from the frame
+bool Funcdata::pointerFromFrame(const Varnode *vn) const
+
+{
+  vector<const Varnode *> todo(1,vn);
+  vector<const Varnode *> seen;
+  while(!todo.empty()) {
+    const Varnode *v = todo.back();
+    todo.pop_back();
+    if (find(seen.begin(),seen.end(),v) != seen.end()) continue;
+    if (seen.size() >= 64) return true;		// too far to follow: taken for one (fail closed)
+    seen.push_back(v);
+    if (v->getSpace()->getType() == IPTR_SPACEBASE) return true;
+    if (!v->isWritten()) continue;
+    const PcodeOp *op = v->getDef();
+    switch(op->code()) {
+    case CPUI_COPY:
+    case CPUI_INDIRECT:
+      todo.push_back(op->getIn(0));
+      break;
+    case CPUI_MULTIEQUAL:
+      for(int4 i=0;i<op->numInput();++i)
+	todo.push_back(op->getIn(i));
+      break;
+    case CPUI_INT_ADD:
+      if (op->getIn(1)->isConstant()) todo.push_back(op->getIn(0));
+      else if (op->getIn(0)->isConstant()) todo.push_back(op->getIn(1));
+      break;
+    case CPUI_LOAD:
+    {
+      uintb off;
+      AddrSpace *stackSpc = glb->getStackSpace();
+      if (stackSpc != (AddrSpace *)0 && exactStackPointer(op->getIn(1),stackSpc,off)) return true;
+      todo.push_back(op->getIn(1));
+      break;
+    }
+    default:
+      break;
+    }
+  }
+  return false;
+}
+
 bool Funcdata::storeAimedAt(const PcodeOp *sop,const Varnode *local) const
 
 {
@@ -1946,7 +1994,7 @@ void Funcdata::opCollapseIndirectsForAlias(PcodeOp *effectOp)
     // it: the guard stays until the STORE is folded into a COPY (opCollapseIndirectsForCopy). Removed, the local's read took the value
     // before the STORE (a save slot taken for unaliased and overwritten through a pointer kept in a frame word: ledger A3-132)
     if (shouldDestroy && effectOp->code() == CPUI_STORE && op->getOut()->getSpace()->getType() == IPTR_SPACEBASE &&
-	(isPendingFrameStore(effectOp) || storeAimedAt(effectOp,op->getOut())))
+	(isPendingFrameStore(effectOp) || storeAimedAt(effectOp,op->getOut()) || pointerFromFrame(effectOp->getIn(1))))
       shouldDestroy = false;
     else if (guard != (const LoadGuard *)0 && !guard->isGuarded(op->getOut()->getAddr()))
       shouldDestroy = true;

@@ -2141,7 +2141,7 @@ int4 ActionRestrictLocal::apply(Funcdata &data)
 	for(list<PcodeOp *>::const_iterator siter=data.beginOp(CPUI_STORE);siter!=data.endOp(CPUI_STORE) && !walked;++siter) {
 	  PcodeOp *sop = *siter;
 	  if (sop->isDead() || !sop->usesSpacebasePtr() || outvn->getSpace() != stackSpc) continue;
-	  if (data.storeAimedAt(sop,outvn))
+	  if (data.storeAimedAt(sop,outvn) || data.pointerFromFrame(sop->getIn(1)))
 	    walked = true;
 	}
 	if (walked) continue;
@@ -4136,7 +4136,7 @@ bool ActionDeadCode::isSavePush(const Funcdata &data,const Address &addr,const V
 bool ActionDeadCode::storeMayWrite(const Funcdata &data,const PcodeOp *sop,const Varnode *local)
 
 {
-  if (data.isPendingFrameStore(sop)) return true;
+  if (data.isPendingFrameStore(sop) || data.pointerFromFrame(sop->getIn(1))) return true;
   return data.storeAimedAt(sop,local);
 }
 
