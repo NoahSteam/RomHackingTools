@@ -7642,8 +7642,8 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
             continue;
         }
         // (A3-137, area 3 round 15 fix: accepted as a print limit) In frame mode a byte array is memory and is compared, but not one the text
-        // assigns as a value: whole (`axStack_14 = (xunknown1  [2])CONCAT11(...)`, no C), by a piece (`axStack_14._0_2_ = ...`, no lvalue), or
-        // under an underscore name of its own (`_axStack_13 = CONCAT12(...)`, whose width the text never says). And an underscore name the text
+        // assigns as a value: whole (`axStack_14 = (xunknown1  [2])CONCAT11(...)`, no C), by a piece (`axStack_14._0_2_ = ...`, no lvalue), a
+        // piece of an element (`axStack_2c[0]._0_1_`, no field of a scalar), or under an underscore name of its own (`_axStack_13 = CONCAT12(...)`, whose width the text never says). And an underscore name the text
         // uses at two widths (`_xStack_14 = CONCAT22(...)` then `CONCAT31(_xStack_14,0x8d)`: the engine prints a three-byte piece of the word under
         // the word's name) has no meaning either. Both are counted apart; the engine's values are right in the ones read by hand (the frame124
         // seeds of the area 2 round 16 review, 15_DECOMPILER_STEP5.md "Area 3 fixer (A3-130 to A3-138)").
@@ -7654,7 +7654,7 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
             for (std::sregex_iterator it(text.begin(), text.end(), arrayDecl), end; it != end && !assigned; ++it)
             {
                 const std::string n = (*it)[1].str();
-                const std::regex use("(\\b_" + n + "\\b)|(\\b" + n + "(\\._\\d+_\\d+_)?\\s*=[^=])");
+                const std::regex use("(\\b_" + n + "\\b)|(\\b" + n + "(\\._\\d+_\\d+_)?\\s*=[^=])|(\\b" + n + "\\[\\d+\\]\\._\\d+_\\d+_)");
                 assigned = std::regex_search(text, use);
             }
             if (assigned)

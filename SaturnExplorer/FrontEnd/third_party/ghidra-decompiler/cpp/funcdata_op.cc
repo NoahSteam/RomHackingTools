@@ -109,8 +109,7 @@ void Funcdata::noteFrameFoldForwarded(bool walk,Varnode *vn)
     return;
   }
   vector<PcodeOp *> walked(1,def);
-  set<PcodeOp *> seen;		// (0072) what the walk reached, looked up in log time: the bound is 4,096 ops, not 64
-  seen.insert(def);
+  set<PcodeOp *> seen;		// (0072) past 64 ops, what the walk reached, looked up in log time: the bound is 4,096 ops, not 64
   for(size_t k=0;k<walked.size();++k) {
     PcodeOp *d = walked[k];
     if (d->isFrameFold())
@@ -123,7 +122,13 @@ void Funcdata::noteFrameFoldForwarded(bool walk,Varnode *vn)
       Varnode *in = d->getIn(i);
       if (in == (Varnode *)0 || !in->isWritten()) continue;
       PcodeOp *e = in->getDef();
-      if (seen.find(e) != seen.end()) continue;
+      if (walked.size() <= 64) {
+	if (find(walked.begin(),walked.end(),e) != walked.end()) continue;
+      }
+      else {
+	if (seen.empty()) seen.insert(walked.begin(),walked.end());
+	if (seen.find(e) != seen.end()) continue;
+      }
       if (walked.size() >= 4096) {
 	// (0072) the walk's bound: every fold is taken for read, and the records say so (a host's ledger counts the function unchecked:
 	// ledger A3-133, where 64 ops were reached by 5% to 8% of the corpus' functions, which were then reported clean)
@@ -131,7 +136,7 @@ void Funcdata::noteFrameFoldForwarded(bool walk,Varnode *vn)
 	frameLedgerCapped = true;
 	return;
       }
-      seen.insert(e);
+      if (!seen.empty()) seen.insert(e);
       walked.push_back(e);
     }
   }
