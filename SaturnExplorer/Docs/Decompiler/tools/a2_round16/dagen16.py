@@ -669,6 +669,54 @@ def fam_ptree(r):
 FAMS16[95] = fam_ptree
 
 
+def fam_forloop(r):
+    # loops the engine can print as `for`: a counter initialised before the loop, tested at the top, stepped by one op at the end of the last block; the body has
+    # conditional jumps to the stepping block (a "continue"), breaks, a nested for loop, an early return, and sometimes a second op in the stepping block (which keeps it
+    # a while), the step reading a data register, the test an unsigned or a signed compare, and the counter read after the loop.
+    g = Gen(r); f = g.f
+    f.add(mov_(0, 4), mov_(1, 5))
+    def loop(depth, outer):
+        ctr = CTR[depth]; lim = [10, 11, 13][depth]
+        top, ex, ct = g.lab('T'), g.lab('X'), g.lab('C')
+        f.add(mov_(0, r.choice([6, 7])), andi(r.choice([3, 7])), mov_(lim, 0))
+        f.add(movi(ctr, r.choice([0, 0, 1, 0xFF])))
+        f.label(top)
+        cmpk = r.randrange(0, 3)
+        if cmpk == 0: f.add(cmpge(lim, ctr)); f.br('bt', ex)           # i >= lim: exit
+        elif cmpk == 1: f.add(cmphs(lim, ctr)); f.br('bt', ex)         # unsigned
+        else: f.add(cmpgt(ctr, lim)); f.br('bf', ex)                   # lim > i continues
+        for _ in range(r.randrange(1, 4)):
+            x = r.random()
+            if x < 0.4: g.body(1)
+            elif x < 0.6:
+                f.add(live_cmp(r)); f.br(r.choice(['bt', 'bf']), ct)             # continue
+            elif x < 0.75:
+                f.add(live_cmp(r)); f.br(r.choice(['bt', 'bf']), ex)             # break
+            elif x < 0.85 and depth < 1 and not outer:
+                loop(depth + 1, True)
+            elif x < 0.92:
+                f.add(live_cmp(r)); f.br(r.choice(['bt', 'bf']), 'END')          # return
+            else:
+                g.body(2)
+        f.label(ct)
+        st = r.random()
+        if st < 0.5: f.add(addi(ctr, 1))
+        elif st < 0.7: f.add(addi(ctr, 2))
+        elif st < 0.85: f.add(addi(ctr, 1)); f.add(*live_op(r)[:1])           # a second op in the stepping block
+        else: f.add(addi(ctr, 3))
+        f.br('bra', top); f.add(NOP)
+        f.label(ex)
+        if r.random() < 0.5: f.add(add__(ctr, r.choice([0, 1])))               # the counter read after the loop
+    loop(0, False)
+    if r.random() < 0.4: loop(0, False)
+    f.label('END')
+    f.rts_slot = mov_(0, 1)
+    return f
+
+
+FAMS16[96] = fam_forloop
+
+
 def build(seed, fam=None, want_fn=False):
     if fam == 88:
         return build_swloop(seed)
