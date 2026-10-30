@@ -4847,12 +4847,17 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
             {
                 uint32_t canon = 0;
                 const uint32_t partition = t.addr >> 29;
-                if (t.depth != 0 || !r.InBody(t.insn) || excused.count(t.insn) || SaidMissing(r, t.insn)) continue;
+                if (t.depth != 0 || !r.InBody(t.insn) || SaidMissing(r, t.insn)) continue;
                 if (!HardwareAlias(t.addr, canon))
                 {
                     // (A5-92) an access in the associative purge or the cache address array has a note of its own, as a direct one does
                     if (partition != 2 && partition != 3 && partition != 5) continue;
                     canon = t.addr;
+                }
+                if (excused.count(t.insn))
+                {
+                    count("pointer.effect.excused");
+                    continue;
                 }
                 const uint16_t word = subject.WordAt(t.insn);
                 if ((word & 0xF000) == 0xD000 || (word & 0xF000) == 0x9000) continue;
@@ -10842,6 +10847,94 @@ void TestA582Pins(Sh2Decompiler& d)
     CHECK(DerefOperands("x = *(xunknown4 *)(p + 4) + y;") == "(xunknown4 *)(p + 4) + y ; ");
 }
 
+// ---- Area 5, A5-87: the five seeds, and what the pointer rules may take for the pointer -------------------------------------------------------
+// A5-88 (seeds 2029583, 2046314): the access is made by a run the output hands to code it does not hold (an unresolved table's cases set the pointer).
+// A5-89 (seed 2018538): the pointer is a callee's output merged with a register's address; the register the run came to is the callee's doing.
+// A5-90 (seed 1804560): `in_r1 | 0xffffffc0`, a byte at +8: the text proves the on-chip partition, not the register; the engine says "may reach on-chip registers".
+// A5-91 (grammar 1 seed 2408172): a pointer stepped from the on-chip page through the cache data array, written to after the loop.
+// Their shrunk words, run as modules: no finding, and the check counted what set the access aside (or, for the last two, said).
+void TestA587Pins(Sh2Decompiler& d)
+{
+    struct Pin { ModulePin module; const char* count; const char* count2; };
+    static const Pin kPins[] = {
+        { { "A5-88, seed 2029583 shrunk", "2F86 2F96 2FA6 2FB6 2FC6 0C2A 6843 6953 6A63 6B73 B032 E49F 6483 6593 66A3 67B3 E105 3417 891B 4408 C702 014E 412B 0009 0600 9052 0600 904C 0600 9052 0600 9056 0600 905E 0600 905E 0600 905A D609 A007 0009 A005 0009 A003 0009 A001 0009 D606 5263 6063 4C2A 6CF6 6BF6 6AF6 69F6 68F6 000B 0009 E000 00E4 0600 210C 6040 000B 0009",
+            "0/0/74,7c/7c/82", "2c:4:6:5e:4c,52,56,5e,5e,5a:52", "1,1", "0,0", "20000,0" }, "pointer.trace.handed-over", nullptr },
+        { { "A5-88, seed 2046314 shrunk", "7FC0 D613 E104 3713 8914 4708 C702 017E 412B 0009 0600 902C 0600 9028 0600 902C 0600 9030 0600 9030 A005 0009 A003 0009 A001 0009 D607 4715 8901 A004 E150 E000 026E A000 0009 603D 7F40 000B 0009 0009 05FE 0028 2600 1018",
+            "0/0/4e", "10:7:4:34:28,2c,30,30:2c", "1", "40000", "400" }, "pointer.trace.handed-over", nullptr },
+        { { "A5-89, seed 2018538 shrunk", "2F86 2F96 2FD6 4F22 6843 6953 B014 0009 6483 6593 2458 8B02 D605 A002 0009 A000 0009 D204 4F26 6DF6 69F6 68F6 422B 0009 FFFF FF62 0600 9038 2F86 2F96 2FE6 4F22 7FE0 6EF3 6843 6953 6361 E416 6533 E68C B00A 0009 6483 6593 7E20 6FE3 4F26 6EF6 69F6 68F6 000B 0009 7FF4 E04D 7F0C 000B 0009",
+            "0/0/30,38/38/68,68/68/72", nullptr, "0,0,1", nullptr, nullptr }, "pointer.effect.open", nullptr },
+        { { "A5-90, seed 1804560 shrunk", "2F86 2F96 2FA6 2FB6 4F22 6843 6953 6A63 6B73 4F26 6BF6 6AF6 69F6 68F6 000B 0009 7FD0 E2C0 212B 411E E104 3412 8914 4408 C701 014E 412B 0009 0600 9048 0600 904C 0600 904C 0600 9050 A006 0009 A004 0009 E008 CF01 A000 0009 6071 7F30 000B 0009",
+            "0/0/20,20/20/60", "34:4:4:58:48,4c,4c,50", "0,1", "1a0000,1a0000", "0,20000" }, "pointer.effect.open", "onchip.span.said" },
+        { { "A5-91, grammar 1 seed 2408172 shrunk", "D706 6072 C801 8BFC E302 7704 D104 271A 4310 8BFA E00E 0735 000B 0009 FFFF FF08 2000 0000",
+            nullptr, nullptr, nullptr, nullptr, nullptr }, "pointer.effect.excused", nullptr },
+    };
+    for (const Pin& p : kPins)
+    {
+        const Report rep = EvaluateSubject(d, ModuleSubject(p.module), true);
+        auto count = [&](const char* name) {
+            const auto it = rep.counts.find(name);
+            return it == rep.counts.end() ? 0 : it->second;
+        };
+        std::printf("pin '%s': %zu finding(s), %s %d, %s %d\n", p.module.name, rep.findings.size(), p.count, count(p.count), p.count2 ? p.count2 : "-", p.count2 ? count(p.count2) : 0);
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+        CHECK(count(p.count) > 0);
+        if (p.count2) CHECK(count(p.count2) > 0);
+    }
+    // Grammar 2 seed 1804560 as a program (the new draws leave it as it was): the engine's span note is what the rule asks for.
+    {
+        const bool savedSpecials = gSpecialReads;
+        gSpecialReads = false;
+        const Report rep = EvaluateSubject(d, MakeSubject(MakeV2(1804560)), true);
+        const auto it = rep.counts.find("onchip.span.said");
+        const int said = it == rep.counts.end() ? 0 : it->second;
+        std::printf("pin 'A5-90, grammar 2 seed 1804560': %zu finding(s), onchip.span.said %d\n", rep.findings.size(), said);
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+        CHECK(said > 0);
+        gSpecialReads = savedSpecials;
+    }
+
+    // The derivation on text: an open pointer (a free name behind it), the mask of the top bits, and the controls.
+    uint32_t chcr0 = 0;
+    CHECK(HardwareAlias(0xFFFFFF8Cu, chcr0));
+    const std::vector<const HardwareRegister*> none;
+    auto derive = [&](const char* what, const std::vector<std::string>& lines, size_t useLine, uint32_t reached, bool wantPointer, bool wantOpen, bool wantMasked) {
+        const DecompileResult r = FakeOutput(lines);
+        bool unrelated = false, open = false, masked = false;
+        const bool got = PointerPrintsFromHardware(r, 0x06009000u + static_cast<uint32_t>(useLine) * 2, none, reached, unrelated, &open, &masked);
+        std::printf("pin 'A5-89 derivation: %s': %s, open %s, masked %s\n", what, got ? "pointer" : "not", open ? "yes" : "no", masked ? "yes" : "no");
+        CHECK(got == wantPointer);
+        CHECK(open == wantOpen);
+        CHECK(masked == wantMasked);
+    };
+    // seed 2018538: a callee's output merged with a register's address 42 bytes from the one reached
+    derive("a callee's output merged with &SH2_BARBL", { "puVar3 = extraout_r6;", "puVar3 = &SH2_BARBL;", "uVar1 = *puVar3;" }, 2, chcr0, true, true, false);
+    derive("the same without the callee's output (control)", { "puVar3 = &SH2_BARBL;", "uVar1 = *puVar3;" }, 1, chcr0, true, false, false);
+    derive("a parameter merged with &SH2_BARBL", { "puVar3 = param_1;", "puVar3 = &SH2_BARBL;", "uVar1 = *puVar3;" }, 2, chcr0, true, true, false);
+    derive("a loaded value merged with &SH2_BARBL", { "puVar3 = *ppuVar4;", "puVar3 = &SH2_BARBL;", "uVar1 = *puVar3;" }, 2, chcr0, true, true, false);
+    derive("a call's result merged with &SH2_BARBL", { "puVar3 = f(1);", "puVar3 = &SH2_BARBL;", "uVar1 = *puVar3;" }, 2, chcr0, true, true, false);
+    derive("a local, itself a register's address (control)", { "puVar2 = &SH2_BARBL;", "puVar3 = puVar2;", "uVar1 = *puVar3;" }, 2, chcr0, true, false, false);
+    // seed 1804560: the number ORed in is a mask of the top bits, and the other operand is a parameter or a register at entry
+    derive("in_r1 | 0xffffffc0, a byte at +8", { "uVar1 = in_r1 | 0xffffffc0;", "*(uint1 *)(uVar1 + 8) = *(uint1 *)(uVar1 + 8) | 1;" }, 1, 0xFFFFFFDAu, true, true, true);
+    derive("param_4 | 0xffffffe0 in the operand", { "*(xunknown1 *)(param_4 | 0xffffffe0) = *param_1;" }, 0, 0xFFFFFFE0u, true, true, true);
+    derive("& 0xffffffc0 is no top-bits mask (control)", { "uVar1 = in_r1 & 0xffffffc0;", "uVar2 = *(uint1 *)(uVar1 + 8);" }, 1, 0xFFFFFFC8u, true, true, false);
+    derive("| 0x40 sets no top bits (control)", { "uVar1 = in_r1 | 0x40;", "uVar2 = *(uint1 *)(uVar1 + 8);" }, 1, 0x48u, false, true, false);
+    derive("|| is no OR of bits (control)", { "bVar1 = in_r1 != 0 || 0xffffffc0 != 0;", "uVar2 = *(uint1 *)(bVar1 + 8);" }, 1, 0x48u, false, true, false);
+    CHECK(OrsIntoOnChip("in_r1 | 0xffffffc0") && OrsIntoOnChip("0xe0000000 | param_1") && OrsIntoOnChip("x|0xffffff00"));
+    CHECK(!OrsIntoOnChip("in_r1 & 0xffffffc0") && !OrsIntoOnChip("in_r1 | 0x1fffffc0") && !OrsIntoOnChip("a || 0xffffffc0") && !OrsIntoOnChip("in_r1 | 0xdfffffc0"));
+    // a read whose instruction has two lines (the delay slot's store and the `return` the printer gives it too): the line that dereferences is the access
+    {
+        DecompileResult r = FakeOutput({ "puVar9 = &VDP2_TVMD;", "iVar5 = (int4)(int2)param_1[7];", "*puVar9 = (uint2)uVar6;", "return iVar5;" });
+        for (size_t k : { size_t(2), size_t(3) })
+            for (Token& t : r.lines[k].tokens) t.addr = 0x06009020u;
+        bool unrelated = false, open = false;
+        const bool got = PointerPrintsFromHardware(r, 0x06009020u, none, 0x05F80000u, unrelated, &open);
+        std::printf("pin 'A5-89 derivation: the store and the return of one instruction': %s, open %s\n", got ? "pointer" : "not", open ? "yes" : "no");
+        CHECK(got && !open);
+    }
+}
+
 // ---- Area 2 round 7 (ledger A2-49, A2-50) ----------------------------------------------------------------------------------------------
 // A2-49: seed 62956 of grammar 2, and the review's reduction of it: a function that calls a lent callee and returns its value, with `tst r0,r0 ;
 // bt` over nothing in between, is printed and lent `void` (accepted: the compare is a use of r0 when the return is decided). It is counted, not a
@@ -11970,6 +12063,7 @@ void TestGenerated()
         RUN(TestLeftoverSeedPins(d));
         RUN(TestRound7Pins(d));
         RUN(TestA582Pins(d));
+        RUN(TestA587Pins(d));
         RUN(TestRound8Pins(d));
         RUN(TestRoutedPins(d));
         RUN(TestRound9Pins(d));
