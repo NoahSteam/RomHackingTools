@@ -26,6 +26,8 @@ _s11.loader.exec_module(sw11)
 
 W16 = int(os.environ.get('DAGEN16_W', '4'))      # the one width of every access of the memory families 91 to 93 (see mkptr16.py)
 SINK = [12]
+TD89 = int(os.environ.get('DAGEN16_TD', '4'))      # the depth of family 89's condition trees
+NB87 = int(os.environ.get('DAGEN16_NB', '10'))     # the most blocks of family 87
 LIVE = [0, 1]
 SRC = [0, 1, 4, 5, 6, 7]
 NOP = 0x0009
@@ -150,7 +152,7 @@ def fam_loopbrk(r):
 def fam_gotomess(r):
     g = Gen(r)
     f = g.f
-    nb = r.randrange(4, 11)
+    nb = r.randrange(4, NB87 + 1)
     f.add(mov_(0, 4), mov_(1, 5), movi(13, r.randrange(2, 7)))
     stubs = {}
     def tgt(i, t):
@@ -282,7 +284,7 @@ def comp(g, t, lt, lf, fall):
 def fam_condtree(r):
     g = Gen(r); f = g.f
     f.add(mov_(0, 4), mov_(1, 5))
-    depth = r.randrange(1, 5)
+    depth = r.randrange(1, TD89 + 1)
     form = r.randrange(0, 6)
     t = tree(r, depth)
     if form == 0:      # if (t) A else B
@@ -715,6 +717,111 @@ def fam_forloop(r):
 
 
 FAMS16[96] = fam_forloop
+
+
+def fam_memmac(r):
+    # mac.l / mac.w @Rm+,@Rn+ over arrays (dot products: straight-line or a counted loop), clrmac or the entry MACH:MACL, the S bit as the entry SR has it, the
+    # accumulator read as macl, mach, both, or stored; r5 may alias r4's array. The widths 4 (mac.l) and 2 (mac.w); w = 1 has no mac and uses the plain loop instead.
+    m = Mem(r); f = m.f
+    w = W16
+    if w == 1:
+        return fam_memloop(r)
+    mac = 0x000F if w == 4 else 0x400F                  # mac.l @Rm+,@Rn+ is 0x0nmF; mac.w is 0x4nmF
+    inc = w
+    if r.random() < 0.6: f.add(0x0028)                  # clrmac
+    n = r.randrange(1, 6)
+    if r.random() < 0.5:                                # straight line
+        for _ in range(n): f.add(mac | 5 << 8 | 4 << 4)   # n = r5 (first operand, the multiplicand pair is @Rn+ x @Rm+): mac.X @r4+,@r5+
+    else:
+        top = m.g.lab('M')
+        f.add(movi(8, n)); f.label(top); f.add(mac | 5 << 8 | 4 << 4, dt(8)); f.br('bf', top)
+    if r.random() < 0.3:
+        f.add(0x2002 | 4 << 8 | 7 << 4) if w == 4 else f.add(0x2001 | 4 << 8 | 7 << 4)   # a store through the advanced pointer
+    k = r.randrange(0, 4)
+    if k == 0: f.add(0x001A | 0 << 8)                   # sts macl,r0
+    elif k == 1: f.add(0x000A | 0 << 8)                 # sts mach,r0
+    elif k == 2: f.add(0x001A | 0 << 8, 0x000A | 1 << 8, add__(1, 0))
+    else: f.add(0x001A | 1 << 8, 0x000A | 0 << 8, 0x4000 | 0 << 8, xor_(1, 0))
+    f.rts_slot = NOP
+    return f
+
+
+FAMS16[97] = fam_memmac
+
+
+def fam_edgeconst(r):
+    # one or two operations of a register with an edge constant from the literal pool (the signed and unsigned limits of 8, 16 and 32 bits, their neighbours and
+    # negatives), then a compare with a second edge constant (all five compares and both senses) read as movt, as a branch around an assignment, or as a returned
+    # difference: the printer's sign, hex or decimal, `-0x80000000` and unsigned-versus-signed choices for every constant, and the engine's folds of the pair.
+    g = Gen(r); f = g.f
+    E = [0, 1, 2, 3, 0x7F, 0x80, 0x81, 0xFF, 0x100, 0x7FFF, 0x8000, 0x8001, 0xFFFF, 0x10000, 0x7FFFFFFE, 0x7FFFFFFF, 0x80000000, 0x80000001, 0xFFFFFFFE, 0xFFFFFFFF,
+         0xFFFFFF00, 0xFFFFFF80, 0xFFFF8000, 0xFFFF0000, 0xFFFF7FFF, 0x55555555, 0xAAAAAAAA, r.getrandbits(32)]
+    f.add(mov_(1, r.choice([4, 5, 6, 7])), mov_(2, r.choice([4, 5, 6, 7])))
+    for _ in range(r.randrange(1, 3)):
+        f.lit(3, r.choice(E))
+        k = r.randrange(0, 14)
+        d = 1
+        if k == 0: f.add(add__(3, d))
+        elif k == 1: f.add(sub__(3, d))
+        elif k == 2: f.add(and__(3, d))
+        elif k == 3: f.add(or__(3, d))
+        elif k == 4: f.add(xor_(3, d))
+        elif k == 5: f.add(mulL(3, d), stsmacl(d))
+        elif k == 6: f.add(neg_(d, d), add__(3, d))
+        elif k == 7: f.add(not_(d, d), sub__(3, d))
+        elif k == 8: f.add(r.choice([extsb, extsw, extub, extuw])(d, d), add__(3, d))
+        elif k == 9: f.add(r.choice([SHLL, SHLR, SHAR, 0x4008, 0x4009, 0x4018, 0x4019, 0x4028, 0x4029, ROTL, ROTR]) | d << 8, add__(3, d))
+        elif k == 10: f.add(sub__(d, 3), mov_(d, 3))
+        elif k == 11: f.add(r.choice([addc, subc, addv, subv])(3, d))
+        elif k == 12: f.add(dmuls(3, d) if r.random() < 0.5 else dmulu(3, d), stsmach(d))
+        else: f.add(0x6000 | d << 8 | 3 << 4 | 0xB)
+    f.lit(3, r.choice(E))
+    c = r.randrange(0, 4)
+    cmps = [cmpeq, cmphi, cmphs, cmpgt, cmpge]
+    if c == 0:
+        f.add(r.choice(cmps)(3, 1), movt(0))
+        if r.random() < 0.4: f.add(neg_(0, 0))
+    elif c == 1:
+        f.add(r.choice(cmps)(3, 1)); l = g.lab('Z'); f.br(r.choice(['bt', 'bf']), l)
+        f.lit(1, r.choice(E)); f.label(l); f.add(mov_(0, 1))
+    elif c == 2:
+        f.add(r.choice(cmps)(3, 2), movt(0)); f.add(r.choice(cmps)(3, 1), movt(2)); f.add(r.choice([add__, sub__, xor_, or__, and__])(2, 0))
+    else:
+        f.add(mov_(0, 1), sub__(3, 0)) if r.random() < 0.5 else f.add(mov_(0, 1), add__(3, 0))
+    f.rts_slot = NOP
+    return f
+
+
+FAMS16[98] = fam_edgeconst
+
+
+def fam_tnarrow(r):
+    # A2-104's shape: a sum or difference that carries T (addc, subc, negc, or a movt added), cut to a byte or a word by an extension, compared for equality or order
+    # with a constant of that width (so that the engine's compare is two or one bytes wide and the constant is a negative or a high one)
+    g = Gen(r); f = g.f
+    f.add(mov_(1, r.choice([4, 5, 6, 7])), mov_(2, r.choice([4, 5, 6, 7])))
+    if r.random() < 0.3: f.add(r.choice([cmpeq, cmphi, cmpgt])(r.choice([4, 5]), r.choice([6, 7])))      # a T of the function's own
+    k = r.randrange(0, 5)
+    if k == 0: f.add(addc(2, 1))
+    elif k == 1: f.add(subc(2, 1))
+    elif k == 2: f.add(negc(1, 1))
+    elif k == 3: f.add(movt(3), add__(3, 1))
+    else: f.add(movt(3), sub__(3, 1))
+    ext = r.choice([extsw, extsw, extsb, extuw, extub])
+    f.add(ext(1, 1))
+    c = r.choice([0xFFFF, 0xFF, 0x7FFF, 0x80, 0x8000, 0xFFFFFFFF, 0xFFFFFF80, 0xFFFF8000, 0x7F, 0, 1, 0x100, 0x10000])
+    if r.random() < 0.5:
+        bias = r.choice([0x8000, 0x80, 0x80000000, 1, 0xFFFFFFFF])
+        f.lit(3, bias); f.add(add__(3, 1)); f.lit(3, (c + bias) & 0xFFFFFFFF)
+    else:
+        f.lit(3, c)
+    f.add(r.choice([cmpeq, cmpeq, cmphi, cmphs, cmpgt, cmpge])(3, 1), movt(0))
+    if r.random() < 0.5: f.add(neg_(0, 0))
+    f.rts_slot = NOP
+    return f
+
+
+FAMS16[99] = fam_tnarrow
 
 
 def build(seed, fam=None, want_fn=False):
