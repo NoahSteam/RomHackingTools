@@ -89,8 +89,12 @@ public:
 
     // Persist / restore the user comment store (address -> note). Called by the App
     // at startup / shutdown, mirroring WatchPanel session persistence.
-    void LoadComments();
-    void SaveComments() const;
+    // Load replaces the notes; a missing file is no notes. False, with 'error', and the notes as they were, when the file is
+    // there and was not read (not a regular file, over 8 MiB, unreadable). Lines that are not "<hex-address> <note>"
+    // are skipped and counted (SkippedCommentLines). Save writes the file whole or not at all.
+    bool LoadComments(std::string* error = nullptr);
+    bool SaveComments(std::string* error = nullptr) const;
+    size_t SkippedCommentLines() const { return mSkippedCommentLines; }
 
 private:
     struct Line
@@ -164,6 +168,7 @@ private:
     // User comment store (address -> note), overlaid on the auto-generated comment
     // and persisted across sessions. Shared by both CPUs (they share the address map).
     std::unordered_map<uint32_t, std::string> mComments;
+    size_t mSkippedCommentLines = 0;
     // Which operand the row context menu was opened on, latched at open time (-1 when it
     // was opened from a cell other than the operands). The pointer has usually moved off
     // the operand by the time a menu item is picked, so it cannot be re-read then.

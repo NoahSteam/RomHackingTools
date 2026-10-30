@@ -58,7 +58,9 @@ public:
     // The OS path separator, so callers assembling paths match the ones this module writes.
     static char PathSeparator();
 
-    void Load();        // read FilePath(); silent no-op if it doesn't exist
+    // Read FilePath(); a no-op if it doesn't exist. False, with 'error', and the settings as they were, when the file is
+    // there and was not read: not a regular file, over 4 MiB, unreadable.
+    bool Load(std::string* error = nullptr);
     // Write FilePath(), creating the config dir first. All-or-nothing: the new file is staged beside the
     // old one and renamed over it once it is safely on disk, so a full disk, a failed flush or a
     // read-only folder leaves the previous settings in place instead of an empty file. False, with

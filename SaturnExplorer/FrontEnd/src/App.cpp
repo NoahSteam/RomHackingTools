@@ -308,11 +308,35 @@ void App::Initialize()
     LoadSettings();                // panel visibility, data dir, emulator paths
 
     mWatchPanel.LoadSession();     // restore the session's watch list, if any
-    mAssemblyPanel.LoadComments(); // restore the session's assembly comments
-    mFunctionNames.Load();         // restore user-renamed function names (call stack)
-    mFunctionNames.Import("saturn_symbols.txt");  // merge a symbol map if present
+    {
+        std::string err;
+        if (!mAssemblyPanel.LoadComments(&err)) mLog.Error("Assembly comments: " + err);   // restore the session's assembly comments
+        else if (mAssemblyPanel.SkippedCommentLines())
+            mLog.Warn("assembly_comments.txt: " + std::to_string(mAssemblyPanel.SkippedCommentLines()) + " line(s) are not \"<hex-address> <note>\" and were skipped");
+    }
+    {
+        // A file that is there and was not read, or lines in it that were not entries, are said (A9-2, A9-4): the names
+        // used to be missing with nothing to say why, and the next save wrote the file over without them.
+        std::string err;
+        if (!mFunctionNames.Load(&err)) mLog.Error("Function names: " + err);
+        else if (mFunctionNames.SkippedLines())
+            mLog.Warn("saturn_functions.txt: " + std::to_string(mFunctionNames.SkippedLines()) + " line(s) are not \"<hex-address> <name>\" and were skipped (the first is line " +
+                      std::to_string(mFunctionNames.FirstSkippedLine()) + ")");
+        err.clear();
+        mFunctionNames.Import("saturn_symbols.txt", &err);  // merge a symbol map if present
+        if (!err.empty()) mLog.Error("Symbol map: " + err);
+        else if (mFunctionNames.SkippedLines())
+            mLog.Warn("saturn_symbols.txt: " + std::to_string(mFunctionNames.SkippedLines()) + " line(s) are not \"<hex-address> <name>\" and were skipped (the first is line " +
+                      std::to_string(mFunctionNames.FirstSkippedLine()) + ")");
+    }
 #if SE_ENABLE_DECOMPILER
-    mFunctionBounds.Load();        // the user's function-start corrections (next to saturn_functions.txt)
+    {
+        std::string err;
+        if (!mFunctionBounds.Load(decomp::FunctionBounds::kDefaultFile, &err)) mLog.Error("Function starts: " + err);
+        else if (mFunctionBounds.SkippedLines())
+            mLog.Warn(std::string(decomp::FunctionBounds::kDefaultFile) + ": " + std::to_string(mFunctionBounds.SkippedLines()) +
+                      " line(s) are not an address or a comment and were skipped (the first is line " + std::to_string(mFunctionBounds.FirstSkippedLine()) + ")");
+    }
     // The process's one engine thread (PLAN.md A4). It is optional: if it cannot be started (the OS
     // refuses the thread, memory runs out) the app opens without it and the panel says why, rather
     // than an exception ending Initialize. An unwritable config dir is reported by the panel as
@@ -321,6 +345,13 @@ void App::Initialize()
     if (!mDecompilerRunner) mLog.Error("Decompiler unavailable: " + mDecompilerUnavailable);
 #endif
     mLog.Info("Saturn Explorer started");
+}
+
+// The names are saved whole or not at all (A9-3); a save that failed is said, once per attempt, where it used to vanish.
+void App::SaveFunctionNames()
+{
+    std::string err;
+    if (!mFunctionNames.Save(&err)) mLog.Error("Could not save the function names: " + err);
 }
 
 void App::Shutdown()
@@ -335,8 +366,11 @@ void App::Shutdown()
 #endif
     SaveSettings();
     mWatchPanel.SaveSession();
-    mAssemblyPanel.SaveComments();
-    mFunctionNames.Save();
+    {
+        std::string err;
+        if (!mAssemblyPanel.SaveComments(&err)) mLog.Error("Could not save the assembly comments: " + err);
+    }
+    SaveFunctionNames();
     CloseData();
 }
 
@@ -399,7 +433,10 @@ const std::vector<App::PanelInfo>& App::PanelList()
 
 void App::LoadSettings()
 {
-    mSettings.Load();
+    {
+        std::string err;
+        if (!mSettings.Load(&err)) mLog.Error("Settings: " + err);
+    }
     mTheme.Load(mSettings);
     mTheme.ApplyPending();
     for (const PanelInfo& p : PanelList())
@@ -3132,7 +3169,10 @@ void App::UpdateDecompiler(IPlatform& platform)
             mSettingsDirty = true;
         }
     }
-    if (req.reloadBios) LoadBiosImage(mBiosPath);   // same path, possibly other bytes: hashed again
+    // Same path, possibly other bytes: hashed again. A file that no longer loads leaves no image: the one held was read from
+    // bytes the file no longer has, and the panel went on labelling it with the path (A9-9). The path stays, so the next
+    // Reload (or start) tries it again.
+    if (req.reloadBios && !LoadBiosImage(mBiosPath)) mBiosImage.reset();
     if (req.clearBios)
     {
         mBiosImage.reset();
@@ -4651,10 +4691,15 @@ void App::DrawCallStack(IPlatform& platform)
         std::string path;
         if (platform.OpenFileDialogFiltered(path, "Symbol / map files", "txt,map,sym"))
         {
-            const size_t n = mFunctionNames.Import(path.c_str());
-            if (n) mFunctionNames.Save();   // persist the merged names
+            std::string err;
+            const size_t n = mFunctionNames.Import(path.c_str(), &err);
+            if (n) SaveFunctionNames();   // persist the merged names
             mLog.Info(n ? ("Imported " + std::to_string(n) + " symbols from " + path)
                         : std::string("No symbols found in " + path));
+            if (!err.empty()) mLog.Error("Symbol map: " + err);
+            else if (mFunctionNames.SkippedLines())
+                mLog.Warn(path + ": " + std::to_string(mFunctionNames.SkippedLines()) + " line(s) are not \"<hex-address> <name>\" and were skipped (the first is line " +
+                          std::to_string(mFunctionNames.FirstSkippedLine()) + ")");
         }
     }
     ImGui::SetItemTooltip("Import a symbol / map file: \"<hex-addr> <name>\" per line");
@@ -4902,7 +4947,7 @@ void App::DrawRenameFunctionModal()
         if (NameDialogBody(mRenameBuf, sizeof(mRenameBuf)) == NameDialogResult::Ok)
         {
             mFunctionNames.Rename(mRenameAddr, mRenameBuf);
-            mFunctionNames.Save();
+            SaveFunctionNames();
         }
         ImGui::EndPopup();
     }

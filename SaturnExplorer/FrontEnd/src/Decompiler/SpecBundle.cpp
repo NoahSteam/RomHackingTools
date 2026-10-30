@@ -1,7 +1,7 @@
 #include "Decompiler/SpecBundle.h"
 
 #include "Decompiler/Sh2SpecData.h"
-#include "Disc/PathUtil.h"   // ReadWholeFile
+#include "FileRead.h"
 #include "FileWrite.h"
 #include "Sha256.h"
 
@@ -53,12 +53,24 @@ std::atomic<void (*)(const std::string&)> gStagingHook(nullptr);
 std::string Verify(const std::string& dir, const std::string& manifest,
                    const std::vector<SpecFileData>& files)
 {
+    // Each file is read no further than one byte past what it should hold, and only if it is a regular file: a FIFO put
+    // where a language file goes blocked the start-up for good, and a link to /dev/zero never ended (A9-5).
     std::string bytes;
-    if (!ReadWholeFile(Join(dir, kManifestName), bytes)) return "manifest.json is missing";
+    auto read = [&](const std::string& path, size_t expected, std::string& why) {
+        switch (ReadFileCapped(path, expected + 1, bytes))
+        {
+        case CappedRead::Ok: return true;
+        case CappedRead::TooLarge: why = "has the wrong size"; return false;
+        case CappedRead::NotRegular: why = "is not a regular file"; return false;
+        default: why = "is missing"; return false;
+        }
+    };
+    std::string why;
+    if (!read(Join(dir, kManifestName), manifest.size(), why)) return std::string(kManifestName) + (why == "is missing" ? " is missing" : " " + why);
     if (bytes != manifest) return "manifest.json does not match this build";
     for (const SpecFileData& f : files)
     {
-        if (!ReadWholeFile(Join(dir, f.name), bytes)) return f.name + " is missing";
+        if (!read(Join(dir, f.name), f.size, why)) return f.name + " " + why;
         if (bytes.size() != f.size) return f.name + " has the wrong size";
         if (std::memcmp(bytes.data(), f.data, f.size) != 0) return f.name + " does not match its contents";
     }

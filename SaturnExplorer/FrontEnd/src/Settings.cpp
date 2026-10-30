@@ -1,8 +1,10 @@
 #include "Settings.h"
 
+#include "FileRead.h"
 #include "FileWrite.h"
 
 #include <cctype>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
@@ -21,6 +23,9 @@ namespace sfe
 
 namespace
 {
+
+// settings.ini is a few kilobytes; 4 MiB is a thousand times that.
+const size_t kMaxSettingsBytes = 4u * 1024u * 1024u;
 
 #ifdef _WIN32
 const char kSep = '\\';
@@ -135,12 +140,26 @@ std::string Settings::LayoutFilePath()
     return JoinConfig(ConfigDir(), "imgui.ini");
 }
 
-void Settings::Load()
+bool Settings::Load(std::string* error)
 {
     const std::string path = FilePath();
-    if (path.empty()) return;
-    std::ifstream f(path);
-    if (!f) return;
+    if (path.empty()) return true;
+    std::string text;
+    switch (ReadFileCapped(path, kMaxSettingsBytes, text))
+    {
+    case CappedRead::Ok: break;
+    case CappedRead::Missing: return true;   // first run
+    case CappedRead::TooLarge:
+        if (error) *error = path + " is larger than " + std::to_string(kMaxSettingsBytes >> 20) + " MiB; not read";
+        return false;
+    case CappedRead::NotRegular:
+        if (error) *error = path + " is not a regular file; not read";
+        return false;
+    case CappedRead::Unreadable:
+        if (error) *error = "could not read " + path;
+        return false;
+    }
+    std::istringstream f(text);
 
     std::string line, section;
     while (std::getline(f, line))
@@ -160,6 +179,7 @@ void Settings::Load()
         const std::string val = Trim(t.substr(eq + 1));
         if (!key.empty()) mData[section][key] = val;
     }
+    return true;
 }
 
 bool Settings::Save(std::string* error) const
@@ -177,12 +197,20 @@ bool Settings::Save(std::string* error) const
 
 bool Settings::SaveTo(const std::string& path, std::string* error) const
 {
+    // One line per setting. A value with a line feed in it (a path can have one) would end its line and begin another
+    // that the next start reads as a setting of its own: a BIOS path could set the volatile list (A9-5). Each line
+    // feed is written as a space, so what comes back is a value that fails visibly (a path that does not exist), not a
+    // different setting.
+    auto oneLine = [](std::string v) {
+        for (char& c : v) if (c == '\n') c = ' ';
+        return v;
+    };
     std::string text;
     for (const auto& sec : mData)
     {
-        text += '[' + sec.first + "]\n";
+        text += '[' + oneLine(sec.first) + "]\n";
         for (const auto& kv : sec.second)
-            text += kv.first + " = " + kv.second + '\n';
+            text += oneLine(kv.first) + " = " + oneLine(kv.second) + '\n';
         text += '\n';
     }
     // Not an ofstream: it truncates the file on open and flushes in its destructor, after any check the
@@ -233,7 +261,8 @@ float Settings::GetFloat(const std::string& section, const std::string& key, flo
     const std::string s = Trim(Get(section, key));
     char* end = nullptr;
     const float v = std::strtof(s.c_str(), &end);
-    return (!s.empty() && end == s.c_str() + s.size()) ? v : def;
+    // "nan" and "inf" are numbers to strtof and a layout size that breaks every frame after it (A9-6).
+    return (!s.empty() && end == s.c_str() + s.size() && std::isfinite(v)) ? v : def;
 }
 
 void Settings::SetFloat(const std::string& section, const std::string& key, float value)

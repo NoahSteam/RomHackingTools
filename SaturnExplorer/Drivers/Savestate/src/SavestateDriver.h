@@ -28,7 +28,10 @@ extern "C" {
 se_result se_savestate_open_region_dir(const char* dir, se_data_source* out);
 
 /* Single linear dump. 'base_address' is the SH-2 bus address of the dump's
- * first byte; any documented region fully contained in the dump is extracted. */
+ * first byte; any documented region that starts inside the dump is extracted, and one the
+ * dump ends inside is extracted as far as it goes (a 64 KiB piece of work RAM opens). The
+ * consumers do not take a short region for the whole: MemorySnapshot::Capture leaves a work
+ * RAM that is not complete out of the decompiler's snapshot. */
 se_result se_savestate_open_full_dump(const char* path, uint32_t base_address,
                                       se_data_source* out);
 

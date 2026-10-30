@@ -587,8 +587,15 @@ se_result ParseYssBuffer(const std::vector<uint8_t>& file, se_data_source* out)
 
     // Walk the section chain: each section is tag(4) + version(4) + size(4) + data.
     size_t pos = kYssHeaderSize;
-    while (pos + 12 <= file.size())
+    while (pos != file.size())
     {
+        if (file.size() - pos < 12)
+        {
+            // Bytes left over that cannot hold a section header: the chain was cut inside one, and whatever section
+            // it began (work RAM, the CPUs) is lost with it. Accepting the sections before it opened a truncated
+            // file as the whole state (A9-6); the Mednafen parser has always refused this.
+            return SE_ERR_UNSUPPORTED;
+        }
         const uint8_t* tag = &file[pos];
         const uint32_t size = Read32LE(file, pos + 8);
         const size_t data = pos + 12;
@@ -601,7 +608,10 @@ se_result ParseYssBuffer(const std::vector<uint8_t>& file, se_data_source* out)
         {
             return SE_ERR_UNSUPPORTED;
         }
-        if (data + size > file.size())
+        // Compared as what remains, not as data + size: with a 32-bit size_t (the web build) a size near 4 GiB wrapped that
+        // sum below the file's length, the section was taken as present, the CPU and work RAM copies read past the
+        // buffer, and the new position wrapped back into the header (A9-7).
+        if (size > file.size() - data)
         {
             // Truncated: the file was cut short, or these are not really section sizes. Either
             // way the chain is not trustworthy. This used to keep whatever had decoded before
@@ -1058,13 +1068,20 @@ se_result se_savestate_open_region_dir(const char* dir, se_data_source* out)
             base += '/';
         }
 
-        LoadFile(base + "vdp1_vram.bin", state->mVdp1Vram);
-        LoadFile(base + "vdp2_vram.bin", state->mVdp2Vram);
-        LoadFile(base + "cram.bin",      state->mCram);
-        LoadFile(base + "wram_low.bin",  state->mWramLow);
-        LoadFile(base + "wram_high.bin", state->mWramHigh);
-        LoadFile(base + "vdp1_regs.bin", state->mVdp1Regs);
-        LoadFile(base + "vdp2_regs.bin", state->mVdp2Regs);
+        // A file is the whole region or it is wrong: one of another size used to be served as the region, with the
+        // bytes past its end readable at addresses that belong to nothing, or a short one as a region of zeros after
+        // its end (A9-8). A file that is not there is a capability off, as documented.
+        struct RegionFile { const char* name; std::vector<uint8_t>* into; size_t size; };
+        const RegionFile files[] = {
+            { "vdp1_vram.bin", &state->mVdp1Vram, kSizeVdp1Vram }, { "vdp2_vram.bin", &state->mVdp2Vram, kSizeVdp2Vram },
+            { "cram.bin", &state->mCram, kSizeCram }, { "wram_low.bin", &state->mWramLow, kSizeWramLow },
+            { "wram_high.bin", &state->mWramHigh, kSizeWramHigh }, { "vdp1_regs.bin", &state->mVdp1Regs, kSizeVdp1Regs },
+            { "vdp2_regs.bin", &state->mVdp2Regs, kSizeVdp2Regs } };
+        for (const RegionFile& f : files)
+        {
+            if (!LoadFile(base + f.name, *f.into)) { f.into->clear(); continue; }
+            if (f.into->size() != f.size) return SE_ERR_UNSUPPORTED;
+        }
 
         if (!state->HasAnyRegion())   // see ParseYssBuffer: anything at all, not VDP1 specifically
         {
