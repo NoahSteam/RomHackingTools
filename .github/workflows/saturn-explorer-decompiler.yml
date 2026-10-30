@@ -57,13 +57,13 @@ jobs:
   # sleigh compiler and the tests alike; the engine's CMakeLists only adds -O2 to Debug, so the
   # sanitizer flags survive. UBSan here includes -fsanitize=vptr (part of "undefined" in C++).
   #
-  # SaturnExplorerSlaFreshnessTests is built and run, but its result is informational: it runs
-  # se-sleighc (upstream's SLEIGH compiler) as a child, and that compiler is not clean under the
-  # sanitizers (an invalid downcast, an out-of-range enum load, a few leaked bytes), which makes
-  # the test fail for reasons outside the engine. The other binaries gate the job, SaturnExplorerDecompilerFaultTests
-  # (the allocation-failure and cancel matrix, its default subset: deterministic, about a few minutes under ASan) among
-  # them: its leak check is a no-op without AddressSanitizer, so an unsanitized ctest run cannot stand in for it. The log is
-  # uploaded in the artifact under informational/.
+  # SaturnExplorerSlaFreshnessTests gates like the rest. It runs se-sleighc (upstream's SLEIGH compiler) as a
+  # child, and that compiler was not clean under the sanitizers (an invalid downcast, an out-of-range enum load, and
+  # four leaked blocks that were the sanitizer runtime's own diagnostics), so the test was informational until patch
+  # 0074 (area 10, A10-1 to A10-3) fixed the sources. SaturnExplorerDecompilerFaultTests
+  # (the allocation-failure and cancel matrix, its default subset: deterministic, about a few minutes under ASan) gates
+  # too: its leak check is a no-op without AddressSanitizer, so an unsanitized ctest run cannot stand in for it. The
+  # logs are uploaded in the artifact.
   #
   # Time: an ASan build of the engine is a few minutes; the runner test is the slow one under
   # ASan (about 6 minutes on a local machine). The step summary lists each binary's wall time.
@@ -124,7 +124,7 @@ jobs:
       - name: Check the logs for sanitizer reports
         run: bash ../.github/scripts/check-sanitizer-logs.sh sanitizer-logs
 
-      - name: Upload sanitizer logs (including informational/)
+      - name: Upload sanitizer logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -135,9 +135,21 @@ jobs:
 
   # ---------------------------------------------------------------------------------------
   # Area 10 (vendored patches): the vendored engine is exactly upstream's pinned commit plus
-  # patches/. vendor.py rewrites the directory it lives in, so it runs in a copy; the copy is
-  # then diffed against the committed tree. sh-2.sla is a build product that vendor.py does not
-  # touch (SaturnExplorerSlaFreshnessTests covers it), so it is left out of the diff.
+  # patches/, and every patch is accounted for. All of it is .github/scripts/check-vendored-tree.py:
+  #   lint      the bookkeeping: each patch has one row in patches/README.md (with what pins it) and
+  #             one in VENDOR.md, in order; the numbers missing from the sequence are the ones the
+  #             README declares unused; every patched file carries the "Modified for SaturnExplorer"
+  #             notice and no other does; the tests the README names exist; the pin agrees.
+  #   rebuild   vendor.py runs in a copy (it rewrites the directory it lives in) against a clone of
+  #             upstream at the pinned commit; the copy is diffed against the committed tree, a
+  #             file only on one side or an executable bit that differs counts. sh-2.sla is a
+  #             build product vendor.py does not touch (SaturnExplorerSlaFreshnessTests, in the
+  #             sanitizers job and in saturn-explorer-verify.yml, covers its content), so only its
+  #             presence is checked.
+  #   selftest  the same check, run on copies each with one defect (a hand-edited vendored file, a
+  #             patch removed or altered, an extra file, a missing row or notice, a gap in the
+  #             numbers, ...), every one of which must be rejected: a gate that stops gating turns
+  #             this job red.
   # ---------------------------------------------------------------------------------------
   vendored-tree:
     name: Vendored tree = pinned Ghidra + patches (Linux)
@@ -147,7 +159,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          sparse-checkout: SaturnExplorer/FrontEnd/third_party/ghidra-decompiler
+          sparse-checkout: |
+            SaturnExplorer/FrontEnd/third_party/ghidra-decompiler
+            SaturnExplorer/FrontEnd/tests
+            .github/scripts
 
       - name: Read the pinned commit
         id: pin
@@ -155,10 +170,13 @@ jobs:
           vend=SaturnExplorer/FrontEnd/third_party/ghidra-decompiler
           commit="$(sed -n 's/^PINNED_COMMIT = "\([0-9a-f]\{40\}\)".*/\1/p' "$vend/vendor.py")"
           test -n "$commit" || { echo "::error::PINNED_COMMIT not found in vendor.py"; exit 1; }
-          # VENDOR.md names the same commit; a bump that updates one and not the other is a bug.
-          grep -q "$commit" "$vend/VENDOR.md" || { echo "::error::VENDOR.md does not name $commit"; exit 1; }
           echo "commit=$commit" >> "$GITHUB_OUTPUT"
           echo "Pinned Ghidra commit: $commit"
+
+      # The patch bookkeeping needs no upstream checkout; it runs first so that a missing row is
+      # reported without waiting for the clone.
+      - name: Lint the patch bookkeeping
+        run: python3 -I .github/scripts/check-vendored-tree.py lint SaturnExplorer/FrontEnd/third_party/ghidra-decompiler --tests-dir SaturnExplorer/FrontEnd/tests
 
       # The two upstream directories vendor.py reads (UPSTREAM_CPP, UPSTREAM_SPEC) and the two
       # licence files it copies. A blobless sparse clone fetches only those few MB.
@@ -170,29 +188,21 @@ jobs:
           git checkout "${{ steps.pin.outputs.commit }}"
           test "$(git rev-parse HEAD)" = "${{ steps.pin.outputs.commit }}"
 
-      - name: Rebuild the tree with vendor.py in a copy
-        run: |
-          cp -a SaturnExplorer/FrontEnd/third_party/ghidra-decompiler "$RUNNER_TEMP/rebuilt"
-          python3 -I "$RUNNER_TEMP/rebuilt/vendor.py" "$RUNNER_TEMP/ghidra"
-
       # Any difference fails: a hand-edited vendored file, a patch that was not recorded in
-      # patches/, a stale file vendor.py no longer produces, or a stale sources.cmake.
-      - name: Diff against the committed tree
-        run: |
-          if diff -r -u -x sh-2.sla "$RUNNER_TEMP/rebuilt" SaturnExplorer/FrontEnd/third_party/ghidra-decompiler > "$RUNNER_TEMP/vendor.diff"; then
-            echo "The committed tree is exactly upstream ${{ steps.pin.outputs.commit }} plus patches/."
-          else
-            head -c 200000 "$RUNNER_TEMP/vendor.diff"
-            echo "::error::The committed vendored tree differs from vendor.py's output (diff above; left side is the rebuilt tree)."
-            exit 1
-          fi
+      # patches/, a stale file vendor.py no longer produces, a stale sources.cmake, a file left
+      # behind in cpp/ or processors/.
+      - name: Rebuild the tree with vendor.py in a copy and diff
+        run: python3 -I .github/scripts/check-vendored-tree.py rebuild SaturnExplorer/FrontEnd/third_party/ghidra-decompiler "$RUNNER_TEMP/ghidra" "$RUNNER_TEMP/vendor-work"
+
+      - name: Self-test the gate
+        run: python3 -I .github/scripts/check-vendored-tree.py selftest SaturnExplorer/FrontEnd/third_party/ghidra-decompiler "$RUNNER_TEMP/ghidra" "$RUNNER_TEMP/vendor-selftest" --tests-dir SaturnExplorer/FrontEnd/tests
 
       - name: Upload the diff
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: vendor-diff
-          path: ${{ runner.temp }}/vendor.diff
+          path: ${{ runner.temp }}/vendor-work/vendor.diff
           if-no-files-found: ignore
 
   # ---------------------------------------------------------------------------------------

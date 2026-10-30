@@ -5,8 +5,9 @@
 //   fixture 1   a caller calling through a literal pool, the argument moved in the delay slot:
 //               the callee is found and named, the literal folded, tokens carry addresses
 //   fixture 1b  the same call into BIOS, which is never captured: an opaque call, not truncated
-//   fixture 3   a PC-relative load in a delay slot (A3): bra/bsr fold the hardware's literal
-//               (patch 0005), every other delayed branch is unsupported with neither folded
+//   fixture 3   a PC-relative load in a delay slot (A3): every delayed branch folds or builds the
+//               hardware's address (patches 0005 and 0050); only a bra slot that other code also
+//               jumps to is unsupported, with neither literal folded
 //   A1          an edited instruction word, an edited literal, a replaced BIOS image: new key,
 //               new output
 //
@@ -434,8 +435,9 @@ void TestMovaFollowsExecutionAddress()
 
 // A3: a PC-relative load in a delay slot. The hardware reads relative to the branch target, which
 // the unpatched spec does not; the fixture holds different literals at the two candidate addresses.
-// Patch 0005 fixes the spec for bra and bsr, so those fold the hardware's literal; every other
-// delayed branch is flagged with neither literal folded.
+// Patch 0005 fixes the spec for bra and bsr, so those fold the hardware's literal; patch 0050 does the
+// same for every other delayed branch (the address is made from the branch's register, PR or target).
+// A bra slot that other code also jumps to is still flagged with neither literal folded.
 void TestDelaySlotPcRelative()
 {
     Sh2Decompiler d(gConfig);

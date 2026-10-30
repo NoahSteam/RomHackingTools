@@ -1,0 +1,88 @@
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/opbehavior.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/opbehavior.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/opbehavior.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/opbehavior.cc
+@@ -12,6 +12,8 @@
+  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
++ *
++ * Modified for SaturnExplorer: the range-arithmetic fixes of patches/0059 carried no notice; this adds it (patches/0074-sleighc-sanitizer-clean.patch).
+  */
+ #include "opbehavior.hh"
+ #include "translate.hh"
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/semantics.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/semantics.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/semantics.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/semantics.cc
+@@ -12,6 +12,8 @@
+  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
++ *
++ * Modified for SaturnExplorer: ConstTpl constructors initialize every field (patches/0074-sleighc-sanitizer-clean.patch).
+  */
+ #include "semantics.hh"
+ #include "translate.hh"
+@@ -23,6 +25,9 @@ ConstTpl::ConstTpl(const_type tp)
+ 
+ {
+   type = tp;
++  value.spaceid = (AddrSpace *)0;	// The copy constructor copies all three fields; copying an unset enum is undefined
++  value_real = 0;
++  select = v_space;
+ }
+ 
+ /// \param tp is constant type: either \b real or \b j_relative
+@@ -67,6 +72,8 @@ ConstTpl::ConstTpl(AddrSpace *sid)
+ {
+   type = spaceid;
+   value.spaceid = sid;
++  value_real = 0;
++  select = v_space;
+ }
+ 
+ bool ConstTpl::isConstSpace(void) const
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/semantics.hh b/Ghidra/Features/Decompiler/src/decompile/cpp/semantics.hh
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/semantics.hh
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/semantics.hh
+@@ -12,6 +12,8 @@
+  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
++ *
++ * Modified for SaturnExplorer: ConstTpl constructors initialize every field (patches/0074-sleighc-sanitizer-clean.patch).
+  */
+ /// \file semantics.hh
+ /// \brief Classes describing p-code operations as parsed from a SLEIGH specification
+@@ -83,7 +85,7 @@ private:
+   uintb value_real;		///< An immediate constant value or other constant offset a ConstTpl represents
+   v_field select;		///< Assuming ConstTpl is a \b handle, the part of the \b handle to use as constant
+ public:
+-  ConstTpl(void) { type = real; value_real = 0; }	///< Construct a zero constant
++  ConstTpl(void) { type = real; value.spaceid = (AddrSpace *)0; value_real = 0; select = v_space; }	///< Construct a zero constant
+   ConstTpl(const ConstTpl &op2) {
+     type=op2.type; value=op2.value; value_real=op2.value_real; select=op2.select; }	///< Copy constructor
+   ConstTpl(const_type tp,uintb val);					///< Constructor for real constants or relative offsets
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/slgh_compile.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/slgh_compile.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/slgh_compile.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/slgh_compile.cc
+@@ -12,6 +12,8 @@
+  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
++ *
++ * Modified for SaturnExplorer: checkSymbols tests a symbol's type before the label downcast (patches/0074-sleighc-sanitizer-clean.patch).
+  */
+ #include "slgh_compile.hh"
+ #include "filemanage.hh"
+@@ -2337,8 +2339,9 @@ string SleighCompile::checkSymbols(SymbolScope *scope)
+   ostringstream msg;
+   SymbolTree::const_iterator iter;
+   for(iter=scope->begin();iter!=scope->end();++iter) {
+-    LabelSymbol *sym = (LabelSymbol *)*iter;
+-    if (sym->getType() != SleighSymbol::label_symbol) continue;
++    SleighSymbol *base = *iter;
++    if (base->getType() != SleighSymbol::label_symbol) continue;	// Test the type before the downcast (an OperandSymbol is no LabelSymbol)
++    LabelSymbol *sym = (LabelSymbol *)base;
+     if (sym->getRefCount() == 0)
+       msg << "   Label <" << sym->getName() << "> was placed but not used" << endl;
+     else if (!sym->isPlaced())

@@ -12,6 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified for SaturnExplorer: checkSymbols tests a symbol's type before the label downcast (patches/0074-sleighc-sanitizer-clean.patch).
  */
 #include "slgh_compile.hh"
 #include "filemanage.hh"
@@ -2337,8 +2339,9 @@ string SleighCompile::checkSymbols(SymbolScope *scope)
   ostringstream msg;
   SymbolTree::const_iterator iter;
   for(iter=scope->begin();iter!=scope->end();++iter) {
-    LabelSymbol *sym = (LabelSymbol *)*iter;
-    if (sym->getType() != SleighSymbol::label_symbol) continue;
+    SleighSymbol *base = *iter;
+    if (base->getType() != SleighSymbol::label_symbol) continue;	// Test the type before the downcast (an OperandSymbol is no LabelSymbol)
+    LabelSymbol *sym = (LabelSymbol *)base;
     if (sym->getRefCount() == 0)
       msg << "   Label <" << sym->getName() << "> was placed but not used" << endl;
     else if (!sym->isPlaced())
