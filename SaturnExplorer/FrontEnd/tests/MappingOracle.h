@@ -66,6 +66,10 @@ struct MappingAudit
     int callGone = 0;          // ...of which no longer in the final p-code (removed with unreachable code or as dead)
     int callGoneUnsaid = 0;    // ...and no warning names a removed block at or before it (counted as a violation)
     int unmappedBranch = 0;    // a conditional branch no token carries
+    // Area 7 round 2 (A7-10), counted: the delay slot's p-code carries its branch's address, so a line the slot instruction made is
+    // addressed to the branch, and a click on it shows the row before the instruction that made it.
+    int slotMadeLines = 0;     // a line whose every address is a delayed branch and that holds no keyword or call name of its own
+    int accessAtBranch = 0;    // a ledger access whose instruction is a delayed branch (the access is made by the slot after it)
     std::vector<std::string> problems;   // the first few of each kind, "kind: where: what"
 
     void Add(const MappingAudit& o)
@@ -79,6 +83,7 @@ struct MappingAudit
         nonCodeLines += o.nonCodeLines; bodyInsns += o.bodyInsns; bodyMapped += o.bodyMapped; unmappedSlots += o.unmappedSlots;
         slotTokens += o.slotTokens; badDataTokens += o.badDataTokens; unmappedMemory += o.unmappedMemory; unmappedCall += o.unmappedCall;
         unmappedBranch += o.unmappedBranch;
+        slotMadeLines += o.slotMadeLines; accessAtBranch += o.accessAtBranch;
         for (const std::string& p : o.problems) Keep(p);
     }
     // Three examples of each kind of problem are kept; the prefix up to the first ':' is the kind.
@@ -256,6 +261,17 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
             continue;
         }
         ++a.linesWithAddr;
+        {
+            bool onlyBranches = true, control = false;
+            for (const Token& t : l.tokens)
+            {
+                if (!t.addr) continue;
+                uint16_t bw = 0;
+                if (!word(t.addr, bw) || !sfe::Sh2Decode(t.addr, bw).HasDelaySlot) onlyBranches = false;
+                if (t.kind == TokenKind::Keyword || t.kind == TokenKind::FuncName) control = true;
+            }
+            if (onlyBranches && !control) ++a.slotMadeLines;
+        }
         if (at.size() == 1) ++a.single;
         else
         {
@@ -304,6 +320,10 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
     // The ledger: each access has a token of its instruction on the line the engine says it first printed on.
     for (const MemoryAccess& m : r.accesses)
     {
+        {
+            uint16_t bw = 0;
+            if (word(m.insn, bw) && sfe::Sh2Decode(m.insn, bw).HasDelaySlot) ++a.accessAtBranch;
+        }
         if (m.printed == 0) continue;   // nothing printed comes from it (A5's oracles say whether that is right)
         bool ok = false;
         if (m.firstLine >= 0 && static_cast<size_t>(m.firstLine) < r.lines.size())
@@ -423,6 +443,8 @@ inline void PrintMappingAudit(const MappingAudit& a, const char* label)
                 "%d tokens at the bad data flow halted at (by design)\n",
                 label, a.bodyInsns, a.bodyMapped, a.unmappedSlots, a.unmappedMemory, a.unmappedCall, a.callGone, a.unmappedBranch, a.slotTokens,
                 a.badDataTokens);
+    std::printf("  mapping (%s): %d lines are made by a delay slot and addressed to its branch (every address a delayed branch, no keyword or call name); %d ledger accesses are at a delayed branch\n",
+                label, a.slotMadeLines, a.accessAtBranch);
     for (const std::string& p : a.problems) std::printf("    %s\n", p.c_str());
 }
 
