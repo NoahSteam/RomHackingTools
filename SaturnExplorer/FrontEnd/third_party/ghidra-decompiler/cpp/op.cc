@@ -19,6 +19,7 @@
  * Modified for SaturnExplorer: the backward step of the consume analysis is a function of one op (patches/0054-engine-cached-masks-never-narrower.patch).
  * Modified for SaturnExplorer: the non-zero mask of a signed shift by 64 or more is the sign's fill (patches/0059-engine-range-arithmetic-sound.patch).
  * Modified for SaturnExplorer: the consume steps of PIECE and INT_LEFT shift by less than 64 (patches/0070-engine-defined-shifts.patch).
+ * Modified for SaturnExplorer: isCseMatch takes two constants for equal only at the same size (patches/0072-engine-frame-chains-and-save-slots.patch).
  */
 #include "op.hh"
 #include "funcdata.hh"
@@ -193,7 +194,9 @@ bool PcodeOp::isCseMatch(const PcodeOp *op) const
     const Varnode *vn1 = getIn(i);
     const Varnode *vn2 = op->getIn(i);
     if (vn1 == vn2) continue;
-    if (vn1->isConstant()&&vn2->isConstant()&&(vn1->getOffset()==vn2->getOffset()))
+    // SaturnExplorer (patches/0072-engine-frame-chains-and-save-slots.patch): constants of the same size. SEXT24(#0xda:2) and
+    // SEXT14(#0xda:1) were taken for the same value (0xda and 0xffffffda), and RuleTrivialArith made their xor 0 (ledger A3-139)
+    if (vn1->isConstant()&&vn2->isConstant()&&(vn1->getOffset()==vn2->getOffset())&&(vn1->getSize()==vn2->getSize()))
       continue;
     return false;
   }
