@@ -13731,3 +13731,145 @@ The open area 3 rows (A3-124, A3-126 to A3-129) are all marked fixed in the ledg
 * `tools/README.md` still says the latest round of each area is kept in `a2_round14`; the coordinator removes older directories (`a2_round14` and `a2_round15` are what this round's tools call: `dagen14.py`, `rulefuzz14.cpp`, `mkrc14.sh`, `relink14.sh`, `build14.sh`, `gen_range.sh`).
 * Mixed-width aliasing through memory has no by-value check (the host is little-endian); a harness that ran the text on a big-endian model of memory would close it.
 * A printed-C text is compared on 32 inputs per function; the families draw few functions with more than 100 words, and the structuring families top out at 16 blocks.
+
+
+## Area 7, round 2: review of the mapping
+
+Branch `review/7-round2-review` from `0f5a5c9`. Adversarial round on the round 1 fixes (A7-1 to A7-4, A7-6) with the engine patches 0053 to 0070 in. **Findings only: no product code changed.** The round adds instruments and
+fixtures (below), files **A7-10 to A7-14** in `Docs/Decompiler/REVIEW_LEDGER.md`, re-checks A7-9 and writes the fix plans for A7-5 and A7-8. **Two P2 rows (A7-10, A7-11), so the round is not clean.** The
+mapping oracle itself reports 0 violations on every run: both rows are things it cannot see (the token exists, lies in the body and decodes, and names the wrong instruction).
+
+### What was run (RelWithDebInfo, gcc 13, own build at the head of the branch)
+
+| Run | Result |
+|---|---|
+| `hwram007.bin`, `SE_GAME_LEND=1` (alone, then lent) | 839 and 1,730 functions, every mapping violation count 0; 26,669 and 53,567 lines, 231,219 and 473,482 tokens; accesses on another line than `firstLine` 4 and 11; tokens at the halt word 11 and 207; tokens at a delay slot's own address 0 and 0 |
+| `hwram008.bin`, `SE_GAME_LEND=1` | 1,554 and 2,995 functions, every count 0; 66,286 and 110,935 lines, 646,401 and 1,058,891 tokens; off-line 4 and 21; halt word 9 and 206; **slot-address tokens 0 and 3 (A7-9, below)** |
+| 16 fixtures plus the new mirror test | violations 0 |
+| generator, `SE_GENERATED_FIRST=4300001 SE_GENERATED_SEEDS=4000` (both grammars) | 0 failing seeds, 0 findings (`map.lines` 181,343, of them 20,488 from several instructions, 4,585 not adjacent; `map.executed` 208,996: 87,300 with a token, 20,389 delay slots, 10,777 branches, 21,981 memory instructions, 68,549 operations) |
+| generator, defaults (300 seeds, canary, pins) | 0 failing seeds |
+| `SaturnExplorerSh2DecompilerTests` (whole suite, no corpus), `SaturnExplorerDecompilerPanelTests` | all passed |
+
+The numbers of round 1 hold: the same 4, 11, 4 and 21 accesses are on another line than `firstLine` (array form), the lending signatures are unchanged, and the engine patches since round 1 (frame pieces, CONCAT, condition
+trees) introduced no token the oracle rejects.
+
+### Attacks on the round 1 fixes
+
+* **A7-3, the empty token.** Read the code against every consumer of `Line::tokens`: the draw loop (`b = e = text.size()`, never `b < pos`), `TokenAtX` (`end <= begin` is skipped, so the empty token cannot capture a hover), the halt hint
+  and the notes (keyed by address, placed on the first line that holds it), the post-filter for `.`/`[`/`->` (`next = t.end = size`, no change), the leading-blank drop (the token is added before it, to non-blank lines only). The load with
+  an explicit pointer that prints nowhere gets no token; it is a ledger access only if the ledger lists it, and the corpus says 0 are unmapped. The shrunk fixture `6044 6040 000B 0009` still holds. No finding.
+* **The multi-instruction tooltip.** 0 unmarked and 0 misnamed lines in all four corpus runs; lines of 8, 9 and 11 instructions list eight and "and n more". Two small gaps filed as **A7-13** (an inspection tooltip replaces the origin text on a
+  token with a target; the "Show Other Instructions" menu stops at 24). The hover text of the line holding `halt_baddata();` calls the halt word an SH-2 instruction (**A7-12**).
+* **Line index shifts.** `LinesFromMarkup` drops only the leading blank lines and moves `printed` by that count; trailing blank lines are popped and hold no token; nothing else inserts or removes a line after
+  `DecodeDecompilerMarkup` (checked: no `lines.insert`/`erase` outside it). `firstLine` agrees with the line holding the token in every corpus function except the four counted array-form cases. No finding.
+* **Odd addresses.** 0 odd tokens that are not the halt word, in alone and lent runs of both images (round 1: 18 and 25 alone, 234 and 298 lent); the entry is refused at an odd address and **Set Function Start Here** is not offered
+  there (`DecompilerPanelTests` passes). No finding.
+* **Mirrors (new).** `TestMappingOracleAtMirrors` decompiles the 11 fixture entries through `0x2...`, `0x07F0...` and `0x27F0...`: 0 violations, and every line has the same instructions, the same `firstAddr` and the same body as the
+  canonical run (the text differs only in a literal that is an address and in a warning that names the entry). No finding.
+
+### The new instruments
+
+* `SE_GAME_TOKEN_DUMP=<prefix>` (`MappingOracle.h`, `DumpMappingTokens`): every token with an address, with its instruction, to `<prefix>_alone.tsv` and `_lent.tsv`; read by `tools/a7_round2/*.py`.
+* Counters `slotMadeLines` and `accessAtBranch` in `MappingAudit` (printed by every corpus run): lines made by a delay slot and addressed to its branch; ledger accesses whose instruction is a delayed branch.
+* `SE_GAME_PERTURB=<n>` (`TestGamePerturb`): the metamorphic oracle for A7-8. For up to n instructions per function that carry an immediate, change it, decompile again, and ask whether a line whose text changed lists the instruction.
+* `SE_GAME_ONLY` accepts a non-prologue entry (the lending runs decompile callees found through literals; A7-9 needed one).
+* Fixtures: `TestMappingOracleAtMirrors`, `TestSlotMadeLineIsAddressedToItsBranch` (A7-10) and `TestFrameStoreMaterialisedAtCall` (A7-11); the last two pin the current behaviour and say what flips when the row is fixed.
+
+### Twenty-two texts read
+
+Alone, hwram007: 06003C06, 06005906, 06007020, 060056E6, 06007D84, 06007ED2, 0600777C, 0600914A, 06009A64, 06021AB8, 0602211C. Lent, hwram008: 06054964, 06055E08, 0601A298, 06029F3C, 060632C4, 06061B14, 06071534, 0606F27E,
+0600C1E2; and the two junk functions of A7-9 (060670C0, 06064A38). For each token the instruction behind it was printed (`showfn.py`) and compared with the statement. Findings of the reading: a token of a delay-slot
+instruction is on the branch (`SINIT = 0xffff;` at the `bra`, `xVar2 = Ram06003308;` at the `jsr`, `uVar3 = uVar3 - 1;` at the `bt/s`, `~CONCAT11(...)` at the `bra`) and a `for`/`while` header is on the branch plus the compare: **A7-10**;
+`xStack_18 = param_1;` at the `jsr` with the store at 0x06021ABE on no line, and `xStack_18._3_1_ = (xunknown1)param_1;` at a `mov.b @r3,r2`: **A7-11**. Everything else checked out: operators sit on the instruction that computes them (`extu.w` for
+`& 0xffff`, `shll2` for `* 4`, `cmp/eq`, `cmp/gt`, `tst` for the comparisons, `mov.b @r4,r1` for the `*`), case labels on the first op of the case, `switch` on the `jmp @r0`, array reads on the load, a `||` on no address
+(the BOOL op the merge rule makes carries none, which is harmless). A merge copy (`pxVar2 = (xunknown4 *)0x0;`, `xVar2 = xVar1;`) sits on the block's branch; it has no instruction, and the branch is a fair address for it.
+
+### A7-9: three tokens at a delay slot's own address (lent hwram008)
+
+**Real, and not a defect.** The three instructions are 0x06062C40 (`nop`, the slot of the `jsr @r2` at 0x06062C3E), 0x0606C374 (`mov.w r1,@r2`, the slot of the `bra` at 0x0606C372) and 0x0606C134 (`mov.l @(0x10,r10),r4`, the slot of
+the `bf/s` at 0x0606C132). In each the token belongs to a `case` label (and the statement under it) of a switch whose jump-table destination is the slot's address: flow follows the destination and decodes the slot a second time as an ordinary
+instruction, so the instruction is in the body twice over (as the slot of its branch and as a case entry) and the token is truthful. The functions are 060670C0, which the engine itself calls not-code ("57 paths run into bytes that do not
+decode: the entry is probably not code", odd destinations, 1,659 lines of table junk) and 06064A38 ("signature withheld: bad instruction data", an odd destination, a bad-data halt). Neither is a prologue entry: both are
+callees found through a literal, which the lending run decompiles and the alone run does not (checked: no `F alone 060670C0` in the dump), which is why the count is 0 "alone". It is present at the area 5 matrices for the same reason. Not a mapping
+defect; the proposal is to close A7-9 as accepted and to count these in the oracle under their own name (a token at a slot address whose line begins with a case label) so that a real one stands out.
+
+### Findings
+
+| Row | Sev | What | Status |
+|---|---|---|---|
+| A7-10 | P2 | The delay slot's instruction is addressed to its branch: 1 line in 10 and 1 ledger access in 10 name the row before the instruction that made them | open |
+| A7-11 | P2 | A frame local is assigned at a call or at a load, not at the store that wrote it, which is on no line (301 and 359 lines alone for the call shape, 153 and 350 for the load shape) | open |
+| A7-12 | P3 | The hover text calls the halt word an SH-2 instruction | open |
+| A7-13 | P3 | An inspection tooltip hides the origin text; the other-instructions menu is capped | open |
+| A7-14 | P3 | "Decompiled from N instructions" understates (86% of changed `mov #i` are on lines that do not list it) | open |
+| A7-5, A7-8 | P3 | fix plans written below | open |
+| A7-9 | P3 | cause found; proposed accepted | open |
+
+**Severity, said plainly.** A7-10 is the row the coordinator may want to argue. Round 1 accepted A7-7, and its text says the slot is carried by its branch; the guide says it too. What A7-7 accepted is the *absence* of a token for an instruction
+folded into its user. The delay slot is different in kind: the token is present, the hover says "Decompiled from the SH-2 instruction at X", and X is not the instruction. The tooltip, the click, **View in Memory**, **Set Function Start Here** and the
+ledger's `insn` (so the hardware notes and the halt hint's match) all use X. The program's definition of P2 is "navigation goes wrong", and one line in ten is not an edge case: the typical SH-2 compiled call puts its last argument in the `jsr`'s slot. If A7-7's reading is kept,
+A7-10 is P3, never lower. A7-11 is the same defect for frame locals and has no documentation at all.
+
+### Fix plan for A7-10 (and A7-11)
+
+*A7-10.* The address of a slot's ops is the translator's: `Sleigh::oneInstruction` emits the branch and its slot with one address. An engine patch (area 10 reviews it) marks the ops built by the delay slot: `SleighBuilder` knows
+when it builds the slot (`delaySlot`), `PcodeCacher` records the index range of the ops it issued there, and `PcodeEmit::dump` passes the flag, which `FlowInfo` stores on the `PcodeOp` as a new `addlflags` bit
+(`from_delay_slot`, copied by the same places that copy the address of a replaced op: `opSetOpcode` keeps it, ops that a rule creates take the flag of the op they replace when it has exactly one source). The SeqNum and the address stay the branch's, so flow, jump tables, jump-table
+recovery and every `getAddr()` user are untouched. The host then reads `t.addr = op->getAddr() + (op->isFromDelaySlot() ? 2 : 0)` in `LinesFromMarkup`, `Accesses` (`a.insn`), `Calls` and the notes, and the fixture flips (`kStore`). Expected
+consequences to check: the ledger's `insn` of a slot access is the slot (area 5's conservation oracle is keyed by op time, not insn; the generator's emulator comparison normalises a slot access to its branch and must stop doing so),
+`unmappedSlots` falls to the real count of slots with no op, `slotTokens` rises by the 1,397 and 2,580 lines above and the oracle's A7-9 counter must then distinguish them (a token at a slot address is the common case; keep the case-label form under its own name). A host-only variant exists but is weaker: a token op that is not a
+branch-class op (BRANCH, CBRANCH, BRANCHIND, CALL, CALLIND, RETURN, the PR copy of a call) at a delayed branch's address came from the slot, so add 2; it misses ops that rules rebuilt as branch-class and fails on `jmp @r0` whose target arithmetic is
+the branch's own. Oracle: `slotMadeLines` and `accessAtBranch` must be 0, and a mutation (the flag dropped) must bring them back.
+
+*A7-11.* (a) The statement at the call is a copy the engine made from the call's indirect effect; its source value is the store's. The host has the store: the engine's access records say the write at 0x06021ABE ended as `fate_folded_ordinary` with
+its frame offset (`AccessFate::address`, `frame`), and `getFrameCalls()` says which calls read which frame words. In `LinesFromMarkup`, for a printed COPY whose output is a frame varnode and whose address is a call, add an empty token (A7-3's mechanism) carrying the `insn` of the last
+folded store to that frame word before the call in flow order (`origBlock`, `origOrder`), and keep the call's own token. The line then lists both; the click still goes to the lowest. (b) The piece assignment at a load: the same lookup, from the folded stores of the word the piece
+covers. Oracle: for every `AccessFate` of a frame write with fate `FoldedOrdinary` or `FrameRemoved`, some token carries its instruction (`frameStoreUnmapped`), counted first, then 0; mutation: the lookup returns nothing.
+
+### Fix plan for A7-5 (navigation back from Assembly)
+
+Build it after A7-10, so that a delay slot is an ordinary instruction.
+
+1. **Data.** `LineForInstruction(const DecompileResult&, uint32_t insn)` next to `LineInstructions`, returning `{line, kind, via}`. *Exact*: the lines that own `insn` (a token with that address, empty tokens included); prefer the line whose
+   `firstAddr == insn` (the click's own round trip), then the first line in text order holding a non-empty token of it, then one holding an empty token. *Folded*: in the body with no token: the next mapped instruction in the same run of the body (`body` ranges, then decode forward to a token), else the previous; `via` is that instruction.
+   *Outside*: not in the body. (Until A7-10 is fixed a slot is *Folded* via its branch.)
+2. **Entry points.** Assembly row menu: **Show in Pseudocode** beside **Decompile Here** (`Request::showPseudocode`, `pseudoAddr`; `App` calls `DecompilerPanel::ShowInstruction(cpu, addr)`, which is `ShowFunctionContaining` plus
+   `mWantInsn`). Follow PC: after each refresh at a stop, the same call with the PC. Optional later: a toggle that makes the panel follow the Assembly selection (`AssemblyPanel::SelectedAddr()` polled per frame; inside the shown body only).
+3. **Panel.** When `mShownValid && !ShownStale()` and `mWantInsn` is in the body, compute the line, set `mSelectedLine`, set `mScrollToLine`, clear `mWantInsn`. A request that must decompile first keeps `mWantInsn` until the
+   result arrives; a new user navigation (a different target, a typed entry, Refresh to another function) clears it. In `Draw`, `clipper.IncludeItemByIndex(mScrollToLine)` before `Step` so the row exists, then `ImGui::SetScrollHereY(0.3f)` in the loop at that row (the panel has no scroll code today).
+   *Folded* and *Outside* set `mNote` ("0x... was folded into the expression on the selected line" / "is not in this function").
+4. **Several lines.** The preference above makes the command idempotent; a second **Show in Pseudocode** on the same instruction cycles to the next owner, and a submenu **Show Other Lines** (line number and text) lists the rest, as **Show Other Instructions** does.
+5. **Oracle.** `AuditMapping` gains the UI round trip on data: for every instruction with owners `LineForInstruction` is *Exact* and its line is an owner; for every line with `firstAddr = a` the line chosen for `a` has `firstAddr == a` (`backWrong` is a violation); the count of *Folded* instructions is printed. Mutations: the last owner is chosen; the
+   preference for `firstAddr` removed. `DecompilerPanelTests`: `TestAssemblyBackToLine` on fixture 1 (the `if (0 < param_1)` line for 0x06004008 and for 0x0600400A, the selected row inside the clip rectangle on a long function, the note for a folded and an outside address).
+6. **Guide.** Replace "There is no way back yet" in `DECOMPILER_GUIDE.md` (and extend `TestGuideQuotesTheTooltip` to quote the new sentence).
+
+### Fix plan for A7-8 (the instrument)
+
+The round built the practical oracle and measured the gap (`SE_GAME_PERTURB`, hwram007.bin, 6 instructions per function, 839 functions):
+
+| Opcode | Changed text on a line that lists the instruction | on a line that does not | Text unchanged | Shape changed |
+|---|---|---|---|---|
+| `add #i,Rn` | 731 | 213 | 212 (4 own a token) | 398 |
+| `mov #i,Rn` | 185 | 1,175 | 30 | 116 |
+| `cmp/eq #i,r0` | 186 | 17 | 5 | 11 |
+| `and #i,r0` / `tst #i,r0` | 28 / 14 | 0 / 0 | 1 / 0 | 18 / 0 |
+| `or #i,r0` / `xor #i,r0` | 4 / 3 | 7 / 1 | 1 / 4 | 0 / 0 |
+
+(Shape changed: a different number of lines, not compared.) The 213 `add` cases are the delay-slot and merge cases A7-10 and A7-7 name plus constants built by two instructions; one in the sample owns a token on another line. The 1,175
+`mov #i` cases are all constants. Plan: (1) make the perturbation a standing instrument of the generator as well as the corpus (an ALU function with an immediate, perturbed, must change a line that lists the instruction, with a table of
+accepted classes that starts as today's numbers and may only shrink); (2) fix the cause with provenance at flow time in the host, no engine patch: from the raw p-code the host already records (`flow.ops`), build for each flow-time op the
+instructions that define its inputs through registers and uniques along the flow (a forward walk over the raw ops in block order, joins by union); for each final op whose `getTime()` survives, a constant or register input that the final p-code
+no longer has contributes its feeders as empty tokens (A7-3's mechanism), so a `mov #i` appears on the line that shows the constant; (3) target: the perturbation's unattributed rate under 1% for `mov #i`, `add #i`, `cmp/eq #i`; (4) until then A7-14's wording.
+Mutation: the walk off, the rate returns to today's.
+
+### Routed
+
+* A7-10: engine patch, to area 10 (review of the patch) and area 5 (ledger `insn`, conservation oracle, hardware notes keyed by it) and area 2 (the generator's slot normalisation).
+* A7-11: frame handling (patches 0061 to 0068), to area 3.
+* A7-12 and A7-13 are host UI, area 7's own.
+
+### Not run
+
+The whole `ctest` was not run: the product is unchanged (only `Sh2DecompilerTests.cpp`, `MappingOracle.h`, tools and documents), the machine's disk filled up twice during the round, and a full build is 661 targets on a machine shared by seven agents. Run: the whole
+`SaturnExplorerSh2DecompilerTests` (with and without the corpora), `SaturnExplorerSh2GeneratedTests` (defaults, and 4,000 seeds from 4,300,001), `SaturnExplorerDecompilerPanelTests`. The fault suite and the Live tests were not run (no product code changed). No
+mutation of the product was applied; an uncommitted diff found at a restart was this round's own work in progress (the slot counters), not a mutation.
