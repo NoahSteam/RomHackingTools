@@ -10476,6 +10476,19 @@ void TestLeftoverSeedPins(Sh2Decompiler& d)
         for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
         CHECK(rep.findings.empty());
     }
+    // A3-136 (area 3 round 15 fix, patch 0072): grammar 2 seed 3901693, shrunk. r3 is 0 at `tst r3,r3 ; bt`, so the `bsr` is removed with its
+    // block; the call's guard on the byte `mov.b r3,@r14` wrote was kept for the frame ledger, which took the call for a read of it
+    // (`frame-lost:W1`). A call that goes with its block drops its records.
+    {
+        static const ModulePin kA3136 = { "A3-136, seed 3901693 (a call removed with its block)",
+                                          "2F86 2F96 2FA6 2FB6 2FE6 4F22 7FD0 6EF3 6843 6953 6A63 6B73 E301 4310 8BFD 2E30 62F3 7230 E103 2216 4110 "
+                                          "8BFC E200 2338 8905 B00E 0009 6483 6593 66A3 67B3 7E30 6FE3 4F26 6EF6 6BF6 6AF6 69F6 68F6 000B 0009 7FE0 "
+                                          "6043 7F20 000B 0009", "0/0/52,52/52/5c", nullptr, "0,1", "0,0", "0,20000" };
+        const Report rep = EvaluateSubject(d, ModuleSubject(kA3136), true);
+        std::printf("pin '%s': %zu finding(s)\n", kA3136.name, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
     static const ModulePin kTables[] = {
         { "A4-10, seed 33994 (div1 in a case)",
           "2F86 2F96 2FC6 0C2A 7FF0 6843 6953 604D 7F10 4C2A 6CF6 69F6 68F6 000B 0009 E301 A000 0009 4310 8BFD E103 3616 8913 4608 C701 016E 412B 0009 0600 9048 0600 "

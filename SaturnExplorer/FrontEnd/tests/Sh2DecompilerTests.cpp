@@ -12897,7 +12897,7 @@ void TestA3124Fix()
 //           slot was unmapped and the STORE's guard on it collapsed as "no local alias" (`return unaff_r8;`); with a call handed the
 //           slot, the call's guard was taken for a save's (R15-1d); behind three slots with a call (F15.11.74).
 //   A3-133: the frame ledger's own bound fails closed (a capped function is unchecked, not clean); R15-15c (40 ops) is checked.
-//   A3-136: a call removed with an unreachable block is no read of the frame (the ledger's false loss).
+// (A3-136, the ledger's false loss for a call removed with an unreachable block, is pinned in Sh2GeneratedTests: its replay.)
 // Each text without a call is evaluated against the code for several inputs; the frame ledger (dts::FrameLosses) and ReferenceOk pass.
 void TestA3130Fix()
 {
@@ -12963,11 +12963,6 @@ void TestA3130Fix()
             0x7104, 0x21D2, 0x51FA, 0x6112, 0x6112, 0x7108, 0x2192, 0x61F3, 0x7104, 0x710C, 0x2182, 0x51FA, 0x6112, 0x6112, 0x7104, 0x2152,
             0x54FA, 0x6442, 0x6442, 0xD106, 0x410B, 0x0009, 0xE000, 0x61F3, 0x7104, 0x7104, 0x6312, 0x203A, 0x7F30, 0x4F26, 0x000B, 0x0009,
             0x0600, 0x9100 }, { 0x6042, 0x000B, 0x0009, 0x0009 }, false, "return param_2;", "return unaff_r13;" },
-        // A3-136: `mov #1,r3 ; dt r3 ; mov.l r3,@r15 ; tst r3,r3 ; bt L ; bsr g`: r3 is 0, the bsr is removed with its block, and the frame
-        // ledger took it for a read of the word written before it (the generator's grammar 2 seed 3901693, shrunk).
-        { "R15-17a (A3-136) a word stored to the frame, a call in a block removed as unreachable",
-          { 0x4F22, 0x7FF0, 0xE301, 0x4310, 0x2F30, 0x2338, 0x8901, 0xB004, 0x0009, 0x7F10, 0x4F26, 0x000B, 0x0009, 0x000B, 0x0009, 0x0009 },
-          {}, false, "", "" },
     };
     const std::vector<std::vector<uint32_t>> inputs = {
         { 0, 0, 0, 0 }, { 0x11112222u, 0x33334444u, 0x55556666u, 0x77778888u }, { 0xFFFF0001u, 0x00008000u, 0x12345678u, 0x0000FFFFu } };
@@ -13006,18 +13001,14 @@ void TestA3130Fix()
         const DecompileResult r = d.Decompile(snap, Request(base));
         CHECK(r.prototype.known && r.prototype.ret.size == 4);
     }
-    // A3-133: a bound of the frame records reached fails closed. A frame read followed by 2,100 xor/add operations: the walk back from
-    // the forwarded value passes 4,096 ops, the function is marked capped, and ReferenceOk (the frame ledger) does not pass it.
+    // A3-133: a bound of the frame records reached fails closed. A frame read, 200 `div1 r5,r0` on it (each some twenty p-code ops), the
+    // result copied to r1 and back: the copy's forward walks back from the result past 4,096 ops, the function is marked capped, and
+    // ReferenceOk (the frame ledger) does not pass it.
     {
-        std::vector<uint16_t> words = { 0x7FF8, 0xE305, 0x1F31, 0x50F1 };
-        for (int k = 0; k < 1050; ++k)
-        {
-            words.push_back(0x205A);   // xor r5,r0
-            words.push_back(0x306C);   // add r6,r0
-        }
-        words.push_back(0x000B);
-        words.push_back(0x7F08);
-        const CallFixture f = { "A3-133 a frame read and 2,100 operations after it", base, words };
+        std::vector<uint16_t> words = { 0x7FF8, 0xE305, 0x1F31, 0x50F1, 0x2057 };   // ... ; mov.l @(4,r15),r0 ; div0s r5,r0
+        for (int k = 0; k < 200; ++k) words.push_back(0x3054);                       // div1 r5,r0
+        for (uint16_t w : { 0x7F08, 0x6103, 0x000B, 0x6013 }) words.push_back(w);   // add #8,r15 ; mov r0,r1 ; rts ; mov r1,r0
+        const CallFixture f = { "A3-133 a frame read and 200 div1 after it", base, words };
         auto snap = CallSnapshot(f, ++serial);
         const DecompileResult r = d.Decompile(snap, Request(base));
         std::printf("A3-133 capped: %d\n", int(r.frameLedgerCapped));
