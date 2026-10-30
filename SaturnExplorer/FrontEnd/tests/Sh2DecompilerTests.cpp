@@ -12897,7 +12897,10 @@ void TestA3124Fix()
 //           slot was unmapped and the STORE's guard on it collapsed as "no local alias" (`return unaff_r8;`); with a call handed the
 //           slot, the call's guard was taken for a save's (R15-1d); behind three slots with a call (F15.11.74).
 //   A3-133: the frame ledger's own bound fails closed (a capped function is unchecked, not clean); R15-15c (40 ops) is checked.
-// (A3-136, the ledger's false loss for a call removed with an unreachable block, is pinned in Sh2GeneratedTests: its replay.)
+//   A3-139: isCseMatch took two constants of different sizes for one value (a frame124 seed of the area 2 round 16 review).
+//   A3-140: RulePullsubIndirect built its INDIRECT's input piece from one reader's truncation, not the lowest byte of all (the chain stream).
+// (A3-136 and A3-138, the ledger's false losses for a call removed with an unreachable block and a word split into halves, are pinned
+// in Sh2GeneratedTests: their replays.)
 // Each text without a call is evaluated against the code for several inputs; the frame ledger (dts::FrameLosses) and ReferenceOk pass.
 void TestA3130Fix()
 {
@@ -12963,6 +12966,19 @@ void TestA3130Fix()
             0x7104, 0x21D2, 0x51FA, 0x6112, 0x6112, 0x7108, 0x2192, 0x61F3, 0x7104, 0x710C, 0x2182, 0x51FA, 0x6112, 0x6112, 0x7104, 0x2152,
             0x54FA, 0x6442, 0x6442, 0xD106, 0x410B, 0x0009, 0xE000, 0x61F3, 0x7104, 0x7104, 0x6312, 0x203A, 0x7F30, 0x4F26, 0x000B, 0x0009,
             0x0600, 0x9100 }, { 0x6042, 0x000B, 0x0009, 0x0009 }, false, "return param_2;", "return unaff_r13;" },
+        // A3-139: the frame124 stream's printed-C seed 3807191 (area 2 round 16 review): a halfword and a byte of a frame word read, sign
+        // extended and xored; both constants 0xda by then, at sizes 2 and 1: isCseMatch took SEXT24(#0xda:2) and SEXT14(#0xda:1) for one
+        // value, and RuleTrivialArith made the xor 0.
+        { "frame124 3807191 (A3-139) the xor of a sign-extended halfword and byte, both 0xda",
+          { 0x7FE0, 0x61F3, 0x7108, 0x1F17, 0x51F7, 0xE234, 0x1120, 0x51F7, 0xE22D, 0x1121, 0x51F7, 0xE200, 0x6313, 0x7301, 0x2320, 0x51F7,
+            0xE2DA, 0x6313, 0x7305, 0x2320, 0x51F7, 0xE24F, 0x6313, 0x7307, 0x2320, 0x51F7, 0x6313, 0x7304, 0x6231, 0x6023, 0x51F7, 0x6313,
+            0x7305, 0x6230, 0x202A, 0x51F7, 0x6313, 0x6230, 0x302C, 0x7F20, 0x000B, 0x0009 }, {}, true, "return 0xffffff00;", "return 0;" },
+        // A3-140: the frame124 chain stream (A3-134), printed-C seed 4100399: bytes S+6 and S+7 of a word read and xored, through two slots;
+        // RulePullsubIndirect gave the guard of the pending STORE the piece of bytes S+5 and S+6 for S+6 and S+7.
+        { "frame124 4100399.chain (A3-140) two bytes of a frame word xored, a store through two slots between",
+          { 0x7FD0, 0x61F3, 0x1F18, 0x61F3, 0x7120, 0x1F19, 0xE2D0, 0x1F20, 0xE29C, 0x1F21, 0xE246, 0x1F22, 0xE278, 0x1F23, 0x51F9, 0x6112,
+            0x6313, 0x730E, 0x2351, 0xE288, 0x51F9, 0x6112, 0x6313, 0x730D, 0x2320, 0x63F3, 0x7306, 0x6230, 0x6023, 0x63F3, 0x7307, 0x6230,
+            0x202A, 0x63F3, 0x730C, 0x6231, 0x202A, 0x7F30, 0x000B, 0x0009 }, {}, true, "0xeb", "return 0x88;" },
     };
     const std::vector<std::vector<uint32_t>> inputs = {
         { 0, 0, 0, 0 }, { 0x11112222u, 0x33334444u, 0x55556666u, 0x77778888u }, { 0xFFFF0001u, 0x00008000u, 0x12345678u, 0x0000FFFFu } };

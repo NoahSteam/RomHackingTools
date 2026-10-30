@@ -113,7 +113,6 @@ Varnode *Funcdata::newUnique(int4 s,Datatype *ct)
 Varnode *Funcdata::newVarnodeOut(int4 s,const Address &m,PcodeOp *op)
 
 {
-
   Varnode *vn;
   Datatype *ct = glb->types->getBase(s,TYPE_UNKNOWN);
   if (m.isValidRange(s)) {

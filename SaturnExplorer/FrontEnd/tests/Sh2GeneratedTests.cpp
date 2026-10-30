@@ -10580,6 +10580,24 @@ void TestLeftoverSeedPins(Sh2Decompiler& d)
                                           "8BFC E200 2338 8905 B00E 0009 6483 6593 66A3 67B3 7E30 6FE3 4F26 6EF6 6BF6 6AF6 69F6 68F6 000B 0009 7FE0 "
                                           "6043 7F20 000B 0009", "0/0/52,52/52/5c", nullptr, "0,1", "0,0", "0,20000" };
         const Report rep = EvaluateSubject(d, ModuleSubject(kA3136), true);
+        // A3-138: the frame124 stream's printed-C seed 3907314: the word S+4 written before a call handed &S (that reads it) and again after;
+        // the engine split the word COPY into two halfword COPYs (SplitDatatype, the int2 array), and the ledger took the word for lost.
+        {
+            CCase c;
+            c.name = "frame124_3907314";
+            std::istringstream in("4F22 7FE0 61F3 7108 1F17 51F7 E294 1120 51F7 E2AB 1121 51F7 E224 6313 2321 54F7 D037 400B 0009 E28D 51F7 1121 "
+                                  "51F7 6313 6231 6023 51F7 6313 7302 6230 302C 7F20 4F26 000B 0009");
+            std::string tok;
+            while (in >> tok) c.words.push_back(static_cast<uint16_t>(std::strtoul(tok.c_str(), nullptr, 16)));
+            c.words.resize(0xC0 / 2, 0x0009);
+            for (uint16_t w : { 0x2338, 0x5041, 0x000B, 0x0009 }) c.words.push_back(w);   // the callee: tst r3,r3 ; mov.l @(4,r4),r0
+            c.words.resize(0x100 / 2, 0x0009);
+            c.words.push_back(0x0600);
+            c.words.push_back(0x90C0);
+            const int lost = CheckFrame124Ledger(d, { c });
+            std::printf("pin 'A3-138: frame124 3907314': %d frame writes lost\n", lost);
+            CHECK(lost == 0);
+        }
         std::printf("pin '%s': %zu finding(s)\n", kA3136.name, rep.findings.size());
         for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
         CHECK(rep.findings.empty());
