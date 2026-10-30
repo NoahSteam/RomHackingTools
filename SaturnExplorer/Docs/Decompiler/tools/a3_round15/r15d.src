@@ -1,0 +1,209 @@
+name R15-3a push const via @-r15
+asm 06009000
+.word 0x4F22
+mov #77,r3
+mov.l r3,@-r15
+add #-8,r15
+mov r15,r1
+add #8,r1
+mov.l r1,@r15
+mov.l @r15,r2
+mov.l r5,@r2
+mov.l @r15,r4
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l @(8,r15),r0
+add #8,r15
+add #4,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+mov.l @r4,r0
+rts
+nop
+endasm
+args 0 0 0 0
+args 1 2 3 4
+end
+
+name R15-3b push arg r4 via @-r15
+asm 06009000
+.word 0x4F22
+mov.l r4,@-r15
+add #-8,r15
+mov r15,r1
+add #8,r1
+mov.l r1,@r15
+mov.l @r15,r2
+mov.l r5,@r2
+mov.l @r15,r4
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l @(8,r15),r0
+add #8,r15
+add #4,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+mov.l @r4,r0
+rts
+nop
+endasm
+args 0 0 0 0
+args 1 2 3 4
+end
+
+name R15-3c push r8 via @-r15
+asm 06009000
+.word 0x4F22
+mov.l r8,@-r15
+add #-8,r15
+mov r15,r1
+add #8,r1
+mov.l r1,@r15
+mov.l @r15,r2
+mov.l r5,@r2
+mov.l @r15,r4
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l @(8,r15),r0
+add #8,r15
+add #4,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+mov.l @r4,r0
+rts
+nop
+endasm
+args 0 0 0 0
+args 1 2 3 4
+end
+
+name R15-3d direct store of r8 after alloc
+asm 06009000
+.word 0x4F22
+add #-16,r15
+mov.l r8,@(8,r15)
+mov r15,r1
+add #8,r1
+mov.l r1,@r15
+mov.l @r15,r2
+mov.l r5,@r2
+mov.l @r15,r4
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l @(8,r15),r0
+add #16,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+mov.l @r4,r0
+rts
+nop
+endasm
+args 0 0 0 0
+args 1 2 3 4
+end
+
+name R15-3e direct store of const after alloc
+asm 06009000
+.word 0x4F22
+add #-16,r15
+mov #77,r3
+mov.l r3,@(8,r15)
+mov r15,r1
+add #8,r1
+mov.l r1,@r15
+mov.l @r15,r2
+mov.l r5,@r2
+mov.l @r15,r4
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l @(8,r15),r0
+add #16,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+mov.l @r4,r0
+rts
+nop
+endasm
+args 0 0 0 0
+args 1 2 3 4
+end
+
+name R15-3f direct store of r4 after alloc
+asm 06009000
+.word 0x4F22
+add #-16,r15
+mov.l r4,@(8,r15)
+mov r15,r1
+add #8,r1
+mov.l r1,@r15
+mov.l @r15,r2
+mov.l r5,@r2
+mov.l @r15,r4
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l @(8,r15),r0
+add #16,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+mov.l @r4,r0
+rts
+nop
+endasm
+args 0 0 0 0
+args 1 2 3 4
+end
+
+name R15-3g alloc then push const via @-r15 (X below the frame)
+asm 06009000
+.word 0x4F22
+add #-8,r15
+mov #77,r3
+mov.l r3,@-r15
+mov r15,r1
+add #8,r1
+mov.l r1,@r15
+mov.l @r15,r2
+mov.l r5,@r2
+mov.l @r15,r4
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l @(8,r15),r0
+add #4,r15
+add #8,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+mov.l @r4,r0
+rts
+nop
+endasm
+args 0 0 0 0
+args 1 2 3 4
+end

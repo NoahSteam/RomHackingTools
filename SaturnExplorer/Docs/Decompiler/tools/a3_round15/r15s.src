@@ -1,0 +1,53 @@
+name R15-18a A3-130 in the -O0 form: r14 is the frame pointer, pp = &p in a local, p = &s in a local; pp->field store, s.field read (struct B s; B *p = &s; B **pp = &p; (*pp)->h = -45; return s.w)
+asm 06009000
+.word 0x4F22
+mov.l r14,@-r15
+add #-48,r15
+mov r15,r14
+mov r14,r1
+add #12,r1
+mov.l r1,@(32,r14)
+mov r14,r1
+add #32,r1
+mov.l r1,@(36,r14)
+mov #0,r3
+mov.l r3,@(20,r14)
+mov #-45,r2
+mov.l @(36,r14),r1
+mov.l @r1,r1
+add #10,r1
+mov.w r2,@r1
+mov.l @(20,r14),r0
+add #48,r14
+mov r14,r15
+mov.l @r15+,r14
+.word 0x4F26
+rts
+nop
+endasm
+args 0 0 0 0
+end
+
+name R15-18b A3-132 in the -O0 form: a local initialised from r8's entry value, then written through a pointer kept in a local
+asm 06009000
+.word 0x4F22
+mov.l r14,@-r15
+add #-16,r15
+mov r15,r14
+mov.l r8,@(8,r14)
+mov r14,r1
+add #8,r1
+mov.l r1,@r14
+mov.l @r14,r2
+mov.l r5,@r2
+mov.l @(8,r14),r0
+add #16,r14
+mov r14,r15
+mov.l @r15+,r14
+.word 0x4F26
+rts
+nop
+endasm
+args 0 0 0 0 r8=11
+args 1 2 3 4 r8=66
+end

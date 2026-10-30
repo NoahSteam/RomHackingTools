@@ -1,0 +1,59 @@
+name R15-16a R15-12a plus a lent call handed &S after the stores (the frame escapes), the word read after the call
+lend 06009100
+asm 06009000
+.word 0x4F22
+add #-48,r15
+mov r15,r1
+add #12,r1
+mov.l r1,@(32,r15)
+mov.l @(32,r15),r1
+add #6,r1
+mov.w r5,@r1
+mov.l @(32,r15),r1
+add #4,r1
+mov.w r6,@r1
+mov r15,r4
+add #12,r4
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l @(16,r15),r0
+add #48,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+rts
+nop
+endasm
+args 11112222 33334444 55556666 77778888
+args ffff0001 00008000 12345678 0000ffff
+end
+
+name R15-16b R15-12a with r14 as the frame pointer (-O0 style): r14 = r15, slot and S addressed from r14
+asm 06009000
+.word 0x4F22
+mov.l r14,@-r15
+add #-48,r15
+mov r15,r14
+mov r14,r1
+add #12,r1
+mov.l r1,@(32,r14)
+mov.l @(32,r14),r1
+add #6,r1
+mov.w r5,@r1
+mov.l @(32,r14),r1
+add #4,r1
+mov.w r6,@r1
+mov.l @(16,r14),r0
+add #48,r14
+mov r14,r15
+mov.l @r15+,r14
+.word 0x4F26
+rts
+nop
+endasm
+args 11112222 33334444 55556666 77778888
+args ffff0001 00008000 12345678 0000ffff
+end

@@ -1,0 +1,107 @@
+name R15-7a two-level pointer chain (slot2 -> slot1 -> S); halfword -45 stored at S+10 through it; S+8 word zeroed first, then read directly
+asm 06009000
+.word 0x4F22
+add #-48,r15
+mov r15,r1
+add #12,r1
+mov.l r1,@(32,r15)
+mov r15,r1
+add #32,r1
+mov.l r1,@(36,r15)
+mov #0,r3
+mov.l r3,@(20,r15)
+mov #-45,r2
+mov.l @(36,r15),r1
+mov.l @r1,r1
+add #10,r1
+mov.w r2,@r1
+mov.l @(20,r15),r0
+add #48,r15
+.word 0x4F26
+rts
+nop
+endasm
+args 0 0 0 0
+args 1 2 3 4
+end
+
+name R15-7b one level (control)
+asm 06009000
+.word 0x4F22
+add #-48,r15
+mov r15,r1
+add #12,r1
+mov.l r1,@(32,r15)
+mov #0,r3
+mov.l r3,@(20,r15)
+mov #-45,r2
+mov.l @(32,r15),r1
+add #10,r1
+mov.w r2,@r1
+mov.l @(20,r15),r0
+add #48,r15
+.word 0x4F26
+rts
+nop
+endasm
+args 0 0 0 0
+args 1 2 3 4
+end
+
+name R15-7c three levels
+asm 06009000
+.word 0x4F22
+add #-48,r15
+mov r15,r1
+add #12,r1
+mov.l r1,@(32,r15)
+mov r15,r1
+add #32,r1
+mov.l r1,@(36,r15)
+mov r15,r1
+add #36,r1
+mov.l r1,@(40,r15)
+mov #0,r3
+mov.l r3,@(20,r15)
+mov #-45,r2
+mov.l @(40,r15),r1
+mov.l @r1,r1
+mov.l @r1,r1
+add #10,r1
+mov.w r2,@r1
+mov.l @(20,r15),r0
+add #48,r15
+.word 0x4F26
+rts
+nop
+endasm
+args 0 0 0 0
+args 1 2 3 4
+end
+
+name R15-7d two levels, word store -1 at S+8 read as word (no sub-word)
+asm 06009000
+.word 0x4F22
+add #-48,r15
+mov r15,r1
+add #12,r1
+mov.l r1,@(32,r15)
+mov r15,r1
+add #32,r1
+mov.l r1,@(36,r15)
+mov #0,r3
+mov.l r3,@(20,r15)
+mov #-45,r2
+mov.l @(36,r15),r1
+mov.l @r1,r1
+add #8,r1
+mov.l r2,@r1
+mov.l @(20,r15),r0
+add #48,r15
+.word 0x4F26
+rts
+nop
+endasm
+args 0 0 0 0
+args 1 2 3 4
+end

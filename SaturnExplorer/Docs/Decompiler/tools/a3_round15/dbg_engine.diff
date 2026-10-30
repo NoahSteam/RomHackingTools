@@ -1,0 +1,129 @@
+diff --git a/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/coreaction.cc b/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/coreaction.cc
+index abe5c70..e6e866c 100644
+--- a/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/coreaction.cc
++++ b/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/coreaction.cc
+@@ -27,6 +27,7 @@
+  * Modified for SaturnExplorer: a call's INDIRECT on a local of an escaped frame keeps its address force (patches/0068-engine-deadcode-late-stack-reads.patch).
+  */
+ #include "coreaction.hh"
++#include <iostream>
+ #include "condexe.hh"
+ #include "double.hh"
+ #include "subflow.hh"
+@@ -4266,6 +4267,7 @@ int4 ActionDeadCode::apply(Funcdata &data)
+       if (!vacflag) {		// Not even vacuously consumed
+ 	op = vn->getDef();
+ 	changecount += 1;
++	if (getenv("SE_DBG_BUMP") && spc->getType()==IPTR_SPACEBASE) { fprintf(stderr,"  KILL op=%s at ",op->getOpcode()->getName().c_str()); op->getAddr().printRaw(std::cerr); fprintf(stderr," out off=%llx size=%d",(unsigned long long)vn->getOffset(),vn->getSize()); if (op->code()==CPUI_INDIRECT) { fprintf(stderr," iop="); PcodeOp *io=PcodeOp::getOpFromConst(op->getIn(1)->getAddr()); if (io) { fprintf(stderr,"%s@",io->getOpcode()->getName().c_str()); io->getAddr().printRaw(std::cerr);} } fprintf(stderr,"\n"); }
+ 	if (op->isCall())
+ 	  data.opUnsetOutput(op); // For calls just get rid of output
+ 	else
+@@ -4280,6 +4282,7 @@ int4 ActionDeadCode::apply(Funcdata &data)
+ 	}
+       }
+     }
++    if (getenv("SE_DBG_BUMP") && spc->getType()==IPTR_SPACEBASE) fprintf(stderr,"DEADCODE stack allowed changecount=%d\n",changecount);
+     if (changecount != 0)
+       data.seenDeadcode(spc);	// Record that we have seen dead code for this space
+   }
+diff --git a/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/funcdata_op.cc b/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/funcdata_op.cc
+index 0e4cc0d..ce8239f 100644
+--- a/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/funcdata_op.cc
++++ b/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/funcdata_op.cc
+@@ -22,6 +22,8 @@
+  * Modified for SaturnExplorer: a STORE made a COPY splits the INDIRECT it covered in the middle of with the right first piece (patches/0068-engine-deadcode-late-stack-reads.patch).
+  */
+ #include "funcdata.hh"
++#include <iostream>
++#include <execinfo.h>
+ #include "flow.hh"
+ 
+ namespace ghidra {
+@@ -67,6 +69,7 @@ void Funcdata::noteGuardRead(const Varnode *vn)
+       if ((*g).store == iop && (*g).space == rec.space && (*g).offset == rec.offset && (*g).size == rec.size) { have = true; break; }
+     if (!have) {
+       if (guardReads.size() >= 4096) {
++	if (getenv("SE_DBG_CAP") && !frameFoldsAllRead) { fprintf(stderr,"FRAMECAP guards fn="); getAddress().printRaw(std::cerr); fprintf(stderr,"\n"); }
+ 	frameFoldsAllRead = true;	// too many to keep: every fold is taken for read (the ledger may miss, never invent)
+ 	return;
+       }
+@@ -116,6 +119,7 @@ void Funcdata::noteFrameFoldForwarded(bool walk,Varnode *vn)
+       PcodeOp *e = in->getDef();
+       if (find(walked.begin(),walked.end(),e) != walked.end()) continue;
+       if (walked.size() >= 64) {
++	if (getenv("SE_DBG_CAP") && !frameFoldsAllRead) { fprintf(stderr,"FRAMECAP walk fn="); getAddress().printRaw(std::cerr); fprintf(stderr,"\n"); }
+ 	frameFoldsAllRead = true;
+ 	return;
+       }
+@@ -575,6 +579,8 @@ void Funcdata::opUnlink(PcodeOp *op)
+ void Funcdata::opDestroy(PcodeOp *op)
+ 
+ {
++  if (getenv("SE_DBG_BUMP") && op->code()==CPUI_INDIRECT && op->getOut()!=(Varnode*)0 && op->getOut()->getSpace()->getType()==IPTR_SPACEBASE) { PcodeOp *io=PcodeOp::getOpFromConst(op->getIn(1)->getAddr()); fprintf(stderr,"DESTROY INDIRECT out off=%llx size=%d iop=%s@%llx\n",(unsigned long long)op->getOut()->getOffset(),op->getOut()->getSize(),io?io->getOpcode()->getName().c_str():"?",io?(unsigned long long)io->getAddr().getOffset():0ULL); void *bt[14]; int n=backtrace(bt,14); backtrace_symbols_fd(bt,n,2); }
++
+   #ifdef OPACTION_DEBUG
+   if (opactdbg_active)
+     debugModCheck(op);
+@@ -1722,6 +1728,7 @@ bool Funcdata::opNormalizeFlip(PcodeOp *cbranch)
+ void Funcdata::opCollapseIndirectsForCopy(PcodeOp *copyOp)
+ 
+ {
++  if (getenv("SE_DBG_BUMP")) fprintf(stderr,"COLLAPSE copy out=%s size=%d off=%llx\n",copyOp->getOut()->getSpace()->getName().c_str(),copyOp->getOut()->getSize(),(unsigned long long)copyOp->getOut()->getOffset());
+   BlockBasic *bb = copyOp->getParent();
+   list<PcodeOp *>::iterator iter = copyOp->getBasicIter();
+   while(iter != bb->beginOp()) {
+@@ -1875,6 +1882,7 @@ void Funcdata::opCollapseIndirectsForAlias(PcodeOp *effectOp)
+     else if (guard != (const LoadGuard *)0 && !guard->isGuarded(op->getOut()->getAddr()))
+       shouldDestroy = true;
+ 
++    if (getenv("SE_DBG_BUMP")) fprintf(stderr,"ALIASCOLLAPSE effect=%s ind out off=%llx size=%d destroy=%d noalias=%d guard=%d\n",effectOp->getOpcode()->getName().c_str(),(unsigned long long)op->getOut()->getOffset(),op->getOut()->getSize(),(int)shouldDestroy,(int)op->getOut()->hasNoLocalAlias(),(int)(guard!=(const LoadGuard *)0));
+     if (shouldDestroy) {
+       if (op->getOut()->getSpace()->getType() == IPTR_SPACEBASE)
+ 	dropFrameCall(effectOp,op->getOut()->getOffset(),op->getOut()->getSize());	// SaturnExplorer (0068): no read of it
+diff --git a/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/heritage.cc b/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/heritage.cc
+index a4e82a6..941428c 100644
+--- a/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/heritage.cc
++++ b/SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/cpp/heritage.cc
+@@ -22,6 +22,7 @@
+  * Modified for SaturnExplorer: a read found after dead code ran in its space delays dead code past the pass that found it, as often as needed, failing closed; whether a frame address escaped forces a call's guard on a local, and the calls guarded at a local are kept for a host (patches/0068-engine-deadcode-late-stack-reads.patch).
+  */
+ #include "heritage.hh"
++#include <iostream>
+ #include "funcdata.hh"
+ #include "prefersplit.hh"
+ 
+@@ -2426,6 +2427,7 @@ void Heritage::guardStores(const Address &addr,int4 size,vector<Varnode *> &writ
+     op = *iter;
+     if (op->isDead()) continue;
+     AddrSpace *storeSpace = op->getIn(0)->getSpaceFromConst();
++    if (getenv("SE_DBG_BUMP") && container==storeSpace) fprintf(stderr,"GUARDSTORE pass=%d range off=%llx size=%d store@%llx usesSpacebasePtr=%d\n",pass,(unsigned long long)addr.getOffset(),size,(unsigned long long)op->getAddr().getOffset(),(int)op->usesSpacebasePtr());
+     if ((container == storeSpace && op->usesSpacebasePtr()) ||
+ 	(spc == storeSpace)) {
+       indop = fd->newIndirectOp(op,addr,size,PcodeOp::indirect_store);
+@@ -3462,8 +3464,10 @@ void Heritage::bumpDeadcodeDelay(AddrSpace *spc)
+   // Raises in one generation are one restart: the bound counts generations, the delay is the latest pass asked for
+   if (over.numDeadcodeBumps() >= maxDeadcodeBumps + (deadcodeBumped ? 1 : 0))
+     want = noDeadcodeDelay;
++  if (getenv("SE_DBG_BUMP")) fprintf(stderr,"BUMPCALL pass=%d have=%d want=%d bumps=%d\n",pass,have,want,over.numDeadcodeBumps());
+   if (want <= have)
+     return;			// dead code never runs in the space already
++  if (getenv("SE_DBG_BUMP")) fprintf(stderr,"BUMP pass=%d have=%d want=%d bumps=%d bumpedgen=%d\n",pass,have,want,over.numDeadcodeBumps(),(int)deadcodeBumped);
+   over.insertDeadcodeDelay(spc,want);
+   if (!deadcodeBumped)
+     over.noteDeadcodeBump();
+@@ -3567,6 +3571,7 @@ void Heritage::heritage(void)
+     buildADT();
+ 
+   processJoins();
++  if (getenv("SE_DBG_BUMP")) fprintf(stderr,"HERITAGE pass=%d\n",pass);
+   if (pass == 0) {
+     splitmanage.init(fd,&fd->getArch()->splitrecords);
+     splitmanage.split();
+@@ -3646,6 +3651,7 @@ void Heritage::heritage(void)
+   widenEscapedStoreGuards();	// SaturnExplorer (patches/0061-engine-stack-frame-escape.patch)
+   handleNewLoadCopies();
+   fd->checkPieceSizes();	// SaturnExplorer (patches/0068-engine-deadcode-late-stack-reads.patch)
++  if (getenv("SE_DBG_RAW")) { std::cerr << "---- RAW after heritage pass " << pass << "\n"; fd->printRaw(std::cerr); }
+   if (pass == 0)
+     splitmanage.splitAdditional();
+   pass += 1;

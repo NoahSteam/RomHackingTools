@@ -1,0 +1,44 @@
+name R15-17a a byte stored to the frame, a call in a block the engine removes as unreachable (r3 is 0, bt always taken)
+asm 06009000
+.word 0x4F22
+add #-16,r15
+mov #1,r3
+dt r3
+mov.b r3,@r15
+tst r3,r3
+bt L
+bsr G
+nop
+L:
+add #16,r15
+.word 0x4F26
+rts
+nop
+G:
+rts
+nop
+endasm
+args 0 0 0 0
+end
+
+name R15-17b the same with the call reading the byte's neighbour, taken: control (r3 = 1, the call runs)
+asm 06009000
+.word 0x4F22
+add #-16,r15
+mov #1,r3
+mov.b r3,@r15
+tst r3,r3
+bf L
+bsr G
+nop
+L:
+add #16,r15
+.word 0x4F26
+rts
+nop
+G:
+rts
+nop
+endasm
+args 0 0 0 0
+end

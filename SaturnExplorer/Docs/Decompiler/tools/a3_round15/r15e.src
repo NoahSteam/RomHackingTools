@@ -1,0 +1,162 @@
+name R15-4a no call: ptr store of r5 over the r8 write, direct read
+asm 06009000
+.word 0x4F22
+add #-16,r15
+mov.l r8,@(8,r15)
+mov r15,r1
+add #8,r1
+mov.l r1,@r15
+mov.l @r15,r2
+mov.l r5,@r2
+mov.l @(8,r15),r0
+add #16,r15
+.word 0x4F26
+rts
+nop
+endasm
+args 0 0 0 0
+args 1 2 3 4
+end
+
+name R15-4b call not handed the frame (r4=0), ptr store, direct read
+asm 06009000
+.word 0x4F22
+add #-16,r15
+mov.l r8,@(8,r15)
+mov r15,r1
+add #8,r1
+mov.l r1,@r15
+mov.l @r15,r2
+mov.l r5,@r2
+mov #0,r4
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l @(8,r15),r0
+add #16,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+mov.l @r4,r0
+rts
+nop
+endasm
+args 0 0 0 0
+args 1 2 3 4
+end
+
+name R15-4c direct store of r5 over the r8 write, call handed &X
+asm 06009000
+.word 0x4F22
+add #-16,r15
+mov.l r8,@(8,r15)
+mov r15,r4
+add #8,r4
+mov.l r5,@(8,r15)
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l @(8,r15),r0
+add #16,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+mov.l @r4,r0
+rts
+nop
+endasm
+args 0 0 0 0
+args 1 2 3 4
+end
+
+name R15-4d ptr in register r12 (no slot), ptr store, call handed r12, direct read
+asm 06009000
+.word 0x4F22
+add #-16,r15
+mov.l r8,@(8,r15)
+mov r15,r12
+add #8,r12
+mov.l r5,@r12
+mov r12,r4
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l @(8,r15),r0
+add #16,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+mov.l @r4,r0
+rts
+nop
+endasm
+args 0 0 0 0
+args 1 2 3 4
+end
+
+name R15-4e slot ptr, ptr store, call handed reload, read via reload
+asm 06009000
+.word 0x4F22
+add #-16,r15
+mov.l r8,@(8,r15)
+mov r15,r1
+add #8,r1
+mov.l r1,@r15
+mov.l @r15,r2
+mov.l r5,@r2
+mov.l @r15,r4
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l @r15,r2
+mov.l @r2,r0
+add #16,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+mov.l @r4,r0
+rts
+nop
+endasm
+args 0 0 0 0
+args 1 2 3 4
+end
+
+name R15-4f like the failing one, callee lent
+lend 06009100
+asm 06009000
+.word 0x4F22
+add #-16,r15
+mov.l r8,@(8,r15)
+mov r15,r1
+add #8,r1
+mov.l r1,@r15
+mov.l @r15,r2
+mov.l r5,@r2
+mov.l @r15,r4
+mov.l =0x06009100,r1
+jsr @r1
+nop
+mov.l @(8,r15),r0
+add #16,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+mov.l @r4,r0
+rts
+nop
+endasm
+args 0 0 0 0
+args 1 2 3 4
+end
+
