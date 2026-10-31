@@ -58,6 +58,7 @@ struct ShownFacts
     std::vector<std::string> notes;     // ...their text (the tooltip of that line)
     std::vector<std::pair<uint32_t, uint32_t>> body;   // the instructions flow reached, [lo, hi), canonical
     std::vector<uint32_t> literalPools; // literal-pool words (data, never reached as code)
+    std::vector<std::string> summarised;// engine notes (flow warnings) the panel says in one line of its own: "Flows into ..." and "Flow runs into bytes ..."
     size_t flowWarnings = 0;            // how many flow warnings the result has
     uint32_t entry = 0;                 // canonical
 };

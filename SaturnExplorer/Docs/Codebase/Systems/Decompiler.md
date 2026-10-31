@@ -2,6 +2,7 @@
 
 Inspected revision: `ff6a3b1fb1c54e4c0344613094ea65292b0023c2` (2026-10-20); the pseudocode-to-assembly mapping (steps 7 and 9) rechecked at the area 7 fixer branch `review/7-a710-fix` (2026-10-30).
 Captured-inspection sections rechecked against `codex/decompiler-variable-inspection` (2026-10-20).
+The panel's status/trust drawing, Decompile-as-a-request and Copy marks rechecked against `5428fe6` plus the area 8 fixer branch (2026-10-30).
 Unless labelled otherwise, behavior below is verified from the cited implementation.
 
 ## Purpose and responsibilities
@@ -59,7 +60,9 @@ the end of whatever it is given.
 
 1. `App` starts its single runner with `DecompilerRunner::Start`. `App::UpdateDecompiler`
    executes each UI frame, including when the window is hidden. Assembly, Call Stack and
-   Registers invoke `DecompilerPanel::ShowFunctionContaining` through App.
+   Registers invoke `DecompilerPanel::ShowFunctionContaining` through App. Like Enter in the
+   entry box it is a request: it sets `mAskAgain`, so the same question is asked again after
+   a Stop or a failure, and it clears a refused entry's text from the box (`SetTarget`).
 2. `App::BuildDecompilerView` describes the **context currently displayed**. A scrubbed
    recording uses its recorded context and stable timeline/frame identity. Live capture
    repeats are normalized by `CaptureRepeatTracker` so unchanged paused captures do not
@@ -107,6 +110,11 @@ the end of whatever it is given.
    selects and scrolls to the line `LineForInstruction`/`InstructionLineIndex` (Sh2Decompiler.h) names;
    an instruction folded into another's line gets that line and a note. With Follow PC at a stop
    each installed result selects the PC's line.
+   `DrawStatus` lays the status row out as wrapping text (`StatusRow`: a piece
+   that does not fit starts the next row) and wraps the amber and red sentences, so the stale
+   badge and "decompiling…" are on screen at any panel width (the default dock is 537 px on a
+   1280 px window). Copy Line and Copy Function prefix `CopyMarks()` (a `/* [stale] … */`
+   comment and one `/* WARNING: … */` per amber line) to the pseudocode they put on the clipboard.
 
 ```mermaid
 flowchart TD
@@ -264,7 +272,7 @@ ctest --test-dir build --output-on-failure -R 'Decompiler|MemorySnapshot|Sh2Func
 | Generated programs, memory ledgers (the frame's in [`FrameLedger.h`](../../../FrontEnd/tests/FrameLedger.h), shared with the decompiler suite), callable signatures and compiled printed C differential | [`Sh2GeneratedTests.cpp`](../../../FrontEnd/tests/Sh2GeneratedTests.cpp); CTest `SaturnExplorerSh2PrintedCTests` reuses this executable under its printed-C configuration |
 | Coalescing, epoch, cancellation, budget and worker teardown | [`DecompilerRunnerTests.cpp`](../../../FrontEnd/tests/DecompilerRunnerTests.cpp), [`DecompilerFaultTests.cpp`](../../../FrontEnd/tests/DecompilerFaultTests.cpp) |
 | Headless ImGui interactions, stale install rejection, mirrors, cache, notes, halt hints | [`DecompilerPanelTests.cpp`](../../../FrontEnd/tests/DecompilerPanelTests.cpp): `TestInstallRule`, `TestCompletedAnswerJudgedAgainstCurrentView`, `TestPrototypesPerMirror`, `TestRegisterHintAtHalt`, `TestScrubCache` |
-| Stateful refresh/trust sequences | [`DecompilerModelTests.cpp`](../../../FrontEnd/tests/DecompilerModelTests.cpp), [`DecompilerTrustTests.cpp`](../../../FrontEnd/tests/DecompilerTrustTests.cpp), [`DecompilerTrustModel.h`](../../../FrontEnd/tests/DecompilerTrustModel.h) |
+| Stateful refresh/trust sequences | [`DecompilerModelTests.cpp`](../../../FrontEnd/tests/DecompilerModelTests.cpp), [`DecompilerTrustTests.cpp`](../../../FrontEnd/tests/DecompilerTrustTests.cpp), [`DecompilerTrustModel.h`](../../../FrontEnd/tests/DecompilerTrustModel.h). The trust test reads every indicator back from the drawn glyphs (wrapped sentences put together, no allowance for cut text), at 1250 px and at the default dock widths (537, 672, 806 px), checks the status row and the Copy marks, classifies every engine note (amber, or grey only and listed in the guide), runs Decompile as a target in the generated sequences, and sweeps a real allocation failure through one request in forked children (`SE_TRUST_OOM_STRIDE`, `SE_TRUST_WIDTH`). Tools: [`Docs/Decompiler/tools/a8_fix`](../../Decompiler/tools/a8_fix) |
 | Paused repeated captures and real live identity changes | [`LiveDecompilerCaptureTests.cpp`](../../../FrontEnd/tests/LiveDecompilerCaptureTests.cpp) |
 | Hardware register width/audit consistency | [`HardwareWidthTableTests.cpp`](../../../FrontEnd/tests/HardwareWidthTableTests.cpp) |
 

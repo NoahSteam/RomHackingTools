@@ -7,7 +7,11 @@ Kept here:
 
 * `derive_handler_cases.py` and `audit_hardware_map.py`: regenerate `FrontEnd/tests/MednafenHandlerCases.txt`
   and the hardware register audit.
-* The latest round of each area (`a2_round14/`, `a3_round14/`, `a8_round2/`, `a9_round1/`), which the next round starts from.
+* The latest round of each area (`a2_round14/`, `a3_round14/`, `a8_fix/`, `a9_round1/`), which the next round starts from.
+  `a8_fix/`: `build_probe.sh` builds `a8fix_probe` from the trust test's own objects; `runlong.sh` runs a piece (at most 20 minutes) of its `long` mode
+  (4 to 8 generated programs end to end, `SE_TRUST_WIDTH=537` for the narrow panel); the probe also has `follow`, `oom <stride>`, `directed` and `script`.
+  Round 2's instruments (`a8_round2/`, last at `5428fe6`) are the trust test itself now: Decompile as a target, the status-row check, the Stop-and-
+  interleave generator, the width runs and the allocation-failure sweep.
   `a9_round1/`: `run_pieces.sh` (a long run of `SaturnExplorerLoaderFuzzTests` in pieces of at most 20 minutes) and
   `wasm32_yss_wrap.sh` with `yss_wrap32.cpp` (the 32-bit repro of A9-7; needs an emsdk and node).
 * What those still call: the `dagen` generator chain (`a2_round10/dagen10.py`, `gen_range.sh`,
