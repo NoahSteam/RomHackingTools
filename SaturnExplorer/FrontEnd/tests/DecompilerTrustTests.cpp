@@ -1133,16 +1133,17 @@ Program MakeProgram(uint64_t seed, int mix, int concat = 1)
     std::vector<Op> out;
     bool held = false, hidden = false;
     std::map<int, int> nameOf;   // function -> the name option it has now: the undo
-    int containFn = -1;   // the function the Containing target is on: its start is not toggled off (the finder would answer another entry: area 4's)
+    // The functions a Decompile was ever asked about: their start is not toggled off (the finder would answer another entry: area 4's). Every
+    // one counts, not the latest: a Decompile that had no effect (the panel hidden or the engine held) must not stand for the target.
+    std::set<int> containFns;
     auto emitContain = [&](int k) {
         out.push_back(Custom("contain " + std::to_string(k)));
-        containFn = k % n;
+        containFns.insert(k % n);
     };
     for (const Op& o0 : ops)
     {
         Op o = o0;
-        if (o.kind == OpKind::Bound && o.b == 0 && containFn >= 0 && o.a % n == containFn) o = Mk(OpKind::Refresh);
-        if (o.kind == OpKind::Custom && o.text.compare(0, 8, "contain ") == 0) containFn = std::atoi(o.text.c_str() + 8) % n;
+        if (o.kind == OpKind::Bound && containFns.count(o.a % n)) o = Mk(OpKind::Refresh);
         out.push_back(o);
         if (o.kind == OpKind::Hold) held = true;
         if (o.kind == OpKind::Wait || o.kind == OpKind::Finish) held = false;
