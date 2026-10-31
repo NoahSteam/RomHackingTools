@@ -93,6 +93,7 @@ The embedded copy of the runtime files is `FrontEnd/src/Decompiler/Sh2SpecData.h
 | `0069-engine-nested-condition-parens.patch` | `PrintC::emitBlockCondition`: when nested (`comma_separate` inherited), the first block of a `BlockCondition` is parenthesized like the second, because `opCbranch` opens no parenthesis in comma mode and an `\|\|` there otherwise binds looser than the `&&` around it. Texts change by redundant parentheses only where no `\|\|` is under the `&&`. |
 | `0070-engine-defined-shifts.patch` | `sign_extend` and `PcodeOp::getConsumeLocal` (`PIECE`, `INT_LEFT`) shift by less than 64 and never a negative value left: x86's results kept, except that the low input of a `PIECE` as wide as its output consumes the output's bits instead of none. |
 | `0071-engine-narrow-compare-constant-sign.patch` | `CastStrategyC::checkIntPromotionForCompare` (`cast.cc`): a constant compared with a narrow named variable or cast takes the variable's signedness into account, so `(uint2)x == -1` (the engine's two-byte compare with 0xFFFF) prints `== 0xffff`, true in C. |
+| `0073-engine-constant-pointer-guess-not-hardware.patch` | `ActionConstantPtr` prints a number as a hardware register's address only where the data flow uses it as one (a LOAD or STORE, a call, a stored value), not in a concatenation, a compare or a copy that returns it (A5-86). |
 | `0074-sleighc-sanitizer-clean.patch` | `se-sleighc` is clean under ASan, UBSan and LSan: `SleighCompile::checkSymbols` tests a symbol's type before the `LabelSymbol` downcast, the `ConstTpl` constructors initialize every field (the copy constructor loaded an unset enum), and `opbehavior.cc` gets the notice patch 0059 omitted. The freshness test is a gating run in the sanitizers job again. `sh-2.sla` is unchanged. |
 
 MSVC and Apple clang needed no patch beyond these.
@@ -195,6 +196,7 @@ applies 0005 to 0008) must run before `se-regen-sla`.
   - 0069: the printed-C pins `A2-101 #0` to `#2` (`SaturnExplorerSh2GeneratedTests`); without the patch all three are `mismatch`.
   - 0070: the UBSan job (`check-sanitizer-logs.sh`): no `runtime error` outside the two accepted SLEIGH sites; the matrix's corpora unchanged.
   - 0071: the printed-C pins `A2-104` and `A2-104 control` (`SaturnExplorerSh2GeneratedTests`; the pin is `mismatch` without the patch) and families 98 and 99 of `dagen16.py` (0 `mismatch` in 26,000 functions; 256 before); the corpora's printed texts unchanged.
+  - 0073: `Sh2DecompilerTests` (`a5_86`, `a5_86_return`, `a5_86_store`) and the printed-C pin `A5-86` (`SaturnExplorerSh2GeneratedTests`); without the patch the text is `not-compilable`; the matrix's corpora change only where a concatenation, a compare or a returned copy held a register's address (15_DECOMPILER_STEP5.md, "Area 5, A5-86 and A5-87").
 
 
   If upstream's Makefile source groups changed, update the lists in `vendor.py`.
