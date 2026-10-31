@@ -14714,7 +14714,7 @@ All from the new build, pieces of at most 20 minutes (`matrix16.sh`), `ulimit -v
 | `hbfuzz14.py` seeds 17 to 19 (700 each, 2,100) | only the T-bit launderer is stale (48, 55 and 54 cells; every cell of the 12 other launderings 0) |
 | `frame16.py` driver runs (`f16run.sh`): 2,340 fixtures | 390 lent, 0 `PRESERVE-LIE`; `LEDGER BAD` for 416: 414 are `g=1` fixtures (A3-141's class), 2 are A3-149; `PseudoEval` rejected 32; the 9 read (two runs) all agree in the printed-C differential, the others were not read one by one |
 | the area 2 round 17 review's seeds (routed) | grammar 2 4503481 is A3-151 (same at 2598c9b); `frame124_4511454` is A3-150 |
-| `ctest` | see section 6 |
+| `ctest` (the tree with this round's docs and tools; no engine, host or suite code changed, so no fault suite) | `-E SaturnExplorerLive -j2`: 102 of 102 (160 s); `-R SaturnExplorerLive`: 6 of 6 |
 
 ### 5. The corpora
 
