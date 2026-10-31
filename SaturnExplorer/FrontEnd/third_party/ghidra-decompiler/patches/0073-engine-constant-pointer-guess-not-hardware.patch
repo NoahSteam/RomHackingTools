@@ -1,0 +1,112 @@
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc
+@@ -26,6 +26,7 @@
+  * Modified for SaturnExplorer: ActionLateDoNothing tests each block again against the graph the earlier removals left, so the two empty arms of one branch are not both removed (patches/0067-engine-round14-sign-mod-late-donothing-three-way-shift-sub.patch).
+  * Modified for SaturnExplorer: a call's INDIRECT on a local of an escaped frame keeps its address force (patches/0068-engine-deadcode-late-stack-reads.patch).
+  * Modified for SaturnExplorer: a save slot a STORE is aimed at, or that a pending STORE may reach, stays mapped (patches/0072-engine-frame-chains-and-save-slots.patch).
++ * Modified for SaturnExplorer: a number is the address of a hardware register where the data flow uses it as one, not by a guess (patches/0073-engine-constant-pointer-guess-not-hardware.patch).
+  */
+ #include "coreaction.hh"
+ #include "condexe.hh"
+@@ -1076,6 +1077,59 @@ bool ActionConstantPtr::checkCopy(PcodeOp *op,Funcdata &data)
+   return data.getArch()->infer_pointers;
+ }
+ 
++/// \brief Is the value of a COPY used as an address, as far as the data flow shows?
++///
++/// Follows the value through copies, merges, casts and the additions and masks that make an address from it, to a LOAD or STORE
++/// whose pointer it is, a call it is handed to (its callee may use it so) or a value stored to memory. A value that reaches only a
++/// return, a compare or an arithmetic result is a number, whatever it equals. A walk that does not end soon says yes.
++/// \param vn is the output of the COPY
++/// \return \b true if the value may be used as an address
++static bool copyUsedAsAddress(Varnode *vn)
++
++{
++  vector<Varnode *> work;
++  set<Varnode *> seen;
++  work.push_back(vn);
++  seen.insert(vn);
++  while(!work.empty()) {
++    if (seen.size() > 128) return true;
++    Varnode *cur = work.back();
++    work.pop_back();
++    list<PcodeOp *>::const_iterator iter;
++    for(iter=cur->beginDescend();iter!=cur->endDescend();++iter) {
++      PcodeOp *use = *iter;
++      switch(use->code()) {
++      case CPUI_LOAD:		// its pointer is slot 1 (slot 0 is the space)
++      case CPUI_STORE:		// as the pointer or as the value stored
++      case CPUI_CALL:
++      case CPUI_CALLIND:
++      case CPUI_CALLOTHER:
++	return true;
++      case CPUI_COPY:
++      case CPUI_CAST:
++      case CPUI_MULTIEQUAL:
++      case CPUI_INDIRECT:
++      case CPUI_INT_ADD:
++      case CPUI_INT_SUB:
++      case CPUI_INT_AND:
++      case CPUI_INT_OR:
++      case CPUI_INT_XOR:
++      case CPUI_PTRADD:
++      case CPUI_PTRSUB:
++	{
++	  Varnode *out = use->getOut();
++	  if (out != (Varnode *)0 && seen.insert(out).second)
++	    work.push_back(out);
++	}
++	break;
++      default:
++	break;
++      }
++    }
++  }
++  return false;
++}
++
+ /// \brief Determine if given Varnode might be a pointer constant.
+ ///
+ /// If it is a pointer, return the symbol it points to, or NULL otherwise. If it is determined
+@@ -1094,6 +1148,7 @@ MapEntry *ActionConstantPtr::isPointer(AddrSpace *spc,Varnode *vn,PcodeOp *op,in
+ 				       Address &rampoint,uintb &fullEncoding,Funcdata &data)
+ {
+   bool needexacthit;
++  bool guessed = false;		// Only the kind of op suggests a pointer: a copy or a concatenation, no type, no lock
+   vn->setSymbolCheck(Varnode::symcheck_complete);
+   Architecture *glb = data.getArch();
+   Varnode *outvn;
+@@ -1127,6 +1182,11 @@ MapEntry *ActionConstantPtr::isPointer(AddrSpace *spc,Varnode *vn,PcodeOp *op,in
+     case CPUI_COPY:
+       if (!checkCopy(op, data))
+ 	return (MapEntry *)0;
++      {
++	PcodeOp *retOp = op->getOut()->loneDescend();
++	// (a return locked to a pointer is known, as checkCopy takes it)
++	guessed = !(retOp != (PcodeOp *)0 && retOp->code() == CPUI_RETURN && data.getFuncProto().isOutputLocked());
++      }
+       break;
+     case CPUI_PIECE:
+       // Pointers get concatenated in structures
+@@ -1137,6 +1197,7 @@ MapEntry *ActionConstantPtr::isPointer(AddrSpace *spc,Varnode *vn,PcodeOp *op,in
+       // A comparison with a constant could be a pointer
+       if (!glb->infer_pointers)
+ 	return (MapEntry *)0;
++      guessed = true;
+       break;
+     case CPUI_INT_ADD:
+       outvn = op->getOut();
+@@ -1186,6 +1247,12 @@ MapEntry *ActionConstantPtr::isPointer(AddrSpace *spc,Varnode *vn,PcodeOp *op,in
+       vn->setSymbolCheck(Varnode::symcheck_incomplete);	// May need to retest if we later discover vn is a pointer
+       return (MapEntry *)0;
+     }
++    // A number that equals the address of a hardware register is that address where the data flow uses it as one (a type that is a pointer,
++    // tried again when it becomes one), not in a concatenation, a compare or a copy that only returns it
++    if (guessed && entry->getSymbol()->isVolatile() && (op->code() != CPUI_COPY || !copyUsedAsAddress(op->getOut()))) {
++      vn->setSymbolCheck(Varnode::symcheck_incomplete);
++      return (MapEntry *)0;
++    }
+   }
+   return entry;
+ }

@@ -14310,6 +14310,113 @@ Not run: the sanitizer job's list (`.github/scripts/run-decompiler-sanitizers.sh
 * The reviewer of round 2 should read `ReadFileCapped`'s callers for a loader that still uses `ReadWholeFile` (`grep ReadWholeFile` finds the disc code and the IP.BIN read in `App`, outside the path), try a symbol map with CRLF and a BOM (a BOM before the first address makes that line malformed and counted, which is right but unfriendly), and the Windows side of A9-3 (a rename over a file another instance has open).
 * Fixed rows A9-1 to A9-14 are pinned by the oracle itself: the classes stay in the run, so a regression is a `VIOLATION` line and a non-zero exit.
 
+## Area 5, A5-86 and A5-87
+
+Fixer, branch `review/5-a587-fix`, on `ec93ad3`; own RelWithDebInfo build under the scratch directory (2.7 GB), `-j2`, every test binary under `ulimit -v 3500000` with a timeout, one heavy job at a time, long runs in pieces of 20 minutes or less. **One engine patch, 0073** (0071 and 0072 are reserved; master has since taken 0071 and 0074 and has a vendored-tree gate: the coordinator resolves the tables at merge, and the README row has the "pinned by" cell).
+
+**The rows.**
+
+- **A5-87** (provisional P2): triaged, each of its five seeds shrunk and its text read against the emulator's run. They split: two oracle mechanisms (A5-88, A5-89), two real missing notes (A5-90, A5-91). The generator's new draws (step 4) found a fifth gap (A5-92), and the grammars lacked them (A5-93). All fixed.
+- **A5-86** (P3): fixed in the engine (patch 0073), not accepted.
+- **A5-88 to A5-93** (all P3, set down from the provisional P2: no corpus function has any of the gaps): fixed.
+- The coordinator's two routed seeds (area 2 round 16 fixer), grammar 2 **4211181** and **4215904** (`n:pointer-effect-unsaid`): confirmed, both fail on `ec93ad3` and pass here; both are **A5-89**: 4211181's derivation names a register that is not where the run went (the base ended the walk at the first name in the statement and followed a line of the same instruction that dereferences nothing), 4215904 is `param_4 = &SH2_BAMRBH` merged with a parameter or a callee's output, read at +18. Pinned in `TestA587Pins`.
+
+### 1. The five seeds
+
+| seed (grammar) | what the emulator did | what the text said | mechanism | row |
+|---|---|---|---|---|
+| 2018538 (2) | a 2-byte read reached FFFFFF8C (SH2_CHCR0) | `puVar3 = extraout_r6; if (c) { puVar3 = &SH2_BARBL; } uVar1 = *puVar3;` (the callee left r6 = 0xFFFFFF8C; BARBL is 0xFFFFFF62, 42 bytes from it) | oracle: the pointer is a callee's output merged with a register's address (A5-58, accepted); SH2_BARBL has no note to carry "(it may hold other values too)", so 3c's excuse did not apply | A5-89 |
+| 2029583 (2) | a 4-byte read at 06009060 reached E00000F0 | `return 0x600210c;` and a call `(**(code **)(param_1 * 4 + 0x6009034))(...)`: a table left as an indirect call; the case's `mov.l @(pc),r6` of 0xE00000E4 is not in the text | oracle: the run was handed to code the output does not hold; 3c took the call's argument `&SH2_CHCR1` for the pointer of a read with no text | A5-88 |
+| 2046314 (2) | a 4-byte read at 06009040 of the cached 05FE0028 | `xVar1 = Ram26001018;` after a table left as a call (`&SCU_D1C` as its argument) | the same | A5-88 |
+| 1804560 (2) | a byte read and write at FFFFFFDA | `uVar1 = in_r1 \| 0xffffffc0; ... *(uint1 *)(uVar1 + 8) = ... \| 1;`, no note | **real gap**: the text proves the on-chip partition, not the register; the oracle had taken the mask for the pointer's base | A5-90 |
+| 2408172 (1) | a 2-byte write at FFFFFF1E / FFFFFF10 | `uVar3 = 0xffffff08; do { uVar3 = uVar3 + 4 ^ 0x20000000; ... } ...; *(xunknown2 *)(uVar3 + 0xe) = 0;`, no note | **real gap**: the first value is 0xDFFFFF1A (cache data array: memory), the stepped note was gated on a first value at a register | A5-91 |
+| 4211181, 4215904 (2) | routed (above) | | A5-89 | |
+
+### 2. The fixes
+
+**Oracle (`Sh2GeneratedTests.cpp`).**
+
+1. *A5-88.* Rules 3b and 3c go over `ownTrace`: the accesses a run made before the output hands it to code it does not hold (`HandedOverAt`, as rule 2 does since A4-17); `pointer.trace.handed-over` counts what was set aside. The fallback for an access with no text (`PointerPrintsFromHardware`'s "the old premise, never narrower") names only the registers within `kPointerReach` of the one reached.
+2. *A5-89.* A derivation that holds a value the text does not know is `open` (`param_`, `in_`, `unaff_`, `extraout_`, a call's result, a loaded value, found in the dereference's operand or in an assignment reaching it): 3c asks nothing of the registers it names (`pointer.effect.open`; `.open.said` / `.open.unsaid` count what it would have asked: in the sweeps the unsaid ones are the `x \| mask` pointers rule 3f asks for). Also: one instruction with two lines of text (a delay slot's store and the `return`), a store's own tokens (`*`, `=`, value: the address is found by the `*`'s position, and the value is not taken for the pointer), and the walk continuing after a base is named in the statement.
+3. *A5-90, rule 3f.* An access in partition 7 through a pointer the output makes by ORing a constant that sets the top three bits (`OrsIntoOnChip`) has "may reach on-chip registers", unless a note names the address the run came to (`onchip.span.said` / `.unsaid` / `.named`); the note excuses 3c's per-register demand (`pointer.effect.excused`, which also counts the stepped-pointer and "may hold other values" notes).
+4. *A5-92.* `NamesHardwareBase` and rule 3c take the associative purge and the cache address array for hardware.
+
+**Host (`Sh2Decompiler.cpp`, `HardwareNotes`, `PointerResolver`).**
+
+- *A5-90.* `PointerValues::ranged`: an unknown value ORed with constants that all set the top three bits is in [lowest mask, 0xFFFFFFFF]; moved by added offsets (clamped; a wrap off the end drops it), kept by an OR with anything else (`BitwiseOf` + `Bitwise`: an OR is at least each operand), lost to an unknown index. Note: "may reach on-chip registers: ... so it lies in 0xFFFFFFC8-0xFFFFFFFF, the SH-2's on-chip register partition (decoded by the low 9 bits of the address); which register this 1-byte read reaches is not known, and none of the registers' effects is said", with the width rule of the half of the page the span can fall in.
+- *A5-91.* `PointerValues::later`: the values the bounded walk of a stepped pointer comes to after its first, moved with the pointer by every offset added and asked, at the access, of the address it is at (a first version asked before the offset: 15 false cautions in the hwram008 diff, fixed). When no first value is hardware and a later one is, the access says "the pointer is stepped in a loop from addresses that are no hardware's: ... among them 0xFFFFFF1E (an on-chip register address): a 2-byte write there has the effects and is subject to the width rules of that hardware".
+- *A5-92.* The associative purge (partitions 2, 5) and the cache address array (3) are hardware for a pointer's notes (`IsHardwareRegion`): "if the pointer holds 0x40001000: an access at 0x40001000 is an associative purge ...".
+
+**Engine, patch 0073 (A5-86).** `ActionConstantPtr::isPointer` guesses a constant to be a pointer from the op it feeds (a COPY, a PIECE, a compare); the host's symbols for every register made any such number a register (`return CONCAT44(&SMPC_IREG0,~in_r7);` for 0x20100000, and `return 0x25F80000;` printed `uint2 * f() { return &VDP2_TVMD; }`). The printed-C harness declares no register, so every such text is `not-compilable`. A guess that finds a volatile symbol now holds only where the data flow uses the value as an address (`copyUsedAsAddress`: reaches a LOAD, STORE or call through copies, merges, casts, additions and masks); a PIECE or a compare never. A pointer the type system proves (the explicit branch, a sum that is a pointer, a locked pointer return), a call argument and a stored value are not guesses and are as they were. `vendor.py` on a copy: exit 0, "vendored 84 library sources ...", tree identical to the committed one.
+
+### 3. The generator draws (A5-93)
+
+`regionRng`, a stream of its own (no earlier draw moves; the programs of the seeds that draw them change, so grammar 1 seed 2408172 is a different program now and its pin is the shrunk module): `litptr.region` (a purge, array or on-chip literal in place of one RAM pointer in fifteen, widths 1, 2 and 4: the address-error halves of the page), `region.mask.or` / `.xor` (+ `.onchip`; one function in seven; 0xFFFFFFC0, 0xFFFFFF00, 0xFFFFFE00, 0xFFFFFFE0, 0xFFFFFFF0, 0xE0000000, 0x40000000, 0xA0000000, 0x60000000, 0x20000000 on a parameter or a literal pointer), `region.walk` (a literal pointer to hardware stepped by 4 and flipped by an xor with a partition bit, then written through; one function in eleven), and the loop masks of A5-70 start from an on-chip address as well. In 3,000 seeds of grammar 2: 110 `litptr.region`, 849 masks, 74 walks; 427 accesses held to the span rule, 691 runs set aside by the hand-over.
+
+### 4. The sweep, grammar 2 at 2,000,001 to 2,050,000
+
+The first version of rule 3f failed five seeds (2007165, 2007998, 2020865, 2034584, 2047534), each a defect of the oracle or of the span (a stepped pointer; a constant the engine names exactly; a free value behind a local; a store's value taken for the pointer; a second OR with a literal outside the body), each fixed and pinned (`A5-90, sweep seed ...`). The final sweep fails seven seeds, all `frame-lost` (area 3, the frame ledger): **2000172, 2019973, 2020478, 2020879, 2025424, 2032241, 2032559**. The base build fails the same seven, with the same classes: not this branch's and not area 5's; for the coordinator.
+
+### 5. Mutation checks
+
+Each part reverted alone (an edit of the source, a rebuild, the pins and 1,500 seeds of each grammar, the part restored):
+
+| part reverted | `Sh2DecompilerTests` | generator, pins and 1,500 seeds of each grammar |
+|---|---|---|
+| A5-88 hand-over (`ownTrace` is the united trace) | passes | 10 pin checks fail (the A5-88 pins for 2029583 and 2046314, the A5-82 pins of 303290, 313937, 910697 and 202350); 0 failing seeds |
+| A5-89 open derivation (`open = false`) | passes | 4 pin checks fail (seed 2018538, routed 4215904, the open pins); 0 failing seeds in 1,500 |
+| A5-89 two lines of one instruction (`anyOperands`) | passes | 3 pin checks fail (the derivation pin; the routed 4211181 pin gets two `onchip-span-unsaid`; seed 179's control) |
+| rule 3f off (no span demanded), engine intact | passes | 6 pin checks fail (`onchip.span.said` of the A5-90 pins); 0 failing seeds |
+| A5-88 fallback limited to near registers (`allRegs`) | passes | passes: no test needs it; kept, it narrows a premise that said "any register of the output" |
+| A5-90 span note (`ranged`) off | 3 checks fail (`a5_90_byte`, `a5_90_long`, `a5_90_chain`) | 12 checks fail; **31 failing seeds (grammar 1), 95 (grammar 2)** |
+| A5-91 stepped note off | 1 check fails (`a5_91`) | 3 checks fail; 3 failing seeds in grammar 1, 0 in grammar 2 |
+| A5-92 purge and array through a pointer off | 1 check fails (`a5_92`) | 1 check fails; **5 failing seeds (grammar 1), 3 (grammar 2)** |
+| A5-83's cache caution for a stepped pointer off (control: the oracle still catches it) | 1 check fails (`a5_83`) | 3 checks fail; 4 failing seeds in grammar 1 (`cache-read-pointer-unsaid`) |
+| pointer notes off (`account` never called; control: 3c is not blind) | 50 checks fail | 5 checks fail; **60 failing seeds (grammar 1), 27 (grammar 2)** |
+| patch 0073 off (`coreaction.cc` of `ec93ad3`) | 2 checks fail (`a5_86`, `a5_86_return`) | the printed-C pin `A5-86` is `not-compilable` (2 checks); the grammars' seeds hold no such constant |
+| rule 3f off and the span note off together | 3 checks fail | 8 checks fail (pins); **0 failing seeds in either grammar**: rule 3f is what makes the generator see the span note's removal (alone, 126 seeds) |
+
+Each part was restored after its run and the next built from the clean tree; the final build passes all of the above.
+
+### 6. The matrix
+
+| | result |
+|---|---|
+| build (all targets), `-j2` | ok |
+| `ctest -E SaturnExplorerLive -j2 --timeout 900` | 101 of 101 on the build before the last host change; on the final build 100 of 101 and the engine suite (`SaturnExplorerSh2DecompilerEngineTests`, 60 s ceiling, 44 to 48 s alone) timed out under the load of three agents; it passes alone through ctest (44.56 s). It does not run the code this branch changes more than a few lines. |
+| fault suite | 0 of 94 failed (94.8 s), no MOVED pin |
+| generator, grammar 2, 3,000 seeds | 0 failing seeds |
+| generator, grammar 1, 1,000 seeds | 0 failing seeds |
+| printed C, 3,000 seeds | 4,241 functions, 3,958 compared, agrees 3,893, narrow-c 94, 0 mismatch |
+| generator, 20,000 seeds in four runs of 5,000 | 0 failing seeds |
+| generator, grammar 2, 2,000,001 to 2,050,000 in ten pieces | 7 seeds, all `frame-lost` of area 3 (above); 0 in area 5's checks |
+| pins | `TestA587Pins` (the five seeds, the five sweep seeds and the two routed ones as shrunk modules, seed 1804560 as a program, the derivation on text), `TestA582Pins` re-pointed, the fixtures `a5_86`, `a5_86_return`, `a5_86_store`, `a5_90_*`, `a5_91`, `a5_91_ram`, `a5_92`, `a5_92_ram`, the printed-C pin `A5-86` |
+
+### 7. The corpora
+
+`SE_GAME_HWRAM=<img> SE_GAME_LEND=1 SE_GAME_NOTES=1 SE_GAME_OUT=<dir>`, the base `ec93ad3` against this branch, each on both images (the output is deterministic: two runs of the base are identical; a run made while another job loaded the machine is not, and was discarded).
+
+| | hwram007 | hwram008 |
+|---|---|---|
+| functions, all ok | 839 | 1,554 |
+| every ledger count | 0 | 0 |
+| missing and said | 0 | 4 |
+| frame writes lost / malformed pieces | 0 / 0 | 0 / 0 |
+| lending, signatures (parameters) | 678 (956), as the base | 1,038 (1,310), as the base |
+| mapping violations | 0 | 0 |
+| hardware notes and cautions | 35 and 0 | 57 and 4: **identical to the base's, line by line** |
+| texts changed | 1 of 839; lend_before 5, lend_after 7 | 2 of 1,554; lend_before 7, lend_after 9 |
+
+Every changed text is the A5-86 class: a number that equals a register's address, printed as the register before and as the number now, where the code does not dereference it. (a) A compare against a register's address: `(&SMPC_SR < puRam060582dc)` is `(0x20100060 < uRam060582dc)`; in `0601B3B0` / `0605A560` the chain of bounds `puStack_3c < (uint4 *)0x5a00000 \|\| &SCU_D0R <= puStack_3c` is `uStack_3c < 0x5a00000 \|\| 0x5fdffff < uStack_3c` and the variable and the parameter are `uint4`, not `uint4 *`. (b) A register's address kept in a global: `puRam060b72f0 = &SMPC_OREG31;` is `xRam060b72f0 = 0x2010005f;` (hwram008 only). (c) A function that returns a register's address: `uint4 * f(void) { return &CD_DATATRNS; }` (060213DC / 060608B8) is `xunknown4 f(void) { return 0x25818000; }`, and its callers cast (`puVar3 = (uint4 *)func_0x060213dc();`). The code in (b) and (c) may well mean an address; the text is right either way, and it loses the name where only a later function dereferences it. No access, note, caution, ledger entry or lent signature changed. A first version of A5-91 printed 15 false cautions in hwram008 (a work RAM address "among them ... a register area", the offset added after the hardware test); the corpus diff found it and the final build has none.
+
+### 8. Limits
+
+- The span (A5-90) is made by OR only; an AND with a mask bounds a pointer to [0, mask], which holds ordinary memory too, and is not said. An XOR with a constant is not bounded either.
+- `kPointerReach` stays (60 bytes) for the closed derivations; the open ones are not asked, so an exact register behind a merge with a parameter is held by the suite's fixtures (A5-28, A5-37, A5-38) and not by rule 3c.
+- The cache caution of a stepped pointer (`steppedCachedAt`) is still judged before the offsets added after the loop (A5-83): not changed here.
+- Patch 0073 prints a register's address as a number in a concatenation, a compare, a returned copy and a copy into a global; the code in (b) and (c) of the corpora section reads less well for it.
+- The engine suite's ceiling (60 s) is near its time (44 to 50 s) under `-j2` on a loaded machine; not a defect of this branch.
+
 ## Area 3 fixer (A3-130 to A3-138)
 
 Fixer, branch `review/3-a3130-fix`, cut at `2598c9b`; patch **0072** (`0072-engine-frame-chains-and-save-slots.patch`, 11 engine files) and the host, suite and generator changes below. Own RelWithDebInfo build under the scratch directory, `-j2`, every test binary under `ulimit -v 3500000` and `timeout`, one heavy job at a time. Engine traces were made with temporary prints behind environment variables (never committed; each commit was checked free of them).
