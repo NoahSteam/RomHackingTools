@@ -14501,3 +14501,22 @@ No number changed and no text: none of the corpus functions has A3-130 to A3-132
 - A STORE kept pending has its guards until its pointer is settled; where the analysis never places it (a pointer that stays a LOAD through the frame) the guards stay, as for any unmodeled STORE. In both corpora no text changed.
 - The frame ledger may still miss a loss in the pieces of a split frame COPY (A3-138: the pieces carry no record of their own).
 - No full mutation table: each fixed row's pins were checked on 2598c9b (the base build's driver and generator), not with each part of 0072 reverted alone.
+
+### 8. After the merge matrix: master merged, frame124 2268.chain, the area 5 seeds
+
+The coordinator's merge failed on one printed-C finding in the default range, `frame124_2268.chain` (`mismatch`, run 0x7FFE, C reading 0x80FE). **A harness reading problem, not a wrong value**: the value is right by hand (the halfword S+12 = r5 sign-extended, xor S+0 = r4, plus r4's top byte sign-extended: 0x7FFE for r4 = 0xFFFFFFFF, r5 = 0x8000); the C reading takes `(int4)uStack_24._0_1_` unsigned, and the engine's reading, which has the sign, did not compile because the engine typed the chain of slots apart in the pointee's sign (`pppxStack_8 = &ppuStack_c;`, `xunknown4 ***` given a `uint4 ***`). The engine's reading now casts such an address assignment to the local's own type (`AddressAssignTyped`), and the text is `narrow-c` (pinned; ledger A3-143). `-fpermissive` was tried first and does not make g++ accept that conversion.
+
+Master was merged twice (`5428fe6`, then `f4b0d46` with 0071, 0073 and 0074; merge commits, no rebase): the patch tables in number order, the "Reserved numbers" line removed (0072 was the last), and 0073's `coreaction.cc` header hunk rebased onto 0072's notice line (context only, as round 14's 0067 was); `check-vendored-tree.py check` passes.
+
+| Run on the merged tree (`684f69d4`) | Result |
+|---|---|
+| `ctest -E SaturnExplorerLive -j2` / Live | 102 of 102 / 6 of 6 |
+| printed-C, the default range 1 to 3,000 (three chunks of 1,000) | 0 findings |
+| printed-C, 4,110,001 to 4,113,000 (fresh) | 0 findings |
+| grammar 1, 4,110,001 to 4,115,000 | 0 failing |
+| grammar 2, 4,110,001 to 4,115,000 | 1 failing seed, 4112577, `n:onchip-span-unsaid` (a write through a pointer ORed with 0x20000000-style constants reaching FFFFFE0C): area 5's class; the same with master's engine sources (0072 left out, built and run), so not this patch; routed to area 5 |
+| the area 5 fixer's grammar 2 `frame-lost` seeds 2000172, 2019973, 2020478, 2020879, 2025424, 2032241, 2032559 | all `frame-lost` on 2598c9b, no finding on the head: frame ledger false losses fixed by 0072's records (A3-136, A3-138, A3-142; not separated per seed) |
+| `frame15.py`, the seven configurations (810 fixtures) / the R15 fixtures (81) | 0 `LEDGER BAD` / 1 (R15-6a, A3-141) |
+| corpora | 839 and 1,554 ok; every ledger count 0; missing and said 0 and 4; 0 frame writes lost, 0 malformed pieces, 0 functions with the frame unchecked; lending 678 (956) and 1,038 (1,310), real entries 474 (645) of 999 and 724 (975) of 1,543; 7 and 9 texts differ from 2598c9b, all 0073's (a constant compared with or stored as a number, not `&SMPC_SR`; a callee's return `xunknown4` instead of `uint4 *`), none from 0072 |
+
+`frame124_3805863` (A3-137's family, a piece's sign) is still a `mismatch` of the harness: its engine reading compiles and does not agree, which I have not separated further; it is not in the default or the fresh ranges.
