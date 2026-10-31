@@ -183,15 +183,38 @@ workflow jobs fail if the build directory says otherwise. An ordinary `install.b
 The Windows archive is **not code-signed** (a deliberate choice for now; see the options below). What stands in for it:
 the archive is built by the workflow from the tagged commit, each archive is published with a `SHA256SUMS-<platform>.txt`
 (also in the draft release's notes and attachments), and the README in the zip, the project `ReadMe.txt` and the release
-notes tell users to expect a SmartScreen prompt and how to get past it. After the macOS image is notarised by hand and
-replaces the CI one, regenerate its checksum (`shasum -a 256`) before uploading. If people report blocked or flagged
+notes tell users to expect a SmartScreen prompt and how to get past it. The CI signing job below writes its own
+`SHA256SUMS-macos.txt` for the notarised image; if you notarise by hand and replace the CI image, regenerate its checksum
+(`shasum -a 256`) before uploading, since the one the `macos` job published is for the ad hoc file. If people report blocked or flagged
 downloads, sign: Azure Artifact Signing (about $10/month; individuals in the USA and Canada) or SignPath Foundation
 (free for open source, publisher shown as the Foundation) both work from GitHub Actions; sign `SaturnExplorerFrontEnd.exe`
 and `mednafen.exe` (and the MSYS2 DLLs if wanted) after the build and before `package_release.py`, with an RFC 3161
 timestamp. A key file in a repository secret is not an option with current CA rules: keys live on hardware or in a cloud HSM.
 
-Still manual: Developer ID signing and notarisation (below), Windows signing, and running the
-Windows archive on a machine that has no Visual Studio or MSYS2.
+Still manual: Windows signing, running the Windows archive on a machine that has no Visual Studio or MSYS2, and
+Developer ID signing and notarisation unless the CI job below has its secrets (it has not run on GitHub yet).
+
+### Signing in CI (the release workflow's `macos-sign` job)
+
+The release workflow can sign and notarise the macOS archive itself. The `macos` job builds the archive ad hoc
+signed; `macos-sign` (on a `v*` tag, or a manual run with `sign` ticked) downloads it, runs
+`Integration/notarize_release.py` (re-sign with the Developer ID, new `.dmg`, notarise, staple, Gatekeeper check;
+the same script works on a Mac with `--keychain-profile`), and uploads `macos-notarized`. The draft release then
+attaches that archive instead of the ad hoc one. With no secrets configured the job does nothing but warn.
+
+One-time setup, in the GitHub repository (Settings → Environments → **release**, then add these as *environment
+secrets*; require yourself as a reviewer so every signing run needs your approval):
+
+| Secret | What |
+|---|---|
+| `MACOS_CERT_P12_BASE64` | the Developer ID Application certificate **and its private key**, exported from Keychain Access as a `.p12`, then base64-encoded (`base64 -i cert.p12 | pbcopy`) |
+| `MACOS_CERT_PASSWORD` | the password you gave the `.p12` when exporting |
+| notarization, **either** `NOTARY_KEY_P8`, `NOTARY_KEY_ID`, `NOTARY_ISSUER_ID` | an App Store Connect API key (App Store Connect → Users and Access → Integrations → Team Keys): the contents of the `.p8`, its key id, the issuer id |
+| **or** `NOTARY_APPLE_ID`, `NOTARY_TEAM_ID`, `NOTARY_PASSWORD` | your Apple ID, Team ID, and an app-specific password |
+
+Anyone who can push a tag or change the workflow could cause a signing run, so keep the required-reviewer rule on
+the environment. If the secrets are ever exposed, revoke the certificate at developer.apple.com and (for an API key)
+the key in App Store Connect, and issue new ones.
 
 ### macOS Developer ID signing and notarisation
 
@@ -204,7 +227,11 @@ record each release in `Docs/FunctionalityVerification/` (version, commit, `spct
 ```sh
 ID="Developer ID Application: <name> (<team>)"
 # 1. The app, signed (the install step fails if the signature does not verify).
-cmake -S . -B build-release -DCMAKE_BUILD_TYPE=Release -DSE_MACOS_BUNDLE_LIBS=ON -DSE_MACOS_SIGN_IDENTITY="$ID"
+# SE_RELEASE_VERSION bakes the tag into the app (Check for Updates); a build-time script reads it, so export it for
+# every step. SE_DEMO_MENU=OFF is the release configuration.
+export SE_RELEASE_VERSION=v1.0
+cmake -S . -B build-release -DCMAKE_BUILD_TYPE=Release -DSE_MACOS_BUNDLE_LIBS=ON \
+      -DSE_DEMO_MENU=OFF -DSE_MACOS_SIGN_IDENTITY="$ID"
 cmake --build build-release --parallel
 cmake --install build-release --prefix "$PWD/stage"
 # 2. The patched Mednafen (built by install.py, see above), then the combined, smoke-tested image with
