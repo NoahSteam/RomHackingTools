@@ -7,7 +7,11 @@ Kept here:
 
 * `derive_handler_cases.py` and `audit_hardware_map.py`: regenerate `FrontEnd/tests/MednafenHandlerCases.txt`
   and the hardware register audit.
-* The latest round of each area (`a2_round14/`, `a3_round14/`, `a8_round2/`, `a9_round1/`), which the next round starts from.
+* The latest round of each area (`a2_round17/`, `a3_round14/`, `a8_round2/`, `a9_round1/`), which the next round starts from.
+  `a2_round17/`: `dagen17.py` (families 100 to 111: narrow compares, hardware-register addresses as numbers, and the mixed-width memory families, on top of
+  `a2_round16/dagen16.py`), `fam17.sh` (the printed-C differential per family; `BE=1` reads the memory families on a big-endian arena), `oldnew17.sh` and `oldnewmem17.sh`
+  (the same words through two engines, `diff17.py` counts the texts that differ), `mkrc17.sh` and `relink17.sh` and `famrc17.sh` (the in-situ rule checks on the tree with patch
+  0075), `cls17.py` (a log's verdicts with their texts), `fix17.py`, `genranges17.sh`.
   `a9_round1/`: `run_pieces.sh` (a long run of `SaturnExplorerLoaderFuzzTests` in pieces of at most 20 minutes) and
   `wasm32_yss_wrap.sh` with `yss_wrap32.cpp` (the 32-bit repro of A9-7; needs an emsdk and node).
 * What those still call: the `dagen` generator chain (`a2_round10/dagen10.py`, `gen_range.sh`,

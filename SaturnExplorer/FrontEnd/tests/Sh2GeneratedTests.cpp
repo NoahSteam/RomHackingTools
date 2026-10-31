@@ -7575,10 +7575,36 @@ std::string ShortCircuitOps(const std::string& text)
     return out + ShortCircuitStatement(chunk);
 }
 
-std::string CxxHeader()
+// A2-110 (the A2-106 limit): SE_GENERATED_PRINTEDC_BE=1 reads a memory-mode text on a big-endian arena, as the machine has it. Every value of the engine's
+// reading is stored most significant byte first (BEInt), so accesses of different widths to the same bytes (a word stored and a byte read back, a half-word
+// over a byte pair) see what the machine's do; a class converts to a pointer (`(uint4 *)(param_1 + 8)`), and a pointer to a class. Only the engine's reading
+// has it (a C text cannot be read big-endian on this host), and it is the verdict itself: no second reading follows.
+static bool gBeRead = std::getenv("SE_GENERATED_PRINTEDC_BE") != nullptr;   // (the pin A2-110 sets it for one call)
+static std::string BeHeaderBase()
+{
+    std::string h = kCxxHeaderBase;
+    const std::string structT = "template <int N, bool S> struct T {\n  typedef typename Rep<N>::type R;\n  R v;\n";
+    const size_t at = h.find(structT);
+    if (at == std::string::npos) return h;
+    h.replace(at, structT.size(),
+              "template <class R> struct BEInt {\n"
+              "  uint8_t b[sizeof(R)];\n"
+              "  BEInt() {}\n"
+              "  BEInt(R x) { *this = x; }\n"
+              "  BEInt& operator=(R x) { for (unsigned i = 0; i < sizeof(R); ++i) b[i] = (uint8_t)((u64)x >> (8 * (sizeof(R) - 1 - i))); return *this; }\n"
+              "  operator R() const { u64 x = 0; for (unsigned i = 0; i < sizeof(R); ++i) x = (x << 8) | b[i]; return (R)x; }\n"
+              "};\n"
+              "template <int N, bool S> struct T {\n  typedef typename Rep<N>::type R;\n  BEInt<R> v;\n"
+              "  template <class P> explicit operator P*() const { return (P*)(uintptr_t)(u64)(Zext() & 0xFFFFFFFFull); }\n"
+              "  operator long long() const { return (long long)Ext(); }   /* an index: `pxVar3[param_3 & 0x3f]` */\n"
+              "  template <class P> explicit T(P* p) : v((R)((u64)(uintptr_t)p & Mask())) {}\n");
+    return h;
+}
+
+std::string CxxHeader(bool be = false)
 {
     std::ostringstream o;
-    o << kCxxHeaderBase;
+    o << (be ? BeHeaderBase() : std::string(kCxxHeaderBase));
     auto mask = [](int bytes) -> std::string {
         char b[32];
         std::snprintf(b, sizeof b, "0x%sULL", std::string(static_cast<size_t>(bytes) * 2, 'F').c_str());
@@ -7948,7 +7974,7 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
         // is not run (the host's pointers are 64-bit and its memory is not the machine's). But for its own frame (A3-65): a function whose code
         // reaches memory through a register other than r15 (a copy of it walked over the locals) has its stack locals mapped onto memory
         // (frame mode, below), and a dereference in it is of a frame address: it is run.
-        const uint32_t ptrW = c.ptrWidth == 1 || c.ptrWidth == 2 || c.ptrWidth == 4 ? c.ptrWidth : 4u;
+        const uint32_t ptrW = gBeRead ? 4u : (c.ptrWidth == 1 || c.ptrWidth == 2 || c.ptrWidth == 4 ? c.ptrWidth : 4u);   // (A2-110: the big-endian reading fills and sums 4-byte units whatever the widths of the accesses)
         const bool ptrMode = c.ptrWidth != 0;
         const bool frameMode = UsesFrameMemory(c.words) || ptrMode;
         static const std::regex memoryRe("\\*[A-Za-z_(]");
@@ -8228,6 +8254,23 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
         }
         pr.cText = frameDefines + rebuilt + frameUndefs;
         if (gPrintedCTextHook) pr.cText = gPrintedCTextHook(pr.cText);
+        // A2-112 (instrument, off by default): a number that is the address of a hardware register is printed `&SMPC_SF` when the data flow uses it as an address (patch 0073),
+        // and the symbol is no C. SE_GENERATED_PRINTEDC_HWSYM=1 gives each `&NAME` the literal of the function that FindHardwareRegister names so (as a `uint4 *`), so the
+        // arithmetic around it is run by value like any other text (the pointer is cast to int4 in the texts that have it, which is how the engine prints a sum of it).
+        if (std::getenv("SE_GENERATED_PRINTEDC_HWSYM") != nullptr && pr.cText.find('&') != std::string::npos)
+            for (size_t wi = 0; wi + 1 < c.words.size(); ++wi)
+            {
+                const uint32_t lit = (static_cast<uint32_t>(c.words[wi]) << 16) | c.words[wi + 1];
+                if (const sfe::decomp::HardwareRegister* reg = sfe::decomp::FindHardwareRegister(lit))
+                {
+                    const std::string sym = std::string("&") + reg->name;
+                    char rep[64];
+                    std::snprintf(rep, sizeof rep, "((uint4 *)(uintptr_t)0x%08Xu)", lit);
+                    for (size_t at = pr.cText.find(sym); at != std::string::npos; at = pr.cText.find(sym, at + 1))
+                        if (at + sym.size() >= pr.cText.size() || !(std::isalnum(static_cast<unsigned char>(pr.cText[at + sym.size()])) || pr.cText[at + sym.size()] == '_'))
+                            pr.cText.replace(at, sym.size(), rep);
+                }
+            }
         pr.frame = frameMode;
         // The signature: the return type and how many parameters.
         const size_t at = pr.cText.find(pr.name + "(");
@@ -8422,7 +8465,8 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
             pr.name + "; }\n";
         m << "      g_wsr = g_in[8]; g_wgbr = g_in[11]; g_wvbr = g_in[12];\n";
         if (frameMode) m << "      memset((void *)(uintptr_t)g_frame_base, 0, 0x10000);\n";
-        if (ptrMode) m << "      { " << ptrU << " *ar = (" << ptrU << " *)(uintptr_t)(g_frame_base + 0x8000); for (unsigned a = 0; a < 0x4000 / " << ptrW << "; ++a) ar[a] = (" << ptrU << ")PTRPAT(k, a); }\n";
+        if (ptrMode && gBeRead) m << "      { uint8_t *ar = (uint8_t *)(uintptr_t)(g_frame_base + 0x8000); for (unsigned a = 0; a < 0x1000; ++a) { unsigned p = (unsigned)PTRPAT(k, a); ar[4 * a] = (uint8_t)(p >> 24); ar[4 * a + 1] = (uint8_t)(p >> 16); ar[4 * a + 2] = (uint8_t)(p >> 8); ar[4 * a + 3] = (uint8_t)p; } }\n";
+        else if (ptrMode) m << "      { " << ptrU << " *ar = (" << ptrU << " *)(uintptr_t)(g_frame_base + 0x8000); for (unsigned a = 0; a < 0x4000 / " << ptrW << "; ++a) ar[a] = (" << ptrU << ")PTRPAT(k, a); }\n";
         if (v.voidReturn) m << "      " << call.str() << ";\n" << ctl;
         else
         {
@@ -8441,7 +8485,11 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
                  "got, rsz == 8 ? (unsigned int)g64 : 0u); ++bad_" << pr.name << "; }\n";
             m << ctl;
         }
-        if (ptrMode)
+        if (ptrMode && gBeRead)
+            m << "      { uint8_t *ar = (uint8_t *)(uintptr_t)(g_frame_base + 0x8000); unsigned cs = 2166136261u; for (unsigned a = 0; a < 0x1000; ++a)\n"
+                 "          cs = (cs * 16777619u) ^ (((unsigned)ar[4 * a] << 24) | ((unsigned)ar[4 * a + 1] << 16) | ((unsigned)ar[4 * a + 2] << 8) | (unsigned)ar[4 * a + 3]);\n        if (cs != MC[k]) { printf(\"MISMATCH " << pr.name
+              << " memory r4=%08X r5=%08X r6=%08X r7=%08X after the call\\n\", g_in[4], g_in[5], g_in[6], g_in[7]); ++bad_" << pr.name << "; } }\n";
+        else if (ptrMode)
             m << "      { " << ptrU << " *ar = (" << ptrU << " *)(uintptr_t)(g_frame_base + 0x8000); unsigned cs = 2166136261u; for (unsigned a = 0; a < 0x4000 / " << ptrW
               << "; ++a) cs = (cs * 16777619u) ^ ar[a];\n        if (cs != MC[k]) { printf(\"MISMATCH " << pr.name
               << " memory r4=%08X r5=%08X r6=%08X r7=%08X after the call\\n\", g_in[4], g_in[5], g_in[6], g_in[7]); ++bad_" << pr.name << "; } }\n";
@@ -8509,7 +8557,7 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
     const std::string cxx = FindCxxCompiler(cc);
     auto compileRun = [&](const std::vector<size_t>& which, const std::string& tag, std::string& log, bool& compiled, bool engine = false) -> std::string {
         std::ostringstream src;
-        src << RunGuardSource() << (engine ? CxxHeader() : CHeader());   // the guard's system headers first: the headers below define names (byte, word, uint, bool) they use
+        src << RunGuardSource() << (engine ? CxxHeader(gBeRead) : CHeader());   // the guard's system headers first: the headers below define names (byte, word, uint, bool) they use
         for (size_t i : which) src << "static int bad_" << prep[i].name << ";\n" << (engine ? AddressAssignTyped(ShortCircuitOps(NegativeWideLiteralsTyped(UnsignedLiteralsTyped(prep[i].cText)))) : prep[i].cText) << "\n";
         src << "int main(void) {\n  RunGuard();\n  FrameInit();\n";
         for (size_t i : which) src << prep[i].mainText;
@@ -8572,14 +8620,14 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
     };
     std::string log;
     bool compiled = false;
-    const std::string run = compileRun(all, "all", log, compiled);
+    const std::string run = compileRun(all, "all", log, compiled, gBeRead);   // (A2-110: gBeRead is the engine's reading on a big-endian arena)
     if (compiled) apply(run);
     else
         for (size_t i : all)   // one at a time: which text is not C, which one dies
         {
             std::string one;
             bool ok = false;
-            const std::string r = compileRun({ i }, prep[i].name, one, ok);
+            const std::string r = compileRun({ i }, prep[i].name, one, ok, gBeRead);
             if (ok) apply(r);
             else
             {
@@ -8601,7 +8649,7 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
     {
         std::vector<size_t> cand;
         for (size_t i : all)
-            if (out[i].cls == "mismatch" && !out[i].upperBits) cand.push_back(i);
+            if (out[i].cls == "mismatch" && !out[i].upperBits && !gBeRead) cand.push_back(i);
         if (!cand.empty() && cxx.empty())
         {
             for (size_t i : cand) out[i].detail += " [no C++ compiler for the engine's reading: set SE_CXX_COMPILER]";
@@ -10654,6 +10702,25 @@ void TestPrintedC()
                 const std::vector<CVerdict> m108 = CheckPrintedC(d, { mem("A2-108: a pointer parameter without the mode", 0, { 0x2462, 0x6052, 0x000B, 0x0009 }) }, nIn, cc, 0x51ED, 8994);
                 std::printf("pin 'A2-108': %s\n", m108[0].cls.c_str());
                 CHECK(m108[0].cls == "skipped:memory");
+                // A2-110 (the A2-106 limit): accesses of different widths to the same bytes. On this host's byte order the load sees the other end of the word, so each is a
+                // mismatch; read on a big-endian arena (gBeRead) each agrees with the machine. (a) a word stored, its first byte loaded; (b) a half-word stored, the word loaded;
+                // (c) a byte stored, the word loaded; (d) a pre-decrement chain that changes width (a word, a half-word and a byte stored below r4) read back by a post-increment chain of a byte, a half-word and a word.
+                {
+                    const std::vector<CCase> mixed = { mem("A2-110 (a): mov.l store, mov.b load", 4, { 0x2462, 0x6040, 0x000B, 0x0009 }),
+                                                       mem("A2-110 (b): mov.w store, mov.l load", 4, { 0x2461, 0x6042, 0x000B, 0x0009 }),
+                                                       mem("A2-110 (c): mov.b store, mov.l load", 4, { 0x2460, 0x6042, 0x000B, 0x0009 }),
+                                                       mem("A2-110 (d): pre-decrement chain of three widths", 4, { 0x2466, 0x2475, 0x2474, 0x6144, 0x6245, 0x6346, 0x312C, 0x313C, 0x6013, 0x000B, 0x0009 }) };
+                    const std::vector<CVerdict> le = CheckPrintedC(d, mixed, nIn, cc, 0x51ED, 8995);
+                    gBeRead = true;
+                    const std::vector<CVerdict> be = CheckPrintedC(d, mixed, nIn, cc, 0x51ED, 8996);
+                    gBeRead = false;
+                    for (size_t i = 0; i < mixed.size(); ++i)
+                    {
+                        std::printf("pin 'A2-110 (%c)': host order %s, big-endian arena %s\n", static_cast<char>('a' + i), le[i].cls.empty() ? "agrees" : le[i].cls.c_str(), be[i].cls.empty() ? "agrees" : be[i].cls.c_str());
+                        CHECK(be[i].cls.empty() && be[i].compared);
+                    }
+                    CHECK(le[0].cls == "mismatch" && le[1].cls == "mismatch" && le[2].cls == "mismatch");   // (the limit this mode removes)
+                }
             }
         }
     }
