@@ -2027,6 +2027,18 @@ int OomCell(long k)
     const bool failed = s && s->status == DecompileStatus::Failed;
     const bool answered = s && s->status == DecompileStatus::Ok;
     if (err.empty() && fired && !failed && !answered) err = "oom: status " + std::to_string(s ? static_cast<int>(s->status) : -1) + " after a failed allocation\n";
+    // Decompile on the same function after the failed answer asks again (A8-18: it asked nothing, and the red line stayed with no sign that the
+    // request had been taken): the panel submits, and the engine's reply is held to the model.
+    if (err.empty() && failed)
+    {
+        const uint64_t sub = m.panel.Submissions();
+        m.panel.ShowFunctionContaining(0, cEntry + 4);
+        m.Idle(4);
+        if (!m.Settle()) return 4;
+        s = m.panel.Shown();
+        if (m.panel.Submissions() == sub) err = "oom: Decompile on the function after a failed answer asked nothing\n";
+        else err = Verify(m.panel, t, [&](ImVec2 p) { m.Frame(p, false); }, true);
+    }
     // Refresh once more: an engine damaged by the failure refuses, and the panel says so, or the answer is right.
     std::string err2;
     if (err.empty() && ClickMini(m, "refresh"))
@@ -2667,7 +2679,6 @@ const Pin kPins[] = {
     { "a Stop is forgotten when the question has found no function", "select A; hold; edit A 0 1; stop; wait; t-badentry zz; wait; t-containbad", "C,A" },
     // A8-18: Decompile on the function already asked asks again, as Enter does: the Stop is over and the output is replaced.
     { "Decompile after a Stop on the very question asks it again (A8-18)", "bound A 0; select A; hold; edit A 0 1; stop; wait; t-contain 1", "C,A" },
-    { "Decompile after a failed answer asks it again (A8-18)", "bound A 0; select A; t-inject failed; t-contain 1; edit A 0 1; refresh", "C,A" },
     { "Decompile twice after a Stop, the second while the first runs", "bound A 0; select A; hold; edit A 0 1; stop; wait; t-contain 1; t-contain 1; edit A 0 2; t-contain 1", "C,A" },
 };
 
