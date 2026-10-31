@@ -1,5 +1,5 @@
 #!/bin/bash
-# usage: D=<driver dir (drv, mk.py, escfuzz14.py, hbfuzz14.py, escsum14.py, hbsum14.py)> OUTD=<result dir> fuzzrun.sh esc|hb <first seed> <last seed> <count per seed> [drv name]
+# usage: D=<driver dir (drv, mk.py and the four files of this directory)> OUTD=<result dir> fuzzrun.sh esc|hb <first seed> <last seed> <count per seed> [drv name]
 # Each seed is one piece (a .sum file); a seed with a .sum is skipped, so a restart resumes. Every run under ulimit -v 4000000 and a timeout.
 kind=$1; a=$2; b=$3; n=$4; drv=${5:-drv}
 mkdir -p $OUTD

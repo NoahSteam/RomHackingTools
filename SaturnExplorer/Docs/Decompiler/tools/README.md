@@ -14,6 +14,13 @@ Kept here:
   interleave generator, the width runs and the allocation-failure sweep.
   `a9_round1/`: `run_pieces.sh` (a long run of `SaturnExplorerLoaderFuzzTests` in pieces of at most 20 minutes) and
   `wasm32_yss_wrap.sh` with `yss_wrap32.cpp` (the 32-bit repro of A9-7; needs an emsdk and node).
+* `a3_round16/` (area 3 round 16): `frame16.py SEED COUNT` (twelve frame-attack modes: 4 to 6 slot chains, pointers through globals, mixed widths at odd offsets,
+  save-slot targets, pushes interleaved with frame stores, r14 frames, loop-carried and indexed stores, spills, callee-output pointers, multi-reader words;
+  knobs `F16_MODE`, `F16_LEVELS`, `F16_NST`, `F16_CALL`, `F16_NOCALL`, `F16_PC`), the driver (`drvmain16.inc` built by `bdrv16.sh`: round 15's, which also prints
+  the registers at the return so `f16sum.py` checks the lent `preserved` mask and `spDelta` against the run), `f16run.sh`/`f16sum.py` (driver, ledger, oracle),
+  `f16pc.py`/`shrink16.py` (printed-C differential on call-free fixtures, delta debugging), `cmp16.sh` (the same fixtures on two builds), the hand generators
+  (`mkloop.py`, `mkloop2.py`, `mkidx.py`, `mkidx2.py`, `mkidx3.py`, `mkbyte.py`, `mkgcall.py`, `mksv.py`, `mksv2.py`, `mkstep.py`, `mkbr.py`), `uninit16.py` (corpus text scan),
+  `matrix16.sh`/`hidden16.sh`/`gen_range.sh` (the generator ranges), `fuzzrun16.sh` (round 14's `escfuzz14.py`/`hbfuzz14.py` runner), `mkrows16.py` (the ledger rows).
 * What those still call: the `dagen` generator chain (`a2_round10/dagen10.py`, `gen_range.sh`,
   `a2_round11/dagen11.py`, `dagen11b.py`, `a2_round12/dagen12.py`, `a2_round13/dagen13.py`) and
   `a3_round13/textdiff.py`.

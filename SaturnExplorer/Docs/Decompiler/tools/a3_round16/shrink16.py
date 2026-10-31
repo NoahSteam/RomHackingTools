@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """shrink16.py GENBIN SRC NAME [kind] : delta-debug a call-free frame16 fixture of SRC by dropping statement groups (a group starts at an address
-computation `mov r15,rN` / `mov.l @(d,r15),r1` / `mov #n,r2` / `mov rN,r0`) while the printed-C differential still reports `kind` (default mismatch).
+computation `mov r15,rN` / `mov.l @(d,r15),r1` / `mov #n,r2` / `mov rN,r0`) while the printed-C differential still reports `kind` (default mismatch), or, with kind LEDGERBAD and env DRV=<the fixture driver>, while the frame ledger still says BAD.
 Prints the reduced assembly. The head (up to the end of the chain set-up: the first `mov #0,r0`-free prefix of stores to slots) and the tail (from
 `mov #0,r0`) are kept."""
 import sys, subprocess, os, re, tempfile, shutil
@@ -31,7 +31,17 @@ if not starts: starts = [0]
 if starts[0] != 0: head = head + rest[:starts[0]]
 for a, b2 in zip(starts, starts[1:] + [len(rest)]): groups.append(rest[a:b2])
 def lines_of(gs): return head + [l for g in groups[:keep] for l in g] + [l for g in gs for l in g] + epi
+def test_driver(gs):
+    # kind LEDGERBAD: the fixture driver (env DRV=<drv>) must still print `LEDGER BAD`
+    try: w = ' '.join('%04X' % x for x in asm.assemble(lines_of(gs)))
+    except Exception: return False
+    spec = WORK + '.spec'
+    open(spec, 'w').write('name S16\ncode 06009000 %s\nargs 11223344 55 6677 80000001\nend\n' % w)
+    p = subprocess.run(['bash', '-c', 'ulimit -v 3500000; exec timeout 60 %s %s.scr %s' % (os.environ['DRV'], WORK, spec)], capture_output=True, text=True)
+    shutil.rmtree(WORK + '.scr', ignore_errors=True)
+    return 'LEDGER BAD' in p.stdout
 def test(gs):
+    if kind == 'LEDGERBAD': return test_driver(gs)
     try: w = ' '.join('%04X' % x for x in asm.assemble(lines_of(gs)))
     except Exception: return False
     env = dict(os.environ, SE_GENERATED_PRINTEDC='only', SE_GENERATED_PRINTEDC_WORDS=w)
