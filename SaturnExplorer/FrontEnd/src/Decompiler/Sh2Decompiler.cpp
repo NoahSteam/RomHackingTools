@@ -3218,6 +3218,18 @@ bool InspectionBinding(const ghidra::Varnode* vn, const ghidra::PcodeOp* op,
     return true;
 }
 
+// The SH-2 instruction a p-code op was made from. The translator gives a delayed branch and the instruction in its delay slot one
+// address, the branch's, so the op of a line the slot made carried the branch (A7-10). The engine marks the ops the slot built, and the
+// ops made for them (patch 0075, PcodeOp::isFromDelaySlot); the slot is the word after the branch.
+uint32_t InstructionOf(const ghidra::PcodeOp* op)
+{
+    return static_cast<uint32_t>(op->getAddr().getOffset()) + (op->isFromDelaySlot() ? 2u : 0u);
+}
+uint32_t InstructionOf(const ghidra::AccessRecord& rec)
+{
+    return static_cast<uint32_t>(rec.pc.getOffset()) + (rec.slot ? 2u : 0u);
+}
+
 // Turns the emitter's markup into lines of tokens. Each token's opref names the p-code op it
 // was printed from; that op's address is the SH-2 instruction it came from. The markup is read
 // in Ghidra's packed encoding, not XML: its XML parser drops whitespace-only text, which is every
@@ -3289,7 +3301,7 @@ std::vector<Line> LinesFromMarkup(const std::string& packed, const ghidra::Funcd
             {
                 // The instruction's canonical address: the function may be analysed at a mirror,
                 // but navigation and notes are keyed by the canonical one.
-                t.addr = static_cast<uint32_t>(op->getAddr().getOffset());
+                t.addr = InstructionOf(op);
                 uint32_t canonical = 0;
                 if (CanonicalAddress(t.addr, canonical)) t.addr = canonical;
                 if (t.kind == TokenKind::FuncName)
@@ -3363,7 +3375,7 @@ std::vector<Line> LinesFromMarkup(const std::string& packed, const ghidra::Funcd
                 v = use->getOut();
             }
             if (!where) continue;
-            uint32_t insn = static_cast<uint32_t>(o->getAddr().getOffset()), canonical = 0;
+            uint32_t insn = InstructionOf(o), canonical = 0;
             if (CanonicalAddress(insn, canonical)) insn = canonical;
             for (size_t at : *where)
             {
@@ -4242,7 +4254,7 @@ std::vector<HardwareNote> HardwareNotes(const ghidra::Funcdata& fd, const std::f
                 if (isRegister(c.first)) registers.push_back(Candidate{ c.first, false, c.second });
             for (uint32_t c : pv.bases)
                 if (isRegister(c) && !pv.constants.count(c)) registers.push_back(Candidate{ c, true, false });
-            const uint32_t insn = canonicalOf(static_cast<uint32_t>(o->getAddr().getOffset()));
+            const uint32_t insn = canonicalOf(InstructionOf(o));
             const bool certain = pv.constants.size() == 1 && pv.bases.empty() && !pv.others;
             // A byte store through a pointer that holds a colour RAM address stores the whole entry as a store at a constant address does
             // (A5-50): said under the address the pointer holds, as the register notes are (A5-67). Every colour RAM address says the same
@@ -4335,7 +4347,7 @@ std::vector<HardwareNote> HardwareNotes(const ghidra::Funcdata& fd, const std::f
         if (!read && !write) continue;
         const ghidra::Varnode* value = read ? o->getOut() : (o->numInput() > 2 ? o->getIn(2) : nullptr);
         if (!value) continue;
-        account(canonicalOf(static_cast<uint32_t>(o->getAddr().getOffset())), static_cast<uint32_t>(o->getIn(1)->getOffset()),
+        account(canonicalOf(InstructionOf(o)), static_cast<uint32_t>(o->getIn(1)->getOffset()),
                 static_cast<uint32_t>(value->getSize()), write, value, std::string(), true);
     }
     // A store to the BIOS ROM (0x00000000-0x000FFFFF through either bus partition), or to the cartridge areas, that the engine folded into ordinary memory: the
@@ -4356,13 +4368,13 @@ std::vector<HardwareNote> HardwareNotes(const ghidra::Funcdata& fd, const std::f
             // write, so a word write stores nothing); the extended RAM cartridge answers 0x02400000 and up. A cartridge probe -- store a pattern, read it
             // back, compare -- is folded to a match, and the absent-cartridge branch goes.
             if (bus < 0x02000000u || bus > 0x04FFFFFFu) continue;
-            noteRaw(canonicalOf(static_cast<uint32_t>(rec.pc.getOffset())),
+            noteRaw(canonicalOf(InstructionOf(rec)),
                     "a write to the cartridge area at " + Hex8(a) + " may be dropped (no cartridge, a ROM cartridge, a backup RAM cartridge for a word or "
                     "an even byte): a later read of it in this function is shown as the value written, which the cartridge may not hold",
                     true);
             continue;
         }
-        noteRaw(canonicalOf(static_cast<uint32_t>(rec.pc.getOffset())),
+        noteRaw(canonicalOf(InstructionOf(rec)),
                 "a write to the BIOS ROM at " + Hex8(a) + " does nothing (the ROM takes no write), but the decompiler treats the address as ordinary "
                 "memory: a later read of it in this function is shown as the value written, which the ROM does not hold",
                 true);
@@ -4392,6 +4404,10 @@ struct FlowRecord
     std::map<std::pair<uint32_t, bool>, std::vector<std::pair<int, uint32_t>>> accessesByInsn;
     std::vector<std::vector<int>> successors;
     int entryBlock = 0;
+    // A7-11: the flow's loads and calls by instruction (the first one's time), and the instructions that store. The instructions are as
+    // the engine has them (InstructionOf, not canonical).
+    std::map<uint32_t, ghidra::uintm> loadCallTime;
+    std::set<uint32_t> storeInsns;
 };
 
 FlowRecord RecordFlow(const ghidra::Funcdata& fd, const std::function<uint32_t(uint32_t)>& canonicalOf)
@@ -4419,8 +4435,14 @@ FlowRecord RecordFlow(const ghidra::Funcdata& fd, const std::function<uint32_t(u
             const ghidra::OpCode c = o->code();
             if (c != ghidra::CPUI_LOAD && c != ghidra::CPUI_STORE && c != ghidra::CPUI_CALL && c != ghidra::CPUI_CALLIND) continue;
             f.ops[o->getTime()] = std::make_pair(i, pos);
+            if (c == ghidra::CPUI_STORE) f.storeInsns.insert(InstructionOf(o));
+            else
+            {
+                auto first = f.loadCallTime.emplace(InstructionOf(o), o->getTime());
+                if (!first.second && o->getTime() < first.first->second) first.first->second = o->getTime();
+            }
             if (c == ghidra::CPUI_LOAD || c == ghidra::CPUI_STORE)
-                f.accessesByInsn[std::make_pair(canonicalOf(static_cast<uint32_t>(o->getAddr().getOffset())), c == ghidra::CPUI_STORE)]
+                f.accessesByInsn[std::make_pair(canonicalOf(InstructionOf(o)), c == ghidra::CPUI_STORE)]
                     .emplace_back(i, pos);
         }
     }
@@ -4435,7 +4457,7 @@ std::vector<CallSite> Calls(const ghidra::Funcdata& fd, const FlowRecord& flow, 
         const ghidra::PcodeOp* o = *it;
         if (o->code() != ghidra::CPUI_CALL && o->code() != ghidra::CPUI_CALLIND) continue;
         CallSite c;
-        c.insn = canonicalOf(static_cast<uint32_t>(o->getAddr().getOffset()));
+        c.insn = canonicalOf(InstructionOf(o));
         if (o->getParent()) c.block = o->getParent()->getIndex();
         c.order = static_cast<uint32_t>(o->getSeqNum().getOrder());
         c.id = static_cast<uint32_t>(o->getTime()) + 1;
@@ -4546,7 +4568,7 @@ std::vector<MemoryAccess> Accesses(const ghidra::Funcdata& fd,
             continue;
         if (!value) continue;
         a.size = static_cast<uint8_t>(value->getSize());
-        a.insn = canonicalOf(static_cast<uint32_t>(o->getAddr().getOffset()));
+        a.insn = canonicalOf(InstructionOf(o));
         a.inLoop = o->getParent() && inLoop(o->getParent());
         a.returned = !a.write && returnedVns.count(value) != 0;
         auto p = printed.find(o);
@@ -4639,7 +4661,7 @@ std::vector<MemoryAccess> Accesses(const ghidra::Funcdata& fd,
     std::map<std::pair<uint32_t, bool>, int> made;
     for (const auto& k : flow.accessesByInsn) made[k.first] = static_cast<int>(k.second.size());
     for (const ghidra::AccessRecord& rec : fd.getAccessFates())
-        --made[std::make_pair(canonicalOf(static_cast<uint32_t>(rec.pc.getOffset())), rec.store)];
+        --made[std::make_pair(canonicalOf(InstructionOf(rec)), rec.store)];
     for (size_t j = 0; j < out.size(); ++j)
     {
         if (!outOps[j]->getParent()) continue;
@@ -4654,6 +4676,91 @@ std::vector<MemoryAccess> Accesses(const ghidra::Funcdata& fd,
         for (size_t i : before) out[i].repeatedOnPath = true;
     }
     return out;
+}
+
+// A7-11: a frame local printed as assigned at an instruction that does not write it. Two shapes, both made by the engine's frame handling
+// (a call's effect on a local, a piece of one read back): the statement is a new op at the address of a call or of a load, and the store
+// that wrote the value, folded into the local, is on no line. The engine's records of the folds (patch 0017: a FoldedOrdinary write into
+// the stack space, with its frame offset) say which store that was. Each line that prints such a statement gets an empty token (as A7-3's)
+// carrying the instruction of the last store of each byte of the local the flow made before the call or load, so the line lists it, a
+// click can reach it and the user's notes find it. The call or load keeps its own token. Returns how many tokens it added.
+int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& printed, const ghidra::Funcdata& fd, const FlowRecord& flow,
+                        const std::function<uint32_t(uint32_t)>& canonicalOf)
+{
+    std::vector<const ghidra::AccessRecord*> stores;
+    for (const ghidra::AccessRecord& rec : fd.getAccessFates())
+        if (rec.fate == ghidra::fate_folded_ordinary && rec.store && !rec.addr.isInvalid() && rec.addr.getSpace()->getType() == ghidra::IPTR_SPACEBASE)
+            stores.push_back(&rec);
+    if (stores.empty()) return 0;
+    int added = 0;
+    for (const auto& kv : printed)
+    {
+        const ghidra::PcodeOp* o = kv.first;
+        const ghidra::Varnode* out = o->getOut();
+        if (!out || out->getSize() > 16 || o->isCall() || o->code() == ghidra::CPUI_LOAD || o->code() == ghidra::CPUI_CALLOTHER) continue;
+        // The frame storage the statement assigns: the output itself when it is in the stack space (a piece of a local), else the stack local the
+        // output's variable is mapped to (the call's copy is a temporary the engine names after the local).
+        ghidra::AddrSpace* frame = nullptr;
+        ghidra::uintb base = 0;
+        if (out->getSpace()->getType() == ghidra::IPTR_SPACEBASE)
+        {
+            frame = out->getSpace();
+            base = out->getOffset();
+        }
+        else if (const ghidra::HighVariable* high = out->getHigh())
+        {
+            const ghidra::Symbol* sym = high->getSymbol();
+            const ghidra::SymbolEntry* entry = sym ? sym->getFirstWholeMap() : nullptr;
+            const ghidra::MapEntry* map = entry && entry->isMapEntry() ? static_cast<const ghidra::MapEntry*>(entry) : nullptr;
+            if (map && map->getAddr().getSpace()->getType() == ghidra::IPTR_SPACEBASE)
+            {
+                frame = map->getAddr().getSpace();
+                const ghidra::int4 piece = high->getSymbolOffset();
+                base = (map->getAddr().getOffset() + (piece > 0 ? static_cast<ghidra::uintb>(piece) : 0)) & frame->getHighest();
+            }
+        }
+        if (!frame) continue;
+        const uint32_t at = InstructionOf(o);
+        const auto when = flow.loadCallTime.find(at);
+        if (when == flow.loadCallTime.end() || flow.storeInsns.count(at)) continue;   // a store's own statement names the store
+        // for each byte of the local: the latest store before this instruction (in the order the flow translated), else the latest at all
+        std::set<const ghidra::AccessRecord*> chosen;
+        for (ghidra::int4 b = 0; b < out->getSize(); ++b)
+        {
+            const ghidra::uintb byte = (base + static_cast<ghidra::uintb>(b)) & frame->getHighest();
+            const ghidra::AccessRecord* before = nullptr;
+            const ghidra::AccessRecord* any = nullptr;
+            for (const ghidra::AccessRecord* r : stores)
+            {
+                if (r->addr.getSpace() != frame) continue;
+                if (((byte - r->addr.getOffset()) & frame->getHighest()) >= static_cast<ghidra::uintb>(r->size)) continue;
+                if (!any || r->time > any->time) any = r;
+                if (r->time < when->second && (!before || r->time > before->time)) before = r;
+            }
+            if (before || any) chosen.insert(before ? before : any);
+        }
+        for (const ghidra::AccessRecord* r : chosen)
+        {
+            uint32_t insn = InstructionOf(*r), canonical = 0;
+            if (CanonicalAddress(insn, canonical)) insn = canonical;
+            for (size_t line : kv.second.first)
+            {
+                if (line >= lines.size()) continue;
+                Line& l = lines[line];
+                bool carried = false;
+                for (const Token& t : l.tokens) carried = carried || t.addr == insn;
+                if (carried) continue;
+                Token t;
+                t.begin = t.end = static_cast<uint16_t>(std::min<size_t>(l.text.size(), 0xFFFF));
+                t.kind = TokenKind::Plain;
+                t.addr = insn;
+                l.tokens.push_back(t);
+                if (l.firstAddr == 0 || insn < l.firstAddr) l.firstAddr = insn;
+                ++added;
+            }
+        }
+    }
+    return added;
 }
 
 }  // namespace
@@ -4681,26 +4788,112 @@ std::vector<uint32_t> LineInstructions(const Line& line)
 
 std::string LineOriginText(const Line& line)
 {
-    const std::vector<uint32_t> at = LineInstructions(line);
-    if (at.empty()) return std::string();
-    // The click and the menu go to the lowest address (Line::firstAddr), the one named first.
+    // A word flow halted at is no instruction (A7-12): bytes that do not decode, where the function's own warning says flow stopped.
+    std::set<uint32_t> halts;
+    for (const Token& t : line.tokens)
+        if (t.addr && t.haltsFlow) halts.insert(t.addr);
+    std::vector<uint32_t> at;
+    for (uint32_t a : LineInstructions(line))
+        if (!halts.count(a)) at.push_back(a);
+    if (at.empty() && halts.empty()) return std::string();
     std::string s;
     if (at.size() == 1)
     {
-        s = "Decompiled from the SH-2 instruction at " + Hex8(at[0]) + " (an address in the program, not a value in this line).\n"
+        // The click and the menu go to the lowest address (Line::firstAddr), the one named first.
+        s = "Decompiled from the SH-2 instruction at " + Hex8(at[0]) + " (an address in the program, not a value in this line); "
+            "a constant or a move folded into the line may come from others.\n"
             "Click to show it in SH-2 Assembly.";
-        return s;
     }
-    s = "Decompiled from " + std::to_string(at.size()) + " SH-2 instructions (an address is not a value in this line):\n";
-    const size_t kListed = 8;
-    for (size_t i = 0; i < at.size() && i < kListed; ++i)
+    else if (at.size() > 1)
     {
-        if (i) s += ", ";
-        s += Hex8(at[i]);
+        s = "Decompiled from " + std::to_string(at.size()) + " SH-2 instructions (an address is not a value in this line; a constant or a move "
+            "folded into it may come from others):\n";
+        const size_t kListed = 8;
+        for (size_t i = 0; i < at.size() && i < kListed; ++i)
+        {
+            if (i) s += ", ";
+            s += Hex8(at[i]);
+        }
+        if (at.size() > kListed) s += ", and " + std::to_string(at.size() - kListed) + " more";
+        s += "\nClick to show the first, " + Hex8(at[0]) + ", in SH-2 Assembly.";
     }
-    if (at.size() > kListed) s += ", and " + std::to_string(at.size() - kListed) + " more";
-    s += "\nClick to show the first, " + Hex8(at[0]) + ", in SH-2 Assembly.";
+    if (!halts.empty())
+    {
+        std::string list;
+        for (uint32_t a : halts) list += (list.empty() ? "" : ", ") + Hex8(a);
+        if (at.empty())
+            s = "Flow stopped at the bytes at " + list + ": they do not decode as an SH-2 instruction (an address in the program, not a value in this line).\n"
+                "Click to show them in SH-2 Assembly.";
+        else
+            s += "\nFlow also stopped at the bytes at " + list + ", which do not decode as an instruction.";
+    }
     return s;
+}
+
+InstructionLineIndex::InstructionLineIndex(const DecompileResult& r) : mResult(r)
+{
+    for (size_t li = 0; li < r.lines.size(); ++li)
+        for (const Token& t : r.lines[li].tokens)
+            if (t.addr)
+            {
+                std::vector<size_t>& v = mOwners[t.addr];
+                if (v.empty() || v.back() != li) v.push_back(li);
+                if (t.begin < t.end) mDrawn[t.addr].insert(li);
+            }
+}
+
+// In the order to offer them (see LineLookup).
+std::vector<size_t> InstructionLineIndex::Ordered(uint32_t a) const
+{
+    std::vector<size_t> out;
+    const auto o = mOwners.find(a);
+    if (o == mOwners.end()) return out;
+    const auto d = mDrawn.find(a);
+    auto drawn = [&](size_t li) { return d != mDrawn.end() && d->second.count(li) != 0; };
+    for (size_t li : o->second)
+        if (mResult.lines[li].firstAddr == a) out.push_back(li);
+    for (size_t li : o->second)
+        if (mResult.lines[li].firstAddr != a && drawn(li)) out.push_back(li);
+    for (size_t li : o->second)
+        if (mResult.lines[li].firstAddr != a && !drawn(li)) out.push_back(li);
+    return out;
+}
+
+LineLookup InstructionLineIndex::Find(uint32_t insn) const
+{
+    LineLookup out;
+    out.lines = Ordered(insn);
+    if (!out.lines.empty())
+    {
+        out.kind = LineLookup::Exact;
+        return out;
+    }
+    if (!mResult.InBody(insn)) return out;   // Outside
+    out.kind = LineLookup::Folded;
+    for (const auto& range : mResult.body)
+    {
+        if (insn < range.first || insn >= range.second) continue;
+        // the run it is in: the nearest instruction after it with a token, else the nearest before it
+        for (uint32_t p = insn + 2; p < range.second && out.lines.empty(); p += 2)
+            if (mOwners.count(p))
+            {
+                out.lines = Ordered(p);
+                out.via = p;
+            }
+        for (uint32_t p = insn; p > range.first && out.lines.empty(); p -= 2)
+            if (mOwners.count(p - 2))
+            {
+                out.lines = Ordered(p - 2);
+                out.via = p - 2;
+            }
+        break;
+    }
+    return out;
+}
+
+LineLookup LineForInstruction(const DecompileResult& r, uint32_t insn)
+{
+    return InstructionLineIndex(r).Find(insn);
 }
 
 bool DecompileResult::InBody(uint32_t canonical) const
@@ -5840,13 +6033,17 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
             }
         }
         r.accesses = Accesses(*fd, printed, canonicalOf, flow);
+        AddFrameStoreTokens(r.lines, printed, *fd, flow, canonicalOf);
+        for (Line& l : r.lines)   // A7-12: the word flow halted at is no instruction; the line's hover text says so
+            for (Token& t : l.tokens)
+                t.haltsFlow = t.addr != 0 && std::binary_search(r.badDataAt.begin(), r.badDataAt.end(), t.addr);
         // How each flow access that is no longer a LOAD or STORE ended (patch 0017). The engine
         // keeps the records of the last generation of the function (a restart clears them with the
         // ops they describe), so they match the final p-code.
         for (const ghidra::AccessRecord& rec : fd->getAccessFates())
         {
             AccessFate f;
-            f.insn = canonicalOf(static_cast<uint32_t>(rec.pc.getOffset()));
+            f.insn = canonicalOf(InstructionOf(rec));
             f.write = rec.store;
             f.size = static_cast<uint8_t>(rec.size);
             switch (rec.fate)

@@ -3046,6 +3046,11 @@ void App::DrawAssembly()
         mDecompilerPanel.ShowFunctionContaining(mAssemblyPanel.Cpu(), req.decompileAddr);
         mPanels.decompiler = true;
     }
+    if (req.showPseudocode)
+    {
+        mDecompilerPanel.ShowInstruction(mAssemblyPanel.Cpu(), req.pseudoAddr);
+        mPanels.decompiler = true;
+    }
 #endif
 }
 

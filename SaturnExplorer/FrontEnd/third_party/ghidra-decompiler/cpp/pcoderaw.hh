@@ -12,6 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified for SaturnExplorer: a raw op says whether the instruction in a delay slot built it (patches/0075-engine-delay-slot-ops-marked.patch).
  */
 /// \file pcoderaw.hh
 /// \brief Raw descriptions of varnodes and p-code ops
@@ -125,7 +127,10 @@ class PcodeOpRaw {
   SeqNum seq;	                ///< Identifying address and index of this operation
   VarnodeData *out;		///< Output varnode triple
   vector<VarnodeData *> in;	///< Raw varnode inputs to this op
+  bool slot = false;		///< SaturnExplorer (0075): built by the instruction in a delay slot
 public:
+  void setDelaySlot(bool val) { slot = val; }	///< SaturnExplorer (0075): mark an op built by the instruction in a delay slot
+  bool isDelaySlot(void) const { return slot; }	///< SaturnExplorer (0075): was this op built by the instruction in a delay slot
   void setBehavior(OpBehavior *be); ///< Set the opcode for this op
   OpBehavior *getBehavior(void) const; ///< Retrieve the behavior for this op
   OpCode getOpcode(void) const;	///< Get the opcode for this op

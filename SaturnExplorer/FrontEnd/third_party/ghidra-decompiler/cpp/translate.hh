@@ -12,6 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified for SaturnExplorer: an emitter is told which ops a delay slot's instruction built (patches/0075-engine-delay-slot-ops-marked.patch).
  */
 /// \file translate.hh
 /// \brief Classes for disassembly and pcode generation
@@ -93,6 +95,8 @@ public:
 /// instruction to the application using this class.
 class PcodeEmit {
 public:
+  bool fromDelaySlot;		///< SaturnExplorer (0075): the op passed to dump() was built by the instruction in a delay slot
+  PcodeEmit(void) { fromDelaySlot = false; }	///< Constructor
   virtual ~PcodeEmit(void) {}	///< Virtual destructor
 
   /// \brief The main pcode emit method.

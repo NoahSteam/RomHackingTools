@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
+ * Modified for SaturnExplorer: an op built by the instruction in a delay slot is flagged, as are the ops made in its place (patches/0075-engine-delay-slot-ops-marked.patch).
  * Modified for SaturnExplorer: every LOAD and STORE's fate is recorded (patches/0017-access-fates.patch).
  * Modified for SaturnExplorer: the instructions and jump tables the flow recovered are recorded (patches/0021-flow-instructions.patch).
  * Modified for SaturnExplorer: an op that changes keeps the cached masks around it a superset of the truth (patches/0054-engine-cached-masks-never-narrower.patch).
@@ -66,6 +67,7 @@ struct AccessRecord {
   bool store;			///< \b true for a write, \b false for a read
   int4 size;			///< Number of bytes accessed
   AccessFate fate;		///< How it ended
+  bool slot = false;		///< SaturnExplorer (0075): the op was built by the instruction in a delay slot; \b pc is its branch's
 };
 
 /// \brief A call of the flow that heritage guarded a stack local at: it may read it (SaturnExplorer, 0068)
@@ -142,6 +144,8 @@ class Funcdata {
   Address baseaddr;		///< Starting code address of binary data
   FuncProto funcp;		///< Prototype of this function
   ScopeLocal *localmap;		///< Local variables (symbols in the function scope)
+  bool slotSource = false;	///< SaturnExplorer (0075): the op being rewritten was built by a delay slot's instruction
+  Address slotSourceAddr;	///< ...and this is its address: an op made at it for the rewrite is the slot's too
 
   vector<FuncCallSpecs *> qlst;	///< List of calls this function makes
   vector<JumpTable *> jumpvec;	///< List of jump-tables for this function
@@ -537,6 +541,9 @@ public:
   // op routines
   PcodeOp *newOp(int4 inputs,const Address &pc);		/// Allocate a new PcodeOp with Address
   PcodeOp *newOp(int4 inputs,const SeqNum &sq);			/// Allocate a new PcodeOp with sequence number
+  /// SaturnExplorer (0075): the ops made until clearSlotSource() at the address of a delay slot's op are the slot's too
+  void setSlotSource(const PcodeOp *op) { slotSource = op->isFromDelaySlot(); if (slotSource) slotSourceAddr = op->getAddr(); }
+  void clearSlotSource(void) { slotSource = false; }	///< SaturnExplorer (0075): end setSlotSource()
   PcodeOp *newOpBefore(PcodeOp *follow,OpCode opc,Varnode *in1,Varnode *in2,Varnode *in3=(Varnode *)0);
   PcodeOp *cloneOp(const PcodeOp *op,const SeqNum &seq);	/// Clone a PcodeOp into \b this function
   PcodeOp *newIndirect(PcodeOp *target);			///< Allocate a new CPUI_INDIRECT

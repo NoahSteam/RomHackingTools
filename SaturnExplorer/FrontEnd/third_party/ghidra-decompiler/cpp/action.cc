@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
+ * Modified for SaturnExplorer: the ops a rule makes for an op of a delay slot's instruction are the slot's too (patches/0075-engine-delay-slot-ops-marked.patch).
  * Modified for SaturnExplorer: host cancellation check-points (patches/0001-cancel-flag.patch).
  * Modified for SaturnExplorer: a cloned action tree that cannot be completed or registered is freed (patches/0032-allocation-failure-order-2.patch).
  * Modified for SaturnExplorer: a repeating action stops, with a warning, after a bounded number of passes (patches/0055-engine-action-repeats-bounded.patch).
@@ -878,7 +879,9 @@ int4 ActionPool::processOp(PcodeOp *op,Funcdata &data)
     data.debugActivate();
 #endif
     rl->count_tests += 1;
+    data.setSlotSource(op);	// SaturnExplorer (0075)
     res = rl->applyOp(op,data);
+    data.clearSlotSource();
 #ifdef OPACTION_DEBUG
     data.debugModPrint(rl->getName());
 #endif

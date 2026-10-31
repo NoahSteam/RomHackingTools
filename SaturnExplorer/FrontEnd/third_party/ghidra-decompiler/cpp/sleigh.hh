@@ -12,6 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified for SaturnExplorer: the p-code of a delay slot's instruction is marked as it is built (patches/0075-engine-delay-slot-ops-marked.patch).
  */
 /// \file sleigh.hh
 /// \brief Classes and utilities for the main SLEIGH engine
@@ -46,6 +48,7 @@ struct PcodeData {
   VarnodeData *invar;		///< Array of input Varnode data
   OpCode opc;			///< The op code
   int4 isize;			///< Number of input Varnodes
+  bool delaySlot;		///< SaturnExplorer (0075): built by the instruction in a delay slot, not by the delayed branch
 };
 
 /// \brief Class for caching a chunk of p-code, prior to emitting
@@ -89,8 +92,11 @@ public:
     PcodeData *res = &issued.back();
     res->outvar = (VarnodeData *)0;
     res->invar = (VarnodeData *)0;
+    res->delaySlot = false;
     return res;
   }
+  size_t numIssued(void) const { return issued.size(); }	///< SaturnExplorer (0075): the number of ops issued so far
+  void markDelaySlot(size_t first) { for(size_t i=first;i<issued.size();++i) issued[i].delaySlot = true; }	///< SaturnExplorer (0075): the ops issued from the \b first-th on were built by a delay slot
   void addLabelRef(VarnodeData *ptr);	///< Denote a Varnode holding a \e relative \e branch offset
   void addLabel(uint4 id);		///< Attach a label to the \e next p-code instruction
   void clear(void);			///< Reset the cache so that all objects are unallocated

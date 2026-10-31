@@ -13,18 +13,21 @@
 //   2. Marking. A line from several instructions says so in its hover text (LineOriginText), and
 //      lists the addresses; a line from one names it; a line from none has no text and no jump.
 //   3. Round trip. A click goes to firstAddr; the lines an instruction owns (those with a token of
-//      it) hold the line it came from.
+//      it) hold the line it came from. A delay slot's instruction is its own (A7-10, patch 0075): the
+//      line it made carries its address, not its branch's, and so does the ledger's `insn` of an
+//      access it makes (a ledger access at a delayed branch is a violation, `rte`'s own pops apart).
 //   4. Coverage. Every access the ledger lists has a token of its instruction on some line, and
 //      every call in the final p-code has one; a call removed from the p-code is named by a
 //      "Removing unreachable block" warning at or before it. The rest of the body (register
-//      moves and arithmetic folded into the expression that uses them, a delay slot, which the
-//      branch carries) has no token of its own by design (A7-7) and is counted.
+//      moves and arithmetic folded into the expression that uses them) has no token of its own by
+//      design (A7-7) and is counted.
 #pragma once
 
 #include "Debug/Sh2Disasm.h"
 #include "Decompiler/Sh2Decompiler.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -51,31 +54,41 @@ struct MappingAudit
     int accessUnmapped = 0;    // a ledger access printed from, with no token of its instruction anywhere
     int accessOffLine = 0;     // (counted, not failed) the token is on a line other than MemoryAccess::firstLine names: the ledger names the
                                // line of the pointer expression when the access is printed through another op's tokens
+    int accessAtBranch = 0;    // a ledger access whose instruction is a delayed branch that makes no access of its own (A7-10: it is the slot's)
+    int foldedInsns = 0;       // (counted) body instructions the way back answers Folded
+    int accessAtRte = 0;       // ...and of an rte, whose own pops of SR and PC they are (counted; before patch 0075 accessAtBranch held these too)
+    int frameStoreMissing = 0; // a line that assigns a frame local at a load or a call and names none of the stores that wrote it (A7-11)
     int callUnmapped = 0;      // a call in the final p-code that no token came from
     int roundTrip = 0;         // a line whose firstAddr does not lead back to it (the lines an instruction owns do not hold it)
+    int backWrong = 0;         // the way back (LineForInstruction, A7-5): an instruction a token names whose lookup is not an owner, or a first address whose lookup
+                               // is a line with another first address
     // What the corpus looks like (counted).
     int functions = 0, lines = 0, linesWithAddr = 0, tokens = 0, tokensWithAddr = 0;
     int single = 0, multi = 0, multiNonAdjacent = 0, widest = 0;
     int nonCodeLines = 0;      // a line with no instruction (declarations, braces, case labels)
     int bodyInsns = 0, bodyMapped = 0;
-    int unmappedSlots = 0;     // a delay slot instruction no token carries (its p-code carries the branch's address)
-    int slotTokens = 0;        // a token at a delay slot's own address
+    int unmappedSlots = 0;     // a delay slot instruction no token carries (folded into the expression that uses it, or removed)
+    int slotTokens = 0;        // a token at a delay slot's own address (A7-10: the line the slot made; before patch 0075 there were none, A7-9)
+    int frameAssigns = 0;      // lines that assign a frame local at a load or a call, with a folded store to the word (A7-11), counted
+    int slotCaseTokens = 0;    // ...of which on a case label's line (A7-9: a jump table destination that is a slot, decoded a second time)
     int badDataTokens = 0;     // a token at a word flow halted at as bad data (`halt_baddata();`): the word, by design
     int unmappedMemory = 0;    // an instruction that accesses memory (not a literal load), no token, in the body
     int unmappedCall = 0;      // a call or jump no token carries
     int callGone = 0;          // ...of which no longer in the final p-code (removed with unreachable code or as dead)
     int callGoneUnsaid = 0;    // ...and no warning names a removed block at or before it (counted as a violation)
     int unmappedBranch = 0;    // a conditional branch no token carries
-    // Area 7 round 2 (A7-10), counted: the delay slot's p-code carries its branch's address, so a line the slot instruction made is
-    // addressed to the branch, and a click on it shows the row before the instruction that made it.
-    int slotMadeLines = 0;     // a line whose every address is a delayed branch and that holds no keyword or call name of its own
-    int accessAtBranch = 0;    // a ledger access whose instruction is a delayed branch (the access is made by the slot after it)
+    // Area 7 round 2 (A7-10), counted: a line whose every address is a delayed branch and that holds no keyword or call name of its own.
+    // Before the slot's ops were marked (patch 0075) these were the lines the slot instruction made, addressed to the branch, and a click on
+    // them showed the row before the instruction that made them (1,397 and 3,357 in the two images). What is left is a copy a merge puts at
+    // the end of a block, which sits on the block's branch by design; the mutation `tokslot` brings the others back.
+    int slotMadeLines = 0;
     std::vector<std::string> problems;   // the first few of each kind, "kind: where: what"
 
     void Add(const MappingAudit& o)
     {
         odd += o.odd; outside += o.outside; notInsn += o.notInsn; firstAddrWrong += o.firstAddrWrong; badRange += o.badRange;
         callWithoutCall += o.callWithoutCall; unmarked += o.unmarked; misnamed += o.misnamed; accessUnmapped += o.accessUnmapped; accessOffLine += o.accessOffLine; callUnmapped += o.callUnmapped; callGone += o.callGone; callGoneUnsaid += o.callGoneUnsaid;
+        accessAtBranch += o.accessAtBranch; accessAtRte += o.accessAtRte; slotCaseTokens += o.slotCaseTokens; frameStoreMissing += o.frameStoreMissing; backWrong += o.backWrong; foldedInsns += o.foldedInsns; frameAssigns += o.frameAssigns;
         roundTrip += o.roundTrip;
         functions += o.functions; lines += o.lines; linesWithAddr += o.linesWithAddr; tokens += o.tokens;
         tokensWithAddr += o.tokensWithAddr; single += o.single; multi += o.multi; multiNonAdjacent += o.multiNonAdjacent;
@@ -83,7 +96,7 @@ struct MappingAudit
         nonCodeLines += o.nonCodeLines; bodyInsns += o.bodyInsns; bodyMapped += o.bodyMapped; unmappedSlots += o.unmappedSlots;
         slotTokens += o.slotTokens; badDataTokens += o.badDataTokens; unmappedMemory += o.unmappedMemory; unmappedCall += o.unmappedCall;
         unmappedBranch += o.unmappedBranch;
-        slotMadeLines += o.slotMadeLines; accessAtBranch += o.accessAtBranch;
+        slotMadeLines += o.slotMadeLines;
         for (const std::string& p : o.problems) Keep(p);
     }
     // Three examples of each kind of problem are kept; the prefix up to the first ':' is the kind.
@@ -97,7 +110,8 @@ struct MappingAudit
     }
     int Violations() const
     {
-        return odd + outside + notInsn + firstAddrWrong + badRange + callWithoutCall + unmarked + misnamed + accessUnmapped + callUnmapped + callGoneUnsaid + roundTrip;
+        return odd + outside + notInsn + firstAddrWrong + badRange + callWithoutCall + unmarked + misnamed + accessUnmapped + callUnmapped + callGoneUnsaid + roundTrip +
+               accessAtBranch + frameStoreMissing + backWrong;
     }
 };
 
@@ -109,9 +123,51 @@ struct MappingAudit
 //   tokdrop     the instruction of the first printed access has no token anywhere
 //   tokcall     the call tokens lose their instruction
 //   tokunmark   (hover text) a line from several instructions is described as one; tokhover: its text lists all but the last
-inline bool MutateMapping(sfe::decomp::DecompileResult& r, const std::string& kind)
+//   tokframe    (A7-11) the tokens that name the stores a frame local was assigned from are taken away again (the empty tokens at a folded
+//               frame store's instruction)
+//   tokslot     (A7-10) a delay slot's instruction is addressed to its branch again: the tokens at a slot, and the ledger's accesses, move
+//               back by one instruction. Needs 'word' (the instruction words), as the audit does.
+inline bool MutateMapping(sfe::decomp::DecompileResult& r, const std::string& kind,
+                          const std::function<bool(uint32_t, uint16_t&)>& word = std::function<bool(uint32_t, uint16_t&)>())
 {
     using namespace sfe::decomp;
+    if (kind == "tokframe")
+    {
+        std::set<uint32_t> folded;
+        for (const AccessFate& f : r.accessFates)
+            if (f.fate == AccessFate::FoldedOrdinary && f.write && f.frame) folded.insert(f.insn);
+        for (Line& l : r.lines)
+        {
+            std::vector<Token> keep;
+            for (const Token& t : l.tokens)
+                if (!(t.begin == t.end && t.addr && folded.count(t.addr))) keep.push_back(t);
+            l.tokens = keep;
+            l.firstAddr = 0;
+            for (const Token& t : l.tokens)
+                if (t.addr && (l.firstAddr == 0 || t.addr < l.firstAddr)) l.firstAddr = t.addr;
+        }
+        return true;
+    }
+    if (kind == "tokslot")
+    {
+        auto slotOf = [&](uint32_t a) {
+            uint16_t w = 0;
+            if (!word || !r.InBody(a - 2) || !word(a - 2, w)) return false;
+            return sfe::Sh2Decode(a - 2, w).HasDelaySlot;
+        };
+        for (Line& l : r.lines)
+        {
+            l.firstAddr = 0;
+            for (Token& t : l.tokens)
+            {
+                if (t.addr && slotOf(t.addr)) t.addr -= 2;
+                if (t.addr && (l.firstAddr == 0 || t.addr < l.firstAddr)) l.firstAddr = t.addr;
+            }
+        }
+        for (MemoryAccess& m : r.accesses)
+            if (slotOf(m.insn)) m.insn -= 2;
+        return true;
+    }
     if (kind == "tokodd" || kind == "tokoutside")
     {
         for (Line& l : r.lines)
@@ -160,6 +216,39 @@ inline std::string MutatedOriginText(const std::string& kind, const sfe::decomp:
     for (const Token& t : l.tokens)
         if (t.addr && (kind == "tokunmark" ? t.addr == at[0] : t.addr != at.back())) damaged.tokens.push_back(t);
     return LineOriginText(damaged);
+}
+
+// How an instruction touches memory, from its text: a load (the first of two operands is a memory operand), a store (the last is), a call.
+struct MemoryShape
+{
+    bool load = false, store = false, call = false;
+};
+inline MemoryShape ShapeOf(const sfe::DisassembledInstruction& d)
+{
+    MemoryShape m;
+    m.call = d.IsCall;
+    if (d.IsCall || d.IsBranch) return m;
+    std::vector<std::string> operands;
+    int depth = 0;
+    std::string cur;
+    for (char c : d.Operands)
+    {
+        if (c == '(') ++depth;
+        if (c == ')') --depth;
+        if (c == ',' && depth == 0)
+        {
+            operands.push_back(cur);
+            cur.clear();
+        }
+        else if (c != ' ') cur += c;
+    }
+    if (!cur.empty()) operands.push_back(cur);
+    if (operands.size() >= 2)
+    {
+        m.load = operands.front().find('@') != std::string::npos;
+        m.store = operands.back().find('@') != std::string::npos;
+    }
+    return m;
 }
 
 inline std::string MappingHex(uint32_t v)
@@ -284,15 +373,26 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
         }
         // The hover text: names the first address; says "N SH-2 instructions" when it is several, and then lists each
         // address (up to the eight it lists, "and n more" after); a line from one says "the SH-2 instruction at".
+        // A word flow halted at is no instruction (A7-12): it is named as bytes that do not decode, and is not counted among the instructions.
+        std::vector<uint32_t> insns;
+        size_t halts = 0;
+        for (uint32_t x : at)
+        {
+            if (std::find(r.badDataAt.begin(), r.badDataAt.end(), x) != r.badDataAt.end()) ++halts;
+            else insns.push_back(x);
+        }
         const bool saysSeveral = tip.find(" SH-2 instructions") != std::string::npos;
-        if ((at.size() > 1) != saysSeveral)
+        if ((insns.size() > 1) != saysSeveral || (halts != 0) != (tip.find("do not decode") != std::string::npos))
         {
             ++a.unmarked;
-            problem("unmarked", "line " + std::to_string(li) + " '" + l.text + "' is from " + std::to_string(at.size()) + " instruction(s) and its hover text says: " + tip);
+            problem("unmarked", "line " + std::to_string(li) + " '" + l.text + "' is from " + std::to_string(insns.size()) + " instruction(s) and " + std::to_string(halts) +
+                                    " halt word(s) and its hover text says: " + tip);
         }
         bool names = tip.find("0x" + MappingHex(at[0])) != std::string::npos;
-        for (size_t i = 0; i < at.size() && i < 8; ++i) names = names && tip.find("0x" + MappingHex(at[i])) != std::string::npos;
-        if (at.size() > 8 && tip.find("and " + std::to_string(at.size() - 8) + " more") == std::string::npos) names = false;
+        for (size_t i = 0; i < insns.size() && i < 8; ++i) names = names && tip.find("0x" + MappingHex(insns[i])) != std::string::npos;
+        for (uint32_t x : at)
+            if (std::find(r.badDataAt.begin(), r.badDataAt.end(), x) != r.badDataAt.end()) names = names && tip.find("0x" + MappingHex(x)) != std::string::npos;
+        if (insns.size() > 8 && tip.find("and " + std::to_string(insns.size() - 8) + " more") == std::string::npos) names = false;
         if (!names)
         {
             ++a.misnamed;
@@ -317,12 +417,57 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
             }
         }
     }
+    // The way back from SH-2 Assembly (A7-5): the lookup finds, for every instruction a token names, one of the lines that hold it, and the one
+    // whose first address it is when there is one (the line a click on that row's own line would have come from); every instruction of the body
+    // that no token names is answered Folded, with the nearest instruction of its run that has a line, and counted.
+    {
+        const InstructionLineIndex index(r);
+        std::map<uint32_t, std::vector<size_t>> owns;
+        std::set<uint32_t> firsts;
+        for (size_t li = 0; li < r.lines.size(); ++li)
+        {
+            for (uint32_t at : LineInstructions(r.lines[li])) owns[at].push_back(li);
+            if (r.lines[li].firstAddr) firsts.insert(r.lines[li].firstAddr);
+        }
+        for (const auto& kv : owns)
+        {
+            const LineLookup k = index.Find(kv.first);
+            const bool owner = k.kind == LineLookup::Exact && !k.lines.empty() && std::find(kv.second.begin(), kv.second.end(), k.lines[0]) != kv.second.end();
+            if (!owner || (firsts.count(kv.first) && r.lines[k.lines[0]].firstAddr != kv.first))
+            {
+                ++a.backWrong;
+                problem("back", "the instruction " + MappingHex(kv.first) + " is answered " + (owner ? "with a line that does not begin with it" : "with no line that holds it"));
+            }
+        }
+        for (const auto& range : r.body)
+            for (uint32_t p = range.first; p < range.second; p += 2)
+            {
+                if (owns.count(p)) continue;
+                const LineLookup k = index.Find(p);
+                if (k.kind != LineLookup::Folded)
+                {
+                    ++a.backWrong;
+                    problem("back", "the body instruction " + MappingHex(p) + " that no token names is not answered Folded");
+                }
+                else ++a.foldedInsns;
+            }
+    }
     // The ledger: each access has a token of its instruction on the line the engine says it first printed on.
     for (const MemoryAccess& m : r.accesses)
     {
         {
+            // (an rte pops SR and PC itself: those are the branch's own accesses)
             uint16_t bw = 0;
-            if (word(m.insn, bw) && sfe::Sh2Decode(m.insn, bw).HasDelaySlot) ++a.accessAtBranch;
+            if (word(m.insn, bw))
+            {
+                const sfe::DisassembledInstruction b = sfe::Sh2Decode(m.insn, bw);
+                if (b.HasDelaySlot && b.Mnemonic == "rte") ++a.accessAtRte;
+                else if (b.HasDelaySlot)
+                {
+                    ++a.accessAtBranch;
+                    problem("access-at-branch", std::string("the ") + (m.write ? "write" : "read") + " of the instruction " + MappingHex(m.insn) + " is at a delayed branch (A7-10: it is the slot's)");
+                }
+            }
         }
         if (m.printed == 0) continue;   // nothing printed comes from it (A5's oracles say whether that is right)
         bool ok = false;
@@ -340,6 +485,83 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                                   ") has no token anywhere");
         }
     }
+    // A7-11: a line that assigns a frame local at a call (`xStack_18 = ...;`) or a piece of one at a load or a call (`xStack_18._3_1_ = ...;`),
+    // and not at a store, is not the code writing the local there: the value was stored earlier and the engine shows it again (a call's effect on
+    // the local; a piece of it read back). The store the engine folded into the local is among the line's instructions, whichever it was.
+    {
+        std::vector<const AccessFate*> folded;
+        for (const AccessFate& f : r.accessFates)
+            if (f.fate == AccessFate::FoldedOrdinary && f.write && f.frame && f.size > 0) folded.push_back(&f);
+        if (!folded.empty())
+            for (size_t li = 0; li < r.lines.size(); ++li)
+            {
+                const std::string& text = r.lines[li].text;
+                size_t p = text.find_first_not_of(' ');
+                if (p == std::string::npos) continue;
+                size_t q = p;
+                while (q < text.size() && text[q] >= 'a' && text[q] <= 'z') ++q;
+                if (text.compare(q, 6, "Stack_") != 0) continue;
+                q += 6;
+                uint32_t hexv = 0;
+                size_t digits = 0;
+                while (q < text.size() && std::isxdigit(static_cast<unsigned char>(text[q])) && digits < 8)
+                {
+                    const char c = text[q];
+                    hexv = hexv * 16 + static_cast<uint32_t>(c <= '9' ? c - '0' : (c | 0x20) - 'a' + 10);
+                    ++q;
+                    ++digits;
+                }
+                if (digits == 0) continue;
+                uint32_t piece = 0;
+                bool isPiece = false;
+                if (text.compare(q, 2, "._") == 0)
+                {
+                    isPiece = true;
+                    q += 2;
+                    piece = static_cast<uint32_t>(std::strtoul(text.c_str() + q, nullptr, 10));
+                    while (q < text.size() && text[q] != '_') ++q;
+                    ++q;
+                    while (q < text.size() && text[q] != '_') ++q;
+                    ++q;
+                }
+                if (text.compare(q, 3, " = ") != 0) continue;
+                const uint32_t at = 0u - hexv + piece;
+                std::set<uint32_t> candidates;
+                for (const AccessFate* f : folded)
+                    if (at - f->address < f->size) candidates.insert(f->insn);
+                if (candidates.empty()) continue;
+                bool atLoadOrCall = false, atCall = false, atStore = false, named = false, callsHere = text.find("(*") != std::string::npos;
+                for (const Token& t : r.lines[li].tokens) callsHere = callsHere || t.kind == TokenKind::FuncName;
+                // ...and a statement that shows the load itself (`xStack_20._2_2_ = *(uint2 *)(p + 0x30) & 0x7ff;`) is the load's: the store is what the
+                // code does with the value, as for a whole local assigned from a load
+                // ...nor a statement that computes (`iStack_2e = (int2)xStack_10 + extraout_r0 + -0x5e;`): the copies A7-11 names are bare values
+                callsHere = callsHere || text.find("*(", q) != std::string::npos || text.find('[', q) != std::string::npos ||
+                            text.find(' ', q + 3) != std::string::npos;
+                if (callsHere) continue;   // `xStack_18 = f(x);` is the call's result stored in the local: the call's own statement
+                for (const Token& t : r.lines[li].tokens)
+                {
+                    uint16_t w = 0;
+                    if (!t.addr || !word(t.addr, w)) continue;
+                    // (what the line draws says what it is made at; the empty tokens a store was named by do not)
+                    if (t.begin < t.end)
+                    {
+                        const MemoryShape m = ShapeOf(sfe::Sh2Decode(t.addr, w));
+                        atLoadOrCall = atLoadOrCall || m.load || m.call;
+                        atCall = atCall || m.call;
+                        atStore = atStore || m.store;
+                    }
+                    named = named || candidates.count(t.addr) != 0;
+                }
+                // (a whole local assigned from a load is the load's value stored: the statement is the load's, and the store the code makes of it
+                // is what the line is about; only a call's copy of a local, and a piece of one read back, are the shapes A7-11 names)
+                if (!(isPiece ? atLoadOrCall : atCall) || atStore) continue;
+                ++a.frameAssigns;
+                if (named) continue;
+                ++a.frameStoreMissing;
+                problem("frame-store", "line " + std::to_string(li) + " '" + text + "' assigns a frame local at a load or a call and names none of the " + std::to_string(candidates.size()) +
+                                           " store(s) the engine folded into it (first " + MappingHex(*candidates.begin()) + ")");
+            }
+    }
     // Coverage of the body: which instructions no token carries, by kind.
     for (const auto& range : r.body)
         for (uint32_t p = range.first; p < range.second; p += 2)
@@ -353,7 +575,22 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
             {
                 ++a.bodyMapped;
                 uint16_t pw = 0;
-                if (word(p - 2, pw) && sfe::Sh2Decode(p - 2, pw).HasDelaySlot && r.InBody(p - 2)) ++a.slotTokens;
+                if (word(p - 2, pw) && sfe::Sh2Decode(p - 2, pw).HasDelaySlot && r.InBody(p - 2))
+                {
+                    ++a.slotTokens;
+                    // ...on a case label's line (A7-9): the destination of a table entry that is a slot, decoded a second time
+                    for (const Line& l : r.lines)
+                    {
+                        bool here = false;
+                        for (const Token& t : l.tokens) here = here || t.addr == p;
+                        const size_t b = l.text.find_first_not_of(' ');
+                        if (here && b != std::string::npos && (l.text.compare(b, 5, "case ") == 0 || l.text.compare(b, 8, "default:") == 0))
+                        {
+                            ++a.slotCaseTokens;
+                            break;
+                        }
+                    }
+                }
                 continue;
             }
             uint16_t pw = 0;
@@ -439,12 +676,17 @@ inline void PrintMappingAudit(const MappingAudit& a, const char* label)
                 "unmapped %d, on another line than firstLine says %d, calls with no token %d, calls removed unsaid %d, click does not lead back %d\n", label, a.odd, a.outside, a.notInsn,
                 a.firstAddrWrong, a.badRange, a.callWithoutCall, a.unmarked, a.misnamed, a.accessUnmapped, a.accessOffLine, a.callUnmapped, a.callGoneUnsaid, a.roundTrip);
     std::printf("  mapping (%s): body instructions %d, %d carry a token; without one: %d delay slots, %d memory accesses outside slots, "
-                "%d calls (%d not in the final p-code), %d conditional branches; %d tokens sit at a delay slot's own address; "
+                "%d calls (%d not in the final p-code), %d conditional branches; %d instructions with a token are delay slots (%d of them on a case label's line); "
                 "%d tokens at the bad data flow halted at (by design)\n",
                 label, a.bodyInsns, a.bodyMapped, a.unmappedSlots, a.unmappedMemory, a.unmappedCall, a.callGone, a.unmappedBranch, a.slotTokens,
-                a.badDataTokens);
-    std::printf("  mapping (%s): %d lines are made by a delay slot and addressed to its branch (every address a delayed branch, no keyword or call name); %d ledger accesses are at a delayed branch\n",
-                label, a.slotMadeLines, a.accessAtBranch);
+                a.slotCaseTokens, a.badDataTokens);
+    std::printf("  mapping (%s): %d lines assign a frame local at a load or a call and have a folded store to it; %d of them name none of the stores (A7-11, a violation)\n",
+                label, a.frameAssigns, a.frameStoreMissing);
+    std::printf("  mapping (%s): %d lines have only a delayed branch's address and no keyword or call name (a merge copy at the end of a block; before patch 0075 also every line a "
+                "delay slot made); %d ledger accesses are at a delayed branch (a violation), %d at an rte (its own pops)\n",
+                label, a.slotMadeLines, a.accessAtBranch, a.accessAtRte);
+    std::printf("  mapping (%s): the way back from SH-2 Assembly: %d instructions of the body are folded into a line of another instruction (answered with the nearest that has one); "
+                "%d answered wrongly (a violation)\n", label, a.foldedInsns, a.backWrong);
     for (const std::string& p : a.problems) std::printf("    %s\n", p.c_str());
 }
 

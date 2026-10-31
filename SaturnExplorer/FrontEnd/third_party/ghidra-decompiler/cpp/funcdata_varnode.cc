@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
+ * Modified for SaturnExplorer: an op built by the instruction in a delay slot is flagged, as are the ops made in its place (patches/0075-engine-delay-slot-ops-marked.patch).
  * Modified for SaturnExplorer: a call output a locked prototype returns is a return value whatever else it is used for (patches/0044-engine-round5-printed-value-fixes.patch).
  * Modified for SaturnExplorer: a write of the return register with the value it holds is not a value of its own (patches/0048-engine-identity-write-return.patch).
  * Modified for SaturnExplorer: a Varnode that takes over the readers of another is consumed in the bits the other was (patches/0051-engine-replaced-varnode-consume-merged.patch).
@@ -761,6 +762,8 @@ bool Funcdata::replaceVolatile(Varnode *vn)
     if (!vn->hasNoDescend()) throw LowlevelError("Volatile memory was propagated");
     PcodeOp *defop = vn->getDef();
     newop = newOp(3,defop->getAddr());
+    if (defop->isFromDelaySlot())
+      newop->setFromDelaySlot();	// SaturnExplorer (0075)
     opSetOpcode(newop,CPUI_CALLOTHER);
     // Create a userop of type specified by vw_op
     opSetInput(newop,newConstant(4,vw_op->getIndex()),0);
@@ -782,6 +785,8 @@ bool Funcdata::replaceVolatile(Varnode *vn)
     if (readop == (PcodeOp *)0)
       throw LowlevelError("Volatile memory value used more than once");
     newop = newOp(2,readop->getAddr());
+    if (readop->isFromDelaySlot())
+      newop->setFromDelaySlot();	// SaturnExplorer (0075)
     opSetOpcode(newop,CPUI_CALLOTHER);
     // Create a temp to replace the volatile variable
     Varnode *tmp = newUniqueOut(vn->getSize(),newop);

@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
+ * Modified for SaturnExplorer: an op built by the instruction in a delay slot is flagged, as are the ops made in its place (patches/0075-engine-delay-slot-ops-marked.patch).
  * Modified for SaturnExplorer: the destructor frees the return-recovery state (patches/0004-funcdata-frees-active-output.patch).
  * Modified for SaturnExplorer: every LOAD and STORE's fate is recorded (patches/0017-access-fates.patch).
  * Modified for SaturnExplorer: the instructions and jump tables the flow recovered are recorded (patches/0021-flow-instructions.patch).
@@ -213,6 +214,7 @@ void Funcdata::recordAccessFate(const PcodeOp *op,bool store,int4 size,const Add
   AccessRecord rec;
   rec.time = op->getTime();
   rec.pc = op->getAddr();
+  rec.slot = op->isFromDelaySlot();	// SaturnExplorer (0075)
   rec.addr = addr;
   rec.store = store;
   rec.size = size;
@@ -327,6 +329,7 @@ void Funcdata::checkPieceSize(const PcodeOp *op)
   AccessRecord rec;
   rec.time = op->getTime();
   rec.pc = op->getAddr();
+  rec.slot = op->isFromDelaySlot();	// SaturnExplorer (0075)
   rec.store = false;
   rec.size = op->getOut()->getSize();
   rec.fate = fate_malformed_piece;
@@ -1128,6 +1131,7 @@ void PcodeEmitFd::dump(const Address &addr,OpCode opc,VarnodeData *outvar,Varnod
   PcodeOp *op;
   Varnode *vn;
 
+  fd->clearSlotSource();	// SaturnExplorer (0075): not the rewrite of another op
   if (outvar != (VarnodeData *)0) {
     Address oaddr(outvar->space,outvar->offset);
     op = fd->newOp(isize,addr);
@@ -1136,6 +1140,8 @@ void PcodeEmitFd::dump(const Address &addr,OpCode opc,VarnodeData *outvar,Varnod
   else
     op = fd->newOp(isize,addr);
   fd->opSetOpcode(op,opc);
+  if (fromDelaySlot)
+    op->setFromDelaySlot();	// SaturnExplorer (0075)
   int4 i=0;
   if (op->isCodeRef()) { // Is the first input parameter a code reference
     Address addrcode(vars[0].space,vars[0].offset);

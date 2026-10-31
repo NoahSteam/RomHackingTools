@@ -231,10 +231,11 @@ void TestMappingOracleAtMirrors()
     (void)textDiffs;   // a name or a literal that is an address differs by design; the instructions per line do not
 }
 
-// Area 7 round 2, A7-10 (open): the instruction in a delay slot is addressed to its branch. `mov.l @(2,pc),r1 ; mov #-1,r0 ; rts ;
-// mov.w r0,@r1` stores to SINIT (0x21800000) in the slot of the rts, and the line that shows the store names the rts (0x06070104), the ledger
-// names it as the store's instruction, and nothing names 0x06070106, the instruction that makes the store. This pins the state as it
-// is; when A7-10 is fixed the three addresses below become 0x06070106 and the test says so.
+// Area 7 round 2, A7-10 (fixed, patch 0075): the instruction in a delay slot is its own. `mov.l @(2,pc),r1 ; mov #-1,r0 ; rts ;
+// mov.w r0,@r1` stores to SINIT (0x21800000) in the slot of the rts. The engine's translator gives the rts and its slot one address, the
+// rts's, and the line that showed the store named the rts (0x06070104), the ledger named it as the store's instruction, and nothing named
+// 0x06070106, the instruction that makes the store. The engine marks the ops the slot built (PcodeOp::isFromDelaySlot) and the host
+// addresses them at the branch plus 2. The `return` itself stays on the rts.
 void TestSlotMadeLineIsAddressedToItsBranch()
 {
     std::vector<uint8_t> hw(0x100000u, 0);
@@ -251,30 +252,39 @@ void TestSlotMadeLineIsAddressedToItsBranch()
     const uint32_t kRts = base + 4, kStore = base + 6;
     if (store)
     {
-        CHECK(LineInstructions(*store) == std::vector<uint32_t>{ kRts });   // A7-10: should be { kStore }
-        CHECK(store->firstAddr == kRts);
+        CHECK(LineInstructions(*store) == std::vector<uint32_t>{ kStore });
+        CHECK(store->firstAddr == kStore);
     }
+    const Line* ret = LineWith(r, "return");
+    CHECK(ret != nullptr);
+    if (ret) CHECK(ret->firstAddr == kRts);   // the branch keeps its own line
     bool ledger = false;
-    for (const MemoryAccess& m : r.accesses) ledger = ledger || (m.write && m.address == 0x21800000u && m.insn == kRts);   // should be kStore
+    for (const MemoryAccess& m : r.accesses) ledger = ledger || (m.write && m.address == 0x21800000u && m.insn == kStore);
     CHECK(ledger);
-    bool anyStoreToken = false;
-    for (const Line& l : r.lines)
-        for (const Token& t : l.tokens) anyStoreToken = anyStoreToken || t.addr == kStore;
-    CHECK(!anyStoreToken);   // A7-10: no token names the slot
     dts::MappingAudit a = dts::AuditMapping(r, [&hw](uint32_t x, uint16_t& w) {
         if (x < 0x06000000u || x - 0x06000000u + 1 >= hw.size()) return false;
         w = static_cast<uint16_t>(hw[x - 0x06000000u] << 8 | hw[x - 0x06000000u + 1]);
         return true;
     }, "a7_10");
     CHECK(a.Violations() == 0);
-    CHECK(a.slotMadeLines >= 1 && a.accessAtBranch == 1);   // the counters of MappingOracle.h see it
+    CHECK(a.slotMadeLines == 0 && a.accessAtBranch == 0 && a.slotTokens >= 1);   // the counters of MappingOracle.h see the fix
+    // ...and the mutation that addresses the slot to its branch again is seen
+    const auto word = [&hw](uint32_t x, uint16_t& w) {
+        if (x < 0x06000000u || x - 0x06000000u + 1 >= hw.size()) return false;
+        w = static_cast<uint16_t>(hw[x - 0x06000000u] << 8 | hw[x - 0x06000000u + 1]);
+        return true;
+    };
+    DecompileResult damaged = r;
+    dts::MutateMapping(damaged, "tokslot", word);
+    const dts::MappingAudit seen = dts::AuditMapping(damaged, word, "a7_10 mutated");
+    CHECK(seen.accessAtBranch == 1 && seen.Violations() > 0 && seen.slotMadeLines >= 1);
 }
 
-// Area 7 round 2, A7-11 (open): a frame local the code stores and a later call may read is printed again before the call
-// (`xStack_18 = param_1;`), and the statement is addressed to the call (the call-effect's copy carries the call's address), while the
-// store that wrote the word, `mov.l r4,@r14`, is on no line of the text. The words are the function at 0x06021AB8 of the second corpus
-// image (a 5-argument-free wrapper: spill r4, build a small structure in the frame, call 0x060231DC), moved to 0x06071000. This pins the
-// state as it is; when A7-11 is fixed the line names the store (base + 6), and the test says so.
+// Area 7 round 2, A7-11 (fixed): a frame local the code stores and a later call may read is printed again before the call
+// (`xStack_18 = param_1;`). The statement is a new op at the call (the call-effect's copy carries the call's address), and the store that
+// wrote the word, `mov.l r4,@r14`, was on no line of the text. The engine's record of the store it folded into the local gives the line an
+// empty token at that store, beside the call's own. The words are the function at 0x06021AB8 of the second corpus image (a 5-argument-free
+// wrapper: spill r4, build a small structure in the frame, call 0x060231DC), moved to 0x06071000.
 void TestFrameStoreMaterialisedAtCall()
 {
     std::vector<uint8_t> hw(0x100000u, 0);
@@ -292,17 +302,33 @@ void TestFrameStoreMaterialisedAtCall()
     const uint32_t kJsr = base + 0x38, kStore = base + 6;   // jsr @r8 and mov.l r4,@r14
     const Line* line = LineWith(r, "xStack_18 = param_1;");
     CHECK(line != nullptr);
-    if (line) CHECK(LineInstructions(*line) == std::vector<uint32_t>{ kJsr });   // A7-11: should name kStore
-    bool storeNamed = false;
-    for (const Line& l : r.lines)
-        for (const Token& t : l.tokens) storeNamed = storeNamed || t.addr == kStore;
-    CHECK(!storeNamed);   // A7-11: the store that wrote xStack_18 is on no line
-    dts::MappingAudit a = dts::AuditMapping(r, [&hw](uint32_t x, uint16_t& w) {
+    if (line)
+    {
+        CHECK(LineInstructions(*line) == std::vector<uint32_t>({ kStore, kJsr }));   // the store and, as before, the call
+        CHECK(line->firstAddr == kStore);                                              // a click goes to the store
+    }
+    // the piece assignments name the stores of the bytes they show
+    const Line* piece = LineWith(r, "xStack_18._3_1_ = ");
+    CHECK(piece != nullptr);
+    if (piece)
+    {
+        bool store = false;
+        for (uint32_t x : LineInstructions(*piece)) store = store || x == kStore;
+        CHECK(store);
+    }
+    const auto word = [&hw](uint32_t x, uint16_t& w) {
         if (x < 0x06000000u || x - 0x06000000u + 1 >= hw.size()) return false;
         w = static_cast<uint16_t>(hw[x - 0x06000000u] << 8 | hw[x - 0x06000000u + 1]);
         return true;
-    }, "a7_11");
-    CHECK(a.Violations() == 0);
+    };
+    dts::MappingAudit a = dts::AuditMapping(r, word, "a7_11");
+    if (a.Violations() != 0) dts::PrintMappingAudit(a, "a7_11");
+    CHECK(a.Violations() == 0 && a.frameAssigns >= 1 && a.frameStoreMissing == 0);
+    // ...and without the tokens (the mutation that takes them away again) the audit sees the line
+    DecompileResult damaged = r;
+    dts::MutateMapping(damaged, "tokframe", word);
+    const dts::MappingAudit seen = dts::AuditMapping(damaged, word, "a7_11 mutated");
+    CHECK(seen.frameStoreMissing >= 1 && seen.Violations() > 0);
 }
 
 void TestFixture1()
@@ -3640,7 +3666,8 @@ void TestHardwareVolatility()
     CHECK(SaidCount(r, 0x0600B150u) == 2 && HasNoteAt(r, 0x0600B150u, "the 4-byte read of SCU_IST here is missing") &&
           HasNoteAt(r, 0x0600B150u, "the 4-byte read of SCU_IMS here is missing") && !r.prototype.known);
     r = run("a register read in the slot of an rte, beside its two stack pops", rteSlot);
-    CHECK(SaidCount(r, 0x0600B1CEu) == 1 && HasNoteAt(r, 0x0600B1CEu, "the 4-byte read of SCU_IST here is missing") && !r.prototype.known);
+    // (the read is the slot's: the instruction after the rte at 0x0600B1CE is its own, A7-10)
+    CHECK(SaidCount(r, 0x0600B1D0u) == 1 && HasNoteAt(r, 0x0600B1D0u, "the 4-byte read of SCU_IST here is missing") && !r.prototype.known);
     {
         // The pops are folds into the function's own frame: offsets, not bus addresses.
         int frames = 0;
@@ -3648,7 +3675,7 @@ void TestHardwareVolatility()
         CHECK(frames == 2);
     }
     r = run("...with an rts for the rte: the control", rtsSlot2);
-    CHECK(SaidCount(r, 0x0600B20Eu) == 1 && HasNoteAt(r, 0x0600B20Eu, "the 4-byte read of SCU_IST here is missing"));
+    CHECK(SaidCount(r, 0x0600B210u) == 1 && HasNoteAt(r, 0x0600B210u, "the 4-byte read of SCU_IST here is missing"));
     // The oracle itself: it must not let one access excuse another. Records and accesses are made up.
     {
         const std::function<bool(uint32_t)> none = [](uint32_t) { return false; };
@@ -4206,7 +4233,7 @@ void TestGameCode()
             std::snprintf(where, sizeof where, "function %08X", entry);
             // SE_GAME_MAPPING_MUTATE=<kind> (MappingOracle.h) damages the result as one defect would; the run must then fail.
             DecompileResult damaged = r;
-            if (!mappingMutate.empty()) dts::MutateMapping(damaged, mappingMutate);
+            if (!mappingMutate.empty()) dts::MutateMapping(damaged, mappingMutate, wordAt);
             mapping.Add(dts::AuditMapping(damaged, wordAt, where, [&](const Line& l) { return dts::MutatedOriginText(mappingMutate, l); }));
             if (tokenDump) dts::DumpMappingTokens(tokenDump, r, wordAt, "alone");
         }
@@ -4517,6 +4544,36 @@ void TestGamePerturb()
     for (const auto& kv : byKind)
         std::printf("  opcode %-3s attributed %d, unattributed %d, text unchanged %d (of them the instruction owns a token %d), shape changed %d, failed %d\n",
                     kv.first.c_str(), kv.second.attributed, kv.second.unattributed, kv.second.same, kv.second.ownedButSame, kv.second.shape, kv.second.failed);
+    // A7-8, standing: SE_GAME_PERTURB_CEILING=<file> holds one `<opcode key> <percent>` per line (the keys the table above prints), the ceiling of the
+    // share of a class's text-changing cases (attributed + unattributed) that no line of the instruction accounts for. A class that passes its
+    // ceiling fails the run; the file is the record of what the product does not attribute (A7-8, A7-14), and it may only shrink
+    // (Docs/Decompiler/tools/a7_fix/perturb_ceilings.txt: hwram007.bin, SE_GAME_PERTURB=6).
+    if (const char* ceilings = std::getenv("SE_GAME_PERTURB_CEILING"))
+    {
+        std::ifstream in(ceilings);
+        CHECK(in.good());
+        std::string key, rest;
+        int checked = 0;
+        while (in >> key)
+        {
+            if (key[0] == '#')
+            {
+                std::getline(in, rest);
+                continue;
+            }
+            double ceiling = 0;
+            in >> ceiling;
+            const auto at = byKind.find(key);
+            if (at == byKind.end()) continue;
+            const int changed = at->second.attributed + at->second.unattributed;
+            if (changed < 20) continue;   // too few cases for a share to mean anything
+            ++checked;
+            const double share = 100.0 * at->second.unattributed / changed;
+            std::printf("  ceiling %-3s %.1f%% unattributed of %d, ceiling %.1f%%\n", key.c_str(), share, changed, ceiling);
+            CHECK(share <= ceiling);
+        }
+        CHECK(checked >= 1);
+    }
 }
 
 void TestGameLending()
@@ -10767,6 +10824,7 @@ void TestRoutedSeeds()
             return true;
         };
         const dts::MappingAudit a = dts::AuditMapping(r, wordAt, "a7_6");
+        if (a.Violations() != 0) dts::PrintMappingAudit(a, "a7_6");
         CHECK(a.Violations() == 0 && a.odd == 0 && a.badDataTokens >= 1);
         uint32_t odd = 0;
         for (const Line& l : r.lines)

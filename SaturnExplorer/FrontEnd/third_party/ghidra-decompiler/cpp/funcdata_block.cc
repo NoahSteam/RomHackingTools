@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
+ * Modified for SaturnExplorer: an op built by the instruction in a delay slot is flagged, as are the ops made in its place (patches/0075-engine-delay-slot-ops-marked.patch).
  * Modified for SaturnExplorer: host cancellation check-points (patches/0001-cancel-flag.patch).
  * Modified for SaturnExplorer: every LOAD and STORE's fate is recorded (patches/0017-access-fates.patch).
  * Modified for SaturnExplorer: a jump-table is owned from the moment it is made (patches/0040-jumptable-tracedag-allocation-failure.patch).
@@ -1012,7 +1013,7 @@ PcodeOp *CloneBlockOps::buildOpClone(PcodeOp *op)
       PcodeOp::no_indirect_collapse | PcodeOp::calculated_bool | PcodeOp::ptrflow);
   dup->setFlag(fl);
   fl = op->addlflags & (PcodeOp::special_prop | PcodeOp::special_print | PcodeOp::incidental_copy |
-      PcodeOp::is_cpool_transformed | PcodeOp::stop_type_propagation | PcodeOp::store_unmapped);
+      PcodeOp::is_cpool_transformed | PcodeOp::stop_type_propagation | PcodeOp::store_unmapped | PcodeOp::from_delay_slot);
   dup->setAdditionalFlag(fl);
 
   cloneList.emplace_back(dup,op);	// Map from clone to orig

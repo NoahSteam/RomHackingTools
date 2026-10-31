@@ -512,6 +512,9 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
                     Navigate(ln.ins.BranchTarget, true);
                 if (mOfferDecompile && ImGui::MenuItem("Decompile Here"))
                 { req.decompile = true; req.decompileAddr = ln.addr; }
+                // The way back from a line (A7-5): the function containing this row is decompiled if it is not shown, and the line the row became is selected.
+                if (mOfferDecompile && ImGui::MenuItem("Show in Pseudocode", nullptr, false, ln.readable))
+                { req.showPseudocode = true; req.pseudoAddr = ln.addr; }
                 ImGui::Separator();
                 if (ImGui::MenuItem("Add Operand to Watch", nullptr, false, hasMem))
                 {

@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
+ * Modified for SaturnExplorer: an op built by the instruction in a delay slot is flagged, as are the ops made in its place (patches/0075-engine-delay-slot-ops-marked.patch).
  * Modified for SaturnExplorer: a recovered switch's table lookup is flagged (patches/0014-keep-unused-loads-late.patch).
  * Modified for SaturnExplorer: the multiply of a division term that is wider than its width is flagged (patches/0064-engine-divopt-sign-and-wrap-rule-guards.patch).
  * Modified for SaturnExplorer: a LOAD or STORE folded into the stack frame is flagged, and so is its value being read (patches/0068-engine-deadcode-late-stack-reads.patch).
@@ -123,6 +124,7 @@ public:
     store_unmapped = 0x400,	///< If STORE collapses to a stack Varnode, force it to be unmapped
     immed_copy = 0x800,		///< Copy has propagated into input of \b this op
     store_aliasupdate = 0x1000,	///< If alias information for \b this STORE has been changed
+    from_delay_slot = 0x400000,	///< SaturnExplorer (0075): the op was built by the instruction in a delay slot, which the translator gives its branch's address
     jumptable_lookup = 0x2000,	///< SaturnExplorer: the LOAD that read a recovered switch's table (the switch now stands for it)
     div_product_wide = 0x4000,	///< SaturnExplorer: the INT_MULT of a division term (RuleDivTermAdd, RuleDivTermAdd2) whose exact product is wider than the multiply
     frame_fold = 0x8000,	///< SaturnExplorer (0068): a flow LOAD or STORE that RuleLoadVarnode or RuleStoreVarnode made a COPY of a stack Varnode
@@ -246,6 +248,8 @@ public:
   bool hasCopyImmed(int4 slot) const;	///< Return \b true if a COPY propagation from an immediate input block has happened
   bool hasAliasUpdate(void) const { return ((addlflags & store_aliasupdate)!=0); }	///< Has alias information for \b this been updated
   void setAliasUpdate(void) { addlflags |= store_aliasupdate; }		///< Mark that there is new alias information for \b this op
+  bool isFromDelaySlot(void) const { return ((addlflags&PcodeOp::from_delay_slot)!=0); }	///< SaturnExplorer (0075): was this built by the instruction in a delay slot
+  void setFromDelaySlot(void) { addlflags |= from_delay_slot; }	///< SaturnExplorer (0075): mark an op built by the instruction in a delay slot
   /// \brief Return \b true if this LOADs or STOREs from a dynamic \e spacebase pointer
   bool usesSpacebasePtr(void) const { return ((flags&PcodeOp::spacebase_ptr)!=0); }
   uintm getCseHash(void) const;	///< Return hash indicating possibility of common subexpression elimination

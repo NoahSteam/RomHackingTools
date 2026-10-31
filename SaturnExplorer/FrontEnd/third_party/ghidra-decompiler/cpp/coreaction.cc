@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
+ * Modified for SaturnExplorer: the casts made for an op of a delay slot's instruction are the slot's too (patches/0075-engine-delay-slot-ops-marked.patch).
  * Modified for SaturnExplorer: unused loads kept until shown to be ordinary memory (patches/0009-keep-unused-loads.patch).
  * Modified for SaturnExplorer: a load is read once and in place, never duplicated or moved past another memory operation (patches/0010-load-not-duplicated.patch).
  * Modified for SaturnExplorer: a load is printed in the block it is made in (patches/0012-load-in-place.patch).
@@ -2973,6 +2974,7 @@ int4 ActionSetCasts::apply(Funcdata &data)
       if (op->notPrinted()) continue;
       OpCode opc = op->code();
       if (opc == CPUI_CAST) continue;
+      data.setSlotSource(op);	// SaturnExplorer (0075): the casts made for an op of a delay slot's instruction are the slot's too
       if (opc == CPUI_PTRADD) {	// Check for PTRADD that no longer fits its pointer
 	int4 sz = (int4)op->getIn(2)->getOffset();
 	Datatype *ct = op->getIn(0)->getHighTypeReadFacing(op);
@@ -3014,6 +3016,7 @@ int4 ActionSetCasts::apply(Funcdata &data)
 	count += castOutput(op,data,castStrategy);
     }
   }
+  data.clearSlotSource();
   return 0;			// Indicate full completion
 }
 
