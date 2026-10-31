@@ -692,14 +692,15 @@ void TestLineOriginText()
     one.firstAddr = 0x06086F54;
     CHECK(LineInstructions(one) == std::vector<uint32_t>{ 0x06086F54 });
     CHECK(LineOriginText(one) ==
-          "Decompiled from the SH-2 instruction at 0x06086F54 (an address in the program, not a value in this line).\n"
+          "Decompiled from the SH-2 instruction at 0x06086F54 (an address in the program, not a value in this line); "
+          "a constant or a move folded into the line may come from others.\n"
           "Click to show it in SH-2 Assembly.");
 
     Line several = one;
     several.tokens = { tok(0x06086F60), tok(0x06086F54), tok(0x06086F58), tok(0x06086F54) };
     CHECK((LineInstructions(several) == std::vector<uint32_t>{ 0x06086F54, 0x06086F58, 0x06086F60 }));
     CHECK(LineOriginText(several) ==
-          "Decompiled from 3 SH-2 instructions (an address is not a value in this line):\n"
+          "Decompiled from 3 SH-2 instructions (an address is not a value in this line; a constant or a move folded into it may come from others):\n"
           "0x06086F54, 0x06086F58, 0x06086F60\n"
           "Click to show the first, 0x06086F54, in SH-2 Assembly.");
 
@@ -709,7 +710,7 @@ void TestLineOriginText()
     for (uint32_t i = 0; i < 10; ++i) wide.tokens.push_back(tok(0x06000100u + 4 * i));
     CHECK(LineInstructions(wide).size() == 10);
     CHECK(LineOriginText(wide) ==
-          "Decompiled from 10 SH-2 instructions (an address is not a value in this line):\n"
+          "Decompiled from 10 SH-2 instructions (an address is not a value in this line; a constant or a move folded into it may come from others):\n"
           "0x06000100, 0x06000104, 0x06000108, 0x0600010C, 0x06000110, 0x06000114, 0x06000118, 0x0600011C, and 2 more\n"
           "Click to show the first, 0x06000100, in SH-2 Assembly.");
 }
@@ -777,10 +778,10 @@ void TestAssemblyBackToLine()
     else
         CHECK(folded.kind == LineLookup::Exact);   // (the engine may keep a token for it)
 
-    // an address in no function this one holds: the literal pool word the caller loads (data, outside the body)
+    // a literal pool word the caller loads: no function holds it, the entry error says why and the request for the instruction is dropped
     f.panel.ShowInstruction(0, dts::kFixture1Literal);
     f.Idle(6);
-    CHECK(Has(f.panel.InstructionNote(), "not in the function shown"));
+    CHECK(Has(f.panel.EntryError(), "literal pool"));
     CHECK(!f.panel.WantsInstruction());
 }
 

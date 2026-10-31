@@ -485,9 +485,9 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                                   ") has no token anywhere");
         }
     }
-    // A7-11: a line that assigns a frame local (`xStack_18 = ...;`, `xStack_18._3_1_ = ...;`) at a load or a call, and not at a store, is not
-    // the code writing the local there: the value was stored earlier and the engine shows it again (a call's effect on the local; a piece of
-    // it read back). The store the engine folded into the local is among the line's instructions, whichever it was.
+    // A7-11: a line that assigns a frame local at a call (`xStack_18 = ...;`) or a piece of one at a load or a call (`xStack_18._3_1_ = ...;`),
+    // and not at a store, is not the code writing the local there: the value was stored earlier and the engine shows it again (a call's effect on
+    // the local; a piece of it read back). The store the engine folded into the local is among the line's instructions, whichever it was.
     {
         std::vector<const AccessFate*> folded;
         for (const AccessFate& f : r.accessFates)
@@ -513,8 +513,10 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                 }
                 if (digits == 0) continue;
                 uint32_t piece = 0;
+                bool isPiece = false;
                 if (text.compare(q, 2, "._") == 0)
                 {
+                    isPiece = true;
                     q += 2;
                     piece = static_cast<uint32_t>(std::strtoul(text.c_str() + q, nullptr, 10));
                     while (q < text.size() && text[q] != '_') ++q;
@@ -528,7 +530,7 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                 for (const AccessFate* f : folded)
                     if (at - f->address < f->size) candidates.insert(f->insn);
                 if (candidates.empty()) continue;
-                bool atLoadOrCall = false, atStore = false, named = false;
+                bool atLoadOrCall = false, atCall = false, atStore = false, named = false;
                 for (const Token& t : r.lines[li].tokens)
                 {
                     uint16_t w = 0;
@@ -538,11 +540,14 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     {
                         const MemoryShape m = ShapeOf(sfe::Sh2Decode(t.addr, w));
                         atLoadOrCall = atLoadOrCall || m.load || m.call;
+                        atCall = atCall || m.call;
                         atStore = atStore || m.store;
                     }
                     named = named || candidates.count(t.addr) != 0;
                 }
-                if (!atLoadOrCall || atStore) continue;
+                // (a whole local assigned from a load is the load's value stored: the statement is the load's, and the store the code makes of it
+                // is what the line is about; only a call's copy of a local, and a piece of one read back, are the shapes A7-11 names)
+                if (!(isPiece ? atLoadOrCall : atCall) || atStore) continue;
                 ++a.frameAssigns;
                 if (named) continue;
                 ++a.frameStoreMissing;

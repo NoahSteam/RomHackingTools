@@ -4481,6 +4481,36 @@ void TestGamePerturb()
     for (const auto& kv : byKind)
         std::printf("  opcode %-3s attributed %d, unattributed %d, text unchanged %d (of them the instruction owns a token %d), shape changed %d, failed %d\n",
                     kv.first.c_str(), kv.second.attributed, kv.second.unattributed, kv.second.same, kv.second.ownedButSame, kv.second.shape, kv.second.failed);
+    // A7-8, standing: SE_GAME_PERTURB_CEILING=<file> holds one `<opcode key> <percent>` per line (the keys the table above prints), the ceiling of the
+    // share of a class's text-changing cases (attributed + unattributed) that no line of the instruction accounts for. A class that passes its
+    // ceiling fails the run; the file is the record of what the product does not attribute (A7-8, A7-14), and it may only shrink
+    // (Docs/Decompiler/tools/a7_fix/perturb_ceilings.txt: hwram007.bin, SE_GAME_PERTURB=6).
+    if (const char* ceilings = std::getenv("SE_GAME_PERTURB_CEILING"))
+    {
+        std::ifstream in(ceilings);
+        CHECK(in.good());
+        std::string key, rest;
+        int checked = 0;
+        while (in >> key)
+        {
+            if (key[0] == '#')
+            {
+                std::getline(in, rest);
+                continue;
+            }
+            double ceiling = 0;
+            in >> ceiling;
+            const auto at = byKind.find(key);
+            if (at == byKind.end()) continue;
+            const int changed = at->second.attributed + at->second.unattributed;
+            if (changed < 20) continue;   // too few cases for a share to mean anything
+            ++checked;
+            const double share = 100.0 * at->second.unattributed / changed;
+            std::printf("  ceiling %-3s %.1f%% unattributed of %d, ceiling %.1f%%\n", key.c_str(), share, changed, ceiling);
+            CHECK(share <= ceiling);
+        }
+        CHECK(checked >= 1);
+    }
 }
 
 void TestGameLending()
