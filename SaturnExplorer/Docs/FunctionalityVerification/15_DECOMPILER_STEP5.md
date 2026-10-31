@@ -14416,3 +14416,69 @@ Every changed text is the A5-86 class: a number that equals a register's address
 - The cache caution of a stepped pointer (`steppedCachedAt`) is still judged before the offsets added after the loop (A5-83): not changed here.
 - Patch 0073 prints a register's address as a number in a concatenation, a compare, a returned copy and a copy into a global; the code in (b) and (c) of the corpora section reads less well for it.
 - The engine suite's ceiling (60 s) is near its time (44 to 50 s) under `-j2` on a loaded machine; not a defect of this branch.
+
+## Area 7 fixer (A7-5, A7-8, A7-10 to A7-14)
+
+Branch `review/7-a710-fix`, base `5428fe6`, master `f4b0d46` merged in. One engine patch (**0075**), the host's token addresses, a lookup and a menu item for the way back, and the oracle's new checks. Ledger rows **A7-5, A7-10 to A7-14 fixed, A7-8 accepted with a standing instrument**; new rows **A7-15 to A7-18** (A7-15 and A7-17 and A7-18 open, A7-16 accepted, all P3). Own RelWithDebInfo build under the scratchpad. The code is in 4a3b569.
+
+### 1. A7-10 (P2): patch 0075, a delay slot's instruction is its own
+
+The translator (`Sleigh::oneInstruction`) gives a delayed branch and the instruction in its slot one address. The fix is the plan's, with one addition the plan did not have to say:
+
+* **Engine.** `SleighBuilder::delaySlot` notes the index of the first op the slot issues, and marks every op from there (`PcodeCacher::markDelaySlot`, `PcodeData::delaySlot`). `PcodeCacher::emit` hands the mark to the emitter in a new `PcodeEmit::fromDelaySlot`; `PcodeEmitFd::dump` makes it a `PcodeOp::from_delay_slot` flag (`addlflags`), and `PcodeEmitCache::dump` a `PcodeOpRaw::isDelaySlot` for the generator's emulator. The op's `SeqNum` and address stay the branch's: flow, jump tables and every `getAddr()` user are untouched.
+* **The ops made for a marked op.** The first build had only the flag from the flow, and the store of the fixture still named the `rts`: the engine had replaced it (`replaceVolatile` makes the user op of a hardware write as a new op at the old one's address). Rules and actions make new ops at the address of the op they rewrite in about 230 places, so the carry is central, not per site: `ActionPool::processOp` and `ActionSetCasts::apply` tell the function the op being rewritten (`Funcdata::setSlotSource`, an address and a bool, never a pointer), and `Funcdata::newOp` marks a new op made at that address; `cloneOp`, `newOpBefore`, `CloneBlockOps::buildOpClone` and `replaceVolatile` copy it directly. `PcodeEmitFd::dump` clears the source first, so a stale one cannot reach the flow of a restarted function. `AccessRecord::slot` carries the mark into the engine's access records.
+* **Host.** `InstructionOf(op)` (and of an `AccessRecord`) is the address plus 2 for a marked op; it is used for tokens, the empty tokens of A7-3, the ledger's `insn`, the hardware notes, the fates, the call sites and the flow record. Area 5's conservation oracle (`RecordFlow`'s `accessesByInsn` against `AccessRecord`) uses `InstructionOf` on both sides, so it keeps its keys. The generator's traced accesses name the slot (`TracingEmulate::InsnOf`), and its join-across-a-branch check (`Ran`) knows a slot runs with its branch. Two area 5 fixtures named the branch of a slot access (the SCU_IST read in the slot of an `rte`: 0x0600B1D0, the `rts` control 0x0600B210) and now name the slot. The vendored-tree gate passes with master's 0073 in (`coreaction.cc` is patched by both; the notice lines of 0075 are first in each header so another patch's line at the end does not meet them).
+
+| Counter (MappingOracle.h) | hwram007 alone, lent | hwram008 alone, lent |
+|---|---|---|
+| `accessAtBranch` before (an `rte` counted) | 534, 1,016 | 1,405, 2,116 |
+| `accessAtBranch` after (a violation; `rte`'s own pops counted apart, 0) | 0, 0 | 0, 0 |
+| `slotMadeLines` before | 1,397, 2,580 | 3,357, 5,479 |
+| `slotMadeLines` after | 341, 686 | 1,295, 2,097 |
+| body instructions without a token that are delay slots, before and after | 6,327 and 4,998; 11,769 and 9,163 | 15,654 and 12,027; 24,670 and 18,992 |
+| instructions with a token that are delay slots (the A7-9 counter, 0 and 3 before) | 1,329, 2,606 | 3,627, 5,681 |
+
+The residue of `slotMadeLines` is not the slot's: 341 lines of hwram007 alone are 161 merge copies at a branch, 105 at or after a `jsr` (a call's effect copy or its output), 60 an indirect call with its arguments, 9 held values at a return and 6 case labels (`tools/a7_fix/at_branch.py`, A7-15 and A7-18). The exact checks are `accessAtBranch` (a ledger access at a delayed branch, `rte` apart) and the generator's traced accesses. The mutation `tokslot` (the slot's tokens and ledger moved back to the branch) is seen: `access-at-branch` on the corpus and in 12 of 60 generated seeds; `slotMadeLines` goes from 341 to 1,111. The A7-9 counter is now `slotTokens` (a token at a slot is the common case) and `slotCaseTokens` (the case-label form of A7-9: 26, 51, 79 and 162).
+
+### 2. A7-11 (P2): the store a frame local was assigned from
+
+`AddFrameStoreTokens` (after the ledger, with the engine's `FoldedOrdinary` records of writes into the stack space): a printed op that is not a store, load or call whose output is a frame local (its own stack-space output, or the stack symbol its variable is mapped to: the call-effect copy is a temporary the engine names after the local) at an instruction that is a flow load or call and not a store, gets an empty token for the latest store of each byte of the local before that instruction in flow order, else the latest at all. The oracle's `frameStoreMissing` is a violation for the two shapes the row names (a bare value assigned to a local at a call, a piece of a local at a load or a call); it was 322 of 322 lines in hwram007 alone with the mutation `tokframe` and is 0 of 322 (alone), 554 (lent), 345 and 625 (hwram008). The generator does not draw the shape (the mutation finds nothing there); the fixture and the corpus hold it.
+
+### 3. The two fixtures flipped
+
+`TestSlotMadeLineIsAddressedToItsBranch` and `TestFrameStoreMaterialisedAtCall` pin the right behaviour, and each applies its mutation (`tokslot`, `tokframe`) and requires the audit to fail.
+
+### 4. A7-12, A7-13, A7-14 (P3)
+
+* **A7-12.** `Token::haltsFlow` (from `badDataAt`); `LineOriginText` says "Flow stopped at the bytes at 0x...: they do not decode as an SH-2 instruction" for such a line, and "Flow also stopped at the bytes at ..." after the instructions of a mixed one. The oracle's hover check counts instructions without the halt word and requires the sentence exactly when the line holds one.
+* **A7-13.** The inspection tooltip is followed by the origin text; **Show Other Instructions** lists every instruction in a menu that scrolls past 24 rows.
+* **A7-14.** The wording: "a constant or a move folded into the line may come from others", in both tooltips and the guide.
+
+### 5. A7-5: the way back
+
+`LineForInstruction` and `InstructionLineIndex` (Sh2Decompiler.h); **Show in Pseudocode** in the Assembly row menu; `DecompilerPanel::ShowInstruction`, `ApplyWantedInstruction` (called by `DrawLines`) and the scroll (`IncludeItemByIndex`, `SetScrollHereY(0.3)`); Follow PC at a stop selects the PC's line on every installed result. A request that must decompile first waits and any other navigation (`SetTarget`) drops it; a question that finds no function drops it with the entry error. The oracle's `backWrong` (a violation, 0) and `foldedInsns` (counted); tests `TestAssemblyBackToLine`, `TestShowInstructionScrolls`, `TestLineForInstructionOrder`. Built as planned except the optional toggle that follows the Assembly selection and a mark of the PC line while running (A7-17). The plan's two mutations of the lookup (the last owner chosen, the preference for the first address removed) are held by `TestLineForInstructionOrder` and the oracle's check that the chosen line begins with the instruction, not by a mutation switch.
+
+### 6. A7-8: accepted, with a standing instrument
+
+`SE_GAME_PERTURB_CEILING=<file>` makes the perturbation run fail when a class passes its ceiling (`tools/a7_fix/perturb_ceilings.txt`; a number may only go down). Measured on hwram007.bin, 6 per function (before in brackets): add 149 unattributed of 944 changing cases (213), mov 1,025 of 1,360 (1,175), cmp/eq 0 of 203 (17), and/tst 0 of 28 and 14; or and xor too few. The ceiling run passed (`perturb2.log`: add 15.8%, mov 75.4%, cmp/eq 0%, and 0%, all under their ceilings). The cause (a `mov #i` built the constant of a line) is the plan's provenance walk, not built: the row says why.
+
+### 7. New rows
+
+A7-15 (open): a global written by the code is printed at a return or a call and addressed there. A7-16 (accepted): a local assigned from a load or a computation is the load's statement. A7-17 (open): the Assembly-selection toggle and a PC mark while running. A7-18 (open, instrument): `slotMadeLines` is an upper bound.
+
+### 8. Validation
+
+| Run | Result |
+|---|---|
+| `ctest` (whole tree built, `-j2`, `ulimit -v 3500000`), Live included | 108 of 108 pass (master has 108) |
+| fault suite (`SaturnExplorerDecompilerFaultTests`) | `fault matrix: 0 of 94 job(s) failed`, 85 s |
+| mapping oracle, hwram007.bin and hwram008.bin, alone and lent (`SE_GAME_LEND=1`) | 0 violations in all four (odd, outside, not an instruction, first address, ranges, call tokens, unmarked, hover, ledger unmapped, calls, round trip, `accessAtBranch`, `frameStoreMissing`, `backWrong`) |
+| corpus ledger counts | lending 678 (956) and 1,038 (1,310) unchanged; missing-and-said 0 and 4 unchanged |
+| generator, default (300 seeds, canary, pins) | 0 failing seeds (the pin A4-17 seed 609269 needed the join check to know that a slot runs with its branch) |
+| grammars 1 and 2, `SE_GENERATED_FIRST=4400001 SE_GENERATED_SEEDS=4000` (2,000 of each) | 0 failing seeds, 0 findings (`map.executed` 214,720: 92,309 with a token, 17,785 delay slots without one) |
+| mutations | corpus `SE_GAME_MAPPING_MUTATE=tokslot` and `tokframe`: the audit fails (`access-at-branch`; 322 of 322 `frame-store`); generator `SE_GENERATED_MUTATE=tokslot`: 12 failing seeds of 60 |
+| perturbation with ceilings | `SE_GAME_PERTURB=6 SE_GAME_PERTURB_CEILING=perturb_ceilings.txt`: add 15.8% (ceiling 16.5), mov 75.4% (76), cmp/eq 0%, and 0% |
+| vendored-tree gate (`check-vendored-tree.py check`, master merged) | ok |
+| `DecompilerPanelTests` | all passed (the new tests and the three origin texts updated) |
+
+Routed: nothing to other areas. The patch touches `coreaction.cc` as master's 0073 does; the gate passes with both. 0072 (frame and heritage) is not touched; the notice lines of 0075 are the first in each header and its hunks are away from the places 0072 is likely to change, but it was not available to try.
