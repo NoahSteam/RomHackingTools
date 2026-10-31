@@ -18,6 +18,7 @@
  * Modified for SaturnExplorer: every LOAD and STORE's fate is recorded (patches/0017-access-fates.patch).
  * Modified for SaturnExplorer: the instructions and jump tables the flow recovered are recorded (patches/0021-flow-instructions.patch).
  * Modified for SaturnExplorer: an access folded into the stack frame is flagged, and recorded again if a write goes with its value unread or the access with an unreachable block; a PIECE or SUBPIECE whose sizes do not add up is recorded (patches/0068-engine-deadcode-late-stack-reads.patch).
+ * Modified for SaturnExplorer: the frame call records of a call can be dropped whole (patches/0072-engine-frame-chains-and-save-slots.patch).
  */
 #include "funcdata.hh"
 
@@ -113,7 +114,9 @@ void Funcdata::clear(void)
   frameEscaped = false;		// SaturnExplorer (0068): ...and the escape found in them
   frameCalls.clear();
   guardReads.clear();
+  numGuardReads = 0;
   frameFoldsAllRead = false;
+  frameLedgerCapped = false;
   flowInsns.clear();		// SaturnExplorer: the next flow records its own
   flowTables.clear();
   flowOps = 0;
@@ -246,7 +249,9 @@ void Funcdata::recordAccessFold(const PcodeOp *op,const Varnode *vn)
   if (op->getTime() < flowOps && vn->getSpace()->getType() == IPTR_SPACEBASE) {
     op->setFrameFold();
     // A STORE whose guard on these bytes was read (and the reader forwarded) before it was folded: its value was read.
-    for(vector<GuardReadRecord>::const_iterator iter=guardReads.begin();iter!=guardReads.end();++iter) {
+    map<const PcodeOp *,vector<GuardReadRecord> >::const_iterator giter = guardReads.find(op);
+    if (giter == guardReads.end()) return;
+    for(vector<GuardReadRecord>::const_iterator iter=(*giter).second.begin();iter!=(*giter).second.end();++iter) {
       if ((*iter).store != op || (*iter).space != vn->getSpace()) continue;
       if ((*iter).offset < vn->getOffset() + vn->getSize() && vn->getOffset() < (*iter).offset + (*iter).size)
 	op->setFrameFoldRead();
@@ -284,7 +289,9 @@ void Funcdata::dropFrameCall(const PcodeOp *op,uintb off,int4 size)
 {
   for(size_t i=frameCalls.size();i>0;--i) {
     const FrameCallRecord &rec(frameCalls[i-1]);
-    if (rec.time != op->getTime() || rec.offset >= off + size || off >= rec.offset + rec.size) continue;
+    if (rec.time != op->getTime()) continue;
+    // (patches/0072-engine-frame-chains-and-save-slots.patch) a size of 0 drops every record of the call (it went with its block)
+    if (size != 0 && (rec.offset >= off + size || off >= rec.offset + rec.size)) continue;
     frameCalls.erase(frameCalls.begin() + (i-1));
   }
 }

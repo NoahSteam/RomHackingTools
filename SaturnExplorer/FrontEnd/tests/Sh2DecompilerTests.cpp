@@ -995,6 +995,13 @@ bool ReferenceOk(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, 
                     "reads it\n", unsigned(l.size), l.write, l.offset, l.read);
         ok = false;
     }
+    // (A3-133, patch 0072) a bound of the engine's frame records was reached: they take every frame write for read, so no loss can be
+    // shown. Fail closed: the function's frame is unchecked, which is no pass.
+    if (r.frameLedgerCapped)
+    {
+        std::printf("  conservation: the frame records reached their bound; the frame ledger is unchecked\n");
+        ok = false;
+    }
     return ok;
 }
 
@@ -4185,6 +4192,7 @@ void TestGameCode()
     // accesses by how the shown output accounts for them.
     int fateCount[7] = { 0, 0, 0, 0, 0, 0, 0 };
     int frameLost = 0;   // A3-124: frame writes that went unread though the code reads them (dts::FrameLosses)
+    int frameUnchecked = 0;   // A3-133 (patch 0072): functions whose frame records reached their bound (no loss can be shown)
     int accountCount[4] = { 0, 0, 0, 0 };   // Printed, Folded, Removed, Dropped
     int foldedLookup = 0, removedOrdinary = 0;
     int deadPointerReads = 0, deadHardwareReads = 0, deadConstantReads = 0, deadWrites = 0, deadLost = 0;
@@ -4318,6 +4326,8 @@ void TestGameCode()
             if (++frameLost <= 20)
                 std::printf("  the frame write of %u bytes at %08X (frame offset %08X) went unread, and the read at %08X reads it, "
                             "in %08X\n", unsigned(l.size), l.write, l.offset, l.read, entry);
+        if (r.frameLedgerCapped && ++frameUnchecked <= 20)
+            std::printf("  the frame records of %08X reached their bound: its frame ledger is unchecked\n", entry);
         {
             DecompileRequest ref = Request(entry);
             ref.allMemoryVolatile = true;
@@ -4426,8 +4436,9 @@ void TestGameCode()
     std::printf("  the engine's records: %d folded into ordinary memory, %d dead, %d unreachable, %d switch lookups; "
                 "frame: %d writes went unread, %d accesses removed with unreachable code\n",
                 fateCount[0], fateCount[1], fateCount[2], fateCount[3], fateCount[4], fateCount[5]);
-    std::printf("  %d frame writes lost: unread, and read by the code later (A3-124); %d malformed pieces (A3-127)\n", frameLost,
-                fateCount[int(AccessFate::MalformedPiece)]);
+    std::printf("  %d frame writes lost: unread, and read by the code later (A3-124); %d malformed pieces (A3-127); %d functions with "
+                "the frame unchecked (their records reached a bound, A3-133)\n", frameLost, fateCount[int(AccessFate::MalformedPiece)],
+                frameUnchecked);
     std::printf("  the reference run's accesses: %d printed, %d folded (%d of them a switch lookup), %d removed (%d of ordinary "
                 "memory, %d said), %d dropped\n", accountCount[int(Account::Printed)], accountCount[int(Account::Folded)],
                 foldedLookup, accountCount[int(Account::Removed)], removedOrdinary, droppedSaid, accountCount[int(Account::Dropped)]);
@@ -4440,6 +4451,7 @@ void TestGameCode()
     CHECK(dropped == 0);
     CHECK(deadLost == 0);
     CHECK(frameLost == 0);
+    CHECK(frameUnchecked == 0);   // (A3-133) fail closed: a frame the ledger cannot check is no pass
     CHECK(fateCount[int(AccessFate::MalformedPiece)] == 0);
     CHECK(noReference == 0);
     CHECK(folded == 0);
@@ -13224,6 +13236,153 @@ void TestA3124Fix()
     }
 }
 
+// Area 3 round 15 fix (patch 0072): the review's fixtures (`Docs/Decompiler/tools/a3_round15/`), each with the text it prints now. The head
+// (2598c9b) printed the stale text named with each pin.
+//   A3-130: a STORE through a pointer reached by two or more frame slots: its guards went when the stack was first heritaged
+//           (reprocessFreeStores: the LOAD through the reloaded slot address was "memory"), and the store was lost (`return 0;`).
+//   A3-131: a word built by stores through a reloaded pointer over bytes never written: RulePiecePathology took the collapse's
+//           `CONCAT(SUB(word_before,2),half)` for a partial register write and cut the return to the half (`return param_2;`).
+//   A3-132: a callee-saved register's entry value stored in a frame word, overwritten through a pointer kept in a frame word: the save
+//           slot was unmapped and the STORE's guard on it collapsed as "no local alias" (`return unaff_r8;`); with a call handed the
+//           slot, the call's guard was taken for a save's (R15-1d); behind three slots with a call (F15.11.74).
+//   A3-133: the frame ledger's own bound fails closed (a capped function is unchecked, not clean); R15-15c (40 ops) is checked.
+//   A3-139: isCseMatch took two constants of different sizes for one value (a frame124 seed of the area 2 round 16 review).
+//   A3-140: RulePullsubIndirect built its INDIRECT's input piece from one reader's truncation, not the lowest byte of all (the chain stream).
+// (A3-136 and A3-138, the ledger's false losses for a call removed with an unreachable block and a word split into halves, are pinned
+// in Sh2GeneratedTests: their replays.)
+// Each text without a call is evaluated against the code for several inputs; the frame ledger (dts::FrameLosses) and ReferenceOk pass.
+void TestA3130Fix()
+{
+    Sh2Decompiler d(gConfig);
+    uint64_t serial = 130000;
+    const uint32_t base = 0x06009000u;
+    struct Pin
+    {
+        const char* name;
+        std::vector<uint16_t> words;     // at base; a callee, if any, at base + 0x100
+        std::vector<uint16_t> callee;    // lent before the entry is decompiled
+        bool eval;                       // the text is evaluated against the run (PseudoEval reads it)
+        const char* text;                // a fragment the text prints now
+        const char* stale;               // ...and the head's stale fragment, which it must not print
+    };
+    static const Pin kPins[] = {
+        { "R15-7a (A3-130) two slots: S+8 = 0, halfword -45 at S+10 through **pp, S+8 read",
+          { 0x4F22, 0x7FD0, 0x61F3, 0x710C, 0x1F18, 0x61F3, 0x7120, 0x1F19, 0xE300, 0x1F35, 0xE2D3, 0x51F9, 0x6112, 0x710A, 0x2121, 0x50F5,
+            0x7F30, 0x4F26, 0x000B, 0x0009 }, {}, true, "return 0xffd3;", "return 0;" },
+        { "R15-7c (A3-130) three slots",
+          { 0x4F22, 0x7FD0, 0x61F3, 0x710C, 0x1F18, 0x61F3, 0x7120, 0x1F19, 0x61F3, 0x7124, 0x1F1A, 0xE300, 0x1F35, 0xE2D3, 0x51FA, 0x6112,
+            0x6112, 0x710A, 0x2121, 0x50F5, 0x7F30, 0x4F26, 0x000B, 0x0009 }, {}, true, "return 0xffd3;", "return 0;" },
+        { "R15-7d (A3-130) two slots, the word -1 at S+8",
+          { 0x4F22, 0x7FD0, 0x61F3, 0x710C, 0x1F18, 0x61F3, 0x7120, 0x1F19, 0xE300, 0x1F35, 0xE2D3, 0x51F9, 0x6112, 0x7108, 0x2122, 0x50F5,
+            0x7F30, 0x4F26, 0x000B, 0x0009 }, {}, true, "return 0xffffffd3;", "return 0;" },
+        { "R15-18a (A3-130) the -O0 form, r14 the frame pointer",
+          { 0x4F22, 0x2FE6, 0x7FD0, 0x6EF3, 0x61E3, 0x710C, 0x1E18, 0x61E3, 0x7120, 0x1E19, 0xE300, 0x1E35, 0xE2D3, 0x51E9, 0x6112, 0x710A,
+            0x2121, 0x50E5, 0x7E30, 0x6FE3, 0x6EF6, 0x4F26, 0x000B, 0x0009 }, {}, true, "return 0xffd3;", "return 0;" },
+        { "R15-15c (A3-130 and A3-133) two slots, then 40 xor/add operations on the result",
+          { 0x4F22, 0x7FD0, 0x61F3, 0x710C, 0x1F18, 0x61F3, 0x7120, 0x1F19, 0xE300, 0x1F35, 0xE2D3, 0x51F9, 0x6112, 0x710A, 0x2121, 0x50F5,
+            0x205A, 0x306C, 0x305C, 0x206A, 0x205A, 0x306C, 0x305C, 0x206A, 0x205A, 0x306C, 0x305C, 0x206A, 0x205A, 0x306C, 0x305C, 0x206A,
+            0x205A, 0x306C, 0x305C, 0x206A, 0x205A, 0x306C, 0x305C, 0x206A, 0x205A, 0x306C, 0x305C, 0x206A, 0x205A, 0x306C, 0x305C, 0x206A,
+            0x205A, 0x306C, 0x305C, 0x206A, 0x205A, 0x306C, 0x305C, 0x206A, 0x7F30, 0x4F26, 0x000B, 0x0009 }, {}, true, "0xffd3", "return 0;" },
+        { "R15-12a (A3-131) halfword r5 at S+6, r6 at S+4 over a word never written, the word returned",
+          { 0x4F22, 0x7FD0, 0x61F3, 0x710C, 0x1F18, 0x51F8, 0x7106, 0x2151, 0x51F8, 0x7104, 0x2161, 0xE000, 0x61F3, 0x710C, 0x7104, 0x6312,
+            0x203A, 0x7F30, 0x4F26, 0x000B, 0x0009, 0x0009 }, {}, true, "CONCAT22(param_3,param_2)", "return param_2;" },
+        { "R15-12b (A3-131) bytes r5 at S+7, r6 at S+5",
+          { 0x4F22, 0x7FD0, 0x61F3, 0x710C, 0x1F18, 0x51F8, 0x7107, 0x2150, 0x51F8, 0x7105, 0x2160, 0xE000, 0x61F3, 0x710C, 0x7104, 0x6312,
+            0x203A, 0x7F30, 0x4F26, 0x000B, 0x0009, 0x0009 }, {}, false, "return xStack_24;", "return param_2;" },
+        { "R15-13d (A3-131) four bytes r5, r6, r7, r4 into a word never written",
+          { 0x4F22, 0x7FD0, 0x61F3, 0x710C, 0x1F18, 0x51F8, 0x7107, 0x2150, 0x51F8, 0x7106, 0x2160, 0x51F8, 0x7105, 0x2170, 0x51F8, 0x7104,
+            0x2140, 0x50F4, 0x7F30, 0x4F26, 0x000B, 0x0009 }, {}, false, "return xStack_24;", "return param_2;" },
+        { "R15-16b (A3-131) the -O0 form",
+          { 0x4F22, 0x2FE6, 0x7FD0, 0x6EF3, 0x61E3, 0x710C, 0x1E18, 0x51E8, 0x7106, 0x2151, 0x51E8, 0x7104, 0x2161, 0x50E4, 0x7E30, 0x6FE3,
+            0x6EF6, 0x4F26, 0x000B, 0x0009 }, {}, true, "CONCAT22(param_3,param_2)", "return param_2;" },
+        { "R15-5a (A3-132) r8 stored at sp+8, *(&slot kept at sp+0) = r5, the word read",
+          { 0x4F22, 0x7FF0, 0x1F82, 0x61F3, 0x7108, 0x2F12, 0x62F2, 0x2252, 0x50F2, 0x7F10, 0x4F26, 0x000B, 0x0009, 0x0009 }, {}, true,
+          "return param_2;", "unaff_r8" },
+        { "R15-5c (A3-132) the same with r14",
+          { 0x4F22, 0x7FF0, 0x1FE2, 0x61F3, 0x7108, 0x2F12, 0x62F2, 0x2252, 0x50F2, 0x7F10, 0x4F26, 0x000B, 0x0009, 0x0009 }, {}, true,
+          "return param_2;", "unaff_r14" },
+        { "R15-6c (A3-132) two halfwords of r5 through the reloaded pointer over r8's word",
+          { 0x4F22, 0x7FF0, 0x1F82, 0x61F3, 0x7108, 0x2F12, 0x62F2, 0x2251, 0x7202, 0x2251, 0x50F2, 0x7F10, 0x4F26, 0x000B, 0x0009, 0x0009 },
+          {}, false, "return xStack_c;", "unaff_r8" },
+        { "R15-18b (A3-132) the -O0 form",
+          { 0x4F22, 0x2FE6, 0x7FF0, 0x6EF3, 0x1E82, 0x61E3, 0x7108, 0x2E12, 0x62E2, 0x2252, 0x50E2, 0x7E10, 0x6FE3, 0x6EF6, 0x4F26, 0x000B,
+            0x0009, 0x0009 }, {}, true, "return param_2;", "unaff_r8" },
+        { "R15-1d (A3-132) r8 pushed, overwritten by r5 through the reloaded pointer, the slot handed to a lent callee that reads it",
+          { 0x4F22, 0x2F86, 0x7FF8, 0x61F3, 0x7108, 0x2F12, 0x62F2, 0x2252, 0x64F2, 0xD104, 0x410B, 0x0009, 0x7F08, 0x7F04, 0x4F26, 0x000B,
+            0x0009, 0x0009, 0x0600, 0x9100 }, { 0x6042, 0x000B, 0x0009, 0x0009 }, false, "= param_2;", "func_0x06009000(void)" },
+        { "F15.11.74 (A3-132) r10, r13, r9, r8 stored into S, S+4 overwritten by r5 through three slots, &S handed to a lent callee, S+4 read",
+          { 0x4F22, 0x7FD0, 0x61F3, 0x7104, 0x1F18, 0x61F3, 0x7120, 0x1F19, 0x61F3, 0x7124, 0x1F1A, 0x61F3, 0x7104, 0x21A2, 0x61F3, 0x7104,
+            0x7104, 0x21D2, 0x51FA, 0x6112, 0x6112, 0x7108, 0x2192, 0x61F3, 0x7104, 0x710C, 0x2182, 0x51FA, 0x6112, 0x6112, 0x7104, 0x2152,
+            0x54FA, 0x6442, 0x6442, 0xD106, 0x410B, 0x0009, 0xE000, 0x61F3, 0x7104, 0x7104, 0x6312, 0x203A, 0x7F30, 0x4F26, 0x000B, 0x0009,
+            0x0600, 0x9100 }, { 0x6042, 0x000B, 0x0009, 0x0009 }, false, "return param_2;", "return unaff_r13;" },
+        // A3-139: the frame124 stream's printed-C seed 3807191 (area 2 round 16 review): a halfword and a byte of a frame word read, sign
+        // extended and xored; both constants 0xda by then, at sizes 2 and 1: isCseMatch took SEXT24(#0xda:2) and SEXT14(#0xda:1) for one
+        // value, and RuleTrivialArith made the xor 0.
+        { "frame124 3807191 (A3-139) the xor of a sign-extended halfword and byte, both 0xda",
+          { 0x7FE0, 0x61F3, 0x7108, 0x1F17, 0x51F7, 0xE234, 0x1120, 0x51F7, 0xE22D, 0x1121, 0x51F7, 0xE200, 0x6313, 0x7301, 0x2320, 0x51F7,
+            0xE2DA, 0x6313, 0x7305, 0x2320, 0x51F7, 0xE24F, 0x6313, 0x7307, 0x2320, 0x51F7, 0x6313, 0x7304, 0x6231, 0x6023, 0x51F7, 0x6313,
+            0x7305, 0x6230, 0x202A, 0x51F7, 0x6313, 0x6230, 0x302C, 0x7F20, 0x000B, 0x0009 }, {}, true, "return 0xffffff00;", "return 0;" },
+        // A3-140: the frame124 chain stream (A3-134), printed-C seed 4100399: bytes S+6 and S+7 of a word read and xored, through two slots;
+        // RulePullsubIndirect gave the guard of the pending STORE the piece of bytes S+5 and S+6 for S+6 and S+7.
+        { "frame124 4100399.chain (A3-140) two bytes of a frame word xored, a store through two slots between",
+          { 0x7FD0, 0x61F3, 0x1F18, 0x61F3, 0x7120, 0x1F19, 0xE2D0, 0x1F20, 0xE29C, 0x1F21, 0xE246, 0x1F22, 0xE278, 0x1F23, 0x51F9, 0x6112,
+            0x6313, 0x730E, 0x2351, 0xE288, 0x51F9, 0x6112, 0x6313, 0x730D, 0x2320, 0x63F3, 0x7306, 0x6230, 0x6023, 0x63F3, 0x7307, 0x6230,
+            0x202A, 0x63F3, 0x730C, 0x6231, 0x202A, 0x7F30, 0x000B, 0x0009 }, {}, true, "0xeb", "return 0x88;" },
+    };
+    const std::vector<std::vector<uint32_t>> inputs = {
+        { 0, 0, 0, 0 }, { 0x11112222u, 0x33334444u, 0x55556666u, 0x77778888u }, { 0xFFFF0001u, 0x00008000u, 0x12345678u, 0x0000FFFFu } };
+    for (const Pin& p : kPins)
+    {
+        std::vector<uint16_t> words = p.words;
+        if (!p.callee.empty())
+        {
+            words.resize(0x100 / 2, 0x0009);
+            words.insert(words.end(), p.callee.begin(), p.callee.end());
+        }
+        const CallFixture f = { p.name, base, words };
+        auto snap = CallSnapshot(f, ++serial);
+        DecompileRequest q = Request(base);
+        if (!p.callee.empty())
+        {
+            const DecompileResult c = d.Decompile(snap, Request(base + 0x100));
+            CHECK(c.status == DecompileStatus::Ok && c.prototype.known);
+            if (c.prototype.known) q.prototypes.emplace_back(base + 0x100, c.prototype);
+        }
+        const DecompileResult r = d.Decompile(snap, q);
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok);
+        if (*p.text) CHECK(Has(r.Text(), p.text));
+        if (*p.stale) CHECK(!Has(r.Text(), p.stale));
+        CHECK(!Has(r.Text(), "Exceeded maximum restarts"));
+        CHECK(!r.frameLedgerCapped);
+        CHECK(dts::FrameLosses(r, dts::SnapshotWords(snap)).empty());
+        CHECK(ReferenceOk(d, snap, q, r));
+        if (p.eval) CHECK(PseudoAgreesWithRun(r, snap, f, inputs, true));
+    }
+    // A3-131: the word is returned whole (a four-byte return), as the run returns it.
+    {
+        const CallFixture f = { "R15-12a return size", base, kPins[5].words };
+        auto snap = CallSnapshot(f, ++serial);
+        const DecompileResult r = d.Decompile(snap, Request(base));
+        CHECK(r.prototype.known && r.prototype.ret.size == 4);
+    }
+    // A3-133: a bound of the frame records reached fails closed. A frame read, 200 `div1 r5,r0` on it (each some twenty p-code ops), the
+    // result copied to r1 and back: the copy's forward walks back from the result past 4,096 ops, the function is marked capped, and
+    // ReferenceOk (the frame ledger) does not pass it.
+    {
+        std::vector<uint16_t> words = { 0x7FF8, 0xE305, 0x1F31, 0x50F1, 0x2057 };   // ... ; mov.l @(4,r15),r0 ; div0s r5,r0
+        for (int k = 0; k < 200; ++k) words.push_back(0x3054);                       // div1 r5,r0
+        for (uint16_t w : { 0x7F08, 0x6103, 0x000B, 0x6013 }) words.push_back(w);   // add #8,r15 ; mov r0,r1 ; rts ; mov r1,r0
+        const CallFixture f = { "A3-133 a frame read and 200 div1 after it", base, words };
+        auto snap = CallSnapshot(f, ++serial);
+        const DecompileResult r = d.Decompile(snap, Request(base));
+        std::printf("A3-133 capped: %d\n", int(r.frameLedgerCapped));
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(r.frameLedgerCapped);
+        CHECK(!ReferenceOk(d, snap, Request(base), r));
+    }
+}
+
 void TestFetchAndDataRefusals()
 {
     Sh2Decompiler d(gConfig);
@@ -13610,6 +13769,7 @@ int main(int argc, char** argv)
         RUN(TestArea3Round13Fix());
         RUN(TestArea3Round14Fix());
         RUN(TestA3124Fix());
+        RUN(TestA3130Fix());
         RUN(TestArea2Round8());
         RUN(TestArea2Round9());
         RUN(TestArea2Round10());

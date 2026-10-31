@@ -21,6 +21,7 @@
  * Modified for SaturnExplorer: and of the non-zero bits of what was worked out from that output (patches/0049-engine-nzmask-forgotten-downstream.patch).
  * Modified for SaturnExplorer: every change to an op keeps the non-zero and consume masks around it a superset of the truth, in place of 0046 and 0049 (patches/0054-engine-cached-masks-never-narrower.patch).
  * Modified for SaturnExplorer: a STORE made a COPY splits the INDIRECT it covered in the middle of with the right first piece (patches/0068-engine-deadcode-late-stack-reads.patch).
+ * Modified for SaturnExplorer: a STORE guard is kept against the alias analysis while the STORE is aimed at its local or pending; the frame records walk to 4,096 ops and follow a guard read through a piece (patches/0072-engine-frame-chains-and-save-slots.patch).
  */
 #include "funcdata.hh"
 #include "flow.hh"
@@ -55,6 +56,13 @@ void Funcdata::noteGuardRead(const Varnode *vn)
   const Varnode *v = vn;
   for(int4 hops=0;hops<64 && v->isWritten();++hops) {
     const PcodeOp *ind = v->getDef();
+    // (patches/0072-engine-frame-chains-and-save-slots.patch) a read of part of a guarded word is a SUBPIECE of the word's chain: the
+    // STOREs guarded there are read in the read's own bytes too (frame124 seed 4101580.chain: a byte of a word read twice and xored, the
+    // word stored through the reloaded pointer, was a false loss: ledger A3-142)
+    if (ind->code() == CPUI_SUBPIECE && ind->getIn(0) != (Varnode *)0 && ind->getIn(0)->getSpace() == vn->getSpace()) {
+      v = ind->getIn(0);
+      continue;
+    }
     if (ind->code() != CPUI_INDIRECT || ind->numInput() != 2 || ind->getIn(0) == (Varnode *)0 || ind->getIn(1) == (Varnode *)0) return;
     PcodeOp *iop = PcodeOp::getOpFromConst(ind->getIn(1)->getAddr());
     if (iop == (PcodeOp *)0 || iop->code() != CPUI_STORE) return;
@@ -64,14 +72,19 @@ void Funcdata::noteGuardRead(const Varnode *vn)
     rec.offset = vn->getOffset();
     rec.size = vn->getSize();
     bool have = false;
-    for(vector<GuardReadRecord>::const_iterator g=guardReads.begin();g!=guardReads.end();++g)
-      if ((*g).store == iop && (*g).space == rec.space && (*g).offset == rec.offset && (*g).size == rec.size) { have = true; break; }
+    vector<GuardReadRecord> &recs( guardReads[iop] );
+    for(vector<GuardReadRecord>::const_iterator g=recs.begin();g!=recs.end();++g)
+      if ((*g).space == rec.space && (*g).offset == rec.offset && (*g).size == rec.size) { have = true; break; }
     if (!have) {
-      if (guardReads.size() >= 4096) {
-	frameFoldsAllRead = true;	// too many to keep: every fold is taken for read (the ledger may miss, never invent)
+      if (numGuardReads >= 65536) {
+	// too many to keep: every fold is taken for read (the ledger may miss, never invent), and the records say so (0072: a host's
+	// ledger counts the function unchecked, not clean)
+	frameFoldsAllRead = true;
+	frameLedgerCapped = true;
 	return;
       }
-      guardReads.push_back(rec);
+      recs.push_back(rec);
+      numGuardReads += 1;
     }
     v = ind->getIn(0);
   }
@@ -85,8 +98,9 @@ void Funcdata::noteGuardRead(const Varnode *vn)
 /// access gone unread when it is destroyed. A frame write whose readers were all destroyed as dead never has its
 /// value forwarded. A marker (MULTIEQUAL, INDIRECT) whose input is replaced forwards only that input's own fold:
 /// heritage relinks markers to other versions; totalReplace and totalReplaceConstant, which give every reader an
-/// equal value, walk for markers too. The walk back stops after 64 ops; every fold of this generation
-/// of the function is then taken as forwarded (the ledger may miss a loss, never report one that is none).
+/// equal value, walk for markers too. The walk back stops after 4,096 ops (64 before patch 0072); every fold of this
+/// generation of the function is then taken as forwarded (the ledger may miss a loss, never report one that is none), and the function
+/// is marked capped (isFrameLedgerCapped), so a host counts its frame ledger unchecked instead of clean.
 /// A frame fold destroyed with its value forwarded passes the mark on to what it reads: a pop forwarded (into
 /// `r1 & 0`, made a constant) while the stack was not yet linked is later linked to its push, which is then read.
 /// A frame read the walk meets notes the STOREs whose guards it read through (noteGuardRead).
@@ -103,6 +117,7 @@ void Funcdata::noteFrameFoldForwarded(bool walk,Varnode *vn)
     return;
   }
   vector<PcodeOp *> walked(1,def);
+  set<PcodeOp *> seen;		// (0072) past 64 ops, what the walk reached, looked up in log time: the bound is 4,096 ops, not 64
   for(size_t k=0;k<walked.size();++k) {
     PcodeOp *d = walked[k];
     if (d->isFrameFold())
@@ -115,11 +130,21 @@ void Funcdata::noteFrameFoldForwarded(bool walk,Varnode *vn)
       Varnode *in = d->getIn(i);
       if (in == (Varnode *)0 || !in->isWritten()) continue;
       PcodeOp *e = in->getDef();
-      if (find(walked.begin(),walked.end(),e) != walked.end()) continue;
-      if (walked.size() >= 64) {
+      if (walked.size() <= 64) {
+	if (find(walked.begin(),walked.end(),e) != walked.end()) continue;
+      }
+      else {
+	if (seen.empty()) seen.insert(walked.begin(),walked.end());
+	if (seen.find(e) != seen.end()) continue;
+      }
+      if (walked.size() >= 4096) {
+	// (0072) the walk's bound: every fold is taken for read, and the records say so (a host's ledger counts the function unchecked:
+	// ledger A3-133, where 64 ops were reached by 5% to 8% of the corpus' functions, which were then reported clean)
 	frameFoldsAllRead = true;
+	frameLedgerCapped = true;
 	return;
       }
+      if (!seen.empty()) seen.insert(e);
       walked.push_back(e);
     }
   }
@@ -1860,6 +1885,126 @@ void Funcdata::opCollapseIndirectsForCopy(PcodeOp *copyOp)
   }
 }
 
+/// SaturnExplorer (patches/0072-engine-frame-chains-and-save-slots.patch): the frame offset a STORE's pointer is, when it is the stack
+/// pointer's input plus constants through copies (a frame word holding it included, once linked) and INDIRECTs: the pointer
+/// discoverIndexedStackPointers marks with no guard record ("resolved in the next heritage pass").
+/// \param vn is the pointer
+/// \param spc is the stack space
+/// \param off is set to the offset in the stack space
+/// \return \b true if the pointer is such an offset
+static bool exactStackPointer(const Varnode *vn,AddrSpace *spc,uintb &off)
+
+{
+  uintb add = 0;
+  for(int4 hops=0;hops<64;++hops) {
+    if (vn->isInput()) {
+      for(int4 i=0;i<spc->numSpacebase();++i) {
+	const VarnodeData &sp(spc->getSpacebase(i));
+	if (vn->getSpace() == sp.space && vn->getOffset() == sp.offset && vn->getSize() == sp.size) {
+	  off = spc->wrapOffset(add);
+	  return true;
+	}
+      }
+      return false;
+    }
+    if (!vn->isWritten()) return false;
+    const PcodeOp *op = vn->getDef();
+    switch(op->code()) {
+    case CPUI_COPY:
+      vn = op->getIn(0);
+      break;
+    case CPUI_INDIRECT:
+      vn = op->getIn(0);
+      break;
+    case CPUI_INT_ADD:
+      if (op->getIn(1)->isConstant()) {
+	add += op->getIn(1)->getOffset();
+	vn = op->getIn(0);
+      }
+      else if (op->getIn(0)->isConstant()) {
+	add += op->getIn(0)->getOffset();
+	vn = op->getIn(1);
+      }
+      else
+	return false;
+      break;
+    default:
+      return false;
+    }
+  }
+  return false;
+}
+
+/// SaturnExplorer (patches/0072-engine-frame-chains-and-save-slots.patch): is the value read from the stack frame and not yet linked to what
+/// was put there: a word of the frame the heritage has not linked (a free stack Varnode), or a LOAD through the stack pointer plus
+/// constants or through such a value, through copies, INDIRECTs, joins and the addition of constants? A pointer kept in a frame word, or
+/// behind a chain of them, before the analysis has linked it to what was put there (a frame address, a parameter): until then it may
+/// point anywhere into the frame.
+/// \param vn is the value
+/// \return \b true if it was read from the frame
+bool Funcdata::pointerFromFrame(const Varnode *vn) const
+
+{
+  vector<const Varnode *> todo(1,vn);
+  vector<const Varnode *> seen;
+  while(!todo.empty()) {
+    const Varnode *v = todo.back();
+    todo.pop_back();
+    if (find(seen.begin(),seen.end(),v) != seen.end()) continue;
+    if (seen.size() >= 64) return true;		// too far to follow: taken for one (fail closed)
+    seen.push_back(v);
+    if (!v->isWritten()) {
+      // a word of the frame not linked to its write yet (an input of the stack space is the caller's argument, no frame word)
+      if (v->getSpace()->getType() == IPTR_SPACEBASE && !v->isInput()) return true;
+      continue;
+    }
+    const PcodeOp *op = v->getDef();
+    switch(op->code()) {
+    case CPUI_COPY:
+    case CPUI_INDIRECT:
+      todo.push_back(op->getIn(0));
+      break;
+    case CPUI_MULTIEQUAL:
+      for(int4 i=0;i<op->numInput();++i)
+	todo.push_back(op->getIn(i));
+      break;
+    case CPUI_INT_ADD:
+      if (op->getIn(1)->isConstant()) todo.push_back(op->getIn(0));
+      else if (op->getIn(0)->isConstant()) todo.push_back(op->getIn(1));
+      break;
+    case CPUI_LOAD:
+    {
+      uintb off;
+      AddrSpace *stackSpc = glb->getStackSpace();
+      if (stackSpc != (AddrSpace *)0 && exactStackPointer(op->getIn(1),stackSpc,off)) return true;
+      todo.push_back(op->getIn(1));
+      break;
+    }
+    default:
+      break;
+    }
+  }
+  return false;
+}
+
+/// SaturnExplorer (patches/0072-engine-frame-chains-and-save-slots.patch): is the STORE, not folded yet, aimed at the given stack local: its
+/// pointer the stack pointer plus constants (exactStackPointer) and its bytes overlapping the local's?
+/// \param sop is the STORE
+/// \param local is the stack local
+/// \return \b true if it writes bytes of the local
+bool Funcdata::storeAimedAt(const PcodeOp *sop,const Varnode *local) const
+
+{
+  if (sop->code() != CPUI_STORE || sop->numInput() < 3) return false;
+  AddrSpace *spc = local->getSpace();
+  if (spc->getType() != IPTR_SPACEBASE) return false;
+  uintb soff;
+  if (!exactStackPointer(sop->getIn(1),spc,soff)) return false;
+  uintb ssz = (uintb)sop->getIn(2)->getSize();
+  uintb loff = local->getOffset();
+  return spc->wrapOffset(soff - loff) < (uintb)local->getSize() || spc->wrapOffset(loff - soff) < ssz;
+}
+
 /// For the given op with indirect effects, run through its INDIRECTs, and
 /// if there is no longer a possible alias for an INDIRECT address, remove the INDIRECT.
 /// \param effectOp is the given op with indirect effects
@@ -1880,6 +2025,13 @@ void Funcdata::opCollapseIndirectsForAlias(PcodeOp *effectOp)
     bool shouldDestroy = false;
     if (op->getOut()->hasNoLocalAlias() && !op->isIndirectCreation() && !op->noIndirectCollapse())
       shouldDestroy = true;
+    // SaturnExplorer (patches/0072-engine-frame-chains-and-save-slots.patch): a STORE not folded yet whose pointer is the stack pointer plus
+    // constants aimed at the local (or read through a frame address: pending) writes it, whatever the alias analysis says of pointers to
+    // it: the guard stays until the STORE is folded into a COPY (opCollapseIndirectsForCopy). Removed, the local's read took the value
+    // before the STORE (a save slot taken for unaliased and overwritten through a pointer kept in a frame word: ledger A3-132)
+    if (shouldDestroy && effectOp->code() == CPUI_STORE && op->getOut()->getSpace()->getType() == IPTR_SPACEBASE &&
+	(isPendingFrameStore(effectOp) || storeAimedAt(effectOp,op->getOut()) || pointerFromFrame(effectOp->getIn(1))))
+      shouldDestroy = false;
     else if (guard != (const LoadGuard *)0 && !guard->isGuarded(op->getOut()->getAddr()))
       shouldDestroy = true;
 

@@ -18,6 +18,7 @@
  * Modified for SaturnExplorer: every LOAD and STORE's fate is recorded (patches/0017-access-fates.patch).
  * Modified for SaturnExplorer: a jump-table is owned from the moment it is made (patches/0040-jumptable-tracedag-allocation-failure.patch).
  * Modified for SaturnExplorer: an access folded into the stack frame that goes with an unreachable block is recorded (patches/0068-engine-deadcode-late-stack-reads.patch).
+ * Modified for SaturnExplorer: a call that goes with an unreachable block drops its frame call records (patches/0072-engine-frame-chains-and-save-slots.patch).
  */
 #include "funcdata.hh"
 #include "flow.hh"
@@ -331,6 +332,10 @@ void Funcdata::blockRemoveInternal(BlockBasic *bb,bool unreachable)
       recordAccessFate(*iter,isstore,accsize,accaddr,unreachable ? fate_unreachable : fate_dead);
     else if ((*iter)->isFrameFold() && unreachable)
       recordFrameEnd(*iter,fate_frame_removed);	// (0068) an access of the frame the code no longer makes
+    // SaturnExplorer (patches/0072-engine-frame-chains-and-save-slots.patch): a call that goes with its block reads nothing of the frame;
+    // its guards on the locals were kept for a host's frame ledger (noteFrameCall), which took it for a read (ledger A3-136)
+    if ((*iter)->isCall())
+      dropFrameCall(*iter,0,0);
   }
   accessesRecorded = true;
   desc_warning = false;

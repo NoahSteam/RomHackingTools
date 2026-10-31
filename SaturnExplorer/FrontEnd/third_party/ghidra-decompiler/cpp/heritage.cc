@@ -20,6 +20,7 @@
  * Modified for SaturnExplorer: the escape's lowest frame offset is the lowest any query saw, so it never rises, and a pointer a loop steps down from an unbounded index is guarded below its base (patches/0065-engine-frame-escape-whole-frame.patch).
  * Modified for SaturnExplorer: a frame address that is no exact offset from the frame base escapes, unless a loop only steps it up, and the guard of an access through one covers the stack space (patches/0066-engine-frame-escape-inexact.patch).
  * Modified for SaturnExplorer: a read found after dead code ran in its space delays dead code past the pass that found it, as often as needed, failing closed; whether a frame address escaped forces a call's guard on a local, and the calls guarded at a local are kept for a host (patches/0068-engine-deadcode-late-stack-reads.patch).
+ * Modified for SaturnExplorer: a STORE through a pointer read through a frame address keeps its guards when the stack is first heritaged (patches/0072-engine-frame-chains-and-save-slots.patch).
  */
 #include "heritage.hh"
 #include "funcdata.hh"
@@ -229,6 +230,7 @@ Heritage::Heritage(Funcdata *data)
   fd = data;
   pass = 0;
   deadcodeBumped = false;
+  pendingSpace = (AddrSpace *)0;
   maxdepth = -1;
 }
 
@@ -1578,6 +1580,48 @@ void FrameEscape::compute(const Funcdata *fd,AddrSpace *spc,bool preHeritage)
   if (haveLowest && scope != (const ScopeLocal *)0) scope->setFrameFloor(lowest);
   if (leftFlow) markUnknownStores(fd);
   if (escaped) fd->noteFrameEscaped();	// (0068) for a host's frame ledger: any call may read the frame's locals
+  // (patches/0072-engine-frame-chains-and-save-slots.patch) A LOAD through a frame address reads a word of the frame, which may hold a frame
+  // address: the read is a stack read in waiting (RuleLoadVarnode makes it a direct one, and the next heritage pass links it to the write
+  // that put the address there), as every stack read is before the stack is heritaged. A STORE through what it read, or through anything
+  // computed from it (a LOAD through it is another such read: a chain of slots), may write the frame; it is pending, and keeps the guards
+  // the heritage put on the frame's locals for it (reprocessFreeStores) until it is folded or its pointer is known. Only that: whether the
+  // frame escaped is decided above, by the walk of what the analysis models (ledger A3-130: `S` behind two slots, `**pp = v`, lost).
+  {
+    set<Varnode *> pending;
+    vector<Varnode *> pwork;
+    for(set<Varnode *>::const_iterator iter=members.begin();iter!=members.end();++iter) {
+      Varnode *vn = *iter;
+      for(list<PcodeOp *>::const_iterator diter=vn->beginDescend();diter!=vn->endDescend();++diter) {
+	PcodeOp *op = *diter;
+	if (op->code() != CPUI_LOAD || op->getIn(1) != vn || op->getOut() == (Varnode *)0) continue;
+	if (pending.insert(op->getOut()).second) pwork.push_back(op->getOut());
+      }
+    }
+    while(!pwork.empty()) {
+      if (pending.size() > maxMembers) {	// too far to follow: every STORE through a computed pointer is pending (fail closed)
+	list<PcodeOp *>::const_iterator siter = fd->beginOp(CPUI_STORE);
+	list<PcodeOp *>::const_iterator senditer = fd->endOp(CPUI_STORE);
+	for(;siter!=senditer;++siter)
+	  if (!(*siter)->isDead() && !(*siter)->getIn(1)->isConstant()) pendingStores.insert(*siter);
+	break;
+      }
+      Varnode *vn = pwork.back();
+      pwork.pop_back();
+      for(list<PcodeOp *>::const_iterator diter=vn->beginDescend();diter!=vn->endDescend();++diter) {
+	PcodeOp *op = *diter;
+	if (op->code() == CPUI_STORE) {
+	  if (op->getIn(1) == vn) pendingStores.insert(op);
+	  continue;
+	}
+	if (op->code() == CPUI_LOAD && op->getIn(1) != vn) continue;
+	if (frameBooleanOutput(op->code())) continue;
+	if (op->code() == CPUI_INDIRECT && op->getIn(0) != vn) continue;
+	Varnode *out = op->getOut();
+	if (out == (Varnode *)0) continue;
+	if (pending.insert(out).second) pwork.push_back(out);
+      }
+    }
+  }
 }
 
 /// SaturnExplorer (patches/0063-engine-frame-escape-unknown-pointers.patch): once a frame address has escaped, any pointer whose origin
@@ -1965,12 +2009,21 @@ void Heritage::reprocessFreeStores(AddrSpace *spc,vector<PcodeOp *> &freeStores)
   // SaturnExplorer (patches/0061-engine-stack-frame-escape.patch): a STORE whose pointer, with the stack heritaged, may still be a frame
   // address the stack analysis does not model (laundered, read back from memory, joined with another pointer, returned by a call it was
   // handed to) stays a store to the stack: it was marked to be guarded, and the forward walk above cannot find it again (FrameEscape).
+  // (patches/0072-engine-frame-chains-and-save-slots.patch) ...and so does one through a value read through a frame address, which is a
+  // frame address in waiting (FrameEscape::pendingStores): unmarked, its guards went at once, and the store was folded a pass later into
+  // a local whose read had been linked to the write before it (ledger A3-130).
   {
     FrameEscape escape;
     escape.compute(fd,spc,false);
     for(int4 i=0;i<freeStores.size();++i) {
       PcodeOp *op = freeStores[i];
-      if (!op->isDead() && !op->usesSpacebasePtr() && escape.storeIsUnmodeled(op))
+      if (op->isDead() || op->usesSpacebasePtr()) continue;
+      if (escape.storeIsPending(op)) {
+	fd->opMarkSpacebasePtr(op);
+	pendingStores.push_back(op->getSeqNum());	// (0072) settled again after the next pass (reprocessPendingStores)
+	pendingSpace = spc;
+      }
+      else if (escape.storeIsUnmodeled(op))
 	fd->opMarkSpacebasePtr(op);
     }
   }
@@ -1983,19 +2036,62 @@ void Heritage::reprocessFreeStores(AddrSpace *spc,vector<PcodeOp *> &freeStores)
     if (op->usesSpacebasePtr()) continue;
 
     // If not the STORE may have triggered INDIRECTs that are unnecessary
-    PcodeOp *indOp = op->previousOp();
-    while(indOp != (PcodeOp *)0) {
-      if (indOp->code() != CPUI_INDIRECT) break;
-      Varnode *iopVn = indOp->getIn(1);
-      if (iopVn->getSpace()->getType()!=IPTR_IOP) break;
-      if (op != PcodeOp::getOpFromConst(iopVn->getAddr())) break;
-      PcodeOp *nextOp = indOp->previousOp();
-      if (indOp->getOut()->getSpace() == spc) {
-	fd->totalReplace(indOp->getOut(),indOp->getIn(0));
-	fd->opDestroy(indOp);		// Get rid of the INDIRECT
-      }
-      indOp = nextOp;
+    unguardStore(spc,op);
+  }
+}
+
+/// The STORE is no longer marked as using a stack pointer: the INDIRECTs it put on the given space are removed, each output replaced by
+/// its input.
+/// \param spc is the stack space
+/// \param op is the STORE
+void Heritage::unguardStore(AddrSpace *spc,PcodeOp *op)
+
+{
+  PcodeOp *indOp = op->previousOp();
+  while(indOp != (PcodeOp *)0) {
+    if (indOp->code() != CPUI_INDIRECT) break;
+    Varnode *iopVn = indOp->getIn(1);
+    if (iopVn->getSpace()->getType()!=IPTR_IOP) break;
+    if (op != PcodeOp::getOpFromConst(iopVn->getAddr())) break;
+    PcodeOp *nextOp = indOp->previousOp();
+    if (indOp->getOut()->getSpace() == spc) {
+      fd->totalReplace(indOp->getOut(),indOp->getIn(0));
+      fd->opDestroy(indOp);		// Get rid of the INDIRECT
     }
+    indOp = nextOp;
+  }
+}
+
+/// SaturnExplorer (patches/0072-engine-frame-chains-and-save-slots.patch): a STORE kept guarded only because its pointer was read through a
+/// frame address (FrameEscape::storeIsPending) is settled again after each later heritage pass, once that read has become a direct stack read
+/// linked to the word's write: a pointer still pending, or now a possible frame address the analysis does not model, keeps the guards; one
+/// the analysis models (a frame address it walks to: the STORE is folded into the frame) keeps the mark; any other pointer (a parameter the
+/// slot held, a global's address) is no frame address, and the STORE loses the mark and its guards, as one settled on the first pass does
+/// (reprocessFreeStores). A STORE already folded or removed is gone from the list.
+void Heritage::reprocessPendingStores(void)
+
+{
+  if (pendingStores.empty() || pendingSpace == (AddrSpace *)0) return;
+  vector<PcodeOp *> ops;
+  for(vector<SeqNum>::const_iterator iter=pendingStores.begin();iter!=pendingStores.end();++iter) {
+    PcodeOp *op = fd->findOp(*iter);
+    if (op == (PcodeOp *)0 || op->isDead() || op->code() != CPUI_STORE || !op->usesSpacebasePtr()) continue;
+    ops.push_back(op);
+  }
+  pendingStores.clear();
+  if (ops.empty()) return;
+  FrameEscape escape;
+  escape.compute(fd,pendingSpace,false);
+  for(int4 i=0;i<ops.size();++i) {
+    PcodeOp *op = ops[i];
+    if (escape.storeIsPending(op)) {
+      pendingStores.push_back(op->getSeqNum());
+      continue;
+    }
+    if (escape.storeIsUnmodeled(op)) continue;
+    if (escape.members.find(op->getIn(1)) != escape.members.end()) continue;
+    fd->opClearSpacebasePtr(op);
+    unguardStore(pendingSpace,op);
   }
 }
 
@@ -3640,6 +3736,9 @@ void Heritage::heritage(void)
     placeMultiequals();
     rename();
   }
+  // (patches/0072-engine-frame-chains-and-save-slots.patch) the STOREs kept as pending by an earlier pass first: this pass linked the reads
+  // their pointers came through
+  reprocessPendingStores();
   if (reprocessStackCount > 0)
     reprocessFreeStores(stackSpace, freeStores);
   analyzeNewLoadGuards();
@@ -3773,6 +3872,8 @@ void Heritage::clear(void)
   maxdepth = -1;
   pass = 0;
   deadcodeBumped = false;
+  pendingStores.clear();
+  pendingSpace = (AddrSpace *)0;
 }
 
 } // End namespace ghidra

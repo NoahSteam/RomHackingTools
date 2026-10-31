@@ -18,6 +18,7 @@
  * Modified for SaturnExplorer: the instructions and jump tables the flow recovered are recorded (patches/0021-flow-instructions.patch).
  * Modified for SaturnExplorer: an op that changes keeps the cached masks around it a superset of the truth (patches/0054-engine-cached-masks-never-narrower.patch).
  * Modified for SaturnExplorer: a write folded into the stack frame whose value nothing read is recorded when it goes (patches/0068-engine-deadcode-late-stack-reads.patch).
+ * Modified for SaturnExplorer: whether a STORE is guarded as pending, for the save slots (patches/0072-engine-frame-chains-and-save-slots.patch).
  */
 #ifndef __FUNCDATA_HH__
 #define __FUNCDATA_HH__
@@ -155,9 +156,11 @@ class Funcdata {
   uintm flowOps = 0;		///< The ops with a lower time were made by the flow; the rest by rules and actions (SaturnExplorer)
   bool accessesRecorded = false;	///< Set while a block is removed: its accesses were recorded before any op was destroyed
   mutable bool frameEscaped = false;	///< SaturnExplorer (0068): a frame address escaped (FrameEscape) in this generation of the function
-  vector<GuardReadRecord> guardReads;	///< SaturnExplorer (0068): ranges read through a STORE's guard, for its fold
+  map<const PcodeOp *,vector<GuardReadRecord> > guardReads;	///< SaturnExplorer (0068): ranges read through a STORE's guard, for its fold (0072: by STORE)
+  int4 numGuardReads = 0;	///< SaturnExplorer (0072): the records in \b guardReads
   vector<FrameCallRecord> frameCalls;	///< SaturnExplorer (0068): the flow's calls heritage guarded a stack local at, in this generation
   bool frameFoldsAllRead = false;	///< SaturnExplorer (0068): a walk of noteFrameFoldForwarded passed its bound: no fold is recorded unread
+  bool frameLedgerCapped = false;	///< SaturnExplorer (0072): ...and so the records cannot show a frame write lost (a host's ledger is unchecked)
 
   VarnodeBank vbank;		///< Container of Varnode objects for \b this function
   PcodeOpBank obank;		///< Container of PcodeOp objects for \b this function
@@ -258,6 +261,7 @@ public:
   void noteFrameCall(const PcodeOp *op,uintb off,int4 size);	///< SaturnExplorer (0068): the call has a guard on a stack local (it may read it)
   void noteGuardRead(const Varnode *vn);	///< SaturnExplorer (0068): a frame read through STOREs' guards
   void dropFrameCall(const PcodeOp *op,uintb off,int4 size);	///< SaturnExplorer (0068): the guard went with the local's alias
+  bool isFrameLedgerCapped(void) const { return frameLedgerCapped; }	///< SaturnExplorer (0072): did a bound of the frame records give up (the records hide any loss)?
   const vector<FrameCallRecord> &getFrameCalls(void) const { return frameCalls; }	///< SaturnExplorer (0068): the flow's calls with a guard on a stack local
   bool hasFrameEscaped(void) const { return frameEscaped; }	///< SaturnExplorer (0068): did a frame address escape, so a call may read the locals
   void warning(const string &txt,const Address &ad) const;	///< Add a warning comment in the function body
@@ -362,6 +366,10 @@ public:
 
   const list<LoadGuard> &getLoadGuards(void) const { return heritage.getLoadGuards(); }		///< Get the list of guarded LOADs
   const list<LoadGuard> &getStoreGuards(void) const { return heritage.getStoreGuards(); }	///< Get the list of guarded STOREs
+  bool hasPendingFrameStores(void) const { return heritage.hasPendingStores(); }	///< SaturnExplorer (0072): is a STORE through a pointer read through a frame address guarded?
+  bool isPendingFrameStore(const PcodeOp *op) const { return heritage.isPendingStore(op); }	///< SaturnExplorer (0072): ...is the given one?
+  bool pointerFromFrame(const Varnode *vn) const;	///< SaturnExplorer (0072): a value read from the frame (a pointer kept in a frame word)
+  bool storeAimedAt(const PcodeOp *sop,const Varnode *local) const;	///< SaturnExplorer (0072): a STORE through the stack pointer plus constants writing the local
   const LoadGuard *getStoreGuard(PcodeOp *op) const { return heritage.getStoreGuard(op); }	///< Get LoadGuard associated with STORE op
 
   // Function prototype and call specification routines

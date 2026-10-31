@@ -20,6 +20,7 @@
  * Modified for SaturnExplorer: the escape's lowest frame offset never rises over the queries of a function (patches/0065-engine-frame-escape-whole-frame.patch).
  * Modified for SaturnExplorer: a frame address that is not an exact offset from the frame base escapes, unless a loop only steps it up (patches/0066-engine-frame-escape-inexact.patch).
  * Modified for SaturnExplorer: the dead code delay a late read asks for, and its bound (patches/0068-engine-deadcode-late-stack-reads.patch).
+ * Modified for SaturnExplorer: a STORE through a value read through a frame address is a STORE through a frame address in waiting (patches/0072-engine-frame-chains-and-save-slots.patch).
  */
 /// \file heritage.hh
 /// \brief Utilities for building Static Single Assignment (SSA) form 
@@ -220,6 +221,7 @@ public:
   set<Varnode *> unmodeled;		///< ...of which those reached through a form the stack analysis does not model
   set<PcodeOp *> unmodeledStores;	///< STOREs through an unmodeled possible frame address, or, once the frame escaped, an unknown pointer
   set<PcodeOp *> inexactLoads;		///< LOADs through a frame address that is no exact offset (0066)
+  set<PcodeOp *> pendingStores;		///< STOREs through a value read from the frame through a frame address (0072)
   vector<uintb> upLows;			///< The lowest entry offset of each loop that only steps a frame address up (0066)
   bool inexact;				///< A frame address that is no exact offset reaches an access or a call (0066)
   bool memoryEscape;			///< A frame address was stored to memory
@@ -236,6 +238,8 @@ public:
   bool storeIsUnmodeled(PcodeOp *op) const { return gaveUp || unmodeledStores.find(op) != unmodeledStores.end(); }
   /// \brief Is the given LOAD made through a frame address that is no exact offset? (0066)
   bool loadIsInexact(PcodeOp *op) const { return gaveUp || inexactLoads.find(op) != inexactLoads.end(); }
+  /// \brief Is the given STORE made through a value a LOAD through a frame address read, which may itself be a frame address? (0072)
+  bool storeIsPending(PcodeOp *op) const { return gaveUp || pendingStores.find(op) != pendingStores.end(); }
 };
 
 /// \brief Manage the construction of Static Single Assignment (SSA) form
@@ -314,6 +318,8 @@ class Heritage {
   int4 maxdepth;		///< Maximum depth of the dominator tree
   int4 pass;			///< Current pass being executed
   bool deadcodeBumped;		///< SaturnExplorer (0068): a dead code delay was raised in this generation (one restart's worth)
+  vector<SeqNum> pendingStores;	///< SaturnExplorer (0072): STOREs kept guarded only as pending (FrameEscape::storeIsPending), settled again each pass
+  AddrSpace *pendingSpace;	///< SaturnExplorer (0072): ...in this stack space
 
   PriorityQueue pq;		///< Priority queue for phi-node placement
   vector<FlowBlock *> merge;	///< Calculate merge points (blocks containing phi-nodes)
@@ -353,6 +359,8 @@ class Heritage {
   bool protectFreeStores(AddrSpace *spc,vector<PcodeOp *> &freeStores);
   bool discoverIndexedStackPointers(AddrSpace *spc,vector<PcodeOp *> &freeStores,bool checkFreeStores);
   void reprocessFreeStores(AddrSpace *spc,vector<PcodeOp *> &freeStores);
+  void reprocessPendingStores(void);	///< SaturnExplorer (0072): settle the STOREs kept guarded as pending again
+  void unguardStore(AddrSpace *spc,PcodeOp *op);	///< Remove the INDIRECTs a free STORE put in the given space
   bool markEscapedStores(AddrSpace *spc,vector<PcodeOp *> &freeStores);	///< SaturnExplorer: mark the STOREs a frame address may have escaped to (patches/0061-engine-stack-frame-escape.patch)
   void widenEscapedStoreGuards(void);	///< SaturnExplorer: a STORE guard through an escaped frame address guards the whole stack (patches/0061-engine-stack-frame-escape.patch)
   void guard(const Address &addr,int4 size,bool guardPerformed,
@@ -411,6 +419,8 @@ public:
   void heritage(void);				    ///< Perform one pass of heritage
   const list<LoadGuard> &getLoadGuards(void) const { return loadGuard; }	///< Get list of LOAD ops that are guarded
   const list<LoadGuard> &getStoreGuards(void) const { return storeGuard; }	///< Get list of STORE ops that are guarded
+  bool hasPendingStores(void) const { return !pendingStores.empty(); }	///< SaturnExplorer (0072): is a STORE guarded as pending?
+  bool isPendingStore(const PcodeOp *op) const { return find(pendingStores.begin(),pendingStores.end(),op->getSeqNum()) != pendingStores.end(); }	///< SaturnExplorer (0072): is the STORE guarded as pending?
   const LoadGuard *getStoreGuard(PcodeOp *op) const;	///< Get LoadGuard record associated with given PcodeOp
 };
 
