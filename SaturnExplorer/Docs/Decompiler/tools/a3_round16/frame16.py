@@ -16,9 +16,9 @@ What frame15 drew: one struct S behind 1 to 3 pointer slots, stores at legal off
   out     a pointer that is a callee's output (r0 = r4 + k) kept in a slot, reloaded and stored through
   multi   several narrow readers of one wide frame word (A3-139/A3-140's class: byte and halfword pieces combined by xor/sub/and/or)
 
-Every fixture is a function at 06009000 (and its callees at 06009100/06009180); the driver prints PROTO (preserved mask), the text, LEDGER and the
+Every fixture is a function at 06009000 (and its callees at 0600A000/0600A080); the driver prints PROTO (preserved mask), the text, LEDGER and the
 ORACLE of each run; args lines perturb r8..r14 so a hidden register that the text reads shows. Env: F16_MODE (one mode), F16_LEVELS, F16_NST,
-F16_CALL (none, lent, unlent, writer, global), F16_NOCALL=1 (call-free), F16_PC=1 (also no hidden register read: the printed-C differential has none)."""
+F16_CALL (none, lent, unlent, writer, global), F16_NOCALL=1 (call-free), F16_PC=1 (also no hidden register read; the printed-C differential gives the in_rN and unaff_rN the emulator's entry values, so it does not need this)."""
 import sys, random, os
 seed = int(sys.argv[1]); count = int(sys.argv[2])
 rnd = random.Random(seed)
@@ -71,6 +71,7 @@ def build(k):
         call = 'none'
     if mode == 'global' and call == 'none' and rnd.random() < 0.5: call = 'global'
     if mode == 'out': call = 'out'
+    if call == 'writer' and (mode in ('save', 'inter')): call = 'lent'     # the writer writes S+8: the target must be S (checked below once the target is known)
     if os.environ.get('F16_NOCALL'): call = 'none'
     # ---- the frame: pushes P1, allocation A1 holding S and the slots, optional pushes P2 and allocation A2
     npush1 = rnd.randint(0, 4) if mode in ('save', 'inter', 'r14', 'spill') else rnd.choice([0, 0, 1, 2])
@@ -162,8 +163,8 @@ def build(k):
     # ---- the body
     init_chain()
     # S is filled first (most fixtures): a read of bytes nothing wrote is no oracle for a call-free fixture (the harness's frame holds other garbage)
-    if target == 'S' and tgtY % 4 == 0 and rnd.random() < 0.85:
-        fm = rnd.choice(['words', 'words', 'bytes', 'halves'])
+    if target == 'S' and rnd.random() < 0.85:
+        fm = rnd.choice(['words', 'words', 'bytes', 'halves']) if tgtY % 4 == 0 else (rnd.choice(['halves', 'bytes']) if tgtY % 2 == 0 else 'bytes')
         for o in rnd.sample(range(0, 16, 4 if fm == 'words' else (2 if fm == 'halves' else 1)), 4 if fm == 'words' else (8 if fm == 'halves' else 16)):
             if fm == 'words': A('mov #%d,r2' % rnd.randint(-100, 100)); store(4, o, 'r2' if rnd.random() < 0.5 else rnd.choice(['r4', 'r5', 'r6', 'r7']), rnd.choice(['ptr', 'direct']))
             elif fm == 'halves': A('mov #%d,r2' % rnd.randint(-100, 100)); store(2, o, 'r2', rnd.choice(['ptr', 'direct']))
@@ -215,12 +216,15 @@ def build(k):
         r = rnd.choice(cand)
         A('mov r5,%s' % r); store(4, rnd.randrange(0, 13, 4), r, 'ptr')
     # ---- the call
+    if call in ('lent', 'unlent', 'writer', 'global', 'out') and tgtY % 4:
+        call = 'none'                 # the callees read and write words at the pointer: it must be word aligned
     if call in ('lent', 'unlent', 'writer', 'global', 'out'):
         if call == 'global':
             A('mov.l =0x%08X,r1' % G); A('mov.l @r1,r4')
         else:
             reload('r4')
-        callee = {'lent': 0x06009100, 'writer': 0x06009100, 'global': 0x06009100, 'unlent': 0x06009180, 'out': 0x06009100}[call]
+        if call == 'writer' and target != 'S': call = 'lent'
+        callee = {'lent': 0x0600A000, 'writer': 0x0600A000, 'global': 0x0600A000, 'unlent': 0x0600A080, 'out': 0x0600A000}[call]
         A('mov.l =0x%08X,r1' % callee); A('jsr @r1'); A('nop')
         if call == 'out':
             # r0 = the callee's output: a pointer into the frame (r4 + 4 or r4 itself) kept in a slot, reloaded, stored through
@@ -288,19 +292,19 @@ def main():
         mode, L, N, call, target, viaG, sOff, push1, push2, asm = build(k)
         nm = 'F16.%d.%d %s L%d N%d %s tgt=%s g=%d s=%d p=%s/%s' % (seed, k, mode, L, N, call, target, int(viaG), sOff, ''.join(r[1:] + ',' for r in push1), ''.join(r[1:] + ',' for r in push2))
         out.append('name ' + nm)
-        if call in ('lent', 'writer', 'global', 'out'): out.append('lend 06009100')
+        if call in ('lent', 'writer', 'global', 'out'): out.append('lend 0600A000')
         out.append('asm 06009000'); out.extend(asm); out.append('endasm')
         if call in ('lent', 'global'):
-            out.append('asm 06009100')
+            out.append('asm 0600A000')
             if call == 'global': out.extend(['mov.l =0x%08X,r1' % G, 'mov.l @r1,r1', 'mov.l @(4,r1),r0', 'rts', 'nop'])
             else: out.extend(['mov.l @r4,r0', 'rts', 'nop'])
             out.append('endasm')
         if call == 'writer':
-            out.append('asm 06009100'); out.extend(['mov.l r5,@(8,r4)', 'mov.l @(4,r4),r0', 'rts', 'nop']); out.append('endasm')
+            out.append('asm 0600A000'); out.extend(['mov.l r5,@(8,r4)', 'mov.l @(4,r4),r0', 'rts', 'nop']); out.append('endasm')
         if call == 'out':
-            out.append('asm 06009100'); out.extend(['mov.l @r4,r0', 'mov r4,r0', 'add #4,r0', 'rts', 'nop']); out.append('endasm')
+            out.append('asm 0600A000'); out.extend(['mov.l @r4,r0', 'mov r4,r0', 'add #4,r0', 'rts', 'nop']); out.append('endasm')
         if call == 'unlent':
-            out.append('asm 06009180'); out.extend(['mov.l @(4,r4),r0', 'rts', 'nop']); out.append('endasm')
+            out.append('asm 0600A080'); out.extend(['mov.l @(4,r4),r0', 'rts', 'nop']); out.append('endasm')
         hid = ' r8=5a5a5a5a r9=a5a5a5a5 r10=3c3c3c3c r11=c3c3c3c3 r12=0f0f0f0f r13=f0f0f0f0 r14=12345678'
         a0 = '0600e000' if mode == 'spill' else '11223344'
         out.append('args %s 55 6677 80000001' % a0)

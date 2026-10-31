@@ -17,19 +17,20 @@ for b in blocks:
 i = [k for k, l in enumerate(lines) if l.startswith('asm ')][0]; j = lines.index('endasm')
 body = lines[i+1:j]
 ti = body.index('mov #0,r0')
-tail = body[ti:]; mid = body[:ti]
+ei = next(k for k in range(ti, len(body)) if body[k] in ('add #64,r15', 'add #80,r15', 'mov r14,r15'))
+tail = []; epi = body[ei:]; mid = body[:ei]    # the reads between `mov #0,r0` and the epilogue are dropped in groups too
 # the head: through the last `mov.l rN,@(d,r15)` of the chain set-up (the stores of slot addresses come first)
 hd = 0
 for k, l in enumerate(mid):
     if re.match(r'mov\.l r1,@\((32|36|40|44|48|52),r15\)$', l): hd = k + 1
     elif k > hd + 6: break
 head = mid[:hd]; rest = mid[hd:]
-starts = [k for k, l in enumerate(rest) if not (k and re.match(r'mov #-?\d+,r2$', rest[k-1]) and not l.startswith('mov #')) and re.match(r'(mov r15,r\d+|mov\.l @\(\d+,r15\),r1|mov #-?\d+,r2|mov r\d,r0|mov #\d+,r3|LP?\d*:|L\d+:)$', l)]
+starts = [k for k, l in enumerate(rest) if not (k and re.match(r'mov #-?\d+,r2$', rest[k-1]) and not l.startswith('mov #')) and re.match(r'(mov r15,r\d+|mov\.l @\(\d+,r15\),r1|mov #-?\d+,r2|mov r\d,r0|mov #\d+,r3|mov #0,r0|LP?\d*:|L\d+:)$', l)]
 groups = []
 if not starts: starts = [0]
 if starts[0] != 0: head = head + rest[:starts[0]]
 for a, b2 in zip(starts, starts[1:] + [len(rest)]): groups.append(rest[a:b2])
-def lines_of(gs): return head + [l for g in groups[:keep] for l in g] + [l for g in gs for l in g] + tail
+def lines_of(gs): return head + [l for g in groups[:keep] for l in g] + [l for g in gs for l in g] + epi
 def test(gs):
     try: w = ' '.join('%04X' % x for x in asm.assemble(lines_of(gs)))
     except Exception: return False
