@@ -7,7 +7,11 @@ Kept here:
 
 * `derive_handler_cases.py` and `audit_hardware_map.py`: regenerate `FrontEnd/tests/MednafenHandlerCases.txt`
   and the hardware register audit.
-* The latest round of each area (`a2_round14/`, `a3_round14/`, `a8_fix/`, `a9_round1/`), which the next round starts from.
+* The latest round of each area (`a2_round17/`, `a3_round14/`, `a8_fix/`, `a9_round1/`), which the next round starts from.
+  `a2_round17/`: `dagen17.py` (families 100 to 111: narrow compares, hardware-register addresses as numbers, and the mixed-width memory families, on top of
+  `a2_round16/dagen16.py`), `fam17.sh` (the printed-C differential per family; `BE=1` reads the memory families on a big-endian arena), `oldnew17.sh` and `oldnewmem17.sh`
+  (the same words through two engines, `diff17.py` counts the texts that differ), `mkrc17.sh` and `relink17.sh` and `famrc17.sh` (the in-situ rule checks on the tree with patch
+  0075), `cls17.py` (a log's verdicts with their texts), `fix17.py`, `genranges17.sh`.
   `a8_fix/`: `build_probe.sh` builds `a8fix_probe` from the trust test's own objects; `runlong.sh` runs a piece (at most 20 minutes) of its `long` mode
   (4 to 8 generated programs end to end, `SE_TRUST_WIDTH=537` for the narrow panel); the probe also has `follow`, `oom <stride>`, `directed` and `script`.
   Round 2's instruments (`a8_round2/`, last at `5428fe6`) are the trust test itself now: Decompile as a target, the status-row check, the Stop-and-
