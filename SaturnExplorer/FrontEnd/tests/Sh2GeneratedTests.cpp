@@ -254,6 +254,10 @@
 #include <sstream>
 #include <tuple>
 
+#if defined(__linux__)
+#include <sys/mman.h>
+#endif
+
 using namespace sfe::decomp;
 
 namespace
@@ -7580,6 +7584,28 @@ std::string ShortCircuitOps(const std::string& text)
 // over a byte pair) see what the machine's do; a class converts to a pointer (`(uint4 *)(param_1 + 8)`), and a pointer to a class. Only the engine's reading
 // has it (a C text cannot be read big-endian on this host), and it is the verdict itself: no second reading follows.
 static bool gBeRead = std::getenv("SE_GENERATED_PRINTEDC_BE") != nullptr;   // (the pin A2-110 sets it for one call)
+
+// The memory mode (A2-106) and its big-endian reading (A2-110) need the compiled text's arena below 4 GiB: the text carries an arena address in a
+// four-byte integer (`(int)param_1 + 4`, `(uint4 *)(param_1 + -4)`) and turns it back into a pointer, which keeps a host address only when its high bits
+// are zero. FrameInit gets such memory from mmap's MAP_32BIT, which only Linux on x86-64 has; elsewhere the arena is a static array of the program,
+// above 4 GiB on macOS (its page zero is the whole low 4 GiB) and in any position-independent executable, and those texts crashed (Apple silicon:
+// A2-110 (d) and the A2-106 fixtures). There a memory-mode case is `skipped:no-low-memory` and the pins that need the mode are not asked.
+// SE_GENERATED_PRINTEDC_NOLOW=1 says there is none (to see the skip on a host that has it).
+static bool LowMemoryAvailable()
+{
+    static const bool ok = [] {
+        if (std::getenv("SE_GENERATED_PRINTEDC_NOLOW")) return false;
+#if defined(__linux__) && defined(MAP_32BIT)
+        void* m = mmap(nullptr, 0x10000, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_32BIT, -1, 0);
+        if (m == MAP_FAILED) return false;
+        munmap(m, 0x10000);
+        return true;
+#else
+        return false;
+#endif
+    }();
+    return ok;
+}
 static std::string BeHeaderBase()
 {
     std::string h = kCxxHeaderBase;
@@ -7976,6 +8002,12 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
         // (frame mode, below), and a dereference in it is of a frame address: it is run.
         const uint32_t ptrW = gBeRead ? 4u : (c.ptrWidth == 1 || c.ptrWidth == 2 || c.ptrWidth == 4 ? c.ptrWidth : 4u);   // (A2-110: the big-endian reading fills and sums 4-byte units whatever the widths of the accesses)
         const bool ptrMode = c.ptrWidth != 0;
+        if (ptrMode && !LowMemoryAvailable())
+        {
+            v.cls = "skipped:no-low-memory";
+            v.detail = "the memory mode needs its arena below 4 GiB, which this host does not map (LowMemoryAvailable)";
+            continue;
+        }
         const bool frameMode = UsesFrameMemory(c.words) || ptrMode;
         static const std::regex memoryRe("\\*[A-Za-z_(]");
         if (!frameMode && std::regex_search(text, memoryRe))
@@ -10684,20 +10716,24 @@ void TestPrintedC()
                     c.ptrWidth = width;
                     return c;
                 };
-                const std::vector<CVerdict> m106 = CheckPrintedC(d, { mem("A2-106 (a): store through r4, load through r5", 4, { 0x2462, 0x6052, 0x000B, 0x0009 }),
-                                                                      mem("A2-106 (b): the same as bytes", 1, { 0x2462, 0x6052, 0x000B, 0x0009 }) },
-                                                                  nIn, cc, 0x51ED, 8992);
-                std::printf("pin 'A2-106 (a)': %s, (b): %s (%s)\n", m106[0].cls.empty() ? "agrees" : m106[0].cls.c_str(), m106[1].cls.c_str(), m106[1].detail.substr(0, 60).c_str());
-                CHECK(m106[0].cls.empty() && m106[0].compared);
-                CHECK(m106[1].cls == "mismatch" && IsFailing(m106[1]));
-                gPrintedCTextHook = [](const std::string& t) {
-                    const size_t at = t.find("*param_1 = param_3;");
-                    return at == std::string::npos ? t : t.substr(0, at) + t.substr(at + 19);
-                };
-                const std::vector<CVerdict> m106c = CheckPrintedC(d, { mem("A2-106 (c): the store dropped", 4, { 0x2462, 0x000B, 0x0009 }) }, nIn, cc, 0x51ED, 8993);
-                gPrintedCTextHook = nullptr;
-                std::printf("pin 'A2-106 (c)': %s (%s)\n", m106c[0].cls.c_str(), m106c[0].detail.substr(0, 90).c_str());
-                CHECK(m106c[0].cls == "mismatch" && m106c[0].detail.find(" memory ") != std::string::npos);
+                if (!LowMemoryAvailable()) std::printf("pins 'A2-106' and 'A2-110': not asked, this host maps no memory below 4 GiB (LowMemoryAvailable)\n");
+                else
+                {
+                    const std::vector<CVerdict> m106 = CheckPrintedC(d, { mem("A2-106 (a): store through r4, load through r5", 4, { 0x2462, 0x6052, 0x000B, 0x0009 }),
+                                                                          mem("A2-106 (b): the same as bytes", 1, { 0x2462, 0x6052, 0x000B, 0x0009 }) },
+                                                                      nIn, cc, 0x51ED, 8992);
+                    std::printf("pin 'A2-106 (a)': %s, (b): %s (%s)\n", m106[0].cls.empty() ? "agrees" : m106[0].cls.c_str(), m106[1].cls.c_str(), m106[1].detail.substr(0, 60).c_str());
+                    CHECK(m106[0].cls.empty() && m106[0].compared);
+                    CHECK(m106[1].cls == "mismatch" && IsFailing(m106[1]));
+                    gPrintedCTextHook = [](const std::string& t) {
+                        const size_t at = t.find("*param_1 = param_3;");
+                        return at == std::string::npos ? t : t.substr(0, at) + t.substr(at + 19);
+                    };
+                    const std::vector<CVerdict> m106c = CheckPrintedC(d, { mem("A2-106 (c): the store dropped", 4, { 0x2462, 0x000B, 0x0009 }) }, nIn, cc, 0x51ED, 8993);
+                    gPrintedCTextHook = nullptr;
+                    std::printf("pin 'A2-106 (c)': %s (%s)\n", m106c[0].cls.c_str(), m106c[0].detail.substr(0, 90).c_str());
+                    CHECK(m106c[0].cls == "mismatch" && m106c[0].detail.find(" memory ") != std::string::npos);
+                }
                 // A2-108: the same dereference without the mode is said to be memory, not run on random numbers as host pointers (it was `crashed`)
                 const std::vector<CVerdict> m108 = CheckPrintedC(d, { mem("A2-108: a pointer parameter without the mode", 0, { 0x2462, 0x6052, 0x000B, 0x0009 }) }, nIn, cc, 0x51ED, 8994);
                 std::printf("pin 'A2-108': %s\n", m108[0].cls.c_str());
@@ -10705,6 +10741,7 @@ void TestPrintedC()
                 // A2-110 (the A2-106 limit): accesses of different widths to the same bytes. On this host's byte order the load sees the other end of the word, so each is a
                 // mismatch; read on a big-endian arena (gBeRead) each agrees with the machine. (a) a word stored, its first byte loaded; (b) a half-word stored, the word loaded;
                 // (c) a byte stored, the word loaded; (d) a pre-decrement chain that changes width (a word, a half-word and a byte stored below r4) read back by a post-increment chain of a byte, a half-word and a word.
+                if (LowMemoryAvailable())
                 {
                     const std::vector<CCase> mixed = { mem("A2-110 (a): mov.l store, mov.b load", 4, { 0x2462, 0x6040, 0x000B, 0x0009 }),
                                                        mem("A2-110 (b): mov.w store, mov.l load", 4, { 0x2461, 0x6042, 0x000B, 0x0009 }),
@@ -10823,7 +10860,9 @@ void TestPrintedC()
         // A ledger fixture exists to be compared: one the harness skips (an input it cannot give a value, a stack piece) checks nothing, and is a failure,
         // not a quiet class (A2-37: `unaff_r8_00` was `skipped:unknown-input`).
         // A frame124 function (A3-124) is drawn, not written: one the harness skips (a text that takes a local's address) is counted below.
-        if (!hand && cases[i].name.compare(0, 4, "seed") != 0 && cases[i].name.compare(0, 9, "frame124_") != 0 && v.cls.compare(0, 8, "skipped:") == 0)
+        // A memory-mode fixture on a host with no memory below 4 GiB (LowMemoryAvailable) is not run there, and says so in its class.
+        if (!hand && cases[i].name.compare(0, 4, "seed") != 0 && cases[i].name.compare(0, 9, "frame124_") != 0 && v.cls.compare(0, 8, "skipped:") == 0 &&
+            v.cls != "skipped:no-low-memory")
         {
             v.detail = "the fixture was skipped (" + v.cls + "): " + v.detail;
             v.cls = "fixture-skipped";
