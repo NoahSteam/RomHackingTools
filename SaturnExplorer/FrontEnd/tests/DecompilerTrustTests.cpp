@@ -106,7 +106,11 @@ trust::ShownFacts FactsOf(const DecompileResult& r)
     // every other warning is a line of its own, and so is each hardware caution (the explanations are shown on their lines).
     for (const FlowWarning& w : r.flowWarnings)
     {
-        if (w.kind == FlowWarning::Cut || (w.kind == FlowWarning::BadData && w.address != 0)) continue;
+        if (w.kind == FlowWarning::Cut || (w.kind == FlowWarning::BadData && w.address != 0))
+        {
+            f.summarised.push_back(trust::Hex8(w.address) + ": " + w.text);   // said by the "Flows into ..." and "Flow runs into bytes ..." lines
+            continue;
+        }
         f.others.push_back({ w.address, w.text });
     }
     for (const HardwareNote& n : r.hardwareNotes)
@@ -394,21 +398,36 @@ std::string Verify(DecompilerPanel& panel, const trust::TrueState& t, const std:
     const float workRight = win ? win->WorkRect.Max.x : 1e9f;
     // What was drawn, a sentence wrapped over several rows put back together. No allowance for text cut by the window's edge (A8-15 (d),
     // A8-17): the panel wraps, so every line is whole, and a glyph past the edge is a failure.
+    // The runs are matched against the lines the model expects, in order: a sentence takes the next run and, while it is not whole, the rows
+    // that continue it; a continuation that could as well be the start of the next expected line is that line's.
     std::vector<Exp> got;
-    float lineX0 = 0;
-    const drawn::Run* prevRun = nullptr;
-    for (const drawn::Run* r : inks)
     {
-        if (prevRun && ContinuesWrap(*prevRun, *r, lineX0, workRight))
-            got.back().parts[0] += " " + r->text;
-        else
+        auto startsLike = [](const std::string& drawnText, const Exp& e) {
+            const std::string q = Norm(e.parts.empty() ? std::string() : e.parts[0]), d = Norm(drawnText);
+            const size_t n = std::min<size_t>(std::min(q.size(), d.size()), 12);
+            return n >= 4 && q.compare(0, n, d, 0, n) == 0;
+        };
+        size_t j = 0;
+        for (size_t i = 0; j < inks.size(); ++i)
         {
-            got.push_back({ InkOf(r->col), { r->text }, "drawn" });
-            lineX0 = r->x0;
+            const drawn::Run* first = inks[j];
+            Exp g{ InkOf(first->col), { first->text }, "drawn" };
+            const float lineX0 = first->x0;
+            size_t k = j + 1;
+            while (k < inks.size() && ContinuesWrap(*inks[k - 1], *inks[k], lineX0, workRight))
+            {
+                const bool whole = i < exp.size() && g.ink == exp[i].ink && HasParts(g.parts[0], exp[i].parts);
+                if (whole && i + 1 < exp.size() && startsLike(inks[k]->text, exp[i + 1])) break;
+                g.parts[0] += " " + inks[k]->text;
+                ++k;
+            }
+            for (size_t m = j; m < k; ++m)
+                if (inks[m]->x1 > right + 0.5f)
+                    bad("CLIPPED: '" + inks[m]->text + "' is drawn past the window's right edge (" + std::to_string(static_cast<int>(inks[m]->x1)) +
+                        " px, the window ends at " + std::to_string(static_cast<int>(right)) + ")");
+            got.push_back(g);
+            j = k;
         }
-        if (r->x1 > right + 0.5f) bad("CLIPPED: '" + r->text + "' is drawn past the window's right edge (" + std::to_string(static_cast<int>(r->x1)) +
-                                      " px, the window ends at " + std::to_string(static_cast<int>(right)) + ")");
-        prevRun = r;
     }
     bool same = got.size() == exp.size();
     for (size_t i = 0; same && i < got.size(); ++i) same = got[i].ink == exp[i].ink && HasParts(got[i].parts[0], exp[i].parts);
@@ -501,6 +520,7 @@ std::string Verify(DecompilerPanel& panel, const trust::TrueState& t, const std:
         const std::string amberNorm = Norm(amberText);
         for (const std::string& n : facts.notes)
         {
+            if (std::find(facts.summarised.begin(), facts.summarised.end(), n) != facts.summarised.end()) continue;
             const size_t colon = n.size() > 12 ? n.find(": ") : std::string::npos;
             const std::string tail = colon == std::string::npos ? n : n.substr(colon + 2);
             if (amberNorm.find(Norm(tail.substr(0, 40))) != std::string::npos) continue;
@@ -1732,6 +1752,7 @@ void RunTooltipPins()
     {
         // An entry typed: Enter is the right word, and stays.
         MiniRig m;
+        m.Idle(3);
         TypeEntry(m, Hex(cEntry));
         m.Idle(3);
         CHECK(m.Settle());
@@ -1770,6 +1791,7 @@ void RunTooltipPins()
     {
         MiniRig m;
         m.kind = DecompViewKind::LiveRunning;
+        m.Idle(3);
         TypeEntry(m, Hex(cEntry));
         m.Idle(3);
         CHECK(m.Settle());
@@ -1819,6 +1841,7 @@ void RunRefusedTextPins()
     {
         // A refusal followed by a valid entry typed: the box keeps what was typed while the answer comes.
         MiniRig m;
+        m.Idle(3);
         TypeEntry(m, Hex(cEntry));
         m.Idle(3);
         CHECK(m.Settle());
@@ -2652,8 +2675,8 @@ const Pin kPins[] = {
 // (the timing variant: Decompile while the engine has not yet acknowledged the cancel, "Stopped." drawn after it).
 const uint64_t kFollowPins[] = { 5051, 5080 };
 
-// The stride of the allocation-failure sweep in the default run: every 100th allocation of one request of C (32,176 of them), 322 cells.
-const long kOomStride = 100;
+// The stride of the allocation-failure sweep in the default run: every 50th allocation of one request of C (about 32,200 of them), about 644 cells.
+const long kOomStride = 50;
 
 struct CoverageNeed
 {
