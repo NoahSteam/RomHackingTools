@@ -7846,6 +7846,19 @@ void StackAliasUnions(std::string& text, const std::set<std::string>& wideNames,
 
 // Decompiles each case, runs it on the emulator for 'nIn' inputs, compiles every text together and runs the
 // comparison. A text that does not compile alone is told apart by compiling the cases one by one.
+// (area 3 round 15 fix) The engine types a pointer to a pointer to a local by the pointee it saw, and a chain of frame slots can disagree in
+// the sign of the pointee alone (`pppxStack_8 = &ppuStack_c;`: an `xunknown4 ***` given a `uint4 ***`, frame124 seed 2268.chain). C converts
+// it with a warning; the engine's reading, whose signed and unsigned values are distinct classes, did not compile. In that reading, the
+// address of a local assigned to a local is cast to the local's own type (the same pointer).
+std::string AddressAssignTyped(const std::string& text)
+{
+    static const std::regex addressAssign("^(\\s*)(\\w+) = &(\\w+);(.*)$");
+    std::istringstream in(text);
+    std::string line, out;
+    while (std::getline(in, line)) out += std::regex_replace(line, addressAssign, "$1$2 = (__typeof__($2))&$3;$4") + "\n";
+    return out;
+}
+
 std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& cases, int nIn, const std::string& cc, uint64_t inputSeed,
                                     int batchNo)
 {
@@ -8481,7 +8494,7 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
     auto compileRun = [&](const std::vector<size_t>& which, const std::string& tag, std::string& log, bool& compiled, bool engine = false) -> std::string {
         std::ostringstream src;
         src << RunGuardSource() << (engine ? CxxHeader() : CHeader());   // the guard's system headers first: the headers below define names (byte, word, uint, bool) they use
-        for (size_t i : which) src << "static int bad_" << prep[i].name << ";\n" << (engine ? ShortCircuitOps(NegativeWideLiteralsTyped(UnsignedLiteralsTyped(prep[i].cText))) : prep[i].cText) << "\n";
+        for (size_t i : which) src << "static int bad_" << prep[i].name << ";\n" << (engine ? AddressAssignTyped(ShortCircuitOps(NegativeWideLiteralsTyped(UnsignedLiteralsTyped(prep[i].cText)))) : prep[i].cText) << "\n";
         src << "int main(void) {\n  RunGuard();\n  FrameInit();\n";
         for (size_t i : which) src << prep[i].mainText;
         int total = 0;
@@ -8495,10 +8508,7 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
             std::ofstream f(cfile);
             f << src.str();
         }
-        // (area 3 round 15 fix) -fpermissive: the engine types a pointer to a pointer to a local by the local's pointee as it saw it, and a
-        // chain of slots can disagree in the sign of the pointee alone (`xunknown4 ***pppxStack_8 = &ppuStack_c;` with `uint4 **ppuStack_c`,
-        // frame124 seed 2268.chain): C converts it with a warning, C++ refused it, and the engine's reading of the text did not compile.
-        const std::string compileCmd = engine ? cxx + " -O0 -fwrapv -w -fpermissive -std=gnu++14 -o " + bin + " " + cfile + " > " + clog + " 2>&1"
+        const std::string compileCmd = engine ? cxx + " -O0 -fwrapv -w -std=gnu++14 -o " + bin + " " + cfile + " > " + clog + " 2>&1"
                                               : cc + " -O0 -fwrapv -fsigned-char -w -std=gnu11 -o " + bin + " " + cfile + " > " + clog + " 2>&1";
         compiled = std::system(compileCmd.c_str()) == 0;
         if (!compiled)
@@ -10591,7 +10601,7 @@ void TestPrintedC()
             }
             // (area 3 round 15 fix) frame124 seed 2268.chain (the merge's printed-C range): `(int4)uStack_24._0_1_` is the engine's sign extension
             // of the word's top byte, which the C reading takes unsigned (0x80FE for the run's 0x7FFE); the engine's reading, which has the
-            // sign, did not compile: `pppxStack_8 = &ppuStack_c;` assigns a `uint4 ***` to an `xunknown4 ***`. Compiled with -fpermissive it
+            // sign, did not compile: `pppxStack_8 = &ppuStack_c;` assigns a `uint4 ***` to an `xunknown4 ***`. With the address assignment cast to the local's type (AddressAssignTyped) it
             // reads the text and agrees (narrow-c). The value is right.
             {
                 const std::vector<CVerdict> r2268 = CheckPrintedC(d, { { "frame124 2268.chain: a piece's sign, a chain of slots typed apart",
