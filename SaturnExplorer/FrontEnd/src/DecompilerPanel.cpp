@@ -124,6 +124,17 @@ void WrappedDisabled(const std::string& text)
     ImGui::PopTextWrapPos();
 }
 
+// A control goes beside the one before it when it fits in the window and on the next row when it does not: on a narrow panel the toolbar's
+// end -- Stop, which "decompiling..." offers, then Auto-refresh, BIOS and Volatile -- was off the window (A8-24).
+void BesideIfFits(float width)
+{
+    const float startX = ImGui::GetItemRectMax().x + ImGui::GetStyle().ItemSpacing.x;
+    const float rightX = ImGui::GetCursorScreenPos().x + ImGui::GetContentRegionAvail().x;
+    if (startX + width <= rightX) ImGui::SameLine();
+}
+float ButtonWidth(const char* label) { return ImGui::CalcTextSize(label).x + ImGui::GetStyle().FramePadding.x * 2.0f; }
+float CheckboxWidth(const char* label) { return ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x + ImGui::CalcTextSize(label).x; }
+
 // The status row is words laid out like text: a piece goes beside the one before it when it fits in the window and starts the next
 // line when it does not (and wraps, when it is wider than a line by itself). The pieces that matter most -- "decompiling...", the stale
 // badge -- come last, so on a narrow panel (537 px at the default layout on a 1280 px window; the row is 760 to 790 px) they used to be
@@ -1159,7 +1170,7 @@ void DecompilerPanel::DrawHeader(const DecompilerView& view, const DecompilerRun
     if (ImGui::Combo("##cpu", &cpu, kCpus, 2)) SetCpu(cpu);
     Remember("cpu");
     ImGui::SetItemTooltip("Whose PC Follow PC reads. The output is the shared RAM's and stays when you switch.");
-    ImGui::SameLine();
+    BesideIfFits(ButtonWidth("Open Registers"));
     if (ImGui::SmallButton("Open Registers"))
     {
         req.showRegisters = true;
@@ -1167,7 +1178,7 @@ void DecompilerPanel::DrawHeader(const DecompilerView& view, const DecompilerRun
     }
     Remember("Open Registers");
 
-    ImGui::SameLine();
+    BesideIfFits(CheckboxWidth("Follow PC"));
     bool follow = FollowPc();
     if (ImGui::Checkbox("Follow PC", &follow))
     {
@@ -1185,7 +1196,7 @@ void DecompilerPanel::DrawHeader(const DecompilerView& view, const DecompilerRun
     }
     Remember("follow");
 
-    ImGui::SameLine();
+    BesideIfFits(ImGui::CalcTextSize("0x00000000").x + ImGui::GetStyle().FramePadding.x * 2.0f);
     // Not while the box is being edited: ImGui owns its text then, and would also lose the draft.
     if (mSyncEntryBox && !mEntryActive && mShownValid)
     {
@@ -1227,7 +1238,7 @@ void DecompilerPanel::DrawHeader(const DecompilerView& view, const DecompilerRun
     Remember("entry");   // the input box: nothing in the branch above submits an item
     ImGui::SetItemTooltip("Decompile the function starting at this address (hex; any mirror). Enter to go.");
 
-    ImGui::SameLine();
+    BesideIfFits(ButtonWidth("Refresh"));
     const bool refresh = ImGui::Button("Refresh");
     Remember("refresh");
     if (refresh)
@@ -1242,18 +1253,18 @@ void DecompilerPanel::DrawHeader(const DecompilerView& view, const DecompilerRun
                               : "Decompile again (also retries a function that ran out of time).");
     if (mPending.active)
     {
-        ImGui::SameLine();
+        BesideIfFits(ButtonWidth("Stop"));
         if (ImGui::Button("Stop")) mCancelRequested = true;
         Remember("stop");
     }
 
-    ImGui::SameLine();
+    BesideIfFits(CheckboxWidth("Auto-refresh"));
     if (ImGui::Checkbox("Auto-refresh", &mAutoRefresh)) req.settingsChanged = true;
     ImGui::SetItemTooltip("While the emulator runs and Follow PC is on: refresh at most every %d frames, and\n"
                           "only once the PC has left the function shown. Off: the output is marked stale\n"
                           "until you press Refresh.", kAutoRefreshFrames);
 
-    ImGui::SameLine();
+    BesideIfFits(ButtonWidth("BIOS"));
     if (ImGui::Button("BIOS")) ImGui::OpenPopup("bios");
     ImGui::SetItemTooltip(view.bios ? "A BIOS image is mapped at 0x00000000." : "No BIOS image: calls into the BIOS stop there.");
     if (ImGui::BeginPopup("bios"))
@@ -1264,7 +1275,7 @@ void DecompilerPanel::DrawHeader(const DecompilerView& view, const DecompilerRun
         ImGui::EndPopup();
     }
 
-    ImGui::SameLine();
+    BesideIfFits(ButtonWidth("Volatile"));
     if (ImGui::Button("Volatile"))
     {
         std::snprintf(mVolatileEdit, sizeof mVolatileEdit, "%s", VolatileMemory().c_str());

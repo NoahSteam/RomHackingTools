@@ -1661,6 +1661,9 @@ void RunWidthPins()
             const bool inside = m.panel.ItemRect("stale", a, b) && win && b.x <= win->Pos.x + win->Size.x;
             std::snprintf(what, sizeof what, "panel %.0f px, frame %d: the badge's rectangle is inside the window", w, frames);
             MiniCheck(what, inside);
+            // ...and so is Stop, the control "decompiling..." offers (A8-24: the toolbar ran off the window)
+            std::snprintf(what, sizeof what, "panel %.0f px, frame %d: Stop is inside the window", w, frames);
+            MiniCheck(what, m.panel.ItemRect("stop", a, b) && win && b.x <= win->Pos.x + win->Size.x);
             m.gate.Open();
             CHECK(m.Settle());
         }
