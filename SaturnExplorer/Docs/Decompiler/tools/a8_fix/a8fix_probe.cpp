@@ -170,6 +170,38 @@ void D5()
     Report("D5 a rename the engine could not apply is amber or classified", s && (s->warnings.empty() || !m.panel.Uncertainties().empty()));
 }
 
+// D12. Where the toolbar's controls end at the default layout's widths (not a trust indicator, but Stop is the control "decompiling..." offers).
+void D12()
+{
+    for (float w : { 537.0f, 672.0f, 806.0f, 1000.0f })
+    {
+        gMiniWinW = w;
+        MiniRig m;
+        m.kind = DecompViewKind::LiveRunning;
+        m.regs[0].pc = Defs()[FnC].entry + 4;
+        m.haveRegs[0] = true;
+        m.Idle(3);
+        CHECK(m.Settle());
+        m.gate.Close();
+        ++m.frame;
+        ++m.serial;
+        ClickMini(m, "refresh");
+        WaitHeldOrBusy(m);
+        m.Idle(3);
+        std::printf("      panel %4.0f px:", w);
+        for (const char* name : { "cpu", "Open Registers", "follow", "entry", "refresh", "stop" })
+        {
+            ImVec2 a, b;
+            if (m.panel.ItemRect(name, a, b)) std::printf("  %s %.0f..%.0f%s", name, a.x, b.x, b.x > w ? " (OUT)" : "");
+            else std::printf("  %s -", name);
+        }
+        std::printf("\n");
+        m.gate.Open();
+        CHECK(m.Settle());
+    }
+    gMiniWinW = 1250.0f;
+}
+
 }  // namespace
 
 int main(int argc, char** argv)
@@ -221,6 +253,7 @@ int main(int argc, char** argv)
             D2();
             D3();
             D5();
+            D12();
             bad = gDirectedBad;
         }
         else if (mode == "oom")
