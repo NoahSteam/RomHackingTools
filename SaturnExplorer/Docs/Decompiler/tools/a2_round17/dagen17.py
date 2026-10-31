@@ -8,11 +8,16 @@
 #               cut constant sum
 #  102 nloop    a loop whose counter or accumulator is cut to a byte or word and compared with a constant at the loop test or inside the body
 #  103 nsel     a cut value compared and then selected on (two compares of the same value with constants of opposite signs, summed)
-#  104 memmix   (memory mode) one record read and written at mixed widths by overlapping accesses: a word stored and a byte read back, a half-word stored
-#               over a byte pair, a byte-wise swap of a word (the machine is big-endian: the BE reading is needed, see be17.py)
-#  105 memchain (memory mode) post-increment and pre-decrement chains that change width in the chain, mixed with displacement forms
-#  106 memalias (memory mode) two pointers (r4, r5 equal, adjacent or overlapping at a different width) written then read
-# usage: dagen17.py <first seed> <count> [family 100..106]   -> one function per seed, ";" joined (SE_GENERATED_PRINTEDC_WORDS)
+#  104 memmix   (memory mode, SE_GENERATED_PRINTEDC_BE=1) one record read and written at mixed widths by overlapping accesses: a word stored and a byte read back, a half-word
+#               over a byte pair (the machine is big-endian and the host is not: the big-endian reading, A2-110)
+#  105 memchain (memory mode, BE) post-increment and pre-decrement chains that change width where the alignment allows
+#  106 memalias (memory mode, BE) a store through r4 at one width and a load through r5 at another (r5 equal to r4, a word apart or unrelated)
+#  107 regaddr  addresses of hardware registers as plain numbers in sums, masks, compares, products, shifts, returned (patch 0073)
+#  108 nexpr    a narrow named variable against a narrow negated, complemented, masked, shifted or offset expression, every compare, both orders (A2-113)
+#  109 ncmp4    family 100 with the source always r4, for SE_GENERATED_PRINTEDC_SWEEP16=1 (r4 = every value 0..65535)
+#  110 memloopmix (memory mode, BE) loops that change width on the same bytes: bytes assembled into a word, a word taken apart, half-words summed, a byte copy read as a word
+#  111 memcmp   (memory mode, width 1 or 2) a byte or half-word loaded and compared with a constant of either sign on either side
+# usage: dagen17.py <first seed> <count> [family 100..111]   -> one function per seed, ";" joined (SE_GENERATED_PRINTEDC_WORDS)
 #        dagen17.py show <seed> <family>
 import importlib.util, os, random, sys
 
@@ -197,7 +202,7 @@ FAMS17[107] = fam_regaddr
 
 
 def fam_nexpr(r):
-    """A2-110's shape: a narrow named variable (a cut of a parameter, used again below so that it stays a variable) against a narrow expression (a cut of a negated,
+    """A2-113's shape: a narrow named variable (a cut of a parameter, used again below so that it stays a variable) against a narrow expression (a cut of a negated,
     complemented, masked, shifted or offset value, the compare reduced to the cut's width by the engine), every compare and both orders"""
     g = Gen(r); f = g.f
     w = r.choice(['b', 'w'])
