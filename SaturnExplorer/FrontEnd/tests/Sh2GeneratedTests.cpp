@@ -5069,7 +5069,12 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
         auto Ran = [&](const RunOut& run, uint32_t insn) {
             const size_t handed = HandedOverAt(r, run);
             for (size_t k = 0; k < run.pcs.size() && (handed == SIZE_MAX || k <= handed); ++k)
-                if (run.pcs[k] == insn && run.depths[k] == 0) return true;
+            {
+                if (run.depths[k] != 0) continue;
+                if (run.pcs[k] == insn) return true;
+                // a delay slot is not an instruction of the run: it runs with its branch (and, since patch 0075, an access of it names the slot)
+                if (run.pcs[k] + 2 == insn && subject.UnitOf(run.pcs[k]) >= 0 && sfe::Sh2Decode(run.pcs[k], subject.WordAt(run.pcs[k])).HasDelaySlot) return true;
+            }
             return false;
         };
         auto separatedByRuns = [&](uint32_t x, uint32_t y) {

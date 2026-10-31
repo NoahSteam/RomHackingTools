@@ -1,0 +1,11 @@
+# A7-8: the ceilings of the share (percent) of a class's text-changing cases that no line of the instruction accounts for.
+# usage: SE_GAME_PERTURB=6 SE_GAME_PERTURB_CEILING=<this file> SE_GAME_HWRAM=<hwram007.bin> SaturnExplorerSh2DecompilerTests <scratch dir>
+# Measured at the area 7 fixer (hwram007.bin, 839 functions, 6 instructions per function; add 149 of 944, mov 1,025 of 1,360, cmp/eq 0 of 203,
+# and 0 of 28 and 0 of 14, or and xor too few to judge) with a hand of margin. The file may only shrink: a number goes down when the product
+# attributes more (the provenance walk of the A7-8 plan), and never up. A class with fewer than 20 changing cases is not judged.
+# key = the table's opcode key: 7 add #i, E mov #i, 88 cmp/eq #i, C9 and #i, C8 tst #i, CB or #i, CA xor #i
+7 16.5
+E 76.0
+88 1.0
+C9 1.0
+C8 1.0

@@ -530,7 +530,14 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                 for (const AccessFate* f : folded)
                     if (at - f->address < f->size) candidates.insert(f->insn);
                 if (candidates.empty()) continue;
-                bool atLoadOrCall = false, atCall = false, atStore = false, named = false;
+                bool atLoadOrCall = false, atCall = false, atStore = false, named = false, callsHere = text.find("(*") != std::string::npos;
+                for (const Token& t : r.lines[li].tokens) callsHere = callsHere || t.kind == TokenKind::FuncName;
+                // ...and a statement that shows the load itself (`xStack_20._2_2_ = *(uint2 *)(p + 0x30) & 0x7ff;`) is the load's: the store is what the
+                // code does with the value, as for a whole local assigned from a load
+                // ...nor a statement that computes (`iStack_2e = (int2)xStack_10 + extraout_r0 + -0x5e;`): the copies A7-11 names are bare values
+                callsHere = callsHere || text.find("*(", q) != std::string::npos || text.find('[', q) != std::string::npos ||
+                            text.find(' ', q + 3) != std::string::npos;
+                if (callsHere) continue;   // `xStack_18 = f(x);` is the call's result stored in the local: the call's own statement
                 for (const Token& t : r.lines[li].tokens)
                 {
                     uint16_t w = 0;
