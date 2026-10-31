@@ -8207,7 +8207,10 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
             std::ofstream f(cfile);
             f << src.str();
         }
-        const std::string compileCmd = engine ? cxx + " -O0 -fwrapv -w -std=gnu++14 -o " + bin + " " + cfile + " > " + clog + " 2>&1"
+        // (area 3 round 15 fix) -fpermissive: the engine types a pointer to a pointer to a local by the local's pointee as it saw it, and a
+        // chain of slots can disagree in the sign of the pointee alone (`xunknown4 ***pppxStack_8 = &ppuStack_c;` with `uint4 **ppuStack_c`,
+        // frame124 seed 2268.chain): C converts it with a warning, C++ refused it, and the engine's reading of the text did not compile.
+        const std::string compileCmd = engine ? cxx + " -O0 -fwrapv -w -fpermissive -std=gnu++14 -o " + bin + " " + cfile + " > " + clog + " 2>&1"
                                               : cc + " -O0 -fwrapv -fsigned-char -w -std=gnu11 -o " + bin + " " + cfile + " > " + clog + " 2>&1";
         compiled = std::system(compileCmd.c_str()) == 0;
         if (!compiled)
