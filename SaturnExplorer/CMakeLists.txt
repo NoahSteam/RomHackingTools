@@ -856,33 +856,38 @@ if(BUILD_TESTING)
         # fed truncated, oversized, bit-flipped and malformed input, two instances at once, and links. No engine
         # linked, so the whole target builds under the sanitizers cheaply. A fixed, seeded run by default;
         # SE_LOADFUZZ_CASES, _SEED, _FROM, _ONLY, _CASE, _PROCS and _ROUNDS make a long one (see the file's header).
-        add_executable(SaturnExplorerLoaderFuzzTests
-            FrontEnd/tests/LoaderFuzzTests.cpp
-            FrontEnd/src/Settings.cpp
-            FrontEnd/src/FileWrite.cpp
-            FrontEnd/src/Sha256.cpp
-            FrontEnd/src/Sh2Address.cpp
-            FrontEnd/src/Debug/CallStack.cpp
-            FrontEnd/src/Debug/MemoryBackend.cpp
-            FrontEnd/src/Debug/Sh2Disasm.cpp
-            FrontEnd/src/Decompiler/MemorySnapshot.cpp
-            FrontEnd/src/Decompiler/BiosImageFile.cpp
-            FrontEnd/src/Decompiler/AddressRanges.cpp
-            FrontEnd/src/Decompiler/Sh2FunctionFinder.cpp
-            FrontEnd/src/Decompiler/SpecBundle.cpp
-            FrontEnd/src/AssemblyPanel.cpp       # the notes file (LoadComments / SaveComments)
-            FrontEnd/src/Sh2Operands.cpp
-            FrontEnd/src/WatchPanel.cpp
-            FrontEnd/src/Debug/BreakpointManager.cpp
-            FrontEnd/src/Debug/ExecutionActions.cpp
-            FrontEnd/src/Debug/WatchList.cpp
-            ${SE_IMGUI_CORE})
-        target_include_directories(SaturnExplorerLoaderFuzzTests PRIVATE FrontEnd/src FrontEnd/tests include ${SE_IMGUI_DIR}
-            ${CMAKE_CURRENT_SOURCE_DIR}/Drivers/Savestate/src)
-        target_link_libraries(SaturnExplorerLoaderFuzzTests PRIVATE SaturnExplorerSavestateDriver SaturnExplorerCore)
-        add_test(NAME SaturnExplorerLoaderFuzzTests
-                 COMMAND SaturnExplorerLoaderFuzzTests ${CMAKE_CURRENT_BINARY_DIR}/loader_fuzz_test)
-        set_tests_properties(SaturnExplorerLoaderFuzzTests PROPERTIES TIMEOUT ${SE_DECOMP_TIMEOUT_120})
+        # Linux only: the harness uses glibc's malloc_usable_size (<malloc.h>), <dirent.h>, fork and rlimits, which
+        # macOS and MSVC do not have, so building it elsewhere breaks a plain `cmake --build` of the whole project.
+        # The Linux sanitizer job is where it runs.
+        if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+            add_executable(SaturnExplorerLoaderFuzzTests
+                FrontEnd/tests/LoaderFuzzTests.cpp
+                FrontEnd/src/Settings.cpp
+                FrontEnd/src/FileWrite.cpp
+                FrontEnd/src/Sha256.cpp
+                FrontEnd/src/Sh2Address.cpp
+                FrontEnd/src/Debug/CallStack.cpp
+                FrontEnd/src/Debug/MemoryBackend.cpp
+                FrontEnd/src/Debug/Sh2Disasm.cpp
+                FrontEnd/src/Decompiler/MemorySnapshot.cpp
+                FrontEnd/src/Decompiler/BiosImageFile.cpp
+                FrontEnd/src/Decompiler/AddressRanges.cpp
+                FrontEnd/src/Decompiler/Sh2FunctionFinder.cpp
+                FrontEnd/src/Decompiler/SpecBundle.cpp
+                FrontEnd/src/AssemblyPanel.cpp       # the notes file (LoadComments / SaveComments)
+                FrontEnd/src/Sh2Operands.cpp
+                FrontEnd/src/WatchPanel.cpp
+                FrontEnd/src/Debug/BreakpointManager.cpp
+                FrontEnd/src/Debug/ExecutionActions.cpp
+                FrontEnd/src/Debug/WatchList.cpp
+                ${SE_IMGUI_CORE})
+            target_include_directories(SaturnExplorerLoaderFuzzTests PRIVATE FrontEnd/src FrontEnd/tests include ${SE_IMGUI_DIR}
+                ${CMAKE_CURRENT_SOURCE_DIR}/Drivers/Savestate/src)
+            target_link_libraries(SaturnExplorerLoaderFuzzTests PRIVATE SaturnExplorerSavestateDriver SaturnExplorerCore)
+            add_test(NAME SaturnExplorerLoaderFuzzTests
+                     COMMAND SaturnExplorerLoaderFuzzTests ${CMAKE_CURRENT_BINARY_DIR}/loader_fuzz_test)
+            set_tests_properties(SaturnExplorerLoaderFuzzTests PROPERTIES TIMEOUT ${SE_DECOMP_TIMEOUT_120})
+        endif()
     endif()
 
     # Frame identity in the scrub view: what a refresh shows as the ring evicts, and which frame staged

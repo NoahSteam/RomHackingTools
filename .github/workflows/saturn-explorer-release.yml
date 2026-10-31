@@ -5,9 +5,11 @@ name: Saturn Explorer Release
 # from make_source_offer.py). A v* tag creates a DRAFT release for a person to review, sign and publish;
 # a manual run only uploads the archives as workflow artifacts.
 #
-# What this does not do: Developer ID signing and notarization of the macOS .dmg (needs the certificate;
-# see SaturnExplorer/Integration/DISTRIBUTION.md), and Windows code signing. The archives are ad hoc /
-# unsigned until that is done by hand.
+# macOS signing: the macOS job builds an ad hoc signed archive. The separate "macos-sign" job (tags, or a
+# manual run with sign=true) re-signs it with a Developer ID, has Apple notarise it and staples the ticket,
+# using secrets from the repository's "release" environment (see SaturnExplorer/Integration/DISTRIBUTION.md,
+# "Signing in CI"). Without those secrets it does nothing and the ad hoc archive is what gets attached.
+# Windows code signing is not done.
 on:
   push:
     tags: ['v*']
@@ -16,6 +18,10 @@ on:
       label:
         description: 'Release label used in the archive names (default: the short commit)'
         required: false
+      sign:
+        description: 'Also sign and notarise the macOS archive (needs the release environment secrets)'
+        type: boolean
+        default: false
 
 # Build jobs only read the repository; the one job that creates the release asks for write access itself.
 permissions:
@@ -170,10 +176,103 @@ jobs:
             SaturnExplorer/dist/SHA256SUMS-windows.txt
           if-no-files-found: error
 
+  macos-sign:
+    name: macOS Developer ID signing and notarization
+    if: github.ref_type == 'tag' || github.event.inputs.sign == 'true'
+    needs: macos
+    runs-on: macos-latest
+    # Secrets live in this environment, which can require a reviewer's approval before the job may use them.
+    environment: release
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: macos
+          path: unsigned
+
+      # Everything below runs only when the credentials were supplied; the values reach the shell only
+      # through the environment.
+      - name: Check for signing credentials
+        id: creds
+        env:
+          CERT: ${{ secrets.MACOS_CERT_P12_BASE64 }}
+          CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+          KEY_P8: ${{ secrets.NOTARY_KEY_P8 }}
+          KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+          APPLE_ID: ${{ secrets.NOTARY_APPLE_ID }}
+          TEAM_ID: ${{ secrets.NOTARY_TEAM_ID }}
+          APP_PASSWORD: ${{ secrets.NOTARY_PASSWORD }}
+        run: |
+          ok=false
+          if [ -n "$CERT" ] && [ -n "$CERT_PASSWORD" ]; then
+            if { [ -n "$KEY_P8" ] && [ -n "$KEY_ID" ] && [ -n "$ISSUER_ID" ]; } || \
+               { [ -n "$APPLE_ID" ] && [ -n "$TEAM_ID" ] && [ -n "$APP_PASSWORD" ]; }; then ok=true; fi
+          fi
+          echo "enabled=$ok" >> "$GITHUB_OUTPUT"
+          if [ "$ok" != true ]; then
+            echo "::warning::Signing secrets are not configured in the 'release' environment; the macOS archive stays ad hoc signed."
+          fi
+
+      - name: Import the signing certificate
+        if: steps.creds.outputs.enabled == 'true'
+        env:
+          CERT: ${{ secrets.MACOS_CERT_P12_BASE64 }}
+          CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 3600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          printf '%s' "$CERT" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -P "$CERT_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN"
+          rm -f "$RUNNER_TEMP/cert.p12"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" > /dev/null
+          # The Developer ID intermediate certificate, so the identity validates as a chain.
+          curl -fsSL -o "$RUNNER_TEMP/DeveloperIDG2CA.cer" https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer
+          security import "$RUNNER_TEMP/DeveloperIDG2CA.cer" -k "$KEYCHAIN" > /dev/null || true
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          security find-identity -v -p codesigning "$KEYCHAIN"
+
+      - name: Sign, notarize and staple
+        if: steps.creds.outputs.enabled == 'true'
+        env:
+          NOTARY_KEY_P8: ${{ secrets.NOTARY_KEY_P8 }}
+          NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+          NOTARY_APPLE_ID: ${{ secrets.NOTARY_APPLE_ID }}
+          NOTARY_TEAM_ID: ${{ secrets.NOTARY_TEAM_ID }}
+          NOTARY_PASSWORD: ${{ secrets.NOTARY_PASSWORD }}
+        run: |
+          DMG="$(ls unsigned/*.dmg)"
+          python3 SaturnExplorer/Integration/notarize_release.py --dmg "$DMG" --out "signed/$(basename "$DMG")"
+
+      # The archive CI built was checksummed before it was re-signed; this is a different file, so it gets its own.
+      - name: Checksum
+        if: steps.creds.outputs.enabled == 'true'
+        run: cd signed && shasum -a 256 *.dmg > SHA256SUMS-macos.txt && cat SHA256SUMS-macos.txt
+
+      - uses: actions/upload-artifact@v4
+        if: steps.creds.outputs.enabled == 'true'
+        with:
+          name: macos-notarized
+          path: |
+            signed/*.dmg
+            signed/SHA256SUMS-macos.txt
+          if-no-files-found: error
+
+      - name: Remove the keychain
+        if: always()
+        run: security delete-keychain "$RUNNER_TEMP/signing.keychain-db" 2>/dev/null || true
+
   draft-release:
     name: Draft GitHub release
     if: github.ref_type == 'tag'
-    needs: [macos, windows]
+    needs: [macos, windows, macos-sign]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -186,7 +285,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          files=(archives/windows/*)
+          notes="Includes mednafen-se, a modified Mednafen build (not an official release); its source is in each archive (SOURCE.txt and mednafen-se-source.tar.xz). You supply the Saturn BIOS. The Windows zip is not code-signed, so SmartScreen may warn the first time you run it (More info, then Run anyway). Check a download against the SHA256SUMS-windows.txt / SHA256SUMS-macos.txt attached here."
+          if ls archives/macos-notarized/*.dmg > /dev/null 2>&1; then
+            files+=(archives/macos-notarized/*)
+          else
+            files+=(archives/macos/*)
+            notes="$notes The macOS archive is NOT notarized (ad hoc signed): open it with right-click, Open."
+          fi
           gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft \
-            --title "Saturn Explorer $GITHUB_REF_NAME" --generate-notes \
-            --notes "Includes mednafen-se, a modified Mednafen build (not an official release); its source is in each archive (SOURCE.txt and mednafen-se-source.tar.xz). You supply the Saturn BIOS. The Windows zip is not code-signed, so SmartScreen may warn the first time you run it (More info, then Run anyway). Check a download against the SHA256SUMS-windows.txt / SHA256SUMS-macos.txt attached here." \
-            archives/*/*
+            --title "Saturn Explorer $GITHUB_REF_NAME" --generate-notes --notes "$notes" \
+            "${files[@]}"
