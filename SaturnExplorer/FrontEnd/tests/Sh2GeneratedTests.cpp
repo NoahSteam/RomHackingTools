@@ -10589,6 +10589,16 @@ void TestPrintedC()
                 CHECK(r104[0].cls.empty() && r104[0].compared && r104[0].text.find("== 0xffff") != std::string::npos);   // agrees as C, not narrow-c
                 CHECK(r104[1].cls.empty() && r104[1].compared);
             }
+            // (area 3 round 15 fix) frame124 seed 2268.chain (the merge's printed-C range): `(int4)uStack_24._0_1_` is the engine's sign extension
+            // of the word's top byte, which the C reading takes unsigned (0x80FE for the run's 0x7FFE); the engine's reading, which has the
+            // sign, did not compile: `pppxStack_8 = &ppuStack_c;` assigns a `uint4 ***` to an `xunknown4 ***`. Compiled with -fpermissive it
+            // reads the text and agrees (narrow-c). The value is right.
+            {
+                const std::vector<CVerdict> r2268 = CheckPrintedC(d, { { "frame124 2268.chain: a piece's sign, a chain of slots typed apart",
+                                                                         { 0x7FD0, 0x61F3, 0x710C, 0x1F18, 0x61F3, 0x7120, 0x1F19, 0x61F3, 0x7124, 0x1F1A, 0x51FA, 0x6112, 0x6112, 0x6313, 0x730C, 0x2372, 0xE21A, 0x51FA, 0x6112, 0x6112, 0x6313, 0x730C, 0x2321, 0x51FA, 0x6112, 0x6112, 0x6313, 0x730A, 0x2350, 0xE248, 0x51FA, 0x6112, 0x6112, 0x6313, 0x730C, 0x2321, 0xE205, 0x51FA, 0x6112, 0x6112, 0x6313, 0x730A, 0x2321, 0x51FA, 0x6112, 0x6112, 0x6313, 0x2342, 0x51FA, 0x6112, 0x6112, 0x6313, 0x7304, 0x2362, 0x51FA, 0x6112, 0x6112, 0x6313, 0x730C, 0x2351, 0x63F3, 0x7318, 0x6231, 0x6023, 0x63F3, 0x730C, 0x6232, 0x202A, 0x63F3, 0x730C, 0x6230, 0x302C, 0x7F30, 0x000B, 0x0009 } } }, nIn, cc, 0x51ED, 8970);
+                std::printf("pin 'frame124 2268.chain': %s (%s)\n", r2268[0].cls.empty() ? "agrees" : r2268[0].cls.c_str(), r2268[0].detail.substr(0, 90).c_str());
+                CHECK(!IsFailing(r2268[0]) && r2268[0].compared);
+            }
             // A2-106: the memory mode compares the value returned and the arena afterwards. (a) The fixtures agree at their width (MemoryPrintedCFixtures, in the default run
             // above); (b) a width-4 function run as bytes is a mismatch (the byte order of the host is not the machine's, which only units of the access width cancel);
             // (c) a text whose store is dropped (the hook) agrees on the value it returns, and differs in the memory alone: "memory" in the finding.
