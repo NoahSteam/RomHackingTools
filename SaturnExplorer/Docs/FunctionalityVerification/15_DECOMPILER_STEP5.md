@@ -14926,3 +14926,83 @@ Lending and every count are unchanged; the mapping statistics move (a few more t
 - A3-154: the printed-C differential cannot read `frame16.py`'s mixed-width loop and index texts in frame mode; the chain144 stream avoids mixed widths, so it does not test them either.
 - A3-146's text is still no C, and `PseudoEval` still rejects it.
 - No mutation table per part of 0076: the pins were checked with the hold and the host fix switched off together (section 3 and 6).
+
+## Area 5 fixer (A5-94 to A5-98)
+
+Fixer, branch `review/5-a594-fix`, on `2a5efab6`; own RelWithDebInfo build under the scratch directory, `-j2`, every test binary under `ulimit -v 3500000` with a timeout, one heavy job at a time. **No engine patch** (0078 not used): one host change (`Sh2Decompiler.cpp`, `PointerResolver`) and three oracle changes (`Sh2GeneratedTests.cpp`, `PointerPrintsFromHardware` and rule 3f). The fix is `afe88d2b`.
+
+**The rows.** Seven seeds, each shrunk and its text read against the emulator's run. They are one real host gap and three oracle mechanisms. All P3: no corpus function has any of them, and the corpora are identical before and after.
+
+| seed (grammar) | from | what the run did | what the text said | mechanism | row |
+|---|---|---|---|---|---|
+| 4112577 (2) | A5-94, open | a 4-byte write reached FFFFFE0C | `uVar3 = param_2 \| 0xfffffff0;` ... `uVar3 = 0xfffffe04; do { uVar3 = uVar3 + 4 ^ 0x20000000; ... } while (...); *(uint4 *)uVar3 = uVar3;` with A5-91's note "among them 0xFFFFFE0C" | oracle: one name for two values; the masked assignment is overwritten before the store, and rule 3f's derivation took it | A5-94 |
+| 4508726 (2) | area 2 round 17 review | writes reached FFFFFFF0 | `pxVar2 = (param_4 \| 0xfffffff0)` overwritten by `pxVar2 = extraout_r7_00` (a callee's output, A5-58) before the store | the same | A5-95 |
+| 4515520 (2) | area 2 round 17 review | GBR byte accesses reached FFFFFFA2, FFFFFFCB, FFFFFFCE | `iVar1 = (int4)*(char *)(param_2 \| 0xfffffe00); Write_GBR(iVar1); *(uint1 *)(iVar1 + 1) = ...`: GBR is a byte loaded through the masked address (the read has its span note) | oracle: a mask in a load's address taken for the loaded value's | A5-96 |
+| 4605385 (1) | area 3 round 16 review | a 2-byte read of 05D00010 (VDP1_EDSR, cached) | `p = (p + 2) ^ 0x40000000` from &VDP1_TVMR four turns, then a second loop `*p; p ^= 0x20000000`: notes for 0x65D00004 and 0x45D00004 only, no cache caution | **real gap**: the stepped walk's later values are not carried through a later loop | A5-97 |
+| 4900986, 4906136 (1) | coordinator (area 2 fixer) | reads of 05B00436, 00100043 (cached) | the same walk, then `^ 0x60000000` / `^ 0x40000004` after the loop | **real gap**: the later values are dropped by a bitwise operation | A5-97 (not distinct) |
+| 4912819 (2) | coordinator (area 2 fixer) | a 4-byte write at FFFFFFF0 | `uVar1` = 0x80002010 or 0x80003010, `*(uVar1 \| 0xffffffe0)`: both are 0xFFFFFFF0; the engine names SH2_RTCSR and rule 3c checks it | oracle: rule 3f asked "may reach on-chip registers" of a pointer whose every value the text gives | A5-98 |
+
+The coordinator's seeds 4912819, 4900986 and 4906136 fail the same way on `d88e06e1`. Only 4912819 is a distinct row; the other two are A5-97.
+
+### 1. The fixes
+
+**Host (A5-97).** `PointerValues::later` holds the values a stepped pointer's bounded walk comes to (A5-91), and `steppedCached` holds the cache flag (A5-70). Both were lost to a bitwise operation after the loop (`BitwiseOf` did not carry them), and a second loop's exact paths closed only the first values. Now the operation moves the later values (and the cached address), and `CloseBack` closes them under the exact paths of a later loop. Every value they come to is asked `CachedRegister` (a register area through the cached partition), so the stepped note says "they read through the cached partition (0x05D00008 is one) too, and a read of a register through the cached partition is a cache read ...". A first version stopped at the later list's 64 entries, which loop 1's walk had filled, so 4605385 still failed. Now every value is asked and the list keeps what fits.
+
+**Oracle.**
+
+- *A5-94, A5-95.* The derivation skips an assignment overwritten on every path to the use by another of the same name. `StatementDominates`: the overwrite lies between the two; no block that holds it closes before the use; and no label (`LAB_...:`, `case`, `default`) lies between it and the use. Structured text only, conservative: an overwrite inside a block or a loop the use is after does not kill. The four A5-89 text pins wrote a merge as two straight-line assignments, which is an overwrite. They now write it as the engine prints one, an `if` block.
+- *A5-96.* `LoadsBlanked`: the operand of each unary `*` (a name with its subscripts, or a parenthesised expression after its casts) and each `name[...]` is left out of the value an assignment computes. A mask in it bounds the address, not the value loaded. The names inside are followed as `loaded`, so a mask behind them counts for nothing. A first version used `DerefOperandList`'s operand, which runs to the end of the expression. It blanked the mask of `(int4)*param_2 | 0xffffffc0` (seed 1804560's text) and failed that pin.
+- *A5-98.* Rule 3f asks only of an open derivation (a free name, A5-89) or a stepped one (an assignment made from its own name, `puVar3 = puVar3 + 4`). A closed one is rule 3c's (`onchip.span.closed`). A first version excused every closed derivation and lost sweep seed 2007165's pin: a pointer stepped from &SMPC_OREG13, then masked, for which the host rightly says the span.
+
+### 2. Mutation checks
+
+Each part reverted alone (an edit of the source, a rebuild, then the decompiler suite, the pins, the seven seeds and 1,500 seeds of each grammar from 1), then restored:
+
+| part reverted | `Sh2DecompilerTests` | pins (`TestA587Pins`) | the seven seeds | 1,500 seeds of each grammar |
+|---|---|---|---|---|
+| overwrite rule (A5-94) | passes | 5 checks: the A5-94 and A5-95 modules, the text pin | 4112577, 4508726 fail | 0 failing |
+| loads (A5-96) | passes | 3 checks: the A5-96 module, two text pins | 4515520 fails | 0 failing |
+| closed rule (A5-98) | passes | 2 checks: the A5-98 module | 4912819 fails | 0 failing |
+| stepped exception of the closed rule | passes | 1 check: sweep seed 2007165's `onchip.span.said` | none fail | 0 failing |
+| host, the operation's part (A5-97) | 1 check (`a5_97`) | 4 checks: the 4900986 and 4906136 modules | 4900986, 4906136 fail | 0 failing |
+| host, the second loop's part (A5-97) | 1 check (`a5_97_loop`) | 2 checks: the 4605385 module | 4605385 fails | 0 failing |
+
+Pins: `TestA587Pins` gains the six shrunk modules (A5-94, A5-95, A5-96, A5-98 and the three of A5-97; A5-95's degenerate function, which the shrinker left at the callee's own entry, was taken out) and the text pins of each derivation rule (with controls). `TestHardwareVolatility` gains `a5_97`, `a5_97_loop` and the control `a5_97_through`.
+
+### 3. The corpora
+
+`SE_GAME_HWRAM=<img> SE_GAME_LEND=1 SE_GAME_NOTES=1 SE_GAME_OUT=<dir> SaturnExplorerSh2DecompilerTests`. The engine is unchanged, and the decompiler's output depends only on the two host blocks. So the base is this build with both blocks off (it fails only the two new fixtures).
+
+| | hwram007 | hwram008 |
+|---|---|---|
+| functions, all ok | 1,730 (839 texts) | 2,995 (1,554 texts) |
+| texts, notes, every log line of the game sections | **identical to the base** | **identical to the base** |
+| lending, signatures (parameters) | 678 (956) | 1,038 (1,310) |
+| real entries | 474 (645) of 999 | 724 (975) of 1,543 |
+| hardware notes and cautions | 35 and 0 | 57 and 4 |
+| missing and said / frame writes lost / malformed / frame unchecked | 0 / 0 / 0 / 0 | 4 / 0 / 0 / 0 |
+
+### 4. The matrix
+
+| | result |
+|---|---|
+| build (all targets), `-j2` | ok |
+| `ctest -E SaturnExplorerLive -j2` | **102 of 102** (190 s; the engine suite 37.9 s) |
+| `ctest -R SaturnExplorerLive` | **6 of 6** |
+| fault suite (`SaturnExplorerDecompilerFaultTests` alone) | **0 of 94 jobs failed** (74 s), no MOVED pin |
+| vendor gate (`check-vendored-tree.py check ... --tests-dir`) | `vendored tree: ok` (no engine file changed) |
+| the seven seeds | 0 failing |
+| grammar 1, 5,000,001 to 5,005,000 | **0 failing seeds** (92 s) |
+| grammar 2, 5,000,001 to 5,005,000 | 4,999 seeds, **0 failing**. Seed **5002665 crashes the generator test** (SIGSEGV in `TracingEmulate::executeLoad`, the emulator's `ReadValue`: A2-115's mechanism, area 2's open row); the chunk was run as 5,000,001 to 5,002,664 and 5,002,666 to 5,005,000. Routed to area 2 |
+
+The range starts at 5,000,001 on the coordinator's word: 4,900,001 and up is the area 2 fixer's.
+
+### 5. Routed
+
+- Grammar 2 seed **5002665** (area 2): the generator test dies with a segmentation fault in the emulator's load (`SE_GENERATED_GRAMMAR=2 SE_GENERATED_FIRST=5002665 SE_GENERATED_SEEDS=1`), as A2-115's 4515655 does. Not checked on the base build; the code that crashes is not touched here.
+
+### 6. Limits
+
+- The overwrite rule reads braces and labels. A `goto` into a block is a label and is respected. Text the engine prints without braces (none seen) would be taken for straight-line code.
+- A closed derivation that names no hardware base (a RAM constant ORed with a top-bits mask) is asked by neither rule 3c nor rule 3f; the engine says the access as a direct one.
+- The later values are still asked before the offsets after them only where A5-83's limit says so (`steppedCachedAt` is moved by an offset, not asked again). The cached address the note names is one value the walk can reach, not necessarily the one the run read.
