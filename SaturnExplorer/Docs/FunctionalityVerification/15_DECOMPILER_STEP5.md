@@ -14818,3 +14818,44 @@ Neither image holds A3-144's or A3-145's shape as far as `uninit16.py` and a loo
 - Calls: the driver's `PseudoEval` cannot evaluate 60 to 70% of the fixtures, so the call fixtures (lent, unlent, writer, global, out) have no value oracle beyond hand reading of `mksv2.py`, `mkout.py` and `mkgcall.py` fixtures (right).
 - A3-152's mechanism is a guess; its minimal pair (V1/V3) is the thing to trace.
 - The generator should draw loops, indexed stores and a partly overwritten pointer slot in its chain stream (A3-147); the nightly range cannot reach A3-144 to A3-146.
+
+## Area 2 fixer (A2-111 to A2-115)
+
+Branch `review/2-a2111-fix`, on `d88e06e1` (patches up to 0075; 0076 is the area 3 fixer's). Engine patch **0077** (`patches/0077-engine-narrow-compare-cast-target.patch`: `cast.cc`, `typeop.cc`), two oracle fixes in `Sh2GeneratedTests.cpp`, their pins, the ledger rows A2-111, A2-113, A2-114, A2-115 closed and **A2-118** (the tools) filed, and `Docs/Decompiler/tools/a2_fix111/` (`fix111.py`, `valid111.sh`, `genranges111.sh`). Own RelWithDebInfo build under the scratch directory (`-j2`; the tree before the patch is kept as a second set of binaries for the old/new comparisons); every run under `ulimit -v 3500000` (4,000,000 for the generator ranges), one heavy job at a time.
+
+### 1. A2-111 and A2-113 (patch 0077)
+
+* **A2-111, the cast target of an equality compare.** `TypeOpEqual::getInputCast` and `TypeOpNotEqual::getInputCast` returned the lower-ordered of the two sides' types when `checkIntPromotionForCompare` said "cast". For a constant of the unsigned limit (`uint2`) against an `INT_SEXT` printed as `(int2)x`, that is `uint2`, which the constant already has, and the other side (NO_PROMOTION: a cast) is never asked. The fix is a file-static `compareCastTarget`: when the input being cast is a constant, the other side is not and is an `int` or `uint` of the constant's size, the cast target is the other side's type, the type C promotes it by. The constant `0xffff` against the `int2` prints `-1`; `0xff80` prints `-0x80`. For every other input the answer is what it was (`reqtype`). The ordered compares (`getInputCast` of `INT_LESS` and the others, which take `inputTypeLocal`) are not changed: the generator draws no case of them.
+* **A2-113, the other side's extension.** Patch 0071's branch of `checkIntPromotionForCompare` (the other side is NO_PROMOTION, a named variable or a cast: take its extension from its type) ran only when this side is a constant. It runs now for any non-constant narrow other side, so `-(param_3 & 0xff) < param_2` (the negation of a masked value: SIGNED_EXTENSION, against the named `uint2`: UNSIGNED) is cast, `(uint2)-(param_3 & 0xff) < param_2`, which C evaluates as the code does. The reviewer's second part, taking `INT_SEXT`/`INT_ZEXT` by their opcode, was not needed: the type of their output (`int2`, `uint2`) gives the same extension. Family 108 and 101 show it (below).
+* **Pinned.** `kPrintedCFixtures` has `A2-111 a`, `A2-111 b`, `A2-113 a` and `A2-113 b` (the words of the rows), always checked and failing as `mismatch` on `d88e06e1` (checked: the four are `mismatch` on the old binary). With the patch each is `agrees` and the texts are `param_2 == -1`, `param_3 != -0x80`, `param_4 <= (uint2)-(param_2 & 0xff)` and `(uint2)-(param_3 & 0xff) < param_2`. The A2-104 pin and its control keep their texts (`== 0xffff`).
+
+| Run (fresh seeds) | Before (d88e06e1) | With 0077 |
+|---|---|---|
+| family 103, 6,000 functions (7,200,001) | 2 `mismatch` in 6,000 (the reviewer's); 1 of the first 200 of seeds 7,500,001 | 0 `mismatch` (and 2,000 more at 7,100,001, 2,000 at 7,600,001: 0) |
+| family 108, 4,000 functions (7,300,001) | 28 of 1,600 (the reviewer's); 5 of 200 at 7,500,001 | 0 `mismatch` (2,000 at 7,600,001: 0) |
+| family 101, 10,000 functions (7,400,001) | 4 of 10,000 (the reviewer's) | 0 `mismatch` |
+| 98, 99, 100, 102, 107, 109 (2,000 each, 7,600,001) | 0 | 0 (`not-compilable` in 107 is the hardware-symbol class, A2-112) |
+| old against new, 200 functions of each of 98 to 103 and 107 to 109 (7,500,001) | | texts identical in all but 7: 1 in family 103 (`mismatch` to `agrees`) and 6 in family 108 (5 `mismatch` to `agrees`, 1 `agrees` to `agrees` with `(uint2)~(...)`), all of the two shapes; the other 1,793 identical in text and verdict (family 103's second difference is the log's trailing failure line, not a text) |
+
+* **The corpora.** Both images through `SE_GAME_HWRAM` with `SE_GAME_OUT`, the old and the new binary: **839 and 1,554 functions, 0 files differ** (2,393 texts identical to `d88e06e1`). Every ledger count of the run is 0 in both (accesses dropped 0, not printed exactly once 0, frame writes lost 0, malformed pieces 0, mapping violations 0, 4 "missing and said" in 008 as before). Lending: **678 (956)** and **1,038 (1,310)** known signatures lent, as before.
+
+### 2. A2-114 and A2-115 (the oracle)
+
+* **A2-114.** `mov.l r7,@-r5 ; rts ; nop` printed `*(xunknown4 *)(param_2 + -4) = param_4;` with `int4 param_2`; `UsesFrameMemory` takes any `@-Rn` through a register other than r15 for the walk of a frame, so the text ran in frame mode and dereferenced a random integer: `crashed`. A first test for `param_N` in the address left 113 of 1,200 functions of families 91, 92 and 94 `crashed` (a pointer variable assigned from a parameter: `piVar1 = (int4 *)(param_1 + ...); return *piVar1 ...`), so `DereferencesParameter` follows the names through plain assignments (to a fixed point; the address of a variable, `&xStack_4`, does not carry the value) and a dereference (`*(T *)(address)` or `*name`) of such a name, without the memory mode, is `skipped:memory`. The classes of 1,200 functions of 91, 92 and 94 without the mode, width 4 words: `crashed=198, skipped:memory=1001, agrees=1` before, `skipped:memory=1199, agrees=1` now. The frame-mode texts (the walks of a frame, where an address is a local's) keep their coverage: 1,500 seeds of the printed-C range from 4,900,001 are 2,418 compared, `agrees=2357` on the old harness and 2,422 compared, `agrees=2361` now (the four more are the new fixtures). Pin `A2-114 #0` to `#2`: the word, byte and half-word pre-decrement store through r5 are `skipped:memory`.
+* **A2-115.** `Env::ReadValue` asked `IsRam` of the first byte of an access and then dereferenced `ByteAt(a + i)` for each byte; a longword at 0xDFFFFFFF ends at 0xE0000000, which no window holds, so `ByteAt` was null. Each byte is asked now, and a byte no window holds reads 0 (the machine takes an address error for the misaligned access, which the oracle's domain leaves out; the run goes on). The write twin, `Store`, already tested each byte (`if (uint8_t* b = ByteAt(a + i))`). Pin `A2-115: grammar 2 seed 4515655`: segmentation fault (rc 139) on the old binary, 0 findings now; the chunk 4,515,001 to 4,520,000 of grammar 2 runs to its summary (its one finding is seed 4515520, `onchip-span-unsaid`, an area 5 stream, and is the same on the old binary).
+
+### 3. Validation
+
+| Run | Result |
+|---|---|
+| `ctest` (all 108: 102 and the 6 Live), `-j1` | 108 of 108 passed (491 s, run again after the last harness edit; `SaturnExplorerSh2DecompilerEngineTests` 39 s). No new test: the pins are in `SaturnExplorerSh2GeneratedTests` and `SaturnExplorerSh2PrintedCTests` |
+| fault suite (`SaturnExplorerDecompilerFaultTests`) | fault matrix: **0 of 94 job(s) failed** |
+| vendored-tree gate | passes but for `number 0076 is missing` (the area 3 fixer's patch; its README row will end that) |
+| grammar 2, 4,900,001 to 4,920,000 | 0 findings in 3 chunks; seed 4912405 `return-dropped` (a lent void, areas 3 and 4) and seed 4912819 `onchip-span-unsaid` (area 5): both the same on the old binary |
+| grammar 1, 4,900,001 to 4,910,000 | seeds 4900986 and 4906136: `cache-read-pointer-unsaid` (area 5), the same on the old binary |
+| printed-C, 4,900,001 to 4,915,000 (24,547 functions) | 0 `mismatch` but `frame124_4909471` (`7FE0 61F3 ...`, an area 3 frame stream), a `mismatch` on the old binary too |
+| dagen16 98 and 99, dagen17 100 to 103 and 107 to 109 (2,000 each at 7,600,001) | 0 `mismatch` |
+| memory, little-endian, families 91 to 94 and 97 at widths 4, 2, 1 (2,000 each) | 0 `mismatch` but family 91 at widths 2 and 1: 1 each, the function `6163 6273 6373 632B 237F 031A 7180 201B 8146 855E 6033 301C 000B 0009` whose engine reading does not compile (`invalid cast from type 'Promoted<4, true>'`): A2-109's class, accepted |
+| memory, big-endian arena (`SE_GENERATED_PRINTEDC_BE=1`), 104 to 106, 110, 111 at widths 4, 2, 1 | 0 `mismatch` (15 chunks of 2,000) |
+
+Routed: the area 3 streams (seed 4912405 `return-dropped`, `frame124_4909471`) and the area 5 streams (4912819 and 4515520 `onchip-span-unsaid`, 4900986 and 4906136 `cache-read-pointer-unsaid`) are not caused by this branch (each is the same on `d88e06e1`); they go to those areas.
