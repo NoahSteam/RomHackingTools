@@ -184,6 +184,19 @@ MUTANTS = [
     ("V-0072-storemaywrite", VEN + "cpp/coreaction.cc",
      "  if (data.isPendingFrameStore(sop) || data.pointerFromFrame(sop->getIn(1))) return true;\n  return data.storeAimedAt(sop,local);",
      "  return false;", ["unit", "gen", "corpus"], ENGINE_ESCALATE, "0072: dead code takes no store through a pointer to write a frame local (A3-130)"),
+    # The host's switches for two patches (0010 is stillborn as a revert: its hunks overlap later ones).
+    ("V-0010", SRC + "Decompiler/SaturnArchitecture.cpp", "    loadsNotDuplicated = true;", "    loadsNotDuplicated = false;",
+     ["unit", "gen", "corpus"], ENGINE_ESCALATE, "patch 0010 off: a load printed at each use and past other memory operations"),
+    ("V-0009", SRC + "Decompiler/SaturnArchitecture.cpp", "    keepUnusedLoads = true;", "    keepUnusedLoads = false;",
+     ["unit", "gen", "corpus"], ENGINE_ESCALATE, "patch 0009 off: an unused load through a pointer dropped"),
+    # Reachability probes for survivors (a kill here means the oracles do reach the code; a survival means no input of theirs does).
+    ("R-ptr-loop", DEC, "if (budget_ <= 0 || !v.back.empty()) v.others = true;", "if (!v.back.empty()) __builtin_trap(); if (budget_ <= 0) v.others = true;",
+     ["unit", "gen", "corpus"], [], "probe: does any input leave a loop path no node closed (H-ptr-loop)?"),
+    ("R-note-reach", DEC, "        const uint32_t reach = AccessAddress(at, size);\n        const std::vector<const HardwareRegister*> regs = HardwareRegistersReached(reach, size, write);",
+     "        const uint32_t reach = AccessAddress(at, size);\n        if (reach != at) __builtin_trap();\n        const std::vector<const HardwareRegister*> regs = HardwareRegistersReached(reach, size, write);",
+     ["unit", "gen", "corpus"], [], "probe: does any input make a misaligned hardware access whose notes are written (H-note-reach)?"),
+    ("R-ptr-sub", DEC, "out = Shift(Walk(base, depth + 1), sub ? 0u - k : k);", "if (sub) __builtin_trap(); out = Shift(Walk(base, depth + 1), sub ? 0u - k : k);",
+     ["unit", "gen", "corpus"], [], "probe: does an INT_SUB of a constant reach PointerResolver (H-ptr-sub)?"),
     # Hand-made reverts of the patches no hunk of which reverts alone (later patches rewrote the lines).
     ("V-0019-ldc", VEN + "processors/SuperH/superh.sinc", "    local value:4 = rm_08_11 & 0x000003F3;", "    local value:4 = rm_08_11 & 0x0FFF0FFF;",
      ["decode", "unit"], ENGINE_ESCALATE, "patch 0019 reverted in ldc Rm,SR: bits the SH-2 does not have kept"),
@@ -215,6 +228,14 @@ PRIORITY = ("0068 0072 0076 0066 0065 0063 0060 0058 0057 0056 0054 "
             "0018 0017 0010 0009 0012 0014 0024 0031 0073 0013 "
             "0001 0023 0032 0040 0003 0004 "
             "0050 0006 0005 0045 0034 0026 0038").split()
+
+# Two host mutants at once: a sensor blinded and the class it is the sensor of brought back (id, [mutant ids], should, escalate).
+MULTI = [
+    ("C-0010-printed", ["V-0010", "H-led-printed"], ["unit", "gen", "corpus"], ENGINE_ESCALATE),
+    ("C-0010-cond", ["V-0010", "H-led-cond"], ["unit", "gen", "corpus"], ENGINE_ESCALATE),
+    ("C-0010-repeat", ["V-0010", "H-led-repeat"], ["unit", "gen", "corpus"], ENGINE_ESCALATE),
+    ("C-0010-all3", ["V-0010", "H-led-printed", "H-led-cond", "H-led-repeat"], ["unit", "gen", "corpus"], ENGINE_ESCALATE),
+]
 
 # Patches with a known reason no plain Linux ctest run can see them (A10-10, accepted): run, reported apart.
 PATCH_NOTES = {
@@ -449,6 +470,25 @@ class Harness:
             self.restore(list(touched) + ["SaturnExplorer/FrontEnd/src/Decompiler/Sh2SpecData.h",
                                           "SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/processors/SuperH/sh-2.sla"])
 
+    def multi(self, m):
+        mid, ids, should, escalate = m
+        ms = [x for i in ids for x in MUTANTS if x[0] == i]
+        paths = sorted({x[1] for x in ms})
+        self.mark(paths)
+        for x in ms:
+            full = os.path.join(self.root, x[1])
+            text = open(full, encoding="utf-8").read()
+            if text.count(x[2]) != 1:
+                self.results.write("%s\t-\tnot-applied\t0\t%s does not apply\n" % (mid, x[0]))
+                self.restore(paths)
+                return
+            open(full, "w", encoding="utf-8").write(text.replace(x[2], x[3]))
+        print("%s: %s" % (mid, " + ".join(ids)), flush=True)
+        try:
+            self.score(mid, should, escalate, None)
+        finally:
+            self.restore(paths)
+
     def combo(self, m):
         self.patch(m[1], (m[0], m[2], m[3], m[4]))
 
@@ -483,6 +523,7 @@ def main():
         todo += [("host", m[0], m) for m in MUTANTS]
     if a.group in ("all", "combo"):
         todo += [("combo", m[0], m) for m in COMBOS]
+        todo += [("multi", m[0], m) for m in MULTI]
     if a.group in ("all", "patch"):
         first = [n for n in PRIORITY if n in patches]
         todo += [("patch", "patch:" + n, n) for n in first + [n for n in patches if n not in first]]
