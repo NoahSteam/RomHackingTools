@@ -4280,6 +4280,10 @@ void ActionDeadCode::keepFrameWritesForLoads(Funcdata &data,vector<Varnode *> &w
 	superseded = true;
     }
     if (superseded) continue;
+    // ...and none the local scope proved no pointer reaches (no local alias: below every frame address the function makes), nor one that is
+    // no address-tied storage: the scope clears an address force on either (Funcdata::syncVarnodesWithSymbol), and a hold it cleared at each
+    // pass was a change at each pass, a main loop that never ended (hwram007 0601A0C8)
+    if (vn->hasNoLocalAlias() || !vn->isAddrTied()) continue;
     if (!vn->isAddrForce()) vn->setFrameLoadForce();	// held against the rules' removal of a write nothing reads (RuleEarlyRemoval)
     pushConsumed(~((uintb)0),vn,worklist);
   }

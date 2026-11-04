@@ -4538,6 +4538,15 @@ bool BitwiseOfOthers(const RunOut& run, uint32_t v, int k)
             const int32_t c = static_cast<int32_t>(w - o);
             if (c > -0x80 && c < 0x80) return true;
         }
+    // (area 3 fixer, A3-151) ...or the swap of another start value, stepped after the swap: `swap.b r5,r0 ; ldc r0,gbr ; mov.b r0,@(15,gbr)` makes
+    // r5's start 0x06022000 swapped, 0x06020020, plus 15 (grammar 2 seed 4503481, `claim-wrong:storesThrough`): the swap is undone only before
+    // the step, so the step is taken off the other side.
+    for (uint32_t o : others)
+        for (uint32_t w : { (o & 0xFFFF0000u) | ((o & 0xFFu) << 8) | ((o >> 8) & 0xFFu), (o << 16) | (o >> 16) })
+        {
+            const int32_t c = static_cast<int32_t>(v - w);
+            if (c > -0x80 && c < 0x80) return true;
+        }
     return false;
 }
 int PointerRegister(const RunOut& run, uint32_t v)
@@ -7718,6 +7727,57 @@ const std::vector<uint32_t>& PrintedCPool()
     return pool;
 }
 
+// (area 3 fixer, A3-152) The inputs no lent signature holds that change what a function leaves in r0, by the emulator: each row of 'ins' (r0 to r7,
+// SR, MACH, MACL, GBR, VBR as the printed-C rows have them) is run once as it is and once with each of r0 to r3, r8 to r11, the parameter
+// registers past 'params' and the T flag changed. Each perturbed run follows a run of the row itself, so memory the function reads before writing
+// holds the same in both. r0 that ends as the value it was changed to is left alone, the excused case (A3-14). Empty when none changes it; else
+// "<register> on entry: <r0> -> <r0>".
+template <typename MachineT, typename EnvT>
+std::string HiddenReturnInput(MachineT& machine, EnvT& env, const std::vector<std::vector<uint32_t>>& ins, size_t params)
+{
+    auto run = [&](const std::vector<uint32_t>& in, const char* reg, uint32_t value, uint32_t& r0) {
+        for (int i = 0; i < 8; ++i) machine.Set(("r" + std::to_string(i)).c_str(), in[i]);
+        for (int i = 8; i < 15; ++i) machine.Set(("r" + std::to_string(i)).c_str(), CalleeSaved(i));
+        machine.Set("r15", kStackTop);
+        machine.Set("pr", kSentinel);
+        machine.Set("sr", in[8]);
+        machine.Set("gbr", in[11]);
+        machine.Set("vbr", in[12]);
+        machine.Set("mach", in[9]);
+        machine.Set("macl", in[10]);
+        if (reg != nullptr) machine.Set(reg, value);
+        RunOut out;
+        env.trace.clear();
+        if (!machine.Run(kCode, kSentinel, kStepLimit, out, env)) return false;
+        r0 = out.fin[0];
+        return true;
+    };
+    std::vector<std::pair<std::string, uint32_t>> perturb;
+    for (int h : { 0, 1, 2, 3, 8, 9, 10, 11 }) perturb.emplace_back("r" + std::to_string(h), 0x7000u + 0x11u * static_cast<uint32_t>(h));
+    for (size_t a = params; a < 4; ++a) perturb.emplace_back("r" + std::to_string(4 + a), 0x0600F200u + 0x10u * static_cast<uint32_t>(a));
+    for (const std::vector<uint32_t>& in : ins)
+        for (const auto& pv : perturb)
+        {
+            uint32_t base = 0, again = 0, v = 0;
+            if (!run(in, nullptr, 0, base) || !run(in, nullptr, 0, again) || again != base) continue;   // (a row whose r0 is not one value: no test)
+            if (!run(in, pv.first.c_str(), pv.second, v)) continue;
+            if (v == base || (pv.first == "r0" && v == pv.second)) continue;
+            char buf[96];
+            std::snprintf(buf, sizeof buf, "%s on entry: %08X -> %08X", pv.first.c_str(), base, v);
+            return buf;
+        }
+    for (const std::vector<uint32_t>& in : ins)
+    {
+        uint32_t base = 0, again = 0, v = 0;
+        if (!run(in, nullptr, 0, base) || !run(in, nullptr, 0, again) || again != base) continue;
+        if (!run(in, "sr", in[8] ^ 1u, v) || v == base) continue;
+        char buf[96];
+        std::snprintf(buf, sizeof buf, "the T flag on entry: %08X -> %08X", base, v);
+        return buf;
+    }
+    return std::string();
+}
+
 // The class of a text that returns nothing over a run that changed r0. A function that returns nothing but whose r0 ended as something
 // other than it began: a return the engine dropped, or r0 left as scratch. Compiled code cannot tell the two apart, and 40 percent of the
 // corpora's lent signatures are such functions (withholding every one would cost 235 of 600 and 431 of 984: the round 5 record), so a `void`
@@ -8284,6 +8344,34 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
                 rebuilt = out;
             }
         }
+        // (area 3 fixer, A3-148) A global the text names by its address (`pxRam0600f000 = axStack_44;`: a frame address published in RAM) is
+        // declared nowhere, and the text did not compile. The function's own write of it gives its type: it is declared after the locals as a
+        // static of the type of the first value assigned to it, so the text reads back what it wrote (a callee is not run with it: a text with a
+        // call is not compared). A name only read stays undeclared (`not-compilable`: the harness has no value for memory it did not write).
+        {
+            static const std::regex ramName("\\b([a-z]+Ram[0-9a-f]{8})\\b");
+            std::set<std::string> seen;
+            std::string decls;
+            for (std::sregex_iterator it(rebuilt.begin(), rebuilt.end(), ramName), end; it != end; ++it)
+            {
+                const std::string n = (*it)[1].str();
+                if (!seen.insert(n).second) continue;
+                const std::regex assign("^\\s*" + n + " = ([^\\n]*);$");
+                std::smatch am;
+                std::istringstream lines(rebuilt);
+                std::string l;
+                while (std::getline(lines, l))
+                    if (std::regex_match(l, am, assign))
+                    {
+                        if (am[1].str().find(n) == std::string::npos) decls += "  static __typeof__(" + am[1].str() + ") " + n + ";\n";
+                        break;
+                    }
+            }
+            const size_t brace = rebuilt.find("{\n");
+            const size_t blank = brace == std::string::npos ? std::string::npos : rebuilt.find("\n\n", brace + 1);
+            if (!decls.empty() && blank != std::string::npos) rebuilt.insert(blank + 1, decls);
+            else if (!decls.empty() && brace != std::string::npos) rebuilt.insert(brace + 2, decls);
+        }
         pr.cText = frameDefines + rebuilt + frameUndefs;
         if (gPrintedCTextHook) pr.cText = gPrintedCTextHook(pr.cText);
         // A2-112 (instrument, off by default): a number that is the address of a hardware register is printed `&SMPC_SF` when the data flow uses it as an address (patch 0073),
@@ -8344,6 +8432,7 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
         std::ostringstream rows, mcs;
         int kept = 0;
         uint32_t baseIn[13] = {};   // the first row's inputs (area 2 round 11: SE_GENERATED_PRINTEDC_SWEEP16 varies r4 from it)
+        std::vector<std::vector<uint32_t>> keptIns;   // the first rows' inputs, for the hidden-input check of a `void` lent text (A3-152)
         bool r0Changed = false;
         // Area 2 round 11 instrument: SE_GENERATED_PRINTEDC_EXTRA=<hex>,<hex>,... and SE_GENERATED_PRINTEDC_BYTES=1 add rows with r4 (and r5)
         // set to those values (the byte rows: every value 0..255 and its sign extension), after the rows above.
@@ -8452,6 +8541,7 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
                 mcs << cs << "u,";
             }
             if (kept == 0) std::memcpy(baseIn, in, sizeof baseIn);
+            if (keptIns.size() < 8) keptIns.push_back(std::vector<uint32_t>(in, in + 13));
             ++kept;
         }
         if (!kept)
@@ -8583,6 +8673,20 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
         {
             v.cls = VoidReturnClass(r.prototype.known, c.words);
             if (v.cls == "return-dropped") v.detail = "the rts slot moves a register into r0 (the compiled `return Rm`), the text returns nothing and the signature is lent";
+            // (area 3 fixer, A3-152) ...and a `void` signature is lent only when no input it does not hold can change what the function leaves in r0
+            // (the host's return rule, A3-5): r0 left as it came in is the one excused case (A3-14). The run says so: each of the first rows again with
+            // r0 to r3, r8 to r11, the parameter registers past the signature's and the T flag changed one at a time. An r0 that changes with one of them
+            // is a return the engine dropped (A3-152: r0's entry value through a frame word, lent `void f(void)`), which the class above, reading the rts
+            // slot only, counted as a void lent over scratch.
+            if (v.cls == "void-return-lent")
+            {
+                const std::string hidden = HiddenReturnInput(*machine, env, keptIns, r.prototype.params.size());
+                if (!hidden.empty())
+                {
+                    v.cls = "return-dropped";
+                    v.detail = "the signature is lent `void` and r0 at the return changes with " + hidden;
+                }
+            }
         }
     }
     // Compile and run.
@@ -10371,6 +10475,121 @@ bool GenFrame130Fn(uint64_t seed, CCase& c, std::string& shape)
     return true;
 }
 
+// ---- A3-147 (area 3 fixer, patch 0076): the shapes of A3-144 to A3-146 on the frame124 stream (one seed in four, a draw of its own, named
+// frame124_<seed>.chain144 so it is checked as a frame124 function): a 16-byte struct S at sp + 4 or 8 in a 64-byte frame on r15, no push and
+// no call, &S behind a chain of 1 to 4 pointer slots (slot 0 at sp + 32 holds &S, slot k the address of slot k - 1), S filled first by four
+// word stores at its frame offset (r4 to r7 or constants), then one of:
+//   loop (A3-144): r3 = 2 to 4 trips; each trip reloads the chain into r1, stores r5 through it (a word, halfword or byte), and either steps
+//        the pointer by the width and writes it back to slot 0 (`wb`) or leaves it (`nowb`); r5 += r6.
+//   idx (A3-145): a store at a non-constant index (`mov r6,r0 ; and #12,r0 ; mov.l r5,@(r0,rB)`), rB the reloaded pointer, r15 + S, or a
+//        local outside S (`other`); then the word and the next word read through the reloaded pointer.
+//   byte (A3-146): slot 0's low byte overwritten with a constant that keeps it inside S (the frame's low byte is the same in the run and in
+//        the printed-C harness, whose arena is page aligned), then a word stored through the reloaded chain.
+// then 1 to 3 reads of S at its frame offset, byte, halfword or word wide, added or xored into r0.
+//   frame124.chain144.<loop|idx|byte>.<variant>.L<1..4>
+bool GenFrame144Fn(uint64_t seed, CCase& c, std::string& shape)
+{
+    Rng rng(seed * 2654435761u + 0x144A3u);
+    if (!rng.Chance(25)) return false;
+    const uint32_t levels = 1 + rng.Below(4);
+    const uint32_t sOff = 4u + 4u * rng.Below(2);
+    const uint32_t kind = rng.Below(3);   // loop, idx, byte
+    LaunderBuilder b;
+    auto put = [&](uint32_t x) { b.Put(static_cast<uint16_t>(x)); };
+    put(0x7FC0);                                     // add #-64,r15
+    put(0x61F3);                                     // mov r15,r1
+    put(0x7100 | sOff);                              // add #sOff,r1: &S
+    put(0x1F18);                                     // mov.l r1,@(32,r15): slot 0
+    for (uint32_t k = 1; k < levels; ++k)
+    {
+        put(0x61F3);                                 // mov r15,r1
+        put(0x7100 | (32u + 4u * (k - 1)));          // add #slot(k-1),r1
+        put(0x1F10 | (8u + k));                      // mov.l r1,@(slot k,r15)
+    }
+    auto reload = [&](uint32_t reg) {
+        put(0x50F0 | reg << 8 | (8u + levels - 1));   // mov.l @(slot L-1,r15),reg
+        for (uint32_t k = 1; k < levels; ++k) put(0x6002 | reg << 8 | reg << 4);   // mov.l @reg,reg
+    };
+    for (uint32_t j = 0; j < 4; ++j)
+    {
+        const uint32_t disp = (sOff + 4u * j) / 4u;
+        if (rng.Chance(30))
+        {
+            put(0xE200 | rng.Below(256));            // mov #imm,r2
+            put(0x1F20 | disp);                      // mov.l r2,@(S+4j,r15)
+        }
+        else
+            put(0x1F00 | (4u + j) << 4 | disp);      // mov.l r4..r7,@(S+4j,r15)
+    }
+    std::string variant;
+    if (kind == 0)
+    {
+        const uint32_t size = 1u << rng.Below(3);
+        const bool wb = rng.Chance(60);
+        variant = std::string(wb ? "wb." : "nowb.") + (size == 1 ? "b" : size == 2 ? "w" : "l");
+        put(0xE300 | (2u + rng.Below(3)));           // mov #trips,r3
+        const size_t top = b.at;                     // L:
+        reload(1);
+        put(0x2150 | (size == 1 ? 0u : size == 2 ? 1u : 2u));   // mov.b / .w / .l r5,@r1
+        if (wb)
+        {
+            put(0x7100 | size);                      // add #size,r1
+            put(0x1F18);                             // mov.l r1,@(32,r15)
+        }
+        put(0x356C);                                 // add r6,r5
+        put(0x4310);                                 // dt r3
+        put(0x8B00 | ((static_cast<int>(top) - static_cast<int>(b.at) - 2) & 0xFF));   // bf L
+    }
+    else if (kind == 1)
+    {
+        const uint32_t base = rng.Below(3);          // the reloaded pointer, r15 + S, a local outside S
+        variant = base == 0 ? "rel" : base == 1 ? "dir" : "other";
+        if (base == 0) reload(1);
+        else
+        {
+            put(0x61F3);                             // mov r15,r1
+            put(0x7100 | (base == 1 ? sOff : 48u));  // add #S or #48,r1
+        }
+        put(0x6063);                                 // mov r6,r0
+        put(0xC90C);                                 // and #12,r0
+        put(0x0156);                                 // mov.l r5,@(r0,r1)
+        reload(1);
+        put(0x6012);                                 // mov.l @r1,r0
+        put(0x7104);                                 // add #4,r1
+        put(0x6312);                                 // mov.l @r1,r3
+        put(0x203A);                                 // xor r3,r0
+    }
+    else
+    {
+        const uint32_t k = rng.Below(4);
+        variant = "c" + std::to_string(k);
+        put(0xE000 | ((0xC0u + sOff + 4u * k) & 0xFF));   // mov #(the low byte of &S) + 4k,r0: entry r15 - 64 + sOff ends in 0xC0 + sOff
+        put(0x62F3);                                 // mov r15,r2
+        put(0x7223);                                 // add #35,r2: slot 0's low byte
+        put(0x2200);                                 // mov.b r0,@r2
+        reload(1);
+        put(0x2172);                                 // mov.l r7,@r1
+    }
+    const uint32_t nReads = 1 + rng.Below(3);
+    for (uint32_t i = 0; i < nReads; ++i)
+    {
+        const uint32_t size = 1u << rng.Below(3);
+        const uint32_t off = rng.Below(16 / size) * size;
+        put(0x63F3);                                 // mov r15,r3
+        put(0x7300 | (sOff + off));                  // add #S+off,r3
+        put(0x6230 | (size == 1 ? 0u : size == 2 ? 1u : 2u));   // mov.b / .w / .l @r3,r2
+        put(i == 0 && kind != 1 ? 0x6023u : rng.Chance(50) ? 0x302Cu : 0x202Au);   // mov r2,r0 / add r2,r0 / xor r2,r0
+    }
+    put(0x7F40);                                     // add #64,r15
+    put(0x000B);                                     // rts
+    put(0x0009);
+    static const char* const kKind[] = { "loop", "idx", "byte" };
+    shape = std::string("frame124.chain144.") + kKind[kind] + "." + variant + ".L" + std::to_string(levels);
+    c.words = b.w;
+    c.name = "frame124_" + std::to_string(seed) + ".chain144";
+    return true;
+}
+
 // The frame ledger over the frame124 stream (A3-124): each function decompiled as CheckLaunderWalks does (the callee at kCode + 0xC0 lent
 // first when there is one), and every frame write that went unread while the code reads it is a finding (dts::FrameLosses).
 int CheckFrame124Ledger(Sh2Decompiler& d, const std::vector<CCase>& cases)
@@ -10533,6 +10752,25 @@ std::vector<CVerdict> CheckLaunderWalks(Sh2Decompiler& d, const std::vector<CCas
         if (v.cls.empty() && (!any || local)) v.cls = any ? "launder:local" : "launder:no-return";
     }
     return out;
+}
+
+// (area 3 fixer, A3-148) `frame16.py` seed 21 fixture 41 (`global L2 N7 none tgt=S g=1`): &S published in the global at 0x0600F000 and read back as
+// the pointer every store goes through, S filled byte by byte, two slots: the printed-C differential's text names the global `pxRam0600f000`.
+std::vector<uint16_t> A3148Words()
+{
+    static const char* const kWords =
+        "4F22 7FC0 61F3 710D 1F18 61F3 7120 1F19 61F3 710D D23D 2212 6122 1F18 E2F5 61F3 710D 7109 2120 E29D "
+        "61F3 710D 7105 2120 E212 51F9 6112 7107 2120 E2CA 51F9 6112 7106 2120 E2CB 51F9 6112 710E 2120 E22D "
+        "51F9 6112 710C 2120 E215 51F9 6112 710F 2120 E23A 51F9 6112 7102 2120 E2D4 61F3 710D 7108 2120 E2C5 "
+        "61F3 710D 7104 2120 E21D 61F3 710D 7101 2120 E2FC 51F9 6112 710B 2120 E2A6 61F3 710D 710A 2120 E2F6 "
+        "51F9 6112 2120 E222 61F3 710D 710D 2120 E207 61F3 710D 7103 2120 51F9 6112 7101 2171 51F9 6112 710B "
+        "2172 51F9 6112 710F 2140 51F9 6112 7109 2151 E250 61F3 710D 7109 2121 51F9 6112 710C 2170 51F9 6112 "
+        "7107 2162 E000 61F3 710D 7104 6310 633C 303C 7F40 4F26 000B 0009 0009 0600 F000";
+    std::vector<uint16_t> v;
+    std::istringstream in(kWords);
+    std::string tok;
+    while (in >> tok) v.push_back(static_cast<uint16_t>(std::strtoul(tok.c_str(), nullptr, 16)));
+    return v;
 }
 
 void TestPrintedC()
@@ -10705,6 +10943,67 @@ void TestPrintedC()
                 std::printf("pin 'frame124 2268.chain': %s (%s)\n", r2268[0].cls.empty() ? "agrees" : r2268[0].cls.c_str(), r2268[0].detail.substr(0, 90).c_str());
                 CHECK(!IsFailing(r2268[0]) && r2268[0].compared);
             }
+            // (area 3 fixer, patch 0076) A3-144: loops that store through a pointer behind 2 to 4 frame slots (the review's `mkloop.py` and `mkloop2.py`):
+            // the slots' writes were removed and the compiled text crashed (d88e06e1: `crashed`); A3-145: an array filled, written at a variable index
+            // and read through a pointer reloaded from a slot (`mkidx.py`, `mkidx2.py`, `mkidx3.py`): the fills were removed (`mismatch` or `crashed`).
+            {
+                auto w = [](const char* t) {
+                    std::vector<uint16_t> v;
+                    std::istringstream in(t);
+                    std::string tok;
+                    while (in >> tok) v.push_back(static_cast<uint16_t>(std::strtoul(tok.c_str(), nullptr, 16)));
+                    return v;
+                };
+                const std::vector<CCase> k144 = {
+                    { "A3-144 LOOP L2", w("4F22 7FC0 61F3 7104 1F18 61F3 7120 1F19 E303 51F9 6112 2152 7104 1F18 356C 4310 8BF7 50F1 53F2 303C 7F40 4F26 000B 0009") },
+                    { "A3-144 LOOP L3", w("4F22 7FC0 61F3 7104 1F18 61F3 7120 1F19 61F3 7124 1F1A E303 51FA 6112 6112 2152 7104 1F18 356C 4310 8BF6 50F1 53F2 303C 7F40 4F26 000B 0009") },
+                    { "A3-144 LOOP L4", w("4F22 7FC0 61F3 7104 1F18 61F3 7120 1F19 61F3 7124 1F1A 61F3 7128 1F1B E303 51FB 6112 6112 6112 2152 7104 1F18 356C 4310 8BF5 50F1 53F2 303C 7F40 4F26 000B 0009") },
+                    { "A3-144 LOOP2 nowb", w("4F22 7FC0 61F3 7104 1F18 61F3 7120 1F19 E303 51F9 6112 2152 356C 4310 8BF9 50F1 52F2 302C 7F40 4F26 000B 0009") },
+                    { "A3-144 LOOP2 wb1", w("4F22 7FC0 61F3 7104 1F18 61F3 7120 1F19 E303 51F9 6112 2152 356C 62F3 7204 1F28 4310 8BF6 50F1 52F2 302C 7F40 4F26 000B 0009 0009") },
+                    { "A3-145 IDX2 idxdir rel", w("4F22 7FC0 61F3 7108 1F18 61F3 7108 2142 61F3 710C 2152 61F3 7110 2162 61F3 7114 2172 61F3 7108 6063 C90C 0156 51F8 6012 7104 6312 203A 7F40 4F26 000B 0009 0009") },
+                    { "A3-145 IDX L2 chain", w("4F22 7FC0 61F3 7108 1F18 61F3 7120 1F19 61F3 7108 2142 61F3 710C 2152 61F3 7110 2162 61F3 7114 2172 51F9 6112 6063 C90C 0156 51F9 6112 6012 7104 6312 203A 7F40 4F26 000B 0009 0009") },
+                    { "A3-145 IDX L4 chain", w("4F22 7FC0 61F3 7108 1F18 61F3 7120 1F19 61F3 7124 1F1A 61F3 7128 1F1B 61F3 7108 2142 61F3 710C 2152 61F3 7110 2162 61F3 7114 2172 51FB 6112 6112 6112 6063 C90C 0156 51FB 6112 6112 6112 6012 7104 6312 203A 7F40 4F26 000B 0009 0009") },
+                    { "A3-145 IDX3 other L1", w("4F22 7FC0 61F3 7108 1F18 61F3 7108 2142 61F3 710C 2152 61F3 7110 2162 61F3 7114 2172 61F3 712C 6063 C90C 0156 51F8 6012 7104 6312 203A 7F40 4F26 000B 0009 0009") },
+                    { "A3-145 IDX3 other L2", w("4F22 7FC0 61F3 7108 1F18 61F3 7120 1F19 61F3 7108 2142 61F3 710C 2152 61F3 7110 2162 61F3 7114 2172 61F3 712C 6063 C90C 0156 51F9 6112 6012 7104 6312 203A 7F40 4F26 000B 0009 0009") },
+                };
+                const std::vector<CVerdict> r144 = CheckPrintedC(d, k144, nIn, cc, 0x51ED, 8960);
+                for (size_t k = 0; k < r144.size(); ++k)
+                {
+                    std::printf("pin '%s': %s (%s)\n", k144[k].name.c_str(), r144[k].cls.empty() ? "agrees" : r144[k].cls.c_str(), r144[k].detail.substr(0, 90).c_str());
+                    CHECK(r144[k].cls.empty() && r144[k].compared);
+                }
+            }
+            // (area 3 fixer) A3-148: a frame address published in a global (`frame16.py` seed 21, fixture 41: `pxRam0600f000 = ...`): the name was declared
+            // nowhere and the text did not compile (`not-compilable`); it is declared now with the type of what the function assigns to it.
+            {
+                const std::vector<CVerdict> r148 = CheckPrintedC(d, { { "A3-148 F16.21.41 a frame address published in a global", A3148Words() } }, nIn, cc, 0x51ED, 8959);
+                std::printf("pin 'A3-148': %s (%s)\n", r148[0].cls.empty() ? "agrees" : r148[0].cls.c_str(), r148[0].detail.substr(0, 90).c_str());
+                CHECK(r148[0].cls.empty() && r148[0].compared);
+            }
+            // (area 3 fixer, A3-152) The hidden-input check of a `void` lent text (HiddenReturnInput), the oracle's own decision: r1 moved into r0 is
+            // an input no signature holds; a constant is none; r0 left alone on one path is the excused case; r4 past a signature of no parameters is one.
+            {
+                auto hidden = [&](std::vector<uint16_t> words, size_t params) {
+                    std::vector<uint8_t> hw;
+                    for (size_t i = 0; i < words.size(); ++i) dts::Put16(hw, kCode - 0x06000000u + 2 * i, words[i]);
+                    dts::Put16(hw, kSentinel - 0x06000000u, 0x0009);
+                    dts::Put16(hw, kSentinel - 0x06000000u + 2, 0x0009);
+                    auto snap = dts::MakeSnapshot(hw, 8958);
+                    Env env;
+                    env.ram = snap->regions[1].bytes;
+                    std::unique_ptr<Machine> machine(new Machine(snap, &env));
+                    const std::vector<std::vector<uint32_t>> ins = { { 1, 2, 3, 4, 5, 6, 7, 8, 0, 9, 10, 0x06030000u, 0x06031000u },
+                                                                    { 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0x06030000u, 0x06031000u } };
+                    return HiddenReturnInput(*machine, env, ins, params);
+                };
+                const std::string a = hidden({ 0x6013, 0x000B, 0x0009 }, 0);                    // mov r1,r0 ; rts ; nop
+                const std::string b = hidden({ 0xE005, 0x000B, 0x0009 }, 0);                    // mov #5,r0
+                const std::string c = hidden({ 0x2448, 0x8900, 0xE005, 0x000B, 0x0009 }, 1);    // tst r4,r4 ; bt L ; mov #5,r0 ; L: rts
+                const std::string e = hidden({ 0x6043, 0x000B, 0x0009 }, 0);                    // mov r4,r0, no parameter
+                const std::string f = hidden({ 0x7001, 0x000B, 0x0009 }, 0);                    // add #1,r0: computed from r0
+                std::printf("pin 'A3-152 oracle': [%s] [%s] [%s] [%s] [%s]\n", a.c_str(), b.c_str(), c.c_str(), e.c_str(), f.c_str());
+                CHECK(a.compare(0, 2, "r1") == 0 && b.empty() && c.empty() && e.compare(0, 2, "r4") == 0 && f.compare(0, 2, "r0") == 0);
+            }
             // A2-106: the memory mode compares the value returned and the arena afterwards. (a) The fixtures agree at their width (MemoryPrintedCFixtures, in the default run
             // above); (b) a width-4 function run as bytes is a mismatch (the byte order of the host is not the machine's, which only units of the access width cancel);
             // (c) a text whose store is dropped (the hook) agrees on the value it returns, and differs in the memory alone: "memory" in the finding.
@@ -10821,6 +11120,19 @@ void TestPrintedC()
                 {
                     fns.push_back(RegFn());
                     cases.push_back(g);
+                }
+            }
+        // (A3-147, area 3 fixer) the loops, indexed stores and partly overwritten slots of A3-144 to A3-146 (GenFrame144Fn), after every case
+        // above so that none of those moves; none has a call
+        if (EnvNumber("SE_GENERATED_PRINTEDC_FRAME124", 1) != 0)
+            for (long seed = first; seed < first + seeds; ++seed)
+            {
+                CCase h;
+                std::string shape;
+                if (GenFrame144Fn(static_cast<uint64_t>(seed), h, shape))
+                {
+                    fns.push_back(RegFn());
+                    cases.push_back(h);
                 }
             }
     }
@@ -11051,6 +11363,12 @@ void TestPrintedC()
             {
                 ++drawn[shape];
                 f124.push_back(g);
+            }
+            CCase h;   // (A3-147, area 3 fixer)
+            if (GenFrame144Fn(static_cast<uint64_t>(seed), h, shape))
+            {
+                ++drawn[shape.substr(0, shape.rfind('.'))];
+                f124.push_back(h);
             }
         }
         if (frame124Words)
@@ -12332,6 +12650,26 @@ void TestRound13FixPins(Sh2Decompiler& d)
         r4run.trace.back() = TraceRec{ 0x0u, true, 1, 0x06020104u, 0x42u };
         CHECK(!EffectClaimsContradicted(viaR5, r4run, &sig).empty() && sig == std::string("claim-wrong:storesThrough"));
     }
+    // A3-151 (grammar 2 seed 4503481, routed by the area 2 round 17 review): the callee swaps r5's low bytes into GBR and stores a byte at
+    // GBR + 15: 0x06022000 -> 0x06020020, + 15, in r4's arena. The swap stepped after it is a swap of r5 as well. The replay is checked whole too.
+    {
+        RunOut run;
+        run.init[4] = 0x06021100u;
+        run.init[5] = 0x06022000u;
+        run.use.readFirst = (1u << 4) | (1u << 5);
+        CallEffects viaR5 = CallEffects();
+        viaR5.storesThrough = 1u << 5;
+        viaR5.spDelta = 0;
+        run.trace.push_back(TraceRec{ 0x0u, true, 1, 0x0602002Fu, 0x42u });
+        std::string sig;
+        const std::string why = EffectClaimsContradicted(viaR5, run, &sig);
+        std::printf("pin 'A3-151 grammar 2 seed 4503481 (a swap stepped into r4 arena)': %s\n", why.empty() ? "no contradiction" : (sig + ": " + why).c_str());
+        CHECK(why.empty());
+        RunOut r4run = run;
+        r4run.init[4] = 0x06020100u;
+        r4run.trace.back() = TraceRec{ 0x0u, true, 1, 0x06020104u, 0x42u };   // a store through r4 itself is still demanded
+        CHECK(!EffectClaimsContradicted(viaR5, r4run, &sig).empty() && sig == std::string("claim-wrong:storesThrough"));
+    }
 }
 
 // ===== Area 3, round 9 fix: the shapes of A3-56 to A3-59 and A3-62 as modules, the grammar's choices, and the claims of A3-63 =====
@@ -12665,6 +13003,27 @@ void TestA365Pins(Sh2Decompiler& d)
         for (const char* l : { "L1", "L2", "L3" })
             for (const char* fill : { "none", "save", "words" })
                 CHECK(drawn[std::string("frame124.chain.") + l + "." + fill] > 0);
+    }
+    // A3-147 (area 3 fixer): the chain144 draws of the frame124 stream: each kind, each variant and each number of slots
+    {
+        std::map<std::string, int> drawn;
+        int n = 0;
+        for (uint64_t seed = 1; seed <= 4000; ++seed)
+        {
+            CCase c;
+            std::string shape;
+            if (!GenFrame144Fn(seed, c, shape)) continue;
+            ++n;
+            ++drawn[shape];
+            ++drawn[shape.substr(0, shape.rfind('.'))];
+            ++drawn["L" + shape.substr(shape.rfind('.') + 2)];
+        }
+        std::printf("pin 'frame124 chain144 draws': %d functions in 4000 seeds, %zu kinds\n", n, drawn.size());
+        for (const char* k : { "frame124.chain144.loop.wb.b", "frame124.chain144.loop.wb.w", "frame124.chain144.loop.wb.l", "frame124.chain144.loop.nowb.b",
+                               "frame124.chain144.loop.nowb.w", "frame124.chain144.loop.nowb.l", "frame124.chain144.idx.rel", "frame124.chain144.idx.dir",
+                               "frame124.chain144.idx.other", "frame124.chain144.byte.c0", "frame124.chain144.byte.c3", "L1", "L2", "L3", "L4" })
+            CHECK(drawn[k] > 0);
+        CHECK(n > 800 && n < 1200);
     }
 }
 

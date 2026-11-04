@@ -13383,6 +13383,108 @@ void TestA3130Fix()
     }
 }
 
+// Area 3 fixer (A3-144 to A3-153, patch 0076): the round 16 review's fixtures (`Docs/Decompiler/tools/a3_round16/`), each with the text it prints
+// now and the stale text of d88e06e1.
+//   A3-144: a loop that stores through a pointer behind 2 to 4 frame slots: the LOAD through the reloaded slot is never folded (the pending
+//           STORE's guard sits on the slot), and dead code removed the writes of the slots (`pxStack_20 = &xStack_24;` with `xStack_24` never
+//           assigned, a crash). A LOAD that may read the frame now holds the frame's writes while it lives (ActionDeadCode).
+//   A3-145: an array filled, written at a variable index, and read through a pointer reloaded from a slot: the fills went the same way.
+//   A3-146: a frame address whose slot's low byte is overwritten, stored through: the store is taken for a frame write (the reads after it
+//           are not folded to the fills); the same store through a parameter pointer folds them (control). No change: a pin of the model.
+//   A3-152: r0's entry value stored to a frame word, half of the word overwritten, the word multiplied and returned: lent `void f(void)` when
+//           r0 was read again after its write (V3), withheld when not (V1). The return rule now takes the mixed word for a use of r0.
+// The loops' values are checked by the printed-C differential (Sh2GeneratedTests, the same words); PseudoEval reads no loop.
+void TestA3144Fix()
+{
+    Sh2Decompiler d(gConfig);
+    uint64_t serial = 144000;
+    const uint32_t base = 0x06009000u;
+    struct Pin
+    {
+        const char* name;
+        std::vector<uint16_t> words;
+        bool eval;            // the text is evaluated against the run (PseudoEval reads it)
+        const char* text;     // a fragment the text prints now
+        const char* stale;    // ...and d88e06e1's stale fragment, which it must not print
+    };
+    static const Pin kPins[] = {
+        { "A3-144 LOOP L2: the pointer behind two slots stepped and written back each trip",
+          { 0x4F22, 0x7FC0, 0x61F3, 0x7104, 0x1F18, 0x61F3, 0x7120, 0x1F19, 0xE303, 0x51F9, 0x6112, 0x2152, 0x7104, 0x1F18, 0x356C, 0x4310,
+            0x8BF7, 0x50F1, 0x53F2, 0x303C, 0x7F40, 0x4F26, 0x000B, 0x0009 }, false, "piStack_24 = &iStack_40;", "*(int4 *)*pxStack_20 = param_2;" },
+        { "A3-144 LOOP L4: behind four slots",
+          { 0x4F22, 0x7FC0, 0x61F3, 0x7104, 0x1F18, 0x61F3, 0x7120, 0x1F19, 0x61F3, 0x7124, 0x1F1A, 0x61F3, 0x7128, 0x1F1B, 0xE303, 0x51FB,
+            0x6112, 0x6112, 0x6112, 0x2152, 0x7104, 0x1F18, 0x356C, 0x4310, 0x8BF5, 0x50F1, 0x53F2, 0x303C, 0x7F40, 0x4F26, 0x000B, 0x0009 },
+          false, "piStack_24 = &iStack_40;", "pxStack_18 = &xStack_1c;" },
+        { "A3-144 LOOP2 nowb: behind two slots, the pointer left alone (A3-130's shape in a loop)",
+          { 0x4F22, 0x7FC0, 0x61F3, 0x7104, 0x1F18, 0x61F3, 0x7120, 0x1F19, 0xE303, 0x51F9, 0x6112, 0x2152, 0x356C, 0x4310, 0x8BF9, 0x50F1,
+            0x52F2, 0x302C, 0x7F40, 0x4F26, 0x000B, 0x0009 }, false, "piStack_24 = &iStack_40;", "*(int4 *)*pxStack_20 = param_2;" },
+        { "A3-145 IDX2 st=idxdir rd=rel fill=dir: S filled, a word stored at a variable index into it, two words read through the reloaded pointer",
+          { 0x4F22, 0x7FC0, 0x61F3, 0x7108, 0x1F18, 0x61F3, 0x7108, 0x2142, 0x61F3, 0x710C, 0x2152, 0x61F3, 0x7110, 0x2162, 0x61F3, 0x7114,
+            0x2172, 0x61F3, 0x7108, 0x6063, 0xC90C, 0x0156, 0x51F8, 0x6012, 0x7104, 0x6312, 0x203A, 0x7F40, 0x4F26, 0x000B, 0x0009, 0x0009 },
+          true, "auStack_3c[0] = param_1;", "" },
+        { "A3-145 IDX L2 chain: the same behind two slots, the indexed store through the reloaded pointer",
+          { 0x4F22, 0x7FC0, 0x61F3, 0x7108, 0x1F18, 0x61F3, 0x7120, 0x1F19, 0x61F3, 0x7108, 0x2142, 0x61F3, 0x710C, 0x2152, 0x61F3, 0x7110,
+            0x2162, 0x61F3, 0x7114, 0x2172, 0x51F9, 0x6112, 0x6063, 0xC90C, 0x0156, 0x51F9, 0x6112, 0x6012, 0x7104, 0x6312, 0x203A, 0x7F40,
+            0x4F26, 0x000B, 0x0009, 0x0009 }, true, "auStack_3c[0] = param_1;", "" },
+        { "A3-145 IDX3 other L2: the indexed store into another local, the read behind two slots",
+          { 0x4F22, 0x7FC0, 0x61F3, 0x7108, 0x1F18, 0x61F3, 0x7120, 0x1F19, 0x61F3, 0x7108, 0x2142, 0x61F3, 0x710C, 0x2152, 0x61F3, 0x7110,
+            0x2162, 0x61F3, 0x7114, 0x2172, 0x61F3, 0x712C, 0x6063, 0xC90C, 0x0156, 0x51F9, 0x6112, 0x6012, 0x7104, 0x6312, 0x203A, 0x7F40,
+            0x4F26, 0x000B, 0x0009, 0x0009 }, true, "= param_1;", "" },
+        // A3-146: the store through the slot whose low byte r4 replaced is a frame write: the reads of S after it stay reads (the engine's text
+        // read as C returns 0x70 for r4 = 0xC4, as the run; PseudoEval does not model the alias and is not asked)
+        { "A3-146 BYTE byte: slot 0's low byte overwritten by r4, a word stored through the slot",
+          { 0x4F22, 0x7FC0, 0x61F3, 0x7108, 0x1F18, 0x61F3, 0x7108, 0x2152, 0x61F3, 0x710C, 0x2162, 0x61F3, 0x7110, 0x2172, 0x61F3, 0x7114,
+            0x2152, 0x6043, 0x62F3, 0x7223, 0x2200, 0x51F8, 0x2172, 0x50F2, 0x53F3, 0x303C, 0x53F4, 0x203A, 0x53F5, 0x303C, 0x7F40, 0x4F26,
+            0x000B, 0x0009 }, false, "return (iStack_3c + iStack_38 ^ uStack_34) + iStack_30;", "return (param_2 + param_3" },
+        { "A3-146 control: the same store through r4, a parameter pointer",
+          { 0x4F22, 0x7FC0, 0x61F3, 0x7108, 0x1F18, 0x61F3, 0x7108, 0x2152, 0x61F3, 0x710C, 0x2162, 0x61F3, 0x7110, 0x2172, 0x61F3, 0x7114,
+            0x2152, 0x6043, 0x62F3, 0x7223, 0x2200, 0x6143, 0x2172, 0x50F2, 0x53F3, 0x303C, 0x53F4, 0x203A, 0x53F5, 0x303C, 0x7F40, 0x4F26,
+            0x000B, 0x0009 }, false, "return (param_2 + param_3 ^ param_4) + param_2;", "" },
+    };
+    const std::vector<std::vector<uint32_t>> inputs = {
+        { 0, 0, 0, 0 }, { 0x11112222u, 0x33334444u, 0x55556666u, 0x77778888u }, { 0xFFFF0001u, 0x00008000u, 0x12345678u, 0x0000FFFFu } };
+    for (const Pin& p : kPins)
+    {
+        const CallFixture f = { p.name, base, p.words };
+        auto snap = CallSnapshot(f, ++serial);
+        const DecompileResult r = d.Decompile(snap, Request(base));
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok);
+        if (*p.text) CHECK(Has(r.Text(), p.text));
+        if (*p.stale) CHECK(!Has(r.Text(), p.stale));
+        CHECK(!r.frameLedgerCapped);
+        CHECK(dts::FrameLosses(r, dts::SnapshotWords(snap)).empty());
+        CHECK(ReferenceOk(d, snap, Request(base), r));
+        if (p.eval) CHECK(PseudoAgreesWithRun(r, snap, f, inputs, true));
+    }
+    // A3-145: the fills are written before the indexed store, in each of the three (d88e06e1 printed none: the array was read unwritten)
+    {
+        const CallFixture f = { "A3-145 fills", base, kPins[3].words };
+        auto snap = CallSnapshot(f, ++serial);
+        const std::string t = d.Decompile(snap, Request(base)).Text();
+        CHECK(Has(t, "auStack_3c[1] = param_2;") && Has(t, "auStack_3c[2] = param_3;") && Has(t, "auStack_3c[3] = param_4;"));
+    }
+    // A3-152: V3 (`or r0,r1` after `mov r1,r0`) is withheld as V1 is: its return is computed from r0 on entry (d88e06e1 lent it `void f(void)`)
+    {
+        const std::vector<uint16_t> v1 = { 0x7FF0, 0x64F3, 0x7408, 0x2402, 0x64F3, 0x7408, 0x2441, 0x6342, 0x0437, 0x011A, 0x6013, 0x7F10, 0x000B, 0x0009 };
+        const std::vector<uint16_t> v3 = { 0x7FF0, 0x64F3, 0x7408, 0x2402, 0x64F3, 0x7408, 0x2441, 0x6342, 0x0437, 0x011A, 0x6013, 0x210B, 0x7F10,
+                                           0x000B, 0x0009, 0x0009 };
+        // ...and the fuzzer's own program 2691 (seed 17)
+        const std::vector<uint16_t> fz = { 0x7FF0, 0x64F3, 0x7408, 0x2402, 0x6140, 0x64F3, 0x7408, 0x2441, 0x6342, 0x64F3, 0x7400, 0x2402, 0x6241,
+                                           0x2AA8, 0x8900, 0x6243, 0x0002, 0x282B, 0x0437, 0x011A, 0x6013, 0x7F10, 0x210B, 0x000B, 0x0009 };
+        for (const auto& w : { v1, v3, fz })
+        {
+            const CallFixture f = { "A3-152", base, w };
+            auto snap = CallSnapshot(f, ++serial);
+            const DecompileResult r = d.Decompile(snap, Request(base));
+            std::printf("A3-152 (%zu words): %s, %s\n", w.size(), r.prototype.known ? "lent" : "withheld", r.prototypeWithheld.c_str());
+            CHECK(r.status == DecompileStatus::Ok);
+            CHECK(!r.prototype.known);
+            CHECK(Has(r.prototypeWithheld, "r0 on entry"));
+        }
+    }
+}
+
 void TestFetchAndDataRefusals()
 {
     Sh2Decompiler d(gConfig);
@@ -13770,6 +13872,7 @@ int main(int argc, char** argv)
         RUN(TestArea3Round14Fix());
         RUN(TestA3124Fix());
         RUN(TestA3130Fix());
+        RUN(TestA3144Fix());
         RUN(TestArea2Round8());
         RUN(TestArea2Round9());
         RUN(TestArea2Round10());
