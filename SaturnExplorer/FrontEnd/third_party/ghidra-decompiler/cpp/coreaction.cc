@@ -4222,6 +4222,40 @@ bool ActionDeadCode::storeMayWrite(const Funcdata &data,const PcodeOp *sop,const
 /// (callMayReadFrame). The writes stay only while the LOAD does: once it is folded into a stack read, the next pass of dead code sees them.
 /// \param data is the function
 /// \param worklist is the consumed Varnodes to process
+/// SaturnExplorer (patches/0076-engine-frame-loads-keep-writes.patch): will a LOAD through this frame address stay a LOAD? Back from the
+/// pointer through copies, additions of a constant and the guards of STOREs still pending (a chain of slots unfolding: each such STORE is
+/// settled, and its guard on the slot removed, once the slots before it are folded, Heritage::reprocessPendingStores), to the stack pointer:
+/// then RuleLoadVarnode makes the LOAD a direct stack read in a pass or two, and dead code that runs meanwhile is undone by heritage's late
+/// reads (0068's delay). Anything else on the way stays: a join (a loop's pointer, two frame addresses; A3-144's slot, whose loop holds the
+/// pending STORE's guard), the guard of any other STORE (an indexed one, whose range covers the slot: A3-145) or of a call, a variable
+/// added, a value from memory or from a call.
+/// \param data is the function
+/// \param vn is the pointer
+/// \return \b true if the LOAD stays one
+static bool frameLoadStays(const Funcdata &data,const Varnode *vn)
+
+{
+  for(int4 hops=0;hops<64;++hops) {
+    if (vn->isSpacebase() && vn->isInput()) return false;
+    if (!vn->isWritten()) return true;
+    const PcodeOp *op = vn->getDef();
+    if (op->code() == CPUI_COPY)
+      vn = op->getIn(0);
+    else if (op->code() == CPUI_INT_ADD && op->getIn(1)->isConstant())
+      vn = op->getIn(0);
+    else if (op->code() == CPUI_INT_ADD && op->getIn(0)->isConstant())
+      vn = op->getIn(1);
+    else if (op->code() == CPUI_INDIRECT && op->isIndirectStore()) {
+      const PcodeOp *sop = PcodeOp::getOpFromConst(op->getIn(1)->getAddr());
+      if (sop == (const PcodeOp *)0 || sop->code() != CPUI_STORE || !data.isPendingFrameStore(sop)) return true;
+      vn = op->getIn(0);
+    }
+    else
+      return true;
+  }
+  return true;		// too far to follow: taken to stay (fail closed)
+}
+
 void ActionDeadCode::keepFrameWritesForLoads(Funcdata &data,vector<Varnode *> &worklist)
 
 {
@@ -4247,13 +4281,11 @@ void ActionDeadCode::keepFrameWritesForLoads(Funcdata &data,vector<Varnode *> &w
   }
   if (candidates.empty()) return;
   bool reads = false;
-  for(int4 i=0;i<candidates.size() && !reads;++i)
-    if (data.pointerFromFrame(candidates[i]->getIn(1))) reads = true;
-  if (!reads) {
+  {
     FrameEscape escape;
     escape.compute(&data,stackSpc,false);
     for(int4 i=0;i<candidates.size() && !reads;++i)
-      if (escape.loadMayReadFrame(candidates[i])) reads = true;
+      if (escape.loadMayReadFrame(candidates[i]) && frameLoadStays(data,candidates[i]->getIn(1))) reads = true;
   }
   if (!reads) return;
   VarnodeLocSet::const_iterator viter = data.beginLoc(stackSpc);

@@ -1587,7 +1587,7 @@ void FrameEscape::compute(const Funcdata *fd,AddrSpace *spc,bool preHeritage)
   // the heritage put on the frame's locals for it (reprocessFreeStores) until it is folded or its pointer is known. Only that: whether the
   // frame escaped is decided above, by the walk of what the analysis models (ledger A3-130: `S` behind two slots, `**pp = v`, lost).
   {
-    set<Varnode *> &pending(pendingValues);	// (patches/0076-engine-frame-loads-keep-writes.patch) kept for loadMayReadFrame
+    set<Varnode *> pending;
     vector<Varnode *> pwork;
     for(set<Varnode *>::const_iterator iter=members.begin();iter!=members.end();++iter) {
       Varnode *vn = *iter;

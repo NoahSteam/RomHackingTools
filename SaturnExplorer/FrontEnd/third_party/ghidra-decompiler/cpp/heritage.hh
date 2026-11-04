@@ -224,7 +224,6 @@ public:
   set<PcodeOp *> unmodeledStores;	///< STOREs through an unmodeled possible frame address, or, once the frame escaped, an unknown pointer
   set<PcodeOp *> inexactLoads;		///< LOADs through a frame address that is no exact offset (0066)
   set<PcodeOp *> pendingStores;		///< STOREs through a value read from the frame through a frame address (0072)
-  set<Varnode *> pendingValues;		///< The values read from the frame through a frame address, and what is computed from them (0072, kept by 0076)
   vector<uintb> upLows;			///< The lowest entry offset of each loop that only steps a frame address up (0066)
   bool inexact;				///< A frame address that is no exact offset reaches an access or a call (0066)
   bool memoryEscape;			///< A frame address was stored to memory
@@ -243,9 +242,8 @@ public:
   bool loadIsInexact(PcodeOp *op) const { return gaveUp || inexactLoads.find(op) != inexactLoads.end(); }
   /// \brief Is the given STORE made through a value a LOAD through a frame address read, which may itself be a frame address? (0072)
   bool storeIsPending(PcodeOp *op) const { return gaveUp || pendingStores.find(op) != pendingStores.end(); }
-  /// \brief May the given LOAD read the frame: is its pointer a possible frame address, modeled or not, or a value read through one? (0076)
-  bool loadMayReadFrame(PcodeOp *op) const {
-    return gaveUp || members.find(op->getIn(1)) != members.end() || pendingValues.find(op->getIn(1)) != pendingValues.end(); }
+  /// \brief May the given LOAD read the frame: is its pointer a possible frame address, modeled or not? (0076)
+  bool loadMayReadFrame(PcodeOp *op) const { return gaveUp || members.find(op->getIn(1)) != members.end(); }
 };
 
 /// \brief Manage the construction of Static Single Assignment (SSA) form
