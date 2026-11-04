@@ -4785,15 +4785,21 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
         }
         for (auto& kv : flowStores) std::sort(kv.second.begin(), kv.second.end());
     };
+    // The printed ops in the order the engine made them, not by address: the work below allocates as it goes, and the fault suite asks
+    // that two runs of one function allocate alike (A6-24).
+    std::vector<std::pair<const ghidra::PcodeOp*, const std::pair<std::set<size_t>, int>*>> ordered;
+    ordered.reserve(printed.size());
+    for (const auto& kv : printed) ordered.emplace_back(kv.first, &kv.second);
+    std::sort(ordered.begin(), ordered.end(), [](const auto& a, const auto& b) { return a.first->getTime() < b.first->getTime(); });
     // The lines on which two printed ops of one instruction are (a statement's tokens there cannot be told from the other op's).
     std::set<std::pair<size_t, uint32_t>> sharedLines;
     {
         std::map<std::pair<size_t, uint32_t>, int> opsOn;
-        for (const auto& kv : printed)
+        for (const auto& kv : ordered)
         {
             uint32_t insn = InstructionOf(kv.first), canonical = 0;
             if (CanonicalAddress(insn, canonical)) insn = canonical;
-            for (size_t line : kv.second.first)
+            for (size_t line : kv.second->first)
                 if (++opsOn[std::make_pair(line, insn)] == 2) sharedLines.insert(std::make_pair(line, insn));
         }
     }
@@ -4821,7 +4827,7 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
         return enters && leaves;
     };
     int added = 0;
-    for (const auto& kv : printed)
+    for (const auto& kv : ordered)
     {
         const ghidra::PcodeOp* o = kv.first;
         const ghidra::Varnode* out = o->getOut();
@@ -5035,7 +5041,7 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
             if ((blockEnd || slotOfCall) && (target == 0 || insn < target)) target = insn;
         }
         if (target)
-            for (size_t line : kv.second.first)
+            for (size_t line : kv.second->first)
             {
                 // (only when no other op printed on the line has the same instruction: its tokens are not this statement's)
                 if (line >= lines.size() || sharedLines.count(std::make_pair(line, own))) continue;
@@ -5051,7 +5057,7 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
         {
             uint32_t insn = InstructionOf(*r), canonical = 0;
             if (CanonicalAddress(insn, canonical)) insn = canonical;
-            for (size_t line : kv.second.first)
+            for (size_t line : kv.second->first)
             {
                 if (line >= lines.size()) continue;
                 Line& l = lines[line];
