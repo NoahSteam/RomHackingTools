@@ -4727,17 +4727,19 @@ std::vector<MemoryAccess> Accesses(const ghidra::Funcdata& fd,
 // the statement shows, so the line lists them, a click goes to the lowest and the user's notes find them. For each byte of the variable:
 //   - the store at the statement's own instruction, if there is one (a store's own statement);
 //   - else the last store of the byte before the statement in its block, else in each block before it, walking the final graph back (a
-//     block holds a store when its addresses cover the store's instruction; a delay slot's store is before its branch): the stores whose
-//     value reaches the statement. A store of another value that does not reach it is not named (A7-20: the store of -3 before a loop is
-//     not the store of 0 on the path that breaks out of it);
+//     block holds a store when its addresses cover the store's instruction; a delay slot's store is before its branch; a store whose
+//     block the engine emptied, putting each path's value on the path, is on the edges through its flow block): the stores whose value
+//     reaches the statement. A store of another value that does not reach it is not named (A7-20: the store of -3 before a loop is not
+//     the store of 0 on the path that breaks out of it). A copy at the end of its block with an emptied store on an edge out of it is
+//     that store's value, put ahead of it (`bra L ; mov #4,r1` to a shared `L: mov.w r1,@r2`): that store first;
 //   - else, when no store reaches it, the store the statement is ahead of: the next store of the byte after it in its block, else the
-//     nearest in the flow after its instruction (the engine put each path's value of a store the paths share at the end of the block
-//     before it, `bra L ; mov #4,r1` to `L: mov.w r1,@r2`, and emptied the store's block).
+//     nearest in the flow after its instruction (a register the engine merged under the variable's name, stored later).
 // A conversion (an extension or a truncation the line prints as a cast) is a computation, whose value is stored after it: the next store
 // in its block comes first. The statements are a COPY or a conversion with an explicit output at any instruction, and (A7-11's set) any
-// op at a call or a load. A copy at the end of its block that shows a store's value is that store's line: its own tokens, the block's last
-// instruction, take the store's address (A7-19); a copy at a call keeps the call's, unless the store is in the call's delay slot (the
-// slot made the line, as A7-10's lines are the slot's). When nothing is found, a statement at a call or a load names the latest store
+// op at a call or a load. A copy the engine put at its block's last instruction is that store's line: its own tokens, the block's last
+// instruction, take the lowest store's address (A7-19) -- not a copy of a constant or one a delay slot made, whose instruction may make
+// the value; a copy at a call keeps the call's, unless the store is in the call's delay slot (the slot made the line, as A7-10's lines
+// are the slot's). When nothing is found, a statement at a call or a load names the latest store
 // before it in the flow's translation order, else the latest at all (A7-11's rule). Returns how many tokens it added.
 int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& printed, const ghidra::Funcdata& fd, const FlowRecord& flow)
 {
@@ -4857,7 +4859,6 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
         // (a statement at a branch, not made by its slot, comes after the slot's store: the slot runs before the branch takes effect)
         const ghidra::uintb before = o->getAddr().getOffset() * 2 + (o->isFromDelaySlot() ? 1u : 2u);
         std::set<const ghidra::AccessRecord*> chosen;
-        bool allBefore = true;   // every store chosen wrote the value before the statement
         for (ghidra::int4 b = 0; b < out->getSize(); ++b)
         {
             const ghidra::uintb byte = (base + static_cast<ghidra::uintb>(b)) & space->getHighest();
@@ -4900,7 +4901,6 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                 if (const ghidra::AccessRecord* r = nextInHome())
                 {
                     chosen.insert(r);
-                    allBefore = false;
                     continue;
                 }
             // the emptied stores of the byte on an edge between two blocks
@@ -4922,7 +4922,6 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                     }
                 if (ahead)
                 {
-                    allBefore = false;
                     continue;
                 }
             }
@@ -4957,7 +4956,6 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                 for (ghidra::int4 i = 0; i < blk->sizeIn(); ++i) todo.emplace_back(blk->getIn(i), blk);
             }
             if (reached) continue;
-            allBefore = false;
             if (const ghidra::AccessRecord* r = nextInHome())
             {
                 chosen.insert(r);
@@ -5025,7 +5023,10 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
         // A copy at the end of its block that shows a store's value is that store's line; at a call, only a store in the call's slot is.
         uint32_t own = at, target = 0, canonicalOwn = 0;
         if (CanonicalAddress(own, canonicalOwn)) own = canonicalOwn;
-        const bool blockEnd = code == ghidra::CPUI_COPY && !atLoadOrCall && allBefore && o->getAddr() == home->getStop();
+        // (a copy the engine put at its block's last instruction, which does not make its value: not one a delay slot made, nor a
+        // constant, whose `mov #imm` may be that instruction)
+        const bool blockEnd = code == ghidra::CPUI_COPY && !atLoadOrCall && o->getAddr() == home->getStop() && !o->isFromDelaySlot() &&
+                              !o->getIn(0)->isConstant();
         for (const ghidra::AccessRecord* r : chosen)
         {
             uint32_t insn = InstructionOf(*r), canonical = 0;
