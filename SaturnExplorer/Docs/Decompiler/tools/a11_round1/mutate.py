@@ -199,8 +199,18 @@ PATCH_SHOULD = {
     # allocation failure and cancellation: the fault matrix
     "0001": ["fault"], "0003": ["fault"], "0004": ["fault"], "0016": ["fault"], "0023": ["fault"], "0032": ["fault"],
     "0040": ["fault"], "0002": ["fault", "engine"], "0020": ["engine", "unit"], "0047": ["decode", "unit"],
-    "0074": ["engine"], "0022": ["engine", "unit"],
+    "0074": ["engine"], "0022": ["engine", "unit"], "0055": ["unit", "engine"],
 }
+# the rest by the class of the patch
+for _n in "0011 0033 0037 0044 0048 0058 0059 0062 0064 0067 0069 0070 0071 0077 0046 0049 0051 0054".split():
+    PATCH_SHOULD[_n] = ["unit", "pc"]           # printed values
+for _n in "0030 0053 0056 0057 0060 0061 0063 0065 0066 0068 0072 0076".split():
+    PATCH_SHOULD[_n] = ["unit", "gen", "corpus"]   # the frame
+for _n in "0005 0006 0007 0008 0019 0025 0026 0034 0038 0045 0050".split():
+    PATCH_SHOULD[_n] = ["decode", "unit", "gen"]   # the spec
+for _n in "0009 0010 0012 0013 0014 0017 0018 0024 0031 0073 0075".split():
+    PATCH_SHOULD[_n] = ["unit", "gen", "corpus"]   # accesses and conservation
+FAULT_PATCHES = set("0001 0002 0003 0004 0016 0023 0032 0040".split())
 
 
 def sh(cmd, **kw):
@@ -347,7 +357,7 @@ class Harness:
                     self.results.write("%s\t-\tstillborn\t0\tse-regen-sla failed\n" % mid)
                     return
             should = PATCH_SHOULD.get(num, ["unit", "gen"])
-            self.score(mid, should, ENGINE_ESCALATE + (["fault"] if num in PATCH_SHOULD else []), None)
+            self.score(mid, should, ENGINE_ESCALATE + (["fault"] if num in FAULT_PATCHES else []), None)
         finally:
             self.restore(list(touched) + ["SaturnExplorer/FrontEnd/src/Decompiler/Sh2SpecData.h",
                                           "SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/processors/SuperH/sh-2.sla"])
@@ -389,6 +399,15 @@ def main():
     if a.list:
         for t in todo:
             print(t[1])
+        return
+    # Resumable: a mutant with a row in results.tsv is done (a piece cut by the clock, or a restart, goes on from the next).
+    done = set()
+    rpath = os.path.join(a.out, "results.tsv")
+    if os.path.exists(rpath):
+        done = {line.split("\t")[0] for line in open(rpath) if line.strip()}
+    todo = [t for t in todo if t[1] not in done]
+    if not todo:
+        print("nothing left")
         return
     h = Harness(a)
     if not h.clean():
