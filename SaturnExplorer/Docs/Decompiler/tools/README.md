@@ -37,8 +37,9 @@ Kept here:
   instrument (A7-8) is `SE_GAME_PERTURB=<n>` in `Sh2DecompilerTests.cpp`.
 * `a7_round3/`: area 7 round 3, over the dumps `a7_round2/corpus.sh` writes. `assign_at.py` sorts the lines that assign by the
   instruction they name (`slot-store-at-branch-memory`: a frame local or a global at a delayed branch whose slot is a store, A7-19);
-  `named_store_value.py` lists lines that assign a number and name a store of another number (A7-20); `dump_diff.py` compares the
-  mapping of two builds' dumps of one image (what an engine patch moved).
+  `named_store_value.py` lists lines that assign a number and name a store of another number (A7-20; since the area 7 fixer it
+  counts apart a number made of a word and a byte store, and a store shared by paths whose register a named `mov #imm` sets, so the
+  A7-20 signal is "neither"); `dump_diff.py` compares the mapping of two builds' dumps of one image (what an engine patch moved).
 
 Everything else that earlier rounds committed (their drivers, fuzzers, fixtures and summaries) was
 removed after commit `215d303`. The record (`FunctionalityVerification/15_DECOMPILER_STEP5.md`) still
