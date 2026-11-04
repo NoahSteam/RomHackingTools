@@ -9,11 +9,21 @@ it, and the survivors (no oracle run on it killed it). Stillborn mutants (did no
 that could not be applied are listed apart and not scored.
 """
 import collections
+import os
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from mutate import corpus_suite_only  # noqa: E402
 
 
 def main(path):
     rows = [l.rstrip("\n").split("\t") for l in open(path) if l.strip()]
+    # a corpus kill made by the fixture suite the same binary runs first is no kill of the corpus (rows from before mutate.py knew)
+    logs = os.path.dirname(os.path.abspath(path))
+    for r in rows:
+        log = os.path.join(logs, "%s.%s.log" % (r[0], r[1]))
+        if r[1] == "corpus" and r[2] == "killed" and os.path.exists(log) and corpus_suite_only(open(log, errors="replace").read()):
+            r[2] = "survived"
     per = collections.OrderedDict()
     killers = collections.OrderedDict()
     other = {}
@@ -47,4 +57,7 @@ def main(path):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1])
+    try:
+        main(sys.argv[1])
+    except BrokenPipeError:
+        pass

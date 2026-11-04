@@ -32,12 +32,12 @@ import time
 # ---- oracles ---------------------------------------------------------------------------------------
 # name: (target, argv after the binary's path, env, timeout seconds)
 ORACLES = {
-    "unit": ("SaturnExplorerSh2DecompilerTests", ["{scratch}"], {}, 300),
-    "gen": ("SaturnExplorerSh2GeneratedTests", ["{scratch}"], {}, 400),
-    "pc": ("SaturnExplorerSh2GeneratedTests", ["{scratch}"], {"SE_GENERATED_PRINTEDC": "only"}, 600),
-    "engine": ("SaturnExplorerSh2DecompilerEngineTests", ["{scratch}"], {}, 300),
+    "unit": ("SaturnExplorerSh2DecompilerTests", ["{scratch}"], {}, 150),
+    "gen": ("SaturnExplorerSh2GeneratedTests", ["{scratch}"], {}, 180),
+    "pc": ("SaturnExplorerSh2GeneratedTests", ["{scratch}"], {"SE_GENERATED_PRINTEDC": "only"}, 180),
+    "engine": ("SaturnExplorerSh2DecompilerEngineTests", ["{scratch}"], {}, 180),
     "decode": ("SaturnExplorerSh2DecodeTests", ["{scratch}"], {}, 400),
-    "corpus": ("SaturnExplorerSh2DecompilerTests", ["{scratch}"], {"SE_GAME_HWRAM": "{hwram}"}, 900),
+    "corpus": ("SaturnExplorerSh2DecompilerTests", ["{scratch}"], {"SE_GAME_HWRAM": "{hwram}"}, 300),
     "fixture": ("SaturnExplorerSh2DecompilerFixtureTests", ["{scratch}"], {}, 300),
     "fault": ("SaturnExplorerDecompilerFaultTests", ["{scratch}"], {"SE_FAULT_JOBS": "2"}, 900),
     "runner": ("SaturnExplorerDecompilerRunnerTests", ["{scratch}"], {}, 400),
@@ -168,6 +168,22 @@ MUTANTS = [
      ["fuzz"], [], "a volatile address of nine digits wraps"),
     ("H-load-inverted", SRC + "Decompiler/AddressRanges.cpp", "if (!ok || hi < lo)", "if (!ok)",
      ["fuzz"], [], "an inverted volatile range accepted"),
+    # Kill switches for the frame patches whose hunks do not revert alone (0056, 0057, 0065, 0066, 0072 stillborn: later patches rewrote them).
+    ("V-0056-stepsdown", VEN + "cpp/varmap.cc", "bool AliasChecker::stepsDown(PcodeOp *multi,bool atCap)\n\n{",
+     "bool AliasChecker::stepsDown(PcodeOp *multi,bool atCap)\n\n{\n  if (multi != (PcodeOp *)0) return false;",
+     ["unit", "gen", "corpus"], ENGINE_ESCALATE, "0056/0057: a loop that steps a frame address down is never seen (A3-72, A3-102)"),
+    ("V-0065-steppeddown", VEN + "cpp/heritage.cc", "bool LoadGuard::pointerSteppedDown(Varnode *vn)\n\n{",
+     "bool LoadGuard::pointerSteppedDown(Varnode *vn)\n\n{\n  if (vn != (Varnode *)0) return false;",
+     ["unit", "gen", "corpus"], ENGINE_ESCALATE, "0065: a load guard never widened for a pointer stepped down (A3-116)"),
+    ("V-0061-memescape", VEN + "cpp/heritage.cc", "  if (memoryEscape) escaped = true;\n  loose = escaped;",
+     "  if (false && memoryEscape) escaped = true;\n  loose = escaped;",
+     ["unit", "gen", "corpus"], ENGINE_ESCALATE, "0061: a frame address stored to memory is no escape (A3-85)"),
+    ("V-0063-hostescape", VEN + "cpp/heritage.cc", "  if (hostEscape) escaped = true;\n  // (patches/0066",
+     "  if (false && hostEscape) escaped = true;\n  // (patches/0066",
+     ["unit", "gen", "corpus"], ENGINE_ESCALATE, "0063: the escapes the host declares are ignored (A3-89, A3-91)"),
+    ("V-0072-storemaywrite", VEN + "cpp/coreaction.cc",
+     "  if (data.isPendingFrameStore(sop) || data.pointerFromFrame(sop->getIn(1))) return true;\n  return data.storeAimedAt(sop,local);",
+     "  return false;", ["unit", "gen", "corpus"], ENGINE_ESCALATE, "0072: dead code takes no store through a pointer to write a frame local (A3-130)"),
     # Hand-made reverts of the patches no hunk of which reverts alone (later patches rewrote the lines).
     ("V-0019-ldc", VEN + "processors/SuperH/superh.sinc", "    local value:4 = rm_08_11 & 0x000003F3;", "    local value:4 = rm_08_11 & 0x0FFF0FFF;",
      ["decode", "unit"], ENGINE_ESCALATE, "patch 0019 reverted in ldc Rm,SR: bits the SH-2 does not have kept"),
@@ -223,6 +239,15 @@ for _n in "0005 0006 0007 0008 0019 0025 0026 0034 0038 0045 0050".split():
 for _n in "0009 0010 0012 0013 0014 0017 0018 0024 0031 0073 0075".split():
     PATCH_SHOULD[_n] = ["unit", "gen", "corpus"]   # accesses and conservation
 FAULT_PATCHES = set("0001 0002 0003 0004 0016 0023 0032 0040".split())
+
+
+# The game-code tests of Sh2DecompilerTests.cpp (TestGameCode, TestGamePerturb, TestGameLending): the corpus oracle's checks.
+CORPUS_LINES = (4317, 5021)
+
+
+def corpus_suite_only(out):
+    lines = [int(m.group(1)) for m in re.finditer(r"CHECK failed at \S*Sh2DecompilerTests\.cpp:(\d+)", out)]
+    return bool(lines) and not any(CORPUS_LINES[0] <= n <= CORPUS_LINES[1] for n in lines)
 
 
 def sh(cmd, **kw):
@@ -310,6 +335,8 @@ class Harness:
             verdict = "killed-timeout"
         else:
             verdict = "killed"
+        if name == "corpus" and verdict == "killed" and corpus_suite_only(out):
+            verdict = "survived"   # the binary also runs the fixture suite: only a check of the game-code tests is the corpus's kill
         why = ""
         for line in out.splitlines():
             if re.search(r"FAIL|FINDING|VIOLATION|CHECK|Assertion|FATAL|failed:|mutation check", line) and "0 failed" not in line:
