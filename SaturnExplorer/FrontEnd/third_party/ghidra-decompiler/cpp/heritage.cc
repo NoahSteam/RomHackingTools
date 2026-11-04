@@ -645,7 +645,7 @@ void Heritage::findAddressForces(vector<PcodeOp *> &copySinks,vector<PcodeOp *> 
     for(int4 i=0;i<maxIn;++i) {
       Varnode *vn = op->getIn(i);
       if (!vn->isWritten()) continue;
-      if (vn->isAddrForce()) continue;		// Already marked address forced
+      if (vn->isAddrForce() && !vn->isFrameLoadForce()) continue;		// Already marked address forced (SaturnExplorer 0076: not as a LOAD's hold, which may go)
       PcodeOp *newOp = vn->getDef();
       if (newOp->isMark()) continue;		// Already visited this op
       newOp->setMark();
@@ -1587,7 +1587,7 @@ void FrameEscape::compute(const Funcdata *fd,AddrSpace *spc,bool preHeritage)
   // the heritage put on the frame's locals for it (reprocessFreeStores) until it is folded or its pointer is known. Only that: whether the
   // frame escaped is decided above, by the walk of what the analysis models (ledger A3-130: `S` behind two slots, `**pp = v`, lost).
   {
-    set<Varnode *> pending;
+    set<Varnode *> &pending(pendingValues);	// (patches/0076-engine-frame-loads-keep-writes.patch) kept for loadMayReadFrame
     vector<Varnode *> pwork;
     for(set<Varnode *>::const_iterator iter=members.begin();iter!=members.end();++iter) {
       Varnode *vn = *iter;
@@ -2570,6 +2570,7 @@ void Heritage::guardLoads(uint4 fl,const Address &addr,int4 size,vector<Varnode 
     invn->setActiveHeritage();
     fd->opSetInput(copyop,invn,0);
     fd->opInsertBefore(copyop,guardRec.op);
+    guardRec.sunk = true;	// SaturnExplorer (patches/0076-engine-frame-loads-keep-writes.patch)
     loadCopyOps.push_back(copyop);
   }
 }

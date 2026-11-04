@@ -4210,6 +4210,67 @@ bool ActionDeadCode::storeMayWrite(const Funcdata &data,const PcodeOp *sop,const
   return data.storeAimedAt(sop,local);
 }
 
+/// SaturnExplorer (patches/0076-engine-frame-loads-keep-writes.patch): a LOAD left in the function whose pointer may be a frame address,
+/// modeled or not (FrameEscape's members), or was read through one (a pointer kept in a frame word: FrameEscape's pending values, or a frame
+/// word not linked yet), reads the frame where RuleLoadVarnode has not made it a direct stack read (its pointer is no constant offset from
+/// the stack pointer yet, or never will be: the join of a loop, a guard's INDIRECT). Nothing links the LOAD to the frame writes it may read,
+/// so dead code took each for a write nothing reads and removed it, and the text read memory nothing wrote (ledger A3-144: a loop storing
+/// through a pointer behind two slots lost the slots' writes, the compiled text crashed; A3-145: an array filled, written at a variable
+/// index, and read through a pointer reloaded from a slot, lost its fills). While such a LOAD lives, every write of the stack space is
+/// consumed: fail closed, as the LOAD may read any word of the frame. A LOAD the stack analysis guarded (an indexed one: its LoadGuard
+/// keeps the writes of its range, Heritage::guardLoads) is left to that guard; the pushes of callee-saved registers are saves, as for a call
+/// (callMayReadFrame). The writes stay only while the LOAD does: once it is folded into a stack read, the next pass of dead code sees them.
+/// \param data is the function
+/// \param worklist is the consumed Varnodes to process
+void ActionDeadCode::keepFrameWritesForLoads(Funcdata &data,vector<Varnode *> &worklist)
+
+{
+  AddrSpace *stackSpc = data.getArch()->getStackSpace();
+  if (stackSpc == (AddrSpace *)0 || !stackSpc->doesDeadcode() || !data.deadRemovalAllowed(stackSpc)) return;
+  vector<PcodeOp *> candidates;
+  list<PcodeOp *>::const_iterator iter = data.beginOp(CPUI_LOAD);
+  list<PcodeOp *>::const_iterator enditer = data.endOp(CPUI_LOAD);
+  for(;iter!=enditer;++iter) {
+    PcodeOp *op = *iter;
+    if (op->isDead() || op->getIn(1)->isConstant()) continue;
+    candidates.push_back(op);
+  }
+  // ...but for a LOAD whose guard kept the writes of its range (a COPY of each location heritaged with the guard there; a guard made after
+  // the frame was heritaged, by reprocessFreeStores, has none: A3-144's LOAD through the slot reloaded in the loop)
+  if (!candidates.empty() && !data.getLoadGuards().empty()) {
+    const list<LoadGuard> &guards(data.getLoadGuards());
+    for(list<LoadGuard>::const_iterator giter=guards.begin();giter!=guards.end();++giter) {
+      if (!(*giter).isSunk() || !(*giter).isValid(CPUI_LOAD)) continue;
+      vector<PcodeOp *>::iterator found = find(candidates.begin(),candidates.end(),(*giter).getOp());
+      if (found != candidates.end()) candidates.erase(found);
+    }
+  }
+  if (candidates.empty()) return;
+  bool reads = false;
+  for(int4 i=0;i<candidates.size() && !reads;++i)
+    if (data.pointerFromFrame(candidates[i]->getIn(1))) reads = true;
+  if (!reads) {
+    FrameEscape escape;
+    escape.compute(&data,stackSpc,false);
+    for(int4 i=0;i<candidates.size() && !reads;++i)
+      if (escape.loadMayReadFrame(candidates[i])) reads = true;
+  }
+  if (!reads) return;
+  VarnodeLocSet::const_iterator viter = data.beginLoc(stackSpc);
+  VarnodeLocSet::const_iterator endviter = data.endLoc(stackSpc);
+  for(;viter!=endviter;++viter) {
+    Varnode *vn = *viter;
+    if (!vn->isWritten()) continue;
+    const PcodeOp *def = vn->getDef();
+    if (def->code() == CPUI_INDIRECT || def->code() == CPUI_MULTIEQUAL) continue;	// a marker: the writes it joins are kept
+    if (def->code() == CPUI_COPY && def->getIn(0)->isInput() && def->getIn(0)->getSpace()->getType() == IPTR_PROCESSOR &&
+	isSavePush(data,def->getAddr(),def->getIn(0)))
+      continue;		// a save, no data
+    if (!vn->isAddrForce()) vn->setFrameLoadForce();	// held against the rules' removal of a write nothing reads (RuleEarlyRemoval)
+    pushConsumed(~((uintb)0),vn,worklist);
+  }
+}
+
 bool ActionDeadCode::callMayReadFrame(const Funcdata &data,const Varnode *vn)
 
 {
@@ -4276,6 +4337,7 @@ int4 ActionDeadCode::apply(Funcdata &data)
     vn->clearConsumeList();
     vn->clearConsumeVacuous();
     vn->setConsume(0);
+    vn->clearFrameLoadForce();	// SaturnExplorer (patches/0076-engine-frame-loads-keep-writes.patch): set again below while the LOAD lives
     if (vn->isAddrForce()&&(!vn->isDirectWrite())&&!callMayReadFrame(data,vn))
       vn->clearAddrForce();
   }
@@ -4292,6 +4354,8 @@ int4 ActionDeadCode::apply(Funcdata &data)
       pushConsumed(~((uintb)0),vn,worklist);
     }
   }
+
+  keepFrameWritesForLoads(data,worklist);	// SaturnExplorer (patches/0076-engine-frame-loads-keep-writes.patch)
 
   returnConsume = gatherConsumedReturn(data);
   for(iter=data.beginOpAlive();iter!=data.endOpAlive();++iter) {

@@ -14,6 +14,7 @@
  * limitations under the License.
  *
  * Modified for SaturnExplorer: the VarnodeBank keeps a Varnode it could not put back in its lists (patches/0032-allocation-failure-order-2.patch).
+ * Modified for SaturnExplorer: a frame write kept for a LOAD that may read the frame is marked so the hold can be let go (patches/0076-engine-frame-loads-keep-writes.patch).
  */
 /// \file varnode.hh
 /// \brief The Varnode and VarnodeBank classes
@@ -132,7 +133,8 @@ public:
     spacebase_placeholder = 0x800, ///< This varnode is inserted artificially to track a register
 				///< value at a specific point in the code
     stop_uppropagation = 0x1000, ///< Data-types do not propagate from an output into \b this
-    has_implied_field = 0x2000	///< The varnode is implied but also has a data-type that needs resolution
+    has_implied_field = 0x2000,	///< The varnode is implied but also has a data-type that needs resolution
+    frameload_force = 0x4000	///< SaturnExplorer (0076): \b addrforce was set only to keep a frame write for a LOAD that may read it
   };
 private:
   mutable uint4 flags;		///< The collection of boolean attributes for this Varnode
@@ -267,6 +269,7 @@ public:
   bool isMark(void) const { return ((flags&Varnode::mark)!=0); } ///< Has \b this been visited by the current algorithm?
   bool isActiveHeritage(void) const { return ((addlflags&Varnode::activeheritage)!=0); } ///< Is \b this currently being traced by the Heritage algorithm?
   bool isStackStore(void) const { return ((addlflags&Varnode::stack_store)!=0); } ///< Was this originally produced by an explicit STORE
+  bool isFrameLoadForce(void) const { return ((addlflags&Varnode::frameload_force)!=0); }	///< SaturnExplorer (0076): is the address force only a hold for a LOAD?
   bool isLockedInput(void) const { return ((addlflags&Varnode::locked_input)!=0); }	///< Is always an input, even if unused
   bool stopsUpPropagation(void) const { return ((addlflags&Varnode::stop_uppropagation)!=0); }	///< Is data-type propagation stopped
   bool hasImpliedField(void) const { return ((addlflags&Varnode::has_implied_field)!=0); }	///< Does \b this have an implied field
@@ -308,8 +311,10 @@ public:
   void clearMark(void) const { flags &= ~Varnode::mark; } ///< Clear the mark on this Varnode
   void setDirectWrite(void) { flags |= Varnode::directwrite; } ///< Mark \b this as directly affected by a legal input
   void clearDirectWrite(void) { flags &= ~Varnode::directwrite; } ///< Mark \b this as not directly affected by a legal input
-  void setAddrForce(void) { setFlags(Varnode::addrforce); } ///< Mark as forcing a value into \b this particular storage location
+  void setAddrForce(void) { setFlags(Varnode::addrforce); addlflags &= ~Varnode::frameload_force; } ///< Mark as forcing a value into \b this particular storage location (SaturnExplorer 0076: for its own sake, not as a LOAD's hold)
   void clearAddrForce(void) { clearFlags(Varnode::addrforce); }	///< Clear the forcing attribute
+  void setFrameLoadForce(void) { setFlags(Varnode::addrforce); addlflags |= Varnode::frameload_force; }	///< SaturnExplorer (0076): hold a frame write for a LOAD
+  void clearFrameLoadForce(void) { if ((addlflags&Varnode::frameload_force)!=0) { clearFlags(Varnode::addrforce); addlflags &= ~Varnode::frameload_force; } }	///< SaturnExplorer (0076): let the hold go
   void setImplied(void) { setFlags(Varnode::implied); }	///< Mark \b this as an \e implied variable in the final C source
   void clearImplied(void) { clearFlags(Varnode::implied); } ///< Clear the \e implied mark on this Varnode
   void setExplicit(void) { setFlags(Varnode::explict); } ///< Mark \b this as an \e explicit variable in the final C source

@@ -578,6 +578,7 @@ class ActionDeadCode : public Action {
   static bool isSavePush(const Funcdata &data,const Address &addr,const Varnode *src);	///< SaturnExplorer (0068): a push of a callee-saved register
   static bool callMayReadFrame(const Funcdata &data,const Varnode *vn);	///< SaturnExplorer (0068): a call's INDIRECT on an escaped frame's local
   static bool storeMayWrite(const Funcdata &data,const PcodeOp *sop,const Varnode *local);	///< SaturnExplorer (0072): a STORE not folded yet aimed at the local
+  static void keepFrameWritesForLoads(Funcdata &data,vector<Varnode *> &worklist);	///< SaturnExplorer (0076): a LOAD that may read the frame keeps its writes
 public:
   ActionDeadCode(const string &g) : Action(0,"deadcode",g) {}	///< Constructor
   virtual Action *clone(const ActionGroupList &grouplist) const {
