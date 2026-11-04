@@ -1,6 +1,6 @@
 # SH-2 pseudocode and embedded decompiler
 
-Inspected revision: `ff6a3b1fb1c54e4c0344613094ea65292b0023c2` (2026-10-20); the pseudocode-to-assembly mapping (steps 7 and 9) rechecked at the area 7 fixer branch `review/7-a710-fix` (2026-10-30).
+Inspected revision: `ff6a3b1fb1c54e4c0344613094ea65292b0023c2` (2026-10-20); the pseudocode-to-assembly mapping (steps 7 and 9) rechecked at the area 7 fixer branch `review/7-a710-fix` (2026-10-30), and step 7's store tokens at `review/7-a719-fix` (2026-11-04).
 Captured-inspection sections rechecked against `codex/decompiler-variable-inspection` (2026-10-20).
 The panel's status/trust drawing, Decompile-as-a-request and Copy marks rechecked against `5428fe6` plus the area 8 fixer branch (2026-10-30).
 Unless labelled otherwise, behavior below is verified from the cited implementation.
@@ -90,8 +90,14 @@ the end of whatever it is given.
    address is `InstructionOf(op)`: the translator gives a delayed branch and the instruction in its
    delay slot one address, so the engine marks the ops the slot built (and the ops made for them;
    `PcodeOp::isFromDelaySlot`, patch 0075) and the host addresses them at the branch + 2.
-   `AddFrameStoreTokens` gives a line that prints a frame local at a call or a load an empty token
-   carrying the folded store that wrote it (the engine's `AccessRecord`s). Tokens at a word flow
+   `AddFrameStoreTokens` gives a line that prints a frame local or a global where no instruction
+   writes it (a COPY or a conversion at any instruction, any op at a call or a load) an empty token
+   for each folded store whose value it shows (the engine's `AccessRecord`s): found back through
+   the final basic blocks' address covers, with a store whose block the engine emptied placed on
+   the edges through its flow block, else forward (`FlowRecord::insnBlock`). A copy at the end of
+   its block that shows a store's value takes the store's address for its own tokens. A COPY the
+   engine made to trim a cover and that feeds a folded read is addressed to the read
+   (`LinesFromMarkup`). `DecompileResult::flowBlockRanges` is for the oracle. Tokens at a word flow
    halted at carry `haltsFlow`. The result records flow body ranges, warnings,
    hardware notes, memory-access provenance and optional recovered prototype/effects.
    `NoteRemovedAccesses` may additionally analyze an all-volatile reference when unreachable

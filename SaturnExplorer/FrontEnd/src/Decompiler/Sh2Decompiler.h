@@ -380,6 +380,7 @@ struct DecompileResult
     std::vector<InspectionTarget> inspectionTargets; // owned metadata only; never capture values or engine pointers
     std::vector<CallSite> calls;                      // the calls, for the ledger's order checks
     std::vector<std::vector<int>> flowSuccessors;     // the flow's basic blocks before any action: each one's successors
+    std::vector<std::pair<uint32_t, uint32_t>> flowBlockRanges;   // ...and each one's lowest and highest instruction (A7-19's oracle)
     // The calls (their place in the flow as first followed, as MemoryAccess::origBlock and origOrder) the engine guarded a local
     // of the frame at once a frame address escaped, with the local (its offset in the stack space, as AccessFate::address, and
     // size): the call's effect on it is unknown and it may reach the frame, so it may read it (patch 0068). For the frame ledger.
