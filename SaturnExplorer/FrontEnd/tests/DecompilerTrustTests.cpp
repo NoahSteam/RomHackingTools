@@ -1155,7 +1155,8 @@ Program MakeProgram(uint64_t seed, int mix, int concat = 1)
             const int before = nameOf.count(fn) ? nameOf[fn] : 0;
             nameOf[fn] = o.b;
             // (not while the panel is hidden: it asks nothing then, and area 1's STALE FOREVER check does not excuse the names generation of a
-            // rename undone -- A8-14 -- for a panel that is not asked; routed to area 1, A8-26)
+            // rename undone -- A8-14 -- for a panel that is not asked; routed to area 1, A8-25. Area 8, round 3: with the excuse A8-25 proposes,
+            // and this guard dropped, the generated sequences pass: Docs/Decompiler/tools/a8_round3/build_hidden_probe.sh)
             if (!hidden && rng.Chance(35))
             {
                 out.push_back(Mk(OpKind::Refresh));
