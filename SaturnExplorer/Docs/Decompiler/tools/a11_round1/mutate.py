@@ -192,6 +192,14 @@ for k in "tokodd tokoutside tokfirst tokdrop tokcall tokunmark tokhover tokslot 
 # (id, patch, host mutant, should, escalate)
 COMBOS = []
 
+# The order of the patch sweep (a sample is taken from the front): the patches that fixed P1 rows, then P2 rows, then the
+# access ledger and conservation, the allocation-failure and cancel patches, the spec, and the rest in number order.
+PRIORITY = ("0068 0072 0076 0066 0065 0063 0060 0058 0057 0056 0054 "
+            "0075 0077 0064 0067 0069 0062 0055 0047 0030 "
+            "0018 0017 0010 0009 0012 0014 0024 0031 0073 0013 "
+            "0001 0023 0032 0040 0003 0004 "
+            "0050 0006 0005 0045 0034 0026 0038").split()
+
 # Patches with a known reason no plain Linux ctest run can see them (A10-10, accepted): run, reported apart.
 PATCH_NOTES = {
     "0011": "UBSan vptr only (A10-10)",
@@ -262,7 +270,12 @@ class Harness:
             sys.exit("the tree is not clean after a restore: stop")
 
     def ninja(self, targets, log):
-        r = sh(["ninja", "-C", self.build, "-j2"] + sorted(set(targets)))
+        # the machine's rule: -j2, or -j1 when less than 4000 MB is available (two agents share it)
+        avail = 0
+        for line in open("/proc/meminfo"):
+            if line.startswith("MemAvailable:"):
+                avail = int(line.split()[1]) // 1024
+        r = sh(["ninja", "-C", self.build, "-j2" if avail >= 4000 else "-j1"] + sorted(set(targets)))
         with open(log, "ab") as f:
             f.write(r.stdout)
         return r.returncode == 0
@@ -363,8 +376,14 @@ class Harness:
             return
         touched, spec, applied = set(), False, 0
         self.mark(["SaturnExplorer/FrontEnd/third_party/ghidra-decompiler", "SaturnExplorer/FrontEnd/src/Decompiler/Sh2SpecData.h"])
+        skipped_hh = 0
         for h in hunks:
             p = os.path.join(self.rev, h)
+            # Header hunks stay: they are the patch's interface (the host uses it, so reverting them does not build) and a
+            # header change rebuilds the whole engine. The mutant is the patch's behaviour, its .cc and spec hunks.
+            if any(l.startswith("+++ b/") and l.rstrip().endswith(".hh") for l in open(p)):
+                skipped_hh += 1
+                continue
             ctx = open(p + ".ctx").read().strip() if os.path.exists(p + ".ctx") else "-C3"
             r = sh(["git", "apply", "-R", "--recount", ctx, p], cwd=self.root)
             if r.returncode != 0:
@@ -374,7 +393,12 @@ class Harness:
                 if line.startswith("+++ b/"):
                     touched.add(line[6:].strip())
                     spec |= "/processors/" in line
-        print("%s: %d of %d hunks reverted%s %s" % (mid, applied, len(hunks), " (spec)" if spec else "", PATCH_NOTES.get(num, "")), flush=True)
+        print("%s: %d of %d hunks reverted (%d header hunks kept)%s %s" % (mid, applied, len(hunks), skipped_hh, " (spec)" if spec else "",
+                                                                        PATCH_NOTES.get(num, "")), flush=True)
+        if not applied:
+            self.results.write("%s\t-\tnot-applied\t0\tonly header hunks revert alone\n" % mid)
+            self.restore([])
+            return
         if combo:
             hm = [m for m in MUTANTS if m[0] == combo[1]][0]
             full = os.path.join(self.root, hm[1])
@@ -433,7 +457,8 @@ def main():
     if a.group in ("all", "combo"):
         todo += [("combo", m[0], m) for m in COMBOS]
     if a.group in ("all", "patch"):
-        todo += [("patch", "patch:" + n, n) for n in patches]
+        first = [n for n in PRIORITY if n in patches]
+        todo += [("patch", "patch:" + n, n) for n in first + [n for n in patches if n not in first]]
     if a.only:
         want = set(a.only.split(","))
         todo = [t for t in todo if t[1] in want]
