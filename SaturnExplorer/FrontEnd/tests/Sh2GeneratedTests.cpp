@@ -3407,6 +3407,101 @@ std::vector<std::pair<std::string, size_t>> DerefOperandList(const std::string& 
     return out;
 }
 
+// The text with what its dereferences read blanked out (the operand of each `*` and each `name[...]`): what is left is the value the expression
+// computes from, not the addresses it loads through (A5-96: `(int4)*(char *)(param_2 | 0xfffffe00)` is a byte loaded through the masked address,
+// not the masked address).
+std::string LoadsBlanked(const std::string& text)
+{
+    static const std::regex castRe("^\\s*(?:[A-Za-z_]\\w*\\s*)+\\*+\\s*$|^\\s*(?:u?int\\d|xunknown\\d|undefined\\d?|char|uchar|short|ushort|bool|byte|word|dword|qword|long|ulong|float\\d*|code|void|unkbyte\\d+|unkuint\\d+|unkint\\d+)\\s*$");
+    std::string out = text;
+    for (const auto& one : DerefOperandList(text))
+    {
+        const size_t at = one.second;
+        if (text[at] == '*')
+        {
+            // (a unary `*` takes one operand, which DerefOperandList reads on to the end of the expression: `*param_2 | 0xffffffc0` loads through
+            // param_2 and ORs the mask into the value loaded. The operand is a name with its subscripts, or a parenthesised expression after the
+            // casts, or another `*` and its operand.)
+            size_t k = at + 1;
+            while (k < text.size() && (text[k] == ' ' || text[k] == '*')) ++k;
+            size_t end = k;
+            while (k < text.size() && text[k] == '(')
+            {
+                int depth = 0;
+                size_t close = std::string::npos;
+                for (size_t q = k; q < text.size(); ++q)
+                {
+                    if (text[q] == '(') ++depth;
+                    else if (text[q] == ')' && --depth == 0) { close = q; break; }
+                }
+                if (close == std::string::npos) { end = text.size(); break; }
+                end = close + 1;
+                if (!std::regex_match(text.substr(k + 1, close - k - 1), castRe)) break;
+                k = close + 1;
+                while (k < text.size() && text[k] == ' ') ++k;
+                end = k;
+            }
+            if (end == k)
+            {
+                while (end < text.size() && (std::isalnum(static_cast<unsigned char>(text[end])) || text[end] == '_')) ++end;
+                while (end < text.size() && text[end] == '[')
+                {
+                    int depth = 0;
+                    for (; end < text.size(); ++end)
+                    {
+                        if (text[end] == '[') ++depth;
+                        else if (text[end] == ']' && --depth == 0) { ++end; break; }
+                    }
+                }
+            }
+            for (size_t q = at + 1; q < end && q < out.size(); ++q) out[q] = ' ';
+            continue;
+        }
+        size_t e = at;   // `name[index]`: the name and the index
+        while (e > 0 && text[e - 1] == ' ') --e;
+        for (size_t k = e - one.first.size(); k < e; ++k) out[k] = ' ';
+        int depth = 0;
+        for (size_t k = at; k < text.size(); ++k)
+        {
+            if (text[k] == '[') ++depth;
+            else if (text[k] == ']' && --depth == 0) break;
+            out[k] = ' ';
+        }
+    }
+    return out;
+}
+
+// Whether the statement at line 'k' is made on every path from it to the statement at line 'use' (k < use): no block that holds k closes
+// before the use, and no label between them lets a path in that does not pass k. Structured text only; a goto out of the block is a path that
+// does not reach the use at all. (A5-94: `uVar3 = param_2 | 0xfffffff0;` is overwritten by `uVar3 = 0xfffffe04;` before the store.)
+bool StatementDominates(const std::vector<Line>& lines, size_t k, size_t use)
+{
+    if (k >= use || use >= lines.size()) return false;
+    int depth = 0;
+    auto step = [&](char c) {
+        if (c == '{') ++depth;
+        else if (c == '}') --depth;
+        return depth >= 0;
+    };
+    for (char c : lines[k].text)
+        if (!step(c)) return false;
+    for (size_t li = k + 1; li < use; ++li)
+    {
+        const std::string& t = lines[li].text;
+        const size_t e = t.find_last_not_of(' ');
+        if (e != std::string::npos && t[e] == ':') return false;   // (a label: `LAB_06009010:`, `case 2:`, `default:`)
+        for (char c : t)
+            if (!step(c)) return false;
+    }
+    for (char c : lines[use].text)
+    {
+        if (c == ' ') continue;
+        if (c != '}') break;
+        if (!step(c)) return false;
+    }
+    return true;
+}
+
 std::string DerefOperands(const std::string& text)
 {
     std::string out;
@@ -3447,16 +3542,19 @@ bool IsFreeValue(const std::string& id)
 // outside every loop and backward goto the statement is in, is made after the read on every path, however it may name `&REG`). 'unrelated' is set when it does not but the output
 // names the register somewhere else (the argument of a call, another statement): counted apart, not folded into anonymous reads.
 bool PointerPrintsFromHardware(const DecompileResult& r, uint32_t insn, const std::vector<const HardwareRegister*>& covering, uint32_t reached, bool& unrelated,
-                               bool* open = nullptr, bool* onChipMask = nullptr)
+                               bool* open = nullptr, bool* onChipMask = nullptr, bool* stepped = nullptr)
 {
     unrelated = false;
     if (open) *open = false;
     if (onChipMask) *onChipMask = false;
+    if (stepped) *stepped = false;
     bool openSource = false;   // (A5-89) some value the pointer can hold is no address the text names: a parameter, a callee's output, a loaded value
     bool maskSeen = false;     // (A5-90) the derivation ORs something with a constant that sets the top bits of the address
+    bool selfSeen = false;     // (A5-98) an assignment reaching the pointer is made from its own name (`puVar3 = puVar3 + 4`): a value stepped round a loop
     auto report = [&]() {
         if (open) *open = openSource;
         if (onChipMask) *onChipMask = maskSeen;
+        if (stepped) *stepped = selfSeen;
     };
     bool tooFar = false;   // the derivation names register addresses, none within reach of the one the emulator came to (A5-82)
     // The read's own tokens on each line that has some: what the instruction contributes to the statement, not the whole statement (a
@@ -3539,8 +3637,9 @@ bool PointerPrintsFromHardware(const DecompileResult& r, uint32_t insn, const st
         return WithoutCalls(text);
     };
     auto derive = [&](bool operandsOnly, bool& narrowed) {
-        std::set<std::pair<std::string, size_t>> seen;
-        std::vector<std::pair<std::string, size_t>> todo;   // (variable, the line of the statement that reads it)
+        std::set<std::tuple<std::string, size_t, bool>> seen;
+        // (variable, the line of the statement that reads it, whether its value is only an address something is loaded through: A5-96)
+        std::vector<std::tuple<std::string, size_t, bool>> todo;
         // (A5-89) One instruction can have two lines of text (a delay slot's store and the `return` the printer gives it too): when one of them
         // dereferences what the read's tokens name, the other is not the access.
         bool anyOperands = false, namedHere = false;
@@ -3564,32 +3663,46 @@ bool PointerPrintsFromHardware(const DecompileResult& r, uint32_t insn, const st
             // (the walk goes on after a base is named in the statement itself: what the other names in it were assigned says whether the pointer is
             // open, and whether a mask of the top bits made it)
             if (NamesHardwareBase(text, reached, tooFar)) namedHere = true;
-            for (const std::string& id : Identifiers(text)) todo.emplace_back(id, statement.second);
+            for (const std::string& id : Identifiers(text)) todo.emplace_back(id, statement.second, false);
         }
         bool found = namedHere;
         while (!todo.empty() && seen.size() < 256)
         {
-            const std::pair<std::string, size_t> item = todo.back();
+            const std::tuple<std::string, size_t, bool> item = todo.back();
             todo.pop_back();
             if (!seen.insert(item).second) continue;
+            const std::string& name = std::get<0>(item);
+            const size_t useLine = std::get<1>(item);
+            const bool loaded = std::get<2>(item);
             bool assigned = false;
             for (const Assign& a : assigns)
             {
-                if (a.name != item.first) continue;
+                if (a.name != name) continue;
                 assigned = true;
                 const std::string rhs = WithoutCalls(a.rhs);
-                if (!reaches(a.line, item.second))
+                if (!reaches(a.line, useLine))
                 {
                     if (NamesHardwareBase(rhs, reached, tooFar)) tooFar = true;   // (named, but made after the read: counted as not the pointer)
                     continue;
                 }
+                // (A5-94) an assignment overwritten on every path to the use, by another of the same name, is not what the use reads: the engine
+                // gives two values one name (`uVar3 = param_2 | 0xfffffff0;` ... `uVar3 = 0xfffffe04;` ... `*(uint4 *)uVar3 = uVar3;`)
+                bool killed = false;
+                for (const Assign& k : assigns)
+                    killed |= k.name == name && a.line < k.line && k.line < useLine && StatementDominates(r.lines, k.line, useLine);
+                if (killed) continue;
                 // (A5-89) a callee's output or a loaded value is no address the text names
                 if (rhs != a.rhs || !DerefOperands(rhs).empty()) openSource = true;
-                maskSeen |= OrsIntoOnChip(rhs);
+                // (A5-96) what is loaded through an address is not the address: a mask in it bounds the address, not the value loaded
+                const std::string value = LoadsBlanked(rhs);
+                if (!loaded) maskSeen |= OrsIntoOnChip(value);
                 if (NamesHardwareBase(rhs, reached, tooFar)) found = true;
-                for (const std::string& q : Identifiers(rhs)) todo.emplace_back(q, a.line);
+                const std::vector<std::string> direct = Identifiers(value);
+                selfSeen |= std::find(direct.begin(), direct.end(), name) != direct.end();
+                for (const std::string& q : Identifiers(rhs))
+                    todo.emplace_back(q, a.line, loaded || std::find(direct.begin(), direct.end(), q) == direct.end());
             }
-            if (!assigned && IsFreeValue(item.first)) openSource = true;
+            if (!assigned && IsFreeValue(name)) openSource = true;
         }
         return found;
     };
@@ -5043,9 +5156,17 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                 bool shown = false;
                 for (const MemoryAccess& m : r.accesses) shown |= m.insn == t.insn && m.direct && m.address == t.addr && m.write == t.write;
                 if (shown || !seenSpan.insert(std::make_tuple(t.insn, t.addr, t.size, t.write)).second) continue;
-                bool unrelated = false, open = false, masked = false;
-                PointerPrintsFromHardware(r, t.insn, none, t.addr, unrelated, &open, &masked);
+                bool unrelated = false, open = false, masked = false, stepped = false;
+                PointerPrintsFromHardware(r, t.insn, none, t.addr, unrelated, &open, &masked, &stepped);
                 if (!masked) continue;
+                // (A5-98) a pointer whose every value the text gives (`uVar1 = 0x80002010;` or `0x80003010`, then `uVar1 | 0xffffffe0`) is no unknown
+                // value ORed with a mask: the engine works the addresses out and says them as a direct access is said, which rule 3c asks for. (A value
+                // stepped round a loop is not given: `puVar3 = puVar3 + 4` from &SMPC_OREG13, then `| 0xffffffe0`, sweep seed 2007165, is asked.)
+                if (!open && !stepped)
+                {
+                    count("onchip.span.closed");
+                    continue;
+                }
                 // (a note that names the address the run came to -- the pointer is also a constant the engine knows, or based at one -- says it
                 // exactly, and the span is for the values it does not name)
                 bool named = false, said = false;
@@ -11908,6 +12029,27 @@ void TestA587Pins(Sh2Decompiler& d)
             "0/0/c,14/14/3a,40/40/4e", nullptr, "0,0,0", "180000,180000,0", "0,0,800" }, "onchip.span.said", nullptr },
         { { "A5-91, grammar 1 seed 2408172 shrunk", "D706 6072 C801 8BFC E302 7704 D104 271A 4310 8BFA E00E 0735 000B 0009 FFFF FF08 2000 0000",
             nullptr, nullptr, nullptr, nullptr, nullptr }, "pointer.effect.excused", nullptr },
+        // A5-94 (grammar 2 seed 4112577) and A5-95 (routed seed 4508726): the engine gives one name to two values, and the one ORed with a mask of the
+        // top bits is overwritten before the access (`uVar3 = param_2 | 0xfffffff0;` ... `uVar3 = 0xfffffe04;`, a walk A5-91's note names; `pxVar2 =
+        // extraout_r7_00;`, a callee's output, A5-58). A5-96 (routed seed 4515520): `iVar1 = (int4)*(char *)(param_2 | 0xfffffe00);`, a byte loaded through
+        // the masked address and put in GBR: the read has its span note, and the GBR access through the value loaded is open. A5-98 (routed seed
+        // 4912819): `uVar1` is 0x80002010 or 0x80003010, both 0xFFFFFFF0 once ORed with 0xffffffe0: the engine names SH2_RTCSR and rule 3c asks for it.
+        // A5-97 (grammar 1 seeds 4605385, 4900986, 4906136): a pointer stepped from a register through the purge or the address array, then moved by an
+        // XOR into the cached partition after the loop or in a second loop: the stepped note now says the cache read.
+        { { "A5-94, grammar 2 seed 4112577 shrunk", "000B 0009 2F86 2F96 2FA6 4F22 7FE0 6843 6953 6A63 D10B 251B 2768 8B04 B016 6783 6483 6593 66A3 2458 8B01 A003 E132 6362 A000 0009 D204 7F20 4F26 6AF6 69F6 68F6 422B 0009 FFFF FFF0 0600 904C 7FE0 D705 E302 7704 D204 272A 4310 8BFA 2772 7F20 000B 0009 FFFF FE04 2000 0000",
+            "0/0/4,4/4/44,4c/4c/64", nullptr, "0,0,0", nullptr, nullptr }, "pointer.effect.excused", nullptr },
+        { { "A5-95, routed seed 4508726 shrunk", "2F86 2F96 4F22 6843 6953 D109 271B C801 8903 B011 0009 6483 6593 B00D 0009 6483 6593 D204 4F26 69F6 68F6 422B 0009 0009 FFFF FFF0 0600 9038 526F 2758 8B00 D702 2722 000B 0009 0009 35A0 00B0",
+            "0/0/2e,38/38/46", nullptr, "34,34", "0,0", "20000,0" }, nullptr, nullptr },
+        { { "A5-96, routed seed 4515520 shrunk", "2F86 2F96 2FA6 2FB6 4F22 7FF0 6843 6953 6A63 6B73 7F10 4F26 6BF6 6AF6 69F6 68F6 000B 0009 D312 253B E105 3616 8918 4608 C701 016E 412B 0009 0600 9050 0600 9050 0600 9054 0600 9058 0600 9058 0600 905C A007 0009 A005 0009 A003 0009 A001 0009 6150 411E E001 CF48 E030 000B 0009 0009 FFFF FE00",
+            "0/0/24,24/24/28,28/28/6e", "34:6:6:60:50,50,54,58,58,5c", "0,1,1", "1a0000,20000,20000", "0,20000,20000" }, "onchip.span.said", nullptr },
+        { { "A5-98, routed seed 4912819 shrunk", "D617 E106 3712 8919 4708 C702 017E 412B 0009 0009 0600 902C 0600 9030 0600 903C 0600 903C 0600 9034 0600 9038 A007 0009 A005 0009 A003 0009 A001 0009 D609 2F86 2F96 4F22 7FE0 6843 6953 D207 262B 2632 6043 7F20 4F26 69F6 68F6 000B 0009 0009 8000 2010 8000 3010 FFFF FFE0",
+            "0/0/3e,3e/3e/5e", "e:7:6:3c:2c,30,3c,3c,34,38", "1,1", "0,0", "20000,0" }, "onchip.span.closed", "onchip.span.said" },
+        { { "A5-97, grammar 1 seed 4605385 shrunk", "D607 E304 7604 D207 262A 4310 8BFA E302 E000 006D D104 261A 4310 8BF9 000B 0009 25D0 0000 4000 0000 2000 0000",
+            nullptr, nullptr, nullptr, nullptr, nullptr }, "cache.read.pointer.said", nullptr },
+        { { "A5-97, routed seed 4900986 shrunk", "D706 E304 7704 D106 271A 4310 8BFA D105 271A E004 017D 000B 0009 0009 25B0 0422 4000 0000 2000 0000",
+            nullptr, nullptr, nullptr, nullptr, nullptr }, "cache.read.pointer.said", nullptr },
+        { { "A5-97, routed seed 4906136 shrunk", "D605 E302 7604 D205 262A 4310 8BFA D204 262A 461B 000B 0009 0010 003F 4000 0000 0000 0004",
+            nullptr, nullptr, nullptr, nullptr, nullptr }, "cache.read.pointer.said", nullptr },
     };
     for (const Pin& p : kPins)
     {
@@ -11949,18 +12091,43 @@ void TestA587Pins(Sh2Decompiler& d)
         CHECK(open == wantOpen);
         CHECK(masked == wantMasked);
     };
-    // seed 2018538: a callee's output merged with a register's address 42 bytes from the one reached
-    derive("a callee's output merged with &SH2_BARBL", { "puVar3 = extraout_r6;", "puVar3 = &SH2_BARBL;", "uVar1 = *puVar3;" }, 2, chcr0, true, true, false);
+    // seed 2018538: a callee's output merged with a register's address 42 bytes from the one reached (a merge is an assignment in a block: two
+    // assignments one after the other are an overwrite, A5-94)
+    derive("a callee's output merged with &SH2_BARBL", { "puVar3 = extraout_r6;", "if (c) {", "puVar3 = &SH2_BARBL;", "}", "uVar1 = *puVar3;" }, 4, chcr0, true, true, false);
     derive("the same without the callee's output (control)", { "puVar3 = &SH2_BARBL;", "uVar1 = *puVar3;" }, 1, chcr0, true, false, false);
-    derive("a parameter merged with &SH2_BARBL", { "puVar3 = param_1;", "puVar3 = &SH2_BARBL;", "uVar1 = *puVar3;" }, 2, chcr0, true, true, false);
-    derive("a loaded value merged with &SH2_BARBL", { "puVar3 = *ppuVar4;", "puVar3 = &SH2_BARBL;", "uVar1 = *puVar3;" }, 2, chcr0, true, true, false);
-    derive("a call's result merged with &SH2_BARBL", { "puVar3 = f(1);", "puVar3 = &SH2_BARBL;", "uVar1 = *puVar3;" }, 2, chcr0, true, true, false);
+    derive("a parameter merged with &SH2_BARBL", { "puVar3 = param_1;", "if (c) {", "puVar3 = &SH2_BARBL;", "}", "uVar1 = *puVar3;" }, 4, chcr0, true, true, false);
+    derive("a loaded value merged with &SH2_BARBL", { "puVar3 = *ppuVar4;", "if (c) {", "puVar3 = &SH2_BARBL;", "}", "uVar1 = *puVar3;" }, 4, chcr0, true, true, false);
+    derive("a call's result merged with &SH2_BARBL", { "puVar3 = f(1);", "if (c) {", "puVar3 = &SH2_BARBL;", "}", "uVar1 = *puVar3;" }, 4, chcr0, true, true, false);
     derive("a local, itself a register's address (control)", { "puVar2 = &SH2_BARBL;", "puVar3 = puVar2;", "uVar1 = *puVar3;" }, 2, chcr0, true, false, false);
     // seed 1804560: the number ORed in is a mask of the top bits, and the other operand is a parameter or a register at entry
     derive("in_r1 | 0xffffffc0, a byte at +8", { "uVar1 = in_r1 | 0xffffffc0;", "*(uint1 *)(uVar1 + 8) = *(uint1 *)(uVar1 + 8) | 1;" }, 1, 0xFFFFFFDAu, true, true, true);
     derive("param_4 | 0xffffffe0 in the operand", { "*(xunknown1 *)(param_4 | 0xffffffe0) = *param_1;" }, 0, 0xFFFFFFE0u, true, true, true);
     derive("& 0xffffffc0 is no top-bits mask (control)", { "uVar1 = in_r1 & 0xffffffc0;", "uVar2 = *(uint1 *)(uVar1 + 8);" }, 1, 0xFFFFFFC8u, true, true, false);
     derive("| 0x40 sets no top bits (control)", { "uVar1 = in_r1 | 0x40;", "uVar2 = *(uint1 *)(uVar1 + 8);" }, 1, 0x48u, false, true, false);
+    // A5-94: an assignment overwritten on every path to the use is not what the use reads; one in a block (a merge), or overwritten in a loop the use is
+    // after, is
+    derive("a masked value overwritten before the use", { "uVar3 = param_2 | 0xfffffff0;", "uVar3 = 0xfffffe04;", "*(uint4 *)uVar3 = uVar3;" }, 2, 0xFFFFFE04u, true, false, false);
+    derive("overwritten in a block (control)", { "uVar3 = param_2 | 0xfffffff0;", "if (c) {", "uVar3 = 0xfffffe04;", "}", "*(uint4 *)uVar3 = uVar3;" }, 4, 0xFFFFFFF0u, true, true, true);
+    derive("overwritten in a loop before the use (control)", { "uVar3 = param_2 | 0xfffffff0;", "while (c) {", "uVar3 = 0xfffffe04;", "}", "*(uint4 *)uVar3 = uVar3;" }, 4, 0xFFFFFFF0u, true, true, true);
+    derive("a label between the overwrite and the use (control)", { "uVar3 = param_2 | 0xfffffff0;", "uVar3 = 0xfffffe04;", "LAB_06009010:", "*(uint4 *)uVar3 = uVar3;" }, 3, 0xFFFFFFF0u, true, true, true);
+    // A5-96: a mask in the address of a load bounds the address, not the value loaded; ORed into the value loaded, it bounds the value
+    derive("a value loaded through a masked address", { "iVar1 = (int4)*(char *)(param_2 | 0xfffffe00);", "*(uint1 *)(iVar1 + 1) = 0;" }, 1, 0xFFFFFFA2u, false, true, false);
+    derive("a local loaded through a masked local", { "pcVar7 = (char *)(param_2 | 0xfffffe00);", "iVar5 = (int4)*pcVar7;", "*(uint1 *)(iVar5 + 1) = 0;" }, 2, 0xFFFFFFCBu, false, true, false);
+    derive("a value loaded, then masked (control)", { "uVar3 = (int4)*param_2 | 0xffffffc0;", "*(uint1 *)(uVar3 + 8) = 0;" }, 1, 0xFFFFFFDAu, true, true, true);
+    derive("an element loaded, then masked (control)", { "uVar3 = param_2[3] | 0xffffffc0;", "*(uint1 *)(uVar3 + 8) = 0;" }, 1, 0xFFFFFFDAu, true, true, true);
+    // A5-98: a mask ORed into values the text gives is closed
+    derive("constants ORed with a mask", { "uVar1 = 0x80002010;", "if (c) {", "uVar1 = 0x80003010;", "}", "*(xunknown4 *)(uVar1 | 0xffffffe0) = in_r3;" }, 4, 0xFFFFFFF0u, true, false, true);
+    // A5-98: what tells a closed derivation from a stepped one, which rule 3f still asks (sweep seed 2007165)
+    for (const bool loop : { false, true })
+    {
+        const DecompileResult r = FakeOutput(loop ? std::vector<std::string>{ "puVar3 = &SMPC_OREG13;", "do {", "puVar3 = puVar3 + 4;", "} while (c);", "uVar4 = (uint4)puVar3 | 0xffffffe0;", "xVar1 = *(xunknown1 *)(uVar4 + 3);" }
+                                                  : std::vector<std::string>{ "uVar1 = 0x80002010;", "if (c) {", "uVar1 = 0x80003010;", "}", "uVar4 = uVar1 | 0xffffffe0;", "xVar1 = *(xunknown1 *)(uVar4 + 3);" });
+        bool unrelated = false, open = true, masked = false, stepped = !loop;
+        PointerPrintsFromHardware(r, 0x0600900Au, none, 0xFFFFFFF3u, unrelated, &open, &masked, &stepped);
+        std::printf("pin 'A5-98 derivation: %s': open %s, masked %s, stepped %s\n", loop ? "a pointer stepped in a loop, then masked" : "two constants, then masked",
+                    open ? "yes" : "no", masked ? "yes" : "no", stepped ? "yes" : "no");
+        CHECK(!open && masked && stepped == loop);
+    }
     derive("|| is no OR of bits (control)", { "bVar1 = in_r1 != 0 || 0xffffffc0 != 0;", "uVar2 = *(uint1 *)(bVar1 + 8);" }, 1, 0x48u, false, true, false);
     // a store's own tokens are the `*`, the `=` and the value; the address is the expression before it, and what the value was assigned is not the pointer
     {

@@ -3652,6 +3652,12 @@ struct PointerValues
     int64_t rangeLo = 0, rangeHi = 0;
 };
 
+// An address of a register area through the cached partition: a read there is a cache read (A5-19, A5-70).
+bool CachedRegister(uint32_t address)
+{
+    return (address >> 29) == 0 && IsRegisterArea(address);
+}
+
 class PointerResolver
 {
 public:
@@ -3844,6 +3850,27 @@ private:
                 if (overflow) break;
             }
         }
+        // (A5-97) The later values of a pointer stepped in an earlier loop, closed under this loop's exact paths as the first values are: a second loop
+        // that flips the partition bit (`p = p ^ 0x20000000`) reads the cached twins of the addresses the first loop's walk came to.
+        // (the walk's list is often full already: every value it comes to is asked, and the list keeps what fits)
+        if (!v.later.empty() && !exact.empty())
+        {
+            std::set<uint32_t> seenLater(v.later.begin(), v.later.end());
+            std::vector<uint32_t> queue = v.later;
+            for (size_t i = 0; i < queue.size() && queue.size() < 2 * kMaxValues + v.later.size(); ++i)
+                for (const SelfPath* p : exact)
+                    for (uint32_t r : Eval(*p, queue[i]))
+                    {
+                        if (!seenLater.insert(r).second) continue;
+                        queue.push_back(r);
+                        if (v.later.size() < 64) v.later.push_back(r);
+                        if (!v.steppedCached && CachedRegister(r))
+                        {
+                            v.steppedCached = true;
+                            v.steppedCachedAt = r;
+                        }
+                    }
+        }
         if (stepped.empty()) return;
         v.steps = v.others = true;
         if (overflow) return;
@@ -4002,6 +4029,27 @@ private:
         for (const auto& s : set->constants)
             for (const auto& m : mask->constants)
                 out.constants[Apply(code, s.first, m.first)] = true;
+        // (A5-97) The later values of a pointer stepped in a loop are moved by the operation too, and asked again whether they read through the cached
+        // partition: `p = (p + 4) ^ 0x40000000` from 0x25D00000 comes to 0x25D00010, and `p ^ 0x20000000` after the loop reads 0x05D00010.
+        if (!set->later.empty() || set->steppedCached)
+        {
+            std::vector<uint32_t> moved;
+            if (set->steppedCached)
+                for (const auto& m : mask->constants) moved.push_back(Apply(code, set->steppedCachedAt, m.first));
+            for (uint32_t l : set->later)
+                for (const auto& m : mask->constants)
+                {
+                    const uint32_t r = Apply(code, l, m.first);
+                    if (out.later.size() < 64 && std::find(out.later.begin(), out.later.end(), r) == out.later.end()) out.later.push_back(r);
+                    moved.push_back(r);
+                }
+            for (uint32_t r : moved)
+                if (!out.steppedCached && CachedRegister(r))
+                {
+                    out.steppedCached = true;
+                    out.steppedCachedAt = r;
+                }
+        }
         // An indexed pointer (bases) is moved by the operation too: the note it allows is for the index 0, where the access is at the base
         // moved (`(base + index) and mask` is `base and mask` at the index 0, A5-61); the operation on the index is nothing it says.
         for (uint32_t base : set->bases)

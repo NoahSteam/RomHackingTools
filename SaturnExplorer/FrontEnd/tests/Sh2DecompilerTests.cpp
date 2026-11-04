@@ -2101,6 +2101,13 @@ void TestHardwareVolatility()
         // A5-92: a pointer merged from an address of the associative purge and one of the cache address array says what the direct access says.
         add("a5_92", { 0xD604, 0x2448, 0x8901, 0xD604, 0x0009, 0x6062, 0x000B, 0x0009, 0x0009, 0x0009, 0x6000, 0x1000, 0x4000, 0x1000 }, 0x14, 0x60001000u);
         add("a5_92_ram", { 0xD604, 0x2448, 0x8901, 0xD604, 0x0009, 0x6062, 0x000B, 0x0009, 0x0009, 0x0009, 0x0600, 0x1000, 0x0600, 0x2000 }, 0x14, 0x06001000u);
+        // A5-97 (generator grammar 1 seeds 4900986 and 4605385): `p = (p + 4) ^ 0x40000000` from SCSP_SCIRE (or VDP1_TVMR) four times, a register and the
+        // cache address array by turns, then moved into the cached partition after the loop (`p ^ 0x20000000`, a word read at +4: 0x05B00436) or in a
+        // second loop (`p ^= 0x20000000` each turn: 0x05D00010 on the second): the later values read registers through the cache. The control XORs with 0
+        // after the loop and stays in the cache-through partition.
+        add("a5_97", { 0xD706, 0xE304, 0x7704, 0xD106, 0x271A, 0x4310, 0x8BFA, 0xD105, 0x271A, 0xE004, 0x017D, 0x000B, 0x0009, 0x0009, 0x25B0, 0x0422, 0x4000, 0x0000, 0x2000, 0x0000 }, 0x1C, 0x25B00422u);
+        add("a5_97_loop", { 0xD607, 0xE304, 0x7604, 0xD207, 0x262A, 0x4310, 0x8BFA, 0xE302, 0xE000, 0x006D, 0xD104, 0x261A, 0x4310, 0x8BF9, 0x000B, 0x0009, 0x25D0, 0x0000, 0x4000, 0x0000, 0x2000, 0x0000 }, 0x20, 0x25D00000u);
+        add("a5_97_through", { 0xD706, 0xE304, 0x7704, 0xD106, 0x271A, 0x4310, 0x8BFA, 0xD105, 0x271A, 0xE004, 0x017D, 0x000B, 0x0009, 0x0009, 0x25B0, 0x0422, 0x4000, 0x0000, 0x0000, 0x0000 }, 0x1C, 0x25B00422u);
         // A5-79: a frame buffer store, a frame change (VDP1_FBCR = 3), a wait for the frame end, the load of the same address
         add("a5_79", { 0xD807, 0x900B, 0x2801, 0xD107, 0xE203, 0x2121, 0xD306, 0x6031, 0xC808, 0x89FC, 0x6081, 0x000B, 0x0009, 0x0009, 0x1234, 0x0009, 0x25C8, 0x0200, 0x25D0, 0x0002, 0x25F8, 0x0004 }, 0x20, 0x25C80200u);
     }
@@ -3570,6 +3577,14 @@ void TestHardwareVolatility()
               HasNote(r, "if the pointer holds 0x60001000: an access at 0x60001000 is the cache address array, not a memory access: entry 0 of the way SH2_CCR selects", false));
         r = R9("a5_92_ram", "control: p = 0x06001000 or 0x06002000");
         CHECK(r.hardwareNotes.empty());
+
+        // A5-97: the later values of a stepped pointer, moved by a bitwise operation after the loop or in a second loop, read through the cached partition.
+        r = R9("a5_97", "p = (p + 4) ^ 0x40000000 from SCSP_SCIRE, four turns; read.w @(4, p ^ 0x20000000)");
+        CHECK(HasNote(r, "a read of a register through the cached partition is a cache read when the cache is on (SH2_CCR.CE)", true));
+        r = R9("a5_97_loop", "p = (p + 4) ^ 0x40000000 from VDP1_TVMR, four turns; then twice: read.w @p, p ^= 0x20000000");
+        CHECK(HasNote(r, "a read of a register through the cached partition is a cache read when the cache is on (SH2_CCR.CE)", true));
+        r = R9("a5_97_through", "control: the same walk, XORed with 0 after the loop: cache-through");
+        CHECK(!HasNote(r, "cache read", true) && !HasNote(r, "cache read", false));
 
         // A5-71: the cache data array is 4 KiB under both partitions: the names of one cell are one memory.
         r = R9("a5_71a", "xRamc0000000 = 5; xRamc0001000 = 7; return xRamc0000000");
