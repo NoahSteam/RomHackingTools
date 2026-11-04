@@ -34,7 +34,7 @@
 //   SE_TRUST_STEPS=<n>   run at least n operations per outcome mix (default: a short run)
 //   SE_TRUST_MIX=<k>     only mix k (see kMixNames); SE_TRUST_FROM=<seed> starts it there, to run a long mix in pieces
 //   SE_TRUST_SEED=<k>    (with SE_TRUST_MIX) one sequence of that mix, every step printed; SE_TRUST_SKIP=3,5 and SE_TRUST_LIMIT=n shrink it
-//   SE_TRUST_FOLLOW_SEED=<k>  one sequence of the Follow PC rig (mix 8), every step printed
+//   SE_TRUST_FOLLOW_SEED=<k>  one sequence of the Follow PC rig (mix 8), every step printed; with SE_TRUST_FOLLOW_AUTO=1 one of mix 9
 //   SE_TRUST_SCRIPT="select A; t-inject failed" SE_MODEL_WORLD=C,A   one sequence written out (area 1's words, and t-...)
 //   SE_TRUST_NOHOVER=1   do not hover the badge (faster)
 #define SE_MODEL_NO_MAIN
@@ -1155,7 +1155,8 @@ Program MakeProgram(uint64_t seed, int mix, int concat = 1)
             const int before = nameOf.count(fn) ? nameOf[fn] : 0;
             nameOf[fn] = o.b;
             // (not while the panel is hidden: it asks nothing then, and area 1's STALE FOREVER check does not excuse the names generation of a
-            // rename undone -- A8-14 -- for a panel that is not asked; routed to area 1, A8-26)
+            // rename undone -- A8-14 -- for a panel that is not asked; routed to area 1, A8-25. Area 8, round 3: with the excuse A8-25 proposes,
+            // and this guard dropped, the generated sequences pass: Docs/Decompiler/tools/a8_round3/build_hidden_probe.sh)
             if (!hidden && rng.Chance(35))
             {
                 out.push_back(Mk(OpKind::Refresh));
@@ -2359,6 +2360,15 @@ struct FRig
 // The model's true state for the rig, then the model against the panel, then the guide's policy.
 std::string FollowCheck(FRig& r, bool hover)
 {
+    // (area 8, round 3) The check draws frames (the read-back, the hover): Auto-refresh is off while it runs, or it would capture and ask in
+    // the middle of the check, against a true state taken before (mix 9). It acts in the operations' frames and the settling.
+    struct AutoOff
+    {
+        DecompilerPanel& p;
+        bool was;
+        explicit AutoOff(DecompilerPanel& panel) : p(panel), was(panel.AutoRefresh()) { p.SetAutoRefresh(false); }
+        ~AutoOff() { p.SetAutoRefresh(was); }
+    } autoOff(r.panel);
     const DecompileResult* sh = r.panel.Shown();
     const FRig::Want w = r.WantNow();
     if (!w.known) return r.visible ? "FOLLOW: the panel holds no snapshot whose registers the rig kept" : "";
@@ -2431,7 +2441,8 @@ std::string FollowCheck(FRig& r, bool hover)
 }
 
 enum class FOp { PcC, PcA, PcT, PcU, PcUDead, PcBios, RegsOff, RegsOn, Static, Paused, Running, Advance, Edit, Refresh, Stop, Hold,
-                 Release, Hide, Show, FollowToggle, TypeC, TypeA, TypeT, BadEntry, NotCode, ContainC, ContainBad, ContainDead, Cpu, kCount };
+                 Release, Hide, Show, FollowToggle, TypeC, TypeA, TypeT, BadEntry, NotCode, ContainC, ContainBad, ContainDead, Cpu, AutoToggle,
+                 ShowInsn, kCount };
 
 const char* FOpName(FOp o)
 {
@@ -2439,7 +2450,8 @@ const char* FOpName(FOp o)
         "the CPU has no registers", "the CPU has registers", "a dump (static source)", "the emulator is paused", "the emulator runs",
         "the emulator advances a frame", "edit a byte of C or U", "Refresh", "Stop", "hold the engine", "release the engine", "hide the panel",
         "show the panel", "click Follow PC", "type the entry of C", "type the entry of A", "type the entry of T", "type 'zz'",
-        "type FFFFFFF0", "Decompile at C+4", "Decompile at 0x00001FF0", "Decompile at the dead code of U", "the other CPU" };
+        "type FFFFFFF0", "Decompile at C+4", "Decompile at 0x00001FF0", "Decompile at the dead code of U", "the other CPU",
+        "toggle Auto-refresh", "Show in Pseudocode at C+4" };
     return names[static_cast<int>(o)];
 }
 
@@ -2577,10 +2589,28 @@ std::string FollowExecute(FRig& r, FOp o, Rng& rng)
         r.cpu ^= 1;
         r.panel.SetCpu(r.cpu);
         return "";
+    case FOp::AutoToggle:
+        // (area 8, round 3) Auto-refresh in the generated sequences: on a running emulator under Follow PC it captures and asks by itself
+        // once the PC has left the function shown (A1-6), over Stops, holds, hides and the other targets. Round 2 held it in one directed pin.
+        if (!r.visible) return "(panel hidden: no checkbox)";
+        r.panel.SetAutoRefresh(!r.panel.AutoRefresh());
+        return r.panel.AutoRefresh() ? "now on" : "now off";
+    case FOp::ShowInsn:
+        // (area 8, round 3) "Show in Pseudocode" from SH-2 Assembly (A7-5): Decompile at the instruction, then its line selected. A target of
+        // the same kind as Decompile; what it adds is the grey note and the selection, neither of which may change an indicator.
+        r.tgt = FRig::Tgt::Contain;
+        r.tgtAddr = d[FnC].entry + 4;
+        r.panel.ShowInstruction(r.cpu, r.tgtAddr);
+        r.refused = false;
+        r.haveStopped = false;
+        return "";
     case FOp::kCount: break;
     }
     return "";
 }
+
+// (area 8, round 3) The Follow PC rig with Auto-refresh toggled and "Show in Pseudocode" among its operations (mix 9).
+bool gFollowAuto = false;
 
 // One random sequence of the Follow PC rig. False, with the sequence printed, when the panel and the model disagree.
 bool RunFollow(uint64_t seed, bool verbose, uint64_t& opsDone)
@@ -2593,9 +2623,12 @@ bool RunFollow(uint64_t seed, bool verbose, uint64_t& opsDone)
         { FOp::Refresh, 6 }, { FOp::Stop, 4 }, { FOp::Hold, 7 }, { FOp::Release, 6 }, { FOp::Hide, 3 }, { FOp::Show, 3 },
         { FOp::FollowToggle, 5 }, { FOp::TypeC, 3 }, { FOp::TypeA, 3 }, { FOp::TypeT, 3 }, { FOp::BadEntry, 2 }, { FOp::NotCode, 2 },
         { FOp::ContainC, 3 }, { FOp::ContainBad, 3 }, { FOp::ContainDead, 3 }, { FOp::Cpu, 3 },
+        // (area 8, round 3) only with gFollowAuto, so that the seeds pinned in kFollowPins stay the sequences they were
+        { FOp::AutoToggle, 4 }, { FOp::ShowInsn, 2 },
     };
+    const size_t kinds = gFollowAuto ? sizeof kW / sizeof kW[0] : sizeof kW / sizeof kW[0] - 2;
     int total = 0;
-    for (const auto& w : kW) total += w.weight;
+    for (size_t k = 0; k < kinds; ++k) total += kW[k].weight;
     FRig r;
     std::vector<std::string> done;
     auto fail = [&](const std::string& what) {
@@ -2615,8 +2648,9 @@ bool RunFollow(uint64_t seed, bool verbose, uint64_t& opsDone)
     {
         int pick = rng.Below(total);
         FOp op = FOp::PcC;
-        for (const auto& w : kW)
+        for (size_t k = 0; k < kinds; ++k)
         {
+            const auto& w = kW[k];
             if (pick < w.weight) { op = w.op; break; }
             pick -= w.weight;
         }
@@ -2900,6 +2934,7 @@ int main(int argc, char** argv)
 
         if (const char* fs = std::getenv("SE_TRUST_FOLLOW_SEED"))
         {
+            gFollowAuto = std::getenv("SE_TRUST_FOLLOW_AUTO") != nullptr;   // a mix 9 sequence
             uint64_t ops = 0;
             const uint64_t seed = std::strtoull(fs, nullptr, 10);
             const bool ok = RunFollow(seed, true, ops);
@@ -2978,6 +3013,31 @@ int main(int argc, char** argv)
             gT.steps += ops;
             std::printf("mix %d (Follow PC, registers, the CPU switched, the entry typed, Decompile): %llu sequences (seeds %llu to %llu), %llu operations, %.1f s\n", kMixes,
                         static_cast<unsigned long long>(seeds), static_cast<unsigned long long>(fromSeed),
+                        static_cast<unsigned long long>(fromSeed + seeds - 1), static_cast<unsigned long long>(ops), dts::MsSince(t0) / 1000.0);
+        }
+
+        // (area 8, round 3) Follow PC with Auto-refresh toggled and "Show in Pseudocode" (mix 9): the policy of A1-6 driven by the generator, not
+        // only by the directed pin, and A7-5's navigation, both held to the model at every step.
+        if (!mixEnv || std::atoi(mixEnv) == kMixes + 1)
+        {
+            gFollowAuto = true;
+            const auto t0 = std::chrono::steady_clock::now();
+            uint64_t ops = 0, seeds = 0;
+            for (uint64_t seed = fromSeed; ops < perMix; ++seed)
+            {
+                const bool ok = RunFollow(seed, false, ops);
+                ++seeds;
+                ++gT.programs;
+                if (!ok)
+                {
+                    ++failedPrograms;
+                    failedList.push_back("follow (auto-refresh) seed " + std::to_string(seed));
+                }
+            }
+            gT.steps += ops;
+            gFollowAuto = false;
+            std::printf("mix %d (Follow PC, as mix %d, with Auto-refresh toggled and Show in Pseudocode): %llu sequences (seeds %llu to %llu), %llu operations, %.1f s\n",
+                        kMixes + 1, kMixes, static_cast<unsigned long long>(seeds), static_cast<unsigned long long>(fromSeed),
                         static_cast<unsigned long long>(fromSeed + seeds - 1), static_cast<unsigned long long>(ops), dts::MsSince(t0) / 1000.0);
         }
 

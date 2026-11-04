@@ -7,7 +7,7 @@ Kept here:
 
 * `derive_handler_cases.py` and `audit_hardware_map.py`: regenerate `FrontEnd/tests/MednafenHandlerCases.txt`
   and the hardware register audit.
-* The latest round of each area (`a2_round17/`, `a3_round14/`, `a8_fix/`, `a9_round1/`), which the next round starts from.
+* The latest round of each area (`a2_round17/`, `a3_round14/`, `a8_fix/`, `a8_round3/`, `a9_round1/`), which the next round starts from.
   `a2_round17/`: `dagen17.py` (families 100 to 111: narrow compares, hardware-register addresses as numbers, and the mixed-width memory families, on top of
   `a2_round16/dagen16.py`), `fam17.sh` (the printed-C differential per family; `BE=1` reads the memory families on a big-endian arena), `oldnew17.sh` and `oldnewmem17.sh`
   (the same words through two engines, `diff17.py` counts the texts that differ), `mkrc17.sh` and `relink17.sh` and `famrc17.sh` (the in-situ rule checks on the tree with patch
@@ -16,6 +16,9 @@ Kept here:
   (4 to 8 generated programs end to end, `SE_TRUST_WIDTH=537` for the narrow panel); the probe also has `follow`, `oom <stride>`, `directed` and `script`.
   Round 2's instruments (`a8_round2/`, last at `5428fe6`) are the trust test itself now: Decompile as a target, the status-row check, the Stop-and-
   interleave generator, the width runs and the allocation-failure sweep.
+  `a8_round3/`: `build_hidden_probe.sh` builds the trust test against copies of itself and of area 1's `DecompilerModelTests.cpp` with
+  A8-25's proposed excuse in the copy and the generator's guard dropped (renames undone while the panel is hidden); `a8_27.sh` runs the eight Follow PC
+  seeds of A8-27. The Follow PC rig with Auto-refresh and Show in Pseudocode is the trust test's mix 9 (`SE_TRUST_MIX=9`, `SE_TRUST_FOLLOW_AUTO=1`).
   `a9_round1/`: `run_pieces.sh` (a long run of `SaturnExplorerLoaderFuzzTests` in pieces of at most 20 minutes) and
   `wasm32_yss_wrap.sh` with `yss_wrap32.cpp` (the 32-bit repro of A9-7; needs an emsdk and node).
 * `a3_round16/` (area 3 round 16): `frame16.py SEED COUNT` (twelve frame-attack modes: 4 to 6 slot chains, pointers through globals, mixed widths at odd offsets,
