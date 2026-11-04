@@ -2757,8 +2757,14 @@ struct Env
             }
         if (IsRam(a))
         {
+            // (A2-115) every byte is asked: a longword at 0xDFFFFFFF starts in the cache-data window and ends at 0xE0000000, outside every window (the machine takes an
+            // address error there, which the oracle's domain leaves out); a byte no window holds reads 0 and the run goes on, it is not dereferenced
             uint64_t v = 0;
-            for (int i = 0; i < size; ++i) v = (v << 8) | *ByteAt(a + i);
+            for (int i = 0; i < size; ++i)
+            {
+                const uint8_t* b = ByteAt(a + i);
+                v = (v << 8) | (b != nullptr ? *b : 0u);
+            }
             return v;
         }
         if (hwMode == 0) return 0;
@@ -7806,6 +7812,33 @@ bool UsesFrameMemory(const std::vector<uint16_t>& words)
     return false;
 }
 
+// A2-114: does a dereference in the text (`*(T *)(address)`) take its address from a parameter (`param_N`, or a register read before it is written: `in_rN`)?
+// The inputs of a run are random integers, so such an address is a host pointer that points nowhere: a text that has one needs the memory mode.
+bool DereferencesParameter(const std::string& text)
+{
+    static const std::regex derefRe("\\*\\([A-Za-z_][\\w ]*\\*+\\)");
+    static const std::regex paramRe("\\b(param_\\d+|in_r\\d+)\\b");
+    for (std::sregex_iterator it(text.begin(), text.end(), derefRe), end; it != end; ++it)
+    {
+        size_t at = static_cast<size_t>(it->position() + it->length());
+        size_t stop = at;
+        if (at < text.size() && text[at] == '(')
+        {
+            int depth = 0;
+            for (stop = at; stop < text.size(); ++stop)
+            {
+                if (text[stop] == '(') ++depth;
+                else if (text[stop] == ')' && --depth == 0) { ++stop; break; }
+            }
+        }
+        else
+            while (stop < text.size() && (std::isalnum(static_cast<unsigned char>(text[stop])) || text[stop] == '_')) ++stop;
+        const std::string addr = text.substr(at, stop - at);
+        if (std::regex_search(addr, paramRe)) return true;
+    }
+    return false;
+}
+
 // The stack offset (from the entry r15) of a local's name: `xStack_8` is 8 below it, `iStack00000004` and `_xStack00000004` 4 above.
 bool StackNameOffset(const std::string& name, int64_t& off)
 {
@@ -8321,6 +8354,14 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
             v.detail = "a parameter is a pointer; the memory mode (CCase::ptrWidth) runs it";
             continue;
         }
+        // A2-114: the same for a parameter declared an integer (`int4 param_2`) that a dereference uses as an address (`*(xunknown4 *)(param_2 + -4) = param_4;`, from
+        // `mov.l r7,@-r5`): UsesFrameMemory takes any store through a register other than r15 for the walk of a frame, and the compiled text would dereference a random integer.
+        if (!ptrMode && DereferencesParameter(pr.cText.substr(close)))
+        {
+            v.cls = "skipped:memory";
+            v.detail = "a parameter is used as an address; the memory mode (CCase::ptrWidth) runs it";
+            continue;
+        }
         int nParams = 0;
         if (plist.find_first_not_of(" \t") != std::string::npos && plist != "void") nParams = 1 + static_cast<int>(std::count(plist.begin(), plist.end(), ','));
         const size_t lineStart = pr.cText.rfind('\n', at);
@@ -8797,6 +8838,12 @@ const PrintedCFixture kPrintedCFixtures[] = {
     // A3-124 (frame124 seed 1529): `_xStack_14 = CONCAT31(...)` over the two-byte `xStack_14` and `xStack_12`, then `xStack_12` read: the
     // harness gives the locals inside the wider write their bytes (it read `xStack_12` unset).
     { "A3-124 _xStack_14 over xStack_12, xStack_12 read", { 0x2FE6, 0x7FE0, 0x6EF3, 0x61E3, 0x7110, 0x1E17, 0x51E7, 0xE2A1, 0x1120, 0x51E7, 0xE20B, 0x1121, 0x51E7, 0xE253, 0x6313, 0x2320, 0x51E7, 0x6313, 0x7306, 0x2360, 0x51E7, 0x6313, 0x7306, 0x2370, 0x51E7, 0xE2EF, 0x6313, 0x7305, 0x2320, 0x51E7, 0xE213, 0x6313, 0x7301, 0x2320, 0x51E7, 0x6313, 0x7302, 0x2370, 0x51E7, 0xE2F9, 0x6313, 0x7307, 0x2320, 0x51E7, 0x6313, 0x7302, 0x6231, 0x6023, 0x51E7, 0x6313, 0x7304, 0x6231, 0x302C, 0x7E20, 0x6FE3, 0x000B, 0x6EF6 } },
+    // A2-111 (patch 0077): a signed narrow side printed as a cast against a constant of the other sign, `(int2)param_2 == 0xffff` for the code's test for -1 (family 103, `nsel`).
+    { "A2-111 a: (int2) char against 0xffff", { 0x6153, 0x611E, 0x611F, 0xD304, 0x3130, 0x0229, 0xD303, 0x3316, 0x0029, 0x3028, 0x000B, 0x0009, 0xFFFF, 0xFFFF, 0x0000, 0x0080 } },
+    { "A2-111 b: (int2) char against 0xff80", { 0x6163, 0x611E, 0x611F, 0xD305, 0x3136, 0x0229, 0xD304, 0x3310, 0x0029, 0x202B, 0x8900, 0x600B, 0x000B, 0x0009, 0x0000, 0x7FFF, 0xFFFF, 0xFF80 } },
+    // A2-113 (patch 0077): a narrow named variable against a narrow negated expression, `-(param_3 & 0xff) < param_2` (family 108, `nexpr`).
+    { "A2-113 a: uint2 against a complement chain", { 0x6153, 0x611C, 0x611B, 0x611F, 0x611F, 0x6273, 0x622F, 0x3122, 0x0029, 0x000B, 0x0009, 0x0009 } },
+    { "A2-113 b: uint2 against a negated masked byte", { 0x6153, 0x611D, 0x6263, 0x622C, 0x622B, 0x622D, 0x3127, 0x0029, 0x000B, 0x0009 } },
     // A2-52 (the A2-47 family beyond patch 0046): sums of scaled terms over shared variables, `c + 8x + 4y + 14x` through `shlr2 ; shll2`.
     { "A2-52 c + 8x + 4y + 14x, shlr2 ; shll2", { 0xD008, 0xD309, 0x0347, 0x031A, 0x303C, 0xD308, 0x0367, 0x031A, 0x303C, 0xD307, 0x0347, 0x031A, 0x303C, 0x4009, 0x4008, 0x000B, 0x0009, 0x0009, 0x0000, 0x0100, 0x0000, 0x0008, 0x0000, 0x0004, 0x0000, 0x000E } },
     { "A2-52 termgen 2", { 0x2468, 0x0129, 0xD00A, 0x6343, 0x4308, 0x4308, 0x303C, 0x6313, 0x4308, 0x4308, 0x303C, 0xD307, 0x0367, 0x031A, 0x303C, 0xD306, 0x0347, 0x031A, 0x303C, 0xD305, 0x2039, 0x000B, 0x0009, 0x0009, 0x0000, 0x0000, 0x0000, 0x0008, 0xFFFF, 0xFFFA, 0xFFFF, 0xFFFC } },
@@ -10738,6 +10785,14 @@ void TestPrintedC()
                 const std::vector<CVerdict> m108 = CheckPrintedC(d, { mem("A2-108: a pointer parameter without the mode", 0, { 0x2462, 0x6052, 0x000B, 0x0009 }) }, nIn, cc, 0x51ED, 8994);
                 std::printf("pin 'A2-108': %s\n", m108[0].cls.c_str());
                 CHECK(m108[0].cls == "skipped:memory");
+                // A2-114: `mov.l r7,@-r5`, a parameter that is declared an integer and used as an address: the same, and the sibling forms of the register's own text
+                const std::vector<CVerdict> m114 = CheckPrintedC(d, { mem("A2-114: a pre-decrement store through a parameter", 0, { 0x2576, 0x000B, 0x0009, 0x0009 }),
+                                                                      mem("A2-114: a post-increment load through a parameter", 0, { 0x6576, 0x000B, 0x0009, 0x0009 }) }, nIn, cc, 0x51ED, 8996);
+                for (size_t k = 0; k < m114.size(); ++k)
+                {
+                    std::printf("pin 'A2-114 #%zu': %s\n", k, m114[k].cls.c_str());
+                    CHECK(m114[k].cls == "skipped:memory");
+                }
                 // A2-110 (the A2-106 limit): accesses of different widths to the same bytes. On this host's byte order the load sees the other end of the word, so each is a
                 // mismatch; read on a big-endian arena (gBeRead) each agrees with the machine. (a) a word stored, its first byte loaded; (b) a half-word stored, the word loaded;
                 // (c) a byte stored, the word loaded; (d) a pre-decrement chain that changes width (a word, a half-word and a byte stored below r4) read back by a post-increment chain of a byte, a half-word and a word.
@@ -11136,6 +11191,14 @@ void TestDomainPins(Sh2Decompiler& d)
         if (track) CHECK(runs == 0);
     }
     gTrackAlignment = tracking;
+    // A2-115 (grammar 2 seed 4515655): a longword read at 0xDFFFFFFF (the last byte of the cache-data window; the next byte is in no window) dereferenced the byte no
+    // window holds and the test died with a segmentation fault. Every byte of an access is asked now: the run is evaluated, with no crash, and no finding.
+    {
+        const Report rep = Evaluate(d, MakeV2(4515655), true);
+        std::printf("pin 'A2-115: grammar 2 seed 4515655': %zu finding(s)\n", rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
 }
 
 // A caller and a lent callee that changes a register the calling convention keeps (ledger A3-3, finding 1 of the external

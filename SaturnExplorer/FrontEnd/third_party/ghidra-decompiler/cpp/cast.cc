@@ -14,6 +14,7 @@
  * limitations under the License.
  *
  * Modified for SaturnExplorer: a compare of a narrow value with a constant of the other sign is cast, as C promotes both (patches/0071-engine-narrow-compare-constant-sign.patch).
+ * Modified for SaturnExplorer: a narrow expression against a named narrow variable is cast too (patches/0077-engine-narrow-compare-cast-target.patch).
  */
 #include "cast.hh"
 #include "op.hh"
@@ -116,10 +117,11 @@ bool CastStrategyC::checkIntPromotionForCompare(const PcodeOp *op,int4 slot) con
 
   const Varnode *othervn = op->getIn(1-slot);
   int4 exttype2 = intPromotionType(othervn);
-  if (exttype2 == NO_PROMOTION && vn->isConstant() && !othervn->isConstant() && othervn->getSize() < promoteSize) {
+  if (exttype2 == NO_PROMOTION && !othervn->isConstant() && othervn->getSize() < promoteSize) {
     // The other side is a named variable or a cast, which intPromotionType does not take to be promoted, but C promotes it by its type:
     // a \b uint2 against the constant -1 (an \b int2 in the engine's compare of two bytes) is never equal, so the constant has to be cast to its type
-    // (printed 0xffff), as is done when the other side is an expression.
+    // (printed 0xffff), as is done when the other side is an expression. Likewise an expression against a named narrow variable
+    // (\b -(x & 0xff) < y, with y a \b uint2): C extends the variable by its type and the expression as a signed value (patches/0077).
     type_metatype meta = othervn->getHighTypeReadFacing(op)->getMetatype();
     if (meta == TYPE_UINT)
       exttype2 = UNSIGNED_EXTENSION;
