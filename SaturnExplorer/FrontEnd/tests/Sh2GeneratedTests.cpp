@@ -7293,9 +7293,8 @@ template <int N, bool S> struct T {
   // the cast of a piece (CONCATab, the engine's untyped value of a + b bytes): for 5 to 7 bytes, which have no type of their own in C, a cast to an unsigned
   // 8-byte type is the ZEXT the engine builds (`(uint8)CONCAT14((char)in_r1,in_r1)`: the high word of the run is 0, not the sign: A2-79). The engine prints a
   // cast to the type of the variable it assigns to, so for sizes with a type (a 2-byte piece read by `mov.w` into a uint4) the extension is by the piece's
-  // sign, as for any other cast. (area 3 fixer, A3-150) ...but a cast to an unsigned type is the ZEXT at every size: the engine prints a sign extension of a
-  // piece as a cast to a signed type (`(int4)xStack_8` for `mov.w`), and `(uint4)CONCAT11(...)` is a word whose upper half is 0 (frame124_4602253.chain)
-  template <int M> explicit T(const Piece<M>& o) : v((R)((N > M ? (!S ? o.Zext() : o.Ext()) : o.Zext()) & Mask())) {}
+  // sign, as for any other cast
+  template <int M> explicit T(const Piece<M>& o) : v((R)((N > M ? ((!S && M >= 5) ? o.Zext() : ((N == 8 && M == 4 && !S) ? o.Zext() : o.Ext())) : o.Zext()) & Mask())) {}
   // an implicit conversion, the one C does: by the source's sign
   template <int M, bool U> operator T<M, U>() const { return T<M, U>(B2U(Ext())); }
   u64 Zext() const { return (u64)v & Mask(); }
@@ -8848,6 +8847,43 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
                     out[i].cls = "narrow-c";
                     out[i].detail += " [agrees when read as the engine means it]";
                 }
+            // (area 3 fixer, A3-150) A piece of a variable read by its field (`xStack_10._2_2_`) has the sign the engine's type has, which the C
+            // reading drops (an xunknown is unsigned there), while the piece a CONCAT builds is no signed value in the C reading, which the
+            // second one makes it (`CONCAT12(param_2,...) >> 8` is the logical shift the code makes; `(uint4)CONCAT11(...)` the zero extension).
+            // The engine prints neither sign: a text that mixes the two is read a third time, as C with the fields signed. Agreeing there, it
+            // is counted apart too (frame124 4602253.chain, 4605918, 4606911, 4511454, 3805863: each value right by hand).
+            std::vector<size_t> third;
+            for (size_t i : cand)
+                if (out[i].cls == "mismatch" && prep[i].cText.find("FLD(") != std::string::npos) third.push_back(i);
+            if (!third.empty())
+            {
+                static const char kSignedFields[] =
+                    "#undef FLDT_1\n#undef FLDT_2\n#undef FLDT_4\n#define FLDT_1(x) ((signed char)(x))\n#define FLDT_2(x) ((short)(x))\n#define FLDT_4(x) ((int)(x))\n";
+                std::vector<std::string> saved;
+                for (size_t i : third)
+                {
+                    saved.push_back(prep[i].cText);
+                    prep[i].cText = kSignedFields + prep[i].cText;
+                }
+                std::string log3;
+                bool compiled3 = false;
+                const std::string run3 = compileRun(third, "fields", log3, compiled3);
+                for (size_t k = 0; k < third.size(); ++k) prep[third[k]].cText = saved[k];
+                if (compiled3)
+                {
+                    std::set<std::string> bad3;
+                    std::istringstream in(run3);
+                    std::string line;
+                    while (std::getline(in, line))
+                        if (line.compare(0, 9, "MISMATCH ") == 0) bad3.insert(line.substr(9, line.find(' ', 9) - 9));
+                    for (size_t i : third)
+                        if (bad3.count(prep[i].name) == 0)
+                        {
+                            out[i].cls = "narrow-c";
+                            out[i].detail += " [agrees when read as C with the fields of a variable signed]";
+                        }
+                }
+            }
         }
     }
     return out;
@@ -11005,6 +11041,29 @@ void TestPrintedC()
                 const std::vector<CVerdict> r148 = CheckPrintedC(d, { { "A3-148 F16.21.41 a frame address published in a global", A3148Words() } }, nIn, cc, 0x51ED, 8959);
                 std::printf("pin 'A3-148': %s (%s)\n", r148[0].cls.empty() ? "agrees" : r148[0].cls.c_str(), r148[0].detail.substr(0, 90).c_str());
                 CHECK(r148[0].cls.empty() && r148[0].compared);
+            }
+            // (area 3 fixer) A3-150: a text that reads a field of a variable with its sign (`(int4)xStack_10._2_2_`) and a CONCAT without one
+            // (`CONCAT12(...) >> 8`, `(uint4)CONCAT11(...)`) agrees in neither reading; read as C with the fields signed it agrees (each value right
+            // by hand): `narrow-c`, not `mismatch`.
+            {
+                auto w = [](const char* t) {
+                    std::vector<uint16_t> v;
+                    std::istringstream in(t);
+                    std::string tok;
+                    while (in >> tok) v.push_back(static_cast<uint16_t>(std::strtoul(tok.c_str(), nullptr, 16)));
+                    return v;
+                };
+                const std::vector<CCase> k150 = {
+                    { "A3-150 frame124_4602253.chain", w("7FD0 61F3 7108 1F18 61F3 7120 1F19 E213 1F22 E2C7 1F23 E217 1F24 E24F 1F25 51F9 6112 6313 7302 2370 E237 51F9 6112 6313 730A 2320 51F9 6112 6313 730E 2341 51F9 6112 6313 730B 2360 51F9 6112 6313 7309 2370 51F9 6112 6313 7308 2372 E206 51F9 6112 6313 730F 2320 51F9 6112 6313 730F 2370 63F3 730A 6231 6023 63F3 7310 6232 202A 63F3 7314 6232 302C 7F30 000B 0009") },
+                    { "A3-150 frame124_4605918", w("7FE0 61F3 710C 1F17 51F7 E2A3 1120 51F7 E265 1121 51F7 6313 7306 2360 E229 6313 7303 2320 51F7 E2E4 6313 7307 2320 51F7 6313 2370 51F7 6313 7307 2360 51F7 6313 7305 2350 51F7 E23C 6313 7307 2320 51F7 6313 7306 6231 6023 51F7 6313 7304 6232 202A 63F3 730E 6230 202A 7F20 000B 0009") },
+                    { "A3-150 frame124_4511454", w("2FE6 7FE0 6EF3 61E3 7108 1E17 51E7 E251 1120 51E7 E244 1121 51E7 6313 7305 2370 51E7 6313 7306 2340 51E7 6313 7303 2340 51E7 6313 7302 2340 51E7 6313 7301 2370 51E7 6313 7304 2350 51E7 6313 7305 2340 51E7 6313 7306 2370 63E3 7308 6232 6023 51E7 6313 7304 6231 302C 51E7 6313 7306 6231 302C 7E20 6FE3 000B 6EF6") },
+                };
+                const std::vector<CVerdict> r150 = CheckPrintedC(d, k150, nIn, cc, 0x51ED, 8957);
+                for (size_t k = 0; k < r150.size(); ++k)
+                {
+                    std::printf("pin '%s': %s (%s)\n", k150[k].name.c_str(), r150[k].cls.empty() ? "agrees" : r150[k].cls.c_str(), r150[k].detail.substr(0, 120).c_str());
+                    CHECK(!IsFailing(r150[k]) && r150[k].compared);
+                }
             }
             // (area 3 fixer, A3-152) The hidden-input check of a `void` lent text (HiddenReturnInput), the oracle's own decision: r1 moved into r0 is
             // an input no signature holds; a constant is none; r0 left alone on one path is the excused case; r4 past a signature of no parameters is one.

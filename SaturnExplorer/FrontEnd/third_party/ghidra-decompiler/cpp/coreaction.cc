@@ -4288,8 +4288,9 @@ static bool frameWriteKilled(const Varnode *vn)
 /// LOAD lives, the frame's writes are held: fail closed, the LOAD may read any word of the frame. A LOAD whose guard heritage sank (a COPY
 /// of each location before it, Heritage::guardLoads) is left to that guard. Not held: the pushes of callee-saved registers (saves, as for a
 /// call: callMayReadFrame), a write a later version of its bytes is built from (that version is held), a write overwritten whole in its
-/// block before any op that may read memory (frameWriteKilled), and a local the scope proved no pointer reaches. The hold is an address force marked as one (Varnode::setFrameLoadForce), let go at the start of each pass of dead code
-/// and set again while the LOAD lives: once it is folded or gone, the next pass sees the writes as before.
+/// block before any op that may read memory (frameWriteKilled), and a local the scope proved no pointer reaches. The hold is an address
+/// force marked as one (Varnode::setFrameLoadForce), let go at the start of each pass of dead code and set again while the LOAD lives: once
+/// it is folded or gone, the next pass sees the writes as before.
 /// \param data is the function
 /// \param worklist is the consumed Varnodes to process
 void ActionDeadCode::keepFrameWritesForLoads(Funcdata &data,vector<Varnode *> &worklist)
