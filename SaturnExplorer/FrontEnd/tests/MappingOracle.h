@@ -82,6 +82,15 @@ struct MappingAudit
     // them showed the row before the instruction that made them (1,397 and 3,357 in the two images). What is left is a copy a merge puts at
     // the end of a block, which sits on the block's branch by design; the mutation `tokslot` brings the others back.
     int slotMadeLines = 0;
+    // Area 7 round 3 (A7-19, A7-20), counted: a line that assigns a frame local or a global a bare value (a name, a number, an address
+    // of a local, a cast of one: no operator, no load, no call), with a store the engine folded into that variable, and that names
+    // none of those stores. The statement is a copy the engine placed elsewhere: a merge copy at the end of a block (it carries the
+    // block's last instruction, a branch or any other), the value of a frame word kept for a LOAD that may read the frame (patch
+    // 0076) printed at the LOAD's guard, a held value at a return or a call (A7-15). The store that wrote the variable is then on no
+    // line of its own, and a click on the line goes to an instruction that neither writes it nor computes it. The line's drawn
+    // tokens say at what: a delayed or conditional branch, a call, a load, or another instruction.
+    int copyLines = 0, copyStoreMissing = 0, copyFrameMissing = 0, copyGlobalMissing = 0;
+    int copyAtBranch = 0, copyAtCall = 0, copyAtLoad = 0, copyAtOther = 0;
     std::vector<std::string> problems;   // the first few of each kind, "kind: where: what"
 
     void Add(const MappingAudit& o)
@@ -97,6 +106,8 @@ struct MappingAudit
         slotTokens += o.slotTokens; badDataTokens += o.badDataTokens; unmappedMemory += o.unmappedMemory; unmappedCall += o.unmappedCall;
         unmappedBranch += o.unmappedBranch;
         slotMadeLines += o.slotMadeLines;
+        copyLines += o.copyLines; copyStoreMissing += o.copyStoreMissing; copyFrameMissing += o.copyFrameMissing; copyGlobalMissing += o.copyGlobalMissing;
+        copyAtBranch += o.copyAtBranch; copyAtCall += o.copyAtCall; copyAtLoad += o.copyAtLoad; copyAtOther += o.copyAtOther;
         for (const std::string& p : o.problems) Keep(p);
     }
     // Three examples of each kind of problem are kept; the prefix up to the first ':' is the kind.
@@ -562,6 +573,86 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                                            " store(s) the engine folded into it (first " + MappingHex(*candidates.begin()) + ")");
             }
     }
+    // A7-19, A7-20 (area 7 round 3), counted: a bare value assigned to a frame local or a global, at an instruction that does not write it.
+    {
+        std::vector<const AccessFate*> folded;
+        for (const AccessFate& f : r.accessFates)
+            if (f.fate == AccessFate::FoldedOrdinary && f.write && f.size > 0 && (f.frame || f.constantAddress)) folded.push_back(&f);
+        if (!folded.empty())
+            for (size_t li = 0; li < r.lines.size(); ++li)
+            {
+                const std::string& text = r.lines[li].text;
+                const size_t p = text.find_first_not_of(' ');
+                if (p == std::string::npos) continue;
+                size_t q = p;
+                while (q < text.size() && text[q] >= 'a' && text[q] <= 'z') ++q;
+                const bool frame = text.compare(q, 6, "Stack_") == 0, global = text.compare(q, 3, "Ram") == 0;
+                if (!frame && !global) continue;
+                q += frame ? 6 : 3;
+                uint32_t hexv = 0;
+                size_t digits = 0;
+                while (q < text.size() && std::isxdigit(static_cast<unsigned char>(text[q])) && digits < 8)
+                {
+                    const char c = text[q];
+                    hexv = hexv * 16 + static_cast<uint32_t>(c <= '9' ? c - '0' : (c | 0x20) - 'a' + 10);
+                    ++q;
+                    ++digits;
+                }
+                if (digits == 0 || (global && digits != 8)) continue;
+                uint32_t piece = 0;
+                if (text.compare(q, 2, "._") == 0)
+                {
+                    q += 2;
+                    piece = static_cast<uint32_t>(std::strtoul(text.c_str() + q, nullptr, 10));
+                    while (q < text.size() && text[q] != '_') ++q;
+                    ++q;
+                    while (q < text.size() && text[q] != '_') ++q;
+                    ++q;
+                }
+                if (text.compare(q, 3, " = ") != 0) continue;
+                // the value: a cast, then '&' or '-', then one name or number, then ';' and the end of the line
+                size_t v = q + 3;
+                if (v < text.size() && text[v] == '(')
+                {
+                    const size_t close = text.find(')', v);
+                    if (close == std::string::npos) continue;
+                    v = close + 1;
+                }
+                if (v < text.size() && (text[v] == '&' || text[v] == '-')) ++v;
+                const size_t valueBegin = v;
+                while (v < text.size() && (std::isalnum(static_cast<unsigned char>(text[v])) || text[v] == '_')) ++v;
+                if (v == valueBegin || text.compare(v, std::string::npos, ";") != 0) continue;
+                const uint32_t at = frame ? 0u - hexv + piece : hexv + piece;
+                std::set<uint32_t> candidates;
+                for (const AccessFate* f : folded)
+                {
+                    if (f->frame != frame) continue;
+                    const uint32_t mask = frame ? 0xFFFFFFFFu : 0x07FFFFFFu;   // a global by any mirror of its address
+                    if (((at - f->address) & mask) < f->size) candidates.insert(f->insn);
+                }
+                if (candidates.empty()) continue;
+                ++a.copyLines;
+                bool named = false, atBranch = false, atCall = false, atLoad = false;
+                for (const Token& t : r.lines[li].tokens)
+                {
+                    if (!t.addr) continue;
+                    named = named || candidates.count(t.addr) != 0;
+                    uint16_t w = 0;
+                    if (t.begin == t.end || !word(t.addr, w)) continue;
+                    const sfe::DisassembledInstruction d = sfe::Sh2Decode(t.addr, w);
+                    const MemoryShape m = ShapeOf(d);
+                    atCall = atCall || m.call;
+                    atBranch = atBranch || (!m.call && (d.IsBranch || d.HasDelaySlot));
+                    atLoad = atLoad || m.load;
+                }
+                if (named) continue;
+                ++a.copyStoreMissing;
+                ++(frame ? a.copyFrameMissing : a.copyGlobalMissing);
+                ++(atCall ? a.copyAtCall : atBranch ? a.copyAtBranch : atLoad ? a.copyAtLoad : a.copyAtOther);
+                a.Keep("copy-store (counted): " + where + ": line " + std::to_string(li) + " '" + text + "' names none of the " + std::to_string(candidates.size()) +
+                       " store(s) folded into the variable (first " + MappingHex(*candidates.begin()) + "); a click goes to " + MappingHex(r.lines[li].firstAddr));
+            }
+    }
     // Coverage of the body: which instructions no token carries, by kind.
     for (const auto& range : r.body)
         for (uint32_t p = range.first; p < range.second; p += 2)
@@ -687,6 +778,9 @@ inline void PrintMappingAudit(const MappingAudit& a, const char* label)
                 label, a.slotMadeLines, a.accessAtBranch, a.accessAtRte);
     std::printf("  mapping (%s): the way back from SH-2 Assembly: %d instructions of the body are folded into a line of another instruction (answered with the nearest that has one); "
                 "%d answered wrongly (a violation)\n", label, a.foldedInsns, a.backWrong);
+    std::printf("  mapping (%s): %d lines assign a frame local or a global a bare value and have a folded store to it; %d of them name none of the stores (%d frame, "
+                "%d global; at a branch %d, a call %d, a load %d, another instruction %d) (A7-19, A7-20, counted)\n",
+                label, a.copyLines, a.copyStoreMissing, a.copyFrameMissing, a.copyGlobalMissing, a.copyAtBranch, a.copyAtCall, a.copyAtLoad, a.copyAtOther);
     for (const std::string& p : a.problems) std::printf("    %s\n", p.c_str());
 }
 
