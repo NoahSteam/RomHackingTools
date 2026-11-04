@@ -188,6 +188,10 @@ for k in "ledger second alias params ret body cases warn preserved claims lent d
 for k in "tokodd tokoutside tokfirst tokdrop tokcall tokunmark tokhover tokslot tokframe tokcopy".split():
     ENV_MUTANTS.append(("E-map-" + k, {"SE_GAME_MAPPING_MUTATE": k}, "corpus"))
 
+# A sensor blinded and the class it is the sensor of brought back (the patch reverted): does any other oracle still see the class?
+# (id, patch, host mutant, should, escalate)
+COMBOS = []
+
 # Patches with a known reason no plain Linux ctest run can see them (A10-10, accepted): run, reported apart.
 PATCH_NOTES = {
     "0011": "UBSan vptr only (A10-10)",
@@ -349,9 +353,10 @@ class Harness:
         finally:
             self.restore([path])
 
-    def patch(self, num):
+    def patch(self, num, combo=None):
+        """combo: (id, host mutant id, should, escalate): the patch reverted and a host mutant applied together."""
         hunks = sorted(f for f in os.listdir(self.rev) if f.startswith(num + ".h") and f.endswith(".rev.patch"))
-        mid = "patch:" + num
+        mid = combo[0] if combo else "patch:" + num
         if not hunks:
             print("%s: no hunk reverts alone" % mid, flush=True)
             self.results.write("%s\t-\tnot-applied\t0\tno hunk reverts alone (later patches rewrote it)\n" % mid)
@@ -370,17 +375,31 @@ class Harness:
                     touched.add(line[6:].strip())
                     spec |= "/processors/" in line
         print("%s: %d of %d hunks reverted%s %s" % (mid, applied, len(hunks), " (spec)" if spec else "", PATCH_NOTES.get(num, "")), flush=True)
+        if combo:
+            hm = [m for m in MUTANTS if m[0] == combo[1]][0]
+            full = os.path.join(self.root, hm[1])
+            text = open(full, encoding="utf-8").read()
+            self.mark(["SaturnExplorer/FrontEnd/third_party/ghidra-decompiler", "SaturnExplorer/FrontEnd/src/Decompiler/Sh2SpecData.h", hm[1]])
+            open(full, "w", encoding="utf-8").write(text.replace(hm[2], hm[3]))
+            touched.add(hm[1])
+            print("  with %s: %s" % (hm[0], hm[6]), flush=True)
         try:
             if spec:
                 r = sh(["ninja", "-C", self.build, "-j2", "se-regen-sla"])
                 if r.returncode != 0:
                     self.results.write("%s\t-\tstillborn\t0\tse-regen-sla failed\n" % mid)
                     return
-            should = PATCH_SHOULD.get(num, ["unit", "gen"])
-            self.score(mid, should, ENGINE_ESCALATE + (["fault"] if num in FAULT_PATCHES else []), None)
+            if combo:
+                self.score(mid, combo[2], combo[3], None)
+            else:
+                should = PATCH_SHOULD.get(num, ["unit", "gen"])
+                self.score(mid, should, ENGINE_ESCALATE + (["fault"] if num in FAULT_PATCHES else []), None)
         finally:
             self.restore(list(touched) + ["SaturnExplorer/FrontEnd/src/Decompiler/Sh2SpecData.h",
                                           "SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/processors/SuperH/sh-2.sla"])
+
+    def combo(self, m):
+        self.patch(m[1], (m[0], m[2], m[3], m[4]))
 
     def env(self, m):
         mid, env, oracle = m
@@ -411,6 +430,8 @@ def main():
         todo += [("env", m[0], m) for m in ENV_MUTANTS]
     if a.group in ("all", "host"):
         todo += [("host", m[0], m) for m in MUTANTS]
+    if a.group in ("all", "combo"):
+        todo += [("combo", m[0], m) for m in COMBOS]
     if a.group in ("all", "patch"):
         todo += [("patch", "patch:" + n, n) for n in patches]
     if a.only:
