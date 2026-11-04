@@ -15101,3 +15101,44 @@ The range starts at 5,000,001 on the coordinator's word: 4,900,001 and up is the
 - The overwrite rule reads braces and labels. A `goto` into a block is a label and is respected. Text the engine prints without braces (none seen) would be taken for straight-line code.
 - A closed derivation that names no hardware base (a RAM constant ORed with a top-bits mask) is asked by neither rule 3c nor rule 3f; the engine says the access as a direct one.
 - The later values are still asked before the offsets after them only where A5-83's limit says so (`steppedCachedAt` is moved by an offset, not asked again). The cached address the note names is one value the walk can reach, not necessarily the one the run read.
+
+## Area 8, round 3
+
+Branch `review/8-round3-review` from `f1012327`. This is an adversarial round on the trust indicators since the area 8 fixer. Since then, engine patches 0076 and 0077, area 3's return rule (A3-152), area 5's note changes in `Sh2Decompiler.cpp` and area 7's mapping work have merged. **No product code changed.** One product file was edited for a trial of A8-27's fix and restored with `git checkout`. The round extends the trust test (mix 9), adds tools in `Docs/Decompiler/tools/a8_round3/`, and files **A8-27 (P3)** and **A8-28 (P3, instrument)**. **The round is clean: no new P1 or P2.** A8-25 still holds as filed.
+
+### What was run (RelWithDebInfo, gcc 13, own build of the branch, `-j2`, every run under `ulimit -v 3500000` and `timeout`)
+
+| Run | Result |
+|---|---|
+| the trust test, default run, on `f1012327` and on the branch (mix 9 added) | all passed, 55 s and 53 s. The branch: 67 sequences, 2,245 operations, 2,833 settled checks, 2,209 badge tooltips hovered |
+| the whole default run at 320 px (`SE_TRUST_WIDTH=320`, pins, mixes and Follow PC; narrower than any default layout) | all passed: every line whole, the badge and `decompiling…` on screen, nothing past the window's edge |
+| area 1's rig, long sequences (`tools/a8_fix/runlong.sh`, 5 programs end to end), fresh seeds 90000 to 90007 and 92000 to 92039 at 1,250 px (mixes 0 to 7; mix 2 seeds 90000 to 90003 only), 91000 to 91005 and 93000 to 93024 at 537 px (mixes 0, 4, 6, 7) | **128,696 operations, 0 failing sequences.** Every settled step was held to the model, to area 1's checks, to the status-row check and to the Copy marks, with the engine of 0076 and 0077 |
+| Follow PC rig, mix 8 unchanged, fresh seeds 20000 to 21355 | 60,023 operations, **3 failing: A8-27** (seeds 20149, 20442, 21097) |
+| Follow PC rig with Auto-refresh and Show in Pseudocode (new mix 9), seeds 20000 to 21356 | 60,046 operations, **5 failing, all A8-27** (20297, 20729, 20793, 21058, 21275). The first version of the instrument failed 9 more seeds. Auto-refresh had captured inside the check's own frames, so the panel moved on from the true state the check had taken: an instrument fault, fixed (A8-28) |
+| A8-25, as filed: `select A; wait; hide; name A 1; name A 0; wait` (world C,A) | fails `STALE FOREVER` in area 1's check: the row holds |
+| A8-25's proposed fix (`build_hidden_probe.sh`: the excuse added to a copy of `DecompilerModelTests.cpp`, the generator's guard dropped in a copy of the trust test) | the script passes; mixes 0, 1, 4, 6 and 7 from seed 30000, 30,138 operations: 0 failing. About one sequence in twenty undoes a rename while the panel is hidden. The panel is right there, and the excuse is all that is needed |
+| A8-27 trial fix (`mAskAgain = true;` after the Follow PC checkbox's `SetTarget`, reverted) | the eight seeds pass; mixes 8 and 9 from seed 20000, 60,002 operations each: 0 failing |
+| `ctest` (see the end of this section) | |
+
+### A8-27 (P3): Follow PC clicked after a Stop asks nothing
+
+The Follow PC checkbox calls `SetTarget`. `SetTarget` forgets the Stop, as A8-10 wants for a new target, but the checkbox does not ask again, as Enter and (since A8-18) Decompile do. When the target resolves to the function and snapshot that were stopped, `Update` finds the question asked already and returns. The output stays stale with nothing outstanding, and the badge says so truthfully ("nothing is being decompiled. Press Refresh"). So the indicators are right and the click is lost: P3, A8-18's family. It needs a Stop, a click on the box, and the same function under the new target. Round 2's 267 seeds and the fixer's runs did not reach it. Fresh seeds reach it about once in 450 sequences. Mix 8's three seeds are the existing generator's. The trial fix is one line, and it holds over both mixes.
+
+### The new territory, read and driven
+
+* **Lending.** `ShownStale` does not include the lent signatures, though `Accept` does (`mPending.prototypes == PrototypeHash(mEntry)`). So output whose lend went out of date while it was shown would look current. Read for a path: the lend of the entry shown changes only through `Learn`. `Learn` changes another entry's signature only when that entry is installed, and then the output on screen is another function's (stale by its entry). It drops only signatures whose callee's shape moved, which are the callers of what was installed. A signature is lent only when every callee's is known and none recurses, so the entry shown can never sit below its own callers. The function set and the volatile list are keyed in `LendingId` and in the shown state. There is no path, and no row. `ShapeOf` hashes every field of `Prototype` and `CallEffects`, the A3-152 and A3-71 fields included.
+* **The engine's notes.** Patches 0076 and 0077 add no warning. Area 3's A3-152 and area 5's A5-97 add no note to `warnings`. The classification of `kGreyOnlyNotes` is unchanged, and `GREY-ONLY NOTE NOT CLASSIFIED` did not fire in any run above.
+* **Auto-refresh and Show in Pseudocode (mix 9).** The policy of A1-6 now runs under Stops, holds, hides, the CPU switch, typed entries, Decompile and the emulator stepping and running. Show in Pseudocode is a Decompile with a line selected and a grey note. Neither moved an indicator in 60,046 operations, except A8-27. When a request starts, `decompiling…` comes before the badge and moves it, so a hovered tooltip closes. Its reason changes at the same moment (Replacement for EmulatorMoved), so this is not a defect (A8-28).
+* **Narrow panels.** At 320 px every status piece and sentence wraps and is read back whole. The long runs held the status row 95,000 times, 21,000 of them at 537 px.
+* **Stale, unsupported, truncated, unimplemented, unavailable, too large**, over edits, renames and their undo, Stop, hide and show, reconnect, BIOS and volatile changes, in sequences of 250 to 300 operations on the current engine: no failure (the long runs above).
+
+### Changes
+
+* `FrontEnd/tests/DecompilerTrustTests.cpp`: mix 9 (`FOp::AutoToggle`, `FOp::ShowInsn`, `gFollowAuto`, `SE_TRUST_FOLLOW_AUTO`), in the default run. `FollowCheck` reads the window with Auto-refresh off. The comment at the generator's guard now names A8-25 (it said A8-26) and the probe.
+* `Docs/Decompiler/tools/a8_round3/`: `build_hidden_probe.sh` (A8-25's fix tried without editing area 1's file) and `a8_27.sh` (the eight seeds). The tools README lists them.
+* Ledger: A8-27 (P3, open), A8-28 (P3, instrument, fixed `79e1dfa0`). A8-25's fixture cell has the round 3 reproduction and the probe's result added.
+
+### Routed
+
+* Area 1: A8-25 (still open, as filed; the probe shows the proposed excuse is enough).
+* A8-27 stays in area 8, like A8-18. Its fix is the panel's, and the guide's grey-messages row needs no change once the click asks.
