@@ -93,6 +93,7 @@ struct MappingAudit
     // a store of the variable, but the wrong one (A7-20), is not seen here.
     int copyLines = 0, copyStoreMissing = 0, copyFrameMissing = 0, copyGlobalMissing = 0;
     int copyAtBranch = 0, copyAtCall = 0, copyAtReturn = 0, copyAtLoad = 0, copyAtOther = 0;
+    int copyUnconnected = 0;   // ...not counted in copyStoreMissing: no store of the variable on a path through the line (a register's merge)
     std::vector<std::string> problems;   // the first few of each kind, "kind: where: what"
 
     void Add(const MappingAudit& o)
@@ -110,6 +111,7 @@ struct MappingAudit
         slotMadeLines += o.slotMadeLines;
         copyLines += o.copyLines; copyStoreMissing += o.copyStoreMissing; copyFrameMissing += o.copyFrameMissing; copyGlobalMissing += o.copyGlobalMissing;
         copyAtBranch += o.copyAtBranch; copyAtCall += o.copyAtCall; copyAtReturn += o.copyAtReturn; copyAtLoad += o.copyAtLoad; copyAtOther += o.copyAtOther;
+        copyUnconnected += o.copyUnconnected;
         for (const std::string& p : o.problems) Keep(p);
     }
     // Three examples of each kind of problem are kept; the prefix up to the first ':' is the kind.
@@ -119,12 +121,12 @@ struct MappingAudit
         int same = 0;
         for (const std::string& q : problems)
             if (q.compare(0, kind.size() + 1, kind + ":") == 0) ++same;
-        if (same < 3) problems.push_back(p);
+        if (same < 3 || std::getenv("SE_KEEP_ALL")) problems.push_back(p);
     }
     int Violations() const
     {
         return odd + outside + notInsn + firstAddrWrong + badRange + callWithoutCall + unmarked + misnamed + accessUnmapped + callUnmapped + callGoneUnsaid + roundTrip +
-               accessAtBranch + frameStoreMissing + backWrong;
+               accessAtBranch + frameStoreMissing + backWrong + copyAtCall + copyAtReturn + copyAtBranch + copyAtOther;
     }
 };
 
@@ -138,12 +140,33 @@ struct MappingAudit
 //   tokunmark   (hover text) a line from several instructions is described as one; tokhover: its text lists all but the last
 //   tokframe    (A7-11) the tokens that name the stores a frame local was assigned from are taken away again (the empty tokens at a folded
 //               frame store's instruction)
+//   tokcopy     (A7-19) a line that assigns a frame local or a global a bare value loses the tokens at the stores folded into it, as before
+//               the fix: those a copy carries (empty, or the copy's own taken over) are gone and the line names no instruction
 //   tokslot     (A7-10) a delay slot's instruction is addressed to its branch again: the tokens at a slot, and the ledger's accesses, move
 //               back by one instruction. Needs 'word' (the instruction words), as the audit does.
 inline bool MutateMapping(sfe::decomp::DecompileResult& r, const std::string& kind,
                           const std::function<bool(uint32_t, uint16_t&)>& word = std::function<bool(uint32_t, uint16_t&)>())
 {
     using namespace sfe::decomp;
+    if (kind == "tokcopy")
+    {
+        std::set<uint32_t> folded;
+        for (const AccessFate& f : r.accessFates)
+            if (f.fate == AccessFate::FoldedOrdinary && f.write && (f.frame || f.constantAddress)) folded.insert(f.insn);
+        for (Line& l : r.lines)
+        {
+            const size_t eq = l.text.find(" = ");
+            if (eq == std::string::npos || l.text.find_first_of("(*+[", eq) != std::string::npos) continue;
+            std::vector<Token> keep;
+            for (const Token& t : l.tokens)
+                if (!(t.addr && folded.count(t.addr))) keep.push_back(t);
+            l.tokens = keep;
+            l.firstAddr = 0;
+            for (const Token& t : l.tokens)
+                if (t.addr && (l.firstAddr == 0 || t.addr < l.firstAddr)) l.firstAddr = t.addr;
+        }
+        return true;
+    }
     if (kind == "tokframe")
     {
         std::set<uint32_t> folded;
@@ -614,14 +637,16 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                 if (text.compare(q, 3, " = ") != 0) continue;
                 // the value: a cast, then '&' or '-', then one name or number, then ';' and the end of the line
                 size_t v = q + 3;
-                if (v < text.size() && text[v] == '(')
+                const bool cast = v < text.size() && text[v] == '(';
+                if (cast)
                 {
                     const size_t close = text.find(')', v);
                     if (close == std::string::npos) continue;
                     v = close + 1;
                 }
-                // (the address of a local is computed by the add the line names: that is the statement's own instruction, as A7-16's)
-                if (v < text.size() && text[v] == '-') ++v;
+                // (the address of a local is computed by the add the line names: that is the statement's own instruction, as A7-16's; a
+                // '-' is a negative number's sign, not a negation, which the `neg` the line names computes)
+                if (v + 1 < text.size() && text[v] == '-' && std::isdigit(static_cast<unsigned char>(text[v + 1]))) ++v;
                 const size_t valueBegin = v;
                 while (v < text.size() && (std::isalnum(static_cast<unsigned char>(text[v])) || text[v] == '_')) ++v;
                 if (v == valueBegin || text.compare(v, std::string::npos, ";") != 0) continue;
@@ -629,11 +654,16 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                 const bool number = std::isdigit(static_cast<unsigned char>(text[valueBegin])) != 0;
                 const uint32_t at = frame ? 0u - hexv + piece : hexv + piece;
                 std::set<uint32_t> candidates;
+                std::set<int> storeBlocks;
                 for (const AccessFate* f : folded)
                 {
                     if (f->frame != frame) continue;
                     const uint32_t mask = frame ? 0xFFFFFFFFu : 0x07FFFFFFu;   // a global by any mirror of its address
-                    if (((at - f->address) & mask) < f->size) candidates.insert(f->insn);
+                    if (((at - f->address) & mask) < f->size)
+                    {
+                        candidates.insert(f->insn);
+                        storeBlocks.insert(f->origBlock);
+                    }
                 }
                 if (candidates.empty()) continue;
                 ++a.copyLines;
@@ -652,13 +682,47 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     atLoad = atLoad || m.load;
                     // (a number the line names the `mov #i` or the literal load of is made there: the statement is that instruction's)
                     if (number && (d.PcRel != sfe::Sh2PcRel::None || (d.Mnemonic == "mov" && d.Operands.compare(0, 1, "#") == 0))) named = true;
+                    // (and a cast the line names an `exts` or `extu` of is that extension, a computation: A7-16's shape)
+                    if (cast && (d.Mnemonic.compare(0, 4, "exts") == 0 || d.Mnemonic.compare(0, 4, "extu") == 0)) named = true;
                 }
                 if (named) continue;
+                // (no store of the variable is on a path through the line, in the flow as first followed: the variable is a register the
+                // engine merged under the variable's name, as the value a return reads -- a merge copy of a register variable, which has
+                // no store to name. Counted apart.)
+                {
+                    std::set<int> lineBlocks;
+                    for (const Token& t : r.lines[li].tokens)
+                        if (t.addr && t.begin < t.end)
+                            for (size_t k = 0; k < r.flowBlockRanges.size(); ++k)
+                                if (r.flowBlockRanges[k].first <= t.addr && t.addr <= r.flowBlockRanges[k].second) lineBlocks.insert(static_cast<int>(k));
+                    const auto reaches = [&r](const std::set<int>& from, const std::set<int>& to) {
+                        std::set<int> seen(from.begin(), from.end());
+                        std::vector<int> todo(from.begin(), from.end());
+                        while (!todo.empty())
+                        {
+                            const int b = todo.back();
+                            todo.pop_back();
+                            if (to.count(b)) return true;
+                            if (b < 0 || static_cast<size_t>(b) >= r.flowSuccessors.size()) continue;
+                            for (int n : r.flowSuccessors[static_cast<size_t>(b)])
+                                if (seen.insert(n).second) todo.push_back(n);
+                        }
+                        return false;
+                    };
+                    if (!lineBlocks.empty() && !storeBlocks.count(-1) && !reaches(storeBlocks, lineBlocks) && !reaches(lineBlocks, storeBlocks))
+                    {
+                        ++a.copyUnconnected;
+                        continue;
+                    }
+                }
                 ++a.copyStoreMissing;
                 ++(frame ? a.copyFrameMissing : a.copyGlobalMissing);
                 ++(atCall ? a.copyAtCall : atReturn ? a.copyAtReturn : atBranch ? a.copyAtBranch : atLoad ? a.copyAtLoad : a.copyAtOther);
-                a.Keep("copy-store (counted): " + where + ": line " + std::to_string(li) + " '" + text + "' names none of the " + std::to_string(candidates.size()) +
-                       " store(s) folded into the variable (first " + MappingHex(*candidates.begin()) + "); a click goes to " + MappingHex(r.lines[li].firstAddr));
+                // (at a load it is counted: A7-16's shape, a global named after a hardware register is its load)
+                const std::string what = "line " + std::to_string(li) + " '" + text + "' names none of the " + std::to_string(candidates.size()) +
+                                         " store(s) folded into the variable (first " + MappingHex(*candidates.begin()) + "); a click goes to " + MappingHex(r.lines[li].firstAddr);
+                if (atLoad && !atCall && !atReturn && !atBranch) a.Keep("copy-store (counted): " + where + ": " + what);
+                else problem("copy-store", what);
             }
     }
     // Coverage of the body: which instructions no token carries, by kind.
@@ -787,8 +851,10 @@ inline void PrintMappingAudit(const MappingAudit& a, const char* label)
     std::printf("  mapping (%s): the way back from SH-2 Assembly: %d instructions of the body are folded into a line of another instruction (answered with the nearest that has one); "
                 "%d answered wrongly (a violation)\n", label, a.foldedInsns, a.backWrong);
     std::printf("  mapping (%s): %d lines assign a frame local or a global a bare value and have a folded store to it; %d of them name none of the stores (%d frame, "
-                "%d global; at a call %d and a return %d (A7-15's), at another branch %d, at a load %d (A7-16's, a register's name is a load), at another instruction %d) (A7-19, counted)\n",
-                label, a.copyLines, a.copyStoreMissing, a.copyFrameMissing, a.copyGlobalMissing, a.copyAtCall, a.copyAtReturn, a.copyAtBranch, a.copyAtLoad, a.copyAtOther);
+                "%d global; at a call %d and a return %d (A7-15), at another branch %d and another instruction %d (A7-19): violations; at a load %d (A7-16's, a "
+                "register's name is a load): counted); %d more have no store of the variable on a path through them (a register merged under its name, counted)\n",
+                label, a.copyLines, a.copyStoreMissing, a.copyFrameMissing, a.copyGlobalMissing, a.copyAtCall, a.copyAtReturn, a.copyAtBranch, a.copyAtOther, a.copyAtLoad,
+                a.copyUnconnected);
     for (const std::string& p : a.problems) std::printf("    %s\n", p.c_str());
 }
 
