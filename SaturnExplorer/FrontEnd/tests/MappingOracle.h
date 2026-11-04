@@ -121,7 +121,7 @@ struct MappingAudit
         int same = 0;
         for (const std::string& q : problems)
             if (q.compare(0, kind.size() + 1, kind + ":") == 0) ++same;
-        if (same < 3 || std::getenv("SE_KEEP_ALL")) problems.push_back(p);
+        if (same < 3) problems.push_back(p);
     }
     int Violations() const
     {

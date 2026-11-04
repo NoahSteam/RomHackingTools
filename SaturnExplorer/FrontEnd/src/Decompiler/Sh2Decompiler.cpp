@@ -4753,6 +4753,11 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
     // The stores each basic block's addresses cover, and each flow block's stores by position, found once.
     std::map<const ghidra::FlowBlock*, std::vector<const ghidra::AccessRecord*>> blockStores;
     std::map<int, std::vector<std::pair<uint32_t, const ghidra::AccessRecord*>>> flowStores;
+    // A store whose instruction no basic block covers any more: the engine emptied its block, putting the value it stores on the paths
+    // into it (`bra L ; mov #4,r1` to a shared `L: mov.w r1,@r2`, `bt L` to `L: mov.l r1,@(4,r14)` before the join). It is on the
+    // edges of the final graph that pass through its flow block (onEdge).
+    std::set<const ghidra::AccessRecord*> covered;
+    std::vector<const ghidra::AccessRecord*> orphans;
     bool blocksFound = false;
     const auto findBlocks = [&]() {
         blocksFound = true;
@@ -4763,8 +4768,14 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
             if (b->getType() != ghidra::FlowBlock::t_basic) continue;
             const ghidra::BlockBasic* bb = static_cast<const ghidra::BlockBasic*>(b);
             for (const ghidra::AccessRecord* r : stores)
-                if (bb->contains(r->pc)) blockStores[b].push_back(r);
+                if (bb->contains(r->pc))
+                {
+                    blockStores[b].push_back(r);
+                    covered.insert(r);
+                }
         }
+        for (const ghidra::AccessRecord* r : stores)
+            if (!covered.count(r)) orphans.push_back(r);
         for (const ghidra::AccessRecord* r : stores)
         {
             const auto pos = flow.ops.find(r->time);
@@ -4786,6 +4797,27 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
     }
     // The order of the stores in a block: by address, and a delay slot's store after any other op at its branch's address.
     const auto key = [](const ghidra::Address& pc, bool slot) { return pc.getOffset() * 2 + (slot ? 1u : 0u); };
+    // An emptied store is on the edge from a block to the next when the flow went from the first block's last instruction through the
+    // store's flow block (after its instruction, in that same flow block) to the second block's first instruction.
+    const auto flowBlockOf = [&flow](uint32_t insn) {
+        const auto f = flow.insnBlock.find(insn);
+        return f == flow.insnBlock.end() ? -1 : f->second.first;
+    };
+    const auto flowSucceeds = [&flow](int from, int to) {
+        if (from < 0 || static_cast<size_t>(from) >= flow.successors.size()) return false;
+        const std::vector<int>& next = flow.successors[static_cast<size_t>(from)];
+        return std::find(next.begin(), next.end(), to) != next.end();
+    };
+    const auto onEdge = [&](const ghidra::AccessRecord* r, const ghidra::FlowBlock* from, const ghidra::FlowBlock* to) {
+        const uint32_t insn = InstructionOf(*r);
+        const int store = flowBlockOf(insn);
+        const uint32_t last = static_cast<uint32_t>(from->getStop().getOffset()), first = static_cast<uint32_t>(to->getStart().getOffset());
+        const int fromBlock = flowBlockOf(last), toBlock = flowBlockOf(first);
+        if (store < 0 || fromBlock < 0 || toBlock < 0) return false;
+        const bool enters = fromBlock == store ? insn > last : flowSucceeds(fromBlock, store);
+        const bool leaves = toBlock == store ? first > insn : flowSucceeds(store, toBlock);
+        return enters && leaves;
+    };
     int added = 0;
     for (const auto& kv : printed)
     {
@@ -4871,27 +4903,58 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                     allBefore = false;
                     continue;
                 }
+            // the emptied stores of the byte on an edge between two blocks
+            const auto edgeStores = [&](const ghidra::FlowBlock* from, const ghidra::FlowBlock* to) {
+                std::vector<const ghidra::AccessRecord*> on;
+                for (const ghidra::AccessRecord* r : orphans)
+                    if (writes(r) && onEdge(r, from, to)) on.push_back(r);
+                return on;
+            };
+            // A copy at the end of its block whose value an emptied store after it writes is that store's statement.
+            if (code == ghidra::CPUI_COPY && o->getAddr() == home->getStop() && !orphans.empty())
+            {
+                bool ahead = false;
+                for (ghidra::int4 i = 0; i < home->sizeOut(); ++i)
+                    for (const ghidra::AccessRecord* r : edgeStores(home, home->getOut(i)))
+                    {
+                        chosen.insert(r);
+                        ahead = true;
+                    }
+                if (ahead)
+                {
+                    allBefore = false;
+                    continue;
+                }
+            }
             if (const ghidra::AccessRecord* r = lastIn(home, true))
             {
                 chosen.insert(r);
                 continue;
             }
-            std::set<const ghidra::FlowBlock*> seen;
-            std::vector<const ghidra::FlowBlock*> todo;
+            std::set<std::pair<const ghidra::FlowBlock*, const ghidra::FlowBlock*>> seen;
+            std::vector<std::pair<const ghidra::FlowBlock*, const ghidra::FlowBlock*>> todo;   // (a block, the block it goes to)
             bool reached = false;
-            for (ghidra::int4 i = 0; i < home->sizeIn(); ++i) todo.push_back(home->getIn(i));
+            for (ghidra::int4 i = 0; i < home->sizeIn(); ++i) todo.emplace_back(home->getIn(i), home);
             while (!todo.empty())
             {
-                const ghidra::FlowBlock* blk = todo.back();
+                const auto edge = todo.back();
                 todo.pop_back();
-                if (!seen.insert(blk).second) continue;
+                if (!seen.insert(edge).second) continue;
+                const std::vector<const ghidra::AccessRecord*> on = edgeStores(edge.first, edge.second);
+                if (!on.empty())
+                {
+                    chosen.insert(on.begin(), on.end());
+                    reached = true;
+                    continue;
+                }
+                const ghidra::FlowBlock* blk = edge.first;
                 if (const ghidra::AccessRecord* r = lastIn(blk, false))
                 {
                     chosen.insert(r);
                     reached = true;
                     continue;
                 }
-                for (ghidra::int4 i = 0; i < blk->sizeIn(); ++i) todo.push_back(blk->getIn(i));
+                for (ghidra::int4 i = 0; i < blk->sizeIn(); ++i) todo.emplace_back(blk->getIn(i), blk);
             }
             if (reached) continue;
             allBefore = false;
