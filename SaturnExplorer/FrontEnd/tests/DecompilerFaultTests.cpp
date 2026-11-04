@@ -2708,9 +2708,10 @@ const Pin kPins[] = {
     { "jumptable", "init", 1, 40, 40, "TypeFactory::getTypeVoid;TypeFactory::setCoreType#0", "A6-7 TypeFactory::getTypeVoid: the \"void\" data-type is freed when the tree cannot take it" },
     // Round 3 (patch 0040): jump-table recovery and the structurer's TraceDAG; leaks, seen under LeakSanitizer.
     { "jumptable", "followFlow", 0, 64, 95, "JumpValuesRange::clone;JumpBasic::clone#0", "A6-21 JumpBasic::clone: the copy of the model is freed when its range cannot be cloned" },
-    { "jumptable", "followFlow", 0, 8, 223, "vector<ghidra::JumpTable*;Funcdata::recoverJumpTable#0", "A6-21 Funcdata::recoverJumpTable: the permanent table is freed when the list of tables cannot take it" },
+    // (area 3 fixer, patch 0076) re-pinned 223 -> 227: dead code's list of LOADs that may read the frame (keepFrameWritesForLoads) grows four times before
+    { "jumptable", "followFlow", 0, 8, 227, "vector<ghidra::JumpTable*;Funcdata::recoverJumpTable#0", "A6-21 Funcdata::recoverJumpTable: the permanent table is freed when the list of tables cannot take it" },
     { "jumptable", "followFlow", 1, 64, 95, "JumpValuesRange::clone;JumpBasic::clone#0", "A6-21 the same, second pass" },
-    { "jumptable", "followFlow", 1, 8, 223, "vector<ghidra::JumpTable*;Funcdata::recoverJumpTable#0", "A6-21 the same, second pass" },
+    { "jumptable", "followFlow", 1, 8, 227, "vector<ghidra::JumpTable*;Funcdata::recoverJumpTable#0", "A6-21 the same, second pass" },
     { "dag", "actions", 0, 8, 179, "vector<ghidra::TraceDAG::BranchPoint*;TraceDAG::initialize#0", "A6-22 TraceDAG::initialize: the root BranchPoint is owned by the list before anything else can fail" },
     { "dag", "actions", 0, 8, 180, "vector<ghidra::TraceDAG::BlockTrace*;TraceDAG::initialize#0", "A6-22 TraceDAG::initialize: a root BlockTrace is owned by its BranchPoint before the active list takes it" },
     { "dag", "actions", 0, 8, 181, "vector<ghidra::TraceDAG::BlockTrace*;BranchPoint::createTraces#0", "A6-22 BranchPoint::BranchPoint (createTraces): the first trace is freed when the list of paths cannot take it" },
