@@ -7916,7 +7916,12 @@ bool DereferencesParameter(const std::string& text)
         std::string l;
         while (std::getline(in, l)) lines.push_back(l);
     }
+    // An address built on a local's address or a frame array (`*(xunknown4 *)((int4)auStack_3c + (param_3 & 0xc))`, `(int4)&iStack_14 + ...`) is a frame
+    // address that a parameter only indexes: the frame mode runs it (the A3-145 pins). Ghidra prints a bitwise and with spaces, so `&` followed at once
+    // by a name is an address-of; a frame array is named `a<type>Stack_<offset>`.
+    static const std::regex frameBaseRe("&[A-Za-z_]|\\ba[a-z]*Stack_[0-9a-fA-F]+\\b");
     auto mentionsTainted = [&](const std::string& expr) {
+        if (std::regex_search(expr, frameBaseRe)) return false;
         for (std::sregex_iterator it(expr.begin(), expr.end(), nameRe), end; it != end; ++it)
         {
             const size_t at = static_cast<size_t>(it->position());
