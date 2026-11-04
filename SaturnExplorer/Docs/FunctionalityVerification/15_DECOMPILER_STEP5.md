@@ -15021,3 +15021,62 @@ In `xStack_1c = 0;` (06021C24, a dead store that 0076 now prints), the tokens ar
 * `tools/a7_round3/`: `assign_at.py`, `named_store_value.py`, `dump_diff.py` (README).
 
 Routed: nothing to other areas. A7-20 is 0076's (area 3's patch) in effect, but the fix is in the host's `AddFrameStoreTokens` and the token of the guard's LOAD, so it stays in area 7.
+
+## Area 7 fixer (A7-15, A7-19, A7-20)
+
+Branch `review/7-a719-fix` from `370a4237` (round 3 merged). **Fixed: A7-19 (P2), A7-20 (P2) and A7-15 (now P2).** Filed: **A7-21 (P3)**. Left open: A7-17 (the Assembly-follow toggle, a feature) and A7-18 (the instrument; annotated). The fix is in the host (`Sh2Decompiler.cpp`): **no engine patch**, and the texts of the four corpus runs are byte-identical to master's (the token dumps' function and line texts compared: same digest in all four).
+
+### What changed
+
+* **`AddFrameStoreTokens` (A7-19, A7-15, A7-20).** A7-11's function, widened. It takes every printed COPY or conversion (`INT_ZEXT`, `INT_SEXT`, `SUBPIECE`, `CAST`) with an explicit output that is a frame local or a global (a FoldedOrdinary store record in the stack space or at a constant address), at any instruction, beside A7-11's ops at a call or a load. For each byte of the variable it names:
+  1. the store at the statement's own instruction (a store's own statement; A7-11 skipped any instruction that stores, so a copy put at the store of *another* variable, `iStack_18 = param_1;` at 060105E2's store of `iStack_10` (06010644), named none of its own and now names only its store, 060105E8);
+  2. else the last store before the statement in its final basic block, else in each block before it, walking the final graph back. A block holds a store when its address cover holds the store's instruction (`BlockBasic::contains`; a delay slot's store is at its branch's address and counts as before a statement at the branch). A store whose block the engine emptied is on the edges of the final graph that pass through its flow block (`onEdge`): `bt L ... L: mov.l r1,@(0x14,r14)` before a join (06008770: `xStack_c = 1;` names the stores of 1 on both paths, not the store of 3 before the call that the walk reached before);
+  3. else, when no store reaches it, the next store after it in its block, else the nearest stores after its instruction in the flow (`FlowRecord::insnBlock`): the engine put a register's value ahead of the store that writes it (`uStack_8 = param_1;` at 060335EE's `bt`, the store at its target 06033624, in a block the engine emptied).
+  A conversion looks after itself in its block first (its value is stored after it: `iStack_c = (int4)param_4;` at `exts.w`). A copy at the end of its block (the op's address is the block's last instruction, `Merge::trimOpInput`'s copies) takes the lowest store's address for its own tokens: the block's last instruction is no part of the statement. Not a copy of a constant or one a delay slot made, whose instruction may be the `mov #imm` that makes the value (`uRam00200020 = 1;` keeps `mov #0x1,r3` and lists the store 0601F8D6 beside it). The printed ops are walked in the order the engine made them (`getTime`), not by address: the fault suite asks that two runs of a function allocate alike, and a walk by pointer did not (`alloc lendx` did not settle and `alloc stack`'s pins went stale in the first full run; 0 of 94 after). At a call the call keeps its token (A7-11's choice), unless the store is in the call's delay slot, where the slot made the line (A7-10). When nothing is found, a statement at a call or a load keeps A7-11's rule.
+* **The return's token (A7-20).** A COPY the engine made to trim a variable's cover (`Merge::allocateCopyTrim`, at the loop head 06021C3A) and implied into a read of the variable that was folded into ordinary memory (a LOAD now a COPY, with its record's time) is addressed to the read: `return xStack_1c;` names 06021CA0 again. In `LinesFromMarkup` (`tokenInstruction`).
+* **`FlowRecord`** keeps each instruction's flow block (`insnBlock`), the call instructions and each flow block's range; `DecompileResult::flowBlockRanges` carries the ranges for the oracle. `storeInsns` is gone (step 1 replaces it).
+* **The oracle (`MappingOracle.h`).** `copyAtCall`, `copyAtReturn`, `copyAtBranch` and `copyAtOther` are violations (A7-15 and A7-19); `copyAtLoad` stays counted (A7-16's shape: `xRam06003014 = SMPC_OREG12;` is the hardware read's). Two corrections to what the copy rule reads as a bare value, both computations the line names: a `-` is a number's sign only before a digit (`uStack_8 = -param_1;` is the `neg`'s), and a cast the line names an `exts`/`extu` of is that extension's. New, counted: `copyUnconnected`, a line the rule sees with no store of the variable on a path through it in the flow as first followed (A7-21). New mutation `tokcopy`: a bare-value assignment loses the tokens at the stores folded into its variable, as before the fix.
+* **`TestArea7Round3`**, flipped as its comments said: the bra's line names only 06070008 and the other only 0607000C (a click goes to the store; `slotMadeLines` 0); 06021E54's four lines each name only their store; `xStack_1c = 0;` names 06021C8C and 06021CA0; `return xStack_1c;` names 06021CA0. Each A7-19 case checks that `tokcopy` is seen. `TestFrameStoreMaterialisedAtCall` (A7-11) is unchanged and passes.
+* **`named_store_value.py`** counts apart two kinds of line that name a store whose preceding `mov #imm` writes another number but are right: *composed* (the line also names a byte or word store into the variable: `xStack_10 = 0x10000000;` is `mov.l` of 0 and `mov.b` of 0x10, 26 lines in hwram007 alone) and *path value* (the line names the `mov #imm` of its number, or a branch whose slot is one: a store shared by paths that each set its register). "Neither" is the A7-20 signal.
+* The guide (hover a line) and `Docs/Codebase/Systems/Decompiler.md` (step 7) say it.
+
+### What was run (RelWithDebInfo, gcc 13)
+
+| Run | Result |
+|---|---|
+| hwram007.bin and hwram008.bin, alone and lent (`SE_GAME_LEND=1`, `SE_GAME_TOKEN_DUMP`) | every violation 0 in all four (odd, outside, not an instruction, first address, ranges, call tokens, unmarked, hover, ledger unmapped, calls, removed calls unsaid, round trip, `accessAtBranch`, `frameStoreMissing`, `backWrong`, and the four copy counters now violations). Off-line 4 / 11 and 4 / 21, as before |
+| corpus lending | 678 (956) and 1,038 (1,310), unchanged |
+| texts | identical to master's in all four runs |
+| `named_store_value.py` | "neither" 0, 0, 0, 0 (was 1, 2, 1, 2: the A7-20 family); of 49 / 91 / 317 / 360 lines that name a store of a constant by an empty token, composed 26 / 44 / 40 / 56 and path value 2 / 3 / 4 / 6 (lines that now name the word and the byte store of their number, or a shared store) |
+| `assign_at.py` | `slot-store-at-branch-memory` 0, 0, 0, 0 (was 6, 13, 14, 183); `frame-no-store` 335 / 612 / 539 / 1,056 (was 388 / 699 / 663 / 1,249), `global-no-store` 177 / 346 / 931 / 950 (was 249 / 489 / 1,474 / 1,606) |
+| perturbation with ceilings (`SE_GAME_PERTURB=6`, `a7_fix/perturb_ceilings.txt`, hwram007) | passes: add 16.0% unattributed of 946 (ceiling 16.5), mov 75.4% of 1,360, cmp/eq 0%, and 0%: as round 3 |
+| `ctest -j2 --timeout 900 -E SaturnExplorerLive` / `ctest -R SaturnExplorerLive` (every binary under `ulimit -v 3500000`) | 102 of 102 (196 s) / 6 of 6. No new ctest test: the fixtures are in `SaturnExplorerSh2DecompilerTests` |
+| fault suite (`SaturnExplorerDecompilerFaultTests`) | 0 of 94 jobs failed (74 s) |
+
+The counters, before (`370a4237`, the round's own logs) and after:
+
+| | hwram007 alone | lent | hwram008 alone | lent |
+|---|---|---|---|---|
+| `copyLines` | 1,238 → 1,236 | 2,388 → 2,385 | 4,230 → 4,221 | 6,526 → 6,512 |
+| `copyStoreMissing` | 103 → 7 | 191 → 13 | 529 → 7 | 849 → 13 |
+| ...at a call (violation) | 30 → 0 | 56 → 0 | 41 → 0 | 230 → 0 |
+| ...at a return (violation) | 9 → 0 | 19 → 0 | 326 → 0 | 352 → 0 |
+| ...at another branch (violation) | 24 → 0 | 45 → 0 | 74 → 0 | 119 → 0 |
+| ...at another instruction (violation) | 30 → 0 | 52 → 0 | 67 → 0 | 117 → 0 |
+| ...at a load (counted, A7-16) | 10 → 7 | 19 → 13 | 21 → 7 | 31 → 13 |
+| `copyUnconnected` (new, counted, A7-21) | 0 | 0 | 3 | 6 |
+| `frameAssigns` (A7-11; `frameStoreMissing` 0) | 301 → 297 | 518 → 512 | 289 → 278 | 536 → 517 |
+| `slotMadeLines` (A7-18) | 341 → 286 | 686 → 580 | 1,296 → 849 | 2,097 → 1,393 |
+| body instructions with a token | 21,043 → 21,213 | 41,786 → 42,079 | 62,379 → 62,915 | 99,948 → 100,867 |
+| answered Folded on the way back | 29,836 → 29,666 | 58,409 → 58,116 | 76,972 → 76,436 | 126,982 → 126,063 |
+
+`copyLines` moved by the oracle's two corrections (a negation is no bare value), not by the product. The copies at a load that remain are hardware reads assigned to a global (`SMPC_OREG12`), A7-16's accepted shape. `frameAssigns` fell where a copy at a `jsr` whose slot is the store is now the slot's line.
+
+### Notes
+
+* **What the search does not know.** It reads stores by their instruction's address (the final blocks' covers, the flow's blocks), not by the engine's data flow: the stores are gone from the final p-code, and the copies' inputs are the registers the stores wrote (`u0x10000000 = r5` for `xRam06080004 = param_2;`), not the folded ops. Within a block it orders by address; a block the engine merged from ranges out of address order would be read in address order. The value check (`named_store_value.py`, "neither" 0) and the oracle are what holds it.
+* **A7-16** (accepted) is touched where its line is a conversion: the store after it in its block is now named too (`iStack_c = (int4)param_4;` lists `exts.w` and the store). Its other shapes (a load, an arithmetic op) are unchanged.
+* **A7-18** keeps its instrument question; its residue no longer holds slot stores of memory. The lines left at a delayed branch include merge copies of a register whose value the slot made (`xRam06057310 = 4;` at `bra 0x060181C2 ; mov #0x4,r1`, which now also names the shared store 060181C2): A7-10's accepted residue.
+* **A7-17** is a feature (the Assembly-follow toggle, a PC mark while running) and is not built.
+
+Routed: nothing to other areas.
