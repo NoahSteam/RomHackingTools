@@ -618,10 +618,13 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     if (close == std::string::npos) continue;
                     v = close + 1;
                 }
-                if (v < text.size() && (text[v] == '&' || text[v] == '-')) ++v;
+                // (the address of a local is computed by the add the line names: that is the statement's own instruction, as A7-16's)
+                if (v < text.size() && text[v] == '-') ++v;
                 const size_t valueBegin = v;
                 while (v < text.size() && (std::isalnum(static_cast<unsigned char>(text[v])) || text[v] == '_')) ++v;
                 if (v == valueBegin || text.compare(v, std::string::npos, ";") != 0) continue;
+                if (text.find("Stack_", valueBegin) != std::string::npos) continue;
+                const bool number = std::isdigit(static_cast<unsigned char>(text[valueBegin])) != 0;
                 const uint32_t at = frame ? 0u - hexv + piece : hexv + piece;
                 std::set<uint32_t> candidates;
                 for (const AccessFate* f : folded)
@@ -644,6 +647,8 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     atCall = atCall || m.call;
                     atBranch = atBranch || (!m.call && (d.IsBranch || d.HasDelaySlot));
                     atLoad = atLoad || m.load;
+                    // (a number the line names the `mov #i` or the literal load of is made there: the statement is that instruction's)
+                    if (number && (d.PcRel != sfe::Sh2PcRel::None || (d.Mnemonic == "mov" && d.Operands.compare(0, 1, "#") == 0))) named = true;
                 }
                 if (named) continue;
                 ++a.copyStoreMissing;
