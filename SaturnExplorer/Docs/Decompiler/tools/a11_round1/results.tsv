@@ -182,3 +182,25 @@ patch:0010	unit	stillborn	0	build failed
 patch:0009	unit	killed-timeout	150	
 patch:0009	gen	killed-timeout	180	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:11749: rep.findings.empty()
 patch:0009	corpus	killed-timeout	300	
+patch:0012	unit	killed	27	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:2630: Ledger(r, { Rd(0, 4, true), Rd(0, 4, true, true) })
+patch:0012	gen	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:12033: rep.findings.empty()
+patch:0012	corpus	killed	50	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:2630: Ledger(r, { Rd(0, 4, true), Rd(0, 4, true, true) })
+patch:0014	unit	survived	27	
+patch:0014	gen	survived	21	
+patch:0014	corpus	survived	51	
+patch:0014	engine	survived	47	
+patch:0014	pc	survived	29	
+patch:0014	decode	survived	3	
+patch:0014	*	SURVIVED	0	
+patch:0024	unit	killed	27	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:2842: Ledger(r, { Rd(0, 2), Rd(0, 4), Wr(0, 2) })
+patch:0024	gen	survived	16	
+patch:0024	corpus	survived	51	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:2842: Ledger(r, { Rd(0, 2), Rd(0, 4), Wr(0, 2) })
+patch:0031	unit	killed	27	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:7841: r.status == DecompileStatus::Ok
+patch:0031	gen	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:11749: rep.findings.empty()
+patch:0031	corpus	survived	56	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:7841: r.status == DecompileStatus::Ok
+patch:0073	unit	killed	29	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:3671: Has(r.Text(), "CONCAT44(0x20100000,~in_r7)") && !Has(r.Text(), "&SMPC_IRE
+patch:0073	gen	survived	17	
+patch:0073	corpus	survived	54	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:3671: Has(r.Text(), "CONCAT44(0x20100000,~in_r7)") && !Has(r.Text(), "&SMPC_IRE
+patch:0013	unit	killed	28	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:2860: Ledger(r, { Rd(0, 4), Rd(0, 4), Rd(0, 4) })
+patch:0013	gen	survived	22	
+patch:0013	corpus	survived	55	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:2860: Ledger(r, { Rd(0, 4), Rd(0, 4), Rd(0, 4) })
