@@ -14888,7 +14888,8 @@ Tools: `Docs/Decompiler/tools/a3_fix144/` (`pc.sh`, one text through the printed
 
 | Run | Result |
 |---|---|
-| `SaturnExplorerSh2DecompilerTests` (alone) | all passed |
+| `ctest -E SaturnExplorerLive -j2 --timeout 900` / `ctest -R SaturnExplorerLive` | 102 of 102 (191 s) / 6 of 6; no new ctest test (the new pins are in the existing binaries) |
+| fault suite (`SaturnExplorerDecompilerFaultTests` alone) | 0 of 94 jobs failed (75 s), after re-pinning two pins that 0076's list of LOADs moved: `A6-21 Funcdata::recoverJumpTable` on the jumptable fixture, both passes, 8-byte allocation 223 to 227 (the suite named the new ordinal) |
 | printed-C, the default range 1 to 3,000 (three chunks of 1,000; every pin of `TestPrintedC`) | 0 findings (1,928, 1,962 and 1,950 functions; 106, 63 and 61 s) |
 | printed-C, 4,800,001 to 4,803,000 (fresh) | 0 findings (1,971, 1,856 and 1,921 functions) |
 | frame124 stream in those six chunks | 720 to 794 structs each, 0 frame writes lost |
@@ -14924,4 +14925,4 @@ Lending and every count are unchanged; the mapping statistics move (a few more t
 - The hold is coarse: while a LOAD that stays may read the frame, every unaliased-or-not frame write but the exceptions above is kept, so a dead frame store can print (kinds 3 and 4 above). A write is only known to be dead for the LOAD when it is overwritten before any read in its own block.
 - A3-154: the printed-C differential cannot read `frame16.py`'s mixed-width loop and index texts in frame mode; the chain144 stream avoids mixed widths, so it does not test them either.
 - A3-146's text is still no C, and `PseudoEval` still rejects it.
-- No full ctest yet at the time of writing this paragraph: see the hand-back.
+- No mutation table per part of 0076: the pins were checked with the hold and the host fix switched off together (section 3 and 6).
