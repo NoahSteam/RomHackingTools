@@ -175,3 +175,10 @@ patch:0030	corpus	killed	0
 patch:0018	unit	killed	26	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:2265: ReferenceOk(d, snap, Request(f.base), r)
 patch:0018	gen	killed	26	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:12033: rep.findings.empty()
 patch:0018	corpus	killed	49	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:2265: ReferenceOk(d, snap, Request(f.base), r)
+patch:0017	unit	killed	24	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:375: slot && LineInstructions(*slot) == std::vector<uint32_t>{ base + 8 }
+patch:0017	gen	survived	21	
+patch:0017	corpus	killed	47	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:375: slot && LineInstructions(*slot) == std::vector<uint32_t>{ base + 8 }
+patch:0010	unit	stillborn	0	build failed
+patch:0009	unit	killed-timeout	150	
+patch:0009	gen	killed-timeout	180	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:11749: rep.findings.empty()
+patch:0009	corpus	killed-timeout	300	
