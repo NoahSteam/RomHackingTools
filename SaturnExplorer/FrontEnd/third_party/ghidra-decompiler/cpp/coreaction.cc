@@ -28,6 +28,7 @@
  * Modified for SaturnExplorer: a call's INDIRECT on a local of an escaped frame keeps its address force (patches/0068-engine-deadcode-late-stack-reads.patch).
  * Modified for SaturnExplorer: a save slot a STORE is aimed at, or that a pending STORE may reach, stays mapped (patches/0072-engine-frame-chains-and-save-slots.patch).
  * Modified for SaturnExplorer: a number is the address of a hardware register where the data flow uses it as one, not by a guess (patches/0073-engine-constant-pointer-guess-not-hardware.patch).
+ * Modified for SaturnExplorer: a LOAD that may read the frame and stays one holds the frame's writes (patches/0076-engine-frame-loads-keep-writes.patch).
  */
 #include "coreaction.hh"
 #include "condexe.hh"
@@ -4210,6 +4211,154 @@ bool ActionDeadCode::storeMayWrite(const Funcdata &data,const PcodeOp *sop,const
   return data.storeAimedAt(sop,local);
 }
 
+/// SaturnExplorer (patches/0076-engine-frame-loads-keep-writes.patch): will a LOAD through this frame address stay a LOAD? Back from the
+/// pointer through copies, additions of a constant and the guards of STOREs still pending (a chain of slots unfolding: each such STORE is
+/// settled, and its guard on the slot removed, once the slots before it are folded, Heritage::reprocessPendingStores), to the stack pointer:
+/// then RuleLoadVarnode makes the LOAD a direct stack read in a pass or two, and dead code that runs meanwhile is undone by heritage's late
+/// reads (0068's delay). Anything else on the way stays: a join (a loop's pointer, two frame addresses; A3-144's slot, whose loop holds the
+/// pending STORE's guard), the guard of any other STORE (an indexed one, whose range covers the slot: A3-145) or of a call, a variable
+/// added, a value from memory or from a call.
+/// \param data is the function
+/// \param vn is the pointer
+/// \return \b true if the LOAD stays one
+static bool frameLoadStays(const Funcdata &data,const Varnode *vn)
+
+{
+  for(int4 hops=0;hops<64;++hops) {
+    if (vn->isSpacebase() && vn->isInput()) return false;
+    if (!vn->isWritten()) return true;
+    const PcodeOp *op = vn->getDef();
+    if (op->code() == CPUI_COPY)
+      vn = op->getIn(0);
+    else if (op->code() == CPUI_INT_ADD && op->getIn(1)->isConstant())
+      vn = op->getIn(0);
+    else if (op->code() == CPUI_INT_ADD && op->getIn(0)->isConstant())
+      vn = op->getIn(1);
+    else if (op->code() == CPUI_INDIRECT && op->isIndirectStore()) {
+      const PcodeOp *sop = PcodeOp::getOpFromConst(op->getIn(1)->getAddr());
+      if (sop == (const PcodeOp *)0 || sop->code() != CPUI_STORE || !data.isPendingFrameStore(sop)) return true;
+      vn = op->getIn(0);
+    }
+    else
+      return true;
+  }
+  return true;		// too far to follow: taken to stay (fail closed)
+}
+
+/// SaturnExplorer (patches/0076-engine-frame-loads-keep-writes.patch): is the frame write overwritten whole, later in its block, before any
+/// op that may read memory (a LOAD, a call, a return)? No LOAD can read it then.
+/// \param vn is the write
+/// \return \b true if it is overwritten so
+static bool frameWriteKilled(const Varnode *vn)
+
+{
+  const PcodeOp *def = vn->getDef();
+  const BlockBasic *bl = def->getParent();
+  if (bl == (const BlockBasic *)0) return false;
+  list<PcodeOp *>::iterator iter = def->getBasicIter();
+  for(++iter;iter!=bl->endOp();++iter) {
+    const PcodeOp *op = *iter;
+    switch(op->code()) {
+    case CPUI_LOAD:
+    case CPUI_CALL:
+    case CPUI_CALLIND:
+    case CPUI_CALLOTHER:
+    case CPUI_RETURN:
+    case CPUI_BRANCHIND:
+    case CPUI_NEW:
+      return false;
+    default:
+      break;
+    }
+    if (op->isMarker()) continue;
+    const Varnode *out = op->getOut();
+    if (out != (const Varnode *)0 && out->getSpace() == vn->getSpace() && out->getOffset() <= vn->getOffset() &&
+	out->getOffset() + out->getSize() >= vn->getOffset() + vn->getSize())
+      return true;
+  }
+  return false;
+}
+
+/// SaturnExplorer (patches/0076-engine-frame-loads-keep-writes.patch): a LOAD left in the function whose pointer may be a frame address,
+/// modeled or not (FrameEscape's members), and that stays a LOAD (frameLoadStays: a loop's join, the guard of an indexed STORE or of a call
+/// between the pointer and the stack pointer), reads the frame where RuleLoadVarnode never makes it a direct stack read. Nothing links the
+/// LOAD to the frame writes it may read, so dead code took each for a write nothing reads and removed it, and the text read memory nothing
+/// wrote (ledger A3-144: a loop storing through a pointer behind two to four slots lost the slots' writes, the compiled text crashed;
+/// A3-145: an array filled, written at a variable index, and read through a pointer reloaded from a slot, lost its fills). While such a
+/// LOAD lives, the frame's writes are held: fail closed, the LOAD may read any word of the frame. A LOAD whose guard heritage sank (a COPY
+/// of each location before it, Heritage::guardLoads) is left to that guard. Not held: the pushes of callee-saved registers (saves, as for a
+/// call: callMayReadFrame), a write a later version of its bytes is built from (that version is held), a write overwritten whole in its
+/// block before any op that may read memory (frameWriteKilled), and a local the scope proved no pointer reaches. The hold is an address
+/// force marked as one (Varnode::setFrameLoadForce), let go at the start of each pass of dead code and set again while the LOAD lives: once
+/// it is folded or gone, the next pass sees the writes as before.
+/// \param data is the function
+/// \param worklist is the consumed Varnodes to process
+void ActionDeadCode::keepFrameWritesForLoads(Funcdata &data,vector<Varnode *> &worklist)
+
+{
+  AddrSpace *stackSpc = data.getArch()->getStackSpace();
+  if (stackSpc == (AddrSpace *)0 || !stackSpc->doesDeadcode() || !data.deadRemovalAllowed(stackSpc)) return;
+  vector<PcodeOp *> candidates;
+  list<PcodeOp *>::const_iterator iter = data.beginOp(CPUI_LOAD);
+  list<PcodeOp *>::const_iterator enditer = data.endOp(CPUI_LOAD);
+  for(;iter!=enditer;++iter) {
+    PcodeOp *op = *iter;
+    if (op->isDead() || op->getIn(1)->isConstant()) continue;
+    candidates.push_back(op);
+  }
+  // ...but for a LOAD whose guard kept the writes of its range (a COPY of each location heritaged with the guard there; a guard made after
+  // the frame was heritaged, by reprocessFreeStores, has none: A3-144's LOAD through the slot reloaded in the loop)
+  if (!candidates.empty() && !data.getLoadGuards().empty()) {
+    const list<LoadGuard> &guards(data.getLoadGuards());
+    for(list<LoadGuard>::const_iterator giter=guards.begin();giter!=guards.end();++giter) {
+      if (!(*giter).isSunk() || !(*giter).isValid(CPUI_LOAD)) continue;
+      vector<PcodeOp *>::iterator found = find(candidates.begin(),candidates.end(),(*giter).getOp());
+      if (found != candidates.end()) candidates.erase(found);
+    }
+  }
+  if (candidates.empty()) return;
+  bool reads = false;
+  {
+    FrameEscape escape;
+    escape.compute(&data,stackSpc,false);
+    for(int4 i=0;i<candidates.size() && !reads;++i)
+      if (escape.loadMayReadFrame(candidates[i]) && frameLoadStays(data,candidates[i]->getIn(1))) reads = true;
+  }
+  if (!reads) return;
+  VarnodeLocSet::const_iterator viter = data.beginLoc(stackSpc);
+  VarnodeLocSet::const_iterator endviter = data.endLoc(stackSpc);
+  for(;viter!=endviter;++viter) {
+    Varnode *vn = *viter;
+    if (!vn->isWritten()) continue;
+    const PcodeOp *def = vn->getDef();
+    if (def->code() == CPUI_INDIRECT || def->code() == CPUI_MULTIEQUAL) continue;	// a marker: the writes it joins are kept
+    if (def->code() == CPUI_COPY && def->getIn(0)->isInput() && def->getIn(0)->getSpace()->getType() == IPTR_PROCESSOR &&
+	isSavePush(data,def->getAddr(),def->getIn(0)))
+      continue;		// a save, no data
+    // A write that a later version of the same bytes is built from (a piece of it taken, a word joined from its pieces: the heritage's
+    // refinement of a word written whole and then in part) lives through that version: the latest version of each location is the write
+    // to hold (held, it keeps alive what it was built from), not every refinement of the word on the way. Any other reader (a COPY into a
+    // register) does not keep it: a rule may forward its value and leave the write with no reader.
+    bool superseded = false;
+    for(list<PcodeOp *>::const_iterator diter=vn->beginDescend();diter!=vn->endDescend() && !superseded;++diter) {
+      const PcodeOp *rop = *diter;
+      if (rop->isMarker()) continue;
+      const Varnode *out = rop->getOut();
+      if (out == (const Varnode *)0 || out->getSpace() != stackSpc) continue;
+      if (out->getOffset() < vn->getOffset() + vn->getSize() && vn->getOffset() < out->getOffset() + out->getSize())
+	superseded = true;
+    }
+    if (superseded) continue;
+    // ...and none the local scope proved no pointer reaches (no local alias: below every frame address the function makes), nor one that is
+    // no address-tied storage: the scope clears an address force on either (Funcdata::syncVarnodesWithSymbol), and a hold it cleared at each
+    // pass was a change at each pass, a main loop that never ended (hwram007 0601A0C8)
+    if (vn->hasNoLocalAlias() || !vn->isAddrTied()) continue;
+    if (frameWriteKilled(vn)) continue;	// ...nor one overwritten before anything may read it (a word's refinement before its whole write)
+    if (!vn->isAddrForce()) vn->setFrameLoadForce();	// held against the rules' removal of a write nothing reads (RuleEarlyRemoval)
+    pushConsumed(~((uintb)0),vn,worklist);
+  }
+}
+
 bool ActionDeadCode::callMayReadFrame(const Funcdata &data,const Varnode *vn)
 
 {
@@ -4276,6 +4425,7 @@ int4 ActionDeadCode::apply(Funcdata &data)
     vn->clearConsumeList();
     vn->clearConsumeVacuous();
     vn->setConsume(0);
+    vn->clearFrameLoadForce();	// SaturnExplorer (patches/0076-engine-frame-loads-keep-writes.patch): set again below while the LOAD lives
     if (vn->isAddrForce()&&(!vn->isDirectWrite())&&!callMayReadFrame(data,vn))
       vn->clearAddrForce();
   }
@@ -4292,6 +4442,8 @@ int4 ActionDeadCode::apply(Funcdata &data)
       pushConsumed(~((uintb)0),vn,worklist);
     }
   }
+
+  keepFrameWritesForLoads(data,worklist);	// SaturnExplorer (patches/0076-engine-frame-loads-keep-writes.patch)
 
   returnConsume = gatherConsumedReturn(data);
   for(iter=data.beginOpAlive();iter!=data.endOpAlive();++iter) {

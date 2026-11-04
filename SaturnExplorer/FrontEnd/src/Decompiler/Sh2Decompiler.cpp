@@ -1793,11 +1793,18 @@ private:
                 mFrameValues |= v;
                 AddFrameWords(addr.v, n);
             }
+            // (area 3 fixer, A3-152) The words a partial store writes into that held r0's entry value itself: what is left of r0 in them is
+            // joined with the bytes stored, a value computed from r0 (the engine reads `in_r0` to build it), not r0 left alone. Clobber's
+            // rule for a word that may still hold what it held (a store through an address not known) takes r0 there for r0 untouched.
+            std::set<int64_t> partR0;
             if (n != 4)
             {
                 // Part of a word: it holds what it held and part of this.
                 for (int64_t w = addr.v & ~int64_t(3); w < addr.v + n; w += 4)
+                {
                     if (s.slots.count(w) == 0) s.slots[w] = Unwritten(s, w);
+                    else if (s.slots[w].kind == Value::Reg && s.slots[w].v == 0) partR0.insert(w);
+                }
             }
             Clobber(s, v, value.Direct(), addr.v, addr.v + n, false, nullptr, INT64_MAX, FrameWriteOf(value));
             if (n == 4)
@@ -1812,7 +1819,7 @@ private:
                 for (auto& slot : s.slots)
                     if (slot.first + 4 > addr.v && slot.first < addr.v + n)
                     {
-                        slot.second.usesR0 = slot.second.UsesR0() || value.UsesR0();
+                        slot.second.usesR0 = slot.second.UsesR0() || value.UsesR0() || partR0.count(slot.first) != 0;
                         slot.second.carried = slot.second.carried || value.carried;
                         slot.second.joined = slot.second.Joined() || value.Joined();
                         slot.second.keepsR0 = slot.second.KeepsR0() || value.KeepsR0();

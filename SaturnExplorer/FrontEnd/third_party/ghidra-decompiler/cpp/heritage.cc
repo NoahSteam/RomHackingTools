@@ -21,6 +21,7 @@
  * Modified for SaturnExplorer: a frame address that is no exact offset from the frame base escapes, unless a loop only steps it up, and the guard of an access through one covers the stack space (patches/0066-engine-frame-escape-inexact.patch).
  * Modified for SaturnExplorer: a read found after dead code ran in its space delays dead code past the pass that found it, as often as needed, failing closed; whether a frame address escaped forces a call's guard on a local, and the calls guarded at a local are kept for a host (patches/0068-engine-deadcode-late-stack-reads.patch).
  * Modified for SaturnExplorer: a STORE through a pointer read through a frame address keeps its guards when the stack is first heritaged (patches/0072-engine-frame-chains-and-save-slots.patch).
+ * Modified for SaturnExplorer: a LOAD guard records whether heritage put its COPYs before the LOAD, and a held frame write is no address force of the guard's (patches/0076-engine-frame-loads-keep-writes.patch).
  */
 #include "heritage.hh"
 #include "funcdata.hh"
@@ -645,7 +646,7 @@ void Heritage::findAddressForces(vector<PcodeOp *> &copySinks,vector<PcodeOp *> 
     for(int4 i=0;i<maxIn;++i) {
       Varnode *vn = op->getIn(i);
       if (!vn->isWritten()) continue;
-      if (vn->isAddrForce()) continue;		// Already marked address forced
+      if (vn->isAddrForce() && !vn->isFrameLoadForce()) continue;		// Already marked address forced (SaturnExplorer 0076: not as a LOAD's hold, which may go)
       PcodeOp *newOp = vn->getDef();
       if (newOp->isMark()) continue;		// Already visited this op
       newOp->setMark();
@@ -2570,6 +2571,7 @@ void Heritage::guardLoads(uint4 fl,const Address &addr,int4 size,vector<Varnode 
     invn->setActiveHeritage();
     fd->opSetInput(copyop,invn,0);
     fd->opInsertBefore(copyop,guardRec.op);
+    guardRec.sunk = true;	// SaturnExplorer (patches/0076-engine-frame-loads-keep-writes.patch)
     loadCopyOps.push_back(copyop);
   }
 }

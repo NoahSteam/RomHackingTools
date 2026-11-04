@@ -21,6 +21,7 @@
  * Modified for SaturnExplorer: a frame address that is not an exact offset from the frame base escapes, unless a loop only steps it up (patches/0066-engine-frame-escape-inexact.patch).
  * Modified for SaturnExplorer: the dead code delay a late read asks for, and its bound (patches/0068-engine-deadcode-late-stack-reads.patch).
  * Modified for SaturnExplorer: a STORE through a value read through a frame address is a STORE through a frame address in waiting (patches/0072-engine-frame-chains-and-save-slots.patch).
+ * Modified for SaturnExplorer: a LOAD guard records whether heritage put its COPYs before the LOAD; whether a LOAD may read the frame (patches/0076-engine-frame-loads-keep-writes.patch).
  */
 /// \file heritage.hh
 /// \brief Utilities for building Static Single Assignment (SSA) form 
@@ -158,6 +159,7 @@ class LoadGuard {
   int4 step;		///< Step of any access into this range (0=unknown)
   int4 analysisState;	///< 0=unanalyzed, 1=analyzed(partial result), 2=analyzed(full result)
   bool guessedBelow;	///< SaturnExplorer: minimumOffset is a guess below a pointer stepped down, not where an array starts (patches/0056-engine-stack-walk-down-aliases.patch)
+  bool sunk;		///< SaturnExplorer: guardLoads put a COPY of a stack location before the LOAD (patches/0076-engine-frame-loads-keep-writes.patch)
   void establishRange(const ValueSetRead &valueSet);	///< Convert partial value set analysis into guard range
   static bool pointerSteppedDown(Varnode *vn);	///< SaturnExplorer (0065): is the pointer the join of a loop that steps it down
   void finalizeRange(const ValueSetRead &valueSet);	///< Convert value set analysis to final guard range
@@ -168,7 +170,7 @@ class LoadGuard {
   /// \param s is the (stack) space it is loading from
   /// \param off is the base offset that is indexed from
   void set(PcodeOp *o,AddrSpace *s,uintb off) {
-    op = o; spc = s; pointerBase=off; minimumOffset=0; maximumOffset=s->getHighest(); step=0; analysisState=0; guessedBelow=false;
+    op = o; spc = s; pointerBase=off; minimumOffset=0; maximumOffset=s->getHighest(); step=0; analysisState=0; guessedBelow=false; sunk=false;
   }
 public:
   PcodeOp *getOp(void) const { return op; }	///< Get the PcodeOp being guarded
@@ -176,6 +178,7 @@ public:
   uintb getMaximum(void) const { return maximumOffset; }	///< Get maximum offset of the guarded range
   int4 getStep(void) const { return step; }		///< Get the calculated step associated with the range (or 0)
   bool isGuessedBelow(void) const { return guessedBelow; }	///< SaturnExplorer: is the minimum a guess below a pointer stepped down
+  bool isSunk(void) const { return sunk; }	///< SaturnExplorer (0076): did a heritage pass keep the stack's writes for the LOAD (a COPY of a location before it)?
   bool isGuarded(const Address &addr) const;		///< Does \b this guard apply to the given address
   bool isRangeLocked(void) const { return (analysisState == 2); }	///< Return \b true if the range is fully determined
   bool isValid(OpCode opc) const { return (!op->isDead() && op->code() == opc); }	///< Return \b true if the record still describes an active LOAD
@@ -240,6 +243,8 @@ public:
   bool loadIsInexact(PcodeOp *op) const { return gaveUp || inexactLoads.find(op) != inexactLoads.end(); }
   /// \brief Is the given STORE made through a value a LOAD through a frame address read, which may itself be a frame address? (0072)
   bool storeIsPending(PcodeOp *op) const { return gaveUp || pendingStores.find(op) != pendingStores.end(); }
+  /// \brief May the given LOAD read the frame: is its pointer a possible frame address, modeled or not? (0076)
+  bool loadMayReadFrame(PcodeOp *op) const { return gaveUp || members.find(op->getIn(1)) != members.end(); }
 };
 
 /// \brief Manage the construction of Static Single Assignment (SSA) form

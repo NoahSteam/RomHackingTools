@@ -1,0 +1,316 @@
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc
+@@ -28,6 +28,7 @@
+  * Modified for SaturnExplorer: a call's INDIRECT on a local of an escaped frame keeps its address force (patches/0068-engine-deadcode-late-stack-reads.patch).
+  * Modified for SaturnExplorer: a save slot a STORE is aimed at, or that a pending STORE may reach, stays mapped (patches/0072-engine-frame-chains-and-save-slots.patch).
+  * Modified for SaturnExplorer: a number is the address of a hardware register where the data flow uses it as one, not by a guess (patches/0073-engine-constant-pointer-guess-not-hardware.patch).
++ * Modified for SaturnExplorer: a LOAD that may read the frame and stays one holds the frame's writes (patches/0076-engine-frame-loads-keep-writes.patch).
+  */
+ #include "coreaction.hh"
+ #include "condexe.hh"
+@@ -4210,6 +4211,154 @@ bool ActionDeadCode::storeMayWrite(const Funcdata &data,const PcodeOp *sop,const
+   return data.storeAimedAt(sop,local);
+ }
+ 
++/// SaturnExplorer (patches/0076-engine-frame-loads-keep-writes.patch): will a LOAD through this frame address stay a LOAD? Back from the
++/// pointer through copies, additions of a constant and the guards of STOREs still pending (a chain of slots unfolding: each such STORE is
++/// settled, and its guard on the slot removed, once the slots before it are folded, Heritage::reprocessPendingStores), to the stack pointer:
++/// then RuleLoadVarnode makes the LOAD a direct stack read in a pass or two, and dead code that runs meanwhile is undone by heritage's late
++/// reads (0068's delay). Anything else on the way stays: a join (a loop's pointer, two frame addresses; A3-144's slot, whose loop holds the
++/// pending STORE's guard), the guard of any other STORE (an indexed one, whose range covers the slot: A3-145) or of a call, a variable
++/// added, a value from memory or from a call.
++/// \param data is the function
++/// \param vn is the pointer
++/// \return \b true if the LOAD stays one
++static bool frameLoadStays(const Funcdata &data,const Varnode *vn)
++
++{
++  for(int4 hops=0;hops<64;++hops) {
++    if (vn->isSpacebase() && vn->isInput()) return false;
++    if (!vn->isWritten()) return true;
++    const PcodeOp *op = vn->getDef();
++    if (op->code() == CPUI_COPY)
++      vn = op->getIn(0);
++    else if (op->code() == CPUI_INT_ADD && op->getIn(1)->isConstant())
++      vn = op->getIn(0);
++    else if (op->code() == CPUI_INT_ADD && op->getIn(0)->isConstant())
++      vn = op->getIn(1);
++    else if (op->code() == CPUI_INDIRECT && op->isIndirectStore()) {
++      const PcodeOp *sop = PcodeOp::getOpFromConst(op->getIn(1)->getAddr());
++      if (sop == (const PcodeOp *)0 || sop->code() != CPUI_STORE || !data.isPendingFrameStore(sop)) return true;
++      vn = op->getIn(0);
++    }
++    else
++      return true;
++  }
++  return true;		// too far to follow: taken to stay (fail closed)
++}
++
++/// SaturnExplorer (patches/0076-engine-frame-loads-keep-writes.patch): is the frame write overwritten whole, later in its block, before any
++/// op that may read memory (a LOAD, a call, a return)? No LOAD can read it then.
++/// \param vn is the write
++/// \return \b true if it is overwritten so
++static bool frameWriteKilled(const Varnode *vn)
++
++{
++  const PcodeOp *def = vn->getDef();
++  const BlockBasic *bl = def->getParent();
++  if (bl == (const BlockBasic *)0) return false;
++  list<PcodeOp *>::iterator iter = def->getBasicIter();
++  for(++iter;iter!=bl->endOp();++iter) {
++    const PcodeOp *op = *iter;
++    switch(op->code()) {
++    case CPUI_LOAD:
++    case CPUI_CALL:
++    case CPUI_CALLIND:
++    case CPUI_CALLOTHER:
++    case CPUI_RETURN:
++    case CPUI_BRANCHIND:
++    case CPUI_NEW:
++      return false;
++    default:
++      break;
++    }
++    if (op->isMarker()) continue;
++    const Varnode *out = op->getOut();
++    if (out != (const Varnode *)0 && out->getSpace() == vn->getSpace() && out->getOffset() <= vn->getOffset() &&
++	out->getOffset() + out->getSize() >= vn->getOffset() + vn->getSize())
++      return true;
++  }
++  return false;
++}
++
++/// SaturnExplorer (patches/0076-engine-frame-loads-keep-writes.patch): a LOAD left in the function whose pointer may be a frame address,
++/// modeled or not (FrameEscape's members), and that stays a LOAD (frameLoadStays: a loop's join, the guard of an indexed STORE or of a call
++/// between the pointer and the stack pointer), reads the frame where RuleLoadVarnode never makes it a direct stack read. Nothing links the
++/// LOAD to the frame writes it may read, so dead code took each for a write nothing reads and removed it, and the text read memory nothing
++/// wrote (ledger A3-144: a loop storing through a pointer behind two to four slots lost the slots' writes, the compiled text crashed;
++/// A3-145: an array filled, written at a variable index, and read through a pointer reloaded from a slot, lost its fills). While such a
++/// LOAD lives, the frame's writes are held: fail closed, the LOAD may read any word of the frame. A LOAD whose guard heritage sank (a COPY
++/// of each location before it, Heritage::guardLoads) is left to that guard. Not held: the pushes of callee-saved registers (saves, as for a
++/// call: callMayReadFrame), a write a later version of its bytes is built from (that version is held), a write overwritten whole in its
++/// block before any op that may read memory (frameWriteKilled), and a local the scope proved no pointer reaches. The hold is an address
++/// force marked as one (Varnode::setFrameLoadForce), let go at the start of each pass of dead code and set again while the LOAD lives: once
++/// it is folded or gone, the next pass sees the writes as before.
++/// \param data is the function
++/// \param worklist is the consumed Varnodes to process
++void ActionDeadCode::keepFrameWritesForLoads(Funcdata &data,vector<Varnode *> &worklist)
++
++{
++  AddrSpace *stackSpc = data.getArch()->getStackSpace();
++  if (stackSpc == (AddrSpace *)0 || !stackSpc->doesDeadcode() || !data.deadRemovalAllowed(stackSpc)) return;
++  vector<PcodeOp *> candidates;
++  list<PcodeOp *>::const_iterator iter = data.beginOp(CPUI_LOAD);
++  list<PcodeOp *>::const_iterator enditer = data.endOp(CPUI_LOAD);
++  for(;iter!=enditer;++iter) {
++    PcodeOp *op = *iter;
++    if (op->isDead() || op->getIn(1)->isConstant()) continue;
++    candidates.push_back(op);
++  }
++  // ...but for a LOAD whose guard kept the writes of its range (a COPY of each location heritaged with the guard there; a guard made after
++  // the frame was heritaged, by reprocessFreeStores, has none: A3-144's LOAD through the slot reloaded in the loop)
++  if (!candidates.empty() && !data.getLoadGuards().empty()) {
++    const list<LoadGuard> &guards(data.getLoadGuards());
++    for(list<LoadGuard>::const_iterator giter=guards.begin();giter!=guards.end();++giter) {
++      if (!(*giter).isSunk() || !(*giter).isValid(CPUI_LOAD)) continue;
++      vector<PcodeOp *>::iterator found = find(candidates.begin(),candidates.end(),(*giter).getOp());
++      if (found != candidates.end()) candidates.erase(found);
++    }
++  }
++  if (candidates.empty()) return;
++  bool reads = false;
++  {
++    FrameEscape escape;
++    escape.compute(&data,stackSpc,false);
++    for(int4 i=0;i<candidates.size() && !reads;++i)
++      if (escape.loadMayReadFrame(candidates[i]) && frameLoadStays(data,candidates[i]->getIn(1))) reads = true;
++  }
++  if (!reads) return;
++  VarnodeLocSet::const_iterator viter = data.beginLoc(stackSpc);
++  VarnodeLocSet::const_iterator endviter = data.endLoc(stackSpc);
++  for(;viter!=endviter;++viter) {
++    Varnode *vn = *viter;
++    if (!vn->isWritten()) continue;
++    const PcodeOp *def = vn->getDef();
++    if (def->code() == CPUI_INDIRECT || def->code() == CPUI_MULTIEQUAL) continue;	// a marker: the writes it joins are kept
++    if (def->code() == CPUI_COPY && def->getIn(0)->isInput() && def->getIn(0)->getSpace()->getType() == IPTR_PROCESSOR &&
++	isSavePush(data,def->getAddr(),def->getIn(0)))
++      continue;		// a save, no data
++    // A write that a later version of the same bytes is built from (a piece of it taken, a word joined from its pieces: the heritage's
++    // refinement of a word written whole and then in part) lives through that version: the latest version of each location is the write
++    // to hold (held, it keeps alive what it was built from), not every refinement of the word on the way. Any other reader (a COPY into a
++    // register) does not keep it: a rule may forward its value and leave the write with no reader.
++    bool superseded = false;
++    for(list<PcodeOp *>::const_iterator diter=vn->beginDescend();diter!=vn->endDescend() && !superseded;++diter) {
++      const PcodeOp *rop = *diter;
++      if (rop->isMarker()) continue;
++      const Varnode *out = rop->getOut();
++      if (out == (const Varnode *)0 || out->getSpace() != stackSpc) continue;
++      if (out->getOffset() < vn->getOffset() + vn->getSize() && vn->getOffset() < out->getOffset() + out->getSize())
++	superseded = true;
++    }
++    if (superseded) continue;
++    // ...and none the local scope proved no pointer reaches (no local alias: below every frame address the function makes), nor one that is
++    // no address-tied storage: the scope clears an address force on either (Funcdata::syncVarnodesWithSymbol), and a hold it cleared at each
++    // pass was a change at each pass, a main loop that never ended (hwram007 0601A0C8)
++    if (vn->hasNoLocalAlias() || !vn->isAddrTied()) continue;
++    if (frameWriteKilled(vn)) continue;	// ...nor one overwritten before anything may read it (a word's refinement before its whole write)
++    if (!vn->isAddrForce()) vn->setFrameLoadForce();	// held against the rules' removal of a write nothing reads (RuleEarlyRemoval)
++    pushConsumed(~((uintb)0),vn,worklist);
++  }
++}
++
+ bool ActionDeadCode::callMayReadFrame(const Funcdata &data,const Varnode *vn)
+ 
+ {
+@@ -4276,6 +4425,7 @@ int4 ActionDeadCode::apply(Funcdata &data)
+     vn->clearConsumeList();
+     vn->clearConsumeVacuous();
+     vn->setConsume(0);
++    vn->clearFrameLoadForce();	// SaturnExplorer (patches/0076-engine-frame-loads-keep-writes.patch): set again below while the LOAD lives
+     if (vn->isAddrForce()&&(!vn->isDirectWrite())&&!callMayReadFrame(data,vn))
+       vn->clearAddrForce();
+   }
+@@ -4293,6 +4443,8 @@ int4 ActionDeadCode::apply(Funcdata &data)
+     }
+   }
+ 
++  keepFrameWritesForLoads(data,worklist);	// SaturnExplorer (patches/0076-engine-frame-loads-keep-writes.patch)
++
+   returnConsume = gatherConsumedReturn(data);
+   for(iter=data.beginOpAlive();iter!=data.endOpAlive();++iter) {
+     op = *iter;
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.hh b/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.hh
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.hh
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.hh
+@@ -16,6 +16,7 @@
+  * Modified for SaturnExplorer: a load is read once and in place, never duplicated or moved past another memory operation (patches/0010-load-not-duplicated.patch).
+  * Modified for SaturnExplorer: a call's INDIRECT on a local of an escaped frame keeps its address force (patches/0068-engine-deadcode-late-stack-reads.patch).
+  * Modified for SaturnExplorer: a STORE not folded yet and aimed at a local is data a call may read there (patches/0072-engine-frame-chains-and-save-slots.patch).
++ * Modified for SaturnExplorer: a LOAD that may read the frame and stays one holds the frame's writes (patches/0076-engine-frame-loads-keep-writes.patch).
+  */
+ /// \file coreaction.hh
+ /// \brief Core decompilation actions which are indepedent of any particular architecture
+@@ -578,6 +579,7 @@ class ActionDeadCode : public Action {
+   static bool isSavePush(const Funcdata &data,const Address &addr,const Varnode *src);	///< SaturnExplorer (0068): a push of a callee-saved register
+   static bool callMayReadFrame(const Funcdata &data,const Varnode *vn);	///< SaturnExplorer (0068): a call's INDIRECT on an escaped frame's local
+   static bool storeMayWrite(const Funcdata &data,const PcodeOp *sop,const Varnode *local);	///< SaturnExplorer (0072): a STORE not folded yet aimed at the local
++  static void keepFrameWritesForLoads(Funcdata &data,vector<Varnode *> &worklist);	///< SaturnExplorer (0076): a LOAD that may read the frame keeps its writes
+ public:
+   ActionDeadCode(const string &g) : Action(0,"deadcode",g) {}	///< Constructor
+   virtual Action *clone(const ActionGroupList &grouplist) const {
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.cc
+@@ -21,6 +21,7 @@
+  * Modified for SaturnExplorer: a frame address that is no exact offset from the frame base escapes, unless a loop only steps it up, and the guard of an access through one covers the stack space (patches/0066-engine-frame-escape-inexact.patch).
+  * Modified for SaturnExplorer: a read found after dead code ran in its space delays dead code past the pass that found it, as often as needed, failing closed; whether a frame address escaped forces a call's guard on a local, and the calls guarded at a local are kept for a host (patches/0068-engine-deadcode-late-stack-reads.patch).
+  * Modified for SaturnExplorer: a STORE through a pointer read through a frame address keeps its guards when the stack is first heritaged (patches/0072-engine-frame-chains-and-save-slots.patch).
++ * Modified for SaturnExplorer: a LOAD guard records whether heritage put its COPYs before the LOAD, and a held frame write is no address force of the guard's (patches/0076-engine-frame-loads-keep-writes.patch).
+  */
+ #include "heritage.hh"
+ #include "funcdata.hh"
+@@ -645,7 +646,7 @@ void Heritage::findAddressForces(vector<PcodeOp *> &copySinks,vector<PcodeOp *>
+     for(int4 i=0;i<maxIn;++i) {
+       Varnode *vn = op->getIn(i);
+       if (!vn->isWritten()) continue;
+-      if (vn->isAddrForce()) continue;		// Already marked address forced
++      if (vn->isAddrForce() && !vn->isFrameLoadForce()) continue;		// Already marked address forced (SaturnExplorer 0076: not as a LOAD's hold, which may go)
+       PcodeOp *newOp = vn->getDef();
+       if (newOp->isMark()) continue;		// Already visited this op
+       newOp->setMark();
+@@ -2570,6 +2571,7 @@ void Heritage::guardLoads(uint4 fl,const Address &addr,int4 size,vector<Varnode
+     invn->setActiveHeritage();
+     fd->opSetInput(copyop,invn,0);
+     fd->opInsertBefore(copyop,guardRec.op);
++    guardRec.sunk = true;	// SaturnExplorer (patches/0076-engine-frame-loads-keep-writes.patch)
+     loadCopyOps.push_back(copyop);
+   }
+ }
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.hh b/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.hh
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.hh
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.hh
+@@ -21,6 +21,7 @@
+  * Modified for SaturnExplorer: a frame address that is not an exact offset from the frame base escapes, unless a loop only steps it up (patches/0066-engine-frame-escape-inexact.patch).
+  * Modified for SaturnExplorer: the dead code delay a late read asks for, and its bound (patches/0068-engine-deadcode-late-stack-reads.patch).
+  * Modified for SaturnExplorer: a STORE through a value read through a frame address is a STORE through a frame address in waiting (patches/0072-engine-frame-chains-and-save-slots.patch).
++ * Modified for SaturnExplorer: a LOAD guard records whether heritage put its COPYs before the LOAD; whether a LOAD may read the frame (patches/0076-engine-frame-loads-keep-writes.patch).
+  */
+ /// \file heritage.hh
+ /// \brief Utilities for building Static Single Assignment (SSA) form 
+@@ -158,6 +159,7 @@ class LoadGuard {
+   int4 step;		///< Step of any access into this range (0=unknown)
+   int4 analysisState;	///< 0=unanalyzed, 1=analyzed(partial result), 2=analyzed(full result)
+   bool guessedBelow;	///< SaturnExplorer: minimumOffset is a guess below a pointer stepped down, not where an array starts (patches/0056-engine-stack-walk-down-aliases.patch)
++  bool sunk;		///< SaturnExplorer: guardLoads put a COPY of a stack location before the LOAD (patches/0076-engine-frame-loads-keep-writes.patch)
+   void establishRange(const ValueSetRead &valueSet);	///< Convert partial value set analysis into guard range
+   static bool pointerSteppedDown(Varnode *vn);	///< SaturnExplorer (0065): is the pointer the join of a loop that steps it down
+   void finalizeRange(const ValueSetRead &valueSet);	///< Convert value set analysis to final guard range
+@@ -168,7 +170,7 @@ class LoadGuard {
+   /// \param s is the (stack) space it is loading from
+   /// \param off is the base offset that is indexed from
+   void set(PcodeOp *o,AddrSpace *s,uintb off) {
+-    op = o; spc = s; pointerBase=off; minimumOffset=0; maximumOffset=s->getHighest(); step=0; analysisState=0; guessedBelow=false;
++    op = o; spc = s; pointerBase=off; minimumOffset=0; maximumOffset=s->getHighest(); step=0; analysisState=0; guessedBelow=false; sunk=false;
+   }
+ public:
+   PcodeOp *getOp(void) const { return op; }	///< Get the PcodeOp being guarded
+@@ -176,6 +178,7 @@ public:
+   uintb getMaximum(void) const { return maximumOffset; }	///< Get maximum offset of the guarded range
+   int4 getStep(void) const { return step; }		///< Get the calculated step associated with the range (or 0)
+   bool isGuessedBelow(void) const { return guessedBelow; }	///< SaturnExplorer: is the minimum a guess below a pointer stepped down
++  bool isSunk(void) const { return sunk; }	///< SaturnExplorer (0076): did a heritage pass keep the stack's writes for the LOAD (a COPY of a location before it)?
+   bool isGuarded(const Address &addr) const;		///< Does \b this guard apply to the given address
+   bool isRangeLocked(void) const { return (analysisState == 2); }	///< Return \b true if the range is fully determined
+   bool isValid(OpCode opc) const { return (!op->isDead() && op->code() == opc); }	///< Return \b true if the record still describes an active LOAD
+@@ -240,6 +243,8 @@ public:
+   bool loadIsInexact(PcodeOp *op) const { return gaveUp || inexactLoads.find(op) != inexactLoads.end(); }
+   /// \brief Is the given STORE made through a value a LOAD through a frame address read, which may itself be a frame address? (0072)
+   bool storeIsPending(PcodeOp *op) const { return gaveUp || pendingStores.find(op) != pendingStores.end(); }
++  /// \brief May the given LOAD read the frame: is its pointer a possible frame address, modeled or not? (0076)
++  bool loadMayReadFrame(PcodeOp *op) const { return gaveUp || members.find(op->getIn(1)) != members.end(); }
+ };
+ 
+ /// \brief Manage the construction of Static Single Assignment (SSA) form
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/varnode.hh b/Ghidra/Features/Decompiler/src/decompile/cpp/varnode.hh
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/varnode.hh
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/varnode.hh
+@@ -14,6 +14,7 @@
+  * limitations under the License.
+  *
+  * Modified for SaturnExplorer: the VarnodeBank keeps a Varnode it could not put back in its lists (patches/0032-allocation-failure-order-2.patch).
++ * Modified for SaturnExplorer: a frame write kept for a LOAD that may read the frame is marked so the hold can be let go (patches/0076-engine-frame-loads-keep-writes.patch).
+  */
+ /// \file varnode.hh
+ /// \brief The Varnode and VarnodeBank classes
+@@ -132,7 +133,8 @@ public:
+     spacebase_placeholder = 0x800, ///< This varnode is inserted artificially to track a register
+ 				///< value at a specific point in the code
+     stop_uppropagation = 0x1000, ///< Data-types do not propagate from an output into \b this
+-    has_implied_field = 0x2000	///< The varnode is implied but also has a data-type that needs resolution
++    has_implied_field = 0x2000,	///< The varnode is implied but also has a data-type that needs resolution
++    frameload_force = 0x4000	///< SaturnExplorer (0076): \b addrforce was set only to keep a frame write for a LOAD that may read it
+   };
+ private:
+   mutable uint4 flags;		///< The collection of boolean attributes for this Varnode
+@@ -267,6 +269,7 @@ public:
+   bool isMark(void) const { return ((flags&Varnode::mark)!=0); } ///< Has \b this been visited by the current algorithm?
+   bool isActiveHeritage(void) const { return ((addlflags&Varnode::activeheritage)!=0); } ///< Is \b this currently being traced by the Heritage algorithm?
+   bool isStackStore(void) const { return ((addlflags&Varnode::stack_store)!=0); } ///< Was this originally produced by an explicit STORE
++  bool isFrameLoadForce(void) const { return ((addlflags&Varnode::frameload_force)!=0); }	///< SaturnExplorer (0076): is the address force only a hold for a LOAD?
+   bool isLockedInput(void) const { return ((addlflags&Varnode::locked_input)!=0); }	///< Is always an input, even if unused
+   bool stopsUpPropagation(void) const { return ((addlflags&Varnode::stop_uppropagation)!=0); }	///< Is data-type propagation stopped
+   bool hasImpliedField(void) const { return ((addlflags&Varnode::has_implied_field)!=0); }	///< Does \b this have an implied field
+@@ -308,8 +311,10 @@ public:
+   void clearMark(void) const { flags &= ~Varnode::mark; } ///< Clear the mark on this Varnode
+   void setDirectWrite(void) { flags |= Varnode::directwrite; } ///< Mark \b this as directly affected by a legal input
+   void clearDirectWrite(void) { flags &= ~Varnode::directwrite; } ///< Mark \b this as not directly affected by a legal input
+-  void setAddrForce(void) { setFlags(Varnode::addrforce); } ///< Mark as forcing a value into \b this particular storage location
++  void setAddrForce(void) { setFlags(Varnode::addrforce); addlflags &= ~Varnode::frameload_force; } ///< Mark as forcing a value into \b this particular storage location (SaturnExplorer 0076: for its own sake, not as a LOAD's hold)
+   void clearAddrForce(void) { clearFlags(Varnode::addrforce); }	///< Clear the forcing attribute
++  void setFrameLoadForce(void) { setFlags(Varnode::addrforce); addlflags |= Varnode::frameload_force; }	///< SaturnExplorer (0076): hold a frame write for a LOAD
++  void clearFrameLoadForce(void) { if ((addlflags&Varnode::frameload_force)!=0) { clearFlags(Varnode::addrforce); addlflags &= ~Varnode::frameload_force; } }	///< SaturnExplorer (0076): let the hold go
+   void setImplied(void) { setFlags(Varnode::implied); }	///< Mark \b this as an \e implied variable in the final C source
+   void clearImplied(void) { clearFlags(Varnode::implied); } ///< Clear the \e implied mark on this Varnode
+   void setExplicit(void) { setFlags(Varnode::explict); } ///< Mark \b this as an \e explicit variable in the final C source
