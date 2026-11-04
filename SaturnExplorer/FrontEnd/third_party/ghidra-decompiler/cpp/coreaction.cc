@@ -4266,6 +4266,13 @@ void ActionDeadCode::keepFrameWritesForLoads(Funcdata &data,vector<Varnode *> &w
     if (def->code() == CPUI_COPY && def->getIn(0)->isInput() && def->getIn(0)->getSpace()->getType() == IPTR_PROCESSOR &&
 	isSavePush(data,def->getAddr(),def->getIn(0)))
       continue;		// a save, no data
+    // A write an op other than a marker reads (a piece of it taken, the next version of the word built from it) is live through that
+    // reader if the word's later versions are: the latest version of each location is the write to hold (held, it keeps alive what it
+    // was built from), not every refinement of the word on the way (a word written whole, then a byte and a halfword of it)
+    bool realReader = false;
+    for(list<PcodeOp *>::const_iterator diter=vn->beginDescend();diter!=vn->endDescend() && !realReader;++diter)
+      if (!(*diter)->isMarker()) realReader = true;
+    if (realReader) continue;
     if (!vn->isAddrForce()) vn->setFrameLoadForce();	// held against the rules' removal of a write nothing reads (RuleEarlyRemoval)
     pushConsumed(~((uintb)0),vn,worklist);
   }
