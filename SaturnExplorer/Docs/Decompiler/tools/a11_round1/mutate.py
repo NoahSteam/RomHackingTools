@@ -51,6 +51,7 @@ ENGINE_ESCALATE = ["unit", "gen", "engine", "pc", "decode", "corpus"]
 HOST_ESCALATE = ["unit", "gen", "pc", "corpus"]
 
 SRC = "SaturnExplorer/FrontEnd/src/"
+VEN = "SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/"
 DEC = SRC + "Decompiler/Sh2Decompiler.cpp"
 
 # ---- host mutants ------------------------------------------------------------------------------------
@@ -167,6 +168,14 @@ MUTANTS = [
      ["fuzz"], [], "a volatile address of nine digits wraps"),
     ("H-load-inverted", SRC + "Decompiler/AddressRanges.cpp", "if (!ok || hi < lo)", "if (!ok)",
      ["fuzz"], [], "an inverted volatile range accepted"),
+    # Hand-made reverts of the patches no hunk of which reverts alone (later patches rewrote the lines).
+    ("V-0019-ldc", VEN + "processors/SuperH/superh.sinc", "    local value:4 = rm_08_11 & 0x000003F3;", "    local value:4 = rm_08_11 & 0x0FFF0FFF;",
+     ["decode", "unit"], ENGINE_ESCALATE, "patch 0019 reverted in ldc Rm,SR: bits the SH-2 does not have kept"),
+    ("V-0019-rte", VEN + "processors/SuperH/superh.sinc", "    _sr:4 = *r15 & 0x000003F3;", "    _sr:4 = *r15 & 0x000063F3;",
+     ["decode", "unit"], ENGINE_ESCALATE, "patch 0019 reverted in rte: SH-2A bits 13 and 14 restored"),
+    ("V-0071", VEN + "cpp/cast.cc", "  if (exttype2 == NO_PROMOTION && !othervn->isConstant() && othervn->getSize() < promoteSize) {",
+     "  if (false && exttype2 == NO_PROMOTION && !othervn->isConstant() && othervn->getSize() < promoteSize) {",
+     ["pc", "unit"], ENGINE_ESCALATE, "patches 0071 and 0077 reverted: a narrow named value against a constant of the other sign uncast"),
     ("H-load-partial", SRC + "Decompiler/AddressRanges.cpp", "            error = \"\\\"\" + entry + \"\\\" is not an address or a range first-last\";\n            out.clear();",
      "            error = \"\\\"\" + entry + \"\\\" is not an address or a range first-last\";", ["fuzz"], [], "a rejected list leaves its first entries"),
 ]
@@ -204,8 +213,8 @@ def limit():
 
 class Harness:
     def __init__(self, a):
-        self.root, self.build, self.rev, self.out = a.root, a.build, a.rev, a.out
-        self.hwram = a.hwram
+        self.root, self.build, self.rev, self.out = (os.path.abspath(x) for x in (a.root, a.build, a.rev, a.out))
+        self.hwram = os.path.abspath(a.hwram) if a.hwram else ""
         os.makedirs(self.out, exist_ok=True)
         self.results = open(os.path.join(self.out, "results.tsv"), "a")
         self.t0 = time.time()
@@ -229,7 +238,7 @@ class Harness:
             f.write(r.stdout)
         return r.returncode == 0
 
-    def run_oracle(self, mid, name, extra_env=None):
+    def run_oracle(self, mid, name, extra_env=None, inverted=False):
         target, argv, env, tmo = ORACLES[name]
         scratch = os.path.join(self.build, "a11_scratch_" + name)
         e = dict(os.environ)
@@ -244,7 +253,14 @@ class Harness:
         out = r.stdout.decode(errors="replace")
         with open(os.path.join(self.out, "%s.%s.log" % (mid, name)), "w") as f:
             f.write(out)
-        if r.returncode == 0:
+        if inverted:
+            # SE_GENERATED_MUTATE: the run passes only when the check reported the damage on some seed.
+            m = re.search(r"mutation check \((\S+)\): (\d+) of", out)
+            verdict = "killed" if r.returncode == 0 and m and int(m.group(2)) > 0 else \
+                      "error" if r.returncode in (126, 127) or not m else "survived"
+        elif r.returncode in (126, 127) or "usage:" in out[:200]:
+            verdict = "error"
+        elif r.returncode == 0:
             verdict = "survived"
         elif r.returncode == 77:
             verdict = "skipped"
@@ -254,7 +270,7 @@ class Harness:
             verdict = "killed"
         why = ""
         for line in out.splitlines():
-            if re.search(r"FAIL|FINDING|VIOLATION|CHECK|Assertion|FATAL|failed:", line) and "0 failed" not in line:
+            if re.search(r"FAIL|FINDING|VIOLATION|CHECK|Assertion|FATAL|failed:|mutation check", line) and "0 failed" not in line:
                 why = line.strip()[:200]
                 break
         self.results.write("%s\t%s\t%s\t%.0f\t%s\n" % (mid, name, verdict, dt, why.replace("\t", " ")))
@@ -297,6 +313,9 @@ class Harness:
         print("%s: %s" % (mid, what), flush=True)
         open(full, "w", encoding="utf-8").write(text.replace(old, new))
         try:
+            if "/processors/" in path and sh(["ninja", "-C", self.build, "-j2", "se-regen-sla"]).returncode != 0:
+                self.results.write("%s\t-\tstillborn\t0\tse-regen-sla failed\n" % mid)
+                return
             self.score(mid, should, escalate, None)
         finally:
             self.restore([path])
@@ -339,7 +358,7 @@ class Harness:
         if oracle == "corpus" and not self.hwram:
             return
         self.ninja([ORACLES[oracle][0]], os.path.join(self.out, "env.build.log"))
-        if not self.run_oracle(mid, oracle, env):
+        if not self.run_oracle(mid, oracle, env, inverted="SE_GENERATED_MUTATE" in env):
             self.results.write("%s\t*\tSURVIVED\t0\t\n" % mid)
 
 
