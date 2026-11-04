@@ -10785,9 +10785,10 @@ void TestPrintedC()
                 const std::vector<CVerdict> m108 = CheckPrintedC(d, { mem("A2-108: a pointer parameter without the mode", 0, { 0x2462, 0x6052, 0x000B, 0x0009 }) }, nIn, cc, 0x51ED, 8994);
                 std::printf("pin 'A2-108': %s\n", m108[0].cls.c_str());
                 CHECK(m108[0].cls == "skipped:memory");
-                // A2-114: `mov.l r7,@-r5`, a parameter that is declared an integer and used as an address: the same, and the sibling forms of the register's own text
-                const std::vector<CVerdict> m114 = CheckPrintedC(d, { mem("A2-114: a pre-decrement store through a parameter", 0, { 0x2576, 0x000B, 0x0009, 0x0009 }),
-                                                                      mem("A2-114: a post-increment load through a parameter", 0, { 0x6576, 0x000B, 0x0009, 0x0009 }) }, nIn, cc, 0x51ED, 8996);
+                // A2-114: `mov.l r7,@-r5`, a parameter that is declared an integer and used as an address (`*(xunknown4 *)(param_2 + -4) = param_4;`): the same, at the other widths
+                const std::vector<CVerdict> m114 = CheckPrintedC(d, { mem("A2-114: a pre-decrement word store through a parameter", 0, { 0x2576, 0x000B, 0x0009, 0x0009 }),
+                                                                      mem("A2-114: a pre-decrement byte store through a parameter", 0, { 0x2574, 0x000B, 0x0009, 0x0009 }),
+                                                                      mem("A2-114: a pre-decrement half-word store through a parameter", 0, { 0x2575, 0x000B, 0x0009, 0x0009 }) }, nIn, cc, 0x51ED, 8996);
                 for (size_t k = 0; k < m114.size(); ++k)
                 {
                     std::printf("pin 'A2-114 #%zu': %s\n", k, m114[k].cls.c_str());
