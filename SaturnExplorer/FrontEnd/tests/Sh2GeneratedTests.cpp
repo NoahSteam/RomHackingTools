@@ -7812,29 +7812,67 @@ bool UsesFrameMemory(const std::vector<uint16_t>& words)
     return false;
 }
 
-// A2-114: does a dereference in the text (`*(T *)(address)`) take its address from a parameter (`param_N`, or a register read before it is written: `in_rN`)?
-// The inputs of a run are random integers, so such an address is a host pointer that points nowhere: a text that has one needs the memory mode.
+// A2-114: does a dereference in the text (`*(T *)(address)`, `*pointer`) take its address from a parameter (`param_N`, or a register read before it is written: `in_rN`),
+// directly or through a variable assigned from one (`piVar2 = (int4 *)(param_1 + 8);`)? The inputs of a run are random integers, so such an address is a host pointer that
+// points nowhere: a text that has one needs the memory mode. (The names are followed through plain assignments, to a fixed point.)
 bool DereferencesParameter(const std::string& text)
 {
-    static const std::regex derefRe("\\*\\([A-Za-z_][\\w ]*\\*+\\)");
-    static const std::regex paramRe("\\b(param_\\d+|in_r\\d+)\\b");
-    for (std::sregex_iterator it(text.begin(), text.end(), derefRe), end; it != end; ++it)
+    static const std::regex nameRe("[A-Za-z_]\\w*");
+    static const std::regex paramRe("^(param_\\d+|in_r\\d+)$");
+    static const std::regex assignRe("^\\s*([A-Za-z_]\\w*)\\s*=([^=].*);\\s*$");
+    static const std::regex derefCastRe("\\*\\([A-Za-z_][\\w ]*\\*+\\)");
+    static const std::regex derefVarRe("(^|[=(,\\s!~+\\-])\\*([A-Za-z_]\\w*)");
+    std::set<std::string> tainted;
+    std::vector<std::string> lines;
     {
-        size_t at = static_cast<size_t>(it->position() + it->length());
-        size_t stop = at;
-        if (at < text.size() && text[at] == '(')
+        std::istringstream in(text);
+        std::string l;
+        while (std::getline(in, l)) lines.push_back(l);
+    }
+    auto mentionsTainted = [&](const std::string& expr) {
+        for (std::sregex_iterator it(expr.begin(), expr.end(), nameRe), end; it != end; ++it)
         {
-            int depth = 0;
-            for (stop = at; stop < text.size(); ++stop)
+            const size_t at = static_cast<size_t>(it->position());
+            if (at > 0 && expr[at - 1] == '&') continue;   // the address of a variable is not its value (a pointer into the frame: `pxVar1 = &xStack_4;`)
+            if (tainted.count(it->str()) != 0 || std::regex_match(it->str(), paramRe)) return true;
+        }
+        return false;
+    };
+    for (bool grew = true; grew;)
+    {
+        grew = false;
+        for (const std::string& l : lines)
+        {
+            std::smatch m;
+            if (std::regex_match(l, m, assignRe) && tainted.count(m[1]) == 0 && !std::regex_match(m[1].str(), paramRe) && mentionsTainted(m[2]))
             {
-                if (text[stop] == '(') ++depth;
-                else if (text[stop] == ')' && --depth == 0) { ++stop; break; }
+                tainted.insert(m[1]);
+                grew = true;
             }
         }
-        else
-            while (stop < text.size() && (std::isalnum(static_cast<unsigned char>(text[stop])) || text[stop] == '_')) ++stop;
-        const std::string addr = text.substr(at, stop - at);
-        if (std::regex_search(addr, paramRe)) return true;
+    }
+    for (const std::string& l : lines)
+    {
+        if (l.find('=') == std::string::npos && l.find('(') == std::string::npos && l.find("return") == std::string::npos) continue;   // a declaration (`int4 *piVar2;`)
+        for (std::sregex_iterator it(l.begin(), l.end(), derefCastRe), end; it != end; ++it)
+        {
+            const size_t at = static_cast<size_t>(it->position() + it->length());
+            size_t stop = at;
+            if (at < l.size() && l[at] == '(')
+            {
+                int depth = 0;
+                for (stop = at; stop < l.size(); ++stop)
+                {
+                    if (l[stop] == '(') ++depth;
+                    else if (l[stop] == ')' && --depth == 0) { ++stop; break; }
+                }
+            }
+            else
+                while (stop < l.size() && (std::isalnum(static_cast<unsigned char>(l[stop])) || l[stop] == '_')) ++stop;
+            if (mentionsTainted(l.substr(at, stop - at))) return true;
+        }
+        for (std::sregex_iterator it(l.begin(), l.end(), derefVarRe), end; it != end; ++it)
+            if (tainted.count((*it)[2].str()) != 0) return true;
     }
     return false;
 }
