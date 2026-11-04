@@ -4245,6 +4245,40 @@ static bool frameLoadStays(const Funcdata &data,const Varnode *vn)
   return true;		// too far to follow: taken to stay (fail closed)
 }
 
+/// SaturnExplorer (patches/0076-engine-frame-loads-keep-writes.patch): is the frame write overwritten whole, later in its block, before any
+/// op that may read memory (a LOAD, a call, a return)? No LOAD can read it then.
+/// \param vn is the write
+/// \return \b true if it is overwritten so
+static bool frameWriteKilled(const Varnode *vn)
+
+{
+  const PcodeOp *def = vn->getDef();
+  const BlockBasic *bl = def->getParent();
+  if (bl == (const BlockBasic *)0) return false;
+  list<PcodeOp *>::iterator iter = def->getBasicIter();
+  for(++iter;iter!=bl->endOp();++iter) {
+    const PcodeOp *op = *iter;
+    switch(op->code()) {
+    case CPUI_LOAD:
+    case CPUI_CALL:
+    case CPUI_CALLIND:
+    case CPUI_CALLOTHER:
+    case CPUI_RETURN:
+    case CPUI_BRANCHIND:
+    case CPUI_NEW:
+      return false;
+    default:
+      break;
+    }
+    if (op->isMarker()) continue;
+    const Varnode *out = op->getOut();
+    if (out != (const Varnode *)0 && out->getSpace() == vn->getSpace() && out->getOffset() <= vn->getOffset() &&
+	out->getOffset() + out->getSize() >= vn->getOffset() + vn->getSize())
+      return true;
+  }
+  return false;
+}
+
 /// SaturnExplorer (patches/0076-engine-frame-loads-keep-writes.patch): a LOAD left in the function whose pointer may be a frame address,
 /// modeled or not (FrameEscape's members), and that stays a LOAD (frameLoadStays: a loop's join, the guard of an indexed STORE or of a call
 /// between the pointer and the stack pointer), reads the frame where RuleLoadVarnode never makes it a direct stack read. Nothing links the
@@ -4253,8 +4287,8 @@ static bool frameLoadStays(const Funcdata &data,const Varnode *vn)
 /// A3-145: an array filled, written at a variable index, and read through a pointer reloaded from a slot, lost its fills). While such a
 /// LOAD lives, the frame's writes are held: fail closed, the LOAD may read any word of the frame. A LOAD whose guard heritage sank (a COPY
 /// of each location before it, Heritage::guardLoads) is left to that guard. Not held: the pushes of callee-saved registers (saves, as for a
-/// call: callMayReadFrame), a write a later version of its bytes is built from (that version is held), and a local the scope proved no
-/// pointer reaches. The hold is an address force marked as one (Varnode::setFrameLoadForce), let go at the start of each pass of dead code
+/// call: callMayReadFrame), a write a later version of its bytes is built from (that version is held), a write overwritten whole in its
+/// block before any op that may read memory (frameWriteKilled), and a local the scope proved no pointer reaches. The hold is an address force marked as one (Varnode::setFrameLoadForce), let go at the start of each pass of dead code
 /// and set again while the LOAD lives: once it is folded or gone, the next pass sees the writes as before.
 /// \param data is the function
 /// \param worklist is the consumed Varnodes to process
@@ -4318,6 +4352,7 @@ void ActionDeadCode::keepFrameWritesForLoads(Funcdata &data,vector<Varnode *> &w
     // no address-tied storage: the scope clears an address force on either (Funcdata::syncVarnodesWithSymbol), and a hold it cleared at each
     // pass was a change at each pass, a main loop that never ended (hwram007 0601A0C8)
     if (vn->hasNoLocalAlias() || !vn->isAddrTied()) continue;
+    if (frameWriteKilled(vn)) continue;	// ...nor one overwritten before anything may read it (a word's refinement before its whole write)
     if (!vn->isAddrForce()) vn->setFrameLoadForce();	// held against the rules' removal of a write nothing reads (RuleEarlyRemoval)
     pushConsumed(~((uintb)0),vn,worklist);
   }

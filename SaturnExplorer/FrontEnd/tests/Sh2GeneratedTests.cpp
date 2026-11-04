@@ -4451,8 +4451,9 @@ bool ComparesCallResult(const Subject& subject, const FnInfo& fn)
 // grammar 2 seed 2317870 store the call's r0 (`mov.b r0,@(1,r5)`; `mov.l r0,@-r4 ; mov.b r0,@r5`) before the `rts`; the lent `void` is
 // right. Only when nothing after the last call writes r0, so the r0 at the return is the call's. Read from the disassembly's operands: r0 in
 // any operand but a last one that is r0 itself is a read; a last operand r0 is a write (a compare or a test writes none).
-bool UsesCallResult(const Subject& subject, const FnInfo& fn)
+bool UsesCallResult(const Subject& subject, const FnInfo& fn, bool* passed = nullptr)
 {
+    if (passed) *passed = false;
     uint32_t lastCall = 0;
     for (uint32_t a = fn.layout.start; a < fn.layout.end; a += 2)
     {
@@ -4490,7 +4491,29 @@ bool UsesCallResult(const Subject& subject, const FnInfo& fn)
             if (namesR0(ops[k])) read = true;
         }
     }
+    if (passed) *passed = true;   // (A3-153) nothing after the last call writes r0: the r0 at the return is the call's, read or not
     return read;
+}
+
+// (area 3 fixer, A3-153) ...and a callee's r0 passed on untouched, read or not: grammar 2 seed 4700578 (the specials alphabet) calls function 1,
+// lent `void` (its r0 is a word it loads, `mov.l @r5,r0`, which the return rule lets a void signature drop: A3-5's "memory"), and leaves r0
+// alone on both arms to its own return. Its r0 there is the callee's scratch, as A3-19 and A3-41 take it; the caller's `void` is the callee's.
+// Only when every callee the function calls is lent `void` (a callee that returns a value would make the caller's r0 a result).
+bool PassesCallResult(const Subject& subject, const FnInfo& fn)
+{
+    bool passed = false;
+    UsesCallResult(subject, fn, &passed);
+    return passed;
+}
+bool CalleesLentVoid(const DecompileResult& r, const std::map<uint32_t, Prototype>& lent)
+{
+    if (r.callees.empty()) return false;
+    for (uint32_t c : r.callees)
+    {
+        const auto it = lent.find(c);
+        if (it == lent.end() || it->second.ret.kind != TypeKind::Void) return false;
+    }
+    return true;
 }
 
 // ---- Check 10b (A3-54): the rest of CallEffects against a finished run -----------------------------------------------------------------------
@@ -5560,6 +5583,8 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                                          (fn.choiceBy == Gen::kChoiceStack && pr.params.size() >= 5) || fn.choiceBy == Gen::kChoiceConst;
                 if (ComparesCallResult(subject, fn)) count("excluded.call-result-compared.return-dropped");   // A2-49, accepted
                 else if (UsesCallResult(subject, fn)) count("excluded.call-result-used.return-dropped");   // A3-112: A3-19's shape, accepted
+                else if (PassesCallResult(subject, fn) && CalleesLentVoid(r, lent))
+                    count("excluded.call-result-passed.return-dropped");   // A3-153: a void callee's r0 passed on untouched
                 else if (fn.choiceBy >= 0 && heldChooser) count("excluded.choice-held.return-dropped");
                 // A function that runs on or jumps into a choice returns its value, but chose its chooser's value itself (seed 706074): the choice is
                 // checked where it is drawn.
@@ -7268,8 +7293,9 @@ template <int N, bool S> struct T {
   // the cast of a piece (CONCATab, the engine's untyped value of a + b bytes): for 5 to 7 bytes, which have no type of their own in C, a cast to an unsigned
   // 8-byte type is the ZEXT the engine builds (`(uint8)CONCAT14((char)in_r1,in_r1)`: the high word of the run is 0, not the sign: A2-79). The engine prints a
   // cast to the type of the variable it assigns to, so for sizes with a type (a 2-byte piece read by `mov.w` into a uint4) the extension is by the piece's
-  // sign, as for any other cast
-  template <int M> explicit T(const Piece<M>& o) : v((R)((N > M ? ((!S && M >= 5) ? o.Zext() : ((N == 8 && M == 4 && !S) ? o.Zext() : o.Ext())) : o.Zext()) & Mask())) {}
+  // sign, as for any other cast. (area 3 fixer, A3-150) ...but a cast to an unsigned type is the ZEXT at every size: the engine prints a sign extension of a
+  // piece as a cast to a signed type (`(int4)xStack_8` for `mov.w`), and `(uint4)CONCAT11(...)` is a word whose upper half is 0 (frame124_4602253.chain)
+  template <int M> explicit T(const Piece<M>& o) : v((R)((N > M ? (!S ? o.Zext() : o.Ext()) : o.Zext()) & Mask())) {}
   // an implicit conversion, the one C does: by the source's sign
   template <int M, bool U> operator T<M, U>() const { return T<M, U>(B2U(Ext())); }
   u64 Zext() const { return (u64)v & Mask(); }
@@ -12627,6 +12653,19 @@ void TestRound13FixPins(Sh2Decompiler& d)
         for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
         CHECK(rep.findings.empty());
         CHECK(count(rep, "excluded.call-result-used.return-dropped") >= 1);
+    }
+    // A3-153 (grammar 2 seed 4700578, the specials alphabet): function 0 calls function 1, lent `void` (its r0 is a word it loads, which the return
+    // rule lets a void signature drop), and leaves the call's r0 alone on both arms to its return: the callee's scratch passed on, A3-19's shape
+    // (`excluded.call-result-passed.return-dropped`; it was `return-dropped`).
+    {
+        const ModulePin m = { "A3-153 grammar 2 seed 4700578",
+                              "4F26 6DF6 6AF6 69F6 68F6 000B 0009 2F86 2F96 2FA6 2FD6 4F22 6843 6953 6A63 461E E258 460A 2278 8F02 E34F 153A D707 D208 420B 0009 6483 6593 66A3 2568 8B02 441B AFDE 0009 535F AFDB 0009 0009 FFFF FEE0 0600 9054 2FD6 7FF8 845A 8803 8901 4024 0302 535E 615C 8803 8D03 1638 D70B E2F5 E144 E304 E004 014C 6171 2701 4310 8BF9 E001 2008 8B03 6042 210B A002 0009 6052 210B 7F08 6DF6 000B 0009 0009 FFFF FF68",
+                              "0/e/4a,54/54/9a", nullptr, "1,41", "a0000,0", "0,0" };
+        const Report rep = EvaluateSubject(d, ModuleSubject(m), true);
+        std::printf("pin '%s': %zu finding(s), call result passed %d\n", m.name, rep.findings.size(), count(rep, "excluded.call-result-passed.return-dropped"));
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+        CHECK(count(rep, "excluded.call-result-passed.return-dropped") >= 1);
     }
     // A3-123 (grammar 2 seed 2616394): function 0 byte-swaps r5's low 16 bits (`char *param_2`, 0x06021100 -> 0x06020011) and hands the result
     // to a callee that stores a byte through it. 0x06020011 lands in r4's arena (0x06020xxx) by chance, and the storesThrough arena check took
