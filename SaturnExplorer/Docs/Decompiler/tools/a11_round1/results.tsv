@@ -122,3 +122,8 @@ H-load-hexlen	fuzz	killed	5	VIOLATION ranges/VERDICT_DIFFERS: accepted=yes where
 H-load-inverted	fuzz	killed	5	VIOLATION ranges/VERDICT_DIFFERS: accepted=yes where the reading of the format says no
 V-0019-ldc	decode	killed	3	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecodeTests.cpp:2240: totalFails == 0
 V-0019-ldc	unit	killed	24	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:9699: Has(r.Text(), "Write_SR(param_1 & 0x3f3);")
+V-0019-rte	decode	killed	3	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecodeTests.cpp:2240: totalFails == 0
+V-0019-rte	unit	killed	24	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:10008: Has(sett.Text(), "Write_SR(in_stack_00000004 & 0x3f2 | 1);")
+V-0071	pc	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:11211: r104[0].cls.empty() && r104[0].compared && r104[0].text.find("== 0xffff")
+V-0071	unit	survived	23	
+H-load-partial	fuzz	killed	4	VIOLATION ranges/PARTIAL_RESULT: refused but left ranges in the output
