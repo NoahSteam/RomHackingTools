@@ -14926,3 +14926,57 @@ Lending and every count are unchanged; the mapping statistics move (a few more t
 - A3-154: the printed-C differential cannot read `frame16.py`'s mixed-width loop and index texts in frame mode; the chain144 stream avoids mixed widths, so it does not test them either.
 - A3-146's text is still no C, and `PseudoEval` still rejects it.
 - No mutation table per part of 0076: the pins were checked with the hold and the host fix switched off together (section 3 and 6).
+
+## Area 7, round 3
+
+Branch `review/7-round3-review` from `2a5efab6` (patches 0075 and 0076 in). This is an adversarial round on the mapping since the area 7 fixer, and on the texts 0076 changed. **No product code changed.** The round adds a counter to the oracle, fixtures and three scripts, and files **A7-19 (P2) and A7-20 (P2)**. **The round is not clean: two new P2 rows.** All of the oracle's existing violations stay 0. Neither row is something those checks look at: in both, the token exists, lies in the body, decodes and leads back, and it names an instruction that did not make the line.
+
+### What was run (RelWithDebInfo, gcc 13, own build of the branch)
+
+| Run | Result |
+|---|---|
+| hwram007.bin and hwram008.bin, alone and lent (`SE_GAME_LEND=1`, `SE_GAME_TOKEN_DUMP`) | 839 / 1,730 and 1,554 / 2,995 functions. Every violation count is 0 (odd, outside, not an instruction, first address, ranges, call tokens, unmarked, hover, ledger unmapped, calls, round trip, `accessAtBranch`, `frameStoreMissing`, `backWrong`). Off-line 4 / 11 and 4 / 21; `slotMadeLines` 341 / 686 and 1,296 / 2,097. All as the fixer measured, and 0076 moved none of them |
+| the same images on d88e06e1 (the area 3 fixer's base binary, 0075 without 0076), with the token dump | all violation counts 0; `dump_diff.py` compares the two builds' mapping (below) |
+| new counter `copyStoreMissing` (A7-19, counted) | lines that assign a frame local or a global a bare value with a store folded into it: 1,238 / 2,388 and 4,230 / 6,526. Of these, lines that name none of the stores: 103 / 191 and 529 / 849. By where they sit: at a call 30 / 56 and 41 / 230, at a return 9 / 19 and 326 / 352 (both A7-15's), **at another branch 24 / 45 and 74 / 119, at another instruction 30 / 52 and 67 / 117 (A7-19)**, at a load 10 / 19 and 21 / 31 (A7-16's accepted shape: a global named after a hardware register is its load) |
+| perturbation with ceilings (`SE_GAME_PERTURB=6`, `perturb_ceilings.txt`, hwram007) | passes: add 16.0% unattributed of 946 (ceiling 16.5; the fixer had 15.8% of 944, so 0076 moved it up by two cases), mov 75.4% (76), cmp/eq 0%, and 0% |
+| `SaturnExplorerSh2DecompilerTests` (whole suite) | all passed; the new `TestArea7Round3` in 26 s with the rest |
+| `ctest -j2 --timeout 900 -E SaturnExplorerLive` / `ctest -R SaturnExplorerLive` (every binary under `ulimit -v 3500000`) | 102 of 102 (198 s) / 6 of 6. No new ctest test: the fixtures are in `SaturnExplorerSh2DecompilerTests` |
+
+### What 0076 did to the mapping
+
+`dump_diff.py` compares the d88e06e1 dump with the current one. A line is "moved" when its text is the same and its instructions differ; a line is "new" when its text is new.
+
+| | hwram007 alone | lent | hwram008 alone | lent |
+|---|---|---|---|---|
+| functions whose mapping changed | 19 | 32 | 31 | 50 |
+| lines moved / new with an address | 67 / 31 | 112 / 51 | 353 / 99 | 507 / 151 |
+
+Almost every move is better than before. A spilled parameter or a local written before a call used to be the store plus the `jsr`, and now it is the store alone (`puStack_28 = param_2;` at `mov.l r5,@(0x4,r14)`). Before, it was the call-effect copy; 0076 keeps the store, so the store prints. The new `xStack_2c._3_1_ = (xunknown1)param_1;` lines of the 06022830 family name the spill and the piece's load (A7-11's fix at work), and `xStack_2c = param_1;` names the spill and the call. The lines whose new instructions are not a superset of the old fall into three groups. Some are duplicated texts that the diff matches across copies (0603D5F6 `iVar3 = (uint4)*puVar11 * 4;`). Some are pushes in two lent junk functions (060670C0, 06027420). The rest is one real regression, **A7-20**: 06021C24 and its family, four texts.
+
+### A7-19 (P2): a copy at the end of a block names that block's last instruction
+
+The engine places a statement that writes a memory variable as a copy at the end of a block in two cases: a merge copy of a global written on paths that join, and the copy of a frame word that a later call may read, placed before the branch to the calls. The copy carries the address of the block's last op. When the block ends in a `bra` whose delay slot is the store, the line names the row before the store: patch 0075's mark is on the store's op, not on the copy. When the block ends in some other instruction, the line names that instruction: `add #1,r7`, `mov #0xB,r7`, `lds.l @r15+,pr`, `and r2,r1`. The store is on no line, although the engine's records name it. Two fixtures: the shrunk words at 06070000, and 06021E54 of hwram007, where four parameter spills print at a `bf` and the spill of param_3 is on no line at all. 06021E54 prints the same on d88e06e1, so this is not 0076's. The row has the counts, the fix plan and the reason for P2: the same consequence as A7-10 and A7-11, a click on the line goes to a wrong instruction and the writer cannot be reached.
+
+### A7-20 (P2): 0076's kept write names a store of another value
+
+In `xStack_1c = 0;` (06021C24, a dead store that 0076 now prints), the tokens are the load that reads the local and the store of -3, chosen by A7-11's rule "latest store before the instruction in the flow's translation order". The store of 0 is on no line. The loop's `return xStack_1c;` names, for the local, the load of another local at the loop head; before 0076 it named the load of `xStack_1c`. `named_store_value.py` finds no other line in the corpora that names a store of another constant, but it only checks constants. The rule that picks the store is not checked in general, and the fix plan in the row says what it should use.
+
+### The open rows
+
+* **A7-15** holds as filed and is wider than its numbers. The global copies at a call or a return are 39 in hwram007 alone and 367 in hwram008 alone (582 lent). In lent hwram008 a common form is the store in the delay slot of the `jsr` that the copy is printed at (`xRam060a8560 = (xunknown2)iVar1;`), where the line names the row before its maker, as A7-10 did. It is A7-19's mechanism. The round thinks it is P2 by the standard applied to A7-10 and A7-11, and leaves the rating to the coordinator (noted in the row).
+* **A7-17** holds: there is no Assembly-follow toggle and no PC mark while running (`DecompilerPanel` has neither).
+* **A7-18** holds as an instrument. Its residue includes slot stores after all: a frame local or a global assigned at a `bra` or `jsr` whose slot is the store is A7-19 (a) or A7-15 (6 / 13 and 14 / 183 lines, `assign_at.py`). That is noted in the row.
+
+### Also read, no finding
+
+* **Navigation.** `ApplyWantedInstruction` and `InstructionLineIndex` were read against mirrors, odd PCs, the second request (the next line) and a request made while another function is shown. `ShownStale` is false until the new target resolves, but `Resolve` runs in the update before `DrawLines`. The way back answers the store of A7-19 Folded, with a neighbour's line, which is what the row describes, not a separate defect.
+* **Frame stores in a delay slot.** `jsr @r1 ; mov.l r5,@(4,r15)` passing the frame's address: the copy at the call names the call and the slot store (A7-11's fix). A store to a global in an `rts` or `bra` slot with no join names the slot.
+* **Kept writes (0076) elsewhere.** The other 0076 texts (0603D0F6, 0603D5F6, 0603ED52, the 0604956A and 0604A14A families) name their stores now. Before, they named a branch or a `jsr` beside the store.
+
+### New instruments
+
+* `MappingAudit::copyStoreMissing` and its split (`copyFrameMissing`, `copyGlobalMissing`, `copyAtCall`, `copyAtReturn`, `copyAtBranch`, `copyAtLoad`, `copyAtOther`), printed by every audit. They are counted, not violations, while A7-19 and A7-15 are open. A fix should make `copyAtBranch` and `copyAtOther` violations. `TestArea7Round3` checks that the counter reads 0 when the stores' tokens are added as a fix would add them.
+* `TestArea7Round3` (Sh2DecompilerTests.cpp): the three fixtures, pinned at the current behaviour. Each comment says what flips when the row is fixed.
+* `tools/a7_round3/`: `assign_at.py`, `named_store_value.py`, `dump_diff.py` (README).
+
+Routed: nothing to other areas. A7-20 is 0076's (area 3's patch) in effect, but the fix is in the host's `AddFrameStoreTokens` and the token of the guard's LOAD, so it stays in area 7.
