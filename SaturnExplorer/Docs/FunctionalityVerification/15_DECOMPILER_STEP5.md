@@ -14818,3 +14818,110 @@ Neither image holds A3-144's or A3-145's shape as far as `uninit16.py` and a loo
 - Calls: the driver's `PseudoEval` cannot evaluate 60 to 70% of the fixtures, so the call fixtures (lent, unlent, writer, global, out) have no value oracle beyond hand reading of `mksv2.py`, `mkout.py` and `mkgcall.py` fixtures (right).
 - A3-152's mechanism is a guess; its minimal pair (V1/V3) is the thing to trace.
 - The generator should draw loops, indexed stores and a partly overwritten pointer slot in its chain stream (A3-147); the nightly range cannot reach A3-144 to A3-146.
+
+## Area 3 fixer (A3-144 to A3-153)
+
+Fixer, branch `review/3-a3144-fix`, cut at `d88e06e1`; patch **0076** (`0076-engine-frame-loads-keep-writes.patch`, 5 engine files), the host's return rule (`Sh2Decompiler.cpp`), and the suite, generator and harness changes below. Own RelWithDebInfo build under the scratch directory, `-j2`, every test binary under `ulimit -v 3500000` and `timeout`, one heavy job at a time. Traces were made with temporary prints behind environment variables, never committed; each commit was checked free of them.
+
+| Row | P | Status | What changed |
+|---|---|---|---|
+| A3-144 | P1 | fixed | patch 0076: `ActionDeadCode::keepFrameWritesForLoads` holds the frame's writes while a LOAD through a possible frame address stays a LOAD |
+| A3-145 | P1 | fixed | the same hold (the reload is the indexed STORE's guard, so the LOAD through it stays) |
+| A3-146 | P1 | accepted | not a wrong value: the engine takes the store for a frame write (control pinned); the C does not compile and `PseudoEval` does not model the alias |
+| A3-147 | P2 | fixed | the generator's `GenFrame144Fn` (`frame124_<seed>.chain144`); why the frame ledger cannot see the class (below) |
+| A3-148 | P3 | fixed | the harness declares a RAM global the text assigns, with the type of what it assigns |
+| A3-149 | P3 | accepted | the ledger fails closed; a read cancelled by algebra is destroyed, not forwarded |
+| A3-150 | P3 | fixed | a third reading, C with the fields of a variable signed; an unsigned cast of a CONCAT is the zero extension in the engine's reading |
+| A3-151 | P3 | fixed | `BitwiseOfOthers`: a swap of another start value stepped after the swap |
+| A3-152 | P1 | fixed | the return rule: a partial store over r0's entry value leaves a value computed from r0; the printed-C differential checks a `void` lent text's hidden inputs (`HiddenReturnInput`) |
+| A3-153 | P3 | fixed | triage finished, the accepted shape of A3-19: `excluded.call-result-passed.return-dropped` |
+| A3-154 | P3 | new, open | the printed-C frame mode reads the frame in the host's byte order: 80 of 1,200 `frame16.py` loop and index texts it cannot read (none of the fixed classes) |
+| A3-141 | P3 | open | not touched |
+
+### 1. A3-144 and A3-145: what the trace showed
+
+The review's reading was half right. 0072's pending STORE does keep its guard on the slots, and in the loop the slot's reload becomes the join of the setup and that guard, so the LOAD through it (`*pxStack_20`) is never folded into a stack read. But the LOAD was not unguarded: `reprocessFreeStores`, after the frame was heritaged, re-ran `discoverIndexedStackPointers`, which found the LOAD through the join and gave it a LoadGuard. That guard came after `guardLoads` had run for every frame location of the pass, so it never had its COPYs and kept no write: the slot's two writes (`&S` and the write-back) were dead code at pass 2, and the text read `xStack_24` that nothing set (the compiled text segfaults). A3-145 is the same hole without the late guard: the reload of slot 0 is the indexed STORE's guard INDIRECT, the LOAD through it has no guard at all, and the four fills went.
+
+The fix, in dead code (`coreaction.cc`): while a LOAD lives whose pointer is a member of `FrameEscape`'s walk (a possible frame address, modeled or not) and that will stay a LOAD (`frameLoadStays`: back from the pointer through copies and additions of constants to the stack pointer, a join, the guard of a STORE that is not pending or of a call, a variable added or a value from memory means it stays), every write of the stack space is held: an address force marked as one (`Varnode::frameload_force`, `varnode.hh`), cleared at the start of each pass of dead code and set again while the LOAD lives, plus a push to the consumed list. A LOAD whose guard heritage did sink is left to it (`LoadGuard::sunk`, `heritage.hh`). What is not held: a push of a callee-saved register (a save, as in `callMayReadFrame`); a write a later version of its bytes is built from (a refinement piece; the later version is held); a write overwritten whole in its block before any op that may read memory (`frameWriteKilled`); and a local the scope proved unaliased or not address-tied.
+
+Three versions were tried and taken back, each for a cause the corpora or the generator showed:
+
+- Holding for any LOAD through a value read from the frame (`pointerFromFrame`, 0072's pending values) held the writes of every straight chain of slots while it unfolded, one pass per slot; the held refinement pieces then outlived the hold, and `frame124_4602253.chain` printed fifteen `xStack_20._2_1_ = ...` assignments. The chain's guards belong to STOREs still pending, which 0072 settles: `frameLoadStays` passes through those (straight-line) and stops at a join (the loop).
+- Holding a write some real op reads lost the hold whenever a rule forwarded the reader (`IDX L2 chain`: `r1 = slot0` copy-propagated, then `RuleEarlyRemoval` destroyed the write between two passes of dead code); only a reader that builds a later version of the same bytes keeps a write alive now.
+- A hold on a local the scope marks `nolocalalias` was cleared by `syncVarnodesWithSymbol` at every pass, and each clearing was a change: hwram007's 0601A0C8 ran its main loop without end (killed after minutes; 375 ms on d88e06e1, 466 ms now).
+
+0072's pins (`TestA3130Fix`: A3-130 to A3-133, A3-139, A3-140) pass unchanged.
+
+### 2. A3-146: no wrong value
+
+`BYTE byte` prints `xStack_24 = (uint4 *)CONCAT31(... &iStack_3c >> 8, param_1); ... *xStack_24 = param_4; return (iStack_3c + iStack_38 ^ uStack_34) + iStack_30;`. The reads of S after the store stay reads: the engine took the store through the overwritten slot for a write of the frame (the PIECE is an unmodeled member of `FrameEscape`'s walk). The control, the same words with the store through r4, folds them: `return (param_2 + param_3 ^ param_4) + param_2;`. Read as C the text returns 0x70 for r4 = 0xC4, as the run. What fails is the C (`*xStack_24` of a local typed `xunknown4`, not compilable) and the driver's `PseudoEval`, which reads `iStack_3c` as the value written before the store. Both are pinned in `TestA3144Fix`.
+
+### 3. A3-147: the instruments
+
+`GenFrame144Fn` (`Sh2GeneratedTests.cpp`), one seed in four on a draw of its own: S at sp + 4 or 8 in a 64-byte frame, 1 to 4 slots, S filled by four words, then a loop through the chain (`wb`, `nowb`), an indexed store (through the reloaded pointer, through r15, into another local) with two words read through the reloaded pointer, or slot 0's low byte overwritten with a constant that keeps it inside S; then words of S read. The loop and idx draws go through the printed-C differential after every other case (so no earlier case's inputs move); all three go through the frame ledger; the byte draws only there (their text is A3-146's). Every access is a word: a first version drew byte and halfword stores and reads, and 56 of its first 1,000 seeds were `mismatch` where the engine prints a halfword of a written word as a local of its own, which frame mode reads from the host's other end of the word (A3-154). Pin `frame124 chain144 draws`.
+
+With 0076 switched off (a temporary build), the printed-C range 1 to 1,000 has 151 findings, all chain144 (132 `crashed`, 19 `mismatch`), and the pins `A3-144 LOOP L2` to `A3-145 IDX3 other L2` fail; with it, 0.
+
+Why the frame ledger cannot see A3-144 or A3-145: the read is a LOAD the engine never resolves to a frame offset. Its record is `folded into ordinary memory` with no offset, so no record says which frame word it reads, and the writes it lost are `a frame write gone unread` with no later recorded read of their bytes, which the ledger must take for a dead store. To count them it would have to take such a LOAD for a read of the whole frame, and every dead frame store before one for a loss. 0076 holds the writes instead, so the engine has no such loss left to record.
+
+### 4. A3-152
+
+V3 differs from V1 by `or r0,r1` after `mov r1,r0`: in V1 the engine reads `in_r0` and the host withholds ("it reads r0 on entry"); in V3 the engine drops the return, `in_r0` with it, and the return rule's interpreter (`ReturnCheck`) had to see that r0 at the return is computed from r0. It did not: the word `mov.l r0,@r4` stored held r0's entry value itself, and the halfword store over it (`mov.w r4,@r4`) went through `Clobber`, whose rule for a word that may still hold what it held takes r0 there for r0 left alone (A3-14). A partial store of an exact stack word is no such word: what is left of r0 is joined with the bytes stored. `ReturnCheck::Store` now marks such a word a use of r0, and V3 and the fuzzer's program 2691 are withheld ("its return is computed from r0 on entry").
+
+The printed-C differential counted V3 `void-return-lent` because A2-34's class reads only the rts slot (`mov Rm,r0` there means a result). It now also runs the first eight rows of a `void` lent text again with r0 to r3, r8 to r11, the parameter registers past the signature's and the T flag changed one at a time (each after a run of the row itself, so memory read before written holds the same): an r0 that changes with one of them, other than r0 left as it came in, is `return-dropped` (`HiddenReturnInput`, pinned on five small functions). With the host fix switched off, V3 is that finding.
+
+### 5. The P3s
+
+- **A3-148.** The text names a global by its address (`pxRam0600f000`); the harness declares each such name the text assigns as a static of the type of the first value assigned (`static __typeof__(axStack_44) pxRam0600f000;`), after the locals. The review's `F16.21.41` agrees (pin `A3-148`).
+- **A3-150.** The texts mix a field of a variable read with the engine's sign (`(int4)xStack_10._2_2_`) and a CONCAT with none (`CONCAT12(param_2,...) >> 8`, a logical shift in the code; `(uint4)CONCAT11(...)`, a zero extension). The C reading drops the first sign, the engine's reading gave the second one. A text both reject that reads a field is read a third time, as C with the fields signed; and in the engine's reading an unsigned cast of a CONCAT is now the zero extension at every size (the engine prints a sign extension of a piece as a signed cast: `(int4)xStack_8` for `mov.w`, checked). `frame124_4602253.chain`, 4605918 and 4511454 are `narrow-c`; 4606911 and 3805863 agree in their seeds' runs. Pinned.
+- **A3-151.** `BitwiseOfOthers` undid a byte or halfword swap only before the step (A3-115); it now also takes the swap of another start value stepped after it (`swap.b r5,r0 ; ldc r0,gbr ; mov.b r0,@(15,gbr)`). Seed 4503481: `claim-wrong:storesThrough` four times on d88e06e1, none now. Pinned on the run's record, with a store through r4 itself still demanded.
+- **A3-153.** Replayed with the specials alphabet (the plain grammar 2 draws another module). Function 1's r0 at its return is a word it loads (`mov.l @r5,r0`: `mov #1,r0 ; tst r0,r0 ; bf` is always taken), which the return rule lets a `void` signature drop (A3-5: memory, and a caller reading r0 afterwards is withheld); function 0 passes the call's r0 to its own return without touching it. That is A3-19's accepted shape: the generator counts it `excluded.call-result-passed.return-dropped` when every callee is lent `void`. Pinned on the replay.
+- **A3-149** is accepted (the row says why). **A3-141** is still open: its store through a pointer read back from a global is not this work's.
+
+### 6. Pins
+
+`Sh2DecompilerTests` `TestA3144Fix`: LOOP L2, LOOP L4, LOOP2 nowb (A3-144), IDX2 idxdir, IDX L2 chain, IDX3 other L2 (A3-145), each with the frame ledger and `ReferenceOk` empty, the slots' or the fills' writes printed and the stale text absent, the indexed ones evaluated against the run; A3-146 and its control; V1, V3 and program 2691 (A3-152). `Sh2GeneratedTests`: the printed-C pins `A3-144 LOOP L2`, `L3`, `L4`, `LOOP2 nowb`, `LOOP2 wb1`, `A3-145 IDX2 idxdir rel`, `IDX L2 chain`, `IDX L4 chain`, `IDX3 other L1`, `IDX3 other L2`, `A3-148`, `A3-150` (three), `A3-152 oracle`; `TestRound13FixPins`: `A3-151 grammar 2 seed 4503481`, `A3-153 grammar 2 seed 4700578`; `frame124 chain144 draws`. With the engine change and the host change switched off, 14 checks of `TestA3144Fix` fail (the six text pins, the fills, and V3 and program 2691 lent) and the ten printed-C pins of A3-144 and A3-145 are `crashed` or `mismatch`; A3-148, A3-150, A3-151 and A3-153 are the d88e06e1 harness's findings on their replays (`not-compilable`, `mismatch`, `claim-wrong:storesThrough`, `return-dropped`).
+
+Tools: `Docs/Decompiler/tools/a3_fix144/` (`pc.sh`, one text through the printed-C differential; `hs.sh`, the review's hand generators on both builds; `f16pc_run.sh`, `runall.sh`, `gen_range.sh`, `runcorp.sh`, the runs below; `mkpatch.sh`, the patch from the tree; `ledger_close.py`, the rows; `dbgon.py` and `strip.py`, the temporary traces), with the review's `a3_round16/` tools.
+
+### 7. Validation
+
+| Run | Result |
+|---|---|
+| `SaturnExplorerSh2DecompilerTests` (alone) | all passed |
+| printed-C, the default range 1 to 3,000 (three chunks of 1,000; every pin of `TestPrintedC`) | 0 findings (1,928, 1,962 and 1,950 functions; 106, 63 and 61 s) |
+| printed-C, 4,800,001 to 4,803,000 (fresh) | 0 findings (1,971, 1,856 and 1,921 functions) |
+| frame124 stream in those six chunks | 720 to 794 structs each, 0 frame writes lost |
+| grammar 1, 4,800,001 to 4,805,000 | 0 failing seeds (139 s) |
+| grammar 2, 4,800,001 to 4,805,000 | 0 failing seeds (193 s); 4,515,655 is outside it |
+| `frame16.py` seeds 161 to 164, 300 each, all modes, call-free, through the printed-C differential | 80 findings (47 loop, 31 index, 2 multi, all `mismatch`): none of the fixed classes (`uninit16.py` over the 80 texts: 0 hits; seed 161 on d88e06e1: 33 findings, 14 of them `crashed`, 15 `global` `not-compilable`); 53 agree in the big-endian reading, the rest are A3-154 |
+| `TestArea3HiddenInputFuzz`, `SE_A3FUZZ_PROGRAMS=5000`, seeds 17 and 18 | 1,220 and 1,214 lent, 15,860 and 15,782 perturbed runs, 0 findings |
+| vendoring gate (`check-vendored-tree.py check`) | `vendored tree: ok (check)` |
+
+### 8. The corpora
+
+`SE_GAME_HWRAM=<img> SE_GAME_LEND=1 SE_GAME_LEND_LIST=1 SE_GAME_OUT=<dir>`, the whole decompiler suite each (exit 0), d88e06e1 and the fix:
+
+| | hwram007 | hwram008 |
+|---|---|---|
+| `TestGameCode` | 839 ok | 1,554 ok |
+| every ledger count / missing and said | 0 / 0 | 0 / 4 |
+| frame writes lost / malformed pieces / frame unchecked | 0 / 0 / 0 | 0 / 0 / 0 |
+| lent signatures (parameters) | 678 (956) | 1,038 (1,310) |
+| ...real entries | 474 (645) of 999 | 724 (975) of 1,543 |
+| texts that differ from d88e06e1 (alone, `lend_before`, `lend_after`) | 83 | 131 |
+
+Lending and every count are unchanged; the mapping statistics move (a few more tokens, fewer instructions folded into another's line), with every violation count 0. I read every text that changed. They are 12 functions of hwram007 and 28 of hwram008 (each in up to three variants), all with the same values as before, in five kinds:
+
+1. Order: a parameter spilled to the frame is printed at its instruction, before the setup of the pointer slots, where it was printed after (`puStack_24 = param_1;`); a local written before a call is printed after the call's comment instead of before it (`iStack_42 = iVar5;`).
+2. Arguments: a call handed the slots' values now names the addresses (`func_0x060231a0(0,&xStack_1c,axStack_10)` for `(0,pxStack_14,pxStack_8)`, with `pxStack_14 = &xStack_1c;` still printed above): the same values.
+3. A refinement piece printed before the word's whole write (`xStack_2c._3_1_ = (xunknown1)param_1;` then `xStack_2c = param_1;`, the local typed `xunknown4` where it was `int4`): the 06022830 family of hwram007 and 06061D0C of hwram008, 13 functions. Redundant, not wrong; the held LOAD is after a call that may write the frame.
+4. A dead store printed (`xStack_1c = 0;` before `return 0;`, 06021C24 and 06061100).
+5. Values kept in a register where they went through a frame word, or the reverse, in four large functions (0603D0F6: the accumulator named `iStack_48` and copied to `iStack_4c`, where it was the other way; 0603D5F6: `if (puStack_24[3] < 2)` for `puStack_8 = puStack_24 + 3; if (*puStack_8 < 2)`; 0603ED52: `xStack_c` computed in two statements; 0604956A, 0604A14A and their family: `uVar3 = ...; uStack_38 = uVar3 & 0xffff;` for two writes of `uStack_38`, `0 < param_1` for `0 < iStack_4c` right after `iStack_4c = (int4)param_1;`), each checked to read the same.
+
+### 9. Limits
+
+- The hold is coarse: while a LOAD that stays may read the frame, every unaliased-or-not frame write but the exceptions above is kept, so a dead frame store can print (kinds 3 and 4 above). A write is only known to be dead for the LOAD when it is overwritten before any read in its own block.
+- A3-154: the printed-C differential cannot read `frame16.py`'s mixed-width loop and index texts in frame mode; the chain144 stream avoids mixed widths, so it does not test them either.
+- A3-146's text is still no C, and `PseudoEval` still rejects it.
+- No full ctest yet at the time of writing this paragraph: see the hand-back.
