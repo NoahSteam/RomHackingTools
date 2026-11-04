@@ -204,3 +204,17 @@ patch:0073	corpus	survived	54	CHECK failed at /home/user/RomHackingTools/.claude
 patch:0013	unit	killed	28	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:2860: Ledger(r, { Rd(0, 4), Rd(0, 4), Rd(0, 4) })
 patch:0013	gen	survived	22	
 patch:0013	corpus	survived	55	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:2860: Ledger(r, { Rd(0, 4), Rd(0, 4), Rd(0, 4) })
+patch:0001	fault	survived	95	
+patch:0001	unit	survived	29	
+patch:0001	gen	survived	23	
+patch:0001	engine	killed	48	CHECK failed at line 302: cancelled
+patch:0023	fault	killed	90	== alloc jumptable: FAILED in 10.4 s
+patch:0032	fault	killed	91	== alloc jumptable: FAILED in 10.3 s
+patch:0040	fault	survived	91	
+patch:0040	unit	survived	27	
+patch:0040	gen	survived	15	
+patch:0040	engine	survived	46	
+patch:0040	pc	survived	25	
+patch:0040	decode	survived	3	
+patch:0040	corpus	survived	50	
+patch:0040	*	SURVIVED	0	
