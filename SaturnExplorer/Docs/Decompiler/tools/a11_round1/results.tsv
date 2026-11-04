@@ -105,3 +105,20 @@ H-lend-extrapop	*	SURVIVED	0
 H-cancel-actions	fault	killed	72	== cancel-enter mailbox: FAILED in 0.3 s
 H-run-epoch	runner	killed	63	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/DecompilerRunnerTests.cpp:586: !late
 H-run-epoch	model	survived	19	
+H-run-gen	runner	killed	43	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/DecompilerRunnerTests.cpp:625: r.generation == second && r.status == DecompileStatus::Ok
+H-run-gen	model	survived	20	
+H-run-toolarge	runner	killed	109	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/DecompilerRunnerTests.cpp:694: gate.WaitHolding(60)
+H-run-toolarge	model	survived	19	
+H-pan-volatile	trust	killed	60	MODEL FAILURE, seed 0, after operation 15
+H-pan-names	trust	killed	52	MODEL FAILURE, seed 0, after operation 5
+H-pan-disabled	trust	killed	51	MODEL FAILURE, seed 0, after operation 3
+H-pan-truncated	trust	killed	44	MODEL FAILURE, seed 0, after operation 0
+H-pan-unsupported	trust	killed	48	MODEL FAILURE, seed 0, after operation 0
+H-pan-copymarks	trust	killed	64	MODEL FAILURE, seed 0, after operation 3
+H-load-empty	fuzz	killed	5	VIOLATION bios/EMPTY_ACCEPTED: regular file: an empty image was accepted
+H-load-toolarge	fuzz	survived	5	
+H-load-toolarge	*	SURVIVED	0	
+H-load-hexlen	fuzz	killed	5	VIOLATION ranges/VERDICT_DIFFERS: accepted=yes where the reading of the format says no
+H-load-inverted	fuzz	killed	5	VIOLATION ranges/VERDICT_DIFFERS: accepted=yes where the reading of the format says no
+V-0019-ldc	decode	killed	3	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecodeTests.cpp:2240: totalFails == 0
+V-0019-ldc	unit	killed	24	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:9699: Has(r.Text(), "Write_SR(param_1 & 0x3f3);")
