@@ -28,6 +28,7 @@
  * Modified for SaturnExplorer: a call's INDIRECT on a local of an escaped frame keeps its address force (patches/0068-engine-deadcode-late-stack-reads.patch).
  * Modified for SaturnExplorer: a save slot a STORE is aimed at, or that a pending STORE may reach, stays mapped (patches/0072-engine-frame-chains-and-save-slots.patch).
  * Modified for SaturnExplorer: a number is the address of a hardware register where the data flow uses it as one, not by a guess (patches/0073-engine-constant-pointer-guess-not-hardware.patch).
+ * Modified for SaturnExplorer: a LOAD that may read the frame and stays one holds the frame's writes (patches/0076-engine-frame-loads-keep-writes.patch).
  */
 #include "coreaction.hh"
 #include "condexe.hh"
@@ -4210,18 +4211,6 @@ bool ActionDeadCode::storeMayWrite(const Funcdata &data,const PcodeOp *sop,const
   return data.storeAimedAt(sop,local);
 }
 
-/// SaturnExplorer (patches/0076-engine-frame-loads-keep-writes.patch): a LOAD left in the function whose pointer may be a frame address,
-/// modeled or not (FrameEscape's members), or was read through one (a pointer kept in a frame word: FrameEscape's pending values, or a frame
-/// word not linked yet), reads the frame where RuleLoadVarnode has not made it a direct stack read (its pointer is no constant offset from
-/// the stack pointer yet, or never will be: the join of a loop, a guard's INDIRECT). Nothing links the LOAD to the frame writes it may read,
-/// so dead code took each for a write nothing reads and removed it, and the text read memory nothing wrote (ledger A3-144: a loop storing
-/// through a pointer behind two slots lost the slots' writes, the compiled text crashed; A3-145: an array filled, written at a variable
-/// index, and read through a pointer reloaded from a slot, lost its fills). While such a LOAD lives, every write of the stack space is
-/// consumed: fail closed, as the LOAD may read any word of the frame. A LOAD the stack analysis guarded (an indexed one: its LoadGuard
-/// keeps the writes of its range, Heritage::guardLoads) is left to that guard; the pushes of callee-saved registers are saves, as for a call
-/// (callMayReadFrame). The writes stay only while the LOAD does: once it is folded into a stack read, the next pass of dead code sees them.
-/// \param data is the function
-/// \param worklist is the consumed Varnodes to process
 /// SaturnExplorer (patches/0076-engine-frame-loads-keep-writes.patch): will a LOAD through this frame address stay a LOAD? Back from the
 /// pointer through copies, additions of a constant and the guards of STOREs still pending (a chain of slots unfolding: each such STORE is
 /// settled, and its guard on the slot removed, once the slots before it are folded, Heritage::reprocessPendingStores), to the stack pointer:
@@ -4256,6 +4245,19 @@ static bool frameLoadStays(const Funcdata &data,const Varnode *vn)
   return true;		// too far to follow: taken to stay (fail closed)
 }
 
+/// SaturnExplorer (patches/0076-engine-frame-loads-keep-writes.patch): a LOAD left in the function whose pointer may be a frame address,
+/// modeled or not (FrameEscape's members), and that stays a LOAD (frameLoadStays: a loop's join, the guard of an indexed STORE or of a call
+/// between the pointer and the stack pointer), reads the frame where RuleLoadVarnode never makes it a direct stack read. Nothing links the
+/// LOAD to the frame writes it may read, so dead code took each for a write nothing reads and removed it, and the text read memory nothing
+/// wrote (ledger A3-144: a loop storing through a pointer behind two to four slots lost the slots' writes, the compiled text crashed;
+/// A3-145: an array filled, written at a variable index, and read through a pointer reloaded from a slot, lost its fills). While such a
+/// LOAD lives, the frame's writes are held: fail closed, the LOAD may read any word of the frame. A LOAD whose guard heritage sank (a COPY
+/// of each location before it, Heritage::guardLoads) is left to that guard. Not held: the pushes of callee-saved registers (saves, as for a
+/// call: callMayReadFrame), a write a later version of its bytes is built from (that version is held), and a local the scope proved no
+/// pointer reaches. The hold is an address force marked as one (Varnode::setFrameLoadForce), let go at the start of each pass of dead code
+/// and set again while the LOAD lives: once it is folded or gone, the next pass sees the writes as before.
+/// \param data is the function
+/// \param worklist is the consumed Varnodes to process
 void ActionDeadCode::keepFrameWritesForLoads(Funcdata &data,vector<Varnode *> &worklist)
 
 {

@@ -16,6 +16,7 @@
  * Modified for SaturnExplorer: a load is read once and in place, never duplicated or moved past another memory operation (patches/0010-load-not-duplicated.patch).
  * Modified for SaturnExplorer: a call's INDIRECT on a local of an escaped frame keeps its address force (patches/0068-engine-deadcode-late-stack-reads.patch).
  * Modified for SaturnExplorer: a STORE not folded yet and aimed at a local is data a call may read there (patches/0072-engine-frame-chains-and-save-slots.patch).
+ * Modified for SaturnExplorer: a LOAD that may read the frame and stays one holds the frame's writes (patches/0076-engine-frame-loads-keep-writes.patch).
  */
 /// \file coreaction.hh
 /// \brief Core decompilation actions which are indepedent of any particular architecture
