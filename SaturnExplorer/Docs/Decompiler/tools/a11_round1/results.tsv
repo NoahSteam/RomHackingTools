@@ -127,3 +127,28 @@ V-0019-rte	unit	killed	24	CHECK failed at /home/user/RomHackingTools/.claude/wor
 V-0071	pc	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:11211: r104[0].cls.empty() && r104[0].compared && r104[0].text.find("== 0xffff")
 V-0071	unit	survived	23	
 H-load-partial	fuzz	killed	4	VIOLATION ranges/PARTIAL_RESULT: refused but left ranges in the output
+patch:0068	unit	killed	26	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:413: l != nullptr
+patch:0068	gen	survived	15	
+patch:0068	corpus	killed	50	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:413: l != nullptr
+patch:0072	unit	stillborn	0	build failed
+patch:0076	unit	killed	27	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:443: zero != nullptr
+patch:0076	gen	survived	22	
+patch:0076	corpus	killed	52	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:443: zero != nullptr
+patch:0066	unit	stillborn	0	build failed
+patch:0065	unit	stillborn	0	build failed
+patch:0063	unit	killed	27	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:413: l != nullptr
+patch:0063	gen	killed	22	CANARY FAILURE canary 11: r4 lent, frame pointer, bsr, 0 earlier call(s), plus an index
+patch:0063	corpus	killed	49	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:413: l != nullptr
+patch:0060	unit	survived	28	
+patch:0060	gen	survived	16	
+patch:0060	corpus	survived	51	
+patch:0060	engine	survived	47	
+patch:0060	pc	survived	25	
+patch:0060	decode	survived	3	
+patch:0060	*	SURVIVED	0	
+patch:0058	unit	killed	27	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:11923: o.verdict == "agrees"
+patch:0058	pc	killed	27	FINDING [mismatch] seed86_0
+patch:0057	unit	stillborn	0	build failed
+patch:0056	unit	stillborn	0	build failed
+patch:0054	unit	killed-timeout	300	
+patch:0054	pc	killed-timeout	600	FINDING [mismatch] A2-56 cmp/str on the SR byte after addc
