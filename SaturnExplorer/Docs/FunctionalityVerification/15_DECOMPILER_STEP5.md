@@ -14975,7 +14975,7 @@ Pins: `TestA587Pins` gains the six shrunk modules (A5-94, A5-95, A5-96, A5-98 an
 
 | | hwram007 | hwram008 |
 |---|---|---|
-| functions, all ok | 1,730 (839 texts) | 2,995 (1,554 texts) |
+| functions, all ok (game code; the lending run) | 839; 1,730 | 1,554; 2,995 |
 | texts, notes, every log line of the game sections | **identical to the base** | **identical to the base** |
 | lending, signatures (parameters) | 678 (956) | 1,038 (1,310) |
 | real entries | 474 (645) of 999 | 724 (975) of 1,543 |
