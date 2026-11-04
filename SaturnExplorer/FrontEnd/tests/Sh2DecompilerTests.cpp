@@ -359,7 +359,7 @@ void TestArea7Round3()
         w = static_cast<uint16_t>(hw[x - 0x06000000u] << 8 | hw[x - 0x06000000u + 1]);
         return true;
     };
-    // A7-19: a global written on two paths that join and read after the join is printed by the merge copy at the end of each path's block,
+    // A7-19, a global: a global written on two paths that join and read after the join is printed by the merge copy at the end of each path's block,
     // which carries the block's last instruction. `mov.l @(lit),r1 ; tst r4,r4 ; bt L ; bra M ; mov.l r5,@(4,r1) ; nop ; L: mov.l r6,@(4,r1) ;
     // add #1,r7 ; M: mov.l @(4,r1),r0 ; rts ; nop`, r1 = 0x06080000. The write in the bra's delay slot is named by the bra (the row before it),
     // the write at L by the `add #1,r7` after it, and neither store (0x06070008, 0x0607000C) is on any line: the engine's records name
@@ -385,12 +385,26 @@ void TestArea7Round3()
         CHECK(a.copyGlobalMissing == 2 && a.copyAtBranch == 1 && a.copyAtOther == 1);
         // the bra's line is counted by slotMadeLines as "a merge copy at the end of a block" (A7-18): it is the delay slot's store
         CHECK(a.slotMadeLines == 1);
+        // ...and the counter sees the fix: with each store's empty token on its line (as A7-11's tokens are), it counts none
+        DecompileResult fixedR = r;
+        for (Line& l : fixedR.lines)
+        {
+            const uint32_t store = Has(l.text, "= param_2;") ? base + 8 : Has(l.text, "= param_3;") ? base + 12 : 0;
+            if (!store) continue;
+            Token t;
+            t.begin = t.end = static_cast<uint16_t>(l.text.size());
+            t.addr = store;
+            l.tokens.push_back(t);
+            l.firstAddr = std::min(l.firstAddr, store);
+        }
+        const dts::MappingAudit seen = dts::AuditMapping(fixedR, word, "a7_19 as fixed");
+        CHECK(seen.copyLines == 2 && seen.copyStoreMissing == 0 && seen.Violations() == 0);
     }
-    // A7-20: the function at 0x06021E54 of the first corpus image. Its four parameters are spilled to the frame (mov.l r4,@r14 to
+    // A7-19, the frame: the function at 0x06021E54 of the first corpus image. Its four parameters are spilled to the frame (mov.l r4,@r14 to
     // mov.l r7,@(0xC,r14), 0x06021E5A to 0x06021E60) and the frame's address is in a stack slot a later call may read, so the engine prints
     // the four words again before the branch to the calls: `xStack_24 = param_1;` to `xStack_18 = param_4;`, each a copy at the end of the
     // block, which is the `bf` at 0x06021EC2. A click on each goes to the bf; the store of param_3 (0x06021E5E) is on no line at all. A7-11's
-    // fix names the store only when the copy is at a call or a load. Fixed, each line names its store.
+    // fix names the store only when the copy is at a call or a load. The same with and without patch 0076. Fixed, each line names its store.
     {
         const uint32_t base = 0x06021E54u;
         const DecompileResult r = a7r3::DecompileWords(d, hw, base, {
@@ -400,7 +414,7 @@ void TestArea7Round3()
             0x8801, 0x8B17, 0x9127, 0x6413, 0xD813, 0x480B, 0x0009, 0xE441, 0xD812, 0x480B, 0x0009, 0x51E7, 0x6513, 0xE440, 0xD810, 0x480B, 0x0009, 0x1E04,
             0x51E4, 0x2118, 0x8B02, 0xD80E, 0x480B, 0x0009, 0xA007, 0x0009, 0x51E7, 0x6513, 0xE400, 0xD809, 0x480B, 0x0009, 0x1E04, 0x50E4, 0xA000, 0x0009,
             0x7E20, 0x6FE3, 0x4F26, 0x6EF6, 0x68F6, 0x000B, 0x0009, 0x2904, 0x0602, 0x3384, 0x0602, 0x14B4, 0x0602, 0x31DC, 0x0602, 0x1480 });
-        Print("A7-20 frame copies at a branch", r);
+        Print("A7-19 frame copies at a branch", r);
         CHECK(r.status == DecompileStatus::Ok);
         const uint32_t kBf = 0x06021EC2u;
         const char* copies[] = { "xStack_24 = param_1;", "xStack_20 = param_2;", "xStack_1c = param_3;", "xStack_18 = param_4;" };
@@ -411,12 +425,12 @@ void TestArea7Round3()
             if (l) CHECK(LineInstructions(*l) == std::vector<uint32_t>{ kBf });   // fixed: the store of the word, 0x06021E5A + 2 * i
         }
         CHECK(!a7r3::OnSomeLine(r, 0x06021E5Eu));   // mov.l r6,@(0x8,r14): fixed, on `xStack_1c = param_3;`
-        const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_20");
-        dts::PrintMappingAudit(a, "a7_20");
+        const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_19 frame");
+        dts::PrintMappingAudit(a, "a7_19 frame");
         CHECK(a.Violations() == 0 && a.frameStoreMissing == 0);   // A7-11's check is for a call or a load
         CHECK(a.copyFrameMissing == 4 && a.copyAtBranch == 4);
     }
-    // A7-21: the function at 0x06021C24 of the first corpus image (and 0x06061100 of the second), a text patch 0076 changed. `xStack_1c` is set
+    // A7-20: the function at 0x06021C24 of the first corpus image (and 0x06061100 of the second), a text patch 0076 changed. `xStack_1c` is set
     // to -3 (mov.l r1,@(0x4,r14) at 0x06021C34), set to 0 before the loop's break (0x06021C8C), and returned (mov.l @(0x4,r14),r0 at
     // 0x06021CA0). 0076 keeps the second write for the load, and it prints as `xStack_1c = 0;` at the load: the line names the load that
     // reads the local and, by A7-11's rule (the latest store before the instruction in the flow's order), the store of -3 at 0x06021C34. The
@@ -430,7 +444,7 @@ void TestArea7Round3()
             0xD812, 0x480B, 0x0009, 0x61E2, 0x52E6, 0x6112, 0x6222, 0x3120, 0x8B09, 0x61E2, 0x52E6, 0x5111, 0x5221, 0x3120, 0x8B03, 0xE100, 0x1E11, 0xA007,
             0x0009, 0x52E3, 0x6123, 0x7101, 0x6213, 0x1E23, 0xAFCD, 0x0009, 0x50E1, 0xA000, 0x0009, 0x7E1C, 0x6FE3, 0x4F26, 0x6EF6, 0x68F6, 0x000B, 0x0009,
             0x0602, 0x2068, 0x0602, 0x20A0, 0x0602, 0x17F4 });
-        Print("A7-21 kept frame write at a load", r);
+        Print("A7-20 kept frame write at a load", r);
         CHECK(r.status == DecompileStatus::Ok);
         const Line* zero = LineWith(r, "xStack_1c = 0;");
         CHECK(zero != nullptr);
@@ -445,8 +459,8 @@ void TestArea7Round3()
                 if (t.begin < t.end && ret->text.compare(t.begin, t.end - t.begin, "xStack_1c") == 0) atOther = t.addr == 0x06021C3Au;   // mov.l @(0xC,r14),r1
             CHECK(atOther);
         }
-        const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_21");
-        dts::PrintMappingAudit(a, "a7_21");
+        const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_20");
+        dts::PrintMappingAudit(a, "a7_20");
         CHECK(a.Violations() == 0);
         // the copy names a store of the local (the wrong one), so the counter does not see it either: the pin is the instrument
         CHECK(a.copyStoreMissing == 0);

@@ -61,6 +61,8 @@ def main():
             cls = None
             if all(mn[a] in DELAYED for a in addrs) and not control and any(is_store(word(img, a + 2)) for a in addrs):
                 cls = "slot-store-at-branch"
+                # ...and the variable assigned is memory (a frame local or a global), which the slot's store may be the write of (A7-19)
+                if re.match(r"^[a-z]+(Stack_[0-9a-f]+|Ram[0-9a-f]{8})(\._\d+_\d+_)?$", lhs): cls = "slot-store-at-branch-memory"
             elif re.match(r"^[a-z]+Stack_[0-9a-f]+(\._\d+_\d+_)?$", lhs) and not stores and not calls and not control:
                 cls = "frame-no-store"
             elif re.match(r"^[a-z]*(Ram|DAT_)[0-9a-f]+$", lhs) and not stores:

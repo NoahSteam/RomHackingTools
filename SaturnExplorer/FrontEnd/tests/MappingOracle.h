@@ -82,15 +82,17 @@ struct MappingAudit
     // them showed the row before the instruction that made them (1,397 and 3,357 in the two images). What is left is a copy a merge puts at
     // the end of a block, which sits on the block's branch by design; the mutation `tokslot` brings the others back.
     int slotMadeLines = 0;
-    // Area 7 round 3 (A7-19, A7-20), counted: a line that assigns a frame local or a global a bare value (a name, a number, an address
-    // of a local, a cast of one: no operator, no load, no call), with a store the engine folded into that variable, and that names
-    // none of those stores. The statement is a copy the engine placed elsewhere: a merge copy at the end of a block (it carries the
-    // block's last instruction, a branch or any other), the value of a frame word kept for a LOAD that may read the frame (patch
-    // 0076) printed at the LOAD's guard, a held value at a return or a call (A7-15). The store that wrote the variable is then on no
-    // line of its own, and a click on the line goes to an instruction that neither writes it nor computes it. The line's drawn
-    // tokens say at what: a delayed or conditional branch, a call, a load, or another instruction.
+    // Area 7 round 3 (A7-19), counted: a line that assigns a frame local or a global a bare value (a name or a number, under a cast or
+    // not: no operator, no load, no call; not a local's address, which the add the line names computes), with a store the engine folded
+    // into that variable, and that names none of those stores (a number the line names the `mov #i` or literal load of is that
+    // instruction's). The statement is a copy the engine placed elsewhere: a merge copy or a call's copy of a frame word at the end of a
+    // block (it carries the block's last instruction, a branch or any other), a held value at a return or a call (A7-15). The store that
+    // wrote the variable is then on no line of its own, and a click on the line goes to an instruction that neither writes nor computes
+    // it. The line's drawn tokens say at what: a call or a return (A7-15), another branch, a load (A7-16's shape: a global named after a
+    // hardware register is its load), or another instruction (A7-19 is the branches and the others). A copy that names
+    // a store of the variable, but the wrong one (A7-20), is not seen here.
     int copyLines = 0, copyStoreMissing = 0, copyFrameMissing = 0, copyGlobalMissing = 0;
-    int copyAtBranch = 0, copyAtCall = 0, copyAtLoad = 0, copyAtOther = 0;
+    int copyAtBranch = 0, copyAtCall = 0, copyAtReturn = 0, copyAtLoad = 0, copyAtOther = 0;
     std::vector<std::string> problems;   // the first few of each kind, "kind: where: what"
 
     void Add(const MappingAudit& o)
@@ -107,7 +109,7 @@ struct MappingAudit
         unmappedBranch += o.unmappedBranch;
         slotMadeLines += o.slotMadeLines;
         copyLines += o.copyLines; copyStoreMissing += o.copyStoreMissing; copyFrameMissing += o.copyFrameMissing; copyGlobalMissing += o.copyGlobalMissing;
-        copyAtBranch += o.copyAtBranch; copyAtCall += o.copyAtCall; copyAtLoad += o.copyAtLoad; copyAtOther += o.copyAtOther;
+        copyAtBranch += o.copyAtBranch; copyAtCall += o.copyAtCall; copyAtReturn += o.copyAtReturn; copyAtLoad += o.copyAtLoad; copyAtOther += o.copyAtOther;
         for (const std::string& p : o.problems) Keep(p);
     }
     // Three examples of each kind of problem are kept; the prefix up to the first ':' is the kind.
@@ -573,7 +575,7 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                                            " store(s) the engine folded into it (first " + MappingHex(*candidates.begin()) + ")");
             }
     }
-    // A7-19, A7-20 (area 7 round 3), counted: a bare value assigned to a frame local or a global, at an instruction that does not write it.
+    // A7-19 (area 7 round 3), counted: a bare value assigned to a frame local or a global, at an instruction that does not write it.
     {
         std::vector<const AccessFate*> folded;
         for (const AccessFate& f : r.accessFates)
@@ -635,7 +637,7 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                 }
                 if (candidates.empty()) continue;
                 ++a.copyLines;
-                bool named = false, atBranch = false, atCall = false, atLoad = false;
+                bool named = false, atBranch = false, atCall = false, atReturn = false, atLoad = false;
                 for (const Token& t : r.lines[li].tokens)
                 {
                     if (!t.addr) continue;
@@ -645,6 +647,7 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     const sfe::DisassembledInstruction d = sfe::Sh2Decode(t.addr, w);
                     const MemoryShape m = ShapeOf(d);
                     atCall = atCall || m.call;
+                    atReturn = atReturn || d.Mnemonic == "rts" || d.Mnemonic == "rte";
                     atBranch = atBranch || (!m.call && (d.IsBranch || d.HasDelaySlot));
                     atLoad = atLoad || m.load;
                     // (a number the line names the `mov #i` or the literal load of is made there: the statement is that instruction's)
@@ -653,7 +656,7 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                 if (named) continue;
                 ++a.copyStoreMissing;
                 ++(frame ? a.copyFrameMissing : a.copyGlobalMissing);
-                ++(atCall ? a.copyAtCall : atBranch ? a.copyAtBranch : atLoad ? a.copyAtLoad : a.copyAtOther);
+                ++(atCall ? a.copyAtCall : atReturn ? a.copyAtReturn : atBranch ? a.copyAtBranch : atLoad ? a.copyAtLoad : a.copyAtOther);
                 a.Keep("copy-store (counted): " + where + ": line " + std::to_string(li) + " '" + text + "' names none of the " + std::to_string(candidates.size()) +
                        " store(s) folded into the variable (first " + MappingHex(*candidates.begin()) + "); a click goes to " + MappingHex(r.lines[li].firstAddr));
             }
@@ -784,8 +787,8 @@ inline void PrintMappingAudit(const MappingAudit& a, const char* label)
     std::printf("  mapping (%s): the way back from SH-2 Assembly: %d instructions of the body are folded into a line of another instruction (answered with the nearest that has one); "
                 "%d answered wrongly (a violation)\n", label, a.foldedInsns, a.backWrong);
     std::printf("  mapping (%s): %d lines assign a frame local or a global a bare value and have a folded store to it; %d of them name none of the stores (%d frame, "
-                "%d global; at a branch %d, a call %d, a load %d, another instruction %d) (A7-19, A7-20, counted)\n",
-                label, a.copyLines, a.copyStoreMissing, a.copyFrameMissing, a.copyGlobalMissing, a.copyAtBranch, a.copyAtCall, a.copyAtLoad, a.copyAtOther);
+                "%d global; at a call %d and a return %d (A7-15's), at another branch %d, at a load %d (A7-16's, a register's name is a load), at another instruction %d) (A7-19, counted)\n",
+                label, a.copyLines, a.copyStoreMissing, a.copyFrameMissing, a.copyGlobalMissing, a.copyAtCall, a.copyAtReturn, a.copyAtBranch, a.copyAtLoad, a.copyAtOther);
     for (const std::string& p : a.problems) std::printf("    %s\n", p.c_str());
 }
 
