@@ -12,6 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified for SaturnExplorer: a constant in an equality compare with a narrow integer is cast to that integer's type (patches/0077-engine-narrow-compare-cast-target.patch).
  */
 #include "typeop.hh"
 #include "funcdata.hh"
@@ -923,6 +925,30 @@ Datatype *TypeOpReturn::getInputLocal(const PcodeOp *op,int4 slot) const
   return ct;
 }
 
+/// \brief The type a compare's input is cast to when \b checkIntPromotionForCompare says it needs a cast
+///
+/// This is the lower-ordered of the two sides' types, but for a constant against a narrow integer that is not a constant, the type C promotes that
+/// side by: a constant already of the lower-ordered type (\b uint2) would be "cast" to its own type, and the other side (an \b int2 printed as a cast, or
+/// a named one) is not cast at all, so \b (int2)x == 0xffff is never true in C while the code tests for -1. The constant is cast to the other side's type
+/// (printed -1) instead.
+/// \param op is the comparison
+/// \param slot is the input being cast
+/// \param reqtype is the lower-ordered of the two types
+/// \return the data-type to cast the input to
+static Datatype *compareCastTarget(const PcodeOp *op,int4 slot,Datatype *reqtype)
+
+{
+  const Varnode *vn = op->getIn(slot);
+  const Varnode *othervn = op->getIn(1-slot);
+  if (vn->isConstant() && !othervn->isConstant()) {
+    Datatype *otherType = othervn->getHighTypeReadFacing(op);
+    type_metatype meta = otherType->getMetatype();
+    if ((meta == TYPE_INT || meta == TYPE_UINT) && otherType->getSize() == vn->getSize())
+      return otherType;
+  }
+  return reqtype;
+}
+
 TypeOpEqual::TypeOpEqual(TypeFactory *t)
   : TypeOpBinary(t,CPUI_INT_EQUAL,"==",TYPE_BOOL,TYPE_INT)
 {
@@ -939,7 +965,7 @@ Datatype *TypeOpEqual::getInputCast(const PcodeOp *op,int4 slot,const CastStrate
   if (0>othertype->typeOrder(*reqtype))
     reqtype = othertype;
   if (castStrategy->checkIntPromotionForCompare(op,slot))
-    return reqtype;
+    return compareCastTarget(op,slot,reqtype);
   othertype = op->getIn(slot)->getHighTypeReadFacing(op);
   return castStrategy->castStandard(reqtype,othertype,false,false);
 }
@@ -1003,7 +1029,7 @@ Datatype *TypeOpNotEqual::getInputCast(const PcodeOp *op,int4 slot,const CastStr
   if (0>othertype->typeOrder(*reqtype))
     reqtype = othertype;
   if (castStrategy->checkIntPromotionForCompare(op,slot))
-    return reqtype;
+    return compareCastTarget(op,slot,reqtype);
   othertype = op->getIn(slot)->getHighTypeReadFacing(op);
   return castStrategy->castStandard(reqtype,othertype,false,false);
 }
