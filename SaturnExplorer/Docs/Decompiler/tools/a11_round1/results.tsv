@@ -152,3 +152,26 @@ patch:0057	unit	stillborn	0	build failed
 patch:0056	unit	stillborn	0	build failed
 patch:0054	unit	killed-timeout	300	
 patch:0054	pc	killed-timeout	600	FINDING [mismatch] A2-56 cmp/str on the SR byte after addc
+patch:0075	unit	killed	26	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:146: all.Violations() == 0
+patch:0075	gen	killed	27	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:11749: rep.findings.empty()
+patch:0075	corpus	killed	50	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:146: all.Violations() == 0
+patch:0077	unit	survived	26	
+patch:0077	pc	killed	25	FINDING [mismatch] A2-111 a: (int2) char against 0xffff
+patch:0064	unit	survived	27	
+patch:0064	pc	killed	25	FINDING [mismatch] A2-82 (a) extsw ; * 0x00010001 ; shlr16
+patch:0067	unit	survived	27	
+patch:0067	pc	killed	85	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:11141: r92[0].cls.empty() && r92[0].compared
+patch:0069	unit	survived	27	
+patch:0069	pc	killed	25	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:11177: r101[k].cls.empty() && r101[k].compared
+patch:0062	unit	survived	26	
+patch:0062	pc	killed	25	FINDING [mismatch] A2-80 exts.b ; and #0x20 ; shar x8
+patch:0055	unit	killed	28	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:11795: bounded
+patch:0055	engine	survived	49	
+patch:0047	decode	killed	3	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecodeTests.cpp:2170: twice == 0
+patch:0047	unit	survived	26	
+patch:0030	unit	killed	0	
+patch:0030	gen	killed	4	
+patch:0030	corpus	killed	0	
+patch:0018	unit	killed	26	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:2265: ReferenceOk(d, snap, Request(f.base), r)
+patch:0018	gen	killed	26	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:12033: rep.findings.empty()
+patch:0018	corpus	killed	49	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:2265: ReferenceOk(d, snap, Request(f.base), r)
