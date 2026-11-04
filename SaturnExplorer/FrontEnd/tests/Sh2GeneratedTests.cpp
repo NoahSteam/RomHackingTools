@@ -139,6 +139,10 @@
 //      for, and a note of that kind excuses rule 3c's asking for the register's effects. (A5-91) The notes of a pointer stepped in a loop say so even when its
 //      first values are no hardware and a later one is (`p = (p + 4) ^ 0x20000000` from 0xFFFFFF08: the first value is in the cache data array, the second
 //      a register); rule 3c asks for the register's effects otherwise (`pointer.effect.excused` counts the ones the note excuses).
+//      The derivation the rule follows (PointerPrintsFromHardware) skips an assignment overwritten on every path to the use by another of the same
+//      name (A5-94, A5-95: the engine gives two values one name), takes no mask from inside the address of a load (A5-96: `(int4)*(char *)(p |
+//      0xfffffe00)` is a byte loaded, not the masked address), and a derivation the text closes (no free name, nothing stepped round a loop: two
+//      constants ORed with the mask) is rule 3c's to ask, not this rule's (`onchip.span.closed`, A5-98).
 //      The grammars draw such pointers (A5-92, `regionRng`): a literal in the purge, the cache address array or the on-chip page (`litptr.region`), a
 //      pointer register ORed or XORed with a constant of those partitions (`region.mask.*`, one function in seven), and the loop masks of rule 3c start
 //      from an on-chip address as well as a cached one.
