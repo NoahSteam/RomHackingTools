@@ -4266,13 +4266,20 @@ void ActionDeadCode::keepFrameWritesForLoads(Funcdata &data,vector<Varnode *> &w
     if (def->code() == CPUI_COPY && def->getIn(0)->isInput() && def->getIn(0)->getSpace()->getType() == IPTR_PROCESSOR &&
 	isSavePush(data,def->getAddr(),def->getIn(0)))
       continue;		// a save, no data
-    // A write an op other than a marker reads (a piece of it taken, the next version of the word built from it) is live through that
-    // reader if the word's later versions are: the latest version of each location is the write to hold (held, it keeps alive what it
-    // was built from), not every refinement of the word on the way (a word written whole, then a byte and a halfword of it)
-    bool realReader = false;
-    for(list<PcodeOp *>::const_iterator diter=vn->beginDescend();diter!=vn->endDescend() && !realReader;++diter)
-      if (!(*diter)->isMarker()) realReader = true;
-    if (realReader) continue;
+    // A write that a later version of the same bytes is built from (a piece of it taken, a word joined from its pieces: the heritage's
+    // refinement of a word written whole and then in part) lives through that version: the latest version of each location is the write
+    // to hold (held, it keeps alive what it was built from), not every refinement of the word on the way. Any other reader (a COPY into a
+    // register) does not keep it: a rule may forward its value and leave the write with no reader.
+    bool superseded = false;
+    for(list<PcodeOp *>::const_iterator diter=vn->beginDescend();diter!=vn->endDescend() && !superseded;++diter) {
+      const PcodeOp *rop = *diter;
+      if (rop->isMarker()) continue;
+      const Varnode *out = rop->getOut();
+      if (out == (const Varnode *)0 || out->getSpace() != stackSpc) continue;
+      if (out->getOffset() < vn->getOffset() + vn->getSize() && vn->getOffset() < out->getOffset() + out->getSize())
+	superseded = true;
+    }
+    if (superseded) continue;
     if (!vn->isAddrForce()) vn->setFrameLoadForce();	// held against the rules' removal of a write nothing reads (RuleEarlyRemoval)
     pushConsumed(~((uintb)0),vn,worklist);
   }
