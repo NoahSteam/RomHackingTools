@@ -1,0 +1,107 @@
+E-gen-ledger	gen	killed	6	FINDING seed 1 (grammar 1):
+E-gen-second	gen	killed	7	FINDING seed 5 (grammar 1):
+E-gen-alias	gen	killed	8	FINDING seed 99 (grammar 1):
+E-gen-params	gen	killed	9	FINDING seed 2 (grammar 2):
+E-gen-ret	gen	killed	7	FINDING seed 2 (grammar 2):
+E-gen-body	gen	killed	6	FINDING seed 1 (grammar 1):
+E-gen-cases	gen	killed	11	FINDING seed 2 (grammar 2):
+E-gen-warn	gen	killed	8	FINDING seed 2 (grammar 2):
+E-gen-preserved	gen	killed	9	FINDING seed 2 (grammar 2):
+E-gen-claims	gen	killed	7	FINDING seed 2 (grammar 2):
+E-gen-lent	gen	killed	9	FINDING seed 1 (grammar 1):
+E-gen-data	gen	killed	9	FINDING seed 2 (grammar 2):
+E-gen-honour	gen	killed	7	FINDING seed 4 (grammar 2):
+E-gen-kept	gen	killed	8	FINDING seed 58 (grammar 2):
+E-gen-tokodd	gen	killed	6	FINDING seed 1 (grammar 1):
+E-gen-tokoutside	gen	killed	8	FINDING seed 1 (grammar 1):
+E-gen-tokfirst	gen	killed	7	FINDING seed 1 (grammar 1):
+E-gen-tokdrop	gen	killed	8	FINDING seed 1 (grammar 1):
+E-gen-tokcall	gen	killed	8	FINDING seed 4 (grammar 2):
+E-gen-tokunmark	gen	killed	8	FINDING seed 1 (grammar 1):
+E-gen-tokhover	gen	killed	8	FINDING seed 1 (grammar 1):
+E-gen-tokslot	gen	killed	12	FINDING seed 1 (grammar 1):
+E-gen-tokframe	gen	killed	8	FINDING seed 72 (grammar 2):
+E-gen-tokcopy	gen	killed	8	FINDING seed 72 (grammar 2):
+E-map-tokodd	corpus	killed	44	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:4594: mapping.Violations() == 0
+E-map-tokoutside	corpus	killed	45	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:4594: mapping.Violations() == 0
+E-map-tokfirst	corpus	killed	44	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:4594: mapping.Violations() == 0
+E-map-tokdrop	corpus	killed	44	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:4594: mapping.Violations() == 0
+E-map-tokcall	corpus	killed	47	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:4594: mapping.Violations() == 0
+E-map-tokunmark	corpus	killed	46	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:4594: mapping.Violations() == 0
+E-map-tokhover	corpus	killed	46	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:4594: mapping.Violations() == 0
+E-map-tokslot	corpus	killed	46	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:4594: mapping.Violations() == 0
+E-map-tokframe	corpus	killed	47	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:4594: mapping.Violations() == 0
+E-map-tokcopy	corpus	killed	46	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:4594: mapping.Violations() == 0
+H-led-width	unit	killed	27	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:2270: Ledger(r, { Wr(0x20100063u, 1), Rd(0x20100063u, 1, true) })
+H-led-width	gen	killed	24	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:11749: rep.findings.empty()
+H-led-printed	unit	survived	24	
+H-led-printed	gen	survived	21	
+H-led-printed	corpus	survived	47	
+H-led-printed	*	SURVIVED	0	
+H-led-cond	unit	survived	25	
+H-led-cond	gen	survived	19	
+H-led-cond	corpus	survived	48	
+H-led-cond	*	SURVIVED	0	
+H-led-repeat	unit	survived	30	
+H-led-repeat	gen	survived	25	
+H-led-repeat	corpus	survived	65	
+H-led-repeat	*	SURVIVED	0	
+H-led-insn	unit	killed	26	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:146: all.Violations() == 0
+H-led-insn	gen	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:11749: rep.findings.empty()
+H-led-nowrites	unit	killed	27	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:263: ledger
+H-led-nowrites	gen	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:11749: rep.findings.empty()
+H-led-direct	unit	killed	29	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:2270: Ledger(r, { Wr(0x20100063u, 1), Rd(0x20100063u, 1, true) })
+H-led-direct	gen	survived	18	
+H-led-returned	unit	killed	25	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:2277: Ledger(r, { Wr(0x25FE00A4u, 4), Rd(0x25FE00A4u, 4, false, true) })
+H-led-returned	gen	survived	20	
+H-fate-unreach	unit	killed	25	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:2711: SaidMissing(r, 0x0600A90Cu) && HasNote(r, "the 1-byte read through a poin
+H-fate-unreach	gen	survived	20	
+H-fate-switch	unit	killed	25	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:2789: ReferenceOk(d, snap, q, r)
+H-fate-switch	gen	survived	22	
+H-fate-frameunread	unit	survived	26	
+H-fate-frameunread	gen	survived	20	
+H-fate-frameunread	corpus	survived	45	
+H-fate-frameunread	*	SURVIVED	0	
+H-fate-capped	unit	killed	25	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:13525: r.frameLedgerCapped
+H-fate-capped	gen	survived	22	
+H-fate-insn	unit	killed	25	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:381: records == 2
+H-fate-insn	gen	killed	23	FINDING [frame-lost] frame124_3907314
+H-removed-unsaid	unit	killed	27	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:2265: ReferenceOk(d, snap, Request(f.base), r)
+H-removed-unsaid	gen	survived	21	
+H-map-origin	unit	killed	26	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:146: all.Violations() == 0
+H-map-origin	gen	killed	15	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:11749: rep.findings.empty()
+H-map-first	unit	killed	27	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:146: all.Violations() == 0
+H-map-first	gen	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:11749: rep.findings.empty()
+H-map-slotbody	unit	killed	28	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:146: all.Violations() == 0
+H-map-slotbody	gen	killed	21	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:11749: rep.findings.empty()
+H-map-framestore	unit	killed	26	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:375: slot && LineInstructions(*slot) == std::vector<uint32_t>{ base + 8 }
+H-map-framestore	gen	killed	16	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:13134: rep.findings.empty()
+H-note-wo	unit	killed	26	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:2322: HasNote(r, "reads VDP1_FBCR, which is write-only")
+H-note-ro	unit	killed	26	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:2345: HasNote(r, "writes SCSP_MIBUF, which is read-only")
+H-note-reach	unit	survived	25	
+H-note-reach	gen	survived	22	
+H-note-reach	corpus	survived	45	
+H-note-reach	*	SURVIVED	0	
+H-note-narrow	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:2310: HasNote(r, "VDP2_SCXN0: one 4-byte write of VDP2_SCXIN0 and VDP2_SCXDN0, 
+H-note-cram	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:3403: HasNote(r, "a 1-byte write to colour RAM at 0x25F00001 stores the whole 1
+H-ptr-sub	unit	survived	24	
+H-ptr-sub	gen	survived	20	
+H-ptr-sub	corpus	survived	42	
+H-ptr-sub	*	SURVIVED	0	
+H-ptr-phi	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:3187: HasNote(r, "if the pointer holds 0x05F80004 (VDP2_TVSTAT): a read of VDP2
+H-ptr-loop	unit	survived	23	
+H-ptr-loop	gen	survived	16	
+H-ptr-loop	corpus	survived	40	
+H-ptr-loop	*	SURVIVED	0	
+H-lend-unknown	gen	survived	19	
+H-lend-unknown	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:5775: !r.InBody(a + 0x0A) && r.InBody(a + 2) && !r.prototype.known && Has(r.pro
+H-lend-self	gen	survived	18	
+H-lend-self	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:8156: Has(r.prototypeWithheld, "calls itself")
+H-lend-kill	gen	killed	19	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:11814: !constant
+H-lend-extrapop	gen	survived	15	
+H-lend-extrapop	unit	survived	22	
+H-lend-extrapop	corpus	survived	41	
+H-lend-extrapop	*	SURVIVED	0	
+H-cancel-actions	fault	killed	72	== cancel-enter mailbox: FAILED in 0.3 s
+H-run-epoch	runner	killed	63	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/DecompilerRunnerTests.cpp:586: !late
+H-run-epoch	model	survived	19	

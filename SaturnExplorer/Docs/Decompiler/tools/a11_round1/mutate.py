@@ -233,7 +233,22 @@ class Harness:
         r = sh(["git", "status", "--porcelain", "--", "SaturnExplorer/FrontEnd", "SaturnExplorer/CMakeLists.txt"], cwd=self.root)
         return r.stdout.decode().strip() == ""
 
+    def mark(self, paths):
+        with open(os.path.join(self.out, "applied.json"), "w") as f:
+            json.dump(sorted(set(paths)), f)
+
+    def recover(self):
+        m = os.path.join(self.out, "applied.json")
+        if os.path.exists(m):
+            paths = json.load(open(m))
+            print("a mutant was left applied by an interrupted piece: restoring %s" % " ".join(paths), flush=True)
+            sh(["git", "checkout", "--"] + paths, cwd=self.root)
+            os.remove(m)
+
     def restore(self, paths):
+        m = os.path.join(self.out, "applied.json")
+        if os.path.exists(m):
+            os.remove(m)
         if paths:
             sh(["git", "checkout", "--"] + sorted(set(paths)), cwd=self.root)
         if not self.clean():
@@ -289,6 +304,9 @@ class Harness:
         return verdict.startswith("killed")
 
     def score(self, mid, should, escalate, targets_of):
+        # the mutant as applied, for reading afterwards
+        with open(os.path.join(self.out, mid.replace(":", "_") + ".diff"), "wb") as f:
+            f.write(sh(["git", "diff", "--", "SaturnExplorer/FrontEnd", ":(exclude)*Sh2SpecData.h", ":(exclude)*.sla"], cwd=self.root).stdout)
         killed = False
         for o in should:
             if not self.ninja([ORACLES[o][0]], os.path.join(self.out, mid + ".build.log")):
@@ -321,6 +339,7 @@ class Harness:
             self.results.write("%s\t-\tnot-applied\t0\ttext occurs %d times\n" % (mid, text.count(old)))
             return
         print("%s: %s" % (mid, what), flush=True)
+        self.mark([path])
         open(full, "w", encoding="utf-8").write(text.replace(old, new))
         try:
             if "/processors/" in path and sh(["ninja", "-C", self.build, "-j2", "se-regen-sla"]).returncode != 0:
@@ -338,6 +357,7 @@ class Harness:
             self.results.write("%s\t-\tnot-applied\t0\tno hunk reverts alone (later patches rewrote it)\n" % mid)
             return
         touched, spec, applied = set(), False, 0
+        self.mark(["SaturnExplorer/FrontEnd/third_party/ghidra-decompiler", "SaturnExplorer/FrontEnd/src/Decompiler/Sh2SpecData.h"])
         for h in hunks:
             p = os.path.join(self.rev, h)
             ctx = open(p + ".ctx").read().strip() if os.path.exists(p + ".ctx") else "-C3"
@@ -410,6 +430,7 @@ def main():
         print("nothing left")
         return
     h = Harness(a)
+    h.recover()
     if not h.clean():
         sys.exit("the tree is not clean: stop")
     for kind, mid, m in todo:

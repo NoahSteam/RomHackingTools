@@ -11,4 +11,7 @@ for i in $(seq 1 60); do
   echo "$out" | grep -q "nothing left" && break
   echo "$out" | grep -q "not clean" && exit 1
   git -C "$ROOT" status --porcelain -- SaturnExplorer/FrontEnd | grep -q . && { echo "tree not clean"; exit 1; }
+  cp "$S/mut/results.tsv" "$ROOT/SaturnExplorer/Docs/Decompiler/tools/a11_round1/results.tsv"
+  git -C "$ROOT" add SaturnExplorer/Docs/Decompiler/tools/a11_round1/results.tsv && git -C "$ROOT" commit -q -m "WIP area 11 round 1: mutation results so far" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_015yhSVBbgN7po8UTqDDxHqd" -- SaturnExplorer/Docs/Decompiler/tools/a11_round1/results.tsv
 done
