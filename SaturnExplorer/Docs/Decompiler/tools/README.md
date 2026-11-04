@@ -35,6 +35,10 @@ Kept here:
   `--suspect`); `slot_lines.py` (A7-10), `frame_at_call.py` and `frame_piece_at_load.py` (A7-11) count the lines whose address names an
   instruction that did not make them; `showfn.py` prints one function with the instruction behind each token. The perturbation
   instrument (A7-8) is `SE_GAME_PERTURB=<n>` in `Sh2DecompilerTests.cpp`.
+* `a7_round3/`: area 7 round 3, over the dumps `a7_round2/corpus.sh` writes. `assign_at.py` sorts the lines that assign by the
+  instruction they name (`slot-store-at-branch-memory`: a frame local or a global at a delayed branch whose slot is a store, A7-19);
+  `named_store_value.py` lists lines that assign a number and name a store of another number (A7-20); `dump_diff.py` compares the
+  mapping of two builds' dumps of one image (what an engine patch moved).
 
 Everything else that earlier rounds committed (their drivers, fuzzers, fixtures and summaries) was
 removed after commit `215d303`. The record (`FunctionalityVerification/15_DECOMPILER_STEP5.md`) still
