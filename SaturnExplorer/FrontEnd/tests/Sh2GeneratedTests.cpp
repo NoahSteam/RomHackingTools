@@ -7293,8 +7293,10 @@ template <int N, bool S> struct T {
   // the cast of a piece (CONCATab, the engine's untyped value of a + b bytes): for 5 to 7 bytes, which have no type of their own in C, a cast to an unsigned
   // 8-byte type is the ZEXT the engine builds (`(uint8)CONCAT14((char)in_r1,in_r1)`: the high word of the run is 0, not the sign: A2-79). The engine prints a
   // cast to the type of the variable it assigns to, so for sizes with a type (a 2-byte piece read by `mov.w` into a uint4) the extension is by the piece's
-  // sign, as for any other cast
-  template <int M> explicit T(const Piece<M>& o) : v((R)((N > M ? ((!S && M >= 5) ? o.Zext() : ((N == 8 && M == 4 && !S) ? o.Zext() : o.Ext())) : o.Zext()) & Mask())) {}
+  // sign, as for any other cast. (area 3 fixer, A3-150) ...but for a cast to an unsigned type, which is the ZEXT at every size: the engine prints a sign
+  // extension of a piece as a cast to a signed type (`(int4)xStack_8` for `mov.w`), and `(uint4)CONCAT11(...)` is a word whose upper half is 0
+  // (frame124_4602253.chain), `(int4)xStack_18` of `_xStack_18 = CONCAT31(CONCAT21(xStack_18,param_4),0x44)` with the sign (4511454)
+  template <int M> explicit T(const Piece<M>& o) : v((R)((N > M ? (!S ? o.Zext() : o.Ext()) : o.Zext()) & Mask())) {}
   // an implicit conversion, the one C does: by the source's sign
   template <int M, bool U> operator T<M, U>() const { return T<M, U>(B2U(Ext())); }
   u64 Zext() const { return (u64)v & Mask(); }
@@ -10541,13 +10543,16 @@ bool GenFrame130Fn(uint64_t seed, CCase& c, std::string& shape)
 // frame124_<seed>.chain144 so it is checked as a frame124 function): a 16-byte struct S at sp + 4 or 8 in a 64-byte frame on r15, no push and
 // no call, &S behind a chain of 1 to 4 pointer slots (slot 0 at sp + 32 holds &S, slot k the address of slot k - 1), S filled first by four
 // word stores at its frame offset (r4 to r7 or constants), then one of:
-//   loop (A3-144): r3 = 2 to 4 trips; each trip reloads the chain into r1, stores r5 through it (a word, halfword or byte), and either steps
-//        the pointer by the width and writes it back to slot 0 (`wb`) or leaves it (`nowb`); r5 += r6.
+//   loop (A3-144): r3 = 2 to 4 trips; each trip reloads the chain into r1, stores r5 through it (a word), and either steps the pointer by 4
+//        and writes it back to slot 0 (`wb`) or leaves it (`nowb`); r5 += r6.
 //   idx (A3-145): a store at a non-constant index (`mov r6,r0 ; and #12,r0 ; mov.l r5,@(r0,rB)`), rB the reloaded pointer, r15 + S, or a
 //        local outside S (`other`); then the word and the next word read through the reloaded pointer.
-//   byte (A3-146): slot 0's low byte overwritten with a constant that keeps it inside S (the frame's low byte is the same in the run and in
-//        the printed-C harness, whose arena is page aligned), then a word stored through the reloaded chain.
-// then 1 to 3 reads of S at its frame offset, byte, halfword or word wide, added or xored into r0.
+//   byte (A3-146): slot 0's low byte overwritten with a constant that keeps it inside S, then a word stored through the reloaded chain. The
+//        engine's text stores through a local it types as a number (`*xStack_24 = ...`, the print limit of A3-146), which is no C: the frame
+//        ledger checks these, the printed-C differential does not take them.
+// then 1 to 3 reads of a word of S at its frame offset, added or xored into r0. Every access is a word: the printed-C harness keeps the frame in
+// the host's byte order, so a word written and a half of it read as a local of its own (which the engine prints when a store through a pointer
+// may write the word) would read the other half there (A2-110's limit).
 //   frame124.chain144.<loop|idx|byte>.<variant>.L<1..4>
 bool GenFrame144Fn(uint64_t seed, CCase& c, std::string& shape)
 {
@@ -10586,13 +10591,13 @@ bool GenFrame144Fn(uint64_t seed, CCase& c, std::string& shape)
     std::string variant;
     if (kind == 0)
     {
-        const uint32_t size = 1u << rng.Below(3);
+        const uint32_t size = 4;
         const bool wb = rng.Chance(60);
-        variant = std::string(wb ? "wb." : "nowb.") + (size == 1 ? "b" : size == 2 ? "w" : "l");
+        variant = wb ? "wb" : "nowb";
         put(0xE300 | (2u + rng.Below(3)));           // mov #trips,r3
         const size_t top = b.at;                     // L:
         reload(1);
-        put(0x2150 | (size == 1 ? 0u : size == 2 ? 1u : 2u));   // mov.b / .w / .l r5,@r1
+        put(0x2152);                                 // mov.l r5,@r1
         if (wb)
         {
             put(0x7100 | size);                      // add #size,r1
@@ -10635,11 +10640,7 @@ bool GenFrame144Fn(uint64_t seed, CCase& c, std::string& shape)
     const uint32_t nReads = 1 + rng.Below(3);
     for (uint32_t i = 0; i < nReads; ++i)
     {
-        const uint32_t size = 1u << rng.Below(3);
-        const uint32_t off = rng.Below(16 / size) * size;
-        put(0x63F3);                                 // mov r15,r3
-        put(0x7300 | (sOff + off));                  // add #S+off,r3
-        put(0x6230 | (size == 1 ? 0u : size == 2 ? 1u : 2u));   // mov.b / .w / .l @r3,r2
+        put(0x52F0 | ((sOff + 4u * rng.Below(4)) / 4u));   // mov.l @(S+4k,r15),r2
         put(i == 0 && kind != 1 ? 0x6023u : rng.Chance(50) ? 0x302Cu : 0x202Au);   // mov r2,r0 / add r2,r0 / xor r2,r0
     }
     put(0x7F40);                                     // add #64,r15
@@ -11214,7 +11215,7 @@ void TestPrintedC()
             {
                 CCase h;
                 std::string shape;
-                if (GenFrame144Fn(static_cast<uint64_t>(seed), h, shape))
+                if (GenFrame144Fn(static_cast<uint64_t>(seed), h, shape) && shape.find(".byte.") == std::string::npos)
                 {
                     fns.push_back(RegFn());
                     cases.push_back(h);
@@ -13117,8 +13118,7 @@ void TestA365Pins(Sh2Decompiler& d)
             ++drawn["L" + shape.substr(shape.rfind('.') + 2)];
         }
         std::printf("pin 'frame124 chain144 draws': %d functions in 4000 seeds, %zu kinds\n", n, drawn.size());
-        for (const char* k : { "frame124.chain144.loop.wb.b", "frame124.chain144.loop.wb.w", "frame124.chain144.loop.wb.l", "frame124.chain144.loop.nowb.b",
-                               "frame124.chain144.loop.nowb.w", "frame124.chain144.loop.nowb.l", "frame124.chain144.idx.rel", "frame124.chain144.idx.dir",
+        for (const char* k : { "frame124.chain144.loop.wb", "frame124.chain144.loop.nowb", "frame124.chain144.idx.rel", "frame124.chain144.idx.dir",
                                "frame124.chain144.idx.other", "frame124.chain144.byte.c0", "frame124.chain144.byte.c3", "L1", "L2", "L3", "L4" })
             CHECK(drawn[k] > 0);
         CHECK(n > 800 && n < 1200);
