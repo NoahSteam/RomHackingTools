@@ -1121,6 +1121,27 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     haveSources = true;
                 }
                 const int rm = (w >> 8) & 0xF;
+                // (a memory variable's line that names its stores: the number is the stores' when one stores Rm; when each stores another
+                // register, the instruction made another value, `mov #0x0,r5` for an argument beside the pushes of r1 that write
+                // `xStack_8 = 0;`)
+                {
+                    std::set<int> storeRegs;
+                    for (const Token& t : r.lines[li].tokens)
+                    {
+                        uint16_t sw = 0;
+                        int size = 0;
+                        if (t.addr && t.begin == t.end && word(t.addr, sw) && StoredRegister(sw, size) >= 0) storeRegs.insert(StoredRegister(sw, size));
+                    }
+                    if (!storeRegs.empty())
+                    {
+                        if (storeRegs.count(rm)) continue;
+                        ++a.constAtJoin;
+                        problem("const-join", "line " + std::to_string(li) + " '" + text + "' is drawn at " + MappingHex(at) + " (" + d.Mnemonic + " " +
+                                                  d.Operands + "), the first instruction of a join, which makes the number into r" + std::to_string(rm) +
+                                                  "; the stores the line names store r" + std::to_string(*storeRegs.begin()));
+                        continue;
+                    }
+                }
                 const auto holds = [&](int reg) {
                     const WordValue v = RegisterBefore(r, word, sources, at, reg);
                     return v.kind == WordValue::Number && static_cast<uint32_t>(v.value) == want;

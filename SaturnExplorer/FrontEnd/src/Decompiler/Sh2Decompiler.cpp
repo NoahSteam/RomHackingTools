@@ -6050,8 +6050,52 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                               !o->getIn(0)->isConstant();
         // (A7-22: a number put at an instruction that does not make it -- a load of the variable, a pop, a branch -- is the store's line too;
         // at a call the call keeps its token, A7-11's choice)
-        const bool numberAway = code == ghidra::CPUI_COPY && o->getIn(0)->isConstant() && !flow.callInsns.count(at) && !slotMaker &&
-                                !InstructionMakesNumber(flow, at, static_cast<uint64_t>(o->getIn(0)->getOffset()), o->getIn(0)->getSize());
+        // (A7-26: the instruction makes the number into a register a chosen store stores, when the flow says which: `mov #0x0,r5` for
+        // an argument, at the pushes of r1 that write the frame words, is no maker of `xStack_8 = 0;`)
+        bool numberMade = false;
+        if (code == ghidra::CPUI_COPY && o->getIn(0)->isConstant())
+        {
+            const uint64_t value = static_cast<uint64_t>(o->getIn(0)->getOffset());
+            const ghidra::int4 size = o->getIn(0)->getSize();
+            // (the register each store stores: its value input, or the register a temporary of the store's instruction copies, as
+            // `mov.l r1,@-r15` stores through one)
+            std::vector<FlowVn> stored;
+            bool storedKnown = !A7fOff("mem");
+            for (const ghidra::AccessRecord* r : chosen)
+            {
+                const auto pos = flow.ops.find(r->time);
+                if (!storedKnown || pos == flow.ops.end() || pos->second.first < 0 || static_cast<size_t>(pos->second.first) >= flow.blockOps.size() ||
+                    pos->second.second >= flow.blockOps[static_cast<size_t>(pos->second.first)].size())
+                {
+                    storedKnown = false;
+                    break;
+                }
+                const std::vector<FlowOp>& ops = flow.blockOps[static_cast<size_t>(pos->second.first)];
+                const FlowOp& store = ops[pos->second.second];
+                if (store.code != ghidra::CPUI_STORE || store.numIn < 3 || store.in[2].Constant())
+                {
+                    storedKnown = false;
+                    break;
+                }
+                FlowVn v = store.in[2];
+                for (size_t k = pos->second.second; v.space && v.space->getType() == ghidra::IPTR_INTERNAL && k-- > 0 && ops[k].insn == store.insn;)
+                    if (ops[k].hasOut && ops[k].out.space == v.space && ops[k].out.offset == v.offset)
+                    {
+                        if (ops[k].code != ghidra::CPUI_COPY || ops[k].numIn < 1) break;
+                        v = ops[k].in[0];
+                    }
+                if (!v.space || v.space->getType() != ghidra::IPTR_PROCESSOR)
+                {
+                    storedKnown = false;
+                    break;
+                }
+                stored.push_back(v);
+            }
+            if (!storedKnown || stored.empty()) numberMade = InstructionMakesNumber(flow, at, value, size);
+            else
+                for (const FlowVn& v : stored) numberMade = numberMade || InstructionMakesNumber(flow, at, value, size, &v);
+        }
+        const bool numberAway = code == ghidra::CPUI_COPY && o->getIn(0)->isConstant() && !flow.callInsns.count(at) && !slotMaker && !numberMade;
         for (const ghidra::AccessRecord* r : chosen)
         {
             uint32_t insn = InstructionOf(*r), canonical = 0;
