@@ -2004,8 +2004,89 @@ void RunAutoRefreshPin()
     MiniCheck("...and the answer is for the function the PC is in", s && s->requestedEntry == aEntry);
 }
 
+// A8-30 (area 8 fixer): Follow PC turned off pins the entry the finder found, and that entry is still the finder's guess. The label keeps
+// its figure, "(entry from rts scan, 60%)", and the amber "Entry: ..." line stays, on screen and in the Copy marks, as the guide says of an
+// entry found only by the rts scan. Both ways in: the entry Follow PC found, and the entry of the output shown when the PC is where no
+// function is. Only an entry the user types drops them. The finder's words are area 4's; here they are what the screen showed before the pin.
+void RunPinnedEntryPins()
+{
+    const uint32_t cEntry = Defs()[FnC].entry;
+    const std::string doubt = "guessed from the previous rts; no symbol, call or user entry confirms it";
+    auto drawnText = [] {
+        std::string all;
+        for (const drawn::Run& run : drawn::WindowRuns(DecompilerPanel::kTitle)) all += run.text + " ";
+        return Norm(all);
+    };
+    auto doubted = [&](MiniRig& m, const char* what) {
+        m.Frame();
+        const std::vector<std::string> u = m.panel.Uncertainties();
+        const bool line = std::find(u.begin(), u.end(), "Entry: " + doubt + ".") != u.end();
+        const bool label = drawnText().find(Norm("(entry from rts scan, 60%)")) != std::string::npos;
+        const bool drawnLine = drawnText().find(Norm("Entry: " + doubt + ".")) != std::string::npos;
+        const bool copied = m.panel.CopyMarks().find(doubt) != std::string::npos;
+        MiniCheck(what, line && label && drawnLine && copied,
+                  std::string("label ") + (label ? "kept" : "lost") + ", Entry line " + (line && drawnLine ? "drawn" : "missing") + ", Copy marks " +
+                      (copied ? "carry it" : "do not carry it") + "; window: " + drawnText());
+    };
+    auto model = [&](MiniRig& m, const char* what) {
+        trust::TrueState t;
+        t.liveEmulator = true;
+        t.entryDoubt = doubt;
+        MiniVerify(m, what, t, "func_");
+    };
+    {
+        MiniRig m;
+        m.kind = DecompViewKind::LivePaused;
+        m.regs[0].pc = cEntry + 4;
+        m.haveRegs[0] = true;
+        m.Idle(3);
+        CHECK(m.Settle());
+        doubted(m, "A8-30: Follow PC on C+4, found by the rts scan: the figure and the Entry line");
+        CHECK(ClickMini(m, "follow"));
+        m.Idle(3);
+        CHECK(m.Settle());
+        MiniCheck("A8-30: ...Follow PC off pins C", !m.panel.FollowPc() && m.panel.WantedEntry() == cEntry);
+        doubted(m, "A8-30: ...pinned, the entry is still the finder's guess: the figure and the Entry line stay");
+        model(m, "A8-30: ...and the model holds the pin to the finder's doubt");
+        // Pinned, a new snapshot asks the same entry again: the doubt goes with the target, not with the snapshot it was found on.
+        EditMini(m);
+        m.Idle(3);
+        CHECK(m.Settle());
+        doubted(m, "A8-30: ...an edit, answered again for the pinned entry: still the finder's guess");
+        // Only the user's own entry drops it.
+        TypeEntry(m, Hex(cEntry));
+        m.Idle(3);
+        CHECK(m.Settle());
+        const std::vector<std::string> u = m.panel.Uncertainties();
+        MiniCheck("A8-30: ...the same entry typed: the user's entry, no figure and no Entry line",
+                  drawnText().find(Norm("(entry from user-set entry)")) != std::string::npos && u.empty() &&
+                      m.panel.CopyMarks().find(doubt) == std::string::npos, "window: " + drawnText());
+    }
+    {
+        // The other way in: the PC where no function is, so the box pins the entry of the output shown.
+        MiniRig m;
+        m.kind = DecompViewKind::LivePaused;
+        m.regs[0].pc = cEntry + 4;
+        m.haveRegs[0] = true;
+        m.Idle(3);
+        CHECK(m.Settle());
+        m.regs[0].pc = 0x00001FF0u;
+        ++m.frame;
+        m.Idle(3);
+        CHECK(m.Settle());
+        CHECK(m.panel.WantedEntry() == 0);
+        CHECK(ClickMini(m, "follow"));
+        m.Idle(3);
+        CHECK(m.Settle());
+        MiniCheck("A8-30: Follow PC off with the PC where no function is pins the output shown, C", !m.panel.FollowPc() && m.panel.WantedEntry() == cEntry);
+        doubted(m, "A8-30: ...that entry was the finder's guess too: the figure and the Entry line stay");
+        model(m, "A8-30: ...and the model holds it to the finder's doubt");
+    }
+}
+
 void RunFixPins()
 {
+    RunPinnedEntryPins();
     RunWidthPins();
     RunTooltipPins();
     RunRefusedTextPins();
@@ -2188,6 +2269,17 @@ struct FRig
     bool haveStopped = false;
     Q stoppedQ;
     uint64_t counter = 100;
+
+    // (area 8 fixer, A8-30) Follow PC turned off pins the entry the finder found (or else the one shown): the Entry target is still the
+    // finder's guess, not the user's, and keeps its doubt. The doubt is the one the model accepted at the check before the click, for the
+    // same question; when no check saw it (the output on screen was another function, or the click's frames captured), any of the finder's.
+    bool pinGuess = false;
+    bool pinDoubtKnown = false;
+    std::string pinDoubt;
+    uint32_t pinAnchor = 0;   // the PC that was followed, which the finder's "never reaches" names
+    bool followDoubtKnown = false;
+    Q followDoubtQ;
+    std::string followDoubt;
 
     FRig() : runner(gConfig, RunnerOptions()), h([this] { Ui(); })
     {
@@ -2401,7 +2493,8 @@ std::string FollowCheck(FRig& r, bool hover)
     t.liveEmulator = r.kind != DecompViewKind::Static;
     t.running = r.kind == DecompViewKind::LiveRunning;
     t.noEntry = w.noEntry;
-    bool doubtful = false;
+    bool doubtful = false, pinned = false;
+    r.followDoubtKnown = false;
     if (sh)
     {
         const bool viewMoved = sh->key.sourceId != r.source || sh->key.deriveSerial != r.serial || sh->key.frameNumber != r.frame;
@@ -2413,6 +2506,10 @@ std::string FollowCheck(FRig& r, bool hover)
             t.anchorKnown = w.anchor;
             t.anchor = w.anchorAt;
         }
+        // (area 8 fixer, A8-30) An Entry target that came from the finder is doubted as the finder doubted it. Before, the model expected
+        // no doubt for every Entry target, and so accepted the pin dropping it. The anchor line is not drawn for it: no address was asked.
+        if (w.entry && sh->requestedEntry == w.entry && r.tgt == FRig::Tgt::Entry && r.pinGuess)
+            doubtful = pinned = true;
     }
     // A request still running for a question that has since found no function is not the replacement of anything on screen.
     const bool pending = r.panel.Pending() && w.noEntry == trust::NoEntry::None;
@@ -2429,20 +2526,28 @@ std::string FollowCheck(FRig& r, bool hover)
     {
         // The finder's doubt about an entry it found by the previous `rts` goes away once the entry is a known callee (area 4's
         // order of rungs): the line is the finder's to give, so it may or may not be there. The pins hold it exactly.
-        std::string variants[3] = { "guessed from the previous rts; no symbol, call or user entry confirms it", "",
-                                    "the code from " + trust::Hex8(w.entry) + " (after the rts at " + trust::Hex8(w.entry - 4) + ") never reaches " +
-                                        trust::Hex8(w.anchorAt) };
-        size_t good = 3;
-        for (size_t i = 0; i < 3 && good == 3; ++i)
+        const uint32_t anchorAt = pinned ? r.pinAnchor : w.anchorAt;
+        std::vector<std::string> variants = { "guessed from the previous rts; no symbol, call or user entry confirms it", "",
+                                              "the code from " + trust::Hex8(w.entry) + " (after the rts at " + trust::Hex8(w.entry - 4) +
+                                                  ") never reaches " + trust::Hex8(anchorAt) };
+        if (pinned && r.pinDoubtKnown) variants = { r.pinDoubt };   // the pin keeps exactly what the finder said
+        size_t good = variants.size();
+        for (size_t i = 0; i < variants.size() && good == variants.size(); ++i)
         {
             t.entryDoubt = variants[i];
             err = Verify(r.panel, t, frame, false);
             if (err.empty()) good = i;
         }
-        if (good < 3 && hover)
+        if (good < variants.size() && hover)
         {
             t.entryDoubt = variants[good];
             err = Verify(r.panel, t, frame, true);
+        }
+        if (err.empty() && r.tgt == FRig::Tgt::Follow)
+        {
+            r.followDoubtKnown = true;
+            r.followDoubtQ = r.QNow(w.entry);
+            r.followDoubt = variants[good];
         }
     }
     else
@@ -2492,6 +2597,7 @@ std::string FollowExecute(FRig& r, FOp o, Rng& rng)
         TypeEntry(r, Hex(entry));
         r.tgt = FRig::Tgt::Entry;
         r.tgtAddr = entry;
+        r.pinGuess = false;   // the user's own entry: full confidence, no doubt
         r.refused = false;
         r.haveStopped = false;
         return std::string();
@@ -2575,8 +2681,16 @@ std::string FollowExecute(FRig& r, FOp o, Rng& rng)
             // 40109 of mix 8 with SE_TRUST_NOHOVER=1). Nothing has resolved the new target yet, so the entry the panel wants is still the one
             // it pinned.
             pinned = r.panel.WantedEntry();
+            const bool found = pinned != 0;
             if (!pinned)
                 if (const DecompileResult* shown = r.panel.Shown()) pinned = shown->requestedEntry;
+            // (area 8 fixer, A8-30) The pin is the finder's guess, with the doubt the last check accepted for this very question. The entry
+            // pinned from the output shown (the question had no function) keeps the doubt it was installed with, which no check here recorded.
+            FRig::Regs hr;
+            r.pinGuess = true;
+            r.pinDoubtKnown = found && r.followDoubtKnown && r.QNow(pinned) == r.followDoubtQ;
+            r.pinDoubt = r.pinDoubtKnown ? r.followDoubt : std::string();
+            r.pinAnchor = r.HeldRegs(hr) && hr.have[r.cpu] ? hr.r[r.cpu].pc : 0;
             r.tgt = FRig::Tgt::Entry;
             r.tgtAddr = pinned;
         }
@@ -2584,6 +2698,7 @@ std::string FollowExecute(FRig& r, FOp o, Rng& rng)
         {
             if (!r.Click("follow")) return "(no Follow PC box)";
             r.tgt = FRig::Tgt::Follow;
+            r.pinGuess = false;
         }
         r.refused = false;
         r.haveStopped = false;
@@ -2603,6 +2718,7 @@ std::string FollowExecute(FRig& r, FOp o, Rng& rng)
         TypeEntry(r, "FFFFFFF0");
         r.tgt = FRig::Tgt::Entry;
         r.tgtAddr = 0xFFFFFFF0u;
+        r.pinGuess = false;
         r.refused = false;
         r.haveStopped = false;
         return "";
@@ -2828,6 +2944,23 @@ const uint64_t kFollowPins[] = { 5051, 5080 };
 // of mix 8 (20149, 20442, 21097) and of mix 9, with Auto-refresh and Show in Pseudocode (20297, 20729, 20793, 21058, 21275).
 const uint64_t kFollowPinsClick[] = { 20149, 20442, 21097 };
 const uint64_t kFollowPinsClickAuto[] = { 20297, 20729, 20793, 21058, 21275 };
+// (area 8 fixer) A8-30: Follow PC turned off drops the finder's doubt about the entry it pins: mix 8 seed 12 and mix 9 seed 1 (the first seeds
+// of each that fail once the model expects the doubt for a pinned entry and the panel drops it).
+const uint64_t kFollowPinsPinned[] = { 12 };
+const uint64_t kFollowPinsPinnedAuto[] = { 1 };
+// A8-29: the CPU switch under Follow PC onto a question whose Stop is over, with the CPU switch, a CPU without registers, the PC in the BIOS
+// and Stop four times as often (SE_TRUST_FOLLOW_CPU) and hover off, as round 4 found them: mix 8 seed 50534 (way (b)), mix 9 seed 50814 ((c)).
+const uint64_t kFollowPinsCpu[] = { 50534 };
+const uint64_t kFollowPinsCpuAuto[] = { 50814 };
+// ...and written out (round 4's tools/a8_round4/a8_29.sh and a8_30.sh): each ended NOT REFRESHED, or (A8-30) with the doubt gone.
+const char* const kFollowScriptPins[] = {
+    "cpu; regsoff; cpu; hold; edit; stop; release; cpu; cpu",              // A8-29 (a): a CPU without registers
+    "cpu; pcbios; cpu; hold; edit; stop; release; cpu; cpu",               // A8-29 (a): the PC in the BIOS
+    "hold; containc; pcc; cpu; regsoff; stop; follow; cpu",                // A8-29 (b): the click's request used up where nothing is found
+    "pct; cpu; regsoff; hold; typet; cpu; cpu; refresh; follow; stop; cpu", // A8-29 (c): Stop on a request for no question on screen
+    "refresh; follow; refresh; follow",                                    // A8-30: the pin keeps the finder's doubt
+    "hold; edit; follow; release; refresh",                                // A8-30: pinned while the answer is held, then answered
+};
 
 // The stride of the allocation-failure sweep in the default run: every 50th allocation of one request of C (about 32,200 of them), about 644 cells.
 const long kOomStride = 50;
@@ -3031,18 +3164,47 @@ int main(int argc, char** argv)
             for (uint64_t seed : kFollowPins) followPins.push_back({ seed, false });
             for (uint64_t seed : kFollowPinsClick) followPins.push_back({ seed, false });
             for (uint64_t seed : kFollowPinsClickAuto) followPins.push_back({ seed, true });
-            for (const auto& fp : followPins)
+            for (uint64_t seed : kFollowPinsPinned) followPins.push_back({ seed, false });
+            for (uint64_t seed : kFollowPinsPinnedAuto) followPins.push_back({ seed, true });
+            const size_t plain = followPins.size();
+            for (uint64_t seed : kFollowPinsCpu) followPins.push_back({ seed, false });
+            for (uint64_t seed : kFollowPinsCpuAuto) followPins.push_back({ seed, true });
+            for (size_t k = 0; k < followPins.size(); ++k)
             {
-                const uint64_t seed = fp.first;
-                gFollowAuto = fp.second;
+                const uint64_t seed = followPins[k].first;
+                gFollowAuto = followPins[k].second;
+                // (area 8 fixer) the A8-29 seeds are sequences of the CPU-weighted mixes, run without hover as they were found
+                const bool cpuWeighted = k >= plain, hoverWas = gHover, cpuWas = gFollowCpu;
+                if (cpuWeighted)
+                {
+                    gFollowCpu = true;
+                    gHover = false;
+                }
                 uint64_t ops = 0;
                 const bool ok = RunFollow(seed, false, ops);
                 gFollowAuto = false;
-                std::printf("pin follow seed %llu (%llu operations) %s\n", static_cast<unsigned long long>(seed), static_cast<unsigned long long>(ops), ok ? "ok" : "FAILED");
+                gFollowCpu = cpuWas;
+                gHover = hoverWas;
+                std::printf("pin follow seed %llu%s (%llu operations) %s\n", static_cast<unsigned long long>(seed), cpuWeighted ? " (CPU-weighted)" : "",
+                            static_cast<unsigned long long>(ops), ok ? "ok" : "FAILED");
                 if (!ok)
                 {
                     ++failedPrograms;
                     failedList.push_back("pin: follow seed " + std::to_string(seed));
+                }
+            }
+            for (const char* script : kFollowScriptPins)
+            {
+                std::string error;
+                CHECK(ParseFollowScript(script, gFollowScript, error));
+                uint64_t ops = 0;
+                const bool ok = RunFollow(0, false, ops);
+                gFollowScript.clear();
+                std::printf("pin follow script \"%s\" %s\n", script, ok ? "ok" : "FAILED");
+                if (!ok)
+                {
+                    ++failedPrograms;
+                    failedList.push_back(std::string("pin: follow script ") + script);
                 }
             }
         }
