@@ -5025,7 +5025,9 @@ void FinalValues(const ghidra::Varnode* vn, ValueSet& s, std::set<const ghidra::
     }
     if (!vn->isWritten()) return;
     const ghidra::PcodeOp* d = vn->getDef();
-    s.insns.insert(InstructionOf(d));
+    // (A7-35: a number the engine put in a copy of its own, at the instruction it placed it at -- `u = 0` at the `bt` ending a block,
+    // the value of a store it moved onto the path -- is that number, not something that instruction made: the value is the number only)
+    if (!(d->code() == ghidra::CPUI_COPY && d->getIn(0)->isConstant() && d->getTime() >= opsEnd)) s.insns.insert(InstructionOf(d));
     s.times.insert(d->getTime());
     switch (d->code())
     {
