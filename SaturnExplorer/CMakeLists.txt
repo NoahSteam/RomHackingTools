@@ -905,6 +905,25 @@ if(BUILD_TESTING)
             add_test(NAME SaturnExplorerLoaderFuzzTests
                      COMMAND SaturnExplorerLoaderFuzzTests ${CMAKE_CURRENT_BINARY_DIR}/loader_fuzz_test)
             set_tests_properties(SaturnExplorerLoaderFuzzTests PROPERTIES TIMEOUT ${SE_DECOMP_TIMEOUT_120})
+
+            # Area 9 round 4 (review): pins of A9-40 and later (the prose address words, the lock's refusal text and wait), and
+            # regression guards for the settings merge, the staging cleanup, blank names and a link loop. Linux only.
+            add_executable(SaturnExplorerArea9Round4Tests
+                FrontEnd/tests/Area9Round4Tests.cpp
+                FrontEnd/src/Settings.cpp
+                FrontEnd/src/FileWrite.cpp
+                FrontEnd/src/Sh2Address.cpp
+                FrontEnd/src/Debug/CallStack.cpp
+                FrontEnd/src/Debug/MemoryBackend.cpp
+                FrontEnd/src/Debug/Sh2Disasm.cpp
+                FrontEnd/src/Decompiler/MemorySnapshot.cpp
+                FrontEnd/src/Decompiler/AddressRanges.cpp
+                FrontEnd/src/Decompiler/Sh2FunctionFinder.cpp
+                FrontEnd/src/Sha256.cpp)
+            target_include_directories(SaturnExplorerArea9Round4Tests PRIVATE FrontEnd/src include
+                ${CMAKE_CURRENT_SOURCE_DIR}/Drivers/Savestate/src)
+            target_link_libraries(SaturnExplorerArea9Round4Tests PRIVATE SaturnExplorerSavestateDriver SaturnExplorerCore)
+            add_test(NAME SaturnExplorerArea9Round4Tests COMMAND SaturnExplorerArea9Round4Tests)
         endif()
     endif()
 

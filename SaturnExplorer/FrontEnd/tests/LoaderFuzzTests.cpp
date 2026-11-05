@@ -1586,7 +1586,11 @@ void RunSettingsCase(uint64_t index)
     // The reference reading of the documented format.
     std::map<std::string, std::map<std::string, std::string>> ref;
     std::string section;
-    for (const std::string& raw : LinesCR(text))   // a lone CR ends a line in settings too (A9-25)
+    // A UTF-8 byte-order mark that opens the file is not part of its first line (A9-34); one anywhere else is (area 9 round 4:
+    // this reference had not followed the A9-34 fix, and reported the product's correct reading as DIFFERS_FROM_FORMAT and
+    // ROUNDTRIP at seed 5309 index 1576).
+    const std::string unmarked = text.compare(0, 3, "\xEF\xBB\xBF") == 0 ? text.substr(3) : text;
+    for (const std::string& raw : LinesCR(unmarked))   // a lone CR ends a line in settings too (A9-25)
     {
         const std::string t = Trim(raw);
         if (t.empty() || t[0] == ';' || t[0] == '#') continue;
