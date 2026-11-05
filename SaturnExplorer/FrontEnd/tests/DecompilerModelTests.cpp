@@ -924,6 +924,8 @@ struct Install
     TooLargeMemo memo;   // as it was when this result was installed
     bool onScreen = true;   // the snapshot held was the one on screen (a running emulator's lags by design)
     bool excused = false;   // a result the from-scratch answer is not the judge of: one the area 8 driver made up, or an Unavailable it caused
+    // The panel installed it from its own cache: no request ran, so the runner's memo is as it was (A8-41).
+    bool fromCache = false;
 };
 
 struct Rig
@@ -977,6 +979,7 @@ struct Rig
     Sig held;                // the snapshot the policy of DecompilerPanel.h has it hold
     bool explicitPending = false;
     uint64_t lastGen = 0;
+    uint64_t lastCacheHits = 0;   // the panel's CacheHits() at the last Observe: a move says the frame's install was a cache hit (A8-41)
     uint64_t frames = 0;
     std::vector<Install> installs;
     Sig shown;               // the inputs the shown result was installed under
@@ -1205,6 +1208,9 @@ struct Rig
     void Observe()
     {
         const DecompileResult* s = panel.Shown();
+        // One Update a frame, and so at most one install: when the cache hits moved in it, the install was from the cache.
+        const bool cacheHit = panel.CacheHits() != lastCacheHits;
+        lastCacheHits = panel.CacheHits();
         if (!s || s->generation == lastGen) return;
         lastGen = s->generation;
         if (haveStopped && stopCertain && namesGeneration == stoppedNamesGen && SigOf(held).Same(stopped))
@@ -1223,6 +1229,7 @@ struct Rig
                                : held.SameView(now));
         }
         in.excused = injectedGens.count(s->generation) != 0 || (cfgBroken && s->status == DecompileStatus::Unavailable);
+        in.fromCache = cacheHit;
         shownInjected = in.excused;
         installs.push_back(std::move(in));
         shown = installs.back().sig;
@@ -1809,7 +1816,8 @@ struct Rig
             // when that run completed. Only an answer of a function with no callee is known to be a run of the very request that was stalled
             // (the signature does not hold what the panel lent, and a request that lent a callee's signature is another request, with
             // its own memo, whose answer can read the same), so only that one erases; the others leave the memo, which accepts more (area 8, round 1).
-            if (in.result.calledAt.empty() && SameAnswer(in.result, oracle.Run(in.sig, in.sig.entry, Lent())))
+            // An answer the panel installed from its own cache was no run at all: the runner still holds its memo (A8-41).
+            if (!in.fromCache && in.result.calledAt.empty() && SameAnswer(in.result, oracle.Run(in.sig, in.sig.entry, Lent())))
                 for (size_t i = memo.starved.size(); i-- > 0;)
                     if (memo.starved[i].Same(in.sig)) memo.starved.erase(memo.starved.begin() + static_cast<std::ptrdiff_t>(i));
             const std::vector<const DecompileResult*> cands = oracle.Candidates(in.sig);
