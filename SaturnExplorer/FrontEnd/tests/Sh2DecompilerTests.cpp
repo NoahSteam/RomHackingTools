@@ -1090,6 +1090,123 @@ void TestArea7Round6()
     }
 }
 
+// Area 7 round 7 (the reviewer's pins): each finding at its current behaviour; the comment of each says what flips when the row is fixed.
+// Fixtures are tools/a7_round7/fixtures/a731.probe (SE_A7R4_PROBE runs them). Every one is A7-31's shrunk module (grammar 2 seed
+// 1404082) with the four words at 0x0600900C (and two at 0x0600901C) changed: function 0 makes r3 = param_1, pushes it
+// (`mov.l r3,@-r15`, 0x06009014), pops it and calls function 1 (`bsr`, 0x06009018), whose frame overlaps the word, so the engine shows
+// `xStack_14 = param_1;` at the call (A7-11's copy).
+void TestArea7Round7()
+{
+    std::vector<uint8_t> hw(0x100000u, 0);
+    Sh2Decompiler d(gConfig);
+    const std::function<bool(uint32_t, uint16_t&)> word = [&hw](uint32_t x, uint16_t& w) {
+        if (x < 0x06000000u || x - 0x06000000u + 1 >= hw.size()) return false;
+        w = static_cast<uint16_t>(hw[x - 0x06000000u] << 8 | hw[x - 0x06000000u + 1]);
+        return true;
+    };
+    const auto module = [](std::vector<uint16_t> makeR3, std::vector<uint16_t> afterCall) {
+        std::vector<uint16_t> w = { 0x2F86, 0x2F96, 0x2FD6, 0x4F22, 0x6843, 0x6953 };
+        w.insert(w.end(), makeR3.begin(), makeR3.end());
+        for (uint16_t x : { 0x2F36, 0x63F6, 0xB00C, 0x0009 }) w.push_back(x);
+        w.insert(w.end(), afterCall.begin(), afterCall.end());
+        for (uint16_t x : { 0xD203, 0x4F26, 0x6DF6, 0x69F6, 0x68F6, 0x422B, 0x0009, 0x0009, 0x0600, 0x9034, 0x2FE6, 0x7FD0, 0x6EF3, 0x62F3, 0x7230,
+                            0xE103, 0x2216, 0x4110, 0x8BFC, 0xE200, 0xE0C2, 0x7E30, 0x6FE3, 0x6EF6, 0x000B, 0x0009 })
+            w.push_back(x);
+        return w;
+    };
+    const std::vector<uint16_t> args = { 0x6483, 0x6593 };          // mov r8,r4 ; mov r9,r5 (the tail call's arguments)
+    const std::vector<uint16_t> pushR1 = { 0x2F16, 0x7F04 };        // mov.l r1,@-r15 ; add #4,r15: the word written again after the call
+    // A7-31 (re-rated P2 by this round): the push is on no line and the copy at the call names nothing. The cause is StoreShowsValue
+    // (FlowValueMayBe): the pushed r3 is made by an `add r4,r3` the engine folded (r3 was 0: `mov #1,r3 ; dt r3 ; bf` in the seed,
+    // `mov #0,r3`, or `mov r4,r3 ; add #0,r3`), so the statement's value is the input param_1 itself, no op of the flow; the walk back
+    // from the store meets the add, a computation the value does not hold, and ends at "another value". A store that wrote the value
+    // is then not the statement's, and the copy names no store. When fixed: the line names 0x06009014 and frameStoreMissing is 0.
+    for (const auto& makeR3 : { std::vector<uint16_t>{ 0xE301, 0x4310, 0x8BFD, 0x334C }, std::vector<uint16_t>{ 0xE300, 0x334C, 0x0009, 0x0009 },
+                                std::vector<uint16_t>{ 0x6343, 0x7300, 0x0009, 0x0009 } })
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, module(makeR3, args));
+        Print("A7-31 a folded computation's push named by no line", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        const Line* copy = LineWith(r, "xStack_14 = param_1;");
+        CHECK(copy != nullptr);
+        if (copy) CHECK(LineInstructions(*copy) == (std::vector<uint32_t>{ 0x06009018u }));   // the bsr only (A7-31; fixed: and 0x06009014)
+        CHECK(!a7r3::OnSomeLine(r, 0x06009014u));                                              // the push is on no line
+        const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_31");
+        CHECK(a.frameStoreMissing == 1);
+    }
+    // The control: r3 moved from r4 (`mov r4,r3`), no computation: the copy names the push.
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, module({ 0x6343, 0x0009, 0x0009, 0x0009 }, args));
+        const Line* copy = LineWith(r, "xStack_14 = param_1;");
+        CHECK(copy != nullptr);
+        if (copy) CHECK(LineInstructions(*copy) == (std::vector<uint32_t>{ 0x06009014u, 0x06009018u }));
+        const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_31 control");
+        CHECK(a.Violations() == 0);
+    }
+    // A7-32 (P2): A7-31's false "another value" with the frame word written again AFTER the call (`mov.l r1,@-r15` at 0x0600901C, r1 the
+    // callee's leftover). AddFrameStoreTokens' search rejects the push and goes on to the next store of the word in the block
+    // (nextInHome), a store after the call: `xStack_14 = param_1;` names 0x0600901C, which writes another value after the call has seen
+    // the word; the hover lists it and Show in Pseudocode on it answers the copy. storeValueOther cannot see it (r1 after a call is not
+    // known); the new storeAfterUse does. When fixed: the line names 0x06009014 (A7-31) or nothing, never a store after the call.
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, module({ 0xE300, 0x334C, 0x0009, 0x0009 }, pushR1));
+        Print("A7-32 a copy at a call naming a store after the call", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        const Line* copy = LineWith(r, "xStack_14 = param_1;");
+        CHECK(copy != nullptr);
+        if (copy) CHECK(LineInstructions(*copy) == (std::vector<uint32_t>{ 0x06009018u, 0x0600901Cu }));   // (A7-32: the later store)
+        const LineLookup back = LineForInstruction(r, 0x0600901Cu);
+        CHECK(!back.lines.empty() && copy && &r.lines[back.lines[0]] == copy);
+        const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_32");
+        CHECK(a.storeValueOther == 0);                         // (the old check is blind to it)
+        CHECK(a.storeAfterUse == 1 && a.Violations() == 1);
+    }
+    // ...the control: r3 moved, the same later store: the copy names the push, and storeAfterUse accepts it. The damaged result (the
+    // push's token moved to the later store) is flagged: the check bites.
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, module({ 0x6343, 0x0009, 0x0009, 0x0009 }, pushR1));
+        const Line* copy = LineWith(r, "xStack_14 = param_1;");
+        CHECK(copy != nullptr);
+        if (copy) CHECK(LineInstructions(*copy) == (std::vector<uint32_t>{ 0x06009014u, 0x06009018u }));
+        const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_32 control");
+        CHECK(a.Violations() == 0 && a.storeAfterUse == 0);
+        DecompileResult moved = r;
+        int n = 0;
+        for (Line& x : moved.lines)
+            if (Has(x.text, "xStack_14 = param_1;"))
+                for (Token& t : x.tokens)
+                    if (t.addr == 0x06009014u) t.addr = 0x0600901Cu, ++n;
+        CHECK(n == 1);
+        const dts::MappingAudit m = dts::AuditMapping(moved, word, "a7_32 mutated");
+        CHECK(m.storeAfterUse == 1);
+    }
+    // A7-33 (instrument): a number line of a memory variable drawn at a `mov #imm` that makes the number into a register no store of the
+    // variable stores, and naming no store, passes every check: numberStoreOther judges only lines that name stores, and copyStoreMissing
+    // takes a number line drawn at a `mov #imm` as that instruction's. The A7-28 (a) fixture's line (drawn at its store 0x06070010) damaged
+    // as A7-28 was and with the store's token dropped: drawn at the slot `mov #0x4,r3` (0x0607000A), r3's 4. When fixed: the oracle
+    // flags it (the instruction must make the number into the register a store of the variable stores, and reach it).
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06070000u, { 0xD205, 0x6043, 0x8804, 0x8B01, 0xA002, 0xE304, 0xE005, 0xE309,
+            0x2201, 0x1231, 0x000B, 0x0009, 0x0603, 0xAC00 });
+        DecompileResult damaged = r;
+        int n = 0;
+        for (Line& x : damaged.lines)
+            if (Has(x.text, "xRam0603ac00 = 4;"))
+            {
+                std::vector<Token> keep;
+                for (Token t : x.tokens)
+                    if (t.begin < t.end) keep.push_back((t.addr = t.addr ? 0x0607000Au : 0, t));
+                x.tokens = keep;
+                x.firstAddr = 0x0607000Au;
+                ++n;
+            }
+        CHECK(n == 1);
+        const dts::MappingAudit a = dts::AuditMapping(damaged, word, "a7_33 damaged");
+        dts::PrintMappingAudit(a, "a7_33 damaged");
+        CHECK(a.Violations() == 0);   // (A7-33: the damaged result passes; fixed: a violation)
+    }
+}
+
 void TestFixture1()
 {
     Sh2Decompiler d(gConfig);
@@ -14815,6 +14932,7 @@ int main(int argc, char** argv)
         RUN(TestArea7Round4());
         RUN(TestArea7Round5());
         RUN(TestArea7Round6());
+        RUN(TestArea7Round7());
         RUN(TestSlotMadeLineIsAddressedToItsBranch());
         RUN(TestFrameStoreMaterialisedAtCall());
         RUN(TestFixture1b());

@@ -108,6 +108,7 @@ struct MappingAudit
                                // stores stores (a violation: A7-28, fixed)
     int caseOtherEntry = 0;    // case labels naming another entry of their own switch's table, or no destination of it (a violation: A7-29, fixed)
     int caseJudged = 0;        // ...the labels judged: a switch of the common `mova ; mov.w/mov.b @(r0,Rm),Rn ; add ; jmp @r0` form
+    int storeAfterUse = 0;     // area 7 round 7: a copy drawn only at a call or a return naming a store that cannot run before it (A7-32, a violation)
     int constAtJoin = 0;       // ...drawn at a join's first instruction (a target of the function's own branches) that makes no number, or another
                                // one, or makes it into another register than every path into the join sets it in: the engine's collapsed
                                // MULTIEQUAL, at its block's start (A7-22, A7-26, a violation)
@@ -131,7 +132,7 @@ struct MappingAudit
         copyUnconnected += o.copyUnconnected;
         storeValueOther += o.storeValueOther; copyOtherValue += o.copyOtherValue; constLines += o.constLines; constAtJoin += o.constAtJoin;
         copyMergeAtBranch += o.copyMergeAtBranch; copyRegisterMade += o.copyRegisterMade; copyNoAddress += o.copyNoAddress;
-        numberStoreOther += o.numberStoreOther; caseOtherEntry += o.caseOtherEntry; caseJudged += o.caseJudged;
+        numberStoreOther += o.numberStoreOther; caseOtherEntry += o.caseOtherEntry; caseJudged += o.caseJudged; storeAfterUse += o.storeAfterUse;
         for (const std::string& p : o.problems) Keep(p);
     }
     // Three examples of each kind of problem are kept; the prefix up to the first ':' is the kind.
@@ -147,7 +148,7 @@ struct MappingAudit
     {
         return odd + outside + notInsn + firstAddrWrong + badRange + callWithoutCall + unmarked + misnamed + accessUnmapped + callUnmapped + callGoneUnsaid + roundTrip +
                accessAtBranch + frameStoreMissing + backWrong + copyAtCall + copyAtReturn + copyAtBranch + copyAtOther + storeValueOther + constAtJoin +
-               copyMergeAtBranch + numberStoreOther + caseOtherEntry;
+               copyMergeAtBranch + numberStoreOther + caseOtherEntry + storeAfterUse;
     }
 };
 
@@ -1023,6 +1024,71 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                             break;
                         }
                 }
+                // Area 7 round 7 (A7-32): a copy drawn only at a call or a return is the value the engine shows there (a call's effect on
+                // a frame word, A7-11; a held value at a return, A7-15), and the stores it names wrote that value before it. A named store
+                // that cannot run before the instruction -- after it in the same flow block (not its delay slot), or in a block from which the
+                // flow does not reach the instruction's block -- wrote nothing the call or the return sees: the line names a store of a
+                // later value. The flow blocks are the flow's (as copyUnconnected reads them), the instructions the words.
+                {
+                    std::set<uint32_t> uses;
+                    bool useOnly = true;
+                    for (const Token& t : r.lines[li].tokens)
+                    {
+                        if (!t.addr || t.begin == t.end) continue;
+                        uint16_t uw = 0;
+                        if (!word(t.addr, uw))
+                        {
+                            useOnly = false;
+                            break;
+                        }
+                        const sfe::DisassembledInstruction ud = sfe::Sh2Decode(t.addr, uw);
+                        if (!(ud.IsCall || ud.Mnemonic == "rts" || ud.Mnemonic == "rte"))
+                        {
+                            useOnly = false;
+                            break;
+                        }
+                        uses.insert(t.addr);
+                    }
+                    const auto blockOf = [&r](uint32_t x) {
+                        for (size_t k = 0; k < r.flowBlockRanges.size(); ++k)
+                            if (r.flowBlockRanges[k].first <= x && x <= r.flowBlockRanges[k].second) return static_cast<int>(k);
+                        return -1;
+                    };
+                    // (may the store at `s` run before the instruction at `u` on some path?)
+                    const auto before = [&](uint32_t s, uint32_t u) {
+                        const int bs = blockOf(s), bu = blockOf(u);
+                        if (bs < 0 || bu < 0) return true;   // (not known)
+                        if (bs == bu && (s < u || s == u + 2)) return true;
+                        std::set<int> seen;
+                        std::vector<int> todo;
+                        if (static_cast<size_t>(bs) < r.flowSuccessors.size())
+                            for (int n : r.flowSuccessors[static_cast<size_t>(bs)])
+                                if (seen.insert(n).second) todo.push_back(n);
+                        while (!todo.empty())
+                        {
+                            const int b = todo.back();
+                            todo.pop_back();
+                            if (b == bu) return true;
+                            if (b < 0 || static_cast<size_t>(b) >= r.flowSuccessors.size()) continue;
+                            for (int n : r.flowSuccessors[static_cast<size_t>(b)])
+                                if (seen.insert(n).second) todo.push_back(n);
+                        }
+                        return false;
+                    };
+                    if (useOnly && !uses.empty() && !r.flowBlockRanges.empty())
+                        for (const Token& t : r.lines[li].tokens)
+                        {
+                            if (!t.addr || !candidates.count(t.addr)) continue;
+                            bool any = false;
+                            for (uint32_t u : uses) any = any || before(t.addr, u);
+                            if (any) continue;
+                            ++a.storeAfterUse;
+                            problem("store-after", "line " + std::to_string(li) + " '" + text + "' is drawn at " + MappingHex(*uses.begin()) +
+                                                       " (a call or a return) and names the store at " + MappingHex(t.addr) +
+                                                       ", which cannot run before it (A7-32)");
+                            break;
+                        }
+                }
                 bool named = false, atBranch = false, atCall = false, atReturn = false, atLoad = false;
                 // (A7-21: a register merge's line names the instructions that set the register, or nothing; never only the branch that ends
                 // its block)
@@ -1589,6 +1655,8 @@ inline void PrintMappingAudit(const MappingAudit& a, const char* label)
     std::printf("  mapping (%s): area 7 round 6: %d number lines of a memory variable drawn at a number instruction whose value no store they name "
                 "stores (A7-28, a violation); %d of %d case labels judged against their own switch's table name another entry or none (A7-29, a violation)\n",
                 label, a.numberStoreOther, a.caseOtherEntry, a.caseJudged);
+    std::printf("  mapping (%s): area 7 round 7: %d copies drawn at a call or a return name a store that cannot run before it (A7-32, a violation)\n",
+                label, a.storeAfterUse);
     for (const std::string& p : a.problems) std::printf("    %s\n", p.c_str());
 }
 
