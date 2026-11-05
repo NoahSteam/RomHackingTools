@@ -9,7 +9,7 @@
 // A word of the letters a-f alone is usually a word, not an address (A9-18): "Dead function", "add it later", an article "a".
 // The rule (ParseAddressWord): with 0x, one to eight hex digits; without it, eight hex digits (what the saves write), or one to
 // seven hex digits that include a decimal digit (what older versions wrote for addresses below 0x10000000: "6004000"), or two
-// to four letters a-f alone when the address they spell is inside the BIOS ROM, 0 to 0x7FFFF (A9-32: what older versions wrote
+// to four lower-case letters a-f alone when the address they spell is inside the BIOS ROM, 0 to 0x7FFFF (A9-32: what older versions wrote
 // for a BIOS function at 0xDEAD, 0xABCD, 0xCAFE; the ROM is mapped at 0, so the address exists). A single letter stays a word
 // ("a"), and so do letters-only words of five or more digits (0xABCDE is above the ROM and in no memory of the machine). A
 // line of that kind with a word like "bad" or "add" in front of text is therefore read as an entry: write such a comment with
@@ -74,7 +74,10 @@ inline bool ParseAddressWord(const std::string& line, size_t b, size_t e, uint32
                                                                                          : std::tolower(static_cast<unsigned char>(c)) - 'a' + 10);
     }
     // Letters a-f alone, unpadded: an address only inside the BIOS ROM, and not a single letter (A9-32).
-    if (!prefixed && e - d < 8 && !digit && (e - d < 2 || a > 0x7FFFFu)) return false;   // "a", "Deadly": a word
+    // The old writers used lower case, so a capital letter makes it a word ("Dead function").
+    bool lower = true;
+    for (size_t i = d; i < e; ++i) lower = lower && !std::isupper(static_cast<unsigned char>(line[i]));
+    if (!prefixed && e - d < 8 && !digit && (e - d < 2 || a > 0x7FFFFu || !lower)) return false;   // "a", "Deadly": a word
     addr = a;
     return true;
 }

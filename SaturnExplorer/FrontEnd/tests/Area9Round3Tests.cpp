@@ -111,6 +111,8 @@ void LettersOnlyBiosAddresses()
     Check(entries == 6, "FIX A9-32: an old file's names at BIOS addresses made of letters a-f alone ('dead', 'abcd', 'fab') are entries");
     Check(ParseAddressNameLine("a article", a, n) == AddressNameLine::Malformed, "A9-32: a single letter stays a word");
     Check(ParseAddressNameLine("abcdef Ladder", a, n) == AddressNameLine::Malformed, "A9-32: six letters (above the ROM) stay a word");
+    Check(ParseAddressNameLine("Dead function", a, n) == AddressNameLine::Malformed && ParseAddressNameLine("Add it later", a, n) == AddressNameLine::Malformed,
+          "A9-32: a capital letter makes it a word (old files wrote lower case)");
     Check(ParseAddressNameLine("Deadly sin", a, n) == AddressNameLine::Malformed, "A9-32: a word with other letters stays a word");
     Check(ParseAddressNameLine("dead", a, n) == AddressNameLine::Malformed, "A9-32: and an address with no name is no entry");
     // What an older version wrote: %x, unpadded.
