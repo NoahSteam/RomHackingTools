@@ -1,6 +1,6 @@
 # SH-2 pseudocode and embedded decompiler
 
-Inspected revision: `ff6a3b1fb1c54e4c0344613094ea65292b0023c2` (2026-10-20); the pseudocode-to-assembly mapping (steps 7 and 9) rechecked at the area 7 fixer branch `review/7-a710-fix` (2026-10-30), and step 7's store tokens at `review/7-a719-fix` (2026-11-04), `review/7-a722-fix` (2026-11-05) and `review/7-a726-fix` (2026-11-05).
+Inspected revision: `ff6a3b1fb1c54e4c0344613094ea65292b0023c2` (2026-10-20); the pseudocode-to-assembly mapping (steps 7 and 9) rechecked at the area 7 fixer branch `review/7-a710-fix` (2026-10-30), and step 7's store tokens at `review/7-a719-fix` (2026-11-04), `review/7-a722-fix` (2026-11-05), `review/7-a726-fix` (2026-11-05) and `review/7-round7-fix` (2026-11-05).
 Captured-inspection sections rechecked against `codex/decompiler-variable-inspection` (2026-10-20).
 The panel's status/trust drawing, Decompile-as-a-request and Copy marks rechecked against `5428fe6` plus the area 8 fixer branch (2026-10-30).
 Unless labelled otherwise, behavior below is verified from the cited implementation.
@@ -98,7 +98,8 @@ and lists these classes as open until they are fixed.
    instruction provenance, call targets and conservative owned inspection bindings. A token's
    address is `InstructionOf(op)`: the translator gives a delayed branch and the instruction in its
    delay slot one address, so the engine marks the ops the slot built (and the ops made for them;
-   `PcodeOp::isFromDelaySlot`, patch 0075) and the host addresses them at the branch + 2.
+   `PcodeOp::isFromDelaySlot`, patch 0075, and the pieces heritage makes for them, patch 0078) and
+   the host addresses them at the branch + 2.
    `AddFrameStoreTokens` gives a line that prints a frame local or a global where no instruction
    writes it (a COPY or a conversion at any instruction, any op at a call or a load) an empty token
    for each folded store whose value it shows (the engine's `AccessRecord`s): found back through
@@ -110,7 +111,16 @@ and lists these classes as open until they are fixed.
    through copies, and through the frame and globals to the store that wrote them, to where the
    value is made, and compared with what the statement's value copies, merges or extends in the
    final p-code; a store whose every path ends at another value is never named, and the search
-   goes on to the store the statement is ahead of. A number put at an instruction that did not
+   goes on to the store the statement is ahead of. The walk goes through arithmetic the engine
+   folds to one of its values (`FlowIdentitySources`: the op's value is built back through its
+   block, single predecessors and each path through a join, to numbers known on every path in --
+   `FlowNumberBefore`, which reads a branch's condition on the edge taken, frame words and
+   non-volatile RAM a store of the flow wrote, and registers a callee's lent prototype keeps
+   (`CallKeeps`) -- and evaluated on test values: `add r4,r3` with r3 0 after a `dt` loop, `and
+   r1,r1`, `xor #k` twice; A7-31). A number is compared on the bytes a store writes of the
+   variable, big-endian, and of those the ones no other store of it writes (A7-36); a number the
+   engine put in a copy of its own is that number only (A7-35). A copy at a call or a return
+   names only stores that run before it when one does (A7-32). A number put at an instruction that did not
    make the value a store stores takes its store's address too: the instruction must make the
    number into the register the store stores AND that value must reach the store (`FlowLastWriters`
    of the register from the store, the whole register for a half-word store; a delay slot that
@@ -311,7 +321,7 @@ ctest --test-dir build --output-on-failure -R 'Decompiler|MemorySnapshot|Sh2Func
 | Entry heuristics and explicit correction | [`Sh2FunctionFinderTests.cpp`](../../../FrontEnd/tests/Sh2FunctionFinderTests.cpp) |
 | Engine/wrapper, calls, frame effects, hardware reads, warning/prototype policy | [`Sh2DecompilerTests.cpp`](../../../FrontEnd/tests/Sh2DecompilerTests.cpp), [`Sh2DecompilerFixtureTests.cpp`](../../../FrontEnd/tests/Sh2DecompilerFixtureTests.cpp), [`Sh2DecompilerEngineTests.cpp`](../../../FrontEnd/tests/Sh2DecompilerEngineTests.cpp) |
 | SLEIGH semantics and decoding | [`Sh2SemanticsTests.cpp`](../../../FrontEnd/tests/Sh2SemanticsTests.cpp), [`Sh2DecodeTests.cpp`](../../../FrontEnd/tests/Sh2DecodeTests.cpp), [`SlaFreshnessTests.cpp`](../../../FrontEnd/tests/SlaFreshnessTests.cpp) |
-| Generated programs, memory ledgers (the frame's in [`FrameLedger.h`](../../../FrontEnd/tests/FrameLedger.h), shared with the decompiler suite), callable signatures and compiled printed C differential | [`Sh2GeneratedTests.cpp`](../../../FrontEnd/tests/Sh2GeneratedTests.cpp); CTest `SaturnExplorerSh2PrintedCTests` reuses this executable under its printed-C configuration |
+| Generated programs, memory ledgers (the frame's in [`FrameLedger.h`](../../../FrontEnd/tests/FrameLedger.h), shared with the decompiler suite), callable signatures, the pseudocode-to-assembly mapping (every violation of [`MappingOracle.h`](../../../FrontEnd/tests/MappingOracle.h) is a finding, `map-*`) and compiled printed C differential | [`Sh2GeneratedTests.cpp`](../../../FrontEnd/tests/Sh2GeneratedTests.cpp); CTest `SaturnExplorerSh2PrintedCTests` reuses this executable under its printed-C configuration |
 | Coalescing, epoch, cancellation, budget and worker teardown | [`DecompilerRunnerTests.cpp`](../../../FrontEnd/tests/DecompilerRunnerTests.cpp), [`DecompilerFaultTests.cpp`](../../../FrontEnd/tests/DecompilerFaultTests.cpp) |
 | Headless ImGui interactions, stale install rejection, mirrors, cache, notes, halt hints | [`DecompilerPanelTests.cpp`](../../../FrontEnd/tests/DecompilerPanelTests.cpp): `TestInstallRule`, `TestCompletedAnswerJudgedAgainstCurrentView`, `TestPrototypesPerMirror`, `TestRegisterHintAtHalt`, `TestScrubCache` |
 | Stateful refresh/trust sequences | [`DecompilerModelTests.cpp`](../../../FrontEnd/tests/DecompilerModelTests.cpp), [`DecompilerTrustTests.cpp`](../../../FrontEnd/tests/DecompilerTrustTests.cpp), [`DecompilerTrustModel.h`](../../../FrontEnd/tests/DecompilerTrustModel.h). The trust test reads every indicator back from the drawn glyphs (wrapped sentences put together, no allowance for cut text), at 1250 px and at the default dock widths (537, 672, 806 px), checks the status row and the Copy marks, classifies every engine note (amber, or grey only and listed in the guide), runs Decompile as a target in the generated sequences, and sweeps a real allocation failure through one request in forked children (`SE_TRUST_OOM_STRIDE`, `SE_TRUST_WIDTH`). Tools: [`Docs/Decompiler/tools/a8_fix`](../../Decompiler/tools/a8_fix) |
