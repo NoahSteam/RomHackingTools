@@ -243,3 +243,29 @@ patch:0038	-	stillborn	0	se-regen-sla failed
 patch:0002	fault	survived	90	
 patch:0002	engine	survived	46	
 patch:0002	unit	killed	26	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:13922: rc == 0
+V-0056-stepsdown	unit	killed	27	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:8873: ra.prototype.known && ra.prototypeWithheld.empty()
+V-0056-stepsdown	gen	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:12306: excluded > 0
+V-0056-stepsdown	corpus	survived	51	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:8873: ra.prototype.known && ra.prototypeWithheld.empty()
+V-0065-steppeddown	unit	survived	29	
+V-0065-steppeddown	gen	survived	22	
+V-0065-steppeddown	corpus	survived	49	
+V-0065-steppeddown	engine	survived	46	
+V-0065-steppeddown	pc	survived	24	
+V-0065-steppeddown	decode	survived	3	
+V-0065-steppeddown	*	SURVIVED	0	
+V-0061-memescape	unit	survived	29	
+V-0061-memescape	gen	survived	21	
+V-0061-memescape	corpus	survived	49	
+V-0061-memescape	engine	survived	46	
+V-0061-memescape	pc	survived	24	
+V-0061-memescape	decode	survived	3	
+V-0061-memescape	*	SURVIVED	0	
+V-0063-hostescape	unit	killed	26	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:8728: !Has(r.Text(), "return 5;") && !r.prototype.known && Has(r.Text(), "a fra
+V-0063-hostescape	gen	survived	21	
+V-0063-hostescape	corpus	survived	48	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:8728: !Has(r.Text(), "return 5;") && !r.prototype.known && Has(r.Text(), "a fra
+V-0072-storemaywrite	unit	killed	27	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:13498: Has(r.Text(), p.text)
+V-0072-storemaywrite	gen	survived	16	
+V-0072-storemaywrite	corpus	survived	53	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:13498: Has(r.Text(), p.text)
+V-0010	unit	killed	26	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:2546: Ledger(r, { Rd(0, 2), Rd(0, 2) })
+V-0010	gen	killed	25	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:12033: rep.findings.empty()
+V-0010	corpus	killed	50	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:2546: Ledger(r, { Rd(0, 2), Rd(0, 2) })
