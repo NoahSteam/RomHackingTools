@@ -5777,6 +5777,27 @@ bool FlowIdentitySources(const FlowRecord& flow, const ghidra::Funcdata& fd, int
             nodes.push_back(n);
             return static_cast<int>(nodes.size()) - 1;
         }
+        // (a piece of a register the block does not write, `extu.w r3,r2` reading r3's low half beside `or r3,r2`: the register's leaf, cut,
+        // so the two reads are one value)
+        if (d < 0 && s.space && s.space->getType() == ghidra::IPTR_PROCESSOR && s.size < 4 && (s.offset & 3) + static_cast<ghidra::uintb>(s.size) <= 4)
+        {
+            FlowVn whole = s;
+            whole.offset = s.offset & ~static_cast<ghidra::uintb>(3);
+            whole.size = 4;
+            const int x = buildOnce(whole, b, before, depth + 1);
+            if (x < 0) return -1;
+            n.kind = 2;
+            n.code = ghidra::CPUI_SUBPIECE;
+            n.inSize = 4;
+            Node amount;
+            amount.size = 4;
+            amount.value = whole.offset + 4 - (s.offset + static_cast<ghidra::uintb>(s.size));
+            nodes.push_back(amount);
+            n.in[0] = x;
+            n.in[1] = static_cast<int>(nodes.size()) - 1;
+            nodes.push_back(n);
+            return static_cast<int>(nodes.size()) - 1;
+        }
         size_t k = 0;
         while (k < leaves.size() && !(SameStorage(leaves[k].s, s) && leaves[k].b == b && leaves[k].at == from)) ++k;
         if (k == leaves.size())
@@ -6662,11 +6683,13 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
             // each block of the nearest level of successors that has one
             const auto fb = flow.insnBlock.find(at);
             if (fb == flow.insnBlock.end()) continue;
+            // (the first store of the byte in a block that shows the value; a store of another value on the way does not end the search,
+            // A7-34's triage: `xRam2e001018 = 0xffffff00;` is ahead of a poll's store of 2 and then of its own store)
             const auto firstIn = [&](int blk, uint32_t after) -> const ghidra::AccessRecord* {
                 const auto f = flowStores.find(blk);
                 if (f == flowStores.end()) return nullptr;
                 for (const auto& p : f->second)
-                    if (p.first >= after && writes(p.second)) return p.second;
+                    if (p.first >= after && writes(p.second) && (!beforeOnly || runsBefore(p.second)) && shows(p.second)) return p.second;
                 return nullptr;
             };
             if (take(firstIn(fb->second.first, fb->second.second + 1))) continue;

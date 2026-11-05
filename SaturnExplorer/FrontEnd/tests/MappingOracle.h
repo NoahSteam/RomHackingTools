@@ -345,6 +345,13 @@ inline int DeclaredWidth(const sfe::decomp::DecompileResult& r, const std::strin
     return 4;
 }
 
+// The offset of address `a` from `b` for a global: through any mirror of work RAM's in the cached and cache-through areas (A24-A26
+// partly decoded), exact for the other areas (A7-34's triage: 0x66001034, the cache's address array, is no mirror of 0x26001034).
+inline uint32_t GlobalDelta(uint32_t a, uint32_t b)
+{
+    return (a >> 29) <= 1 && (b >> 29) <= 1 ? (a - b) & 0x07FFFFFFu : a - b;
+}
+
 inline std::string MappingHex(uint32_t v)
 {
     char b[16];
@@ -361,6 +368,7 @@ struct WordValue
 {
     enum Kind { Unknown, Number, Param } kind = Unknown;
     int64_t value = 0;   // the number, or the parameter's index (param_1 is r4)
+    bool byCondition = false;   // (A7-34: a number a branch's condition gives on the path, which a parameter may equal there)
     bool operator==(const WordValue& o) const { return kind == o.kind && value == o.value; }
 };
 // The register an instruction stores, and how many bytes; -1 when it is no store of a register.
@@ -414,12 +422,32 @@ inline std::map<uint32_t, std::vector<uint32_t>> BranchSources(const sfe::decomp
             const sfe::DisassembledInstruction d = sfe::Sh2Decode(p, w);
             if (d.IsValid && d.HasBranchTarget && !d.IsCall) into[d.BranchTarget].push_back(d.HasDelaySlot ? p + 2 : p);
         }
+    // A7-34 (the area 7 fixer): the edges no word names, a jump table's (`jmp @r1` to its cases), from the flow's blocks: the last
+    // instruction of a block into the first of each block after it that does not follow it in memory
+    for (size_t k = 0; k < r.flowSuccessors.size() && k < r.flowBlockRanges.size(); ++k)
+    {
+        // (a block that ends in a `jmp`'s slot)
+        uint16_t pw = 0;
+        const uint32_t jump = r.flowBlockRanges[k].second;
+        if (!(word(jump - 2, pw) && sfe::Sh2Decode(jump - 2, pw).Mnemonic == "jmp")) continue;
+        for (int n : r.flowSuccessors[k])
+        {
+            if (n < 0 || static_cast<size_t>(n) >= r.flowBlockRanges.size()) continue;
+            const uint32_t first = r.flowBlockRanges[static_cast<size_t>(n)].first;
+            std::vector<uint32_t>& from = into[first];
+            if (first != jump + 2 && std::find(from.begin(), from.end(), jump) == from.end()) from.push_back(jump);
+        }
+    }
     return into;
 }
 inline WordValue RegisterBefore(const sfe::decomp::DecompileResult& r, const std::function<bool(uint32_t, uint16_t&)>& word,
                                 const std::map<uint32_t, std::vector<uint32_t>>& into, uint32_t at, int reg, int depth = 0);
 inline WordValue WrittenValue(const sfe::decomp::DecompileResult& r, const std::function<bool(uint32_t, uint16_t&)>& word,
                               const std::map<uint32_t, std::vector<uint32_t>>& into, uint32_t p, int reg, int depth);
+inline int TBefore(const sfe::decomp::DecompileResult& r, const std::function<bool(uint32_t, uint16_t&)>& word,
+                   const std::map<uint32_t, std::vector<uint32_t>>& into, uint32_t p, int depth);
+inline bool NeverRun(const sfe::decomp::DecompileResult& r, const std::function<bool(uint32_t, uint16_t&)>& word,
+                     const std::map<uint32_t, std::vector<uint32_t>>& into, uint32_t p, int depth);
 inline WordValue NumberValue(uint64_t v)
 {
     return WordValue{ WordValue::Number, static_cast<int64_t>(static_cast<int32_t>(static_cast<uint32_t>(v))) };
@@ -592,6 +620,15 @@ inline WordValue RegisterBefore(const sfe::decomp::DecompileResult& r, const std
             if (d.IsCall && !d.HasDelaySlot && rg <= 7) return WordValue();
             uint16_t w = 0;
             word(p, w);
+            // A7-34 (the area 7 fixer): an edge never taken, by a T the words give (`cmp/eq r1,r2` of two numbers), or an instruction
+            // never run after one: no path
+            if (p + 2 == a && depth < 6 && NeverRun(r, word, into, p, depth + 1)) continue;
+            if (((w >> 8) == 0x89 || (w >> 8) == 0x8B) && depth < 6 && d.BranchTarget != p + 2)
+            {
+                const bool taken = p + 2 != a;
+                const int t = TBefore(r, word, into, p, depth + 1);
+                if (t >= 0 && taken != (((w >> 8) == 0x89) == (t == 1))) continue;
+            }
             // A7-34 (the area 7 fixer): an edge a condition says the register's value on: `dt rN ; bf L` falls through, and `dt rN ; bt
             // L` (or `tst rN,rN`) branches, only when rN is 0; `cmp/eq #imm,r0` likewise with the number (as the engine's conditional
             // constants know)
@@ -603,12 +640,12 @@ inline WordValue RegisterBefore(const sfe::decomp::DecompileResult& r, const std
                     const int cn = (cw >> 8) & 0xF;
                     if (((cw & 0xF0FF) == 0x4010 && cn == rg) || ((cw & 0xF00F) == 0x2008 && cn == rg && ((cw >> 4) & 0xF) == rg))
                     {
-                        if (!give(WordValue{ WordValue::Number, 0 })) return WordValue();
+                        if (!give(WordValue{ WordValue::Number, 0, true })) return WordValue();
                         continue;
                     }
                     if ((cw >> 8) == 0x88 && rg == 0)
                     {
-                        if (!give(WordValue{ WordValue::Number, static_cast<int8_t>(cw & 0xFF) })) return WordValue();
+                        if (!give(WordValue{ WordValue::Number, static_cast<int8_t>(cw & 0xFF), true })) return WordValue();
                         continue;
                     }
                 }
@@ -650,6 +687,146 @@ inline WordValue RegisterBefore(const sfe::decomp::DecompileResult& r, const std
 // (RegisterBefore) and what memory holds (MemoryBefore): moves, numbers, literals, `mova`, the ALU ops with known inputs, the
 // extensions, swaps and shifts, `dt`, and loads. `and Rn,Rn` and `or Rn,Rn` pass Rn on whatever it is (a parameter too); `xor Rn,Rn`
 // and `sub Rn,Rn` are 0 whatever it is. Unknown for anything else.
+// A7-34 (the area 7 fixer): the T bit before `p` (0 or 1), when every path into `p` gives the same one: the instruction that last set
+// it, from values the words give (`cmp/eq`, `cmp/hs` and the other compares, `tst`, `dt`, `clrt`, `sett`, `div0u`); a `bt` or `bf`
+// passes T on, and a path through one's edge that T says is never taken gives nothing. -1 when that is not known (another
+// instruction that sets T, a call, the entry, paths that disagree, past a bound).
+inline int TSetBy(const sfe::decomp::DecompileResult& r, const std::function<bool(uint32_t, uint16_t&)>& word,
+                  const std::map<uint32_t, std::vector<uint32_t>>& into, uint32_t q, uint16_t w, int depth)
+{
+    const int hi = w >> 12, n = (w >> 8) & 0xF, m = (w >> 4) & 0xF, lo = w & 0xF;
+    const auto value = [&](int reg, uint32_t& x) {
+        const WordValue v = RegisterBefore(r, word, into, q, reg, depth + 1);
+        if (v.kind != WordValue::Number) return false;
+        x = static_cast<uint32_t>(v.value);
+        return true;
+    };
+    uint32_t a = 0, b = 0;
+    if (w == 0x0008 || w == 0x0019) return 0;
+    if (w == 0x0018) return 1;
+    if (hi == 0x3 && (lo == 0x0 || lo == 0x2 || lo == 0x3 || lo == 0x6 || lo == 0x7))
+    {
+        if (lo == 0x0 && n == m) return 1;
+        if (!value(n, a) || !value(m, b)) return -1;
+        switch (lo)
+        {
+        case 0x0: return a == b;
+        case 0x2: return a >= b;
+        case 0x3: return static_cast<int32_t>(a) >= static_cast<int32_t>(b);
+        case 0x6: return a > b;
+        default: return static_cast<int32_t>(a) > static_cast<int32_t>(b);
+        }
+    }
+    if ((w >> 8) == 0x88) return value(0, a) ? a == static_cast<uint32_t>(static_cast<int32_t>(static_cast<int8_t>(w & 0xFF))) : -1;
+    if ((w >> 8) == 0xC8) return value(0, a) ? (a & (w & 0xFFu)) == 0 : -1;
+    if (hi == 0x2 && lo == 0x8)
+    {
+        if ((value(n, a) && a == 0) || (value(m, b) && b == 0)) return 1;
+        if (!value(n, a) || !value(m, b)) return -1;
+        return (a & b) == 0;
+    }
+    if ((w & 0xF0FF) == 0x4010) return value(n, a) ? a == 1 : -1;
+    if ((w & 0xF0FF) == 0x4011) return value(n, a) ? static_cast<int32_t>(a) >= 0 : -1;
+    if ((w & 0xF0FF) == 0x4015) return value(n, a) ? static_cast<int32_t>(a) > 0 : -1;
+    return -2;   // (does not set T from what the words give: -1 if it sets T at all, as the caller asks)
+}
+// A7-34 (the area 7 fixer): is the instruction at `p` never run: the straight line it is on is entered only by the fall-through of a
+// `bt` or `bf` that T says always branches (`cmp/eq r1,r2` of 0x18 and -0x5e ; `bf L`)?
+inline bool NeverRun(const sfe::decomp::DecompileResult& r, const std::function<bool(uint32_t, uint16_t&)>& word,
+                     const std::map<uint32_t, std::vector<uint32_t>>& into, uint32_t p, int depth)
+{
+    if (depth > 6) return false;
+    for (uint32_t x = p, steps = 0; steps < 32; x -= 2, ++steps)
+    {
+        const auto in = into.find(x);
+        if ((in != into.end() && !in->second.empty()) || x == r.entry || !r.InBody(x - 2)) return false;
+        uint16_t w = 0;
+        if (!word(x - 2, w)) return false;
+        const sfe::DisassembledInstruction d = sfe::Sh2Decode(x - 2, w);
+        if (!d.IsValid) return false;
+        if ((w >> 8) == 0x89 || (w >> 8) == 0x8B)
+        {
+            if (d.BranchTarget == x) return false;
+            const int t = TBefore(r, word, into, x - 2, depth + 1);
+            return t >= 0 && (((w >> 8) == 0x89) == (t == 1));   // (the branch is always taken)
+        }
+        if (d.IsBranch || d.HasDelaySlot) return false;
+    }
+    return false;
+}
+inline bool SetsT(uint16_t w)
+{
+    const int hi = w >> 12, lo = w & 0xF;
+    return (hi == 0x4 && ((w & 0xFF) == 0x00 || (w & 0xFF) == 0x01 || (w & 0xFF) == 0x04 || (w & 0xFF) == 0x05 || (w & 0xFF) == 0x20 ||
+                          (w & 0xFF) == 0x21 || (w & 0xFF) == 0x24 || (w & 0xFF) == 0x25 || (w & 0xFF) == 0x1B || (w & 0xFF) == 0x0E || (w & 0xFF) == 0x07)) ||
+           (hi == 0x3 && (lo == 0x4 || lo == 0xA || lo == 0xB || lo == 0xE || lo == 0xF)) || (hi == 0x2 && (lo == 0x7 || lo == 0xC)) || (hi == 0x6 && lo == 0xA) ||
+           w == 0x002B;
+}
+inline int TBefore(const sfe::decomp::DecompileResult& r, const std::function<bool(uint32_t, uint16_t&)>& word,
+                   const std::map<uint32_t, std::vector<uint32_t>>& into, uint32_t at, int depth)
+{
+    if (depth > 6) return -1;
+    const auto decode = [&](uint32_t p, sfe::DisassembledInstruction& d) {
+        uint16_t w = 0;
+        if (!r.InBody(p) || !word(p, w)) return false;
+        d = sfe::Sh2Decode(p, w);
+        return d.IsValid;
+    };
+    int result = -1;
+    bool any = false;
+    std::set<uint32_t> seen;
+    std::vector<uint32_t> todo = { at };
+    int steps = 0;
+    const auto give = [&](int t) {
+        if (t < 0 || (any && t != result)) return false;
+        result = t;
+        any = true;
+        return true;
+    };
+    while (!todo.empty())
+    {
+        const uint32_t a = todo.back();
+        todo.pop_back();
+        if (!seen.insert(a).second) continue;
+        if (++steps > 200 || a == r.entry) return -1;
+        std::vector<uint32_t> preds;
+        sfe::DisassembledInstruction prev, prev2;
+        if (decode(a - 2, prev))
+        {
+            const bool afterJump = decode(a - 4, prev2) && prev2.HasDelaySlot && !prev2.IsConditional && !prev2.IsCall;
+            if (!afterJump) preds.push_back(a - 2);
+        }
+        const auto in = into.find(a);
+        if (in != into.end()) preds.insert(preds.end(), in->second.begin(), in->second.end());
+        if (preds.empty()) return -1;
+        for (uint32_t p : preds)
+        {
+            sfe::DisassembledInstruction d;
+            uint16_t w = 0;
+            if (!decode(p, d) || !word(p, w) || d.IsCall || d.Mnemonic == "rte") return -1;
+            if ((w >> 8) == 0x89 || (w >> 8) == 0x8B)
+            {
+                // (a `bt` or `bf` passes T on: the edge into `a` is taken only with the T it needs)
+                const int t = TBefore(r, word, into, p, depth + 1);
+                if (t < 0) return -1;
+                const bool degenerate = d.BranchTarget == p + 2;
+                const bool taken = p + 2 != a;
+                if (!degenerate && taken != (((w >> 8) == 0x89) == (t == 1))) continue;
+                if (!give(t)) return -1;
+                continue;
+            }
+            const int t = TSetBy(r, word, into, p, w, depth);
+            if (t == -1 || (t == -2 && SetsT(w))) return -1;
+            if (t >= 0)
+            {
+                if (!give(t)) return -1;
+                continue;
+            }
+            todo.push_back(p);
+        }
+    }
+    return any ? result : -1;
+}
 inline WordValue WrittenValue(const sfe::decomp::DecompileResult& r, const std::function<bool(uint32_t, uint16_t&)>& word,
                               const std::map<uint32_t, std::vector<uint32_t>>& into, uint32_t p, int reg, int depth)
 {
@@ -687,9 +864,17 @@ inline WordValue WrittenValue(const sfe::decomp::DecompileResult& r, const std::
     if (hi == 0x2 && n == reg && (lo == 0x9 || lo == 0xA || lo == 0xB))
     {
         if (m == n) return lo == 0xA ? NumberValue(0) : before(n);
+        // (an AND with a known 0 is 0 whatever the other is)
+        if (lo == 0x9 && ((number(before(n), a) && a == 0) || (number(before(m), b) && b == 0))) return NumberValue(0);
         if (!number(before(n), a) || !number(before(m), b)) return WordValue();
         return NumberValue(lo == 0x9 ? a & b : lo == 0xA ? a ^ b : a | b);
     }
+    if ((w & 0xF0FF) == 0x0029 && n == reg)   // movt
+    {
+        const int t = TBefore(r, word, into, p, depth);
+        return t < 0 ? WordValue() : NumberValue(static_cast<uint32_t>(t));
+    }
+    if (reg == 0 && (w >> 8) == 0xC9 && (w & 0xFF) == 0) return NumberValue(0);
     if (reg == 0 && ((w >> 8) == 0xC9 || (w >> 8) == 0xCA || (w >> 8) == 0xCB))
     {
         if (!number(before(0), a)) return WordValue();
@@ -728,6 +913,28 @@ inline WordValue WrittenValue(const sfe::decomp::DecompileResult& r, const std::
         case 0x29: return NumberValue(a >> 16);
         case 0x10: return NumberValue(a - 1);
         default: return WordValue();
+        }
+    }
+    // a register an access steps (`mac.w @r7+,@r5+`, `mov.l r1,@-r2`), not the one a load writes: by the access's size each time
+    {
+        const sfe::DisassembledInstruction sd = sfe::Sh2Decode(p, w);
+        const std::string rn = "r" + std::to_string(reg);
+        const std::string& ops = sd.Operands;
+        int steps = 0;
+        for (size_t q = ops.find("@" + rn + "+"); q != std::string::npos; q = ops.find("@" + rn + "+", q + 1))
+            if (q + 2 + rn.size() > ops.size() || ops[q + 1 + rn.size()] == '+') ++steps;
+        for (size_t q = ops.find("@-" + rn); q != std::string::npos; q = ops.find("@-" + rn, q + 1))
+        {
+            const size_t e = q + 2 + rn.size();
+            if (e >= ops.size() || !std::isdigit(static_cast<unsigned char>(ops[e]))) --steps;
+        }
+        const bool loadsIt = hi == 0x6 && lo <= 6 && n == reg;   // (`mov.l @r4+,r4`: the load's value)
+        if (steps != 0 && !loadsIt)
+        {
+            const std::string& mn = sd.Mnemonic;
+            const int size = mn.size() > 2 && mn[mn.size() - 2] == '.' ? (mn.back() == 'b' ? 1 : mn.back() == 'w' ? 2 : 4) : 4;
+            if (!number(before(reg), a)) return WordValue();
+            return NumberValue(a + static_cast<uint32_t>(steps * size));
         }
     }
     // a pop of what the instruction before pushed (`mov.l r3,@-r15 ; mov.l @r15+,r3`, not a branch's target): the pushed register
@@ -1259,8 +1466,8 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                 for (const AccessFate* f : folded)
                 {
                     if (f->frame != frame) continue;
-                    const uint32_t mask = frame ? 0xFFFFFFFFu : 0x07FFFFFFu;   // a global by any mirror of its address
-                    if (((at - f->address) & mask) < f->size)
+                    // (a global by any mirror of its address)
+                    if ((frame ? at - f->address : GlobalDelta(at, f->address)) < f->size)
                     {
                         candidates.insert(f->insn);
                         storeBlocks.insert(f->origBlock);
@@ -1292,7 +1499,7 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     if (candidates.count(f->insn))
                     {
                         storeSize[f->insn] = std::max(storeSize[f->insn], static_cast<int>(f->size));
-                        storeShift[f->insn] = static_cast<int>((at - f->address) & (frame ? 0xFFFFFFFFu : 0x07FFFFFFu));
+                        storeShift[f->insn] = static_cast<int>(frame ? at - f->address : GlobalDelta(at, f->address));
                     }
                 const auto writesOther = [&](uint32_t store, bool composed) {
                     uint16_t w = 0;
@@ -1307,7 +1514,7 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     }
                     const WordValue got = RegisterBefore(r, word, sources, store, reg);
                     if (got.kind == WordValue::Unknown) return false;
-                    if (shownValue.kind == WordValue::Param) return !(got == shownValue);
+                    if (shownValue.kind == WordValue::Param) return !(got == shownValue) && !(got.kind == WordValue::Number && got.byCondition);
                     if (shownValue.kind == WordValue::Number)
                     {
                         // (a parameter may be the number on the line's path: `param_4 == 0` tested before the store)
@@ -1319,9 +1526,9 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                         // width gives the number)
                         const int shift = std::min(std::max(storeShift[store], 0), size - 1);
                         std::set<int> widths = { size - shift };
-                        const uint32_t amask = frame ? 0xFFFFFFFFu : 0x07FFFFFFu;
+                        const auto delta = [frame](uint32_t a, uint32_t b) { return frame ? a - b : GlobalDelta(a, b); };
                         for (const AccessFate& f : r.accessFates)
-                            if (f.size > 0 && ((f.address - at) & amask) == 0 && static_cast<int>(f.size) < size - shift) widths.insert(static_cast<int>(f.size));
+                            if (f.size > 0 && delta(f.address, at) == 0 && static_cast<int>(f.size) < size - shift) widths.insert(static_cast<int>(f.size));
                         // (a piece the text names, `xRam3600228c._0_2_`, has its own size)
                         if (pieceSize > 0 && pieceSize < size - shift) widths = { pieceSize };
                         // (the store's bytes another store of the variable writes too may be that store's in the value shown: compared are
@@ -1335,7 +1542,7 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                         for (int k = 0; k < size; ++k)
                         {
                             for (const AccessFate* f : folded)
-                                if (f->insn != store && candidates.count(f->insn) && ((storeAt + static_cast<uint32_t>(k) - f->address) & amask) < f->size)
+                                if (f->insn != store && f->frame == frame && delta(storeAt + static_cast<uint32_t>(k), f->address) < f->size)
                                     alone[static_cast<size_t>(k)] = false;
                             anyAlone = anyAlone || alone[static_cast<size_t>(k)];
                         }
@@ -1481,6 +1688,11 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                         }
                     }
                     named = named || candidates.count(t.addr) != 0;
+                    // (A7-34's triage: a store of the variable the engine did not fold, a write to memory the request marks volatile, drawn
+                    // at its own instruction)
+                    if (!frame && t.begin < t.end)
+                        for (const MemoryAccess& m : r.accesses)
+                            if (m.write && m.direct && m.insn == t.addr && GlobalDelta(at, m.address) < m.size) named = true;
                     uint16_t w = 0;
                     if (t.begin == t.end || !word(t.addr, w)) continue;
                     const sfe::DisassembledInstruction d = sfe::Sh2Decode(t.addr, w);
@@ -1740,6 +1952,17 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     computes = computes || (v.kind == WordValue::Number && sameNumber(static_cast<uint32_t>(v.value)));
                 }
                 if ((w == 0x0019 || w == 0x0008 || w == 0x0028) && want == 0) computes = true;
+                // (an AND with a number whose bytes the variable keeps are 0: `and r3,r2` with r3 0x60000000 for a two-byte variable's 0)
+                if (!computes && (want & widthMask) == 0 && (((w >> 12) == 0x2 && (w & 0xF) == 0x9) || (w >> 8) == 0xC9))
+                {
+                    const bool imm = (w >> 8) == 0xC9;
+                    for (int reg : imm ? std::vector<int>{} : std::vector<int>{ (w >> 8) & 0xF, (w >> 4) & 0xF })
+                    {
+                        const WordValue v = RegisterBefore(r, word, sources, at, reg);
+                        computes = computes || (v.kind == WordValue::Number && (static_cast<uint32_t>(v.value) & widthMask) == 0);
+                    }
+                    if (imm && ((w & 0xFFu) & widthMask) == 0) computes = true;
+                }
                 if (w == 0x0018 && want == 1) computes = true;
                 if (computes) continue;
             }

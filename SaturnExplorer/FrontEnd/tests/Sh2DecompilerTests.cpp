@@ -1122,13 +1122,14 @@ void TestArea7Round7()
     // statement's and the copy at the call named nothing. Now the walk goes through an op that gives one of its values back
     // (FlowIdentitySources: the op's value built back to numbers known on every path in, FlowNumberBefore, and evaluated on test values;
     // a `dt` loop's fall-through says r3 is 0, EdgeNumber), so the line names the push 0x06009014. The same for chains the engine folds
-    // (`neg` twice, `xor #0x55` twice, `swap.w` twice, `add #5 ; add #-5`, `clrt ; addc r4,r3` with r3 0) and for a 0 kept in a frame
-    // word (`mov #0,r3 ; push ; pop ; add r8,r3`). Was: the bsr only, the push on no line, frameStoreMissing 1.
+    // (`neg` twice, `xor #0x55` twice, `swap.w` twice, `add #5 ; add #-5`, `clrt ; addc r4,r3` with r3 0, `cmp/eq r4,r4 ; movt r3 ;
+    // add #-1,r3`) and for a 0 kept in a frame word (`mov #0,r3 ; push ; pop ; add r8,r3`). Was: the bsr only, the push on no line,
+    // frameStoreMissing 1.
     for (const auto& makeR3 : { std::vector<uint16_t>{ 0xE301, 0x4310, 0x8BFD, 0x334C }, std::vector<uint16_t>{ 0xE300, 0x334C, 0x0009, 0x0009 },
                                 std::vector<uint16_t>{ 0x6343, 0x7300, 0x0009, 0x0009 }, std::vector<uint16_t>{ 0x634B, 0x633B, 0x0009, 0x0009 },
                                 std::vector<uint16_t>{ 0x6343, 0xE555, 0x235A, 0x235A }, std::vector<uint16_t>{ 0x6349, 0x6339, 0x0009, 0x0009 },
                                 std::vector<uint16_t>{ 0x6343, 0x7305, 0x73FB, 0x0009 }, std::vector<uint16_t>{ 0xE300, 0x0008, 0x334E, 0x0009 },
-                                std::vector<uint16_t>{ 0xE300, 0x2F36, 0x63F6, 0x338C } })
+                                std::vector<uint16_t>{ 0xE300, 0x2F36, 0x63F6, 0x338C }, std::vector<uint16_t>{ 0x3440, 0x0329, 0x73FF, 0x334C } })
     {
         const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, module(makeR3, args));
         Print("A7-31 a folded computation's push", r);
@@ -1266,7 +1267,8 @@ void TestArea7Round7()
         const dts::MappingAudit k = dts::AuditMapping(kept, word, "a7_28 damaged");
         CHECK(k.numberStoreOther == 1);
     }
-    // The generator's findings once the later checks were flagged (A7-34; SE_GENERATED_MAP_ALL=1), shrunk words:
+    // The generator's findings once the later checks were flagged (A7-34; round 7 flagged them with SE_GENERATED_MAP_ALL=1, the area 7
+    // fixer by default), shrunk words:
     // A7-31 on a global (grammar 1 seed 1711170): `mov.l lit,r6 ; and r1,r1 ; mov.l r1,@(0x1c,r6) ; mov.l r2,@-r4 ; rts ; nop`. The `and r1,r1`
     // the engine folds is A7-31's computation. Fixed: the copy, materialised at the may-alias store 0x06009006 (A7-25's shape), names the
     // global's store 0x06009004, where a click goes. Was: it named no store, the store on no line, copyAtOther 1.
@@ -1327,6 +1329,47 @@ void TestArea7Round7()
         if (s) CHECK(s->firstAddr == 0x06009008u && LineInstructions(*s) == (std::vector<uint32_t>{ 0x06009008u }));
         const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_37");
         CHECK(a.backWrong == 0 && a.Violations() == 0);
+    }
+    // A7-34 (instrument), fixed by the area 7 fixer: constAtJoin took a number the engine folded as made by no instruction. A load that
+    // reads back what a store before it wrote (grammar 1 seed 295, shrunk: `mov #2,r0 ; mov.l r0,@r7 ; L: mov.l @r7,r0 ; tst #1,r0 ; bf L
+    // ; ...`): `iVar1 = 2;` is drawn at the poll's load 0x06009006, a join, and the oracle now reads the value the store forwarded
+    // (WrittenValue, MemoryBefore); likewise the ALU ops with known inputs, a `mov #imm` at the variable's declared width, a
+    // read-modify-write of the variable. Was: constAtJoin 1 (a load makes nothing).
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, { 0xD705, 0xE002, 0x2702, 0x6072, 0xC801, 0x8BFC, 0xE301, 0x305C,
+            0x4310, 0x8BFC, 0x000B, 0x0009, 0x2600, 0x2180 });
+        const Line* l = LineWith(r, "iVar1 = 2;");
+        CHECK(l != nullptr);
+        if (l) CHECK(LineInstructions(*l) == (std::vector<uint32_t>{ 0x06009006u }));
+        const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_34 forwarded");
+        CHECK(a.constAtJoin == 0 && a.Violations() == 0);
+    }
+    // The generator's findings once every mapping check was flagged by default (A7-34), triaged by the area 7 fixer: the shrunk words
+    // of each, now 0 violations. Product: a value kept only in the bytes a half-word store stores (`xor #0x40000000`, grammar 1 seed
+    // 6110349); a path never taken (`extu.b r2,r0 ; cmp/eq #1,r0 ; bf`, the `add #0x54` skipped, 6132630); `or r2,r2` at a join, each
+    // path built once (6110098); r3 0 after a `dt` loop, no store of `iStack_1c = 1;` (grammar 2 seed 374); a conversion at the `bt`
+    // ending its block takes its store's address (6132458). Oracle: a piece `._0_2_` compared at its size (1710882); a word store's
+    // bytes another store writes too not compared (6131245); a copy materialised at a load (6110156); a loop counter `mov #1,r3` whose
+    // r3 the store stores (1711212); `tas.b` a maker (2557).
+    for (const auto& words : { std::vector<uint16_t>{ 0xD104, 0x251A, 0xD604, 0x6253, 0x8803, 0x8F01, 0x2621, 0x2422, 0x000B, 0x0009, 0x4000, 0x0000, 0x2600, 0x1034 },
+                               std::vector<uint16_t>{ 0xD205, 0x272B, 0x602C, 0x8801, 0x8B00, 0x7054, 0xD703, 0x201B, 0x817B, 0x2512, 0x000B, 0x0009, 0x2000, 0x0000,
+                                                      0xC000, 0x2004 },
+                               std::vector<uint16_t>{ 0xD705, 0x1610, 0x6272, 0x477F, 0x4015, 0x8901, 0xE00E, 0xCED1, 0x222B, 0x000B, 0x1725, 0x0009, 0x2600, 0x2008 },
+                               std::vector<uint16_t>{ 0x2F86, 0x2F96, 0x2FA6, 0x2FE6, 0x4F22, 0x7FF8, 0x6EF3, 0x6843, 0x6953, 0x6A63, 0xE301, 0xA000, 0x0009, 0x4310,
+                                                      0x8BFD, 0x2E32, 0xB013, 0x6783, 0x6483, 0x6593, 0x66A3, 0x62F3, 0x7208, 0xE102, 0x2216, 0x4110, 0x8BFC, 0xE200,
+                                                      0x7E08, 0x6FE3, 0x4F26, 0x6EF6, 0x6AF6, 0x69F6, 0x68F6, 0x000B, 0x0009, 0x000B, 0x0009 },
+                               std::vector<uint16_t>{ 0xD708, 0x6071, 0xC801, 0x8BFC, 0xC880, 0x8901, 0xE00A, 0xCF3F, 0x2038, 0x8900, 0x8152, 0x8802, 0x8F00, 0x2701,
+                                                      0x8159, 0x000B, 0x0009, 0x0009, 0x2600, 0x1024 },
+                               std::vector<uint16_t>{ 0xD705, 0xE001, 0x2702, 0x6072, 0xC801, 0x89FC, 0x804E, 0xE002, 0x0735, 0x000B, 0x0009, 0x0009, 0x3600, 0x228C },
+                               std::vector<uint16_t>{ 0xD705, 0xE001, 0x2702, 0x6072, 0xC801, 0x89FC, 0x1531, 0xE003, 0x0714, 0x000B, 0x0009, 0x0009, 0x2600, 0x1014 },
+                               std::vector<uint16_t>{ 0xD605, 0x6246, 0xE301, 0x6241, 0x163D, 0x4310, 0x8BFB, 0xE004, 0xCF33, 0x000B, 0x0009, 0x0009, 0x0600, 0x1004 },
+                               std::vector<uint16_t>{ 0xD605, 0xE301, 0x6233, 0x4310, 0x8BFC, 0x1636, 0x054F, 0x4115, 0x8D00, 0x1427, 0x000B, 0x0009, 0x2600, 0x1028 },
+                               std::vector<uint16_t>{ 0xD705, 0xE002, 0x2702, 0x6072, 0xC801, 0x8BFC, 0xE301, 0x471B, 0x4310, 0x8BFC, 0x000B, 0x0009, 0x2600, 0x2300 } })
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, words);
+        const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_34 triage");
+        if (a.Violations()) Print("A7-34 triage", r);
+        CHECK(a.Violations() == 0);
     }
     // caseOtherEntry bites: A7-29's fixture with the outer `case 2:` moved back to the inner switch's entry (A7-29 as it was).
     {
