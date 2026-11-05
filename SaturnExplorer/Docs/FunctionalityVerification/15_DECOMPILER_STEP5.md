@@ -15666,7 +15666,7 @@ Mix 7 seed 210063 (with `SE_TRUST_HIDDEN_RENAME=1`) runs: a Refresh stalled past
 | mixes 0, 1, 3 to 7 with `SE_TRUST_HIDDEN_RENAME=1`, hover on, seeds from 210000 | **35,256 operations** (5,022, 5,043, 5,014, 5,052, 5,053, 5,001, 5,071), 415 renames made and undone while hidden. **1 failing: mix 7 seed 210063**. The output was kept before any rerun. It fails in three of three runs, so it is deterministic: **A8-41** (the oracle's too-large memo; `SE_TRUST_SKIP=50` and `SE_TRUST_SKIP=53,54` pass) |
 | fourteen directed Follow scripts on A8-29 (above) | all `ok` |
 | `SE_TRUST_PROBE6=1` (`probe6.sh`) | reproduces A8-36 (A, I; B), A8-37 (F, G), A8-38 (C, D), A8-39 (H) and A8-32's variant (E); not in the default run |
-CTEST_ROW
+| `ctest -E SaturnExplorerLive -j2 --timeout 900 --output-on-failure` / `ctest -R SaturnExplorerLive` | **102 of 102** on the first run (175 s: the trust test 54.5 s, the engine suite 40.9 s, the fault suite 82.0 s, the model test 19.4 s) / **6 of 6** (28 s). 108 tests, as on master: no test was added. The probe is inside the trust test, and its default run is unchanged. A8-35: the trust test did not fail in ctest this round, so there is no output to add (the knob run's failure is A8-41, kept). No product file changed, so the fault suite needed no separate run |
 
 The generated runs do not reach the new findings, and cannot: the Follow rig has no Enter on the untouched box, no names, function starts or call stack, and it refuses "nothing to pin" (A8-40).
 
