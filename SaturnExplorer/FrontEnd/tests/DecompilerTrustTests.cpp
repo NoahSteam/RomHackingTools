@@ -2858,12 +2858,27 @@ struct FRig
     uint64_t namesGen = 0;
     uint64_t shownNamesGen = 0;          // ...as they were when the output on screen was installed: a change marks it stale until it is replaced
     std::set<uint32_t> shownFunctions;
-    std::set<uint32_t> Functions() const
+    // The starts (the named addresses move the names' generation): a start at a named address is engine input of its own.
+    std::set<uint32_t> Functions() const { return bounds.Entries(); }
+    // What the verdict on an entry depends on, besides the snapshot: the target and the evidence. Taken at each install, so that the doubt
+    // the model accepts for current output is known to be the one the output was installed with only while this is unchanged.
+    struct State
     {
-        std::set<uint32_t> f = bounds.Entries();
-        for (const auto& n : names) f.insert(n.first);
-        return f;
-    }
+        Tgt tgt = Tgt::Follow;
+        uint32_t addr = 0;
+        bool pinGuess = false, refused = false;
+        uint32_t pinAnchor = 0;
+        uint64_t namesGen = 0;
+        std::set<uint32_t> functions;
+        int cpu = 0;
+        bool operator==(const State& o) const
+        {
+            return tgt == o.tgt && addr == o.addr && pinGuess == o.pinGuess && refused == o.refused && pinAnchor == o.pinAnchor &&
+                   namesGen == o.namesGen && functions == o.functions && cpu == o.cpu;
+        }
+    };
+    State StateNow() const { return State{ tgt, tgtAddr, pinGuess, refused, pinAnchor, namesGen, Functions(), cpu }; }
+    State installState;
     // Where the output on screen came from, recorded at the check after it was installed (ResultRevision): what Follow PC turned off and
     // Enter on the box the panel filled ask for it again with. typed: the user's own entry; else the finder's, found for 'anchor'.
     struct Prov
@@ -2992,6 +3007,7 @@ struct FRig
             installRev = panel.ResultRevision();
             shownNamesGen = namesGen;
             shownFunctions = Functions();
+            installState = StateNow();
         }
     }
     void Idle(int n = 1)
@@ -3205,8 +3221,12 @@ std::string FollowCheck(FRig& r, bool hover)
     }
 
     // (area 8 fixer, A8-36, A8-37) What confirms the entry of current output, held against the label: the user's own entry (typed, or a
-    // function start at it), else a symbol, else the finder alone. A pin is the finder's: keeping it confirms nothing.
-    if (sh && forQuestion && !t.inputsDiffer && w.noEntry == trust::NoEntry::None && !(r.tgt == FRig::Tgt::Entry && r.provUnknown))
+    // function start at it), else a symbol, else the finder alone. A pin is the finder's: keeping it confirms nothing. Only while the target
+    // and the evidence are those the output was installed under: the label is the verdict at the install, and a target that changes with
+    // the question unchanged (an entry typed, then Follow PC finding the same entry) asks nothing, which is A8-32's (CPU-weighted mix 8
+    // seeds 420068 and 420664).
+    if (sh && forQuestion && !t.inputsDiffer && w.noEntry == trust::NoEntry::None && !(r.tgt == FRig::Tgt::Entry && r.provUnknown) &&
+        r.installRev == r.panel.ResultRevision() && r.installState == r.StateNow() && r.panel.HeldKey() && *r.panel.HeldKey() == sh->key)
     {
         uint32_t canon = sh->requestedEntry;
         CanonicalAddress(sh->requestedEntry, canon);
@@ -3269,16 +3289,22 @@ std::string FollowCheck(FRig& r, bool hover)
         t.entryDoubt = variants[good];
         err = Verify(r.panel, t, frame, true);
     }
-    if (err.empty() && doubtful && r.tgt == FRig::Tgt::Follow)
+    if (err.empty() && r.visible && doubtful && r.tgt == FRig::Tgt::Follow)
     {
         r.followDoubtKnown = true;
         r.followDoubtQ = r.QNow(w.entry);
         r.followDoubt = variants[good];
     }
-    if (err.empty() && forQuestion && !t.inputsDiffer)
+    // The doubt it was installed with: what this check accepted, the first time it is drawn after the install, while the target, the evidence
+    // and the snapshot are still those of the install (a hidden panel draws nothing, so its check accepts any).
+    if (err.empty() && r.visible && forQuestion && r.shownDoubtRev != r.panel.ResultRevision() && r.installRev == r.panel.ResultRevision())
     {
-        r.shownDoubt = t.entryDoubt;
-        r.shownDoubtRev = r.panel.ResultRevision();
+        const SnapshotKey* held = r.panel.HeldKey();
+        if (held && *held == sh->key && r.installState == r.StateNow())
+        {
+            r.shownDoubt = t.entryDoubt;
+            r.shownDoubtRev = r.panel.ResultRevision();
+        }
     }
     // (area 8 fixer, A8-36) A tooltip that sends the reader to Enter in the entry box promises that Enter asks the question on screen again:
     // the same entry, from the same origin (A8-19). Where the rig knows what Enter on the untouched box asks, it must be the target.
@@ -3333,12 +3359,13 @@ std::string FollowExecute(FRig& r, FOp o, Rng& rng)
     };
     auto typed = [&](uint32_t entry) {
         if (!r.visible) return std::string("(panel hidden: no entry box)");
-        TypeEntry(r, Hex(entry));
+        // The target first: an answer the keys' own frames install (a cache hit on Enter) is installed for it.
         r.tgt = FRig::Tgt::Entry;
         r.tgtAddr = entry;
         r.pinGuess = false;   // the user's own entry: full confidence, no doubt
         r.provUnknown = false;
         r.refused = false;
+        TypeEntry(r, Hex(entry));
         r.haveStopped = false;
         r.boxShowsShown = false;
         r.boxTarget = r.TargetProv();
@@ -3565,10 +3592,6 @@ std::string FollowExecute(FRig& r, FOp o, Rng& rng)
         r.Frame(c, true);
         r.Frame(c, false);
         r.Idle(2);
-        ImGui::GetIO().AddKeyEvent(ImGuiKey_Enter, true);
-        r.Frame(ImVec2(1270, 710), false);
-        ImGui::GetIO().AddKeyEvent(ImGuiKey_Enter, false);
-        r.Frame(ImVec2(1270, 710), false);
         r.tgt = FRig::Tgt::Entry;
         r.tgtAddr = enter.entry;
         r.pinGuess = !enter.typed;
@@ -3577,6 +3600,10 @@ std::string FollowExecute(FRig& r, FOp o, Rng& rng)
         r.pinDoubtKnown = false;
         r.provUnknown = false;
         r.refused = false;
+        ImGui::GetIO().AddKeyEvent(ImGuiKey_Enter, true);
+        r.Frame(ImVec2(1270, 710), false);
+        ImGui::GetIO().AddKeyEvent(ImGuiKey_Enter, false);
+        r.Frame(ImVec2(1270, 710), false);
         r.haveStopped = false;
         r.boxShowsShown = false;
         r.boxTarget = enter;
