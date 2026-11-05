@@ -42,6 +42,13 @@ def entry(img, T, size, i):
     b = (w >> 8) if (T + i) % 2 == 0 else (w & 0xFF)
     return T + (b - 0x100 if b & 0x80 else b)
 
+def widths(v):
+    """The value a label prints, read at the switch's width: `case 0xfffa:` of a 16-bit switch is -6."""
+    out = [v]
+    if 0x8000 <= v < 0x10000: out.append(v - 0x10000)
+    if 0x80 <= v < 0x100: out.append(v - 0x100)
+    return out
+
 def main():
     img = open(sys.argv[2], "rb").read()
     limit = int(sys.argv[sys.argv.index("--list") + 1]) if "--list" in sys.argv else 0
@@ -80,7 +87,7 @@ def main():
             votes = collections.Counter()
             for _, v, a in labels:
                 for k in range(-64, 65):
-                    if 0 <= v - k < 256 and entry(img, T, size, v - k) == a: votes[k] += 1
+                    if any(0 <= c - k < 256 and entry(img, T, size, c - k) == a for c in widths(v)): votes[k] += 1
             if not votes:
                 counts["...in a switch no label of which names its table's entry"] += len(labels)
                 k = None
@@ -90,7 +97,7 @@ def main():
             dests = {entry(img, T, size, i) for i in range(max(min(n, 256), 1))}
             for li, v, a in labels:
                 counts["...judged"] += 1
-                if k is not None and 0 <= v - k < 256 and entry(img, T, size, v - k) == a: continue
+                if k is not None and any(0 <= c - k < 256 and entry(img, T, size, c - k) == a for c in widths(v)): continue
                 kind = "...naming another entry of its own table" if a in dests else "...naming no destination of its own table"
                 counts[kind] += 1
                 if shown < limit:

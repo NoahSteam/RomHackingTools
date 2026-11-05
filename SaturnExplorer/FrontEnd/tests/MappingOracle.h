@@ -1377,13 +1377,17 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
             uint32_t T = 0;
             int size = 0;
             if (jmps.size() != 1 || !tableOf(*jmps.begin(), T, size)) continue;
+            // (the value a label prints, read at the switch's width: `case 0xfffa:` of a 16-bit switch is -6)
+            const auto names = [&](int64_t v, int64_t k, uint32_t at) {
+                uint32_t dest = 0;
+                if (entryOf(T, size, v - k, dest) && dest == at) return true;
+                if (v >= 0x8000 && v < 0x10000 && entryOf(T, size, v - 0x10000 - k, dest) && dest == at) return true;
+                return v >= 0x80 && v < 0x100 && entryOf(T, size, v - 0x100 - k, dest) && dest == at;
+            };
             std::map<int64_t, int> votes;
             for (const auto& label : kv.second)
                 for (int64_t k = -64; k <= 64; ++k)
-                {
-                    uint32_t dest = 0;
-                    if (entryOf(T, size, label.first - k, dest) && dest == label.second) ++votes[k];
-                }
+                    if (names(label.first, k, label.second)) ++votes[k];
             bool haveK = false;
             int64_t k = 0;
             int best = 0;
@@ -1393,7 +1397,7 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
             {
                 ++a.caseJudged;
                 uint32_t dest = 0;
-                if (haveK && entryOf(T, size, label.first - k, dest) && dest == label.second) continue;
+                if (haveK && names(label.first, k, label.second)) continue;
                 ++a.caseOtherEntry;
                 problem("case-entry", "the label 'case " + std::to_string(label.first) + ":' of the switch on line " + std::to_string(kv.first) + " names " +
                                           MappingHex(label.second) + (haveK && entryOf(T, size, label.first - k, dest) ? ", its table's entry is " + MappingHex(dest)

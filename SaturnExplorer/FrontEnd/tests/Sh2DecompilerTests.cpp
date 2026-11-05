@@ -941,6 +941,149 @@ void TestArea7Round5()
     }
 }
 
+// Area 7 round 6 (the reviewer's pins): each finding at its current behaviour; the comment of each says what flips when the row is fixed.
+// Fixtures are tools/a7_round6/fixtures (sh2asm.py of round 5 assembles them; SE_A7R4_PROBE runs them).
+void TestArea7Round6()
+{
+    std::vector<uint8_t> hw(0x100000u, 0);
+    Sh2Decompiler d(gConfig);
+    const std::function<bool(uint32_t, uint16_t&)> word = [&hw](uint32_t x, uint16_t& w) {
+        if (x < 0x06000000u || x - 0x06000000u + 1 >= hw.size()) return false;
+        w = static_cast<uint16_t>(hw[x - 0x06000000u] << 8 | hw[x - 0x06000000u + 1]);
+        return true;
+    };
+    // A7-28 (a): a number put at a delayed branch whose slot makes the same number into ANOTHER register. `mov.l @(lit),r2 ; mov r4,r0 ;
+    // cmp/eq #4,r0 ; bf B ; bra L ; mov #4,r3 ; B: mov #5,r0 ; mov #9,r3 ; L: mov.w r0,@r2 ; mov.l r3,@(4,r2) ; rts ; nop` (fixtures/s2.s,
+    // eq_known_slot). On the path that branches to L the engine knows r0 is 4 (the compare) and prints `xRam0603ac00 = 4;` at the `bra`;
+    // AddFrameStoreTokens' slot rule (A7-22's `bra ; mov #0x4,r1`) asks whether the slot makes the number, not into which register, so the
+    // line is drawn at the slot `mov #0x4,r3` (0x0607000A), r3's 4 (stored to xRam0603ac04), and a click goes there. The oracle's
+    // constAtJoin judges joins only; the new numberStoreOther (counted) sees it. Flips when fixed: the line is not drawn at 0x0607000A (its
+    // store, 0x06070010, or nothing), numberStoreOther 0.
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06070000u, { 0xD205, 0x6043, 0x8804, 0x8B01, 0xA002, 0xE304, 0xE005, 0xE309,
+            0x2201, 0x1231, 0x000B, 0x0009, 0x0603, 0xAC00 });
+        Print("A7-28 a number drawn at a slot that makes another register's", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        const Line* four = LineWith(r, "xRam0603ac00 = 4;");
+        CHECK(four != nullptr);
+        if (four) CHECK(four->firstAddr == 0x0607000Au);   // the slot `mov #0x4,r3` (A7-28)
+        if (four) CHECK(LineInstructions(*four) == (std::vector<uint32_t>{ 0x0607000Au, 0x06070010u }));
+        const Line* r3 = LineWith(r, "xRam0603ac04 = 4;");
+        if (r3) CHECK(r3->firstAddr == 0x0607000Au);       // (r3's own line: right)
+        const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_28 slot");
+        CHECK(a.Violations() == 0 && a.constAtJoin == 0 && a.numberStoreOther == 1);
+    }
+    // A7-28 (b): A7-26's number-in-memory rule takes an instruction that makes the number into the register a named store stores, though
+    // its value is made after the stores. kA726FrameWords (0x060216B6 of hwram008) with the join's `mov #0x0,r5` (0x0602183E) made
+    // `mov #0x0,r1`: r1 is what the pushes stored (0x0602176E.., 0x06021830..), and `xStack_8 = 0;` and the three other frame words are
+    // drawn at 0x0602183E again (A7-26 as it was, through the other register), the way back from it answering them. Flips when fixed: each
+    // line drawn at its lower push, numberStoreOther 0. The image itself (the round 5 pin) stays right.
+    {
+        std::vector<uint16_t> words = a7r4::kA726FrameWords;
+        CHECK(words[(0x0602183Eu - 0x060216B6u) / 2] == 0xE500);
+        words[(0x0602183Eu - 0x060216B6u) / 2] = 0xE100;
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x060216B6u, words, [] {
+            std::vector<std::pair<uint32_t, uint16_t>> c;
+            for (size_t i = 0; i < a7r4::kA726CalleeWords.size(); ++i) c.emplace_back(0x06008670u + 2 * static_cast<uint32_t>(i), a7r4::kA726CalleeWords[i]);
+            return c;
+        }());
+        Print("A7-28 a number drawn at the stored register's later number", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        int drawnAtJoin = 0;
+        for (const char* w : { "Stack_8 = 0;", "iStack_c = 0;", "iStack_10 = 0;", "iStack_14 = 0;" })
+        {
+            const std::vector<const Line*> all = a7r4::LinesWith(r, w);
+            CHECK(!all.empty());
+            if (all.empty()) continue;
+            for (const Token& t : all.back()->tokens)
+                if (t.begin < t.end && t.addr == 0x0602183Eu) ++drawnAtJoin;
+        }
+        CHECK(drawnAtJoin == 12);   // three drawn tokens on each of the four lines (A7-28)
+        const LineLookup back = LineForInstruction(r, 0x0602183Eu);
+        CHECK(back.kind == LineLookup::Exact && !back.lines.empty());
+        if (!back.lines.empty()) CHECK(Has(r.lines[back.lines[0]].text, "Stack_8 = 0;"));
+        const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_28 after the stores");
+        CHECK(a.constAtJoin == 0 && a.numberStoreOther == 4);   // (constAtJoin: a store stores r1, so it judges the line right)
+    }
+    // A7-29: a case label with no op of its own (a `nop` falling into the next case) after a nested switch names the INNER switch's
+    // destination for its value. fixtures/n1.s, nested_outer2_nop: the outer table sends 2 to the `nop` at 0x06070056; case 1 holds an inner
+    // switch whose case 2 is at 0x0607004E. LinesFromMarkup's caseDestination takes the table of the switch printed last, the inner one, so
+    // the outer `case 2:` names 0x0607004E and a click goes into the inner switch. The new caseOtherEntry (counted) pairs a label with the
+    // switch at its indent and reads that table. Flips when fixed: the outer `case 2:` names 0x06070056, caseOtherEntry 0.
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06070000u, { 0x4F22, 0xD518, 0xE103, 0x3416, 0x8D28, 0x6143, 0x311C, 0xC702,
+            0x011D, 0x301C, 0x402B, 0x0009, 0x0008, 0x0010, 0x003E, 0x0040, 0xE201, 0x2522, 0xA01A, 0x0009, 0xE102, 0x3616, 0x8D16, 0x6163,
+            0x311C, 0xC702, 0x011D, 0x301C, 0x402B, 0x0009, 0x0006, 0x000E, 0x0012, 0xE207, 0x1521, 0xA009, 0x0009, 0xA007, 0x0009, 0xE209,
+            0x1522, 0xA003, 0x0009, 0x0009, 0xE203, 0x1523, 0x4F26, 0x000B, 0x0009, 0x0000, 0x0603, 0xAC00 });
+        Print("A7-29 an op-less case label after a nested switch", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        std::vector<const Line*> twos = a7r4::LinesWith(r, "case 2:");
+        CHECK(twos.size() == 2);
+        if (twos.size() == 2)
+        {
+            CHECK(twos[0]->firstAddr == 0x0607004Eu);   // the inner switch's case 2: right
+            CHECK(twos[1]->firstAddr == 0x0607004Eu);   // the outer one: the inner's too (A7-29; its table sends 2 to 0x06070056)
+        }
+        const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_29");
+        CHECK(a.Violations() == 0 && a.caseJudged == 7 && a.caseOtherEntry == 1);
+    }
+    // The new checks on lines they must accept: the round 5 A7-27 fixture's labels (each at its own table's entry) and the real
+    // 0x060216B6 (each frame word drawn at its push).
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06070000u, { 0x4F22, 0xD50F, 0xE104, 0x3416, 0x8D17, 0x6143, 0x311C, 0xC702,
+            0x011D, 0x301C, 0x402B, 0x0009, 0x000A, 0x000E, 0x0012, 0x0014, 0x0018, 0xA00A, 0x0009, 0xA006, 0x0009, 0x0009, 0xE203, 0x2522,
+            0x6352, 0x7301, 0x2532, 0xE205, 0x1521, 0x4F26, 0x000B, 0x0009, 0x0603, 0xAC00 });
+        const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_29 control");
+        CHECK(a.Violations() == 0 && a.caseJudged == 5 && a.caseOtherEntry == 0);
+        const DecompileResult f = a7r4::DecompileWords(d, hw, 0x060216B6u, a7r4::kA726FrameWords, [] {
+            std::vector<std::pair<uint32_t, uint16_t>> c;
+            for (size_t i = 0; i < a7r4::kA726CalleeWords.size(); ++i) c.emplace_back(0x06008670u + 2 * static_cast<uint32_t>(i), a7r4::kA726CalleeWords[i]);
+            return c;
+        }());
+        const dts::MappingAudit fa = dts::AuditMapping(f, word, "a7_28 control");
+        CHECK(fa.Violations() == 0 && fa.numberStoreOther == 0 && fa.caseOtherEntry == 0);
+    }
+    // A7-30 (instrument): two of the fixer's oracle checks take what they judge from the product. (a) backWrong reads Token::materialised,
+    // the product's own flag: the A7-25 fixture with the flag cleared puts the global's copy first on the way back from the byte store again,
+    // and the oracle passes it. (b) copyMergeAtBranch judges a register merge drawn only at a BRANCH; the A7-21 lines (kA723Words' control,
+    // the image's own words) drawn at the `tst r0,r0` before each bt/s, an instruction that makes nothing either, pass.
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06070000u, { 0x4F22, 0xD106, 0x2142, 0x6243, 0x7213, 0xE100, 0x2210, 0xD104,
+            0x410B, 0x0009, 0x4F26, 0x000B, 0x0009, 0x0009, 0x0603, 0xAD2C, 0x0607, 0x1000 }, { { 0x06071000u, 0x000B }, { 0x06071002u, 0x0009 } });
+        DecompileResult unmarked = r;
+        for (Line& x : unmarked.lines)
+            for (Token& t : x.tokens) t.materialised = false;
+        const LineLookup old = LineForInstruction(unmarked, 0x0607000Cu);
+        const Line* g = LineWith(unmarked, "iRam0603ad2c = param_1;");
+        CHECK(g && !old.lines.empty());
+        if (g && !old.lines.empty()) CHECK(&unmarked.lines[old.lines[0]] == g);   // the copy first: A7-25 as it was
+        const dts::MappingAudit ua = dts::AuditMapping(unmarked, word, "a7_30 unmarked");
+        CHECK(ua.backWrong == 0);   // (A7-30 (a): flips when the oracle judges the order without the product's flag)
+    }
+    {
+        std::vector<uint16_t> image = a7r4::kA723Words;
+        image[(0x0600D932u - 0x0600D90Eu) / 2] = 0x0009;
+        image[(0x0600D93Cu - 0x0600D90Eu) / 2] = 0x0009;
+        const DecompileResult c = a7r4::DecompileWords(d, hw, 0x0600D90Eu, image);
+        DecompileResult atTst = c;
+        const uint32_t tsts[] = { 0x0600D9CCu, 0x0600DA0Au, 0x0600DA76u };
+        size_t k = 0;
+        for (Line& x : atTst.lines)
+            if (Has(x.text, "uStack_8 = uVar6;") && x.text.find('(') == std::string::npos && k < 3)
+            {
+                std::vector<Token> keep;
+                for (Token t : x.tokens)
+                    if (t.begin < t.end) keep.push_back((t.addr = t.addr ? tsts[k] : 0, t));
+                x.tokens = keep;
+                x.firstAddr = tsts[k++];
+            }
+        CHECK(k == 3);
+        const dts::MappingAudit ta = dts::AuditMapping(atTst, word, "a7_30 at a tst");
+        dts::PrintMappingAudit(ta, "a7_30 at a tst");
+        CHECK(ta.copyMergeAtBranch == 0 && ta.Violations() == 0);   // (A7-30 (b): flips when the check takes any instruction that makes nothing)
+    }
+}
+
 void TestFixture1()
 {
     Sh2Decompiler d(gConfig);
@@ -14665,6 +14808,7 @@ int main(int argc, char** argv)
         RUN(TestArea7Round3());
         RUN(TestArea7Round4());
         RUN(TestArea7Round5());
+        RUN(TestArea7Round6());
         RUN(TestSlotMadeLineIsAddressedToItsBranch());
         RUN(TestFrameStoreMaterialisedAtCall());
         RUN(TestFixture1b());
