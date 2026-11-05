@@ -39,6 +39,7 @@
 //   SE_TRUST_SCRIPT="select A; t-inject failed" SE_MODEL_WORLD=C,A   one sequence written out (area 1's words, and t-...)
 //   SE_TRUST_NOHOVER=1   do not hover the badge (faster)
 //   SE_TRUST_HIDDEN_RENAME=1  half the renames made and undone while the panel is hidden (A8-25), with the mixes
+//   SE_TRUST_FOLLOW_CPU=1     mixes 8 and 9 with the CPU switch, a CPU without registers, the PC in the BIOS and Stop four times as often
 #define SE_MODEL_NO_MAIN
 #include "DecompilerModelTests.cpp"
 
@@ -2648,6 +2649,7 @@ const char* const kFollowWords[] = { "pcc", "pca", "pct", "pcu", "pcudead", "pcb
 static_assert(sizeof kFollowWords / sizeof kFollowWords[0] == static_cast<size_t>(FOp::kCount), "a word per operation");
 std::vector<FOp> gFollowScript;
 bool gFollowDump = false;
+bool gFollowCpu = false;   // SE_TRUST_FOLLOW_CPU (area 8, round 4)
 
 bool ParseFollowScript(const std::string& text, std::vector<FOp>& out, std::string& error)
 {
@@ -2703,8 +2705,14 @@ bool RunFollow(uint64_t seed, bool verbose, uint64_t& opsDone)
         { FOp::AutoToggle, 4 }, { FOp::ShowInsn, 2 },
     };
     const size_t kinds = gFollowAuto ? sizeof kW / sizeof kW[0] : sizeof kW / sizeof kW[0] - 2;
+    // (area 8, round 4) SE_TRUST_FOLLOW_CPU=1: the CPU switch, a CPU without registers and Stop four times as often (A8-29's ground). Not in the
+    // default run: the pinned seeds keep their sequences.
+    auto weightOf = [](size_t k) {
+        const FOp o = kW[k].op;
+        return gFollowCpu && (o == FOp::Cpu || o == FOp::RegsOff || o == FOp::Stop || o == FOp::PcBios) ? 4 * kW[k].weight : kW[k].weight;
+    };
     int total = 0;
-    for (size_t k = 0; k < kinds; ++k) total += kW[k].weight;
+    for (size_t k = 0; k < kinds; ++k) total += weightOf(k);
     FRig r;
     std::vector<std::string> done;
     auto fail = [&](const std::string& what) {
@@ -2730,9 +2738,8 @@ bool RunFollow(uint64_t seed, bool verbose, uint64_t& opsDone)
             int pick = rng.Below(total);
             for (size_t k = 0; k < kinds; ++k)
             {
-                const auto& w = kW[k];
-                if (pick < w.weight) { op = w.op; break; }
-                pick -= w.weight;
+                if (pick < weightOf(k)) { op = kW[k].op; break; }
+                pick -= weightOf(k);
             }
         }
         const std::string note = FollowExecute(r, op, rng);
@@ -2928,6 +2935,7 @@ int main(int argc, char** argv)
     CHECK(sfe::MakeDirectory(gConfig));
     gHover = std::getenv("SE_TRUST_NOHOVER") == nullptr;
     gHiddenRename = std::getenv("SE_TRUST_HIDDEN_RENAME") != nullptr;
+    gFollowCpu = std::getenv("SE_TRUST_FOLLOW_CPU") != nullptr;
 
     CheckGuide();
 
