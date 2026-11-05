@@ -4971,8 +4971,16 @@ struct ValueSet
     std::set<ghidra::uintm> times;                      // ...and those ops' times (a store's own COPY, alive)
     std::vector<FlowVn> locations;                      // the memory it is read from: a local, a stack parameter, a global (varnodes of the stack or RAM)
     bool rebuilt = false;                               // a computation in it is the engine's own (no op of the flow: an addition moved past a join)
+    // A7-36: the statement's variable is a part of a wider store: its bytes are the store's value shifted right by `shiftBytes` bytes
+    // (big-endian: the byte at the store's address is its most significant), for a value of the store's size
+    ghidra::int4 shiftBytes = 0, storeSize = 0;
     bool Has(uint64_t value, ghidra::int4 size) const
     {
+        if (shiftBytes > 0 && size == storeSize && shiftBytes < size)
+        {
+            value >>= 8 * shiftBytes;
+            size -= shiftBytes;
+        }
         for (const auto& n : numbers)
         {
             const ghidra::int4 bytes = std::min(std::max(size, 1), std::max(n.second, 1));
@@ -6288,7 +6296,15 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
             }
             const auto f = shown.find(r);
             if (f != shown.end()) return f->second;
-            const bool v = StoreShowsValue(*r, flow, fd, values);
+            // (A7-36: a variable inside a wider store shows the bytes of the store's value it covers)
+            ValueSet part = values;
+            const ghidra::uintb k = (base - r->addr.getOffset()) & space->getHighest();
+            if (r->addr.getSpace() == space && out->getSize() < r->size && k + static_cast<ghidra::uintb>(out->getSize()) <= static_cast<ghidra::uintb>(r->size))
+            {
+                part.storeSize = r->size;
+                part.shiftBytes = r->size - static_cast<ghidra::int4>(k) - out->getSize();
+            }
+            const bool v = StoreShowsValue(*r, flow, fd, part);
             shown[r] = v;
             return v;
         };

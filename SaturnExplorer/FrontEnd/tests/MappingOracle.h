@@ -1003,10 +1003,17 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                         // (a parameter may be the number on the line's path: `param_4 == 0` tested before the store)
                         if (got.kind == WordValue::Param) return false;
                         if (composed) return false;   // (a number made of a word and a narrower store: each writes some of its bytes)
-                        // (the bytes of the store from the variable's on: the low ones, the SH-2 being big-endian)
-                        const int bytes = size - std::min(std::max(storeShift[store], 0), size - 1);
+                        // (the bytes of the store from the variable's on, the SH-2 being big-endian; A7-36: as many as the variable has,
+                        // the narrowest access the function makes at its address, so a byte at the start of a word store is the word's
+                        // high byte)
+                        const int shift = std::min(std::max(storeShift[store], 0), size - 1);
+                        int bytes = size - shift;
+                        const uint32_t amask = frame ? 0xFFFFFFFFu : 0x07FFFFFFu;
+                        for (const AccessFate& f : r.accessFates)
+                            if (f.size > 0 && ((f.address - at) & amask) == 0 && static_cast<int>(f.size) < bytes) bytes = static_cast<int>(f.size);
                         const uint64_t mask = bytes >= 8 ? ~0ull : (1ull << (8 * bytes)) - 1;
-                        return ((static_cast<uint64_t>(got.value) ^ static_cast<uint64_t>(shownValue.value)) & mask) != 0;
+                        const int down = size - shift - bytes;
+                        return (((static_cast<uint64_t>(got.value) >> (8 * down)) ^ static_cast<uint64_t>(shownValue.value)) & mask) != 0;
                     }
                     return registerVariable && got.kind == WordValue::Param;
                 };
