@@ -519,6 +519,10 @@ public:
     // it keeps, so a caller reads them as they were instead of extraout_rN). On unless cleared: the
     // lending measurements run both ways. Process-wide.
     static void SetLendEffectsForTests(bool lend);
+    // Tests only: patch 0010's policy (Architecture::loadsNotDuplicated, set by SaturnArchitecture) switched off, so a load is printed at each
+    // use and past other memory operations as upstream prints it. The access ledger's print count and conditional flag are then seen set
+    // (A11-5: with the policy on no correct output sets them). On unless cleared. Process-wide.
+    static void SetLoadsNotDuplicatedForTests(bool on);
     // Tests only: the most passes one repeating action of the engine makes before it stops with "Exceeded maximum repeats of"
     // and the signature is withheld (patch 0055; 0 restores the engine's own bound). Process-wide.
     static void SetActionRepeatLimitForTests(int limit);

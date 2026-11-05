@@ -57,9 +57,10 @@ void Print(const char* label, const DecompileResult& r)
     if (!r.prototypeWithheld.empty()) std::printf("  signature withheld: %s\n", r.prototypeWithheld.c_str());
     for (const std::string& w : r.warnings) std::printf("  warning: %s\n", w.c_str());
     for (const MemoryAccess& m : r.accesses)
-        std::printf("  access: %s %s %08X size %u at %08X%s%s printed %d time(s), %d line(s), %d token(s)\n", m.write ? "write" : "read",
+        std::printf("  access: %s %s %08X size %u at %08X%s%s printed %d time(s), %d line(s), %d token(s)%s%s\n", m.write ? "write" : "read",
                     m.direct ? "direct" : "via pointer", m.address, unsigned(m.size), m.insn, m.inLoop ? " in loop" : "",
-                    m.returned ? " returned" : "", m.printed, m.printedLines, m.printedTokens);
+                    m.returned ? " returned" : "", m.printed, m.printedLines, m.printedTokens, m.conditionalInPrint ? ", conditional" : "",
+                    m.repeatedOnPath ? ", repeated on a path" : "");
     for (const AccessFate& f : r.accessFates)
     {
         static const char* const names[] = { "folded into ordinary memory", "dead", "removed with unreachable code", "the switch's table",
@@ -2876,6 +2877,34 @@ void TestHardwareVolatility()
 
     r = run("indexed read-modify-write", indexRmw);
     CHECK(Ledger(r, { Rd(0, 1), Rd(0, 2), Wr(0, 2) }));
+    // A11-5: the ledger's print count and conditional flag, seen set. With patch 0010's policy on, every correct output has a read printed
+    // once and unconditionally, so `Ledger` only ever asked for 1 and false, and a ledger that never counted (mutants H-led-printed,
+    // H-led-cond) passed. Off, upstream prints the index byte at both of its uses and the && read inside the right operand.
+    {
+        auto readAt = [](const DecompileResult& x, uint32_t insn) -> const MemoryAccess* {
+            for (const MemoryAccess& m : x.accesses)
+                if (m.insn == insn && !m.write) return &m;
+            return nullptr;
+        };
+        Sh2Decompiler::SetLoadsNotDuplicatedForTests(false);
+        const DecompileResult twice = d.Decompile(snap, Request(indexRmw.base));
+        const DecompileResult cond = d.Decompile(snap, Request(andRead.base));
+        Sh2Decompiler::SetLoadsNotDuplicatedForTests(true);
+        Print("indexed read-modify-write, patch 0010's policy off", twice);
+        Print("read combined with &&, patch 0010's policy off", cond);
+        const MemoryAccess* index = readAt(twice, indexRmw.base);
+        CHECK(index && index->printed == 2);
+        CHECK(!Ledger(twice, { Rd(0, 1), Rd(0, 2), Wr(0, 2) }));
+        const MemoryAccess* right = readAt(cond, andRead.base + 4);
+        CHECK(right && right->conditionalInPrint && right->printed == 1);
+        CHECK(!Ledger(cond, { Rd(0, 4) }));
+        // ...and on again, the same reads as the ledgers above have them.
+        const MemoryAccess* once = readAt(r, indexRmw.base);
+        CHECK(once && once->printed == 1);
+        const DecompileResult inPlace = d.Decompile(snap, Request(andRead.base));
+        const MemoryAccess* plain = readAt(inPlace, andRead.base + 4);
+        CHECK(plain && !plain->conditionalInPrint);
+    }
 
     r = run("read-only write", roWrite);
     CHECK(Ledger(r, { Wr(0x25D00010u, 2) }));
