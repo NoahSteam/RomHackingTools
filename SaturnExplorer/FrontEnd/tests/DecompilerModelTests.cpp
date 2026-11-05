@@ -2184,6 +2184,10 @@ const Pinned kPinned[] = {
     { "A8-44", "select A; hold; reconnect; stop; scrub 1; resume; wait", "C,A", 0 },
     { "A8-44 (scrub 2)", "select A; hold; reconnect; stop; scrub 2; resume; wait", "C,A", 0 },
     { "A8-44 (released)", "select A; hold; reconnect; stop; scrub 1; resume; finish; wait", "C,A", 0 },
+    // (area 8, round 8) The other side of A8-44: on a running emulator the view moves every frame and the held snapshot does not, so a Stop
+    // stays in force while frames pass. A panel that forgets it whenever the view moves asks the stopped question again by itself (the
+    // mutation "ForgetStop() when a running view's identity changes" fails here and at 1 seed in 150, not in the 18 default seeds).
+    { "A8-44 (running)", "run; hold; select A; stop; wait; advance; advance; wait", "C,A", 0 },
     // Refresh on output that already answers the inputs is not stale while the replacement runs (A8-3):
     // the held-engine check forbids a stale mark when the inputs are the ones shown, not only requires
     // one when they differ.
@@ -2209,8 +2213,14 @@ const Pinned kPinned[] = {
 };
 
 // The open findings, not in the default run while they fail: SE_MODEL_OPEN=1 runs them alone (exit
-// 1 while any fails). The fixer moves each into kPinned once it passes. None is open now.
+// 1 while any fails). The fixer moves each into kPinned once it passes.
 const Pinned kOpen[] = {
+    // (area 8, round 8) A8-47: the Stop's cancel comes back while the panel is hidden and the view is elsewhere (the panel discards it: not in
+    // force, A8-29 (c)); the view comes back and the panel, shown, asks the question again. The held snapshot never moved, so the model, which
+    // forgets a Stop only when the held snapshot leaves the stopped question (A8-44), calls the answer a Stop violation.
+    { "A8-47 (scrub)", "hold; select A; stop; hide; scrub 1; wait; resume; show; wait", "C,A", 0 },
+    { "A8-47 (BIOS)", "hold; select A; stop; hide; bios 1; wait; bios 0; show; wait", "C,A", 0 },
+    { "A8-47 (start)", "hold; select A; stop; hide; bound A 1; wait; bound A 1; show; wait", "C,A", 0 },
     { nullptr, nullptr, nullptr, 0 },
 };
 
