@@ -260,16 +260,34 @@ public:
 
 private:
     enum class TargetKind : uint8_t { FollowPc, Containing, Entry };
+    // Where an Entry target came from, which every reader of the target takes from here and from nowhere else (A8-36 to A8-39). Only an
+    // entry the user typed, or a function start the user set, is the user's entry: "user-set entry", full confidence, no doubt. A pin is
+    // the function the finder found, kept when Follow PC was turned off (or Enter pressed on the box the panel filled): it is still the
+    // finder's guess, and its verdict is asked of the finder again on every resolve, against the evidence then -- a symbol removed, a
+    // start set, a call stack gone (A8-30, A8-33, A8-37). NothingToPin: Follow PC was turned off with no function found and none shown;
+    // nothing is asked (A8-38).
+    enum class EntryOrigin : uint8_t { Typed, FunctionStart, Pinned, NothingToPin };
     struct Target
     {
         TargetKind kind = TargetKind::FollowPc;
         uint32_t address = 0;   // Containing: the address asked about; Entry: the entry itself
-        decomp::EntrySource source = decomp::EntrySource::User;   // Entry: why it is an entry
-        // Entry: how sure the finder was, and its doubt, for an entry it found and the user pinned (Follow PC turned off). Pinning it does not
-        // confirm it: the figure and the "Entry: ..." line stay (A8-30). Only an entry the user gives has 100 and no doubt.
-        int confidence = 100;
-        std::string doubt;
+        EntryOrigin origin = EntryOrigin::Typed;   // Entry: where it came from
+        // Pinned: the address the finder found the entry for (the PC followed, the address asked about), canonical, when there was one. The
+        // pin's verdict is the finder's answer for it while that answer is still this entry.
+        bool haveAnchor = false;
+        uint32_t anchor = 0;
+        bool operator==(const Target& o) const
+        {
+            return kind == o.kind && address == o.address && origin == o.origin && haveAnchor == o.haveAnchor && (!haveAnchor || anchor == o.anchor);
+        }
     };
+    // The verdict on a pinned entry, asked of the finder now (Resolve).
+    void ResolvePin(const DecompilerInputs& inputs, uint32_t canonical);
+    // What Enter in the entry box asks now: the target its text stands for while the user has not edited it, else the entry typed. False
+    // when the text is no entry.
+    bool EnterTarget(Target& out) const;
+    // ...and that is the target asked now: the tooltips may then send the reader to Enter, which asks it again (A8-19, A8-36).
+    bool EnterAsksTarget() const;
 
     // The view's identity: what a snapshot must match to show what is on screen.
     struct ViewId
@@ -402,7 +420,7 @@ private:
     int mEntryConfidence = 0;
     std::string mEntryError;
     // Why no entry was found, so the stale badge can name the cause for the target kind (A8-2).
-    enum class EntryFailure : uint8_t { None, Refused, NotCode, NoRegisters, NotFound };
+    enum class EntryFailure : uint8_t { None, Refused, NotCode, NoRegisters, NotFound, NothingPinned };
     EntryFailure mEntryFailure = EntryFailure::None;
     // The entry box refused what was typed and the target is unchanged: the refusal stays the question
     // until the entry changes (SetTarget), however often the old target would resolve again (A8-4).
@@ -481,11 +499,13 @@ private:
     uint64_t mShownVolatileHash = 0;   // the volatile list the shown answer was asked under
     uint64_t mShownFunctions = 0;      // ...and the function set (names and starts), so a change after a Stop still shows as stale
     std::string mShownEntrySource;
-    // ...and what it is made from, for the entry the shown answer was asked at: Follow PC turned off when the question has no function pins
-    // that entry, and it keeps the finder's figure and doubt (A8-30).
-    decomp::EntrySource mShownEntryFrom = decomp::EntrySource::None;
-    int mShownEntryConfidence = 0;
+    // The finder's doubt about the shown answer's entry when it was installed: the output's own, drawn while the question on screen is
+    // about something else (A8-39).
     std::string mShownEntryDoubt;
+    // The Entry target that asks for the shown answer again, with its origin: the target itself for an Entry target, a pin of the entry
+    // found (with its anchor) for Follow PC and Decompile. Follow PC turned off when the question has no function pins it, and Enter on
+    // the box the panel filled with its entry asks it (A8-30, A8-36).
+    Target mShownTarget;
     float mShownWidth = 0.0f;        // widest line, for the horizontal scroll range
     int mSelectedLine = -1;
     // A7-5: "Show in Pseudocode". The instruction asked for (canonical once applied) waits here for its function to be shown; the line to bring into view
@@ -501,6 +521,12 @@ private:
     std::list<CacheEntry> mCache;    // most recent first
 
     char mEntryBuf[16] = {};
+    // The target the box's text stands for: the shown answer's (mShownTarget) when the panel wrote it, the entry asked when the user pressed
+    // Enter on it, a pin when Follow PC was turned off on the entry it names. Invalid once the user edits the text: Enter is then the typed
+    // entry (A8-36: Enter on text the panel wrote is not the user's entry).
+    bool mBoxTargetValid = false;
+    bool mBoxShowsShown = false;     // ...and it is the shown answer's text: the target is mShownTarget, whatever was installed since
+    Target mBoxTarget;
     // A new function was installed: the entry box shows its entry once it is not being edited, so
     // it never names a function other than the one on screen (Follow PC, Call Stack, Registers).
     bool mSyncEntryBox = false;
