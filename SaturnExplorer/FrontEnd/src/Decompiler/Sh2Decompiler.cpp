@@ -5456,6 +5456,66 @@ bool EdgeNumber(NumberWalk& w, const FlowRecord& flow, const ghidra::Funcdata& f
     }
     return false;
 }
+// The bits `mask` of what storage `vn` holds before op `pos` of block `blk`, when the walk knows them though not the whole value: the T
+// bit read back from sr after `sr = (sr & ~1) | zext(t)` is t's (`rotr r3` of a known r3 sets T from r3's low bit). Through the low
+// piece, extensions, an OR, and an AND with a number; anything else is FlowNumberIn's whole value, masked.
+bool FlowMaskedNumberIn(NumberWalk& w, const FlowRecord& flow, const ghidra::Funcdata& fd, int blk, int pos, const FlowVn& vn, uint64_t mask,
+                        uint64_t& value, int depth = 0)
+{
+    if (depth > 8 || blk < 0 || static_cast<size_t>(blk) >= flow.blockOps.size()) return false;
+    if (vn.Constant())
+    {
+        value = static_cast<uint64_t>(vn.offset) & mask;
+        return true;
+    }
+    const std::vector<FlowOp>& ops = flow.blockOps[static_cast<size_t>(blk)];
+    for (int i = std::min(pos, static_cast<int>(ops.size())) - 1; i >= 0; --i)
+    {
+        const FlowOp& op = ops[static_cast<size_t>(i)];
+        if (op.code == ghidra::CPUI_CALL || op.code == ghidra::CPUI_CALLIND) break;
+        if (!op.hasOut || !FlowStorageOverlaps(op.out, vn)) continue;
+        if (!SameStorage(op.out, vn)) break;
+        uint64_t a = 0, b = 0;
+        if (op.code == ghidra::CPUI_SUBPIECE && op.numIn >= 2 && op.in[1].Constant() && op.in[1].offset == 0)
+        {
+            if (!FlowMaskedNumberIn(w, flow, fd, blk, i, op.in[0], mask & MaskToSize(~0ull, op.out.size), a, depth + 1)) return false;
+            value = a & mask;
+            return true;
+        }
+        if ((op.code == ghidra::CPUI_INT_ZEXT || op.code == ghidra::CPUI_COPY) && op.numIn >= 1)
+        {
+            if (!FlowMaskedNumberIn(w, flow, fd, blk, i, op.in[0], mask & MaskToSize(~0ull, op.in[0].size), a, depth + 1)) return false;
+            value = a & mask;
+            return true;
+        }
+        if (op.code == ghidra::CPUI_INT_OR && op.numIn >= 2)
+        {
+            if (!FlowMaskedNumberIn(w, flow, fd, blk, i, op.in[0], mask, a, depth + 1) ||
+                !FlowMaskedNumberIn(w, flow, fd, blk, i, op.in[1], mask, b, depth + 1))
+                return false;
+            value = (a | b) & mask;
+            return true;
+        }
+        if (op.code == ghidra::CPUI_INT_AND && op.numIn >= 2 && (op.in[0].Constant() || op.in[1].Constant()))
+        {
+            const int k = op.in[1].Constant() ? 1 : 0;
+            const uint64_t c = static_cast<uint64_t>(op.in[k].offset);
+            if ((c & mask) == 0)
+            {
+                value = 0;
+                return true;
+            }
+            if (!FlowMaskedNumberIn(w, flow, fd, blk, i, op.in[1 - k], mask & c, a, depth + 1)) return false;
+            value = a & c & mask;
+            return true;
+        }
+        break;
+    }
+    uint64_t whole = 0;
+    if (!FlowNumberIn(w, flow, fd, blk, pos, vn, whole)) return false;
+    value = whole & mask;
+    return true;
+}
 // Is the flow's edge from block `from` to `to` never taken, by a condition the walk knows (EdgeNumber), or `from` never entered, every
 // edge into it never taken (the `add #0x54,r0` a `cmp/eq #1,r0 ; bf L` with r0 0 always branches around)?
 bool EdgeDead(NumberWalk& w, const FlowRecord& flow, const ghidra::Funcdata& fd, int from, int to)
@@ -5561,6 +5621,16 @@ bool FlowNumberIn(NumberWalk& w, const FlowRecord& flow, const ghidra::Funcdata&
         {
             if (!op.in[1].Constant() || !FlowNumberIn(w, flow, fd, blk, i, op.in[0], a)) return false;
             value = MaskToSize(op.in[1].offset >= 8 ? 0 : a >> (8 * op.in[1].offset), size);
+            return true;
+        }
+        // (an AND with a number: the bits it keeps may be known when the whole is not, FlowMaskedNumberIn)
+        if (op.code == ghidra::CPUI_INT_AND && (op.in[0].Constant() || op.in[1].Constant()))
+        {
+            const int k = op.in[1].Constant() ? 1 : 0;
+            const uint64_t c = MaskToSize(static_cast<uint64_t>(op.in[k].offset), op.in[k].size);
+            uint64_t bits = 0;
+            if (!FlowMaskedNumberIn(w, flow, fd, blk, i, op.in[1 - k], c, bits)) return false;
+            value = MaskToSize(bits & c, size);
             return true;
         }
         const bool knownA = FlowNumberIn(w, flow, fd, blk, i, op.in[0], a);

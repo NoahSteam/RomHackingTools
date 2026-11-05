@@ -814,13 +814,18 @@ inline int TBefore(const sfe::decomp::DecompileResult& r, const std::function<bo
             if (!decode(p, d) || !word(p, w) || d.IsCall || d.Mnemonic == "rte") return -1;
             if ((w >> 8) == 0x89 || (w >> 8) == 0x8B)
             {
-                // (a `bt` or `bf` passes T on: the edge into `a` is taken only with the T it needs)
+                // (a `bt` or `bf` passes T on, and its edge says it: `bt` is taken with T 1 and falls through with T 0, `bf` the other
+                // way; an edge the T before the branch never takes gives nothing)
                 const int t = TBefore(r, word, into, p, depth + 1);
-                if (t < 0) return -1;
-                const bool degenerate = d.BranchTarget == p + 2;
+                if (d.BranchTarget == p + 2)
+                {
+                    if (!give(t)) return -1;
+                    continue;
+                }
                 const bool taken = p + 2 != a;
-                if (!degenerate && taken != (((w >> 8) == 0x89) == (t == 1))) continue;
-                if (!give(t)) return -1;
+                const int edge = taken == ((w >> 8) == 0x89) ? 1 : 0;
+                if (t >= 0 && t != edge) continue;
+                if (!give(edge)) return -1;
                 continue;
             }
             const int t = TSetBy(r, word, into, p, w, depth);
@@ -1225,13 +1230,13 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
             const sfe::DisassembledInstruction d = sfe::Sh2Decode(x, w);
             return d.IsValid && ShapeOf(d).store;
         };
-        // (A7-34's triage: or at a load, the first instruction of a loop the engine put a register's copy under a global's name at,
-        // `iRam06001038 = iVar2;` at the loop's `mov.w @r4,r2`, naming the store later in the loop)
-        const auto isCallOrLoad = [&](uint32_t x) {
+        // (A7-34's triage: at any instruction but a branch -- a load, the first instruction of a loop the engine put a register's copy
+        // under a global's name at, `iRam06001038 = iVar2;` at the loop's `mov.w @r4,r2`; an `and` -- naming a store elsewhere)
+        const auto isBranch = [&](uint32_t x) {
             uint16_t w = 0;
-            if (!word(x, w)) return false;
+            if (!word(x, w)) return true;
             const sfe::DisassembledInstruction d = sfe::Sh2Decode(x, w);
-            return d.IsValid && (ShapeOf(d).call || ShapeOf(d).load);
+            return !d.IsValid || (d.IsBranch && !d.IsCall);
         };
         const auto plainCopy = [](const std::string& text) {
             const size_t b = text.find_first_not_of(' ');
@@ -1260,7 +1265,8 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
             for (const Token& t : r.lines[li].tokens)
                 if (t.addr && t.begin < t.end)
                 {
-                    const bool copy = plain && (isCallOrLoad(t.addr) || isStore(t.addr)) && !named.empty() && !named.count(t.addr);
+                    // (A7-34's triage: at any instruction but a branch, `xRam26002208 = (xunknown2)uVar1;` at the `and` making uVar1)
+                    const bool copy = plain && !isBranch(t.addr) && !named.empty() && !named.count(t.addr);
                     (copy ? copyDrawn : ownDrawn)[t.addr].insert(li);
                 }
         }
