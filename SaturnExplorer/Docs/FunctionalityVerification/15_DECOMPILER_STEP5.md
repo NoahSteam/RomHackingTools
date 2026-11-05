@@ -15354,3 +15354,47 @@ Mnemonics (`SE_GENERATED_COVERAGE=1`): 73 distinct in grammar 1, 81 in grammar 2
 * **Restarts.** The machine restarted twice during the sweep. Each time one mutant was left applied: `DecompilerRunner.cpp` (`H-run-gen`) and `sleigh.cc` (patch 0002). Both were put back with `git checkout`, and the mutants were rerun. Since then `applied.json` makes the next piece restore them itself.
 
 Routed: A11-7 to area 10 (the "Pinned by" cells of 0014 and 0060, and adding 0040 to A10-10). A11-4 and A11-8 concern area 3's fixtures and grammar. A11-3 is area 3's frame ledger (the A3-124 and A3-133 instrument). Each is filed under area 11.
+
+## Area 11, fix of round 1
+
+Branch `review/11-fix` from master `d18fc225`. The fixer of area 11 round 1's rows. **Rows A11-3 and A11-4 (P2), A11-5, A11-10, A11-11 and A11-12 (P3) fixed; A11-13 (P3) filed** (split from A11-5); A11-6, A11-8 and A11-9 left open; A11-7 stays with area 10. Product code: a test switch only (`Sh2Decompiler::SetLoadsNotDuplicatedForTests`, on unless a test clears it). Every kill below was shown by `tools/a11_round1/mutate.py --only <mutant> --oracles <oracle>`, with an empty `--rev` directory (host mutants need none) and a fresh `--out`. Each run put the file back, and `git status` was clean after it. The build is the round's (RelWithDebInfo, gcc 13), `-j2`, and every binary ran under `ulimit -v 3500000` and `timeout`.
+
+### A11-3: the frame ledger's intake
+
+The witness is the code, not the mapping. In `TestFrameLedgerIntake`, a frame word is written twice and then read: `add #-8,r15 ; mov.l r4,@(4,r15) ; mov.l r5,@(4,r15) ; mov.l @(4,r15),r0 ; rts ; add #8,r15`. Nothing reads the first write, so its record must be `FrameUnread`; the second write's must not be. A copy of the result with the second write's fold removed must then give one loss in `FrameLosses`: the first write, read at +6. That checks the whole path, from the engine's record to the ledger's verdict.
+
+The intake guard is `dts::FrameIntakeErrors` in `FrameLedger.h`. Patch 0068's `recordFrameEnd` repeats a fold's record with the end's fate. So a frame op of the flow has exactly one fold, an end comes only after a fold, and there is at most one end. A host that reads an end as a fold leaves two folds of one op, and the guard says so. The guard sits beside every `FrameLosses` call:
+* `ReferenceOk`, so every suite fixture;
+* both generator check sites, as the finding `frame-intake`;
+* `TestGameCode`, which must count 0 unpaired records. A corpus of 100 functions or more must also have `FrameUnread` records: hwram007 has 3,396.
+
+| Mutant `H-fate-frameunread` | Result |
+|---|---|
+| unit | killed: the witness (no `FrameUnread` record), the damaged copy (no loss), and the intake in 37 `ReferenceOk` calls |
+| gen (300 seeds) | killed: 2,267 `frame-intake` findings |
+| corpus hwram007 | killed by its game-code checks: 3,396 unpaired records, 0 `FrameUnread` |
+| unmutated | suite, generator at 300 seeds and at 3,000 seeds from 1000 (75 s), hwram007: pass, 0 unpaired |
+
+### A11-4: a lent callee's r15 distance
+
+The new fixture sits beside the "callee pops the caller's push" control: "callee pops the caller's push, the caller pops the next". The caller is `4F22 2F56 2F46 B00B 0009 60F6 4F26 000B 0009` and the callee is `000B 7F04`. The caller pushes PR, r5 and r4. The lent callee pops r4's word, and the caller then pops the next word, r5's, into r0. The run returns r5. The lent pair goes through `PseudoAgreesWithRun`, and the text must be `return param_2;`. With `H-lend-extrapop` the text is `return param_1;`. That kills the mutant with three checks: the run oracle ("the code returned 22222222 for r4=11111111, the pseudocode returns 11111111") and both text pins. The generator's lending check was not widened: its grammar has no lent callee whose `spDelta` changes what its caller prints, a grammar gap like A11-8's.
+
+### The P3 rows
+
+* **A11-10.** Both fixture suites exit 77 without their states, and `SKIP_RETURN_CODE 77` is set on both tests. A check with the `OhrimeMiniGame` directory moved aside (and put back after): ctest lists both as "Skipped". With the directory in place, both run and pass.
+* **A11-12.** The `oversize.bios` case requires "larger than a Saturn BIOS" (`WRONG_REASON`). `H-load-toolarge` is killed, refused as "(the file is empty)".
+* **A11-11.** `fn.ret_call` joins `TestRound9Pins`' "first drawn" choosers. Its first grammar 2 seed is 185, evaluated in every generator run with 0 findings.
+* **A11-5.** With `SetLoadsNotDuplicatedForTests(false)`, the indexed read-modify-write's index byte is printed twice, and the `&&` fixture's right-operand read is `conditionalInPrint`. Each fixture's `Ledger` then fails. With the switch on again, both are once and unconditional. `H-led-printed` and `H-led-cond` are killed. `H-led-repeat` survives: with 0010 off, no suite output sets `repeatedOnPath`. The flag needs an engine that copies an access onto one path, which no correct output does. Filed as **A11-13 (P3)**: the corpus's `duplicated` count and the generator's `repeated` finding read the same flag, so it is an unwitnessed sensor; hwram007 has 0.
+
+### What was run
+
+| Run | Result |
+|---|---|
+| `ctest -j2 --timeout 900 -E SaturnExplorerLive` | first run 101 of 102: `SaturnExplorerDecompilerTrustTests` failed once, under load from another agent's build; it passed alone (52.7 s) and in the full rerun, **102 of 102** (184 s: the engine suite 40.7 s, the fault suite 85.9 s, the decompiler suite 25.0 s, printed C 23.5 s) |
+| `ctest -R SaturnExplorerLive` | 6 of 6 (29.8 s) |
+| the fault suite alone (`SE_FAULT_JOBS=2`) | 0 of 94 jobs failed (92.1 s) |
+| tests | 108, as on master: no ctest test added; the new checks are inside existing suites |
+
+Notes:
+* The machine restarted once, during the first `H-fate-frameunread` run. The mutant was left applied in `Sh2Decompiler.cpp`. It was put back with `git checkout`, and the marker `applied.json` was removed. The mutant was then rerun one oracle at a time.
+* `Print` in the suite now also shows an access's `conditional` and `repeated on a path` flags.
