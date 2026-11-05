@@ -472,8 +472,9 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
                     ImGui::PopStyleVar();
                     if (enter || ImGui::IsItemDeactivated())
                     {
-                        if (mCommentBuf[0]) mComments[ln.addr] = mCommentBuf;
-                        else                mComments.erase(ln.addr);
+                        const std::string note = CleanEntryText(mCommentBuf);   // as the file holds it; blank is no note (A9-31)
+                        if (!note.empty()) mComments[ln.addr] = note;
+                        else               mComments.erase(ln.addr);
                         mEditingComment = false;
                         SaveAfterEdit();
                     }

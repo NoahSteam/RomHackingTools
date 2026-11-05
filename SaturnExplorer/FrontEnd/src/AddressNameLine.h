@@ -6,11 +6,14 @@
 // counts it. The readers used strtoul / sscanf on the front of the line, so "100000000 f" named address 0 (the high bits
 // cut off), "-1 f" named 0xFFFFFFFF, and "0608<garbage>" named 0x608 after the digits it began with (A9-2, A9-10).
 //
-// A word of the letters a-f alone is a word, not an address (A9-18): "Dead function", "add it later", "beef", an article "a".
+// A word of the letters a-f alone is usually a word, not an address (A9-18): "Dead function", "add it later", an article "a".
 // The rule (ParseAddressWord): with 0x, one to eight hex digits; without it, eight hex digits (what the saves write), or one to
-// seven hex digits that include a decimal digit (what older versions wrote for addresses below 0x10000000: "6004000"). So an
-// older file's entry still loads unless every digit of its address is a-f ("abc" for 0x00000ABC, which older versions wrote for
-// addresses that exist in no memory of the machine); such a line is skipped and counted like any other that is not an entry.
+// seven hex digits that include a decimal digit (what older versions wrote for addresses below 0x10000000: "6004000"), or two
+// to four letters a-f alone when the address they spell is inside the BIOS ROM, 0 to 0x7FFFF (A9-32: what older versions wrote
+// for a BIOS function at 0xDEAD, 0xABCD, 0xCAFE; the ROM is mapped at 0, so the address exists). A single letter stays a word
+// ("a"), and so do letters-only words of five or more digits (0xABCDE is above the ROM and in no memory of the machine). A
+// line of that kind with a word like "bad" or "add" in front of text is therefore read as an entry: write such a comment with
+// ; # or //. A line that is not an entry is skipped and counted, and kept by the next save.
 #pragma once
 
 #include <cctype>
@@ -23,13 +26,13 @@ namespace sfe
 
 enum class AddressNameLine { Entry, Comment, Malformed };
 
-// The lines of 'text' without their ends. A line ends at LF, CRLF or a lone CR (a classic Mac tool, or a CRLF file that lost its
+// The lines of 'text' without their ends (and without a byte-order mark at its start). A line ends at LF, CRLF or a lone CR (a classic Mac tool, or a CRLF file that lost its
 // LFs, A9-25); a last line without an end is a line, an end at the end of the text does not start an empty one.
 inline std::vector<std::string> SplitLines(const std::string& text)
 {
     std::vector<std::string> out;
-    size_t b = 0;
-    for (size_t i = 0; i < text.size(); ++i)
+    size_t b = text.compare(0, 3, "\xEF\xBB\xBF") == 0 ? 3 : 0;   // a UTF-8 byte-order mark (Windows editors) is not part of the first line (A9-34)
+    for (size_t i = b; i < text.size(); ++i)
     {
         if (text[i] != '\n' && text[i] != '\r') continue;
         out.push_back(text.substr(b, i - b));
@@ -38,6 +41,19 @@ inline std::vector<std::string> SplitLines(const std::string& text)
     }
     if (b < text.size()) out.push_back(text.substr(b));
     return out;
+}
+
+// The text of a name or a note as the files hold it (A9-31, A9-36): a line end becomes a space (it would start a second line, which the
+// next start reads as an entry of its own), and white space at either end goes (the loader trims it, so a session would show a
+// text the file cannot hold). All white space gives the empty string, which the stores treat as no entry.
+inline std::string CleanEntryText(const std::string& text)
+{
+    std::string s = text;
+    for (char& c : s) if (c == '\n' || c == '\r') c = ' ';
+    size_t a = 0, b = s.size();
+    while (a < b && std::isspace(static_cast<unsigned char>(s[a]))) ++a;
+    while (b > a && std::isspace(static_cast<unsigned char>(s[b - 1]))) --b;
+    return s.substr(a, b - a);
 }
 
 // The word line[b, e) as an address, by the rule at the top of this file.
@@ -57,7 +73,8 @@ inline bool ParseAddressWord(const std::string& line, size_t b, size_t e, uint32
         a = (a << 4) | static_cast<uint32_t>(std::isdigit(static_cast<unsigned char>(c)) ? c - '0'
                                                                                          : std::tolower(static_cast<unsigned char>(c)) - 'a' + 10);
     }
-    if (!prefixed && e - d < 8 && !digit) return false;   // "Dead", "add", "a": a word
+    // Letters a-f alone, unpadded: an address only inside the BIOS ROM, and not a single letter (A9-32).
+    if (!prefixed && e - d < 8 && !digit && (e - d < 2 || a > 0x7FFFFu)) return false;   // "a", "Deadly": a word
     addr = a;
     return true;
 }

@@ -1,7 +1,7 @@
-// Area 9, round 3 (review): the stores' save (StoreMerge.h SaveStore, Settings::SaveTo), the address word, the capped read and the
-// line ends, attacked after the area 9 fixer. Each "PIN" below asserts what the product does TODAY for a finding filed in
-// REVIEW_LEDGER.md (A9-31 and later); when a finding is fixed its pin fails and is turned round (the ledger row names it).
-// The rest are fuzz and sequence cases that hold (a regression guard for what the fixer got right).
+// Area 9, round 3 (review) and its fixer: the stores' save (StoreMerge.h SaveStore, Settings::SaveTo), the address word, the capped
+// read and the line ends, attacked after the area 9 fixer. Each "FIX" below holds what the product does since the finding filed in
+// REVIEW_LEDGER.md (A9-31 and later) was fixed (it was a PIN asserting the defect until then); "PIN" is a finding accepted as it
+// is (A9-35). The rest are fuzz and sequence cases that hold (a regression guard for what the fixer got right).
 //
 // Linux only (fork, kill, FIFOs). Runs in a scratch folder under the current directory; nothing outside it is touched.
 #include "Debug/CallStack.h"
@@ -75,7 +75,7 @@ auto kFormat = [](uint32_t a, const std::string& n) {
     return std::string(b) + n + "\n";
 };
 
-// A9-31: a name that is only white space is kept by the session and saved as a line its own loader skips.
+// A9-31: a name that is only white space is no name; white space at either end of a name is not kept by the session either.
 void WhitespaceNames()
 {
     std::remove(kNames);
@@ -83,33 +83,41 @@ void WhitespaceNames()
     fn.Load();
     fn.Rename(0x06004000u, "   ");
     fn.Rename(0x06004100u, "  keep  ");
+    Check(!fn.HasName(0x06004000u), "FIX A9-31: a blank name is no name in the session");
+    Check(fn.NameOf(0x06004100u) == "keep", "FIX A9-31: the session shows the trimmed name");
+    fn.Rename(0x06004200u, "gone");
+    fn.Rename(0x06004200u, " \t ");
+    Check(!fn.HasName(0x06004200u), "FIX A9-31: a blank name deletes the name that was there");
     std::string err;
-    Check(fn.Save(&err), "A9-31: the save of a blank name reports success");
+    Check(fn.Save(&err), "A9-31: the save reports success");
     FunctionNames again;
     again.Load();
-    Check(!again.HasName(0x06004000u) && again.SkippedLines() == 1, "PIN A9-31: a blank name is saved as a line the next start skips (and counts)");
-    Check(again.NameOf(0x06004100u) == "keep", "A9-31: surrounding white space of a name does not survive a restart");
-    Check(fn.HasName(0x06004000u), "A9-31: this session shows the blank name as a name");
+    Check(!again.HasName(0x06004000u) && again.SkippedLines() == 0, "FIX A9-31: nothing blank is written, so no line is skipped at the next start");
+    Check(again.NameOf(0x06004100u) == "keep", "A9-31: the name is the same after a restart");
+    Check(CleanEntryText("  a note \t") == "a note" && CleanEntryText(" \t\r\n").empty(), "FIX A9-31: the notes' text goes through the same cleaning");
 }
 
-// A9-32: an address of letters a-f alone below 0x10000000 is "in no memory of the machine" (the fixer's reason); the BIOS ROM
-// (0x00000000 to 0x0007FFFF) holds many of them (0x0000DEAD, 0x0000ABCD, 0x00000FAB).
+// A9-32: an address of letters a-f alone is an address when it lies in the BIOS ROM (0x00000000 to 0x0007FFFF), which the decompiler
+// maps at 0 and which holds 0x0000DEAD, 0x0000ABCD, 0x00000FAB. A single letter and five or more letters stay words.
 void LettersOnlyBiosAddresses()
 {
     uint32_t a = 0;
     std::string n;
     const char* words[] = { "dead", "abcd", "fab", "cafe", "fade", "bad" };
-    int skipped = 0;
-    for (const char* w : words)
-        if (ParseAddressNameLine(std::string(w) + " BiosFunc", a, n) == AddressNameLine::Malformed) ++skipped;
-    Check(skipped == 6, "PIN A9-32: an old file's names at BIOS addresses made of letters a-f alone (written 'dead', 'abcd', 'fab') are not entries");
-    Check(0xDEADu < 0x80000u && 0xABCDu < 0x80000u, "A9-32: those addresses are inside the 512 KiB BIOS ROM the decompiler maps at 0");
+    const uint32_t values[] = { 0xDEADu, 0xABCDu, 0xFABu, 0xCAFEu, 0xFADEu, 0xBADu };
+    int entries = 0;
+    for (size_t i = 0; i < 6; ++i)
+        if (ParseAddressNameLine(std::string(words[i]) + " BiosFunc", a, n) == AddressNameLine::Entry && a == values[i]) ++entries;
+    Check(entries == 6, "FIX A9-32: an old file's names at BIOS addresses made of letters a-f alone ('dead', 'abcd', 'fab') are entries");
+    Check(ParseAddressNameLine("a article", a, n) == AddressNameLine::Malformed, "A9-32: a single letter stays a word");
+    Check(ParseAddressNameLine("abcdef Ladder", a, n) == AddressNameLine::Malformed, "A9-32: six letters (above the ROM) stay a word");
+    Check(ParseAddressNameLine("Deadly sin", a, n) == AddressNameLine::Malformed, "A9-32: a word with other letters stays a word");
+    Check(ParseAddressNameLine("dead", a, n) == AddressNameLine::Malformed, "A9-32: and an address with no name is no entry");
     // What an older version wrote: %x, unpadded.
     Put(kNames, "dead dead_handler\nabcd abcd_handler\n6004000 main\n");
     FunctionNames fn;
     fn.Load();
-    Check(!fn.HasName(0xDEADu) && !fn.HasName(0xABCDu) && fn.HasName(0x6004000u) && fn.SkippedLines() == 2,
-          "PIN A9-32: of an old file, the two BIOS names are skipped and counted, the RAM one loads");
+    Check(fn.HasName(0xDEADu) && fn.HasName(0xABCDu) && fn.HasName(0x6004000u) && fn.SkippedLines() == 0, "FIX A9-32: of an old file, the two BIOS names and the RAM one load");
 }
 
 // A9-33: SaveStore never looks at FileLock::Held(). A lock that cannot be made (here the lock path is a folder; in life a lock file
@@ -144,15 +152,27 @@ void LockNotHeld()
     const int count = 300;
     const size_t good = RunTwoWriters("lockok.txt", count);
     Check(good == 2u * count, "two instances saving 300 entries each under the lock lose none");
-    mkdir("lockdir.txt.lock", 0755);   // a lock that cannot be made
+    // A lock that cannot be made: the save is refused, says why (naming the lock file) and leaves the file as it was.
+    mkdir("lockdir.txt.lock", 0755);
     {
         FileLock probe("lockdir.txt.lock", false);
         Check(!probe.Held(), "A9-33: the lock cannot be taken when its file cannot be opened");
     }
-    const size_t bad = RunTwoWriters("lockdir.txt", count);
-    Note("with the lock unavailable: %ld of %ld entries survived", (long)bad, (long)(2 * count));
-    Check(bad <= 2u * count, "A9-33: (information) unlocked saves");
-    Check(bad < 2u * count, "PIN A9-33: with the lock path unusable the saves run unlocked and succeed (no error), and entries are lost");
+    Put("lockdir.txt", "06004000 old\n");
+    AddressMap base, cur;
+    cur[0x06004100u] = "new";
+    std::string err;
+    Check(!SaveStore("lockdir.txt", "The names", std::string(), 1u << 20, base, cur, kClassify, kFormat, std::string(), &err),
+          "FIX A9-33: with the lock path unusable the save is refused");
+    Check(Has(err, "lockdir.txt.lock") && Has(err, "not saved"), "FIX A9-33: the refusal names the lock file and says nothing was saved");
+    Check(Slurp("lockdir.txt") == "06004000 old\n" && base.empty(), "FIX A9-33: the file is as it was and the session keeps its changes pending");
+    // The same for settings.
+    Put("lockset.ini", "[a]\nx = 1\n");
+    mkdir("lockset.ini.lock", 0755);
+    Settings s;
+    s.Set("a", "y", "2");
+    err.clear();
+    Check(!s.SaveTo("lockset.ini", &err) && Has(err, "lockset.ini.lock") && Slurp("lockset.ini") == "[a]\nx = 1\n", "FIX A9-33: Settings::SaveTo refuses the same way");
 }
 
 // A9-34: settings.ini is rewritten whole from the parsed keys: a hand-written comment and the order are gone after the first
@@ -170,19 +190,23 @@ void SettingsRewrite()
     Check(s.Load(&err), "settings load");
     s.Set("ui", "extra", "1");
     Check(s.Save(&err), "settings save");
-    Check(!Has(Slurp(ini), "my notes"), "PIN A9-34: a hand-written comment in settings.ini is erased by the first save");
+    {
+        const std::string now = Slurp(ini);
+        Check(Has(now, "; my notes about this file\n[decompiler]\nbios = /x/bios.bin\n\n[ui]\ntooltips = 1\nextra = 1\n"),
+              "FIX A9-34: a hand-written comment, the order and the blank line of settings.ini survive the save; the new key goes into its section");
+    }
 
     // A byte-order mark (Windows editors, PowerShell Set-Content -Encoding UTF8).
     Put(ini, "\xEF\xBB\xBF[decompiler]\nbios = /x/bios.bin\nvolatile = 0x06002000\n[ui]\ntooltips = 0\n");
     Settings b;
     Check(b.Load(&err), "bom: load");
-    Check(b.Get("decompiler", "bios", "none") == "none" && b.Get("", "bios", "none") == "/x/bios.bin",
-          "PIN A9-34: with a byte-order mark the first section header is not read; its keys land in the section ''");
+    Check(b.Get("decompiler", "bios", "none") == "/x/bios.bin" && b.Get("decompiler", "volatile", "none") == "0x06002000" && !b.Has("", "bios"),
+          "FIX A9-34: with a byte-order mark the first section header is read");
     Check(b.Get("ui", "tooltips", "") == "0", "bom: later sections are read");
     b.Set("ui", "extra", "1");
     Check(b.Save(&err), "bom: save");
     const std::string after = Slurp(ini);
-    Check(Has(after, "[]\n") && Has(after, "bios = /x/bios.bin"), "PIN A9-34: and the save writes them under '[]' for good");
+    Check(!Has(after, "[]") && Has(after, "[decompiler]\nbios = /x/bios.bin") && Has(after, "extra = 1"), "FIX A9-34: and the save does not write them under '[]'");
 
     // A choice equal to the file's value from the start is not a change, whatever another instance wrote since (A9-35).
     Put(ini, "[decompiler]\nbios = /p/one.bin\n");
@@ -194,7 +218,7 @@ void SettingsRewrite()
     b2.Set("decompiler", "bios", "/p/one.bin");   // B's user chooses the original again, after A's choice
     b2.Set("ui", "x", "1");
     Check(b2.Save(&err), "instance B saves");
-    Check(Slurp(ini).find("/p/two.bin") != std::string::npos, "PIN A9-35: B's later choice of the value it started with is dropped; A's value stays");
+    Check(Slurp(ini).find("/p/two.bin") != std::string::npos, "ACCEPTED A9-35: B's later choice of the value it started with is dropped; A's value stays");
 }
 
 // A9-36: a name or note with a line end is written as two lines; the second is read as an entry of its own (settings do not: A9-12).
@@ -210,7 +234,8 @@ void NameInjection()
     fn.Save(&err);
     FunctionNames again;
     again.Load();
-    Check(again.HasName(0x06004100u) && again.HasName(0x06004300u), "PIN A9-36: a line end in a name starts another entry at the next start (API level)");
+    Check(!again.HasName(0x06004100u) && !again.HasName(0x06004300u), "FIX A9-36: a line end in a name does not start another entry at the next start");
+    Check(again.NameOf(0x06004000u) == "x 06004100 evil" && again.NameOf(0x06004200u) == "y 06004300 evil2", "FIX A9-36: it is written as a space, on one line");
 }
 
 // Delete against edit, and the same key changed by both: the session that touched the key decides; the other's edit is lost.
@@ -264,8 +289,22 @@ void KillFuzz()
     }
     const size_t litter = CountLeftovers(".", "killfuzz.txt.separt-");
     Note("after 60 killed writers: %ld entries, %ld staging files left beside the file", (long)lastCount, (long)litter);
-    Check(litter == 0 || litter > 0, "(information) staging litter");
-    if (litter > 0) std::printf("  PIN A9-37: a writer killed between the staging write and the rename leaves '<file>.separt-<pid>-<n>' beside it for good\n");
+    // The next save removes what the killed writers left (A9-37), and nothing but staging files of dead writers.
+    Put("killfuzz.txt.separt-1-1.keep", "x");               // not of the form: stays
+    mkdir("killfuzz.txt.separt-2-2", 0755);                 // a folder: stays
+    if (symlink("killfuzz.txt", "killfuzz.txt.separt-3-3") != 0) {}     // a link: stays
+    Put("killfuzz.txt.separt-999999999-1", "dead writer");  // a dead process: goes
+    {
+        const pid_t me = getpid();
+        Put(std::string("killfuzz.txt.separt-") + std::to_string((long)me) + "-7", "live writer");   // a live process, fresh: stays
+    }
+    std::string err;
+    AddressMap b, cur;
+    cur[0x07000000u] = "after";
+    Check(SaveStore(file, "t", std::string(), 1u << 20, b, cur, kClassify, kFormat, std::string(), &err), "kill fuzz: a save after the kills");
+    Check(CountLeftovers(".", "killfuzz.txt.separt-") == 4 && CountLeftovers(".", "separt-999999999") == 0,
+          "FIX A9-37: the save removes the staging files of dead writers and only those");
+    std::remove((std::string("killfuzz.txt.separt-") + std::to_string((long)getpid()) + "-7").c_str());
 }
 
 // ReadFileCapped: a file that grows while it is read, a FIFO, a device, a loop of links, a file that shrinks.
@@ -293,8 +332,9 @@ void CappedReads()
     Check(other == 0, "a file growing under the read gives Ok or TooLarge only");
     Note("growing file: %ld ok, %ld too large", ok, tooLarge);
     // A link that loops is 'Missing' (no file, no message): the loader says nothing and the save replaces the link.
-    symlink("loop.txt", "loop.txt");
-    Check(ReadFileCapped("loop.txt", 1024, out) == CappedRead::Missing, "PIN A9-38: a link loop reads as Missing (silent), not Unreadable");
+    if (symlink("loop.txt", "loop.txt") != 0) {}
+    Check(ReadFileCapped("loop.txt", 1024, out) == CappedRead::Unreadable, "FIX A9-38: a link loop is Unreadable (said, and the link is not replaced)");
+
 }
 
 // Old-file and odd-width address words.
@@ -321,7 +361,9 @@ void AddressWords()
     Check(SplitLines("a\r\nb").size() == 2 && SplitLines("a\rb").size() == 2 && SplitLines("a\n\rb").size() == 3 && SplitLines("a\n").size() == 1,
           "line ends: LF, CRLF, lone CR");
     // A UTF-8 byte-order mark in front of the first address (A9-34's names-file half).
-    Check(ParseAddressNameLine("\xEF\xBB\xBF" "06004000 first", a, n) == AddressNameLine::Malformed, "PIN A9-34: a byte-order mark makes the first entry of a names file a skipped line");
+    const std::vector<std::string> bom = SplitLines("\xEF\xBB\xBF" "06004000 first\n06004100 second\n");
+    Check(bom.size() == 2 && ParseAddressNameLine(bom[0], a, n) == AddressNameLine::Entry && a == 0x06004000u && n == "first",
+          "FIX A9-34: a byte-order mark does not make the first entry of a names file a skipped line");
 }
 
 }  // namespace
