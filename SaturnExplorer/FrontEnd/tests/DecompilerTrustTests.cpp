@@ -35,8 +35,11 @@
 //   SE_TRUST_MIX=<k>     only mix k (see kMixNames); SE_TRUST_FROM=<seed> starts it there, to run a long mix in pieces
 //   SE_TRUST_SEED=<k>    (with SE_TRUST_MIX) one sequence of that mix, every step printed; SE_TRUST_SKIP=3,5 and SE_TRUST_LIMIT=n shrink it
 //   SE_TRUST_FOLLOW_SEED=<k>  one sequence of the Follow PC rig (mix 8), every step printed; with SE_TRUST_FOLLOW_AUTO=1 one of mix 9
+//   SE_TRUST_FOLLOW_SCRIPT="cpu; regsoff; cpu"   one Follow PC sequence written out (kFollowWords); SE_TRUST_FOLLOW_DUMP=1 prints the window
 //   SE_TRUST_SCRIPT="select A; t-inject failed" SE_MODEL_WORLD=C,A   one sequence written out (area 1's words, and t-...)
 //   SE_TRUST_NOHOVER=1   do not hover the badge (faster)
+//   SE_TRUST_HIDDEN_RENAME=1  half the renames made and undone while the panel is hidden (A8-25), with the mixes
+//   SE_TRUST_FOLLOW_CPU=1     mixes 8 and 9 with the CPU switch, a CPU without registers, the PC in the BIOS and Stop four times as often
 #define SE_MODEL_NO_MAIN
 #include "DecompilerModelTests.cpp"
 
@@ -1114,6 +1117,9 @@ Op Mk(OpKind k, int a = 0, int b = 0, int c = 0, const char* text = "")
     return o;
 }
 
+bool gHiddenRename = false;   // SE_TRUST_HIDDEN_RENAME (area 8, round 4)
+uint64_t gHiddenRenames = 0;  // ...how many renames it made and undid while the panel was hidden
+
 // The sequence a run uses: `concat` generated programs end to end (their functions are the first program's: indexes are taken modulo the
 // world; round 1's ran 20 to 60 operations, a long run 300 to 450), with, after each Stop, some of the operations that interleave with
 // it (a Refresh, a reconnect, a rename, an edit, Decompile, hide and show, a Select, the volatile list, a second Stop), every rename
@@ -1148,6 +1154,28 @@ Program MakeProgram(uint64_t seed, int mix, int concat = 1)
         if (o.kind == OpKind::Hold) held = true;
         if (o.kind == OpKind::Wait || o.kind == OpKind::Finish) held = false;
         const int fn = o.a % n;
+        // (area 8, round 4) SE_TRUST_HIDDEN_RENAME=1: half the renames are made and undone while the panel is hidden (A8-25's case, which
+        // the default mixes reach only by chance), with now and then an edit, a hold or a reconnect while hidden, and the panel shown after
+        // (or left hidden for a later Show of the sequence). Not in the default run: its sequences stay as they were.
+        if (gHiddenRename && o.kind == OpKind::Rename && !held && rng.Chance(50))
+        {
+            out.pop_back();
+            const int before = nameOf.count(fn) ? nameOf[fn] : 0;
+            out.push_back(Mk(OpKind::Hide));
+            out.push_back(o);
+            switch (rng.Below(5))
+            {
+            case 0: out.push_back(Mk(OpKind::Edit, rng.Below(1000), rng.Below(1000), rng.Below(1000))); break;
+            case 1: out.push_back(Mk(OpKind::Reconnect, rng.Below(2))); break;
+            case 2: out.push_back(Mk(OpKind::Volatile, rng.Below(4))); break;
+            default: break;
+            }
+            out.push_back(Mk(OpKind::Rename, o.a, before));
+            nameOf[fn] = before;
+            ++gHiddenRenames;
+            if (rng.Chance(75)) out.push_back(Mk(OpKind::Show));
+            continue;
+        }
         if (o.kind == OpKind::Rename && !held)
         {
             const int before = nameOf.count(fn) ? nameOf[fn] : 0;
@@ -2542,6 +2570,13 @@ std::string FollowExecute(FRig& r, FOp o, Rng& rng)
                 if (const DecompileResult* shown = r.panel.Shown()) pinned = shown->requestedEntry;
             if (!pinned) return "(nothing to pin)";
             if (!r.Click("follow")) return "(no Follow PC box)";
+            // (area 8, round 4) What the box pinned is what the panel had found when the click landed, not before the click's own frames: on a
+            // running emulator the retry of a PC that found no function (on the auto-refresh cadence) can capture and find one in them (seed
+            // 40109 of mix 8 with SE_TRUST_NOHOVER=1). Nothing has resolved the new target yet, so the entry the panel wants is still the one
+            // it pinned.
+            pinned = r.panel.WantedEntry();
+            if (!pinned)
+                if (const DecompileResult* shown = r.panel.Shown()) pinned = shown->requestedEntry;
             r.tgt = FRig::Tgt::Entry;
             r.tgtAddr = pinned;
         }
@@ -2607,6 +2642,56 @@ std::string FollowExecute(FRig& r, FOp o, Rng& rng)
 // (area 8, round 3) The Follow PC rig with Auto-refresh toggled and "Show in Pseudocode" among its operations (mix 9).
 bool gFollowAuto = false;
 
+// (area 8, round 4) A Follow PC sequence written out: SE_TRUST_FOLLOW_SCRIPT="cpu; regsoff; cpu; hold; edit; stop; release; cpu; cpu", one word
+// per operation (kFollowWords, in the order of FOp). Each step is held to the model as a generated one is; SE_TRUST_FOLLOW_DUMP=1 also prints
+// the window's text after each step.
+const char* const kFollowWords[] = { "pcc", "pca", "pct", "pcu", "pcudead", "pcbios", "regsoff", "regson", "static", "paused", "running",
+                                     "advance", "edit", "refresh", "stop", "hold", "release", "hide", "show", "follow", "typec", "typea",
+                                     "typet", "badentry", "notcode", "containc", "containbad", "containdead", "cpu", "auto", "showinsn" };
+static_assert(sizeof kFollowWords / sizeof kFollowWords[0] == static_cast<size_t>(FOp::kCount), "a word per operation");
+std::vector<FOp> gFollowScript;
+bool gFollowDump = false;
+bool gFollowCpu = false;   // SE_TRUST_FOLLOW_CPU (area 8, round 4)
+
+bool ParseFollowScript(const std::string& text, std::vector<FOp>& out, std::string& error)
+{
+    out.clear();
+    std::istringstream all(text);
+    std::string stmt;
+    while (std::getline(all, stmt, ';'))
+    {
+        std::istringstream words(stmt);
+        std::string w;
+        if (!(words >> w)) continue;
+        size_t k = 0;
+        while (k < static_cast<size_t>(FOp::kCount) && w != kFollowWords[k]) ++k;
+        if (k == static_cast<size_t>(FOp::kCount))
+        {
+            error = "unknown operation '" + w + "'";
+            return false;
+        }
+        out.push_back(static_cast<FOp>(k));
+    }
+    return !out.empty();
+}
+
+void DumpFollowWindow()
+{
+    std::string line;
+    float y = -1.0f;
+    for (const drawn::Run& run : drawn::WindowRuns(DecompilerPanel::kTitle))
+    {
+        if (run.y0 != y && !line.empty())
+        {
+            std::printf("      | %s\n", line.c_str());
+            line.clear();
+        }
+        y = run.y0;
+        line += (line.empty() ? "" : " ") + run.text;
+    }
+    if (!line.empty()) std::printf("      | %s\n", line.c_str());
+}
+
 // One random sequence of the Follow PC rig. False, with the sequence printed, when the panel and the model disagree.
 bool RunFollow(uint64_t seed, bool verbose, uint64_t& opsDone)
 {
@@ -2622,8 +2707,14 @@ bool RunFollow(uint64_t seed, bool verbose, uint64_t& opsDone)
         { FOp::AutoToggle, 4 }, { FOp::ShowInsn, 2 },
     };
     const size_t kinds = gFollowAuto ? sizeof kW / sizeof kW[0] : sizeof kW / sizeof kW[0] - 2;
+    // (area 8, round 4) SE_TRUST_FOLLOW_CPU=1: the CPU switch, a CPU without registers and Stop four times as often (A8-29's ground). Not in the
+    // default run: the pinned seeds keep their sequences.
+    auto weightOf = [](size_t k) {
+        const FOp o = kW[k].op;
+        return gFollowCpu && (o == FOp::Cpu || o == FOp::RegsOff || o == FOp::Stop || o == FOp::PcBios) ? 4 * kW[k].weight : kW[k].weight;
+    };
     int total = 0;
-    for (size_t k = 0; k < kinds; ++k) total += kW[k].weight;
+    for (size_t k = 0; k < kinds; ++k) total += weightOf(k);
     FRig r;
     std::vector<std::string> done;
     auto fail = [&](const std::string& what) {
@@ -2638,16 +2729,20 @@ bool RunFollow(uint64_t seed, bool verbose, uint64_t& opsDone)
     if (!r.Settle()) return fail("HANG at the first look");
     std::string err = FollowCheck(r, gHover);
     if (!err.empty()) return fail("TRUST (first look): " + err);
-    const int n = 25 + rng.Below(40);
+    const int n = gFollowScript.empty() ? 25 + rng.Below(40) : static_cast<int>(gFollowScript.size());
     for (int i = 0; i < n; ++i)
     {
-        int pick = rng.Below(total);
         FOp op = FOp::PcC;
-        for (size_t k = 0; k < kinds; ++k)
+        if (!gFollowScript.empty())
+            op = gFollowScript[static_cast<size_t>(i)];
+        else
         {
-            const auto& w = kW[k];
-            if (pick < w.weight) { op = w.op; break; }
-            pick -= w.weight;
+            int pick = rng.Below(total);
+            for (size_t k = 0; k < kinds; ++k)
+            {
+                if (pick < weightOf(k)) { op = kW[k].op; break; }
+                pick -= weightOf(k);
+            }
         }
         const std::string note = FollowExecute(r, op, rng);
         done.push_back("[" + std::to_string(i + 1) + "] " + FOpName(op) + (note.empty() ? "" : "  " + note));
@@ -2660,8 +2755,17 @@ bool RunFollow(uint64_t seed, bool verbose, uint64_t& opsDone)
             r.Idle(2);
             if (!r.Settle()) return fail("HANG: the panel did not settle");
         }
+        // (area 8, round 4) A Stop belongs to the question it stopped: once the question on screen has found no function it is forgotten
+        // (A8-10, the guide's grey-messages row), however the question got there. The panel resolves only while it is drawn. Before round 4
+        // the rig forgot it only for the operations that choose a target, so a CPU switch onto a CPU with no registers and back kept it.
+        if (r.visible && r.WantNow().noEntry != trust::NoEntry::None) r.haveStopped = false;
         ++gT.checks;
         ++(r.holding ? gT.held : gT.idle);
+        if (gFollowDump && r.visible)
+        {
+            r.Frame();
+            DumpFollowWindow();
+        }
         err = FollowCheck(r, gHover);
         if (!err.empty()) return fail("TRUST (" + std::string(r.holding ? "held" : "idle") + "): " + err);
     }
@@ -2832,6 +2936,8 @@ int main(int argc, char** argv)
     gConfig = dts::Join(scratch, "config");
     CHECK(sfe::MakeDirectory(gConfig));
     gHover = std::getenv("SE_TRUST_NOHOVER") == nullptr;
+    gHiddenRename = std::getenv("SE_TRUST_HIDDEN_RENAME") != nullptr;
+    gFollowCpu = std::getenv("SE_TRUST_FOLLOW_CPU") != nullptr;
 
     CheckGuide();
 
@@ -2846,7 +2952,8 @@ int main(int argc, char** argv)
     std::vector<std::string> failedList;
     if (const char* w = std::getenv("SE_TRUST_WIDTH"))
         if (*w) gRigWinW = static_cast<float>(std::atof(w));
-    const bool defaultRun = !mixEnv && !seedEnv && !std::getenv("SE_TRUST_SCRIPT") && !std::getenv("SE_TRUST_FOLLOW_SEED");
+    const bool defaultRun = !mixEnv && !seedEnv && !std::getenv("SE_TRUST_SCRIPT") && !std::getenv("SE_TRUST_FOLLOW_SEED") &&
+                            !std::getenv("SE_TRUST_FOLLOW_SCRIPT");
 #ifndef _WIN32
     // The real allocation failure first: it runs in a process that has not decompiled anything yet, so every child counts the same allocations
     // (SE_TRUST_OOM_STRIDE=0 leaves it out, =1 tries every allocation of the request).
@@ -2896,7 +3003,7 @@ int main(int argc, char** argv)
         }
 
         // The pins.
-        if (!mixEnv && !std::getenv("SE_TRUST_FOLLOW_SEED"))
+        if (!mixEnv && !std::getenv("SE_TRUST_FOLLOW_SEED") && !std::getenv("SE_TRUST_FOLLOW_SCRIPT"))
             for (const Pin& pin : kPins)
             {
                 Program p;
@@ -2916,7 +3023,7 @@ int main(int argc, char** argv)
                 }
             }
 
-        if (!mixEnv && !std::getenv("SE_TRUST_FOLLOW_SEED"))
+        if (!mixEnv && !std::getenv("SE_TRUST_FOLLOW_SEED") && !std::getenv("SE_TRUST_FOLLOW_SCRIPT"))
         {
             RunMiniPins();
             RunFixPins();
@@ -2940,6 +3047,22 @@ int main(int argc, char** argv)
             }
         }
 
+        if (const char* fsc = std::getenv("SE_TRUST_FOLLOW_SCRIPT"))
+        {
+            std::string error;
+            if (!ParseFollowScript(fsc, gFollowScript, error))
+            {
+                std::printf("SE_TRUST_FOLLOW_SCRIPT: %s\n", error.empty() ? "no operation" : error.c_str());
+                return 2;
+            }
+            gFollowDump = std::getenv("SE_TRUST_FOLLOW_DUMP") != nullptr;
+            uint64_t ops = 0;
+            const bool ok = RunFollow(0, true, ops);
+            gFollowScript.clear();
+            std::printf("follow script: %s\n", ok ? "ok" : "FAILED");
+            dts::RemoveTree(scratch);
+            return ok ? 0 : 1;
+        }
         if (const char* fs = std::getenv("SE_TRUST_FOLLOW_SEED"))
         {
             gFollowAuto = std::getenv("SE_TRUST_FOLLOW_AUTO") != nullptr;   // a mix 9 sequence
@@ -3083,6 +3206,7 @@ int main(int argc, char** argv)
                 static_cast<unsigned long long>(gT.programs), failedPrograms, static_cast<unsigned long long>(gT.steps),
                 static_cast<unsigned long long>(gT.checks), static_cast<unsigned long long>(gT.held), static_cast<unsigned long long>(gT.idle),
                 static_cast<unsigned long long>(gT.drawn), static_cast<unsigned long long>(gT.hovers), static_cast<unsigned long long>(gT.injected));
+    if (gHiddenRename) std::printf("renames made and undone while the panel was hidden: %llu\n", static_cast<unsigned long long>(gHiddenRenames));
     std::printf("indicators drawn and held to the model:\n");
     for (const auto& c : gCov) std::printf("  %-52s %llu\n", c.first.c_str(), static_cast<unsigned long long>(c.second));
     if (!mixEnv)
