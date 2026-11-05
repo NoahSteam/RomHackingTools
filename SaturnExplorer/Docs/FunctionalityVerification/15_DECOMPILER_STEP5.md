@@ -15345,3 +15345,12 @@ Mnemonics (`SE_GENERATED_COVERAGE=1`): 73 distinct in grammar 1, 81 in grammar 2
 | 34 oracle self-mutations, 79 host and kill-switch mutants with probes and combinations, 44 patch reverts | `tools/a11_round1/results.tsv` (302 rows) |
 | `--oracles gen3k` on eight mutants | none killed |
 | grammar coverage, both grammars, 3,000 seeds each | 117 of 117 |
+| `ctest -j2 --timeout 900 -E SaturnExplorerLive` / `ctest -R SaturnExplorerLive` (every binary under `ulimit -v 3500000`) | 102 of 102 (187 s; the engine suite 43.9 s, the fault suite 95 s, printed C 26 s) / 6 of 6 (29 s). 108 tests, as on master: none added, none skipped. The fault suite needed no separate run: no product file changed |
+
+### Notes
+
+* **A kill is only as good as its oracle's failing check.** The harness records the first failing line of each run, in `results.tsv` and `<mutant>.<oracle>.log`. A corpus run whose only failure is a fixture check (the same binary runs the suite first) is no corpus kill. `score.py` rescores the rows written before the harness knew that. `patch:0068`'s corpus "kill" was the suite's A7-19 pin: hwram007 reports 0 frame losses with 0068 reverted, because the revert removes the records the frame ledger reads (A11-3).
+* **Equivalent, or nearly.** With `H-ptr-sub` the sign of a constant subtracted from a pointer is dropped. `RuleSub2Add` rewrites most subtractions, but the probe shows the generator and the corpus still reach the branch, so the mutant is not equivalent there (A11-6). The runner mutants are equivalent to the area 1 model, because the panel compares the key itself. `H-load-toolarge` is equivalent under I2 and wrong in its message (A11-12).
+* **Restarts.** The machine restarted twice during the sweep. Each time one mutant was left applied: `DecompilerRunner.cpp` (`H-run-gen`) and `sleigh.cc` (patch 0002). Both were put back with `git checkout`, and the mutants were rerun. Since then `applied.json` makes the next piece restore them itself.
+
+Routed: A11-7 to area 10 (the "Pinned by" cells of 0014 and 0060, and adding 0040 to A10-10). A11-4 and A11-8 concern area 3's fixtures and grammar. A11-3 is area 3's frame ledger (the A3-124 and A3-133 instrument). Each is filed under area 11.

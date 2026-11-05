@@ -33,7 +33,7 @@ Kept here:
   `SE_GENERATED_MUTATE` / `SE_GAME_MAPPING_MUTATE` mode, a probe, a combination; builds only the oracles' targets and runs them under the
   machine's rules; resumable, `applied.json` undoes a mutant a restart left; `--oracles gen3k` for a long generator recheck),
   `run_pieces.sh` (pieces of at most 20 minutes, `results.tsv` committed after each), `score.py` (the score per oracle),
-  `grammar_coverage.py` (each production of the generator's two grammars against its `shapes:` counts), `results.tsv` (the round's runs).
+  `grammar_coverage.py` (each production of the generator's two grammars against its `shapes:` counts), `results.tsv` and `results_gen3k.tsv` (the round's runs).
 * What those still call: the `dagen` generator chain (`a2_round10/dagen10.py`, `gen_range.sh`,
   `a2_round11/dagen11.py`, `dagen11b.py`, `a2_round12/dagen12.py`, `a2_round13/dagen13.py`) and
   `a3_round13/textdiff.py`.
