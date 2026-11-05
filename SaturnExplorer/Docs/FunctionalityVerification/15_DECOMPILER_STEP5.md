@@ -16341,7 +16341,7 @@ Branch `review/7-round7` from master `07f5998d` (the area 7 fixer's A7-28, A7-29
 | the same 10,000 and grammar 2 from 6,120,000 (5,000), grammar 1 from 6,130,000 (3,000), with every mapping violation flagged (A7-34) | **84 failing seeds of 18,000**: first findings `map-const-join` 53, `map-way-back` 16, `map-copy-store` 13, `map-store-value` 1; `map-store-after`, `map-number-store`, `map-case-entry`, `map-copy-merge` 0. The default 300-seed run: 4 (now counted, `map.late.*`, and passing) |
 | hand-built fixtures (`SE_A7R4_PROBE`, round 5's `sh2asm.py`, round 6's `view.py`) | below |
 | `SaturnExplorerSh2DecompilerTests` (with `TestArea7Round7`) | all passed |
-| `ctest -j2 --timeout 900 -E SaturnExplorerLive` / `ctest -R SaturnExplorerLive` | CTEST_RESULT |
+| `ctest -j2 --timeout 900 -E SaturnExplorerLive` / `ctest -R SaturnExplorerLive` | **102 of 102** (183 s) / **6 of 6** (29 s). No new ctest test: the pins are in `SaturnExplorerSh2DecompilerTests`, the counters in `SaturnExplorerSh2GeneratedTests` (whose default run passes). No product code changed, so the fault suite was not rerun alone (it passed in the ctest run) |
 
 ### A7-31: the cause, and re-rated P2
 
