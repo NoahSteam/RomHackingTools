@@ -3901,7 +3901,12 @@ void CheckGuide()
                                 "Type the function's entry as a hex address", "is not code memory", "No function found containing",
                                 "registers to follow", "Nothing decompiled yet.", "No source", "Stopped.", "N warnings",
                                 "You stopped its replacement; press Refresh to ask for it again.", "nothing is being decompiled. Press Refresh to replace it.",
-                                "/* WARNING: <the amber line> */", "/* [stale] This output is from an earlier state.", "wrap at the panel's edge" })
+                                "/* WARNING: <the amber line> */", "/* [stale] This output is from an earlier state.", "wrap at the panel's edge",
+                                // (area 8 fixer) the label's figures (trust::EntryLabels), the pin asked again, Enter on the box, nothing to keep
+                                "user-set entry (no figure), symbol 90%, call-site target 80%, callee 70%, rts scan 60%, less 20 for a doubt",
+                                "is asked of the finder again whenever what it knows changes", "only text you type is your entry",
+                                "Follow PC is off, and there was no function to keep", "kept by you from the finder, and no source names",
+                                "The line belongs to the output on screen" })
         CHECK(has(phrase));
 #endif
 }
