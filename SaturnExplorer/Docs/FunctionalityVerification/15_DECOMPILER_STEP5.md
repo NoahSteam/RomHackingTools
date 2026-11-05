@@ -15204,3 +15204,153 @@ The counters, before (`370a4237`, the round's own logs) and after:
 * **A7-17** is a feature (the Assembly-follow toggle, a PC mark while running) and is not built.
 
 Routed: nothing to other areas.
+
+## Area 11, round 1: mutation score
+
+Branch `review/11-mutation` from master `a64678c3`. Oracle builder, the first round of area 11 (A11-1 and A11-2 were earlier generator findings, both closed). Area 11's oracle has three parts: a mutation score per oracle, no skipped tests, and a generator that covers its grammar. Its corpus is the test suites. **No product code changed.** The round adds the harness and these results under `Docs/Decompiler/tools/a11_round1/`, and rows A11-3 to A11-12. **The round is not clean: two P2 rows (A11-3, A11-4)**, eight P3.
+
+### The harness
+
+`tools/a11_round1/`:
+
+* `patch_mutants.py <patches> <out> --check <root>` reads each vendored patch and writes its hunks as reverse patches with the vendored paths. It leaves out the hunks that only add a licence notice, and checks which hunks revert alone in the final tree (`git apply -R --recount`, context cut to one line if need be).
+* `mutate.py` applies one mutant at a time, builds only the test targets its oracles need (ninja, `-j2`, `-j1` under 4,000 MB free), and runs the oracles under `ulimit -v 3500000` and `timeout`. It then puts the files back and checks `git status` before the next mutant.
+
+  A mutant is one of four kinds:
+  * a vendored patch reverted (its `.cc` and spec hunks; the header hunks are kept as the patch's interface, which the host uses, and a header change would rebuild the whole engine; a spec patch goes through `se-regen-sla`);
+  * a one-expression host mutant (`MUTANTS`: the ledger, conservation, the mapping, the notes, `PointerResolver`, lending, the runner, the panel, the loaders), or a kill switch for a patch that does not revert alone (`V-`);
+  * an oracle's own "check checked" mode (`SE_GENERATED_MUTATE`, `SE_GAME_MAPPING_MUTATE`), with no rebuild;
+  * a probe (`R-`: a trap on a branch, to say whether any oracle input reaches it), or a combination (`C-`: a sensor blinded with its class brought back).
+
+  Each mutant names the oracles that should see it. All of them are run and scored. The cheaper escalation list (suite, generator, engine, printed C, decode, corpus) runs only while nothing has killed the mutant. A corpus kill is a failed check in the game-code tests: the same binary runs the fixture suite first. The harness is resumable: `results.tsv`, plus an `applied.json` marker that puts back a mutant a restart left applied (the machine restarted twice during the round, and the marker restored `DecompilerRunner.cpp` and `sleigh.cc`). `run_pieces.sh` runs it in pieces of at most 20 minutes and commits `results.tsv` after each. A `STOP` file ends it cleanly. `--oracles gen3k` reruns chosen mutants on 3,000 generator seeds.
+* `score.py results.tsv` prints the score per oracle, the survivors, and the probes and combinations apart. `grammar_coverage.py` is described below.
+
+The unmutated oracles, in this build (RelWithDebInfo, gcc 13): the suite 27 s, the generator 22 s, printed C 22 s, the engine tests 36 s, decode 2 s, the corpus hwram007 46 s, the fault matrix 105 s, the runner 74 s, the area 1 model 20 s, trust 54 s, the panel 5 s, the loader fuzz 5 s.
+
+### The mutants
+
+| Family | Mutants | Killed | Survived | Not scored |
+|---|---|---|---|---|
+| The oracles' own modes (`SE_GENERATED_MUTATE`: 24 kinds; `SE_GAME_MAPPING_MUTATE`: 10 kinds, on hwram007) | 34 | 34 | 0 | |
+| Host one-expression mutants (`H-`) | 45 | 36 | 9 | |
+| Kill switches and hand-made reverts (`V-`: 0009, 0010, 0019 ×2, 0056/0057, 0061, 0063, 0065, 0071+0077, 0072) | 10 | 8 | 2 | |
+| Vendored patches reverted alone (a sample, below) | 44 | 34 | 3 | 7 stillborn |
+| **Total scored** | **126** | **112 (89%)** | **14** | 7 |
+
+The score per oracle. "Run on" counts each mutant the oracle ran on: as one of the mutant's own oracles, or on the escalation, which runs only on mutants nothing had killed yet. So a cheap oracle that ran early is run on more mutants than an expensive one.
+
+| Oracle | Run on | Killed | Score |
+|---|---|---|---|
+| suite (`Sh2DecompilerTests`: access ledger, frame ledger, conservation, mapping, pins) | 73 | 52 | 71% |
+| generator, grammars 1 and 2, emulator differential (300 seeds) | 79 | 45 | 57% (24 of 24 of its own modes) |
+| printed-C differential | 13 | 8 | 62% |
+| corpus hwram007 (game-code checks only; mapping oracle) | 41 | 18 | 44% (10 of 10 mapping modes) |
+| engine tests | 8 | 1 | 12% |
+| decode oracle (`Sh2DecodeTests`) | 14 | 6 | 43% (of the 11 spec mutants: 6) |
+| fault matrix (default subset) | 8 | 4 | 50% |
+| runner tests | 3 | 3 | 100% |
+| area 1 model | 3 | 0 | 0% (the runner mutants: the panel checks the key itself, so a stale result the runner lets through is never shown) |
+| trust model (`DecompilerTrustModel.h`) | 6 | 6 | 100% |
+| loader fuzz | 5 | 4 | 80% |
+
+Killed, by family. Ledger:
+* width, instruction and writes left out (suite and generator);
+* direct-as-pointer and returned not marked (suite only).
+
+Conservation:
+* unreachable taken for folded (the suite's `SaidMissing`);
+* switch lookup as dead;
+* the A3-133 cap forced false (the suite's `r.frameLedgerCapped` pin);
+* a record naming the next instruction;
+* the removal not said.
+
+Mapping, every one (origin text, `firstAddr`, slot out of the body, A7-11's tokens).
+
+Notes: the write-only and read-only cautions, the width table's cautions, colour RAM's byte note, `PointerResolver` following one input of a join.
+
+Lending:
+* a signature lent past an unknown callee, and a recursive function lent (suite);
+* A3-3's kill (generator).
+
+The rest:
+* the host's cancel (fault);
+* the runner's epoch, generation and memo (runner tests);
+* all six panel mutants (trust model: stale on another volatile list, before a rename, the disabled reason, truncated, unsupported, Copy's stale mark);
+* four of five loader mutants (fuzz);
+* both 0019 reverts (decode and suite);
+* 0071 and 0077 (printed C).
+
+**The patch sweep is a sample, in priority order.** The coordinator agreed to a sample after two restarts. It runs the patches that fixed P1 rows first, then those that fixed P2 rows, then the access ledger and conservation, the allocation-failure and cancel patches, and the spec. 44 patches were reverted alone. Of those, 37 are scored and 7 are stillborn: their hunks do not revert alone because later patches rewrote the lines (0010, 0038, 0056, 0057, 0065, 0066, 0072). Kill switches stand in for 0010, 0056/0057, 0065 and 0072. Three more are covered by a hand-made mutant: 0019, 0061 and 0071. 0046, 0049 and 0051 are dead (A10-8). 0011, 0016, 0022 and 0074 can be seen only by a sanitizer or a 32-bit `long` (A10-10). **Not run: 0007, 0008, 0015, 0020, 0021, 0025, 0027, 0028, 0029, 0033, 0037, 0044, 0048, 0052, 0053, 0059, 0070** (17 of 71: the next round's).
+
+Killed, by patch:
+* 0068, 0076, 0063, 0072's switch: the suite's frame pins (text, `PseudoAgreesWithRun`);
+* 0058, 0054 (a timeout), 0077, 0064, 0067, 0069, 0062: printed C;
+* 0075, 0030, 0018, 0017, 0009, 0012, 0024, 0031, 0073, 0013: the suite's ledger fixtures (the generator too for 0075, 0030, 0018, 0009, 0012, 0031; the corpus for 0075, 0030, 0018, 0017, 0009, 0012);
+* 0050, 0006, 0005, 0047: decode;
+* 0045, 0034, 0026, 0055, 0004, 0002: the suite;
+* 0023, 0032, 0003: fault;
+* 0001: the engine tests.
+
+### The survivors
+
+| Mutant | What it does | What it shows | Row |
+|---|---|---|---|
+| `H-fate-frameunread` | the frame ledger's unread writes read as folds | the frame ledger's intake fails open, unnoticed (also at 3,000 seeds) | **A11-3 (P2)** |
+| `H-lend-extrapop` | a lent callee's r15 distance is not applied | the caller's frame read moves from -4 to -8 in one listing, which no check reads (also at 3,000 seeds) | **A11-4 (P2)** |
+| `H-led-printed`, `H-led-cond`, `H-led-repeat` | the ledger's print count, conditional and repeated flags blinded | no positive witness; with patch 0010 off as well (`C-0010-*`) the suite and the generator still fail, so the class is held another way | A11-5 |
+| `H-ptr-sub`, `H-note-reach`, `H-ptr-loop` | a pointer's subtracted constant, the notes' alignment, a loop path not closed | the first two are reached (probes) and unchecked; the third branch is reached by no oracle input | A11-6 |
+| patch 0014, patch 0060, `V-0061-memescape`, `V-0065-steppeddown`, patch 0040 | subsumed by later patches, or seen only under LeakSanitizer | routed to area 10 | A11-7 |
+| `H-load-toolarge` | an oversize BIOS file reported as empty | the fuzz checks that an error is given, not its reason | A11-12 |
+
+The generator's long run (`--oracles gen3k`, 3,000 seeds from 1000) on eight of them: none killed. Also not killed are 0068, 0076 and 0072's switch, which the suite kills (A11-8).
+
+### Skipped tests
+
+Every skip in ctest and in the suites, from the sources and the logs of this round:
+
+| Where | What | Justified |
+|---|---|---|
+| `SaturnExplorerDecompilerFaultTests`, `SKIP_RETURN_CODE 77` | without POSIX (`fork`) it exits 77: ctest says skipped (A6-19) | yes; it runs on Linux and macOS |
+| `SaturnExplorerSh2PrintedCTests`, `SKIP_RETURN_CODE 77` | without a C compiler it exits 77 and prints "did NOT run" | yes |
+| `WILL_FAIL` | none set; the comments say how it is used | n/a |
+| `Sh2DecompilerFixtureTests`, `YssFixtureTests` | without the game save states they print SKIPPED and return 0, which ctest counts as a pass | **no: A11-10** (the data is in this repository, so it does not happen today) |
+| the fault suite's allocation pins and `pin-selftest` | skipped where the standard library is not libstdc++ (libc++, MSVC): the coordinates were recorded against it; printed | yes; they run on Linux |
+| `DecompilerRunnerTests` and `Sh2DecompilerTests` allocation cases | skipped in an MSVC Debug build (its STL allocates in `noexcept` moves); printed | yes |
+| `MemoryRoundTripTests` | skipped on a big-endian host | yes |
+| `SavestateShapeTests`' gzip case | without `SE_HAVE_ZLIB`, which the web build alone lacks | yes |
+| the printed-C `skipped:` classes | default run: 646 functions, 614 compared; not compared: 1 `skipped:stack-piece`, 21 `void-return`, 1 `void-return-lent`. Pins: `skipped:stack-address` (A2-61, A2-65) and `skipped:memory` (A2-108, A2-114), each pinned as that class. `skipped:no-low-memory` where there is no `MAP_32BIT` (macOS, Windows): the frame mode does not run there | yes, each counted and pinned |
+| the generator's excluded runs | address errors (A2-8 (a), A11-2): counted, the seeds listed | yes |
+| `Sh2DecodeTests` | `sleep` is not run; "could not run" is counted: 0 of 260,000 | yes |
+| `#if` | `TestU128` without `__int128` (MSVC); the guide checks under `SE_DECOMPILER_GUIDE` (defined for both targets); `MAP_32BIT` (above) | yes |
+| the corpus (`SE_GAME_HWRAM`) | not in ctest: the game RAM is not in the repository (REVIEW_PROGRAM.md); a local run | yes |
+
+### Grammar coverage
+
+`grammar_coverage.py` reads the productions from the generator's own source: every shape name the grammar's code (`struct Gen`) gives an item, the name tables, and the keys `CountShapes` and `CountProgram` derive. That is 117. It sums the `shapes:` lines of runs and lists each with its count.
+
+| Run | Productions reached |
+|---|---|
+| grammar 1, 3,000 seeds (78 s) | 61 of 117; the 56 not reached are grammar 2's (calls, frames, tables, choices ...) |
+| grammar 2, 3,000 seeds (113 s) | 102 of 117; the 15 not reached are grammar 1's: polls, `mac`, the mask loops (the header: "Version 2 has no polls"; "Version 1 also has mac.l / mac.w") |
+| **both** | **117 of 117** |
+| the default ctest run, 300 seeds | 114 of 117: not `choice.by_r0`, `choice.by_stack` (A3-64's "first drawn" pins evaluate both: seeds 331 and 69) or `fn.ret_call` (A11-11) |
+
+Mnemonics (`SE_GENERATED_COVERAGE=1`): 73 distinct in grammar 1, 81 in grammar 2. The rarest productions in 3,000 grammar 2 seeds: `choice.by_r0` 2, `choice.by_scratch` 17, `choice.by_const` 22, `choice.by_stack` 24, `fn.ret_call` 33.
+
+### What was run
+
+| Run | Result |
+|---|---|
+| the oracles unmutated | all pass (times above) |
+| 34 oracle self-mutations, 79 host and kill-switch mutants with probes and combinations, 44 patch reverts | `tools/a11_round1/results.tsv` (302 rows) |
+| `--oracles gen3k` on eight mutants | none killed |
+| grammar coverage, both grammars, 3,000 seeds each | 117 of 117 |
+| `ctest -j2 --timeout 900 -E SaturnExplorerLive` / `ctest -R SaturnExplorerLive` (every binary under `ulimit -v 3500000`) | 102 of 102 (187 s; the engine suite 43.9 s, the fault suite 95 s, printed C 26 s) / 6 of 6 (29 s). 108 tests, as on master: none added, none skipped. The fault suite needed no separate run: no product file changed |
+
+### Notes
+
+* **A kill is only as good as its oracle's failing check.** The harness records the first failing line of each run, in `results.tsv` and `<mutant>.<oracle>.log`. A corpus run whose only failure is a fixture check (the same binary runs the suite first) is no corpus kill. `score.py` rescores the rows written before the harness knew that. `patch:0068`'s corpus "kill" was the suite's A7-19 pin: hwram007 reports 0 frame losses with 0068 reverted, because the revert removes the records the frame ledger reads (A11-3).
+* **Equivalent, or nearly.** With `H-ptr-sub` the sign of a constant subtracted from a pointer is dropped. `RuleSub2Add` rewrites most subtractions, but the probe shows the generator and the corpus still reach the branch, so the mutant is not equivalent there (A11-6). The runner mutants are equivalent to the area 1 model, because the panel compares the key itself. `H-load-toolarge` is equivalent under I2 and wrong in its message (A11-12).
+* **Restarts.** The machine restarted twice during the sweep. Each time one mutant was left applied: `DecompilerRunner.cpp` (`H-run-gen`) and `sleigh.cc` (patch 0002). Both were put back with `git checkout`, and the mutants were rerun. Since then `applied.json` makes the next piece restore them itself.
+
+Routed: A11-7 to area 10 (the "Pinned by" cells of 0014 and 0060, and adding 0040 to A10-10). A11-4 and A11-8 concern area 3's fixtures and grammar. A11-3 is area 3's frame ledger (the A3-124 and A3-133 instrument). Each is filed under area 11.
