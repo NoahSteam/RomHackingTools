@@ -25,9 +25,6 @@
 #include <sstream>
 #include <tuple>
 
-// TEMPORARY MUTATION SWITCHES (area 7 fixer)
-static bool A7fOff(const char* k) { const char* e = std::getenv("SE_A7F_OFF"); return e && std::strstr(e, k); }
-
 namespace sfe
 {
 namespace decomp
@@ -3373,7 +3370,7 @@ std::vector<Line> LinesFromMarkup(const std::string& packed, const ghidra::Funcd
             t.kind = elem == kLabel ? TokenKind::Label : elem == kFuncName ? TokenKind::FuncName : KindForColor(color);
             if (op && op->code() == ghidra::CPUI_BRANCHIND) lastSwitch = op;
             // (A7-27: the label's value, for a case label that is no `default:`)
-            const bool caseValueKnown = elem == kCaseLabel && haveCaseValue && content != "default" && !A7fOff("27");
+            const bool caseValueKnown = elem == kCaseLabel && haveCaseValue && content != "default";
             uint32_t caseDest = 0;
             if (op)
             {
@@ -5420,7 +5417,8 @@ bool FlowNumber(const FlowOp& op, uint64_t& v)
 }
 
 // Does an instruction make a number: one of its flow ops sets a storage to it (`mov #imm`), or reads it from a literal? With `into`, only
-// into that storage (A7-26: `mov #0,r12` makes r12's zero, not the zero a COPY into r8 shows).
+// into that storage (A7-26: `mov #0,r12` makes r12's zero, not the zero a COPY into r8 shows); a literal word read into a temporary and
+// extended into the register (`mov.w @(disp,pc),Rn`) makes it into the register.
 bool InstructionMakesNumber(const FlowRecord& flow, uint32_t insn, uint64_t value, ghidra::int4 size, const FlowVn* into = nullptr)
 {
     const auto first = flow.insnFirst.find(insn);
@@ -5428,14 +5426,32 @@ bool InstructionMakesNumber(const FlowRecord& flow, uint32_t insn, uint64_t valu
     const std::vector<FlowOp>& ops = flow.blockOps[static_cast<size_t>(first->second.first)];
     ValueSet number;
     number.numbers.emplace_back(value, size);
+    const auto covers = [into](const FlowVn& out) {
+        return out.space == into->space && out.offset <= into->offset &&
+               into->offset + static_cast<ghidra::uintb>(into->size) <= out.offset + static_cast<ghidra::uintb>(out.size);
+    };
+    std::vector<std::pair<FlowVn, uint64_t>> temporaries;   // (the instruction's temporaries that hold a number, and which)
     for (size_t i = first->second.second; i < ops.size() && ops[i].insn == insn; ++i)
     {
+        const FlowOp& op = ops[i];
+        if (!op.hasOut) continue;
         uint64_t v = 0;
-        if (!FlowNumber(ops[i], v) || !number.Has(v, ops[i].out.size)) continue;
-        if (into && !A7fOff("26") && (!ops[i].hasOut || ops[i].out.space != into->space || ops[i].out.offset > into->offset ||
-                     into->offset + static_cast<ghidra::uintb>(into->size) > ops[i].out.offset + static_cast<ghidra::uintb>(ops[i].out.size)))
+        bool numbered = FlowNumber(op, v);
+        if (!numbered && into && op.numIn >= 1 && (op.code == ghidra::CPUI_COPY || op.code == ghidra::CPUI_INT_SEXT || op.code == ghidra::CPUI_INT_ZEXT))
+            for (const auto& t : temporaries)
+                if (t.first.space == op.in[0].space && t.first.offset == op.in[0].offset && t.first.size == op.in[0].size)
+                {
+                    v = t.second;
+                    if (op.code == ghidra::CPUI_INT_SEXT && op.in[0].size < 8 && (v >> (8 * op.in[0].size - 1) & 1)) v |= ~0ull << (8 * op.in[0].size);
+                    numbered = true;
+                }
+        if (!numbered) continue;
+        if (into && !covers(op.out))
+        {
+            if (op.out.space && op.out.space->getType() == ghidra::IPTR_INTERNAL) temporaries.emplace_back(op.out, v);
             continue;
-        return true;
+        }
+        if (number.Has(v, op.out.size)) return true;
     }
     return false;
 }
@@ -5997,7 +6013,7 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                         }
                 }
             }
-            if (registerMerge && !registerMakers.count(own) && !A7fOff("21"))
+            if (registerMerge && !registerMakers.count(own))
             {
                 const uint32_t lowest = registerMakers.empty() ? 0 : *registerMakers.begin();
                 for (size_t line : kv.second->first)
@@ -6060,7 +6076,7 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
             // (the register each store stores: its value input, or the register a temporary of the store's instruction copies, as
             // `mov.l r1,@-r15` stores through one)
             std::vector<FlowVn> stored;
-            bool storedKnown = !A7fOff("mem");
+            bool storedKnown = true;
             for (const ghidra::AccessRecord* r : chosen)
             {
                 const auto pos = flow.ops.find(r->time);
@@ -6120,7 +6136,7 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                 {
                     if (line >= lines.size() || sharedLines.count(std::make_pair(line, own))) continue;
                     for (Token& t : lines[line].tokens)
-                        if (t.addr == own && t.begin < t.end && !A7fOff("25f")) t.materialised = true;
+                        if (t.addr == own && t.begin < t.end) t.materialised = true;
                 }
         }
         if (target)
@@ -6250,7 +6266,7 @@ std::vector<size_t> InstructionLineIndex::Ordered(uint32_t a) const
     const auto own = mOwnDrawn.find(a);
     auto drawn = [&](size_t li) { return d != mDrawn.end() && d->second.count(li) != 0; };
     // (A7-25: a line that draws the instruction only as a copy materialised there comes after the lines whose statement it is)
-    auto materialised = [&](size_t li) { return !A7fOff("25o") && drawn(li) && (own == mOwnDrawn.end() || own->second.count(li) == 0); };
+    auto materialised = [&](size_t li) { return drawn(li) && (own == mOwnDrawn.end() || own->second.count(li) == 0); };
     for (size_t li : o->second)
         if (mResult.lines[li].firstAddr == a && !materialised(li)) out.push_back(li);
     for (size_t li : o->second)

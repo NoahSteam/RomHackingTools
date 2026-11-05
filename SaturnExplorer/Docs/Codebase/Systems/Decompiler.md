@@ -109,7 +109,7 @@ and lists these classes as open until they are fixed.
    value is made, and compared with what the statement's value copies, merges or extends in the
    final p-code; a store whose every path ends at another value is never named, and the search
    goes on to the store the statement is ahead of. A number put at an instruction that does not
-   make it takes its store's address too. A register the engine merged under a memory variable's
+   make it into a register the store stores takes its store's address too. A register the engine merged under a memory variable's
    name, a copy at the end of its block that no store shows, is addressed to the instructions that
    last set the register on each path into the block's end (`FlowLastWriters`), or to nothing,
    never to the branch (A7-21). A statement that keeps its drawn tokens at its instruction beside

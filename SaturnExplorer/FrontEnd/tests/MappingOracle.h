@@ -26,7 +26,6 @@
 #include "Debug/Sh2Disasm.h"
 #include "Decompiler/Sh2Decompiler.h"
 
-#include <cstring> // TEMPORARY
 #include <algorithm>
 #include <cctype>
 #include <cstdint>
@@ -644,8 +643,7 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
         {
             const LineLookup k = index.Find(kv.first);
             const bool owner = k.kind == LineLookup::Exact && !k.lines.empty() && std::find(kv.second.begin(), kv.second.end(), k.lines[0]) != kv.second.end();
-            const bool copyFirst = owner && copyOnly(kv.first, k.lines[0]) && ownDrawn.count(kv.first) &&
-                                   !(std::getenv("SE_A7F_ORACLE_OFF") && strstr(std::getenv("SE_A7F_ORACLE_OFF"), "25"));   // TEMPORARY
+            const bool copyFirst = owner && copyOnly(kv.first, k.lines[0]) && ownDrawn.count(kv.first);
             if (!owner || (firsts.count(kv.first) && r.lines[k.lines[0]].firstAddr != kv.first) || copyFirst)
             {
                 ++a.backWrong;
@@ -954,7 +952,7 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     if (cast && (d.Mnemonic.compare(0, 4, "exts") == 0 || d.Mnemonic.compare(0, 4, "extu") == 0)) named = true;
                 }
                 if (named) continue;
-                if (registerVariable && drawnAny && branchOnly && !(std::getenv("SE_A7F_ORACLE_OFF") && strstr(std::getenv("SE_A7F_ORACLE_OFF"), "21")))   // TEMPORARY
+                if (registerVariable && drawnAny && branchOnly)
                 {
                     ++a.copyMergeAtBranch;
                     problem("copy-merge", "line " + std::to_string(li) + " '" + text + "' names no store of the variable and is drawn only at the branch " +
@@ -1114,7 +1112,7 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                 // text uses it elsewhere (its tokens' instructions name Rx and never Rm), the instruction made another register's number
                 // (`mov #0,r12` at the join of the paths that set r8 to 0). An `else { iVar4 = 0; }` whose `mov #0,r7` is the line's own,
                 // while r6 happens to be 0 on the paths in, uses r7 elsewhere: not judged. Nor when nothing is known.
-                if (!numberInsn || (std::getenv("SE_A7F_ORACLE_OFF") && strstr(std::getenv("SE_A7F_ORACLE_OFF"), "26"))) continue;   // TEMPORARY
+                if (!numberInsn) continue;
                 if (!haveSources)
                 {
                     sources = BranchSources(r, word);
