@@ -13,6 +13,12 @@
 // wrote unpadded); such a line is skipped and counted like any other that is not an entry, and the Log says it may be an old
 // unpadded address and should be written as eight digits ("0000DEAD", A9-32). It stays in the file. Reading such words as addresses
 // when they lie in the BIOS ROM was tried (A9-32) and made prose lines ("add it later", "be careful") entries again (A9-41).
+//
+// A9-45: a remark that opens with a number ("2026 trace", "12 Nov", "2 more below", "3D engine") is no entry either. A word of fewer than
+// eight digits and no 0x that lies below 0x80000 (the BIOS ROM: a year, a day, a count) is skipped with the same warning ("write it as
+// eight digits"); an unpadded address of an older version is always above that. In the function bounds file (strict), which the
+// application has always written with eight digits ("%08X"), only eight digits or 0x are taken. A remark that opens with an
+// eight-digit date ("20261104 ...") cannot be told from an address and is still one; the bounds file takes remarks after "; ".
 #pragma once
 
 #include <cctype>
@@ -56,7 +62,7 @@ inline std::string CleanEntryText(const std::string& text)
 }
 
 // The word line[b, e) as an address, by the rule at the top of this file.
-inline bool ParseAddressWord(const std::string& line, size_t b, size_t e, uint32_t& addr)
+inline bool ParseAddressWord(const std::string& line, size_t b, size_t e, uint32_t& addr, bool strict = false)
 {
     size_t d = b;
     const bool prefixed = e - b > 2 && line[b] == '0' && (line[b + 1] == 'x' || line[b + 1] == 'X');
@@ -73,6 +79,7 @@ inline bool ParseAddressWord(const std::string& line, size_t b, size_t e, uint32
                                                                                          : std::tolower(static_cast<unsigned char>(c)) - 'a' + 10);
     }
     if (!prefixed && e - d < 8 && !digit) return false;   // "Dead", "add", "a": a word (A9-18, A9-41)
+    if (!prefixed && e - d < 8 && (strict || a < 0x80000u)) return false;   // "2026", "12", "3D": a number of a remark (A9-45)
     addr = a;
     return true;
 }

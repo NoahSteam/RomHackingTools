@@ -16682,3 +16682,35 @@ The pins assert today's behaviour: when a finding is fixed, its check fails and 
 
 * A9-45 first. The bounds file needs no unpadded reading at all (the application writes eight digits): take eight digits or `0x` there and skip and warn on the rest. For the names and notes files, an unpadded first word that lands in the BIOS ROM (below 0x80000: a year, a day, a count) is the A9-32 trade that A9-41 already took for letters; skip it with the same warning. Give the oracle a prose list with numbers so `PROSE_AS_ADDRESS` can fire for them.
 * A9-46 with A9-47: at exit wait longer, or say a refusal before the window goes; take the settings lock without blocking the frame; use `WhyNotHeld()` in `SpecBundle`.
+
+## Area 9 fixer (A9-45 to A9-50)
+
+Branch `review/9-round5-fix` from master `5320680e`. Product code changed; the ledger rows A9-45 to A9-48 and A9-50 are fixed (A9-49 is an instrument row). `App.cpp` and the Windows code are not compiled on Linux: read against the headers.
+
+### What changed
+
+* **A9-45 (P2).** `ParseAddressWord` (`AddressNameLine.h`) takes a `strict` flag. `saturn_function_bounds.txt` reads strict: only eight hex digits or `0x` and up to eight are starts; `2026 trace`, `12 Nov`, `3D engine` and an unpadded start are skipped and counted, and the Log text says to write a start as eight digits and a remark after the address or a semicolon. The names, symbol-map and notes files skip an unpadded word without `0x` below 0x80000 (a year, a day, a count), counted, with the A9-41 warning (`App.cpp` text now names numbers). An older version's unpadded address (`6004000`) is always above that and still loads. Left open by nature: a remark that opens with an eight-digit date (`20261104 ...`) is indistinguishable from an address. The fuzz oracle (`LoaderFuzzTests.cpp`) has its own rule for the number case (`strtoul` and the 0x80000 test, plus a bounds mode, not the product's function) and its malformed list has number-led prose, so `PROSE_AS_ADDRESS` fires for it (shown below). `AddressWords` (round 3) changed: `1a x` is skipped, `0x1a x` loads, `7ffff x` is skipped, `80000 x` loads.
+* **A9-50 (P3).** `Area9Round3Tests` `Hammer` retries as the product does: a refused `SaveStore` keeps the change pending and the next save carries it; the last save is retried until it succeeds, so "two instances lose none" still proves no entry is lost. Is 3 s too short? No: a holder keeps the lock for one read and one write (0.28 s at the 8 MiB cap), about ten times less, and a session saves on a change, not in a loop. The failure came from the test's own load (600 saves in a tight loop in two processes; the poll sleeps 20 ms and `flock` is not fair, so a process that retakes the lock at once can starve the sleeper past 3 s on a loaded machine). The bound stays.
+* **A9-46 (P3).** `FileLock::SetClosing(true)`, the first thing `App::Shutdown` does after the engine stops, makes lock waits 10 s (`kExitWaitMs`); a save still refused at exit (settings, notes, names or starts) is said in a message box before the window goes (`NoticeAtExit`: `MessageBoxA` on Windows, stderr elsewhere). The frame's settings retry is `SaveSettings(false)`: `Settings::Save(error, wait=false)` makes one try and no wait, and tries again 2 s later (5 s for a waited save), so a stuck holder costs the frame nothing. Not changed: the notes, names and starts saves made on a user action still wait up to 3 s on the UI thread when a holder is stuck.
+* **A9-47 (P3).** `SpecBundle` puts `lock.WhyNotHeld()` in its text (shown: "another process has held ... for more than 3 seconds"). POSIX records no error for `EWOULDBLOCK`, so a refused try says "another process holds ...". Windows (not compiled here, kept to a few lines): the loop retries only `ERROR_LOCK_VIOLATION` and `ERROR_SHARING_VIOLATION`; any other `LockFileEx` error is kept and ends the loop at once.
+* **A9-48 (P3), chosen: sync, do not weaken the header.** The staged file is flushed before the rename (`fflush`, then `fsync`; `F_FULLFSYNC` first on macOS; `FlushFileBuffers` on Windows), only on the staged path (a device written in place refuses `fsync`), and on POSIX the folder is `fsync`ed after the rename (best effort: the file is published already). `EINVAL`, `ENOTSUP`, `EROFS` from the sync are not failures (a file system that cannot sync); another error refuses the save with the reason and the old file stays. The cost is two syncs per save of a few KiB, on a user action or an interval. The header's "safely on disk" is now true. The Windows and macOS branches are not compiled here.
+
+### Pins flipped, and proof that each bites
+
+Every `PIN` in `Area9Round5Tests` became a check of the fixed behaviour (the `Pin` helper is gone). With the product fixes reverted (all of them, one build) the test fails with 13 checks (A9-45 four, A9-46 five, A9-47 two, A9-48 one, and A9-40's 3 s bound as a side effect of the `EWOULDBLOCK` revert), `Area9Round3Tests` with 4, and `LoaderFuzzTests` (seed 7, 500 cases) reports `names/PROSE_AS_ADDRESS`, `bounds/PROSE_AS_ADDRESS` and `comments/PROSE_AS_ADDRESS` from the new oracle lines. The fixes were then restored (`git checkout`) and everything rebuilt.
+
+### Runs
+
+| Run | Result |
+|---|---|
+| `SaturnExplorerArea9Round3Tests`, 5 times beside a `-j2` build of the whole tree | 5 of 5 passed (the load did not refuse a save this time; the retry path is also covered by `LaterSaveCarriesRefused`) |
+| `SaturnExplorerArea9Round5Tests` | all passed (exit save waits 5.01 s and writes; frame try-lock refuses in 0.000 s; 2 sync calls for each of three kinds of save; `SpecBundle` text "another process has held ... for more than 3 seconds") |
+| `SaturnExplorerLoaderFuzzTests`, seed 91357, 3,000 cases a module, all modules, directed and two-process cases | 37,985 cases in 65 s, 0 classes outside the ledger (only `HARDLINK_SPLIT`, A9-28) |
+| Full `ctest -j2 --timeout 900` (`ulimit -v 3500000`), Live tests included | **111 of 111 passed** (216 s): 105 + 6 Live; no test was added (the fixer changed existing ones) |
+| `SaturnExplorerDecompilerFaultTests` (fault suite) | 0 of 94 jobs failed (90.8 s) |
+
+### Not done, routed
+
+* Windows and macOS code (`LockFileEx` error handling, `FlushFileBuffers`, `F_FULLFSYNC`, `MessageBoxA`) and `App.cpp` (`Shutdown`, `SaveSettings(bool)`) are read against the headers, not compiled; the next Windows build is the check.
+* The notes, names and starts saves made on a user action still wait up to 3 s on the UI thread behind a stuck holder; only the settings retry was moved off the wait.
+* A remark opening with an eight-digit date still reads as an address (indistinguishable); remarks belong after a semicolon.

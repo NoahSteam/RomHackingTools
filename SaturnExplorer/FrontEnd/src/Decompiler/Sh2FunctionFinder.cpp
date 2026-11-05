@@ -551,7 +551,7 @@ int ClassifyBoundsLine(const std::string& line, uint32_t& canonical)
     size_t e = b;
     while (e < line.size() && !std::isspace(static_cast<unsigned char>(line[e]))) ++e;
     uint32_t v = 0;
-    if (!ParseAddressWord(line, b, e, v)) return 2;
+    if (!ParseAddressWord(line, b, e, v, true)) return 2;   // strict: eight digits or 0x (A9-45)
     // An address the CPU does not see as memory (the on-chip registers, FFFFFE10) is not a function start: counted, not dropped quietly (A9-21).
     return CanonicalAddress(v, canonical) ? 1 : 2;
 }

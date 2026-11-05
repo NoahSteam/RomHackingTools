@@ -1198,6 +1198,8 @@ bool IsHex(char c) { return std::isxdigit(static_cast<unsigned char>(c)) != 0; }
 // then white space, then a name; blank lines and lines opening with ; # // are comments.
 enum class LineKind { Entry, Comment, TooLong, Signed, NotHex, NoName, Prose };
 
+static bool gBoundsRef = false;   // set while the bounds file's reference reads a line (A9-45)
+
 LineKind ParseSymbolRef(const std::string& line, uint32_t& addr, std::string& name)
 {
     size_t b = 0;
@@ -1222,6 +1224,9 @@ LineKind ParseSymbolRef(const std::string& line, uint32_t& addr, std::string& na
     bool lettersOnly = !prefixed && tok.size() < 8;
     for (char c : tok) lettersOnly = lettersOnly && std::isalpha(static_cast<unsigned char>(c)) != 0;
     if (lettersOnly) return LineKind::Prose;
+    // A9-45: written apart from the product: a number of fewer than eight digits and no 0x that lies below the BIOS ROM's end (0x80000)
+    // opens a remark ("2026 trace", "12 Nov", "3D engine"), whatever its digits; the bounds file takes only eight digits or 0x.
+    if (!prefixed && tok.size() < 8 && (gBoundsRef || std::strtoul(tok.c_str(), nullptr, 16) < 0x80000ul)) return LineKind::Prose;
     addr = static_cast<uint32_t>(std::strtoul(tok.c_str(), nullptr, 16));
     name = Trim(line.substr(e));
     return name.empty() ? LineKind::NoName : LineKind::Entry;
@@ -1231,7 +1236,9 @@ LineKind ParseSymbolRef(const std::string& line, uint32_t& addr, std::string& na
 LineKind ParseBoundsRef(const std::string& line, uint32_t& addr)
 {
     std::string name;
+    gBoundsRef = true;
     LineKind k = ParseSymbolRef(line, addr, name);
+    gBoundsRef = false;
     return k == LineKind::NoName ? LineKind::Entry : k;
 }
 
@@ -1328,7 +1335,8 @@ const char* const kMalformedLines[] = {
     "12g name", "06004000name_glued", "Dead function in the old build", "add it later", "beef", "06004000", "0x06004000", "  06004000\t\tname with spaces   ",
     "06004000 ", ";06004000 commented", "// 06004000 slashes", "# 06004000 hash", "06004000 na\xFFme", "06004000 \tx",
     "0X0600A000 upper_prefix", "6004000 short", "00000000 zero_address", "FFFFFFFF last_address", "26004000 cache_through_mirror", "06100000 hwram_mirror",
-    "4000 tiny_address", "0600 400 split", "06004000 name\x01with\x02" "controls" };
+    "4000 tiny_address", "0600 400 split",
+    "2026 trace: from the November run", "12 Nov: from the trace", "2 more below, unconfirmed", "3D engine hooks below", "0 entries yet", "06004000 name\x01with\x02" "controls" };
 
 std::string MakeNamesText(Rng& rng)
 {
