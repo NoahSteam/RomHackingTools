@@ -4877,6 +4877,7 @@ struct ValueSet
     std::vector<FlowVn> inputs;                         // the function's inputs it is (a parameter's register)
     std::set<ghidra::uintm> times;                      // ...and those ops' times (a store's own COPY, alive)
     std::vector<FlowVn> locations;                      // the memory it is read from: a local, a stack parameter, a global (varnodes of the stack or RAM)
+    bool rebuilt = false;                               // a computation in it is the engine's own (no op of the flow: an addition moved past a join)
     bool Has(uint64_t value, ghidra::int4 size) const
     {
         for (const auto& n : numbers)
@@ -4903,7 +4904,7 @@ struct ValueSet
     }
 };
 
-void FinalValues(const ghidra::Varnode* vn, ValueSet& s, std::set<const ghidra::Varnode*>& seen)
+void FinalValues(const ghidra::Varnode* vn, ValueSet& s, std::set<const ghidra::Varnode*>& seen, ghidra::uintm opsEnd)
 {
     if (!vn || seen.size() > 512 || !seen.insert(vn).second) return;
     if (vn->getSpace()->getType() == ghidra::IPTR_SPACEBASE || vn->getSpace()->getType() == ghidra::IPTR_PROCESSOR)
@@ -4940,27 +4941,28 @@ void FinalValues(const ghidra::Varnode* vn, ValueSet& s, std::set<const ghidra::
     case ghidra::CPUI_INT_SEXT:
     case ghidra::CPUI_SUBPIECE:
     case ghidra::CPUI_CAST:
-        FinalValues(d->getIn(0), s, seen);
+        FinalValues(d->getIn(0), s, seen, opsEnd);
         break;
     case ghidra::CPUI_MULTIEQUAL:
     case ghidra::CPUI_PIECE:
-        for (ghidra::int4 i = 0; i < d->numInput(); ++i) FinalValues(d->getIn(i), s, seen);
+        for (ghidra::int4 i = 0; i < d->numInput(); ++i) FinalValues(d->getIn(i), s, seen, opsEnd);
         break;
     case ghidra::CPUI_INDIRECT:
     {
         // (the value before the op that may change it, or the op's: a call's effect)
         const ghidra::PcodeOp* by = ghidra::PcodeOp::getOpFromConst(d->getIn(1)->getAddr());
         if (by) s.insns.insert(InstructionOf(by));
-        FinalValues(d->getIn(0), s, seen);
+        FinalValues(d->getIn(0), s, seen, opsEnd);
         break;
     }
     default:
+        if (d->getTime() >= opsEnd) s.rebuilt = true;
         break;
     }
 }
 
 // The value a printed statement shows: what its input copies (a COPY), or the op itself and what it extends (a conversion), or the op.
-ValueSet StatementValues(const ghidra::PcodeOp* o)
+ValueSet StatementValues(const ghidra::PcodeOp* o, ghidra::uintm opsEnd)
 {
     ValueSet s;
     std::set<const ghidra::Varnode*> seen;
@@ -4969,9 +4971,11 @@ ValueSet StatementValues(const ghidra::PcodeOp* o)
     if (c != ghidra::CPUI_COPY) s.insns.insert(InstructionOf(o));
     if (c == ghidra::CPUI_COPY || c == ghidra::CPUI_INT_ZEXT || c == ghidra::CPUI_INT_SEXT || c == ghidra::CPUI_SUBPIECE || c == ghidra::CPUI_CAST ||
         c == ghidra::CPUI_INDIRECT)
-        FinalValues(o->getIn(0), s, seen);
+        FinalValues(o->getIn(0), s, seen, opsEnd);
     else if (c == ghidra::CPUI_MULTIEQUAL || c == ghidra::CPUI_PIECE)
-        for (ghidra::int4 i = 0; i < o->numInput(); ++i) FinalValues(o->getIn(i), s, seen);
+        for (ghidra::int4 i = 0; i < o->numInput(); ++i) FinalValues(o->getIn(i), s, seen, opsEnd);
+    else if (o->getTime() >= opsEnd)
+        s.rebuilt = true;
     return s;
 }
 
@@ -5170,7 +5174,10 @@ bool FlowValueMayBe(const FlowRecord& flow, const ghidra::Funcdata& fd, int blk,
     };
     // where a path ends: true when the value there may be the statement's (the walk answers true)
     const auto number = [&](uint64_t v, ghidra::int4 size) { return want.Has(v, size) || !numbersOnly; };
+    // (an op of the flow the statement's value does not hold is another value, unless the engine computed the value itself, from ops the
+    // flow's no longer are: then it is not known)
     const auto other = [&](bool found) { return found || numbersOnly; };
+    const auto computed = [&]() { return numbersOnly || want.rebuilt; };
     std::vector<State> todo = { State{ blk, pos, vn } };
     std::set<std::tuple<int, const ghidra::AddrSpace*, ghidra::uintb, ghidra::int4>> entered;   // a block entered from its end for a storage
     int steps = 0;
@@ -5228,7 +5235,7 @@ bool FlowValueMayBe(const FlowRecord& flow, const ghidra::Funcdata& fd, int blk,
             }
             if (!whole || !passes || op.numIn < 1)
             {
-                if (other(false)) return true;
+                if (computed()) return true;
                 break;
             }
             FlowVn from = op.in[0];
@@ -5650,7 +5657,7 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
         const auto shows = [&](const ghidra::AccessRecord* r) {
             if (!valuesFound)
             {
-                values = StatementValues(o);
+                values = StatementValues(o, flow.opsEnd);
                 valuesFound = true;
             }
             const auto f = shown.find(r);
