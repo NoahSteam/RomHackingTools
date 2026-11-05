@@ -776,8 +776,10 @@ void TestArea7Round5()
     // mov.l r12,@r10 ; mov #7,r9 ; M: jsr @r11 ; nop ; add #1,r8 ; cmp/gt r9,r8 ; bf M ; X: lds.l @r15+,pr ; rts ; mov r8,r0`. The zeros
     // of r8 are made in the two slots (0x06070008, 0x0607000E). The join's first instruction makes another register's zero (r12, stored
     // at 0x06070016), and `iVar1 = 0;` in the loop's guard names that one (0x06070010): the instruction is kept because it makes the
-    // number. A click goes to it; the two slots are on the line of the condition only. The oracle accepts it (constAtJoin asks for the
-    // number). Expected: the line names 0x06070008 and 0x0607000E, as A7-22's does.
+    // number. A click went to it; the two slots were on the line of the condition only, and the oracle accepted it (constAtJoin asked for
+    // the number). Fixed (the area 7 fixer, A7-26): InstructionMakesNumber asks for the COPY's register, so the line names 0x06070008 and
+    // 0x0607000E, as A7-22's does; the oracle's constAtJoin asks which register the join's instruction makes the number into, and sees
+    // the line as it was (the damage below).
     {
         const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06070000u, { 0x4F22, 0x6043, 0x8801, 0x8D03, 0xE800, 0x8802, 0x8F0A, 0xE800,
             0xEC00, 0xDB06, 0xDA06, 0x2AC2, 0xE907, 0x4B0B, 0x0009, 0x7801, 0x3897, 0x8BFA, 0x4F26, 0x000B, 0x6083, 0x0000, 0x0607, 0x1000,
@@ -788,14 +790,32 @@ void TestArea7Round5()
         for (const Line* l : a7r4::LinesWith(r, "iVar1 = 0;"))
             if (l->text.find('(') == std::string::npos) body = l;
         CHECK(body != nullptr);
-        if (body) CHECK(LineInstructions(*body) == (std::vector<uint32_t>{ 0x06070010u }));   // expected: 0x06070008 and 0x0607000E
+        if (body) CHECK(LineInstructions(*body) == (std::vector<uint32_t>{ 0x06070008u, 0x0607000Eu }));   // was 0x06070010 (mov #0x0,r12)
+        if (body) CHECK(body->firstAddr == 0x06070008u);
+        if (body) CHECK(Has(LineOriginText(*body), "0x06070008") && Has(LineOriginText(*body), "0x0607000E"));
+        for (const Line& x : r.lines)
+            for (const Token& t : x.tokens) CHECK(!(t.addr == 0x06070010u && Has(x.text, "iVar1 = 0;")));   // never r12's zero
         const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_26");
-        CHECK(a.Violations() == 0);
+        CHECK(a.Violations() == 0 && a.constAtJoin == 0);
+        // ...and the oracle sees the line as it was: drawn at the join's `mov #0x0,r12`
+        DecompileResult was = r;
+        for (Line& x : was.lines)
+            if (Has(x.text, "iVar1 = 0;") && x.text.find('(') == std::string::npos)
+            {
+                std::vector<Token> keep;
+                for (Token t : x.tokens)
+                    if (t.begin < t.end) keep.push_back((t.addr = t.addr ? 0x06070010u : 0, t));
+                x.tokens = keep;
+                x.firstAddr = 0x06070010u;
+            }
+        const dts::MappingAudit wa = dts::AuditMapping(was, word, "a7_26 as it was");
+        CHECK(wa.constAtJoin == 1 && wa.Violations() == 1);
     }
     // A7-27: a case that is only a branch or a nop. `T: .word A0-T ... ; A0: bra Lend ; nop ; A1: bra Lmid ; nop ; A2: nop ; A3: ...` through
     // the common mova / mov.w / add / jmp form: the table sends case 0 to the `bra` at 0x06070022 and case 2 to the `nop` at 0x0607002A.
-    // `case 0:` names 0x0607003A, the exit the branch goes to (the same instruction as `default:`), and `case 2:` names nothing. The
-    // table's destination is on no line. Expected: the labels name the table's destinations, or the label says it is the exit's.
+    // `case 0:` named 0x0607003A, the exit the branch goes to (the same instruction as `default:`), and `case 2:` named nothing: the
+    // table's destination was on no line. Fixed (the area 7 fixer, A7-27): when no block of the final graph holds the table's destination
+    // for the label's value, the label names the first instruction of the flow's block that does, the destination itself.
     {
         const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06070000u, { 0x4F22, 0xD50F, 0xE104, 0x3416, 0x8D17, 0x6143, 0x311C, 0xC702,
             0x011D, 0x301C, 0x402B, 0x0009, 0x000A, 0x000E, 0x0012, 0x0014, 0x0018, 0xA00A, 0x0009, 0xA006, 0x0009, 0x0009, 0xE203, 0x2522,
@@ -806,9 +826,15 @@ void TestArea7Round5()
         const Line* two = LineWith(r, "case 2:");
         const Line* def = LineWith(r, "default:");
         CHECK(zero && two && def);
-        if (zero) CHECK(zero->firstAddr == 0x0607003Au);   // expected 0x06070022 (the table's destination)
-        if (def && zero) CHECK(zero->firstAddr == def->firstAddr);
-        if (two) CHECK(two->firstAddr == 0);                // expected 0x0607002A
+        if (zero) CHECK(zero->firstAddr == 0x06070022u);   // the table's destination, `bra` (was 0x0607003A, the exit)
+        if (def && zero) CHECK(zero->firstAddr != def->firstAddr);
+        if (two) CHECK(two->firstAddr == 0x0607002Au);     // the `nop` (was none)
+        const Line* one = LineWith(r, "case 1:");
+        const Line* three = LineWith(r, "case 3:");
+        if (one) CHECK(one->firstAddr == 0x06070026u);     // (a branch too: `bra Lmid ; nop`)
+        if (three) CHECK(three->firstAddr == 0x0607002Cu); // (a case with code of its own: A7-24's rule)
+        if (zero) CHECK(LineForInstruction(r, 0x06070022u).kind == LineLookup::Exact && !LineForInstruction(r, 0x06070022u).lines.empty() &&
+                        &r.lines[LineForInstruction(r, 0x06070022u).lines[0]] == zero);
         const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_27");
         CHECK(a.Violations() == 0);
     }

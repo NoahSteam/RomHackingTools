@@ -100,7 +100,8 @@ struct MappingAudit
     int copyOtherValue = 0;    // ...not counted in copyStoreMissing: every store of the variable writes a value the line does not show (counted)
     int constLines = 0;        // lines `V = <number>;` drawn at one instruction (counted)
     int constAtJoin = 0;       // ...drawn at a join's first instruction (a target of the function's own branches) that makes no number, or another
-                               // one: the engine's collapsed MULTIEQUAL, at its block's start (A7-22, a violation)
+                               // one, or makes it into another register than every path into the join sets it in: the engine's collapsed
+                               // MULTIEQUAL, at its block's start (A7-22, A7-26, a violation)
     std::vector<std::string> problems;   // the first few of each kind, "kind: where: what"
 
     void Add(const MappingAudit& o)
@@ -1043,7 +1044,34 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
             const bool move = (w >> 12) == 0x6 && (w & 0xF) == 0x3;
             const bool makes = numberInsn || (d.Mnemonic.compare(0, 3, "mov") == 0 && m.store) || control || move;
             uint32_t got = 0;
-            if (makes && !(numberInsn && made(at, w, got) && got != want)) continue;
+            if (makes && !(numberInsn && made(at, w, got) && got != want))
+            {
+                // A7-26 (the area 7 fixer): an instruction that makes the number makes it into its register, Rm. The engine merged the
+                // paths' values into the line's register, so a register every path into the join sets to the number (RegisterBefore,
+                // the walk storeValueOther uses) is the line's. When Rm is not one and another register is, the instruction made
+                // another register's number (`mov #0,r12` at the join of the paths that set r8 to 0). When none is known: not judged.
+                if (!numberInsn) continue;
+                if (!haveSources)
+                {
+                    sources = BranchSources(r, word);
+                    haveSources = true;
+                }
+                const int rm = (w >> 8) & 0xF;
+                const auto holds = [&](int reg) {
+                    const WordValue v = RegisterBefore(r, word, sources, at, reg);
+                    return v.kind == WordValue::Number && static_cast<uint32_t>(v.value) == want;
+                };
+                if (holds(rm)) continue;
+                int other = -1;
+                for (int reg = 0; reg < 15 && other < 0; ++reg)
+                    if (reg != rm && holds(reg)) other = reg;
+                if (other < 0) continue;
+                ++a.constAtJoin;
+                problem("const-join", "line " + std::to_string(li) + " '" + text + "' is drawn at " + MappingHex(at) + " (" + d.Mnemonic + " " + d.Operands +
+                                          "), the first instruction of a join, which makes the number into r" + std::to_string(rm) +
+                                          "; the paths into the join set it in r" + std::to_string(other));
+                continue;
+            }
             ++a.constAtJoin;
             problem("const-join", "line " + std::to_string(li) + " '" + text + "' is drawn at " + MappingHex(at) + " (" + d.Mnemonic + " " + d.Operands +
                                       "), the first instruction of a join, which does not make the number");
