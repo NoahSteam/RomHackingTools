@@ -45,6 +45,8 @@ ORACLES = {
     "trust": ("SaturnExplorerDecompilerTrustTests", ["{scratch}"], {}, 600),
     "panel": ("SaturnExplorerDecompilerPanelTests", ["{scratch}"], {}, 300),
     "fuzz": ("SaturnExplorerLoaderFuzzTests", ["{scratch}"], {}, 400),
+    # the generator's long run in one piece: 3,000 seeds (both grammars), for the patches its short run does not see
+    "gen3k": ("SaturnExplorerSh2GeneratedTests", ["{scratch}"], {"SE_GENERATED_SEEDS": "3000", "SE_GENERATED_FIRST": "1000"}, 1100),
 }
 
 ENGINE_ESCALATE = ["unit", "gen", "engine", "pc", "decode", "corpus"]
@@ -197,6 +199,12 @@ MUTANTS = [
      ["unit", "gen", "corpus"], [], "probe: does any input make a misaligned hardware access whose notes are written (H-note-reach)?"),
     ("R-ptr-sub", DEC, "out = Shift(Walk(base, depth + 1), sub ? 0u - k : k);", "if (sub) __builtin_trap(); out = Shift(Walk(base, depth + 1), sub ? 0u - k : k);",
      ["unit", "gen", "corpus"], [], "probe: does an INT_SUB of a constant reach PointerResolver (H-ptr-sub)?"),
+    ("R-0061-mem", VEN + "cpp/heritage.cc", "  if (memoryEscape) escaped = true;\n  loose = escaped;",
+     "  if (memoryEscape) __builtin_trap();\n  loose = escaped;",
+     ["unit", "gen", "corpus"], [], "probe: does any input make 0061's memory escape (V-0061-memescape survived)?"),
+    ("R-0065-down", VEN + "cpp/heritage.cc", "    case CPUI_MULTIEQUAL:\n      return AliasChecker::stepsDown(def);",
+     "    case CPUI_MULTIEQUAL:\n      if (AliasChecker::stepsDown(def)) __builtin_trap();\n      return false;",
+     ["unit", "gen", "corpus"], [], "probe: does any input reach 0065's stepped-down load guard (V-0065-steppeddown survived)?"),
     # Hand-made reverts of the patches no hunk of which reverts alone (later patches rewrote the lines).
     ("V-0019-ldc", VEN + "processors/SuperH/superh.sinc", "    local value:4 = rm_08_11 & 0x000003F3;", "    local value:4 = rm_08_11 & 0x0FFF0FFF;",
      ["decode", "unit"], ENGINE_ESCALATE, "patch 0019 reverted in ldc Rm,SR: bits the SH-2 does not have kept"),
@@ -283,6 +291,7 @@ class Harness:
     def __init__(self, a):
         self.root, self.build, self.rev, self.out = (os.path.abspath(x) for x in (a.root, a.build, a.rev, a.out))
         self.hwram = os.path.abspath(a.hwram) if a.hwram else ""
+        self.oracles = a.oracles.split(",") if a.oracles else []
         os.makedirs(self.out, exist_ok=True)
         self.results = open(os.path.join(self.out, "results.tsv"), "a")
         self.t0 = time.time()
@@ -369,6 +378,8 @@ class Harness:
         return verdict.startswith("killed")
 
     def score(self, mid, should, escalate, targets_of):
+        if self.oracles:   # --oracles: these and no escalation (a recheck of chosen mutants by one oracle)
+            should, escalate = self.oracles, []
         # the mutant as applied, for reading afterwards
         with open(os.path.join(self.out, mid.replace(":", "_") + ".diff"), "wb") as f:
             f.write(sh(["git", "diff", "--", "SaturnExplorer/FrontEnd", ":(exclude)*Sh2SpecData.h", ":(exclude)*.sla"], cwd=self.root).stdout)
@@ -513,6 +524,7 @@ def main():
     ap.add_argument("--group", default="all")
     ap.add_argument("--minutes", type=float, default=20)
     ap.add_argument("--list", action="store_true")
+    ap.add_argument("--oracles", default="", help="run only these oracles on each mutant (no escalation); use another --out")
     a = ap.parse_args()
     patches = sorted({f[:4] for f in os.listdir(a.rev) if f.endswith(".rev.patch")} |
                      {f[:4] for f in os.listdir(os.path.join(a.root, "SaturnExplorer/FrontEnd/third_party/ghidra-decompiler/patches")) if f.endswith(".patch")})
