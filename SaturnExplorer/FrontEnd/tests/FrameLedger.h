@@ -26,8 +26,12 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstdio>
 #include <functional>
+#include <map>
 #include <memory>
+#include <string>
+#include <tuple>
 #include <vector>
 
 namespace dts
@@ -73,6 +77,49 @@ inline bool SavesCalleeRegister(uint16_t w)
 {
     if ((w & 0xFF0F) == 0x2F06) return ((w >> 4) & 15) >= 8 && ((w >> 4) & 15) <= 14;
     return w == 0x4F02 || w == 0x4F12 || w == 0x4F22 || w == 0x4F03 || w == 0x4F13 || w == 0x4F23;
+}
+
+// The ledger's intake (A11-3): patch 0068 records a flow access folded into the frame once as a fold (FoldedOrdinary, 'frame' set),
+// and again, as a copy of that record with another fate, when it ends unread or with an unreachable block (Funcdata::recordFrameEnd,
+// at most once: opDestroy and the block removal record no end once the accesses of the removal are recorded). So a flow op of the
+// frame has exactly one fold, and an end has a fold of the same op. The pairing is the engine's, not the host's mapping of fates: a
+// second fold of one op is an end the host read as a fold (mutant H-fate-frameunread, which hid every unread write from FrameLosses),
+// an end with no fold is a record the host invented or lost. Each such op is one sentence here; none is a pass.
+inline std::vector<std::string> FrameIntakeErrors(const sfe::decomp::DecompileResult& r)
+{
+    using sfe::decomp::AccessFate;
+    struct Count
+    {
+        int folds = 0, ends = 0;
+        uint32_t insn = 0;
+    };
+    std::map<std::tuple<int, uint32_t, bool>, Count> ops;
+    for (const AccessFate& f : r.accessFates)
+    {
+        if (!f.frame || f.origBlock < 0) continue;
+        Count& c = ops[std::make_tuple(f.origBlock, f.origOrder, f.write)];
+        c.insn = f.insn;
+        if (f.fate == AccessFate::FoldedOrdinary) ++c.folds;
+        else if (f.fate == AccessFate::FrameUnread || f.fate == AccessFate::FrameRemoved) ++c.ends;
+    }
+    std::vector<std::string> out;
+    char buf[160];
+    for (const auto& op : ops)
+    {
+        const Count& c = op.second;
+        const char* what = std::get<2>(op.first) ? "write" : "read";
+        if (c.folds > 1)
+            std::snprintf(buf, sizeof buf, "the frame %s at %08X is recorded folded %d times (an end read as a fold?)", what, unsigned(c.insn),
+                          c.folds);
+        else if (c.ends > 0 && c.folds == 0)
+            std::snprintf(buf, sizeof buf, "the frame %s at %08X has an end and no fold", what, unsigned(c.insn));
+        else if (c.ends > 1)
+            std::snprintf(buf, sizeof buf, "the frame %s at %08X is recorded ended %d times", what, unsigned(c.insn), c.ends);
+        else
+            continue;
+        out.push_back(buf);
+    }
+    return out;
 }
 
 // 'wordAt' gives the instruction word at an address (nothing given: no write is taken for a save).

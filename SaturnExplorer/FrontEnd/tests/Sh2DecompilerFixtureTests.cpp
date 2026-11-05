@@ -173,8 +173,9 @@ int main(int argc, char** argv)
     const auto start = std::chrono::steady_clock::now();
     if (!sfe::PathEntryExists(kState))
     {
+        // 77 is SKIP_RETURN_CODE in CMakeLists.txt: ctest reports the suite skipped, not passed (A11-10).
         std::printf("SKIPPED: %s is not in this checkout (game data absent)\n", kState);
-        return 0;
+        return 77;
     }
     const std::string scratch = argv[1];
     dts::RemoveTree(scratch);

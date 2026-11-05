@@ -1576,6 +1576,10 @@ void RunOversizeCases()
             BiosLoadResult r = sfe::decomp::LoadBiosImageFile(bios);
             if (r.image) Violation("OVERSIZE_ACCEPTED", "an image of 48 MiB was accepted");
             if (!r.image && r.error.empty()) Violation("NO_ERROR", "refused without an error");
+            // A11-12: and refused for its size. A TooLarge read that fell through was refused as an empty file (ReadFileCapped
+            // clears what it read), with a sentence that names the path and the wrong reason.
+            if (!r.image && r.error.find("larger than a Saturn BIOS") == std::string::npos)
+                Violation("WRONG_REASON", "an image of 48 MiB was refused as: " + r.error);
         });
     }
     ::unlink((base + "/assembly_comments.txt").c_str());

@@ -57,9 +57,10 @@ void Print(const char* label, const DecompileResult& r)
     if (!r.prototypeWithheld.empty()) std::printf("  signature withheld: %s\n", r.prototypeWithheld.c_str());
     for (const std::string& w : r.warnings) std::printf("  warning: %s\n", w.c_str());
     for (const MemoryAccess& m : r.accesses)
-        std::printf("  access: %s %s %08X size %u at %08X%s%s printed %d time(s), %d line(s), %d token(s)\n", m.write ? "write" : "read",
+        std::printf("  access: %s %s %08X size %u at %08X%s%s printed %d time(s), %d line(s), %d token(s)%s%s\n", m.write ? "write" : "read",
                     m.direct ? "direct" : "via pointer", m.address, unsigned(m.size), m.insn, m.inLoop ? " in loop" : "",
-                    m.returned ? " returned" : "", m.printed, m.printedLines, m.printedTokens);
+                    m.returned ? " returned" : "", m.printed, m.printedLines, m.printedTokens, m.conditionalInPrint ? ", conditional" : "",
+                    m.repeatedOnPath ? ", repeated on a path" : "");
     for (const AccessFate& f : r.accessFates)
     {
         static const char* const names[] = { "folded into ordinary memory", "dead", "removed with unreachable code", "the switch's table",
@@ -1122,6 +1123,12 @@ bool ReferenceOk(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, 
     {
         std::printf("  conservation: the frame write of %u bytes at %08X (frame offset %08X) went unread, and the read at %08X "
                     "reads it\n", unsigned(l.size), l.write, l.offset, l.read);
+        ok = false;
+    }
+    // (A11-3) the records FrameLosses reads pair as the engine makes them: one fold per frame access, an end only after a fold.
+    for (const std::string& e : dts::FrameIntakeErrors(r))
+    {
+        std::printf("  conservation: the frame ledger's intake: %s\n", e.c_str());
         ok = false;
     }
     // (A3-133, patch 0072) a bound of the engine's frame records was reached: they take every frame write for read, so no loss can be
@@ -2870,6 +2877,34 @@ void TestHardwareVolatility()
 
     r = run("indexed read-modify-write", indexRmw);
     CHECK(Ledger(r, { Rd(0, 1), Rd(0, 2), Wr(0, 2) }));
+    // A11-5: the ledger's print count and conditional flag, seen set. With patch 0010's policy on, every correct output has a read printed
+    // once and unconditionally, so `Ledger` only ever asked for 1 and false, and a ledger that never counted (mutants H-led-printed,
+    // H-led-cond) passed. Off, upstream prints the index byte at both of its uses and the && read inside the right operand.
+    {
+        auto readAt = [](const DecompileResult& x, uint32_t insn) -> const MemoryAccess* {
+            for (const MemoryAccess& m : x.accesses)
+                if (m.insn == insn && !m.write) return &m;
+            return nullptr;
+        };
+        Sh2Decompiler::SetLoadsNotDuplicatedForTests(false);
+        const DecompileResult twice = d.Decompile(snap, Request(indexRmw.base));
+        const DecompileResult cond = d.Decompile(snap, Request(andRead.base));
+        Sh2Decompiler::SetLoadsNotDuplicatedForTests(true);
+        Print("indexed read-modify-write, patch 0010's policy off", twice);
+        Print("read combined with &&, patch 0010's policy off", cond);
+        const MemoryAccess* index = readAt(twice, indexRmw.base);
+        CHECK(index && index->printed == 2);
+        CHECK(!Ledger(twice, { Rd(0, 1), Rd(0, 2), Wr(0, 2) }));
+        const MemoryAccess* right = readAt(cond, andRead.base + 4);
+        CHECK(right && right->conditionalInPrint && right->printed == 1);
+        CHECK(!Ledger(cond, { Rd(0, 4) }));
+        // ...and on again, the same reads as the ledgers above have them.
+        const MemoryAccess* once = readAt(r, indexRmw.base);
+        CHECK(once && once->printed == 1);
+        const DecompileResult inPlace = d.Decompile(snap, Request(andRead.base));
+        const MemoryAccess* plain = readAt(inPlace, andRead.base + 4);
+        CHECK(plain && !plain->conditionalInPrint);
+    }
 
     r = run("read-only write", roWrite);
     CHECK(Ledger(r, { Wr(0x25D00010u, 2) }));
@@ -4337,6 +4372,7 @@ void TestGameCode()
     int fateCount[7] = { 0, 0, 0, 0, 0, 0, 0 };
     int frameLost = 0;   // A3-124: frame writes that went unread though the code reads them (dts::FrameLosses)
     int frameUnchecked = 0;   // A3-133 (patch 0072): functions whose frame records reached their bound (no loss can be shown)
+    int frameIntake = 0;   // A11-3: frame records that do not pair as the engine makes them (dts::FrameIntakeErrors)
     int accountCount[4] = { 0, 0, 0, 0 };   // Printed, Folded, Removed, Dropped
     int foldedLookup = 0, removedOrdinary = 0;
     int deadPointerReads = 0, deadHardwareReads = 0, deadConstantReads = 0, deadWrites = 0, deadLost = 0;
@@ -4470,6 +4506,8 @@ void TestGameCode()
             if (++frameLost <= 20)
                 std::printf("  the frame write of %u bytes at %08X (frame offset %08X) went unread, and the read at %08X reads it, "
                             "in %08X\n", unsigned(l.size), l.write, l.offset, l.read, entry);
+        for (const std::string& e : dts::FrameIntakeErrors(r))   // (A11-3) the records pair as the engine makes them
+            if (++frameIntake <= 20) std::printf("  the frame ledger's intake: %s, in %08X\n", e.c_str(), entry);
         if (r.frameLedgerCapped && ++frameUnchecked <= 20)
             std::printf("  the frame records of %08X reached their bound: its frame ledger is unchecked\n", entry);
         {
@@ -4583,6 +4621,7 @@ void TestGameCode()
     std::printf("  %d frame writes lost: unread, and read by the code later (A3-124); %d malformed pieces (A3-127); %d functions with "
                 "the frame unchecked (their records reached a bound, A3-133)\n", frameLost, fateCount[int(AccessFate::MalformedPiece)],
                 frameUnchecked);
+    std::printf("  %d frame records that do not pair as the engine makes them (A11-3)\n", frameIntake);
     std::printf("  the reference run's accesses: %d printed, %d folded (%d of them a switch lookup), %d removed (%d of ordinary "
                 "memory, %d said), %d dropped\n", accountCount[int(Account::Printed)], accountCount[int(Account::Folded)],
                 foldedLookup, accountCount[int(Account::Removed)], removedOrdinary, droppedSaid, accountCount[int(Account::Dropped)]);
@@ -4596,6 +4635,11 @@ void TestGameCode()
     CHECK(deadLost == 0);
     CHECK(frameLost == 0);
     CHECK(frameUnchecked == 0);   // (A3-133) fail closed: a frame the ledger cannot check is no pass
+    CHECK(frameIntake == 0);   // (A11-3) the ledger's intake fails closed
+    // (A11-3) A witness the ledger is fed: a corpus of game code has frame writes that go unread (a pop the engine takes for
+    // unaffected, a push of a register nothing reads back), hwram007 3,396. None means the records were lost or misread on the way in,
+    // and FrameLosses, which reads only FrameUnread writes, would pass anything.
+    CHECK(n < 100 || fateCount[int(AccessFate::FrameUnread)] > 0);
     CHECK(fateCount[int(AccessFate::MalformedPiece)] == 0);
     CHECK(noReference == 0);
     CHECK(folded == 0);
@@ -8467,6 +8511,18 @@ void TestCallsAndTraps()
             const Lent lp = lend(pop, true, false);
             CHECK(lp.callee.prototype.known && lp.callee.prototype.effects.spDelta == 4);
             CHECK(lp.caller.prototype.known);
+            // A11-4: the callee's r15 distance as its caller sees it. Pushes of PR, r5 and r4, the callee pops r4's, and the caller
+            // pops the next word into r0: r5's, with the callee's spDelta applied as its extrapop. Without it (mutant H-lend-extrapop)
+            // the caller's model of r15 is 4 bytes low after the call, the pop reads r4's slot, and the text returns param_1. The run
+            // decides: the lent pair is evaluated against it.
+            const CallFixture pop2 = { "callee pops the caller's push, the caller pops the next", base,
+                                       withCallee({ 0x4F22, 0x2F56, 0x2F46, 0xB00B, 0x0009, 0x60F6, 0x4F26, 0x000B, 0x0009 }, { 0x000B, 0x7F04 }) };
+            uint32_t popped = 0;
+            CHECK(CallRunResult(CallSnapshot(pop2, ++serial), pop2, inputs[0], popped) && popped == 0x22222222u);   // r5, the second argument
+            const Lent lp2 = lend(pop2);   // PseudoAgreesWithRun on the caller
+            CHECK(lp2.callee.prototype.known && lp2.callee.prototype.effects.spDelta == 4);
+            CHECK(Has(lp2.caller.Text(), "return param_2;"));
+            CHECK(!Has(lp2.caller.Text(), "return param_1;"));
         }
         // ...and a callee that moves r15 by an amount that depends on an argument cannot say where it leaves
         // it: not lent, and so not its caller either.
@@ -13380,6 +13436,68 @@ void TestA3124Fix()
     }
 }
 
+// A11-3: the frame ledger's intake. FrameLosses reads only the engine's FrameUnread records, so a host that misread them (mutant
+// H-fate-frameunread: fate_frame_unread mapped to FoldedOrdinary) left it nothing to report, and every oracle passed. The witness is the
+// code, not the mapping: a frame word written twice before it is read, whose first write no read can see. Its record must be FrameUnread,
+// the second write's not; the records must pair (dts::FrameIntakeErrors); and FrameLosses, given a copy of the result that lacks the
+// second write's fold (as if the engine had dropped it), must find the first write read.
+void TestFrameLedgerIntake()
+{
+    Sh2Decompiler d(gConfig);
+    const uint32_t base = 0x06009000u;
+    // add #-8,r15 ; mov.l r4,@(4,r15) ; mov.l r5,@(4,r15) ; mov.l @(4,r15),r0 ; rts ; add #8,r15
+    const CallFixture f = { "A11-3 a frame word written twice, then read", base, { 0x7FF8, 0x1F41, 0x1F51, 0x50F1, 0x000B, 0x7F08 } };
+    auto snap = CallSnapshot(f, 131000);
+    const DecompileResult r = d.Decompile(snap, Request(base));
+    Print(f.name.c_str(), r);
+    CHECK(r.status == DecompileStatus::Ok);
+    CHECK(Has(r.Text(), "return param_2;"));
+    auto has = [&](uint32_t insn, AccessFate::Kind k, bool write) {
+        for (const AccessFate& a : r.accessFates)
+            if (a.insn == insn && a.fate == k && a.write == write && a.frame) return true;
+        return false;
+    };
+    CHECK(has(base + 2, AccessFate::FoldedOrdinary, true));
+    CHECK(has(base + 2, AccessFate::FrameUnread, true));    // the first write: overwritten before any read
+    CHECK(has(base + 4, AccessFate::FoldedOrdinary, true));
+    CHECK(!has(base + 4, AccessFate::FrameUnread, true));   // the second: its value is returned
+    CHECK(dts::FrameIntakeErrors(r).empty());
+    CHECK(dts::FrameLosses(r, dts::SnapshotWords(snap)).empty());
+    CHECK(ReferenceOk(d, snap, Request(base), r));
+    // The ledger on the damaged copy: without the second write's fold, the read reads the first write's bytes.
+    DecompileResult damaged = r;
+    damaged.accessFates.erase(std::remove_if(damaged.accessFates.begin(), damaged.accessFates.end(),
+                                             [&](const AccessFate& a) { return a.insn == base + 4 && a.write; }),
+                              damaged.accessFates.end());
+    const std::vector<dts::FrameLoss> lost = dts::FrameLosses(damaged, dts::SnapshotWords(snap));
+    CHECK(lost.size() == 1 && lost[0].write == base + 2 && lost[0].read == base + 6 && lost[0].size == 4);
+    // The intake's own sentences, on records made up as a misreading host would leave them.
+    {
+        auto rec = [](AccessFate::Kind k) {
+            AccessFate a;
+            a.insn = 0x100;
+            a.write = true;
+            a.size = 4;
+            a.fate = k;
+            a.address = 0xFFFFFFFCu;
+            a.frame = true;
+            a.origBlock = 0;
+            a.origOrder = 1;
+            return a;
+        };
+        DecompileResult fake;
+        fake.flowSuccessors = { {} };
+        fake.accessFates = { rec(AccessFate::FoldedOrdinary), rec(AccessFate::FrameUnread) };
+        CHECK(dts::FrameIntakeErrors(fake).empty());
+        fake.accessFates[1].fate = AccessFate::FoldedOrdinary;   // the end read as a fold (H-fate-frameunread)
+        CHECK(dts::FrameIntakeErrors(fake).size() == 1 && Has(dts::FrameIntakeErrors(fake)[0], "folded 2 times"));
+        fake.accessFates = { rec(AccessFate::FrameRemoved) };   // an end with no fold
+        CHECK(dts::FrameIntakeErrors(fake).size() == 1 && Has(dts::FrameIntakeErrors(fake)[0], "no fold"));
+        fake.accessFates = { rec(AccessFate::FoldedOrdinary), rec(AccessFate::FrameUnread), rec(AccessFate::FrameRemoved) };
+        CHECK(dts::FrameIntakeErrors(fake).size() == 1 && Has(dts::FrameIntakeErrors(fake)[0], "ended 2 times"));
+    }
+}
+
 // Area 3 round 15 fix (patch 0072): the review's fixtures (`Docs/Decompiler/tools/a3_round15/`), each with the text it prints now. The head
 // (2598c9b) printed the stale text named with each pin.
 //   A3-130: a STORE through a pointer reached by two or more frame slots: its guards went when the stack was first heritaged
@@ -14016,6 +14134,7 @@ int main(int argc, char** argv)
         RUN(TestArea3Round13Fix());
         RUN(TestArea3Round14Fix());
         RUN(TestA3124Fix());
+        RUN(TestFrameLedgerIntake());
         RUN(TestA3130Fix());
         RUN(TestA3144Fix());
         RUN(TestArea2Round8());

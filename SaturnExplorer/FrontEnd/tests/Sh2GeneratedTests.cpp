@@ -4864,6 +4864,7 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                     " (frame offset " + Hex(l.offset) + ") went unread, and the read at " + Hex(l.read) + " reads it");
         // (A3-133, patch 0072) the engine's frame records reached a bound and took every frame write for read: unchecked is no pass
         if (r.frameLedgerCapped) add("frame-unchecked", "the frame records reached their bound; the frame ledger cannot check this function");
+        for (const std::string& e : dts::FrameIntakeErrors(r)) add("frame-intake", e);   // (A11-3) the records pair as the engine makes them
         // The canary (A3-34): the function stored fn.canary in a local that a callee overwrote, and no run returned it. A `return` that
         // contains it (as 0x5a, or in decimal) is the local folded across the call, the value from before the callee wrote it.
         if (fn.canary != 0)
@@ -10907,6 +10908,12 @@ int CheckFrame124Ledger(Sh2Decompiler& d, const std::vector<CCase>& cases)
             std::printf("FINDING [frame-unchecked] %s\n  detail: the frame records reached their bound (A3-133)\n  words: %s\n", c.name.c_str(),
                         WordsText(c.words).c_str());
         }
+        for (const std::string& e : dts::FrameIntakeErrors(r))   // (A11-3)
+        {
+            ++lost;
+            std::printf("FINDING [frame-intake] %s\n  detail: %s\n  words: %s\n", c.name.c_str(), e.c_str(), WordsText(c.words).c_str());
+            break;
+        }
         for (const dts::FrameLoss& l : dts::FrameLosses(r, dts::SnapshotWords(snap)))
         {
             ++lost;
@@ -13082,9 +13089,11 @@ void TestRound9Pins(Sh2Decompiler& d)
         CHECK(rep.findings.empty() && count(rep, "proto.withheld") >= 1);
     }
     // The grammar's choices (A3-64): the first grammar-2 seed that draws each chooser, decompiled and checked. A chooser the signature does not hold
-    // is withheld; one it holds, or a constant, is the accepted void (`excluded.choice-held.return-dropped`).
+    // is withheld; one it holds, or a constant, is the accepted void (`excluded.choice-held.return-dropped`). With them `fn.ret_call` (`return g(p);`,
+    // Func::retIsCall, A2-31), which the default 300 seeds do not draw (A11-11): only the A2-50 shrinker's hand-written module stood for it.
     {
-        const char* const kKinds[] = { "choice.by_r0", "choice.by_sr", "choice.by_scratch", "choice.by_param", "choice.by_const", "choice.by_stack" };
+        const char* const kKinds[] = { "choice.by_r0", "choice.by_sr", "choice.by_scratch", "choice.by_param", "choice.by_const", "choice.by_stack",
+                                       "fn.ret_call" };
         for (const char* kind : kKinds)
         {
             long found = -1;

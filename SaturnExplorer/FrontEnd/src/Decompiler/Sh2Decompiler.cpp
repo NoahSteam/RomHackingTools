@@ -48,6 +48,7 @@ std::string Hex8(uint32_t v)
 
 // Tests only: the bound on the passes of one repeating action of the engine (patch 0055), 0 for the engine's own.
 int gActionRepeatLimitForTests = 0;
+bool gLoadsNotDuplicatedForTests = true;
 
 std::unique_ptr<SaturnArchitecture> BuildArchitecture(const std::shared_ptr<const MemorySnapshot>& snapshot,
                                                       uint32_t maxInstructions, std::atomic<bool>* cancel,
@@ -56,6 +57,7 @@ std::unique_ptr<SaturnArchitecture> BuildArchitecture(const std::shared_ptr<cons
     std::unique_ptr<SaturnArchitecture> arch(new SaturnArchitecture(snapshot, &errors));
     arch->Initialise(maxInstructions, cancel);
     if (gActionRepeatLimitForTests > 0) arch->maxActionRepeats = gActionRepeatLimitForTests;
+    if (!gLoadsNotDuplicatedForTests) arch->loadsNotDuplicated = false;
     return arch;
 }
 
@@ -3550,6 +3552,11 @@ void Sh2Decompiler::SetActionRepeatLimitForTests(int limit)
 void Sh2Decompiler::SetLendEffectsForTests(bool lend)
 {
     gLendEffectsForTests = lend;
+}
+
+void Sh2Decompiler::SetLoadsNotDuplicatedForTests(bool on)
+{
+    gLoadsNotDuplicatedForTests = on;
 }
 
 void Sh2Decompiler::SetNoReturnForTests(const std::set<uint32_t>& entries)
