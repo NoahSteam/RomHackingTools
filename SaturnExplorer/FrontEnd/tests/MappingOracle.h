@@ -105,8 +105,8 @@ struct MappingAudit
     int copyNoAddress = 0;     // ...naming no instruction at all: no maker was found (counted)
     int constLines = 0;        // lines `V = <number>;` drawn at one instruction (counted)
     int numberStoreOther = 0;  // ...of a memory variable, drawn at a number instruction beside the stores it names, whose value none of those
-                               // stores stores (A7-28, counted until it is fixed; area 7 round 6)
-    int caseOtherEntry = 0;    // case labels naming another entry of their own switch's table, or no destination of it (A7-29, counted until fixed)
+                               // stores stores (a violation: A7-28, fixed)
+    int caseOtherEntry = 0;    // case labels naming another entry of their own switch's table, or no destination of it (a violation: A7-29, fixed)
     int caseJudged = 0;        // ...the labels judged: a switch of the common `mova ; mov.w/mov.b @(r0,Rm),Rn ; add ; jmp @r0` form
     int constAtJoin = 0;       // ...drawn at a join's first instruction (a target of the function's own branches) that makes no number, or another
                                // one, or makes it into another register than every path into the join sets it in: the engine's collapsed
@@ -147,7 +147,7 @@ struct MappingAudit
     {
         return odd + outside + notInsn + firstAddrWrong + badRange + callWithoutCall + unmarked + misnamed + accessUnmapped + callUnmapped + callGoneUnsaid + roundTrip +
                accessAtBranch + frameStoreMissing + backWrong + copyAtCall + copyAtReturn + copyAtBranch + copyAtOther + storeValueOther + constAtJoin +
-               copyMergeAtBranch;
+               copyMergeAtBranch + numberStoreOther + caseOtherEntry;
     }
 };
 
@@ -701,10 +701,31 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
         // A7-25: the lines that draw an instruction as their own statement, and those that draw it only as a copy materialised there
         // (Token::materialised); the way back answers an own one first, and a line beginning with the instruction is one only when it is
         // not a copy materialised there
+        // A7-30 (a): read from the words, not from the product's flag. A line draws a store or a call as a copy materialised there when its
+        // first address is another instruction that is a store (the line is that store's statement, `iRam0603ad2c = param_1;` at the
+        // store it names, drawn again where the engine materialised the value); a line beginning with the instruction itself, or one
+        // whose first instruction is no store, is the instruction's own statement.
+        const auto isStore = [&](uint32_t x) {
+            uint16_t w = 0;
+            if (!word(x, w)) return false;
+            const sfe::DisassembledInstruction d = sfe::Sh2Decode(x, w);
+            return d.IsValid && ShapeOf(d).store;
+        };
+        const auto isCall = [&](uint32_t x) {
+            uint16_t w = 0;
+            if (!word(x, w)) return false;
+            const sfe::DisassembledInstruction d = sfe::Sh2Decode(x, w);
+            return d.IsValid && ShapeOf(d).call;
+        };
         std::map<uint32_t, std::set<size_t>> ownDrawn, copyDrawn;
         for (size_t li = 0; li < r.lines.size(); ++li)
             for (const Token& t : r.lines[li].tokens)
-                if (t.addr && t.begin < t.end) (t.materialised ? copyDrawn : ownDrawn)[t.addr].insert(li);
+                if (t.addr && t.begin < t.end)
+                {
+                    const uint32_t first = r.lines[li].firstAddr;
+                    const bool copy = first && first != t.addr && isStore(first) && (isStore(t.addr) || isCall(t.addr));
+                    (copy ? copyDrawn : ownDrawn)[t.addr].insert(li);
+                }
         const auto copyOnly = [&](uint32_t at, size_t li) {
             const auto c = copyDrawn.find(at);
             const auto o = ownDrawn.find(at);
@@ -1009,7 +1030,8 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                             if (t.begin < t.end)
                             {
                                 drawnAny = true;
-                                if (mm.call || md.Mnemonic == "rts" || md.Mnemonic == "rte" || !(md.IsBranch || md.HasDelaySlot)) branchOnly = false;
+                                // (A7-30: any instruction that makes nothing -- a branch, a `tst`, a compare, a nop -- not only a branch)
+                                if (mm.call || mm.load || md.Mnemonic == "rts" || md.Mnemonic == "rte" || !WrittenRegisters(md).empty()) branchOnly = false;
                             }
                         }
                     }
@@ -1031,8 +1053,8 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                 if (registerVariable && drawnAny && branchOnly)
                 {
                     ++a.copyMergeAtBranch;
-                    problem("copy-merge", "line " + std::to_string(li) + " '" + text + "' names no store of the variable and is drawn only at the branch " +
-                                              MappingHex(r.lines[li].firstAddr) + " that ends its block, which makes nothing (A7-21)");
+                    problem("copy-merge", "line " + std::to_string(li) + " '" + text + "' names no store of the variable and is drawn only at instructions that make nothing, " +
+                                              MappingHex(r.lines[li].firstAddr) + " first (A7-21, A7-30)");
                     continue;
                 }
                 if (registerVariable && anyAddress && makersOnly)
@@ -1551,7 +1573,7 @@ inline void PrintMappingAudit(const MappingAudit& a, const char* label)
                 "violation), %d naming the instructions that set the register (counted), %d naming nothing (counted)\n",
                 label, a.copyMergeAtBranch, a.copyRegisterMade, a.copyNoAddress);
     std::printf("  mapping (%s): area 7 round 6: %d number lines of a memory variable drawn at a number instruction whose value no store they name "
-                "stores (A7-28, counted); %d of %d case labels judged against their own switch's table name another entry or none (A7-29, counted)\n",
+                "stores (A7-28, a violation); %d of %d case labels judged against their own switch's table name another entry or none (A7-29, a violation)\n",
                 label, a.numberStoreOther, a.caseOtherEntry, a.caseJudged);
     for (const std::string& p : a.problems) std::printf("    %s\n", p.c_str());
 }
