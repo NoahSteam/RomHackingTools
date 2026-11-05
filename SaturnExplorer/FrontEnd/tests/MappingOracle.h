@@ -963,7 +963,8 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
     // a block sets a register to one number, the engine makes the MULTIEQUAL a COPY with the block's address; a line that names that
     // instruction names one that neither makes nor computes its value. As tools/a7_round4/const_at_other.py --join counts them: a line
     // `V = <number>;` with one drawn instruction, a target of the function's own bt/bf/bt/s/bf/s/bra/bsr (the words from the entry to its
-    // highest token), that is no `mov #imm`, literal load, store, call or branch, or is a `mov #imm` or literal load of another number.
+    // highest token), that is no `mov #imm`, literal load, store, call or branch, or is a `mov #imm` or literal load of another number; and
+    // (unlike the script) no register move, which copies the value into the line's register.
     {
         uint32_t highest = 0;
         for (const Line& l : r.lines)
@@ -1032,7 +1033,9 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
             const MemoryShape m = ShapeOf(d);
             const bool control = d.IsBranch || d.IsCall || d.Mnemonic == "rts" || d.Mnemonic == "rte";
             const bool numberInsn = (w >> 12) == 0xE || (w >> 12) == 0x9 || (w >> 12) == 0xD;
-            const bool makes = numberInsn || (d.Mnemonic.compare(0, 3, "mov") == 0 && m.store) || control;
+            // (a register move puts the value in the line's register: `bVar1 = true;` at `mov r10,r9`, r10 holding it, is that move's)
+            const bool move = (w >> 12) == 0x6 && (w & 0xF) == 0x3;
+            const bool makes = numberInsn || (d.Mnemonic.compare(0, 3, "mov") == 0 && m.store) || control || move;
             uint32_t got = 0;
             if (makes && !(numberInsn && made(at, w, got) && got != want)) continue;
             ++a.constAtJoin;

@@ -3331,6 +3331,10 @@ std::vector<Line> LinesFromMarkup(const std::string& packed, const ghidra::Funcd
                 // The instruction's canonical address: the function may be analysed at a mirror,
                 // but navigation and notes are keyed by the canonical one.
                 t.addr = tokenInstruction(op);
+                // A7-24: a case label is the case's entry, the first instruction of the block the engine names it by its first op (the
+                // case's own first instructions, a literal load or a register move, are folded into the ops after them).
+                if (elem == kCaseLabel && op->getParent() && op->getParent()->getStart().getOffset() <= op->getAddr().getOffset())
+                    t.addr = static_cast<uint32_t>(op->getParent()->getStart().getOffset());
                 uint32_t canonical = 0;
                 if (CanonicalAddress(t.addr, canonical)) t.addr = canonical;
                 if (t.kind == TokenKind::FuncName)
@@ -5261,39 +5265,50 @@ bool FlowValueMayBe(const FlowRecord& flow, const ghidra::Funcdata& fd, int blk,
     return false;
 }
 
-// The ops that last wrote storage `vn` before op `pos` of flow block `blk`, one for each path (a call, for a register it may change);
-// false when a path reaches the function's entry without one (an input), writes part of it, or past a bound.
+// The ops that made the value storage `vn` holds before op `pos` of flow block `blk`, one for each path: the op that last wrote it, or,
+// for a copy of a register, the op that made that register's value (a call, for a register it may change). False when a path reaches
+// the function's entry without one (an input), writes part of it, or past a bound.
 bool FlowLastWriters(const FlowRecord& flow, const ghidra::Funcdata& fd, int blk, int pos, const FlowVn& vn, std::vector<const FlowOp*>& out)
 {
-    std::vector<std::pair<int, int>> todo = { { blk, pos } };
-    std::set<int> entered;
+    struct State
+    {
+        int blk;
+        int pos;
+        FlowVn vn;
+    };
+    std::vector<State> todo = { State{ blk, pos, vn } };
+    std::set<std::tuple<int, const ghidra::AddrSpace*, ghidra::uintb, ghidra::int4>> entered;
     int steps = 0;
     while (!todo.empty())
     {
-        const std::pair<int, int> st = todo.back();
+        const State st = todo.back();
         todo.pop_back();
-        if (st.first < 0 || static_cast<size_t>(st.first) >= flow.blockOps.size()) return false;
-        const std::vector<FlowOp>& ops = flow.blockOps[static_cast<size_t>(st.first)];
+        if (st.blk < 0 || static_cast<size_t>(st.blk) >= flow.blockOps.size()) return false;
+        const std::vector<FlowOp>& ops = flow.blockOps[static_cast<size_t>(st.blk)];
         bool done = false;
-        for (int i = std::min(st.second, static_cast<int>(ops.size())) - 1; i >= 0 && !done; --i)
+        for (int i = std::min(st.pos, static_cast<int>(ops.size())) - 1; i >= 0 && !done; --i)
         {
             if (++steps > 4096) return false;
             const FlowOp& op = ops[static_cast<size_t>(i)];
-            const bool call = (op.code == ghidra::CPUI_CALL || op.code == ghidra::CPUI_CALLIND) && !KeptByCall(fd, vn);
-            if (!call && (!op.hasOut || op.out.space != vn.space || op.out.offset >= vn.offset + static_cast<ghidra::uintb>(vn.size) ||
-                          vn.offset >= op.out.offset + static_cast<ghidra::uintb>(op.out.size)))
+            const bool call = (op.code == ghidra::CPUI_CALL || op.code == ghidra::CPUI_CALLIND) && !KeptByCall(fd, st.vn);
+            if (!call && (!op.hasOut || op.out.space != st.vn.space || op.out.offset >= st.vn.offset + static_cast<ghidra::uintb>(st.vn.size) ||
+                          st.vn.offset >= op.out.offset + static_cast<ghidra::uintb>(op.out.size)))
                 continue;
-            if (!call && (op.out.offset > vn.offset || vn.offset + vn.size > op.out.offset + op.out.size)) return false;
-            out.push_back(&op);
             done = true;
+            if (!call && (op.out.offset != st.vn.offset || op.out.size != st.vn.size)) return false;
+            if (!call && op.code == ghidra::CPUI_COPY && !op.in[0].Constant() && op.in[0].size == st.vn.size)
+                todo.push_back(State{ st.blk, i, op.in[0] });   // (a register moved: what made it)
+            else
+                out.push_back(&op);
         }
         if (done) continue;
-        if (st.first == flow.entryBlock) return false;
-        const std::vector<int>& preds = flow.predecessors[static_cast<size_t>(st.first)];
+        if (st.blk == flow.entryBlock) return false;
+        const std::vector<int>& preds = flow.predecessors[static_cast<size_t>(st.blk)];
         if (preds.empty()) return false;
         for (int p : preds)
-            if (entered.insert(p).second && p >= 0 && static_cast<size_t>(p) < flow.blockOps.size())
-                todo.emplace_back(p, static_cast<int>(flow.blockOps[static_cast<size_t>(p)].size()));
+            if (entered.insert(std::make_tuple(p, st.vn.space, st.vn.offset, st.vn.size)).second && p >= 0 &&
+                static_cast<size_t>(p) < flow.blockOps.size())
+                todo.push_back(State{ p, static_cast<int>(flow.blockOps[static_cast<size_t>(p)].size()), st.vn });
     }
     return !out.empty();
 }
@@ -5366,9 +5381,9 @@ std::set<std::pair<size_t, uint32_t>> SharedInstructionLines(const PrintedOperat
 // The same for a number the engine knew a register holds on a path (`xVar3 = 1;` after `cmp/eq #1,r0 ; bf ; mov r0,r12`), put in a copy
 // with the address of the next block. Such a COPY is no op of the flow (its time is later than every flow op's), its instruction does not
 // make the number, and it sets a register (the COPY's output, or the register of the variable a copy the merge made is part of). On each
-// path into it, the instruction that last set the register made the value (FlowLastWriters; a path whose writer sets another number is
-// another path's, and is passed): the line names those, its drawn tokens at the lowest and an empty token at each other, so the line says
-// it is made at several instructions and a click goes to one of them. When there is none (the register is an input, or memory), the
+// path into it, the instruction that last set the register, or made the register it was moved from, made the value (FlowLastWriters; a
+// path whose writer sets another number is another path's, and is passed): the line names those, its drawn tokens at the lowest and an
+// empty token at each other, so the line says it is made at several instructions and a click goes to one of them. When there is none (the register is an input, or memory), the
 // drawn tokens name nothing: never an instruction that does not make the value. A number put in memory is AddFrameStoreTokens'.
 // Returns how many tokens moved.
 int AddJoinConstantTokens(std::vector<Line>& lines, const PrintedOperations& printed, const ghidra::Funcdata& fd, const FlowRecord& flow)
