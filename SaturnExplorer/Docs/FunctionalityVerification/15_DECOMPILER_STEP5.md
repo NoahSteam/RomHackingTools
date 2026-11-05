@@ -16150,3 +16150,17 @@ Added: the Follow rig's `FocusBox` operation (word `focus`; `SE_TRUST_FOLLOW_FOC
 
 ### What was run
 
+| Run | Result |
+|---|---|
+| `SE_TRUST_FOLLOW_FOCUS=1`, Follow PC mixes 8 and 9, hover on, seeds from 900000 | 20,005 + 20,005 operations, 0 failing |
+| the same with `SE_TRUST_FOLLOW_CPU=1` | 20,005 + 20,005 operations, 0 failing |
+| the same with `SE_TRUST_NOHOVER=1` | 20,005 + 20,005 operations, 0 failing |
+| mixes 0 to 7 with `SE_TRUST_HIDDEN_RENAME=1` (no hover), seeds from 900000 | 20,019 / 20,034 / 20,014 / 20,105 / 20,078 / 20,038 / 20,045 operations in mixes 0, 1, 3, 4, 5, 6, 7; mix 2 in two pieces (seeds 900000 and 900300, 10,035 + 10,007 operations; the single 20,000-operation run hit its 1,100 s limit); 0 failing. A8-44's sequence does not occur in them |
+| `ctest -j2 --timeout 900`, all 108 | **108 of 108 passed** (102 + 6 Live; 205 s). One test was added: `TestVolatileCutListNotRewritten` in the panel suite; the trust test and the model suite gained pins (A8-42 block, two Follow scripts, three A8-44 scripts) |
+| the fault suite | **0 of 94 failed** (90 s) |
+
+Two rig corrections came out of the first fresh-seed run with the new `focus` operation (mix 8 and 9 with the CPU knob, seeds 900085 and 900091, then mix 8 seed 900071): the rig's model of the box (`boxShowsShown`) took the panel's sync to happen while the box held the focus, when the sync waits for the focus to go. Both were the rig's, not the panel's (the panel kept the user's refused text, and the user's typed text, while focused); the rig now leaves the box state alone while the box is active and unedited-by-the-panel, and takes the sync when the focus goes. The runs above are after that correction.
+
+### Routed
+
+Nothing. A8-43 (area 9's popup) and A8-44 (area 1's oracle) are fixed here, as asked.
