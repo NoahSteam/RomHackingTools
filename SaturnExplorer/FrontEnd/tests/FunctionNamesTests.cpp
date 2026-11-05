@@ -86,7 +86,11 @@ void SaveAfterLoadPins()
         a.Rename(0x06004200u, "read_pad");
         Check(a.Save(), "A saves");
         const std::string afterA = Slurp(kFile);
+        struct stat s1, s2;
+        ::stat(kFile, &s1);
         Check(b.Save(), "idle B saves");
+        ::stat(kFile, &s2);
+        Check(s1.st_ino == s2.st_ino && s1.st_mtime == s2.st_mtime, "A9-20: an idle instance does not even replace the file");
         Check(Slurp(kFile) == afterA, "A9-20: an instance that changed nothing writes nothing");
         b.Rename(0x06004300u, "wait_vblank");
         Check(b.Save(), "B saves its own rename");
