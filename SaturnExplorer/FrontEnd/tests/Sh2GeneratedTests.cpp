@@ -5379,9 +5379,10 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                     }
         // ---- Area 7: the mapping from the text to the instructions (MappingOracle.h) ----
         {
+            // (the module's words, literal pools too: the oracle reads a literal's word as the game-code run reads the image's, A7-34)
             const dts::MappingAudit audit = dts::AuditMapping(
                 r, [&](uint32_t pc, uint16_t& w) {
-                    if (subject.UnitOf(pc) < 0) return false;
+                    if (pc < kCode || (pc - kCode) / 2 >= subject.words.size()) return false;
                     w = subject.WordAt(pc);
                     return true;
                 }, "", OriginTextUnderTest);
