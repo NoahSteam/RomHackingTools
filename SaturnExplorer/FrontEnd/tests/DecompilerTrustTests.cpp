@@ -1988,15 +1988,20 @@ void RunAutoRefreshPin()
     CHECK(m.Settle());
     m.gate.Close();
     m.regs[0].pc = aEntry + 4;
+    // The panel's part is frame-bound: it asks within 120 frames. The engine's part is not: the worker has to reach the held phase, which takes
+    // real time and, on a loaded machine, more than the 120 frames take (A8-35: this pin failed once in a full ctest run, alone it passed).
+    // So the frames are counted until the panel has asked, and the engine is then waited for by the clock.
+    const uint64_t asked = m.panel.Submissions();
     bool held = false;
-    for (int i = 0; i < 120 && !held; ++i)
+    for (int i = 0; i < 120 && m.panel.Submissions() == asked; ++i)
     {
         ++m.frame;
         ++m.serial;
         m.Idle(1);
-        held = m.runner.Busy() && m.gate.Held() > 0;
-        if (!held && m.runner.Busy()) std::this_thread::yield();
     }
+    const bool asksByItself = m.panel.Submissions() > asked;
+    if (asksByItself) held = WaitHeldOrBusy(m);
+    held = held && asksByItself;
     MiniCheck("auto-refresh asks by itself within 120 frames once the PC has left the function", held);
     if (!held)
     {
@@ -2017,7 +2022,8 @@ void RunAutoRefreshPin()
     t.entryDoubt = trust::RtsGuess();
     MiniVerify(m, "auto-refresh in flight: [stale: frame N] and decompiling...", t, "func_");
     m.gate.Open();
-    for (int i = 0; i < 400 && (m.runner.Busy() || m.panel.Pending()); ++i)
+    // By the clock, as the wait above (A8-35): 400 frames pass in less time than a loaded machine needs for the answer.
+    for (const auto t0 = std::chrono::steady_clock::now(); (m.runner.Busy() || m.panel.Pending()) && dts::MsSince(t0) < dts::kWaitMs;)
     {
         ++m.frame;
         ++m.serial;
@@ -2646,6 +2652,242 @@ void RunProbe6()
         std::printf("   window: %s\n", drawnText().c_str());
         const DecompileResult* s = m.panel.Shown();
         if (s) std::printf("   status %d, error: %s\n", static_cast<int>(s->status), s->error.c_str());
+    }
+}
+
+// Round 7 probe (SE_TRUST_PROBE7): hand-built sequences against A8-33, A8-36 to A8-39: pins across snapshots, starts and names appearing and
+// going, Follow PC on and off, Enter on an edited and on an untouched box, Stop and ask again, a typed entry the finder then finds as well.
+void RunProbe7()
+{
+    const uint32_t cEntry = Defs()[FnC].entry, aEntry = Defs()[FnA].entry;
+    auto drawnText = [] {
+        std::string all;
+        for (const drawn::Run& run : drawn::WindowRuns(DecompilerPanel::kTitle)) all += run.text + " ";
+        return Norm(all);
+    };
+    auto show = [&](MiniRig& m, const char* what) {
+        m.Frame();
+        std::string u;
+        for (const std::string& x : m.panel.Uncertainties()) u += "[" + x + "]";
+        const std::string w = drawnText();
+        const size_t at = w.find(Norm("(entry from"));
+        const DecompileResult* s = m.panel.Shown();
+        std::printf("PROBE7 %s\n   label: %s\n   uncertainties: %s\n   box: %s, follow %d, wanted %08X, shown %s, stale %d, pending %d\n"
+                    "   tooltip: %s\n   error: %s\n   copy: %s\n",
+                    what, at == std::string::npos ? "(none)" : w.substr(at, 40).c_str(), u.c_str(), m.panel.EntryText(), m.panel.FollowPc() ? 1 : 0,
+                    m.panel.WantedEntry(), s ? Hex(s->requestedEntry).c_str() : "nothing", m.panel.ShownStale() ? 1 : 0, m.panel.Pending() ? 1 : 0,
+                    m.panel.StaleTooltip().c_str(), m.panel.EntryError().c_str(), m.panel.CopyMarks().c_str());
+    };
+    auto enterUntouched = [](MiniRig& m) {
+        ImVec2 a, b;
+        if (!m.panel.ItemRect("entry", a, b)) return false;
+        const ImVec2 c((a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f);
+        for (int i = 0; i < 3; ++i) m.Frame(c, false);
+        m.Frame(c, true);
+        m.Frame(c, false);
+        m.Idle(2);
+        ImGui::GetIO().AddKeyEvent(ImGuiKey_Enter, true);
+        m.Frame(ImVec2(1270, 710), false);
+        ImGui::GetIO().AddKeyEvent(ImGuiKey_Enter, false);
+        m.Frame(ImVec2(1270, 710), false);
+        return true;
+    };
+    auto settle = [&](MiniRig& m) {
+        m.Idle(3);
+        CHECK(m.Settle());
+    };
+    auto live = [&](MiniRig& m, uint32_t pc) {
+        m.kind = DecompViewKind::LivePaused;
+        m.regs[0].pc = pc;
+        m.haveRegs[0] = true;
+    };
+    {
+        MiniRig m;
+        live(m, cEntry + 4);
+        settle(m);
+        CHECK(ClickMini(m, "follow"));
+        settle(m);
+        show(m, "1: C pinned");
+        m.regs[0].pc = aEntry + 4;
+        ++m.frame;
+        settle(m);
+        show(m, "1: the PC moved into A, next frame: the pin still C");
+        m.bounds.SetEntry(cEntry);
+        settle(m);
+        show(m, "1: a start set at C");
+        CHECK(enterUntouched(m));
+        settle(m);
+        show(m, "1: Enter on the untouched box (the start set)");
+        CHECK(ClickMini(m, "follow"));
+        settle(m);
+        show(m, "1: Follow PC on (PC in A)");
+    }
+    {
+        MiniRig m;
+        live(m, cEntry + 4);
+        settle(m);
+        CHECK(ClickMini(m, "follow"));
+        settle(m);
+        m.bounds.SetEntry(cEntry + 2);
+        settle(m);
+        show(m, "2: pinned C, a start set at C+2 (inside C, below the PC)");
+        m.bounds.SetEntry(cEntry);
+        settle(m);
+        show(m, "2: ...and one at C as well");
+    }
+    {
+        MiniRig m;
+        live(m, cEntry + 4);
+        settle(m);
+        TypeEntry(m, Hex(cEntry));
+        settle(m);
+        show(m, "3: C typed with Follow PC on, the finder finds the same C");
+        CHECK(ClickMini(m, "follow"));
+        settle(m);
+        show(m, "3: Follow PC (it was turned off by the typed entry) on again");
+        CHECK(ClickMini(m, "follow"));
+        settle(m);
+        show(m, "3: off again, a pin");
+        ++m.frame;
+        settle(m);
+        show(m, "3: next frame");
+        CHECK(enterUntouched(m));
+        settle(m);
+        show(m, "3: Enter on the untouched box");
+    }
+    {
+        MiniRig m;
+        live(m, cEntry + 4);
+        settle(m);
+        m.gate.Close();
+        ++m.frame;
+        m.regs[0].pc = aEntry + 4;
+        m.Idle(3);
+        CHECK(WaitHeldOrBusy(m));
+        CHECK(ClickMini(m, "stop"));
+        m.gate.Open();
+        settle(m);
+        show(m, "4: Follow PC, PC moved to A, the request stopped (C on screen)");
+        CHECK(enterUntouched(m));
+        settle(m);
+        show(m, "4: Enter on the untouched box (shows C)");
+    }
+    {
+        MiniRig m;
+        live(m, cEntry + 4);
+        settle(m);
+        CHECK(ClickMini(m, "follow"));
+        settle(m);
+        TypeEntry(m, Hex(cEntry));
+        settle(m);
+        show(m, "5: pinned C, then C typed and Entered");
+        m.names[cEntry] = "foo";
+        ++m.namesGen;
+        settle(m);
+        show(m, "5: C named");
+        m.names.erase(cEntry);
+        ++m.namesGen;
+        settle(m);
+        show(m, "5: name removed");
+    }
+    {
+        MiniRig m;
+        m.kind = DecompViewKind::LivePaused;
+        m.haveRegs[0] = false;
+        m.panel.ShowFunctionContaining(0, aEntry + 2);
+        settle(m);
+        show(m, "6: Decompile A+2");
+        CHECK(enterUntouched(m));
+        settle(m);
+        show(m, "6: Enter on the untouched box");
+        m.names[aEntry] = "bar";
+        ++m.namesGen;
+        settle(m);
+        show(m, "6: A named");
+        m.names.erase(aEntry);
+        ++m.namesGen;
+        m.bounds.SetEntry(aEntry);
+        settle(m);
+        show(m, "6: name gone, start at A");
+    }
+    {
+        MiniRig m;
+        live(m, 0x00001FF0u);
+        settle(m);
+        show(m, "7: PC in the BIOS, nothing shown");
+        CHECK(ClickMini(m, "follow"));
+        settle(m);
+        show(m, "7: Follow PC off (nothing to pin)");
+        m.regs[0].pc = cEntry + 4;
+        ++m.frame;
+        settle(m);
+        show(m, "7: PC in C now, frame 2");
+        CHECK(enterUntouched(m));
+        settle(m);
+        show(m, "7: Enter on the empty box");
+        CHECK(ClickMini(m, "follow"));
+        settle(m);
+        show(m, "7: Follow PC on");
+    }
+    {
+        MiniRig m;
+        live(m, cEntry + 4);
+        m.regs[1].pc = aEntry + 4;
+        m.haveRegs[1] = true;
+        settle(m);
+        CHECK(ClickMini(m, "follow"));
+        settle(m);
+        m.panel.SetCpu(1);
+        settle(m);
+        show(m, "8: pinned C, CPU 1 chosen (PC in A)");
+        CHECK(ClickMini(m, "follow"));
+        settle(m);
+        show(m, "8: Follow PC on, CPU 1");
+        CHECK(ClickMini(m, "follow"));
+        settle(m);
+        show(m, "8: Follow PC off, CPU 1: pin A");
+    }
+    {
+        // 9: the box has the focus (clicked, not edited) while the output moves on; then Enter.
+        MiniRig m;
+        live(m, cEntry + 4);
+        settle(m);
+        show(m, "9: Follow PC on C+4");
+        ImVec2 a, b;
+        CHECK(m.panel.ItemRect("entry", a, b));
+        const ImVec2 c((a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f);
+        for (int i = 0; i < 3; ++i) m.Frame(c, false);
+        m.Frame(c, true);
+        m.Frame(c, false);
+        m.Idle(2);
+        m.regs[0].pc = aEntry + 4;
+        ++m.frame;
+        m.Idle(6);
+        CHECK(m.Settle());
+        show(m, "9: the box focused, the PC moved to A, A shown, the box still C");
+        ImGui::GetIO().AddKeyEvent(ImGuiKey_Enter, true);
+        m.Frame(ImVec2(1270, 710), false);
+        ImGui::GetIO().AddKeyEvent(ImGuiKey_Enter, false);
+        m.Frame(ImVec2(1270, 710), false);
+        settle(m);
+        show(m, "9: Enter in the box (text the panel wrote, C)");
+    }
+    {
+        // 10: the long saved volatile list the popup cannot hold: what Apply on its text does.
+        MiniRig m;
+        std::string list = "06002000, ";   // 10 + 107 * 19 + 4 = 2047: the buffer ends after "0600" of the 108th range
+        while (list.size() < 2300) list += "06001000-06001003, ";
+        list += "06002000";
+        m.panel.KeepUnparsedVolatileMemory(list);
+        std::printf("PROBE7 10: saved list of %zu chars, not in force %d\n   problem: %s\n", list.size(), m.panel.VolatileNotInForce() ? 1 : 0,
+                    m.panel.UnparsedVolatileProblem().c_str());
+        char edit[2048];
+        std::snprintf(edit, sizeof edit, "%s", m.panel.VolatileMemory().c_str());   // what the popup puts in its buffer
+        std::string why;
+        const bool ok = m.panel.SetVolatileMemory(edit, &why);
+        std::printf("   Apply on the buffer (%zu chars, ends '%s'): %d, in force %d, now %zu chars\n", std::strlen(edit),
+                    std::strlen(edit) > 12 ? edit + std::strlen(edit) - 12 : edit, ok ? 1 : 0, m.panel.VolatileNotInForce() ? 0 : 1,
+                    m.panel.VolatileMemory().size());
     }
 }
 
@@ -4003,6 +4245,11 @@ int main(int argc, char** argv)
         if (std::getenv("SE_TRUST_PROBE6"))
         {
             RunProbe6();
+            return 0;
+        }
+        if (std::getenv("SE_TRUST_PROBE7"))
+        {
+            RunProbe7();
             return 0;
         }
         if (seedEnv && *seedEnv)
