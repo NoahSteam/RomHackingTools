@@ -16450,3 +16450,43 @@ A7-31 (the shrunk words and two `add` variants: the copy's instructions are the 
 ### Routed
 
 Nothing outside area 7. A7-37's missing slot mark is in the engine's op for a narrowed store in a slot (patch 0075's marking); the fix belongs with area 7's fixer, who owns `isFromDelaySlot`'s use.
+
+## Area 8 fixer (A8-46, A8-50, A8-51)
+
+Branch `review/8-p3-fix` from master `511072cf`. Product code: `DecompilerPanel.cpp` and `.h`. Tests: `DecompilerTrustTests.cpp` (`RunEntryOriginPins`). Docs: `DECOMPILER_GUIDE.md` (Entry row), `Codebase/Systems/Decompiler.md`, the ledger.
+
+### The fixes
+
+* **A8-46** (an edit taken back before Enter). The panel keeps the text it last left in the box (`mBoxCleanText`, set when the sync writes the box and when an Enter is accepted) and whether it was the shown answer's text. When `IsItemEdited` fires and the text is that text again, the box counts as untouched (`mBoxTargetValid`, `mBoxShowsShown` restored). Two guards, both found by the existing pins: (1) the text must not have grown into it from a part of it (`mBoxPrevText`, the text at the end of the last Draw, is a proper prefix of it): that is the user typing the entry out, and A8-30 and A8-36 require that to stay "user-set entry"; (2) a shown-answer text only counts while it still names the output shown, so probe E4 (the box kept C while A is shown, '1' typed and deleted) stays the user's entry.
+* **A8-50** (a refusal's text overwritten by a pending sync). The refusal branch of Enter now clears `mSyncEntryBox`, as the accepted branch does. `SetTarget` already sets it again when the refusal ends, so the refused text goes with the refusal (A8-20) and not before.
+* **A8-51** (the box's tooltip). When the box's Enter would ask a function other than the address in the box (`EnterTarget` gives another address than the text), the tooltip reads "The box still holds an older address than the function shown. Enter asks for the function shown again (type an address to decompile another)." Otherwise the old text.
+
+### Pins (default run) and mutations
+
+New pins: A8-46 for Escape, Backspace and Ctrl+Z (label "rts scan, 60%", the Entry line, a pin of C, held to the model) and the E4 control; A8-50 with and without the focus at the install (text `zz` kept, the refusal's tooltip true of the box); A8-51 (the box hovered in A8-42's state, the tooltip drawn whole, Enter asks A). Each fix was reverted in turn, the trust test built and run, then restored (`git status` clean of product changes afterwards):
+
+| Mutation | Result |
+|---|---|
+| A8-46: the restore disabled | fails: "Enter after an edit taken back ..." and "held to the model", in all three ways |
+| A8-50: the refusal branch no longer clears the sync | fails: "the box that had the focus at the install keeps the refused text" (the unfocused control passes) |
+| A8-51: the tooltip condition disabled | fails: "the tooltip says Enter asks the function shown" |
+
+### Open rows re-judged
+
+* **A8-32**: accepted (P3). The amber line is the live verdict beside the label and never over-sells; only a cleared or rebuilt call stack shows the gap, and closing it means asking again on every evidence change.
+* **A8-40**: accepted (P3). What is left is the call stack in a generated sequence; the mini pins hold it (A8-37 G) and a call stack in the Follow rig is not small. The two doors named in round 8 (an edit taken back, a refusal at a focused install) are now pinned by hand-built sequences.
+
+### Runs
+
+Seeds from 1,200,000 (Follow rig, `SE_TRUST_FOLLOW_FOCUS=1`), each run alone under `ulimit -v 3500000`:
+
+| Run | Result |
+|---|---|
+| mix 8 and mix 9, hover on, from 1,200,000, 60,000 steps | 60,021 + 60,021 operations (1,355 sequences each), 0 failing |
+| mix 8 and 9 with `SE_TRUST_FOLLOW_CPU=1`, from 1,300,000 | 60,013 + 60,013 operations (1,349 sequences each), 0 failing |
+| mix 8 and 9, `SE_TRUST_NOHOVER=1`, from 1,400,000 | 40,004 + 40,004 operations (908 sequences each), 0 failing |
+| the model run, `SE_MODEL_SEEDS=1200` (the model has no start seed: seeds 1 to 1200) | 1,200 seeds, 0 failed |
+
+The Follow rig has no edit-then-revert operation and its `badentry` still takes the box as the panel's text, so the generated runs do not reach A8-46 or A8-50; the pins do.
+
+`ctest -j2 --timeout 900`: **108 of 108 passed** (102 + 6 Live; 190 s). No test was added to ctest; the default trust run gained the pins above. The fault suite: 0 of 94 jobs failed.
