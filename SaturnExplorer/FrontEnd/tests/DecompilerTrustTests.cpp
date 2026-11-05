@@ -1280,6 +1280,8 @@ struct MiniRig
     se_sh2_regs regs[2] = {};
     bool haveRegs[2] = { false, false };
     std::vector<int> placed;
+    std::set<uint32_t> stackEntries;   // round 5 probe: the call stack's targets, and its revision
+    uint64_t stackRevision = 0;
 
     MiniRig() : runner(gConfig), h([this] { Ui(); })
     {
@@ -1313,6 +1315,8 @@ struct MiniRig
         in.names = &names;
         in.bounds = &bounds;
         in.comments = &comments;
+        in.callSites = [this](const SnapshotKey&, std::set<uint32_t>& out) { out.insert(stackEntries.begin(), stackEntries.end()); };
+        in.callSitesRevision = stackRevision;
         panel.Update(v, runner, in, true);
         DecompilerPanel::Request r;
         ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
@@ -2081,6 +2085,61 @@ void RunPinnedEntryPins()
         MiniCheck("A8-30: Follow PC off with the PC where no function is pins the output shown, C", !m.panel.FollowPc() && m.panel.WantedEntry() == cEntry);
         doubted(m, "A8-30: ...that entry was the finder's guess too: the figure and the Entry line stay");
         model(m, "A8-30: ...and the model holds it to the finder's doubt");
+    }
+}
+
+// Round 5 probe (SE_TRUST_PROBE5): the call stack changes under an answer that is not asked again.
+void RunProbe5()
+{
+    const uint32_t cEntry = Defs()[FnC].entry;
+    auto drawnText = [] {
+        std::string all;
+        for (const drawn::Run& run : drawn::WindowRuns(DecompilerPanel::kTitle)) all += run.text + " ";
+        return Norm(all);
+    };
+    auto show = [&](MiniRig& m, const char* what) {
+        m.Frame();
+        std::string u;
+        for (const std::string& x : m.panel.Uncertainties()) u += "[" + x + "]";
+        const std::string w = drawnText();
+        const size_t at = w.find(Norm("(entry from"));
+        std::printf("PROBE5 %s\n   label: %s\n   uncertainties: %s\n   copy: %s\n", what,
+                    at == std::string::npos ? "(none)" : w.substr(at, 40).c_str(), u.c_str(), m.panel.CopyMarks().c_str());
+    };
+    {
+        MiniRig m;
+        m.kind = DecompViewKind::LivePaused;
+        m.regs[0].pc = cEntry + 4;
+        m.haveRegs[0] = true;
+        m.Idle(3);
+        CHECK(m.Settle());
+        show(m, "A: Follow PC C+4, rts scan");
+        m.stackEntries.insert(cEntry);
+        ++m.stackRevision;
+        m.Idle(3);
+        CHECK(m.Settle());
+        show(m, "A: the call stack now confirms C (revision bumped)");
+        m.stackEntries.clear();
+        ++m.stackRevision;
+        m.Idle(3);
+        CHECK(m.Settle());
+        show(m, "A: the call stack gone again");
+    }
+    {
+        MiniRig m;
+        m.kind = DecompViewKind::LivePaused;
+        m.stackEntries.insert(cEntry);
+        ++m.stackRevision;
+        m.regs[0].pc = cEntry + 4;
+        m.haveRegs[0] = true;
+        m.Idle(3);
+        CHECK(m.Settle());
+        show(m, "B: stack confirms C first");
+        m.stackEntries.clear();
+        ++m.stackRevision;
+        m.Idle(3);
+        CHECK(m.Settle());
+        show(m, "B: stack gone: C is a guess again, the label?");
     }
 }
 
@@ -3117,6 +3176,11 @@ int main(int argc, char** argv)
     try
     {
         Oracle oracle;
+        if (std::getenv("SE_TRUST_PROBE5"))
+        {
+            RunProbe5();
+            return 0;
+        }
         if (seedEnv && *seedEnv)
         {
             const int mix = mixEnv && *mixEnv ? std::atoi(mixEnv) : 0;
