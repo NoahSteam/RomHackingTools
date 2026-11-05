@@ -612,7 +612,9 @@ void DecompilerPanel::Resolve(const DecompilerInputs& inputs)
         mEntryOk = true;
         mEntry = mTarget.address;   // as typed: a mirror is where the code runs, which mova sees
         mEntrySource = mTarget.source;
-        mEntryConfidence = 100;
+        // An entry the finder found and the user pinned is still the finder's guess (A8-30): its figure and doubt come with the target.
+        mEntryConfidence = mTarget.confidence;
+        mEntryDoubt = mTarget.doubt;
         return;
     }
 
@@ -828,6 +830,9 @@ void DecompilerPanel::Install(DecompileResult& result, const ViewId& snapId, uin
         std::snprintf(b, sizeof b, "%s, %d%%", EntrySourceName(mEntrySource), mEntryConfidence);
         mShownEntrySource = b;
     }
+    mShownEntryFrom = mEntrySource;
+    mShownEntryConfidence = mEntryConfidence;
+    mShownEntryDoubt = mEntryDoubt;
     for (uint32_t c : mShown.callees)
     {
         auto it = mCallees.find(c);
@@ -892,11 +897,13 @@ bool DecompilerPanel::Accept(DecompileResult& r, uint64_t runnerEpoch)
         // The answer to the outstanding request came back and is not wanted: nothing else will. And
         // the question it answered is not settled: an answer the panel threw away (it was closed
         // while the view moved) must not leave the question recorded as asked, or the inputs coming
-        // back to it ask nothing and the old output stays (A1-4). A question the user Stopped stays
-        // asked: the Stop is the user's answer to it.
+        // back to it ask nothing and the old output stays (A1-4). Nor one the user Stopped: the Stop
+        // came back for a question that is no longer the one on screen (it changed, or found no
+        // function: A8-9), so it answers nothing on screen and is not in force; coming back to the
+        // question asks it (A8-29 (c)).
         if (mPending.active && r.slot == kSlot && r.generation == mPending.generation)
         {
-            if (!mPending.cancelled) mAsked = Question();
+            mAsked = Question();
             mPending.active = false;
         }
         return false;
@@ -1255,10 +1262,25 @@ void DecompilerPanel::DrawHeader(const DecompilerView& view, const DecompilerRun
             t.kind = TargetKind::FollowPc;
         else
         {
-            // Pin the function shown, rather than forgetting what was asked.
+            // Pin the function found, or else the one shown, rather than forgetting what was asked. Pinning is not the user's entry: an
+            // entry the finder guessed keeps its source, its figure and its doubt (A8-30; the guide: an rts-scan entry always shows it).
             t.kind = TargetKind::Entry;
-            t.address = mEntryOk ? mEntry : (mShownValid ? mShown.requestedEntry : 0);
-            t.source = mEntryOk ? mEntrySource : EntrySource::User;
+            if (mEntryOk)
+            {
+                t.address = mEntry;
+                t.source = mEntrySource;
+                t.confidence = mEntryConfidence;
+                t.doubt = mEntryDoubt;
+            }
+            else if (mShownValid && mShownEntryFrom != EntrySource::None)
+            {
+                t.address = mShown.requestedEntry;
+                t.source = mShownEntryFrom;
+                t.confidence = mShownEntryConfidence;
+                t.doubt = mShownEntryDoubt;
+            }
+            else
+                t.address = mShownValid ? mShown.requestedEntry : 0;
         }
         SetTarget(t);
         // A click is a request, as Enter and Decompile are (A8-18, A8-27): after a Stop the new target may resolve to the very

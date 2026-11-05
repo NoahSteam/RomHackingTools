@@ -265,6 +265,10 @@ private:
         TargetKind kind = TargetKind::FollowPc;
         uint32_t address = 0;   // Containing: the address asked about; Entry: the entry itself
         decomp::EntrySource source = decomp::EntrySource::User;   // Entry: why it is an entry
+        // Entry: how sure the finder was, and its doubt, for an entry it found and the user pinned (Follow PC turned off). Pinning it does not
+        // confirm it: the figure and the "Entry: ..." line stay (A8-30). Only an entry the user gives has 100 and no doubt.
+        int confidence = 100;
+        std::string doubt;
     };
 
     // The view's identity: what a snapshot must match to show what is on screen.
@@ -323,7 +327,14 @@ private:
 
     void SetTarget(const Target& target);
     // A Stop belongs to the question it stopped. A question that has since found no function, or another target, is not stopped (A8-10).
-    void ForgetStop() { mStopped = false; mNote.clear(); }
+    // The Stop is also what keeps the stopped question in mAsked: once it is over, that question is no longer asked, and coming back to it
+    // asks it (A8-29). The Stop is in force once acknowledged (mStopped), or while the cancel is on its way.
+    void ForgetStop()
+    {
+        if (mStopped || (mPending.active && mPending.cancelled)) mAsked = Question();
+        mStopped = false;
+        mNote.clear();
+    }
     void Resolve(const DecompilerInputs& inputs);
     // The finder's hints for the snapshot held (the user's starts, names, call stack, callees found).
     decomp::FinderHints FinderHintsFor(const DecompilerInputs& inputs) const;
@@ -454,6 +465,8 @@ private:
     uint64_t mVolatileHash = 0;
     char mVolatileEdit[2048] = {};                               // the popup's edit box
     std::string mVolatileError;
+    // The question asked last: its answer or failure is shown, or it is outstanding, or the user's Stop of it is in force. A question
+    // stopped stays here only while that Stop is (ForgetStop; a cancel acknowledged when it is no longer the question on screen, Accept).
     Question mAsked;
     Outstanding mPending;
     std::string mNote;               // "cancelled", ... (the last request's fate when not installed)
@@ -468,6 +481,11 @@ private:
     uint64_t mShownVolatileHash = 0;   // the volatile list the shown answer was asked under
     uint64_t mShownFunctions = 0;      // ...and the function set (names and starts), so a change after a Stop still shows as stale
     std::string mShownEntrySource;
+    // ...and what it is made from, for the entry the shown answer was asked at: Follow PC turned off when the question has no function pins
+    // that entry, and it keeps the finder's figure and doubt (A8-30).
+    decomp::EntrySource mShownEntryFrom = decomp::EntrySource::None;
+    int mShownEntryConfidence = 0;
+    std::string mShownEntryDoubt;
     float mShownWidth = 0.0f;        // widest line, for the horizontal scroll range
     int mSelectedLine = -1;
     // A7-5: "Show in Pseudocode". The instruction asked for (canonical once applied) waits here for its function to be shown; the line to bring into view
