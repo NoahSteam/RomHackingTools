@@ -3343,6 +3343,24 @@ std::vector<Line> LinesFromMarkup(const std::string& packed, const ghidra::Funcd
                     // (a delayed branch's slot is not in the cover, its ops being at the branch's address: the run goes on past it)
                     const auto covered = [&](ghidra::uintb x) { return bb->contains(ghidra::Address(op->getAddr().getSpace(), x)); };
                     for (int k = 0; k < 4096 && a >= 4 && (covered(a - 2) || covered(a - 4)); ++k) a -= covered(a - 2) ? 2 : 4;
+                    // ...and when a jump table's destination is in the block, that destination: the case's first instructions may all be
+                    // folded, the op then in a later run (`case 4:` of `bra L ; mov #1,r0` to a shared `L:`). The one at or before the op,
+                    // nearest it; else the lowest.
+                    ghidra::uintb best = 0, lowest = 0;
+                    bool haveBest = false, haveLowest = false;
+                    for (ghidra::int4 j = 0; j < fd.numJumpTables(); ++j)
+                    {
+                        const ghidra::JumpTable* jt = const_cast<ghidra::Funcdata&>(fd).getJumpTable(j);
+                        for (ghidra::int4 e = 0; e < jt->numEntries(); ++e)
+                        {
+                            const ghidra::Address dest = jt->getAddressByIndex(e);
+                            if (dest.getSpace() != op->getAddr().getSpace() || !bb->contains(dest)) continue;
+                            const ghidra::uintb x = dest.getOffset();
+                            if (!haveLowest || x < lowest) lowest = x, haveLowest = true;
+                            if (x <= op->getAddr().getOffset() && (!haveBest || x > best)) best = x, haveBest = true;
+                        }
+                    }
+                    if (haveBest || haveLowest) a = haveBest ? best : lowest;
                     t.addr = static_cast<uint32_t>(a);
                 }
                 uint32_t canonical = 0;
