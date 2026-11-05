@@ -5129,9 +5129,10 @@ bool FlowPointer(const FlowRecord& flow, const ghidra::Funcdata& fd, int blk, in
 // made: a number (a `mov #imm`, a literal's word), an op that computes it, a read of memory, a call that changes the register, or the
 // function's input. A path ends at the statement's value when that is one of `want`'s numbers, inputs or memory, or an instruction on the
 // way is one of `want`'s. It ends at another value when it is another number, or, for a statement that shows no number, another input,
-// op or memory. Anything else is not known: for a statement that shows a number, the engine may have computed it from an input or op
-// the flow cannot (`param_4` where a test said it is 0, arithmetic of literals it folded). False only when every path ends at another
-// value: the store wrote, on every path, something the statement does not show.
+// op or memory. Anything else is not known: a call between (it may change the register, or keep it, as the callee's prototype says), a
+// read of memory the flow cannot place, and, for a statement that shows a number, an input or op the engine may have computed it from
+// (`param_4` where a test said it is 0, arithmetic of literals it folded). False only when every path ends at another value: the store
+// wrote, on every path, something the statement does not show.
 bool FlowValueMayBe(const FlowRecord& flow, const ghidra::Funcdata& fd, int blk, int pos, FlowVn vn, const ValueSet& want)
 {
     struct State
@@ -5189,11 +5190,9 @@ bool FlowValueMayBe(const FlowRecord& flow, const ghidra::Funcdata& fd, int blk,
         {
             if (++steps > 4096) return true;
             const FlowOp& op = ops[static_cast<size_t>(i)];
-            // (a call that may change the register or the memory: the statement's value is the call's when the call is in it; else the
-            // engine kept the value across the call, as the callee's prototype says, and the walk goes past it)
-            if ((op.code == ghidra::CPUI_CALL || op.code == ghidra::CPUI_CALLIND) && (memory(st.vn) || !KeptByCall(fd, st.vn)) &&
-                want.insns.count(op.insn))
-                return true;
+            // (a call that may change the register or the memory: the call's value, or the one before it when the callee keeps it, as its
+            // prototype may say: not known, unless the call is in the statement's value)
+            if ((op.code == ghidra::CPUI_CALL || op.code == ghidra::CPUI_CALLIND) && (memory(st.vn) || !KeptByCall(fd, st.vn))) return true;
             // (memory: the store of the flow that wrote it, when its pointer is known. One whose pointer the flow does not show is passed:
             // the engine's value says whether it wrote there, and the statement's value is what is looked for)
             if (memory(st.vn) && op.code == ghidra::CPUI_STORE && op.numIn > 2)
