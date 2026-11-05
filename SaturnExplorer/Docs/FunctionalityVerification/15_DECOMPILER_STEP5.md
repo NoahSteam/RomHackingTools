@@ -16127,3 +16127,26 @@ The output of the failures was kept (`MODEL FAILURE, seed 760054, after operatio
 * **Area 9**: A8-43 (the Volatile popup cuts a too-long saved list; Apply on it replaces the saved list with a parsed prefix). The BIOS and Volatile claims are otherwise true.
 * **Area 1**: A8-44 (the model keeps a Stop after the view leaves the stopped question and comes back; a seven-operation script reproduces it).
 * Area 4: nothing.
+
+## Area 8 fixer (A8-42 to A8-45)
+
+Branch `review/8-a842-fix` from master `d2a0f9b3`. Round 7 was clean; its four P3 rows are fixed here, so that area 8 can start round 8 with no open P3 of its own. Changed: product code (`DecompilerPanel.cpp` / `.h`), the trust tests, the panel tests, the model oracle, the guide and the ledger.
+
+### A8-42 (Enter in a focused, unedited entry box)
+
+`EnterTarget` now treats text the panel wrote and the user did not edit (`mBoxShowsShown`, cleared by any edit) as standing for the output shown, whatever the text says: Enter asks the shown output's target with its origin (a pin stays the finder's guess), and the box is rewritten with the address asked, so the next Enter does not read the old text as typed. `EnterAsksTarget` (the tooltips) uses the same function, so they agree. Pins: the trust test's A8-42 block on the small rig (the box clicked, the PC moved to A, Enter: A asked, box A, no "user-set entry"), and the Follow rig script `pcc; focus; pca; enter` in the default run. Mutation check: with the new branch in `EnterTarget` replaced by `if (false)`, both fail (the typed C is asked, the Follow rig reports the wrong target). Restored. `RunProbe7` case 9 now prints the fixed behaviour and checks it.
+
+### A8-43 (Volatile popup, area 9's)
+
+The popup's buffer is still 2,048 characters, but opening it now goes through `BeginVolatileEdit`, which remembers the cut text when the saved list is longer; `ApplyVolatileEdit` refuses that text unchanged with an amber line, and an edited text applies as before. The saved list is never rewritten by the cut. Pin: `TestVolatileCutListNotRewritten` (panel tests; also an edit applies, and a list that fits is applied unchanged). Mutation check: with the refusal replaced by `if (false)` the pin fails; restored. `RunProbe7` case 10 uses the same two calls and checks the refusal.
+
+### A8-44 (the oracle's Stop)
+
+`PolicyStep` in `DecompilerModelTests.cpp` clears `haveStopped` once the held snapshot is no longer the stopped question, the panel's rule (A8-29 (c)). Three scripts are in the default run: `select A; hold; reconnect; stop; scrub 1; resume; wait`, the same with `scrub 2`, and with `finish; wait`. Mutation checks, both ways: (1) the oracle change reverted: the three scripts fail (`3 failed`); (2) the panel's real bug class, a Stop that does not cancel the engine's request (`runner.Cancel` removed from `Update`): the model suite fails A1-3, A8-1 (stopped), A8-7, A8-7 (twice), A1-5 (control, ended first) and a random seed, so the oracle still catches it. Restored.
+
+### A8-45 (instrument)
+
+Added: the Follow rig's `FocusBox` operation (word `focus`; `SE_TRUST_FOLLOW_FOCUS=1` turns it on in the generated mixes 8 and 9, off by default so the pinned seeds keep their sequences), `DecompilerPanel::EntryBoxActive()`, and `EnterProv` knowing that a focused, unedited box stands for the output shown. Scripts `pcc; focus; pca; enter` (bites: fails with A8-42 reverted) and `pcc; focus; pca; follow; focus; pcc; enter` (a control; passes either way) are in the default run. Still not held: the call stack in a generated sequence (A8-40); the Volatile popup and the BIOS menu are drawn by no rig (the popup's logic is held through `BeginVolatileEdit` / `ApplyVolatileEdit`).
+
+### What was run
+
