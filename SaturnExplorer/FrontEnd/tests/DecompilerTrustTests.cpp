@@ -39,6 +39,7 @@
 //   SE_TRUST_SCRIPT="select A; t-inject failed" SE_MODEL_WORLD=C,A   one sequence written out (area 1's words, and t-...)
 //   SE_TRUST_NOHOVER=1   do not hover the badge (faster)
 //   SE_TRUST_HIDDEN_RENAME=1  half the renames made and undone while the panel is hidden (A8-25), with the mixes
+//   SE_TRUST_FOLLOW_FOCUS=1   mixes 8 and 9 also click into the entry box without an edit (Enter on it across an install, A8-42)
 //   SE_TRUST_FOLLOW_CPU=1     mixes 8 and 9 with the CPU switch, a CPU without registers, the PC in the BIOS and Stop four times as often
 #define SE_MODEL_NO_MAIN
 #include "DecompilerModelTests.cpp"
@@ -2122,7 +2123,8 @@ void RunPinnedEntryPins()
 }
 
 // Enter on the entry box as the panel left it: a click into it, no edit, Enter (what the tooltips tell the reader to do).
-bool EnterUntouched(MiniRig& m)
+// Click into the entry box without editing it (the box keeps the keyboard focus), and press Enter in it.
+bool FocusEntryBox(MiniRig& m)
 {
     ImVec2 a, b;
     if (!m.panel.ItemRect("entry", a, b)) return false;
@@ -2131,10 +2133,21 @@ bool EnterUntouched(MiniRig& m)
     m.Frame(c, true);
     m.Frame(c, false);
     m.Idle(2);
+    return true;
+}
+
+void PressEnterInBox(MiniRig& m)
+{
     ImGui::GetIO().AddKeyEvent(ImGuiKey_Enter, true);
     m.Frame(ImVec2(1270, 710), false);
     ImGui::GetIO().AddKeyEvent(ImGuiKey_Enter, false);
     m.Frame(ImVec2(1270, 710), false);
+}
+
+bool EnterUntouched(MiniRig& m)
+{
+    if (!FocusEntryBox(m)) return false;
+    PressEnterInBox(m);
     return true;
 }
 
@@ -2216,6 +2229,27 @@ void RunEntryOriginPins()
         MiniCheck("A8-36: Enter on the box Follow PC filled pins the function found", !m.panel.FollowPc() && m.panel.WantedEntry() == cEntry);
         says(m, "A8-36: ...the finder's guess, not a user-set entry", "(entry from rts scan, 60%)", guess);
         model(m, "A8-36: ...held to the model", rts);
+    }
+    {
+        // A8-42: the box has the focus (clicked, not edited) while the output moves on; Enter asks the output shown, as A8-36 does for an
+        // untouched box, and not the panel's stale text as a user-set entry.
+        MiniRig m;
+        const uint32_t aEntry = Defs()[FnA].entry;
+        paused(m, cEntry + 4);
+        CHECK(FocusEntryBox(m));
+        m.regs[0].pc = aEntry + 4;
+        ++m.frame;
+        m.Idle(6);
+        CHECK(m.Settle());
+        MiniCheck("A8-42: the focused box kept C while A is shown", m.panel.Shown() && m.panel.Shown()->requestedEntry == aEntry &&
+                  std::string(m.panel.EntryText()) == Hex(cEntry), std::string(m.panel.EntryText()));
+        PressEnterInBox(m);
+        m.Idle(3);
+        CHECK(m.Settle());
+        MiniCheck("A8-42: Enter in the focused, unedited box asks the output shown (A), not C as typed",
+                  m.panel.Shown() && m.panel.Shown()->requestedEntry == aEntry && m.panel.WantedEntry() == aEntry && std::string(m.panel.EntryText()) == Hex(aEntry),
+                  std::string(m.panel.EntryText()));
+        MiniCheck("A8-42: ...no 'user-set entry' label", drawnText().find(Norm("user-set entry")) == std::string::npos, drawnText());
     }
     {
         // A8-36, probe case I: the NoRegisters tooltip ("Turn Follow PC off and press Enter on an entry"), done as it says.
@@ -2870,7 +2904,8 @@ void RunProbe7()
         ImGui::GetIO().AddKeyEvent(ImGuiKey_Enter, false);
         m.Frame(ImVec2(1270, 710), false);
         settle(m);
-        show(m, "9: Enter in the box (text the panel wrote, C)");
+        show(m, "9: Enter in the box (text the panel wrote): fixed (A8-42), A is asked with its origin, box A");
+        MiniCheck("9: A8-42 fixed", m.panel.WantedEntry() == aEntry && std::string(m.panel.EntryText()) == Hex(aEntry));
     }
     {
         // 10: the long saved volatile list the popup cannot hold: what Apply on its text does.
@@ -2881,13 +2916,13 @@ void RunProbe7()
         m.panel.KeepUnparsedVolatileMemory(list);
         std::printf("PROBE7 10: saved list of %zu chars, not in force %d\n   problem: %s\n", list.size(), m.panel.VolatileNotInForce() ? 1 : 0,
                     m.panel.UnparsedVolatileProblem().c_str());
-        char edit[2048];
-        std::snprintf(edit, sizeof edit, "%s", m.panel.VolatileMemory().c_str());   // what the popup puts in its buffer
-        std::string why;
-        const bool ok = m.panel.SetVolatileMemory(edit, &why);
-        std::printf("   Apply on the buffer (%zu chars, ends '%s'): %d, in force %d, now %zu chars\n", std::strlen(edit),
-                    std::strlen(edit) > 12 ? edit + std::strlen(edit) - 12 : edit, ok ? 1 : 0, m.panel.VolatileNotInForce() ? 0 : 1,
-                    m.panel.VolatileMemory().size());
+        m.panel.BeginVolatileEdit();   // what the popup does on opening
+        const std::string edit = m.panel.VolatileEditText();
+        const bool ok = m.panel.ApplyVolatileEdit();
+        std::printf("   Apply on the buffer (%zu chars, ends '%s'): %d, in force %d, saved list kept whole %d\n   said: %s\n", edit.size(),
+                    edit.size() > 12 ? edit.c_str() + edit.size() - 12 : edit.c_str(), ok ? 1 : 0, m.panel.VolatileNotInForce() ? 0 : 1,
+                    m.panel.VolatileMemory() == list ? 1 : 0, m.panel.VolatileEditError().c_str());
+        CHECK(!ok && m.panel.VolatileNotInForce() && m.panel.VolatileMemory() == list);   // A8-43 fixed: expected behaviour
     }
 }
 
@@ -3161,6 +3196,13 @@ struct FRig
         Prov none;
         uint32_t v = 0;
         if (!DecompilerPanel::ParseHexAddress(panel.EntryText(), v)) return none;
+        // The box kept the focus, unedited, while the output moved on: its text is stale and Enter asks the output shown (A8-42).
+        if (boxShowsShown && panel.EntryBoxActive())
+        {
+            const DecompileResult* s = panel.Shown();
+            if (!s || shownProvRev != panel.ResultRevision() || !shownProv.known) return none;
+            return shownProv;
+        }
         const bool panelText = boxShowsShown || Hex(boxTarget.entry) != panel.EntryText();
         if (!panelText) return boxTarget.entry == v ? boxTarget : none;
         const DecompileResult* s = panel.Shown();
@@ -3456,7 +3498,8 @@ std::string FollowCheck(FRig& r, bool hover)
         r.shownProv = p;
     }
     // The panel writes the entry of a new function into the box (the user's draft aside, which the rig never leaves).
-    if (sh && sh->requestedEntry != r.lastShownEntry)
+    // ...but not over the user's own text while the box holds the focus (A8-42): the sync waits for the focus to go.
+    if (sh && sh->requestedEntry != r.lastShownEntry && !(r.panel.EntryBoxActive() && !r.boxShowsShown))
     {
         r.lastShownEntry = sh->requestedEntry;
         r.boxShowsShown = true;
@@ -3576,7 +3619,7 @@ std::string FollowCheck(FRig& r, bool hover)
 
 enum class FOp { PcC, PcA, PcT, PcU, PcUDead, PcBios, RegsOff, RegsOn, Static, Paused, Running, Advance, Edit, Refresh, Stop, Hold,
                  Release, Hide, Show, FollowToggle, TypeC, TypeA, TypeT, BadEntry, NotCode, ContainC, ContainBad, ContainDead, Cpu, AutoToggle,
-                 ShowInsn, NameAll, Unname, StartAll, ClearStarts, EnterBox, kCount };
+                 ShowInsn, NameAll, Unname, StartAll, ClearStarts, EnterBox, FocusBox, kCount };
 
 const char* FOpName(FOp o)
 {
@@ -3586,7 +3629,7 @@ const char* FOpName(FOp o)
         "show the panel", "click Follow PC", "type the entry of C", "type the entry of A", "type the entry of T", "type 'zz'",
         "type FFFFFFF0", "Decompile at C+4", "Decompile at 0x00001FF0", "Decompile at the dead code of U", "the other CPU",
         "toggle Auto-refresh", "Show in Pseudocode at C+4", "name every function", "erase every name", "set a function start at every entry",
-        "clear every function start", "Enter on the untouched entry box" };
+        "clear every function start", "Enter on the untouched entry box", "click into the entry box (no edit)" };
     return names[static_cast<int>(o)];
 }
 
@@ -3851,6 +3894,20 @@ std::string FollowExecute(FRig& r, FOp o, Rng& rng)
         r.boxTarget = enter;
         return enter.typed ? "asks the typed entry " + Hex(enter.entry) : "asks the pin of " + Hex(enter.entry);
     }
+    case FOp::FocusBox:
+    {
+        // (area 8 fixer, A8-42) The box keeps the keyboard focus (clicked, not edited) while the output moves on; the panel does not rewrite
+        // it then, and Enter on it asks the output shown (EnterProv).
+        if (!r.visible) return "(panel hidden: no entry box)";
+        ImVec2 a, b;
+        if (!r.panel.ItemRect("entry", a, b)) return "(no entry box)";
+        const ImVec2 c((a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f);
+        for (int i = 0; i < 3; ++i) r.Frame(c, false);
+        r.Frame(c, true);
+        r.Frame(c, false);
+        r.Idle(2);
+        return "the box has the focus";
+    }
     case FOp::kCount: break;
     }
     return "";
@@ -3865,7 +3922,7 @@ bool gFollowAuto = false;
 const char* const kFollowWords[] = { "pcc", "pca", "pct", "pcu", "pcudead", "pcbios", "regsoff", "regson", "static", "paused", "running",
                                      "advance", "edit", "refresh", "stop", "hold", "release", "hide", "show", "follow", "typec", "typea",
                                      "typet", "badentry", "notcode", "containc", "containbad", "containdead", "cpu", "auto", "showinsn", "nameall",
-                                     "unname", "startall", "clearstarts", "enter" };
+                                     "unname", "startall", "clearstarts", "enter", "focus" };
 static_assert(sizeof kFollowWords / sizeof kFollowWords[0] == static_cast<size_t>(FOp::kCount), "a word per operation");
 std::vector<FOp> gFollowScript;
 bool gFollowDump = false;
@@ -3873,6 +3930,9 @@ bool gFollowCpu = false;   // SE_TRUST_FOLLOW_CPU (area 8, round 4)
 // (area 8 fixer) The evidence operations and Enter on the untouched box in the generated Follow PC sequences: on in mixes 8 and 9 and for
 // SE_TRUST_FOLLOW_SEED, off (SE_TRUST_FOLLOW_EVIDENCE=0) for the seeds pinned before it, which keep their sequences.
 bool gFollowEvidence = true;
+// (area 8 fixer, A8-42) SE_TRUST_FOLLOW_FOCUS=1: the box is clicked into without an edit while the sequence goes on (off by default: the seeds
+// pinned before keep their sequences).
+bool gFollowFocus = false;
 
 bool ParseFollowScript(const std::string& text, std::vector<FOp>& out, std::string& error)
 {
@@ -3929,6 +3989,7 @@ bool RunFollow(uint64_t seed, bool verbose, uint64_t& opsDone)
         // (area 8 fixer, A8-36 to A8-39) only with gFollowEvidence: names and starts that come and go under a pin, and Enter on the box the
         // panel filled. The seeds pinned before keep their sequences (they run without it).
         { FOp::NameAll, 2 }, { FOp::Unname, 2 }, { FOp::StartAll, 2 }, { FOp::ClearStarts, 2 }, { FOp::EnterBox, 5 },
+        { FOp::FocusBox, 4 },
     };
     const size_t kinds = sizeof kW / sizeof kW[0];
     // (area 8, round 4) SE_TRUST_FOLLOW_CPU=1: the CPU switch, a CPU without registers and Stop four times as often (A8-29's ground). Not in the
@@ -3937,6 +3998,7 @@ bool RunFollow(uint64_t seed, bool verbose, uint64_t& opsDone)
         const FOp o = kW[k].op;
         if ((o == FOp::AutoToggle || o == FOp::ShowInsn) && !gFollowAuto) return 0;
         if (o >= FOp::NameAll && !gFollowEvidence) return 0;
+        if (o == FOp::FocusBox && !gFollowFocus) return 0;
         return gFollowCpu && (o == FOp::Cpu || o == FOp::RegsOff || o == FOp::Stop || o == FOp::PcBios) ? 4 * kW[k].weight : kW[k].weight;
     };
     int total = 0;
@@ -4072,6 +4134,8 @@ const char* const kFollowScriptPins[] = {
     "pct; cpu; regsoff; hold; typet; cpu; cpu; refresh; follow; stop; cpu", // A8-29 (c): Stop on a request for no question on screen
     "refresh; follow; refresh; follow",                                    // A8-30: the pin keeps the finder's doubt
     "hold; edit; follow; release; refresh",                                // A8-30: pinned while the answer is held, then answered
+    "pcc; focus; pca; enter",                                              // A8-42: Enter in the box that kept the focus while the output moved on
+    "pcc; focus; pca; follow; focus; pcc; enter",                          // A8-42 (control: also passes with the fix reverted)
 };
 
 // (area 8 fixer, A8-36 to A8-39) Generated sequences with the evidence operations and Enter on the untouched box that failed with the fix
@@ -4199,6 +4263,7 @@ int main(int argc, char** argv)
     gHover = std::getenv("SE_TRUST_NOHOVER") == nullptr;
     gHiddenRename = std::getenv("SE_TRUST_HIDDEN_RENAME") != nullptr;
     gFollowCpu = std::getenv("SE_TRUST_FOLLOW_CPU") != nullptr;
+    gFollowFocus = std::getenv("SE_TRUST_FOLLOW_FOCUS") != nullptr;
     if (const char* ev = std::getenv("SE_TRUST_FOLLOW_EVIDENCE")) gFollowEvidence = std::strcmp(ev, "0") != 0;
 
     CheckGuide();

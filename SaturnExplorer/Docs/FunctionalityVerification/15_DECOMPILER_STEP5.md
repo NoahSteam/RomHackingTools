@@ -16243,3 +16243,40 @@ A7-28 (a) (`eq_known_slot`, the line at the slot 0x0607000A, `numberStoreOther` 
 ### Routed
 
 Nothing. Grammar 2 seed 300847 (A5-99) was not counted.
+
+## Area 8 fixer (A8-42 to A8-45)
+
+Branch `review/8-a842-fix` from master `d2a0f9b3`. Round 7 was clean; its four P3 rows are fixed here, so that area 8 can start round 8 with no open P3 of its own. Changed: product code (`DecompilerPanel.cpp` / `.h`), the trust tests, the panel tests, the model oracle, the guide and the ledger.
+
+### A8-42 (Enter in a focused, unedited entry box)
+
+`EnterTarget` now treats text the panel wrote and the user did not edit (`mBoxShowsShown`, cleared by any edit) as standing for the output shown, whatever the text says: Enter asks the shown output's target with its origin (a pin stays the finder's guess), and the box is rewritten with the address asked, so the next Enter does not read the old text as typed. `EnterAsksTarget` (the tooltips) uses the same function, so they agree. Pins: the trust test's A8-42 block on the small rig (the box clicked, the PC moved to A, Enter: A asked, box A, no "user-set entry"), and the Follow rig script `pcc; focus; pca; enter` in the default run. Mutation check: with the new branch in `EnterTarget` replaced by `if (false)`, both fail (the typed C is asked, the Follow rig reports the wrong target). Restored. `RunProbe7` case 9 now prints the fixed behaviour and checks it.
+
+### A8-43 (Volatile popup, area 9's)
+
+The popup's buffer is still 2,048 characters, but opening it now goes through `BeginVolatileEdit`, which remembers the cut text when the saved list is longer; `ApplyVolatileEdit` refuses that text unchanged with an amber line, and an edited text applies as before. The saved list is never rewritten by the cut. Pin: `TestVolatileCutListNotRewritten` (panel tests; also an edit applies, and a list that fits is applied unchanged). Mutation check: with the refusal replaced by `if (false)` the pin fails; restored. `RunProbe7` case 10 uses the same two calls and checks the refusal.
+
+### A8-44 (the oracle's Stop)
+
+`PolicyStep` in `DecompilerModelTests.cpp` clears `haveStopped` once the held snapshot is no longer the stopped question, the panel's rule (A8-29 (c)). Three scripts are in the default run: `select A; hold; reconnect; stop; scrub 1; resume; wait`, the same with `scrub 2`, and with `finish; wait`. Mutation checks, both ways: (1) the oracle change reverted: the three scripts fail (`3 failed`); (2) the panel's real bug class, a Stop that does not cancel the engine's request (`runner.Cancel` removed from `Update`): the model suite fails A1-3, A8-1 (stopped), A8-7, A8-7 (twice), A1-5 (control, ended first) and a random seed, so the oracle still catches it. Restored.
+
+### A8-45 (instrument)
+
+Added: the Follow rig's `FocusBox` operation (word `focus`; `SE_TRUST_FOLLOW_FOCUS=1` turns it on in the generated mixes 8 and 9, off by default so the pinned seeds keep their sequences), `DecompilerPanel::EntryBoxActive()`, and `EnterProv` knowing that a focused, unedited box stands for the output shown. Scripts `pcc; focus; pca; enter` (bites: fails with A8-42 reverted) and `pcc; focus; pca; follow; focus; pcc; enter` (a control; passes either way) are in the default run. Still not held: the call stack in a generated sequence (A8-40); the Volatile popup and the BIOS menu are drawn by no rig (the popup's logic is held through `BeginVolatileEdit` / `ApplyVolatileEdit`).
+
+### What was run
+
+| Run | Result |
+|---|---|
+| `SE_TRUST_FOLLOW_FOCUS=1`, Follow PC mixes 8 and 9, hover on, seeds from 900000 | 20,005 + 20,005 operations, 0 failing |
+| the same with `SE_TRUST_FOLLOW_CPU=1` | 20,005 + 20,005 operations, 0 failing |
+| the same with `SE_TRUST_NOHOVER=1` | 20,005 + 20,005 operations, 0 failing |
+| mixes 0 to 7 with `SE_TRUST_HIDDEN_RENAME=1` (no hover), seeds from 900000 | 20,019 / 20,034 / 20,014 / 20,105 / 20,078 / 20,038 / 20,045 operations in mixes 0, 1, 3, 4, 5, 6, 7; mix 2 in two pieces (seeds 900000 and 900300, 10,035 + 10,007 operations; the single 20,000-operation run hit its 1,100 s limit); 0 failing. A8-44's sequence does not occur in them |
+| `ctest -j2 --timeout 900`, all 108 | **108 of 108 passed** (102 + 6 Live; 205 s). One test was added: `TestVolatileCutListNotRewritten` in the panel suite; the trust test and the model suite gained pins (A8-42 block, two Follow scripts, three A8-44 scripts) |
+| the fault suite | **0 of 94 failed** (90 s) |
+
+Two rig corrections came out of the first fresh-seed run with the new `focus` operation (mix 8 and 9 with the CPU knob, seeds 900085 and 900091, then mix 8 seed 900071): the rig's model of the box (`boxShowsShown`) took the panel's sync to happen while the box held the focus, when the sync waits for the focus to go. Both were the rig's, not the panel's (the panel kept the user's refused text, and the user's typed text, while focused); the rig now leaves the box state alone while the box is active and unedited-by-the-panel, and takes the sync when the focus goes. The runs above are after that correction.
+
+### Routed
+
+Nothing. A8-43 (area 9's popup) and A8-44 (area 1's oracle) are fixed here, as asked.
