@@ -3810,6 +3810,10 @@ const char* const kFollowScriptPins[] = {
 struct FollowPinE { uint64_t seed; bool autoMix, cpu; };
 const std::vector<FollowPinE> kFollowPinsEvidence = {};
 
+// (area 8 fixer) A8-41: sequences of SE_TRUST_HIDDEN_RENAME=1, kept in the default run (mix, seed).
+struct HiddenRenamePin { int mix; uint64_t seed; };
+const HiddenRenamePin kHiddenRenamePins[] = { { 7, 210063 } };
+
 // The stride of the allocation-failure sweep in the default run: every 50th allocation of one request of C (about 32,200 of them), about 644 cells.
 const long kOomStride = 50;
 
@@ -4012,6 +4016,24 @@ int main(int argc, char** argv)
                 {
                     ++failedPrograms;
                     failedList.push_back(std::string("pin: ") + pin.id);
+                }
+            }
+
+        // (area 8 fixer) A8-41: mix 7 seed 210063 with the renames made and undone while hidden (SE_TRUST_HIDDEN_RENAME), the sequence that found
+        // area 1's oracle erasing the runner's too-large memo on a panel cache hit.
+        if (!mixEnv && !std::getenv("SE_TRUST_FOLLOW_SEED") && !std::getenv("SE_TRUST_FOLLOW_SCRIPT"))
+            for (const auto& hp : kHiddenRenamePins)
+            {
+                const bool was = gHiddenRename;
+                gHiddenRename = true;
+                const Program p = MakeProgram(hp.seed, hp.mix);
+                gHiddenRename = was;
+                const bool ok = RunTrust(oracle, p, hp.seed, false);
+                std::printf("pin mix %d seed %llu with the renames undone while hidden %s\n", hp.mix, static_cast<unsigned long long>(hp.seed), ok ? "ok" : "FAILED");
+                if (!ok)
+                {
+                    ++failedPrograms;
+                    failedList.push_back("pin: hidden rename mix " + std::to_string(hp.mix) + " seed " + std::to_string(hp.seed));
                 }
             }
 
