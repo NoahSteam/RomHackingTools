@@ -329,7 +329,7 @@ void App::Initialize()
         std::string err;
         if (!mAssemblyPanel.LoadComments(&err)) mLog.Error("Assembly comments: " + err);   // restore the session's assembly comments
         else if (mAssemblyPanel.SkippedCommentLines())
-            mLog.Warn("assembly_comments.txt: " + std::to_string(mAssemblyPanel.SkippedCommentLines()) + " line(s) are not \"<hex-address> <note>\" (an address is eight hex digits, or 0x and up to eight) and were skipped; they stay in the file");
+            mLog.Warn("assembly_comments.txt: " + std::to_string(mAssemblyPanel.SkippedCommentLines()) + " line(s) are not \"<hex-address> <note>\" (an address is eight hex digits, or 0x and up to eight) and were skipped (a line that begins with the letters a-f alone, like \"dead\", may be an old unpadded address: write it as eight digits, e.g. 0000DEAD); they stay in the file");
     }
     {
         // A file that is there and was not read, or lines in it that were not entries, are said (A9-2, A9-4): the names
@@ -337,13 +337,13 @@ void App::Initialize()
         std::string err;
         if (!mFunctionNames.Load(&err)) mLog.Error("Function names: " + err);
         else if (mFunctionNames.SkippedLines())
-            mLog.Warn("saturn_functions.txt: " + std::to_string(mFunctionNames.SkippedLines()) + " line(s) are not \"<hex-address> <name>\" (an address is eight hex digits, or 0x and up to eight) and were skipped; they stay in the file (the first is line " +
+            mLog.Warn("saturn_functions.txt: " + std::to_string(mFunctionNames.SkippedLines()) + " line(s) are not \"<hex-address> <name>\" (an address is eight hex digits, or 0x and up to eight) and were skipped (a line that begins with the letters a-f alone, like \"dead\", may be an old unpadded address: write it as eight digits, e.g. 0000DEAD); they stay in the file (the first is line " +
                       std::to_string(mFunctionNames.FirstSkippedLine()) + ")");
         err.clear();
         mFunctionNames.Import(WorkFilePath("saturn_symbols.txt").c_str(), &err);  // merge a symbol map if present
         if (!err.empty()) mLog.Error("Symbol map: " + err);
         else if (mFunctionNames.SkippedLines())
-            mLog.Warn("saturn_symbols.txt: " + std::to_string(mFunctionNames.SkippedLines()) + " line(s) are not \"<hex-address> <name>\" (an address is eight hex digits, or 0x and up to eight) and were skipped; they stay in the file (the first is line " +
+            mLog.Warn("saturn_symbols.txt: " + std::to_string(mFunctionNames.SkippedLines()) + " line(s) are not \"<hex-address> <name>\" (an address is eight hex digits, or 0x and up to eight) and were skipped (a line that begins with the letters a-f alone, like \"dead\", may be an old unpadded address: write it as eight digits, e.g. 0000DEAD); they stay in the file (the first is line " +
                       std::to_string(mFunctionNames.FirstSkippedLine()) + ")");
     }
 #if SE_ENABLE_DECOMPILER
@@ -352,7 +352,7 @@ void App::Initialize()
         if (!mFunctionBounds.Load(WorkFilePath(decomp::FunctionBounds::kDefaultFile), &err)) mLog.Error("Function starts: " + err);
         else if (mFunctionBounds.SkippedLines())
             mLog.Warn(std::string(decomp::FunctionBounds::kDefaultFile) + ": " + std::to_string(mFunctionBounds.SkippedLines()) +
-                      " line(s) are not an address in memory or a comment and were skipped; they stay in the file (the first is line " + std::to_string(mFunctionBounds.FirstSkippedLine()) + ")");
+                      " line(s) are not an address in memory or a comment and were skipped (a line that begins with the letters a-f alone, like \"dead\", may be an old unpadded address: write it as eight digits, e.g. 0000DEAD); they stay in the file (the first is line " + std::to_string(mFunctionBounds.FirstSkippedLine()) + ")");
     }
     // The process's one engine thread (PLAN.md A4). It is optional: if it cannot be started (the OS
     // refuses the thread, memory runs out) the app opens without it and the panel says why, rather
@@ -388,6 +388,15 @@ void App::Shutdown()
         if (!mAssemblyPanel.SaveComments(&err)) mLog.Error("Could not save the assembly comments: " + err);
     }
     SaveFunctionNames();
+#if SE_ENABLE_DECOMPILER
+    {
+        // The function starts are saved when they change; one whose save was refused (the lock, a full disk) is tried again here,
+        // like the names and notes above (A9-43). Nothing is written when nothing is pending.
+        std::string err;
+        if (!mFunctionBounds.Save(WorkFilePath(decomp::FunctionBounds::kDefaultFile), &err))
+            mLog.Error(std::string("Could not save ") + decomp::FunctionBounds::kDefaultFile + ": " + err);
+    }
+#endif
     CloseData();
 }
 
@@ -4725,7 +4734,7 @@ void App::DrawCallStack(IPlatform& platform)
                         : std::string("No symbols found in " + path));
             if (!err.empty()) mLog.Error("Symbol map: " + err);
             else if (mFunctionNames.SkippedLines())
-                mLog.Warn(path + ": " + std::to_string(mFunctionNames.SkippedLines()) + " line(s) are not \"<hex-address> <name>\" (an address is eight hex digits, or 0x and up to eight) and were skipped; they stay in the file (the first is line " +
+                mLog.Warn(path + ": " + std::to_string(mFunctionNames.SkippedLines()) + " line(s) are not \"<hex-address> <name>\" (an address is eight hex digits, or 0x and up to eight) and were skipped (a line that begins with the letters a-f alone, like \"dead\", may be an old unpadded address: write it as eight digits, e.g. 0000DEAD); they stay in the file (the first is line " +
                           std::to_string(mFunctionNames.FirstSkippedLine()) + ")");
         }
     }

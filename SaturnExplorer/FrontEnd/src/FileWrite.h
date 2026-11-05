@@ -90,7 +90,9 @@ unsigned long ProcessId();
 // other FileLocks in this one, and the OS drops it if the process dies, so a crash never
 // leaves it held. The descriptor is close-on-exec (Windows handles are not inheritable by
 // default): an emulator launched while the lock is held must not inherit it, or the lock would
-// stay held until that emulator exits. With wait=false, Held() is false when someone else has it.
+// stay held until that emulator exits. With wait=false, Held() is false when someone else has it; with wait=true the wait ends
+// after kWaitMs (A9-40), so a holder that never lets go cannot freeze the caller, and Held() is false. WhyNotHeld() says why,
+// with the OS reason when the file could not be opened (a folder that cannot be written or is gone, A9-42).
 class FileLock
 {
 public:
@@ -99,8 +101,13 @@ public:
     FileLock(const FileLock&) = delete;
     FileLock& operator=(const FileLock&) = delete;
     bool Held() const { return mHeld; }
+    std::string WhyNotHeld() const;   // empty when held
+    static constexpr unsigned kWaitMs = 3000;
 
 private:
+    std::string mPath;
+    int mError = 0;          // errno / GetLastError of the open or the lock
+    bool mTimedOut = false;
     bool mHeld = false;
     intptr_t mHandle = -1;   // a POSIX descriptor, or a Windows HANDLE
 };

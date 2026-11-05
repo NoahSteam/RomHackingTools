@@ -1,6 +1,8 @@
 #include "FileWrite.h"
 
 #include <atomic>
+#include <chrono>
+#include <system_error>
 #include <cerrno>
 #include <cstdio>
 #include <cstdlib>
@@ -380,24 +382,54 @@ bool RemoveLink(const std::string& path)
 
 FileLock::FileLock(const std::string& path, bool wait)
 {
+    mPath = path;
+    // A wait is bounded (A9-40): try without waiting, retry every few milliseconds until kWaitMs has passed. A holder that is
+    // stuck (a hung instance on a stalled network folder, a debugger) no longer freezes the caller; the caller refuses its save.
+    const auto start = std::chrono::steady_clock::now();
+    auto expired = [&]() {
+        return std::chrono::steady_clock::now() - start >= std::chrono::milliseconds(kWaitMs);
+    };
 #ifdef _WIN32
     // A null SECURITY_ATTRIBUTES makes the handle non-inheritable, the counterpart of O_CLOEXEC.
     const HANDLE h = ::CreateFileA(path.c_str(), GENERIC_READ | GENERIC_WRITE,
                                    FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
                                    OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (h == INVALID_HANDLE_VALUE) return;
+    if (h == INVALID_HANDLE_VALUE) { mError = static_cast<int>(::GetLastError()); return; }
     mHandle = reinterpret_cast<intptr_t>(h);
     OVERLAPPED whole = {};
-    const DWORD flags = LOCKFILE_EXCLUSIVE_LOCK | (wait ? 0 : LOCKFILE_FAIL_IMMEDIATELY);
-    mHeld = ::LockFileEx(h, flags, 0, MAXDWORD, MAXDWORD, &whole) != 0;
+    for (;;)
+    {
+        whole = OVERLAPPED();
+        mHeld = ::LockFileEx(h, LOCKFILE_EXCLUSIVE_LOCK | LOCKFILE_FAIL_IMMEDIATELY, 0, MAXDWORD, MAXDWORD, &whole) != 0;
+        if (mHeld || !wait) break;
+        if (expired()) { mTimedOut = true; break; }
+        ::Sleep(20);
+    }
+    if (!mHeld && !mTimedOut) mError = static_cast<int>(::GetLastError());
 #else
     const int fd = ::open(path.c_str(), O_RDWR | O_CREAT | O_CLOEXEC, 0644);
-    if (fd < 0) return;
+    if (fd < 0) { mError = errno; return; }
     mHandle = fd;
-    int rc;
-    do rc = ::flock(fd, LOCK_EX | (wait ? 0 : LOCK_NB)); while (rc != 0 && errno == EINTR);
-    mHeld = rc == 0;
+    for (;;)
+    {
+        const int rc = ::flock(fd, LOCK_EX | LOCK_NB);
+        if (rc == 0) { mHeld = true; break; }
+        if (errno == EINTR) continue;
+        if (errno != EWOULDBLOCK || !wait) { mError = errno; break; }
+        if (expired()) { mTimedOut = true; break; }
+        struct timespec ts = { 0, 20 * 1000 * 1000 };
+        ::nanosleep(&ts, nullptr);
+    }
 #endif
+}
+
+std::string FileLock::WhyNotHeld() const
+{
+    if (mHeld) return std::string();
+    if (mTimedOut)
+        return "another process has held " + mPath + " for more than " + std::to_string(kWaitMs / 1000) + " seconds";
+    if (mError == 0) return "another process holds " + mPath;   // wait=false and someone has it
+    return "cannot create or lock " + mPath + ": " + std::system_category().message(mError);
 }
 
 size_t RemoveStaleStagingFiles(const std::string& path)

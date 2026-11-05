@@ -1,6 +1,6 @@
-// Area 9, round 4 (review): the area 9 fixer's changes (A9-31 to A9-38) and the Windows run's A9-40, attacked. "PIN" asserts a
-// finding as it is today (REVIEW_LEDGER.md, A9-40 and later); when the finding is fixed its check fails and is turned round in the
-// same change. The rest hold what the fixer got right (a regression guard): the settings merge by lines, the stale staging
+// Area 9, round 4 (review) and its fixer: the area 9 fixer's changes (A9-31 to A9-38) and the Windows run's A9-40, attacked. "PIN"
+// asserts a finding as it was (REVIEW_LEDGER.md, A9-40 and later); the findings A9-40 to A9-42 are fixed and their checks are now
+// "FIX" checks of the fixed behaviour. The rest hold what the fixer got right (a regression guard): the settings merge by lines, the stale staging
 // cleanup, the blank-is-delete rule, a link loop.
 //
 // Linux only (fork, flock, setuid). Runs in a scratch folder under the current directory; nothing outside it is touched.
@@ -71,54 +71,55 @@ auto kFormat = [](uint32_t a, const std::string& n) {
     return std::string(b) + n + "\n";
 };
 
-// A9-41 (A9-32's fix): two to four lower-case letters a-f in front of a line are an address again when they spell one in the BIOS
-// ROM. A prose line in a hand-edited file is an entry, with no line skipped and so no Log warning: the A9-4 and A9-18 examples
-// ("add it later") come back, and so do "be careful", "fade routine", "bad idea", "dead code". The fixer's tests and the fuzz
-// oracle were changed to "Add it later" to pass.
-void ProseLinesAreEntries()
+// A9-41 (A9-32's fix, undone): a word of the letters a-f alone in front of a line is a word, not an address, in every file: the
+// prose lines of a hand-edited file ("add it later", "be careful", "fade routine", "bad idea", "dead code") are skipped and
+// counted, so the Log warns, and the remark stays in the file. (A9-32's alternative was taken: the warning says the line may be an
+// old unpadded address to be written with eight digits.)
+void ProseLinesAreSkipped()
 {
     uint32_t a = 0;
     std::string n;
-    struct P { const char* line; uint32_t addr; };
-    const P prose[] = {
-        { "add it later", 0xADDu },        // A9-4's and A9-18's own example
-        { "be careful: the next one is a guess", 0xBEu },
-        { "fade routine is near 06012000, not found yet", 0xFADEu },
-        { "bad idea to rename this", 0xBADu },
-        { "dead code below", 0xDEADu },
-        { "face sprites are loaded by the next one", 0xFACEu },
+    const char* prose[] = {
+        "add it later",                    // A9-4's and A9-18's own example
+        "be careful: the next one is a guess",
+        "fade routine is near 06012000, not found yet",
+        "bad idea to rename this",
+        "dead code below",
+        "face sprites are loaded by the next one",
     };
-    int entries = 0;
-    for (const P& p : prose)
-        if (ParseAddressNameLine(p.line, a, n) == AddressNameLine::Entry && a == p.addr) ++entries;
-    Pin(entries == 6, "A9-41: six prose lines opening with a lower-case a-f word are entries at 0xADD, 0xBE, 0xFADE, 0xBAD, 0xDEAD, 0xFACE");
+    int skipped = 0;
+    for (const char* line : prose)
+        if (ParseAddressNameLine(line, a, n) == AddressNameLine::Malformed) ++skipped;
+    Check(skipped == 6, "FIX A9-41: six prose lines opening with a lower-case a-f word are skipped, not entries at 0xADD, 0xBE, 0xFADE, 0xBAD, 0xDEAD, 0xFACE");
 
-    // The names file: the prose is a name, and nothing is counted as skipped, so App logs nothing.
+    // The names file: the prose is no name, and it is counted, so App logs the warning.
     Put("saturn_functions.txt", "06004000 main_loop\nbe careful: the next one is a guess\n06004100 init_vdp2\nfade routine is near 06012000, not found yet\n");
     FunctionNames fn;
     fn.Load();
-    Pin(fn.HasName(0xBEu) && fn.NameOf(0xBEu) == "careful: the next one is a guess" && fn.HasName(0xFADEu) && fn.SkippedLines() == 0,
-        "A9-41: in saturn_functions.txt the prose lines are names at 0xBE and 0xFADE (BIOS ROM, even: callable), with no line skipped");
+    Check(!fn.HasName(0xBEu) && !fn.HasName(0xFADEu) && fn.HasName(0x06004000u) && fn.HasName(0x06004100u) && fn.SkippedLines() == 2 && fn.FirstSkippedLine() == 2,
+          "FIX A9-41: in saturn_functions.txt the prose lines are skipped and counted (the first is line 2)");
 
-    // The bounds file (the one the user edits by hand, A9-4): the prose is a function start the decompiler uses.
+    // The bounds file (the one the user edits by hand, A9-4): the prose is no function start, and clearing a real one keeps the remark.
     Put("bounds.txt", "; Function entries set by hand\n06004000 main loop\nbe careful: the next one is a guess\n06004100\nfade in handler starts below\n");
     decomp::FunctionBounds fb;
     std::string err;
     Check(fb.Load("bounds.txt", &err), "bounds load");
-    Pin(fb.Entries().count(0xBEu) && fb.Entries().count(0xFADEu) && fb.SkippedLines() == 0,
-        "A9-41: in saturn_function_bounds.txt the prose lines are function starts at 0x000000BE and 0x0000FADE, with no line skipped");
-    // And the remark is the entry, so clearing the stray start (the only way the user can get rid of it) erases the remark.
-    fb.ClearEntry(0xBEu);
+    Check(!fb.Entries().count(0xBEu) && !fb.Entries().count(0xFADEu) && fb.Entries().count(0x06004000u) && fb.Entries().count(0x06004100u) && fb.SkippedLines() == 2,
+          "FIX A9-41: in saturn_function_bounds.txt the prose lines are no function starts and are counted");
+    fb.ClearEntry(0x06004000u);
     Check(fb.Save("bounds.txt", &err), "bounds save");
-    Pin(!Has(Slurp("bounds.txt"), "be careful"), "A9-41: clearing the stray start at 0xBE deletes the user's remark line from the file");
+    Check(Has(Slurp("bounds.txt"), "be careful: the next one is a guess") && Has(Slurp("bounds.txt"), "fade in handler starts below") && !Has(Slurp("bounds.txt"), "main loop"),
+          "FIX A9-41: a save keeps the user's remark lines");
 
-    // What round 1 to 3 did (the comparison): capitals, one letter and five or more stay words, skipped and counted.
+    // Capitals, one letter and words with other letters: words, as before; an old unpadded address with a digit and the padded form load.
     Check(ParseAddressNameLine("Add it later", a, n) == AddressNameLine::Malformed && ParseAddressNameLine("a note", a, n) == AddressNameLine::Malformed &&
           ParseAddressNameLine("faded colours", a, n) == AddressNameLine::Malformed,
           "A9-32: a capital, a single letter, and a word with other letters stay words");
+    Check(ParseAddressNameLine("0000DEAD dead_handler", a, n) == AddressNameLine::Entry && a == 0xDEADu && ParseAddressNameLine("0xdead h", a, n) == AddressNameLine::Entry,
+          "A9-32: the way out the warning names: the same address written with eight digits (or 0x) is an entry");
 }
 
-// A9-33's refusal, from an ordinary user: the text when the folder is not writable, when the folder is gone, and when the lock file
+// A9-33's refusal, from an ordinary user: the text (A9-42: with the OS reason) when the folder is not writable, when the folder is gone, and when the lock file
 // belongs to someone else (sudo); and that the change is kept and goes out at the next save once the cause is removed.
 void LockRefusal()
 {
@@ -171,30 +172,40 @@ void LockRefusal()
     waitpid(kid, &st, 0);
     Check(WIFEXITED(st) && WEXITSTATUS(st) == 0, "lock refusal child ran");
     std::printf("  %s", got.c_str());
-    // 1: refused (nothing could be saved there anyway), but the text gives the three lock causes and not the real one.
+    // 1: refused (nothing could be saved there anyway), and the text gives the OS reason.
     const size_t l1 = got.find("readonly ");
     const std::string line1 = l1 == std::string::npos ? std::string() : got.substr(l1, got.find('\n', l1) - l1);
     Check(Has(line1, "refused"), "A9-33: a folder the user cannot write refuses the save");
-    Pin(Has(line1, "names.txt.lock cannot be opened or locked") && !Has(line1, "folder cannot be written") && !Has(line1, "ermission"),
-        "A9-42: in a folder the user cannot write the refusal blames the lock file (another user's lock, a folder, a refused lock) and gives no OS reason");
+    Check(Has(line1, "names.txt.lock") && Has(line1, "ermission denied") && !Has(line1, "refused lock") && Has(line1, "not saved"),
+          "FIX A9-42: in a folder the user cannot write the refusal gives the OS reason (Permission denied)");
     Check(Has(got, "rootlock refused") && Has(got, "other.txt.lock"), "A9-33: a lock file of another user refuses the save and names the file");
     Check(Has(got, "retry saved") && Has(got, "06004100 new"), "A9-33: the refused change is kept and is written by the next save once the lock file is gone");
 
-    // 4. A folder that is gone (the working folder removed or unmounted while the app runs): the same lock text, no ENOENT.
+    // 4. A folder that is gone (the working folder removed or unmounted while the app runs): the text has ENOENT.
     std::string err;
     AddressMap base, cur;
     cur[0x06004100u] = "new";
     Check(!SaveStore("gone/names.txt", "The function names", std::string(), 1u << 20, base, cur, kClassify, kFormat, std::string(), &err), "A9-33: no folder, refused");
-    Pin(Has(err, "gone/names.txt.lock cannot be opened or locked") && !Has(err, "No such file"),
-        "A9-42: when the folder is gone the refusal blames the lock file too");
+    Check(Has(err, "gone/names.txt.lock") && Has(err, "No such file") && !Has(err, "refused lock"),
+          "FIX A9-42: when the folder is gone the refusal gives the OS reason (No such file or directory)");
 }
 
-// A9-40: a save waits for the lock with no limit. Another process holds <file>.lock for three seconds; SaveStore and Settings::SaveTo
-// each return only when it lets go (on the UI thread, the window stops for that long).
-double TimedSaveWhileLocked(const std::string& lockPath, bool settings)
+// A9-40: a save waits for the lock for FileLock::kWaitMs (3 s) at most. Another process holds <file>.lock for five seconds; SaveStore and
+// Settings::SaveTo each give up after the bound, refuse the save (A9-33's path: the text names the lock file and the wait, the file is
+// left as it is, the session keeps the change pending), and save the same change once the holder has let go.
+struct TimedSave
 {
+    double secs = -1;
+    bool refused = false;
+    std::string err;
+    bool untouched = false;   // the data file as it was, the session's base not advanced
+    bool retried = false;     // the same change saved after the holder let go
+};
+TimedSave TimedSaveWhileLocked(const std::string& lockPath, bool settings)
+{
+    TimedSave r;
     int fds[2];
-    if (pipe(fds) != 0) return -1;
+    if (pipe(fds) != 0) return r;
     const pid_t kid = fork();
     if (kid == 0)
     {
@@ -202,40 +213,47 @@ double TimedSaveWhileLocked(const std::string& lockPath, bool settings)
         const int fd = open(lockPath.c_str(), O_RDWR | O_CREAT, 0644);
         if (fd < 0 || flock(fd, LOCK_EX) != 0) _exit(1);
         if (write(fds[1], "x", 1) != 1) _exit(2);
-        sleep(3);
+        sleep(5);
         _exit(0);
     }
     close(fds[1]);
     char c;
-    if (read(fds[0], &c, 1) != 1) { close(fds[0]); return -1; }
+    if (read(fds[0], &c, 1) != 1) { close(fds[0]); return r; }
     close(fds[0]);
     const auto t0 = std::chrono::steady_clock::now();
-    std::string err;
     bool ok;
+    Settings s;
+    AddressMap base, cur;
+    const char* data = settings ? "held.ini" : "held.txt";
+    Put(data, settings ? "[a]\nx = 0\n" : "06004100 old\n");
     if (settings)
-    {
-        Settings s;
         s.Set("a", "b", "1");
-        ok = s.SaveTo("held.ini", &err);
-    }
     else
-    {
-        AddressMap base, cur;
         cur[0x06004000u] = "x";
-        ok = SaveStore("held.txt", "t", std::string(), 1u << 20, base, cur, kClassify, kFormat, std::string(), &err);
-    }
-    const double secs = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+    auto save = [&](std::string& err) {
+        return settings ? s.SaveTo(data, &err)
+                        : SaveStore(data, "t", std::string(), 1u << 20, base, cur, kClassify, kFormat, std::string(), &err);
+    };
+    ok = save(r.err);
+    r.secs = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+    r.refused = !ok;
+    r.untouched = Slurp(data) == (settings ? "[a]\nx = 0\n" : "06004100 old\n") && (settings || base.empty());
     int st = 0;
     waitpid(kid, &st, 0);
-    Check(ok, "A9-40: the save succeeds after the holder lets go");
-    return secs;
+    std::string err2;
+    r.retried = save(err2) && Has(Slurp(data), settings ? "b = 1" : "06004000 x");
+    return r;
 }
 void LockWait()
 {
-    const double s1 = TimedSaveWhileLocked("held.txt.lock", false);
-    const double s2 = TimedSaveWhileLocked("held.ini.lock", true);
-    std::printf("  SaveStore waited %.2f s, Settings::SaveTo %.2f s, for a lock another process held 3 s\n", s1, s2);
-    Pin(s1 > 2.5 && s2 > 2.5, "A9-40: SaveStore and Settings::SaveTo wait for another process's lock with no limit (Linux, as on Windows)");
+    const TimedSave a = TimedSaveWhileLocked("held.txt.lock", false);
+    const TimedSave b = TimedSaveWhileLocked("held.ini.lock", true);
+    std::printf("  SaveStore waited %.2f s, Settings::SaveTo %.2f s, for a lock another process held 5 s\n  %s\n  %s\n", a.secs, b.secs, a.err.c_str(), b.err.c_str());
+    Check(a.secs > 2.5 && a.secs < 4.5 && b.secs > 2.5 && b.secs < 4.5, "FIX A9-40: SaveStore and Settings::SaveTo give up waiting for another process's lock after about 3 s");
+    Check(a.refused && b.refused && Has(a.err, "held.txt.lock") && Has(a.err, "more than 3 seconds") && Has(b.err, "held.ini.lock") && Has(b.err, "kept in memory"),
+          "FIX A9-40: the save is refused through A9-33's path, naming the lock file and the wait");
+    Check(a.untouched && b.untouched, "FIX A9-40: the file is as it was and the session keeps its change pending");
+    Check(a.retried && b.retried, "FIX A9-40: the next save, once the holder has let go, writes the pending change");
 }
 
 // A9-34: Settings::SaveTo merges by lines. Odd files: each must read back with the session's change and keep the rest.
@@ -396,7 +414,7 @@ int main()
     alarm(120);
     struct Step { const char* name; void (*fn)(); };
     const Step steps[] = {
-        { "ProseLinesAreEntries", ProseLinesAreEntries }, { "LockRefusal", LockRefusal }, { "LockWait", LockWait },
+        { "ProseLinesAreSkipped", ProseLinesAreSkipped }, { "LockRefusal", LockRefusal }, { "LockWait", LockWait },
         { "SettingsMergeEdges", SettingsMergeEdges },     { "StaleStagingEdges", StaleStagingEdges },
         { "BlankIsDelete", BlankIsDelete },               { "LinkLoop", LinkLoop },
     };
