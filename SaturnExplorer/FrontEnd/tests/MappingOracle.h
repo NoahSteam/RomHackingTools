@@ -129,7 +129,7 @@ struct MappingAudit
         int same = 0;
         for (const std::string& q : problems)
             if (q.compare(0, kind.size() + 1, kind + ":") == 0) ++same;
-        if (same < 3) problems.push_back(p);
+        if (same < (std::getenv("SE_A7F_DEBUG") ? 400 : 3)) problems.push_back(p);
     }
     int Violations() const
     {
@@ -428,6 +428,17 @@ inline WordValue RegisterBefore(const sfe::decomp::DecompileResult& r, const std
             if ((w >> 12) == 0x6 && (w & 0xF) == 0x3 && ((w >> 8) & 0xF) == rg)
             {
                 todo.emplace_back(p, (w >> 4) & 0xF);
+                continue;
+            }
+            // a literal (`mov.w @(disp,pc),Rn`, `mov.l @(disp,pc),Rn`), when no delayed branch is before it (in a slot the pc is the target's)
+            sfe::DisassembledInstruction before;
+            if (((w >> 12) == 0x9 || (w >> 12) == 0xD) && ((w >> 8) & 0xF) == rg && !(decode(p - 2, before) && before.HasDelaySlot))
+            {
+                uint16_t hi = 0, lo = 0;
+                const uint32_t q = (w >> 12) == 0x9 ? p + 4 + (w & 0xFFu) * 2 : (p & ~3u) + 4 + (w & 0xFFu) * 4;
+                if ((w >> 12) == 0x9 ? !word(q, lo) : !(word(q, hi) && word(q + 2, lo))) return WordValue();
+                const int64_t v = (w >> 12) == 0x9 ? static_cast<int16_t>(lo) : static_cast<int32_t>(static_cast<uint32_t>(hi) << 16 | lo);
+                if (!give(WordValue{ WordValue::Number, v })) return WordValue();
                 continue;
             }
             if (WrittenRegisters(d).count(rg)) return WordValue();
@@ -850,7 +861,8 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     if (shownValue.kind == WordValue::Param) return !(got == shownValue);
                     if (shownValue.kind == WordValue::Number)
                     {
-                        if (got.kind == WordValue::Param) return true;
+                        // (a parameter may be the number on the line's path: `param_4 == 0` tested before the store)
+                        if (got.kind == WordValue::Param) return false;
                         if (composed) return false;   // (a number made of a word and a narrower store: each writes some of its bytes)
                         const uint64_t mask = size >= 8 ? ~0ull : (1ull << (8 * size)) - 1;
                         return ((static_cast<uint64_t>(got.value) ^ static_cast<uint64_t>(shownValue.value)) & mask) != 0;
