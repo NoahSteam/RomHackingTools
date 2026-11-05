@@ -760,6 +760,60 @@ void TestArea7Round4()
     }
 }
 
+// Area 7 round 5 (the reviewer's pins): each finding at its current behaviour. The comment of each says what flips when the row is fixed.
+void TestArea7Round5()
+{
+    std::vector<uint8_t> hw(0x100000u, 0);
+    Sh2Decompiler d(gConfig);
+    const std::function<bool(uint32_t, uint16_t&)> word = [&hw](uint32_t x, uint16_t& w) {
+        if (x < 0x06000000u || x - 0x06000000u + 1 >= hw.size()) return false;
+        w = static_cast<uint16_t>(hw[x - 0x06000000u] << 8 | hw[x - 0x06000000u + 1]);
+        return true;
+    };
+    const std::vector<std::pair<uint32_t, uint16_t>> callee = { { 0x06071000u, 0x000B }, { 0x06071002u, 0x0009 } };
+    // A7-26: A7-22's rule asks whether the join's first instruction makes the NUMBER, not into which register. `sts.l pr,@-r15 ; mov r4,r0 ;
+    // cmp/eq #1,r0 ; bt/s L ; mov #0,r8 ; cmp/eq #2,r0 ; bf/s X ; mov #0,r8 ; L: mov #0,r12 ; mov.l @(lit),r11 ; mov.l @(lit),r10 ;
+    // mov.l r12,@r10 ; mov #7,r9 ; M: jsr @r11 ; nop ; add #1,r8 ; cmp/gt r9,r8 ; bf M ; X: lds.l @r15+,pr ; rts ; mov r8,r0`. The zeros
+    // of r8 are made in the two slots (0x06070008, 0x0607000E). The join's first instruction makes another register's zero (r12, stored
+    // at 0x06070016), and `iVar1 = 0;` in the loop's guard names that one (0x06070010): the instruction is kept because it makes the
+    // number. A click goes to it; the two slots are on the line of the condition only. The oracle accepts it (constAtJoin asks for the
+    // number). Expected: the line names 0x06070008 and 0x0607000E, as A7-22's does.
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06070000u, { 0x4F22, 0x6043, 0x8801, 0x8D03, 0xE800, 0x8802, 0x8F0A, 0xE800,
+            0xEC00, 0xDB06, 0xDA06, 0x2AC2, 0xE907, 0x4B0B, 0x0009, 0x7801, 0x3897, 0x8BFA, 0x4F26, 0x000B, 0x6083, 0x0000, 0x0607, 0x1000,
+            0x0603, 0xAC00 }, callee);
+        Print("A7-26 a merged constant at another register's constant", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        const Line* body = nullptr;
+        for (const Line* l : a7r4::LinesWith(r, "iVar1 = 0;"))
+            if (l->text.find('(') == std::string::npos) body = l;
+        CHECK(body != nullptr);
+        if (body) CHECK(LineInstructions(*body) == (std::vector<uint32_t>{ 0x06070010u }));   // expected: 0x06070008 and 0x0607000E
+        const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_26");
+        CHECK(a.Violations() == 0);
+    }
+    // A7-27: a case that is only a branch or a nop. `T: .word A0-T ... ; A0: bra Lend ; nop ; A1: bra Lmid ; nop ; A2: nop ; A3: ...` through
+    // the common mova / mov.w / add / jmp form: the table sends case 0 to the `bra` at 0x06070022 and case 2 to the `nop` at 0x0607002A.
+    // `case 0:` names 0x0607003A, the exit the branch goes to (the same instruction as `default:`), and `case 2:` names nothing. The
+    // table's destination is on no line. Expected: the labels name the table's destinations, or the label says it is the exit's.
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06070000u, { 0x4F22, 0xD50F, 0xE104, 0x3416, 0x8D17, 0x6143, 0x311C, 0xC702,
+            0x011D, 0x301C, 0x402B, 0x0009, 0x000A, 0x000E, 0x0012, 0x0014, 0x0018, 0xA00A, 0x0009, 0xA006, 0x0009, 0x0009, 0xE203, 0x2522,
+            0x6352, 0x7301, 0x2532, 0xE205, 0x1521, 0x4F26, 0x000B, 0x0009, 0x0603, 0xAC00 });
+        Print("A7-27 a case that is a bare branch", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        const Line* zero = LineWith(r, "case 0:");
+        const Line* two = LineWith(r, "case 2:");
+        const Line* def = LineWith(r, "default:");
+        CHECK(zero && two && def);
+        if (zero) CHECK(zero->firstAddr == 0x0607003Au);   // expected 0x06070022 (the table's destination)
+        if (def && zero) CHECK(zero->firstAddr == def->firstAddr);
+        if (two) CHECK(two->firstAddr == 0);                // expected 0x0607002A
+        const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_27");
+        CHECK(a.Violations() == 0);
+    }
+}
+
 void TestFixture1()
 {
     Sh2Decompiler d(gConfig);
@@ -14483,6 +14537,7 @@ int main(int argc, char** argv)
         RUN(TestMappingOracleAtMirrors());
         RUN(TestArea7Round3());
         RUN(TestArea7Round4());
+        RUN(TestArea7Round5());
         RUN(TestSlotMadeLineIsAddressedToItsBranch());
         RUN(TestFrameStoreMaterialisedAtCall());
         RUN(TestFixture1b());

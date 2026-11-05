@@ -15963,3 +15963,39 @@ No new `ctest` entry (108 with the Live tests, as on master): the round extends 
 * The live wire (A9-17 a) is still not fuzzed: `FakeLiveServer.h` can serve raw bytes to `ReadSnapshot`.
 * A9-22 and A9-26 are read, not run: `DecompilerPanelTests` can hold the popup's text and the BIOS menu's enabled items.
 * When A9-19 and A9-20 are fixed in `App` rather than in the classes, the `lifecycle` cases must call the new seam.
+
+## Area 7, round 5
+
+Branch `review/7-round5` from master `a8da072d` (the area 7 fixer's A7-22, A7-23, A7-24 and the two regression fixes merged). An adversarial round on the mapping since that fix. **No product code changed.** The round adds `TestArea7Round5` (pins) to `Sh2DecompilerTests.cpp`, `tools/a7_round5/` (a script, a small SH-2 assembler for probe fixtures and the fixtures), and files **A7-26 (P2) and A7-27 (P3)**. **The round is not clean: one new P2 row.** It decides A7-25 and re-judges A7-21 (both stay open, P3, with changed fix directions).
+
+### What was run (RelWithDebInfo, gcc 13, own build in the worktree, `-j2`, every binary under `ulimit -v 3500000` and `timeout`)
+
+| Run | Result |
+|---|---|
+| hwram007.bin and hwram008.bin, alone and lent (`tools/a7_round2/corpus.sh`, `SE_GAME_TOKEN_DUMP`) | all passed; every violation 0 in the four runs, as the fixer measured (off-line 4 / 4, `storeValueOther` 0, `constAtJoin` 0, `copyOtherValue` 24 / 39 / 24 / 39, folded on the way back 29,597 / 125,132 for hwram007 alone and hwram008 lent). The oracle sees nothing of A7-26 |
+| generator, fresh seeds beyond the fixer's 20,000: grammar 2 at 300000 (3,000), grammar 1 at 300001 (3,000), grammar 2 at 700000 (6,000) | 0 mapping findings in 12,000 seeds. One finding of another class: grammar 2 seed 300847, `n:pointer-effect-unsaid` (a read and write at `060090EA` reaching `A0000000`.. through a pointer derived from register addresses, "an associative purge" unsaid). Reproduces alone with `SE_GENERATED_FIRST=300847 SE_GENERATED_SEEDS=1 SE_GENERATED_GRAMMAR=2 SE_GENERATED_CANARY=0` on this base. Not mapping: routed |
+| hand-built fixtures (`tools/a7_round5/fixtures/*.s`, assembled by `sh2asm.py`, run by `SE_A7R4_PROBE`) | below |
+| `SaturnExplorerSh2DecompilerTests` (whole suite, with `TestArea7Round5`) | all passed (27 s) |
+
+### The fixtures
+
+* **Case labels (A7-24).** Two jump tables in one function with cases sharing tails (`f1`), a `braf` table (`f2`), cases that begin with a call and a delay slot, with a store in the slot of the branch out (`f3`), a case falling through into the next case with a `jsr` and slot (`m1`), two tables whose destinations are shared and cross (`f4_2`), cases that are `rts` (`f4_1`). Every label names its table destination (0 violations, the generator's `n:table-case` clean over 12,000 seeds). The corpus tables the script calls "not at a destination" (288 in lent hwram007) are the script's decode: checked by hand, `06027420`'s `braf` table (base braf + 4) and `0602579C`'s (labels 060257DA and 06025800 are the destinations, the others lead into bad data). **One fixture does break it: a case that is only a branch or a nop (A7-27, P3).** Its destination has no block in the final graph, the destination rule finds none, and the run rule names the exit (`case 0:`) or nothing (`case 2:`).
+* **Calls and preserved registers (A7-23).** A value stored, passed through r8 and r9 across a call, stored again after a second call (`g1`, `k1`); a callee that sets r8; two stores of a global with two calls' results on either side of a branch. The stores named are the right ones (0 violations). `g1_0` (a callee that sets r8 and returns) ends "Exceeded maximum restarts" with the signature withheld: the engine's, not the mapping's, and hand-written only.
+* **A7-22 variants.** A merged constant whose join begins with an instruction that makes the same number into another register (`h1`): **A7-26 (P2)**. A path whose writer is a call or a computation names nothing, as designed; a writer behind a register move names the `mov #imm`.
+
+### A7-26 (P2): the join's first instruction makes the number into another register
+
+`InstructionMakesNumber` asks whether an instruction makes the number, not into which register. The A7-22 fixer's rule keeps a COPY of 0 at the join's first instruction when that is `mov #0,r12`, though the COPY is r8's. `iVar1 = 0;` names it, a click goes there, and the two `mov #0,r8` in the slots of the branches into the join are on the condition's line only. The oracle's `constAtJoin` asks the same question, so it accepts the line (0 violations, in the fixture and in the four corpus runs). `tools/a7_round5/const_other_reg.py` bounds the real ones in the corpus: of 192 / 385 / 440 / 795 number lines drawn at a join's first instruction that makes the number, 8 / 16 / 15 / 23 have a path that sets the number into another register and none into this one. One checked by hand: 06015B38 of hwram007, the inner loop's `iVar1 = 0;` (r2) drawn at 06015B52 `mov #0,r3` (the zero the loop stores). Pinned in `TestArea7Round5`.
+
+### A7-25: decision
+
+Keep open, P3, and **do not move the tokens**. What a user sees: the hover of `iRam0603ad2c = param_1;` lists the byte store 0600C152 as well as the global's store, and a click goes to the store. That hover is true. The engine really materialises the value at the byte store (it may alias) and at a `jsr` (the callee may read the frame word), which is what A7-11 chose and `TestFrameStoreMaterialisedAtCall` pins; a user reading "this value is needed here" at a call is helped by it, and moving the tokens to the store would hide where the engine needs the value. What misleads is the way back: the copy is answered before the statement that is the instruction's own, so **Show in Pseudocode** on the byte store selects the global's copy first. The panel says "on 2 lines" and a second request offers the other, so both are reachable. The fix is in the ordering (mark a token that a copy's materialisation drew, and order such lines after the instruction's own statement), with no token moved. Recorded in the A7-25 row.
+
+### A7-21: re-judged
+
+Keep open, P3, direction changed. Accepting it would contradict the fixer's own rule that a line names an instruction only when that instruction made the value, else none: the `bf` makes nothing. `FlowLastWriters` already finds the makers of a register's value on each path (A7-22 uses it for numbers); a register merge with no store of the local could name those, or nothing. The same would cover the loop-head merges that are counted, not rated. P3 stays because the value shown is right. The counts are the fixer's (`copyUnconnected` 0 / 0 / 3 / 6, `copyOtherValue` 24 / 39 / 24 / 39).
+
+### Routed
+
+* Grammar 2 seed 300847, `n:pointer-effect-unsaid` (reads and writes at 060090EA and 060090EE reaching `A0000000` to `A0000040` and `A0000030`.. with no note of an associative purge): to the area that owns pointer notes (area 5), not mapping.
+* `g1_0`: a callee that sets r8 (`mov #9,r8 ; rts ; mov r4,r0`, lent) ends "Exceeded maximum restarts"; hand-written, to area 3/engine, not filed.
