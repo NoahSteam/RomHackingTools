@@ -2,6 +2,7 @@
 
 #include "FileRead.h"
 #include "FileWrite.h"
+#include "AddressNameLine.h"   // SplitLines
 
 #include <cctype>
 #include <cmath>
@@ -140,32 +141,16 @@ std::string Settings::LayoutFilePath()
     return JoinConfig(ConfigDir(), "imgui.ini");
 }
 
-bool Settings::Load(std::string* error)
+namespace
 {
-    const std::string path = FilePath();
-    if (path.empty()) return true;
-    std::string text;
-    switch (ReadFileCapped(path, kMaxSettingsBytes, text))
-    {
-    case CappedRead::Ok: break;
-    case CappedRead::Missing: return true;   // first run
-    case CappedRead::TooLarge:
-        if (error) *error = path + " is larger than " + std::to_string(kMaxSettingsBytes >> 20) + " MiB; not read";
-        return false;
-    case CappedRead::NotRegular:
-        if (error) *error = path + " is not a regular file; not read";
-        return false;
-    case CappedRead::Unreadable:
-        if (error) *error = "could not read " + path;
-        return false;
-    }
-    std::istringstream f(text);
+using IniData = std::map<std::string, std::map<std::string, std::string>>;
 
-    std::string line, section;
-    while (std::getline(f, line))
+// The INI text into 'data'. A line ends at LF, CRLF or a lone CR (A9-25).
+void ParseIni(const std::string& text, IniData& data)
+{
+    std::string section;
+    for (const std::string& line : SplitLines(text))
     {
-        // Strip a trailing CR (an INI written on Windows read on POSIX, or vice versa).
-        if (!line.empty() && line.back() == '\r') line.pop_back();
         std::string t = Trim(line);
         if (t.empty() || t[0] == ';' || t[0] == '#') continue;
         if (t.front() == '[' && t.back() == ']')
@@ -177,8 +162,42 @@ bool Settings::Load(std::string* error)
         if (eq == std::string::npos) continue;
         const std::string key = Lower(Trim(t.substr(0, eq)));
         const std::string val = Trim(t.substr(eq + 1));
-        if (!key.empty()) mData[section][key] = val;
+        if (!key.empty()) data[section][key] = val;
     }
+}
+
+// Why a read of the settings file gave nothing: "" for Ok and Missing.
+std::string WhyNotRead(CappedRead r, const std::string& path)
+{
+    switch (r)
+    {
+    case CappedRead::TooLarge: return path + " is larger than " + std::to_string(kMaxSettingsBytes >> 20) + " MiB; not read";
+    case CappedRead::NotRegular: return path + " is not a regular file; not read";
+    case CappedRead::Unreadable: return "could not read " + path;
+    default: return std::string();
+    }
+}
+}  // namespace
+
+bool Settings::Load(std::string* error)
+{
+    const std::string path = FilePath();
+    if (path.empty()) return true;
+    std::string text;
+    const CappedRead r = ReadFileCapped(path, kMaxSettingsBytes, text);
+    mLoadedPath = path;
+    const std::string why = WhyNotRead(r, path);
+    if (!why.empty())
+    {
+        mRefusedWhy = path + " was refused (" + why + ")";   // no save may replace it (A9-19)
+        if (error) *error = why;
+        return false;
+    }
+    mRefusedWhy.clear();
+    mBase.clear();
+    if (r == CappedRead::Missing) return true;   // first run
+    ParseIni(text, mData);
+    ParseIni(text, mBase);
     return true;
 }
 
@@ -197,28 +216,54 @@ bool Settings::Save(std::string* error) const
 
 bool Settings::SaveTo(const std::string& path, std::string* error) const
 {
+    auto fail = [&](const std::string& why) { if (error) *error = why; return false; };
+    const bool same = path == mLoadedPath;
+    static const IniData kNone;
+    const IniData& base = same ? mBase : kNone;
+    // The keys this session set or changed.
+    IniData changes;
+    for (const auto& sec : mData)
+        for (const auto& kv : sec.second)
+        {
+            auto s = base.find(sec.first);
+            if (s == base.end() || !s->second.count(kv.first) || s->second.at(kv.first) != kv.second) changes[sec.first][kv.first] = kv.second;
+        }
+    if (changes.empty()) return true;   // an instance that changed nothing writes nothing (A9-20)
+    if (same && !mRefusedWhy.empty())
+        return fail("Settings: not saved, " + mRefusedWhy + " when it was loaded, and a save would replace it; this session's changes are kept in memory only");
+    // The lock file lives beside the data: a lock on the file itself would be dropped by the rename that replaces it.
+    FileLock lock(path + ".lock");
+    std::string disk;
+    IniData merged;
+    const CappedRead r = ReadFileCapped(path, kMaxSettingsBytes, disk);
+    const std::string why0 = WhyNotRead(r, path);
+    if (!why0.empty()) return fail("Settings: not saved, " + why0 + " now; the file is left as it is");
+    if (r == CappedRead::Ok) ParseIni(disk, merged);
+    for (const auto& sec : changes)
+        for (const auto& kv : sec.second) merged[sec.first][kv.first] = kv.second;
     // One line per setting. A value with a line feed in it (a path can have one) would end its line and begin another
     // that the next start reads as a setting of its own: a BIOS path could set the volatile list (A9-12). Each line
-    // feed is written as a space, so what comes back is a value that fails visibly (a path that does not exist), not a
-    // different setting.
+    // end character (LF, and CR, which the loader now also ends a line at) is written as a space, so what comes back is a
+    // value that fails visibly (a path that does not exist), not a different setting.
     auto oneLine = [](std::string v) {
-        for (char& c : v) if (c == '\n') c = ' ';
+        for (char& c : v) if (c == '\n' || c == '\r') c = ' ';
         return v;
     };
     std::string text;
-    for (const auto& sec : mData)
+    for (const auto& sec : merged)
     {
         text += '[' + oneLine(sec.first) + "]\n";
         for (const auto& kv : sec.second)
             text += oneLine(kv.first) + " = " + oneLine(kv.second) + '\n';
         text += '\n';
     }
+    if (text.size() > kMaxSettingsBytes) return fail("Settings: not saved, it would be over the 4 MiB that is read back at the next start");
     // Not an ofstream: it truncates the file on open and flushes in its destructor, after any check the
     // caller could make, so a failed write both lost the old settings and reported success.
     std::string why;
-    if (WriteFileAtomically(path, text.data(), text.size(), why)) return true;
-    if (error) *error = path + ": " + why;
-    return false;
+    if (!WriteFileAtomically(path, text.data(), text.size(), why)) return fail(path + ": " + why);
+    if (same) mBase = mData;
+    return true;
 }
 
 bool Settings::Has(const std::string& section, const std::string& key) const

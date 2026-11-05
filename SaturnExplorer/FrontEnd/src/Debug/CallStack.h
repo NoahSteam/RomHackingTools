@@ -73,7 +73,10 @@ public:
     // False, with 'error', when the file is there and was not read: not a regular file, over 8 MiB, unreadable.
     // Lines that are not "<address> <name>" are skipped and counted (SkippedLines).
     bool Load(std::string* error = nullptr);
-    // Written whole or not at all, so a reader never sees half a list. False, with 'error', when it could not be written.
+    // Applies this session's changes (renames, clears, imports since Load) to the file as it is NOW, under a lock, and writes
+    // it atomically; every other line of the file (comments, lines Load skipped, another instance's renames) is kept, and an
+    // instance that changed nothing writes nothing (A9-20, A9-21). Refused, with 'error' naming the file and why, when Load
+    // refused the file (A9-19) or the result would be over the 8 MiB that Load reads. New lines carry eight digits.
     bool Save(std::string* error = nullptr) const;
 
     // Merge an external symbol map ("<hex-addr> <name>" per line) into the store without
@@ -95,6 +98,8 @@ public:
 
 private:
     std::map<uint32_t, std::string> mNames;
+    mutable std::map<uint32_t, std::string> mBase;   // what the file held at Load (or at the last Save): changes are measured from it
+    std::string mRefusedWhy;                          // why Load refused the file; empty when it did not
     uint64_t mGeneration = 0;
     size_t mSkipped = 0, mFirstSkipped = 0;
 };

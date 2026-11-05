@@ -831,6 +831,16 @@ std::vector<std::string> DecompilerPanel::Uncertainties() const
     return out;
 }
 
+std::string DecompilerPanel::UnparsedVolatileProblem() const
+{
+    if (!VolatileNotInForce()) return std::string();
+    std::vector<std::pair<uint32_t, uint32_t>> ranges;
+    std::string why;
+    if (mVolatileUnparsed.size() >= sizeof mVolatileEdit) why = "the list is longer than " + std::to_string(sizeof mVolatileEdit - 1) + " characters";
+    else if (ParseAddressRanges(mVolatileUnparsed, ranges, why)) why = "it could not be applied";
+    return "The saved list is NOT in force (no volatile memory is set): " + why + ". Apply a list that parses to replace it.";
+}
+
 bool DecompilerPanel::SetVolatileMemory(const std::string& text, std::string* error)
 {
     std::vector<std::pair<uint32_t, uint32_t>> ranges;
@@ -1455,8 +1465,8 @@ void DecompilerPanel::DrawHeader(const DecompilerView& view, const DecompilerRun
     if (ImGui::BeginPopup("bios"))
     {
         if (ImGui::MenuItem("Choose BIOS Image...")) req.chooseBios = true;
-        if (ImGui::MenuItem("Reload BIOS Image", nullptr, false, view.bios != nullptr)) req.reloadBios = true;
-        if (ImGui::MenuItem("Stop Using BIOS Image", nullptr, false, view.bios != nullptr)) req.clearBios = true;
+        if (ImGui::MenuItem("Reload BIOS Image", nullptr, false, BiosItemsEnabled(view))) req.reloadBios = true;
+        if (ImGui::MenuItem("Stop Using BIOS Image", nullptr, false, BiosItemsEnabled(view))) req.clearBios = true;
         ImGui::EndPopup();
     }
 
@@ -1464,11 +1474,12 @@ void DecompilerPanel::DrawHeader(const DecompilerView& view, const DecompilerRun
     if (ImGui::Button("Volatile"))
     {
         std::snprintf(mVolatileEdit, sizeof mVolatileEdit, "%s", VolatileMemory().c_str());
-        mVolatileError.clear();
+        mVolatileError = UnparsedVolatileProblem();   // a saved list that did not parse is said, not shown as if set (A9-22)
         ImGui::OpenPopup("volatile");
     }
     ImGui::SetItemTooltip("Memory another processor changes, such as a mailbox shared with the slave SH-2:\n"
-                          "every access there is kept. Hardware registers and sound RAM always are.");
+                          "every access there is kept. Hardware registers and sound RAM always are.%s",
+                          VolatileNotInForce() ? "\nThe saved list does not parse and is NOT in force." : "");
     if (ImGui::BeginPopup("volatile"))
     {
         ImGui::TextUnformatted("Volatile memory: first-last or single addresses, hex");

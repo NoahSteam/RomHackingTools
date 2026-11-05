@@ -65,6 +65,9 @@ public:
     // old one and renamed over it once it is safely on disk, so a full disk, a failed flush or a
     // read-only folder leaves the previous settings in place instead of an empty file. False, with
     // 'error' filled, when it could not be saved -- the caller must keep its changes pending.
+    // Only the keys this session set or changed since Load are applied to the file as it is now, under a lock (another
+    // instance's keys, the installer's [emulators], are kept), and nothing is written when nothing changed. Refused, with
+    // 'error', when Load refused the file, so a file the user cannot have loaded is never replaced (A9-19, A9-20).
     bool Save(std::string* error = nullptr) const;
     bool SaveTo(const std::string& path, std::string* error = nullptr) const;   // the same, to 'path'
 
@@ -84,6 +87,9 @@ private:
     // section -> (key -> value). Sections/keys are stored lowercased so lookups
     // are case-insensitive and match whatever casing the installer writes.
     std::map<std::string, std::map<std::string, std::string>> mData;
+    // What the file held at Load (or at the last Save), and why Load refused it: changes are measured from the first.
+    mutable std::map<std::string, std::map<std::string, std::string>> mBase;
+    std::string mLoadedPath, mRefusedWhy;
 };
 
 }  // namespace sfe

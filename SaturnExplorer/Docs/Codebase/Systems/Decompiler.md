@@ -45,15 +45,17 @@ holds them is `LoaderFuzzTests` (see `Docs/FunctionalityVerification/15_DECOMPIL
 | File | Loader | Rule |
 |---|---|---|
 | BIOS image (path in `settings.ini` `[decompiler] bios`) | `LoadBiosImageFile` (`Decompiler/BiosImageFile.cpp`), called by `App::LoadBiosImage` | A regular file of 1 byte to 512 KiB; stat first, read to one byte past the ceiling. A failed Reload drops the image. |
-| `settings.ini` | `Settings::Load` / `Save` | Up to 4 MiB; saved atomically; a line feed in a value is written as a space. |
-| `saturn_functions.txt`, `saturn_symbols.txt`, Load Symbols | `FunctionNames::Load` / `Import` / `Save` | `<hex-address> <name>` (`AddressNameLine.h`), up to 8 MiB; other lines are skipped and counted; saved atomically. |
-| `saturn_function_bounds.txt` | `FunctionBounds::Load` / `Save` (`Sh2FunctionFinder.cpp`) | An address as the first word, a remark after it allowed; up to 4 MiB. |
-| `assembly_comments.txt` | `AssemblyPanel::LoadComments` / `SaveComments` | As the names file, up to 8 MiB. |
+| `settings.ini` | `Settings::Load` / `Save` | Up to 4 MiB; a lone CR ends a line; saved by merging this session's changed keys into the file as it is, under a lock; a line end character in a value is written as a space. |
+| `saturn_functions.txt`, `saturn_symbols.txt`, Load Symbols | `FunctionNames::Load` / `Import` / `Save` | `<hex-address> <name>` (`AddressNameLine.h`), up to 8 MiB; other lines are skipped and counted (and kept by the next save); a word of the letters a-f alone is not an address; saved with eight digits. Save: `SaveStore` (`StoreMerge.h`). |
+| `saturn_function_bounds.txt` | `FunctionBounds::Load` / `Save` (`Sh2FunctionFinder.cpp`) | An address as the first word (the same rule), a remark after it allowed; up to 4 MiB; an address in no memory (`CanonicalAddress` refuses) is counted as skipped. |
+| `assembly_comments.txt` | `AssemblyPanel::LoadComments` / `SaveComments` | As the names file, up to 8 MiB. Failed saves after an edit go to the Log (`SetSaveErrorHandler`). |
 | Volatile list text | `ParseAddressRanges` (`Decompiler/AddressRanges.cpp`) | Capped at 2047 characters by `SetVolatileMemory`. |
 | Language files | `MaterialiseSh2SpecBundle` | Each file read to one byte past its embedded size, regular files only. |
 | Savestates, dumps | `se_savestate_open*` (`StateSources.md`) | A region of a state is whole or absent; a dump may hold a region in part, and `MemorySnapshot::Capture` then leaves it out. |
 
-`FileRead.h` (`ReadFileCapped`) is the one bounded reader; use it for a new file rather than `ReadWholeFile`, which reads to
+**Saving the user's files (A9-19 to A9-21, A9-23, A9-28).** `StoreMerge.h` (`SaveStore`) is the one save of the names, notes, function starts, and (by the same rules, in `Settings::SaveTo`) `settings.ini`: a file the loader refused is never written over (the store is marked not-loaded, and a save that would change it is refused with a message); a store that changed nothing since the load writes nothing; otherwise the file is read again under a `FileLock` on `<file>.lock`, this session's adds, edits and deletes are applied to its lines (the rest is kept as written), and `WriteFileAtomically` writes it, keeping the permission bits and refusing a read-only target. The three files are opened at `WorkFilePath(...)` (`WorkFiles.h`), anchored at the folder the application started in. Not run on Windows: `OFN_NOCHANGEDIR` on the open and save dialogs (`WindowsPlatform.cpp`).
+
+`FileRead.h` (`ReadFileCapped`) is the one bounded reader (it opens with `O_NONBLOCK` and looks at the descriptor, so a path swapped for a FIFO after the stat is refused); use it for a new file rather than `ReadWholeFile`, which reads to
 the end of whatever it is given.
 
 What the save after a load does is the other half, and round 2 of area 9 found it open (A9-19 to A9-21, A9-28 in

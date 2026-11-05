@@ -5,16 +5,62 @@
 // name. Blank lines and lines opening with ; # // are comments. Any other line is Malformed and the caller skips it and
 // counts it. The readers used strtoul / sscanf on the front of the line, so "100000000 f" named address 0 (the high bits
 // cut off), "-1 f" named 0xFFFFFFFF, and "0608<garbage>" named 0x608 after the digits it began with (A9-2, A9-10).
+//
+// A word of the letters a-f alone is a word, not an address (A9-18): "Dead function", "add it later", "beef", an article "a".
+// The rule (ParseAddressWord): with 0x, one to eight hex digits; without it, eight hex digits (what the saves write), or one to
+// seven hex digits that include a decimal digit (what older versions wrote for addresses below 0x10000000: "6004000"). So an
+// older file's entry still loads unless every digit of its address is a-f ("abc" for 0x00000ABC, which older versions wrote for
+// addresses that exist in no memory of the machine); such a line is skipped and counted like any other that is not an entry.
 #pragma once
 
 #include <cctype>
 #include <cstdint>
 #include <string>
+#include <vector>
 
 namespace sfe
 {
 
 enum class AddressNameLine { Entry, Comment, Malformed };
+
+// The lines of 'text' without their ends. A line ends at LF, CRLF or a lone CR (a classic Mac tool, or a CRLF file that lost its
+// LFs, A9-25); a last line without an end is a line, an end at the end of the text does not start an empty one.
+inline std::vector<std::string> SplitLines(const std::string& text)
+{
+    std::vector<std::string> out;
+    size_t b = 0;
+    for (size_t i = 0; i < text.size(); ++i)
+    {
+        if (text[i] != '\n' && text[i] != '\r') continue;
+        out.push_back(text.substr(b, i - b));
+        if (text[i] == '\r' && i + 1 < text.size() && text[i + 1] == '\n') ++i;
+        b = i + 1;
+    }
+    if (b < text.size()) out.push_back(text.substr(b));
+    return out;
+}
+
+// The word line[b, e) as an address, by the rule at the top of this file.
+inline bool ParseAddressWord(const std::string& line, size_t b, size_t e, uint32_t& addr)
+{
+    size_t d = b;
+    const bool prefixed = e - b > 2 && line[b] == '0' && (line[b + 1] == 'x' || line[b + 1] == 'X');
+    if (prefixed) d = b + 2;
+    if (d == e || e - d > 8) return false;
+    uint32_t a = 0;
+    bool digit = false;
+    for (size_t i = d; i < e; ++i)
+    {
+        const char c = line[i];
+        if (!std::isxdigit(static_cast<unsigned char>(c))) return false;
+        digit = digit || std::isdigit(static_cast<unsigned char>(c)) != 0;
+        a = (a << 4) | static_cast<uint32_t>(std::isdigit(static_cast<unsigned char>(c)) ? c - '0'
+                                                                                         : std::tolower(static_cast<unsigned char>(c)) - 'a' + 10);
+    }
+    if (!prefixed && e - d < 8 && !digit) return false;   // "Dead", "add", "a": a word
+    addr = a;
+    return true;
+}
 
 inline AddressNameLine ParseAddressNameLine(const std::string& line, uint32_t& addr, std::string& name)
 {
@@ -27,17 +73,8 @@ inline AddressNameLine ParseAddressNameLine(const std::string& line, uint32_t& a
 
     size_t e = b;
     while (e < line.size() && !space(line[e])) ++e;
-    size_t d = b;
-    if (e - b > 2 && line[b] == '0' && (line[b + 1] == 'x' || line[b + 1] == 'X')) d = b + 2;
-    if (d == e || e - d > 8) return AddressNameLine::Malformed;
     uint32_t a = 0;
-    for (size_t i = d; i < e; ++i)
-    {
-        const char c = line[i];
-        if (!std::isxdigit(static_cast<unsigned char>(c))) return AddressNameLine::Malformed;
-        a = (a << 4) | static_cast<uint32_t>(std::isdigit(static_cast<unsigned char>(c)) ? c - '0'
-                                                                                         : std::tolower(static_cast<unsigned char>(c)) - 'a' + 10);
-    }
+    if (!ParseAddressWord(line, b, e, a)) return AddressNameLine::Malformed;
     size_t np = e;
     while (np < line.size() && space(line[np])) ++np;
     size_t ne = line.size();

@@ -93,6 +93,8 @@ struct DecompilerView
     bool inspectionReady = true;
     std::string inspectionReason;
     std::shared_ptr<const decomp::BiosImage> bios;   // content hashed once, at load
+    // A BIOS path is held (saved in settings) although no image is: the load failed. Reload and Stop Using stay available (A9-26).
+    bool biosPathHeld = false;
 };
 
 // Text coordinates use the same origin and font measurement as the draw-list renderer.
@@ -188,6 +190,12 @@ public:
     const std::string& VolatileMemory() const { return mVolatileText.empty() ? mVolatileUnparsed : mVolatileText; }
     bool SetVolatileMemory(const std::string& text, std::string* error = nullptr);
     void KeepUnparsedVolatileMemory(const std::string& text) { mVolatileUnparsed = text; }
+    // Whether the BIOS popup's Reload and Stop Using items are offered: an image is held, or a path is (a load that failed).
+    static bool BiosItemsEnabled(const DecompilerView& v) { return v.bios != nullptr || v.biosPathHeld; }
+    // True while a saved list that did not parse is all there is: no volatile memory is in force (A9-22).
+    bool VolatileNotInForce() const { return mVolatileText.empty() && !mVolatileUnparsed.empty(); }
+    // What is wrong with that saved list ("" when it is in force or nothing is saved).
+    std::string UnparsedVolatileProblem() const;
 
     // The install decision for one polled result (called by Update; public so tests can offer a
     // result the runner would never deliver, which is how the panel's own checks are pinned

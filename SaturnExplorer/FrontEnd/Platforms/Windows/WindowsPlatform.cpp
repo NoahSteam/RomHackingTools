@@ -276,7 +276,7 @@ bool WindowsPlatform::OpenFileDialog(std::string& outPath)
     ofn.lpstrFilter = "All Files\0*.*\0Memory Dumps\0*.bin;*.dump;*.sav\0";
     ofn.lpstrFile = file;
     ofn.nMaxFile = MAX_PATH;
-    ofn.Flags = OFN_FILEMUSTEXIST | OFN_HIDEREADONLY;
+    ofn.Flags = OFN_FILEMUSTEXIST | OFN_HIDEREADONLY | OFN_NOCHANGEDIR;
 
     if (!::GetOpenFileNameA(&ofn))
     {
@@ -322,7 +322,7 @@ bool WindowsPlatform::OpenFileDialogFiltered(std::string& outPath, const char* f
     ofn.lpstrFilter = filter.c_str();
     ofn.lpstrFile = file;
     ofn.nMaxFile = MAX_PATH;
-    ofn.Flags = OFN_FILEMUSTEXIST | OFN_HIDEREADONLY;
+    ofn.Flags = OFN_FILEMUSTEXIST | OFN_HIDEREADONLY | OFN_NOCHANGEDIR;
     if (!::GetOpenFileNameA(&ofn))
     {
         return false;
@@ -346,7 +346,7 @@ SaveOutcome WindowsPlatform::SaveFile(const char* suggestedName, const void* dat
     ofn.lpstrFilter = "All Files\0*.*\0";
     ofn.lpstrFile = file;
     ofn.nMaxFile = MAX_PATH;
-    ofn.Flags = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY;
+    ofn.Flags = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY | OFN_NOCHANGEDIR;
 
     // GetSaveFileName returning zero is a dismissed dialog unless CommDlg has an error to
     // report, which is the one case here that is not the user's choice.

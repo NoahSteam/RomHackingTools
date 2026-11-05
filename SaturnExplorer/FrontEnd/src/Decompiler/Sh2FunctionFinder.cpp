@@ -4,6 +4,8 @@
 #include "Disc/PathUtil.h"   // ReadWholeFile
 #include "FileRead.h"
 #include "FileWrite.h"
+#include "AddressNameLine.h"
+#include "StoreMerge.h"
 
 #include <algorithm>
 #include <cctype>
@@ -537,72 +539,83 @@ void FunctionBounds::ClearEntry(uint32_t address)
 // The largest bounds file read. An entry is nine bytes: 4 MiB is some 460,000 of them.
 static const size_t kMaxBoundsFileBytes = 4u * 1024u * 1024u;
 
+namespace
+{
+// A bounds line: an address (AddressNameLine.h's rule) with anything after white space as a remark, in memory (CanonicalAddress).
+// 'kind': 0 = comment or blank, 1 = entry, 2 = a line that is not an entry (skipped and counted).
+int ClassifyBoundsLine(const std::string& line, uint32_t& canonical)
+{
+    size_t b = 0;
+    while (b < line.size() && std::isspace(static_cast<unsigned char>(line[b]))) ++b;
+    if (b >= line.size() || line[b] == ';' || line[b] == '#' || (line[b] == '/' && b + 1 < line.size() && line[b + 1] == '/')) return 0;
+    size_t e = b;
+    while (e < line.size() && !std::isspace(static_cast<unsigned char>(line[e]))) ++e;
+    uint32_t v = 0;
+    if (!ParseAddressWord(line, b, e, v)) return 2;
+    // An address the CPU does not see as memory (the on-chip registers, FFFFFE10) is not a function start: counted, not dropped quietly (A9-21).
+    return CanonicalAddress(v, canonical) ? 1 : 2;
+}
+}  // namespace
+
 bool FunctionBounds::Load(const std::string& path, std::string* error)
 {
     mSkipped = mFirstSkipped = 0;
     std::string text;
+    std::string why;
     switch (ReadFileCapped(path, kMaxBoundsFileBytes, text))
     {
     case CappedRead::Ok: break;
-    case CappedRead::Missing: mEntries.clear(); return true;   // no file is no corrections
-    case CappedRead::TooLarge:
-        if (error) *error = path + " is larger than " + std::to_string(kMaxBoundsFileBytes >> 20) + " MiB; not read";
-        return false;
-    case CappedRead::NotRegular:
-        if (error) *error = path + " is not a regular file; not read";
-        return false;
-    case CappedRead::Unreadable:
-        if (error) *error = "could not read " + path;
+    case CappedRead::Missing: mEntries.clear(); mBase.clear(); mBasePath = path; mRefusedWhy.clear(); return true;   // no file is no corrections
+    case CappedRead::TooLarge: why = path + " is larger than " + std::to_string(kMaxBoundsFileBytes >> 20) + " MiB; not read"; break;
+    case CappedRead::NotRegular: why = path + " is not a regular file; not read"; break;
+    case CappedRead::Unreadable: why = "could not read " + path; break;
+    }
+    if (!why.empty())
+    {
+        mBasePath = path;
+        mRefusedWhy = path + " was refused (" + why + ")";   // no save may replace it (A9-19)
+        if (error) *error = why;
         return false;
     }
-    // A line is "<address>" with anything after white space (a remark), or a comment (; # // or blank). The address is one
-    // to eight hex digits, optionally 0x-prefixed, and all of the first word: the line "Dead function" used to be the
-    // address 0xDEAD, "100000000" the address 0, and "-1" 0xFFFFFFFF, because strtoul read the front of whatever came (A9-4).
+    mRefusedWhy.clear();
+    // A line is "<address>" with anything after white space (a remark), or a comment (; # // or blank); see ClassifyBoundsLine.
     std::set<uint32_t> entries;
-    std::istringstream in(text);
-    std::string line;
     size_t lineNo = 0;
-    while (std::getline(in, line))
+    for (const std::string& line : SplitLines(text))
     {
         ++lineNo;
-        size_t b = 0;
-        while (b < line.size() && std::isspace(static_cast<unsigned char>(line[b]))) ++b;
-        if (b >= line.size() || line[b] == ';' || line[b] == '#' || (line[b] == '/' && b + 1 < line.size() && line[b + 1] == '/')) continue;
-        size_t e = b;
-        while (e < line.size() && !std::isspace(static_cast<unsigned char>(line[e]))) ++e;
-        size_t d = b;
-        if (e - b > 2 && line[b] == '0' && (line[b + 1] == 'x' || line[b + 1] == 'X')) d = b + 2;
-        bool ok = d < e && e - d <= 8;
-        uint32_t v = 0;
-        for (size_t i = d; ok && i < e; ++i)
-        {
-            const char c = line[i];
-            ok = std::isxdigit(static_cast<unsigned char>(c)) != 0;
-            if (ok) v = (v << 4) | static_cast<uint32_t>(std::isdigit(static_cast<unsigned char>(c)) ? c - '0' : std::tolower(static_cast<unsigned char>(c)) - 'a' + 10);
-        }
-        if (!ok)
-        {
-            if (!mSkipped++) mFirstSkipped = lineNo;
-            continue;
-        }
         uint32_t c = 0;
-        if (CanonicalAddress(v, c)) entries.insert(c);
+        const int k = ClassifyBoundsLine(line, c);
+        if (k == 1) entries.insert(c);
+        else if (k == 2 && !mSkipped++) mFirstSkipped = lineNo;
     }
     mEntries = std::move(entries);
+    mBase = mEntries;
+    mBasePath = path;
     return true;
 }
 
-bool FunctionBounds::Save(const std::string& path) const
+bool FunctionBounds::Save(const std::string& path, std::string* error) const
 {
-    std::string text = "; Function entries set by hand (Saturn Explorer, SH-2 Pseudocode)\n";
-    char b[16];
-    for (uint32_t e : mEntries)
+    // Only this session's changes, on the file as it is now (StoreMerge.h). The base is the file this object loaded.
+    const bool same = path == mBasePath;
+    AddressMap base, cur;
+    if (same) for (uint32_t a : mBase) base[a] = std::string();
+    for (uint32_t a : mEntries) cur[a] = std::string();
+    auto classify = [](const std::string& line, uint32_t& a) { return ClassifyBoundsLine(line, a) == 1; };
+    auto format = [](uint32_t a, const std::string&) {
+        char b[16];
+        std::snprintf(b, sizeof b, "%08X\n", a);
+        return std::string(b);
+    };
+    const bool ok = SaveStore(path, "The function starts", same ? mRefusedWhy : std::string(), kMaxBoundsFileBytes, base, cur, classify, format,
+                              "; Function entries set by hand (Saturn Explorer, SH-2 Pseudocode)\n", error);
+    if (ok && same)
     {
-        std::snprintf(b, sizeof b, "%08X\n", e);
-        text += b;
+        mBase.clear();
+        for (const auto& kv : base) mBase.insert(kv.first);
     }
-    std::string error;
-    return WriteFileAtomically(path, text.data(), text.size(), error);
+    return ok;
 }
 
 }  // namespace decomp

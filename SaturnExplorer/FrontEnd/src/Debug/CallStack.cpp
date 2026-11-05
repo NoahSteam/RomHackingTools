@@ -9,12 +9,15 @@
 #include "AddressNameLine.h"
 #include "FileRead.h"
 #include "FileWrite.h"
+#include "StoreMerge.h"
+#include "WorkFiles.h"
 
 namespace sfe
 {
 namespace
 {
-const char* kFunctionFile = "saturn_functions.txt";
+const char* kFunctionName = "saturn_functions.txt";
+std::string FunctionFile() { return WorkFilePath(kFunctionName); }
 
 // Read a big-endian u32 out of a byte span at 'off'; false if it doesn't fit.
 bool BeU32(const std::vector<uint8_t>& b, size_t off, uint32_t& out)
@@ -110,17 +113,11 @@ bool ReadNames(const std::string& path, std::map<uint32_t, std::string>& names, 
     case CappedRead::Unreadable: error = "could not read " + path; return false;
     }
     entries = skipped = firstSkipped = 0;
-    size_t lineNo = 0, p = 0;
+    size_t lineNo = 0;
     uint32_t addr = 0;
     std::string name;
-    while (p <= text.size())
+    for (const std::string& line : SplitLines(text))
     {
-        size_t e = text.find('\n', p);
-        if (e == std::string::npos) e = text.size();
-        const std::string line = text.substr(p, e - p);
-        const bool last = e == text.size();
-        p = e + 1;
-        if (last && line.empty()) break;
         ++lineNo;
         switch (ParseAddressNameLine(line, addr, name))
         {
@@ -140,12 +137,16 @@ bool FunctionNames::Load(std::string* error)
     bool missing = false;
     std::string why;
     mSkipped = mFirstSkipped = 0;
-    if (!ReadNames(kFunctionFile, names, entries, mSkipped, mFirstSkipped, why, missing))
+    if (!ReadNames(FunctionFile(), names, entries, mSkipped, mFirstSkipped, why, missing))
     {
+        // The file is there and was not read. Nothing this session holds may be written over it (A9-19).
+        mRefusedWhy = why;
         if (error) *error = why;
         return false;
     }
-    if (missing) return true;
+    mRefusedWhy.clear();
+    if (missing) { mBase.clear(); return true; }
+    mBase = names;
     mNames = std::move(names);
     ++mGeneration;
     return true;
@@ -153,21 +154,20 @@ bool FunctionNames::Load(std::string* error)
 
 bool FunctionNames::Save(std::string* error) const
 {
-    std::string text;
-    char b[16];
+    AddressMap cur;
     for (const auto& kv : mNames)
-    {
-        if (kv.second.empty()) continue;
-        std::snprintf(b, sizeof b, "%x ", kv.first);
-        text += b;
-        text += kv.second;
-        text += '\n';
-    }
-    // Staged and renamed: written in place, a second instance (or a crash) read half of it as the whole list (A9-3).
-    std::string why;
-    if (WriteFileAtomically(kFunctionFile, text.data(), text.size(), why)) return true;
-    if (error) *error = std::string(kFunctionFile) + ": " + why;
-    return false;
+        if (!kv.second.empty()) cur[kv.first] = kv.second;
+    auto classify = [](const std::string& line, uint32_t& a) {
+        std::string n;
+        return ParseAddressNameLine(line, a, n) == AddressNameLine::Entry;
+    };
+    auto format = [](uint32_t a, const std::string& n) {
+        char b[16];
+        std::snprintf(b, sizeof b, "%08x ", a);
+        return std::string(b) + n + "\n";
+    };
+    return SaveStore(FunctionFile(), "The function names", mRefusedWhy.empty() ? mRefusedWhy : FunctionFile() + " was refused (" + mRefusedWhy + ")",
+                     kMaxNamesFileBytes, mBase, cur, classify, format, std::string(), error);
 }
 
 size_t FunctionNames::Import(const char* path, std::string* error)
@@ -183,6 +183,19 @@ size_t FunctionNames::Import(const char* path, std::string* error)
         return 0;
     }
     if (missing) return 0;
+    // The merged names are saved, and a file over the ceiling is refused at the next start: refuse the merge instead, and say so.
+    {
+        size_t total = 0;
+        std::map<uint32_t, std::string> merged = mNames;
+        for (const auto& kv : names) merged[kv.first] = kv.second;
+        for (const auto& kv : merged) total += 10 + kv.second.size();
+        if (total > kMaxNamesFileBytes)
+        {
+            if (error) *error = std::string(path) + " not merged: the names would come to about " + std::to_string(total >> 20) + " MiB, over the " +
+                                std::to_string(kMaxNamesFileBytes >> 20) + " MiB that is read back at the next start";
+            return 0;
+        }
+    }
     for (auto& kv : names) mNames[kv.first] = std::move(kv.second);
     if (entries) ++mGeneration;
     return entries;

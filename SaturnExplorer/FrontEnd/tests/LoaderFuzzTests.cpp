@@ -177,30 +177,14 @@ namespace
 const int kSlowMs = 5000;   // a case that takes longer is a hang, whatever it was doing
 
 // Violation classes the ledger holds as open: class -> row. Counted and printed, not failed.
-// (Emptied as the rows are fixed.) Round 1's were all fixed; these are round 2's.
+// (Emptied as the rows are fixed.) Round 1's were all fixed; round 2's were fixed by the area 9 fixer except A9-28's hard link,
+// which is accepted.
 const std::map<std::string, std::string>& Known()
 {
     static const std::map<std::string, std::string> k = {
-        { "names/PROSE_AS_ADDRESS", "A9-18" },
-        { "comments/PROSE_AS_ADDRESS", "A9-18" },
-        { "bounds/PROSE_AS_ADDRESS", "A9-18" },
-        { "lifecycle/UNREAD_FILE_OVERWRITTEN", "A9-19" },
-        { "lifecycle/SAVE_WRITES_UNREADABLE", "A9-19" },
-        { "lifecycle/IDLE_INSTANCE_REVERTS", "A9-20" },
-        { "lifecycle/LOST_UPDATE", "A9-20" },
-        { "lifecycle/SAVE_DROPS_SKIPPED_LINES", "A9-21" },
-        { "lifecycle/SAVE_DROPS_COMMENTS", "A9-21" },
-        { "lifecycle/DROPPED_UNCOUNTED", "A9-21" },
-        { "lifecycle/SAVE_BLOCKS", "A9-24" },
-        { "links.savestate/SAVESTATE_HANG", "A9-24" },
-        { "concurrent.race/STAT_OPEN_RACE", "A9-24" },
-        { "names/LONE_CR_JOINS_LINES", "A9-25" },
-        { "comments/LONE_CR_JOINS_LINES", "A9-25" },
-        { "bounds/LONE_CR_JOINS_LINES", "A9-25" },
-        { "lifecycle/LONE_CR_JOINS_LINES", "A9-25" },
-        { "lifecycle/MODE_NOT_KEPT", "A9-28" },
+        // A9-28 (accepted): a save writes a new file, so a hard link to the old one no longer names it. The mode and the read-only
+        // bit are kept (fixed); a link is not, for the reason A9-15 gives for a symlink.
         { "lifecycle/HARDLINK_SPLIT", "A9-28" },
-        { "lifecycle/READONLY_REPLACED", "A9-28" },
     };
     return k;
 }
