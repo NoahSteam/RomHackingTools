@@ -6604,7 +6604,15 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
         emptied[k] = !covered;
         return !covered;
     };
-    const auto flowSucceeds = [&](int from, int to) {
+    // (A7-39 (c): an instruction the flow splits into blocks of its own, `mac.w` with its saturation, is passed through too: the edge from
+    // the block it ends is from each of its blocks, and the edge to the block it begins is to any of them)
+    const auto onlyOf = [&flow](int k, uint32_t insn) {
+        if (k < 0 || static_cast<size_t>(k) >= flow.blockOps.size() || flow.blockOps[static_cast<size_t>(k)].empty()) return false;
+        for (const FlowOp& op : flow.blockOps[static_cast<size_t>(k)])
+            if (op.insn != insn) return false;
+        return true;
+    };
+    const auto flowSucceeds = [&](int from, int to, uint32_t fromInsn, uint32_t toInsn) {
         if (from < 0 || static_cast<size_t>(from) >= flow.successors.size()) return false;
         std::set<int> seen = { from };
         std::vector<int> todo = { from };
@@ -6615,8 +6623,8 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
             if (b < 0 || static_cast<size_t>(b) >= flow.successors.size()) continue;
             for (int n : flow.successors[static_cast<size_t>(b)])
             {
-                if (n == to) return true;
-                if (seen.insert(n).second && isEmptied(n)) todo.push_back(n);
+                if (n == to || (toInsn && onlyOf(n, toInsn))) return true;
+                if (seen.insert(n).second && (isEmptied(n) || (fromInsn && onlyOf(n, fromInsn)))) todo.push_back(n);
             }
         }
         return false;
@@ -6627,8 +6635,8 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
         const uint32_t last = static_cast<uint32_t>(from->getStop().getOffset()), first = static_cast<uint32_t>(to->getStart().getOffset());
         const int fromBlock = flowBlockOf(last), toBlock = flowBlockOf(first);
         if (store < 0 || fromBlock < 0 || toBlock < 0) return false;
-        const bool enters = fromBlock == store ? insn > last : flowSucceeds(fromBlock, store);
-        const bool leaves = toBlock == store ? first > insn : flowSucceeds(store, toBlock);
+        const bool enters = fromBlock == store ? insn > last : flowSucceeds(fromBlock, store, last, 0);
+        const bool leaves = toBlock == store ? first > insn : flowSucceeds(store, toBlock, 0, first);
         return enters && leaves;
     };
     int added = 0;
