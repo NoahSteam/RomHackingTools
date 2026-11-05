@@ -1118,6 +1118,7 @@ Op Mk(OpKind k, int a = 0, int b = 0, int c = 0, const char* text = "")
 }
 
 bool gHiddenRename = false;   // SE_TRUST_HIDDEN_RENAME (area 8, round 4)
+uint64_t gHiddenRenames = 0;  // ...how many renames it made and undid while the panel was hidden
 
 // The sequence a run uses: `concat` generated programs end to end (their functions are the first program's: indexes are taken modulo the
 // world; round 1's ran 20 to 60 operations, a long run 300 to 450), with, after each Stop, some of the operations that interleave with
@@ -1171,6 +1172,7 @@ Program MakeProgram(uint64_t seed, int mix, int concat = 1)
             }
             out.push_back(Mk(OpKind::Rename, o.a, before));
             nameOf[fn] = before;
+            ++gHiddenRenames;
             if (rng.Chance(75)) out.push_back(Mk(OpKind::Show));
             continue;
         }
@@ -3204,6 +3206,7 @@ int main(int argc, char** argv)
                 static_cast<unsigned long long>(gT.programs), failedPrograms, static_cast<unsigned long long>(gT.steps),
                 static_cast<unsigned long long>(gT.checks), static_cast<unsigned long long>(gT.held), static_cast<unsigned long long>(gT.idle),
                 static_cast<unsigned long long>(gT.drawn), static_cast<unsigned long long>(gT.hovers), static_cast<unsigned long long>(gT.injected));
+    if (gHiddenRename) std::printf("renames made and undone while the panel was hidden: %llu\n", static_cast<unsigned long long>(gHiddenRenames));
     std::printf("indicators drawn and held to the model:\n");
     for (const auto& c : gCov) std::printf("  %-52s %llu\n", c.first.c_str(), static_cast<unsigned long long>(c.second));
     if (!mixEnv)
