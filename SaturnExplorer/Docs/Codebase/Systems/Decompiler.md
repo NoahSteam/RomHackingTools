@@ -105,8 +105,9 @@ the end of whatever it is given.
    make it takes its store's address too. `AddJoinConstantTokens` addresses a number the engine
    merged (a COPY that is no flow op, at an instruction that does not make the number: a collapsed
    MULTIEQUAL at a join) to the instruction on each path that set the register, or to nothing.
-   A case label's token is the start of the run of its block's addresses that holds the case's
-   first op (a block the engine merged out of address order covers several runs). A COPY the
+   A case label's token is the jump table's destination in its block, else the start of the run
+   of the block's addresses that holds the case's first op (a block the engine merged out of
+   address order covers several runs; a delay slot is no gap). A COPY the
    engine made to trim a cover and that feeds a folded read is addressed to the read
    (`LinesFromMarkup`). `DecompileResult::flowBlockRanges` is for the oracle. Tokens at a word flow
    halted at carry `haltsFlow`. The result records flow body ranges, warnings,
