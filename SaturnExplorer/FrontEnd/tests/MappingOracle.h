@@ -450,9 +450,16 @@ inline bool AccessAddress(const sfe::decomp::DecompileResult& r, const std::func
     return true;
 }
 // A7-34 (the area 7 fixer): what memory holds before `at`, by the stores of the function's own words on every path into it: a store of
-// the same address and size whose register's value is known. Any other store that may write it (its address not known, or a part of it),
-// a call, the entry, or paths that disagree: unknown. The engine forwards such a store to a later read (a poll's first read of what the
-// function stored) and prints the number at the read.
+// the same address and size whose register's value is known and that the engine folded (an access fate FoldedOrdinary: not hardware, not
+// memory the request marks volatile). Any other store that may write it (its address not known, or a part of it), a call, the entry, or
+// paths that disagree: unknown. The engine forwards such a store to a later read (a poll's first read of what the function stored) and
+// prints the number at the read.
+inline bool FoldedAccess(const sfe::decomp::DecompileResult& r, uint32_t insn, bool write)
+{
+    for (const sfe::decomp::AccessFate& f : r.accessFates)
+        if (f.insn == insn && f.write == write && f.fate == sfe::decomp::AccessFate::FoldedOrdinary) return true;
+    return false;
+}
 inline WordValue MemoryBefore(const sfe::decomp::DecompileResult& r, const std::function<bool(uint32_t, uint16_t&)>& word,
                               const std::map<uint32_t, std::vector<uint32_t>>& into, uint32_t at, uint32_t addr, int size, int depth)
 {
@@ -506,7 +513,7 @@ inline WordValue MemoryBefore(const sfe::decomp::DecompileResult& r, const std::
                 todo.push_back(p);
                 continue;
             }
-            if (x != y || ssize != size) return WordValue();
+            if (x != y || ssize != size || !FoldedAccess(r, p, true)) return WordValue();
             const WordValue v = RegisterBefore(r, word, into, p, reg, depth + 1);
             if (v.kind != WordValue::Number) return WordValue();
             const uint64_t bytes = size >= 4 ? 0xFFFFFFFFull : (1ull << (8 * size)) - 1;
@@ -572,6 +579,27 @@ inline WordValue RegisterBefore(const sfe::decomp::DecompileResult& r, const std
             if (d.IsCall && !d.HasDelaySlot && rg <= 7) return WordValue();
             uint16_t w = 0;
             word(p, w);
+            // A7-34 (the area 7 fixer): an edge a condition says the register's value on: `dt rN ; bf L` falls through, and `dt rN ; bt
+            // L` (or `tst rN,rN`) branches, only when rN is 0; `cmp/eq #imm,r0` likewise with the number (as the engine's conditional
+            // constants know)
+            {
+                const bool fallsThrough = (w >> 8) == 0x8B && p + 2 == a, branches = (w >> 8) == 0x89 && p + 2 != a;
+                uint16_t cw = 0;
+                if ((fallsThrough || branches) && r.InBody(p - 2) && word(p - 2, cw))
+                {
+                    const int cn = (cw >> 8) & 0xF;
+                    if (((cw & 0xF0FF) == 0x4010 && cn == rg) || ((cw & 0xF00F) == 0x2008 && cn == rg && ((cw >> 4) & 0xF) == rg))
+                    {
+                        if (!give(WordValue{ WordValue::Number, 0 })) return WordValue();
+                        continue;
+                    }
+                    if ((cw >> 8) == 0x88 && rg == 0)
+                    {
+                        if (!give(WordValue{ WordValue::Number, static_cast<int8_t>(cw & 0xFF) })) return WordValue();
+                        continue;
+                    }
+                }
+            }
             if ((w >> 12) == 0xE && ((w >> 8) & 0xF) == rg)
             {
                 if (!give(WordValue{ WordValue::Number, static_cast<int8_t>(w & 0xFF) })) return WordValue();
@@ -689,12 +717,26 @@ inline WordValue WrittenValue(const sfe::decomp::DecompileResult& r, const std::
         default: return WordValue();
         }
     }
+    // a pop of what the instruction before pushed (`mov.l r3,@-r15 ; mov.l @r15+,r3`, not a branch's target): the pushed register
+    {
+        uint16_t pushw = 0;
+        const bool pop = hi == 0x6 && lo >= 4 && lo <= 6 && n == reg && n != m;
+        if (pop && into.find(p) == into.end() && r.InBody(p - 2) && word(p - 2, pushw) && (pushw >> 12) == 0x2 && (pushw & 0xF) == lo &&
+            ((pushw >> 8) & 0xF) == m && !inSlot)
+        {
+            const WordValue v = RegisterBefore(r, word, into, p - 2, (pushw >> 4) & 0xF, depth);
+            if (!number(v, a)) return v.kind == WordValue::Param && lo == 6 ? v : WordValue();
+            if (lo == 4) a = static_cast<uint32_t>(static_cast<int32_t>(static_cast<int8_t>(a & 0xFF)));
+            if (lo == 5) a = static_cast<uint32_t>(static_cast<int32_t>(static_cast<int16_t>(a & 0xFFFF)));
+            return NumberValue(a);
+        }
+    }
     // a load: what memory holds at its address, extended as the load extends (a byte or a word sign-extended)
     uint32_t addr = 0;
     int size = 0;
     const bool loadInto = (hi == 0x6 && lo <= 2 && n == reg) || (hi == 0x6 && lo >= 4 && lo <= 6 && n == reg && n != m) || (hi == 0x5 && n == reg) ||
                           (((w >> 8) == 0x84 || (w >> 8) == 0x85) && reg == 0) || (hi == 0x0 && lo >= 0xC && n == reg);
-    if (loadInto && AccessAddress(r, word, into, p, w, false, addr, size, depth))
+    if (loadInto && FoldedAccess(r, p, false) && AccessAddress(r, word, into, p, w, false, addr, size, depth))
     {
         const WordValue v = MemoryBefore(r, word, into, p, addr, size, depth + 1);
         if (!number(v, a)) return WordValue();
@@ -955,11 +997,13 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
             const sfe::DisassembledInstruction d = sfe::Sh2Decode(x, w);
             return d.IsValid && ShapeOf(d).store;
         };
-        const auto isCall = [&](uint32_t x) {
+        // (A7-34's triage: or at a load, the first instruction of a loop the engine put a register's copy under a global's name at,
+        // `iRam06001038 = iVar2;` at the loop's `mov.w @r4,r2`, naming the store later in the loop)
+        const auto isCallOrLoad = [&](uint32_t x) {
             uint16_t w = 0;
             if (!word(x, w)) return false;
             const sfe::DisassembledInstruction d = sfe::Sh2Decode(x, w);
-            return d.IsValid && ShapeOf(d).call;
+            return d.IsValid && (ShapeOf(d).call || ShapeOf(d).load);
         };
         const auto plainCopy = [](const std::string& text) {
             const size_t b = text.find_first_not_of(' ');
@@ -980,7 +1024,7 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
             for (const Token& t : r.lines[li].tokens)
                 if (t.addr && t.begin < t.end)
                 {
-                    const bool copy = plain && (isCall(t.addr) || isStore(t.addr)) && !named.empty() && !named.count(t.addr);
+                    const bool copy = plain && (isCallOrLoad(t.addr) || isStore(t.addr)) && !named.empty() && !named.count(t.addr);
                     (copy ? copyDrawn : ownDrawn)[t.addr].insert(li);
                 }
         }
@@ -1159,12 +1203,14 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                 }
                 if (digits == 0 || (global && digits != 8)) continue;
                 uint32_t piece = 0;
+                int pieceSize = 0;   // (`._0_2_`: the piece's offset and size)
                 if (text.compare(q, 2, "._") == 0)
                 {
                     q += 2;
                     piece = static_cast<uint32_t>(std::strtoul(text.c_str() + q, nullptr, 10));
                     while (q < text.size() && text[q] != '_') ++q;
                     ++q;
+                    pieceSize = std::atoi(text.c_str() + q);
                     while (q < text.size() && text[q] != '_') ++q;
                     ++q;
                 }
@@ -1255,11 +1301,34 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                         const uint32_t amask = frame ? 0xFFFFFFFFu : 0x07FFFFFFu;
                         for (const AccessFate& f : r.accessFates)
                             if (f.size > 0 && ((f.address - at) & amask) == 0 && static_cast<int>(f.size) < size - shift) widths.insert(static_cast<int>(f.size));
+                        // (a piece the text names, `xRam3600228c._0_2_`, has its own size)
+                        if (pieceSize > 0 && pieceSize < size - shift) widths = { pieceSize };
+                        // (the store's bytes another store of the variable writes too may be that store's in the value shown: compared are
+                        // the ones no other writes, when there are such, as the product compares them -- `xRam26001014 = 0;` for a word
+                        // store of 1 whose low byte a byte store writes after it)
+                        uint32_t storeAt = 0;
+                        for (const AccessFate* f : folded)
+                            if (f->insn == store) storeAt = f->address;
+                        std::vector<bool> alone(static_cast<size_t>(size), true);
+                        bool anyAlone = false;
+                        for (int k = 0; k < size; ++k)
+                        {
+                            for (const AccessFate* f : folded)
+                                if (f->insn != store && candidates.count(f->insn) && ((storeAt + static_cast<uint32_t>(k) - f->address) & amask) < f->size)
+                                    alone[static_cast<size_t>(k)] = false;
+                            anyAlone = anyAlone || alone[static_cast<size_t>(k)];
+                        }
                         for (int bytes : widths)
                         {
-                            const uint64_t mask = bytes >= 8 ? ~0ull : (1ull << (8 * bytes)) - 1;
-                            const int down = size - shift - bytes;
-                            if ((((static_cast<uint64_t>(got.value) >> (8 * down)) ^ static_cast<uint64_t>(shownValue.value)) & mask) == 0) return false;
+                            bool same = true;
+                            for (int j = 0; j < bytes && same; ++j)
+                            {
+                                const int k = shift + j;   // (the store's byte, from its address)
+                                if (k >= size || (anyAlone && !alone[static_cast<size_t>(k)])) continue;
+                                same = (static_cast<uint64_t>(got.value) >> (8 * (size - 1 - k)) & 0xFF) ==
+                                       (static_cast<uint64_t>(shownValue.value) >> (8 * (bytes - 1 - j)) & 0xFF);
+                            }
+                            if (same) return false;
                         }
                         return true;
                     }
@@ -1400,8 +1469,10 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     atBranch = atBranch || (!m.call && (d.IsBranch || d.HasDelaySlot));
                     atLoad = atLoad || m.load;
                     // (a number the line names the `mov #i` or the literal load of is made there: the statement is that instruction's --
-                    // A7-33 (the area 7 fixer): when it made the value a store of the variable stores, RegisterMakers from the store finding
-                    // it (or when that is not known); a `mov #0x4,r3` in a slot whose r3 no store of the variable stores is not the line's)
+                    // A7-33 (the area 7 fixer): when it makes the number into the register a store of the variable stores, or RegisterMakers
+                    // from such a store finds it (or that is not known); a `mov #0x4,r3` in a slot whose r3 no store of the variable stores
+                    // is not the line's. A loop's `mov #1,r3` whose r3 a `dt` counts down before the store is: the engine names the loop's
+                    // counter after the global)
                     if (number && (d.PcRel != sfe::Sh2PcRel::None || (d.Mnemonic == "mov" && d.Operands.compare(0, 1, "#") == 0)))
                     {
                         if (!haveSources)
@@ -1410,13 +1481,15 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                             haveSources = true;
                         }
                         bool known = true, maker = false;
+                        const int into = (w >> 12) == 0xE || (w >> 12) == 0x9 || (w >> 12) == 0xD ? (w >> 8) & 0xF : 0;
                         for (uint32_t st : candidates)
                         {
                             uint16_t sw = 0;
                             int size = 0;
                             const int reg = word(st, sw) ? StoredRegister(sw, size) : -1;
                             std::set<uint32_t> makers;
-                            if (reg < 0 || !RegisterMakers(r, word, sources, st, reg, makers)) known = false;
+                            if (reg == into) maker = true;
+                            else if (reg < 0 || !RegisterMakers(r, word, sources, st, reg, makers)) known = false;
                             else maker = maker || makers.count(t.addr) != 0;
                         }
                         if (maker || !known) named = true;
