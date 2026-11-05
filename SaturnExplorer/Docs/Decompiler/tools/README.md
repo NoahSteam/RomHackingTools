@@ -28,6 +28,12 @@ Kept here:
   `f16pc.py`/`shrink16.py` (printed-C differential on call-free fixtures, delta debugging), `cmp16.sh` (the same fixtures on two builds), the hand generators
   (`mkloop.py`, `mkloop2.py`, `mkidx.py`, `mkidx2.py`, `mkidx3.py`, `mkbyte.py`, `mkgcall.py`, `mksv.py`, `mksv2.py`, `mkstep.py`, `mkbr.py`), `uninit16.py` (corpus text scan),
   `matrix16.sh`/`hidden16.sh`/`gen_range.sh` (the generator ranges), `fuzzrun16.sh` (round 14's `escfuzz14.py`/`hbfuzz14.py` runner), `mkrows16.py` (the ledger rows).
+* `a11_round1/` (area 11 round 1, the mutation score): `patch_mutants.py` (each vendored patch's hunks as reverse patches, and which revert
+  alone), `mutate.py` (one mutant at a time: a patch reverted, a host one-expression mutant or a kill switch, an oracle's own
+  `SE_GENERATED_MUTATE` / `SE_GAME_MAPPING_MUTATE` mode, a probe, a combination; builds only the oracles' targets and runs them under the
+  machine's rules; resumable, `applied.json` undoes a mutant a restart left; `--oracles gen3k` for a long generator recheck),
+  `run_pieces.sh` (pieces of at most 20 minutes, `results.tsv` committed after each), `score.py` (the score per oracle),
+  `grammar_coverage.py` (each production of the generator's two grammars against its `shapes:` counts), `results.tsv` (the round's runs).
 * What those still call: the `dagen` generator chain (`a2_round10/dagen10.py`, `gen_range.sh`,
   `a2_round11/dagen11.py`, `dagen11b.py`, `a2_round12/dagen12.py`, `a2_round13/dagen13.py`) and
   `a3_round13/textdiff.py`.
