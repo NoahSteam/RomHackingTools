@@ -218,3 +218,28 @@ patch:0040	pc	survived	25
 patch:0040	decode	survived	3	
 patch:0040	corpus	survived	50	
 patch:0040	*	SURVIVED	0	
+patch:0003	fault	killed	88	== alloc mailbox: FAILED in 11.6 s
+patch:0004	fault	survived	88	
+patch:0004	unit	killed	26	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:13898: dts::WatchedFreed()
+patch:0050	decode	killed	3	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecodeTests.cpp:2240: totalFails == 0
+patch:0050	unit	killed	26	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:658: Has(text, "0x6006114")
+patch:0050	gen	survived	16	
+patch:0006	decode	killed	3	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecodeTests.cpp:2240: totalFails == 0
+patch:0006	unit	killed	27	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:3800: Ledger(r, { Rd(0, 2), Rd(0, 2) })
+patch:0006	gen	survived	16	
+patch:0005	decode	killed	3	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecodeTests.cpp:2240: totalFails == 0
+patch:0005	unit	killed	26	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:613: hasValue(text, "0x22222222", "572662306")
+patch:0005	gen	survived	22	
+patch:0045	decode	survived	3	
+patch:0045	unit	killed	28	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:454: atLoad
+patch:0045	gen	killed	16	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:12320: rep.findings.empty()
+patch:0034	decode	survived	3	
+patch:0034	unit	killed	27	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:9689: Has(r.Text(), "Write_VBR(param_1);")
+patch:0034	gen	survived	16	
+patch:0026	decode	survived	3	
+patch:0026	unit	killed	26	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:6271: !run(letOut, { { handsOn, ho.prototype }, { storesThroughG, sg.prototype 
+patch:0026	gen	killed	21	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:12174: rep.findings.empty()
+patch:0038	-	stillborn	0	se-regen-sla failed
+patch:0002	fault	survived	90	
+patch:0002	engine	survived	46	
+patch:0002	unit	killed	26	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:13922: rc == 0
