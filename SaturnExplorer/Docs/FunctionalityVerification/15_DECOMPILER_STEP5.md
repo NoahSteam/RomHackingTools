@@ -15413,7 +15413,7 @@ Branch `review/7-round4` from master `3fcf678d` (the area 7 fixer's A7-15, A7-19
 | the A7-19 and A7-20 fixtures, and variants (the probe) | the fixer's three fixtures pass; a store in a `bt/s` slot and a three-way merge of a global name their stores; all of them at the 0x26000000 mirror name the same (canonical) stores |
 | the new scripts (below) | A7-22 to A7-25 measured; `empty_load.py`: every one of 101 / 177 / 175 / 347 empty load tokens (A7-3) is on a line that shows a read |
 | `SaturnExplorerSh2DecompilerTests` (whole suite) | all passed; `TestArea7Round4` with the rest |
-| `ctest` | see the end of the section |
+| `ctest -j2 --timeout 900 -E SaturnExplorerLive` / `ctest -R SaturnExplorerLive` (every binary under `ulimit -v 3500000`) | **102 of 102** (174 s) / **6 of 6** (28 s). 108 tests, as on master: no ctest test added; the pins are in `SaturnExplorerSh2DecompilerTests`. The fault suite was not run: no product file changed |
 
 ### Verifying the fixer (A7-15, A7-19, A7-20)
 
