@@ -61,7 +61,8 @@ struct MappingAudit
     int callUnmapped = 0;      // a call in the final p-code that no token came from
     int roundTrip = 0;         // a line whose firstAddr does not lead back to it (the lines an instruction owns do not hold it)
     int backWrong = 0;         // the way back (LineForInstruction, A7-5): an instruction a token names whose lookup is not an owner, or a first address whose lookup
-                               // is a line with another first address
+                               // is a line with another first address, or (A7-25) a line that draws it only as a copy materialised there while
+                               // another line draws it as its own statement
     // What the corpus looks like (counted).
     int functions = 0, lines = 0, linesWithAddr = 0, tokens = 0, tokensWithAddr = 0;
     int single = 0, multi = 0, multiNonAdjacent = 0, widest = 0;
@@ -615,19 +616,34 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
         const InstructionLineIndex index(r);
         std::map<uint32_t, std::vector<size_t>> owns;
         std::set<uint32_t> firsts;
+        // A7-25: the lines that draw an instruction as their own statement, and those that draw it only as a copy materialised there
+        // (Token::materialised); the way back answers an own one first, and a line beginning with the instruction is one only when it is
+        // not a copy materialised there
+        std::map<uint32_t, std::set<size_t>> ownDrawn, copyDrawn;
+        for (size_t li = 0; li < r.lines.size(); ++li)
+            for (const Token& t : r.lines[li].tokens)
+                if (t.addr && t.begin < t.end) (t.materialised ? copyDrawn : ownDrawn)[t.addr].insert(li);
+        const auto copyOnly = [&](uint32_t at, size_t li) {
+            const auto c = copyDrawn.find(at);
+            const auto o = ownDrawn.find(at);
+            return c != copyDrawn.end() && c->second.count(li) && (o == ownDrawn.end() || !o->second.count(li));
+        };
         for (size_t li = 0; li < r.lines.size(); ++li)
         {
             for (uint32_t at : LineInstructions(r.lines[li])) owns[at].push_back(li);
-            if (r.lines[li].firstAddr) firsts.insert(r.lines[li].firstAddr);
+            if (r.lines[li].firstAddr && !copyOnly(r.lines[li].firstAddr, li)) firsts.insert(r.lines[li].firstAddr);
         }
         for (const auto& kv : owns)
         {
             const LineLookup k = index.Find(kv.first);
             const bool owner = k.kind == LineLookup::Exact && !k.lines.empty() && std::find(kv.second.begin(), kv.second.end(), k.lines[0]) != kv.second.end();
-            if (!owner || (firsts.count(kv.first) && r.lines[k.lines[0]].firstAddr != kv.first))
+            const bool copyFirst = owner && copyOnly(kv.first, k.lines[0]) && ownDrawn.count(kv.first);
+            if (!owner || (firsts.count(kv.first) && r.lines[k.lines[0]].firstAddr != kv.first) || copyFirst)
             {
                 ++a.backWrong;
-                problem("back", "the instruction " + MappingHex(kv.first) + " is answered " + (owner ? "with a line that does not begin with it" : "with no line that holds it"));
+                problem("back", "the instruction " + MappingHex(kv.first) + " is answered " +
+                                    (!owner ? "with no line that holds it" : copyFirst ? "with a copy materialised there before its own statement (A7-25)"
+                                                                                       : "with a line that does not begin with it"));
             }
         }
         for (const auto& range : r.body)
@@ -1157,7 +1173,8 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
 
 // Area 7 round 2 instrument (SE_GAME_TOKEN_DUMP=<file prefix>): every token of every text, with the instruction its address names, as
 // tab separated rows for tools/a7_round2/*.py to read. F = a function (label, entry, status of its body), L = a line, T = a token with
-// an address (line, begin, end, kind, address, in body, previous instruction has a delay slot, the instruction, the token's text).
+// an address (line, begin, end, kind, address, in body, previous instruction has a delay slot, the instruction, the token's text, and
+// (the area 7 fixer, A7-25) whether it is a copy materialised there).
 inline void DumpMappingTokens(std::FILE* out, const sfe::decomp::DecompileResult& r, const std::function<bool(uint32_t, uint16_t&)>& word,
                               const char* label)
 {
@@ -1181,8 +1198,8 @@ inline void DumpMappingTokens(std::FILE* out, const sfe::decomp::DecompileResult
             }
             const bool slot = word(t.addr - 2, pw) && sfe::Sh2Decode(t.addr - 2, pw).HasDelaySlot && r.InBody(t.addr - 2);
             const std::string text = t.begin <= t.end && t.end <= l.text.size() ? l.text.substr(t.begin, t.end - t.begin) : std::string("?");
-            std::fprintf(out, "T\t%zu\t%zu\t%u\t%u\t%d\t%08X\t%d\t%d\t%s\t%s\n", li, ti, unsigned(t.begin), unsigned(t.end), int(t.kind), t.addr,
-                         r.InBody(t.addr) ? 1 : 0, slot ? 1 : 0, insn.c_str(), text.c_str());
+            std::fprintf(out, "T\t%zu\t%zu\t%u\t%u\t%d\t%08X\t%d\t%d\t%s\t%s\t%d\n", li, ti, unsigned(t.begin), unsigned(t.end), int(t.kind), t.addr,
+                         r.InBody(t.addr) ? 1 : 0, slot ? 1 : 0, insn.c_str(), text.c_str(), t.materialised ? 1 : 0);
         }
     }
 }

@@ -5985,6 +5985,25 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
             if ((blockEnd || slotOfCall || ownOther || numberAway) && (target == 0 || insn < target)) target = insn;
         }
         if (slotMaker) target = slotMaker;
+        // A7-25: a statement that keeps its drawn tokens at its instruction beside the stores it names is a copy the engine materialised
+        // there (at a call, at a store that may alias): the instruction's own statement is another's, which the way back offers first.
+        if (!target)
+        {
+            bool ownStore = false;
+            for (const ghidra::AccessRecord* r : chosen)
+            {
+                uint32_t insn = InstructionOf(*r), canonical = 0;
+                if (CanonicalAddress(insn, canonical)) insn = canonical;
+                ownStore = ownStore || insn == own;
+            }
+            if (!ownStore)
+                for (size_t line : kv.second->first)
+                {
+                    if (line >= lines.size() || sharedLines.count(std::make_pair(line, own))) continue;
+                    for (Token& t : lines[line].tokens)
+                        if (t.addr == own && t.begin < t.end) t.materialised = true;
+                }
+        }
         if (target)
             for (size_t line : kv.second->first)
             {
@@ -6098,6 +6117,7 @@ InstructionLineIndex::InstructionLineIndex(const DecompileResult& r) : mResult(r
                 std::vector<size_t>& v = mOwners[t.addr];
                 if (v.empty() || v.back() != li) v.push_back(li);
                 if (t.begin < t.end) mDrawn[t.addr].insert(li);
+                if (t.begin < t.end && !t.materialised) mOwnDrawn[t.addr].insert(li);
             }
 }
 
@@ -6108,11 +6128,18 @@ std::vector<size_t> InstructionLineIndex::Ordered(uint32_t a) const
     const auto o = mOwners.find(a);
     if (o == mOwners.end()) return out;
     const auto d = mDrawn.find(a);
+    const auto own = mOwnDrawn.find(a);
     auto drawn = [&](size_t li) { return d != mDrawn.end() && d->second.count(li) != 0; };
+    // (A7-25: a line that draws the instruction only as a copy materialised there comes after the lines whose statement it is)
+    auto materialised = [&](size_t li) { return drawn(li) && (own == mOwnDrawn.end() || own->second.count(li) == 0); };
     for (size_t li : o->second)
-        if (mResult.lines[li].firstAddr == a) out.push_back(li);
+        if (mResult.lines[li].firstAddr == a && !materialised(li)) out.push_back(li);
     for (size_t li : o->second)
-        if (mResult.lines[li].firstAddr != a && drawn(li)) out.push_back(li);
+        if (mResult.lines[li].firstAddr != a && drawn(li) && !materialised(li)) out.push_back(li);
+    for (size_t li : o->second)
+        if (mResult.lines[li].firstAddr == a && materialised(li)) out.push_back(li);
+    for (size_t li : o->second)
+        if (mResult.lines[li].firstAddr != a && materialised(li)) out.push_back(li);
     for (size_t li : o->second)
         if (mResult.lines[li].firstAddr != a && !drawn(li)) out.push_back(li);
     return out;

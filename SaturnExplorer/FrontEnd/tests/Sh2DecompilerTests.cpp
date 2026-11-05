@@ -741,8 +741,9 @@ void TestArea7Round4()
     // add #0x13,r2 ; mov #0,r1 ; mov.b r1,@r2 ; ...` (0x0600C12C's shape): the store through param_1 may write the global, so the engine prints
     // `iRam0603ad2c = param_1;` again at it, with the byte store's address (0x0607000C); AddFrameStoreTokens adds the global's store
     // (0x06070004) and a click goes there, but the hover lists 0x0607000C, and the way back from 0x0607000C (`mov.b r1,@r2`) answers the
-    // global's line first, before `*(xunknown1 *)(param_1 + 0x13) = 0;`, whose instruction it is (a user's note on it goes there too).
-    // Fixed: the copy's own tokens are its store's, or the way back offers the instruction's own statement first.
+    // global's line first, before `*(xunknown1 *)(param_1 + 0x13) = 0;`, whose instruction it is (a user's note on it went there too).
+    // Fixed (the area 7 fixer, A7-25, as the reviewer decided): the tokens stay (the engine materialises the value at the byte store, A7-11's
+    // choice), the copy's token at 0x0607000C is marked materialised, and the way back offers the instruction's own statement first.
     {
         const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06070000u, { 0x4F22, 0xD106, 0x2142, 0x6243, 0x7213, 0xE100, 0x2210, 0xD104,
             0x410B, 0x0009, 0x4F26, 0x000B, 0x0009, 0x0009, 0x0603, 0xAD2C, 0x0607, 0x1000 }, callee);
@@ -754,9 +755,22 @@ void TestArea7Round4()
         if (g) CHECK(LineInstructions(*g) == (std::vector<uint32_t>{ 0x06070004u, 0x0607000Cu }) && g->firstAddr == 0x06070004u);
         const LineLookup back = LineForInstruction(r, 0x0607000Cu);
         CHECK(back.kind == LineLookup::Exact && back.lines.size() == 2);
-        if (g && !back.lines.empty()) CHECK(&r.lines[back.lines[0]] == g);   // fixed: s first
+        if (s && back.lines.size() == 2) CHECK(&r.lines[back.lines[0]] == s && &r.lines[back.lines[1]] == g);   // was g first
+        bool marked = false;
+        if (g)
+            for (const Token& t : g->tokens) marked = marked || (t.addr == 0x0607000Cu && t.begin < t.end && t.materialised);
+        CHECK(marked);
+        if (s)
+            for (const Token& t : s->tokens) CHECK(!t.materialised);
         const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_25");
         CHECK(a.Violations() == 0);
+        // (unmarked, the copy is first again: both draw the instruction and the copy is first in the text. The oracle's backWrong
+        // answers for the order: it fails when the way back puts a marked line before a line that draws the instruction unmarked)
+        DecompileResult unmarked = r;
+        for (Line& x : unmarked.lines)
+            for (Token& t : x.tokens) t.materialised = false;
+        const LineLookup old = LineForInstruction(unmarked, 0x0607000Cu);
+        if (g && !old.lines.empty()) CHECK(old.lines[0] == static_cast<size_t>(g - &r.lines[0]));   // the base build's order
     }
 }
 
