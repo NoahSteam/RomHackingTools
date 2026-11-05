@@ -4499,6 +4499,7 @@ struct FlowOp
     FlowVn out;
     FlowVn in[3];
     int numIn = 0;
+    bool slot = false;      // built by the instruction in a delayed branch's slot (PcodeOp::isFromDelaySlot)
     bool literal = false;   // a LOAD of a constant address whose word the image has: `value`
     uint64_t value = 0;
 };
@@ -4555,6 +4556,7 @@ FlowRecord RecordFlow(const ghidra::Funcdata& fd, const std::function<uint32_t(u
                 FlowOp op;
                 op.insn = InstructionOf(o);
                 op.code = c;
+                op.slot = o->isFromDelaySlot();
                 const auto storage = [](const ghidra::Varnode* v) {
                     FlowVn x;
                     if (v)
@@ -5409,6 +5411,13 @@ int AddJoinConstantTokens(std::vector<Line>& lines, const PrintedOperations& pri
         const ghidra::int4 size = o->getIn(0)->getSize();
         const uint32_t at = InstructionOf(o);
         if (InstructionMakesNumber(flow, at, value, size)) continue;
+        // (at a delayed branch whose slot makes the number: the slot's line, A7-10; AddFrameStoreTokens moves its tokens)
+        {
+            const auto slot = flow.insnFirst.find(at + 2);
+            if (slot != flow.insnFirst.end() && flow.blockOps[static_cast<size_t>(slot->second.first)][slot->second.second].slot &&
+                InstructionMakesNumber(flow, at + 2, value, size))
+                continue;
+        }
         // the register: the output's, or the variable's when the merge made the copy (a temporary)
         const ghidra::Varnode* out = o->getOut();
         ghidra::Address reg = out->getAddr();
@@ -5810,17 +5819,36 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
             }
         uint32_t own = at, target = 0, canonicalOwn = 0;
         if (CanonicalAddress(own, canonicalOwn)) own = canonicalOwn;
+        // (A7-22: a number put at a delayed branch whose slot makes it is the slot's line, as A7-10's are: `xRam06057310 = 4;` at
+        // `bra ; mov #0x4,r1`, before the store the paths share)
+        uint32_t slotMaker = 0;
+        if (code == ghidra::CPUI_COPY && o->getIn(0)->isConstant() && !o->isFromDelaySlot())
+        {
+            const uint64_t value = static_cast<uint64_t>(o->getIn(0)->getOffset());
+            const ghidra::int4 size = o->getIn(0)->getSize();
+            const auto slot = flow.insnFirst.find(at + 2);
+            if (slot != flow.insnFirst.end() && flow.blockOps[static_cast<size_t>(slot->second.first)][slot->second.second].slot &&
+                !InstructionMakesNumber(flow, at, value, size) && InstructionMakesNumber(flow, at + 2, value, size))
+            {
+                slotMaker = at + 2;
+                uint32_t c = 0;
+                if (CanonicalAddress(slotMaker, c)) slotMaker = c;
+            }
+        }
         if (chosen.empty())
         {
             // No store shows the value. A copy the engine put at the end of its block (a branch, or any instruction) is then the line of
             // the flow's op that made the value it copies, when there is one (`iStack_34 = iRam060a8e8a;` at a `bra`, the global read in
             // its slot, the shared store after the join writing a sum): the statement's own maker. A statement drawn at a store of another
             // value (A7-23 (b)) names that maker, or nothing.
-            uint32_t maker = 0;
+            uint32_t maker = slotMaker;
             const ghidra::Varnode* in = o->getIn(0);
             const bool atEnd = code == ghidra::CPUI_COPY && !atLoadOrCall && o->getAddr() == home->getStop() && !o->isFromDelaySlot() &&
                                !in->isConstant();
-            if (atEnd && in->isWritten() && in->getDef()->getTime() < flow.opsEnd) maker = InstructionOf(in->getDef());
+            if (maker)
+                ;
+            else if (atEnd && in->isWritten() && in->getDef()->getTime() < flow.opsEnd)
+                maker = InstructionOf(in->getDef());
             // (...or a read of memory, a global or a local, whose value the engine carries in the variable itself: the flow's load of it in
             // the block, or in the delay slot of its last instruction)
             else if (atEnd && !in->isInput() &&
@@ -5866,7 +5894,7 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                               !o->getIn(0)->isConstant();
         // (A7-22: a number put at an instruction that does not make it -- a load of the variable, a pop, a branch -- is the store's line too;
         // at a call the call keeps its token, A7-11's choice)
-        const bool numberAway = code == ghidra::CPUI_COPY && o->getIn(0)->isConstant() && !flow.callInsns.count(at) &&
+        const bool numberAway = code == ghidra::CPUI_COPY && o->getIn(0)->isConstant() && !flow.callInsns.count(at) && !slotMaker &&
                                 !InstructionMakesNumber(flow, at, static_cast<uint64_t>(o->getIn(0)->getOffset()), o->getIn(0)->getSize());
         for (const ghidra::AccessRecord* r : chosen)
         {
@@ -5875,6 +5903,7 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
             const bool slotOfCall = flow.callInsns.count(at) && r->slot && r->pc == o->getAddr() && !o->isFromDelaySlot();
             if ((blockEnd || slotOfCall || ownOther || numberAway) && (target == 0 || insn < target)) target = insn;
         }
+        if (slotMaker) target = slotMaker;
         if (target)
             for (size_t line : kv.second->first)
             {
