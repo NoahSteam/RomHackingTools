@@ -2531,6 +2531,13 @@ std::string FollowCheck(FRig& r, bool hover)
                                               "the code from " + trust::Hex8(w.entry) + " (after the rts at " + trust::Hex8(w.entry - 4) +
                                                   ") never reaches " + trust::Hex8(anchorAt) };
         if (pinned && r.pinDoubtKnown) variants = { r.pinDoubt };   // the pin keeps exactly what the finder said
+        else if (pinned)
+            // Pinned from the output shown (the question had no function), the doubt is the one that output was installed with: "never
+            // reaches" names the PC followed then, any the rig sets (CPU-weighted mix 8 seed 95174, the PC in the dead code of U).
+            for (uint32_t pc : { Defs()[FnC].entry + 4, Defs()[FnA].entry, Defs()[FnT].entry + 4, Defs()[FnU].entry + 4, Defs()[FnU].entry + 8 })
+                if (pc != anchorAt)
+                    variants.push_back("the code from " + trust::Hex8(w.entry) + " (after the rts at " + trust::Hex8(w.entry - 4) + ") never reaches " +
+                                       trust::Hex8(pc));
         size_t good = variants.size();
         for (size_t i = 0; i < variants.size() && good == variants.size(); ++i)
         {
@@ -2950,7 +2957,9 @@ const uint64_t kFollowPinsPinned[] = { 12 };
 const uint64_t kFollowPinsPinnedAuto[] = { 1 };
 // A8-29: the CPU switch under Follow PC onto a question whose Stop is over, with the CPU switch, a CPU without registers, the PC in the BIOS
 // and Stop four times as often (SE_TRUST_FOLLOW_CPU) and hover off, as round 4 found them: mix 8 seed 50534 (way (b)), mix 9 seed 50814 ((c)).
-const uint64_t kFollowPinsCpu[] = { 50534 };
+// Seed 95174 of the same mix 8 is the rig's own: Follow PC off with the PC in the BIOS pins the output shown, whose doubt names the PC it was
+// installed for (the dead code of U), which the rig did not know (found by this round's fresh run, after the fix).
+const uint64_t kFollowPinsCpu[] = { 50534, 95174 };
 const uint64_t kFollowPinsCpuAuto[] = { 50814 };
 // ...and written out (round 4's tools/a8_round4/a8_29.sh and a8_30.sh): each ended NOT REFRESHED, or (A8-30) with the doubt gone.
 const char* const kFollowScriptPins[] = {
