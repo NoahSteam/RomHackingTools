@@ -15435,3 +15435,51 @@ With both fixes in and the guard dropped, mixes 0, 1, 4, 6 and 7 from seed 30000
 ### Routed
 
 Nothing. A8-25 was routed to area 1, and its fix is in area 1's file. It was made here because it is the one expression the row names, and it was confirmed by the probe and again above. Area 1 may want to review the line.
+
+## Area 8, round 4
+
+Branch `review/8-round4` from master `81005761` (area 8 fixer, A8-25 and A8-27, merged). This is the second adversarial round after the clean round 3. It covers the last fix and hunts for new defects in the trust indicators. **No product code changed.** Two trial edits of `DecompilerPanel.cpp` were made and each was put back with `git checkout`: A8-27's line removed, and the `ForgetStop` trial of A8-29. The round extends the trust test (test-only knobs, and two corrections to the Follow PC rig) and adds `Docs/Decompiler/tools/a8_round4/`. It files **A8-29 (P3)**, **A8-30 (P2)** and **A8-31 (P3, instrument, fixed here)**. **The round is NOT CLEAN: A8-30 is a new P2.**
+
+### What was run (RelWithDebInfo, gcc 13, own build: Ninja, `SE_ENABLE_DECOMPILER=ON`, `-j2`; every run under `ulimit -v 3500000` and `timeout`)
+
+| Run | Result |
+|---|---|
+| A8-25, 14 directed scripts in area 1's rig: a rename made and undone while hidden, then shown, with a Stop in force, an edit, a running emulator, the engine held, a reconnect, the language files broken, a wedge, another function selected, a scrub, Decompile, and a rename of another function | all pass. Each time the panel was shown again it asked under the new names generation, and `STALE FOREVER` and `NOT REFRESHED` did not fire. The excuse covers only the frames while the panel is hidden, and those draw nothing |
+| mixes 0 to 7 with `SE_TRUST_HIDDEN_RENAME=1` (new: half the renames made and undone while hidden), fresh seeds from 60000; 15,000 operations each for mixes 0, 1 and 3, 12,000 for 4 to 7, 2,500 for mix 2 at 537 px | **95,788 operations, 0 failing.** The count was added after mixes 0, 1 and 3: mixes 2 and 4 to 7 made and undid 704 renames while hidden |
+| Follow PC rig, mixes 8 and 9 unchanged, fresh seeds 40000 to 41362, hover off | 120,012 operations, 0 failing once the rig reads the pin after the click (A8-31 (2): seed 40109 failed before) |
+| the same at 537 px with hover, seeds 70000 to 70566 | 50,024 operations, 0 failing |
+| mixes 8 and 9 with `SE_TRUST_FOLLOW_CPU=1` (new: the CPU switch, a CPU without registers, the PC in the BIOS and Stop four times as often), seeds 50000 to 50898, hover off | 80,028 operations, **2 failing, both A8-29** (50534, 50814) |
+| Follow PC click probes (`SE_TRUST_FOLLOW_SCRIPT` with the window dumped): a click while a request for the same question runs, after a Stop not yet acknowledged, on a running emulator, twice in a row | all pass. A click on the question already outstanding and wanted asks nothing: `decompiling…` stays, with no restart. A click after a Stop that is not yet acknowledged asks again (or installs the cached answer), and `stopping…` goes. No indicator changed for a frame and came back |
+| `ctest -E SaturnExplorerLive -j2 --timeout 900` / `ctest -R SaturnExplorerLive` | **102 of 102** (168 s; the engine suite 39.9 s, the fault suite 81.1 s, the model test 19.1 s, the trust test 51.7 s) / **6 of 6** (28 s). 108 tests, as on master: no test was added. The fault suite needed no separate run: no product file changed |
+
+### The last fix
+
+* **A8-25 (the excuse).** `(!visible && namesGeneration != shownNamesGen)` changes only `STALE FOREVER`, and only while the rig's panel is hidden. A hidden panel draws nothing: no badge, line or Copy mark comes from it, and the inspection menu and the halt hint are drawn by the panel. Once it is shown, the check runs in full. The panel asks again at once because the names generation only grows, so the question differs from `mAsked` whatever was asked before (a Stop, a discarded answer, a held engine). No sequence keeps a stale mark after the show. That held in the 14 scripts and in the 704 hidden renames above. The excuse can hide no indicator.
+* **A8-27 (`mAskAgain` on the Follow PC click).** `askAgain` is not taken over a request that is outstanding and not cancelled, so a click on the question running does not restart it. A click with nothing outstanding re-asks: a cache hit installs the same answer, and a too-large answer is memoized by the runner (`mTooLarge` unless `retryTooLarge`), so nothing expensive restarts. A click while the view has no source keeps `mAskAgain` until the view has one, and the first question there is new anyway. No wanted request is lost and no indicator flickers. The re-install does make one change visible at the click: the `(entry from …)` label is recomputed, and A8-30 shows what that label then says.
+* **The same class at the other entry points.** These are read and driven: the volatile list, the BIOS menu, Auto-refresh, Refresh, Enter, a refused entry, Decompile and Show in Pseudocode. Each one asks, changes the question, or keeps a Stop it does not forget. The CPU switch does not: **A8-29**.
+
+### A8-29 (P3): the CPU switch under Follow PC asks nothing on a question whose Stop was forgotten
+
+A question that finds no function forgets the Stop (A8-10, in `Resolve`), but `mAsked` keeps the stopped question. `SetCpu` sets no `mAskAgain`. Switching onto a CPU with no registers (or with its PC in the BIOS) and back on a paused source lands on the stopped question, and `Update` returns at `q == mAsked`. There are three ways in. (a) The switch alone. (b) After a Follow PC click whose `mAskAgain` was used up at `!mEntryOk`. (c) After a Stop pressed on a request whose question had since found no function: `Accept` keeps `mAsked` for any cancelled request. The indicators are true ("nothing is being decompiled. Press Refresh"), so this is P3, A8-27's family. A trial that makes every `ForgetStop()` forget the question asked fixes (a) and (b), but not (c). The unweighted mixes did not reach it in 170,000 operations. The CPU-weighted ones reach it about once in 900 sequences.
+
+### A8-30 (P2): Follow PC off shows the finder's guess as certain
+
+Unticking Follow PC pins the entry found as an Entry target. It keeps the finder's source, and `Resolve` gives every Entry target confidence 100 and no doubt. On the same output the label goes from "(entry from rts scan, 60%)" to "(entry from rts scan)". The amber "Entry: guessed from the previous rts; no symbol, call or user entry confirms it." goes from the window and from the Copy marks. Nothing confirmed the entry. The guide says an entry found only by the rts scan *always* shows "guessed from the previous rts". So the panel claims more support for its output than it has, and a wrong entry would show another function's code with nothing saying so. The trust model accepted this: it models the doubt only for the Follow PC and Decompile targets. So this is an instrument gap as well as a defect. The row names both ways out: keep the finder's confidence and doubt across the pin, or decide that a pin is the user's entry, label it "user-set entry", write that in the guide, and drop the row to P3. Before A8-27 the label changed at the next answer instead of at the click. The Entry line went at the click either way, so the defect is older than A8-27.
+
+### Changes
+
+* `FrontEnd/tests/DecompilerTrustTests.cpp`:
+  * `SE_TRUST_FOLLOW_SCRIPT` (`kFollowWords`, `ParseFollowScript`) with `SE_TRUST_FOLLOW_DUMP` (`DumpFollowWindow`);
+  * `SE_TRUST_FOLLOW_CPU` (weights);
+  * `SE_TRUST_HIDDEN_RENAME` (`gHiddenRename`, with the count printed);
+  * the Follow rig forgets a Stop once the drawn question has found no function (A8-31 (1));
+  * Follow PC off reads the pinned entry after the click (A8-31 (2)).
+
+  The knobs are off by default and the default run's sequences are unchanged; the default run passes (51.7 s).
+* `Docs/Decompiler/tools/a8_round4/`: `a8_29.sh`, `a8_30.sh`, `shrink.py`; the tools README lists them.
+* Ledger: A8-29 (P3, open), A8-30 (P2, open), A8-31 (P3, instrument, fixed `5c0b3d8a`).
+
+### Routed
+
+* Area 4 may want to see A8-30: the finder's confidence and doubt are its texts, though dropping them is the panel's doing.
+* Area 1: nothing new. The A8-25 line in `DecompilerModelTests.cpp` was reviewed here and holds.
