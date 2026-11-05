@@ -91,8 +91,10 @@ bool FunctionNames::HasName(uint32_t address) const
 
 void FunctionNames::Rename(uint32_t address, const std::string& name)
 {
-    if (name.empty()) mNames.erase(address);
-    else              mNames[address] = name;
+    // The text as the file holds it: no line end, no white space at either end; all white space is no name (A9-31, A9-36).
+    const std::string clean = CleanEntryText(name);
+    if (clean.empty()) mNames.erase(address);
+    else               mNames[address] = clean;
     ++mGeneration;
 }
 

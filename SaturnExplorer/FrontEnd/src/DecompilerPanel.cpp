@@ -857,9 +857,10 @@ void DecompilerPanel::BeginVolatileEdit()
     if (VolatileMemory().size() >= sizeof mVolatileEdit)
     {
         mVolatileCut = mVolatileEdit;
-        if (mVolatileError.empty())
-            mVolatileError = "The saved list is longer than " + std::to_string(sizeof mVolatileEdit - 1) + " characters and is shown cut here";
-        mVolatileError += ". Applying the text unchanged is refused: it would replace the saved list with the cut.";
+        // A saved list of 2,048 characters or more is never in force (SetVolatileMemory refuses it), so UnparsedVolatileProblem has
+        // already said so, in a sentence that ends in a full stop (A8-48: this line used to append ". Applying" to it).
+        const char* unchanged = "Applying the text unchanged is refused: it would replace the saved list with the cut.";
+        mVolatileError = mVolatileError.empty() ? std::string(unchanged) : mVolatileError + " " + unchanged;
     }
 }
 

@@ -16529,3 +16529,34 @@ The pins assert today's behaviour: when a finding is fixed, its check fails and 
 
 * A9-33 and A9-34 are the ones worth fixing first (the lock is the A9-20 guard, and it is silent when it cannot work).
 * A lock file owned by another user is stood in for by a folder; a run with a second account would settle whether the open fails as modelled.
+
+## Area 9 fixer (A9-31 to A9-38, A8-48)
+
+Branch `review/9-round3-fix` from master `16629836`. Fixes the P3 rows of area 9 round 3 and A8-48; each pin in `Area9Round3Tests` was turned round to hold the fix, and each was shown to fail with its fix reverted (list below).
+
+### What changed
+
+| Row | Change | Test that holds it (fails with the fix reverted) |
+|---|---|---|
+| A9-33 | `SaveStore` and `Settings::SaveTo` refuse when `!FileLock::Held()`, with a message naming `<file>.lock`; the existing handlers (`SetSaveErrorHandler`, the Log, the settings retry loop) report it. Refuse, not save-with-warning: the lock is the only guard between two instances, and a warning after a lost entry cannot undo the loss. Cost: a user whose lock file is owned by another user cannot save until it is removed; the message says which file. | `LockNotHeld`, 4 checks |
+| A9-31, A9-36 | `CleanEntryText` (`AddressNameLine.h`): line ends become spaces, both ends trimmed, blank is a delete; used in `FunctionNames::Rename` and the notes edit. | `WhitespaceNames`, `NameInjection`, 6 checks |
+| A9-32 | 2 to 4 lower-case letters a-f alone are an address when inside the BIOS ROM (0 to 0x7FFFF); one letter, longer words and capitals stay words. Log warnings and the header comment corrected. Cost: a prose line starting with such a word followed by text ("bad idea") now names 0xBAD. | `LettersOnlyBiosAddresses`, 2 checks |
+| A9-34 | `SplitLines` skips a leading byte-order mark. `Settings::SaveTo` merges by lines: comments, order and unknown lines kept, changed key rewritten in place, new key after the last key of its section, new section at the end. | `SettingsRewrite`, `AddressWords`, 4 checks (2 for the mark, 2 for the merge) |
+| A9-37 | `RemoveStaleStagingFiles`, under the lock: regular files named exactly `<file>.separt-<pid>-<n>` whose process is gone or that are over ten minutes old. Links, folders, other names, and live writers' files stay (all four checked). POSIX only. `.lock` files stay. | `KillFuzz` |
+| A9-38 | ELOOP is Unreadable (ENOTDIR stays Missing). | `CappedReads` |
+| A8-48 | One full stop in the popup's opening line; dead "shown cut here" branch removed; the guide says any edit replaces the whole list. | `DecompilerTrustTests` probe 7 case 10 (run with `SE_TRUST_PROBE7=1`; fails with the fix reverted) |
+| A9-35 | Accepted: `SaveSettings` sets every key every time, so "keys set" cannot tell a choice from a refresh; comparing with the loaded value is what keeps another instance's keys. Pin renamed `ACCEPTED A9-35`. | |
+| A9-16, A9-17 | Accepted with reasons in the rows (a base-address dialog is a UI change; A9-17 is an instrument row). | |
+
+A9-23 untouched. A byte-order mark in a file is dropped by the next save of that file (the stores rewrite lines they keep; `SplitLines` no longer returns it).
+
+### Runs
+
+| Run | Result |
+|---|---|
+| `SaturnExplorerArea9Round3Tests` | all passed; each fix's checks shown failing with that fix reverted (table above) |
+| `SaturnExplorerLoaderFuzzTests`, seed 4417, 3,000 cases per module, directed and two-process cases included | 37,985 cases, 0 classes outside the ledger (only the accepted A9-28 hard link). Run once earlier at the same seed: 3 `SET_DIFFERS` from the oracle's own list holding a byte-order-mark line, which is now an entry when first in a file; the list was changed |
+| Full `ctest` (`-j2`, `ulimit -v 3500000`) | 109 of 109 passed (103 + 6 Live), no new test target. An earlier run failed `FunctionNamesTests` and the fuzz oracle on "add it later": the first cut of A9-32 took capitals and every case of the letters; narrowed to lower case and the test and oracle prose lines changed to "Add it later" |
+| `SaturnExplorerDecompilerFaultTests` | see the hand-back |
+
+`App.cpp` is not part of the build in this configuration; its change (four Log strings) is text only and was not compiled.

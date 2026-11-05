@@ -329,7 +329,7 @@ void App::Initialize()
         std::string err;
         if (!mAssemblyPanel.LoadComments(&err)) mLog.Error("Assembly comments: " + err);   // restore the session's assembly comments
         else if (mAssemblyPanel.SkippedCommentLines())
-            mLog.Warn("assembly_comments.txt: " + std::to_string(mAssemblyPanel.SkippedCommentLines()) + " line(s) are not \"<hex-address> <note>\" and were skipped; they stay in the file");
+            mLog.Warn("assembly_comments.txt: " + std::to_string(mAssemblyPanel.SkippedCommentLines()) + " line(s) are not \"<hex-address> <note>\" (an address is eight hex digits, or 0x and up to eight) and were skipped; they stay in the file");
     }
     {
         // A file that is there and was not read, or lines in it that were not entries, are said (A9-2, A9-4): the names
@@ -337,13 +337,13 @@ void App::Initialize()
         std::string err;
         if (!mFunctionNames.Load(&err)) mLog.Error("Function names: " + err);
         else if (mFunctionNames.SkippedLines())
-            mLog.Warn("saturn_functions.txt: " + std::to_string(mFunctionNames.SkippedLines()) + " line(s) are not \"<hex-address> <name>\" and were skipped; they stay in the file (the first is line " +
+            mLog.Warn("saturn_functions.txt: " + std::to_string(mFunctionNames.SkippedLines()) + " line(s) are not \"<hex-address> <name>\" (an address is eight hex digits, or 0x and up to eight) and were skipped; they stay in the file (the first is line " +
                       std::to_string(mFunctionNames.FirstSkippedLine()) + ")");
         err.clear();
         mFunctionNames.Import(WorkFilePath("saturn_symbols.txt").c_str(), &err);  // merge a symbol map if present
         if (!err.empty()) mLog.Error("Symbol map: " + err);
         else if (mFunctionNames.SkippedLines())
-            mLog.Warn("saturn_symbols.txt: " + std::to_string(mFunctionNames.SkippedLines()) + " line(s) are not \"<hex-address> <name>\" and were skipped; they stay in the file (the first is line " +
+            mLog.Warn("saturn_symbols.txt: " + std::to_string(mFunctionNames.SkippedLines()) + " line(s) are not \"<hex-address> <name>\" (an address is eight hex digits, or 0x and up to eight) and were skipped; they stay in the file (the first is line " +
                       std::to_string(mFunctionNames.FirstSkippedLine()) + ")");
     }
 #if SE_ENABLE_DECOMPILER
@@ -4725,7 +4725,7 @@ void App::DrawCallStack(IPlatform& platform)
                         : std::string("No symbols found in " + path));
             if (!err.empty()) mLog.Error("Symbol map: " + err);
             else if (mFunctionNames.SkippedLines())
-                mLog.Warn(path + ": " + std::to_string(mFunctionNames.SkippedLines()) + " line(s) are not \"<hex-address> <name>\" and were skipped; they stay in the file (the first is line " +
+                mLog.Warn(path + ": " + std::to_string(mFunctionNames.SkippedLines()) + " line(s) are not \"<hex-address> <name>\" (an address is eight hex digits, or 0x and up to eight) and were skipped; they stay in the file (the first is line " +
                           std::to_string(mFunctionNames.FirstSkippedLine()) + ")");
         }
     }

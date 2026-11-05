@@ -3027,6 +3027,9 @@ void RunProbe7()
         std::printf("PROBE7 10: saved list of %zu chars, not in force %d\n   problem: %s\n", list.size(), m.panel.VolatileNotInForce() ? 1 : 0,
                     m.panel.UnparsedVolatileProblem().c_str());
         m.panel.BeginVolatileEdit();   // what the popup does on opening
+        // A8-48 fixed: one full stop between the two sentences, not two.
+        CHECK(m.panel.VolatileEditError().find("..") == std::string::npos &&
+              m.panel.VolatileEditError().find("replace it. Applying the text unchanged is refused") != std::string::npos);
         const std::string edit = m.panel.VolatileEditText();
         const bool ok = m.panel.ApplyVolatileEdit();
         std::printf("   Apply on the buffer (%zu chars, ends '%s'): %d, in force %d, saved list kept whole %d\n   said: %s\n", edit.size(),

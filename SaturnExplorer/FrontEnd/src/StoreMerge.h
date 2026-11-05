@@ -82,6 +82,10 @@ inline bool SaveStore(const std::string& path, const char* what, const std::stri
                     "this session's changes to it are kept in memory only");
     // The lock file lives beside the data: a lock on the data file itself would be dropped by the rename that replaces it.
     FileLock lock(path + ".lock");
+    if (!lock.Held())
+        return fail(std::string(what) + ": not saved, " + path + ".lock cannot be opened or locked (a lock file made by another user, a folder in its place, or a refused lock); "
+                    "saving without it could lose another instance's entries, so the file is left as it is and this session's changes are kept in memory only");
+    RemoveStaleStagingFiles(path);
     std::string disk;
     switch (ReadFileCapped(path, maxBytes, disk))
     {

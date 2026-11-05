@@ -105,6 +105,12 @@ private:
     intptr_t mHandle = -1;   // a POSIX descriptor, or a Windows HANDLE
 };
 
+// Remove the staging files "<path>.separt-<pid>-<n>" that a writer killed between its write and its rename left beside 'path'
+// (A9-37). Call it only while holding the lock that serialises the writers of 'path': then no live writer of that file has one.
+// Even so it removes only a regular file (never a link or a folder) whose name is exactly that form, and only when the
+// process named in it is gone or the file is over ten minutes old. POSIX only: on Windows it does nothing. Returns the count.
+size_t RemoveStaleStagingFiles(const std::string& path);
+
 // Move the file 'from' over 'path', replacing what is there in one step (rename on POSIX,
 // MoveFileEx with REPLACE_EXISTING on Windows), so 'path' holds one complete file or the other.
 // A symlink at 'path' is itself replaced; the file it pointed to is left alone.

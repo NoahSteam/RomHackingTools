@@ -27,6 +27,8 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/file.h>    // flock
+#include <csignal>
+#include <ctime>
 #include <sys/types.h>
 #include <unistd.h>
 #define SE_MKDIR(p)  ::mkdir((p), 0755)
@@ -395,6 +397,43 @@ FileLock::FileLock(const std::string& path, bool wait)
     int rc;
     do rc = ::flock(fd, LOCK_EX | (wait ? 0 : LOCK_NB)); while (rc != 0 && errno == EINTR);
     mHeld = rc == 0;
+#endif
+}
+
+size_t RemoveStaleStagingFiles(const std::string& path)
+{
+#ifdef _WIN32
+    (void)path;
+    return 0;
+#else
+    const size_t slash = path.find_last_of('/');
+    const std::string dir = slash == std::string::npos ? std::string(".") : (slash == 0 ? std::string("/") : path.substr(0, slash));
+    const std::string prefix = (slash == std::string::npos ? path : path.substr(slash + 1)) + ".separt-";
+    DIR* d = ::opendir(dir.c_str());
+    if (!d) return 0;
+    std::vector<std::string> doomed;
+    while (const dirent* e = ::readdir(d))
+    {
+        const std::string name = e->d_name;
+        if (name.size() <= prefix.size() || name.compare(0, prefix.size(), prefix) != 0) continue;
+        // "<pid>-<n>": digits, a dash, digits.
+        const size_t dash = name.find('-', prefix.size());
+        if (dash == std::string::npos || dash == prefix.size() || dash + 1 >= name.size()) continue;
+        bool shape = true;
+        for (size_t i = prefix.size(); i < name.size() && shape; ++i) shape = i == dash || (name[i] >= '0' && name[i] <= '9');
+        if (!shape || name.size() - prefix.size() > 30) continue;
+        const std::string full = (slash == std::string::npos ? std::string() : dir + (dir == "/" ? "" : "/")) + name;
+        struct stat st;
+        if (::lstat(full.c_str(), &st) != 0 || !S_ISREG(st.st_mode)) continue;
+        const long long pid = std::atoll(name.c_str() + prefix.size());
+        const bool alive = pid > 0 && (::kill(static_cast<pid_t>(pid), 0) == 0 || errno == EPERM);
+        if (alive && ::time(nullptr) - st.st_mtime < 600) continue;
+        doomed.push_back(full);
+    }
+    ::closedir(d);
+    size_t n = 0;
+    for (const std::string& f : doomed) if (::unlink(f.c_str()) == 0) ++n;
+    return n;
 #endif
 }
 
