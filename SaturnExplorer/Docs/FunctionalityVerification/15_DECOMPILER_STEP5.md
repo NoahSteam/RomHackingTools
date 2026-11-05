@@ -15970,7 +15970,7 @@ No new `ctest` entry (108 with the Live tests, as on master): the round extends 
 
 ## Area 9 fixer (A9-18 to A9-30)
 
-Branch `review/9-fix` from `bc4e6aaf`; own build `build-a9` (RelWithDebInfo, gcc 13, `-j2`, every test binary under `ulimit -v 3500000`). The oracle (`LoaderFuzzTests`) was the target: each class fixed was removed from `Known()`, so it fails the run if it comes back. Rows closed in `Docs/Decompiler/REVIEW_LEDGER.md` (commit hashes in the rows' status cells are the branch head named in the hand-back).
+Branch `review/9-fix` from `bc4e6aaf`; own build `build-a9` (RelWithDebInfo, gcc 13, `-j2`, every test binary under `ulimit -v 3500000`). The oracle (`LoaderFuzzTests`) was the target: each class fixed was removed from `Known()`, so it fails the run if it comes back. Rows closed in `Docs/Decompiler/REVIEW_LEDGER.md` (fix commits a735123a and 1f44b25d; the record repair 79ba4d47).
 
 ### The decisions as built
 
