@@ -828,6 +828,19 @@ inline int TBefore(const sfe::decomp::DecompileResult& r, const std::function<bo
                 if (!give(edge)) return -1;
                 continue;
             }
+            // (the slot of a `bt/s` or `bf/s` that does not set T: the edge from the slot says T as the branch's own edge does, A7-34's
+            // triage of grammar 2 seed 1804151: `tst r1,r1 ; bt/s L ; mov.l r1,@(0x18,r6) ; sett ; L: movt r2` puts 1 in r2 either way)
+            uint16_t bw = 0;
+            sfe::DisassembledInstruction b;
+            if (!SetsT(w) && decode(p - 2, b) && word(p - 2, bw) && ((bw >> 8) == 0x8D || (bw >> 8) == 0x8F) && b.BranchTarget != p + 2)
+            {
+                const int t = TBefore(r, word, into, p - 2, depth + 1);
+                const bool taken = p + 2 != a;
+                const int edge = taken == ((bw >> 8) == 0x8D) ? 1 : 0;
+                if (t >= 0 && t != edge) continue;
+                if (!give(edge)) return -1;
+                continue;
+            }
             const int t = TSetBy(r, word, into, p, w, depth);
             if (t == -1 || (t == -2 && SetsT(w))) return -1;
             if (t >= 0)

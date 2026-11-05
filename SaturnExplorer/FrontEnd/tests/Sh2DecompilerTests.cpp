@@ -1361,7 +1361,8 @@ void TestArea7Round7()
     // path built once (6110098); r3 0 after a `dt` loop, no store of `iStack_1c = 1;` (grammar 2 seed 374); a conversion at the `bt`
     // ending its block takes its store's address (6132458). Oracle: a piece `._0_2_` compared at its size (1710882); a word store's
     // bytes another store writes too not compared (6131245); a copy materialised at a load (6110156); a loop counter `mov #1,r3` whose
-    // r3 the store stores (1711212); `tas.b` a maker (2557).
+    // r3 the store stores (1711212); `tas.b` a maker (2557); T on the edges of a `bt/s` whose slot does not set it (`tst r1,r1 ; bt/s L ;
+    // mov.l r1,@(0x18,r6) ; sett ; L: movt r2`, `iVar1 = 1;` at the `movt`: grammar 2 seed 1804151, of the fresh seeds from 1,800,000).
     for (const auto& words : { std::vector<uint16_t>{ 0xD104, 0x251A, 0xD604, 0x6253, 0x8803, 0x8F01, 0x2621, 0x2422, 0x000B, 0x0009, 0x4000, 0x0000, 0x2600, 0x1034 },
                                std::vector<uint16_t>{ 0xD205, 0x272B, 0x602C, 0x8801, 0x8B00, 0x7054, 0xD703, 0x201B, 0x817B, 0x2512, 0x000B, 0x0009, 0x2000, 0x0000,
                                                       0xC000, 0x2004 },
@@ -1375,7 +1376,8 @@ void TestArea7Round7()
                                std::vector<uint16_t>{ 0xD705, 0xE001, 0x2702, 0x6072, 0xC801, 0x89FC, 0x1531, 0xE003, 0x0714, 0x000B, 0x0009, 0x0009, 0x2600, 0x1014 },
                                std::vector<uint16_t>{ 0xD605, 0x6246, 0xE301, 0x6241, 0x163D, 0x4310, 0x8BFB, 0xE004, 0xCF33, 0x000B, 0x0009, 0x0009, 0x0600, 0x1004 },
                                std::vector<uint16_t>{ 0xD605, 0xE301, 0x6233, 0x4310, 0x8BFC, 0x1636, 0x054F, 0x4115, 0x8D00, 0x1427, 0x000B, 0x0009, 0x2600, 0x1028 },
-                               std::vector<uint16_t>{ 0xD705, 0xE002, 0x2702, 0x6072, 0xC801, 0x8BFC, 0xE301, 0x471B, 0x4310, 0x8BFC, 0x000B, 0x0009, 0x2600, 0x2300 } })
+                               std::vector<uint16_t>{ 0xD705, 0xE002, 0x2702, 0x6072, 0xC801, 0x8BFC, 0xE301, 0x471B, 0x4310, 0x8BFC, 0x000B, 0x0009, 0x2600, 0x2300 },
+                               std::vector<uint16_t>{ 0x2118, 0x8D01, 0x1616, 0x0018, 0x0229, 0xE301, 0x3248, 0x2420, 0x4310, 0x8BFB, 0x000B, 0x0009 } })
     {
         const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, words);
         const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_34 triage");
