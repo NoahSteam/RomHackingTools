@@ -1555,6 +1555,7 @@ void RunBoundsCase(uint64_t index)
     }
     Guarded::Run("FunctionBounds::Save", [&] {
         const std::string out = gScratch + "/bounds/out.txt";
+        ::unlink(out.c_str());   // a save merges into what the file holds (A9-20): start from no file
         if (!fb.Save(out)) { Violation("SAVE_FAILED", "Save failed in a writable folder"); return; }
         sfe::decomp::FunctionBounds again;
         if (!again.Load(out) || again.Entries() != fb.Entries()) Violation("ROUNDTRIP", "Save then Load does not give back the entries");
@@ -1580,7 +1581,7 @@ void RunSettingsCase(uint64_t index)
     // The reference reading of the documented format.
     std::map<std::string, std::map<std::string, std::string>> ref;
     std::string section;
-    for (const std::string& raw : Lines(text))
+    for (const std::string& raw : LinesCR(text))   // a lone CR ends a line in settings too (A9-25)
     {
         const std::string t = Trim(raw);
         if (t.empty() || t[0] == ';' || t[0] == '#') continue;
@@ -1632,6 +1633,7 @@ void RunSettingsValueCases()
     for (const V& v : values)
     {
         CaseScope scope("settings.values", n++, v.what, nullptr, 64 * kMiB, 32 * kMiB);
+        ::unlink((cfg + "/settings.ini").c_str());   // a save merges into what the file holds (A9-20): start from no file
         sfe::Settings w;
         w.Set("decompiler", "bios", v.value);
         w.Set("decompiler", "autorefresh", "1");
@@ -1640,7 +1642,7 @@ void RunSettingsValueCases()
         sfe::Settings r;
         r.Load();
         std::string flat = v.value;
-        for (char& c : flat) if (c == '\n') c = ' ';
+        for (char& c : flat) if (c == '\n' || c == '\r') c = ' ';   // both line ends are written as a space (A9-25)
         const bool same = r.Get("decompiler", "bios") == v.value;
         const bool injected = r.Has("decompiler", "volatile");
         if (saved && injected) Violation("VALUE_INJECTS_KEY", std::string(v.what) + ": the saved value became another key (volatile) on the next start");
@@ -2250,9 +2252,9 @@ void RunConcurrentCases()
                 {
                     sfe::decomp::FunctionBounds fb;
                     if (!fb.Load(path)) { ++torn; continue; }
-                    if (fb.Entries().size() != static_cast<size_t>(kEntries)) { ++torn; continue; }
-                    const uint32_t first = *fb.Entries().begin();
-                    if (*fb.Entries().rbegin() != first + 2 * (kEntries - 1)) ++torn;
+                    // A save merges this session's starts into the file (A9-20), so the list only grows: a read that is shorter than
+                    // the file started with, or ends in half a run of entries, saw a torn file.
+                    if (fb.Entries().size() < static_cast<size_t>(kEntries)) { ++torn; continue; }
                 }
                 return torn > 100 ? 100 : torn;
             });
