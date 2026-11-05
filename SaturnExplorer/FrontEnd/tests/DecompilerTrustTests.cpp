@@ -3498,11 +3498,11 @@ std::string FollowCheck(FRig& r, bool hover)
         r.shownProv = p;
     }
     // The panel writes the entry of a new function into the box (the user's draft aside, which the rig never leaves).
-    if (sh && sh->requestedEntry != r.lastShownEntry)
+    // ...but not over the user's own text while the box holds the focus (A8-42): the sync waits for the focus to go.
+    if (sh && sh->requestedEntry != r.lastShownEntry && !(r.panel.EntryBoxActive() && !r.boxShowsShown))
     {
         r.lastShownEntry = sh->requestedEntry;
-        // ...but not over the user's own text while the box holds the focus (A8-42): the sync waits for the focus to go.
-        if (!(r.panel.EntryBoxActive() && !r.boxShowsShown)) r.boxShowsShown = true;
+        r.boxShowsShown = true;
     }
 
     // (area 8 fixer, A8-36, A8-37) What confirms the entry of current output, held against the label: the user's own entry (typed, or a
