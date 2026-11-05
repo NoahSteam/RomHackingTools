@@ -15145,3 +15145,40 @@ The Follow PC checkbox calls `SetTarget`. `SetTarget` forgets the Stop, as A8-10
 
 * Area 1: A8-25 (still open, as filed; the probe shows the proposed excuse is enough).
 * A8-27 stays in area 8, like A8-18. Its fix is the panel's, and the guide's grey-messages row needs no change once the click asks.
+
+## Area 8 fixer (A8-25, A8-27)
+
+Fixer, branch `review/8-a827-fix`, on `f11fb727` (area 8 round 3 merged). The fix is `0dfad19c`; the ledger and tools README are `16ba01af`. Own RelWithDebInfo build (Ninja, gcc, `-j2`), with every test binary under `ulimit -v 3500000` and a timeout, one heavy job at a time.
+
+### What changed
+
+* **A8-27 (P3, the panel).** `FrontEnd/src/DecompilerPanel.cpp`, `DrawHeader`: the Follow PC checkbox sets `mAskAgain = true;` after its `SetTarget`, as Enter in the entry box and Decompile (A8-18) do. The click forgets the Stop with the old target (`ForgetStop` in `SetTarget`). When the new target resolves to the question that was stopped, `Update` used to return at `q == mAsked` and leave the stale output with nothing outstanding. Now the click asks again. `askAgain` is still not taken over a request that is outstanding and wanted (`!mPending.active || mPending.cancelled`), so a click while a request runs does not restart it.
+* **A8-25 (P3, area 1's check, made by the area 8 fixer).** `FrontEnd/tests/DecompilerModelTests.cpp`: the `excused` expression of the idle check takes `|| (!visible && namesGeneration != shownNamesGen)`. This is the excuse the held check already makes for the names (`namesMoved`) when a rename is undone (A8-14), applied to a hidden panel, which asks nothing. It changes only `STALE FOREVER`: `NOT REFRESHED` needs `visible` already, and a rename that is not undone makes the view itself differ (`modelStale`), so the excuse does not apply to it.
+* **The generator's guard is gone.** `FrontEnd/tests/DecompilerTrustTests.cpp`, `MakeProgram`: `if (!hidden && rng.Chance(35))` is `if (rng.Chance(35))`, and the `hidden` flag is removed. Renames are now undone while the panel is hidden too. The default run's sequences change with it, because the generator now draws the random number while the panel is hidden as well.
+* **Pins.** The trust test's `kPins` has `a rename undone while the panel is hidden (A8-25)` (`select A; wait; hide; name A 1; name A 0; wait`, world C,A). The eight Follow PC seeds of A8-27 run in the default run: `kFollowPinsClick` (mix 8: 20149, 20442, 21097) and `kFollowPinsClickAuto` (mix 9, with `gFollowAuto`: 20297, 20729, 20793, 21058, 21275). `gFollowAuto` is set for each pin and cleared after it.
+* **Docs.** In the ledger, A8-25 and A8-27 are fixed with `0dfad19c` (8 cells each, with pipes escaped). The tools README drops `a8_round3/build_hidden_probe.sh` and keeps `a8_27.sh`. The probe is removed because the excuse it tried is in the real file now.
+
+### Each pin catches its revert
+
+| Revert (temporary, restored with `git checkout`, `git status` clean after) | Trust test, default run |
+|---|---|
+| none (the branch) | all passed: 68 sequences, 0 failed, 2,251 operations, 52 s. The A8-25 pin and all ten Follow PC pins are `ok` |
+| the `mAskAgain = true;` line of A8-27 removed | **8 failed: exactly the eight A8-27 pins**, each `NOT REFRESHED` ("the source does not run, the panel is idle, the question has a function, and the output on screen is stale"), each right after `click Follow PC` (operations 23, 36, 31, 46, 15, 39, 20, 36). Seeds 5051 and 5080 (A8-18) and everything else pass |
+| the A8-25 excuse removed from `DecompilerModelTests.cpp` (the guard still dropped) | **1 failed: the pin `a rename undone while the panel is hidden (A8-25)`**, `STALE FOREVER` after operation 5. The default mixes did not reach the case on their own, so the pin is what holds it |
+
+With both fixes in and the guard dropped, mixes 0, 1, 4, 6 and 7 from seed 30000 at 6,000 operations each (`SE_TRUST_MIX=<k> SE_TRUST_FROM=30000 SE_TRUST_STEPS=6000`): 508 sequences, 30,138 operations, **0 failed**. Round 3's probe got the same 30,138 operations from the same seeds, so this confirms the probe's result in the real files.
+
+### Test results
+
+| Run | Result |
+|---|---|
+| `cmake --build build -j2` (fresh configure: Ninja, RelWithDebInfo, `SE_ENABLE_DECOMPILER=ON`, `SE_DEMO_MENU=ON`; no SDL2 here, as in the other worktrees) | 867 of 867 steps, no warnings in the changed files |
+| `ctest -E SaturnExplorerLive -j2 --timeout 900` | **102 of 102** passed (187 s; the engine suite 43.2 s, the model test 20.8 s, the trust test 53.5 s) |
+| `ctest -R SaturnExplorerLive` | **6 of 6** (28 s) |
+| fault suite (`SaturnExplorerDecompilerFaultTests` alone; product code changed) | **0 of 94 jobs failed** (78.5 s), no MOVED pin |
+
+108 tests, as on master. No test was added; the pins are part of the trust test's default run.
+
+### Routed
+
+Nothing. A8-25 was routed to area 1, and its fix is in area 1's file. It was made here because it is the one expression the row names, and it was confirmed by the probe and again above. Area 1 may want to review the line.
