@@ -72,6 +72,9 @@ and lists these classes as open until they are fixed.
    Registers invoke `DecompilerPanel::ShowFunctionContaining` through App. Like Enter in the
    entry box it is a request: it sets `mAskAgain`, so the same question is asked again after
    a Stop or a failure, and it clears a refused entry's text from the box (`SetTarget`).
+   The entry box remembers the text the panel last wrote (`mBoxCleanText`): an edit taken back to it
+   (Escape, Backspace, Ctrl+Z) leaves the box untouched (A8-46), and a refused text stays in the box
+   with its refusal even when an install left the sync pending (A8-50).
 2. `App::BuildDecompilerView` describes the **context currently displayed**. A scrubbed
    recording uses its recorded context and stable timeline/frame identity. Live capture
    repeats are normalized by `CaptureRepeatTracker` so unchanged paused captures do not
