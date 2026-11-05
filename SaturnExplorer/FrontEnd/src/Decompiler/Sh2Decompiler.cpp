@@ -5533,6 +5533,44 @@ bool EdgeDead(NumberWalk& w, const FlowRecord& flow, const ghidra::Funcdata& fd,
     }
     return true;
 }
+// A7-39: is the edge from `p` into `blk` a loop's way back that leaves `vn` as it was at `blk`'s start? Every path from the entry to `p`
+// passes through `blk` (so `blk` is entered first by another edge), and no op of a block on a way from `blk` to `p` writes `vn` (for
+// memory: no store and no call at all). Then the edge brings the number the other edges bring, by induction on the visits of `blk`: a
+// poll loop between a register's literal and its `cmp/pl` does not make the register unknown.
+bool LoopKeeps(const FlowRecord& flow, const ghidra::Funcdata& fd, int blk, int p, const FlowVn& vn, bool memory)
+{
+    const size_t n = flow.blockOps.size();
+    if (n == 0 || p < 0 || static_cast<size_t>(p) >= n || blk == flow.entryBlock || flow.successors.size() < n || flow.predecessors.size() < n)
+        return false;
+    const auto reach = [&](int from, const std::vector<std::vector<int>>& edges, int avoid) {
+        std::vector<char> seen(n, 0);
+        std::vector<int> work{from};
+        seen[static_cast<size_t>(from)] = 1;
+        while (!work.empty())
+        {
+            const int b = work.back();
+            work.pop_back();
+            if (b == avoid) continue;
+            for (int s : edges[static_cast<size_t>(b)])
+                if (s >= 0 && static_cast<size_t>(s) < n && !seen[static_cast<size_t>(s)]) seen[static_cast<size_t>(s)] = 1, work.push_back(s);
+        }
+        return seen;
+    };
+    if (p != blk && reach(flow.entryBlock, flow.successors, blk)[static_cast<size_t>(p)]) return false;   // (`blk` does not dominate `p`)
+    const std::vector<char> from = reach(blk, flow.successors, -1);
+    const std::vector<char> to = reach(p, flow.predecessors, -1);
+    for (size_t b = 0; b < n; ++b)
+    {
+        if (!from[b] || !to[b]) continue;
+        for (const FlowOp& op : flow.blockOps[b])
+        {
+            if ((op.code == ghidra::CPUI_CALL || op.code == ghidra::CPUI_CALLIND) && (memory || !CallKeeps(fd, op.insn, vn))) return false;
+            if (memory && op.code == ghidra::CPUI_STORE) return false;
+            if (op.hasOut && FlowStorageOverlaps(op.out, vn)) return false;
+        }
+    }
+    return true;
+}
 bool FlowNumberIn(NumberWalk& w, const FlowRecord& flow, const ghidra::Funcdata& fd, int blk, int pos, const FlowVn& vn, uint64_t& value)
 {
     if (--w.budget < 0 || blk < 0 || static_cast<size_t>(blk) >= flow.blockOps.size()) return false;
@@ -5684,6 +5722,7 @@ bool FlowNumberIn(NumberWalk& w, const FlowRecord& flow, const ghidra::Funcdata&
     {
         if (p < 0 || static_cast<size_t>(p) >= flow.blockOps.size()) return false;
         if (preds.size() > 1 && EdgeDead(w, flow, fd, p, blk)) continue;   // (a path never taken)
+        if (preds.size() > 1 && LoopKeeps(flow, fd, blk, p, vn, memory)) continue;   // (a loop's way back that keeps it, A7-39)
         uint64_t v = 0;
         if (!EdgeNumber(w, flow, fd, p, blk, vn, v))
         {
@@ -5818,6 +5857,14 @@ bool FlowIdentitySources(const FlowRecord& flow, const ghidra::Funcdata& fd, int
                 for (int q : preds)
                     if (!EdgeDead(dw, flow, fd, q, b)) live.push_back(q);
                 if (!live.empty()) preds = live;
+                // (a loop's way back that leaves the storage as it was brings what the other paths bring, A7-39: `bra L ; ... L: dt r3 ;
+                // bf` with r5 read after the loop)
+                const ghidra::AddrSpace* stackSpace = fd.getArch()->getStackSpace();
+                const bool inMemory = s.space && (s.space == stackSpace || s.space == fd.getArch()->getDefaultDataSpace());
+                std::vector<int> entering;
+                for (int q : preds)
+                    if (!LoopKeeps(flow, fd, b, q, s, inMemory)) entering.push_back(q);
+                if (!entering.empty()) preds = entering;
             }
             // (unless the edges in give a number: `dt r3 ; bf L` falls through with r3 0)
             uint64_t v = 0;
