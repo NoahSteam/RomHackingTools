@@ -38,6 +38,7 @@
 //   SE_TRUST_FOLLOW_SCRIPT="cpu; regsoff; cpu"   one Follow PC sequence written out (kFollowWords); SE_TRUST_FOLLOW_DUMP=1 prints the window
 //   SE_TRUST_SCRIPT="select A; t-inject failed" SE_MODEL_WORLD=C,A   one sequence written out (area 1's words, and t-...)
 //   SE_TRUST_NOHOVER=1   do not hover the badge (faster)
+//   SE_TRUST_HIDDEN_RENAME=1  half the renames made and undone while the panel is hidden (A8-25), with the mixes
 #define SE_MODEL_NO_MAIN
 #include "DecompilerModelTests.cpp"
 
@@ -1115,6 +1116,8 @@ Op Mk(OpKind k, int a = 0, int b = 0, int c = 0, const char* text = "")
     return o;
 }
 
+bool gHiddenRename = false;   // SE_TRUST_HIDDEN_RENAME (area 8, round 4)
+
 // The sequence a run uses: `concat` generated programs end to end (their functions are the first program's: indexes are taken modulo the
 // world; round 1's ran 20 to 60 operations, a long run 300 to 450), with, after each Stop, some of the operations that interleave with
 // it (a Refresh, a reconnect, a rename, an edit, Decompile, hide and show, a Select, the volatile list, a second Stop), every rename
@@ -1149,6 +1152,27 @@ Program MakeProgram(uint64_t seed, int mix, int concat = 1)
         if (o.kind == OpKind::Hold) held = true;
         if (o.kind == OpKind::Wait || o.kind == OpKind::Finish) held = false;
         const int fn = o.a % n;
+        // (area 8, round 4) SE_TRUST_HIDDEN_RENAME=1: half the renames are made and undone while the panel is hidden (A8-25's case, which
+        // the default mixes reach only by chance), with now and then an edit, a hold or a reconnect while hidden, and the panel shown after
+        // (or left hidden for a later Show of the sequence). Not in the default run: its sequences stay as they were.
+        if (gHiddenRename && o.kind == OpKind::Rename && !held && rng.Chance(50))
+        {
+            out.pop_back();
+            const int before = nameOf.count(fn) ? nameOf[fn] : 0;
+            out.push_back(Mk(OpKind::Hide));
+            out.push_back(o);
+            switch (rng.Below(5))
+            {
+            case 0: out.push_back(Mk(OpKind::Edit, rng.Below(1000), rng.Below(1000), rng.Below(1000))); break;
+            case 1: out.push_back(Mk(OpKind::Reconnect, rng.Below(2))); break;
+            case 2: out.push_back(Mk(OpKind::Volatile, rng.Below(4))); break;
+            default: break;
+            }
+            out.push_back(Mk(OpKind::Rename, o.a, before));
+            nameOf[fn] = before;
+            if (rng.Chance(75)) out.push_back(Mk(OpKind::Show));
+            continue;
+        }
         if (o.kind == OpKind::Rename && !held)
         {
             const int before = nameOf.count(fn) ? nameOf[fn] : 0;
@@ -2543,6 +2567,13 @@ std::string FollowExecute(FRig& r, FOp o, Rng& rng)
                 if (const DecompileResult* shown = r.panel.Shown()) pinned = shown->requestedEntry;
             if (!pinned) return "(nothing to pin)";
             if (!r.Click("follow")) return "(no Follow PC box)";
+            // (area 8, round 4) What the box pinned is what the panel had found when the click landed, not before the click's own frames: on a
+            // running emulator the retry of a PC that found no function (on the auto-refresh cadence) can capture and find one in them (seed
+            // 40109 of mix 8 with SE_TRUST_NOHOVER=1). Nothing has resolved the new target yet, so the entry the panel wants is still the one
+            // it pinned.
+            pinned = r.panel.WantedEntry();
+            if (!pinned)
+                if (const DecompileResult* shown = r.panel.Shown()) pinned = shown->requestedEntry;
             r.tgt = FRig::Tgt::Entry;
             r.tgtAddr = pinned;
         }
@@ -2715,6 +2746,10 @@ bool RunFollow(uint64_t seed, bool verbose, uint64_t& opsDone)
             r.Idle(2);
             if (!r.Settle()) return fail("HANG: the panel did not settle");
         }
+        // (area 8, round 4) A Stop belongs to the question it stopped: once the question on screen has found no function it is forgotten
+        // (A8-10, the guide's grey-messages row), however the question got there. The panel resolves only while it is drawn. Before round 4
+        // the rig forgot it only for the operations that choose a target, so a CPU switch onto a CPU with no registers and back kept it.
+        if (r.visible && r.WantNow().noEntry != trust::NoEntry::None) r.haveStopped = false;
         ++gT.checks;
         ++(r.holding ? gT.held : gT.idle);
         if (gFollowDump && r.visible)
@@ -2892,6 +2927,7 @@ int main(int argc, char** argv)
     gConfig = dts::Join(scratch, "config");
     CHECK(sfe::MakeDirectory(gConfig));
     gHover = std::getenv("SE_TRUST_NOHOVER") == nullptr;
+    gHiddenRename = std::getenv("SE_TRUST_HIDDEN_RENAME") != nullptr;
 
     CheckGuide();
 
