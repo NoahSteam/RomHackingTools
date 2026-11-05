@@ -16596,7 +16596,7 @@ The pins assert today's behaviour: when a finding is fixed, its check fails and 
 | `SaturnExplorerLoaderFuzzTests`, seed 5309, 3,000 cases a module, all modules | 37,985 cases, 0 classes outside the ledger after the reference correction (2 oracle artefacts before it) |
 | `SaturnExplorerLoaderFuzzTests`, seed 8123, 15,000 cases a module, names, comments, bounds, settings, `NOFIXED` | 0 classes outside the ledger |
 | `SaturnExplorerLoaderFuzzTests` `concurrent`, 40 rounds; `SaturnExplorerArea9Round3Tests` | pass |
-| Full `ctest` | see below |
+| Full `ctest` (`-j2`, `ulimit -v 3500000`), Live tests included | 110 of 110 passed: 103 + 6 Live on master, plus the new `SaturnExplorerArea9Round4Tests` |
 
 ### For the fixer
 
