@@ -15581,3 +15581,35 @@ The mutation checks were run on the built test with the product reverted by a sc
 
 * Area 4: nothing to do. The finder's confidence and doubt texts are unchanged. The panel now keeps them across a pin.
 * A8-31's "still not held: the `(entry from …)` label's figure" is now held for the pin by `RunPinnedEntryPins`. Elsewhere it is still not held.
+
+## Area 8, round 5
+
+Branch `review/8-round5` from master `cc4cbe8f` (area 8 fixer, A8-29 and A8-30, merged). This is the first adversarial round after the fixer, and so the first of the two clean rounds in a row the area needs. **No product code changed.** The trust test gained a call-stack knob on the mini rig and a probe (`RunProbe5`, run only with `SE_TRUST_PROBE5=1`), and `Docs/Decompiler/tools/a8_round5/` was added. Filed: **A8-32 (P3)**, **A8-33 (P3)**, **A8-34 (P3, instrument)**. **The round is CLEAN: no new P1 or P2.**
+
+### Attacks on the two fixes
+
+* **A8-30 (the pin).** Read: every place that builds, copies or restores an Entry target (`SetTarget` callers: the Follow PC box, the entry box, Set Function Start Here, `ShowFunctionContaining`, `ShowInstruction`), and `Resolve`'s Entry branch. The pin takes the finder's source, figure and doubt from `mEntry*` when the question has an entry, and from `mShownEntry*` (set by `Install`) when it has none. Tried: the CPU switch (the pin follows the entry of the question wanted now, and the shown output's when the CPU has no registers); a refused entry text (the shown output's verdict); a typed entry equal to the guess (user-set, no doubt, as the pin test holds); an edit (the doubt belongs to the target, so it survives); Decompile and Show in Pseudocode (Containing targets, resolved by the finder); a stale result (`Accept` only installs for `mEntry`, and `Install` stores what `mEntry*` is then); a cache hit on a pinned entry. No path loses the doubt, and none puts it on an entry the user typed or set. Two small defects found, both toward doubt or a stale label, not toward confidence: A8-32 and A8-33. Considered and not filed: Enter pressed in the entry box on its untouched, auto-filled text makes a typed (user-set) entry with no doubt; the user did ask to decompile that address, and the label says "user-set entry".
+* **A8-29 (a stopped question stays asked only while its Stop is in force).** Read `ForgetStop`, `Accept`'s discarded branch and `Update`'s ask. A Stop racing a completed answer: the answer is current, `Install` runs, `mStopped` is false, the cancel flag is irrelevant once nothing is outstanding. Stop during a held engine and then another target or a question with no function: `ForgetStop` clears `mAsked`, the next submission supersedes the cancelled request, and the old generation's result is dropped by the runner, so no "Stopped." comes back. Stop then reselect: the same, and asked again from the cache or the engine. The discarded branch can fire for a cancelled request only when the held snapshot is no longer on screen (a hidden panel whose view moved); the panel then asks again on return, which the A1-4 rule already does for any discarded answer. No restart loop: a discard needs the same generation, and the new submission has a new one. Directed Follow scripts, all `ok`: `hold; stop; hide; show; release; refresh`, `hold; stop; hide; edit; show; release; show`, `hold; stop; pcbios; pcc; release`, `hold; stop; release; pcbios; pcc; cpu; cpu`, `hold; stop; follow; release; follow`, `hold; stop; typec; release; follow; stop`, `hold; stop; hide; pcbios; show; pcc; release`, `pct; hold; stop; cpu; regsoff; cpu; release; cpu; cpu; stop`, `hold; stop; showinsn; release; auto; running; advance`, `hold; stop; containbad; containc; release`.
+
+### A8-32 (P3): the label can disagree with the Entry line
+
+`Install` copies the entry's source and figure into the status row's label; `Uncertainties` reads the live doubt. A call-stack change resolves again but asks nothing (same entry, same question), so the two can differ. With the stack gone, the label reads "(entry from call-site target, 80%)" and the window "Entry: guessed from the previous rts; …". The amber line is the true one and is drawn beside it, so this is P3. A8-31's remark that the label's figure is held only in the pin case is therefore right, and here is the case where it is wrong. Fixture: `tools/a8_round5/probe5.sh`.
+
+### A8-33 (P3): a pinned entry keeps the doubt after a user function start confirms it
+
+An Entry target is never resolved again, so a function start recorded at the pinned entry leaves "no symbol, call or user entry confirms it" on screen. The text is false, in the direction of doubt. Fixture: probe case C.
+
+### What was run (RelWithDebInfo, gcc 13, Ninja, `-j2`; every run under `ulimit -v 3500000` and `timeout`)
+
+| Run | Result |
+|---|---|
+| mixes 0, 1, 3 to 7 with `SE_TRUST_HIDDEN_RENAME=1`, hover off, fresh seeds from 130000 (mix 2 not run: it is the 537 px mix) | **42,256 operations, 0 failing** (6,046, 6,032, 6,046, 6,030, 6,045, 6,038, 6,019) |
+| Follow PC mixes 8 and 9, fresh seeds from 140000, hover off; CPU-weighted (`SE_TRUST_FOLLOW_CPU=1`) and not | **60,044 operations, 0 failing** (15,011 each, four runs) |
+| ten directed Follow scripts on A8-29 (above) | all `ok` |
+| `SE_TRUST_PROBE5=1` | reproduces A8-32 (B, A) and A8-33 (C); not in the default run |
+| `ctest -E SaturnExplorerLive -j2 --timeout 900` / `ctest -R SaturnExplorerLive` | **102 of 102** on the second full run (175 s; the trust test 51.8 s) / **6 of 6**. 108 tests, as on master: no test was added. **The first full run failed `SaturnExplorerDecompilerTrustTests` once** (101 of 102; the output was not kept, and the machine was shared). The test passed alone three times (51 s each) and in the second full run. The cause is not established, and nothing in the run's other output pointed at the probe, which is off in the default run. If it comes back, run the test with `--output-on-failure` first. |
+
+### Routed
+
+* Area 4: nothing. A8-32 and A8-33 are the panel's, not the finder's texts.
+* No product file changed, so the fault suite was not rerun.
