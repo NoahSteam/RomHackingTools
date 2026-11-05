@@ -16676,7 +16676,7 @@ The pins assert today's behaviour: when a finding is fixed, its check fails and 
 | `SaturnExplorerArea9Round5Tests` (under `ulimit -v 3500000`, `timeout`) | all passed; `PIN A9-45` to `A9-48` print as holding; with `SE_A9R5_FULLDIR` on a 64 KiB tmpfs the `ENOSPC` case passes too |
 | `SaturnExplorerLoaderFuzzTests`, seed 48271, 3,000 cases a module, all modules | 37,985 cases, 0 classes outside the ledger |
 | `concurrent` module, 40 rounds, 4 processes; `SaturnExplorerArea9Round3Tests`; `SaturnExplorerArea9Round4Tests` | pass |
-| Full `ctest` (`-j2`, `ulimit -v 3500000`), Live tests included | see the hand-back |
+| Full `ctest` (`-j2`, `ulimit -v 3500000`), Live tests included | 111 of 111 passed: 104 + 6 Live on master, plus the new `SaturnExplorerArea9Round5Tests` |
 
 ### For the fixer
 
