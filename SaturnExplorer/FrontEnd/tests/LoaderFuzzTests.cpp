@@ -14,7 +14,11 @@
 //   specbundle  MaterialiseSh2SpecBundle over a damaged directory
 //   links       the BIOS path as a symlink, a dangling or looping link, a directory, a FIFO,
 //               /dev/zero; the same file read again after it changed
-//   concurrent  several processes on one file: nobody reads a half-written file
+//   concurrent  several processes on one file: nobody reads a half-written file; the BIOS path a link flipped
+//               between a file and a FIFO while it is read (round 2)
+//   lifecycle   (round 2) the files across a session, in the application's order: a file the loader refused and
+//               the save after it, lines it skipped, comments and remarks, two instances, a FIFO, a read-only or
+//               hard-linked file, CR line ends; and the savestate openers on a FIFO, /dev/zero, a folder (links.savestate)
 //
 // The invariants, held after every case:
 //   I1  no crash (signal, sanitizer report), no hang (a case takes under kSlowMs), no unbounded
@@ -23,6 +27,9 @@
 //   I3  nothing partly loaded is shown as valid: a region is whole or absent, an entry comes from
 //       a line that is one, a failed load leaves the state it found.
 //   I4  two instances on one file do not corrupt each other.
+//   I5  (round 2) a save keeps what the user put in the file: it does not write over a file the loader refused, drop
+//       lines the loader skipped or comments its format allows, or undo what another instance saved; and a save, like a
+//       load, never waits on a path that is not a file.
 //
 // A violation is a line "VIOLATION <module>/<class> ..." with the case that made it (seed, index,
 // the mutation) and the input saved under <scratch>/repro. A class with a ledger row that is not
@@ -39,6 +46,8 @@
 //   SE_LOADFUZZ_CASE=<k>       one case, with the mutation printed (with ONLY)
 //   SE_LOADFUZZ_PROCS=<n>      writers and readers in the concurrency module (default 3)
 //   SE_LOADFUZZ_ROUNDS=<n>     rounds of the concurrency module (default 40)
+//   SE_LOADFUZZ_RACE_TRIES=<n> loads in the stat/open race case (default 5000, well under its 6 s when nothing blocks;
+//                              the race was lost within 2,000 in every run of round 2)
 #include "AssemblyPanel.h"
 #include "Debug/CallStack.h"
 #include "Debug/MemoryBackend.h"
@@ -168,10 +177,31 @@ namespace
 const int kSlowMs = 5000;   // a case that takes longer is a hang, whatever it was doing
 
 // Violation classes the ledger holds as open: class -> row. Counted and printed, not failed.
-// (Emptied as the rows are fixed.)
+// (Emptied as the rows are fixed.) Round 1's were all fixed; these are round 2's.
 const std::map<std::string, std::string>& Known()
 {
-    static const std::map<std::string, std::string> k;
+    static const std::map<std::string, std::string> k = {
+        { "names/PROSE_AS_ADDRESS", "A9-18" },
+        { "comments/PROSE_AS_ADDRESS", "A9-18" },
+        { "bounds/PROSE_AS_ADDRESS", "A9-18" },
+        { "lifecycle/UNREAD_FILE_OVERWRITTEN", "A9-19" },
+        { "lifecycle/SAVE_WRITES_UNREADABLE", "A9-19" },
+        { "lifecycle/IDLE_INSTANCE_REVERTS", "A9-20" },
+        { "lifecycle/LOST_UPDATE", "A9-20" },
+        { "lifecycle/SAVE_DROPS_SKIPPED_LINES", "A9-21" },
+        { "lifecycle/SAVE_DROPS_COMMENTS", "A9-21" },
+        { "lifecycle/DROPPED_UNCOUNTED", "A9-21" },
+        { "lifecycle/SAVE_BLOCKS", "A9-24" },
+        { "links.savestate/SAVESTATE_HANG", "A9-24" },
+        { "concurrent.race/STAT_OPEN_RACE", "A9-24" },
+        { "names/LONE_CR_JOINS_LINES", "A9-25" },
+        { "comments/LONE_CR_JOINS_LINES", "A9-25" },
+        { "bounds/LONE_CR_JOINS_LINES", "A9-25" },
+        { "lifecycle/LONE_CR_JOINS_LINES", "A9-25" },
+        { "lifecycle/MODE_NOT_KEPT", "A9-28" },
+        { "lifecycle/HARDLINK_SPLIT", "A9-28" },
+        { "lifecycle/READONLY_REPLACED", "A9-28" },
+    };
     return k;
 }
 
@@ -1164,7 +1194,7 @@ bool IsHex(char c) { return std::isxdigit(static_cast<unsigned char>(c)) != 0; }
 
 // The symbol-map line as the documentation gives it: "<hex-addr> <name>", the address 1 to 8 hex digits with an optional 0x,
 // then white space, then a name; blank lines and lines opening with ; # // are comments.
-enum class LineKind { Entry, Comment, TooLong, Signed, NotHex, NoName };
+enum class LineKind { Entry, Comment, TooLong, Signed, NotHex, NoName, Prose };
 
 LineKind ParseSymbolRef(const std::string& line, uint32_t& addr, std::string& name)
 {
@@ -1176,9 +1206,16 @@ LineKind ParseSymbolRef(const std::string& line, uint32_t& addr, std::string& na
     while (e < line.size() && !std::isspace(static_cast<unsigned char>(line[e]))) ++e;
     std::string tok = line.substr(b, e - b);
     if (tok[0] == '-' || tok[0] == '+') return LineKind::Signed;
-    if (tok.size() > 2 && tok[0] == '0' && (tok[1] == 'x' || tok[1] == 'X')) tok = tok.substr(2);
+    const bool prefixed = tok.size() > 2 && tok[0] == '0' && (tok[1] == 'x' || tok[1] == 'X');
+    if (prefixed) tok = tok.substr(2);
     for (char c : tok) if (!IsHex(c)) return LineKind::NotHex;
     if (tok.size() > 8) return LineKind::TooLong;
+    // Round 2 (A9-18): a first word of the letters a-f alone, with no digit and no 0x, is a word of the remark, not an address.
+    // "Dead function in the old build", "add it later", "a note", "beef" are the examples A9-4 was filed for; nothing the
+    // application writes, and no symbol tool, prints an address without a digit or a prefix.
+    bool digit = false;
+    for (char c : tok) digit = digit || std::isdigit(static_cast<unsigned char>(c)) != 0;
+    if (!prefixed && !digit) return LineKind::Prose;
     addr = static_cast<uint32_t>(std::strtoul(tok.c_str(), nullptr, 16));
     name = Trim(line.substr(e));
     return name.empty() ? LineKind::NoName : LineKind::Entry;
@@ -1190,6 +1227,49 @@ LineKind ParseBoundsRef(const std::string& line, uint32_t& addr)
     std::string name;
     LineKind k = ParseSymbolRef(line, addr, name);
     return k == LineKind::NoName ? LineKind::Entry : k;
+}
+
+// Which line an entry the reference does not have came from (round 2): the address each line that is not an entry would have
+// been read as by the readers before round 1 (strtoul on the first word, a sign applied, cut to 32 bits). The class is that
+// line's kind; with several kinds of bad line in one text, the first that the product accepted is the one named, not the first
+// in the text (round 1 named the first in the text, which a prose line accepted under A9-18 would make any of them).
+bool LiberalAddr(const std::string& line, uint32_t& a)
+{
+    size_t b = 0;
+    while (b < line.size() && std::isspace(static_cast<unsigned char>(line[b]))) ++b;
+    if (b >= line.size()) return false;
+    bool neg = false;
+    if (line[b] == '-' || line[b] == '+') { neg = line[b] == '-'; ++b; }
+    const char* s = line.c_str() + b;
+    char* end = nullptr;
+    const unsigned long long v = std::strtoull(s, &end, 16);
+    if (end == s) return false;
+    uint32_t x = static_cast<uint32_t>(v);
+    if (neg) x = 0u - x;
+    a = x;
+    return true;
+}
+
+using BadLines = std::vector<std::pair<LineKind, std::string>>;
+
+const char* ExtraClass(const BadLines& bad, uint32_t addr, bool canonical, bool bounds)
+{
+    for (const auto& kl : bad)
+    {
+        uint32_t a = 0, c = 0;
+        if (!LiberalAddr(kl.second, a)) continue;
+        if (canonical) { if (!sfe::CanonicalAddress(a, c)) continue; a = c; }
+        if (a != addr) continue;
+        switch (kl.first)
+        {
+        case LineKind::TooLong: return "ADDR_TRUNCATED";
+        case LineKind::Signed: return "SIGNED_ADDR";
+        case LineKind::NotHex: return bounds ? "PROSE_AS_ADDRESS" : "ACCEPTS_MALFORMED";
+        case LineKind::Prose: return "PROSE_AS_ADDRESS";
+        default: break;
+        }
+    }
+    return "SET_DIFFERS";
 }
 
 const char* const kMalformedLines[] = {
@@ -1297,7 +1377,7 @@ void RunNamesCase(uint64_t index)
     gAccepted["names"] += !names.All().empty();
 
     std::map<uint32_t, std::string> ref;
-    LineKind firstBad = LineKind::Entry;
+    BadLines bad;
     size_t refEntries = 0;
     for (const std::string& l : Lines(text))
     {
@@ -1305,19 +1385,25 @@ void RunNamesCase(uint64_t index)
         std::string n;
         const LineKind k = ParseSymbolRef(l, a, n);
         if (k == LineKind::Entry) { ref[a] = n; ++refEntries; }
-        else if (k != LineKind::Comment && k != LineKind::NoName && firstBad == LineKind::Entry) firstBad = k;
+        else if (k != LineKind::Comment && k != LineKind::NoName) bad.emplace_back(k, l);
     }
-    if (viaImport && imported != refEntries && firstBad == LineKind::Entry)
+    if (viaImport && imported != refEntries && bad.empty())
         Violation("IMPORT_COUNT", "Import reported " + std::to_string(imported) + " entries, the lines hold " + std::to_string(refEntries));
     if (names.All() != ref)
     {
-        const char* cls = firstBad == LineKind::TooLong ? "ADDR_TRUNCATED" : firstBad == LineKind::Signed ? "SIGNED_ADDR" : firstBad == LineKind::NotHex ? "ACCEPTS_MALFORMED" : "SET_DIFFERS";
-        // The product may only have accepted more than the reference (a malformed line read as an entry), never less.
-        bool lessThanRef = false;
-        for (const auto& kv : ref) { auto it = names.All().find(kv.first); if (it == names.All().end() || it->second != kv.second) lessThanRef = true; }
-        if (lessThanRef && firstBad == LineKind::Entry) cls = "DROPS_VALID";
+        // An entry the reference does not have (or has with another name) came from a line that is not one: its class is that
+        // line's. With none, the product loaded less than the well-formed lines hold.
+        const char* cls = "DROPS_VALID";
+        for (const auto& kv : names.All())
+        {
+            auto it = ref.find(kv.first);
+            if (it == ref.end() || it->second != kv.second) { cls = ExtraClass(bad, kv.first, false, false); break; }
+        }
         Violation(cls, "the entries loaded (" + std::to_string(names.All().size()) + ") are not the well-formed lines' (" + std::to_string(ref.size()) + ")");
     }
+    // A lone carriage return ends a line (round 2, A9-25): a name that holds one is two lines read as one.
+    for (const auto& kv : names.All())
+        if (kv.second.find('\r') != std::string::npos) { Violation("LONE_CR_JOINS_LINES", "the name of " + Hex(kv.first) + " holds a carriage return: the next line is in it"); break; }
     // Save then Load must give back what was loaded.
     Guarded::Run("FunctionNames::Save", [&] {
         names.Save();
@@ -1344,20 +1430,27 @@ void RunCommentsCase(uint64_t index)
     Guarded::Run("AssemblyPanel::LoadComments", [&] { panel.LoadComments(); });
     gAccepted["comments"] += !panel.UserComments().empty();
     std::map<uint32_t, std::string> got(panel.UserComments().begin(), panel.UserComments().end()), ref;
-    LineKind firstBad = LineKind::Entry;
+    BadLines bad;
     for (const std::string& l : Lines(text))
     {
         uint32_t a = 0;
         std::string n;
         const LineKind k = ParseSymbolRef(l, a, n);
         if (k == LineKind::Entry) ref[a] = n;
-        else if (k != LineKind::Comment && k != LineKind::NoName && firstBad == LineKind::Entry) firstBad = k;
+        else if (k != LineKind::Comment && k != LineKind::NoName) bad.emplace_back(k, l);
     }
     if (got != ref)
     {
-        const char* cls = firstBad == LineKind::TooLong ? "ADDR_TRUNCATED" : firstBad == LineKind::Signed ? "SIGNED_ADDR" : firstBad == LineKind::NotHex ? "ACCEPTS_MALFORMED" : "SET_DIFFERS";
+        const char* cls = "DROPS_VALID";
+        for (const auto& kv : got)
+        {
+            auto it = ref.find(kv.first);
+            if (it == ref.end() || it->second != kv.second) { cls = ExtraClass(bad, kv.first, false, false); break; }
+        }
         Violation(cls, "the notes loaded (" + std::to_string(got.size()) + ") are not the well-formed lines' (" + std::to_string(ref.size()) + ")");
     }
+    for (const auto& kv : got)
+        if (kv.second.find('\r') != std::string::npos) { Violation("LONE_CR_JOINS_LINES", "the note at " + Hex(kv.first) + " holds a carriage return: the next line is in it"); break; }
     Guarded::Run("AssemblyPanel::SaveComments", [&] {
         panel.SaveComments();
         sfe::AssemblyPanel again;
@@ -1387,18 +1480,37 @@ void RunBoundsCase(uint64_t index)
     if (!ok) Violation("REJECTED_READABLE", "Load refused a file it could read");
 
     std::set<uint32_t> ref;
-    LineKind firstBad = LineKind::Entry;
+    BadLines bad;
     for (const std::string& l : Lines(text))
     {
         uint32_t a = 0;
         const LineKind k = ParseBoundsRef(l, a);
         if (k == LineKind::Entry) { uint32_t c = 0; if (sfe::CanonicalAddress(a, c)) ref.insert(c); }
-        else if (k != LineKind::Comment && firstBad == LineKind::Entry) firstBad = k;
+        else if (k != LineKind::Comment) bad.emplace_back(k, l);
     }
     if (fb.Entries() != ref)
     {
-        const char* cls = firstBad == LineKind::TooLong ? "ADDR_TRUNCATED" : firstBad == LineKind::Signed ? "SIGNED_ADDR" : firstBad == LineKind::NotHex ? "PROSE_AS_ADDRESS" : "SET_DIFFERS";
+        const char* cls = "DROPS_VALID";
+        for (uint32_t e : fb.Entries())
+            if (!ref.count(e)) { cls = ExtraClass(bad, e, true, true); break; }
         Violation(cls, "the entries loaded (" + std::to_string(fb.Entries().size()) + ") are not the well-formed lines' (" + std::to_string(ref.size()) + ")");
+    }
+    // A lone carriage return ends a line (round 2, A9-25): an entry after one is read as the remark of the line before it.
+    for (const std::string& l : Lines(text))
+    {
+        size_t p = l.find('\r');
+        while (p != std::string::npos)
+        {
+            const size_t q = l.find('\r', p + 1);
+            uint32_t a = 0, c = 0;
+            if (ParseBoundsRef(l.substr(p + 1, q == std::string::npos ? std::string::npos : q - p - 1), a) == LineKind::Entry &&
+                sfe::CanonicalAddress(a, c) && !fb.Entries().count(c))
+            {
+                Violation("LONE_CR_JOINS_LINES", "the entry " + Hex(a) + " after a carriage return was read as a remark");
+                break;
+            }
+            p = q;
+        }
     }
     Guarded::Run("FunctionBounds::Save", [&] {
         const std::string out = gScratch + "/bounds/out.txt";
@@ -2280,6 +2392,478 @@ void RunConcurrentCases()
 }
 
 // ---------------------------------------------------------------------------------------------
+// Round 2: the files across a session. Round 1 held what one Load makes of a file; these hold what the next Save makes of
+// it: a file the loader refused, lines it skipped, a second instance, a target that is not a plain writable file, and line
+// ends other than LF. The application's own order is modelled: names and notes are saved at every exit (App::Shutdown),
+// whatever happened at the start; the function starts at the next change; settings at the exit.
+// ---------------------------------------------------------------------------------------------
+std::string ReadText(const std::string& path)
+{
+    Bytes b;
+    ReadBytes(path, b);
+    return std::string(b.begin(), b.end());
+}
+
+// 'count' lines "<8 hex digits> <prefix>_<i>_<pad x>", at even addresses from 'base'.
+std::string NamesText(size_t count, uint32_t base, const char* prefix, size_t pad)
+{
+    std::string t;
+    const std::string tail(pad, 'x');
+    char b[64];
+    for (size_t i = 0; i < count; ++i)
+    {
+        std::snprintf(b, sizeof b, "%08x %s_%zu_", static_cast<unsigned>(base + 2 * i), prefix, i);
+        t += b;
+        t += tail;
+        t += '\n';
+    }
+    return t;
+}
+
+bool Contains(const std::string& hay, const std::string& needle) { return hay.find(needle) != std::string::npos; }
+
+void RunLifecycleCases()
+{
+    const std::string root = gScratch + "/lifecycle";
+    RemoveTree(root);
+    MakeDir(root);
+    int n = 0;
+    const size_t kBig = 512 * kMiB;   // these cases write and read files of several MiB on purpose; the loaders' own bounds are round 1's
+
+    // --- L1: a file the loader refused is not written over by the next save (A9-19) ---
+    {
+        const std::string dir = root + "/l1";
+        MakeDir(dir);
+        InDir in(dir);
+        // Names over their 8 MiB ceiling: Load refuses and says so; the exit saves what it holds (nothing) over the file.
+        {
+            CaseScope scope("lifecycle", n++, "saturn_functions.txt over 8 MiB, then the exit's save", nullptr, kBig, kBig, 60000);
+            const std::string text = NamesText(40000, 0x06000000u, "named", 200);   // 8.6 MB
+            WriteText("saturn_functions.txt", text);
+            sfe::FunctionNames fn;
+            std::string err, serr;
+            const bool loaded = fn.Load(&err);
+            fn.Save(&serr);   // App::Shutdown -> SaveFunctionNames, unconditionally
+            const std::string after = ReadText("saturn_functions.txt");
+            if (!loaded && after.size() < text.size())
+                Violation("UNREAD_FILE_OVERWRITTEN", "saturn_functions.txt (" + std::to_string(text.size()) + " bytes, 40,000 names) was refused at the start (\"" + err +
+                          "\") and the exit's save replaced it with " + std::to_string(after.size()) + " bytes");
+        }
+        // Notes over their 8 MiB ceiling.
+        {
+            CaseScope scope("lifecycle", n++, "assembly_comments.txt over 8 MiB, then the exit's save", nullptr, kBig, kBig, 60000);
+            const std::string text = NamesText(40000, 0x06000000u, "note", 200);
+            WriteText("assembly_comments.txt", text);
+            sfe::AssemblyPanel panel;
+            std::string err, serr;
+            const bool loaded = panel.LoadComments(&err);
+            panel.SaveComments(&serr);   // App::Shutdown
+            const std::string after = ReadText("assembly_comments.txt");
+            if (!loaded && after.size() < text.size())
+                Violation("UNREAD_FILE_OVERWRITTEN", "assembly_comments.txt (" + std::to_string(text.size()) + " bytes) was refused at the start (\"" + err +
+                          "\") and the exit's save replaced it with " + std::to_string(after.size()) + " bytes");
+        }
+        // Function starts over their 4 MiB ceiling: the next Set Function Start Here saves one entry over the file.
+        {
+            CaseScope scope("lifecycle", n++, "saturn_function_bounds.txt over 4 MiB, then one function start set", nullptr, kBig, kBig, 60000);
+            std::string text = "; Function entries set by hand (Saturn Explorer, SH-2 Pseudocode)\n";
+            char b[48];
+            for (uint32_t i = 0; i < 160000; ++i) { std::snprintf(b, sizeof b, "%08X the start %u, checked\n", 0x06000000u + 2 * (i % 0x80000), i); text += b; }
+            const std::string path = dir + "/saturn_function_bounds.txt";
+            WriteText(path, text);
+            sfe::decomp::FunctionBounds fb;
+            std::string err;
+            const bool loaded = fb.Load(path, &err);
+            fb.SetEntry(0x06004000u);
+            fb.Save(path);   // App: req.boundsChanged -> mFunctionBounds.Save()
+            const std::string after = ReadText(path);
+            if (!loaded && after.size() < text.size())
+                Violation("UNREAD_FILE_OVERWRITTEN", "saturn_function_bounds.txt (" + std::to_string(text.size()) + " bytes) was refused at the start (\"" + err +
+                          "\") and the next function start saved " + std::to_string(after.size()) + " bytes over it");
+        }
+        // settings.ini over 4 MiB: the exit's SaveSettings writes the defaults over the user's settings.
+        {
+            CaseScope scope("lifecycle", n++, "settings.ini over 4 MiB, then the exit's save", nullptr, kBig, kBig, 60000);
+            const std::string ini = gScratch + "/cfg/SaturnExplorer/settings.ini";
+            std::string text = "[decompiler]\nbios = /home/u/saturn/bios.bin\nvolatile = 26001000-26001003\n\n[recent]\n";
+            for (int i = 0; text.size() <= 4 * kMiB; ++i) text += "rom" + std::to_string(i) + " = /home/u/games/" + std::string(200, 'g') + "\n";
+            WriteText(ini, text);
+            sfe::Settings s;
+            std::string err, serr;
+            const bool loaded = s.Load(&err);
+            s.Set("decompiler", "autorefresh", "0");   // App::SaveSettings sets its keys, then saves
+            s.Save(&serr);
+            const std::string after = ReadText(ini);
+            if (!loaded && !Contains(after, "/home/u/saturn/bios.bin"))
+                Violation("UNREAD_FILE_OVERWRITTEN", "settings.ini (" + std::to_string(text.size()) + " bytes) was refused at the start (\"" + err +
+                          "\") and the exit's save wrote " + std::to_string(after.size()) + " bytes over it: the BIOS path and the volatile list are gone");
+            ::unlink(ini.c_str());
+        }
+        // A file the user may not read (another user's 0600 copy, a mode 000 file) in a folder the user may write: run as an
+        // ordinary user in a child (as root the child drops to nobody first).
+        {
+            CaseScope scope("lifecycle", n++, "saturn_functions.txt not readable, folder writable, then the exit's save", nullptr, ~size_t(0), ~size_t(0), 60000);
+            gTrack = false;
+            const std::string sub = dir + "/perm";
+            MakeDir(sub);
+            const std::string text = "06004000 main_loop\n06004100 init_vdp2\n";
+            WriteText(sub + "/saturn_functions.txt", text);
+            ChildResult c = RunChild([&] {
+                // Into the folder first: as nobody, the scratch folder's parents may not be searchable.
+                if (::chdir(sub.c_str()) != 0) return 23;
+                if (::geteuid() == 0)
+                {
+                    if (::chown(".", 65534, 65534) != 0 || ::chown("saturn_functions.txt", 65534, 65534) != 0) return 20;
+                    if (::setgid(65534) != 0 || ::setuid(65534) != 0) return 21;
+                }
+                if (::chmod("saturn_functions.txt", 0) != 0) return 22;
+                sfe::FunctionNames fn;
+                std::string err, serr;
+                if (fn.Load(&err)) return 24;   // the file was read after all: nothing to see
+                fn.Save(&serr);
+                return 0;
+            }, 20);
+            gTrack = true;
+            ::chmod((sub + "/saturn_functions.txt").c_str(), 0644);
+            const std::string after = ReadText(sub + "/saturn_functions.txt");
+            if (c.exited && c.code == 0 && !Contains(after, "main_loop"))
+                Violation("UNREAD_FILE_OVERWRITTEN", "saturn_functions.txt that could not be read (mode 000, folder writable) was replaced by the exit's save with " +
+                          std::to_string(after.size()) + " bytes");
+            else if (!c.exited || c.code != 0) std::printf("note: lifecycle unreadable-file case not run (child %s %d)\n", c.exited ? "exit" : "signal", c.exited ? c.code : c.signal);
+        }
+        // The application makes such a file itself: Load Symbols merges a map into the names and saves them (App: "if (n)
+        // SaveFunctionNames()"), and nothing bounds the merged file by the ceiling Load applies to it.
+        {
+            CaseScope scope("lifecycle", n++, "names (5 MiB) and a symbol map (5 MiB) merged and saved, then the next start and exit", nullptr, kBig, kBig, 120000);
+            const std::string sub = dir + "/merge";
+            MakeDir(sub);
+            InDir in2(sub);
+            const std::string own = NamesText(24000, 0x06000000u, "renamed", 200);
+            const std::string map = NamesText(24000, 0x06080000u, "symbol", 200);
+            WriteText("saturn_functions.txt", own);
+            WriteText("game.map", map);
+            {
+                sfe::FunctionNames fn;   // the first session
+                std::string err;
+                fn.Load(&err);
+                if (fn.Import("game.map", &err)) fn.Save(&err);
+            }
+            const size_t merged = ReadText("saturn_functions.txt").size();
+            sfe::FunctionNames next;   // the next session
+            std::string err, serr;
+            const bool loaded = next.Load(&err);
+            if (!loaded)
+                Violation("SAVE_WRITES_UNREADABLE", "the names saved after Load Symbols (" + std::to_string(merged) + " bytes) are refused by the next start: \"" + err + "\"");
+            next.Save(&serr);   // that session's exit
+            const std::string after = ReadText("saturn_functions.txt");
+            if (!loaded && !Contains(after, "renamed_0_"))
+                Violation("UNREAD_FILE_OVERWRITTEN", "and that session's exit replaced the file with " + std::to_string(after.size()) + " bytes: every rename is gone");
+        }
+    }
+
+    // --- L2: what the loader skipped, and the comments and remarks its format accepts, survive the next save (A9-21) ---
+    {
+        const std::string dir = root + "/l2";
+        MakeDir(dir);
+        InDir in(dir);
+        {
+            CaseScope scope("lifecycle", n++, "saturn_functions.txt with a comment and a line Load skips, then the exit's save", nullptr, kBig, kBig);
+            WriteText("saturn_functions.txt", "; names for the 1.01 release\n06004000 main_loop\n0000000106004100 from_a_64bit_tool\n");
+            sfe::FunctionNames fn;
+            std::string err;
+            fn.Load(&err);
+            const size_t skipped = fn.SkippedLines();
+            fn.Save(&err);
+            const std::string after = ReadText("saturn_functions.txt");
+            if (skipped && !Contains(after, "from_a_64bit_tool"))
+                Violation("SAVE_DROPS_SKIPPED_LINES", "saturn_functions.txt: the line Load skipped (and said it skipped) is deleted by the exit's save");
+            if (!Contains(after, "1.01 release"))
+                Violation("SAVE_DROPS_COMMENTS", "saturn_functions.txt: a comment line (a form AddressNameLine.h documents) is deleted by the exit's save");
+        }
+        {
+            CaseScope scope("lifecycle", n++, "assembly_comments.txt with a comment and a line Load skips, then the exit's save", nullptr, kBig, kBig);
+            WriteText("assembly_comments.txt", "# notes, see the wiki\n06004000 reads the pad\n0x0600_4100 the vblank wait\n");
+            sfe::AssemblyPanel panel;
+            std::string err;
+            panel.LoadComments(&err);
+            const size_t skipped = panel.SkippedCommentLines();
+            panel.SaveComments(&err);
+            const std::string after = ReadText("assembly_comments.txt");
+            if (skipped && !Contains(after, "vblank wait"))
+                Violation("SAVE_DROPS_SKIPPED_LINES", "assembly_comments.txt: the line LoadComments skipped is deleted by the exit's save");
+            if (!Contains(after, "see the wiki"))
+                Violation("SAVE_DROPS_COMMENTS", "assembly_comments.txt: a comment line is deleted by the exit's save");
+        }
+        {
+            CaseScope scope("lifecycle", n++, "saturn_function_bounds.txt with remarks, a skipped line and an on-chip address, then one start set", nullptr, kBig, kBig);
+            const std::string path = dir + "/saturn_function_bounds.txt";
+            WriteText(path, "; checked against the 1.01 release\n06004000 the main loop, found by hand\n0600_4100 typo\nFFFFFE10 the FRT handler\n");
+            sfe::decomp::FunctionBounds fb;
+            std::string err;
+            fb.Load(path, &err);
+            const size_t skipped = fb.SkippedLines();
+            uint32_t c = 0;
+            if (!sfe::CanonicalAddress(0xFFFFFE10u, c) && skipped < 2)
+                Violation("DROPPED_UNCOUNTED", "saturn_function_bounds.txt: the line FFFFFE10 (an on-chip address, not memory) is dropped and not counted with the skipped lines (" +
+                          std::to_string(skipped) + " counted)");
+            fb.SetEntry(0x06005000u);
+            fb.Save(path);
+            const std::string after = ReadText(path);
+            if (skipped && !Contains(after, "0600_4100"))
+                Violation("SAVE_DROPS_SKIPPED_LINES", "saturn_function_bounds.txt: the line Load skipped is deleted by the next function start's save");
+            if (!Contains(after, "found by hand") || !Contains(after, "1.01 release"))
+                Violation("SAVE_DROPS_COMMENTS", "saturn_function_bounds.txt: the remark after an address (which the loader invites, A9-4) and the comment line are deleted by the next save");
+        }
+    }
+
+    // --- L3: two instances in one folder (A9-20) ---
+    {
+        const std::string dir = root + "/l3";
+        MakeDir(dir);
+        InDir in(dir);
+        {
+            CaseScope scope("lifecycle", n++, "two instances: A renames and saves, B (no change) exits", nullptr, kBig, kBig);
+            WriteText("saturn_functions.txt", "06004000 main_loop\n06004100 init_vdp2\n");
+            sfe::FunctionNames a, b;
+            a.Load();
+            b.Load();
+            a.Rename(0x06004200u, "read_pad");   // App: the rename dialog, then SaveFunctionNames
+            a.Save();
+            b.Save();                            // B's exit
+            sfe::FunctionNames next;
+            next.Load();
+            if (next.NameOf(0x06004200u) != "read_pad")
+                Violation("IDLE_INSTANCE_REVERTS", "saturn_functions.txt: a rename saved by one instance is undone when a second instance, which changed nothing, exits");
+        }
+        {
+            CaseScope scope("lifecycle", n++, "two instances: A adds a note, B (no change) exits", nullptr, kBig, kBig);
+            WriteText("assembly_comments.txt", "6004000 reads the pad\n");
+            sfe::AssemblyPanel b;
+            b.LoadComments();
+            WriteText("assembly_comments.txt", "6004000 reads the pad\n6004100 waits for vblank\n");   // what A's SaveComments writes after an edit
+            b.SaveComments();                    // B's exit
+            if (!Contains(ReadText("assembly_comments.txt"), "waits for vblank"))
+                Violation("IDLE_INSTANCE_REVERTS", "assembly_comments.txt: a note saved by one instance is undone when a second instance, which changed nothing, exits");
+        }
+        {
+            CaseScope scope("lifecycle", n++, "two instances: each sets a function start", nullptr, kBig, kBig);
+            const std::string path = dir + "/saturn_function_bounds.txt";
+            WriteText(path, "06004000\n");
+            sfe::decomp::FunctionBounds a, b;
+            a.Load(path);
+            b.Load(path);
+            a.SetEntry(0x06004100u); a.Save(path);
+            b.SetEntry(0x06004200u); b.Save(path);
+            sfe::decomp::FunctionBounds next;
+            next.Load(path);
+            if (!next.Entries().count(0x06004100u))
+                Violation("LOST_UPDATE", "saturn_function_bounds.txt: the start one instance set is gone after another instance set one of its own");
+        }
+        {
+            CaseScope scope("lifecycle", n++, "two instances: A chooses a BIOS image, B exits", nullptr, kBig, kBig);
+            const std::string ini = gScratch + "/cfg/SaturnExplorer/settings.ini";
+            WriteText(ini, "[decompiler]\nbios = /home/u/old_bios.bin\n");
+            sfe::Settings a, b;
+            a.Load();
+            b.Load();
+            a.Set("decompiler", "bios", "/home/u/new_bios.bin");
+            a.Save();
+            b.Set("decompiler", "bios", b.Get("decompiler", "bios"));   // App::SaveSettings writes every key it holds
+            b.Save();
+            sfe::Settings next;
+            next.Load();
+            if (next.Get("decompiler", "bios") != "/home/u/new_bios.bin")
+                Violation("LOST_UPDATE", "settings.ini: the BIOS image one instance chose is undone when a second instance exits");
+            ::unlink(ini.c_str());
+        }
+    }
+
+    // --- L4: a save target that is a FIFO blocks the save, and so the exit (A9-24) ---
+    {
+        const std::string dir = root + "/l4";
+        MakeDir(dir);
+        struct T { const char* what; std::string fifo; std::function<int()> save; };
+        const std::string ini = gScratch + "/cfg/SaturnExplorer/settings.ini";
+        const T targets[] = {
+            { "saturn_functions.txt is a FIFO", dir + "/saturn_functions.txt", [&] { InDir in(dir); sfe::FunctionNames fn; std::string e; fn.Load(&e); fn.Rename(0x06004000u, "f"); fn.Save(&e); return 0; } },
+            { "settings.ini is a FIFO", ini, [&] { sfe::Settings s; std::string e; s.Load(&e); s.Set("a", "b", "c"); s.Save(&e); return 0; } },
+        };
+        for (const T& t : targets)
+        {
+            CaseScope scope("lifecycle", n++, t.what, nullptr, ~size_t(0), ~size_t(0), 30000);
+            gTrack = false;
+            ::unlink(t.fifo.c_str());
+            ::mkfifo(t.fifo.c_str(), 0600);
+            ChildResult c = RunChild(t.save, 3);   // a FIFO with no reader blocks the open for good; a fixed save answers at once
+            gTrack = true;
+            if (c.timedOut) Violation("SAVE_BLOCKS", std::string(t.what) + ": the load refuses it, and the save then opens it for writing and waits for a reader (no answer in 3 s)");
+            ::unlink(t.fifo.c_str());
+        }
+    }
+
+    // --- L5: a save replaces what is at the path: a read-only file, its mode, a hard link (A9-28) ---
+    {
+        const std::string dir = root + "/l5";
+        MakeDir(dir);
+        InDir in(dir);
+        {
+            CaseScope scope("lifecycle", n++, "saturn_functions.txt mode 0600 and hard-linked, then a save", nullptr, kBig, kBig);
+            WriteText("saturn_functions.txt", "06004000 main_loop\n");
+            ::chmod("saturn_functions.txt", 0600);
+            ::unlink("names_backup.txt");
+            if (::link("saturn_functions.txt", "names_backup.txt") != 0) {}
+            sfe::FunctionNames fn;
+            fn.Load();
+            fn.Rename(0x06004100u, "init");
+            fn.Save();
+            struct stat st;
+            if (::stat("saturn_functions.txt", &st) == 0 && (st.st_mode & 0777) != 0600)
+                Violation("MODE_NOT_KEPT", "a 0600 saturn_functions.txt is 0" + Hex(st.st_mode & 0777) + " after a save");
+            if (!sfe::SameFile("saturn_functions.txt", "names_backup.txt"))
+                Violation("HARDLINK_SPLIT", "a hard link to saturn_functions.txt no longer names the file after a save");
+        }
+        {
+            CaseScope scope("lifecycle", n++, "saturn_functions.txt read-only (0444), then a save by an ordinary user", nullptr, ~size_t(0), ~size_t(0), 30000);
+            gTrack = false;
+            const std::string sub = dir + "/ro";
+            MakeDir(sub);
+            WriteText(sub + "/saturn_functions.txt", "06004000 main_loop\n");
+            ChildResult c = RunChild([&] {
+                if (::chdir(sub.c_str()) != 0) return 23;
+                if (::geteuid() == 0)
+                {
+                    if (::chown(".", 65534, 65534) != 0 || ::chown("saturn_functions.txt", 65534, 65534) != 0) return 20;
+                    if (::setgid(65534) != 0 || ::setuid(65534) != 0) return 21;
+                }
+                if (::chmod("saturn_functions.txt", 0444) != 0) return 22;
+                sfe::FunctionNames fn;
+                fn.Load();
+                fn.Rename(0x06004100u, "init");
+                std::string err;
+                return fn.Save(&err) ? 0 : 1;
+            }, 20);
+            gTrack = true;
+            if (!c.exited || c.code > 1) std::printf("note: lifecycle read-only case not run (child %s %d)\n", c.exited ? "exit" : "signal", c.exited ? c.code : c.signal);
+            else if (c.code == 0)
+                Violation("READONLY_REPLACED", "a read-only saturn_functions.txt (0444, the user's own) is replaced by a save without a word");
+        }
+    }
+
+    // --- L6: line ends other than LF and CRLF (A9-25) ---
+    {
+        const std::string dir = root + "/l6";
+        MakeDir(dir);
+        InDir in(dir);
+        {
+            CaseScope scope("lifecycle", n++, "saturn_functions.txt with CR line ends", nullptr, kBig, kBig);
+            WriteText("saturn_functions.txt", "06004000 main_loop\r06004100 init_vdp2\r06004200 read_pad\r");
+            sfe::FunctionNames fn;
+            fn.Load();
+            if (fn.All().size() != 3)
+                Violation("LONE_CR_JOINS_LINES", "saturn_functions.txt with CR line ends: " + std::to_string(fn.All().size()) + " name(s), the first \"" +
+                          (fn.All().empty() ? std::string() : fn.All().begin()->second.substr(0, 40)) + "...\"; 06004100 and 06004200 have none");
+        }
+        {
+            CaseScope scope("lifecycle", n++, "saturn_function_bounds.txt with CR line ends", nullptr, kBig, kBig);
+            const std::string path = dir + "/saturn_function_bounds.txt";
+            WriteText(path, "06004000\r06004100\r06004200\r");
+            sfe::decomp::FunctionBounds fb;
+            fb.Load(path);
+            if (fb.Entries().size() != 3)
+                Violation("LONE_CR_JOINS_LINES", "saturn_function_bounds.txt with CR line ends: " + std::to_string(fb.Entries().size()) + " start(s) of 3, no line skipped (" +
+                          std::to_string(fb.SkippedLines()) + ")");
+        }
+        {
+            CaseScope scope("lifecycle", n++, "settings.ini with CR line ends", nullptr, kBig, kBig);
+            const std::string ini = gScratch + "/cfg/SaturnExplorer/settings.ini";
+            WriteText(ini, "[decompiler]\rbios = /home/u/bios.bin\rvolatile = 26001000-26001003\r");
+            sfe::Settings s;
+            std::string err;
+            const bool ok = s.Load(&err);
+            if (ok && !s.Has("decompiler", "bios"))
+                Violation("LONE_CR_JOINS_LINES", "settings.ini with CR line ends loads without an error and without [decompiler] bios and volatile");
+            ::unlink(ini.c_str());
+        }
+    }
+}
+
+// The savestate and dump openers on a path that is not a file (A9-24): Open Savestate and Load Raw Dump take it from a dialog,
+// as the BIOS button does (A9-1).
+void RunSavestateLinkCases()
+{
+    const std::string root = gScratch + "/links";
+    MakeDir(root);
+    ::unlink((root + "/state.fifo").c_str());
+    ::mkfifo((root + "/state.fifo").c_str(), 0600);
+    struct H { const char* what; std::string path; bool dump; };
+    const H cases[] = {
+        { "se_savestate_open on a FIFO nobody writes", root + "/state.fifo", false },
+        { "se_savestate_open_full_dump on a FIFO nobody writes", root + "/state.fifo", true },
+        { "se_savestate_open on /dev/zero", "/dev/zero", false },
+        { "se_savestate_open on a directory", root, false },
+    };
+    int n = 0;
+    for (const H& h : cases)
+    {
+        CaseScope scope("links.savestate", n++, h.what, nullptr, ~size_t(0), ~size_t(0), 30000);
+        gTrack = false;
+        ChildResult c = RunChild([&] {
+            se_data_source ds;
+            std::memset(&ds, 0, sizeof ds);
+            const se_result r = h.dump ? se_savestate_open_full_dump(h.path.c_str(), 0x06000000u, &ds) : se_savestate_open(h.path.c_str(), &ds);
+            if (r == SE_OK) { if (ds.close) ds.close(ds.user); return 6; }
+            return 0;
+        }, 3);
+        gTrack = true;
+        if (c.timedOut) Violation("SAVESTATE_HANG", std::string(h.what) + ": no answer in 3 s (LoadFile opens before it looks at what the path is)");
+        else if (!c.exited) Violation("CRASH", std::string(h.what) + ": signal " + std::to_string(c.signal));
+        else if (c.code == 6) Violation("ACCEPTED", std::string(h.what) + ": opened");
+    }
+    ::unlink((root + "/state.fifo").c_str());
+}
+
+// ReadFileCapped looks at the path (stat), then opens it (fopen): a link retargeted from a file to a FIFO in between is opened
+// as a FIFO, and the open waits for a writer (A9-24). A process flips the link while the BIOS loader reads through it.
+void RunStatOpenRace()
+{
+    const std::string root = gScratch + "/concurrent/race";
+    RemoveTree(root);
+    MakeDir(gScratch + "/concurrent");
+    MakeDir(root);
+    Bytes good;
+    Pattern(good, 4096, 3);
+    WriteBytes(root + "/real.bin", good);
+    ::mkfifo((root + "/fifo.bin").c_str(), 0600);
+    ::symlink("real.bin", (root + "/bios.bin").c_str());
+    CaseScope scope("concurrent.race", 0, "the BIOS path a link flipped between a file and a FIFO", nullptr, ~size_t(0), ~size_t(0), 60000);
+    gTrack = false;
+    std::fflush(stdout);
+    const pid_t flipper = ::fork();
+    if (flipper == 0)
+    {
+        ::alarm(60);
+        const std::string a = root + "/t_a", b = root + "/t_b", link = root + "/bios.bin";
+        for (;;)
+        {
+            ::unlink(a.c_str());
+            if (::symlink("fifo.bin", a.c_str()) == 0) ::rename(a.c_str(), link.c_str());
+            ::unlink(b.c_str());
+            if (::symlink("real.bin", b.c_str()) == 0) ::rename(b.c_str(), link.c_str());
+        }
+    }
+    const int tries = EnvInt("SE_LOADFUZZ_RACE_TRIES", 5000);
+    ChildResult c = RunChild([&] {
+        for (int i = 0; i < tries; ++i) (void)sfe::decomp::LoadBiosImageFile(root + "/bios.bin");
+        return 0;
+    }, 6);
+    if (flipper > 0) { ::kill(flipper, SIGKILL); ::waitpid(flipper, nullptr, 0); }
+    gTrack = true;
+    if (c.timedOut)
+        Violation("STAT_OPEN_RACE", "LoadBiosImageFile through a link retargeted between a file and a FIFO: stat saw the file, fopen opened the FIFO and waited (no answer in 6 s)");
+    RemoveTree(root);
+}
+
+// ---------------------------------------------------------------------------------------------
 // The run.
 // ---------------------------------------------------------------------------------------------
 struct Module
@@ -2364,6 +2948,10 @@ int main(int argc, char** argv)
         if (fixed("oversize")) RunOversizeCases();
         if (fixed("links")) RunLinkCases();
         if (fixed("concurrent")) RunConcurrentCases();
+        // Round 2 (A9-18 onwards).
+        if (fixed("lifecycle")) RunLifecycleCases();
+        if (fixed("links")) RunSavestateLinkCases();
+        if (fixed("concurrent")) RunStatOpenRace();
     }
     const long secs = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - t0).count();
 
