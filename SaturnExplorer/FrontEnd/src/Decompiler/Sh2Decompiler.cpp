@@ -4526,7 +4526,7 @@ struct FlowRecord
     ghidra::uintm opsEnd = 0;
 };
 
-FlowRecord RecordFlow(const ghidra::Funcdata& fd, const std::function<uint32_t(uint32_t)>& canonicalOf)
+FlowRecord RecordFlow(const ghidra::Funcdata& fd, const std::function<uint32_t(uint32_t)>& canonicalOf, const MemorySnapshot& snap)
 {
     FlowRecord f;
     const ghidra::BlockGraph& graph = fd.getBasicBlocks();
@@ -4590,20 +4590,19 @@ FlowRecord RecordFlow(const ghidra::Funcdata& fd, const std::function<uint32_t(u
                                 break;
                             }
                 }
-                if (pointerKnown && o->getOut() && o->getOut()->getSize() <= 4)
+                // (read from the capture, which neither allocates nor throws: the flow's record must not change what the engine allocates)
+                // (not memory the engine takes for volatile: a hardware register, the user's shared memory)
+                if (pointerKnown && o->getOut() && o->getOut()->getSize() <= 4 && o->getIn(0)->getSpaceFromConst() == fd.getArch()->getDefaultDataSpace() &&
+                    (fd.getArch()->symboltab->getProperty(ghidra::Address(o->getIn(0)->getSpaceFromConst(), pointer)) & ghidra::Varnode::volatil) == 0)
                 {
-                    try
+                    uint8_t buf[4] = { 0, 0, 0, 0 };
+                    const ghidra::int4 n = o->getOut()->getSize();
+                    if (snap.Read(static_cast<uint32_t>(pointer), buf, static_cast<size_t>(n)))
                     {
-                        ghidra::uint1 buf[4] = { 0, 0, 0, 0 };
-                        const ghidra::int4 n = o->getOut()->getSize();
-                        fd.getArch()->loader->loadFill(buf, n, ghidra::Address(o->getIn(0)->getSpaceFromConst(), pointer));
                         uint64_t v = 0;
                         for (ghidra::int4 k = 0; k < n; ++k) v = v << 8 | buf[k];
                         op.literal = true;
                         op.value = v;
-                    }
-                    catch (...)
-                    {
                     }
                 }
                 f.blockOps[static_cast<size_t>(i)].push_back(op);
@@ -4990,15 +4989,7 @@ ValueSet StatementValues(const ghidra::PcodeOp* o, ghidra::uintm opsEnd)
 bool KeptByCall(const ghidra::Funcdata& fd, const FlowVn& v)
 {
     if (!v.space || v.space->getType() != ghidra::IPTR_PROCESSOR || v.space == fd.getArch()->getDefaultDataSpace()) return true;
-    std::string name;
-    try
-    {
-        name = fd.getArch()->translate->getRegisterName(const_cast<ghidra::AddrSpace*>(v.space), v.offset, v.size);
-    }
-    catch (...)
-    {
-        return false;
-    }
+    const std::string name = fd.getArch()->translate->getRegisterName(const_cast<ghidra::AddrSpace*>(v.space), v.offset, v.size);
     if (name.size() < 2 || name[0] != 'r' || name.find_first_not_of("0123456789", 1) != std::string::npos) return false;
     const int n = std::atoi(name.c_str() + 1);
     return n >= 8 && n <= 15;
@@ -5367,16 +5358,17 @@ bool StoreShowsValue(const ghidra::AccessRecord& r, const FlowRecord& flow, cons
     return FlowValueMayBe(flow, fd, blk, pos, store.in[2], want);
 }
 
-// The lines on which two printed ops of one instruction are (a statement's tokens there cannot be told from the other op's).
-std::set<std::pair<size_t, uint32_t>> SharedInstructionLines(const PrintedOperations& printed)
+// The lines on which two printed ops of one instruction are (a statement's tokens there cannot be told from the other op's). The ops
+// are taken in the order the engine made them (`ordered`), not by address: the fault suite asks that two runs allocate alike (A6-24).
+std::set<std::pair<size_t, uint32_t>> SharedInstructionLines(const PrintedOperations& printed, const std::vector<const ghidra::PcodeOp*>& ordered)
 {
     std::set<std::pair<size_t, uint32_t>> shared;
     std::map<std::pair<size_t, uint32_t>, int> opsOn;
-    for (const auto& kv : printed)
+    for (const ghidra::PcodeOp* o : ordered)
     {
-        uint32_t insn = InstructionOf(kv.first), canonical = 0;
+        uint32_t insn = InstructionOf(o), canonical = 0;
         if (CanonicalAddress(insn, canonical)) insn = canonical;
-        for (size_t line : kv.second.first)
+        for (size_t line : printed.at(o).first)
             if (++opsOn[std::make_pair(line, insn)] == 2) shared.insert(std::make_pair(line, insn));
     }
     return shared;
@@ -5399,7 +5391,7 @@ int AddJoinConstantTokens(std::vector<Line>& lines, const PrintedOperations& pri
     std::vector<const ghidra::PcodeOp*> ordered;
     for (const auto& kv : printed) ordered.push_back(kv.first);
     std::sort(ordered.begin(), ordered.end(), [](const ghidra::PcodeOp* a, const ghidra::PcodeOp* b) { return a->getTime() < b->getTime(); });
-    const std::set<std::pair<size_t, uint32_t>> sharedLines = SharedInstructionLines(printed);
+    const std::set<std::pair<size_t, uint32_t>> sharedLines = SharedInstructionLines(printed, ordered);
     int moved = 0;
     for (const ghidra::PcodeOp* o : ordered)
     {
@@ -6744,7 +6736,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         Enter(DecompilePhase::Flow);
         fd->followFlow(ghidra::Address(ram, 0), ghidra::Address(ram, ram->getHighest()));
         if (fd->hasNoCode()) return std::string();
-        const FlowRecord flow = RecordFlow(*fd, canonicalOf);
+        const FlowRecord flow = RecordFlow(*fd, canonicalOf, *snapshot);
 
         const RawScan scan = ScanRawPcode(*fd, *snapshot);
         knownLiterals = scan.readonly;
