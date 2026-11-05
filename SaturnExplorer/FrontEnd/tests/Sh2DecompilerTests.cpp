@@ -602,8 +602,12 @@ void TestArea7Round4()
     // tokens to the lower one: each line names only 0x0600D932 and 0x0600D93C (`mov.l r5,@(0x20,r14)`, a store of param_2) and a click
     // goes to a store of another value. The oracle accepted it (the line names a store of the variable; copyUnconnected no longer saw it).
     // Fixed (the area 7 fixer): a store whose value is another's is not named (StoreShowsValue: every path into the store ends at param_2,
-    // not at the r9 the line shows), and the lines keep A7-21's mapping, each at its bt/s, as the control's. The oracle's storeValueOther (a
+    // not at the r9 the line shows), and the lines kept A7-21's mapping, each at its bt/s, as the control's. The oracle's storeValueOther (a
     // line that names a store whose register holds, by the instruction words, another value) is 0, and sees the lines as they were.
+    // A7-21 (the area 7 fixer): a register merged under the local's name names the instructions that last set the register on each path
+    // into the end of its block (FlowLastWriters), never the branch: here r9's `mov #0x0,r9` (0x0600D992), and on the paths that move r8 into
+    // r9 the writers of r8 (`mov #0x8,r8` 0x0600D994, `add #-1,r8` 0x0600D9A2); a click goes to the first. The oracle's
+    // copyMergeAtBranch (a register merge naming no store drawn only at its block's branch, a violation) sees the bt/s mapping.
     {
         const DecompileResult r = a7r4::DecompileWords(d, hw, 0x0600D90Eu, a7r4::kA723Words);
         Print("A7-23 register merge named by a store of another value", r);
@@ -613,15 +617,34 @@ void TestArea7Round4()
         const uint32_t bts[] = { 0x0600D9CEu, 0x0600DA0Cu, 0x0600DA78u };
         for (size_t i = 0; i < copies.size() && i < 3; ++i)
         {
-            CHECK(LineInstructions(*copies[i]) == std::vector<uint32_t>{ bts[i] });   // was 0x0600D932 and 0x0600D93C, the stores of param_2
-            CHECK(copies[i]->firstAddr == bts[i]);
+            // was 0x0600D932 and 0x0600D93C, the stores of param_2 (A7-23), then each line's bt/s (A7-21)
+            // mov #0x0,r9, and the writers of r8 a path moves into r9 (mov #0x8,r8, add #-1,r8)
+            CHECK(LineInstructions(*copies[i]) == (std::vector<uint32_t>{ 0x0600D992u, 0x0600D994u, 0x0600D9A2u }));
+            CHECK(copies[i]->firstAddr == 0x0600D992u);
+            for (uint32_t at : LineInstructions(*copies[i])) CHECK(at != bts[i]);
         }
         for (const Line& x : r.lines)
             if (Has(x.text, "uStack_8 = uVar6"))
                 for (uint32_t at : LineInstructions(x)) CHECK(at != 0x0600D932u && at != 0x0600D93Cu);   // the while line too
         const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_23");
         dts::PrintMappingAudit(a, "a7_23");
-        CHECK(a.Violations() == 0 && a.copyStoreMissing == 0 && a.copyUnconnected == 3 && a.storeValueOther == 0);
+        CHECK(a.Violations() == 0 && a.copyStoreMissing == 0 && a.copyUnconnected == 0 && a.storeValueOther == 0 && a.copyRegisterMade == 3);
+        // ...and the oracle sees A7-21's mapping: each line at its bt/s
+        {
+            DecompileResult atBranch = r;
+            size_t k = 0;
+            for (Line& x : atBranch.lines)
+                if (Has(x.text, "uStack_8 = uVar6;") && x.text.find('(') == std::string::npos && k < 3)
+                {
+                    std::vector<Token> keep;
+                    for (Token t : x.tokens)
+                        if (t.begin < t.end) keep.push_back((t.addr = t.addr ? bts[k] : 0, t));
+                    x.tokens = keep;
+                    x.firstAddr = bts[k++];
+                }
+            const dts::MappingAudit ba = dts::AuditMapping(atBranch, word, "a7_21 at the branch");
+            CHECK(ba.copyMergeAtBranch == 3 && ba.Violations() == 3);
+        }
         // ...and the oracle sees the lines as they were: each names the two stores of param_2
         DecompileResult was = r;
         for (Line& x : was.lines)
@@ -644,10 +667,10 @@ void TestArea7Round4()
         const DecompileResult c = a7r4::DecompileWords(d, hw, 0x0600D90Eu, image);
         const std::vector<const Line*> controls = a7r4::LinesWith(c, "uStack_8 = uVar6;");
         CHECK(controls.size() == 3);
-        const uint32_t at[] = { 0x0600D9CEu, 0x0600DA0Cu, 0x0600DA78u };
-        for (size_t i = 0; i < controls.size() && i < 3; ++i) CHECK(LineInstructions(*controls[i]) == std::vector<uint32_t>{ at[i] });
+        for (size_t i = 0; i < controls.size() && i < 3; ++i)
+            CHECK(LineInstructions(*controls[i]) == (std::vector<uint32_t>{ 0x0600D992u, 0x0600D994u, 0x0600D9A2u }));   // was its bt/s
         const dts::MappingAudit ca = dts::AuditMapping(c, word, "a7_23 control");
-        CHECK(ca.Violations() == 0 && ca.copyUnconnected == 3);
+        CHECK(ca.Violations() == 0 && ca.copyUnconnected == 0 && ca.copyRegisterMade == 3);
     }
     // A7-23 (b): the same merge, named by the engine itself. `sts.l pr,@-r15 ; add #-8,r15 ; mov r15,r14 ; mov.l r5,@(0,r14) ; tst r4,r4 ;
     // bf B ; bra X ; extu.b r6,r0 ; B: mov.l r7,@(0,r14) ; mov.l @(lit),r1 ; jsr @r1 ; mov r14,r4 ; mov #3,r12 ; add r14,r12 ; mov.b @r12,r12
@@ -655,7 +678,8 @@ void TestArea7Round4()
     // the local and prints `xStack_c._3_1_ = param_3;` with the address of the dead store of param_2 (0x06070006, `mov.l r5,@(0x0,r14)`):
     // the line named only that store, and a click went to it. The value is made by `extu.b r6,r0` (0x0607000E). Fixed (the area 7 fixer):
     // the store of param_2 is not the line's, so the copy keeps the instruction it is put at, the bf that ends its block (A7-21's mapping);
-    // storeValueOther is 0, and sees the line as it was.
+    // storeValueOther is 0, and sees the line as it was. A7-21 (the area 7 fixer): the value is param_3, which no instruction makes (the
+    // register is an input on every path into the end of the block), so the line names nothing, not the bf.
     {
         const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06070000u, { 0x4F22, 0x7FF8, 0x6EF3, 0x1E50, 0x2448, 0x8B01, 0xA009, 0x606C,
             0x1E70, 0xD107, 0x410B, 0x64E3, 0xEC03, 0x3CEC, 0x6CC0, 0x61CC, 0x6013, 0x7E08, 0x6FE3, 0x4F26, 0x000B, 0x6EF6, 0x0009, 0x0009,
@@ -664,7 +688,7 @@ void TestArea7Round4()
         CHECK(r.status == DecompileStatus::Ok);
         const Line* l = LineWith(r, "xStack_c._3_1_ = param_3;");
         CHECK(l != nullptr);
-        if (l) CHECK(LineInstructions(*l) == std::vector<uint32_t>{ 0x0607000Au });   // the bf (was 0x06070006, mov.l r5,@(0x0,r14): param_2)
+        if (l) CHECK(LineInstructions(*l).empty() && l->firstAddr == 0);   // nothing (was 0x06070006, mov.l r5,@(0x0,r14): param_2; then the bf 0x0607000A)
         const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_23 piece");
         dts::PrintMappingAudit(a, "a7_23 piece");
         CHECK(a.Violations() == 0 && a.copyStoreMissing == 0 && a.storeValueOther == 0 && a.copyOtherValue == 1);
@@ -673,7 +697,7 @@ void TestArea7Round4()
             if (Has(x.text, "xStack_c._3_1_ = param_3;"))
             {
                 for (Token& t : x.tokens)
-                    if (t.addr) t.addr = 0x06070006u;
+                    if (t.begin < t.end) t.addr = 0x06070006u;
                 x.firstAddr = 0x06070006u;
             }
         const dts::MappingAudit wa = dts::AuditMapping(was, word, "a7_23 piece as it was");

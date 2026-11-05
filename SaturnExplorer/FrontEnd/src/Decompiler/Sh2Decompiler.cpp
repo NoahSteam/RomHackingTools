@@ -5950,6 +5950,68 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                         if (space == in->getSpace() && (offset & space->getHighest()) == in->getOffset()) maker = a;
                     }
                 }
+            // A7-21: a register the engine merged under the variable's name (`uStack_8 = uVar6;` at the `bf` ending its block, r9's value on
+            // paths that never write the local): no instruction of the block made it, and no store wrote it. The line names the instructions
+            // that last set the register on each path into the end of its block (FlowLastWriters, as A7-22 finds a merged number's), its
+            // drawn tokens at the lowest and an empty token at each other; when a path has none (an input, a register written in part, past
+            // the bound), it names nothing. Never the branch, which makes nothing.
+            bool registerMerge = false;
+            std::set<uint32_t> registerMakers;
+            if (!maker && atEnd && !(in->isWritten() && in->getDef()->getTime() < flow.opsEnd))
+            {
+                ghidra::Address reg = in->getAddr();
+                ghidra::int4 regSize = in->getSize();
+                if (in->getSpace()->getType() == ghidra::IPTR_INTERNAL && in->getHigh())
+                {
+                    const ghidra::Varnode* rep = in->getHigh()->getNameRepresentative();
+                    if (rep && rep != in) reg = rep->getAddr(), regSize = rep->getSize();
+                }
+                if (reg.getSpace()->getType() == ghidra::IPTR_PROCESSOR)
+                {
+                    registerMerge = true;
+                    const auto last = flow.insnBlock.find(static_cast<uint32_t>(home->getStop().getOffset()));
+                    std::vector<const FlowOp*> writers;
+                    FlowVn storage;
+                    storage.space = reg.getSpace();
+                    storage.offset = reg.getOffset();
+                    storage.size = regSize;
+                    if (last != flow.insnBlock.end() &&
+                        FlowLastWriters(flow, fd, last->second.first, static_cast<int>(last->second.second) + 1, storage, writers))
+                        for (const FlowOp* w : writers)
+                        {
+                            uint32_t m = w->insn, c = 0;
+                            registerMakers.insert(CanonicalAddress(m, c) ? c : m);
+                        }
+                }
+            }
+            if (registerMerge && !registerMakers.count(own))
+            {
+                const uint32_t lowest = registerMakers.empty() ? 0 : *registerMakers.begin();
+                for (size_t line : kv.second->first)
+                {
+                    if (line >= lines.size() || sharedLines.count(std::make_pair(line, own))) continue;
+                    Line& l = lines[line];
+                    bool drawn = false;
+                    for (Token& t : l.tokens)
+                        if (t.addr == own && t.begin < t.end) t.addr = lowest, drawn = true;
+                    if (!drawn) continue;
+                    for (uint32_t m : registerMakers)
+                    {
+                        bool carried = false;
+                        for (const Token& t : l.tokens) carried = carried || t.addr == m;
+                        if (carried) continue;
+                        Token t;
+                        t.begin = t.end = static_cast<uint16_t>(std::min<size_t>(l.text.size(), 0xFFFF));
+                        t.kind = TokenKind::Plain;
+                        t.addr = m;
+                        l.tokens.push_back(t);
+                    }
+                    l.firstAddr = 0;
+                    for (const Token& t : l.tokens)
+                        if (t.addr && (l.firstAddr == 0 || t.addr < l.firstAddr)) l.firstAddr = t.addr;
+                }
+                continue;
+            }
             {
                 uint32_t c = 0;
                 if (maker && CanonicalAddress(maker, c)) maker = c;

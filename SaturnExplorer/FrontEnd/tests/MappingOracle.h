@@ -99,6 +99,10 @@ struct MappingAudit
     int storeValueOther = 0;   // a line `V = X;` that names a store of V whose register holds, on every path into it, a value the line does not show
                                // (another parameter or number; a parameter where the line shows a register variable): a violation (A7-23)
     int copyOtherValue = 0;    // ...not counted in copyStoreMissing: every store of the variable writes a value the line does not show (counted)
+    // Area 7 fixer (A7-21): a register the engine merged under a memory variable's name (`uStack_8 = uVar6;`), naming no store of it.
+    int copyMergeAtBranch = 0; // ...drawn only at a branch that ends its block, which makes nothing (a violation: the line names its makers or nothing)
+    int copyRegisterMade = 0;  // ...naming instructions that each write a register and are no load, store, call or branch: the makers (counted)
+    int copyNoAddress = 0;     // ...naming no instruction at all: no maker was found (counted)
     int constLines = 0;        // lines `V = <number>;` drawn at one instruction (counted)
     int constAtJoin = 0;       // ...drawn at a join's first instruction (a target of the function's own branches) that makes no number, or another
                                // one, or makes it into another register than every path into the join sets it in: the engine's collapsed
@@ -122,6 +126,7 @@ struct MappingAudit
         copyAtBranch += o.copyAtBranch; copyAtCall += o.copyAtCall; copyAtReturn += o.copyAtReturn; copyAtLoad += o.copyAtLoad; copyAtOther += o.copyAtOther;
         copyUnconnected += o.copyUnconnected;
         storeValueOther += o.storeValueOther; copyOtherValue += o.copyOtherValue; constLines += o.constLines; constAtJoin += o.constAtJoin;
+        copyMergeAtBranch += o.copyMergeAtBranch; copyRegisterMade += o.copyRegisterMade; copyNoAddress += o.copyNoAddress;
         for (const std::string& p : o.problems) Keep(p);
     }
     // Three examples of each kind of problem are kept; the prefix up to the first ':' is the kind.
@@ -136,7 +141,8 @@ struct MappingAudit
     int Violations() const
     {
         return odd + outside + notInsn + firstAddrWrong + badRange + callWithoutCall + unmarked + misnamed + accessUnmapped + callUnmapped + callGoneUnsaid + roundTrip +
-               accessAtBranch + frameStoreMissing + backWrong + copyAtCall + copyAtReturn + copyAtBranch + copyAtOther + storeValueOther + constAtJoin;
+               accessAtBranch + frameStoreMissing + backWrong + copyAtCall + copyAtReturn + copyAtBranch + copyAtOther + storeValueOther + constAtJoin +
+               copyMergeAtBranch;
     }
 };
 
@@ -907,9 +913,30 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                         }
                 }
                 bool named = false, atBranch = false, atCall = false, atReturn = false, atLoad = false;
+                // (A7-21: a register merge's line names the instructions that set the register, or nothing; never only the branch that ends
+                // its block)
+                bool anyAddress = false, branchOnly = true, drawnAny = false, makersOnly = true;
                 for (const Token& t : r.lines[li].tokens)
                 {
                     if (!t.addr) continue;
+                    anyAddress = true;
+                    {
+                        uint16_t mw = 0;
+                        if (!word(t.addr, mw)) makersOnly = false;
+                        else
+                        {
+                            const sfe::DisassembledInstruction md = sfe::Sh2Decode(t.addr, mw);
+                            const MemoryShape mm = ShapeOf(md);
+                            if (mm.load || mm.store || mm.call || md.IsBranch || md.HasDelaySlot || md.Mnemonic == "rts" || md.Mnemonic == "rte" ||
+                                WrittenRegisters(md).empty())
+                                makersOnly = false;
+                            if (t.begin < t.end)
+                            {
+                                drawnAny = true;
+                                if (mm.call || md.Mnemonic == "rts" || md.Mnemonic == "rte" || !(md.IsBranch || md.HasDelaySlot)) branchOnly = false;
+                            }
+                        }
+                    }
                     named = named || candidates.count(t.addr) != 0;
                     uint16_t w = 0;
                     if (t.begin == t.end || !word(t.addr, w)) continue;
@@ -925,6 +952,23 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     if (cast && (d.Mnemonic.compare(0, 4, "exts") == 0 || d.Mnemonic.compare(0, 4, "extu") == 0)) named = true;
                 }
                 if (named) continue;
+                if (registerVariable && drawnAny && branchOnly)
+                {
+                    ++a.copyMergeAtBranch;
+                    problem("copy-merge", "line " + std::to_string(li) + " '" + text + "' names no store of the variable and is drawn only at the branch " +
+                                              MappingHex(r.lines[li].firstAddr) + " that ends its block, which makes nothing (A7-21)");
+                    continue;
+                }
+                if (registerVariable && anyAddress && makersOnly)
+                {
+                    ++a.copyRegisterMade;
+                    continue;
+                }
+                if (registerVariable && !anyAddress)
+                {
+                    ++a.copyNoAddress;
+                    continue;
+                }
                 // (every store of the variable writes a value the line does not show: a register the engine merged under the variable's
                 // name, which no store makes, A7-21 and A7-23. Counted apart.)
                 {
@@ -1234,6 +1278,9 @@ inline void PrintMappingAudit(const MappingAudit& a, const char* label)
                 "every store of the variable writes another value of (a register merged under its name, counted); %d number lines drawn at one "
                 "instruction, %d of them at a join's first instruction that does not make the number (A7-22, a violation)\n",
                 label, a.storeValueOther, a.copyOtherValue, a.constLines, a.constAtJoin);
+    std::printf("  mapping (%s): register merges under a memory variable's name naming no store (A7-21): %d drawn only at a branch ending the block (a "
+                "violation), %d naming the instructions that set the register (counted), %d naming nothing (counted)\n",
+                label, a.copyMergeAtBranch, a.copyRegisterMade, a.copyNoAddress);
     for (const std::string& p : a.problems) std::printf("    %s\n", p.c_str());
 }
 
