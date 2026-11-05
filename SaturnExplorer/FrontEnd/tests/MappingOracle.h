@@ -740,8 +740,16 @@ inline bool NeverRun(const sfe::decomp::DecompileResult& r, const std::function<
     {
         const auto in = into.find(x);
         if ((in != into.end() && !in->second.empty()) || x == r.entry || !r.InBody(x - 2)) return false;
-        uint16_t w = 0;
+        uint16_t w = 0, sw = 0;
         if (!word(x - 2, w)) return false;
+        // (the instruction after a `bt/s` or `bf/s` and its slot: the slot runs either way)
+        if (r.InBody(x - 4) && word(x - 4, sw) && ((sw >> 8) == 0x8D || (sw >> 8) == 0x8F))
+        {
+            const sfe::DisassembledInstruction b = sfe::Sh2Decode(x - 4, sw);
+            if (b.BranchTarget == x) return false;
+            const int t = TBefore(r, word, into, x - 4, depth + 1);
+            return t >= 0 && (((sw >> 8) == 0x8D) == (t == 1));
+        }
         const sfe::DisassembledInstruction d = sfe::Sh2Decode(x - 2, w);
         if (!d.IsValid) return false;
         if ((w >> 8) == 0x89 || (w >> 8) == 0x8B)
@@ -1479,10 +1487,13 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                 // give; a register variable is no parameter (a variable that holds a parameter's input is named after it).
                 WordValue shownValue;
                 const std::string shownText = text.substr(valueBegin, v - valueBegin);
-                const bool registerVariable = !number && shownText.find("Var") != std::string::npos &&
-                                              shownText.find_first_not_of("abcdefghijklmnopqrstuvwxyz") == shownText.find("Var") &&
-                                              shownText.find("Var") > 0 && shownText.size() > shownText.find("Var") + 3 &&
-                                              shownText.find_first_not_of("0123456789", shownText.find("Var") + 3) == std::string::npos;
+                // (A7-34's triage: or a register the engine names after a call's output or the entry, `extraout_r8`, merged under the
+                // variable's name at a loop's start)
+                const bool registerVariable = (!number && shownText.find("Var") != std::string::npos &&
+                                               shownText.find_first_not_of("abcdefghijklmnopqrstuvwxyz") == shownText.find("Var") &&
+                                               shownText.find("Var") > 0 && shownText.size() > shownText.find("Var") + 3 &&
+                                               shownText.find_first_not_of("0123456789", shownText.find("Var") + 3) == std::string::npos) ||
+                                              shownText.compare(0, 10, "extraout_r") == 0;
                 if (number)
                 {
                     shownValue.kind = WordValue::Number;

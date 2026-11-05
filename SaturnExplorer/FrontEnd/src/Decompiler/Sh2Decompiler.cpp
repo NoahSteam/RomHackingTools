@@ -6438,10 +6438,41 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
         const auto f = flow.insnBlock.find(insn);
         return f == flow.insnBlock.end() ? -1 : f->second.first;
     };
-    const auto flowSucceeds = [&flow](int from, int to) {
+    // (A7-34's triage: through flow blocks the engine emptied too -- two paths storing one byte, both emptied, before a poll -- a flow
+    // block emptied when no final basic block covers its first instruction)
+    std::map<int, bool> emptied;
+    const auto isEmptied = [&](int k) {
+        const auto f = emptied.find(k);
+        if (f != emptied.end()) return f->second;
+        bool covered = false;
+        if (k >= 0 && static_cast<size_t>(k) < flow.blockOps.size() && !flow.blockOps[static_cast<size_t>(k)].empty())
+        {
+            const uint32_t insn = flow.blockOps[static_cast<size_t>(k)].front().insn;
+            const ghidra::BlockGraph& graph = fd.getBasicBlocks();
+            const ghidra::Address a(fd.getArch()->getDefaultCodeSpace(), insn);
+            for (ghidra::int4 i = 0; i < graph.getSize() && !covered; ++i)
+                if (graph.getBlock(i)->getType() == ghidra::FlowBlock::t_basic && static_cast<const ghidra::BlockBasic*>(graph.getBlock(i))->contains(a))
+                    covered = true;
+        }
+        emptied[k] = !covered;
+        return !covered;
+    };
+    const auto flowSucceeds = [&](int from, int to) {
         if (from < 0 || static_cast<size_t>(from) >= flow.successors.size()) return false;
-        const std::vector<int>& next = flow.successors[static_cast<size_t>(from)];
-        return std::find(next.begin(), next.end(), to) != next.end();
+        std::set<int> seen = { from };
+        std::vector<int> todo = { from };
+        while (!todo.empty() && seen.size() < 64)
+        {
+            const int b = todo.back();
+            todo.pop_back();
+            if (b < 0 || static_cast<size_t>(b) >= flow.successors.size()) continue;
+            for (int n : flow.successors[static_cast<size_t>(b)])
+            {
+                if (n == to) return true;
+                if (seen.insert(n).second && isEmptied(n)) todo.push_back(n);
+            }
+        }
+        return false;
     };
     const auto onEdge = [&](const ghidra::AccessRecord* r, const ghidra::FlowBlock* from, const ghidra::FlowBlock* to) {
         const uint32_t insn = InstructionOf(*r);
