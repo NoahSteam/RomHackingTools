@@ -3135,6 +3135,33 @@ void RunProbe8()
         settle(m);
         show(m, "E9: Enter (untouched)");
     }
+    {
+        // E10: the box's own tooltip ("Decompile the function starting at this address ... Enter to go.") while it holds the focus and an older
+        // address than the output (A8-42's state): what Enter asks then is the output shown, not the address in the box.
+        MiniRig m;
+        live(m, cEntry + 4);
+        settle(m);
+        CHECK(focusBox(m));
+        m.regs[0].pc = aEntry + 4;
+        ++m.frame;
+        m.Idle(6);
+        CHECK(m.Settle());
+        ImVec2 a, b;
+        CHECK(m.panel.ItemRect("entry", a, b));
+        const ImVec2 c((a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f);
+        bool found = false;
+        std::string tip;
+        for (int i = 0; i < 90 && !found; ++i)
+        {
+            m.Frame(c, false);
+            tip = drawn::TooltipText(&found);
+        }
+        std::printf("PROBE8 E10: focused, A shown, box %s, active %d; the box hovered: tooltip %s\n   %s\n", m.panel.EntryText(),
+                    m.panel.EntryBoxActive() ? 1 : 0, found ? "shown" : "not shown", Norm(tip).c_str());
+        enter(m);
+        settle(m);
+        show(m, "E10: Enter");
+    }
 
     // The Volatile popup, drawn. The button and the popup's items are found by their drawn text.
     auto popupWindow = []() -> ImGuiWindow* {
