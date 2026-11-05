@@ -701,10 +701,11 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
         // A7-25: the lines that draw an instruction as their own statement, and those that draw it only as a copy materialised there
         // (Token::materialised); the way back answers an own one first, and a line beginning with the instruction is one only when it is
         // not a copy materialised there
-        // A7-30 (a): read from the words, not from the product's flag. A line draws a store or a call as a copy materialised there when its
-        // first address is another instruction that is a store (the line is that store's statement, `iRam0603ad2c = param_1;` at the
-        // store it names, drawn again where the engine materialised the value); a line beginning with the instruction itself, or one
-        // whose first instruction is no store, is the instruction's own statement.
+        // A7-30 (a): read from the text and the words, not from the product's flag. A line is a copy materialised at a call or a store
+        // when it is a plain assignment (`V = W;`, a variable or a number on the right: `iRam0603ad2c = param_1;`, `piStack_c =
+        // param_2;`), names a store of its variable at another instruction (an empty token at a store) and not one at this
+        // instruction, and draws this instruction: the value the engine wrote there again. Every other line that draws the instruction
+        // is the instruction's own statement (`uVar7 = extraout_sr_01;` after a call names no store: the call's output).
         const auto isStore = [&](uint32_t x) {
             uint16_t w = 0;
             if (!word(x, w)) return false;
@@ -717,15 +718,29 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
             const sfe::DisassembledInstruction d = sfe::Sh2Decode(x, w);
             return d.IsValid && ShapeOf(d).call;
         };
+        const auto plainCopy = [](const std::string& text) {
+            const size_t b = text.find_first_not_of(' ');
+            const size_t eq = text.find(" = ");
+            if (b == std::string::npos || eq == std::string::npos || text.empty() || text.back() != ';') return false;
+            const auto word = [](const std::string& x) {
+                return !x.empty() && x.find_first_not_of("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.-") == std::string::npos;
+            };
+            return word(text.substr(b, eq - b)) && word(text.substr(eq + 3, text.size() - 1 - (eq + 3)));
+        };
         std::map<uint32_t, std::set<size_t>> ownDrawn, copyDrawn;
         for (size_t li = 0; li < r.lines.size(); ++li)
+        {
+            const bool plain = plainCopy(r.lines[li].text);
+            std::set<uint32_t> named;   // (the stores the line names without drawing them)
+            for (const Token& t : r.lines[li].tokens)
+                if (t.addr && t.begin == t.end && isStore(t.addr)) named.insert(t.addr);
             for (const Token& t : r.lines[li].tokens)
                 if (t.addr && t.begin < t.end)
                 {
-                    const uint32_t first = r.lines[li].firstAddr;
-                    const bool copy = first && first != t.addr && isStore(first) && (isStore(t.addr) || isCall(t.addr));
+                    const bool copy = plain && (isCall(t.addr) || isStore(t.addr)) && !named.empty() && !named.count(t.addr);
                     (copy ? copyDrawn : ownDrawn)[t.addr].insert(li);
                 }
+        }
         const auto copyOnly = [&](uint32_t at, size_t li) {
             const auto c = copyDrawn.find(at);
             const auto o = ownDrawn.find(at);

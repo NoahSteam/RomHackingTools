@@ -5960,7 +5960,14 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
             if (!InstructionMakesNumber(flow, insn, numberValue, numberSize, &v)) return false;
             const auto pos = flow.ops.find(r->time);
             std::vector<const FlowOp*> writers;
-            if (pos == flow.ops.end() || !FlowLastWriters(flow, fd, pos->second.first, static_cast<int>(pos->second.second), v, writers))
+            // (a half of a register, as `mov.w r1,@r2` stores: the instructions write the whole register, which FlowLastWriters finds)
+            FlowVn whole = v;
+            if (whole.size < 4)
+            {
+                whole.offset &= ~static_cast<ghidra::uintb>(3);
+                whole.size = 4;
+            }
+            if (pos == flow.ops.end() || !FlowLastWriters(flow, fd, pos->second.first, static_cast<int>(pos->second.second), whole, writers))
                 return true;   // (the walk is not finished: the register's number is all that is known)
             for (const FlowOp* w : writers)
                 if (w->insn == insn) return true;
