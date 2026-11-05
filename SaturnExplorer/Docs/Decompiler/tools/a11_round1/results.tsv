@@ -269,3 +269,22 @@ V-0072-storemaywrite	corpus	survived	53	CHECK failed at /home/user/RomHackingToo
 V-0010	unit	killed	26	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:2546: Ledger(r, { Rd(0, 2), Rd(0, 2) })
 V-0010	gen	killed	25	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:12033: rep.findings.empty()
 V-0010	corpus	killed	50	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:2546: Ledger(r, { Rd(0, 2), Rd(0, 2) })
+V-0009	unit	killed	26	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:154: ra.status == DecompileStatus::Ok && arr != nullptr
+V-0009	gen	killed	21	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:11749: rep.findings.empty()
+V-0009	corpus	killed	50	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:154: ra.status == DecompileStatus::Ok && arr != nullptr
+R-ptr-loop	unit	survived	28	
+R-ptr-loop	gen	survived	17	
+R-ptr-loop	corpus	survived	53	
+R-ptr-loop	*	SURVIVED	0	
+R-note-reach	unit	killed	2	
+R-note-reach	gen	killed	2	
+R-note-reach	corpus	killed	2	
+R-ptr-sub	unit	survived	27	
+R-ptr-sub	gen	killed	4	
+R-ptr-sub	corpus	killed	4	
+R-0061-mem	unit	killed	0	
+R-0061-mem	gen	killed	0	
+R-0061-mem	corpus	killed	0	
+R-0065-down	unit	killed	7	
+R-0065-down	gen	survived	22	
+R-0065-down	corpus	killed	29	
