@@ -170,6 +170,8 @@ if(BUILD_TESTING)
         SE_YSS_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../SakuraTaisen2/Data/SaveFiles/SaveStates/Yabause/OhrimeMiniGame")
     add_test(NAME SaturnExplorerYssFixtureTests
              COMMAND SaturnExplorerYssFixtureTests)
+    # Without the states it exits 77: ctest reports it skipped, not passed (A11-10).
+    set_tests_properties(SaturnExplorerYssFixtureTests PROPERTIES SKIP_RETURN_CODE 77)
 endif()
 
 # Does the Windows live tap's shutdown actually end its server thread (HOOK-01)? The threads it
@@ -386,6 +388,8 @@ if(SE_ENABLE_DECOMPILER)
             SE_DECOMPILER_SPIKE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/Docs/Decompiler/spike")
         add_test(NAME SaturnExplorerSh2DecompilerFixtureTests
                  COMMAND SaturnExplorerSh2DecompilerFixtureTests ${CMAKE_CURRENT_BINARY_DIR}/decompiler_fixture_test)
+        # Without the game state it exits 77: ctest reports it skipped, not passed (A11-10).
+        set_tests_properties(SaturnExplorerSh2DecompilerFixtureTests PROPERTIES SKIP_RETURN_CODE 77)
 
         # The snapshot's A2 rules and the function finder are pure: no engine linked.
         foreach(name MemorySnapshot Sh2FunctionFinder)

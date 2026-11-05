@@ -89,8 +89,9 @@ int main()
 
     if (found == 0)
     {
+        // 77 is SKIP_RETURN_CODE in CMakeLists.txt: ctest reports the suite skipped, not passed (A11-10).
         std::printf("YssFixtureTests: no fixtures under %s -- skipped\n", dir.c_str());
-        return 0;
+        return 77;
     }
     if (gFailures)
     {
