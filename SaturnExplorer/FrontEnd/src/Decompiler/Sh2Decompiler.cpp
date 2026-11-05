@@ -5213,6 +5213,496 @@ bool FlowPointer(const FlowRecord& flow, const ghidra::Funcdata& fd, int blk, in
     return FlowPointerIn(w, flow, fd, blk, pos, vn, stack, offset);
 }
 
+// A7-31: the number a register (or a temporary) of the flow holds before op `pos` of flow block `blk`, when every path into the op gives
+// the same one. A number is set (`mov #imm`, a literal's word) and carried through copies, extensions and the arithmetic of known
+// numbers; a branch's condition gives one on the edge a path takes (`dt r3 ; bf L` leaves by its fall-through only when r3 is 0, as the
+// engine's conditional constants know). Not known: memory, the function's input, a call that may change the register, an op the walk
+// cannot compute, and a path around a loop back into a block the walk is in (the loop may change it). Bounded.
+struct NumberWalk
+{
+    int budget = 512;
+    std::set<std::tuple<int, const ghidra::AddrSpace*, ghidra::uintb, ghidra::int4>> active;
+};
+uint64_t MaskToSize(uint64_t v, ghidra::int4 size)
+{
+    return size >= 8 || size <= 0 ? v : v & ((1ull << (8 * size)) - 1);
+}
+bool SameStorage(const FlowVn& a, const FlowVn& b)
+{
+    return a.space == b.space && a.offset == b.offset && a.size == b.size;
+}
+bool FlowStorageOverlaps(const FlowVn& a, const FlowVn& b)
+{
+    return a.space == b.space && a.offset < b.offset + static_cast<ghidra::uintb>(b.size) && b.offset < a.offset + static_cast<ghidra::uintb>(a.size);
+}
+bool FlowNumberIn(NumberWalk& w, const FlowRecord& flow, const ghidra::Funcdata& fd, int blk, int pos, const FlowVn& vn, uint64_t& value);
+// Does a branch's condition say, on the edge from flow block `from` to `to`, that `target` holds a number at the end of `from`? The
+// condition is followed back in `from` through copies, negations and comparisons with a number (`T = (r3 == 0)`, `tmp = (T == 0)`) to
+// an equality of `target` with a number that no later op of the block changes. `(r & r)` and `(r | r)` are r (`tst r3,r3`).
+bool EdgeNumber(NumberWalk& w, const FlowRecord& flow, const ghidra::Funcdata& fd, int from, int to, const FlowVn& target, uint64_t& value)
+{
+    if (from < 0 || static_cast<size_t>(from) >= flow.blockOps.size() || static_cast<size_t>(from) >= flow.successors.size()) return false;
+    const std::vector<FlowOp>& ops = flow.blockOps[static_cast<size_t>(from)];
+    const std::vector<int>& next = flow.successors[static_cast<size_t>(from)];
+    if (ops.empty() || ops.back().code != ghidra::CPUI_CBRANCH || ops.back().numIn < 2 || next.size() != 2 || next[0] == next[1]) return false;
+    if (to != next[0] && to != next[1]) return false;
+    // (the flow's edges of a conditional branch: the fall-through first, then the target the branch takes when its condition is true)
+    bool truth = to == next[1];
+    FlowVn x = ops.back().in[1];
+    int at = static_cast<int>(ops.size()) - 1;   // the op that reads x
+    const auto defOf = [&](const FlowVn& v, int before) {
+        for (int i = before - 1; i >= 0; --i)
+        {
+            const FlowOp& op = ops[static_cast<size_t>(i)];
+            if ((op.code == ghidra::CPUI_CALL || op.code == ghidra::CPUI_CALLIND) && !KeptByCall(fd, v)) return -1;
+            if (!op.hasOut || !FlowStorageOverlaps(op.out, v)) continue;
+            return SameStorage(op.out, v) ? i : -1;
+        }
+        return -1;
+    };
+    const auto boolean = [](ghidra::OpCode c) {
+        return c == ghidra::CPUI_INT_EQUAL || c == ghidra::CPUI_INT_NOTEQUAL || c == ghidra::CPUI_BOOL_NEGATE || c == ghidra::CPUI_INT_LESS ||
+               c == ghidra::CPUI_INT_SLESS || c == ghidra::CPUI_INT_LESSEQUAL || c == ghidra::CPUI_INT_SLESSEQUAL || c == ghidra::CPUI_BOOL_AND ||
+               c == ghidra::CPUI_BOOL_OR || c == ghidra::CPUI_BOOL_XOR;
+    };
+    // The boolean whose value is the low bit of `v` read before op `before` (the T bit: `sr = (sr & ~1) | zext(b)`, read back as
+    // `sub(sr,0) & 1`), through copies, extensions, the low piece, masks that keep the bit and an OR with a value whose bit is clear.
+    const auto lowBit = [&](FlowVn v, int before, FlowVn& b, int& readAt) {
+        for (int g = 0; g < 8; ++g)
+        {
+            const int d = defOf(v, before);
+            if (d < 0) return false;
+            const FlowOp& op = ops[static_cast<size_t>(d)];
+            if (boolean(op.code))
+            {
+                b = v;
+                readAt = before;
+                return true;
+            }
+            const bool piece = op.code == ghidra::CPUI_SUBPIECE && op.numIn >= 2 && op.in[1].Constant() && op.in[1].offset == 0;
+            const bool keeps = op.code == ghidra::CPUI_INT_AND && op.numIn >= 2 && op.in[1].Constant() && (op.in[1].offset & 1) != 0;
+            if ((piece || keeps || op.code == ghidra::CPUI_INT_ZEXT || op.code == ghidra::CPUI_COPY) && op.numIn >= 1 && !op.in[0].Constant())
+            {
+                v = op.in[0];
+                before = d;
+                continue;
+            }
+            if (op.code != ghidra::CPUI_INT_OR || op.numIn < 2) return false;
+            int keep = -1;
+            for (int k = 0; k < 2 && keep < 0; ++k)
+            {
+                const FlowVn& z = op.in[k];
+                if (z.Constant())
+                {
+                    if ((z.offset & 1) == 0) keep = 1 - k;
+                    continue;
+                }
+                const int zd = defOf(z, d);
+                if (zd >= 0 && ops[static_cast<size_t>(zd)].code == ghidra::CPUI_INT_AND && ops[static_cast<size_t>(zd)].numIn >= 2 &&
+                    ops[static_cast<size_t>(zd)].in[1].Constant() && (ops[static_cast<size_t>(zd)].in[1].offset & 1) == 0)
+                    keep = 1 - k;
+            }
+            if (keep < 0 || op.in[keep].Constant()) return false;
+            v = op.in[keep];
+            before = d;
+        }
+        return false;
+    };
+    for (int guard = 0; guard < 16; ++guard)
+    {
+        const int d = defOf(x, at);
+        if (d < 0) return false;
+        const FlowOp& op = ops[static_cast<size_t>(d)];
+        if (op.code == ghidra::CPUI_COPY && op.numIn >= 1 && !op.in[0].Constant())
+        {
+            x = op.in[0];
+            at = d;
+            continue;
+        }
+        if (op.code == ghidra::CPUI_BOOL_NEGATE && op.numIn >= 1)
+        {
+            x = op.in[0];
+            at = d;
+            truth = !truth;
+            continue;
+        }
+        if ((op.code != ghidra::CPUI_INT_EQUAL && op.code != ghidra::CPUI_INT_NOTEQUAL) || op.numIn < 2) return false;
+        const bool equal = (op.code == ghidra::CPUI_INT_EQUAL) == truth;   // the two sides are equal (else they differ)
+        // one side a number (a constant, or a register holding one), the other the storage it says something of
+        int side = -1;
+        uint64_t c = 0;
+        for (int k = 1; k >= 0 && side < 0; --k)
+        {
+            const FlowVn& v = op.in[k];
+            if (v.Constant()) c = static_cast<uint64_t>(v.offset), side = 1 - k;
+            else if (!op.in[1 - k].Constant() && FlowNumberIn(w, flow, fd, from, d, v, c)) side = 1 - k;
+        }
+        if (side < 0) return false;
+        FlowVn s = op.in[side];
+        int read = d;
+        // (`(r & r) == 0` is `r == 0`: `tst r3,r3`)
+        for (int k = 0; k < 4; ++k)
+        {
+            const int sd = defOf(s, read);
+            if (sd < 0) break;
+            const FlowOp& so = ops[static_cast<size_t>(sd)];
+            if ((so.code == ghidra::CPUI_INT_AND || so.code == ghidra::CPUI_INT_OR) && so.numIn >= 2 && SameStorage(so.in[0], so.in[1]) &&
+                !so.in[0].Constant())
+            {
+                s = so.in[0];
+                read = sd;
+                continue;
+            }
+            if (so.code == ghidra::CPUI_COPY && so.numIn >= 1 && !so.in[0].Constant() && SameStorage(so.out, s) && so.in[0].size == s.size)
+            {
+                s = so.in[0];
+                read = sd;
+                continue;
+            }
+            // (`x & 1` of a flag kept in a register's low bit is that flag: the T bit of sr)
+            FlowVn b;
+            int r = 0;
+            if (so.code == ghidra::CPUI_INT_AND && so.numIn >= 2 && so.in[1].Constant() && MaskToSize(so.in[1].offset, so.in[1].size) == 1 &&
+                !so.in[0].Constant() && lowBit(so.in[0], sd, b, r))
+            {
+                s = b;
+                read = r;
+                continue;
+            }
+            break;
+        }
+        if (equal && SameStorage(s, target))
+        {
+            // (nothing after the read changes the target before the block ends)
+            for (size_t i = static_cast<size_t>(read) + 1; i < ops.size(); ++i)
+            {
+                const FlowOp& later = ops[i];
+                if ((later.code == ghidra::CPUI_CALL || later.code == ghidra::CPUI_CALLIND) && !KeptByCall(fd, target)) return false;
+                if (later.hasOut && FlowStorageOverlaps(later.out, target)) return false;
+            }
+            value = MaskToSize(c, target.size);
+            return true;
+        }
+        // a flag compared with 0 or 1: the comparison that set it was true or false
+        const int sd = defOf(s, read);
+        if (sd < 0 || !boolean(ops[static_cast<size_t>(sd)].code) || c > 1) return false;
+        truth = equal ? c == 1 : c == 0;
+        x = s;
+        at = read;
+    }
+    return false;
+}
+bool FlowNumberIn(NumberWalk& w, const FlowRecord& flow, const ghidra::Funcdata& fd, int blk, int pos, const FlowVn& vn, uint64_t& value)
+{
+    if (--w.budget < 0 || blk < 0 || static_cast<size_t>(blk) >= flow.blockOps.size()) return false;
+    if (vn.Constant())
+    {
+        value = MaskToSize(static_cast<uint64_t>(vn.offset), vn.size);
+        return true;
+    }
+    // (a frame word: the number a store of the flow put there, `mov #0,r3 ; mov.l r3,@-r15 ; mov.l @r15+,r5`; a store the walk cannot
+    // place, or a call, may change it)
+    const ghidra::AddrSpace* stackSpace = fd.getArch()->getStackSpace();
+    const bool frame = vn.space && vn.space == stackSpace;
+    if (!vn.space || (!frame && vn.space->getType() != ghidra::IPTR_PROCESSOR && vn.space->getType() != ghidra::IPTR_INTERNAL) ||
+        vn.space == fd.getArch()->getDefaultDataSpace())
+        return false;
+    const std::vector<FlowOp>& ops = flow.blockOps[static_cast<size_t>(blk)];
+    const auto frameAt = [&](int i, const FlowVn& ptr, ghidra::int4 size, FlowVn& m) {
+        bool stack = false;
+        ghidra::uintb offset = 0;
+        if (!stackSpace || !FlowPointer(flow, fd, blk, i, ptr, stack, offset)) return 0;   // (not known)
+        if (!stack) return 1;                                                               // (a global)
+        m.space = stackSpace;
+        m.offset = offset & stackSpace->getHighest();
+        m.size = size;
+        return 2;
+    };
+    for (int i = std::min(pos, static_cast<int>(ops.size())) - 1; i >= 0; --i)
+    {
+        const FlowOp& op = ops[static_cast<size_t>(i)];
+        if ((op.code == ghidra::CPUI_CALL || op.code == ghidra::CPUI_CALLIND) && (frame || !KeptByCall(fd, vn))) return false;
+        if (frame && op.code == ghidra::CPUI_STORE && op.numIn > 2)
+        {
+            FlowVn m;
+            const int where = frameAt(i, op.in[1], op.in[2].size, m);
+            if (where == 0) return false;
+            if (where == 1 || !FlowStorageOverlaps(m, vn)) continue;
+            if (!SameStorage(m, vn)) return false;
+            return FlowNumberIn(w, flow, fd, blk, i, op.in[2], value);
+        }
+        if (!op.hasOut || !FlowStorageOverlaps(op.out, vn)) continue;
+        if (!SameStorage(op.out, vn)) return false;
+        const ghidra::int4 size = op.out.size;
+        if (op.code == ghidra::CPUI_LOAD)
+        {
+            if (op.literal)
+            {
+                value = MaskToSize(op.value, size);
+                return true;
+            }
+            FlowVn m;
+            if (op.numIn < 2 || frameAt(i, op.in[1], size, m) != 2) return false;
+            return FlowNumberIn(w, flow, fd, blk, i, m, value);
+        }
+        uint64_t a = 0, b = 0;
+        const bool unary = op.code == ghidra::CPUI_COPY || op.code == ghidra::CPUI_INT_ZEXT || op.code == ghidra::CPUI_INT_SEXT ||
+                           op.code == ghidra::CPUI_INT_NEGATE || op.code == ghidra::CPUI_INT_2COMP || op.code == ghidra::CPUI_BOOL_NEGATE;
+        if (unary)
+        {
+            if (op.numIn < 1 || !FlowNumberIn(w, flow, fd, blk, i, op.in[0], a)) return false;
+            const ghidra::int4 n = op.in[0].size;
+            if (op.code == ghidra::CPUI_INT_SEXT && n < 8 && (a >> (8 * n - 1) & 1)) a |= ~0ull << (8 * n);
+            if (op.code == ghidra::CPUI_INT_NEGATE) a = ~a;
+            if (op.code == ghidra::CPUI_INT_2COMP) a = 0 - a;
+            if (op.code == ghidra::CPUI_BOOL_NEGATE) a = a ? 0 : 1;
+            value = MaskToSize(a, size);
+            return true;
+        }
+        if (op.numIn < 2) return false;
+        // (`xor r1,r1`, `sub r3,r3`: 0 whatever r1 or r3 holds)
+        if ((op.code == ghidra::CPUI_INT_XOR || op.code == ghidra::CPUI_INT_SUB) && SameStorage(op.in[0], op.in[1]))
+        {
+            value = 0;
+            return true;
+        }
+        if (op.code == ghidra::CPUI_SUBPIECE)
+        {
+            if (!op.in[1].Constant() || !FlowNumberIn(w, flow, fd, blk, i, op.in[0], a)) return false;
+            value = MaskToSize(op.in[1].offset >= 8 ? 0 : a >> (8 * op.in[1].offset), size);
+            return true;
+        }
+        if (!FlowNumberIn(w, flow, fd, blk, i, op.in[0], a) || !FlowNumberIn(w, flow, fd, blk, i, op.in[1], b)) return false;
+        const ghidra::int4 n = op.in[0].size;
+        const auto signedOf = [n](uint64_t v) {
+            return n < 8 && (v >> (8 * n - 1) & 1) ? static_cast<int64_t>(v | ~0ull << (8 * n)) : static_cast<int64_t>(v);
+        };
+        switch (op.code)
+        {
+        case ghidra::CPUI_INT_ADD: a += b; break;
+        case ghidra::CPUI_INT_SUB: a -= b; break;
+        case ghidra::CPUI_INT_AND: a &= b; break;
+        case ghidra::CPUI_INT_OR: a |= b; break;
+        case ghidra::CPUI_INT_XOR: a ^= b; break;
+        case ghidra::CPUI_INT_MULT: a *= b; break;
+        case ghidra::CPUI_INT_LEFT: a = b >= 64 ? 0 : a << b; break;
+        case ghidra::CPUI_INT_RIGHT: a = b >= 64 ? 0 : a >> b; break;
+        case ghidra::CPUI_INT_EQUAL: a = a == b; break;
+        case ghidra::CPUI_INT_NOTEQUAL: a = a != b; break;
+        case ghidra::CPUI_INT_LESS: a = a < b; break;
+        case ghidra::CPUI_INT_LESSEQUAL: a = a <= b; break;
+        case ghidra::CPUI_INT_SLESS: a = signedOf(a) < signedOf(b); break;
+        case ghidra::CPUI_INT_SLESSEQUAL: a = signedOf(a) <= signedOf(b); break;
+        case ghidra::CPUI_BOOL_AND: a = (a && b) ? 1 : 0; break;
+        case ghidra::CPUI_BOOL_OR: a = (a || b) ? 1 : 0; break;
+        case ghidra::CPUI_BOOL_XOR: a = ((a != 0) != (b != 0)) ? 1 : 0; break;
+        default: return false;
+        }
+        value = MaskToSize(a, size);
+        return true;
+    }
+    // the block's start: each path in gives the number (on its edge, or at its end), and all the same one
+    if (blk == flow.entryBlock) return false;
+    const std::vector<int>& preds = flow.predecessors[static_cast<size_t>(blk)];
+    if (preds.empty()) return false;
+    bool any = false;
+    for (int p : preds)
+    {
+        if (p < 0 || static_cast<size_t>(p) >= flow.blockOps.size()) return false;
+        uint64_t v = 0;
+        if (!EdgeNumber(w, flow, fd, p, blk, vn, v))
+        {
+            const auto key = std::make_tuple(p, vn.space, vn.offset, vn.size);
+            if (w.active.count(key)) return false;   // (around a loop: not known)
+            w.active.insert(key);
+            const bool known = FlowNumberIn(w, flow, fd, p, static_cast<int>(flow.blockOps[static_cast<size_t>(p)].size()), vn, v);
+            w.active.erase(key);
+            if (!known) return false;
+        }
+        if (any && v != value) return false;
+        value = v;
+        any = true;
+    }
+    return any;
+}
+bool FlowNumberBefore(const FlowRecord& flow, const ghidra::Funcdata& fd, int blk, int pos, const FlowVn& vn, uint64_t& value)
+{
+    NumberWalk w;
+    return FlowNumberIn(w, flow, fd, blk, pos, vn, value);
+}
+
+// A7-31: the value an op of the flow (op `pos` of block `blk`) passes on unchanged, which the engine folds the op to: `x + 0` with the 0
+// known (`add r4,r3` where a `dt` loop left r3 0), `x + 0`, `x & x`, `x | x`, and chains of such ops that give x back (`xor #k` twice,
+// `add #5` then `add #-5`, `neg` twice, `swap.w` twice). The op's value is built back through the ops of its block that compute it, to
+// numbers (known on every path in, FlowNumberBefore) and to the values the block does not compute (a register at the block's start, an
+// op the walk cannot compute); the op passes on one such value x, of the op's size, when it gives back every one of a set of test
+// values put for x whatever the others are (each bit at 0 and at 1, and carries and signs: a composition of the ops built that is not x
+// differs on one of them; `clrt ; addc r4,r3` with r3 0 gives r4 whatever sr's other bits). `through` is that storage, in block
+// `throughBlock`, and `at` the op it is read before. False for anything else.
+bool FlowIdentitySource(const FlowRecord& flow, const ghidra::Funcdata& fd, int blk, int pos, FlowVn& through, int& throughBlock, int& at)
+{
+    if (blk < 0 || static_cast<size_t>(blk) >= flow.blockOps.size()) return false;
+    if (pos < 0 || static_cast<size_t>(pos) >= flow.blockOps[static_cast<size_t>(blk)].size() ||
+        !flow.blockOps[static_cast<size_t>(blk)][static_cast<size_t>(pos)].hasOut)
+        return false;
+    const auto computes = [](ghidra::OpCode c) {
+        return c == ghidra::CPUI_COPY || c == ghidra::CPUI_INT_ADD || c == ghidra::CPUI_INT_SUB || c == ghidra::CPUI_INT_AND || c == ghidra::CPUI_INT_OR ||
+               c == ghidra::CPUI_INT_XOR || c == ghidra::CPUI_INT_MULT || c == ghidra::CPUI_INT_LEFT || c == ghidra::CPUI_INT_RIGHT ||
+               c == ghidra::CPUI_INT_SRIGHT || c == ghidra::CPUI_INT_NEGATE || c == ghidra::CPUI_INT_2COMP || c == ghidra::CPUI_INT_ZEXT ||
+               c == ghidra::CPUI_INT_SEXT || c == ghidra::CPUI_SUBPIECE;
+    };
+    struct Node
+    {
+        int kind = 0;   // 0 a number, 1 a value the block does not compute (`value` its index), 2 an op
+        uint64_t value = 0;
+        ghidra::OpCode code = ghidra::CPUI_COPY;
+        ghidra::int4 size = 0, inSize = 0;
+        int in[2] = { -1, -1 };
+    };
+    std::vector<Node> nodes;
+    struct Leaf
+    {
+        FlowVn s;
+        int b, at;
+    };
+    std::vector<Leaf> leaves;
+    // (the node of storage `s` read before op `before` of block `b`; -1 when it cannot be built)
+    std::function<int(const FlowVn&, int, int, int)> build = [&](const FlowVn& s, int b, int before, int depth) -> int {
+        if (nodes.size() > 48 || depth > 16) return -1;
+        const std::vector<FlowOp>& ops = flow.blockOps[static_cast<size_t>(b)];
+        Node n;
+        n.size = s.size;
+        if (s.Constant())
+        {
+            n.value = static_cast<uint64_t>(s.offset);
+            nodes.push_back(n);
+            return static_cast<int>(nodes.size()) - 1;
+        }
+        int d = -1;
+        for (int i = before - 1; i >= 0; --i)
+        {
+            const FlowOp& op = ops[static_cast<size_t>(i)];
+            if ((op.code == ghidra::CPUI_CALL || op.code == ghidra::CPUI_CALLIND) && !KeptByCall(fd, s))
+            {
+                d = i;
+                break;
+            }
+            if (!op.hasOut || !FlowStorageOverlaps(op.out, s)) continue;
+            if (!SameStorage(op.out, s)) return -1;
+            d = i;
+            break;
+        }
+        // (at the start of a block with one block before it, the value that block leaves: `add #5` before a branch, `add #-5` after it)
+        if (d < 0 && b != flow.entryBlock && static_cast<size_t>(b) < flow.predecessors.size())
+        {
+            const std::vector<int>& preds = flow.predecessors[static_cast<size_t>(b)];
+            const int p = preds.empty() ? -1 : preds[0];
+            bool one = p >= 0 && p != b && static_cast<size_t>(p) < flow.blockOps.size();
+            for (int q : preds) one = one && q == p;
+            // (unless the edge in gives a number: `dt r3 ; bf L` falls through with r3 0)
+            uint64_t v = 0;
+            if (one && !FlowNumberBefore(flow, fd, b, 0, s, v)) return build(s, p, static_cast<int>(flow.blockOps[static_cast<size_t>(p)].size()), depth + 1);
+        }
+        const FlowOp* def = d >= 0 ? &ops[static_cast<size_t>(d)] : nullptr;
+        if (def && def->hasOut && computes(def->code) && def->numIn >= 1)
+        {
+            const bool binary = !(def->code == ghidra::CPUI_COPY || def->code == ghidra::CPUI_INT_NEGATE || def->code == ghidra::CPUI_INT_2COMP ||
+                                  def->code == ghidra::CPUI_INT_ZEXT || def->code == ghidra::CPUI_INT_SEXT);
+            if (binary && def->numIn < 2) return -1;
+            n.kind = 2;
+            n.code = def->code;
+            n.inSize = def->in[0].size;
+            const int x = build(def->in[0], b, d, depth + 1);
+            if (x < 0) return -1;
+            int y = -1;
+            if (binary && (y = build(def->in[1], b, d, depth + 1)) < 0) return -1;
+            n.in[0] = x;
+            n.in[1] = y;
+            nodes.push_back(n);
+            return static_cast<int>(nodes.size()) - 1;
+        }
+        // a value the block does not compute: a number known on every path, else x (one only)
+        const int from = d + 1;
+        uint64_t v = 0;
+        if (FlowNumberBefore(flow, fd, b, from, s, v))
+        {
+            n.value = v;
+            nodes.push_back(n);
+            return static_cast<int>(nodes.size()) - 1;
+        }
+        size_t k = 0;
+        while (k < leaves.size() && !(SameStorage(leaves[k].s, s) && leaves[k].b == b && leaves[k].at == from)) ++k;
+        if (k == leaves.size())
+        {
+            if (leaves.size() >= 4) return -1;
+            leaves.push_back(Leaf{ s, b, from });
+        }
+        n.kind = 1;
+        n.value = k;
+        nodes.push_back(n);
+        return static_cast<int>(nodes.size()) - 1;
+    };
+    const FlowOp& top = flow.blockOps[static_cast<size_t>(blk)][static_cast<size_t>(pos)];
+    const int root = build(top.out, blk, pos + 1, 0);
+    if (root < 0 || leaves.empty() || nodes[static_cast<size_t>(root)].kind != 2) return false;
+    uint64_t put[4] = { 0, 0, 0, 0 };
+    std::function<uint64_t(int)> eval = [&](int k) -> uint64_t {
+        const Node& n = nodes[static_cast<size_t>(k)];
+        if (n.kind == 0) return MaskToSize(n.value, n.size);
+        if (n.kind == 1) return MaskToSize(put[n.value], n.size);
+        const uint64_t a = MaskToSize(eval(n.in[0]), n.inSize);
+        const uint64_t b = n.in[1] >= 0 ? eval(n.in[1]) : 0;
+        uint64_t r = 0;
+        switch (n.code)
+        {
+        case ghidra::CPUI_COPY: r = a; break;
+        case ghidra::CPUI_INT_ZEXT: r = a; break;
+        case ghidra::CPUI_INT_SEXT: r = n.inSize < 8 && (a >> (8 * n.inSize - 1) & 1) ? a | ~0ull << (8 * n.inSize) : a; break;
+        case ghidra::CPUI_INT_NEGATE: r = ~a; break;
+        case ghidra::CPUI_INT_2COMP: r = 0 - a; break;
+        case ghidra::CPUI_INT_ADD: r = a + b; break;
+        case ghidra::CPUI_INT_SUB: r = a - b; break;
+        case ghidra::CPUI_INT_AND: r = a & b; break;
+        case ghidra::CPUI_INT_OR: r = a | b; break;
+        case ghidra::CPUI_INT_XOR: r = a ^ b; break;
+        case ghidra::CPUI_INT_MULT: r = a * b; break;
+        case ghidra::CPUI_INT_LEFT: r = b >= 64 ? 0 : a << b; break;
+        case ghidra::CPUI_INT_RIGHT: r = b >= 64 ? 0 : a >> b; break;
+        case ghidra::CPUI_INT_SRIGHT:
+        {
+            const bool neg = n.inSize > 0 && n.inSize <= 8 && (a >> (8 * n.inSize - 1) & 1);
+            const uint64_t ext = neg && n.inSize < 8 ? a | ~0ull << (8 * n.inSize) : a;
+            r = b >= 64 ? (neg ? ~0ull : 0) : static_cast<uint64_t>(static_cast<int64_t>(ext) >> b);
+            break;
+        }
+        case ghidra::CPUI_SUBPIECE: r = b >= 8 ? 0 : a >> (8 * b); break;
+        default: r = 0; break;
+        }
+        return MaskToSize(r, n.size);
+    };
+    static const uint64_t tests[] = { 0, ~0ull, 1, 2, 0x7FFFFFFFull, 0x80000000ull, 0x55555555ull, 0xAAAAAAAAull, 0x12345678ull, 0x9ABCDEF0ull,
+                                      0x0F0F0F0Full, 0xF0F0F0F0ull, 0x00010000ull, 0xDEADBEEFull, 0x00FF00FFull, 0x8000ull, 0x80ull };
+    const size_t count = sizeof(tests) / sizeof(tests[0]);
+    for (size_t x = 0; x < leaves.size(); ++x)
+    {
+        if (leaves[x].s.size != top.out.size) continue;
+        bool same = true;
+        for (size_t k = 0; k < count && same; ++k)
+            for (size_t round = 0; round < 2 && same; ++round)
+            {
+                for (size_t j = 0; j < leaves.size(); ++j)
+                    put[j] = j == x ? tests[k] : tests[(k * (round ? 11 : 7) + j * 5 + 3 + round) % count];
+                same = eval(root) == MaskToSize(tests[k], top.out.size);
+            }
+        if (!same) continue;
+        through = leaves[x].s;
+        throughBlock = leaves[x].b;
+        at = leaves[x].at;
+        return true;
+    }
+    return false;
+}
+
 // May the value storage `vn` holds before op `pos` of flow block `blk` be the statement's (`want`)? Each path of the flow into the op is
 // followed back through the ops that copy or extend the value, and through memory to the store that wrote it, to where the value is
 // made: a number (a `mov #imm`, a literal's word), an op that computes it, a read of memory, a call that changes the register, or the
@@ -5318,6 +5808,17 @@ bool FlowValueMayBe(const FlowRecord& flow, const ghidra::Funcdata& fd, int blk,
                 const std::pair<bool, FlowVn> m = whole ? memoryOf(st.blk, i) : std::make_pair(false, FlowVn());
                 if (!m.first || want.HasLocation(m.second)) return true;
                 todo.push_back(State{ st.blk, i, m.second });
+                break;
+            }
+            // A7-31: arithmetic that leaves one input's value unchanged (`add r4,r3` with r3 0 after a `dt` loop, `add #0`, `and r1,r1`,
+            // `or r2,r2`), which the engine folds to that input: the walk goes on from the input, which must still be the statement's
+            FlowVn through;
+            int throughBlock = -1, throughAt = 0;
+            if (whole && !passes && FlowIdentitySource(flow, fd, st.blk, i, through, throughBlock, throughAt))
+            {
+                through.offset += st.vn.offset - op.out.offset;
+                through.size = st.vn.size;
+                todo.push_back(State{ throughBlock, throughAt, through });
                 break;
             }
             if (!whole || !passes || op.numIn < 1)
@@ -5790,6 +6291,49 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
             return v;
         };
         bool ownOther = false;   // the statement's own instruction is a store of the variable that wrote another value
+        // A7-32: a copy at a call or a return shows the value the callee or the caller sees there: only a store that runs before that
+        // instruction is its (before it in its flow block, or in a flow block from which the flow reaches it). The searches that look
+        // past the statement (the store it is ahead of) do not apply to it: a store after the call wrote what came after.
+        int useBlock = -1, usePos = 0;
+        {
+            const auto ib = flow.insnBlock.find(at);
+            if (ib != flow.insnBlock.end() && ib->second.first >= 0 && static_cast<size_t>(ib->second.first) < flow.blockOps.size() &&
+                ib->second.second < flow.blockOps[static_cast<size_t>(ib->second.first)].size())
+            {
+                const FlowOp& last = flow.blockOps[static_cast<size_t>(ib->second.first)][ib->second.second];
+                if (last.code == ghidra::CPUI_CALL || last.code == ghidra::CPUI_CALLIND || last.code == ghidra::CPUI_RETURN)
+                {
+                    useBlock = ib->second.first;
+                    usePos = static_cast<int>(ib->second.second);
+                }
+            }
+        }
+        std::map<int, bool> reachesUse;
+        const auto runsBefore = [&](const ghidra::AccessRecord* r) {
+            if (useBlock < 0) return true;
+            const auto f = flow.ops.find(r->time);
+            if (f == flow.ops.end()) return true;   // (not placed: as before)
+            const int rb = f->second.first;
+            if (rb == useBlock) return static_cast<int>(f->second.second) < usePos;
+            const auto known = reachesUse.find(rb);
+            if (known != reachesUse.end()) return known->second;
+            std::set<int> seen = { rb };
+            std::vector<int> todo = { rb };
+            bool reached = false;
+            while (!todo.empty() && !reached)
+            {
+                const int b = todo.back();
+                todo.pop_back();
+                if (b < 0 || static_cast<size_t>(b) >= flow.successors.size()) continue;
+                for (int n : flow.successors[static_cast<size_t>(b)])
+                {
+                    if (n == useBlock) reached = true;
+                    if (seen.insert(n).second) todo.push_back(n);
+                }
+            }
+            reachesUse[rb] = reached;
+            return reached;
+        };
         for (ghidra::int4 b = 0; b < out->getSize(); ++b)
         {
             const ghidra::uintb byte = (base + static_cast<ghidra::uintb>(b)) & space->getHighest();
@@ -5833,7 +6377,7 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
             // (each store found below is the statement's only when it may have written its value, `take`; one that wrote another value
             // ends that path, and the search goes on to the store the statement is ahead of)
             const auto take = [&](const ghidra::AccessRecord* r) {
-                if (!r || !shows(r)) return false;
+                if (!r || !runsBefore(r) || !shows(r)) return false;
                 chosen.insert(r);
                 return true;
             };
@@ -5926,6 +6470,7 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                 {
                     if (r->addr.getSpace() != space) continue;
                     if (((byte - r->addr.getOffset()) & space->getHighest()) >= static_cast<ghidra::uintb>(r->size)) continue;
+                    if (!runsBefore(r)) continue;   // (A7-32)
                     if (!any || r->time > any->time) any = r;
                     if (r->time < when->second && (!earlier || r->time > earlier->time)) earlier = r;
                 }
