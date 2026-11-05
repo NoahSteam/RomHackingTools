@@ -14043,6 +14043,98 @@ void TestEngineAllocationFailureInChild(const char* self, const std::string& scr
 
 }  // namespace
 
+// SE_A7R4_PROBE=<file> (area 7 round 4) runs only this (see main): one function a line, `name|base|words|lend`; base and words in hex (the
+// words from the base, in work RAM high), lend: callee addresses whose prototypes are lent, comma separated. Prints the text with every
+// token's instruction (DumpMappingTokens), the access fates with their flow blocks, the flow's blocks and the mapping audit. For fixtures
+// a reviewer draws without rebuilding the suite.
+int TestArea7Round4Probe(const char* path)
+{
+    Sh2Decompiler d(gConfig);
+    std::ifstream in(path);
+    std::string line;
+    std::vector<uint8_t> hw(0x100000u, 0);
+    const std::function<bool(uint32_t, uint16_t&)> word = [&hw](uint32_t x, uint16_t& w) {
+        x &= 0x07FFFFFFu;
+        if (x < 0x06000000u || x - 0x06000000u + 1 >= hw.size()) return false;
+        w = static_cast<uint16_t>(hw[x - 0x06000000u] << 8 | hw[x - 0x06000000u + 1]);
+        return true;
+    };
+    uint64_t serial = 90000;
+    while (std::getline(in, line))
+    {
+        if (line.empty() || line[0] == '#') continue;
+        const std::vector<std::string> field = R8Split(line, '|');
+        if (field.size() < 3) continue;
+        // `dis|<image>|<from>|<to>`: the image's instructions; `img|<image>|<entry>[|lend]`: a function of an image
+        if (field[0] == "dis" || field[0] == "img")
+        {
+            std::ifstream f(field[1], std::ios::binary);
+            std::vector<uint8_t> image((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+            std::fill(hw.begin(), hw.end(), 0);
+            std::copy(image.begin(), image.begin() + static_cast<std::ptrdiff_t>(std::min(image.size(), hw.size())), hw.begin());
+            if (field[0] == "dis")
+            {
+                const uint32_t from = static_cast<uint32_t>(std::strtoul(field[2].c_str(), nullptr, 16));
+                const uint32_t to = field.size() > 3 ? static_cast<uint32_t>(std::strtoul(field[3].c_str(), nullptr, 16)) : from + 0x40;
+                for (uint32_t a = from; a < to; a += 2)
+                {
+                    uint16_t w = 0;
+                    if (!word(a, w)) break;
+                    const sfe::DisassembledInstruction dd = sfe::Sh2Decode(a, w);
+                    std::printf("  %08X  %04X  %s %s\n", a, w, dd.Mnemonic.c_str(), dd.Operands.c_str());
+                }
+                continue;
+            }
+        }
+        const bool fromImage = field[0] == "img";
+        const uint32_t base = static_cast<uint32_t>(std::strtoul(field[fromImage ? 2 : 1].c_str(), nullptr, 16));
+        if (!fromImage) std::fill(hw.begin(), hw.end(), 0);
+        if (!fromImage)
+        {
+            std::istringstream ws(field[2]);
+            std::string tok;
+            uint32_t at = base;
+            while (ws >> tok)
+            {
+                if (tok.size() > 1 && tok[0] == '@')   // @addr: continue the words there
+                {
+                    at = static_cast<uint32_t>(std::strtoul(tok.c_str() + 1, nullptr, 16));
+                    continue;
+                }
+                dts::Put16(hw, at - 0x06000000u, static_cast<uint16_t>(std::strtoul(tok.c_str(), nullptr, 16)));
+                at += 2;
+            }
+        }
+        auto snap = MakeSnapshot(hw, ++serial);
+        DecompileRequest q = Request(base);
+        if (field.size() > (fromImage ? 4u : 3u))
+            for (const std::string& a : R8Split(field[fromImage ? 4 : 3], ','))
+                if (!a.empty())
+                {
+                    const uint32_t addr = static_cast<uint32_t>(std::strtoul(a.c_str(), nullptr, 16));
+                    q.prototypes.emplace_back(addr, d.Decompile(snap, Request(addr)).prototype);
+                }
+        const DecompileResult r = d.Decompile(snap, q);
+        std::printf("==== %s\n", field[0].c_str());
+        Print(field[0].c_str(), r);
+        for (const AccessFate& f : r.accessFates)
+            std::printf("  fate: %s %u at %08X addr %08X%s%s fate %d flow block %d order %u\n", f.write ? "write" : "read", unsigned(f.size), f.insn, f.address,
+                        f.frame ? " frame" : "", f.constantAddress ? " const" : "", int(f.fate), f.origBlock, f.origOrder);
+        for (size_t k = 0; k < r.flowBlockRanges.size(); ++k)
+        {
+            std::printf("  flow block %zu: %08X..%08X ->", k, r.flowBlockRanges[k].first, r.flowBlockRanges[k].second);
+            if (k < r.flowSuccessors.size())
+                for (int n : r.flowSuccessors[k]) std::printf(" %d", n);
+            std::printf("\n");
+        }
+        dts::DumpMappingTokens(stdout, r, word, field[0].c_str());
+        const dts::MappingAudit a = dts::AuditMapping(r, word, field[0]);
+        dts::PrintMappingAudit(a, field[0].c_str());
+        std::printf("  violations %d\n", a.Violations());
+    }
+    return 0;
+}
+
 int main(int argc, char** argv)
 {
     if (argc == 5 && std::string(argv[1]) == "--engine-oom")
@@ -14065,6 +14157,12 @@ int main(int argc, char** argv)
     CHECK(sfe::MakeDirectory(scratch));
     gConfig = dts::Join(scratch, "config");
     CHECK(sfe::MakeDirectory(gConfig));
+    if (const char* probe = std::getenv("SE_A7R4_PROBE"))   // area 7 round 4: the reviewer's probe file, nothing else
+    {
+        TestArea7Round4Probe(probe);
+        dts::RemoveTree(scratch);
+        return dts::Finish("Sh2DecompilerTests (probe)", start);
+    }
     if (const char* fixtures = std::getenv("SE_AREA2_FIXTURES"))   // round 8: the fixtures of a file, nothing else
     {
         try
