@@ -3808,7 +3808,9 @@ const char* const kFollowScriptPins[] = {
 // (area 8 fixer, A8-36 to A8-39) Generated sequences with the evidence operations and Enter on the untouched box that failed with the fix
 // reverted: the seed, mix 9 (Auto-refresh and Show in Pseudocode), and CPU-weighted without hover.
 struct FollowPinE { uint64_t seed; bool autoMix, cpu; };
-const std::vector<FollowPinE> kFollowPinsEvidence = {};
+// Mix 8 seed 2 fails with the pin's verdict frozen (A8-37, A8-33: names given to every entry under a pin of A, still "rts scan"); mix 9 seed 3 with Enter on
+// the box always the typed entry (A8-36: Enter on the box Follow PC filled shows "user-set entry").
+const std::vector<FollowPinE> kFollowPinsEvidence = { { 2, false, false }, { 3, true, false } };
 
 // (area 8 fixer) A8-41: sequences of SE_TRUST_HIDDEN_RENAME=1, kept in the default run (mix, seed).
 struct HiddenRenamePin { int mix; uint64_t seed; };
