@@ -1204,6 +1204,42 @@ void TestArea7Round7()
         const dts::MappingAudit a = dts::AuditMapping(damaged, word, "a7_33 damaged");
         dts::PrintMappingAudit(a, "a7_33 damaged");
         CHECK(a.Violations() == 0);   // (A7-33: the damaged result passes; fixed: a violation)
+        // ...while the same damage that keeps the store's empty token is seen: numberStoreOther bites (the fixer's checks were proved by
+        // switches in the product, not pinned; these pin them on damaged results)
+        DecompileResult kept = r;
+        for (Line& x : kept.lines)
+            if (Has(x.text, "xRam0603ac00 = 4;"))
+            {
+                for (Token& t : x.tokens)
+                    if (t.begin < t.end && t.addr) t.addr = 0x0607000Au;
+                Token s;
+                s.begin = s.end = static_cast<uint16_t>(x.text.size());
+                s.addr = 0x06070010u;
+                x.tokens.push_back(s);
+                x.firstAddr = 0x0607000Au;
+            }
+        const dts::MappingAudit k = dts::AuditMapping(kept, word, "a7_28 damaged");
+        CHECK(k.numberStoreOther == 1);
+    }
+    // caseOtherEntry bites: A7-29's fixture with the outer `case 2:` moved back to the inner switch's entry (A7-29 as it was).
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06070000u, { 0x4F22, 0xD518, 0xE103, 0x3416, 0x8D28, 0x6143, 0x311C, 0xC702,
+            0x011D, 0x301C, 0x402B, 0x0009, 0x0008, 0x0010, 0x003E, 0x0040, 0xE201, 0x2522, 0xA01A, 0x0009, 0xE102, 0x3616, 0x8D16, 0x6163,
+            0x311C, 0xC702, 0x011D, 0x301C, 0x402B, 0x0009, 0x0006, 0x000E, 0x0012, 0xE207, 0x1521, 0xA009, 0x0009, 0xA007, 0x0009, 0xE209,
+            0x1522, 0xA003, 0x0009, 0x0009, 0xE203, 0x1523, 0x4F26, 0x000B, 0x0009, 0x0000, 0x0603, 0xAC00 });
+        DecompileResult moved = r;
+        int n = 0;
+        for (Line& x : moved.lines)
+            if (Has(x.text, "case 2:") && x.firstAddr == 0x06070056u)
+            {
+                for (Token& t : x.tokens)
+                    if (t.addr == 0x06070056u) t.addr = 0x0607004Eu;
+                x.firstAddr = 0x0607004Eu;
+                ++n;
+            }
+        CHECK(n == 1);
+        const dts::MappingAudit a = dts::AuditMapping(moved, word, "a7_29 damaged");
+        CHECK(a.caseOtherEntry == 1);
     }
 }
 
