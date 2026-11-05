@@ -15674,3 +15674,106 @@ The generated runs do not reach the new findings, and cannot: the Follow rig has
 
 * Area 4: nothing. The finder's texts and verdicts are right. A8-37 is the panel keeping an old verdict, not the finder giving a wrong one.
 * Area 1: **A8-41**. The model in `DecompilerModelTests.cpp` erases a starved signature on a panel cache hit, and the panel's cache and the runner's memo key the names differently (generation against content). Otherwise nothing: Enter on the pinned entry asks the same `Question`, and the cache and the stale rule are right about it. What changes is only the verdict the label and the Entry line are drawn from.
+
+## Area 9, round 2
+
+Branch `review/9-round2` from master `112eed2f`. An adversarial round on BIOS and external files, independent of round 1's conclusions: each round 1 fix attacked with inputs round 1 did not use, the files' life across a session (what the save after a load does), several instances, odd targets and line ends, and what the panel shows when a load fails. Filed **A9-18 to A9-30** in `Docs/Decompiler/REVIEW_LEDGER.md`: **two P1 (A9-19, A9-20), four P2 (A9-18, A9-21, A9-22, A9-23), seven P3 (A9-24 to A9-29) and an instrument row (A9-30)**. **The round is not clean.** No product code changed: the oracle (`FrontEnd/tests/LoaderFuzzTests.cpp`), the ledger and this record.
+
+### What changed on master since round 1
+
+`git diff 0f5a5c9 master` on the loaders' files is round 1's own fixes plus, since its merge (`5428fe61`), the A7-5 "Show in Pseudocode" request (`App.cpp`, `AssemblyPanel.cpp/.h`), the decompiler and panel work of areas 1 to 8 (`Sh2Decompiler.cpp`, `DecompilerPanel.cpp`: no new file access; checked by search for `fopen`, `ifstream`, `ofstream`, `ReadWholeFile`, `ReadFileCapped`, `stat`), and `YssFixtureTests` returning 77 when it has no data (A11-10). No loader was added.
+
+### Attacks on the round 1 fixes
+
+| Row | Attack (new inputs) | Holds? |
+|---|---|---|
+| A9-1 | The BIOS path a link that another process flips between a file and a FIFO while it is read: `ReadFileCapped` stats, then opens. | The size, FIFO and `/dev/zero` cases hold; the race is lost within 2,000 loads and the open waits for ever (A9-24 c). |
+| A9-2, A9-4, A9-10 | First words of the letters a-f alone: `Dead`, `add`, `a`, `beef`, `cafe`; the 64-bit, signed and glued forms again under a classifier that names each difference by its own line. | No for the prose words, which are the examples A9-4 was filed for (A9-18); yes for the rest (round 1's mutation, the length check removed from `ParseAddressNameLine`, still gives `ADDR_TRUNCATED` 258 and 173 in 2,500 cases). |
+| A9-3 | Two instances that each load, one renames, the other exits; each sets a start. | Torn reads: holds (the concurrent module, rerun). Lost updates: no; atomic saves were never about them (A9-20). |
+| A9-4, A9-11 | The save after a refused load: a file over the ceiling, a file the user cannot read in a folder the user can write, a file the application wrote itself. | The refusal holds; the next save writes over the refused file (A9-19). |
+| A9-5 | `Verify` reads with `ReadFileCapped`: the same stat/open window (A9-24 c). | Yes, apart from the race. |
+| A9-6, A9-7 | Re-read the walk; every other offset-plus-length sum in `SavestateDriver.cpp` and `LiveDriver.cpp` `ReadSnapshot` read for a 32-bit `size_t`. | Yes; no other sum wraps (A9-30). |
+| A9-8 | The region directory module rerun (seed 29). | Yes. |
+| A9-9 | A reload that fails, then the BIOS popup. | The image is dropped as fixed, but Reload and Stop Using are then disabled, so the guide's "the next Reload ... tries it again" cannot be done (A9-26). |
+| A9-12 | A carriage return inside a value; a file with CR line ends. | No key is injected (CR inside a value stays in it); a CR-only `settings.ini` loads with no keys and no error (A9-25). |
+| A9-13 | `nan` and `1e999` (the settings dictionary; the check is `std::isfinite`, read). | Yes. |
+| A9-15 (accepted) | A 0600, read-only or hard-linked target. | As accepted for links; the mode, the read-only bit and a hard link are lost the same way (A9-28). |
+
+### Findings
+
+| Row | Sev | What | Status |
+|---|---|---|---|
+| A9-18 | P2 | A9-4's fix does not hold for its own examples: a first word of letters a-f (`Dead`, `add`, `a`, `beef`) is still an address in the bounds, names and notes files | open |
+| A9-19 | **P1** | A file the loader refused is written over by the next save (names and notes at every exit, settings at exit, bounds at the next start set); Load Symbols writes a names file the next start refuses, and that session's exit empties it | open |
+| A9-20 | **P1** | Two instances in one folder: the one that changed nothing undoes the other's renames and notes at its exit; starts and settings are lost updates | open |
+| A9-21 | P2 | The next save erases the lines the loader skipped (and said it skipped), every comment line, every remark after a bounds address; an on-chip bounds address is dropped uncounted | open |
+| A9-22 | P2 | A saved volatile list that does not parse is shown in the Volatile popup with no error, as if in force; the engine runs with none | open |
+| A9-23 | P2 | Windows: the open dialogs change the current directory, and the names, notes and starts files are relative paths, so a session's work is saved in the last dialog's folder (read, not run) | open |
+| A9-24 | P3 | Savestate and dump openers on a FIFO wait for ever; a save to a FIFO waits (the exit hangs); `ReadFileCapped`'s stat/open race opens a FIFO | open |
+| A9-25 | P3 | A lone CR is not a line end: a CR-only names file is one name holding the rest of the file; a CR-only `settings.ini` loads empty without an error | open |
+| A9-26 | P3 | After a failed BIOS load, Reload and Stop Using are disabled, against the guide | open |
+| A9-27 | P3 | A failed notes save while editing is not reported; a failed starts save gives no reason | open |
+| A9-28 | P3 | A save replaces a read-only file, resets a 0600 mode, splits a hard link | open |
+| A9-29 | P3 | Round 1's record is spliced with area 7 round 2's (merge) | open, to the coordinator |
+| A9-30 | P3 | Instrument | open |
+
+**Severity, said plainly.** A9-19 and A9-20 are P1 because the user's own work is destroyed with nothing on screen that says so: in A9-19 the Log says only that a file was "not read", and the application itself makes the oversized names file in one ordinary step (Load Symbols on a large map); in A9-20 the trigger is two windows open on the same folder, the second untouched. A9-3, which round 1 rated P2, reached the same loss through a race; these are deterministic, which is why they are rated by their result. A9-18 is A9-4's own severity, since its examples still reproduce. A9-21 is P2 because the Log's "were skipped" hides that the next save erases the lines. A9-22 hides an A5-1-class loss (a mailbox folded) behind a display that says the list is set. A9-23 would be P1 if it reproduces as read; it is P2 until it is run on Windows.
+
+### The oracle, extended
+
+`FrontEnd/tests/LoaderFuzzTests.cpp`, test code only (the same target, no new `ctest` entry):
+
+* **I5** (new invariant): a save keeps what the user put in the file: it does not write over a file the loader refused, does not erase lines the loader skipped or comments its format allows, does not undo what another instance saved; and a save, like a load, never waits on a path that is not a file.
+* **`lifecycle`** (directed, 20 cases, with the other directed cases): the classes' `Load` and `Save` called in `App`'s order (names and notes saved at every exit, settings at the exit, starts at the next change): refused files (over the ceiling; mode 000 in a writable folder, in a child that drops to nobody when run as root; the Load Symbols merge), skipped lines, comments and remarks, two instances, FIFO targets (in a child, 3 s), a 0600, hard-linked and read-only target, CR line ends.
+* **`links.savestate`**: `se_savestate_open` and `se_savestate_open_full_dump` on a FIFO, `/dev/zero`, a folder (in a child).
+* **`concurrent.race`**: the BIOS loader through a link another process flips between a file and a FIFO (`SE_LOADFUZZ_RACE_TRIES`, default 5,000 loads in 6 s).
+* **References.** `ParseSymbolRef` reads a first word of one to seven letters a-f, with no digit and no `0x`, as prose (eight letters stay an address); `LinesCR` ends a line at a lone CR for the names, notes and bounds files (settings keep LF, as their own writer does).
+* **Classifier.** Round 1 named a difference by the first bad line in the text; with A9-18's prose lines accepted that made any class of any text. Each difference is now named by its own cause (`DiffClasses`): an entry the LF-only reading also gives is A9-25's; an extra entry is the bad line that a strict, then a liberal (`strtoul`, a sign, 32 bits) reading of its first word makes it; a missing one is `DROPS_VALID`. `SE_LOADFUZZ_DIFF=1` prints the differing entries of a replayed `names` case.
+* **`Known()`** lists the twenty new classes with their rows (counted, not failed), so `ctest` stays green and a class that stops occurring is reported.
+
+**Mutation checks** (product edits made locally, run, and reverted; none committed): (1) the prose rule in `ParseAddressNameLine` and `FunctionBounds::Load`: `PROSE_AS_ADDRESS` is gone from all three modules in 2,500 cases each, and `ROUNDTRIP` appears in `names` and `comments` (the `%x` save, noted in A9-18); (2) a lone CR made a line end in the three loaders: `LONE_CR_JOINS_LINES` gone, nothing else new once the reference reads CR the same way (the first version of the reference did not, and showed `SET_DIFFERS`: fixed in the oracle); (3) `ReadFileCapped` opening with `O_NONBLOCK` and checking the descriptor: `STAT_OPEN_RACE` gone; (4) round 1's own mutation (the address length check removed): `ADDR_TRUNCATED`, `SIGNED_ADDR`, `ACCEPTS_MALFORMED` come back in `names` and `comments`, so the new classifier does not hide round 1's classes.
+
+### Runs
+
+The oracle under AddressSanitizer and UBSan (`build-asan`, Debug, `-fsanitize=address,undefined -fno-omit-frame-pointer`, `detect_leaks=1`), with a seed round 1 did not use (29), in four pieces of 1,500 case indices a module (`run_pieces.sh 0 3 29`, `CASES_PER_PIECE=1500`, each piece under `timeout 1200`): 200, 193, 202 and 220 s.
+
+| Module | Cases (seed 29, indices 0 to 5,999 scaled) |
+|---|---|
+| savestate | 5,624 |
+| regiondir | 1,124 |
+| bios | 7,500 |
+| settings | 5,624 |
+| names (Load and Import) | 9,372 |
+| bounds | 9,372 |
+| comments | 5,624 |
+| ranges | 30,000 |
+| specbundle | 1,500 |
+| all | 75,740 |
+
+Every piece exited 0: no violation class outside the ledger, no sanitizer report, no UBSan runtime error. The classes seen are A9-18's and A9-25's only (piece 3: `PROSE_AS_ADDRESS` 215, 143, 339 in names, notes, bounds; `LONE_CR_JOINS_LINES` 83, 56, 18). The directed cases (round 1's pins, oversize, links, concurrent, and round 2's lifecycle, savestate links and race) ran under the same build on seed 9: 2,133 cases in 46 s, every class in the ledger, no report. The default `ctest` run of the test (ordinary build) is in the matrix.
+
+### Matrix
+
+RelWithDebInfo, gcc 13, own build in the worktree (`build-rel`), `-j2`, every test binary under `ulimit -v 3500000`.
+
+| Run | Result |
+|---|---|
+| `ctest -E SaturnExplorerLive -j1 --timeout 900` | 102 of 102 passed, 354 s (the engine test 42 s, the fault test 76 s, the trust test 55 s, the loader fuzz test 23 s: it was 5.4 s, and the round 2 directed cases add the FIFO and race children, 3 to 6 s each, and the lifecycle files of several MiB) |
+| `ctest -R SaturnExplorerLive -j1` | 6 of 6 passed, 29 s |
+| `SaturnExplorerLoaderFuzzTests` default run under ASan and UBSan | 2,133 cases in 46 s, exit 0, every class in the ledger |
+| the long run above | 75,740 cases, exit 0 in every piece, no sanitizer report |
+
+No new `ctest` entry (108 with the Live tests, as on master): the round extends `SaturnExplorerLoaderFuzzTests`. No product code changed, so the fault suite was not rerun on its own (it passed inside `ctest`).
+
+### Routed
+
+* A9-29 (the spliced record): the coordinator, who keeps the record.
+* A9-22 touches area 5's volatile memory (what is lost when the list is not in force) and area 1's panel; the fix is in the panel and `App`.
+* A9-19 and A9-20 need a decision on the files' ownership (one writer per folder with a lock, or merge on save, or reload before save); `FileLock` (`FileWrite.h`) already serialises the language files across instances.
+
+### For the next round
+
+* Run A9-23 on Windows (and A9-17 e, sharing violations on the names file another instance has open).
+* The live wire (A9-17 a) is still not fuzzed: `FakeLiveServer.h` can serve raw bytes to `ReadSnapshot`.
+* A9-22 and A9-26 are read, not run: `DecompilerPanelTests` can hold the popup's text and the BIOS menu's enabled items.
+* When A9-19 and A9-20 are fixed in `App` rather than in the classes, the `lifecycle` cases must call the new seam.
