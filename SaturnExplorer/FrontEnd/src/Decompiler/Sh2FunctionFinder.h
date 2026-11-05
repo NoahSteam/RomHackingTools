@@ -96,18 +96,23 @@ public:
     void SetEntry(uint32_t address);           // canonicalised
     void ClearEntry(uint32_t address);
 
-    // Replaces the set from 'path'; a missing file is an empty set. A line is an address (one to eight hex digits,
-    // optionally 0x-prefixed, then anything after white space) or a comment (; # // or blank); any other line is skipped
+    // Replaces the set from 'path'; a missing file is an empty set. A line is an address (the rule of AddressNameLine.h: a word of the letters a-f alone is not one;
+    // then anything after white space) or a comment (; # // or blank); any other line is skipped
     // and counted (SkippedLines), not read as the address its first characters spell. False, with 'error', and the set
     // left as it was, when the file is there and was not read: not a regular file, over 4 MiB, unreadable.
     bool Load(const std::string& path = kDefaultFile, std::string* error = nullptr);
-    bool Save(const std::string& path = kDefaultFile) const;
+    // Applies this session's changes (starts set or cleared since Load) to the file as it is now, under a lock, and writes it
+    // atomically; comments, remarks and lines Load skipped are kept, another instance's starts are kept, and a session that
+    // changed nothing writes nothing. Refused, with 'error' naming the file and why, when Load refused it (A9-19, A9-20, A9-21).
+    bool Save(const std::string& path = kDefaultFile, std::string* error = nullptr) const;
 
     size_t SkippedLines() const { return mSkipped; }
     size_t FirstSkippedLine() const { return mFirstSkipped; }
 
 private:
     std::set<uint32_t> mEntries;
+    mutable std::set<uint32_t> mBase;   // the starts the file held at Load (or the last Save), for 'path' below
+    std::string mBasePath, mRefusedWhy;
     size_t mSkipped = 0, mFirstSkipped = 0;
 };
 

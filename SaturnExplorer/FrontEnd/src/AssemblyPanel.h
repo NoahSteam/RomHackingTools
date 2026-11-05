@@ -6,6 +6,8 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
+#include <map>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -97,6 +99,8 @@ public:
     bool LoadComments(std::string* error = nullptr);
     bool SaveComments(std::string* error = nullptr) const;
     size_t SkippedCommentLines() const { return mSkippedCommentLines; }
+    // Where a failed save after an edit is reported (the App's Log), with the reason (A9-27). Unset: not reported.
+    void SetSaveErrorHandler(std::function<void(const std::string&)> h) { mOnSaveError = std::move(h); }
 
 private:
     struct Line
@@ -171,6 +175,10 @@ private:
     // and persisted across sessions. Shared by both CPUs (they share the address map).
     std::unordered_map<uint32_t, std::string> mComments;
     size_t mSkippedCommentLines = 0;
+    mutable std::map<uint32_t, std::string> mBase;   // the notes the file held at Load or at the last Save
+    std::string mRefusedWhy;                          // why LoadComments refused the file (A9-19)
+    std::function<void(const std::string&)> mOnSaveError;
+    void SaveAfterEdit();
     // Which operand the row context menu was opened on, latched at open time (-1 when it
     // was opened from a cell other than the operands). The pointer has usually moved off
     // the operand by the time a menu item is picked, so it cannot be re-read then.

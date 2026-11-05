@@ -1560,6 +1560,33 @@ void TestUnparsedVolatileKept()
     CHECK(f.panel.VolatileMemory().empty());   // the unparsed text is gone for good
 }
 
+// A9-22: a saved list that did not parse is not in force, and the popup says so (it used to open with the text and no error).
+void TestUnparsedVolatileIsSaid()
+{
+    Fixture f;
+    CHECK(!f.panel.VolatileNotInForce() && f.panel.UnparsedVolatileProblem().empty());
+    f.panel.KeepUnparsedVolatileMemory("26001000-zz");
+    CHECK(f.panel.VolatileNotInForce());
+    CHECK(Has(f.panel.UnparsedVolatileProblem(), "NOT in force"));
+    CHECK(f.panel.SetVolatileMemory("26001000-26001003"));
+    CHECK(!f.panel.VolatileNotInForce() && f.panel.UnparsedVolatileProblem().empty());
+    CHECK(f.panel.SetVolatileMemory(""));
+    f.panel.KeepUnparsedVolatileMemory(std::string(4000, '1'));   // over the popup's buffer: refused at start
+    CHECK(Has(f.panel.UnparsedVolatileProblem(), "longer"));
+}
+
+// A9-26: after a BIOS image failed to load (no image, the path kept) Reload and Stop Using are offered.
+void TestBiosItemsAfterFailedLoad()
+{
+    DecompilerView v;
+    CHECK(!DecompilerPanel::BiosItemsEnabled(v));
+    v.biosPathHeld = true;
+    CHECK(DecompilerPanel::BiosItemsEnabled(v));
+    v.biosPathHeld = false;
+    v.bios = BiosImage::Make(std::vector<uint8_t>(64, 0));
+    CHECK(DecompilerPanel::BiosItemsEnabled(v));
+}
+
 // A function start set after the answer arrived makes the shown output stale even when nothing is
 // pending any more (review of 0e3cd12: after a Stop, or with the runner disabled, nothing re-asks).
 void TestFunctionSetChangeIsStale()
@@ -3102,6 +3129,8 @@ int main(int argc, char** argv)
         RUN(TestRenameBiosAndBounds());
         RUN(TestPrototypeProvenance());
         RUN(TestUnparsedVolatileKept());
+        RUN(TestUnparsedVolatileIsSaid());
+        RUN(TestBiosItemsAfterFailedLoad());
         RUN(TestFunctionSetChangeIsStale());
         RUN(TestFunctionSetKeysQuestions());
         RUN(TestCalleeHintsBelongToTheirSnapshot());

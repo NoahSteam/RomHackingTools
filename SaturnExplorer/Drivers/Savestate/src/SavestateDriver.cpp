@@ -1,3 +1,8 @@
+#ifndef _WIN32
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
 #include "SavestateDriver.h"
 
 #include <algorithm>
@@ -183,7 +188,22 @@ bool OverSavestateCap(size_t size) { return size >= kMaxSavestateBytes; }
 // truncated-but-valid state.
 bool LoadFile(const std::string& path, std::vector<uint8_t>& out)
 {
+#ifdef _WIN32
     FILE* file = std::fopen(path.c_str(), "rb");
+#else
+    // Opened without waiting and checked through the descriptor: a FIFO picked in the Open Savestate or Load Raw Dump dialog
+    // blocked the opening thread for ever (A9-24). Only a regular file is read.
+    FILE* file = nullptr;
+    {
+        const int fd = ::open(path.c_str(), O_RDONLY | O_NONBLOCK | O_CLOEXEC);
+        if (fd >= 0)
+        {
+            struct stat st;
+            if (::fstat(fd, &st) == 0 && S_ISREG(st.st_mode)) file = ::fdopen(fd, "rb");
+            if (!file) ::close(fd);
+        }
+    }
+#endif
     if (!file)
     {
         return false;

@@ -15,6 +15,8 @@
 #include "AddressNameLine.h"
 #include "FileRead.h"
 #include "FileWrite.h"
+#include "StoreMerge.h"
+#include "WorkFiles.h"
 #include "Sh2Operands.h"
 #include "WatchPanel.h"
 
@@ -473,7 +475,7 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
                         if (mCommentBuf[0]) mComments[ln.addr] = mCommentBuf;
                         else                mComments.erase(ln.addr);
                         mEditingComment = false;
-                        SaveComments();
+                        SaveAfterEdit();
                     }
                 }
                 else
@@ -540,7 +542,7 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
                                   it != mComments.end() ? it->second.c_str() : "");
                 }
                 if (ImGui::MenuItem("Clear Comment", nullptr, false, mComments.count(ln.addr) != 0))
-                { mComments.erase(ln.addr); SaveComments(); }
+                { mComments.erase(ln.addr); SaveAfterEdit(); }
                 ImGui::Separator();
                 // Aims at the operand's address when it has one, else the instruction's own, so the
                 // item is available on every row (but not on an uncertain PC-relative operand).
@@ -613,27 +615,42 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
 // stopgap that no-ops on the web build's ephemeral MEMFS).
 namespace
 {
-const char* kCommentFile = "assembly_comments.txt";
+const char* kCommentName = "assembly_comments.txt";
+std::string CommentFile() { return WorkFilePath(kCommentName); }
 const size_t kMaxCommentFileBytes = 8u * 1024u * 1024u;
+}
+
+void AssemblyPanel::SaveAfterEdit()
+{
+    std::string err;
+    if (!SaveComments(&err) && mOnSaveError) mOnSaveError(err);
 }
 
 bool AssemblyPanel::LoadComments(std::string* error)
 {
     std::string text;
-    switch (ReadFileCapped(kCommentFile, kMaxCommentFileBytes, text))
+    const std::string file = CommentFile();
+    std::string why;
+    switch (ReadFileCapped(file, kMaxCommentFileBytes, text))
     {
     case CappedRead::Ok: break;
-    case CappedRead::Missing: return true;
-    case CappedRead::TooLarge: if (error) *error = std::string(kCommentFile) + " is larger than 8 MiB; not read"; return false;
-    case CappedRead::NotRegular: if (error) *error = std::string(kCommentFile) + " is not a regular file; not read"; return false;
-    case CappedRead::Unreadable: if (error) *error = std::string("could not read ") + kCommentFile; return false;
+    case CappedRead::Missing: mRefusedWhy.clear(); mBase.clear(); return true;
+    case CappedRead::TooLarge: why = file + " is larger than 8 MiB; not read"; break;
+    case CappedRead::NotRegular: why = file + " is not a regular file; not read"; break;
+    case CappedRead::Unreadable: why = "could not read " + file; break;
     }
+    if (!why.empty())
+    {
+        mRefusedWhy = file + " was refused (" + why + ")";   // no save may replace it (A9-19)
+        if (error) *error = why;
+        return false;
+    }
+    mRefusedWhy.clear();
     mComments.clear();
     mSkippedCommentLines = 0;
-    std::istringstream in(text);
-    std::string line, note;
+    std::string note;
     uint32_t addr = 0;
-    while (std::getline(in, line))
+    for (const std::string& line : SplitLines(text))
     {
         switch (ParseAddressNameLine(line, addr, note))
         {
@@ -642,26 +659,27 @@ bool AssemblyPanel::LoadComments(std::string* error)
         case AddressNameLine::Malformed: ++mSkippedCommentLines; break;
         }
     }
+    mBase.clear();
+    for (const auto& kv : mComments) mBase[kv.first] = kv.second;
     return true;
 }
 
 bool AssemblyPanel::SaveComments(std::string* error) const
 {
-    // Staged and renamed: written in place, a second instance (or a crash) read half of the notes as all of them (A9-3).
-    std::string text;
-    char b[16];
+    // Only this session's changes, on the file as it is now, under a lock, atomically (A9-19, A9-20, A9-21); see StoreMerge.h.
+    AddressMap cur;
     for (const auto& kv : mComments)
-    {
-        if (kv.second.empty()) continue;
-        std::snprintf(b, sizeof b, "%x ", kv.first);
-        text += b;
-        text += kv.second;
-        text += '\n';
-    }
-    std::string why;
-    if (WriteFileAtomically(kCommentFile, text.data(), text.size(), why)) return true;
-    if (error) *error = std::string(kCommentFile) + ": " + why;
-    return false;
+        if (!kv.second.empty()) cur[kv.first] = kv.second;
+    auto classify = [](const std::string& line, uint32_t& a) {
+        std::string n;
+        return ParseAddressNameLine(line, a, n) == AddressNameLine::Entry;
+    };
+    auto format = [](uint32_t a, const std::string& n) {
+        char b[16];
+        std::snprintf(b, sizeof b, "%08x ", a);
+        return std::string(b) + n + "\n";
+    };
+    return SaveStore(CommentFile(), "The assembly notes", mRefusedWhy, kMaxCommentFileBytes, mBase, cur, classify, format, std::string(), error);
 }
 
 }  // namespace sfe

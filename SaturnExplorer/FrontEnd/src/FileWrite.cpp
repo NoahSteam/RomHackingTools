@@ -188,6 +188,26 @@ bool WriteFileAtomically(const std::string& path, const void* data, size_t size,
         return WriteDirect(path, data, size, error);
     }
 
+    // What the user set on the file survives the save (A9-28). A read-only file is the user's protection: it is not
+    // replaced, and the save says so (Windows does the same, MoveFileEx refuses). Its permission bits go to the new file.
+    // A hard link to it is not kept: the new file has a new identity, as for a symlink (A9-15, accepted).
+    unsigned keepMode = 0;
+    bool haveMode = false;
+#ifndef _WIN32
+    {
+        struct stat st;
+        if (::stat(path.c_str(), &st) == 0 && S_ISREG(st.st_mode))
+        {
+            if ((st.st_mode & 0222) == 0)
+            {
+                error = path + " is read-only; it was not replaced (clear the read-only bit to save)";
+                return false;
+            }
+            keepMode = static_cast<unsigned>(st.st_mode & 07777);
+            haveMode = true;
+        }
+    }
+#endif
     std::string temp;
     FILE* f = OpenStagingFile(path, temp, error);
     if (f == nullptr) return false;
@@ -201,6 +221,11 @@ bool WriteFileAtomically(const std::string& path, const void* data, size_t size,
         ~TempGuard() { if (armed) RemoveFile(path); }
     } guard{ temp, true };
     if (!WriteAndClose(f, temp, data, size, error)) return false;
+#ifndef _WIN32
+    if (haveMode) (void)::chmod(temp.c_str(), static_cast<mode_t>(keepMode));   // best effort: the file is still whole if it fails
+#else
+    (void)keepMode; (void)haveMode;
+#endif
     if (!PublishFile(temp, path, error)) return false;
     guard.armed = false;   // the rename took the name
     return true;

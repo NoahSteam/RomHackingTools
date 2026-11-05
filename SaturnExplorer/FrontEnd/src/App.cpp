@@ -29,7 +29,13 @@
 #include "Disc/DiscBuilder.h"     // Build Disc Image: BIN/CUE (+ audio tracks) or ISO
 #include "Disc/PathUtil.h"        // ReadWholeFile: a checked read of IP.BIN
 #include "DataSearch.h"           // IsDirectory / PathExists for the disc build
-#include "FileWrite.h"          // FileOrDirectoryExists: an unused folder for each diff comparison
+#ifdef _WIN32
+#include <direct.h>
+#else
+#include <unistd.h>
+#endif
+#include "FileWrite.h"
+#include "WorkFiles.h"           // SetWorkFolder: the names, notes and starts files stay where the app started (A9-23)          // FileOrDirectoryExists: an unused folder for each diff comparison
 #include "DiffTool.h"             // hand the two compared frames to an external diff program
 #include "BinaryWriter.h"         // PushU16/PushU32 + the shared BMP encoders
 #include "Debug/FormatString.h"   // tracepoint output mini-syntax
@@ -305,6 +311,17 @@ void App::Initialize()
         mIniPath = Settings::LayoutFilePath();   // config-dir path assembly lives in Settings
         if (!mIniPath.empty()) ImGui::GetIO().IniFilename = mIniPath.c_str();
     }
+    // The names, notes and function starts are files in the folder the app started in. Fixed here as an absolute path: the
+    // Windows open dialogs change the process's current directory, and a relative name would follow them (A9-23).
+    {
+        char cwd[4096];
+#ifdef _WIN32
+        if (_getcwd(cwd, sizeof cwd)) SetWorkFolder(cwd);
+#else
+        if (::getcwd(cwd, sizeof cwd)) SetWorkFolder(cwd);
+#endif
+    }
+    mAssemblyPanel.SetSaveErrorHandler([this](const std::string& why) { mLog.Error("Could not save the assembly notes: " + why); });
     LoadSettings();                // panel visibility, data dir, emulator paths
 
     mWatchPanel.LoadSession();     // restore the session's watch list, if any
@@ -312,7 +329,7 @@ void App::Initialize()
         std::string err;
         if (!mAssemblyPanel.LoadComments(&err)) mLog.Error("Assembly comments: " + err);   // restore the session's assembly comments
         else if (mAssemblyPanel.SkippedCommentLines())
-            mLog.Warn("assembly_comments.txt: " + std::to_string(mAssemblyPanel.SkippedCommentLines()) + " line(s) are not \"<hex-address> <note>\" and were skipped");
+            mLog.Warn("assembly_comments.txt: " + std::to_string(mAssemblyPanel.SkippedCommentLines()) + " line(s) are not \"<hex-address> <note>\" and were skipped; they stay in the file");
     }
     {
         // A file that is there and was not read, or lines in it that were not entries, are said (A9-2, A9-4): the names
@@ -320,22 +337,22 @@ void App::Initialize()
         std::string err;
         if (!mFunctionNames.Load(&err)) mLog.Error("Function names: " + err);
         else if (mFunctionNames.SkippedLines())
-            mLog.Warn("saturn_functions.txt: " + std::to_string(mFunctionNames.SkippedLines()) + " line(s) are not \"<hex-address> <name>\" and were skipped (the first is line " +
+            mLog.Warn("saturn_functions.txt: " + std::to_string(mFunctionNames.SkippedLines()) + " line(s) are not \"<hex-address> <name>\" and were skipped; they stay in the file (the first is line " +
                       std::to_string(mFunctionNames.FirstSkippedLine()) + ")");
         err.clear();
-        mFunctionNames.Import("saturn_symbols.txt", &err);  // merge a symbol map if present
+        mFunctionNames.Import(WorkFilePath("saturn_symbols.txt").c_str(), &err);  // merge a symbol map if present
         if (!err.empty()) mLog.Error("Symbol map: " + err);
         else if (mFunctionNames.SkippedLines())
-            mLog.Warn("saturn_symbols.txt: " + std::to_string(mFunctionNames.SkippedLines()) + " line(s) are not \"<hex-address> <name>\" and were skipped (the first is line " +
+            mLog.Warn("saturn_symbols.txt: " + std::to_string(mFunctionNames.SkippedLines()) + " line(s) are not \"<hex-address> <name>\" and were skipped; they stay in the file (the first is line " +
                       std::to_string(mFunctionNames.FirstSkippedLine()) + ")");
     }
 #if SE_ENABLE_DECOMPILER
     {
         std::string err;
-        if (!mFunctionBounds.Load(decomp::FunctionBounds::kDefaultFile, &err)) mLog.Error("Function starts: " + err);
+        if (!mFunctionBounds.Load(WorkFilePath(decomp::FunctionBounds::kDefaultFile), &err)) mLog.Error("Function starts: " + err);
         else if (mFunctionBounds.SkippedLines())
             mLog.Warn(std::string(decomp::FunctionBounds::kDefaultFile) + ": " + std::to_string(mFunctionBounds.SkippedLines()) +
-                      " line(s) are not an address or a comment and were skipped (the first is line " + std::to_string(mFunctionBounds.FirstSkippedLine()) + ")");
+                      " line(s) are not an address in memory or a comment and were skipped; they stay in the file (the first is line " + std::to_string(mFunctionBounds.FirstSkippedLine()) + ")");
     }
     // The process's one engine thread (PLAN.md A4). It is optional: if it cannot be started (the OS
     // refuses the thread, memory runs out) the app opens without it and the panel says why, rather
@@ -3064,6 +3081,7 @@ DecompilerView App::BuildDecompilerView()
     if (!mbHasData || !mContext) return v;
     v.backend = &mMemBackend;
     v.bios = mBiosImage;
+    v.biosPathHeld = !mBiosPath.empty();
     v.deriveSerial = se_derive_serial(mContext);
     v.frameNumber = se_frame_number(mContext);
     v.sourceId = mMemBackend.SourceId();
@@ -3162,8 +3180,12 @@ void App::UpdateDecompiler(IPlatform& platform)
                       mFunctionNames.HasName(req.renameAddr) ? mFunctionNames.NameOf(req.renameAddr).c_str() : "");
         mRenameOpen = true;
     }
-    if (req.boundsChanged && !mFunctionBounds.Save())
-        mLog.Error(std::string("Could not save ") + decomp::FunctionBounds::kDefaultFile);
+    if (req.boundsChanged)
+    {
+        std::string why;
+        if (!mFunctionBounds.Save(WorkFilePath(decomp::FunctionBounds::kDefaultFile), &why))
+            mLog.Error(std::string("Could not save ") + decomp::FunctionBounds::kDefaultFile + ": " + why);
+    }
     if (req.settingsChanged) mSettingsDirty = true;
     if (req.chooseBios)
     {
@@ -4703,7 +4725,7 @@ void App::DrawCallStack(IPlatform& platform)
                         : std::string("No symbols found in " + path));
             if (!err.empty()) mLog.Error("Symbol map: " + err);
             else if (mFunctionNames.SkippedLines())
-                mLog.Warn(path + ": " + std::to_string(mFunctionNames.SkippedLines()) + " line(s) are not \"<hex-address> <name>\" and were skipped (the first is line " +
+                mLog.Warn(path + ": " + std::to_string(mFunctionNames.SkippedLines()) + " line(s) are not \"<hex-address> <name>\" and were skipped; they stay in the file (the first is line " +
                           std::to_string(mFunctionNames.FirstSkippedLine()) + ")");
         }
     }

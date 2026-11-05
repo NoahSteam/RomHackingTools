@@ -17,6 +17,10 @@
 
 #include <sys/stat.h>
 #include <sys/types.h>
+#ifndef _WIN32
+#include <fcntl.h>
+#include <unistd.h>
+#endif
 
 namespace sfe
 {
@@ -43,8 +47,21 @@ inline CappedRead ReadFileCapped(const std::string& path, size_t maxBytes, std::
     if (!S_ISREG(st.st_mode)) return CappedRead::NotRegular;
 #endif
     if (static_cast<unsigned long long>(st.st_size) > maxBytes) return CappedRead::TooLarge;
+#ifdef _WIN32
     std::FILE* f = std::fopen(path.c_str(), "rb");
     if (!f) return CappedRead::Unreadable;
+#else
+    // Opened without waiting (O_NONBLOCK) and looked at again through the descriptor: a link retargeted from a file to a FIFO
+    // between the stat above and this open would otherwise block the open for ever (A9-24).
+    const int fd = ::open(path.c_str(), O_RDONLY | O_NONBLOCK | O_CLOEXEC);
+    if (fd < 0) return CappedRead::Unreadable;
+    struct stat st2;
+    if (::fstat(fd, &st2) != 0) { ::close(fd); return CappedRead::Unreadable; }
+    if (!S_ISREG(st2.st_mode)) { ::close(fd); return CappedRead::NotRegular; }
+    if (static_cast<unsigned long long>(st2.st_size) > maxBytes) { ::close(fd); return CappedRead::TooLarge; }
+    std::FILE* f = ::fdopen(fd, "rb");
+    if (!f) { ::close(fd); return CappedRead::Unreadable; }
+#endif
     CappedRead result = CappedRead::Ok;
     try
     {
