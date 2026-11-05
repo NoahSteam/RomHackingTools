@@ -4963,6 +4963,10 @@ std::vector<MemoryAccess> Accesses(const ghidra::Funcdata& fd,
 // numbers, the memory it is read from and the function's inputs it is made of (FinalValues). A store is not the statement's when every
 // path of the flow into the store ends, back from the register it stores, at another value (FlowValueMayBe): a store of another value
 // (a parameter stored where the engine merged a register under the variable's name, A7-21 and A7-23; -3 where the statement is 0, A7-20).
+uint64_t MaskBytes(uint64_t v, ghidra::int4 size)
+{
+    return size >= 8 || size <= 0 ? v : v & ((1ull << (8 * size)) - 1);
+}
 struct ValueSet
 {
     std::set<uint32_t> insns;                           // the instructions of the ops the value is, or copies, merges or extends
@@ -4971,15 +4975,33 @@ struct ValueSet
     std::set<ghidra::uintm> times;                      // ...and those ops' times (a store's own COPY, alive)
     std::vector<FlowVn> locations;                      // the memory it is read from: a local, a stack parameter, a global (varnodes of the stack or RAM)
     bool rebuilt = false;                               // a computation in it is the engine's own (no op of the flow: an addition moved past a join)
-    // A7-36: the statement's variable is a part of a wider store: its bytes are the store's value shifted right by `shiftBytes` bytes
-    // (big-endian: the byte at the store's address is its most significant), for a value of the store's size
-    ghidra::int4 shiftBytes = 0, storeSize = 0;
+    // A7-36: a store that is not the statement's variable exactly (a byte variable inside a word store, a word variable two stores
+    // wrote): a number is compared on the bytes the store writes of the variable, big-endian (the byte at the lower address the more
+    // significant), and of those only the ones no other store of the variable writes when there are such (`xStack_10 = 0x10000000;` from
+    // a word store of 0 and a byte store of 0x10 over its first byte). `storeAt` is the store's first byte from the variable's.
+    bool partial = false;
+    ghidra::int4 storeSize = 0, varSize = 0;
+    int storeAt = 0;
+    uint32_t compared = 0;   // the variable's bytes compared (bit i: byte i)
     bool Has(uint64_t value, ghidra::int4 size) const
     {
-        if (shiftBytes > 0 && size == storeSize && shiftBytes < size)
+        if (partial)
         {
-            value >>= 8 * shiftBytes;
-            size -= shiftBytes;
+            // (a register a narrower store stores a piece of: its low bytes)
+            if (size < storeSize) return true;
+            value = MaskBytes(value, storeSize);
+            for (const auto& n : numbers)
+            {
+                bool same = true;
+                for (int i = 0; i < varSize && i < 32 && same; ++i)
+                {
+                    const int j = i - storeAt;
+                    if (!(compared >> i & 1) || j < 0 || j >= storeSize) continue;
+                    same = (value >> (8 * (storeSize - 1 - j)) & 0xFF) == (n.first >> (8 * (varSize - 1 - i)) & 0xFF);
+                }
+                if (same) return true;
+            }
+            return false;
         }
         for (const auto& n : numbers)
         {
@@ -6356,22 +6378,40 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
             }
             const auto f = shown.find(r);
             if (f != shown.end()) return f->second;
-            // (A7-36: a variable inside a wider store shows the bytes of the store's value it covers)
+            // (A7-36: a store shows, of a number, the bytes it writes of the variable -- a byte variable inside a word store, a word two
+            // stores wrote -- and of those the ones no other store of the variable writes, when there are such)
             ValueSet part = values;
-            const ghidra::uintb k = (base - r->addr.getOffset()) & space->getHighest();
-            if (r->addr.getSpace() == space && out->getSize() < r->size && k + static_cast<ghidra::uintb>(out->getSize()) <= static_cast<ghidra::uintb>(r->size))
+            const ghidra::uintb mask = space->getHighest();
+            const ghidra::uintb rel = (r->addr.getOffset() - base) & mask;   // the store's first byte from the variable's
+            const int at = rel <= mask / 2 ? static_cast<int>(std::min<ghidra::uintb>(rel, 64)) : -static_cast<int>(std::min<ghidra::uintb>((base - r->addr.getOffset()) & mask, 64));
+            if (r->addr.getSpace() == space && out->getSize() <= 32 && r->size <= 8)
             {
+                part.partial = true;
                 part.storeSize = r->size;
-                part.shiftBytes = r->size - static_cast<ghidra::int4>(k) - out->getSize();
+                part.varSize = out->getSize();
+                part.storeAt = at;
+                uint32_t mine = 0, alone = 0;
+                for (int i = 0; i < out->getSize(); ++i)
+                {
+                    if (i - at < 0 || i - at >= r->size) continue;
+                    mine |= 1u << i;
+                    const ghidra::uintb byte = (base + static_cast<ghidra::uintb>(i)) & mask;
+                    bool other = false;
+                    for (const ghidra::AccessRecord* x : stores)
+                        if (x != r && x->addr.getSpace() == space && ((byte - x->addr.getOffset()) & mask) < static_cast<ghidra::uintb>(x->size)) other = true;
+                    if (!other) alone |= 1u << i;
+                }
+                part.compared = alone ? alone : mine;
             }
             const bool v = StoreShowsValue(*r, flow, fd, part);
             shown[r] = v;
             return v;
         };
         bool ownOther = false;   // the statement's own instruction is a store of the variable that wrote another value
-        // A7-32: a copy at a call or a return shows the value the callee or the caller sees there: only a store that runs before that
-        // instruction is its (before it in its flow block, or in a flow block from which the flow reaches it). The searches that look
-        // past the statement (the store it is ahead of) do not apply to it: a store after the call wrote what came after.
+        // A7-32: a copy at a call or a return shows the value the callee or the caller sees there: when a store of the byte runs before
+        // that instruction (before it in its flow block, or in a flow block from which the flow reaches it), only such a store is its,
+        // and the searches that look past the statement (the store it is ahead of) do not take a store after the call, which wrote what
+        // came after. When none does, the line is the engine's of a later store it put at the call, and the searches stand.
         int useBlock = -1, usePos = 0;
         {
             const auto ib = flow.insnBlock.find(at);
@@ -6454,8 +6494,18 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
             };
             // (each store found below is the statement's only when it may have written its value, `take`; one that wrote another value
             // ends that path, and the search goes on to the store the statement is ahead of)
+            // (A7-32: when a store of the byte runs before the call or the return, only such a store; when none does, the statement is
+            // the engine's of a store after it, hoisted to the call: `piStack_10 = piStack_c;` at a `bsr` for the push after it)
+            bool beforeOnly = false;
+            if (useBlock >= 0)
+                for (const ghidra::AccessRecord* r : stores)
+                    if (writes(r) && runsBefore(r))
+                    {
+                        beforeOnly = true;
+                        break;
+                    }
             const auto take = [&](const ghidra::AccessRecord* r) {
-                if (!r || !runsBefore(r) || !shows(r)) return false;
+                if (!r || (beforeOnly && !runsBefore(r)) || !shows(r)) return false;
                 chosen.insert(r);
                 return true;
             };
@@ -6544,11 +6594,16 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                 const ghidra::uintb byte = (base + static_cast<ghidra::uintb>(b)) & space->getHighest();
                 const ghidra::AccessRecord* earlier = nullptr;
                 const ghidra::AccessRecord* any = nullptr;
+                bool beforeOnly = false;   // (A7-32, as above)
+                for (const ghidra::AccessRecord* r : stores)
+                    if (r->addr.getSpace() == space && ((byte - r->addr.getOffset()) & space->getHighest()) < static_cast<ghidra::uintb>(r->size) &&
+                        runsBefore(r))
+                        beforeOnly = true;
                 for (const ghidra::AccessRecord* r : stores)
                 {
                     if (r->addr.getSpace() != space) continue;
                     if (((byte - r->addr.getOffset()) & space->getHighest()) >= static_cast<ghidra::uintb>(r->size)) continue;
-                    if (!runsBefore(r)) continue;   // (A7-32)
+                    if (beforeOnly && !runsBefore(r)) continue;   // (A7-32)
                     if (!any || r->time > any->time) any = r;
                     if (r->time < when->second && (!earlier || r->time > earlier->time)) earlier = r;
                 }

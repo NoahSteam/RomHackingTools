@@ -381,7 +381,122 @@ inline std::map<uint32_t, std::vector<uint32_t>> BranchSources(const sfe::decomp
     return into;
 }
 inline WordValue RegisterBefore(const sfe::decomp::DecompileResult& r, const std::function<bool(uint32_t, uint16_t&)>& word,
-                                const std::map<uint32_t, std::vector<uint32_t>>& into, uint32_t at, int reg)
+                                const std::map<uint32_t, std::vector<uint32_t>>& into, uint32_t at, int reg, int depth = 0);
+inline WordValue WrittenValue(const sfe::decomp::DecompileResult& r, const std::function<bool(uint32_t, uint16_t&)>& word,
+                              const std::map<uint32_t, std::vector<uint32_t>>& into, uint32_t p, int reg, int depth);
+inline WordValue NumberValue(uint64_t v)
+{
+    return WordValue{ WordValue::Number, static_cast<int64_t>(static_cast<int32_t>(static_cast<uint32_t>(v))) };
+}
+// The address a store or a load at `p` reads or writes, and its size: false when the instruction is neither or its address is not
+// known (RegisterBefore of its registers; GBR is not followed).
+inline bool AccessAddress(const sfe::decomp::DecompileResult& r, const std::function<bool(uint32_t, uint16_t&)>& word,
+                          const std::map<uint32_t, std::vector<uint32_t>>& into, uint32_t p, uint16_t w, bool store, uint32_t& addr, int& size, int depth)
+{
+    const int hi = w >> 12, n = (w >> 8) & 0xF, m = (w >> 4) & 0xF, lo = w & 0xF;
+    int base = -1, index = -1;
+    int64_t offset = 0;
+    if (store)
+    {
+        if (hi == 0x2 && lo <= 2) base = n, size = 1 << lo;
+        else if (hi == 0x2 && lo >= 4 && lo <= 6) base = n, size = 1 << (lo - 4), offset = -size;
+        else if (hi == 0x1) base = n, size = 4, offset = (w & 0xF) * 4;
+        else if ((w >> 8) == 0x80 || (w >> 8) == 0x81) base = m, size = (w >> 8) == 0x80 ? 1 : 2, offset = (w & 0xF) * size;
+        else if (hi == 0x0 && lo >= 4 && lo <= 6) base = n, index = 0, size = 1 << (lo - 4);
+        else return false;
+    }
+    else
+    {
+        if (hi == 0x6 && lo <= 2) base = m, size = 1 << lo;
+        else if (hi == 0x6 && lo >= 4 && lo <= 6) base = m, size = 1 << (lo - 4);
+        else if (hi == 0x5) base = m, size = 4, offset = (w & 0xF) * 4;
+        else if ((w >> 8) == 0x84 || (w >> 8) == 0x85) base = m, size = (w >> 8) == 0x84 ? 1 : 2, offset = (w & 0xF) * size;
+        else if (hi == 0x0 && lo >= 0xC) base = m, index = 0, size = 1 << (lo - 0xC);
+        else return false;
+    }
+    const WordValue b = RegisterBefore(r, word, into, p, base, depth);
+    if (b.kind != WordValue::Number) return false;
+    int64_t a = b.value + offset;
+    if (index >= 0)
+    {
+        const WordValue i = RegisterBefore(r, word, into, p, index, depth);
+        if (i.kind != WordValue::Number) return false;
+        a += i.value;
+    }
+    addr = static_cast<uint32_t>(a);
+    return true;
+}
+// A7-34 (the area 7 fixer): what memory holds before `at`, by the stores of the function's own words on every path into it: a store of
+// the same address and size whose register's value is known. Any other store that may write it (its address not known, or a part of it),
+// a call, the entry, or paths that disagree: unknown. The engine forwards such a store to a later read (a poll's first read of what the
+// function stored) and prints the number at the read.
+inline WordValue MemoryBefore(const sfe::decomp::DecompileResult& r, const std::function<bool(uint32_t, uint16_t&)>& word,
+                              const std::map<uint32_t, std::vector<uint32_t>>& into, uint32_t at, uint32_t addr, int size, int depth)
+{
+    if (depth > 6) return WordValue();
+    const auto decode = [&](uint32_t p, sfe::DisassembledInstruction& d) {
+        uint16_t w = 0;
+        if (!r.InBody(p) || !word(p, w)) return false;
+        d = sfe::Sh2Decode(p, w);
+        return d.IsValid;
+    };
+    WordValue result;
+    bool any = false;
+    std::set<uint32_t> seen;
+    std::vector<uint32_t> todo = { at };
+    int steps = 0;
+    while (!todo.empty())
+    {
+        const uint32_t a = todo.back();
+        todo.pop_back();
+        if (!seen.insert(a).second) continue;
+        if (++steps > 2000 || a == r.entry) return WordValue();
+        std::vector<uint32_t> preds;
+        sfe::DisassembledInstruction prev, prev2;
+        if (decode(a - 2, prev))
+        {
+            const bool afterJump = decode(a - 4, prev2) && prev2.HasDelaySlot && !prev2.IsConditional && !prev2.IsCall;
+            if (!afterJump) preds.push_back(a - 2);
+        }
+        const auto in = into.find(a);
+        if (in != into.end()) preds.insert(preds.end(), in->second.begin(), in->second.end());
+        if (preds.empty()) return WordValue();
+        for (uint32_t p : preds)
+        {
+            sfe::DisassembledInstruction d;
+            if (!decode(p, d) || d.IsCall || d.Mnemonic == "rte" || d.Mnemonic == "trapa") return WordValue();
+            uint16_t w = 0;
+            word(p, w);
+            int ssize = 0;
+            const int reg = StoredRegister(w, ssize);
+            if (reg < 0 && (w >> 8) != 0xC0 && (w >> 8) != 0xC1 && (w >> 8) != 0xC2)
+            {
+                todo.push_back(p);
+                continue;
+            }
+            uint32_t sa = 0;
+            if (reg < 0 || !AccessAddress(r, word, into, p, w, true, sa, ssize, depth + 1)) return WordValue();
+            const uint32_t mask = 0x07FFFFFFu;
+            const uint32_t x = sa & mask, y = addr & mask;
+            if (x + static_cast<uint32_t>(ssize) <= y || y + static_cast<uint32_t>(size) <= x)
+            {
+                todo.push_back(p);
+                continue;
+            }
+            if (x != y || ssize != size) return WordValue();
+            const WordValue v = RegisterBefore(r, word, into, p, reg, depth + 1);
+            if (v.kind != WordValue::Number) return WordValue();
+            const uint64_t bytes = size >= 4 ? 0xFFFFFFFFull : (1ull << (8 * size)) - 1;
+            const WordValue masked{ WordValue::Number, static_cast<int64_t>(static_cast<uint64_t>(v.value) & bytes) };
+            if (any && !(masked == result)) return WordValue();
+            result = masked;
+            any = true;
+        }
+    }
+    return any ? result : WordValue();
+}
+inline WordValue RegisterBefore(const sfe::decomp::DecompileResult& r, const std::function<bool(uint32_t, uint16_t&)>& word,
+                                const std::map<uint32_t, std::vector<uint32_t>>& into, uint32_t at, int reg, int depth)
 {
     const auto decode = [&](uint32_t p, sfe::DisassembledInstruction& d) {
         uint16_t w = 0;
@@ -455,11 +570,116 @@ inline WordValue RegisterBefore(const sfe::decomp::DecompileResult& r, const std
                 if (!give(WordValue{ WordValue::Number, v })) return WordValue();
                 continue;
             }
-            if (WrittenRegisters(d).count(rg)) return WordValue();
+            // A7-34 (the area 7 fixer): an instruction that computes the register from values the walk knows (`add #imm`, `xor r1,r1`,
+            // `extu.w`, `shll2`, `and r1,r1`, a read of memory a store before it wrote), as the engine folds it
+            if (WrittenRegisters(d).count(rg) || ((w >> 8) == 0xC7 && rg == 0))
+            {
+                if (!give(depth < 6 ? WrittenValue(r, word, into, p, rg, depth + 1) : WordValue())) return WordValue();
+                continue;
+            }
             todo.emplace_back(p, rg);
         }
     }
     return any ? result : WordValue();
+}
+// A7-34 (the area 7 fixer): the value instruction `p` writes into register `reg`, from what the registers hold before it
+// (RegisterBefore) and what memory holds (MemoryBefore): moves, numbers, literals, `mova`, the ALU ops with known inputs, the
+// extensions, swaps and shifts, `dt`, and loads. `and Rn,Rn` and `or Rn,Rn` pass Rn on whatever it is (a parameter too); `xor Rn,Rn`
+// and `sub Rn,Rn` are 0 whatever it is. Unknown for anything else.
+inline WordValue WrittenValue(const sfe::decomp::DecompileResult& r, const std::function<bool(uint32_t, uint16_t&)>& word,
+                              const std::map<uint32_t, std::vector<uint32_t>>& into, uint32_t p, int reg, int depth)
+{
+    uint16_t w = 0;
+    if (depth > 6 || !word(p, w)) return WordValue();
+    const int hi = w >> 12, n = (w >> 8) & 0xF, m = (w >> 4) & 0xF, lo = w & 0xF;
+    const auto before = [&](int x) { return RegisterBefore(r, word, into, p, x, depth); };
+    const auto number = [](const WordValue& v, uint32_t& x) {
+        if (v.kind != WordValue::Number) return false;
+        x = static_cast<uint32_t>(v.value);
+        return true;
+    };
+    sfe::DisassembledInstruction prev;
+    uint16_t pw = 0;
+    const bool inSlot = word(p - 2, pw) && r.InBody(p - 2) && (prev = sfe::Sh2Decode(p - 2, pw)).IsValid && prev.HasDelaySlot;
+    uint32_t a = 0, b = 0;
+    if (hi == 0xE && n == reg) return NumberValue(static_cast<uint32_t>(static_cast<int32_t>(static_cast<int8_t>(w & 0xFF))));
+    if (hi == 0x6 && lo == 0x3 && n == reg) return before(m);
+    if ((w >> 8) == 0xC7 && reg == 0)
+        return inSlot ? WordValue() : NumberValue((p & ~3u) + 4 + (w & 0xFFu) * 4);
+    if ((hi == 0x9 || hi == 0xD) && n == reg && !inSlot)
+    {
+        uint16_t h = 0, l = 0;
+        const uint32_t q = hi == 0x9 ? p + 4 + (w & 0xFFu) * 2 : (p & ~3u) + 4 + (w & 0xFFu) * 4;
+        if (hi == 0x9 ? !word(q, l) : !(word(q, h) && word(q + 2, l))) return WordValue();
+        return NumberValue(hi == 0x9 ? static_cast<uint32_t>(static_cast<int32_t>(static_cast<int16_t>(l))) : (static_cast<uint32_t>(h) << 16 | l));
+    }
+    if (hi == 0x7 && n == reg) return number(before(n), a) ? NumberValue(a + static_cast<uint32_t>(static_cast<int32_t>(static_cast<int8_t>(w & 0xFF)))) : WordValue();
+    if (hi == 0x3 && n == reg && (lo == 0xC || lo == 0x8))
+    {
+        if (lo == 0x8 && m == n) return NumberValue(0);
+        if (!number(before(n), a) || !number(before(m), b)) return WordValue();
+        return NumberValue(lo == 0xC ? a + b : a - b);
+    }
+    if (hi == 0x2 && n == reg && (lo == 0x9 || lo == 0xA || lo == 0xB))
+    {
+        if (m == n) return lo == 0xA ? NumberValue(0) : before(n);
+        if (!number(before(n), a) || !number(before(m), b)) return WordValue();
+        return NumberValue(lo == 0x9 ? a & b : lo == 0xA ? a ^ b : a | b);
+    }
+    if (reg == 0 && ((w >> 8) == 0xC9 || (w >> 8) == 0xCA || (w >> 8) == 0xCB))
+    {
+        if (!number(before(0), a)) return WordValue();
+        b = w & 0xFFu;
+        return NumberValue((w >> 8) == 0xC9 ? a & b : (w >> 8) == 0xCA ? a ^ b : a | b);
+    }
+    if (hi == 0x6 && n == reg && (lo == 0x7 || lo == 0x8 || lo == 0x9 || lo >= 0xB))
+    {
+        if (!number(before(m), a)) return WordValue();
+        switch (lo)
+        {
+        case 0x7: return NumberValue(~a);
+        case 0x8: return NumberValue((a & 0xFFFF0000u) | (a & 0xFF) << 8 | (a >> 8 & 0xFF));
+        case 0x9: return NumberValue(a << 16 | a >> 16);
+        case 0xB: return NumberValue(0u - a);
+        case 0xC: return NumberValue(a & 0xFF);
+        case 0xD: return NumberValue(a & 0xFFFF);
+        case 0xE: return NumberValue(static_cast<uint32_t>(static_cast<int32_t>(static_cast<int8_t>(a & 0xFF))));
+        default: return NumberValue(static_cast<uint32_t>(static_cast<int32_t>(static_cast<int16_t>(a & 0xFFFF))));
+        }
+    }
+    if (hi == 0x4 && n == reg)
+    {
+        const int op = w & 0xFF;
+        if (!number(before(n), a)) return WordValue();
+        switch (op)
+        {
+        case 0x00: case 0x20: return NumberValue(a << 1);
+        case 0x01: return NumberValue(a >> 1);
+        case 0x21: return NumberValue(static_cast<uint32_t>(static_cast<int32_t>(a) >> 1));
+        case 0x08: return NumberValue(a << 2);
+        case 0x09: return NumberValue(a >> 2);
+        case 0x18: return NumberValue(a << 8);
+        case 0x19: return NumberValue(a >> 8);
+        case 0x28: return NumberValue(a << 16);
+        case 0x29: return NumberValue(a >> 16);
+        case 0x10: return NumberValue(a - 1);
+        default: return WordValue();
+        }
+    }
+    // a load: what memory holds at its address, extended as the load extends (a byte or a word sign-extended)
+    uint32_t addr = 0;
+    int size = 0;
+    const bool loadInto = (hi == 0x6 && lo <= 2 && n == reg) || (hi == 0x6 && lo >= 4 && lo <= 6 && n == reg && n != m) || (hi == 0x5 && n == reg) ||
+                          (((w >> 8) == 0x84 || (w >> 8) == 0x85) && reg == 0) || (hi == 0x0 && lo >= 0xC && n == reg);
+    if (loadInto && AccessAddress(r, word, into, p, w, false, addr, size, depth))
+    {
+        const WordValue v = MemoryBefore(r, word, into, p, addr, size, depth + 1);
+        if (!number(v, a)) return WordValue();
+        if (size == 1) a = static_cast<uint32_t>(static_cast<int32_t>(static_cast<int8_t>(a & 0xFF)));
+        if (size == 2) a = static_cast<uint32_t>(static_cast<int32_t>(static_cast<int16_t>(a & 0xFFFF)));
+        return NumberValue(a);
+    }
+    return WordValue();
 }
 
 // Area 7 round 6: the instructions that made the value a register holds before `at`, on each path (the walk RegisterBefore takes): an
