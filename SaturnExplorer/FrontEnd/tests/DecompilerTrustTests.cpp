@@ -35,6 +35,7 @@
 //   SE_TRUST_MIX=<k>     only mix k (see kMixNames); SE_TRUST_FROM=<seed> starts it there, to run a long mix in pieces
 //   SE_TRUST_SEED=<k>    (with SE_TRUST_MIX) one sequence of that mix, every step printed; SE_TRUST_SKIP=3,5 and SE_TRUST_LIMIT=n shrink it
 //   SE_TRUST_FOLLOW_SEED=<k>  one sequence of the Follow PC rig (mix 8), every step printed; with SE_TRUST_FOLLOW_AUTO=1 one of mix 9
+//   SE_TRUST_FOLLOW_SCRIPT="cpu; regsoff; cpu"   one Follow PC sequence written out (kFollowWords); SE_TRUST_FOLLOW_DUMP=1 prints the window
 //   SE_TRUST_SCRIPT="select A; t-inject failed" SE_MODEL_WORLD=C,A   one sequence written out (area 1's words, and t-...)
 //   SE_TRUST_NOHOVER=1   do not hover the badge (faster)
 #define SE_MODEL_NO_MAIN
@@ -2607,6 +2608,55 @@ std::string FollowExecute(FRig& r, FOp o, Rng& rng)
 // (area 8, round 3) The Follow PC rig with Auto-refresh toggled and "Show in Pseudocode" among its operations (mix 9).
 bool gFollowAuto = false;
 
+// (area 8, round 4) A Follow PC sequence written out: SE_TRUST_FOLLOW_SCRIPT="cpu; regsoff; cpu; hold; edit; stop; release; cpu; cpu", one word
+// per operation (kFollowWords, in the order of FOp). Each step is held to the model as a generated one is; SE_TRUST_FOLLOW_DUMP=1 also prints
+// the window's text after each step.
+const char* const kFollowWords[] = { "pcc", "pca", "pct", "pcu", "pcudead", "pcbios", "regsoff", "regson", "static", "paused", "running",
+                                     "advance", "edit", "refresh", "stop", "hold", "release", "hide", "show", "follow", "typec", "typea",
+                                     "typet", "badentry", "notcode", "containc", "containbad", "containdead", "cpu", "auto", "showinsn" };
+static_assert(sizeof kFollowWords / sizeof kFollowWords[0] == static_cast<size_t>(FOp::kCount), "a word per operation");
+std::vector<FOp> gFollowScript;
+bool gFollowDump = false;
+
+bool ParseFollowScript(const std::string& text, std::vector<FOp>& out, std::string& error)
+{
+    out.clear();
+    std::istringstream all(text);
+    std::string stmt;
+    while (std::getline(all, stmt, ';'))
+    {
+        std::istringstream words(stmt);
+        std::string w;
+        if (!(words >> w)) continue;
+        size_t k = 0;
+        while (k < static_cast<size_t>(FOp::kCount) && w != kFollowWords[k]) ++k;
+        if (k == static_cast<size_t>(FOp::kCount))
+        {
+            error = "unknown operation '" + w + "'";
+            return false;
+        }
+        out.push_back(static_cast<FOp>(k));
+    }
+    return !out.empty();
+}
+
+void DumpFollowWindow()
+{
+    std::string line;
+    float y = -1.0f;
+    for (const drawn::Run& run : drawn::WindowRuns(DecompilerPanel::kTitle))
+    {
+        if (run.y0 != y && !line.empty())
+        {
+            std::printf("      | %s\n", line.c_str());
+            line.clear();
+        }
+        y = run.y0;
+        line += (line.empty() ? "" : " ") + run.text;
+    }
+    if (!line.empty()) std::printf("      | %s\n", line.c_str());
+}
+
 // One random sequence of the Follow PC rig. False, with the sequence printed, when the panel and the model disagree.
 bool RunFollow(uint64_t seed, bool verbose, uint64_t& opsDone)
 {
@@ -2638,16 +2688,21 @@ bool RunFollow(uint64_t seed, bool verbose, uint64_t& opsDone)
     if (!r.Settle()) return fail("HANG at the first look");
     std::string err = FollowCheck(r, gHover);
     if (!err.empty()) return fail("TRUST (first look): " + err);
-    const int n = 25 + rng.Below(40);
+    const int n = gFollowScript.empty() ? 25 + rng.Below(40) : static_cast<int>(gFollowScript.size());
     for (int i = 0; i < n; ++i)
     {
-        int pick = rng.Below(total);
         FOp op = FOp::PcC;
-        for (size_t k = 0; k < kinds; ++k)
+        if (!gFollowScript.empty())
+            op = gFollowScript[static_cast<size_t>(i)];
+        else
         {
-            const auto& w = kW[k];
-            if (pick < w.weight) { op = w.op; break; }
-            pick -= w.weight;
+            int pick = rng.Below(total);
+            for (size_t k = 0; k < kinds; ++k)
+            {
+                const auto& w = kW[k];
+                if (pick < w.weight) { op = w.op; break; }
+                pick -= w.weight;
+            }
         }
         const std::string note = FollowExecute(r, op, rng);
         done.push_back("[" + std::to_string(i + 1) + "] " + FOpName(op) + (note.empty() ? "" : "  " + note));
@@ -2662,6 +2717,11 @@ bool RunFollow(uint64_t seed, bool verbose, uint64_t& opsDone)
         }
         ++gT.checks;
         ++(r.holding ? gT.held : gT.idle);
+        if (gFollowDump && r.visible)
+        {
+            r.Frame();
+            DumpFollowWindow();
+        }
         err = FollowCheck(r, gHover);
         if (!err.empty()) return fail("TRUST (" + std::string(r.holding ? "held" : "idle") + "): " + err);
     }
@@ -2846,7 +2906,8 @@ int main(int argc, char** argv)
     std::vector<std::string> failedList;
     if (const char* w = std::getenv("SE_TRUST_WIDTH"))
         if (*w) gRigWinW = static_cast<float>(std::atof(w));
-    const bool defaultRun = !mixEnv && !seedEnv && !std::getenv("SE_TRUST_SCRIPT") && !std::getenv("SE_TRUST_FOLLOW_SEED");
+    const bool defaultRun = !mixEnv && !seedEnv && !std::getenv("SE_TRUST_SCRIPT") && !std::getenv("SE_TRUST_FOLLOW_SEED") &&
+                            !std::getenv("SE_TRUST_FOLLOW_SCRIPT");
 #ifndef _WIN32
     // The real allocation failure first: it runs in a process that has not decompiled anything yet, so every child counts the same allocations
     // (SE_TRUST_OOM_STRIDE=0 leaves it out, =1 tries every allocation of the request).
@@ -2896,7 +2957,7 @@ int main(int argc, char** argv)
         }
 
         // The pins.
-        if (!mixEnv && !std::getenv("SE_TRUST_FOLLOW_SEED"))
+        if (!mixEnv && !std::getenv("SE_TRUST_FOLLOW_SEED") && !std::getenv("SE_TRUST_FOLLOW_SCRIPT"))
             for (const Pin& pin : kPins)
             {
                 Program p;
@@ -2916,7 +2977,7 @@ int main(int argc, char** argv)
                 }
             }
 
-        if (!mixEnv && !std::getenv("SE_TRUST_FOLLOW_SEED"))
+        if (!mixEnv && !std::getenv("SE_TRUST_FOLLOW_SEED") && !std::getenv("SE_TRUST_FOLLOW_SCRIPT"))
         {
             RunMiniPins();
             RunFixPins();
@@ -2940,6 +3001,22 @@ int main(int argc, char** argv)
             }
         }
 
+        if (const char* fsc = std::getenv("SE_TRUST_FOLLOW_SCRIPT"))
+        {
+            std::string error;
+            if (!ParseFollowScript(fsc, gFollowScript, error))
+            {
+                std::printf("SE_TRUST_FOLLOW_SCRIPT: %s\n", error.empty() ? "no operation" : error.c_str());
+                return 2;
+            }
+            gFollowDump = std::getenv("SE_TRUST_FOLLOW_DUMP") != nullptr;
+            uint64_t ops = 0;
+            const bool ok = RunFollow(0, true, ops);
+            gFollowScript.clear();
+            std::printf("follow script: %s\n", ok ? "ok" : "FAILED");
+            dts::RemoveTree(scratch);
+            return ok ? 0 : 1;
+        }
         if (const char* fs = std::getenv("SE_TRUST_FOLLOW_SEED"))
         {
             gFollowAuto = std::getenv("SE_TRUST_FOLLOW_AUTO") != nullptr;   // a mix 9 sequence
