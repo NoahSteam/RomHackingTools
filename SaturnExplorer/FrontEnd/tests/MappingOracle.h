@@ -1080,8 +1080,28 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                         {
                             if (!t.addr || !candidates.count(t.addr)) continue;
                             bool any = false;
-                            for (uint32_t u : uses) any = any || before(t.addr, u);
+                            for (uint32_t u : uses) any = any || t.addr == u || before(t.addr, u);
                             if (any) continue;
+                            // (a store of the call's own output -- `xRam0603b480 = (uint4)uVar2;`, r0 after the call stored -- is the line's
+                            // value written after the call, as it should be: the call is one of what made the stored register. Not for a line
+                            // that shows a parameter or a number, which no call returns)
+                            if (shownValue.kind != WordValue::Param && shownValue.kind != WordValue::Number)
+                            {
+                                uint16_t sw = 0;
+                                int size = 0;
+                                const int reg = word(t.addr, sw) ? StoredRegister(sw, size) : -1;
+                                if (reg < 0) continue;
+                                if (!haveSources)
+                                {
+                                    sources = BranchSources(r, word);
+                                    haveSources = true;
+                                }
+                                std::set<uint32_t> makers;
+                                if (!RegisterMakers(r, word, sources, t.addr, reg, makers)) continue;
+                                bool output = false;
+                                for (uint32_t u : uses) output = output || makers.count(u) != 0;
+                                if (output) continue;
+                            }
                             ++a.storeAfterUse;
                             problem("store-after", "line " + std::to_string(li) + " '" + text + "' is drawn at " + MappingHex(*uses.begin()) +
                                                        " (a call or a return) and names the store at " + MappingHex(t.addr) +
