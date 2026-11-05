@@ -3371,6 +3371,8 @@ std::vector<Line> LinesFromMarkup(const std::string& packed, const ghidra::Funcd
             t.end = static_cast<uint16_t>(std::min<size_t>(line.text.size(), 0xFFFF));
             t.kind = elem == kLabel ? TokenKind::Label : elem == kFuncName ? TokenKind::FuncName : KindForColor(color);
             const size_t lineIndent = std::min(line.text.find_first_not_of(' '), line.text.size());
+            // (not a case label, whose first op can be the inner switch's jump: `case 1:` of a case that holds a switch)
+            if (op && op->code() == ghidra::CPUI_BRANCHIND && elem != kCaseLabel) switchAtIndent[lineIndent] = op;
             // (A7-27: the label's value, for a case label that is no `default:`)
             const bool caseValueKnown = elem == kCaseLabel && haveCaseValue && content != "default";
             uint32_t caseDest = 0;
