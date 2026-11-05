@@ -288,3 +288,15 @@ R-0061-mem	corpus	killed	0
 R-0065-down	unit	killed	7	
 R-0065-down	gen	survived	22	
 R-0065-down	corpus	killed	29	
+C-0010-printed	unit	killed	27	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:2546: Ledger(r, { Rd(0, 2), Rd(0, 2) })
+C-0010-printed	gen	killed	26	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:12033: rep.findings.empty()
+C-0010-printed	corpus	killed	48	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:2546: Ledger(r, { Rd(0, 2), Rd(0, 2) })
+C-0010-cond	unit	killed	27	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:2546: Ledger(r, { Rd(0, 2), Rd(0, 2) })
+C-0010-cond	gen	killed	18	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:12033: rep.findings.empty()
+C-0010-cond	corpus	killed	52	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:2546: Ledger(r, { Rd(0, 2), Rd(0, 2) })
+C-0010-repeat	unit	killed	27	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:2546: Ledger(r, { Rd(0, 2), Rd(0, 2) })
+C-0010-repeat	gen	killed	26	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:12033: rep.findings.empty()
+C-0010-repeat	corpus	killed	50	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:2546: Ledger(r, { Rd(0, 2), Rd(0, 2) })
+C-0010-all3	unit	killed	27	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:2546: Ledger(r, { Rd(0, 2), Rd(0, 2) })
+C-0010-all3	gen	killed	26	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:12033: rep.findings.empty()
+C-0010-all3	corpus	killed	50	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a11mut/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:2546: Ledger(r, { Rd(0, 2), Rd(0, 2) })
