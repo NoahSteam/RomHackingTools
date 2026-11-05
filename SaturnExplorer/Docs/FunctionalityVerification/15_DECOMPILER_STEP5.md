@@ -16404,3 +16404,49 @@ Seeds from 1,100,000, each run alone under `ulimit -v 3500000` and a 1,150 s lim
 * **Area 9**: A8-48 (the Volatile popup's opening line has two full stops; the guide's "the cut never replaces the saved list" holds only for the unchanged cut).
 * **Area 1**: A8-47 (the model keeps a Stop the hidden panel has forgotten; three scripts in `kOpen`, the fix in the row).
 * Area 4: nothing.
+
+## Area 7, round 7
+
+Branch `review/7-round7` from master `07f5998d` (the area 7 fixer's A7-28, A7-29, A7-30 merged). An adversarial round on that fixer's rules, on the oracle and on A7-31. **No product code changed.** The round adds `TestArea7Round7` (pins and pinned mutations) to `Sh2DecompilerTests.cpp`, the check `storeAfterUse` to `MappingOracle.h`, the later mapping checks to the generator (`Sh2GeneratedTests.cpp`, counted, flagged with `SE_GENERATED_MAP_ALL=1`), `tools/a7_round7/fixtures/a731.probe`, and files **A7-32 (P2), A7-33 (P3, instrument), A7-34 (P3, instrument), A7-35 (P2), A7-36 (P3), A7-37 (P2)**, and **re-rates A7-31 to P2** with its cause. **The round is not clean: three new P2 rows and one re-rated.**
+
+### What was run (RelWithDebInfo, gcc 13, the worktree's build, `-j2`, every binary under `ulimit -v 3500000` and `timeout`)
+
+| Run | Result |
+|---|---|
+| hwram007.bin and hwram008.bin, alone and lent (`tools/a7_round2/corpus.sh`, `SE_GAME_TOKEN_DUMP`) | 839 / 1,730 / 1,554 / 2,995 functions; every violation 0 in the four runs with the final oracle, the fixer's counters unchanged (`numberStoreOther` 0, `caseOtherEntry` 0 of 180 / 432 / 1,275 / 1,733, `copyOtherValue` 24 / 39 / 24 / 39, folded on the way back 29,600 / 57,942 / 75,744 / 125,151). `storeAfterUse`: 0 / 0 / 0 / 0. A first version of it gave 158 in each lent run: stores of the call's own output after the call (`xRam0603b480 = (uint4)uVar2;`, r0 after a `jsr`) and a token at the store itself (an odd-address function); it now skips a store whose register the call made (`RegisterMakers`) when the line shows no parameter or number, and the instruction itself. The alone runs were measured with the first version (0), which only flags more |
+| generator, fresh seeds, the oracle as the generator flagged it (rounds 1 and 2's checks): grammar 2 from 1,700,000 (3,000) and 6,100,000 (3,000), grammar 1 from 1,710,000 (2,000) and 6,110,000 (2,000) | 0 failing seeds, 0 findings (74, 37, 80, 41 s) |
+| the same 10,000 and grammar 2 from 6,120,000 (5,000), grammar 1 from 6,130,000 (3,000), with every mapping violation flagged (A7-34) | **84 failing seeds of 18,000**: first findings `map-const-join` 53, `map-way-back` 16, `map-copy-store` 13, `map-store-value` 1; `map-store-after`, `map-number-store`, `map-case-entry`, `map-copy-merge` 0. The default 300-seed run: 4 (now counted, `map.late.*`, and passing) |
+| hand-built fixtures (`SE_A7R4_PROBE`, round 5's `sh2asm.py`, round 6's `view.py`) | below |
+| `SaturnExplorerSh2DecompilerTests` (with `TestArea7Round7`) | all passed |
+| `ctest -j2 --timeout 900 -E SaturnExplorerLive` / `ctest -R SaturnExplorerLive` | **102 of 102** (183 s) / **6 of 6** (29 s). No new ctest test: the pins are in `SaturnExplorerSh2DecompilerTests`, the counters in `SaturnExplorerSh2GeneratedTests` (whose default run passes). No product code changed, so the fault suite was not rerun alone (it passed in the ctest run) |
+
+### A7-31: the cause, and re-rated P2
+
+The pushed r3 of the shrunk module is made by an `add r4,r3` the engine folds (r3 is 0 after `mov #1,r3 ; dt r3 ; bf`). The statement's value is then the input param_1 and no op of the flow. `StoreShowsValue` (`FlowValueMayBe`) walks back from the push, meets the `add`, an op the statement's value does not hold and not one the engine rebuilt (`want.rebuilt` is false for a bare input), and ends the path at "another value". The store that wrote the value is judged not the statement's, and the copy at the `bsr` names nothing. `mov #0,r3 ; add r4,r3` and `mov r4,r3 ; add #0,r3` do the same; `mov r4,r3` names the push. Rated P2 as A7-11 (a) is: the hover and a click name the `bsr`, and the store (with the `add`) is on no line. It is not frame-specific: the generator, once it flags the copy checks, finds the same on globals (`and r1,r1`, `or r2,r2`, `and r3,r3`, `or r5,r3`), the copy drawn at a may-alias store of another variable or at nothing. The line not naming a store also leaves `Token::materialised` unset, so Show in Pseudocode on the `bsr` answers the copy first (A7-25's order), which `backWrong` does not see.
+
+### The fixer's rules, attacked
+
+* **The number must reach its store (A7-28).** Held on fixtures aimed at the walk's fallback (when `FlowLastWriters` reaches the entry, `reaches` takes the register's number alone): a param stored on the path a `tst` or `cmp/eq` knows (`tst r4,r4 ; bf ; mov.w r4,@r2 ; mov #0,r4 ; mov.b r4,@r3`, the same with `mov.l`, with `cmp/eq #4`, with a second store at the same or the next half-word): each line is drawn at its own store. Half-word and byte stores: right. The drop rule (a named store not reached is dropped when a reached store overlaps it) tests overlap, not cover; no fixture made a statement where that differs, so nothing is filed.
+* **A copy at a call (A7-11's rule) after A7-31's rejection: A7-32 (P2).** With the frame word written again after the call (`mov.l r1,@-r15 ; add #4,r15`), the search's `nextInHome()` takes the store after the call (a call does not end a basic block), whose r1 is unknown after the call and so "may" be the value: `xStack_14 = param_1;` names 0x0600901C, the way back from it answers the copy, and the push that wrote the value is on no line. `storeValueOther` stops at the call; the new `storeAfterUse` (a copy drawn only at a call or a return that names a store which cannot run before it, by the flow blocks) sees it.
+* **The case label's own switch (A7-29).** Held: two switches in sequence at one indent, each with an op-less case (`two_switches_seq`), and round 6's nested fixtures: every label at its own table's entry (8 of 8 judged).
+
+### The oracle, attacked
+
+* **The generator flagged half the audit (A7-34).** `Sh2GeneratedTests` made findings only of the checks of rounds 1 and 2; `backWrong`, the copy checks, `storeValueOther`, `constAtJoin`, `copyMergeAtBranch`, `numberStoreOther` and `caseOtherEntry` were computed and dropped, so the "0 mapping findings" of earlier generator runs said nothing of A7-15 to A7-29. Flagged, they find A7-31 (most `map-copy-store` seeds), A7-35, A7-36 and A7-37, and 51 false positives of `constAtJoin`: a computation the engine folds to the number (`extu.w`, `shll2`, `add #imm`, `xor r1,r1`, `sub r3,r3`, `ldc r1,gbr`, `div0u`: 22), a load reading back a value the engine forwarded from a store (23) and a `mov #imm` compared at 32 bits with a narrower variable (6). So the later checks are counted by default (`map.late.*`) and flagged with `SE_GENERATED_MAP_ALL=1`, until `constAtJoin` is fixed.
+* **A number line with no store (A7-33).** `numberStoreOther` judges only lines that name stores, and `copyStoreMissing` takes a number line drawn at a `mov #imm` as that instruction's: A7-28 (a) as it was, with the store's token dropped, passes every check (pinned).
+* **Each check bites (pinned on damaged results).** `numberStoreOther` 1 (A7-28 (a) damaged, the store's token kept); `caseOtherEntry` 1 (A7-29's outer `case 2:` moved back to the inner entry); `storeAfterUse` 1 (the A7-32 control with the push's token moved to the later store). The fixer proved the first two only by temporary product switches. `backWrong` and `copyMergeAtBranch` keep round 6's pins (A7-30).
+* **What the checks read from the product.** `copyUnconnected` (counted) and `storeAfterUse` read the flow blocks the product exports (`flowBlockRanges`, `flowSuccessors`); `storeAfterUse` takes "not known" as before, so a wrong flow hides a finding but makes none. `frameStoreMissing` and the copy checks take their candidate stores from the product's access fates.
+
+### The generator's findings (A7-35 to A7-37), shrunk
+
+* **A7-35 (P2), grammar 1 seed 1710746.** A merge copy `xRam26002204 = 0;` at the `bt` ending its block names 0x06009004, `mov.l r0,@r7` storing 3, the lowest token, so a click goes there; the shared store 0x06009018 that writes the 0 is on no line. `storeValueOther` 1.
+* **A7-36 (P3), grammar 2 seed 1702385.** `xRam2600220c = 0xff;` is the high byte of `mov.l r2,@r6` (r2 = 0xFFFFFFA6); `ValueSet::Has` compares low bytes (0xA6), so the store is rejected and the line has no instruction at all.
+* **A7-37 (P2), grammar 1 seed 1710596.** The slot's byte store of `bt/s L ; mov.b r1,@r6` prints `xRam26001008 = (xunknown1)in_r1;` drawn at the `bt/s`, the slot only an empty token: a click goes to the branch (A7-10's shape), and the way back from the branch is wrong (`backWrong`). 15 more seeds have `map-way-back` first; not shrunk.
+
+### Pins (`TestArea7Round7`)
+
+A7-31 (the shrunk words and two `add` variants: the copy's instructions are the `bsr` only, the push on no line, `frameStoreMissing` 1; the `mov r4,r3` control names it; the global shape of seed 1711170, `copyAtOther` 1); A7-32 (the later store named, the way back from it answering the copy, `storeValueOther` 0, `storeAfterUse` 1, and its control); A7-33 (the damaged result passes); A7-35, A7-36, A7-37 as above; the pinned mutations. Each comment says what flips when the row is fixed.
+
+### Routed
+
+Nothing outside area 7. A7-37's missing slot mark is in the engine's op for a narrowed store in a slot (patch 0075's marking); the fix belongs with area 7's fixer, who owns `isFromDelaySlot`'s use.
