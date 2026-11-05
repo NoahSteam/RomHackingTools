@@ -1190,6 +1190,24 @@ std::vector<std::string> Lines(const std::string& text)
     return out;
 }
 
+// The lines of a names, notes or bounds file as a reader of text files takes them (round 2, A9-25): LF, CRLF, and a lone CR
+// (the classic Mac line end, or a CRLF file whose LF was lost) each end a line.
+std::vector<std::string> LinesCR(const std::string& text)
+{
+    std::string t;
+    t.reserve(text.size());
+    for (size_t i = 0; i < text.size(); ++i)
+        t += (text[i] == '\r' && (i + 1 == text.size() || text[i + 1] != '\n')) ? '\n' : text[i];
+    return Lines(t);
+}
+
+bool HasLoneCR(const std::string& text)
+{
+    for (size_t i = 0; i < text.size(); ++i)
+        if (text[i] == '\r' && i + 1 < text.size() && text[i + 1] != '\n') return true;
+    return false;
+}
+
 bool IsHex(char c) { return std::isxdigit(static_cast<unsigned char>(c)) != 0; }
 
 // The symbol-map line as the documentation gives it: "<hex-addr> <name>", the address 1 to 8 hex digits with an optional 0x,
@@ -1210,12 +1228,14 @@ LineKind ParseSymbolRef(const std::string& line, uint32_t& addr, std::string& na
     if (prefixed) tok = tok.substr(2);
     for (char c : tok) if (!IsHex(c)) return LineKind::NotHex;
     if (tok.size() > 8) return LineKind::TooLong;
-    // Round 2 (A9-18): a first word of the letters a-f alone, with no digit and no 0x, is a word of the remark, not an address.
-    // "Dead function in the old build", "add it later", "a note", "beef" are the examples A9-4 was filed for; nothing the
-    // application writes, and no symbol tool, prints an address without a digit or a prefix.
+    // Round 2 (A9-18): a first word of one to seven of the letters a-f alone, with no digit and no 0x, is a word of the remark,
+    // not an address: "Dead function in the old build", "add it later", "a note", "beef" are the examples A9-4 was filed for.
+    // Eight letters (FFFFFFFF) is an address written out in full. (The names and notes files are saved with "%x", so the
+    // application itself writes 0x00000ABC as "abc": a fix that refuses such words must save eight digits, as the bounds
+    // file already does.)
     bool digit = false;
     for (char c : tok) digit = digit || std::isdigit(static_cast<unsigned char>(c)) != 0;
-    if (!prefixed && !digit) return LineKind::Prose;
+    if (!prefixed && !digit && tok.size() < 8) return LineKind::Prose;
     addr = static_cast<uint32_t>(std::strtoul(tok.c_str(), nullptr, 16));
     name = Trim(line.substr(e));
     return name.empty() ? LineKind::NoName : LineKind::Entry;
@@ -1252,8 +1272,32 @@ bool LiberalAddr(const std::string& line, uint32_t& a)
 
 using BadLines = std::vector<std::pair<LineKind, std::string>>;
 
+// The first word read the way round 1's rule reads it: one to eight hex digits, an optional 0x, all of the word.
+bool StrictAddr(const std::string& line, uint32_t& a)
+{
+    size_t b = 0;
+    while (b < line.size() && std::isspace(static_cast<unsigned char>(line[b]))) ++b;
+    size_t e = b;
+    while (e < line.size() && !std::isspace(static_cast<unsigned char>(line[e]))) ++e;
+    std::string tok = line.substr(b, e - b);
+    if (tok.size() > 2 && tok[0] == '0' && (tok[1] == 'x' || tok[1] == 'X')) tok = tok.substr(2);
+    if (tok.empty() || tok.size() > 8) return false;
+    for (char c : tok) if (!IsHex(c)) return false;
+    a = static_cast<uint32_t>(std::strtoul(tok.c_str(), nullptr, 16));
+    return true;
+}
+
 const char* ExtraClass(const BadLines& bad, uint32_t addr, bool canonical, bool bounds)
 {
+    // First a bad line round 1's rule itself accepts (its first word is a whole hex number: a prose word, A9-18), so that a
+    // NotHex line that merely starts with the same digits is not blamed; then the liberal reading (a round 1 class come back).
+    for (const auto& kl : bad)
+    {
+        uint32_t a = 0, c = 0;
+        if (!StrictAddr(kl.second, a)) continue;
+        if (canonical) { if (!sfe::CanonicalAddress(a, c)) continue; a = c; }
+        if (a == addr && kl.first == LineKind::Prose) return "PROSE_AS_ADDRESS";
+    }
     for (const auto& kl : bad)
     {
         uint32_t a = 0, c = 0;
@@ -1270,6 +1314,26 @@ const char* ExtraClass(const BadLines& bad, uint32_t addr, bool canonical, bool 
         }
     }
     return "SET_DIFFERS";
+}
+
+// Every difference between what a loader loaded and the reference, each named by its own cause: an entry the reading with LF
+// alone also gives (or also lacks) is a lone carriage return's (A9-25); another extra entry is the bad line it came from; a
+// missing one is DROPS_VALID. One violation per class per case.
+std::set<std::string> DiffClasses(const std::map<uint32_t, std::string>& got, const std::map<uint32_t, std::string>& ref,
+                                  const std::map<uint32_t, std::string>& refLF, const BadLines& bad, bool canonical, bool bounds)
+{
+    std::set<std::string> out;
+    for (const auto& kv : got)
+    {
+        auto it = ref.find(kv.first);
+        if (it != ref.end() && it->second == kv.second) continue;
+        auto lf = refLF.find(kv.first);
+        if (lf != refLF.end() && lf->second == kv.second) out.insert("LONE_CR_JOINS_LINES");
+        else out.insert(ExtraClass(bad, kv.first, canonical, bounds));
+    }
+    for (const auto& kv : ref)
+        if (!got.count(kv.first)) out.insert(refLF.count(kv.first) ? "DROPS_VALID" : "LONE_CR_JOINS_LINES");
+    return out;
 }
 
 const char* const kMalformedLines[] = {
@@ -1376,10 +1440,10 @@ void RunNamesCase(uint64_t index)
     });
     gAccepted["names"] += !names.All().empty();
 
-    std::map<uint32_t, std::string> ref;
+    std::map<uint32_t, std::string> ref, refLF;   // refLF: the same reading with LF alone ending a line
     BadLines bad;
     size_t refEntries = 0;
-    for (const std::string& l : Lines(text))
+    for (const std::string& l : LinesCR(text))
     {
         uint32_t a = 0;
         std::string n;
@@ -1387,23 +1451,27 @@ void RunNamesCase(uint64_t index)
         if (k == LineKind::Entry) { ref[a] = n; ++refEntries; }
         else if (k != LineKind::Comment && k != LineKind::NoName) bad.emplace_back(k, l);
     }
-    if (viaImport && imported != refEntries && bad.empty())
+    for (const std::string& l : Lines(text))
+    {
+        uint32_t a = 0;
+        std::string n;
+        if (ParseSymbolRef(l, a, n) == LineKind::Entry) refLF[a] = n;
+    }
+    // Import's count is the entries it took (a text with a lone CR is A9-25's, and the count follows whichever reading of it).
+    if (viaImport && imported != refEntries && bad.empty() && !HasLoneCR(text))
         Violation("IMPORT_COUNT", "Import reported " + std::to_string(imported) + " entries, the lines hold " + std::to_string(refEntries));
     if (names.All() != ref)
     {
         // An entry the reference does not have (or has with another name) came from a line that is not one: its class is that
         // line's. With none, the product loaded less than the well-formed lines hold.
-        const char* cls = "DROPS_VALID";
-        for (const auto& kv : names.All())
+        if (std::getenv("SE_LOADFUZZ_DIFF"))
         {
-            auto it = ref.find(kv.first);
-            if (it == ref.end() || it->second != kv.second) { cls = ExtraClass(bad, kv.first, false, false); break; }
+            for (const auto& kv : names.All()) { auto it = ref.find(kv.first); if (it == ref.end() || it->second != kv.second) std::printf("  loaded %s [%s], reference %s\n", Hex(kv.first).c_str(), kv.second.substr(0, 60).c_str(), it == ref.end() ? "none" : ("[" + it->second.substr(0, 60) + "]").c_str()); }
+            for (const auto& kv : ref) if (!names.All().count(kv.first)) std::printf("  reference only %s [%s]\n", Hex(kv.first).c_str(), kv.second.substr(0, 60).c_str());
         }
-        Violation(cls, "the entries loaded (" + std::to_string(names.All().size()) + ") are not the well-formed lines' (" + std::to_string(ref.size()) + ")");
+        for (const std::string& cls : DiffClasses(names.All(), ref, refLF, bad, false, false))
+            Violation(cls, "the entries loaded (" + std::to_string(names.All().size()) + ") are not the well-formed lines' (" + std::to_string(ref.size()) + ")");
     }
-    // A lone carriage return ends a line (round 2, A9-25): a name that holds one is two lines read as one.
-    for (const auto& kv : names.All())
-        if (kv.second.find('\r') != std::string::npos) { Violation("LONE_CR_JOINS_LINES", "the name of " + Hex(kv.first) + " holds a carriage return: the next line is in it"); break; }
     // Save then Load must give back what was loaded.
     Guarded::Run("FunctionNames::Save", [&] {
         names.Save();
@@ -1429,9 +1497,9 @@ void RunCommentsCase(uint64_t index)
     sfe::AssemblyPanel panel;
     Guarded::Run("AssemblyPanel::LoadComments", [&] { panel.LoadComments(); });
     gAccepted["comments"] += !panel.UserComments().empty();
-    std::map<uint32_t, std::string> got(panel.UserComments().begin(), panel.UserComments().end()), ref;
+    std::map<uint32_t, std::string> got(panel.UserComments().begin(), panel.UserComments().end()), ref, refLF;
     BadLines bad;
-    for (const std::string& l : Lines(text))
+    for (const std::string& l : LinesCR(text))
     {
         uint32_t a = 0;
         std::string n;
@@ -1439,18 +1507,17 @@ void RunCommentsCase(uint64_t index)
         if (k == LineKind::Entry) ref[a] = n;
         else if (k != LineKind::Comment && k != LineKind::NoName) bad.emplace_back(k, l);
     }
+    for (const std::string& l : Lines(text))
+    {
+        uint32_t a = 0;
+        std::string n;
+        if (ParseSymbolRef(l, a, n) == LineKind::Entry) refLF[a] = n;
+    }
     if (got != ref)
     {
-        const char* cls = "DROPS_VALID";
-        for (const auto& kv : got)
-        {
-            auto it = ref.find(kv.first);
-            if (it == ref.end() || it->second != kv.second) { cls = ExtraClass(bad, kv.first, false, false); break; }
-        }
-        Violation(cls, "the notes loaded (" + std::to_string(got.size()) + ") are not the well-formed lines' (" + std::to_string(ref.size()) + ")");
+        for (const std::string& cls : DiffClasses(got, ref, refLF, bad, false, false))
+            Violation(cls, "the notes loaded (" + std::to_string(got.size()) + ") are not the well-formed lines' (" + std::to_string(ref.size()) + ")");
     }
-    for (const auto& kv : got)
-        if (kv.second.find('\r') != std::string::npos) { Violation("LONE_CR_JOINS_LINES", "the note at " + Hex(kv.first) + " holds a carriage return: the next line is in it"); break; }
     Guarded::Run("AssemblyPanel::SaveComments", [&] {
         panel.SaveComments();
         sfe::AssemblyPanel again;
@@ -1479,38 +1546,28 @@ void RunBoundsCase(uint64_t index)
     gAccepted["bounds"] += !fb.Entries().empty();
     if (!ok) Violation("REJECTED_READABLE", "Load refused a file it could read");
 
-    std::set<uint32_t> ref;
+    std::set<uint32_t> ref, refLF;
     BadLines bad;
-    for (const std::string& l : Lines(text))
+    for (const std::string& l : LinesCR(text))
     {
         uint32_t a = 0;
         const LineKind k = ParseBoundsRef(l, a);
         if (k == LineKind::Entry) { uint32_t c = 0; if (sfe::CanonicalAddress(a, c)) ref.insert(c); }
         else if (k != LineKind::Comment) bad.emplace_back(k, l);
     }
-    if (fb.Entries() != ref)
-    {
-        const char* cls = "DROPS_VALID";
-        for (uint32_t e : fb.Entries())
-            if (!ref.count(e)) { cls = ExtraClass(bad, e, true, true); break; }
-        Violation(cls, "the entries loaded (" + std::to_string(fb.Entries().size()) + ") are not the well-formed lines' (" + std::to_string(ref.size()) + ")");
-    }
-    // A lone carriage return ends a line (round 2, A9-25): an entry after one is read as the remark of the line before it.
     for (const std::string& l : Lines(text))
     {
-        size_t p = l.find('\r');
-        while (p != std::string::npos)
-        {
-            const size_t q = l.find('\r', p + 1);
-            uint32_t a = 0, c = 0;
-            if (ParseBoundsRef(l.substr(p + 1, q == std::string::npos ? std::string::npos : q - p - 1), a) == LineKind::Entry &&
-                sfe::CanonicalAddress(a, c) && !fb.Entries().count(c))
-            {
-                Violation("LONE_CR_JOINS_LINES", "the entry " + Hex(a) + " after a carriage return was read as a remark");
-                break;
-            }
-            p = q;
-        }
+        uint32_t a = 0, c = 0;
+        if (ParseBoundsRef(l, a) == LineKind::Entry && sfe::CanonicalAddress(a, c)) refLF.insert(c);
+    }
+    if (fb.Entries() != ref)
+    {
+        std::map<uint32_t, std::string> g, r, rl;
+        for (uint32_t e : fb.Entries()) g[e];
+        for (uint32_t e : ref) r[e];
+        for (uint32_t e : refLF) rl[e];
+        for (const std::string& cls : DiffClasses(g, r, rl, bad, true, true))
+            Violation(cls, "the entries loaded (" + std::to_string(fb.Entries().size()) + ") are not the well-formed lines' (" + std::to_string(ref.size()) + ")");
     }
     Guarded::Run("FunctionBounds::Save", [&] {
         const std::string out = gScratch + "/bounds/out.txt";
