@@ -1570,6 +1570,7 @@ void TestUnparsedVolatileIsSaid()
     CHECK(Has(f.panel.UnparsedVolatileProblem(), "NOT in force"));
     CHECK(f.panel.SetVolatileMemory("26001000-26001003"));
     CHECK(!f.panel.VolatileNotInForce() && f.panel.UnparsedVolatileProblem().empty());
+    CHECK(f.panel.SetVolatileMemory(""));
     f.panel.KeepUnparsedVolatileMemory(std::string(4000, '1'));   // over the popup's buffer: refused at start
     CHECK(Has(f.panel.UnparsedVolatileProblem(), "longer"));
 }

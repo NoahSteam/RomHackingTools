@@ -15967,3 +15967,61 @@ No new `ctest` entry (108 with the Live tests, as on master): the round extends 
 * The live wire (A9-17 a) is still not fuzzed: `FakeLiveServer.h` can serve raw bytes to `ReadSnapshot`.
 * A9-22 and A9-26 are read, not run: `DecompilerPanelTests` can hold the popup's text and the BIOS menu's enabled items.
 * When A9-19 and A9-20 are fixed in `App` rather than in the classes, the `lifecycle` cases must call the new seam.
+
+## Area 9 fixer (A9-18 to A9-30)
+
+Branch `review/9-fix` from `bc4e6aaf`; own build `build-a9` (RelWithDebInfo, gcc 13, `-j2`, every test binary under `ulimit -v 3500000`). The oracle (`LoaderFuzzTests`) was the target: each class fixed was removed from `Known()`, so it fails the run if it comes back. Rows closed in `Docs/Decompiler/REVIEW_LEDGER.md` (commit hashes in the rows' status cells are the branch head named in the hand-back).
+
+### The decisions as built
+
+* **One save for the user's files** (`FrontEnd/src/StoreMerge.h`, `SaveStore`; `Settings::SaveTo` follows the same rules). A store remembers what its file held when it was loaded (the base) and why `Load` refused the file, if it did (A9-19). `Save`: nothing changed since the base: nothing is written (A9-20); a refused file: the save is refused, with a message naming the file and why; otherwise, under a `FileLock` on `<file>.lock`, the file is read again (a file that is now over the ceiling, not regular or unreadable is refused), this session's adds, edits and deletes are applied to its lines, every other line is kept as written (comments, skipped lines, remarks, another instance's entries: A9-21), the result must not exceed the ceiling the next start enforces, and it is written atomically. New and rewritten lines carry eight hex digits. Names, notes, function starts and `settings.ini`.
+* **Load Symbols** (A9-19): `FunctionNames::Import` refuses a merge that would come to more than the 8 MiB `Load` reads, with a message, and merges nothing.
+* **The address word** (A9-18, `ParseAddressWord`, `AddressNameLine.h`; the bounds loader uses it too). With `0x`: one to eight hex digits. Without: eight hex digits, or one to seven that include a decimal digit. A word of the letters a-f alone and shorter than eight (`Dead`, `add`, `beef`, `a`) is a word: the line is skipped, counted and kept. Old files keep loading where unambiguous (`6004000 name`); the one case that changes is a line an old version wrote for an address of letters only below 0x10000000 (`abc` for 0x00000ABC), an address in no memory of the machine, which is now skipped and counted.
+* **Line ends** (A9-25, `SplitLines`): LF, CRLF and a lone CR, in the names, notes, bounds and `settings.ini` loaders. `settings.ini` writes a CR in a value as a space (as it did a line feed), so a value cannot start another key.
+* **Bounds** (A9-21): an address `CanonicalAddress` refuses (`FFFFFE10`) is counted with the skipped lines.
+* **Volatile popup** (A9-22): opens with an amber line that the saved list is not in force and why; the button's tooltip says so.
+* **Windows** (A9-23, read, not run on Windows): `OFN_NOCHANGEDIR` on the three dialogs; `WorkFilePath` (`WorkFiles.h`) anchors the names, notes and starts files at the folder `App::Initialize` records first.
+* **P3s.** A9-24: `ReadFileCapped` and the savestate openers' `LoadFile` open with `O_NONBLOCK` and `fstat` the descriptor; a save to a FIFO is refused at the re-read. A9-26: Reload and Stop Using are offered when a BIOS path is held. A9-27: notes saves after an edit report through `SetSaveErrorHandler` (the Log), the starts save logs its reason. A9-28: `WriteFileAtomically` refuses to replace a read-only regular file (says so) and gives the new file the old one's permission bits; the hard link is accepted (a new file has a new identity; keeping a link needs an in-place write, which gives up A9-3's atomic save; same reason as the symlink in A9-15). A9-29: record repaired (commit `79ba4d47`; text moved only; the shared `### Findings` heading and table header line are present in both sections, as both sections had them). A9-30: instrument row updated.
+
+### Pins and mutation checks
+
+New tests: `FunctionNamesTests` `SaveAfterLoadPins` (A9-18 words, eight digits, lone CR, idle instance (same inode and mtime), two instances, comments and skipped lines kept, refused 8 MiB file, Load Symbols over the ceiling, mode kept, read-only refused); `DecompilerPanelTests` `TestUnparsedVolatileIsSaid`, `TestBiosItemsAfterFailedLoad`. No new `ctest` entry. The oracle's `lifecycle`, `links.savestate` and `concurrent.race` cases pin the rest. Adapted in the oracle: cases that saved over an old output file start from no file (a save merges now); the settings reference ends a line at a lone CR; the concurrent bounds test checks that the list never shrinks (a union is the new contract, a torn read is a short list).
+
+Mutations (made locally in the product, run, reverted; none committed). Classes are those the oracle then reported, default run, seed 9:
+
+| Mutation | Result |
+|---|---|
+| `ParseAddressWord`: the letters-only rule removed | `PROSE_AS_ADDRESS` 24, 16, 32 (names, notes, bounds) |
+| `SplitLines`: LF only | `LONE_CR_JOINS_LINES` 6, 7, 1, 3; settings `DIFFERS_FROM_FORMAT` 4, `ROUNDTRIP` 4 |
+| `SaveStore`: the re-read file replaced by an empty one | `LOST_UPDATE`, `SAVE_DROPS_COMMENTS`, `SAVE_DROPS_SKIPPED_LINES` |
+| `SaveStore`: the unchanged-store return removed | no oracle class (the rewritten text is the same); `FunctionNamesTests` fails (the file is replaced: inode and mtime) |
+| `SaveStore`: the not-loaded refusal removed | no oracle class and `FunctionNamesTests` fails on the message: the re-read of the file refuses the same cases (a second guard) |
+| not-loaded refusal and every re-read refusal removed | `UNREAD_FILE_OVERWRITTEN`, `SAVE_BLOCKS`, plus `LOST_UPDATE` and `SAVE_DROPS_*` |
+| `WriteFileAtomically`: read-only check removed | `READONLY_REPLACED` |
+| `WriteFileAtomically`: mode copy removed | `MODE_NOT_KEPT` |
+| `ReadFileCapped`: `O_NONBLOCK` removed | `STAT_OPEN_RACE` |
+| savestate `LoadFile`: `O_NONBLOCK` removed | `SAVESTATE_HANG` 2 |
+| bounds: on-chip address counted as no line | `DROPPED_UNCOUNTED` |
+| `Import`: ceiling check removed | `FunctionNamesTests` fails (Load Symbols over the ceiling); the oracle's merge case still passes because `Save` refuses an over-ceiling result |
+| panel pins (A9-22, A9-26) | state-level: they fail if `UnparsedVolatileProblem` or `BiosItemsEnabled` is reverted; the drawn popup and menu are read, not run |
+
+### Runs
+
+| Run | Result |
+|---|---|
+| `ctest -E SaturnExplorerLive -j1 --timeout 900` | 102 of 102 passed (after a first run in which `DecompilerPanelTests` failed on a mistake in the new test: it asked for the "not in force" text with a list already set; fixed and rerun alone: passed) |
+| `ctest -R SaturnExplorerLive -j1` | 6 of 6 passed, 29 s |
+| `SaturnExplorerDecompilerFaultTests` | 0 of 94 jobs failed, 77.6 s |
+| `SaturnExplorerLoaderFuzzTests` default run, ordinary build | 2,133 cases, 0 classes outside the ledger; only `HARDLINK_SPLIT` (A9-28, accepted) seen |
+| the same under ASan and UBSan | 2,133 cases in 25 s, same |
+| long run, ASan and UBSan, seed 29, four pieces of 1,500 case indices a module (`SE_LOADFUZZ_NOFIXED=1`) | 18,935 cases each (75,740 in all), 110 to 114 s a piece, every piece exit 0, no violation class, no sanitizer report, no UBSan error |
+| `App.cpp` | `g++ -std=gnu++14 -fsyntax-only` with `-DSE_ENABLE_DECOMPILER=1 -DSE_ENABLE_LIVE` and with `-DSE_ENABLE_DECOMPILER=0`: clean (the application is not built here: no SDL2) |
+
+The sanitized binary was compiled by hand in the scratchpad (the coordinator asked for no second build directory), linked against the ordinary-build driver libraries, so the savestate driver itself was not instrumented in this run; the sanitized objects are the loaders, stores and the oracle. It ran without `ulimit -v` (AddressSanitizer cannot run under one).
+
+### Not run, and limits
+
+* Windows: `OFN_NOCHANGEDIR`, the absolute paths, `LockFileEx` for the lock files and `MoveFileEx` on a read-only target are by reading.
+* The lock files `saturn_functions.txt.lock`, `assembly_comments.txt.lock`, `saturn_function_bounds.txt.lock` and `settings.ini.lock` stay in the folder (empty); a folder the user cannot write gets no lock and the save fails with its own message.
+* The save is no longer "the file is exactly the session's list": an entry the user removes by hand while an instance runs comes back only if that instance changed it; a hand edit made while an instance runs is kept unless the instance changed the same address.
+* `App` is not linked by any test: the order Load, Save is modelled by the oracle, and the Log lines are read, not run.
