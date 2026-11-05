@@ -486,8 +486,9 @@ std::string DecompilerPanel::StaleTooltip() const
         return "This output is from an earlier state; its replacement is shown when it is ready.";
     case StaleReason::Stopped:
         // Enter in the entry box asks for the function the box holds, as an Entry target: under Follow PC or Decompile that is not
-        // the question that was stopped (A8-19).
-        if (mTarget.kind == TargetKind::Entry)
+        // the question that was stopped (A8-19). Nor is it for an Entry target whose box would ask another: another entry, or the same
+        // entry with another origin (a pin of the finder's guess against the entry the user typed there; A8-36).
+        if (EnterAsksTarget())
             return "This output is from an earlier state. You stopped its replacement; press Enter in the\n"
                    "entry box or Refresh to ask for it again.";
         return "This output is from an earlier state. You stopped its replacement; press Refresh to ask\n"
@@ -527,6 +528,7 @@ std::string DecompilerPanel::StaleTooltip() const
             return b;
         case EntryFailure::Refused:
         case EntryFailure::NotCode:
+        case EntryFailure::NothingPinned:
         case EntryFailure::None:
             break;
         }
@@ -535,7 +537,7 @@ std::string DecompilerPanel::StaleTooltip() const
     }
     if (mViewKind == DecompViewKind::LiveRunning && EmulatorMovedOn())
         return "The emulator has moved on since this was decompiled. Press Refresh.";
-    if (mTarget.kind != TargetKind::Entry)
+    if (!EnterAsksTarget())
         return "This output is from an earlier state and nothing is being decompiled. Press Refresh to\n"
                "replace it.";
     return "This output is from an earlier state and nothing is being decompiled. Press Enter in the\n"
@@ -594,6 +596,16 @@ void DecompilerPanel::Resolve(const DecompilerInputs& inputs)
         return;
     }
 
+    // Follow PC turned off with no function found and none shown: there is nothing to keep, and nothing is asked. Not entry 0 as the
+    // user's entry (A8-38).
+    if (mTarget.kind == TargetKind::Entry && mTarget.origin == EntryOrigin::NothingToPin)
+    {
+        mEntryError = "Follow PC is off, and there was no function to keep: type an entry and press Enter, or turn Follow PC on.";
+        mEntryFailure = EntryFailure::NothingPinned;
+        ForgetStop();
+        return;
+    }
+
     if (mTarget.kind == TargetKind::Entry)
     {
         // A2: classify before folding. A mirror is accepted and shown canonical; an address in
@@ -611,10 +623,14 @@ void DecompilerPanel::Resolve(const DecompilerInputs& inputs)
         }
         mEntryOk = true;
         mEntry = mTarget.address;   // as typed: a mirror is where the code runs, which mova sees
-        mEntrySource = mTarget.source;
-        // An entry the finder found and the user pinned is still the finder's guess (A8-30): its figure and doubt come with the target.
-        mEntryConfidence = mTarget.confidence;
-        mEntryDoubt = mTarget.doubt;
+        if (mTarget.origin == EntryOrigin::Pinned)
+            ResolvePin(inputs, canonical);
+        else
+        {
+            // Only the user's own entry is settled: typed, or a function start set.
+            mEntrySource = EntrySource::User;
+            mEntryConfidence = 100;
+        }
         return;
     }
 
@@ -653,6 +669,61 @@ void DecompilerPanel::Resolve(const DecompilerInputs& inputs)
     mEntryDoubt = g.doubt;
     mHaveAnchor = true;
     mAnchor = anchorCanonical;
+}
+
+// A pinned entry is the finder's guess, kept: it is not confirmed by being kept, and what confirmed it can go (a name erased, a call stack
+// cleared) or come (a start set at it). So its verdict is asked of the finder each time it is resolved, never carried in the target
+// (A8-30, A8-33, A8-37): first for the address it was found for, while the finder still names this entry there (its doubts about that
+// address, "never reaches 0x...", stay true of it), else for the entry itself. When the finder names neither, no source holds the
+// entry any more: no label, and a doubt of the panel's own that says so.
+void DecompilerPanel::ResolvePin(const DecompilerInputs& inputs, uint32_t canonical)
+{
+    const FinderHints hints = FinderHintsFor(inputs);
+    EntryGuess g;
+    if (mTarget.haveAnchor) g = FindFunctionContaining(*mSnap, mTarget.anchor, hints);
+    if (!g.ok || g.entry != canonical) g = FindFunctionContaining(*mSnap, canonical, hints);
+    if (g.ok && g.entry == canonical)
+    {
+        mEntrySource = g.source;
+        mEntryConfidence = g.confidence;
+        mEntryDoubt = g.doubt;
+        return;
+    }
+    mEntrySource = EntrySource::None;
+    mEntryConfidence = 0;
+    char b[300];
+    if (g.ok)
+        std::snprintf(b, sizeof b, "kept by you from the finder, and no source names 0x%08X as an entry now: the finder puts it in the function at 0x%08X",
+                      canonical, g.entry);
+    else
+        std::snprintf(b, sizeof b, "kept by you from the finder, and no source names 0x%08X as an entry now: %s", canonical, g.why.c_str());
+    mEntryDoubt = b;
+}
+
+bool DecompilerPanel::EnterTarget(Target& out) const
+{
+    uint32_t v = 0;
+    if (!ParseHexAddress(mEntryBuf, v)) return false;
+    if (mBoxTargetValid)
+    {
+        const Target& t = mBoxShowsShown ? mShownTarget : mBoxTarget;
+        if ((!mBoxShowsShown || mShownValid) && t.kind == TargetKind::Entry && t.address == v)
+        {
+            out = t;
+            return true;
+        }
+    }
+    out = Target();
+    out.kind = TargetKind::Entry;
+    out.address = v;
+    out.origin = EntryOrigin::Typed;
+    return true;
+}
+
+bool DecompilerPanel::EnterAsksTarget() const
+{
+    Target t;
+    return mTarget.kind == TargetKind::Entry && EnterTarget(t) && t == mTarget;
 }
 
 // What the screen says about the output that the text alone would not: the stale badge with its reason, and each amber line (unsupported,
@@ -732,8 +803,13 @@ std::vector<std::string> DecompilerPanel::Uncertainties() const
         std::snprintf(b, sizeof b, "0x%08X: ", n.address);
         out.push_back(b + n.text);
     }
-    // Only for the answer to the question the anchor belongs to.
-    if (mResolved && mEntryOk && mShown.requestedEntry == mEntry)
+    // Only for the answer to the question the anchor belongs to. The entry's doubt is the output's own: when the question on screen is about
+    // something else (no function at the PC, another function), the doubt the output was installed with is still true of it (A8-39).
+    if (!(mResolved && mEntryOk && mShown.requestedEntry == mEntry))
+    {
+        if (!mShownEntryDoubt.empty()) out.push_back("Entry: " + mShownEntryDoubt + ".");
+    }
+    else
     {
         // Not reached can mean the entry is wrong, or that flow stopped short of the address (a
         // switch it could not recover, a cut, data) -- then a new start would be the wrong fix. A
@@ -830,9 +906,19 @@ void DecompilerPanel::Install(DecompileResult& result, const ViewId& snapId, uin
         std::snprintf(b, sizeof b, "%s, %d%%", EntrySourceName(mEntrySource), mEntryConfidence);
         mShownEntrySource = b;
     }
-    mShownEntryFrom = mEntrySource;
-    mShownEntryConfidence = mEntryConfidence;
     mShownEntryDoubt = mEntryDoubt;
+    // The target that asks for this answer again, with where its entry came from.
+    if (mTarget.kind == TargetKind::Entry)
+        mShownTarget = mTarget;
+    else
+    {
+        mShownTarget = Target();
+        mShownTarget.kind = TargetKind::Entry;
+        mShownTarget.address = mEntry;
+        mShownTarget.origin = EntryOrigin::Pinned;
+        mShownTarget.haveAnchor = mHaveAnchor;
+        mShownTarget.anchor = mAnchor;
+    }
     for (uint32_t c : mShown.callees)
     {
         auto it = mCallees.find(c);
@@ -1056,7 +1142,8 @@ void DecompilerPanel::Update(const DecompilerView& view, DecompilerRunner& runne
         }
         // A containing function is found from the finder's hints as well as the snapshot: a start set
         // or a symbol added inside it, an entry discovered since, or a call stack rebuilt can move it.
-        if (mSnap && mResolved && mTarget.kind != TargetKind::Entry &&
+        // So can a pin's verdict (A8-33, A8-37): the finder is asked about it again.
+        if (mSnap && mResolved && (mTarget.kind != TargetKind::Entry || mTarget.origin == EntryOrigin::Pinned) &&
             (mResolvedFunctions != mFunctions || mResolvedCallees != CalleeHash() ||
              mResolvedCallSites != mCallSitesRevision))
             mResolved = false;
@@ -1263,24 +1350,23 @@ void DecompilerPanel::DrawHeader(const DecompilerView& view, const DecompilerRun
         else
         {
             // Pin the function found, or else the one shown, rather than forgetting what was asked. Pinning is not the user's entry: an
-            // entry the finder guessed keeps its source, its figure and its doubt (A8-30; the guide: an rts-scan entry always shows it).
-            t.kind = TargetKind::Entry;
+            // entry the finder guessed stays the finder's, asked of it again (A8-30, A8-37; the guide: an rts-scan entry always shows
+            // it). The output shown is pinned with the origin it was asked with. Nothing found and nothing shown pins nothing (A8-38).
             if (mEntryOk)
             {
+                t.kind = TargetKind::Entry;
                 t.address = mEntry;
-                t.source = mEntrySource;
-                t.confidence = mEntryConfidence;
-                t.doubt = mEntryDoubt;
+                t.origin = EntryOrigin::Pinned;
+                t.haveAnchor = mHaveAnchor;
+                t.anchor = mAnchor;
             }
-            else if (mShownValid && mShownEntryFrom != EntrySource::None)
-            {
-                t.address = mShown.requestedEntry;
-                t.source = mShownEntryFrom;
-                t.confidence = mShownEntryConfidence;
-                t.doubt = mShownEntryDoubt;
-            }
+            else if (mShownValid)
+                t = mShownTarget;
             else
-                t.address = mShownValid ? mShown.requestedEntry : 0;
+            {
+                t.kind = TargetKind::Entry;
+                t.origin = EntryOrigin::NothingToPin;
+            }
         }
         SetTarget(t);
         // A click is a request, as Enter and Decompile are (A8-18, A8-27): after a Stop the new target may resolve to the very
@@ -1295,19 +1381,25 @@ void DecompilerPanel::DrawHeader(const DecompilerView& view, const DecompilerRun
     {
         std::snprintf(mEntryBuf, sizeof mEntryBuf, "%08X", mShown.requestedEntry);
         mSyncEntryBox = false;
+        // The panel's text: Enter on it asks for the output shown, as it was asked (A8-36).
+        mBoxTargetValid = true;
+        mBoxShowsShown = true;
     }
     ImGui::SetNextItemWidth(ImGui::CalcTextSize("0x00000000").x + ImGui::GetStyle().FramePadding.x * 2.0f);
-    if (ImGui::InputTextWithHint("##entry", "entry", mEntryBuf, sizeof mEntryBuf,
-                                 ImGuiInputTextFlags_EnterReturnsTrue))
+    const bool entered = ImGui::InputTextWithHint("##entry", "entry", mEntryBuf, sizeof mEntryBuf, ImGuiInputTextFlags_EnterReturnsTrue);
+    // Any edit makes the text the user's: Enter on it is then the entry typed, whatever the text says.
+    if (ImGui::IsItemEdited()) mBoxTargetValid = false;
+    if (entered)
     {
-        uint32_t v = 0;
-        if (ParseHexAddress(mEntryBuf, v))
+        Target t;
+        if (EnterTarget(t))
         {
-            Target t;
-            t.kind = TargetKind::Entry;
-            t.address = v;
-            t.source = EntrySource::User;
+            // Text the user typed is their entry. Text the panel wrote, untouched, asks again what it stands for, with its origin: a pin
+            // stays the finder's guess (A8-36).
             SetTarget(t);
+            mBoxTarget = t;
+            mBoxTargetValid = true;
+            mBoxShowsShown = false;
             // The box holds what was typed: the reset of a refusal's text (SetTarget) is for the targets that did not come from it.
             mSyncEntryBox = false;
             // Typing an entry and pressing Enter is a request, not a state the panel drifted into: it
@@ -1886,7 +1978,7 @@ void DecompilerPanel::DrawLines(const DecompilerInputs& inputs, Request& req)
                     Target t;
                     t.kind = TargetKind::Entry;
                     t.address = ln.firstAddr + (mShown.requestedEntry - mShown.entry);
-                    t.source = EntrySource::User;
+                    t.origin = EntryOrigin::FunctionStart;
                     SetTarget(t);
                 }
                 if (item("View in Memory", ln.firstAddr != 0))
