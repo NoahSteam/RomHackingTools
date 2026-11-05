@@ -13089,9 +13089,11 @@ void TestRound9Pins(Sh2Decompiler& d)
         CHECK(rep.findings.empty() && count(rep, "proto.withheld") >= 1);
     }
     // The grammar's choices (A3-64): the first grammar-2 seed that draws each chooser, decompiled and checked. A chooser the signature does not hold
-    // is withheld; one it holds, or a constant, is the accepted void (`excluded.choice-held.return-dropped`).
+    // is withheld; one it holds, or a constant, is the accepted void (`excluded.choice-held.return-dropped`). With them `fn.ret_call` (`return g(p);`,
+    // Func::retIsCall, A2-31), which the default 300 seeds do not draw (A11-11): only the A2-50 shrinker's hand-written module stood for it.
     {
-        const char* const kKinds[] = { "choice.by_r0", "choice.by_sr", "choice.by_scratch", "choice.by_param", "choice.by_const", "choice.by_stack" };
+        const char* const kKinds[] = { "choice.by_r0", "choice.by_sr", "choice.by_scratch", "choice.by_param", "choice.by_const", "choice.by_stack",
+                                       "fn.ret_call" };
         for (const char* kind : kKinds)
         {
             long found = -1;
