@@ -1203,6 +1203,9 @@ struct Rig
             held = now;
             held.valid = true;
         }
+        // A Stop is forgotten when the view leaves the question stopped (A8-29 (c)): the cancel's answer, if still to come, answers nothing on
+        // screen, and coming back to the question asks it again (A8-44).
+        if (haveStopped && held.valid && !SigOf(held).Same(stopped)) haveStopped = false;
     }
 
     void Observe()
@@ -2176,6 +2179,11 @@ const Pinned kPinned[] = {
     // closed, leaves the question unasked and the view coming back to it asks it, as after any request (A1-4).
     { "A8-7", "hold; select A; stop; wait; hold; edit A 0 1; hide; scrub 1; wait; resume; show; wait", "C,A", 0 },
     { "A8-7 (twice)", "select A; hold; edit A 0 1; stop; wait; hold; edit A 0 2; hide; scrub 1; wait; resume; show; wait", "C,A", 0 },
+    // The model forgets a Stop when the view leaves the question stopped (A8-44, the panel's A8-29 (c)): the question asked again on return
+    // is no violation. After a reconnect the recorded frame has the live frame's number, so the held snapshot is the stopped one again.
+    { "A8-44", "select A; hold; reconnect; stop; scrub 1; resume; wait", "C,A", 0 },
+    { "A8-44 (scrub 2)", "select A; hold; reconnect; stop; scrub 2; resume; wait", "C,A", 0 },
+    { "A8-44 (released)", "select A; hold; reconnect; stop; scrub 1; resume; finish; wait", "C,A", 0 },
     // Refresh on output that already answers the inputs is not stale while the replacement runs (A8-3):
     // the held-engine check forbids a stale mark when the inputs are the ones shown, not only requires
     // one when they differ.
