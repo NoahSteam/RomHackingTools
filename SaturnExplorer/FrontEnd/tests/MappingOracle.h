@@ -309,25 +309,38 @@ inline MemoryShape ShapeOf(const sfe::DisassembledInstruction& d)
     return m;
 }
 
-// A7-34 (the area 7 fixer): how many bytes a variable of the text has, by its declaration (`uint2 uVar4;`): a type ending in its size
-// (int1, uint2, xunknown4, undefined8), or char, bool, short; 4 for any other or when the text declares it nowhere (a global).
+// A7-34 (the area 7 fixer): how many bytes a variable of the text has, by its declaration (`uint2 uVar4;`, or a parameter's in the
+// signature, `int2 param_3)`): a type ending in its size (int1, uint2, xunknown4, undefined8), or char, bool, short; 4 for any other or
+// when the text declares it nowhere (a global).
 inline int DeclaredWidth(const sfe::decomp::DecompileResult& r, const std::string& name)
 {
     if (name.empty()) return 4;
+    const auto widthOf = [](const std::string& type) {
+        const char last = type.back();
+        if (last == '1' || last == '2' || last == '4' || last == '8') return last - '0';
+        if (type == "char" || type == "uchar" || type == "bool" || type == "byte") return 1;
+        if (type == "short" || type == "ushort") return 2;
+        return 4;
+    };
     for (const sfe::decomp::Line& l : r.lines)
     {
         const std::string& t = l.text;
+        // (a parameter: `<type> name,` or `<type> name)` in the signature)
+        for (size_t at = t.find(" " + name); at != std::string::npos; at = t.find(" " + name, at + 1))
+        {
+            const size_t end = at + 1 + name.size();
+            if (end >= t.size() || (t[end] != ',' && t[end] != ')')) continue;
+            size_t b = at;
+            while (b > 0 && (std::isalnum(static_cast<unsigned char>(t[b - 1])) || t[b - 1] == '_')) --b;
+            if (b < at && (b == 0 || t[b - 1] == '(' || t[b - 1] == ',')) return widthOf(t.substr(b, at - b));
+        }
         const size_t a = t.find_first_not_of(' ');
         if (a == std::string::npos || t.size() < name.size() + 2 || t.compare(t.size() - name.size() - 1, std::string::npos, name + ";") != 0) continue;
         const size_t gap = t.size() - name.size() - 1;
         if (gap == 0 || t[gap - 1] != ' ') continue;
         const std::string type = t.substr(a, gap - 1 - a);
         if (type.empty() || type.find_first_of(" =(*[") != std::string::npos) continue;
-        const char last = type.back();
-        if (last == '1' || last == '2' || last == '4' || last == '8') return last - '0';
-        if (type == "char" || type == "uchar" || type == "bool" || type == "byte") return 1;
-        if (type == "short" || type == "ushort") return 2;
-        return 4;
+        return widthOf(type);
     }
     return 4;
 }
@@ -1012,7 +1025,15 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
             const auto word = [](const std::string& x) {
                 return !x.empty() && x.find_first_not_of("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.-") == std::string::npos;
             };
-            return word(text.substr(b, eq - b)) && word(text.substr(eq + 3, text.size() - 1 - (eq + 3)));
+            // (A7-34's triage: a conversion too, `xRam26002108 = (xunknown2)xVar1;` at the load that made xVar1, naming the store)
+            size_t v = eq + 3;
+            if (v < text.size() && text[v] == '(')
+            {
+                const size_t close = text.find(')', v);
+                if (close == std::string::npos || !word(text.substr(v + 1, close - v - 1))) return false;
+                v = close + 1;
+            }
+            return word(text.substr(b, eq - b)) && v < text.size() && word(text.substr(v, text.size() - 1 - v));
         };
         std::map<uint32_t, std::set<size_t>> ownDrawn, copyDrawn;
         for (size_t li = 0; li < r.lines.size(); ++li)
@@ -1686,7 +1707,9 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
             const bool numberInsn = (w >> 12) == 0xE || (w >> 12) == 0x9 || (w >> 12) == 0xD;
             // (a register move puts the value in the line's register: `bVar1 = true;` at `mov r10,r9`, r10 holding it, is that move's)
             const bool move = (w >> 12) == 0x6 && (w & 0xF) == 0x3;
-            const bool makes = numberInsn || (d.Mnemonic.compare(0, 3, "mov") == 0 && m.store) || control || move;
+            // (A7-34's triage: a read-modify-write of memory, `tas.b @r7` or `or.b #imm,@(r0,gbr)`, stores the variable as a `mov` does)
+            const bool modifies = (w & 0xF0FF) == 0x401B || (w >> 8) == 0xCD || (w >> 8) == 0xCE || (w >> 8) == 0xCF;
+            const bool makes = numberInsn || (d.Mnemonic.compare(0, 3, "mov") == 0 && m.store) || modifies || control || move;
             // A7-34 (the area 7 fixer): the number at the variable's width, its declaration's (`uVar4 = 0xffab;` at `mov #0xAB,r2`: the
             // sign-extended 0xffffffab of a two-byte variable)
             const size_t nameAt = text.find_first_not_of(' ');

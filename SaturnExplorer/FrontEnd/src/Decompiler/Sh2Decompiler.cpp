@@ -5948,6 +5948,17 @@ bool FlowValueMayBe(const FlowRecord& flow, const ghidra::Funcdata& fd, int blk,
             continue;
         }
         if (st.blk < 0 || static_cast<size_t>(st.blk) >= flow.blockOps.size()) return true;
+        // (a statement that shows a number: a number the walk knows the storage holds here, on every path, is the statement's or another
+        // -- r3 after `dt r3 ; bf` is 0, no store of the loop's `iStack_1c = 1;` -- FlowNumberBefore)
+        if (numbersOnly)
+        {
+            uint64_t known = 0;
+            if (FlowNumberBefore(flow, fd, st.blk, st.pos, st.vn, known))
+            {
+                if (number(known, st.vn.size)) return true;
+                continue;
+            }
+        }
         const std::vector<FlowOp>& ops = flow.blockOps[static_cast<size_t>(st.blk)];
         bool done = false;
         for (int i = std::min(st.pos, static_cast<int>(ops.size())) - 1; i >= 0 && !done; --i)
