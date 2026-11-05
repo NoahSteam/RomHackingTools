@@ -2122,7 +2122,8 @@ void RunPinnedEntryPins()
 }
 
 // Enter on the entry box as the panel left it: a click into it, no edit, Enter (what the tooltips tell the reader to do).
-bool EnterUntouched(MiniRig& m)
+// Click into the entry box without editing it (the box keeps the keyboard focus), and press Enter in it.
+bool FocusEntryBox(MiniRig& m)
 {
     ImVec2 a, b;
     if (!m.panel.ItemRect("entry", a, b)) return false;
@@ -2131,10 +2132,21 @@ bool EnterUntouched(MiniRig& m)
     m.Frame(c, true);
     m.Frame(c, false);
     m.Idle(2);
+    return true;
+}
+
+void PressEnterInBox(MiniRig& m)
+{
     ImGui::GetIO().AddKeyEvent(ImGuiKey_Enter, true);
     m.Frame(ImVec2(1270, 710), false);
     ImGui::GetIO().AddKeyEvent(ImGuiKey_Enter, false);
     m.Frame(ImVec2(1270, 710), false);
+}
+
+bool EnterUntouched(MiniRig& m)
+{
+    if (!FocusEntryBox(m)) return false;
+    PressEnterInBox(m);
     return true;
 }
 
@@ -2216,6 +2228,27 @@ void RunEntryOriginPins()
         MiniCheck("A8-36: Enter on the box Follow PC filled pins the function found", !m.panel.FollowPc() && m.panel.WantedEntry() == cEntry);
         says(m, "A8-36: ...the finder's guess, not a user-set entry", "(entry from rts scan, 60%)", guess);
         model(m, "A8-36: ...held to the model", rts);
+    }
+    {
+        // A8-42: the box has the focus (clicked, not edited) while the output moves on; Enter asks the output shown, as A8-36 does for an
+        // untouched box, and not the panel's stale text as a user-set entry.
+        MiniRig m;
+        const uint32_t aEntry = Defs()[FnA].entry;
+        paused(m, cEntry + 4);
+        CHECK(FocusEntryBox(m));
+        m.regs[0].pc = aEntry + 4;
+        ++m.frame;
+        m.Idle(6);
+        CHECK(m.Settle());
+        MiniCheck("A8-42: the focused box kept C while A is shown", m.panel.Shown() && m.panel.Shown()->requestedEntry == aEntry &&
+                  std::string(m.panel.EntryText()) == Hex(cEntry), std::string(m.panel.EntryText()));
+        PressEnterInBox(m);
+        m.Idle(3);
+        CHECK(m.Settle());
+        MiniCheck("A8-42: Enter in the focused, unedited box asks the output shown (A), not C as typed",
+                  m.panel.Shown() && m.panel.Shown()->requestedEntry == aEntry && m.panel.WantedEntry() == aEntry && std::string(m.panel.EntryText()) == Hex(aEntry),
+                  std::string(m.panel.EntryText()));
+        MiniCheck("A8-42: ...no 'user-set entry' label", drawnText().find(Norm("user-set entry")) == std::string::npos, drawnText());
     }
     {
         // A8-36, probe case I: the NoRegisters tooltip ("Turn Follow PC off and press Enter on an entry"), done as it says.
@@ -2870,7 +2903,8 @@ void RunProbe7()
         ImGui::GetIO().AddKeyEvent(ImGuiKey_Enter, false);
         m.Frame(ImVec2(1270, 710), false);
         settle(m);
-        show(m, "9: Enter in the box (text the panel wrote, C)");
+        show(m, "9: Enter in the box (text the panel wrote): fixed (A8-42), A is asked with its origin, box A");
+        MiniCheck("9: A8-42 fixed", m.panel.WantedEntry() == aEntry && std::string(m.panel.EntryText()) == Hex(aEntry));
     }
     {
         // 10: the long saved volatile list the popup cannot hold: what Apply on its text does.
@@ -2881,13 +2915,13 @@ void RunProbe7()
         m.panel.KeepUnparsedVolatileMemory(list);
         std::printf("PROBE7 10: saved list of %zu chars, not in force %d\n   problem: %s\n", list.size(), m.panel.VolatileNotInForce() ? 1 : 0,
                     m.panel.UnparsedVolatileProblem().c_str());
-        char edit[2048];
-        std::snprintf(edit, sizeof edit, "%s", m.panel.VolatileMemory().c_str());   // what the popup puts in its buffer
-        std::string why;
-        const bool ok = m.panel.SetVolatileMemory(edit, &why);
-        std::printf("   Apply on the buffer (%zu chars, ends '%s'): %d, in force %d, now %zu chars\n", std::strlen(edit),
-                    std::strlen(edit) > 12 ? edit + std::strlen(edit) - 12 : edit, ok ? 1 : 0, m.panel.VolatileNotInForce() ? 0 : 1,
-                    m.panel.VolatileMemory().size());
+        m.panel.BeginVolatileEdit();   // what the popup does on opening
+        const std::string edit = m.panel.VolatileEditText();
+        const bool ok = m.panel.ApplyVolatileEdit();
+        std::printf("   Apply on the buffer (%zu chars, ends '%s'): %d, in force %d, saved list kept whole %d\n   said: %s\n", edit.size(),
+                    edit.size() > 12 ? edit.c_str() + edit.size() - 12 : edit.c_str(), ok ? 1 : 0, m.panel.VolatileNotInForce() ? 0 : 1,
+                    m.panel.VolatileMemory() == list ? 1 : 0, m.panel.VolatileEditError().c_str());
+        CHECK(!ok && m.panel.VolatileNotInForce() && m.panel.VolatileMemory() == list);   // A8-43 fixed: expected behaviour
     }
 }
 

@@ -707,6 +707,13 @@ bool DecompilerPanel::EnterTarget(Target& out) const
     if (mBoxTargetValid)
     {
         const Target& t = mBoxShowsShown ? mShownTarget : mBoxTarget;
+        // Text the panel wrote and the user did not edit stands for the output shown now, whatever it says (A8-42): the box may have kept
+        // the focus (and so its text) while the output moved on.
+        if (mBoxShowsShown && mShownValid && t.kind == TargetKind::Entry)
+        {
+            out = t;
+            return true;
+        }
         if ((!mBoxShowsShown || mShownValid) && t.kind == TargetKind::Entry && t.address == v)
         {
             out = t;
@@ -839,6 +846,31 @@ std::string DecompilerPanel::UnparsedVolatileProblem() const
     if (mVolatileUnparsed.size() >= sizeof mVolatileEdit) why = "the list is longer than " + std::to_string(sizeof mVolatileEdit - 1) + " characters";
     else if (ParseAddressRanges(mVolatileUnparsed, ranges, why)) why = "it could not be applied";
     return "The saved list is NOT in force (no volatile memory is set): " + why + ". Apply a list that parses to replace it.";
+}
+
+void DecompilerPanel::BeginVolatileEdit()
+{
+    std::snprintf(mVolatileEdit, sizeof mVolatileEdit, "%s", VolatileMemory().c_str());
+    mVolatileError = UnparsedVolatileProblem();   // a saved list that did not parse is said, not shown as if set (A9-22)
+    mVolatileCut.clear();
+    if (VolatileMemory().size() >= sizeof mVolatileEdit)
+    {
+        mVolatileCut = mVolatileEdit;
+        if (mVolatileError.empty())
+            mVolatileError = "The saved list is longer than " + std::to_string(sizeof mVolatileEdit - 1) + " characters and is shown cut here";
+        mVolatileError += ". Applying the text unchanged is refused: it would replace the saved list with the cut.";
+    }
+}
+
+bool DecompilerPanel::ApplyVolatileEdit()
+{
+    if (!mVolatileCut.empty() && mVolatileCut == mVolatileEdit)
+    {
+        mVolatileError = "The saved list is longer than " + std::to_string(sizeof mVolatileEdit - 1) +
+                         " characters and this is only the start of it: edit the text to replace the whole list.";
+        return false;
+    }
+    return SetVolatileMemory(mVolatileEdit, &mVolatileError);
 }
 
 bool DecompilerPanel::SetVolatileMemory(const std::string& text, std::string* error)
@@ -1406,10 +1438,13 @@ void DecompilerPanel::DrawHeader(const DecompilerView& view, const DecompilerRun
         {
             // Text the user typed is their entry. Text the panel wrote, untouched, asks again what it stands for, with its origin: a pin
             // stays the finder's guess (A8-36).
+            const bool shownText = mBoxTargetValid && mBoxShowsShown && mShownValid;
             SetTarget(t);
             mBoxTarget = t;
             mBoxTargetValid = true;
             mBoxShowsShown = false;
+            // Untouched panel text stood for the output shown, which may not be what it says (A8-42): the box says what was asked.
+            if (shownText) std::snprintf(mEntryBuf, sizeof mEntryBuf, "%08X", t.address);
             // The box holds what was typed: the reset of a refusal's text (SetTarget) is for the targets that did not come from it.
             mSyncEntryBox = false;
             // Typing an entry and pressing Enter is a request, not a state the panel drifted into: it
@@ -1473,8 +1508,7 @@ void DecompilerPanel::DrawHeader(const DecompilerView& view, const DecompilerRun
     BesideIfFits(ButtonWidth("Volatile"));
     if (ImGui::Button("Volatile"))
     {
-        std::snprintf(mVolatileEdit, sizeof mVolatileEdit, "%s", VolatileMemory().c_str());
-        mVolatileError = UnparsedVolatileProblem();   // a saved list that did not parse is said, not shown as if set (A9-22)
+        BeginVolatileEdit();
         ImGui::OpenPopup("volatile");
     }
     ImGui::SetItemTooltip("Memory another processor changes, such as a mailbox shared with the slave SH-2:\n"
@@ -1487,7 +1521,7 @@ void DecompilerPanel::DrawHeader(const DecompilerView& view, const DecompilerRun
         const bool enter = ImGui::InputText("##volatile", mVolatileEdit, sizeof mVolatileEdit, ImGuiInputTextFlags_EnterReturnsTrue);
         if (ImGui::Button("Apply") || enter)
         {
-            if (SetVolatileMemory(mVolatileEdit, &mVolatileError))
+            if (ApplyVolatileEdit())
             {
                 req.settingsChanged = true;
                 ImGui::CloseCurrentPopup();

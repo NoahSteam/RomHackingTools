@@ -1575,6 +1575,28 @@ void TestUnparsedVolatileIsSaid()
     CHECK(Has(f.panel.UnparsedVolatileProblem(), "longer"));
 }
 
+// A8-43: a saved list longer than the popup's box opens cut; Apply on that unchanged cut must not replace the saved list with it (the cut
+// "...06001003, 0600" parses), and an edit of the text still applies.
+void TestVolatileCutListNotRewritten()
+{
+    Fixture f;
+    std::string list = "06002000, ";
+    while (list.size() < 2300) list += "06001000-06001003, ";
+    list += "06002000";
+    f.panel.KeepUnparsedVolatileMemory(list);
+    f.panel.BeginVolatileEdit();
+    CHECK(f.panel.VolatileEditText().size() < list.size());
+    CHECK(!f.panel.ApplyVolatileEdit());
+    CHECK(f.panel.VolatileNotInForce() && f.panel.VolatileMemory() == list);   // the saved list is untouched
+    CHECK(Has(f.panel.VolatileEditError(), "edit the text") || Has(f.panel.VolatileEditError(), "cut"));
+    f.panel.SetVolatileEditText("06002000-06002003");
+    CHECK(f.panel.ApplyVolatileEdit());
+    CHECK(!f.panel.VolatileNotInForce() && f.panel.VolatileMemory() == "06002000-06002003");
+    // A list that fits is applied unchanged as before.
+    f.panel.BeginVolatileEdit();
+    CHECK(f.panel.ApplyVolatileEdit() && f.panel.VolatileMemory() == "06002000-06002003");
+}
+
 // A9-26: after a BIOS image failed to load (no image, the path kept) Reload and Stop Using are offered.
 void TestBiosItemsAfterFailedLoad()
 {
@@ -3130,6 +3152,7 @@ int main(int argc, char** argv)
         RUN(TestPrototypeProvenance());
         RUN(TestUnparsedVolatileKept());
         RUN(TestUnparsedVolatileIsSaid());
+        RUN(TestVolatileCutListNotRewritten());
         RUN(TestBiosItemsAfterFailedLoad());
         RUN(TestFunctionSetChangeIsStale());
         RUN(TestFunctionSetKeysQuestions());

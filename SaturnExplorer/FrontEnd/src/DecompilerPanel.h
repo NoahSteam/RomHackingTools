@@ -196,6 +196,13 @@ public:
     bool VolatileNotInForce() const { return mVolatileText.empty() && !mVolatileUnparsed.empty(); }
     // What is wrong with that saved list ("" when it is in force or nothing is saved).
     std::string UnparsedVolatileProblem() const;
+    // The Volatile popup's edit box. Opening it copies the saved list; one longer than the box holds is cut, and Apply on that unchanged
+    // cut is refused (A8-43): it would replace the saved list with a prefix that happens to parse.
+    void BeginVolatileEdit();
+    bool ApplyVolatileEdit();                       // SetVolatileMemory on the box, except for an unchanged cut
+    std::string VolatileEditText() const { return mVolatileEdit; }
+    void SetVolatileEditText(const std::string& t) { std::snprintf(mVolatileEdit, sizeof mVolatileEdit, "%s", t.c_str()); }
+    const std::string& VolatileEditError() const { return mVolatileError; }
 
     // The install decision for one polled result (called by Update; public so tests can offer a
     // result the runner would never deliver, which is how the panel's own checks are pinned
@@ -493,6 +500,7 @@ private:
     uint64_t mVolatileHash = 0;
     char mVolatileEdit[2048] = {};                               // the popup's edit box
     std::string mVolatileError;
+    std::string mVolatileCut;                                    // the box as opened, when the saved list was longer than it: Apply refuses it unchanged
     // The question asked last: its answer or failure is shown, or it is outstanding, or the user's Stop of it is in force. A question
     // stopped stays here only while that Stop is (ForgetStop; a cancel acknowledged when it is no longer the question on screen, Accept).
     Question mAsked;
