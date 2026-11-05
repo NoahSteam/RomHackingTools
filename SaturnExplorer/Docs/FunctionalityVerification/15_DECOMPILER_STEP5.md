@@ -16560,3 +16560,45 @@ A9-23 untouched. A byte-order mark in a file is dropped by the next save of that
 | `SaturnExplorerDecompilerFaultTests` | see the hand-back |
 
 `App.cpp` is not part of the build in this configuration; its change (four Log strings) is text only and was not compiled.
+
+## Area 9, round 4
+
+Branch `review/9-round4` from master `7893bf84`. An adversarial round on the area 9 fixer (A9-31 to A9-38) and the Windows run's A9-40. **No product code changed.** The round adds `FrontEnd/tests/Area9Round4Tests.cpp` (ctest `SaturnExplorerArea9Round4Tests`, Linux; `CMakeLists.txt` target beside the loader fuzz), corrects one reference reading in `LoaderFuzzTests`, confirms A9-40 and files A9-41 (**P2**), A9-42, A9-43 and A9-44 (P3). **One P2: the round is not clean.**
+
+### What was attacked, and how
+
+* **A9-32 (letters-only BIOS addresses).** The fixer's cost line ("a prose line starting with such a word ... now names 0xBAD") is the A9-18 finding (P2) back for lower case: `add it later`, A9-4's and A9-18's own example, is again the function start 0xADD in `saturn_function_bounds.txt`; `be careful ...` is 0xBE and `fade in handler ...` 0xFADE (even, callable BIOS addresses), and no line is skipped, so the Log says nothing. In the names file the same lines are names. Clearing the stray start, the only way to get rid of it, deletes the user's remark line. The fixer turned the A9-18 test and the oracle's prose line to `Add it later` and made the oracle's reference reading copy the new rule, so the fuzz cannot see it. Judged against the old skip-and-warn: the old behaviour lost an older version's BIOS name with a Log line that pointed at the line (A9-32, P3); the new one makes wrong entries in the file the user annotates by hand with no line at all, the A9-18 class at its own severity. **A9-41, P2.**
+* **A9-33 (refuse without the lock).** Run as an ordinary user (root drops to nobody in a child). A lock file of another user (root's, 0644): refused, the text names the file; after the user deletes it, the next save writes the pending change (the session's base is not advanced by a refused save, so nothing is dropped). In a folder the user cannot write, and when the folder is gone, the refusal blames the lock file with three causes none of which holds, and no OS reason (**A9-42, P3**). Never retried: names and notes are saved again at exit and at the next edit, the settings every five seconds; the function starts only at the next change, never at exit (**A9-43, P3**, by reading `App::Shutdown`). The refusal is in the Log for names, notes and starts, and on the status line for settings.
+* **A9-40 (the save waits for the lock).** Confirmed on Linux: another process holding `<file>.lock` for 3 s made `SaveStore` and `Settings::SaveTo` each take 3.00 s, then save (`PIN A9-40`). Kept at P3: nothing is lost or wrong, a SaturnExplorer holder holds the lock for one read and one write, and a dead holder is released; only a stuck holder (a hung instance on a stalled network folder, a debugger, a `flock` script) freezes the window. No same-process double lock exists (the only `FileLock` users are `SaveStore`, `Settings::SaveTo` and `SpecBundle`, each on its own file, never nested); the descriptor is close-on-exec and the Windows handle not inheritable, so a child process cannot keep the lock.
+* **A9-34 (settings merge by lines).** A duplicated key (both lines take the change, the loader's last one wins), a section written twice (a new key goes to the first part, a changed key is rewritten where it stands, a key only in the second part is written in both, which reads back right), the same key in two sections, `  [ DeCompiler ]  ` and `\tBIOS\t=`, no final line end, CRLF (lines come back LF), a byte-order mark with CRLF and a new section (no `[]`, the mark dropped), a header with a remark after it (not a header to the loader or the merge alike), a key before any section: every one reads back with the change and keeps the rest. No finding. Out of scope and not filed: a UTF-16 `settings.ini` (PowerShell 5 `Out-File`) loads no keys and no message, before and after the fix.
+* **A9-37 (`RemoveStaleStagingFiles`).** It runs only under the lock, and every writer of the stores and settings writes its staging file while holding the same lock, so no live writer of that file can have one then. Shown: a child holds the lock with a 15-minute-old staging file of its own (a slow save); the parent's save waits for the lock, and the child's file is there until it renames it; both writes are in the file. A reused pid (alive, fresh) stays; an old file of a live pid goes (stale by construction under the lock); a pid past `pid_t` (`kill(-1, 0)` succeeds) stays; pid 0 goes; another file's staging and a near name stay. Another user's process is `EPERM`, alive. Two machines on one network folder where `flock` is local only would see each other's live writers as dead, but there the instances have no lock between them at all. Windows does nothing (A9-37's litter stays there). No finding.
+* **A9-31 / A9-36 (`CleanEntryText`, blank is a delete).** Import never goes through `Rename`, and the reader skips a name that is only white space (`\f\v\t`), so an import deletes nothing (both lines skipped and counted). `Rename` with white space deletes, as documented; a no-break space (UTF-8 `C2 A0`, not white space to `isspace` in the C locale; the application sets no locale) is a name and reads back the same. No finding.
+* **A9-38.** A names file that is a link loop: `Load` refuses with a reason, the save is refused, the link stays. Holds.
+* **Fuzz.** `LoaderFuzzTests` at a fresh seed, 5309, 3,000 cases a module, directed and two-process cases included: 37,985 cases. The first run reported `settings/DIFFERS_FROM_FORMAT` and `settings/ROUNDTRIP` (index 1576: a byte-order mark that opens the file, before `[decompiler]`). The product is right (A9-34: the mark is skipped); the oracle's settings reference had not followed the fix and read the first header as a key line. Corrected in the test (the reference skips a mark that opens the file, nowhere else); the rerun: 0 classes outside the ledger (only `HARDLINK_SPLIT`, A9-28). Seed 8123, 15,000 cases a module, text modules, `NOFIXED`: 0. The `concurrent` module at 40 rounds and `Area9Round3Tests` (`LockNotHeld`: 600 of 600 under the lock, `KillFuzz`): pass.
+
+### Findings
+
+| Row | Severity | Summary | Test |
+|---|---|---|---|
+| A9-40 | P3 (confirmed) | a save waits for another process's lock with no limit, on Linux as on Windows | `LockWait` (`PIN A9-40`) |
+| A9-41 | **P2** | A9-32's fix makes lower-case prose lines (`add it later`, `be careful`, `fade ...`) entries again, with no Log line; the oracle was changed to match | `ProseLinesAreEntries` (`PIN A9-41`) |
+| A9-42 | P3 | the lock refusal blames the lock file when the folder cannot be written or is gone | `LockRefusal` (`PIN A9-42`) |
+| A9-43 | P3 | a refused save of the function starts is not tried again at exit | read |
+| A9-44 | P3 | instrument row: what this round adds | |
+
+The pins assert today's behaviour: when a finding is fixed, its check fails and is turned round in the same change.
+
+### Runs
+
+| Run | Result |
+|---|---|
+| `SaturnExplorerArea9Round4Tests` (under `ulimit -v 3500000`, `timeout`) | all passed; `PIN A9-40`, `A9-41`, `A9-42` print as holding |
+| `SaturnExplorerLoaderFuzzTests`, seed 5309, 3,000 cases a module, all modules | 37,985 cases, 0 classes outside the ledger after the reference correction (2 oracle artefacts before it) |
+| `SaturnExplorerLoaderFuzzTests`, seed 8123, 15,000 cases a module, names, comments, bounds, settings, `NOFIXED` | 0 classes outside the ledger |
+| `SaturnExplorerLoaderFuzzTests` `concurrent`, 40 rounds; `SaturnExplorerArea9Round3Tests` | pass |
+| Full `ctest` | see below |
+
+### For the fixer
+
+* A9-41 first. The fix A9-32 offered as its alternative keeps the old safety: skip letters-only words as before, and make the skip warning say that `dead` may be an older version's 0x0000DEAD and should be written `0000DEAD`. Give the oracle an independent lower-case prose list back (`add it later`, `be careful`, `fade in`), so `PROSE_AS_ADDRESS` can fire.
+* A9-40, A9-42 and A9-43 go together: a bounded wait that refuses through the existing path needs the starts to be retried (A9-43), and the refusal text needs the real cause (A9-42).
