@@ -5189,12 +5189,11 @@ bool FlowValueMayBe(const FlowRecord& flow, const ghidra::Funcdata& fd, int blk,
         {
             if (++steps > 4096) return true;
             const FlowOp& op = ops[static_cast<size_t>(i)];
-            if ((op.code == ghidra::CPUI_CALL || op.code == ghidra::CPUI_CALLIND) && (memory(st.vn) || !KeptByCall(fd, st.vn)))
-            {
-                if (other(want.insns.count(op.insn) != 0)) return true;
-                done = true;
-                break;
-            }
+            // (a call that may change the register or the memory: the statement's value is the call's when the call is in it; else the
+            // engine kept the value across the call, as the callee's prototype says, and the walk goes past it)
+            if ((op.code == ghidra::CPUI_CALL || op.code == ghidra::CPUI_CALLIND) && (memory(st.vn) || !KeptByCall(fd, st.vn)) &&
+                want.insns.count(op.insn))
+                return true;
             // (memory: the store of the flow that wrote it, when its pointer is known. One whose pointer the flow does not show is passed:
             // the engine's value says whether it wrote there, and the statement's value is what is looked for)
             if (memory(st.vn) && op.code == ghidra::CPUI_STORE && op.numIn > 2)
@@ -5381,10 +5380,11 @@ std::set<std::pair<size_t, uint32_t>> SharedInstructionLines(const PrintedOperat
 // The same for a number the engine knew a register holds on a path (`xVar3 = 1;` after `cmp/eq #1,r0 ; bf ; mov r0,r12`), put in a copy
 // with the address of the next block. Such a COPY is no op of the flow (its time is later than every flow op's), its instruction does not
 // make the number, and it sets a register (the COPY's output, or the register of the variable a copy the merge made is part of). On each
-// path into it, the instruction that last set the register, or made the register it was moved from, made the value (FlowLastWriters; a
-// path whose writer sets another number is another path's, and is passed): the line names those, its drawn tokens at the lowest and an
-// empty token at each other, so the line says it is made at several instructions and a click goes to one of them. When there is none (the register is an input, or memory), the
-// drawn tokens name nothing: never an instruction that does not make the value. A number put in memory is AddFrameStoreTokens'.
+// path into it, the instruction that last set the register, or the register it was moved from, is found (FlowLastWriters; a path whose
+// writer sets another number is another path's, and is passed). When each is a `mov #imm` or a literal load of the number, the line
+// names those, its drawn tokens at the lowest and an empty token at each other, so the line says it is made at several instructions and
+// a click goes to one of them. Otherwise (a load, a call or a computation the engine knew the value of, an input, a temporary) the drawn
+// tokens name nothing: never an instruction that does not make the number. A number put in memory is AddFrameStoreTokens'.
 // Returns how many tokens moved.
 int AddJoinConstantTokens(std::vector<Line>& lines, const PrintedOperations& printed, const ghidra::Funcdata& fd, const FlowRecord& flow)
 {
@@ -5416,7 +5416,9 @@ int AddJoinConstantTokens(std::vector<Line>& lines, const PrintedOperations& pri
                 regSize = rep->getSize();
             }
         }
-        if (reg.getSpace()->getType() != ghidra::IPTR_PROCESSOR || reg.getSpace() == fd.getArch()->getDefaultDataSpace()) continue;
+        // (a number put in memory is AddFrameStoreTokens'; one in a temporary no register holds has no instruction that sets it)
+        if (reg.getSpace()->getType() == ghidra::IPTR_SPACEBASE || reg.getSpace() == fd.getArch()->getDefaultDataSpace()) continue;
+        const bool registerStorage = reg.getSpace()->getType() == ghidra::IPTR_PROCESSOR;
         // where: before the first instruction of its block, or after the last (a copy the merge put at the end of the block before)
         int fblk = -1, fpos = 0;
         if (o->getAddr() == home->getStart())
@@ -5435,17 +5437,24 @@ int AddJoinConstantTokens(std::vector<Line>& lines, const PrintedOperations& pri
         storage.offset = reg.getOffset();
         storage.size = regSize;
         std::set<uint32_t> canonicalMakers;
-        if (fblk >= 0 && FlowLastWriters(flow, fd, fblk, fpos, storage, writers))
+        if (registerStorage && fblk >= 0 && FlowLastWriters(flow, fd, fblk, fpos, storage, writers))
         {
             ValueSet number;
             number.numbers.emplace_back(value, size);
+            bool numbers = true;
             for (const FlowOp* w : writers)
             {
                 uint64_t v = 0;
-                if (FlowNumber(*w, v) && !number.Has(v, w->out.size)) continue;   // (another path's number)
+                if (!FlowNumber(*w, v))
+                {
+                    numbers = false;   // (a load, a call, a computation the engine knew the value of on this path: no instruction makes the number)
+                    break;
+                }
+                if (!number.Has(v, w->out.size)) continue;   // (another path's number)
                 uint32_t m = w->insn, c = 0;
                 canonicalMakers.insert(CanonicalAddress(m, c) ? c : m);
             }
+            if (!numbers) canonicalMakers.clear();
         }
         uint32_t own = at, canonicalOwn = 0;
         if (CanonicalAddress(own, canonicalOwn)) own = canonicalOwn;
@@ -5797,8 +5806,40 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
         if (CanonicalAddress(own, canonicalOwn)) own = canonicalOwn;
         if (chosen.empty())
         {
-            // (A7-23 (b): no store shows the value, and the statement is drawn at a store of another value: it names nothing)
-            if (ownOther)
+            // No store shows the value. A copy the engine put at the end of its block (a branch, or any instruction) is then the line of
+            // the flow's op that made the value it copies, when there is one (`iStack_34 = iRam060a8e8a;` at a `bra`, the global read in
+            // its slot, the shared store after the join writing a sum): the statement's own maker. A statement drawn at a store of another
+            // value (A7-23 (b)) names that maker, or nothing.
+            uint32_t maker = 0;
+            const ghidra::Varnode* in = o->getIn(0);
+            const bool atEnd = code == ghidra::CPUI_COPY && !atLoadOrCall && o->getAddr() == home->getStop() && !o->isFromDelaySlot() &&
+                               !in->isConstant();
+            if (atEnd && in->isWritten() && in->getDef()->getTime() < flow.opsEnd) maker = InstructionOf(in->getDef());
+            // (...or a read of memory, a global or a local, whose value the engine carries in the variable itself: the flow's load of it in
+            // the block, or in the delay slot of its last instruction)
+            else if (atEnd && !in->isInput() &&
+                     (in->getSpace()->getType() == ghidra::IPTR_SPACEBASE || in->getSpace() == fd.getArch()->getDefaultDataSpace()))
+                for (uint32_t a = static_cast<uint32_t>(home->getStart().getOffset()); !maker && a <= home->getStop().getOffset() + 2; a += 2)
+                {
+                    const auto first = flow.insnFirst.find(a);
+                    if (first == flow.insnFirst.end()) continue;
+                    const std::vector<FlowOp>& ops = flow.blockOps[static_cast<size_t>(first->second.first)];
+                    for (size_t i = first->second.second; i < ops.size() && ops[i].insn == a && !maker; ++i)
+                    {
+                        bool stack = false;
+                        ghidra::uintb offset = 0;
+                        if (ops[i].code != ghidra::CPUI_LOAD || ops[i].numIn < 2 ||
+                            !FlowPointer(flow, fd, first->second.first, static_cast<int>(i), ops[i].in[1], stack, offset))
+                            continue;
+                        const ghidra::AddrSpace* space = stack ? fd.getArch()->getStackSpace() : fd.getArch()->getDefaultDataSpace();
+                        if (space == in->getSpace() && (offset & space->getHighest()) == in->getOffset()) maker = a;
+                    }
+                }
+            {
+                uint32_t c = 0;
+                if (maker && CanonicalAddress(maker, c)) maker = c;
+            }
+            if (ownOther || maker)
                 for (size_t line : kv.second->first)
                 {
                     if (line >= lines.size() || sharedLines.count(std::make_pair(line, own))) continue;
@@ -5806,7 +5847,7 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                     l.firstAddr = 0;
                     for (Token& t : l.tokens)
                     {
-                        if (t.addr == own) t.addr = 0;
+                        if (t.addr == own && (t.begin < t.end || !maker)) t.addr = maker;
                         if (t.addr && (l.firstAddr == 0 || t.addr < l.firstAddr)) l.firstAddr = t.addr;
                     }
                 }

@@ -842,9 +842,13 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     shownValue.kind = WordValue::Param;
                     shownValue.value = std::atoi(shownText.c_str() + 6);
                 }
-                std::map<uint32_t, int> storeSize;
+                std::map<uint32_t, int> storeSize, storeShift;   // ...and where in the store the variable begins (a piece of a wider store)
                 for (const AccessFate* f : folded)
-                    if (candidates.count(f->insn)) storeSize[f->insn] = std::max(storeSize[f->insn], static_cast<int>(f->size));
+                    if (candidates.count(f->insn))
+                    {
+                        storeSize[f->insn] = std::max(storeSize[f->insn], static_cast<int>(f->size));
+                        storeShift[f->insn] = static_cast<int>((at - f->address) & (frame ? 0xFFFFFFFFu : 0x07FFFFFFu));
+                    }
                 const auto writesOther = [&](uint32_t store, bool composed) {
                     uint16_t w = 0;
                     int size = 0;
@@ -864,7 +868,9 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                         // (a parameter may be the number on the line's path: `param_4 == 0` tested before the store)
                         if (got.kind == WordValue::Param) return false;
                         if (composed) return false;   // (a number made of a word and a narrower store: each writes some of its bytes)
-                        const uint64_t mask = size >= 8 ? ~0ull : (1ull << (8 * size)) - 1;
+                        // (the bytes of the store from the variable's on: the low ones, the SH-2 being big-endian)
+                        const int bytes = size - std::min(std::max(storeShift[store], 0), size - 1);
+                        const uint64_t mask = bytes >= 8 ? ~0ull : (1ull << (8 * bytes)) - 1;
                         return ((static_cast<uint64_t>(got.value) ^ static_cast<uint64_t>(shownValue.value)) & mask) != 0;
                     }
                     return registerVariable && got.kind == WordValue::Param;
@@ -1095,6 +1101,12 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     bool said = false;
                     for (const std::string& w : r.warnings)
                     {
+                        // (or the engine says it made the call a branch: `Possible PIC construction at 0x...: Changing call to branch`, and
+                        // the text has no call there to name)
+                        const size_t pic = w.find("Possible PIC construction at 0x");
+                        if (pic != std::string::npos && w.find("Changing call to branch") != std::string::npos &&
+                            static_cast<uint32_t>(std::strtoul(w.c_str() + pic + 31, nullptr, 16)) == p)
+                            said = true;
                         const size_t at = w.find("Removing unreachable block (ram,0x");
                         if (at == std::string::npos) continue;
                         const uint32_t block = static_cast<uint32_t>(std::strtoul(w.c_str() + at + 34, nullptr, 16));
