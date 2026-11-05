@@ -56,6 +56,13 @@ holds them is `LoaderFuzzTests` (see `Docs/FunctionalityVerification/15_DECOMPIL
 `FileRead.h` (`ReadFileCapped`) is the one bounded reader; use it for a new file rather than `ReadWholeFile`, which reads to
 the end of whatever it is given.
 
+What the save after a load does is the other half, and round 2 of area 9 found it open (A9-19 to A9-21, A9-28 in
+`REVIEW_LEDGER.md`): `App::Shutdown` saves the names and notes at every exit and `settings.ini` at the exit whatever their
+`Load` returned, the function starts at the next change, each from the entries in memory only. So a file a loader refused,
+lines it skipped, comment lines and remarks, and what a second instance in the same folder saved are written over; a save
+also replaces a read-only or hard-linked file. The `lifecycle` module of `LoaderFuzzTests` drives the classes in that order
+and lists these classes as open until they are fixed.
+
 ## Entry points and execution flow
 
 1. `App` starts its single runner with `DecompilerRunner::Start`. `App::UpdateDecompiler`
