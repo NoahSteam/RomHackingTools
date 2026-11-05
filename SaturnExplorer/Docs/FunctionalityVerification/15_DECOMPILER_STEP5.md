@@ -15683,7 +15683,7 @@ The counters, base build and fixed build (hwram007 alone / lent, hwram008 alone 
 | `case_labels.py`, labels at no destination | 133 / 522 / 796 / 1,319 | 0 / 288 / 14 / 314 (the script's `braf` base and second tables, and junk lent entries) |
 | `drawn_elsewhere.py`, the way back answering the copy first (A7-25) | 36 / 54 / 63 / 90 | 31 / 46 / 46 / 68 |
 | `slotMadeLines` (A7-18, counted) | 286 / 580 / 849 / 1,393 | 254 / 511 / 630 / 1,121 |
-| answered Folded on the way back | 29,666 / 58,116 / 76,436 / 126,063 | 29,597 / 57,939 / 75,732 / 125,129 |
+| answered Folded on the way back | 29,666 / 58,116 / 76,436 / 126,063 | 29,597 / 57,943 / 75,732 / 125,132 (after the m249 fixes below) |
 | functions whose mapping changed (`dump_diff.py`) | | 109 / 220 / 311 / 490 (262 / 560 / 1,137 / 1,644 lines; no text changed) |
 
 The base `storeValueOther` is 0, as round 4 found ("not seen in the corpora"). One false positive in lent hwram008 (`xStack_32 = 0xffff;`, a piece of the word `mov.l r0,@(0x4,r14)` writes -1) was fixed in the oracle before the counts above: the store's bytes are compared from the piece on. The corpus's own A7-23 instances are stores whose register the words cannot resolve. One is `iStack_34 = iRam060a8e8a;` of 0x06048B7E in hwram008, which named the store of a sum after the join. They show in `copyOtherValue` and in the `store_value.py` row, not in `storeValueOther`.
@@ -15843,3 +15843,20 @@ Fixed: **A8-36 (P2)**, **A8-37 (P2)**, **A8-33 (P3)**, **A8-38 (P3)** and **A8-3
 
 * Area 1: A8-41's oracle fix is in `DecompilerModelTests.cpp` (`Install::fromCache`). The product note (the cache's names key against the runner's memo) is decided in the row, not changed.
 * Area 4: nothing. The finder is unchanged. The panel asks it again for a pin, and adds one line of its own for a pin no source names.
+
+### The coordinator's matrix m249: two generator seeds (after the first hand-back)
+
+The branch failed the coordinator's matrix after it was merged into master `d6e08626`, and the merge was taken out. Two generator findings appeared, and master had neither.
+
+* **Grammar 2 seed 12696 (20,000-seed run), `n:map-frame-store`.** The finding was `iStack_10 = extraout_r14;`: after a call, the function runs into its callee's code, and the line is the push of r14 there. The engine takes r14 after the call for the call's value (`extraout_r14`). The value walk went past the call, because the calling convention keeps r14, and reached the entry. There it found the input r14, which is not in the statement's value, so it decided the push wrote another value and named no store. The rule is now that a call in the statement's value is where the value is made, whatever the register (`FlowValueMayBe`). This was a gap in the value rule, not in the oracle.
+* **Grammar 2 seed 1501 (3,000-seed grammar 2 run), `n:table-case` and `n:lent-incomplete:table-case-missing`.** This came from A7-24. Case 0's code stores and branches back to the function's exit. The engine merged it with the exit's code into one basic block whose addresses are out of order. `BlockBasic::getStart` is the cover's lowest address, which here is the exit's (0x0600901A), so `case 0:` named another case's code. The generator's check matched the case by its tokens and was right. The label is now the jump table's destination in the case's block: the one at or before its first op, else the lowest. Where no table destination is in the block, it is the start of the run of the block's addresses that holds the first op. A delay slot is not in a block's cover (its ops carry the branch's address), so the run is followed past a one-instruction gap. For seed 1501 the label is 0x06009048, the table's destination. The corpus also showed a case whose first instructions are all folded, `case 4:` of 0x06033AE2 in hwram008 (`bra L ; mov #1,r0` to the shared exit). Its first op is in the exit's run, so only the table's destination names it. That function is a new fixture in `TestArea7Round4`, and it fails with the destination rule taken out.
+* Both seeds are pinned in `TestDomainPins` (`Sh2GeneratedTests.cpp`, `MakeV2(12696)` and `MakeV2(1501)`, 0 findings). Each fix was reverted and the pin failed. 12696 gave the matrix's `n:map-frame-store` when the call check was reverted. 1501 gave its `n:table-case` and `n:lent-incomplete:table-case-missing` when the label went back to the block's lowest address. That revert was made before the table rule existed; the table rule and the run rule each fix 1501 on their own. The folded-case fixture fails, at `case 4:`, when the table rule alone is taken out.
+
+Run again on `5e47d444` (every binary under `ulimit -v 3500000`, one heavy job at a time, each piece under 20 minutes):
+
+| Run | Result |
+|---|---|
+| the generator at the matrix's sizes: 20,000 seeds of both grammars, 1,000 of grammar 1, 3,000 of grammar 2, and the printed-C run at 3,000 (`SE_GENERATED_PRINTEDC=only`) | **0 failing seeds and 0 findings in all four**, exit 0 (531 s, 24 s, 111 s, 228 s). The printed-C classes are the same as the matrix's master run (agrees 5,185, narrow-c 136, void-return 227, skipped 8), and both seed pins pass |
+| `ctest -j2 --timeout 900 -E SaturnExplorerLive` / `ctest -R SaturnExplorerLive` | **102 of 102** (191 s) / **6 of 6** (29 s). `SaturnExplorerDecompilerTrustTests` passed in every run (A8-35 did not appear) |
+| fault suite | **0 of 94 jobs failed** (95 s) |
+| hwram007.bin and hwram008.bin, alone and lent | every violation 0 in all four runs, and the texts are the same as the base build's. The counters are as in the table above, except: answered Folded 29,597 / 57,943 / 75,732 / 125,132; `case_labels.py` 0 / 288 / 14 / 314 at no destination (the 14 of hwram008 alone are second tables the script does not decode); `store_value.py` "every resolved store disagrees" 0 / 0 / 0 / 0 |

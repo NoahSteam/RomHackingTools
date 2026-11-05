@@ -3332,9 +3332,37 @@ std::vector<Line> LinesFromMarkup(const std::string& packed, const ghidra::Funcd
                 // but navigation and notes are keyed by the canonical one.
                 t.addr = tokenInstruction(op);
                 // A7-24: a case label is the case's entry, the first instruction of the block the engine names it by its first op (the
-                // case's own first instructions, a literal load or a register move, are folded into the ops after them).
-                if (elem == kCaseLabel && op->getParent() && op->getParent()->getStart().getOffset() <= op->getAddr().getOffset())
-                    t.addr = static_cast<uint32_t>(op->getParent()->getStart().getOffset());
+                // case's own first instructions, a literal load or a register move, are folded into the ops after them): the start of
+                // the run of the block's addresses that holds that op. Not the block's lowest address: a block the engine merged from
+                // code out of address order (a case that stores and branches back to the function's exit) covers several runs, and
+                // its lowest is another case's code.
+                if (elem == kCaseLabel && op->getParent() && op->getParent()->contains(op->getAddr()))
+                {
+                    const ghidra::BlockBasic* bb = op->getParent();
+                    ghidra::uintb a = op->getAddr().getOffset();
+                    // (a delayed branch's slot is not in the cover, its ops being at the branch's address: the run goes on past it)
+                    const auto covered = [&](ghidra::uintb x) { return bb->contains(ghidra::Address(op->getAddr().getSpace(), x)); };
+                    for (int k = 0; k < 4096 && a >= 4 && (covered(a - 2) || covered(a - 4)); ++k) a -= covered(a - 2) ? 2 : 4;
+                    // ...and when a jump table's destination is in the block, that destination: the case's first instructions may all be
+                    // folded, the op then in a later run (`case 4:` of `bra L ; mov #1,r0` to a shared `L:`). The one at or before the op,
+                    // nearest it; else the lowest.
+                    ghidra::uintb best = 0, lowest = 0;
+                    bool haveBest = false, haveLowest = false;
+                    for (ghidra::int4 j = 0; j < fd.numJumpTables(); ++j)
+                    {
+                        const ghidra::JumpTable* jt = const_cast<ghidra::Funcdata&>(fd).getJumpTable(j);
+                        for (ghidra::int4 e = 0; e < jt->numEntries(); ++e)
+                        {
+                            const ghidra::Address dest = jt->getAddressByIndex(e);
+                            if (dest.getSpace() != op->getAddr().getSpace() || !bb->contains(dest)) continue;
+                            const ghidra::uintb x = dest.getOffset();
+                            if (!haveLowest || x < lowest) lowest = x, haveLowest = true;
+                            if (x <= op->getAddr().getOffset() && (!haveBest || x > best)) best = x, haveBest = true;
+                        }
+                    }
+                    if (haveBest || haveLowest) a = haveBest ? best : lowest;
+                    t.addr = static_cast<uint32_t>(a);
+                }
                 uint32_t canonical = 0;
                 if (CanonicalAddress(t.addr, canonical)) t.addr = canonical;
                 if (t.kind == TokenKind::FuncName)
@@ -5191,8 +5219,10 @@ bool FlowValueMayBe(const FlowRecord& flow, const ghidra::Funcdata& fd, int blk,
             if (++steps > 4096) return true;
             const FlowOp& op = ops[static_cast<size_t>(i)];
             // (a call that may change the register or the memory: the call's value, or the one before it when the callee keeps it, as its
-            // prototype may say: not known, unless the call is in the statement's value)
-            if ((op.code == ghidra::CPUI_CALL || op.code == ghidra::CPUI_CALLIND) && (memory(st.vn) || !KeptByCall(fd, st.vn))) return true;
+            // prototype may say: not known. A call in the statement's value is where it is made, whatever the register: the engine takes
+            // a register the callee is not known to keep for the call's (`extraout_r14`))
+            if ((op.code == ghidra::CPUI_CALL || op.code == ghidra::CPUI_CALLIND) && (want.insns.count(op.insn) || memory(st.vn) || !KeptByCall(fd, st.vn)))
+                return true;
             // (memory: the store of the flow that wrote it, when its pointer is known. One whose pointer the flow does not show is passed:
             // the engine's value says whether it wrote there, and the statement's value is what is looked for)
             if (memory(st.vn) && op.code == ghidra::CPUI_STORE && op.numIn > 2)

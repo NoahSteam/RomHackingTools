@@ -11779,6 +11779,20 @@ void TestDomainPins(Sh2Decompiler& d)
         for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
         CHECK(rep.findings.empty());
     }
+    // Area 7 fixer (A7-22 to A7-24), the coordinator's matrix m249. Grammar 2 seed 12696: `iStack_10 = extraout_r14;` after a call is the
+    // push of r14 in the callee's code the function runs on (0x0600902E of the shrunk replay). The engine takes r14 after the call for the
+    // call's (`extraout_r14`), and the value walk went past the call (r14 kept by the convention) to the entry, found the input r14 and
+    // no store: `n:map-frame-store`. A call in the statement's value is where it is made, whatever the register. Grammar 2 seed 1501: a
+    // case whose block the engine merged with the function's exit code, out of address order (it stores and branches back to the exit),
+    // labelled with the block's lowest address, the exit's: `n:table-case`. The label is the start of the run of the block's addresses
+    // that holds its first op, the table's destination.
+    for (const int seed : { 12696, 1501 })
+    {
+        const Report rep = Evaluate(d, MakeV2(seed), true);
+        std::printf("pin 'area 7 fixer: grammar 2 seed %d': %zu finding(s)\n", seed, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
 }
 
 // A caller and a lent callee that changes a register the calling convention keeps (ledger A3-3, finding 1 of the external
