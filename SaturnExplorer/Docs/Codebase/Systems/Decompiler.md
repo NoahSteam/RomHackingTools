@@ -110,8 +110,12 @@ and lists these classes as open until they are fixed.
    through copies, and through the frame and globals to the store that wrote them, to where the
    value is made, and compared with what the statement's value copies, merges or extends in the
    final p-code; a store whose every path ends at another value is never named, and the search
-   goes on to the store the statement is ahead of. A number put at an instruction that does not
-   make it into a register the store stores takes its store's address too. A register the engine merged under a memory variable's
+   goes on to the store the statement is ahead of. A number put at an instruction that did not
+   make the value a store stores takes its store's address too: the instruction must make the
+   number into the register the store stores AND that value must reach the store (`FlowLastWriters`
+   of the register from the store, the whole register for a half-word store; a delay slot that
+   makes the number into another register is no maker, A7-28); a named store the number does not
+   reach, when it reaches another store of the same bytes, is dropped. A register the engine merged under a memory variable's
    name, a copy at the end of its block that no store shows, is addressed to the instructions that
    last set the register on each path into the block's end (`FlowLastWriters`), or to nothing,
    never to the branch (A7-21). A statement that keeps its drawn tokens at its instruction beside
@@ -121,7 +125,8 @@ and lists these classes as open until they are fixed.
    merged (a COPY that is no flow op, at an instruction that does not make the number into the
    COPY's register: a collapsed MULTIEQUAL at a join) to the instruction on each path that set the
    register, or to nothing. A case label's token is where the jump table sends its value
-   (`JumpTable::getLabelByIndex`/`getAddressByIndex`; the table of the `switch` printed last), the
+   (`JumpTable::getLabelByIndex`/`getAddressByIndex`; the table of the `switch` printed at the
+   label's own indent, so a case after a nested switch is not the inner one's, A7-29), the
    destination itself when a block of the final graph holds it, else the first instruction of the
    flow's block that does (a case that is only a branch or a nop, A7-27). For a table without
    labels: the destination in its block, else the start of the run
