@@ -15738,3 +15738,27 @@ The first fresh Follow PC run, before the rig was finished, failed 14 sequences 
 * The doubt the output carried (A8-39's expectation) was recorded at the wrong check, in 9 sequences: mix 8 seeds 400241, 400445, 400477 and 400582, mix 9 seeds 400248, 400261 and 400343, and CPU-weighted mix 8 seeds 420229 and 420613. Some of those checks were of a hidden panel, which draws nothing and so accepts any doubt. Others came under a target other than the one installed: an entry typed while the same function was shown. The doubt is now recorded only at the first drawn check after the install, and only while the target, the evidence and the snapshot are those of the install. The typed-entry operations set the rig's target before the keys, because their Enter can install from the cache.
 * In 3 sequences (mix 8 seed 400361, mix 9 seeds 400157 and 400493), the rig's function set merged the starts with the named addresses. A start at a named address is engine input of its own, and the panel asks again for it.
 * (CPU-weighted 420068, 420664) An entry was typed, then Follow PC found the same entry on the same snapshot. The question is unchanged, so nothing is asked: the label stays "user-set entry" and the line says the finder's guess. That is A8-32's class, noted in its row, and not this fix. The label is held only while the target and the evidence are those of the install.
+
+### What was run (RelWithDebInfo, gcc 13, Ninja, `SE_ENABLE_DECOMPILER=ON`, `-j2`; every run under `ulimit -v 3500000` and `timeout`)
+
+| Run | Result |
+|---|---|
+| `probe6.sh` before the fix / after | before: A8-36 (A, B, I), A8-37 (F, G), A8-38 (C, D) and A8-39 (H) reproduced as round 6 recorded. After: A, B and I keep "(entry from rts scan, 60%)" and the Entry line. F and G show "(entry from rts scan, 60%)" with the line. C and D pin nothing, with the red "Follow PC is off, and there was no function to keep". H keeps the line. E (A8-32) is unchanged |
+| mix 7 seed 210063, `SE_TRUST_HIDDEN_RENAME=1`, before / after the oracle fix | `TOO LARGE` after operation 55, as round 6 found it / ok |
+| Follow PC mixes, fresh seeds, the evidence operations and Enter on the box on, hover off: mix 8 and mix 9 at 500000 to 500671; CPU-weighted (`SE_TRUST_FOLLOW_CPU=1`) at 520000 to 520676 | **120,114 operations, 0 failing** (30,003 + 30,003 + 30,054 + 30,054). The label was held 10,351 times in plain mix 8 alone |
+| the same with hover: mix 8 and 9 at 540000 to 540109, CPU-weighted at 550000 to 550119 | 20,108 operations, 0 failing |
+| mixes 0 to 7 with `SE_TRUST_HIDDEN_RENAME=1`, hover on, seeds from 610000 | **32,233 operations, 0 failing** (4,026, 4,003, 4,010, 4,050, 4,050, 4,028, 4,001, 4,065), 343 renames made and undone while hidden |
+| the mutation checks (above) | each new pin fails with its fix reverted and passes restored; `git status` clean after each |
+| `ctest -E SaturnExplorerLive -j2 --timeout 900 --output-on-failure` / `ctest -R SaturnExplorerLive` | **102 of 102** (179 s: the trust test 57.3 s, the engine suite 43.8 s, the fault suite 92.4 s) / **6 of 6** (28 s). 108 tests, as on master: no ctest test was added, and the pins are inside the trust test. A8-35: the trust test did not fail in ctest this round, so there is no output to add |
+| `SaturnExplorerDecompilerFaultTests` alone (product code changed) | **0 of 94 failed**, 84.8 s |
+
+The first fresh run (90,000 Follow PC operations, before the rig was finished) failed 14 sequences, all the rig's (above). That run is not counted in the table.
+
+### Rows
+
+Fixed: **A8-36 (P2)**, **A8-37 (P2)**, **A8-33 (P3)**, **A8-38 (P3)** and **A8-39 (P3)**. **A8-41 (P3)**: its oracle is fixed, and the product note is left with the reasons above. **A8-34 (P3)** is closed: its (3) is A8-36's fix, and the rest is A8-40's. **A8-40 (P3)** is narrowed: the call stack in a generated sequence is still not held. **A8-32 (P3)** stays open, with a note: pins now follow it, and the target can change with the question unchanged. **A8-35** stays open, with nothing new.
+
+### Routed
+
+* Area 1: A8-41's oracle fix is in `DecompilerModelTests.cpp` (`Install::fromCache`). The product note (the cache's names key against the runner's memo) is decided in the row, not changed.
+* Area 4: nothing. The finder is unchanged. The panel asks it again for a pin, and adds one line of its own for a pin no source names.
