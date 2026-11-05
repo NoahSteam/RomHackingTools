@@ -2115,6 +2115,245 @@ void RunPinnedEntryPins()
     }
 }
 
+// Enter on the entry box as the panel left it: a click into it, no edit, Enter (what the tooltips tell the reader to do).
+bool EnterUntouched(MiniRig& m)
+{
+    ImVec2 a, b;
+    if (!m.panel.ItemRect("entry", a, b)) return false;
+    const ImVec2 c((a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f);
+    for (int i = 0; i < 3; ++i) m.Frame(c, false);
+    m.Frame(c, true);
+    m.Frame(c, false);
+    m.Idle(2);
+    ImGui::GetIO().AddKeyEvent(ImGuiKey_Enter, true);
+    m.Frame(ImVec2(1270, 710), false);
+    ImGui::GetIO().AddKeyEvent(ImGuiKey_Enter, false);
+    m.Frame(ImVec2(1270, 710), false);
+    return true;
+}
+
+// (area 8 fixer) A8-36 to A8-39, A8-33: round 6's probe cases, made pins. Each states the verdict the label, the Entry line and the Copy marks
+// must carry, and holds the window to the model with the label checked against what confirms the entry.
+void RunEntryOriginPins()
+{
+    const uint32_t cEntry = Defs()[FnC].entry;
+    const std::string guess = trust::RtsGuess();
+    auto drawnText = [] {
+        std::string all;
+        for (const drawn::Run& run : drawn::WindowRuns(DecompilerPanel::kTitle)) all += run.text + " ";
+        return Norm(all);
+    };
+    // The window says: this label, this Entry line (or none), in Uncertainties, drawn, and in the Copy marks.
+    auto says = [&](MiniRig& m, const char* what, const std::string& label, const std::string& doubt) {
+        m.Frame();
+        const std::vector<std::string> u = m.panel.Uncertainties();
+        const std::string w = drawnText();
+        const bool labelOk = label.empty() ? w.find(Norm("(entry from")) == std::string::npos : w.find(Norm(label)) != std::string::npos;
+        bool lineOk = true;
+        if (doubt.empty())
+        {
+            for (const std::string& x : u) lineOk &= x.compare(0, 7, "Entry: ") != 0;
+            lineOk &= m.panel.CopyMarks().find("Entry: ") == std::string::npos;
+        }
+        else
+            lineOk = std::find(u.begin(), u.end(), "Entry: " + doubt + ".") != u.end() && w.find(Norm("Entry: " + doubt + ".")) != std::string::npos &&
+                     m.panel.CopyMarks().find(doubt) != std::string::npos;
+        MiniCheck(what, labelOk && lineOk, "want label '" + label + "' and Entry line '" + doubt + "'; window: " + w);
+    };
+    auto model = [&](MiniRig& m, const char* what, trust::TrueState t) {
+        t.liveEmulator = m.kind == DecompViewKind::LivePaused || m.kind == DecompViewKind::LiveRunning;
+        MiniVerify(m, what, t, nullptr);
+    };
+    auto follow = [&](MiniRig& m) {
+        CHECK(ClickMini(m, "follow"));
+        m.Idle(3);
+        CHECK(m.Settle());
+    };
+    auto paused = [&](MiniRig& m, uint32_t pc) {
+        m.kind = DecompViewKind::LivePaused;
+        m.regs[0].pc = pc;
+        m.haveRegs[0] = true;
+        m.Idle(3);
+        CHECK(m.Settle());
+    };
+    trust::TrueState rts;
+    rts.entryDoubt = guess;
+    rts.evidenceKnown = true;
+    {
+        // A8-36, probe case A: the pin, an edit whose request is Stopped, the tooltip that says Enter, and Enter on the untouched box.
+        MiniRig m;
+        paused(m, cEntry + 4);
+        follow(m);
+        m.gate.Close();
+        EditMini(m);
+        m.Idle(3);
+        CHECK(WaitHeldOrBusy(m));
+        CHECK(ClickMini(m, "stop"));
+        m.gate.Open();
+        m.Idle(3);
+        CHECK(m.Settle());
+        MiniCheck("A8-36: a pin Stopped: the tooltip names Enter, which asks the pin again",
+                  m.panel.StaleTooltip().find("press Enter in the") != std::string::npos, m.panel.StaleTooltip());
+        CHECK(EnterUntouched(m));
+        m.Idle(3);
+        CHECK(m.Settle());
+        says(m, "A8-36: ...Enter on the untouched box asks the pin again: still the finder's guess", "(entry from rts scan, 60%)", guess);
+        model(m, "A8-36: ...and the model holds the label to what confirms the entry", rts);
+    }
+    {
+        // A8-36, probe case B (A8-34 (3)): Enter on the box Follow PC filled.
+        MiniRig m;
+        paused(m, cEntry + 4);
+        CHECK(EnterUntouched(m));
+        m.Idle(3);
+        CHECK(m.Settle());
+        MiniCheck("A8-36: Enter on the box Follow PC filled pins the function found", !m.panel.FollowPc() && m.panel.WantedEntry() == cEntry);
+        says(m, "A8-36: ...the finder's guess, not a user-set entry", "(entry from rts scan, 60%)", guess);
+        model(m, "A8-36: ...held to the model", rts);
+    }
+    {
+        // A8-36, probe case I: the NoRegisters tooltip ("Turn Follow PC off and press Enter on an entry"), done as it says.
+        MiniRig m;
+        paused(m, cEntry + 4);
+        m.haveRegs[0] = false;
+        ++m.frame;
+        m.Idle(3);
+        CHECK(m.Settle());
+        follow(m);
+        CHECK(EnterUntouched(m));
+        m.Idle(3);
+        CHECK(m.Settle());
+        says(m, "A8-36: no registers, Follow PC off and Enter on the entry, as the tooltip says: still the finder's guess", "(entry from rts scan, 60%)", guess);
+        model(m, "A8-36: ...held to the model", rts);
+    }
+    {
+        // A8-36, the converse: the box holds the entry the user typed, and the target is the pin of the same entry. Enter there asks the
+        // user's entry, which is another question: the tooltip must not say it asks the pin again. Enter is then the user's entry.
+        MiniRig m;
+        paused(m, cEntry + 4);
+        TypeEntry(m, Hex(cEntry));
+        m.Idle(3);
+        CHECK(m.Settle());
+        follow(m);   // Follow PC on: the same function, so the box keeps the typed text
+        follow(m);   // ...and off: the pin
+        m.gate.Close();
+        EditMini(m);
+        m.Idle(3);
+        CHECK(WaitHeldOrBusy(m));
+        CHECK(ClickMini(m, "stop"));
+        m.gate.Open();
+        m.Idle(3);
+        CHECK(m.Settle());
+        MiniCheck("A8-36: a pin Stopped with the user's typed text in the box: the tooltip names Refresh only",
+                  m.panel.StaleTooltip().find("You stopped its replacement; press Refresh") != std::string::npos, m.panel.StaleTooltip());
+        CHECK(EnterUntouched(m));
+        m.Idle(3);
+        CHECK(m.Settle());
+        says(m, "A8-36: ...and Enter there is the user's entry", "(entry from user-set entry)", "");
+    }
+    {
+        // A8-37, probe case F: a symbol confirms the entry, Follow PC off pins it, the symbol is erased.
+        MiniRig m;
+        m.names[cEntry] = "foo";
+        ++m.namesGen;
+        paused(m, cEntry + 4);
+        follow(m);
+        says(m, "A8-37: a pin the symbol confirms", "(entry from symbol, 90%)", "");
+        m.names.erase(cEntry);
+        ++m.namesGen;
+        m.Idle(3);
+        CHECK(m.Settle());
+        says(m, "A8-37: ...the symbol erased: the pin is the rts scan's guess again", "(entry from rts scan, 60%)", guess);
+        model(m, "A8-37: ...held to the model", rts);
+    }
+    {
+        // A8-37, probe case G: the call stack confirms it, then the stack goes and C is edited.
+        MiniRig m;
+        m.stackEntries.insert(cEntry);
+        ++m.stackRevision;
+        paused(m, cEntry + 4);
+        follow(m);
+        says(m, "A8-37: a pin the call stack confirms", "(entry from call-site target, 80%)", "");
+        m.stackEntries.clear();
+        ++m.stackRevision;
+        EditMini(m);
+        m.Idle(3);
+        CHECK(m.Settle());
+        says(m, "A8-37: ...the stack gone and C edited: the rts scan's guess again", "(entry from rts scan, 60%)", guess);
+        model(m, "A8-37: ...held to the model", rts);
+    }
+    {
+        // A8-33, round 5's probe case C: a function start set at the pinned entry from another panel confirms it.
+        MiniRig m;
+        paused(m, cEntry + 4);
+        follow(m);
+        m.bounds.SetEntry(cEntry);
+        m.Idle(3);
+        CHECK(m.Settle());
+        says(m, "A8-33: a start set at the pinned entry: the user's entry, no doubt", "(entry from user-set entry)", "");
+        trust::TrueState t;
+        t.evidenceKnown = true;
+        t.userEntry = true;
+        model(m, "A8-33: ...held to the model", t);
+        // ...and cleared again: the finder's guess again.
+        m.bounds.ClearEntry(cEntry);
+        m.Idle(3);
+        CHECK(m.Settle());
+        says(m, "A8-33: ...the start cleared: the rts scan's guess again", "(entry from rts scan, 60%)", guess);
+    }
+    {
+        // A pin no source names any more: a start set below it, which the finder never overrides, takes the address in. No label, and the
+        // panel's own line says so.
+        MiniRig m;
+        paused(m, cEntry + 4);
+        follow(m);
+        m.bounds.SetEntry(cEntry - 0x100);
+        m.Idle(3);
+        CHECK(m.Settle());
+        const std::string unconfirmed = "kept by you from the finder, and no source names " + trust::Hex8(cEntry) +
+                                        " as an entry now: the finder puts it in the function at " + trust::Hex8(cEntry - 0x100);
+        says(m, "a pin no source names now: no label, and a line that says so", "", unconfirmed);
+        trust::TrueState t;
+        t.entryDoubt = unconfirmed;
+        t.evidenceKnown = true;
+        t.unconfirmedPin = true;
+        model(m, "...held to the model", t);
+    }
+    for (int k = 0; k < 2; ++k)
+    {
+        // A8-38, probe cases C and D: Follow PC off with no function found and nothing shown pins nothing and asks nothing.
+        MiniRig m;
+        if (k == 1)
+        {
+            m.kind = DecompViewKind::LivePaused;
+            m.regs[0].pc = 0x00001FF0u;
+            m.haveRegs[0] = true;
+        }
+        m.Idle(3);
+        CHECK(m.Settle());
+        const uint64_t asked = m.panel.Submissions();
+        follow(m);
+        MiniCheck(k ? "A8-38: the PC in the BIOS, nothing shown, Follow PC off: nothing asked, nothing shown, the box empty"
+                    : "A8-38: no registers, nothing shown, Follow PC off: nothing asked, nothing shown, the box empty",
+                  m.panel.Submissions() == asked && !m.panel.Shown() && std::string(m.panel.EntryText()).empty() && !m.panel.FollowPc(),
+                  std::string("box '") + m.panel.EntryText() + "', window: " + drawnText());
+        trust::TrueState t;
+        t.liveEmulator = k == 1;
+        t.noEntry = trust::NoEntry::NothingPinned;
+        MiniVerify(m, k ? "A8-38: ...held to the model (the PC in the BIOS)" : "A8-38: ...held to the model (no registers)", t, nullptr);
+    }
+    {
+        // A8-39, probe case H: the PC moves where no function is; the output on screen keeps its own Entry line and Copy mark.
+        MiniRig m;
+        paused(m, cEntry + 4);
+        m.regs[0].pc = 0x00001FF0u;
+        ++m.frame;
+        m.Idle(3);
+        CHECK(m.Settle());
+        says(m, "A8-39: the PC in the BIOS, C stale on screen: its label and its Entry line, drawn and copied", "(entry from rts scan, 60%)", guess);
+    }
+}
+
 // Round 5 probe (SE_TRUST_PROBE5): the call stack changes under an answer that is not asked again.
 void RunProbe5()
 {
@@ -2413,6 +2652,7 @@ void RunProbe6()
 void RunFixPins()
 {
     RunPinnedEntryPins();
+    RunEntryOriginPins();
     RunWidthPins();
     RunTooltipPins();
     RunRefusedTextPins();
