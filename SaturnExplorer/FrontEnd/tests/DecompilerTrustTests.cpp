@@ -1282,6 +1282,7 @@ struct MiniRig
     std::vector<int> placed;
     std::set<uint32_t> stackEntries;   // round 5 probe: the call stack's targets, and its revision
     uint64_t stackRevision = 0;
+    uint64_t namesGen = 0;             // round 6 probe: the names' generation (0, as before, unless a probe renames)
 
     MiniRig() : runner(gConfig), h([this] { Ui(); })
     {
@@ -1313,6 +1314,7 @@ struct MiniRig
         const DecompilerView v = View();
         DecompilerInputs in;
         in.names = &names;
+        in.namesGeneration = namesGen;
         in.bounds = &bounds;
         in.comments = &comments;
         in.callSites = [this](const SnapshotKey&, std::set<uint32_t>& out) { out.insert(stackEntries.begin(), stackEntries.end()); };
@@ -2156,6 +2158,230 @@ void RunProbe5()
         m.Idle(3);
         CHECK(m.Settle());
         show(m, "C: ...a user function start is now recorded at the pinned entry");
+    }
+}
+
+// Round 6 probe (SE_TRUST_PROBE6): Enter on the untouched entry box after a pin, as the stale tooltip says; a pin with nothing found and
+// nothing shown; the call stack under a Decompile target whose entry is also a callee.
+void RunProbe6()
+{
+    const uint32_t cEntry = Defs()[FnC].entry, aEntry = Defs()[FnA].entry;
+    auto drawnText = [] {
+        std::string all;
+        for (const drawn::Run& run : drawn::WindowRuns(DecompilerPanel::kTitle)) all += run.text + " ";
+        return Norm(all);
+    };
+    auto show = [&](MiniRig& m, const char* what) {
+        m.Frame();
+        std::string u;
+        for (const std::string& x : m.panel.Uncertainties()) u += "[" + x + "]";
+        const std::string w = drawnText();
+        const size_t at = w.find(Norm("(entry from"));
+        const DecompileResult* s = m.panel.Shown();
+        std::printf("PROBE6 %s\n   label: %s\n   uncertainties: %s\n   box: %s, follow %d, wanted %08X, shown %s, stale %d, pending %d\n"
+                    "   tooltip: %s\n   error: %s\n   copy: %s\n",
+                    what, at == std::string::npos ? "(none)" : w.substr(at, 40).c_str(), u.c_str(), m.panel.EntryText(), m.panel.FollowPc() ? 1 : 0,
+                    m.panel.WantedEntry(), s ? Hex(s->requestedEntry).c_str() : "nothing", m.panel.ShownStale() ? 1 : 0, m.panel.Pending() ? 1 : 0,
+                    m.panel.StaleTooltip().c_str(), m.panel.EntryError().c_str(), m.panel.CopyMarks().c_str());
+    };
+    auto enterUntouched = [](MiniRig& m) {
+        ImVec2 a, b;
+        if (!m.panel.ItemRect("entry", a, b)) return false;
+        const ImVec2 c((a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f);
+        for (int i = 0; i < 3; ++i) m.Frame(c, false);
+        m.Frame(c, true);
+        m.Frame(c, false);
+        m.Idle(2);
+        ImGui::GetIO().AddKeyEvent(ImGuiKey_Enter, true);
+        m.Frame(ImVec2(1270, 710), false);
+        ImGui::GetIO().AddKeyEvent(ImGuiKey_Enter, false);
+        m.Frame(ImVec2(1270, 710), false);
+        return true;
+    };
+    {
+        // A: the pin, an edit whose request is Stopped, then Enter in the box as the Stopped tooltip says.
+        MiniRig m;
+        m.kind = DecompViewKind::LivePaused;
+        m.regs[0].pc = cEntry + 4;
+        m.haveRegs[0] = true;
+        m.Idle(3);
+        CHECK(m.Settle());
+        show(m, "A: Follow PC on C+4, rts scan");
+        CHECK(ClickMini(m, "follow"));
+        m.Idle(3);
+        CHECK(m.Settle());
+        show(m, "A: pinned (Follow PC off)");
+        m.gate.Close();
+        EditMini(m);
+        m.Idle(3);
+        CHECK(WaitHeldOrBusy(m));
+        CHECK(ClickMini(m, "stop"));
+        m.gate.Open();
+        m.Idle(3);
+        CHECK(m.Settle());
+        show(m, "A: an edit, its request Stopped");
+        CHECK(enterUntouched(m));
+        m.Idle(3);
+        CHECK(m.Settle());
+        show(m, "A: Enter in the untouched box, as the tooltip says");
+    }
+    {
+        // B: the same without the Stop: Enter on the box the panel filled, under Follow PC (A8-34 (3)).
+        MiniRig m;
+        m.kind = DecompViewKind::LivePaused;
+        m.regs[0].pc = cEntry + 4;
+        m.haveRegs[0] = true;
+        m.Idle(3);
+        CHECK(m.Settle());
+        CHECK(enterUntouched(m));
+        m.Idle(3);
+        CHECK(m.Settle());
+        show(m, "B: Follow PC on C+4, Enter in the untouched box");
+    }
+    {
+        // C: nothing found and nothing shown (a dump without registers), Follow PC off.
+        MiniRig m;
+        m.Idle(3);
+        CHECK(m.Settle());
+        show(m, "C: Follow PC, no registers, nothing shown");
+        CHECK(ClickMini(m, "follow"));
+        m.Idle(3);
+        CHECK(m.Settle());
+        show(m, "C: Follow PC off");
+    }
+    {
+        // D: the PC where no function is, nothing shown, Follow PC off.
+        MiniRig m;
+        m.kind = DecompViewKind::LivePaused;
+        m.regs[0].pc = 0x00001FF0u;
+        m.haveRegs[0] = true;
+        m.Idle(3);
+        CHECK(m.Settle());
+        show(m, "D: Follow PC, PC in the BIOS, nothing shown");
+        CHECK(ClickMini(m, "follow"));
+        m.Idle(3);
+        CHECK(m.Settle());
+        show(m, "D: Follow PC off");
+    }
+    {
+        // E: Decompile at A+2 on the snapshot C was shown on (A is C's callee) with the call stack holding A; then the stack goes.
+        MiniRig m;
+        m.kind = DecompViewKind::LivePaused;
+        m.regs[0].pc = cEntry + 4;
+        m.haveRegs[0] = true;
+        m.Idle(3);
+        CHECK(m.Settle());
+        m.stackEntries.insert(aEntry);
+        ++m.stackRevision;
+        m.panel.ShowFunctionContaining(0, aEntry + 2);
+        m.Idle(3);
+        CHECK(m.Settle());
+        show(m, "E: Decompile at A+2, the stack holds A, A is C's callee");
+        m.stackEntries.clear();
+        ++m.stackRevision;
+        m.Idle(3);
+        CHECK(m.Settle());
+        show(m, "E: the stack gone: the finder now says callee, 70%");
+        CHECK(ClickMini(m, "refresh"));
+        m.Idle(3);
+        CHECK(m.Settle());
+        show(m, "E: ...Refresh: the verdict now");
+    }
+    {
+        // F: a symbol at C; Follow PC on C+4 finds it by the symbol; Follow PC off pins it; the symbol is then removed (Rename to empty).
+        MiniRig m;
+        m.kind = DecompViewKind::LivePaused;
+        m.names[cEntry] = "foo";
+        ++m.namesGen;
+        m.regs[0].pc = cEntry + 4;
+        m.haveRegs[0] = true;
+        m.Idle(3);
+        CHECK(m.Settle());
+        show(m, "F: Follow PC on C+4, C named foo");
+        CHECK(ClickMini(m, "follow"));
+        m.Idle(3);
+        CHECK(m.Settle());
+        show(m, "F: pinned (Follow PC off)");
+        m.names.erase(cEntry);
+        ++m.namesGen;
+        m.Idle(3);
+        CHECK(m.Settle());
+        show(m, "F: the name removed: answered again for the pinned entry");
+        CHECK(ClickMini(m, "follow"));
+        m.Idle(3);
+        CHECK(m.Settle());
+        show(m, "F: ...Follow PC on again: the finder's verdict now");
+    }
+    {
+        // G: the same with a call-stack entry at C instead of a symbol, the stack then gone and C edited.
+        MiniRig m;
+        m.kind = DecompViewKind::LivePaused;
+        m.stackEntries.insert(cEntry);
+        ++m.stackRevision;
+        m.regs[0].pc = cEntry + 4;
+        m.haveRegs[0] = true;
+        m.Idle(3);
+        CHECK(m.Settle());
+        CHECK(ClickMini(m, "follow"));
+        m.Idle(3);
+        CHECK(m.Settle());
+        show(m, "G: Follow PC on C+4 with the stack holding C, pinned");
+        m.stackEntries.clear();
+        ++m.stackRevision;
+        EditMini(m);
+        m.Idle(3);
+        CHECK(m.Settle());
+        show(m, "G: the stack gone and C edited: answered again for the pinned entry");
+    }
+    {
+        // H: the output's own doubt when the question moves on: the PC steps into the BIOS (no function), C stays on screen, stale.
+        MiniRig m;
+        m.kind = DecompViewKind::LivePaused;
+        m.regs[0].pc = cEntry + 4;
+        m.haveRegs[0] = true;
+        m.Idle(3);
+        CHECK(m.Settle());
+        m.regs[0].pc = 0x00001FF0u;
+        ++m.frame;
+        m.Idle(3);
+        CHECK(m.Settle());
+        show(m, "H: the PC in the BIOS, C stale on screen");
+        std::printf("   window: %s\n", drawnText().c_str());
+    }
+    {
+        // I: the registers go; the NoRegisters tooltip says "Turn Follow PC off and press Enter on an entry". Done as it says.
+        MiniRig m;
+        m.kind = DecompViewKind::LivePaused;
+        m.regs[0].pc = cEntry + 4;
+        m.haveRegs[0] = true;
+        m.Idle(3);
+        CHECK(m.Settle());
+        m.haveRegs[0] = false;
+        ++m.frame;
+        m.Idle(3);
+        CHECK(m.Settle());
+        show(m, "I: no registers now, C stale on screen");
+        CHECK(ClickMini(m, "follow"));
+        m.Idle(3);
+        CHECK(m.Settle());
+        show(m, "I: Follow PC off (pins the output shown, with its doubt)");
+        CHECK(enterUntouched(m));
+        m.Idle(3);
+        CHECK(m.Settle());
+        show(m, "I: ...and Enter on the entry in the box, as the tooltip says");
+    }
+    {
+        // C again, the whole window.
+        MiniRig m;
+        m.Idle(3);
+        CHECK(m.Settle());
+        CHECK(ClickMini(m, "follow"));
+        m.Idle(3);
+        CHECK(m.Settle());
+        show(m, "C': Follow PC off with nothing found or shown");
+        std::printf("   window: %s\n", drawnText().c_str());
+        const DecompileResult* s = m.panel.Shown();
+        if (s) std::printf("   status %d, error: %s\n", static_cast<int>(s->status), s->error.c_str());
     }
 }
 
@@ -3195,6 +3421,11 @@ int main(int argc, char** argv)
         if (std::getenv("SE_TRUST_PROBE5"))
         {
             RunProbe5();
+            return 0;
+        }
+        if (std::getenv("SE_TRUST_PROBE6"))
+        {
+            RunProbe6();
             return 0;
         }
         if (seedEnv && *seedEnv)
