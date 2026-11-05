@@ -15674,3 +15674,19 @@ The generated runs do not reach the new findings, and cannot: the Follow rig has
 
 * Area 4: nothing. The finder's texts and verdicts are right. A8-37 is the panel keeping an old verdict, not the finder giving a wrong one.
 * Area 1: **A8-41**. The model in `DecompilerModelTests.cpp` erases a starved signature on a panel cache hit, and the panel's cache and the runner's memo key the names differently (generation against content). Otherwise nothing: Enter on the pinned entry asks the same `Question`, and the cache and the stale rule are right about it. What changes is only the verdict the label and the Entry line are drawn from.
+
+## Area 8 fixer (A8-36, A8-37, A8-38, A8-39, A8-41)
+
+Branch `review/8-a836-fix` from master `112eed2f` (area 8 round 6, merged). It fixes **A8-36 (P2)**, **A8-37 (P2)** and, with the same root, **A8-33 (P3)**, **A8-38 (P3)** and **A8-39 (P3)** in `DecompilerPanel.cpp` and `.h`. It fixes area 1's oracle for **A8-41** and widens the trust model so it holds each of these.
+
+### Root cause (written before the code)
+
+An Entry target has no notion of where it came from. `Target` holds a `source` and, since A8-30, a `confidence` and a `doubt`. These are the finder's verdict at the moment of the pin, copied into the target, and every consumer works out what kind of Entry target it has from `kind == Entry` alone:
+
+* `Resolve` copies the verdict out of the target and never asks the finder again. `Update` re-resolves on a change of the finder's hints only `mTarget.kind != Entry`. So a pin is a settled entry whose verdict is frozen: a symbol erased or a call stack gone leaves the old confirmation on each new answer (A8-37), and a start recorded at the pin leaves the old doubt (A8-33). Both are the same frozen verdict, in opposite directions.
+* The entry box's Enter always builds `Target{Entry, v, User}`: it cannot tell text the user typed from text the panel wrote there. So Enter on the untouched box turns a pin into "user-set entry" (A8-36), and so does Enter under Follow PC on the box the panel filled (A8-34 (3)).
+* `StaleTooltip` chooses the "press Enter" wording by `kind == Entry`, which since A8-30 includes a pin. The wording sends the reader to the Enter that undoes the pin (A8-36).
+* Follow PC off with nothing found and nothing shown builds an Entry target with the defaults: entry 0, `source = User` (A8-38).
+* The output on screen has a provenance too (`mShownEntryFrom`, `mShownEntryConfidence`, `mShownEntryDoubt`), but only the pin reads it. `Uncertainties` reads the verdict now, so the output loses its own Entry line once the question is about something else (A8-39).
+
+The fix is one notion, read by every consumer: an Entry target's **origin**, which is typed by the user, set as a function start by the user, or pinned from the finder. A pin carries the address the finder was asked about (the anchor) and no verdict. `Resolve` asks the finder again for a pin each time it resolves, and `Update` resolves a pin again whenever the finder's hints change, as it does for Follow PC and Decompile. The output shown keeps the target that would ask for it again, with its origin. Enter on the box the panel wrote, or the user last confirmed, re-asks that target. The tooltip offers Enter only where Enter would ask that same target again.
