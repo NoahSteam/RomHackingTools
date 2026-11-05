@@ -664,6 +664,20 @@ if(BUILD_TESTING)
         PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
     add_test(NAME SaturnExplorerFunctionNamesTests COMMAND SaturnExplorerFunctionNamesTests)
 
+    # Area 9 round 3 (review): the stores' save, the address word, the capped read; pins of the findings A9-31 and later. Linux only.
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        add_executable(SaturnExplorerArea9Round3Tests
+            FrontEnd/tests/Area9Round3Tests.cpp
+            FrontEnd/src/Debug/CallStack.cpp
+            FrontEnd/src/Settings.cpp
+            FrontEnd/src/FileWrite.cpp
+        )
+        target_include_directories(SaturnExplorerArea9Round3Tests
+            PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
+        target_link_libraries(SaturnExplorerArea9Round3Tests PRIVATE Threads::Threads)
+        add_test(NAME SaturnExplorerArea9Round3Tests COMMAND SaturnExplorerArea9Round3Tests)
+    endif()
+
     # What the heuristic call-stack reconstruction claims to know: a bsr encodes the callee's
     # entry point, a jsr through a register does not, and a return address is not one.
     add_executable(SaturnExplorerCallStackHeuristicTests

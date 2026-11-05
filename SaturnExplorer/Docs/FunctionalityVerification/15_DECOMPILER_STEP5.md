@@ -16490,3 +16490,42 @@ Seeds from 1,200,000 (Follow rig, `SE_TRUST_FOLLOW_FOCUS=1`), each run alone und
 The Follow rig has no edit-then-revert operation and its `badentry` still takes the box as the panel's text, so the generated runs do not reach A8-46 or A8-50; the pins do.
 
 `ctest -j2 --timeout 900`: **108 of 108 passed** (102 + 6 Live; 190 s). No test was added to ctest; the default trust run gained the pins above. The fault suite: 0 of 94 jobs failed.
+
+## Area 9, round 3
+
+Branch `review/9-round3` from master `d2960c8f`. An adversarial round on the area 9 fixer (A9-18 to A9-30). **No product code changed.** The round adds `FrontEnd/tests/Area9Round3Tests.cpp` (ctest `SaturnExplorerArea9Round3Tests`, Linux; `CMakeLists.txt` target) and files A9-31 to A9-39, all P3. **No P1 and no P2: the round is clean.**
+
+### What was attacked, and how
+
+* **`SaveStore` (StoreMerge.h).** Two processes saving 300 distinct entries each under the lock: 600 of 600 survive. A kill fuzz (60 SIGKILLs of a looping saver): the file is never torn and never smaller; three staging files are left (A9-37). Two sessions on one file: a delete by the second beats the first's edit, and for the same key the later saver wins; both are the stated contract and lose the other session's edit without a word (not filed: documented in the fixer's limits). An idle instance writes nothing (inode and mtime). The lock is the weak part: `SaveStore` and `Settings::SaveTo` do not look at `FileLock::Held()`, so a lock file that cannot be opened (a folder at its path stands in for a lock file another user made) gives silent unlocked saves, and 301 of 600 entries survive (A9-33). A stale lock cannot occur on POSIX (flock goes with the process).
+* **`Settings::SaveTo`.** It rewrites the parsed keys, not the lines: comments are erased (A9-34), a byte-order mark makes the first section header unreadable and the save then writes its keys under `[]` (A9-34), and a key whose value equals the loaded one is not written even if another instance changed it since (A9-35). The line-end hardening of A9-12 holds for settings and is absent from names and notes (A9-36, API level only).
+* **`ParseAddressWord` and the eight-digit saves.** Odd widths, prefixes, signs, nine digits, a 64-bit form, `0x` alone, `0x0600_4100`, a line with an address and no name: all as designed (`AddressWords`, 15 lines). The fixer's reason for skipping letters-only old addresses is wrong: the BIOS ROM holds them (A9-32). Whitespace-only and padded names are not round-trip safe (A9-31).
+* **`ReadFileCapped`.** FIFO and `/dev/zero` refused without waiting; a file growing under 300 reads gave only Ok (within the cap) or TooLarge; a link loop is reported as Missing (A9-38). A file that shrinks while read is read short, which nothing can tell (A9-17 f).
+* **Lone CR.** `SplitLines` is right for LF, CRLF, CR, and `\n\r` (an empty line between). The names, notes and bounds loaders all use it. Not filed.
+* **`SetSaveErrorHandler`.** Every save site reports: notes after an edit and after Clear Comment (handler, set in `App::Initialize` before the notes are loaded), notes at exit, names at each rename, Load Symbols and exit, the starts at each change, settings at the retry loop (once) and at exit. Two reports are only in the Log: a failed `settings.ini` save at exit (the window is closing) and the notes at exit when the earlier edit saves already failed (the user saw those). Not filed. A refused file is reported at each save attempt, not once.
+* **Fuzz.** `LoaderFuzzTests` modules names, comments, bounds, settings and lifecycle at seed 31, 3,000 cases each, `SE_LOADFUZZ_NOFIXED=1`: 0 violation classes outside the ledger (only the accepted `HARDLINK_SPLIT`, not seen).
+
+### Judgement on A8-48 (routed from area 8)
+
+Confirmed by reading `DecompilerPanel.cpp` (`UnparsedVolatileProblem` ends "... to replace it." and `BeginVolatileEdit` appends ". Applying the text unchanged ..."): the popup's opening line for a saved list over 2,047 characters has two full stops. The guide's claim is true only of the unchanged text: the box is full, so the first possible edit is a Backspace and Apply then replaces the saved list with the cut less a character (a range at an address the list never held). The row stays open (P3), and its expected fix stands. One addition: the branch in `BeginVolatileEdit` that sets "The saved list is longer than ... shown cut here" when `mVolatileError` is empty cannot be reached, because a saved list of 2,048 characters or more is never in force (`SetVolatileMemory` refuses it) and `UnparsedVolatileProblem` is therefore always set; it is dead code with a text nobody sees. The other texts (the "NOT in force" line, the tooltip, the amber line after a failed Apply) are true in every state read.
+
+### Open rows checked
+
+* **A9-16** (Load Raw Dump always at base 0): still open; `App.cpp` `ExecuteTopBarCommand` calls `OpenFullDump(path, 0)`.
+* **A9-17** (what the oracle does not hold): still true; A9-39 records what this round adds.
+* **A9-29** (spliced record): fixed as the ledger says. Area 9 round 1's headings (`The loaders` to `For the next round`) are one section, and round 2's Routed / For the next round are followed by a different area's section only because later sections were appended after it; no text of another area is inside.
+* **A9-23** (Windows): not checked, as instructed.
+
+### Runs
+
+| Run | Result |
+|---|---|
+| `SaturnExplorerArea9Round3Tests` (under `ulimit -v 3500000`, `timeout`) | all passed; pins print `PIN A9-31` to `A9-38` as holding |
+| `SaturnExplorerLoaderFuzzTests`, five text modules, seed 31, 3,000 cases | 0 classes outside the ledger |
+
+The pins assert today's behaviour: when a finding is fixed, its check fails and is turned round in the same change.
+
+### For the next round
+
+* A9-33 and A9-34 are the ones worth fixing first (the lock is the A9-20 guard, and it is silent when it cannot work).
+* A lock file owned by another user is stood in for by a folder; a run with a second account would settle whether the open fails as modelled.
