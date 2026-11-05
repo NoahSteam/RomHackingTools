@@ -1261,6 +1261,9 @@ void DecompilerPanel::DrawHeader(const DecompilerView& view, const DecompilerRun
             t.source = mEntryOk ? mEntrySource : EntrySource::User;
         }
         SetTarget(t);
+        // A click is a request, as Enter and Decompile are (A8-18, A8-27): after a Stop the new target may resolve to the very
+        // question that was stopped, and the Stop is forgotten with the target; it would be dropped as asked already.
+        mAskAgain = true;
     }
     Remember("follow");
 

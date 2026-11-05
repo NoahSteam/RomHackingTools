@@ -1892,7 +1892,10 @@ struct Rig
                                  shown.BiosHash() == now.BiosHash();
         // The user stopped this very question; or decompilation is disabled for this session (a cancel
         // that was not acknowledged, 'wedge'): nothing can be asked until a new session.
-        const bool excused = (haveStopped && SigOf(held).Same(stopped)) || runner.Disabled() || noEntry != 0;
+        const bool excused = (haveStopped && SigOf(held).Same(stopped)) || runner.Disabled() || noEntry != 0 ||
+                              // A rename undone while the panel is hidden (A8-14, A8-25): the output stays marked until it is replaced, and a
+                              // hidden panel asks nothing.
+                              (!visible && namesGeneration != shownNamesGen);
         std::string state = "\n  shown under " + DescribeSig(shown) + "\n  now          " + DescribeSig(now) +
                             "\n  model stale " + std::to_string(modelStale) + " (view " + std::to_string(viewDiff) +
                             ", other inputs " + std::to_string(otherDiff) + "), panel stale " + std::to_string(panelStale);

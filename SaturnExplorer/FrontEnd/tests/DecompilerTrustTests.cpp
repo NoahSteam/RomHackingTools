@@ -1131,7 +1131,7 @@ Program MakeProgram(uint64_t seed, int mix, int concat = 1)
     }
     const int n = static_cast<int>(p.placed.size());
     std::vector<Op> out;
-    bool held = false, hidden = false;
+    bool held = false;
     std::map<int, int> nameOf;   // function -> the name option it has now: the undo
     // The functions a Decompile was ever asked about: their start is not toggled off (the finder would answer another entry: area 4's). Every
     // one counts, not the latest: a Decompile that had no effect (the panel hidden or the engine held) must not stand for the target.
@@ -1147,17 +1147,12 @@ Program MakeProgram(uint64_t seed, int mix, int concat = 1)
         out.push_back(o);
         if (o.kind == OpKind::Hold) held = true;
         if (o.kind == OpKind::Wait || o.kind == OpKind::Finish) held = false;
-        if (o.kind == OpKind::Hide) hidden = true;
-        if (o.kind == OpKind::Show) hidden = false;
         const int fn = o.a % n;
         if (o.kind == OpKind::Rename && !held)
         {
             const int before = nameOf.count(fn) ? nameOf[fn] : 0;
             nameOf[fn] = o.b;
-            // (not while the panel is hidden: it asks nothing then, and area 1's STALE FOREVER check does not excuse the names generation of a
-            // rename undone -- A8-14 -- for a panel that is not asked; routed to area 1, A8-25. Area 8, round 3: with the excuse A8-25 proposes,
-            // and this guard dropped, the generated sequences pass: Docs/Decompiler/tools/a8_round3/build_hidden_probe.sh)
-            if (!hidden && rng.Chance(35))
+            if (rng.Chance(35))
             {
                 out.push_back(Mk(OpKind::Refresh));
                 out.push_back(Mk(OpKind::Rename, o.a, before));
@@ -2718,11 +2713,17 @@ const Pin kPins[] = {
     // A8-18: Decompile on the function already asked asks again, as Enter does: the Stop is over and the output is replaced.
     { "Decompile after a Stop on the very question asks it again (A8-18)", "bound A 0; select A; hold; edit A 0 1; stop; wait; t-contain 1", "C,A" },
     { "Decompile twice after a Stop, the second while the first runs", "bound A 0; select A; hold; edit A 0 1; stop; wait; t-contain 1; t-contain 1; edit A 0 2; t-contain 1", "C,A" },
+    // A8-25: a rename undone while the panel is hidden leaves the output marked with the names generation moved; a hidden panel asks nothing.
+    { "a rename undone while the panel is hidden (A8-25)", "select A; wait; hide; name A 1; name A 0; wait", "C,A" },
 };
 
 // Follow PC sequences (mix 8) that found A8-18, kept as pins: seed 5051 (Stop, the PC moves, Stop, Decompile at C+4: not refreshed) and seed 5080
 // (the timing variant: Decompile while the engine has not yet acknowledged the cancel, "Stopped." drawn after it).
 const uint64_t kFollowPins[] = { 5051, 5080 };
+// A8-27: Stop, then a click on the Follow PC box onto the question that was stopped (the box asks again, as Enter and Decompile do): the seeds
+// of mix 8 (20149, 20442, 21097) and of mix 9, with Auto-refresh and Show in Pseudocode (20297, 20729, 20793, 21058, 21275).
+const uint64_t kFollowPinsClick[] = { 20149, 20442, 21097 };
+const uint64_t kFollowPinsClickAuto[] = { 20297, 20729, 20793, 21058, 21275 };
 
 // The stride of the allocation-failure sweep in the default run: every 50th allocation of one request of C (about 32,200 of them), about 644 cells.
 const long kOomStride = 50;
@@ -2919,10 +2920,17 @@ int main(int argc, char** argv)
         {
             RunMiniPins();
             RunFixPins();
-            for (uint64_t seed : kFollowPins)
+            std::vector<std::pair<uint64_t, bool>> followPins;
+            for (uint64_t seed : kFollowPins) followPins.push_back({ seed, false });
+            for (uint64_t seed : kFollowPinsClick) followPins.push_back({ seed, false });
+            for (uint64_t seed : kFollowPinsClickAuto) followPins.push_back({ seed, true });
+            for (const auto& fp : followPins)
             {
+                const uint64_t seed = fp.first;
+                gFollowAuto = fp.second;
                 uint64_t ops = 0;
                 const bool ok = RunFollow(seed, false, ops);
+                gFollowAuto = false;
                 std::printf("pin follow seed %llu (%llu operations) %s\n", static_cast<unsigned long long>(seed), static_cast<unsigned long long>(ops), ok ? "ok" : "FAILED");
                 if (!ok)
                 {
