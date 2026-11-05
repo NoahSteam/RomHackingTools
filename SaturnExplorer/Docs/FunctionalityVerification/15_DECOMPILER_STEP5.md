@@ -16198,3 +16198,48 @@ The counters, base (the four fixes switched off) and fixed (hwram007 alone / len
 Nothing of these rows. Not changed: a merged number whose writer is a `mov.w` literal (a temporary extended into the register) still names nothing in `AddJoinConstantTokens` (`FlowNumber` does not follow the extension; as A7-22 left it), and the loop-head register merges of A7-21's note. The oracle has no case-label check.
 
 Routed: nothing new. Grammar 2 seed 300847 (A5-99, area 5) was not counted, as asked.
+
+## Area 7, round 6
+
+Branch `review/7-round6` from master `d858034d` (the area 7 fixer's A7-26, A7-27, A7-25 and A7-21 merged). An adversarial round on the four fixes and on the oracle checks that came with them. **No product code changed.** The round adds `TestArea7Round6` (pins) to `Sh2DecompilerTests.cpp`, two counted checks and `RegisterMakers` to `MappingOracle.h`, `tools/a7_round6/` (fixtures for round 5's `sh2asm.py`, a viewer for probe output and three dump scripts), and files **A7-28 (P2), A7-29 (P3) and A7-30 (P3, instrument)**. **The round is not clean: one new P2 row.**
+
+### What was run (RelWithDebInfo, gcc 13, the worktree's build, `-j2`, every binary under `ulimit -v 3500000` and `timeout`)
+
+| Run | Result |
+|---|---|
+| hwram007.bin and hwram008.bin, alone and lent (`tools/a7_round2/corpus.sh`, `SE_GAME_TOKEN_DUMP`), master's oracle and then this round's | all passed; every violation 0 in the four runs, the fixer's counters as measured (`constAtJoin` 0, `copyMergeAtBranch` 0, `copyOtherValue` 24 / 39 / 24 / 39, off-line 4 / 11 / 4 / 21, folded on the way back 29,598 / 57,939 / ...). New counters: `numberStoreOther` **2 / 3 / 14 / 26** (A7-28), `caseOtherEntry` **0** of 180 / 432 / 1,275 / 1,733 labels judged (A7-29's check: the corpus has no nested switch with an op-less case) |
+| `tools/a7_round4/drawn_elsewhere.py` (A7-25), `tools/a7_round5/const_other_reg.py` (A7-26) on the new dumps | the way back answers a copy first 0 / 0 / 1 / 0, as the fixer measured (0x060193F2, two copies at a `bra`); no register candidate beyond the variable's own |
+| hand-built fixtures (`tools/a7_round6/fixtures/*.s`, `SE_A7R4_PROBE`; `view.py` prints the text with each token's instruction) and patched corpus functions | below |
+| generator, fresh seeds: grammar 2 from 1,200,000 (3,000), grammar 1 from 1,206,000 (2,000), with this round's oracle | 0 failing seeds, 0 findings (125, 47 s). Grammar 2 seed 300847 (A5-99) is outside the ranges and was not counted |
+| `SaturnExplorerSh2DecompilerTests` (with `TestArea7Round6`) | all passed (26 s) |
+| `ctest -j2 --timeout 900 -E SaturnExplorerLive` / `ctest -R SaturnExplorerLive` | **102 of 102** (199 s) / **6 of 6** (29 s). No new ctest test: the pins are in `SaturnExplorerSh2DecompilerTests`. No product code changed, so the fault suite was not rerun alone (it passed in the ctest run) |
+
+### The four fixes, attacked
+
+* **A7-26 (the register in `InstructionMakesNumber`).** Holds for registers: three paths into the join, one through `mov #0,r1 ; mov r1,r2 ; mov r2,r8` (`c1.s` `three_paths_copies`): the line names the two slots and the first `mov #0,r1`; a value moved into the register at the join and the source register re-made after (`moved_then_remade`): the paths' makers; `mov.l` literals on the paths and at the join (`lliteral_paths`): no merge copy, each path's literal on its own line. **It breaks where the fixer's register was not passed, in `AddFrameStoreTokens`: A7-28.** (a) The slot rule (`bra ; mov #imm`) calls `InstructionMakesNumber` with no register. `s2.s` `eq_known_slot`: `cmp/eq #4,r0 ; bf B ; bra L ; mov #4,r3 ... L: mov.w r0,@r2`: the engine knows r0 is 4 on the `bra` path and prints `xRam0603ac00 = 4;` at the branch; the line is drawn at the slot `mov #0x4,r3` (r3's 4, stored elsewhere), the lowest address, so a click goes there. The corpus has it: 0x0601EDA6 and 0x0601FA28 of hwram007 (and their twins 0x0605E282, 0x0605EF04 of hwram008), the line's own store lower, so the hover and the way back from the slot are what is wrong there. (b) The number-in-memory rule asks only whether the instruction sets a register a named store stores, not whether its value reaches the store. Patched 0x060216B6 (the join's `mov #0x0,r5` made `mov #0x0,r1`): the four pushed frame words are drawn at the join again, the way back from it answering `xStack_8 = 0;`; the corpus has the same through the store choice: a statement that makes its own number names an EARLIER store of the variable whose register may hold the same number. 0x06048690 of hwram008: the second `if`'s `xStack_1a = 0x220;` and `= 0x204;` are drawn at their own literal loads (right) but name the first `if`'s store 0x06048784, the lowest, so a click goes into the other `if` (the store the value goes to is 0x060487CA); 0x06046C06's `iStack_20 = -0x90;` names a store of `lit + r0`; 0x06033F16, 0x0603C3A6 (three lines), and the return-value merges of 0x06062E20 and 0x06063104 (`iStack_8 = -1;` naming the store of an earlier call's result, 0 on that path; the oracle's `storeValueOther` stops at the call). P2: the line names, and in the fixture and 0x06048690 a click goes to, an instruction that did not make or write its value. A mov.w literal on the paths (`c2.s` `wliteral_paths`): the merged `iVar1 = 0x1234;` has no address, the fixer's note; `tools/a7_round6/number_no_address.py` finds no such line in the four corpus runs (the 35 / 103 number lines with no address in hwram007 alone / hwram008 lent are computed numbers or paths whose writer is a load or a call, as designed), so it is not filed.
+* **A7-27 (the label's value).** Holds for a single switch, labels sharing a destination, cases that are bare branches, and nested switches whose outer labels have an op (`n1.s`: `nested_inner2_code`, `nested_inner2_bare`). **It breaks on an op-less outer label after a nested switch: A7-29 (P3).** `caseDestination` takes the table of the switch printed last; after a case that holds a switch, that is the inner one, so the outer `case 2:` that is a `nop` falling into case 3 names the inner switch's case 2 (`nested_outer2_nop`, `nested_both_nop`). P3 with A7-24 and A7-27: a label, no value.
+* **A7-25 (`Token::materialised`, `Ordered`).** Holds: the way back answers the instruction's own statement first in the fixtures and in the corpus (1 copy first, the fixer's 0x060193F2). Copies materialised at calls and at the may-alias byte store keep their flag; A7-28's lines are flagged materialised too, which orders them after an own statement where there is one, but the slot `mov #0x4,r3` and the join's `mov #0x0,r1` have none.
+* **A7-21 (`FlowLastWriters` for a register merge).** Holds on the A7-23 fixtures; no register merge at a branch anywhere in the corpus (`copyMergeAtBranch` 0, `copyRegisterMade` 0 / 0 / 3 / 6). The merges A7-28 (b) lists (0x06062E20) are not this rule's: the copy is not at the end of its block, it is the return value's `mov #imm,r0`, and the line names a store.
+
+### The oracle's new checks, attacked (A7-30)
+
+Each fixer check was given an input it should flag:
+
+* `constAtJoin` (registers): flags the A7-26 fixture as it was (the round 5 pin). Blind to A7-28: it judges a join's first instruction only, and for a memory variable accepts any instruction into a stored register (the patched 0x060216B6: 0). **This round adds `numberStoreOther` (counted, a violation once A7-28 is fixed):** a number line of a memory variable drawn at a `mov #imm` or literal beside the stores it names is the instruction's only when `RegisterMakers` (the walk `RegisterBefore` takes, returning the writers, through register moves) from one of those stores finds it. It flags the fixture, the corpus lines above and the patched function, and none of the round 5 controls (the real 0x060216B6: 0).
+* `backWrong` (A7-25 order): blind by construction: it reads the product's flag. The A7-25 fixture with the flag cleared puts the copy first again and `backWrong` stays 0 (pinned, A7-30 (a)).
+* `copyMergeAtBranch` (A7-21): flags the A7-21 lines at the `bt/s` (the fixer's pin); the same lines drawn at the `tst r0,r0` before each `bt/s`, which makes nothing either, pass, counted as unconnected only (pinned, A7-30 (b)).
+* The case labels: the oracle had none (the fixer's note). **This round adds `caseOtherEntry` (counted):** a label is paired with the `switch` at its own indent (the text's nesting, not the print order), that switch's table is read from the words (the common `mova ; mov.w/mov.b @(r0,Rm),Rn ; add ; jmp @r0` form) with the value offset most of its labels agree with, and a label naming another entry or none is counted; narrow labels (`case 0xfffa:` of a 16-bit switch) are read at the switch's width. 0 of 3,620 corpus labels; 1 in each nested fixture.
+
+### Re-judged
+
+* A7-17 (P3, the Assembly-follow toggle and the PC mark): holds.
+* A7-18 (P3, instrument): holds; `slotMadeLines` 252, 509, 627 and 1,112.
+* A7-21, A7-25, A7-26 (its register shape) and A7-27 stay fixed; what broke is filed as A7-28 and A7-29, not as a reopening.
+
+### Pins (`TestArea7Round6`)
+
+A7-28 (a) (`eq_known_slot`, the line at the slot 0x0607000A, `numberStoreOther` 1) and (b) (`kA726FrameWords` with 0x0602183E = 0xE100, the four frame words drawn at it, the way back answering them, `numberStoreOther` 4); A7-29 (`nested_outer2_nop`, the outer `case 2:` at 0x0607004E, `caseOtherEntry` 1); the controls (the A7-27 fixture's five labels judged, the real 0x060216B6 with `numberStoreOther` 0); A7-30 (a) and (b) (the damaged results pass). Each comment says what flips when the row is fixed.
+
+### Routed
+
+Nothing. Grammar 2 seed 300847 (A5-99) was not counted.

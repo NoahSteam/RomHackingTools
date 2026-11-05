@@ -104,6 +104,10 @@ struct MappingAudit
     int copyRegisterMade = 0;  // ...naming instructions that each write a register and are no load, store, call or branch: the makers (counted)
     int copyNoAddress = 0;     // ...naming no instruction at all: no maker was found (counted)
     int constLines = 0;        // lines `V = <number>;` drawn at one instruction (counted)
+    int numberStoreOther = 0;  // ...of a memory variable, drawn at a number instruction beside the stores it names, whose value none of those
+                               // stores stores (A7-28, counted until it is fixed; area 7 round 6)
+    int caseOtherEntry = 0;    // case labels naming another entry of their own switch's table, or no destination of it (A7-29, counted until fixed)
+    int caseJudged = 0;        // ...the labels judged: a switch of the common `mova ; mov.w/mov.b @(r0,Rm),Rn ; add ; jmp @r0` form
     int constAtJoin = 0;       // ...drawn at a join's first instruction (a target of the function's own branches) that makes no number, or another
                                // one, or makes it into another register than every path into the join sets it in: the engine's collapsed
                                // MULTIEQUAL, at its block's start (A7-22, A7-26, a violation)
@@ -127,6 +131,7 @@ struct MappingAudit
         copyUnconnected += o.copyUnconnected;
         storeValueOther += o.storeValueOther; copyOtherValue += o.copyOtherValue; constLines += o.constLines; constAtJoin += o.constAtJoin;
         copyMergeAtBranch += o.copyMergeAtBranch; copyRegisterMade += o.copyRegisterMade; copyNoAddress += o.copyNoAddress;
+        numberStoreOther += o.numberStoreOther; caseOtherEntry += o.caseOtherEntry; caseJudged += o.caseJudged;
         for (const std::string& p : o.problems) Keep(p);
     }
     // Three examples of each kind of problem are kept; the prefix up to the first ':' is the kind.
@@ -454,6 +459,77 @@ inline WordValue RegisterBefore(const sfe::decomp::DecompileResult& r, const std
         }
     }
     return any ? result : WordValue();
+}
+
+// Area 7 round 6: the instructions that made the value a register holds before `at`, on each path (the walk RegisterBefore takes): an
+// instruction that writes it, or, through a register move, what made the moved register; a call for r0 to r7; 0 for the function's input.
+// False when the walk is not finished (an undecodable word, past the bound).
+inline bool RegisterMakers(const sfe::decomp::DecompileResult& r, const std::function<bool(uint32_t, uint16_t&)>& word,
+                           const std::map<uint32_t, std::vector<uint32_t>>& into, uint32_t at, int reg, std::set<uint32_t>& makers)
+{
+    const auto decode = [&](uint32_t p, sfe::DisassembledInstruction& d) {
+        uint16_t w = 0;
+        if (!r.InBody(p) || !word(p, w)) return false;
+        d = sfe::Sh2Decode(p, w);
+        return d.IsValid;
+    };
+    std::set<std::pair<uint32_t, int>> seen;
+    std::vector<std::pair<uint32_t, int>> todo = { { at, reg } };
+    int steps = 0;
+    while (!todo.empty())
+    {
+        const std::pair<uint32_t, int> st = todo.back();
+        todo.pop_back();
+        if (!seen.insert(st).second) continue;
+        if (++steps > 4000) return false;
+        const uint32_t a = st.first;
+        const int rg = st.second;
+        std::vector<uint32_t> preds;
+        sfe::DisassembledInstruction prev, prev2;
+        if (decode(a - 2, prev))
+        {
+            const bool afterJump = decode(a - 4, prev2) && prev2.HasDelaySlot && !prev2.IsConditional && !prev2.IsCall;
+            if (!afterJump) preds.push_back(a - 2);
+        }
+        const auto in = into.find(a);
+        if (in != into.end()) preds.insert(preds.end(), in->second.begin(), in->second.end());
+        if (a == r.entry)
+        {
+            makers.insert(0);
+            continue;
+        }
+        if (preds.empty()) return false;
+        for (uint32_t p : preds)
+        {
+            sfe::DisassembledInstruction d;
+            if (!decode(p, d)) return false;
+            sfe::DisassembledInstruction call;
+            if (p + 2 == a && decode(p - 2, call) && call.IsCall && call.HasDelaySlot && rg <= 7)
+            {
+                makers.insert(p - 2);
+                continue;
+            }
+            if (d.IsCall && !d.HasDelaySlot && rg <= 7)
+            {
+                makers.insert(p);
+                continue;
+            }
+            uint16_t w = 0;
+            word(p, w);
+            if ((w >> 12) == 0x6 && (w & 0xF) == 0x3 && ((w >> 8) & 0xF) == rg)
+            {
+                todo.emplace_back(p, (w >> 4) & 0xF);
+                continue;
+            }
+            if (WrittenRegisters(d).count(rg))
+            {
+                makers.insert(p);
+                continue;
+            }
+            todo.emplace_back(p, rg);
+        }
+    }
+    return true;
 }
 
 // 'word' reads the 16-bit instruction word at a canonical address; false when not there.
@@ -1095,6 +1171,44 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
             ++a.constLines;
             const uint32_t at = *drawn.begin();
             uint16_t w = 0;
+            // Area 7 round 6 (A7-28): a number line of a memory variable, drawn at an instruction that makes the number (`mov #imm`, a
+            // literal) beside the stores it names, at any instruction (not only a join's first): the instruction is the line's only when
+            // it made the value one of those stores stores (RegisterMakers from the store, through register moves). `xRam0603ac00 = 4;`
+            // drawn at the slot `mov #0x4,r3` of the `bra` while the store stores r0, which the engine knew was 4 by a compare; and the
+            // join's `mov #0x0,r1` after the pushes of r1 that wrote the frame words (the rule A7-26 gave AddFrameStoreTokens asks only
+            // which register, not whether its value reaches the store). Counted until A7-28 is fixed (a violation then).
+            if (word(at, w) && ((w >> 12) == 0xE || (w >> 12) == 0x9 || (w >> 12) == 0xD))
+            {
+                uint32_t got = 0;
+                std::vector<std::pair<uint32_t, int>> stores;
+                for (const Token& t : r.lines[li].tokens)
+                {
+                    uint16_t sw = 0;
+                    int size = 0;
+                    if (t.addr && t.begin == t.end && word(t.addr, sw) && StoredRegister(sw, size) >= 0) stores.emplace_back(t.addr, StoredRegister(sw, size));
+                }
+                if (!stores.empty() && made(at, w, got) && got == want)
+                {
+                    if (!haveSources)
+                    {
+                        sources = BranchSources(r, word);
+                        haveSources = true;
+                    }
+                    bool known = true, maker = false;
+                    for (const auto& st : stores)
+                    {
+                        std::set<uint32_t> makers;
+                        if (!RegisterMakers(r, word, sources, st.first, st.second, makers)) known = false;
+                        maker = maker || makers.count(at) != 0;
+                    }
+                    if (known && !maker)
+                    {
+                        ++a.numberStoreOther;
+                        problem("number-store", "line " + std::to_string(li) + " '" + text + "' is drawn at " + MappingHex(at) +
+                                                    ", which makes the number, but not the value any store the line names stores (A7-28)");
+                    }
+                }
+            }
             if (!targets.count(at) || !word(at, w)) continue;
             const sfe::DisassembledInstruction d = sfe::Sh2Decode(at, w);
             const MemoryShape m = ShapeOf(d);
@@ -1177,6 +1291,119 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
             ++a.constAtJoin;
             problem("const-join", "line " + std::to_string(li) + " '" + text + "' is drawn at " + MappingHex(at) + " (" + d.Mnemonic + " " + d.Operands +
                                       "), the first instruction of a join, which does not make the number");
+        }
+    }
+    // Area 7 round 6 (A7-29): a case label against its own switch's table. The label's switch is the `switch` line at the label's indent
+    // before it (the text's nesting; A7-27's caseDestination takes the switch printed last, which a nested switch is). For a table of the
+    // common form (`mova @(T),r0 ; mov.w/mov.b @(r0,Rm),Rn ; add Rn,r0 ; jmp @r0`, entries relative to T), the label's value maps to an
+    // entry with an offset (a bias before the bound check), the one most of the switch's labels agree with; a label naming another entry,
+    // or no destination of the table, is counted (until A7-29 is fixed). tools/a7_round6/case_switch.py is the same over a token dump.
+    {
+        const auto indentOf = [](const std::string& t) { return t.find_first_not_of(' '); };
+        const auto parseCase = [](const std::string& t, int64_t& v) {
+            const size_t q = t.find_first_not_of(' ');
+            if (q == std::string::npos || t.compare(q, 5, "case ") != 0 || t.empty() || t.back() != ':') return false;
+            const std::string num = t.substr(q + 5, t.size() - 1 - (q + 5));
+            if (num.empty() || num.find_first_not_of("-0123456789abcdefx") != std::string::npos) return false;
+            char* end = nullptr;
+            const bool neg = num[0] == '-';
+            const unsigned long long u = std::strtoull(num.c_str() + (neg ? 1 : 0), &end, 0);
+            if (!end || *end) return false;
+            v = neg ? -static_cast<int64_t>(u) : static_cast<int64_t>(u);
+            if (!neg && v >= (int64_t(1) << 31) && v < (int64_t(1) << 32)) v -= int64_t(1) << 32;   // (an unsigned label of a negative case)
+            return true;
+        };
+        const auto tableOf = [&](uint32_t jmp, uint32_t& T, int& size) {
+            uint16_t w = 0;
+            if (!word(jmp, w) || w != 0x402B) return false;
+            size = 0;
+            for (uint32_t k = 1; k < 8; ++k)
+            {
+                uint16_t x = 0;
+                if (!word(jmp - 2 * k, x)) return false;
+                if ((x & 0xF00F) == 0x000D) size = 2;
+                if ((x & 0xF00F) == 0x000C) size = 1;
+                if ((x >> 8) == 0xC7)
+                {
+                    T = ((jmp - 2 * k) & ~3u) + 4 + (x & 0xFFu) * 4;
+                    return size != 0;
+                }
+            }
+            return false;
+        };
+        const auto entryOf = [&](uint32_t T, int size, int64_t i, uint32_t& dest) {
+            if (i < 0 || i >= 256) return false;
+            uint16_t x = 0;
+            if (size == 2)
+            {
+                if (!word(T + 2 * static_cast<uint32_t>(i), x)) return false;
+                dest = T + static_cast<uint32_t>(static_cast<int32_t>(static_cast<int16_t>(x)));
+                return true;
+            }
+            const uint32_t b = T + static_cast<uint32_t>(i);
+            if (!word(b & ~1u, x)) return false;
+            const uint8_t byte = (b & 1) ? static_cast<uint8_t>(x & 0xFF) : static_cast<uint8_t>(x >> 8);
+            dest = T + static_cast<uint32_t>(static_cast<int32_t>(static_cast<int8_t>(byte)));
+            return true;
+        };
+        std::map<size_t, std::vector<std::pair<int64_t, uint32_t>>> bySwitch;   // switch line -> (value, the label's address)
+        for (size_t li = 0; li < r.lines.size(); ++li)
+        {
+            int64_t v = 0;
+            if (!parseCase(r.lines[li].text, v)) continue;
+            const size_t ind = indentOf(r.lines[li].text);
+            size_t sw = r.lines.size();
+            for (size_t lj = li; lj-- > 0;)
+            {
+                const std::string& t = r.lines[lj].text;
+                if (indentOf(t) == ind && t.compare(ind, 7, "switch(") == 0)
+                {
+                    sw = lj;
+                    break;
+                }
+            }
+            std::set<uint32_t> at;
+            for (const Token& t : r.lines[li].tokens)
+                if (t.addr) at.insert(t.addr);
+            if (sw == r.lines.size() || at.size() != 1) continue;
+            bySwitch[sw].emplace_back(v, *at.begin());
+        }
+        for (const auto& kv : bySwitch)
+        {
+            std::set<uint32_t> jmps;
+            const Line& sl = r.lines[kv.first];
+            for (const Token& t : sl.tokens)
+                if (t.addr && t.end <= sl.text.size() && sl.text.compare(t.begin, t.end - t.begin, "switch") == 0) jmps.insert(t.addr);
+            uint32_t T = 0;
+            int size = 0;
+            if (jmps.size() != 1 || !tableOf(*jmps.begin(), T, size)) continue;
+            // (the value a label prints, read at the switch's width: `case 0xfffa:` of a 16-bit switch is -6)
+            const auto names = [&](int64_t v, int64_t k, uint32_t at) {
+                uint32_t dest = 0;
+                if (entryOf(T, size, v - k, dest) && dest == at) return true;
+                if (v >= 0x8000 && v < 0x10000 && entryOf(T, size, v - 0x10000 - k, dest) && dest == at) return true;
+                return v >= 0x80 && v < 0x100 && entryOf(T, size, v - 0x100 - k, dest) && dest == at;
+            };
+            std::map<int64_t, int> votes;
+            for (const auto& label : kv.second)
+                for (int64_t k = -64; k <= 64; ++k)
+                    if (names(label.first, k, label.second)) ++votes[k];
+            bool haveK = false;
+            int64_t k = 0;
+            int best = 0;
+            for (const auto& vk : votes)
+                if (vk.second > best) best = vk.second, k = vk.first, haveK = true;
+            for (const auto& label : kv.second)
+            {
+                ++a.caseJudged;
+                uint32_t dest = 0;
+                if (haveK && names(label.first, k, label.second)) continue;
+                ++a.caseOtherEntry;
+                problem("case-entry", "the label 'case " + std::to_string(label.first) + ":' of the switch on line " + std::to_string(kv.first) + " names " +
+                                          MappingHex(label.second) + (haveK && entryOf(T, size, label.first - k, dest) ? ", its table's entry is " + MappingHex(dest)
+                                                                                                                      : std::string(", no entry of its table")) +
+                                          " (A7-29)");
+            }
         }
     }
     // Coverage of the body: which instructions no token carries, by kind.
@@ -1323,6 +1550,9 @@ inline void PrintMappingAudit(const MappingAudit& a, const char* label)
     std::printf("  mapping (%s): register merges under a memory variable's name naming no store (A7-21): %d drawn only at a branch ending the block (a "
                 "violation), %d naming the instructions that set the register (counted), %d naming nothing (counted)\n",
                 label, a.copyMergeAtBranch, a.copyRegisterMade, a.copyNoAddress);
+    std::printf("  mapping (%s): area 7 round 6: %d number lines of a memory variable drawn at a number instruction whose value no store they name "
+                "stores (A7-28, counted); %d of %d case labels judged against their own switch's table name another entry or none (A7-29, counted)\n",
+                label, a.numberStoreOther, a.caseOtherEntry, a.caseJudged);
     for (const std::string& p : a.problems) std::printf("    %s\n", p.c_str());
 }
 
