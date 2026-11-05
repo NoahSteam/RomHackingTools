@@ -1988,15 +1988,20 @@ void RunAutoRefreshPin()
     CHECK(m.Settle());
     m.gate.Close();
     m.regs[0].pc = aEntry + 4;
+    // The panel's part is frame-bound: it asks within 120 frames. The engine's part is not: the worker has to reach the held phase, which takes
+    // real time and, on a loaded machine, more than the 120 frames take (A8-35: this pin failed once in a full ctest run, alone it passed).
+    // So the frames are counted until the panel has asked, and the engine is then waited for by the clock.
+    const uint64_t asked = m.panel.Submissions();
     bool held = false;
-    for (int i = 0; i < 120 && !held; ++i)
+    for (int i = 0; i < 120 && m.panel.Submissions() == asked; ++i)
     {
         ++m.frame;
         ++m.serial;
         m.Idle(1);
-        held = m.runner.Busy() && m.gate.Held() > 0;
-        if (!held && m.runner.Busy()) std::this_thread::yield();
     }
+    const bool asksByItself = m.panel.Submissions() > asked;
+    if (asksByItself) held = WaitHeldOrBusy(m);
+    held = held && asksByItself;
     MiniCheck("auto-refresh asks by itself within 120 frames once the PC has left the function", held);
     if (!held)
     {
