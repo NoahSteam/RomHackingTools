@@ -16638,3 +16638,47 @@ The Windows branch of `FileLock` was changed the same way and not compiled or ru
 | `SaturnExplorerDecompilerFaultTests` | 0 of 94 jobs failed |
 
 Docs: `Docs/Codebase/Systems/Decompiler.md` (the file table and "Saving the user's files") and the ledger rows A9-32, A9-40 to A9-43.
+
+## Area 9, round 5
+
+Branch `review/9-round5` from master `c5268769`. An adversarial round on the area 9 fixer's round 4 changes (A9-40 to A9-43) and on parts of area 9 the earlier rounds did not reach. **No product code changed.** The round adds `FrontEnd/tests/Area9Round5Tests.cpp` (ctest `SaturnExplorerArea9Round5Tests`, Linux; `CMakeLists.txt` target beside round 4's) and files A9-45 (**P2**), A9-46, A9-47, A9-48 and A9-49 (P3). **One P2: the round is not clean.**
+
+### What was attacked, and how
+
+* **A9-41 (letters-only words skipped).** Every reader of an address word goes through `ParseAddressWord`: names (`FunctionNames::Load`), symbol maps and Load Symbols (`Import`), notes (`AssemblyPanel::LoadComments`), starts (`ClassifyBoundsLine`). The settings values that hold addresses are whole-field parses (the volatile list, `ParseAddressRanges`; the entry box, `ParseHexAddress`), where a letters-only word is an address on purpose and a bad entry refuses the whole list. The letters-only fix holds in all of them. The oracle's reference is now independent for letters (its own `isalpha` test). But the same hole is open for digits: a first word of decimal digits is an address, so a remark that opens with a year, a day, a count or a date (`2026 trace: ...`, `12 Nov: ...`, `2 more below`, `20261104 ...`) is a function start or a name, silently. That is A9-4's case (a remark that opens with a word spelled in hex digits), closed by A9-18 and A9-41 for letters only, and the oracle shares the product's reading of digit words, so it cannot see it. Rated as A9-41 was: **A9-45, P2**. The bounds file has always been written with eight digits (`%08X` since b21b3110), so its unpadded reading serves only hand-typed starts.
+* **A9-40 (the bounded wait).** A refused save keeps its change pending and the next successful save writes it, for names, starts and settings (`LaterSaveCarriesRefused`, holds). A SaturnExplorer holder holds the lock for one read and one write: 0.27 s for a names file at the 8 MiB cap here, so a long save by another instance does not make this one refuse unless that save is stuck or on a very slow disk. Polling every 20 ms against a holder that saves at most every few seconds does not starve. At exit the wait no longer ends in a save: a change still pending when another process holds the lock past 3 s is gone at the next start, and the refusal goes to the Log panel, which closes with the window (**A9-46, P3**: before A9-40 the exit waited and saved). With a stuck holder the settings retry still freezes the UI thread 3 s in every 8 s (read). A crash loses what is pending, as before.
+* **SpecBundle without the lock.** Its caller retries at each request (`SaturnArchitecture.cpp` keeps the stage Fresh on a failure, and verifies again when Ready), and a verified directory is used without the lock; a fresh configuration folder whose lock another process holds for 5 s gives "Decompiler unavailable" at 3.00 s and extracts at the next request. The decompiler is not lost. Its text still blames the lock file ("cannot be opened") after a timeout (A9-47).
+* **A9-42 (`WhyNotHeld`).** The stores' three refusal causes give the true text (a folder that cannot be written, a folder gone, a timeout; round 4's `LockRefusal` and `LockWait` pass). Not reached: `SpecBundle`'s own text; `FileLock(wait=false)` reports `EWOULDBLOCK` as "cannot create or lock ...: Resource temporarily unavailable", so the "another process holds" branch is dead on POSIX; the Windows loop retries every `LockFileEx` failure until the bound and calls it a timeout (read). **A9-47, P3.**
+* **A9-43 (`App::Shutdown` saves the starts).** Read: the order is the engine thread joined, settings, Watch session, notes, names, starts, `CloseData`; the starts save uses the same path as `req.boundsChanged` and writes nothing when nothing is pending; a failure is logged. Right, but the log is not seen (A9-46).
+* **Full disk mid-write.** `RLIMIT_FSIZE` in a child (`EFBIG` at the write) and a real `ENOSPC` on a 64 KiB tmpfs: the save is refused with the OS reason ("No space left on device"), the data file is as it was, no `.separt-` file is left, and the change is written once there is space (names, settings). Holds.
+* **Durability.** No save asks for its bytes to reach the device: nothing in the tree calls `fsync` (the test interposes it and counts 0 calls), though `FileWrite.h` says the rename happens "once they are safely on disk". A power cut soon after a save can leave an empty file on file systems that do not order the data before the rename (**A9-48, P3**).
+* **Read-only files.** A read-only data file is refused with a message (A9-28's fix); a read-only folder gives A9-42's text. Hold (round 4's tests).
+* **Long lines and the cap.** A names file of exactly 8 MiB that is one line (one name of 8 MiB less 10 bytes) loads; one byte more is refused at load and no save replaces it; a rename that would take the file past the cap is refused with the reason and the file is untouched. Hold.
+* **Unicode and spaces.** A working folder `dir with spaces üñï ディレクトリ`, files `starts file.txt` and `settings file.ini`, UTF-8 names (Japanese, U+2713, é) and a name with U+2028 (not a line end to the loaders), a BIOS path with spaces and Japanese: all read back as written. A UTF-8 byte-order mark in front of the names file does not lose the first entry (`SplitLines` skips it). Hold. On Windows every file call is an `A` function (`fopen`, `CreateFileA`, `MoveFileExA`), consistently, so a path outside the ANSI code page fails everywhere alike; not filed here.
+* **Fuzz.** `LoaderFuzzTests` at a fresh seed, 48271, 3,000 cases a module, all modules, directed and two-process cases: 37,985 cases in 62 s, 0 classes outside the ledger (only `HARDLINK_SPLIT`, A9-28). The `concurrent` module at 40 rounds and 4 processes, `Area9Round3Tests` (`LockNotHeld`, `KillFuzz`) and `Area9Round4Tests` (`LockWait`: 3.01 s and 3.02 s): pass.
+
+### Findings
+
+| Row | Severity | Summary | Test |
+|---|---|---|---|
+| A9-45 | **P2** | a remark line that opens with a number (`2026 trace`, `12 Nov`, `2 more`, `20261104`) is a function start, a name or a note, with no Log line; the oracle reads digits as the product does | `DigitProseLines` (`PIN A9-45`) |
+| A9-46 | P3 | a save refused at exit after the bounded wait is lost, said only in the closing Log; a stuck holder freezes the settings retry 3 s in 8 | `RefusedAtExit` (`PIN A9-46`), read |
+| A9-47 | P3 | `SpecBundle`'s timeout text, `FileLock(wait=false)`'s text, the Windows loop's retry of every failure | `LockTexts` (`PIN A9-47`), read |
+| A9-48 | P3 | no `fsync` before the rename, against `FileWrite.h`'s "safely on disk" | `NoSyncBeforeRename` (`PIN A9-48`) |
+| A9-49 | P3 | instrument row: what this round adds | |
+
+The pins assert today's behaviour: when a finding is fixed, its check fails and is turned round in the same change.
+
+### Runs
+
+| Run | Result |
+|---|---|
+| `SaturnExplorerArea9Round5Tests` (under `ulimit -v 3500000`, `timeout`) | all passed; `PIN A9-45` to `A9-48` print as holding; with `SE_A9R5_FULLDIR` on a 64 KiB tmpfs the `ENOSPC` case passes too |
+| `SaturnExplorerLoaderFuzzTests`, seed 48271, 3,000 cases a module, all modules | 37,985 cases, 0 classes outside the ledger |
+| `concurrent` module, 40 rounds, 4 processes; `SaturnExplorerArea9Round3Tests`; `SaturnExplorerArea9Round4Tests` | pass |
+| Full `ctest` (`-j2`, `ulimit -v 3500000`), Live tests included | see the hand-back |
+
+### For the fixer
+
+* A9-45 first. The bounds file needs no unpadded reading at all (the application writes eight digits): take eight digits or `0x` there and skip and warn on the rest. For the names and notes files, an unpadded first word that lands in the BIOS ROM (below 0x80000: a year, a day, a count) is the A9-32 trade that A9-41 already took for letters; skip it with the same warning. Give the oracle a prose list with numbers so `PROSE_AS_ADDRESS` can fire for them.
+* A9-46 with A9-47: at exit wait longer, or say a refusal before the window goes; take the settings lock without blocking the frame; use `WhyNotHeld()` in `SpecBundle`.
