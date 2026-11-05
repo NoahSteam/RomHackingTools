@@ -1116,23 +1116,28 @@ void TestArea7Round7()
     };
     const std::vector<uint16_t> args = { 0x6483, 0x6593 };          // mov r8,r4 ; mov r9,r5 (the tail call's arguments)
     const std::vector<uint16_t> pushR1 = { 0x2F16, 0x7F04 };        // mov.l r1,@-r15 ; add #4,r15: the word written again after the call
-    // A7-31 (re-rated P2 by this round): the push is on no line and the copy at the call names nothing. The cause is StoreShowsValue
-    // (FlowValueMayBe): the pushed r3 is made by an `add r4,r3` the engine folded (r3 was 0: `mov #1,r3 ; dt r3 ; bf` in the seed,
-    // `mov #0,r3`, or `mov r4,r3 ; add #0,r3`), so the statement's value is the input param_1 itself, no op of the flow; the walk back
-    // from the store meets the add, a computation the value does not hold, and ends at "another value". A store that wrote the value
-    // is then not the statement's, and the copy names no store. When fixed: the line names 0x06009014 and frameStoreMissing is 0.
+    // A7-31 (P2), fixed by the area 7 fixer (round 7 rows): the pushed r3 is made by arithmetic the engine folds to param_1 (`add r4,r3`
+    // with r3 0 after `mov #1,r3 ; dt r3 ; bf` in the seed, `mov #0,r3 ; add r4,r3`, `mov r4,r3 ; add #0,r3`), so the statement's value is
+    // the input itself, no op of the flow. StoreShowsValue (FlowValueMayBe) took the add for "another value", the push was judged not the
+    // statement's and the copy at the call named nothing. Now the walk goes through an op that gives one of its values back
+    // (FlowIdentitySources: the op's value built back to numbers known on every path in, FlowNumberBefore, and evaluated on test values;
+    // a `dt` loop's fall-through says r3 is 0, EdgeNumber), so the line names the push 0x06009014. The same for chains the engine folds
+    // (`neg` twice, `xor #0x55` twice, `swap.w` twice, `add #5 ; add #-5`, `clrt ; addc r4,r3` with r3 0) and for a 0 kept in a frame
+    // word (`mov #0,r3 ; push ; pop ; add r8,r3`). Was: the bsr only, the push on no line, frameStoreMissing 1.
     for (const auto& makeR3 : { std::vector<uint16_t>{ 0xE301, 0x4310, 0x8BFD, 0x334C }, std::vector<uint16_t>{ 0xE300, 0x334C, 0x0009, 0x0009 },
-                                std::vector<uint16_t>{ 0x6343, 0x7300, 0x0009, 0x0009 } })
+                                std::vector<uint16_t>{ 0x6343, 0x7300, 0x0009, 0x0009 }, std::vector<uint16_t>{ 0x634B, 0x633B, 0x0009, 0x0009 },
+                                std::vector<uint16_t>{ 0x6343, 0xE555, 0x235A, 0x235A }, std::vector<uint16_t>{ 0x6349, 0x6339, 0x0009, 0x0009 },
+                                std::vector<uint16_t>{ 0x6343, 0x7305, 0x73FB, 0x0009 }, std::vector<uint16_t>{ 0xE300, 0x0008, 0x334E, 0x0009 },
+                                std::vector<uint16_t>{ 0xE300, 0x2F36, 0x63F6, 0x338C } })
     {
         const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, module(makeR3, args));
-        Print("A7-31 a folded computation's push named by no line", r);
+        Print("A7-31 a folded computation's push", r);
         CHECK(r.status == DecompileStatus::Ok);
         const Line* copy = LineWith(r, "xStack_14 = param_1;");
         CHECK(copy != nullptr);
-        if (copy) CHECK(LineInstructions(*copy) == (std::vector<uint32_t>{ 0x06009018u }));   // the bsr only (A7-31; fixed: and 0x06009014)
-        CHECK(!a7r3::OnSomeLine(r, 0x06009014u));                                              // the push is on no line
+        if (copy) CHECK(LineInstructions(*copy) == (std::vector<uint32_t>{ 0x06009014u, 0x06009018u }));
         const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_31");
-        CHECK(a.frameStoreMissing == 1);
+        CHECK(a.frameStoreMissing == 0 && a.Violations() == 0);
     }
     // The control: r3 moved from r4 (`mov r4,r3`), no computation: the copy names the push.
     {
@@ -1143,23 +1148,62 @@ void TestArea7Round7()
         const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_31 control");
         CHECK(a.Violations() == 0);
     }
-    // A7-32 (P2): A7-31's false "another value" with the frame word written again AFTER the call (`mov.l r1,@-r15` at 0x0600901C, r1 the
-    // callee's leftover). AddFrameStoreTokens' search rejects the push and goes on to the next store of the word in the block
-    // (nextInHome), a store after the call: `xStack_14 = param_1;` names 0x0600901C, which writes another value after the call has seen
-    // the word; the hover lists it and Show in Pseudocode on it answers the copy. storeValueOther cannot see it (r1 after a call is not
-    // known); the new storeAfterUse does. When fixed: the line names 0x06009014 (A7-31) or nothing, never a store after the call.
+    // A7-31 on a global, the fold's parts on the two sides of a join: `mov.l lit,r8 ; mov r4,r3 ; add #5,r3 ; bt L ; nop ; L: add #-5,r3 ;
+    // mov.l r3,@r8 ; bsr f ; ... mov.l r0,@r8`. Each path into the join is built on its own (r4 + 5 - 5): the copy at the bsr names the
+    // store 0x0600900C. And a 0 kept in r3 across a call whose lent prototype says the callee leaves r3 alone (CallKeeps): `mov #0,r3 ;
+    // bsr g ; nop ; add r9,r3`, the store 0x0600900E named.
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, { 0xD807, 0x6343, 0x7305, 0x8900, 0x0009, 0x73FB, 0x2832, 0x4F22,
+            0xB004, 0x0009, 0x2802, 0x4F26, 0x000B, 0x0009, 0x000B, 0x0009, 0x2600, 0x2200 });
+        const Line* g = LineWith(r, "xRam26002200 = param_1;");
+        CHECK(g != nullptr);
+        if (g) CHECK(LineInstructions(*g) == (std::vector<uint32_t>{ 0x0600900Cu, 0x06009010u }));
+        const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_31 join");
+        CHECK(a.Violations() == 0);
+    }
+    {
+        const std::vector<uint16_t> w = { 0xD808, 0x6943, 0xE300, 0x4F22, 0xB008, 0x0009, 0x339C, 0x2832, 0xB006, 0x0009, 0x2802, 0x4F26,
+                                          0x000B, 0x0009, 0x000B, 0x0009, 0x000B, 0x0009, 0x2600, 0x2200 };
+        std::fill(hw.begin(), hw.end(), 0);
+        for (size_t i = 0; i < w.size(); ++i) dts::Put16(hw, 0x9000u + 2 * i, w[i]);
+        auto snap = MakeSnapshot(hw);
+        DecompileRequest q = Request(0x06009000u);
+        for (uint32_t callee : { 0x0600901Cu, 0x06009020u }) q.prototypes.emplace_back(callee, d.Decompile(snap, Request(callee)).prototype);
+        const DecompileResult r = d.Decompile(snap, q);
+        Print("A7-31 a number kept across a call by the callee's prototype", r);
+        const Line* g = LineWith(r, "xRam26002200 = param_1;");
+        CHECK(g != nullptr);
+        if (g) CHECK(LineInstructions(*g) == (std::vector<uint32_t>{ 0x0600900Eu, 0x06009010u }));
+        const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_31 kept");
+        CHECK(a.Violations() == 0);
+    }
+    // A7-32 (P2), fixed by the area 7 fixer: a copy at a call or a return names only stores that run before that instruction (before it
+    // in its flow block, or in a block from which the flow reaches it); the searches past the statement (nextInHome, the stores after it in
+    // the flow) and A7-11's fallback skip any other. A7-31's module with the word written again after the call (`mov.l r1,@-r15 ; add
+    // #4,r15` at 0x0600901C) now names the push (A7-31). The fixture that still has the value test reject the store before the call is
+    // A7-38's: a 0 kept in a frame word across a store through a pointer the walk cannot place (`mov #0,r5 ; mov.l r5,@-r15 ; mov.l
+    // r1,@r2 ; mov.l @r15+,r5 ; mov r4,r3 ; add r5,r3 ; mov.l r3,@r8 ; bsr f ; nop ; mov.l r0,@r8`): the copy at the bsr names no store
+    // (A7-38), never the store 0x06009016 after the call. Was: the line named 0x0600901C, the store after the call, storeAfterUse 1.
     {
         const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, module({ 0xE300, 0x334C, 0x0009, 0x0009 }, pushR1));
-        Print("A7-32 a copy at a call naming a store after the call", r);
+        Print("A7-32 a copy at a call with a later store of the word", r);
         CHECK(r.status == DecompileStatus::Ok);
         const Line* copy = LineWith(r, "xStack_14 = param_1;");
         CHECK(copy != nullptr);
-        if (copy) CHECK(LineInstructions(*copy) == (std::vector<uint32_t>{ 0x06009018u, 0x0600901Cu }));   // (A7-32: the later store)
-        const LineLookup back = LineForInstruction(r, 0x0600901Cu);
-        CHECK(!back.lines.empty() && copy && &r.lines[back.lines[0]] == copy);
+        if (copy) CHECK(LineInstructions(*copy) == (std::vector<uint32_t>{ 0x06009014u, 0x06009018u }));
         const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_32");
-        CHECK(a.storeValueOther == 0);                         // (the old check is blind to it)
-        CHECK(a.storeAfterUse == 1 && a.Violations() == 1);
+        CHECK(a.storeAfterUse == 0 && a.Violations() == 0);
+    }
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, { 0xD808, 0xE500, 0x2F56, 0x2212, 0x65F6, 0x6343, 0x335C, 0x2832,
+            0x4F22, 0xB004, 0x0009, 0x2802, 0x4F26, 0x000B, 0x0009, 0x000B, 0x0009, 0x0009, 0x2600, 0x2200 });
+        Print("A7-32 a rejected store before the call, a later store after it", r);
+        const Line* g = LineWith(r, "xRam26002200 = param_1;");
+        CHECK(g != nullptr);
+        if (g) CHECK(LineInstructions(*g) == (std::vector<uint32_t>{ 0x06009012u }));   // (A7-38: the store 0x0600900E is on no line)
+        CHECK(!a7r3::OnSomeLine(r, 0x0600900Eu));
+        const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_32 later");
+        CHECK(a.storeAfterUse == 0 && a.copyAtCall == 1);
     }
     // ...the control: r3 moved, the same later store: the copy names the push, and storeAfterUse accepts it. The damaged result (the
     // push's token moved to the later store) is flagged: the check bites.
@@ -1223,39 +1267,39 @@ void TestArea7Round7()
     }
     // The generator's findings once the later checks were flagged (A7-34; SE_GENERATED_MAP_ALL=1), shrunk words:
     // A7-31 on a global (grammar 1 seed 1711170): `mov.l lit,r6 ; and r1,r1 ; mov.l r1,@(0x1c,r6) ; mov.l r2,@-r4 ; rts ; nop`. The `and r1,r1`
-    // the engine folds is A7-31's computation; the global's copy is materialised at the may-alias store 0x06009006 (A7-25's shape) and
-    // names no store, so a click goes to a store of another variable and the store 0x06009004 is on no line. When fixed: the line names
-    // 0x06009004 and copyStoreMissing is 0.
+    // the engine folds is A7-31's computation. Fixed: the copy, materialised at the may-alias store 0x06009006 (A7-25's shape), names the
+    // global's store 0x06009004, where a click goes. Was: it named no store, the store on no line, copyAtOther 1.
     {
         const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, { 0xD602, 0x2119, 0x1617, 0x2426, 0x000B, 0x0009, 0x2600, 0x2304 });
         Print("A7-31 a global's store through a folded computation", r);
         const Line* g = LineWith(r, "xRam26002320 = in_r1;");
         CHECK(g != nullptr);
-        if (g) CHECK(LineInstructions(*g) == (std::vector<uint32_t>{ 0x06009006u }));   // (A7-31; fixed: and 0x06009004)
-        CHECK(!a7r3::OnSomeLine(r, 0x06009004u));
+        if (g) CHECK(LineInstructions(*g) == (std::vector<uint32_t>{ 0x06009004u, 0x06009006u }) && g->firstAddr == 0x06009004u);
         const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_31 global");
-        CHECK(a.copyAtOther == 1);
+        CHECK(a.copyAtOther == 0 && a.Violations() == 0);
     }
     // A7-35 (grammar 1 seed 1710746): a merge copy of a number at the `bt` ending its block names a store of ANOTHER value, the lowest, so
     // a click goes there. `mov.l lit,r7 ; mov #3,r0 ; mov.l r0,@r7 ; (poll) ; mov #1,r3 ; dt r3 ; bf ; cmp/eq r1,r3 ; bt L ; or r0,r3 ;
-    // L: mov.l r3,@r7`: `xRam26002204 = 0;` (the path where r3 stays 0) is drawn at the `bt` 0x06009014 and names 0x06009004, the store
-    // of 3; the shared store 0x06009018 that writes the 0 is on no line. storeValueOther flags it. When fixed: the line names 0x06009018
-    // (or the maker), never 0x06009004.
+    // L: mov.l r3,@r7`: `xRam26002204 = 0;` (the path where r3 stays 0) is the engine's copy of 0 at the `bt` 0x06009014. Its value set
+    // held the bt's instruction (the engine's own COPY of the number, made at the bt), so the value test took it for a statement that
+    // shows no number only and accepted the store of 3. Fixed (the area 7 fixer): an engine-made copy of a number is that number only
+    // (FinalValues), the store of 3 is rejected and the search finds the shared store 0x06009018 that writes the 0. Was: the line named
+    // 0x06009004, firstAddr there, 0x06009018 on no line, storeValueOther 1.
     {
         const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, { 0xD707, 0xE003, 0x2702, 0x6072, 0xC801, 0x89FC, 0xE301, 0x4310,
             0x8BFD, 0x3310, 0x8900, 0x230B, 0x2732, 0x000B, 0x0009, 0x0009, 0x2600, 0x2204 });
-        Print("A7-35 a merge copy naming a store of another value", r);
+        Print("A7-35 a merge copy of a number at a bt", r);
         const Line* z = LineWith(r, "xRam26002204 = 0;");
         CHECK(z != nullptr);
-        if (z) CHECK(LineInstructions(*z) == (std::vector<uint32_t>{ 0x06009004u, 0x06009014u }) && z->firstAddr == 0x06009004u);
-        CHECK(!a7r3::OnSomeLine(r, 0x06009018u));
+        if (z) CHECK(LineInstructions(*z) == (std::vector<uint32_t>{ 0x06009014u, 0x06009018u }) && z->firstAddr == 0x06009014u);
         const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_35");
-        CHECK(a.storeValueOther == 1);
+        CHECK(a.storeValueOther == 0 && a.Violations() == 0);
     }
     // A7-36 (grammar 2 seed 1702385): a byte variable that is the HIGH byte of a word store. `mov #-0x5a,r2` then `mov.l r2,@r6` (0x06009042)
-    // writes 0xFFFFFFA6 to 0x2600220C, whose byte is 0xFF (big-endian); the engine prints `xRam2600220c = 0xff;` (right), and the line has
-    // no instruction at all: StoreShowsValue compares the number with the store's LOW bytes (0xA6), rejects the store, and the store is
-    // on no line. When fixed: the line names 0x06009042.
+    // writes 0xFFFFFFA6 to 0x2600220C, whose byte is 0xFF (big-endian); the engine prints `xRam2600220c = 0xff;` (right). Fixed (the area
+    // 7 fixer): StoreShowsValue compares the bytes of the store the variable covers (ValueSet::shiftBytes), and the oracle's storeValueOther
+    // as many bytes as the variable has (the narrowest access at its address): the line names 0x06009042. Was: compared with the store's
+    // LOW byte (0xA6), the store rejected, the line with no instruction at all, copyAtOther 1.
     {
         const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, { 0x2F86, 0x2F96, 0x2FA6, 0x2FB6, 0x4F22, 0x7FE8, 0x6843, 0x6953,
             0x6A63, 0x6B73, 0xE301, 0x4310, 0x8901, 0xAFFC, 0x0009, 0xD60E, 0x2328, 0x8D07, 0x2620, 0xB019, 0x0009, 0x6483, 0x6593, 0x66A3, 0x67B3,
@@ -1264,24 +1308,24 @@ void TestArea7Round7()
         Print("A7-36 the high byte of a word store", r);
         const Line* ff = LineWith(r, "xRam2600220c = 0xff;");
         CHECK(ff != nullptr);
-        if (ff) CHECK(LineInstructions(*ff).empty());   // (A7-36; fixed: 0x06009042)
-        CHECK(!a7r3::OnSomeLine(r, 0x06009042u));
+        if (ff) CHECK(LineInstructions(*ff) == (std::vector<uint32_t>{ 0x06009042u }));
         const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_36");
-        CHECK(a.copyAtOther == 1);
+        CHECK(a.copyAtOther == 0 && a.storeValueOther == 0 && a.Violations() == 0);
     }
     // A7-37 (grammar 1 seed 1710596): the line a delay slot's store made is drawn at its branch. `mov.l lit,r6 ; or r1,r3 ; tst r3,r0 ;
-    // bt/s L ; mov.b r1,@r6 ; ...`: `xRam26001008 = (xunknown1)in_r1;` is the slot's store (0x06009008), and its drawn tokens are at the
-    // `bt/s` 0x06009006 (marked as a copy materialised there), the slot only an empty token: a click goes to the branch, the row before the
-    // store (A7-10's shape), and the way back from the branch is wrong (backWrong). When fixed: the line is drawn at 0x06009008.
+    // bt/s L ; mov.b r1,@r6 ; ...`: `xRam26001008 = (xunknown1)in_r1;` is the slot's store (0x06009008). The engine printed it from the
+    // SUBPIECE heritage made for the slot's read of r1's low byte (Heritage::normalizeReadSize), which patch 0075 did not flag. Fixed (the
+    // area 7 fixer, engine patch 0078): heritage's pieces for a slot's op carry the flag, and the line is drawn at the slot. Was: drawn at
+    // the `bt/s` 0x06009006 (a click to the row before the store, A7-10's shape), the slot an empty token, backWrong 1.
     {
         const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, { 0xD603, 0x231B, 0x2038, 0x8D01, 0x2610, 0x153C, 0x000B, 0x0009,
             0x2600, 0x1008 });
-        Print("A7-37 a slot's store drawn at its branch", r);
+        Print("A7-37 a slot's store", r);
         const Line* s = LineWith(r, "xRam26001008 = (xunknown1)in_r1;");
         CHECK(s != nullptr);
-        if (s) CHECK(s->firstAddr == 0x06009006u && LineInstructions(*s) == (std::vector<uint32_t>{ 0x06009006u, 0x06009008u }));
+        if (s) CHECK(s->firstAddr == 0x06009008u && LineInstructions(*s) == (std::vector<uint32_t>{ 0x06009008u }));
         const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_37");
-        CHECK(a.backWrong == 1);
+        CHECK(a.backWrong == 0 && a.Violations() == 0);
     }
     // caseOtherEntry bites: A7-29's fixture with the outer `case 2:` moved back to the inner switch's entry (A7-29 as it was).
     {
