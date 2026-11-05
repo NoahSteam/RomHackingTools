@@ -3340,7 +3340,9 @@ std::vector<Line> LinesFromMarkup(const std::string& packed, const ghidra::Funcd
                 {
                     const ghidra::BlockBasic* bb = op->getParent();
                     ghidra::uintb a = op->getAddr().getOffset();
-                    for (int k = 0; k < 4096 && a >= 2 && bb->contains(ghidra::Address(op->getAddr().getSpace(), a - 2)); ++k) a -= 2;
+                    // (a delayed branch's slot is not in the cover, its ops being at the branch's address: the run goes on past it)
+                    const auto covered = [&](ghidra::uintb x) { return bb->contains(ghidra::Address(op->getAddr().getSpace(), x)); };
+                    for (int k = 0; k < 4096 && a >= 4 && (covered(a - 2) || covered(a - 4)); ++k) a -= covered(a - 2) ? 2 : 4;
                     t.addr = static_cast<uint32_t>(a);
                 }
                 uint32_t canonical = 0;
