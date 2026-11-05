@@ -461,6 +461,174 @@ void TestArea7Round3()
     }
 }
 
+// Area 7 round 4 (the reviewer's pins): each finding at its current behaviour. The comment of each says what flips when the row is fixed.
+namespace a7r4
+{
+DecompileResult DecompileWords(Sh2Decompiler& d, std::vector<uint8_t>& hw, uint32_t base, const std::vector<uint16_t>& words,
+                               const std::vector<std::pair<uint32_t, uint16_t>>& more = {})
+{
+    std::fill(hw.begin(), hw.end(), 0);
+    for (size_t i = 0; i < words.size(); ++i) dts::Put16(hw, base - 0x06000000u + 2 * i, words[i]);
+    for (const auto& w : more) dts::Put16(hw, w.first - 0x06000000u, w.second);
+    return d.Decompile(MakeSnapshot(hw), Request(base));
+}
+std::vector<const Line*> LinesWith(const DecompileResult& r, const char* what)
+{
+    std::vector<const Line*> out;
+    for (const Line& l : r.lines)
+        if (Has(l.text, what)) out.push_back(&l);
+    return out;
+}
+// The words of 0x0600D90E of the second corpus image (A7-21's function) with the delay slots at 0x0600D932 and 0x0600D93C, `nop` in the
+// image, made `mov.l r5,@(0x20,r14)`: a store of param_2 to uStack_8 on two of the three paths into the function's body.
+const std::vector<uint16_t> kA723Words = {
+        0x4F22, 0x7FDC, 0x6EF3, 0x1E56, 0x6A4C, 0x60A3, 0x8801, 0x8D0A, 0x1E67, 0xE101, 0x3A17, 0x8F0B, 0x8802, 0x8B09, 0xD63E, 0xD73E, 0xD23F, 0xA008,
+        0x1E58, 0xD63E, 0x9772, 0x9272, 0xA003, 0x1E58, 0xD63D, 0xE708, 0xE203, 0xD13C, 0x5113, 0x2129, 0x2118, 0x8D04, 0xE000, 0xA0F7, 0x7E24, 0xA029,
+        0x6983, 0xD138, 0x6010, 0xC901, 0x2008, 0x8BFB, 0xE101, 0xD335, 0x2310, 0xD235, 0xE11A, 0x2210, 0x6030, 0xC901, 0x2008, 0x8D04, 0x6133, 0x6010,
+        0xC901, 0x2008, 0x8BFB, 0xD12D, 0x5113, 0x2179, 0x2118, 0x8F02, 0xED00, 0xA09D, 0x0009, 0x5267, 0xE900, 0xE808, 0xD32B, 0xE720, 0x6073, 0x013E,
+        0x3210, 0x89D8, 0x78FF, 0x4811, 0x8DF8, 0x77FC, 0x6093, 0x8808, 0x8F17, 0xE540, 0xD122, 0x6010, 0xC901, 0x2008, 0x8BFB, 0xE101, 0xD31F, 0x2310,
+        0xD21F, 0xE119, 0x2210, 0x6030, 0xC901, 0x2008, 0x8D78, 0x6133, 0x6010, 0xC901, 0x2008, 0x8FFB, 0x609C, 0xA0B1, 0x7E24, 0xD019, 0x66E3, 0x400B,
+        0x64A3, 0x51E5, 0x2118, 0x8F2E, 0x56E7, 0xD112, 0x6010, 0xC901, 0x2008, 0x8BFB, 0xE101, 0xD30F, 0x2310, 0xD20F, 0xE119, 0x2210, 0x6030, 0xC901,
+        0x2008, 0x8D59, 0x6133, 0x6010, 0xC901, 0x2008, 0x8FFB, 0x609C, 0xA092, 0x7E24, 0x0800, 0x0300, 0x0009, 0x060A, 0x3B1C, 0x0008, 0x0000, 0x0003,
+        0x0000, 0x060A, 0x3ADC, 0x060A, 0x3A9C, 0x060A, 0x3A70, 0x2010, 0x0063, 0x2010, 0x001F, 0x0607, 0x56EC, 0x0606, 0x3AAC, 0xD042, 0x55E6, 0x400B,
+        0x64A3, 0x6103, 0x2118, 0x8D17, 0xED01, 0xD13F, 0x6010, 0xC901, 0x2008, 0x8BFB, 0xE101, 0xD33C, 0x2310, 0xD23C, 0xE119, 0x2210, 0x6030, 0xC901,
+        0x2008, 0x8D23, 0x6133, 0x6010, 0xC901, 0x2008, 0x8FFB, 0x609C, 0xA05C, 0x7E24, 0xD536, 0xD036, 0x400B, 0x64A3, 0x6103, 0x2118, 0x8D19, 0xE808,
+        0xD130, 0x6010, 0xC901, 0x2008, 0x8BFB, 0xE101, 0xD32D, 0x2310, 0xD22D, 0xE119, 0x2210, 0x6030, 0xC901, 0x2008, 0x8D04, 0x6133, 0x6010, 0xC901,
+        0x2008, 0x8BFB, 0xA03D, 0x609C, 0xA011, 0x1E88, 0xE808, 0xEC00, 0x1EC8, 0xDB26, 0xE920, 0xD026, 0x66E3, 0x059E, 0x4B0B, 0x64A3, 0x51E5, 0x2118,
+        0x8BF0, 0x78FF, 0x4815, 0x8DF4, 0x79FC, 0x60D3, 0x8801, 0x8B0D, 0xE800, 0xDB1F, 0xE903, 0x56E7, 0x55E6, 0x4B0B, 0x64A3, 0x6103, 0x2118, 0x8903,
+        0x7801, 0x3897, 0x8FF6, 0x56E7, 0xD113, 0x6010, 0xC901, 0x2008, 0x8BFB, 0xE101, 0xD310, 0x2310, 0xD210, 0xE119, 0x2210, 0x6030, 0xC901, 0x2008,
+        0x8D04, 0x6133, 0x6010, 0xC901, 0x2008, 0x8BFB, 0xEC23, 0x3CEC, 0x6CC0, 0x61CC, 0x6013, 0x7E24, 0x6FE3, 0x4F26, 0x6EF6, 0x6DF6, 0x6CF6, 0x6BF6,
+        0x6AF6, 0x69F6, 0x000B, 0x68F6, 0x0009, 0x0600, 0xE6A4, 0x2010, 0x0063, 0x2010, 0x001F, 0x0607, 0x56D4, 0x0606, 0x3BE0, 0x0606, 0x3AAC, 0x0607,
+        0x56EC, 0x0600, 0xDB78 };
+}  // namespace a7r4
+
+void TestArea7Round4()
+{
+    std::vector<uint8_t> hw(0x100000u, 0);
+    Sh2Decompiler d(gConfig);
+    const std::function<bool(uint32_t, uint16_t&)> word = [&hw](uint32_t x, uint16_t& w) {
+        if (x < 0x06000000u || x - 0x06000000u + 1 >= hw.size()) return false;
+        w = static_cast<uint16_t>(hw[x - 0x06000000u] << 8 | hw[x - 0x06000000u + 1]);
+        return true;
+    };
+    const std::vector<std::pair<uint32_t, uint16_t>> callee = { { 0x06071000u, 0x000B }, { 0x06071002u, 0x0009 } };
+    // A7-22: a constant the engine merged from two paths is addressed to the join's first instruction. `sts.l pr,@-r15 ; mov r4,r0 ;
+    // cmp/eq #1,r0 ; bt/s L ; mov #0,r8 ; cmp/eq #2,r0 ; bf/s X ; mov #0,r8 ; L: mov.l @(lit),r11 ; mov #7,r10 ; M: jsr @r11 ; nop ;
+    // add #1,r8 ; cmp/gt r10,r8 ; bf M ; X: lds.l @r15+,pr ; rts ; mov r8,r0`. Both paths into L set r8 to 0 in a delay slot (0x06070008,
+    // 0x0607000E); the engine makes the MULTIEQUAL of the two zeros a COPY at L, and `iVar1 = 0;` names only L's first instruction, the
+    // literal load of the callee's address (0x06070010). A click goes there; 0x06070008 is on no line (the way back answers Folded, with the
+    // condition's line). Fixed: the line names the instructions that make the value (0x06070008, 0x0607000E) and a click goes to one of them.
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06070000u, { 0x4F22, 0x6043, 0x8801, 0x8D03, 0xE800, 0x8802, 0x8F07, 0xE800,
+            0xDB04, 0xEA07, 0x4B0B, 0x0009, 0x7801, 0x38A7, 0x8BFC, 0x4F26, 0x000B, 0x6083, 0x0607, 0x1000 }, callee);
+        Print("A7-22 merged constant", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        const Line* l = LineWith(r, "iVar1 = 0;");
+        CHECK(l != nullptr);
+        if (l) CHECK(LineInstructions(*l) == std::vector<uint32_t>{ 0x06070010u });   // mov.l @(0x06070024),r11 (fixed: 0x06070008, 0x0607000E)
+        if (l) CHECK(l->firstAddr == 0x06070010u);
+        CHECK(!a7r3::OnSomeLine(r, 0x06070008u));                                       // mov #0x0,r8, the bt/s path's zero (fixed: on the line)
+        CHECK(LineForInstruction(r, 0x06070008u).kind == LineLookup::Folded);
+        const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_22");
+        dts::PrintMappingAudit(a, "a7_22");
+        CHECK(a.Violations() == 0);   // the oracle accepts it: none of its checks reads a register's merge
+    }
+    // A7-23 (a): a register merged under a frame local's name (A7-21), with a store of the local on a path into the line. kA723Words: A7-21's
+    // `uStack_8 = uVar6;` lines (the value is r9's, returned by `bra ; extu.b r9,r0`) are copies at the bt/s ending their blocks. With the two
+    // stores of param_2 added before them, A7-19's walk back reaches those stores, names them, and the block-end rule moves the lines' own
+    // tokens to the lower one: each line names only 0x0600D932 and 0x0600D93C (`mov.l r5,@(0x20,r14)`, a store of param_2) and a click
+    // goes to a store of another value. The oracle accepts it (the line names a store of the variable; copyUnconnected no longer sees it).
+    // Fixed: a store whose value is not the copy's is not named, and the lines keep A7-21's mapping (or name the instruction that makes r9).
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x0600D90Eu, a7r4::kA723Words);
+        Print("A7-23 register merge named by a store of another value", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        const std::vector<const Line*> copies = a7r4::LinesWith(r, "uStack_8 = uVar6;");
+        CHECK(copies.size() == 3);
+        for (const Line* l : copies)
+        {
+            CHECK(LineInstructions(*l) == (std::vector<uint32_t>{ 0x0600D932u, 0x0600D93Cu }));   // fixed: neither
+            CHECK(l->firstAddr == 0x0600D932u);
+        }
+        const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_23");
+        dts::PrintMappingAudit(a, "a7_23");
+        CHECK(a.Violations() == 0 && a.copyStoreMissing == 0 && a.copyUnconnected == 0);
+        // ...the control, the image's own words: A7-21 as filed, each line at its bt/s and counted as unconnected
+        std::vector<uint16_t> image = a7r4::kA723Words;
+        image[(0x0600D932u - 0x0600D90Eu) / 2] = 0x0009;
+        image[(0x0600D93Cu - 0x0600D90Eu) / 2] = 0x0009;
+        const DecompileResult c = a7r4::DecompileWords(d, hw, 0x0600D90Eu, image);
+        const std::vector<const Line*> controls = a7r4::LinesWith(c, "uStack_8 = uVar6;");
+        CHECK(controls.size() == 3);
+        const uint32_t at[] = { 0x0600D9CEu, 0x0600DA0Cu, 0x0600DA78u };
+        for (size_t i = 0; i < controls.size() && i < 3; ++i) CHECK(LineInstructions(*controls[i]) == std::vector<uint32_t>{ at[i] });
+        const dts::MappingAudit ca = dts::AuditMapping(c, word, "a7_23 control");
+        CHECK(ca.Violations() == 0 && ca.copyUnconnected == 3);
+    }
+    // A7-23 (b): the same merge, named by the engine itself. `sts.l pr,@-r15 ; add #-8,r15 ; mov r15,r14 ; mov.l r5,@(0,r14) ; tst r4,r4 ;
+    // bf B ; bra X ; extu.b r6,r0 ; B: mov.l r7,@(0,r14) ; mov.l @(lit),r1 ; jsr @r1 ; mov r14,r4 ; mov #3,r12 ; add r14,r12 ; mov.b @r12,r12
+    // ; extu.b r12,r1 ; mov r1,r0 ; X: ...`. The return value is r6's byte on one path and the local's on the other; the engine names it after
+    // the local and prints `xStack_c._3_1_ = param_3;` with the address of the dead store of param_2 (0x06070006, `mov.l r5,@(0x0,r14)`):
+    // the line names only that store, and a click goes to it. The value is made by `extu.b r6,r0` (0x0607000E). Fixed: the line does not
+    // name 0x06070006 (A7-21's mapping, or 0x0607000E).
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06070000u, { 0x4F22, 0x7FF8, 0x6EF3, 0x1E50, 0x2448, 0x8B01, 0xA009, 0x606C,
+            0x1E70, 0xD107, 0x410B, 0x64E3, 0xEC03, 0x3CEC, 0x6CC0, 0x61CC, 0x6013, 0x7E08, 0x6FE3, 0x4F26, 0x000B, 0x6EF6, 0x0009, 0x0009,
+            0x0607, 0x1000 }, callee);
+        Print("A7-23 piece merge at a dead store", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        const Line* l = LineWith(r, "xStack_c._3_1_ = param_3;");
+        CHECK(l != nullptr);
+        if (l) CHECK(LineInstructions(*l) == std::vector<uint32_t>{ 0x06070006u });   // mov.l r5,@(0x0,r14): param_2 (fixed: not this)
+        const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_23 piece");
+        dts::PrintMappingAudit(a, "a7_23 piece");
+        CHECK(a.Violations() == 0 && a.copyStoreMissing == 0);
+    }
+    // A7-24: a case label names the first instruction of its case that kept an op, not the case's entry. 0x06005906 of the first corpus
+    // image: `switch(xRam0603acc3)` through the table at 0x06005924 (entries 0x0600592C, 0x0600593C, 0x0600595A, 0x0600592C). `case 1:`
+    // names 0x06005946 (tst r1,r1, the fifth instruction of the case), `case 0:` and `case 3:` 0x06005934 (the store, the fifth), `case 2:`
+    // 0x0600595C (the jsr). A click on a label goes into the case's code, and its hover says it was decompiled from that instruction.
+    // Fixed: each label names its case's entry (0x0600593C for `case 1:`).
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06005906u, {
+            0x4F22, 0xD117, 0x6210, 0xE103, 0x3216, 0x8D26, 0x6EF3, 0x6123, 0x311C, 0xC702, 0x011D, 0x301C, 0x402B, 0x0009, 0x0009, 0x0008, 0x0018,
+            0x0036, 0x0008, 0xD10F, 0x6213, 0x7201, 0xE300, 0x2230, 0x7102, 0xA012, 0x2130, 0xD30B, 0x6733, 0x7702, 0x6170, 0x611C, 0x2118, 0x8D0A,
+            0xE200, 0xD108, 0x2121, 0x7301, 0xE100, 0x2310, 0xA003, 0x2710, 0xD106, 0x410B, 0x0009, 0x6FE3, 0x4F26, 0x000B, 0x6EF6, 0x0603, 0xACC3,
+            0x0603, 0xACC0, 0x25D0, 0x0000, 0x0600, 0x5978 });
+        Print("A7-24 case labels", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        const Line* one = LineWith(r, "case 1:");
+        CHECK(one != nullptr);
+        if (one) CHECK(one->firstAddr == 0x06005946u);   // fixed: 0x0600593C
+        const Line* zero = LineWith(r, "case 0:");
+        if (zero) CHECK(zero->firstAddr == 0x06005934u);   // fixed: 0x0600592C
+        CHECK(zero != nullptr);
+        const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_24");
+        CHECK(a.Violations() == 0);
+    }
+    // A7-25: a copy's statement drawn at another statement's instruction. `sts.l pr,@-r15 ; mov.l @(lit),r1 ; mov.l r4,@r1 ; mov r4,r2 ;
+    // add #0x13,r2 ; mov #0,r1 ; mov.b r1,@r2 ; ...` (0x0600C12C's shape): the store through param_1 may write the global, so the engine prints
+    // `iRam0603ad2c = param_1;` again at it, with the byte store's address (0x0607000C); AddFrameStoreTokens adds the global's store
+    // (0x06070004) and a click goes there, but the hover lists 0x0607000C, and the way back from 0x0607000C (`mov.b r1,@r2`) answers the
+    // global's line first, before `*(xunknown1 *)(param_1 + 0x13) = 0;`, whose instruction it is (a user's note on it goes there too).
+    // Fixed: the copy's own tokens are its store's, or the way back offers the instruction's own statement first.
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06070000u, { 0x4F22, 0xD106, 0x2142, 0x6243, 0x7213, 0xE100, 0x2210, 0xD104,
+            0x410B, 0x0009, 0x4F26, 0x000B, 0x0009, 0x0009, 0x0603, 0xAD2C, 0x0607, 0x1000 }, callee);
+        Print("A7-25 a copy drawn at another statement", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        const Line* g = LineWith(r, "iRam0603ad2c = param_1;");
+        const Line* s = LineWith(r, "*(xunknown1 *)(param_1 + 0x13) = 0;");
+        CHECK(g && s);
+        if (g) CHECK(LineInstructions(*g) == (std::vector<uint32_t>{ 0x06070004u, 0x0607000Cu }) && g->firstAddr == 0x06070004u);
+        const LineLookup back = LineForInstruction(r, 0x0607000Cu);
+        CHECK(back.kind == LineLookup::Exact && back.lines.size() == 2);
+        if (g && !back.lines.empty()) CHECK(&r.lines[back.lines[0]] == g);   // fixed: s first
+        const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_25");
+        CHECK(a.Violations() == 0);
+    }
+}
+
 void TestFixture1()
 {
     Sh2Decompiler d(gConfig);
@@ -14043,6 +14211,98 @@ void TestEngineAllocationFailureInChild(const char* self, const std::string& scr
 
 }  // namespace
 
+// SE_A7R4_PROBE=<file> (area 7 round 4) runs only this (see main): one function a line, `name|base|words|lend`; base and words in hex (the
+// words from the base, in work RAM high), lend: callee addresses whose prototypes are lent, comma separated. Prints the text with every
+// token's instruction (DumpMappingTokens), the access fates with their flow blocks, the flow's blocks and the mapping audit. For fixtures
+// a reviewer draws without rebuilding the suite.
+int TestArea7Round4Probe(const char* path)
+{
+    Sh2Decompiler d(gConfig);
+    std::ifstream in(path);
+    std::string line;
+    std::vector<uint8_t> hw(0x100000u, 0);
+    const std::function<bool(uint32_t, uint16_t&)> word = [&hw](uint32_t x, uint16_t& w) {
+        x &= 0x07FFFFFFu;
+        if (x < 0x06000000u || x - 0x06000000u + 1 >= hw.size()) return false;
+        w = static_cast<uint16_t>(hw[x - 0x06000000u] << 8 | hw[x - 0x06000000u + 1]);
+        return true;
+    };
+    uint64_t serial = 90000;
+    while (std::getline(in, line))
+    {
+        if (line.empty() || line[0] == '#') continue;
+        const std::vector<std::string> field = R8Split(line, '|');
+        if (field.size() < 3) continue;
+        // `dis|<image>|<from>|<to>`: the image's instructions; `img|<image>|<entry>[|lend]`: a function of an image
+        if (field[0] == "dis" || field[0] == "img")
+        {
+            std::ifstream f(field[1], std::ios::binary);
+            std::vector<uint8_t> image((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+            std::fill(hw.begin(), hw.end(), 0);
+            std::copy(image.begin(), image.begin() + static_cast<std::ptrdiff_t>(std::min(image.size(), hw.size())), hw.begin());
+            if (field[0] == "dis")
+            {
+                const uint32_t from = static_cast<uint32_t>(std::strtoul(field[2].c_str(), nullptr, 16));
+                const uint32_t to = field.size() > 3 ? static_cast<uint32_t>(std::strtoul(field[3].c_str(), nullptr, 16)) : from + 0x40;
+                for (uint32_t a = from; a < to; a += 2)
+                {
+                    uint16_t w = 0;
+                    if (!word(a, w)) break;
+                    const sfe::DisassembledInstruction dd = sfe::Sh2Decode(a, w);
+                    std::printf("  %08X  %04X  %s %s\n", a, w, dd.Mnemonic.c_str(), dd.Operands.c_str());
+                }
+                continue;
+            }
+        }
+        const bool fromImage = field[0] == "img";
+        const uint32_t base = static_cast<uint32_t>(std::strtoul(field[fromImage ? 2 : 1].c_str(), nullptr, 16));
+        if (!fromImage) std::fill(hw.begin(), hw.end(), 0);
+        if (!fromImage)
+        {
+            std::istringstream ws(field[2]);
+            std::string tok;
+            uint32_t at = base;
+            while (ws >> tok)
+            {
+                if (tok.size() > 1 && tok[0] == '@')   // @addr: continue the words there
+                {
+                    at = static_cast<uint32_t>(std::strtoul(tok.c_str() + 1, nullptr, 16));
+                    continue;
+                }
+                dts::Put16(hw, (at & 0x07FFFFFFu) - 0x06000000u, static_cast<uint16_t>(std::strtoul(tok.c_str(), nullptr, 16)));
+                at += 2;
+            }
+        }
+        auto snap = MakeSnapshot(hw, ++serial);
+        DecompileRequest q = Request(base);
+        if (field.size() > (fromImage ? 4u : 3u))
+            for (const std::string& a : R8Split(field[fromImage ? 4 : 3], ','))
+                if (!a.empty())
+                {
+                    const uint32_t addr = static_cast<uint32_t>(std::strtoul(a.c_str(), nullptr, 16));
+                    q.prototypes.emplace_back(addr, d.Decompile(snap, Request(addr)).prototype);
+                }
+        const DecompileResult r = d.Decompile(snap, q);
+        std::printf("==== %s\n", field[0].c_str());
+        Print(field[0].c_str(), r);
+        for (const AccessFate& f : r.accessFates)
+            std::printf("  fate: %s %u at %08X addr %08X%s%s fate %d flow block %d order %u\n", f.write ? "write" : "read", unsigned(f.size), f.insn, f.address,
+                        f.frame ? " frame" : "", f.constantAddress ? " const" : "", int(f.fate), f.origBlock, f.origOrder);
+        for (size_t k = 0; k < r.flowBlockRanges.size(); ++k)
+        {
+            std::printf("  flow block %zu: %08X..%08X ->", k, r.flowBlockRanges[k].first, r.flowBlockRanges[k].second);
+            if (k < r.flowSuccessors.size())
+                for (int n : r.flowSuccessors[k]) std::printf(" %d", n);
+            std::printf("\n");
+        }
+        dts::DumpMappingTokens(stdout, r, word, field[0].c_str());
+        const dts::MappingAudit a = dts::AuditMapping(r, word, field[0]);
+        dts::PrintMappingAudit(a, field[0].c_str());
+        std::printf("  violations %d\n", a.Violations());
+    }
+    return 0;
+}
+
 int main(int argc, char** argv)
 {
     if (argc == 5 && std::string(argv[1]) == "--engine-oom")
@@ -14065,6 +14325,12 @@ int main(int argc, char** argv)
     CHECK(sfe::MakeDirectory(scratch));
     gConfig = dts::Join(scratch, "config");
     CHECK(sfe::MakeDirectory(gConfig));
+    if (const char* probe = std::getenv("SE_A7R4_PROBE"))   // area 7 round 4: the reviewer's probe file, nothing else
+    {
+        TestArea7Round4Probe(probe);
+        dts::RemoveTree(scratch);
+        return dts::Finish("Sh2DecompilerTests (probe)", start);
+    }
     if (const char* fixtures = std::getenv("SE_AREA2_FIXTURES"))   // round 8: the fixtures of a file, nothing else
     {
         try
@@ -14085,6 +14351,7 @@ int main(int argc, char** argv)
         RUN(TestMappingOracleOnFixtures());
         RUN(TestMappingOracleAtMirrors());
         RUN(TestArea7Round3());
+        RUN(TestArea7Round4());
         RUN(TestSlotMadeLineIsAddressedToItsBranch());
         RUN(TestFrameStoreMaterialisedAtCall());
         RUN(TestFixture1b());

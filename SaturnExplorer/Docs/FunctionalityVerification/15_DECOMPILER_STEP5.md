@@ -15435,3 +15435,53 @@ With both fixes in and the guard dropped, mixes 0, 1, 4, 6 and 7 from seed 30000
 ### Routed
 
 Nothing. A8-25 was routed to area 1, and its fix is in area 1's file. It was made here because it is the one expression the row names, and it was confirmed by the probe and again above. Area 1 may want to review the line.
+
+## Area 7, round 4
+
+Branch `review/7-round4` from master `3fcf678d` (the area 7 fixer's A7-15, A7-19 and A7-20 merged; patches 0076 and 0077 in). An adversarial round on the mapping since the area 7 fixer. **No product code changed.** One experiment edited the vendored engine (0077 reverted in `cast.cc` and `typeop.cc` for one build) and was restored with `git checkout` before anything else was built. The round adds a probe and pins to `Sh2DecompilerTests.cpp`, scripts under `tools/a7_round4/`, and files **A7-22 (P2), A7-23 (P2), A7-24 (P3) and A7-25 (P3)**. **The round is not clean: two new P2 rows.** All of the oracle's violations stay 0 in the four corpus runs; none of the four rows is something its checks look at.
+
+### What was run (RelWithDebInfo, gcc 13, own build of the branch, `-j2`, every binary under `ulimit -v 3500000` and `timeout`)
+
+| Run | Result |
+|---|---|
+| hwram007.bin and hwram008.bin, alone and lent (`SE_GAME_LEND=1`, `SE_GAME_TOKEN_DUMP`, `tools/a7_round2/corpus.sh`) | 839 / 1,730 and 1,554 / 2,995 functions, all passed. Every violation 0 in all four runs. Off-line 4 / 11 and 4 / 21; `slotMadeLines` 286 / 580 and 849 / 1,393; `copyStoreMissing` 7 / 13 and 7 / 13, all at a load (A7-16's); `copyUnconnected` 0 / 0 and 3 / 6; folded on the way back 29,666 / 58,116 and 76,436 / 126,063. All as the fixer measured |
+| the fixer's instruments | `named_store_value.py` "neither" 0 in all four (composed 26 / 44 / 40 / 56, path value 2 / 3 / 4 / 6); `assign_at.py` `frame-no-store` 335 / 612 / 539 / 1,056, `global-no-store` 177 / 346 / 931 / 950: as the fixer measured |
+| the same images on a build with 0077 reverted (`dump_diff.py`) | **0 functions changed** in all four runs: 0077 moved no token and changed no text of the corpora |
+| the A7-19 and A7-20 fixtures, and variants (the probe) | the fixer's three fixtures pass; a store in a `bt/s` slot and a three-way merge of a global name their stores; all of them at the 0x26000000 mirror name the same (canonical) stores |
+| the new scripts (below) | A7-22 to A7-25 measured; `empty_load.py`: every one of 101 / 177 / 175 / 347 empty load tokens (A7-3) is on a line that shows a read |
+| `SaturnExplorerSh2DecompilerTests` (whole suite) | all passed; `TestArea7Round4` with the rest |
+| `ctest -j2 --timeout 900 -E SaturnExplorerLive` / `ctest -R SaturnExplorerLive` (every binary under `ulimit -v 3500000`) | **102 of 102** (174 s) / **6 of 6** (28 s). 108 tests, as on master: no ctest test added; the pins are in `SaturnExplorerSh2DecompilerTests`. The fault suite was not run: no product file changed |
+
+### Verifying the fixer (A7-15, A7-19, A7-20)
+
+The fixes hold on what they were made for. The fixer's fixtures pass, the counters it made violations are 0, and the variants above (a delayed conditional branch's slot store, three paths, a mirror) name their stores. The class is not closed, though. The search names *a* store of the variable that reaches the statement, and the block-end rule then moves the line's own tokens to that store. Neither asks whether the store's value is the statement's. Where the statement is a register the engine merged under the variable's name (A7-21), a store of the variable on a path into the line is taken for its maker: **A7-23**. The fixer's `own` rule (a store at the statement's own instruction is its store) has the same blind spot, in a shape the engine makes itself: a piece of the return register merged into a local, printed at the local's dead store of another value (A7-23 (b)). The oracle's copy rule is satisfied by any store of the variable, and `copyUnconnected` only asks whether some store is on a path. So neither sees it, and `store_value.py`, which follows a store's register back, resolves no corpus line to the shape. It is filed from fixtures: 0600D90E of hwram008 with two `nop` slots made stores (two words), and a 26-word function.
+
+### A7-22 (P2): a merged constant is addressed to the join
+
+When every path into a block sets a register to one number, the engine makes the MULTIEQUAL of those numbers a COPY, and the COPY keeps the MULTIEQUAL's address, which is the block's first instruction. `iVar3 = 0;` of 060086E8 (hwram007) names `mov.l @(0x0600875C),r11`, the callee's address for the loop's calls. The zeros are `mov #0x0,r8` in two delay slots, and one of them is on no line. `uVar4 = 8;` of 0600D90E (hwram008) names `mov #0x0,r12`, an instruction that makes another number. `const_at_other.py --join` finds 30 / 56 / 49 / 80 such lines in the four runs; on 13 / 23 / 27 / 46 of them a click goes to that instruction. A7-7 and A7-14 accept that a folded `mov #imm` has no token, and the tooltip warns that a constant may come from others. But this line names an unrelated instruction instead of none, and a click goes there: P2, as A7-10 and A7-19 were rated.
+
+### A7-24 and A7-25 (P3)
+
+* **Case labels** (A7-24) take Ghidra's opref, the first op of the case, which is past the case's folded literal loads and moves. 133 of 185 labels in the decodable tables of hwram007 alone name an instruction that is no destination (`case_labels.py`).
+* **Copies drawn at another statement** (A7-25). The fixer's block-end rule moves a copy's tokens to its store only when the copy is at its block's last instruction. Elsewhere the copy keeps the instruction it was put at, beside the store it names. For a global copied again at an aliasing byte store, that is the byte store; for frame words copied before a call, it is the `jsr`. The click is right (the store is lower), but the hover lists the other instruction, and the way back from that instruction answers the copy first. That happens 36 / 54 / 63 / 90 times, most at a `jsr` whose call line has a lower first address.
+
+### The open rows
+
+* **A7-17** holds: `DecompilerPanel` has no Assembly-follow toggle and no PC mark while running.
+* **A7-18** holds as an instrument (`slotMadeLines` 286, 580, 849, 1,393).
+* **A7-21** holds (`copyUnconnected` 0, 0, 3, 6). Its worse form is A7-23.
+
+### Also read, no finding
+
+* **0077** moves nothing in the corpora (the build with it reverted gives identical dumps). Its CAST ops are implied and carry the compare's address.
+* **Folded loads** (A7-3's empty tokens) are all on lines that show a read.
+* **Lent callees.** A stack argument pushed in a `jsr`'s slot to a callee that reads it is not lent (its signature is withheld), and the text drops the push. That is the lending rule's (area 3), not the mapping's. The lent runs' violations are 0.
+* **Delay slots.** The slot residue at branches (A7-10's accepted `bra ; mov #imm` merge copies, `uRam00200020 = 3;` at `bf/s ; mov #0x3,r3`) is as accepted. A7-22 is a different place: the join after the slots.
+
+### New instruments
+
+* `SE_A7R4_PROBE=<file>` (`Sh2DecompilerTests.cpp`, test only). It takes `name|base|words|lend` lines (with `@addr` to continue the words elsewhere), `img|<image>|<entry>` and `dis|<image>|<from>|<to>`. For each function it prints the text with each token's instruction, the fates with their flow blocks, the flow's blocks and the mapping audit. Words can be placed at a mirror.
+* `TestArea7Round4` (`Sh2DecompilerTests.cpp`): A7-22, A7-23 (a) with its control and (b), A7-24 and A7-25, pinned at the current behaviour. Each comment says what flips when the row is fixed.
+* `tools/a7_round4/`: `const_at_other.py`, `store_value.py`, `drawn_elsewhere.py`, `click_target.py`, `case_labels.py`, `empty_load.py` (README).
+
+Routed: nothing to other areas. A7-23 (b)'s address is the engine's (the piece's COPY at the dead store), but the fix is the host's, as for A7-20. The dropped stack argument above is noted for area 3; it is not filed (the signature is withheld, and the program's lending rule says so).

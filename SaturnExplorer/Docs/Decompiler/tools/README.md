@@ -49,6 +49,15 @@ Kept here:
   `named_store_value.py` lists lines that assign a number and name a store of another number (A7-20; since the area 7 fixer it
   counts apart a number made of a word and a byte store, and a store shared by paths whose register a named `mov #imm` sets, so the
   A7-20 signal is "neither"); `dump_diff.py` compares the mapping of two builds' dumps of one image (what an engine patch moved).
+* `a7_round4/`: area 7 round 4, over the same dumps (and the image for the instruction words). `const_at_other.py` lists number lines drawn
+  at a `mov #imm` or a literal of another number, and with `--join` those whose one instruction is a join's first that makes no number
+  (A7-22); `store_value.py` follows a named store's register back to a number or a parameter and lists lines whose stores all write
+  another value (`--drawn` reads the drawn tokens too); `drawn_elsewhere.py` counts the copies drawn at another statement's instruction
+  and where the way back from it goes (A7-25); `click_target.py` sorts where a click on such a copy goes; `case_labels.py` reads the
+  common jump tables and counts the case labels that are no destination (A7-24); `empty_load.py` checks that A7-3's empty load tokens
+  sit on lines that show a read. The reviewer's probe is `SE_A7R4_PROBE=<file>` in `Sh2DecompilerTests.cpp` (`name|base|words|lend`,
+  `img|<image>|<entry>`, `dis|<image>|<from>|<to>`): a function's text with each token's instruction, its fates and flow blocks, and the
+  mapping audit, without rebuilding.
 
 Everything else that earlier rounds committed (their drivers, fuzzers, fixtures and summaries) was
 removed after commit `215d303`. The record (`FunctionalityVerification/15_DECOMPILER_STEP5.md`) still
