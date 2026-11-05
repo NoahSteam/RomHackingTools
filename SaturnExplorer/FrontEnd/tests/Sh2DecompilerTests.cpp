@@ -1221,6 +1221,68 @@ void TestArea7Round7()
         const dts::MappingAudit k = dts::AuditMapping(kept, word, "a7_28 damaged");
         CHECK(k.numberStoreOther == 1);
     }
+    // The generator's findings once the later checks were flagged (A7-34; SE_GENERATED_MAP_ALL=1), shrunk words:
+    // A7-31 on a global (grammar 1 seed 1711170): `mov.l lit,r6 ; and r1,r1 ; mov.l r1,@(0x1c,r6) ; mov.l r2,@-r4 ; rts ; nop`. The `and r1,r1`
+    // the engine folds is A7-31's computation; the global's copy is materialised at the may-alias store 0x06009006 (A7-25's shape) and
+    // names no store, so a click goes to a store of another variable and the store 0x06009004 is on no line. When fixed: the line names
+    // 0x06009004 and copyStoreMissing is 0.
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, { 0xD602, 0x2119, 0x1617, 0x2426, 0x000B, 0x0009, 0x2600, 0x2304 });
+        Print("A7-31 a global's store through a folded computation", r);
+        const Line* g = LineWith(r, "xRam26002320 = in_r1;");
+        CHECK(g != nullptr);
+        if (g) CHECK(LineInstructions(*g) == (std::vector<uint32_t>{ 0x06009006u }));   // (A7-31; fixed: and 0x06009004)
+        CHECK(!a7r3::OnSomeLine(r, 0x06009004u));
+        const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_31 global");
+        CHECK(a.copyAtOther == 1);
+    }
+    // A7-35 (grammar 1 seed 1710746): a merge copy of a number at the `bt` ending its block names a store of ANOTHER value, the lowest, so
+    // a click goes there. `mov.l lit,r7 ; mov #3,r0 ; mov.l r0,@r7 ; (poll) ; mov #1,r3 ; dt r3 ; bf ; cmp/eq r1,r3 ; bt L ; or r0,r3 ;
+    // L: mov.l r3,@r7`: `xRam26002204 = 0;` (the path where r3 stays 0) is drawn at the `bt` 0x06009014 and names 0x06009004, the store
+    // of 3; the shared store 0x06009018 that writes the 0 is on no line. storeValueOther flags it. When fixed: the line names 0x06009018
+    // (or the maker), never 0x06009004.
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, { 0xD707, 0xE003, 0x2702, 0x6072, 0xC801, 0x89FC, 0xE301, 0x4310,
+            0x8BFD, 0x3310, 0x8900, 0x230B, 0x2732, 0x000B, 0x0009, 0x0009, 0x2600, 0x2204 });
+        Print("A7-35 a merge copy naming a store of another value", r);
+        const Line* z = LineWith(r, "xRam26002204 = 0;");
+        CHECK(z != nullptr);
+        if (z) CHECK(LineInstructions(*z) == (std::vector<uint32_t>{ 0x06009004u, 0x06009014u }) && z->firstAddr == 0x06009004u);
+        CHECK(!a7r3::OnSomeLine(r, 0x06009018u));
+        const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_35");
+        CHECK(a.storeValueOther == 1);
+    }
+    // A7-36 (grammar 2 seed 1702385): a byte variable that is the HIGH byte of a word store. `mov #-0x5a,r2` then `mov.l r2,@r6` (0x06009042)
+    // writes 0xFFFFFFA6 to 0x2600220C, whose byte is 0xFF (big-endian); the engine prints `xRam2600220c = 0xff;` (right), and the line has
+    // no instruction at all: StoreShowsValue compares the number with the store's LOW bytes (0xA6), rejects the store, and the store is
+    // on no line. When fixed: the line names 0x06009042.
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, { 0x2F86, 0x2F96, 0x2FA6, 0x2FB6, 0x4F22, 0x7FE8, 0x6843, 0x6953,
+            0x6A63, 0x6B73, 0xE301, 0x4310, 0x8901, 0xAFFC, 0x0009, 0xD60E, 0x2328, 0x8D07, 0x2620, 0xB019, 0x0009, 0x6483, 0x6593, 0x66A3, 0x67B3,
+            0x0222, 0x2458, 0x8F00, 0xE2A6, 0x2648, 0x8901, 0xA003, 0xE19D, 0x2622, 0xA000, 0xE14E, 0x7F18, 0x4F26, 0x6BF6, 0x6AF6, 0x69F6, 0x68F6,
+            0x000B, 0x0009, 0x2600, 0x220C, 0x000B, 0x0009 });
+        Print("A7-36 the high byte of a word store", r);
+        const Line* ff = LineWith(r, "xRam2600220c = 0xff;");
+        CHECK(ff != nullptr);
+        if (ff) CHECK(LineInstructions(*ff).empty());   // (A7-36; fixed: 0x06009042)
+        CHECK(!a7r3::OnSomeLine(r, 0x06009042u));
+        const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_36");
+        CHECK(a.copyAtOther == 1);
+    }
+    // A7-37 (grammar 1 seed 1710596): the line a delay slot's store made is drawn at its branch. `mov.l lit,r6 ; or r1,r3 ; tst r3,r0 ;
+    // bt/s L ; mov.b r1,@r6 ; ...`: `xRam26001008 = (xunknown1)in_r1;` is the slot's store (0x06009008), and its drawn tokens are at the
+    // `bt/s` 0x06009006 (marked as a copy materialised there), the slot only an empty token: a click goes to the branch, the row before the
+    // store (A7-10's shape), and the way back from the branch is wrong (backWrong). When fixed: the line is drawn at 0x06009008.
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, { 0xD603, 0x231B, 0x2038, 0x8D01, 0x2610, 0x153C, 0x000B, 0x0009,
+            0x2600, 0x1008 });
+        Print("A7-37 a slot's store drawn at its branch", r);
+        const Line* s = LineWith(r, "xRam26001008 = (xunknown1)in_r1;");
+        CHECK(s != nullptr);
+        if (s) CHECK(s->firstAddr == 0x06009006u && LineInstructions(*s) == (std::vector<uint32_t>{ 0x06009006u, 0x06009008u }));
+        const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_37");
+        CHECK(a.backWrong == 1);
+    }
     // caseOtherEntry bites: A7-29's fixture with the outer `case 2:` moved back to the inner switch's entry (A7-29 as it was).
     {
         const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06070000u, { 0x4F22, 0xD518, 0xE103, 0x3416, 0x8D28, 0x6143, 0x311C, 0xC702,
