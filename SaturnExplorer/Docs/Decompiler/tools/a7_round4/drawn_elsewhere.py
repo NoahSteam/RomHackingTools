@@ -39,15 +39,21 @@ def main():
         for t in fn["tokens"]: by[t["line"]].append(t)
         owners = collections.defaultdict(list)   # addr -> lines in text order
         drawn = collections.defaultdict(set)
+        own = collections.defaultdict(set)       # ...drawn as the line's own statement, not a copy materialised there (A7-25)
         for li in sorted(by):
             for t in by[li]:
                 a = t["addr"]
                 if not owners[a] or owners[a][-1] != li: owners[a].append(li)
                 if t["b"] < t["e"]: drawn[a].add(li)
+                if t["b"] < t["e"] and not t.get("mat"): own[a].add(li)
         first = {li: fn["lines"][li][0] for li in fn["lines"]}
         def find(a):
+            # (InstructionLineIndex::Ordered, with the area 7 fixer's A7-25 order: a line that draws `a` only as a materialised copy after
+            # the lines whose own statement `a` is; a dump without the column has no such line)
             o = owners.get(a, [])
-            return [li for li in o if first[li] == a] + [li for li in o if first[li] != a and li in drawn[a]] + \
+            mat = lambda li: li in drawn[a] and li not in own[a]
+            return [li for li in o if first[li] == a and not mat(li)] + [li for li in o if first[li] != a and li in drawn[a] and not mat(li)] + \
+                   [li for li in o if first[li] == a and mat(li)] + [li for li in o if first[li] != a and mat(li)] + \
                    [li for li in o if first[li] != a and li not in drawn[a]]
         for li, toks in by.items():
             text = fn["lines"][li][1]
@@ -63,7 +69,7 @@ def main():
             for a, insn in ds.items():
                 k = klass(insn)
                 counts["drawn at " + k] += 1
-                elsewhere = [m for m in drawn[a] if m != li]
+                elsewhere = [m for m in own[a] if m != li]   # (another line whose own statement it is)
                 back = find(a)
                 wrong = bool(elsewhere) and back and back[0] == li
                 if wrong: counts["way back from it answers this line, though it draws on another (" + k + ")"] += 1

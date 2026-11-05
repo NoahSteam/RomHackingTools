@@ -183,6 +183,9 @@ struct Token
     TokenKind kind = TokenKind::Plain;
     uint32_t addr = 0;             // the instruction the token came from; 0 = none. A delay slot's instruction is its own (A7-10, patch 0075)
     bool haltsFlow = false;        // ...but 'addr' is the word flow halted at as bad data (DecompileResult::badDataAt): no instruction (A7-12)
+    bool materialised = false;     // ...and the statement is not that instruction's: a copy of a value a store elsewhere wrote, which the
+                                   // engine prints where it needs the value (a call, a store that may alias); the line names that store too.
+                                   // The way back from the instruction offers the instruction's own statement first (A7-25)
     uint32_t target = 0;           // a called function's entry, for FuncName tokens; 0 = none
     uint32_t calledAt = 0;         // ...and the exact address called (a mirror, if through one); 0 = none
     uint32_t inspectionTarget = 0; // one-based index into inspectionTargets; zero is unbound
@@ -455,7 +458,9 @@ struct DecompileResult
 
 // Which line shows an SH-2 instruction: the way back from SH-2 Assembly (A7-5). 'Exact': the instruction owns the lines in 'lines' (a token of
 // it, an empty one included), in the order to offer them: a line whose first (lowest) address it is, which is the line a click on that
-// instruction's own row would have come from; then the lines with a token that draws something, in text order; then the others.
+// instruction's own row would have come from; then the lines with a token that draws something, in text order; then the lines whose
+// every drawing token of it is a copy materialised there (Token::materialised, A7-25: the instruction's own statement comes first); then
+// the others.
 // 'Folded': the instruction is in the function's body and no token names it (a move or an operation folded into the expression that
 // uses it, a literal load, a nop): 'via' is the nearest instruction of the same run that has one, the next before the previous, and
 // 'lines' are its. 'Outside': the instruction is not in the body, and 'lines' is empty.
@@ -479,6 +484,7 @@ private:
     const DecompileResult& mResult;
     std::map<uint32_t, std::vector<size_t>> mOwners;          // the lines holding a token of the instruction, in text order
     std::map<uint32_t, std::set<size_t>> mDrawn;              // ...of which a token that draws something
+    std::map<uint32_t, std::set<size_t>> mOwnDrawn;           // ...of which one that is not a copy materialised there (A7-25)
 };
 
 struct PassSeed;   // what a printed pass followed its flow with: the reference run follows the same

@@ -16127,3 +16127,74 @@ The output of the failures was kept (`MODEL FAILURE, seed 760054, after operatio
 * **Area 9**: A8-43 (the Volatile popup cuts a too-long saved list; Apply on it replaces the saved list with a parsed prefix). The BIOS and Volatile claims are otherwise true.
 * **Area 1**: A8-44 (the model keeps a Stop after the view leaves the stopped question and comes back; a seven-operation script reproduces it).
 * Area 4: nothing.
+
+## Area 7 fixer (A7-26, A7-27, A7-25, A7-21)
+
+Branch `review/7-a726-fix` from master `701557fd` (area 7 round 5 merged). **Fixed: A7-26 (P2), A7-27 (P3), A7-25 (P3, as the reviewer decided) and A7-21 (P3, in the decided direction).** Host only (`Sh2Decompiler.cpp`, `Sh2Decompiler.h`, `InspectionBinding.h`); no engine patch. The texts of the four corpus runs are the same as the base's (the dumps compared: no new line text); only token addresses changed.
+
+### The rule, and where these rows broke it
+
+The A7-22 fixer's rule: a line names an instruction only when that instruction made, or wrote, the line's value. Each row here was a place that compared too little to apply it.
+
+* **A7-26: the number, not the register.** `InstructionMakesNumber` asked whether an instruction makes the line's number, not into which storage, so `mov #0,r12` at a join satisfied a merged zero of r8. It now takes the storage: `AddJoinConstantTokens` passes the COPY's register (as it already found it for `FlowLastWriters`), and an instruction that makes the number into another register is no maker; the line names each path's writer. A literal word read into a temporary and extended into the register (`mov.w @(disp,pc),Rn`) counts as made into the register (the first try dropped those: six lines of hwram008, `xStack_1a = 0x2ee;` of 0x0603714A and four of 0x06048690, lost their literal load and kept only their store; the dump diff showed it, and it was fixed before the counts below). The same blind spot was in `AddFrameStoreTokens` for a number in memory (`numberAway`): `iStack_8 = 0;` and three more frame words of 0x060216B6 of hwram008, pushed as `mov #0x0,r1 ; mov.l r1,@-r15` on two paths, were drawn at the join's `mov #0x0,r5` (an argument). A number in memory is now made at its instruction only when the instruction sets a register a store the line names stores (the store's value input, or the register a temporary of the store's instruction copies, as the push does); else the line takes its store. Pinned with the function's words and 32 words of its callee (`a7r4::kA726FrameWords`), whose stack arguments make the frame words locals.
+* **A7-27: the label's block, not the label's value.** A7-24's rule took a table destination in the block of the label's first op. A case that is only a branch has no block, and its first op is the exit's, whose block holds the `default:` destination. `LinesFromMarkup` now reads the label's value from the markup and asks the jump table where it sends that value: a destination of that value in the block first; when none, and no block of the final graph holds the value's destination, the first instruction of the flow's block that does; a label with no op (a `nop` falling into the next case) names the destination. The table is the one whose `switch` was printed last, else any, and only when the value has one destination. A first version used the value's destination for every label and moved over a hundred labels of the junk lent function 0x06027420 of hwram007 (several tables, nested; 123 labels changed in that run): the order above keeps A7-24's rule wherever the block has the value's destination, and the base-to-fixed label diff is now only labels that had no address or an odd one.
+* **A7-25: the order of the way back.** No token moves (the reviewer's decision; `TestFrameStoreMaterialisedAtCall` unchanged). A statement that keeps its drawn tokens at its instruction beside the stores it names is marked (`Token::materialised`), and `InstructionLineIndex::Ordered` answers a line that draws the instruction only through such tokens after the lines that draw it as their own statement.
+* **A7-21: a branch that makes nothing.** A copy at the end of its block that no store shows and whose value is a register (not a flow op's output) kept the branch the engine put it at. It now names the instructions `FlowLastWriters` finds for that register at the block's end (drawn at the lowest, an empty token at each other), or nothing when a path has none (an input). `uStack_8 = uVar6;` of 0x0600D90E names `mov #0x0,r9` and, on the paths that move r8 into r9, r8's writers `mov #0x8,r8` and `add #-1,r8`; a click goes to `mov #0x0,r9`. A7-23 (b)'s `xStack_c._3_1_ = param_3;` names nothing (param_3 is an input). The loop-head merges (`uVar6 = uVar2;`) are register to register, not this rule's (no memory variable), and are unchanged.
+
+### The oracle (`MappingOracle.h`)
+
+* `constAtJoin` (violation) compares registers. For a number instruction at a join that makes the line's number: when the line names stores (a memory variable), it is a violation when none of them stores the instruction's register; else when the instruction's register is not set to the number on every path into the join (`RegisterBefore`), another register is, and the line's variable is that register where the text uses it elsewhere (its other tokens' instructions name it, never the instruction's). The first version, without the last condition, flagged `else { iVar4 = 0; }` (0x0601DE76 of hwram007: `mov #0x0,r7` at the else, r6 happening to be 0 on the paths in) and two loop counters: 3 false positives in hwram007 alone, gone with it.
+* `backWrong` (violation) also fails a lookup that answers a line drawing the instruction only through materialised tokens while another line draws it unmarked; a first address binds the lookup only for a line that is not such a copy there.
+* `copyMergeAtBranch` (violation, A7-21): a register variable's copy to a memory variable that names no store and is drawn only at a branch ending its block. `copyRegisterMade` and `copyNoAddress` (counted) are the fixed shapes.
+* The token dump (`SE_GAME_TOKEN_DUMP`) has a twelfth column, the flag; `token_semantics.py` reads it and `drawn_elsewhere.py` mirrors the new order. `const_other_reg.py` splits its candidates by whether the line's variable is the drawn register where the text uses it elsewhere.
+
+### Mutation checks
+
+Each change was switched off alone (a temporary environment switch in the source, removed before the last commit, and the build rebuilt without it), the suite run, and the result recorded:
+
+| Switched off | `SaturnExplorerSh2DecompilerTests` |
+|---|---|
+| A7-26, the register in `InstructionMakesNumber` | fails, 7 checks: the A7-26 pin, and the oracle on the fixture (`constAtJoin` 1) |
+| A7-26, the stores' register for a number in memory | fails, 17 checks: the memory pin, and the oracle on it (`constAtJoin` 4 in the audit) |
+| the oracle's register comparisons (product fixed) | fails, 2 checks: the damaged A7-26 results (register and memory) pass |
+| A7-27, the label's value | fails, 4 checks: the A7-27 pin |
+| A7-25, the flag not set | fails, 2 checks: the A7-25 pin |
+| A7-25, the order (flag set) | fails, 4 checks: the pin, and the oracle's `backWrong` on the A7-25 fixture and A7-23 (b)'s |
+| A7-25, the order and the oracle's check | fails, 1 check: the pin alone (the oracle check is what caught the other 3) |
+| A7-21, the makers | fails, 15 checks: the A7-23 fixtures' lines, and the oracle (`copyMergeAtBranch` 3) |
+| the oracle's `copyMergeAtBranch` (product fixed) | fails, 1 check: the damaged A7-21 result passes |
+
+### What was run (RelWithDebInfo, gcc 13, the worktree's build, `-j2`, every binary under `ulimit -v 3500000` and `timeout`)
+
+| Run | Result |
+|---|---|
+| hwram007.bin and hwram008.bin, alone and lent (`tools/a7_round2/corpus.sh`, `SE_GAME_TOKEN_DUMP`), on the final build and on a base (the four fixes switched off in the same build) | 839 / 1,730 and 1,554 / 2,995 functions, all passed. Final build: **every violation 0 in the four runs** (odd, outside, not an instruction, first address, ranges, call tokens, unmarked, hover, ledger unmapped, calls, removed calls unsaid, round trip, `accessAtBranch`, `frameStoreMissing`, `backWrong`, the copy counters, `storeValueOther`, `constAtJoin` with registers, `copyMergeAtBranch`); off-line 4 / 11 and 4 / 21 as before. The base fails the new checks (47 failures in each base run: the corpus audits and the flipped pins), as it should |
+| `SaturnExplorerSh2DecompilerTests` | all passed (25 s in ctest) |
+| `ctest -j2 --timeout 900 -E SaturnExplorerLive` / `ctest -R SaturnExplorerLive` | **102 of 102** (187 s) / **6 of 6** (29 s). No new ctest test: the pins are in `SaturnExplorerSh2DecompilerTests` |
+| fault suite (`SaturnExplorerDecompilerFaultTests`, alone) | **0 of 94 jobs failed** (88.8 s; passed in the ctest run too, 87 s) |
+| generator, the matrix's sizes: `SE_GENERATED_SEEDS=20000` (four runs of 5,000 from seeds 1, 5,001, 10,001, 15,001, both grammars) | 0 failing seeds, 0 findings (154, 151, 148, 132 s) |
+| generator, `SE_GENERATED_GRAMMAR=1 SE_GENERATED_SEEDS=1000` / `SE_GENERATED_GRAMMAR=2 SE_GENERATED_SEEDS=3000` | 0 failing seeds (27 s) / 0 failing seeds (119 s) |
+| `SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000` | 0 findings; 5,580 functions, 5,292 compared, agrees=5,185 narrow-c=136 void-return=227 void-return-lent=24, skipped 8 (197 s) |
+| generator, fresh seeds: grammar 2 from 800,000 (two runs of 3,000) and grammar 1 from 806,000 (2,000) | 0 failing seeds, 0 findings (120, 128, 55 s). Grammar 2 seed 300847 (A5-99) is outside these ranges and was not counted |
+
+The counters, base (the four fixes switched off) and fixed (hwram007 alone / lent, hwram008 alone / lent):
+
+| | base | fixed |
+|---|---|---|
+| `constAtJoin` (now with registers, violation) | 2 / 4 / 5 / 3 | **0 / 0 / 0 / 0** |
+| `copyMergeAtBranch` (new, violation) | 0 / 0 / 3 / 6 | **0 / 0 / 0 / 0** |
+| `copyUnconnected` (A7-21, counted) | 0 / 0 / 3 / 6 | 0 / 0 / 0 / 0 |
+| `copyRegisterMade` (new, counted) | 0 / 0 / 0 / 0 | 0 / 0 / 3 / 6 |
+| `copyOtherValue` (counted) | 24 / 39 / 24 / 39 | 24 / 39 / 24 / 39 |
+| `const_other_reg.py` candidates (A7-26) | 8 / 16 / 15 / 23 | 7 / 14 / 11 / 22, all but 2 / 2 / 0 / 0 the variable's own register; the 2 are `xVar3 = 8;` and `xVar3 = 6;` of 0x06009E96 and 0x0600A49A, right (xVar3 is r2, `extu.b r1,r2` folded into it; the paths' 8 is r1's, the switch bound) |
+| `drawn_elsewhere.py`, the way back answering a copy first (A7-25) | 31 / 46 / 46 / 68 | 0 / 0 / 1 / 0 (0x060193F2 of hwram008: two copies at a `bra`, neither the branch's statement) |
+| `case_labels.py`, labels at no destination / labels counted | 0 of 185 / 288 of 628 / 14 of 1,285 / 314 of 1,947 | 0 of 185 / 293 of 633 / 14 of 1,286 / 322 of 1,956 (the labels counted anew had no address; the lent extra ones are the junk tables the script decodes from the wrong base) |
+| labels whose address changed (dumps compared) | | 0 / 8 / 1 / 12 |
+| functions whose mapping changed (`dump_diff.py`) | | 4 / 9 / 5 / 14 |
+| answered Folded on the way back | 29,597 / 57,943 / 75,732 / 125,132 | 29,598 / 57,939 / 75,735 / 125,134 |
+
+### Left open
+
+Nothing of these rows. Not changed: a merged number whose writer is a `mov.w` literal (a temporary extended into the register) still names nothing in `AddJoinConstantTokens` (`FlowNumber` does not follow the extension; as A7-22 left it), and the loop-head register merges of A7-21's note. The oracle has no case-label check.
+
+Routed: nothing new. Grammar 2 seed 300847 (A5-99, area 5) was not counted, as asked.

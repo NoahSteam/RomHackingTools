@@ -61,7 +61,8 @@ struct MappingAudit
     int callUnmapped = 0;      // a call in the final p-code that no token came from
     int roundTrip = 0;         // a line whose firstAddr does not lead back to it (the lines an instruction owns do not hold it)
     int backWrong = 0;         // the way back (LineForInstruction, A7-5): an instruction a token names whose lookup is not an owner, or a first address whose lookup
-                               // is a line with another first address
+                               // is a line with another first address, or (A7-25) a line that draws it only as a copy materialised there while
+                               // another line draws it as its own statement
     // What the corpus looks like (counted).
     int functions = 0, lines = 0, linesWithAddr = 0, tokens = 0, tokensWithAddr = 0;
     int single = 0, multi = 0, multiNonAdjacent = 0, widest = 0;
@@ -98,9 +99,14 @@ struct MappingAudit
     int storeValueOther = 0;   // a line `V = X;` that names a store of V whose register holds, on every path into it, a value the line does not show
                                // (another parameter or number; a parameter where the line shows a register variable): a violation (A7-23)
     int copyOtherValue = 0;    // ...not counted in copyStoreMissing: every store of the variable writes a value the line does not show (counted)
+    // Area 7 fixer (A7-21): a register the engine merged under a memory variable's name (`uStack_8 = uVar6;`), naming no store of it.
+    int copyMergeAtBranch = 0; // ...drawn only at a branch that ends its block, which makes nothing (a violation: the line names its makers or nothing)
+    int copyRegisterMade = 0;  // ...naming instructions that each write a register and are no load, store, call or branch: the makers (counted)
+    int copyNoAddress = 0;     // ...naming no instruction at all: no maker was found (counted)
     int constLines = 0;        // lines `V = <number>;` drawn at one instruction (counted)
     int constAtJoin = 0;       // ...drawn at a join's first instruction (a target of the function's own branches) that makes no number, or another
-                               // one: the engine's collapsed MULTIEQUAL, at its block's start (A7-22, a violation)
+                               // one, or makes it into another register than every path into the join sets it in: the engine's collapsed
+                               // MULTIEQUAL, at its block's start (A7-22, A7-26, a violation)
     std::vector<std::string> problems;   // the first few of each kind, "kind: where: what"
 
     void Add(const MappingAudit& o)
@@ -120,6 +126,7 @@ struct MappingAudit
         copyAtBranch += o.copyAtBranch; copyAtCall += o.copyAtCall; copyAtReturn += o.copyAtReturn; copyAtLoad += o.copyAtLoad; copyAtOther += o.copyAtOther;
         copyUnconnected += o.copyUnconnected;
         storeValueOther += o.storeValueOther; copyOtherValue += o.copyOtherValue; constLines += o.constLines; constAtJoin += o.constAtJoin;
+        copyMergeAtBranch += o.copyMergeAtBranch; copyRegisterMade += o.copyRegisterMade; copyNoAddress += o.copyNoAddress;
         for (const std::string& p : o.problems) Keep(p);
     }
     // Three examples of each kind of problem are kept; the prefix up to the first ':' is the kind.
@@ -134,7 +141,8 @@ struct MappingAudit
     int Violations() const
     {
         return odd + outside + notInsn + firstAddrWrong + badRange + callWithoutCall + unmarked + misnamed + accessUnmapped + callUnmapped + callGoneUnsaid + roundTrip +
-               accessAtBranch + frameStoreMissing + backWrong + copyAtCall + copyAtReturn + copyAtBranch + copyAtOther + storeValueOther + constAtJoin;
+               accessAtBranch + frameStoreMissing + backWrong + copyAtCall + copyAtReturn + copyAtBranch + copyAtOther + storeValueOther + constAtJoin +
+               copyMergeAtBranch;
     }
 };
 
@@ -614,19 +622,34 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
         const InstructionLineIndex index(r);
         std::map<uint32_t, std::vector<size_t>> owns;
         std::set<uint32_t> firsts;
+        // A7-25: the lines that draw an instruction as their own statement, and those that draw it only as a copy materialised there
+        // (Token::materialised); the way back answers an own one first, and a line beginning with the instruction is one only when it is
+        // not a copy materialised there
+        std::map<uint32_t, std::set<size_t>> ownDrawn, copyDrawn;
+        for (size_t li = 0; li < r.lines.size(); ++li)
+            for (const Token& t : r.lines[li].tokens)
+                if (t.addr && t.begin < t.end) (t.materialised ? copyDrawn : ownDrawn)[t.addr].insert(li);
+        const auto copyOnly = [&](uint32_t at, size_t li) {
+            const auto c = copyDrawn.find(at);
+            const auto o = ownDrawn.find(at);
+            return c != copyDrawn.end() && c->second.count(li) && (o == ownDrawn.end() || !o->second.count(li));
+        };
         for (size_t li = 0; li < r.lines.size(); ++li)
         {
             for (uint32_t at : LineInstructions(r.lines[li])) owns[at].push_back(li);
-            if (r.lines[li].firstAddr) firsts.insert(r.lines[li].firstAddr);
+            if (r.lines[li].firstAddr && !copyOnly(r.lines[li].firstAddr, li)) firsts.insert(r.lines[li].firstAddr);
         }
         for (const auto& kv : owns)
         {
             const LineLookup k = index.Find(kv.first);
             const bool owner = k.kind == LineLookup::Exact && !k.lines.empty() && std::find(kv.second.begin(), kv.second.end(), k.lines[0]) != kv.second.end();
-            if (!owner || (firsts.count(kv.first) && r.lines[k.lines[0]].firstAddr != kv.first))
+            const bool copyFirst = owner && copyOnly(kv.first, k.lines[0]) && ownDrawn.count(kv.first);
+            if (!owner || (firsts.count(kv.first) && r.lines[k.lines[0]].firstAddr != kv.first) || copyFirst)
             {
                 ++a.backWrong;
-                problem("back", "the instruction " + MappingHex(kv.first) + " is answered " + (owner ? "with a line that does not begin with it" : "with no line that holds it"));
+                problem("back", "the instruction " + MappingHex(kv.first) + " is answered " +
+                                    (!owner ? "with no line that holds it" : copyFirst ? "with a copy materialised there before its own statement (A7-25)"
+                                                                                       : "with a line that does not begin with it"));
             }
         }
         for (const auto& range : r.body)
@@ -890,9 +913,30 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                         }
                 }
                 bool named = false, atBranch = false, atCall = false, atReturn = false, atLoad = false;
+                // (A7-21: a register merge's line names the instructions that set the register, or nothing; never only the branch that ends
+                // its block)
+                bool anyAddress = false, branchOnly = true, drawnAny = false, makersOnly = true;
                 for (const Token& t : r.lines[li].tokens)
                 {
                     if (!t.addr) continue;
+                    anyAddress = true;
+                    {
+                        uint16_t mw = 0;
+                        if (!word(t.addr, mw)) makersOnly = false;
+                        else
+                        {
+                            const sfe::DisassembledInstruction md = sfe::Sh2Decode(t.addr, mw);
+                            const MemoryShape mm = ShapeOf(md);
+                            if (mm.load || mm.store || mm.call || md.IsBranch || md.HasDelaySlot || md.Mnemonic == "rts" || md.Mnemonic == "rte" ||
+                                WrittenRegisters(md).empty())
+                                makersOnly = false;
+                            if (t.begin < t.end)
+                            {
+                                drawnAny = true;
+                                if (mm.call || md.Mnemonic == "rts" || md.Mnemonic == "rte" || !(md.IsBranch || md.HasDelaySlot)) branchOnly = false;
+                            }
+                        }
+                    }
                     named = named || candidates.count(t.addr) != 0;
                     uint16_t w = 0;
                     if (t.begin == t.end || !word(t.addr, w)) continue;
@@ -908,6 +952,23 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     if (cast && (d.Mnemonic.compare(0, 4, "exts") == 0 || d.Mnemonic.compare(0, 4, "extu") == 0)) named = true;
                 }
                 if (named) continue;
+                if (registerVariable && drawnAny && branchOnly)
+                {
+                    ++a.copyMergeAtBranch;
+                    problem("copy-merge", "line " + std::to_string(li) + " '" + text + "' names no store of the variable and is drawn only at the branch " +
+                                              MappingHex(r.lines[li].firstAddr) + " that ends its block, which makes nothing (A7-21)");
+                    continue;
+                }
+                if (registerVariable && anyAddress && makersOnly)
+                {
+                    ++a.copyRegisterMade;
+                    continue;
+                }
+                if (registerVariable && !anyAddress)
+                {
+                    ++a.copyNoAddress;
+                    continue;
+                }
                 // (every store of the variable writes a value the line does not show: a register the engine merged under the variable's
                 // name, which no store makes, A7-21 and A7-23. Counted apart.)
                 {
@@ -1043,7 +1104,76 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
             const bool move = (w >> 12) == 0x6 && (w & 0xF) == 0x3;
             const bool makes = numberInsn || (d.Mnemonic.compare(0, 3, "mov") == 0 && m.store) || control || move;
             uint32_t got = 0;
-            if (makes && !(numberInsn && made(at, w, got) && got != want)) continue;
+            if (makes && !(numberInsn && made(at, w, got) && got != want))
+            {
+                // A7-26 (the area 7 fixer): an instruction that makes the number makes it into its register, Rm. When the engine merged
+                // the paths' values, every path into the join sets the line's register to the number (RegisterBefore, the walk
+                // storeValueOther uses). When Rm is not such a register and another, Rx, is, and the line's variable is Rx's where the
+                // text uses it elsewhere (its tokens' instructions name Rx and never Rm), the instruction made another register's number
+                // (`mov #0,r12` at the join of the paths that set r8 to 0). An `else { iVar4 = 0; }` whose `mov #0,r7` is the line's own,
+                // while r6 happens to be 0 on the paths in, uses r7 elsewhere: not judged. Nor when nothing is known.
+                if (!numberInsn) continue;
+                if (!haveSources)
+                {
+                    sources = BranchSources(r, word);
+                    haveSources = true;
+                }
+                const int rm = (w >> 8) & 0xF;
+                // (a memory variable's line that names its stores: the number is the stores' when one stores Rm; when each stores another
+                // register, the instruction made another value, `mov #0x0,r5` for an argument beside the pushes of r1 that write
+                // `xStack_8 = 0;`)
+                {
+                    std::set<int> storeRegs;
+                    for (const Token& t : r.lines[li].tokens)
+                    {
+                        uint16_t sw = 0;
+                        int size = 0;
+                        if (t.addr && t.begin == t.end && word(t.addr, sw) && StoredRegister(sw, size) >= 0) storeRegs.insert(StoredRegister(sw, size));
+                    }
+                    if (!storeRegs.empty())
+                    {
+                        if (storeRegs.count(rm)) continue;
+                        ++a.constAtJoin;
+                        problem("const-join", "line " + std::to_string(li) + " '" + text + "' is drawn at " + MappingHex(at) + " (" + d.Mnemonic + " " +
+                                                  d.Operands + "), the first instruction of a join, which makes the number into r" + std::to_string(rm) +
+                                                  "; the stores the line names store r" + std::to_string(*storeRegs.begin()));
+                        continue;
+                    }
+                }
+                const auto holds = [&](int reg) {
+                    const WordValue v = RegisterBefore(r, word, sources, at, reg);
+                    return v.kind == WordValue::Number && static_cast<uint32_t>(v.value) == want;
+                };
+                if (holds(rm)) continue;
+                // the registers the instructions name where the text uses the line's variable elsewhere
+                const size_t nameBegin = text.find_first_not_of(' ');
+                const size_t nameEnd = text.find(" = ", nameBegin);
+                const std::string name = text.substr(nameBegin, nameEnd - nameBegin);
+                std::set<int> used;
+                for (const Line& l : r.lines)
+                    for (const Token& t : l.tokens)
+                    {
+                        uint16_t tw = 0;
+                        if (!t.addr || t.addr == at || t.begin >= t.end || t.end > l.text.size() || l.text.compare(t.begin, t.end - t.begin, name) != 0 ||
+                            !word(t.addr, tw))
+                            continue;
+                        const std::string ops = sfe::Sh2Decode(t.addr, tw).Operands;
+                        for (size_t k = 0; k + 1 < ops.size(); ++k)
+                            if (ops[k] == 'r' && std::isdigit(static_cast<unsigned char>(ops[k + 1])) &&
+                                (k == 0 || !std::isalnum(static_cast<unsigned char>(ops[k - 1]))))
+                                used.insert(std::atoi(ops.c_str() + k + 1));
+                    }
+                if (used.count(rm)) continue;
+                int other = -1;
+                for (int reg = 0; reg < 15 && other < 0; ++reg)
+                    if (reg != rm && used.count(reg) && holds(reg)) other = reg;
+                if (other < 0) continue;
+                ++a.constAtJoin;
+                problem("const-join", "line " + std::to_string(li) + " '" + text + "' is drawn at " + MappingHex(at) + " (" + d.Mnemonic + " " + d.Operands +
+                                          "), the first instruction of a join, which makes the number into r" + std::to_string(rm) +
+                                          "; the paths into the join set it in r" + std::to_string(other));
+                continue;
+            }
             ++a.constAtJoin;
             problem("const-join", "line " + std::to_string(li) + " '" + text + "' is drawn at " + MappingHex(at) + " (" + d.Mnemonic + " " + d.Operands +
                                       "), the first instruction of a join, which does not make the number");
@@ -1129,7 +1259,8 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
 
 // Area 7 round 2 instrument (SE_GAME_TOKEN_DUMP=<file prefix>): every token of every text, with the instruction its address names, as
 // tab separated rows for tools/a7_round2/*.py to read. F = a function (label, entry, status of its body), L = a line, T = a token with
-// an address (line, begin, end, kind, address, in body, previous instruction has a delay slot, the instruction, the token's text).
+// an address (line, begin, end, kind, address, in body, previous instruction has a delay slot, the instruction, the token's text, and
+// (the area 7 fixer, A7-25) whether it is a copy materialised there).
 inline void DumpMappingTokens(std::FILE* out, const sfe::decomp::DecompileResult& r, const std::function<bool(uint32_t, uint16_t&)>& word,
                               const char* label)
 {
@@ -1153,8 +1284,8 @@ inline void DumpMappingTokens(std::FILE* out, const sfe::decomp::DecompileResult
             }
             const bool slot = word(t.addr - 2, pw) && sfe::Sh2Decode(t.addr - 2, pw).HasDelaySlot && r.InBody(t.addr - 2);
             const std::string text = t.begin <= t.end && t.end <= l.text.size() ? l.text.substr(t.begin, t.end - t.begin) : std::string("?");
-            std::fprintf(out, "T\t%zu\t%zu\t%u\t%u\t%d\t%08X\t%d\t%d\t%s\t%s\n", li, ti, unsigned(t.begin), unsigned(t.end), int(t.kind), t.addr,
-                         r.InBody(t.addr) ? 1 : 0, slot ? 1 : 0, insn.c_str(), text.c_str());
+            std::fprintf(out, "T\t%zu\t%zu\t%u\t%u\t%d\t%08X\t%d\t%d\t%s\t%s\t%d\n", li, ti, unsigned(t.begin), unsigned(t.end), int(t.kind), t.addr,
+                         r.InBody(t.addr) ? 1 : 0, slot ? 1 : 0, insn.c_str(), text.c_str(), t.materialised ? 1 : 0);
         }
     }
 }
@@ -1189,6 +1320,9 @@ inline void PrintMappingAudit(const MappingAudit& a, const char* label)
                 "every store of the variable writes another value of (a register merged under its name, counted); %d number lines drawn at one "
                 "instruction, %d of them at a join's first instruction that does not make the number (A7-22, a violation)\n",
                 label, a.storeValueOther, a.copyOtherValue, a.constLines, a.constAtJoin);
+    std::printf("  mapping (%s): register merges under a memory variable's name naming no store (A7-21): %d drawn only at a branch ending the block (a "
+                "violation), %d naming the instructions that set the register (counted), %d naming nothing (counted)\n",
+                label, a.copyMergeAtBranch, a.copyRegisterMade, a.copyNoAddress);
     for (const std::string& p : a.problems) std::printf("    %s\n", p.c_str());
 }
 

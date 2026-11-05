@@ -1,6 +1,6 @@
 # SH-2 pseudocode and embedded decompiler
 
-Inspected revision: `ff6a3b1fb1c54e4c0344613094ea65292b0023c2` (2026-10-20); the pseudocode-to-assembly mapping (steps 7 and 9) rechecked at the area 7 fixer branch `review/7-a710-fix` (2026-10-30), and step 7's store tokens at `review/7-a719-fix` (2026-11-04) and `review/7-a722-fix` (2026-11-05).
+Inspected revision: `ff6a3b1fb1c54e4c0344613094ea65292b0023c2` (2026-10-20); the pseudocode-to-assembly mapping (steps 7 and 9) rechecked at the area 7 fixer branch `review/7-a710-fix` (2026-10-30), and step 7's store tokens at `review/7-a719-fix` (2026-11-04), `review/7-a722-fix` (2026-11-05) and `review/7-a726-fix` (2026-11-05).
 Captured-inspection sections rechecked against `codex/decompiler-variable-inspection` (2026-10-20).
 The panel's status/trust drawing, Decompile-as-a-request and Copy marks rechecked against `5428fe6` plus the area 8 fixer branch (2026-10-30).
 Unless labelled otherwise, behavior below is verified from the cited implementation.
@@ -111,10 +111,20 @@ and lists these classes as open until they are fixed.
    value is made, and compared with what the statement's value copies, merges or extends in the
    final p-code; a store whose every path ends at another value is never named, and the search
    goes on to the store the statement is ahead of. A number put at an instruction that does not
-   make it takes its store's address too. `AddJoinConstantTokens` addresses a number the engine
-   merged (a COPY that is no flow op, at an instruction that does not make the number: a collapsed
-   MULTIEQUAL at a join) to the instruction on each path that set the register, or to nothing.
-   A case label's token is the jump table's destination in its block, else the start of the run
+   make it into a register the store stores takes its store's address too. A register the engine merged under a memory variable's
+   name, a copy at the end of its block that no store shows, is addressed to the instructions that
+   last set the register on each path into the block's end (`FlowLastWriters`), or to nothing,
+   never to the branch (A7-21). A statement that keeps its drawn tokens at its instruction beside
+   the stores it names (a copy the engine materialised at a call or a store that may alias) marks
+   them `Token::materialised`, and `InstructionLineIndex` offers the instruction's own statement
+   before it (A7-25). `AddJoinConstantTokens` addresses a number the engine
+   merged (a COPY that is no flow op, at an instruction that does not make the number into the
+   COPY's register: a collapsed MULTIEQUAL at a join) to the instruction on each path that set the
+   register, or to nothing. A case label's token is where the jump table sends its value
+   (`JumpTable::getLabelByIndex`/`getAddressByIndex`; the table of the `switch` printed last), the
+   destination itself when a block of the final graph holds it, else the first instruction of the
+   flow's block that does (a case that is only a branch or a nop, A7-27). For a table without
+   labels: the destination in its block, else the start of the run
    of the block's addresses that holds the case's first op (a block the engine merged out of
    address order covers several runs; a delay slot is no gap). A COPY the
    engine made to trim a cover and that feeds a folded read is addressed to the read

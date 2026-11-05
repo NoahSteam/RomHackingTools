@@ -545,6 +545,28 @@ const std::vector<uint16_t> kFoldedCaseWords = {
         0x3878, 0x060A, 0x6A90, 0x060A, 0x6A48, 0x0608, 0x5D60, 0x0603, 0x24A4, 0x0603, 0x24C4, 0x0608, 0x5D80, 0x0608, 0x5D70, 0x0603, 0x232C, 0xE010,
         0x4000, 0x0600, 0x6AC0, 0x0608, 0xCF64, 0x0608, 0x5D40, 0x0608, 0x5D50, 0x060A, 0x6AC0, 0x2FE6, 0x6EF3, 0xD103, 0x6011, 0xCA01, 0x2101, 0x6EF6,
         0x000B, 0xE001, 0x0009, 0x060A, 0x5084 };
+// Area 7 fixer (A7-26, a number in memory): the 245 words of 0x060216B6 of hwram008 and the first 32 of its callee 0x06008670, whose stack
+// arguments make the frame words locals.
+const std::vector<uint16_t> kA726FrameWords = {
+        0x4F22, 0x6943, 0x6193, 0x7111, 0x6210, 0xE147, 0x3216, 0x8F02, 0x6EF3, 0xA0C7, 0x0009, 0x6123, 0x311C, 0xC702, 0x011D, 0x301C, 0x402B, 0x0009,
+        0x0009, 0x0090, 0x0168, 0x0168, 0x0168, 0x0168, 0x0168, 0x0168, 0x0168, 0x0168, 0x0168, 0x0168, 0x0168, 0x0168, 0x0168, 0x0168, 0x0168, 0x0168,
+        0x0168, 0x0168, 0x0168, 0x0168, 0x0168, 0x0168, 0x0168, 0x0168, 0x0168, 0x0168, 0x0168, 0x0168, 0x0168, 0x0168, 0x0168, 0x0168, 0x0168, 0x0168,
+        0x0168, 0x0168, 0x0168, 0x0168, 0x0168, 0x0168, 0x0168, 0x0168, 0x0168, 0x0168, 0x0168, 0x0168, 0x0168, 0x0168, 0x0168, 0x0168, 0x0168, 0x0168,
+        0x0168, 0x0168, 0x0168, 0x0168, 0x0168, 0x0168, 0x0168, 0x0168, 0x0168, 0x0168, 0x00A2, 0x00AE, 0x00E0, 0x0168, 0x0168, 0x0168, 0x0146, 0x0152,
+        0x0174, 0xE100, 0x2F16, 0x2F16, 0x2F16, 0x2F16, 0xD03E, 0xE701, 0xA060, 0xE600, 0xD03D, 0xE502, 0x400B, 0xE400, 0xA05E, 0x6293, 0x6393, 0x7314,
+        0x6193, 0x7110, 0x6293, 0x6110, 0x7211, 0x2311, 0x6120, 0xD736, 0x7101, 0x2210, 0x6131, 0xD635, 0x6A1D, 0x4A08, 0xD135, 0x60A3, 0x051E, 0xD434,
+        0xD135, 0x410B, 0x0009, 0xA050, 0x6FE3, 0x6193, 0x7114, 0xD830, 0x6111, 0x6A1D, 0xD131, 0x410B, 0x6483, 0x7811, 0x6880, 0x2888, 0x8B42, 0x2F86,
+        0x9448, 0x2F86, 0x2F86, 0x2F86, 0xDB24, 0xE700, 0xE600, 0x4B0B, 0xE500, 0x61A3, 0x71C9, 0x611D, 0xE501, 0x3156, 0x8F04, 0x7F10, 0x60A3, 0x8839,
+        0x8F08, 0xE700, 0x9435, 0x2F86, 0x2F86, 0x2F86, 0x2F86, 0xE700, 0xA006, 0xE600, 0x942D, 0x2F86, 0x2F86, 0x2F86, 0x2F86, 0x6653, 0x4B0B, 0x0009,
+        0xA012, 0x6293, 0xD014, 0xE501, 0x400B, 0xE400, 0xA00C, 0x6293, 0xE100, 0x2F16, 0x2F16, 0x2F16, 0x2F16, 0xD00D, 0xE700, 0xE67F, 0xE500, 0x400B,
+        0xE405, 0x6293, 0x7211, 0x6120, 0x7101, 0xA005, 0x2210, 0xE100, 0x2912, 0xD20E, 0xE100, 0x2211, 0x6FE3, 0x4F26, 0x6EF6, 0x6BF6, 0x6AF6, 0x69F6,
+        0x000B, 0x68F6, 0x0083, 0x0087, 0x0009, 0x0600, 0x9418, 0x0600, 0x946C, 0x0003, 0xE540, 0x25A1, 0x8040, 0x0607, 0xB120, 0x060A, 0x6A60, 0x0600,
+        0x8670, 0x0600, 0x87D0, 0x060A, 0x5E1E, 0x2F86, 0x2FE6, 0x4F22, 0x6843, 0x6183, 0x7111,
+};
+const std::vector<uint16_t> kA726CalleeWords = {
+        0x2F86, 0x2F96, 0x2FA6, 0x2FB6, 0x2FE6, 0x4F22, 0x6EF3, 0x6843, 0x6953, 0x6B63, 0xD41C, 0xD11D, 0x410B, 0x6A73, 0xD01C, 0x400B,
+        0x6493, 0x6103, 0x1815, 0xD01B, 0x400B, 0x6413, 0x2008, 0x8F04, 0x2802, 0xD119, 0xE5F7, 0x410B, 0x6493, 0xD118, 0x410B, 0x0009,
+};
 }  // namespace a7r4
 
 void TestArea7Round4()
@@ -602,8 +624,12 @@ void TestArea7Round4()
     // tokens to the lower one: each line names only 0x0600D932 and 0x0600D93C (`mov.l r5,@(0x20,r14)`, a store of param_2) and a click
     // goes to a store of another value. The oracle accepted it (the line names a store of the variable; copyUnconnected no longer saw it).
     // Fixed (the area 7 fixer): a store whose value is another's is not named (StoreShowsValue: every path into the store ends at param_2,
-    // not at the r9 the line shows), and the lines keep A7-21's mapping, each at its bt/s, as the control's. The oracle's storeValueOther (a
+    // not at the r9 the line shows), and the lines kept A7-21's mapping, each at its bt/s, as the control's. The oracle's storeValueOther (a
     // line that names a store whose register holds, by the instruction words, another value) is 0, and sees the lines as they were.
+    // A7-21 (the area 7 fixer): a register merged under the local's name names the instructions that last set the register on each path
+    // into the end of its block (FlowLastWriters), never the branch: here r9's `mov #0x0,r9` (0x0600D992), and on the paths that move r8 into
+    // r9 the writers of r8 (`mov #0x8,r8` 0x0600D994, `add #-1,r8` 0x0600D9A2); a click goes to the first. The oracle's
+    // copyMergeAtBranch (a register merge naming no store drawn only at its block's branch, a violation) sees the bt/s mapping.
     {
         const DecompileResult r = a7r4::DecompileWords(d, hw, 0x0600D90Eu, a7r4::kA723Words);
         Print("A7-23 register merge named by a store of another value", r);
@@ -613,15 +639,34 @@ void TestArea7Round4()
         const uint32_t bts[] = { 0x0600D9CEu, 0x0600DA0Cu, 0x0600DA78u };
         for (size_t i = 0; i < copies.size() && i < 3; ++i)
         {
-            CHECK(LineInstructions(*copies[i]) == std::vector<uint32_t>{ bts[i] });   // was 0x0600D932 and 0x0600D93C, the stores of param_2
-            CHECK(copies[i]->firstAddr == bts[i]);
+            // was 0x0600D932 and 0x0600D93C, the stores of param_2 (A7-23), then each line's bt/s (A7-21)
+            // mov #0x0,r9, and the writers of r8 a path moves into r9 (mov #0x8,r8, add #-1,r8)
+            CHECK(LineInstructions(*copies[i]) == (std::vector<uint32_t>{ 0x0600D992u, 0x0600D994u, 0x0600D9A2u }));
+            CHECK(copies[i]->firstAddr == 0x0600D992u);
+            for (uint32_t at : LineInstructions(*copies[i])) CHECK(at != bts[i]);
         }
         for (const Line& x : r.lines)
             if (Has(x.text, "uStack_8 = uVar6"))
                 for (uint32_t at : LineInstructions(x)) CHECK(at != 0x0600D932u && at != 0x0600D93Cu);   // the while line too
         const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_23");
         dts::PrintMappingAudit(a, "a7_23");
-        CHECK(a.Violations() == 0 && a.copyStoreMissing == 0 && a.copyUnconnected == 3 && a.storeValueOther == 0);
+        CHECK(a.Violations() == 0 && a.copyStoreMissing == 0 && a.copyUnconnected == 0 && a.storeValueOther == 0 && a.copyRegisterMade == 3);
+        // ...and the oracle sees A7-21's mapping: each line at its bt/s
+        {
+            DecompileResult atBranch = r;
+            size_t k = 0;
+            for (Line& x : atBranch.lines)
+                if (Has(x.text, "uStack_8 = uVar6;") && x.text.find('(') == std::string::npos && k < 3)
+                {
+                    std::vector<Token> keep;
+                    for (Token t : x.tokens)
+                        if (t.begin < t.end) keep.push_back((t.addr = t.addr ? bts[k] : 0, t));
+                    x.tokens = keep;
+                    x.firstAddr = bts[k++];
+                }
+            const dts::MappingAudit ba = dts::AuditMapping(atBranch, word, "a7_21 at the branch");
+            CHECK(ba.copyMergeAtBranch == 3 && ba.Violations() == 3);
+        }
         // ...and the oracle sees the lines as they were: each names the two stores of param_2
         DecompileResult was = r;
         for (Line& x : was.lines)
@@ -644,10 +689,10 @@ void TestArea7Round4()
         const DecompileResult c = a7r4::DecompileWords(d, hw, 0x0600D90Eu, image);
         const std::vector<const Line*> controls = a7r4::LinesWith(c, "uStack_8 = uVar6;");
         CHECK(controls.size() == 3);
-        const uint32_t at[] = { 0x0600D9CEu, 0x0600DA0Cu, 0x0600DA78u };
-        for (size_t i = 0; i < controls.size() && i < 3; ++i) CHECK(LineInstructions(*controls[i]) == std::vector<uint32_t>{ at[i] });
+        for (size_t i = 0; i < controls.size() && i < 3; ++i)
+            CHECK(LineInstructions(*controls[i]) == (std::vector<uint32_t>{ 0x0600D992u, 0x0600D994u, 0x0600D9A2u }));   // was its bt/s
         const dts::MappingAudit ca = dts::AuditMapping(c, word, "a7_23 control");
-        CHECK(ca.Violations() == 0 && ca.copyUnconnected == 3);
+        CHECK(ca.Violations() == 0 && ca.copyUnconnected == 0 && ca.copyRegisterMade == 3);
     }
     // A7-23 (b): the same merge, named by the engine itself. `sts.l pr,@-r15 ; add #-8,r15 ; mov r15,r14 ; mov.l r5,@(0,r14) ; tst r4,r4 ;
     // bf B ; bra X ; extu.b r6,r0 ; B: mov.l r7,@(0,r14) ; mov.l @(lit),r1 ; jsr @r1 ; mov r14,r4 ; mov #3,r12 ; add r14,r12 ; mov.b @r12,r12
@@ -655,7 +700,8 @@ void TestArea7Round4()
     // the local and prints `xStack_c._3_1_ = param_3;` with the address of the dead store of param_2 (0x06070006, `mov.l r5,@(0x0,r14)`):
     // the line named only that store, and a click went to it. The value is made by `extu.b r6,r0` (0x0607000E). Fixed (the area 7 fixer):
     // the store of param_2 is not the line's, so the copy keeps the instruction it is put at, the bf that ends its block (A7-21's mapping);
-    // storeValueOther is 0, and sees the line as it was.
+    // storeValueOther is 0, and sees the line as it was. A7-21 (the area 7 fixer): the value is param_3, which no instruction makes (the
+    // register is an input on every path into the end of the block), so the line names nothing, not the bf.
     {
         const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06070000u, { 0x4F22, 0x7FF8, 0x6EF3, 0x1E50, 0x2448, 0x8B01, 0xA009, 0x606C,
             0x1E70, 0xD107, 0x410B, 0x64E3, 0xEC03, 0x3CEC, 0x6CC0, 0x61CC, 0x6013, 0x7E08, 0x6FE3, 0x4F26, 0x000B, 0x6EF6, 0x0009, 0x0009,
@@ -664,7 +710,7 @@ void TestArea7Round4()
         CHECK(r.status == DecompileStatus::Ok);
         const Line* l = LineWith(r, "xStack_c._3_1_ = param_3;");
         CHECK(l != nullptr);
-        if (l) CHECK(LineInstructions(*l) == std::vector<uint32_t>{ 0x0607000Au });   // the bf (was 0x06070006, mov.l r5,@(0x0,r14): param_2)
+        if (l) CHECK(LineInstructions(*l).empty() && l->firstAddr == 0);   // nothing (was 0x06070006, mov.l r5,@(0x0,r14): param_2; then the bf 0x0607000A)
         const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_23 piece");
         dts::PrintMappingAudit(a, "a7_23 piece");
         CHECK(a.Violations() == 0 && a.copyStoreMissing == 0 && a.storeValueOther == 0 && a.copyOtherValue == 1);
@@ -673,7 +719,7 @@ void TestArea7Round4()
             if (Has(x.text, "xStack_c._3_1_ = param_3;"))
             {
                 for (Token& t : x.tokens)
-                    if (t.addr) t.addr = 0x06070006u;
+                    if (t.begin < t.end) t.addr = 0x06070006u;
                 x.firstAddr = 0x06070006u;
             }
         const dts::MappingAudit wa = dts::AuditMapping(was, word, "a7_23 piece as it was");
@@ -741,8 +787,9 @@ void TestArea7Round4()
     // add #0x13,r2 ; mov #0,r1 ; mov.b r1,@r2 ; ...` (0x0600C12C's shape): the store through param_1 may write the global, so the engine prints
     // `iRam0603ad2c = param_1;` again at it, with the byte store's address (0x0607000C); AddFrameStoreTokens adds the global's store
     // (0x06070004) and a click goes there, but the hover lists 0x0607000C, and the way back from 0x0607000C (`mov.b r1,@r2`) answers the
-    // global's line first, before `*(xunknown1 *)(param_1 + 0x13) = 0;`, whose instruction it is (a user's note on it goes there too).
-    // Fixed: the copy's own tokens are its store's, or the way back offers the instruction's own statement first.
+    // global's line first, before `*(xunknown1 *)(param_1 + 0x13) = 0;`, whose instruction it is (a user's note on it went there too).
+    // Fixed (the area 7 fixer, A7-25, as the reviewer decided): the tokens stay (the engine materialises the value at the byte store, A7-11's
+    // choice), the copy's token at 0x0607000C is marked materialised, and the way back offers the instruction's own statement first.
     {
         const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06070000u, { 0x4F22, 0xD106, 0x2142, 0x6243, 0x7213, 0xE100, 0x2210, 0xD104,
             0x410B, 0x0009, 0x4F26, 0x000B, 0x0009, 0x0009, 0x0603, 0xAD2C, 0x0607, 0x1000 }, callee);
@@ -754,9 +801,22 @@ void TestArea7Round4()
         if (g) CHECK(LineInstructions(*g) == (std::vector<uint32_t>{ 0x06070004u, 0x0607000Cu }) && g->firstAddr == 0x06070004u);
         const LineLookup back = LineForInstruction(r, 0x0607000Cu);
         CHECK(back.kind == LineLookup::Exact && back.lines.size() == 2);
-        if (g && !back.lines.empty()) CHECK(&r.lines[back.lines[0]] == g);   // fixed: s first
+        if (s && back.lines.size() == 2) CHECK(&r.lines[back.lines[0]] == s && &r.lines[back.lines[1]] == g);   // was g first
+        bool marked = false;
+        if (g)
+            for (const Token& t : g->tokens) marked = marked || (t.addr == 0x0607000Cu && t.begin < t.end && t.materialised);
+        CHECK(marked);
+        if (s)
+            for (const Token& t : s->tokens) CHECK(!t.materialised);
         const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_25");
         CHECK(a.Violations() == 0);
+        // (unmarked, the copy is first again: both draw the instruction and the copy is first in the text. The oracle's backWrong
+        // answers for the order: it fails when the way back puts a marked line before a line that draws the instruction unmarked)
+        DecompileResult unmarked = r;
+        for (Line& x : unmarked.lines)
+            for (Token& t : x.tokens) t.materialised = false;
+        const LineLookup old = LineForInstruction(unmarked, 0x0607000Cu);
+        if (g && !old.lines.empty()) CHECK(old.lines[0] == static_cast<size_t>(g - &r.lines[0]));   // the base build's order
     }
 }
 
@@ -776,8 +836,10 @@ void TestArea7Round5()
     // mov.l r12,@r10 ; mov #7,r9 ; M: jsr @r11 ; nop ; add #1,r8 ; cmp/gt r9,r8 ; bf M ; X: lds.l @r15+,pr ; rts ; mov r8,r0`. The zeros
     // of r8 are made in the two slots (0x06070008, 0x0607000E). The join's first instruction makes another register's zero (r12, stored
     // at 0x06070016), and `iVar1 = 0;` in the loop's guard names that one (0x06070010): the instruction is kept because it makes the
-    // number. A click goes to it; the two slots are on the line of the condition only. The oracle accepts it (constAtJoin asks for the
-    // number). Expected: the line names 0x06070008 and 0x0607000E, as A7-22's does.
+    // number. A click went to it; the two slots were on the line of the condition only, and the oracle accepted it (constAtJoin asked for
+    // the number). Fixed (the area 7 fixer, A7-26): InstructionMakesNumber asks for the COPY's register, so the line names 0x06070008 and
+    // 0x0607000E, as A7-22's does; the oracle's constAtJoin asks which register the join's instruction makes the number into, and sees
+    // the line as it was (the damage below).
     {
         const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06070000u, { 0x4F22, 0x6043, 0x8801, 0x8D03, 0xE800, 0x8802, 0x8F0A, 0xE800,
             0xEC00, 0xDB06, 0xDA06, 0x2AC2, 0xE907, 0x4B0B, 0x0009, 0x7801, 0x3897, 0x8BFA, 0x4F26, 0x000B, 0x6083, 0x0000, 0x0607, 0x1000,
@@ -788,14 +850,73 @@ void TestArea7Round5()
         for (const Line* l : a7r4::LinesWith(r, "iVar1 = 0;"))
             if (l->text.find('(') == std::string::npos) body = l;
         CHECK(body != nullptr);
-        if (body) CHECK(LineInstructions(*body) == (std::vector<uint32_t>{ 0x06070010u }));   // expected: 0x06070008 and 0x0607000E
+        if (body) CHECK(LineInstructions(*body) == (std::vector<uint32_t>{ 0x06070008u, 0x0607000Eu }));   // was 0x06070010 (mov #0x0,r12)
+        if (body) CHECK(body->firstAddr == 0x06070008u);
+        if (body) CHECK(Has(LineOriginText(*body), "0x06070008") && Has(LineOriginText(*body), "0x0607000E"));
+        for (const Line& x : r.lines)
+            for (const Token& t : x.tokens) CHECK(!(t.addr == 0x06070010u && Has(x.text, "iVar1 = 0;")));   // never r12's zero
         const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_26");
-        CHECK(a.Violations() == 0);
+        CHECK(a.Violations() == 0 && a.constAtJoin == 0);
+        // ...and the oracle sees the line as it was: drawn at the join's `mov #0x0,r12`
+        DecompileResult was = r;
+        for (Line& x : was.lines)
+            if (Has(x.text, "iVar1 = 0;") && x.text.find('(') == std::string::npos)
+            {
+                std::vector<Token> keep;
+                for (Token t : x.tokens)
+                    if (t.begin < t.end) keep.push_back((t.addr = t.addr ? 0x06070010u : 0, t));
+                x.tokens = keep;
+                x.firstAddr = 0x06070010u;
+            }
+        const dts::MappingAudit wa = dts::AuditMapping(was, word, "a7_26 as it was");
+        CHECK(wa.constAtJoin == 1 && wa.Violations() == 1);
+    }
+    // A7-26, a number in memory (the area 7 fixer): the same blind spot in AddFrameStoreTokens. 0x060216B6 of hwram008 pushes four zero
+    // words for a call on two paths (`mov #0x0,r1 ; mov.l r1,@-r15` x4, at 0x0602176E.. and 0x06021830..) that join at `mov #0x0,r5`
+    // (0x0602183E, an argument in r5). The engine prints `iStack_8 = 0;` and three more at the join's first instruction; the line named
+    // its two pushes by empty tokens, but its drawn tokens stayed at `mov #0x0,r5`, which makes a zero, but r5's (the number check asked
+    // no register), and the way back from it answered the frame words. Fixed: a number in memory is made at an instruction only when it
+    // sets a register a store of the line stores (the pushes store r1), so the line's drawn tokens are its lowest store's. The oracle's
+    // constAtJoin compares the drawn instruction's register with the registers the line's stores store, and sees the line as it was.
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x060216B6u, a7r4::kA726FrameWords, [] {
+            std::vector<std::pair<uint32_t, uint16_t>> c;
+            for (size_t i = 0; i < a7r4::kA726CalleeWords.size(); ++i) c.emplace_back(0x06008670u + 2 * static_cast<uint32_t>(i), a7r4::kA726CalleeWords[i]);
+            return c;
+        }());
+        Print("A7-26 a number in memory at another register's number", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        const char* words[] = { "iStack_8 = 0;", "iStack_c = 0;", "iStack_10 = 0;", "iStack_14 = 0;" };
+        for (uint32_t i = 0; i < 4; ++i)
+        {
+            const std::vector<const Line*> all = a7r4::LinesWith(r, words[i]);   // (the join's is the last; other paths print their own)
+            CHECK(!all.empty());
+            if (all.empty()) continue;
+            const Line* l = all.back();
+            CHECK(LineInstructions(*l) == (std::vector<uint32_t>{ 0x0602176Eu + 2 * i, 0x06021830u + 2 * i }));   // its two pushes (was also 0x0602183E)
+            CHECK(l->firstAddr == 0x0602176Eu + 2 * i);
+            for (const Token& t : l->tokens)
+                if (t.addr && t.begin < t.end) CHECK(t.addr == 0x0602176Eu + 2 * i);   // drawn at the lower push (was mov #0x0,r5)
+        }
+        const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_26 frame");
+        CHECK(a.Violations() == 0 && a.constAtJoin == 0);
+        DecompileResult was = r;
+        for (const char* w : words)
+        {
+            const std::vector<const Line*> all = a7r4::LinesWith(was, w);
+            if (all.empty()) continue;
+            Line& x = const_cast<Line&>(*all.back());
+            for (Token& t : x.tokens)
+                if (t.addr && t.begin < t.end) t.addr = 0x0602183Eu;
+        }
+        const dts::MappingAudit wa = dts::AuditMapping(was, word, "a7_26 frame as it was");
+        CHECK(wa.constAtJoin == 4);
     }
     // A7-27: a case that is only a branch or a nop. `T: .word A0-T ... ; A0: bra Lend ; nop ; A1: bra Lmid ; nop ; A2: nop ; A3: ...` through
     // the common mova / mov.w / add / jmp form: the table sends case 0 to the `bra` at 0x06070022 and case 2 to the `nop` at 0x0607002A.
-    // `case 0:` names 0x0607003A, the exit the branch goes to (the same instruction as `default:`), and `case 2:` names nothing. The
-    // table's destination is on no line. Expected: the labels name the table's destinations, or the label says it is the exit's.
+    // `case 0:` named 0x0607003A, the exit the branch goes to (the same instruction as `default:`), and `case 2:` named nothing: the
+    // table's destination was on no line. Fixed (the area 7 fixer, A7-27): when no block of the final graph holds the table's destination
+    // for the label's value, the label names the first instruction of the flow's block that does, the destination itself.
     {
         const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06070000u, { 0x4F22, 0xD50F, 0xE104, 0x3416, 0x8D17, 0x6143, 0x311C, 0xC702,
             0x011D, 0x301C, 0x402B, 0x0009, 0x000A, 0x000E, 0x0012, 0x0014, 0x0018, 0xA00A, 0x0009, 0xA006, 0x0009, 0x0009, 0xE203, 0x2522,
@@ -806,9 +927,15 @@ void TestArea7Round5()
         const Line* two = LineWith(r, "case 2:");
         const Line* def = LineWith(r, "default:");
         CHECK(zero && two && def);
-        if (zero) CHECK(zero->firstAddr == 0x0607003Au);   // expected 0x06070022 (the table's destination)
-        if (def && zero) CHECK(zero->firstAddr == def->firstAddr);
-        if (two) CHECK(two->firstAddr == 0);                // expected 0x0607002A
+        if (zero) CHECK(zero->firstAddr == 0x06070022u);   // the table's destination, `bra` (was 0x0607003A, the exit)
+        if (def && zero) CHECK(zero->firstAddr != def->firstAddr);
+        if (two) CHECK(two->firstAddr == 0x0607002Au);     // the `nop` (was none)
+        const Line* one = LineWith(r, "case 1:");
+        const Line* three = LineWith(r, "case 3:");
+        if (one) CHECK(one->firstAddr == 0x06070026u);     // (a branch too: `bra Lmid ; nop`)
+        if (three) CHECK(three->firstAddr == 0x0607002Cu); // (a case with code of its own: A7-24's rule)
+        if (zero) CHECK(LineForInstruction(r, 0x06070022u).kind == LineLookup::Exact && !LineForInstruction(r, 0x06070022u).lines.empty() &&
+                        &r.lines[LineForInstruction(r, 0x06070022u).lines[0]] == zero);
         const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_27");
         CHECK(a.Violations() == 0);
     }

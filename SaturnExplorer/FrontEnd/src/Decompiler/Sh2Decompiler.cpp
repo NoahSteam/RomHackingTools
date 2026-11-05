@@ -3245,7 +3245,8 @@ uint32_t InstructionOf(const ghidra::AccessRecord& rec)
 // space between tokens.
 std::vector<Line> LinesFromMarkup(const std::string& packed, const ghidra::Funcdata& fd, const ghidra::AddrSpaceManager* spaces,
                                   std::vector<InspectionTarget>& inspectionTargets,
-                                  std::map<const ghidra::PcodeOp*, std::pair<std::set<size_t>, int>>* printed = nullptr)
+                                  std::map<const ghidra::PcodeOp*, std::pair<std::set<size_t>, int>>* printed = nullptr,
+                                  const std::vector<std::pair<uint32_t, uint32_t>>* flowBlockRanges = nullptr)
 {
     std::map<ghidra::uintm, const ghidra::PcodeOp*> ops;
     for (auto it = fd.beginOpAlive(); it != fd.endOpAlive(); ++it) ops[(*it)->getTime()] = *it;
@@ -3282,6 +3283,40 @@ std::vector<Line> LinesFromMarkup(const std::string& packed, const ghidra::Funcd
     const ghidra::uint4 kLabel = ghidra::ELEM_LABEL.getId();
     const ghidra::uint4 kFuncName = ghidra::ELEM_FUNCNAME.getId();
     const ghidra::uint4 kCaseLabel = ghidra::ELEM_VALUE.getId();   // EmitMarkup::tagCaseLabel
+    // A7-27: the jump table's destination for a case label's value: where the table sends that value, the case's entry. The table is the
+    // switch's whose `switch` was printed last (its BRANCHIND), else any; 0 when no labelled table has the value, or several send it to
+    // different places. When a block of the final graph holds the destination: the destination, unless `unheldOnly`. Else (a case that is
+    // only a branch, the engine keeping no block for it) the first instruction of the flow's block that holds it; else 0.
+    const ghidra::PcodeOp* lastSwitch = nullptr;
+    const auto caseDestination = [&](ghidra::uintb value, bool unheldOnly) -> uint32_t {
+        std::set<std::pair<const ghidra::AddrSpace*, ghidra::uintb>> found;
+        const auto collect = [&](const ghidra::JumpTable* jt) {
+            if (!jt || !jt->isLabelled()) return;
+            for (ghidra::int4 e = 0; e < jt->numEntries(); ++e)
+                if (jt->getLabelByIndex(e) == value)
+                {
+                    const ghidra::Address dest = jt->getAddressByIndex(e);
+                    found.insert(std::make_pair(dest.getSpace(), dest.getOffset()));
+                }
+        };
+        if (lastSwitch) collect(fd.findJumpTable(lastSwitch));
+        for (ghidra::int4 j = 0; found.empty() && j < fd.numJumpTables(); ++j) collect(const_cast<ghidra::Funcdata&>(fd).getJumpTable(j));
+        if (found.size() != 1) return 0;
+        const ghidra::Address dest(const_cast<ghidra::AddrSpace*>(found.begin()->first), found.begin()->second);
+        uint32_t c = static_cast<uint32_t>(dest.getOffset());
+        uint32_t canonical = 0;
+        if (CanonicalAddress(c, canonical)) c = canonical;
+        const ghidra::BlockGraph& graph = fd.getBasicBlocks();
+        for (ghidra::int4 i = 0; i < graph.getSize(); ++i)
+            if (graph.getBlock(i)->getType() == ghidra::FlowBlock::t_basic && static_cast<const ghidra::BlockBasic*>(graph.getBlock(i))->contains(dest))
+                return unheldOnly ? 0 : c;
+        // (no block of the final graph holds it: the flow's block that does; a destination begins one, the engine splitting the flow at each)
+        uint32_t first = 0;
+        if (flowBlockRanges)
+            for (const auto& range : *flowBlockRanges)
+                if (range.first && range.first <= c && c <= range.second && (first == 0 || range.first > first)) first = range.first;
+        return first;
+    };
     std::function<void()> walk = [&]() {
         const ghidra::uint4 elem = decoder.openElement();
         int color = 8, indent = 0;
@@ -3290,11 +3325,18 @@ std::vector<Line> LinesFromMarkup(const std::string& packed, const ghidra::Funcd
         const ghidra::PcodeOp* op = nullptr;
         const ghidra::Varnode* vn = nullptr;
         bool haveVarref = false;
+        bool haveCaseValue = false;
+        ghidra::uintb caseValue = 0;
         for (;;)
         {
             const ghidra::uint4 attr = decoder.getNextAttributeId();
             if (attr == 0) break;
-            if (attr == ghidra::ATTRIB_COLOR.getId()) color = static_cast<int>(decoder.readUnsignedInteger());
+            if (attr == ghidra::ATTRIB_OFF.getId() && elem == kCaseLabel)
+            {
+                caseValue = decoder.readUnsignedInteger();
+                haveCaseValue = true;
+            }
+            else if (attr == ghidra::ATTRIB_COLOR.getId()) color = static_cast<int>(decoder.readUnsignedInteger());
             else if (attr == ghidra::ATTRIB_INDENT.getId()) indent = static_cast<int>(decoder.readSignedInteger());
             else if (attr == ghidra::ATTRIB_CONTENT.getId())
             {
@@ -3326,6 +3368,10 @@ std::vector<Line> LinesFromMarkup(const std::string& packed, const ghidra::Funcd
             line.text += content;
             t.end = static_cast<uint16_t>(std::min<size_t>(line.text.size(), 0xFFFF));
             t.kind = elem == kLabel ? TokenKind::Label : elem == kFuncName ? TokenKind::FuncName : KindForColor(color);
+            if (op && op->code() == ghidra::CPUI_BRANCHIND) lastSwitch = op;
+            // (A7-27: the label's value, for a case label that is no `default:`)
+            const bool caseValueKnown = elem == kCaseLabel && haveCaseValue && content != "default";
+            uint32_t caseDest = 0;
             if (op)
             {
                 // The instruction's canonical address: the function may be analysed at a mirror,
@@ -3345,9 +3391,10 @@ std::vector<Line> LinesFromMarkup(const std::string& packed, const ghidra::Funcd
                     for (int k = 0; k < 4096 && a >= 4 && (covered(a - 2) || covered(a - 4)); ++k) a -= covered(a - 2) ? 2 : 4;
                     // ...and when a jump table's destination is in the block, that destination: the case's first instructions may all be
                     // folded, the op then in a later run (`case 4:` of `bra L ; mov #1,r0` to a shared `L:`). The one at or before the op,
-                    // nearest it; else the lowest.
-                    ghidra::uintb best = 0, lowest = 0;
-                    bool haveBest = false, haveLowest = false;
+                    // nearest it; else the lowest. A destination the table gives the label's value comes first (A7-27: the exit's block
+                    // holds the `default:` destination, which is not `case 0:`'s).
+                    ghidra::uintb best = 0, lowest = 0, labelBest = 0, labelLowest = 0;
+                    bool haveBest = false, haveLowest = false, haveLabelBest = false, haveLabelLowest = false;
                     for (ghidra::int4 j = 0; j < fd.numJumpTables(); ++j)
                     {
                         const ghidra::JumpTable* jt = const_cast<ghidra::Funcdata&>(fd).getJumpTable(j);
@@ -3358,9 +3405,17 @@ std::vector<Line> LinesFromMarkup(const std::string& packed, const ghidra::Funcd
                             const ghidra::uintb x = dest.getOffset();
                             if (!haveLowest || x < lowest) lowest = x, haveLowest = true;
                             if (x <= op->getAddr().getOffset() && (!haveBest || x > best)) best = x, haveBest = true;
+                            if (!caseValueKnown || !jt->isLabelled() || jt->getLabelByIndex(e) != caseValue) continue;
+                            if (!haveLabelLowest || x < labelLowest) labelLowest = x, haveLabelLowest = true;
+                            if (x <= op->getAddr().getOffset() && (!haveLabelBest || x > labelBest)) labelBest = x, haveLabelBest = true;
                         }
                     }
-                    if (haveBest || haveLowest) a = haveBest ? best : lowest;
+                    // (A7-27: no destination of the label's value in the block, and none in any block of the final graph: the case is only a
+                    // branch or a nop, and its first op is the code the branch goes to, the exit `default:` names too)
+                    if (haveLabelBest || haveLabelLowest) a = haveLabelBest ? labelBest : labelLowest;
+                    else if (caseValueKnown && (caseDest = caseDestination(caseValue, true)) != 0)
+                        ;
+                    else if (haveBest || haveLowest) a = haveBest ? best : lowest;
                     t.addr = static_cast<uint32_t>(a);
                 }
                 uint32_t canonical = 0;
@@ -3377,6 +3432,10 @@ std::vector<Line> LinesFromMarkup(const std::string& packed, const ghidra::Funcd
                     }
                 }
             }
+            // A7-27: a case with no op of its own (a nop falling into the next case) names the table's destination for its value; one
+            // whose destination no block holds (above) names the flow's block of it. A7-24's rule named the exit or nothing.
+            if (!op && caseValueKnown) caseDest = caseDestination(caseValue, false);
+            if (caseDest) t.addr = caseDest;
             if (elem == ghidra::ELEM_VARIABLE.getId() && (!haveVarref || vn) && t.begin < t.end && line.text.size() <= 0xFFFF)
             {
                 InspectionTarget target;
@@ -3506,10 +3565,11 @@ struct AsmLines : public ghidra::AssemblyEmit
 
 std::vector<Line> DecodeDecompilerMarkup(const std::string& packed, const ghidra::Funcdata& function,
                                         const ghidra::AddrSpaceManager* spaces,
-                                        std::vector<InspectionTarget>& targets, PrintedOperations* printed)
+                                        std::vector<InspectionTarget>& targets, PrintedOperations* printed,
+                                        const std::vector<std::pair<uint32_t, uint32_t>>* flowBlockRanges)
 {
     targets.clear();
-    return LinesFromMarkup(packed, function, spaces, targets, printed);
+    return LinesFromMarkup(packed, function, spaces, targets, printed, flowBlockRanges);
 }
 
 bool ResolvePrintedInspection(const ghidra::Varnode* variable, const ghidra::PcodeOp* operation,
@@ -5356,18 +5416,42 @@ bool FlowNumber(const FlowOp& op, uint64_t& v)
     return true;
 }
 
-// Does an instruction make a number: one of its flow ops sets a storage to it (`mov #imm`), or reads it from a literal?
-bool InstructionMakesNumber(const FlowRecord& flow, uint32_t insn, uint64_t value, ghidra::int4 size)
+// Does an instruction make a number: one of its flow ops sets a storage to it (`mov #imm`), or reads it from a literal? With `into`, only
+// into that storage (A7-26: `mov #0,r12` makes r12's zero, not the zero a COPY into r8 shows); a literal word read into a temporary and
+// extended into the register (`mov.w @(disp,pc),Rn`) makes it into the register.
+bool InstructionMakesNumber(const FlowRecord& flow, uint32_t insn, uint64_t value, ghidra::int4 size, const FlowVn* into = nullptr)
 {
     const auto first = flow.insnFirst.find(insn);
     if (first == flow.insnFirst.end() || first->second.first < 0 || static_cast<size_t>(first->second.first) >= flow.blockOps.size()) return false;
     const std::vector<FlowOp>& ops = flow.blockOps[static_cast<size_t>(first->second.first)];
     ValueSet number;
     number.numbers.emplace_back(value, size);
+    const auto covers = [into](const FlowVn& out) {
+        return out.space == into->space && out.offset <= into->offset &&
+               into->offset + static_cast<ghidra::uintb>(into->size) <= out.offset + static_cast<ghidra::uintb>(out.size);
+    };
+    std::vector<std::pair<FlowVn, uint64_t>> temporaries;   // (the instruction's temporaries that hold a number, and which)
     for (size_t i = first->second.second; i < ops.size() && ops[i].insn == insn; ++i)
     {
+        const FlowOp& op = ops[i];
+        if (!op.hasOut) continue;
         uint64_t v = 0;
-        if (FlowNumber(ops[i], v) && number.Has(v, ops[i].out.size)) return true;
+        bool numbered = FlowNumber(op, v);
+        if (!numbered && into && op.numIn >= 1 && (op.code == ghidra::CPUI_COPY || op.code == ghidra::CPUI_INT_SEXT || op.code == ghidra::CPUI_INT_ZEXT))
+            for (const auto& t : temporaries)
+                if (t.first.space == op.in[0].space && t.first.offset == op.in[0].offset && t.first.size == op.in[0].size)
+                {
+                    v = t.second;
+                    if (op.code == ghidra::CPUI_INT_SEXT && op.in[0].size < 8 && (v >> (8 * op.in[0].size - 1) & 1)) v |= ~0ull << (8 * op.in[0].size);
+                    numbered = true;
+                }
+        if (!numbered) continue;
+        if (into && !covers(op.out))
+        {
+            if (op.out.space && op.out.space->getType() == ghidra::IPTR_INTERNAL) temporaries.emplace_back(op.out, v);
+            continue;
+        }
+        if (number.Has(v, op.out.size)) return true;
     }
     return false;
 }
@@ -5409,7 +5493,8 @@ std::set<std::pair<size_t, uint32_t>> SharedInstructionLines(const PrintedOperat
 // instruction, which neither makes nor computes it (`iVar3 = 0;` at a literal load of a callee's address, `uVar4 = 8;` at `mov #0x0,r12`).
 // The same for a number the engine knew a register holds on a path (`xVar3 = 1;` after `cmp/eq #1,r0 ; bf ; mov r0,r12`), put in a copy
 // with the address of the next block. Such a COPY is no op of the flow (its time is later than every flow op's), its instruction does not
-// make the number, and it sets a register (the COPY's output, or the register of the variable a copy the merge made is part of). On each
+// make the number into the COPY's register (A7-26: one that makes it into another register, `mov #0,r12` at the join of paths that set
+// r8 to 0, is no maker of the line), and it sets a register (the COPY's output, or the register of the variable a copy the merge made is part of). On each
 // path into it, the instruction that last set the register, or the register it was moved from, is found (FlowLastWriters; a path whose
 // writer sets another number is another path's, and is passed). When each is a `mov #imm` or a literal load of the number, the line
 // names those, its drawn tokens at the lowest and an empty token at each other, so the line says it is made at several instructions and
@@ -5432,14 +5517,6 @@ int AddJoinConstantTokens(std::vector<Line>& lines, const PrintedOperations& pri
         const uint64_t value = static_cast<uint64_t>(o->getIn(0)->getOffset());
         const ghidra::int4 size = o->getIn(0)->getSize();
         const uint32_t at = InstructionOf(o);
-        if (InstructionMakesNumber(flow, at, value, size)) continue;
-        // (at a delayed branch whose slot makes the number: the slot's line, A7-10; AddFrameStoreTokens moves its tokens)
-        {
-            const auto slot = flow.insnFirst.find(at + 2);
-            if (slot != flow.insnFirst.end() && flow.blockOps[static_cast<size_t>(slot->second.first)][slot->second.second].slot &&
-                InstructionMakesNumber(flow, at + 2, value, size))
-                continue;
-        }
         // the register: the output's, or the variable's when the merge made the copy (a temporary)
         const ghidra::Varnode* out = o->getOut();
         ghidra::Address reg = out->getAddr();
@@ -5456,6 +5533,21 @@ int AddJoinConstantTokens(std::vector<Line>& lines, const PrintedOperations& pri
         // (a number put in memory is AddFrameStoreTokens'; one in a temporary no register holds has no instruction that sets it)
         if (reg.getSpace()->getType() == ghidra::IPTR_SPACEBASE || reg.getSpace() == fd.getArch()->getDefaultDataSpace()) continue;
         const bool registerStorage = reg.getSpace()->getType() == ghidra::IPTR_PROCESSOR;
+        FlowVn storage;
+        storage.space = reg.getSpace();
+        storage.offset = reg.getOffset();
+        storage.size = regSize;
+        // (an instruction that makes the number into that register is the line's own; A7-26: one that makes it into another register is
+        // not, `mov #0,r12` at the join of the paths that set r8 to 0. A temporary no register holds: any that makes the number)
+        const FlowVn* into = registerStorage ? &storage : nullptr;
+        if (InstructionMakesNumber(flow, at, value, size, into)) continue;
+        // (at a delayed branch whose slot makes the number: the slot's line, A7-10; AddFrameStoreTokens moves its tokens)
+        {
+            const auto slot = flow.insnFirst.find(at + 2);
+            if (slot != flow.insnFirst.end() && flow.blockOps[static_cast<size_t>(slot->second.first)][slot->second.second].slot &&
+                InstructionMakesNumber(flow, at + 2, value, size, into))
+                continue;
+        }
         // where: before the first instruction of its block, or after the last (a copy the merge put at the end of the block before)
         int fblk = -1, fpos = 0;
         if (o->getAddr() == home->getStart())
@@ -5469,10 +5561,6 @@ int AddJoinConstantTokens(std::vector<Line>& lines, const PrintedOperations& pri
             if (last != flow.insnBlock.end()) fblk = last->second.first, fpos = static_cast<int>(last->second.second) + 1;
         }
         std::vector<const FlowOp*> writers;
-        FlowVn storage;
-        storage.space = reg.getSpace();
-        storage.offset = reg.getOffset();
-        storage.size = regSize;
         std::set<uint32_t> canonicalMakers;
         if (registerStorage && fblk >= 0 && FlowLastWriters(flow, fd, fblk, fpos, storage, writers))
         {
@@ -5891,6 +5979,68 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                         if (space == in->getSpace() && (offset & space->getHighest()) == in->getOffset()) maker = a;
                     }
                 }
+            // A7-21: a register the engine merged under the variable's name (`uStack_8 = uVar6;` at the `bf` ending its block, r9's value on
+            // paths that never write the local): no instruction of the block made it, and no store wrote it. The line names the instructions
+            // that last set the register on each path into the end of its block (FlowLastWriters, as A7-22 finds a merged number's), its
+            // drawn tokens at the lowest and an empty token at each other; when a path has none (an input, a register written in part, past
+            // the bound), it names nothing. Never the branch, which makes nothing.
+            bool registerMerge = false;
+            std::set<uint32_t> registerMakers;
+            if (!maker && atEnd && !(in->isWritten() && in->getDef()->getTime() < flow.opsEnd))
+            {
+                ghidra::Address reg = in->getAddr();
+                ghidra::int4 regSize = in->getSize();
+                if (in->getSpace()->getType() == ghidra::IPTR_INTERNAL && in->getHigh())
+                {
+                    const ghidra::Varnode* rep = in->getHigh()->getNameRepresentative();
+                    if (rep && rep != in) reg = rep->getAddr(), regSize = rep->getSize();
+                }
+                if (reg.getSpace()->getType() == ghidra::IPTR_PROCESSOR)
+                {
+                    registerMerge = true;
+                    const auto last = flow.insnBlock.find(static_cast<uint32_t>(home->getStop().getOffset()));
+                    std::vector<const FlowOp*> writers;
+                    FlowVn storage;
+                    storage.space = reg.getSpace();
+                    storage.offset = reg.getOffset();
+                    storage.size = regSize;
+                    if (last != flow.insnBlock.end() &&
+                        FlowLastWriters(flow, fd, last->second.first, static_cast<int>(last->second.second) + 1, storage, writers))
+                        for (const FlowOp* w : writers)
+                        {
+                            uint32_t m = w->insn, c = 0;
+                            registerMakers.insert(CanonicalAddress(m, c) ? c : m);
+                        }
+                }
+            }
+            if (registerMerge && !registerMakers.count(own))
+            {
+                const uint32_t lowest = registerMakers.empty() ? 0 : *registerMakers.begin();
+                for (size_t line : kv.second->first)
+                {
+                    if (line >= lines.size() || sharedLines.count(std::make_pair(line, own))) continue;
+                    Line& l = lines[line];
+                    bool drawn = false;
+                    for (Token& t : l.tokens)
+                        if (t.addr == own && t.begin < t.end) t.addr = lowest, drawn = true;
+                    if (!drawn) continue;
+                    for (uint32_t m : registerMakers)
+                    {
+                        bool carried = false;
+                        for (const Token& t : l.tokens) carried = carried || t.addr == m;
+                        if (carried) continue;
+                        Token t;
+                        t.begin = t.end = static_cast<uint16_t>(std::min<size_t>(l.text.size(), 0xFFFF));
+                        t.kind = TokenKind::Plain;
+                        t.addr = m;
+                        l.tokens.push_back(t);
+                    }
+                    l.firstAddr = 0;
+                    for (const Token& t : l.tokens)
+                        if (t.addr && (l.firstAddr == 0 || t.addr < l.firstAddr)) l.firstAddr = t.addr;
+                }
+                continue;
+            }
             {
                 uint32_t c = 0;
                 if (maker && CanonicalAddress(maker, c)) maker = c;
@@ -5916,8 +6066,52 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                               !o->getIn(0)->isConstant();
         // (A7-22: a number put at an instruction that does not make it -- a load of the variable, a pop, a branch -- is the store's line too;
         // at a call the call keeps its token, A7-11's choice)
-        const bool numberAway = code == ghidra::CPUI_COPY && o->getIn(0)->isConstant() && !flow.callInsns.count(at) && !slotMaker &&
-                                !InstructionMakesNumber(flow, at, static_cast<uint64_t>(o->getIn(0)->getOffset()), o->getIn(0)->getSize());
+        // (A7-26: the instruction makes the number into a register a chosen store stores, when the flow says which: `mov #0x0,r5` for
+        // an argument, at the pushes of r1 that write the frame words, is no maker of `xStack_8 = 0;`)
+        bool numberMade = false;
+        if (code == ghidra::CPUI_COPY && o->getIn(0)->isConstant())
+        {
+            const uint64_t value = static_cast<uint64_t>(o->getIn(0)->getOffset());
+            const ghidra::int4 size = o->getIn(0)->getSize();
+            // (the register each store stores: its value input, or the register a temporary of the store's instruction copies, as
+            // `mov.l r1,@-r15` stores through one)
+            std::vector<FlowVn> stored;
+            bool storedKnown = true;
+            for (const ghidra::AccessRecord* r : chosen)
+            {
+                const auto pos = flow.ops.find(r->time);
+                if (!storedKnown || pos == flow.ops.end() || pos->second.first < 0 || static_cast<size_t>(pos->second.first) >= flow.blockOps.size() ||
+                    pos->second.second >= flow.blockOps[static_cast<size_t>(pos->second.first)].size())
+                {
+                    storedKnown = false;
+                    break;
+                }
+                const std::vector<FlowOp>& ops = flow.blockOps[static_cast<size_t>(pos->second.first)];
+                const FlowOp& store = ops[pos->second.second];
+                if (store.code != ghidra::CPUI_STORE || store.numIn < 3 || store.in[2].Constant())
+                {
+                    storedKnown = false;
+                    break;
+                }
+                FlowVn v = store.in[2];
+                for (size_t k = pos->second.second; v.space && v.space->getType() == ghidra::IPTR_INTERNAL && k-- > 0 && ops[k].insn == store.insn;)
+                    if (ops[k].hasOut && ops[k].out.space == v.space && ops[k].out.offset == v.offset)
+                    {
+                        if (ops[k].code != ghidra::CPUI_COPY || ops[k].numIn < 1) break;
+                        v = ops[k].in[0];
+                    }
+                if (!v.space || v.space->getType() != ghidra::IPTR_PROCESSOR)
+                {
+                    storedKnown = false;
+                    break;
+                }
+                stored.push_back(v);
+            }
+            if (!storedKnown || stored.empty()) numberMade = InstructionMakesNumber(flow, at, value, size);
+            else
+                for (const FlowVn& v : stored) numberMade = numberMade || InstructionMakesNumber(flow, at, value, size, &v);
+        }
+        const bool numberAway = code == ghidra::CPUI_COPY && o->getIn(0)->isConstant() && !flow.callInsns.count(at) && !slotMaker && !numberMade;
         for (const ghidra::AccessRecord* r : chosen)
         {
             uint32_t insn = InstructionOf(*r), canonical = 0;
@@ -5926,6 +6120,25 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
             if ((blockEnd || slotOfCall || ownOther || numberAway) && (target == 0 || insn < target)) target = insn;
         }
         if (slotMaker) target = slotMaker;
+        // A7-25: a statement that keeps its drawn tokens at its instruction beside the stores it names is a copy the engine materialised
+        // there (at a call, at a store that may alias): the instruction's own statement is another's, which the way back offers first.
+        if (!target)
+        {
+            bool ownStore = false;
+            for (const ghidra::AccessRecord* r : chosen)
+            {
+                uint32_t insn = InstructionOf(*r), canonical = 0;
+                if (CanonicalAddress(insn, canonical)) insn = canonical;
+                ownStore = ownStore || insn == own;
+            }
+            if (!ownStore)
+                for (size_t line : kv.second->first)
+                {
+                    if (line >= lines.size() || sharedLines.count(std::make_pair(line, own))) continue;
+                    for (Token& t : lines[line].tokens)
+                        if (t.addr == own && t.begin < t.end) t.materialised = true;
+                }
+        }
         if (target)
             for (size_t line : kv.second->first)
             {
@@ -6039,6 +6252,7 @@ InstructionLineIndex::InstructionLineIndex(const DecompileResult& r) : mResult(r
                 std::vector<size_t>& v = mOwners[t.addr];
                 if (v.empty() || v.back() != li) v.push_back(li);
                 if (t.begin < t.end) mDrawn[t.addr].insert(li);
+                if (t.begin < t.end && !t.materialised) mOwnDrawn[t.addr].insert(li);
             }
 }
 
@@ -6049,11 +6263,18 @@ std::vector<size_t> InstructionLineIndex::Ordered(uint32_t a) const
     const auto o = mOwners.find(a);
     if (o == mOwners.end()) return out;
     const auto d = mDrawn.find(a);
+    const auto own = mOwnDrawn.find(a);
     auto drawn = [&](size_t li) { return d != mDrawn.end() && d->second.count(li) != 0; };
+    // (A7-25: a line that draws the instruction only as a copy materialised there comes after the lines whose statement it is)
+    auto materialised = [&](size_t li) { return drawn(li) && (own == mOwnDrawn.end() || own->second.count(li) == 0); };
     for (size_t li : o->second)
-        if (mResult.lines[li].firstAddr == a) out.push_back(li);
+        if (mResult.lines[li].firstAddr == a && !materialised(li)) out.push_back(li);
     for (size_t li : o->second)
-        if (mResult.lines[li].firstAddr != a && drawn(li)) out.push_back(li);
+        if (mResult.lines[li].firstAddr != a && drawn(li) && !materialised(li)) out.push_back(li);
+    for (size_t li : o->second)
+        if (mResult.lines[li].firstAddr == a && materialised(li)) out.push_back(li);
+    for (size_t li : o->second)
+        if (mResult.lines[li].firstAddr != a && materialised(li)) out.push_back(li);
     for (size_t li : o->second)
         if (mResult.lines[li].firstAddr != a && !drawn(li)) out.push_back(li);
     return out;
@@ -7210,7 +7431,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         // Never read the text of a stream that failed: with the exception mask above nothing
         // reaches here with badbit set, and this says so if that ever stops being true.
         if (markup.bad()) throw std::bad_alloc();
-        r.lines = DecodeDecompilerMarkup(markup.str(), *fd, arch.get(), r.inspectionTargets, &printed);
+        r.lines = DecodeDecompilerMarkup(markup.str(), *fd, arch.get(), r.inspectionTargets, &printed, &flow.ranges);
         // A3-87 (closing A3-79): the engine prints a pointer into stack storage no local is mapped to -- a save slot a walk down
         // reaches (A3-65's recorded limit) -- as the raw stack register `register0x0000003c` (BADSPACEBASE), which is no C a caller
         // or the printed-C differential could compile (`'register0x0000003c' undeclared`). The value is right, but the text is not
