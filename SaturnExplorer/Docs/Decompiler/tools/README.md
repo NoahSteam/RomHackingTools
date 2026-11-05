@@ -7,7 +7,7 @@ Kept here:
 
 * `derive_handler_cases.py` and `audit_hardware_map.py`: regenerate `FrontEnd/tests/MednafenHandlerCases.txt`
   and the hardware register audit.
-* The latest round of each area (`a2_round17/`, `a3_round14/`, `a8_fix/`, `a8_round3/`, `a8_round4/`, `a8_round5/`, `a9_round1/`), which the next round starts from.
+* The latest round of each area (`a2_round17/`, `a3_round14/`, `a8_fix/`, `a8_round3/`, `a8_round4/`, `a8_round5/`, `a8_round6/`, `a9_round1/`), which the next round starts from.
   `a2_round17/`: `dagen17.py` (families 100 to 111: narrow compares, hardware-register addresses as numbers, and the mixed-width memory families, on top of
   `a2_round16/dagen16.py`), `fam17.sh` (the printed-C differential per family; `BE=1` reads the memory families on a big-endian arena), `oldnew17.sh` and `oldnewmem17.sh`
   (the same words through two engines, `diff17.py` counts the texts that differ), `mkrc17.sh` and `relink17.sh` and `famrc17.sh` (the in-situ rule checks on the tree with patch
@@ -22,6 +22,8 @@ Kept here:
   `a8_round4/`: `a8_29.sh` (the Follow PC scripts and CPU-weighted seeds of A8-29), `a8_30.sh` (the window's entry label and Entry line across a
   Follow PC off click, A8-30), `shrink.py` (deletes operations from a failing `SE_TRUST_FOLLOW_SCRIPT` while its output still holds a text). The
   trust test's own knobs for them: `SE_TRUST_FOLLOW_SCRIPT`, `SE_TRUST_FOLLOW_DUMP`, `SE_TRUST_FOLLOW_CPU`, `SE_TRUST_HIDDEN_RENAME`.
+  `a8_round5/`: `probe5.sh` (A8-32 and A8-33: `SE_TRUST_PROBE5=1`). `a8_round6/`: `probe6.sh` (A8-36 to A8-39, and A8-32's variant without an
+  amber line: `SE_TRUST_PROBE6=1`, the trust test's `RunProbe6`, not in the default run).
   `a9_round1/`: `run_pieces.sh` (a long run of `SaturnExplorerLoaderFuzzTests` in pieces of at most 20 minutes) and
   `wasm32_yss_wrap.sh` with `yss_wrap32.cpp` (the 32-bit repro of A9-7; needs an emsdk and node).
 * `a3_round16/` (area 3 round 16): `frame16.py SEED COUNT` (twelve frame-attack modes: 4 to 6 slot chains, pointers through globals, mixed widths at odd offsets,

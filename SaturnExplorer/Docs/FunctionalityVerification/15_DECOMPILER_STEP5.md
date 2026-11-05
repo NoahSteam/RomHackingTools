@@ -15694,3 +15694,64 @@ The base `storeValueOther` is 0, as round 4 found ("not seen in the corpora"). O
 * **A7-21 (P3)** holds: `copyUnconnected` 0 / 0 / 3 / 6 as before. Its lines keep the instruction the engine put them at. No instruction writes what they show.
 
 Routed: nothing to other areas.
+
+## Area 8, round 6
+
+Branch `review/8-round6` from master `d6e08626` (area 8 round 5, clean, and the coordinator's A8-35). This round is an independent read on another model family. Round 5's conclusions were derived again here, not taken over. **No product code changed.** The trust test gained a probe, `RunProbe6`, run only with `SE_TRUST_PROBE6=1`, and the small rig gained a names generation (`namesGen`, 0 unless a probe renames). `Docs/Decompiler/tools/a8_round6/probe6.sh` was added. Filed: **A8-36 (P2)**, **A8-37 (P2)**, **A8-38 (P3)**, **A8-39 (P3)**, **A8-40 (P3, instrument)** and **A8-41 (P3, instrument with a product note)**. A8-32 stays at P3, and a note was added to its row. **The round is NOT CLEAN: A8-36 and A8-37 are new P2s.** Both follow from the pin A8-30's fix introduced: an Entry target that carries the finder's verdict. The rest of the panel still treats every Entry target as the user's typed entry, or as settled.
+
+### Attacks on the two fixes, from directions round 5 did not try
+
+* **A8-30 (the pin keeps the finder's verdict).** Round 5 read the places that build a pin. This round asked what happens to a pin afterwards, and what the panel tells the reader to do with one.
+  * *The tooltips.* `StaleTooltip` chooses its "press Enter in the entry box" wording by `mTarget.kind == TargetKind::Entry`, and since A8-30 that includes a pin. The Stopped, NeedsRefresh and NoRegisters tooltips send the reader to Enter. Enter on the untouched box makes `Target{Entry, v, User}`, and the doubt is gone: **A8-36**. Following the panel's own instruction to "ask for it again" undoes A8-30's fix.
+  * *The pin's evidence goes.* An Entry target is never resolved again. Round 5 found that a user start recorded at the pin leaves the doubt (A8-33, toward doubt). The other direction is worse: a symbol removed by Rename Function with an empty name, and the pin's next answer is still "(entry from symbol, 90%)" with no Entry line, current, not stale. **A8-37**.
+  * *Nothing to pin.* Follow PC off with no function found and nothing shown pins 0x00000000 with the default `EntrySource::User`. The Follow rig refuses this case ("(nothing to pin)"). **A8-38**.
+  * Held: a pin while a request for another entry is outstanding (it pins the entry wanted, and the click's cache hit re-installs the label); a pin after the CPU switch; the pin's "never reaches <PC>" doubt after the PC moves (it names the PC it was found for, and is still true of it; no anchor line is drawn for an Entry target).
+* **A8-29 (a stopped question stays asked only while its Stop is in force).** Read again: `ForgetStop` clears `mAsked` only when a Stop was in force, and the discarded branch of `Accept` clears it for the outstanding generation only. A late cancel of a superseded generation fails `r.generation == mPending.generation` and touches nothing, so no "Stopped." comes back. A discard needs the outstanding generation, and every new submission takes a new one, so there is no restart loop. Fourteen directed Follow scripts, none of them round 5's, all `ok`: `hold; edit; stop; badentry; release; follow; follow` (a refusal over a cancel in flight); `hold; edit; stop; static; release; refresh`; `pct; hold; edit; stop; cpu; cpu; release` (the CPU switch both ways over a cancel in flight, the question changed and back); `hold; edit; stop; hide; cpu; regsoff; show; cpu; release`; `hold; edit; stop; auto; running; advance; release; paused`; `follow; hold; edit; stop; notcode; release; typec`; `hold; edit; stop; containdead; release; follow`; `hold; edit; stop; release; pcbios; hide; pcc; show`; `cpu; hold; edit; stop; cpu; regsoff; cpu; release; cpu`; `hold; edit; stop; showinsn; stop; release; follow`; `follow; hold; edit; stop; release; follow; follow`; `hold; edit; stop; regsoff; release; regson`; `hold; pcbios; stop; pcc; release; edit`; `follow; hold; edit; stop; release; refresh; follow`. No defect found.
+
+### A8-32: P3 or P2
+
+Kept at **P3**. The derivation:
+
+* The label is the verdict at install, and `Uncertainties` reads the verdict now. Between installs the question (`Question`) holds neither the callee hints nor the call sites. So `mResolvedCallees` and `mResolvedCallSites` can move the finder's verdict without an install, and only for a Follow PC or Decompile target.
+* The callee hints for a snapshot only grow (`Install` writes `mCallees`, keyed by the snapshot), so they can only raise the verdict. The label then claims less than the panel knows.
+* Call sites can lower the verdict. In the app (`App::UpdateDecompiler`), the call sites for a snapshot are the Call Stack's frames when the stack's origin is that snapshot's identity. They change under an unchanged question only when the stack is cleared (`CallStackCleared`, when the emulator runs) or rebuilt for another frame or CPU. A rebuild for the same identity reads the same registers and memory. So the evidence behind "(entry from call-site target, 80%)" is forgotten, never refuted. The label stays true of the output it labels. The amber "Entry: guessed …" line, which says less, is drawn beside it, and errs toward doubt.
+* Against P3, two things were looked at, and neither carries it to P2. (a) With more than four uncertainties, the Entry line sits behind "N more warnings", and the label alone is in view. It is still a true statement about that output. (b) Probe 6 case E finds a variant with no amber line at all. The label reads "call-site target, 80%" while the finder now says "callee, 70%": two confirmed sources, ten points apart, and Refresh shows the second.
+* So a reader who stops at the status row is told what the panel knew when it made that output, not more than it ever knew. Where the same frozen verdict is put on a *new* answer, it does claim more than the panel knows. That happens with a pin asked again after its evidence went, and it is A8-37 (P2), not A8-32.
+
+### A8-36 (P2): the tooltips send the reader to Enter, and Enter makes a pinned guess the user's entry
+
+Probe case A: the small rig, paused, PC 06004004, Follow PC on, "(entry from rts scan, 60%)" with the Entry line. Follow PC off keeps both. Then the engine is held, C edited and the request Stopped, and the tooltip reads "… You stopped its replacement; press Enter in the entry box or Refresh to ask for it again." Enter in the box, which still reads `06004000`, then gives "(entry from user-set entry)", no Entry line, and no Copy mark. Case I reaches the same through the NoRegisters tooltip ("Turn Follow PC off and press Enter on an entry"). The guide says the Enter wording is for "a typed entry", and A8-19 says a tooltip does not send the reader to Enter where Enter asks something else. Here Enter keeps the question but drops the verdict. That is A8-30's over-claim, so this is P2. Case B (Enter under Follow PC) is the same root, and round 5's design question (A8-34 (3)) now has a consequence.
+
+### A8-37 (P2): a pinned entry keeps a confirmation that has been removed
+
+Probe case F: C named "foo", Follow PC on C+4, "(entry from symbol, 90%)". Follow PC off, then the name is erased (`FunctionNames::Rename` with an empty name). The pin is asked again under the new names, and the answer shows `func_0x06004000 … (entry from symbol, 90%)` with no Entry line. Follow PC on again shows the finder's verdict now: "(entry from rts scan, 60%)" and "Entry: guessed from the previous rts; …". Case G is the same with the call stack (cleared, then C edited). This is A8-33's cause erring toward confidence. Round 5's reason for P3 there, that it erred toward doubt, does not hold here.
+
+### A8-38, A8-39 (P3)
+
+* A8-38: probe cases C and D. With nothing found and nothing shown, the box shows `00000000`, and the label reads "(entry from user-set entry)" above the red "no code at 0x00000000: uncaptured memory at 0x00000000 (BIOS)".
+* A8-39: probe case H. The PC moves where no function is. The output shown keeps "(entry from rts scan, 60%)" and the stale badge but loses its Entry line, and the Copy marks only say stale. `mShownEntryDoubt` holds the doubt, but only the pin reads it. The model agrees with the panel (the entry doubt only when `noEntry == None`).
+
+### A8-41 (P3): the oracle forgets the runner's memo on a panel cache hit
+
+Mix 7 seed 210063 (with `SE_TRUST_HIDDEN_RENAME=1`) runs: a Refresh stalled past the budget (T "too large", memo recorded), then Enter on T, then a rename made and undone while hidden. Enter is not forced, so the panel installs the Ok answer of the same question from its cache. The model takes that for a run of the request and erases its memo. Shown again, the new names generation misses the panel's cache, and the runner's memo (keyed by the names' content) answers "too large". The model now holds no memo and fails it. The product side is P3: the panel's cache and the runner's memo key the names differently, so after a rename undone the panel shows "too large … use Refresh" in place of an Ok answer it holds for the same inputs. The text is true of the memo, and Refresh retries. Routed to area 1, whose oracle (`TooLargeExcused`, `CheckInstalls`) it is.
+
+### What was run (RelWithDebInfo, gcc 13, Ninja, `-j2`; every run under `ulimit -v 3500000` and `timeout`; hover on unless said)
+
+| Run | Result |
+|---|---|
+| mix 2 (too large) at 537 px (`SE_TRUST_WIDTH=537`), hover on, seeds 160000 to 160049: not run in round 5 | **3,038 operations, 0 failing** (303 s) |
+| Follow PC mixes 8 and 9, hover on, seeds 170000 to 170181 and 180000 to 181348 | 8,049 + 60,034 (mix 8), 8,049 + 60,034 (mix 9), 0 failing |
+| the same CPU-weighted (`SE_TRUST_FOLLOW_CPU=1`), hover on, seeds 175000 to 175177 and 190000 to 191353 | 8,001 + 60,041 (mix 8), 8,001 + 60,041 (mix 9), 0 failing |
+| mixes 8 and 9 at 537 px, hover on, seeds 200000 to 200450 (mix 9 CPU-weighted) | 20,039 each, 0 failing |
+| Follow PC total | **312,328 operations, 0 failing** |
+| mixes 0, 1, 3 to 7 with `SE_TRUST_HIDDEN_RENAME=1`, hover on, seeds from 210000 | **35,256 operations** (5,022, 5,043, 5,014, 5,052, 5,053, 5,001, 5,071), 415 renames made and undone while hidden. **1 failing: mix 7 seed 210063**. The output was kept before any rerun. It fails in three of three runs, so it is deterministic: **A8-41** (the oracle's too-large memo; `SE_TRUST_SKIP=50` and `SE_TRUST_SKIP=53,54` pass) |
+| fourteen directed Follow scripts on A8-29 (above) | all `ok` |
+| `SE_TRUST_PROBE6=1` (`probe6.sh`) | reproduces A8-36 (A, I; B), A8-37 (F, G), A8-38 (C, D), A8-39 (H) and A8-32's variant (E); not in the default run |
+| `ctest -E SaturnExplorerLive -j2 --timeout 900 --output-on-failure` / `ctest -R SaturnExplorerLive` | **102 of 102** on the first run (175 s: the trust test 54.5 s, the engine suite 40.9 s, the fault suite 82.0 s, the model test 19.4 s) / **6 of 6** (28 s). 108 tests, as on master: no test was added. The probe is inside the trust test, and its default run is unchanged. A8-35: the trust test did not fail in ctest this round, so there is no output to add (the knob run's failure is A8-41, kept). No product file changed, so the fault suite needed no separate run |
+
+The generated runs do not reach the new findings, and cannot: the Follow rig has no Enter on the untouched box, no names, function starts or call stack, and it refuses "nothing to pin" (A8-40).
+
+### Routed
+
+* Area 4: nothing. The finder's texts and verdicts are right. A8-37 is the panel keeping an old verdict, not the finder giving a wrong one.
+* Area 1: **A8-41**. The model in `DecompilerModelTests.cpp` erases a starved signature on a panel cache hit, and the panel's cache and the runner's memo key the names differently (generation against content). Otherwise nothing: Enter on the pinned entry asks the same `Question`, and the cache and the stale rule are right about it. What changes is only the verdict the label and the Entry line are drawn from.
