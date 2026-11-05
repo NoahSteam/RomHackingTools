@@ -8,7 +8,8 @@ usage: const_other_reg.py <dump.tsv> <hwram image> [--list N]
 Counts the number lines with one drawn instruction that is a join's first instruction (a branch target) and makes the line's number
 (mov #imm,Rm or a literal load into Rm); of those, the lines where some path into the join (a branch's delay slot, or the instruction
 before it on the fall-through) sets the same number into another register Rx and none sets it into Rm: the candidates (the drawn
-instruction is a register's own maker only when a path does not set it). Lists the first N.
+instruction is a register's own maker only when a path does not set it), and of them (the area 7 fixer) those whose variable the text
+uses elsewhere at instructions that name the drawn instruction's register (its own number) and those left. Lists the first N.
 """
 import os, sys, re, collections
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'a7_round2'))
@@ -76,6 +77,17 @@ def main():
             if not same: continue
             if any(r[0] == mk[0] for r in same): continue
             counts["...where the paths set the number in another register, not r%d (candidates)" % mk[0]] += 1
+            # (the area 7 fixer: the line's variable is the drawn register where the text uses it elsewhere, its tokens' instructions
+            # naming that register: the instruction makes the variable's own number, an `else { iVar4 = 0; }`, not a merge's)
+            var = text.strip().split(" = ")[0]
+            regs_used = set()
+            for t in fn["tokens"]:
+                if t["text"] == var and t["b"] < t["e"] and int(t["addr"], 16) != a:
+                    regs_used |= {int(x) for x in re.findall(r"(?<![a-z0-9])r(\d+)", t["insn"].split(" ", 1)[-1])}
+            if mk[0] in regs_used:
+                counts["......of which the variable is r%d where the text uses it elsewhere (its own number)" % mk[0]] += 1
+                continue
+            counts["......left (the variable is not that register elsewhere): A7-26's lines"] += 1
             if shown < limit:
                 shown += 1
                 print("%s %s line %d: %s   drawn at %08X %s; paths set r%s" % (fn["label"], fn["entry"], li, text.strip(), a, next(iter(drawn.values())),

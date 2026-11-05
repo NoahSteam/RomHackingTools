@@ -25,7 +25,8 @@ def load(path):
                 cur["lines"][int(p[1])] = (p[2], p[3] if len(p) > 3 else "")
             elif p[0] == "T" and cur is not None and len(p) >= 11:
                 cur["tokens"].append({"line": int(p[1]), "ti": int(p[2]), "b": int(p[3]), "e": int(p[4]), "kind": KIND[int(p[5])],
-                                      "addr": p[6], "inbody": p[7] == "1", "slot": p[8] == "1", "insn": p[9], "text": p[10]})
+                                      "addr": p[6], "inbody": p[7] == "1", "slot": p[8] == "1", "insn": p[9], "text": p[10],
+                                      "mat": len(p) > 11 and p[11] == "1"})   # (the area 7 fixer, A7-25: a copy materialised there)
     return funcs
 
 def mnem(insn):

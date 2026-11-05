@@ -26,6 +26,7 @@
 #include "Debug/Sh2Disasm.h"
 #include "Decompiler/Sh2Decompiler.h"
 
+#include <cstring> // TEMPORARY
 #include <algorithm>
 #include <cctype>
 #include <cstdint>
@@ -643,7 +644,8 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
         {
             const LineLookup k = index.Find(kv.first);
             const bool owner = k.kind == LineLookup::Exact && !k.lines.empty() && std::find(kv.second.begin(), kv.second.end(), k.lines[0]) != kv.second.end();
-            const bool copyFirst = owner && copyOnly(kv.first, k.lines[0]) && ownDrawn.count(kv.first);
+            const bool copyFirst = owner && copyOnly(kv.first, k.lines[0]) && ownDrawn.count(kv.first) &&
+                                   !(std::getenv("SE_A7F_ORACLE_OFF") && strstr(std::getenv("SE_A7F_ORACLE_OFF"), "25"));   // TEMPORARY
             if (!owner || (firsts.count(kv.first) && r.lines[k.lines[0]].firstAddr != kv.first) || copyFirst)
             {
                 ++a.backWrong;
@@ -952,7 +954,7 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     if (cast && (d.Mnemonic.compare(0, 4, "exts") == 0 || d.Mnemonic.compare(0, 4, "extu") == 0)) named = true;
                 }
                 if (named) continue;
-                if (registerVariable && drawnAny && branchOnly)
+                if (registerVariable && drawnAny && branchOnly && !(std::getenv("SE_A7F_ORACLE_OFF") && strstr(std::getenv("SE_A7F_ORACLE_OFF"), "21")))   // TEMPORARY
                 {
                     ++a.copyMergeAtBranch;
                     problem("copy-merge", "line " + std::to_string(li) + " '" + text + "' names no store of the variable and is drawn only at the branch " +
@@ -1106,11 +1108,13 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
             uint32_t got = 0;
             if (makes && !(numberInsn && made(at, w, got) && got != want))
             {
-                // A7-26 (the area 7 fixer): an instruction that makes the number makes it into its register, Rm. The engine merged the
-                // paths' values into the line's register, so a register every path into the join sets to the number (RegisterBefore,
-                // the walk storeValueOther uses) is the line's. When Rm is not one and another register is, the instruction made
-                // another register's number (`mov #0,r12` at the join of the paths that set r8 to 0). When none is known: not judged.
-                if (!numberInsn) continue;
+                // A7-26 (the area 7 fixer): an instruction that makes the number makes it into its register, Rm. When the engine merged
+                // the paths' values, every path into the join sets the line's register to the number (RegisterBefore, the walk
+                // storeValueOther uses). When Rm is not such a register and another, Rx, is, and the line's variable is Rx's where the
+                // text uses it elsewhere (its tokens' instructions name Rx and never Rm), the instruction made another register's number
+                // (`mov #0,r12` at the join of the paths that set r8 to 0). An `else { iVar4 = 0; }` whose `mov #0,r7` is the line's own,
+                // while r6 happens to be 0 on the paths in, uses r7 elsewhere: not judged. Nor when nothing is known.
+                if (!numberInsn || (std::getenv("SE_A7F_ORACLE_OFF") && strstr(std::getenv("SE_A7F_ORACLE_OFF"), "26"))) continue;   // TEMPORARY
                 if (!haveSources)
                 {
                     sources = BranchSources(r, word);
@@ -1122,9 +1126,28 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     return v.kind == WordValue::Number && static_cast<uint32_t>(v.value) == want;
                 };
                 if (holds(rm)) continue;
+                // the registers the instructions name where the text uses the line's variable elsewhere
+                const size_t nameBegin = text.find_first_not_of(' ');
+                const size_t nameEnd = text.find(" = ", nameBegin);
+                const std::string name = text.substr(nameBegin, nameEnd - nameBegin);
+                std::set<int> used;
+                for (const Line& l : r.lines)
+                    for (const Token& t : l.tokens)
+                    {
+                        uint16_t tw = 0;
+                        if (!t.addr || t.addr == at || t.begin >= t.end || t.end > l.text.size() || l.text.compare(t.begin, t.end - t.begin, name) != 0 ||
+                            !word(t.addr, tw))
+                            continue;
+                        const std::string ops = sfe::Sh2Decode(t.addr, tw).Operands;
+                        for (size_t k = 0; k + 1 < ops.size(); ++k)
+                            if (ops[k] == 'r' && std::isdigit(static_cast<unsigned char>(ops[k + 1])) &&
+                                (k == 0 || !std::isalnum(static_cast<unsigned char>(ops[k - 1]))))
+                                used.insert(std::atoi(ops.c_str() + k + 1));
+                    }
+                if (used.count(rm)) continue;
                 int other = -1;
                 for (int reg = 0; reg < 15 && other < 0; ++reg)
-                    if (reg != rm && holds(reg)) other = reg;
+                    if (reg != rm && used.count(reg) && holds(reg)) other = reg;
                 if (other < 0) continue;
                 ++a.constAtJoin;
                 problem("const-join", "line " + std::to_string(li) + " '" + text + "' is drawn at " + MappingHex(at) + " (" + d.Mnemonic + " " + d.Operands +

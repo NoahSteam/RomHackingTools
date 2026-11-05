@@ -25,6 +25,9 @@
 #include <sstream>
 #include <tuple>
 
+// TEMPORARY MUTATION SWITCHES (area 7 fixer)
+static bool A7fOff(const char* k) { const char* e = std::getenv("SE_A7F_OFF"); return e && std::strstr(e, k); }
+
 namespace sfe
 {
 namespace decomp
@@ -3285,10 +3288,10 @@ std::vector<Line> LinesFromMarkup(const std::string& packed, const ghidra::Funcd
     const ghidra::uint4 kCaseLabel = ghidra::ELEM_VALUE.getId();   // EmitMarkup::tagCaseLabel
     // A7-27: the jump table's destination for a case label's value: where the table sends that value, the case's entry. The table is the
     // switch's whose `switch` was printed last (its BRANCHIND), else any; 0 when no labelled table has the value, or several send it to
-    // different places. When a block of the final graph holds the destination, the destination; else (a case that is only a branch, the
-    // engine keeping no block for it) the first instruction of the flow's block that holds it; else 0.
+    // different places. When a block of the final graph holds the destination: the destination, unless `unheldOnly`. Else (a case that is
+    // only a branch, the engine keeping no block for it) the first instruction of the flow's block that holds it; else 0.
     const ghidra::PcodeOp* lastSwitch = nullptr;
-    const auto caseDestination = [&](ghidra::uintb value) -> uint32_t {
+    const auto caseDestination = [&](ghidra::uintb value, bool unheldOnly) -> uint32_t {
         std::set<std::pair<const ghidra::AddrSpace*, ghidra::uintb>> found;
         const auto collect = [&](const ghidra::JumpTable* jt) {
             if (!jt || !jt->isLabelled()) return;
@@ -3309,7 +3312,7 @@ std::vector<Line> LinesFromMarkup(const std::string& packed, const ghidra::Funcd
         const ghidra::BlockGraph& graph = fd.getBasicBlocks();
         for (ghidra::int4 i = 0; i < graph.getSize(); ++i)
             if (graph.getBlock(i)->getType() == ghidra::FlowBlock::t_basic && static_cast<const ghidra::BlockBasic*>(graph.getBlock(i))->contains(dest))
-                return c;
+                return unheldOnly ? 0 : c;
         // (no block of the final graph holds it: the flow's block that does; a destination begins one, the engine splitting the flow at each)
         uint32_t first = 0;
         if (flowBlockRanges)
@@ -3369,8 +3372,9 @@ std::vector<Line> LinesFromMarkup(const std::string& packed, const ghidra::Funcd
             t.end = static_cast<uint16_t>(std::min<size_t>(line.text.size(), 0xFFFF));
             t.kind = elem == kLabel ? TokenKind::Label : elem == kFuncName ? TokenKind::FuncName : KindForColor(color);
             if (op && op->code() == ghidra::CPUI_BRANCHIND) lastSwitch = op;
-            // (A7-27: a case label names where the table sends its value, when the table says)
-            const uint32_t caseDest = elem == kCaseLabel && haveCaseValue && content != "default" ? caseDestination(caseValue) : 0;
+            // (A7-27: the label's value, for a case label that is no `default:`)
+            const bool caseValueKnown = elem == kCaseLabel && haveCaseValue && content != "default" && !A7fOff("27");
+            uint32_t caseDest = 0;
             if (op)
             {
                 // The instruction's canonical address: the function may be analysed at a mirror,
@@ -3381,7 +3385,7 @@ std::vector<Line> LinesFromMarkup(const std::string& packed, const ghidra::Funcd
                 // the run of the block's addresses that holds that op. Not the block's lowest address: a block the engine merged from
                 // code out of address order (a case that stores and branches back to the function's exit) covers several runs, and
                 // its lowest is another case's code.
-                if (elem == kCaseLabel && !caseDest && op->getParent() && op->getParent()->contains(op->getAddr()))
+                if (elem == kCaseLabel && op->getParent() && op->getParent()->contains(op->getAddr()))
                 {
                     const ghidra::BlockBasic* bb = op->getParent();
                     ghidra::uintb a = op->getAddr().getOffset();
@@ -3390,9 +3394,10 @@ std::vector<Line> LinesFromMarkup(const std::string& packed, const ghidra::Funcd
                     for (int k = 0; k < 4096 && a >= 4 && (covered(a - 2) || covered(a - 4)); ++k) a -= covered(a - 2) ? 2 : 4;
                     // ...and when a jump table's destination is in the block, that destination: the case's first instructions may all be
                     // folded, the op then in a later run (`case 4:` of `bra L ; mov #1,r0` to a shared `L:`). The one at or before the op,
-                    // nearest it; else the lowest.
-                    ghidra::uintb best = 0, lowest = 0;
-                    bool haveBest = false, haveLowest = false;
+                    // nearest it; else the lowest. A destination the table gives the label's value comes first (A7-27: the exit's block
+                    // holds the `default:` destination, which is not `case 0:`'s).
+                    ghidra::uintb best = 0, lowest = 0, labelBest = 0, labelLowest = 0;
+                    bool haveBest = false, haveLowest = false, haveLabelBest = false, haveLabelLowest = false;
                     for (ghidra::int4 j = 0; j < fd.numJumpTables(); ++j)
                     {
                         const ghidra::JumpTable* jt = const_cast<ghidra::Funcdata&>(fd).getJumpTable(j);
@@ -3403,9 +3408,17 @@ std::vector<Line> LinesFromMarkup(const std::string& packed, const ghidra::Funcd
                             const ghidra::uintb x = dest.getOffset();
                             if (!haveLowest || x < lowest) lowest = x, haveLowest = true;
                             if (x <= op->getAddr().getOffset() && (!haveBest || x > best)) best = x, haveBest = true;
+                            if (!caseValueKnown || !jt->isLabelled() || jt->getLabelByIndex(e) != caseValue) continue;
+                            if (!haveLabelLowest || x < labelLowest) labelLowest = x, haveLabelLowest = true;
+                            if (x <= op->getAddr().getOffset() && (!haveLabelBest || x > labelBest)) labelBest = x, haveLabelBest = true;
                         }
                     }
-                    if (haveBest || haveLowest) a = haveBest ? best : lowest;
+                    // (A7-27: no destination of the label's value in the block, and none in any block of the final graph: the case is only a
+                    // branch or a nop, and its first op is the code the branch goes to, the exit `default:` names too)
+                    if (haveLabelBest || haveLabelLowest) a = haveLabelBest ? labelBest : labelLowest;
+                    else if (caseValueKnown && (caseDest = caseDestination(caseValue, true)) != 0)
+                        ;
+                    else if (haveBest || haveLowest) a = haveBest ? best : lowest;
                     t.addr = static_cast<uint32_t>(a);
                 }
                 uint32_t canonical = 0;
@@ -3422,9 +3435,9 @@ std::vector<Line> LinesFromMarkup(const std::string& packed, const ghidra::Funcd
                     }
                 }
             }
-            // A7-27: a case label names the table's destination for its value. A case that is only a branch (`bra Lend ; nop`) or a nop
-            // falling into the next case has no block of its own in the final graph: its first op, if any, is the code the branch goes to
-            // (the exit, which `default:` names too), or there is none, and A7-24's rule (the label's block) named the exit or nothing.
+            // A7-27: a case with no op of its own (a nop falling into the next case) names the table's destination for its value; one
+            // whose destination no block holds (above) names the flow's block of it. A7-24's rule named the exit or nothing.
+            if (!op && caseValueKnown) caseDest = caseDestination(caseValue, false);
             if (caseDest) t.addr = caseDest;
             if (elem == ghidra::ELEM_VARIABLE.getId() && (!haveVarref || vn) && t.begin < t.end && line.text.size() <= 0xFFFF)
             {
@@ -5419,7 +5432,7 @@ bool InstructionMakesNumber(const FlowRecord& flow, uint32_t insn, uint64_t valu
     {
         uint64_t v = 0;
         if (!FlowNumber(ops[i], v) || !number.Has(v, ops[i].out.size)) continue;
-        if (into && (!ops[i].hasOut || ops[i].out.space != into->space || ops[i].out.offset > into->offset ||
+        if (into && !A7fOff("26") && (!ops[i].hasOut || ops[i].out.space != into->space || ops[i].out.offset > into->offset ||
                      into->offset + static_cast<ghidra::uintb>(into->size) > ops[i].out.offset + static_cast<ghidra::uintb>(ops[i].out.size)))
             continue;
         return true;
@@ -5984,7 +5997,7 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                         }
                 }
             }
-            if (registerMerge && !registerMakers.count(own))
+            if (registerMerge && !registerMakers.count(own) && !A7fOff("21"))
             {
                 const uint32_t lowest = registerMakers.empty() ? 0 : *registerMakers.begin();
                 for (size_t line : kv.second->first)
@@ -6063,7 +6076,7 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                 {
                     if (line >= lines.size() || sharedLines.count(std::make_pair(line, own))) continue;
                     for (Token& t : lines[line].tokens)
-                        if (t.addr == own && t.begin < t.end) t.materialised = true;
+                        if (t.addr == own && t.begin < t.end && !A7fOff("25f")) t.materialised = true;
                 }
         }
         if (target)
@@ -6193,7 +6206,7 @@ std::vector<size_t> InstructionLineIndex::Ordered(uint32_t a) const
     const auto own = mOwnDrawn.find(a);
     auto drawn = [&](size_t li) { return d != mDrawn.end() && d->second.count(li) != 0; };
     // (A7-25: a line that draws the instruction only as a copy materialised there comes after the lines whose statement it is)
-    auto materialised = [&](size_t li) { return drawn(li) && (own == mOwnDrawn.end() || own->second.count(li) == 0); };
+    auto materialised = [&](size_t li) { return !A7fOff("25o") && drawn(li) && (own == mOwnDrawn.end() || own->second.count(li) == 0); };
     for (size_t li : o->second)
         if (mResult.lines[li].firstAddr == a && !materialised(li)) out.push_back(li);
     for (size_t li : o->second)
