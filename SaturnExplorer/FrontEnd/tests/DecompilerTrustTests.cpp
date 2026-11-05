@@ -921,8 +921,9 @@ std::string Inject(Rig& r, const std::string& kind)
     return "";
 }
 
+// beforeEnter, when given, runs just before the Enter key goes down (area 8, round 8: the Follow rig notes the output shown at that moment).
 template <class R>
-void TypeEntry(R& r, const std::string& text)
+void TypeEntry(R& r, const std::string& text, const std::function<void()>& beforeEnter = nullptr)
 {
     ImVec2 a, b;
     if (!r.panel.ItemRect("entry", a, b)) return;
@@ -935,6 +936,7 @@ void TypeEntry(R& r, const std::string& text)
     for (int i = 0; i < 16; ++i) r.Key(ImGuiKey_Backspace);
     for (char ch : text) ImGui::GetIO().AddInputCharacter(static_cast<unsigned>(ch));
     r.Idle();
+    if (beforeEnter) beforeEnter();
     ImGui::GetIO().AddKeyEvent(ImGuiKey_Enter, true);
     r.Frame(ImVec2(1270, 710), false);
     ImGui::GetIO().AddKeyEvent(ImGuiKey_Enter, false);
@@ -4056,6 +4058,12 @@ std::string FollowExecute(FRig& r, FOp o, Rng& rng)
         r.Moved();
         return std::string();
     };
+    // (area 8, round 8, A8-49) An entry the box takes (Enter on a text that parses) cancels the panel's pending sync (`mSyncEntryBox = false`):
+    // an install made while the box held the focus is not written over the text afterwards. The rig took that sync when the focus went. Noted
+    // at the Enter itself: an install of a new function after it, in the same key's frames, is synced as any other.
+    auto consumeSync = [&r] {
+        if (const DecompileResult* s = r.panel.Shown()) r.lastShownEntry = s->requestedEntry;
+    };
     auto typed = [&](uint32_t entry) {
         if (!r.visible) return std::string("(panel hidden: no entry box)");
         // The target first: an answer the keys' own frames install (a cache hit on Enter) is installed for it.
@@ -4064,10 +4072,7 @@ std::string FollowExecute(FRig& r, FOp o, Rng& rng)
         r.pinGuess = false;   // the user's own entry: full confidence, no doubt
         r.provUnknown = false;
         r.refused = false;
-        TypeEntry(r, Hex(entry));
-        // (area 8, round 8, A8-49) An entry the box takes (Enter on a text that parses) cancels the panel's pending sync (`mSyncEntryBox = false`):
-        // an install made while the box held the focus is not written over the text afterwards. The rig took the sync when the focus went.
-        if (const DecompileResult* s = r.panel.Shown()) r.lastShownEntry = s->requestedEntry;
+        TypeEntry(r, Hex(entry), consumeSync);
         r.haveStopped = false;
         r.boxShowsShown = false;
         r.boxTarget = r.TargetProv();
@@ -4209,10 +4214,7 @@ std::string FollowExecute(FRig& r, FOp o, Rng& rng)
         return "";
     case FOp::NotCode:
         if (!r.visible) return "(panel hidden: no entry box)";
-        TypeEntry(r, "FFFFFFF0");
-        // (area 8, round 8, A8-49) An entry the box takes (Enter on a text that parses) cancels the panel's pending sync (`mSyncEntryBox = false`):
-        // an install made while the box held the focus is not written over the text afterwards. The rig took the sync when the focus went.
-        if (const DecompileResult* s = r.panel.Shown()) r.lastShownEntry = s->requestedEntry;
+        TypeEntry(r, "FFFFFFF0", consumeSync);
         r.tgt = FRig::Tgt::Entry;
         r.tgtAddr = 0xFFFFFFF0u;
         r.pinGuess = false;
@@ -4305,13 +4307,11 @@ std::string FollowExecute(FRig& r, FOp o, Rng& rng)
         r.pinDoubtKnown = false;
         r.provUnknown = false;
         r.refused = false;
+        consumeSync();
         ImGui::GetIO().AddKeyEvent(ImGuiKey_Enter, true);
         r.Frame(ImVec2(1270, 710), false);
         ImGui::GetIO().AddKeyEvent(ImGuiKey_Enter, false);
         r.Frame(ImVec2(1270, 710), false);
-        // (area 8, round 8, A8-49) An entry the box takes (Enter on a text that parses) cancels the panel's pending sync (`mSyncEntryBox = false`):
-        // an install made while the box held the focus is not written over the text afterwards. The rig took the sync when the focus went.
-        if (const DecompileResult* s = r.panel.Shown()) r.lastShownEntry = s->requestedEntry;
         r.haveStopped = false;
         r.boxShowsShown = false;
         r.boxTarget = enter;
