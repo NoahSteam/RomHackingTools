@@ -16061,3 +16061,69 @@ The sanitized binary was compiled by hand in the scratchpad (the coordinator ask
 * The lock files `saturn_functions.txt.lock`, `assembly_comments.txt.lock`, `saturn_function_bounds.txt.lock` and `settings.ini.lock` stay in the folder (empty); a folder the user cannot write gets no lock and the save fails with its own message.
 * The save is no longer "the file is exactly the session's list": an entry the user removes by hand while an instance runs comes back only if that instance changed it; a hand edit made while an instance runs is kept unless the instance changed the same address.
 * `App` is not linked by any test: the order Load, Save is modelled by the oracle, and the Log lines are read, not run.
+
+## Area 8, round 7
+
+Branch `review/8-round7` from master `21c0ed1d` (the area 8 fixer and the area 9 fixer merged). An adversarial review of the trust indicators, independent of the fixer's conclusions. Changed: test code only (`RunProbe7` in `DecompilerTrustTests.cpp`, `Docs/Decompiler/tools/a8_round7/probe7.sh`) and the docs. No product code.
+
+**The round is CLEAN: no P1 and no P2 was found.** Four rows are filed, all P3: **A8-42** (Enter on panel-written text with the box focused), **A8-43** (the Volatile popup's cut list, area 9's), **A8-44** (area 1's model keeps a Stop after the view leaves and comes back) and **A8-45** (instrument).
+
+### What was tried against the round 6 fixes
+
+Read first, from the code: `Target::origin`, `ResolvePin`, `Update`'s re-resolve of a pin, `Install`'s `mShownTarget`, `EnterTarget` and `EnterAsksTarget`, the stale tooltips, `Uncertainties` and the entry box's sync. Then nine hand-built sequences (`RunProbe7`, `SE_TRUST_PROBE7=1`, small rig), each printing the label, the Entry line, the box, the tooltip, the red line and the Copy marks:
+
+| # | Sequence | Result |
+|---|---|---|
+| 1 | Follow PC on C+4, pinned; PC to A and the next frame; a start set at C; Enter on the untouched box; Follow PC on | label "rts scan, 60%" with the Entry line through the new snapshot; "user-set entry" with no line once the start is set (A8-33 holds); Enter keeps it; Follow PC on: "callee, 70%" for A. As the guide says |
+| 2 | a pin of C, a start set at C+2 (inside C, below the PC), then one at C | the pin keeps "rts scan, 60%" and the line until a start is at C itself, with the engine's own flow warning for C+2. True |
+| 3 | C typed while Follow PC finds C too; Follow PC on (re-asked from the cache); off (a pin); a frame; Enter on the untouched box | "user-set entry" while the question is unchanged (A8-32's class); "rts scan, 60%" with the line after the click re-asks; the pin keeps it across the frame; Enter on the box converts to "user-set entry": the box holds the user's own typed target, and the user did type it. Judged not a defect (noted in A8-42) |
+| 4 | Follow PC, PC moved, its request stopped, Enter on the untouched box (C shown) | the Stopped tooltip names Refresh only (Enter would ask another target); Enter pins C with its doubt, label and line right |
+| 5 | pinned C, then C typed and Entered, a name given, taken away | "user-set entry" throughout (typed); right |
+| 6 | Decompile A+2, Enter on the untouched box, A named, name gone and a start at A | "rts scan, 60%" + line; kept by Enter; "symbol, 90%"; "user-set entry". Right |
+| 7 | the PC in the BIOS with nothing shown, Follow PC off, the PC moved into C, Enter on the empty box, Follow PC on | the "no function to keep" line stays while off; Enter on the empty box is the refusal text, not entry 0; Follow PC on finds C. Right (A8-38) |
+| 8 | a pin of C, the CPU switched (PC in A), Follow PC on, off | the pin survives the switch; Follow PC on finds A ("callee, 70%"); pin of A. Right |
+| 9 | the box focused (clicked, not edited) while Follow PC moves from C to A, then Enter | **A8-42**: the box still holds C, written by the panel; Enter asks C as a typed entry: "user-set entry", no Entry line, Follow PC off |
+| 10 | the Volatile popup's buffer for a 2317-character saved list, Apply unchanged | **A8-43**: the cut list parses and replaces the saved one |
+
+Random sequences with fresh seeds (the fixer's were 500000 to 550000 and 610000; these 710000, 730000, 750000, 760000, 770000), each run alone under `ulimit -v 3500000`:
+
+| Run | Result |
+|---|---|
+| mix 8 and mix 9, evidence and Enter on the untouched box on, hover on, seeds from 730000 | 40,026 + 40,026 operations, 0 failing |
+| the same with `SE_TRUST_FOLLOW_CPU=1`, seeds from 750000 | 40,029 + 40,029 operations, 0 failing |
+| the same with `SE_TRUST_NOHOVER=1`, seeds from 770000 | 40,006 + 40,006 operations, 0 failing |
+| mixes 0 to 7 with `SE_TRUST_HIDDEN_RENAME=1`, hover on, seeds from 760000 | 32,168 operations; **seed 760054 failed in mixes 0, 2, 3 and 4** (A8-44), the other 7 sequences of the mixes and mixes 1, 5, 6 and 7 pass |
+
+The output of the failures was kept (`MODEL FAILURE, seed 760054, after operation 8`, `STOP: the request was cancelled while the engine held it, yet a result for the question stopped was installed`) before any rerun. They are deterministic, and the same sequence fails in a seven-operation script without the knob (A8-44): `SE_TRUST_SCRIPT="select A; hold; reconnect; stop; scrub 1; resume; wait"`. It is the oracle's rule, not the panel (the panel asks the question again on return, A8-29 (c); its badge says "decompiling…").
+
+### The claims the panel shows, checked against what is true
+
+* The status row's source label and frame, name, "(run at …)", the entry label, `[stale]`, `[stale: frame N]` and "decompiling…" / "stopping…": held by the rigs; the label by `trust::EntryLabels`. The ones the rigs do not reach (a start removed after "Set Function Start Here" leaves "user-set entry" on a target the user set; the target is theirs, as a typed one) were read and judged true.
+* The Entry line for current output, and the output's own doubt when the question moves on: probes 1 to 8 and H of round 6 agree.
+* The Stopped and nothing-is-being-decompiled tooltips: "press Enter in the entry box" appears only where `EnterAsksTarget()` holds. The cases tried (4, and a pin Stopped with the box edited) agree. The one door that bypasses it is A8-42, and no tooltip sends the reader there.
+* **Volatile (area 9).** The button's tooltip ("every access there is kept. Hardware registers and sound RAM always are.") agrees with the guide and with `SetVolatile` / `VolatileAliases`. "The saved list does not parse and is NOT in force": true, `mVolatile` is empty (`VolatileNotInForce()` is `mVolatileText.empty() && !mVolatileUnparsed.empty()`), the popup line says why (parse error, or the length), and Apply of a list that parses, or of an empty list, replaces it. Changing the list marks the output stale (`mShownVolatileHash`). One loss: A8-43.
+* **BIOS (area 9).** "A BIOS image is mapped at 0x00000000." (`view.bios`) and "No BIOS image: calls into the BIOS stop there." are true; a changed BIOS makes the output stale through the view's `biosHash`. Reload and Stop Using stay enabled while only the path is held (`BiosItemsEnabled`). After a failed Reload the tooltip says "No BIOS image" and the reason is in the Log only, as the guide says. Not a false claim; a reader who sees "Reload" enabled beside "No BIOS image" is told why only by the Log. Not filed.
+
+### Open rows re-judged
+
+* **A8-32 (P3)**: stays open, stays P3. Round 7 found nothing that makes the label claim more than the finder would say now. The new observation (a typed entry found by Follow PC on the same question keeps "user-set entry", and the Follow PC click re-asks from the cache and shows the finder's figure) is the same class; each state is true of its moment and the amber line never over-sells.
+* **A8-35 (P3)**: **seen, once, and the output kept.** `ctest -E SaturnExplorerLive -j2 --timeout 900 --output-on-failure`, while the other agent's jobs shared the machine: `SaturnExplorerDecompilerTrustTests (Failed) 62.36 sec`, with one failing check and nothing else: `pin auto-refresh asks by itself within 120 frames once the PC has left the function   FAILED`, then `CHECK failed at DecompilerTrustTests.cpp:2897: gMiniFailures == 0`. It passed alone at once (60.6 s) and in the ctest rerun below. Cause, from the code: the pin advances 120 frames and tests after each whether the worker thread has reached the held phase. A frame takes microseconds, the worker's start and first decompilation take real time, so a loaded machine can spend all 120 frames before the engine is held. It is a test that bounds the engine's progress by frames. The panel's own part (it asks within 120 frames) is deterministic. It could not be provoked by six busy loops on four cores (4 runs), so the cause is read, not reproduced; the mutation check shows the rewritten pin still bites. **Fixed in the test** (`08686a91`): the pin counts frames only until the panel has asked (`Submissions()` moved), then waits for the engine by the clock (`WaitHeldOrBusy`, 30 s). With auto-refresh off the pin still fails (checked and restored). The same shape was in the wait for the answer (400 frames of `Busy() || Pending()`), changed to the clock as well. The row is closed as fixed in the test; it is reopened by any failure of the default test that is not this pin.
+* **A8-40 (P3)**: stays open; (2) is still the call stack only, (3) is held except with the box focused across an install (A8-42).
+* **A8-41 (P3)**: the oracle part is fixed; the product note stands. Not re-run with new evidence: the fixer's mix 7 seed 210063 pin is in the default run and passed.
+
+### What was run
+
+| Run | Result |
+|---|---|
+| fresh-seed runs (above) | 0 failing except A8-44 |
+| `probe7.sh` | the table above |
+| `ctest -E SaturnExplorerLive -j2 --timeout 900 --output-on-failure` (first run, before the test fix) | 101 of 102; `SaturnExplorerDecompilerTrustTests` failed, 62.36 s: A8-35 (above), output kept |
+| `ctest -j2 --timeout 900 --output-on-failure`, all 108 (after the fix `08686a91`) | **108 of 108 passed** (102 + 6 Live; 205 s; the trust test 60.6 s, the engine suite 45.2 s, the model suite 20.3 s). No test was added to ctest: the probe is behind `SE_TRUST_PROBE7` |
+| `SaturnExplorerDecompilerTrustTests` alone, after the second test edit (the wait for the answer by the clock) | passed, 62.1 s |
+| the fault suite | not run: no product code changed |
+
+### Routed
+
+* **Area 9**: A8-43 (the Volatile popup cuts a too-long saved list; Apply on it replaces the saved list with a parsed prefix). The BIOS and Volatile claims are otherwise true.
+* **Area 1**: A8-44 (the model keeps a Stop after the view leaves the stopped question and comes back; a seven-operation script reproduces it).
+* Area 4: nothing.

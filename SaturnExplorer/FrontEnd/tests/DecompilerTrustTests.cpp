@@ -2022,7 +2022,8 @@ void RunAutoRefreshPin()
     t.entryDoubt = trust::RtsGuess();
     MiniVerify(m, "auto-refresh in flight: [stale: frame N] and decompiling...", t, "func_");
     m.gate.Open();
-    for (int i = 0; i < 400 && (m.runner.Busy() || m.panel.Pending()); ++i)
+    // By the clock, as the wait above (A8-35): 400 frames pass in less time than a loaded machine needs for the answer.
+    for (const auto t0 = std::chrono::steady_clock::now(); (m.runner.Busy() || m.panel.Pending()) && dts::MsSince(t0) < dts::kWaitMs;)
     {
         ++m.frame;
         ++m.serial;
