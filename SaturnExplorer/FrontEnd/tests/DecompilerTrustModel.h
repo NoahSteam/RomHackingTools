@@ -63,8 +63,14 @@ struct ShownFacts
     uint32_t entry = 0;                 // canonical
 };
 
-// Why no function was found for the question, when none was.
-enum class NoEntry { None, NoRegisters, FollowNotFound, ContainingNotFound, EntryRefused, EntryNotCode };
+// Why no function was found for the question, when none was. NothingPinned: Follow PC was turned off with no function found and none shown,
+// so there was nothing to keep (A8-38).
+enum class NoEntry { None, NoRegisters, FollowNotFound, ContainingNotFound, EntryRefused, EntryNotCode, NothingPinned };
+
+// The finder's sources, as the status row's "(entry from SOURCE, N%)" names them, with the figure each has when the finder does not doubt it
+// (the guide's "Entry: ..." row). The figure drops by 20 for a doubt; the doubt every rts-scan entry carries ("guessed from the previous rts")
+// is not one of those. An entry the user typed, or a function start the user set, is "user-set entry", with no figure and no doubt.
+inline const char* RtsGuess() { return "guessed from the previous rts; no symbol, call or user entry confirms it"; }
 
 // The true state.
 struct TrueState
@@ -82,7 +88,19 @@ struct TrueState
     std::string disabledReason;
     NoEntry noEntry = NoEntry::None;
     uint32_t askedAddress = 0;          // Containing: the address asked about
-    std::string entryDoubt;             // the finder's doubt about the entry on screen ("guessed from the previous rts; ..."), if it has one
+    // The finder's doubt about the entry of the output on screen ("guessed from the previous rts; ..."), if it has one: the verdict now while
+    // the question on screen is that entry, else the one the output was installed with. It is the output's own, so it is drawn also when the
+    // question has moved where no function is, or to another function (A8-39).
+    std::string entryDoubt;
+    // (area 8 fixer, A8-36, A8-37) What confirms the entry of the output on screen, when the driver knows it (output that is current, so the
+    // evidence it was made under is the evidence now). The label "(entry from ...)" must then be that verdict: the user's own entry (typed,
+    // or a function start set at it), else the most trusted source that names it, a pin included: keeping the finder's guess confirms nothing,
+    // and a symbol erased or a call stack gone is no longer a source.
+    bool evidenceKnown = false;
+    bool userEntry = false;             // the user typed it (not a pin of the finder's), or set a function start at it
+    bool symbolEntry = false;           // a symbol names it
+    bool callSiteEntry = false;         // the call stack names it
+    bool unconfirmedPin = false;        // a pin no source names as an entry now: no label
     bool anchorKnown = false;           // the function was found for an address (the PC, or the one asked about) ...
     uint32_t anchor = 0;                // ... this one, canonical, which the function found should reach
     // The CPU is stopped on a call through a register that the output does not resolve, and this is where it goes this time (empty: not).
@@ -134,7 +152,25 @@ struct Expected
     std::vector<std::string> greyTooltip;   // the tooltip of the grey "N warnings": each note
     std::vector<std::string> greyMust;      // grey messages that are drawn
     std::vector<std::string> greyMustNot;   // ...and the ones that are not
+    bool labelChecked = false;       // the status row's "(entry from ...)" is held to 'labels'
+    std::vector<std::string> labels; // ...one of these ("" for no label)
 };
+
+// The labels the status row may give the entry of the output on screen, from what confirms it and the finder's doubt about it.
+inline std::vector<std::string> EntryLabels(const TrueState& t)
+{
+    if (t.userEntry) return { "(entry from user-set entry)" };
+    if (t.unconfirmedPin) return { "" };
+    const bool rtsGuess = t.entryDoubt == RtsGuess();
+    const int drop = !t.entryDoubt.empty() && !rtsGuess ? 20 : 0;
+    auto with = [&](const char* name, int figure) { return std::string("(entry from ") + name + ", " + std::to_string(figure - drop) + "%)"; };
+    if (t.symbolEntry) return { with("symbol", 90) };
+    if (t.callSiteEntry) return { with("call-site target", 80) };
+    // Known to nothing else: the rts scan, which always doubts, or a callee another output found (the panel's own bookkeeping).
+    if (rtsGuess) return { with("rts scan", 60) };
+    if (t.entryDoubt.empty()) return { with("callee", 70) };
+    return { with("rts scan", 60), with("callee", 70) };
+}
 
 // The key phrase of each reason's tooltip. Each is in the guide; a tooltip names its reason and only its reason.
 inline const char* TooltipPhrase(Reason r)
@@ -185,7 +221,8 @@ inline Reason ReasonFor(const TrueState& t)
     case NoEntry::FollowNotFound: return Reason::FollowNotFound;
     case NoEntry::ContainingNotFound: return Reason::ContainingNotFound;
     case NoEntry::EntryRefused:
-    case NoEntry::EntryNotCode: return Reason::EntryBox;
+    case NoEntry::EntryNotCode:
+    case NoEntry::NothingPinned: return Reason::EntryBox;
     case NoEntry::None: break;
     }
     if (t.running && t.frameMoved) return Reason::EmulatorMoved;
@@ -242,10 +279,18 @@ inline Expected Expect(const TrueState& t, const ShownFacts& s)
     case NoEntry::ContainingNotFound:
         e.lines.push_back({ Ink::Red, { "No function found containing 0x" }, "no function found" });
         break;
+    case NoEntry::NothingPinned:
+        e.lines.push_back({ Ink::Red, { "Follow PC is off, and there was no function to keep" }, "nothing to keep" });
+        break;
     case NoEntry::None:
         break;
     }
     if (!s.present) return e;
+    if (t.evidenceKnown)
+    {
+        e.labelChecked = true;
+        e.labels = EntryLabels(t);
+    }
 
     switch (s.status)
     {
@@ -318,8 +363,8 @@ inline Expected Expect(const TrueState& t, const ShownFacts& s)
                                     "the anchor is not reached" });
             }
         }
-        // The finder's doubt about the entry on screen comes last (guide: "Entry: ...").
-        if (!t.entryDoubt.empty() && t.noEntry == NoEntry::None) unc.push_back({ Ink::Amber, { "Entry: " + t.entryDoubt + "." }, "the entry doubt" });
+        // The finder's doubt about the entry on screen comes last (guide: "Entry: ..."), whatever the question is now (A8-39).
+        if (!t.entryDoubt.empty()) unc.push_back({ Ink::Amber, { "Entry: " + t.entryDoubt + "." }, "the entry doubt" });
     }
     e.uncertain = static_cast<int>(unc.size());
     for (size_t i = 0; i < unc.size() && i < 4; ++i) e.lines.push_back(unc[i]);
