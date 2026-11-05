@@ -107,7 +107,7 @@ def main():
             if any(narrow(a) for a in named) and len(named) > 1: counts["composed or narrow"] += 1; continue
             if any(makes(a) or (word(img, a) is not None and delayed(word(img, a)) and makes(a + 2)) for a in named):
                 counts["path value"] += 1; continue
-            for a in sorted({int(t["addr"], 16) for t in toks if t["b"] == t["e"]}):
+            for a in sorted(named if "--drawn" in sys.argv else {int(t["addr"], 16) for t in toks if t["b"] == t["e"]}):
                 w = word(img, a)
                 src = store_source(w) if w is not None else None
                 if not src: continue
