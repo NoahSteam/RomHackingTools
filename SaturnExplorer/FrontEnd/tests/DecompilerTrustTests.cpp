@@ -3151,7 +3151,8 @@ void RunProbe8()
         const ImVec2 c((a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f);
         bool found = false;
         std::string tip;
-        for (int i = 0; i < 90 && !found; ++i)
+        // A tooltip window is measured on its first frame and drawn whole from the next: read it until its text stops growing.
+        for (int i = 0; i < 120 && (!found || Norm(tip).size() < 20); ++i)
         {
             m.Frame(c, false);
             tip = drawn::TooltipText(&found);
@@ -3161,6 +3162,42 @@ void RunProbe8()
         enter(m);
         settle(m);
         show(m, "E10: Enter");
+    }
+    {
+        // E11: the box focused while A installs (the sync waits); 'zz' typed over it and Enter (refused); the focus goes. What does the box
+        // say next to the refusal?
+        MiniRig m;
+        live(m, cEntry + 4);
+        settle(m);
+        CHECK(focusBox(m));
+        m.regs[0].pc = aEntry + 4;
+        ++m.frame;
+        m.Idle(6);
+        CHECK(m.Settle());
+        show(m, "E11: focused, PC to A, A shown, box C");
+        TypeEntry(m, "zz");
+        settle(m);
+        show(m, "E11: 'zz' typed and Enter (refused), the focus gone");
+        m.regs[0].pc = cEntry + 4;
+        ++m.frame;
+        settle(m);
+        show(m, "E11: PC back in C, frame 3");
+        CHECK(focusBox(m));
+        enter(m);
+        settle(m);
+        show(m, "E11: Enter on the box as it now reads");
+    }
+    {
+        // E12: the same with the box not focused at the install (the control): 'zz' and Enter.
+        MiniRig m;
+        live(m, cEntry + 4);
+        settle(m);
+        m.regs[0].pc = aEntry + 4;
+        ++m.frame;
+        settle(m);
+        TypeEntry(m, "zz");
+        settle(m);
+        show(m, "E12 (control): A shown, 'zz' typed and Enter (refused)");
     }
 
     // The Volatile popup, drawn. The button and the popup's items are found by their drawn text.
@@ -4028,6 +4065,9 @@ std::string FollowExecute(FRig& r, FOp o, Rng& rng)
         r.provUnknown = false;
         r.refused = false;
         TypeEntry(r, Hex(entry));
+        // (area 8, round 8, A8-49) An entry the box takes (Enter on a text that parses) cancels the panel's pending sync (`mSyncEntryBox = false`):
+        // an install made while the box held the focus is not written over the text afterwards. The rig took the sync when the focus went.
+        if (const DecompileResult* s = r.panel.Shown()) r.lastShownEntry = s->requestedEntry;
         r.haveStopped = false;
         r.boxShowsShown = false;
         r.boxTarget = r.TargetProv();
@@ -4170,6 +4210,9 @@ std::string FollowExecute(FRig& r, FOp o, Rng& rng)
     case FOp::NotCode:
         if (!r.visible) return "(panel hidden: no entry box)";
         TypeEntry(r, "FFFFFFF0");
+        // (area 8, round 8, A8-49) An entry the box takes (Enter on a text that parses) cancels the panel's pending sync (`mSyncEntryBox = false`):
+        // an install made while the box held the focus is not written over the text afterwards. The rig took the sync when the focus went.
+        if (const DecompileResult* s = r.panel.Shown()) r.lastShownEntry = s->requestedEntry;
         r.tgt = FRig::Tgt::Entry;
         r.tgtAddr = 0xFFFFFFF0u;
         r.pinGuess = false;
@@ -4266,6 +4309,9 @@ std::string FollowExecute(FRig& r, FOp o, Rng& rng)
         r.Frame(ImVec2(1270, 710), false);
         ImGui::GetIO().AddKeyEvent(ImGuiKey_Enter, false);
         r.Frame(ImVec2(1270, 710), false);
+        // (area 8, round 8, A8-49) An entry the box takes (Enter on a text that parses) cancels the panel's pending sync (`mSyncEntryBox = false`):
+        // an install made while the box held the focus is not written over the text afterwards. The rig took the sync when the focus went.
+        if (const DecompileResult* s = r.panel.Shown()) r.lastShownEntry = s->requestedEntry;
         r.haveStopped = false;
         r.boxShowsShown = false;
         r.boxTarget = enter;
@@ -4513,6 +4559,7 @@ const char* const kFollowScriptPins[] = {
     "hold; edit; follow; release; refresh",                                // A8-30: pinned while the answer is held, then answered
     "pcc; focus; pca; enter",                                              // A8-42: Enter in the box that kept the focus while the output moved on
     "pcc; focus; pca; follow; focus; pcc; enter",                          // A8-42 (control: also passes with the fix reverted)
+    "hold; typet; focus; release; hold; typea; stop; focus",               // A8-49: the rig's sync after an Enter that cancelled it (round 8)
 };
 
 // (area 8 fixer, A8-36 to A8-39) Generated sequences with the evidence operations and Enter on the untouched box that failed with the fix
