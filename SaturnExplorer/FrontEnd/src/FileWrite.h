@@ -28,7 +28,7 @@ namespace sfe
 // short write, and the flush that happens inside the close.
 //
 // Normally staged: the bytes go to a sibling temporary and are renamed over 'path' once they
-// are safely on disk, so 'path' either holds the whole new file or is untouched. The staging
+// have been flushed to the device (fsync / FlushFileBuffers; the folder is synced after the rename on POSIX, A9-48), so 'path' either holds the whole new file or is untouched. The staging
 // is skipped when 'path' names something that is not a regular file (a device, a FIFO, a
 // directory): renaming over those would replace the thing itself rather than its contents,
 // which is never what a save meant. Such a target is written directly, and the close is still
@@ -103,14 +103,23 @@ public:
     bool Held() const { return mHeld; }
     std::string WhyNotHeld() const;   // empty when held
     static constexpr unsigned kWaitMs = 3000;
+    static constexpr unsigned kExitWaitMs = 10000;   // the bound once SetClosing(true) has been called (A9-46)
+    // Called when the application is shutting down: a waiting lock then waits up to kExitWaitMs, because a change refused now is lost
+    // with the window and the freeze costs nothing.
+    static void SetClosing(bool closing);
 
 private:
     std::string mPath;
+    unsigned mWaitMs = kWaitMs;
     int mError = 0;          // errno / GetLastError of the open or the lock
     bool mTimedOut = false;
     bool mHeld = false;
     intptr_t mHandle = -1;   // a POSIX descriptor, or a Windows HANDLE
 };
+
+// Tell the user something before the window goes, where the Log panel is no longer there to read: a native message box on Windows,
+// a line on stderr elsewhere. For a save refused at exit (A9-46).
+void NoticeAtExit(const std::string& text);
 
 // Remove the staging files "<path>.separt-<pid>-<n>" that a writer killed between its write and its rename left beside 'path'
 // (A9-37). Call it only while holding the lock that serialises the writers of 'path': then no live writer of that file has one.

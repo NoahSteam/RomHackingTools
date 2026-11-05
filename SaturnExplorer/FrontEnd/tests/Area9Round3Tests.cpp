@@ -129,14 +129,22 @@ void LettersOnlyBiosAddresses()
 // another user, or sudo, made) means the save runs unlocked, silently, and two instances lose each other's entries.
 int Hammer(const std::string& file, uint32_t base, int count)
 {
+    int refused = 0;
     AddressMap b, cur;
     for (int i = 0; i < count; ++i)
     {
         cur[base + i] = "n";
         std::string err;
-        if (!SaveStore(file, "t", std::string(), 1u << 20, b, cur, kClassify, kFormat, std::string(), &err)) return 2;
+        // A9-50: since A9-40 a waiter gives up after 3 s, so under load a legitimate save can be refused. As the product does, the change
+        // stays pending (base is untouched) and the next save writes it; only the last save must succeed, and then no entry is lost.
+        if (!SaveStore(file, "t", std::string(), 1u << 20, b, cur, kClassify, kFormat, std::string(), &err)) ++refused;
     }
-    return 0;
+    for (int tries = 0; tries < 20; ++tries)   // the final save, retried as the settings retry does
+    {
+        std::string err;
+        if (SaveStore(file, "t", std::string(), 1u << 20, b, cur, kClassify, kFormat, std::string(), &err)) { if (refused) std::printf("  note: a writer's save was refused %d time(s) by the bounded wait and carried by the next\n", refused); return 0; }
+    }
+    return 2;
 }
 size_t RunTwoWriters(const std::string& file, int count)
 {

@@ -203,7 +203,7 @@ bool Settings::Load(std::string* error)
     return true;
 }
 
-bool Settings::Save(std::string* error) const
+bool Settings::Save(std::string* error, bool wait) const
 {
     // Resolve the dir once (creating it), then derive the file path from it, rather
     // than re-resolving ConfigDir via FilePath().
@@ -213,10 +213,10 @@ bool Settings::Save(std::string* error) const
         if (error) *error = "The settings folder could not be found or created.";
         return false;
     }
-    return SaveTo(path, error);
+    return SaveTo(path, error, wait);
 }
 
-bool Settings::SaveTo(const std::string& path, std::string* error) const
+bool Settings::SaveTo(const std::string& path, std::string* error, bool wait) const
 {
     auto fail = [&](const std::string& why) { if (error) *error = why; return false; };
     const bool same = path == mLoadedPath;
@@ -234,7 +234,7 @@ bool Settings::SaveTo(const std::string& path, std::string* error) const
     if (same && !mRefusedWhy.empty())
         return fail("Settings: not saved, " + mRefusedWhy + " when it was loaded, and a save would replace it; this session's changes are kept in memory only");
     // The lock file lives beside the data: a lock on the file itself would be dropped by the rename that replaces it.
-    FileLock lock(path + ".lock");
+    FileLock lock(path + ".lock", wait);
     if (!lock.Held())
         return fail("Settings: not saved, " + lock.WhyNotHeld() + "; "
                     "saving without the lock could lose another instance's keys, so the file is left as it is and this session's changes are kept in memory only");

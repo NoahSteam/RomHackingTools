@@ -101,7 +101,7 @@ private:
     // emulator paths the installer records. LoadSettings runs in Initialize;
     // SaveSettings on Shutdown and whenever a persisted preference changes.
     void LoadSettings();
-    void SaveSettings();
+    bool SaveSettings(bool wait = true);   // false: the frame's try (no wait for the lock, A9-46); true if saved
     // Read every available memory region from the current source and hand a single
     // self-describing dump blob (.sedump) to the platform to save / download.
     void DumpMemory(IPlatform& platform);
@@ -119,7 +119,7 @@ private:
     // dialog picks the columns and memory; the job then runs a slice per frame under a progress
     // modal, and the finished text goes to the platform's save dialog.
     void DrawDumpSh2Modal(IPlatform& platform);
-    void SaveFunctionNames();
+    bool SaveFunctionNames();   // true if saved
     void BeginDumpSh2();
     void RenderFrameToTexture(IPlatform& platform);
     void BuildDefaultLayout(unsigned int dockspaceId);
