@@ -1330,6 +1330,17 @@ void TestArea7Round7()
         const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_37");
         CHECK(a.backWrong == 0 && a.Violations() == 0);
     }
+    // ...the same piece in the slot of an `rts` (`or r1,r3 ; mov r3,r0 ; rts ; mov.b r1,@r6`), where no branch ends the block and the
+    // fixer's rule for a conversion at its block's branch (which also moves the `bt/s` fixture's tokens) does not apply: only patch 0078
+    // puts `xRam26001008 = (char)in_r1;` at the slot. Without it the line begins at the `rts` 0x06009006.
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, { 0xD603, 0x231B, 0x6033, 0x000B, 0x2610, 0x0009, 0x0009, 0x0009, 0x2600, 0x1008 });
+        const Line* s = LineWith(r, "xRam26001008 = (char)in_r1;");
+        CHECK(s != nullptr);
+        if (s) CHECK(s->firstAddr == 0x06009008u && LineInstructions(*s) == (std::vector<uint32_t>{ 0x06009008u }));
+        const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_37 rts");
+        CHECK(a.Violations() == 0);
+    }
     // A7-34 (instrument), fixed by the area 7 fixer: constAtJoin took a number the engine folded as made by no instruction. A load that
     // reads back what a store before it wrote (grammar 1 seed 295, shrunk: `mov #2,r0 ; mov.l r0,@r7 ; L: mov.l @r7,r0 ; tst #1,r0 ; bf L
     // ; ...`): `iVar1 = 2;` is drawn at the poll's load 0x06009006, a join, and the oracle now reads the value the store forwarded
