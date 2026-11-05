@@ -15616,7 +15616,7 @@ An Entry target is never resolved again, so a function start recorded at the pin
 
 ## Area 8, round 6
 
-Branch `review/8-round6` from master `d6e08626` (area 8 round 5, clean, and the coordinator's A8-35). This round is an independent read on another model family. Round 5's conclusions were derived again here, not taken over. **No product code changed.** The trust test gained a probe, `RunProbe6`, run only with `SE_TRUST_PROBE6=1`, and the small rig gained a names generation (`namesGen`, 0 unless a probe renames). `Docs/Decompiler/tools/a8_round6/probe6.sh` was added. Filed: **A8-36 (P2)**, **A8-37 (P2)**, **A8-38 (P3)**, **A8-39 (P3)** and **A8-40 (P3, instrument)**. A8-32 stays at P3, and a note was added to its row. **The round is NOT CLEAN: A8-36 and A8-37 are new P2s.** Both follow from the pin A8-30's fix introduced: an Entry target that carries the finder's verdict. The rest of the panel still treats every Entry target as the user's typed entry, or as settled.
+Branch `review/8-round6` from master `d6e08626` (area 8 round 5, clean, and the coordinator's A8-35). This round is an independent read on another model family. Round 5's conclusions were derived again here, not taken over. **No product code changed.** The trust test gained a probe, `RunProbe6`, run only with `SE_TRUST_PROBE6=1`, and the small rig gained a names generation (`namesGen`, 0 unless a probe renames). `Docs/Decompiler/tools/a8_round6/probe6.sh` was added. Filed: **A8-36 (P2)**, **A8-37 (P2)**, **A8-38 (P3)**, **A8-39 (P3)**, **A8-40 (P3, instrument)** and **A8-41 (P3, instrument with a product note)**. A8-32 stays at P3, and a note was added to its row. **The round is NOT CLEAN: A8-36 and A8-37 are new P2s.** Both follow from the pin A8-30's fix introduced: an Entry target that carries the finder's verdict. The rest of the panel still treats every Entry target as the user's typed entry, or as settled.
 
 ### Attacks on the two fixes, from directions round 5 did not try
 
@@ -15650,6 +15650,10 @@ Probe case F: C named "foo", Follow PC on C+4, "(entry from symbol, 90%)". Follo
 * A8-38: probe cases C and D. With nothing found and nothing shown, the box shows `00000000`, and the label reads "(entry from user-set entry)" above the red "no code at 0x00000000: uncaptured memory at 0x00000000 (BIOS)".
 * A8-39: probe case H. The PC moves where no function is. The output shown keeps "(entry from rts scan, 60%)" and the stale badge but loses its Entry line, and the Copy marks only say stale. `mShownEntryDoubt` holds the doubt, but only the pin reads it. The model agrees with the panel (the entry doubt only when `noEntry == None`).
 
+### A8-41 (P3): the oracle forgets the runner's memo on a panel cache hit
+
+Mix 7 seed 210063 (with `SE_TRUST_HIDDEN_RENAME=1`) runs: a Refresh stalled past the budget (T "too large", memo recorded), then Enter on T, then a rename made and undone while hidden. Enter is not forced, so the panel installs the Ok answer of the same question from its cache. The model takes that for a run of the request and erases its memo. Shown again, the new names generation misses the panel's cache, and the runner's memo (keyed by the names' content) answers "too large". The model now holds no memo and fails it. The product side is P3: the panel's cache and the runner's memo key the names differently, so after a rename undone the panel shows "too large … use Refresh" in place of an Ok answer it holds for the same inputs. The text is true of the memo, and Refresh retries. Routed to area 1, whose oracle (`TooLargeExcused`, `CheckInstalls`) it is.
+
 ### What was run (RelWithDebInfo, gcc 13, Ninja, `-j2`; every run under `ulimit -v 3500000` and `timeout`; hover on unless said)
 
 | Run | Result |
@@ -15659,7 +15663,7 @@ Probe case F: C named "foo", Follow PC on C+4, "(entry from symbol, 90%)". Follo
 | the same CPU-weighted (`SE_TRUST_FOLLOW_CPU=1`), hover on, seeds 175000 to 175177 and 190000 to 191353 | 8,001 + 60,041 (mix 8), 8,001 + 60,041 (mix 9), 0 failing |
 | mixes 8 and 9 at 537 px, hover on, seeds 200000 to 200450 (mix 9 CPU-weighted) | 20,039 each, 0 failing |
 | Follow PC total | **312,328 operations, 0 failing** |
-MIXES_ROW
+| mixes 0, 1, 3 to 7 with `SE_TRUST_HIDDEN_RENAME=1`, hover on, seeds from 210000 | **35,256 operations** (5,022, 5,043, 5,014, 5,052, 5,053, 5,001, 5,071), 415 renames made and undone while hidden. **1 failing: mix 7 seed 210063**. The output was kept before any rerun. It fails in three of three runs, so it is deterministic: **A8-41** (the oracle's too-large memo; `SE_TRUST_SKIP=50` and `SE_TRUST_SKIP=53,54` pass) |
 | fourteen directed Follow scripts on A8-29 (above) | all `ok` |
 | `SE_TRUST_PROBE6=1` (`probe6.sh`) | reproduces A8-36 (A, I; B), A8-37 (F, G), A8-38 (C, D), A8-39 (H) and A8-32's variant (E); not in the default run |
 CTEST_ROW
@@ -15669,4 +15673,4 @@ The generated runs do not reach the new findings, and cannot: the Follow rig has
 ### Routed
 
 * Area 4: nothing. The finder's texts and verdicts are right. A8-37 is the panel keeping an old verdict, not the finder giving a wrong one.
-* Area 1: nothing. Enter on the pinned entry asks the same `Question`, and the cache and the stale rule are right about it. What changes is only the verdict the label and the Entry line are drawn from.
+* Area 1: **A8-41**. The model in `DecompilerModelTests.cpp` erases a starved signature on a panel cache hit, and the panel's cache and the runner's memo key the names differently (generation against content). Otherwise nothing: Enter on the pinned entry asks the same `Question`, and the cache and the stale rule are right about it. What changes is only the verdict the label and the Entry line are drawn from.
