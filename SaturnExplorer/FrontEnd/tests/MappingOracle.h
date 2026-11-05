@@ -94,6 +94,13 @@ struct MappingAudit
     int copyLines = 0, copyStoreMissing = 0, copyFrameMissing = 0, copyGlobalMissing = 0;
     int copyAtBranch = 0, copyAtCall = 0, copyAtReturn = 0, copyAtLoad = 0, copyAtOther = 0;
     int copyUnconnected = 0;   // ...not counted in copyStoreMissing: no store of the variable on a path through the line (a register's merge)
+    // Area 7 fixer (A7-22, A7-23). What a store wrote and what made a number, read from the instruction words (RegisterBefore).
+    int storeValueOther = 0;   // a line `V = X;` that names a store of V whose register holds, on every path into it, a value the line does not show
+                               // (another parameter or number; a parameter where the line shows a register variable): a violation (A7-23)
+    int copyOtherValue = 0;    // ...not counted in copyStoreMissing: every store of the variable writes a value the line does not show (counted)
+    int constLines = 0;        // lines `V = <number>;` drawn at one instruction (counted)
+    int constAtJoin = 0;       // ...drawn at a join's first instruction (a target of the function's own branches) that makes no number, or another
+                               // one: the engine's collapsed MULTIEQUAL, at its block's start (A7-22, a violation)
     std::vector<std::string> problems;   // the first few of each kind, "kind: where: what"
 
     void Add(const MappingAudit& o)
@@ -112,6 +119,7 @@ struct MappingAudit
         copyLines += o.copyLines; copyStoreMissing += o.copyStoreMissing; copyFrameMissing += o.copyFrameMissing; copyGlobalMissing += o.copyGlobalMissing;
         copyAtBranch += o.copyAtBranch; copyAtCall += o.copyAtCall; copyAtReturn += o.copyAtReturn; copyAtLoad += o.copyAtLoad; copyAtOther += o.copyAtOther;
         copyUnconnected += o.copyUnconnected;
+        storeValueOther += o.storeValueOther; copyOtherValue += o.copyOtherValue; constLines += o.constLines; constAtJoin += o.constAtJoin;
         for (const std::string& p : o.problems) Keep(p);
     }
     // Three examples of each kind of problem are kept; the prefix up to the first ':' is the kind.
@@ -126,7 +134,7 @@ struct MappingAudit
     int Violations() const
     {
         return odd + outside + notInsn + firstAddrWrong + badRange + callWithoutCall + unmarked + misnamed + accessUnmapped + callUnmapped + callGoneUnsaid + roundTrip +
-               accessAtBranch + frameStoreMissing + backWrong + copyAtCall + copyAtReturn + copyAtBranch + copyAtOther;
+               accessAtBranch + frameStoreMissing + backWrong + copyAtCall + copyAtReturn + copyAtBranch + copyAtOther + storeValueOther + constAtJoin;
     }
 };
 
@@ -292,6 +300,141 @@ inline std::string MappingHex(uint32_t v)
     char b[16];
     std::snprintf(b, sizeof b, "%08X", v);
     return b;
+}
+
+// Area 7 fixer (A7-22, A7-23): what a register holds before an instruction, read from the instruction words alone (the oracle does not
+// ask the product). Every path into the instruction is followed back -- by fall-through, from the function's own branches to it (from a
+// delayed branch's slot), across a delayed branch to its slot -- through `mov Rm,Rn` to a `mov #imm,Rn` (a number) or to the entry,
+// where r4 to r7 are the parameters. Any other write of the register, a call returning between (r0 to r7), a path out of the body or
+// past the bound, or paths that disagree: unknown.
+struct WordValue
+{
+    enum Kind { Unknown, Number, Param } kind = Unknown;
+    int64_t value = 0;   // the number, or the parameter's index (param_1 is r4)
+    bool operator==(const WordValue& o) const { return kind == o.kind && value == o.value; }
+};
+// The register an instruction stores, and how many bytes; -1 when it is no store of a register.
+inline int StoredRegister(uint16_t w, int& size)
+{
+    const int hi = w >> 12, lo = w & 0xF, m = (w >> 4) & 0xF;
+    if (hi == 0x2 && lo <= 2) return size = 1 << lo, m;
+    if (hi == 0x2 && lo >= 4 && lo <= 6) return size = 1 << (lo - 4), m;
+    if (hi == 0x1) return size = 4, m;
+    if (hi == 0x0 && lo >= 4 && lo <= 6) return size = 1 << (lo - 4), m;
+    if ((w >> 8) == 0x80 || (w >> 8) == 0xC0) return size = 1, 0;
+    if ((w >> 8) == 0x81 || (w >> 8) == 0xC1) return size = 2, 0;
+    if ((w >> 8) == 0xC2) return size = 4, 0;
+    return -1;
+}
+// The general registers an instruction writes (its last operand when that is a register and the instruction is no compare or test, a
+// post-increment's or pre-decrement's register).
+inline std::set<int> WrittenRegisters(const sfe::DisassembledInstruction& d)
+{
+    std::set<int> out;
+    const std::string& ops = d.Operands;
+    for (size_t p = ops.find('@'); p != std::string::npos; p = ops.find('@', p + 1))
+    {
+        const bool pre = p + 1 < ops.size() && ops[p + 1] == '-';
+        const size_t r = p + (pre ? 2 : 1);
+        if (r < ops.size() && ops[r] == 'r' && r + 1 < ops.size() && std::isdigit(static_cast<unsigned char>(ops[r + 1])))
+        {
+            size_t e = r + 1;
+            while (e < ops.size() && std::isdigit(static_cast<unsigned char>(ops[e]))) ++e;
+            if (pre || (e < ops.size() && ops[e] == '+')) out.insert(std::atoi(ops.c_str() + r + 1));
+        }
+    }
+    const size_t comma = ops.rfind(',');
+    const std::string last = comma == std::string::npos ? ops : ops.substr(comma + 1);
+    const std::string& mn = d.Mnemonic;
+    const bool reads = mn.compare(0, 4, "cmp/") == 0 || mn == "tst" || mn == "div0s" || mn.compare(0, 3, "mul") == 0 || mn.compare(0, 4, "dmul") == 0 ||
+                       mn.compare(0, 3, "ldc") == 0 || mn.compare(0, 3, "lds") == 0 || d.IsBranch;
+    if (!reads && last.size() >= 2 && last[0] == 'r' && last.find_first_not_of("0123456789", 1) == std::string::npos)
+        out.insert(std::atoi(last.c_str() + 1));
+    return out;
+}
+// The function's own branches, by target (not its calls): the instruction each comes from (a delayed branch's slot).
+inline std::map<uint32_t, std::vector<uint32_t>> BranchSources(const sfe::decomp::DecompileResult& r, const std::function<bool(uint32_t, uint16_t&)>& word)
+{
+    std::map<uint32_t, std::vector<uint32_t>> into;
+    for (const auto& range : r.body)
+        for (uint32_t p = range.first; p < range.second; p += 2)
+        {
+            uint16_t w = 0;
+            if (!word(p, w)) continue;
+            const sfe::DisassembledInstruction d = sfe::Sh2Decode(p, w);
+            if (d.IsValid && d.HasBranchTarget && !d.IsCall) into[d.BranchTarget].push_back(d.HasDelaySlot ? p + 2 : p);
+        }
+    return into;
+}
+inline WordValue RegisterBefore(const sfe::decomp::DecompileResult& r, const std::function<bool(uint32_t, uint16_t&)>& word,
+                                const std::map<uint32_t, std::vector<uint32_t>>& into, uint32_t at, int reg)
+{
+    const auto decode = [&](uint32_t p, sfe::DisassembledInstruction& d) {
+        uint16_t w = 0;
+        if (!r.InBody(p) || !word(p, w)) return false;
+        d = sfe::Sh2Decode(p, w);
+        return d.IsValid;
+    };
+    WordValue result;
+    bool any = false;
+    std::set<std::pair<uint32_t, int>> seen;
+    std::vector<std::pair<uint32_t, int>> todo = { { at, reg } };
+    int steps = 0;
+    const auto give = [&](const WordValue& v) {
+        if (v.kind == WordValue::Unknown || (any && !(v == result))) return false;
+        result = v;
+        any = true;
+        return true;
+    };
+    while (!todo.empty())
+    {
+        const std::pair<uint32_t, int> st = todo.back();
+        todo.pop_back();
+        if (!seen.insert(st).second) continue;
+        if (++steps > 4000) return WordValue();
+        const uint32_t a = st.first;
+        const int rg = st.second;
+        std::vector<uint32_t> preds;
+        sfe::DisassembledInstruction prev, prev2;
+        if (decode(a - 2, prev))
+        {
+            // (after the slot of an unconditional delayed branch, only a branch reaches `a`)
+            const bool afterJump = decode(a - 4, prev2) && prev2.HasDelaySlot && !prev2.IsConditional && !prev2.IsCall;
+            if (!afterJump) preds.push_back(a - 2);
+        }
+        const auto in = into.find(a);
+        if (in != into.end()) preds.insert(preds.end(), in->second.begin(), in->second.end());
+        if (a == r.entry)
+        {
+            if (!(rg >= 4 && rg <= 7 && give(WordValue{ WordValue::Param, rg - 3 }))) return WordValue();
+            continue;
+        }
+        if (preds.empty()) return WordValue();
+        for (uint32_t p : preds)
+        {
+            sfe::DisassembledInstruction d;
+            if (!decode(p, d)) return WordValue();
+            // a call returned between its slot and `a`: r0 to r7 are the callee's
+            sfe::DisassembledInstruction call;
+            if (p + 2 == a && decode(p - 2, call) && call.IsCall && call.HasDelaySlot && rg <= 7) return WordValue();
+            if (d.IsCall && !d.HasDelaySlot && rg <= 7) return WordValue();
+            uint16_t w = 0;
+            word(p, w);
+            if ((w >> 12) == 0xE && ((w >> 8) & 0xF) == rg)
+            {
+                if (!give(WordValue{ WordValue::Number, static_cast<int8_t>(w & 0xFF) })) return WordValue();
+                continue;
+            }
+            if ((w >> 12) == 0x6 && (w & 0xF) == 0x3 && ((w >> 8) & 0xF) == rg)
+            {
+                todo.emplace_back(p, (w >> 4) & 0xF);
+                continue;
+            }
+            if (WrittenRegisters(d).count(rg)) return WordValue();
+            todo.emplace_back(p, rg);
+        }
+    }
+    return any ? result : WordValue();
 }
 
 // 'word' reads the 16-bit instruction word at a canonical address; false when not there.
@@ -599,6 +742,8 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
             }
     }
     // A7-19 (area 7 round 3), counted: a bare value assigned to a frame local or a global, at an instruction that does not write it.
+    bool haveSources = false;
+    std::map<uint32_t, std::vector<uint32_t>> sources;
     {
         std::vector<const AccessFate*> folded;
         for (const AccessFate& f : r.accessFates)
@@ -667,6 +812,65 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                 }
                 if (candidates.empty()) continue;
                 ++a.copyLines;
+                // A7-23: what the line shows, against what the stores it names wrote. A number or a parameter is a value the words can
+                // give; a register variable is no parameter (a variable that holds a parameter's input is named after it).
+                WordValue shownValue;
+                const std::string shownText = text.substr(valueBegin, v - valueBegin);
+                const bool registerVariable = !number && shownText.find("Var") != std::string::npos &&
+                                              shownText.find_first_not_of("abcdefghijklmnopqrstuvwxyz") == shownText.find("Var") &&
+                                              shownText.find("Var") > 0 && shownText.size() > shownText.find("Var") + 3 &&
+                                              shownText.find_first_not_of("0123456789", shownText.find("Var") + 3) == std::string::npos;
+                if (number)
+                {
+                    shownValue.kind = WordValue::Number;
+                    shownValue.value = static_cast<int64_t>(std::strtoull(shownText.c_str(), nullptr, 0));
+                    if (valueBegin > 0 && text[valueBegin - 1] == '-') shownValue.value = -shownValue.value;
+                }
+                else if (shownText.compare(0, 6, "param_") == 0 && shownText.size() > 6 && shownText.find_first_not_of("0123456789", 6) == std::string::npos)
+                {
+                    shownValue.kind = WordValue::Param;
+                    shownValue.value = std::atoi(shownText.c_str() + 6);
+                }
+                std::map<uint32_t, int> storeSize;
+                for (const AccessFate* f : folded)
+                    if (candidates.count(f->insn)) storeSize[f->insn] = std::max(storeSize[f->insn], static_cast<int>(f->size));
+                const auto writesOther = [&](uint32_t store, bool composed) {
+                    uint16_t w = 0;
+                    int size = 0;
+                    if (!word(store, w)) return false;
+                    const int reg = StoredRegister(w, size);
+                    if (reg < 0) return false;
+                    if (!haveSources)
+                    {
+                        sources = BranchSources(r, word);
+                        haveSources = true;
+                    }
+                    const WordValue got = RegisterBefore(r, word, sources, store, reg);
+                    if (got.kind == WordValue::Unknown) return false;
+                    if (shownValue.kind == WordValue::Param) return !(got == shownValue);
+                    if (shownValue.kind == WordValue::Number)
+                    {
+                        if (got.kind == WordValue::Param) return true;
+                        if (composed) return false;   // (a number made of a word and a narrower store: each writes some of its bytes)
+                        const uint64_t mask = size >= 8 ? ~0ull : (1ull << (8 * size)) - 1;
+                        return ((static_cast<uint64_t>(got.value) ^ static_cast<uint64_t>(shownValue.value)) & mask) != 0;
+                    }
+                    return registerVariable && got.kind == WordValue::Param;
+                };
+                {
+                    std::set<uint32_t> namedStores;
+                    bool narrow = false;
+                    for (const Token& t : r.lines[li].tokens)
+                        if (t.addr && candidates.count(t.addr) && namedStores.insert(t.addr).second) narrow = narrow || storeSize[t.addr] < 4;
+                    for (uint32_t st : namedStores)
+                        if (writesOther(st, narrow && namedStores.size() > 1))
+                        {
+                            ++a.storeValueOther;
+                            problem("store-value", "line " + std::to_string(li) + " '" + text + "' names the store at " + MappingHex(st) +
+                                                       ", whose register holds another value than the line shows");
+                            break;
+                        }
+                }
                 bool named = false, atBranch = false, atCall = false, atReturn = false, atLoad = false;
                 for (const Token& t : r.lines[li].tokens)
                 {
@@ -686,6 +890,24 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     if (cast && (d.Mnemonic.compare(0, 4, "exts") == 0 || d.Mnemonic.compare(0, 4, "extu") == 0)) named = true;
                 }
                 if (named) continue;
+                // (every store of the variable writes a value the line does not show: a register the engine merged under the variable's
+                // name, which no store makes, A7-21 and A7-23. Counted apart.)
+                {
+                    std::set<int> kept;
+                    bool any = false;
+                    for (const AccessFate* f : folded)
+                        if (candidates.count(f->insn) && f->frame == frame && !writesOther(f->insn, false))
+                        {
+                            any = true;
+                            kept.insert(f->origBlock);
+                        }
+                    if (!any)
+                    {
+                        ++a.copyOtherValue;
+                        continue;
+                    }
+                    storeBlocks = kept;
+                }
                 // (no store of the variable is on a path through the line, in the flow as first followed: the variable is a register the
                 // engine merged under the variable's name, as the value a return reads -- a merge copy of a register variable, which has
                 // no store to name. Counted apart.)
@@ -724,6 +946,87 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                 if (atLoad && !atCall && !atReturn && !atBranch) a.Keep("copy-store (counted): " + where + ": " + what);
                 else problem("copy-store", what);
             }
+    }
+    // A7-22 (the area 7 fixer): a number line drawn at the first instruction of a join that does not make the number. When every path into
+    // a block sets a register to one number, the engine makes the MULTIEQUAL a COPY with the block's address; a line that names that
+    // instruction names one that neither makes nor computes its value. As tools/a7_round4/const_at_other.py --join counts them: a line
+    // `V = <number>;` with one drawn instruction, a target of the function's own bt/bf/bt/s/bf/s/bra/bsr (the words from the entry to its
+    // highest token), that is no `mov #imm`, literal load, store, call or branch, or is a `mov #imm` or literal load of another number.
+    {
+        uint32_t highest = 0;
+        for (const Line& l : r.lines)
+            for (const Token& t : l.tokens) highest = std::max(highest, t.addr);
+        std::set<uint32_t> targets;
+        for (uint32_t p = r.entry; p <= highest && highest - r.entry < 0x100000u; p += 2)
+        {
+            uint16_t w = 0;
+            if (!word(p, w)) continue;
+            if ((w >> 8) == 0x89 || (w >> 8) == 0x8B || (w >> 8) == 0x8D || (w >> 8) == 0x8F)
+                targets.insert(p + 4 + 2 * static_cast<uint32_t>(static_cast<int32_t>(static_cast<int8_t>(w & 0xFF))));
+            else if ((w >> 12) == 0xA || (w >> 12) == 0xB)
+            {
+                const int32_t d = (w & 0x800) ? static_cast<int32_t>(w & 0xFFF) - 0x1000 : static_cast<int32_t>(w & 0xFFF);
+                targets.insert(p + 4 + 2 * static_cast<uint32_t>(d));
+            }
+        }
+        // the value a `mov #imm`, `mov.w @(disp,pc)` or `mov.l @(disp,pc)` gives; false when there is none
+        const auto made = [&](uint32_t p, uint16_t w, uint32_t& value) {
+            uint16_t hi = 0, lo = 0;
+            if ((w >> 12) == 0xE) return value = static_cast<uint32_t>(static_cast<int32_t>(static_cast<int8_t>(w & 0xFF))), true;
+            if ((w >> 12) == 0x9 && word(p + 4 + (w & 0xFFu) * 2, lo)) return value = static_cast<uint32_t>(static_cast<int32_t>(static_cast<int16_t>(lo))), true;
+            const uint32_t q = (p & ~3u) + 4 + (w & 0xFFu) * 4;
+            if ((w >> 12) == 0xD && word(q, hi) && word(q + 2, lo)) return value = static_cast<uint32_t>(hi) << 16 | lo, true;
+            return false;
+        };
+        for (size_t li = 0; li < r.lines.size(); ++li)
+        {
+            const std::string& text = r.lines[li].text;
+            size_t q = text.find_first_not_of(' ');
+            if (q == std::string::npos || !(std::isalpha(static_cast<unsigned char>(text[q])) || text[q] == '_')) continue;
+            while (q < text.size() && (std::isalnum(static_cast<unsigned char>(text[q])) || text[q] == '_' || text[q] == '.')) ++q;
+            if (text.compare(q, 3, " = ") != 0) continue;
+            q += 3;
+            if (q < text.size() && text[q] == '(')
+            {
+                const size_t close = text.find(')', q);
+                if (close == std::string::npos || text.find_first_not_of("abcdefghijklmnopqrstuvwxyz0123456789 ", q + 1) != close) continue;
+                q = close + 1;
+            }
+            const size_t end = text.size() - 1;
+            if (text.empty() || text[end] != ';' || end <= q) continue;
+            const std::string value = text.substr(q, end - q);
+            uint32_t want = 0;
+            if (value == "true" || value == "false") want = value == "true" ? 1u : 0u;
+            else if (value.size() == 6 && value.compare(0, 3, "'\\x") == 0 && value[5] == '\'') want = static_cast<uint32_t>(std::strtoul(value.substr(3, 2).c_str(), nullptr, 16));
+            else if (value.size() == 3 && value[0] == '\'' && value[2] == '\'') want = static_cast<unsigned char>(value[1]);
+            else
+            {
+                const size_t digits = value[0] == '-' ? 1 : 0;
+                if (digits >= value.size() || !std::isdigit(static_cast<unsigned char>(value[digits]))) continue;
+                const bool hex = value.compare(digits, 2, "0x") == 0;
+                if (value.find_first_not_of(hex ? "0123456789abcdef" : "0123456789", digits + (hex ? 2 : 0)) != std::string::npos) continue;
+                want = static_cast<uint32_t>(std::strtoull(value.c_str() + digits, nullptr, 0));
+                if (digits) want = 0u - want;
+            }
+            std::set<uint32_t> drawn;
+            for (const Token& t : r.lines[li].tokens)
+                if (t.addr && t.begin < t.end) drawn.insert(t.addr);
+            if (drawn.size() != 1) continue;
+            ++a.constLines;
+            const uint32_t at = *drawn.begin();
+            uint16_t w = 0;
+            if (!targets.count(at) || !word(at, w)) continue;
+            const sfe::DisassembledInstruction d = sfe::Sh2Decode(at, w);
+            const MemoryShape m = ShapeOf(d);
+            const bool control = d.IsBranch || d.IsCall || d.Mnemonic == "rts" || d.Mnemonic == "rte";
+            const bool numberInsn = (w >> 12) == 0xE || (w >> 12) == 0x9 || (w >> 12) == 0xD;
+            const bool makes = numberInsn || (d.Mnemonic.compare(0, 3, "mov") == 0 && m.store) || control;
+            uint32_t got = 0;
+            if (makes && !(numberInsn && made(at, w, got) && got != want)) continue;
+            ++a.constAtJoin;
+            problem("const-join", "line " + std::to_string(li) + " '" + text + "' is drawn at " + MappingHex(at) + " (" + d.Mnemonic + " " + d.Operands +
+                                      "), the first instruction of a join, which does not make the number");
+        }
     }
     // Coverage of the body: which instructions no token carries, by kind.
     for (const auto& range : r.body)
@@ -855,6 +1158,10 @@ inline void PrintMappingAudit(const MappingAudit& a, const char* label)
                 "register's name is a load): counted); %d more have no store of the variable on a path through them (a register merged under its name, counted)\n",
                 label, a.copyLines, a.copyStoreMissing, a.copyFrameMissing, a.copyGlobalMissing, a.copyAtCall, a.copyAtReturn, a.copyAtBranch, a.copyAtOther, a.copyAtLoad,
                 a.copyUnconnected);
+    std::printf("  mapping (%s): %d lines name a store whose register holds another value than they show (A7-23, a violation); %d lines assign a bare value "
+                "every store of the variable writes another value of (a register merged under its name, counted); %d number lines drawn at one "
+                "instruction, %d of them at a join's first instruction that does not make the number (A7-22, a violation)\n",
+                label, a.storeValueOther, a.copyOtherValue, a.constLines, a.constAtJoin);
     for (const std::string& p : a.problems) std::printf("    %s\n", p.c_str());
 }
 

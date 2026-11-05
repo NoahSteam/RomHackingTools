@@ -4478,6 +4478,27 @@ namespace
 // blocks' edges. The final blocks are joined (a block with one way out into one with one way in),
 // split and copied, so the order two accesses are made in is read from here, not from op ids or
 // addresses (review of 0e3cd12: both were wrong on joined blocks).
+// A7-22, A7-23: one varnode of the flow's p-code, by its storage (the flow's ops are gone by the time the text is printed).
+struct FlowVn
+{
+    const ghidra::AddrSpace* space = nullptr;
+    ghidra::uintb offset = 0;
+    ghidra::int4 size = 0;
+    bool Constant() const { return space && space->getType() == ghidra::IPTR_CONSTANT; }
+};
+// ...and one op: what it writes, from what, at which instruction (InstructionOf), and the word a load of a constant address reads.
+struct FlowOp
+{
+    uint32_t insn = 0;
+    ghidra::OpCode code = ghidra::CPUI_COPY;
+    bool hasOut = false;
+    FlowVn out;
+    FlowVn in[3];
+    int numIn = 0;
+    bool literal = false;   // a LOAD of a constant address whose word the image has: `value`
+    uint64_t value = 0;
+};
+
 struct FlowRecord
 {
     std::map<ghidra::uintm, std::pair<int, uint32_t>> ops;   // op time -> (block, position)
@@ -4492,6 +4513,12 @@ struct FlowRecord
     std::set<uint32_t> callInsns;
     std::map<uint32_t, std::pair<int, uint32_t>> insnBlock;   // A7-19: the block of each instruction and the position of its last op there
     std::vector<std::pair<uint32_t, uint32_t>> ranges;        // ...and each block's lowest and highest instruction (canonical)
+    // A7-22, A7-23: every op of the flow by block, in order (the positions of `ops`), each block's predecessors, the position of each
+    // instruction's first op, and the first time no flow op has (an op with a later time was made by the actions: a MULTIEQUAL, a copy).
+    std::vector<std::vector<FlowOp>> blockOps;
+    std::vector<std::vector<int>> predecessors;
+    std::map<uint32_t, std::pair<int, uint32_t>> insnFirst;
+    ghidra::uintm opsEnd = 0;
 };
 
 FlowRecord RecordFlow(const ghidra::Funcdata& fd, const std::function<uint32_t(uint32_t)>& canonicalOf)
@@ -4499,6 +4526,8 @@ FlowRecord RecordFlow(const ghidra::Funcdata& fd, const std::function<uint32_t(u
     FlowRecord f;
     const ghidra::BlockGraph& graph = fd.getBasicBlocks();
     f.successors.resize(static_cast<size_t>(graph.getSize()));
+    f.predecessors.resize(static_cast<size_t>(graph.getSize()));
+    f.blockOps.resize(static_cast<size_t>(graph.getSize()));
     f.ranges.assign(static_cast<size_t>(graph.getSize()), std::make_pair(0u, 0u));
     // The blocks have no indices of their own yet (the engine numbers them later): by position.
     std::map<const ghidra::FlowBlock*, int> indexOf;
@@ -4518,6 +4547,48 @@ FlowRecord RecordFlow(const ghidra::Funcdata& fd, const std::function<uint32_t(u
         {
             const ghidra::PcodeOp* o = *it;
             const ghidra::OpCode c = o->code();
+            {
+                FlowOp op;
+                op.insn = InstructionOf(o);
+                op.code = c;
+                const auto storage = [](const ghidra::Varnode* v) {
+                    FlowVn x;
+                    if (v)
+                    {
+                        x.space = v->getSpace();
+                        x.offset = v->getOffset();
+                        x.size = v->getSize();
+                    }
+                    return x;
+                };
+                if (o->getOut())
+                {
+                    op.hasOut = true;
+                    op.out = storage(o->getOut());
+                }
+                op.numIn = std::min(3, static_cast<int>(o->numInput()));
+                for (int k = 0; k < op.numIn; ++k) op.in[k] = storage(o->getIn(k));
+                // (a literal: the word a load of a constant address reads, as the engine folds a read-only one)
+                if (c == ghidra::CPUI_LOAD && o->numInput() == 2 && o->getIn(1)->isConstant() && o->getOut() && o->getOut()->getSize() <= 4)
+                {
+                    try
+                    {
+                        ghidra::uint1 buf[4] = { 0, 0, 0, 0 };
+                        const ghidra::int4 n = o->getOut()->getSize();
+                        fd.getArch()->loader->loadFill(buf, n, ghidra::Address(o->getIn(0)->getSpaceFromConst(), o->getIn(1)->getOffset()));
+                        uint64_t v = 0;
+                        for (ghidra::int4 k = 0; k < n; ++k) v = v << 8 | buf[k];
+                        op.literal = true;
+                        op.value = v;
+                    }
+                    catch (...)
+                    {
+                    }
+                }
+                f.blockOps[static_cast<size_t>(i)].push_back(op);
+                f.insnFirst.emplace(op.insn, std::make_pair(static_cast<int>(i), pos));
+                f.opsEnd = std::max(f.opsEnd, o->getTime() + 1);
+            }
             {
                 auto in = f.insnBlock.emplace(InstructionOf(o), std::make_pair(static_cast<int>(i), pos));
                 if (!in.second && in.first->second.first == static_cast<int>(i)) in.first->second.second = pos;
@@ -4539,6 +4610,9 @@ FlowRecord RecordFlow(const ghidra::Funcdata& fd, const std::function<uint32_t(u
                     .emplace_back(i, pos);
         }
     }
+    for (size_t i = 0; i < f.successors.size(); ++i)
+        for (int n : f.successors[i])
+            if (n >= 0 && static_cast<size_t>(n) < f.predecessors.size()) f.predecessors[static_cast<size_t>(n)].push_back(static_cast<int>(i));
     return f;
 }
 
@@ -4771,6 +4845,308 @@ std::vector<MemoryAccess> Accesses(const ghidra::Funcdata& fd,
     return out;
 }
 
+// A7-22, A7-23: what a value of the final p-code is, as the flow can be asked about it. A store the engine folded is gone from the
+// final p-code, and so is the varnode it stored; the flow's ops (FlowRecord::blockOps) still say what the stored register held. A
+// statement's value is described by what it copies, merges or extends, back to the ops that compute it: those ops' instructions, the
+// numbers, and the function's inputs it is made of (FinalValues). A store is the statement's when every path of the flow into the store
+// reaches, back from the register it stores, one of those (FlowValueIs): the store wrote the statement's value. A store of another value
+// (a register the engine merged under the variable's name, A7-21 and A7-23) reaches none of them.
+struct ValueSet
+{
+    std::set<uint32_t> insns;                           // the instructions of the ops the value is, or copies, merges or extends
+    std::vector<std::pair<uint64_t, ghidra::int4>> numbers;
+    std::vector<FlowVn> inputs;                         // the function's inputs it is (a parameter's register)
+    std::set<ghidra::uintm> times;                      // ...and those ops' times (a store's own COPY, alive)
+    bool Has(uint64_t value, ghidra::int4 size) const
+    {
+        for (const auto& n : numbers)
+        {
+            const ghidra::int4 bytes = std::min(std::max(size, 1), std::max(n.second, 1));
+            const uint64_t mask = bytes >= 8 ? ~0ull : (1ull << (8 * bytes)) - 1;
+            if (((n.first ^ value) & mask) == 0) return true;
+        }
+        return false;
+    }
+    bool HasInput(const FlowVn& v) const
+    {
+        for (const FlowVn& x : inputs)
+            if (x.space == v.space && x.offset < v.offset + static_cast<ghidra::uintb>(v.size) && v.offset < x.offset + static_cast<ghidra::uintb>(x.size))
+                return true;
+        return false;
+    }
+};
+
+void FinalValues(const ghidra::Varnode* vn, ValueSet& s, std::set<const ghidra::Varnode*>& seen)
+{
+    if (!vn || seen.size() > 512 || !seen.insert(vn).second) return;
+    if (vn->isConstant())
+    {
+        s.numbers.emplace_back(static_cast<uint64_t>(vn->getOffset()), vn->getSize());
+        return;
+    }
+    if (vn->isInput())
+    {
+        FlowVn x;
+        x.space = vn->getSpace();
+        x.offset = vn->getOffset();
+        x.size = vn->getSize();
+        s.inputs.push_back(x);
+        return;
+    }
+    if (!vn->isWritten()) return;
+    const ghidra::PcodeOp* d = vn->getDef();
+    s.insns.insert(InstructionOf(d));
+    s.times.insert(d->getTime());
+    switch (d->code())
+    {
+    case ghidra::CPUI_COPY:
+    case ghidra::CPUI_INT_ZEXT:
+    case ghidra::CPUI_INT_SEXT:
+    case ghidra::CPUI_SUBPIECE:
+    case ghidra::CPUI_CAST:
+        FinalValues(d->getIn(0), s, seen);
+        break;
+    case ghidra::CPUI_MULTIEQUAL:
+    case ghidra::CPUI_PIECE:
+        for (ghidra::int4 i = 0; i < d->numInput(); ++i) FinalValues(d->getIn(i), s, seen);
+        break;
+    case ghidra::CPUI_INDIRECT:
+    {
+        // (the value before the op that may change it, or the op's: a call's effect)
+        const ghidra::PcodeOp* by = ghidra::PcodeOp::getOpFromConst(d->getIn(1)->getAddr());
+        if (by) s.insns.insert(InstructionOf(by));
+        FinalValues(d->getIn(0), s, seen);
+        break;
+    }
+    default:
+        break;
+    }
+}
+
+// The value a printed statement shows: what its input copies (a COPY), or the op itself and what it extends (a conversion), or the op.
+ValueSet StatementValues(const ghidra::PcodeOp* o)
+{
+    ValueSet s;
+    std::set<const ghidra::Varnode*> seen;
+    const ghidra::OpCode c = o->code();
+    if (c != ghidra::CPUI_COPY) s.insns.insert(InstructionOf(o));
+    if (c == ghidra::CPUI_COPY || c == ghidra::CPUI_INT_ZEXT || c == ghidra::CPUI_INT_SEXT || c == ghidra::CPUI_SUBPIECE || c == ghidra::CPUI_CAST ||
+        c == ghidra::CPUI_INDIRECT)
+        FinalValues(o->getIn(0), s, seen);
+    else if (c == ghidra::CPUI_MULTIEQUAL || c == ghidra::CPUI_PIECE)
+        for (ghidra::int4 i = 0; i < o->numInput(); ++i) FinalValues(o->getIn(i), s, seen);
+    return s;
+}
+
+// Does every path of the flow into op `pos` of flow block `blk` find, going back from storage `vn`, one of the values in `want`? Each
+// path is followed back through the ops that copy or extend the value to the first op that computes it, a number, a literal's word, a
+// call that changes the register, or the function's input: that op's instruction (or the number, or the input) must be in `want`, or an
+// instruction on the way. False when a path ends anywhere else, or past a bound.
+// With `makers`, the instructions each path ends at (a number's `mov #imm`, a literal's load) are collected.
+bool FlowValueIs(const FlowRecord& flow, const ghidra::Funcdata& fd, int blk, int pos, FlowVn vn, const ValueSet& want,
+                 std::set<uint32_t>* makers = nullptr)
+{
+    struct State
+    {
+        int blk;
+        int pos;
+        FlowVn vn;
+    };
+    const auto overlaps = [](const FlowVn& a, const FlowVn& b) {
+        return a.space == b.space && a.offset < b.offset + static_cast<ghidra::uintb>(b.size) && b.offset < a.offset + static_cast<ghidra::uintb>(a.size);
+    };
+    // (a call keeps r8 to r15; every other register may hold what the callee left)
+    const auto keptByCall = [&fd](const FlowVn& v) {
+        if (!v.space || v.space->getType() != ghidra::IPTR_PROCESSOR) return true;
+        std::string name;
+        try
+        {
+            name = fd.getArch()->translate->getRegisterName(const_cast<ghidra::AddrSpace*>(v.space), v.offset, v.size);
+        }
+        catch (...)
+        {
+            return false;
+        }
+        if (name.size() < 2 || name[0] != 'r') return false;
+        const int n = std::atoi(name.c_str() + 1);
+        return name.find_first_not_of("0123456789", 1) == std::string::npos && n >= 8 && n <= 15;
+    };
+    std::vector<State> todo = { State{ blk, pos, vn } };
+    std::set<std::tuple<int, const ghidra::AddrSpace*, ghidra::uintb, ghidra::int4>> entered;   // a block entered from its end for a storage
+    int steps = 0;
+    while (!todo.empty())
+    {
+        State st = todo.back();
+        todo.pop_back();
+        if (st.vn.Constant()) 
+        {
+            if (!want.Has(static_cast<uint64_t>(st.vn.offset), st.vn.size)) return false;
+            continue;
+        }
+        if (st.blk < 0 || static_cast<size_t>(st.blk) >= flow.blockOps.size()) return false;
+        const std::vector<FlowOp>& ops = flow.blockOps[static_cast<size_t>(st.blk)];
+        bool done = false;
+        for (int i = std::min(st.pos, static_cast<int>(ops.size())) - 1; i >= 0 && !done; --i)
+        {
+            if (++steps > 4096) return false;
+            const FlowOp& op = ops[static_cast<size_t>(i)];
+            if ((op.code == ghidra::CPUI_CALL || op.code == ghidra::CPUI_CALLIND) && !keptByCall(st.vn))
+            {
+                if (!want.insns.count(op.insn)) return false;
+                done = true;
+                break;
+            }
+            if (!op.hasOut || !overlaps(op.out, st.vn)) continue;
+            done = true;
+            if (want.insns.count(op.insn)) break;   // an instruction the statement's value is made at
+            const bool whole = op.out.offset <= st.vn.offset && st.vn.offset + st.vn.size <= op.out.offset + op.out.size;
+            const bool passes = op.code == ghidra::CPUI_COPY || op.code == ghidra::CPUI_INT_ZEXT || op.code == ghidra::CPUI_INT_SEXT ||
+                                op.code == ghidra::CPUI_SUBPIECE;
+            if (op.code == ghidra::CPUI_LOAD && op.literal)
+            {
+                if (!want.Has(op.value, op.out.size)) return false;
+                if (makers) makers->insert(op.insn);
+                break;
+            }
+            if (!whole || !passes || op.numIn < 1) return false;
+            FlowVn from = op.in[0];
+            if (from.Constant())
+            {
+                uint64_t v = static_cast<uint64_t>(from.offset);
+                if (op.code == ghidra::CPUI_INT_SEXT && from.size < 8 && (v >> (8 * from.size - 1) & 1)) v |= ~0ull << (8 * from.size);
+                if (!want.Has(v, op.out.size)) return false;
+                if (makers) makers->insert(op.insn);
+                break;
+            }
+            if (op.code == ghidra::CPUI_COPY && from.size == op.out.size) from.offset += st.vn.offset - op.out.offset, from.size = st.vn.size;
+            todo.push_back(State{ st.blk, i, from });
+        }
+        if (done) continue;
+        // the block's start: the function's input at the entry, else each block before it
+        if (st.blk == flow.entryBlock)
+        {
+            if (!want.HasInput(st.vn)) return false;
+            continue;
+        }
+        const std::vector<int>& preds = flow.predecessors[static_cast<size_t>(st.blk)];
+        if (preds.empty()) return false;
+        for (int p : preds)
+            if (entered.insert(std::make_tuple(p, st.vn.space, st.vn.offset, st.vn.size)).second && p >= 0 &&
+                static_cast<size_t>(p) < flow.blockOps.size())
+                todo.push_back(State{ p, static_cast<int>(flow.blockOps[static_cast<size_t>(p)].size()), st.vn });
+    }
+    return true;
+}
+
+// Is the value a folded store wrote the statement's (`want`)? The store's own COPY in the statement's value, or its stored register's
+// value on every path into it.
+bool StoreShowsValue(const ghidra::AccessRecord& r, const FlowRecord& flow, const ghidra::Funcdata& fd, const ValueSet& want)
+{
+    if (want.times.count(r.time)) return true;
+    const auto at = flow.ops.find(r.time);
+    if (at == flow.ops.end()) return false;
+    const int blk = at->second.first;
+    const int pos = static_cast<int>(at->second.second);
+    if (blk < 0 || static_cast<size_t>(blk) >= flow.blockOps.size() || static_cast<size_t>(pos) >= flow.blockOps[static_cast<size_t>(blk)].size())
+        return false;
+    const FlowOp& store = flow.blockOps[static_cast<size_t>(blk)][static_cast<size_t>(pos)];
+    if (store.code != ghidra::CPUI_STORE || store.numIn < 3) return false;
+    return FlowValueIs(flow, fd, blk, pos, store.in[2], want);
+}
+
+// The lines on which two printed ops of one instruction are (a statement's tokens there cannot be told from the other op's).
+std::set<std::pair<size_t, uint32_t>> SharedInstructionLines(const PrintedOperations& printed)
+{
+    std::set<std::pair<size_t, uint32_t>> shared;
+    std::map<std::pair<size_t, uint32_t>, int> opsOn;
+    for (const auto& kv : printed)
+    {
+        uint32_t insn = InstructionOf(kv.first), canonical = 0;
+        if (CanonicalAddress(insn, canonical)) insn = canonical;
+        for (size_t line : kv.second.first)
+            if (++opsOn[std::make_pair(line, insn)] == 2) shared.insert(std::make_pair(line, insn));
+    }
+    return shared;
+}
+
+// A7-22: a number the engine merged from paths that each set it. When every path into a block sets a register to one number (often in a
+// delay slot), the engine makes the MULTIEQUAL of those numbers a COPY, and the COPY keeps the MULTIEQUAL's address: the block's first
+// instruction, which neither makes nor computes it (`iVar3 = 0;` at a literal load of a callee's address, `uVar4 = 8;` at `mov #0x0,r12`).
+// Such a COPY is no op of the flow (its time is later than every flow op's) and is at its block's start. Its value is made, on each path
+// into the block, by the instruction that last set its storage to the number (FlowValueIs, collecting them): the line names those, its
+// drawn tokens at the lowest and an empty token at each other, so the line says it is made at several instructions and a click goes to
+// one of them. When a path does not end at a maker of the number (a memory variable, whose stores AddFrameStoreTokens names; a register
+// set some other way), the drawn tokens name nothing: never an instruction that does not make the value. Returns how many tokens moved.
+int AddJoinConstantTokens(std::vector<Line>& lines, const PrintedOperations& printed, const ghidra::Funcdata& fd, const FlowRecord& flow)
+{
+    std::vector<const ghidra::PcodeOp*> ordered;
+    for (const auto& kv : printed) ordered.push_back(kv.first);
+    std::sort(ordered.begin(), ordered.end(), [](const ghidra::PcodeOp* a, const ghidra::PcodeOp* b) { return a->getTime() < b->getTime(); });
+    const std::set<std::pair<size_t, uint32_t>> sharedLines = SharedInstructionLines(printed);
+    int moved = 0;
+    for (const ghidra::PcodeOp* o : ordered)
+    {
+        const ghidra::BlockBasic* home = o->getParent();
+        if (o->code() != ghidra::CPUI_COPY || !o->getOut() || !o->getIn(0)->isConstant() || o->getTime() < flow.opsEnd || !home ||
+            o->isFromDelaySlot() || o->getAddr() != home->getStart())
+            continue;
+        const uint32_t at = InstructionOf(o);
+        const auto first = flow.insnFirst.find(at);
+        std::set<uint32_t> makers;
+        bool made = false;
+        if (first != flow.insnFirst.end())
+        {
+            ValueSet number;
+            number.numbers.emplace_back(static_cast<uint64_t>(o->getIn(0)->getOffset()), o->getIn(0)->getSize());
+            FlowVn out;
+            out.space = o->getOut()->getSpace();
+            out.offset = o->getOut()->getOffset();
+            out.size = o->getOut()->getSize();
+            made = FlowValueIs(flow, fd, first->second.first, static_cast<int>(first->second.second), out, number, &makers) && !makers.empty();
+        }
+        std::set<uint32_t> canonicalMakers;
+        for (uint32_t m : makers)
+        {
+            uint32_t c = 0;
+            canonicalMakers.insert(CanonicalAddress(m, c) ? c : m);
+        }
+        uint32_t own = at, canonicalOwn = 0;
+        if (CanonicalAddress(own, canonicalOwn)) own = canonicalOwn;
+        if (made && canonicalMakers.count(own)) continue;   // (the instruction is one of them)
+        const uint32_t target = made ? *canonicalMakers.begin() : 0;
+        for (size_t line : printed.at(o).first)
+        {
+            if (line >= lines.size() || sharedLines.count(std::make_pair(line, own))) continue;
+            Line& l = lines[line];
+            bool drawn = false;
+            for (Token& t : l.tokens)
+                if (t.addr == own && t.begin < t.end)
+                {
+                    t.addr = target;
+                    drawn = true;
+                    ++moved;
+                }
+            if (!drawn) continue;
+            for (uint32_t m : canonicalMakers)
+            {
+                if (!made || m == target) continue;
+                bool carried = false;
+                for (const Token& t : l.tokens) carried = carried || t.addr == m;
+                if (carried) continue;
+                Token t;
+                t.begin = t.end = static_cast<uint16_t>(std::min<size_t>(l.text.size(), 0xFFFF));
+                t.kind = TokenKind::Plain;
+                t.addr = m;
+                l.tokens.push_back(t);
+            }
+            l.firstAddr = 0;
+            for (const Token& t : l.tokens)
+                if (t.addr && (l.firstAddr == 0 || t.addr < l.firstAddr)) l.firstAddr = t.addr;
+        }
+    }
+    return moved;
+}
+
 // A7-11, A7-15, A7-19, A7-20: a frame local or a global printed as assigned at an instruction that does not write it. The engine prints the
 // variable where it needs the value, with the address of the op that carries it on, and the store that wrote it, folded into the variable,
 // is on no line: a call's effect copy of a frame word and a piece of one read back (at a call or a load, A7-11); a copy of a frame word a
@@ -4920,6 +5296,24 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
         // (a statement at a branch, not made by its slot, comes after the slot's store: the slot runs before the branch takes effect)
         const ghidra::uintb before = o->getAddr().getOffset() * 2 + (o->isFromDelaySlot() ? 1u : 2u);
         std::set<const ghidra::AccessRecord*> chosen;
+        // A7-23: a store is the statement's only when it wrote the statement's value (StoreShowsValue). The search below finds the stores
+        // of the variable by where they are; this says which of them the line shows.
+        bool valuesFound = false;
+        ValueSet values;
+        std::map<const ghidra::AccessRecord*, bool> shown;
+        const auto shows = [&](const ghidra::AccessRecord* r) {
+            if (!valuesFound)
+            {
+                values = StatementValues(o);
+                valuesFound = true;
+            }
+            const auto f = shown.find(r);
+            if (f != shown.end()) return f->second;
+            const bool v = StoreShowsValue(*r, flow, fd, values);
+            shown[r] = v;
+            return v;
+        };
+        bool ownOther = false;   // the statement's own instruction is a store of the variable that wrote another value
         for (ghidra::int4 b = 0; b < out->getSize(); ++b)
         {
             const ghidra::uintb byte = (base + static_cast<ghidra::uintb>(b)) & space->getHighest();
@@ -4930,11 +5324,13 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
             const ghidra::AccessRecord* own = nullptr;
             for (const ghidra::AccessRecord* r : stores)
                 if (InstructionOf(*r) == at && writes(r)) own = r;
-            if (own)
+            if (own && shows(own))
             {
                 chosen.insert(own);
                 continue;
             }
+            // (the engine put the statement at a store of another value, a dead one: A7-23 (b); the line is not that store's)
+            if (own) ownOther = true;
             // the last store of the byte in a block (before the statement, in its own block the first time)
             const auto lastIn = [&](const ghidra::FlowBlock* blk, bool partial) -> const ghidra::AccessRecord* {
                 const auto f = blockStores.find(blk);
@@ -5063,6 +5459,8 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                 level = std::move(next);
             }
         }
+        for (auto c = chosen.begin(); c != chosen.end();)
+            c = shows(*c) ? std::next(c) : chosen.erase(c);
         if (chosen.empty() && atLoadOrCall)
             for (ghidra::int4 b = 0; b < out->getSize(); ++b)
             {
@@ -5078,12 +5476,28 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                     if (!any || r->time > any->time) any = r;
                     if (r->time < when->second && (!earlier || r->time > earlier->time)) earlier = r;
                 }
-                if (earlier || any) chosen.insert(earlier ? earlier : any);
+                if ((earlier || any) && shows(earlier ? earlier : any)) chosen.insert(earlier ? earlier : any);
             }
-        if (chosen.empty()) continue;
-        // A copy at the end of its block that shows a store's value is that store's line; at a call, only a store in the call's slot is.
         uint32_t own = at, target = 0, canonicalOwn = 0;
         if (CanonicalAddress(own, canonicalOwn)) own = canonicalOwn;
+        if (chosen.empty())
+        {
+            // (A7-23 (b): no store shows the value, and the statement is drawn at a store of another value: it names nothing)
+            if (ownOther)
+                for (size_t line : kv.second->first)
+                {
+                    if (line >= lines.size() || sharedLines.count(std::make_pair(line, own))) continue;
+                    Line& l = lines[line];
+                    l.firstAddr = 0;
+                    for (Token& t : l.tokens)
+                    {
+                        if (t.addr == own) t.addr = 0;
+                        if (t.addr && (l.firstAddr == 0 || t.addr < l.firstAddr)) l.firstAddr = t.addr;
+                    }
+                }
+            continue;
+        }
+        // A copy at the end of its block that shows a store's value is that store's line; at a call, only a store in the call's slot is.
         // (a copy the engine put at its block's last instruction, which does not make its value: not one a delay slot made, nor a
         // constant, whose `mov #imm` may be that instruction)
         const bool blockEnd = code == ghidra::CPUI_COPY && !atLoadOrCall && o->getAddr() == home->getStop() && !o->isFromDelaySlot() &&
@@ -5093,7 +5507,7 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
             uint32_t insn = InstructionOf(*r), canonical = 0;
             if (CanonicalAddress(insn, canonical)) insn = canonical;
             const bool slotOfCall = flow.callInsns.count(at) && r->slot && r->pc == o->getAddr() && !o->isFromDelaySlot();
-            if ((blockEnd || slotOfCall) && (target == 0 || insn < target)) target = insn;
+            if ((blockEnd || slotOfCall || ownOther) && (target == 0 || insn < target)) target = insn;
         }
         if (target)
             for (size_t line : kv.second->first)
@@ -6402,6 +6816,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
             }
         }
         r.accesses = Accesses(*fd, printed, canonicalOf, flow);
+        AddJoinConstantTokens(r.lines, printed, *fd, flow);
         AddFrameStoreTokens(r.lines, printed, *fd, flow);
         for (Line& l : r.lines)   // A7-12: the word flow halted at is no instruction; the line's hover text says so
             for (Token& t : l.tokens)
