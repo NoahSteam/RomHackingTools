@@ -16243,3 +16243,50 @@ A7-28 (a) (`eq_known_slot`, the line at the slot 0x0607000A, `numberStoreOther` 
 ### Routed
 
 Nothing. Grammar 2 seed 300847 (A5-99) was not counted.
+
+## Area 7 fixer (A7-28, A7-29, A7-30)
+
+Branch `review/7-a728-fix` from master `9534332d` (area 7 round 6 merged). **Fixed: A7-28 (P2), A7-29 (P3), A7-30 (P3, instrument).** Host only (`Sh2Decompiler.cpp`) and the oracle (`MappingOracle.h`); no engine patch. One new row filed: **A7-31 (P3)**, found by the generator on fresh seeds, present on master before this work.
+
+### The rule, and where these rows broke it
+
+The rule is still the A7-22 fixer's: a line names an instruction only when that instruction made, or wrote, the line's value. A7-26 asked it of the register; A7-28 is the other half, that the value reaches the store.
+
+* **A7-28: the number must reach the store.** `AddFrameStoreTokens` now finds, for each store a number statement names, the register the store stores (its value input, or the register a temporary of the store's instruction copies, as before) and asks whether an instruction's number reaches that store: the instruction makes the number into that register AND the instruction is one of `FlowLastWriters` of the register from the store (the walk A7-21 and A7-22 use; the whole register when a half-word is stored, `mov.w r1,@r2` stores r1's low half; where the walk is not finished, the register's number alone). (a) The delayed-branch slot rule asks it of the slot (`bra ; mov #4,r3` is the line's maker only when r3's 4 reaches a named store) and of the branch. (b) The number-in-memory rule: when the statement's own instruction reaches none of the named stores it is no maker and the line takes its store (as A7-26); when it reaches some, a named store it does not reach is dropped if a reached store covers the same bytes; and when it reaches none of the named ones but makes the number, the stores of the variable it does reach (the next ones after it) are named. That last step is the 0x06048690 shape: the second `if`'s `xStack_1a = 0x220;` named the first `if`'s store, whose register held the same number.
+* **A7-29: the label's own switch.** `LinesFromMarkup` keeps the BRANCHIND of the `switch` last printed at each indent (a token of the jump, never a case label: the first op of `case 1:`, a case that holds a switch, is the inner switch's jump, which is how the old `lastSwitch` became the inner one) and `caseDestination` looks the label's value up in the table of the switch at the label's indent; no table found, or none with the value, as before (any table with exactly one destination).
+* **A7-30 (oracle).** (a) `backWrong` no longer reads `Token::materialised`. A line is a copy materialised at a call or a store when its text is a plain assignment (`V = W;`), it names a store at another instruction (an empty token at a store) and none at this one, and it draws the instruction (`iRam0603ad2c = param_1;` at the byte store, `piStack_c = param_2;` at a call). Every other line that draws the instruction is its own statement. A first reading without the "names a store" condition put 13 / 120 / 19 / 123 corpus lookups wrong (`uVar7 = extraout_sr_01;` after a call is the call's output, `piVar2 = piStack_24;` likewise); a second, with a first-address condition, 4 (a call line with a lower first address). (b) `copyMergeAtBranch` takes any drawn instruction that writes no register and is no load, call or return (a `tst`, a compare, a nop, a branch), not only a branch. `numberStoreOther` and `caseOtherEntry` are violations.
+
+### Mutation checks
+
+Each change switched off alone by a temporary environment switch (in the source, removed before the last commit; the binary rebuilt with it, the suite run for each value):
+
+| Switched off | `SaturnExplorerSh2DecompilerTests` |
+|---|---|
+| A7-28 (a), the slot rule asks the old no-register question | fails, 3 checks: the line's address, its instructions, the oracle (`numberStoreOther` 1) |
+| A7-28 (b), the number need only be made into a stored register (no `FlowLastWriters`, no store change) | fails, 6 checks: the four frame words are drawn at 0x0602183E again, the way back from it names them, the oracle (`numberStoreOther` 4) |
+| A7-29, the table of the last `switch` printed (the case-label jump counted as a switch) | fails, 2 checks: the outer `case 2:` names 0x0607004E, the oracle (`caseOtherEntry` 1) |
+| A7-25's order reverted in `Ordered` (the flag still set, so the oracle's old reading would not see it) | fails, 4 checks: the A7-25 pin and the oracle's `backWrong` on the A7-25 fixture and the two A7-23 fixtures; the new reading finds it without the flag |
+| A7-30 (a), the A7-25 fixture with the flag cleared (the damaged result) | the oracle gives `backWrong` 1 (was 0; pinned) |
+| A7-30 (b), the A7-21 lines drawn at the `tst r0,r0` before each `bt/s` | the oracle gives `copyMergeAtBranch` 3 (was 0; pinned) |
+
+Also in the corpus: with `FlowLastWriters` asked for the half-register rather than the whole one, `numberStoreOther` was 0 / 0 / 5 / 9 (hwram008: 0x06033F16, 0x06046C06 twice, 0x06048684 twice in the lent run); the walk returned "not finished" and the register's number was taken. Fixed in the same commit sequence.
+
+### What was run (RelWithDebInfo, gcc 13, the worktree's build, `-j2`, every binary under `ulimit -v 3500000` and `timeout`)
+
+| Run | Result |
+|---|---|
+| hwram007.bin and hwram008.bin, alone and lent (`tools/a7_round2/corpus.sh`, `SE_GAME_TOKEN_DUMP`) | 839 / 1,730 and 1,554 / 2,995 functions, all passed; **every violation 0 in the four runs** (including `backWrong`, `numberStoreOther`, `caseOtherEntry`, `constAtJoin`, `copyMergeAtBranch`); `copyOtherValue` 24 / 39 / 24 / 39, `copyRegisterMade` 0 / 0 / 3 / 6 as before; answered Folded on the way back 29,600 / 57,942 / 75,744 / 125,151 (29,598 / 57,939 / 75,735 / 125,134 in the A7-26 fixer's record: the lines that moved to their store) |
+| the counters (hwram007 alone / lent, hwram008 alone / lent) | `numberStoreOther` 2 / 3 / 14 / 26 (round 6) to **0 / 0 / 0 / 0**; `caseOtherEntry` 0 of 180 / 432 / 1,275 / 1,733 labels judged, as before (no nested switch with an op-less case in the corpus) |
+| `SaturnExplorerSh2DecompilerTests` | all passed (27 s) |
+| `ctest -j2 --timeout 900 -E SaturnExplorerLive` / `ctest -R SaturnExplorerLive` | **102 of 102** (196 s) / **6 of 6** (29 s). No new ctest test: the pins are in `SaturnExplorerSh2DecompilerTests` |
+| fault suite (`SaturnExplorerDecompilerFaultTests`, alone) | **0 of 94 jobs failed** (91.8 s) |
+| generator, the matrix's sizes: `SE_GENERATED_SEEDS=20000` (four runs of 5,000 from seeds 1, 5,001, 10,001, 15,001, both grammars) | 0 failing seeds, 0 findings (146 to 159 s each) |
+| generator, `SE_GENERATED_GRAMMAR=1 SE_GENERATED_SEEDS=1000` / `SE_GENERATED_GRAMMAR=2 SE_GENERATED_SEEDS=3000` | 0 failing seeds (33 s) / 0 failing seeds (118 s) |
+| `SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000` | 0 findings; 5,580 functions, 5,292 compared, agrees=5,185 narrow-c=136 void-return=227 void-return-lent=24 (189 s) |
+| generator, fresh seeds: grammar 2 from 1,400,000 (3,000) and from 1,403,000 (3,000), grammar 1 from 1,406,000 (2,000) | 0 failing seeds in the first and the last (79, 43 s). **The second has one finding: grammar 2 seed 1,404,082, `[n:map-frame-store]` `uStack_14 = param_1;` names none of the store the engine folded into it.** Reproduced on master `9534332d`'s product code (`Sh2Decompiler.cpp` reverted in the same build, the oracle's frame-store check unchanged since A7-11): not caused by this work. Filed as **A7-31 (P3)**, open, with the shrunk words. Grammar 2 seed 300847 (A5-99, area 5) is outside these ranges and was not counted |
+
+### Left open
+
+A7-31 (above). Not changed: the lines the old `backWrong` flag excused and the new reading calls own statements (a line `V = W;` that names no store of its variable and is drawn at a call: the call's output). The product's `Token::materialised` is unchanged; the oracle no longer depends on it.
+
+Routed: A7-31 to area 7's next round (an A7-11 frame-store case: the generator's shrunk words are in the row).

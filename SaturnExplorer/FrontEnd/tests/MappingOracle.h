@@ -698,9 +698,8 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
         const InstructionLineIndex index(r);
         std::map<uint32_t, std::vector<size_t>> owns;
         std::set<uint32_t> firsts;
-        // A7-25: the lines that draw an instruction as their own statement, and those that draw it only as a copy materialised there
-        // (Token::materialised); the way back answers an own one first, and a line beginning with the instruction is one only when it is
-        // not a copy materialised there
+        // A7-25: the lines that draw an instruction as their own statement, and those that draw it only as a copy materialised there;
+        // the way back answers an own one first, and a line beginning with the instruction is one only when it is not such a copy
         // A7-30 (a): read from the text and the words, not from the product's flag. A line is a copy materialised at a call or a store
         // when it is a plain assignment (`V = W;`, a variable or a number on the right: `iRam0603ad2c = param_1;`, `piStack_c =
         // param_2;`), names a store of its variable at another instruction (an empty token at a store) and not one at this
@@ -1213,7 +1212,7 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
             // it made the value one of those stores stores (RegisterMakers from the store, through register moves). `xRam0603ac00 = 4;`
             // drawn at the slot `mov #0x4,r3` of the `bra` while the store stores r0, which the engine knew was 4 by a compare; and the
             // join's `mov #0x0,r1` after the pushes of r1 that wrote the frame words (the rule A7-26 gave AddFrameStoreTokens asks only
-            // which register, not whether its value reaches the store). Counted until A7-28 is fixed (a violation then).
+            // which register, not whether its value reaches the store). A violation (A7-28, fixed by the area 7 fixer).
             if (word(at, w) && ((w >> 12) == 0xE || (w >> 12) == 0x9 || (w >> 12) == 0xD))
             {
                 uint32_t got = 0;
@@ -1334,7 +1333,7 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
     // before it (the text's nesting; A7-27's caseDestination takes the switch printed last, which a nested switch is). For a table of the
     // common form (`mova @(T),r0 ; mov.w/mov.b @(r0,Rm),Rn ; add Rn,r0 ; jmp @r0`, entries relative to T), the label's value maps to an
     // entry with an offset (a bias before the bound check), the one most of the switch's labels agree with; a label naming another entry,
-    // or no destination of the table, is counted (until A7-29 is fixed). tools/a7_round6/case_switch.py is the same over a token dump.
+    // or no destination of the table, is a violation (A7-29, fixed by the area 7 fixer). tools/a7_round6/case_switch.py is the same over a token dump.
     {
         const auto indentOf = [](const std::string& t) { return t.find_first_not_of(' '); };
         const auto parseCase = [](const std::string& t, int64_t& v) {
