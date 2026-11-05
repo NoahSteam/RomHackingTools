@@ -40,6 +40,7 @@
 //   SE_TRUST_NOHOVER=1   do not hover the badge (faster)
 //   SE_TRUST_HIDDEN_RENAME=1  half the renames made and undone while the panel is hidden (A8-25), with the mixes
 //   SE_TRUST_FOLLOW_FOCUS=1   mixes 8 and 9 also click into the entry box without an edit (Enter on it across an install, A8-42)
+//   SE_TRUST_PROBE8=1    (area 8, round 8) hand-built sequences against the A8-42 and A8-43 fixes, printed; not in the default run
 //   SE_TRUST_FOLLOW_CPU=1     mixes 8 and 9 with the CPU switch, a CPU without registers, the PC in the BIOS and Stop four times as often
 #define SE_MODEL_NO_MAIN
 #include "DecompilerModelTests.cpp"
@@ -920,8 +921,9 @@ std::string Inject(Rig& r, const std::string& kind)
     return "";
 }
 
+// beforeEnter, when given, runs just before the Enter key goes down (area 8, round 8: the Follow rig notes the output shown at that moment).
 template <class R>
-void TypeEntry(R& r, const std::string& text)
+void TypeEntry(R& r, const std::string& text, const std::function<void()>& beforeEnter = nullptr)
 {
     ImVec2 a, b;
     if (!r.panel.ItemRect("entry", a, b)) return;
@@ -934,6 +936,7 @@ void TypeEntry(R& r, const std::string& text)
     for (int i = 0; i < 16; ++i) r.Key(ImGuiKey_Backspace);
     for (char ch : text) ImGui::GetIO().AddInputCharacter(static_cast<unsigned>(ch));
     r.Idle();
+    if (beforeEnter) beforeEnter();
     ImGui::GetIO().AddKeyEvent(ImGuiKey_Enter, true);
     r.Frame(ImVec2(1270, 710), false);
     ImGui::GetIO().AddKeyEvent(ImGuiKey_Enter, false);
@@ -2926,6 +2929,419 @@ void RunProbe7()
     }
 }
 
+// Round 8 probe (SE_TRUST_PROBE8): the A8-42 and A8-43 fixes attacked. The entry box edited and brought back to the panel's text (Escape,
+// Backspace, Ctrl+Z) before Enter; the box focused across an install, a Stop, a CPU switch, a rename, a PC with no function; the Volatile
+// popup drawn and driven with the mouse and the keyboard, with saved lists at, just under and just over its box, an edit made and undone,
+// and a multibyte character cut in two.
+void RunProbe8()
+{
+    const uint32_t cEntry = Defs()[FnC].entry, aEntry = Defs()[FnA].entry;
+    auto drawnText = [] {
+        std::string all;
+        for (const drawn::Run& run : drawn::WindowRuns(DecompilerPanel::kTitle)) all += run.text + " ";
+        return Norm(all);
+    };
+    auto show = [&](MiniRig& m, const char* what) {
+        m.Frame();
+        std::string u;
+        for (const std::string& x : m.panel.Uncertainties()) u += "[" + x + "]";
+        const std::string w = drawnText();
+        const size_t at = w.find(Norm("(entry from"));
+        const DecompileResult* s = m.panel.Shown();
+        std::printf("PROBE8 %s\n   label: %s\n   uncertainties: %s\n   box: %s, active %d, follow %d, wanted %08X, shown %s, stale %d, pending %d\n"
+                    "   tooltip: %s\n   error: %s\n   copy: %s\n",
+                    what, at == std::string::npos ? "(none)" : w.substr(at, 40).c_str(), u.c_str(), m.panel.EntryText(), m.panel.EntryBoxActive() ? 1 : 0,
+                    m.panel.FollowPc() ? 1 : 0, m.panel.WantedEntry(), s ? Hex(s->requestedEntry).c_str() : "nothing", m.panel.ShownStale() ? 1 : 0,
+                    m.panel.Pending() ? 1 : 0, m.panel.StaleTooltip().c_str(), m.panel.EntryError().c_str(), m.panel.CopyMarks().c_str());
+    };
+    auto settle = [&](MiniRig& m) {
+        m.Idle(3);
+        CHECK(m.Settle());
+    };
+    auto live = [&](MiniRig& m, uint32_t pc) {
+        m.kind = DecompViewKind::LivePaused;
+        m.regs[0].pc = pc;
+        m.haveRegs[0] = true;
+    };
+    auto focusBox = [](MiniRig& m) {
+        ImVec2 a, b;
+        if (!m.panel.ItemRect("entry", a, b)) return false;
+        const ImVec2 c((a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f);
+        for (int i = 0; i < 3; ++i) m.Frame(c, false);
+        m.Frame(c, true);
+        m.Frame(c, false);
+        m.Idle(2);
+        return m.panel.EntryBoxActive();
+    };
+    auto enter = [](MiniRig& m) {
+        ImGui::GetIO().AddKeyEvent(ImGuiKey_Enter, true);
+        m.Frame(ImVec2(1270, 710), false);
+        ImGui::GetIO().AddKeyEvent(ImGuiKey_Enter, false);
+        m.Frame(ImVec2(1270, 710), false);
+    };
+    auto typeChar = [](MiniRig& m, char ch) {
+        ImGui::GetIO().AddInputCharacter(static_cast<unsigned>(ch));
+        m.Idle(2);
+    };
+    auto ctrl = [](MiniRig& m, ImGuiKey key) {
+        ImGui::GetIO().AddKeyEvent(ImGuiMod_Ctrl, true);
+        ImGui::GetIO().AddKeyEvent(key, true);
+        m.Frame();
+        ImGui::GetIO().AddKeyEvent(key, false);
+        ImGui::GetIO().AddKeyEvent(ImGuiMod_Ctrl, false);
+        m.Frame();
+    };
+    // E1 to E3: Follow PC on C (rts scan, 60%, the Entry line). The box is focused, a character typed, and the edit taken back three ways; then
+    // Enter on text that is the panel's again.
+    for (int way = 0; way < 3; ++way)
+    {
+        static const char* const kWay[] = { "Escape (ImGui reverts the edit and drops the focus), then the box clicked again",
+                                            "Backspace", "Ctrl+Z" };
+        MiniRig m;
+        live(m, cEntry + 4);
+        settle(m);
+        std::string title = std::string("E") + std::to_string(way + 1) + ": Follow PC on C+4";
+        show(m, title.c_str());
+        CHECK(focusBox(m));
+        typeChar(m, '1');
+        std::printf("PROBE8 E%d: typed '1': box %s\n", way + 1, m.panel.EntryText());
+        if (way == 0)
+        {
+            m.Key(ImGuiKey_Escape);
+            std::printf("PROBE8 E1: Escape: box %s, active %d\n", m.panel.EntryText(), m.panel.EntryBoxActive() ? 1 : 0);
+            CHECK(focusBox(m));
+        }
+        else if (way == 1)
+            m.Key(ImGuiKey_Backspace);
+        else
+            ctrl(m, ImGuiKey_Z);
+        title = std::string("E") + std::to_string(way + 1) + ": the edit taken back by " + kWay[way] + "; box before Enter";
+        show(m, title.c_str());
+        enter(m);
+        settle(m);
+        title = std::string("E") + std::to_string(way + 1) + ": Enter on the box (text the panel wrote, brought back)";
+        show(m, title.c_str());
+    }
+    {
+        // E4: the box focused while C is shown; the PC moves to A and A installs (box still C); a character typed and deleted (the text is C,
+        // the panel's old text); Enter.
+        MiniRig m;
+        live(m, cEntry + 4);
+        settle(m);
+        CHECK(focusBox(m));
+        m.regs[0].pc = aEntry + 4;
+        ++m.frame;
+        m.Idle(6);
+        CHECK(m.Settle());
+        show(m, "E4: focused, the PC moved to A, A shown, box C");
+        typeChar(m, '1');
+        m.Key(ImGuiKey_Backspace);
+        enter(m);
+        settle(m);
+        show(m, "E4: '1' typed and deleted, Enter (box C, the user's keys)");
+    }
+    {
+        // E5: the box focused with C shown; the PC moves to A with the engine held; the request is stopped (the click takes the focus); then the
+        // box is clicked and Enter pressed on its untouched text.
+        MiniRig m;
+        live(m, cEntry + 4);
+        settle(m);
+        CHECK(focusBox(m));
+        m.gate.Close();
+        m.regs[0].pc = aEntry + 4;
+        ++m.frame;
+        m.Idle(3);
+        CHECK(WaitHeldOrBusy(m));
+        show(m, "E5: focused, PC to A, A held in the engine");
+        CHECK(ClickMini(m, "stop"));
+        m.gate.Open();
+        settle(m);
+        show(m, "E5: Stop clicked (focus gone)");
+        CHECK(focusBox(m));
+        enter(m);
+        settle(m);
+        show(m, "E5: Enter on the untouched box");
+    }
+    {
+        // E6: the box focused on CPU 0's C; the CPU switched to 1 (PC in A) without a click (SetCpu), A installs while the box is focused; Enter.
+        MiniRig m;
+        live(m, cEntry + 4);
+        m.regs[1].pc = aEntry + 4;
+        m.haveRegs[1] = true;
+        settle(m);
+        CHECK(focusBox(m));
+        m.panel.SetCpu(1);
+        m.Idle(4);
+        CHECK(m.Settle());
+        show(m, "E6: focused, CPU 1 (PC in A), A shown, box C");
+        enter(m);
+        settle(m);
+        show(m, "E6: Enter (untouched)");
+        m.panel.SetCpu(0);
+        settle(m);
+        show(m, "E6: CPU 0 again (a pin: nothing moves)");
+    }
+    {
+        // E7: the box focused on C; C named while focused (the same function installed again, no sync); Enter. Then the name erased.
+        MiniRig m;
+        live(m, cEntry + 4);
+        settle(m);
+        CHECK(focusBox(m));
+        m.names[cEntry] = "foo";
+        ++m.namesGen;
+        m.Idle(4);
+        CHECK(m.Settle());
+        show(m, "E7: focused, C named");
+        enter(m);
+        settle(m);
+        show(m, "E7: Enter (untouched)");
+        m.names.erase(cEntry);
+        ++m.namesGen;
+        settle(m);
+        show(m, "E7: the name erased");
+    }
+    {
+        // E8: the box focused on C; the PC moves into the BIOS (no function): C stays, stale; Enter.
+        MiniRig m;
+        live(m, cEntry + 4);
+        settle(m);
+        CHECK(focusBox(m));
+        m.regs[0].pc = 0x00001FF0u;
+        ++m.frame;
+        m.Idle(4);
+        CHECK(m.Settle());
+        show(m, "E8: focused, PC in the BIOS");
+        enter(m);
+        settle(m);
+        show(m, "E8: Enter (untouched)");
+    }
+    {
+        // E9: an entry typed (A) and asked; the box focused; the PC moves (nothing: an Entry target); Follow PC turned on by a click (focus
+        // gone) and C installs, then the box focused again and the PC moved to A, then Enter.
+        MiniRig m;
+        live(m, cEntry + 4);
+        settle(m);
+        TypeEntry(m, Hex(aEntry));
+        settle(m);
+        show(m, "E9: A typed");
+        CHECK(ClickMini(m, "follow"));
+        settle(m);
+        show(m, "E9: Follow PC on (C)");
+        CHECK(focusBox(m));
+        m.regs[0].pc = aEntry + 4;
+        ++m.frame;
+        m.Idle(4);
+        CHECK(m.Settle());
+        show(m, "E9: focused, PC to A (A shown, box C)");
+        enter(m);
+        settle(m);
+        show(m, "E9: Enter (untouched)");
+    }
+    {
+        // E10: the box's own tooltip ("Decompile the function starting at this address ... Enter to go.") while it holds the focus and an older
+        // address than the output (A8-42's state): what Enter asks then is the output shown, not the address in the box.
+        MiniRig m;
+        live(m, cEntry + 4);
+        settle(m);
+        CHECK(focusBox(m));
+        m.regs[0].pc = aEntry + 4;
+        ++m.frame;
+        m.Idle(6);
+        CHECK(m.Settle());
+        ImVec2 a, b;
+        CHECK(m.panel.ItemRect("entry", a, b));
+        const ImVec2 c((a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f);
+        bool found = false;
+        std::string tip;
+        // A tooltip window is measured on its first frame and drawn whole from the next: read it until its text stops growing.
+        for (int i = 0; i < 120 && (!found || Norm(tip).size() < 20); ++i)
+        {
+            m.Frame(c, false);
+            tip = drawn::TooltipText(&found);
+        }
+        std::printf("PROBE8 E10: focused, A shown, box %s, active %d; the box hovered: tooltip %s\n   %s\n", m.panel.EntryText(),
+                    m.panel.EntryBoxActive() ? 1 : 0, found ? "shown" : "not shown", Norm(tip).c_str());
+        enter(m);
+        settle(m);
+        show(m, "E10: Enter");
+    }
+    {
+        // E11: the box focused while A installs (the sync waits); 'zz' typed over it and Enter (refused); the focus goes. What does the box
+        // say next to the refusal?
+        MiniRig m;
+        live(m, cEntry + 4);
+        settle(m);
+        CHECK(focusBox(m));
+        m.regs[0].pc = aEntry + 4;
+        ++m.frame;
+        m.Idle(6);
+        CHECK(m.Settle());
+        show(m, "E11: focused, PC to A, A shown, box C");
+        TypeEntry(m, "zz");
+        settle(m);
+        show(m, "E11: 'zz' typed and Enter (refused), the focus gone");
+        m.regs[0].pc = cEntry + 4;
+        ++m.frame;
+        settle(m);
+        show(m, "E11: PC back in C, frame 3");
+        CHECK(focusBox(m));
+        enter(m);
+        settle(m);
+        show(m, "E11: Enter on the box as it now reads");
+    }
+    {
+        // E12: the same with the box not focused at the install (the control): 'zz' and Enter.
+        MiniRig m;
+        live(m, cEntry + 4);
+        settle(m);
+        m.regs[0].pc = aEntry + 4;
+        ++m.frame;
+        settle(m);
+        TypeEntry(m, "zz");
+        settle(m);
+        show(m, "E12 (control): A shown, 'zz' typed and Enter (refused)");
+    }
+
+    // The Volatile popup, drawn. The button and the popup's items are found by their drawn text.
+    auto popupWindow = []() -> ImGuiWindow* {
+        ImGuiContext& g = *ImGui::GetCurrentContext();
+        for (ImGuiWindow* w : g.Windows)
+            if ((w->Flags & ImGuiWindowFlags_Popup) && w->Active && !(w->Flags & ImGuiWindowFlags_Tooltip)) return w;
+        return nullptr;
+    };
+    auto clickAt = [](MiniRig& m, ImVec2 c) {
+        for (int i = 0; i < 3; ++i) m.Frame(c, false);
+        m.Frame(c, true);
+        m.Frame(c, false);
+        m.Frame(c, false);
+    };
+    auto runCentre = [](const std::vector<drawn::Run>& runs, const std::string& text, ImVec2& c) {
+        for (const drawn::Run& r : runs)
+            if (r.text == text)
+            {
+                c = ImVec2((r.x0 + r.x1) * 0.5f, (r.y0 + r.y1) * 0.5f);
+                return true;
+            }
+        return false;
+    };
+    auto openPopup = [&](MiniRig& m) {
+        m.Idle(2);
+        ImVec2 c;
+        if (!runCentre(drawn::WindowRuns(DecompilerPanel::kTitle), "Volatile", c)) return false;
+        clickAt(m, c);
+        return popupWindow() != nullptr;
+    };
+    auto popupText = [&]() {
+        ImGuiWindow* w = popupWindow();
+        std::string all;
+        if (w)
+            for (const drawn::Run& r : drawn::Runs(w->DrawList)) all += r.text + " | ";
+        return all;
+    };
+    auto clickApply = [&](MiniRig& m) {
+        ImGuiWindow* w = popupWindow();
+        ImVec2 c;
+        if (!w || !runCentre(drawn::Runs(w->DrawList), "Apply", c)) return false;
+        clickAt(m, c);
+        return true;
+    };
+    auto clickBox = [&](MiniRig& m) {
+        // The edit box is the frame under the first line of text: click just below the popup's first run.
+        ImGuiWindow* w = popupWindow();
+        if (!w) return false;
+        std::vector<drawn::Run> rs = drawn::Runs(w->DrawList);
+        if (rs.empty()) return false;
+        const float y = rs[0].y1 + ImGui::GetFrameHeight() * 0.5f + ImGui::GetStyle().ItemSpacing.y;
+        clickAt(m, ImVec2(rs[0].x0 + 40.0f, y));
+        return true;
+    };
+    auto tail = [](const std::string& s) { return s.size() > 14 ? "..." + s.substr(s.size() - 14) : s; };
+    auto report = [&](MiniRig& m, const char* what, const std::string& saved) {
+        const std::string t = popupText();
+        std::printf("PROBE8 %s\n   popup open %d: %s\n   saved list %zu chars (%s), whole %d, not in force %d, edit %zu chars (%s)\n", what,
+                    popupWindow() ? 1 : 0, t.size() > 400 ? (t.substr(0, 200) + " ... " + t.substr(t.size() - 200)).c_str() : t.c_str(),
+                    m.panel.VolatileMemory().size(), tail(m.panel.VolatileMemory()).c_str(), m.panel.VolatileMemory() == saved ? 1 : 0,
+                    m.panel.VolatileNotInForce() ? 1 : 0, m.panel.VolatileEditText().size(), tail(m.panel.VolatileEditText()).c_str());
+    };
+    auto listOf = [](size_t n) {
+        // A list that parses, exactly n characters: "06002000, " then ranges, padded with spaces before the last address.
+        std::string list = "06002000";
+        while (list.size() + 19 + 10 <= n) list += ", 06001000-06001003";
+        list += ",";
+        while (list.size() + 9 < n) list += " ";
+        list += " 06003000";
+        return list;
+    };
+    for (size_t n : { static_cast<size_t>(2046), static_cast<size_t>(2047), static_cast<size_t>(2048), static_cast<size_t>(2049) })
+    {
+        MiniRig m;
+        live(m, cEntry + 4);
+        settle(m);
+        const std::string list = listOf(n);
+        CHECK(list.size() == n);
+        std::string err;
+        if (!m.panel.SetVolatileMemory(list, &err)) m.panel.KeepUnparsedVolatileMemory(list);   // what App does at start
+        char what[160];
+        std::snprintf(what, sizeof what, "V%zu: a saved list of %zu characters that parses (set: %s)", n, n, err.empty() ? "in force" : err.c_str());
+        CHECK(openPopup(m));
+        report(m, what, list);
+        CHECK(clickApply(m));
+        report(m, "   ...Apply clicked on the text unchanged", list);
+        if (!popupWindow()) CHECK(openPopup(m));
+        CHECK(clickBox(m));
+        m.Key(ImGuiKey_End);
+        typeChar(m, '7');
+        report(m, "   ...a '7' typed at the end", list);
+        m.Key(ImGuiKey_Backspace);
+        report(m, "   ...and deleted when it went in (edit-then-revert)", list);
+        CHECK(clickApply(m));
+        report(m, "   ...Apply", list);
+        if (!popupWindow()) CHECK(openPopup(m));
+        CHECK(clickBox(m));
+        typeChar(m, 'x');
+        m.Key(ImGuiKey_Escape);
+        report(m, "   ...'x' typed and Escape pressed in the box", list);
+        if (!popupWindow()) CHECK(openPopup(m));
+        if (popupWindow())
+        {
+            CHECK(clickApply(m));
+            report(m, "   ...Apply after the Escape", list);
+        }
+    }
+    {
+        // V-mb: a saved list cut in the middle of a two-byte character (it does not parse: the character is no address).
+        MiniRig m;
+        live(m, cEntry + 4);
+        settle(m);
+        std::string list = listOf(2046);
+        list.erase(list.size() - 9);
+        while (list.size() < 2046) list += " ";
+        list += "\xC3\xA9 06003000";   // 'é': its first byte is the 2047th
+        m.panel.KeepUnparsedVolatileMemory(list);
+        CHECK(openPopup(m));
+        report(m, "Vmb: a saved list cut in the middle of 'é' (the box holds its first byte)", list);
+        CHECK(clickBox(m));
+        report(m, "   ...the box clicked", list);
+        CHECK(clickApply(m));
+        report(m, "   ...Apply on it unchanged", list);
+        if (!popupWindow()) CHECK(openPopup(m));
+        CHECK(clickBox(m));
+        m.Key(ImGuiKey_Home);
+        typeChar(m, '1');
+        m.Key(ImGuiKey_Backspace);
+        report(m, "   ...a '1' typed at the start and deleted", list);
+        CHECK(clickApply(m));
+        report(m, "   ...Apply", list);
+        if (!popupWindow()) CHECK(openPopup(m));
+        CHECK(clickBox(m));
+        m.Key(ImGuiKey_End);
+        m.Key(ImGuiKey_Backspace);
+        report(m, "   ...Backspace at the end (the cut byte)", list);
+        CHECK(clickApply(m));
+        report(m, "   ...Apply", list);
+    }
+}
+
 void RunFixPins()
 {
     RunPinnedEntryPins();
@@ -3642,6 +4058,12 @@ std::string FollowExecute(FRig& r, FOp o, Rng& rng)
         r.Moved();
         return std::string();
     };
+    // (area 8, round 8, A8-49) An entry the box takes (Enter on a text that parses) cancels the panel's pending sync (`mSyncEntryBox = false`):
+    // an install made while the box held the focus is not written over the text afterwards. The rig took that sync when the focus went. Noted
+    // at the Enter itself: an install of a new function after it, in the same key's frames, is synced as any other.
+    auto consumeSync = [&r] {
+        if (const DecompileResult* s = r.panel.Shown()) r.lastShownEntry = s->requestedEntry;
+    };
     auto typed = [&](uint32_t entry) {
         if (!r.visible) return std::string("(panel hidden: no entry box)");
         // The target first: an answer the keys' own frames install (a cache hit on Enter) is installed for it.
@@ -3650,7 +4072,7 @@ std::string FollowExecute(FRig& r, FOp o, Rng& rng)
         r.pinGuess = false;   // the user's own entry: full confidence, no doubt
         r.provUnknown = false;
         r.refused = false;
-        TypeEntry(r, Hex(entry));
+        TypeEntry(r, Hex(entry), consumeSync);
         r.haveStopped = false;
         r.boxShowsShown = false;
         r.boxTarget = r.TargetProv();
@@ -3792,7 +4214,7 @@ std::string FollowExecute(FRig& r, FOp o, Rng& rng)
         return "";
     case FOp::NotCode:
         if (!r.visible) return "(panel hidden: no entry box)";
-        TypeEntry(r, "FFFFFFF0");
+        TypeEntry(r, "FFFFFFF0", consumeSync);
         r.tgt = FRig::Tgt::Entry;
         r.tgtAddr = 0xFFFFFFF0u;
         r.pinGuess = false;
@@ -3885,6 +4307,7 @@ std::string FollowExecute(FRig& r, FOp o, Rng& rng)
         r.pinDoubtKnown = false;
         r.provUnknown = false;
         r.refused = false;
+        consumeSync();
         ImGui::GetIO().AddKeyEvent(ImGuiKey_Enter, true);
         r.Frame(ImVec2(1270, 710), false);
         ImGui::GetIO().AddKeyEvent(ImGuiKey_Enter, false);
@@ -4136,6 +4559,7 @@ const char* const kFollowScriptPins[] = {
     "hold; edit; follow; release; refresh",                                // A8-30: pinned while the answer is held, then answered
     "pcc; focus; pca; enter",                                              // A8-42: Enter in the box that kept the focus while the output moved on
     "pcc; focus; pca; follow; focus; pcc; enter",                          // A8-42 (control: also passes with the fix reverted)
+    "hold; typet; focus; release; hold; typea; stop; focus",               // A8-49: the rig's sync after an Enter that cancelled it (round 8)
 };
 
 // (area 8 fixer, A8-36 to A8-39) Generated sequences with the evidence operations and Enter on the untouched box that failed with the fix
@@ -4315,6 +4739,11 @@ int main(int argc, char** argv)
         if (std::getenv("SE_TRUST_PROBE7"))
         {
             RunProbe7();
+            return 0;
+        }
+        if (std::getenv("SE_TRUST_PROBE8"))
+        {
+            RunProbe8();
             return 0;
         }
         if (seedEnv && *seedEnv)
