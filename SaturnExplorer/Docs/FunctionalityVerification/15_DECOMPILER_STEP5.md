@@ -15533,3 +15533,51 @@ Unticking Follow PC pins the entry found as an Entry target. It keeps the finder
 
 * Area 4 may want to see A8-30: the finder's confidence and doubt are its texts, though dropping them is the panel's doing.
 * Area 1: nothing new. The A8-25 line in `DecompilerModelTests.cpp` was reviewed here and holds.
+
+## Area 8 fixer (A8-29, A8-30)
+
+Branch `review/8-a830-fix` from master `24db22a1` (area 8 round 4, merged). It fixes **A8-30 (P2)** and **A8-29 (P3)** in `DecompilerPanel.cpp` and `.h`, widens the trust model where it accepted A8-30, and pins both rows in the default run. The finder's texts (area 4's) are not changed. One sentence is added to the guide's "Entry: …" row.
+
+### A8-30: a pinned entry is still the finder's guess
+
+The coordinator kept this at P2: a pin is the finder's guess, not the user's entry. `Target` now carries `confidence` (default 100) and `doubt` (default none), and `Resolve` takes both for an Entry target instead of 100 and none. Follow PC off pins `mEntrySource`, `mEntryConfidence` and `mEntryDoubt` with the entry. When the question has no function (the PC in the BIOS, no registers), the box pins the entry of the output shown. It now pins it with the source, figure and doubt that output was installed with (`mShownEntryFrom`, `mShownEntryConfidence`, `mShownEntryDoubt`, set by `Install`). Before, it labelled the pin "user-set entry", which was the same defect by the other path. Enter in the entry box and Set Function Start Here build their targets with the defaults, so only an entry the user gives shows full confidence and no doubt. After the pin, the label still reads "(entry from rts scan, 60%)", and "Entry: guessed from the previous rts; …" stays in the window and in the Copy marks. Both survive later answers for the pinned entry, such as an edit, because the doubt belongs to the target, not to the snapshot.
+
+**The instrument gap.** `FollowCheck` modelled the doubt only for the Follow PC and Decompile targets, so a pinned entry had to show none. It now expects the doubt for an Entry target that the box pinned (`FRig::pinGuess`; a typed entry clears it). When the check before the click accepted a doubt for the same question, the pin must show exactly that doubt. Otherwise (the output on screen was another function, or the click's frames captured) any of the finder's doubts is accepted, with any PC the rig sets in "never reaches". The pin then comes from the output shown, whose doubt names the PC it was installed for. The fresh run found that case: CPU-weighted mix 8 seed 95174, the dead code of U. That seed is pinned as the rig's own. The strict hold on that path is the mini pin below.
+
+### A8-29: the root cause covering (a), (b) and (c)
+
+`Update` returns at `q == mAsked`. After a Stop, `mAsked` keeps the stopped question, which is right only while the Stop is in force: acknowledged (`mStopped`), or with its cancel on its way. That lifetime had two exits that left the question asked:
+
+* **The Stop is forgotten.** `ForgetStop` runs on another target, or on a question that finds no function (A8-10). This is ways (a) and (b): the CPU switch onto a CPU without registers or into the BIOS, and a Follow PC click whose request was used up where nothing is found.
+* **The cancel comes back when the request is no longer for the question on screen.** `Accept`'s discarded branch kept `mAsked` for any cancelled request, "the Stop is the user's answer to it", but `mStopped` is never set there, so no Stop was in force. This is way (c), a Stop pressed after the question had found no function (A8-9). The same exit is reached when the CPU is switched before the cancel is acknowledged.
+
+Round 4's trial covered only the first exit. The fix is one rule, written at `mAsked`: a stopped question stays there only while its Stop is in force. `ForgetStop` clears `mAsked` when a Stop was in force (`mStopped || (mPending.active && mPending.cancelled)`). The discarded branch clears it whether or not the request was cancelled. A question that comes back after its Stop is over is asked again. If its cancelled request is still running, the new submission supersedes it, so the late cancel cannot bring back a "Stopped." that was forgotten. A Stop in force still holds as before: the same question is not asked again until Enter, Refresh, Decompile or a click.
+
+### Pins (all in the default run of `SaturnExplorerDecompilerTrustTests`)
+
+| Pin | Row | Without the fix |
+|---|---|---|
+| `RunPinnedEntryPins` (mini rig): Follow PC on C+4, then off; an edit; the same entry typed; and Follow PC off with the PC in the BIOS. The drawn label "(entry from rts scan, 60%)", the drawn Entry line, `Uncertainties`, the Copy marks and the model are checked, and the typed entry must drop them | A8-30 | the five checks of the doubt after a pin fail |
+| `kFollowScriptPins`: `refresh; follow; refresh; follow` and `hold; edit; follow; release; refresh` | A8-30 | both fail `LINE MISSING (the entry doubt)` |
+| `kFollowPinsPinned` / `kFollowPinsPinnedAuto`: mix 8 seed 12, mix 9 seed 1 (the first seeds of each that fail once the model expects the doubt) | A8-30 | both fail |
+| `kFollowScriptPins`: round 4's four scripts for (a), (a) in the BIOS, (b) and (c) | A8-29 | all four fail `NOT REFRESHED` |
+| `kFollowPinsCpu` / `kFollowPinsCpuAuto`: seeds 50534 (mix 8) and 50814 (mix 9), run with `SE_TRUST_FOLLOW_CPU` and hover off as round 4 found them | A8-29 | both fail `NOT REFRESHED` |
+| `kFollowPinsCpu`: seed 95174 (mix 8, CPU-weighted) | the rig | fails only without the rig's widened "never reaches" (it is an instrument pin) |
+
+The mutation checks were run on the built test with the product reverted by a script and put back with `git checkout`, after which `git status` was clean. With `Resolve`'s two lines reverted to `mEntryConfidence = 100;`, the A8-30 pins fail as listed, as do the older seed 5080, mix 9 seed 1 and seed 1003 at 537 px. With the A8-29 fix reverted, the six A8-29 pins fail. With only `ForgetStop`'s line reverted, the (a) and (b) scripts and seed 50534 fail. With only `Accept`'s line reverted, the (c) script and seed 50814 fail. Restored, all pass.
+
+### What was run (RelWithDebInfo, gcc 13, own build: Ninja, `SE_ENABLE_DECOMPILER=ON`, `-j2`; every run under `ulimit -v 3500000` and `timeout`)
+
+| Run | Result |
+|---|---|
+| Round 4's `a8_29.sh` and `a8_30.sh` before the fix | reproduced: all six A8-29 cases fail `NOT REFRESHED`; the A8-30 dump shows "(entry from rts scan)" and no Entry line after the click |
+| Follow PC mixes, fresh seeds, hover off: mix 8 and mix 9 at 90000 to 90683; CPU-weighted (`SE_TRUST_FOLLOW_CPU=1`) mix 8 and mix 9 at 95000 to 95674 | **120,138 operations, 0 failing** (30,037 + 30,037 + 30,032 + 30,032). The first CPU-weighted mix 8 run failed once, at 95174: that was the rig, not the panel (above) |
+| the same with hover: mix 8 and 9 at 97000 to 97176, CPU-weighted at 98000 to 98172 | 32,156 operations, 0 failing |
+| mixes 0 to 7 (area 1's rig, which sees the `Accept` change), fresh seeds from 61000, hover off | 24,151 operations, 0 failing |
+| `ctest -E SaturnExplorerLive -j2 --timeout 900` / `ctest -R SaturnExplorerLive` | **102 of 102** / **6 of 6**. 108 tests, as on master: no ctest test was added, and the pins are inside the trust test (51.4 s, was 51.7 s) |
+| `SaturnExplorerDecompilerFaultTests` (product code changed) | **0 of 94 failed**, 80.0 s |
+
+### Routed
+
+* Area 4: nothing to do. The finder's confidence and doubt texts are unchanged. The panel now keeps them across a pin.
+* A8-31's "still not held: the `(entry from …)` label's figure" is now held for the pin by `RunPinnedEntryPins`. Elsewhere it is still not held.
