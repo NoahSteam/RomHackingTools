@@ -16280,3 +16280,80 @@ Two rig corrections came out of the first fresh-seed run with the new `focus` op
 ### Routed
 
 Nothing. A8-43 (area 9's popup) and A8-44 (area 1's oracle) are fixed here, as asked.
+
+## Area 8, round 8
+
+Branch `review/8-round8` from master `b26f913b` (the area 8 fixer for A8-42 to A8-45 merged, and area 9's loader changes). An adversarial review of the trust indicators, independent of the fixer's conclusions. Changed: test code only (`RunProbe8` and the Follow rig's Enter in `DecompilerTrustTests.cpp`, one pin and three open scripts in `DecompilerModelTests.cpp`, `Docs/Decompiler/tools/a8_round8/probe8.sh`) and the docs. No product code.
+
+**The round is CLEAN: no P1 and no P2 was found.** Six rows are filed, all P3: **A8-46** (Enter after an edit taken back), **A8-47** (area 1's model, a Stop discarded while hidden), **A8-48** (area 9's Volatile popup texts), **A8-49** (the Follow rig's box model; fixed in the rig this round), **A8-50** (a refusal typed into a box that kept the focus at an install), **A8-51** (the entry box's tooltip against A8-42).
+
+### The A8-42 and A8-43 fixes, attacked
+
+Read first, from the code: `EnterTarget`, `EnterAsksTarget`, the box's sync (`mSyncEntryBox && !mEntryActive`), `Install`'s `sameFunction`, `SetCpu`, `ForgetStop`, `Accept`'s discarded branch, `BeginVolatileEdit` / `ApplyVolatileEdit`, and ImGui 1.92's `InputText` (Escape reverts the edit and drops the focus, and marks the item edited; Enter on a single-line box drops the focus). Then twelve hand-built sequences on the small rig and the Volatile popup drawn and driven (`RunProbe8`, `SE_TRUST_PROBE8=1`, `probe8.sh <build dir>`):
+
+| # | Sequence | Result |
+|---|---|---|
+| E1-E3 | Follow PC on C ("rts scan, 60%", Entry line); the box clicked, '1' typed, the edit taken back by Escape (then a click), Backspace, Ctrl+Z; Enter | **A8-46**: the box reads `06004000`, the panel's text, and Enter asks it as typed: "user-set entry", no Entry line, no Copy mark, Follow PC off |
+| E4 | the box focused while A installs (box C); '1' typed and deleted; Enter | C typed, "user-set entry": the user's keys made the text, which names C. Not a defect |
+| E5 | the box focused; PC to A with the engine held; Stop (the click takes the focus); Enter on the untouched box | Stopped tooltip names Refresh only; Enter asks the pin of C with its label and line. Right |
+| E6 | the box focused; CPU 1 chosen without a click (PC in A); Enter; CPU 0 | A installs while focused ("callee, 70%", true for A); Enter asks the pin of A, box rewritten; the CPU back moves nothing. Right |
+| E7 | the box focused; C named; Enter; the name erased | "symbol, 90%"; the pin keeps it; "rts scan, 60%" with the line once the name goes (A8-37). Right |
+| E8 | the box focused; PC into the BIOS; Enter | the "no function" tooltip; Enter pins C with its doubt. Right |
+| E9 | A typed; Follow PC on (C); the box focused; PC to A; Enter | Enter asks A (shown) as a pin, "rts scan, 60%". Right |
+| E10 | the A8-42 state (box focused, `06004000`, A shown), the box hovered | **A8-51**: the box's tooltip "Decompile the function starting at this address ... Enter to go." is drawn; Enter asks A |
+| E11, E12 | the box focused while A installs; 'zz' typed and Entered (refused); the focus goes | **A8-50**: the deferred sync writes `06005000` over 'zz' while the refusal stays the question, and the tooltip says the box "names no function". Control E12 (no focus at the install): 'zz' stays |
+| V2046, V2047 | saved lists that parse and fit (2,046 and 2,047 characters): the popup opened by its button, Apply clicked unchanged, a character typed and deleted, Escape | applied unchanged, the edit taken back applies the same list, the popup keeps no amber line. Right. (At 2,047 the box is full: the typed character is not taken) |
+| V2048, V2049 | lists that parse and are one and two characters over the box | "NOT in force ... longer than 2047 characters", the box cut; Apply on it refused, also after a typed character (not taken) and Escape. **A8-48**: two full stops in the opening line; one Backspace and Apply replace the saved list with the cut less a character (an address the list never held), announced by the popup's line, not by the guide's "never" |
+| Vmb | a saved list cut in the middle of "é" | the lone first byte stays in the box (ImGui does not rewrite it on activation), Apply unchanged refused; a Backspace at the end removes the byte and Apply then replaces the list with its ASCII prefix (A8-48 (2)) |
+
+Twenty-two Follow rig scripts with the `focus` word across installs, Stop, the CPU switch, a hide, Decompile, names and starts, the BIOS, the dead code of U, Show in Pseudocode and Auto-refresh (`SE_TRUST_FOLLOW_SCRIPT`, e.g. `pcc; focus; cpu; enter`, `pcc; focus; hold; pca; stop; release; enter`, `pcc; focus; hide; pca; show; enter`, `pcc; focus; nameall; pca; unname; enter`, `pcc; focus; hold; edit; stop; focus; release; enter`): all pass. Six with a Stop then a hide (`hold; pca; stop; hide; pcc; release; pca; show` and five more): all pass.
+
+### A8-44's oracle change: is the model blind to a real Stop bug?
+
+Three bugs of the Stop class were put into `DecompilerPanel.cpp` one at a time (made locally, run, reverted; `git status` clean after each), against the model as it stands:
+
+| Mutation | Default model run (18 seeds and the pins) | Directed scripts |
+|---|---|---|
+| M1: the Stop's question cleared on acknowledgement (`mAsked = Question()` after `mStopped = true`): the panel asks the stopped question by itself | **fails**: seed 3, A1-3, A8-1 (stopped), A8-7, A8-7 (twice) | `run; hold; select A; stop; wait; advance; advance; wait` fails `STOP` |
+| M2: `ForgetStop()` whenever a running view's identity moves (the held snapshot does not) | passes | the same script fails `STOP` after operation 6; seed 142 of 150 (`SE_MODEL_SEEDS=150`) fails. The script is now a pin: `A8-44 (running)` |
+| M3: `Accept`'s discarded branch keeping `mAsked` for a cancelled request (A8-29 (c) reverted) | passes | `hold; select A; stop; hide; scrub 1; wait; resume; show; wait` (and with a BIOS image or a function start set and undone while hidden) fails `STALE REASON` |
+
+So A8-44 did not blind the model: a Stop that the panel drops while the held snapshot is still the stopped question is caught, by the default run (M1) or by the new pin (M2). But M3's scripts showed the other side: on the unchanged panel they fail too, with `STOP: ... a result for the question stopped was installed`. A hidden panel's held snapshot does not move, so the model keeps a Stop the panel has rightly forgotten (its cancel came back while the snapshot was not on screen). That is **A8-47**, a false failure of the oracle; the three scripts are in `kOpen` (`SE_MODEL_OPEN=1`), and M3 is caught there only through the model's own wrong belief.
+
+### Fresh seeds
+
+Seeds from 1,100,000, each run alone under `ulimit -v 3500000` and a 1,150 s limit, the output of every failure kept before any rerun:
+
+| Run | Result |
+|---|---|
+| `SE_TRUST_FOLLOW_FOCUS=1`, mix 8 and mix 9, hover on, seeds from 1,100,000 | 100,017 + 100,017 operations (2,250 sequences each), 0 failing |
+| the same with `SE_TRUST_FOLLOW_CPU=1`, seeds from 1,150,000 | mix 8: **seed 1150766 failed** (A8-49, the rig's; the output kept, `FOLLOW FAILURE, seed 1150766, after operation 46`); mix 9: 60,025 operations, 0 failing. After the rig's fix: 60,025 + 60,025 operations, 0 failing. (A first version of the fix, which took the sync after the Enter's frames, failed mix 9 seed 1151271; kept and read, the rig again; the version committed passes both) |
+| `SE_TRUST_FOLLOW_FOCUS=1 SE_TRUST_NOHOVER=1`, seeds from 1,200,000 | 60,021 + 60,021 operations, 0 failing |
+| focus, CPU and hover off, seeds from 1,250,000 | 60,033 + 60,033 operations, 0 failing |
+| after the rig's fix: focus, hover on, seeds from 1,400,000; focus, CPU, hover off, seeds from 1,450,000 | 40,004 + 40,004 and 40,021 + 40,021 operations, 0 failing |
+| mixes 0 to 7 with `SE_TRUST_HIDDEN_RENAME=1`, hover on, seeds from 1,300,000 | 15,029 / 15,023 / 15,037 / 15,048 / 15,010 / 15,066 / 15,000 operations in mixes 0, 1, 3, 4, 5, 6, 7; mix 2 in two pieces (seeds from 1,300,000 and 1,300,500: 7,526 + 7,544 operations, 750 s and 730 s); 0 failing. A8-47's sequence (Stop, hide, the view away and back while the cancel lands) does not occur in them |
+| the area 1 model, M2 only: `SE_MODEL_SEEDS=150` | seed 142 fails `STOP` after operation 13; on the unchanged panel seed 142 passes (`SE_MODEL_SEED=142`), so the failure is M2's |
+
+### Open rows re-judged
+
+* **A8-32 (P3)**: stays open, stays P3. E6 and E7 (the label across a CPU switch, a name given and erased, with the box focused) agree with the finder at each install; nothing over-sells beyond the call stack case already in the row.
+* **A8-40 (P3)**: stays open for the call stack in a generated sequence. Two more doors no generated sequence reaches: an edit taken back (A8-46) and a refusal typed into a box that kept the focus at an install (A8-50; the rig's `badentry` takes the box as the panel's text whatever the panel did).
+* **A8-45 (P3)**: its status cell held no status; noted as an open instrument record. Its `focus` model had a fault (A8-49, fixed in the rig); the drawn Volatile popup is now driven by `RunProbe8`, outside the default run.
+* **A8-43** (area 9's, fixed): the refusal holds for every unchanged cut tried (2,048, 2,049, a multibyte cut, after Escape, after a character the full box did not take). What an edited cut does is A8-48.
+* **A8-44** (fixed): see above; the fix is sound for a visible panel, and A8-47 is its hidden-panel remainder.
+
+### What was run
+
+| Run | Result |
+|---|---|
+| fresh seeds (above) | 0 failing, except A8-49 (the rig's, fixed) |
+| `probe8.sh` | the tables above |
+| Stop mutations M1 to M3 against the model | above; the product restored after each, `git status` clean |
+| `ctest -j2 --timeout 900 --output-on-failure`, all 108, after the last test change | **108 of 108 passed** (102 + 6 Live; 191 s; the trust test 57.7 s, the engine suite 43.6 s, the model suite 20.5 s). No test was added to ctest. The default runs gained: the model pin `A8-44 (running)` and the Follow rig script `hold; typet; focus; release; hold; typea; stop; focus` (A8-49). `RunProbe8` is behind `SE_TRUST_PROBE8`; the A8-47 scripts are in `kOpen` (`SE_MODEL_OPEN=1`, failing until the model is fixed) |
+| the fault suite | not run: no product code changed |
+
+### Routed
+
+* **Area 9**: A8-48 (the Volatile popup's opening line has two full stops; the guide's "the cut never replaces the saved list" holds only for the unchanged cut).
+* **Area 1**: A8-47 (the model keeps a Stop the hidden panel has forgotten; three scripts in `kOpen`, the fix in the row).
+* Area 4: nothing.
