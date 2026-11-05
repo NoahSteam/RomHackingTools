@@ -6,6 +6,7 @@
 #include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <iterator>
 #include <limits>
 #include <map>
@@ -1426,11 +1427,32 @@ void DecompilerPanel::DrawHeader(const DecompilerView& view, const DecompilerRun
         // The panel's text: Enter on it asks for the output shown, as it was asked (A8-36).
         mBoxTargetValid = true;
         mBoxShowsShown = true;
+        mBoxCleanValid = true;
+        mBoxCleanShown = true;
+        std::snprintf(mBoxCleanText, sizeof mBoxCleanText, "%s", mEntryBuf);
     }
     ImGui::SetNextItemWidth(ImGui::CalcTextSize("0x00000000").x + ImGui::GetStyle().FramePadding.x * 2.0f);
     const bool entered = ImGui::InputTextWithHint("##entry", "entry", mEntryBuf, sizeof mEntryBuf, ImGuiInputTextFlags_EnterReturnsTrue);
     // Any edit makes the text the user's: Enter on it is then the entry typed, whatever the text says.
-    if (ImGui::IsItemEdited()) mBoxTargetValid = false;
+    if (ImGui::IsItemEdited())
+    {
+        mBoxTargetValid = false;
+        // An edit taken back (Escape, Backspace, Ctrl+Z) leaves the text the panel wrote: the box is untouched again (A8-46). Not when the
+        // panel's text is no longer the shown output's (the box kept the focus while the output moved on): that text is now the user's. Nor
+        // when the text grew into it from a part of it: that is the user typing the entry out, not taking an edit back.
+        const size_t prevLen = std::strlen(mBoxPrevText);
+        const bool typedOut = prevLen < std::strlen(mBoxCleanText) && std::strncmp(mBoxPrevText, mBoxCleanText, prevLen) == 0;
+        if (mBoxCleanValid && !typedOut && std::strcmp(mEntryBuf, mBoxCleanText) == 0)
+        {
+            char shownText[16];
+            std::snprintf(shownText, sizeof shownText, "%08X", mShownValid ? mShown.requestedEntry : 0u);
+            if (!mBoxCleanShown || (mShownValid && std::strcmp(mEntryBuf, shownText) == 0))
+            {
+                mBoxTargetValid = true;
+                mBoxShowsShown = mBoxCleanShown;
+            }
+        }
+    }
     if (entered)
     {
         Target t;
@@ -1445,6 +1467,9 @@ void DecompilerPanel::DrawHeader(const DecompilerView& view, const DecompilerRun
             mBoxShowsShown = false;
             // Untouched panel text stood for the output shown, which may not be what it says (A8-42): the box says what was asked.
             if (shownText) std::snprintf(mEntryBuf, sizeof mEntryBuf, "%08X", t.address);
+            mBoxCleanValid = true;
+            mBoxCleanShown = false;
+            std::snprintf(mBoxCleanText, sizeof mBoxCleanText, "%s", mEntryBuf);
             // The box holds what was typed: the reset of a refusal's text (SetTarget) is for the targets that did not come from it.
             mSyncEntryBox = false;
             // Typing an entry and pressing Enter is a request, not a state the panel drifted into: it
@@ -1457,6 +1482,8 @@ void DecompilerPanel::DrawHeader(const DecompilerView& view, const DecompilerRun
             // The refusal is the question until the entry changes (A8-4); the target is not touched,
             // so a later Follow PC or Containing target is still the one asked for after it.
             mEntryRefused = true;
+            // The refused text stays in the box with the refusal; the sync an install left pending waits for the refusal to go (A8-50, A8-20).
+            mSyncEntryBox = false;
             mResolved = true;
             mEntryOk = false;
             mEntryFailure = EntryFailure::Refused;
@@ -1464,9 +1491,19 @@ void DecompilerPanel::DrawHeader(const DecompilerView& view, const DecompilerRun
             ForgetStop();
         }
     }
+    std::snprintf(mBoxPrevText, sizeof mBoxPrevText, "%s", mEntryBuf);
     mEntryActive = ImGui::IsItemActive();
     Remember("entry");   // the input box: nothing in the branch above submits an item
-    ImGui::SetItemTooltip("Decompile the function starting at this address (hex; any mirror). Enter to go.");
+    {
+        // Untouched text of an older output: Enter asks the output shown, not the address in the box (A8-42, A8-51).
+        Target asked;
+        uint32_t typed = 0;
+        if (ParseHexAddress(mEntryBuf, typed) && EnterTarget(asked) && asked.address != typed)
+            ImGui::SetItemTooltip("The box still holds an older address than the function shown. Enter asks for the function shown\n"
+                                  "again (type an address to decompile another).");
+        else
+            ImGui::SetItemTooltip("Decompile the function starting at this address (hex; any mirror). Enter to go.");
+    }
 
     BesideIfFits(ButtonWidth("Refresh"));
     const bool refresh = ImGui::Button("Refresh");

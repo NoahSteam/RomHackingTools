@@ -546,6 +546,12 @@ private:
     bool mBoxTargetValid = false;
     bool mBoxShowsShown = false;     // ...and it is the shown answer's text: the target is mShownTarget, whatever was installed since
     Target mBoxTarget;
+    // The text the panel (or an accepted Enter) last left the box with, and whether it was the shown answer's: an edit brought back to it
+    // leaves the box untouched (A8-46).
+    char mBoxCleanText[16] = {};
+    char mBoxPrevText[16] = {};      // the box's text at the end of the last Draw
+    bool mBoxCleanValid = false;
+    bool mBoxCleanShown = false;
     // A new function was installed: the entry box shows its entry once it is not being edited, so
     // it never names a function other than the one on screen (Follow PC, Call Stack, Registers).
     bool mSyncEntryBox = false;
