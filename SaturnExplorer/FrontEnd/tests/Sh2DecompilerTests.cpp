@@ -429,7 +429,9 @@ void TestArea7Round3()
     // the break's path. Before the fix the line named, by A7-11's rule (the latest store before the instruction in the flow's order), the store
     // of -3 at 0x06021C34, and the store of 0 was on no line; now it names the store whose value reaches it, 0x06021C8C, beside the load. The
     // loop's `return xStack_1c;` named, for the local, the load of iStack_14 at the loop head (0x06021C3A: the engine's copy that trims the
-    // local's cover is there); it names the load that reads xStack_1c for the return, 0x06021CA0, as before 0076.
+    // local's cover is there); it names the load that reads xStack_1c for the return, 0x06021CA0, as before 0076. Since the area 7 fixer's A7-22
+    // rule (a number drawn at an instruction that does not make it is its store's line), `xStack_1c = 0;` names only the store: the load is
+    // the return's, and it neither makes nor computes the 0.
     {
         const uint32_t base = 0x06021C24u;
         const DecompileResult r = a7r3::DecompileWords(d, hw, base, {
@@ -442,7 +444,7 @@ void TestArea7Round3()
         CHECK(r.status == DecompileStatus::Ok);
         const Line* zero = LineWith(r, "xStack_1c = 0;");
         CHECK(zero != nullptr);
-        if (zero) CHECK(LineInstructions(*zero) == (std::vector<uint32_t>{ 0x06021C8Cu, 0x06021CA0u }));   // the store of 0 (was 0x06021C34, of -3)
+        if (zero) CHECK(LineInstructions(*zero) == (std::vector<uint32_t>{ 0x06021C8Cu }));   // the store of 0 (was 0x06021C34, of -3; then also the load)
         if (zero) CHECK(zero->firstAddr == 0x06021C8Cu);
         CHECK(a7r3::OnSomeLine(r, 0x06021C8Cu));
         const Line* ret = LineWith(r, "return xStack_1c;");
@@ -462,6 +464,8 @@ void TestArea7Round3()
 }
 
 // Area 7 round 4 (the reviewer's pins): each finding at its current behaviour. The comment of each says what flips when the row is fixed.
+// The area 7 fixer flipped A7-22, A7-23 and A7-24 (each now checks the fixed mapping, and that the oracle's new check sees the line as it
+// was); A7-25 is open and stays pinned.
 namespace a7r4
 {
 DecompileResult DecompileWords(Sh2Decompiler& d, std::vector<uint8_t>& hw, uint32_t base, const std::vector<uint16_t>& words,
@@ -500,6 +504,30 @@ const std::vector<uint16_t> kA723Words = {
         0x8D04, 0x6133, 0x6010, 0xC901, 0x2008, 0x8BFB, 0xEC23, 0x3CEC, 0x6CC0, 0x61CC, 0x6013, 0x7E24, 0x6FE3, 0x4F26, 0x6EF6, 0x6DF6, 0x6CF6, 0x6BF6,
         0x6AF6, 0x69F6, 0x000B, 0x68F6, 0x0009, 0x0600, 0xE6A4, 0x2010, 0x0063, 0x2010, 0x001F, 0x0607, 0x56D4, 0x0606, 0x3BE0, 0x0606, 0x3AAC, 0x0607,
         0x56EC, 0x0600, 0xDB78 };
+// The words of 0x06048B7E of the second corpus image, to the end of its literal pool (the area 7 fixer): `iStack_34 = iRam060a8e8a;` is a
+// copy the engine put at a `bra` (0x06048C54) whose slot reads the global (0x06048C56, `mov.w @r1,r1`); the store the paths share after the
+// join (0x06048C98) writes the global plus another value.
+const std::vector<uint16_t> kCopyMakerWords = {
+        0x4F22, 0x7FC8, 0x6EF3, 0xD14E, 0x6243, 0x6C12, 0x7204, 0x6121, 0x601D, 0x8810, 0x8F02, 0x655F, 0x7101, 0x2211, 0x4515, 0x8F03, 0x6721, 0x617B,
+        0x7120, 0x671F, 0xE110, 0x3717, 0x8F05, 0x6143, 0x7106, 0xD244, 0x6111, 0xA004, 0xE001, 0x7108, 0xD242, 0x6111, 0xE0FF, 0x6222, 0x611D, 0x6313,
+        0x4308, 0x331C, 0x4308, 0x332C, 0x7314, 0x6331, 0x1E09, 0x916C, 0xE000, 0x1E08, 0x62E3, 0x720A, 0x9068, 0x271F, 0x1E0A, 0x011A, 0x3C1C, 0x9164,
+        0x2211, 0xE109, 0x6233, 0x7201, 0x3216, 0x8D56, 0xEB12, 0x6123, 0x311C, 0xC702, 0x011D, 0x301C, 0x402B, 0x0009, 0x0009, 0x01F4, 0x0074, 0x0044,
+        0x0050, 0x0014, 0x001C, 0x009C, 0x005C, 0x0068, 0x0082, 0x62E3, 0xD12A, 0xA003, 0x7208, 0x62E3, 0x7208, 0xD128, 0x9044, 0x6111, 0xEB11, 0x2211,
+        0x62E3, 0xD126, 0x6111, 0x7206, 0x2211, 0x62E3, 0x720A, 0x913A, 0x2211, 0x1E0A, 0xE001, 0xA02C, 0x1E08, 0x63E3, 0x7308, 0xD120, 0x9232, 0xA01F,
+        0x6111, 0x62E3, 0xD11F, 0x6111, 0x7208, 0xA01B, 0x2211, 0x62E3, 0xD11D, 0x6111, 0x7208, 0xA015, 0x2211, 0x62E3, 0xD11B, 0x6111, 0x7208, 0xA00F,
+        0x2211, 0x62E3, 0x7208, 0xD114, 0x6111, 0xEB02, 0xA008, 0x2211, 0x63E3, 0x7308, 0xD114, 0x9214, 0x6111, 0xEB02, 0x312C, 0x2311, 0x62E3, 0xD111,
+        0x6111, 0x7206, 0x2211, 0x50E9, 0x8801, 0x8F1E, 0x58E9, 0xA020, 0xE900, 0x03DC, 0x00C0, 0x1808, 0x00B0, 0x1608, 0x0180, 0x0D80, 0x0009, 0x060A,
+        0x8E50, 0x060A, 0x8E4C, 0x060A, 0x8E78, 0x060A, 0x8E5C, 0x060A, 0x8E64, 0x060A, 0x8E8A, 0x060A, 0x8E5A, 0x060A, 0x8E54, 0x060A, 0x8E48, 0x060A,
+        0x8E58, 0x69B3, 0x61B3, 0x71FF, 0x681F, 0x918F, 0x2E11, 0x62E3, 0x7204, 0x918C, 0x2211, 0x63E3, 0x731E, 0x740E, 0x6141, 0x9287, 0xEA00, 0x3AB3,
+        0x312C, 0x8D76, 0x2311, 0x65E3, 0x7510, 0x60E3, 0x7012, 0x1E0B, 0x50E8, 0x6DE3, 0x7D14, 0x300C, 0x1E0C, 0x6293, 0x322C, 0x6023, 0x02CD, 0xD13A,
+        0x6711, 0x6623, 0x367C, 0x2561, 0xE032, 0x0907, 0xD238, 0x6321, 0x011A, 0x31CC, 0x50EC, 0x7126, 0x011D, 0x50EB, 0x313C, 0x2011, 0x6183, 0x311C,
+        0x6013, 0x01CD, 0x62E3, 0xE032, 0x0807, 0x371C, 0x2D71, 0x011A, 0x31CC, 0x50EC, 0x7126, 0x011D, 0x7216, 0x313C, 0x2211, 0x626F, 0x617F, 0x3217,
+        0x8F03, 0x6163, 0x71FF, 0xA003, 0x2511, 0x6173, 0x71FF, 0x2D11, 0x62E3, 0x7218, 0xE032, 0x64E3, 0x61D1, 0x0807, 0x2211, 0x62E3, 0x721A, 0xD120,
+        0x6311, 0x061A, 0x36CC, 0x7626, 0x50E8, 0x73FF, 0x670B, 0x7718, 0x377C, 0x6073, 0x016D, 0x1E5D, 0x313C, 0x2211, 0x62E3, 0x720C, 0xE032, 0x6151,
+        0x0907, 0x2211, 0x62E3, 0x011A, 0x31CC, 0x7126, 0x6073, 0x011D, 0x720E, 0x331C, 0xD013, 0x400B, 0x2231, 0x62E3, 0x7208, 0x6121, 0x50EA, 0x310C,
+        0x2211, 0x51E9, 0x319C, 0x691F, 0x51E9, 0x318C, 0x681F, 0x61A3, 0x7101, 0x6A1F, 0x3AB3, 0x8F94, 0x55ED, 0x7E38, 0x6FE3, 0x4F26, 0x6EF6, 0x6DF6,
+        0x6CF6, 0x6BF6, 0x6AF6, 0x69F6, 0x000B, 0x68F6, 0x1002, 0x08A0, 0x01FC, 0x060A, 0x8E86, 0x060A, 0x8E76, 0x0600, 0x6230, 0x2F86, 0x2F96, 0x2FA6,
+        0x2FB6, 0x2FC6, 0x2FD6, 0x2FE6, 0x4F22, 0x7FC4, 0x6EF3, 0x1E48, 0x655F, 0x1E59, 0x6143 };
 }  // namespace a7r4
 
 void TestArea7Round4()
@@ -516,8 +544,10 @@ void TestArea7Round4()
     // cmp/eq #1,r0 ; bt/s L ; mov #0,r8 ; cmp/eq #2,r0 ; bf/s X ; mov #0,r8 ; L: mov.l @(lit),r11 ; mov #7,r10 ; M: jsr @r11 ; nop ;
     // add #1,r8 ; cmp/gt r10,r8 ; bf M ; X: lds.l @r15+,pr ; rts ; mov r8,r0`. Both paths into L set r8 to 0 in a delay slot (0x06070008,
     // 0x0607000E); the engine makes the MULTIEQUAL of the two zeros a COPY at L, and `iVar1 = 0;` names only L's first instruction, the
-    // literal load of the callee's address (0x06070010). A click goes there; 0x06070008 is on no line (the way back answers Folded, with the
-    // condition's line). Fixed: the line names the instructions that make the value (0x06070008, 0x0607000E) and a click goes to one of them.
+    // literal load of the callee's address (0x06070010). A click went there; 0x06070008 was on no line (the way back answered Folded, with the
+    // condition's line). Fixed (the area 7 fixer, AddJoinConstantTokens): the line names the instructions that make the value, each path's
+    // `mov #0,r8` (0x06070008, 0x0607000E), it says it is made at several, and a click goes to the lower. The oracle's constAtJoin (a number
+    // drawn at a join's first instruction that does not make it) is 0, and sees the line as it was (the damage below).
     {
         const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06070000u, { 0x4F22, 0x6043, 0x8801, 0x8D03, 0xE800, 0x8802, 0x8F07, 0xE800,
             0xDB04, 0xEA07, 0x4B0B, 0x0009, 0x7801, 0x38A7, 0x8BFC, 0x4F26, 0x000B, 0x6083, 0x0607, 0x1000 }, callee);
@@ -525,34 +555,71 @@ void TestArea7Round4()
         CHECK(r.status == DecompileStatus::Ok);
         const Line* l = LineWith(r, "iVar1 = 0;");
         CHECK(l != nullptr);
-        if (l) CHECK(LineInstructions(*l) == std::vector<uint32_t>{ 0x06070010u });   // mov.l @(0x06070024),r11 (fixed: 0x06070008, 0x0607000E)
-        if (l) CHECK(l->firstAddr == 0x06070010u);
-        CHECK(!a7r3::OnSomeLine(r, 0x06070008u));                                       // mov #0x0,r8, the bt/s path's zero (fixed: on the line)
-        CHECK(LineForInstruction(r, 0x06070008u).kind == LineLookup::Folded);
+        if (l) CHECK(LineInstructions(*l) == (std::vector<uint32_t>{ 0x06070008u, 0x0607000Eu }));   // each path's mov #0x0,r8 (was 0x06070010)
+        if (l) CHECK(l->firstAddr == 0x06070008u);
+        if (l) CHECK(Has(LineOriginText(*l), "0x06070008") && Has(LineOriginText(*l), "0x0607000E"));
+        CHECK(a7r3::OnSomeLine(r, 0x06070008u));                                        // mov #0x0,r8, the bt/s path's zero (was on no line)
+        CHECK(LineForInstruction(r, 0x06070008u).kind == LineLookup::Exact);
+        for (const Line& x : r.lines)
+            for (const Token& t : x.tokens) CHECK(!(t.addr == 0x06070010u && Has(x.text, "iVar1 = 0;")));   // never the literal load
         const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_22");
         dts::PrintMappingAudit(a, "a7_22");
-        CHECK(a.Violations() == 0);   // the oracle accepts it: none of its checks reads a register's merge
+        CHECK(a.Violations() == 0 && a.constAtJoin == 0);
+        // ...and the oracle sees the line as it was: drawn at the join's literal load
+        DecompileResult was = r;
+        for (Line& x : was.lines)
+            if (Has(x.text, "iVar1 = 0;") && x.text.find('(') == std::string::npos)
+            {
+                std::vector<Token> keep;
+                for (Token t : x.tokens)
+                    if (t.begin < t.end) keep.push_back((t.addr = t.addr ? 0x06070010u : 0, t));
+                x.tokens = keep;
+                x.firstAddr = 0x06070010u;
+            }
+        const dts::MappingAudit wa = dts::AuditMapping(was, word, "a7_22 as it was");
+        CHECK(wa.constAtJoin == 1 && wa.Violations() == 1);
     }
     // A7-23 (a): a register merged under a frame local's name (A7-21), with a store of the local on a path into the line. kA723Words: A7-21's
     // `uStack_8 = uVar6;` lines (the value is r9's, returned by `bra ; extu.b r9,r0`) are copies at the bt/s ending their blocks. With the two
     // stores of param_2 added before them, A7-19's walk back reaches those stores, names them, and the block-end rule moves the lines' own
     // tokens to the lower one: each line names only 0x0600D932 and 0x0600D93C (`mov.l r5,@(0x20,r14)`, a store of param_2) and a click
-    // goes to a store of another value. The oracle accepts it (the line names a store of the variable; copyUnconnected no longer sees it).
-    // Fixed: a store whose value is not the copy's is not named, and the lines keep A7-21's mapping (or name the instruction that makes r9).
+    // goes to a store of another value. The oracle accepted it (the line names a store of the variable; copyUnconnected no longer saw it).
+    // Fixed (the area 7 fixer): a store whose value is another's is not named (StoreShowsValue: every path into the store ends at param_2,
+    // not at the r9 the line shows), and the lines keep A7-21's mapping, each at its bt/s, as the control's. The oracle's storeValueOther (a
+    // line that names a store whose register holds, by the instruction words, another value) is 0, and sees the lines as they were.
     {
         const DecompileResult r = a7r4::DecompileWords(d, hw, 0x0600D90Eu, a7r4::kA723Words);
         Print("A7-23 register merge named by a store of another value", r);
         CHECK(r.status == DecompileStatus::Ok);
         const std::vector<const Line*> copies = a7r4::LinesWith(r, "uStack_8 = uVar6;");
         CHECK(copies.size() == 3);
-        for (const Line* l : copies)
+        const uint32_t bts[] = { 0x0600D9CEu, 0x0600DA0Cu, 0x0600DA78u };
+        for (size_t i = 0; i < copies.size() && i < 3; ++i)
         {
-            CHECK(LineInstructions(*l) == (std::vector<uint32_t>{ 0x0600D932u, 0x0600D93Cu }));   // fixed: neither
-            CHECK(l->firstAddr == 0x0600D932u);
+            CHECK(LineInstructions(*copies[i]) == std::vector<uint32_t>{ bts[i] });   // was 0x0600D932 and 0x0600D93C, the stores of param_2
+            CHECK(copies[i]->firstAddr == bts[i]);
         }
+        for (const Line& x : r.lines)
+            if (Has(x.text, "uStack_8 = uVar6"))
+                for (uint32_t at : LineInstructions(x)) CHECK(at != 0x0600D932u && at != 0x0600D93Cu);   // the while line too
         const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_23");
         dts::PrintMappingAudit(a, "a7_23");
-        CHECK(a.Violations() == 0 && a.copyStoreMissing == 0 && a.copyUnconnected == 0);
+        CHECK(a.Violations() == 0 && a.copyStoreMissing == 0 && a.copyUnconnected == 3 && a.storeValueOther == 0);
+        // ...and the oracle sees the lines as they were: each names the two stores of param_2
+        DecompileResult was = r;
+        for (Line& x : was.lines)
+            if (Has(x.text, "uStack_8 = uVar6;") && x.text.find('(') == std::string::npos)
+            {
+                for (Token& t : x.tokens)
+                    if (t.addr) t.addr = 0x0600D932u;
+                Token e;
+                e.begin = e.end = static_cast<uint16_t>(x.text.size());
+                e.addr = 0x0600D93Cu;
+                x.tokens.push_back(e);
+                x.firstAddr = 0x0600D932u;
+            }
+        const dts::MappingAudit wa = dts::AuditMapping(was, word, "a7_23 as it was");
+        CHECK(wa.storeValueOther == 3 && wa.Violations() == 3);
         // ...the control, the image's own words: A7-21 as filed, each line at its bt/s and counted as unconnected
         std::vector<uint16_t> image = a7r4::kA723Words;
         image[(0x0600D932u - 0x0600D90Eu) / 2] = 0x0009;
@@ -569,8 +636,9 @@ void TestArea7Round4()
     // bf B ; bra X ; extu.b r6,r0 ; B: mov.l r7,@(0,r14) ; mov.l @(lit),r1 ; jsr @r1 ; mov r14,r4 ; mov #3,r12 ; add r14,r12 ; mov.b @r12,r12
     // ; extu.b r12,r1 ; mov r1,r0 ; X: ...`. The return value is r6's byte on one path and the local's on the other; the engine names it after
     // the local and prints `xStack_c._3_1_ = param_3;` with the address of the dead store of param_2 (0x06070006, `mov.l r5,@(0x0,r14)`):
-    // the line names only that store, and a click goes to it. The value is made by `extu.b r6,r0` (0x0607000E). Fixed: the line does not
-    // name 0x06070006 (A7-21's mapping, or 0x0607000E).
+    // the line named only that store, and a click went to it. The value is made by `extu.b r6,r0` (0x0607000E). Fixed (the area 7 fixer):
+    // the store of param_2 is not the line's, so the copy keeps the instruction it is put at, the bf that ends its block (A7-21's mapping);
+    // storeValueOther is 0, and sees the line as it was.
     {
         const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06070000u, { 0x4F22, 0x7FF8, 0x6EF3, 0x1E50, 0x2448, 0x8B01, 0xA009, 0x606C,
             0x1E70, 0xD107, 0x410B, 0x64E3, 0xEC03, 0x3CEC, 0x6CC0, 0x61CC, 0x6013, 0x7E08, 0x6FE3, 0x4F26, 0x000B, 0x6EF6, 0x0009, 0x0009,
@@ -579,16 +647,44 @@ void TestArea7Round4()
         CHECK(r.status == DecompileStatus::Ok);
         const Line* l = LineWith(r, "xStack_c._3_1_ = param_3;");
         CHECK(l != nullptr);
-        if (l) CHECK(LineInstructions(*l) == std::vector<uint32_t>{ 0x06070006u });   // mov.l r5,@(0x0,r14): param_2 (fixed: not this)
+        if (l) CHECK(LineInstructions(*l) == std::vector<uint32_t>{ 0x0607000Au });   // the bf (was 0x06070006, mov.l r5,@(0x0,r14): param_2)
         const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_23 piece");
         dts::PrintMappingAudit(a, "a7_23 piece");
-        CHECK(a.Violations() == 0 && a.copyStoreMissing == 0);
+        CHECK(a.Violations() == 0 && a.copyStoreMissing == 0 && a.storeValueOther == 0 && a.copyOtherValue == 1);
+        DecompileResult was = r;
+        for (Line& x : was.lines)
+            if (Has(x.text, "xStack_c._3_1_ = param_3;"))
+            {
+                for (Token& t : x.tokens)
+                    if (t.addr) t.addr = 0x06070006u;
+                x.firstAddr = 0x06070006u;
+            }
+        const dts::MappingAudit wa = dts::AuditMapping(was, word, "a7_23 piece as it was");
+        CHECK(wa.storeValueOther == 1 && wa.Violations() == 1);
+    }
+    // The area 7 fixer's rule for a copy no store shows: `iStack_34 = iRam060a8e8a;` at the `bra` 0x06048C54 named the store after the join
+    // (0x06048C98, `mov.w r1,@r3`), which writes the global plus another value. That store is not the line's, and the copy is the line of
+    // the flow's load of the global it copies, in the bra's slot (0x06048C56); the oracle counts it at a load (A7-16's shape), not at a branch.
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06048B7Eu, a7r4::kCopyMakerWords);
+        Print("copy at a bra whose slot reads the global", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        const std::vector<const Line*> copies = a7r4::LinesWith(r, "iStack_34 = iRam060a8e8a;");
+        bool atSlot = false;
+        for (const Line* l : copies)
+        {
+            for (uint32_t at : LineInstructions(*l)) CHECK(at != 0x06048C98u && at != 0x06048C54u);   // was 0x06048C98
+            atSlot = atSlot || LineInstructions(*l) == std::vector<uint32_t>{ 0x06048C56u };
+        }
+        CHECK(atSlot);
+        const dts::MappingAudit a = dts::AuditMapping(r, word, "copy maker");
+        CHECK(a.Violations() == 0 && a.storeValueOther == 0 && a.copyAtLoad >= 1);
     }
     // A7-24: a case label names the first instruction of its case that kept an op, not the case's entry. 0x06005906 of the first corpus
     // image: `switch(xRam0603acc3)` through the table at 0x06005924 (entries 0x0600592C, 0x0600593C, 0x0600595A, 0x0600592C). `case 1:`
     // names 0x06005946 (tst r1,r1, the fifth instruction of the case), `case 0:` and `case 3:` 0x06005934 (the store, the fifth), `case 2:`
-    // 0x0600595C (the jsr). A click on a label goes into the case's code, and its hover says it was decompiled from that instruction.
-    // Fixed: each label names its case's entry (0x0600593C for `case 1:`).
+    // 0x0600595C (the jsr). A click on a label went into the case's code, and its hover said it was decompiled from that instruction.
+    // Fixed (the area 7 fixer): each label names its case's entry, the start of the block its first op is in: the table's destinations.
     {
         const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06005906u, {
             0x4F22, 0xD117, 0x6210, 0xE103, 0x3216, 0x8D26, 0x6EF3, 0x6123, 0x311C, 0xC702, 0x011D, 0x301C, 0x402B, 0x0009, 0x0009, 0x0008, 0x0018,
@@ -599,10 +695,14 @@ void TestArea7Round4()
         CHECK(r.status == DecompileStatus::Ok);
         const Line* one = LineWith(r, "case 1:");
         CHECK(one != nullptr);
-        if (one) CHECK(one->firstAddr == 0x06005946u);   // fixed: 0x0600593C
+        if (one) CHECK(one->firstAddr == 0x0600593Cu);   // was 0x06005946
         const Line* zero = LineWith(r, "case 0:");
-        if (zero) CHECK(zero->firstAddr == 0x06005934u);   // fixed: 0x0600592C
+        if (zero) CHECK(zero->firstAddr == 0x0600592Cu);   // was 0x06005934
         CHECK(zero != nullptr);
+        const Line* two = LineWith(r, "case 2:");
+        if (two) CHECK(two->firstAddr == 0x0600595Au);    // was 0x0600595C
+        const Line* three = LineWith(r, "case 3:");
+        if (three) CHECK(three->firstAddr == 0x0600592Cu);
         const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_24");
         CHECK(a.Violations() == 0);
     }

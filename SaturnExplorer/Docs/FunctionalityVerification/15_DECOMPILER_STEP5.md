@@ -15613,3 +15613,84 @@ An Entry target is never resolved again, so a function start recorded at the pin
 
 * Area 4: nothing. A8-32 and A8-33 are the panel's, not the finder's texts.
 * No product file changed, so the fault suite was not rerun.
+
+## Area 7 fixer (A7-22, A7-23, A7-24)
+
+Branch `review/7-a722-fix` from master `b361bdd4` (area 7 round 4 merged). **Fixed: A7-23 (P2), A7-22 (P2) and A7-24 (P3).** Left open: A7-25 (P3; pinned as round 4 left it), A7-21 (P3, the instrument it filed is unchanged), A7-17 and A7-18. The fix is in the host (`Sh2Decompiler.cpp`): **no engine patch**, and the texts of the four corpus runs are the same as master's (the dumps' function and line texts compared, base build against fixed build). The mapping oracle gains two violations and a counter.
+
+### The store-naming class: why it came back three times
+
+The class is A7-11, A7-19 and A7-20, then A7-15, then A7-23: a line that names a store of its variable, and a click that goes to a store that did not write the line's value.
+
+1. **What `AddFrameStoreTokens` assumes about a store's value.** That a store of the variable found by *where it is* wrote the value the statement shows. The search, with the A7-19 walk and the block-end rule, reads addresses and blocks: the store at the statement's own instruction, the last one before it on each path of the final graph, an emptied store on an edge, else the next one after it. It never reads a value. The block-end rule then trusts that store more than the engine's own placement, and moves the line's drawn tokens to it.
+2. **Why each patch leaves a gap.** Each one replaced *which position* to trust, and none asked *what was stored*. A7-11 took the latest store before the instruction in the flow's translation order. That is wrong when the store is on another path, and A7-20 found the store of -3 named for a line that assigns 0. A7-19 took the store that reaches the statement in the final graph. That is right about the path. It is still blind to the value, and it is right only while the statement is a copy *of* the stored value. Where the engine merged a register under the variable's name (A7-21), any store of the variable on a path into the line is taken for its maker (A7-23 (a)). Where the block-end rule moves a merged piece's tokens, the dead store of param_2 is taken for it (A7-23 (b): the copy was at the `bf` that ends its block, and the rule moved it to the lowest store). A7-22 is the same mistake on the other side. The address of an op the engine made (a MULTIEQUAL collapsed into a COPY at the join's first instruction) is taken for the instruction that made its value.
+3. **The single rule.** A line names an instruction only when that instruction made, or wrote, the line's value. So a store is named only when the value it stored may be the statement's, and a store whose stored value is provably another value is never named. A statement the engine made, which is no op of the flow, is addressed to the flow's instructions that produced its value, or to nothing. It is never addressed to its placeholder address. Both halves compare values, not positions. The flow's p-code (kept by `RecordFlow` before the actions run) says what a store stored and what last set a register. The final p-code says what the statement's value copies, merges or extends. The patches before this one fixed shapes: a delay slot, a block end, a call. This rule does not depend on the shape.
+
+"May be", not "is", for one reason the corpus showed. The engine proves equalities the flow alone cannot: `param_4` stored where a test said it is 0 prints as `xStack_20 = 0;`, and arithmetic of literals it folded prints as `xRam060399fc = 0x246;`. A value check that demanded proof dropped those stores, about 200 lines in hwram007 alone in the first try, each a correct store. So a path ends at **another value** only when it ends at another number, or, for a line that shows no number, at another input, op or memory. A call between, memory the flow cannot place, and, for a number line, an input or a computation are **not known**, and they keep the store. A7-23's stores end at param_2 where the line shows r9's merge (a), or param_3 (b), and A7-20's ends at -3 where the line shows 0, so all three are provably another value.
+
+### What changed
+
+* **`RecordFlow`** keeps every op of the flow by block (`FlowRecord::blockOps`: output and input storage, and the word a literal load reads), the blocks' predecessors, each instruction's first op, and the first time no flow op has (`opsEnd`).
+* **The value of a statement and of a store (A7-23).** `StatementValues`/`FinalValues` describe a printed op's value in the final p-code. That is the instructions of the ops it is, copies, merges (MULTIEQUAL, INDIRECT, PIECE) or extends, the numbers and the inputs it is made of, and the memory it is read from. `FlowValueMayBe` follows a store's register back through the flow on each path. It goes through copies and extensions, and through the frame and globals to the store that wrote them (`FlowPointer` places a pointer: a literal, the entry's stack pointer plus a number, a pointer kept in a local). It stops at where the value is made, and answers false only when every path ends at another value. `AddFrameStoreTokens` names a store only through `take`, which asks that question. A store of another value ends its path, and the search goes on to the store the statement is ahead of. A statement drawn at a store of another value (`ownOther`) does not keep that store's address.
+* **A copy with no store of its value.** A copy the engine put at the end of its block, which names no store, is the line of the flow op that made what it copies: the op's own instruction, or the flow's load in the block of the memory it reads (`iStack_34 = iRam060a8e8a;` at a `bra`, now at the `mov.w @r1,r1` in its slot. The store after the join writes a sum, and the base build named it). A7-21's register merges (`uStack_8 = uVar6;`) have no such op and keep their `bt/s`.
+* **A number put at an instruction that does not make it (A7-22).** `AddJoinConstantTokens` takes a COPY of a number that is no flow op (a collapsed MULTIEQUAL at a join, or a copy the merge made), whose instruction does not make the number (`InstructionMakesNumber`), into a register. On each path it finds the instruction that last set the register, or the register it was moved from (`FlowLastWriters`). A path whose writer sets another number is another path's. When each writer is a `mov #imm` or a literal load of the number, the line's drawn tokens take the lowest and the others are empty tokens, so the hover says "Decompiled from 2 SH-2 instructions". Otherwise (a load, a call, a computation whose value the engine knew, an input) the drawn tokens name nothing. In `AddFrameStoreTokens`, a number in memory drawn at an instruction that does not make it, such as a load of the variable, a pop or a branch, takes its store's address (`numberAway`), as the block-end rule does for other copies. A number at a delayed branch whose slot makes it is the slot's line (`xRam06057310 = 4;` at `bra ; mov #0x4,r1` names the `mov #0x4`, beside the store the paths share), as A7-10's lines are. At a call the call keeps its token (A7-11's choice). This moves A7-20's `xStack_1c = 0;` to its store alone (`TestArea7Round3` updated: the load is the return's).
+* **Case labels (A7-24).** In `LinesFromMarkup` a case label's token is the start of the block its first op is in: the table's destination.
+* **The oracle (`MappingOracle.h`).** It reads values from the instruction words alone. `RegisterBefore` follows every path into an instruction back through `mov Rm,Rn` to a `mov #imm`, a literal or the entry's r4 to r7. It handles a delayed branch's slot, the function's own branch targets and a call returning in between.
+  * `storeValueOther` (**violation**, A7-23): a line `V = X;` that names a store of V whose register holds another value: another parameter or number than X, or a parameter where X is a register variable. A number made of a word and a narrower store is compared byte by byte, and so is a piece of a wider store. A parameter where X is a number is not judged, because a test may have made it that number.
+  * `constAtJoin` (**violation**, A7-22): `const_at_other.py --join` as a check. It finds a number line drawn at one instruction, a target of the function's own branches, that makes no number or makes another. The script's operand split takes `mov.l r1,@(0x14,r14)` for no store, and a register move does put the value in the line's register, so the oracle counts neither. That makes 24, not the script's 30, in hwram007 alone: two register moves and four displacement stores.
+  * `copyOtherValue` (counted): a line that names no store, where every store of the variable writes another value. These are A7-21's merges, which are not `copyStoreMissing`.
+  * A call the engine made a branch ("Possible PIC construction ... Changing call to branch") is said. A7-24's labels uncovered three in each lent image, where the label had named the `bsr`.
+* **A new fixture** in `TestArea7Round4`, the 353 words of 0x06048B7E of hwram008: `iStack_34 = iRam060a8e8a;` names its slot's load 0x06048C56, not the `bra` 0x06048C54 or the store of the sum 0x06048C98.
+* **`TestArea7Round4`** is flipped as its comments said. A7-22: `iVar1 = 0;` names 06070008 and 0607000E, its hover lists both, and a click goes to 06070008. A7-23 (a): the three lines are at their `bt/s` (A7-21's), with `copyUnconnected` 3. A7-23 (b): the line is at the `bf`. A7-24: `case 1:` is 0600593C, `case 0:` and `case 3:` are 0600592C, `case 2:` is 0600595A. Each A7-22 and A7-23 case also damages the result back to what the base build gave and checks that the new check sees it (constAtJoin 1, storeValueOther 3 and 1). A7-25 stays pinned.
+* The guide (hover a line) and `Docs/Codebase/Systems/Decompiler.md` (step 7) say it.
+
+### Mutation checks
+
+Each change was reverted alone in the source, the suite was built and run, and the change was restored (`git status` clean afterwards):
+
+| Reverted | `SaturnExplorerSh2DecompilerTests` |
+|---|---|
+| the whole product change (master's `Sh2Decompiler.cpp`) | fails: the A7-20 pin, A7-22, A7-23 (a) and (b), A7-24 |
+| the value check (`StoreShowsValue` answers true) | fails, 17 checks: A7-23 (a) and (b) |
+| `AddJoinConstantTokens` not called | fails, 12 checks: A7-22, and the A7-23 fixture's `uVar4 = 8;` (`constAtJoin`) |
+| the case label's block start | fails, 4 checks: A7-24 |
+| `numberAway` | fails, 2 checks: A7-20's `xStack_1c = 0;` (`constAtJoin`) |
+| the copy's own maker | fails, 3 checks: the new 0x06048B7E fixture (`iStack_34 = iRam060a8e8a;`) |
+| the oracle's `storeValueOther` count | fails, 2 checks: A7-23's damaged results are not seen |
+| the oracle's `constAtJoin` count | fails, 1 check: A7-22's damaged result is not seen |
+
+### What was run (RelWithDebInfo, gcc 13, own build, `-j2`, every binary under `ulimit -v 3500000` and `timeout`)
+
+| Run | Result |
+|---|---|
+| hwram007.bin and hwram008.bin, alone and lent (`tools/a7_round2/corpus.sh`: `SE_GAME_LEND=1`, `SE_GAME_TOKEN_DUMP`), with this branch's oracle on a base build (master's `Sh2Decompiler.cpp`) and on the fixed build | 839 / 1,730 and 1,554 / 2,995 functions. Fixed build: **every violation 0 in all four runs**: odd, outside, not an instruction, first address, ranges, call tokens, unmarked, hover, ledger unmapped, calls, removed calls unsaid, round trip, `accessAtBranch`, `frameStoreMissing`, `backWrong`, the four copy counters, and the new `storeValueOther` and `constAtJoin`. Off-line 4 / 11 and 4 / 21, as before. The function and line texts are the same as the base build's in all four runs (the dumps compared) |
+| `TestArea7Round4` with A7-22, A7-23 and A7-24 flipped, and the new fixture | pass. The suite passes whole |
+| `ctest -j2 --timeout 900 -E SaturnExplorerLive` / `ctest -R SaturnExplorerLive` (every binary under `ulimit -v 3500000`) | **102 of 102** (176 s) / **6 of 6** (28 s). No new ctest test: the fixtures are in `SaturnExplorerSh2DecompilerTests` |
+| fault suite (`SaturnExplorerDecompilerFaultTests`) | **0 of 94 jobs failed** (83 s alone, and passed in the ctest run). The first build did not settle (`alloc shapes`, `loopbrk`, `stack`, `lendx`, `nest`): two runs allocated alike in number but not in order, because the new `SharedInstructionLines` walked the printed ops by address. It now walks them in the engine's order (`getTime`), as the area 7 fixer did for A6-24. The flow's record reads a literal's word from the capture (`MemorySnapshot::Read`, which neither allocates nor throws), not through the engine's load image under a catch-all, so an injected allocation failure cannot be swallowed there |
+
+The counters, base build and fixed build (hwram007 alone / lent, hwram008 alone / lent):
+
+| | base | fixed |
+|---|---|---|
+| `storeValueOther` (new, violation) | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 |
+| `constAtJoin` (new, violation) | 24 / 45 / 40 / 58 | **0 / 0 / 0 / 0** |
+| `const_at_other.py --join` (round 4's script) | 30 / 56 / 49 / 80, as round 4 measured | 4 / 6 / 5 / 8, every one a displacement store or a register move |
+| `copyOtherValue` (new, counted) | 0 / 0 / 0 / 0 | 24 / 39 / 24 / 39 |
+| `copyStoreMissing`, all at a load (A7-16's, counted) | 7 / 13 / 7 / 13 | 7 / 13 / 9 / 18 (copies at a `bra` that named a store of a sum now name their slot's load of the global) |
+| `copyUnconnected` (A7-21, counted) | 0 / 0 / 3 / 6 | 0 / 0 / 3 / 6 |
+| `store_value.py` "every resolved store disagrees" | 0 / 0 / 1 / 2 | 0 / 0 / 0 / 0 |
+| `named_store_value.py` "neither" | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 |
+| `case_labels.py`, labels at no destination | 133 / 522 / 796 / 1,319 | 0 / 288 / 14 / 314 (the script's `braf` base and second tables, and junk lent entries) |
+| `drawn_elsewhere.py`, the way back answering the copy first (A7-25) | 36 / 54 / 63 / 90 | 31 / 46 / 46 / 68 |
+| `slotMadeLines` (A7-18, counted) | 286 / 580 / 849 / 1,393 | 254 / 511 / 630 / 1,121 |
+| answered Folded on the way back | 29,666 / 58,116 / 76,436 / 126,063 | 29,597 / 57,939 / 75,732 / 125,129 |
+| functions whose mapping changed (`dump_diff.py`) | | 109 / 220 / 311 / 490 (262 / 560 / 1,137 / 1,644 lines; no text changed) |
+
+The base `storeValueOther` is 0, as round 4 found ("not seen in the corpora"). One false positive in lent hwram008 (`xStack_32 = 0xffff;`, a piece of the word `mov.l r0,@(0x4,r14)` writes -1) was fixed in the oracle before the counts above: the store's bytes are compared from the piece on. The corpus's own A7-23 instances are stores whose register the words cannot resolve. One is `iStack_34 = iRam060a8e8a;` of 0x06048B7E in hwram008, which named the store of a sum after the join. They show in `copyOtherValue` and in the `store_value.py` row, not in `storeValueOther`.
+
+### Left open
+
+* **A7-25 (P3)** holds as pinned: a copy's drawn tokens at another statement's instruction (the byte store, a `jsr`) are still listed in the hover, and the way back answers the copy first. The rule above would move them to the store. At a call that changes A7-11's choice, which `TestFrameStoreMaterialisedAtCall` pins ("the store and, as before, the call"), so it is left for the reviewer and the coordinator.
+* **A7-21 (P3)** holds: `copyUnconnected` 0 / 0 / 3 / 6 as before. Its lines keep the instruction the engine put them at. No instruction writes what they show.
+
+Routed: nothing to other areas.

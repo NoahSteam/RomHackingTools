@@ -1,6 +1,6 @@
 # SH-2 pseudocode and embedded decompiler
 
-Inspected revision: `ff6a3b1fb1c54e4c0344613094ea65292b0023c2` (2026-10-20); the pseudocode-to-assembly mapping (steps 7 and 9) rechecked at the area 7 fixer branch `review/7-a710-fix` (2026-10-30), and step 7's store tokens at `review/7-a719-fix` (2026-11-04).
+Inspected revision: `ff6a3b1fb1c54e4c0344613094ea65292b0023c2` (2026-10-20); the pseudocode-to-assembly mapping (steps 7 and 9) rechecked at the area 7 fixer branch `review/7-a710-fix` (2026-10-30), and step 7's store tokens at `review/7-a719-fix` (2026-11-04) and `review/7-a722-fix` (2026-11-05).
 Captured-inspection sections rechecked against `codex/decompiler-variable-inspection` (2026-10-20).
 The panel's status/trust drawing, Decompile-as-a-request and Copy marks rechecked against `5428fe6` plus the area 8 fixer branch (2026-10-30).
 Unless labelled otherwise, behavior below is verified from the cited implementation.
@@ -95,7 +95,17 @@ the end of whatever it is given.
    for each folded store whose value it shows (the engine's `AccessRecord`s): found back through
    the final basic blocks' address covers, with a store whose block the engine emptied placed on
    the edges through its flow block, else forward (`FlowRecord::insnBlock`). A copy at the end of
-   its block that shows a store's value takes the store's address for its own tokens. A COPY the
+   its block that shows a store's value takes the store's address for its own tokens. A store is
+   named only when its value may be the statement's (`StoreShowsValue`): `RecordFlow` keeps the
+   flow's ops (`FlowRecord::blockOps`, before the actions), the stored register is followed back
+   through copies, and through the frame and globals to the store that wrote them, to where the
+   value is made, and compared with what the statement's value copies, merges or extends in the
+   final p-code; a store whose every path ends at another value is never named, and the search
+   goes on to the store the statement is ahead of. A number put at an instruction that does not
+   make it takes its store's address too. `AddJoinConstantTokens` addresses a number the engine
+   merged (a COPY that is no flow op, at an instruction that does not make the number: a collapsed
+   MULTIEQUAL at a join) to the instruction on each path that set the register, or to nothing.
+   A case label's token is the start of the block its case's first op is in. A COPY the
    engine made to trim a cover and that feeds a folded read is addressed to the read
    (`LinesFromMarkup`). `DecompileResult::flowBlockRanges` is for the oracle. Tokens at a word flow
    halted at carry `haltsFlow`. The result records flow body ranges, warnings,
