@@ -309,6 +309,29 @@ inline MemoryShape ShapeOf(const sfe::DisassembledInstruction& d)
     return m;
 }
 
+// A7-34 (the area 7 fixer): how many bytes a variable of the text has, by its declaration (`uint2 uVar4;`): a type ending in its size
+// (int1, uint2, xunknown4, undefined8), or char, bool, short; 4 for any other or when the text declares it nowhere (a global).
+inline int DeclaredWidth(const sfe::decomp::DecompileResult& r, const std::string& name)
+{
+    if (name.empty()) return 4;
+    for (const sfe::decomp::Line& l : r.lines)
+    {
+        const std::string& t = l.text;
+        const size_t a = t.find_first_not_of(' ');
+        if (a == std::string::npos || t.size() < name.size() + 2 || t.compare(t.size() - name.size() - 1, std::string::npos, name + ";") != 0) continue;
+        const size_t gap = t.size() - name.size() - 1;
+        if (gap == 0 || t[gap - 1] != ' ') continue;
+        const std::string type = t.substr(a, gap - 1 - a);
+        if (type.empty() || type.find_first_of(" =(*[") != std::string::npos) continue;
+        const char last = type.back();
+        if (last == '1' || last == '2' || last == '4' || last == '8') return last - '0';
+        if (type == "char" || type == "uchar" || type == "bool" || type == "byte") return 1;
+        if (type == "short" || type == "ushort") return 2;
+        return 4;
+    }
+    return 4;
+}
+
 inline std::string MappingHex(uint32_t v)
 {
     char b[16];
@@ -1371,8 +1394,28 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     atReturn = atReturn || d.Mnemonic == "rts" || d.Mnemonic == "rte";
                     atBranch = atBranch || (!m.call && (d.IsBranch || d.HasDelaySlot));
                     atLoad = atLoad || m.load;
-                    // (a number the line names the `mov #i` or the literal load of is made there: the statement is that instruction's)
-                    if (number && (d.PcRel != sfe::Sh2PcRel::None || (d.Mnemonic == "mov" && d.Operands.compare(0, 1, "#") == 0))) named = true;
+                    // (a number the line names the `mov #i` or the literal load of is made there: the statement is that instruction's --
+                    // A7-33 (the area 7 fixer): when it made the value a store of the variable stores, RegisterMakers from the store finding
+                    // it (or when that is not known); a `mov #0x4,r3` in a slot whose r3 no store of the variable stores is not the line's)
+                    if (number && (d.PcRel != sfe::Sh2PcRel::None || (d.Mnemonic == "mov" && d.Operands.compare(0, 1, "#") == 0)))
+                    {
+                        if (!haveSources)
+                        {
+                            sources = BranchSources(r, word);
+                            haveSources = true;
+                        }
+                        bool known = true, maker = false;
+                        for (uint32_t st : candidates)
+                        {
+                            uint16_t sw = 0;
+                            int size = 0;
+                            const int reg = word(st, sw) ? StoredRegister(sw, size) : -1;
+                            std::set<uint32_t> makers;
+                            if (reg < 0 || !RegisterMakers(r, word, sources, st, reg, makers)) known = false;
+                            else maker = maker || makers.count(t.addr) != 0;
+                        }
+                        if (maker || !known) named = true;
+                    }
                     // (and a cast the line names an `exts` or `extu` of is that extension, a computation: A7-16's shape)
                     if (cast && (d.Mnemonic.compare(0, 4, "exts") == 0 || d.Mnemonic.compare(0, 4, "extu") == 0)) named = true;
                 }
@@ -1566,8 +1609,41 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
             // (a register move puts the value in the line's register: `bVar1 = true;` at `mov r10,r9`, r10 holding it, is that move's)
             const bool move = (w >> 12) == 0x6 && (w & 0xF) == 0x3;
             const bool makes = numberInsn || (d.Mnemonic.compare(0, 3, "mov") == 0 && m.store) || control || move;
+            // A7-34 (the area 7 fixer): the number at the variable's width, its declaration's (`uVar4 = 0xffab;` at `mov #0xAB,r2`: the
+            // sign-extended 0xffffffab of a two-byte variable)
+            const size_t nameAt = text.find_first_not_of(' ');
+            const int width = DeclaredWidth(r, text.substr(nameAt, text.find(" = ", nameAt) - nameAt));
+            const uint32_t widthMask = width >= 4 ? 0xFFFFFFFFu : (1u << (8 * width)) - 1;
+            const auto sameNumber = [&](uint32_t x) { return ((x ^ want) & widthMask) == 0; };
+            // A7-34 (the area 7 fixer): an instruction that computes the number into the register it writes, from values the words give
+            // (WrittenValue: `extu.w r3,r1` of 0xffe4, `shll2`, `add #imm`, `xor r1,r1`, a read of what a store before it wrote, as the
+            // engine folds them), or into a control register (`ldc r1,gbr` for `unaff_gbr = 4`), or a status bit it sets (`div0u` for
+            // `in_sr = 0`), makes it
+            if (!makes)
+            {
+                if (!haveSources)
+                {
+                    sources = BranchSources(r, word);
+                    haveSources = true;
+                }
+                bool computes = false;
+                for (int reg : WrittenRegisters(d))
+                {
+                    const WordValue v = WrittenValue(r, word, sources, at, reg, 0);
+                    computes = computes || (v.kind == WordValue::Number && sameNumber(static_cast<uint32_t>(v.value)));
+                }
+                if ((w >> 12) == 0x4 && ((w & 0xFF) == 0x0E || (w & 0xFF) == 0x1E || (w & 0xFF) == 0x2E || (w & 0xFF) == 0x0A || (w & 0xFF) == 0x1A ||
+                                         (w & 0xFF) == 0x2A))
+                {
+                    const WordValue v = RegisterBefore(r, word, sources, at, (w >> 8) & 0xF);
+                    computes = computes || (v.kind == WordValue::Number && sameNumber(static_cast<uint32_t>(v.value)));
+                }
+                if ((w == 0x0019 || w == 0x0008 || w == 0x0028) && want == 0) computes = true;
+                if (w == 0x0018 && want == 1) computes = true;
+                if (computes) continue;
+            }
             uint32_t got = 0;
-            if (makes && !(numberInsn && made(at, w, got) && got != want))
+            if (makes && !(numberInsn && made(at, w, got) && !sameNumber(got)))
             {
                 // A7-26 (the area 7 fixer): an instruction that makes the number makes it into its register, Rm. When the engine merged
                 // the paths' values, every path into the join sets the line's register to the number (RegisterBefore, the walk

@@ -5402,25 +5402,18 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
             flag("map-round-trip", audit.roundTrip);
             flag("map-access-at-branch", audit.accessAtBranch);
             flag("map-frame-store", audit.frameStoreMissing);
-            // Area 7 round 7 (A7-34): the violations rounds 3 to 7 added to the audit. Only the ones above were flagged, so the generator
-            // never judged the way back's order, a copy's stores, a store's value, a number's maker, a case label or a store after a call.
-            // SE_GENERATED_MAP_ALL=1 flags them too; without it they are counted (map.late.*), because the first runs found real defects
-            // (A7-31, A7-35, A7-36) beside false positives of constAtJoin on generated code (A7-34), and the default run must keep passing.
-            {
-                static const bool all = std::getenv("SE_GENERATED_MAP_ALL") != nullptr;
-                const auto late = [&](const char* sig, const char* key, int n) {
-                    if (all) flag(sig, n);
-                    else count(key, n);
-                };
-                late("map-way-back", "map.late.way-back", audit.backWrong);
-                late("map-copy-store", "map.late.copy-store", audit.copyAtCall + audit.copyAtReturn + audit.copyAtBranch + audit.copyAtOther);
-                late("map-store-value", "map.late.store-value", audit.storeValueOther);
-                late("map-const-join", "map.late.const-join", audit.constAtJoin);
-                late("map-copy-merge", "map.late.copy-merge", audit.copyMergeAtBranch);
-                late("map-number-store", "map.late.number-store", audit.numberStoreOther);
-                late("map-case-entry", "map.late.case-entry", audit.caseOtherEntry);
-                late("map-store-after", "map.late.store-after", audit.storeAfterUse);
-            }
+            // Area 7 round 7 (A7-34): the violations rounds 3 to 7 added to the audit, flagged since the area 7 fixer (round 7 rows) made
+            // constAtJoin take the numbers the engine folds (WrittenValue, MemoryBefore, the variable's width). Round 7 had only counted
+            // them (map.late.*, SE_GENERATED_MAP_ALL=1 to flag): the generator had never judged the way back's order, a copy's stores, a
+            // store's value, a number's maker, a case label or a store after a call.
+            flag("map-way-back", audit.backWrong);
+            flag("map-copy-store", audit.copyAtCall + audit.copyAtReturn + audit.copyAtBranch + audit.copyAtOther);
+            flag("map-store-value", audit.storeValueOther);
+            flag("map-const-join", audit.constAtJoin);
+            flag("map-copy-merge", audit.copyMergeAtBranch);
+            flag("map-number-store", audit.numberStoreOther);
+            flag("map-case-entry", audit.caseOtherEntry);
+            flag("map-store-after", audit.storeAfterUse);
             count("map.lines", audit.lines);
             count("map.lines.one", audit.single);
             count("map.lines.several", audit.multi);

@@ -1224,11 +1224,12 @@ void TestArea7Round7()
         const dts::MappingAudit m = dts::AuditMapping(moved, word, "a7_32 mutated");
         CHECK(m.storeAfterUse == 1);
     }
-    // A7-33 (instrument): a number line of a memory variable drawn at a `mov #imm` that makes the number into a register no store of the
-    // variable stores, and naming no store, passes every check: numberStoreOther judges only lines that name stores, and copyStoreMissing
-    // takes a number line drawn at a `mov #imm` as that instruction's. The A7-28 (a) fixture's line (drawn at its store 0x06070010) damaged
-    // as A7-28 was and with the store's token dropped: drawn at the slot `mov #0x4,r3` (0x0607000A), r3's 4. When fixed: the oracle
-    // flags it (the instruction must make the number into the register a store of the variable stores, and reach it).
+    // A7-33 (instrument), fixed by the area 7 fixer: a number line of a memory variable drawn at a `mov #imm` that makes the number into a
+    // register no store of the variable stores, and naming no store, passed every check: numberStoreOther judges only lines that name
+    // stores, and the copy check took a number line drawn at a `mov #imm` as that instruction's. The A7-28 (a) fixture's line (drawn at its
+    // store 0x06070010) damaged as A7-28 was and with the store's token dropped: drawn at the slot `mov #0x4,r3` (0x0607000A), r3's 4. Now
+    // the copy check takes the instruction as the line's only when it made the value a store of the variable stores (RegisterMakers from
+    // the store finds it, or that is not known): the damaged result is a copy naming no store, copyAtOther 1. Was: Violations() 0.
     {
         const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06070000u, { 0xD205, 0x6043, 0x8804, 0x8B01, 0xA002, 0xE304, 0xE005, 0xE309,
             0x2201, 0x1231, 0x000B, 0x0009, 0x0603, 0xAC00 });
@@ -1247,7 +1248,7 @@ void TestArea7Round7()
         CHECK(n == 1);
         const dts::MappingAudit a = dts::AuditMapping(damaged, word, "a7_33 damaged");
         dts::PrintMappingAudit(a, "a7_33 damaged");
-        CHECK(a.Violations() == 0);   // (A7-33: the damaged result passes; fixed: a violation)
+        CHECK(a.copyAtOther == 1 && a.Violations() == 1);   // (A7-33; was 0)
         // ...while the same damage that keeps the store's empty token is seen: numberStoreOther bites (the fixer's checks were proved by
         // switches in the product, not pinned; these pin them on damaged results)
         DecompileResult kept = r;
