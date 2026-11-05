@@ -28,26 +28,26 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v142</PlatformToolset>
+    <PlatformToolset>v143</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v142</PlatformToolset>
+    <PlatformToolset>v143</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v142</PlatformToolset>
+    <PlatformToolset>v143</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v142</PlatformToolset>
+    <PlatformToolset>v143</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
@@ -78,7 +78,8 @@
       <LanguageStandard>stdcpp14</LanguageStandard>
       <AdditionalIncludeDirectories>$(ProjectDir)..\include;$(ProjectDir)src;$(ProjectDir)Platforms\Windows;$(ProjectDir)third_party\imgui;$(ProjectDir)third_party\imgui\backends;$(ProjectDir)..\Drivers\Savestate\src;$(ProjectDir)..\Drivers\Live\src;$(ProjectDir)..\Drivers\Common\src;$(ProjectDir)..\Integration\Common;$(ProjectDir)third_party\ghidra-decompiler\cpp;$(ProjectDir)third_party\zlib;$(ProjectDir)third_party\nlohmann-json\include;$(IntDir)generated;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <!-- The engine's headers include zlib.h (compression.hh). _WINDOWS: Ghidra's types.h picks its integer types from it; src\Decompiler includes the engine's headers and must see the ones the library was built with. -->
-      <PreprocessorDefinitions>WIN32_LEAN_AND_MEAN;NOMINMAX;SE_ENABLE_LIVE;SE_ENABLE_DECOMPILER=1;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <!-- The native Win32 HMENU menu bar instead of the ImGui toolbar; matches SE_NATIVE_MENUBAR in CMakeLists.txt (A12-13). -->
+      <PreprocessorDefinitions>WIN32_LEAN_AND_MEAN;NOMINMAX;SE_ENABLE_LIVE;SE_NATIVE_MENUBAR;SE_ENABLE_DECOMPILER=1;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
