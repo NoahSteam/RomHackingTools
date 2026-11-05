@@ -1487,13 +1487,13 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                 // give; a register variable is no parameter (a variable that holds a parameter's input is named after it).
                 WordValue shownValue;
                 const std::string shownText = text.substr(valueBegin, v - valueBegin);
-                // (A7-34's triage: or a register the engine names after a call's output or the entry, `extraout_r8`, merged under the
-                // variable's name at a loop's start)
-                const bool registerVariable = (!number && shownText.find("Var") != std::string::npos &&
-                                               shownText.find_first_not_of("abcdefghijklmnopqrstuvwxyz") == shownText.find("Var") &&
-                                               shownText.find("Var") > 0 && shownText.size() > shownText.find("Var") + 3 &&
-                                               shownText.find_first_not_of("0123456789", shownText.find("Var") + 3) == std::string::npos) ||
-                                              shownText.compare(0, 10, "extraout_r") == 0;
+                const bool registerVariable = !number && shownText.find("Var") != std::string::npos &&
+                                              shownText.find_first_not_of("abcdefghijklmnopqrstuvwxyz") == shownText.find("Var") &&
+                                              shownText.find("Var") > 0 && shownText.size() > shownText.find("Var") + 3 &&
+                                              shownText.find_first_not_of("0123456789", shownText.find("Var") + 3) == std::string::npos;
+                // (A7-34's triage: a register the engine names after a call's output, `extraout_r8`, merged under the variable's name at a
+                // loop's start, is counted as a register variable's merge is)
+                const bool mergedRegister = registerVariable || shownText.compare(0, 10, "extraout_r") == 0;
                 if (number)
                 {
                     shownValue.kind = WordValue::Number;
@@ -1742,19 +1742,19 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     if (cast && (d.Mnemonic.compare(0, 4, "exts") == 0 || d.Mnemonic.compare(0, 4, "extu") == 0)) named = true;
                 }
                 if (named) continue;
-                if (registerVariable && drawnAny && branchOnly)
+                if (mergedRegister && drawnAny && branchOnly)
                 {
                     ++a.copyMergeAtBranch;
                     problem("copy-merge", "line " + std::to_string(li) + " '" + text + "' names no store of the variable and is drawn only at instructions that make nothing, " +
                                               MappingHex(r.lines[li].firstAddr) + " first (A7-21, A7-30)");
                     continue;
                 }
-                if (registerVariable && anyAddress && makersOnly)
+                if (mergedRegister && anyAddress && makersOnly)
                 {
                     ++a.copyRegisterMade;
                     continue;
                 }
-                if (registerVariable && !anyAddress)
+                if (mergedRegister && !anyAddress)
                 {
                     ++a.copyNoAddress;
                     continue;

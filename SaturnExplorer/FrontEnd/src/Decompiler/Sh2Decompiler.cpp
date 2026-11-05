@@ -5268,6 +5268,7 @@ bool FlowPointer(const FlowRecord& flow, const ghidra::Funcdata& fd, int blk, in
 struct NumberWalk
 {
     int budget = 512;
+    int depth = 0;   // (walks a branch's condition starts afresh, at most three deep)
     std::set<std::tuple<int, const ghidra::AddrSpace*, ghidra::uintb, ghidra::int4>> active;
 };
 uint64_t MaskToSize(uint64_t v, ghidra::int4 size)
@@ -5363,8 +5364,11 @@ bool EdgeNumber(NumberWalk& w, const FlowRecord& flow, const ghidra::Funcdata& f
     {
         if (dead)
         {
+            // (each step its own bound: the T bit of the branch itself may lead the walk far back through sr)
+            NumberWalk step;
+            step.depth = w.depth + 1;
             uint64_t v = 0;
-            if (FlowNumberIn(w, flow, fd, from, at, x, v))
+            if (step.depth <= 3 && FlowNumberIn(step, flow, fd, from, at, x, v))
             {
                 *dead = (v != 0) != truth;
                 return true;
@@ -5559,7 +5563,20 @@ bool FlowNumberIn(NumberWalk& w, const FlowRecord& flow, const ghidra::Funcdata&
             value = MaskToSize(op.in[1].offset >= 8 ? 0 : a >> (8 * op.in[1].offset), size);
             return true;
         }
-        if (!FlowNumberIn(w, flow, fd, blk, i, op.in[0], a) || !FlowNumberIn(w, flow, fd, blk, i, op.in[1], b)) return false;
+        const bool knownA = FlowNumberIn(w, flow, fd, blk, i, op.in[0], a);
+        // (an AND or a multiply with a known 0 is 0 whatever the other is: `tst r4,r3` with r3 0 after a `dt` loop sets T)
+        if ((op.code == ghidra::CPUI_INT_AND || op.code == ghidra::CPUI_INT_MULT) && knownA && a == 0)
+        {
+            value = 0;
+            return true;
+        }
+        const bool knownB = FlowNumberIn(w, flow, fd, blk, i, op.in[1], b);
+        if ((op.code == ghidra::CPUI_INT_AND || op.code == ghidra::CPUI_INT_MULT) && knownB && b == 0)
+        {
+            value = 0;
+            return true;
+        }
+        if (!knownA || !knownB) return false;
         const ghidra::int4 n = op.in[0].size;
         const auto signedOf = [n](uint64_t v) {
             return n < 8 && (v >> (8 * n - 1) & 1) ? static_cast<int64_t>(v | ~0ull << (8 * n)) : static_cast<int64_t>(v);
@@ -6070,9 +6087,14 @@ bool FlowValueMayBe(const FlowRecord& flow, const ghidra::Funcdata& fd, int blk,
         const std::vector<int>& preds = flow.predecessors[static_cast<size_t>(st.blk)];
         if (preds.empty()) return true;
         for (int p : preds)
+        {
+            // (a path a known condition never takes writes nothing the statement shows, A7-34's triage)
+            NumberWalk dead;
+            if (preds.size() > 1 && EdgeDead(dead, flow, fd, p, st.blk)) continue;
             if (entered.insert(std::make_tuple(p, st.vn.space, st.vn.offset, st.vn.size)).second && p >= 0 &&
                 static_cast<size_t>(p) < flow.blockOps.size())
                 todo.push_back(State{ p, static_cast<int>(flow.blockOps[static_cast<size_t>(p)].size()), st.vn });
+        }
     }
     return false;
 }
@@ -6184,16 +6206,24 @@ bool InstructionMakesNumber(const FlowRecord& flow, uint32_t insn, uint64_t valu
 // register's value on a path into it may be (a store shared by paths that join writes each path's value; the statement is one of them).
 bool StoreShowsValue(const ghidra::AccessRecord& r, const FlowRecord& flow, const ghidra::Funcdata& fd, const ValueSet& want)
 {
-    if (want.times.count(r.time)) return true;
     const auto at = flow.ops.find(r.time);
-    if (at == flow.ops.end()) return false;
-    const int blk = at->second.first;
-    const int pos = static_cast<int>(at->second.second);
-    if (blk < 0 || static_cast<size_t>(blk) >= flow.blockOps.size() || static_cast<size_t>(pos) >= flow.blockOps[static_cast<size_t>(blk)].size())
-        return false;
-    const FlowOp& store = flow.blockOps[static_cast<size_t>(blk)][static_cast<size_t>(pos)];
-    if (store.code != ghidra::CPUI_STORE || store.numIn < 3) return false;
-    return FlowValueMayBe(flow, fd, blk, pos, store.in[2], want);
+    const bool placed = at != flow.ops.end() && at->second.first >= 0 && static_cast<size_t>(at->second.first) < flow.blockOps.size() &&
+                        at->second.second < flow.blockOps[static_cast<size_t>(at->second.first)].size();
+    const FlowOp* store = placed ? &flow.blockOps[static_cast<size_t>(at->second.first)][at->second.second] : nullptr;
+    const bool isStore = store && store->code == ghidra::CPUI_STORE && store->numIn >= 3;
+    // (A7-34's triage: the store's own COPY, which the engine moved to where its merged register took the number -- `iRam2600208c = 1;`
+    // for the store after a `dt` loop that writes 0 -- shows a number the store never wrote: a number the walk knows it wrote, on every
+    // path, decides)
+    const bool numbersOnly = !want.numbers.empty() && want.insns.empty() && want.inputs.empty() && want.locations.empty();
+    if (numbersOnly && isStore)
+    {
+        uint64_t known = 0;
+        if (FlowNumberBefore(flow, fd, at->second.first, static_cast<int>(at->second.second), store->in[2], known))
+            return want.Has(known, store->in[2].size);
+    }
+    if (want.times.count(r.time)) return true;
+    if (!isStore) return false;
+    return FlowValueMayBe(flow, fd, at->second.first, static_cast<int>(at->second.second), store->in[2], want);
 }
 
 // The lines on which two printed ops of one instruction are (a statement's tokens there cannot be told from the other op's). The ops
@@ -6899,6 +6929,24 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                 ;
             else if (atEnd && in->isWritten() && in->getDef()->getTime() < flow.opsEnd)
                 maker = InstructionOf(in->getDef());
+            // (A7-34's triage: a number the engine put at a store of another value, the store's COPY moved to where the register it stores
+            // took the number -- a loop's counter merged under a global's name: the one instruction that makes the number into that
+            // register)
+            else if (ownOther && numberCopy)
+            {
+                FlowVn reg;
+                const ghidra::AccessRecord* ownRec = nullptr;
+                for (const ghidra::AccessRecord* r : stores)
+                    if (InstructionOf(*r) == at) ownRec = r;
+                if (ownRec && storedRegister(ownRec, reg))
+                {
+                    uint32_t found = 0;
+                    int count = 0;
+                    for (const auto& kv2 : flow.insnFirst)
+                        if (InstructionMakesNumber(flow, kv2.first, numberValue, numberSize, &reg)) found = kv2.first, ++count;
+                    if (count == 1) maker = found;
+                }
+            }
             // (...or a read of memory, a global or a local, whose value the engine carries in the variable itself: the flow's load of it in
             // the block, or in the delay slot of its last instruction)
             else if (atEnd && !in->isInput() &&
