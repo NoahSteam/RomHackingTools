@@ -924,6 +924,27 @@ if(BUILD_TESTING)
                 ${CMAKE_CURRENT_SOURCE_DIR}/Drivers/Savestate/src)
             target_link_libraries(SaturnExplorerArea9Round4Tests PRIVATE SaturnExplorerSavestateDriver SaturnExplorerCore)
             add_test(NAME SaturnExplorerArea9Round4Tests COMMAND SaturnExplorerArea9Round4Tests)
+
+            # Area 9 round 5 (review): pins of A9-45 and later (a remark that opens with a number, a save refused at exit after the
+            # lock's bounded wait, the lock's texts, no flush before the rename), and guards for a full disk mid-write, paths with
+            # spaces and Unicode, files at the read cap. Linux only.
+            add_executable(SaturnExplorerArea9Round5Tests
+                FrontEnd/tests/Area9Round5Tests.cpp
+                FrontEnd/src/Settings.cpp
+                FrontEnd/src/FileWrite.cpp
+                FrontEnd/src/Sh2Address.cpp
+                FrontEnd/src/Debug/CallStack.cpp
+                FrontEnd/src/Debug/MemoryBackend.cpp
+                FrontEnd/src/Debug/Sh2Disasm.cpp
+                FrontEnd/src/Decompiler/MemorySnapshot.cpp
+                FrontEnd/src/Decompiler/AddressRanges.cpp
+                FrontEnd/src/Decompiler/Sh2FunctionFinder.cpp
+                FrontEnd/src/Decompiler/SpecBundle.cpp
+                FrontEnd/src/Sha256.cpp)
+            target_include_directories(SaturnExplorerArea9Round5Tests PRIVATE FrontEnd/src include
+                ${CMAKE_CURRENT_SOURCE_DIR}/Drivers/Savestate/src)
+            target_link_libraries(SaturnExplorerArea9Round5Tests PRIVATE SaturnExplorerSavestateDriver SaturnExplorerCore ${CMAKE_DL_LIBS})
+            add_test(NAME SaturnExplorerArea9Round5Tests COMMAND SaturnExplorerArea9Round5Tests)
         endif()
     endif()
 
