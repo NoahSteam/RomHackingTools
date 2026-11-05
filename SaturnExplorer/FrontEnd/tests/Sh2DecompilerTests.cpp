@@ -1382,6 +1382,48 @@ void TestArea7Round7()
         if (a.Violations()) Print("A7-34 triage", r);
         CHECK(a.Violations() == 0);
     }
+    // A7-39 (a), grammar 1 seed 1814817 shrunk: a loop counter the engine merges under a global's name. `mov #1,r3 ; L: mov.l lit,r1 ; and
+    // r1,r7 ; dt r3 ; bf L ; (poll) ; cmp/pl r1 ; bt M ; rotr r3 ; M: mov.l r3,@(0x18,r7)`: `iRam00000008 = 1;` is the counter's start,
+    // and the store 0x06009018 writes the 0 the loop leaves (the `rotr` path is never taken: r1 is the literal 0x1FFFFFFF). Fixed (the
+    // area 7 fixer, LoopKeeps): the number walk passes the poll loop's way back, which does not write r1, so `cmp/pl r1` is known, the
+    // `rotr` path is left out and r3 is 0 at the store: the store is not the line's, the number's maker `mov #1,r3` is. Was: the poll
+    // loop made r1 unknown, the line named the store 0x06009018 (storeValueOther 1).
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, { 0xE301, 0xD107, 0x2719, 0x4310, 0x8BFB, 0xD706, 0x6072, 0xC801,
+            0x8BFC, 0x4115, 0x8900, 0x4305, 0x1736, 0x000B, 0x0009, 0x0009, 0x1FFF, 0xFFFF, 0xFFFF, 0xFFF0 });
+        const Line* l = LineWith(r, "iRam00000008 = 1;");
+        CHECK(l != nullptr);
+        if (l) CHECK(LineInstructions(*l) == (std::vector<uint32_t>{ 0x06009000u }));
+        const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_39 a");
+        CHECK(a.storeValueOther == 0 && a.Violations() == 0);
+    }
+    // A7-39 (b), grammar 2 seed 1804185 shrunk: `mov #1,r3 ; bra L ; nop ; M: mov.b @r6,r1 ; L: dt r3 ; bf M ; add r5,r3 ; mov.b r3,@r6`.
+    // The `add` gives r5 back (r3 is 0); building r5 back through the loop's join met the way back from M, a loop of two blocks. Fixed
+    // (LoopKeeps in the identity build: the way back does not write r5): `xRam26001034 = (xunknown1)param_2;` names its store
+    // 0x06009010. Was: no store named, the line with no instruction (copyStoreMissing 1).
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, { 0xD605, 0xE301, 0xA001, 0x0009, 0x6160, 0x4310, 0x8BFC, 0x335C,
+            0x2630, 0x2432, 0x000B, 0x0009, 0x2600, 0x1034 });
+        const Line* l = LineWith(r, "xRam26001034 = (xunknown1)param_2;");
+        CHECK(l != nullptr);
+        if (l) CHECK(LineInstructions(*l) == (std::vector<uint32_t>{ 0x06009010u }));
+        const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_39 b");
+        CHECK(a.Violations() == 0);
+    }
+    // A7-39 (c), grammar 1 seed 1814703 shrunk: `mov.l lit,r6 ; mac.w @r7+,@r7+ ; mov.w r2,@r6 ; (poll) ; mov.b r1,@(r0,r4)`. The engine
+    // empties the store's block and materialises `xRamc0002024 = in_r2;` at the may-alias `mov.b` after the poll. The final block before
+    // the poll ends at the `mac.w`, which the flow splits into blocks of its own (its saturation), so the store's flow block did not
+    // follow it. Fixed (onEdge passes an instruction's own blocks): the line names the store 0x06009004 beside its tokens at 0x06009010.
+    // Was: no store named, a click to 0x06009010 (copyAtOther 1).
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, { 0xD605, 0x477F, 0x2621, 0xD705, 0x6072, 0xC801, 0x8BFC, 0xE007,
+            0x0414, 0x000B, 0x0009, 0x0009, 0xC000, 0x2024, 0x2600, 0x2004 });
+        const Line* l = LineWith(r, "xRamc0002024 = in_r2;");
+        CHECK(l != nullptr);
+        if (l) CHECK(l->firstAddr == 0x06009004u && LineInstructions(*l) == (std::vector<uint32_t>{ 0x06009004u, 0x06009010u }));
+        const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_39 c");
+        CHECK(a.Violations() == 0);
+    }
     // caseOtherEntry bites: A7-29's fixture with the outer `case 2:` moved back to the inner switch's entry (A7-29 as it was).
     {
         const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06070000u, { 0x4F22, 0xD518, 0xE103, 0x3416, 0x8D28, 0x6143, 0x311C, 0xC702,
