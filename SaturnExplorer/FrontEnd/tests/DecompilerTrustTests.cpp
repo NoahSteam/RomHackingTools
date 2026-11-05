@@ -2141,6 +2141,22 @@ void RunProbe5()
         CHECK(m.Settle());
         show(m, "B: stack gone: C is a guess again, the label?");
     }
+    {
+        MiniRig m;
+        m.kind = DecompViewKind::LivePaused;
+        m.regs[0].pc = cEntry + 4;
+        m.haveRegs[0] = true;
+        m.Idle(3);
+        CHECK(m.Settle());
+        CHECK(ClickMini(m, "follow"));
+        m.Idle(3);
+        CHECK(m.Settle());
+        show(m, "C: pinned (Follow PC off), the finder's guess");
+        m.bounds.SetEntry(cEntry);   // a function start recorded at the pinned entry (another panel's Set Function Start Here)
+        m.Idle(3);
+        CHECK(m.Settle());
+        show(m, "C: ...a user function start is now recorded at the pinned entry");
+    }
 }
 
 void RunFixPins()
