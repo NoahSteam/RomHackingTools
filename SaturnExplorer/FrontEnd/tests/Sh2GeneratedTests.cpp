@@ -4864,6 +4864,7 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                     " (frame offset " + Hex(l.offset) + ") went unread, and the read at " + Hex(l.read) + " reads it");
         // (A3-133, patch 0072) the engine's frame records reached a bound and took every frame write for read: unchecked is no pass
         if (r.frameLedgerCapped) add("frame-unchecked", "the frame records reached their bound; the frame ledger cannot check this function");
+        for (const std::string& e : dts::FrameIntakeErrors(r)) add("frame-intake", e);   // (A11-3) the records pair as the engine makes them
         // The canary (A3-34): the function stored fn.canary in a local that a callee overwrote, and no run returned it. A `return` that
         // contains it (as 0x5a, or in decimal) is the local folded across the call, the value from before the callee wrote it.
         if (fn.canary != 0)
@@ -10906,6 +10907,12 @@ int CheckFrame124Ledger(Sh2Decompiler& d, const std::vector<CCase>& cases)
             ++lost;
             std::printf("FINDING [frame-unchecked] %s\n  detail: the frame records reached their bound (A3-133)\n  words: %s\n", c.name.c_str(),
                         WordsText(c.words).c_str());
+        }
+        for (const std::string& e : dts::FrameIntakeErrors(r))   // (A11-3)
+        {
+            ++lost;
+            std::printf("FINDING [frame-intake] %s\n  detail: %s\n  words: %s\n", c.name.c_str(), e.c_str(), WordsText(c.words).c_str());
+            break;
         }
         for (const dts::FrameLoss& l : dts::FrameLosses(r, dts::SnapshotWords(snap)))
         {
