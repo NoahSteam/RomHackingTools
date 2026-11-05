@@ -24,6 +24,10 @@ def main(path):
         log = os.path.join(logs, "%s.%s.log" % (r[0], r[1]))
         if r[1] == "corpus" and r[2] == "killed" and os.path.exists(log) and corpus_suite_only(open(log, errors="replace").read()):
             r[2] = "survived"
+    # Probes (R-: does any input reach the code) and combinations (C-: a sensor blinded with its class brought back) are not mutants
+    # of the score: they are listed apart.
+    apart = [r for r in rows if r[0].startswith(("R-", "C-"))]
+    rows = [r for r in rows if not r[0].startswith(("R-", "C-"))]
     per = collections.OrderedDict()
     killers = collections.OrderedDict()
     other = {}
@@ -51,6 +55,9 @@ def main(path):
     print("\nsurvivors:", " ".join(m for m in scored if not killers[m]))
     for m, why in other.items():
         print("not scored: %s (%s)" % (m, why))
+    print("\nprobes and combinations:")
+    for r in apart:
+        print("  %s %s %s %s" % (r[0], r[1], r[2], r[4][:100] if len(r) > 4 else ""))
     print("\nkilled by:")
     for m in dead:
         print("  %s: %s" % (m, ", ".join(killers[m])))

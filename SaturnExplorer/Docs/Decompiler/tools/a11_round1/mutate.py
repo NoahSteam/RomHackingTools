@@ -548,6 +548,10 @@ def main():
     if not h.clean():
         sys.exit("the tree is not clean: stop")
     for kind, mid, m in todo:
+        if os.path.exists(os.path.join(h.out, "STOP")):
+            print("stopping: %s/STOP exists; next would be %s" % (h.out, mid), flush=True)
+            print("nothing left")
+            break
         if (time.time() - h.t0) / 60 > a.minutes:
             print("stopping: %.0f minutes gone; next would be %s" % ((time.time() - h.t0) / 60, mid), flush=True)
             break
