@@ -1217,13 +1217,11 @@ LineKind ParseSymbolRef(const std::string& line, uint32_t& addr, std::string& na
     // Eight letters (FFFFFFFF) is an address written out in full. (The names and notes files are saved with "%x", so the
     // application itself writes 0x00000ABC as "abc": a fix that refuses such words must save eight digits, as the bounds
     // file already does.)
-    bool digit = false;
-    for (char c : tok) digit = digit || std::isdigit(static_cast<unsigned char>(c)) != 0;
-    // A9-32: two to four LOWER-CASE letters a-f alone are an address inside the BIOS ROM (0 to 0x7FFFF), what old versions wrote.
-    bool lower = true;
-    for (char c : tok) lower = lower && !std::isupper(static_cast<unsigned char>(c));
-    if (!prefixed && !digit && tok.size() < 8 &&
-        (tok.size() < 2 || !lower || std::strtoul(tok.c_str(), nullptr, 16) > 0x7FFFFul)) return LineKind::Prose;
+    // A9-41: this rule is written down apart from the product's: a word of letters only is prose, whatever the case and the length
+    // below eight, and whatever address it spells (a BIOS address written unpadded is skipped with a warning, never read).
+    bool lettersOnly = !prefixed && tok.size() < 8;
+    for (char c : tok) lettersOnly = lettersOnly && std::isalpha(static_cast<unsigned char>(c)) != 0;
+    if (lettersOnly) return LineKind::Prose;
     addr = static_cast<uint32_t>(std::strtoul(tok.c_str(), nullptr, 16));
     name = Trim(line.substr(e));
     return name.empty() ? LineKind::NoName : LineKind::Entry;
@@ -1327,7 +1325,7 @@ std::set<std::string> DiffClasses(const std::map<uint32_t, std::string>& got, co
 // (A9-34: a byte-order mark opening the file is no longer malformed; SplitLines drops it, so it is not in this list.)
 const char* const kMalformedLines[] = {
     "100000000 big_address", "FFFFFFFFFFFFFFFF all_ones", "0000000106004000 sixteen", "-1 negative", "+6004000 plus", "0x name_after_bare_prefix",
-    "12g name", "06004000name_glued", "Dead function in the old build", "Add it later", "beef", "06004000", "0x06004000", "  06004000\t\tname with spaces   ",
+    "12g name", "06004000name_glued", "Dead function in the old build", "add it later", "beef", "06004000", "0x06004000", "  06004000\t\tname with spaces   ",
     "06004000 ", ";06004000 commented", "// 06004000 slashes", "# 06004000 hash", "06004000 na\xFFme", "06004000 \tx",
     "0X0600A000 upper_prefix", "6004000 short", "00000000 zero_address", "FFFFFFFF last_address", "26004000 cache_through_mirror", "06100000 hwram_mirror",
     "4000 tiny_address", "0600 400 split", "06004000 name\x01with\x02" "controls" };

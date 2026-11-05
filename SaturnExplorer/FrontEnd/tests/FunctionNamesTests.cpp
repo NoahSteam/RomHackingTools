@@ -58,7 +58,7 @@ void SaveAfterLoadPins()
         uint32_t a = 0;
         std::string n;
         Check(ParseAddressNameLine("Dead function in the old build", a, n) == AddressNameLine::Malformed, "A9-18: 'Dead function' is not an address");
-        Check(ParseAddressNameLine("Add it later", a, n) == AddressNameLine::Malformed, "A9-18: 'Add it later' is not an address");
+        Check(ParseAddressNameLine("add it later", a, n) == AddressNameLine::Malformed, "A9-18: 'add it later' is not an address");
         Check(ParseAddressNameLine("a note", a, n) == AddressNameLine::Malformed, "A9-18: 'a note' is not an address");
         Check(ParseAddressNameLine("6004000 main", a, n) == AddressNameLine::Entry && a == 0x6004000u, "A9-18: an old unpadded address loads");
         Check(ParseAddressNameLine("0xdead main", a, n) == AddressNameLine::Entry && a == 0xDEADu, "A9-18: 0x makes letters an address");

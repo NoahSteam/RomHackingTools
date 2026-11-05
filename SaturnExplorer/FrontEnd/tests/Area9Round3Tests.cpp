@@ -97,29 +97,32 @@ void WhitespaceNames()
     Check(CleanEntryText("  a note \t") == "a note" && CleanEntryText(" \t\r\n").empty(), "FIX A9-31: the notes' text goes through the same cleaning");
 }
 
-// A9-32: an address of letters a-f alone is an address when it lies in the BIOS ROM (0x00000000 to 0x0007FFFF), which the decompiler
-// maps at 0 and which holds 0x0000DEAD, 0x0000ABCD, 0x00000FAB. A single letter and five or more letters stay words.
+// A9-32 (resolved by the warning, A9-41): a letters-only word is not read as an address even where the address would lie in the BIOS
+// ROM (0x0000DEAD, 0x0000ABCD, 0x00000FAB are real BIOS addresses): reading it made prose lines entries (A9-41). An older version's
+// unpadded line is skipped and counted (the Log says to write eight digits, 0000DEAD) and stays in the file; the padded form loads.
 void LettersOnlyBiosAddresses()
 {
     uint32_t a = 0;
     std::string n;
     const char* words[] = { "dead", "abcd", "fab", "cafe", "fade", "bad" };
-    const uint32_t values[] = { 0xDEADu, 0xABCDu, 0xFABu, 0xCAFEu, 0xFADEu, 0xBADu };
-    int entries = 0;
-    for (size_t i = 0; i < 6; ++i)
-        if (ParseAddressNameLine(std::string(words[i]) + " BiosFunc", a, n) == AddressNameLine::Entry && a == values[i]) ++entries;
-    Check(entries == 6, "FIX A9-32: an old file's names at BIOS addresses made of letters a-f alone ('dead', 'abcd', 'fab') are entries");
+    int skipped = 0;
+    for (const char* w : words)
+        if (ParseAddressNameLine(std::string(w) + " BiosFunc", a, n) == AddressNameLine::Malformed) ++skipped;
+    Check(skipped == 6, "FIX A9-41: letters a-f alone ('dead', 'abcd', 'fab') are a word, not an address, at any length below eight");
     Check(ParseAddressNameLine("a article", a, n) == AddressNameLine::Malformed, "A9-32: a single letter stays a word");
-    Check(ParseAddressNameLine("abcdef Ladder", a, n) == AddressNameLine::Malformed, "A9-32: six letters (above the ROM) stay a word");
-    Check(ParseAddressNameLine("Dead function", a, n) == AddressNameLine::Malformed && ParseAddressNameLine("Add it later", a, n) == AddressNameLine::Malformed,
-          "A9-32: a capital letter makes it a word (old files wrote lower case)");
+    Check(ParseAddressNameLine("abcdef Ladder", a, n) == AddressNameLine::Malformed, "A9-32: six letters stay a word");
+    Check(ParseAddressNameLine("Dead function", a, n) == AddressNameLine::Malformed && ParseAddressNameLine("add it later", a, n) == AddressNameLine::Malformed,
+          "A9-18: 'Dead function' and 'add it later' are words");
     Check(ParseAddressNameLine("Deadly sin", a, n) == AddressNameLine::Malformed, "A9-32: a word with other letters stays a word");
-    Check(ParseAddressNameLine("dead", a, n) == AddressNameLine::Malformed, "A9-32: and an address with no name is no entry");
-    // What an older version wrote: %x, unpadded.
+    Check(ParseAddressNameLine("0000DEAD BiosFunc", a, n) == AddressNameLine::Entry && a == 0xDEADu &&
+          ParseAddressNameLine("0000abcd BiosFunc", a, n) == AddressNameLine::Entry && a == 0xABCDu,
+          "A9-32: written with eight digits (what the saves write) the same address is an entry");
+    // What an older version wrote: %x, unpadded. The BIOS lines are skipped and counted, kept in the file; the RAM one loads.
     Put(kNames, "dead dead_handler\nabcd abcd_handler\n6004000 main\n");
     FunctionNames fn;
     fn.Load();
-    Check(fn.HasName(0xDEADu) && fn.HasName(0xABCDu) && fn.HasName(0x6004000u) && fn.SkippedLines() == 0, "FIX A9-32: of an old file, the two BIOS names and the RAM one load");
+    Check(!fn.HasName(0xDEADu) && !fn.HasName(0xABCDu) && fn.HasName(0x6004000u) && fn.SkippedLines() == 2 && fn.FirstSkippedLine() == 1,
+          "A9-32: of an old file, the two BIOS names are skipped and counted (the Log warns), the RAM one loads");
 }
 
 // A9-33: SaveStore never looks at FileLock::Held(). A lock that cannot be made (here the lock path is a folder; in life a lock file

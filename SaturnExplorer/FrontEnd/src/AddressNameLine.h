@@ -6,14 +6,13 @@
 // counts it. The readers used strtoul / sscanf on the front of the line, so "100000000 f" named address 0 (the high bits
 // cut off), "-1 f" named 0xFFFFFFFF, and "0608<garbage>" named 0x608 after the digits it began with (A9-2, A9-10).
 //
-// A word of the letters a-f alone is usually a word, not an address (A9-18): "Dead function", "add it later", an article "a".
+// A word of the letters a-f alone is a word, not an address (A9-18, A9-41): "Dead function", "add it later", "beef", an article "a".
 // The rule (ParseAddressWord): with 0x, one to eight hex digits; without it, eight hex digits (what the saves write), or one to
-// seven hex digits that include a decimal digit (what older versions wrote for addresses below 0x10000000: "6004000"), or two
-// to four lower-case letters a-f alone when the address they spell is inside the BIOS ROM, 0 to 0x7FFFF (A9-32: what older versions wrote
-// for a BIOS function at 0xDEAD, 0xABCD, 0xCAFE; the ROM is mapped at 0, so the address exists). A single letter stays a word
-// ("a"), and so do letters-only words of five or more digits (0xABCDE is above the ROM and in no memory of the machine). A
-// line of that kind with a word like "bad" or "add" in front of text is therefore read as an entry: write such a comment with
-// ; # or //. A line that is not an entry is skipped and counted, and kept by the next save.
+// seven hex digits that include a decimal digit (what older versions wrote for addresses below 0x10000000: "6004000"). So an
+// older file's entry still loads unless every digit of its address is a-f ("dead" for 0x0000DEAD, a BIOS function an older version
+// wrote unpadded); such a line is skipped and counted like any other that is not an entry, and the Log says it may be an old
+// unpadded address and should be written as eight digits ("0000DEAD", A9-32). It stays in the file. Reading such words as addresses
+// when they lie in the BIOS ROM was tried (A9-32) and made prose lines ("add it later", "be careful") entries again (A9-41).
 #pragma once
 
 #include <cctype>
@@ -73,11 +72,7 @@ inline bool ParseAddressWord(const std::string& line, size_t b, size_t e, uint32
         a = (a << 4) | static_cast<uint32_t>(std::isdigit(static_cast<unsigned char>(c)) ? c - '0'
                                                                                          : std::tolower(static_cast<unsigned char>(c)) - 'a' + 10);
     }
-    // Letters a-f alone, unpadded: an address only inside the BIOS ROM, and not a single letter (A9-32).
-    // The old writers used lower case, so a capital letter makes it a word ("Dead function").
-    bool lower = true;
-    for (size_t i = d; i < e; ++i) lower = lower && !std::isupper(static_cast<unsigned char>(line[i]));
-    if (!prefixed && e - d < 8 && !digit && (e - d < 2 || a > 0x7FFFFu || !lower)) return false;   // "a", "Deadly": a word
+    if (!prefixed && e - d < 8 && !digit) return false;   // "Dead", "add", "a": a word (A9-18, A9-41)
     addr = a;
     return true;
 }

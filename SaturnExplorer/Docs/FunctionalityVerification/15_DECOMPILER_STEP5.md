@@ -16602,3 +16602,39 @@ The pins assert today's behaviour: when a finding is fixed, its check fails and 
 
 * A9-41 first. The fix A9-32 offered as its alternative keeps the old safety: skip letters-only words as before, and make the skip warning say that `dead` may be an older version's 0x0000DEAD and should be written `0000DEAD`. Give the oracle an independent lower-case prose list back (`add it later`, `be careful`, `fade in`), so `PROSE_AS_ADDRESS` can fire.
 * A9-40, A9-42 and A9-43 go together: a bounded wait that refuses through the existing path needs the starts to be retried (A9-43), and the refusal text needs the real cause (A9-42).
+
+## Area 9 fixer (A9-41, A9-42, A9-43, A9-40)
+
+Branch `review/9-round4-fix` from master `190438f5`. Product code changed: `AddressNameLine.h`, `App.cpp`, `FileWrite.cpp/.h`, `StoreMerge.h`, `Settings.cpp`.
+
+### What was done
+
+* **A9-41 (P2).** `ParseAddressWord` skips a word of the letters a-f alone again, in every file (names, symbol maps, notes, function starts): `add it later`, `be careful`, `fade in`, `bad idea`, `dead code` are skipped and counted, so the Log warns, and the remark stays in the file. The skip warning (five places in `App.cpp`) says the line may be an old unpadded address and should be written as eight digits (`0000DEAD`). A9-32's corrected Log text (eight digits or 0x) is kept. The A9-18 test is back to lower-case `add it later` (`FunctionNamesTests`), `Area9Round3Tests` `LettersOnlyBiosAddresses` now holds the skip and the padded form, `Area9Round4Tests` `ProseLinesAreEntries` became `ProseLinesAreSkipped` (names and bounds files, the remark kept by a save), and the fuzz oracle's prose line is `add it later`. The oracle's reference now skips a letters-only word by its own test (the whole word is alphabetic and shorter than eight, no 0x) and no longer copies the product rule. A9-32 is marked resolved by the warning.
+* **A9-42 (P3).** `FileLock` keeps the OS error of the open or the lock; `FileLock::WhyNotHeld()` gives the text. `SaveStore` and `Settings::SaveTo` put it in the refusal: "cannot create or lock `<file>`.lock: Permission denied" (folder not writable), "...: No such file or directory" (folder gone).
+* **A9-43 (P3).** `App::Shutdown` saves the function starts after the names (`mFunctionBounds.Save`, which writes nothing when nothing is pending), and logs a failure.
+* **A9-40 (P3).** `FileLock` waits at most `kWaitMs` = 3000 ms (retry every 20 ms with `LOCK_NB`), then `Held()` is false and `WhyNotHeld()` says "another process has held `<file>`.lock for more than 3 seconds"; both stores refuse through A9-33's path and keep the change pending. The same bound applies to `SpecBundle`'s lock, whose caller already works without the lock.
+
+### Windows
+
+The Windows branch of `FileLock` was changed the same way and not compiled or run here: `LockFileEx` with `LOCKFILE_FAIL_IMMEDIATELY` in a loop with `::Sleep(20)`, `GetLastError` as the error, `std::system_category().message` for the text. `App.cpp` is linked by no test target and no target builds it here; the A9-43 and Log-text edits were checked by reading only.
+
+### Bite proofs (each fix reverted, the pin run, restored)
+
+| Fix reverted | Result |
+|---|---|
+| A9-41 (the A9-32 rule back) | `ProseLinesAreSkipped` 3 checks, `LettersOnlyBiosAddresses` 3 and `FunctionNamesTests` 1 fail; LoaderFuzzTests seed 9, `names`/`bounds`/`comments` each report `PROSE_AS_ADDRESS` (NEW) |
+| A9-42 (old lock text) | `LockRefusal` 2 `FIX A9-42` checks fail |
+| A9-40 (bound set to 600 s) | `LockWait` 3 of 4 checks fail (waited 5.02 s) |
+| A9-43 | not testable (`App.cpp` is in no test); read only |
+
+### Runs
+
+| Run | Result |
+|---|---|
+| `SaturnExplorerArea9Round4Tests`, `Area9Round3Tests`, `FunctionNamesTests`, `FileWriteTests` | all passed; `LockWait`: `SaveStore` gave up at 3.00 s, `Settings::SaveTo` at 3.02 s for a holder of 5 s, files untouched, the retry wrote |
+| `SaturnExplorerLoaderFuzzTests`, seed 7741, 3,000 cases a module, all modules, directed and two-process cases | 37,985 cases, 0 classes outside the ledger (only `HARDLINK_SPLIT`, A9-28) |
+| `concurrent` module (two-process saves), `Area9Round3Tests` `LockNotHeld` | pass |
+| Full `ctest` (`-j2`, `ulimit -v 3500000`), Live included | 110 of 110 passed (103 + 6 Live on master, plus `SaturnExplorerArea9Round4Tests`; no new test this round) |
+| `SaturnExplorerDecompilerFaultTests` | 0 of 94 jobs failed |
+
+Docs: `Docs/Codebase/Systems/Decompiler.md` (the file table and "Saving the user's files") and the ledger rows A9-32, A9-40 to A9-43.
