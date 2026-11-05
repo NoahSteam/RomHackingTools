@@ -244,6 +244,8 @@ public:
     uint64_t Submissions() const { return mSubmissions; }
     uint64_t Discarded() const { return mDiscarded; }
     uint64_t CacheHits() const { return mCacheHits; }
+    // Moves on every install, a cache hit's too (tests: an install of the same result again is still an install).
+    uint64_t ResultRevision() const { return mResultRevision; }
     // Screen rectangle of displayed line 'index' in the last Draw (tests click it). False when the
     // line was not drawn (clipped, or no output).
     bool LineRect(int index, ImVec2& min, ImVec2& max) const;
