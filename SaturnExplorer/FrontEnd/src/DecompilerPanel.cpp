@@ -1940,6 +1940,7 @@ void DecompilerPanel::DrawLines(const DecompilerInputs& inputs, Request& req)
                     req.cpu = mCpu;
                     req.addr = ln.firstAddr;
                 }
+                else if (ln.noOrigin) mInsnNote = LineOriginText(ln);   // A7-52: a statement no instruction is named for says so
             }
             const ImVec2 min = ImGui::GetItemRectMin(), max = ImGui::GetItemRectMax();
             if (i == mScrollToLine)
@@ -1966,7 +1967,7 @@ void DecompilerPanel::DrawLines(const DecompilerInputs& inputs, Request& req)
                     mLineTooltip = InspectionText(*target);
                     if (ln.firstAddr) mLineTooltip += "\n\n" + LineOriginText(ln);
                 }
-                else if (ln.firstAddr) mLineTooltip = LineOriginText(ln);
+                else if (ln.firstAddr || ln.noOrigin) mLineTooltip = LineOriginText(ln);
                 if (!mLineTooltip.empty()) ImGui::SetTooltip("%s", mLineTooltip.c_str());
             }
             // The pointer moves into the menu next frame. Freeze owned metadata now; all actions

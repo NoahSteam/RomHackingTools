@@ -196,6 +196,10 @@ struct Line
     std::string text;
     std::vector<Token> tokens;
     uint32_t firstAddr = 0;        // the lowest token address on the line; 0 = none
+    // A7-52: the line prints an operation of the function (a statement) and no instruction could be named for it: a copy of a value the
+    // engine merged, whose maker the printer's records do not give. The hover text and the click say so (LineOriginText); false for a
+    // declaration, a brace, a label, and any line with an address.
+    bool noOrigin = false;
 };
 
 // The instructions a line was decompiled from: the distinct non-zero token addresses, ascending
@@ -210,7 +214,8 @@ std::vector<uint32_t> LineInstructions(const Line& line);
 // the line is several instructions, how many and which. Not always all of them: a constant or a
 // move folded into the line may come from an instruction no token names (A7-14), and the text says
 // so. A word flow halted at is no instruction (A7-12): the text says it is bytes that do not
-// decode. Empty for a line with no address (a declaration, a brace), where a click does nothing.
+// decode. Empty for a line with no address (a declaration, a brace), where a click does nothing; a statement with no address
+// (Line::noOrigin, A7-52) says that no instruction is named for it and why.
 std::string LineOriginText(const Line& line);
 
 

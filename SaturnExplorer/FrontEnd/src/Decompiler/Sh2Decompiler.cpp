@@ -6427,6 +6427,56 @@ bool FlowLastWriters(const FlowRecord& flow, const ghidra::Funcdata& fd, int blk
     return !out.empty() || (input && *input);
 }
 
+// A7-52: the loads of the memory `mem` (a global or a frame word) that produced the value it holds before op `pos` of flow block `blk`:
+// on each path back, the nearest load that reads it. False (nothing named) when no path has such a load, or one meets, before its load,
+// a store that writes any of it or whose pointer the walk cannot place (a frame word, when no frame address escaped, apart), a call or
+// any other op that may write memory, or the bound. A path that reaches the entry without a load holds the function's input, which no
+// instruction reads, and adds nothing.
+bool FlowLastReads(const FlowRecord& flow, const ghidra::Funcdata& fd, int blk, int pos, const FlowVn& mem, std::set<uint32_t>& out)
+{
+    const ghidra::AddrSpace* stackSpace = fd.getArch()->getStackSpace();
+    const ghidra::AddrSpace* ram = fd.getArch()->getDefaultDataSpace();
+    std::vector<std::pair<int, int>> todo = { std::make_pair(blk, pos) };
+    std::set<int> entered;
+    int steps = 0;
+    while (!todo.empty())
+    {
+        const std::pair<int, int> st = todo.back();
+        todo.pop_back();
+        if (st.first < 0 || static_cast<size_t>(st.first) >= flow.blockOps.size()) return false;
+        const std::vector<FlowOp>& ops = flow.blockOps[static_cast<size_t>(st.first)];
+        bool done = false;
+        for (int i = std::min(st.second, static_cast<int>(ops.size())) - 1; i >= 0 && !done; --i)
+        {
+            if (++steps > 4096) return false;
+            const FlowOp& op = ops[static_cast<size_t>(i)];
+            if (op.code == ghidra::CPUI_CALL || op.code == ghidra::CPUI_CALLIND || op.code == ghidra::CPUI_CALLOTHER) return false;
+            if ((op.code != ghidra::CPUI_LOAD && op.code != ghidra::CPUI_STORE) || op.numIn < 2 || op.literal) continue;
+            bool stack = false;
+            ghidra::uintb offset = 0;
+            if (!FlowPointer(flow, fd, st.first, i, op.in[1], stack, offset) || (stack && !stackSpace))
+            {
+                if (op.code == ghidra::CPUI_STORE && stackSpace && mem.space == stackSpace && flow.frameKept) continue;
+                if (op.code == ghidra::CPUI_STORE) return false;
+                continue;   // (a load through a pointer the walk cannot place reads something else or the same: not named)
+            }
+            FlowVn m;
+            m.space = stack ? stackSpace : ram;
+            m.offset = offset & m.space->getHighest();
+            m.size = op.code == ghidra::CPUI_STORE ? (op.numIn > 2 ? op.in[2].size : 0) : op.out.size;
+            if (!FlowStorageOverlaps(m, mem)) continue;
+            if (op.code == ghidra::CPUI_STORE) return false;
+            out.insert(op.insn);
+            done = true;
+        }
+        if (done || st.first == flow.entryBlock) continue;
+        for (int p : flow.predecessors[static_cast<size_t>(st.first)])
+            if (p >= 0 && static_cast<size_t>(p) < flow.blockOps.size() && entered.insert(p).second)
+                todo.push_back(std::make_pair(p, static_cast<int>(flow.blockOps[static_cast<size_t>(p)].size())));
+    }
+    return !out.empty();
+}
+
 // The number a flow op sets its output to (a `mov #imm`, a literal's word); false when it sets none.
 bool FlowNumber(const FlowOp& op, uint64_t& v)
 {
@@ -7285,6 +7335,7 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
             const ghidra::Varnode* in = o->getIn(0);
             const bool atEnd = code == ghidra::CPUI_COPY && !atLoadOrCall && o->getAddr() == home->getStop() && !o->isFromDelaySlot() &&
                                !in->isConstant();
+            bool memoryMerge = false;   // A7-52: a copy of memory no read in its block makes, the loads that produced the value (below)
             if (maker)
                 ;
             else if (atEnd && in->isWritten() && in->getDef()->getTime() < flow.opsEnd)
@@ -7339,12 +7390,14 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                 if (atEnd && !in->isInput())
                 {
                     if (!reads.empty()) maker = reads.front();
+                    else memoryMerge = true;
                 }
                 else if (std::find(reads.begin(), reads.end(), at) == reads.end())
                 {
                     for (uint32_t a : reads)
                         if (a >= at && !maker) maker = a;
                     if (!maker && !reads.empty()) maker = reads.back();
+                    memoryMerge = !maker;
                 }
             }
             // A7-21: a register the engine merged under the variable's name (`uStack_8 = uVar6;` at the `bf` ending its block, r9's value on
@@ -7354,7 +7407,27 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
             // the bound), it names nothing. Never the branch, which makes nothing.
             bool registerMerge = false;
             std::set<uint32_t> registerMakers;
-            if (!maker && atEnd && !(in->isWritten() && in->getDef()->getTime() < flow.opsEnd))
+            // A7-52: `uRam2600200f = uRam2600200c;`, r0 the poll's load of the byte, merged under the name of the byte the loop stores, at
+            // the block after the poll: the copy's own instruction (here the `mov #1,r3` starting the block, or a branch ending it) neither
+            // reads nor writes the global. The line is the load(s) that produced the value, found back along the flow (the nearest read of
+            // the memory on each path); with none, it names nothing and says so (Line::noOrigin), as a register merge with no maker does.
+            if (memoryMerge)
+            {
+                FlowVn mem;
+                mem.space = in->getSpace();
+                mem.offset = in->getOffset();
+                mem.size = in->getSize();
+                const auto first = flow.insnFirst.find(at);
+                std::set<uint32_t> found;
+                if (first != flow.insnFirst.end() && FlowLastReads(flow, fd, first->second.first, static_cast<int>(first->second.second), mem, found))
+                    for (uint32_t m : found)
+                    {
+                        uint32_t c = 0;
+                        registerMakers.insert(CanonicalAddress(m, c) ? c : m);
+                    }
+                registerMerge = true;
+            }
+            else if (!maker && atEnd && !(in->isWritten() && in->getDef()->getTime() < flow.opsEnd))
             {
                 ghidra::Address reg = in->getAddr();
                 ghidra::int4 regSize = in->getSize();
@@ -7381,7 +7454,7 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                         }
                 }
             }
-            if (registerMerge && !registerMakers.count(own))
+                if (registerMerge && !registerMakers.count(own))
             {
                 const uint32_t lowest = registerMakers.empty() ? 0 : *registerMakers.begin();
                 for (size_t line : kv.second->first)
@@ -7548,7 +7621,14 @@ std::string LineOriginText(const Line& line)
     std::vector<uint32_t> at;
     for (uint32_t a : LineInstructions(line))
         if (!halts.count(a)) at.push_back(a);
-    if (at.empty() && halts.empty()) return std::string();
+    if (at.empty() && halts.empty())
+    {
+        if (line.noOrigin)
+            return "No SH-2 instruction is named for this line. It prints a value the decompiler carried from one place to another when it "
+                   "merged variables, and the records it keeps do not say which instruction made it, so none is pointed at (a click does "
+                   "nothing here).";
+        return std::string();
+    }
     std::string s;
     if (at.size() == 1)
     {
@@ -8799,6 +8879,17 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         for (Line& l : r.lines)   // A7-12: the word flow halted at is no instruction; the line's hover text says so
             for (Token& t : l.tokens)
                 t.haltsFlow = t.addr != 0 && std::binary_search(r.badDataAt.begin(), r.badDataAt.end(), t.addr);
+        // A7-52: a line some printed operation is on, that no token of an instruction is on, is a statement that names no instruction.
+        // It says so, rather than being a line whose click silently does nothing.
+        for (const auto& kv : printed)
+            for (size_t line : kv.second.first)
+            {
+                if (line >= r.lines.size()) continue;
+                Line& l = r.lines[line];
+                bool any = false;
+                for (const Token& t : l.tokens) any = any || t.addr != 0;
+                if (!any) l.noOrigin = true;
+            }
         // How each flow access that is no longer a LOAD or STORE ended (patch 0017). The engine
         // keeps the records of the last generation of the function (a restart clears them with the
         // ops they describe), so they match the final p-code.

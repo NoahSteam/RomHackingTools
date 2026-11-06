@@ -199,7 +199,7 @@
 //       (LineOriginText) and lists them; every access the ledger lists has a token of its instruction on its first line; every
 //       call in the final p-code has a token at its instruction; every executed instruction in the body is counted by what carries
 //       it (`map.executed.*`: a token, or none because the instruction is a delay slot, a move or an operation folded into its user).
-//       SE_GENERATED_MUTATE=tokodd|tokoutside|tokfirst|tokdrop|tokcall|tokunmark|tokhover|tokslot|tokframe damages a result as the defect would.
+//       SE_GENERATED_MUTATE=tokodd|tokoutside|tokfirst|tokdrop|tokcall|tokunmark|tokhover|tokslot|tokframe|toksilent damages a result as the defect would.
 //   And the generator's own contract (not the decompiler's): a version 2 function returns, restores
 //   r8-r15 and ends with PR as it began (but what it was generated to change: Func::clobbers).
 // The ground truth is emulator runs with different inputs (registers, what hardware reads
@@ -217,7 +217,7 @@
 //   SE_GENERATED_SHRINK=<n>  how many findings to reduce (default 3; 0 none; large: all)
 //   SE_GENERATED_VERBOSE=1   print the full report of every failing seed, not just the first few
 //   SE_GENERATED_TOKENS=1    print each output line with the addresses its tokens came from
-//   SE_GENERATED_MUTATE=1|ledger|second|alias|params|ret|body|cases|warn|preserved|claims|lent|data|honour|kept|tokodd|tokoutside|tokfirst|tokdrop|tokcall|tokunmark|tokhover|tokslot|tokframe
+//   SE_GENERATED_MUTATE=1|ledger|second|alias|params|ret|body|cases|warn|preserved|claims|lent|data|honour|kept|tokodd|tokoutside|tokfirst|tokdrop|tokcall|tokunmark|tokhover|tokslot|tokframe|toksilent
 //                            damage every result as one defect would (1: delete the first ledger entry) and
 //                            pass only if the check reports it: the checks checked
 //   SE_GENERATED_COVERAGE=1  print the mnemonics of the generated programs and how often each was emitted
@@ -5442,6 +5442,10 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
             flag("map-number-store", audit.numberStoreOther);
             flag("map-case-entry", audit.caseOtherEntry);
             flag("map-store-after", audit.storeAfterUse);
+            // A7-52: a statement line with no instruction that does not say so. Until then the audit counted the lines with none
+            // (nonCodeLines) and judged only the shapes above, so a statement named by no check passed with a click that did nothing.
+            flag("map-no-instruction", audit.noInstruction);
+            count("map.no-origin", audit.noOriginLines);
             count("map.lines", audit.lines);
             count("map.lines.one", audit.single);
             count("map.lines.several", audit.multi);
@@ -12328,14 +12332,16 @@ void TestDomainPins(Sh2Decompiler& d)
     // grammar 2 seed 2067040 (A7-51, the oracle: `xStack_8._0_2_ = *param_2;` at its load, a dereference without parentheses). The
     // second matrix and fresh seeds after A7-46: grammar 1 seed 16415 (`uRam26001014 = 4;` at its `mov #4,r0`, the global's store writing
     // `in_r3`) and grammar 2 seed 1910826 (`xStack_40 = 0x18;` at `mov #0x18,r0`, the frame store writing `mov #0x3,r1`'s 3 or a table
-    // entry), both A7-45's count (`n:map-copy-store` once A7-46 stopped naming those stores).
+    // entry), both A7-45's count (`n:map-copy-store` once A7-46 stopped naming those stores). Grammar 1 seed 1904648 (A7-52:
+    // `uRam2600200f = uRam2600200c;`, r0 the poll's byte load merged under the loop's store, printed with no instruction: the copy names
+    // the load; the oracle's `no-instruction` finds a statement with none that does not say so).
     for (const auto& s : { std::make_pair(2, 304221), std::make_pair(2, 1700689), std::make_pair(1, 1832116), std::make_pair(1, 1843925),
                            std::make_pair(2, 1853425), std::make_pair(1, 1843373), std::make_pair(1, 1843207), std::make_pair(1, 1862210),
                            std::make_pair(2, 1872967), std::make_pair(2, 1873745), std::make_pair(1, 1862942),
                            std::make_pair(1, 14875), std::make_pair(2, 1891223), std::make_pair(1, 1881632), std::make_pair(1, 1884426),
                            std::make_pair(1, 1883172), std::make_pair(2, 1894780),
                            std::make_pair(2, 2087030), std::make_pair(2, 2089570), std::make_pair(2, 9403567), std::make_pair(2, 2067040),
-                           std::make_pair(1, 16415), std::make_pair(2, 1910826) })
+                           std::make_pair(1, 16415), std::make_pair(2, 1910826), std::make_pair(1, 1904648) })
     {
         const Report rep = Evaluate(d, s.first == 2 ? MakeV2(s.second) : Generate(s.second), true);
         std::printf("pin 'area 7 fixer: grammar %d seed %d': %zu finding(s)\n", s.first, s.second, rep.findings.size());

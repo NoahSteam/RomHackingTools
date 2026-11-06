@@ -40,6 +40,19 @@
 namespace dts
 {
 
+// A7-52: does a printed line read as a statement that does something (an assignment, a call, a value returned) rather than a declaration,
+// a brace, a label, or a bare `break;`? Such a line with no instruction is a click that silently does nothing.
+inline bool MappingIsStatement(const std::string& text)
+{
+    size_t b = 0, e = text.size();
+    while (b < e && std::isspace(static_cast<unsigned char>(text[b]))) ++b;
+    while (e > b && std::isspace(static_cast<unsigned char>(text[e - 1]))) --e;
+    if (e - b < 2 || text[e - 1] != ';' || text[b] == '}') return false;
+    if (text[b] == '(' && text.find(" = ", b) == std::string::npos) return false;   // (the argument list of a call printed over two lines)   // (`} while( true );` closes a loop: no op of its own)
+    const std::string t = text.substr(b, e - b);
+    return t.find(" = ") != std::string::npos || t.find('(') != std::string::npos || t.compare(0, 7, "return ") == 0;
+}
+
 struct MappingAudit
 {
     // Violations (each must be 0).
@@ -67,6 +80,9 @@ struct MappingAudit
     int functions = 0, lines = 0, linesWithAddr = 0, tokens = 0, tokensWithAddr = 0;
     int single = 0, multi = 0, multiNonAdjacent = 0, widest = 0;
     int nonCodeLines = 0;      // a line with no instruction (declarations, braces, case labels)
+    int noOriginLines = 0;     // ...of which statements the product says it names no instruction for (Line::noOrigin, A7-52; counted)
+    int noInstruction = 0;     // ...a statement (an assignment, a call, a value returned) with no instruction and no word saying so, or a line
+                               // that says it has none and has one, or says it without a hover text that does (A7-52, a violation)
     int bodyInsns = 0, bodyMapped = 0;
     int unmappedSlots = 0;     // a delay slot instruction no token carries (folded into the expression that uses it, or removed)
     int slotTokens = 0;        // a token at a delay slot's own address (A7-10: the line the slot made; before patch 0075 there were none, A7-9)
@@ -125,7 +141,7 @@ struct MappingAudit
         functions += o.functions; lines += o.lines; linesWithAddr += o.linesWithAddr; tokens += o.tokens;
         tokensWithAddr += o.tokensWithAddr; single += o.single; multi += o.multi; multiNonAdjacent += o.multiNonAdjacent;
         widest = widest > o.widest ? widest : o.widest;
-        nonCodeLines += o.nonCodeLines; bodyInsns += o.bodyInsns; bodyMapped += o.bodyMapped; unmappedSlots += o.unmappedSlots;
+        nonCodeLines += o.nonCodeLines; noOriginLines += o.noOriginLines; noInstruction += o.noInstruction; bodyInsns += o.bodyInsns; bodyMapped += o.bodyMapped; unmappedSlots += o.unmappedSlots;
         slotTokens += o.slotTokens; badDataTokens += o.badDataTokens; unmappedMemory += o.unmappedMemory; unmappedCall += o.unmappedCall;
         unmappedBranch += o.unmappedBranch;
         slotMadeLines += o.slotMadeLines;
@@ -150,7 +166,7 @@ struct MappingAudit
     {
         return odd + outside + notInsn + firstAddrWrong + badRange + callWithoutCall + unmarked + misnamed + accessUnmapped + callUnmapped + callGoneUnsaid + roundTrip +
                accessAtBranch + frameStoreMissing + backWrong + copyAtCall + copyAtReturn + copyAtBranch + copyAtOther + storeValueOther + constAtJoin +
-               copyMergeAtBranch + numberStoreOther + caseOtherEntry + storeAfterUse;
+               copyMergeAtBranch + numberStoreOther + caseOtherEntry + storeAfterUse + noInstruction;
     }
 };
 
@@ -166,6 +182,7 @@ struct MappingAudit
 //               frame store's instruction)
 //   tokcopy     (A7-19) a line that assigns a frame local or a global a bare value loses the tokens at the stores folded into it, as before
 //               the fix: those a copy carries (empty, or the copy's own taken over) are gone and the line names no instruction
+//   toksilent   (A7-52) every statement line that names an instruction loses them all and is not marked: a click that silently does nothing
 //   tokslot     (A7-10) a delay slot's instruction is addressed to its branch again: the tokens at a slot, and the ledger's accesses, move
 //               back by one instruction. Needs 'word' (the instruction words), as the audit does.
 inline bool MutateMapping(sfe::decomp::DecompileResult& r, const std::string& kind,
@@ -188,6 +205,17 @@ inline bool MutateMapping(sfe::decomp::DecompileResult& r, const std::string& ki
             l.firstAddr = 0;
             for (const Token& t : l.tokens)
                 if (t.addr && (l.firstAddr == 0 || t.addr < l.firstAddr)) l.firstAddr = t.addr;
+        }
+        return true;
+    }
+    if (kind == "toksilent")
+    {
+        for (Line& l : r.lines)
+        {
+            if (!MappingIsStatement(l.text) || l.firstAddr == 0) continue;
+            for (Token& t : l.tokens) t.addr = 0;
+            l.firstAddr = 0;
+            l.noOrigin = false;
         }
         return true;
     }
@@ -1193,12 +1221,36 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
         if (at.empty())
         {
             ++a.nonCodeLines;
-            if (!tip.empty())
+            // A7-52: a statement with no instruction says so (a click goes nowhere; the hover text, and the panel's note, say why); a
+            // declaration, a brace or a label has neither. A line the product marks must be a statement, and have the words.
+            if (l.noOrigin)
             {
-                ++a.misnamed;
-                problem("hover", "line " + std::to_string(li) + " has no instruction and a hover text");
+                ++a.noOriginLines;
+                if (tip.find("No SH-2 instruction is named for this line") != 0)
+                {
+                    ++a.noInstruction;
+                    problem("no-instruction", "line " + std::to_string(li) + " '" + l.text + "' says no instruction is named for it, and its hover text does not: " + tip);
+                }
+            }
+            else
+            {
+                if (!tip.empty())
+                {
+                    ++a.misnamed;
+                    problem("hover", "line " + std::to_string(li) + " has no instruction and a hover text");
+                }
+                if (MappingIsStatement(l.text))
+                {
+                    ++a.noInstruction;
+                    problem("no-instruction", "line " + std::to_string(li) + " '" + l.text + "' is a statement that names no instruction and does not say so (a click does nothing)");
+                }
             }
             continue;
+        }
+        if (l.noOrigin)
+        {
+            ++a.noInstruction;
+            problem("no-instruction", "line " + std::to_string(li) + " '" + l.text + "' says no instruction is named for it and names one");
         }
         ++a.linesWithAddr;
         {
@@ -2496,6 +2548,8 @@ inline void PrintMappingAudit(const MappingAudit& a, const char* label)
                 label, a.numberStoreOther, a.caseOtherEntry, a.caseJudged);
     std::printf("  mapping (%s): area 7 round 7: %d copies drawn at a call or a return name a store that cannot run before it (A7-32, a violation)\n",
                 label, a.storeAfterUse);
+    std::printf("  mapping (%s): area 7 round 8 (A7-52): %d of the lines with no instruction are statements the product says so of (counted); %d statements with none that do not say so, or say so with one (a violation)\n",
+                label, a.noOriginLines, a.noInstruction);
     for (const std::string& p : a.problems) std::printf("    %s\n", p.c_str());
 }
 
