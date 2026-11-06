@@ -9021,7 +9021,7 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
             std::ofstream f(cfile);
             f << src.str();
         }
-        // A12-20: GCC 14 made an assignment between pointer types the engine prints apart (`pppxStack_14 = &pppiStack_18;`, an `int4 ***` to
+        // A10-13: GCC 14 made an assignment between pointer types the engine prints apart (`pppxStack_14 = &pppiStack_18;`, an `int4 ***` to
         // an `xunknown4 ***`) an error, where GCC 13 and clang warn (and -w hides it). The value is the same either way (the C++ reading casts it,
         // AddressAssignTyped), so the C reading keeps the older rule on every compiler: the verdict no longer depends on the host's GCC.
         // SE_FRAME_NO_LOW: the frame above 4 GiB as macOS has it (LowMemoryAvailable, SE_GENERATED_PRINTEDC_NOLOW).
