@@ -1118,6 +1118,20 @@ if(BUILD_TESTING)
     target_include_directories(SaturnExplorerDiffToolTests
         PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
     add_test(NAME SaturnExplorerDiffToolTests COMMAND SaturnExplorerDiffToolTests)
+    # 0.1 s on Linux. A hang on Windows (A12-27) must end in two minutes, not at ctest's 1500 s default.
+    set_tests_properties(SaturnExplorerDiffToolTests PROPERTIES TIMEOUT 120)
+
+    # A12-25: a non-ASCII path through FileWrite, ReadFileCapped and the savestate driver (the wide-call plumbing on Windows,
+    # the UTF-8 converters everywhere).
+    add_executable(SaturnExplorerUtf8PathTests
+        FrontEnd/tests/Utf8PathTests.cpp
+        FrontEnd/src/FileWrite.cpp
+    )
+    target_include_directories(SaturnExplorerUtf8PathTests
+        PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_link_libraries(SaturnExplorerUtf8PathTests PRIVATE SaturnExplorerSavestateDriver)
+    add_test(NAME SaturnExplorerUtf8PathTests COMMAND SaturnExplorerUtf8PathTests)
+    set_tests_properties(SaturnExplorerUtf8PathTests PROPERTIES TIMEOUT 120)
 
     # LaunchTool's launcher on macOS/Linux: arguments reach the program literally, and a launch that
     # failed is reported as one. Needs fork/exec, so POSIX only.

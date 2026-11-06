@@ -1,4 +1,5 @@
 #include "Theme.h"
+#include "saturnexplorer/SeFilePath.h"   // UTF-8 paths on Windows (A12-25)
 #include "ControllerPanel.h"
 
 #include <algorithm>
@@ -837,7 +838,7 @@ bool ControllerPanel::LoadRecording(IPlatform& platform)
 {
     std::string path;
     if (!platform.OpenFileDialogFiltered(path, "Saturn input recording", "json")) return false;
-    std::ifstream f(path, std::ios::binary);
+    std::ifstream f(se::NativePath(path).c_str(), std::ios::binary);
     if (!f) return false;
     const std::string text((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
     if (text.find("\"format\": \"saturn-input-recording\"") == std::string::npos) return false;

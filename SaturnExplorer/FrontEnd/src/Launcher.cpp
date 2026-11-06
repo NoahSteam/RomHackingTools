@@ -1,4 +1,5 @@
 #include "Launcher.h"
+#include "saturnexplorer/SeFilePath.h"   // UTF-8 paths on Windows (A12-25)
 
 #include <algorithm>
 #include <cstdint>
@@ -81,7 +82,7 @@ std::string CollapseSpaces(const std::string& s)
 
 bool FileExists(const std::string& path)
 {
-    std::ifstream f(path, std::ios::binary);
+    std::ifstream f(se::NativePath(path).c_str(), std::ios::binary);
     return static_cast<bool>(f);
 }
 

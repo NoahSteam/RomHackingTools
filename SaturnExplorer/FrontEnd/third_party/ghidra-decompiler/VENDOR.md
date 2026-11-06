@@ -102,6 +102,7 @@ The embedded copy of the runtime files is `FrontEnd/src/Decompiler/Sh2SpecData.h
 | `0078-engine-deindirect-restart-per-call-site.patch` | `ActionRestartGroup::apply` allows one more restart for each call site `FuncCallSpecs::deindirect` could not convert in place (`Override::noteDeindirectRestart`): a chain of indirect calls that resolve one generation after another (two `jsr @r3` to a lent callee that keeps r3) is followed to its end instead of ending "Exceeded maximum restarts" with the later call under the default model's effects. Ledger A3-155. |
 | `0080-engine-narrow-compare-both-sides-cast.patch` | `TypeOpEqual::getInputCast` and `TypeOpNotEqual::getInputCast` (`typeop.cc`): when one side of an equality compare is cast (`checkIntPromotionForCompare`), the other, a narrow `int` or `uint` of the other signedness, is cast to the same type (`compareOtherSideCast`), so `(uint2)(x & 0xff80) == (uint2)(int2)y` reads in C as the code's two-byte compare, where it was `(uint2)(x & 0xff80) == (int2)y` (zero extension against sign extension). Ledger A10-12. |
 | `0081-engine-sext-of-concat-cast.patch` | `TypeOpIntSext::getInputCast` (`typeop.cc`): the sign extension of a `PIECE` printed in place (`CONCAT11(a,b)`, no type in the text) casts it to its signed type first when the extension prints as a cast or is hidden (`sextOfImpliedPiece`), so `(uint4)(int2)CONCAT11(a,b)` says the sign where `(uint4)CONCAT11(a,b)` read as the zero extension (a stack word overwritten by a byte and read back by `mov.w`). Ledger A10-16. |
+| `0083-engine-msvc-unused-catch-names.patch` | The `catch` handlers in `funcdata_block.cc`, `database.cc` and `coreaction.cc` that patches 0001, 0044 and 0068 left naming an exception they never read no longer name it (MSVC C4101). No change in behaviour. |
 
 MSVC and Apple clang needed no patch beyond these.
 
@@ -211,6 +212,7 @@ applies 0005 to 0008) must run before `se-regen-sla`.
   - 0078: `TestA3155Fix` (`Sh2DecompilerTests.cpp`: the g1 fixture and its control; 9 checks fail without the patch).
   - 0080: the printed-C fixtures `A10-12 a` to `e` and the pins `A10-12 #0` to `#7` (`SaturnExplorerSh2GeneratedTests`; each of the five is `mismatch` without the patch, the oracle now counting a narrow compare that is false as C as a finding and not `narrow-c`) and families 98 to 103, 108 and 109 of `dagen17.py`; the corpora's texts are unchanged (record: 15_DECOMPILER_STEP5.md, "A10-12: narrow compare cast (patch 0080)").
   - 0081: the printed-C pins `A10-16 #0` to `#16` and `A10-16 oracle #0` and `#1` (`SaturnExplorerSh2GeneratedTests`; #0 to #7 are `mismatch` without the patch, the zero extensions #13 to #16 keep `(uint4)CONCAT11(...)`) and the stack-word family of the record (15_DECOMPILER_STEP5.md, "A10-16 and A10-17").
+  - 0083: none beyond the build (a catch handler loses an unused name); the engine tests run unchanged.
 
 
   If upstream's Makefile source groups changed, update the lists in `vendor.py`.

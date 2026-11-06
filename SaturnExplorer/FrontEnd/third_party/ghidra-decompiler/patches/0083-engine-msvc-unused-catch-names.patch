@@ -1,0 +1,60 @@
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc
+@@ -29,6 +29,7 @@
+  * Modified for SaturnExplorer: a save slot a STORE is aimed at, or that a pending STORE may reach, stays mapped (patches/0072-engine-frame-chains-and-save-slots.patch).
+  * Modified for SaturnExplorer: a number is the address of a hardware register where the data flow uses it as one, not by a guess (patches/0073-engine-constant-pointer-guess-not-hardware.patch).
+  * Modified for SaturnExplorer: a LOAD that may read the frame and stays one holds the frame's writes (patches/0076-engine-frame-loads-keep-writes.patch).
++ * Modified for SaturnExplorer: a catch handler that never reads its exception no longer names it, which MSVC warned about (C4101) (patches/0083-engine-msvc-unused-catch-names.patch).
+  */
+ #include "coreaction.hh"
+ #include "condexe.hh"
+@@ -4175,7 +4176,7 @@ bool ActionDeadCode::isSavePush(const Funcdata &data,const Address &addr,const V
+   try {
+     data.getArch()->loader->loadFill(buf,2,addr);
+   }
+-  catch(DataUnavailError &err) {
++  catch(DataUnavailError &) {
+     return false;
+   }
+   uint4 w = ((uint4)buf[0] << 8) | buf[1];
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/database.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/database.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/database.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/database.cc
+@@ -16,6 +16,7 @@
+  * Modified for SaturnExplorer: a Symbol the name tree cannot take back is kept, and a Symbol or map entry that a failed insertion leaves unowned is freed, and so is a Scope the parent cannot take (patches/0032-allocation-failure-order-2.patch).
+  * Modified for SaturnExplorer: an input that is a piece of a register is named with the byte it starts at (patches/0037-engine-division-piece-and-input-names.patch).
+  * Modified for SaturnExplorer: the bytes of a register the function keeps are named with the byte they start at, as an input's are (patches/0044-engine-round5-printed-value-fixes.patch).
++ * Modified for SaturnExplorer: a catch handler that never reads its exception no longer names it, which MSVC warned about (C4101) (patches/0083-engine-msvc-unused-catch-names.patch).
+  */
+ #include "database.hh"
+ #include "funcdata.hh"
+@@ -2680,7 +2681,7 @@ static string registerPieceSuffix(Architecture *glb,const string &regname,const
+ 	return s.str();
+       }
+     }
+-  } catch(LowlevelError &err) {
++  } catch(LowlevelError &) {
+   }
+   return string();
+ }
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_block.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_block.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_block.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_block.cc
+@@ -19,6 +19,7 @@
+  * Modified for SaturnExplorer: a jump-table is owned from the moment it is made (patches/0040-jumptable-tracedag-allocation-failure.patch).
+  * Modified for SaturnExplorer: an access folded into the stack frame that goes with an unreachable block is recorded (patches/0068-engine-deadcode-late-stack-reads.patch).
+  * Modified for SaturnExplorer: a call that goes with an unreachable block drops its frame call records (patches/0072-engine-frame-chains-and-save-slots.patch).
++ * Modified for SaturnExplorer: a catch handler that never reads its exception no longer names it, which MSVC warned about (C4101) (patches/0083-engine-msvc-unused-catch-names.patch).
+  */
+ #include "funcdata.hh"
+ #include "flow.hh"
+@@ -556,7 +557,7 @@ JumpTable::RecoveryMode Funcdata::stageJumpTable(Funcdata &partial,JumpTable *jt
+ #endif
+       glb->allacts.setCurrent(oldactname); // Restore old action
+     }
+-    catch(CancelError &err) {	// Not a recovery failure: the host wants the whole analysis stopped
++    catch(CancelError &) {	// Not a recovery failure: the host wants the whole analysis stopped
+       glb->allacts.setCurrent(oldactname);
+       throw;
+     }

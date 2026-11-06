@@ -4,6 +4,7 @@
 // have to be held in memory at once.
 
 #include "DataSearch.h"
+#include "saturnexplorer/SeFilePath.h"   // UTF-8 paths on Windows (A12-25)
 
 #include <algorithm>
 #include <fstream>
@@ -153,7 +154,7 @@ void SearchFile(const std::string& path, const uint8_t* needle, size_t len,
     {
         return;
     }
-    std::ifstream f(path, std::ios::binary);
+    std::ifstream f(se::NativePath(path).c_str(), std::ios::binary);
     if (!f)
     {
         return;
@@ -212,7 +213,7 @@ enum class ReadStatus { Ok, OpenFailed, TooLarge };
 // read the data — no separate stat.
 ReadStatus ReadWholeFile(const std::string& path, std::vector<uint8_t>& data, uint64_t maxBytes)
 {
-    std::ifstream f(path, std::ios::binary | std::ios::ate);
+    std::ifstream f(se::NativePath(path).c_str(), std::ios::binary | std::ios::ate);
     if (!f)
     {
         return ReadStatus::OpenFailed;

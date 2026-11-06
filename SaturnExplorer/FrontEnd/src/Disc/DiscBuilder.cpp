@@ -1,4 +1,5 @@
 #include "Disc/DiscBuilder.h"
+#include "saturnexplorer/SeFilePath.h"   // UTF-8 paths on Windows (A12-25)
 
 #include <algorithm>
 #include <cstdio>
@@ -19,7 +20,7 @@ namespace
 {
 uint64_t FileSize(const std::string& path)
 {
-    std::ifstream f(path, std::ios::binary | std::ios::ate);
+    std::ifstream f(se::NativePath(path).c_str(), std::ios::binary | std::ios::ate);
     return f ? uint64_t(f.tellg()) : 0;
 }
 std::string Track2(int n)
@@ -34,8 +35,8 @@ std::string Track2(int n)
 // image and call it done.
 bool IsoToRawBin(const std::string& iso, const std::string& bin, std::string& error)
 {
-    std::ifstream in(iso, std::ios::binary);
-    std::ofstream out(bin, std::ios::binary | std::ios::trunc);
+    std::ifstream in(se::NativePath(iso).c_str(), std::ios::binary);
+    std::ofstream out(se::NativePath(bin).c_str(), std::ios::binary | std::ios::trunc);
     if (!in) { error = "Could not read the data-track image: " + iso; return false; }
     if (!out) { error = "Could not write the raw data track: " + bin; return false; }
     const uint64_t expected = (FileSize(iso) + 2047) / 2048;
@@ -66,8 +67,8 @@ bool IsoToRawBin(const std::string& iso, const std::string& bin, std::string& er
 // Copy a byte range [offset, offset+length) from src to dst.
 bool CopyRange(const std::string& src, uint64_t offset, uint64_t length, const std::string& dst)
 {
-    std::ifstream in(src, std::ios::binary);
-    std::ofstream out(dst, std::ios::binary | std::ios::trunc);
+    std::ifstream in(se::NativePath(src).c_str(), std::ios::binary);
+    std::ofstream out(se::NativePath(dst).c_str(), std::ios::binary | std::ios::trunc);
     if (!in || !out) return false;
     in.seekg(std::streamoff(offset), std::ios::beg);
     if (!in) return false;
@@ -88,7 +89,7 @@ bool CopyRange(const std::string& src, uint64_t offset, uint64_t length, const s
 
 bool WriteText(const std::string& path, const std::string& text)
 {
-    std::ofstream f(path, std::ios::binary | std::ios::trunc);
+    std::ofstream f(se::NativePath(path).c_str(), std::ios::binary | std::ios::trunc);
     if (!f) return false;
     f << text;
     f.close();
@@ -453,7 +454,7 @@ VerifyEncodeResult VerifyDataTrackEncoding(const std::string& sourceImage)
 
     if (length < 2352) { v.error = "Track 01 is empty or shorter than one sector."; return v; }
 
-    std::ifstream in(trackFile, std::ios::binary);
+    std::ifstream in(se::NativePath(trackFile).c_str(), std::ios::binary);
     if (!in) { v.error = "Could not open the source track: " + trackFile; return v; }
     in.seekg(std::streamoff(offset), std::ios::beg);
 

@@ -13,6 +13,11 @@
 #include "FileWrite.h"
 #include "Platform/CommandLine.h"
 
+#ifdef _WIN32
+#include <crtdbg.h>
+#include <stdlib.h>   // _set_abort_behavior
+#endif
+
 using namespace sfe;
 
 namespace
@@ -28,8 +33,17 @@ size_t Ix(RegionId id) { return static_cast<size_t>(id); }
 std::string TempRoot()
 {
     const char* t = std::getenv("TMPDIR");
+#ifdef _WIN32
+    // "/tmp" is a folder at the root of the current drive on Windows, which a CI runner does not have: the folder was never made,
+    // every file read came back empty, and the unchecked got[0] below then failed the Debug CRT's range assertion, whose dialog
+    // nobody can click on a runner (A12-27). The user's temp folder is always there.
+    if (!t || !*t) t = std::getenv("TEMP");
+    if (!t || !*t) t = std::getenv("TMP");
+    std::string base = t && *t ? t : ".";
+#else
     std::string base = t && *t ? t : "/tmp";
-    if (base.back() == '/') base.pop_back();
+#endif
+    while (base.size() > 1 && (base.back() == '/' || base.back() == '\\')) base.pop_back();
     return base + "/se_difftool_test_" + std::to_string(static_cast<unsigned long long>(std::time(nullptr)));
 }
 
@@ -147,7 +161,7 @@ void TestWriteAndPurge()
         CHECK(Read(a + PathSeparator() + DiffRegionFileName(rid), got));
         CHECK(got == sa.regions[i].bytes);
         CHECK(got.size() == Traits(rid).size);
-        CHECK(got[0] == i + 1);
+        CHECK(!got.empty() && got[0] == i + 1);   // not got[0] alone: on an empty vector the Debug CRT asserts (A12-27)
     }
 
     // Writing the same side again replaces the files rather than failing on them.
@@ -222,8 +236,8 @@ void TestComparisonsDoNotShareFolders()
     CHECK(WriteSnapshotFolder(first, a1, error));
     CHECK(WriteSnapshotFolder(second, a2, error));
     std::vector<uint8_t> got;
-    CHECK(Read(a1 + PathSeparator() + DiffRegionFileName(RegionId::Hwram), got) && got[0] == 0x00);
-    CHECK(Read(a2 + PathSeparator() + DiffRegionFileName(RegionId::Hwram), got) && got[0] == 0x55);
+    CHECK(Read(a1 + PathSeparator() + DiffRegionFileName(RegionId::Hwram), got) && !got.empty() && got[0] == 0x00);
+    CHECK(Read(a2 + PathSeparator() + DiffRegionFileName(RegionId::Hwram), got) && !got.empty() && got[0] == 0x55);
 
     PurgeDiffFolders(root, 5000, 0);
     CHECK(!FileOrDirectoryExists(a1) && !FileOrDirectoryExists(a2));
@@ -233,6 +247,15 @@ void TestComparisonsDoNotShareFolders()
 
 int main()
 {
+#ifdef _WIN32
+    // A failed assertion of the Debug CRT (or a crash) opens a dialog that no one can close on a CI runner, and the test then
+    // runs until ctest's 1500 s limit (A12-27). Send them to stderr and end the process instead, so the log shows what failed.
+    _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+    _CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
+    _CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
+    _CrtSetReportFile(_CRT_ERROR, _CRTDBG_FILE_STDERR);
+    _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
+#endif
     TestArgs();
     TestWindowsCommandLine();
     TestNames();

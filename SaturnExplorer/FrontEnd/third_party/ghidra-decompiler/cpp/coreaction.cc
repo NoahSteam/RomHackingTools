@@ -29,6 +29,7 @@
  * Modified for SaturnExplorer: a save slot a STORE is aimed at, or that a pending STORE may reach, stays mapped (patches/0072-engine-frame-chains-and-save-slots.patch).
  * Modified for SaturnExplorer: a number is the address of a hardware register where the data flow uses it as one, not by a guess (patches/0073-engine-constant-pointer-guess-not-hardware.patch).
  * Modified for SaturnExplorer: a LOAD that may read the frame and stays one holds the frame's writes (patches/0076-engine-frame-loads-keep-writes.patch).
+ * Modified for SaturnExplorer: a catch handler that never reads its exception no longer names it, which MSVC warned about (C4101) (patches/0083-engine-msvc-unused-catch-names.patch).
  */
 #include "coreaction.hh"
 #include "condexe.hh"
@@ -4175,7 +4176,7 @@ bool ActionDeadCode::isSavePush(const Funcdata &data,const Address &addr,const V
   try {
     data.getArch()->loader->loadFill(buf,2,addr);
   }
-  catch(DataUnavailError &err) {
+  catch(DataUnavailError &) {
     return false;
   }
   uint4 w = ((uint4)buf[0] << 8) | buf[1];
