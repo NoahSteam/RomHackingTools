@@ -11806,6 +11806,16 @@ void TestDomainPins(Sh2Decompiler& d)
         for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
         CHECK(rep.findings.empty());
     }
+    // Area 7 fixer (round 7 rows), A7-39's triage. Grammar 2 seed 1820753: `xStack_30 = (xunknown4)xVar3;` at a `bsr` is the call's own
+    // output (r1 of a 64-bit return, the callee's lent prototype), which a push after the call wrote; A7-32's rule (a copy at a call names
+    // only stores that run before it) left it naming nothing: `n:map-frame-store`. The rule is for copies the callee sees, not for a
+    // statement whose value the call makes. (Pinned here: the function needs the generator's lent prototypes and its tail jump followed.)
+    {
+        const Report rep = Evaluate(d, MakeV2(1820753), true);
+        std::printf("pin 'area 7 fixer: grammar 2 seed 1820753': %zu finding(s)\n", rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
 }
 
 // A caller and a lent callee that changes a register the calling convention keeps (ledger A3-3, finding 1 of the external
