@@ -103,6 +103,8 @@ struct MappingAudit
     int copyMergeAtBranch = 0; // ...drawn only at a branch that ends its block, which makes nothing (a violation: the line names its makers or nothing)
     int copyRegisterMade = 0;  // ...naming instructions that each write a register and are no load, store, call or branch: the makers (counted)
     int copyNoAddress = 0;     // ...naming no instruction at all: no maker was found (counted)
+    int copyNumberMade = 0;    // A7-45: a number line drawn only at instructions that make the number, no store of the variable storing a
+                               // number any instruction makes (a register merged under the variable's name; counted)
     int constLines = 0;        // lines `V = <number>;` drawn at one instruction (counted)
     int numberStoreOther = 0;  // ...of a memory variable, drawn at a number instruction beside the stores it names, whose value none of those
                                // stores stores (a violation: A7-28, fixed)
@@ -131,7 +133,7 @@ struct MappingAudit
         copyAtBranch += o.copyAtBranch; copyAtCall += o.copyAtCall; copyAtReturn += o.copyAtReturn; copyAtLoad += o.copyAtLoad; copyAtOther += o.copyAtOther;
         copyUnconnected += o.copyUnconnected;
         storeValueOther += o.storeValueOther; copyOtherValue += o.copyOtherValue; constLines += o.constLines; constAtJoin += o.constAtJoin;
-        copyMergeAtBranch += o.copyMergeAtBranch; copyRegisterMade += o.copyRegisterMade; copyNoAddress += o.copyNoAddress;
+        copyMergeAtBranch += o.copyMergeAtBranch; copyRegisterMade += o.copyRegisterMade; copyNoAddress += o.copyNoAddress; copyNumberMade += o.copyNumberMade;
         numberStoreOther += o.numberStoreOther; caseOtherEntry += o.caseOtherEntry; caseJudged += o.caseJudged; storeAfterUse += o.storeAfterUse;
         for (const std::string& p : o.problems) Keep(p);
     }
@@ -1832,6 +1834,75 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     if (cast && (d.Mnemonic.compare(0, 4, "exts") == 0 || d.Mnemonic.compare(0, 4, "extu") == 0)) named = true;
                 }
                 if (named) continue;
+                // (A7-45 (the area 7 fixer): a number line drawn only at instructions that make the number (`mov #imm`, a literal), when
+                // no store of the variable stores a number any instruction makes -- the makers of each store's register known
+                // (RegisterMakers), none a `mov #imm` or a literal; a store of no register, `tas.b`, makes its own -- is a register the
+                // engine merged under the variable's name, as a register variable's merge is: `iRam0600218c = 0xb;` at `mov #0xb,r0`, r0
+                // the global's load, whose stores write a loaded byte and a loaded word. Naming one of those stores would name another
+                // value (numberStoreOther, A7-28, at the maker; storeValueOther at the store). Counted apart.)
+                if (number && anyAddress)
+                {
+                    const auto numberOf = [&](uint32_t p, uint16_t w, uint32_t& value) {
+                        uint16_t hi = 0, lo = 0;
+                        if ((w >> 12) == 0xE) return value = static_cast<uint32_t>(static_cast<int32_t>(static_cast<int8_t>(w & 0xFF))), true;
+                        if ((w >> 12) == 0x9 && word(p + 4 + (w & 0xFFu) * 2, lo))
+                            return value = static_cast<uint32_t>(static_cast<int32_t>(static_cast<int16_t>(lo))), true;
+                        const uint32_t q = (p & ~3u) + 4 + (w & 0xFFu) * 4;
+                        if ((w >> 12) == 0xD && word(q, hi) && word(q + 2, lo)) return value = static_cast<uint32_t>(hi) << 16 | lo, true;
+                        return false;
+                    };
+                    const uint32_t shown = static_cast<uint32_t>(shownValue.value);
+                    const auto sameNumber = [shown](uint32_t v) {
+                        for (int n = 1; n <= 4; n *= 2)
+                        {
+                            const uint32_t mask = n == 4 ? ~0u : (1u << (8 * n)) - 1;
+                            if ((n == 4 || shown <= mask) && ((v ^ shown) & mask) == 0) return true;
+                        }
+                        return false;
+                    };
+                    bool apart = true;
+                    for (const Token& t : r.lines[li].tokens)
+                    {
+                        if (!t.addr) continue;
+                        uint16_t mw = 0;
+                        uint32_t got = 0;
+                        if (t.begin == t.end || !word(t.addr, mw) || !numberOf(t.addr, mw, got) || !sameNumber(got))
+                        {
+                            apart = false;
+                            break;
+                        }
+                    }
+                    if (apart && !haveSources)
+                    {
+                        sources = BranchSources(r, word);
+                        haveSources = true;
+                    }
+                    for (uint32_t st : candidates)
+                    {
+                        if (!apart) break;
+                        uint16_t sw = 0;
+                        int size = 0;
+                        const int reg = word(st, sw) ? StoredRegister(sw, size) : -1;
+                        if (reg < 0) continue;
+                        std::set<uint32_t> makers;
+                        if (!RegisterMakers(r, word, sources, st, reg, makers))
+                        {
+                            apart = false;
+                            break;
+                        }
+                        for (uint32_t m : makers)
+                        {
+                            uint16_t mw = 0;
+                            uint32_t got = 0;
+                            if (m == 0 || (word(m, mw) && numberOf(m, mw, got))) apart = false;   // (an input, or a number some instruction makes)
+                        }
+                    }
+                    if (apart)
+                    {
+                        ++a.copyNumberMade;
+                        continue;
+                    }
+                }
                 if (mergedRegister && drawnAny && branchOnly)
                 {
                     ++a.copyMergeAtBranch;
@@ -2398,8 +2469,9 @@ inline void PrintMappingAudit(const MappingAudit& a, const char* label)
                 "instruction, %d of them at a join's first instruction that does not make the number (A7-22, a violation)\n",
                 label, a.storeValueOther, a.copyOtherValue, a.constLines, a.constAtJoin);
     std::printf("  mapping (%s): register merges under a memory variable's name naming no store (A7-21): %d drawn only at a branch ending the block (a "
-                "violation), %d naming the instructions that set the register (counted), %d naming nothing (counted)\n",
-                label, a.copyMergeAtBranch, a.copyRegisterMade, a.copyNoAddress);
+                "violation), %d naming the instructions that set the register (counted), %d naming nothing (counted); %d number lines drawn at "
+                "their makers that no store's value is made by (A7-45, counted)\n",
+                label, a.copyMergeAtBranch, a.copyRegisterMade, a.copyNoAddress, a.copyNumberMade);
     std::printf("  mapping (%s): area 7 round 6: %d number lines of a memory variable drawn at a number instruction whose value no store they name "
                 "stores (A7-28, a violation); %d of %d case labels judged against their own switch's table name another entry or none (A7-29, a violation)\n",
                 label, a.numberStoreOther, a.caseOtherEntry, a.caseJudged);

@@ -1525,6 +1525,50 @@ void TestArea7Round7()
         const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_44");
         CHECK(a.numberStoreOther == 0 && a.Violations() == 0);
     }
+    // A7-45 (P3, the oracle), from the matrix run after A7-44's fix: grammar 1 seed 14875. r0 is the load of the global 0x0600218C and,
+    // on the path where it is 2, `mov #0xb,r0` sets it; the engine merges r0 under the global's name and prints `iRam0600218c = 0xb;` at
+    // that mov. The global's two stores write a loaded byte (`mov.l r2,@r7`, r2 from `mov.b @r4,r2`) and a loaded word (`mov.l r1,@r7`).
+    // Before A7-44's rule the line was drawn at the first store, which writes another value, and no check saw it; now it is drawn at the
+    // mov and names no store, and the copy check (A7-11's) wanted a store. A number line drawn only at instructions that make its number,
+    // when no store of the variable stores a number any instruction makes, is counted apart (`copyNumberMade`), as a register
+    // variable's merge is. Was: `n:map-copy-store` (copyAtOther 1).
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, { 0xD60D, 0xD70E, 0x6113, 0x7132, 0x6072, 0x8802, 0x8B03, 0xE336,
+            0x6113, 0xE00B, 0xCC10, 0x225A, 0x2500, 0x0229, 0x5169, 0x4015, 0x8901, 0x6240, 0x2722, 0xE303, 0x6240, 0x2712, 0x805C, 0x4310,
+            0x8BFA, 0x000B, 0x0009, 0x0009, 0x2600, 0x2280, 0x0600, 0x218C });
+        Print("A7-45 a number in the register a global's load merged with", r);
+        const Line* l = LineWith(r, "iRam0600218c = 0xb;");
+        CHECK(l != nullptr);
+        if (l) CHECK(LineInstructions(*l) == (std::vector<uint32_t>{ 0x06009012u }));
+        const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_45");
+        CHECK(a.copyNumberMade == 1 && a.copyStoreMissing == 0 && a.Violations() == 0);
+    }
+    // ...and the count does not take a line that should name a store: `mov #5,r2 ; mov #5,r1 ; mov.l r1,@r7`, the line moved to the
+    // `mov #5,r2` (which makes the number into no stored register) and its store token removed. The store's register is made by
+    // `mov #5,r1`, a number: the copy check still bites.
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, { 0xD702, 0xE205, 0xE105, 0x2712, 0x000B, 0x0009, 0x0600, 0x1000 });
+        Print("A7-45 control", r);
+        DecompileResult moved = r;
+        int n = 0;
+        for (Line& x : moved.lines)
+            if (Has(x.text, "= 5;"))
+            {
+                std::vector<Token> kept;
+                for (Token t : x.tokens)
+                {
+                    if (t.addr && t.begin == t.end) continue;
+                    if (t.addr) t.addr = 0x06009002u;
+                    kept.push_back(t);
+                }
+                x.tokens = kept;
+                x.firstAddr = 0x06009002u;
+                ++n;
+            }
+        CHECK(n == 1);
+        const dts::MappingAudit a = dts::AuditMapping(moved, word, "a7_45 damaged");
+        CHECK(a.copyNumberMade == 0 && a.copyStoreMissing == 1);
+    }
     // caseOtherEntry bites: A7-29's fixture with the outer `case 2:` moved back to the inner switch's entry (A7-29 as it was).
     {
         const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06070000u, { 0x4F22, 0xD518, 0xE103, 0x3416, 0x8D28, 0x6143, 0x311C, 0xC702,
