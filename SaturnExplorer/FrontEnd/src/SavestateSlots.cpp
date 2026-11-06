@@ -1,4 +1,5 @@
 #include "SavestateSlots.h"
+#include "saturnexplorer/SeFilePath.h"   // UTF-8 paths on Windows (A12-25)
 
 #include <cstdio>
 #include <new>
@@ -162,7 +163,7 @@ std::string SavestateSlots::SlotLabel(const std::string& romPath, int slot)
     if (stat(path.c_str(), &st) != 0) return std::string();
 
     // Read just the header for the frame number; the state itself can be megabytes.
-    std::ifstream in(path, std::ios::binary);
+    std::ifstream in(se::NativePath(path).c_str(), std::ios::binary);
     if (!in) return std::string();
     uint8_t hdr[kHeaderLen];
     in.read(reinterpret_cast<char*>(hdr), sizeof(hdr));
@@ -205,7 +206,7 @@ bool SavestateSlots::SaveToSlot(const std::string& romPath, int slot, std::strin
     // leaves the previous state intact rather than a truncated file.
     const std::string tmp = path + ".tmp";
     {
-        std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
+        std::ofstream out(se::NativePath(tmp).c_str(), std::ios::binary | std::ios::trunc);
         if (!out) { error = "Could not open " + tmp; return false; }
         out.write(reinterpret_cast<const char*>(header.data()),
                   static_cast<std::streamsize>(header.size()));
@@ -229,7 +230,7 @@ bool SavestateSlots::LoadFromSlot(const std::string& romPath, int slot,
 {
     const std::string path = SlotPath(romPath, slot);
     if (path.empty()) { error = "Could not build the slot path."; return false; }
-    std::ifstream in(path, std::ios::binary);
+    std::ifstream in(se::NativePath(path).c_str(), std::ios::binary);
     if (!in) { error = "Slot is empty."; return false; }
 
     uint8_t hdr[kHeaderLen];

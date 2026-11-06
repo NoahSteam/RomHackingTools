@@ -19,6 +19,7 @@
  * Modified for SaturnExplorer: a jump-table is owned from the moment it is made (patches/0040-jumptable-tracedag-allocation-failure.patch).
  * Modified for SaturnExplorer: an access folded into the stack frame that goes with an unreachable block is recorded (patches/0068-engine-deadcode-late-stack-reads.patch).
  * Modified for SaturnExplorer: a call that goes with an unreachable block drops its frame call records (patches/0072-engine-frame-chains-and-save-slots.patch).
+ * Modified for SaturnExplorer: a catch handler that never reads its exception no longer names it, which MSVC warned about (C4101) (patches/0083-engine-msvc-unused-catch-names.patch).
  */
 #include "funcdata.hh"
 #include "flow.hh"
@@ -556,7 +557,7 @@ JumpTable::RecoveryMode Funcdata::stageJumpTable(Funcdata &partial,JumpTable *jt
 #endif
       glb->allacts.setCurrent(oldactname); // Restore old action
     }
-    catch(CancelError &err) {	// Not a recovery failure: the host wants the whole analysis stopped
+    catch(CancelError &) {	// Not a recovery failure: the host wants the whole analysis stopped
       glb->allacts.setCurrent(oldactname);
       throw;
     }

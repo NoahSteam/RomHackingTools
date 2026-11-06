@@ -1,4 +1,5 @@
 #include "PatchLibrary.h"
+#include "saturnexplorer/SeFilePath.h"   // UTF-8 paths on Windows (A12-25)
 
 #include <cstdio>
 #include <fstream>
@@ -241,7 +242,7 @@ bool PatchLibrary::Deserialize(const std::string& text, std::string* error)
 
 bool PatchLibrary::LoadProject(const std::string& path, std::string* error)
 {
-    std::ifstream f(path, std::ios::binary);
+    std::ifstream f(se::NativePath(path).c_str(), std::ios::binary);
     if (!f)
     {
         if (error) *error = "cannot open " + path;

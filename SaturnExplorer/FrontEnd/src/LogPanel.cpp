@@ -137,8 +137,12 @@ void LogPanel::Draw(Request& req)
     if (ImGui::SmallButton("Clear")) Clear();
 
     // --- the event table + a detail pane for the selected row. ---
-    const float detailH = mSelected ? ImGui::GetTextLineHeightWithSpacing() * 6.0f : 0.0f;
+    // A12-26: the pane is six lines, but never more than half of what the panel has left. In the default layout the Log tab is a
+    // short strip; with a fixed six lines the table's height went negative (ImGui reads that as "all but this much") and the pane
+    // was left a few pixels, so selecting a row seemed to open nothing. The pane scrolls when it is short.
     const ImVec2 avail = ImGui::GetContentRegionAvail();
+    float detailH = mSelected ? ImGui::GetTextLineHeightWithSpacing() * 6.0f : 0.0f;
+    if (detailH > avail.y * 0.5f) detailH = avail.y * 0.5f;
     const float tableH = avail.y - detailH;
 
     const ImGuiTableFlags tf = ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY |

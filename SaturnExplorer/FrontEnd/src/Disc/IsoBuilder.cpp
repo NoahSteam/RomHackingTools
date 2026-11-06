@@ -1,4 +1,5 @@
 #include "Disc/IsoBuilder.h"
+#include "saturnexplorer/SeFilePath.h"   // UTF-8 paths on Windows (A12-25)
 
 #include <algorithm>
 #include <cerrno>
@@ -592,7 +593,7 @@ IsoBuildResult IsoBuild(const IsoBuildOptions& o)
     }
 
     // 7) Write the image: the header region, then each file's data sector-padded, in LBA order.
-    std::ofstream out(o.outIso, std::ios::binary | std::ios::trunc);
+    std::ofstream out(se::NativePath(o.outIso).c_str(), std::ios::binary | std::ios::trunc);
     if (!out) { r.error = "Could not open output image for writing: " + o.outIso; return r; }
     out.write(reinterpret_cast<const char*>(head.data()), std::streamsize(head.size()));
 
@@ -601,7 +602,7 @@ IsoBuildResult IsoBuild(const IsoBuildOptions& o)
     for (int di : bfs)
         for (const File& f : dirs[di].files)
         {
-            std::ifstream in(f.diskPath, std::ios::binary);
+            std::ifstream in(se::NativePath(f.diskPath).c_str(), std::ios::binary);
             if (!in) { r.error = "Could not read game file: " + f.diskPath; return r; }
             if (!out) { r.error = "Write error while producing " + o.outIso; return r; }
             uint32_t remaining = f.size;
@@ -624,7 +625,7 @@ IsoBuildResult IsoBuild(const IsoBuildOptions& o)
     // 8) A single-track MODE1/2048 cue beside the image.
     if (o.writeCue)
     {
-        std::ofstream cue(r.cuePath, std::ios::trunc);
+        std::ofstream cue(se::NativePath(r.cuePath).c_str(), std::ios::trunc);
         if (cue)
         {
             cue << "FILE \"" << BaseName(o.outIso) << "\" BINARY\n"

@@ -1,6 +1,6 @@
 # SH-2 pseudocode and embedded decompiler
 
-Inspected revision: `ff6a3b1fb1c54e4c0344613094ea65292b0023c2` (2026-10-20); the pseudocode-to-assembly mapping (steps 7 and 9) rechecked at the area 7 fixer branch `review/7-a710-fix` (2026-10-30), and step 7's store tokens at `review/7-a719-fix` (2026-11-04), `review/7-a722-fix` (2026-11-05) and `review/7-a726-fix` (2026-11-05).
+Inspected revision: `ff6a3b1fb1c54e4c0344613094ea65292b0023c2` (2026-10-20); the pseudocode-to-assembly mapping (steps 7 and 9) rechecked at the area 7 fixer branch `review/7-a710-fix` (2026-10-30), and step 7's store tokens at `review/7-a719-fix` (2026-11-04), `review/7-a722-fix` (2026-11-05), `review/7-a726-fix` (2026-11-05) and `review/7-round7-fix` (2026-11-06).
 Captured-inspection sections rechecked against `codex/decompiler-variable-inspection` (2026-10-20).
 The panel's status/trust drawing, Decompile-as-a-request and Copy marks rechecked against `5428fe6` plus the area 8 fixer branch (2026-10-30).
 Unless labelled otherwise, behavior below is verified from the cited implementation.
@@ -101,7 +101,8 @@ and lists these classes as open until they are fixed.
    instruction provenance, call targets and conservative owned inspection bindings. A token's
    address is `InstructionOf(op)`: the translator gives a delayed branch and the instruction in its
    delay slot one address, so the engine marks the ops the slot built (and the ops made for them;
-   `PcodeOp::isFromDelaySlot`, patch 0075) and the host addresses them at the branch + 2.
+   `PcodeOp::isFromDelaySlot`, patch 0075, and the pieces heritage makes for them, patch 0079) and
+   the host addresses them at the branch + 2.
    `AddFrameStoreTokens` gives a line that prints a frame local or a global where no instruction
    writes it (a COPY or a conversion at any instruction, any op at a call or a load) an empty token
    for each folded store whose value it shows (the engine's `AccessRecord`s): found back through
@@ -113,12 +114,40 @@ and lists these classes as open until they are fixed.
    through copies, and through the frame and globals to the store that wrote them, to where the
    value is made, and compared with what the statement's value copies, merges or extends in the
    final p-code; a store whose every path ends at another value is never named, and the search
-   goes on to the store the statement is ahead of. A number put at an instruction that did not
+   goes on to the store the statement is ahead of. The walk goes through arithmetic the engine
+   folds to one of its values (`FlowIdentitySources`: the op's value is built back through its
+   block, single predecessors and each path through a join, to numbers known on every path in --
+   `FlowNumberBefore`, which reads a branch's condition on the edge taken, frame words and
+   non-volatile RAM a store of the flow wrote, and registers a callee's lent prototype keeps
+   (`CallKeeps`) -- and evaluated on test values: `add r4,r3` with r3 0 after a `dt` loop, `and
+   r1,r1`, `xor #k` twice; A7-31); a path a known condition never takes is left out
+   (`EdgeDead`), a loop's way back into a block that dominates it, on which nothing writes the
+   value, brings what the other edges bring (`LoopKeeps`, A7-39); when the op's value is all
+   numbers the walk knows (`mov #0,r2 ; xor r1,r2` with r1 0 after a `dt` loop) the build is
+   retried on the op's own block, every value at its start a leaf; and a statement that shows a number takes the number the walk knows the store
+   wrote. A statement that shows only an input or a variable shows a number only when a condition of
+   the flow compares a storage with that number (A7-41: a copy of `param_2` the engine put at a store
+   of 3 is not that store's). The number walk passes a frame word over a store through a pointer it
+   cannot place when no address of the frame leaves the stack pointer and the temporaries its accesses
+   compute (`FlowRecord::frameKept`, `FrameKept`), as the engine does when it forwards the word (A7-38). A number is compared on the bytes a store writes of the variable, big-endian, and of
+   those the ones no other store of it writes (A7-36); a number the engine put in a copy of its
+   own is that number only (A7-35). A copy at a call or a return names only stores that run
+   before it when one does (A7-32), unless its value is the call's own output. An emptied store is on an edge also through flow blocks the
+   engine emptied too and through the flow blocks of one instruction the flow splits (`mac.w`), and the forward search passes a store of another value. A conversion at
+   the branch ending its block takes its store's address as a copy there does. A number put at an instruction that did not
    make the value a store stores takes its store's address too: the instruction must make the
    number into the register the store stores AND that value must reach the store (`FlowLastWriters`
    of the register from the store, the whole register for a half-word store; a delay slot that
    makes the number into another register is no maker, A7-28); a named store the number does not
-   reach, when it reaches another store of the same bytes, is dropped. A register the engine merged under a memory variable's
+   reach, when it reaches another store of the same bytes, is dropped. A number put in a register the
+   engine merged under a memory variable's name, at an instruction that makes the number into that
+   register, names only the stores that instruction's value reaches (`FlowLastWriters` from the store):
+   not a `tas.b` (no register) nor a store of the register after a loop changed it, whatever the value
+   walk cannot rule out (A7-44); a store of the function's input is no such store (`FlowLastWriters`
+   with `input`, A7-46). A copy of memory the engine put anywhere in its block at an instruction that
+   does not read that memory (materialised at an access that may alias it) is drawn at the nearest
+   load of it in the block, as a copy at the block's end is (A7-49). The value walk follows the T bit
+   that `movt` reads (`sr & 1`) back to the compare that set it (A7-48). A register the engine merged under a memory variable's
    name, a copy at the end of its block that no store shows, is addressed to the instructions that
    last set the register on each path into the block's end (`FlowLastWriters`), or to nothing,
    never to the branch (A7-21). A statement that keeps its drawn tokens at its instruction beside
@@ -126,7 +155,8 @@ and lists these classes as open until they are fixed.
    them `Token::materialised`, and `InstructionLineIndex` offers the instruction's own statement
    before it (A7-25). `AddJoinConstantTokens` addresses a number the engine
    merged (a COPY that is no flow op, at an instruction that does not make the number into the
-   COPY's register: a collapsed MULTIEQUAL at a join) to the instruction on each path that set the
+   COPY's register: a collapsed MULTIEQUAL at a join; or a copy of a temporary the engine made of a
+   number and prints in place, A7-40's triage, even on a line it shares with that copy, A7-47) to the instruction on each path that set the
    register, or to nothing. A case label's token is where the jump table sends its value
    (`JumpTable::getLabelByIndex`/`getAddressByIndex`; the table of the `switch` printed at the
    label's own indent, so a case after a nested switch is not the inner one's, A7-29), the
@@ -314,7 +344,7 @@ ctest --test-dir build --output-on-failure -R 'Decompiler|MemorySnapshot|Sh2Func
 | Entry heuristics and explicit correction | [`Sh2FunctionFinderTests.cpp`](../../../FrontEnd/tests/Sh2FunctionFinderTests.cpp) |
 | Engine/wrapper, calls, frame effects, hardware reads, warning/prototype policy | [`Sh2DecompilerTests.cpp`](../../../FrontEnd/tests/Sh2DecompilerTests.cpp), [`Sh2DecompilerFixtureTests.cpp`](../../../FrontEnd/tests/Sh2DecompilerFixtureTests.cpp), [`Sh2DecompilerEngineTests.cpp`](../../../FrontEnd/tests/Sh2DecompilerEngineTests.cpp) |
 | SLEIGH semantics and decoding | [`Sh2SemanticsTests.cpp`](../../../FrontEnd/tests/Sh2SemanticsTests.cpp), [`Sh2DecodeTests.cpp`](../../../FrontEnd/tests/Sh2DecodeTests.cpp), [`SlaFreshnessTests.cpp`](../../../FrontEnd/tests/SlaFreshnessTests.cpp) |
-| Generated programs, memory ledgers (the frame's in [`FrameLedger.h`](../../../FrontEnd/tests/FrameLedger.h), shared with the decompiler suite), callable signatures and compiled printed C differential | [`Sh2GeneratedTests.cpp`](../../../FrontEnd/tests/Sh2GeneratedTests.cpp); CTest `SaturnExplorerSh2PrintedCTests` reuses this executable under its printed-C configuration |
+| Generated programs, memory ledgers (the frame's in [`FrameLedger.h`](../../../FrontEnd/tests/FrameLedger.h), shared with the decompiler suite), callable signatures, the pseudocode-to-assembly mapping (every violation of [`MappingOracle.h`](../../../FrontEnd/tests/MappingOracle.h) is a finding, `map-*`) and compiled printed C differential | [`Sh2GeneratedTests.cpp`](../../../FrontEnd/tests/Sh2GeneratedTests.cpp); CTest `SaturnExplorerSh2PrintedCTests` reuses this executable under its printed-C configuration |
 | Coalescing, epoch, cancellation, budget and worker teardown | [`DecompilerRunnerTests.cpp`](../../../FrontEnd/tests/DecompilerRunnerTests.cpp), [`DecompilerFaultTests.cpp`](../../../FrontEnd/tests/DecompilerFaultTests.cpp) |
 | Headless ImGui interactions, stale install rejection, mirrors, cache, notes, halt hints | [`DecompilerPanelTests.cpp`](../../../FrontEnd/tests/DecompilerPanelTests.cpp): `TestInstallRule`, `TestCompletedAnswerJudgedAgainstCurrentView`, `TestPrototypesPerMirror`, `TestRegisterHintAtHalt`, `TestScrubCache` |
 | Stateful refresh/trust sequences | [`DecompilerModelTests.cpp`](../../../FrontEnd/tests/DecompilerModelTests.cpp), [`DecompilerTrustTests.cpp`](../../../FrontEnd/tests/DecompilerTrustTests.cpp), [`DecompilerTrustModel.h`](../../../FrontEnd/tests/DecompilerTrustModel.h). The trust test reads every indicator back from the drawn glyphs (wrapped sentences put together, no allowance for cut text), at 1250 px and at the default dock widths (537, 672, 806 px), checks the status row and the Copy marks, classifies every engine note (amber, or grey only and listed in the guide), runs Decompile as a target in the generated sequences, and sweeps a real allocation failure through one request in forked children (`SE_TRUST_OOM_STRIDE`, `SE_TRUST_WIDTH`). Tools: [`Docs/Decompiler/tools/a8_fix`](../../Decompiler/tools/a8_fix) |

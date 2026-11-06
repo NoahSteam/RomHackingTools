@@ -1,4 +1,5 @@
 #include "Theme.h"
+#include "saturnexplorer/SeFilePath.h"   // UTF-8 paths on Windows (A12-25)
 #include "WatchPanel.h"
 
 #include <cstring>
@@ -330,7 +331,7 @@ void WatchPanel::DoImport(IPlatform& platform)
 {
     std::string path;
     if (!platform.OpenFileDialog(path)) return;
-    std::ifstream f(path, std::ios::binary);
+    std::ifstream f(se::NativePath(path).c_str(), std::ios::binary);
     if (!f) { mNotice = "Import failed: cannot open file."; mNoticeTime = 6.0f; return; }
     std::stringstream ss; ss << f.rdbuf();
     std::vector<std::string> errors;

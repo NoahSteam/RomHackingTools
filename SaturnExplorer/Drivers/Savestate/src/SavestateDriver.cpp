@@ -18,6 +18,7 @@
 #endif
 
 #include "SaturnStateShared.h"
+#include "saturnexplorer/SeFilePath.h"
 #include "saturnexplorer/SeGuard.h"
 
 namespace
@@ -189,7 +190,8 @@ bool OverSavestateCap(size_t size) { return size >= kMaxSavestateBytes; }
 bool LoadFile(const std::string& path, std::vector<uint8_t>& out)
 {
 #ifdef _WIN32
-    FILE* file = std::fopen(path.c_str(), "rb");
+    // The wide form: fopen reads a char* in the ANSI code page, so a UTF-8 path with a character outside it did not open (A12-25).
+    FILE* file = se::OpenFile(path, "rb");
 #else
     // Opened without waiting and checked through the descriptor: a FIFO picked in the Open Savestate or Load Raw Dump dialog
     // blocked the opening thread for ever (A9-24). Only a regular file is read.

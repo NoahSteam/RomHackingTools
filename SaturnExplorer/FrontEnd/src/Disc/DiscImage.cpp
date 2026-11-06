@@ -1,4 +1,5 @@
 #include "Disc/DiscImage.h"
+#include "saturnexplorer/SeFilePath.h"   // UTF-8 paths on Windows (A12-25)
 
 #include <cstring>
 
@@ -59,7 +60,7 @@ bool DiscImage::Open(const std::string& path)
         mPath = dataPath;
     }
 
-    mFile.open(dataPath, std::ios::binary);
+    mFile.open(se::NativePath(dataPath).c_str(), std::ios::binary);
     if (!mFile) return false;
     mFile.seekg(0, std::ios::end);
     mFileSize = (uint64_t)mFile.tellg();

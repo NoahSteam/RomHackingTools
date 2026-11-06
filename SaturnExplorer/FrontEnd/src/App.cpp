@@ -1,4 +1,5 @@
 #include "App.h"
+#include "saturnexplorer/SeFilePath.h"   // UTF-8 paths on Windows (A12-25)
 #include "ArgSplit.h"
 
 #include <algorithm>
@@ -8,6 +9,7 @@
 #include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
+#include <cerrno>
 #include <cstring>
 #include <ctime>
 #include <fstream>
@@ -1292,11 +1294,19 @@ bool App::OpenSavestate(const char* path)
     // Generic entry: dispatches by file magic to the right emulator's parser.
     if (se_savestate_open(path, &dataSource) != 0)
     {
+        // Say why (A12-25): a path that did not open used to fail with no line in the Log, so a command-line savestate
+        // looked ignored. The probe tells "cannot be opened" (with the system's reason) from "opened but not a savestate".
+        std::string reason;
+        errno = 0;
+        if (std::FILE* probe = path ? se::OpenFile(path, "rb") : nullptr) { std::fclose(probe); reason = "not a savestate this build reads, or too large"; }
+        else reason = errno != 0 ? std::strerror(errno) : "cannot be opened";
+        mLog.Error(std::string("Could not open savestate ") + (path ? path : "") + ": " + reason);
         return false;
     }
     se_context* context = nullptr;
     if (!CreateContextFromSource(dataSource, &context))
     {
+        mLog.Error(std::string("Could not use savestate ") + (path ? path : "") + ": the data could not be set up");
         return false;
     }
     CloseData();
@@ -7876,7 +7886,7 @@ bool App::SetRenderLayer(const std::string& name, bool on)
 void App::LoadDemoScript(const std::string& path, IPlatform& platform)
 {
     (void)platform;
-    std::ifstream f(path, std::ios::binary);
+    std::ifstream f(se::NativePath(path).c_str(), std::ios::binary);
     if (!f)
     {
         mDemoStatus = "Could not open " + path;
@@ -8216,13 +8226,13 @@ void App::DoSaveState(int slot)
         char msg[96];
         std::snprintf(msg, sizeof(msg), "Saved to slot %d.", slot);
         mStateStatus = msg;
-        mLog.Info(mStateStatus, se_frame_number(mContext));
+        mLog.Info(mStateStatus, static_cast<uint32_t>(se_frame_number(mContext)));
         RefreshSlotCache();   // the slot just gained (or replaced) a state
     }
     else
     {
         mStateStatus = error;
-        mLog.Error("Save state failed: " + error, se_frame_number(mContext));
+        mLog.Error("Save state failed: " + error, static_cast<uint32_t>(se_frame_number(mContext)));
     }
 }
 
@@ -8241,7 +8251,7 @@ void App::DoLoadState(int slot)
     if (!SavestateSlots::LoadFromSlot(mLauncher.Rom(), slot, image, frame, error))
     {
         mStateStatus = error;
-        mLog.Error("Load state failed: " + error, se_frame_number(mContext));
+        mLog.Error("Load state failed: " + error, static_cast<uint32_t>(se_frame_number(mContext)));
         return;
     }
     // No edits ride along: a slot is a point in time on its own, not a scrubbed frame the user
@@ -8253,7 +8263,7 @@ void App::DoLoadState(int slot)
     if (se_load_state(ctl, frame, image.data(), image.size(), nullptr, 0) != SE_OK)
     {
         mStateStatus = "The emulator refused the save state.";
-        mLog.Error("Load state failed: the emulator refused it.", se_frame_number(mContext));
+        mLog.Error("Load state failed: the emulator refused it.", static_cast<uint32_t>(se_frame_number(mContext)));
         return;
     }
     DropRecordedHistory();
@@ -8503,7 +8513,7 @@ void App::DoLoadEmulatorState(int slot)
         // Refused (no emulator attached, a stale session, or another load still queued): nothing
         // was asked of the emulator, so there is no outcome to wait for and nothing to drop.
         mStateStatus = "The emulator slot load was not sent.";
-        mLog.Error(mStateStatus, se_frame_number(mContext));
+        mLog.Error(mStateStatus, static_cast<uint32_t>(se_frame_number(mContext)));
         return;
     }
     DropRecordedHistory();
@@ -8511,7 +8521,7 @@ void App::DoLoadEmulatorState(int slot)
     char msg[96];
     std::snprintf(msg, sizeof(msg), "Asked the emulator to load its slot %d.", slot);
     mStateStatus = msg;
-    mLog.Info(mStateStatus, se_frame_number(mContext));
+    mLog.Info(mStateStatus, static_cast<uint32_t>(se_frame_number(mContext)));
 }
 
 void App::DoSaveEmulatorState(int slot)
@@ -8528,13 +8538,13 @@ void App::DoSaveEmulatorState(int slot)
             : rc == SE_LIVE_EMUSAVE_LOADING
                 ? "Cannot save to an emulator slot while a state load is still being applied."
                 : "The emulator slot save was not sent.";
-        mLog.Error(mStateStatus, se_frame_number(mContext));
+        mLog.Error(mStateStatus, static_cast<uint32_t>(se_frame_number(mContext)));
         return;
     }
     char msg[96];
     std::snprintf(msg, sizeof(msg), "Saving emulator slot %d.", slot);
     mStateStatus = msg;
-    mLog.Info(mStateStatus, se_frame_number(mContext));
+    mLog.Info(mStateStatus, static_cast<uint32_t>(se_frame_number(mContext)));
 }
 #endif  // SE_ENABLE_LIVE
 
@@ -8675,9 +8685,8 @@ void App::ExecuteTopBarCommand(const TopBarCommand& command, IPlatform& platform
     case TopBarCommandType::LoadMednafenState:
         if (platform.OpenFileDialog(path) && !OpenSavestate(path.c_str()))
         {
-            mOperationStatus = "Could not load the selected savestate.";
+            mOperationStatus = "Could not load the selected savestate (the Log says why).";   // OpenSavestate logged the reason (A12-25)
             mOperationError = true;
-            mLog.Error(mOperationStatus);
         }
         break;
     case TopBarCommandType::LoadRawDump:
