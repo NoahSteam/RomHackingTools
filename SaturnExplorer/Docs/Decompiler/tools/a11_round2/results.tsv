@@ -452,3 +452,33 @@ H-load-inverted	fuzz	killed	5	VIOLATION ranges/VERDICT_DIFFERS: accepted=yes whe
 V-0056-stepsdown	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:9773: ra.prototype.known && ra.prototypeWithheld.empty()
 V-0056-stepsdown	gen	killed	19	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:12346: excluded > 0
 V-0056-stepsdown	corpus	survived	41	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:9773: ra.prototype.known && ra.prototypeWithheld.empty()
+V-0065-steppeddown	unit	survived	22	
+V-0065-steppeddown	gen	survived	18	
+V-0065-steppeddown	corpus	survived	42	
+V-0065-steppeddown	engine	survived	39	
+V-0065-steppeddown	pc	survived	20	
+V-0065-steppeddown	decode	survived	2	
+V-0065-steppeddown	*	SURVIVED	0	
+V-0061-memescape	unit	survived	23	
+V-0061-memescape	gen	survived	14	
+V-0061-memescape	corpus	survived	43	
+V-0061-memescape	engine	survived	39	
+V-0061-memescape	pc	survived	22	
+V-0061-memescape	decode	survived	2	
+V-0061-memescape	*	SURVIVED	0	
+V-0063-hostescape	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:893: !all.empty()
+V-0063-hostescape	gen	survived	13	
+V-0063-hostescape	corpus	survived	41	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:893: !all.empty()
+V-0072-storemaywrite	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:14460: Has(r.Text(), p.text)
+V-0072-storemaywrite	gen	survived	13	
+V-0072-storemaywrite	corpus	survived	41	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:14460: Has(r.Text(), p.text)
+V-0010	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:3397: Ledger(r, { Rd(0, 2), Rd(0, 2) })
+V-0010	gen	killed	18	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:11813: rep.findings.empty()
+V-0010	corpus	killed	42	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:3397: Ledger(r, { Rd(0, 2), Rd(0, 2) })
+V-0009	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:155: ra.status == DecompileStatus::Ok && arr != nullptr
+V-0009	gen	killed	19	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:11775: rep.findings.empty()
+V-0009	corpus	killed	41	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:155: ra.status == DecompileStatus::Ok && arr != nullptr
+R-ptr-loop	unit	survived	22	
+R-ptr-loop	gen	survived	13	
+R-ptr-loop	corpus	survived	41	
+R-ptr-loop	*	SURVIVED	0	
