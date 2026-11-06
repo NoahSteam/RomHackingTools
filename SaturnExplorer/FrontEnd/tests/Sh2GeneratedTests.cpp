@@ -7344,6 +7344,10 @@ std::string FindCCompiler()
 
 // The frame of a function in frame mode (A3-65, CheckPrintedC): 64 KiB of memory for the stack locals, the entry r15 at its middle, mapped below
 // 2 GiB where the host allows it, so that a text that casts a frame address to a four-byte integer and back (`(int4 *)((int4)p + 4)`) keeps it.
+// Elsewhere (macOS, whose page zero is the whole low 4 GiB; SE_FRAME_NO_LOW, which SE_GENERATED_PRINTEDC_NOLOW=1 compiles in) the frame is a static
+// array above 4 GiB and such a text faults on the frame address with its high bits lost (A12-21: the 0076 pins A3-144 and A3-145 and the chain144
+// draws, `(int4 *)**ppxVar1` of a pointer read back as an xunknown4). The program then says FRAME-HIGH-BITS and ends: the harness classes that
+// `skipped:no-low-memory`, the host's limit. Any other fault is left to kill the program (one-shot handler) and stays `crashed`.
 static const char kFrameHeader[] = R"FRAME(
 #if defined(__linux__)
 #include <sys/mman.h>
@@ -7352,13 +7356,39 @@ static unsigned long long g_frame_base;
 static unsigned char g_frame_static[0x10000];
 /* memory mode (A2-106): unit a of the arena at the start of input k holds this (the harness's own table fills the emulator's RAM with the same) */
 #define PTRPAT(k, a) ((((unsigned)(a) * 2654435761u) ^ ((unsigned)(k) * 40503u)) >> 13)
+#if defined(__unix__) || defined(__APPLE__)
+static void FrameLostHighBits(int sig, siginfo_t *si, void *uc)
+{
+  unsigned long long a = (unsigned long long)(uintptr_t)si->si_addr;
+  (void)sig; (void)uc;
+  /* the frame's address with other high bits (cut to four bytes, then zero- or sign-extended): the frame is above 4 GiB */
+  if ((a >> 32) != (g_frame_base >> 32) && (unsigned)((unsigned)a - (unsigned)g_frame_base) < 0x10000u)
+  {
+    (void)!write(1, "FRAME-HIGH-BITS\n", 16);
+    _exit(125);
+  }
+  /* any other fault: the handler was one-shot (SA_RESETHAND), so the instruction faults again and the program dies as it would have */
+}
+#endif
 static void FrameInit(void)
 {
-#if defined(__linux__) && defined(MAP_32BIT)
+#if defined(__linux__) && defined(MAP_32BIT) && !defined(SE_FRAME_NO_LOW)
   void *m = mmap(0, 0x10000, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_32BIT, -1, 0);
   if (m != MAP_FAILED) { g_frame_base = (unsigned long long)(uintptr_t)m; return; }
 #endif
   g_frame_base = (unsigned long long)(uintptr_t)g_frame_static;
+#if defined(__unix__) || defined(__APPLE__)
+  if (g_frame_base >> 32)
+  {
+    struct sigaction sa;
+    memset(&sa, 0, sizeof sa);
+    sa.sa_sigaction = FrameLostHighBits;
+    sa.sa_flags = SA_SIGINFO | SA_RESETHAND;
+    sigemptyset(&sa.sa_mask);
+    sigaction(SIGSEGV, &sa, 0);
+    sigaction(SIGBUS, &sa, 0);
+  }
+#endif
 }
 )FRAME";
 
@@ -8991,8 +9021,14 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
             std::ofstream f(cfile);
             f << src.str();
         }
-        const std::string compileCmd = engine ? cxx + " -O0 -fwrapv -w -std=gnu++14 -o " + bin + " " + cfile + " > " + clog + " 2>&1"
-                                              : cc + " -O0 -fwrapv -fsigned-char -w -std=gnu11 -o " + bin + " " + cfile + " > " + clog + " 2>&1";
+        // A12-20: GCC 14 made an assignment between pointer types the engine prints apart (`pppxStack_14 = &pppiStack_18;`, an `int4 ***` to
+        // an `xunknown4 ***`) an error, where GCC 13 and clang warn (and -w hides it). The value is the same either way (the C++ reading casts it,
+        // AddressAssignTyped), so the C reading keeps the older rule on every compiler: the verdict no longer depends on the host's GCC.
+        // SE_FRAME_NO_LOW: the frame above 4 GiB as macOS has it (LowMemoryAvailable, SE_GENERATED_PRINTEDC_NOLOW).
+        const std::string noLow = LowMemoryAvailable() ? std::string() : std::string(" -DSE_FRAME_NO_LOW=1");
+        const std::string compileCmd = engine ? cxx + " -O0 -fwrapv -w -std=gnu++14" + noLow + " -o " + bin + " " + cfile + " > " + clog + " 2>&1"
+                                              : cc + " -O0 -fwrapv -fsigned-char -w -Wno-error=incompatible-pointer-types -std=gnu11" + noLow + " -o " + bin + " " +
+                                                    cfile + " > " + clog + " 2>&1";
         compiled = std::system(compileCmd.c_str()) == 0;
         if (!compiled)
         {
@@ -9052,6 +9088,14 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
             {
                 const bool died = one.compare(0, 19, "the compiled progra") == 0;
                 out[i].cls = died ? (one.find("(timeout after") != std::string::npos ? "timeout" : "crashed") : "not-compilable";
+                const bool lostHighBits = r.compare(0, 16, "FRAME-HIGH-BITS\n") == 0 || r.find("\nFRAME-HIGH-BITS\n") != std::string::npos;
+                if (died && lostHighBits && !LowMemoryAvailable())
+                {
+                    // A12-21 (kFrameHeader): the fault was on the frame's address cut to four bytes, the host's limit, not the text's
+                    out[i].cls = "skipped:no-low-memory";
+                    out[i].detail = "the text carries a frame address in a four-byte integer and turns it back into a pointer; this host maps the frame above 4 GiB (LowMemoryAvailable)";
+                    continue;
+                }
                 std::istringstream l(one);
                 std::string first;
                 while (std::getline(l, first))
@@ -11301,6 +11345,13 @@ void TestPrintedC()
                 for (size_t k = 0; k < r144.size(); ++k)
                 {
                     std::printf("pin '%s': %s (%s)\n", k144[k].name.c_str(), r144[k].cls.empty() ? "agrees" : r144[k].cls.c_str(), r144[k].detail.substr(0, 90).c_str());
+                    // A12-21: six of them read a frame address back from a four-byte slot; a host with no memory below 4 GiB cannot run that (as A2-106
+                    // and A2-110 are not asked there). Only the fault on the cut address is excused; the Linux jobs run all ten.
+                    if (!LowMemoryAvailable() && r144[k].cls == "skipped:no-low-memory")
+                    {
+                        std::printf("pin '%s': not run, this host maps no memory below 4 GiB (LowMemoryAvailable)\n", k144[k].name.c_str());
+                        continue;
+                    }
                     CHECK(r144[k].cls.empty() && r144[k].compared);
                 }
             }

@@ -1641,6 +1641,14 @@ void EditMini(MiniRig& m)
     ++m.serial;
 }
 
+// The modifier a backend submits for the platform's shortcut key (A12-22). ImGui reads its shortcuts (undo is ImGuiMod_Ctrl | ImGuiKey_Z) after
+// swapping Cmd and Ctrl when io.ConfigMacOSXBehaviors is set, which it is by default on macOS: there the backend's Cmd (ImGuiMod_Super) is the
+// shortcut and an ImGuiMod_Ctrl event is the Control key, which undoes nothing.
+ImGuiKey ShortcutMod()
+{
+    return ImGui::GetIO().ConfigMacOSXBehaviors ? ImGuiMod_Super : ImGuiMod_Ctrl;
+}
+
 // A check of the small rig that is not a comparison with the model.
 void MiniCheck(const char* what, bool ok, const std::string& detail = "")
 {
@@ -2274,11 +2282,11 @@ void RunEntryOriginPins()
                 m.Key(ImGuiKey_Backspace);
             else
             {
-                ImGui::GetIO().AddKeyEvent(ImGuiMod_Ctrl, true);
+                ImGui::GetIO().AddKeyEvent(ShortcutMod(), true);
                 ImGui::GetIO().AddKeyEvent(ImGuiKey_Z, true);
                 m.Frame();
                 ImGui::GetIO().AddKeyEvent(ImGuiKey_Z, false);
-                ImGui::GetIO().AddKeyEvent(ImGuiMod_Ctrl, false);
+                ImGui::GetIO().AddKeyEvent(ShortcutMod(), false);
                 m.Frame();
             }
             MiniCheck("A8-46: the edit taken back: the box reads the panel's text", std::string(m.panel.EntryText()) == Hex(cEntry), m.panel.EntryText());
@@ -3094,11 +3102,11 @@ void RunProbe8()
         m.Idle(2);
     };
     auto ctrl = [](MiniRig& m, ImGuiKey key) {
-        ImGui::GetIO().AddKeyEvent(ImGuiMod_Ctrl, true);
+        ImGui::GetIO().AddKeyEvent(ShortcutMod(), true);
         ImGui::GetIO().AddKeyEvent(key, true);
         m.Frame();
         ImGui::GetIO().AddKeyEvent(key, false);
-        ImGui::GetIO().AddKeyEvent(ImGuiMod_Ctrl, false);
+        ImGui::GetIO().AddKeyEvent(ShortcutMod(), false);
         m.Frame();
     };
     // E1 to E3: Follow PC on C (rts scan, 60%, the Entry line). The box is focused, a character typed, and the edit taken back three ways; then
