@@ -17369,3 +17369,56 @@ Branch `review/2-a1012-fix` from master `6f0ca4ab`. Own RelWithDebInfo build (`-
 ### Tests
 
 Full `ctest` including Live: 100 percent, 0 failed of 115 (109 plus 6 Live, the master count; no test added, the pins are inside `SaturnExplorerSh2GeneratedTests`; engine tests 50 s, passed). Fault suite: 0 of 94 jobs failed. Generator default run (`SaturnExplorerSh2GeneratedTests`, no environment): 0 findings, all passed. Vendor check: ok.
+
+## CI green on master
+
+Branch `review/ci-green` from master `9df1524b` (master `6f0ca4ab` has the same `SaturnExplorer/FrontEnd` tree). Coordinator's task: the jobs red on master's GitHub CI. Out of scope: `Deploy Saturn Explorer (Web)`, because GitHub Pages is not enabled (a repository setting). Only test code and docs changed (`AssemblyPanelTests.cpp`, `DecompilerTrustTests.cpp`, `Area9Round4Tests.cpp`, `Sh2GeneratedTests.cpp`). No product code and no test was skipped or disabled. Own RelWithDebInfo build (gcc 13, `-j2`); every test binary run under `ulimit -v 3500000` and `timeout`.
+
+### The red jobs: first red commit, cause, fix
+
+| Job | First red | Cause | Fix |
+|---|---|---|---|
+| `Supported platform build + tests (windows-latest)` and `build-release.bat (Windows, CMake Release)` (Verify) | `b68bfb60` (run 42155324654; `ef04ce9c`'s 42153020028 the last green build) | A12-20: `AssemblyPanelTests.cpp(20,10): error C1083: Cannot open include file: 'unistd.h'` (A9-57's pin `TestWatchSessionSave`: `mkdtemp`, `getcwd`, `chdir`, two-argument `mkdir`); this is the only `error C` in the logs of `6f0ca4ab` (jobs 128030444839, 128030445115) | `9d025705`: `direct.h`/`process.h` on Windows; the stream is closed before the remove |
+| `Supported platform build + tests (macos-latest)`: `SaturnExplorerSh2PrintedCTests` | `2a5efab6` (patch 0076; `d88e06e1`'s 41218601021 the last green) | A12-21: six 0076 pins and 31 chain144 draws `crashed`: on macOS the frame is above 4 GiB and these texts read a frame address back from a four-byte slot | `1286d48b`: a one-shot SIGSEGV/SIGBUS handler says `FRAME-HIGH-BITS` for a fault on the frame address cut to four bytes; such a text is `skipped:no-low-memory` (A2-106's class), only where `LowMemoryAvailable()` is false; any other fault still `crashed` |
+| the same job: `SaturnExplorerDecompilerTrustTests` | `d2960c8f` (A8-46's pin; `13961004` passed) | A12-22: the pin sends `ImGuiMod_Ctrl` + Z; with `ConfigMacOSXBehaviors` (the macOS default) undo is Cmd (`ImGuiMod_Super`) | `1286d48b`: `ShortcutMod()` |
+| `Decompiler tests under ASan + UBSan + LSan` (Review Checks) | `2a5efab6` (run 41876883439; `d88e06e1`'s 41218600846 the last green) | A10-13: `ubuntu-latest` became ubuntu-26.04; its GCC 14+ makes `-Wincompatible-pointer-types` an error that `-w` does not hide; two 0076 pins and 11 stream texts `not-compilable`. In `6f0ca4ab`'s run (job 128011898026) `SaturnExplorerSh2PrintedCTests` is the only failing log; every UBSan line is one of the two accepted shifts | `1286d48b`: the C reading is compiled with `-Wno-error=incompatible-pointer-types` |
+| `Area 9 store tests incl. the real full disk (Linux)` (Review Checks, new in `c7e6e638`) | `83d93864` (its first run, 42244244285) | A12-23: the A9-33 case makes the lock "another user's" only as root; the runner is not root | `9d025705`: not root, the lock file is 0444 |
+| `Generator, long run (Linux)` (Review Checks, nightly; not in the task's list, red for the same reason) | nightly of 2026-11-03 (`d88e06e1`, run 41615501283, the first on ubuntu-26.04) | A12-24: A10-13's error in the nightly's 20,000 seeds: `not-compilable=18`, 709 from 0076 on | A10-13's fix. Still red on A2-125 (below) |
+
+### The nightly's printed-C on GCC 14, in four pieces
+
+`SE_C_COMPILER=gcc-14 SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=5000`, `SE_GENERATED_FIRST` 1, 5001, 10001, 15001: the nightly's seeds 1 to 20,000 (each piece under 13 minutes). `not-compilable` is 0 in every piece (the nightly on the runner: 709).
+
+| Piece | Functions | Compared | Classes | Result |
+|---|---|---|---|---|
+| 1 to 5,000 | 9,163 | 8,697 | agrees 8,528, narrow-c 217, skipped (array-local 5, piece-name 3, stack-piece 7), void-return 367 + 36 | passed |
+| 5,001 to 10,000 | 9,028 | 8,557 | agrees 8,398, narrow-c 220, skipped (array-local 11, piece-name 1, stack-piece 10), void-return 352 + 36 | passed |
+| 10,001 to 15,000 | 9,002 | 8,552 | agrees 8,375, **mismatch 1** (`frame124_10822`, A2-125), narrow-c 227, skipped (array-local 12, stack-address 2, stack-piece 12), void-return 346 + 27 | 1 failure |
+| 15,001 to 20,000 | 9,067 | 8,627 | agrees 8,499, narrow-c 172, skipped (array-local 5, stack-address 2, stack-piece 11), void-return 345 + 33 | passed |
+
+### `frame124_10822` (A2-125, P3, open; no wrong value)
+
+On every nightly since 2026-11-05 (`a8da072d`, run 42005418429; `1efd1c26`, 42197918392) with the runner's `cc`, and here with gcc 13 and gcc-14. The merge matrix runs 3,000 printed-C seeds and does not reach it. The code stores a long at S-0x14, then halfwords r6 at S-0x12 and r7 at S-0x14, and returns `(short)r6 ^ (char)r6 ^ (short)r7`. The text:
+
+```
+  _xStack_14 = CONCAT22(0xffff,param_3);
+  xVar1 = _xStack_14;
+  xStack_12._1_1_ = (char)param_3;
+  cVar2 = (char)xStack_12;
+  _xStack_14 = SUB43(xVar1,1);
+  return (int4)xStack_12 ^ (int4)cVar2 ^ (int4)param_4;
+```
+
+The last write is three bytes (`SUB43`): S-0x14 to S-0x12, which leaves them as they were. The engine prints the three-byte piece under the four-byte name, A3-137's "underscore name at two widths". The harness declares `_xStack_14` once as `xunknown4`, so its second write also clears S-0x11, and the text disagrees in all three readings. In the kept C (`SE_GENERATED_KEEP=1`), 76 of 76 inputs mismatch. With the write made three bytes and `xStack_12` read with the engine's sign, 0 of 76 mismatch. With only the width fixed, 40; with only the sign, 71. So the engine's values are right. The text is A3-137's print, which the harness's two-width rule would class `skipped:piece-name`, but that rule sees only `CONCATab` writes and reads, not `= SUBab(`. This is left open for area 2 (harness) and area 3 (print). Widening the rule is not done here: it is an excuse class, and deciding it is the coordinator's call.
+
+### Verified here, and what needs CI or Windows
+
+* Here: the Linux CI behaviours. `SaturnExplorerSh2PrintedCTests` with `SE_C_COMPILER=gcc-14` gives `agrees=607 narrow-c=16`, all passed; before the fix it gave the sanitizers job's exact failure. With `SE_GENERATED_PRINTEDC_NOLOW=1` and clang-18 it gives the macOS numbers before the fix and all passed after (`skipped:no-low-memory=50`). `DecompilerTrustTests` with `ConfigMacOSXBehaviors = true` (a local edit, not committed) fails as on macOS before the fix and passes after. `Area9Round4Tests` as uid 65534 and as root passes. `x86_64-w64-mingw32-g++ -std=c++14 -fsyntax-only` of `AssemblyPanelTests.cpp` is clean.
+* Needs CI: the MSVC build and the first Windows `ctest` since `b68bfb60` (a failure there may come from any commit since); the macOS job on real hardware; the sanitizers job; the Area 9 job as the runner's user; the nightly (red on A2-125 until that is decided). The Windows bot's exact build errors had not arrived; the CI logs of `6f0ca4ab` show only the C1083 above.
+
+| Check | Result |
+|---|---|
+| `ctest -E SaturnExplorerLive` (109, `-j2`, `--timeout 900`, in two pieces) | 109 passed |
+| `ctest -R SaturnExplorerLive` (6) | 6 passed |
+| New tests | none (115 = 109 + 6, as on master) |
+| Fault suite | not rerun as a separate step, since no product code changed; `SaturnExplorerDecompilerFaultTests` passed in the ctest run |
