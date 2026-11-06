@@ -964,6 +964,24 @@ if(BUILD_TESTING)
                 ${CMAKE_CURRENT_SOURCE_DIR}/Drivers/Savestate/src)
             target_link_libraries(SaturnExplorerArea9Round6Tests PRIVATE SaturnExplorerSavestateDriver SaturnExplorerCore ${CMAKE_DL_LIBS})
             add_test(NAME SaturnExplorerArea9Round6Tests COMMAND SaturnExplorerArea9Round6Tests)
+
+            # Area 9 round 7 (review): the shared exit deadline, the frame try's stall, the refusal texts. Linux only.
+            add_executable(SaturnExplorerArea9Round7Tests
+                FrontEnd/tests/Area9Round7Tests.cpp
+                FrontEnd/src/Settings.cpp
+                FrontEnd/src/FileWrite.cpp
+                FrontEnd/src/Sh2Address.cpp
+                FrontEnd/src/Debug/CallStack.cpp
+                FrontEnd/src/Debug/MemoryBackend.cpp
+                FrontEnd/src/Debug/Sh2Disasm.cpp
+                FrontEnd/src/Decompiler/MemorySnapshot.cpp
+                FrontEnd/src/Decompiler/AddressRanges.cpp
+                FrontEnd/src/Decompiler/Sh2FunctionFinder.cpp
+                FrontEnd/src/Sha256.cpp)
+            target_include_directories(SaturnExplorerArea9Round7Tests PRIVATE FrontEnd/src include
+                ${CMAKE_CURRENT_SOURCE_DIR}/Drivers/Savestate/src)
+            target_link_libraries(SaturnExplorerArea9Round7Tests PRIVATE SaturnExplorerSavestateDriver SaturnExplorerCore ${CMAKE_DL_LIBS})
+            add_test(NAME SaturnExplorerArea9Round7Tests COMMAND SaturnExplorerArea9Round7Tests)
         endif()
     endif()
 
