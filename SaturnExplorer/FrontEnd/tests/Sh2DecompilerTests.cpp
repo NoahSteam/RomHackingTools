@@ -1201,10 +1201,13 @@ void TestArea7Round7()
         Print("A7-32 a rejected store before the call, a later store after it", r);
         const Line* g = LineWith(r, "xRam26002200 = param_1;");
         CHECK(g != nullptr);
-        if (g) CHECK(LineInstructions(*g) == (std::vector<uint32_t>{ 0x06009012u }));   // (A7-38: the store 0x0600900E is on no line)
-        CHECK(!a7r3::OnSomeLine(r, 0x0600900Eu));
+        // (A7-38, fixed by the area 7 fixer: the number walk passes the frame word over the store through r2, which the walk cannot place,
+        // when no frame address escapes the flow (FrameKept), as the engine took it when it forwarded the 0: the add passes r4 on and the
+        // line names the store 0x0600900E. Was: the bsr only, 0x0600900E on no line, copyAtCall 1)
+        if (g) CHECK(LineInstructions(*g) == (std::vector<uint32_t>{ 0x0600900Eu, 0x06009012u }));
+        CHECK(a7r3::OnSomeLine(r, 0x0600900Eu));
         const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_32 later");
-        CHECK(a.storeAfterUse == 0 && a.copyAtCall == 1);
+        CHECK(a.storeAfterUse == 0 && a.copyAtCall == 0 && a.Violations() == 0);
     }
     // ...the control: r3 moved, the same later store: the copy names the push, and storeAfterUse accepts it. The damaged result (the
     // push's token moved to the later store) is flagged: the check bites.
@@ -1446,6 +1449,24 @@ void TestArea7Round7()
         const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_39 fresh");
         if (a.Violations()) Print("A7-39 fresh", r);
         CHECK(a.Violations() == 0);
+    }
+    // A7-41 (P2), fixed by the area 7 fixer: grammar 1 seed 1832116, shrunk (`mov.l lit,r7 ; mov #3,r0 ; mov.b r0,@r7 ; (poll) ; mov #1,r3
+    // ; dt r3 ; bf ; mov.b @(9,r4),r0 ; tst #0x80,r0 ; bt M ; or r5,r3 ; M: mov.b r3,@r7`). The engine gives the copy of
+    // `xRam26001008 = param_2;` (inside the `if`) the address of the first store 0x06009004, which writes 3. A statement that shows only
+    // an input shows a number only where a condition of the flow compares a storage with that number (FlowValueMayBe, `ties`): no
+    // comparison with 3 here, so the store of 3 is another value and the line names the shared store 0x0600901A that wrote param_2's
+    // byte. Was: the line named 0x06009004, a click went there, storeValueOther 1.
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, { 0xD707, 0xE003, 0x2700, 0x6070, 0xC801, 0x89FC, 0xE301, 0x4310,
+            0x8BFD, 0x8449, 0xC880, 0x8900, 0x235B, 0x2730, 0x000B, 0x0009, 0x2600, 0x1008 });
+        Print("A7-41 an input's copy at a store of a number", r);
+        const Line* l = LineWith(r, "xRam26001008 = param_2;");
+        CHECK(l != nullptr);
+        const std::vector<uint32_t> ins = l ? LineInstructions(*l) : std::vector<uint32_t>{};
+        CHECK(std::find(ins.begin(), ins.end(), 0x0600901Au) != ins.end());
+        CHECK(std::find(ins.begin(), ins.end(), 0x06009004u) == ins.end());
+        const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_41");
+        CHECK(a.storeValueOther == 0 && a.Violations() == 0);
     }
     // caseOtherEntry bites: A7-29's fixture with the outer `case 2:` moved back to the inner switch's entry (A7-29 as it was).
     {

@@ -4616,7 +4616,51 @@ struct FlowRecord
     std::vector<std::vector<int>> predecessors;
     std::map<uint32_t, std::pair<int, uint32_t>> insnFirst;
     ghidra::uintm opsEnd = 0;
+    // A7-38: no address of the frame leaves the stack pointer and the temporaries an access computes from it (FrameKept), so a store
+    // through a pointer the walk cannot place does not write a frame word, as the engine takes it when it forwards one
+    bool frameKept = false;
 };
+
+// A7-38: does the frame's address stay where the flow's accesses use it? The stack pointer and the temporaries an addition or a
+// subtraction of it makes are the frame's; any of them that reaches another register (`mov r15,r14`, `mov r15,r4`), is stored, or is the
+// input of any op but an addition, a subtraction, a copy into a temporary or the pointer of a load or a store, lets the frame escape: then
+// a pointer the walk cannot place may point into it. Bounded: a large flow is taken as escaping.
+bool FrameKept(const FlowRecord& f, const ghidra::Funcdata& fd)
+{
+    const ghidra::AddrSpace* sp = fd.getArch()->getStackSpace();
+    if (!sp || sp->numSpacebase() < 1) return false;
+    const ghidra::VarnodeData& reg = sp->getSpacebase(0);
+    std::vector<FlowVn> frame(1);
+    frame[0].space = reg.space;
+    frame[0].offset = reg.offset;
+    frame[0].size = static_cast<ghidra::int4>(reg.size);
+    const auto isFrame = [&frame](const FlowVn& v) {
+        for (const FlowVn& x : frame)
+            if (x.space == v.space && x.offset < v.offset + static_cast<ghidra::uintb>(v.size) && v.offset < x.offset + static_cast<ghidra::uintb>(x.size))
+                return true;
+        return false;
+    };
+    size_t total = 0;
+    for (const auto& ops : f.blockOps) total += ops.size();
+    if (total > 20000) return false;
+    // (the temporaries first: an instruction's temporaries are written before they are read, so one pass in order finds them)
+    for (const auto& ops : f.blockOps)
+        for (const FlowOp& op : ops)
+        {
+            for (int k = 0; k < op.numIn && k < 3; ++k)
+            {
+                if (op.in[k].Constant() || !isFrame(op.in[k])) continue;
+                const bool pointer = (op.code == ghidra::CPUI_LOAD || op.code == ghidra::CPUI_STORE) && k == 1;
+                const bool arithmetic = op.code == ghidra::CPUI_INT_ADD || op.code == ghidra::CPUI_INT_SUB || op.code == ghidra::CPUI_COPY;
+                if (pointer) continue;
+                if (!arithmetic || !op.hasOut) return false;
+                if (isFrame(op.out)) continue;   // (r15 stepped)
+                if (!op.out.space || op.out.space->getType() != ghidra::IPTR_INTERNAL) return false;   // (into another register)
+                frame.push_back(op.out);
+            }
+        }
+    return true;
+}
 
 FlowRecord RecordFlow(const ghidra::Funcdata& fd, const std::function<uint32_t(uint32_t)>& canonicalOf, const MemorySnapshot& snap)
 {
@@ -4725,6 +4769,7 @@ FlowRecord RecordFlow(const ghidra::Funcdata& fd, const std::function<uint32_t(u
     for (size_t i = 0; i < f.successors.size(); ++i)
         for (int n : f.successors[i])
             if (n >= 0 && static_cast<size_t>(n) < f.predecessors.size()) f.predecessors[static_cast<size_t>(n)].push_back(static_cast<int>(i));
+    f.frameKept = FrameKept(f, fd);
     return f;
 }
 
@@ -5602,7 +5647,12 @@ bool FlowNumberIn(NumberWalk& w, const FlowRecord& flow, const ghidra::Funcdata&
         if (memory && op.code == ghidra::CPUI_STORE && op.numIn > 2)
         {
             FlowVn m;
-            if (!memoryAt(i, op.in[1], op.in[2].size, m)) return false;
+            if (!memoryAt(i, op.in[1], op.in[2].size, m))
+            {
+                // (A7-38: a frame word, past a store through a pointer the walk cannot place, when no frame address escaped)
+                if (stackSpace && vn.space == stackSpace && flow.frameKept) continue;
+                return false;
+            }
             if (!FlowStorageOverlaps(m, vn)) continue;
             if (!SameStorage(m, vn)) return false;
             return FlowNumberIn(w, flow, fd, blk, i, op.in[2], value);
@@ -6097,8 +6147,33 @@ bool FlowValueMayBe(const FlowRecord& flow, const ghidra::Funcdata& fd, int blk,
     const auto memory = [&fd](const FlowVn& v) {
         return v.space && (v.space->getType() == ghidra::IPTR_SPACEBASE || v.space == fd.getArch()->getDefaultDataSpace());
     };
+    // A7-41: a statement that shows only an input or a variable (no number, no instruction, nothing the engine computed) shows a number
+    // only where the engine can know the input equals it: a condition of the flow compares a storage with that number. Else a number is
+    // another value (`xRam26001008 = param_2;`, which the engine put at the store of 3 before a poll, is not that store's).
+    const bool bare = want.numbers.empty() && want.insns.empty() && !want.rebuilt && (!want.inputs.empty() || !want.locations.empty());
+    std::map<std::pair<uint64_t, ghidra::int4>, bool> tied;
+    const auto ties = [&](uint64_t v, ghidra::int4 size) {
+        const auto f = tied.find(std::make_pair(v, size));
+        if (f != tied.end()) return f->second;
+        bool found = false;
+        for (size_t b = 0; b < flow.blockOps.size() && !found; ++b)
+            for (const FlowOp& op : flow.blockOps[b])
+            {
+                if ((op.code != ghidra::CPUI_INT_EQUAL && op.code != ghidra::CPUI_INT_NOTEQUAL) || op.numIn < 2) continue;
+                for (int k = 0; k < 2 && !found; ++k)
+                {
+                    const FlowVn& c = op.in[k];
+                    if (!c.Constant()) continue;
+                    const ghidra::int4 bytes = std::min(std::max(size, 1), std::max(c.size, 1));
+                    found = MaskToSize(static_cast<uint64_t>(c.offset) ^ v, bytes) == 0;
+                }
+                if (found) break;
+            }
+        tied[std::make_pair(v, size)] = found;
+        return found;
+    };
     // where a path ends: true when the value there may be the statement's (the walk answers true)
-    const auto number = [&](uint64_t v, ghidra::int4 size) { return want.Has(v, size) || !numbersOnly; };
+    const auto number = [&](uint64_t v, ghidra::int4 size) { return want.Has(v, size) || (!numbersOnly && (!bare || ties(v, size))); };
     // (an op of the flow the statement's value does not hold is another value, unless the engine computed the value itself, from ops the
     // flow's no longer are: then it is not known)
     const auto other = [&](bool found) { return found || numbersOnly; };

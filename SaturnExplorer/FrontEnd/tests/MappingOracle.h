@@ -963,14 +963,39 @@ inline WordValue WrittenValue(const sfe::decomp::DecompileResult& r, const std::
             return NumberValue(a + static_cast<uint32_t>(steps * size));
         }
     }
-    // a pop of what the instruction before pushed (`mov.l r3,@-r15 ; mov.l @r15+,r3`, not a branch's target): the pushed register
+    // a pop of what a push before it pushed (`mov.l r3,@-r15 ; mov.l @r15+,r3`, none of them a branch's target): the pushed register.
+    // A7-40: up to six instructions between them, when none names the stack register, writes memory, branches or calls, and none is a
+    // branch's target (`mov.l r3,@-r15 ; extu.w r4,r3 ; mov.l @r15+,r3`)
     {
         uint16_t pushw = 0;
         const bool pop = hi == 0x6 && lo >= 4 && lo <= 6 && n == reg && n != m;
-        if (pop && into.find(p) == into.end() && r.InBody(p - 2) && word(p - 2, pushw) && (pushw >> 12) == 0x2 && (pushw & 0xF) == lo &&
-            ((pushw >> 8) & 0xF) == m && !inSlot)
+        uint32_t push = p - 2;
+        const auto between = [&](uint32_t q) {
+            uint16_t iw = 0;
+            if (!r.InBody(q) || !word(q, iw) || into.find(q + 2) != into.end()) return false;
+            const sfe::DisassembledInstruction di = sfe::Sh2Decode(q, iw);
+            if (!di.IsValid || di.IsBranch || di.IsCall || di.HasDelaySlot || di.HasBranchTarget) return false;
+            const int ih = iw >> 12, in = (iw >> 8) & 0xF, im = (iw >> 4) & 0xF, il = iw & 0xF;
+            if (in == m || im == m) return false;   // (any field that may name the stack register)
+            const bool store = (ih == 0x2 && il <= 6) || ih == 0x1 || (ih == 0x0 && il >= 4 && il <= 6) || (iw >> 8) == 0x80 || (iw >> 8) == 0x81 ||
+                               ((iw >> 8) >= 0xC0 && (iw >> 8) <= 0xC2) || (iw >> 8) >= 0xCC || (ih == 0x4 && (il == 0x2 || il == 0x3 || il == 0xB));
+            return !store;
+        };
+        const auto isPush = [&](uint32_t q) {
+            return r.InBody(q) && word(q, pushw) && (pushw >> 12) == 0x2 && (pushw & 0xF) == lo && ((pushw >> 8) & 0xF) == m;
+        };
+        if (pop && !isPush(push))
+            for (int k = 0; k < 6 && between(push) && into.find(push) == into.end(); ++k)
+                if (isPush(push - 2))
+                {
+                    push -= 2;
+                    break;
+                }
+                else
+                    push -= 2;
+        if (pop && into.find(p) == into.end() && isPush(push) && !inSlot)
         {
-            const WordValue v = RegisterBefore(r, word, into, p - 2, (pushw >> 4) & 0xF, depth);
+            const WordValue v = RegisterBefore(r, word, into, push, (pushw >> 4) & 0xF, depth);
             if (!number(v, a)) return v.kind == WordValue::Param && lo == 6 ? v : WordValue();
             if (lo == 4) a = static_cast<uint32_t>(static_cast<int32_t>(static_cast<int8_t>(a & 0xFF)));
             if (lo == 5) a = static_cast<uint32_t>(static_cast<int32_t>(static_cast<int16_t>(a & 0xFFFF)));
