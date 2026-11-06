@@ -1451,7 +1451,8 @@ void TestArea7Round7()
     {
         const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, { 0xD605, 0xE301, 0xA001, 0x0009, 0x6160, 0x4310, 0x8BFC, 0x335C,
             0x2630, 0x2432, 0x000B, 0x0009, 0x2600, 0x1034 });
-        const Line* l = LineWith(r, "xRam26001034 = (xunknown1)param_2;");
+        // (since patch 0082 the global's byte store keeps its own COPY, typed by the store: `(char)param_2`, was `(xunknown1)param_2`)
+        const Line* l = LineWith(r, "xRam26001034 = (char)param_2;");
         CHECK(l != nullptr);
         if (l) CHECK(LineInstructions(*l) == (std::vector<uint32_t>{ 0x06009010u }));
         const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_39 b");
@@ -1461,13 +1462,14 @@ void TestArea7Round7()
     // empties the store's block and materialises `xRamc0002024 = in_r2;` at the may-alias `mov.b` after the poll. The final block before
     // the poll ends at the `mac.w`, which the flow splits into blocks of its own (its saturation), so the store's flow block did not
     // follow it. Fixed (onEdge passes an instruction's own blocks): the line names the store 0x06009004 beside its tokens at 0x06009010.
-    // Was: no store named, a click to 0x06009010 (copyAtOther 1).
+    // Was: no store named, a click to 0x06009010 (copyAtOther 1). Since patch 0082 (A5-102) the engine no longer materialises the copy at the
+    // `mov.b`: the store keeps its COPY and the line is its own, at 0x06009004 before the poll, as the code makes it.
     {
         const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, { 0xD605, 0x477F, 0x2621, 0xD705, 0x6072, 0xC801, 0x8BFC, 0xE007,
             0x0414, 0x000B, 0x0009, 0x0009, 0xC000, 0x2024, 0x2600, 0x2004 });
         const Line* l = LineWith(r, "xRamc0002024 = in_r2;");
         CHECK(l != nullptr);
-        if (l) CHECK(l->firstAddr == 0x06009004u && LineInstructions(*l) == (std::vector<uint32_t>{ 0x06009004u, 0x06009010u }));
+        if (l) CHECK(l->firstAddr == 0x06009004u && LineInstructions(*l) == (std::vector<uint32_t>{ 0x06009004u }));
         const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_39 c");
         CHECK(a.Violations() == 0);
     }
