@@ -7519,11 +7519,18 @@ BINARY(|, return C(x.Zext() | y.Zext());)
 BINARY(^, return C(x.Zext() ^ y.Zext());)
 BINARY(/, if (y.Zext() == 0) return C(0); if (sg && (s64)y.Sext() == -1) return C((0 - x.Zext()) & C::Mask()); return sg ? C((u64)((s64)x.Sext() / (s64)y.Sext())) : C(x.Zext() / y.Zext());)
 BINARY(%, if (y.Zext() == 0) return C(0); if (sg && (s64)y.Sext() == -1) return C(0); return sg ? C((u64)((s64)x.Sext() % (s64)y.Sext())) : C(x.Zext() % y.Zext());)
+// (A10-12) A comparison of two values both narrower than int is the compare of their own width here; C widens each to int by its own sign. When
+// the two differ (a zero extension against a sign extension of the same bits) the text, read as C, is false where the engine's reading is right,
+// and g_cmpc says so: the harness prints CMPC <name> for such a function, and a text that C and this reading disagree on is counted narrow-c
+// only if no compare was like that (a cast on the narrow side makes the text right as C: patch 0080).
+static unsigned g_cmpc;
 #define CMP(op) \
   template <int N, bool S, int M, bool U> Bool4 operator op(const T<N, S>& a, const T<M, U>& b) { \
     typedef typename Common<N, S, M, U>::type C; \
     C x, y; x.v = (typename C::R)(a.Ext() & C::Mask()); y.v = (typename C::R)(b.Ext() & C::Mask()); \
-    return Bool4(C::sign ? ((s64)x.Sext() op (s64)y.Sext()) : (x.Zext() op y.Zext())); } \
+    const bool r = C::sign ? ((s64)x.Sext() op (s64)y.Sext()) : (x.Zext() op y.Zext()); \
+    if (N < 4 && M < 4 && r != ((s64)a.Ext() op (s64)b.Ext())) g_cmpc = 1; \
+    return Bool4(r); } \
   template <int N, bool S, class I, class = typename std::enable_if<IsInt<I>::value>::type> Bool4 operator op(const T<N, S>& a, I b) { typedef typename Promoted<N, S>::type P; return P(a) op P(b); } \
   template <int N, bool S, class I, class = typename std::enable_if<IsInt<I>::value>::type> Bool4 operator op(I a, const T<N, S>& b) { typedef typename Promoted<N, S>::type P; return P(a) op P(b); }
 CMP(==) CMP(!=) CMP(<) CMP(<=) CMP(>) CMP(>=)
@@ -8979,7 +8986,12 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
         src << RunGuardSource() << (engine ? CxxHeader(gBeRead) : CHeader());   // the guard's system headers first: the headers below define names (byte, word, uint, bool) they use
         for (size_t i : which) src << "static int bad_" << prep[i].name << ";\n" << (engine ? AddressAssignTyped(ShortCircuitOps(NegativeWideLiteralsTyped(UnsignedLiteralsTyped(prep[i].cText)))) : prep[i].cText) << "\n";
         src << "int main(void) {\n  RunGuard();\n  FrameInit();\n";
-        for (size_t i : which) src << prep[i].mainText;
+        for (size_t i : which)
+        {
+            if (engine) src << "  g_cmpc = 0;\n";
+            src << prep[i].mainText;
+            if (engine) src << "  if (g_cmpc) printf(\"CMPC " << prep[i].name << "\\n\");\n";
+        }
         int total = 0;
         (void)total;
         src << "  int bad = 0;\n";
@@ -9075,7 +9087,7 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
         }
         else if (!cand.empty())
         {
-            std::set<std::string> bad, unreadable;
+            std::set<std::string> bad, unreadable, cmpc;
             auto readBatch = [&](const std::vector<size_t>& which, const std::string& tag) {
                 std::string altLog;
                 bool altCompiled = false;
@@ -9085,7 +9097,10 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
                 std::istringstream in(altRun);
                 std::string line;
                 while (std::getline(in, line))
+                {
                     if (line.compare(0, 9, "MISMATCH ") == 0) bad.insert(line.substr(9, line.find(' ', 9) - 9));
+                    if (line.compare(0, 5, "CMPC ") == 0) cmpc.insert(line.substr(5));
+                }
                 return true;
             };
             if (!readBatch(cand, "engine"))
@@ -9102,8 +9117,16 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
             for (size_t i : cand)
                 if (bad.count(prep[i].name) == 0 && unreadable.count(prep[i].name) == 0)
                 {
-                    out[i].cls = "narrow-c";
-                    out[i].detail += " [agrees when read as the engine means it]";
+                    // (A10-12) narrow-c excuses the engine's width of arithmetic, which the text does not show. It does not excuse a comparison of two narrow
+                    // values that C extends one by zero and one by sign: a cast on the narrow side (patch 0080) makes the text right as C, so the text is the
+                    // finding, `mismatch`, as before the class existed (the first line of the detail names it).
+                    if (cmpc.count(prep[i].name) != 0)
+                        out[i].detail += " [agrees when read as the engine means it, but a comparison of narrow operands is false as C: the sides need one cast type]";
+                    else
+                    {
+                        out[i].cls = "narrow-c";
+                        out[i].detail += " [agrees when read as the engine means it]";
+                    }
                 }
             // (area 3 fixer, A3-150) A piece of a variable read by its field (`xStack_10._2_2_`) has the sign the engine's type has, which the C
             // reading drops (an xunknown is unsigned there), while the piece a CONCAT builds is no signed value in the C reading, which the
@@ -9227,6 +9250,13 @@ const PrintedCFixture kPrintedCFixtures[] = {
     // A2-113 (patch 0077): a narrow named variable against a narrow negated expression, `-(param_3 & 0xff) < param_2` (family 108, `nexpr`).
     { "A2-113 a: uint2 against a complement chain", { 0x6153, 0x611C, 0x611B, 0x611F, 0x611F, 0x6273, 0x622F, 0x3122, 0x0029, 0x000B, 0x0009, 0x0009 } },
     { "A2-113 b: uint2 against a negated masked byte", { 0x6153, 0x611D, 0x6263, 0x622C, 0x622B, 0x622D, 0x3127, 0x0029, 0x000B, 0x0009 } },
+    // A10-12 (patch 0080): a two-byte equality of a masked half-word against a sign-extended byte, `(uint2)(param_1 & 0xff80) == (int2)param_2`: C widens the left side by zero and
+    // the right by sign (never equal where the code is). Both sides are cast to one type now. The ne forms and the signed left side are the same shape.
+    { "A10-12 a: uint2 expression == (int2) char", { 0x6143, 0x611D, 0x9207, 0x2129, 0x6353, 0x633E, 0x633D, 0x3130, 0x0029, 0x000B, 0x0009, 0xFF80 } },
+    { "A10-12 b: the branch form", { 0x6143, 0x611D, 0x920B, 0x2129, 0x6353, 0x633E, 0x633D, 0x3130, 0x8B02, 0xE001, 0x000B, 0x0009, 0xE000, 0x000B, 0x0009, 0xFF80 } },
+    { "A10-12 c: != of the same", { 0x6143, 0x611D, 0x9208, 0x2129, 0x6353, 0x633E, 0x633D, 0x3130, 0x0029, 0xCA01, 0x000B, 0x0009, 0xFF80 } },
+    { "A10-12 d: int2 expression == (int2) char", { 0x6143, 0x611F, 0x9207, 0x2129, 0x6353, 0x633E, 0x633F, 0x3130, 0x0029, 0x000B, 0x0009, 0xFF80 } },
+    { "A10-12 e: int2 expression != (int2) char", { 0x6143, 0x611F, 0x9208, 0x2129, 0x6353, 0x633E, 0x633F, 0x3130, 0x0029, 0xCA01, 0x000B, 0x0009, 0xFF80 } },
     // A2-52 (the A2-47 family beyond patch 0046): sums of scaled terms over shared variables, `c + 8x + 4y + 14x` through `shlr2 ; shll2`.
     { "A2-52 c + 8x + 4y + 14x, shlr2 ; shll2", { 0xD008, 0xD309, 0x0347, 0x031A, 0x303C, 0xD308, 0x0367, 0x031A, 0x303C, 0xD307, 0x0347, 0x031A, 0x303C, 0x4009, 0x4008, 0x000B, 0x0009, 0x0009, 0x0000, 0x0100, 0x0000, 0x0008, 0x0000, 0x0004, 0x0000, 0x000E } },
     { "A2-52 termgen 2", { 0x2468, 0x0129, 0xD00A, 0x6343, 0x4308, 0x4308, 0x303C, 0x6313, 0x4308, 0x4308, 0x303C, 0xD307, 0x0367, 0x031A, 0x303C, 0xD306, 0x0347, 0x031A, 0x303C, 0xD305, 0x2039, 0x000B, 0x0009, 0x0009, 0x0000, 0x0000, 0x0000, 0x0008, 0xFFFF, 0xFFFA, 0xFFFF, 0xFFFC } },
@@ -11263,6 +11293,47 @@ void TestPrintedC()
                 std::printf("pin 'A2-104 control': %s\n", r104[1].cls.empty() ? "agrees" : r104[1].cls.c_str());
                 CHECK(r104[0].cls.empty() && r104[0].compared && r104[0].text.find("== 0xffff") != std::string::npos);   // agrees as C, not narrow-c
                 CHECK(r104[1].cls.empty() && r104[1].compared);
+            }
+            // A10-12 (patch 0080): `(uint2)(param_1 & 0xff80) == (int2)param_2` is never true read as C (65408 against -128) where the code compares two bytes. The cast of the
+            // expression was to its own type (0077); both sides are cast to one type now. The oracle used to class the old text `narrow-c` (it agrees in the engine's reading) and
+            // pass it: a comparison of narrow operands that C extends one way each is `mismatch` now (CMPC), so the pin fails on the tree before the patch (checked).
+            {
+                const std::vector<CVerdict> r1012 = CheckPrintedC(d, { { "A10-12 a", { 0x6143, 0x611D, 0x9207, 0x2129, 0x6353, 0x633E, 0x633D, 0x3130, 0x0029, 0x000B, 0x0009, 0xFF80 } },
+                                                                      { "A10-12 b: the branch form", { 0x6143, 0x611D, 0x920B, 0x2129, 0x6353, 0x633E, 0x633D, 0x3130, 0x8B02, 0xE001, 0x000B, 0x0009, 0xE000, 0x000B, 0x0009, 0xFF80 } },
+                                                                      { "A10-12 c: !=", { 0x6143, 0x611D, 0x9208, 0x2129, 0x6353, 0x633E, 0x633D, 0x3130, 0x0029, 0xCA01, 0x000B, 0x0009, 0xFF80 } },
+                                                                      { "A10-12 d: signed expression", { 0x6143, 0x611F, 0x9207, 0x2129, 0x6353, 0x633E, 0x633F, 0x3130, 0x0029, 0x000B, 0x0009, 0xFF80 } },
+                                                                      { "A10-12 e: signed expression, !=", { 0x6143, 0x611F, 0x9208, 0x2129, 0x6353, 0x633E, 0x633F, 0x3130, 0x0029, 0xCA01, 0x000B, 0x0009, 0xFF80 } },
+                                                                      // the ordered compares are cast already (castStandard cares for the sign there): their texts are as they were
+                                                                      { "A10-12 control: unsigned >", { 0x6143, 0x611D, 0x9207, 0x2129, 0x6353, 0x633E, 0x633D, 0x3136, 0x0029, 0x000B, 0x0009, 0xFF80 } },
+                                                                      { "A10-12 control: signed >", { 0x6143, 0x611F, 0x9207, 0x2129, 0x6353, 0x633E, 0x633F, 0x3137, 0x0029, 0x000B, 0x0009, 0xFF80 } },
+                                                                      // two named sides of one sign need no cast
+                                                                      { "A10-12 control: uint2 == uint2", { 0x6143, 0x611D, 0x9207, 0x2129, 0x6353, 0x633D, 0x3130, 0x0029, 0x000B, 0x0009, 0x0009, 0xFF80 } } },
+                                                                   nIn, cc, 0x51ED, 8958);
+                for (size_t k = 0; k < r1012.size(); ++k)
+                {
+                    std::printf("pin 'A10-12 #%zu': %s (%s)\n", k, r1012[k].cls.empty() ? "agrees" : r1012[k].cls.c_str(), r1012[k].detail.substr(0, 90).c_str());
+                    CHECK(r1012[k].cls.empty() && r1012[k].compared);   // agrees as C, not narrow-c
+                }
+                CHECK(r1012[0].text.find("== (uint2)(int2)param_2") != std::string::npos);
+                CHECK(r1012[1].text.find("== (uint2)(int2)param_2") != std::string::npos);
+                CHECK(r1012[2].text.find("!= (uint2)(int2)param_2") != std::string::npos);
+                CHECK(r1012[3].text.find("(uint2)(param_1 & 0xff80) == (uint2)(int2)param_2") != std::string::npos);
+                CHECK(r1012[5].text.find("(uint2)(int2)param_2 < (param_1 & 0xff80)") != std::string::npos);
+                // The oracle by itself: the text the engine printed before the patch (the cast on the right side taken out) is false as C and right in the engine's reading, and is
+                // a finding, not narrow-c. (A text whose arithmetic is the engine's width, the narrow-c of A2-120 and A2-121 above, is still excused.)
+                gPrintedCTextHook = [](const std::string& t) {
+                    std::string u = t;
+                    const std::string with = "== (uint2)(int2)param_2";
+                    const size_t at = u.find(with);
+                    if (at != std::string::npos) u.replace(at, with.size(), "== (int2)param_2");
+                    return u;
+                };
+                const std::vector<CVerdict> old1012 = CheckPrintedC(d, { { "A10-12 oracle: the text before the patch", { 0x6143, 0x611D, 0x9207, 0x2129, 0x6353, 0x633E, 0x633D, 0x3130, 0x0029, 0x000B, 0x0009, 0xFF80 } } },
+                                                                    nIn, cc, 0x51ED, 8961);
+                gPrintedCTextHook = nullptr;
+                std::printf("pin 'A10-12 oracle': %s (%s)\n", old1012[0].cls.c_str(), old1012[0].detail.substr(0, 150).c_str());
+                CHECK(old1012[0].cls == "mismatch");
+                CHECK(IsFailing(old1012[0]));
             }
             // (area 3 round 15 fix) frame124 seed 2268.chain (the merge's printed-C range): `(int4)uStack_24._0_1_` is the engine's sign extension
             // of the word's top byte, which the C reading takes unsigned (0x80FE for the run's 0x7FFE); the engine's reading, which has the
