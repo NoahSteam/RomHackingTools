@@ -11854,10 +11854,18 @@ void TestDomainPins(Sh2Decompiler& d)
     // r0, `xRam26002003 = 0;` naming no store under the volatile request, `v:map-copy-store`), and the oracle's grammar 2 seeds 1872967
     // (`shll16 r1 ; extu.b r1,r1` is 0) and 1873745 (`rotcl`), both `n:map-const-join`. Grammar 1 seed 1862942 (A7-44, the product's:
     // `iRam06002308 = -0x10;`, r1's low half the engine merged under the global's name, at the literal load, naming a `tas.b` and a
-    // `mov.w` of the doubled r1, `n:map-number-store`).
+    // `mov.w` of the doubled r1, `n:map-number-store`). The fixer's resumption, after A7-44: the matrix's grammar 1 seed 14875 (A7-45, the
+    // oracle: `iRam0600218c = 0xb;` at its `mov #0xb,r0`, no store of the global storing a made number, `n:map-copy-store`) and the fresh
+    // seeds from 1,880,000 and 1,890,000 (the product's): grammar 2 seed 1891223 (A7-46: `iStack_28 = 3;` naming the push of `in_r3`,
+    // `n:map-number-store`), grammar 1 seeds 1881632 and 1884426 (A7-47: a join's number printed through an engine-made temporary on the
+    // same line, `n:map-const-join` and `v:map-const-join`), grammar 1 seed 1883172 (A7-48: `uRam2600230e = (uint2)bVar1;` stored by
+    // `movt r0 ; mov.w r0,@(0xe,r6)`, `n:map-copy-merge`) and grammar 2 seed 1894780 (A7-49: `iRam06002210 = iRam06002200;` at an
+    // `or.b #imm,@(r0,gbr)`, `n:map-copy-store`).
     for (const auto& s : { std::make_pair(2, 304221), std::make_pair(2, 1700689), std::make_pair(1, 1832116), std::make_pair(1, 1843925),
                            std::make_pair(2, 1853425), std::make_pair(1, 1843373), std::make_pair(1, 1843207), std::make_pair(1, 1862210),
-                           std::make_pair(2, 1872967), std::make_pair(2, 1873745), std::make_pair(1, 1862942) })
+                           std::make_pair(2, 1872967), std::make_pair(2, 1873745), std::make_pair(1, 1862942),
+                           std::make_pair(1, 14875), std::make_pair(2, 1891223), std::make_pair(1, 1881632), std::make_pair(1, 1884426),
+                           std::make_pair(1, 1883172), std::make_pair(2, 1894780) })
     {
         const Report rep = Evaluate(d, s.first == 2 ? MakeV2(s.second) : Generate(s.second), true);
         std::printf("pin 'area 7 fixer: grammar %d seed %d': %zu finding(s)\n", s.first, s.second, rep.findings.size());

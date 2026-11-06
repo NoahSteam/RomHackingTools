@@ -6134,7 +6134,7 @@ bool FlowValueMayBe(const FlowRecord& flow, const ghidra::Funcdata& fd, int blk,
         int blk;
         int pos;
         FlowVn vn;
-        bool bit = false;   // only the low bit is followed (the T bit, A7-47)
+        bool bit = false;   // only the low bit is followed (the T bit, A7-48)
     };
     const auto overlaps = [](const FlowVn& a, const FlowVn& b) {
         return a.space == b.space && a.offset < b.offset + static_cast<ghidra::uintb>(b.size) && b.offset < a.offset + static_cast<ghidra::uintb>(a.size);
@@ -6247,7 +6247,7 @@ bool FlowValueMayBe(const FlowRecord& flow, const ghidra::Funcdata& fd, int blk,
             const bool whole = op.out.offset <= st.vn.offset && st.vn.offset + st.vn.size <= op.out.offset + op.out.size;
             const bool passes = op.code == ghidra::CPUI_COPY || op.code == ghidra::CPUI_INT_ZEXT || op.code == ghidra::CPUI_INT_SEXT ||
                                 op.code == ghidra::CPUI_SUBPIECE;
-            // A7-47: the T bit, read back from sr by `movt` (`r0 = sr & 1`) and set by a compare or a test as `sr = (sr & ~1) |
+            // A7-48: the T bit, read back from sr by `movt` (`r0 = sr & 1`) and set by a compare or a test as `sr = (sr & ~1) |
             // zext(t)`: the walk follows the low bit to the boolean that set it (`bVar1 = in_r1 == 0;` at a `tst`, stored by `movt r0 ;
             // mov.w r0,@(0xe,r6)`)
             if (whole && op.code == ghidra::CPUI_INT_AND && op.numIn >= 2 && (op.in[0].Constant() || op.in[1].Constant()))
@@ -6375,7 +6375,7 @@ bool FlowValueMayBe(const FlowRecord& flow, const ghidra::Funcdata& fd, int blk,
 // The ops that made the value storage `vn` holds before op `pos` of flow block `blk`, one for each path: the op that last wrote it, or,
 // for a copy of a register, the op that made that register's value (a call, for a register it may change). False when a path reaches
 // the function's entry without one (an input), writes part of it, or past a bound. With `input`, a path that reaches the entry sets it
-// and the walk goes on (the function's input is one of the values; A7-44's triage: the push of `in_r3` is no store of a number).
+// and the walk goes on (the function's input is one of the values; A7-46: the push of `in_r3` is no store of a merged number).
 bool FlowLastWriters(const FlowRecord& flow, const ghidra::Funcdata& fd, int blk, int pos, const FlowVn& vn, std::vector<const FlowOp*>& out,
                      bool* input = nullptr)
 {
@@ -6640,7 +6640,7 @@ int AddJoinConstantTokens(std::vector<Line>& lines, const PrintedOperations& pri
         const bool made = !canonicalMakers.empty();
         const uint32_t target = made ? *canonicalMakers.begin() : 0;
         // (a line on which another printed op has the instruction is not the statement's alone, unless that op is the copy the number
-        // came through, printed in place: A7-40's temporary, `uVar2 = 0xff98;` at the join after a delay slot's `add #-0x6c,r0`)
+        // came through, printed in place, A7-47: A7-40's temporary, `uVar2 = 0xff98;` at the join after a delay slot's `add #-0x6c,r0`)
         const auto shared = [&](size_t line) {
             if (!sharedLines.count(std::make_pair(line, own))) return false;
             if (!through) return true;
@@ -7308,7 +7308,7 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                 }
             }
             // (...or a read of memory, a global or a local, whose value the engine carries in the variable itself: the flow's load of it in
-            // the block, or in the delay slot of its last instruction. A7-48: also a copy the engine put elsewhere in the block, at an
+            // the block, or in the delay slot of its last instruction. A7-49: also a copy the engine put elsewhere in the block, at an
             // instruction that does not read that memory -- `iRam06002210 = iRam06002200;` materialised at an `or.b #imm,@(r0,gbr)` that may
             // alias it, r3 the global's load four instructions on, merged under the other global's name: the nearest load of the memory at
             // or after the copy's instruction, else the last before it; the global's value at the entry, an input, is read there too. Not at
