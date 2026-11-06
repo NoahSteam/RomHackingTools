@@ -1,6 +1,6 @@
 # SH-2 pseudocode and embedded decompiler
 
-Inspected revision: `ff6a3b1fb1c54e4c0344613094ea65292b0023c2` (2026-10-20); the pseudocode-to-assembly mapping (steps 7 and 9) rechecked at the area 7 fixer branch `review/7-a710-fix` (2026-10-30), and step 7's store tokens at `review/7-a719-fix` (2026-11-04), `review/7-a722-fix` (2026-11-05), `review/7-a726-fix` (2026-11-05) and `review/7-round7-fix` (2026-11-05).
+Inspected revision: `ff6a3b1fb1c54e4c0344613094ea65292b0023c2` (2026-10-20); the pseudocode-to-assembly mapping (steps 7 and 9) rechecked at the area 7 fixer branch `review/7-a710-fix` (2026-10-30), and step 7's store tokens at `review/7-a719-fix` (2026-11-04), `review/7-a722-fix` (2026-11-05), `review/7-a726-fix` (2026-11-05) and `review/7-round7-fix` (2026-11-06).
 Captured-inspection sections rechecked against `codex/decompiler-variable-inspection` (2026-10-20).
 The panel's status/trust drawing, Decompile-as-a-request and Copy marks rechecked against `5428fe6` plus the area 8 fixer branch (2026-10-30).
 Unless labelled otherwise, behavior below is verified from the cited implementation.
@@ -125,7 +125,11 @@ and lists these classes as open until they are fixed.
    value, brings what the other edges bring (`LoopKeeps`, A7-39); when the op's value is all
    numbers the walk knows (`mov #0,r2 ; xor r1,r2` with r1 0 after a `dt` loop) the build is
    retried on the op's own block, every value at its start a leaf; and a statement that shows a number takes the number the walk knows the store
-   wrote. A number is compared on the bytes a store writes of the variable, big-endian, and of
+   wrote. A statement that shows only an input or a variable shows a number only when a condition of
+   the flow compares a storage with that number (A7-41: a copy of `param_2` the engine put at a store
+   of 3 is not that store's). The number walk passes a frame word over a store through a pointer it
+   cannot place when no address of the frame leaves the stack pointer and the temporaries its accesses
+   compute (`FlowRecord::frameKept`, `FrameKept`), as the engine does when it forwards the word (A7-38). A number is compared on the bytes a store writes of the variable, big-endian, and of
    those the ones no other store of it writes (A7-36); a number the engine put in a copy of its
    own is that number only (A7-35). A copy at a call or a return names only stores that run
    before it when one does (A7-32), unless its value is the call's own output. An emptied store is on an edge also through flow blocks the
@@ -143,7 +147,8 @@ and lists these classes as open until they are fixed.
    them `Token::materialised`, and `InstructionLineIndex` offers the instruction's own statement
    before it (A7-25). `AddJoinConstantTokens` addresses a number the engine
    merged (a COPY that is no flow op, at an instruction that does not make the number into the
-   COPY's register: a collapsed MULTIEQUAL at a join) to the instruction on each path that set the
+   COPY's register: a collapsed MULTIEQUAL at a join; or a copy of a temporary the engine made of a
+   number and prints in place, A7-40's triage) to the instruction on each path that set the
    register, or to nothing. A case label's token is where the jump table sends its value
    (`JumpTable::getLabelByIndex`/`getAddressByIndex`; the table of the `switch` printed at the
    label's own indent, so a case after a nested switch is not the inner one's, A7-29), the
