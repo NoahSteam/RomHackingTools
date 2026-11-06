@@ -35,3 +35,13 @@ O-storeValueOther	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.cla
 O-storeValueOther	gen	survived	19	
 O-storeAfterUse	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:1162: a.storeAfterUse == 1 && a.Violations() == 1
 O-storeAfterUse	gen	survived	19	
+O-copyMergeAtBranch	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:668: ba.copyMergeAtBranch == 3 && ba.Violations() == 3
+O-copyMergeAtBranch	gen	survived	19	
+O-numberStoreOther	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:1222: k.numberStoreOther == 1
+O-numberStoreOther	gen	survived	19	
+O-constAtJoin	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:619: wa.constAtJoin == 1 && wa.Violations() == 1
+O-constAtJoin	gen	survived	18	
+O-caseOtherEntry	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:1304: a.caseOtherEntry == 1
+O-caseOtherEntry	gen	survived	18	
+O-backWrong	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:1067: ua.backWrong == 1 && ua.Violations() == 1
+O-backWrong	gen	survived	18	
