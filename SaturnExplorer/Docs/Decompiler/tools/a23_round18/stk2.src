@@ -1,0 +1,88 @@
+name S6 caller keeps a local at its frame bottom, callee writes it (lent S5)
+asm 06009100
+.word 0x4F22
+add #-8,r15
+mov.l r6,@r15
+mov.l r7,@(4,r15)
+mov.l =0x06009000,r3
+jsr @r3
+nop
+mov.l @r15,r1
+add r1,r0
+mov.l @(4,r15),r1
+add r1,r0
+add #8,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009000
+mov.l r4,@r15
+rts
+mov r5,r0
+endasm
+lend 06009000
+entry 06009100
+args 1 2 3 4
+args 10 20 30 40
+end
+
+name S7 callee writes the second word above its entry sp (lent)
+asm 06009100
+.word 0x4F22
+add #-8,r15
+mov.l r6,@r15
+mov.l r7,@(4,r15)
+mov.l =0x06009000,r3
+jsr @r3
+nop
+mov.l @r15,r1
+add r1,r0
+mov.l @(4,r15),r1
+add r1,r0
+add #8,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009000
+mov.l r4,@(4,r15)
+rts
+mov r5,r0
+endasm
+lend 06009000
+entry 06009100
+args 1 2 3 4
+args 10 20 30 40
+end
+
+name S8 callee writes above its sp through a copy
+asm 06009100
+.word 0x4F22
+add #-8,r15
+mov.l r6,@r15
+mov.l r7,@(4,r15)
+mov.l =0x06009000,r3
+jsr @r3
+nop
+mov.l @r15,r1
+add r1,r0
+mov.l @(4,r15),r1
+add r1,r0
+add #8,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009000
+mov r15,r2
+add #4,r2
+mov.l r4,@r2
+rts
+mov r5,r0
+endasm
+lend 06009000
+entry 06009100
+args 1 2 3 4
+args 10 20 30 40
+end

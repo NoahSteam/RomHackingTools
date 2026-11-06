@@ -1,0 +1,64 @@
+name S1 callee reads the first stack argument
+asm 06009000
+mov.l @r15,r0
+rts
+add r4,r0
+endasm
+args 1 2 3 4
+end
+
+name S2 callee reads the second stack argument, after a push
+asm 06009000
+mov.l r8,@-r15
+mov.l @(8,r15),r0
+add r4,r0
+rts
+mov.l @r15+,r8
+endasm
+args 1 2 3 4
+end
+
+name S3 caller pushes a fifth argument, lent S1
+asm 06009100
+.word 0x4F22
+mov.l r7,@-r15
+mov.l =0x06009000,r3
+jsr @r3
+nop
+add #4,r15
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009000
+mov.l @r15,r0
+rts
+add r4,r0
+endasm
+lend 06009000
+entry 06009100
+args 1 2 3 4
+args 1 2 3 9
+end
+
+name S4 callee reads stack arg only on one path
+asm 06009000
+tst r5,r5
+bt L
+mov.l @r15,r4
+L:
+rts
+mov r4,r0
+endasm
+args 1 0 3 4
+args 1 2 3 4
+end
+
+name S5 callee writes its stack argument slot
+asm 06009000
+mov.l r4,@r15
+rts
+mov r5,r0
+endasm
+args 1 2 3 4
+end
