@@ -542,3 +542,31 @@ patch:0037	-	not-applied	0	only header hunks revert alone
 patch:0044	unit	stillborn	0	build failed
 patch:0048	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:10852: r->prototype.known && r->prototype.ret.kind == idNop.prototype.ret.kind
 patch:0048	pc	survived	21	
+patch:0052	unit	survived	23	
+patch:0052	gen	survived	20	
+patch:0052	engine	survived	38	
+patch:0052	pc	survived	21	
+patch:0052	decode	survived	2	
+patch:0052	corpus	killed	43	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:5477: mapping.Violations() == 0
+patch:0053	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:12565: !Has(r.Text(), "return 0;")
+patch:0053	gen	survived	20	
+patch:0053	corpus	survived	43	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:12565: !Has(r.Text(), "return 0;")
+patch:0059	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:12893: !Has(r.Text(), " < param_1 * 4")
+patch:0059	pc	survived	20	
+patch:0070	unit	survived	22	
+patch:0070	pc	survived	21	
+patch:0070	gen	survived	19	
+patch:0070	engine	killed	41	CHECK failed at line 1993: hi == 0xff00ull && lo == 0xff00ull
+patch:0068	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:414: l != nullptr
+patch:0068	gen	survived	13	
+patch:0068	corpus	killed	41	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:414: l != nullptr
+patch:0076	unit	killed	24	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:446: zero != nullptr
+patch:0076	gen	survived	19	
+patch:0076	corpus	survived	42	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:446: zero != nullptr
+patch:0060	unit	survived	22	
+patch:0060	gen	survived	18	
+patch:0060	corpus	survived	42	
+patch:0060	engine	survived	39	
+patch:0060	pc	survived	21	
+patch:0060	decode	survived	2	
+patch:0060	*	SURVIVED	0	
