@@ -162,8 +162,9 @@ void ExitLateStore()
     const double t2 = Since(u0);
     std::printf("  settings: %s after %.2f s: %s\n  names:    %s after %.2f s: %s\n", ok1 ? "saved" : "refused", t1, e1.c_str(), ok2 ? "saved" : "refused", t2, e2.c_str());
     Check(!ok1 && t1 > 9.5, "setup: the settings save used the 10 s");
-    Check(!ok2 && t2 < 0.5, "PIN A9-58: the names, whose holder lets go 2 s later, are refused at once: an earlier store spent the shared deadline");
-    Check(Has(e2, "more than 10 seconds"), "PIN A9-58: ... and the text says the holder was waited for 'more than 10 seconds' though this store waited 0 s");
+    Check(!ok2 && t2 < 0.5, "setup: the names, whose holder lets go 2 s later, are refused at once: an earlier store spent the shared deadline (App now saves the names first)");
+    Check(!Has(e2, "more than 10 seconds") && Has(e2, "exit time ran out") && Has(e2, "waited 0.0 s"),
+          "FIX A9-58: the text says the exit time ran out and what was waited, not the configured 10 s");
     kill(stuck, SIGKILL); Reap(stuck);
     Reap(slow);
     FileLock::SetClosing(false);
@@ -180,7 +181,7 @@ void FrameStall()
     const bool ok = s.SaveTo("stall.ini", &err, false);
     const double secs = Since(t0);
     std::printf("  frame try behind a stuck holder: %s after %.3f s\n", ok ? "saved" : "refused", secs);
-    Check(!ok && secs > 0.2 && secs < 0.6, "PIN A9-59: each frame try behind a stuck holder blocks the UI thread about 250 ms (every 2 s)");
+    Check(!ok && secs < 0.15, "FIX A9-59: a frame try behind a stuck holder blocks the UI thread about 50 ms (every 2 s), not 250 ms");
     kill(stuck, SIGKILL); Reap(stuck);
 }
 
@@ -195,9 +196,9 @@ void RefusalTexts()
     fn.Save(&err);
     gFailFileErrno = 0;
     std::printf("  names, fsync EIO: %s\n", err.c_str());
-    Check(err.rfind("The function names", 0) != 0, "PIN A9-60: a write or flush refusal does not begin with its subject (App logs it bare since A9-51)");
+    Check(err.rfind("The function names: not saved, ", 0) == 0, "FIX A9-60: a write or flush refusal begins with its subject and says not saved");
     const size_t first = err.find("saturn_functions.txt");
-    Check(first != std::string::npos && err.find("saturn_functions.txt", first + 1) != std::string::npos, "PIN A9-60: the file's path is in the flush text twice");
+    Check(first != std::string::npos && err.find("saturn_functions.txt", first + 1) == std::string::npos, "FIX A9-60: the file's path is in the flush text once");
 }
 }  // namespace
 

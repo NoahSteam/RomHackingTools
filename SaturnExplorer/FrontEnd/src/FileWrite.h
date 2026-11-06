@@ -114,6 +114,8 @@ private:
     unsigned mWaitMs = kWaitMs;
     int mError = 0;          // errno / GetLastError of the open or the lock
     bool mTimedOut = false;
+    bool mSharedShort = false;   // at exit, with less than the full shared time left (A9-58)
+    unsigned mWaitedMs = 0;      // what was waited for the lock
     bool mHeld = false;
     intptr_t mHandle = -1;   // a POSIX descriptor, or a Windows HANDLE
 };

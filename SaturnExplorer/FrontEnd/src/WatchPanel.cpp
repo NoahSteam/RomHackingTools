@@ -6,6 +6,8 @@
 #include <sstream>
 #include <vector>
 
+#include "FileWrite.h"
+
 namespace sfe
 {
 
@@ -379,10 +381,14 @@ void WatchPanel::LoadSession()
     mRows.clear();
 }
 
-void WatchPanel::SaveSession() const
+bool WatchPanel::SaveSession(std::string* error) const
 {
-    std::ofstream f(kSessionFile, std::ios::binary);
-    if (f) f << mList.ToJson();
+    // Staged and renamed like the other stores (A9-57): a failed or interrupted write leaves the old file whole.
+    const std::string json = mList.ToJson();
+    std::string why;
+    if (WriteFileAtomically(kSessionFile, json.data(), json.size(), why)) return true;
+    if (error) *error = std::string("The watch list: not saved, ") + why;
+    return false;
 }
 
 }  // namespace sfe

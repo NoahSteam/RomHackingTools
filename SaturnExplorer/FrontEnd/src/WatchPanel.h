@@ -35,7 +35,7 @@ public:
 
     // Session persistence: load/save the watch list to a file in the working dir.
     void LoadSession();
-    void SaveSession() const;
+    bool SaveSession(std::string* error = nullptr) const;   // false, with the reason, when the file was not written (A9-57)
 
     // Add a watch programmatically (e.g. Assembly "Add Operand to Watch").
     void AddWatch(const std::string& name, const std::string& expr, WatchType type)

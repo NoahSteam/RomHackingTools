@@ -13,6 +13,12 @@
 #include <cmath>
 #include <cstdio>
 #include <vector>
+#include <string>
+#include <fstream>
+#include <sstream>
+#include <cstdlib>
+#include <unistd.h>
+#include <sys/stat.h>
 
 #include "imgui_internal.h"
 #include "ImGuiHarness.h"
@@ -264,6 +270,34 @@ void TestBreakpointRevealAtUnchangedPc()
     ScrollToTop(f.h);
     CHECK(ScrollY() == 0.0f);
 }
+
+// A9-57: the Watch panel's session file is written atomically and a failure is reported. The file is a directory for the failing case:
+// the rename over it is refused, the old thing is left as it was, and the text names the subject.
+void TestWatchSessionSave()
+{
+    char tmpl[] = "watchsess_XXXXXX";
+    if (!mkdtemp(tmpl)) { CHECK(false); return; }
+    char* old = getcwd(nullptr, 0);
+    CHECK(chdir(tmpl) == 0);
+    {
+        WatchPanel w;
+        w.AddWatch("hp", "0x06000000", WatchType::U8);
+        std::string err;
+        CHECK(w.SaveSession(&err) && err.empty());
+        std::ifstream f("saturn_explorer_watches.json", std::ios::binary);
+        std::stringstream ss; ss << f.rdbuf();
+        CHECK(ss.str().find("hp") != std::string::npos);
+        CHECK(std::remove("saturn_explorer_watches.json") == 0);
+        CHECK(mkdir("saturn_explorer_watches.json", 0755) == 0);
+        err.clear();
+        CHECK(!w.SaveSession(&err));
+        CHECK(err.rfind("The watch list: not saved, ", 0) == 0);
+        CHECK(rmdir("saturn_explorer_watches.json") == 0);
+    }
+    if (old) { CHECK(chdir(old) == 0); free(old); }
+    const std::string cmd = std::string("rm -rf ") + tmpl;
+    if (std::system(cmd.c_str()) != 0) {}
+}
 }  // namespace
 
 int main()
@@ -273,6 +307,7 @@ int main()
     TestJumpLandsOnTargetWhileEditing();
     TestBreakpointRevealReturnsFromBrowsing();
     TestBreakpointRevealAtUnchangedPc();
+    TestWatchSessionSave();
     if (gFailures) { std::printf("FAILURES: %d\n", gFailures); return 1; }
     std::printf("all cases passed\n");
     return 0;
