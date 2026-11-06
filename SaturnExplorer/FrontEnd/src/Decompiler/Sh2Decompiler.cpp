@@ -6800,6 +6800,57 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
         // (a statement at a branch, not made by its slot, comes after the slot's store: the slot runs before the branch takes effect)
         const ghidra::uintb before = o->getAddr().getOffset() * 2 + (o->isFromDelaySlot() ? 1u : 2u);
         std::set<const ghidra::AccessRecord*> chosen;
+        // The register a store stores: its value input, or the register a temporary of the store's instruction copies (`mov.l r1,@-r15`
+        // stores through one). False for a store of no register (`tas.b`'s computed byte, a constant).
+        const auto storedRegister = [&](const ghidra::AccessRecord* r, FlowVn& v) {
+            const auto pos = flow.ops.find(r->time);
+            if (pos == flow.ops.end() || pos->second.first < 0 || static_cast<size_t>(pos->second.first) >= flow.blockOps.size() ||
+                pos->second.second >= flow.blockOps[static_cast<size_t>(pos->second.first)].size())
+                return false;
+            const std::vector<FlowOp>& ops = flow.blockOps[static_cast<size_t>(pos->second.first)];
+            const FlowOp& store = ops[pos->second.second];
+            if (store.code != ghidra::CPUI_STORE || store.numIn < 3 || store.in[2].Constant()) return false;
+            v = store.in[2];
+            for (size_t k = pos->second.second; v.space && v.space->getType() == ghidra::IPTR_INTERNAL && k-- > 0 && ops[k].insn == store.insn;)
+                if (ops[k].hasOut && ops[k].out.space == v.space && ops[k].out.offset == v.offset)
+                {
+                    if (ops[k].code != ghidra::CPUI_COPY || ops[k].numIn < 1) break;
+                    v = ops[k].in[0];
+                }
+            return v.space && v.space->getType() == ghidra::IPTR_PROCESSOR;
+        };
+        // A7-44: a number put in a register the engine merged under the variable's name, at an instruction that makes the number into
+        // that register (`iRam06002308 = -0x10;`, r1's low half, at the literal load into r1; r1 is doubled in a loop and stored by an
+        // `rts` slot's `mov.w`), is that instruction's value: a store is the statement's only when the value reaches it, the instruction
+        // one of the last writers of the register the store stores (FlowLastWriters, through register moves, as A7-28's `reaches`). A
+        // store of no register (`tas.b`'s byte) or of a register another instruction wrote last stores another value, whatever number
+        // the value walk cannot rule out (it answers "may" for a computation it does not know).
+        bool ownNumber = false;
+        if (code == ghidra::CPUI_COPY && o->getIn(0)->isConstant() && !o->isFromDelaySlot() && out->getSpace()->getType() == ghidra::IPTR_PROCESSOR)
+        {
+            FlowVn reg;
+            reg.space = out->getSpace();
+            reg.offset = out->getOffset();
+            reg.size = out->getSize();
+            ownNumber = InstructionMakesNumber(flow, at, static_cast<uint64_t>(o->getIn(0)->getOffset()), o->getIn(0)->getSize(), &reg);
+        }
+        const auto ownOpReaches = [&](const ghidra::AccessRecord* r) {
+            FlowVn v;
+            if (!storedRegister(r, v)) return false;
+            FlowVn whole = v;   // (a half of a register, as `mov.w r1,@r2` stores: the instructions write the whole register)
+            if (whole.size < 4)
+            {
+                whole.offset &= ~static_cast<ghidra::uintb>(3);
+                whole.size = 4;
+            }
+            const auto pos = flow.ops.find(r->time);
+            std::vector<const FlowOp*> writers;
+            if (pos == flow.ops.end() || !FlowLastWriters(flow, fd, pos->second.first, static_cast<int>(pos->second.second), whole, writers))
+                return true;   // (the walk is not finished: not known, the value test decides)
+            for (const FlowOp* w : writers)
+                if (w->insn == at) return true;
+            return false;
+        };
         // A7-23: a store is the statement's only when it wrote the statement's value (StoreShowsValue). The search below finds the stores
         // of the variable by where they are; this says which of them the line shows.
         bool valuesFound = false;
@@ -6813,6 +6864,11 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
             }
             const auto f = shown.find(r);
             if (f != shown.end()) return f->second;
+            if (ownNumber && !ownOpReaches(r))
+            {
+                shown[r] = false;
+                return false;
+            }
             // (A7-36: a store shows, of a number, the bytes it writes of the variable -- a byte variable inside a word store, a word two
             // stores wrote -- and of those the ones no other store of the variable writes, when there are such)
             ValueSet part = values;
@@ -7059,23 +7115,6 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
         const bool numberCopy = code == ghidra::CPUI_COPY && o->getIn(0)->isConstant();
         const uint64_t numberValue = numberCopy ? static_cast<uint64_t>(o->getIn(0)->getOffset()) : 0;
         const ghidra::int4 numberSize = numberCopy ? o->getIn(0)->getSize() : 0;
-        const auto storedRegister = [&](const ghidra::AccessRecord* r, FlowVn& v) {
-            const auto pos = flow.ops.find(r->time);
-            if (pos == flow.ops.end() || pos->second.first < 0 || static_cast<size_t>(pos->second.first) >= flow.blockOps.size() ||
-                pos->second.second >= flow.blockOps[static_cast<size_t>(pos->second.first)].size())
-                return false;
-            const std::vector<FlowOp>& ops = flow.blockOps[static_cast<size_t>(pos->second.first)];
-            const FlowOp& store = ops[pos->second.second];
-            if (store.code != ghidra::CPUI_STORE || store.numIn < 3 || store.in[2].Constant()) return false;
-            v = store.in[2];
-            for (size_t k = pos->second.second; v.space && v.space->getType() == ghidra::IPTR_INTERNAL && k-- > 0 && ops[k].insn == store.insn;)
-                if (ops[k].hasOut && ops[k].out.space == v.space && ops[k].out.offset == v.offset)
-                {
-                    if (ops[k].code != ghidra::CPUI_COPY || ops[k].numIn < 1) break;
-                    v = ops[k].in[0];
-                }
-            return v.space && v.space->getType() == ghidra::IPTR_PROCESSOR;
-        };
         const auto reaches = [&](const ghidra::AccessRecord* r, const FlowVn& v, uint32_t insn) {
             if (!InstructionMakesNumber(flow, insn, numberValue, numberSize, &v)) return false;
             const auto pos = flow.ops.find(r->time);
