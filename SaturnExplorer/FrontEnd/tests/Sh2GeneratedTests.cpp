@@ -12233,6 +12233,9 @@ void TestA587Pins(Sh2Decompiler& d)
         // entry is the pointer's other value: as open as in function 1 alone (the same instructions without the switch), whose text has no assignment.
         { { "A5-99, grammar 2 seed 300847 shrunk", "2F86 2F96 2FA6 2FB6 2FC6 0C2A 6843 6953 6A63 6B73 E106 3712 891C 4708 C701 017E 412B 0009 0600 903C 0600 9040 0600 9044 0600 9048 0600 904C 0600 9050 A00B 0009 A009 0009 A007 0009 A005 0009 A003 0009 A001 0009 614D D204 4C2A 6CF6 6BF6 6AF6 69F6 68F6 422B 0009 0600 906C D303 273A 471B 517C E061 000B 0009 0009 A000 0000",
             "0/0/68,6c/6c/7a", "20:7:6:54:3c,40,44,48,4c,50", "1,1", "0,0", "20000,0" }, "pointer.effect.open", nullptr },
+        // ...and grammar 2 seed 292513 (the A5-99 sweep): `param_4 = uVar2;` in the cases, then `puVar3 = (uint1 *)(param_4 | 0x40000000);`, the purge
+        { { "A5-99, grammar 2 seed 292513 shrunk", "2FD6 4F22 E104 3712 8914 4708 C701 017E 412B 0009 0600 9024 0600 9028 0600 902C 0600 9030 A007 0009 A005 0009 A003 0009 A001 0009 6133 D202 4F26 6DF6 422B 0009 0600 9044 2FD6 7FF8 D207 272B 471B 4715 8B02 6251 A002 0009 A000 0009 604C 7F08 6DF6 000B 0009 0009 4000 0000",
+            "0/0/40,44/44/66", "10:7:4:34:24,28,2c,30", "1,1", "84000,0", "20004,20000" }, "pointer.effect.open", nullptr },
         // A5-100 (grammar 2 seeds 293720 and 298629, the A5-99 sweep): `in_r7 ^ 0xe0000000 | 0x60000000` and `(param_1 ^ 0xe0000000 | uRam06009034) - 4`
         // hold 0xe0000000 as the XOR's operand; rule 3f took it for an OR with a mask of the top bits (`n:onchip-span-unsaid`). No finding now.
         { { "A5-100, grammar 2 seed 293720 shrunk", "2FD6 4F22 7FF8 D104 271A 2702 D203 7F08 4F26 6DF6 422B 0009 E000 0000 0600 9020 D102 271B 6372 E03F 000B 0009 6000 0000",
