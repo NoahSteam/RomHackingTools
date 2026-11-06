@@ -420,3 +420,18 @@ H-ptr-sub	unit	survived	23
 H-ptr-sub	gen	survived	14	
 H-ptr-sub	corpus	survived	41	
 H-ptr-sub	*	SURVIVED	0	
+H-ptr-phi	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:4066: HasNote(r, "if the pointer holds 0x05F80004 (VDP2_TVSTAT): a read of VDP2_T
+H-ptr-loop	unit	survived	23	
+H-ptr-loop	gen	survived	14	
+H-ptr-loop	corpus	survived	42	
+H-ptr-loop	*	SURVIVED	0	
+H-lend-unknown	gen	survived	18	
+H-lend-unknown	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:6663: !r.InBody(a + 0x0A) && r.InBody(a + 2) && !r.prototype.known && Has(r.proto
+H-lend-self	gen	survived	13	
+H-lend-self	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:9044: Has(r.prototypeWithheld, "calls itself")
+H-lend-kill	gen	killed	18	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:11854: !constant
+H-lend-extrapop	gen	survived	13	
+H-lend-extrapop	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:9121: !oracle || PseudoAgreesWithRun(l.caller, snap, f, inputs, !l.caller.prototy
+H-cancel-actions	fault	killed	76	== cancel-enter jumptable: FAILED in 0.2 s
+H-run-epoch	runner	killed	37	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/DecompilerRunnerTests.cpp:586: !late
+H-run-epoch	model	survived	18	
