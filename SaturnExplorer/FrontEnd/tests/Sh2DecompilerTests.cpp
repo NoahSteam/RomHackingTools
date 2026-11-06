@@ -14653,6 +14653,38 @@ void TestA3155Fix()
     }
 }
 
+// ===== Area 10, round 2 (A11-7, routed to area 10): the shape 0061's memory escape was written for ===================================
+// The kill switch V-0061-memescape (FrameEscape cause (b) no longer sets `escaped`) survives every oracle. This is the shape that would need
+// it if anything did: a frame address stored to memory, then a call handed nothing (r1 is cleared first), then a read of the local below
+// the stored address, which the callee writes through the address it reads back (`g[-1] = 7`, legal C for `g = &arr[1]`): the code
+// returns 7. With the switch off the text is still right (the call's guard keeps the local); only the local map changes (`axStack_8[2]`
+// becomes `xStack_8`). So (b)'s `escaped` is subsumed for values (A10-14); this pins the value, which a wider change to the escape or
+// to the call guards could break.
+void TestArea10Round2()
+{
+    Sh2Decompiler d(gConfig);
+    uint64_t serial = 102000;
+    const uint32_t base = 0x06009000u;
+    // sts.l pr,@-r15 ; add #-8,r15 ; mov #1,r1 ; mov.l r1,@r15 ; mov #2,r1 ; mov.l r1,@(4,r15) ; mov r15,r1 ; add #4,r1 ;
+    // mov.l @(lit),r2 (0x0603AC00) ; mov.l r1,@r2 ; mov #0,r1 ; mov.l @(lit),r3 (the callee) ; jsr @r3 ; nop ; mov.l @r15,r0 ;
+    // add #8,r15 ; lds.l @r15+,pr ; rts ; nop
+    // callee: mov.l @(lit),r1 ; mov.l @r1,r1 ; add #-4,r1 ; mov #7,r2 ; mov.l r2,@r1 ; rts ; nop
+    {
+        std::vector<uint16_t> w = { 0x4F22, 0x7FF8, 0xE101, 0x2F12, 0xE102, 0x1F11, 0x61F3, 0x7104, 0xD205, 0x2212, 0xE100, 0xD305, 0x430B,
+                                    0x0009, 0x60F2, 0x7F08, 0x4F26, 0x000B, 0x0009, 0x0009, 0x0603, 0xAC00, 0x0600, 0x9040 };
+        w.resize(0x20, 0x0009);
+        const std::vector<uint16_t> callee = { 0xD103, 0x6112, 0x71FC, 0xE207, 0x2122, 0x000B, 0x0009, 0x0009, 0x0603, 0xAC00 };
+        w.insert(w.end(), callee.begin(), callee.end());
+        const CallFixture f = { "A10 r2 M1: a frame address stored to memory, a call, the local below it", base, w };
+        auto snap = CallSnapshot(f, ++serial);
+        const DecompileResult r = d.Decompile(snap, Request(base));
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(PseudoAgreesWithRun(r, snap, f, { { 0u } }, true));
+        CHECK(!Has(r.Text(), "return 1;") && Has(r.Text(), "func_0x06009040();"));
+    }
+}
+
 void TestFetchAndDataRefusals()
 {
     Sh2Decompiler d(gConfig);
@@ -15146,6 +15178,7 @@ int main(int argc, char** argv)
         RUN(TestA3130Fix());
         RUN(TestA3144Fix());
         RUN(TestA3155Fix());
+        RUN(TestArea10Round2());
         RUN(TestArea2Round8());
         RUN(TestArea2Round9());
         RUN(TestArea2Round10());
