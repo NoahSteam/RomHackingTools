@@ -5387,12 +5387,21 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
             std::string what;
             if (PrintedPast(m, got, r.calls, &what)) add("printed-past", "the read at " + Hex(m.insn) + " is printed past " + what);
         }
-        // (A5-102) ...and a store the engine folded into a global at a constant address, before an access the ledger holds (a store or a read
-        // through a pointer, a register's access) in the same flow block: its statement is printed before that access's. The ledger holds no
+        // (A5-102) ...and a store the engine folded into a global at a constant address, before a write through a pointer the ledger holds
+        // that the code makes after it: its statement is printed before that write's (a read through a pointer and a register's access are
+        // counted, A5-109). The ledger holds no
         // folded store, so the order rule above could not see `*puVar2 = uRam06030000; uRam06030000 = xVar1;`, the DMA enable printed before the
         // buffer write the code makes first (and the old value left in the global when the pointer is its address). The folded store's
         // statement is the first line that assigns a variable and names its instruction (AddFrameStoreTokens names the store on the line it
-        // went to); a store no line names was dropped or merged, which the conservation rules judge.
+        // went to); a store no line names was dropped or merged, which the conservation rules judge, and one a later store of the same address
+        // follows is the later one's to stand for.
+        // (a poll of memory this request does not mark is ordinary memory to the engine, by design: it folds the poll, may take the loop for
+        // one that never ends or never runs, and what is printed around it is not the code's order to judge; the request that marks it is)
+        bool foldedPoll = false;
+        for (const Env::Poll& poll : subject.polls)
+            if (!InHardwareRange(poll.addr) && !inMarked(poll.raw)) foldedPoll = true;
+        if (foldedPoll) count("order.folded-store.folded-poll");
+        else
         {
             bool hasGoto = false;
             for (const Line& l : r.lines) hasGoto |= l.text.find("goto ") != std::string::npos;
@@ -5412,6 +5421,23 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                         if (t.addr == f.insn) { first = static_cast<int>(li); break; }
                 }
                 if (first < 0) continue;
+                // (a store a later folded store of the same address follows is the engine's to drop or merge: the later one writes what is
+                // left, whatever the pointer wrote in between, and the mapping names the dropped store on the later one's line. Ordinary
+                // memory, a variable by design. `g = r2; poll; tas.b @g` prints the poll, then `g = (uint1)in_r2 | 0x80;`.)
+                bool overwritten = false;
+                for (const AccessFate& o : r.accessFates)
+                {
+                    if (&o == &f || !o.write || o.fate != AccessFate::FoldedOrdinary || !o.constantAddress || o.frame || o.origBlock < 0 || o.insn == f.insn) continue;
+                    if (o.address >= f.address + f.size || f.address >= o.address + o.size) continue;
+                    const size_t ob = static_cast<size_t>(o.origBlock), fb0 = static_cast<size_t>(f.origBlock);
+                    if (ob >= fr.reach.size() || fb0 >= fr.reach.size()) continue;
+                    overwritten |= ob == fb0 ? o.origOrder > f.origOrder : fr.reach[fb0][ob] != 0;
+                }
+                if (overwritten)
+                {
+                    count("order.folded-store.overwritten");
+                    continue;
+                }
                 for (const MemoryAccess& m : got)
                 {
                     if (m.firstLine < 0 || m.insn == f.insn || m.origBlock < 0) continue;
@@ -5421,12 +5447,14 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                     if (fb >= fr.reach.size() || mb >= fr.reach.size()) continue;
                     const bool after = fb == mb ? m.origOrder > f.origOrder : fr.reach[fb][mb] && !fr.reach[mb][fb] && !hasGoto;
                     if (!after) continue;
-                    // (A5-109, open: a read through a pointer is still printed before a folded store the code makes first when the engine
-                    // takes the store for dead or joins it with a later one, `g = v; x = *p; if (c) g = v;` printing the store after the join.
-                    // The engine assumes a load does not read a global it may have written; counted until that is fixed.)
-                    if (!m.write && !m.direct)
+                    // (A5-109, open: a read through a pointer, or a register's access, is still printed before a folded store the code makes
+                    // first by routes patch 0082 does not close: the engine takes the store for dead or joins it with a later one (`g = v; x = *p;
+                    // if (c) g = v;` prints the store after the join), or writes the global at the return (grammar 1 seed 2012158: `x = g; g = r4;
+                    // SCSP_SCILV2 = x` prints the register write first). Counted until fixed; a write through a pointer, which may be the global's
+                    // own address, is judged.)
+                    if (!m.write || m.direct)
                     {
-                        if (first > m.firstLine) count("order.folded-store.read-past");
+                        if (first > m.firstLine) count(m.direct ? "order.folded-store.hardware-past" : "order.folded-store.read-past");
                         continue;
                     }
                     count("order.folded-store.checked");
