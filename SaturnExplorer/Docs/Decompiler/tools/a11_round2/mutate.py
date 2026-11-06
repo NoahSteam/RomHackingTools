@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Area 11 round 2: the mutation harness (round 1's, with the oracles and mutants added since; see README.md).
+"""Area 11 round 2: the mutation harness (round 1's, with the oracles added since and the round's mutants of mutants2.py).
 
 usage: mutate.py --root <repo root> --build <build dir> --rev <dir of patch_mutants.py output> --out <log dir>
                  [--only id,id,...] [--group patch|host|env|all] [--minutes 20] [--list]

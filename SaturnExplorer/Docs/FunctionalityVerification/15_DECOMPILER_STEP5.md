@@ -16828,3 +16828,207 @@ Each pin was shown to bite: with A9-58, A9-59 and A9-60 reverted in turn `Area9R
 
 Runs: full `ctest -j2` 113 of 113 after one test pin moved (`Area9Round6Tests` `FrameTryCollides` held the lock 150 ms against the old 250 ms try; it now holds 20 ms against the 50 ms try, the trade-off of A9-59); no new test target (the A9-57 test is in the existing `AssemblyPanelTests`); `LoaderFuzzTests` seed 48211, 3,000 cases a module, all modules: 37,985 cases in 64 s, 0 classes outside the ledger (only `HARDLINK_SPLIT`, A9-28); the two-process lock tests (`Area9Round3Tests`, `Area9Round4Tests`, `Area9Round5Tests`, `Area9Round6Tests`, `Area9Round7Tests`) pass; fault suite below.
 Fault suite (`SaturnExplorerDecompilerFaultTests`): 0 of 94 jobs failed (78.5 s).
+
+## Area 11, round 2
+
+Branch `review/11-round2` from master `b68bfb60`. Oracle builder, round 2 of area 11: the oracles scored again on today's master. Since round 1 (`a64678c3`) the oracles grew: area 7's mapping oracle and its later checks (rounds 3 to 7), area 9's loader fuzz and `Area9Round3Tests` to `Area9Round7Tests`, area 8's model and Follow rig, and A11-3's frame-intake guard. **No vendored patch was added since 0077, and no vendored engine file changed** (`git diff a64678c3 b68bfb60 -- third_party/ghidra-decompiler` touches only the MSBuild project). **No product code changed.** The round adds the harness under `Docs/Decompiler/tools/a11_round2/` and rows **A11-14 (P2), A11-15 (P3) and A11-16 (P3)**. It re-judges A11-6, A11-7, A11-8, A11-9 and A11-13: all five still hold. **The round is not clean: one P2 row.**
+
+### The harness
+
+`tools/a11_round2/` is round 1's harness with these changes:
+
+* `mutate.py`:
+  * area 9's suites as oracles: `fw`, `settings`, `names`, `asm`, `a9r3` to `a9r7`, with the loader fuzz (`A9ALL`);
+  * the corpus's game-code lines moved to `TestGameCode` to `TestGameLending` as they stand at `b68bfb60` (lines 5196 to 5912);
+  * `-j1` unless more than 6,000 MB is available;
+  * an old text with the `ALL` prefix replaces every occurrence (an oracle counter raised at several sites);
+  * `--group r2` runs this round's own mutants;
+  * the patch order puts the 17 patches round 1 did not run first.
+* `mutants2.py`: the round's 56 mutants (below).
+* `settings_refused_probe.cpp`: A11-14's probe.
+* `run_pieces.sh` runs pieces of at most 13 minutes, as before, and commits `results.tsv` after each.
+
+Every mutant was applied alone, built with ninja (`-j2` above 6,000 MB available, else `-j1`), and run under `ulimit -v 3500000` and `timeout`. Then the files were put back and `git status` was checked clean before the next. No restart happened in this round.
+
+The unmutated oracles (RelWithDebInfo, gcc 13):
+
+| Oracle | Time |
+|---|---|
+| suite | 23 s |
+| generator, 300 seeds | 19 s |
+| printed C | 21 s |
+| engine tests | 39 s |
+| decode | 2 s |
+| corpus hwram007 | 42 s |
+| fault matrix | 80 s |
+| trust | 52 s |
+| area 1 model | 19 s |
+| panel | 5 s |
+| loader fuzz | 5 s |
+| `Area9Round3Tests` | 0.5 s |
+| `Area9Round4Tests` | 11 s |
+| `Area9Round5Tests` | 36 s |
+| `Area9Round6Tests` | 22 s |
+| `Area9Round7Tests` | 12 s |
+| `FileWriteTests`, `SettingsTests`, `FunctionNamesTests`, `AssemblyPanelTests` | under 0.1 s each |
+
+### The round's new mutants (56)
+
+| Family | What | Mutants | Killed | Survived |
+|---|---|---|---|---|
+| `H7-` | area 7's mapping in `Sh2Decompiler.cpp`. The value rule (A7-23): `StoreShowsValue` always true; `take` without the value; the statement's own store. The join constants (A7-22, and A7-26's `into` storage). The number-reaches-store rule (A7-28): the register ignored, any maker taken, the rule off. The case-label table (A7-24's opref, A7-27's destination, A7-29's own-indent switch) | 11 | 11 (suite all; corpus 5) | 0 |
+| `O-` | the mapping oracle's own checks blinded one at a time: `storeValueOther`, `storeAfterUse`, `copyMergeAtBranch`, `numberStoreOther`, `constAtJoin` (3 sites), `caseOtherEntry`, `backWrong` (2 sites), `frameStoreMissing`, `accessAtBranch` | 9 | 9 (suite: each check's damaged-copy pin) | 0 |
+| `S-` | `StoreMerge.h`. The idle save (A9-20), the refused file (A9-19), the lock not held (A9-33), the file not read again (A9-20), lines that are no entry dropped (A9-21), deletes not applied, the size cap | 7 | 7 | 0 |
+| `T-` | `Settings::SaveTo`: the same five rules, and the CR in a value (A9-25) | 5 | 3 | **2: `T-refused`, `T-unchanged` (A11-14)** |
+| `L-` | `FileLock`: no `flock`; no retry; no bound (A9-40); no exit budget (A9-46, A9-53); `mSharedShort` (A9-58); the "holds" text (A9-47) | 6 | 6 | 0 |
+| `N-` | the loaders' readers. The a-f word (A9-18, A9-41) and the number-led remark (A9-45). The lone CR (A9-25) and the byte-order mark (A9-34). `CleanEntryText` (A9-31). The FIFO open (A9-24) and the size checked again on the descriptor | 7 | 6 | 1: `N-resize`, equivalent (the read loop stops one block past the cap and returns `TooLarge` all the same) |
+| `P-` | the panel's entry box and pin. A8-42 (shown target, box rewrite), A8-36's second rule, A8-46 (an edit taken back, and text typed out), A8-50, Enter's request, the sync while the box is edited, A8-30's origin, A8-37's `ResolvePin`, A8-38 | 11 | 10 (trust 10, panel 2, model 0) | **1: `P-a836-origin` (A11-15)** |
+
+### Round 1's families again
+
+| Family | Mutants | Killed | Survived | Not scored |
+|---|---|---|---|---|
+| The oracles' own modes (`SE_GENERATED_MUTATE` 24, `SE_GAME_MAPPING_MUTATE` 10 on hwram007) | 34 | 34 | 0 | |
+| Host one-expression mutants (`H-`) | 45 | 41 | 4: `H-led-repeat` (A11-13); `H-note-reach`, `H-ptr-sub`, `H-ptr-loop` (A11-6) | |
+| Kill switches and hand-made reverts (`V-`) | 10 | 8 | 2: `V-0061-memescape`, `V-0065-steppeddown` (A11-7) | |
+| Patches: the 17 round 1 did not run | 17 | 14 | 0 | 3: 0028 and 0044 do not build with their `.cc` hunks alone, 0037 has only header hunks that revert |
+| Patches: round 1's survivors and A11-8/A11-9's (0014, 0060, 0040, 0068, 0076, 0001, 0004) | 7 | 4 | 3: 0014, 0060, 0040 (A11-7) | |
+| **Total scored, both tables** | **166** | **153 (92%)** | **13** | 3 |
+
+Probes and combinations, apart:
+* `R-ptr-loop` is reached by no input;
+* `R-ptr-sub` is reached by the generator and the corpus, not the suite;
+* `R-note-reach`, `R-0061-mem` and `R-0065-down` are reached (the generator does not reach `R-0065-down`);
+* `C-0010-printed`, `-cond`, `-repeat` and `-all3` are killed by the suite, the generator and the corpus.
+
+Round 1's 34 patch reverts that were killed were not run again. No vendored file changed since, and the checks that killed them are still in the suites. The generator's long run (`gen3k`) was not repeated either: its grammar is unchanged since round 1 (the only changes to `Sh2GeneratedTests.cpp` are A11-3's intake, A11-11's pin and A7-34's counters).
+
+Killed, by the patches round 1 did not run:
+* 0007, 0015, 0025, 0027, 0048, 0053, 0059: the suite;
+* 0008: decode, the suite and the generator;
+* 0021, 0029: the suite and the generator;
+* 0033: the suite and printed C;
+* 0020 (the SLEIGH cache's LRU): decode alone (`r.prototypeWithheld.empty()`, `historyBad == 0`);
+* 0052 (flow alignment, A7-6): the corpus alone, by the mapping oracle (`mapping.Violations() == 0`);
+* 0070 (defined shifts): the engine tests alone.
+
+### The score per oracle
+
+"Run on" counts each mutant the oracle ran on, as in round 1: as one of the mutant's own oracles, or on the escalation, which runs only while nothing has killed the mutant.
+
+| Oracle | Run on | Killed | Score |
+|---|---|---|---|
+| suite (`Sh2DecompilerTests`) | 80 | 66 | 82% (all 20 area 7 mutants, product and oracle) |
+| generator, 300 seeds | 93 | 40 | 43% (24 of 24 of its own modes; **0 of the 20 area 7 mutants**) |
+| corpus hwram007 (game-code checks only) | 39 | 19 | 49% (10 of 10 mapping modes; 5 of 11 `H7-`; now `patch:0068`, by A11-3's floor) |
+| printed C | 12 | 2 | 17% |
+| engine tests | 9 | 2 | 22% |
+| decode | 12 | 4 | 33% |
+| fault matrix (default subset) | 4 | 1 | 25% (0001 and 0004 again pass it: A11-9) |
+| runner tests | 3 | 3 | 100% |
+| area 1 model | 14 | 0 | 0% (the runner's and the panel's mutants: the trust rig is their oracle) |
+| trust (`DecompilerTrustTests`, Follow rig included) | 17 | 16 | 94% |
+| panel tests | 11 | 2 | 18% |
+| loader fuzz | 30 | 14 | 47% |
+| `FunctionNamesTests` | 25 | 6 | 24% |
+| `FileWriteTests` | 25 | 1 | 4% |
+| `SettingsTests` | 25 | 0 | 0% |
+| `AssemblyPanelTests` | 25 | 0 | 0% |
+| `Area9Round3Tests` | 25 | 13 | 52% |
+| `Area9Round4Tests` | 25 | 11 | 44% |
+| `Area9Round5Tests` | 25 | 13 | 52% |
+| `Area9Round6Tests` | 25 | 11 | 44% |
+| `Area9Round7Tests` | 25 | 7 | 28% |
+
+Each area 9 mutant other than A11-14's two is killed by at least one of area 9's suites. `SettingsTests` and `AssemblyPanelTests` kill none of them: the stores' rules are held by the round suites, the fuzz and `FunctionNamesTests`.
+
+### The survivors
+
+| Mutant | What it shows | Row |
+|---|---|---|
+| `T-refused` | No oracle sees `Settings` save over a file `Load` refused once the file is readable by the save. The probe loses the user's BIOS path | **A11-14 (P2)** |
+| `T-unchanged` | `Settings`' idle save has no witness (the names' has) | A11-14 |
+| `P-a836-origin` | A8-36's second `EnterTarget` rule: a second Enter on untouched text makes the pinned guess a "user-set entry". `follow; enter; enter` fails with the mutant, passes on master | A11-15 |
+| `H-note-reach`, `H-ptr-sub`, `H-ptr-loop` | unchanged | A11-6 (open) |
+| `patch:0014`, `patch:0060`, `patch:0040`, `V-0061-memescape`, `V-0065-steppeddown` | unchanged; area 10 has not acted on the routing | A11-7 (open) |
+| `H-led-repeat` | unchanged | A11-13 (open) |
+| `N-resize` | equivalent | none |
+
+And the two rows whose mutants are killed by some oracle but not by the one they name:
+* **A11-8** (open): the generator passes 0068, 0076 and `V-0072-storemaywrite`;
+* **A11-9** (open): the fault matrix passes 0001 and 0004.
+
+**A11-14 is P2 by the area's scale.** The surviving mutant reverts part of A9-19's P1 fix, and the loss is reachable with it. The fix put two guards in place: the refused-file mark, and the save's re-read of the file. The A9-19 row's mutation note says the mark "removed alone changes nothing in the oracle because the re-read of the file refuses the same cases". That is true only of the oracle's cases, in which the file is still unreadable at the save. `settings_refused_probe.cpp` writes a 5 MiB `settings.ini` that `Load` refuses. It then cuts the file back to two lines and saves one key, as `App::SaveSettings` saves every key (A9-35):
+* master refuses the save;
+* `T-refused` writes `path = ` over the user's BIOS path.
+
+The names store has the witness (`S-refused` is killed by `FunctionNamesTests`); `Settings` has none.
+
+### The generator and area 7
+
+The generator kills none of the 20 area 7 mutants. A7-34 (open) says why in part: the checks added after area 7 round 2 are counted in the default run (`map.late.*`), not flagged. The counts show more. Under 10 of the 11 `H7-` product mutants, the 300 seeds' late counts are the same as the unmutated run's (`const-join` 3, `copy-store` 1, `way-back` 2) or lower. Only `H7-joinconst-off` moves one, `const-join` from 3 to 4. So flagging them (`SE_GENERATED_MAP_ALL=1`) would not make the default run see these reverts: it does not draw the shapes in 300 seeds. Area 7 found its generator rows in 18,000 fresh seeds. Routed to area 7 with A7-34, not filed again.
+
+### The oracles' new checks are witnessed
+
+Each `O-` mutant fails the suite at the check's own damaged-copy pin:
+
+| Check | Pin |
+|---|---|
+| `storeValueOther` | `wa.storeValueOther == 3` |
+| `storeAfterUse` | `a.storeAfterUse == 1` |
+| `copyMergeAtBranch` | `ba.copyMergeAtBranch == 3` |
+| `numberStoreOther` | `k.numberStoreOther == 1` |
+| `constAtJoin` | `wa.constAtJoin == 1` |
+| `caseOtherEntry` | `a.caseOtherEntry == 1` |
+| `backWrong` | `ua.backWrong == 1` |
+| `frameStoreMissing` | `a.frameStoreMissing == 1` |
+| `accessAtBranch` | `seen.accessAtBranch == 1` |
+
+The corpus cannot see a blinded check, since its violations are 0 on master; the suite is the witness.
+
+### Skipped and disabled tests, gated tests, pins
+
+* **ctest.** 113 tests in this build: 107, and 6 Live. 0 skipped, 0 "not run". `SKIP_RETURN_CODE 77` is on four tests, as in round 1 and A11-10's fix: Yss and fixture states absent, the fault suite without POSIX, printed C without a compiler. No `WILL_FAIL` or `DISABLED` is set. Every `add_executable(...Tests)` has its `add_test`. `SaturnExplorerExportShutdownTests` is Windows-only (area 12).
+* **Disabled code in the suites.** No `#if 0` or `if (false)` block, and no test function that is defined and never called, in `FrontEnd/tests`. `Area9Round4Tests`' `Pin()` helper is defined and not used (its pins became FIX checks); this is harmless.
+* **Environment-gated tests that run nowhere.** One: `Area9Round5Tests`' `RealFullDisk` (`SE_A9R5_FULLDIR`) prints "(skipped: ...)" and returns, in ctest, in CI and in the matrix (**A11-16**). The simulated full disk (`RLIMIT_FSIZE`) does run. The trust suite's switches are not of this kind, because their sequences are pinned in the default run:
+  * `SE_TRUST_FOLLOW_CPU`: `kFollowPinsCpu`;
+  * `SE_TRUST_FOLLOW_FOCUS`: the `focus` scripts;
+  * `SE_TRUST_HIDDEN_RENAME`: `kHiddenRenamePins`.
+
+  The game corpus (`SE_GAME_HWRAM`, `SE_GAME_LEND`) is local only, as round 1 recorded: the data is not in the repository.
+* **Pins that assert defects.** Each pin that names a ledger row was checked against the row's status:
+  * every pin of a fixed row asserts the fixed behaviour;
+  * the area 7 round 4 to 7 "current behaviour" pins of rows that are now fixed (A7-22 to A7-30) were flipped by their fixers, and the `H7-` mutants that revert those fixes fail them;
+  * the pins still at the defect are of open rows: A7-21, A7-25, A7-31 to A7-37, and area 9's `RESIDUAL A9-45` checks.
+
+  `Area9Round6Tests` labels two checks of fixed behaviour "PIN A9-52 fixed" and "PIN A9-53 fixed". That is the label only; they assert the fix. No pin was found asserting a defect whose row is fixed.
+
+### Grammar coverage
+
+`grammar_coverage.py` reads the same 117 productions from the generator's source: the grammar has not changed since round 1.
+
+| Run | Productions reached |
+|---|---|
+| grammar 1, 3,000 seeds (67 s) | 61 of 117; the 56 not reached are grammar 2's |
+| grammar 2, 3,000 seeds (102 s) | 102 of 117; the 15 not reached are grammar 1's (polls, `mac`, the mask loops, `rts.slot_insn`, `module.v1`) |
+| **both** | **117 of 117** |
+| the default ctest run, 300 seeds (19 s) | 114 of 117: not `choice.by_r0`, `choice.by_stack`, `fn.ret_call`. All three are evaluated anyway by `TestRound9Pins`' first-drawn pins (A11-11, fixed) |
+
+Mnemonics: 73 distinct in grammar 1, 81 in grammar 2. The rarest productions in grammar 2: `choice.by_r0` 2, `choice.by_scratch` 17, `choice.by_const` 22, `choice.by_stack` 24, `fn.ret_call` 33, `choice.by_sr` 42. Every figure is round 1's. No generator run found anything: 0 findings in all three runs.
+
+### What was run
+
+| Run | Result |
+|---|---|
+| 56 new mutants, 89 of round 1's host, kill-switch and self-mutation mutants with 5 probes and 4 combinations, 24 patch reverts | `tools/a11_round2/results.tsv`; scores above. `git status` clean after every mutant |
+| `settings_refused_probe.cpp`, master and `T-refused` (built apart in the scratch folder; the tree not touched) | master: refused, the path kept (exit 0); mutant: saved, the path lost (exit 1) |
+| `SE_TRUST_FOLLOW_SCRIPT`, five scripts, master and `P-a836-origin` (applied, built, run, put back with `git checkout`) | master: all ok; mutant: all five fail |
+| grammar coverage, both grammars at 3,000 seeds, and the default run | 117 of 117; 114 of 117 in the default run |
+| `ctest -j2 --timeout 900 -E SaturnExplorerLive` / `ctest -R SaturnExplorerLive` (every binary under `ulimit -v 3500000`), after a full unmutated rebuild | **107 of 107** (213 s: the fault suite 80.5 s, trust 52.4 s, the engine suite 38.7 s, the decompiler suite 23.1 s, printed C 20.5 s) / **6 of 6** (27.7 s). 113 tests, as on master: none added, none skipped. No product file changed, so the fault suite needed no separate run |
+
+Routed:
+* A11-14 to area 9's oracle;
+* A11-15 to area 8's Follow rig;
+* A11-16 to area 9 (or area 12's CI);
+* the generator's blindness to area 7's value rule to A7-34 (area 7);
+* A11-7 again to area 10.
