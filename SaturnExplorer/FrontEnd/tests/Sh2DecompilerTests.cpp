@@ -14596,7 +14596,8 @@ void TestA3144Fix()
 // restart group allowed one restart: the second call's own was refused, the function ended "Exceeded maximum restarts", its signature was
 // withheld, and the second call kept the default model's effects -- r8, which the callee writes (`mov #9,r8`, a calling-convention violation
 // the lent effects say), read as kept: `xRam0603ac08 = xVar1;` where the run stores 9. Patch 0078: a restart for each call site that asks.
-// The r8 write is not the cause: the same caller with a callee that writes nothing (`rts ; mov r4,r0`) ended the same way.
+// The r8 write is not the cause: the same caller with a callee that writes nothing (`rts ; mov r4,r0`) ended the same way, and is lent now.
+// With the write, the text reads the r8 each call leaves (`extraout_r8`, `extraout_r8_00`) and the signature is withheld for that (A3-3).
 void TestA3155Fix()
 {
     Sh2Decompiler d(gConfig);
@@ -14616,10 +14617,12 @@ void TestA3155Fix()
         const char* name;
         std::vector<uint16_t> callee;
         const char* third;   // what the store at 0607001C prints
+        const char* withheld;   // why the caller's signature is withheld (A3-3: a callee-saved register the callee changes, read after the call), or ""
     };
     const Case kCases[] = {
-        { "A3-155 g1: the callee sets r8 (mov #9,r8 ; rts ; mov r4,r0)", { 0xE809, 0x000B, 0x6043 }, "xRam0603ac08 = extraout_r8" },
-        { "A3-155 control: the callee writes nothing (rts ; mov r4,r0)", { 0x000B, 0x6043 }, "xRam0603ac08 = xVar1;" },
+        { "A3-155 g1: the callee sets r8 (mov #9,r8 ; rts ; mov r4,r0)", { 0xE809, 0x000B, 0x6043 }, "xRam0603ac08 = extraout_r8_00;",
+          "it uses r8 after calling 0x06009040" },
+        { "A3-155 control: the callee writes nothing (rts ; mov r4,r0)", { 0x000B, 0x6043 }, "xRam0603ac08 = xVar1;", "" },
     };
     for (const Case& c : kCases)
     {
@@ -14637,7 +14640,10 @@ void TestA3155Fix()
         for (const std::string& w : r.warnings) restarts |= Has(w, "restarts");
         CHECK(!restarts);
         CHECK(!Has(r.Text(), "Exceeded maximum restarts"));
-        CHECK(r.prototype.known && r.prototypeWithheld.empty());
+        // (the caller of a callee that changes r8 reads the r8 the call left: its text says so, `extraout_r8`, and its signature is withheld
+        // for it, as A3-3 has it; the control is lent)
+        if (*c.withheld) CHECK(!r.prototype.known && Has(r.prototypeWithheld, c.withheld));
+        else CHECK(r.prototype.known && r.prototypeWithheld.empty());
         // both calls direct, each passing the parameter the callee reads (the second call printed `func_0x06009040();` with the limit hit)
         const std::string text = r.Text();
         size_t calls = 0;
