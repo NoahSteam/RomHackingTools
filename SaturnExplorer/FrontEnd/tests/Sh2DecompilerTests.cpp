@@ -1509,6 +1509,22 @@ void TestArea7Round7()
         const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_42");
         CHECK(a.Violations() == 0);
     }
+    // A7-44 (P2), found by the area 7 fixer and fixed on its resumption: grammar 1 seed 1862942, shrunk (`mov.l lit,r1 ; or r1,r4 ;
+    // mov.l lit,r6 ; mov #1,r3 ; L: tas.b @r6 ; add r1,r1 ; dt r3 ; bf L ; rts ; mov.w r1,@r6`, r1 = 0xFFFFFFF0, r6 = 0x06002308). The
+    // engine merges r1's low half under the global's name and prints `iRam06002308 = -0x10;` at the literal load 0x06009000. The line
+    // named the `tas.b` 0x06009008 and the `mov.w` 0x06009012, neither of which writes -0x10: the value walk answered "may" for the
+    // tas.b's computed byte and for the doubled r1. A number put in such a register at the instruction that makes it names a store only
+    // when that instruction's value reaches the store (AddFrameStoreTokens, FlowLastWriters). Was: the line named both, numberStoreOther 1.
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, { 0xD104, 0x241B, 0xD604, 0xE301, 0x461B, 0x311C, 0x4310,
+            0x8BFB, 0x000B, 0x2611, 0xFFFF, 0xFFF0, 0x0600, 0x2308 });
+        Print("A7-44 a number in a register merged under a global's name", r);
+        const Line* l = LineWith(r, "iRam06002308 = -0x10;");
+        CHECK(l != nullptr);
+        if (l) CHECK(LineInstructions(*l) == (std::vector<uint32_t>{ 0x06009000u }));
+        const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_44");
+        CHECK(a.numberStoreOther == 0 && a.Violations() == 0);
+    }
     // caseOtherEntry bites: A7-29's fixture with the outer `case 2:` moved back to the inner switch's entry (A7-29 as it was).
     {
         const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06070000u, { 0x4F22, 0xD518, 0xE103, 0x3416, 0x8D28, 0x6143, 0x311C, 0xC702,
