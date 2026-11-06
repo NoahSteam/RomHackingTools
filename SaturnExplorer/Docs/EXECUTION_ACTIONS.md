@@ -82,6 +82,14 @@ Every entry is **expandable** to a detail view: Time, PC, CPU, Frame, the captur
 register values, and **Jump to Assembly / Jump to Memory** actions. Double-clicking a
 tracepoint entry jumps the Assembly panel to that instruction.
 
+**Opening the detail view.** A single left click on a row (anywhere in it) selects it and opens the detail pane under the
+table: the time, category and frame, the source CPU and PC with **Jump to Assembly / Jump to Memory** (tracepoints), the full
+message with **Copy message**, and the captured values. It is not a separate gesture and there is no expander arrow. The pane takes
+six lines, or half of the panel if the panel is shorter, and scrolls inside itself; in the default layout the Log tab is a short strip,
+so drag its top edge up (or undock it) to see more. Hovering a row whose message is cut at the column edge shows the whole text;
+right-click on a row gives **Copy message**. A12-26: before a fix in the pane's height the pane could be squeezed to a few pixels in a
+short Log tab, which looked like no pane at all.
+
 ### Assembly gutter + right-click
 Two gutter glyphs, distinguished by **shape** (not just color) so they read at a glance:
 🔴 Break (circle) · 🔷 Tracepoint (diamond) · ▶ current PC. Right-click menu (from the

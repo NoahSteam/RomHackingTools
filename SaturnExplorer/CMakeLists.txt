@@ -28,6 +28,10 @@ include(CTest)
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# saturnexplorer/SeFilePath.h (UTF-8 paths on Windows, A12-25) is used by FileRead.h, FileWrite.cpp and the Disc code, which
+# many targets compile; the public headers directory is on every target's path rather than on each one's.
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 # The decompiler suites' ctest ceilings only catch hangs (no millisecond gate, A7). They were sized on
 # optimised builds; a Debug build runs those suites several times slower (the engine tests: about 50 s
 # in RelWithDebInfo, 110 s in Debug on Linux, more on CI's macOS, Rosetta and Windows runners). Where the
@@ -795,6 +799,17 @@ if(BUILD_TESTING)
     add_test(NAME SaturnExplorerPanelInteractionTests
              COMMAND SaturnExplorerPanelInteractionTests)
 
+    # The Log panel's detail pane opens when a row is selected (A12-26), driven headlessly.
+    add_executable(SaturnExplorerLogPanelTests
+        FrontEnd/tests/LogPanelTests.cpp
+        FrontEnd/src/LogPanel.cpp
+        ${SE_IMGUI_CORE}
+    )
+    target_include_directories(SaturnExplorerLogPanelTests
+        PRIVATE FrontEnd/src FrontEnd/tests ${SE_IMGUI_DIR})
+    add_test(NAME SaturnExplorerLogPanelTests COMMAND SaturnExplorerLogPanelTests)
+    set_tests_properties(SaturnExplorerLogPanelTests PROPERTIES TIMEOUT 120)
+
     # The Memory panel -- the real panel under the app's real theme and font, against a mock
     # backend: typed digits, edit-box fit, row-height/scroll agreement, and click gating.
     add_executable(SaturnExplorerHexEditorPanelTests
@@ -1118,6 +1133,20 @@ if(BUILD_TESTING)
     target_include_directories(SaturnExplorerDiffToolTests
         PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
     add_test(NAME SaturnExplorerDiffToolTests COMMAND SaturnExplorerDiffToolTests)
+    # 0.1 s on Linux. A hang on Windows (A12-27) must end in two minutes, not at ctest's 1500 s default.
+    set_tests_properties(SaturnExplorerDiffToolTests PROPERTIES TIMEOUT 120)
+
+    # A12-25: a non-ASCII path through FileWrite, ReadFileCapped and the savestate driver (the wide-call plumbing on Windows,
+    # the UTF-8 converters everywhere).
+    add_executable(SaturnExplorerUtf8PathTests
+        FrontEnd/tests/Utf8PathTests.cpp
+        FrontEnd/src/FileWrite.cpp
+    )
+    target_include_directories(SaturnExplorerUtf8PathTests
+        PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_link_libraries(SaturnExplorerUtf8PathTests PRIVATE SaturnExplorerSavestateDriver)
+    add_test(NAME SaturnExplorerUtf8PathTests COMMAND SaturnExplorerUtf8PathTests)
+    set_tests_properties(SaturnExplorerUtf8PathTests PROPERTIES TIMEOUT 120)
 
     # LaunchTool's launcher on macOS/Linux: arguments reach the program literally, and a launch that
     # failed is reported as one. Needs fork/exec, so POSIX only.

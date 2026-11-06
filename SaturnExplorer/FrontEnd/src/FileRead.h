@@ -15,6 +15,8 @@
 #include <cstdio>
 #include <string>
 
+#include "saturnexplorer/SeFilePath.h"
+
 #include <sys/stat.h>
 #include <sys/types.h>
 #ifndef _WIN32
@@ -39,7 +41,7 @@ inline CappedRead ReadFileCapped(const std::string& path, size_t maxBytes, std::
     out.clear();
 #ifdef _WIN32
     struct __stat64 st;
-    if (_stat64(path.c_str(), &st) != 0) return errno == ENOENT ? CappedRead::Missing : CappedRead::Unreadable;
+    if (_wstat64(se::NativePath(path).c_str(), &st) != 0) return errno == ENOENT ? CappedRead::Missing : CappedRead::Unreadable;
     if ((st.st_mode & _S_IFMT) != _S_IFREG) return CappedRead::NotRegular;
 #else
     struct stat st;
@@ -48,7 +50,7 @@ inline CappedRead ReadFileCapped(const std::string& path, size_t maxBytes, std::
 #endif
     if (static_cast<unsigned long long>(st.st_size) > maxBytes) return CappedRead::TooLarge;
 #ifdef _WIN32
-    std::FILE* f = std::fopen(path.c_str(), "rb");
+    std::FILE* f = se::OpenFile(path, "rb");   // wide on Windows (A12-25)
     if (!f) return CappedRead::Unreadable;
 #else
     // Opened without waiting (O_NONBLOCK) and looked at again through the descriptor: a link retargeted from a file to a FIFO

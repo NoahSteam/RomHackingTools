@@ -5,6 +5,7 @@
 #pragma once
 
 #include <fstream>
+#include "saturnexplorer/SeFilePath.h"   // UTF-8 paths on Windows (A12-25)
 #include <string>
 
 namespace sfe
@@ -60,7 +61,7 @@ inline bool IEquals(const std::string& a, const std::string& b)
 inline bool ReadWholeFile(const std::string& path, std::string& out)
 {
     out.clear();
-    std::ifstream f(path, std::ios::binary);
+    std::ifstream f(se::NativePath(path).c_str(), std::ios::binary);
     if (!f) return false;
     char buf[64 * 1024];
     for (;;)

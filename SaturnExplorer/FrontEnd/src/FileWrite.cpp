@@ -1,5 +1,7 @@
 #include "FileWrite.h"
 
+#include "saturnexplorer/SeFilePath.h"
+
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -17,11 +19,13 @@
 #include <windows.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#define SE_MKDIR(p)  _mkdir(p)
-#define SE_RMDIR(p)  _rmdir(p)
-#define SE_UNLINK(p) _unlink(p)
+// Every path is UTF-8; the wide calls read it whole where the ANSI ones fail on a character outside the code page (A12-25).
+// The macros take a std::string.
+#define SE_MKDIR(p)  _wmkdir(se::NativePath(p).c_str())
+#define SE_RMDIR(p)  _wrmdir(se::NativePath(p).c_str())
+#define SE_UNLINK(p) _wunlink(se::NativePath(p).c_str())
 #define SE_STAT      struct _stat
-#define SE_STAT_FN   _stat
+#define SE_STAT_FN(p, st) _wstat(se::NativePath(p).c_str(), (st))
 #ifndef S_ISREG
 #define S_ISREG(m) (((m) & _S_IFMT) == _S_IFREG)
 #endif
@@ -34,11 +38,11 @@
 #include <ctime>
 #include <sys/types.h>
 #include <unistd.h>
-#define SE_MKDIR(p)  ::mkdir((p), 0755)
-#define SE_RMDIR(p)  ::rmdir(p)
-#define SE_UNLINK(p) ::unlink(p)
+#define SE_MKDIR(p)  ::mkdir((p).c_str(), 0755)
+#define SE_RMDIR(p)  ::rmdir((p).c_str())
+#define SE_UNLINK(p) ::unlink((p).c_str())
 #define SE_STAT      struct stat
-#define SE_STAT_FN   ::stat
+#define SE_STAT_FN(p, st) ::stat((p).c_str(), (st))
 #endif
 
 namespace sfe
@@ -156,7 +160,7 @@ bool WriteAndClose(FILE* f, const std::string& path, const void* data, size_t si
 bool WriteDirect(const std::string& path, const void* data, size_t size, std::string& error)
 {
     errno = 0;
-    FILE* f = std::fopen(path.c_str(), "wb");
+    FILE* f = se::OpenFile(path, "wb");
     if (f == nullptr)
     {
         error = Reason("could not open", path);
@@ -193,7 +197,7 @@ FILE* OpenStagingFile(const std::string& path, std::string& temp, std::string& e
         temp = path + ".separt-" + std::to_string(pid) + "-" + std::to_string(++counter);
         errno = 0;
 #ifdef _WIN32
-        const int fd = ::_open(temp.c_str(), _O_CREAT | _O_EXCL | _O_WRONLY | _O_BINARY,
+        const int fd = ::_wopen(se::NativePath(temp).c_str(), _O_CREAT | _O_EXCL | _O_WRONLY | _O_BINARY,
                                _S_IREAD | _S_IWRITE);
 #else
         const int fd = ::open(temp.c_str(), O_CREAT | O_EXCL | O_WRONLY, 0666);
@@ -315,11 +319,13 @@ bool PublishFile(const std::string& from, const std::string& path, std::string& 
     // power loss cannot leave the directory entry pointing at a file whose contents never
     // landed.
 #ifdef _WIN32
-    if (::MoveFileExA(from.c_str(), path.c_str(),
+    if (::MoveFileExW(se::NativePath(from).c_str(), se::NativePath(path).c_str(),
                       MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) == 0)
     {
-        // Nothing has been removed, so the previous contents of 'path' are still there.
-        error = "could not publish " + path;
+        // Nothing has been removed, so the previous contents of 'path' are still there. The system's reason is kept (A12-25: this
+        // used to say only "could not publish").
+        const DWORD last = ::GetLastError();
+        error = "could not publish " + path + ": " + TrimStop(std::system_category().message(static_cast<int>(last)));
         return false;
     }
 #else
@@ -338,7 +344,7 @@ bool PublishFile(const std::string& from, const std::string& path, std::string& 
 bool MakeDirectory(const std::string& path)
 {
     if (path.empty()) return false;
-    if (SE_MKDIR(path.c_str()) == 0) return true;
+    if (SE_MKDIR(path) == 0) return true;
     return errno == EEXIST;
 }
 
@@ -349,7 +355,7 @@ bool RemoveFile(const std::string& path)
     // unlink, not std::remove: remove() falls back to rmdir, so it deletes an empty
     // DIRECTORY sitting at this path. The staging path is cleared before use, and a
     // directory that happens to share that name belongs to someone else.
-    if (SE_UNLINK(path.c_str()) == 0) return true;
+    if (SE_UNLINK(path) == 0) return true;
     return errno == ENOENT;
 }
 
@@ -357,21 +363,25 @@ bool RemoveEmptyDirectory(const std::string& path)
 {
     if (path.empty()) return false;
     errno = 0;
-    if (SE_RMDIR(path.c_str()) == 0) return true;
+    if (SE_RMDIR(path) == 0) return true;
     return errno == ENOENT;
 }
 
 bool MovePath(const std::string& from, const std::string& to)
 {
     if (from.empty() || to.empty()) return false;
+#ifdef _WIN32
+    return ::_wrename(se::NativePath(from).c_str(), se::NativePath(to).c_str()) == 0;
+#else
     return std::rename(from.c_str(), to.c_str()) == 0;
+#endif
 }
 
 bool FileOrDirectoryExists(const std::string& path)
 {
     if (path.empty()) return false;
     SE_STAT st;
-    return SE_STAT_FN(path.c_str(), &st) == 0;
+    return SE_STAT_FN(path, &st) == 0;
 }
 
 bool ListDirectory(const std::string& path, std::vector<std::string>& names)
@@ -379,17 +389,17 @@ bool ListDirectory(const std::string& path, std::vector<std::string>& names)
     names.clear();
     if (path.empty()) return false;
 #ifdef _WIN32
-    WIN32_FIND_DATAA find;
-    const HANDLE h = ::FindFirstFileA((path + kSep + "*").c_str(), &find);
+    WIN32_FIND_DATAW find;
+    const HANDLE h = ::FindFirstFileW(se::NativePath(path + kSep + "*").c_str(), &find);
     if (h == INVALID_HANDLE_VALUE) return false;
     // The name and the list can fail to allocate; the search handle must not be lost with them (A6-38).
     try
     {
         do
         {
-            const std::string name = find.cFileName;
+            const std::string name = se::WideToUtf8(find.cFileName);
             if (name != "." && name != "..") names.push_back(name);
-        } while (::FindNextFileA(h, &find) != 0);
+        } while (::FindNextFileW(h, &find) != 0);
     }
     catch (...)
     {
@@ -425,7 +435,7 @@ bool IsLink(const std::string& path)
 {
     if (path.empty()) return false;
 #ifdef _WIN32
-    const DWORD attrs = ::GetFileAttributesA(path.c_str());
+    const DWORD attrs = ::GetFileAttributesW(se::NativePath(path).c_str());
     return attrs != INVALID_FILE_ATTRIBUTES && (attrs & FILE_ATTRIBUTE_REPARSE_POINT) != 0;
 #else
     struct stat st;
@@ -439,9 +449,9 @@ bool RemoveLink(const std::string& path)
 #ifdef _WIN32
     // A directory symlink or junction is removed with RemoveDirectory, which deletes the reparse
     // point itself and leaves the target alone; a file symlink with DeleteFile.
-    const DWORD attrs = ::GetFileAttributesA(path.c_str());
-    if (attrs & FILE_ATTRIBUTE_DIRECTORY) return ::RemoveDirectoryA(path.c_str()) != 0;
-    return ::DeleteFileA(path.c_str()) != 0;
+    const DWORD attrs = ::GetFileAttributesW(se::NativePath(path).c_str());
+    if (attrs & FILE_ATTRIBUTE_DIRECTORY) return ::RemoveDirectoryW(se::NativePath(path).c_str()) != 0;
+    return ::DeleteFileW(se::NativePath(path).c_str()) != 0;
 #else
     return ::unlink(path.c_str()) == 0;
 #endif
@@ -471,7 +481,7 @@ void NoticeAtExit(const std::string& text)
     }
 #ifdef _WIN32
     // The window is going: the Log panel goes with it, so a refused save is said in a box the user must close.
-    ::MessageBoxA(nullptr, text.c_str(), "Saturn Explorer", MB_OK | MB_ICONWARNING | MB_SETFOREGROUND);
+    ::MessageBoxW(nullptr, se::NativePath(text).c_str(), L"Saturn Explorer", MB_OK | MB_ICONWARNING | MB_SETFOREGROUND);
 #else
     std::fprintf(stderr, "Saturn Explorer: %s\n", text.c_str());
 #endif
@@ -499,7 +509,7 @@ FileLock::FileLock(const std::string& path, bool wait, unsigned tryMs)
     };
 #ifdef _WIN32
     // A null SECURITY_ATTRIBUTES makes the handle non-inheritable, the counterpart of O_CLOEXEC.
-    const HANDLE h = ::CreateFileA(path.c_str(), GENERIC_READ | GENERIC_WRITE,
+    const HANDLE h = ::CreateFileW(se::NativePath(path).c_str(), GENERIC_READ | GENERIC_WRITE,
                                    FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
                                    OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (h == INVALID_HANDLE_VALUE) { mError = static_cast<int>(::GetLastError()); return; }
@@ -612,7 +622,7 @@ bool RemoveFlatDirectory(const std::string& path)
     for (size_t i = 0; i < names.size(); ++i)
     {
         SE_STAT st;
-        if (SE_STAT_FN((path + kSep + names[i]).c_str(), &st) != 0) return false;
+        if (SE_STAT_FN(path + kSep + names[i], &st) != 0) return false;
         if (!S_ISREG(st.st_mode)) return false;
     }
     for (size_t i = 0; i < names.size(); ++i)
@@ -631,7 +641,7 @@ bool PathEntryExists(const std::string& path)
 {
     if (path.empty()) return false;
 #ifdef _WIN32
-    return ::GetFileAttributesA(path.c_str()) != INVALID_FILE_ATTRIBUTES;
+    return ::GetFileAttributesW(se::NativePath(path).c_str()) != INVALID_FILE_ATTRIBUTES;
 #else
     struct stat st;
     return ::lstat(path.c_str(), &st) == 0;
@@ -642,7 +652,7 @@ bool PathEntryExists(const std::string& path)
 bool ExistsAsNonRegularFile(const std::string& path)
 {
     SE_STAT st;
-    if (SE_STAT_FN(path.c_str(), &st) != 0) return false;   // missing, or unstattable
+    if (SE_STAT_FN(path, &st) != 0) return false;   // missing, or unstattable
     return !S_ISREG(st.st_mode);
 }
 
@@ -670,15 +680,15 @@ std::string CanonicalPath(const std::string& path)
 #ifdef _WIN32
     // Resolve the final path of the object itself, so a junction or symlink is followed the way
     // the OS would follow it when the file is opened.
-    const HANDLE h = ::CreateFileA(path.c_str(), 0, FILE_SHARE_READ | FILE_SHARE_WRITE |
+    const HANDLE h = ::CreateFileW(se::NativePath(path).c_str(), 0, FILE_SHARE_READ | FILE_SHARE_WRITE |
                                    FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
                                    FILE_FLAG_BACKUP_SEMANTICS, nullptr);
     if (h == INVALID_HANDLE_VALUE) return std::string();
-    char buf[4096];
-    const DWORD n = ::GetFinalPathNameByHandleA(h, buf, sizeof buf, 0);
+    wchar_t buf[4096];
+    const DWORD n = ::GetFinalPathNameByHandleW(h, buf, 4096, 0);
     ::CloseHandle(h);
-    if (n == 0 || n >= sizeof buf) return std::string();
-    std::string out(buf, n);
+    if (n == 0 || n >= 4096) return std::string();
+    std::string out = se::WideToUtf8(std::wstring(buf, n));
     if (out.compare(0, 8, "\\\\?\\UNC\\") == 0) out = "\\\\" + out.substr(8);
     else if (out.compare(0, 4, "\\\\?\\") == 0) out = out.substr(4);
     return out;
@@ -696,7 +706,7 @@ bool SameFile(const std::string& a, const std::string& b)
     if (a.empty() || b.empty()) return false;
 #ifdef _WIN32
     auto ident = [](const std::string& p, BY_HANDLE_FILE_INFORMATION& info) {
-        const HANDLE h = ::CreateFileA(p.c_str(), 0, FILE_SHARE_READ | FILE_SHARE_WRITE |
+        const HANDLE h = ::CreateFileW(se::NativePath(p).c_str(), 0, FILE_SHARE_READ | FILE_SHARE_WRITE |
                                        FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
                                        FILE_FLAG_BACKUP_SEMANTICS, nullptr);
         if (h == INVALID_HANDLE_VALUE) return false;
