@@ -407,11 +407,14 @@ if(SE_ENABLE_DECOMPILER)
 
         # No hard millisecond gate (A7): a generous ceiling, and the tests print their timings.
         # The runner test decompiles the cancellation spike's large fixtures several times (A4).
-        set_tests_properties(SaturnExplorerSlaFreshnessTests SaturnExplorerSh2DecompilerEngineTests
+        # The engine suite takes about 50 s on an idle 4-core machine, so 60 s timed it out
+        # whenever anything else was building (A11-17); it shares the runner's ceiling.
+        set_tests_properties(SaturnExplorerSlaFreshnessTests
                              SaturnExplorerSh2DecompilerTests SaturnExplorerMemorySnapshotTests
                              SaturnExplorerSh2FunctionFinderTests SaturnExplorerSh2DecompilerFixtureTests
                              PROPERTIES TIMEOUT ${SE_DECOMP_TIMEOUT_60})
-        set_tests_properties(SaturnExplorerDecompilerRunnerTests PROPERTIES TIMEOUT ${SE_DECOMP_TIMEOUT_120})
+        set_tests_properties(SaturnExplorerDecompilerRunnerTests SaturnExplorerSh2DecompilerEngineTests
+                             PROPERTIES TIMEOUT ${SE_DECOMP_TIMEOUT_120})
         # Random SH-2 functions against the emulator's access trace (REVIEW_PROGRAM.md, Phase 0), in two
         # grammars: version 1, one function with loads, stores, branches, loops and polls; version 2, modules
         # of functions with a stack, calls with lent prototypes, tail calls, jump tables, shared exits and
