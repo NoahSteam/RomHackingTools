@@ -28,6 +28,10 @@ include(CTest)
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# saturnexplorer/SeFilePath.h (UTF-8 paths on Windows, A12-25) is used by FileRead.h, FileWrite.cpp and the Disc code, which
+# many targets compile; the public headers directory is on every target's path rather than on each one's.
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 # The decompiler suites' ctest ceilings only catch hangs (no millisecond gate, A7). They were sized on
 # optimised builds; a Debug build runs those suites several times slower (the engine tests: about 50 s
 # in RelWithDebInfo, 110 s in Debug on Linux, more on CI's macOS, Rosetta and Windows runners). Where the
@@ -794,6 +798,17 @@ if(BUILD_TESTING)
         PRIVATE FrontEnd/src FrontEnd/tests ${SE_IMGUI_DIR})
     add_test(NAME SaturnExplorerPanelInteractionTests
              COMMAND SaturnExplorerPanelInteractionTests)
+
+    # The Log panel's detail pane opens when a row is selected (A12-26), driven headlessly.
+    add_executable(SaturnExplorerLogPanelTests
+        FrontEnd/tests/LogPanelTests.cpp
+        FrontEnd/src/LogPanel.cpp
+        ${SE_IMGUI_CORE}
+    )
+    target_include_directories(SaturnExplorerLogPanelTests
+        PRIVATE FrontEnd/src FrontEnd/tests ${SE_IMGUI_DIR})
+    add_test(NAME SaturnExplorerLogPanelTests COMMAND SaturnExplorerLogPanelTests)
+    set_tests_properties(SaturnExplorerLogPanelTests PROPERTIES TIMEOUT 120)
 
     # The Memory panel -- the real panel under the app's real theme and font, against a mock
     # backend: typed digits, edit-box fit, row-height/scroll agreement, and click gating.
