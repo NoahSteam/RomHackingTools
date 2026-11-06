@@ -48,6 +48,41 @@ permissions:
 
 jobs:
   # ---------------------------------------------------------------------------------------
+  # Area 9 stores (Linux): the Area 9 round tests are Linux-only and no other job runs them. This one also gates the real
+  # full-disk case (A11-16): a 64 KiB tmpfs is mounted and SE_A9R5_FULLDIR_REQUIRED=1 turns "no small filesystem" into a failure,
+  # so the case cannot be skipped here. (Without the mount the test makes its own tmpfs in a user namespace, or ctest reports it skipped.)
+  # ---------------------------------------------------------------------------------------
+  area9-stores:
+    name: Area 9 store tests incl. the real full disk (Linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SE_A9R5_FULLDIR: /mnt/se_fulldisk
+      SE_A9R5_FULLDIR_REQUIRED: '1'
+    defaults:
+      run:
+        working-directory: SaturnExplorer
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Mount a 64 KiB tmpfs
+        run: |
+          sudo mkdir -p "$SE_A9R5_FULLDIR"
+          sudo mount -t tmpfs -o size=64k,mode=1777 tmpfs "$SE_A9R5_FULLDIR"
+
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON -DCMAKE_DISABLE_FIND_PACKAGE_SDL2=ON
+
+      - name: Build the Area 9 tests
+        run: |
+          targets=$(cmake --build build --target help | grep -o 'SaturnExplorerArea9[A-Za-z0-9]*Tests' | sort -u | tr '\n' ' ')
+          echo "targets: $targets"
+          cmake --build build --parallel 4 --target $targets
+
+      - name: Run the Area 9 tests (the full-disk case must run)
+        run: ctest --test-dir build --output-on-failure -R "SaturnExplorerArea9"
+
+  # ---------------------------------------------------------------------------------------
   # Areas 6 and 12 (lifecycle, platforms): no memory error, leak or undefined behaviour in the
   # decompiler suites (the invariant of area 6). Builds are --parallel 4, as in saturn-explorer-verify.yml.
   #

@@ -945,6 +945,10 @@ if(BUILD_TESTING)
                 ${CMAKE_CURRENT_SOURCE_DIR}/Drivers/Savestate/src)
             target_link_libraries(SaturnExplorerArea9Round5Tests PRIVATE SaturnExplorerSavestateDriver SaturnExplorerCore ${CMAKE_DL_LIBS})
             add_test(NAME SaturnExplorerArea9Round5Tests COMMAND SaturnExplorerArea9Round5Tests)
+            # A11-16: the real ENOSPC case (a 64 KiB tmpfs mounted in a private user namespace, or SE_A9R5_FULLDIR). Exit 77 = skipped;
+            # the CI sets SE_A9R5_FULLDIR_REQUIRED=1 so the case cannot be skipped there.
+            add_test(NAME SaturnExplorerArea9Round5FullDisk COMMAND SaturnExplorerArea9Round5Tests --real-full-disk)
+            set_tests_properties(SaturnExplorerArea9Round5FullDisk PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
 
             # Area 9 round 6 (review): the sync before the rename (order, refused syncs, cost), an older version's unpadded names file,
             # the residual number-led remarks, the exit wait and the frame's no-wait settings try. Linux only.

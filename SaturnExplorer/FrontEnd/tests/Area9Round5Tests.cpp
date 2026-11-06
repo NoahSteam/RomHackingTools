@@ -25,7 +25,9 @@
 #include <dlfcn.h>
 #include <fcntl.h>
 #include <signal.h>
+#include <sched.h>
 #include <sys/file.h>
+#include <sys/mount.h>
 #include <sys/resource.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
@@ -430,11 +432,60 @@ void FullDiskMidWrite()
     Check(bad == 0, "full disk mid-write: refused with the OS reason, the file as it was, no staging file left, the change pending and written once space is back (names, settings)");
 }
 
-// A real ENOSPC on a small filesystem, when the run is given one (SE_A9R5_FULLDIR, a tmpfs of a few KB mounted by the caller).
-void RealFullDisk()
+bool link_ok(const std::string& a, const std::string& b) { return ::link(a.c_str(), b.c_str()) == 0; }
+
+// A11-14: Settings::SaveTo does not replace a file Load refused, even when the file is readable again by the save (trimmed by the
+// user, rewritten by another instance), and an idle instance writes nothing (A9-19, A9-20). The names store has both witnesses; this
+// is the same pair for settings.ini, plus the names case for symmetry.
+void SettingsRefusedThenReadable()
 {
-    const char* dir = std::getenv("SE_A9R5_FULLDIR");
-    if (!dir || !*dir) { std::printf("  (skipped: SE_A9R5_FULLDIR not set)\n"); return; }
+    char cwd[4096];
+    if (!getcwd(cwd, sizeof cwd)) { Check(false, "getcwd"); return; }
+    const std::string cfg = std::string(cwd) + "/xdg_refused";
+    mkdir(cfg.c_str(), 0755);
+    setenv("XDG_CONFIG_HOME", cfg.c_str(), 1);
+    Settings::EnsureConfigDir();
+    const std::string path = Settings::FilePath();
+    const std::string user = "[bios]\npath = /home/user/bios/sega_101.bin\n";
+    Put(path, user + "; padding\n" + std::string(5u << 20, 'x') + "\n");   // over the 4 MiB Load reads
+    Settings s;
+    std::string err, serr;
+    Check(!s.Load(&err), "A11-14: a 5 MiB settings.ini is refused at Load");
+    Put(path, user);   // readable again before the save
+    s.Set("bios", "path", "");   // App::SaveSettings sets every key at each save (A9-35)
+    Check(!s.Save(&serr) && Has(serr, "refused"), "A11-14: a save over a file Load refused is refused, although the file is readable now");
+    Check(Slurp(path) == user, "A11-14: the user's BIOS path is kept");
+    // The idle rule: a session that changed nothing writes nothing (no new file, same bytes, a CRLF and a byte-order mark kept).
+    const std::string crlf = "\xEF\xBB\xBF[bios]\r\npath = /home/user/bios/sega_101.bin\r\n";
+    Put(path, crlf);
+    Settings idle;
+    Check(idle.Load(&err), "A11-14: the CRLF file loads");
+    idle.Set("bios", "path", "/home/user/bios/sega_101.bin");   // the same value: no change
+    const std::string link = path + ".hard";
+    Check(link_ok(path, link), "hard link made");
+    struct stat s1, s2;
+    stat(path.c_str(), &s1);
+    Check(idle.Save(&serr), "A11-14: an idle settings save succeeds");
+    stat(path.c_str(), &s2);
+    Check(s1.st_ino == s2.st_ino && s1.st_mtime == s2.st_mtime && s2.st_nlink == 2 && Slurp(path) == crlf,
+          "A9-20: an idle settings instance writes nothing (same inode, bytes, hard link kept)");
+    unlink(link.c_str());
+    // The names store: refused at Load, readable at the save: refused.
+    std::string big;
+    for (int i = 0; big.size() < 8u * 1024u * 1024u + 100; ++i) big += "06000000 " + std::string(200, 'x') + "\n";
+    Put("saturn_functions.txt", big);
+    FunctionNames fn;
+    Check(!fn.Load(&err), "A11-14: an 8 MiB names file is refused");
+    Put("saturn_functions.txt", "06004000 user_name\n");
+    fn.Rename(0x06004000u, "session_name");
+    Check(!fn.Save(&serr), "A11-14: the names save over a refused file is refused although it is readable now");
+    Check(Slurp("saturn_functions.txt") == "06004000 user_name\n", "A11-14: the user's name is kept");
+    unsetenv("XDG_CONFIG_HOME");
+}
+
+// A real ENOSPC on a small filesystem: 'dir' is a tmpfs of a few KB.
+void RealFullDiskIn(const char* dir)
+{
     const std::string names = std::string(dir) + "/saturn_functions.txt";
     std::string body;
     for (int i = 0; i < 200; ++i)
@@ -470,6 +521,60 @@ void RealFullDisk()
     Check(SaveStore(names, "The function names", std::string(), 8u << 20, base, cur, classify, format, std::string(), &err) &&
               Has(Slurp(names), "06004000 renamed_on_a_full_disk"),
           "ENOSPC: the pending change is written once there is space");
+}
+
+// A11-16: the real ENOSPC case, run by its own ctest (SaturnExplorerArea9Round5FullDisk, SKIP_RETURN_CODE 77). The small filesystem is
+// SE_A9R5_FULLDIR when the caller mounted one; otherwise a 64 KiB tmpfs this process mounts in a private user and mount namespace (works
+// unprivileged where the kernel allows user namespaces). Where neither is possible the result is 77 ("skipped" in ctest), or a failure
+// when SE_A9R5_FULLDIR_REQUIRED=1 (the CI sets it, so the case cannot go missing there).
+int RealFullDisk()
+{
+    const char* dir = std::getenv("SE_A9R5_FULLDIR");
+    const bool required = std::getenv("SE_A9R5_FULLDIR_REQUIRED") && *std::getenv("SE_A9R5_FULLDIR_REQUIRED") == '1';
+    int rc = 77;
+    if (dir && *dir)
+    {
+        RealFullDiskIn(dir);
+        rc = gFail ? 1 : 0;
+    }
+    else
+    {
+        char cwd[4096];
+        if (!getcwd(cwd, sizeof cwd)) return 2;
+        const std::string mp = std::string(cwd) + "/small_fs";
+        mkdir(mp.c_str(), 0755);
+        fflush(stdout);
+        const pid_t kid = fork();
+        if (kid == 0)
+        {
+            const uid_t uid = getuid();
+            const gid_t gid = getgid();
+            if (unshare(CLONE_NEWUSER | CLONE_NEWNS) != 0) _exit(77);
+            auto writeFile = [](const char* f, const std::string& v) {
+                const int fd = open(f, O_WRONLY);
+                if (fd < 0) return false;
+                const bool ok = write(fd, v.data(), v.size()) == static_cast<ssize_t>(v.size());
+                close(fd);
+                return ok;
+            };
+            if (!writeFile("/proc/self/setgroups", "deny") || !writeFile("/proc/self/uid_map", "0 " + std::to_string(uid) + " 1") ||
+                !writeFile("/proc/self/gid_map", "0 " + std::to_string(gid) + " 1"))
+                _exit(77);
+            if (mount("tmpfs", mp.c_str(), "tmpfs", 0, "size=64k") != 0) _exit(77);
+            RealFullDiskIn(mp.c_str());
+            fflush(stdout);
+            _exit(gFail ? 1 : 0);
+        }
+        int st = 0;
+        waitpid(kid, &st, 0);
+        rc = WIFEXITED(st) ? WEXITSTATUS(st) : 1;
+    }
+    if (rc == 77)
+    {
+        std::printf("  no small filesystem (SE_A9R5_FULLDIR unset, no user namespace to mount one in)\n");
+        if (required) { std::printf("FAIL: SE_A9R5_FULLDIR_REQUIRED=1 and the real full-disk case could not run\n"); return 1; }
+    }
+    return rc;
 }
 
 // Paths with spaces and Unicode, names and values in UTF-8: everything reads back as written.
@@ -534,26 +639,36 @@ void AtTheCap()
 
 }  // namespace
 
-int main()
+int main(int argc, char** argv)
 {
     char tmpl[] = "area9r5_XXXXXX";
     if (!mkdtemp(tmpl)) { std::printf("no temp folder\n"); return 2; }
     if (chmod(tmpl, 0755) != 0) return 2;
     if (chdir(tmpl) != 0) return 2;
     alarm(150);
+    int rc = 0;
+    const bool onlyFullDisk = argc > 1 && std::strcmp(argv[1], "--real-full-disk") == 0;   // A11-16: its own ctest; 77 = skipped
+    if (onlyFullDisk)
+    {
+        std::printf("RealFullDisk\n");
+        rc = RealFullDisk();
+        std::printf(rc == 0 ? "Area9Round5Tests --real-full-disk: passed\n" : "Area9Round5Tests --real-full-disk: result %d\n", rc);
+    }
     struct Step { const char* name; void (*fn)(); };
     const Step steps[] = {
         { "DigitProseLines", DigitProseLines },     { "RefusedAtExit", RefusedAtExit },       { "LaterSaveCarriesRefused", LaterSaveCarriesRefused },
         { "HolderTime", HolderTime },               { "LockTexts", LockTexts },               { "NoSyncBeforeRename", NoSyncBeforeRename },
-        { "FullDiskMidWrite", FullDiskMidWrite },   { "RealFullDisk", RealFullDisk },         { "SpacesAndUnicode", SpacesAndUnicode },
-        { "AtTheCap", AtTheCap },
+        { "FullDiskMidWrite", FullDiskMidWrite },   { "SpacesAndUnicode", SpacesAndUnicode },
+        { "AtTheCap", AtTheCap },        { "SettingsRefusedThenReadable", SettingsRefusedThenReadable },
     };
+    if (!onlyFullDisk)
     for (const Step& s : steps) { std::printf("%s\n", s.name); s.fn(); }
     if (chdir("..") == 0)
     {
         std::string cmd = std::string("chmod -R u+rwx ") + tmpl + " 2>/dev/null; rm -rf " + tmpl;
         if (std::system(cmd.c_str()) != 0) {}
     }
+    if (onlyFullDisk) return rc;
     std::printf(gFail ? "Area9Round5Tests: %d FAILED\n" : "Area9Round5Tests: all passed\n", gFail);
     return gFail ? 1 : 0;
 }
