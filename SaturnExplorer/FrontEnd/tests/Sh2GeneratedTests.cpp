@@ -11846,8 +11846,12 @@ void TestDomainPins(Sh2Decompiler& d)
     // Area 7 fixer (round 7 rows), the seeds the rows name, replayed whole: grammar 2 seed 304221 (A7-31's mechanism, routed by the A5-99
     // and A3-155 fixer: `xStack_24 = param_2;` at a call, the push of an `add` the engine folds away after a `dt` loop, `n:map-frame-store`),
     // grammar 2 seed 1700689 (A7-40: `xVar3 = 0xffe4;` at `extu.w r3,r1`, r3 pushed and popped with an instruction between, the oracle's
-    // `n:map-const-join`) and grammar 1 seed 1832116 (A7-41: `xRam26001008 = param_2;` naming the store of 3, `n:map-store-value`).
-    for (const auto& s : { std::make_pair(2, 304221), std::make_pair(2, 1700689), std::make_pair(1, 1832116) })
+    // `n:map-const-join`) and grammar 1 seed 1832116 (A7-41: `xRam26001008 = param_2;` naming the store of 3, `n:map-store-value`). The
+    // fixer's fresh seeds from 1,840,000 and 1,850,000: grammar 1 seed 1843925 (A7-42, the product's: `extu.b r3,r3` after a `dt` loop,
+    // the store named nothing, `n:map-copy-store`), and the oracle's (A7-43): grammar 2 seed 1853425 (`rotl`, `n:map-const-join`), grammar
+    // 1 seed 1843373 (`xVar1 = (char)param_1;`, `n:map-store-value`), grammar 1 seed 1843207 (a `SUB42` copy, `v:map-way-back`).
+    for (const auto& s : { std::make_pair(2, 304221), std::make_pair(2, 1700689), std::make_pair(1, 1832116), std::make_pair(1, 1843925),
+                           std::make_pair(2, 1853425), std::make_pair(1, 1843373), std::make_pair(1, 1843207) })
     {
         const Report rep = Evaluate(d, s.first == 2 ? MakeV2(s.second) : Generate(s.second), true);
         std::printf("pin 'area 7 fixer: grammar %d seed %d': %zu finding(s)\n", s.first, s.second, rep.findings.size());

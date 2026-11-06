@@ -5774,7 +5774,23 @@ bool FlowNumberIn(NumberWalk& w, const FlowRecord& flow, const ghidra::Funcdata&
         if (preds.size() > 1 && EdgeDead(w, flow, fd, p, blk)) continue;   // (a path never taken)
         if (preds.size() > 1 && LoopKeeps(flow, fd, blk, p, vn, memory)) continue;   // (a loop's way back that keeps it, A7-39)
         uint64_t v = 0;
-        if (!EdgeNumber(w, flow, fd, p, blk, vn, v))
+        bool onEdge = EdgeNumber(w, flow, fd, p, blk, vn, v);
+        // (A7-42: a piece of a register the edge's condition gives whole -- `extu.b r3,r3` after `dt r3 ; bf` reads r3's low byte -- is
+        // the number's bytes, big-endian)
+        if (!onEdge && !memory && vn.space && vn.space->getType() == ghidra::IPTR_PROCESSOR && vn.size < 4)
+        {
+            FlowVn whole = vn;
+            whole.offset = vn.offset & ~static_cast<ghidra::uintb>(3);
+            whole.size = 4;
+            uint64_t all = 0;
+            if (vn.offset + static_cast<ghidra::uintb>(vn.size) <= whole.offset + 4 && EdgeNumber(w, flow, fd, p, blk, whole, all))
+            {
+                const ghidra::uintb below = whole.offset + 4 - (vn.offset + static_cast<ghidra::uintb>(vn.size));
+                v = MaskToSize(all >> (8 * below), vn.size);
+                onEdge = true;
+            }
+        }
+        if (!onEdge)
         {
             const auto key = std::make_tuple(p, vn.space, vn.offset, vn.size);
             if (w.active.count(key)) return false;   // (around a loop: not known)

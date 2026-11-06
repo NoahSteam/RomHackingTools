@@ -17145,3 +17145,50 @@ Branch `review/9-a1114-fix` from master `1efd1c26`. Test changes only; no produc
 * **A11-15 (P3), fixed `9522bb1b`.** `kFollowScriptPins` in `DecompilerTrustTests.cpp` gains the five scripts of the row (`follow; enter; enter`, `refresh; follow; enter; enter`, `pct; refresh; follow; enter; enter`, `pct; follow; enter; enter; refresh`, `pct; follow; enter; refresh; enter`). With `DecompilerPanel.cpp` line 718 made `if (false)` (`P-a836-origin`) all five fail; on master all pass and the suite ends "all passed".
 * **A11-16 (P3), fixed `c7e6e638`.** The real `ENOSPC` case is now `SaturnExplorerArea9Round5FullDisk` (`SaturnExplorerArea9Round5Tests --real-full-disk`). Unprivileged on Linux it forks, enters a new user and mount namespace (`unshare`, `uid_map`, `gid_map`) and mounts a 64 KiB tmpfs there; `SE_A9R5_FULLDIR` still names a tmpfs the caller mounted. Where neither works it exits 77, which ctest reports as skipped (`SKIP_RETURN_CODE 77`), and with `SE_A9R5_FULLDIR_REQUIRED=1` it fails instead. The case no longer runs inside the default `Area9Round5Tests`. A new Linux job in `saturn-explorer-decompiler.yml` (`area9-stores`) mounts the tmpfs with `sudo`, sets both variables, and runs the `SaturnExplorerArea9` tests, which no other CI job ran (the verify workflow's matrix is Windows and macOS). The workflow could not be run here; the YAML parses. Checked locally: it runs and passes through the user namespace and through a tmpfs given by `SE_A9R5_FULLDIR`; with the staging-file cleanup of `WriteFileAtomically` removed it fails (a leaked staging file).
 
+
+## Area 7 fixer (round 7 rows)
+
+Branch `review/7-round7-fix` from `13961004`, master merged twice (`1efd1c26`, then `83d93864`); the worktree's RelWithDebInfo build (gcc 13), `-j2`, every test binary under `ulimit -v 3500000` and `timeout`, one heavy job at a time. The fixer was stopped once mid-work (28 WIP commits) and resumed. **Every area 7 row of round 7 is closed: the six P2 rows (A7-31, A7-32, A7-35, A7-37, A7-39, A7-41) and the five P3 rows (A7-33, A7-34, A7-36, A7-38, A7-40) are fixed, none accepted.** Each fix has a pin that fails with the change reverted (checked by reverting the rule and running the pin); no existing check was weakened (the generator's later mapping checks were made stricter: they are now findings by default).
+
+| Row | Severity | Fix (where) | Pin |
+|---|---|---|---|
+| A7-31 | P2 | the value test goes through an op the engine folds to one of its values (`FlowValueMayBe`, `FlowIdentitySources`, `FlowNumberBefore`, `EdgeNumber`, `CallKeeps`; Sh2Decompiler.cpp) | `TestArea7Round7` (the shrunk seed and nine variants, a join, a lent prototype; the global shape); seed 304221 in `Sh2GeneratedTests` |
+| A7-32 | P2 | a copy at a call or a return names only stores that run before it, when one does, unless the call makes its value (`AddFrameStoreTokens`, `runsBefore`) | `TestArea7Round7` |
+| A7-33 | P3 | oracle: a number line at a `mov #imm` is that instruction's only when it makes the value a store of the variable stores | `TestArea7Round7` (the damaged A7-28 (a) result, `copyAtOther` 1) |
+| A7-34 | P3 | the generator flags every later mapping check; `constAtJoin` takes the numbers the engine folds (`WrittenValue`, `MemoryBefore`, `TBefore`, `NeverRun`, the variable's width); the generator's oracle reads the literal pools | the default run, eleven shrunk triage fixtures |
+| A7-35 | P2 | an engine-made copy of a number is the number only (`FinalValues`) | `TestArea7Round7` |
+| A7-36 | P3 | a number is compared on the bytes a store writes of the variable, big-endian (`ValueSet::partial`); oracle likewise | `TestArea7Round7` |
+| A7-37 | P2 | engine patch **0079** (`markSlotPiece`, heritage.cc: the pieces heritage makes for a slot's op carry the slot flag); also a conversion at its block's branch takes its store's address | `TestArea7Round7` (the `rts` slot store, the patch alone) |
+| A7-38 | P3 | the number walk passes a frame word over a store through a pointer it cannot place when no frame address escapes (`FrameKept`, `FlowRecord::frameKept`) | `TestArea7Round7` (A7-32's second fixture now names 0x0600900E) |
+| A7-39 | P2 | (a), (b) `LoopKeeps` in the number walk and the identity build; (c) `onEdge` through the blocks an instruction the flow splits makes (`mac.w`); the fresh-seed triage (identity retry on the op's block, a call's own output) | `TestArea7Round7` (three shrunk seeds, three fresh seeds); seed 1820753 in `Sh2GeneratedTests` |
+| A7-40 | P3 | oracle: a pop of a push with up to six harmless instructions between (`WrittenValue`); seed 6123903 was the product's: a copy of an engine-made number temporary is a join's number (`AddJoinConstantTokens`) | seed 1700689 in `Sh2GeneratedTests`; `TestArea7Round7` (seed 6123903's function, shrunk) |
+| A7-41 | P2 | a statement that shows only an input or a variable shows a number only when a condition of the flow compares a storage with it (`FlowValueMayBe`, `ties`) | `TestArea7Round7` (the shrunk words); seed 1832116 in `Sh2GeneratedTests` |
+
+### 1. Merging master: patch 0078 became 0079
+
+Master took `0078-engine-deindirect-restart-per-call-site.patch` (A3-155). This branch's `0078-engine-heritage-slot-pieces-marked.patch` is renumbered **0079** (`git mv`): its rows in `patches/README.md` and `VENDOR.md` (both after master's 0078, the "Pinned by" bullets too), the notice and the `SaturnExplorer (0079)` comments in `cpp/heritage.cc` (and the same lines inside the patch), `Decompiler.md`, the ledger's A7-37 row and two comments of `TestArea7Round7`. The two patches touch different files, so the tree is the same. `check-vendored-tree.py check` (the pinned upstream `918d44e` plus the stack in order, rebuilt and diffed, and the lint) passes: **vendored tree: ok**, zero diff. After the first merge: ctest 107 of 107 and 6 of 6 Live (the trust suite failed once in the `-j2` run with a time-budget verdict, "too large to decompile within 1 s", under a load average near 6 from the other agents, and passed alone).
+
+### 2. The rows this resumption closed
+
+**A7-41 (P2).** `xRam26001008 = param_2;` inside the `if` carries the address of the first store `mov.b r0,@r7` (0x06009004, writes 3). The own-instruction rule asked only that the store's value *may* be the statement's, and the walk answered yes to any number for a statement that shows no number ("the engine may know an input equals it"). The engine can know that only from a comparison; a statement whose value is only inputs or variables (no number, no instruction, nothing rebuilt) now takes a number only when some `INT_EQUAL`/`INT_NOTEQUAL` of the flow compares with it. The store of 3 is rejected and the search names the shared store 0x0600901A. The test is flow-wide, so it fails open.
+
+**A7-38 (P3).** `mov #0,r5 ; mov.l r5,@-r15 ; mov.l r1,@r2 ; mov.l @r15+,r5 ; add r5,r3`: the engine forwards the 0 through the frame word across the store through r2; the number walk gave up at a store it cannot place, so the `add` was not seen to pass r4 on and the line named nothing. `FrameKept` decides once per function whether any address of the frame leaves r15 and the temporaries an access computes from it (into another register, `mov r15,r14` included; stored; read by any other op). When none does, a store through an unplaced pointer cannot write a frame word, which is the engine's own assumption: the walk passes it. RAM is not passed.
+
+**A7-40 (P3).** Seed 1700689 was the oracle's (a push and a pop with `extu.w r4,r3` between): `WrittenValue` now forwards a pop of a push with up to six instructions between them that name no r15, write no memory, branch or call, and are no branch's target. Seed 6123903 was triaged and is the **product's**: after `mov #1,r3 ; dt r3 ; bf`, `movt r0` sets r0 to 1; the switch's default runs `and r0,r3 ; tst #2,r0`; the engine reads only bit 1 of r0 and prints `uVar1 = 0;` in the default as a COPY of an implied temporary it made of 0 at the `movt` (both ops past the flow's). `AddJoinConstantTokens` took only a COPY of a constant input, so the inner op's token was cleared and the outer COPY's tokens stayed at `and r0,r3`, which does not make the number (A7-22's shape). A copy of such a temporary is now handled as the number; `movt` sets no number, so the line names no instruction (as A7-22 does for a computation the engine knew the value of).
+
+**A7-31's seed 304221** (routed by the A5-99 and A3-155 fixer) is A7-31's mechanism and gives no finding here; it is pinned with 1700689 and 1832116 in `Sh2GeneratedTests` (the whole seeds replayed, `rep.findings.empty()`).
+
+### 3. Pins, before and after
+
+| Pin | Reverted rule | Before | After |
+|---|---|---|---|
+| A7-41 (`TestArea7Round7`) | `ties` (a number "may" be any statement's) | 3 checks fail: the line names 0x06009004, not 0x0600901A; `storeValueOther` 1 | pass |
+| A7-38 (`TestArea7Round7`, A7-32's second fixture) | the `frameKept` pass | 3 checks fail: the line is the `bsr` only, 0x0600900E on no line, `copyAtCall` 1 | pass |
+| A7-40 6123903 (`TestArea7Round7`) | the implied-temporary copy | 2 checks fail: `uVar1 = 0;` drawn at 0x0600906A, `constAtJoin` 1 | pass |
+| A7-40 1700689 (generator pin) | the oracle's pop over instructions | `n:map-const-join` | 0 findings |
+| A7-31 304221, A7-41 1832116 (generator pins) | (the WIP's walk; A7-41's rule) | `n:map-frame-store` (on `6849e85c`), `n:map-store-value` | 0 findings |
+
+The earlier rows' pins were proved by the same reverts during the WIP (the ledger rows say so).
+
+### 4. What was run (final code, `d664fd88` plus this record)
+

@@ -1494,6 +1494,21 @@ void TestArea7Round7()
         const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_40 movt");
         CHECK(a.constAtJoin == 0 && a.Violations() == 0);
     }
+    // A7-42 (P2), found and fixed by the area 7 fixer: grammar 1 seed 1843925, shrunk (`mov.l lit,r6 ; mov #1,r3 ; dt r3 ; bf ; extu.b
+    // r3,r3 ; and r3,r2 ; xor r4,r2 ; mov.l r2,@(0x24,r6)`). The engine folds the and with r3's 0 and prints `xRam2600104c = param_1;`;
+    // the identity build reads r3's low byte (`extu.b`) at the block's start, which the `dt` loop's fall-through gives only whole, so the
+    // byte was not known, the xor was not seen to pass r4 on and the store's own line named nothing. A piece of a register the edge's
+    // condition gives whole is the number's bytes (FlowNumberIn). Was: the line with no instruction, 0x0600900E on no line.
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, { 0xD604, 0xE301, 0x4310, 0x8BFD, 0x633C, 0x2239, 0x224A, 0x1629,
+            0x000B, 0x2511, 0x2600, 0x1028 });
+        Print("A7-42 a byte of a register a loop's edge gives whole", r);
+        const Line* l = LineWith(r, "xRam2600104c = param_1;");
+        CHECK(l != nullptr);
+        if (l) CHECK(LineInstructions(*l) == (std::vector<uint32_t>{ 0x0600900Eu }));
+        const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_42");
+        CHECK(a.Violations() == 0);
+    }
     // caseOtherEntry bites: A7-29's fixture with the outer `case 2:` moved back to the inner switch's entry (A7-29 as it was).
     {
         const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06070000u, { 0x4F22, 0xD518, 0xE103, 0x3416, 0x8D28, 0x6143, 0x311C, 0xC702,

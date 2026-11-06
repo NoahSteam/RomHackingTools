@@ -938,6 +938,9 @@ inline WordValue WrittenValue(const sfe::decomp::DecompileResult& r, const std::
         case 0x28: return NumberValue(a << 16);
         case 0x29: return NumberValue(a >> 16);
         case 0x10: return NumberValue(a - 1);
+        // (A7-42: `rotl`, `rotr`, whose T the value does not need; grammar 2 seed 1853425, `xVar1 = 0xda;` at `rotl r1` of 0x6d)
+        case 0x04: return NumberValue(a << 1 | a >> 31);
+        case 0x05: return NumberValue(a >> 1 | a << 31);
         default: return WordValue();
         }
     }
@@ -1291,6 +1294,17 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                 if (close == std::string::npos || !word(text.substr(v + 1, close - v - 1))) return false;
                 v = close + 1;
             }
+            // (A7-42: a piece the engine prints as `SUB42(in_r0,0)` is a conversion too: grammar 1 seed 1843207, `xRam26001042 =
+            // SUB42(in_r0,0);` materialised at the `add` that made in_r0, naming the store)
+            if (text.compare(v, 3, "SUB") == 0 && text.size() > v + 6 && std::isdigit(static_cast<unsigned char>(text[v + 3])) &&
+                std::isdigit(static_cast<unsigned char>(text[v + 4])) && text[v + 5] == '(')
+            {
+                const size_t comma = text.find(',', v + 6), close = text.find(')', v + 6);
+                if (comma == std::string::npos || close == std::string::npos || comma > close || close + 2 != text.size()) return false;
+                const std::string at = text.substr(comma + 1, close - comma - 1);
+                return word(text.substr(b, eq - b)) && word(text.substr(v + 6, comma - v - 6)) && !at.empty() &&
+                       at.find_first_not_of("0123456789") == std::string::npos;
+            }
             return word(text.substr(b, eq - b)) && v < text.size() && word(text.substr(v, text.size() - 1 - v));
         };
         std::map<uint32_t, std::set<size_t>> ownDrawn, copyDrawn;
@@ -1615,7 +1629,24 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                         }
                         return true;
                     }
-                    return registerVariable && got.kind == WordValue::Param;
+                    if (!registerVariable || got.kind != WordValue::Param) return false;
+                    // (A7-42: a register variable the text assigns from that parameter, whole or through a cast, holds it -- a byte of
+                    // param_1 is `xVar1 = (char)param_1;`, named after no parameter; grammar 1 seed 1843373)
+                    const std::string from = "param_" + std::to_string(got.value) + ";";
+                    for (const auto& other : r.lines)
+                    {
+                        const size_t s = other.text.find_first_not_of(' ');
+                        if (s == std::string::npos || other.text.compare(s, shownText.size() + 3, shownText + " = ") != 0) continue;
+                        std::string rhs = other.text.substr(s + shownText.size() + 3);
+                        while (!rhs.empty() && rhs[0] == '(')
+                        {
+                            const size_t close = rhs.find(')');
+                            if (close == std::string::npos || rhs.find_first_not_of("abcdefghijklmnopqrstuvwxyz0123456789_ *", 1) < close) break;
+                            rhs = rhs.substr(close + 1);
+                        }
+                        if (rhs == from) return false;
+                    }
+                    return true;
                 };
                 {
                     std::set<uint32_t> namedStores;
