@@ -131,7 +131,8 @@
 //      treats as a call; HandedOverAt) reaches addresses no text of this function can know, and what it does after the jump is not asked
 //      (`pointer.trace.handed-over`). (A5-89) A pointer that is also something the text does not know -- a parameter, a register at entry, a callee's
 //      output, a loaded value, a call's result -- is `open`: the run may have come to the register by the other value, and the rule asks nothing of the
-//      registers it names (`pointer.effect.open`; `.open.said` / `.open.unsaid` count what would have been asked). (A5-92) The associative purge and the
+//      registers it names (`pointer.effect.open`; `.open.said` / `.open.unsaid` count what would have been asked). (A5-99) A free name the text also
+//      assigns (`in_r7 = uVar1;` in some cases of a switch) is still open unless an assignment is made on every path to the use. (A5-92) The associative purge and the
 //      cache address array through a pointer are hardware as a register area is: the same rule asks for their note, for a pointer that names one.
 //   3f. (A5-90) An access in the on-chip registers' partition (0xE0000000 and up) through a pointer the output makes by ORing a constant that sets the
 //      top three bits of the address (`in_r1 | 0xffffffc0`) has a note that it "may reach on-chip registers" (`onchip.span.said` / `.unsaid`), unless a
@@ -3684,11 +3685,9 @@ bool PointerPrintsFromHardware(const DecompileResult& r, uint32_t insn, const st
             const std::string& name = std::get<0>(item);
             const size_t useLine = std::get<1>(item);
             const bool loaded = std::get<2>(item);
-            bool assigned = false;
             for (const Assign& a : assigns)
             {
                 if (a.name != name) continue;
-                assigned = true;
                 const std::string rhs = WithoutCalls(a.rhs);
                 if (!reaches(a.line, useLine))
                 {
@@ -3712,7 +3711,16 @@ bool PointerPrintsFromHardware(const DecompileResult& r, uint32_t insn, const st
                 for (const std::string& q : Identifiers(rhs))
                     todo.emplace_back(q, a.line, loaded || std::find(direct.begin(), direct.end(), q) == direct.end());
             }
-            if (!assigned && IsFreeValue(name)) openSource = true;
+            // (A5-99) A free name the text also assigns is still the value it had on entry on every path no assignment covers: the engine
+            // writes a merge into a register at entry as assignments in some arms (`case 0: in_r7 = uVar1; break;` in a switch the run can
+            // skip), and the pointer is as open as with no assignment at all. Only an assignment made on every path to the use replaces it.
+            if (IsFreeValue(name))
+            {
+                bool replaced = false;
+                for (const Assign& a : assigns)
+                    replaced |= a.name == name && a.line < useLine && StatementDominates(r.lines, a.line, useLine);
+                if (!replaced) openSource = true;
+            }
         }
         return found;
     };
@@ -12201,6 +12209,11 @@ void TestA587Pins(Sh2Decompiler& d)
             nullptr, nullptr, nullptr, nullptr, nullptr }, "cache.read.pointer.said", nullptr },
         { { "A5-97, routed seed 4906136 shrunk", "D605 E302 7604 D205 262A 4310 8BFA D204 262A 461B 000B 0009 0010 003F 4000 0000 0000 0004",
             nullptr, nullptr, nullptr, nullptr, nullptr }, "cache.read.pointer.said", nullptr },
+        // A5-99 (grammar 2 seed 300847, routed from area 7 round 5): `puVar2 = (uint1 *)(in_r7 ^ 0xa0000000);`, a byte read and written and a long read
+        // at +0x30, after a switch whose cases assign `in_r7 = uVar1;` (in_r7 * 4) and whose guard (`in_r7 < 6`) the run can skip. The register at
+        // entry is the pointer's other value: as open as in function 1 alone (the same instructions without the switch), whose text has no assignment.
+        { { "A5-99, grammar 2 seed 300847 shrunk", "2F86 2F96 2FA6 2FB6 2FC6 0C2A 6843 6953 6A63 6B73 E106 3712 891C 4708 C701 017E 412B 0009 0600 903C 0600 9040 0600 9044 0600 9048 0600 904C 0600 9050 A00B 0009 A009 0009 A007 0009 A005 0009 A003 0009 A001 0009 614D D204 4C2A 6CF6 6BF6 6AF6 69F6 68F6 422B 0009 0600 906C D303 273A 471B 517C E061 000B 0009 0009 A000 0000",
+            "0/0/68,6c/6c/7a", "20:7:6:54:3c,40,44,48,4c,50", "1,1", "0,0", "20000,0" }, "pointer.effect.open", nullptr },
     };
     for (const Pin& p : kPins)
     {
@@ -12279,6 +12292,15 @@ void TestA587Pins(Sh2Decompiler& d)
                     open ? "yes" : "no", masked ? "yes" : "no", stepped ? "yes" : "no");
         CHECK(!open && masked && stepped == loop);
     }
+    // A5-99: a register at entry the text assigns only on some paths (the arms of a switch) is still open; one assigned on every path to the use
+    // is not (control); one assigned in an if block is a merge with the entry value, open
+    derive("in_r7 assigned in a switch's cases, then XORed with 0xa0000000",
+           { "if (in_r7 < 6) {", "uVar1 = in_r7 * 4;", "switch(in_r7) {", "case 0:", "in_r7 = uVar1;", "break;", "case 1:", "in_r7 = uVar1;", "}", "}",
+             "puVar2 = (uint1 *)(in_r7 ^ 0xa0000000);", "*puVar2 = *puVar2 | 0x80;" }, 11, 0xA0000000u, true, true, false);
+    derive("in_r7 assigned on every path before the use (control)", { "in_r7 = 0x10;", "puVar2 = (uint1 *)(in_r7 ^ 0xa0000000);", "*puVar2 = *puVar2 | 0x80;" },
+           2, 0xA0000010u, true, false, false);
+    derive("in_r7 assigned in an if block (a merge)", { "if (c) {", "in_r7 = 0x10;", "}", "puVar2 = (uint1 *)(in_r7 ^ 0xa0000000);", "*puVar2 = *puVar2 | 0x80;" },
+           4, 0xA0000010u, true, true, false);
     derive("|| is no OR of bits (control)", { "bVar1 = in_r1 != 0 || 0xffffffc0 != 0;", "uVar2 = *(uint1 *)(bVar1 + 8);" }, 1, 0x48u, false, true, false);
     // a store's own tokens are the `*`, the `=` and the value; the address is the expression before it, and what the value was assigned is not the pointer
     {
