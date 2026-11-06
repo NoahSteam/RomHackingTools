@@ -139,7 +139,11 @@ and lists these classes as open until they are fixed.
    number into the register the store stores AND that value must reach the store (`FlowLastWriters`
    of the register from the store, the whole register for a half-word store; a delay slot that
    makes the number into another register is no maker, A7-28); a named store the number does not
-   reach, when it reaches another store of the same bytes, is dropped. A register the engine merged under a memory variable's
+   reach, when it reaches another store of the same bytes, is dropped. A number put in a register the
+   engine merged under a memory variable's name, at an instruction that makes the number into that
+   register, names only the stores that instruction's value reaches (`FlowLastWriters` from the store):
+   not a `tas.b` (no register) nor a store of the register after a loop changed it, whatever the value
+   walk cannot rule out (A7-44). A register the engine merged under a memory variable's
    name, a copy at the end of its block that no store shows, is addressed to the instructions that
    last set the register on each path into the block's end (`FlowLastWriters`), or to nothing,
    never to the branch (A7-21). A statement that keeps its drawn tokens at its instruction beside
