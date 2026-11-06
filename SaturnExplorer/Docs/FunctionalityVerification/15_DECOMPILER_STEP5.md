@@ -17508,3 +17508,44 @@ No new ctest test: the pins are a function inside `SaturnExplorerSh2DecompilerTe
 
 * **Area 7:** grammar 2 seeds **2067040**, **2087030**, **2089570** (`n:map-frame-store`: `xStack_8._0_2_ = *param_2;`, `iStack_24 = iVar4;`, `xStack_20 = param_2;` drawn at a load or a call and naming none of the folded store). A7-31's check, open. Replay: `SE_GENERATED_GRAMMAR=2 SE_GENERATED_FIRST=<seed> SE_GENERATED_SEEDS=1 SE_GENERATED_CANARY=0`.
 * **A5-102** is ordinary memory as much as hardware (the area 3 rows of frame aliasing are its neighbours); filed in area 5 for the reordered hardware write. For the coordinator to route if the fixer finds the cause in the engine's merge of a global's two values.
+
+## Printed-C harness: A2-125 and A3-159
+
+Branch `review/2-3-harness-gaps` from master `9bb451a9`. Only `Sh2GeneratedTests.cpp` and docs changed; no product code. Own build (`-j2`), every run under `ulimit -v 3500000` and `timeout`.
+
+Both gaps are one fault: the harness compiled a text at a width the engine does not mean, and reported a mismatch that is not a wrong value. Both are closed by compiling the text at the width the engine means, so the text is checked; no skip was added or widened.
+
+### A2-125 (P3): a three-byte write under a word's name
+
+* **Text** (`frame124_10822`, the nightly's only finding): `_xStack_14 = CONCAT22(0xffff,param_3); xVar1 = _xStack_14; xStack_12._1_1_ = (char)param_3; cVar2 = (char)xStack_12; _xStack_14 = SUB43(xVar1,1); return (int4)xStack_12 ^ (int4)cVar2 ^ (int4)param_4;`
+* **Cause.** `SUB43` writes three bytes (the first three of the four-byte name, the stack being big-endian). The harness declares the name once, as the word, so the write assigned all four bytes and cleared the low one, which is the high byte of `xStack_12`'s second half.
+* **Fix** (`84f0bf93`, `SubNarrowedWritesAsFields`). A write whose right side is one `SUBab(...)` of b bytes, to an underscore name that every `CONCAT` write gives one width w with b smaller than w, becomes `_n = (SETFLD(_n, 0, b, SUBab(...)), _n);`. `SETFLD` is the field macro of both readings, so the same bytes are replaced in C and in the engine's reading; the assignment form keeps the refresh of the locals inside the word. Any other shape, or a name with no single width, is as before.
+* **Result.** `narrow-c`: it agrees in the engine's reading. As C it differs only in the sign of `xStack_12` (an xunknown2, signed in the engine's reading); with `(int4)(short)xStack_12` written in through the hook it agrees as C for all inputs (pin `A2-125 signed`).
+* **Pins.** `A2-125` is `narrow-c`; `A2-125 signed` agrees. Three wrong texts of the same shape are `mismatch`: the piece taken at offset 0 (`SUB43(xVar1,0)`), written at the other end of the word (`SETFLD(_xStack_14, 1, 3, ...)`), and the whole word written (the old harness). Before the fix the case was `mismatch` in every reading.
+* **Not done.** The engine's print (a three-byte piece under the word's name) is unchanged: A3-137's accepted print limit.
+
+### A3-159 / A3-160 (P3): a byte array named whole as a value
+
+* A3-160 is the same finding as A3-159 on `review/2-a1016-fix`, so the coordinator can dedupe at merge. The branch was not cherry-picked.
+* **Text** (`frame124_9403586`): `xunknown1 axStack_f [3]; ... _xStack_10 = CONCAT31((unkuint3)axStack_f >> 8,param_2); _xStack_10 = CONCAT13(param_4,axStack_f);`. The name stands for the array's three bytes. C reads its address; the engine's reading did not compile it; and a write of the wide name did not reach the array inside it.
+* **Fix** (`8bf1b115`). `ArrayNamesAsValues` turns the name into `BEARR(name, n)` (the n bytes, first most significant) where it is the operand of a cast to an n-byte type, or the whole argument of a `CONCATab(` slot of n bytes, and n is not 4 (a pointer's size: a four-byte array named whole may be an address, so it stays as it was). Any other use is left alone. A write of a wide name now also refreshes the byte arrays inside its bytes.
+* **Result.** `narrow-c`; with `(int4)(short)xStack_c` written in it agrees as C for all inputs (pin `A3-159 signed`).
+* **Pins.** `A3-159` is `narrow-c`; three wrong texts are `mismatch`: the shift taken wrong (`>> 16`), the array read at length 2, the array read least significant byte first.
+
+### Nightly-sized printed-C
+
+`SE_C_COMPILER=gcc-14 SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=5000`, `SE_GENERATED_FIRST` 1, 5001, 10001, 15001 (the nightly's 20,000 seeds in its four pieces), and 9,400,001 (A3-159's range).
+
+| Seeds | Functions | Compared | agrees | narrow-c | mismatch | skipped and other |
+|---|---|---|---|---|---|---|
+| 1 to 5,000 | 9,168 | 8,702 | 8,533 | 217 | 0 | array-local 5, piece-name 3, stack-piece 7, void-return 367 + 36 |
+| 5,001 to 10,000 | 9,033 | 8,562 | 8,403 | 220 | 0 | array-local 11, piece-name 1, stack-piece 10, void-return 352 + 36 |
+| 10,001 to 15,000 | 9,007 | 8,557 | 8,381 | 227 | 0 | array-local 12, stack-address 2, stack-piece 12, void-return 346 + 27 |
+| 15,001 to 20,000 | 9,072 | 8,632 | 8,504 | 172 | 0 | array-local 5, stack-address 2, stack-piece 11, void-return 345 + 33 |
+| 9,400,001 to 9,405,000 | 9,013 | 8,524 | 8,395 | 189 | 0 | array-local 5, piece-name 2, stack-address 1, stack-piece 19, void-return 370 + 32 |
+
+The nightly's printed-C step has 0 findings. The earlier run of the same pieces had `frame124_10822` as its one `mismatch` (piece 10001), and the 9,400,001 piece had `frame124_9403586` (A3-159). The skip counts of the unchanged pieces are those of the earlier run. The nightly itself needs CI to confirm.
+
+### Tests
+
+See the next paragraph of this section for the full ctest result.
