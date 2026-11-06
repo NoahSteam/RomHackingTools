@@ -945,6 +945,25 @@ if(BUILD_TESTING)
                 ${CMAKE_CURRENT_SOURCE_DIR}/Drivers/Savestate/src)
             target_link_libraries(SaturnExplorerArea9Round5Tests PRIVATE SaturnExplorerSavestateDriver SaturnExplorerCore ${CMAKE_DL_LIBS})
             add_test(NAME SaturnExplorerArea9Round5Tests COMMAND SaturnExplorerArea9Round5Tests)
+
+            # Area 9 round 6 (review): the sync before the rename (order, refused syncs, cost), an older version's unpadded names file,
+            # the residual number-led remarks, the exit wait and the frame's no-wait settings try. Linux only.
+            add_executable(SaturnExplorerArea9Round6Tests
+                FrontEnd/tests/Area9Round6Tests.cpp
+                FrontEnd/src/Settings.cpp
+                FrontEnd/src/FileWrite.cpp
+                FrontEnd/src/Sh2Address.cpp
+                FrontEnd/src/Debug/CallStack.cpp
+                FrontEnd/src/Debug/MemoryBackend.cpp
+                FrontEnd/src/Debug/Sh2Disasm.cpp
+                FrontEnd/src/Decompiler/MemorySnapshot.cpp
+                FrontEnd/src/Decompiler/AddressRanges.cpp
+                FrontEnd/src/Decompiler/Sh2FunctionFinder.cpp
+                FrontEnd/src/Sha256.cpp)
+            target_include_directories(SaturnExplorerArea9Round6Tests PRIVATE FrontEnd/src include
+                ${CMAKE_CURRENT_SOURCE_DIR}/Drivers/Savestate/src)
+            target_link_libraries(SaturnExplorerArea9Round6Tests PRIVATE SaturnExplorerSavestateDriver SaturnExplorerCore ${CMAKE_DL_LIBS})
+            add_test(NAME SaturnExplorerArea9Round6Tests COMMAND SaturnExplorerArea9Round6Tests)
         endif()
     endif()
 
