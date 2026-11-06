@@ -482,3 +482,22 @@ R-ptr-loop	unit	survived	22
 R-ptr-loop	gen	survived	13	
 R-ptr-loop	corpus	survived	41	
 R-ptr-loop	*	SURVIVED	0	
+R-note-reach	unit	killed	2	
+R-note-reach	gen	killed	1	
+R-note-reach	corpus	killed	2	
+R-ptr-sub	unit	survived	23	
+R-ptr-sub	gen	killed	3	
+R-ptr-sub	corpus	killed	4	
+R-0061-mem	unit	killed	0	
+R-0061-mem	gen	killed	0	
+R-0061-mem	corpus	killed	0	
+R-0065-down	unit	killed	6	
+R-0065-down	gen	survived	19	
+R-0065-down	corpus	killed	25	
+V-0019-ldc	decode	killed	2	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecodeTests.cpp:2240: totalFails == 0
+V-0019-ldc	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:10599: Has(r.Text(), "Write_SR(param_1 & 0x3f3);")
+V-0019-rte	decode	killed	2	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecodeTests.cpp:2240: totalFails == 0
+V-0019-rte	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:10908: Has(sett.Text(), "Write_SR(in_stack_00000004 & 0x3f2 | 1);")
+V-0071	pc	killed	21	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:11237: r104[0].cls.empty() && r104[0].compared && r104[0].text.find("== 0xffff") !
+V-0071	unit	survived	22	
+H-load-partial	fuzz	killed	5	VIOLATION ranges/PARTIAL_RESULT: refused but left ranges in the output
