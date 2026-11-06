@@ -1,0 +1,93 @@
+name P3b jsr @r10 in a loop, r10 loaded once (callee-saved)
+asm 06009000
+.word 0x4F22
+mov.l r8,@-r15
+mov.l r9,@-r15
+mov.l r10,@-r15
+mov #0,r8
+mov #3,r9
+mov.l =0x06009100,r10
+L:
+mov r5,r4
+jsr @r10
+nop
+dt r9
+bf/s L
+add r0,r8
+mov r8,r0
+mov.l @r15+,r10
+mov.l @r15+,r9
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+shll r4
+rts
+mov r4,r0
+endasm
+lend 06009100
+args 1 2 3 4
+end
+
+name P3c jsr @r3 in a loop, r3 reloaded each trip
+asm 06009000
+.word 0x4F22
+mov.l r8,@-r15
+mov.l r9,@-r15
+mov #0,r8
+mov #3,r9
+L:
+mov.l =0x06009100,r3
+mov r5,r4
+jsr @r3
+nop
+dt r9
+bf/s L
+add r0,r8
+mov r8,r0
+mov.l @r15+,r9
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+shll r4
+rts
+mov r4,r0
+endasm
+lend 06009100
+args 1 2 3 4
+end
+
+name P3d jsr @r3 in a loop, r3 loaded once, nothing lent
+asm 06009000
+.word 0x4F22
+mov.l r8,@-r15
+mov.l r9,@-r15
+mov #0,r8
+mov #3,r9
+mov.l =0x06009100,r3
+L:
+mov r5,r4
+jsr @r3
+nop
+dt r9
+bf/s L
+add r0,r8
+mov r8,r0
+mov.l @r15+,r9
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+shll r4
+rts
+mov r4,r0
+endasm
+args 1 2 3 4
+end

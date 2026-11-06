@@ -1,0 +1,182 @@
+name P1 four jsr @r3, r3 loaded once, lent callee shll r4
+asm 06009000
+.word 0x4F22
+mov.l r8,@-r15
+mov.l =0x06009100,r3
+jsr @r3
+nop
+mov r0,r8
+mov r5,r4
+jsr @r3
+nop
+add r0,r8
+mov r6,r4
+jsr @r3
+nop
+add r0,r8
+mov r7,r4
+jsr @r3
+nop
+add r8,r0
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+shll r4
+rts
+mov r4,r0
+endasm
+lend 06009100
+args 1 2 3 4
+args 5 6 7 8
+end
+
+name P2 jsr @r3 with r3 reloaded in its delay slot (PC-relative), then jsr @r3 again
+asm 06009000
+.word 0x4F22
+mov.l r8,@-r15
+mov.l =0x06009100,r3
+jsr @r3
+mov.l =0x06009120,r3
+mov r0,r8
+mov r5,r4
+jsr @r3
+nop
+add r8,r0
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+shll r4
+rts
+mov r4,r0
+endasm
+asm 06009120
+shll2 r4
+rts
+mov r4,r0
+endasm
+lend 06009100 06009120
+args 1 2 3 4
+args 5 6 7 8
+end
+
+name P2u the same, nothing lent
+asm 06009000
+.word 0x4F22
+mov.l r8,@-r15
+mov.l =0x06009100,r3
+jsr @r3
+mov.l =0x06009120,r3
+mov r0,r8
+mov r5,r4
+jsr @r3
+nop
+add r8,r0
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+shll r4
+rts
+mov r4,r0
+endasm
+asm 06009120
+shll2 r4
+rts
+mov r4,r0
+endasm
+args 1 2 3 4
+end
+
+name P3 jsr @r3 in a loop, r3 loaded once
+asm 06009000
+.word 0x4F22
+mov.l r8,@-r15
+mov.l r9,@-r15
+mov #0,r8
+mov #3,r9
+mov.l =0x06009100,r3
+L:
+mov r5,r4
+jsr @r3
+nop
+dt r9
+bf/s L
+add r0,r8
+mov r8,r0
+mov.l @r15+,r9
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+shll r4
+rts
+mov r4,r0
+endasm
+lend 06009100
+args 1 2 3 4
+end
+
+name P4 jsr @r3 then tail jmp @r3
+asm 06009000
+.word 0x4F22
+mov.l r8,@-r15
+mov.l =0x06009100,r3
+jsr @r3
+nop
+mov r0,r4
+add r5,r4
+mov.l @r15+,r8
+.word 0x4F26
+jmp @r3
+nop
+endasm
+asm 06009100
+shll r4
+rts
+mov r4,r0
+endasm
+lend 06009100
+args 1 2 3 4
+end
+
+name P5 two registers, second loaded from first callee's kept register r9
+asm 06009000
+.word 0x4F22
+mov.l r9,@-r15
+mov.l =0x06009100,r3
+mov.l =0x06009120,r9
+jsr @r3
+nop
+mov r0,r4
+jsr @r9
+nop
+jsr @r3
+mov r0,r4
+mov.l @r15+,r9
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+shll r4
+rts
+mov r4,r0
+endasm
+asm 06009120
+shll2 r4
+rts
+mov r4,r0
+endasm
+lend 06009100 06009120
+args 1 2 3 4
+end

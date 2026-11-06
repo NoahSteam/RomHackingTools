@@ -407,11 +407,14 @@ if(SE_ENABLE_DECOMPILER)
 
         # No hard millisecond gate (A7): a generous ceiling, and the tests print their timings.
         # The runner test decompiles the cancellation spike's large fixtures several times (A4).
-        set_tests_properties(SaturnExplorerSlaFreshnessTests SaturnExplorerSh2DecompilerEngineTests
+        # The engine suite takes about 50 s on an idle 4-core machine, so 60 s timed it out
+        # whenever anything else was building (A11-17); it shares the runner's ceiling.
+        set_tests_properties(SaturnExplorerSlaFreshnessTests
                              SaturnExplorerSh2DecompilerTests SaturnExplorerMemorySnapshotTests
                              SaturnExplorerSh2FunctionFinderTests SaturnExplorerSh2DecompilerFixtureTests
                              PROPERTIES TIMEOUT ${SE_DECOMP_TIMEOUT_60})
-        set_tests_properties(SaturnExplorerDecompilerRunnerTests PROPERTIES TIMEOUT ${SE_DECOMP_TIMEOUT_120})
+        set_tests_properties(SaturnExplorerDecompilerRunnerTests SaturnExplorerSh2DecompilerEngineTests
+                             PROPERTIES TIMEOUT ${SE_DECOMP_TIMEOUT_120})
         # Random SH-2 functions against the emulator's access trace (REVIEW_PROGRAM.md, Phase 0), in two
         # grammars: version 1, one function with loads, stores, branches, loops and polls; version 2, modules
         # of functions with a stack, calls with lent prototypes, tail calls, jump tables, shared exits and
@@ -663,6 +666,20 @@ if(BUILD_TESTING)
     target_include_directories(SaturnExplorerFunctionNamesTests
         PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
     add_test(NAME SaturnExplorerFunctionNamesTests COMMAND SaturnExplorerFunctionNamesTests)
+
+    # FileLock and the settings save on it, with no fork or namespace: the Windows branch (LockFileEx, GetLastError reasons,
+    # FlushFileBuffers) gets an automated test here; the Area9Round3..7 tests that need POSIX stay Linux only (A12-19).
+    add_executable(SaturnExplorerFileLockTests
+        FrontEnd/tests/FileLockTests.cpp
+        FrontEnd/src/Debug/CallStack.cpp
+        FrontEnd/src/Settings.cpp
+        FrontEnd/src/FileWrite.cpp
+    )
+    target_include_directories(SaturnExplorerFileLockTests
+        PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_link_libraries(SaturnExplorerFileLockTests PRIVATE Threads::Threads)
+    add_test(NAME SaturnExplorerFileLockTests COMMAND SaturnExplorerFileLockTests)
+    set_tests_properties(SaturnExplorerFileLockTests PROPERTIES TIMEOUT 60)
 
     # Area 9 round 3 (review): the stores' save, the address word, the capped read; pins of the findings A9-31 and later. Linux only.
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux")

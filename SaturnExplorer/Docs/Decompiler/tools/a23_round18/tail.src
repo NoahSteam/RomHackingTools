@@ -1,0 +1,115 @@
+name J1 r0 written on one path, the other tail-jumps to a void callee that keeps r0
+asm 06009000
+tst r4,r4
+bt L
+rts
+mov #1,r0
+L:
+mov.l =0x06009100,r3
+jmp @r3
+nop
+endasm
+asm 06009100
+rts
+nop
+endasm
+lend 06009100
+args 0 2 3 4 r0=55
+args 1 2 3 4 r0=55
+end
+
+name J2 r0 written on both paths, one through a tail jump to a void callee
+asm 06009000
+tst r4,r4
+bt L
+rts
+mov #1,r0
+L:
+mov.l =0x06009100,r3
+jmp @r3
+mov #2,r0
+endasm
+asm 06009100
+rts
+nop
+endasm
+lend 06009100
+args 0 2 3 4 r0=55
+args 1 2 3 4 r0=55
+end
+
+name J3 bra into the next function (falls into it), callee writes r0 on every path
+asm 06009000
+tst r4,r4
+bt L
+rts
+mov #1,r0
+L:
+bra M
+nop
+nop
+nop
+M:
+rts
+mov r5,r0
+endasm
+args 0 2 3 4 r0=55
+args 1 2 3 4 r0=55
+end
+
+name J4 tail jump through bsrf-like braf table? jsr then rts slot leaves callee r0
+asm 06009000
+.word 0x4F22
+mov.l =0x06009100,r3
+jsr @r3
+nop
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+tst r4,r4
+bt X
+mov #3,r0
+X:
+rts
+nop
+endasm
+lend 06009100
+args 0 2 3 4 r0=55
+args 1 2 3 4 r0=55
+end
+
+name J5 void callee lent, caller returns r0 set before the call (callee keeps r0)
+asm 06009000
+.word 0x4F22
+mov #7,r0
+mov.l =0x06009100,r3
+jsr @r3
+nop
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+rts
+mov r4,r1
+endasm
+lend 06009100
+args 0 2 3 4 r0=55
+end
+
+name J6 callee writes r0 in rts slot on one path, bt/s slot on the other
+asm 06009000
+tst r4,r4
+bt/s L
+mov #4,r1
+rts
+mov #1,r0
+L:
+rts
+mov r1,r0
+endasm
+args 0 2 3 4 r0=55
+args 1 2 3 4 r0=55
+end

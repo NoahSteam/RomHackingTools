@@ -207,7 +207,11 @@ void RefusedAtExit()
     next.Load();
     Check(next.HasName(0x06004100u), "A9-46 fixed: the rename pending at exit is in the file at the next start");
 
-    // The same for the function starts (A9-43's exit save).
+    // The same for the function starts (A9-43's exit save). This is a second, separate exit: the 10 s of an exit are one budget shared by
+    // every store (A9-53, A9-58), and the names block above has already used 5 s of it. With the starts holder's 4 s that left under a
+    // second of slack, so a loaded machine (a compile running) made the save refuse, rightly (A9-64: "the exit time ran out (waited 5.0 s
+    // of the 10 s that every save at exit shares)"). A new SetClosing(true) starts a new exit with a new budget.
+    FileLock::SetClosing(true);
     std::remove("bounds.txt");
     Put("bounds.txt", "06004000\n");
     {
@@ -216,7 +220,10 @@ void RefusedAtExit()
         fb.Load("bounds.txt", &err);
         fb.SetEntry(0x06004200u);
         const pid_t kid = HoldLock("bounds.txt.lock", 4);
+        const auto t0 = std::chrono::steady_clock::now();
         const bool ok = fb.Save("bounds.txt", &err);
+        const double secs = Since(t0);
+        std::printf("  exit save of the starts: %s after %.2f s: %s\n", ok ? "saved" : "refused", secs, err.c_str());
         Check(ok, "A9-46 fixed: the exit save of the starts waits and writes");
         Reap(kid);
     }

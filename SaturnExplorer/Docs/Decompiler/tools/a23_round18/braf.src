@@ -1,0 +1,36 @@
+name B1 braf over one instruction, returns r4+1
+code 06009000 E202 0223 0009 7401 7401 6043 000B 0009
+args 1 2 3 4
+end
+
+name B2 caller of B1 uses its r0
+asm 06009100
+.word 0x4F22
+mov.l =0x06009000,r3
+jsr @r3
+nop
+add #3,r0
+.word 0x4F26
+rts
+nop
+endasm
+code 06009000 E202 0223 0009 7401 7401 6043 000B 0009
+lend 06009000
+entry 06009100
+args 1 2 3 4
+end
+
+name B3 jmp @r3 to a local label (mova), returns r4+1
+asm 06009000
+mova @(4,pc),r0
+jmp @r0
+nop
+nop
+nop
+nop
+add #1,r4
+rts
+mov r4,r0
+endasm
+args 1 2 3 4
+end
