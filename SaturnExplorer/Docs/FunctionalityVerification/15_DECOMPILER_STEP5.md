@@ -16825,3 +16825,6 @@ Branch `review/9-round7-fix` from master `ef04ce9c`. The open P3s of rounds 6 an
 Each pin was shown to bite: with A9-58, A9-59 and A9-60 reverted in turn `Area9Round7Tests` failed 4 checks, with A9-57 reverted `AssemblyPanelTests` failed 2; all restored.
 
 **Uncompiled:** `App.cpp` (not built on Linux; `-fsyntax-only` with the worktree flags, 0 errors). The Windows branches of `FileWrite.cpp` (the `TrimStop` calls on `std::system_category().message`) and the macOS branch are not compiled here.
+
+Runs: full `ctest -j2` 113 of 113 after one test pin moved (`Area9Round6Tests` `FrameTryCollides` held the lock 150 ms against the old 250 ms try; it now holds 20 ms against the 50 ms try, the trade-off of A9-59); no new test target (the A9-57 test is in the existing `AssemblyPanelTests`); `LoaderFuzzTests` seed 48211, 3,000 cases a module, all modules: 37,985 cases in 64 s, 0 classes outside the ledger (only `HARDLINK_SPLIT`, A9-28); the two-process lock tests (`Area9Round3Tests`, `Area9Round4Tests`, `Area9Round5Tests`, `Area9Round6Tests`, `Area9Round7Tests`) pass; fault suite below.
+Fault suite (`SaturnExplorerDecompilerFaultTests`): 0 of 94 jobs failed (78.5 s).
