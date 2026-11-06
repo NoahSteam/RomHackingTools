@@ -386,3 +386,19 @@ H-led-nowrites	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude
 H-led-nowrites	gen	killed	19	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:11775: rep.findings.empty()
 H-led-direct	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:3121: Ledger(r, { Wr(0x20100063u, 1), Rd(0x20100063u, 1, true) })
 H-led-direct	gen	survived	18	
+H-led-returned	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:3128: Ledger(r, { Wr(0x25FE00A4u, 4), Rd(0x25FE00A4u, 4, false, true) })
+H-led-returned	gen	survived	18	
+H-fate-unreach	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:3562: SaidMissing(r, 0x0600A90Cu) && HasNote(r, "the 1-byte read through a pointe
+H-fate-unreach	gen	survived	18	
+H-fate-switch	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:3640: ReferenceOk(d, snap, q, r)
+H-fate-switch	gen	survived	19	
+H-fate-frameunread	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:3116: ReferenceOk(d, snap, Request(f.base), r)
+H-fate-frameunread	gen	killed	14	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:11789: rep.findings.empty()
+H-fate-capped	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:14487: r.frameLedgerCapped
+H-fate-capped	gen	survived	19	
+H-fate-insn	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:382: records == 2
+H-fate-insn	gen	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:11813: rep.findings.empty()
+H-removed-unsaid	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:3116: ReferenceOk(d, snap, Request(f.base), r)
+H-removed-unsaid	gen	survived	13	
+H-map-origin	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:147: all.Violations() == 0
+H-map-origin	gen	killed	19	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:11775: rep.findings.empty()
