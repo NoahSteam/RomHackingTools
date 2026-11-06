@@ -9,6 +9,7 @@
 
 #include "App.h"
 #include "WebPlatform.h"
+#include "FileWrite.h"
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
@@ -139,6 +140,11 @@ int main(int argc, char** argv)
         gApp.BuildUI(gPlatform);
         gPlatform.EndFrame();
     }
+    // A9-53: a save refused at exit is said in a message box (stderr goes nowhere a desktop user looks); before gPlatform's window goes.
+    sfe::SetExitNoticeHook([](const std::string& text) {
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_WARNING, "Saturn Explorer", text.c_str(), nullptr);
+        std::fprintf(stderr, "Saturn Explorer: %s\n", text.c_str());
+    });
     gApp.Shutdown();
     gPlatform.Shutdown();
 #endif

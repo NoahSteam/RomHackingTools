@@ -847,6 +847,8 @@ private:
     Settings         mSettings;
     std::string      mIniPath;
     bool             mSettingsDirty = false;
+    std::string      mSettingsStatus;               // the status line the failed save set, cleared when a retry saves (A9-52); also the exit notice's text
+    std::string      mFunctionNamesError;           // the last refused names save, for the exit notice (A9-53)
     bool             mSettingsSaveFailed = false;   // the last save failed (reported once, retried below)
     std::chrono::steady_clock::time_point mSettingsRetryAt;   // no save attempt before this (a failure backs off)
     // "Launch Session": which emulator + ROM the toolbar's Launch menu starts. Exe

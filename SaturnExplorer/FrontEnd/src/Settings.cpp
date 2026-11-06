@@ -234,7 +234,7 @@ bool Settings::SaveTo(const std::string& path, std::string* error, bool wait) co
     if (same && !mRefusedWhy.empty())
         return fail("Settings: not saved, " + mRefusedWhy + " when it was loaded, and a save would replace it; this session's changes are kept in memory only");
     // The lock file lives beside the data: a lock on the file itself would be dropped by the rename that replaces it.
-    FileLock lock(path + ".lock", wait);
+    FileLock lock(path + ".lock", wait, 250);   // the frame's try (wait=false) still waits 250 ms: another instance's ordinary save is over by then (A9-52)
     if (!lock.Held())
         return fail("Settings: not saved, " + lock.WhyNotHeld() + "; "
                     "saving without the lock could lose another instance's keys, so the file is left as it is and this session's changes are kept in memory only");

@@ -16753,3 +16753,21 @@ Branch `review/9-round6` from master `521dc0e5`. An adversarial round on the are
 
 * A9-52 and A9-53 go together (the exit and the frame's try): treat "another process holds" in the frame as not yet a failure and clear the status after a later success; on SDL2 show the exit notice with `SDL_ShowSimpleMessageBox`, carry each store's own error into it, and save the user's work before the settings.
 * A9-54 and A9-55 are text: the guide's address rules, and the sync refusal's file name and reason on each platform.
+
+## Area 9 fixer (A9-51 to A9-55)
+
+Branch `review/9-round6-fix` from master `6849e85c`. Small, local fixes for the five P3 rows of round 6; A9-56 (an instrument row) is left as accepted. The store was not reshaped.
+
+| Row | Change | Pin |
+|---|---|---|
+| A9-51 | `App.cpp` logs the store's own text (it begins with its subject) instead of adding a second "Could not save ..." prefix; the settings status does the same for `Settings: ...` texts | none: `App.cpp` is not linked by a test (syntax-checked) |
+| A9-52 | `FileLock(path, wait, tryMs)`: the frame's no-wait settings try waits 250 ms; the "Could not save settings" status is cleared when a later save succeeds (`mSettingsStatus`) | `FrameTryCollides`: the try during a 150 ms holder now saves; behind a 2 s holder it still gives up in under a second with "another process holds" |
+| A9-53 | `SetClosing(true)` sets one 10 s deadline shared by every lock taken at exit; the exit notice lists each store's own error and no guessed cause; `SetExitNoticeHook` (set in `WebMain.cpp` to `SDL_ShowSimpleMessageBox`, plus stderr) | `ExitWaits` (four stuck locks: 4 of 4 refused after about 10 s, was 40 s; now always run), `NoticeHook` |
+| A9-54 | `DECOMPILER_GUIDE.md`: bounds file eight digits or `0x`; names and notes eight digits, `0x`, or an unpadded address at or above 0x80000; unpadded words below 0x80000 and letters-only words skipped with a warning | none: text |
+| A9-55 | the sync refusal names the target file; Windows keeps `GetLastError` after `FlushFileBuffers`; macOS falls back to `fsync` only when `F_FULLFSYNC` fails with `ENOTSUP` or `EINVAL` | `SyncRefused` (names `saturn_functions.txt`, not `separt`) |
+
+Not done: A9-53's "save the user's work before the settings" (the order is kept). Uncompiled: the Windows and macOS branches of `FileWrite.cpp`, `App.cpp` (syntax-checked with the worktree's include paths: clean), `WebMain.cpp` (syntax-checked against a stub `SDL.h`; no SDL2 on this machine).
+
+Bite proof: with the four fixes reverted together (target name, shared deadline, `tryMs` 0, hook ignored), `Area9Round6Tests` fails exactly the four checks ("A9-55 names the file", "PIN A9-53 fixed", "PIN A9-52 fixed", "A9-53 hands its text to the hook"); restored, it passes.
+
+Runs: full `ctest -j2` 112 of 112 (226 s; 106 + 6 Live; no new test target); `LoaderFuzzTests` seed 71903, 3,000 cases a module, all modules: 37,985 cases, 0 classes outside the ledger (only `HARDLINK_SPLIT`, A9-28); `concurrent` module 30 rounds, 4 processes: 0; `Area9Round3Tests` (`LockNotHeld`, two processes) 2 of 2; fault suite 0 of 94 failed.
