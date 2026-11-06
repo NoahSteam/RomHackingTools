@@ -5616,6 +5616,21 @@ bool LoopKeeps(const FlowRecord& flow, const ghidra::Funcdata& fd, int blk, int 
     }
     return true;
 }
+// EdgeNumber, and (A7-42) a piece of a register the edge's condition gives whole -- `extu.b r3,r3` after `dt r3 ; bf` reads r3's low
+// byte, `mov.b r0,@(3,r7)` after `tst r0,r0 ; bt` stores r0's -- as the number's bytes, big-endian.
+bool EdgeNumberOrPiece(NumberWalk& w, const FlowRecord& flow, const ghidra::Funcdata& fd, int from, int to, const FlowVn& vn, uint64_t& value)
+{
+    if (EdgeNumber(w, flow, fd, from, to, vn, value)) return true;
+    if (!vn.space || vn.space->getType() != ghidra::IPTR_PROCESSOR || vn.size >= 4 || vn.size <= 0) return false;
+    FlowVn whole = vn;
+    whole.offset = vn.offset & ~static_cast<ghidra::uintb>(3);
+    whole.size = 4;
+    uint64_t all = 0;
+    if (vn.offset + static_cast<ghidra::uintb>(vn.size) > whole.offset + 4 || !EdgeNumber(w, flow, fd, from, to, whole, all)) return false;
+    const ghidra::uintb below = whole.offset + 4 - (vn.offset + static_cast<ghidra::uintb>(vn.size));
+    value = MaskToSize(all >> (8 * below), vn.size);
+    return true;
+}
 bool FlowNumberIn(NumberWalk& w, const FlowRecord& flow, const ghidra::Funcdata& fd, int blk, int pos, const FlowVn& vn, uint64_t& value)
 {
     if (--w.budget < 0 || blk < 0 || static_cast<size_t>(blk) >= flow.blockOps.size()) return false;
@@ -5774,23 +5789,7 @@ bool FlowNumberIn(NumberWalk& w, const FlowRecord& flow, const ghidra::Funcdata&
         if (preds.size() > 1 && EdgeDead(w, flow, fd, p, blk)) continue;   // (a path never taken)
         if (preds.size() > 1 && LoopKeeps(flow, fd, blk, p, vn, memory)) continue;   // (a loop's way back that keeps it, A7-39)
         uint64_t v = 0;
-        bool onEdge = EdgeNumber(w, flow, fd, p, blk, vn, v);
-        // (A7-42: a piece of a register the edge's condition gives whole -- `extu.b r3,r3` after `dt r3 ; bf` reads r3's low byte -- is
-        // the number's bytes, big-endian)
-        if (!onEdge && !memory && vn.space && vn.space->getType() == ghidra::IPTR_PROCESSOR && vn.size < 4)
-        {
-            FlowVn whole = vn;
-            whole.offset = vn.offset & ~static_cast<ghidra::uintb>(3);
-            whole.size = 4;
-            uint64_t all = 0;
-            if (vn.offset + static_cast<ghidra::uintb>(vn.size) <= whole.offset + 4 && EdgeNumber(w, flow, fd, p, blk, whole, all))
-            {
-                const ghidra::uintb below = whole.offset + 4 - (vn.offset + static_cast<ghidra::uintb>(vn.size));
-                v = MaskToSize(all >> (8 * below), vn.size);
-                onEdge = true;
-            }
-        }
-        if (!onEdge)
+        if (!EdgeNumberOrPiece(w, flow, fd, p, blk, vn, v))
         {
             const auto key = std::make_tuple(p, vn.space, vn.offset, vn.size);
             if (w.active.count(key)) return false;   // (around a loop: not known)
@@ -6312,6 +6311,18 @@ bool FlowValueMayBe(const FlowRecord& flow, const ghidra::Funcdata& fd, int blk,
             // (a path a known condition never takes writes nothing the statement shows, A7-34's triage)
             NumberWalk dead;
             if (preds.size() > 1 && EdgeDead(dead, flow, fd, p, st.blk)) continue;
+            // (A7-42: a statement that shows a number, on an edge whose condition gives the register a number -- `tst r0,r0 ; bt L` to
+            // a shared `L: mov.b r0,@(3,r7)`, r0 a volatile poll's word: 0 on that edge -- has that number on the path)
+            if (numbersOnly && !memory(st.vn))
+            {
+                NumberWalk ew;
+                uint64_t ev = 0;
+                if (EdgeNumberOrPiece(ew, flow, fd, p, st.blk, st.vn, ev))
+                {
+                    if (number(ev, st.vn.size)) return true;
+                    continue;
+                }
+            }
             if (entered.insert(std::make_tuple(p, st.vn.space, st.vn.offset, st.vn.size)).second && p >= 0 &&
                 static_cast<size_t>(p) < flow.blockOps.size())
                 todo.push_back(State{ p, static_cast<int>(flow.blockOps[static_cast<size_t>(p)].size()), st.vn });

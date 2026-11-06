@@ -11849,9 +11849,13 @@ void TestDomainPins(Sh2Decompiler& d)
     // `n:map-const-join`) and grammar 1 seed 1832116 (A7-41: `xRam26001008 = param_2;` naming the store of 3, `n:map-store-value`). The
     // fixer's fresh seeds from 1,840,000 and 1,850,000: grammar 1 seed 1843925 (A7-42, the product's: `extu.b r3,r3` after a `dt` loop,
     // the store named nothing, `n:map-copy-store`), and the oracle's (A7-43): grammar 2 seed 1853425 (`rotl`, `n:map-const-join`), grammar
-    // 1 seed 1843373 (`xVar1 = (char)param_1;`, `n:map-store-value`), grammar 1 seed 1843207 (a `SUB42` copy, `v:map-way-back`).
+    // 1 seed 1843373 (`xVar1 = (char)param_1;`, `n:map-store-value`), grammar 1 seed 1843207 (a `SUB42` copy, `v:map-way-back`). From
+    // 1,860,000 and 1,870,000: grammar 1 seed 1862210 (A7-42's second shape, the product's: `tst r0,r0 ; bt L` to a shared byte store of
+    // r0, `xRam26002003 = 0;` naming no store under the volatile request, `v:map-copy-store`), and the oracle's grammar 2 seeds 1872967
+    // (`shll16 r1 ; extu.b r1,r1` is 0) and 1873745 (`rotcl`), both `n:map-const-join`.
     for (const auto& s : { std::make_pair(2, 304221), std::make_pair(2, 1700689), std::make_pair(1, 1832116), std::make_pair(1, 1843925),
-                           std::make_pair(2, 1853425), std::make_pair(1, 1843373), std::make_pair(1, 1843207) })
+                           std::make_pair(2, 1853425), std::make_pair(1, 1843373), std::make_pair(1, 1843207), std::make_pair(1, 1862210),
+                           std::make_pair(2, 1872967), std::make_pair(2, 1873745) })
     {
         const Report rep = Evaluate(d, s.first == 2 ? MakeV2(s.second) : Generate(s.second), true);
         std::printf("pin 'area 7 fixer: grammar %d seed %d': %zu finding(s)\n", s.first, s.second, rep.findings.size());

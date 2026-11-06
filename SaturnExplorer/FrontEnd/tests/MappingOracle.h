@@ -909,6 +909,14 @@ inline WordValue WrittenValue(const sfe::decomp::DecompileResult& r, const std::
     }
     if (hi == 0x6 && n == reg && (lo == 0x7 || lo == 0x8 || lo == 0x9 || lo >= 0xB))
     {
+        // (an extension of bits a shift just before it cleared is 0 whatever the register held: `shll16 r1 ; extu.b r1,r1`, grammar 2
+        // seed 1872967)
+        {
+            uint16_t sw = 0;
+            if ((lo == 0xC || lo == 0xD) && into.find(p) == into.end() && !inSlot && r.InBody(p - 2) && word(p - 2, sw) && (sw >> 12) == 0x4 &&
+                ((sw >> 8) & 0xF) == m && ((sw & 0xFF) == 0x28 || (lo == 0xC && (sw & 0xFF) == 0x18)))
+                return NumberValue(0);
+        }
         if (!number(before(m), a)) return WordValue();
         switch (lo)
         {
@@ -941,6 +949,13 @@ inline WordValue WrittenValue(const sfe::decomp::DecompileResult& r, const std::
         // (A7-42: `rotl`, `rotr`, whose T the value does not need; grammar 2 seed 1853425, `xVar1 = 0xda;` at `rotl r1` of 0x6d)
         case 0x04: return NumberValue(a << 1 | a >> 31);
         case 0x05: return NumberValue(a >> 1 | a << 31);
+        // (`rotcl`, `rotcr`: through T, when T is known before it; grammar 2 seed 1873745, `uVar6 = 1;` at `rotcl r3`)
+        case 0x24: case 0x25:
+        {
+            const int t = TBefore(r, word, into, p, depth);
+            if (t < 0) return WordValue();
+            return NumberValue(op == 0x24 ? a << 1 | static_cast<uint32_t>(t) : a >> 1 | static_cast<uint32_t>(t) << 31);
+        }
         default: return WordValue();
         }
     }
