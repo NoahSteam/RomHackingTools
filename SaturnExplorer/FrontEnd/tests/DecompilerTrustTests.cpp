@@ -4670,6 +4670,13 @@ const char* const kFollowScriptPins[] = {
     "pcc; focus; pca; enter",                                              // A8-42: Enter in the box that kept the focus while the output moved on
     "pcc; focus; pca; follow; focus; pcc; enter",                          // A8-42 (control: also passes with the fix reverted)
     "hold; typet; focus; release; hold; typea; stop; focus",               // A8-49: the rig's sync after an Enter that cancelled it (round 8)
+    // A11-15: Enter twice on the untouched panel text must not make the finder's pinned guess a user-set entry (A8-36's second rule,
+    // EnterTarget's "text from the last Enter keeps its target and origin"); each failed with that rule off and passes with it.
+    "follow; enter; enter",
+    "refresh; follow; enter; enter",
+    "pct; refresh; follow; enter; enter",
+    "pct; follow; enter; enter; refresh",
+    "pct; follow; enter; refresh; enter",
 };
 
 // (area 8 fixer, A8-36 to A8-39) Generated sequences with the evidence operations and Enter on the untouched box that failed with the fix
