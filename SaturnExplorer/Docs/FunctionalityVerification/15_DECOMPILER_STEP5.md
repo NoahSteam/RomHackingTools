@@ -17369,3 +17369,65 @@ Branch `review/2-a1012-fix` from master `6f0ca4ab`. Own RelWithDebInfo build (`-
 ### Tests
 
 Full `ctest` including Live: 100 percent, 0 failed of 115 (109 plus 6 Live, the master count; no test added, the pins are inside `SaturnExplorerSh2GeneratedTests`; engine tests 50 s, passed). Fault suite: 0 of 94 jobs failed. Generator default run (`SaturnExplorerSh2GeneratedTests`, no environment): 0 findings, all passed. Vendor check: ok.
+
+## A10-16 and A10-17
+
+Branch `review/2-a1016-fix` from master `27044e60`. Own RelWithDebInfo build (`-j2`), every test binary under `ulimit -v 3500000` and `timeout`. Product change: engine patch 0081 (`typeop.cc`). Oracle changes: `Sh2GeneratedTests.cpp`. Guide: one sentence on CONCAT in "Limits". Instrument: `Docs/Decompiler/tools/a10_fix16/stackword16.py` (the sibling family).
+
+### A10-16 (P1, filed P2): the sign extension of a CONCAT printed as a zero extension
+
+* **Mechanism.** `mov.l r1,@r15 ; mov.b r0,@(1,r15) ; mov.w @(0,r15),r0 ; swap.w r0,r1`. Heritage joins the two stores into the halfword the load reads (`PIECE`), and the load's sign extension is an `INT_SEXT` of it. The p-code is right: after `setcasts` it is `r0 = SEXT24(CONCAT11(SUB41(r5 >> 0x18), r7:1))`, then `r0 >> 0x10` and `r0 << 0x10` (a raw dump through a scratch hook in `action.cc`), and the whole-function check (`wholefn14.hh`, every rule and every leaf action, `mkrc17.sh`) finds no application that changes a value. The print is wrong. `PrintC::opIntSext` prints the extension as a cast to the output's type when `isSextCast` says so (the `PIECE` is typed `int2`). The `PIECE` prints in place as `CONCAT11(a,b)` and shows no type, so the text is `uVar1 = (uint4)CONCAT11(xStack_4,(char)param_4);`.
+* **Severity: P1.** In C, and in the reading the guide gives (a CONCAT has no sign; A3-150's fixer reads `(uint4)CONCAT11(...)` as the zero extension, for a real `INT_ZEXT`), that text is the zero extension. `(uint4)CONCAT11(...)` is how the engine prints the zero extension of a CONCAT too. So the same text stands for two values, and read as the engine means it the seed's value is 0x80FF0000 where the code returns 0x80FFFFFF. This is a wrong value in the engine's own reading, not a C-only difference. The `(int4)CONCAT11(...)` form and an extension hidden in an expression (`CONCAT11(a,b) + param_1`) are the same class.
+* **Fix (patch 0081, `da50cf93`).** A file-static `sextOfImpliedPiece` makes `TypeOpIntSext::getInputCast` ask for a cast of the input to its own signed type. It does so when the input is a `PIECE` that is not a variable of its own and the output is an `int` or `uint`. The texts are `(uint4)(int2)CONCAT11(...)`, `(int4)(int2)CONCAT11(...)` and `(int2)CONCAT11(...) + param_1`. An `INT_ZEXT` keeps `(uint4)CONCAT11(...)`. A named local (`xStack_2 = CONCAT11(...); (int4)xStack_2`) and a field (`(int4)xStack_4._0_2_`) are not changed: their declared type carries the sign (A3-150's reading). A functional `SEXT24(...)` (output not an integer) is not changed either. 9 functional lines in 1 file, plus the notice.
+* **Siblings** (`stackword16.py`, 572 functions: a word or a half stored at offset 0 or 2; a byte or a half overwritten at every position; `mov.w` at 0 and 2, `mov.b` at 0 to 3 and `mov.l` read back; then returned, `swap.w`, `shlr16`, `shar`, `shlr`, `add #1`, `and r4`, `add r4`, `cmp/pz`, `extu.w`/`extu.b` then a 4-byte use, and `exts.b`/`exts.w` then a use).
+  * Before the patch: 1 `mismatch` and 97 `narrow-c`.
+  * After the patch: 0 `mismatch` and 88 `narrow-c`. The 10 functions that changed are every use of byte 1 overwritten and read by `mov.w` at 0.
+  * The `narrow-c` that remain are not this class. Byte 0 overwritten, or byte 3 with the low half read, prints a field (`(int4)xStack_4._0_2_`). Byte 2, or a half store at 0 or 2, prints a named `xunknown2` local. The engine's reading has the sign of both (A3-150). The others are `xStack_4 >> 1` of an `xunknown4` (signed in the engine's reading) and functions that read an uninitialised byte.
+  * The zero extensions all agree and keep `(uint4)CONCAT11(...)` (`(int4)(uint4)CONCAT11(...) >> 1` for `extu.w ; shar`).
+  * `mov.b` reads, and half overwrites read whole (`CONCAT22`), agree before and after.
+
+### Why no oracle caught it (A11-18, fixed)
+
+* **The generator's default run** compares memory accesses with the emulator, not values, so it cannot see this class.
+* **The printed-C differential** caught only the `(uint4)` form: C and the engine's reading both read it as the zero extension, so it is `mismatch`. Seed 9301338 needs a logical use of the high half (`swap.w`, `shlr`), which is rare.
+* **The other forms were excused.** The second reading (`CxxHeader`) took a CONCAT cast to a signed type, or widened inside an expression, with its sign: a CONCAT is a signed `Piece` there, and A3-150 had made only the cast to an unsigned type the zero extension. So `(int4)CONCAT11(...)` and `CONCAT11(...) + x` agreed in that reading and were `narrow-c`.
+* **The fix (`67fb3093`).** A CONCAT cast to a wider type is its unsigned value whatever the sign of the target. A CONCAT that meets a wider typed operand is zero-extended into it (`PIECEOP` overloads). After 0081 this is exactly the engine's meaning.
+* **What the old engine gives under the new reading.** Printed-C at 9,400,001 to 9,410,000 (two chunks of 5,000 seeds) gives 9 + 9 findings: 16 of this class (`(int4)CONCAT11(param_2,param_2)`, `xStack_10 + CONCAT11(param_1,param_4)`, ...) and 1 of another class, twice. With the old reading the same engine gave 1. The default fixture set (651 functions) had no function of the class: on the unpatched engine it passes, while the new pins fail (11 checks: `A10-16 #0` to `#7` `mismatch`, and three text checks).
+* **Left.** A CONCAT against a plain number keeps `Promoted`'s signed reading (`CONCAT11(a,b) + 1`). A zero extension printed in that form would be excused, not found. After 0081 the engine prints no sign extension that way.
+
+### A10-17: `-0x80000000` in a signed compare (the oracle's side)
+
+* **The text is right in the engine's types.** `return -0x7fffff81 < -(param_2 < param_3) + -0x80000000;` is the code's signed compare (`cmp/ge` of `0x80000000 - T` against `0x80000080`). The constant is an `int4`: the engine prints a minus only for a signed constant. The sum is an `int4`, and the arithmetic is modular. For T = 1: -1 + -2^31 wraps to 0x7FFFFFFF, and 0x8000007F < 0x7FFFFFFF is 1, which is the run's value.
+* **The row's hypothesis was not the cause.** Signed overflow is not the problem: the C reading is compiled with `-fwrapv` already. The cause is C's literal typing. `0x80000000` does not fit an int, so C makes it an `unsigned int`. `-0x80000000` is then unsigned, and so is the comparison. The engine's reading fails as well, because it takes a comparison's result as an unsigned `Bool4`, so the sum is unsigned there too.
+* **The fix (oracle, `5ede2b39`).** A text that disagrees in both readings and holds `-0x80000000` is read once more as C, with that literal an int: `(-0x7fffffff - 1)`, the same value when widened to 8 bytes (`IntMinLiteralsSigned`). If it agrees there, it is `narrow-c`, as A2-120's text is. A wrong text with the literal is still a finding.
+* **Why not the engine.** The engine's print, which is upstream's, is kept. Writing every most-negative int as `(-0x7fffffff - 1)` would be no clearer to a reader than the guide's rule.
+* **Pins.** `A10-17` is `narrow-c` ("read as C with -0x80000000 an int"). `A10-17 oracle` is the same text with the compare turned to `>=`, and is `mismatch`. `IntMinLiteralsSigned` self-checks cover a subtraction (`y - 0x80000000`), `-0x80000000U`, `-0x80000000LL`, `-0x8000000000000000` and `-0x800000001`, which are all left alone.
+
+### Fresh seeds
+
+* **Printed-C, patched engine and new oracle (5,000 seeds per chunk, 32 inputs each).**
+
+  | seeds | functions | compared | agrees | narrow-c | mismatch | note |
+  |---|---|---|---|---|---|---|
+  | 9,400,001 to 9,405,000 | 9,013 | 8,524 | 8,404 | 179 | 1 | the `mismatch` is A3-159 |
+  | 9,405,001 to 9,410,000 | 8,983 | 8,550 | 8,404 | 202 | 0 | |
+  | 9,300,001 to 9,305,000 (A10-12's range) | 9,018 | 8,561 | 8,419 | 189 | 0 | A10-12 had 8,405 / 202 / 1 here; seed 9301338 agrees now |
+  | 9,305,001 to 9,310,000 | 9,019 | 8,551 | 8,389 | 224 | 0 | |
+
+* **A3-159 (open, routed to area 3).** The one `mismatch` is `frame124_9403586`, the same on master's engine and oracle. A frame text reads a byte-array local as a value (`(unkuint3)axStack_f >> 8`, `CONCAT13(param_4,axStack_f)`). The engine's reading does not compile it, and `skipped:array-local` does not take it: it is A3-137's class.
+* **Generator (access differential), patched engine.**
+  * Grammar 2, 9,400,001 to 9,405,000: 1 finding, seed 9403567 `map-frame-store`. Routed as A7-38.
+  * Grammar 1, 9,400,001 to 9,405,000: 1 seed with 4 findings, seed 9400696 `cache-read-pointer-unsaid`. Routed as A5-101.
+  * Both are the same on the engine without 0081: replayed with a build that links master's `typeop.cc`.
+
+### Vendored tree
+
+`check-vendored-tree.py check` (lint, then rebuild from the pinned `918d44eb` sparse clone): ok. The tree is the pinned upstream plus patches 0001 to 0078, 0080 and 0081. 0079 stays reserved for area 7's fixer.
+
+### Tests
+
+* **Full `ctest` including Live:** 100 percent, 0 failed of 115 (109 plus 6 Live, the master count). No test was added: the pins are inside `SaturnExplorerSh2GeneratedTests`. Engine tests took 46 s and passed.
+* **Printed-C test alone:** the pins pass: `A10-16 #0` to `#16` (agrees, or `narrow-c` for #8 and #9), `A10-16 oracle #0` and `#1` (`mismatch`), `A10-17` (`narrow-c`), `A10-17 oracle` (`mismatch`).
+* **Fault suite** (`SaturnExplorerDecompilerFaultTests` alone): 0 of 94 jobs failed (92 s).
+* **Generator default run** (no environment): 0 findings, all passed.
+* **Not run.** The game corpora's texts were not compared before and after: the images are in a scratch folder this round was told not to touch. A text of the corpora changes only where a sign extension of a CONCAT printed in place was a cast or hidden, which now gains its `(int2)`.
