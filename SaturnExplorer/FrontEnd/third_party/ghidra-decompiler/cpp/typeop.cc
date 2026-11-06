@@ -15,6 +15,7 @@
  *
  * Modified for SaturnExplorer: a constant in an equality compare with a narrow integer is cast to that integer's type (patches/0077-engine-narrow-compare-cast-target.patch).
  * Modified for SaturnExplorer: the other side of an equality compare whose one side is cast is cast to the same type (patches/0080-engine-narrow-compare-both-sides-cast.patch).
+ * Modified for SaturnExplorer: the sign extension of a CONCAT printed in place casts the CONCAT to its signed type first (patches/0081-engine-sext-of-concat-cast.patch).
  */
 #include "typeop.hh"
 #include "funcdata.hh"
@@ -1240,11 +1241,31 @@ string TypeOpIntSext::getOperatorName(const PcodeOp *op) const
   return s.str();
 }
 
+/// \brief Whether the input of a sign extension is a PIECE printed in place, whose type the text does not show
+///
+/// A PIECE that is not a variable of its own prints as \b CONCATxy(a,b) where it is read, with no type: C, and the reading of the text
+/// (DECOMPILER_GUIDE.md), take it as the unsigned value of its bytes. Its INT_SEXT printed as a cast to the output's type,
+/// \b (uint4)CONCAT11(a,b), or as \b (int4)CONCAT11(a,b), or hidden where the output is read, then reads as a zero extension: a stack word whose
+/// byte was overwritten and that \b mov.w reads back gives 0xFFFF80FF in the code and 0x000080FF in the text. The PIECE is cast to the signed
+/// type of its own size first (\b (uint4)(int2)CONCAT11(a,b)), so the text says the sign. A functional \b SEXT24(...) (an output that is not an
+/// integer) says it already. (SaturnExplorer, patches/0081-engine-sext-of-concat-cast.patch)
+/// \param op is the INT_SEXT
+/// \return \b true if the input is to be cast to the signed type of its size
+static bool sextOfImpliedPiece(const PcodeOp *op)
+
+{
+  const Varnode *vn = op->getIn(0);
+  if (!vn->isWritten() || vn->isExplicit()) return false;
+  if (vn->getDef()->code() != CPUI_PIECE) return false;
+  type_metatype meta = op->getOut()->getHighTypeDefFacing()->getMetatype();
+  return (meta == TYPE_INT || meta == TYPE_UINT);
+}
+
 Datatype *TypeOpIntSext::getInputCast(const PcodeOp *op,int4 slot,const CastStrategy *castStrategy) const
 
 {
   Datatype *reqtype = op->inputTypeLocal(slot);
-  if (castStrategy->checkIntPromotionForExtension(op))
+  if (castStrategy->checkIntPromotionForExtension(op) || sextOfImpliedPiece(op))	// SaturnExplorer (0081)
     return reqtype;
   Datatype *curtype = op->getIn(slot)->getHighTypeReadFacing(op);
   return castStrategy->castStandard(reqtype,curtype,true,false);
