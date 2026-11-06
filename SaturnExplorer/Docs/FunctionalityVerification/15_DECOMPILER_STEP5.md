@@ -17422,3 +17422,89 @@ The last write is three bytes (`SUB43`): S-0x14 to S-0x12, which leaves them as 
 | `ctest -R SaturnExplorerLive` (6) | 6 passed |
 | New tests | none (115 = 109 + 6, as on master) |
 | Fault suite | not rerun as a separate step, since no product code changed; `SaturnExplorerDecompilerFaultTests` passed in the ctest run |
+
+## Area 5, confirming round
+
+Reviewer, branch `review/5-confirm` from master `27044e60` (patches up to 0078 and 0080). The worktree's RelWithDebInfo build (`-j2`), every test binary under `ulimit -v 3500000` (4,000,000 for the generator pieces) and `timeout`, one heavy job at a time, generator runs in pieces of 5,000 seeds (under 20 minutes each). No product code changed. The round adds one test function, `TestArea5Confirm` in `Sh2DecompilerTests.cpp` (inside `SaturnExplorerSh2DecompilerTests`, so the ctest count is unchanged), which pins each new row's fixture as the head prints it, with controls; and the ledger rows **A5-101 to A5-107**.
+
+**The round is not clean: A5-102 is P1 and A5-103 is P2.** The other five rows are P3 (A5-105 and A5-106 are the oracle's and the instrument's). The area's count of consecutive clean rounds starts again.
+
+### 1. The recent fixes still hold
+
+| What | Result |
+|---|---|
+| The seeds of A5-90 and A5-94 to A5-100 (grammar 2 1804560, 4112577, 4508726, 4515520, 4912819, 300847, 292513, 293720, 298629; grammar 1 4605385, 4900986, 4906136), one at a time, `SE_GENERATED_CANARY=0` | 0 findings each |
+| The pins of A5-86 to A5-100 (`TestA587Pins`, `TestHardwareVolatility`) in the default generator and decompiler runs | pass (ctest below) |
+| Patch 0080 and 0077 on hardware reads in a compare: `return ((int4)iVar1 & 0xff80U) == (int4)param_1;` for VDP2_TVSTAT against `exts.w r4`, `(uint4)uVar1 != (int4)param_1` for SMPC_SF against `exts.b r4`, `(iVar2 == -0x8000) + (cVar1 == -1)`, `(uint4)(int4)param_1 < (uint4)uVar1` | the read printed once, at its width, every value as the code's; no cast reaches a dereference |
+| Patch 0075 (area 7: a delay slot's access is its own instruction) | the ledger and the notes name the slot in every shape tried: a store in a `bt/s` slot, a read in a `bra` slot, a store in an `rts` slot, a store in a `jsr` slot and a read in a `bsr` slot (the store before the call, the read before the call's argument), a store in each `bra` slot of a switch's arms and in the `jmp` slot of the dispatch |
+| Patch 0078 (a second restart for a second indirect call): A3-155's shape with VDP2 reads and writes before, between and after the two `jsr @r3` | every access once, in order, notes on each read |
+
+### 2. Shapes earlier rounds did not reach
+
+Probed by hand with an assembler of the round's own (scratch, not committed) through `SE_GENERATED_WORDS`, so every shape ran on the emulator beside the text:
+
+* **Computed pointers, byte, word and long.** A bus register plus an index says "if the index is 0 (the pointer is based at ...)" for VDP2_TVMD, SCU_IMS, VDP1_TVMR and the SMPC's even address. **An on-chip register plus an index says nothing (A5-101)**, and the corpora's DMAC routines are of that shape.
+* **Read-modify-write of on-chip registers.** `or.b`, `and.b`, `xor.b`, `tst.b #imm,@(r0,GBR)` with GBR at 0xFFFFFE00 and r0 constant: four reads and three writes, each once, in order, as SH2_TIER (`uVar1 = SH2_TIER; SH2_TIER = uVar1 \| 0x80;`). The same with r0 an index: right values and widths, no note (A5-101). A word read-modify-write of SH2_CCR, a long one of SH2_CHCR0: each with its notes and width cautions.
+* **Switch arms.** A switch on r4 whose arms read, write and `tas.b` SH2_FTCSR, SH2_FRCH, SH2_OCRH, SH2_FICRH and SH2_TIER at three widths, with a store in the dispatch's `jmp` slot, and a switch on a VDP2_TVSTAT value with a store in each arm's `bra` slot: every access in its case, once, with its cautions (the address errors of a long at 0xFFFFFE14 and 0xFFFFFE18 included).
+* **Across calls.** A register read and written before a call and after it, a pointer to one of two registers kept in r8 across a call and spilled to the frame across a call: each access once, in the code's order, the read note on the read after the call ("if the pointer holds 0x25F80004 (VDP2_TVSTAT)").
+* **Dead reads and repeated writes.** Reads whose values are unused (byte, word, long, direct and through a parameter), a read only compared with itself, a register read only to be subtracted from itself, the same write twice: all kept.
+* **Ordinary memory beside hardware.** A global read, rewritten and its old value stored through a pointer: **the global's write is printed after the pointer's (A5-102)**. With the old value stored to a register at a constant address, read through the pointer, passed to a call or written at another width, the order is the code's.
+* **The cartridge areas.** A store and a read back at 0x22000000 (word) and 0x24FFFFFF (byte): each folded with its caution ("a write to the cartridge area ... may be dropped ... a later read of it in this function is shown as the value written"); 0x05800000 (CD_DATATRNS through the cached partition) is listed, with the FIFO and cache notes.
+* **The cache-purge area.** A purge at a constant address between two reads of the line's word: both reads printed (the word is volatile, A5-72), the note on the purge; a cache-through write, a purge and a cached read: in order; a purge loop from 0x46030000: "if the pointer holds 0x46030000 (it may hold other values too)". **A purge through `(p & 0x1FFFFFFF) \| 0x40000000` says nothing (A5-103)**, and both corpora have it.
+* **Stepped pointers.** Through address 0 into the on-chip page (0x10, 0, 0xFFFFFFF0) and off the top (0xFFFFFFE0, 0xFFFFFFF0, 0): said (A5-91's note; the stepped note from SH2_BCR1).
+* **The literal pool.** A word of the pool overwritten and then loaded PC-relative is still the old constant (A5-104).
+
+### 3. The generator, fresh seeds
+
+| Range | Seeds | Failing | Classes |
+|---|---|---|---|
+| grammar 1, 2,000,001 to 2,050,000 (ten pieces) | 50,000 | 1: **2027066** | `cache-read-pointer-unsaid` (n and v): **A5-107** |
+| grammar 2, 2,050,001 to 2,100,000 (ten pieces) | 50,000 | 3: 2067040, 2087030, 2089570 | `map-frame-store` (area 7: a frame local's line names none of the stores folded into it, A7-31's check): routed |
+
+3,104 s in all; no piece timed out and none crashed. 4,487 seeds had a run excluded as an address error (the domain rule). The area 5 checks over the 100,000 seeds: `cache.read.said` 20,362, `cache.read.pointer.said` 3,947, `pointer.effect.derived` 6,676, `pointer.effect.open` 1,262, `onchip.span.said` 11,416, `cart.write.said` 1,255.
+
+Grammar 2's range from 2,000,001 was the A5-87 fixer's and the A5-99 triage's; it starts here at 2,050,001.
+
+### 4. The corpora
+
+`SE_GAME_HWRAM=<img> SE_GAME_LEND=1 SE_GAME_NOTES=1 SE_GAME_OUT=<dir> SaturnExplorerSh2DecompilerTests`, both images, on master's build:
+
+| | hwram007 | hwram008 | matrix |
+|---|---|---|---|
+| functions, all ok; lending run | 839; 1,730 | 1,554; 2,995 | as the record |
+| real entries, lent after lending the effects | 474 (645) of 999 | 724 (975) of 1,543 | **the same** |
+| missing and said | 0 | 4 | **the same** |
+| accesses dropped / not printed exactly once | 0 / 0 | 0 / 0 | 0 |
+| hardware notes and cautions | 35 and 0 | 57 and 4 | as the record |
+| frame writes lost / malformed pieces / frame unchecked | 0 / 0 / 0 | 0 / 0 / 0 | 0 |
+
+Every count is the matrix's. What the counts cannot see, the texts show: the DMAC channel routines (hwram007 06033AA8, 06033C50, 06033C90, 06033D20; hwram008 0605ADF0, 0605AF98, 0605AFD8, 0605B068) and the cache-purge routines (hwram007 060339C8, 06024764; hwram008 06074D88, 06064404) print with no note at all (A5-101, A5-103). A scan of the lent texts for A5-102's shape (`v = x; *p = ...g...; g = v;` with a pure copy) finds none; the two loose matches in hwram008 (0603E8F4 and 0603E8F8, a shift loop and then `iRam060a8e20 = iVar2;`) are in the code's order (read against `SE_GAME_DISASM`), and so is hwram007's 06007ED2 linked-list insert.
+
+### 5. The rows
+
+| Row | Severity | What |
+|---|---|---|
+| A5-101 | P3 | An unknown index added to an on-chip register's address (`iVar1 + -0x1f0`, `param_1 * 0x10 + -0x74`) says nothing: `Walk` takes such a constant for a small negative addend (A5-78's rule stops below 0xE0000000). Both corpora's DMAC routines. Values right; the DMAC's "starts the transfer" is excused by design |
+| A5-102 | **P1** | `x = g; g = r5; *r4 = x` prints `xVar1 = param_2; *param_1 = xRam...; xRam... = xVar1;`: the text ends with the new value where the code ends with the old when r4 is &g (shown on the emulator with the global in r4's arena), and a DMA enable through a pointer is printed before the buffer write the code makes first. Not in either corpus |
+| A5-103 | **P2** | A purge through `(param & 0x1ffffff0) \| 0x40000000` is printed as a store of 0 with no note; the address is in the purge partition whatever the parameter is. Both corpora's purge routines read as buffer clears |
+| A5-104 | P3 | A literal overwritten and then loaded is folded as its old constant (`return 0x12345678;`), with only the engine's "Read-only address ... is written" |
+| A5-105 | P3 | Oracle: rule 3f takes an OR into the loaded value for the read's pointer (a false positive, which happens to sit on A5-101) |
+| A5-106 | P3 | Instrument: the grammars draw none of A5-101 to A5-103's shapes |
+| A5-107 | P3 | Grammar 1 seed 2027066: a pointer flipped by 0x80000000 in one loop and stepped and flipped by 0x20000000 in a second reads VDP2 registers through the cached partition with no stepped note and no cache caution (A5-97's class) |
+
+Each product row's fixture is in `TestArea5Confirm`, which holds today's output (the checks marked DEFECT) beside a control that has the right output. The fixer turns the DEFECT checks round. The replay lines (`SE_GENERATED_WORDS=...`) in the rows run the same words on the emulator.
+
+### 6. Tests
+
+| | Result |
+|---|---|
+| build (all targets), `-j2` | ok |
+| `SaturnExplorerSh2DecompilerTests` alone, with `TestArea5Confirm` | all passed (27.8 s) |
+| `ctest -j2 --timeout 900 -E SaturnExplorerLive` / `ctest -R SaturnExplorerLive` | **109 of 109** (290 s; the engine suite 63.3 s, passed under the 900 s timeout) / **6 of 6** (29 s): 109 plus 6 Live, the master count |
+
+No new ctest test: the pins are a function inside `SaturnExplorerSh2DecompilerTests`. No product file changed, so the fault suite was not rerun.
+
+### 7. Routed
+
+* **Area 7:** grammar 2 seeds **2067040**, **2087030**, **2089570** (`n:map-frame-store`: `xStack_8._0_2_ = *param_2;`, `iStack_24 = iVar4;`, `xStack_20 = param_2;` drawn at a load or a call and naming none of the folded store). A7-31's check, open. Replay: `SE_GENERATED_GRAMMAR=2 SE_GENERATED_FIRST=<seed> SE_GENERATED_SEEDS=1 SE_GENERATED_CANARY=0`.
+* **A5-102** is ordinary memory as much as hardware (the area 3 rows of frame aliasing are its neighbours); filed in area 5 for the reordered hardware write. For the coordinator to route if the fixer finds the cause in the engine's merge of a global's two values.

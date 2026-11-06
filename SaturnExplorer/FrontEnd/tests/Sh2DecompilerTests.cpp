@@ -14685,6 +14685,105 @@ void TestArea10Round2()
     }
 }
 
+// ===== Area 5, confirming round (REVIEW_LEDGER.md A5-101 to A5-104) ===================================================================
+// The reviewer's fixtures, each pinned as the head prints it today, so the fixer reproduces the row by running this function. The checks
+// marked DEFECT hold the wrong or missing output: the fix turns each of them round (and keeps the controls). The words are the reviewer's,
+// assembled at the bases below (only sm1 holds an absolute address of its own, its literal's).
+void TestArea5Confirm()
+{
+    Sh2Decompiler d(gConfig);
+    std::vector<uint8_t> hw(0x100000u, 0);
+    struct W { const char* name; uint32_t base; std::vector<uint16_t> words; };
+    const std::vector<W> fx = {
+        // A5-101: mov.l @(lit),r1 (0xFFFFFE10) ; mov #3,r0 ; and r4,r0 ; shll r0 ; mov.b @(r0,r1),r2 ; or #0,r0 ; mov #0x80,r3 ; or r3,r2 ;
+        // mov.b r2,@(r0,r1) ; rts ; nop -- a byte read-modify-write of SH2_TIER / FRCH / OCRH / TCR by an index
+        { "a5_101_byte", 0x06050000u, { 0xD105, 0xE003, 0x2049, 0x4000, 0x021C, 0xCB00, 0xE380, 0x223B, 0x0124, 0x000B, 0x0009, 0x0009, 0xFFFF, 0xFE10 } },
+        // A5-101, the corpus's shape (hwram007 06033C50): CHCR of channel param_1 |= 1: mov.l @(lit),r1 (0xFFFFFF8C) ; mov r4,r0 ; shll2 r0 ;
+        // shll2 r0 ; add r0,r1 ; mov.l @r1,r0 ; or #1,r0 ; mov.l r0,@r1 ; rts ; nop
+        { "a5_101_dmac", 0x06050100u, { 0xD104, 0x6043, 0x4008, 0x4008, 0x310C, 0x6012, 0xCB01, 0x2102, 0x000B, 0x0009, 0xFFFF, 0xFF8C } },
+        // control: the same shape based at SCU_D0EN
+        { "a5_101_scu", 0x06050200u, { 0xD104, 0x6043, 0x4008, 0x4008, 0x310C, 0x6012, 0xCB01, 0x2102, 0x000B, 0x0009, 0x25FE, 0x0010 } },
+        // A5-102: mov.l @(lit),r3 (0x06030000) ; mov.l @r3,r0 ; mov.l r5,@r3 ; mov.l r0,@r4 ; rts ; nop
+        { "a5_102", 0x06050300u, { 0xD302, 0x6032, 0x2352, 0x2402, 0x000B, 0x0009, 0x0603, 0x0000 } },
+        // A5-102 through a pointer merged from SCU_D0EN and SCU_D1EN: mov.l @(lit),r3 ; mov.l @r3,r0 ; mov.l r5,@r3 ; mov.l @(lit),r1 ;
+        // tst r4,r4 ; bt L ; mov.l @(lit),r1 ; L: mov.l r0,@r1 ; rts ; nop
+        { "a5_102_hw", 0x06050400u, { 0xD306, 0x6032, 0x2352, 0xD103, 0x2448, 0x8900, 0xD102, 0x2102, 0x000B, 0x0009, 0x25FE, 0x0010, 0x25FE, 0x0030, 0x0603, 0x0000 } },
+        // control: the same as a5_102 with the global read and written as a byte
+        { "a5_102_byte", 0x06050500u, { 0xD302, 0x6030, 0x2350, 0x2402, 0x000B, 0x0009, 0x0603, 0x0000 } },
+        // A5-103: mov.l @(lit),r1 (0x1FFFFFF0) ; and r4,r1 ; mov.l @(lit),r2 (0x40000000) ; or r2,r1 ; mov #0,r0 ; rts ; mov.l r0,@r1
+        { "a5_103", 0x06050600u, { 0xD103, 0x2149, 0xD203, 0x212B, 0xE000, 0x000B, 0x2102, 0x0009, 0x1FFF, 0xFFF0, 0x4000, 0x0000 } },
+        // control: the purge at a constant address, 0x46030000
+        { "a5_103_const", 0x06050700u, { 0xD101, 0xE000, 0x000B, 0x2102, 0x4603, 0x0000 } },
+        // A5-104: mov.l @(lit),r1 (the address of the next literal) ; mov.l r4,@r1 ; mov.l @(lit),r0 (0x12345678) ; rts ; nop
+        { "a5_104", 0x06050800u, { 0xD102, 0x2142, 0xD002, 0x000B, 0x0009, 0x0009, 0x0605, 0x0810, 0x1234, 0x5678 } },
+        // A5-107 (grammar 1 seed 2027066, shrunk by the generator): p = 0x25F800DC; loop 4: p = (p + 4) ^ 0x80000000; loop 4: read.w @(2,p);
+        // p = (p + 4) ^ 0x20000000 -- the second loop reads 0x05F800F2 and 0x05F800FA through the cached partition
+        { "a5_107", 0x06050900u, { 0xD607, 0xE304, 0x7604, 0xD107, 0x261A, 0x4310, 0x8BFA, 0xE304, 0x8561, 0x7604, 0xD204, 0x262A, 0x4310, 0x8BF9, 0x000B, 0x0009,
+                                   0x25F8, 0x00DC, 0x8000, 0x0000, 0x2000, 0x0000 } },
+        // control: the same without the step in the second loop (read.w @(2,p); p ^= 0x20000000)
+        { "a5_107_nostep", 0x06050A00u, { 0xD607, 0xE304, 0x7604, 0xD107, 0x261A, 0x4310, 0x8BFA, 0xE304, 0x8561, 0xD205, 0x262A, 0x4310, 0x8BFA, 0x000B, 0x0009, 0x0009,
+                                          0x25F8, 0x00DC, 0x8000, 0x0000, 0x2000, 0x0000 } },
+    };
+    for (const W& w : fx)
+    {
+        size_t off = w.base - 0x06000000u;
+        for (uint16_t c : w.words) { dts::Put16(hw, off, c); off += 2; }
+    }
+    auto snap = MakeSnapshot(hw);
+    std::map<std::string, DecompileResult> out;
+    for (const W& w : fx)
+    {
+        const DecompileResult r = d.Decompile(snap, Request(w.base));
+        Print(w.name, r);
+        CHECK(r.status == DecompileStatus::Ok);
+        out[w.name] = r;
+    }
+    // A5-101 (P3): an unknown index added to an on-chip register's address says nothing. DEFECT: no note at all (want: "if the index is 0
+    // (the pointer is based at 0xFFFFFE10 (SH2_TIER))", and the TE-arming read note of CHCR0 for the DMAC shape).
+    {
+        const DecompileResult& r = out["a5_101_byte"];
+        CHECK(Has(r.Text(), "+ -0x1f0)"));
+        CHECK(r.hardwareNotes.empty());   // DEFECT
+        const DecompileResult& m = out["a5_101_dmac"];
+        CHECK(Has(m.Text(), "param_1 * 0x10 + -0x74"));
+        CHECK(m.hardwareNotes.empty());   // DEFECT
+        CHECK(HasNote(out["a5_101_scu"], "if the index is 0 (the pointer is based at 0x25FE0010 (SCU_D0EN))", false));   // control
+    }
+    // A5-102 (P1): a store to a global is printed after a later store through a pointer that writes the global's old value. DEFECT: the
+    // pointer's store is printed first, so when the pointer is the global's address the text ends with the new value and the code with the old.
+    {
+        auto before = [](const std::string& t, const char* a, const char* b) {
+            const size_t i = t.find(a), j = t.find(b);
+            return i != std::string::npos && j != std::string::npos && i < j;
+        };
+        CHECK(before(out["a5_102"].Text(), "*param_1 = xRam06030000;", "xRam06030000 = xVar1;"));        // DEFECT
+        CHECK(before(out["a5_102_hw"].Text(), "*puVar2 = uRam06030000;", "uRam06030000 = xVar1;"));     // DEFECT: the DMA start before the RAM write
+        CHECK(before(out["a5_102_byte"].Text(), "cRam06030000 = param_2;", "*param_1 = iVar1;"));        // control: in the code's order
+    }
+    // A5-103 (P2): an associative purge through a pointer the code builds with the and/or idiom says nothing; the text is a store of 0.
+    {
+        const DecompileResult& r = out["a5_103"];
+        CHECK(Has(r.Text(), "& 0x1ffffff0 | 0x40000000) = 0;"));
+        CHECK(!HasNote(r, "associative purge", false) && !HasNote(r, "associative purge", true));   // DEFECT
+        CHECK(HasNote(out["a5_103_const"], "an access at 0x46030000 is an associative purge, not a memory access", false));   // control
+    }
+    // A5-104 (P3): a literal-pool word the function overwrites is still folded as the old constant. DEFECT: `return 0x12345678;` where
+    // the code returns param_1; only the engine's generic "Read-only address ... is written" warning is given.
+    {
+        const DecompileResult& r = out["a5_104"];
+        CHECK(Has(r.Text(), "return 0x12345678;"));   // DEFECT
+        CHECK(WarnsAbout(r, "Read-only address"));
+    }
+    // A5-107 (P3): a pointer stepped and flipped into the cached partition in a second loop, after a first loop that flipped it with 0x80000000,
+    // gets neither the stepped note nor the cache caution. DEFECT: no "stepped in a loop" note (the control without the step has both).
+    {
+        const char* cache = "a read of a register through the cached partition is a cache read when the cache is on (SH2_CCR.CE)";
+        CHECK(!HasNote(out["a5_107"], "stepped in a loop", true) && !HasNote(out["a5_107"], "stepped in a loop", false));   // DEFECT
+        CHECK(!HasNote(out["a5_107"], cache, true));                                                                      // DEFECT
+        CHECK(HasNote(out["a5_107_nostep"], cache, true));                                                                // control
+    }
+}
+
 void TestFetchAndDataRefusals()
 {
     Sh2Decompiler d(gConfig);
@@ -15179,6 +15278,7 @@ int main(int argc, char** argv)
         RUN(TestA3144Fix());
         RUN(TestA3155Fix());
         RUN(TestArea10Round2());
+        RUN(TestArea5Confirm());
         RUN(TestArea2Round8());
         RUN(TestArea2Round9());
         RUN(TestArea2Round10());
