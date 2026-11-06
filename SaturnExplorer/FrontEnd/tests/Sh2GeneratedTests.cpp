@@ -3533,10 +3533,29 @@ bool OrsIntoOnChip(const std::string& text)
         if (v < 0xE0000000ull || v > 0xFFFFFFFFull) continue;
         size_t b = at;
         while (b > 0 && text[b - 1] == ' ') --b;
-        if (b > 0 && text[b - 1] == '|' && (b < 2 || text[b - 2] != '|')) return true;
         size_t e = j;
         while (e < text.size() && text[e] == ' ') ++e;
-        if (e < text.size() && text[e] == '|' && (e + 1 >= text.size() || text[e + 1] != '|')) return true;
+        // (A5-100) The constant is an operand of the `|` beside it only if no operator that binds tighter than `|` holds it on its other side:
+        // `in_r7 ^ 0xe0000000 | 0x60000000` is `(in_r7 ^ 0xe0000000) | 0x60000000`, an XOR with the constant, then an OR with one that sets
+        // two of the top bits (seeds 293720, 298629). The tighter ones: `^`, `&` (not `&&`), the arithmetic and shifts, the compares.
+        auto tighterBefore = [&]() {
+            if (b == 0) return false;
+            const char c = text[b - 1];
+            if (c == '=') return b >= 2 && (text[b - 2] == '=' || text[b - 2] == '!' || text[b - 2] == '<' || text[b - 2] == '>');
+            if (c == '&') return b < 2 || text[b - 2] != '&';
+            return c == '^' || c == '+' || c == '-' || c == '*' || c == '/' || c == '%' || c == '<' || c == '>';
+        };
+        auto tighterAfter = [&]() {
+            if (e >= text.size()) return false;
+            const char c = text[e];
+            const char n = e + 1 < text.size() ? text[e + 1] : '\0';
+            if (c == '=') return n == '=';
+            if (c == '!') return n == '=';
+            if (c == '&') return n != '&';
+            return c == '^' || c == '+' || c == '-' || c == '*' || c == '/' || c == '%' || c == '<' || c == '>';
+        };
+        if (b > 0 && text[b - 1] == '|' && (b < 2 || text[b - 2] != '|') && !tighterAfter()) return true;
+        if (e < text.size() && text[e] == '|' && (e + 1 >= text.size() || text[e + 1] != '|') && !tighterBefore()) return true;
     }
     return false;
 }
@@ -12214,6 +12233,12 @@ void TestA587Pins(Sh2Decompiler& d)
         // entry is the pointer's other value: as open as in function 1 alone (the same instructions without the switch), whose text has no assignment.
         { { "A5-99, grammar 2 seed 300847 shrunk", "2F86 2F96 2FA6 2FB6 2FC6 0C2A 6843 6953 6A63 6B73 E106 3712 891C 4708 C701 017E 412B 0009 0600 903C 0600 9040 0600 9044 0600 9048 0600 904C 0600 9050 A00B 0009 A009 0009 A007 0009 A005 0009 A003 0009 A001 0009 614D D204 4C2A 6CF6 6BF6 6AF6 69F6 68F6 422B 0009 0600 906C D303 273A 471B 517C E061 000B 0009 0009 A000 0000",
             "0/0/68,6c/6c/7a", "20:7:6:54:3c,40,44,48,4c,50", "1,1", "0,0", "20000,0" }, "pointer.effect.open", nullptr },
+        // A5-100 (grammar 2 seeds 293720 and 298629, the A5-99 sweep): `in_r7 ^ 0xe0000000 | 0x60000000` and `(param_1 ^ 0xe0000000 | uRam06009034) - 4`
+        // hold 0xe0000000 as the XOR's operand; rule 3f took it for an OR with a mask of the top bits (`n:onchip-span-unsaid`). No finding now.
+        { { "A5-100, grammar 2 seed 293720 shrunk", "2FD6 4F22 7FF8 D104 271A 2702 D203 7F08 4F26 6DF6 422B 0009 E000 0000 0600 9020 D102 271B 6372 E03F 000B 0009 6000 0000",
+            "0/0/18,20/20/2c", nullptr, "1,1", "104000,0", "0,0" }, nullptr, nullptr },
+        { { "A5-100, grammar 2 seed 298629 shrunk", "4F22 2622 D101 4F26 412B 0009 0600 9010 D302 243A D302 432B 0009 0009 E000 0000 0600 9024 2FD6 D103 241B 6361 2436 6DF6 000B 0009 FFFF FE00",
+            "0/0/c,10/10/1a,24/24/34", nullptr, "0,0,0", nullptr, nullptr }, nullptr, nullptr },
     };
     for (const Pin& p : kPins)
     {
@@ -12323,6 +12348,11 @@ void TestA587Pins(Sh2Decompiler& d)
     }
     CHECK(OrsIntoOnChip("in_r1 | 0xffffffc0") && OrsIntoOnChip("0xe0000000 | param_1") && OrsIntoOnChip("x|0xffffff00"));
     CHECK(!OrsIntoOnChip("in_r1 & 0xffffffc0") && !OrsIntoOnChip("in_r1 | 0x1fffffc0") && !OrsIntoOnChip("a || 0xffffffc0") && !OrsIntoOnChip("in_r1 | 0xdfffffc0"));
+    // A5-100: a constant held by a tighter operator on its other side is not the OR's operand (seeds 293720, 298629); the controls are
+    CHECK(!OrsIntoOnChip("in_r7 ^ 0xe0000000 | 0x60000000") && !OrsIntoOnChip("(param_1 ^ 0xe0000000 | uRam06009034) - 4") &&
+          !OrsIntoOnChip("x | 0xe0000000 ^ y") && !OrsIntoOnChip("x & 0xffffff00 | y") && !OrsIntoOnChip("a == 0xffffffc0 | b"));
+    CHECK(OrsIntoOnChip("in_r7 ^ 0x10 | 0xe0000000") && OrsIntoOnChip("a && 0xffffffc0 | b") && OrsIntoOnChip("(uint4)0xffffffc0 | b") &&
+          OrsIntoOnChip("x = 0xffffffc0 | y") && OrsIntoOnChip("x | 0xffffffc0 || y"));
     // a read whose instruction has two lines (the delay slot's store and the `return` the printer gives it too): the line that dereferences is the access
     {
         DecompileResult r = FakeOutput({ "puVar9 = &VDP2_TVMD;", "iVar5 = (int4)(int2)param_1[7];", "*puVar9 = (uint2)uVar6;", "return iVar5;" });
