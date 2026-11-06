@@ -17136,3 +17136,98 @@ Routed:
 * A11-16 to area 9 (or area 12's CI);
 * the generator's blindness to area 7's value rule to A7-34 (area 7);
 * A11-7 again to area 10.
+
+## Area 10, round 2
+
+Branch `review/10-round2` from master `1efd1c26` (patches 0001 to 0078). Reviewer of area 10 (`REVIEW_PROGRAM.md`: "the reproduction job; one review per patch against pinned upstream; upstream bugs filed"), round 2. Own RelWithDebInfo build (gcc 13, `-j2`), every test binary under `ulimit -v 3500000` and `timeout`. **Not clean: A10-12 and A10-13 are P2.** No product code changed; the round adds one test function (`TestArea10Round2`, inside `SaturnExplorerSh2DecompilerTests`, so the ctest count is unchanged), the `patches/README.md` cells of 0014, 0040, 0060, 0061 and 0065, and `Docs/Decompiler/tools/a10_round2/textdiff.sh`.
+
+### 1. The reproduction job
+
+* `check-vendored-tree.py check` against a clean clone of upstream at the pinned commit (`918d44ebc2962a53d23eeee52b8f44c7816e7815`, `git status` empty): **ok, zero diff** (`vendor.py` applies 0001 to 0078, 72 patch files; `Unused numbers: 0035, 0036, 0039, 0041, 0042, 0043`, the `Reserved numbers:` line round 1 left for 0071 to 0073 is gone, as it should be). `selftest`: all 16 defects rejected, `vendored tree: ok (selftest)`. `lint` again after this round's README edits: ok.
+* CI: the `vendored-tree` job runs `lint`, `rebuild` and `selftest` on every push and pull request touching `SaturnExplorer/**`, `.github/scripts/**` or the workflow (not on the nightly schedule, where it has nothing new to check). It was **green** on master `1efd1c26`'s run (42184145545) and on every run listed back to 2026-11-04.
+* **The same workflow's sanitizers job has been red on every run since 2026-10-31 (A10-13, P2).** 40 runs of `saturn-explorer-decompiler.yml` on master from 2026-11-04 18:11 to 2026-11-06 09:49 all fail, the last success is 41218600846 (2026-10-31 16:13). The job ends `Sanitizer check FAILED` because `SaturnExplorerSh2PrintedCTests` fails there: the printed-C pins `A3-144 LOOP L4` and `A3-145 IDX L4 chain` (patch 0076's) are `not-compilable` in the job, then `failing == 0`. Every other gate in the job passes in those logs (the fault matrix, the freshness test, the engine suite). A10-10 accepts that 0011, 0016 (and now 0040) are pinned only there because the job is a gate; a job that is always red gates nothing, so the acceptance does not hold until it is green again. Routed to the coordinator (CI) and area 3 (the two pins: why only that job fails to compile them).
+
+### 2. The patches added since round 1
+
+Round 1 reviewed 0001 to 0070 and added 0074; 0071 to 0073 were in flight then, so this round reads 0071 to 0073 and 0075 to 0078, each against the pinned upstream file and against what its README and `VENDOR.md` rows say. Each was also checked for memory safety (ownership on exceptions, new fields initialised, flags that collide).
+
+| Patch | Size | Review against pinned upstream | Row says what the code does? | Mutant |
+|---|---|---|---|---|
+| `0071-engine-narrow-compare-constant-sign` | +14 -1, `cast.cc` | Upstream `checkIntPromotionForCompare` takes a named variable or cast for NO_PROMOTION; the patch reads its signedness from its type when the other side is a constant. Sound for the constant case. | Yes (0077 later widened the condition; the 0077 row says so). | area 11 `V-0071` killed |
+| `0072-engine-frame-chains-and-save-slots` | +359 -28, 11 files | Read for safety: the new sets and maps are owned by `FrameEscape`/`Funcdata` values, cleared with the function; the bounds (4,096 ops, 65,536 guard records) mark the function capped instead of failing open. Its behaviour was reviewed by area 3 round 16 (A3-144, a regression of 0072, fixed by 0076). Upstream defects in it worth filing: `PcodeOp::isCseMatch` compares constants without their size (A3-139), `RulePullsubIndirect`'s piece (A3-140), `RulePiecePathology` on a stack word (A3-131). | Yes. | `TestA3130Fix` |
+| `0073-engine-constant-pointer-guess-not-hardware` | +65, `coreaction.cc` | Upstream `ActionConstantPtr::isPointer` substitutes a symbol for any constant a copy, compare or concatenation holds. The patch keeps a volatile symbol only where the flow uses the value as an address (`copyUsedAsAddress`, a bounded walk that answers yes at 128 nodes). One upstream note: the exemption for a return locked to a pointer also takes a locked `TYPE_UNKNOWN` return (it mirrors `checkCopy`); the host never locks the decompiled function's own output (`Sh2Decompiler.cpp`: "the function being decompiled keeps the engine's own recovery"), so unreachable here. | Yes. | `a5_86*` |
+| `0075-engine-delay-slot-ops-marked` | +65 -3, 13 files | `from_delay_slot = 0x400000` collides with no other `addlflags` bit; `PcodeData::delaySlot` is set false in `allocateInstruction` and marked only for the slot's range; `PcodeEmit::fromDelaySlot` is initialised by the new constructor; `setSlotSource`/`clearSlotSource` bracket each rule and the cast pass (an exception out of a rule leaves the source set, but every path that catches one abandons the function or the partial function). The flag reaches the ops the pool rules, the cast pass, `newOpBefore`, `cloneOp`, `CloneBlockOps` and `replaceVolatile` make, not ops other actions make at a slot op's address (a Merge copy, `ActionConstantPtr`'s PTRSUB): those keep the branch's address, as before the patch. The row names exactly the hooks it has, so it does not overclaim; area 7 owns the mapping. | Yes. | area 7 `tokslot` |
+| `0076-engine-frame-loads-keep-writes` | +163 -4, 5 files | `frameload_force = 0x4000` fits `Varnode::addlflags` (`uint2`) and collides with nothing; `LoadGuard::sunk` is set in `set()`. `setAddrForce` clears the mark, `clearFrameLoadForce` clears only a force it set. One gap: `cloneVarnode`, `transferVarnodeProperties` and `CloneBlockOps::buildOpClone` copy `addrforce` and not the mark, so a held write copied by them keeps a permanent force (fail closed: a dead frame write printed). The callers that run while dead code still runs are lane splitting (`transform.cc`) and `ActionReturnSplit`'s node split; no input of the suite or the generator was found to reach them with a held write, so no row. Its behaviour had no area 3 round after it (area 3 round 16 found what it fixes). | Yes, but for the copies above ("let go at the start of each pass ... another address force makes it permanent": so do the three copies). | `TestA3144Fix` |
+| `0077-engine-narrow-compare-cast-target` | +30 -4, `cast.cc`, `typeop.cc` | `compareCastTarget` is safe for the constant case because a constant sits in slot 1 (`RuleTermOrder`) and the cast pass handles slot 0 first, so the other side it reads is already the CAST that pass made. The `cast.cc` half, a narrow expression against a named narrow side, does not do what the row says when the expression's type is the lower-ordered one: **A10-12 (P2)**, below. | No (A10-12). | `V-0071` (both) |
+| `0078-engine-deindirect-restart-per-call-site` | +18 -1, 4 files | `ActionRestartGroup` allowed one restart; the patch adds one per call site `deindirect` could not convert in place. Finite: a site is counted once (a `set<Address>`), and the override makes it a direct CALL from the next flow on; a site whose override is cancelled (`setupCallindSpecs`, an injected call of its own entry) asks again but is not counted again. The set is cleared with the override and never by a restart, as the count needs. Reverted (all five hunks), **9 checks of `TestA3155Fix` fail**, as its row says (both the g1 fixture and the control). Upstream: reachable wherever a callee's prototype carries effects other than the model's (a user-set calling convention), so filed as "part". | Yes. | 9 checks |
+
+### 3. The fixture for A10-12
+
+```
+SE_GENERATED_PRINTEDC=only SE_GENERATED_PRINTEDC_WORDS="6143 611D 9207 2129 6353 633E 633D 3130 0029 000B 0009 FF80" SaturnExplorerSh2GeneratedTests <dir>
+hand0: narrow-c (f0 r4=FFFFFFFE r5=00000080 ... size=1 run=00000001:0000FF80 pseudo=00000000:00000000 [agrees when read as the engine means it])
+bool func_0x06009000(uint2 param_1,char param_2)
+{
+  return (uint2)(param_1 & 0xff80) == (int2)param_2;
+}
+```
+
+`mov r4,r1 ; extu.w r1,r1 ; mov.w #0xff80,r2 ; and r2,r1 ; mov r5,r3 ; exts.b r3,r3 ; extu.w r3,r3 ; cmp/eq r3,r1 ; movt r0`: a two-byte compare. In C the left side is 65408 and the right -128. The cast `(uint2)` is to `reqtype`, the lower-ordered of `uint2` and `int2`, which is the expression's own type; the right side is a NO_PROMOTION cast and is never cast. Families 103 and 108 report 0 `mismatch` because the oracle classes this `narrow-c` and passes it. Before 0077 the text was the same without the cast, so this is no regression, but 0077's row claims the class.
+
+### 4. A11-7: each survivor decided (A10-14)
+
+A mutant that survives can mean dead code, code another patch does the work of, or code nobody tests. To tell them apart, each was run against the suite and the **printed texts compared** (`tools/a10_round2/textdiff.sh`), not only the checks:
+
+| Mutant | Checks that fail | Texts that change (suite) | Verdict |
+|---|---|---|---|
+| 0014 hunk 1 (hold in every pass) alone | 0 | 0 (and 0 of 839 texts of the first game image) | subsumed by 0018 |
+| 0014 hunk 2 (lookup skip) alone | 14 (`TestHardwareVolatility` 9, `TestDefaultAlsoCase` 3, `TestArea7Round4` 2) | the table read held and printed | needed, but only because of hunk 1 |
+| 0014 hunk 3 (`foldInOneGuard`) alone | 0 | 1 fixture: `switch, truncated table` prints `if (param_1 < 3) return 0;` instead of a one-case switch, both under "cases may be missing" | changes only when a guard folds |
+| 0014 whole (as area 11 ran it) | 0 | the hunk 3 fixture only | hunks 1 and 2 cancel |
+| 0060 (hunks 1, 2, 4) | 0 | 2 local arrays sized differently | subsumed by 0066 for values |
+| `V-0061-memescape` | 0 | 3 local maps (`axStack_8[2]` against `xStack_8`), one frame-ledger note | subsumed by 0061's own load path for values |
+| `V-0065-steppeddown` | 0 | 0 | subsumed by 0066 |
+| 0040 | 0 without the sanitizers | n/a | needed; LeakSanitizer only (A10-10) |
+
+For 0061 the shape the switch should matter for was built as a fixture (`TestArea10Round2`, M1): a frame address stored to a global, a call handed nothing, the callee writing the word below the stored address through it, the local read after the call. The text is right with and without the switch (the call's guard keeps the local), so the fixture pins the value rather than killing the mutant. No fixture can kill the others by value; pinning a local map's shape would pin a choice, not a value. **The `patches/README.md` cells now say what each is subsumed by, and what still pins it** (A11-7's request). A11-7 is accepted with that.
+
+The corpus runs of the other mutants did not run: `scratchpad/h/` (the game images `hwram007.bin`, `hwram008.bin`, `hwram009.bin`) and other scratch directories were deleted by another session at about 15:20, during this round, with the disk at 87 % (5.4 GB free). The coordinator's `matrix.sh` reads those images.
+
+### 5. Round 1's rows re-judged
+
+* **A10-4** (bookkeeping, fixed): still fixed: `lint` and `selftest` pass, the README has no undeclared gap and the `Reserved numbers:` line is gone. A10-15 is a new defect of the same kind that the lint cannot see (allocation ordinals).
+* **A10-8** (0046, 0049, 0051 dead, replaced by 0054; accepted until the next bump): still right, there has been no bump. A10-14 adds 0014's later-pass hold and 0060 to the list of what to drop or squash then.
+* **A10-10** (accepted: sanitizer-only and Windows-only coverage): **0040 added** (A11-7). The reason still holds for each patch, but the acceptance assumed a green gate, and the sanitizers job has been red since 2026-10-31 (A10-13).
+* **A10-11** (accepted: 0052, 0053, 0055's global assumptions): still right. The new patches add two more, both stated in their rows: 0075's host maps a slot op to its branch's address plus 2 (true on the SH-2, whose instructions are 2 bytes), 0076 holds every frame write while a frame LOAD lives (fail closed). 0078's bound (one restart per indirect call site) is finite and not an assumption about the code.
+
+### 6. Upstream candidates added since round 1
+
+Drafts only, nothing filed. Each is in the pinned commit, `918d44e`.
+
+1. *`CastStrategyC::checkIntPromotionForCompare` takes a named narrow variable or a cast for one C does not promote* (`cast.cc`; patches 0071, 0077): `(uint2)x == -1` for the engine's two-byte compare with 0xFFFF, `-(x & 0xff) < y`. Also *`TypeOpEqual::getInputCast` casts to the lower-ordered type* (`typeop.cc`), which for a constant of the unsigned limit is the constant's own type (A2-111) and for an expression typed `uint2` its own (A10-12, not fixed here).
+2. *`PcodeOp::isCseMatch` compares constant inputs by offset only* (`op.cc`; 0072, A3-139): `SEXT24(#0xda:2)` and `SEXT14(#0xda:1)` were merged as one value.
+3. *`RulePullsubIndirect` takes its INDIRECT's input piece from the wrong byte* (`ruleaction.cc`; 0072, A3-140) and *`RulePiecePathology` takes the collapse of a stack word never written for a partial register write* (0072, A3-131).
+4. *`ActionConstantPtr::isPointer` makes a symbol of any constant that equals its address in a copy, a compare or a concatenation* (`coreaction.cc`; 0073, A5-86): for a volatile symbol the text then names a hardware register where the code holds a number.
+5. *A delay slot's ops carry the branch's address and nothing marks them* (`sleigh.cc`, `SleighBuilder::delaySlot`; 0075): a feature request, as the address is a `SeqNum` choice; the mark could be offered.
+6. *A LOAD through a frame address that no rule makes a direct read keeps none of the writes it may read* (`coreaction.cc`, `ActionDeadCode`; 0076, A3-144, A3-145): dead code removes them, a silent wrong value.
+7. *`ActionRestartGroup` allows one restart, and `FuncCallSpecs::deindirect` asks one per call site whose prototype is not compatible* (`action.cc`, `fspec.cc`; 0078, A3-155): a chain of indirect calls resolving one generation apart stops at the second with "Exceeded maximum restarts" and the second call under the default model. Reachable upstream with callee prototypes whose effects differ from the model's.
+
+### 7. The rows
+
+* **A10-12 (P2, open, route area 2).** 0077's class left open for a narrow expression typed `uint2` against a signed cast or named side.
+* **A10-13 (P2, open, route coordinator and area 3).** The CI sanitizers job red on every run since 2026-10-31.
+* **A10-14 (P3, accepted).** A11-7's survivors decided; the README cells say so.
+* **A10-15 (P3, fixed `f1fbae40`).** 0040's README cell named stale pin ordinals.
+* **Re-judged:** A10-4 still fixed; A10-8, A10-11 still accepted; A10-10 accepted with 0040 added and conditioned on A10-13; A11-7 accepted (A10-14).
+
+### 8. Verification
+
+| Check | Result |
+|---|---|
+| `check-vendored-tree.py check` (pinned clone, `git status` clean) | ok, zero diff |
+| `check-vendored-tree.py selftest` | 16 of 16 defects rejected |
+| `check-vendored-tree.py lint` after the README edits | ok |
+| 0078 reverted (5 hunks) | `TestA3155Fix`: 9 checks fail |
+| 0014 hunk 2 reverted alone | 14 checks fail |
+| 0014 hunks 1 and 3 alone, 0014 whole, 0060, `V-0061-memescape`, `V-0065-steppeddown` | 0 checks fail; text differences as in section 4 |
+| `git status` after every mutant | clean but for this round's own files |
