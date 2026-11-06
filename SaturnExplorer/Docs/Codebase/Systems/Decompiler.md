@@ -119,11 +119,13 @@ and lists these classes as open until they are fixed.
    (`CallKeeps`) -- and evaluated on test values: `add r4,r3` with r3 0 after a `dt` loop, `and
    r1,r1`, `xor #k` twice; A7-31); a path a known condition never takes is left out
    (`EdgeDead`), a loop's way back into a block that dominates it, on which nothing writes the
-   value, brings what the other edges bring (`LoopKeeps`, A7-39), and a statement that shows a number takes the number the walk knows the store
+   value, brings what the other edges bring (`LoopKeeps`, A7-39); when the op's value is all
+   numbers the walk knows (`mov #0,r2 ; xor r1,r2` with r1 0 after a `dt` loop) the build is
+   retried on the op's own block, every value at its start a leaf; and a statement that shows a number takes the number the walk knows the store
    wrote. A number is compared on the bytes a store writes of the variable, big-endian, and of
    those the ones no other store of it writes (A7-36); a number the engine put in a copy of its
    own is that number only (A7-35). A copy at a call or a return names only stores that run
-   before it when one does (A7-32). An emptied store is on an edge also through flow blocks the
+   before it when one does (A7-32), unless its value is the call's own output. An emptied store is on an edge also through flow blocks the
    engine emptied too and through the flow blocks of one instruction the flow splits (`mac.w`), and the forward search passes a store of another value. A conversion at
    the branch ending its block takes its store's address as a copy there does. A number put at an instruction that did not
    make the value a store stores takes its store's address too: the instruction must make the
