@@ -161,3 +161,83 @@ T-nodisk	a9r4	killed	11	FAIL: A9-34 merge: a section written twice, the key in i
 T-nodisk	a9r5	killed	36	FAIL: A9-40: the later settings save writes the refused key too
 T-nodisk	a9r6	survived	22	
 T-nodisk	a9r7	survived	12	
+T-oneline-cr	fuzz	killed	6	VIOLATION settings.values/VALUE_CHANGED: path with a carriage return: read back as another value
+T-oneline-cr	fw	survived	0	
+T-oneline-cr	settings	survived	0	
+T-oneline-cr	names	survived	0	
+T-oneline-cr	asm	survived	0	
+T-oneline-cr	a9r3	survived	1	
+T-oneline-cr	a9r4	survived	11	
+T-oneline-cr	a9r5	survived	36	
+T-oneline-cr	a9r6	survived	22	
+T-oneline-cr	a9r7	survived	12	
+L-noflock	fuzz	killed	6	VIOLATION concurrent.specbundle/SPEC_INSTANCES: 3 of 4 instances starting together got no verified language directory (damaged)
+L-noflock	fw	killed	0	CHECK failed at line 301: !second.Held()
+L-noflock	settings	survived	0	
+L-noflock	names	survived	0	
+L-noflock	asm	survived	0	
+L-noflock	a9r3	killed	0	FAIL: two instances saving 300 entries each under the lock lose none
+L-noflock	a9r4	killed	11	FAIL: FIX A9-40: SaveStore and Settings::SaveTo give up waiting for another process's lock after about 3 s
+L-noflock	a9r5	killed	36	FAIL: A9-46 fixed: the exit save waits past the 3 s of a session and writes once the holder has gone
+L-noflock	a9r6	killed	2	FAIL: A9-46: at exit a stuck holder refuses after 10 s and says so
+L-noflock	a9r7	killed	12	FAIL: setup: the settings save used the 10 s
+L-noretry	fuzz	killed	5	VIOLATION concurrent.specbundle/SPEC_INSTANCES: 3 of 4 instances starting together got no verified language directory (empty)
+L-noretry	fw	survived	0	
+L-noretry	settings	survived	0	
+L-noretry	names	survived	0	
+L-noretry	asm	survived	0	
+L-noretry	a9r3	killed	0	FAIL: writer child saved without an error
+L-noretry	a9r4	killed	11	FAIL: FIX A9-40: SaveStore and Settings::SaveTo give up waiting for another process's lock after about 3 s
+L-noretry	a9r5	killed	36	FAIL: A9-46 fixed: the exit save waits past the 3 s of a session and writes once the holder has gone
+L-noretry	a9r6	killed	2	FAIL: A9-46: at exit a stuck holder refuses after 10 s and says so
+L-noretry	a9r7	killed	12	FAIL: setup: the settings save used the 10 s
+L-nobound	fuzz	survived	6	VIOLATION lifecycle/HARDLINK_SPLIT: a hard link to saturn_functions.txt no longer names the file after a save
+L-nobound	fw	survived	0	
+L-nobound	settings	survived	0	
+L-nobound	names	survived	0	
+L-nobound	asm	survived	0	
+L-nobound	a9r3	survived	1	
+L-nobound	a9r4	killed	11	FAIL: FIX A9-40: SaveStore and Settings::SaveTo give up waiting for another process's lock after about 3 s
+L-nobound	a9r5	killed	36	FAIL: A9-46 fixed: Settings::SaveTo(wait=false) against a held lock returns at once and says another process holds it
+L-nobound	a9r6	killed	31	FAIL: A9-46: at exit a stuck holder refuses after 10 s and says so
+L-nobound	a9r7	killed	32	FAIL: setup: the settings save used the 10 s
+L-exitwait	fuzz	survived	6	VIOLATION lifecycle/HARDLINK_SPLIT: a hard link to saturn_functions.txt no longer names the file after a save
+L-exitwait	fw	survived	0	
+L-exitwait	settings	survived	0	
+L-exitwait	names	survived	0	
+L-exitwait	asm	survived	0	
+L-exitwait	a9r3	survived	1	
+L-exitwait	a9r4	survived	11	
+L-exitwait	a9r5	killed	36	FAIL: A9-46 fixed: the exit save waits past the 3 s of a session and writes once the holder has gone
+L-exitwait	a9r6	killed	17	FAIL: A9-46: at exit a stuck holder refuses after 10 s and says so
+L-exitwait	a9r7	killed	12	FAIL: setup: the settings save used the 10 s
+L-sharedshort	fuzz	survived	5	VIOLATION lifecycle/HARDLINK_SPLIT: a hard link to saturn_functions.txt no longer names the file after a save
+L-sharedshort	fw	survived	0	
+L-sharedshort	settings	survived	0	
+L-sharedshort	names	survived	0	
+L-sharedshort	asm	survived	0	
+L-sharedshort	a9r3	survived	0	
+L-sharedshort	a9r4	survived	11	
+L-sharedshort	a9r5	survived	36	
+L-sharedshort	a9r6	survived	22	
+L-sharedshort	a9r7	killed	12	FAIL: FIX A9-58: the text says the exit time ran out and what was waited, not the configured 10 s
+L-why-holds	fuzz	survived	6	VIOLATION lifecycle/HARDLINK_SPLIT: a hard link to saturn_functions.txt no longer names the file after a save
+L-why-holds	fw	survived	0	
+L-why-holds	settings	survived	0	
+L-why-holds	names	survived	0	
+L-why-holds	asm	survived	0	
+L-why-holds	a9r3	survived	0	
+L-why-holds	a9r4	survived	11	
+L-why-holds	a9r5	killed	36	FAIL: A9-46 fixed: Settings::SaveTo(wait=false) against a held lock returns at once and says another process holds it
+L-why-holds	a9r6	killed	22	FAIL: the frame's try still gives up (under a second) behind a stuck holder
+L-why-holds	a9r7	survived	12	
+N-addr-letters	fuzz	killed	5	VIOLATION names/PROSE_AS_ADDRESS: the entries loaded (1) are not the well-formed lines' (0)
+N-addr-letters	fw	survived	0	
+N-addr-letters	settings	survived	0	
+N-addr-letters	names	survived	0	
+N-addr-letters	asm	survived	0	
+N-addr-letters	a9r3	killed	1	FAIL: A9-32: six letters stay a word
+N-addr-letters	a9r4	killed	11	FAIL: A9-32: a capital, a single letter, and a word with other letters stay words
+N-addr-letters	a9r5	survived	36	
+N-addr-letters	a9r6	survived	22	
+N-addr-letters	a9r7	survived	12	
