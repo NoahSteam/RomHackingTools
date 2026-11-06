@@ -672,6 +672,41 @@ void TestLineClickNavigates()
 // address of the SH-2 instruction the line came from, not a value in it; a line from several
 // instructions says so and lists them; a line from none has no text. Pinned verbatim: the user
 // could not tell what the bare "0x06086F54" it replaced was.
+// A7-52. A statement line no instruction is named for says so: the hover shows why, and a click shows the same words in the panel's
+// note instead of silently doing nothing. A line with an address still navigates, and a brace (no statement, no address) says nothing.
+void TestStatementWithoutInstruction()
+{
+    Fixture f;
+    f.panel.ShowFunctionContaining(0, dts::kFixture1Caller);
+    CHECK(f.WaitShown());
+    DecompileResult& shown = *const_cast<DecompileResult*>(f.panel.Shown());
+    Line copy; copy.text = "  uRam2600200f = uRam2600200c;"; copy.noOrigin = true;
+    Token plain; plain.begin = 2; plain.end = 14;
+    copy.tokens = { plain };
+    Line brace; brace.text = "}";
+    shown.lines = { copy, brace };
+    shown.inspectionTargets.clear();
+    f.Idle(2);
+    ImVec2 a, b;
+    CHECK(f.panel.LineRect(0, a, b));
+    const ImVec2 point(a.x + ImGui::CalcTextSize("  uRam").x, (a.y + b.y) * .5f);
+    for (int i = 0; i < 40; ++i) f.h.Frame(point, false);
+    CHECK(Has(f.panel.LineTooltip(), "No SH-2 instruction is named for this line"));
+    f.Take();
+    f.h.Hover(point);
+    f.h.Click(point);
+    f.Idle(2);
+    const DecompilerPanel::Request r = f.Take();
+    CHECK(!r.jumpAssembly);
+    CHECK(Has(f.panel.InstructionNote(), "No SH-2 instruction is named for this line"));
+    // a brace says nothing, and a click on it clears the note
+    CHECK(f.panel.LineRect(1, a, b));
+    f.h.Hover(Centre(a, b));
+    f.h.Click(Centre(a, b));
+    f.Idle(2);
+    CHECK(f.panel.InstructionNote().empty());
+}
+
 void TestLineOriginText()
 {
     auto tok = [](uint32_t a) {
@@ -3129,6 +3164,7 @@ int main(int argc, char** argv)
         RUN(TestCapturedInspectionUntypedAndWide());
         RUN(TestLineClickNavigates());
         RUN(TestLineOriginText());
+        RUN(TestStatementWithoutInstruction());
 #ifdef SE_DECOMPILER_GUIDE
         RUN(TestGuideQuotesTheTooltip());
 #endif

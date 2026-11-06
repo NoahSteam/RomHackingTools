@@ -721,6 +721,7 @@ void TestArea7Round4()
                 for (Token& t : x.tokens)
                     if (t.begin < t.end) t.addr = 0x06070006u;
                 x.firstAddr = 0x06070006u;
+                x.noOrigin = false;   // (A7-52: the line that names nothing says so; as it was it named the store)
             }
         const dts::MappingAudit wa = dts::AuditMapping(was, word, "a7_23 piece as it was");
         CHECK(wa.storeValueOther == 1 && wa.Violations() == 1);
@@ -1569,6 +1570,51 @@ void TestArea7Round7()
         const dts::MappingAudit a = dts::AuditMapping(moved, word, "a7_45 damaged");
         CHECK(a.copyNumberMade == 0 && a.copyStoreMissing == 1);
     }
+    // A7-52 (P2), found by the area 7 fixer's fresh seeds: grammar 1 seed 1904648, shrunk (`mov.l lit,r7 ; L: mov.b @r7,r0 ; tst #1,r0 ;
+    // bt L ; mov #1,r3 ; L2: sub r2,r0 ; mov.b r0,@(3,r7) ; dt r3 ; bf L2`). The engine merges r0 (the poll's last byte load) under the name
+    // of the byte the second loop stores and prints `uRam2600200f = uRam2600200c;` after the poll, at the block's first instruction
+    // (`mov #1,r3`, which neither reads nor writes the byte). The token pass took that for a register merge with no maker and took the
+    // tokens off: a click did nothing and the line said nothing. It now names the load that produced the value, 0x06009002 (the nearest
+    // read of the global on the way back along the flow; A7-49's search only looked in the copy's own block). The store is not the
+    // statement's: it stores r0 minus r2, another value.
+    const std::vector<uint16_t> pollWords = { 0xD705, 0x6070, 0xC801, 0x89FC, 0xE301, 0x3028, 0x8073, 0x4310, 0x8BFB, 0x000B, 0x0009, 0x0009,
+                                              0x2600, 0x200C };
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, pollWords);
+        Print("A7-52 a copy of a global the poll loaded, merged under the loop's store", r);
+        const Line* l = LineWith(r, "uRam2600200f = uRam2600200c;");
+        CHECK(l != nullptr);
+        if (l)
+        {
+            CHECK(LineInstructions(*l) == (std::vector<uint32_t>{ 0x06009002u }));
+            CHECK(l->firstAddr == 0x06009002u && !l->noOrigin);
+        }
+        const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_52");
+        CHECK(a.Violations() == 0 && a.noInstruction == 0);
+        // ...the check: the same line with its tokens taken off and nothing said is a violation (the mutation toksilent), and the
+        // line marked as having no origin, with its hover text, is not
+        DecompileResult damaged = r;
+        dts::MutateMapping(damaged, "toksilent", word);
+        const dts::MappingAudit seen = dts::AuditMapping(damaged, word, "a7_52 silent");
+        CHECK(seen.noInstruction >= 1 && seen.Violations() > 0);
+        DecompileResult said = damaged;
+        for (Line& x : said.lines)
+            if (x.firstAddr == 0 && dts::MappingIsStatement(x.text)) x.noOrigin = true;
+        const dts::MappingAudit told = dts::AuditMapping(said, word, "a7_52 said");
+        CHECK(told.noInstruction == 0 && told.noOriginLines >= 1);
+        // ...and a line marked that has an instruction, or is marked without the words, is one too
+        DecompileResult wrong = r;
+        for (Line& x : wrong.lines)
+            if (x.firstAddr != 0) x.noOrigin = true;
+        CHECK(dts::AuditMapping(wrong, word, "a7_52 wrong").noInstruction >= 1);
+        // ...the tooltip (LineOriginText) of a marked line names no address and says why
+        Line marked;
+        marked.text = "  uRam2600200f = uRam2600200c;";
+        marked.noOrigin = true;
+        CHECK(LineOriginText(marked).find("No SH-2 instruction is named for this line") == 0);
+        CHECK(LineOriginText(Line()).empty());
+    }
+
     // caseOtherEntry bites: A7-29's fixture with the outer `case 2:` moved back to the inner switch's entry (A7-29 as it was).
     {
         const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06070000u, { 0x4F22, 0xD518, 0xE103, 0x3416, 0x8D28, 0x6143, 0x311C, 0xC702,
