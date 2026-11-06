@@ -336,3 +336,37 @@ P-pin-noresolve	model	survived	18
 P-nothingpin	trust	killed	52	pin A8-38: no registers, nothing shown, Follow PC off: nothing asked, nothing shown, the box empty FAILED
 P-nothingpin	panel	survived	4	
 P-nothingpin	model	survived	19	
+E-gen-ledger	gen	killed	7	FINDING seed 1 (grammar 1):
+E-gen-second	gen	killed	7	FINDING seed 5 (grammar 1):
+E-gen-alias	gen	killed	7	FINDING seed 99 (grammar 1):
+E-gen-params	gen	killed	8	FINDING seed 2 (grammar 2):
+E-gen-ret	gen	killed	6	FINDING seed 2 (grammar 2):
+E-gen-body	gen	killed	6	FINDING seed 1 (grammar 1):
+E-gen-cases	gen	killed	8	FINDING seed 2 (grammar 2):
+E-gen-warn	gen	killed	9	FINDING seed 2 (grammar 2):
+E-gen-preserved	gen	killed	7	FINDING seed 2 (grammar 2):
+E-gen-claims	gen	killed	7	FINDING seed 2 (grammar 2):
+E-gen-lent	gen	killed	13	FINDING seed 1 (grammar 1):
+E-gen-data	gen	killed	11	FINDING seed 2 (grammar 2):
+E-gen-honour	gen	killed	8	FINDING seed 4 (grammar 2):
+E-gen-kept	gen	killed	8	FINDING seed 58 (grammar 2):
+E-gen-tokodd	gen	killed	6	FINDING seed 1 (grammar 1):
+E-gen-tokoutside	gen	killed	8	FINDING seed 1 (grammar 1):
+E-gen-tokfirst	gen	killed	6	FINDING seed 1 (grammar 1):
+E-gen-tokdrop	gen	killed	8	FINDING seed 1 (grammar 1):
+E-gen-tokcall	gen	killed	7	FINDING seed 4 (grammar 2):
+E-gen-tokunmark	gen	killed	6	FINDING seed 1 (grammar 1):
+E-gen-tokhover	gen	killed	6	FINDING seed 1 (grammar 1):
+E-gen-tokslot	gen	killed	9	FINDING seed 1 (grammar 1):
+E-gen-tokframe	gen	killed	9	FINDING seed 72 (grammar 2):
+E-gen-tokcopy	gen	killed	9	FINDING seed 72 (grammar 2):
+E-map-tokodd	corpus	killed	43	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:5477: mapping.Violations() == 0
+E-map-tokoutside	corpus	killed	43	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:5477: mapping.Violations() == 0
+E-map-tokfirst	corpus	killed	45	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:5477: mapping.Violations() == 0
+E-map-tokdrop	corpus	killed	44	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:5477: mapping.Violations() == 0
+E-map-tokcall	corpus	killed	43	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:5477: mapping.Violations() == 0
+E-map-tokunmark	corpus	killed	43	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:5477: mapping.Violations() == 0
+E-map-tokhover	corpus	killed	42	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:5477: mapping.Violations() == 0
+E-map-tokslot	corpus	killed	42	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:5477: mapping.Violations() == 0
+E-map-tokframe	corpus	killed	43	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:5477: mapping.Violations() == 0
+E-map-tokcopy	corpus	killed	42	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:5477: mapping.Violations() == 0
