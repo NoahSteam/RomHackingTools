@@ -89,3 +89,75 @@ S-nodisk	a9r4	killed	11	FAIL: FIX A9-41: a save keeps the user's remark lines
 S-nodisk	a9r5	killed	36	FAIL: A9-40: the later save writes the refused rename too
 S-nodisk	a9r6	killed	22	FAIL: A9-45: the skipped BIOS lines stay in the file through a save (nothing is lost on disk)
 S-nodisk	a9r7	survived	12	
+S-dropother	fuzz	killed	5	VIOLATION lifecycle/SAVE_DROPS_SKIPPED_LINES: saturn_function_bounds.txt: the line Load skipped is deleted by the next function start's save
+S-dropother	fw	survived	0	
+S-dropother	settings	survived	0	
+S-dropother	names	killed	0	FAIL: A9-21: the comment and the skipped line are kept
+S-dropother	asm	survived	0	
+S-dropother	a9r3	survived	1	
+S-dropother	a9r4	killed	11	FAIL: FIX A9-41: a save keeps the user's remark lines
+S-dropother	a9r5	survived	36	
+S-dropother	a9r6	killed	22	FAIL: A9-45: the skipped BIOS lines stay in the file through a save (nothing is lost on disk)
+S-dropother	a9r7	survived	12	
+S-nodelete	fuzz	survived	6	VIOLATION lifecycle/HARDLINK_SPLIT: a hard link to saturn_functions.txt no longer names the file after a save
+S-nodelete	fw	survived	0	
+S-nodelete	settings	survived	0	
+S-nodelete	names	killed	0	FAIL: A9-20: a delete removes only that name
+S-nodelete	asm	survived	0	
+S-nodelete	a9r3	killed	1	FAIL: delete by B beats A's edit (A's edit is lost without a word)
+S-nodelete	a9r4	killed	11	FAIL: FIX A9-41: a save keeps the user's remark lines
+S-nodelete	a9r5	killed	36	FAIL: A9-40: the later save of the starts writes the refused start and the later clear
+S-nodelete	a9r6	survived	22	
+S-nodelete	a9r7	survived	12	
+S-cap	fuzz	survived	5	VIOLATION lifecycle/HARDLINK_SPLIT: a hard link to saturn_functions.txt no longer names the file after a save
+S-cap	fw	survived	0	
+S-cap	settings	survived	0	
+S-cap	names	survived	0	
+S-cap	asm	survived	0	
+S-cap	a9r3	survived	0	
+S-cap	a9r4	survived	11	
+S-cap	a9r5	killed	36	FAIL: a rename past the cap is refused with the reason; the file is untouched
+S-cap	a9r6	survived	22	
+S-cap	a9r7	survived	12	
+T-unchanged	fuzz	survived	6	VIOLATION lifecycle/HARDLINK_SPLIT: a hard link to saturn_functions.txt no longer names the file after a save
+T-unchanged	fw	survived	0	
+T-unchanged	settings	survived	0	
+T-unchanged	names	survived	0	
+T-unchanged	asm	survived	0	
+T-unchanged	a9r3	survived	1	
+T-unchanged	a9r4	survived	11	
+T-unchanged	a9r5	survived	36	
+T-unchanged	a9r6	survived	22	
+T-unchanged	a9r7	survived	12	
+T-unchanged	*	SURVIVED	0	
+T-refused	fuzz	survived	6	VIOLATION lifecycle/HARDLINK_SPLIT: a hard link to saturn_functions.txt no longer names the file after a save
+T-refused	fw	survived	0	
+T-refused	settings	survived	0	
+T-refused	names	survived	0	
+T-refused	asm	survived	0	
+T-refused	a9r3	survived	1	
+T-refused	a9r4	survived	11	
+T-refused	a9r5	survived	36	
+T-refused	a9r6	survived	22	
+T-refused	a9r7	survived	12	
+T-refused	*	SURVIVED	0	
+T-lockheld	fuzz	survived	5	VIOLATION lifecycle/HARDLINK_SPLIT: a hard link to saturn_functions.txt no longer names the file after a save
+T-lockheld	fw	survived	0	
+T-lockheld	settings	survived	0	
+T-lockheld	names	survived	0	
+T-lockheld	asm	survived	0	
+T-lockheld	a9r3	killed	0	FAIL: FIX A9-33: Settings::SaveTo refuses the same way
+T-lockheld	a9r4	killed	11	FAIL: FIX A9-40: the save is refused through A9-33's path, naming the lock file and the wait
+T-lockheld	a9r5	killed	36	FAIL: A9-46 fixed: Settings::SaveTo(wait=false) against a held lock returns at once and says another process holds it
+T-lockheld	a9r6	killed	22	FAIL: PIN A9-53 fixed: four stuck locks hold the exit about 10 s in all (one shared budget), not 40 s
+T-lockheld	a9r7	killed	12	FAIL: setup: the settings save used the 10 s
+T-nodisk	fuzz	survived	6	VIOLATION lifecycle/HARDLINK_SPLIT: a hard link to saturn_functions.txt no longer names the file after a save
+T-nodisk	fw	survived	0	
+T-nodisk	settings	survived	0	
+T-nodisk	names	survived	0	
+T-nodisk	asm	survived	0	
+T-nodisk	a9r3	killed	1	FAIL: FIX A9-34: a hand-written comment, the order and the blank line of settings.ini survive the save; the new key goes into its section
+T-nodisk	a9r4	killed	11	FAIL: A9-34 merge: a section written twice, the key in its second part
+T-nodisk	a9r5	killed	36	FAIL: A9-40: the later settings save writes the refused key too
+T-nodisk	a9r6	survived	22	
+T-nodisk	a9r7	survived	12	
