@@ -22,12 +22,23 @@
  * Modified for SaturnExplorer: a read found after dead code ran in its space delays dead code past the pass that found it, as often as needed, failing closed; whether a frame address escaped forces a call's guard on a local, and the calls guarded at a local are kept for a host (patches/0068-engine-deadcode-late-stack-reads.patch).
  * Modified for SaturnExplorer: a STORE through a pointer read through a frame address keeps its guards when the stack is first heritaged (patches/0072-engine-frame-chains-and-save-slots.patch).
  * Modified for SaturnExplorer: a LOAD guard records whether heritage put its COPYs before the LOAD, and a held frame write is no address force of the guard's (patches/0076-engine-frame-loads-keep-writes.patch).
+ * Modified for SaturnExplorer: the pieces heritage makes at a delay slot's op for it are the slot's too (patches/0079-engine-heritage-slot-pieces-marked.patch).
  */
 #include "heritage.hh"
 #include "funcdata.hh"
 #include "prefersplit.hh"
 
 namespace ghidra {
+
+/// SaturnExplorer (0079): an op heritage makes at the address of an op of a delay slot's instruction, for that op (the SUBPIECE
+/// that reads a register's byte, the pieces of a register a byte of it is written to), was built for the slot: it carries the flag
+/// patch 0075 gives the slot's ops, so the host addresses it at the slot and not at the branch.
+static void markSlotPiece(PcodeOp *made,const PcodeOp *forOp)
+
+{
+  if (forOp != (const PcodeOp *)0 && forOp->isFromDelaySlot())
+    made->setFromDelaySlot();
+}
 
 /// Update disjoint cover making sure (addr,size) is contained in a single element and return
 /// an iterator to this element. The element's \b pass number is set to be the smallest value
@@ -399,6 +410,7 @@ Varnode *Heritage::normalizeReadSize(Varnode *vn,PcodeOp *op,const Address &addr
   PcodeOp *newop;
 
   newop = fd->newOp(2,op->getAddr());
+  markSlotPiece(newop,op);	// SaturnExplorer (0079)
   fd->opSetOpcode(newop,CPUI_SUBPIECE);
   vn1 = fd->newVarnode(size,addr);
   overlap = vn->overlap(addr,size);
@@ -449,6 +461,7 @@ Varnode *Heritage::normalizeWriteSize(Varnode *vn,const Address &addr,int4 size)
     }
     else {
       newop = fd->newOp(2,op->getAddr());
+      markSlotPiece(newop,op);	// SaturnExplorer (0079)
       mostvn = fd->newVarnodeOut(mostsigsize,pieceaddr,newop);
       big = fd->newVarnode(size,addr);	// The new read
       big->setActiveHeritage();
@@ -470,6 +483,7 @@ Varnode *Heritage::normalizeWriteSize(Varnode *vn,const Address &addr,int4 size)
     }
     else {
       newop = fd->newOp(2,op->getAddr());
+      markSlotPiece(newop,op);	// SaturnExplorer (0079)
       leastvn = fd->newVarnodeOut(overlap,pieceaddr,newop);
       big = fd->newVarnode(size,addr);	// The new read
       big->setActiveHeritage();
@@ -481,6 +495,7 @@ Varnode *Heritage::normalizeWriteSize(Varnode *vn,const Address &addr,int4 size)
   }
   if (overlap !=0 ) {
     newop = fd->newOp(2,op->getAddr());
+    markSlotPiece(newop,op);	// SaturnExplorer (0079)
     if (addr.isBigEndian())
       midvn = fd->newVarnodeOut(overlap+vn->getSize(),vn->getAddr(),newop);
     else
@@ -494,6 +509,7 @@ Varnode *Heritage::normalizeWriteSize(Varnode *vn,const Address &addr,int4 size)
     midvn = vn;
   if (mostsigsize != 0) {
     newop = fd->newOp(2,op->getAddr());
+    markSlotPiece(newop,op);	// SaturnExplorer (0079)
     bigout = fd->newVarnodeOut(size,addr,newop);
     fd->opSetOpcode(newop,CPUI_PIECE);
     fd->opSetInput(newop,mostvn,0);
@@ -539,6 +555,7 @@ Varnode *Heritage::concatPieces(const vector<Varnode *> &vnlist,PcodeOp *inserto
   for(uint4 i=1;i<vnlist.size();++i) {
     Varnode *vn = vnlist[i];
     PcodeOp *newop = fd->newOp(2,opaddress);
+    markSlotPiece(newop,insertop);	// SaturnExplorer (0079)
     fd->opSetOpcode(newop,CPUI_PIECE);
     Varnode *newvn;
     if (i==vnlist.size()-1) {
@@ -602,6 +619,7 @@ void Heritage::splitPieces(const vector<Varnode *> &vnlist,PcodeOp *insertop,
   for(uint4 i=0;i<vnlist.size();++i) {
     Varnode *vn = vnlist[i];
     PcodeOp *newop = fd->newOp(2,opaddress);
+    markSlotPiece(newop,insertop);	// SaturnExplorer (0079)
     fd->opSetOpcode(newop,CPUI_SUBPIECE);
     uintb diff;
     if (isbigendian)
@@ -3097,6 +3115,7 @@ void Heritage::splitJoinRead(Varnode *vn,JoinRecord *joinrec)
       Varnode *leasthalf = nextlev[2*i+1];
       if (leasthalf == (Varnode *)0) continue; // Varnode didn't get split this level
       PcodeOp *concat = fd->newOp(2,op->getAddr());
+      markSlotPiece(concat,op);	// SaturnExplorer (0079)
       fd->opSetOpcode(concat,CPUI_PIECE);
       fd->opSetOutput(concat,curvn);
       fd->opSetInput(concat,mosthalf,0);
@@ -3154,6 +3173,7 @@ void Heritage::splitJoinWrite(Varnode *vn,JoinRecord *joinrec)
 	  split = fd->newOp(2,bb->getStart());
 	else
 	  split = fd->newOp(2,op->getAddr());
+	markSlotPiece(split,op);	// SaturnExplorer (0079)
 	fd->opSetOpcode(split,CPUI_SUBPIECE);
 	fd->opSetOutput(split,mosthalf);
 	fd->opSetInput(split,curvn,0);
@@ -3166,6 +3186,7 @@ void Heritage::splitJoinWrite(Varnode *vn,JoinRecord *joinrec)
       }
       if (!leasthalf->isConstant()) {
 	PcodeOp *split = fd->newOp(2,op->getAddr());
+	markSlotPiece(split,op);	// SaturnExplorer (0079)
 	fd->opSetOpcode(split,CPUI_SUBPIECE);
 	fd->opSetOutput(split,leasthalf);
 	fd->opSetInput(split,curvn,0);

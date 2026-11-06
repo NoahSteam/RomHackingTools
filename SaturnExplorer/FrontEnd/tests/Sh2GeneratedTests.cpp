@@ -5406,9 +5406,10 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                     }
         // ---- Area 7: the mapping from the text to the instructions (MappingOracle.h) ----
         {
+            // (the module's words, literal pools too: the oracle reads a literal's word as the game-code run reads the image's, A7-34)
             const dts::MappingAudit audit = dts::AuditMapping(
                 r, [&](uint32_t pc, uint16_t& w) {
-                    if (subject.UnitOf(pc) < 0) return false;
+                    if (pc < kCode || (pc - kCode) / 2 >= subject.words.size()) return false;
                     w = subject.WordAt(pc);
                     return true;
                 }, "", OriginTextUnderTest);
@@ -5429,25 +5430,18 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
             flag("map-round-trip", audit.roundTrip);
             flag("map-access-at-branch", audit.accessAtBranch);
             flag("map-frame-store", audit.frameStoreMissing);
-            // Area 7 round 7 (A7-34): the violations rounds 3 to 7 added to the audit. Only the ones above were flagged, so the generator
-            // never judged the way back's order, a copy's stores, a store's value, a number's maker, a case label or a store after a call.
-            // SE_GENERATED_MAP_ALL=1 flags them too; without it they are counted (map.late.*), because the first runs found real defects
-            // (A7-31, A7-35, A7-36) beside false positives of constAtJoin on generated code (A7-34), and the default run must keep passing.
-            {
-                static const bool all = std::getenv("SE_GENERATED_MAP_ALL") != nullptr;
-                const auto late = [&](const char* sig, const char* key, int n) {
-                    if (all) flag(sig, n);
-                    else count(key, n);
-                };
-                late("map-way-back", "map.late.way-back", audit.backWrong);
-                late("map-copy-store", "map.late.copy-store", audit.copyAtCall + audit.copyAtReturn + audit.copyAtBranch + audit.copyAtOther);
-                late("map-store-value", "map.late.store-value", audit.storeValueOther);
-                late("map-const-join", "map.late.const-join", audit.constAtJoin);
-                late("map-copy-merge", "map.late.copy-merge", audit.copyMergeAtBranch);
-                late("map-number-store", "map.late.number-store", audit.numberStoreOther);
-                late("map-case-entry", "map.late.case-entry", audit.caseOtherEntry);
-                late("map-store-after", "map.late.store-after", audit.storeAfterUse);
-            }
+            // Area 7 round 7 (A7-34): the violations rounds 3 to 7 added to the audit, flagged since the area 7 fixer (round 7 rows) made
+            // constAtJoin take the numbers the engine folds (WrittenValue, MemoryBefore, the variable's width). Round 7 had only counted
+            // them (map.late.*, SE_GENERATED_MAP_ALL=1 to flag): the generator had never judged the way back's order, a copy's stores, a
+            // store's value, a number's maker, a case label or a store after a call.
+            flag("map-way-back", audit.backWrong);
+            flag("map-copy-store", audit.copyAtCall + audit.copyAtReturn + audit.copyAtBranch + audit.copyAtOther);
+            flag("map-store-value", audit.storeValueOther);
+            flag("map-const-join", audit.constAtJoin);
+            flag("map-copy-merge", audit.copyMergeAtBranch);
+            flag("map-number-store", audit.numberStoreOther);
+            flag("map-case-entry", audit.caseOtherEntry);
+            flag("map-store-after", audit.storeAfterUse);
             count("map.lines", audit.lines);
             count("map.lines.one", audit.single);
             count("map.lines.several", audit.multi);
@@ -12299,6 +12293,52 @@ void TestDomainPins(Sh2Decompiler& d)
     {
         const Report rep = Evaluate(d, MakeV2(seed), true);
         std::printf("pin 'area 7 fixer: grammar 2 seed %d': %zu finding(s)\n", seed, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+    // Area 7 fixer (round 7 rows), A7-39's triage. Grammar 2 seed 1820753: `xStack_30 = (xunknown4)xVar3;` at a `bsr` is the call's own
+    // output (r1 of a 64-bit return, the callee's lent prototype), which a push after the call wrote; A7-32's rule (a copy at a call names
+    // only stores that run before it) left it naming nothing: `n:map-frame-store`. The rule is for copies the callee sees, not for a
+    // statement whose value the call makes. (Pinned here: the function needs the generator's lent prototypes and its tail jump followed.)
+    {
+        const Report rep = Evaluate(d, MakeV2(1820753), true);
+        std::printf("pin 'area 7 fixer: grammar 2 seed 1820753': %zu finding(s)\n", rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+    // Area 7 fixer (round 7 rows), the seeds the rows name, replayed whole: grammar 2 seed 304221 (A7-31's mechanism, routed by the A5-99
+    // and A3-155 fixer: `xStack_24 = param_2;` at a call, the push of an `add` the engine folds away after a `dt` loop, `n:map-frame-store`),
+    // grammar 2 seed 1700689 (A7-40: `xVar3 = 0xffe4;` at `extu.w r3,r1`, r3 pushed and popped with an instruction between, the oracle's
+    // `n:map-const-join`) and grammar 1 seed 1832116 (A7-41: `xRam26001008 = param_2;` naming the store of 3, `n:map-store-value`). The
+    // fixer's fresh seeds from 1,840,000 and 1,850,000: grammar 1 seed 1843925 (A7-42, the product's: `extu.b r3,r3` after a `dt` loop,
+    // the store named nothing, `n:map-copy-store`), and the oracle's (A7-43): grammar 2 seed 1853425 (`rotl`, `n:map-const-join`), grammar
+    // 1 seed 1843373 (`xVar1 = (char)param_1;`, `n:map-store-value`), grammar 1 seed 1843207 (a `SUB42` copy, `v:map-way-back`). From
+    // 1,860,000 and 1,870,000: grammar 1 seed 1862210 (A7-42's second shape, the product's: `tst r0,r0 ; bt L` to a shared byte store of
+    // r0, `xRam26002003 = 0;` naming no store under the volatile request, `v:map-copy-store`), and the oracle's grammar 2 seeds 1872967
+    // (`shll16 r1 ; extu.b r1,r1` is 0) and 1873745 (`rotcl`), both `n:map-const-join`. Grammar 1 seed 1862942 (A7-44, the product's:
+    // `iRam06002308 = -0x10;`, r1's low half the engine merged under the global's name, at the literal load, naming a `tas.b` and a
+    // `mov.w` of the doubled r1, `n:map-number-store`). The fixer's resumption, after A7-44: the matrix's grammar 1 seed 14875 (A7-45, the
+    // oracle: `iRam0600218c = 0xb;` at its `mov #0xb,r0`, no store of the global storing a made number, `n:map-copy-store`) and the fresh
+    // seeds from 1,880,000 and 1,890,000 (the product's): grammar 2 seed 1891223 (A7-46: `iStack_28 = 3;` naming the push of `in_r3`,
+    // `n:map-number-store`), grammar 1 seeds 1881632 and 1884426 (A7-47: a join's number printed through an engine-made temporary on the
+    // same line, `n:map-const-join` and `v:map-const-join`), grammar 1 seed 1883172 (A7-48: `uRam2600230e = (uint2)bVar1;` stored by
+    // `movt r0 ; mov.w r0,@(0xe,r6)`, `n:map-copy-merge`) and grammar 2 seed 1894780 (A7-49: `iRam06002210 = iRam06002200;` at an
+    // `or.b #imm,@(r0,gbr)`, `n:map-copy-store`). Routed by the coordinator, each `n:map-frame-store` on master: grammar 2 seeds 2087030,
+    // 2089570 (the area 5 confirming round) and 9403567 (the A10-16 fixer, under A7-38), which this branch's earlier rules fix, and
+    // grammar 2 seed 2067040 (A7-51, the oracle: `xStack_8._0_2_ = *param_2;` at its load, a dereference without parentheses). The
+    // second matrix and fresh seeds after A7-46: grammar 1 seed 16415 (`uRam26001014 = 4;` at its `mov #4,r0`, the global's store writing
+    // `in_r3`) and grammar 2 seed 1910826 (`xStack_40 = 0x18;` at `mov #0x18,r0`, the frame store writing `mov #0x3,r1`'s 3 or a table
+    // entry), both A7-45's count (`n:map-copy-store` once A7-46 stopped naming those stores).
+    for (const auto& s : { std::make_pair(2, 304221), std::make_pair(2, 1700689), std::make_pair(1, 1832116), std::make_pair(1, 1843925),
+                           std::make_pair(2, 1853425), std::make_pair(1, 1843373), std::make_pair(1, 1843207), std::make_pair(1, 1862210),
+                           std::make_pair(2, 1872967), std::make_pair(2, 1873745), std::make_pair(1, 1862942),
+                           std::make_pair(1, 14875), std::make_pair(2, 1891223), std::make_pair(1, 1881632), std::make_pair(1, 1884426),
+                           std::make_pair(1, 1883172), std::make_pair(2, 1894780),
+                           std::make_pair(2, 2087030), std::make_pair(2, 2089570), std::make_pair(2, 9403567), std::make_pair(2, 2067040),
+                           std::make_pair(1, 16415), std::make_pair(2, 1910826) })
+    {
+        const Report rep = Evaluate(d, s.first == 2 ? MakeV2(s.second) : Generate(s.second), true);
+        std::printf("pin 'area 7 fixer: grammar %d seed %d': %zu finding(s)\n", s.first, s.second, rep.findings.size());
         for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
         CHECK(rep.findings.empty());
     }
