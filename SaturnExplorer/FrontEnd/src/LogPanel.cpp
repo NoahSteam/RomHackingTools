@@ -171,12 +171,29 @@ void LogPanel::Draw(Request& req)
                     req.jumpAssembly = true; req.jumpCpu = e.cpu; req.jumpAddr = e.pc;
                 }
             }
+            // A12-18: the end of a long message (an OS reason such as "Access is denied.") can lie past
+            // the panel edge. Hovering the row shows the whole text wrapped; right-click copies it.
+            const bool rowHovered = ImGui::IsItemHovered();
+            if (ImGui::BeginPopupContextItem("##logrowmenu"))
+            {
+                if (ImGui::MenuItem("Copy message")) ImGui::SetClipboardText(e.message.c_str());
+                ImGui::EndPopup();
+            }
             ImGui::TableSetColumnIndex(1);
             if (e.frame) ImGui::Text("%u", e.frame); else ImGui::TextDisabled("-");
             ImGui::TableSetColumnIndex(2);
             const CatStyle& st = Style(e.category);
             ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(st.color), "%s", st.name);
             ImGui::TableSetColumnIndex(3);
+            const bool clipped = ImGui::CalcTextSize(e.message.c_str()).x > ImGui::GetContentRegionAvail().x;
+            if (rowHovered && clipped && !ImGui::IsPopupOpen("##logrowmenu"))
+            {
+                ImGui::BeginTooltip();
+                ImGui::PushTextWrapPos(ImGui::GetFontSize() * 40.0f);
+                ImGui::TextUnformatted(e.message.c_str());
+                ImGui::PopTextWrapPos();
+                ImGui::EndTooltip();
+            }
             ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(
                 e.category == LogCategory::Tracepoint ? st.color : ImGui::GetColorU32(ImGuiCol_Text)),
                 "%s", e.message.c_str());
@@ -213,6 +230,7 @@ void LogPanel::Draw(Request& req)
                 }
             }
             ImGui::TextWrapped("%s", sel->message.c_str());
+            if (ImGui::SmallButton("Copy message")) ImGui::SetClipboardText(sel->message.c_str());
             for (const auto& kv : sel->detail)
                 ImGui::BulletText("%s = %s", kv.first.c_str(), kv.second.c_str());
         }
