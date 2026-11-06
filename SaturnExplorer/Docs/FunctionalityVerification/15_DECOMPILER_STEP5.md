@@ -17231,3 +17231,6 @@ Drafts only, nothing filed. Each is in the pinned commit, `918d44e`.
 | 0014 hunk 2 reverted alone | 14 checks fail |
 | 0014 hunks 1 and 3 alone, 0014 whole, 0060, `V-0061-memescape`, `V-0065-steppeddown` | 0 checks fail; text differences as in section 4 |
 | `git status` after every mutant | clean but for this round's own files |
+| `ctest` (107, `-j2`, `--timeout 900`) | 106 passed; `SaturnExplorerSh2DecompilerEngineTests` timed out under the load of three agents and passed alone (48 s). `SaturnExplorerSh2PrintedCTests` passes here (A10-13 is the CI job's own) |
+| `ctest -R SaturnExplorerLive` (6) | 6 passed |
+| New tests | none in the count: `TestArea10Round2` is a function of `SaturnExplorerSh2DecompilerTests` (113 = 107 + 6, as on master) |
