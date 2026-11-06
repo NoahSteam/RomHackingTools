@@ -16753,3 +16753,107 @@ Branch `review/9-round6` from master `521dc0e5`. An adversarial round on the are
 
 * A9-52 and A9-53 go together (the exit and the frame's try): treat "another process holds" in the frame as not yet a failure and clear the status after a later success; on SDL2 show the exit notice with `SDL_ShowSimpleMessageBox`, carry each store's own error into it, and save the user's work before the settings.
 * A9-54 and A9-55 are text: the guide's address rules, and the sync refusal's file name and reason on each platform.
+
+## A5-99 and A3-155 (triage and fix)
+
+Branch `review/5-a599-triage` from master `6849e85c`; the worktree's RelWithDebInfo build (gcc 13), `-j2`, every test binary under `ulimit -v 3500000` and `timeout`, one heavy job at a time. Two rows routed by the coordinator from area 7 round 5. **A5-99 is the oracle's (set down to P3); A3-155 is the engine's restart limit, not the r8 write (P3), fixed by patch 0078.** The A5-99 sweep found one more oracle defect of area 5 (A5-100, P3, fixed) and one more seed of A7-31 (routed). `Sh2Decompiler.cpp` and `MappingOracle.h` (the area 7 fixer's) are not touched.
+
+| Row | Severity | Verdict | Change |
+|---|---|---|---|
+| A5-99 | P2 provisional, now **P3** | oracle: a free name the text assigns in some arms only was taken for a closed derivation | `PointerPrintsFromHardware` (`Sh2GeneratedTests.cpp`) |
+| A5-100 | **P3**, new | oracle: rule 3f took an XOR's constant for an OR's | `OrsIntoOnChip` (`Sh2GeneratedTests.cpp`) |
+| A3-155 | P3 | engine: a second indirect call that resolves a generation after the first was refused its restart | patch 0078 (`action.cc`, `fspec.cc`, `override.hh`/`.cc`) |
+
+### 1. A5-99: the product hides nothing
+
+Seed 300847 shrinks to two functions. Function 1 is `mov.l @(lit),r3 ; xor r3,r7 ; tas.b @r7 ; mov.l @(0x30,r7),r1` with the literal 0xA0000000; function 0 switches on r7 and runs into it. Function 0's text:
+
+```
+if (in_r7 < 6) { uVar1 = in_r7 * 4; switch(in_r7) { case 0: in_r7 = uVar1; break; ... case 5: in_r7 = uVar1; } }
+puVar2 = (uint1 *)(in_r7 ^ 0xa0000000);
+*puVar2 = *puVar2 | 0x80;
+return CONCAT44(0x61,*(xunknown4 *)(puVar2 + 0x30));
+```
+
+The run came to the purge (0xA0000000 to 0xA0000014, and 0xA0000030 onward at +0x30) because the input r7 was small. The text cannot say which line the access purges, or that it is a purge at all: the pointer is the register at entry, or four times it, XORed with the purge's base, and an XOR with an unknown operand bounds nothing (A5-90's limit; the partition is the operand's top bits XOR 101). That is A5-89's open pointer, whose register the rule does not ask for. Function 1 alone, the same instructions without the switch, is judged so already (`pointer.effect.open`, no finding).
+
+The oracle differed between the two functions only through the switch's assignments. Its derivation counted a free name (`param_`, `in_`, `unaff_`, `extraout_`) as open only if the text assigned it nowhere (`!assigned && IsFreeValue(name)`), and `in_r7 = uVar1;` in the cases made it closed, though the run can skip every case. It then asked rule 3c for the purge's note at each address the run came to (`pointer.effect.derived`, 12 unsaid). Now a free name is open unless an assignment of it dominates the use (`StatementDominates`, A5-94's test: the assignment lies between, no block holding it closes before the use, no label between).
+
+**A product note would be possible only for part of the paths:** on the switch's paths the value is a bounded range (0 to 20) XORed with a constant, so the pointer is in 0xA0000000-0xA0000014. The product works with constants (`PointerValues`), and its only range (`ranged`, A5-90) is an OR that sets the top three bits. A range carried through a multiply and an XOR, and a note for a pointer that holds it on some paths only, is a feature, not a fix of this row; not routed, recorded here.
+
+### 2. A5-100, found by the sweep
+
+Seeds 293720 and 298629 (grammar 2, both fail on `6849e85c`) give `n:onchip-span-unsaid` for `*(xunknown4 *)(in_r7 ^ 0xe0000000 | 0x60000000)` (a read at E6023100) and `*(int4 *)((param_1 ^ 0xe0000000 | uRam06009034) - 4)` (writes at FFFFFEF8, FFFFFEFC). C's `^` binds tighter than `|`: the OR is with 0x60000000 (two of the top bits) or with a word the text reads from memory, and the text does not bound the pointer to the on-chip partition. `OrsIntoOnChip` took a constant with a `|` on either side for the OR's operand. Now it is the OR's operand only if no operator that binds tighter than `|` (`^`, `&` but not `&&`, the arithmetic, the shifts, the compares) holds it on its other side.
+
+### 3. A3-155: the restart limit
+
+The fixture's caller makes two `jsr @r3` with r3 loaded once. The r8 write is not the cause:
+
+| callee (lent) | base | patch 0078 |
+|---|---|---|
+| `mov #9,r8 ; rts ; mov r4,r0` (g1) | "Exceeded maximum restarts", withheld (restart limit), `xRam0603ac08 = xVar1;` (the run stores 9), second call `func_0x06071000();` | no warning; `xRam0603ac04 = extraout_r8;`, `xVar1 = func_0x06071000(param_1);`, `xRam0603ac08 = extraout_r8_00;`, `return xVar1;`; withheld: "it uses r8 after calling 0x06071000, which is not known to return it" |
+| `rts ; mov r4,r0` | the same restart failure | no warning; lent; both calls `func_0x06071000(param_1)`, `xRam0603ac08 = xVar1;` |
+| `mov #9,r9 ; rts ; mov r4,r0` | the same restart failure | as the line above |
+| `mov #9,r8 ; mov #9,r3 ; rts ; mov r4,r0` | `(*extraout_r3)();`, withheld (an unresolved indirect call) | unchanged |
+| not lent (`preserved_call2`) | withheld (an unlent callee) | unchanged |
+
+Traced in the engine (gdb on `FuncCallSpecs::deindirect`, `lateRestriction`, `isCompatible`, `Architecture::clearAnalysis`): the first generation converts the first `jsr @r3` (its r3 is the literal) and `lateRestriction` fails at `FuncProto::isCompatible`, which compares effect lists: a lent callee's effects (patch 0028) are never the default model's. `deindirect` records the override and asks for a restart; from the next flow on the call is direct. Only then, with the callee's effects (it keeps r3), is the second call's r3 the constant, and its `deindirect` asks for a second restart, which the universal group (`maxrestarts` 1, plus 0068's raises) refused. The second call kept the default model's effects (r8 kept) and lost its argument.
+
+So the restart was right and the bound wrong. Patch 0078 allows one more restart for each call site whose conversion asked for one (`Override::noteDeindirectRestart`, a set of call addresses, cleared with the overrides): a site asks once, since the override makes it direct from the flow on, so the bound is the number of indirect call sites. The text with the callee that writes r8 says what the callee does (`extraout_r8`, `extraout_r8_00`) and the signature is withheld for it with A3-3's reason, which names r8 and the callee: the calling-convention violation is said by the refusal, as the effects lending already handles it once the call is linked. No new caution was added.
+
+### 4. Pins, and proof that each bites
+
+| Pin | Fix reverted | Result |
+|---|---|---|
+| `TestA587Pins`: `A5-99, grammar 2 seed 300847 shrunk`, `... 292513 shrunk` (`pointer.effect.open`, no finding); derivation pins `in_r7 assigned in a switch's cases` (open), `... on every path before the use (control)` (not open), `... in an if block (a merge)` (open) | the old rule (open only if never assigned) | the 300847 module 17 findings (`pointer.effect.open` 0), the three derivation pins fail (4 checks: `open == wantOpen`), seed 300847 fails; restored, all pass |
+| `TestA587Pins`: `A5-100, grammar 2 seed 293720 shrunk`, `... 298629 shrunk` (no finding); `OrsIntoOnChip` text checks (five without the mask, five controls with it) | the precedence test off | both modules 1 finding, the text check fails, both seeds fail; restored, all pass |
+| `TestA3155Fix` (`Sh2DecompilerTests.cpp`, new; g1 at 0x06009000, the callee at 0x06009040, and the control) | patch 0078's restart allowance off (`action.cc`) | **9 checks fail** (both fixtures: the restart warning, withheld for the restart limit, one call with `param_1`; g1's `extraout_r8_00` missing), nothing else in the suite; restored, all pass |
+
+### 5. Sweeps (grammar 2, `SE_GENERATED_CANARY=0`, pieces of 5,000)
+
+| range | patched oracle | base (`6849e85c`) |
+|---|---|---|
+| 290,001 to 320,000 (around 300847) | 1 failing seed: 304221 (`n:map-frame-store`, A7-31) | 5: **292513 and 300847 (`n:pointer-effect-unsaid`, A5-99)**, 293720 and 298629 (`n:onchip-span-unsaid`, A5-100), 304221 |
+| 2,000,001 to 2,020,000 | 0 | 0 |
+| 6,000,001 to 6,020,000 (fresh) | 0 | 0 |
+
+The rules' counters over the 70,000 seeds, base to patched: `pointer.effect.derived` 551 to 519 and `.open` 1,444 to 1,476 (the 32 accesses of the two A5-99 seeds; `.unsaid` 30 to 0), `pointer.effect.said` 121 and `.excused` 17,333 unchanged: no access rule 3c checked and passed is asked less. `onchip.span.said` 9,966 to 9,987 (rule 3f asks of the newly open derivations, and the engine says each), `.unsaid` 10 to 0, `.closed` 33 to 12.
+
+**The matrix's seed ranges.** The nightly run draws seeds 1 to 20,000; A5-99's class came twice and A5-100's twice in the 30,000 seeds around 300847, and none of either in 40,000 elsewhere. Both are oracle defects, now pinned, so widening the nightly for them would find nothing more. Widening in general would: all five failures above lie outside every range the matrix runs, and one of them (304221) is an open product row. I suggest the nightly move `SE_GENERATED_FIRST` each night (the contract at the top of `Sh2GeneratedTests.cpp` says "a nightly run moves it"; the workflow does not), for example to 20,000 times the day of the year, so that each night's 20,000 seeds are fresh; the fixed short run stays the regression gate. For the coordinator.
+
+### 6. The corpora
+
+`SE_GAME_HWRAM=<img> SE_GAME_LEND=1 SE_GAME_NOTES=1 SE_GAME_OUT=<dir> SaturnExplorerSh2DecompilerTests`, the base binary (`6849e85c`) and the patched one, each image, outputs compared file by file.
+
+| | hwram007 | hwram008 |
+|---|---|---|
+| functions alone, all ok; texts alone | 839; **identical to the base** | 1,554; **identical to the base** |
+| notes and cautions (alone) | 35 and 0, as the base | 57 and 4, as the base |
+| missing and said / frame writes lost / malformed / frame unchecked | 0 / 0 / 0 / 0 | 4 / 0 / 0 / 0 |
+| real entries lent, before / after lending the effects | 461 (615) / **474 (645)** of 999, as the base | 710 (939) / **724 (975)** of 1,543, as the base |
+| withheld for the restart limit (lent) | **10 to 0** | **13 to 0** |
+| lent texts that differ from the base | 10 (those functions) | 13 (those functions) |
+| mapping violations (alone and lent) | 0 | 0 |
+
+The 23 functions now settle. Each was withheld for the restart limit and still is withheld, for what it does: in hwram007 3 for an unresolved indirect call, 5 for an unlent callee, 2 for r1 read after a call; in hwram008 2 for an unresolved indirect call, 10 for an unlent callee, 1 for an incoming argument outside its signature. So no lent count moves. Their texts change where the second call was left half-linked: in 0x0600A16C of hwram007 the call to 0x060198E6, lent `void func_0x060198e6(void)`, printed an argument (`func_0x060198e6(iVar2);`, the computation of r4 kept for it) under the default model and prints none now, with the r4 the call leaves read as `extraout_r4`, as the lent signature has it.
+
+### 7. Runs
+
+| Run | Result |
+|---|---|
+| build (all targets), `-j2` | ok |
+| `ctest -j2 --timeout 900 -E SaturnExplorerLive` / `ctest -R SaturnExplorerLive` | **106 of 106** (207 s; the engine suite 42.8 s) / **6 of 6** (28 s). No new ctest test: the pins are in `SaturnExplorerSh2DecompilerTests` and `SaturnExplorerSh2GeneratedTests` |
+| `SaturnExplorerSh2DecompilerTests` alone | all passed (26 s) |
+| fault suite (`SaturnExplorerDecompilerFaultTests` alone) | **0 of 94 jobs failed** (78 s), no MOVED pin |
+| vendor gate (`check-vendored-tree.py check`, against a sparse checkout of Ghidra at the pinned `918d44eb`, `--tests-dir`) | `vendored tree: ok (check)` |
+| generator, the matrix's sizes: `SE_GENERATED_SEEDS=20000` (four runs of 5,000 from seeds 1, 5,001, 10,001, 15,001, both grammars) | 0 failing seeds (101 to 138 s each) |
+| generator, `SE_GENERATED_GRAMMAR=1 SE_GENERATED_SEEDS=1000` / `SE_GENERATED_GRAMMAR=2 SE_GENERATED_SEEDS=3000` | 0 failing seeds (22 s) / 0 failing seeds (103 s) |
+| `SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000` | all passed; 5,580 functions, 5,292 compared, **agrees=5,185** narrow-c=136 void-return=227 void-return-lent=24, skipped 8 (165 s) |
+| seeds 300847, 292513, 293720, 298629 (grammar 2, `SE_GENERATED_CANARY=0`) | 0 failing each (each failed on the base) |
+| the sweeps (section 5) and the corpora (section 6) | as above |
+
+### 8. Routed
+
+* **Grammar 2 seed 304221** (`n:map-frame-store`, the same on `6849e85c`): `xStack_24 = param_2;` at a call, the push of a value made by an `add` the engine folds away (r1 is 0 after a `dt` loop). A7-31's mechanism, open; for the area 7 fixer. Replay: `SE_GENERATED_FIRST=304221 SE_GENERATED_SEEDS=1 SE_GENERATED_GRAMMAR=2 SE_GENERATED_CANARY=0`.
+* **The nightly's seed range** (section 5): for the coordinator.
+* **Patch number.** 0078 is the next number after master's 0077; if another branch merges a 0078 first, this one is renumbered on merge.
