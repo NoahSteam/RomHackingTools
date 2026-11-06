@@ -336,7 +336,7 @@ void FrameTryCollides()
     std::string err;
     const bool ok = s.SaveTo("frame.ini", &err, false);
     std::printf("  frame try during another instance's 150 ms save: %s: %s\n", ok ? "saved" : "refused", err.c_str());
-    Check(!ok && Has(err, "another process holds"), "PIN A9-53: the frame's no-wait try is refused by another instance's ordinary save");
+    Check(!ok && Has(err, "another process holds"), "PIN A9-52: the frame's no-wait try is refused by another instance's ordinary save");
     Reap(kid);
     const pid_t kid2 = HoldLockMs("frame.ini.lock", 150);
     const auto t0 = std::chrono::steady_clock::now();
