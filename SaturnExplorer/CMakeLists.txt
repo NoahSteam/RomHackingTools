@@ -664,6 +664,20 @@ if(BUILD_TESTING)
         PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
     add_test(NAME SaturnExplorerFunctionNamesTests COMMAND SaturnExplorerFunctionNamesTests)
 
+    # FileLock and the settings save on it, with no fork or namespace: the Windows branch (LockFileEx, GetLastError reasons,
+    # FlushFileBuffers) gets an automated test here; the Area9Round3..7 tests that need POSIX stay Linux only (A12-19).
+    add_executable(SaturnExplorerFileLockTests
+        FrontEnd/tests/FileLockTests.cpp
+        FrontEnd/src/Debug/CallStack.cpp
+        FrontEnd/src/Settings.cpp
+        FrontEnd/src/FileWrite.cpp
+    )
+    target_include_directories(SaturnExplorerFileLockTests
+        PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_link_libraries(SaturnExplorerFileLockTests PRIVATE Threads::Threads)
+    add_test(NAME SaturnExplorerFileLockTests COMMAND SaturnExplorerFileLockTests)
+    set_tests_properties(SaturnExplorerFileLockTests PROPERTIES TIMEOUT 60)
+
     # Area 9 round 3 (review): the stores' save, the address word, the capped read; pins of the findings A9-31 and later. Linux only.
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
         add_executable(SaturnExplorerArea9Round3Tests

@@ -14,6 +14,7 @@
 #include <cstdio>
 #include <cstdlib>
 #ifdef _WIN32
+#include <direct.h>       // _rmdir
 #include <process.h>      // _getpid, for the per-process temp config dir
 static inline int se_getpid() { return _getpid(); }
 #else
@@ -657,6 +658,16 @@ void TestSplitHeightRoundTripsThroughSettings()
     in.Set("callstack", "split", "wide");
     CHECK(in.GetFloat("callstack", "split", -1.0f) == -1.0f);
     std::remove(Settings::FilePath().c_str());
+    // Leave no folder behind (each run has its own pid-named one).
+    std::remove((Settings::FilePath() + ".lock").c_str());
+    const std::string appDir = Settings::ConfigDir();
+#ifdef _WIN32
+    _rmdir(appDir.c_str());
+    _rmdir(dir.c_str());
+#else
+    rmdir(appDir.c_str());
+    rmdir(dir.c_str());
+#endif
 }
 
 }  // namespace
