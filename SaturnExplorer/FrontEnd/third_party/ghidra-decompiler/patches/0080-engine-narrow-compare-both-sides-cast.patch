@@ -1,0 +1,73 @@
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/typeop.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/typeop.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/typeop.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/typeop.cc
+@@ -14,6 +14,7 @@
+  * limitations under the License.
+  *
+  * Modified for SaturnExplorer: a constant in an equality compare with a narrow integer is cast to that integer's type (patches/0077-engine-narrow-compare-cast-target.patch).
++ * Modified for SaturnExplorer: the other side of an equality compare whose one side is cast is cast to the same type (patches/0080-engine-narrow-compare-both-sides-cast.patch).
+  */
+ #include "typeop.hh"
+ #include "funcdata.hh"
+@@ -949,6 +950,37 @@ static Datatype *compareCastTarget(const PcodeOp *op,int4 slot,Datatype *reqtype
+   return reqtype;
+ }
+ 
++/// \brief The type the unflagged side of an equality compare is cast to when the other side is cast
++///
++/// \b checkIntPromotionForCompare says whether C would extend this input differently from the other one. When it says so of the other input (or the other
++/// input is already the output of the cast made for it) and not of this one, \b getInputCast casts the other to the lower-ordered of the two types (\b reqtype) and this one, a named variable or a cast that C extends
++/// by its own type, was left alone: with \b reqtype a \b uint2 and this side an \b int2, the \b (uint2) on the other side changes nothing in C and
++/// \b (uint2)(x & 0xff80) == (int2)y extends the two sides one by zero and one by sign, where the code compares two bytes. This side is cast to
++/// \b reqtype too, so that C extends both the same way. (A constant is cast to the other side's type by compareCastTarget, and is not paired.)
++/// \param op is the comparison
++/// \param slot is the input being asked about
++/// \param reqtype is the lower-ordered of the two types
++/// \param castStrategy is the cast strategy
++/// \param tlst is the type factory
++/// \return the data-type to cast the input to, or null
++static Datatype *compareOtherSideCast(const PcodeOp *op,int4 slot,Datatype *reqtype,const CastStrategy *castStrategy,TypeFactory *tlst)
++
++{
++  const Varnode *vn = op->getIn(slot);
++  const Varnode *othervn = op->getIn(1-slot);
++  if (vn->isConstant() || othervn->isConstant()) return (Datatype *)0;
++  if (vn->getSize() >= tlst->getSizeOfInt()) return (Datatype *)0;
++  // The cast pass takes the inputs in order, so the other side is already the output of the CAST it made when it is slot 0
++  if (!othervn->isWritten() || othervn->getDef()->code() != CPUI_CAST) {
++    if (!castStrategy->checkIntPromotionForCompare(op,1-slot)) return (Datatype *)0;
++  }
++  type_metatype meta = vn->getHighTypeReadFacing(op)->getMetatype();
++  type_metatype reqmeta = reqtype->getMetatype();
++  if ((meta != TYPE_INT && meta != TYPE_UINT) || (reqmeta != TYPE_INT && reqmeta != TYPE_UINT)) return (Datatype *)0;
++  if (meta == reqmeta || reqtype->getSize() != vn->getSize()) return (Datatype *)0;
++  return reqtype;
++}
++
+ TypeOpEqual::TypeOpEqual(TypeFactory *t)
+   : TypeOpBinary(t,CPUI_INT_EQUAL,"==",TYPE_BOOL,TYPE_INT)
+ {
+@@ -967,7 +999,10 @@ Datatype *TypeOpEqual::getInputCast(const PcodeOp *op,int4 slot,const CastStrate
+   if (castStrategy->checkIntPromotionForCompare(op,slot))
+     return compareCastTarget(op,slot,reqtype);
+   othertype = op->getIn(slot)->getHighTypeReadFacing(op);
+-  return castStrategy->castStandard(reqtype,othertype,false,false);
++  Datatype *ct = castStrategy->castStandard(reqtype,othertype,false,false);
++  if (ct == (Datatype *)0)
++    ct = compareOtherSideCast(op,slot,reqtype,castStrategy,tlst);
++  return ct;
+ }
+ 
+ Datatype *TypeOpEqual::propagateType(Datatype *alttype,PcodeOp *op,Varnode *invn,Varnode *outvn,
+@@ -1031,7 +1066,10 @@ Datatype *TypeOpNotEqual::getInputCast(const PcodeOp *op,int4 slot,const CastStr
+   if (castStrategy->checkIntPromotionForCompare(op,slot))
+     return compareCastTarget(op,slot,reqtype);
+   othertype = op->getIn(slot)->getHighTypeReadFacing(op);
+-  return castStrategy->castStandard(reqtype,othertype,false,false);
++  Datatype *ct = castStrategy->castStandard(reqtype,othertype,false,false);
++  if (ct == (Datatype *)0)
++    ct = compareOtherSideCast(op,slot,reqtype,castStrategy,tlst);
++  return ct;
+ }
+ 
+ Datatype *TypeOpNotEqual::propagateType(Datatype *alttype,PcodeOp *op,Varnode *invn,Varnode *outvn,
