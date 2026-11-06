@@ -370,3 +370,19 @@ E-map-tokhover	corpus	killed	42	CHECK failed at /home/user/RomHackingTools/.clau
 E-map-tokslot	corpus	killed	42	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:5477: mapping.Violations() == 0
 E-map-tokframe	corpus	killed	43	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:5477: mapping.Violations() == 0
 E-map-tokcopy	corpus	killed	42	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:5477: mapping.Violations() == 0
+H-led-width	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:3121: Ledger(r, { Wr(0x20100063u, 1), Rd(0x20100063u, 1, true) })
+H-led-width	gen	killed	20	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:11775: rep.findings.empty()
+H-led-printed	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:3740: index && index->printed == 2
+H-led-printed	gen	survived	19	
+H-led-cond	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:3743: right && right->conditionalInPrint && right->printed == 1
+H-led-cond	gen	survived	19	
+H-led-repeat	unit	survived	22	
+H-led-repeat	gen	survived	18	
+H-led-repeat	corpus	survived	41	
+H-led-repeat	*	SURVIVED	0	
+H-led-insn	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:147: all.Violations() == 0
+H-led-insn	gen	killed	20	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:11775: rep.findings.empty()
+H-led-nowrites	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:264: ledger
+H-led-nowrites	gen	killed	19	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:11775: rep.findings.empty()
+H-led-direct	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:3121: Ledger(r, { Wr(0x20100063u, 1), Rd(0x20100063u, 1, true) })
+H-led-direct	gen	survived	18	
