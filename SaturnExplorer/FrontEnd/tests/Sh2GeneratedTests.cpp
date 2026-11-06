@@ -7473,8 +7473,11 @@ template <int N, bool S> struct T {
   // cast to the type of the variable it assigns to, so for sizes with a type (a 2-byte piece read by `mov.w` into a uint4) the extension is by the piece's
   // sign, as for any other cast. (area 3 fixer, A3-150) ...but for a cast to an unsigned type, which is the ZEXT at every size: the engine prints a sign
   // extension of a piece as a cast to a signed type (`(int4)xStack_8` for `mov.w`), and `(uint4)CONCAT11(...)` is a word whose upper half is 0
-  // (frame124_4602253.chain), `(int4)xStack_18` of `_xStack_18 = CONCAT31(CONCAT21(xStack_18,param_4),0x44)` with the sign (4511454)
-  template <int M> explicit T(const Piece<M>& o) : v((R)((N > M ? (!S ? o.Zext() : o.Ext()) : o.Zext()) & Mask())) {}
+  // (frame124_4602253.chain), `(int4)xStack_18` of `_xStack_18 = CONCAT31(CONCAT21(xStack_18,param_4),0x44)` with the sign (4511454).
+  // (A10-16, patch 0081) ...and for a cast to a signed type too: the engine casts the CONCAT to its signed type before it extends it by the sign
+  // (`(uint4)(int2)CONCAT11(...)`, `(int4)(int2)CONCAT11(...)`), so a CONCAT cast straight to a wider type is its unsigned value, as C has it.
+  // Before 0081 `(int4)CONCAT11(...)` was the engine's sign extension of `mov.w` and agreed here only, so it was excused as 'narrow-c'.
+  template <int M> explicit T(const Piece<M>& o) : v((R)(o.Zext() & Mask())) {}
   // an implicit conversion, the one C does: by the source's sign
   template <int M, bool U> operator T<M, U>() const { return T<M, U>(B2U(Ext())); }
   u64 Zext() const { return (u64)v & Mask(); }
@@ -7534,6 +7537,17 @@ static unsigned g_cmpc;
   template <int N, bool S, class I, class = typename std::enable_if<IsInt<I>::value>::type> Bool4 operator op(const T<N, S>& a, I b) { typedef typename Promoted<N, S>::type P; return P(a) op P(b); } \
   template <int N, bool S, class I, class = typename std::enable_if<IsInt<I>::value>::type> Bool4 operator op(I a, const T<N, S>& b) { typedef typename Promoted<N, S>::type P; return P(a) op P(b); }
 CMP(==) CMP(!=) CMP(<) CMP(<=) CMP(>) CMP(>=)
+// (A10-16, patch 0081) A CONCAT meeting a wider operand (`CONCAT11(a,b) + param_1`) stands for the p-code's extension of it, which the text hides:
+// the engine casts the CONCAT to its signed type for a sign extension (`(int2)CONCAT11(a,b) + param_1`), so the hidden one is the zero extension,
+// as in C. (Before 0081 that text was the sign extension, and agreed here only: 'narrow-c'.) Against a plain number the CONCAT keeps Promoted's reading.
+template <int N, int M> struct PieceWide { typedef T<(N > M ? N : M), true> type; };
+template <int M, int N> static inline typename PieceWide<N, M>::type WidenPiece(const Piece<N>& a) { typename PieceWide<N, M>::type r; r.v = (typename PieceWide<N, M>::type::R)a.Zext(); return r; }
+#define PIECEOP(op) \
+  template <int N, int M, bool U> auto operator op(const Piece<N>& a, const T<M, U>& b) -> decltype(WidenPiece<M>(a) op b) { return WidenPiece<M>(a) op b; } \
+  template <int N, int M, bool U> auto operator op(const T<M, U>& b, const Piece<N>& a) -> decltype(b op WidenPiece<M>(a)) { return b op WidenPiece<M>(a); } \
+  template <int N, int M> auto operator op(const Piece<N>& a, const Piece<M>& b) -> decltype(WidenPiece<M>(a) op WidenPiece<N>(b)) { return WidenPiece<M>(a) op WidenPiece<N>(b); }
+PIECEOP(+) PIECEOP(-) PIECEOP(*) PIECEOP(&) PIECEOP(|) PIECEOP(^) PIECEOP(/) PIECEOP(%)
+PIECEOP(==) PIECEOP(!=) PIECEOP(<) PIECEOP(<=) PIECEOP(>) PIECEOP(>=)
 // shifts take the type of the left operand
 template <int N, bool S, int M, bool U> T<N, S> operator<<(const T<N, S>& a, const T<M, U>& b) { u64 c = b.Zext(); return T<N, S>(c >= 8 * N ? 0 : (a.Zext() << c)); }
 template <int N, bool S, int M, bool U> T<N, S> operator>>(const T<N, S>& a, const T<M, U>& b) {
