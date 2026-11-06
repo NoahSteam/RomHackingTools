@@ -5796,6 +5796,9 @@ bool FlowIdentitySources(const FlowRecord& flow, const ghidra::Funcdata& fd, int
     // (a storage read at one point is one node of the path, built once: `x | x` reads x twice and takes one way through each join)
     std::map<std::tuple<const ghidra::AddrSpace*, ghidra::uintb, ghidra::int4, int, int>, int> built;
     // (the node of storage `s` read before op `before` of block `b`; -1 when it cannot be built)
+    // (local: the op's own block only, every value read at its start a leaf and no number the walk knows of one, for an op the engine folds
+    // to a register whose value the walk also knows: `mov #0,r2 ; xor r1,r2` after a `dt r1` loop passes r1 on, which is 0 too)
+    bool local = false;
     std::function<int(const FlowVn&, int, int, int)> build;
     const auto buildOnce = [&](const FlowVn& s, int b, int before, int depth) -> int {
         const auto key = std::make_tuple(s.space, s.offset, s.size, b, before);
@@ -5830,7 +5833,7 @@ bool FlowIdentitySources(const FlowRecord& flow, const ghidra::Funcdata& fd, int
             {
                 // (a piece of a register an op wrote whole: a number when the walk knows the register's)
                 uint64_t v = 0;
-                if (!FlowNumberBefore(flow, fd, b, before, s, v)) return -1;
+                if (local || !FlowNumberBefore(flow, fd, b, before, s, v)) return -1;
                 n.value = v;
                 nodes.push_back(n);
                 return static_cast<int>(nodes.size()) - 1;
@@ -5840,15 +5843,27 @@ bool FlowIdentitySources(const FlowRecord& flow, const ghidra::Funcdata& fd, int
         }
         // (at the start of a block, the value the block before it leaves -- `add #5` before a branch, `add #-5` after it -- on the path
         // this build takes through a join; not around a loop back into the block)
-        if (d < 0 && b != flow.entryBlock && static_cast<size_t>(b) < flow.predecessors.size())
+        if (!local && d < 0 && b != flow.entryBlock && static_cast<size_t>(b) < flow.predecessors.size())
         {
             std::vector<int> preds;
             bool usable = true;
             for (int q : flow.predecessors[static_cast<size_t>(b)])
             {
-                usable = usable && q >= 0 && q != b && static_cast<size_t>(q) < flow.blockOps.size();
+                usable = usable && q >= 0 && static_cast<size_t>(q) < flow.blockOps.size();
                 if (std::find(preds.begin(), preds.end(), q) == preds.end()) preds.push_back(q);
             }
+            if (usable && preds.size() > 1)
+            {
+                // (a loop's way back that leaves the storage as it was brings what the other paths bring, A7-39: `bra L ; ... L: dt r3 ;
+                // bf` with r5 read after the loop, a poll loop of one block between `and r3,r2` and `xor r2,r3`)
+                const ghidra::AddrSpace* stackSpace = fd.getArch()->getStackSpace();
+                const bool inMemory = s.space && (s.space == stackSpace || s.space == fd.getArch()->getDefaultDataSpace());
+                std::vector<int> entering;
+                for (int q : preds)
+                    if (!LoopKeeps(flow, fd, b, q, s, inMemory)) entering.push_back(q);
+                if (!entering.empty()) preds = entering;
+            }
+            for (int q : preds) usable = usable && q != b;   // (not around a loop back into the block)
             // (a path into the join that is never taken, by a condition the walk knows, gives nothing)
             if (usable && preds.size() > 1)
             {
@@ -5857,14 +5872,6 @@ bool FlowIdentitySources(const FlowRecord& flow, const ghidra::Funcdata& fd, int
                 for (int q : preds)
                     if (!EdgeDead(dw, flow, fd, q, b)) live.push_back(q);
                 if (!live.empty()) preds = live;
-                // (a loop's way back that leaves the storage as it was brings what the other paths bring, A7-39: `bra L ; ... L: dt r3 ;
-                // bf` with r5 read after the loop)
-                const ghidra::AddrSpace* stackSpace = fd.getArch()->getStackSpace();
-                const bool inMemory = s.space && (s.space == stackSpace || s.space == fd.getArch()->getDefaultDataSpace());
-                std::vector<int> entering;
-                for (int q : preds)
-                    if (!LoopKeeps(flow, fd, b, q, s, inMemory)) entering.push_back(q);
-                if (!entering.empty()) preds = entering;
             }
             // (unless the edges in give a number: `dt r3 ; bf L` falls through with r3 0)
             uint64_t v = 0;
@@ -5905,7 +5912,7 @@ bool FlowIdentitySources(const FlowRecord& flow, const ghidra::Funcdata& fd, int
         // a value the block does not compute: a number known on every path, else x (one only)
         const int from = d + 1;
         uint64_t v = 0;
-        if (FlowNumberBefore(flow, fd, b, from, s, v))
+        if (!local && FlowNumberBefore(flow, fd, b, from, s, v))
         {
             n.value = v;
             nodes.push_back(n);
@@ -6001,41 +6008,47 @@ bool FlowIdentitySources(const FlowRecord& flow, const ghidra::Funcdata& fd, int
     static const uint64_t tests[] = { 0, ~0ull, 1, 2, 0x7FFFFFFFull, 0x80000000ull, 0x55555555ull, 0xAAAAAAAAull, 0x12345678ull, 0x9ABCDEF0ull,
                                       0x0F0F0F0Full, 0xF0F0F0F0ull, 0x00010000ull, 0xDEADBEEFull, 0x00FF00FFull, 0x8000ull, 0x80ull };
     const size_t count = sizeof(tests) / sizeof(tests[0]);
-    sources.clear();
-    for (int path = 0; path < 32; ++path)
+    for (int mode = 0; mode < 2; ++mode)
     {
-        nodes.clear();
-        leaves.clear();
-        built.clear();
-        cursor = 0;
-        const int root = build(top.out, blk, pos + 1, 0);
-        if (root < 0 || leaves.empty() || nodes[static_cast<size_t>(root)].kind != 2) return false;
-        bool found = false;
-        for (size_t x = 0; x < leaves.size() && !found; ++x)
+        local = mode == 1;
+        sources.clear();
+        choice.clear();
+        arity.clear();
+        for (int path = 0; path < 32; ++path)
         {
-            if (leaves[x].s.size != top.out.size) continue;
-            bool same = true;
-            for (size_t k = 0; k < count && same; ++k)
-                for (size_t round = 0; round < 2 && same; ++round)
-                {
-                    for (size_t j = 0; j < leaves.size(); ++j)
-                        put[j] = j == x ? tests[k] : tests[(k * (round ? 11 : 7) + j * 5 + 3 + round) % count];
-                    same = ((eval(root) ^ tests[k]) & MaskToSize(bytes, top.out.size)) == 0;
-                }
-            if (!same) continue;
-            sources.push_back(IdentitySource{ leaves[x].s, leaves[x].b, leaves[x].at });
-            found = true;
+            nodes.clear();
+            leaves.clear();
+            built.clear();
+            cursor = 0;
+            const int root = build(top.out, blk, pos + 1, 0);
+            if (root < 0 || leaves.empty() || nodes[static_cast<size_t>(root)].kind != 2) break;
+            bool found = false;
+            for (size_t x = 0; x < leaves.size() && !found; ++x)
+            {
+                if (leaves[x].s.size != top.out.size) continue;
+                bool same = true;
+                for (size_t k = 0; k < count && same; ++k)
+                    for (size_t round = 0; round < 2 && same; ++round)
+                    {
+                        for (size_t j = 0; j < leaves.size(); ++j)
+                            put[j] = j == x ? tests[k] : tests[(k * (round ? 11 : 7) + j * 5 + 3 + round) % count];
+                        same = ((eval(root) ^ tests[k]) & MaskToSize(bytes, top.out.size)) == 0;
+                    }
+                if (!same) continue;
+                sources.push_back(IdentitySource{ leaves[x].s, leaves[x].b, leaves[x].at });
+                found = true;
+            }
+            if (!found) break;
+            // the next path: the last join's next predecessor, the joins after it taken afresh
+            choice.resize(cursor);
+            arity.resize(cursor);
+            while (!choice.empty() && ++choice.back() == arity.back())
+            {
+                choice.pop_back();
+                arity.pop_back();
+            }
+            if (choice.empty()) return true;
         }
-        if (!found) return false;
-        // the next path: the last join's next predecessor, the joins after it taken afresh
-        choice.resize(cursor);
-        arity.resize(cursor);
-        while (!choice.empty() && ++choice.back() == arity.back())
-        {
-            choice.pop_back();
-            arity.pop_back();
-        }
-        if (choice.empty()) return true;
     }
     return false;
 }
@@ -6732,7 +6745,10 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                 ib->second.second < flow.blockOps[static_cast<size_t>(ib->second.first)].size())
             {
                 const FlowOp& last = flow.blockOps[static_cast<size_t>(ib->second.first)][ib->second.second];
-                if (last.code == ghidra::CPUI_CALL || last.code == ghidra::CPUI_CALLIND || last.code == ghidra::CPUI_RETURN)
+                // (not a statement of the call's own output, `xStack_30 = (xunknown4)xVar3;` for the r1 a 64-bit return leaves, which a
+                // store after the call wrote: the A7-39 triage, grammar 2 seed 1820753)
+                if ((last.code == ghidra::CPUI_CALL || last.code == ghidra::CPUI_CALLIND || last.code == ghidra::CPUI_RETURN) &&
+                    !(last.code != ghidra::CPUI_RETURN && StatementValues(o, flow.opsEnd).insns.count(at)))
                 {
                     useBlock = ib->second.first;
                     usePos = static_cast<int>(ib->second.second);
