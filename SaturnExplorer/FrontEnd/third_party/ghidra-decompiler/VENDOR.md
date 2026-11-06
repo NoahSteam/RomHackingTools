@@ -212,7 +212,7 @@ applies 0005 to 0008) must run before `se-regen-sla`.
   - 0078: `TestA3155Fix` (`Sh2DecompilerTests.cpp`: the g1 fixture and its control; 9 checks fail without the patch).
   - 0080: the printed-C fixtures `A10-12 a` to `e` and the pins `A10-12 #0` to `#7` (`SaturnExplorerSh2GeneratedTests`; each of the five is `mismatch` without the patch, the oracle now counting a narrow compare that is false as C as a finding and not `narrow-c`) and families 98 to 103, 108 and 109 of `dagen17.py`; the corpora's texts are unchanged (record: 15_DECOMPILER_STEP5.md, "A10-12: narrow compare cast (patch 0080)").
   - 0081: the printed-C pins `A10-16 #0` to `#16` and `A10-16 oracle #0` and `#1` (`SaturnExplorerSh2GeneratedTests`; #0 to #7 are `mismatch` without the patch, the zero extensions #13 to #16 keep `(uint4)CONCAT11(...)`) and the stack-word family of the record (15_DECOMPILER_STEP5.md, "A10-16 and A10-17").
-  - 0082: `TestArea5Confirm` (`a5_102`, `a5_102_hw`) and the A7-25, A7-30 (a) and A7-31 global pins (`Sh2DecompilerTests.cpp`; 12 checks fail without the patch), and the pins `A5-102, ...` of `TestA587Pins` (`SaturnExplorerSh2GeneratedTests`; `folded-store-after-access` without the patch, with 18 of the default run's 300 seeds).
+  - 0082: `TestArea5Confirm` (`a5_102`, `a5_102_hw`) and the A7-25, A7-30 (a) and A7-31 global pins (`Sh2DecompilerTests.cpp`; 12 checks fail without the patch), and the pins `A5-102, ...` of `TestA587Pins` (`SaturnExplorerSh2GeneratedTests`; `folded-store-after-access` without the patch, with 12 of the default run's 300 seeds).
 
 
   If upstream's Makefile source groups changed, update the lists in `vendor.py`.
