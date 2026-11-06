@@ -28,8 +28,8 @@ namespace sfe
 enum class CappedRead
 {
     Ok,
-    Missing,       // nothing at the path (a link that points nowhere counts)
-    Unreadable,    // it exists and could not be read
+    Missing,       // nothing at the path (a link that points nowhere counts; so does a file where a folder was expected)
+    Unreadable,    // it exists and could not be read (a link loop included: the link is not to be replaced, A9-38)
     NotRegular,    // a directory, a device, a FIFO, a socket
     TooLarge,      // more than 'maxBytes'
 };
@@ -43,7 +43,7 @@ inline CappedRead ReadFileCapped(const std::string& path, size_t maxBytes, std::
     if ((st.st_mode & _S_IFMT) != _S_IFREG) return CappedRead::NotRegular;
 #else
     struct stat st;
-    if (::stat(path.c_str(), &st) != 0) return errno == ENOENT || errno == ENOTDIR || errno == ELOOP ? CappedRead::Missing : CappedRead::Unreadable;
+    if (::stat(path.c_str(), &st) != 0) return errno == ENOENT || errno == ENOTDIR ? CappedRead::Missing : CappedRead::Unreadable;
     if (!S_ISREG(st.st_mode)) return CappedRead::NotRegular;
 #endif
     if (static_cast<unsigned long long>(st.st_size) > maxBytes) return CappedRead::TooLarge;

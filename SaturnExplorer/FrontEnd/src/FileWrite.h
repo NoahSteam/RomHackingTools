@@ -28,7 +28,7 @@ namespace sfe
 // short write, and the flush that happens inside the close.
 //
 // Normally staged: the bytes go to a sibling temporary and are renamed over 'path' once they
-// are safely on disk, so 'path' either holds the whole new file or is untouched. The staging
+// have been flushed to the device (fsync / FlushFileBuffers; the folder is synced after the rename on POSIX, A9-48), so 'path' either holds the whole new file or is untouched. The staging
 // is skipped when 'path' names something that is not a regular file (a device, a FIFO, a
 // directory): renaming over those would replace the thing itself rather than its contents,
 // which is never what a save meant. Such a target is written directly, and the close is still
@@ -90,20 +90,47 @@ unsigned long ProcessId();
 // other FileLocks in this one, and the OS drops it if the process dies, so a crash never
 // leaves it held. The descriptor is close-on-exec (Windows handles are not inheritable by
 // default): an emulator launched while the lock is held must not inherit it, or the lock would
-// stay held until that emulator exits. With wait=false, Held() is false when someone else has it.
+// stay held until that emulator exits. With wait=false, Held() is false when someone else has it; with wait=true the wait ends
+// after kWaitMs (A9-40), so a holder that never lets go cannot freeze the caller, and Held() is false. WhyNotHeld() says why,
+// with the OS reason when the file could not be opened (a folder that cannot be written or is gone, A9-42).
 class FileLock
 {
 public:
-    explicit FileLock(const std::string& path, bool wait = true);
+    // 'tryMs' (with wait=false): retry for that many milliseconds before refusing as "another process holds" (A9-52).
+    explicit FileLock(const std::string& path, bool wait = true, unsigned tryMs = 0);
     ~FileLock();
     FileLock(const FileLock&) = delete;
     FileLock& operator=(const FileLock&) = delete;
     bool Held() const { return mHeld; }
+    std::string WhyNotHeld() const;   // empty when held
+    static constexpr unsigned kWaitMs = 3000;
+    static constexpr unsigned kExitWaitMs = 10000;   // the bound once SetClosing(true) has been called (A9-46)
+    // Called when the application is shutting down: a waiting lock then waits up to kExitWaitMs, because a change refused now is lost
+    // with the window and the freeze costs nothing. The kExitWaitMs is one budget for all the locks taken after the call (A9-53).
+    static void SetClosing(bool closing);
 
 private:
+    std::string mPath;
+    unsigned mWaitMs = kWaitMs;
+    int mError = 0;          // errno / GetLastError of the open or the lock
+    bool mTimedOut = false;
+    bool mSharedShort = false;   // at exit, with less than the full shared time left (A9-58)
+    unsigned mWaitedMs = 0;      // what was waited for the lock
     bool mHeld = false;
     intptr_t mHandle = -1;   // a POSIX descriptor, or a Windows HANDLE
 };
+
+// Tell the user something before the window goes, where the Log panel is no longer there to read: a native message box on Windows,
+// a line on stderr elsewhere. For a save refused at exit (A9-46).
+void NoticeAtExit(const std::string& text);
+// A platform that has a better place for the notice than stderr (the SDL2 builds: SDL_ShowSimpleMessageBox) sets it; null restores the default.
+void SetExitNoticeHook(void (*hook)(const std::string&));
+
+// Remove the staging files "<path>.separt-<pid>-<n>" that a writer killed between its write and its rename left beside 'path'
+// (A9-37). Call it only while holding the lock that serialises the writers of 'path': then no live writer of that file has one.
+// Even so it removes only a regular file (never a link or a folder) whose name is exactly that form, and only when the
+// process named in it is gone or the file is over ten minutes old. POSIX only: on Windows it does nothing. Returns the count.
+size_t RemoveStaleStagingFiles(const std::string& path);
 
 // Move the file 'from' over 'path', replacing what is there in one step (rename on POSIX,
 // MoveFileEx with REPLACE_EXISTING on Windows), so 'path' holds one complete file or the other.

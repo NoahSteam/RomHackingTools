@@ -321,7 +321,7 @@ void App::Initialize()
         if (::getcwd(cwd, sizeof cwd)) SetWorkFolder(cwd);
 #endif
     }
-    mAssemblyPanel.SetSaveErrorHandler([this](const std::string& why) { mLog.Error("Could not save the assembly notes: " + why); });
+    mAssemblyPanel.SetSaveErrorHandler([this](const std::string& why) { mLog.Error(why); });   // begins with its subject (A9-51)
     LoadSettings();                // panel visibility, data dir, emulator paths
 
     mWatchPanel.LoadSession();     // restore the session's watch list, if any
@@ -329,7 +329,7 @@ void App::Initialize()
         std::string err;
         if (!mAssemblyPanel.LoadComments(&err)) mLog.Error("Assembly comments: " + err);   // restore the session's assembly comments
         else if (mAssemblyPanel.SkippedCommentLines())
-            mLog.Warn("assembly_comments.txt: " + std::to_string(mAssemblyPanel.SkippedCommentLines()) + " line(s) are not \"<hex-address> <note>\" and were skipped; they stay in the file");
+            mLog.Warn("assembly_comments.txt: " + std::to_string(mAssemblyPanel.SkippedCommentLines()) + " line(s) are not \"<hex-address> <note>\" (an address is eight hex digits, or 0x and up to eight) and were skipped (a line that begins with the letters a-f alone, like \"dead\", or with a number below 80000 without 0x, like \"2026\", may be an old unpadded address: write it as eight digits, e.g. 0000DEAD, or put a remark after a semicolon); they stay in the file");
     }
     {
         // A file that is there and was not read, or lines in it that were not entries, are said (A9-2, A9-4): the names
@@ -337,13 +337,13 @@ void App::Initialize()
         std::string err;
         if (!mFunctionNames.Load(&err)) mLog.Error("Function names: " + err);
         else if (mFunctionNames.SkippedLines())
-            mLog.Warn("saturn_functions.txt: " + std::to_string(mFunctionNames.SkippedLines()) + " line(s) are not \"<hex-address> <name>\" and were skipped; they stay in the file (the first is line " +
+            mLog.Warn("saturn_functions.txt: " + std::to_string(mFunctionNames.SkippedLines()) + " line(s) are not \"<hex-address> <name>\" (an address is eight hex digits, or 0x and up to eight) and were skipped (a line that begins with the letters a-f alone, like \"dead\", or with a number below 80000 without 0x, like \"2026\", may be an old unpadded address: write it as eight digits, e.g. 0000DEAD, or put a remark after a semicolon); they stay in the file (the first is line " +
                       std::to_string(mFunctionNames.FirstSkippedLine()) + ")");
         err.clear();
         mFunctionNames.Import(WorkFilePath("saturn_symbols.txt").c_str(), &err);  // merge a symbol map if present
         if (!err.empty()) mLog.Error("Symbol map: " + err);
         else if (mFunctionNames.SkippedLines())
-            mLog.Warn("saturn_symbols.txt: " + std::to_string(mFunctionNames.SkippedLines()) + " line(s) are not \"<hex-address> <name>\" and were skipped; they stay in the file (the first is line " +
+            mLog.Warn("saturn_symbols.txt: " + std::to_string(mFunctionNames.SkippedLines()) + " line(s) are not \"<hex-address> <name>\" (an address is eight hex digits, or 0x and up to eight) and were skipped (a line that begins with the letters a-f alone, like \"dead\", or with a number below 80000 without 0x, like \"2026\", may be an old unpadded address: write it as eight digits, e.g. 0000DEAD, or put a remark after a semicolon); they stay in the file (the first is line " +
                       std::to_string(mFunctionNames.FirstSkippedLine()) + ")");
     }
 #if SE_ENABLE_DECOMPILER
@@ -352,7 +352,7 @@ void App::Initialize()
         if (!mFunctionBounds.Load(WorkFilePath(decomp::FunctionBounds::kDefaultFile), &err)) mLog.Error("Function starts: " + err);
         else if (mFunctionBounds.SkippedLines())
             mLog.Warn(std::string(decomp::FunctionBounds::kDefaultFile) + ": " + std::to_string(mFunctionBounds.SkippedLines()) +
-                      " line(s) are not an address in memory or a comment and were skipped; they stay in the file (the first is line " + std::to_string(mFunctionBounds.FirstSkippedLine()) + ")");
+                      " line(s) are not an address in memory or a comment and were skipped (a start is eight hex digits or 0x and up to eight: write it as eight digits, e.g. 00002026, and put a remark after the address or after a semicolon, not a number or a word in front of it); they stay in the file (the first is line " + std::to_string(mFunctionBounds.FirstSkippedLine()) + ")");
     }
     // The process's one engine thread (PLAN.md A4). It is optional: if it cannot be started (the OS
     // refuses the thread, memory runs out) the app opens without it and the panel says why, rather
@@ -365,10 +365,13 @@ void App::Initialize()
 }
 
 // The names are saved whole or not at all (A9-3); a save that failed is said, once per attempt, where it used to vanish.
-void App::SaveFunctionNames()
+bool App::SaveFunctionNames()
 {
     std::string err;
-    if (!mFunctionNames.Save(&err)) mLog.Error("Could not save the function names: " + err);
+    if (mFunctionNames.Save(&err)) return true;
+    mLog.Error(err);   // the store's text begins with its subject (A9-51)
+    mFunctionNamesError = err;
+    return false;
 }
 
 void App::Shutdown()
@@ -381,13 +384,48 @@ void App::Shutdown()
     // must be gone before static destruction -- not left to whenever App's members are destroyed.
     mDecompilerRunner.reset();
 #endif
-    SaveSettings();
-    mWatchPanel.SaveSession();
+    // The window is closing and the Log goes with it (A9-46): a lock held by another instance is waited for up to 10 s instead of 3,
+    // and a save still refused is said in a box (NoticeAtExit) before the window goes, not only in the Log.
+    FileLock::SetClosing(true);
+    // The user's own work first (notes, names, starts), then the settings and the watches: the 10 s are shared, and a stuck settings lock
+    // must not spend them before the names are tried (A9-58).
+    std::string lost;
+    // The stores' texts end in "this session's changes are kept in memory only": true until now, and the box says they are lost (A9-61).
+    auto addLost = [&lost](std::string text) {
+        const size_t p = text.find("this session's changes");
+        if (p != std::string::npos)
+        {
+            text.erase(p);
+            while (!text.empty() && (text.back() == ' ' || text.back() == ';')) text.pop_back();
+            if (text.size() > 4 && text.compare(text.size() - 4, 4, " and") == 0) text.erase(text.size() - 4);
+        }
+        lost += "\n  " + text;
+    };
     {
         std::string err;
-        if (!mAssemblyPanel.SaveComments(&err)) mLog.Error("Could not save the assembly comments: " + err);
+        if (!mAssemblyPanel.SaveComments(&err)) { mLog.Error(err); addLost(err); }
     }
-    SaveFunctionNames();
+    if (!SaveFunctionNames()) addLost(mFunctionNamesError);
+#if SE_ENABLE_DECOMPILER
+    {
+        // The function starts are saved when they change; one whose save was refused (the lock, a full disk) is tried again here,
+        // like the names and notes above (A9-43). Nothing is written when nothing is pending.
+        std::string err;
+        if (!mFunctionBounds.Save(WorkFilePath(decomp::FunctionBounds::kDefaultFile), &err))
+        {
+            mLog.Error(err);
+            addLost(err);
+        }
+    }
+#endif
+    if (!SaveSettings()) addLost(mSettingsStatus);   // set by every failure, so it is this attempt's text (A9-61)
+    {
+        std::string err;
+        if (!mWatchPanel.SaveSession(&err)) { mLog.Error(err); addLost(err); }   // A9-57
+    }
+    if (!lost.empty())
+        NoticeAtExit("These changes were not saved:" + lost + "\n\nThe files were left as they were, and the Log panel closes with the window, so the changes are lost. "
+                     "At exit all the saves share 10 seconds of waiting for another instance.");
     CloseData();
 }
 
@@ -495,7 +533,7 @@ void App::LoadSettings()
 #endif
 }
 
-void App::SaveSettings()
+bool App::SaveSettings(bool wait)
 {
     for (const PanelInfo& p : PanelList())
         mSettings.SetBool("panels", p.key, mPanels.*(p.flag));
@@ -522,23 +560,35 @@ void App::SaveSettings()
     mSettings.Set("recording", "maximumseconds", std::to_string(mRecordSeconds));
 #endif
     std::string error;
-    if (mSettings.Save(&error))
+    if (mSettings.Save(&error, wait))
     {
         mSettingsDirty = false;
+        if (mSettingsSaveFailed && mOperationError && mOperationStatus == mSettingsStatus)
+        {
+            mOperationStatus.clear();   // the retry saved it: the line that said otherwise is stale (A9-52)
+            mOperationError = false;
+        }
         mSettingsSaveFailed = false;
-        return;
+        return true;
     }
     // Keep the changes pending and try again shortly -- the previous file is still intact -- but say so
     // once, not every attempt.
     mSettingsDirty = true;
-    mSettingsRetryAt = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    mSettingsRetryAt = std::chrono::steady_clock::now() + std::chrono::seconds(wait ? 5 : 2);   // the frame's try takes no wait, so it tries again sooner
+    const std::string text = error.rfind("Settings: ", 0) == 0 ? error : "Settings: not saved, " + error;   // A9-51, A9-60: the subject once
+    // Every failure sets mSettingsStatus: the exit notice must show this attempt's text, not the first one's (A9-61). The status line
+    // follows it while it still shows the settings' text.
+    const bool lineShowsIt = mSettingsSaveFailed && mOperationError && mOperationStatus == mSettingsStatus;
+    mSettingsStatus = text;
+    if (lineShowsIt) mOperationStatus = text;
     if (!mSettingsSaveFailed)
     {
         mSettingsSaveFailed = true;
-        mOperationStatus = "Could not save settings: " + error;
+        mOperationStatus = text;
         mOperationError = true;
         mLog.Error(mOperationStatus);
     }
+    return false;
 }
 
 // "Search Options..." persistence: compression type + the file/folder list (joined with
@@ -2041,7 +2091,7 @@ void App::BuildUI(IPlatform& platform)
     // Persist any preference the user changed this frame (panel visibility, data
     // dir). Dock-layout changes are saved separately by ImGui into imgui.ini.
     if (mController.ConsumeSettingsDirty()) mSettingsDirty = true;
-    if (mSettingsDirty && std::chrono::steady_clock::now() >= mSettingsRetryAt) SaveSettings();
+    if (mSettingsDirty && std::chrono::steady_clock::now() >= mSettingsRetryAt) SaveSettings(false);   // no wait for the lock in a frame (A9-46)
 }
 
 // Programmatic default dock layout: a left inspector column (Texture/Palette live
@@ -3184,7 +3234,7 @@ void App::UpdateDecompiler(IPlatform& platform)
     {
         std::string why;
         if (!mFunctionBounds.Save(WorkFilePath(decomp::FunctionBounds::kDefaultFile), &why))
-            mLog.Error(std::string("Could not save ") + decomp::FunctionBounds::kDefaultFile + ": " + why);
+            mLog.Error(why);   // begins with its subject (A9-51)
     }
     if (req.settingsChanged) mSettingsDirty = true;
     if (req.chooseBios)
@@ -4725,7 +4775,7 @@ void App::DrawCallStack(IPlatform& platform)
                         : std::string("No symbols found in " + path));
             if (!err.empty()) mLog.Error("Symbol map: " + err);
             else if (mFunctionNames.SkippedLines())
-                mLog.Warn(path + ": " + std::to_string(mFunctionNames.SkippedLines()) + " line(s) are not \"<hex-address> <name>\" and were skipped; they stay in the file (the first is line " +
+                mLog.Warn(path + ": " + std::to_string(mFunctionNames.SkippedLines()) + " line(s) are not \"<hex-address> <name>\" (an address is eight hex digits, or 0x and up to eight) and were skipped (a line that begins with the letters a-f alone, like \"dead\", or with a number below 80000 without 0x, like \"2026\", may be an old unpadded address: write it as eight digits, e.g. 0000DEAD, or put a remark after a semicolon); they stay in the file (the first is line " +
                           std::to_string(mFunctionNames.FirstSkippedLine()) + ")");
         }
     }

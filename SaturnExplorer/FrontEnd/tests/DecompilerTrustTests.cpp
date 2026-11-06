@@ -2255,6 +2255,113 @@ void RunEntryOriginPins()
         MiniCheck("A8-42: ...no 'user-set entry' label", drawnText().find(Norm("user-set entry")) == std::string::npos, drawnText());
     }
     {
+        // A8-46 (probe8 E1 to E3): an edit taken back (Escape, Backspace, Ctrl+Z) leaves the panel's text; Enter on it is the untouched box's
+        // (a pin of C, the finder's guess), not an entry the user typed.
+        for (int way = 0; way < 3; ++way)
+        {
+            MiniRig m;
+            paused(m, cEntry + 4);
+            CHECK(FocusEntryBox(m));
+            ImGui::GetIO().AddInputCharacter('1');
+            m.Idle(2);
+            MiniCheck("A8-46: '1' typed: the box reads the edit", std::string(m.panel.EntryText()).size() == 9, m.panel.EntryText());
+            if (way == 0)
+            {
+                m.Key(ImGuiKey_Escape);
+                CHECK(FocusEntryBox(m));
+            }
+            else if (way == 1)
+                m.Key(ImGuiKey_Backspace);
+            else
+            {
+                ImGui::GetIO().AddKeyEvent(ImGuiMod_Ctrl, true);
+                ImGui::GetIO().AddKeyEvent(ImGuiKey_Z, true);
+                m.Frame();
+                ImGui::GetIO().AddKeyEvent(ImGuiKey_Z, false);
+                ImGui::GetIO().AddKeyEvent(ImGuiMod_Ctrl, false);
+                m.Frame();
+            }
+            MiniCheck("A8-46: the edit taken back: the box reads the panel's text", std::string(m.panel.EntryText()) == Hex(cEntry), m.panel.EntryText());
+            PressEnterInBox(m);
+            m.Idle(3);
+            CHECK(m.Settle());
+            says(m, "A8-46: Enter after an edit taken back: still the finder's guess, with its Entry line", "(entry from rts scan, 60%)", guess);
+            MiniCheck("A8-46: ...a pin of C, not a typed entry", m.panel.WantedEntry() == cEntry);
+            model(m, "A8-46: ...held to the model", rts);
+        }
+        {
+            // The control (probe8 E4): the box kept C while A was shown; '1' typed and deleted makes C the user's text.
+            MiniRig m;
+            const uint32_t aEntry = Defs()[FnA].entry;
+            paused(m, cEntry + 4);
+            CHECK(FocusEntryBox(m));
+            m.regs[0].pc = aEntry + 4;
+            ++m.frame;
+            m.Idle(6);
+            CHECK(m.Settle());
+            ImGui::GetIO().AddInputCharacter('1');
+            m.Idle(2);
+            m.Key(ImGuiKey_Backspace);
+            PressEnterInBox(m);
+            m.Idle(3);
+            CHECK(m.Settle());
+            MiniCheck("A8-46 (control): C typed over A shown stays the user's entry",
+                      m.panel.WantedEntry() == cEntry && drawnText().find(Norm("user-set entry")) != std::string::npos, drawnText());
+        }
+    }
+    {
+        // A8-50 (probe8 E11, E12): a refused entry's text stays in the box with the refusal, also when the box had the focus at an install.
+        for (int focused = 1; focused >= 0; --focused)
+        {
+            MiniRig m;
+            const uint32_t aEntry = Defs()[FnA].entry;
+            paused(m, cEntry + 4);
+            if (focused) CHECK(FocusEntryBox(m));
+            m.regs[0].pc = aEntry + 4;
+            ++m.frame;
+            m.Idle(6);
+            CHECK(m.Settle());
+            TypeEntry(m, "zz");
+            m.Idle(3);
+            CHECK(m.Settle());
+            m.Idle(3);
+            MiniCheck(focused ? "A8-50: the box that had the focus at the install keeps the refused text"
+                              : "A8-50 (control): the refused text stays",
+                      std::string(m.panel.EntryText()) == "zz" && !m.panel.EntryError().empty(), m.panel.EntryText());
+            MiniCheck("A8-50: ...so the refusal's tooltip is true of the box",
+                      m.panel.StaleTooltip().find("names no function") != std::string::npos, m.panel.StaleTooltip());
+        }
+    }
+    {
+        // A8-51 (probe8 E10): the box's tooltip does not promise the address in the box when Enter asks the function shown.
+        MiniRig m;
+        const uint32_t aEntry = Defs()[FnA].entry;
+        paused(m, cEntry + 4);
+        CHECK(FocusEntryBox(m));
+        m.regs[0].pc = aEntry + 4;
+        ++m.frame;
+        m.Idle(6);
+        CHECK(m.Settle());
+        ImVec2 a, b;
+        CHECK(m.panel.ItemRect("entry", a, b));
+        const ImVec2 c((a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f);
+        bool found = false;
+        std::string tip;
+        for (int i = 0; i < 120 && (!found || Norm(tip).size() < 20); ++i)
+        {
+            m.Frame(c, false);
+            tip = drawn::TooltipText(&found);
+        }
+        MiniCheck("A8-51: box older than the output: the tooltip says Enter asks the function shown",
+                  found && Norm(tip).find(Norm("asks for the function shown")) != std::string::npos &&
+                      Norm(tip).find(Norm("Decompile the function starting")) == std::string::npos,
+                  Norm(tip));
+        PressEnterInBox(m);
+        m.Idle(3);
+        CHECK(m.Settle());
+        MiniCheck("A8-51: ...and Enter did ask A", m.panel.WantedEntry() == aEntry);
+    }
+    {
         // A8-36, probe case I: the NoRegisters tooltip ("Turn Follow PC off and press Enter on an entry"), done as it says.
         MiniRig m;
         paused(m, cEntry + 4);
@@ -2920,6 +3027,9 @@ void RunProbe7()
         std::printf("PROBE7 10: saved list of %zu chars, not in force %d\n   problem: %s\n", list.size(), m.panel.VolatileNotInForce() ? 1 : 0,
                     m.panel.UnparsedVolatileProblem().c_str());
         m.panel.BeginVolatileEdit();   // what the popup does on opening
+        // A8-48 fixed: one full stop between the two sentences, not two.
+        CHECK(m.panel.VolatileEditError().find("..") == std::string::npos &&
+              m.panel.VolatileEditError().find("replace it. Applying the text unchanged is refused") != std::string::npos);
         const std::string edit = m.panel.VolatileEditText();
         const bool ok = m.panel.ApplyVolatileEdit();
         std::printf("   Apply on the buffer (%zu chars, ends '%s'): %d, in force %d, saved list kept whole %d\n   said: %s\n", edit.size(),

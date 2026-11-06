@@ -664,6 +664,20 @@ if(BUILD_TESTING)
         PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
     add_test(NAME SaturnExplorerFunctionNamesTests COMMAND SaturnExplorerFunctionNamesTests)
 
+    # Area 9 round 3 (review): the stores' save, the address word, the capped read; pins of the findings A9-31 and later. Linux only.
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        add_executable(SaturnExplorerArea9Round3Tests
+            FrontEnd/tests/Area9Round3Tests.cpp
+            FrontEnd/src/Debug/CallStack.cpp
+            FrontEnd/src/Settings.cpp
+            FrontEnd/src/FileWrite.cpp
+        )
+        target_include_directories(SaturnExplorerArea9Round3Tests
+            PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
+        target_link_libraries(SaturnExplorerArea9Round3Tests PRIVATE Threads::Threads)
+        add_test(NAME SaturnExplorerArea9Round3Tests COMMAND SaturnExplorerArea9Round3Tests)
+    endif()
+
     # What the heuristic call-stack reconstruction claims to know: a bsr encodes the callee's
     # entry point, a jsr through a register does not, and a return address is not one.
     add_executable(SaturnExplorerCallStackHeuristicTests
@@ -891,6 +905,83 @@ if(BUILD_TESTING)
             add_test(NAME SaturnExplorerLoaderFuzzTests
                      COMMAND SaturnExplorerLoaderFuzzTests ${CMAKE_CURRENT_BINARY_DIR}/loader_fuzz_test)
             set_tests_properties(SaturnExplorerLoaderFuzzTests PROPERTIES TIMEOUT ${SE_DECOMP_TIMEOUT_120})
+
+            # Area 9 round 4 (review): pins of A9-40 and later (the prose address words, the lock's refusal text and wait), and
+            # regression guards for the settings merge, the staging cleanup, blank names and a link loop. Linux only.
+            add_executable(SaturnExplorerArea9Round4Tests
+                FrontEnd/tests/Area9Round4Tests.cpp
+                FrontEnd/src/Settings.cpp
+                FrontEnd/src/FileWrite.cpp
+                FrontEnd/src/Sh2Address.cpp
+                FrontEnd/src/Debug/CallStack.cpp
+                FrontEnd/src/Debug/MemoryBackend.cpp
+                FrontEnd/src/Debug/Sh2Disasm.cpp
+                FrontEnd/src/Decompiler/MemorySnapshot.cpp
+                FrontEnd/src/Decompiler/AddressRanges.cpp
+                FrontEnd/src/Decompiler/Sh2FunctionFinder.cpp
+                FrontEnd/src/Sha256.cpp)
+            target_include_directories(SaturnExplorerArea9Round4Tests PRIVATE FrontEnd/src include
+                ${CMAKE_CURRENT_SOURCE_DIR}/Drivers/Savestate/src)
+            target_link_libraries(SaturnExplorerArea9Round4Tests PRIVATE SaturnExplorerSavestateDriver SaturnExplorerCore)
+            add_test(NAME SaturnExplorerArea9Round4Tests COMMAND SaturnExplorerArea9Round4Tests)
+
+            # Area 9 round 5 (review): pins of A9-45 and later (a remark that opens with a number, a save refused at exit after the
+            # lock's bounded wait, the lock's texts, no flush before the rename), and guards for a full disk mid-write, paths with
+            # spaces and Unicode, files at the read cap. Linux only.
+            add_executable(SaturnExplorerArea9Round5Tests
+                FrontEnd/tests/Area9Round5Tests.cpp
+                FrontEnd/src/Settings.cpp
+                FrontEnd/src/FileWrite.cpp
+                FrontEnd/src/Sh2Address.cpp
+                FrontEnd/src/Debug/CallStack.cpp
+                FrontEnd/src/Debug/MemoryBackend.cpp
+                FrontEnd/src/Debug/Sh2Disasm.cpp
+                FrontEnd/src/Decompiler/MemorySnapshot.cpp
+                FrontEnd/src/Decompiler/AddressRanges.cpp
+                FrontEnd/src/Decompiler/Sh2FunctionFinder.cpp
+                FrontEnd/src/Decompiler/SpecBundle.cpp
+                FrontEnd/src/Sha256.cpp)
+            target_include_directories(SaturnExplorerArea9Round5Tests PRIVATE FrontEnd/src include
+                ${CMAKE_CURRENT_SOURCE_DIR}/Drivers/Savestate/src)
+            target_link_libraries(SaturnExplorerArea9Round5Tests PRIVATE SaturnExplorerSavestateDriver SaturnExplorerCore ${CMAKE_DL_LIBS})
+            add_test(NAME SaturnExplorerArea9Round5Tests COMMAND SaturnExplorerArea9Round5Tests)
+
+            # Area 9 round 6 (review): the sync before the rename (order, refused syncs, cost), an older version's unpadded names file,
+            # the residual number-led remarks, the exit wait and the frame's no-wait settings try. Linux only.
+            add_executable(SaturnExplorerArea9Round6Tests
+                FrontEnd/tests/Area9Round6Tests.cpp
+                FrontEnd/src/Settings.cpp
+                FrontEnd/src/FileWrite.cpp
+                FrontEnd/src/Sh2Address.cpp
+                FrontEnd/src/Debug/CallStack.cpp
+                FrontEnd/src/Debug/MemoryBackend.cpp
+                FrontEnd/src/Debug/Sh2Disasm.cpp
+                FrontEnd/src/Decompiler/MemorySnapshot.cpp
+                FrontEnd/src/Decompiler/AddressRanges.cpp
+                FrontEnd/src/Decompiler/Sh2FunctionFinder.cpp
+                FrontEnd/src/Sha256.cpp)
+            target_include_directories(SaturnExplorerArea9Round6Tests PRIVATE FrontEnd/src include
+                ${CMAKE_CURRENT_SOURCE_DIR}/Drivers/Savestate/src)
+            target_link_libraries(SaturnExplorerArea9Round6Tests PRIVATE SaturnExplorerSavestateDriver SaturnExplorerCore ${CMAKE_DL_LIBS})
+            add_test(NAME SaturnExplorerArea9Round6Tests COMMAND SaturnExplorerArea9Round6Tests)
+
+            # Area 9 round 7 (review): the shared exit deadline, the frame try's stall, the refusal texts. Linux only.
+            add_executable(SaturnExplorerArea9Round7Tests
+                FrontEnd/tests/Area9Round7Tests.cpp
+                FrontEnd/src/Settings.cpp
+                FrontEnd/src/FileWrite.cpp
+                FrontEnd/src/Sh2Address.cpp
+                FrontEnd/src/Debug/CallStack.cpp
+                FrontEnd/src/Debug/MemoryBackend.cpp
+                FrontEnd/src/Debug/Sh2Disasm.cpp
+                FrontEnd/src/Decompiler/MemorySnapshot.cpp
+                FrontEnd/src/Decompiler/AddressRanges.cpp
+                FrontEnd/src/Decompiler/Sh2FunctionFinder.cpp
+                FrontEnd/src/Sha256.cpp)
+            target_include_directories(SaturnExplorerArea9Round7Tests PRIVATE FrontEnd/src include
+                ${CMAKE_CURRENT_SOURCE_DIR}/Drivers/Savestate/src)
+            target_link_libraries(SaturnExplorerArea9Round7Tests PRIVATE SaturnExplorerSavestateDriver SaturnExplorerCore ${CMAKE_DL_LIBS})
+            add_test(NAME SaturnExplorerArea9Round7Tests COMMAND SaturnExplorerArea9Round7Tests)
         endif()
     endif()
 

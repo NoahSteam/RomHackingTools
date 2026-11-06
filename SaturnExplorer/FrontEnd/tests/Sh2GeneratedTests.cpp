@@ -131,7 +131,8 @@
 //      treats as a call; HandedOverAt) reaches addresses no text of this function can know, and what it does after the jump is not asked
 //      (`pointer.trace.handed-over`). (A5-89) A pointer that is also something the text does not know -- a parameter, a register at entry, a callee's
 //      output, a loaded value, a call's result -- is `open`: the run may have come to the register by the other value, and the rule asks nothing of the
-//      registers it names (`pointer.effect.open`; `.open.said` / `.open.unsaid` count what would have been asked). (A5-92) The associative purge and the
+//      registers it names (`pointer.effect.open`; `.open.said` / `.open.unsaid` count what would have been asked). (A5-99) A free name the text also
+//      assigns (`in_r7 = uVar1;` in some cases of a switch) is still open unless an assignment is made on every path to the use. (A5-92) The associative purge and the
 //      cache address array through a pointer are hardware as a register area is: the same rule asks for their note, for a pointer that names one.
 //   3f. (A5-90) An access in the on-chip registers' partition (0xE0000000 and up) through a pointer the output makes by ORing a constant that sets the
 //      top three bits of the address (`in_r1 | 0xffffffc0`) has a note that it "may reach on-chip registers" (`onchip.span.said` / `.unsaid`), unless a
@@ -3532,10 +3533,29 @@ bool OrsIntoOnChip(const std::string& text)
         if (v < 0xE0000000ull || v > 0xFFFFFFFFull) continue;
         size_t b = at;
         while (b > 0 && text[b - 1] == ' ') --b;
-        if (b > 0 && text[b - 1] == '|' && (b < 2 || text[b - 2] != '|')) return true;
         size_t e = j;
         while (e < text.size() && text[e] == ' ') ++e;
-        if (e < text.size() && text[e] == '|' && (e + 1 >= text.size() || text[e + 1] != '|')) return true;
+        // (A5-100) The constant is an operand of the `|` beside it only if no operator that binds tighter than `|` holds it on its other side:
+        // `in_r7 ^ 0xe0000000 | 0x60000000` is `(in_r7 ^ 0xe0000000) | 0x60000000`, an XOR with the constant, then an OR with one that sets
+        // two of the top bits (seeds 293720, 298629). The tighter ones: `^`, `&` (not `&&`), the arithmetic and shifts, the compares.
+        auto tighterBefore = [&]() {
+            if (b == 0) return false;
+            const char c = text[b - 1];
+            if (c == '=') return b >= 2 && (text[b - 2] == '=' || text[b - 2] == '!' || text[b - 2] == '<' || text[b - 2] == '>');
+            if (c == '&') return b < 2 || text[b - 2] != '&';
+            return c == '^' || c == '+' || c == '-' || c == '*' || c == '/' || c == '%' || c == '<' || c == '>';
+        };
+        auto tighterAfter = [&]() {
+            if (e >= text.size()) return false;
+            const char c = text[e];
+            const char n = e + 1 < text.size() ? text[e + 1] : '\0';
+            if (c == '=') return n == '=';
+            if (c == '!') return n == '=';
+            if (c == '&') return n != '&';
+            return c == '^' || c == '+' || c == '-' || c == '*' || c == '/' || c == '%' || c == '<' || c == '>';
+        };
+        if (b > 0 && text[b - 1] == '|' && (b < 2 || text[b - 2] != '|') && !tighterAfter()) return true;
+        if (e < text.size() && text[e] == '|' && (e + 1 >= text.size() || text[e + 1] != '|') && !tighterBefore()) return true;
     }
     return false;
 }
@@ -3684,11 +3704,9 @@ bool PointerPrintsFromHardware(const DecompileResult& r, uint32_t insn, const st
             const std::string& name = std::get<0>(item);
             const size_t useLine = std::get<1>(item);
             const bool loaded = std::get<2>(item);
-            bool assigned = false;
             for (const Assign& a : assigns)
             {
                 if (a.name != name) continue;
-                assigned = true;
                 const std::string rhs = WithoutCalls(a.rhs);
                 if (!reaches(a.line, useLine))
                 {
@@ -3712,7 +3730,16 @@ bool PointerPrintsFromHardware(const DecompileResult& r, uint32_t insn, const st
                 for (const std::string& q : Identifiers(rhs))
                     todo.emplace_back(q, a.line, loaded || std::find(direct.begin(), direct.end(), q) == direct.end());
             }
-            if (!assigned && IsFreeValue(name)) openSource = true;
+            // (A5-99) A free name the text also assigns is still the value it had on entry on every path no assignment covers: the engine
+            // writes a merge into a register at entry as assignments in some arms (`case 0: in_r7 = uVar1; break;` in a switch the run can
+            // skip), and the pointer is as open as with no assignment at all. Only an assignment made on every path to the use replaces it.
+            if (IsFreeValue(name))
+            {
+                bool replaced = false;
+                for (const Assign& a : assigns)
+                    replaced |= a.name == name && a.line < useLine && StatementDominates(r.lines, a.line, useLine);
+                if (!replaced) openSource = true;
+            }
         }
         return found;
     };
@@ -12205,6 +12232,20 @@ void TestA587Pins(Sh2Decompiler& d)
             nullptr, nullptr, nullptr, nullptr, nullptr }, "cache.read.pointer.said", nullptr },
         { { "A5-97, routed seed 4906136 shrunk", "D605 E302 7604 D205 262A 4310 8BFA D204 262A 461B 000B 0009 0010 003F 4000 0000 0000 0004",
             nullptr, nullptr, nullptr, nullptr, nullptr }, "cache.read.pointer.said", nullptr },
+        // A5-99 (grammar 2 seed 300847, routed from area 7 round 5): `puVar2 = (uint1 *)(in_r7 ^ 0xa0000000);`, a byte read and written and a long read
+        // at +0x30, after a switch whose cases assign `in_r7 = uVar1;` (in_r7 * 4) and whose guard (`in_r7 < 6`) the run can skip. The register at
+        // entry is the pointer's other value: as open as in function 1 alone (the same instructions without the switch), whose text has no assignment.
+        { { "A5-99, grammar 2 seed 300847 shrunk", "2F86 2F96 2FA6 2FB6 2FC6 0C2A 6843 6953 6A63 6B73 E106 3712 891C 4708 C701 017E 412B 0009 0600 903C 0600 9040 0600 9044 0600 9048 0600 904C 0600 9050 A00B 0009 A009 0009 A007 0009 A005 0009 A003 0009 A001 0009 614D D204 4C2A 6CF6 6BF6 6AF6 69F6 68F6 422B 0009 0600 906C D303 273A 471B 517C E061 000B 0009 0009 A000 0000",
+            "0/0/68,6c/6c/7a", "20:7:6:54:3c,40,44,48,4c,50", "1,1", "0,0", "20000,0" }, "pointer.effect.open", nullptr },
+        // ...and grammar 2 seed 292513 (the A5-99 sweep): `param_4 = uVar2;` in the cases, then `puVar3 = (uint1 *)(param_4 | 0x40000000);`, the purge
+        { { "A5-99, grammar 2 seed 292513 shrunk", "2FD6 4F22 E104 3712 8914 4708 C701 017E 412B 0009 0600 9024 0600 9028 0600 902C 0600 9030 A007 0009 A005 0009 A003 0009 A001 0009 6133 D202 4F26 6DF6 422B 0009 0600 9044 2FD6 7FF8 D207 272B 471B 4715 8B02 6251 A002 0009 A000 0009 604C 7F08 6DF6 000B 0009 0009 4000 0000",
+            "0/0/40,44/44/66", "10:7:4:34:24,28,2c,30", "1,1", "84000,0", "20004,20000" }, "pointer.effect.open", nullptr },
+        // A5-100 (grammar 2 seeds 293720 and 298629, the A5-99 sweep): `in_r7 ^ 0xe0000000 | 0x60000000` and `(param_1 ^ 0xe0000000 | uRam06009034) - 4`
+        // hold 0xe0000000 as the XOR's operand; rule 3f took it for an OR with a mask of the top bits (`n:onchip-span-unsaid`). No finding now.
+        { { "A5-100, grammar 2 seed 293720 shrunk", "2FD6 4F22 7FF8 D104 271A 2702 D203 7F08 4F26 6DF6 422B 0009 E000 0000 0600 9020 D102 271B 6372 E03F 000B 0009 6000 0000",
+            "0/0/18,20/20/2c", nullptr, "1,1", "104000,0", "0,0" }, nullptr, nullptr },
+        { { "A5-100, grammar 2 seed 298629 shrunk", "4F22 2622 D101 4F26 412B 0009 0600 9010 D302 243A D302 432B 0009 0009 E000 0000 0600 9024 2FD6 D103 241B 6361 2436 6DF6 000B 0009 FFFF FE00",
+            "0/0/c,10/10/1a,24/24/34", nullptr, "0,0,0", nullptr, nullptr }, nullptr, nullptr },
     };
     for (const Pin& p : kPins)
     {
@@ -12283,6 +12324,15 @@ void TestA587Pins(Sh2Decompiler& d)
                     open ? "yes" : "no", masked ? "yes" : "no", stepped ? "yes" : "no");
         CHECK(!open && masked && stepped == loop);
     }
+    // A5-99: a register at entry the text assigns only on some paths (the arms of a switch) is still open; one assigned on every path to the use
+    // is not (control); one assigned in an if block is a merge with the entry value, open
+    derive("in_r7 assigned in a switch's cases, then XORed with 0xa0000000",
+           { "if (in_r7 < 6) {", "uVar1 = in_r7 * 4;", "switch(in_r7) {", "case 0:", "in_r7 = uVar1;", "break;", "case 1:", "in_r7 = uVar1;", "}", "}",
+             "puVar2 = (uint1 *)(in_r7 ^ 0xa0000000);", "*puVar2 = *puVar2 | 0x80;" }, 11, 0xA0000000u, true, true, false);
+    derive("in_r7 assigned on every path before the use (control)", { "in_r7 = 0x10;", "puVar2 = (uint1 *)(in_r7 ^ 0xa0000000);", "*puVar2 = *puVar2 | 0x80;" },
+           2, 0xA0000010u, true, false, false);
+    derive("in_r7 assigned in an if block (a merge)", { "if (c) {", "in_r7 = 0x10;", "}", "puVar2 = (uint1 *)(in_r7 ^ 0xa0000000);", "*puVar2 = *puVar2 | 0x80;" },
+           4, 0xA0000010u, true, true, false);
     derive("|| is no OR of bits (control)", { "bVar1 = in_r1 != 0 || 0xffffffc0 != 0;", "uVar2 = *(uint1 *)(bVar1 + 8);" }, 1, 0x48u, false, true, false);
     // a store's own tokens are the `*`, the `=` and the value; the address is the expression before it, and what the value was assigned is not the pointer
     {
@@ -12305,6 +12355,11 @@ void TestA587Pins(Sh2Decompiler& d)
     }
     CHECK(OrsIntoOnChip("in_r1 | 0xffffffc0") && OrsIntoOnChip("0xe0000000 | param_1") && OrsIntoOnChip("x|0xffffff00"));
     CHECK(!OrsIntoOnChip("in_r1 & 0xffffffc0") && !OrsIntoOnChip("in_r1 | 0x1fffffc0") && !OrsIntoOnChip("a || 0xffffffc0") && !OrsIntoOnChip("in_r1 | 0xdfffffc0"));
+    // A5-100: a constant held by a tighter operator on its other side is not the OR's operand (seeds 293720, 298629); the controls are
+    CHECK(!OrsIntoOnChip("in_r7 ^ 0xe0000000 | 0x60000000") && !OrsIntoOnChip("(param_1 ^ 0xe0000000 | uRam06009034) - 4") &&
+          !OrsIntoOnChip("x | 0xe0000000 ^ y") && !OrsIntoOnChip("x & 0xffffff00 | y") && !OrsIntoOnChip("a == 0xffffffc0 | b"));
+    CHECK(OrsIntoOnChip("in_r7 ^ 0x10 | 0xe0000000") && OrsIntoOnChip("a && 0xffffffc0 | b") && OrsIntoOnChip("(uint4)0xffffffc0 | b") &&
+          OrsIntoOnChip("x = 0xffffffc0 | y") && OrsIntoOnChip("x | 0xffffffc0 || y"));
     // a read whose instruction has two lines (the delay slot's store and the `return` the printer gives it too): the line that dereferences is the access
     {
         DecompileResult r = FakeOutput({ "puVar9 = &VDP2_TVMD;", "iVar5 = (int4)(int2)param_1[7];", "*puVar9 = (uint2)uVar6;", "return iVar5;" });

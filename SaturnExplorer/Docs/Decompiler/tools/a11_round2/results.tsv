@@ -1,0 +1,593 @@
+H7-storeshows	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:644: LineInstructions(*copies[i]) == (std::vector<uint32_t>{ 0x0600D992u, 0x0600D
+H7-storeshows	gen	survived	19	
+H7-storeshows	corpus	survived	42	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:644: LineInstructions(*copies[i]) == (std::vector<uint32_t>{ 0x0600D992u, 0x0600D
+H7-take-noshow	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:644: LineInstructions(*copies[i]) == (std::vector<uint32_t>{ 0x0600D992u, 0x0600D
+H7-take-noshow	gen	survived	19	
+H7-take-noshow	corpus	survived	42	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:644: LineInstructions(*copies[i]) == (std::vector<uint32_t>{ 0x0600D992u, 0x0600D
+H7-own-shows	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:1267: LineInstructions(*ff).empty()
+H7-own-shows	gen	survived	18	
+H7-own-shows	corpus	killed	41	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:1267: LineInstructions(*ff).empty()
+H7-joinconst-off	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:597: LineInstructions(*l) == (std::vector<uint32_t>{ 0x06070008u, 0x0607000Eu })
+H7-joinconst-off	gen	survived	19	
+H7-joinconst-off	corpus	killed	41	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:597: LineInstructions(*l) == (std::vector<uint32_t>{ 0x06070008u, 0x0607000Eu })
+H7-into-null	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:853: LineInstructions(*body) == (std::vector<uint32_t>{ 0x06070008u, 0x0607000Eu 
+H7-into-null	gen	survived	19	
+H7-into-null	corpus	killed	42	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:853: LineInstructions(*body) == (std::vector<uint32_t>{ 0x06070008u, 0x0607000Eu 
+H7-reaches-reg	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:970: four->firstAddr == 0x06070010u
+H7-reaches-reg	gen	survived	19	
+H7-reaches-reg	corpus	killed	42	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:970: four->firstAddr == 0x06070010u
+H7-reaches-any	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:1003: drawnAtJoin == 0
+H7-reaches-any	gen	survived	18	
+H7-reaches-any	corpus	survived	41	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:1003: drawnAtJoin == 0
+H7-numreach-off	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:973: r3->firstAddr == 0x0607000Au
+H7-numreach-off	gen	survived	19	
+H7-numreach-off	corpus	survived	41	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:973: r3->firstAddr == 0x0607000Au
+H7-case-opref	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:744: a.Violations() == 0 && a.storeValueOther == 0 && a.copyAtLoad >= 1
+H7-case-opref	gen	survived	18	
+H7-case-opref	corpus	killed	41	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:744: a.Violations() == 0 && a.storeValueOther == 0 && a.copyAtLoad >= 1
+H7-case-dest	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:932: two->firstAddr == 0x0607002Au
+H7-case-dest	gen	survived	18	
+H7-case-dest	corpus	survived	41	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:932: two->firstAddr == 0x0607002Au
+H7-case-inner	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:1029: twos[1]->firstAddr == 0x06070056u
+H7-case-inner	gen	survived	19	
+H7-case-inner	corpus	survived	41	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:1029: twos[1]->firstAddr == 0x06070056u
+O-storeValueOther	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:684: wa.storeValueOther == 3 && wa.Violations() == 3
+O-storeValueOther	gen	survived	19	
+O-storeAfterUse	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:1162: a.storeAfterUse == 1 && a.Violations() == 1
+O-storeAfterUse	gen	survived	19	
+O-copyMergeAtBranch	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:668: ba.copyMergeAtBranch == 3 && ba.Violations() == 3
+O-copyMergeAtBranch	gen	survived	19	
+O-numberStoreOther	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:1222: k.numberStoreOther == 1
+O-numberStoreOther	gen	survived	19	
+O-constAtJoin	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:619: wa.constAtJoin == 1 && wa.Violations() == 1
+O-constAtJoin	gen	survived	18	
+O-caseOtherEntry	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:1304: a.caseOtherEntry == 1
+O-caseOtherEntry	gen	survived	18	
+O-backWrong	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:1067: ua.backWrong == 1 && ua.Violations() == 1
+O-backWrong	gen	survived	18	
+O-frameStoreMissing	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:1135: a.frameStoreMissing == 1
+O-frameStoreMissing	gen	survived	19	
+O-accessAtBranch	unit	killed	24	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:281: seen.accessAtBranch == 1 && seen.Violations() > 0 && seen.slotMadeLines >= 1
+O-accessAtBranch	gen	survived	19	
+S-unchanged	fuzz	survived	6	VIOLATION lifecycle/HARDLINK_SPLIT: a hard link to saturn_functions.txt no longer names the file after a save
+S-unchanged	fw	survived	0	
+S-unchanged	settings	survived	0	
+S-unchanged	names	killed	0	FAIL: A9-20: an idle instance does not even replace the file
+S-unchanged	asm	survived	0	
+S-unchanged	a9r3	killed	0	FAIL: an idle instance writes nothing
+S-unchanged	a9r4	survived	11	
+S-unchanged	a9r5	survived	36	
+S-unchanged	a9r6	killed	22	FAIL: A9-46: at exit a store with nothing pending is not held up by a stuck lock
+S-unchanged	a9r7	survived	12	
+S-refused	fuzz	survived	5	VIOLATION lifecycle/HARDLINK_SPLIT: a hard link to saturn_functions.txt no longer names the file after a save
+S-refused	fw	survived	0	
+S-refused	settings	survived	0	
+S-refused	names	killed	0	FAIL: A9-19: a save over a refused file is refused, naming the file
+S-refused	asm	survived	0	
+S-refused	a9r3	survived	0	
+S-refused	a9r4	survived	11	
+S-refused	a9r5	survived	36	
+S-refused	a9r6	survived	22	
+S-refused	a9r7	survived	12	
+S-lockheld	fuzz	survived	5	VIOLATION lifecycle/HARDLINK_SPLIT: a hard link to saturn_functions.txt no longer names the file after a save
+S-lockheld	fw	survived	0	
+S-lockheld	settings	survived	0	
+S-lockheld	names	survived	0	
+S-lockheld	asm	survived	0	
+S-lockheld	a9r3	killed	1	FAIL: FIX A9-33: with the lock path unusable the save is refused
+S-lockheld	a9r4	killed	11	FAIL: FIX A9-42: in a folder the user cannot write the refusal gives the OS reason (Permission denied)
+S-lockheld	a9r5	killed	36	FAIL: names: refused while held
+S-lockheld	a9r6	killed	22	FAIL: A9-46: at exit a stuck holder refuses after 10 s and says so
+S-lockheld	a9r7	killed	12	FAIL: setup: the names, whose holder lets go 2 s later, are refused at once: an earlier store spent the shared deadline (App now saves the names first)
+S-nodisk	fuzz	killed	5	VIOLATION lifecycle/SAVE_DROPS_SKIPPED_LINES: saturn_function_bounds.txt: the line Load skipped is deleted by the next function start's save
+S-nodisk	fw	survived	0	
+S-nodisk	settings	survived	0	
+S-nodisk	names	killed	0	FAIL: A9-20: both instances' renames are in the file
+S-nodisk	asm	survived	0	
+S-nodisk	a9r3	killed	0	FAIL: two instances saving 300 entries each under the lock lose none
+S-nodisk	a9r4	killed	11	FAIL: FIX A9-41: a save keeps the user's remark lines
+S-nodisk	a9r5	killed	36	FAIL: A9-40: the later save writes the refused rename too
+S-nodisk	a9r6	killed	22	FAIL: A9-45: the skipped BIOS lines stay in the file through a save (nothing is lost on disk)
+S-nodisk	a9r7	survived	12	
+S-dropother	fuzz	killed	5	VIOLATION lifecycle/SAVE_DROPS_SKIPPED_LINES: saturn_function_bounds.txt: the line Load skipped is deleted by the next function start's save
+S-dropother	fw	survived	0	
+S-dropother	settings	survived	0	
+S-dropother	names	killed	0	FAIL: A9-21: the comment and the skipped line are kept
+S-dropother	asm	survived	0	
+S-dropother	a9r3	survived	1	
+S-dropother	a9r4	killed	11	FAIL: FIX A9-41: a save keeps the user's remark lines
+S-dropother	a9r5	survived	36	
+S-dropother	a9r6	killed	22	FAIL: A9-45: the skipped BIOS lines stay in the file through a save (nothing is lost on disk)
+S-dropother	a9r7	survived	12	
+S-nodelete	fuzz	survived	6	VIOLATION lifecycle/HARDLINK_SPLIT: a hard link to saturn_functions.txt no longer names the file after a save
+S-nodelete	fw	survived	0	
+S-nodelete	settings	survived	0	
+S-nodelete	names	killed	0	FAIL: A9-20: a delete removes only that name
+S-nodelete	asm	survived	0	
+S-nodelete	a9r3	killed	1	FAIL: delete by B beats A's edit (A's edit is lost without a word)
+S-nodelete	a9r4	killed	11	FAIL: FIX A9-41: a save keeps the user's remark lines
+S-nodelete	a9r5	killed	36	FAIL: A9-40: the later save of the starts writes the refused start and the later clear
+S-nodelete	a9r6	survived	22	
+S-nodelete	a9r7	survived	12	
+S-cap	fuzz	survived	5	VIOLATION lifecycle/HARDLINK_SPLIT: a hard link to saturn_functions.txt no longer names the file after a save
+S-cap	fw	survived	0	
+S-cap	settings	survived	0	
+S-cap	names	survived	0	
+S-cap	asm	survived	0	
+S-cap	a9r3	survived	0	
+S-cap	a9r4	survived	11	
+S-cap	a9r5	killed	36	FAIL: a rename past the cap is refused with the reason; the file is untouched
+S-cap	a9r6	survived	22	
+S-cap	a9r7	survived	12	
+T-unchanged	fuzz	survived	6	VIOLATION lifecycle/HARDLINK_SPLIT: a hard link to saturn_functions.txt no longer names the file after a save
+T-unchanged	fw	survived	0	
+T-unchanged	settings	survived	0	
+T-unchanged	names	survived	0	
+T-unchanged	asm	survived	0	
+T-unchanged	a9r3	survived	1	
+T-unchanged	a9r4	survived	11	
+T-unchanged	a9r5	survived	36	
+T-unchanged	a9r6	survived	22	
+T-unchanged	a9r7	survived	12	
+T-unchanged	*	SURVIVED	0	
+T-refused	fuzz	survived	6	VIOLATION lifecycle/HARDLINK_SPLIT: a hard link to saturn_functions.txt no longer names the file after a save
+T-refused	fw	survived	0	
+T-refused	settings	survived	0	
+T-refused	names	survived	0	
+T-refused	asm	survived	0	
+T-refused	a9r3	survived	1	
+T-refused	a9r4	survived	11	
+T-refused	a9r5	survived	36	
+T-refused	a9r6	survived	22	
+T-refused	a9r7	survived	12	
+T-refused	*	SURVIVED	0	
+T-lockheld	fuzz	survived	5	VIOLATION lifecycle/HARDLINK_SPLIT: a hard link to saturn_functions.txt no longer names the file after a save
+T-lockheld	fw	survived	0	
+T-lockheld	settings	survived	0	
+T-lockheld	names	survived	0	
+T-lockheld	asm	survived	0	
+T-lockheld	a9r3	killed	0	FAIL: FIX A9-33: Settings::SaveTo refuses the same way
+T-lockheld	a9r4	killed	11	FAIL: FIX A9-40: the save is refused through A9-33's path, naming the lock file and the wait
+T-lockheld	a9r5	killed	36	FAIL: A9-46 fixed: Settings::SaveTo(wait=false) against a held lock returns at once and says another process holds it
+T-lockheld	a9r6	killed	22	FAIL: PIN A9-53 fixed: four stuck locks hold the exit about 10 s in all (one shared budget), not 40 s
+T-lockheld	a9r7	killed	12	FAIL: setup: the settings save used the 10 s
+T-nodisk	fuzz	survived	6	VIOLATION lifecycle/HARDLINK_SPLIT: a hard link to saturn_functions.txt no longer names the file after a save
+T-nodisk	fw	survived	0	
+T-nodisk	settings	survived	0	
+T-nodisk	names	survived	0	
+T-nodisk	asm	survived	0	
+T-nodisk	a9r3	killed	1	FAIL: FIX A9-34: a hand-written comment, the order and the blank line of settings.ini survive the save; the new key goes into its section
+T-nodisk	a9r4	killed	11	FAIL: A9-34 merge: a section written twice, the key in its second part
+T-nodisk	a9r5	killed	36	FAIL: A9-40: the later settings save writes the refused key too
+T-nodisk	a9r6	survived	22	
+T-nodisk	a9r7	survived	12	
+T-oneline-cr	fuzz	killed	6	VIOLATION settings.values/VALUE_CHANGED: path with a carriage return: read back as another value
+T-oneline-cr	fw	survived	0	
+T-oneline-cr	settings	survived	0	
+T-oneline-cr	names	survived	0	
+T-oneline-cr	asm	survived	0	
+T-oneline-cr	a9r3	survived	1	
+T-oneline-cr	a9r4	survived	11	
+T-oneline-cr	a9r5	survived	36	
+T-oneline-cr	a9r6	survived	22	
+T-oneline-cr	a9r7	survived	12	
+L-noflock	fuzz	killed	6	VIOLATION concurrent.specbundle/SPEC_INSTANCES: 3 of 4 instances starting together got no verified language directory (damaged)
+L-noflock	fw	killed	0	CHECK failed at line 301: !second.Held()
+L-noflock	settings	survived	0	
+L-noflock	names	survived	0	
+L-noflock	asm	survived	0	
+L-noflock	a9r3	killed	0	FAIL: two instances saving 300 entries each under the lock lose none
+L-noflock	a9r4	killed	11	FAIL: FIX A9-40: SaveStore and Settings::SaveTo give up waiting for another process's lock after about 3 s
+L-noflock	a9r5	killed	36	FAIL: A9-46 fixed: the exit save waits past the 3 s of a session and writes once the holder has gone
+L-noflock	a9r6	killed	2	FAIL: A9-46: at exit a stuck holder refuses after 10 s and says so
+L-noflock	a9r7	killed	12	FAIL: setup: the settings save used the 10 s
+L-noretry	fuzz	killed	5	VIOLATION concurrent.specbundle/SPEC_INSTANCES: 3 of 4 instances starting together got no verified language directory (empty)
+L-noretry	fw	survived	0	
+L-noretry	settings	survived	0	
+L-noretry	names	survived	0	
+L-noretry	asm	survived	0	
+L-noretry	a9r3	killed	0	FAIL: writer child saved without an error
+L-noretry	a9r4	killed	11	FAIL: FIX A9-40: SaveStore and Settings::SaveTo give up waiting for another process's lock after about 3 s
+L-noretry	a9r5	killed	36	FAIL: A9-46 fixed: the exit save waits past the 3 s of a session and writes once the holder has gone
+L-noretry	a9r6	killed	2	FAIL: A9-46: at exit a stuck holder refuses after 10 s and says so
+L-noretry	a9r7	killed	12	FAIL: setup: the settings save used the 10 s
+L-nobound	fuzz	survived	6	VIOLATION lifecycle/HARDLINK_SPLIT: a hard link to saturn_functions.txt no longer names the file after a save
+L-nobound	fw	survived	0	
+L-nobound	settings	survived	0	
+L-nobound	names	survived	0	
+L-nobound	asm	survived	0	
+L-nobound	a9r3	survived	1	
+L-nobound	a9r4	killed	11	FAIL: FIX A9-40: SaveStore and Settings::SaveTo give up waiting for another process's lock after about 3 s
+L-nobound	a9r5	killed	36	FAIL: A9-46 fixed: Settings::SaveTo(wait=false) against a held lock returns at once and says another process holds it
+L-nobound	a9r6	killed	31	FAIL: A9-46: at exit a stuck holder refuses after 10 s and says so
+L-nobound	a9r7	killed	32	FAIL: setup: the settings save used the 10 s
+L-exitwait	fuzz	survived	6	VIOLATION lifecycle/HARDLINK_SPLIT: a hard link to saturn_functions.txt no longer names the file after a save
+L-exitwait	fw	survived	0	
+L-exitwait	settings	survived	0	
+L-exitwait	names	survived	0	
+L-exitwait	asm	survived	0	
+L-exitwait	a9r3	survived	1	
+L-exitwait	a9r4	survived	11	
+L-exitwait	a9r5	killed	36	FAIL: A9-46 fixed: the exit save waits past the 3 s of a session and writes once the holder has gone
+L-exitwait	a9r6	killed	17	FAIL: A9-46: at exit a stuck holder refuses after 10 s and says so
+L-exitwait	a9r7	killed	12	FAIL: setup: the settings save used the 10 s
+L-sharedshort	fuzz	survived	5	VIOLATION lifecycle/HARDLINK_SPLIT: a hard link to saturn_functions.txt no longer names the file after a save
+L-sharedshort	fw	survived	0	
+L-sharedshort	settings	survived	0	
+L-sharedshort	names	survived	0	
+L-sharedshort	asm	survived	0	
+L-sharedshort	a9r3	survived	0	
+L-sharedshort	a9r4	survived	11	
+L-sharedshort	a9r5	survived	36	
+L-sharedshort	a9r6	survived	22	
+L-sharedshort	a9r7	killed	12	FAIL: FIX A9-58: the text says the exit time ran out and what was waited, not the configured 10 s
+L-why-holds	fuzz	survived	6	VIOLATION lifecycle/HARDLINK_SPLIT: a hard link to saturn_functions.txt no longer names the file after a save
+L-why-holds	fw	survived	0	
+L-why-holds	settings	survived	0	
+L-why-holds	names	survived	0	
+L-why-holds	asm	survived	0	
+L-why-holds	a9r3	survived	0	
+L-why-holds	a9r4	survived	11	
+L-why-holds	a9r5	killed	36	FAIL: A9-46 fixed: Settings::SaveTo(wait=false) against a held lock returns at once and says another process holds it
+L-why-holds	a9r6	killed	22	FAIL: the frame's try still gives up (under a second) behind a stuck holder
+L-why-holds	a9r7	survived	12	
+N-addr-letters	fuzz	killed	5	VIOLATION names/PROSE_AS_ADDRESS: the entries loaded (1) are not the well-formed lines' (0)
+N-addr-letters	fw	survived	0	
+N-addr-letters	settings	survived	0	
+N-addr-letters	names	survived	0	
+N-addr-letters	asm	survived	0	
+N-addr-letters	a9r3	killed	1	FAIL: A9-32: six letters stay a word
+N-addr-letters	a9r4	killed	11	FAIL: A9-32: a capital, a single letter, and a word with other letters stay words
+N-addr-letters	a9r5	survived	36	
+N-addr-letters	a9r6	survived	22	
+N-addr-letters	a9r7	survived	12	
+N-addr-remark	fuzz	killed	5	VIOLATION names/PROSE_AS_ADDRESS: the entries loaded (4) are not the well-formed lines' (3)
+N-addr-remark	fw	survived	0	
+N-addr-remark	settings	survived	0	
+N-addr-remark	names	survived	0	
+N-addr-remark	asm	survived	0	
+N-addr-remark	a9r3	killed	1	FAIL: address word: '1a x'
+N-addr-remark	a9r4	survived	11	
+N-addr-remark	a9r5	killed	36	FAIL: A9-45 fixed: of five remark lines that open with a number only the eight-digit date is an entry in a names file
+N-addr-remark	a9r6	killed	22	FAIL: A9-45: of an older version's file the three BIOS names (digits and letters) are skipped and counted, the RAM names load
+N-addr-remark	a9r7	survived	12	
+N-split-cr	fuzz	killed	5	VIOLATION settings/DIFFERS_FROM_FORMAT: Settings read something other than what the format's lines say
+N-split-cr	fw	survived	0	
+N-split-cr	settings	survived	0	
+N-split-cr	names	killed	0	FAIL: A9-25: a lone CR ends a line
+N-split-cr	asm	survived	0	
+N-split-cr	a9r3	killed	0	FAIL: line ends: LF, CRLF, lone CR
+N-split-cr	a9r4	survived	11	
+N-split-cr	a9r5	survived	36	
+N-split-cr	a9r6	survived	22	
+N-split-cr	a9r7	survived	12	
+N-bom	fuzz	survived	6	VIOLATION lifecycle/HARDLINK_SPLIT: a hard link to saturn_functions.txt no longer names the file after a save
+N-bom	fw	survived	0	
+N-bom	settings	survived	0	
+N-bom	names	survived	0	
+N-bom	asm	survived	0	
+N-bom	a9r3	killed	0	FAIL: FIX A9-34: with a byte-order mark the first section header is read
+N-bom	a9r4	killed	11	FAIL: A9-34 merge: a byte-order mark, CRLF, and a new section
+N-bom	a9r5	killed	36	FAIL: a byte-order mark in front of the names file does not lose the first entry
+N-bom	a9r6	survived	22	
+N-bom	a9r7	survived	12	
+N-clean	fuzz	survived	5	VIOLATION lifecycle/HARDLINK_SPLIT: a hard link to saturn_functions.txt no longer names the file after a save
+N-clean	fw	survived	0	
+N-clean	settings	survived	0	
+N-clean	names	survived	0	
+N-clean	asm	survived	0	
+N-clean	a9r3	killed	1	FAIL: FIX A9-36: a line end in a name does not start another entry at the next start
+N-clean	a9r4	survived	11	
+N-clean	a9r5	survived	36	
+N-clean	a9r6	survived	22	
+N-clean	a9r7	survived	12	
+N-fifo	fuzz	killed	11	VIOLATION lifecycle/HARDLINK_SPLIT: a hard link to saturn_functions.txt no longer names the file after a save
+N-fifo	fw	survived	0	
+N-fifo	settings	survived	0	
+N-fifo	names	survived	0	
+N-fifo	asm	survived	0	
+N-fifo	a9r3	survived	0	
+N-fifo	a9r4	survived	11	
+N-fifo	a9r5	survived	36	
+N-fifo	a9r6	survived	22	
+N-fifo	a9r7	survived	12	
+N-resize	fuzz	survived	5	VIOLATION lifecycle/HARDLINK_SPLIT: a hard link to saturn_functions.txt no longer names the file after a save
+N-resize	fw	survived	0	
+N-resize	settings	survived	0	
+N-resize	names	survived	0	
+N-resize	asm	survived	0	
+N-resize	a9r3	survived	0	
+N-resize	a9r4	survived	11	
+N-resize	a9r5	survived	36	
+N-resize	a9r6	survived	22	
+N-resize	a9r7	survived	12	
+N-resize	*	SURVIVED	0	
+P-a842-shown	trust	killed	52	pin A8-42: Enter in the focused, unedited box asks the output shown (A), not C as typed        FAILED
+P-a842-shown	panel	survived	4	
+P-a842-shown	model	survived	18	
+P-a836-origin	trust	survived	52	
+P-a836-origin	panel	survived	4	
+P-a836-origin	model	survived	18	
+P-a836-origin	*	SURVIVED	0	
+P-a846-undo	trust	killed	52	pin A8-46: Enter after an edit taken back: still the finder's guess, with its Entry line       FAILED
+P-a846-undo	panel	survived	4	
+P-a846-undo	model	survived	19	
+P-a846-typedout	trust	killed	51	pin A8-30: ...the same entry typed: the user's entry, no figure and no Entry line              FAILED
+P-a846-typedout	panel	survived	4	
+P-a846-typedout	model	survived	19	
+P-a842-rewrite	trust	killed	52	pin A8-42: Enter in the focused, unedited box asks the output shown (A), not C as typed        FAILED
+P-a842-rewrite	panel	survived	4	
+P-a842-rewrite	model	survived	18	
+P-a850-sync	trust	killed	52	pin A8-50: the box that had the focus at the install keeps the refused text                    FAILED
+P-a850-sync	panel	survived	4	
+P-a850-sync	model	survived	19	
+P-askagain	trust	killed	52	pin A8-30: ...the same entry typed: the user's entry, no figure and no Entry line              FAILED
+P-askagain	panel	killed	4	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/DecompilerPanelTests.cpp:1269: f.panel.Submissions() == n + 1
+P-askagain	model	survived	18	
+P-sync-active	trust	killed	52	pin A8-42: Enter in the focused, unedited box asks the output shown (A), not C as typed        FAILED
+P-sync-active	panel	killed	5	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/DecompilerPanelTests.cpp:2780: std::string(f.panel.EntryText()) == "06005000"
+P-sync-active	model	survived	18	
+P-pin-typed	trust	killed	52	pin A8-30: ...pinned, the entry is still the finder's guess: the figure and the Entry line stay FAILED
+P-pin-typed	panel	survived	4	
+P-pin-typed	model	survived	18	
+P-pin-noresolve	trust	killed	51	pin A8-30: ...pinned, the entry is still the finder's guess: the figure and the Entry line stay FAILED
+P-pin-noresolve	panel	survived	4	
+P-pin-noresolve	model	survived	18	
+P-nothingpin	trust	killed	52	pin A8-38: no registers, nothing shown, Follow PC off: nothing asked, nothing shown, the box empty FAILED
+P-nothingpin	panel	survived	4	
+P-nothingpin	model	survived	19	
+E-gen-ledger	gen	killed	7	FINDING seed 1 (grammar 1):
+E-gen-second	gen	killed	7	FINDING seed 5 (grammar 1):
+E-gen-alias	gen	killed	7	FINDING seed 99 (grammar 1):
+E-gen-params	gen	killed	8	FINDING seed 2 (grammar 2):
+E-gen-ret	gen	killed	6	FINDING seed 2 (grammar 2):
+E-gen-body	gen	killed	6	FINDING seed 1 (grammar 1):
+E-gen-cases	gen	killed	8	FINDING seed 2 (grammar 2):
+E-gen-warn	gen	killed	9	FINDING seed 2 (grammar 2):
+E-gen-preserved	gen	killed	7	FINDING seed 2 (grammar 2):
+E-gen-claims	gen	killed	7	FINDING seed 2 (grammar 2):
+E-gen-lent	gen	killed	13	FINDING seed 1 (grammar 1):
+E-gen-data	gen	killed	11	FINDING seed 2 (grammar 2):
+E-gen-honour	gen	killed	8	FINDING seed 4 (grammar 2):
+E-gen-kept	gen	killed	8	FINDING seed 58 (grammar 2):
+E-gen-tokodd	gen	killed	6	FINDING seed 1 (grammar 1):
+E-gen-tokoutside	gen	killed	8	FINDING seed 1 (grammar 1):
+E-gen-tokfirst	gen	killed	6	FINDING seed 1 (grammar 1):
+E-gen-tokdrop	gen	killed	8	FINDING seed 1 (grammar 1):
+E-gen-tokcall	gen	killed	7	FINDING seed 4 (grammar 2):
+E-gen-tokunmark	gen	killed	6	FINDING seed 1 (grammar 1):
+E-gen-tokhover	gen	killed	6	FINDING seed 1 (grammar 1):
+E-gen-tokslot	gen	killed	9	FINDING seed 1 (grammar 1):
+E-gen-tokframe	gen	killed	9	FINDING seed 72 (grammar 2):
+E-gen-tokcopy	gen	killed	9	FINDING seed 72 (grammar 2):
+E-map-tokodd	corpus	killed	43	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:5477: mapping.Violations() == 0
+E-map-tokoutside	corpus	killed	43	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:5477: mapping.Violations() == 0
+E-map-tokfirst	corpus	killed	45	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:5477: mapping.Violations() == 0
+E-map-tokdrop	corpus	killed	44	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:5477: mapping.Violations() == 0
+E-map-tokcall	corpus	killed	43	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:5477: mapping.Violations() == 0
+E-map-tokunmark	corpus	killed	43	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:5477: mapping.Violations() == 0
+E-map-tokhover	corpus	killed	42	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:5477: mapping.Violations() == 0
+E-map-tokslot	corpus	killed	42	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:5477: mapping.Violations() == 0
+E-map-tokframe	corpus	killed	43	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:5477: mapping.Violations() == 0
+E-map-tokcopy	corpus	killed	42	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:5477: mapping.Violations() == 0
+H-led-width	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:3121: Ledger(r, { Wr(0x20100063u, 1), Rd(0x20100063u, 1, true) })
+H-led-width	gen	killed	20	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:11775: rep.findings.empty()
+H-led-printed	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:3740: index && index->printed == 2
+H-led-printed	gen	survived	19	
+H-led-cond	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:3743: right && right->conditionalInPrint && right->printed == 1
+H-led-cond	gen	survived	19	
+H-led-repeat	unit	survived	22	
+H-led-repeat	gen	survived	18	
+H-led-repeat	corpus	survived	41	
+H-led-repeat	*	SURVIVED	0	
+H-led-insn	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:147: all.Violations() == 0
+H-led-insn	gen	killed	20	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:11775: rep.findings.empty()
+H-led-nowrites	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:264: ledger
+H-led-nowrites	gen	killed	19	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:11775: rep.findings.empty()
+H-led-direct	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:3121: Ledger(r, { Wr(0x20100063u, 1), Rd(0x20100063u, 1, true) })
+H-led-direct	gen	survived	18	
+H-led-returned	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:3128: Ledger(r, { Wr(0x25FE00A4u, 4), Rd(0x25FE00A4u, 4, false, true) })
+H-led-returned	gen	survived	18	
+H-fate-unreach	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:3562: SaidMissing(r, 0x0600A90Cu) && HasNote(r, "the 1-byte read through a pointe
+H-fate-unreach	gen	survived	18	
+H-fate-switch	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:3640: ReferenceOk(d, snap, q, r)
+H-fate-switch	gen	survived	19	
+H-fate-frameunread	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:3116: ReferenceOk(d, snap, Request(f.base), r)
+H-fate-frameunread	gen	killed	14	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:11789: rep.findings.empty()
+H-fate-capped	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:14487: r.frameLedgerCapped
+H-fate-capped	gen	survived	19	
+H-fate-insn	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:382: records == 2
+H-fate-insn	gen	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:11813: rep.findings.empty()
+H-removed-unsaid	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:3116: ReferenceOk(d, snap, Request(f.base), r)
+H-removed-unsaid	gen	survived	13	
+H-map-origin	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:147: all.Violations() == 0
+H-map-origin	gen	killed	19	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:11775: rep.findings.empty()
+H-map-first	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:147: all.Violations() == 0
+H-map-first	gen	killed	19	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:11775: rep.findings.empty()
+H-map-slotbody	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:147: all.Violations() == 0
+H-map-slotbody	gen	killed	13	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:11775: rep.findings.empty()
+H-map-framestore	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:376: slot && LineInstructions(*slot) == std::vector<uint32_t>{ base + 8 }
+H-map-framestore	gen	killed	19	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:11813: rep.findings.empty()
+H-note-wo	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:3173: HasNote(r, "reads VDP1_FBCR, which is write-only")
+H-note-ro	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:3196: HasNote(r, "writes SCSP_MIBUF, which is read-only")
+H-note-reach	unit	survived	23	
+H-note-reach	gen	survived	14	
+H-note-reach	corpus	survived	42	
+H-note-reach	*	SURVIVED	0	
+H-note-narrow	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:3161: HasNote(r, "VDP2_SCXN0: one 4-byte write of VDP2_SCXIN0 and VDP2_SCXDN0, as
+H-note-cram	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:4282: HasNote(r, "a 1-byte write to colour RAM at 0x25F00001 stores the whole 16-
+H-ptr-sub	unit	survived	23	
+H-ptr-sub	gen	survived	14	
+H-ptr-sub	corpus	survived	41	
+H-ptr-sub	*	SURVIVED	0	
+H-ptr-phi	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:4066: HasNote(r, "if the pointer holds 0x05F80004 (VDP2_TVSTAT): a read of VDP2_T
+H-ptr-loop	unit	survived	23	
+H-ptr-loop	gen	survived	14	
+H-ptr-loop	corpus	survived	42	
+H-ptr-loop	*	SURVIVED	0	
+H-lend-unknown	gen	survived	18	
+H-lend-unknown	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:6663: !r.InBody(a + 0x0A) && r.InBody(a + 2) && !r.prototype.known && Has(r.proto
+H-lend-self	gen	survived	13	
+H-lend-self	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:9044: Has(r.prototypeWithheld, "calls itself")
+H-lend-kill	gen	killed	18	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:11854: !constant
+H-lend-extrapop	gen	survived	13	
+H-lend-extrapop	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:9121: !oracle || PseudoAgreesWithRun(l.caller, snap, f, inputs, !l.caller.prototy
+H-cancel-actions	fault	killed	76	== cancel-enter jumptable: FAILED in 0.2 s
+H-run-epoch	runner	killed	37	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/DecompilerRunnerTests.cpp:586: !late
+H-run-epoch	model	survived	18	
+H-run-gen	runner	killed	36	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/DecompilerRunnerTests.cpp:625: r.generation == second && r.status == DecompileStatus::Ok
+H-run-gen	model	survived	18	
+H-run-toolarge	runner	killed	108	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/DecompilerRunnerTests.cpp:694: gate.WaitHolding(60)
+H-run-toolarge	model	survived	18	
+H-pan-volatile	trust	killed	60	MODEL FAILURE, seed 0, after operation 15
+H-pan-names	trust	killed	51	MODEL FAILURE, seed 0, after operation 5
+H-pan-disabled	trust	killed	51	MODEL FAILURE, seed 0, after operation 3
+H-pan-truncated	trust	killed	43	MODEL FAILURE, seed 0, after operation 0
+H-pan-unsupported	trust	killed	48	MODEL FAILURE, seed 0, after operation 0
+H-pan-copymarks	trust	killed	62	MODEL FAILURE, seed 0, after operation 3
+H-load-empty	fuzz	killed	5	VIOLATION bios/EMPTY_ACCEPTED: regular file: an empty image was accepted
+H-load-toolarge	fuzz	killed	5	VIOLATION oversize.bios/WRONG_REASON: an image of 48 MiB was refused as: could not read the BIOS image /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/build/a11_scratch_fuzz/oversize/
+H-load-hexlen	fuzz	killed	5	VIOLATION ranges/VERDICT_DIFFERS: accepted=yes where the reading of the format says no
+H-load-inverted	fuzz	killed	5	VIOLATION ranges/VERDICT_DIFFERS: accepted=yes where the reading of the format says no
+V-0056-stepsdown	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:9773: ra.prototype.known && ra.prototypeWithheld.empty()
+V-0056-stepsdown	gen	killed	19	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:12346: excluded > 0
+V-0056-stepsdown	corpus	survived	41	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:9773: ra.prototype.known && ra.prototypeWithheld.empty()
+V-0065-steppeddown	unit	survived	22	
+V-0065-steppeddown	gen	survived	18	
+V-0065-steppeddown	corpus	survived	42	
+V-0065-steppeddown	engine	survived	39	
+V-0065-steppeddown	pc	survived	20	
+V-0065-steppeddown	decode	survived	2	
+V-0065-steppeddown	*	SURVIVED	0	
+V-0061-memescape	unit	survived	23	
+V-0061-memescape	gen	survived	14	
+V-0061-memescape	corpus	survived	43	
+V-0061-memescape	engine	survived	39	
+V-0061-memescape	pc	survived	22	
+V-0061-memescape	decode	survived	2	
+V-0061-memescape	*	SURVIVED	0	
+V-0063-hostescape	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:893: !all.empty()
+V-0063-hostescape	gen	survived	13	
+V-0063-hostescape	corpus	survived	41	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:893: !all.empty()
+V-0072-storemaywrite	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:14460: Has(r.Text(), p.text)
+V-0072-storemaywrite	gen	survived	13	
+V-0072-storemaywrite	corpus	survived	41	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:14460: Has(r.Text(), p.text)
+V-0010	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:3397: Ledger(r, { Rd(0, 2), Rd(0, 2) })
+V-0010	gen	killed	18	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:11813: rep.findings.empty()
+V-0010	corpus	killed	42	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:3397: Ledger(r, { Rd(0, 2), Rd(0, 2) })
+V-0009	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:155: ra.status == DecompileStatus::Ok && arr != nullptr
+V-0009	gen	killed	19	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:11775: rep.findings.empty()
+V-0009	corpus	killed	41	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:155: ra.status == DecompileStatus::Ok && arr != nullptr
+R-ptr-loop	unit	survived	22	
+R-ptr-loop	gen	survived	13	
+R-ptr-loop	corpus	survived	41	
+R-ptr-loop	*	SURVIVED	0	
+R-note-reach	unit	killed	2	
+R-note-reach	gen	killed	1	
+R-note-reach	corpus	killed	2	
+R-ptr-sub	unit	survived	23	
+R-ptr-sub	gen	killed	3	
+R-ptr-sub	corpus	killed	4	
+R-0061-mem	unit	killed	0	
+R-0061-mem	gen	killed	0	
+R-0061-mem	corpus	killed	0	
+R-0065-down	unit	killed	6	
+R-0065-down	gen	survived	19	
+R-0065-down	corpus	killed	25	
+V-0019-ldc	decode	killed	2	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecodeTests.cpp:2240: totalFails == 0
+V-0019-ldc	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:10599: Has(r.Text(), "Write_SR(param_1 & 0x3f3);")
+V-0019-rte	decode	killed	2	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecodeTests.cpp:2240: totalFails == 0
+V-0019-rte	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:10908: Has(sett.Text(), "Write_SR(in_stack_00000004 & 0x3f2 | 1);")
+V-0071	pc	killed	21	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:11237: r104[0].cls.empty() && r104[0].compared && r104[0].text.find("== 0xffff") !
+V-0071	unit	survived	22	
+H-load-partial	fuzz	killed	5	VIOLATION ranges/PARTIAL_RESULT: refused but left ranges in the output
+C-0010-printed	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:3397: Ledger(r, { Rd(0, 2), Rd(0, 2) })
+C-0010-printed	gen	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:12073: rep.findings.empty()
+C-0010-printed	corpus	killed	42	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:3397: Ledger(r, { Rd(0, 2), Rd(0, 2) })
+C-0010-cond	unit	killed	24	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:3397: Ledger(r, { Rd(0, 2), Rd(0, 2) })
+C-0010-cond	gen	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:11813: rep.findings.empty()
+C-0010-cond	corpus	killed	43	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:3397: Ledger(r, { Rd(0, 2), Rd(0, 2) })
+C-0010-repeat	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:3397: Ledger(r, { Rd(0, 2), Rd(0, 2) })
+C-0010-repeat	gen	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:11813: rep.findings.empty()
+C-0010-repeat	corpus	killed	41	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:3397: Ledger(r, { Rd(0, 2), Rd(0, 2) })
+C-0010-all3	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:3397: Ledger(r, { Rd(0, 2), Rd(0, 2) })
+C-0010-all3	gen	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:12073: rep.findings.empty()
+C-0010-all3	corpus	killed	42	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:3397: Ledger(r, { Rd(0, 2), Rd(0, 2) })
+patch:0007	decode	survived	2	
+patch:0007	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:4550: Has(r.Text(), "CONCAT44(0x20100000,~in_r7)") && !Has(r.Text(), "&SMPC_IREG0
+patch:0007	gen	survived	18	
+patch:0008	decode	killed	2	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecodeTests.cpp:2100: r.prototypeWithheld.empty()
+patch:0008	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:1540: Has(r.Text(), "unaff_retaddr + 4")
+patch:0008	gen	killed	19	CANARY FAILURE canary 11: r4 lent, frame pointer, bsr, 0 earlier call(s), plus an index
+patch:0015	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:14884: rc == 0
+patch:0015	gen	survived	19	
+patch:0020	engine	survived	39	
+patch:0020	unit	survived	23	
+patch:0020	gen	survived	18	
+patch:0020	pc	survived	21	
+patch:0020	decode	killed	2	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecodeTests.cpp:2100: r.prototypeWithheld.empty()
+patch:0021	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:147: all.Violations() == 0
+patch:0021	gen	killed	19	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:11775: rep.findings.empty()
+patch:0025	decode	survived	2	
+patch:0025	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:8907: PseudoAgreesWithRun(r, snap, f, with ? *with : inputs, !r.prototype.known)
+patch:0025	gen	survived	18	
+patch:0027	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:6609: Ledger(r, { Wr(scuIst, 1) })
+patch:0027	gen	survived	19	
+patch:0028	unit	stillborn	0	build failed
+patch:0029	unit	killed	24	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:8671: PseudoAgreesWithRun(r, snap, f, c.zeroExtended ? byteIndices : indices)
+patch:0029	gen	killed	20	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:12042: seen > 0
+patch:0033	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:10555: r.prototype.ret.size == 8
+patch:0033	pc	killed	34	FINDING [mismatch] A2-12 r0 = 0, r1 = r5
+patch:0037	-	not-applied	0	only header hunks revert alone
+patch:0044	unit	stillborn	0	build failed
+patch:0048	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:10852: r->prototype.known && r->prototype.ret.kind == idNop.prototype.ret.kind
+patch:0048	pc	survived	21	
+patch:0052	unit	survived	23	
+patch:0052	gen	survived	20	
+patch:0052	engine	survived	38	
+patch:0052	pc	survived	21	
+patch:0052	decode	survived	2	
+patch:0052	corpus	killed	43	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:5477: mapping.Violations() == 0
+patch:0053	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:12565: !Has(r.Text(), "return 0;")
+patch:0053	gen	survived	20	
+patch:0053	corpus	survived	43	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:12565: !Has(r.Text(), "return 0;")
+patch:0059	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:12893: !Has(r.Text(), " < param_1 * 4")
+patch:0059	pc	survived	20	
+patch:0070	unit	survived	22	
+patch:0070	pc	survived	21	
+patch:0070	gen	survived	19	
+patch:0070	engine	killed	41	CHECK failed at line 1993: hi == 0xff00ull && lo == 0xff00ull
+patch:0068	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:414: l != nullptr
+patch:0068	gen	survived	13	
+patch:0068	corpus	killed	41	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:414: l != nullptr
+patch:0076	unit	killed	24	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:446: zero != nullptr
+patch:0076	gen	survived	19	
+patch:0076	corpus	survived	42	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:446: zero != nullptr
+patch:0060	unit	survived	22	
+patch:0060	gen	survived	18	
+patch:0060	corpus	survived	42	
+patch:0060	engine	survived	39	
+patch:0060	pc	survived	21	
+patch:0060	decode	survived	2	
+patch:0060	*	SURVIVED	0	
+patch:0014	unit	survived	23	
+patch:0014	gen	survived	19	
+patch:0014	corpus	survived	43	
+patch:0014	engine	survived	38	
+patch:0014	pc	survived	22	
+patch:0014	decode	survived	2	
+patch:0014	*	SURVIVED	0	
+patch:0001	fault	survived	83	
+patch:0001	unit	survived	23	
+patch:0001	gen	survived	16	
+patch:0001	engine	killed	43	CHECK failed at line 302: cancelled
+patch:0040	fault	survived	81	
+patch:0040	unit	survived	23	
+patch:0040	gen	survived	19	
+patch:0040	engine	survived	40	
+patch:0040	pc	survived	21	
+patch:0040	decode	survived	2	
+patch:0040	corpus	survived	44	
+patch:0040	*	SURVIVED	0	
+patch:0004	fault	survived	79	
+patch:0004	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:14860: dts::WatchedFreed()

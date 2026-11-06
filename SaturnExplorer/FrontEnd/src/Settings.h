@@ -68,8 +68,9 @@ public:
     // Only the keys this session set or changed since Load are applied to the file as it is now, under a lock (another
     // instance's keys, the installer's [emulators], are kept), and nothing is written when nothing changed. Refused, with
     // 'error', when Load refused the file, so a file the user cannot have loaded is never replaced (A9-19, A9-20).
-    bool Save(std::string* error = nullptr) const;
-    bool SaveTo(const std::string& path, std::string* error = nullptr) const;   // the same, to 'path'
+    // 'wait' false takes the lock without waiting: the UI thread's retry uses it so that a stuck holder does not freeze the frame (A9-46); it waits at most 250 ms (A9-52).
+    bool Save(std::string* error = nullptr, bool wait = true) const;
+    bool SaveTo(const std::string& path, std::string* error = nullptr, bool wait = true) const;   // the same, to 'path'
 
     bool Has(const std::string& section, const std::string& key) const;
     std::string Get(const std::string& section, const std::string& key,

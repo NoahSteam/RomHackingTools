@@ -9,7 +9,9 @@
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
+#include <set>
 #include <sstream>
+#include <vector>
 
 #ifdef _WIN32
 #include <direct.h>
@@ -201,7 +203,7 @@ bool Settings::Load(std::string* error)
     return true;
 }
 
-bool Settings::Save(std::string* error) const
+bool Settings::Save(std::string* error, bool wait) const
 {
     // Resolve the dir once (creating it), then derive the file path from it, rather
     // than re-resolving ConfigDir via FilePath().
@@ -211,10 +213,10 @@ bool Settings::Save(std::string* error) const
         if (error) *error = "The settings folder could not be found or created.";
         return false;
     }
-    return SaveTo(path, error);
+    return SaveTo(path, error, wait);
 }
 
-bool Settings::SaveTo(const std::string& path, std::string* error) const
+bool Settings::SaveTo(const std::string& path, std::string* error, bool wait) const
 {
     auto fail = [&](const std::string& why) { if (error) *error = why; return false; };
     const bool same = path == mLoadedPath;
@@ -232,15 +234,16 @@ bool Settings::SaveTo(const std::string& path, std::string* error) const
     if (same && !mRefusedWhy.empty())
         return fail("Settings: not saved, " + mRefusedWhy + " when it was loaded, and a save would replace it; this session's changes are kept in memory only");
     // The lock file lives beside the data: a lock on the file itself would be dropped by the rename that replaces it.
-    FileLock lock(path + ".lock");
+    FileLock lock(path + ".lock", wait, 50);   // the frame's try (wait=false) waits 50 ms, not more: the UI thread stalls behind a stuck holder (A9-52, A9-59)
+    if (!lock.Held())
+        return fail("Settings: not saved, " + lock.WhyNotHeld() + "; "
+                    "saving without the lock could lose another instance's keys, so the file is left as it is and this session's changes are kept in memory only");
+    RemoveStaleStagingFiles(path);
     std::string disk;
-    IniData merged;
     const CappedRead r = ReadFileCapped(path, kMaxSettingsBytes, disk);
     const std::string why0 = WhyNotRead(r, path);
     if (!why0.empty()) return fail("Settings: not saved, " + why0 + " now; the file is left as it is");
-    if (r == CappedRead::Ok) ParseIni(disk, merged);
-    for (const auto& sec : changes)
-        for (const auto& kv : sec.second) merged[sec.first][kv.first] = kv.second;
+    if (r != CappedRead::Ok) disk.clear();
     // One line per setting. A value with a line feed in it (a path can have one) would end its line and begin another
     // that the next start reads as a setting of its own: a BIOS path could set the volatile list (A9-12). Each line
     // end character (LF, and CR, which the loader now also ends a line at) is written as a space, so what comes back is a
@@ -249,19 +252,73 @@ bool Settings::SaveTo(const std::string& path, std::string* error) const
         for (char& c : v) if (c == '\n' || c == '\r') c = ' ';
         return v;
     };
-    std::string text;
-    for (const auto& sec : merged)
+    // The file as it is now, line by line: what this session did not change is kept as written (a hand-written comment, the order
+    // of sections and keys, a line that is no setting, A9-34); a changed key is rewritten where it stands; a new key goes after the
+    // last key of its section; a new section goes at the end.
+    std::vector<std::string> out;
+    std::set<std::pair<std::string, std::string>> written;
+    std::set<std::string> seen;
+    std::string section;
+    size_t insertAt = 0;
+    seen.insert(section);
+    auto flush = [&](const std::string& sec, size_t at) {
+        auto c = changes.find(sec);
+        if (c == changes.end()) return;
+        std::vector<std::string> add;
+        for (const auto& kv : c->second)
+            if (written.insert({ sec, kv.first }).second) add.push_back(oneLine(kv.first) + " = " + oneLine(kv.second));
+        out.insert(out.begin() + static_cast<std::ptrdiff_t>(at), add.begin(), add.end());
+    };
+    for (const std::string& line : SplitLines(disk))
     {
-        text += '[' + oneLine(sec.first) + "]\n";
-        for (const auto& kv : sec.second)
-            text += oneLine(kv.first) + " = " + oneLine(kv.second) + '\n';
-        text += '\n';
+        const std::string t = Trim(line);
+        if (!t.empty() && t[0] != ';' && t[0] != '#')
+        {
+            if (t.front() == '[' && t.back() == ']')
+            {
+                flush(section, insertAt);
+                section = Lower(Trim(t.substr(1, t.size() - 2)));
+                seen.insert(section);
+                out.push_back(line);
+                insertAt = out.size();
+                continue;
+            }
+            const size_t eq = t.find('=');
+            if (eq != std::string::npos)
+            {
+                const std::string keyText = Trim(t.substr(0, eq));
+                const std::string key = Lower(keyText);
+                if (!key.empty())
+                {
+                    auto c = changes.find(section);
+                    if (c != changes.end() && c->second.count(key))
+                    {
+                        out.push_back(oneLine(keyText) + " = " + oneLine(c->second.at(key)));
+                        written.insert({ section, key });
+                    }
+                    else out.push_back(line);
+                    insertAt = out.size();
+                    continue;
+                }
+            }
+        }
+        out.push_back(line);
     }
+    flush(section, insertAt);
+    for (const auto& sec : changes)
+    {
+        if (seen.count(sec.first)) continue;
+        if (!out.empty() && !Trim(out.back()).empty()) out.push_back(std::string());
+        out.push_back('[' + oneLine(sec.first) + ']');
+        for (const auto& kv : sec.second) out.push_back(oneLine(kv.first) + " = " + oneLine(kv.second));
+    }
+    std::string text;
+    for (const std::string& l : out) { text += l; text += '\n'; }
     if (text.size() > kMaxSettingsBytes) return fail("Settings: not saved, it would be over the 4 MiB that is read back at the next start");
     // Not an ofstream: it truncates the file on open and flushes in its destructor, after any check the
     // caller could make, so a failed write both lost the old settings and reported success.
     std::string why;
-    if (!WriteFileAtomically(path, text.data(), text.size(), why)) return fail(path + ": " + why);
+    if (!WriteFileAtomically(path, text.data(), text.size(), why)) return fail("Settings: not saved, " + why);   // A9-60: the subject first; the path is in why
     if (same) mBase = mData;
     return true;
 }

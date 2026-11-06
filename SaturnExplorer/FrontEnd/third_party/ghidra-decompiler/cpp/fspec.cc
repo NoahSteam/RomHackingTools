@@ -17,6 +17,7 @@
  * a host can set a function's side-effect overrides (patches/0028-funcproto-set-effects.patch).
  * Modified for SaturnExplorer: a prototype is copied, and its store replaced, with the allocation first and the old object freed after (patches/0032-allocation-failure-order-2.patch).
  * Modified for SaturnExplorer: a call's stack argument words stay mapped once a frame address escaped (patches/0066-engine-frame-escape-inexact.patch).
+ * Modified for SaturnExplorer: a call site whose conversion to a direct call asks for a restart is counted (patches/0078-engine-deindirect-restart-per-call-site.patch).
  */
 #include "fspec.hh"
 #include "funcdata.hh"
@@ -5488,6 +5489,12 @@ void FuncCallSpecs::deindirect(Funcdata &data,Funcdata *newfd)
       return;	// We have successfully updated the prototype, don't restart
     }
   }
+  // SaturnExplorer (0078): counted for the restart group, which allows a restart for each call site that asks. The override
+  // above makes the call direct from the flow on, so a site asks once; but a call whose register a lent callee keeps
+  // (A3-155: two `jsr @r3`, the first to a callee that preserves r3) resolves only once the earlier call is direct, a
+  // generation later, and its own restart was refused: the function ended with the restart warning, the second call
+  // under the default model's effects (a register the callee writes read as kept) and its arguments lost.
+  data.getOverride().noteDeindirectRestart(op->getAddr());
   data.setRestartPending(true);
 }
 

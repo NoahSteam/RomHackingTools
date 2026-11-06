@@ -18,6 +18,7 @@
  * Modified for SaturnExplorer: a cloned action tree that cannot be completed or registered is freed (patches/0032-allocation-failure-order-2.patch).
  * Modified for SaturnExplorer: a repeating action stops, with a warning, after a bounded number of passes (patches/0055-engine-action-repeats-bounded.patch).
  * Modified for SaturnExplorer: a restart group allows one more restart for each raise of a dead code delay (patches/0068-engine-deadcode-late-stack-reads.patch).
+ * Modified for SaturnExplorer: ...and one more for each call site whose conversion to a direct call asked for one (patches/0078-engine-deindirect-restart-per-call-site.patch).
  */
 #include "action.hh"
 #include "funcdata.hh"
@@ -617,7 +618,10 @@ int4 ActionRestartGroup::apply(Funcdata &data)
     // SaturnExplorer (patches/0068-engine-deadcode-late-stack-reads.patch): each raise of a dead code delay
     // (Heritage::bumpDeadcodeDelay, itself bounded) is a restart the output needs to be right; not taking
     // it leaves a write removed before its read was found.
-    if (curstart > maxrestarts + data.getOverride().numDeadcodeBumps()) {
+    // SaturnExplorer (patches/0078-engine-deindirect-restart-per-call-site.patch): likewise each call site that FuncCallSpecs::deindirect
+    // could not convert in place (a site asks once: the override makes it direct from the next flow on), so a chain of
+    // indirect calls that resolve one generation after another is followed to its end.
+    if (curstart > maxrestarts + data.getOverride().numDeadcodeBumps() + data.getOverride().numDeindirectRestarts()) {
       data.warningHeader("Exceeded maximum restarts with more pending");
       curstart = -1;
       return 0;

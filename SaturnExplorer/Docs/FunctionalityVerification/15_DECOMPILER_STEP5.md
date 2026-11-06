@@ -16450,3 +16450,689 @@ A7-31 (the shrunk words and two `add` variants: the copy's instructions are the 
 ### Routed
 
 Nothing outside area 7. A7-37's missing slot mark is in the engine's op for a narrowed store in a slot (patch 0075's marking); the fix belongs with area 7's fixer, who owns `isFromDelaySlot`'s use.
+
+## Area 8 fixer (A8-46, A8-50, A8-51)
+
+Branch `review/8-p3-fix` from master `511072cf`. Product code: `DecompilerPanel.cpp` and `.h`. Tests: `DecompilerTrustTests.cpp` (`RunEntryOriginPins`). Docs: `DECOMPILER_GUIDE.md` (Entry row), `Codebase/Systems/Decompiler.md`, the ledger.
+
+### The fixes
+
+* **A8-46** (an edit taken back before Enter). The panel keeps the text it last left in the box (`mBoxCleanText`, set when the sync writes the box and when an Enter is accepted) and whether it was the shown answer's text. When `IsItemEdited` fires and the text is that text again, the box counts as untouched (`mBoxTargetValid`, `mBoxShowsShown` restored). Two guards, both found by the existing pins: (1) the text must not have grown into it from a part of it (`mBoxPrevText`, the text at the end of the last Draw, is a proper prefix of it): that is the user typing the entry out, and A8-30 and A8-36 require that to stay "user-set entry"; (2) a shown-answer text only counts while it still names the output shown, so probe E4 (the box kept C while A is shown, '1' typed and deleted) stays the user's entry.
+* **A8-50** (a refusal's text overwritten by a pending sync). The refusal branch of Enter now clears `mSyncEntryBox`, as the accepted branch does. `SetTarget` already sets it again when the refusal ends, so the refused text goes with the refusal (A8-20) and not before.
+* **A8-51** (the box's tooltip). When the box's Enter would ask a function other than the address in the box (`EnterTarget` gives another address than the text), the tooltip reads "The box still holds an older address than the function shown. Enter asks for the function shown again (type an address to decompile another)." Otherwise the old text.
+
+### Pins (default run) and mutations
+
+New pins: A8-46 for Escape, Backspace and Ctrl+Z (label "rts scan, 60%", the Entry line, a pin of C, held to the model) and the E4 control; A8-50 with and without the focus at the install (text `zz` kept, the refusal's tooltip true of the box); A8-51 (the box hovered in A8-42's state, the tooltip drawn whole, Enter asks A). Each fix was reverted in turn, the trust test built and run, then restored (`git status` clean of product changes afterwards):
+
+| Mutation | Result |
+|---|---|
+| A8-46: the restore disabled | fails: "Enter after an edit taken back ..." and "held to the model", in all three ways |
+| A8-50: the refusal branch no longer clears the sync | fails: "the box that had the focus at the install keeps the refused text" (the unfocused control passes) |
+| A8-51: the tooltip condition disabled | fails: "the tooltip says Enter asks the function shown" |
+
+### Open rows re-judged
+
+* **A8-32**: accepted (P3). The amber line is the live verdict beside the label and never over-sells; only a cleared or rebuilt call stack shows the gap, and closing it means asking again on every evidence change.
+* **A8-40**: accepted (P3). What is left is the call stack in a generated sequence; the mini pins hold it (A8-37 G) and a call stack in the Follow rig is not small. The two doors named in round 8 (an edit taken back, a refusal at a focused install) are now pinned by hand-built sequences.
+
+### Runs
+
+Seeds from 1,200,000 (Follow rig, `SE_TRUST_FOLLOW_FOCUS=1`), each run alone under `ulimit -v 3500000`:
+
+| Run | Result |
+|---|---|
+| mix 8 and mix 9, hover on, from 1,200,000, 60,000 steps | 60,021 + 60,021 operations (1,355 sequences each), 0 failing |
+| mix 8 and 9 with `SE_TRUST_FOLLOW_CPU=1`, from 1,300,000 | 60,013 + 60,013 operations (1,349 sequences each), 0 failing |
+| mix 8 and 9, `SE_TRUST_NOHOVER=1`, from 1,400,000 | 40,004 + 40,004 operations (908 sequences each), 0 failing |
+| the model run, `SE_MODEL_SEEDS=1200` (the model has no start seed: seeds 1 to 1200) | 1,200 seeds, 0 failed |
+
+The Follow rig has no edit-then-revert operation and its `badentry` still takes the box as the panel's text, so the generated runs do not reach A8-46 or A8-50; the pins do.
+
+`ctest -j2 --timeout 900`: **108 of 108 passed** (102 + 6 Live; 190 s). No test was added to ctest; the default trust run gained the pins above. The fault suite: 0 of 94 jobs failed.
+
+## Area 9, round 3
+
+Branch `review/9-round3` from master `d2960c8f`. An adversarial round on the area 9 fixer (A9-18 to A9-30). **No product code changed.** The round adds `FrontEnd/tests/Area9Round3Tests.cpp` (ctest `SaturnExplorerArea9Round3Tests`, Linux; `CMakeLists.txt` target) and files A9-31 to A9-39, all P3. **No P1 and no P2: the round is clean.**
+
+### What was attacked, and how
+
+* **`SaveStore` (StoreMerge.h).** Two processes saving 300 distinct entries each under the lock: 600 of 600 survive. A kill fuzz (60 SIGKILLs of a looping saver): the file is never torn and never smaller; three staging files are left (A9-37). Two sessions on one file: a delete by the second beats the first's edit, and for the same key the later saver wins; both are the stated contract and lose the other session's edit without a word (not filed: documented in the fixer's limits). An idle instance writes nothing (inode and mtime). The lock is the weak part: `SaveStore` and `Settings::SaveTo` do not look at `FileLock::Held()`, so a lock file that cannot be opened (a folder at its path stands in for a lock file another user made) gives silent unlocked saves, and 301 of 600 entries survive (A9-33). A stale lock cannot occur on POSIX (flock goes with the process).
+* **`Settings::SaveTo`.** It rewrites the parsed keys, not the lines: comments are erased (A9-34), a byte-order mark makes the first section header unreadable and the save then writes its keys under `[]` (A9-34), and a key whose value equals the loaded one is not written even if another instance changed it since (A9-35). The line-end hardening of A9-12 holds for settings and is absent from names and notes (A9-36, API level only).
+* **`ParseAddressWord` and the eight-digit saves.** Odd widths, prefixes, signs, nine digits, a 64-bit form, `0x` alone, `0x0600_4100`, a line with an address and no name: all as designed (`AddressWords`, 15 lines). The fixer's reason for skipping letters-only old addresses is wrong: the BIOS ROM holds them (A9-32). Whitespace-only and padded names are not round-trip safe (A9-31).
+* **`ReadFileCapped`.** FIFO and `/dev/zero` refused without waiting; a file growing under 300 reads gave only Ok (within the cap) or TooLarge; a link loop is reported as Missing (A9-38). A file that shrinks while read is read short, which nothing can tell (A9-17 f).
+* **Lone CR.** `SplitLines` is right for LF, CRLF, CR, and `\n\r` (an empty line between). The names, notes and bounds loaders all use it. Not filed.
+* **`SetSaveErrorHandler`.** Every save site reports: notes after an edit and after Clear Comment (handler, set in `App::Initialize` before the notes are loaded), notes at exit, names at each rename, Load Symbols and exit, the starts at each change, settings at the retry loop (once) and at exit. Two reports are only in the Log: a failed `settings.ini` save at exit (the window is closing) and the notes at exit when the earlier edit saves already failed (the user saw those). Not filed. A refused file is reported at each save attempt, not once.
+* **Fuzz.** `LoaderFuzzTests` modules names, comments, bounds, settings and lifecycle at seed 31, 3,000 cases each, `SE_LOADFUZZ_NOFIXED=1`: 0 violation classes outside the ledger (only the accepted `HARDLINK_SPLIT`, not seen).
+
+### Judgement on A8-48 (routed from area 8)
+
+Confirmed by reading `DecompilerPanel.cpp` (`UnparsedVolatileProblem` ends "... to replace it." and `BeginVolatileEdit` appends ". Applying the text unchanged ..."): the popup's opening line for a saved list over 2,047 characters has two full stops. The guide's claim is true only of the unchanged text: the box is full, so the first possible edit is a Backspace and Apply then replaces the saved list with the cut less a character (a range at an address the list never held). The row stays open (P3), and its expected fix stands. One addition: the branch in `BeginVolatileEdit` that sets "The saved list is longer than ... shown cut here" when `mVolatileError` is empty cannot be reached, because a saved list of 2,048 characters or more is never in force (`SetVolatileMemory` refuses it) and `UnparsedVolatileProblem` is therefore always set; it is dead code with a text nobody sees. The other texts (the "NOT in force" line, the tooltip, the amber line after a failed Apply) are true in every state read.
+
+### Open rows checked
+
+* **A9-16** (Load Raw Dump always at base 0): still open; `App.cpp` `ExecuteTopBarCommand` calls `OpenFullDump(path, 0)`.
+* **A9-17** (what the oracle does not hold): still true; A9-39 records what this round adds.
+* **A9-29** (spliced record): fixed as the ledger says. Area 9 round 1's headings (`The loaders` to `For the next round`) are one section, and round 2's Routed / For the next round are followed by a different area's section only because later sections were appended after it; no text of another area is inside.
+* **A9-23** (Windows): not checked, as instructed.
+
+### Runs
+
+| Run | Result |
+|---|---|
+| `SaturnExplorerArea9Round3Tests` (under `ulimit -v 3500000`, `timeout`) | all passed; pins print `PIN A9-31` to `A9-38` as holding |
+| `SaturnExplorerLoaderFuzzTests`, five text modules, seed 31, 3,000 cases | 0 classes outside the ledger |
+
+The pins assert today's behaviour: when a finding is fixed, its check fails and is turned round in the same change.
+
+### For the next round
+
+* A9-33 and A9-34 are the ones worth fixing first (the lock is the A9-20 guard, and it is silent when it cannot work).
+* A lock file owned by another user is stood in for by a folder; a run with a second account would settle whether the open fails as modelled.
+
+## Area 9 fixer (A9-31 to A9-38, A8-48)
+
+Branch `review/9-round3-fix` from master `16629836`. Fixes the P3 rows of area 9 round 3 and A8-48; each pin in `Area9Round3Tests` was turned round to hold the fix, and each was shown to fail with its fix reverted (list below).
+
+### What changed
+
+| Row | Change | Test that holds it (fails with the fix reverted) |
+|---|---|---|
+| A9-33 | `SaveStore` and `Settings::SaveTo` refuse when `!FileLock::Held()`, with a message naming `<file>.lock`; the existing handlers (`SetSaveErrorHandler`, the Log, the settings retry loop) report it. Refuse, not save-with-warning: the lock is the only guard between two instances, and a warning after a lost entry cannot undo the loss. Cost: a user whose lock file is owned by another user cannot save until it is removed; the message says which file. | `LockNotHeld`, 4 checks |
+| A9-31, A9-36 | `CleanEntryText` (`AddressNameLine.h`): line ends become spaces, both ends trimmed, blank is a delete; used in `FunctionNames::Rename` and the notes edit. | `WhitespaceNames`, `NameInjection`, 6 checks |
+| A9-32 | 2 to 4 lower-case letters a-f alone are an address when inside the BIOS ROM (0 to 0x7FFFF); one letter, longer words and capitals stay words. Log warnings and the header comment corrected. Cost: a prose line starting with such a word followed by text ("bad idea") now names 0xBAD. | `LettersOnlyBiosAddresses`, 2 checks |
+| A9-34 | `SplitLines` skips a leading byte-order mark. `Settings::SaveTo` merges by lines: comments, order and unknown lines kept, changed key rewritten in place, new key after the last key of its section, new section at the end. | `SettingsRewrite`, `AddressWords`, 4 checks (2 for the mark, 2 for the merge) |
+| A9-37 | `RemoveStaleStagingFiles`, under the lock: regular files named exactly `<file>.separt-<pid>-<n>` whose process is gone or that are over ten minutes old. Links, folders, other names, and live writers' files stay (all four checked). POSIX only. `.lock` files stay. | `KillFuzz` |
+| A9-38 | ELOOP is Unreadable (ENOTDIR stays Missing). | `CappedReads` |
+| A8-48 | One full stop in the popup's opening line; dead "shown cut here" branch removed; the guide says any edit replaces the whole list. | `DecompilerTrustTests` probe 7 case 10 (run with `SE_TRUST_PROBE7=1`; fails with the fix reverted) |
+| A9-35 | Accepted: `SaveSettings` sets every key every time, so "keys set" cannot tell a choice from a refresh; comparing with the loaded value is what keeps another instance's keys. Pin renamed `ACCEPTED A9-35`. | |
+| A9-16, A9-17 | Accepted with reasons in the rows (a base-address dialog is a UI change; A9-17 is an instrument row). | |
+
+A9-23 untouched. A byte-order mark in a file is dropped by the next save of that file (the stores rewrite lines they keep; `SplitLines` no longer returns it).
+
+### Runs
+
+| Run | Result |
+|---|---|
+| `SaturnExplorerArea9Round3Tests` | all passed; each fix's checks shown failing with that fix reverted (table above) |
+| `SaturnExplorerLoaderFuzzTests`, seed 4417, 3,000 cases per module, directed and two-process cases included | 37,985 cases, 0 classes outside the ledger (only the accepted A9-28 hard link). Run once earlier at the same seed: 3 `SET_DIFFERS` from the oracle's own list holding a byte-order-mark line, which is now an entry when first in a file; the list was changed |
+| Full `ctest` (`-j2`, `ulimit -v 3500000`) | 109 of 109 passed (103 + 6 Live), no new test target. An earlier run failed `FunctionNamesTests` and the fuzz oracle on "add it later": the first cut of A9-32 took capitals and every case of the letters; narrowed to lower case and the test and oracle prose lines changed to "Add it later" |
+| `SaturnExplorerDecompilerFaultTests` | see the hand-back |
+
+`App.cpp` is not part of the build in this configuration; its change (four Log strings) is text only and was not compiled.
+
+## Area 9, round 4
+
+Branch `review/9-round4` from master `7893bf84`. An adversarial round on the area 9 fixer (A9-31 to A9-38) and the Windows run's A9-40. **No product code changed.** The round adds `FrontEnd/tests/Area9Round4Tests.cpp` (ctest `SaturnExplorerArea9Round4Tests`, Linux; `CMakeLists.txt` target beside the loader fuzz), corrects one reference reading in `LoaderFuzzTests`, confirms A9-40 and files A9-41 (**P2**), A9-42, A9-43 and A9-44 (P3). **One P2: the round is not clean.**
+
+### What was attacked, and how
+
+* **A9-32 (letters-only BIOS addresses).** The fixer's cost line ("a prose line starting with such a word ... now names 0xBAD") is the A9-18 finding (P2) back for lower case: `add it later`, A9-4's and A9-18's own example, is again the function start 0xADD in `saturn_function_bounds.txt`; `be careful ...` is 0xBE and `fade in handler ...` 0xFADE (even, callable BIOS addresses), and no line is skipped, so the Log says nothing. In the names file the same lines are names. Clearing the stray start, the only way to get rid of it, deletes the user's remark line. The fixer turned the A9-18 test and the oracle's prose line to `Add it later` and made the oracle's reference reading copy the new rule, so the fuzz cannot see it. Judged against the old skip-and-warn: the old behaviour lost an older version's BIOS name with a Log line that pointed at the line (A9-32, P3); the new one makes wrong entries in the file the user annotates by hand with no line at all, the A9-18 class at its own severity. **A9-41, P2.**
+* **A9-33 (refuse without the lock).** Run as an ordinary user (root drops to nobody in a child). A lock file of another user (root's, 0644): refused, the text names the file; after the user deletes it, the next save writes the pending change (the session's base is not advanced by a refused save, so nothing is dropped). In a folder the user cannot write, and when the folder is gone, the refusal blames the lock file with three causes none of which holds, and no OS reason (**A9-42, P3**). Never retried: names and notes are saved again at exit and at the next edit, the settings every five seconds; the function starts only at the next change, never at exit (**A9-43, P3**, by reading `App::Shutdown`). The refusal is in the Log for names, notes and starts, and on the status line for settings.
+* **A9-40 (the save waits for the lock).** Confirmed on Linux: another process holding `<file>.lock` for 3 s made `SaveStore` and `Settings::SaveTo` each take 3.00 s, then save (`PIN A9-40`). Kept at P3: nothing is lost or wrong, a SaturnExplorer holder holds the lock for one read and one write, and a dead holder is released; only a stuck holder (a hung instance on a stalled network folder, a debugger, a `flock` script) freezes the window. No same-process double lock exists (the only `FileLock` users are `SaveStore`, `Settings::SaveTo` and `SpecBundle`, each on its own file, never nested); the descriptor is close-on-exec and the Windows handle not inheritable, so a child process cannot keep the lock.
+* **A9-34 (settings merge by lines).** A duplicated key (both lines take the change, the loader's last one wins), a section written twice (a new key goes to the first part, a changed key is rewritten where it stands, a key only in the second part is written in both, which reads back right), the same key in two sections, `  [ DeCompiler ]  ` and `\tBIOS\t=`, no final line end, CRLF (lines come back LF), a byte-order mark with CRLF and a new section (no `[]`, the mark dropped), a header with a remark after it (not a header to the loader or the merge alike), a key before any section: every one reads back with the change and keeps the rest. No finding. Out of scope and not filed: a UTF-16 `settings.ini` (PowerShell 5 `Out-File`) loads no keys and no message, before and after the fix.
+* **A9-37 (`RemoveStaleStagingFiles`).** It runs only under the lock, and every writer of the stores and settings writes its staging file while holding the same lock, so no live writer of that file can have one then. Shown: a child holds the lock with a 15-minute-old staging file of its own (a slow save); the parent's save waits for the lock, and the child's file is there until it renames it; both writes are in the file. A reused pid (alive, fresh) stays; an old file of a live pid goes (stale by construction under the lock); a pid past `pid_t` (`kill(-1, 0)` succeeds) stays; pid 0 goes; another file's staging and a near name stay. Another user's process is `EPERM`, alive. Two machines on one network folder where `flock` is local only would see each other's live writers as dead, but there the instances have no lock between them at all. Windows does nothing (A9-37's litter stays there). No finding.
+* **A9-31 / A9-36 (`CleanEntryText`, blank is a delete).** Import never goes through `Rename`, and the reader skips a name that is only white space (`\f\v\t`), so an import deletes nothing (both lines skipped and counted). `Rename` with white space deletes, as documented; a no-break space (UTF-8 `C2 A0`, not white space to `isspace` in the C locale; the application sets no locale) is a name and reads back the same. No finding.
+* **A9-38.** A names file that is a link loop: `Load` refuses with a reason, the save is refused, the link stays. Holds.
+* **Fuzz.** `LoaderFuzzTests` at a fresh seed, 5309, 3,000 cases a module, directed and two-process cases included: 37,985 cases. The first run reported `settings/DIFFERS_FROM_FORMAT` and `settings/ROUNDTRIP` (index 1576: a byte-order mark that opens the file, before `[decompiler]`). The product is right (A9-34: the mark is skipped); the oracle's settings reference had not followed the fix and read the first header as a key line. Corrected in the test (the reference skips a mark that opens the file, nowhere else); the rerun: 0 classes outside the ledger (only `HARDLINK_SPLIT`, A9-28). Seed 8123, 15,000 cases a module, text modules, `NOFIXED`: 0. The `concurrent` module at 40 rounds and `Area9Round3Tests` (`LockNotHeld`: 600 of 600 under the lock, `KillFuzz`): pass.
+
+### Findings
+
+| Row | Severity | Summary | Test |
+|---|---|---|---|
+| A9-40 | P3 (confirmed) | a save waits for another process's lock with no limit, on Linux as on Windows | `LockWait` (`PIN A9-40`) |
+| A9-41 | **P2** | A9-32's fix makes lower-case prose lines (`add it later`, `be careful`, `fade ...`) entries again, with no Log line; the oracle was changed to match | `ProseLinesAreEntries` (`PIN A9-41`) |
+| A9-42 | P3 | the lock refusal blames the lock file when the folder cannot be written or is gone | `LockRefusal` (`PIN A9-42`) |
+| A9-43 | P3 | a refused save of the function starts is not tried again at exit | read |
+| A9-44 | P3 | instrument row: what this round adds | |
+
+The pins assert today's behaviour: when a finding is fixed, its check fails and is turned round in the same change.
+
+### Runs
+
+| Run | Result |
+|---|---|
+| `SaturnExplorerArea9Round4Tests` (under `ulimit -v 3500000`, `timeout`) | all passed; `PIN A9-40`, `A9-41`, `A9-42` print as holding |
+| `SaturnExplorerLoaderFuzzTests`, seed 5309, 3,000 cases a module, all modules | 37,985 cases, 0 classes outside the ledger after the reference correction (2 oracle artefacts before it) |
+| `SaturnExplorerLoaderFuzzTests`, seed 8123, 15,000 cases a module, names, comments, bounds, settings, `NOFIXED` | 0 classes outside the ledger |
+| `SaturnExplorerLoaderFuzzTests` `concurrent`, 40 rounds; `SaturnExplorerArea9Round3Tests` | pass |
+| Full `ctest` (`-j2`, `ulimit -v 3500000`), Live tests included | 110 of 110 passed: 103 + 6 Live on master, plus the new `SaturnExplorerArea9Round4Tests` |
+
+### For the fixer
+
+* A9-41 first. The fix A9-32 offered as its alternative keeps the old safety: skip letters-only words as before, and make the skip warning say that `dead` may be an older version's 0x0000DEAD and should be written `0000DEAD`. Give the oracle an independent lower-case prose list back (`add it later`, `be careful`, `fade in`), so `PROSE_AS_ADDRESS` can fire.
+* A9-40, A9-42 and A9-43 go together: a bounded wait that refuses through the existing path needs the starts to be retried (A9-43), and the refusal text needs the real cause (A9-42).
+
+## Area 9 fixer (A9-41, A9-42, A9-43, A9-40)
+
+Branch `review/9-round4-fix` from master `190438f5`. Product code changed: `AddressNameLine.h`, `App.cpp`, `FileWrite.cpp/.h`, `StoreMerge.h`, `Settings.cpp`.
+
+### What was done
+
+* **A9-41 (P2).** `ParseAddressWord` skips a word of the letters a-f alone again, in every file (names, symbol maps, notes, function starts): `add it later`, `be careful`, `fade in`, `bad idea`, `dead code` are skipped and counted, so the Log warns, and the remark stays in the file. The skip warning (five places in `App.cpp`) says the line may be an old unpadded address and should be written as eight digits (`0000DEAD`). A9-32's corrected Log text (eight digits or 0x) is kept. The A9-18 test is back to lower-case `add it later` (`FunctionNamesTests`), `Area9Round3Tests` `LettersOnlyBiosAddresses` now holds the skip and the padded form, `Area9Round4Tests` `ProseLinesAreEntries` became `ProseLinesAreSkipped` (names and bounds files, the remark kept by a save), and the fuzz oracle's prose line is `add it later`. The oracle's reference now skips a letters-only word by its own test (the whole word is alphabetic and shorter than eight, no 0x) and no longer copies the product rule. A9-32 is marked resolved by the warning.
+* **A9-42 (P3).** `FileLock` keeps the OS error of the open or the lock; `FileLock::WhyNotHeld()` gives the text. `SaveStore` and `Settings::SaveTo` put it in the refusal: "cannot create or lock `<file>`.lock: Permission denied" (folder not writable), "...: No such file or directory" (folder gone).
+* **A9-43 (P3).** `App::Shutdown` saves the function starts after the names (`mFunctionBounds.Save`, which writes nothing when nothing is pending), and logs a failure.
+* **A9-40 (P3).** `FileLock` waits at most `kWaitMs` = 3000 ms (retry every 20 ms with `LOCK_NB`), then `Held()` is false and `WhyNotHeld()` says "another process has held `<file>`.lock for more than 3 seconds"; both stores refuse through A9-33's path and keep the change pending. The same bound applies to `SpecBundle`'s lock, whose caller already works without the lock.
+
+### Windows
+
+The Windows branch of `FileLock` was changed the same way and not compiled or run here: `LockFileEx` with `LOCKFILE_FAIL_IMMEDIATELY` in a loop with `::Sleep(20)`, `GetLastError` as the error, `std::system_category().message` for the text. `App.cpp` is linked by no test target and no target builds it here; the A9-43 and Log-text edits were checked by reading only.
+
+### Bite proofs (each fix reverted, the pin run, restored)
+
+| Fix reverted | Result |
+|---|---|
+| A9-41 (the A9-32 rule back) | `ProseLinesAreSkipped` 3 checks, `LettersOnlyBiosAddresses` 3 and `FunctionNamesTests` 1 fail; LoaderFuzzTests seed 9, `names`/`bounds`/`comments` each report `PROSE_AS_ADDRESS` (NEW) |
+| A9-42 (old lock text) | `LockRefusal` 2 `FIX A9-42` checks fail |
+| A9-40 (bound set to 600 s) | `LockWait` 3 of 4 checks fail (waited 5.02 s) |
+| A9-43 | not testable (`App.cpp` is in no test); read only |
+
+### Runs
+
+| Run | Result |
+|---|---|
+| `SaturnExplorerArea9Round4Tests`, `Area9Round3Tests`, `FunctionNamesTests`, `FileWriteTests` | all passed; `LockWait`: `SaveStore` gave up at 3.00 s, `Settings::SaveTo` at 3.02 s for a holder of 5 s, files untouched, the retry wrote |
+| `SaturnExplorerLoaderFuzzTests`, seed 7741, 3,000 cases a module, all modules, directed and two-process cases | 37,985 cases, 0 classes outside the ledger (only `HARDLINK_SPLIT`, A9-28) |
+| `concurrent` module (two-process saves), `Area9Round3Tests` `LockNotHeld` | pass |
+| Full `ctest` (`-j2`, `ulimit -v 3500000`), Live included | 110 of 110 passed (103 + 6 Live on master, plus `SaturnExplorerArea9Round4Tests`; no new test this round) |
+| `SaturnExplorerDecompilerFaultTests` | 0 of 94 jobs failed |
+
+Docs: `Docs/Codebase/Systems/Decompiler.md` (the file table and "Saving the user's files") and the ledger rows A9-32, A9-40 to A9-43.
+
+## Area 9, round 5
+
+Branch `review/9-round5` from master `c5268769`. An adversarial round on the area 9 fixer's round 4 changes (A9-40 to A9-43) and on parts of area 9 the earlier rounds did not reach. **No product code changed.** The round adds `FrontEnd/tests/Area9Round5Tests.cpp` (ctest `SaturnExplorerArea9Round5Tests`, Linux; `CMakeLists.txt` target beside round 4's) and files A9-45 (**P2**), A9-46, A9-47, A9-48 and A9-49 (P3). **One P2: the round is not clean.**
+
+### What was attacked, and how
+
+* **A9-41 (letters-only words skipped).** Every reader of an address word goes through `ParseAddressWord`: names (`FunctionNames::Load`), symbol maps and Load Symbols (`Import`), notes (`AssemblyPanel::LoadComments`), starts (`ClassifyBoundsLine`). The settings values that hold addresses are whole-field parses (the volatile list, `ParseAddressRanges`; the entry box, `ParseHexAddress`), where a letters-only word is an address on purpose and a bad entry refuses the whole list. The letters-only fix holds in all of them. The oracle's reference is now independent for letters (its own `isalpha` test). But the same hole is open for digits: a first word of decimal digits is an address, so a remark that opens with a year, a day, a count or a date (`2026 trace: ...`, `12 Nov: ...`, `2 more below`, `20261104 ...`) is a function start or a name, silently. That is A9-4's case (a remark that opens with a word spelled in hex digits), closed by A9-18 and A9-41 for letters only, and the oracle shares the product's reading of digit words, so it cannot see it. Rated as A9-41 was: **A9-45, P2**. The bounds file has always been written with eight digits (`%08X` since b21b3110), so its unpadded reading serves only hand-typed starts.
+* **A9-40 (the bounded wait).** A refused save keeps its change pending and the next successful save writes it, for names, starts and settings (`LaterSaveCarriesRefused`, holds). A SaturnExplorer holder holds the lock for one read and one write: 0.27 s for a names file at the 8 MiB cap here, so a long save by another instance does not make this one refuse unless that save is stuck or on a very slow disk. (Starvation of the 20 ms poll by a holder that takes the lock again at once was not measured; a SaturnExplorer instance saves on a change and every few seconds, not in a loop.) At exit the wait no longer ends in a save: a change still pending when another process holds the lock past 3 s is gone at the next start, and the refusal goes to the Log panel, which closes with the window (**A9-46, P3**: before A9-40 the exit waited and saved). With a stuck holder the settings retry still freezes the UI thread 3 s in every 8 s (read). A crash loses what is pending, as before.
+* **SpecBundle without the lock.** Its caller retries at each request (`SaturnArchitecture.cpp` keeps the stage Fresh on a failure, and verifies again when Ready), and a verified directory is used without the lock; a fresh configuration folder whose lock another process holds for 5 s gives "Decompiler unavailable" at 3.00 s and extracts at the next request. The decompiler is not lost. Its text still blames the lock file ("cannot be opened") after a timeout (A9-47).
+* **A9-42 (`WhyNotHeld`).** The stores' three refusal causes give the true text (a folder that cannot be written, a folder gone, a timeout; round 4's `LockRefusal` and `LockWait` pass). Not reached: `SpecBundle`'s own text; `FileLock(wait=false)` reports `EWOULDBLOCK` as "cannot create or lock ...: Resource temporarily unavailable", so the "another process holds" branch is dead on POSIX; the Windows loop retries every `LockFileEx` failure until the bound and calls it a timeout (read). **A9-47, P3.**
+* **A9-43 (`App::Shutdown` saves the starts).** Read: the order is the engine thread joined, settings, Watch session, notes, names, starts, `CloseData`; the starts save uses the same path as `req.boundsChanged` and writes nothing when nothing is pending; a failure is logged. Right, but the log is not seen (A9-46).
+* **Full disk mid-write.** `RLIMIT_FSIZE` in a child (`EFBIG` at the write) and a real `ENOSPC` on a 64 KiB tmpfs: the save is refused with the OS reason ("No space left on device"), the data file is as it was, no `.separt-` file is left, and the change is written once there is space (names, settings). Holds.
+* **Durability.** No save asks for its bytes to reach the device: nothing in the tree calls `fsync` (the test interposes it and counts 0 calls), though `FileWrite.h` says the rename happens "once they are safely on disk". A power cut soon after a save can leave an empty file on file systems that do not order the data before the rename (**A9-48, P3**).
+* **Read-only files.** A read-only data file is refused with a message (A9-28's fix); a read-only folder gives A9-42's text. Hold (round 4's tests).
+* **Long lines and the cap.** A names file of exactly 8 MiB that is one line (one name of 8 MiB less 10 bytes) loads; one byte more is refused at load and no save replaces it; a rename that would take the file past the cap is refused with the reason and the file is untouched. Hold.
+* **Unicode and spaces.** A working folder `dir with spaces üñï ディレクトリ`, files `starts file.txt` and `settings file.ini`, UTF-8 names (Japanese, U+2713, é) and a name with U+2028 (not a line end to the loaders), a BIOS path with spaces and Japanese: all read back as written. A UTF-8 byte-order mark in front of the names file does not lose the first entry (`SplitLines` skips it). Hold. On Windows every file call is an `A` function (`fopen`, `CreateFileA`, `MoveFileExA`), consistently, so a path outside the ANSI code page fails everywhere alike; not filed here.
+* **Fuzz.** `LoaderFuzzTests` at a fresh seed, 48271, 3,000 cases a module, all modules, directed and two-process cases: 37,985 cases in 62 s, 0 classes outside the ledger (only `HARDLINK_SPLIT`, A9-28). The `concurrent` module at 40 rounds and 4 processes, `Area9Round3Tests` (`LockNotHeld`, `KillFuzz`) and `Area9Round4Tests` (`LockWait`: 3.01 s and 3.02 s): pass.
+
+### Findings
+
+| Row | Severity | Summary | Test |
+|---|---|---|---|
+| A9-45 | **P2** | a remark line that opens with a number (`2026 trace`, `12 Nov`, `2 more`, `20261104`) is a function start, a name or a note, with no Log line; the oracle reads digits as the product does | `DigitProseLines` (`PIN A9-45`) |
+| A9-46 | P3 | a save refused at exit after the bounded wait is lost, said only in the closing Log; a stuck holder freezes the settings retry 3 s in 8 | `RefusedAtExit` (`PIN A9-46`), read |
+| A9-47 | P3 | `SpecBundle`'s timeout text, `FileLock(wait=false)`'s text, the Windows loop's retry of every failure | `LockTexts` (`PIN A9-47`), read |
+| A9-48 | P3 | no `fsync` before the rename, against `FileWrite.h`'s "safely on disk" | `NoSyncBeforeRename` (`PIN A9-48`) |
+| A9-49 | P3 | instrument row: what this round adds | |
+
+The pins assert today's behaviour: when a finding is fixed, its check fails and is turned round in the same change.
+
+### Runs
+
+| Run | Result |
+|---|---|
+| `SaturnExplorerArea9Round5Tests` (under `ulimit -v 3500000`, `timeout`) | all passed; `PIN A9-45` to `A9-48` print as holding; with `SE_A9R5_FULLDIR` on a 64 KiB tmpfs the `ENOSPC` case passes too |
+| `SaturnExplorerLoaderFuzzTests`, seed 48271, 3,000 cases a module, all modules | 37,985 cases, 0 classes outside the ledger |
+| `concurrent` module, 40 rounds, 4 processes; `SaturnExplorerArea9Round3Tests`; `SaturnExplorerArea9Round4Tests` | pass |
+| Full `ctest` (`-j2`, `ulimit -v 3500000`), Live tests included | 111 of 111 passed: 104 + 6 Live on master, plus the new `SaturnExplorerArea9Round5Tests` |
+
+### For the fixer
+
+* A9-45 first. The bounds file needs no unpadded reading at all (the application writes eight digits): take eight digits or `0x` there and skip and warn on the rest. For the names and notes files, an unpadded first word that lands in the BIOS ROM (below 0x80000: a year, a day, a count) is the A9-32 trade that A9-41 already took for letters; skip it with the same warning. Give the oracle a prose list with numbers so `PROSE_AS_ADDRESS` can fire for them.
+* A9-46 with A9-47: at exit wait longer, or say a refusal before the window goes; take the settings lock without blocking the frame; use `WhyNotHeld()` in `SpecBundle`.
+
+## Area 9 fixer (A9-45 to A9-50)
+
+Branch `review/9-round5-fix` from master `5320680e`. Product code changed; the ledger rows A9-45 to A9-48 and A9-50 are fixed (A9-49 is an instrument row). `App.cpp` and the Windows code are not compiled on Linux: read against the headers.
+
+### What changed
+
+* **A9-45 (P2).** `ParseAddressWord` (`AddressNameLine.h`) takes a `strict` flag. `saturn_function_bounds.txt` reads strict: only eight hex digits or `0x` and up to eight are starts; `2026 trace`, `12 Nov`, `3D engine` and an unpadded start are skipped and counted, and the Log text says to write a start as eight digits and a remark after the address or a semicolon. The names, symbol-map and notes files skip an unpadded word without `0x` below 0x80000 (a year, a day, a count), counted, with the A9-41 warning (`App.cpp` text now names numbers). An older version's unpadded address (`6004000`) is always above that and still loads. Left open by nature: a remark that opens with an eight-digit date (`20261104 ...`) is indistinguishable from an address. The fuzz oracle (`LoaderFuzzTests.cpp`) has its own rule for the number case (`strtoul` and the 0x80000 test, plus a bounds mode, not the product's function) and its malformed list has number-led prose, so `PROSE_AS_ADDRESS` fires for it (shown below). `AddressWords` (round 3) changed: `1a x` is skipped, `0x1a x` loads, `7ffff x` is skipped, `80000 x` loads.
+* **A9-50 (P3).** `Area9Round3Tests` `Hammer` retries as the product does: a refused `SaveStore` keeps the change pending and the next save carries it; the last save is retried until it succeeds, so "two instances lose none" still proves no entry is lost. Is 3 s too short? No: a holder keeps the lock for one read and one write (0.28 s at the 8 MiB cap), about ten times less, and a session saves on a change, not in a loop. The failure came from the test's own load (600 saves in a tight loop in two processes; the poll sleeps 20 ms and `flock` is not fair, so a process that retakes the lock at once can starve the sleeper past 3 s on a loaded machine). The bound stays.
+* **A9-46 (P3).** `FileLock::SetClosing(true)`, the first thing `App::Shutdown` does after the engine stops, makes lock waits 10 s (`kExitWaitMs`); a save still refused at exit (settings, notes, names or starts) is said in a message box before the window goes (`NoticeAtExit`: `MessageBoxA` on Windows, stderr elsewhere). The frame's settings retry is `SaveSettings(false)`: `Settings::Save(error, wait=false)` makes one try and no wait, and tries again 2 s later (5 s for a waited save), so a stuck holder costs the frame nothing. Not changed: the notes, names and starts saves made on a user action still wait up to 3 s on the UI thread when a holder is stuck.
+* **A9-47 (P3).** `SpecBundle` puts `lock.WhyNotHeld()` in its text (shown: "another process has held ... for more than 3 seconds"). POSIX records no error for `EWOULDBLOCK`, so a refused try says "another process holds ...". Windows (not compiled here, kept to a few lines): the loop retries only `ERROR_LOCK_VIOLATION` and `ERROR_SHARING_VIOLATION`; any other `LockFileEx` error is kept and ends the loop at once.
+* **A9-48 (P3), chosen: sync, do not weaken the header.** The staged file is flushed before the rename (`fflush`, then `fsync`; `F_FULLFSYNC` first on macOS; `FlushFileBuffers` on Windows), only on the staged path (a device written in place refuses `fsync`), and on POSIX the folder is `fsync`ed after the rename (best effort: the file is published already). `EINVAL`, `ENOTSUP`, `EROFS` from the sync are not failures (a file system that cannot sync); another error refuses the save with the reason and the old file stays. The cost is two syncs per save of a few KiB, on a user action or an interval. The header's "safely on disk" is now true. The Windows and macOS branches are not compiled here.
+
+### Pins flipped, and proof that each bites
+
+Every `PIN` in `Area9Round5Tests` became a check of the fixed behaviour (the `Pin` helper is gone). With the product fixes reverted (all of them, one build) the test fails with 13 checks (A9-45 four, A9-46 five, A9-47 two, A9-48 one, and A9-40's 3 s bound as a side effect of the `EWOULDBLOCK` revert), `Area9Round3Tests` with 4, and `LoaderFuzzTests` (seed 7, 500 cases) reports `names/PROSE_AS_ADDRESS`, `bounds/PROSE_AS_ADDRESS` and `comments/PROSE_AS_ADDRESS` from the new oracle lines. The fixes were then restored (`git checkout`) and everything rebuilt.
+
+### Runs
+
+| Run | Result |
+|---|---|
+| `SaturnExplorerArea9Round3Tests`, 5 times beside a `-j2` build of the whole tree | 5 of 5 passed (the load did not refuse a save this time; the retry path is also covered by `LaterSaveCarriesRefused`) |
+| `SaturnExplorerArea9Round5Tests` | all passed (exit save waits 5.01 s and writes; frame try-lock refuses in 0.000 s; 2 sync calls for each of three kinds of save; `SpecBundle` text "another process has held ... for more than 3 seconds") |
+| `SaturnExplorerLoaderFuzzTests`, seed 91357, 3,000 cases a module, all modules, directed and two-process cases | 37,985 cases in 65 s, 0 classes outside the ledger (only `HARDLINK_SPLIT`, A9-28) |
+| Full `ctest -j2 --timeout 900` (`ulimit -v 3500000`), Live tests included | **111 of 111 passed** (216 s): 105 + 6 Live; no test was added (the fixer changed existing ones) |
+| `SaturnExplorerDecompilerFaultTests` (fault suite) | 0 of 94 jobs failed (90.8 s) |
+
+### Not done, routed
+
+* Windows and macOS code (`LockFileEx` error handling, `FlushFileBuffers`, `F_FULLFSYNC`, `MessageBoxA`) and `App.cpp` (`Shutdown`, `SaveSettings(bool)`) are read against the headers, not compiled; the next Windows build is the check.
+* The notes, names and starts saves made on a user action still wait up to 3 s on the UI thread behind a stuck holder; only the settings retry was moved off the wait.
+* A remark opening with an eight-digit date still reads as an address (indistinguishable); remarks belong after a semicolon.
+
+## Area 9, round 6
+
+Branch `review/9-round6` from master `521dc0e5`. An adversarial round on the area 9 fixer's A9-45 to A9-50. **No product code changed.** The round adds `FrontEnd/tests/Area9Round6Tests.cpp` (ctest `SaturnExplorerArea9Round6Tests`, Linux; `CMakeLists.txt` target beside round 5's) and files A9-52 to A9-55 (P3) and the instrument row A9-56. **No P1 or P2: the round is clean** (the first of the two clean rounds area 9 needs).
+
+### What was attacked, and how
+
+* **A9-45 (unpadded words below 0x80000 skipped; the bounds file strict).** The question was whether a real old file now loses real entries. Older versions saved names and notes with `%x` (`std::hex` before 1338f12, `%x` until a735123a on 2026-11-05), so every name an older version kept at a BIOS ROM address is unpadded (`1c0 bios_init`). Shown (`OldUnpaddedFile`): such lines are skipped and counted, the Log line names the first one and says to write eight digits, and a later save keeps them in the file as written; the RAM names (`6004000`, `200400`) load; padded or with `0x` the BIOS names load. A symbol map from another tool that writes short BIOS addresses imports nothing and counts every line. So the cost is a name not shown, said in the Log, with nothing removed from disk: the A9-32 trade that A9-41 took for letters, now for digits, against A9-45's silent wrong starts. P3 by the round 5 reasoning, not filed again. The guide was not updated to the new rule (**A9-54, P3**). The oracle: `ParseSymbolRef` now has its own number test (`strtoul`, 0x80000, a bounds mode) and number-led prose in its malformed list; it implements the same rule independently of the product's function, so it would catch a product that drifts from the rule, but not a hole in the rule itself. Two such holes are left open by nature and are now held as `RESIDUAL` checks: a bounds-file remark opening with an eight-digit date (`20261104 starts found by the trace`) is the start 0x00261104, with no Log line, and `250000 cycles` in a names file names 0x00250000 (an older version wrote that address exactly so). **Judgement on the date:** P3, accepted. The bounds file invites a remark after an address, so `20261104 remark` is the valid form of a start at 0x20261104 and no reading can tell them apart; only the compact form opens such a line (a date with `-`, `/`, `.` or a colon after it is skipped: shown), and the Log text now says to put a remark after a semicolon. A cheap help would be an Info line at load giving the number of starts read, so a stray one is visible; not filed.
+* **A9-46 (exit waits 10 s; notice; the frame's no-wait try).** A store with nothing pending takes no lock (`SaveStore` and `Settings::SaveTo` return first), so a stuck holder costs a clean exit nothing (shown). With a change pending, a stuck holder refuses the exit save after 10.00 s with "more than 10 seconds". Four stuck locks (settings, notes, names, starts) held the exit 40.05 s, one after the other (`SE_A9R6_LONG=1`); that needs four stuck holders, while a stuck SaturnExplorer instance holds one lock at a time, so the realistic bound is 10 s. On Windows the window is destroyed before `app.Shutdown()` (`WM_CLOSE`, `DestroyWindow`, then the loop ends), so the wait freezes no window; the process is invisible while it waits. The notice is a box on Windows only; on the SDL2 desktop builds (Linux, macOS) it goes to stderr, where a desktop user does not look, and its text names a guessed cause (a lock or the disk) that is wrong for a store refused at load, and points to the Log that has closed (**A9-53, P3**). A settings change is not lost while the frame's no-wait try keeps failing: it stays pending, is tried every 2 s, and at exit waits 10 s and is then said. But the no-wait try is refused by another instance's ordinary save of the shared `settings.ini` (a 150 ms holder: refused; a waiting save in the same moment saved after 0.18 s), and the App shows "Could not save settings ... kept in memory only" in red in the status line and the Log; the retry 2 s later saves and the status line keeps the error (**A9-52, P3**: a loss reported that did not happen). `App.cpp` syntax-checks clean against the worktree's headers (`-fsyntax-only`, 0 errors).
+* **A9-47 (lock texts).** `FileLock(wait=false)` against a held lock says "another process holds" (round 5's `LockTexts`, passes); `SpecBundle` uses `WhyNotHeld()` ("more than 3 seconds", passes). The Windows loop now ends at once on an error other than a lock or sharing violation, with that error (read). No finding.
+* **A9-48 (sync before the rename).** The order is right: the staging file is synced, renamed over the path, then the folder is synced (`SyncOrder`; round 5's check only counted calls). A refused sync (`EIO` from an `fsync` hook) refuses the save with the reason, leaves the old file and no staging file, keeps the change pending, and the next save writes it, for names and settings; `EINVAL`, `ENOTSUP` and `EROFS` (a file system that cannot sync) save; a failed folder sync is ignored and the file is published. Cost here: 0.53 ms for a 4 KiB save with its two syncs, on saves made at a user action (a splitter saves on release, not per frame). The refusal text names the staging file, which is gone, and on Windows (read) loses the reason (`errno` read after `FlushFileBuffers`); on macOS (read) a failing `F_FULLFSYNC` falls back to `fsync` for every error (**A9-55, P3**).
+* **A9-50 (the reworked `LockNotHeld`).** Still a two-process proof: with `FileLock` mutated to take no lock (`flock` replaced by success), the test fails 3 of 3 ("two instances saving 300 entries each under the lock lose none"); restored, it passes 2 of 2 alone and 3 of 3 beside six busy loops on the four cores (no save was refused in those runs). The retry only lets a refused save be carried by the next one; the count of entries in the file is still the check.
+* **Fuzz.** `LoaderFuzzTests` at a fresh seed, 60617, 3,000 cases a module, all modules, directed and two-process cases: 37,985 cases in 64 s, 0 classes outside the ledger (only `HARDLINK_SPLIT`, A9-28). The `concurrent` module at 40 rounds and 4 processes beside six busy loops (load 3.5): 0 classes. `Area9Round5Tests` and `Area9Round6Tests` under the same load: pass.
+* **Routed, not filed (outside area 9's files):** `WatchPanel::SaveSession` (`saturn_explorer_watches.json`, saved in `App::Shutdown` between the settings and the notes) still writes with a truncating `std::ofstream` and checks nothing, the A9-3 class for the Watch panel's file.
+
+### Findings
+
+| Row | Severity | Summary | Test |
+|---|---|---|---|
+| A9-52 | P3 | the frame's no-wait settings try is refused by another instance's ordinary save, reported as an error, and the status line keeps it after the retry saves | `FrameTryCollides` (`PIN A9-52`), read |
+| A9-53 | P3 | the exit notice is stderr on the SDL2 builds, names a guessed cause, and omits the reason; the exit waits 10 s per pending store, settings first | `ExitWaits`, read |
+| A9-54 | P3 | `DECOMPILER_GUIDE.md` still gives the address rule of before A9-45 and A9-32 | read |
+| A9-55 | P3 | a refused sync names the removed staging file; Windows drops the reason; macOS passes over an `F_FULLFSYNC` error | `SyncRefused`, read |
+| A9-56 | P3 | instrument row: what this round adds | |
+
+### Runs
+
+| Run | Result |
+|---|---|
+| `SaturnExplorerArea9Round6Tests` (under `ulimit -v 3500000`, `timeout`) | all passed; with `SE_A9R6_LONG=1` too (four stuck locks: 40.05 s) |
+| `SaturnExplorerLoaderFuzzTests`, seed 60617, 3,000 cases a module, all modules | 37,985 cases, 0 classes outside the ledger |
+| `concurrent` module, 40 rounds, 4 processes, beside six busy loops | 0 classes outside the ledger |
+| `SaturnExplorerArea9Round3Tests` (`LockNotHeld`): alone, 2 runs; under load, 3 runs; with the lock mutated away, 3 runs | pass, pass, **fail 3 of 3** (the mutation; restored after) |
+| Full `ctest -j2 --timeout 900` (`ulimit -v 3500000`), Live tests included | **112 of 112 passed** (206 s): 105 + 6 Live on master, plus the new `SaturnExplorerArea9Round6Tests` |
+
+### For the fixer
+
+* A9-52 and A9-53 go together (the exit and the frame's try): treat "another process holds" in the frame as not yet a failure and clear the status after a later success; on SDL2 show the exit notice with `SDL_ShowSimpleMessageBox`, carry each store's own error into it, and save the user's work before the settings.
+* A9-54 and A9-55 are text: the guide's address rules, and the sync refusal's file name and reason on each platform.
+
+## Area 9 fixer (A9-51 to A9-55)
+
+Branch `review/9-round6-fix` from master `6849e85c`. Small, local fixes for the five P3 rows of round 6; A9-56 (an instrument row) is left as accepted. The store was not reshaped.
+
+| Row | Change | Pin |
+|---|---|---|
+| A9-51 | `App.cpp` logs the store's own text (it begins with its subject) instead of adding a second "Could not save ..." prefix; the settings status does the same for `Settings: ...` texts | none: `App.cpp` is not linked by a test (syntax-checked) |
+| A9-52 | `FileLock(path, wait, tryMs)`: the frame's no-wait settings try waits 250 ms; the "Could not save settings" status is cleared when a later save succeeds (`mSettingsStatus`) | `FrameTryCollides`: the try during a 150 ms holder now saves; behind a 2 s holder it still gives up in under a second with "another process holds" |
+| A9-53 | `SetClosing(true)` sets one 10 s deadline shared by every lock taken at exit; the exit notice lists each store's own error and no guessed cause; `SetExitNoticeHook` (set in `WebMain.cpp` to `SDL_ShowSimpleMessageBox`, plus stderr) | `ExitWaits` (four stuck locks: 4 of 4 refused after about 10 s, was 40 s; now always run), `NoticeHook` |
+| A9-54 | `DECOMPILER_GUIDE.md`: bounds file eight digits or `0x`; names and notes eight digits, `0x`, or an unpadded address at or above 0x80000; unpadded words below 0x80000 and letters-only words skipped with a warning | none: text |
+| A9-55 | the sync refusal names the target file; Windows keeps `GetLastError` after `FlushFileBuffers`; macOS falls back to `fsync` only when `F_FULLFSYNC` fails with `ENOTSUP` or `EINVAL` | `SyncRefused` (names `saturn_functions.txt`, not `separt`) |
+
+Not done: A9-53's "save the user's work before the settings" (the order is kept). Uncompiled: the Windows and macOS branches of `FileWrite.cpp`, `App.cpp` (syntax-checked with the worktree's include paths: clean), `WebMain.cpp` (syntax-checked against a stub `SDL.h`; no SDL2 on this machine).
+
+Bite proof: with the four fixes reverted together (target name, shared deadline, `tryMs` 0, hook ignored), `Area9Round6Tests` fails exactly the four checks ("A9-55 names the file", "PIN A9-53 fixed", "PIN A9-52 fixed", "A9-53 hands its text to the hook"); restored, it passes.
+
+Runs: full `ctest -j2` 112 of 112 (226 s; 106 + 6 Live; no new test target); `LoaderFuzzTests` seed 71903, 3,000 cases a module, all modules: 37,985 cases, 0 classes outside the ledger (only `HARDLINK_SPLIT`, A9-28); `concurrent` module 30 rounds, 4 processes: 0; `Area9Round3Tests` (`LockNotHeld`, two processes) 2 of 2; fault suite 0 of 94 failed.
+
+## Area 9, round 7
+
+Branch `review/9-round7` from master `3f3850b7`. An adversarial round on the area 9 fixer's A9-51 to A9-55. **No product code changed.** The round adds `FrontEnd/tests/Area9Round7Tests.cpp` (ctest `SaturnExplorerArea9Round7Tests`, Linux; `CMakeLists.txt` target beside round 6's) and files A9-58 to A9-62 (P3) and the instrument row A9-63. **No P1 or P2: the round is clean** (the second clean round in a row, so area 9 is done on that rule). Two of the findings (A9-58, A9-60) are close to the line; the judgement is given with each.
+
+### What was attacked, and how
+
+* **`FileLock` `tryMs` and the cleared settings status (A9-52).** `wait=false` with `tryMs` 250 retries every 20 ms and gives up as "another process holds" (`mTimedOut` is `wait`, so a try never says "held for more than"); `FrameTryCollides` holds. Can a stale status hide a later failure? No: the status is cleared only when the line still shows the settings text and is an error (`mOperationStatus == mSettingsStatus`), so another operation's message is never wiped; after a success `mSettingsSaveFailed` is false, so the next failure is reported afresh. Cost: the try now sleeps 250 ms in the UI thread on every frame try behind a stuck holder, once every 2 s, about 11 % of the time (**A9-59, P3**; `FrameStall`: refused after 0.262 s).
+* **The shared 10 s exit deadline (A9-53).** A store late in the order is refused only because an earlier store used the deadline: settings behind a stuck lock take the 10.01 s, and the names, whose holder lets go 2 s later, are refused after 0.00 s (`ExitLateStore`). That is said nowhere, and worse, the text says `another process has held ...lock for more than 10 seconds` (`WhyNotHeld` prints the configured `mWaitMs`, not what was waited). The loss is the user's names, in favour of the settings, because "user's work before the settings" was not done (**A9-58, P3**). Judgement: P3, since it needs a stuck holder first and a second holder at the next moment; a coordinator who reads the false text as P2 may raise it. A late store whose lock is free still saves (one try with no wait: shown by the four-lock test of round 6, and `budgetMs` 0 reaches `expired()` only after the first attempt, read).
+* **`SetExitNoticeHook`, `NoticeAtExit` and the text.** The hook is set in `WebMain.cpp` after the loop and before `Shutdown`, so the box is shown while the SDL window still exists; the Emscripten build never calls `Shutdown` (no file system lock there). The text lists each store's own error, but (a) the settings line is the first failure's text, not the exit's, (b) every text ends "kept in memory only" under a heading that says "lost", (c) nothing says the budget was shared (**A9-61, P3**, read).
+* **A9-55.** The flush text names the target, and the path is in it twice (`saturn_functions.txt: could not flush the new saturn_functions.txt to the device: Input/output error`). The macOS rule (fall back to `fsync` only for `ENOTSUP` or `EINVAL`) and the Windows `GetLastError` capture read right; both are uncompiled, as the fixer said.
+* **A9-51, the doubled subject.** Gone in every path. But the premise that the store's text begins with its subject holds only for the lock and cap refusals: a refused write or flush is `path + ": " + why`, so the Log line for a full disk is now a bare `<path>: could not write ...` with nothing saying a save failed (**A9-60, P3**; `RefusalTexts`).
+* **The stray `.;` on Windows.** Still there and never filed: `WhyNotHeld` appends the system message (it ends in a full stop on Windows) and the store adds `; saving without the lock`. Filed as **A9-62, P3** (read; no Linux test can show it).
+* **`App.cpp` exit path.** `-fsyntax-only` with the worktree flags: 0 errors. `Shutdown` order read: runner reset, `SetClosing`, settings, watches (A9-57, open), notes, names, starts, notice, `CloseData`.
+* **Sweep.** Fresh fuzz (below), the lock tests alone and under load, a look at every `FileLock` caller (`StoreMerge.h`, `SpecBundle.cpp`, `Settings.cpp`: only the settings use `wait=false`). Nothing else.
+
+### Findings
+
+| Row | Severity | Summary | Test |
+|---|---|---|---|
+| A9-58 | P3 | the shared exit deadline refuses a late store after 0 s and the text says "more than 10 seconds" | `ExitLateStore` (`PIN A9-58`) |
+| A9-59 | P3 | the 250 ms try stalls the UI 250 ms every 2 s behind a stuck holder | `FrameStall` (`PIN A9-59`) |
+| A9-60 | P3 | a write or flush refusal has no subject (bare in the Log since A9-51) and the path twice | `RefusalTexts` (`PIN A9-60`) |
+| A9-61 | P3 | the exit notice can list a stale settings text, says "kept" under "lost", and not the shared budget | read |
+| A9-62 | P3 | the Windows ".;" after the OS reason is still there | read |
+| A9-63 | P3 | instrument row | |
+
+### Runs
+
+| Run | Result |
+|---|---|
+| `SaturnExplorerArea9Round7Tests` (`ulimit -v 3500000`, `timeout`) | all passed (the pins hold today's behaviour) |
+| `SaturnExplorerLoaderFuzzTests`, seed 77123, 3,000 cases a module, all modules | 37,985 cases in 68 s, 0 classes outside the ledger (only `HARDLINK_SPLIT`, A9-28) |
+| `concurrent` module, 40 rounds, 4 processes, six busy loops | 0 classes outside the ledger |
+| `SaturnExplorerArea9Round3Tests` (`LockNotHeld`, two processes) | alone 2 of 2, under six busy loops 3 of 3 |
+| Rounds 5, 6, 7 under the same load | pass |
+| `App.cpp` `-fsyntax-only` | 0 errors |
+
+## Area 9 fixer (A9-57 to A9-62)
+
+Branch `review/9-round7-fix` from master `ef04ce9c`. The open P3s of rounds 6 and 7 are fixed; area 9 has no open row.
+
+| Row | Fix | Pin |
+|---|---|---|
+| A9-57 | `WatchPanel::SaveSession` writes with `WriteFileAtomically` and returns `false` with `The watch list: not saved, <reason>`; `App::Shutdown` logs it and lists it in the exit notice | `TestWatchSessionSave` in `AssemblyPanelTests` (WatchPanel links there): the file is made a directory, the save is refused with the subject; reverting the body fails both checks |
+| A9-58 | `FileLock::WhyNotHeld` says `another process held X and the exit time ran out (waited 0.0 s of the 10 s that every save at exit shares)` when an earlier store used the shared time, and `more than N seconds` only for a full wait; `Shutdown` saves notes, names and starts before the settings and the watches | `ExitLateStore` flipped (the settings still spend the 10 s in the test, the order is App code, read) |
+| A9-59 | the frame try waits 50 ms (was 250); the retry stays at 2 s, so the stall is about 2.4 % of the time | `FrameStall` flipped: refused after 0.060 s |
+| A9-60 | write and flush refusals read `<subject>: not saved, <reason>` in `SaveStore` and `Settings::SaveTo`; the path is in the reason once | `RefusalTexts` flipped |
+| A9-61 | `mSettingsStatus` is set on every failure (the status line follows it while it still shows the settings text); the notice cuts the `this session's changes are kept in memory only` tail, says the files were left as they were and the changes are lost, and says the exit's 10 s are shared | read; `App.cpp` syntax-checked only |
+| A9-62 | `TrimStop` cuts a trailing full stop and white space from the OS message in `WhyNotHeld`, `Reason` and the flush text | read (Windows text; Linux messages have no full stop) |
+
+Each pin was shown to bite: with A9-58, A9-59 and A9-60 reverted in turn `Area9Round7Tests` failed 4 checks, with A9-57 reverted `AssemblyPanelTests` failed 2; all restored.
+
+**Uncompiled:** `App.cpp` (not built on Linux; `-fsyntax-only` with the worktree flags, 0 errors). The Windows branches of `FileWrite.cpp` (the `TrimStop` calls on `std::system_category().message`) and the macOS branch are not compiled here.
+
+Runs: full `ctest -j2` 113 of 113 after one test pin moved (`Area9Round6Tests` `FrameTryCollides` held the lock 150 ms against the old 250 ms try; it now holds 20 ms against the 50 ms try, the trade-off of A9-59); no new test target (the A9-57 test is in the existing `AssemblyPanelTests`); `LoaderFuzzTests` seed 48211, 3,000 cases a module, all modules: 37,985 cases in 64 s, 0 classes outside the ledger (only `HARDLINK_SPLIT`, A9-28); the two-process lock tests (`Area9Round3Tests`, `Area9Round4Tests`, `Area9Round5Tests`, `Area9Round6Tests`, `Area9Round7Tests`) pass; fault suite below.
+Fault suite (`SaturnExplorerDecompilerFaultTests`): 0 of 94 jobs failed (78.5 s).
+
+## A5-99 and A3-155 (triage and fix)
+
+Branch `review/5-a599-triage` from master `6849e85c`; the worktree's RelWithDebInfo build (gcc 13), `-j2`, every test binary under `ulimit -v 3500000` and `timeout`, one heavy job at a time. Two rows routed by the coordinator from area 7 round 5. **A5-99 is the oracle's (set down to P3); A3-155 is the engine's restart limit, not the r8 write (P3), fixed by patch 0078.** The A5-99 sweep found one more oracle defect of area 5 (A5-100, P3, fixed) and one more seed of A7-31 (routed). `Sh2Decompiler.cpp` and `MappingOracle.h` (the area 7 fixer's) are not touched.
+
+| Row | Severity | Verdict | Change |
+|---|---|---|---|
+| A5-99 | P2 provisional, now **P3** | oracle: a free name the text assigns in some arms only was taken for a closed derivation | `PointerPrintsFromHardware` (`Sh2GeneratedTests.cpp`) |
+| A5-100 | **P3**, new | oracle: rule 3f took an XOR's constant for an OR's | `OrsIntoOnChip` (`Sh2GeneratedTests.cpp`) |
+| A3-155 | P3 | engine: a second indirect call that resolves a generation after the first was refused its restart | patch 0078 (`action.cc`, `fspec.cc`, `override.hh`/`.cc`) |
+
+### 1. A5-99: the product hides nothing
+
+Seed 300847 shrinks to two functions. Function 1 is `mov.l @(lit),r3 ; xor r3,r7 ; tas.b @r7 ; mov.l @(0x30,r7),r1` with the literal 0xA0000000; function 0 switches on r7 and runs into it. Function 0's text:
+
+```
+if (in_r7 < 6) { uVar1 = in_r7 * 4; switch(in_r7) { case 0: in_r7 = uVar1; break; ... case 5: in_r7 = uVar1; } }
+puVar2 = (uint1 *)(in_r7 ^ 0xa0000000);
+*puVar2 = *puVar2 | 0x80;
+return CONCAT44(0x61,*(xunknown4 *)(puVar2 + 0x30));
+```
+
+The run came to the purge (0xA0000000 to 0xA0000014, and 0xA0000030 onward at +0x30) because the input r7 was small. The text cannot say which line the access purges, or that it is a purge at all: the pointer is the register at entry, or four times it, XORed with the purge's base, and an XOR with an unknown operand bounds nothing (A5-90's limit; the partition is the operand's top bits XOR 101). That is A5-89's open pointer, whose register the rule does not ask for. Function 1 alone, the same instructions without the switch, is judged so already (`pointer.effect.open`, no finding).
+
+The oracle differed between the two functions only through the switch's assignments. Its derivation counted a free name (`param_`, `in_`, `unaff_`, `extraout_`) as open only if the text assigned it nowhere (`!assigned && IsFreeValue(name)`), and `in_r7 = uVar1;` in the cases made it closed, though the run can skip every case. It then asked rule 3c for the purge's note at each address the run came to (`pointer.effect.derived`, 12 unsaid). Now a free name is open unless an assignment of it dominates the use (`StatementDominates`, A5-94's test: the assignment lies between, no block holding it closes before the use, no label between).
+
+**A product note would be possible only for part of the paths:** on the switch's paths the value is a bounded range (0 to 20) XORed with a constant, so the pointer is in 0xA0000000-0xA0000014. The product works with constants (`PointerValues`), and its only range (`ranged`, A5-90) is an OR that sets the top three bits. A range carried through a multiply and an XOR, and a note for a pointer that holds it on some paths only, is a feature, not a fix of this row; not routed, recorded here.
+
+### 2. A5-100, found by the sweep
+
+Seeds 293720 and 298629 (grammar 2, both fail on `6849e85c`) give `n:onchip-span-unsaid` for `*(xunknown4 *)(in_r7 ^ 0xe0000000 | 0x60000000)` (a read at E6023100) and `*(int4 *)((param_1 ^ 0xe0000000 | uRam06009034) - 4)` (writes at FFFFFEF8, FFFFFEFC). C's `^` binds tighter than `|`: the OR is with 0x60000000 (two of the top bits) or with a word the text reads from memory, and the text does not bound the pointer to the on-chip partition. `OrsIntoOnChip` took a constant with a `|` on either side for the OR's operand. Now it is the OR's operand only if no operator that binds tighter than `|` (`^`, `&` but not `&&`, the arithmetic, the shifts, the compares) holds it on its other side.
+
+### 3. A3-155: the restart limit
+
+The fixture's caller makes two `jsr @r3` with r3 loaded once. The r8 write is not the cause:
+
+| callee (lent) | base | patch 0078 |
+|---|---|---|
+| `mov #9,r8 ; rts ; mov r4,r0` (g1) | "Exceeded maximum restarts", withheld (restart limit), `xRam0603ac08 = xVar1;` (the run stores 9), second call `func_0x06071000();` | no warning; `xRam0603ac04 = extraout_r8;`, `xVar1 = func_0x06071000(param_1);`, `xRam0603ac08 = extraout_r8_00;`, `return xVar1;`; withheld: "it uses r8 after calling 0x06071000, which is not known to return it" |
+| `rts ; mov r4,r0` | the same restart failure | no warning; lent; both calls `func_0x06071000(param_1)`, `xRam0603ac08 = xVar1;` |
+| `mov #9,r9 ; rts ; mov r4,r0` | the same restart failure | as the line above |
+| `mov #9,r8 ; mov #9,r3 ; rts ; mov r4,r0` | `(*extraout_r3)();`, withheld (an unresolved indirect call) | unchanged |
+| not lent (`preserved_call2`) | withheld (an unlent callee) | unchanged |
+
+Traced in the engine (gdb on `FuncCallSpecs::deindirect`, `lateRestriction`, `isCompatible`, `Architecture::clearAnalysis`): the first generation converts the first `jsr @r3` (its r3 is the literal) and `lateRestriction` fails at `FuncProto::isCompatible`, which compares effect lists: a lent callee's effects (patch 0028) are never the default model's. `deindirect` records the override and asks for a restart; from the next flow on the call is direct. Only then, with the callee's effects (it keeps r3), is the second call's r3 the constant, and its `deindirect` asks for a second restart, which the universal group (`maxrestarts` 1, plus 0068's raises) refused. The second call kept the default model's effects (r8 kept) and lost its argument.
+
+So the restart was right and the bound wrong. Patch 0078 allows one more restart for each call site whose conversion asked for one (`Override::noteDeindirectRestart`, a set of call addresses, cleared with the overrides): a site asks once, since the override makes it direct from the flow on, so the bound is the number of indirect call sites. The text with the callee that writes r8 says what the callee does (`extraout_r8`, `extraout_r8_00`) and the signature is withheld for it with A3-3's reason, which names r8 and the callee: the calling-convention violation is said by the refusal, as the effects lending already handles it once the call is linked. No new caution was added.
+
+### 4. Pins, and proof that each bites
+
+| Pin | Fix reverted | Result |
+|---|---|---|
+| `TestA587Pins`: `A5-99, grammar 2 seed 300847 shrunk`, `... 292513 shrunk` (`pointer.effect.open`, no finding); derivation pins `in_r7 assigned in a switch's cases` (open), `... on every path before the use (control)` (not open), `... in an if block (a merge)` (open) | the old rule (open only if never assigned) | the 300847 module 17 findings (`pointer.effect.open` 0), the three derivation pins fail (4 checks: `open == wantOpen`), seed 300847 fails; restored, all pass |
+| `TestA587Pins`: `A5-100, grammar 2 seed 293720 shrunk`, `... 298629 shrunk` (no finding); `OrsIntoOnChip` text checks (five without the mask, five controls with it) | the precedence test off | both modules 1 finding, the text check fails, both seeds fail; restored, all pass |
+| `TestA3155Fix` (`Sh2DecompilerTests.cpp`, new; g1 at 0x06009000, the callee at 0x06009040, and the control) | patch 0078's restart allowance off (`action.cc`) | **9 checks fail** (both fixtures: the restart warning, withheld for the restart limit, one call with `param_1`; g1's `extraout_r8_00` missing), nothing else in the suite; restored, all pass |
+
+### 5. Sweeps (grammar 2, `SE_GENERATED_CANARY=0`, pieces of 5,000)
+
+| range | patched oracle | base (`6849e85c`) |
+|---|---|---|
+| 290,001 to 320,000 (around 300847) | 1 failing seed: 304221 (`n:map-frame-store`, A7-31) | 5: **292513 and 300847 (`n:pointer-effect-unsaid`, A5-99)**, 293720 and 298629 (`n:onchip-span-unsaid`, A5-100), 304221 |
+| 2,000,001 to 2,020,000 | 0 | 0 |
+| 6,000,001 to 6,020,000 (fresh) | 0 | 0 |
+
+The rules' counters over the 70,000 seeds, base to patched: `pointer.effect.derived` 551 to 519 and `.open` 1,444 to 1,476 (the 32 accesses of the two A5-99 seeds; `.unsaid` 30 to 0), `pointer.effect.said` 121 and `.excused` 17,333 unchanged: no access rule 3c checked and passed is asked less. `onchip.span.said` 9,966 to 9,987 (rule 3f asks of the newly open derivations, and the engine says each), `.unsaid` 10 to 0, `.closed` 33 to 12.
+
+**The matrix's seed ranges.** The nightly run draws seeds 1 to 20,000; A5-99's class came twice and A5-100's twice in the 30,000 seeds around 300847, and none of either in 40,000 elsewhere. Both are oracle defects, now pinned, so widening the nightly for them would find nothing more. Widening in general would: all five failures above lie outside every range the matrix runs, and one of them (304221) is an open product row. I suggest the nightly move `SE_GENERATED_FIRST` each night (the contract at the top of `Sh2GeneratedTests.cpp` says "a nightly run moves it"; the workflow does not), for example to 20,000 times the day of the year, so that each night's 20,000 seeds are fresh; the fixed short run stays the regression gate. For the coordinator.
+
+### 6. The corpora
+
+`SE_GAME_HWRAM=<img> SE_GAME_LEND=1 SE_GAME_NOTES=1 SE_GAME_OUT=<dir> SaturnExplorerSh2DecompilerTests`, the base binary (`6849e85c`) and the patched one, each image, outputs compared file by file.
+
+| | hwram007 | hwram008 |
+|---|---|---|
+| functions alone, all ok; texts alone | 839; **identical to the base** | 1,554; **identical to the base** |
+| notes and cautions (alone) | 35 and 0, as the base | 57 and 4, as the base |
+| missing and said / frame writes lost / malformed / frame unchecked | 0 / 0 / 0 / 0 | 4 / 0 / 0 / 0 |
+| real entries lent, before / after lending the effects | 461 (615) / **474 (645)** of 999, as the base | 710 (939) / **724 (975)** of 1,543, as the base |
+| withheld for the restart limit (lent) | **10 to 0** | **13 to 0** |
+| lent texts that differ from the base | 10 (those functions) | 13 (those functions) |
+| mapping violations (alone and lent) | 0 | 0 |
+
+The 23 functions now settle. Each was withheld for the restart limit and still is withheld, for what it does: in hwram007 3 for an unresolved indirect call, 5 for an unlent callee, 2 for r1 read after a call; in hwram008 2 for an unresolved indirect call, 10 for an unlent callee, 1 for an incoming argument outside its signature. So no lent count moves. Their texts change where the second call was left half-linked: in 0x0600A16C of hwram007 the call to 0x060198E6, lent `void func_0x060198e6(void)`, printed an argument (`func_0x060198e6(iVar2);`, the computation of r4 kept for it) under the default model and prints none now, with the r4 the call leaves read as `extraout_r4`, as the lent signature has it.
+
+### 7. Runs
+
+| Run | Result |
+|---|---|
+| build (all targets), `-j2` | ok |
+| `ctest -j2 --timeout 900 -E SaturnExplorerLive` / `ctest -R SaturnExplorerLive` | **106 of 106** (207 s; the engine suite 42.8 s) / **6 of 6** (28 s). No new ctest test: the pins are in `SaturnExplorerSh2DecompilerTests` and `SaturnExplorerSh2GeneratedTests` |
+| `SaturnExplorerSh2DecompilerTests` alone | all passed (26 s) |
+| fault suite (`SaturnExplorerDecompilerFaultTests` alone) | **0 of 94 jobs failed** (78 s), no MOVED pin |
+| vendor gate (`check-vendored-tree.py check`, against a sparse checkout of Ghidra at the pinned `918d44eb`, `--tests-dir`) | `vendored tree: ok (check)` |
+| generator, the matrix's sizes: `SE_GENERATED_SEEDS=20000` (four runs of 5,000 from seeds 1, 5,001, 10,001, 15,001, both grammars) | 0 failing seeds (101 to 138 s each) |
+| generator, `SE_GENERATED_GRAMMAR=1 SE_GENERATED_SEEDS=1000` / `SE_GENERATED_GRAMMAR=2 SE_GENERATED_SEEDS=3000` | 0 failing seeds (22 s) / 0 failing seeds (103 s) |
+| `SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000` | all passed; 5,580 functions, 5,292 compared, **agrees=5,185** narrow-c=136 void-return=227 void-return-lent=24, skipped 8 (165 s) |
+| seeds 300847, 292513, 293720, 298629 (grammar 2, `SE_GENERATED_CANARY=0`) | 0 failing each (each failed on the base) |
+| the sweeps (section 5) and the corpora (section 6) | as above |
+
+### 8. Routed
+
+* **Grammar 2 seed 304221** (`n:map-frame-store`, the same on `6849e85c`): `xStack_24 = param_2;` at a call, the push of a value made by an `add` the engine folds away (r1 is 0 after a `dt` loop). A7-31's mechanism, open; for the area 7 fixer. Replay: `SE_GENERATED_FIRST=304221 SE_GENERATED_SEEDS=1 SE_GENERATED_GRAMMAR=2 SE_GENERATED_CANARY=0`.
+* **The nightly's seed range** (section 5): for the coordinator.
+* **Patch number.** 0078 is the next number after master's 0077; if another branch merges a 0078 first, this one is renumbered on merge.
+
+## Area 11, round 2
+
+Branch `review/11-round2` from master `b68bfb60`. Oracle builder, round 2 of area 11: the oracles scored again on today's master. Since round 1 (`a64678c3`) the oracles grew: area 7's mapping oracle and its later checks (rounds 3 to 7), area 9's loader fuzz and `Area9Round3Tests` to `Area9Round7Tests`, area 8's model and Follow rig, and A11-3's frame-intake guard. **No vendored patch was added since 0077, and no vendored engine file changed** (`git diff a64678c3 b68bfb60 -- third_party/ghidra-decompiler` touches only the MSBuild project). **No product code changed.** The round adds the harness under `Docs/Decompiler/tools/a11_round2/` and rows **A11-14 (P2), A11-15 (P3) and A11-16 (P3)**. It re-judges A11-6, A11-7, A11-8, A11-9 and A11-13: all five still hold. **The round is not clean: one P2 row.**
+
+### The harness
+
+`tools/a11_round2/` is round 1's harness with these changes:
+
+* `mutate.py`:
+  * area 9's suites as oracles: `fw`, `settings`, `names`, `asm`, `a9r3` to `a9r7`, with the loader fuzz (`A9ALL`);
+  * the corpus's game-code lines moved to `TestGameCode` to `TestGameLending` as they stand at `b68bfb60` (lines 5196 to 5912);
+  * `-j1` unless more than 6,000 MB is available;
+  * an old text with the `ALL` prefix replaces every occurrence (an oracle counter raised at several sites);
+  * `--group r2` runs this round's own mutants;
+  * the patch order puts the 17 patches round 1 did not run first.
+* `mutants2.py`: the round's 56 mutants (below).
+* `settings_refused_probe.cpp`: A11-14's probe.
+* `run_pieces.sh` runs pieces of at most 13 minutes, as before, and commits `results.tsv` after each.
+
+Every mutant was applied alone, built with ninja (`-j2` above 6,000 MB available, else `-j1`), and run under `ulimit -v 3500000` and `timeout`. Then the files were put back and `git status` was checked clean before the next. No restart happened in this round.
+
+The unmutated oracles (RelWithDebInfo, gcc 13):
+
+| Oracle | Time |
+|---|---|
+| suite | 23 s |
+| generator, 300 seeds | 19 s |
+| printed C | 21 s |
+| engine tests | 39 s |
+| decode | 2 s |
+| corpus hwram007 | 42 s |
+| fault matrix | 80 s |
+| trust | 52 s |
+| area 1 model | 19 s |
+| panel | 5 s |
+| loader fuzz | 5 s |
+| `Area9Round3Tests` | 0.5 s |
+| `Area9Round4Tests` | 11 s |
+| `Area9Round5Tests` | 36 s |
+| `Area9Round6Tests` | 22 s |
+| `Area9Round7Tests` | 12 s |
+| `FileWriteTests`, `SettingsTests`, `FunctionNamesTests`, `AssemblyPanelTests` | under 0.1 s each |
+
+### The round's new mutants (56)
+
+| Family | What | Mutants | Killed | Survived |
+|---|---|---|---|---|
+| `H7-` | area 7's mapping in `Sh2Decompiler.cpp`. The value rule (A7-23): `StoreShowsValue` always true; `take` without the value; the statement's own store. The join constants (A7-22, and A7-26's `into` storage). The number-reaches-store rule (A7-28): the register ignored, any maker taken, the rule off. The case-label table (A7-24's opref, A7-27's destination, A7-29's own-indent switch) | 11 | 11 (suite all; corpus 5) | 0 |
+| `O-` | the mapping oracle's own checks blinded one at a time: `storeValueOther`, `storeAfterUse`, `copyMergeAtBranch`, `numberStoreOther`, `constAtJoin` (3 sites), `caseOtherEntry`, `backWrong` (2 sites), `frameStoreMissing`, `accessAtBranch` | 9 | 9 (suite: each check's damaged-copy pin) | 0 |
+| `S-` | `StoreMerge.h`. The idle save (A9-20), the refused file (A9-19), the lock not held (A9-33), the file not read again (A9-20), lines that are no entry dropped (A9-21), deletes not applied, the size cap | 7 | 7 | 0 |
+| `T-` | `Settings::SaveTo`: the same five rules, and the CR in a value (A9-25) | 5 | 3 | **2: `T-refused`, `T-unchanged` (A11-14)** |
+| `L-` | `FileLock`: no `flock`; no retry; no bound (A9-40); no exit budget (A9-46, A9-53); `mSharedShort` (A9-58); the "holds" text (A9-47) | 6 | 6 | 0 |
+| `N-` | the loaders' readers. The a-f word (A9-18, A9-41) and the number-led remark (A9-45). The lone CR (A9-25) and the byte-order mark (A9-34). `CleanEntryText` (A9-31). The FIFO open (A9-24) and the size checked again on the descriptor | 7 | 6 | 1: `N-resize`, equivalent (the read loop stops one block past the cap and returns `TooLarge` all the same) |
+| `P-` | the panel's entry box and pin. A8-42 (shown target, box rewrite), A8-36's second rule, A8-46 (an edit taken back, and text typed out), A8-50, Enter's request, the sync while the box is edited, A8-30's origin, A8-37's `ResolvePin`, A8-38 | 11 | 10 (trust 10, panel 2, model 0) | **1: `P-a836-origin` (A11-15)** |
+
+### Round 1's families again
+
+| Family | Mutants | Killed | Survived | Not scored |
+|---|---|---|---|---|
+| The oracles' own modes (`SE_GENERATED_MUTATE` 24, `SE_GAME_MAPPING_MUTATE` 10 on hwram007) | 34 | 34 | 0 | |
+| Host one-expression mutants (`H-`) | 45 | 41 | 4: `H-led-repeat` (A11-13); `H-note-reach`, `H-ptr-sub`, `H-ptr-loop` (A11-6) | |
+| Kill switches and hand-made reverts (`V-`) | 10 | 8 | 2: `V-0061-memescape`, `V-0065-steppeddown` (A11-7) | |
+| Patches: the 17 round 1 did not run | 17 | 14 | 0 | 3: 0028 and 0044 do not build with their `.cc` hunks alone, 0037 has only header hunks that revert |
+| Patches: round 1's survivors and A11-8/A11-9's (0014, 0060, 0040, 0068, 0076, 0001, 0004) | 7 | 4 | 3: 0014, 0060, 0040 (A11-7) | |
+| **Total scored, both tables** | **166** | **153 (92%)** | **13** | 3 |
+
+Probes and combinations, apart:
+* `R-ptr-loop` is reached by no input;
+* `R-ptr-sub` is reached by the generator and the corpus, not the suite;
+* `R-note-reach`, `R-0061-mem` and `R-0065-down` are reached (the generator does not reach `R-0065-down`);
+* `C-0010-printed`, `-cond`, `-repeat` and `-all3` are killed by the suite, the generator and the corpus.
+
+Round 1's 34 patch reverts that were killed were not run again. No vendored file changed since, and the checks that killed them are still in the suites. The generator's long run (`gen3k`) was not repeated either: its grammar is unchanged since round 1 (the only changes to `Sh2GeneratedTests.cpp` are A11-3's intake, A11-11's pin and A7-34's counters).
+
+Killed, by the patches round 1 did not run:
+* 0007, 0015, 0025, 0027, 0048, 0053, 0059: the suite;
+* 0008: decode, the suite and the generator;
+* 0021, 0029: the suite and the generator;
+* 0033: the suite and printed C;
+* 0020 (the SLEIGH cache's LRU): decode alone (`r.prototypeWithheld.empty()`, `historyBad == 0`);
+* 0052 (flow alignment, A7-6): the corpus alone, by the mapping oracle (`mapping.Violations() == 0`);
+* 0070 (defined shifts): the engine tests alone.
+
+### The score per oracle
+
+"Run on" counts each mutant the oracle ran on, as in round 1: as one of the mutant's own oracles, or on the escalation, which runs only while nothing has killed the mutant.
+
+| Oracle | Run on | Killed | Score |
+|---|---|---|---|
+| suite (`Sh2DecompilerTests`) | 80 | 66 | 82% (all 20 area 7 mutants, product and oracle) |
+| generator, 300 seeds | 93 | 40 | 43% (24 of 24 of its own modes; **0 of the 20 area 7 mutants**) |
+| corpus hwram007 (game-code checks only) | 39 | 19 | 49% (10 of 10 mapping modes; 5 of 11 `H7-`; now `patch:0068`, by A11-3's floor) |
+| printed C | 12 | 2 | 17% |
+| engine tests | 9 | 2 | 22% |
+| decode | 12 | 4 | 33% |
+| fault matrix (default subset) | 4 | 1 | 25% (0001 and 0004 again pass it: A11-9) |
+| runner tests | 3 | 3 | 100% |
+| area 1 model | 14 | 0 | 0% (the runner's and the panel's mutants: the trust rig is their oracle) |
+| trust (`DecompilerTrustTests`, Follow rig included) | 17 | 16 | 94% |
+| panel tests | 11 | 2 | 18% |
+| loader fuzz | 30 | 14 | 47% |
+| `FunctionNamesTests` | 25 | 6 | 24% |
+| `FileWriteTests` | 25 | 1 | 4% |
+| `SettingsTests` | 25 | 0 | 0% |
+| `AssemblyPanelTests` | 25 | 0 | 0% |
+| `Area9Round3Tests` | 25 | 13 | 52% |
+| `Area9Round4Tests` | 25 | 11 | 44% |
+| `Area9Round5Tests` | 25 | 13 | 52% |
+| `Area9Round6Tests` | 25 | 11 | 44% |
+| `Area9Round7Tests` | 25 | 7 | 28% |
+
+Each area 9 mutant other than A11-14's two is killed by at least one of area 9's suites. `SettingsTests` and `AssemblyPanelTests` kill none of them: the stores' rules are held by the round suites, the fuzz and `FunctionNamesTests`.
+
+### The survivors
+
+| Mutant | What it shows | Row |
+|---|---|---|
+| `T-refused` | No oracle sees `Settings` save over a file `Load` refused once the file is readable by the save. The probe loses the user's BIOS path | **A11-14 (P2)** |
+| `T-unchanged` | `Settings`' idle save has no witness (the names' has) | A11-14 |
+| `P-a836-origin` | A8-36's second `EnterTarget` rule: a second Enter on untouched text makes the pinned guess a "user-set entry". `follow; enter; enter` fails with the mutant, passes on master | A11-15 |
+| `H-note-reach`, `H-ptr-sub`, `H-ptr-loop` | unchanged | A11-6 (open) |
+| `patch:0014`, `patch:0060`, `patch:0040`, `V-0061-memescape`, `V-0065-steppeddown` | unchanged; area 10 has not acted on the routing | A11-7 (open) |
+| `H-led-repeat` | unchanged | A11-13 (open) |
+| `N-resize` | equivalent | none |
+
+And the two rows whose mutants are killed by some oracle but not by the one they name:
+* **A11-8** (open): the generator passes 0068, 0076 and `V-0072-storemaywrite`;
+* **A11-9** (open): the fault matrix passes 0001 and 0004.
+
+**A11-14 is P2 by the area's scale.** The surviving mutant reverts part of A9-19's P1 fix, and the loss is reachable with it. The fix put two guards in place: the refused-file mark, and the save's re-read of the file. The A9-19 row's mutation note says the mark "removed alone changes nothing in the oracle because the re-read of the file refuses the same cases". That is true only of the oracle's cases, in which the file is still unreadable at the save. `settings_refused_probe.cpp` writes a 5 MiB `settings.ini` that `Load` refuses. It then cuts the file back to two lines and saves one key, as `App::SaveSettings` saves every key (A9-35):
+* master refuses the save;
+* `T-refused` writes `path = ` over the user's BIOS path.
+
+The names store has the witness (`S-refused` is killed by `FunctionNamesTests`); `Settings` has none.
+
+### The generator and area 7
+
+The generator kills none of the 20 area 7 mutants. A7-34 (open) says why in part: the checks added after area 7 round 2 are counted in the default run (`map.late.*`), not flagged. The counts show more. Under 10 of the 11 `H7-` product mutants, the 300 seeds' late counts are the same as the unmutated run's (`const-join` 3, `copy-store` 1, `way-back` 2) or lower. Only `H7-joinconst-off` moves one, `const-join` from 3 to 4. So flagging them (`SE_GENERATED_MAP_ALL=1`) would not make the default run see these reverts: it does not draw the shapes in 300 seeds. Area 7 found its generator rows in 18,000 fresh seeds. Routed to area 7 with A7-34, not filed again.
+
+### The oracles' new checks are witnessed
+
+Each `O-` mutant fails the suite at the check's own damaged-copy pin:
+
+| Check | Pin |
+|---|---|
+| `storeValueOther` | `wa.storeValueOther == 3` |
+| `storeAfterUse` | `a.storeAfterUse == 1` |
+| `copyMergeAtBranch` | `ba.copyMergeAtBranch == 3` |
+| `numberStoreOther` | `k.numberStoreOther == 1` |
+| `constAtJoin` | `wa.constAtJoin == 1` |
+| `caseOtherEntry` | `a.caseOtherEntry == 1` |
+| `backWrong` | `ua.backWrong == 1` |
+| `frameStoreMissing` | `a.frameStoreMissing == 1` |
+| `accessAtBranch` | `seen.accessAtBranch == 1` |
+
+The corpus cannot see a blinded check, since its violations are 0 on master; the suite is the witness.
+
+### Skipped and disabled tests, gated tests, pins
+
+* **ctest.** 113 tests in this build: 107, and 6 Live. 0 skipped, 0 "not run". `SKIP_RETURN_CODE 77` is on four tests, as in round 1 and A11-10's fix: Yss and fixture states absent, the fault suite without POSIX, printed C without a compiler. No `WILL_FAIL` or `DISABLED` is set. Every `add_executable(...Tests)` has its `add_test`. `SaturnExplorerExportShutdownTests` is Windows-only (area 12).
+* **Disabled code in the suites.** No `#if 0` or `if (false)` block, and no test function that is defined and never called, in `FrontEnd/tests`. `Area9Round4Tests`' `Pin()` helper is defined and not used (its pins became FIX checks); this is harmless.
+* **Environment-gated tests that run nowhere.** One: `Area9Round5Tests`' `RealFullDisk` (`SE_A9R5_FULLDIR`) prints "(skipped: ...)" and returns, in ctest, in CI and in the matrix (**A11-16**). The simulated full disk (`RLIMIT_FSIZE`) does run. The trust suite's switches are not of this kind, because their sequences are pinned in the default run:
+  * `SE_TRUST_FOLLOW_CPU`: `kFollowPinsCpu`;
+  * `SE_TRUST_FOLLOW_FOCUS`: the `focus` scripts;
+  * `SE_TRUST_HIDDEN_RENAME`: `kHiddenRenamePins`.
+
+  The game corpus (`SE_GAME_HWRAM`, `SE_GAME_LEND`) is local only, as round 1 recorded: the data is not in the repository.
+* **Pins that assert defects.** Each pin that names a ledger row was checked against the row's status:
+  * every pin of a fixed row asserts the fixed behaviour;
+  * the area 7 round 4 to 7 "current behaviour" pins of rows that are now fixed (A7-22 to A7-30) were flipped by their fixers, and the `H7-` mutants that revert those fixes fail them;
+  * the pins still at the defect are of open rows: A7-21, A7-25, A7-31 to A7-37, and area 9's `RESIDUAL A9-45` checks.
+
+  `Area9Round6Tests` labels two checks of fixed behaviour "PIN A9-52 fixed" and "PIN A9-53 fixed". That is the label only; they assert the fix. No pin was found asserting a defect whose row is fixed.
+
+### Grammar coverage
+
+`grammar_coverage.py` reads the same 117 productions from the generator's source: the grammar has not changed since round 1.
+
+| Run | Productions reached |
+|---|---|
+| grammar 1, 3,000 seeds (67 s) | 61 of 117; the 56 not reached are grammar 2's |
+| grammar 2, 3,000 seeds (102 s) | 102 of 117; the 15 not reached are grammar 1's (polls, `mac`, the mask loops, `rts.slot_insn`, `module.v1`) |
+| **both** | **117 of 117** |
+| the default ctest run, 300 seeds (19 s) | 114 of 117: not `choice.by_r0`, `choice.by_stack`, `fn.ret_call`. All three are evaluated anyway by `TestRound9Pins`' first-drawn pins (A11-11, fixed) |
+
+Mnemonics: 73 distinct in grammar 1, 81 in grammar 2. The rarest productions in grammar 2: `choice.by_r0` 2, `choice.by_scratch` 17, `choice.by_const` 22, `choice.by_stack` 24, `fn.ret_call` 33, `choice.by_sr` 42. Every figure is round 1's. No generator run found anything: 0 findings in all three runs.
+
+### What was run
+
+| Run | Result |
+|---|---|
+| 56 new mutants, 89 of round 1's host, kill-switch and self-mutation mutants with 5 probes and 4 combinations, 24 patch reverts | `tools/a11_round2/results.tsv`; scores above. `git status` clean after every mutant |
+| `settings_refused_probe.cpp`, master and `T-refused` (built apart in the scratch folder; the tree not touched) | master: refused, the path kept (exit 0); mutant: saved, the path lost (exit 1) |
+| `SE_TRUST_FOLLOW_SCRIPT`, five scripts, master and `P-a836-origin` (applied, built, run, put back with `git checkout`) | master: all ok; mutant: all five fail |
+| grammar coverage, both grammars at 3,000 seeds, and the default run | 117 of 117; 114 of 117 in the default run |
+| `ctest -j2 --timeout 900 -E SaturnExplorerLive` / `ctest -R SaturnExplorerLive` (every binary under `ulimit -v 3500000`), after a full unmutated rebuild | **107 of 107** (213 s: the fault suite 80.5 s, trust 52.4 s, the engine suite 38.7 s, the decompiler suite 23.1 s, printed C 20.5 s) / **6 of 6** (27.7 s). 113 tests, as on master: none added, none skipped. No product file changed, so the fault suite needed no separate run |
+
+Routed:
+* A11-14 to area 9's oracle;
+* A11-15 to area 8's Follow rig;
+* A11-16 to area 9 (or area 12's CI);
+* the generator's blindness to area 7's value rule to A7-34 (area 7);
+* A11-7 again to area 10.

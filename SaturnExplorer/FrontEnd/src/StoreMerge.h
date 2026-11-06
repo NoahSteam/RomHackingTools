@@ -82,6 +82,10 @@ inline bool SaveStore(const std::string& path, const char* what, const std::stri
                     "this session's changes to it are kept in memory only");
     // The lock file lives beside the data: a lock on the data file itself would be dropped by the rename that replaces it.
     FileLock lock(path + ".lock");
+    if (!lock.Held())
+        return fail(std::string(what) + ": not saved, " + lock.WhyNotHeld() + "; "
+                    "saving without the lock could lose another instance's entries, so the file is left as it is and this session's changes are kept in memory only");
+    RemoveStaleStagingFiles(path);
     std::string disk;
     switch (ReadFileCapped(path, maxBytes, disk))
     {
@@ -99,7 +103,7 @@ inline bool SaveStore(const std::string& path, const char* what, const std::stri
         return fail(std::string(what) + ": not saved, it would be " + std::to_string(text.size()) + " bytes, over the " + std::to_string(maxBytes >> 20) +
                     " MiB that is read back at the next start, which would refuse " + path + "; trim it or move entries to another file");
     std::string why;
-    if (!WriteFileAtomically(path, text.data(), text.size(), why)) return fail(path + ": " + why);
+    if (!WriteFileAtomically(path, text.data(), text.size(), why)) return fail(std::string(what) + ": not saved, " + why);   // A9-60: the subject first; 'why' names the path once
     base = cur;
     return true;
 }

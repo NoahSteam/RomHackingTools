@@ -236,7 +236,7 @@ SpecBundleResult MaterialiseSh2SpecBundle(const std::string& configDir)
     {
         r.error = "Decompiler unavailable: " + dir + " cannot be " +
                   (r.repaired ? "repaired (" + problem + ")" : "created") +
-                  ": the lock file in " + root + " cannot be opened";
+                  ": " + lock.WhyNotHeld();   // the true reason: a timeout, a folder that cannot be written (A9-47)
         return r;
     }
     if (r.repaired && !RemoveEntry(dir))

@@ -1,6 +1,9 @@
 #include "FileWrite.h"
 
+#include <algorithm>
 #include <atomic>
+#include <chrono>
+#include <system_error>
 #include <cerrno>
 #include <cstdio>
 #include <cstdlib>
@@ -27,6 +30,8 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/file.h>    // flock
+#include <csignal>
+#include <ctime>
 #include <sys/types.h>
 #include <unistd.h>
 #define SE_MKDIR(p)  ::mkdir((p), 0755)
@@ -48,13 +53,20 @@ const char kSep = '\\';
 const char kSep = '/';
 #endif
 
+// A9-62: the system message of Windows ends in a full stop (and a line break); the texts built from it go on with "; " or ": ".
+std::string TrimStop(std::string s)
+{
+    while (!s.empty() && (s.back() == '.' || s.back() == ' ' || s.back() == '\r' || s.back() == '\n')) s.pop_back();
+    return s;
+}
+
 std::string Reason(const char* what, const std::string& path)
 {
     // errno is captured by the caller immediately after the failing call; strerror keeps the
     // message specific ("No space left on device") rather than a generic "could not write".
     const int err = errno;
     std::string out = std::string(what) + " " + path;
-    if (err != 0) out += ": " + std::string(std::strerror(err));
+    if (err != 0) out += ": " + TrimStop(std::strerror(err));
     return out;
 }
 
@@ -66,7 +78,7 @@ std::string Reason(const char* what, const std::string& path)
 // disk that is full and a heap that is short at the same moment is rare, but the cost of the
 // order is nothing. errno is captured at the failing call and put back for Reason.
 bool WriteAndClose(FILE* f, const std::string& path, const void* data, size_t size,
-                   std::string& error)
+                   std::string& error, bool sync = false, const std::string& target = std::string())
 {
     errno = 0;
     const size_t wrote = (size == 0) ? 0 : std::fwrite(data, 1, size, f);
@@ -77,6 +89,56 @@ bool WriteAndClose(FILE* f, const std::string& path, const void* data, size_t si
         errno = err;
         error = Reason("could not write", path);
         return false;
+    }
+    // A9-48: a staged file's bytes are asked to reach the device before it is renamed over the old one, so a power cut shortly after
+    // cannot leave a path that holds an empty file (a file system that does not order the data before the rename). Not for a device
+    // written in place (/dev/full, a FIFO: fsync refuses those). A file system that cannot sync at all (EINVAL, ENOTSUP) is not a failure.
+    if (sync)
+    {
+        errno = 0;
+        bool synced = std::fflush(f) == 0;
+        int err = errno;
+        bool winError = false;   // err holds a GetLastError code (Windows only)
+        (void)winError;
+        if (synced)
+        {
+#ifdef _WIN32
+            // A9-55 (uncompiled on Linux): the failure is in GetLastError, not errno; keep it and let Reason show it.
+            errno = 0;
+            synced = ::FlushFileBuffers(reinterpret_cast<HANDLE>(::_get_osfhandle(::_fileno(f)))) != 0;
+            if (!synced)
+            {
+                const DWORD last = ::GetLastError();
+                if (last == ERROR_INVALID_FUNCTION) synced = true;   // a device that cannot sync is not a failure
+                else err = static_cast<int>(last), winError = true;
+            }
+            else err = 0;
+#elif defined(__APPLE__)
+            // A9-55 (uncompiled on Linux): fall back to fsync only when F_FULLFSYNC is not supported; a real I/O error from it is a failure.
+            errno = 0;
+            synced = ::fcntl(::fileno(f), F_FULLFSYNC) == 0;
+            if (!synced && (errno == ENOTSUP || errno == EINVAL))
+                synced = ::fsync(::fileno(f)) == 0 || errno == EINVAL || errno == ENOTSUP;
+            err = errno;
+#else
+            errno = 0;
+            synced = ::fsync(::fileno(f)) == 0 || errno == EINVAL || errno == ENOTSUP || errno == EROFS;
+            err = errno;
+#endif
+        }
+        if (!synced)
+        {
+            std::fclose(f);
+            // A9-55: 'path' is the staging file, removed before the text is shown; the text names the file the user knows.
+            std::string reason;
+#ifdef _WIN32
+            reason = TrimStop(winError ? std::system_category().message(err) : std::string(std::strerror(err)));
+#else
+            reason = TrimStop(std::strerror(err));
+#endif
+            error = "could not flush the new " + (target.empty() ? path : target) + " to the device" + (err != 0 ? ": " + reason : std::string());
+            return false;
+        }
     }
     // THE line this file exists for. fclose flushes, and a small write has not reached the
     // device before this point, so this is where ENOSPC and EIO are reported.
@@ -220,7 +282,7 @@ bool WriteFileAtomically(const std::string& path, const void* data, size_t size,
         bool armed;
         ~TempGuard() { if (armed) RemoveFile(path); }
     } guard{ temp, true };
-    if (!WriteAndClose(f, temp, data, size, error)) return false;
+    if (!WriteAndClose(f, temp, data, size, error, true, path)) return false;
 #ifndef _WIN32
     if (haveMode) (void)::chmod(temp.c_str(), static_cast<mode_t>(keepMode));   // best effort: the file is still whole if it fails
 #else
@@ -228,6 +290,15 @@ bool WriteFileAtomically(const std::string& path, const void* data, size_t size,
 #endif
     if (!PublishFile(temp, path, error)) return false;
     guard.armed = false;   // the rename took the name
+#ifndef _WIN32
+    // The rename itself is a change to the folder: ask for it to reach the device too (best effort; the file is already published).
+    {
+        const size_t slash = path.find_last_of('/');
+        const std::string dir = slash == std::string::npos ? std::string(".") : (slash == 0 ? std::string("/") : path.substr(0, slash));
+        const int dfd = ::open(dir.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+        if (dfd >= 0) { (void)::fsync(dfd); ::close(dfd); }
+    }
+#endif
     return true;
 }
 
@@ -376,25 +447,146 @@ bool RemoveLink(const std::string& path)
 #endif
 }
 
-FileLock::FileLock(const std::string& path, bool wait)
+namespace
 {
+std::atomic<bool> gClosing(false);
+std::atomic<long long> gExitDeadlineMs(0);   // steady-clock milliseconds at which the exit's waiting ends, for every store together (A9-53)
+std::atomic<void (*)(const std::string&)> gNoticeHook(nullptr);
+long long NowMs() { return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count(); }
+}
+void FileLock::SetClosing(bool closing)
+{
+    if (closing) gExitDeadlineMs = NowMs() + kExitWaitMs;
+    gClosing = closing;
+}
+
+void SetExitNoticeHook(void (*hook)(const std::string&)) { gNoticeHook = hook; }
+
+void NoticeAtExit(const std::string& text)
+{
+    if (void (*hook)(const std::string&) = gNoticeHook)
+    {
+        hook(text);   // the SDL2 builds show a message box (A9-53)
+        return;
+    }
+#ifdef _WIN32
+    // The window is going: the Log panel goes with it, so a refused save is said in a box the user must close.
+    ::MessageBoxA(nullptr, text.c_str(), "Saturn Explorer", MB_OK | MB_ICONWARNING | MB_SETFOREGROUND);
+#else
+    std::fprintf(stderr, "Saturn Explorer: %s\n", text.c_str());
+#endif
+}
+
+FileLock::FileLock(const std::string& path, bool wait, unsigned tryMs)
+{
+    mPath = path;
+    // At exit the window is closing: a longer wait costs nothing and saves the change (A9-46). The 10 s is one budget shared by every
+    // store, not 10 s each (A9-53): four stuck locks held the exit 40 s.
+    unsigned budgetMs = wait ? mWaitMs : tryMs;   // wait=false with tryMs: a short try (A9-52), refused as "holds", not "held for"
+    const bool retry = wait || tryMs > 0;
+    if (gClosing && wait)
+    {
+        mWaitMs = kExitWaitMs;
+        const long long left = gExitDeadlineMs - NowMs();
+        budgetMs = left > 0 ? static_cast<unsigned>(std::min<long long>(left, kExitWaitMs)) : 0;
+        mSharedShort = budgetMs + 500 < kExitWaitMs;   // an earlier store at exit used part of the shared time (A9-58)
+    }
+    // A wait is bounded (A9-40): try without waiting, retry every few milliseconds until kWaitMs has passed. A holder that is
+    // stuck (a hung instance on a stalled network folder, a debugger) no longer freezes the caller; the caller refuses its save.
+    const auto start = std::chrono::steady_clock::now();
+    auto expired = [&]() {
+        return std::chrono::steady_clock::now() - start >= std::chrono::milliseconds(budgetMs);
+    };
 #ifdef _WIN32
     // A null SECURITY_ATTRIBUTES makes the handle non-inheritable, the counterpart of O_CLOEXEC.
     const HANDLE h = ::CreateFileA(path.c_str(), GENERIC_READ | GENERIC_WRITE,
                                    FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
                                    OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (h == INVALID_HANDLE_VALUE) return;
+    if (h == INVALID_HANDLE_VALUE) { mError = static_cast<int>(::GetLastError()); return; }
     mHandle = reinterpret_cast<intptr_t>(h);
     OVERLAPPED whole = {};
-    const DWORD flags = LOCKFILE_EXCLUSIVE_LOCK | (wait ? 0 : LOCKFILE_FAIL_IMMEDIATELY);
-    mHeld = ::LockFileEx(h, flags, 0, MAXDWORD, MAXDWORD, &whole) != 0;
+    for (;;)
+    {
+        whole = OVERLAPPED();
+        mHeld = ::LockFileEx(h, LOCKFILE_EXCLUSIVE_LOCK | LOCKFILE_FAIL_IMMEDIATELY, 0, MAXDWORD, MAXDWORD, &whole) != 0;
+        if (mHeld) break;
+        // Only a lock somebody else holds is waited for (A9-47); any other error (a share without byte-range locks) is the answer at once.
+        const DWORD err = ::GetLastError();
+        if (err != ERROR_LOCK_VIOLATION && err != ERROR_SHARING_VIOLATION) { mError = static_cast<int>(err); break; }
+        if (!retry) break;
+        if (expired()) { mTimedOut = wait; break; }
+        ::Sleep(20);
+    }
 #else
     const int fd = ::open(path.c_str(), O_RDWR | O_CREAT | O_CLOEXEC, 0644);
-    if (fd < 0) return;
+    if (fd < 0) { mError = errno; return; }
     mHandle = fd;
-    int rc;
-    do rc = ::flock(fd, LOCK_EX | (wait ? 0 : LOCK_NB)); while (rc != 0 && errno == EINTR);
-    mHeld = rc == 0;
+    for (;;)
+    {
+        const int rc = ::flock(fd, LOCK_EX | LOCK_NB);
+        if (rc == 0) { mHeld = true; break; }
+        if (errno == EINTR) continue;
+        if (errno != EWOULDBLOCK) { mError = errno; break; }   // EWOULDBLOCK is "another process holds it" (mError 0, A9-47)
+        if (!retry) break;
+        if (expired()) { mTimedOut = wait; break; }
+        struct timespec ts = { 0, 20 * 1000 * 1000 };
+        ::nanosleep(&ts, nullptr);
+    }
+#endif
+    mWaitedMs = static_cast<unsigned>(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count());
+}
+
+std::string FileLock::WhyNotHeld() const
+{
+    if (mHeld) return std::string();
+    if (mTimedOut && mSharedShort)
+    {
+        // A9-58: the exit's 10 s are shared; an earlier save used them, so this one waited less (maybe not at all). Say what happened.
+        char b[32];
+        std::snprintf(b, sizeof b, "%.1f", static_cast<double>(mWaitedMs) / 1000.0);
+        return "another process held " + mPath + " and the exit time ran out (waited " + b + " s of the " + std::to_string(kExitWaitMs / 1000) +
+               " s that every save at exit shares)";
+    }
+    if (mTimedOut)
+        return "another process has held " + mPath + " for more than " + std::to_string(mWaitMs / 1000) + " seconds";
+    if (mError == 0) return "another process holds " + mPath;   // wait=false and someone has it
+    return "cannot create or lock " + mPath + ": " + TrimStop(std::system_category().message(mError));
+}
+
+size_t RemoveStaleStagingFiles(const std::string& path)
+{
+#ifdef _WIN32
+    (void)path;
+    return 0;
+#else
+    const size_t slash = path.find_last_of('/');
+    const std::string dir = slash == std::string::npos ? std::string(".") : (slash == 0 ? std::string("/") : path.substr(0, slash));
+    const std::string prefix = (slash == std::string::npos ? path : path.substr(slash + 1)) + ".separt-";
+    DIR* d = ::opendir(dir.c_str());
+    if (!d) return 0;
+    std::vector<std::string> doomed;
+    while (const dirent* e = ::readdir(d))
+    {
+        const std::string name = e->d_name;
+        if (name.size() <= prefix.size() || name.compare(0, prefix.size(), prefix) != 0) continue;
+        // "<pid>-<n>": digits, a dash, digits.
+        const size_t dash = name.find('-', prefix.size());
+        if (dash == std::string::npos || dash == prefix.size() || dash + 1 >= name.size()) continue;
+        bool shape = true;
+        for (size_t i = prefix.size(); i < name.size() && shape; ++i) shape = i == dash || (name[i] >= '0' && name[i] <= '9');
+        if (!shape || name.size() - prefix.size() > 30) continue;
+        const std::string full = (slash == std::string::npos ? std::string() : dir + (dir == "/" ? "" : "/")) + name;
+        struct stat st;
+        if (::lstat(full.c_str(), &st) != 0 || !S_ISREG(st.st_mode)) continue;
+        const long long pid = std::atoll(name.c_str() + prefix.size());
+        const bool alive = pid > 0 && (::kill(static_cast<pid_t>(pid), 0) == 0 || errno == EPERM);
+        if (alive && ::time(nullptr) - st.st_mtime < 600) continue;
+        doomed.push_back(full);
+    }
+    ::closedir(d);
+    size_t n = 0;
+    for (const std::string& f : doomed) if (::unlink(f.c_str()) == 0) ++n;
+    return n;
 #endif
 }
 
