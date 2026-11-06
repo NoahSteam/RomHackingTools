@@ -1458,8 +1458,10 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                 // ...and a statement that shows the load itself (`xStack_20._2_2_ = *(uint2 *)(p + 0x30) & 0x7ff;`) is the load's: the store is what the
                 // code does with the value, as for a whole local assigned from a load
                 // ...nor a statement that computes (`iStack_2e = (int2)xStack_10 + extraout_r0 + -0x5e;`): the copies A7-11 names are bare values
+                // (A7-51 (the area 7 fixer): a dereference of a plain pointer too, `xStack_8._0_2_ = *param_2;` -- a register the engine
+                // merged under the piece's name, assigned at the load `mov.w @r5,r3`; a product has spaces, which the last test takes)
                 callsHere = callsHere || text.find("*(", q) != std::string::npos || text.find('[', q) != std::string::npos ||
-                            text.find(' ', q + 3) != std::string::npos;
+                            text.find(" = *", q) == q || text.find(' ', q + 3) != std::string::npos;
                 if (callsHere) continue;   // `xStack_18 = f(x);` is the call's result stored in the local: the call's own statement
                 for (const Token& t : r.lines[li].tokens)
                 {

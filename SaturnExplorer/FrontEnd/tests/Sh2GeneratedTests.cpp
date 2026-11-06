@@ -11860,12 +11860,15 @@ void TestDomainPins(Sh2Decompiler& d)
     // `n:map-number-store`), grammar 1 seeds 1881632 and 1884426 (A7-47: a join's number printed through an engine-made temporary on the
     // same line, `n:map-const-join` and `v:map-const-join`), grammar 1 seed 1883172 (A7-48: `uRam2600230e = (uint2)bVar1;` stored by
     // `movt r0 ; mov.w r0,@(0xe,r6)`, `n:map-copy-merge`) and grammar 2 seed 1894780 (A7-49: `iRam06002210 = iRam06002200;` at an
-    // `or.b #imm,@(r0,gbr)`, `n:map-copy-store`).
+    // `or.b #imm,@(r0,gbr)`, `n:map-copy-store`). Routed by the coordinator, each `n:map-frame-store` on master: grammar 2 seeds 2087030,
+    // 2089570 (the area 5 confirming round) and 9403567 (the A10-16 fixer, under A7-38), which this branch's earlier rules fix, and
+    // grammar 2 seed 2067040 (A7-51, the oracle: `xStack_8._0_2_ = *param_2;` at its load, a dereference without parentheses).
     for (const auto& s : { std::make_pair(2, 304221), std::make_pair(2, 1700689), std::make_pair(1, 1832116), std::make_pair(1, 1843925),
                            std::make_pair(2, 1853425), std::make_pair(1, 1843373), std::make_pair(1, 1843207), std::make_pair(1, 1862210),
                            std::make_pair(2, 1872967), std::make_pair(2, 1873745), std::make_pair(1, 1862942),
                            std::make_pair(1, 14875), std::make_pair(2, 1891223), std::make_pair(1, 1881632), std::make_pair(1, 1884426),
-                           std::make_pair(1, 1883172), std::make_pair(2, 1894780) })
+                           std::make_pair(1, 1883172), std::make_pair(2, 1894780),
+                           std::make_pair(2, 2087030), std::make_pair(2, 2089570), std::make_pair(2, 9403567), std::make_pair(2, 2067040) })
     {
         const Report rep = Evaluate(d, s.first == 2 ? MakeV2(s.second) : Generate(s.second), true);
         std::printf("pin 'area 7 fixer: grammar %d seed %d': %zu finding(s)\n", s.first, s.second, rep.findings.size());
