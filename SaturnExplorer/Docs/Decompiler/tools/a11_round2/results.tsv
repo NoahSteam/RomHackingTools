@@ -402,3 +402,21 @@ H-removed-unsaid	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.clau
 H-removed-unsaid	gen	survived	13	
 H-map-origin	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:147: all.Violations() == 0
 H-map-origin	gen	killed	19	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:11775: rep.findings.empty()
+H-map-first	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:147: all.Violations() == 0
+H-map-first	gen	killed	19	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:11775: rep.findings.empty()
+H-map-slotbody	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:147: all.Violations() == 0
+H-map-slotbody	gen	killed	13	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:11775: rep.findings.empty()
+H-map-framestore	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:376: slot && LineInstructions(*slot) == std::vector<uint32_t>{ base + 8 }
+H-map-framestore	gen	killed	19	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:11813: rep.findings.empty()
+H-note-wo	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:3173: HasNote(r, "reads VDP1_FBCR, which is write-only")
+H-note-ro	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:3196: HasNote(r, "writes SCSP_MIBUF, which is read-only")
+H-note-reach	unit	survived	23	
+H-note-reach	gen	survived	14	
+H-note-reach	corpus	survived	42	
+H-note-reach	*	SURVIVED	0	
+H-note-narrow	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:3161: HasNote(r, "VDP2_SCXN0: one 4-byte write of VDP2_SCXIN0 and VDP2_SCXDN0, as
+H-note-cram	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:4282: HasNote(r, "a 1-byte write to colour RAM at 0x25F00001 stores the whole 16-
+H-ptr-sub	unit	survived	23	
+H-ptr-sub	gen	survived	14	
+H-ptr-sub	corpus	survived	41	
+H-ptr-sub	*	SURVIVED	0	
