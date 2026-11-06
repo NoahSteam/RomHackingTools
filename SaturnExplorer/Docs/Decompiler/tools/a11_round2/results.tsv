@@ -513,3 +513,32 @@ C-0010-repeat	corpus	killed	41	CHECK failed at /home/user/RomHackingTools/.claud
 C-0010-all3	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:3397: Ledger(r, { Rd(0, 2), Rd(0, 2) })
 C-0010-all3	gen	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:12073: rep.findings.empty()
 C-0010-all3	corpus	killed	42	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:3397: Ledger(r, { Rd(0, 2), Rd(0, 2) })
+patch:0007	decode	survived	2	
+patch:0007	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:4550: Has(r.Text(), "CONCAT44(0x20100000,~in_r7)") && !Has(r.Text(), "&SMPC_IREG0
+patch:0007	gen	survived	18	
+patch:0008	decode	killed	2	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecodeTests.cpp:2100: r.prototypeWithheld.empty()
+patch:0008	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:1540: Has(r.Text(), "unaff_retaddr + 4")
+patch:0008	gen	killed	19	CANARY FAILURE canary 11: r4 lent, frame pointer, bsr, 0 earlier call(s), plus an index
+patch:0015	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:14884: rc == 0
+patch:0015	gen	survived	19	
+patch:0020	engine	survived	39	
+patch:0020	unit	survived	23	
+patch:0020	gen	survived	18	
+patch:0020	pc	survived	21	
+patch:0020	decode	killed	2	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecodeTests.cpp:2100: r.prototypeWithheld.empty()
+patch:0021	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:147: all.Violations() == 0
+patch:0021	gen	killed	19	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:11775: rep.findings.empty()
+patch:0025	decode	survived	2	
+patch:0025	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:8907: PseudoAgreesWithRun(r, snap, f, with ? *with : inputs, !r.prototype.known)
+patch:0025	gen	survived	18	
+patch:0027	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:6609: Ledger(r, { Wr(scuIst, 1) })
+patch:0027	gen	survived	19	
+patch:0028	unit	stillborn	0	build failed
+patch:0029	unit	killed	24	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:8671: PseudoAgreesWithRun(r, snap, f, c.zeroExtended ? byteIndices : indices)
+patch:0029	gen	killed	20	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:12042: seen > 0
+patch:0033	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:10555: r.prototype.ret.size == 8
+patch:0033	pc	killed	34	FINDING [mismatch] A2-12 r0 = 0, r1 = r5
+patch:0037	-	not-applied	0	only header hunks revert alone
+patch:0044	unit	stillborn	0	build failed
+patch:0048	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:10852: r->prototype.known && r->prototype.ret.kind == idNop.prototype.ret.kind
+patch:0048	pc	survived	21	
