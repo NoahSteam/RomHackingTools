@@ -16747,7 +16747,7 @@ Branch `review/9-round6` from master `521dc0e5`. An adversarial round on the are
 | `SaturnExplorerLoaderFuzzTests`, seed 60617, 3,000 cases a module, all modules | 37,985 cases, 0 classes outside the ledger |
 | `concurrent` module, 40 rounds, 4 processes, beside six busy loops | 0 classes outside the ledger |
 | `SaturnExplorerArea9Round3Tests` (`LockNotHeld`): alone, 2 runs; under load, 3 runs; with the lock mutated away, 3 runs | pass, pass, **fail 3 of 3** (the mutation; restored after) |
-| Full `ctest` (`-j2`, `ulimit -v 3500000`), Live tests included | CTEST_RESULT |
+| Full `ctest -j2 --timeout 900` (`ulimit -v 3500000`), Live tests included | **112 of 112 passed** (206 s): 105 + 6 Live on master, plus the new `SaturnExplorerArea9Round6Tests` |
 
 ### For the fixer
 
