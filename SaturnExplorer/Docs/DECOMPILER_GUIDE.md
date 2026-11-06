@@ -194,7 +194,10 @@ continue to work on those lines.
 - The output is pseudocode for reading, not source that compiles.
   Arithmetic on a value narrower than `int` is printed at the width the code does it (`(int4)-param_1` with a
   one-byte `param_1` negates a byte), where C would widen it first; and a widening cast such as `(uint8)x` of a
-  signed `x` means a zero extension. Read the types, not C's promotion rules.
+  signed `x` means a zero extension. Read the types, not C's promotion rules. A `CONCATxy(a, b)` (bytes joined, as from
+  a stack word written in pieces) has no type of its own: it is the unsigned value of its bytes, and a widening cast of it
+  (`(uint4)CONCAT11(a,b)`) is a zero extension; its sign extension is printed with a cast to its signed type first
+  (`(uint4)(int2)CONCAT11(a,b)`, as `mov.w` reads such a word).
 - Whether r0 is shown as the return follows the engine's rule, and not the instruction in `rts`'s delay slot. A value in r0 is the
   return when nothing else uses it (`mov #1,r0 ; rts`), or when it is the output of a call to a function whose signature is lent as
   returning a value (`return g(p);`, with whatever else the value is used for: compared, stored through). A value with another use
