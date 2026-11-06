@@ -570,3 +570,24 @@ patch:0060	engine	survived	39
 patch:0060	pc	survived	21	
 patch:0060	decode	survived	2	
 patch:0060	*	SURVIVED	0	
+patch:0014	unit	survived	23	
+patch:0014	gen	survived	19	
+patch:0014	corpus	survived	43	
+patch:0014	engine	survived	38	
+patch:0014	pc	survived	22	
+patch:0014	decode	survived	2	
+patch:0014	*	SURVIVED	0	
+patch:0001	fault	survived	83	
+patch:0001	unit	survived	23	
+patch:0001	gen	survived	16	
+patch:0001	engine	killed	43	CHECK failed at line 302: cancelled
+patch:0040	fault	survived	81	
+patch:0040	unit	survived	23	
+patch:0040	gen	survived	19	
+patch:0040	engine	survived	40	
+patch:0040	pc	survived	21	
+patch:0040	decode	survived	2	
+patch:0040	corpus	survived	44	
+patch:0040	*	SURVIVED	0	
+patch:0004	fault	survived	79	
+patch:0004	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:14860: dts::WatchedFreed()
