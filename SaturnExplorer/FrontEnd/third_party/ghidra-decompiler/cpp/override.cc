@@ -14,6 +14,7 @@
  * limitations under the License.
  *
  * Modified for SaturnExplorer: the dead code delay installed for a space, and how many times one was raised (patches/0068-engine-deadcode-late-stack-reads.patch).
+ * Modified for SaturnExplorer: the call sites whose conversion to a direct call asked for a restart (patches/0078-engine-deindirect-restart-per-call-site.patch).
  */
 #include "override.hh"
 #include "funcdata.hh"
@@ -43,6 +44,7 @@ void Override::clear(void)
   deadcodedelay.clear();
   deadcodeBumps = 0;
   deindirect.clear();
+  deindirectRestarts.clear();
   protoover.clear();
   multistagejump.clear();
 }

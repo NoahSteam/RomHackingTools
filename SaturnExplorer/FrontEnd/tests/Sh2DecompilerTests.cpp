@@ -14591,6 +14591,68 @@ void TestA3144Fix()
     }
 }
 
+// A3-155 (routed from area 7 round 5, `tools/a7_round5/fixtures/g1.s`): two `jsr @r3` to a lent callee that keeps r3. The first call becomes
+// direct a generation before the second can (r3 is a constant across the first call only through the callee's lent effects), and the engine's
+// restart group allowed one restart: the second call's own was refused, the function ended "Exceeded maximum restarts", its signature was
+// withheld, and the second call kept the default model's effects -- r8, which the callee writes (`mov #9,r8`, a calling-convention violation
+// the lent effects say), read as kept: `xRam0603ac08 = xVar1;` where the run stores 9. Patch 0078: a restart for each call site that asks.
+// The r8 write is not the cause: the same caller with a callee that writes nothing (`rts ; mov r4,r0`) ended the same way, and is lent now.
+// With the write, the text reads the r8 each call leaves (`extraout_r8`, `extraout_r8_00`) and the signature is withheld for that (A3-3).
+void TestA3155Fix()
+{
+    Sh2Decompiler d(gConfig);
+    uint64_t serial = 155000;
+    const uint32_t base = 0x06009000u;
+    auto fixture = [&](std::vector<uint16_t> callee) {
+        // sts.l pr,@-r15 ; mov.l r8,@-r15 ; mov.l r10,@-r15 ; mov.l @(lit),r10 (0x0603AC00) ; mov.l @(lit),r3 (the callee) ; mov #5,r8 ;
+        // mov.l r8,@r10 ; jsr @r3 ; nop ; mov r8,r2 ; mov.l r2,@(4,r10) ; mov r0,r8 ; jsr @r3 ; nop ; mov.l r8,@(8,r10) ; pops ; rts ; nop
+        std::vector<uint16_t> w = { 0x4F22, 0x2F86, 0x2FA6, 0xDA08, 0xD308, 0xE805, 0x2A82, 0x430B, 0x0009, 0x6283, 0x1A21, 0x6803, 0x430B, 0x0009,
+                                    0x1A82, 0x6AF6, 0x68F6, 0x4F26, 0x000B, 0x0009, 0x0603, 0xAC00, 0x0600, 0x9040 };
+        w.resize(0x20, 0x0009);
+        w.insert(w.end(), callee.begin(), callee.end());
+        return w;
+    };
+    struct Case
+    {
+        const char* name;
+        std::vector<uint16_t> callee;
+        const char* third;   // what the store at 0607001C prints
+        const char* withheld;   // why the caller's signature is withheld (A3-3: a callee-saved register the callee changes, read after the call), or ""
+    };
+    const Case kCases[] = {
+        { "A3-155 g1: the callee sets r8 (mov #9,r8 ; rts ; mov r4,r0)", { 0xE809, 0x000B, 0x6043 }, "xRam0603ac08 = extraout_r8_00;",
+          "it uses r8 after calling 0x06009040" },
+        { "A3-155 control: the callee writes nothing (rts ; mov r4,r0)", { 0x000B, 0x6043 }, "xRam0603ac08 = xVar1;", "" },
+    };
+    for (const Case& c : kCases)
+    {
+        const CallFixture f = { c.name, base, fixture(c.callee) };
+        auto snap = CallSnapshot(f, ++serial);
+        const DecompileResult callee = d.Decompile(snap, Request(0x06009040u));
+        CHECK(callee.prototype.known);
+        DecompileRequest q = Request(base);
+        q.prototypes.emplace_back(0x06009040u, callee.prototype);
+        const DecompileResult r = d.Decompile(snap, q);
+        Print(c.name, r);
+        std::printf("%s: %s %s\n", c.name, r.prototype.known ? "lent" : "withheld:", r.prototypeWithheld.c_str());
+        CHECK(r.status == DecompileStatus::Ok);
+        bool restarts = false;
+        for (const std::string& w : r.warnings) restarts |= Has(w, "restarts");
+        CHECK(!restarts);
+        CHECK(!Has(r.Text(), "Exceeded maximum restarts"));
+        // (the caller of a callee that changes r8 reads the r8 the call left: its text says so, `extraout_r8`, and its signature is withheld
+        // for it, as A3-3 has it; the control is lent)
+        if (*c.withheld) CHECK(!r.prototype.known && Has(r.prototypeWithheld, c.withheld));
+        else CHECK(r.prototype.known && r.prototypeWithheld.empty());
+        // both calls direct, each passing the parameter the callee reads (the second call printed `func_0x06009040();` with the limit hit)
+        const std::string text = r.Text();
+        size_t calls = 0;
+        for (size_t at = text.find("func_0x06009040(param_1)"); at != std::string::npos; at = text.find("func_0x06009040(param_1)", at + 1)) ++calls;
+        CHECK(calls == 2);
+        CHECK(Has(text, c.third));
+    }
+}
+
 void TestFetchAndDataRefusals()
 {
     Sh2Decompiler d(gConfig);
@@ -15083,6 +15145,7 @@ int main(int argc, char** argv)
         RUN(TestFrameLedgerIntake());
         RUN(TestA3130Fix());
         RUN(TestA3144Fix());
+        RUN(TestA3155Fix());
         RUN(TestArea2Round8());
         RUN(TestArea2Round9());
         RUN(TestArea2Round10());

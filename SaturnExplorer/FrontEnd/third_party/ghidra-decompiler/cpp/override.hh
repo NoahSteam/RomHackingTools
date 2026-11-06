@@ -14,6 +14,7 @@
  * limitations under the License.
  *
  * Modified for SaturnExplorer: the dead code delay installed for a space, and how many times one was raised (patches/0068-engine-deadcode-late-stack-reads.patch).
+ * Modified for SaturnExplorer: the call sites whose conversion to a direct call asked for a restart (patches/0078-engine-deindirect-restart-per-call-site.patch).
  */
 /// \file override.hh
 /// \brief A system for sending override commands to the decompiler
@@ -155,6 +156,7 @@ private:
   vector<int4> deadcodedelay;		///< Delay count indexed by address space
   int4 deadcodeBumps;			///< SaturnExplorer (0068): times Heritage raised a delay, for the restarts it may ask for
   map<Address,Address> deindirect;	///< Convert CALLIND into CALL with recovered direct \b addr
+  set<Address> deindirectRestarts;	///< SaturnExplorer (0078): call sites whose conversion asked for a restart
   map<Address,FuncProto *> protoover;	///< Override prototype at \b call-point
   vector<Address> multistagejump;	///< Addresses of indirect jumps that need multistage recovery
   void clear(void);			///< Clear the entire set of overrides
@@ -169,6 +171,8 @@ public:
   void noteDeadcodeBump(void) { deadcodeBumps += 1; }	///< SaturnExplorer (0068): Heritage raised a delay
   int4 numDeadcodeBumps(void) const { return deadcodeBumps; }	///< SaturnExplorer (0068): times a delay was raised
   void insertDeindirect(const Address &callPoint,const Address &directAddr);
+  void noteDeindirectRestart(const Address &callPoint) { deindirectRestarts.insert(callPoint); }	///< SaturnExplorer (0078)
+  int4 numDeindirectRestarts(void) const { return (int4)deindirectRestarts.size(); }	///< SaturnExplorer (0078): call sites that asked
   void insertProtoOverride(const Address &callpoint,FuncProto *p);
   void insertMultistageJump(const Address &addr);
   void insertFlowOverride(const Address &addr,const string &type);

@@ -1,0 +1,94 @@
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/action.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/action.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/action.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/action.cc
+@@ -18,6 +18,7 @@
+  * Modified for SaturnExplorer: a cloned action tree that cannot be completed or registered is freed (patches/0032-allocation-failure-order-2.patch).
+  * Modified for SaturnExplorer: a repeating action stops, with a warning, after a bounded number of passes (patches/0055-engine-action-repeats-bounded.patch).
+  * Modified for SaturnExplorer: a restart group allows one more restart for each raise of a dead code delay (patches/0068-engine-deadcode-late-stack-reads.patch).
++ * Modified for SaturnExplorer: ...and one more for each call site whose conversion to a direct call asked for one (patches/0078-engine-deindirect-restart-per-call-site.patch).
+  */
+ #include "action.hh"
+ #include "funcdata.hh"
+@@ -617,7 +618,10 @@ int4 ActionRestartGroup::apply(Funcdata &data)
+     // SaturnExplorer (patches/0068-engine-deadcode-late-stack-reads.patch): each raise of a dead code delay
+     // (Heritage::bumpDeadcodeDelay, itself bounded) is a restart the output needs to be right; not taking
+     // it leaves a write removed before its read was found.
+-    if (curstart > maxrestarts + data.getOverride().numDeadcodeBumps()) {
++    // SaturnExplorer (patches/0078-engine-deindirect-restart-per-call-site.patch): likewise each call site that FuncCallSpecs::deindirect
++    // could not convert in place (a site asks once: the override makes it direct from the next flow on), so a chain of
++    // indirect calls that resolve one generation after another is followed to its end.
++    if (curstart > maxrestarts + data.getOverride().numDeadcodeBumps() + data.getOverride().numDeindirectRestarts()) {
+       data.warningHeader("Exceeded maximum restarts with more pending");
+       curstart = -1;
+       return 0;
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/fspec.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/fspec.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/fspec.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/fspec.cc
+@@ -17,6 +17,7 @@
+  * a host can set a function's side-effect overrides (patches/0028-funcproto-set-effects.patch).
+  * Modified for SaturnExplorer: a prototype is copied, and its store replaced, with the allocation first and the old object freed after (patches/0032-allocation-failure-order-2.patch).
+  * Modified for SaturnExplorer: a call's stack argument words stay mapped once a frame address escaped (patches/0066-engine-frame-escape-inexact.patch).
++ * Modified for SaturnExplorer: a call site whose conversion to a direct call asks for a restart is counted (patches/0078-engine-deindirect-restart-per-call-site.patch).
+  */
+ #include "fspec.hh"
+ #include "funcdata.hh"
+@@ -5488,6 +5489,12 @@ void FuncCallSpecs::deindirect(Funcdata &data,Funcdata *newfd)
+       return;	// We have successfully updated the prototype, don't restart
+     }
+   }
++  // SaturnExplorer (0078): counted for the restart group, which allows a restart for each call site that asks. The override
++  // above makes the call direct from the flow on, so a site asks once; but a call whose register a lent callee keeps
++  // (A3-155: two `jsr @r3`, the first to a callee that preserves r3) resolves only once the earlier call is direct, a
++  // generation later, and its own restart was refused: the function ended with the restart warning, the second call
++  // under the default model's effects (a register the callee writes read as kept) and its arguments lost.
++  data.getOverride().noteDeindirectRestart(op->getAddr());
+   data.setRestartPending(true);
+ }
+ 
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/override.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/override.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/override.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/override.cc
+@@ -14,6 +14,7 @@
+  * limitations under the License.
+  *
+  * Modified for SaturnExplorer: the dead code delay installed for a space, and how many times one was raised (patches/0068-engine-deadcode-late-stack-reads.patch).
++ * Modified for SaturnExplorer: the call sites whose conversion to a direct call asked for a restart (patches/0078-engine-deindirect-restart-per-call-site.patch).
+  */
+ #include "override.hh"
+ #include "funcdata.hh"
+@@ -43,6 +44,7 @@ void Override::clear(void)
+   deadcodedelay.clear();
+   deadcodeBumps = 0;
+   deindirect.clear();
++  deindirectRestarts.clear();
+   protoover.clear();
+   multistagejump.clear();
+ }
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/override.hh b/Ghidra/Features/Decompiler/src/decompile/cpp/override.hh
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/override.hh
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/override.hh
+@@ -14,6 +14,7 @@
+  * limitations under the License.
+  *
+  * Modified for SaturnExplorer: the dead code delay installed for a space, and how many times one was raised (patches/0068-engine-deadcode-late-stack-reads.patch).
++ * Modified for SaturnExplorer: the call sites whose conversion to a direct call asked for a restart (patches/0078-engine-deindirect-restart-per-call-site.patch).
+  */
+ /// \file override.hh
+ /// \brief A system for sending override commands to the decompiler
+@@ -155,6 +156,7 @@ private:
+   vector<int4> deadcodedelay;		///< Delay count indexed by address space
+   int4 deadcodeBumps;			///< SaturnExplorer (0068): times Heritage raised a delay, for the restarts it may ask for
+   map<Address,Address> deindirect;	///< Convert CALLIND into CALL with recovered direct \b addr
++  set<Address> deindirectRestarts;	///< SaturnExplorer (0078): call sites whose conversion asked for a restart
+   map<Address,FuncProto *> protoover;	///< Override prototype at \b call-point
+   vector<Address> multistagejump;	///< Addresses of indirect jumps that need multistage recovery
+   void clear(void);			///< Clear the entire set of overrides
+@@ -169,6 +171,8 @@ public:
+   void noteDeadcodeBump(void) { deadcodeBumps += 1; }	///< SaturnExplorer (0068): Heritage raised a delay
+   int4 numDeadcodeBumps(void) const { return deadcodeBumps; }	///< SaturnExplorer (0068): times a delay was raised
+   void insertDeindirect(const Address &callPoint,const Address &directAddr);
++  void noteDeindirectRestart(const Address &callPoint) { deindirectRestarts.insert(callPoint); }	///< SaturnExplorer (0078)
++  int4 numDeindirectRestarts(void) const { return (int4)deindirectRestarts.size(); }	///< SaturnExplorer (0078): call sites that asked
+   void insertProtoOverride(const Address &callpoint,FuncProto *p);
+   void insertMultistageJump(const Address &addr);
+   void insertFlowOverride(const Address &addr,const string &type);
