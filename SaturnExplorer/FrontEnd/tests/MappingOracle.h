@@ -103,8 +103,8 @@ struct MappingAudit
     int copyMergeAtBranch = 0; // ...drawn only at a branch that ends its block, which makes nothing (a violation: the line names its makers or nothing)
     int copyRegisterMade = 0;  // ...naming instructions that each write a register and are no load, store, call or branch: the makers (counted)
     int copyNoAddress = 0;     // ...naming no instruction at all: no maker was found (counted)
-    int copyNumberMade = 0;    // A7-45: a number line drawn only at instructions that make the number, no store of the variable storing a
-                               // number any instruction makes (a register merged under the variable's name; counted)
+    int copyNumberMade = 0;    // A7-45: a number line drawn only at instructions that make the number, no store of the variable storing it as
+                               // an instruction makes it (a register merged under the variable's name; counted)
     int constLines = 0;        // lines `V = <number>;` drawn at one instruction (counted)
     int numberStoreOther = 0;  // ...of a memory variable, drawn at a number instruction beside the stores it names, whose value none of those
                                // stores stores (a violation: A7-28, fixed)
@@ -1837,8 +1837,9 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                 }
                 if (named) continue;
                 // (A7-45 (the area 7 fixer): a number line drawn only at instructions that make the number (`mov #imm`, a literal), when
-                // no store of the variable stores a number any instruction makes -- the makers of each store's register known
-                // (RegisterMakers), none a `mov #imm` or a literal; a store of no register, `tas.b`, makes its own -- is a register the
+                // no store of the variable stores that number as an instruction makes it -- the makers of each store's register known
+                // (RegisterMakers), none a `mov #imm` or a literal of the line's number (an input, another number may be); a store of no
+                // register, `tas.b`, makes its own -- is a register the
                 // engine merged under the variable's name, as a register variable's merge is: `iRam0600218c = 0xb;` at `mov #0xb,r0`, r0
                 // the global's load, whose stores write a loaded byte and a loaded word. Naming one of those stores would name another
                 // value (numberStoreOther, A7-28, at the maker; storeValueOther at the store). Counted apart.)
@@ -1860,6 +1861,18 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                             const uint32_t mask = n == 4 ? ~0u : (1u << (8 * n)) - 1;
                             if ((n == 4 || shown <= mask) && ((v ^ shown) & mask) == 0) return true;
                         }
+                        return false;
+                    };
+                    // (a compare in the body: `cmp/eq #imm,r0` of the number, or any compare of two registers, which may hold it)
+                    const auto inputTied = [&]() {
+                        for (const auto& range : r.flowBlockRanges)
+                            for (uint32_t p = range.first; p <= range.second; p += 2)
+                            {
+                                uint16_t cw = 0;
+                                if (!word(p, cw)) continue;
+                                if ((cw >> 8) == 0x88 && sameNumber(static_cast<uint32_t>(static_cast<int32_t>(static_cast<int8_t>(cw & 0xFF))))) return true;
+                                if ((cw >> 12) == 0x3 && (cw & 0xF) == 0x0) return true;
+                            }
                         return false;
                     };
                     bool apart = true;
@@ -1896,7 +1909,11 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                         {
                             uint16_t mw = 0;
                             uint32_t got = 0;
-                            if (m == 0 || (word(m, mw) && numberOf(m, mw, got))) apart = false;   // (an input, or a number some instruction makes)
+                            // (the line's number, made by some instruction; another number, `mov #0x3,r1` stored where the line
+                            // shows 0x18, is another value. The function's input is the number only where a compare of the body
+                            // can say so, as the product's A7-41 rule has it: `cmp/eq #4,r0` of A7-28's fixture, r0 the input
+                            // stored; a store of `in_r3` with no compare is no store of the line's number)
+                            if (m == 0 ? inputTied() : word(m, mw) && numberOf(m, mw, got) && sameNumber(got)) apart = false;
                         }
                     }
                     if (apart)
