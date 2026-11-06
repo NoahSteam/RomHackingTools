@@ -5301,6 +5301,8 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                     named |= n.address == t.insn && (n.text.find("if the pointer holds 0x" + Hex(t.addr)) != std::string::npos ||
                                                        n.text.find("the pointer is based at 0x" + Hex(t.addr)) != std::string::npos);
                     said |= n.address == t.insn && n.caution && n.text.find("may reach on-chip registers") != std::string::npos;
+                    // (A5-101: an on-chip register's address plus an index says that another index reaches another register of the page)
+                    said |= n.address == t.insn && n.caution && n.text.find("plus an index that is not known") != std::string::npos;
                 }
                 if (named)
                 {
@@ -5445,7 +5447,29 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                     // any loop holding both; and a text without goto prints the blocks in the flow's order)
                     const size_t fb = static_cast<size_t>(f.origBlock), mb = static_cast<size_t>(m.origBlock);
                     if (fb >= fr.reach.size() || mb >= fr.reach.size()) continue;
-                    const bool after = fb == mb ? m.origOrder > f.origOrder : fr.reach[fb][mb] && !fr.reach[mb][fb] && !hasGoto;
+                    // (in another block, one every path from the store's block runs through: two complementary `if`s the engine prints as
+                    // one `if`/`else` make the access on the paths that skip the store, grammar 2 seed 2070495)
+                    auto alwaysReaches = [&](size_t from, size_t to) {
+                        std::vector<char> seen(r.flowSuccessors.size(), 0);
+                        std::vector<size_t> todo{ from };
+                        while (!todo.empty())
+                        {
+                            const size_t x = todo.back();
+                            todo.pop_back();
+                            if (x == to || x >= seen.size() || seen[x]) continue;
+                            seen[x] = 1;
+                            bool any = false;
+                            for (int y : r.flowSuccessors[x])
+                                if (y >= 0)
+                                {
+                                    any = true;
+                                    todo.push_back(static_cast<size_t>(y));
+                                }
+                            if (!any) return false;   // (an exit reached without passing 'to')
+                        }
+                        return true;
+                    };
+                    const bool after = fb == mb ? m.origOrder > f.origOrder : fr.reach[fb][mb] && !fr.reach[mb][fb] && !hasGoto && alwaysReaches(fb, mb);
                     if (!after) continue;
                     // (A5-109, open: a read through a pointer, or a register's access, is still printed before a folded store the code makes
                     // first by routes patch 0082 does not close: the engine takes the store for dead or joins it with a later one (`g = v; x = *p;

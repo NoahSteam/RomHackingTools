@@ -3887,10 +3887,13 @@ private:
                 // (`x + y + -0x200` in hwram008 0602A19E is an index made relative), or added to an index the code computes (a multiply, a
                 // shift, a mask: `param_1 * 0x10 + -0x74` is the DMAC channel's CHCR, `(param_1 & 3) * 2 + -0x1f0` the FRT's). `param_1 + -0xc`
                 // off a pointer parameter stays `param_1 - 12`.
-                const bool onChip = k >= 0xE0000000u;
-                if (!sub && out.others && out.constants.empty() && out.bases.empty() && out.back.empty() && !out.steps &&
-                    (!onChip || (k > 0xFFFFFE00u && k <= 0xFFFFFEFFu && (k & 0xFFu) != 0) || IsComputedIndex(base)) && (InColorRam(k) || IsRegisterArea(k)))
-                    out.bases.insert(k);
+                // (an on-chip address subtracted is the same base added: `(param_1 & 0x1c) - 0x198` is 0xFFFFFE68 plus an index)
+                const uint32_t added = sub ? 0u - k : k;
+                const bool onChip = added >= 0xE0000000u;
+                if ((!sub || onChip) && out.others && out.constants.empty() && out.bases.empty() && out.back.empty() && !out.steps &&
+                    (!onChip || (added > 0xFFFFFE00u && added <= 0xFFFFFEFFu && (added & 0xFFu) != 0) || IsComputedIndex(base)) &&
+                    (InColorRam(added) || IsRegisterArea(added)))
+                    out.bases.insert(added);
             }
             else
             {
