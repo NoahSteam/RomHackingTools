@@ -17185,7 +17185,7 @@ A mutant that survives can mean dead code, code another patch does the work of, 
 | 0014 hunk 3 (`foldInOneGuard`) alone | 0 | 1 fixture: `switch, truncated table` prints `if (param_1 < 3) return 0;` instead of a one-case switch, both under "cases may be missing" | changes only when a guard folds |
 | 0014 whole (as area 11 ran it) | 0 | the hunk 3 fixture only | hunks 1 and 2 cancel |
 | 0060 (hunks 1, 2, 4) | 0 | 2 local arrays sized differently | subsumed by 0066 for values |
-| `V-0061-memescape` | 0 | 3 local maps (`axStack_8[2]` against `xStack_8`), one frame-ledger note | subsumed by 0061's own load path for values |
+| `V-0061-memescape` | 0 | 4 local maps (`axStack_8[2]` against `xStack_8`; one is `TestArea10Round2`), one frame-ledger note | subsumed by 0061's own load path for values |
 | `V-0065-steppeddown` | 0 | 0 | subsumed by 0066 |
 | 0040 | 0 without the sanitizers | n/a | needed; LeakSanitizer only (A10-10) |
 
