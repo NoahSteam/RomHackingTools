@@ -784,12 +784,15 @@ void TestArea7Round4()
         CHECK(dts::AuditMapping(c, word, "a7_24 folded case").Violations() == 0);
     }
     // A7-25: a copy's statement drawn at another statement's instruction. `sts.l pr,@-r15 ; mov.l @(lit),r1 ; mov.l r4,@r1 ; mov r4,r2 ;
-    // add #0x13,r2 ; mov #0,r1 ; mov.b r1,@r2 ; ...` (0x0600C12C's shape): the store through param_1 may write the global, so the engine prints
+    // add #0x13,r2 ; mov #0,r1 ; mov.b r1,@r2 ; ...` (0x0600C12C's shape): the store through param_1 may write the global, so the engine printed
     // `iRam0603ad2c = param_1;` again at it, with the byte store's address (0x0607000C); AddFrameStoreTokens adds the global's store
-    // (0x06070004) and a click goes there, but the hover lists 0x0607000C, and the way back from 0x0607000C (`mov.b r1,@r2`) answers the
+    // (0x06070004) and a click goes there, but the hover listed 0x0607000C, and the way back from 0x0607000C (`mov.b r1,@r2`) answered the
     // global's line first, before `*(xunknown1 *)(param_1 + 0x13) = 0;`, whose instruction it is (a user's note on it went there too).
-    // Fixed (the area 7 fixer, A7-25, as the reviewer decided): the tokens stay (the engine materialises the value at the byte store, A7-11's
-    // choice), the copy's token at 0x0607000C is marked materialised, and the way back offers the instruction's own statement first.
+    // Fixed (the area 7 fixer, A7-25, as the reviewer decided): the copy's token at the instruction is marked materialised, and the way back
+    // offers the instruction's own statement first. Since patch 0082 (A5-102) the engine no longer puts the global's write at the byte store:
+    // the global's store keeps its COPY, so the line is the store's own (0x06070004 only) and the way back from 0x0607000C is its statement
+    // alone. The materialised copy is pinned on the shape that still makes one, the same global written before a call (`mov.l r4,@r1 ;
+    // jsr @r1`): the call's INDIRECT is address forced, and the engine writes the value just before the call, at the `jsr`.
     {
         const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06070000u, { 0x4F22, 0xD106, 0x2142, 0x6243, 0x7213, 0xE100, 0x2210, 0xD104,
             0x410B, 0x0009, 0x4F26, 0x000B, 0x0009, 0x0009, 0x0603, 0xAD2C, 0x0607, 0x1000 }, callee);
@@ -798,25 +801,42 @@ void TestArea7Round4()
         const Line* g = LineWith(r, "iRam0603ad2c = param_1;");
         const Line* s = LineWith(r, "*(xunknown1 *)(param_1 + 0x13) = 0;");
         CHECK(g && s);
-        if (g) CHECK(LineInstructions(*g) == (std::vector<uint32_t>{ 0x06070004u, 0x0607000Cu }) && g->firstAddr == 0x06070004u);
+        if (g) CHECK(LineInstructions(*g) == (std::vector<uint32_t>{ 0x06070004u }) && g->firstAddr == 0x06070004u);   // (was 0x06070004, 0x0607000C)
         const LineLookup back = LineForInstruction(r, 0x0607000Cu);
+        CHECK(back.kind == LineLookup::Exact && back.lines.size() == 1);
+        if (s && back.lines.size() == 1) CHECK(&r.lines[back.lines[0]] == s);
+        for (const Line& x : r.lines)
+            for (const Token& t : x.tokens) CHECK(!t.materialised);
+        CHECK(dts::AuditMapping(r, word, "a7_25").Violations() == 0);
+    }
+    {
+        // sts.l pr,@-r15 ; mov.l @(lit),r1 (0x0603AD2C) ; mov.l r4,@r1 ; mov.l @(lit),r1 (the callee) ; jsr @r1 ; nop ; lds.l @r15+,pr ; rts ; nop
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06070000u, { 0x4F22, 0xD104, 0x2142, 0xD104, 0x410B, 0x0009, 0x4F26, 0x000B, 0x0009,
+            0x0009, 0x0603, 0xAD2C, 0x0607, 0x1000 }, callee);
+        Print("A7-25 a copy materialised at a call", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        const Line* g = LineWith(r, "xRam0603ad2c = param_1;");
+        const Line* c = LineWith(r, "func_0x06071000();");
+        CHECK(g && c);
+        if (g) CHECK(LineInstructions(*g) == (std::vector<uint32_t>{ 0x06070004u, 0x06070008u }) && g->firstAddr == 0x06070004u);
+        const LineLookup back = LineForInstruction(r, 0x06070008u);
         CHECK(back.kind == LineLookup::Exact && back.lines.size() == 2);
-        if (s && back.lines.size() == 2) CHECK(&r.lines[back.lines[0]] == s && &r.lines[back.lines[1]] == g);   // was g first
+        if (c && back.lines.size() == 2) CHECK(&r.lines[back.lines[0]] == c && &r.lines[back.lines[1]] == g);   // the call's own statement first
         bool marked = false;
         if (g)
-            for (const Token& t : g->tokens) marked = marked || (t.addr == 0x0607000Cu && t.begin < t.end && t.materialised);
+            for (const Token& t : g->tokens) marked = marked || (t.addr == 0x06070008u && t.begin < t.end && t.materialised);
         CHECK(marked);
-        if (s)
-            for (const Token& t : s->tokens) CHECK(!t.materialised);
-        const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_25");
-        CHECK(a.Violations() == 0);
-        // (unmarked, the copy is first again: both draw the instruction and the copy is first in the text. The oracle's backWrong
-        // answers for the order: it fails when the way back puts a marked line before a line that draws the instruction unmarked)
+        if (c)
+            for (const Token& t : c->tokens) CHECK(!t.materialised);
+        CHECK(dts::AuditMapping(r, word, "a7_25 call").Violations() == 0);
+        // (unmarked, the copy is first: both draw the instruction and the copy is first in the text. The oracle's backWrong answers for
+        // the order: it fails when the way back puts a marked line before a line that draws the instruction unmarked)
         DecompileResult unmarked = r;
         for (Line& x : unmarked.lines)
             for (Token& t : x.tokens) t.materialised = false;
-        const LineLookup old = LineForInstruction(unmarked, 0x0607000Cu);
-        if (g && !old.lines.empty()) CHECK(old.lines[0] == static_cast<size_t>(g - &r.lines[0]));   // the base build's order
+        const LineLookup old = LineForInstruction(unmarked, 0x06070008u);
+        CHECK(g && !old.lines.empty());
+        if (g && !old.lines.empty()) CHECK(old.lines[0] == static_cast<size_t>(g - &r.lines[0]));
     }
 }
 
@@ -1053,18 +1073,20 @@ void TestArea7Round6()
     // the words (a line beginning at another store that draws a store or a call), so it fails the damaged result. (b) copyMergeAtBranch
     // judged a register merge drawn only at a BRANCH; the A7-21 lines (kA723Words' control, the image's own words) drawn at the
     // `tst r0,r0` before each bt/s, an instruction that makes nothing either, now fail too (any instruction that writes no register).
+    // (Since patch 0082 the A7-25 fixture has no copy at the byte store; the copy materialised at a call, its other shape, is judged instead.)
     {
-        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06070000u, { 0x4F22, 0xD106, 0x2142, 0x6243, 0x7213, 0xE100, 0x2210, 0xD104,
-            0x410B, 0x0009, 0x4F26, 0x000B, 0x0009, 0x0009, 0x0603, 0xAD2C, 0x0607, 0x1000 }, { { 0x06071000u, 0x000B }, { 0x06071002u, 0x0009 } });
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06070000u, { 0x4F22, 0xD104, 0x2142, 0xD104, 0x410B, 0x0009, 0x4F26, 0x000B, 0x0009,
+            0x0009, 0x0603, 0xAD2C, 0x0607, 0x1000 }, { { 0x06071000u, 0x000B }, { 0x06071002u, 0x0009 } });
         DecompileResult unmarked = r;
         for (Line& x : unmarked.lines)
             for (Token& t : x.tokens) t.materialised = false;
-        const LineLookup old = LineForInstruction(unmarked, 0x0607000Cu);
-        const Line* g = LineWith(unmarked, "iRam0603ad2c = param_1;");
+        const LineLookup old = LineForInstruction(unmarked, 0x06070008u);
+        const Line* g = LineWith(unmarked, "xRam0603ad2c = param_1;");
         CHECK(g && !old.lines.empty());
         if (g && !old.lines.empty()) CHECK(&unmarked.lines[old.lines[0]] == g);   // the copy first: A7-25 as it was
         const dts::MappingAudit ua = dts::AuditMapping(unmarked, word, "a7_30 unmarked");
         CHECK(ua.backWrong == 1 && ua.Violations() == 1);   // (A7-30 (a): the order is judged without the product's flag)
+        CHECK(dts::AuditMapping(r, word, "a7_30 marked").Violations() == 0);
     }
     {
         std::vector<uint16_t> image = a7r4::kA723Words;
@@ -1223,18 +1245,20 @@ void TestArea7Round7()
     }
     // The generator's findings once the later checks were flagged (A7-34; SE_GENERATED_MAP_ALL=1), shrunk words:
     // A7-31 on a global (grammar 1 seed 1711170): `mov.l lit,r6 ; and r1,r1 ; mov.l r1,@(0x1c,r6) ; mov.l r2,@-r4 ; rts ; nop`. The `and r1,r1`
-    // the engine folds is A7-31's computation; the global's copy is materialised at the may-alias store 0x06009006 (A7-25's shape) and
-    // names no store, so a click goes to a store of another variable and the store 0x06009004 is on no line. When fixed: the line names
-    // 0x06009004 and copyStoreMissing is 0.
+    // the engine folds is A7-31's computation; the global's copy was materialised at the may-alias store 0x06009006 (A7-25's shape) and
+    // named no store, so a click went to a store of another variable and the store 0x06009004 was on no line. Since patch 0082 (A5-102) the
+    // global's store keeps its COPY at 0x06009004 and is printed there, before the store through param_1, as the code makes it: the line is
+    // the store's own. (The frame shape of A7-31, TestArea7Round7, is not this one.)
     {
         const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, { 0xD602, 0x2119, 0x1617, 0x2426, 0x000B, 0x0009, 0x2600, 0x2304 });
         Print("A7-31 a global's store through a folded computation", r);
         const Line* g = LineWith(r, "xRam26002320 = in_r1;");
-        CHECK(g != nullptr);
-        if (g) CHECK(LineInstructions(*g) == (std::vector<uint32_t>{ 0x06009006u }));   // (A7-31; fixed: and 0x06009004)
-        CHECK(!a7r3::OnSomeLine(r, 0x06009004u));
+        const Line* p = LineWith(r, "*(xunknown4 *)(param_1 + -4) = in_r2;");
+        CHECK(g != nullptr && p != nullptr && g < p);
+        if (g) CHECK(LineInstructions(*g) == (std::vector<uint32_t>{ 0x06009004u }));   // (was 0x06009006 only)
+        CHECK(a7r3::OnSomeLine(r, 0x06009004u));
         const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_31 global");
-        CHECK(a.copyAtOther == 1);
+        CHECK(a.copyAtOther == 0 && a.copyStoreMissing == 0 && a.Violations() == 0);
     }
     // A7-35 (grammar 1 seed 1710746): a merge copy of a number at the `bt` ending its block names a store of ANOTHER value, the lowest, so
     // a click goes there. `mov.l lit,r7 ; mov #3,r0 ; mov.l r0,@r7 ; (poll) ; mov #1,r3 ; dt r3 ; bf ; cmp/eq r1,r3 ; bt L ; or r0,r3 ;
@@ -14685,10 +14709,10 @@ void TestArea10Round2()
     }
 }
 
-// ===== Area 5, confirming round (REVIEW_LEDGER.md A5-101 to A5-104) ===================================================================
-// The reviewer's fixtures, each pinned as the head prints it today, so the fixer reproduces the row by running this function. The checks
-// marked DEFECT hold the wrong or missing output: the fix turns each of them round (and keeps the controls). The words are the reviewer's,
-// assembled at the bases below (only sm1 holds an absolute address of its own, its literal's).
+// ===== Area 5, confirming round (REVIEW_LEDGER.md A5-101 to A5-107) ===================================================================
+// The reviewer's fixtures, pinned first as the head printed them (the checks then marked DEFECT); the area 5 confirming-round fixer turned
+// each of them round (marked FIXED, with the patch or the function that fixed it) and added the controls marked so. The words are the
+// reviewer's, assembled at the bases below.
 void TestArea5Confirm()
 {
     Sh2Decompiler d(gConfig);
@@ -14723,6 +14747,13 @@ void TestArea5Confirm()
         // control: the same without the step in the second loop (read.w @(2,p); p ^= 0x20000000)
         { "a5_107_nostep", 0x06050A00u, { 0xD607, 0xE304, 0x7604, 0xD107, 0x261A, 0x4310, 0x8BFA, 0xE304, 0x8561, 0xD205, 0x262A, 0x4310, 0x8BFA, 0x000B, 0x0009, 0x0009,
                                           0x25F8, 0x00DC, 0x8000, 0x0000, 0x2000, 0x0000 } },
+        // (fixer) control for A5-101: mov.l @(lit),r1 (0xFFFFFFF4) ; add r4,r1 ; mov.l @r1,r0 ; rts ; nop -- `param_1 + -0xc` off a pointer parameter
+        // is `param_1 - 12`, A5-28's rawconst, not SH2_RTCNT plus an index
+        { "a5_101_rawconst", 0x06050B00u, { 0xD102, 0x314C, 0x6012, 0x000B, 0x0009, 0x0009, 0xFFFF, 0xFFF4 } },
+        // (fixer) A5-103 without the AND: mov.l @(lit),r2 (0x40000000) ; or r4,r2 ; mov #0,r0 ; rts ; mov.l r0,@r2 -- partition 2, 3, 6 or 7
+        { "a5_103_or", 0x06050C00u, { 0xD202, 0x224B, 0xE000, 0x000B, 0x2202, 0x0009, 0x4000, 0x0000 } },
+        // (fixer) control for A5-104: the store goes to 0x06050D18, next to the pool and no literal of it; the literal is folded
+        { "a5_104_other", 0x06050D00u, { 0xD102, 0x2142, 0xD002, 0x000B, 0x0009, 0x0009, 0x0605, 0x0D18, 0x1234, 0x5678 } },
     };
     for (const W& w : fx)
     {
@@ -14738,49 +14769,72 @@ void TestArea5Confirm()
         CHECK(r.status == DecompileStatus::Ok);
         out[w.name] = r;
     }
-    // A5-101 (P3): an unknown index added to an on-chip register's address says nothing. DEFECT: no note at all (want: "if the index is 0
-    // (the pointer is based at 0xFFFFFE10 (SH2_TIER))", and the TE-arming read note of CHCR0 for the DMAC shape).
+    // A5-101 (P3): an unknown index added to an on-chip register's address said nothing. FIXED (PointerResolver::Walk takes the register's
+    // address for the base of an index the code computes, or one 257 to 512 bytes back): the register at the index 0 is said, with the page's
+    // width rule for the access, and the read note of CHCR0 for the DMAC shape.
     {
         const DecompileResult& r = out["a5_101_byte"];
         CHECK(Has(r.Text(), "+ -0x1f0)"));
-        CHECK(r.hardwareNotes.empty());   // DEFECT
+        CHECK(HasNoteAt(r, 0x06050008u, "the pointer is 0xFFFFFE10 (SH2_TIER) plus an index that is not known", true));   // FIXED (was no note)
+        CHECK(HasNoteAt(r, 0x06050010u, "a 1-byte access at an address with bit 8 set (0xFFFFFF00-0xFFFFFFFF) is an address error", true));
         const DecompileResult& m = out["a5_101_dmac"];
         CHECK(Has(m.Text(), "param_1 * 0x10 + -0x74"));
-        CHECK(m.hardwareNotes.empty());   // DEFECT
+        CHECK(HasNoteAt(m, 0x0605010Au, "if the index is 0 (the pointer is based at 0xFFFFFF8C (SH2_CHCR0)): SH2_CHCR0: a read arms clearing TE", false));   // FIXED
+        CHECK(HasNoteAt(m, 0x0605010Eu, "a 4-byte access at an address with bit 8 clear (0xFFFFFE00-0xFFFFFEFF) is an address error", true));
         CHECK(HasNote(out["a5_101_scu"], "if the index is 0 (the pointer is based at 0x25FE0010 (SCU_D0EN))", false));   // control
+        CHECK(!HasNote(out["a5_101_scu"], "plus an index that is not known", true));   // control: no on-chip page note off the page
+        // control (fixer): a small negative offset off a pointer parameter names no register
+        CHECK(Has(out["a5_101_rawconst"].Text(), "param_1 + -0xc"));
+        CHECK(out["a5_101_rawconst"].hardwareNotes.empty());
     }
-    // A5-102 (P1): a store to a global is printed after a later store through a pointer that writes the global's old value. DEFECT: the
-    // pointer's store is printed first, so when the pointer is the global's address the text ends with the new value and the code with the old.
+    // A5-102 (P1): a store to a global was printed after a later store through a pointer that writes the global's old value, so when the
+    // pointer is the global's address the text ended with the new value and the code with the old. FIXED (patch 0082: RulePropagateCopy keeps
+    // the global's write out of the INDIRECT the pointer's store puts on it, and the merge saves the old value instead): the code's order.
     {
         auto before = [](const std::string& t, const char* a, const char* b) {
             const size_t i = t.find(a), j = t.find(b);
             return i != std::string::npos && j != std::string::npos && i < j;
         };
-        CHECK(before(out["a5_102"].Text(), "*param_1 = xRam06030000;", "xRam06030000 = xVar1;"));        // DEFECT
-        CHECK(before(out["a5_102_hw"].Text(), "*puVar2 = uRam06030000;", "uRam06030000 = xVar1;"));     // DEFECT: the DMA start before the RAM write
+        const std::string t = out["a5_102"].Text();
+        CHECK(before(t, "xVar1 = xRam06030000;", "xRam06030000 = param_2;") && before(t, "xRam06030000 = param_2;", "*param_1 = xVar1;"));   // FIXED
+        CHECK(!Has(t, "*param_1 = xRam06030000;") && !Has(t, "xRam06030000 = xVar1;"));
+        const std::string h = out["a5_102_hw"].Text();
+        CHECK(before(h, "uVar1 = uRam06030000;", "uRam06030000 = param_2;") && before(h, "uRam06030000 = param_2;", "*puVar2 = uVar1;"));   // FIXED: the RAM write first
+        CHECK(!Has(h, "uRam06030000 = xVar1;"));
         CHECK(before(out["a5_102_byte"].Text(), "cRam06030000 = param_2;", "*param_1 = iVar1;"));        // control: in the code's order
     }
-    // A5-103 (P2): an associative purge through a pointer the code builds with the and/or idiom says nothing; the text is a store of 0.
+    // A5-103 (P2): an associative purge through a pointer the code builds with the and/or idiom said nothing; the text is a store of 0.
+    // FIXED (PointerValues::parts, MaskedPartitionNote): the partition the masks fix is said, certain for the idiom, "may" without the AND.
     {
         const DecompileResult& r = out["a5_103"];
         CHECK(Has(r.Text(), "& 0x1ffffff0 | 0x40000000) = 0;"));
-        CHECK(!HasNote(r, "associative purge", false) && !HasNote(r, "associative purge", true));   // DEFECT
+        CHECK(HasNoteAt(r, 0x0605060Cu, "an access through this pointer is an associative purge, not a memory access: whatever the value it is made from, "
+                                        "the address is in 0x40000000-0x5FFFFFFF", true));   // FIXED (was no note)
         CHECK(HasNote(out["a5_103_const"], "an access at 0x46030000 is an associative purge, not a memory access", false));   // control
+        const DecompileResult& o = out["a5_103_or"];
+        CHECK(HasNoteAt(o, 0x06050C08u, "may not be a memory access: whatever the value it is made from, the address is in 0x40000000-0x5FFFFFFF, "
+                                        "0x60000000-0x7FFFFFFF, 0xC0000000-0xDFFFFFFF, 0xE0000000-0xFFFFFFFF", true));
+        CHECK(!HasNote(o, "an access through this pointer is an associative purge", true));
     }
-    // A5-104 (P3): a literal-pool word the function overwrites is still folded as the old constant. DEFECT: `return 0x12345678;` where
-    // the code returns param_1; only the engine's generic "Read-only address ... is written" warning is given.
+    // A5-104 (P3): a literal-pool word the function overwrites was still folded as the old constant (`return 0x12345678;` where the code
+    // returns param_1), with only the engine's "Read-only address ... is written". FIXED (Sh2Decompiler::DecompileInto: a literal word a
+    // folded store writes is ordinary memory for the passes after, and a printing pass gives way): the value written, and said.
     {
         const DecompileResult& r = out["a5_104"];
-        CHECK(Has(r.Text(), "return 0x12345678;"));   // DEFECT
-        CHECK(WarnsAbout(r, "Read-only address"));
+        CHECK(Has(r.Text(), "return param_1;") && !Has(r.Text(), "0x12345678"));   // FIXED
+        CHECK(!WarnsAbout(r, "Read-only address"));
+        CHECK(WarnsAbout(r, "0x06050802: the literal-pool word at 0x06050810 is written by the function"));
+        const DecompileResult& c = out["a5_104_other"];   // control: a literal no store reaches is folded
+        CHECK(Has(c.Text(), "return 0x12345678;") && !WarnsAbout(c, "literal-pool word"));
     }
     // A5-107 (P3): a pointer stepped and flipped into the cached partition in a second loop, after a first loop that flipped it with 0x80000000,
-    // gets neither the stepped note nor the cache caution. DEFECT: no "stepped in a loop" note (the control without the step has both).
+    // got neither the stepped note nor the cache caution. FIXED (PointerResolver::CloseBack walks a stepped loop from the later values of the
+    // earlier loop too): both, as the control without the step has them.
     {
         const char* cache = "a read of a register through the cached partition is a cache read when the cache is on (SH2_CCR.CE)";
-        CHECK(!HasNote(out["a5_107"], "stepped in a loop", true) && !HasNote(out["a5_107"], "stepped in a loop", false));   // DEFECT
-        CHECK(!HasNote(out["a5_107"], cache, true));                                                                      // DEFECT
-        CHECK(HasNote(out["a5_107_nostep"], cache, true));                                                                // control
+        CHECK(HasNoteAt(out["a5_107"], 0x06050910u, "the pointer is stepped in a loop from 0xA5F800E2", true));   // FIXED
+        CHECK(HasNoteAt(out["a5_107"], 0x06050910u, cache, true));                                               // FIXED
+        CHECK(HasNote(out["a5_107_nostep"], cache, true));                                                       // control
     }
 }
 
@@ -15154,6 +15208,8 @@ int TestArea7Round4Probe(const char* path)
         const DecompileResult r = d.Decompile(snap, q);
         std::printf("==== %s\n", field[0].c_str());
         Print(field[0].c_str(), r);
+        for (const HardwareNote& n : r.hardwareNotes)
+            std::printf("  hardware %s at %08X: %s\n", n.caution ? "caution" : "note", n.address, n.text.c_str());
         for (const AccessFate& f : r.accessFates)
             std::printf("  fate: %s %u at %08X addr %08X%s%s fate %d flow block %d order %u\n", f.write ? "write" : "read", unsigned(f.size), f.insn, f.address,
                         f.frame ? " frame" : "", f.constantAddress ? " const" : "", int(f.fate), f.origBlock, f.origOrder);

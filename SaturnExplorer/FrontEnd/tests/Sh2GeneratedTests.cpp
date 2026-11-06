@@ -3364,8 +3364,56 @@ std::vector<std::pair<size_t, size_t>> BackEdgeSpans(const std::vector<Line>& li
     return spans;
 }
 
-// The operands of the dereferences in a statement's text: what follows a unary `*` (up to the end of its operand: a `,`, a `;`, a `)` that closes
-// nothing, ` = `), and the name before a `[` (A5-85). A `*` is unary at the start, after an operator or an opening parenthesis, or after a cast
+// The cast types the engine prints, for telling `(type *)p` from a parenthesised expression.
+const std::regex& CastTypeRe()
+{
+    static const std::regex castRe("^\\s*(?:[A-Za-z_]\\w*\\s*)+\\*+\\s*$|^\\s*(?:u?int\\d|xunknown\\d|undefined\\d?|char|uchar|short|ushort|bool|byte|word|dword|qword|long|ulong|float\\d*|code|void|unkbyte\\d+|unkuint\\d+|unkint\\d+)\\s*$");
+    return castRe;
+}
+
+// Where the operand of the unary `*` at 'at' ends: a unary `*` takes one operand, a name with its subscripts, or a parenthesised expression
+// after the casts, or another `*` and its operand. `*param_2 | 0xffffffc0` loads through param_2 and ORs the mask into the value loaded, and
+// `*(uint4 *)(x + -0x80) | 0xffffffc0` through `x + -0x80` (A5-105).
+size_t UnaryOperandEnd(const std::string& text, size_t at)
+{
+    size_t k = at + 1;
+    while (k < text.size() && (text[k] == ' ' || text[k] == '*')) ++k;
+    size_t end = k;
+    while (k < text.size() && text[k] == '(')
+    {
+        int depth = 0;
+        size_t close = std::string::npos;
+        for (size_t q = k; q < text.size(); ++q)
+        {
+            if (text[q] == '(') ++depth;
+            else if (text[q] == ')' && --depth == 0) { close = q; break; }
+        }
+        if (close == std::string::npos) return text.size();
+        end = close + 1;
+        if (!std::regex_match(text.substr(k + 1, close - k - 1), CastTypeRe())) break;
+        k = close + 1;
+        while (k < text.size() && text[k] == ' ') ++k;
+        end = k;
+    }
+    if (end == k)
+    {
+        while (end < text.size() && (std::isalnum(static_cast<unsigned char>(text[end])) || text[end] == '_')) ++end;
+        while (end < text.size() && text[end] == '[')
+        {
+            int depth = 0;
+            for (; end < text.size(); ++end)
+            {
+                if (text[end] == '[') ++depth;
+                else if (text[end] == ']' && --depth == 0) { ++end; break; }
+            }
+        }
+    }
+    return end;
+}
+
+// The operands of the dereferences in a statement's text: what follows a unary `*` (its operand, UnaryOperandEnd: before A5-105 it ran on to
+// the end of the expression, a `,`, a `;`, a `)` that closes nothing, ` = `, and took a mask ORed into the value loaded for the pointer's), and
+// the name before a `[` (A5-85). A `*` is unary at the start, after an operator or an opening parenthesis, or after a cast
 // (`(int4)*p`, `(xunknown4 *)`); after a name, a number or another closing parenthesis it multiplies. Empty when the text dereferences nothing.
 std::vector<std::pair<std::string, size_t>> DerefOperandList(const std::string& text)
 {
@@ -3403,15 +3451,7 @@ std::vector<std::pair<std::string, size_t>> DerefOperandList(const std::string& 
             else unary = !(std::isalnum(static_cast<unsigned char>(p)) || p == '_' || p == ']');
         }
         if (!unary) continue;
-        int depth = 0;
-        size_t j = i + 1;
-        for (; j < text.size(); ++j)
-        {
-            const char c = text[j];
-            if (c == '(' || c == '[') ++depth;
-            else if (c == ')' || c == ']') { if (depth == 0) break; --depth; }
-            else if (depth == 0 && (c == ',' || c == ';' || text.compare(j, 3, " = ") == 0)) break;
-        }
+        const size_t j = std::min(UnaryOperandEnd(text, i), text.size());
         const std::string operand = text.substr(i + 1, j - i - 1);
         if (operand.find_first_not_of(" *") != std::string::npos) out.emplace_back(operand, i);
     }
@@ -3423,48 +3463,14 @@ std::vector<std::pair<std::string, size_t>> DerefOperandList(const std::string& 
 // not the masked address).
 std::string LoadsBlanked(const std::string& text)
 {
-    static const std::regex castRe("^\\s*(?:[A-Za-z_]\\w*\\s*)+\\*+\\s*$|^\\s*(?:u?int\\d|xunknown\\d|undefined\\d?|char|uchar|short|ushort|bool|byte|word|dword|qword|long|ulong|float\\d*|code|void|unkbyte\\d+|unkuint\\d+|unkint\\d+)\\s*$");
     std::string out = text;
     for (const auto& one : DerefOperandList(text))
     {
         const size_t at = one.second;
         if (text[at] == '*')
         {
-            // (a unary `*` takes one operand, which DerefOperandList reads on to the end of the expression: `*param_2 | 0xffffffc0` loads through
-            // param_2 and ORs the mask into the value loaded. The operand is a name with its subscripts, or a parenthesised expression after the
-            // casts, or another `*` and its operand.)
-            size_t k = at + 1;
-            while (k < text.size() && (text[k] == ' ' || text[k] == '*')) ++k;
-            size_t end = k;
-            while (k < text.size() && text[k] == '(')
-            {
-                int depth = 0;
-                size_t close = std::string::npos;
-                for (size_t q = k; q < text.size(); ++q)
-                {
-                    if (text[q] == '(') ++depth;
-                    else if (text[q] == ')' && --depth == 0) { close = q; break; }
-                }
-                if (close == std::string::npos) { end = text.size(); break; }
-                end = close + 1;
-                if (!std::regex_match(text.substr(k + 1, close - k - 1), castRe)) break;
-                k = close + 1;
-                while (k < text.size() && text[k] == ' ') ++k;
-                end = k;
-            }
-            if (end == k)
-            {
-                while (end < text.size() && (std::isalnum(static_cast<unsigned char>(text[end])) || text[end] == '_')) ++end;
-                while (end < text.size() && text[end] == '[')
-                {
-                    int depth = 0;
-                    for (; end < text.size(); ++end)
-                    {
-                        if (text[end] == '[') ++depth;
-                        else if (text[end] == ']' && --depth == 0) { ++end; break; }
-                    }
-                }
-            }
+            // (a unary `*` takes one operand: UnaryOperandEnd)
+            const size_t end = UnaryOperandEnd(text, at);
             for (size_t q = at + 1; q < end && q < out.size(); ++q) out[q] = ' ';
             continue;
         }

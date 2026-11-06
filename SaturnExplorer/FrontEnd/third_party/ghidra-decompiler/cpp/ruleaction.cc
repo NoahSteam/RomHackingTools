@@ -22,6 +22,7 @@
  * Modified for SaturnExplorer: RuleDivOpt refuses a multiply that wraps and a sign extension shifted logically (or a zero extension shifted arithmetically) whose difference is read; RuleDivTermAdd and RuleDivTermAdd2 need the original product not to wrap, RuleDivTermAdd the sum not to wrap its add and RuleDivTermAdd2 the multiplier to be at most 2^n; RuleDivChain, RuleSignForm2, RuleThreeWayCompare and the rules that read a shift amount check what they read (patches/0064-engine-divopt-sign-and-wrap-rule-guards.patch).
  * Modified for SaturnExplorer: RuleSignMod2nOpt2 tests that the sign steering its bias is V's own; RuleThreeWayCompare refuses unsigned constants that are neighbours only modulo 2^64; RuleShiftSub refuses a SUBPIECE that reads past the top of the shifted value (patches/0067-engine-round14-sign-mod-late-donothing-three-way-shift-sub.patch).
  * Modified for SaturnExplorer: RulePiecePathology leaves a word of the stack frame alone, which is no register a partial write fills in; RulePullsubIndirect takes the piece of the INDIRECT's input from the lowest byte its readers take (patches/0072-engine-frame-chains-and-save-slots.patch).
+ * Modified for SaturnExplorer: RulePropagateCopy does not propagate a write of a global into the INDIRECT a STORE puts on it (patches/0082-engine-store-keeps-earlier-write.patch).
  */
 #include "ruleaction.hh"
 #include "coreaction.hh"
@@ -3961,6 +3962,18 @@ int4 RulePropagateCopy::applyOp(PcodeOp *op,Funcdata &data)
       if (otherOp->isMarker()) {
 	if (invn->isConstant()) continue;		// Don't propagate constants into markers
 	if (vn->isAddrForce()) continue;		// Don't propagate if we are keeping the COPY anyway
+	// SaturnExplorer (0082): the INDIRECT a STORE puts on a global stands for the global as the store finds it,
+	// and the store may write it through an alias. Fed the COPY's input, the INDIRECT leaves the write without a
+	// place: the COPY goes as dead, and when the global's old value is read at or after the store (`x = g;
+	// g = v; *p = x;`) the merge can only write v back after the store (Merge::trimOpOutput), which reverses the
+	// two writes when p is &g and prints a hardware write through p before the memory write the code makes
+	// first (A5-102). Kept, the COPY writes the global where the code does and the merge saves the old value
+	// instead. (A local of the frame, which a store through a frame pointer guards, is left as it was: the
+	// frame's aliases are the frame ledger's, and the engine makes such a local an array once a pointer may
+	// reach it.)
+	if (otherOp->code() == CPUI_INDIRECT && otherOp->isIndirectStore() && slot == 0 && vn->isAddrTied() &&
+	    vn->getSpace()->getType() == IPTR_PROCESSOR)
+	  continue;
 	if (invn->isAddrTied() && otherOp->getOut()->isAddrTied() &&
 	    (otherOp->getOut()->getAddr() != invn->getAddr()))
 	  continue;		// We must not allow merging of different addrtieds
