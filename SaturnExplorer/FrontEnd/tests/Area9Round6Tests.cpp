@@ -4,7 +4,7 @@
 // and must be turned round when the finding is fixed. A check marked RESIDUAL holds a case the fixer left open on purpose.
 //
 // Linux only (fork, flock, /proc). Runs in a scratch folder under the current directory; nothing outside it is touched.
-// SE_A9R6_LONG=1 adds the exit with four stuck locks (about 40 s).
+// The exit with four stuck locks shares one 10 s budget (A9-53; it took 40 s before); SE_A9R6_LONG=1 is no longer needed.
 #include "Debug/CallStack.h"
 #include "Decompiler/Sh2FunctionFinder.h"
 #include "Settings.h"
@@ -168,6 +168,7 @@ void SyncRefused()
     gFailFileErrno = 0;
     std::printf("  names save with fsync EIO: %s: %s\n", ok ? "saved" : "refused", err.c_str());
     Check(!ok && Has(err, "flush") && Has(err, "Input/output error"), "A9-48: an fsync I/O error refuses the save and says so");
+    Check(Has(err, "saturn_functions.txt") && !Has(err, "separt"), "A9-55: the refusal names the file the user knows, not the removed staging file");
     Check(Slurp("saturn_functions.txt") == "06004000 main_loop\n" && CountStaging("saturn_functions.txt") == 0,
           "A9-48: after a refused sync the old file is as it was and no staging file is left");
     Check(fn.Save(&err) && Has(Slurp("saturn_functions.txt"), "06004100 pending_name"), "A9-48: the next save writes the pending change");
@@ -289,16 +290,15 @@ void ExitWaits()
         kill(kid, SIGKILL);
         Reap(kid);
     }
-    const char* longRun = std::getenv("SE_A9R6_LONG");
-    if (longRun && *longRun == '1')
     {
+        FileLock::SetClosing(true);   // a new exit: a new 10 s budget
         Put("ex.ini", "[a]\nx = 1\n");
         Put("ex_notes.txt", "06004000 note\n");
         Put("ex_names.txt", "06004000 main\n");
         Put("ex_bounds.txt", "06004000\n");
         const char* locks[] = { "ex.ini.lock", "ex_notes.txt.lock", "ex_names.txt.lock", "ex_bounds.txt.lock" };
         pid_t kids[4];
-        for (int i = 0; i < 4; ++i) kids[i] = HoldLockMs(locks[i], 60000);
+        for (int i = 0; i < 4; ++i) kids[i] = HoldLockMs(locks[i], 16000);
         Settings s;
         s.Set("a", "y", "2");
         AddressMap nb, nc, mb, mc;
@@ -318,7 +318,7 @@ void ExitWaits()
         refused += !fb.Save("ex_bounds.txt", &err);
         const double secs = Since(t0);
         std::printf("  exit with four stuck locks: %d of 4 refused after %.2f s\n", refused, secs);
-        Check(refused == 4 && secs > 38.0, "A9-46: four stuck locks hold the exit for about 40 s (10 s each, one after the other)");
+        Check(refused == 4 && secs > 9.0 && secs < 12.5, "PIN A9-53 fixed: four stuck locks hold the exit about 10 s in all (one shared budget), not 40 s");
         for (pid_t k : kids) { kill(k, SIGKILL); Reap(k); }
     }
     FileLock::SetClosing(false);
@@ -336,14 +336,35 @@ void FrameTryCollides()
     std::string err;
     const bool ok = s.SaveTo("frame.ini", &err, false);
     std::printf("  frame try during another instance's 150 ms save: %s: %s\n", ok ? "saved" : "refused", err.c_str());
-    Check(!ok && Has(err, "another process holds"), "PIN A9-52: the frame's no-wait try is refused by another instance's ordinary save");
+    Check(ok && Has(Slurp("frame.ini"), "y = 2"), "PIN A9-52 fixed: the frame's try waits 250 ms, so another instance's ordinary save does not refuse it");
     Reap(kid);
+    {
+        const pid_t stuck = HoldLockMs("frame.ini.lock", 2000);
+        Settings s2;
+        s2.Set("a", "z", "3");
+        const auto u0 = std::chrono::steady_clock::now();
+        const bool refused = !s2.SaveTo("frame.ini", &err, false);
+        const double secs = Since(u0);
+        Check(refused && Has(err, "another process holds") && secs < 1.0, "the frame's try still gives up (under a second) behind a stuck holder");
+        Reap(stuck);
+    }
     const pid_t kid2 = HoldLockMs("frame.ini.lock", 150);
     const auto t0 = std::chrono::steady_clock::now();
+    s.Set("a", "w", "4");
     const bool waited = s.SaveTo("frame.ini", &err, true);
     std::printf("  a waiting save in the same moment: %s after %.2f s\n", waited ? "saved" : "refused", Since(t0));
     Check(waited, "a save that waits takes the lock once the other instance's save is done");
     Reap(kid2);
+}
+
+static std::string gNotice;
+// A9-53: the platform's notice hook gets the text (the SDL2 build shows it in a message box).
+void NoticeHook()
+{
+    SetExitNoticeHook([](const std::string& t) { gNotice = t; });
+    NoticeAtExit("These changes could not be saved: boom");
+    SetExitNoticeHook(nullptr);
+    Check(gNotice == "These changes could not be saved: boom", "A9-53: NoticeAtExit hands its text to the platform's hook");
 }
 }  // namespace
 
@@ -358,7 +379,7 @@ int main()
     const Step steps[] = {
         { "SyncOrder", SyncOrder },       { "SyncRefused", SyncRefused }, { "SyncCost", SyncCost },
         { "OldUnpaddedFile", OldUnpaddedFile }, { "Residuals", Residuals }, { "ExitWaits", ExitWaits },
-        { "FrameTryCollides", FrameTryCollides },
+        { "FrameTryCollides", FrameTryCollides }, { "NoticeHook", NoticeHook },
     };
     for (const Step& s : steps) { std::printf("%s\n", s.name); s.fn(); }
     if (chdir("..") == 0)

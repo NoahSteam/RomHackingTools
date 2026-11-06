@@ -321,7 +321,7 @@ void App::Initialize()
         if (::getcwd(cwd, sizeof cwd)) SetWorkFolder(cwd);
 #endif
     }
-    mAssemblyPanel.SetSaveErrorHandler([this](const std::string& why) { mLog.Error("Could not save the assembly notes: " + why); });
+    mAssemblyPanel.SetSaveErrorHandler([this](const std::string& why) { mLog.Error(why); });   // begins with its subject (A9-51)
     LoadSettings();                // panel visibility, data dir, emulator paths
 
     mWatchPanel.LoadSession();     // restore the session's watch list, if any
@@ -369,7 +369,8 @@ bool App::SaveFunctionNames()
 {
     std::string err;
     if (mFunctionNames.Save(&err)) return true;
-    mLog.Error("Could not save the function names: " + err);
+    mLog.Error(err);   // the store's text begins with its subject (A9-51)
+    mFunctionNamesError = err;
     return false;
 }
 
@@ -387,13 +388,13 @@ void App::Shutdown()
     // and a save still refused is said in a box (NoticeAtExit) before the window goes, not only in the Log.
     FileLock::SetClosing(true);
     std::string lost;
-    if (!SaveSettings()) lost += "\n  the settings";
+    if (!SaveSettings()) lost += "\n  " + mSettingsStatus;
     mWatchPanel.SaveSession();
     {
         std::string err;
-        if (!mAssemblyPanel.SaveComments(&err)) { mLog.Error("Could not save the assembly comments: " + err); lost += "\n  the assembly notes"; }
+        if (!mAssemblyPanel.SaveComments(&err)) { mLog.Error(err); lost += "\n  " + err; }
     }
-    if (!SaveFunctionNames()) lost += "\n  the function names";
+    if (!SaveFunctionNames()) lost += "\n  " + mFunctionNamesError;
 #if SE_ENABLE_DECOMPILER
     {
         // The function starts are saved when they change; one whose save was refused (the lock, a full disk) is tried again here,
@@ -401,13 +402,13 @@ void App::Shutdown()
         std::string err;
         if (!mFunctionBounds.Save(WorkFilePath(decomp::FunctionBounds::kDefaultFile), &err))
         {
-            mLog.Error(std::string("Could not save ") + decomp::FunctionBounds::kDefaultFile + ": " + err);
-            lost += "\n  the function starts";
+            mLog.Error(err);
+            lost += "\n  " + err;
         }
     }
 #endif
     if (!lost.empty())
-        NoticeAtExit("These changes could not be saved and are lost:" + lost + "\n\nAnother program holds their lock file or the disk refused the write; the Log panel has the reason, but it closes with the window.");
+        NoticeAtExit("These changes could not be saved and are lost:" + lost + "\n\nThe Log panel closes with the window.");
     CloseData();
 }
 
@@ -545,6 +546,11 @@ bool App::SaveSettings(bool wait)
     if (mSettings.Save(&error, wait))
     {
         mSettingsDirty = false;
+        if (mSettingsSaveFailed && mOperationError && mOperationStatus == mSettingsStatus)
+        {
+            mOperationStatus.clear();   // the retry saved it: the line that said otherwise is stale (A9-52)
+            mOperationError = false;
+        }
         mSettingsSaveFailed = false;
         return true;
     }
@@ -555,7 +561,8 @@ bool App::SaveSettings(bool wait)
     if (!mSettingsSaveFailed)
     {
         mSettingsSaveFailed = true;
-        mOperationStatus = "Could not save settings: " + error;
+        mOperationStatus = error.rfind("Settings: ", 0) == 0 ? error : "Could not save settings: " + error;   // A9-51: not the subject twice
+        mSettingsStatus = mOperationStatus;
         mOperationError = true;
         mLog.Error(mOperationStatus);
     }
@@ -3205,7 +3212,7 @@ void App::UpdateDecompiler(IPlatform& platform)
     {
         std::string why;
         if (!mFunctionBounds.Save(WorkFilePath(decomp::FunctionBounds::kDefaultFile), &why))
-            mLog.Error(std::string("Could not save ") + decomp::FunctionBounds::kDefaultFile + ": " + why);
+            mLog.Error(why);   // begins with its subject (A9-51)
     }
     if (req.settingsChanged) mSettingsDirty = true;
     if (req.chooseBios)

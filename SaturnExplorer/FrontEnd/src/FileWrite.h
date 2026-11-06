@@ -96,7 +96,8 @@ unsigned long ProcessId();
 class FileLock
 {
 public:
-    explicit FileLock(const std::string& path, bool wait = true);
+    // 'tryMs' (with wait=false): retry for that many milliseconds before refusing as "another process holds" (A9-52).
+    explicit FileLock(const std::string& path, bool wait = true, unsigned tryMs = 0);
     ~FileLock();
     FileLock(const FileLock&) = delete;
     FileLock& operator=(const FileLock&) = delete;
@@ -105,7 +106,7 @@ public:
     static constexpr unsigned kWaitMs = 3000;
     static constexpr unsigned kExitWaitMs = 10000;   // the bound once SetClosing(true) has been called (A9-46)
     // Called when the application is shutting down: a waiting lock then waits up to kExitWaitMs, because a change refused now is lost
-    // with the window and the freeze costs nothing.
+    // with the window and the freeze costs nothing. The kExitWaitMs is one budget for all the locks taken after the call (A9-53).
     static void SetClosing(bool closing);
 
 private:
@@ -120,6 +121,8 @@ private:
 // Tell the user something before the window goes, where the Log panel is no longer there to read: a native message box on Windows,
 // a line on stderr elsewhere. For a save refused at exit (A9-46).
 void NoticeAtExit(const std::string& text);
+// A platform that has a better place for the notice than stderr (the SDL2 builds: SDL_ShowSimpleMessageBox) sets it; null restores the default.
+void SetExitNoticeHook(void (*hook)(const std::string&));
 
 // Remove the staging files "<path>.separt-<pid>-<n>" that a writer killed between its write and its rename left beside 'path'
 // (A9-37). Call it only while holding the lock that serialises the writers of 'path': then no live writer of that file has one.
