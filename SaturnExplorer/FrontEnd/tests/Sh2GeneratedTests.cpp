@@ -7515,6 +7515,7 @@ static const char kCxxHeaderBase[] = R"CXX(// The engine's reading of its own ps
 #include <stdint.h>
 #include <string.h>
 #include <type_traits>
+#include <map>
 typedef unsigned long long u64;
 typedef long long s64;
 template <int N> struct Rep { typedef typename std::conditional<(N <= 1), uint8_t, typename std::conditional<(N <= 2), uint16_t, typename std::conditional<(N <= 4), uint32_t, uint64_t>::type>::type>::type type; };
@@ -7550,8 +7551,8 @@ template <int N, bool S> struct T {
   // extension, as for a CONCAT: the engine prints its ZEXT as `(uint4)xStack_4._0_2_` (`extu.w`) and `(uint4)xStack_2`. To a signed type it
   // extends by the sign, as the engine prints its SEXT (`(int4)xStack_8`). It was the sign extension at every target, so the right text was
   // `mismatch` in every reading. A local last assigned a signed value (`xStack_4 = (int2)(...); uVar1 = (uint4)xStack_4;`, the sign extension
-  // of `mov.w`) keeps that sign (Unk::sg), as A3-150 reads such a text: the local's assignment says which extension the cast is.
-  template <int M> explicit T(const Unk<M>& o) : v((R)((N > M && (S || o.sg) ? o.Sext() : o.Zext()) & Mask())) {}
+  // of `mov.w`) keeps that sign (Unk::Signed), as A3-150 reads such a text: the local's assignment says which extension the cast is.
+  template <int M> explicit T(const Unk<M>& o) : v((R)((N > M && (S || o.Signed()) ? o.Sext() : o.Zext()) & Mask())) {}
   // an implicit conversion, the one C does: by the source's sign
   template <int M, bool U> operator T<M, U>() const { return T<M, U>(B2U(Ext())); }
   u64 Zext() const { return (u64)v & Mask(); }
@@ -7574,16 +7575,18 @@ template <int N> struct Piece : T<N, false> {
   template <class I, class = typename std::enable_if<IsInt<I>::value>::type> Piece(I x) : T<N, false>(x) {}
 };
 // (A2-126) xunknownN: signed in this reading as before, but a type of its own, for the cast to a wider unsigned type above
-// sg: the value it was last assigned had a signed type (a cast `(int2)` in the text, a signed variable); a field read out of a variable, a CONCAT, a
-// number or an unsigned value leave it clear
+// Signed(): the value it was last assigned had a signed type (a cast `(int2)` in the text, a signed variable); a field read out of a variable, a
+// CONCAT, a number or an unsigned value leave it clear. The flag is kept beside the object, keyed by its address, so that its size stays the
+// type's (the harness takes a returned value's width from sizeof); every constructor and assignment sets it for its own object first.
+static inline bool& UnkSign(const void* p) { static std::map<const void*, bool> m; return m[p]; }
 template <int N> struct Unk : T<N, true> {
-  bool sg;
-  Unk() : sg(false) {}
-  template <class I, class = typename std::enable_if<IsInt<I>::value>::type> Unk(I x) : T<N, true>(x), sg(false) {}
-  template <int M, bool U> Unk(const T<M, U>& o) : T<N, true>(B2U(o.Ext())), sg(U) {}
-  template <int M> Unk(const Unk<M>& o) : T<N, true>(B2U(o.Ext())), sg(o.sg) {}
-  Unk(const Unk& o) : T<N, true>(o), sg(o.sg) {}
-  Unk& operator=(const Unk& o) { this->v = o.v; sg = o.sg; return *this; }
+  Unk() { UnkSign(this) = false; }
+  template <class I, class = typename std::enable_if<IsInt<I>::value>::type> Unk(I x) : T<N, true>(x) { UnkSign(this) = false; }
+  template <int M, bool U> Unk(const T<M, U>& o) : T<N, true>(B2U(o.Ext())) { UnkSign(this) = U; }
+  template <int M> Unk(const Unk<M>& o) : T<N, true>(B2U(o.Ext())) { UnkSign(this) = o.Signed(); }
+  Unk(const Unk& o) : T<N, true>(o) { UnkSign(this) = o.Signed(); }
+  Unk& operator=(const Unk& o) { this->v = o.v; UnkSign(this) = o.Signed(); return *this; }
+  bool Signed() const { return UnkSign(this); }
 };
 typedef T<4, false> Bool4;
 // `&&` and `||` of the text (A2-96) arrive as LAND(a, b) and LOR(a, b) (ShortCircuitOps): the right operand is evaluated only when the left does not decide,
@@ -11701,6 +11704,95 @@ void TestPrintedC()
                 std::printf("pin 'A10-17 oracle': %s (%s)\n", bad1017[0].cls.c_str(), bad1017[0].detail.substr(0, 150).c_str());
                 CHECK(bad1017[0].cls == "mismatch" && IsFailing(bad1017[0]));
             }
+            // A2-127 (patch 0084): a CONCAT printed in place has no type in the text, so C and DECOMPILER_GUIDE.md read it as the unsigned value of its bytes.
+            // Compared with a signed narrow side it printed bare, `return CONCAT11(xStack_4,param_4) == param_1;` (int2 param_1), false as C for the bytes 0xFFFF the
+            // code finds equal and right only for a CONCAT taken as signed, which the oracle's reading did (its Piece was signed, so g_cmpc counted nothing: narrow-c).
+            // The CONCAT is cast to its signed type where the op reads it signed: an equality with a signed narrow side (#0, #1), the signed ordered compares (#2, #3),
+            // an arithmetic shift (#4, pgen.py seed 1594: `(int2)CONCAT11(cVar1,param_1) >> 1`). #5 and #6 are controls: an unsigned compare with `extu.w`, and the
+            // CONCAT zero-extended by `extu.w` before the compare. Each of #0 to #4 is `mismatch` on the engine without 0084 under this oracle.
+            {
+                auto w = [](const char* t) {
+                    std::vector<uint16_t> v;
+                    std::istringstream in(t);
+                    std::string tok;
+                    while (in >> tok) v.push_back(static_cast<uint16_t>(std::strtoul(tok.c_str(), nullptr, 16)));
+                    return v;
+                };
+                const std::vector<CCase> k127 = {
+                    { "A2-127 #0: ==", w("7FFC 2F52 6073 80F1 85F0 7F04 614F 3010 0029 000B 0009") },
+                    { "A2-127 #1: !=", w("7FFC 2F52 6073 80F1 85F0 7F04 614F 3010 0029 CA01 000B 0009") },
+                    { "A2-127 #2: cmp/ge", w("7FFC 2F52 6073 80F1 85F0 7F04 614F 3013 0029 000B 0009") },
+                    { "A2-127 #3: cmp/gt the other way", w("7FFC 2F52 6073 80F1 85F0 7F04 614F 3107 0029 000B 0009") },
+                    { "A2-127 #4: shar of the CONCAT (pgen.py 1594)", w("7FF8 1F40 1F51 6043 80F1 6063 81F2 6043 80F7 84F6 6103 611F 85F3 6203 4221 3126 8B02 E001 A001 0009 E000 7F08 000B 0009") },
+                    { "A2-127 #5 control: cmp/hs against extu.w", w("7FFC 2F52 6073 80F1 85F0 7F04 614D 3012 0029 000B 0009") },
+                    { "A2-127 #6 control: the CONCAT zero-extended", w("7FFC 2F52 6073 80F1 85F0 7F04 600D 614F 3010 0029 000B 0009") } };
+                const std::vector<CVerdict> r127 = CheckPrintedC(d, k127, nIn, cc, 0x51ED, 8971);
+                for (size_t k = 0; k < r127.size(); ++k)
+                {
+                    std::printf("pin '%s': %s (%s)\n", k127[k].name.c_str(), r127[k].cls.empty() ? "agrees" : r127[k].cls.c_str(), r127[k].detail.substr(0, 90).c_str());
+                    CHECK(r127[k].cls.empty() && r127[k].compared);   // agrees as C, not narrow-c
+                }
+                CHECK(r127[0].text.find("(int2)CONCAT11(xStack_4,param_4) == param_1") != std::string::npos);
+                CHECK(r127[1].text.find("(int2)CONCAT11(xStack_4,param_4)") != std::string::npos);
+                CHECK(r127[2].text.find("param_1 <= (int2)CONCAT11(xStack_4,param_4)") != std::string::npos);
+                CHECK(r127[3].text.find("(int2)CONCAT11(xStack_4,param_4) < param_1") != std::string::npos);
+                CHECK(r127[4].text.find("(int2)CONCAT11(cVar1,param_1) >> 1") != std::string::npos);
+                // The oracle by itself: the texts before the patch (the casts taken out) agree only with a signed CONCAT, and are findings, not narrow-c.
+                gPrintedCTextHook = [](const std::string& t) {
+                    std::string u = t;
+                    const std::string with = "(int2)CONCAT11(";
+                    for (size_t at = u.find(with); at != std::string::npos; at = u.find(with)) u.replace(at, with.size(), "CONCAT11(");
+                    return u;
+                };
+                const std::vector<CCase> old127(k127.begin(), k127.begin() + 5);
+                const std::vector<CVerdict> b127 = CheckPrintedC(d, old127, nIn, cc, 0x51ED, 8972);
+                gPrintedCTextHook = nullptr;
+                for (size_t k = 0; k < b127.size(); ++k)
+                {
+                    std::printf("pin 'A2-127 oracle #%zu': %s (%s)\n", k, b127[k].cls.c_str(), b127[k].detail.substr(0, 150).c_str());
+                    CHECK(b127[k].cls == "mismatch" && IsFailing(b127[k]));
+                }
+            }
+            // A2-126 (the oracle): `(uint4)` of an xunknown (no sign), a field `xStack_4._0_2_` (#0, pgen.py seed 77 shrunk) or a local (#1, seed 3372), is the zero
+            // extension the code makes (`extu.w`), in C and as the engine prints a ZEXT; the engine's reading took it by the source's sign, and with C failing for
+            // its own reason (an xunknown4 against an int4) no reading took the right text: `mismatch`. The cast of an xunknown to a wider unsigned type is the zero
+            // extension there now, but for a local last assigned a signed value (#2: `xStack_4 = (int2)(...); uVar1 = (uint4)xStack_4;`, the `mov.w` sign
+            // extension, A3-150's reading). #3 is the field zero-extended into a sum (`agrees` as C); the same text with the field sign-extended
+            // (`(uint4)(int2)xStack_4._0_2_ + xStack_4`, a wrong text) is `mismatch`.
+            {
+                auto w = [](const char* t) {
+                    std::vector<uint16_t> v;
+                    std::istringstream in(t);
+                    std::string tok;
+                    while (in >> tok) v.push_back(static_cast<uint16_t>(std::strtoul(tok.c_str(), nullptr, 16)));
+                    return v;
+                };
+                const std::vector<CCase> k126 = {
+                    { "A2-126 #0: (uint4) of an xunknown2 field", w("7FFC 2F42 6053 81F1 51F0 85F0 600D 3017 0029 7F04 000B 0009") },
+                    { "A2-126 #1: (uint4) of an xunknown2 local (pgen.py 3372)", w("7FF8 1F40 1F51 6073 80F6 6073 80F3 6053 81F1 85F3 6103 611D 52F0 3217 8B02 E001 A001 0009 E000 7F08 000B 0009") },
+                    { "A2-126 #2: the local assigned a signed value", w("7FF8 1F40 1F51 6063 80F3 85F2 6103 84F5 6203 622D 3212 0029 7F08 000B 0009") },
+                    { "A2-126 #3: the field zero-extended into a sum", w("7FFC 2F42 6053 81F1 51F0 85F0 600D 301C 7F04 000B 0009") } };
+                const std::vector<CVerdict> r126 = CheckPrintedC(d, k126, nIn, cc, 0x51ED, 8973);
+                for (size_t k = 0; k < r126.size(); ++k)
+                {
+                    std::printf("pin '%s': %s (%s)\n", k126[k].name.c_str(), r126[k].cls.empty() ? "agrees" : r126[k].cls.c_str(), r126[k].detail.substr(0, 90).c_str());
+                    CHECK(!IsFailing(r126[k]) && r126[k].compared);
+                }
+                CHECK(r126[0].text.find("(int4)(uint4)xStack_4._0_2_") != std::string::npos);
+                CHECK(r126[2].text.find("uVar1 = (uint4)xStack_4;") != std::string::npos);
+                CHECK(r126[3].cls.empty() && r126[3].text.find("(uint4)xStack_4._0_2_ + xStack_4") != std::string::npos);
+                gPrintedCTextHook = [](const std::string& t) {
+                    std::string u = t;
+                    const std::string with = "(uint4)FLD(xStack_4, 0, 2) + xStack_4";   // the hook sees the text with its fields rewritten
+                    const size_t at = u.find(with);
+                    if (at != std::string::npos) u.replace(at, with.size(), "(uint4)(int2)FLD(xStack_4, 0, 2) + xStack_4");
+                    return u;
+                };
+                const std::vector<CVerdict> b126 = CheckPrintedC(d, { k126[3] }, nIn, cc, 0x51ED, 8974);
+                gPrintedCTextHook = nullptr;
+                std::printf("pin 'A2-126 oracle: the field sign-extended': %s (%s)\n", b126[0].cls.c_str(), b126[0].detail.substr(0, 150).c_str());
+                CHECK(b126[0].cls == "mismatch" && IsFailing(b126[0]));
+            }
             // (area 3 round 15 fix) frame124 seed 2268.chain (the merge's printed-C range): `(int4)uStack_24._0_1_` is the engine's sign extension
             // of the word's top byte, which the C reading takes unsigned (0x80FE for the run's 0x7FFE); the engine's reading, which has the
             // sign, did not compile: `pppxStack_8 = &ppuStack_c;` assigns a `uint4 ***` to an `xunknown4 ***`. With the address assignment cast to the local's type (AddressAssignTyped) it
@@ -13784,6 +13876,31 @@ void TestRound9Pins(Sh2Decompiler& d)
 // over the words function 0's pushes freed; the text read the walk's byte as the saved r13 (`(char)((uint4)unaff_r13 >> 0x10)`). With the patch the
 // save slot is a local the walk may write (`xStack_c = unaff_r13;` at the push, `xStack_c._1_1_` read after the walk), and check 12 takes the save
 // before any call for no read of r13 (SavesBeforeCallsDropped). The walk the printed-C differential draws (GenWalkFn) is drawn in every form.
+// (A3-161) The text-store check (CheckFn): grammar 1 seed 1862942, shrunk, prints `iRam06002308 = -0x10;` before its loop and
+// `iRam06002308 = iRam06002308 * 2;` in it, stores the code does not make (the loop's register merged into the global it is stored to after
+// the loop; the code writes 06002308 by `tas.b` in the loop and `mov.w` in the `rts` slot). The row is accepted (P3: the final memory and every
+// value are right); the check names it, so the shape cannot pass unseen. The controls: the same loop with the store in it, and with the store
+// after it made on one path, print their stores on the store's own line and pass.
+void TestA3161Pins(Sh2Decompiler& d)
+{
+    struct { const char* name; const char* words; bool finding; } pins[] = {
+        { "A3-161 seed 1862942 shrunk", "D104 241B D604 E301 461B 311C 4310 8BFB 000B 2611 FFFF FFF0 0600 2308", true },
+        { "A3-161 control: the store in the loop", "D105 241B D605 E301 461B 311C 2611 4310 8BFA 000B 0009 0009 FFFF FFF0 0600 2308", false },
+        { "A3-161 control: the store after the loop, on one path", "D106 241B D606 E301 461B 311C 4310 8BFB 2448 8900 2611 000B 0009 0009 FFFF FFF0 0600 2308", false } };
+    for (const auto& pin : pins)
+    {
+        const Report rep = EvaluateSubject(d, RawSubject(pin.words), true);
+        int stores = 0;
+        for (const Finding& f : rep.findings) stores += f.sig.find("text-store") != std::string::npos ? 1 : 0;
+        std::printf("pin '%s': %zu finding(s), %d text-store\n", pin.name, rep.findings.size(), stores);
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        const auto lines = rep.counts.find("text-store.lines");
+        CHECK(lines != rep.counts.end() && lines->second > 0);
+        if (pin.finding) CHECK(stores > 0 && static_cast<size_t>(stores) == rep.findings.size());
+        else CHECK(rep.findings.empty());
+    }
+}
+
 void TestA365Pins(Sh2Decompiler& d)
 {
     auto count = [](const Report& rep, const char* name) {
@@ -14143,6 +14260,7 @@ void TestGenerated()
         RUN(TestRound12FixPins(d));
         RUN(TestRound13FixPins(d));
         RUN(TestA365Pins(d));
+        RUN(TestA3161Pins(d));
         if (EnvNumber("SE_GENERATED_CANARY", 240) > 0) RUN(TestCanary(d));
     }
     const long seeds = single ? 1 : EnvNumber("SE_GENERATED_SEEDS", 300);
