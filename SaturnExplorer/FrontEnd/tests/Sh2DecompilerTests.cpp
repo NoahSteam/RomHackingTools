@@ -1426,6 +1426,34 @@ void TestArea7Round7()
         const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_39 c");
         CHECK(a.Violations() == 0);
     }
+    // A7-39's triage of the fresh seeds from 1,820,000 and 1,830,000 (the area 7 fixer, after the restart): grammar 2 seed 1820210, `mov #0,r2
+    // ; xor r1,r2` after a `dt r1` loop passes r1 on, which the walk also knows is 0 (the identity build's local retry); grammar 2 seed
+    // 1820753, `xStack_30 = (xunknown4)xVar3;` at a `bsr` is the call's own output (r1 of a 64-bit return), which the push after the call
+    // wrote (A7-32's rule is for copies the callee sees); grammar 1 seeds 1830605 and 1832545, a value read before a loop of one block that
+    // does not write it (`and r3,r2 ; (poll) ; xor r2,r3`: the identity build's way back judged before its self loop). Was: no store named
+    // (frameStoreMissing, copyStoreMissing).
+    for (const auto& f : std::vector<std::pair<uint32_t, std::vector<uint16_t>>>{
+        { 0x06009008u, std::vector<uint16_t>{ 0x2F86, 0x2F96, 0x2FA6, 0x4F22, 0x7FE8, 0x6843, 0x6953, 0x6A63, 0x62F3, 0x7218, 0xE103, 0x2216, 0x4110, 0x8BFC,
+              0xE200, 0x221A, 0x1F25, 0xB00B, 0x6483, 0x6483, 0x6593, 0x66A3, 0x62E3, 0x7F18, 0x4F26, 0x6AF6, 0x69F6, 0x68F6,
+              0x000B, 0x0009, 0xE084, 0x000B, 0x0009 } },
+        { 0x06009000u, std::vector<uint16_t>{ 0x2F86, 0x2F96, 0x2FA6, 0x2FB6, 0x4F22, 0x7FE8, 0x6843, 0x6953, 0x6A63, 0x6B73, 0x2F56, 0x65F6, 0xB012, 0x0009,
+              0x6483, 0x6593, 0x66A3, 0x67B3, 0x2702, 0x2F16, 0x61F6, 0xD204, 0x7F18, 0x4F26, 0x6BF6, 0x6AF6, 0x69F6, 0x68F6,
+              0x422B, 0x0009, 0x0600, 0x9040, 0x2F86, 0x2F96, 0x2FA6, 0x2FB6, 0x4F22, 0x7FD0, 0x6843, 0x6953, 0x6A63, 0x6B73,
+              0xB010, 0x0009, 0x6483, 0x6593, 0x66A3, 0x67B3, 0xD104, 0x7F30, 0x4F26, 0x6BF6, 0x6AF6, 0x69F6, 0x68F6, 0x412B,
+              0x0009, 0x0009, 0x0600, 0x9078, 0x7FC0, 0x62F3, 0x7240, 0xE103, 0x2216, 0x4110, 0x8BFC, 0xE200, 0x6053, 0x7F40,
+              0x000B, 0x0009 } },
+        { 0x06009000u, std::vector<uint16_t>{ 0xD607, 0xD708, 0x6070, 0xC801, 0x8BFC, 0x2308, 0x8D01, 0x845B, 0xC504, 0x2338, 0x8D01, 0x200B, 0x807E, 0x160C,
+              0x000B, 0x0009, 0x0600, 0x2304, 0x0600, 0x1018 } },
+        { 0x06009000u, std::vector<uint16_t>{ 0xD205, 0x242B, 0x2239, 0xD705, 0x6071, 0xC801, 0x8BFC, 0x232A, 0xE000, 0x0735, 0x000B, 0x8058, 0xE000, 0x0000,
+              0x0600, 0x1024 } } })
+    {
+        std::fill(hw.begin(), hw.end(), 0);
+        for (size_t i = 0; i < f.second.size(); ++i) dts::Put16(hw, f.first - 0x06000000u + 2 * i, f.second[i]);
+        const DecompileResult r = d.Decompile(MakeSnapshot(hw), Request(f.first));
+        const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_39 fresh");
+        if (a.Violations()) Print("A7-39 fresh", r);
+        CHECK(a.Violations() == 0);
+    }
     // caseOtherEntry bites: A7-29's fixture with the outer `case 2:` moved back to the inner switch's entry (A7-29 as it was).
     {
         const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06070000u, { 0x4F22, 0xD518, 0xE103, 0x3416, 0x8D28, 0x6143, 0x311C, 0xC702,
