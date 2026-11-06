@@ -430,6 +430,57 @@ void FullDiskMidWrite()
     Check(bad == 0, "full disk mid-write: refused with the OS reason, the file as it was, no staging file left, the change pending and written once space is back (names, settings)");
 }
 
+bool link_ok(const std::string& a, const std::string& b) { return ::link(a.c_str(), b.c_str()) == 0; }
+
+// A11-14: Settings::SaveTo does not replace a file Load refused, even when the file is readable again by the save (trimmed by the
+// user, rewritten by another instance), and an idle instance writes nothing (A9-19, A9-20). The names store has both witnesses; this
+// is the same pair for settings.ini, plus the names case for symmetry.
+void SettingsRefusedThenReadable()
+{
+    char cwd[4096];
+    if (!getcwd(cwd, sizeof cwd)) { Check(false, "getcwd"); return; }
+    const std::string cfg = std::string(cwd) + "/xdg_refused";
+    mkdir(cfg.c_str(), 0755);
+    setenv("XDG_CONFIG_HOME", cfg.c_str(), 1);
+    Settings::EnsureConfigDir();
+    const std::string path = Settings::FilePath();
+    const std::string user = "[bios]\npath = /home/user/bios/sega_101.bin\n";
+    Put(path, user + "; padding\n" + std::string(5u << 20, 'x') + "\n");   // over the 4 MiB Load reads
+    Settings s;
+    std::string err, serr;
+    Check(!s.Load(&err), "A11-14: a 5 MiB settings.ini is refused at Load");
+    Put(path, user);   // readable again before the save
+    s.Set("bios", "path", "");   // App::SaveSettings sets every key at each save (A9-35)
+    Check(!s.Save(&serr) && Has(serr, "refused"), "A11-14: a save over a file Load refused is refused, although the file is readable now");
+    Check(Slurp(path) == user, "A11-14: the user's BIOS path is kept");
+    // The idle rule: a session that changed nothing writes nothing (no new file, same bytes, a CRLF and a byte-order mark kept).
+    const std::string crlf = "\xEF\xBB\xBF[bios]\r\npath = /home/user/bios/sega_101.bin\r\n";
+    Put(path, crlf);
+    Settings idle;
+    Check(idle.Load(&err), "A11-14: the CRLF file loads");
+    idle.Set("bios", "path", "/home/user/bios/sega_101.bin");   // the same value: no change
+    const std::string link = path + ".hard";
+    Check(link_ok(path, link), "hard link made");
+    struct stat s1, s2;
+    stat(path.c_str(), &s1);
+    Check(idle.Save(&serr), "A11-14: an idle settings save succeeds");
+    stat(path.c_str(), &s2);
+    Check(s1.st_ino == s2.st_ino && s1.st_mtime == s2.st_mtime && s2.st_nlink == 2 && Slurp(path) == crlf,
+          "A9-20: an idle settings instance writes nothing (same inode, bytes, hard link kept)");
+    unlink(link.c_str());
+    // The names store: refused at Load, readable at the save: refused.
+    std::string big;
+    for (int i = 0; big.size() < 8u * 1024u * 1024u + 100; ++i) big += "06000000 " + std::string(200, 'x') + "\n";
+    Put("saturn_functions.txt", big);
+    FunctionNames fn;
+    Check(!fn.Load(&err), "A11-14: an 8 MiB names file is refused");
+    Put("saturn_functions.txt", "06004000 user_name\n");
+    fn.Rename(0x06004000u, "session_name");
+    Check(!fn.Save(&serr), "A11-14: the names save over a refused file is refused although it is readable now");
+    Check(Slurp("saturn_functions.txt") == "06004000 user_name\n", "A11-14: the user's name is kept");
+    unsetenv("XDG_CONFIG_HOME");
+}
+
 // A real ENOSPC on a small filesystem, when the run is given one (SE_A9R5_FULLDIR, a tmpfs of a few KB mounted by the caller).
 void RealFullDisk()
 {
@@ -546,7 +597,7 @@ int main()
         { "DigitProseLines", DigitProseLines },     { "RefusedAtExit", RefusedAtExit },       { "LaterSaveCarriesRefused", LaterSaveCarriesRefused },
         { "HolderTime", HolderTime },               { "LockTexts", LockTexts },               { "NoSyncBeforeRename", NoSyncBeforeRename },
         { "FullDiskMidWrite", FullDiskMidWrite },   { "RealFullDisk", RealFullDisk },         { "SpacesAndUnicode", SpacesAndUnicode },
-        { "AtTheCap", AtTheCap },
+        { "AtTheCap", AtTheCap },        { "SettingsRefusedThenReadable", SettingsRefusedThenReadable },
     };
     for (const Step& s : steps) { std::printf("%s\n", s.name); s.fn(); }
     if (chdir("..") == 0)
