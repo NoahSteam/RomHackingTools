@@ -7953,6 +7953,52 @@ std::string UnderscoreNameType(const std::string& text, const std::string& name)
     }
 }
 
+// (A2-125) The engine writes a piece of an underscore name's word under the word's name: `_xStack_14 = CONCAT22(0xffff,param_3);` and later
+// `_xStack_14 = SUB43(xVar1,1);`, a write of three bytes, the first three of the name's four (the stack is big-endian), which leaves the fourth as
+// it was. The harness declared the name once, as the word (UnderscoreNameType), so the narrow write assigned the whole word and cleared the byte
+// it does not write. This returns the text with each such write made what it is: `_n = (SETFLD(_n, 0, 3, SUB43(xVar1,1)), _n);` (the field macro
+// of both readings replaces the first b bytes; the assignment form stays so that the locals inside the word are refreshed after it, as after any
+// write of the name). Only a write whose right side is one `SUBab(...)` of b bytes, to a name that every `CONCAT` write gives one width w, with
+// b < w. A write of any other shape, or of a name with no single width, is left as it was (it is a finding or a skip as before).
+std::string SubNarrowedWritesAsFields(const std::string& text)
+{
+    static const std::regex head("(^|\n)([ \\t]*)(_[A-Za-z]*Stack_[0-9a-f]+) = SUB([0-9])([0-9])\\(");
+    auto widthOf = [&](const std::string& name) {
+        const std::regex write("\\b" + name + " = CONCAT([0-9])([0-9])\\(");
+        int width = 0;
+        for (std::sregex_iterator it(text.begin(), text.end(), write), end; it != end; ++it)
+        {
+            const int w = std::atoi((*it)[1].str().c_str()) + std::atoi((*it)[2].str().c_str());
+            if (width != 0 && width != w) return 0;
+            width = w;
+        }
+        return width;
+    };
+    std::string out;
+    size_t pos = 0;
+    for (std::sregex_iterator it(text.begin(), text.end(), head), end; it != end; ++it)
+    {
+        const std::smatch& m = *it;
+        const size_t start = static_cast<size_t>(m.position(0)), open = start + m.length(0) - 1;   // the '(' of SUBab(
+        if (start < pos) continue;
+        int depth = 0;
+        size_t close = std::string::npos;
+        for (size_t k = open; k < text.size(); ++k)
+        {
+            if (text[k] == '(') ++depth;
+            else if (text[k] == ')' && --depth == 0) { close = k; break; }
+        }
+        if (close == std::string::npos || close + 1 >= text.size() || text[close + 1] != ';') continue;
+        const int b = std::atoi(m[5].str().c_str()), w = widthOf(m[3].str());
+        if (b < 1 || w <= b || w > 8) continue;
+        const size_t exprStart = open - (std::string("SUB00(")).size() + 1;
+        out += text.substr(pos, start - pos) + m[1].str() + m[2].str() + m[3].str() + " = (SETFLD(" + m[3].str() + ", 0, " + std::to_string(b) + ", " +
+               text.substr(exprStart, close - exprStart + 1) + "), " + m[3].str() + ")";
+        pos = close + 1;
+    }
+    return out + text.substr(pos);
+}
+
 // The value r8-r14 start with in a printed-C run. Its four bytes differ from each other, for every register (A2-44): with
 // 0xA0000000 + r * 0x01010101 the bytes 1 and 2 were equal, so a text that named the two the wrong way round (`unaff_r8_b1` for the register's
 // byte 2) read the same value under either name and the differential could not tell.
@@ -8518,6 +8564,7 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
         static const std::regex fieldGet("\\b([A-Za-z_]\\w*)\\._(\\d+)_(\\d+)_");
         text = std::regex_replace(text, fieldSet, "SETFLD($1, $2, $3, $4);");
         text = std::regex_replace(text, fieldGet, "FLD($1, $2, $3)");
+        if (frameMode) text = SubNarrowedWritesAsFields(text);   // A2-125
         // Every input the text names, as a local holding what the run started with.
         static const std::regex input("^(\\s*)((?:\\w+\\s+)+)((?:in|unaff)_\\w+);\\s*$");
         std::istringstream lines(text);
