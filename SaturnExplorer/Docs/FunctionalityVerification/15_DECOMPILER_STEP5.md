@@ -17423,4 +17423,19 @@ On the game corpus the final code differs from the first fix run by five lines (
 
 The earlier rows' pins were proved by the same reverts during the WIP (the ledger rows say so).
 
-### 4. What was run (final code, `d664fd88` plus this record)
+### 4. What was run (final code: the second resumption's last product change `d44bbf1e`, plus the record)
+
+| Run | Result |
+|---|---|
+| full `ctest -j2` (Live included) | 114 of 115 in the parallel run; the 115th, `SaturnExplorerArea9Round7Tests`, failed its 10 s settings-save budget ("the settings save used the 10 s") under a load average near 6 from the other agents and passed alone (12 s). 115 = master's 109 + 6 Live: no new test target (the new pins are inside `Sh2DecompilerTests` and `Sh2GeneratedTests`) |
+| fault suite (`SaturnExplorerDecompilerFaultTests` alone) | **0 of 94 jobs failed** (171 s) |
+| generator default run (`Sh2GeneratedTests` in ctest, every mapping check a finding) | 0 findings; the pins of this section all 0 findings |
+| matrix (24,000 seeds: 4 x 5,000 mixed, 1,000 grammar 1, 3,000 grammar 2) | after A7-44: 1 finding (14875, A7-45); on the code with A7-46 to A7-49: 1 (16415, A7-45's count), which the final oracle passes; the product has not changed since |
+| fresh seeds | grammar 1 from 1,880,000 and grammar 2 from 1,890,000 (10,000): 7 failing, triaged above (A7-46 to A7-50); grammar 1 from 1,900,000 and grammar 2 from 1,910,000 (10,000) on the code with A7-46 to A7-49: 4 failing plus 1910826 from that code's count (A7-45, A7-50, A7-52, A7-53) |
+| game corpus (hwram007, hwram008, alone and lent; token dumps diffed against the binary with A7-44's rule switched off, then against the first fix run) | A7-44: 4 lines of hwram008 change, each to the instruction that makes its number; A7-46 to A7-49: 5 lines change, each from a branch to no instruction; nothing else |
+| `check-vendored-tree.py check` (the pinned clone `918d44e`; its only untracked entry is another session's `up/`) | **vendored tree: ok**; no patch added by this resumption (the branch's own is 0079) |
+
+### 5. Routed
+
+To area 3: A7-44's text (`iRam06002308 = -0x10;`, a 4-byte global printed for r1's low half, the `tas.b` lost). To the next area 7 fixer: A7-52 (open, P2) with its replay, and the observation that fresh seeds keep giving about four mapping findings in 10,000 after each round of fixes, most of them in shapes no earlier seed had (a register merged under a memory variable's name in a new place); the matrix and the default run stay at 0.
+
