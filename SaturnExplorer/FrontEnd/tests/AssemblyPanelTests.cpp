@@ -17,8 +17,13 @@
 #include <fstream>
 #include <sstream>
 #include <cstdlib>
+#ifdef _WIN32
+#include <direct.h>
+#include <process.h>
+#else
 #include <unistd.h>
 #include <sys/stat.h>
+#endif
 
 #include "imgui_internal.h"
 #include "ImGuiHarness.h"
@@ -37,6 +42,24 @@ int gFailures;
 #define CHECK(cond) do {                                                      \
     if (!(cond)) { std::printf("FAIL %s:%d: %s\n", __FILE__, __LINE__, #cond); ++gFailures; } \
 } while (0)
+
+bool MakeDir(const char* path)
+{
+#ifdef _WIN32
+    return _mkdir(path) == 0;
+#else
+    return mkdir(path, 0755) == 0;
+#endif
+}
+
+bool RemoveDir(const char* path)
+{
+#ifdef _WIN32
+    return _rmdir(path) == 0;
+#else
+    return rmdir(path) == 0;
+#endif
+}
 
 constexpr uint32_t kBase = 0x06000000u;
 constexpr uint32_t kSize = 0x100000u;
@@ -275,27 +298,44 @@ void TestBreakpointRevealAtUnchangedPc()
 // the rename over it is refused, the old thing is left as it was, and the text names the subject.
 void TestWatchSessionSave()
 {
+#ifdef _WIN32
+    // (A12-20) no mkdtemp on Windows: a name of this process's own
+    const std::string dir = "watchsess_" + std::to_string(_getpid());
+    CHECK(MakeDir(dir.c_str()));
+    char* old = _getcwd(nullptr, 0);
+    CHECK(_chdir(dir.c_str()) == 0);
+#else
     char tmpl[] = "watchsess_XXXXXX";
     if (!mkdtemp(tmpl)) { CHECK(false); return; }
+    const std::string dir = tmpl;
     char* old = getcwd(nullptr, 0);
     CHECK(chdir(tmpl) == 0);
+#endif
     {
         WatchPanel w;
         w.AddWatch("hp", "0x06000000", WatchType::U8);
         std::string err;
         CHECK(w.SaveSession(&err) && err.empty());
-        std::ifstream f("saturn_explorer_watches.json", std::ios::binary);
-        std::stringstream ss; ss << f.rdbuf();
-        CHECK(ss.str().find("hp") != std::string::npos);
+        {
+            // closed before the remove: Windows does not delete a file that is open
+            std::ifstream f("saturn_explorer_watches.json", std::ios::binary);
+            std::stringstream ss; ss << f.rdbuf();
+            CHECK(ss.str().find("hp") != std::string::npos);
+        }
         CHECK(std::remove("saturn_explorer_watches.json") == 0);
-        CHECK(mkdir("saturn_explorer_watches.json", 0755) == 0);
+        CHECK(MakeDir("saturn_explorer_watches.json"));
         err.clear();
         CHECK(!w.SaveSession(&err));
         CHECK(err.rfind("The watch list: not saved, ", 0) == 0);
-        CHECK(rmdir("saturn_explorer_watches.json") == 0);
+        CHECK(RemoveDir("saturn_explorer_watches.json"));
     }
+#ifdef _WIN32
+    if (old) { CHECK(_chdir(old) == 0); free(old); }
+    const std::string cmd = "rmdir /s /q " + dir;
+#else
     if (old) { CHECK(chdir(old) == 0); free(old); }
-    const std::string cmd = std::string("rm -rf ") + tmpl;
+    const std::string cmd = "rm -rf " + dir;
+#endif
     if (std::system(cmd.c_str()) != 0) {}
 }
 }  // namespace

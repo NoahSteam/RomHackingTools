@@ -141,6 +141,9 @@ void LockRefusal()
             if (::chown(".", 65534, 65534) != 0 || ::chown("names.txt", 65534, 65534) != 0 || ::chown("other.txt", 65534, 65534) != 0) _exit(12);
             if (::setgid(65534) != 0 || ::setuid(65534) != 0) _exit(13);
         }
+        // (A12-23) Not root (the CI runner): no file of another user can be made, and the lock above is this user's own, which the save opens and
+        // takes. Root's 0644 file is one the user cannot open for writing; this user's 0444 file is the same to the save (open O_RDWR: EACCES).
+        else if (chmod("other.txt.lock", 0444) != 0) _exit(17);
         std::string err;
         // 1. The folder is not writable (a read-only share, a folder of another user): the lock file cannot be created.
         if (chmod(".", 0555) != 0) _exit(14);
