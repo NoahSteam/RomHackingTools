@@ -1,0 +1,78 @@
+name T1 trapa then return r4
+asm 06009000
+.word 0xC320
+rts
+mov r4,r0
+endasm
+args 5 6 7 8
+args 9 6 7 8
+end
+
+name T2 push r4 trapa pop
+asm 06009000
+mov.l r4,@-r15
+.word 0xC320
+mov.l @r15+,r0
+rts
+nop
+endasm
+args 5 6 7 8
+args 9 6 7 8
+end
+
+name T3 store below sp, trapa overwrites it
+asm 06009000
+mov r15,r1
+add #-4,r1
+mov.l r4,@r1
+.word 0xC320
+mov.l @r1,r0
+rts
+nop
+endasm
+args 5 6 7 8
+args 9 6 7 8
+end
+
+name T4 store below sp at -12, trapa does not reach
+asm 06009000
+mov r15,r1
+add #-12,r1
+mov.l r4,@r1
+.word 0xC320
+mov.l @r1,r0
+rts
+nop
+endasm
+args 5 6 7 8
+args 9 6 7 8
+end
+
+name T5 frame, trapa, r15-relative read after
+asm 06009000
+add #-8,r15
+mov.l r4,@(4,r15)
+mov.l r5,@(0,r15)
+.word 0xC320
+mov.l @(4,r15),r0
+mov.l @(0,r15),r1
+add r1,r0
+rts
+add #8,r15
+endasm
+args 5 6 7 8
+args 9 6 7 8
+end
+
+name T6 r8 kept across trapa
+asm 06009000
+mov.l r8,@-r15
+mov r4,r8
+.word 0xC320
+mov r8,r0
+rts
+mov.l @r15+,r8
+endasm
+args 5 6 7 8
+args 9 6 7 8
+end

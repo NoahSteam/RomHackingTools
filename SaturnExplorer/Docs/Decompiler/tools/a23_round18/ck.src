@@ -1,0 +1,164 @@
+name K1 callee sets gbr from r5, caller reads gbr after
+asm 06009000
+.word 0x4F22
+mov.l =0x06009100,r3
+jsr @r3
+nop
+.word 0x0012
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+.word 0x451E
+rts
+nop
+endasm
+lend 06009100
+args 1 2 3 4
+args 1 9 3 4
+end
+
+name K2 callee mul.l, caller reads macl after
+asm 06009000
+.word 0x4F22
+mov.l =0x06009100,r3
+jsr @r3
+nop
+.word 0x001A
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+mul.l r4,r5
+rts
+nop
+endasm
+lend 06009100
+args 3 2 3 4
+args 5 9 3 4
+end
+
+name K3 callee leaves macl, caller does mul.l before and reads macl after
+asm 06009000
+.word 0x4F22
+mul.l r6,r7
+mov.l =0x06009100,r3
+jsr @r3
+nop
+.word 0x001A
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+rts
+add r5,r4
+endasm
+lend 06009100
+args 3 2 3 4
+args 5 9 6 4
+end
+
+name K4 caller reads T after a lent callee that sets T
+asm 06009000
+.word 0x4F22
+mov.l =0x06009100,r3
+jsr @r3
+nop
+.word 0x0029
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+rts
+cmp/eq r4,r5
+endasm
+lend 06009100
+args 3 3 3 4
+args 5 9 6 4
+end
+
+name K5 caller reads T after a lent callee that keeps T
+asm 06009000
+.word 0x4F22
+cmp/eq r6,r7
+mov.l =0x06009100,r3
+jsr @r3
+nop
+.word 0x0029
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+rts
+add r5,r4
+endasm
+lend 06009100
+args 3 3 3 3
+args 5 9 6 4
+end
+
+name K6 caller reads mach after lent dmuls callee
+asm 06009000
+.word 0x4F22
+mov.l =0x06009100,r3
+jsr @r3
+nop
+.word 0x000A
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+dmuls.l r4,r5
+rts
+nop
+endasm
+lend 06009100
+args 7FFFFFFF 7FFFFFFF 3 3
+args 5 9 6 4
+end
+
+name K7 caller reads r1 kept by the lent callee
+asm 06009000
+.word 0x4F22
+mov r6,r1
+mov.l =0x06009100,r3
+jsr @r3
+nop
+add r1,r0
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+rts
+mov r4,r0
+endasm
+lend 06009100
+args 3 3 3 3
+args 5 9 6 4
+end
+
+name K8 caller reads pr after a call (sts pr)
+asm 06009000
+.word 0x4F22
+mov.l =0x06009100,r3
+jsr @r3
+nop
+.word 0x002A
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+rts
+nop
+endasm
+lend 06009100
+args 3 3 3 3
+end
