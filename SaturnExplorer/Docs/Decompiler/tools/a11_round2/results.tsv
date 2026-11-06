@@ -501,3 +501,15 @@ V-0019-rte	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/wor
 V-0071	pc	killed	21	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:11237: r104[0].cls.empty() && r104[0].compared && r104[0].text.find("== 0xffff") !
 V-0071	unit	survived	22	
 H-load-partial	fuzz	killed	5	VIOLATION ranges/PARTIAL_RESULT: refused but left ranges in the output
+C-0010-printed	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:3397: Ledger(r, { Rd(0, 2), Rd(0, 2) })
+C-0010-printed	gen	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:12073: rep.findings.empty()
+C-0010-printed	corpus	killed	42	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:3397: Ledger(r, { Rd(0, 2), Rd(0, 2) })
+C-0010-cond	unit	killed	24	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:3397: Ledger(r, { Rd(0, 2), Rd(0, 2) })
+C-0010-cond	gen	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:11813: rep.findings.empty()
+C-0010-cond	corpus	killed	43	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:3397: Ledger(r, { Rd(0, 2), Rd(0, 2) })
+C-0010-repeat	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:3397: Ledger(r, { Rd(0, 2), Rd(0, 2) })
+C-0010-repeat	gen	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:11813: rep.findings.empty()
+C-0010-repeat	corpus	killed	41	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:3397: Ledger(r, { Rd(0, 2), Rd(0, 2) })
+C-0010-all3	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:3397: Ledger(r, { Rd(0, 2), Rd(0, 2) })
+C-0010-all3	gen	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2GeneratedTests.cpp:12073: rep.findings.empty()
+C-0010-all3	corpus	killed	42	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:3397: Ledger(r, { Rd(0, 2), Rd(0, 2) })
