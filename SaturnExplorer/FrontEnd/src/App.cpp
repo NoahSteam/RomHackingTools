@@ -387,14 +387,25 @@ void App::Shutdown()
     // The window is closing and the Log goes with it (A9-46): a lock held by another instance is waited for up to 10 s instead of 3,
     // and a save still refused is said in a box (NoticeAtExit) before the window goes, not only in the Log.
     FileLock::SetClosing(true);
+    // The user's own work first (notes, names, starts), then the settings and the watches: the 10 s are shared, and a stuck settings lock
+    // must not spend them before the names are tried (A9-58).
     std::string lost;
-    if (!SaveSettings()) lost += "\n  " + mSettingsStatus;
-    mWatchPanel.SaveSession();
+    // The stores' texts end in "this session's changes are kept in memory only": true until now, and the box says they are lost (A9-61).
+    auto addLost = [&lost](std::string text) {
+        const size_t p = text.find("this session's changes");
+        if (p != std::string::npos)
+        {
+            text.erase(p);
+            while (!text.empty() && (text.back() == ' ' || text.back() == ';')) text.pop_back();
+            if (text.size() > 4 && text.compare(text.size() - 4, 4, " and") == 0) text.erase(text.size() - 4);
+        }
+        lost += "\n  " + text;
+    };
     {
         std::string err;
-        if (!mAssemblyPanel.SaveComments(&err)) { mLog.Error(err); lost += "\n  " + err; }
+        if (!mAssemblyPanel.SaveComments(&err)) { mLog.Error(err); addLost(err); }
     }
-    if (!SaveFunctionNames()) lost += "\n  " + mFunctionNamesError;
+    if (!SaveFunctionNames()) addLost(mFunctionNamesError);
 #if SE_ENABLE_DECOMPILER
     {
         // The function starts are saved when they change; one whose save was refused (the lock, a full disk) is tried again here,
@@ -403,12 +414,18 @@ void App::Shutdown()
         if (!mFunctionBounds.Save(WorkFilePath(decomp::FunctionBounds::kDefaultFile), &err))
         {
             mLog.Error(err);
-            lost += "\n  " + err;
+            addLost(err);
         }
     }
 #endif
+    if (!SaveSettings()) addLost(mSettingsStatus);   // set by every failure, so it is this attempt's text (A9-61)
+    {
+        std::string err;
+        if (!mWatchPanel.SaveSession(&err)) { mLog.Error(err); addLost(err); }   // A9-57
+    }
     if (!lost.empty())
-        NoticeAtExit("These changes could not be saved and are lost:" + lost + "\n\nThe Log panel closes with the window.");
+        NoticeAtExit("These changes were not saved:" + lost + "\n\nThe files were left as they were, and the Log panel closes with the window, so the changes are lost. "
+                     "At exit all the saves share 10 seconds of waiting for another instance.");
     CloseData();
 }
 
@@ -558,11 +575,16 @@ bool App::SaveSettings(bool wait)
     // once, not every attempt.
     mSettingsDirty = true;
     mSettingsRetryAt = std::chrono::steady_clock::now() + std::chrono::seconds(wait ? 5 : 2);   // the frame's try takes no wait, so it tries again sooner
+    const std::string text = error.rfind("Settings: ", 0) == 0 ? error : "Settings: not saved, " + error;   // A9-51, A9-60: the subject once
+    // Every failure sets mSettingsStatus: the exit notice must show this attempt's text, not the first one's (A9-61). The status line
+    // follows it while it still shows the settings' text.
+    const bool lineShowsIt = mSettingsSaveFailed && mOperationError && mOperationStatus == mSettingsStatus;
+    mSettingsStatus = text;
+    if (lineShowsIt) mOperationStatus = text;
     if (!mSettingsSaveFailed)
     {
         mSettingsSaveFailed = true;
-        mOperationStatus = error.rfind("Settings: ", 0) == 0 ? error : "Could not save settings: " + error;   // A9-51: not the subject twice
-        mSettingsStatus = mOperationStatus;
+        mOperationStatus = text;
         mOperationError = true;
         mLog.Error(mOperationStatus);
     }

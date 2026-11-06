@@ -234,7 +234,7 @@ bool Settings::SaveTo(const std::string& path, std::string* error, bool wait) co
     if (same && !mRefusedWhy.empty())
         return fail("Settings: not saved, " + mRefusedWhy + " when it was loaded, and a save would replace it; this session's changes are kept in memory only");
     // The lock file lives beside the data: a lock on the file itself would be dropped by the rename that replaces it.
-    FileLock lock(path + ".lock", wait, 250);   // the frame's try (wait=false) still waits 250 ms: another instance's ordinary save is over by then (A9-52)
+    FileLock lock(path + ".lock", wait, 50);   // the frame's try (wait=false) waits 50 ms, not more: the UI thread stalls behind a stuck holder (A9-52, A9-59)
     if (!lock.Held())
         return fail("Settings: not saved, " + lock.WhyNotHeld() + "; "
                     "saving without the lock could lose another instance's keys, so the file is left as it is and this session's changes are kept in memory only");
@@ -318,7 +318,7 @@ bool Settings::SaveTo(const std::string& path, std::string* error, bool wait) co
     // Not an ofstream: it truncates the file on open and flushes in its destructor, after any check the
     // caller could make, so a failed write both lost the old settings and reported success.
     std::string why;
-    if (!WriteFileAtomically(path, text.data(), text.size(), why)) return fail(path + ": " + why);
+    if (!WriteFileAtomically(path, text.data(), text.size(), why)) return fail("Settings: not saved, " + why);   // A9-60: the subject first; the path is in why
     if (same) mBase = mData;
     return true;
 }

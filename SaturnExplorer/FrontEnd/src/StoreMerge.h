@@ -103,7 +103,7 @@ inline bool SaveStore(const std::string& path, const char* what, const std::stri
         return fail(std::string(what) + ": not saved, it would be " + std::to_string(text.size()) + " bytes, over the " + std::to_string(maxBytes >> 20) +
                     " MiB that is read back at the next start, which would refuse " + path + "; trim it or move entries to another file");
     std::string why;
-    if (!WriteFileAtomically(path, text.data(), text.size(), why)) return fail(path + ": " + why);
+    if (!WriteFileAtomically(path, text.data(), text.size(), why)) return fail(std::string(what) + ": not saved, " + why);   // A9-60: the subject first; 'why' names the path once
     base = cur;
     return true;
 }

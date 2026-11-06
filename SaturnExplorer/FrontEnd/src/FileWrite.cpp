@@ -53,13 +53,20 @@ const char kSep = '\\';
 const char kSep = '/';
 #endif
 
+// A9-62: the system message of Windows ends in a full stop (and a line break); the texts built from it go on with "; " or ": ".
+std::string TrimStop(std::string s)
+{
+    while (!s.empty() && (s.back() == '.' || s.back() == ' ' || s.back() == '\r' || s.back() == '\n')) s.pop_back();
+    return s;
+}
+
 std::string Reason(const char* what, const std::string& path)
 {
     // errno is captured by the caller immediately after the failing call; strerror keeps the
     // message specific ("No space left on device") rather than a generic "could not write".
     const int err = errno;
     std::string out = std::string(what) + " " + path;
-    if (err != 0) out += ": " + std::string(std::strerror(err));
+    if (err != 0) out += ": " + TrimStop(std::strerror(err));
     return out;
 }
 
@@ -125,9 +132,9 @@ bool WriteAndClose(FILE* f, const std::string& path, const void* data, size_t si
             // A9-55: 'path' is the staging file, removed before the text is shown; the text names the file the user knows.
             std::string reason;
 #ifdef _WIN32
-            reason = winError ? std::system_category().message(err) : std::string(std::strerror(err));
+            reason = TrimStop(winError ? std::system_category().message(err) : std::string(std::strerror(err)));
 #else
-            reason = std::strerror(err);
+            reason = TrimStop(std::strerror(err));
 #endif
             error = "could not flush the new " + (target.empty() ? path : target) + " to the device" + (err != 0 ? ": " + reason : std::string());
             return false;
@@ -482,6 +489,7 @@ FileLock::FileLock(const std::string& path, bool wait, unsigned tryMs)
         mWaitMs = kExitWaitMs;
         const long long left = gExitDeadlineMs - NowMs();
         budgetMs = left > 0 ? static_cast<unsigned>(std::min<long long>(left, kExitWaitMs)) : 0;
+        mSharedShort = budgetMs + 500 < kExitWaitMs;   // an earlier store at exit used part of the shared time (A9-58)
     }
     // A wait is bounded (A9-40): try without waiting, retry every few milliseconds until kWaitMs has passed. A holder that is
     // stuck (a hung instance on a stalled network folder, a debugger) no longer freezes the caller; the caller refuses its save.
@@ -525,15 +533,24 @@ FileLock::FileLock(const std::string& path, bool wait, unsigned tryMs)
         ::nanosleep(&ts, nullptr);
     }
 #endif
+    mWaitedMs = static_cast<unsigned>(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count());
 }
 
 std::string FileLock::WhyNotHeld() const
 {
     if (mHeld) return std::string();
+    if (mTimedOut && mSharedShort)
+    {
+        // A9-58: the exit's 10 s are shared; an earlier save used them, so this one waited less (maybe not at all). Say what happened.
+        char b[32];
+        std::snprintf(b, sizeof b, "%.1f", static_cast<double>(mWaitedMs) / 1000.0);
+        return "another process held " + mPath + " and the exit time ran out (waited " + b + " s of the " + std::to_string(kExitWaitMs / 1000) +
+               " s that every save at exit shares)";
+    }
     if (mTimedOut)
         return "another process has held " + mPath + " for more than " + std::to_string(mWaitMs / 1000) + " seconds";
     if (mError == 0) return "another process holds " + mPath;   // wait=false and someone has it
-    return "cannot create or lock " + mPath + ": " + std::system_category().message(mError);
+    return "cannot create or lock " + mPath + ": " + TrimStop(std::system_category().message(mError));
 }
 
 size_t RemoveStaleStagingFiles(const std::string& path)
