@@ -7503,8 +7503,11 @@ template <int N, bool S> struct T {
   // cast to the type of the variable it assigns to, so for sizes with a type (a 2-byte piece read by `mov.w` into a uint4) the extension is by the piece's
   // sign, as for any other cast. (area 3 fixer, A3-150) ...but for a cast to an unsigned type, which is the ZEXT at every size: the engine prints a sign
   // extension of a piece as a cast to a signed type (`(int4)xStack_8` for `mov.w`), and `(uint4)CONCAT11(...)` is a word whose upper half is 0
-  // (frame124_4602253.chain), `(int4)xStack_18` of `_xStack_18 = CONCAT31(CONCAT21(xStack_18,param_4),0x44)` with the sign (4511454)
-  template <int M> explicit T(const Piece<M>& o) : v((R)((N > M ? (!S ? o.Zext() : o.Ext()) : o.Zext()) & Mask())) {}
+  // (frame124_4602253.chain), `(int4)xStack_18` of `_xStack_18 = CONCAT31(CONCAT21(xStack_18,param_4),0x44)` with the sign (4511454).
+  // (A10-16, patch 0081) ...and for a cast to a signed type too: the engine casts the CONCAT to its signed type before it extends it by the sign
+  // (`(uint4)(int2)CONCAT11(...)`, `(int4)(int2)CONCAT11(...)`), so a CONCAT cast straight to a wider type is its unsigned value, as C has it.
+  // Before 0081 `(int4)CONCAT11(...)` was the engine's sign extension of `mov.w` and agreed here only, so it was excused as 'narrow-c'.
+  template <int M> explicit T(const Piece<M>& o) : v((R)(o.Zext() & Mask())) {}
   // an implicit conversion, the one C does: by the source's sign
   template <int M, bool U> operator T<M, U>() const { return T<M, U>(B2U(Ext())); }
   u64 Zext() const { return (u64)v & Mask(); }
@@ -7564,6 +7567,17 @@ static unsigned g_cmpc;
   template <int N, bool S, class I, class = typename std::enable_if<IsInt<I>::value>::type> Bool4 operator op(const T<N, S>& a, I b) { typedef typename Promoted<N, S>::type P; return P(a) op P(b); } \
   template <int N, bool S, class I, class = typename std::enable_if<IsInt<I>::value>::type> Bool4 operator op(I a, const T<N, S>& b) { typedef typename Promoted<N, S>::type P; return P(a) op P(b); }
 CMP(==) CMP(!=) CMP(<) CMP(<=) CMP(>) CMP(>=)
+// (A10-16, patch 0081) A CONCAT meeting a wider operand (`CONCAT11(a,b) + param_1`) stands for the p-code's extension of it, which the text hides:
+// the engine casts the CONCAT to its signed type for a sign extension (`(int2)CONCAT11(a,b) + param_1`), so the hidden one is the zero extension,
+// as in C. (Before 0081 that text was the sign extension, and agreed here only: 'narrow-c'.) Against a plain number the CONCAT keeps Promoted's reading.
+template <int N, int M> struct PieceWide { typedef T<(N > M ? N : M), true> type; };
+template <int M, int N> static inline typename PieceWide<N, M>::type WidenPiece(const Piece<N>& a) { typename PieceWide<N, M>::type r; r.v = (typename PieceWide<N, M>::type::R)a.Zext(); return r; }
+#define PIECEOP(op) \
+  template <int N, int M, bool U> auto operator op(const Piece<N>& a, const T<M, U>& b) -> decltype(WidenPiece<M>(a) op b) { return WidenPiece<M>(a) op b; } \
+  template <int N, int M, bool U> auto operator op(const T<M, U>& b, const Piece<N>& a) -> decltype(b op WidenPiece<M>(a)) { return b op WidenPiece<M>(a); } \
+  template <int N, int M> auto operator op(const Piece<N>& a, const Piece<M>& b) -> decltype(WidenPiece<M>(a) op WidenPiece<N>(b)) { return WidenPiece<M>(a) op WidenPiece<N>(b); }
+PIECEOP(+) PIECEOP(-) PIECEOP(*) PIECEOP(&) PIECEOP(|) PIECEOP(^) PIECEOP(/) PIECEOP(%)
+PIECEOP(==) PIECEOP(!=) PIECEOP(<) PIECEOP(<=) PIECEOP(>) PIECEOP(>=)
 // shifts take the type of the left operand
 template <int N, bool S, int M, bool U> T<N, S> operator<<(const T<N, S>& a, const T<M, U>& b) { u64 c = b.Zext(); return T<N, S>(c >= 8 * N ? 0 : (a.Zext() << c)); }
 template <int N, bool S, int M, bool U> T<N, S> operator>>(const T<N, S>& a, const T<M, U>& b) {
@@ -7677,6 +7691,19 @@ std::string NegativeWideLiteralsTyped(const std::string& text)
 {
     static const std::regex neg("-(0x[89a-fA-F][0-9a-fA-F]{7})\\b");
     return std::regex_replace(text, neg, "-$1LL");
+}
+
+// (A10-17) The C reading of the most negative int4. The engine prints a signed four-byte constant of -2^31 as `-0x80000000` (a minus only for a
+// signed constant: an unsigned one is `0x80000000`, a subtraction `x - 0x80000000`). In C the hexadecimal literal does not fit an int, so it and its
+// negation are an `unsigned int`, and the arithmetic and the comparison around it are unsigned: `-0x7fffff81 < -(param_2 < param_3) + -0x80000000`,
+// the code's signed compare, is an unsigned one as C. A text that disagrees with the run in both readings and holds the literal is read once more as
+// C with it an int (`(-0x7fffffff - 1)`, the same value widened to eight bytes, as A2-71's reading has it); the C reading wraps (-fwrapv) as the
+// engine's arithmetic does. Agreeing there, it is counted apart ('narrow-c', as A2-120's text is). A longer literal (`-0x8000000000000000`,
+// `-0x80000000U`, `-0x80000000LL`) is left as it is.
+std::string IntMinLiteralsSigned(const std::string& text)
+{
+    static const std::regex neg("-0x80000000(?![0-9a-fA-FuUlL])");
+    return std::regex_replace(text, neg, "(-0x7fffffff - 1)");
 }
 
 // A2-96: the engine's reading short-circuits `&&` and `||` as C does. An overloaded operator in C++ evaluates both operands, so a text whose right operand
@@ -8084,6 +8111,10 @@ void TestOracleOwnDecisions()
     CHECK(NegativeWideLiteralsTyped("(int8)param_2 * -0x80000000") == "(int8)param_2 * -0x80000000LL");
     CHECK(NegativeWideLiteralsTyped("x + -0xfffffffe;") == "x + -0xfffffffeLL;");
     CHECK(NegativeWideLiteralsTyped("x * -0x7fffffff + y - 0x80000000 + -0x80000000U + -0x180000000 + -2147483648") == "x * -0x7fffffff + y - 0x80000000 + -0x80000000U + -0x180000000 + -2147483648");
+    // A10-17: the most negative int4 read as an int in the fourth reading; a subtraction, an unsigned or longer literal and other numbers are as they were
+    CHECK(IntMinLiteralsSigned("return -0x7fffff81 < -(param_2 < param_3) + -0x80000000;") == "return -0x7fffff81 < -(param_2 < param_3) + (-0x7fffffff - 1);");
+    CHECK(IntMinLiteralsSigned("x == -0x80000000 || y - 0x80000000 + -0x80000000U + -0x80000000LL + -0x8000000000000000 + -0x800000001 + -0x7fffffff") ==
+          "x == (-0x7fffffff - 1) || y - 0x80000000 + -0x80000000U + -0x80000000LL + -0x8000000000000000 + -0x800000001 + -0x7fffffff");
 }
 
 bool IsFailing(const CVerdict& v)
@@ -9206,6 +9237,38 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
                         {
                             out[i].cls = "narrow-c";
                             out[i].detail += " [agrees when read as C with the fields of a variable signed]";
+                        }
+                }
+            }
+            // (A10-17) A text that holds the engine's most negative int4, `-0x80000000`, which C types unsigned: read once more as C with it an int
+            // (IntMinLiteralsSigned). Agreeing there, it is the engine's meaning, as A2-120's text is; agreeing nowhere, it stays a finding.
+            std::vector<size_t> fourth;
+            for (size_t i : cand)
+                if (out[i].cls == "mismatch" && IntMinLiteralsSigned(prep[i].cText) != prep[i].cText) fourth.push_back(i);
+            if (!fourth.empty())
+            {
+                std::vector<std::string> saved;
+                for (size_t i : fourth)
+                {
+                    saved.push_back(prep[i].cText);
+                    prep[i].cText = IntMinLiteralsSigned(prep[i].cText);
+                }
+                std::string log4;
+                bool compiled4 = false;
+                const std::string run4 = compileRun(fourth, "intmin", log4, compiled4);
+                for (size_t k = 0; k < fourth.size(); ++k) prep[fourth[k]].cText = saved[k];
+                if (compiled4)
+                {
+                    std::set<std::string> bad4;
+                    std::istringstream in(run4);
+                    std::string line;
+                    while (std::getline(in, line))
+                        if (line.compare(0, 9, "MISMATCH ") == 0) bad4.insert(line.substr(9, line.find(' ', 9) - 9));
+                    for (size_t i : fourth)
+                        if (bad4.count(prep[i].name) == 0)
+                        {
+                            out[i].cls = "narrow-c";
+                            out[i].detail += " [agrees when read as C with -0x80000000 an int]";
                         }
                 }
             }
@@ -11378,6 +11441,86 @@ void TestPrintedC()
                 std::printf("pin 'A10-12 oracle': %s (%s)\n", old1012[0].cls.c_str(), old1012[0].detail.substr(0, 150).c_str());
                 CHECK(old1012[0].cls == "mismatch");
                 CHECK(IsFailing(old1012[0]));
+            }
+            // A10-16 (patch 0081): a word stored to the stack, one byte of it overwritten and the word read back by `mov.w`, which sign-extends. The engine joins the bytes
+            // (CONCAT11, printed in place, no type in the text) and extended it by its sign, printed as a cast to the output's type: `(uint4)CONCAT11(...)` and
+            // `(int4)CONCAT11(...)` read as the zero extension in C and in the engine's reading of a CONCAT (the unsigned value of its bytes), so seed 9301338
+            // returned 0x80FF0000 for the code's 0x80FFFFFF. The CONCAT is cast to its signed type first now. #0 to #7 the class (every use of the read: swap.w,
+            // returned, shifts, AND, a hidden extension in an add, exts.w after it); #8 to #12 other positions and widths (byte 0 and bytes 2 and 3 print a field or
+            // a named local, whose sign the engine's reading has: narrow-c, A3-150's class; a half overwritten and the whole word read; mov.b reads); #13 to #16
+            // the zero extensions (extu.w after the read), which stay `(uint4)CONCAT11(...)`.
+            {
+                const std::vector<CVerdict> r1016 = CheckPrintedC(d, {
+                    { "A10-16 #0: seed 9301338 (swap.w, r0:r1)", { 0x6043, 0x6153, 0x6263, 0x6373, 0x7FFC, 0x2F12, 0x6033, 0x80F1, 0x85F0, 0x7F04, 0x6109, 0x6033, 0x000B, 0x0009 } },
+                    { "A10-16 #1: returned", { 0x7FFC, 0x2F52, 0x6073, 0x80F1, 0x85F0, 0x7F04, 0x000B, 0x0009 } },
+                    { "A10-16 #2: swap.w", { 0x7FFC, 0x2F52, 0x6073, 0x80F1, 0x85F0, 0x7F04, 0x6109, 0x6013, 0x000B, 0x0009 } },
+                    { "A10-16 #3: shlr", { 0x7FFC, 0x2F52, 0x6073, 0x80F1, 0x85F0, 0x7F04, 0x4001, 0x000B, 0x0009 } },
+                    { "A10-16 #4: shar", { 0x7FFC, 0x2F52, 0x6073, 0x80F1, 0x85F0, 0x7F04, 0x4021, 0x000B, 0x0009 } },
+                    { "A10-16 #5: and r4", { 0x7FFC, 0x2F52, 0x6073, 0x80F1, 0x85F0, 0x7F04, 0x2049, 0x000B, 0x0009 } },
+                    { "A10-16 #6: add r4 (the extension hidden)", { 0x7FFC, 0x2F52, 0x6073, 0x80F1, 0x85F0, 0x7F04, 0x304C, 0x000B, 0x0009 } },
+                    { "A10-16 #7: exts.w ; swap.w", { 0x7FFC, 0x2F52, 0x6073, 0x80F1, 0x85F0, 0x7F04, 0x600F, 0x6109, 0x6013, 0x000B, 0x0009 } },
+                    { "A10-16 #8: byte 0 overwritten (a field)", { 0x7FFC, 0x2F52, 0x6073, 0x80F0, 0x85F0, 0x7F04, 0x6109, 0x6013, 0x000B, 0x0009 } },
+                    { "A10-16 #9: byte 3, the low half read (a field)", { 0x7FFC, 0x2F52, 0x6073, 0x80F3, 0x85F1, 0x7F04, 0x6109, 0x6013, 0x000B, 0x0009 } },
+                    { "A10-16 #10: a half overwritten, the word read", { 0x7FFC, 0x2F52, 0x6073, 0x81F1, 0x60F2, 0x7F04, 0x6109, 0x6013, 0x000B, 0x0009 } },
+                    { "A10-16 #11: mov.b of the byte not overwritten", { 0x7FFC, 0x2F52, 0x6073, 0x80F1, 0x84F0, 0x7F04, 0x6109, 0x6013, 0x000B, 0x0009 } },
+                    { "A10-16 #12: mov.b of the byte overwritten", { 0x7FFC, 0x2F52, 0x6073, 0x80F1, 0x84F1, 0x7F04, 0x6109, 0x6013, 0x000B, 0x0009 } },
+                    { "A10-16 #13: extu.w ; swap.w", { 0x7FFC, 0x2F52, 0x6073, 0x80F1, 0x85F0, 0x7F04, 0x600D, 0x6109, 0x6013, 0x000B, 0x0009 } },
+                    { "A10-16 #14: extu.w ; add r4", { 0x7FFC, 0x2F52, 0x6073, 0x80F1, 0x85F0, 0x7F04, 0x600D, 0x304C, 0x000B, 0x0009 } },
+                    { "A10-16 #15: extu.w ; shar", { 0x7FFC, 0x2F52, 0x6073, 0x80F1, 0x85F0, 0x7F04, 0x600D, 0x4021, 0x000B, 0x0009 } },
+                    { "A10-16 #16: extu.w ; cmp/pz", { 0x7FFC, 0x2F52, 0x6073, 0x80F1, 0x85F0, 0x7F04, 0x600D, 0x4011, 0x0029, 0x000B, 0x0009 } } },
+                    nIn, cc, 0x51ED, 8962);
+                for (size_t k = 0; k < r1016.size(); ++k)
+                {
+                    std::printf("pin 'A10-16 #%zu': %s (%s)\n", k, r1016[k].cls.empty() ? "agrees" : r1016[k].cls.c_str(), r1016[k].detail.substr(0, 90).c_str());
+                    if (k <= 7 || k >= 10) CHECK(r1016[k].cls.empty() && r1016[k].compared);   // agrees as C, not narrow-c
+                    else CHECK(!IsFailing(r1016[k]) && r1016[k].compared);
+                }
+                CHECK(r1016[0].text.find("(uint4)(int2)CONCAT11(") != std::string::npos);
+                CHECK(r1016[1].text.find("(int4)(int2)CONCAT11(") != std::string::npos);
+                CHECK(r1016[6].text.find("(int2)CONCAT11(") != std::string::npos);
+                for (size_t k = 13; k <= 16; ++k)
+                    CHECK(r1016[k].text.find("(uint4)CONCAT11(") != std::string::npos && r1016[k].text.find("(int2)CONCAT11") == std::string::npos);
+                // The oracle by itself: the texts the engine printed before the patch. `(uint4)CONCAT11` was a finding already (#0); `(int4)CONCAT11` and the hidden
+                // extension agreed in the engine's reading (a CONCAT was signed there) and were narrow-c: they are findings now.
+                gPrintedCTextHook = [](const std::string& t) {
+                    std::string u = t;
+                    for (const std::string with : { std::string("(int4)(int2)CONCAT11("), std::string("(int2)CONCAT11(") })
+                        for (size_t at = u.find(with); at != std::string::npos; at = u.find(with))
+                            u.replace(at, with.size(), with == "(int2)CONCAT11(" ? "CONCAT11(" : "(int4)CONCAT11(");
+                    return u;
+                };
+                const std::vector<CVerdict> old1016 = CheckPrintedC(d, { { "A10-16 oracle: (int4)CONCAT11 returned", { 0x7FFC, 0x2F52, 0x6073, 0x80F1, 0x85F0, 0x7F04, 0x000B, 0x0009 } },
+                                                                        { "A10-16 oracle: the extension hidden in an add", { 0x7FFC, 0x2F52, 0x6073, 0x80F1, 0x85F0, 0x7F04, 0x304C, 0x000B, 0x0009 } } },
+                                                                    nIn, cc, 0x51ED, 8963);
+                gPrintedCTextHook = nullptr;
+                for (size_t k = 0; k < old1016.size(); ++k)
+                {
+                    std::printf("pin 'A10-16 oracle #%zu': %s (%s)\n", k, old1016[k].cls.c_str(), old1016[k].detail.substr(0, 150).c_str());
+                    CHECK(old1016[k].cls == "mismatch" && IsFailing(old1016[k]));
+                }
+            }
+            // A10-17 (the oracle): `return -0x7fffff81 < -(param_2 < param_3) + -0x80000000;` is the code's signed compare of a sum that wraps (-1 + -2^31). The C
+            // reading wraps too (-fwrapv), but types `-0x80000000` as C does, an unsigned int, which makes the comparison unsigned; the engine's reading takes the
+            // comparison's result as unsigned (Bool4). It was `mismatch`; read as C with the literal an int it agrees, and is narrow-c (A2-120's class). A wrong text
+            // with the same literal (the hook turns the compare into `>=`) stays a finding.
+            {
+                const std::vector<CVerdict> r1017 = CheckPrintedC(d, { { "A10-17: -0x80000000 in a signed compare", { 0x6163, 0x6263, 0x3656, 0x312A, 0x611E, 0xD303, 0x313C, 0xD303, 0x3133, 0x0029, 0x000B, 0x0009, 0x8000, 0x0000, 0x8000, 0x0080 } } },
+                                                                    nIn, cc, 0x51ED, 8964);
+                std::printf("pin 'A10-17': %s (%s)\n", r1017[0].cls.c_str(), r1017[0].detail.substr(0, 150).c_str());
+                CHECK(r1017[0].cls == "narrow-c" && r1017[0].compared && r1017[0].detail.find("-0x80000000 an int") != std::string::npos);
+                CHECK(r1017[0].text.find("-0x80000000") != std::string::npos);
+                gPrintedCTextHook = [](const std::string& t) {
+                    std::string u = t;
+                    const std::string with = "return -0x7fffff81 < ";
+                    const size_t at = u.find(with);
+                    if (at != std::string::npos) u.replace(at, with.size(), "return -0x7fffff81 >= ");
+                    return u;
+                };
+                const std::vector<CVerdict> bad1017 = CheckPrintedC(d, { { "A10-17 oracle: a wrong text with the literal", { 0x6163, 0x6263, 0x3656, 0x312A, 0x611E, 0xD303, 0x313C, 0xD303, 0x3133, 0x0029, 0x000B, 0x0009, 0x8000, 0x0000, 0x8000, 0x0080 } } },
+                                                                    nIn, cc, 0x51ED, 8965);
+                gPrintedCTextHook = nullptr;
+                std::printf("pin 'A10-17 oracle': %s (%s)\n", bad1017[0].cls.c_str(), bad1017[0].detail.substr(0, 150).c_str());
+                CHECK(bad1017[0].cls == "mismatch" && IsFailing(bad1017[0]));
             }
             // (area 3 round 15 fix) frame124 seed 2268.chain (the merge's printed-C range): `(int4)uStack_24._0_1_` is the engine's sign extension
             // of the word's top byte, which the C reading takes unsigned (0x80FE for the run's 0x7FFE); the engine's reading, which has the
