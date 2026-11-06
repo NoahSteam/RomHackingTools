@@ -16771,3 +16771,40 @@ Not done: A9-53's "save the user's work before the settings" (the order is kept)
 Bite proof: with the four fixes reverted together (target name, shared deadline, `tryMs` 0, hook ignored), `Area9Round6Tests` fails exactly the four checks ("A9-55 names the file", "PIN A9-53 fixed", "PIN A9-52 fixed", "A9-53 hands its text to the hook"); restored, it passes.
 
 Runs: full `ctest -j2` 112 of 112 (226 s; 106 + 6 Live; no new test target); `LoaderFuzzTests` seed 71903, 3,000 cases a module, all modules: 37,985 cases, 0 classes outside the ledger (only `HARDLINK_SPLIT`, A9-28); `concurrent` module 30 rounds, 4 processes: 0; `Area9Round3Tests` (`LockNotHeld`, two processes) 2 of 2; fault suite 0 of 94 failed.
+
+## Area 9, round 7
+
+Branch `review/9-round7` from master `3f3850b7`. An adversarial round on the area 9 fixer's A9-51 to A9-55. **No product code changed.** The round adds `FrontEnd/tests/Area9Round7Tests.cpp` (ctest `SaturnExplorerArea9Round7Tests`, Linux; `CMakeLists.txt` target beside round 6's) and files A9-58 to A9-62 (P3) and the instrument row A9-63. **No P1 or P2: the round is clean** (the second clean round in a row, so area 9 is done on that rule). Two of the findings (A9-58, A9-60) are close to the line; the judgement is given with each.
+
+### What was attacked, and how
+
+* **`FileLock` `tryMs` and the cleared settings status (A9-52).** `wait=false` with `tryMs` 250 retries every 20 ms and gives up as "another process holds" (`mTimedOut` is `wait`, so a try never says "held for more than"); `FrameTryCollides` holds. Can a stale status hide a later failure? No: the status is cleared only when the line still shows the settings text and is an error (`mOperationStatus == mSettingsStatus`), so another operation's message is never wiped; after a success `mSettingsSaveFailed` is false, so the next failure is reported afresh. Cost: the try now sleeps 250 ms in the UI thread on every frame try behind a stuck holder, once every 2 s, about 11 % of the time (**A9-59, P3**; `FrameStall`: refused after 0.262 s).
+* **The shared 10 s exit deadline (A9-53).** A store late in the order is refused only because an earlier store used the deadline: settings behind a stuck lock take the 10.01 s, and the names, whose holder lets go 2 s later, are refused after 0.00 s (`ExitLateStore`). That is said nowhere, and worse, the text says `another process has held ...lock for more than 10 seconds` (`WhyNotHeld` prints the configured `mWaitMs`, not what was waited). The loss is the user's names, in favour of the settings, because "user's work before the settings" was not done (**A9-58, P3**). Judgement: P3, since it needs a stuck holder first and a second holder at the next moment; a coordinator who reads the false text as P2 may raise it. A late store whose lock is free still saves (one try with no wait: shown by the four-lock test of round 6, and `budgetMs` 0 reaches `expired()` only after the first attempt, read).
+* **`SetExitNoticeHook`, `NoticeAtExit` and the text.** The hook is set in `WebMain.cpp` after the loop and before `Shutdown`, so the box is shown while the SDL window still exists; the Emscripten build never calls `Shutdown` (no file system lock there). The text lists each store's own error, but (a) the settings line is the first failure's text, not the exit's, (b) every text ends "kept in memory only" under a heading that says "lost", (c) nothing says the budget was shared (**A9-61, P3**, read).
+* **A9-55.** The flush text names the target, and the path is in it twice (`saturn_functions.txt: could not flush the new saturn_functions.txt to the device: Input/output error`). The macOS rule (fall back to `fsync` only for `ENOTSUP` or `EINVAL`) and the Windows `GetLastError` capture read right; both are uncompiled, as the fixer said.
+* **A9-51, the doubled subject.** Gone in every path. But the premise that the store's text begins with its subject holds only for the lock and cap refusals: a refused write or flush is `path + ": " + why`, so the Log line for a full disk is now a bare `<path>: could not write ...` with nothing saying a save failed (**A9-60, P3**; `RefusalTexts`).
+* **The stray `.;` on Windows.** Still there and never filed: `WhyNotHeld` appends the system message (it ends in a full stop on Windows) and the store adds `; saving without the lock`. Filed as **A9-62, P3** (read; no Linux test can show it).
+* **`App.cpp` exit path.** `-fsyntax-only` with the worktree flags: 0 errors. `Shutdown` order read: runner reset, `SetClosing`, settings, watches (A9-57, open), notes, names, starts, notice, `CloseData`.
+* **Sweep.** Fresh fuzz (below), the lock tests alone and under load, a look at every `FileLock` caller (`StoreMerge.h`, `SpecBundle.cpp`, `Settings.cpp`: only the settings use `wait=false`). Nothing else.
+
+### Findings
+
+| Row | Severity | Summary | Test |
+|---|---|---|---|
+| A9-58 | P3 | the shared exit deadline refuses a late store after 0 s and the text says "more than 10 seconds" | `ExitLateStore` (`PIN A9-58`) |
+| A9-59 | P3 | the 250 ms try stalls the UI 250 ms every 2 s behind a stuck holder | `FrameStall` (`PIN A9-59`) |
+| A9-60 | P3 | a write or flush refusal has no subject (bare in the Log since A9-51) and the path twice | `RefusalTexts` (`PIN A9-60`) |
+| A9-61 | P3 | the exit notice can list a stale settings text, says "kept" under "lost", and not the shared budget | read |
+| A9-62 | P3 | the Windows ".;" after the OS reason is still there | read |
+| A9-63 | P3 | instrument row | |
+
+### Runs
+
+| Run | Result |
+|---|---|
+| `SaturnExplorerArea9Round7Tests` (`ulimit -v 3500000`, `timeout`) | all passed (the pins hold today's behaviour) |
+| `SaturnExplorerLoaderFuzzTests`, seed 77123, 3,000 cases a module, all modules | 37,985 cases in 68 s, 0 classes outside the ledger (only `HARDLINK_SPLIT`, A9-28) |
+| `concurrent` module, 40 rounds, 4 processes, six busy loops | 0 classes outside the ledger |
+| `SaturnExplorerArea9Round3Tests` (`LockNotHeld`, two processes) | alone 2 of 2, under six busy loops 3 of 3 |
+| Rounds 5, 6, 7 under the same load | pass |
+| `App.cpp` `-fsyntax-only` | 0 errors |
