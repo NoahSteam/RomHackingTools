@@ -197,7 +197,10 @@ continue to work on those lines.
   signed `x` means a zero extension. Read the types, not C's promotion rules. A `CONCATxy(a, b)` (bytes joined, as from
   a stack word written in pieces) has no type of its own: it is the unsigned value of its bytes, and a widening cast of it
   (`(uint4)CONCAT11(a,b)`) is a zero extension; its sign extension is printed with a cast to its signed type first
-  (`(uint4)(int2)CONCAT11(a,b)`, as `mov.w` reads such a word).
+  (`(uint4)(int2)CONCAT11(a,b)`, as `mov.w` reads such a word), and so is a CONCAT that a signed compare, a compare with
+  a signed narrow value, an arithmetic shift or a signed division reads (`(int2)CONCAT11(a,b) == param_1`,
+  `(int2)CONCAT11(a,b) >> 1`). An `xunknown` variable has no sign either: a cast of it to a wider unsigned type
+  (`(uint4)xStack_4._0_2_`) is a zero extension unless the variable was last assigned a signed value.
 - Whether r0 is shown as the return follows the engine's rule, and not the instruction in `rts`'s delay slot. A value in r0 is the
   return when nothing else uses it (`mov #1,r0 ; rts`), or when it is the output of a call to a function whose signature is lent as
   returning a value (`return g(p);`, with whatever else the value is used for: compared, stored through). A value with another use
