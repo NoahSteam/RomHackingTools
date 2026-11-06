@@ -302,3 +302,25 @@ N-resize	a9r5	survived	36
 N-resize	a9r6	survived	22	
 N-resize	a9r7	survived	12	
 N-resize	*	SURVIVED	0	
+P-a842-shown	trust	killed	52	pin A8-42: Enter in the focused, unedited box asks the output shown (A), not C as typed        FAILED
+P-a842-shown	panel	survived	4	
+P-a842-shown	model	survived	18	
+P-a836-origin	trust	survived	52	
+P-a836-origin	panel	survived	4	
+P-a836-origin	model	survived	18	
+P-a836-origin	*	SURVIVED	0	
+P-a846-undo	trust	killed	52	pin A8-46: Enter after an edit taken back: still the finder's guess, with its Entry line       FAILED
+P-a846-undo	panel	survived	4	
+P-a846-undo	model	survived	19	
+P-a846-typedout	trust	killed	51	pin A8-30: ...the same entry typed: the user's entry, no figure and no Entry line              FAILED
+P-a846-typedout	panel	survived	4	
+P-a846-typedout	model	survived	19	
+P-a842-rewrite	trust	killed	52	pin A8-42: Enter in the focused, unedited box asks the output shown (A), not C as typed        FAILED
+P-a842-rewrite	panel	survived	4	
+P-a842-rewrite	model	survived	18	
+P-a850-sync	trust	killed	52	pin A8-50: the box that had the focus at the install keeps the refused text                    FAILED
+P-a850-sync	panel	survived	4	
+P-a850-sync	model	survived	19	
+P-askagain	trust	killed	52	pin A8-30: ...the same entry typed: the user's entry, no figure and no Entry line              FAILED
+P-askagain	panel	killed	4	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/DecompilerPanelTests.cpp:1269: f.panel.Submissions() == n + 1
+P-askagain	model	survived	18	
