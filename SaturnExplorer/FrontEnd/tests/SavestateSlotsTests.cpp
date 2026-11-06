@@ -9,6 +9,14 @@
 #include <string>
 #include <vector>
 
+#ifdef _WIN32
+#include <direct.h>    // _mkdir, _rmdir, _getpid
+#include <process.h>
+#else
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
+
 #include "SavestateSlots.h"
 #include "SeLiveProtocol.h"
 #include "SeStateCodec.h"
@@ -48,6 +56,53 @@ std::vector<uint8_t> Xor(const std::vector<uint8_t>& a, const std::vector<uint8_
     std::vector<uint8_t> out(a.size());
     for (size_t i = 0; i < a.size(); ++i) out[i] = a[i] ^ b[i];
     return out;
+}
+
+// A12-15: the slot files go under Settings::ConfigDir(), which reads %APPDATA% (Windows) or
+// XDG_CONFIG_HOME (elsewhere). Point that at a private temp folder before anything resolves it, so
+// the test never touches the user's real SaturnExplorer\states folder, on any platform.
+std::string gTempConfigRoot;
+
+bool UseTempConfigDir()
+{
+#ifdef _WIN32
+    const char* t = std::getenv("TEMP");
+    const int pid = _getpid();
+#else
+    const char* t = std::getenv("TMPDIR");
+    const int pid = static_cast<int>(getpid());
+#endif
+    gTempConfigRoot = std::string(t && *t ? t : ".") + "/__se_slots_cfg_" + std::to_string(pid);
+#ifdef _WIN32
+    _mkdir(gTempConfigRoot.c_str());
+    return _putenv_s("APPDATA", gTempConfigRoot.c_str()) == 0;
+#else
+    mkdir(gTempConfigRoot.c_str(), 0700);
+    return setenv("XDG_CONFIG_HOME", gTempConfigRoot.c_str(), 1) == 0;
+#endif
+}
+
+void RemoveTempConfigDir()
+{
+    // Only empty folders are left by now (the test removes its files); rmdir refuses anything else.
+    const std::string app = gTempConfigRoot + "/SaturnExplorer";
+    const char* dirs[] = { "/states", "" };
+    for (const char* d : dirs)
+    {
+        const std::string path = app + d;
+#ifdef _WIN32
+        _rmdir(path.c_str());
+#else
+        rmdir(path.c_str());
+#endif
+    }
+#ifdef _WIN32
+    _rmdir(app.c_str());
+    _rmdir(gTempConfigRoot.c_str());
+#else
+    rmdir(app.c_str());
+    rmdir(gTempConfigRoot.c_str());
+#endif
 }
 }  // namespace
 
@@ -135,7 +190,7 @@ void TestResetDropsEverything()
 
 void TestSlotFileRoundTrip()
 {
-    // Writes into the real config dir, so use a ROM name no game would produce and clean up.
+    // Writes into the temp config dir main() set up (never the real one); clean up after.
     const std::string rom = "/tmp/__se_selftest_rom__.cue";
     const std::string path = SavestateSlots::SlotPath(rom, 3);
     if (path.empty())
@@ -143,6 +198,9 @@ void TestSlotFileRoundTrip()
         std::cerr << "note: no resolvable config dir; skipping the slot-file round trip\n";
         return;
     }
+    // Guard: the slot path must be inside the temp folder, or the test would touch a real folder.
+    CHECK(path.compare(0, gTempConfigRoot.size(), gTempConfigRoot) == 0);
+    if (path.compare(0, gTempConfigRoot.size(), gTempConfigRoot) != 0) return;
 
     SavestateSlots slots;
     const std::vector<uint8_t> full = MakeState(8192, 7);
@@ -209,12 +267,18 @@ void TestSaveWithoutAStateFails()
 
 int main()
 {
+    if (!UseTempConfigDir())
+    {
+        std::cerr << "could not point the config dir at a temp folder; not running\n";
+        return 1;
+    }
     TestKeyframeIsTheLatestState();
     TestDeltaReconstructsAgainstItsKeyframe();
     TestDeltaForAnotherKeyframeIsIgnored();
     TestResetDropsEverything();
     TestSlotFileRoundTrip();
     TestSaveWithoutAStateFails();
+    RemoveTempConfigDir();
     if (gFailures != 0)
     {
         std::cerr << gFailures << " savestate slot check(s) failed\n";

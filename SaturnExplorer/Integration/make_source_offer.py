@@ -104,7 +104,9 @@ Rebuilding it
     CPPFLAGS="{install.MEDNAFEN_DEFINES}" ./configure --enable-debugger --enable-ss {cfg}
     make
 
-(Integration/install.py runs exactly this and adds toolchain-specific flags for Windows/MSYS2.)
+(Integration/install.py runs this and adds toolchain-specific flags for Windows/MSYS2. On Windows it
+passes CPPFLAGS="-DUNICODE=1 -D_UNICODE=1 {install.MEDNAFEN_DEFINES}": without the two UNICODE defines Mednafen
+builds its Windows 98 variant, which refuses to start on Windows NT. Use that CPPFLAGS for a Windows rebuild.)
 
 {libraries_text(libs)}
 Licences for all of the above are in the Licenses folder. The Saturn BIOS and game images are not

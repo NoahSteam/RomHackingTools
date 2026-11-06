@@ -48,16 +48,25 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, LPWSTR, int)
             if (n > 1) WideCharToMultiByte(CP_UTF8, 0, w, -1, &a[0], n, nullptr, nullptr);
             args.push_back(a);
         }
-    const char* liveEndpoint = nullptr;
-    for (size_t i = 1; i < args.size(); ++i)
+    // Same rule as the desktop main in WebMain.cpp: `--live [endpoint]` auto-connects; any other first
+    // argument is a savestate path (A12-4; the build scripts tell users to pass one) and is opened, which
+    // also turns auto-connect off. If it cannot be opened, or there is no argument, poll for an emulator.
+    bool opened = false;
+    if (args.size() > 1 && args[1] != "--live")
+        opened = app.OpenSavestate(args[1].c_str());
+    if (!opened)
     {
-        if (args[i] == "--live")
+        const char* liveEndpoint = nullptr;
+        for (size_t i = 1; i < args.size(); ++i)
         {
-            liveEndpoint = (i + 1 < args.size()) ? args[i + 1].c_str() : nullptr;
-            break;
+            if (args[i] == "--live")
+            {
+                liveEndpoint = (i + 1 < args.size()) ? args[i + 1].c_str() : nullptr;
+                break;
+            }
         }
+        app.EnableLiveAutoConnect(liveEndpoint);
     }
-    app.EnableLiveAutoConnect(liveEndpoint);
 
     while (platform.PumpEvents())
     {

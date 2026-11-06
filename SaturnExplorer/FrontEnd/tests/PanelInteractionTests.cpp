@@ -630,7 +630,13 @@ void TestSplitHeightRoundTripsThroughSettings()
     // pixel height, including the fractional part a drag leaves behind. Points the config
     // dir at a private directory for the rest of the process -- so this test runs last,
     // and its directory carries the pid so concurrent runs cannot collide.
-    const std::string dir = "/tmp/__se_split_settings__" + std::to_string(se_getpid());
+    // Under the platform's temp folder (TEMP on Windows, TMPDIR elsewhere), never the user's real one.
+#ifdef _WIN32
+    const char* tmpBase = std::getenv("TEMP");
+#else
+    const char* tmpBase = std::getenv("TMPDIR");
+#endif
+    const std::string dir = std::string(tmpBase && *tmpBase ? tmpBase : "/tmp") + "/__se_split_settings__" + std::to_string(se_getpid());
 #ifdef _WIN32
     _putenv_s("APPDATA", dir.c_str());
 #else
