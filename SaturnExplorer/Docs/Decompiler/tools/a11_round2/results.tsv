@@ -241,3 +241,64 @@ N-addr-letters	a9r4	killed	11	FAIL: A9-32: a capital, a single letter, and a wor
 N-addr-letters	a9r5	survived	36	
 N-addr-letters	a9r6	survived	22	
 N-addr-letters	a9r7	survived	12	
+N-addr-remark	fuzz	killed	5	VIOLATION names/PROSE_AS_ADDRESS: the entries loaded (4) are not the well-formed lines' (3)
+N-addr-remark	fw	survived	0	
+N-addr-remark	settings	survived	0	
+N-addr-remark	names	survived	0	
+N-addr-remark	asm	survived	0	
+N-addr-remark	a9r3	killed	1	FAIL: address word: '1a x'
+N-addr-remark	a9r4	survived	11	
+N-addr-remark	a9r5	killed	36	FAIL: A9-45 fixed: of five remark lines that open with a number only the eight-digit date is an entry in a names file
+N-addr-remark	a9r6	killed	22	FAIL: A9-45: of an older version's file the three BIOS names (digits and letters) are skipped and counted, the RAM names load
+N-addr-remark	a9r7	survived	12	
+N-split-cr	fuzz	killed	5	VIOLATION settings/DIFFERS_FROM_FORMAT: Settings read something other than what the format's lines say
+N-split-cr	fw	survived	0	
+N-split-cr	settings	survived	0	
+N-split-cr	names	killed	0	FAIL: A9-25: a lone CR ends a line
+N-split-cr	asm	survived	0	
+N-split-cr	a9r3	killed	0	FAIL: line ends: LF, CRLF, lone CR
+N-split-cr	a9r4	survived	11	
+N-split-cr	a9r5	survived	36	
+N-split-cr	a9r6	survived	22	
+N-split-cr	a9r7	survived	12	
+N-bom	fuzz	survived	6	VIOLATION lifecycle/HARDLINK_SPLIT: a hard link to saturn_functions.txt no longer names the file after a save
+N-bom	fw	survived	0	
+N-bom	settings	survived	0	
+N-bom	names	survived	0	
+N-bom	asm	survived	0	
+N-bom	a9r3	killed	0	FAIL: FIX A9-34: with a byte-order mark the first section header is read
+N-bom	a9r4	killed	11	FAIL: A9-34 merge: a byte-order mark, CRLF, and a new section
+N-bom	a9r5	killed	36	FAIL: a byte-order mark in front of the names file does not lose the first entry
+N-bom	a9r6	survived	22	
+N-bom	a9r7	survived	12	
+N-clean	fuzz	survived	5	VIOLATION lifecycle/HARDLINK_SPLIT: a hard link to saturn_functions.txt no longer names the file after a save
+N-clean	fw	survived	0	
+N-clean	settings	survived	0	
+N-clean	names	survived	0	
+N-clean	asm	survived	0	
+N-clean	a9r3	killed	1	FAIL: FIX A9-36: a line end in a name does not start another entry at the next start
+N-clean	a9r4	survived	11	
+N-clean	a9r5	survived	36	
+N-clean	a9r6	survived	22	
+N-clean	a9r7	survived	12	
+N-fifo	fuzz	killed	11	VIOLATION lifecycle/HARDLINK_SPLIT: a hard link to saturn_functions.txt no longer names the file after a save
+N-fifo	fw	survived	0	
+N-fifo	settings	survived	0	
+N-fifo	names	survived	0	
+N-fifo	asm	survived	0	
+N-fifo	a9r3	survived	0	
+N-fifo	a9r4	survived	11	
+N-fifo	a9r5	survived	36	
+N-fifo	a9r6	survived	22	
+N-fifo	a9r7	survived	12	
+N-resize	fuzz	survived	5	VIOLATION lifecycle/HARDLINK_SPLIT: a hard link to saturn_functions.txt no longer names the file after a save
+N-resize	fw	survived	0	
+N-resize	settings	survived	0	
+N-resize	names	survived	0	
+N-resize	asm	survived	0	
+N-resize	a9r3	survived	0	
+N-resize	a9r4	survived	11	
+N-resize	a9r5	survived	36	
+N-resize	a9r6	survived	22	
+N-resize	a9r7	survived	12	
+N-resize	*	SURVIVED	0	
