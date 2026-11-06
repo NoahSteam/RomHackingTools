@@ -17548,4 +17548,6 @@ The nightly's printed-C step has 0 findings. The earlier run of the same pieces 
 
 ### Tests
 
-See the next paragraph of this section for the full ctest result.
+* **Full `ctest` including Live:** 100 percent, 0 failed of 115 (109 plus 6 Live, the master count), run with `-j1` under `ulimit -v 3500000`. No test was added to the list: the new pins (`A2-125`, `A2-125 signed`, three `A2-125 oracle`, `A3-159`, `A3-159 signed`, three `A3-159 oracle`) are inside `SaturnExplorerSh2PrintedCTests` (the default run of `SaturnExplorerSh2GeneratedTests`).
+* **Printed-C test alone:** the default run passes (651 fixtures, `agrees=612 narrow-c=16`).
+* **Fault suite:** not run; no product code changed.
