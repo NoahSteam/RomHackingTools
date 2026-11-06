@@ -45,3 +45,47 @@ O-caseOtherEntry	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.clau
 O-caseOtherEntry	gen	survived	18	
 O-backWrong	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:1067: ua.backWrong == 1 && ua.Violations() == 1
 O-backWrong	gen	survived	18	
+O-frameStoreMissing	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:1135: a.frameStoreMissing == 1
+O-frameStoreMissing	gen	survived	19	
+O-accessAtBranch	unit	killed	24	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:281: seen.accessAtBranch == 1 && seen.Violations() > 0 && seen.slotMadeLines >= 1
+O-accessAtBranch	gen	survived	19	
+S-unchanged	fuzz	survived	6	VIOLATION lifecycle/HARDLINK_SPLIT: a hard link to saturn_functions.txt no longer names the file after a save
+S-unchanged	fw	survived	0	
+S-unchanged	settings	survived	0	
+S-unchanged	names	killed	0	FAIL: A9-20: an idle instance does not even replace the file
+S-unchanged	asm	survived	0	
+S-unchanged	a9r3	killed	0	FAIL: an idle instance writes nothing
+S-unchanged	a9r4	survived	11	
+S-unchanged	a9r5	survived	36	
+S-unchanged	a9r6	killed	22	FAIL: A9-46: at exit a store with nothing pending is not held up by a stuck lock
+S-unchanged	a9r7	survived	12	
+S-refused	fuzz	survived	5	VIOLATION lifecycle/HARDLINK_SPLIT: a hard link to saturn_functions.txt no longer names the file after a save
+S-refused	fw	survived	0	
+S-refused	settings	survived	0	
+S-refused	names	killed	0	FAIL: A9-19: a save over a refused file is refused, naming the file
+S-refused	asm	survived	0	
+S-refused	a9r3	survived	0	
+S-refused	a9r4	survived	11	
+S-refused	a9r5	survived	36	
+S-refused	a9r6	survived	22	
+S-refused	a9r7	survived	12	
+S-lockheld	fuzz	survived	5	VIOLATION lifecycle/HARDLINK_SPLIT: a hard link to saturn_functions.txt no longer names the file after a save
+S-lockheld	fw	survived	0	
+S-lockheld	settings	survived	0	
+S-lockheld	names	survived	0	
+S-lockheld	asm	survived	0	
+S-lockheld	a9r3	killed	1	FAIL: FIX A9-33: with the lock path unusable the save is refused
+S-lockheld	a9r4	killed	11	FAIL: FIX A9-42: in a folder the user cannot write the refusal gives the OS reason (Permission denied)
+S-lockheld	a9r5	killed	36	FAIL: names: refused while held
+S-lockheld	a9r6	killed	22	FAIL: A9-46: at exit a stuck holder refuses after 10 s and says so
+S-lockheld	a9r7	killed	12	FAIL: setup: the names, whose holder lets go 2 s later, are refused at once: an earlier store spent the shared deadline (App now saves the names first)
+S-nodisk	fuzz	killed	5	VIOLATION lifecycle/SAVE_DROPS_SKIPPED_LINES: saturn_function_bounds.txt: the line Load skipped is deleted by the next function start's save
+S-nodisk	fw	survived	0	
+S-nodisk	settings	survived	0	
+S-nodisk	names	killed	0	FAIL: A9-20: both instances' renames are in the file
+S-nodisk	asm	survived	0	
+S-nodisk	a9r3	killed	0	FAIL: two instances saving 300 entries each under the lock lose none
+S-nodisk	a9r4	killed	11	FAIL: FIX A9-41: a save keeps the user's remark lines
+S-nodisk	a9r5	killed	36	FAIL: A9-40: the later save writes the refused rename too
+S-nodisk	a9r6	killed	22	FAIL: A9-45: the skipped BIOS lines stay in the file through a save (nothing is lost on disk)
+S-nodisk	a9r7	survived	12	
