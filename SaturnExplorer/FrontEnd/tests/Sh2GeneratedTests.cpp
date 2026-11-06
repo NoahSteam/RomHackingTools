@@ -7435,6 +7435,9 @@ std::string CHeader()
          "#define FLD(v, o, n) FLDT_##n(FLDRAW(v, o, n))\n"
          "#define SETFLD(v, o, n, e) ((v) = (__typeof__(v))(((unsigned long long)(v) & ~(FLDMASK(n) << (8 * (sizeof(v) - (o) - (n))))) | "
          "(((unsigned long long)(e) & FLDMASK(n)) << (8 * (sizeof(v) - (o) - (n))))))\n"
+         // (A3-159) a byte array named whole as a value of its own length: its bytes, the first the most significant (the machine's order)
+         "static inline unsigned long long BEARR_(const uint8_t *p, int n) { unsigned long long v = 0; for (int i = 0; i < n; ++i) v = (v << 8) | p[i]; return v; }\n"
+         "#define BEARR(a, n) BEARR_((const uint8_t *)(a), (n))\n"
          "#define CARRY4(a, b) ((uint32_t)((uint32_t)(a) + (uint32_t)(b)) < (uint32_t)(a))\n"
          "#define CARRY1(a, b) ((uint8_t)((uint8_t)(a) + (uint8_t)(b)) < (uint8_t)(a))\n"
          "#define SCARRY4(a, b) (((int32_t)(a) >= 0) == ((int32_t)(b) >= 0) && (((int32_t)((uint32_t)(a) + (uint32_t)(b)) >= 0) != ((int32_t)(a) >= 0)))\n"
@@ -7625,6 +7628,8 @@ template <int N> struct SZ<Piece<N> > { static const int n = N; };
 #define FLDT_8(x) (T<8, false>((u64)(x)))
 #define FLD(v, o, n) FLDT_##n(FLDRAW(v, o, n))
 #define SETFLD(v, o, n, e) ((v) = static_cast<__typeof__(v)>((RAW(v) & ~(FLDMASK(n) << (8 * (SIZEOFV(v) - (o) - (n))))) | ((RAW(e) & FLDMASK(n)) << (8 * (SIZEOFV(v) - (o) - (n))))))
+static inline u64 BEARR_(const uint8_t *p, int n) { u64 v = 0; for (int i = 0; i < n; ++i) v = (v << 8) | p[i]; return v; }
+#define BEARR(a, n) BEARR_((const uint8_t *)(a), (n))
 static inline Bool4 CARRY4(u64 a, u64 b) { return Bool4((uint32_t)((uint32_t)a + (uint32_t)b) < (uint32_t)a); }
 static inline Bool4 CARRY1(u64 a, u64 b) { return Bool4((uint8_t)((uint8_t)a + (uint8_t)b) < (uint8_t)a); }
 static inline Bool4 SCARRY4(u64 a, u64 b) { return Bool4(((int32_t)a >= 0) == ((int32_t)b >= 0) && (((int32_t)((uint32_t)a + (uint32_t)b) >= 0) != ((int32_t)a >= 0))); }
@@ -7978,6 +7983,106 @@ std::string UnderscoreNameType(const std::string& text, const std::string& name)
     case 8: return "xunknown8";
     default: return "unsigned long long";
     }
+}
+
+// (A2-125) The engine writes a piece of an underscore name's word under the word's name: `_xStack_14 = CONCAT22(0xffff,param_3);` and later
+// `_xStack_14 = SUB43(xVar1,1);`, a write of three bytes, the first three of the name's four (the stack is big-endian), which leaves the fourth as
+// it was. The harness declared the name once, as the word (UnderscoreNameType), so the narrow write assigned the whole word and cleared the byte
+// it does not write. This returns the text with each such write made what it is: `_n = (SETFLD(_n, 0, 3, SUB43(xVar1,1)), _n);` (the field macro
+// of both readings replaces the first b bytes; the assignment form stays so that the locals inside the word are refreshed after it, as after any
+// write of the name). Only a write whose right side is one `SUBab(...)` of b bytes, to a name that every `CONCAT` write gives one width w, with
+// b < w. A write of any other shape, or of a name with no single width, is left as it was (it is a finding or a skip as before).
+std::string SubNarrowedWritesAsFields(const std::string& text)
+{
+    static const std::regex head("(^|\n)([ \\t]*)(_[A-Za-z]*Stack_[0-9a-f]+) = SUB([0-9])([0-9])\\(");
+    auto widthOf = [&](const std::string& name) {
+        const std::regex write("\\b" + name + " = CONCAT([0-9])([0-9])\\(");
+        int width = 0;
+        for (std::sregex_iterator it(text.begin(), text.end(), write), end; it != end; ++it)
+        {
+            const int w = std::atoi((*it)[1].str().c_str()) + std::atoi((*it)[2].str().c_str());
+            if (width != 0 && width != w) return 0;
+            width = w;
+        }
+        return width;
+    };
+    std::string out;
+    size_t pos = 0;
+    for (std::sregex_iterator it(text.begin(), text.end(), head), end; it != end; ++it)
+    {
+        const std::smatch& m = *it;
+        const size_t start = static_cast<size_t>(m.position(0)), open = start + m.length(0) - 1;   // the '(' of SUBab(
+        if (start < pos) continue;
+        int depth = 0;
+        size_t close = std::string::npos;
+        for (size_t k = open; k < text.size(); ++k)
+        {
+            if (text[k] == '(') ++depth;
+            else if (text[k] == ')' && --depth == 0) { close = k; break; }
+        }
+        if (close == std::string::npos || close + 1 >= text.size() || text[close + 1] != ';') continue;
+        const int b = std::atoi(m[5].str().c_str()), w = widthOf(m[3].str());
+        if (b < 1 || w <= b || w > 8) continue;
+        const size_t exprStart = open - (std::string("SUB00(")).size() + 1;
+        out += text.substr(pos, start - pos) + m[1].str() + m[2].str() + m[3].str() + " = (SETFLD(" + m[3].str() + ", 0, " + std::to_string(b) + ", " +
+               text.substr(exprStart, close - exprStart + 1) + "), " + m[3].str() + ")";
+        pos = close + 1;
+    }
+    return out + text.substr(pos);
+}
+
+// (A3-159) The engine names a byte-array local whole when a value of the array's own length reads it: `(unkuint3)axStack_f >> 8` and
+// `CONCAT13(param_4,axStack_f)` for `xunknown1 axStack_f [3];` (the bytes, the first the most significant). In C that name is the array's
+// address. This returns the text with each such name made the value it stands for, `BEARR(axStack_f, 3)`, for the names in 'arrays' (name to
+// length). The name is a value only where the size says so and no pointer can: the length is not four (a pointer's, so `CONCAT44(axStack_4,x)`
+// stays as it was), and the name is the operand of a cast to a type of that size, or an argument of `CONCATab(` in the slot of that size.
+// Any other use of the name (an index, a pointer assignment, an argument elsewhere) is left alone.
+std::string ArrayNamesAsValues(const std::string& text, const std::map<std::string, int>& arrays)
+{
+    std::string out = text;
+    for (const auto& a : arrays)
+    {
+        const std::string& n = a.first;
+        const int len = a.second;
+        if (len == 4 || len < 2 || len > 8) continue;
+        const std::string name = "\\b" + n + "\\b(?!\\s*\\[)";
+        auto replaceAll = [&](const std::regex& re, const std::string& fmt) { out = std::regex_replace(out, re, fmt); };
+        const std::string value = "BEARR(" + n + ", " + std::to_string(len) + ")";
+        // a cast to a type of the array's length: `(unkuint3)axStack_f`, `(unkbyte5)axStack_f`, `(uint3)...`
+        replaceAll(std::regex("(\\((?:unk(?:u?int|byte)|xunknown|undefined|u?int)" + std::to_string(len) + "\\)\\s*)" + name), "$1" + value);
+        // an argument of CONCATab( that is the name alone, in the slot whose size is the array's length (`CONCAT13(param_4,axStack_f)`):
+        // the occurrences from the last to the first, so that an edit does not move the ones before it
+        std::vector<size_t> at;
+        static const std::regex concatHead("CONCAT[1-7][1-7]\\(");
+        for (std::sregex_iterator it(out.begin(), out.end(), concatHead), end; it != end; ++it) at.push_back(static_cast<size_t>(it->position(0)));
+        for (size_t k = at.size(); k-- > 0;)
+        {
+            const size_t open = at[k] + 8;
+            const int slotA = out[at[k] + 6] - '0', slotB = out[at[k] + 7] - '0';
+            // the end of the first argument (the comma at depth 0) and of the call
+            int depth = 0;
+            size_t comma = std::string::npos, close = std::string::npos;
+            for (size_t q = open + 1; q < out.size(); ++q)
+            {
+                if (out[q] == '(') ++depth;
+                else if (out[q] == ')') { if (depth == 0) { close = q; break; } --depth; }
+                else if (out[q] == ',' && depth == 0 && comma == std::string::npos) comma = q;
+            }
+            if (comma == std::string::npos || close == std::string::npos) continue;
+            auto trimmed = [&](size_t b, size_t e, size_t& tb, size_t& te) {
+                tb = b; te = e;
+                while (tb < te && out[tb] == ' ') ++tb;
+                while (te > tb && out[te - 1] == ' ') --te;
+            };
+            size_t tb2 = 0, te2 = 0, tb1 = 0, te1 = 0;
+            trimmed(comma + 1, close, tb2, te2);
+            trimmed(open + 1, comma, tb1, te1);
+            // the second argument first (it is later in the string)
+            if (slotB == len && out.compare(tb2, te2 - tb2, n) == 0 && te2 - tb2 == n.size()) out.replace(tb2, te2 - tb2, value);
+            if (slotA == len && out.compare(tb1, te1 - tb1, n) == 0 && te1 - tb1 == n.size()) out.replace(tb1, te1 - tb1, value);
+        }
+    }
+    return out;
 }
 
 // The value r8-r14 start with in a printed-C run. Its four bytes differ from each other, for every register (A2-44): with
@@ -8549,6 +8654,7 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
         static const std::regex fieldGet("\\b([A-Za-z_]\\w*)\\._(\\d+)_(\\d+)_");
         text = std::regex_replace(text, fieldSet, "SETFLD($1, $2, $3, $4);");
         text = std::regex_replace(text, fieldGet, "FLD($1, $2, $3)");
+        if (frameMode) text = SubNarrowedWritesAsFields(text);   // A2-125
         // Every input the text names, as a local holding what the run started with.
         static const std::regex input("^(\\s*)((?:\\w+\\s+)+)((?:in|unaff)_\\w+);\\s*$");
         std::istringstream lines(text);
@@ -8603,6 +8709,7 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
         // is left undeclared: the text cannot be run, and fails.
         std::set<std::string> frameNames;
         std::string frameDefines, frameUndefs;
+        std::map<std::string, std::pair<int64_t, int>> byteArrays;   // A3-159: the byte arrays of the frame, with their offsets and lengths
         // The stack locals the text declares, with their offsets and the widths of their types, for the names wider than a symbol below (A3-124).
         std::map<std::string, std::pair<int64_t, int>> stackLocals;
         {
@@ -8628,6 +8735,7 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
                 {
                     const std::string name = dm[2].str(), type = dm[1].str();
                     const bool array = dm[3].matched;
+                    if (array && StackTypeSize(type) == 1) byteArrays[name] = std::make_pair(off, std::atoi(dm[4].str().c_str()));
                     frameDefines += "#define " + name + (array ? " ((" : " (*(") + type + " *)(g_frame_base + 0x8000 + (" + std::to_string(off) + "))" +
                                     ")\n";
                     frameUndefs += "#undef " + name + "\n";
@@ -8637,6 +8745,12 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
                 kept += l + "\n";
             }
             rebuilt = kept;
+            if (!byteArrays.empty())
+            {
+                std::map<std::string, int> lens;
+                for (const auto& ba : byteArrays) lens[ba.first] = ba.second.second;
+                rebuilt = ArrayNamesAsValues(rebuilt, lens);   // A3-159
+            }
         }
         // A name the engine makes for an access wider than the symbol it starts at (`_Stack_4 = CONCAT31(...)` where only `Stack_4`
         // and `xStack_1` are declared) is no declaration of its own. It is declared with the width of the write (A2-57): `CONCATab` gives a + b
@@ -8678,6 +8792,12 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
                     if (s.second.first >= at && s.second.first + s.second.second <= at + width)
                         follow += " " + s.first + " = (xunknown" + std::to_string(s.second.second) + ")((unsigned long long)" + n + " >> " +
                                   std::to_string(8 * (at + width - s.second.first - s.second.second)) + ");";
+                // (A3-159) ...and so is a byte array inside it: its bytes are the word's, the first the most significant
+                for (const auto& ba : byteArrays)
+                    if (ba.second.first >= at && ba.second.first + ba.second.second <= at + width)
+                        for (int bi = 0; bi < ba.second.second; ++bi)
+                            follow += " ((uint8_t *)" + ba.first + ")[" + std::to_string(bi) + "] = (uint8_t)((unsigned long long)" + n + " >> " +
+                                      std::to_string(8 * (at + width - ba.second.first - bi - 1)) + ");";
                 if (follow.empty()) continue;
                 const std::regex assign("^(\\s*" + n + " = [^\\n]*;)$");
                 std::string out;
@@ -11575,6 +11695,84 @@ void TestPrintedC()
                 const std::vector<CVerdict> r148 = CheckPrintedC(d, { { "A3-148 F16.21.41 a frame address published in a global", A3148Words() } }, nIn, cc, 0x51ED, 8959);
                 std::printf("pin 'A3-148': %s (%s)\n", r148[0].cls.empty() ? "agrees" : r148[0].cls.c_str(), r148[0].detail.substr(0, 90).c_str());
                 CHECK(r148[0].cls.empty() && r148[0].compared);
+            }
+            // (A2-125, A3-159; the harness compiled a text at a width the engine does not mean)
+            // (a) `_xStack_14 = SUB43(xVar1,1);` is a write of three bytes under the name of a word (`frame124_10822`, the nightly's finding): the harness wrote the
+            // whole word and cleared the byte the text leaves alone. It writes the three bytes now (SubNarrowedWritesAsFields); the engine reads `xStack_12` (an xunknown2)
+            // with a sign the C reading drops, so the text is `narrow-c`, and with that sign written in (the hook) it agrees as C. A wrong text of the same shape stays
+            // `mismatch`: the three bytes taken from the wrong place in the word, written at the other end of the name, or the whole word written (the old harness).
+            // (b) a byte array named whole as a value of its own length (`(unkuint3)axStack_f >> 8`, `CONCAT13(param_4,axStack_f)` for `axStack_f [3]`,
+            // `frame124_9403586`) is its bytes, the first the most significant (ArrayNamesAsValues), and a wide name's write reaches the array inside it; before, C read the
+            // array's address and the engine's reading did not compile. The same text with the shift, the length or the byte order of the read wrong is `mismatch`.
+            {
+                auto w = [](const char* t) {
+                    std::vector<uint16_t> v;
+                    std::istringstream in(t);
+                    std::string tok;
+                    while (in >> tok) v.push_back(static_cast<uint16_t>(std::strtoul(tok.c_str(), nullptr, 16)));
+                    return v;
+                };
+                const std::vector<uint16_t> words125 = w("7FE0 61F3 710C 1F17 51F7 E282 1120 51F7 E22B 1121 51F7 6313 7302 2361 51F7 6313 2371 51F7 6313 7302 6231 6023 63F3 730F 6230 202A 51F7 6313 6231 202A 7F20 000B 0009");
+                const std::vector<uint16_t> words159 = w("7FE0 61F3 7110 1F17 51F7 6313 7305 2350 51F7 E29C 6313 7307 2320 51F7 6313 2360 51F7 6313 7306 2350 51F7 E2D3 6313 7302 2320 51F7 6313 7303 2360 51F7 6313 7301 2360 51F7 6313 7304 2370 51F7 6313 7302 2340 6313 7304 2350 51F7 E262 6313 7303 2320 51F7 E20B 6313 7301 2320 6313 7303 2350 6313 2370 51F7 6313 6232 6023 51F7 6313 7304 6231 302C 51F7 6313 7305 6230 302C 7F20 000B 0009");
+                static const char* gFrom = nullptr;
+                static const char* gTo = nullptr;
+                auto one = [&](const char* name, const std::vector<uint16_t>& words, int salt) { return CheckPrintedC(d, { { name, words } }, nIn, cc, 0x51ED, salt)[0]; };
+                auto show = [](const char* pin, const CVerdict& v) { std::printf("pin '%s': %s (%s)\n", pin, v.cls.empty() ? "agrees" : v.cls.c_str(), v.detail.substr(0, 110).c_str()); };
+                auto replaceHook = [](const std::string& t) {
+                    std::string u = t;
+                    const size_t at = u.find(gFrom);
+                    if (at != std::string::npos) u.replace(at, std::strlen(gFrom), gTo);
+                    return u;
+                };
+                const CVerdict r125 = one("A2-125 frame124_10822: a three-byte write under a word's name", words125, 8960);
+                show("A2-125", r125);
+                CHECK(r125.cls == "narrow-c" && r125.compared && r125.text.find("SUB43(xVar1,1)") != std::string::npos);
+                gFrom = "(int4)xStack_12";
+                gTo = "(int4)(short)xStack_12";
+                gPrintedCTextHook = replaceHook;
+                const CVerdict r125c = one("A2-125 with the sign the engine means written in", words125, 8961);
+                gPrintedCTextHook = nullptr;
+                show("A2-125 signed", r125c);
+                CHECK(r125c.cls.empty() && r125c.compared);   // agrees as C
+                const struct { const char* name; const char* from; const char* to; } wrong125[] = {
+                    { "A2-125 oracle: the piece taken from the wrong bytes", "SUB43(xVar1,1)", "SUB43(xVar1,0)" },
+                    { "A2-125 oracle: written at the other end of the word", "SETFLD(_xStack_14, 0, 3,", "SETFLD(_xStack_14, 1, 3," },
+                    { "A2-125 oracle: the whole word written", "SETFLD(_xStack_14, 0, 3,", "SETFLD(_xStack_14, 0, 4," } };
+                for (size_t k = 0; k < 3; ++k)
+                {
+                    gFrom = wrong125[k].from;
+                    gTo = wrong125[k].to;
+                    gPrintedCTextHook = replaceHook;
+                    const CVerdict bad = one(wrong125[k].name, words125, static_cast<int>(8962 + k));
+                    gPrintedCTextHook = nullptr;
+                    show(wrong125[k].name, bad);
+                    CHECK(bad.cls == "mismatch" && IsFailing(bad));
+                }
+                const CVerdict r159 = one("A3-159 frame124_9403586: a byte array read as a value", words159, 8965);
+                show("A3-159", r159);
+                CHECK(!IsFailing(r159) && r159.compared && r159.text.find("axStack_f") != std::string::npos);
+                gFrom = "_xStack_10 + xStack_c";
+                gTo = "_xStack_10 + (int4)(short)xStack_c";
+                gPrintedCTextHook = replaceHook;
+                const CVerdict r159c = one("A3-159 with the sign the engine means written in", words159, 8969);
+                gPrintedCTextHook = nullptr;
+                show("A3-159 signed", r159c);
+                CHECK(r159c.cls.empty() && r159c.compared);   // agrees as C
+                const struct { const char* name; const char* from; const char* to; } wrong159[] = {
+                    { "A3-159 oracle: the array's bytes shifted wrong", ">> 8", ">> 16" },
+                    { "A3-159 oracle: the array read at another length", "CONCAT13(param_4,BEARR(axStack_f, 3))", "CONCAT13(param_4,BEARR(axStack_f, 2))" },
+                    { "A3-159 oracle: the array read least significant byte first", "CONCAT13(param_4,BEARR(axStack_f, 3))",
+                      "CONCAT13(param_4,(((uint8_t *)axStack_f)[2] << 16) | (((uint8_t *)axStack_f)[1] << 8) | ((uint8_t *)axStack_f)[0])" } };
+                for (size_t k = 0; k < 3; ++k)
+                {
+                    gFrom = wrong159[k].from;
+                    gTo = wrong159[k].to;
+                    gPrintedCTextHook = replaceHook;
+                    const CVerdict bad = one(wrong159[k].name, words159, static_cast<int>(8966 + k));
+                    gPrintedCTextHook = nullptr;
+                    show(wrong159[k].name, bad);
+                    CHECK(bad.cls == "mismatch" && IsFailing(bad));
+                }
             }
             // (area 3 fixer) A3-150: a text that reads a field of a variable with its sign (`(int4)xStack_10._2_2_`) and a CONCAT without one
             // (`CONCAT12(...) >> 8`, `(uint4)CONCAT11(...)`) agrees in neither reading; read as C with the fields signed it agrees (each value right
