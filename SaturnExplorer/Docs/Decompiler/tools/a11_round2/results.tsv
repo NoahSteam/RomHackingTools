@@ -1,0 +1,21 @@
+H7-storeshows	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:644: LineInstructions(*copies[i]) == (std::vector<uint32_t>{ 0x0600D992u, 0x0600D
+H7-storeshows	gen	survived	19	
+H7-storeshows	corpus	survived	42	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:644: LineInstructions(*copies[i]) == (std::vector<uint32_t>{ 0x0600D992u, 0x0600D
+H7-take-noshow	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:644: LineInstructions(*copies[i]) == (std::vector<uint32_t>{ 0x0600D992u, 0x0600D
+H7-take-noshow	gen	survived	19	
+H7-take-noshow	corpus	survived	42	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:644: LineInstructions(*copies[i]) == (std::vector<uint32_t>{ 0x0600D992u, 0x0600D
+H7-own-shows	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:1267: LineInstructions(*ff).empty()
+H7-own-shows	gen	survived	18	
+H7-own-shows	corpus	killed	41	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:1267: LineInstructions(*ff).empty()
+H7-joinconst-off	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:597: LineInstructions(*l) == (std::vector<uint32_t>{ 0x06070008u, 0x0607000Eu })
+H7-joinconst-off	gen	survived	19	
+H7-joinconst-off	corpus	killed	41	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:597: LineInstructions(*l) == (std::vector<uint32_t>{ 0x06070008u, 0x0607000Eu })
+H7-into-null	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:853: LineInstructions(*body) == (std::vector<uint32_t>{ 0x06070008u, 0x0607000Eu 
+H7-into-null	gen	survived	19	
+H7-into-null	corpus	killed	42	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:853: LineInstructions(*body) == (std::vector<uint32_t>{ 0x06070008u, 0x0607000Eu 
+H7-reaches-reg	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:970: four->firstAddr == 0x06070010u
+H7-reaches-reg	gen	survived	19	
+H7-reaches-reg	corpus	killed	42	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:970: four->firstAddr == 0x06070010u
+H7-reaches-any	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:1003: drawnAtJoin == 0
+H7-reaches-any	gen	survived	18	
+H7-reaches-any	corpus	survived	41	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:1003: drawnAtJoin == 0
