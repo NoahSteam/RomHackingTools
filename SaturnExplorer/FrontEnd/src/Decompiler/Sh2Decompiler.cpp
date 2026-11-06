@@ -6470,11 +6470,18 @@ int AddJoinConstantTokens(std::vector<Line>& lines, const PrintedOperations& pri
     for (const ghidra::PcodeOp* o : ordered)
     {
         const ghidra::BlockBasic* home = o->getParent();
-        if (o->code() != ghidra::CPUI_COPY || !o->getOut() || !o->getIn(0)->isConstant() || o->getTime() < flow.opsEnd || !home ||
+        // (A7-40's triage, grammar 2 seed 6123903: the number may come through a temporary the line prints in place, an engine-made copy
+        // of it -- `uVar1 = 0;` in a switch's default, the 0 the engine made of `movt r0` (1) where only bit 1 is read -- which is the
+        // number as much as a constant input is)
+        const ghidra::Varnode* number = o->numInput() == 1 ? o->getIn(0) : nullptr;
+        if (number && !number->isConstant() && number->isImplied() && number->isWritten() && number->getDef()->code() == ghidra::CPUI_COPY &&
+            number->getDef()->getIn(0)->isConstant() && number->getDef()->getTime() >= flow.opsEnd)
+            number = number->getDef()->getIn(0);
+        if (o->code() != ghidra::CPUI_COPY || !o->getOut() || !number || !number->isConstant() || o->getTime() < flow.opsEnd || !home ||
             o->isFromDelaySlot())
             continue;
-        const uint64_t value = static_cast<uint64_t>(o->getIn(0)->getOffset());
-        const ghidra::int4 size = o->getIn(0)->getSize();
+        const uint64_t value = static_cast<uint64_t>(number->getOffset());
+        const ghidra::int4 size = number->getSize();
         const uint32_t at = InstructionOf(o);
         // the register: the output's, or the variable's when the merge made the copy (a temporary)
         const ghidra::Varnode* out = o->getOut();

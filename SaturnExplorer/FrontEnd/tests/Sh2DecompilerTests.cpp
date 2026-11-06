@@ -1468,6 +1468,32 @@ void TestArea7Round7()
         const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_41");
         CHECK(a.storeValueOther == 0 && a.Violations() == 0);
     }
+    // A7-40's triage, grammar 2 seed 6123903 (shrunk; the function at 0x06009028): `movt r0` after a `dt` loop sets r0 to 1, a switch's
+    // default runs `and r0,r3 ; tst #2,r0`, and the engine, which reads only bit 1 of r0, prints `uVar1 = 0;` in the default: a copy of a
+    // temporary it made of the 0 at the movt, printed in place. AddJoinConstantTokens took only a copy of a constant, so the line was
+    // drawn at the default's first instruction `and r0,r3`, which does not make the number (constAtJoin). The copy of such a temporary
+    // is the number's too: the instruction that last set r0 on the way in, `movt`, makes no number, so the line names no instruction.
+    // Was: drawn at 0x0600906A, constAtJoin 1.
+    {
+        const std::vector<uint16_t> w = { 0x2F86, 0x2F96, 0x2FA6, 0x2FC6, 0x2FD6, 0x0C2A, 0x7FE8, 0x6843, 0x6953, 0x6A63, 0x6043, 0x7F18, 0x4C2A,
+            0x6DF6, 0x6CF6, 0x6AF6, 0x69F6, 0x68F6, 0x000B, 0x0009, 0xE301, 0xA000, 0x0009, 0x4310, 0x8BFD, 0x6361, 0x0029, 0xE103, 0x3716, 0x8916,
+            0x4708, 0xC702, 0x017E, 0x412B, 0x0009, 0x0009, 0x0600, 0x9058, 0x0600, 0x905C, 0x0600, 0x9062, 0x0600, 0x9066, 0xA008, 0x0009, 0x6062,
+            0xA005, 0x0009, 0xA003, 0x0009, 0xA001, 0x0009, 0x2309, 0xC802, 0x8900, 0x633D, 0x6033, 0x000B, 0x0009 };
+        std::fill(hw.begin(), hw.end(), 0);
+        for (size_t i = 0; i < w.size(); ++i) dts::Put16(hw, 0x9000u + 2 * i, w[i]);
+        const DecompileResult r = d.Decompile(MakeSnapshot(hw), Request(0x06009028u));
+        Print("A7-40 a number the engine made of movt, in a switch's default", r);
+        int zeros = 0;
+        for (const Line& x : r.lines)
+            if (Has(x.text, "uVar1 = 0;"))
+            {
+                ++zeros;
+                CHECK(LineInstructions(x).empty());
+            }
+        CHECK(zeros == 2);
+        const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_40 movt");
+        CHECK(a.constAtJoin == 0 && a.Violations() == 0);
+    }
     // caseOtherEntry bites: A7-29's fixture with the outer `case 2:` moved back to the inner switch's entry (A7-29 as it was).
     {
         const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06070000u, { 0x4F22, 0xD518, 0xE103, 0x3416, 0x8D28, 0x6143, 0x311C, 0xC702,

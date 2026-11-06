@@ -11843,6 +11843,17 @@ void TestDomainPins(Sh2Decompiler& d)
         for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
         CHECK(rep.findings.empty());
     }
+    // Area 7 fixer (round 7 rows), the seeds the rows name, replayed whole: grammar 2 seed 304221 (A7-31's mechanism, routed by the A5-99
+    // and A3-155 fixer: `xStack_24 = param_2;` at a call, the push of an `add` the engine folds away after a `dt` loop, `n:map-frame-store`),
+    // grammar 2 seed 1700689 (A7-40: `xVar3 = 0xffe4;` at `extu.w r3,r1`, r3 pushed and popped with an instruction between, the oracle's
+    // `n:map-const-join`) and grammar 1 seed 1832116 (A7-41: `xRam26001008 = param_2;` naming the store of 3, `n:map-store-value`).
+    for (const auto& s : { std::make_pair(2, 304221), std::make_pair(2, 1700689), std::make_pair(1, 1832116) })
+    {
+        const Report rep = Evaluate(d, s.first == 2 ? MakeV2(s.second) : Generate(s.second), true);
+        std::printf("pin 'area 7 fixer: grammar %d seed %d': %zu finding(s)\n", s.first, s.second, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
 }
 
 // A caller and a lent callee that changes a register the calling convention keeps (ledger A3-3, finding 1 of the external
