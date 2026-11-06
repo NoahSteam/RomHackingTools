@@ -330,13 +330,13 @@ void ExitWaits()
 void FrameTryCollides()
 {
     Put("frame.ini", "[a]\nx = 1\n");
-    const pid_t kid = HoldLockMs("frame.ini.lock", 150);
+    const pid_t kid = HoldLockMs("frame.ini.lock", 20);   // the try waits 50 ms since A9-59 (it was 250 ms and a 150 ms save)
     Settings s;
     s.Set("a", "y", "2");
     std::string err;
     const bool ok = s.SaveTo("frame.ini", &err, false);
-    std::printf("  frame try during another instance's 150 ms save: %s: %s\n", ok ? "saved" : "refused", err.c_str());
-    Check(ok && Has(Slurp("frame.ini"), "y = 2"), "PIN A9-52 fixed: the frame's try waits 250 ms, so another instance's ordinary save does not refuse it");
+    std::printf("  frame try during another instance's 20 ms save: %s: %s\n", ok ? "saved" : "refused", err.c_str());
+    Check(ok && Has(Slurp("frame.ini"), "y = 2"), "PIN A9-52 fixed: the frame's try waits 50 ms, so another instance's short save does not refuse it");
     Reap(kid);
     {
         const pid_t stuck = HoldLockMs("frame.ini.lock", 2000);
