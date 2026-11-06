@@ -425,6 +425,9 @@ struct Item
     uint16_t cond = 0;             // Skip: the tst or cmp that sets T
     bool onTrue = true;            // Skip: bt (else bf); Mask: and (else or, or xor with 'xorOp')
     bool xorOp = false;            // Mask: xor (A5-70)
+    bool addOp = false;            // Mask: add (A5-106: an on-chip register's address plus an index)
+    int oldStoreFrom = -1;         // Mask: not a mask (A5-106): the literal is a global's address, read into r0, rewritten from this register, and
+                                   // its old value stored through 'reg'
     bool delayed = false;          // Skip: bt/s, bf/s with 'slot'
     int counter = 3, count = 2;    // Loop, BraLoop, BraBack
     int width = 2;                 // Poll
@@ -534,6 +537,7 @@ struct Gen
     Rng bsrfRng;  // ...and one for which register-called calls are bsrf (A2-20)
     Rng choiceRng;   // ...and one for the return chosen by an input (A3-64)
     Rng regionRng;   // ...and one for the pointers into the purge, the cache address array and the on-chip registers' partition, by literals and by masks (A5-92)
+    Rng idiomRng;    // ...and one for the area 5 confirming round's shapes (A5-106): the cache idiom, an on-chip register plus an index, a global's old value stored
     // What the function being made changes for good / reads on entry through the wide alphabet and the GBR accesses
     // (an over-approximation: an item the grammar drops again is counted, which the checks that use it allow).
     uint32_t wideClobbers = 0;
@@ -555,7 +559,7 @@ struct Gen
     bool inSpill = false;     // r15 is moved: no local is addressed through it here
     int loopDepth = 0;        // inside a loop body: a pointer advanced here is advanced again by the next iteration
     std::vector<Func> built;  // the functions of this module generated so far (the later ones)
-    Gen(uint64_t seed) : rng(seed), macRng(seed ^ 0x6D61636D61636D61ull), guardRng(seed ^ 0x7367756172643A5Aull), convRng(seed ^ 0x636F6E7663727667ull), wideRng(seed ^ 0x77696465414C5521ull), aliasRng(seed ^ 0x616C696173526E67ull), maskRng(seed ^ 0x6D61736B52616E64ull), placeRng(seed ^ 0x706C616365526E67ull), loopMaskRng(seed ^ 0x6C6F6F704D61736Bull), frameRng(seed ^ 0x6672616D6557616Cull), partialRng(seed ^ 0x7061727469616C52ull), retRng(seed ^ 0x7265747263616C6Cull), bsrfRng(seed ^ 0x6273726652656C21ull), choiceRng(seed ^ 0x63686F6F73657221ull), regionRng(seed ^ 0x726567696F6E5074ull)
+    Gen(uint64_t seed) : rng(seed), macRng(seed ^ 0x6D61636D61636D61ull), guardRng(seed ^ 0x7367756172643A5Aull), convRng(seed ^ 0x636F6E7663727667ull), wideRng(seed ^ 0x77696465414C5521ull), aliasRng(seed ^ 0x616C696173526E67ull), maskRng(seed ^ 0x6D61736B52616E64ull), placeRng(seed ^ 0x706C616365526E67ull), loopMaskRng(seed ^ 0x6C6F6F704D61736Bull), frameRng(seed ^ 0x6672616D6557616Cull), partialRng(seed ^ 0x7061727469616C52ull), retRng(seed ^ 0x7265747263616C6Cull), bsrfRng(seed ^ 0x6273726652656C21ull), choiceRng(seed ^ 0x63686F6F73657221ull), regionRng(seed ^ 0x726567696F6E5074ull), idiomRng(seed ^ 0x69646F6D52616E64ull)
     {
         for (int i = 0; i < 8; ++i) align[i] = 4, pref[i] = 4;
         p.mbox = 0x26001000u + 0x10u * rng.Below(4);
@@ -904,6 +908,73 @@ struct Gen
         for (size_t i = 0; i < items.size(); ++i)
             if (items[i].type == Item::LitPtr && items[i].reg == reg) at = i + 1;
         items.insert(items.begin() + static_cast<std::ptrdiff_t>(at), m);
+    }
+
+    // The area 5 confirming round's shapes (A5-106), from a stream of their own, in one function in twelve, at the start of the items or after the
+    // register's literal: (a) the cache idiom on a pointer register, `and` 0x1FFFFFF0 then `or` the partition of the associative purge (0x4, 0xA)
+    // or of the cache address array (0x6), whatever the register held (A5-103); (b) a register made an index into the on-chip page, `and` a small
+    // aligned mask then `add` an on-chip register's address (the DMAC's and the FRT's routines, A5-101); (c) a global read into r0, rewritten from
+    // another argument register and its old value stored through the pointer register (A5-102: the order rule for folded stores judges it).
+    void AddConfirmShapes(std::vector<Item>& items, int avoidReg, uint32_t avoidScratch)
+    {
+        if (!idiomRng.Chance(12)) return;
+        const uint32_t which = idiomRng.Below(3);
+        int reg = 4 + static_cast<int>(idiomRng.Below(4));
+        for (int tries = 0; reg == avoidReg && tries < 4; ++tries) reg = 4 + ((reg - 3) & 3);
+        if (reg == avoidReg) return;
+        int jsr = 1 + static_cast<int>(idiomRng.Below(3));
+        for (int tries = 0; ((avoidScratch >> jsr) & 1u) && tries < 3; ++tries) jsr = 1 + (jsr % 3);
+        if ((avoidScratch >> jsr) & 1u) return;
+        auto mask = [&](const char* shape, uint32_t value, bool andOp, bool addOp) {
+            Item m;
+            m.type = Item::Mask;
+            m.reg = reg;
+            m.jsrReg = jsr;
+            m.onTrue = andOp;
+            m.addOp = addOp;
+            m.shape = shape;
+            Lit l;
+            l.kind = LitKind::Mask;
+            l.value = value;
+            m.lit = static_cast<int>(p.lits.size());
+            p.lits.push_back(l);
+            return m;
+        };
+        std::vector<Item> add;
+        if (which == 0)
+        {
+            static const uint32_t kPart[] = { 0x40000000u, 0xA0000000u, 0x60000000u };
+            add.push_back(mask("region.idiom.and", 0x1FFFFFF0u, true, false));
+            add.push_back(mask("region.idiom.or", kPart[idiomRng.Below(3)], false, false));
+        }
+        else if (which == 1)
+        {
+            static const uint32_t kIndex[] = { 0x0Cu, 0x1Cu, 0x3Cu };
+            static const uint32_t kBase[] = { 0xFFFFFF80u, 0xFFFFFE10u, 0xFFFFFF00u, 0xFFFFFFE0u, 0xFFFFFE60u };
+            add.push_back(mask("region.index.and", kIndex[idiomRng.Below(3)], true, false));
+            add.push_back(mask("region.index.add", kBase[idiomRng.Below(5)], false, true));
+        }
+        else
+        {
+            int from = 4 + static_cast<int>(idiomRng.Below(4));
+            if (from == reg) from = 4 + ((from - 3) & 3);
+            Lit l;
+            l.kind = LitKind::Ram;
+            l.value = (idiomRng.Chance(50) ? 0x06000000u : 0x26000000u) + 0x2000u + 0x80u * idiomRng.Below(8) + 4u * idiomRng.Below(4);
+            Item m;
+            m.type = Item::Mask;
+            m.reg = reg;
+            m.jsrReg = jsr;
+            m.oldStoreFrom = from;
+            m.shape = "global.old-store";
+            m.lit = static_cast<int>(p.lits.size());
+            p.lits.push_back(l);
+            add.push_back(m);
+        }
+        size_t at = 0;
+        for (size_t i = 0; i < items.size(); ++i)
+            if (items[i].type == Item::LitPtr && items[i].reg == reg) at = i + 1;
+        items.insert(items.begin() + static_cast<std::ptrdiff_t>(at), add.begin(), add.end());
     }
 
     // A literal pointer to hardware stepped in a loop and flipped between partitions by an xor, then written through (A5-91): `p = (p + 4) ^ 0x20000000`
@@ -1848,6 +1919,7 @@ struct Gen
         }
         AddRegionMask(f.items, f.sel, convDefined | leftScratch);
         AddRegionWalk(f.items, f.sel, convDefined | leftScratch);
+        AddConfirmShapes(f.items, f.sel, convDefined | leftScratch);
         if (hasConvRead) f.items.insert(f.items.begin(), convRead);   // first: before anything can write what it reads
         // A return chosen by an input (A3-64), from a stream of its own and after every other draw, so no program a seed made before it changes but
         // for this item: in a function that returns, makes no call (a callee may leave anything in r0), and has no table (mova writes r0) and no
@@ -2024,6 +2096,7 @@ struct Gen
         }
         AddRegionMask(items, -1, 0);
         AddRegionWalk(items, -1, 0);
+        AddConfirmShapes(items, -1, 0);
         // A pointer moved between bus partitions with a mask -- `and` 0x1FFFFFFF (to the cached partition) or `or` 0x20000000 (to the
         // cache-through one), the idiom SBL calls CACHE_THROUGH (A5-51) -- in one program of eight, after the pointer's literal. The pointer
         // is then a merge of addresses whenever a skipped reload gave it two values, which the engine does not fold to a constant.
@@ -2394,7 +2467,16 @@ struct Emitter
             break;
         case Item::Mask:
             PutLitLoad(it.jsrReg, it.lit);
-            Put(static_cast<uint16_t>((it.xorOp ? 0x200A : it.onTrue ? 0x2009 : 0x200B) | it.reg << 8 | it.jsrReg << 4));   // and / xor / or Rm,Rn
+            if (it.oldStoreFrom >= 0)
+            {
+                Put(static_cast<uint16_t>(0x6002 | it.jsrReg << 4));                               // mov.l @Rj,r0
+                Put(static_cast<uint16_t>(0x2002 | it.jsrReg << 8 | it.oldStoreFrom << 4));        // mov.l Rk,@Rj
+                Put(static_cast<uint16_t>(0x2002 | it.reg << 8));                                  // mov.l r0,@Rn
+            }
+            else if (it.addOp)
+                Put(static_cast<uint16_t>(0x300C | it.reg << 8 | it.jsrReg << 4));   // add Rm,Rn
+            else
+                Put(static_cast<uint16_t>((it.xorOp ? 0x200A : it.onTrue ? 0x2009 : 0x200B) | it.reg << 8 | it.jsrReg << 4));   // and / xor / or Rm,Rn
             break;
         case Item::Choice:
         {
@@ -6451,7 +6533,11 @@ void CountMnemonics(const std::vector<Item>& items, std::map<std::string, int>& 
         case Item::BraLoop: case Item::BraBack: m["bra"] += 1; break;
         case Item::DataSkip: m["bra"] += 1; break;
         case Item::Choice: m[it.onTrue ? "bt" : "bf"] += 1; m["bra"] += 1; break;
-        case Item::Mask: m["mov.l"] += 1; m[it.xorOp ? "xor" : it.onTrue ? "and" : "or"] += 1; break;
+        case Item::Mask:
+            m["mov.l"] += 1;
+            if (it.oldStoreFrom >= 0) m["mov.l"] += 3;
+            else m[it.addOp ? "add" : it.xorOp ? "xor" : it.onTrue ? "and" : "or"] += 1;
+            break;
         default: break;
         }
         CountMnemonics(it.slot, m);

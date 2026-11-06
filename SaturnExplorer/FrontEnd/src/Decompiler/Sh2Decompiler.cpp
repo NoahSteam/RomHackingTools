@@ -3883,12 +3883,13 @@ private:
                 // pointer is based at it already); colour RAM has none, nor has an unnamed register (A5-78). Said for the index 0, as an indexed
                 // pointer is. (Not the on-chip registers' partition: `param_1 + 0xFFFFFFF4` is `param_1 - 12`, A5-28's rawconst.)
                 // (A5-101) An on-chip register's address is a base too where it cannot be a small negative offset: below the page's upper half
-                // (0xFFFFFE00-0xFFFFFEFF, 257 to 512 bytes back, the SCI, FRT, WDT, TIER and DRCR registers), or added to an index the code
-                // computes (a multiply, a shift, a mask: `param_1 * 0x10 + -0x74` is the DMAC channel's CHCR, `(param_1 & 3) * 2 + -0x1f0` the
-                // FRT's). `param_1 + -0xc` off a pointer parameter stays `param_1 - 12`.
+                // (0xFFFFFE01-0xFFFFFEFF, 257 to 511 bytes back, the SCI, FRT, WDT, TIER and DRCR registers), but not a round -0x100 or -0x200
+                // (`x + y + -0x200` in hwram008 0602A19E is an index made relative), or added to an index the code computes (a multiply, a
+                // shift, a mask: `param_1 * 0x10 + -0x74` is the DMAC channel's CHCR, `(param_1 & 3) * 2 + -0x1f0` the FRT's). `param_1 + -0xc`
+                // off a pointer parameter stays `param_1 - 12`.
                 const bool onChip = k >= 0xE0000000u;
                 if (!sub && out.others && out.constants.empty() && out.bases.empty() && out.back.empty() && !out.steps &&
-                    (!onChip || (k >= 0xFFFFFE00u && k <= 0xFFFFFEFFu) || IsComputedIndex(base)) && (InColorRam(k) || IsRegisterArea(k)))
+                    (!onChip || (k > 0xFFFFFE00u && k <= 0xFFFFFEFFu && (k & 0xFFu) != 0) || IsComputedIndex(base)) && (InColorRam(k) || IsRegisterArea(k)))
                     out.bases.insert(k);
             }
             else
