@@ -17275,7 +17275,7 @@ Drafts only, nothing filed. Each is in the pinned commit, `918d44e`.
 
 ## CI green on master
 
-Branch `review/ci-green` from master `5f002440`, rebased on `9df1524b` (master `6f0ca4ab` has the same `SaturnExplorer/FrontEnd` tree). Coordinator's task: the jobs red on master's GitHub CI. Out of scope: `Deploy Saturn Explorer (Web)`, because GitHub Pages is not enabled (a repository setting). Only test code and docs changed (`AssemblyPanelTests.cpp`, `DecompilerTrustTests.cpp`, `Area9Round4Tests.cpp`, `Sh2GeneratedTests.cpp`). No product code and no test was skipped or disabled. Own RelWithDebInfo build (gcc 13, `-j2`); every test binary run under `ulimit -v 3500000` and `timeout`.
+Branch `review/ci-green` from master `9df1524b` (master `6f0ca4ab` has the same `SaturnExplorer/FrontEnd` tree). Coordinator's task: the jobs red on master's GitHub CI. Out of scope: `Deploy Saturn Explorer (Web)`, because GitHub Pages is not enabled (a repository setting). Only test code and docs changed (`AssemblyPanelTests.cpp`, `DecompilerTrustTests.cpp`, `Area9Round4Tests.cpp`, `Sh2GeneratedTests.cpp`). No product code and no test was skipped or disabled. Own RelWithDebInfo build (gcc 13, `-j2`); every test binary run under `ulimit -v 3500000` and `timeout`.
 
 ### The red jobs: first red commit, cause, fix
 
