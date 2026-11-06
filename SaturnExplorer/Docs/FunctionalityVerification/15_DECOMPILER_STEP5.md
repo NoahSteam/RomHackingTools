@@ -16808,3 +16808,20 @@ Branch `review/9-round7` from master `3f3850b7`. An adversarial round on the are
 | `SaturnExplorerArea9Round3Tests` (`LockNotHeld`, two processes) | alone 2 of 2, under six busy loops 3 of 3 |
 | Rounds 5, 6, 7 under the same load | pass |
 | `App.cpp` `-fsyntax-only` | 0 errors |
+
+## Area 9 fixer (A9-57 to A9-62)
+
+Branch `review/9-round7-fix` from master `ef04ce9c`. The open P3s of rounds 6 and 7 are fixed; area 9 has no open row.
+
+| Row | Fix | Pin |
+|---|---|---|
+| A9-57 | `WatchPanel::SaveSession` writes with `WriteFileAtomically` and returns `false` with `The watch list: not saved, <reason>`; `App::Shutdown` logs it and lists it in the exit notice | `TestWatchSessionSave` in `AssemblyPanelTests` (WatchPanel links there): the file is made a directory, the save is refused with the subject; reverting the body fails both checks |
+| A9-58 | `FileLock::WhyNotHeld` says `another process held X and the exit time ran out (waited 0.0 s of the 10 s that every save at exit shares)` when an earlier store used the shared time, and `more than N seconds` only for a full wait; `Shutdown` saves notes, names and starts before the settings and the watches | `ExitLateStore` flipped (the settings still spend the 10 s in the test, the order is App code, read) |
+| A9-59 | the frame try waits 50 ms (was 250); the retry stays at 2 s, so the stall is about 2.4 % of the time | `FrameStall` flipped: refused after 0.060 s |
+| A9-60 | write and flush refusals read `<subject>: not saved, <reason>` in `SaveStore` and `Settings::SaveTo`; the path is in the reason once | `RefusalTexts` flipped |
+| A9-61 | `mSettingsStatus` is set on every failure (the status line follows it while it still shows the settings text); the notice cuts the `this session's changes are kept in memory only` tail, says the files were left as they were and the changes are lost, and says the exit's 10 s are shared | read; `App.cpp` syntax-checked only |
+| A9-62 | `TrimStop` cuts a trailing full stop and white space from the OS message in `WhyNotHeld`, `Reason` and the flush text | read (Windows text; Linux messages have no full stop) |
+
+Each pin was shown to bite: with A9-58, A9-59 and A9-60 reverted in turn `Area9Round7Tests` failed 4 checks, with A9-57 reverted `AssemblyPanelTests` failed 2; all restored.
+
+**Uncompiled:** `App.cpp` (not built on Linux; `-fsyntax-only` with the worktree flags, 0 errors). The Windows branches of `FileWrite.cpp` (the `TrimStop` calls on `std::system_category().message`) and the macOS branch are not compiled here.
