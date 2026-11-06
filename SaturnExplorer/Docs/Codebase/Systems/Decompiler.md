@@ -143,7 +143,11 @@ and lists these classes as open until they are fixed.
    engine merged under a memory variable's name, at an instruction that makes the number into that
    register, names only the stores that instruction's value reaches (`FlowLastWriters` from the store):
    not a `tas.b` (no register) nor a store of the register after a loop changed it, whatever the value
-   walk cannot rule out (A7-44). A register the engine merged under a memory variable's
+   walk cannot rule out (A7-44); a store of the function's input is no such store (`FlowLastWriters`
+   with `input`, A7-46). A copy of memory the engine put anywhere in its block at an instruction that
+   does not read that memory (materialised at an access that may alias it) is drawn at the nearest
+   load of it in the block, as a copy at the block's end is (A7-49). The value walk follows the T bit
+   that `movt` reads (`sr & 1`) back to the compare that set it (A7-48). A register the engine merged under a memory variable's
    name, a copy at the end of its block that no store shows, is addressed to the instructions that
    last set the register on each path into the block's end (`FlowLastWriters`), or to nothing,
    never to the branch (A7-21). A statement that keeps its drawn tokens at its instruction beside
@@ -152,7 +156,7 @@ and lists these classes as open until they are fixed.
    before it (A7-25). `AddJoinConstantTokens` addresses a number the engine
    merged (a COPY that is no flow op, at an instruction that does not make the number into the
    COPY's register: a collapsed MULTIEQUAL at a join; or a copy of a temporary the engine made of a
-   number and prints in place, A7-40's triage) to the instruction on each path that set the
+   number and prints in place, A7-40's triage, even on a line it shares with that copy, A7-47) to the instruction on each path that set the
    register, or to nothing. A case label's token is where the jump table sends its value
    (`JumpTable::getLabelByIndex`/`getAddressByIndex`; the table of the `switch` printed at the
    label's own indent, so a case after a nested switch is not the inner one's, A7-29), the
