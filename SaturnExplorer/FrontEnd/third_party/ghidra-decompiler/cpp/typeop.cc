@@ -16,7 +16,7 @@
  * Modified for SaturnExplorer: a constant in an equality compare with a narrow integer is cast to that integer's type (patches/0077-engine-narrow-compare-cast-target.patch).
  * Modified for SaturnExplorer: the other side of an equality compare whose one side is cast is cast to the same type (patches/0080-engine-narrow-compare-both-sides-cast.patch).
  * Modified for SaturnExplorer: the sign extension of a CONCAT printed in place casts the CONCAT to its signed type first (patches/0081-engine-sext-of-concat-cast.patch).
- * Modified for SaturnExplorer: a CONCAT printed in place is cast to a signed type in a compare that reads it signed (patches/0084-engine-concat-compare-cast.patch).
+ * Modified for SaturnExplorer: a CONCAT printed in place is cast to a signed type where a compare, a shift or a division reads it signed (patches/0084-engine-concat-compare-cast.patch).
  */
 #include "typeop.hh"
 #include "funcdata.hh"
@@ -983,13 +983,14 @@ static Datatype *compareOtherSideCast(const PcodeOp *op,int4 slot,Datatype *reqt
   return reqtype;
 }
 
-/// \brief Whether a compare's input is a PIECE printed in place, whose type the text does not show
+/// \brief Whether an input is a PIECE printed in place, whose type the text does not show
 ///
 /// Such a PIECE prints as \b CONCATxy(a,b) where it is read. C, and the reading of the text (DECOMPILER_GUIDE.md), take it as the unsigned
-/// value of its bytes, whatever type the engine propagated to it. (SaturnExplorer, patches/0084-engine-concat-compare-cast.patch)
+/// value of its bytes, whatever type the engine propagated to it, so an op that reads it signed (a signed compare, a compare with a signed
+/// narrow side, an arithmetic shift, a signed division) casts it to its signed type first. (SaturnExplorer, patches/0084-engine-concat-compare-cast.patch)
 /// \param vn is the input
 /// \return \b true if it is a PIECE that is not a variable of its own
-static bool compareImpliedPiece(const Varnode *vn)
+static bool impliedPieceRead(const Varnode *vn)
 
 {
   if (!vn->isWritten() || vn->isExplicit()) return false;
@@ -1014,9 +1015,9 @@ static Datatype *comparePieceCast(const PcodeOp *op,int4 slot,Datatype *reqtype,
 
 {
   const Varnode *vn = op->getIn(slot);
-  if (!compareImpliedPiece(vn) || vn->getSize() >= tlst->getSizeOfInt()) return (Datatype *)0;
+  if (!impliedPieceRead(vn) || vn->getSize() >= tlst->getSizeOfInt()) return (Datatype *)0;
   const Varnode *othervn = op->getIn(1-slot);
-  if (compareImpliedPiece(othervn)) return (Datatype *)0;
+  if (impliedPieceRead(othervn)) return (Datatype *)0;
   Datatype *otherType = othervn->getHighTypeReadFacing(op);
   // The other side is cast to compareCastTarget's type when C would extend it otherwise; the cast pass takes the inputs in order, so that CAST
   // is already made when it is slot 0 and not yet when it is slot 1
@@ -1157,7 +1158,7 @@ Datatype *TypeOpIntSless::getInputCast(const PcodeOp *op,int4 slot,const CastStr
   Datatype *curtype = op->getIn(slot)->getHighTypeReadFacing(op);
   Datatype *ct = castStrategy->castStandard(reqtype,curtype,true,true);
   // SaturnExplorer (0084): a CONCAT printed in place reads as unsigned, so a signed compare casts it to its signed type even when the engine typed it so
-  if (ct == (Datatype *)0 && compareImpliedPiece(op->getIn(slot)))
+  if (ct == (Datatype *)0 && impliedPieceRead(op->getIn(slot)))
     ct = reqtype;
   return ct;
 }
@@ -1197,7 +1198,7 @@ Datatype *TypeOpIntSlessEqual::getInputCast(const PcodeOp *op,int4 slot,const Ca
   Datatype *curtype = op->getIn(slot)->getHighTypeReadFacing(op);
   Datatype *ct = castStrategy->castStandard(reqtype,curtype,true,true);
   // SaturnExplorer (0084): a CONCAT printed in place reads as unsigned, so a signed compare casts it to its signed type even when the engine typed it so
-  if (ct == (Datatype *)0 && compareImpliedPiece(op->getIn(slot)))
+  if (ct == (Datatype *)0 && impliedPieceRead(op->getIn(slot)))
     ct = reqtype;
   return ct;
 }
@@ -1758,7 +1759,10 @@ Datatype *TypeOpIntSright::getInputCast(const PcodeOp *op,int4 slot,const CastSt
     int4 promoType = castStrategy->intPromotionType(vn);
     if (promoType != CastStrategy::NO_PROMOTION && ((promoType & CastStrategy::SIGNED_EXTENSION)==0))
       return reqtype;
-    return castStrategy->castStandard(reqtype,curtype,true,true);
+    Datatype *ct = castStrategy->castStandard(reqtype,curtype,true,true);
+    if (ct == (Datatype *)0 && impliedPieceRead(vn))	// SaturnExplorer (0084): `(int2)CONCAT11(a,b) >> 1`, an arithmetic shift
+      ct = reqtype;
+    return ct;
   }
   return TypeOpBinary::getInputCast(op,slot,castStrategy);
 }
@@ -1831,7 +1835,10 @@ Datatype *TypeOpIntSdiv::getInputCast(const PcodeOp *op,int4 slot,const CastStra
   int4 promoType = castStrategy->intPromotionType(vn);
   if (promoType != CastStrategy::NO_PROMOTION && ((promoType & CastStrategy::SIGNED_EXTENSION)==0))
     return reqtype;
-  return castStrategy->castStandard(reqtype,curtype,true,true);
+  Datatype *ct = castStrategy->castStandard(reqtype,curtype,true,true);
+  if (ct == (Datatype *)0 && impliedPieceRead(vn))	// SaturnExplorer (0084): a signed division of a CONCAT
+    ct = reqtype;
+  return ct;
 }
 
 void TypeOpIntSdiv::printRaw(ostream &s,const PcodeOp *op)
@@ -1891,7 +1898,10 @@ Datatype *TypeOpIntSrem::getInputCast(const PcodeOp *op,int4 slot,const CastStra
   int4 promoType = castStrategy->intPromotionType(vn);
   if (promoType != CastStrategy::NO_PROMOTION && ((promoType & CastStrategy::SIGNED_EXTENSION)==0))
     return reqtype;
-  return castStrategy->castStandard(reqtype,curtype,true,true);
+  Datatype *ct = castStrategy->castStandard(reqtype,curtype,true,true);
+  if (ct == (Datatype *)0 && impliedPieceRead(vn))	// SaturnExplorer (0084): the signed remainder of a CONCAT
+    ct = reqtype;
+  return ct;
 }
 
 TypeOpBoolNegate::TypeOpBoolNegate(TypeFactory *t)
