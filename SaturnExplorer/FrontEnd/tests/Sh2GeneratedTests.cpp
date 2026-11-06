@@ -5305,6 +5305,56 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
             std::string what;
             if (PrintedPast(m, got, r.calls, &what)) add("printed-past", "the read at " + Hex(m.insn) + " is printed past " + what);
         }
+        // (A5-102) ...and a store the engine folded into a global at a constant address, before an access the ledger holds (a store or a read
+        // through a pointer, a register's access) in the same flow block: its statement is printed before that access's. The ledger holds no
+        // folded store, so the order rule above could not see `*puVar2 = uRam06030000; uRam06030000 = xVar1;`, the DMA enable printed before the
+        // buffer write the code makes first (and the old value left in the global when the pointer is its address). The folded store's
+        // statement is the first line that assigns a variable and names its instruction (AddFrameStoreTokens names the store on the line it
+        // went to); a store no line names was dropped or merged, which the conservation rules judge.
+        {
+            bool hasGoto = false;
+            for (const Line& l : r.lines) hasGoto |= l.text.find("goto ") != std::string::npos;
+            for (const AccessFate& f : r.accessFates)
+            {
+                if (!f.write || f.fate != AccessFate::FoldedOrdinary || !f.constantAddress || f.frame || f.origBlock < 0) continue;
+                int first = -1;
+                for (size_t li = 0; li < r.lines.size() && first < 0; ++li)
+                {
+                    const Line& l = r.lines[li];
+                    const size_t b = l.text.find_first_not_of(' ');
+                    if (b == std::string::npos) continue;
+                    size_t e = b;
+                    while (e < l.text.size() && (std::isalnum(static_cast<unsigned char>(l.text[e])) || l.text[e] == '_' || l.text[e] == '.')) ++e;
+                    if (e == b || l.text.compare(e, 3, " = ") != 0) continue;
+                    for (const Token& t : l.tokens)
+                        if (t.addr == f.insn) { first = static_cast<int>(li); break; }
+                }
+                if (first < 0) continue;
+                for (const MemoryAccess& m : got)
+                {
+                    if (m.firstLine < 0 || m.insn == f.insn || m.origBlock < 0) continue;
+                    // (the access runs after the store whenever both run: later in its block, or in a block only the store's reaches, outside
+                    // any loop holding both; and a text without goto prints the blocks in the flow's order)
+                    const size_t fb = static_cast<size_t>(f.origBlock), mb = static_cast<size_t>(m.origBlock);
+                    if (fb >= fr.reach.size() || mb >= fr.reach.size()) continue;
+                    const bool after = fb == mb ? m.origOrder > f.origOrder : fr.reach[fb][mb] && !fr.reach[mb][fb] && !hasGoto;
+                    if (!after) continue;
+                    // (A5-109, open: a read through a pointer is still printed before a folded store the code makes first when the engine
+                    // takes the store for dead or joins it with a later one, `g = v; x = *p; if (c) g = v;` printing the store after the join.
+                    // The engine assumes a load does not read a global it may have written; counted until that is fixed.)
+                    if (!m.write && !m.direct)
+                    {
+                        if (first > m.firstLine) count("order.folded-store.read-past");
+                        continue;
+                    }
+                    count("order.folded-store.checked");
+                    if (first > m.firstLine)
+                        add("folded-store-after-access", "the store at " + Hex(f.insn) + " the engine folded into " + Hex(f.address) + " is printed (line " +
+                                                             std::to_string(first) + ") after the " + (m.write ? "write" : "read") + " at " + Hex(m.insn) +
+                                                             " (line " + std::to_string(m.firstLine) + "), which the code makes after it");
+                }
+            }
+        }
 
         // ---- Area 4: control flow and boundaries ----
         // The functions this one calls, transitively, as the results name them: their code runs inside
@@ -12432,7 +12482,11 @@ void TestA582Pins(Sh2Decompiler& d)
     check("a product is no dereference (A5-85 control)", { "puVar1 = &VDP2_TVSTAT;", "uVar2 = puVar1[iVar3 * 2];" }, 1, tvstat, true, false);
     CHECK(DerefOperands("return CONCAT44((int4)*param_1,xVar1);") == "param_1 ; ");
     CHECK(DerefOperands("x = a * b;").empty());
-    CHECK(DerefOperands("x = *(xunknown4 *)(p + 4) + y;") == "(xunknown4 *)(p + 4) + y ; ");
+    // (A5-105: a unary `*` takes its own operand only, and what is added to or ORed into the value loaded is not the pointer)
+    CHECK(DerefOperands("x = *(xunknown4 *)(p + 4) + y;") == "(xunknown4 *)(p + 4) ; ");
+    CHECK(DerefOperands("*(uint4 *)(param_1 + 8) = *(uint4 *)((param_1 & 3) * 4 + -0x80) | 0xffffffc0;") ==
+          "(uint4 *)(param_1 + 8) ; (uint4 *)((param_1 & 3) * 4 + -0x80) ; ");
+    CHECK(DerefOperands("x = *param_2 | 0xffffffc0;") == "param_2 ; ");
 }
 
 // ---- Area 5, A5-87: the five seeds, and what the pointer rules may take for the pointer -------------------------------------------------------
@@ -12513,6 +12567,28 @@ void TestA587Pins(Sh2Decompiler& d)
             "0/0/18,20/20/2c", nullptr, "1,1", "104000,0", "0,0" }, nullptr, nullptr },
         { { "A5-100, grammar 2 seed 298629 shrunk", "4F22 2622 D101 4F26 412B 0009 0600 9010 D302 243A D302 432B 0009 0009 E000 0000 0600 9024 2FD6 D103 241B 6361 2436 6DF6 000B 0009 FFFF FE00",
             "0/0/c,10/10/1a,24/24/34", nullptr, "0,0,0", nullptr, nullptr }, nullptr, nullptr },
+        // The area 5 confirming round's replays (A5-101 to A5-108), each with no finding once fixed. A5-102, and its hardware form, a pointer merged
+        // from SCU_D0EN and SCU_D1EN: the folded store's statement before the pointer's (rule "folded-store-after-access", the order rule's gap,
+        // counted when checked). (With the global in r4's arena the old value left there is seen only as the arena rule's `dropped`, A5-102.) A5-105: the
+        // OR into the loaded value is not the read's pointer (rule 3f). A5-104: the literal the function writes, then loads.
+        { { "A5-101, a byte read-modify-write of SH2_TIER by an index", "D105 E003 2049 4000 021C CB00 E380 223B 0124 000B 0009 0009 FFFF FE10",
+            nullptr, nullptr, nullptr, nullptr, nullptr }, nullptr, nullptr },
+        { { "A5-102, the global read, rewritten and its old value stored through param_1", "D302 6032 2352 2402 000B 0009 0603 0000",
+            nullptr, nullptr, nullptr, nullptr, nullptr }, "order.folded-store.checked", nullptr },
+        { { "A5-102, through a pointer merged from SCU_D0EN and SCU_D1EN", "D306 6032 2352 D103 2448 8900 D102 2102 000B 0009 25FE 0010 25FE 0030 0603 0000",
+            nullptr, nullptr, nullptr, nullptr, nullptr }, "order.folded-store.checked", nullptr },
+        { { "A5-103, a purge through (p & 0x1FFFFFF0) | 0x40000000", "D103 2149 D203 212B E000 000B 2102 0009 1FFF FFF0 4000 0000",
+            nullptr, nullptr, nullptr, nullptr, nullptr }, nullptr, nullptr },
+        { { "A5-104, a literal written and then loaded", "D102 2142 D002 000B 0009 0009 0600 9010 1234 5678",
+            nullptr, nullptr, nullptr, nullptr, nullptr }, nullptr, nullptr },
+        { { "A5-105, an OR into the value loaded through an on-chip index", "D105 E003 2049 4008 310C 6212 E3C0 223B 1422 000B 0009 0009 FFFF FF80",
+            nullptr, nullptr, nullptr, nullptr, nullptr }, nullptr, nullptr },
+        { { "A5-107, grammar 1 seed 2027066 shrunk", "D607 E304 7604 D107 261A 4310 8BFA E304 8561 7604 D204 262A 4310 8BF9 000B 0009 25F8 00DC 8000 0000 2000 0000",
+            nullptr, nullptr, nullptr, nullptr, nullptr }, "cache.read.pointer.said", nullptr },
+        // A5-108 (grammar 1 seed 9400696, the A10-16 fixer's run): A5-107's class, a first loop flipping with 0x60000000 and a second stepping and
+        // flipping with 0x20000000; the 1-byte reads at 06009020 come to 05F80102 and 05F8010A, through the cached partition.
+        { { "A5-108, grammar 1 seed 9400696 shrunk", "D612 E302 7604 D112 261A 4310 8BFA 2662 D710 71DE 4315 8B00 C20E E304 205A E006 006C 855B 7604 D20C 262A 4310 8BF6 E304 615F 4015 4310 8BFB E399 D708 E002 2701 6071 C801 8BFC 000B 0009 0009 25F8 00F0 6000 0000 2600 1034 2000 0000 2600 1034",
+            nullptr, nullptr, nullptr, nullptr, nullptr }, "cache.read.pointer.said", nullptr },
     };
     for (const Pin& p : kPins)
     {

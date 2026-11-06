@@ -7198,7 +7198,13 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         if (fd->hasNoCode()) return std::string();
         const FlowRecord flow = RecordFlow(*fd, canonicalOf, *snapshot);
 
-        const RawScan scan = ScanRawPcode(*fd, *snapshot);
+        const RawScan scan = [&] {
+            RawScan raw = ScanRawPcode(*fd, *snapshot);
+            // (A5-104) a literal word an earlier pass found written is memory: no probe or rule here may read it as the snapshot's constant
+            for (auto it = raw.literalWords.begin(); it != raw.literalWords.end();)
+                it = writtenLiteral(*it, 1) ? raw.literalWords.erase(it) : std::next(it);
+            return raw;
+        }();
         knownLiterals = scan.readonly;
         JumpDests flowTables;
         AddJumpTables(*fd, flowTables);

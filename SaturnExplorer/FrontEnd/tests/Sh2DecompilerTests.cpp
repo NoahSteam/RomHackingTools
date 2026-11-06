@@ -476,6 +476,24 @@ DecompileResult DecompileWords(Sh2Decompiler& d, std::vector<uint8_t>& hw, uint3
     for (const auto& w : more) dts::Put16(hw, w.first - 0x06000000u, w.second);
     return d.Decompile(MakeSnapshot(hw), Request(base));
 }
+// ...with the prototype of the function at 'lend' lent, as the panel lends a callee's once it has decompiled it.
+DecompileResult DecompileWordsLending(Sh2Decompiler& d, std::vector<uint8_t>& hw, uint32_t base, const std::vector<uint16_t>& words,
+                                      const std::vector<std::pair<uint32_t, uint16_t>>& more, uint32_t lend)
+{
+    std::fill(hw.begin(), hw.end(), 0);
+    for (size_t i = 0; i < words.size(); ++i) dts::Put16(hw, base - 0x06000000u + 2 * i, words[i]);
+    for (const auto& w : more) dts::Put16(hw, w.first - 0x06000000u, w.second);
+    const auto snap = MakeSnapshot(hw);
+    DecompileRequest q = Request(base);
+    q.prototypes.emplace_back(lend, d.Decompile(snap, Request(lend)).prototype);
+    return d.Decompile(snap, q);
+}
+// The A7-25 copy as the engine still materialises it since patch 0082: a global written, then a call whose own statement starts at an earlier
+// instruction (`add #1,r4` makes its argument): sts.l pr,@-r15 ; mov.l @(lit),r1 (0x0603AD2C) ; mov.l r4,@r1 ; add #1,r4 ; mov.l @(lit),r2
+// (the callee) ; jsr @r2 ; nop ; lds.l @r15+,pr ; rts ; nop; the callee `rts ; mov r4,r0`, lent.
+const std::vector<uint16_t> kA725CallWords = { 0x4F22, 0xD105, 0x2142, 0x7401, 0xD204, 0x420B, 0x0009, 0x4F26, 0x000B, 0x0009, 0x0009, 0x0009,
+                                               0x0603, 0xAD2C, 0x0607, 0x1000 };
+const std::vector<std::pair<uint32_t, uint16_t>> kA725Callee = { { 0x06071000u, 0x000B }, { 0x06071002u, 0x6043 } };
 std::vector<const Line*> LinesWith(const DecompileResult& r, const char* what)
 {
     std::vector<const Line*> out;
@@ -791,8 +809,8 @@ void TestArea7Round4()
     // Fixed (the area 7 fixer, A7-25, as the reviewer decided): the copy's token at the instruction is marked materialised, and the way back
     // offers the instruction's own statement first. Since patch 0082 (A5-102) the engine no longer puts the global's write at the byte store:
     // the global's store keeps its COPY, so the line is the store's own (0x06070004 only) and the way back from 0x0607000C is its statement
-    // alone. The materialised copy is pinned on the shape that still makes one, the same global written before a call (`mov.l r4,@r1 ;
-    // jsr @r1`): the call's INDIRECT is address forced, and the engine writes the value just before the call, at the `jsr`.
+    // alone. The materialised copy is pinned on the shape that still makes one, the same global written before a call (kA725CallWords):
+    // the call's INDIRECT is address forced, and the engine writes the value just before the call, at the `jsr`.
     {
         const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06070000u, { 0x4F22, 0xD106, 0x2142, 0x6243, 0x7213, 0xE100, 0x2210, 0xD104,
             0x410B, 0x0009, 0x4F26, 0x000B, 0x0009, 0x0009, 0x0603, 0xAD2C, 0x0607, 0x1000 }, callee);
@@ -810,21 +828,20 @@ void TestArea7Round4()
         CHECK(dts::AuditMapping(r, word, "a7_25").Violations() == 0);
     }
     {
-        // sts.l pr,@-r15 ; mov.l @(lit),r1 (0x0603AD2C) ; mov.l r4,@r1 ; mov.l @(lit),r1 (the callee) ; jsr @r1 ; nop ; lds.l @r15+,pr ; rts ; nop
-        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06070000u, { 0x4F22, 0xD104, 0x2142, 0xD104, 0x410B, 0x0009, 0x4F26, 0x000B, 0x0009,
-            0x0009, 0x0603, 0xAD2C, 0x0607, 0x1000 }, callee);
+        const DecompileResult r = a7r4::DecompileWordsLending(d, hw, 0x06070000u, a7r4::kA725CallWords, a7r4::kA725Callee, 0x06071000u);
         Print("A7-25 a copy materialised at a call", r);
         CHECK(r.status == DecompileStatus::Ok);
-        const Line* g = LineWith(r, "xRam0603ad2c = param_1;");
-        const Line* c = LineWith(r, "func_0x06071000();");
+        const Line* g = LineWith(r, "iRam0603ad2c = param_1;");
+        const Line* c = LineWith(r, "xVar1 = func_0x06071000(param_1 + 1);");
         CHECK(g && c);
-        if (g) CHECK(LineInstructions(*g) == (std::vector<uint32_t>{ 0x06070004u, 0x06070008u }) && g->firstAddr == 0x06070004u);
-        const LineLookup back = LineForInstruction(r, 0x06070008u);
+        if (g) CHECK(LineInstructions(*g) == (std::vector<uint32_t>{ 0x06070004u, 0x0607000Au }) && g->firstAddr == 0x06070004u);
+        if (c) CHECK(c->firstAddr == 0x06070006u);
+        const LineLookup back = LineForInstruction(r, 0x0607000Au);
         CHECK(back.kind == LineLookup::Exact && back.lines.size() == 2);
         if (c && back.lines.size() == 2) CHECK(&r.lines[back.lines[0]] == c && &r.lines[back.lines[1]] == g);   // the call's own statement first
         bool marked = false;
         if (g)
-            for (const Token& t : g->tokens) marked = marked || (t.addr == 0x06070008u && t.begin < t.end && t.materialised);
+            for (const Token& t : g->tokens) marked = marked || (t.addr == 0x0607000Au && t.begin < t.end && t.materialised);
         CHECK(marked);
         if (c)
             for (const Token& t : c->tokens) CHECK(!t.materialised);
@@ -834,7 +851,7 @@ void TestArea7Round4()
         DecompileResult unmarked = r;
         for (Line& x : unmarked.lines)
             for (Token& t : x.tokens) t.materialised = false;
-        const LineLookup old = LineForInstruction(unmarked, 0x06070008u);
+        const LineLookup old = LineForInstruction(unmarked, 0x0607000Au);
         CHECK(g && !old.lines.empty());
         if (g && !old.lines.empty()) CHECK(old.lines[0] == static_cast<size_t>(g - &r.lines[0]));
     }
@@ -1075,13 +1092,12 @@ void TestArea7Round6()
     // `tst r0,r0` before each bt/s, an instruction that makes nothing either, now fail too (any instruction that writes no register).
     // (Since patch 0082 the A7-25 fixture has no copy at the byte store; the copy materialised at a call, its other shape, is judged instead.)
     {
-        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06070000u, { 0x4F22, 0xD104, 0x2142, 0xD104, 0x410B, 0x0009, 0x4F26, 0x000B, 0x0009,
-            0x0009, 0x0603, 0xAD2C, 0x0607, 0x1000 }, { { 0x06071000u, 0x000B }, { 0x06071002u, 0x0009 } });
+        const DecompileResult r = a7r4::DecompileWordsLending(d, hw, 0x06070000u, a7r4::kA725CallWords, a7r4::kA725Callee, 0x06071000u);
         DecompileResult unmarked = r;
         for (Line& x : unmarked.lines)
             for (Token& t : x.tokens) t.materialised = false;
-        const LineLookup old = LineForInstruction(unmarked, 0x06070008u);
-        const Line* g = LineWith(unmarked, "xRam0603ad2c = param_1;");
+        const LineLookup old = LineForInstruction(unmarked, 0x0607000Au);
+        const Line* g = LineWith(unmarked, "iRam0603ad2c = param_1;");
         CHECK(g && !old.lines.empty());
         if (g && !old.lines.empty()) CHECK(&unmarked.lines[old.lines[0]] == g);   // the copy first: A7-25 as it was
         const dts::MappingAudit ua = dts::AuditMapping(unmarked, word, "a7_30 unmarked");
