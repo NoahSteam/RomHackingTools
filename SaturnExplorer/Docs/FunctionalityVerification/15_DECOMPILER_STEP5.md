@@ -17556,7 +17556,7 @@ Branch `review/2-a1016-fix` from master `27044e60`. Own RelWithDebInfo build (`-
 * **A3-159 (open, routed to area 3).** The one `mismatch` is `frame124_9403586`, the same on master's engine and oracle. A frame text reads a byte-array local as a value (`(unkuint3)axStack_f >> 8`, `CONCAT13(param_4,axStack_f)`). The engine's reading does not compile it, and `skipped:array-local` does not take it: it is A3-137's class.
 * **Generator (access differential), patched engine.**
   * Grammar 2, 9,400,001 to 9,405,000: 1 finding, seed 9403567 `map-frame-store`. Routed as A7-38.
-  * Grammar 1, 9,400,001 to 9,405,000: 1 seed with 4 findings, seed 9400696 `cache-read-pointer-unsaid`. Routed as A5-101.
+  * Grammar 1, 9,400,001 to 9,405,000: 1 seed with 4 findings, seed 9400696 `cache-read-pointer-unsaid`. Routed as A5-101, renumbered A5-108 at merge (A5-101 was already taken).
   * Both are the same on the engine without 0081: replayed with a build that links master's `typeop.cc`.
 
 ### Vendored tree
