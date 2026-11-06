@@ -19,3 +19,19 @@ H7-reaches-reg	corpus	killed	42	CHECK failed at /home/user/RomHackingTools/.clau
 H7-reaches-any	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:1003: drawnAtJoin == 0
 H7-reaches-any	gen	survived	18	
 H7-reaches-any	corpus	survived	41	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:1003: drawnAtJoin == 0
+H7-numreach-off	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:973: r3->firstAddr == 0x0607000Au
+H7-numreach-off	gen	survived	19	
+H7-numreach-off	corpus	survived	41	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:973: r3->firstAddr == 0x0607000Au
+H7-case-opref	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:744: a.Violations() == 0 && a.storeValueOther == 0 && a.copyAtLoad >= 1
+H7-case-opref	gen	survived	18	
+H7-case-opref	corpus	killed	41	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:744: a.Violations() == 0 && a.storeValueOther == 0 && a.copyAtLoad >= 1
+H7-case-dest	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:932: two->firstAddr == 0x0607002Au
+H7-case-dest	gen	survived	18	
+H7-case-dest	corpus	survived	41	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:932: two->firstAddr == 0x0607002Au
+H7-case-inner	unit	killed	22	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:1029: twos[1]->firstAddr == 0x06070056u
+H7-case-inner	gen	survived	19	
+H7-case-inner	corpus	survived	41	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:1029: twos[1]->firstAddr == 0x06070056u
+O-storeValueOther	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:684: wa.storeValueOther == 3 && wa.Violations() == 3
+O-storeValueOther	gen	survived	19	
+O-storeAfterUse	unit	killed	23	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/Sh2DecompilerTests.cpp:1162: a.storeAfterUse == 1 && a.Violations() == 1
+O-storeAfterUse	gen	survived	19	
