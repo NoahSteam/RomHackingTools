@@ -1,0 +1,139 @@
+name N1 site2 callee B re-points r3 for site3
+asm 06009000
+.word 0x4F22
+mov.l r8,@-r15
+mov.l =0x06009100,r3
+jsr @r3
+nop
+mov r0,r8
+mov.l =0x06009200,r2
+jsr @r2
+nop
+add r0,r8
+mov r5,r4
+jsr @r3
+nop
+add r8,r0
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+shll r4
+rts
+mov r4,r0
+endasm
+asm 06009200
+mov.l =0x06009300,r3
+rts
+mov #5,r0
+endasm
+asm 06009300
+add #1,r4
+rts
+mov r4,r0
+endasm
+end
+
+name N2 r3 chosen by a branch, kept callee called twice after the join
+asm 06009000
+.word 0x4F22
+mov.l r8,@-r15
+tst r4,r4
+bt/s L1
+mov.l =0x06009100,r3
+mov.l =0x06009300,r3
+L1:
+jsr @r3
+nop
+mov r0,r8
+mov r5,r4
+jsr @r3
+nop
+add r8,r0
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+shll r4
+rts
+mov r4,r0
+endasm
+asm 06009300
+add #1,r4
+rts
+mov r4,r0
+endasm
+end
+
+name N3 callee restores r3 from the stack after using it
+asm 06009000
+.word 0x4F22
+mov.l r8,@-r15
+mov.l =0x06009100,r3
+jsr @r3
+nop
+mov r0,r8
+mov r5,r4
+jsr @r3
+nop
+add r8,r0
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+mov.l r3,@-r15
+mov.l =0x06009300,r3
+shll r4
+mov r4,r0
+add r3,r0
+mov.l @r15+,r3
+rts
+nop
+endasm
+asm 06009300
+add #1,r4
+rts
+mov r4,r0
+endasm
+end
+
+name N4 callee keeps r3 only when r4 is nonzero
+asm 06009000
+.word 0x4F22
+mov.l r8,@-r15
+mov.l =0x06009100,r3
+jsr @r3
+nop
+mov r0,r8
+mov r5,r4
+jsr @r3
+nop
+add r8,r0
+mov.l @r15+,r8
+.word 0x4F26
+rts
+nop
+endasm
+asm 06009100
+tst r4,r4
+bt L
+shll r4
+rts
+mov r4,r0
+L:
+mov.l =0x06009300,r3
+rts
+mov #7,r0
+endasm
+asm 06009300
+add #1,r4
+rts
+mov r4,r0
+endasm
+end
