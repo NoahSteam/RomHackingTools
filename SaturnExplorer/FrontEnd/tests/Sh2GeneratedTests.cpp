@@ -4910,6 +4910,46 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                 if (h.first <= addr && addr <= h.last) return true;
             return false;
         };
+        // ---- (A3-161) A store the text prints at a constant address is a write the code makes there ----
+        // The ledger below pairs the run's accesses with the engine's records, and an access of ordinary memory at a constant address is
+        // `FoldedOrdinary` there by design, whatever the text then does with it; the printed-C differential runs no function that touches absolute
+        // memory. So a store the text shows and the code does not make passed every oracle: grammar 1 seed 1862942 prints
+        // `iRam06002308 = -0x10;` before a loop and `iRam06002308 = iRam06002308 * 2;` in it (the loop's register merged into the global it is
+        // stored to after the loop), where the code writes 06002308 by a `tas.b` in the loop and a `mov.w` in the `rts` slot only. A line that
+        // assigns a global at a constant address (`xRam06002308 = ...`, `iRam06002308 += ...`, a field `._2_2_` of one) must hold an instruction
+        // that writes that address (any of its bytes) in a run, whenever a run executed the line: a store printed in a loop is then one the
+        // code makes on each trip that executes the line, by that line's own instruction. (The engine's statement of a store holds the store's
+        // instruction: the line's tokens are the ops that make it, LineInstructions.)
+        {
+            static const std::regex storeLine("^\\s*[A-Za-z]*Ram([0-9a-f]{8})(?:\\._([0-9]+)_([0-9]+)_)?\\s*(?:[-+*/%&|^]|<<|>>)?=(?!=)");
+            for (const Line& line : r.lines)
+            {
+                std::smatch m;
+                if (!std::regex_search(line.text, m, storeLine)) continue;
+                count("text-store.lines");
+                const uint32_t at = (static_cast<uint32_t>(std::stoul(m[1].str(), nullptr, 16)) + (m[2].matched ? static_cast<uint32_t>(std::stoul(m[2].str())) : 0u)) & 0x1FFFFFFFu;
+                const uint32_t span = m[3].matched ? static_cast<uint32_t>(std::stoul(m[3].str())) : 4u;
+                const std::vector<uint32_t> insns = LineInstructions(line);
+                bool ran = false, writes = false;
+                for (uint32_t i : insns) ran = ran || executed.count(i) != 0;
+                if (!ran)
+                {
+                    count("text-store.not-run");
+                    continue;
+                }
+                for (const TraceRec& t : trace)
+                {
+                    const uint32_t a = t.addr & 0x1FFFFFFFu;
+                    if (t.write && std::find(insns.begin(), insns.end(), t.insn) != insns.end() && a < at + span && at < a + static_cast<uint32_t>(t.size)) writes = true;
+                }
+                if (!writes)
+                {
+                    std::string trimmed = line.text;
+                    trimmed.erase(0, trimmed.find_first_not_of(' '));
+                    add("text-store", "the text stores at " + Hex(at) + " (`" + trimmed + "`) and no instruction of that line writes there in a run");
+                }
+            }
+        }
         // ---- Area 5, round 7 (A5-52): a word of work RAM the function reaches under two addresses is one memory ----
         // The bus gives a work-RAM word as many addresses as it has partitions, undecoded bits (28-27) and 1 MiB repeats; the emulator's
         // memory is the same bytes under all of them. The engine's data flow keys memory by address, and forwards a store to a load past
@@ -7480,6 +7520,7 @@ typedef long long s64;
 template <int N> struct Rep { typedef typename std::conditional<(N <= 1), uint8_t, typename std::conditional<(N <= 2), uint16_t, typename std::conditional<(N <= 4), uint32_t, uint64_t>::type>::type>::type type; };
 template <int N, bool S> struct T;
 template <int N> struct Piece;
+template <int N> struct Unk;
 template <class I> struct IsInt { static const bool value = std::is_integral<I>::value; };
 static inline u64 B2U(bool x) { return x ? 1 : 0; }
 template <class I> static inline typename std::enable_if<std::is_signed<I>::value && !std::is_same<I, bool>::value, u64>::type B2U(I x) { return (u64)(s64)x; }
@@ -7505,6 +7546,12 @@ template <int N, bool S> struct T {
   // (`(uint4)(int2)CONCAT11(...)`, `(int4)(int2)CONCAT11(...)`), so a CONCAT cast straight to a wider type is its unsigned value, as C has it.
   // Before 0081 `(int4)CONCAT11(...)` was the engine's sign extension of `mov.w` and agreed here only, so it was excused as 'narrow-c'.
   template <int M> explicit T(const Piece<M>& o) : v((R)(o.Zext() & Mask())) {}
+  // (A2-126) a cast of an xunknown (a value of no sign: a field `xStack_4._0_2_`, a local declared xunknown2) to a wider unsigned type is the zero
+  // extension, as for a CONCAT: the engine prints its ZEXT as `(uint4)xStack_4._0_2_` (`extu.w`) and `(uint4)xStack_2`. To a signed type it
+  // extends by the sign, as the engine prints its SEXT (`(int4)xStack_8`). It was the sign extension at every target, so the right text was
+  // `mismatch` in every reading. A local last assigned a signed value (`xStack_4 = (int2)(...); uVar1 = (uint4)xStack_4;`, the sign extension
+  // of `mov.w`) keeps that sign (Unk::sg), as A3-150 reads such a text: the local's assignment says which extension the cast is.
+  template <int M> explicit T(const Unk<M>& o) : v((R)((N > M && (S || o.sg) ? o.Sext() : o.Zext()) & Mask())) {}
   // an implicit conversion, the one C does: by the source's sign
   template <int M, bool U> operator T<M, U>() const { return T<M, U>(B2U(Ext())); }
   u64 Zext() const { return (u64)v & Mask(); }
@@ -7518,10 +7565,25 @@ template <int N, bool S, int M, bool U> struct Common {
   static const bool sign = N == M ? (S && U) : (N > M ? S : U);
   typedef T<size, sign> type;
 };
-// The value of a CONCATab: signed as an xunknown is in this reading, with the cast above for the extension
-template <int N> struct Piece : T<N, true> {
+// The value of a CONCATab: the unsigned value of its bytes, as DECOMPILER_GUIDE.md reads it (and C does), with the cast above for the extension.
+// (A2-127, patch 0084) It was signed here, as an xunknown is: `CONCAT11(a,b) == param_1` with an int2 param_1 then compared two sign extensions,
+// agreed, and g_cmpc counted nothing, so a text false as C and in the guide's reading was excused as 'narrow-c'. A compare with a CONCAT is the
+// compare of its own width and sign now (CMP below), and a signed one needs the cast to a signed type the engine prints, `(int2)CONCAT11(a,b)`.
+template <int N> struct Piece : T<N, false> {
   Piece() {}
-  template <class I, class = typename std::enable_if<IsInt<I>::value>::type> Piece(I x) : T<N, true>(x) {}
+  template <class I, class = typename std::enable_if<IsInt<I>::value>::type> Piece(I x) : T<N, false>(x) {}
+};
+// (A2-126) xunknownN: signed in this reading as before, but a type of its own, for the cast to a wider unsigned type above
+// sg: the value it was last assigned had a signed type (a cast `(int2)` in the text, a signed variable); a field read out of a variable, a CONCAT, a
+// number or an unsigned value leave it clear
+template <int N> struct Unk : T<N, true> {
+  bool sg;
+  Unk() : sg(false) {}
+  template <class I, class = typename std::enable_if<IsInt<I>::value>::type> Unk(I x) : T<N, true>(x), sg(false) {}
+  template <int M, bool U> Unk(const T<M, U>& o) : T<N, true>(B2U(o.Ext())), sg(U) {}
+  template <int M> Unk(const Unk<M>& o) : T<N, true>(B2U(o.Ext())), sg(o.sg) {}
+  Unk(const Unk& o) : T<N, true>(o), sg(o.sg) {}
+  Unk& operator=(const Unk& o) { this->v = o.v; sg = o.sg; return *this; }
 };
 typedef T<4, false> Bool4;
 // `&&` and `||` of the text (A2-96) arrive as LAND(a, b) and LOR(a, b) (ShortCircuitOps): the right operand is evaluated only when the left does not decide,
@@ -7574,7 +7636,8 @@ template <int M, int N> static inline typename PieceWide<N, M>::type WidenPiece(
   template <int N, int M, bool U> auto operator op(const T<M, U>& b, const Piece<N>& a) -> decltype(b op WidenPiece<M>(a)) { return b op WidenPiece<M>(a); } \
   template <int N, int M> auto operator op(const Piece<N>& a, const Piece<M>& b) -> decltype(WidenPiece<M>(a) op WidenPiece<N>(b)) { return WidenPiece<M>(a) op WidenPiece<N>(b); }
 PIECEOP(+) PIECEOP(-) PIECEOP(*) PIECEOP(&) PIECEOP(|) PIECEOP(^) PIECEOP(/) PIECEOP(%)
-PIECEOP(==) PIECEOP(!=) PIECEOP(<) PIECEOP(<=) PIECEOP(>) PIECEOP(>=)
+// (A2-127) A comparison with a CONCAT is CMP's, the CONCAT unsigned at its own width (Piece), so that a compare of two narrow sides whose C widening
+// differs (a CONCAT by zero, an int2 by sign) is counted by g_cmpc, and an ordered compare reads the CONCAT unsigned unless the text casts it.
 // shifts take the type of the left operand
 template <int N, bool S, int M, bool U> T<N, S> operator<<(const T<N, S>& a, const T<M, U>& b) { u64 c = b.Zext(); return T<N, S>(c >= 8 * N ? 0 : (a.Zext() << c)); }
 template <int N, bool S, int M, bool U> T<N, S> operator>>(const T<N, S>& a, const T<M, U>& b) {
@@ -7599,16 +7662,18 @@ typedef T<1, false> byte; typedef T<1, false> uchar; typedef T<2, false> ushort;
 typedef T<2, false> word; typedef T<4, false> dword; typedef T<8, false> qword;
 typedef T<3, true> int3; typedef T<1, true> int1; typedef T<2, true> int2; typedef T<4, true> int4; typedef T<8, true> int8;
 typedef T<1, false> uint1; typedef T<2, false> uint2; typedef T<4, false> uint4; typedef T<8, false> uint8;
-typedef T<1, true> xunknown1; typedef T<2, true> xunknown2; typedef T<4, true> xunknown4; typedef T<8, true> xunknown8;
+typedef Unk<1> xunknown1; typedef Unk<2> xunknown2; typedef Unk<4> xunknown4; typedef Unk<8> xunknown8;
 typedef T<3, true> unkbyte3; typedef T<3, false> unkuint3; typedef T<3, true> unkint3;
 typedef T<5, true> unkbyte5; typedef T<6, true> unkbyte6; typedef T<7, true> unkbyte7; typedef T<5, false> unkuint5; typedef T<6, false> unkuint6; typedef T<7, false> unkuint7;
 typedef T<5, true> unkint5; typedef T<6, true> unkint6; typedef T<7, true> unkint7;
 template <class X> static inline u64 RAW(const X& x) { return B2U(x); }
 template <int N, bool S> static inline u64 RAW(const T<N, S>& x) { return x.Zext(); }
 template <int N> static inline u64 RAW(const Piece<N>& x) { return x.Zext(); }
+template <int N> static inline u64 RAW(const Unk<N>& x) { return x.Zext(); }
 template <class X> struct SZ { static const int n = sizeof(X); };
 template <int N, bool S> struct SZ<T<N, S> > { static const int n = N; };
 template <int N> struct SZ<Piece<N> > { static const int n = N; };
+template <int N> struct SZ<Unk<N> > { static const int n = N; };
 #define SIZEOFV(v) (SZ<__typeof__(v)>::n)
 #define FLDMASK(n) ((n) >= 8 ? ~0ULL : ((1ULL << (8 * (n))) - 1))
 #define FLDRAW(v, o, n) ((RAW(v) >> (8 * (SIZEOFV(v) - (o) - (n)))) & FLDMASK(n))

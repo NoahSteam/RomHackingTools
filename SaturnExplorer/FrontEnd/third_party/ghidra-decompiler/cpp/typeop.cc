@@ -16,6 +16,7 @@
  * Modified for SaturnExplorer: a constant in an equality compare with a narrow integer is cast to that integer's type (patches/0077-engine-narrow-compare-cast-target.patch).
  * Modified for SaturnExplorer: the other side of an equality compare whose one side is cast is cast to the same type (patches/0080-engine-narrow-compare-both-sides-cast.patch).
  * Modified for SaturnExplorer: the sign extension of a CONCAT printed in place casts the CONCAT to its signed type first (patches/0081-engine-sext-of-concat-cast.patch).
+ * Modified for SaturnExplorer: a CONCAT printed in place is cast to a signed type in a compare that reads it signed (patches/0084-engine-concat-compare-cast.patch).
  */
 #include "typeop.hh"
 #include "funcdata.hh"
@@ -982,6 +983,52 @@ static Datatype *compareOtherSideCast(const PcodeOp *op,int4 slot,Datatype *reqt
   return reqtype;
 }
 
+/// \brief Whether a compare's input is a PIECE printed in place, whose type the text does not show
+///
+/// Such a PIECE prints as \b CONCATxy(a,b) where it is read. C, and the reading of the text (DECOMPILER_GUIDE.md), take it as the unsigned
+/// value of its bytes, whatever type the engine propagated to it. (SaturnExplorer, patches/0084-engine-concat-compare-cast.patch)
+/// \param vn is the input
+/// \return \b true if it is a PIECE that is not a variable of its own
+static bool compareImpliedPiece(const Varnode *vn)
+
+{
+  if (!vn->isWritten() || vn->isExplicit()) return false;
+  return (vn->getDef()->code() == CPUI_PIECE);
+}
+
+/// \brief The type a CONCAT printed in place is cast to in an equality compare with a signed narrow side
+///
+/// The equality of two narrow inputs is the engine's compare of their bytes. With one side a CONCAT (no type in the text, so its unsigned value)
+/// and the other a signed narrow integer (\b int2 \b param_1, a cast \b (int2)x, a negative constant), C extends the CONCAT by zero and the other
+/// side by sign: \b CONCAT11(a,b) == \b param_1 is false in C for the bytes 0xFFFF that the code finds equal. \b compareOtherSideCast does not
+/// pair them, as a CONCAT is no \b int or \b uint to it (and when the engine gave it a type, it is the signed one of the other side, which nothing
+/// shows). The CONCAT is cast to the other side's signed type, \b (int2)CONCAT11(a,b) == \b param_1, as patch 0081 casts it before a sign extension.
+/// Two CONCATs, or a side C extends by zero, need no cast.
+/// \param op is the comparison
+/// \param slot is the input being asked about
+/// \param reqtype is the lower-ordered of the two types
+/// \param castStrategy is the cast strategy
+/// \param tlst is the type factory
+/// \return the data-type to cast the input to, or null
+static Datatype *comparePieceCast(const PcodeOp *op,int4 slot,Datatype *reqtype,const CastStrategy *castStrategy,TypeFactory *tlst)
+
+{
+  const Varnode *vn = op->getIn(slot);
+  if (!compareImpliedPiece(vn) || vn->getSize() >= tlst->getSizeOfInt()) return (Datatype *)0;
+  const Varnode *othervn = op->getIn(1-slot);
+  if (compareImpliedPiece(othervn)) return (Datatype *)0;
+  Datatype *otherType = othervn->getHighTypeReadFacing(op);
+  // The other side is cast to compareCastTarget's type when C would extend it otherwise; the cast pass takes the inputs in order, so that CAST
+  // is already made when it is slot 0 and not yet when it is slot 1
+  if (!othervn->isWritten() || othervn->getDef()->code() != CPUI_CAST) {
+    if (castStrategy->checkIntPromotionForCompare(op,1-slot))
+      otherType = compareCastTarget(op,1-slot,reqtype);
+  }
+  if (otherType->getMetatype() != TYPE_INT || otherType->getSize() != vn->getSize()) return (Datatype *)0;
+  if (othervn->isConstant() && !signbit_negative(othervn->getOffset(),othervn->getSize())) return (Datatype *)0;
+  return otherType;
+}
+
 TypeOpEqual::TypeOpEqual(TypeFactory *t)
   : TypeOpBinary(t,CPUI_INT_EQUAL,"==",TYPE_BOOL,TYPE_INT)
 {
@@ -1003,6 +1050,8 @@ Datatype *TypeOpEqual::getInputCast(const PcodeOp *op,int4 slot,const CastStrate
   Datatype *ct = castStrategy->castStandard(reqtype,othertype,false,false);
   if (ct == (Datatype *)0)
     ct = compareOtherSideCast(op,slot,reqtype,castStrategy,tlst);
+  if (ct == (Datatype *)0)
+    ct = comparePieceCast(op,slot,reqtype,castStrategy,tlst);	// SaturnExplorer (0084)
   return ct;
 }
 
@@ -1070,6 +1119,8 @@ Datatype *TypeOpNotEqual::getInputCast(const PcodeOp *op,int4 slot,const CastStr
   Datatype *ct = castStrategy->castStandard(reqtype,othertype,false,false);
   if (ct == (Datatype *)0)
     ct = compareOtherSideCast(op,slot,reqtype,castStrategy,tlst);
+  if (ct == (Datatype *)0)
+    ct = comparePieceCast(op,slot,reqtype,castStrategy,tlst);	// SaturnExplorer (0084)
   return ct;
 }
 
@@ -1104,7 +1155,11 @@ Datatype *TypeOpIntSless::getInputCast(const PcodeOp *op,int4 slot,const CastStr
   if (castStrategy->checkIntPromotionForCompare(op,slot))
     return reqtype;
   Datatype *curtype = op->getIn(slot)->getHighTypeReadFacing(op);
-  return castStrategy->castStandard(reqtype,curtype,true,true);
+  Datatype *ct = castStrategy->castStandard(reqtype,curtype,true,true);
+  // SaturnExplorer (0084): a CONCAT printed in place reads as unsigned, so a signed compare casts it to its signed type even when the engine typed it so
+  if (ct == (Datatype *)0 && compareImpliedPiece(op->getIn(slot)))
+    ct = reqtype;
+  return ct;
 }
 
 Datatype *TypeOpIntSless::propagateType(Datatype *alttype,PcodeOp *op,Varnode *invn,Varnode *outvn,
@@ -1140,7 +1195,11 @@ Datatype *TypeOpIntSlessEqual::getInputCast(const PcodeOp *op,int4 slot,const Ca
   if (castStrategy->checkIntPromotionForCompare(op,slot))
     return reqtype;
   Datatype *curtype = op->getIn(slot)->getHighTypeReadFacing(op);
-  return castStrategy->castStandard(reqtype,curtype,true,true);
+  Datatype *ct = castStrategy->castStandard(reqtype,curtype,true,true);
+  // SaturnExplorer (0084): a CONCAT printed in place reads as unsigned, so a signed compare casts it to its signed type even when the engine typed it so
+  if (ct == (Datatype *)0 && compareImpliedPiece(op->getIn(slot)))
+    ct = reqtype;
+  return ct;
 }
 
 Datatype *TypeOpIntSlessEqual::propagateType(Datatype *alttype,PcodeOp *op,Varnode *invn,Varnode *outvn,
