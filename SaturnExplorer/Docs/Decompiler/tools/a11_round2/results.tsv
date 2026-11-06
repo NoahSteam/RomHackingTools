@@ -324,3 +324,15 @@ P-a850-sync	model	survived	19
 P-askagain	trust	killed	52	pin A8-30: ...the same entry typed: the user's entry, no figure and no Entry line              FAILED
 P-askagain	panel	killed	4	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/DecompilerPanelTests.cpp:1269: f.panel.Submissions() == n + 1
 P-askagain	model	survived	18	
+P-sync-active	trust	killed	52	pin A8-42: Enter in the focused, unedited box asks the output shown (A), not C as typed        FAILED
+P-sync-active	panel	killed	5	CHECK failed at /home/user/RomHackingTools/.claude/worktrees/a8r4/SaturnExplorer/FrontEnd/tests/DecompilerPanelTests.cpp:2780: std::string(f.panel.EntryText()) == "06005000"
+P-sync-active	model	survived	18	
+P-pin-typed	trust	killed	52	pin A8-30: ...pinned, the entry is still the finder's guess: the figure and the Entry line stay FAILED
+P-pin-typed	panel	survived	4	
+P-pin-typed	model	survived	18	
+P-pin-noresolve	trust	killed	51	pin A8-30: ...pinned, the entry is still the finder's guess: the figure and the Entry line stay FAILED
+P-pin-noresolve	panel	survived	4	
+P-pin-noresolve	model	survived	18	
+P-nothingpin	trust	killed	52	pin A8-38: no registers, nothing shown, Follow PC off: nothing asked, nothing shown, the box empty FAILED
+P-nothingpin	panel	survived	4	
+P-nothingpin	model	survived	19	
