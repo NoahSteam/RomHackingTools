@@ -1733,7 +1733,7 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     if (!registerVariable || got.kind != WordValue::Param) return false;
                     // (A7-42: a register variable the text assigns from that parameter, whole or through a cast, holds it -- a byte of
                     // param_1 is `xVar1 = (char)param_1;`, named after no parameter; grammar 1 seed 1843373)
-                    // (A7-61: or through the variables the text assigns it from in turn, `xVar1 = xRam26001000;` after `xRam26001000 =
+                    // (A7-63: or through the variables the text assigns it from in turn, `xVar1 = xRam26001000;` after `xRam26001000 =
                     // param_1;`, grammar 1 seed 2404131; up to three steps)
                     const std::string from = "param_" + std::to_string(got.value) + ";";
                     std::vector<std::string> names = { shownText };
@@ -1954,15 +1954,26 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                         return false;
                     };
                     // (a compare in the body: `cmp/eq #imm,r0` of the number, or any compare of two registers, which may hold it)
-                    const auto inputTied = [&]() {
+                    // (A7-56: `cmp/eq r1,r1` compares a register with itself, which ties it to no number; A7-61 (the area 5
+                    // fixer's seed 2017373): a compare of two registers ties the stored input only when one of them is the stored register
+                    // or a register moved into it -- `cmp/eq r3,r2` with r3 a global's address does not tie the r6 a store stores)
+                    const auto inputTied = [&](int reg) {
+                        std::set<int> chain = { reg };
+                        for (int round = 0; round < 3; ++round)
+                            for (const auto& range : r.flowBlockRanges)
+                                for (uint32_t p = range.first; p <= range.second; p += 2)
+                                {
+                                    uint16_t mw = 0;
+                                    if (word(p, mw) && (mw >> 12) == 0x6 && (mw & 0xF) == 0x3 && chain.count((mw >> 8) & 0xF)) chain.insert((mw >> 4) & 0xF);
+                                }
                         for (const auto& range : r.flowBlockRanges)
                             for (uint32_t p = range.first; p <= range.second; p += 2)
                             {
                                 uint16_t cw = 0;
                                 if (!word(p, cw)) continue;
                                 if ((cw >> 8) == 0x88 && sameNumber(static_cast<uint32_t>(static_cast<int32_t>(static_cast<int8_t>(cw & 0xFF))))) return true;
-                                // (A7-56: `cmp/eq r1,r1` compares a register with itself, which ties it to no number)
-                                if ((cw >> 12) == 0x3 && (cw & 0xF) == 0x0 && ((cw >> 8) & 0xF) != ((cw >> 4) & 0xF)) return true;
+                                const int n = (cw >> 8) & 0xF, m = (cw >> 4) & 0xF;
+                                if ((cw >> 12) == 0x3 && (cw & 0xF) == 0x0 && n != m && (chain.count(n) || chain.count(m))) return true;
                             }
                         return false;
                     };
@@ -2004,7 +2015,7 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                             // shows 0x18, is another value. The function's input is the number only where a compare of the body
                             // can say so, as the product's A7-41 rule has it: `cmp/eq #4,r0` of A7-28's fixture, r0 the input
                             // stored; a store of `in_r3` with no compare is no store of the line's number)
-                            if (m == 0 ? inputTied() : word(m, mw) && numberOf(m, mw, got) && sameNumber(got)) apart = false;
+                            if (m == 0 ? inputTied(reg) : word(m, mw) && numberOf(m, mw, got) && sameNumber(got)) apart = false;
                         }
                     }
                     if (apart)

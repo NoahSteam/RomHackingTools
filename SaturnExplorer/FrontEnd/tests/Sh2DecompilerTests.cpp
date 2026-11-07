@@ -1681,8 +1681,8 @@ void TestArea7Round7()
     }
 }
 
-// Area 7 round 8 (A7-55 to A7-59, filed by the A7-52 fixer from fresh generator seeds 2,300,001 on; A7-60, the matrix's regression from
-// A7-52): each shrunk seed, the line it is about, and the audit; for the rows that were the oracle's, the damaged result the relaxed
+// Area 7 round 8 (A7-55 to A7-59, filed by the A7-52 fixer from fresh generator seeds 2,300,001 on; A7-60 and A7-61, filed by the area 5
+// confirming-round fixer; A7-62, the matrix's regression from A7-52; A7-63, routed): each shrunk seed, the line it is about, and the audit; for the rows that were the oracle's, the damaged result the relaxed
 // check still catches.
 void TestArea7Round8()
 {
@@ -1693,7 +1693,7 @@ void TestArea7Round8()
         w = static_cast<uint16_t>(hw[x - 0x06000000u] << 8 | hw[x - 0x06000000u + 1]);
         return true;
     };
-    // A7-60 (P2, a regression from A7-52; grammar 1 seed 7557 of the matrix's 20,000): `mov.l lit,r7 ; ... mov.l lit,r2 ; and r2,r7 ;
+    // A7-62 (P2, a regression from A7-52; grammar 1 seed 7557 of the matrix's 20,000): `mov.l lit,r7 ; ... mov.l lit,r2 ; and r2,r7 ;
     // mov.l @r7,r2`, the global's address 0x0400000C masked with 0x1FFFFFFF. The engine merges r2 under the name of the global the second
     // loop stores and puts the copy `uRam04000014 = uRam0400000c;` at the function's first instruction. A7-52's search for the load that
     // read the global could not place an address made by an AND, found none, and took the tokens off (before A7-52 they stayed at the
@@ -1704,11 +1704,11 @@ void TestArea7Round8()
             0x3048, 0x5162, 0x2432, 0x4310, 0x8BFA, 0x2525, 0x2219, 0x7046, 0xE303, 0x3248, 0x171E, 0x4310, 0x8BFB, 0x1722, 0x2029, 0x2208,
             0x8B00, 0x6242, 0x8162, 0xE303, 0x8169, 0x4310, 0x8BFC, 0x000B, 0x0009, 0x0009, 0x0600, 0x1028, 0x0400, 0x000C, 0x05F8, 0x0028,
             0xC000, 0x0004, 0x1FFF, 0xFFFF });
-        Print("A7-60 a copy of a global read through a masked address", r);
+        Print("A7-62 a copy of a global read through a masked address", r);
         const Line* l = LineWith(r, "uRam04000014 = uRam0400000c;");
         CHECK(l != nullptr);
         if (l) CHECK(LineInstructions(*l) == (std::vector<uint32_t>{ 0x0600900Cu }) && !l->noOrigin);
-        CHECK(dts::AuditMapping(r, word, "a7_60").Violations() == 0);
+        CHECK(dts::AuditMapping(r, word, "a7_62").Violations() == 0);
     }
     // A7-55 (P2), the product's (grammar 2 seed 2306761 shrunk): `mov r4,r1 ; mov.l lit,r7 ; mov #1,r3 ; L: sub r4,r1 ; mov.l r1,@(0x28,r7) ;
     // dt r3 ; bf L`. The engine merges r1 under the global's name and puts a copy of r4, the input, at the end of the first block
@@ -1909,14 +1909,14 @@ void TestArea7Round8()
             }
         CHECK(n == 1 && dts::AuditMapping(other, word, "a7_58 shlr8 other").constAtJoin == 1);
     }
-    // Seed 2404131 (A7-61): `mov r4,r2 ; mov.l r2,@r6 ; mov.w @r6,r0`: the engine prints `xVar1 = xRam26001000;` after `xRam26001000 =
+    // Seed 2404131 (A7-63): `mov r4,r2 ; mov.l r2,@r6 ; mov.w @r6,r0`: the engine prints `xVar1 = xRam26001000;` after `xRam26001000 =
     // param_1;` and puts the global back with `xRam26001000 = xVar1;` at the store of r4. A7-42's search for a register variable that holds
     // a parameter looked one assignment deep; it follows the chain now. With xVar1 assigned another global, the store is still another value.
     {
         const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, { 0xD602, 0x6243, 0x2622, 0x6061, 0x000B, 0x0009, 0x2600, 0x1000 });
-        Print("A7-61 a variable that holds a parameter through a global", r);
+        Print("A7-63 a variable that holds a parameter through a global", r);
         CHECK(LineWith(r, "xRam26001000 = xVar1;") != nullptr);
-        CHECK(dts::AuditMapping(r, word, "a7_61").Violations() == 0);
+        CHECK(dts::AuditMapping(r, word, "a7_63").Violations() == 0);
         DecompileResult other = r;
         int n = 0;
         for (Line& x : other.lines)
@@ -1925,7 +1925,42 @@ void TestArea7Round8()
                 x.text = "  xVar1 = xRam26001004;";
                 ++n;
             }
-        CHECK(n == 1 && dts::AuditMapping(other, word, "a7_61 other").storeValueOther == 1);
+        CHECK(n == 1 && dts::AuditMapping(other, word, "a7_63 other").storeValueOther == 1);
+    }
+    // A7-60 (filed by the area 5 confirming-round fixer, A7-59's shape): `bsr f ; ... mov.l @r1,r0 ; mov.l r7,@r1 ; mov.l r0,@r6`
+    // prints `xRam2e00218c = xRam26002204;` at the `bsr`, the global's old value the merge keeps after the call, stored after it. The line is
+    // drawn at the load after the call and names the store (the callee's prototype lent, as the generator lends it).
+    {
+        const std::vector<uint16_t> w = { 0x2F86, 0x2F96, 0x2FA6, 0x2FD6, 0x0D2A, 0x6843, 0x6953, 0x6A63, 0xB014, 0x0009, 0x6483, 0x6593,
+            0x66A3, 0xD606, 0xD106, 0x6012, 0x2172, 0x2602, 0x4D2A, 0x6DF6, 0x6AF6, 0x69F6, 0x68F6, 0x000B, 0x0009, 0x0009, 0x2E00, 0x218C,
+            0x2600, 0x2204, 0x7FF0, 0x7F10, 0x000B, 0x0009 };
+        std::fill(hw.begin(), hw.end(), 0);
+        for (size_t i = 0; i < w.size(); ++i) dts::Put16(hw, 0x9000u + 2 * i, w[i]);
+        auto snap = MakeSnapshot(hw);
+        DecompileRequest q = Request(0x06009000u);
+        q.prototypes.emplace_back(0x0600903Cu, d.Decompile(snap, Request(0x0600903Cu)).prototype);
+        const DecompileResult r = d.Decompile(snap, q);
+        Print("A7-60 a global's old value after a call", r);
+        const Line* l = LineWith(r, "xRam2e00218c = xRam26002204;");
+        CHECK(l != nullptr);
+        if (l) CHECK(LineInstructions(*l) == (std::vector<uint32_t>{ 0x0600901Eu, 0x06009022u }));
+        CHECK(dts::AuditMapping(r, word, "a7_60").Violations() == 0);
+    }
+    // A7-61 (the area 5 fixer's grammar 1 seed 2017373, shrunk), the oracle's: `xRam06002304 = 0x66;` at its `mov #0x66,r0` (r0,
+    // the global's load, merged under its name) names no store; the only store writes the input r6. A7-45's count took `cmp/eq r3,r2`
+    // (r3 the global's address) for a compare that may tie r6 to 0x66; only a compare of the stored register, or of one moved into it,
+    // does. With `cmp/eq r6,r2` the check still asks for the store. (The text's loop is the engine's: area 3.)
+    {
+        std::vector<uint16_t> w = { 0xD309, 0x6032, 0x2362, 0x2502, 0xE301, 0x8170, 0xE066, 0x4310, 0x8BFB, 0x3230, 0x89FF, 0xD705, 0xE001,
+                                    0x2701, 0x6071, 0xC801, 0x8BFC, 0x000B, 0x0009, 0x0009, 0x0600, 0x2304, 0x0600, 0x1010 };
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, w);
+        Print("A7-61 a number at its maker, a compare of other registers", r);
+        const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_61");
+        CHECK(a.Violations() == 0 && a.copyNumberMade == 1);
+        w[9] = 0x3260;   // cmp/eq r6,r2
+        const DecompileResult t = a7r4::DecompileWords(d, hw, 0x06009000u, w);
+        const dts::MappingAudit ta = dts::AuditMapping(t, word, "a7_61 tied");
+        CHECK(ta.copyNumberMade == 0 && ta.copyStoreMissing == 1);
     }
     // A7-59 (P2), the product's (grammar 2 seed 2306048 shrunk): `bsr f ; ... mov.l lit,r6 ; mov.l @(4,r6),r1 ; mov.w r2,@r5 ; mov.l r1,@r6`.
     // The engine prints `xRam0600210c = xRam06002110;` at the `bsr` (the global's value after the call, ahead of the store through r5 that

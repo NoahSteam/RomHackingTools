@@ -5407,7 +5407,7 @@ bool FlowPointerIn(PointerWalk& w, const FlowRecord& flow, const ghidra::Funcdat
             offset = o1 + o2;
             return true;
         }
-        // (A7-60: an address masked or combined from numbers, `mov.l lit,r7 ; mov.l lit2,r2 ; and r2,r7` for 0x0400000C & 0x1FFFFFFF: the
+        // (A7-62: an address masked or combined from numbers, `mov.l lit,r7 ; mov.l lit2,r2 ; and r2,r7` for 0x0400000C & 0x1FFFFFFF: the
         // engine folds it to the global it reads, and the walk must place it too, or a copy of that global finds no load of it)
         if ((op.code == ghidra::CPUI_INT_AND || op.code == ghidra::CPUI_INT_OR || op.code == ghidra::CPUI_INT_XOR) && op.numIn == 2)
         {
@@ -6679,6 +6679,54 @@ bool FlowLastReads(const FlowRecord& flow, const ghidra::Funcdata& fd, int blk, 
     return !out.empty();
 }
 
+// A7-59: the loads of the memory `mem` that read, on each path forward from op `pos` of flow block `blk`, the value it holds there: the
+// nearest load of it. False (none named) when a path meets first a store that writes any of it or whose pointer the walk cannot place, a
+// call, the function's end, or the bound. FlowLastReads looks back; this looks ahead.
+bool FlowNextReads(const FlowRecord& flow, const ghidra::Funcdata& fd, int blk, int pos, const FlowVn& mem, std::set<uint32_t>& out)
+{
+    const ghidra::AddrSpace* stackSpace = fd.getArch()->getStackSpace();
+    const ghidra::AddrSpace* ram = fd.getArch()->getDefaultDataSpace();
+    std::vector<std::pair<int, int>> todo = { std::make_pair(blk, pos) };
+    std::set<int> entered;
+    int steps = 0;
+    while (!todo.empty())
+    {
+        const std::pair<int, int> st = todo.back();
+        todo.pop_back();
+        if (st.first < 0 || static_cast<size_t>(st.first) >= flow.blockOps.size()) return false;
+        const std::vector<FlowOp>& ops = flow.blockOps[static_cast<size_t>(st.first)];
+        bool done = false;
+        for (size_t i = static_cast<size_t>(std::max(st.second, 0)); i < ops.size() && !done; ++i)
+        {
+            if (++steps > 4096) return false;
+            const FlowOp& op = ops[i];
+            if (op.code == ghidra::CPUI_CALL || op.code == ghidra::CPUI_CALLIND || op.code == ghidra::CPUI_CALLOTHER || op.code == ghidra::CPUI_RETURN)
+                return false;
+            if ((op.code != ghidra::CPUI_LOAD && op.code != ghidra::CPUI_STORE) || op.numIn < 2 || op.literal) continue;
+            bool stack = false;
+            ghidra::uintb offset = 0;
+            if (!FlowPointer(flow, fd, st.first, static_cast<int>(i), op.in[1], stack, offset) || (stack && !stackSpace))
+            {
+                if (op.code == ghidra::CPUI_STORE) return false;
+                continue;
+            }
+            FlowVn m;
+            m.space = stack ? stackSpace : ram;
+            m.offset = offset & m.space->getHighest();
+            m.size = op.code == ghidra::CPUI_STORE ? (op.numIn > 2 ? op.in[2].size : 0) : op.out.size;
+            if (!FlowStorageOverlaps(m, mem)) continue;
+            if (op.code == ghidra::CPUI_STORE) return false;
+            out.insert(op.insn);
+            done = true;
+        }
+        if (done) continue;
+        if (static_cast<size_t>(st.first) >= flow.successors.size() || flow.successors[static_cast<size_t>(st.first)].empty()) return false;
+        for (int n : flow.successors[static_cast<size_t>(st.first)])
+            if (entered.insert(n).second) todo.push_back(std::make_pair(n, 0));
+    }
+    return !out.empty();
+}
+
 // The number a flow op sets its output to (a `mov #imm`, a literal's word); false when it sets none.
 bool FlowNumber(const FlowOp& op, uint64_t& v)
 {
@@ -7768,8 +7816,9 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
         if (slotMaker) target = slotMaker;
         // A7-59: a copy of memory the engine put at a call (the global's value after it, `xRam0600210c = xRam06002110;` at a `bsr`) whose
         // stores all run after the call is not the call's effect on a value stored before it (A7-11): it is the value a load after the
-        // call reads and those stores write. Its drawn tokens go to the nearest load of the memory after the call in the call's flow
-        // block, when no store that may write the memory, and no other call, comes first; else they stay.
+        // call reads and those stores write. Its drawn tokens go to the nearest load of the memory after the call (on every path,
+        // FlowNextReads; the lowest when the paths have several), when no store that may write the memory, and no other call, comes
+        // first; else they stay.
         if (!target && code == ghidra::CPUI_COPY && flow.callInsns.count(at) && !o->isFromDelaySlot() && !chosen.empty() &&
             (o->getIn(0)->getSpace()->getType() == ghidra::IPTR_SPACEBASE || o->getIn(0)->getSpace() == fd.getArch()->getDefaultDataSpace()))
         {
@@ -7806,28 +7855,13 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                 mem.space = in->getSpace();
                 mem.offset = in->getOffset();
                 mem.size = in->getSize();
-                const std::vector<FlowOp>& ops = flow.blockOps[static_cast<size_t>(cb)];
-                for (size_t i = ib->second.second + 1; i < ops.size(); ++i)
+                // (on every path from the call, through the blocks after it: grammar 2 seed 2061746, the code after the call testing a
+                // register and jumping into the callee's body on both ways, where the load and the store are)
+                std::set<uint32_t> reads;
+                if (FlowNextReads(flow, fd, cb, static_cast<int>(ib->second.second) + 1, mem, reads))
                 {
-                    const FlowOp& op = ops[i];
-                    if (op.code == ghidra::CPUI_CALL || op.code == ghidra::CPUI_CALLIND || op.code == ghidra::CPUI_CALLOTHER) break;
-                    if ((op.code != ghidra::CPUI_LOAD && op.code != ghidra::CPUI_STORE) || op.numIn < 2 || op.literal) continue;
-                    bool stack = false;
-                    ghidra::uintb offset = 0;
-                    FlowVn m;
-                    if (!FlowPointer(flow, fd, cb, static_cast<int>(i), op.in[1], stack, offset))
-                    {
-                        if (op.code == ghidra::CPUI_STORE) break;
-                        continue;
-                    }
-                    m.space = stack ? fd.getArch()->getStackSpace() : fd.getArch()->getDefaultDataSpace();
-                    m.offset = offset & m.space->getHighest();
-                    m.size = op.code == ghidra::CPUI_STORE ? (op.numIn > 2 ? op.in[2].size : 0) : op.out.size;
-                    if (!FlowStorageOverlaps(m, mem)) continue;
-                    if (op.code == ghidra::CPUI_STORE) break;
                     uint32_t c = 0;
-                    target = CanonicalAddress(op.insn, c) ? c : op.insn;
-                    break;
+                    target = CanonicalAddress(*reads.begin(), c) ? c : *reads.begin();
                 }
             }
         }
