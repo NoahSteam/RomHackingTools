@@ -13339,6 +13339,11 @@ void TestA587Pins(Sh2Decompiler& d)
             nullptr, nullptr, nullptr, nullptr, nullptr }, "text-store.loop-short", nullptr },
         { { "A5-111, the same with a long write and a byte read", "D605 D706 6071 C801 8BFC 3230 8D01 1603 846D 6371 000B 0009 2600 2308 FFFF FE68",
             nullptr, nullptr, nullptr, nullptr, nullptr }, "order.folded-store.hardware-read", nullptr },
+        // A5-113 (grammar 2 seed 2701218 of the A5-111 fixer's fresh run): `g = 0 (a byte, r3 after a dt loop) ; r2 = *r4` on the arm a constant
+        // test always takes; once the other arm went as unreachable, the join of the global's writes was a copy of the earlier write, read as the
+        // constant 0 by ActionVarnodeProps, and the write went to the return's copy, after the read through r4.
+        { { "A5-113, a zero byte store before a read through a pointer, grammar 2 seed 2701218 shrunk", "7FD0 D609 E301 4310 8BFD 2638 8900 6351 2438 8901 A004 0009 2630 6240 A000 0009 7F30 000B 0009 0009 2600 2388",
+            "0/0/26", nullptr, "2", nullptr, nullptr }, "order.folded-store.read", nullptr },
         // A5-112 (open, P3; the A5-111 fixer's 20,000-seed run, grammar 1 seeds 366, 1259, 1486 and 3284; 366 shrunk): a byte write after a half-word write of the
         // global is printed as a store of the half's other byte and a store of the whole (`xRam26002008._1_1_ = in_r1; ... xRam26002008 =
         // CONCAT11(in_r2,(xunknown1)xRam26002008);`); counted (`order.folded-store.piece-split`), not judged.
@@ -13369,6 +13374,13 @@ void TestA587Pins(Sh2Decompiler& d)
         CHECK(rep.findings.empty());
         if (p.count) CHECK(count(p.count) > 0);
         if (p.count2) CHECK(count(p.count2) > 0);
+    }
+    // A5-113, grammar 2 seed 2701218 whole: the zero store before the read through r4.
+    {
+        const Report rep = Evaluate(d, MakeV2(2701218), true);
+        std::printf("pin 'A5-113, grammar 2 seed 2701218': %zu finding(s)\n", rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
     }
     // A5-111, grammar 1 seed 2606069 whole: no piece of the global stored, and its half-word store before the later SH2_VCRD reads.
     {

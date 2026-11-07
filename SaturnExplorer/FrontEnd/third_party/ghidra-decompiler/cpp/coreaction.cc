@@ -31,6 +31,7 @@
  * Modified for SaturnExplorer: a LOAD that may read the frame and stays one holds the frame's writes (patches/0076-engine-frame-loads-keep-writes.patch).
  * Modified for SaturnExplorer: a catch handler that never reads its exception no longer names it, which MSVC warned about (C4101) (patches/0083-engine-msvc-unused-catch-names.patch).
  * Modified for SaturnExplorer: ActionVarnodeProps does not read a global as the constant zero where its next write would then be made after a memory access (patches/0085-engine-global-write-keeps-place.patch).
+ * Modified for SaturnExplorer: nor a copy of an earlier write of a global with an access between them (patches/0088-engine-global-piece-read-and-join-copy.patch).
  */
 #include "coreaction.hh"
 #include "condexe.hh"
@@ -1511,6 +1512,15 @@ int4 ActionVarnodeProps::apply(Funcdata &data)
 	    const PcodeOp *rd = *diter;
 	    if (rd->code() == CPUI_COPY && rd->getOut()->isAddrTied() && rd->getOut()->getAddr() == vn->getAddr() &&
 		accessBetween(vn->getDef(),rd))
+	      moved = true;
+	  }
+	  // SaturnExplorer (0088): ...and a copy of an earlier write of the global (a join left with one input once a branch was
+	  // removed as unreachable): read as a constant, it would leave the earlier write dead and the later write would carry it
+	  // past the access between them (`g = 0; x = *p;` then the join and the return's copy of `g`, A5-113)
+	  if (vn->getDef()->code() == CPUI_COPY) {
+	    const Varnode *w = vn->getDef()->getIn(0);
+	    if (w->isWritten() && w->isAddrTied() && w->getAddr() == vn->getAddr() && w->getSize() == vn->getSize() &&
+		accessBetween(w->getDef(),vn->getDef()))
 	      moved = true;
 	  }
 	  if (moved) continue;

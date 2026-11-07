@@ -15508,6 +15508,10 @@ void TestArea5Confirm()
         // -- the byte read of the global after its half-word write was a write of that byte, and the half-word written back after the last read
         { "a5_111", 0x06051100u, { 0xD605, 0xD706, 0x6071, 0xC801, 0x8BFC, 0x3230, 0x8D01, 0x8166, 0x846C, 0x6371, 0x000B, 0x0009, 0x2600, 0x2308, 0xFFFF, 0xFE68 } },
         // ...and with a long write (mov.l r0,@(0xc,r6)) and a read of its second byte (mov.b @(0xd,r6),r0)
+        // A5-113, grammar 2 seed 2701218 shrunk: a dt loop leaves r3 0 ; tst r3,r4 ; bt L (always) ; ... L: mov.b r3,@r6 (0x26002388) ; mov.b @r4,r2
+        // -- the zero store was carried to the return, after the read through r4
+        { "a5_113", 0x06051300u, { 0x7FD0, 0xD609, 0xE301, 0x4310, 0x8BFD, 0x2638, 0x8900, 0x6351, 0x2438, 0x8901, 0xA004, 0x0009, 0x2630, 0x6240,
+                                   0xA000, 0x0009, 0x7F30, 0x000B, 0x0009, 0x0009, 0x2600, 0x2388 } },
         { "a5_111_long", 0x06051200u, { 0xD605, 0xD706, 0x6071, 0xC801, 0x8BFC, 0x3230, 0x8D01, 0x1603, 0x846D, 0x6371, 0x000B, 0x0009, 0x2600, 0x2308, 0xFFFF, 0xFE68 } },
     };
     for (const W& w : fx)
@@ -15588,6 +15592,13 @@ void TestArea5Confirm()
         const std::string l = out["a5_111_long"].Text();
         CHECK(!Has(l, "Ram26002314._1_1_ ="));                                           // FIXED
         CHECK(lastBefore(l, "uRam26002314 = ", "= SH2_VCRD;"));                          // FIXED
+    }
+    // A5-113 (P2): A5-109's class by one more route, a copy of an earlier write of a global (a join left with one input once a branch was removed
+    // as unreachable) read as the constant 0. FIXED (patch 0088, ActionVarnodeProps): the store before the read through the pointer.
+    {
+        const std::string t = out["a5_113"].Text();
+        const size_t st = t.find("xRam26002388 = 0;"), rd = t.find("= *param_1;");
+        CHECK(st != std::string::npos && rd != std::string::npos && st < rd);   // FIXED (was after the read)
     }
     // A5-103 (P2): an associative purge through a pointer the code builds with the and/or idiom said nothing; the text is a store of 0.
     // FIXED (PointerValues::parts, MaskedPartitionNote): the partition the masks fix is said, certain for the idiom, "may" without the AND.
