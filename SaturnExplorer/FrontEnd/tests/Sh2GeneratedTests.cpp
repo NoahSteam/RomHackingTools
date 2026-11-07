@@ -7942,20 +7942,6 @@ template <int N, bool S, int M, bool U> T<N, S> operator>>(const T<N, S>& a, con
   return T<N, S>(c >= 8 * N ? 0 : (a.Zext() >> c)); }
 template <int N, bool S, class I, class = typename std::enable_if<IsInt<I>::value>::type> T<N, S> operator<<(const T<N, S>& a, I b) { return a << T<4, false>(b); }
 template <int N, bool S, class I, class = typename std::enable_if<IsInt<I>::value>::type> T<N, S> operator>>(const T<N, S>& a, I b) { return a >> T<4, false>(b); }
-// (A2-128, patch 0086) An xunknown is signed in the arithmetic around it, as before (its implicit conversions and its casts to a signed type extend by the sign,
-// the engine's SEXT), but it is read as unsigned where an op reads it as a number with a sign of its own: an equality (a compare of the narrow bytes is not the sign extension of one), an ordered compare, a right shift, a division, a
-// remainder. C reads it that way and so does the guide, and a signed read is the cast the engine now prints (`5 < (int4)xStack_4`). It used to be signed there
-// too, so `5 < xStack_4` agreed in this reading whichever op made it (cmp/gt or cmp/hi) and the two ops' one text was never asked which it meant.
-template <int N> static inline T<N, false> UnsignedOf(const Unk<N>& a) { T<N, false> r; r.v = a.v; return r; }
-#define UNKREAD(op) \
-  template <int N, int M> auto operator op(const Unk<N>& a, const Unk<M>& b) -> decltype(UnsignedOf(a) op UnsignedOf(b)) { return UnsignedOf(a) op UnsignedOf(b); } \
-  template <int N, int M, bool U> auto operator op(const Unk<N>& a, const T<M, U>& b) -> decltype(UnsignedOf(a) op b) { return UnsignedOf(a) op b; } \
-  template <int N, int M, bool U> auto operator op(const T<M, U>& a, const Unk<N>& b) -> decltype(a op UnsignedOf(b)) { return a op UnsignedOf(b); } \
-  template <int N, class I, class = typename std::enable_if<IsInt<I>::value>::type> auto operator op(const Unk<N>& a, I b) -> decltype(UnsignedOf(a) op b) { return UnsignedOf(a) op b; } \
-  template <int N, class I, class = typename std::enable_if<IsInt<I>::value>::type> auto operator op(I a, const Unk<N>& b) -> decltype(a op UnsignedOf(b)) { return a op UnsignedOf(b); }
-UNKREAD(==) UNKREAD(!=) UNKREAD(<) UNKREAD(<=) UNKREAD(>) UNKREAD(>=) UNKREAD(/) UNKREAD(%)
-template <int N, int M, bool U> auto operator>>(const Unk<N>& a, const T<M, U>& b) -> decltype(UnsignedOf(a) >> b) { return UnsignedOf(a) >> b; }
-template <int N, class I, class = typename std::enable_if<IsInt<I>::value>::type> auto operator>>(const Unk<N>& a, I b) -> decltype(UnsignedOf(a) >> b) { return UnsignedOf(a) >> b; }
 template <int N, bool S> T<N, S> operator-(const T<N, S>& a) { return T<N, S>((0 - a.Zext()) & T<N, S>::Mask()); }
 template <int N, bool S> T<N, S> operator~(const T<N, S>& a) { return T<N, S>(~a.Zext() & T<N, S>::Mask()); }
 template <int N, bool S> T<N, S> operator+(const T<N, S>& a) { return a; }
@@ -8279,10 +8265,27 @@ static std::string BeHeaderBase()
     return h;
 }
 
+// The reading of an xunknown in the ordered reads (A2-128), a literal of its own: a string literal is limited to 16,380 bytes on MSVC.
+static const char kCxxHeaderUnk[] = R"CXX(// (A2-128, patch 0086) An xunknown is signed in the arithmetic around it, as before (its implicit conversions and its casts to a signed type extend by the sign,
+// the engine's SEXT), but it is read as unsigned where an op reads it as a number with a sign of its own: an equality (a compare of the narrow bytes is not the sign extension of one), an ordered compare, a right shift, a division, a
+// remainder. C reads it that way and so does the guide, and a signed read is the cast the engine now prints (`5 < (int4)xStack_4`). It used to be signed there
+// too, so `5 < xStack_4` agreed in this reading whichever op made it (cmp/gt or cmp/hi) and the two ops' one text was never asked which it meant.
+template <int N> static inline T<N, false> UnsignedOf(const Unk<N>& a) { T<N, false> r; r.v = a.v; return r; }
+#define UNKREAD(op) \
+  template <int N, int M> auto operator op(const Unk<N>& a, const Unk<M>& b) -> decltype(UnsignedOf(a) op UnsignedOf(b)) { return UnsignedOf(a) op UnsignedOf(b); } \
+  template <int N, int M, bool U> auto operator op(const Unk<N>& a, const T<M, U>& b) -> decltype(UnsignedOf(a) op b) { return UnsignedOf(a) op b; } \
+  template <int N, int M, bool U> auto operator op(const T<M, U>& a, const Unk<N>& b) -> decltype(a op UnsignedOf(b)) { return a op UnsignedOf(b); } \
+  template <int N, class I, class = typename std::enable_if<IsInt<I>::value>::type> auto operator op(const Unk<N>& a, I b) -> decltype(UnsignedOf(a) op b) { return UnsignedOf(a) op b; } \
+  template <int N, class I, class = typename std::enable_if<IsInt<I>::value>::type> auto operator op(I a, const Unk<N>& b) -> decltype(a op UnsignedOf(b)) { return a op UnsignedOf(b); }
+UNKREAD(==) UNKREAD(!=) UNKREAD(<) UNKREAD(<=) UNKREAD(>) UNKREAD(>=) UNKREAD(/) UNKREAD(%)
+template <int N, int M, bool U> auto operator>>(const Unk<N>& a, const T<M, U>& b) -> decltype(UnsignedOf(a) >> b) { return UnsignedOf(a) >> b; }
+template <int N, class I, class = typename std::enable_if<IsInt<I>::value>::type> auto operator>>(const Unk<N>& a, I b) -> decltype(UnsignedOf(a) >> b) { return UnsignedOf(a) >> b; }
+)CXX";
+
 std::string CxxHeader(bool be = false)
 {
     std::ostringstream o;
-    o << (be ? BeHeaderBase() : std::string(kCxxHeaderBase));
+    o << (be ? BeHeaderBase() : std::string(kCxxHeaderBase) + kCxxHeaderUnk);
     auto mask = [](int bytes) -> std::string {
         char b[32];
         std::snprintf(b, sizeof b, "0x%sULL", std::string(static_cast<size_t>(bytes) * 2, 'F').c_str());
