@@ -17926,3 +17926,65 @@ Fixer, branch `review/3-p3-sweep`, cut at master `3529aa0e`. The four open area 
 | A3-141 | accepted | The dropped store writes the function's own frame through a pointer read back from a global; the text is withheld and its values are right, so nothing wrong is lent. Printing it needs an engine change to the access ledger and forwarding for a shape neither image has; A3-148 gave the class a value oracle. |
 
 Results: full `ctest` 117/117 (the 111 plus the 6 Live); `SaturnExplorerDecompilerFaultTests` 0 of 94 jobs failed; the generator's default run (300 seeds) has no finding class. The only code change is in `Sh2GeneratedTests.cpp` (a test file), so the product, the printed-C agrees count and the corpus images are untouched by construction.
+
+## Area 2, round 20 review
+
+Reviewer, branch `review/2-round20`, cut at master `76cfb9a5` (patches to 0084 in the tree). Findings only: no engine, host or suite file changed. The repository gets tools (`Docs/Decompiler/tools/a2_round20/`), ledger rows **A2-128** and **A2-129**, and this record. The worktree's RelWithDebInfo build of `76cfb9a5`, every test binary under `ulimit -v 3500000` (4,000,000 for the generator ranges) and `timeout`, one heavy job at a time, each run at most 20 minutes.
+
+**Verdict: not clean.** One P2 (A2-128: a stack piece once named, `xStack_4 = CONCAT22(...)`, is read by a signed and by an unsigned op with no cast either way, so `cmp/gt` and `cmp/hi`, `cmp/ge` and `cmp/hs`, `shar` and `shlr` print the same function; the oracle passes both, one as C and one in the engine's reading) and one P3 (A2-129: an oracle false positive of the memory mode, which gives a text's integer r4 and r5 the host's address). Patch 0084 itself held: no CONCAT printed in place was read signed without its cast in any function of the round. The count of clean area 2 rounds after the patches stays 0.
+
+| Row | P | What |
+|---|---|---|
+| A2-128 | P2 | engine and oracle: `return 5 < xStack_4;` is the whole text of both `cmp/gt` and `cmp/hi` of a piece named `xunknown4`; `return xStack_4 >> 1;` of both `shar` and `shlr`; `5 < xStack_4._0_2_` of a field; `xStack_2 == param_1` with `int2 param_1` is A2-127's text for a named piece; one text, two values, each verdict passed |
+| A2-129 | P3 | oracle: the memory mode passes a text's integer r4 and r5 as host addresses; `return param_2;` (`mov r5,r0`) is `mismatch` |
+
+### 1. What I ran
+
+| Run | Result |
+|---|---|
+| grammar 2, 2,500,001 to 2,510,000 (two pieces of 5,000) | 2 failing seeds, both area 7's (`map-const-join`, A7-58's class): 2500642, 2502184 (182 and 186 s) |
+| grammar 1, 2,500,001 to 2,510,000 | 5 failing seeds, none area 2's: 2500514, 2501451, 2509053 (`map-copy-store`, area 7); 2504292, 2508741 (`onchip-span-unsaid`, area 5, A5-94's class) (121 and 120 s) |
+| printed-C, 2,500,001 to 2,515,000 (three pieces of 5,000 seeds) | 8,981, 9,159 and 9,024 functions, **0 `mismatch`**: agrees 8,339 + 8,530 + 8,434, narrow-c 206 + 212 + 161, void-return 379 + 367 + 374, void-return-lent 38 + 41 + 43, skipped 19 + 9 + 12 (array-local, stack-address, stack-piece); 567, 444 and 560 s. Two of the narrow-c are A2-128 (seed 2508533 #0, `if (xStack_4 < 1)`; seed 2513643 #0, `CONCAT44(xStack_8 >> 1,param_2)`) |
+| `mkpiece20.py` (new): round 19's stack pieces (a word stored, a byte or half overwritten, read back by byte, half or long) under five cuts (none, `extu.w`, `exts.w`, `exts.b`, `extu.b`) by 40 uses: `shar`, `shal`, `shlr`, `shlr8`, `shlr16`, the T of `shll`/`shar`, `cmp/pz`, `cmp/pl`, `cmp/eq #imm` (-1, -128, 0x7F, 1), `tst #0x80`, `muls.w`, `mulu.w`, `mul.l`, `dmuls.l` and `dmulu.l` (MACH and MACL), `div0s` both ways, one `div1` step, `addv`, `subv` both ways, `addc`, `subc`, `negc`, `neg`, `not`, `add #±1`, `add`/`sub` of r4 then a signed test, `cmp/str` | 5,200 functions, **0 `mismatch`**: agrees 4,625, narrow-c 575 (an `xunknown` local read with a sign 384, a field of one 185, a 3-byte type 4, A2-19's promotion 2; section 3) |
+| `xpair20.py` (new): every piece shape read by a signed and by an unsigned op as a pair (`cmp/gt`/`cmp/hi`, `cmp/ge`/`cmp/hs` either way round, against 0, 5, 0x7F, -1, -128; `shar`/`shlr` once and twice), the unsigned one after `extu.w` where the read is 16 bits; `pairs20.py` compares each pair's texts | 792 functions (396 pairs), 0 `mismatch`, agrees 500, narrow-c 292; **146 pairs print the same body, 128 the same whole text**, all of them `narrow-c` against `agrees` (A2-128): compares 128 (local 80, field 48), shifts 18 (local 10, field 8); none with the CONCAT in place |
+| hand fixtures | sections 2 to 4 |
+| `ctest` | section 5 |
+
+### 2. Patch 0084 and its neighbours
+
+**0084 held.** In every function of the round where a CONCAT is printed in place and read with a sign it carries the cast: `(int2)CONCAT11(...) == -1` and `== -0x80` (`cmp/eq #imm` of a sign-extended read; `== 0x7f` stays bare, rightly), `0 < (int2)CONCAT11(...)` (`cmp/pl`), `(int4)(int2)CONCAT11(...) >> 1` and `<< 1`, `(int4)param_1 * (int4)(int2)CONCAT11(...)` (`muls.w`), `param_1 * (int2)CONCAT11(...)` (`dmuls.l`, MACL). A sign-extended piece in an unknown-typed setting (returned, `and`/`xor`/`or` with a parameter, `swap.b`, `swap.w`, `xtrct`, `shll8`, stored through `int4 *` in the memory mode) prints `(int4)(int2)CONCAT11(...)` every time (0081 held as well). No register op makes a PIECE: `xtrct`, `swap.w` and `swap.b` print shifts and masks, and their signed compares and arithmetic shifts carry `(int4)` (`param_3 < (int4)(param_1 << 0x10 | param_2 >> 0x10)`), all `agrees`.
+
+**A2-128: the same CONCAT, named.** When the stack word is a local of its own (`xunknown4 xStack_4; xStack_4 = CONCAT22(param_4,param_2);`, `xunknown2 xStack_2 = CONCAT11(...)`, or a field `xStack_4._0_2_`), a signed and an unsigned read print no cast. Upstream's `castStandard` casts a TYPE_UNKNOWN input of a signed or unsigned compare (and of a shift), so the op's input is typed `int4` or `uint4` inside the engine while the declaration says `xunknown4`; the text then has nothing to tell them apart. The full texts of `7FFC 2F52 6073 81F0 60F2 7F04 E105 3017 0029 000B 0009` (`cmp/gt`) and `... E105 3016 ...` (`cmp/hi`) are byte for byte the same:
+
+```
+bool func_0x06009000(xunknown4 param_1,xunknown2 param_2,xunknown4 param_3,xunknown2 param_4)
+{
+  xunknown4 xStack_4;
+  xStack_4 = CONCAT22(param_4,param_2);
+  return 5 < xStack_4;
+}
+```
+
+For r5 = 0x80000001 and r7 = 0xFF7FFFFF the word is 0xFFFF0001, `cmp/gt` gives 0 and `cmp/hi` 1. C (the harness's first reading, where an `xunknown` has no sign and is unsigned) agrees with `cmp/hi` and gives 1 for `cmp/gt`; the engine's reading (`Unk<4>`, signed, A2-41) agrees with `cmp/gt`. The oracle reads a text the engine's way only when C disagrees, so the `cmp/hi` function is `agrees` without being asked whether the engine's own reading holds (it does not), and the `cmp/gt` one is `narrow-c`. `shar` and `shlr` print `return xStack_4 >> 1;` with only the return type different (`int4`, `uint4`), which C does not apply before the shift. The guide gives the CONCAT the unsigned value of its bytes and the `xunknown` no sign, with the assignment saying which extension a cast to an unsigned type is; neither says how a compare or a shift of one reads it. So the text gives one value for two codes, which is A2-127's verdict for the same value in place (P2). The equality of a named piece with a signed narrow side is A2-127's own text again: `return xStack_2 == param_1;` with `int2 param_1`, for `exts.w` and for `extu.w` of r4, `narrow-c`.
+
+Not new, not filed: an `xunknown` local or field cast to a wider signed type and read with its sign (`(int4)xStack_2 >> 1`, `(int4)xStack_4._0_2_ * param_1`), A3-150's and A2-41's reading, which the guide's "the assignment says which" covers; the 3-byte types (`unkint3 param_2` against -1); A2-19's promotion (below).
+
+### 3. Other semantics
+
+`mkpiece20.py`'s uses cover the flag ops on a narrow value (`addv`, `subv`, `addc`, `subc`, `negc`, `div0s`, a `div1` step, `cmp/str`) and the multiplies at each width; none is `mismatch`. Two texts are `narrow-c` for A2-19's accepted reason, C's promotion of a narrow unsigned value to a signed `int`: `return (param_4 & 0xff) + param_1 < (param_4 & 0xff);` (`addc`'s carry, `uint2 param_4`, `int4 param_1`) and `(param_4 & 0xff) < (param_4 & 0xff) - param_1` (`subc`), and by hand `return (param_4 & 0xff) + param_1 >> 1;` for `add ; shlr` (the logical shift of a sum C types as `int`). They are the class A2-33 names (`(in_sr & 1) - 1 >> 2`) and the engine's reading agrees; with a `uint4` operand instead (`param_2 + param_1 < param_2`) the text is right as C too.
+
+### 4. A2-129: the memory mode's integers
+
+The memory mode gives a parameter declared a pointer the host's pointer into the arena and one declared an integer "the number" (`(int)(g_frame_base + 0x8000 + (r - 0x06080000))`), which is the host's address, not 0x0608xxxx. A right text that uses r4 or r5 as a number is then `mismatch`: `mov r5,r0 ; rts` (`return param_2;`), `shlr16` of r4 (`return param_1 >> 0x10;`), `mov.l r5,@r4` (`*param_1 = param_2;`, the arena differs after the call), and `mov.l r4,@r4` does not compile in the engine's reading (`*(xunknown4 *)param_1 = param_1;`). The memory families do not use r4 or r5 as values, so no run is affected; it costs hand-written words (I met it with a piece built from r5 and stored through r4, and moved the pieces to r6 and r7). P3.
+
+### 5. Tests
+
+* **Full `ctest`:** `-E SaturnExplorerLive -j2 --timeout 900` under `ulimit -v 3500000`: **111 of 111** passed (251 s; `SaturnExplorerSh2DecompilerEngineTests` 52 s, `SaturnExplorerSh2PrintedCTests` 31 s, `SaturnExplorerSh2GeneratedTests` 22 s, `SaturnExplorerDecompilerFaultTests` 123 s); `-R SaturnExplorerLive`: **6 of 6** (28 s). 111 plus 6 Live, the master count. **No test was added** and no suite, engine, spec or host file changed: the rows are open with their fixtures in the ledger and the tools directory. The fault suite ran inside the full `ctest` (passed); no product code changed, so it was not run apart.
+
+### 6. Routed
+
+* **Area 7:** grammar 2 seeds **2500642** and **2502184** (`map-const-join`: `uStack_8 = 0;` drawn at `mov #0x1C,r0`, `bVar3 = false;` at `rotcl r3`, each the first instruction of a join); grammar 1 seeds **2500514**, **2501451** and **2509053** (`map-copy-store`: a global's copy names none of the stores folded into it). Replay: `SE_GENERATED_GRAMMAR=<g> SE_GENERATED_SEED=<seed> SE_GENERATED_CANARY=0`.
+* **Area 5:** grammar 1 seeds **2504292** and **2508741** (`onchip-span-unsaid`: a write at 0600905E reaching E5FE0058 and a byte read at 0600903A reaching FFFFFE87 through a pointer ORed with a constant that sets the top bits, no note).
+* All seven are on master's binary (this branch changes no product file).
+
+Tools: `Docs/Decompiler/tools/a2_round20/` (`mkpiece20.py` and `xpair20.py` the new families, `pairs20.py` the pair comparison, `cls20.py` a family log by name, `xcount20.py` the A2-128 shapes in a printed-C log, `pc20.sh` one function, `q20.sh` the generator queue; families run through `../a23_round19/famrun19.sh`).
