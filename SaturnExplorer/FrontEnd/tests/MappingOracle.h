@@ -950,7 +950,7 @@ inline WordValue WrittenValue(const sfe::decomp::DecompileResult& r, const std::
         if (!number(before(m), a)) return WordValue();
         switch (lo)
         {
-        case 0x7: return NumberValue(~a);
+        case 0x7: return NumberValue(static_cast<uint32_t>(~a));   // not.l: a 32-bit not, widened only after (MSVC C4319)
         case 0x8: return NumberValue((a & 0xFFFF0000u) | (a & 0xFF) << 8 | (a >> 8 & 0xFF));
         case 0x9: return NumberValue(a << 16 | a >> 16);
         case 0xB: return NumberValue(0u - a);

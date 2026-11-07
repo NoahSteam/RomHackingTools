@@ -7799,6 +7799,8 @@ std::string CHeader()
     return o.str();
 }
 
+// MSVC limits one string literal to 16,380 bytes (C2026), so the header is split into adjacent raw strings of at most 12,000 bytes each;
+// the compiler joins them. Keep every piece under that limit when this grows.
 static const char kCxxHeaderBase[] = R"CXX(// The engine's reading of its own pseudocode (A2-19, A2-33), as C++: every integer type is a class that does arithmetic at its own width, as the
 // p-code does and as DECOMPILER_GUIDE.md says to read the text ("read the types, not C's promotion rules"). Two operands are brought to the
 // wider one (each extended by its own sign), the result is unsigned if either is, at one width; a comparison or a logical operator gives
@@ -7926,7 +7928,8 @@ CMP(==) CMP(!=) CMP(<) CMP(<=) CMP(>) CMP(>=)
 // the engine casts the CONCAT to its signed type for a sign extension (`(int2)CONCAT11(a,b) + param_1`), so the hidden one is the zero extension,
 // as in C. (Before 0081 that text was the sign extension, and agreed here only: 'narrow-c'.) Against a plain number the CONCAT keeps Promoted's reading.
 template <int N, int M> struct PieceWide { typedef T<(N > M ? N : M), true> type; };
-template <int M, int N> static inline typename PieceWide<N, M>::type WidenPiece(const Piece<N>& a) { typename PieceWide<N, M>::type r; r.v = (typename PieceWide<N, M>::type::R)a.Zext(); return r; }
+)CXX"
+    R"CXX(template <int M, int N> static inline typename PieceWide<N, M>::type WidenPiece(const Piece<N>& a) { typename PieceWide<N, M>::type r; r.v = (typename PieceWide<N, M>::type::R)a.Zext(); return r; }
 #define PIECEOP(op) \
   template <int N, int M, bool U> auto operator op(const Piece<N>& a, const T<M, U>& b) -> decltype(WidenPiece<M>(a) op b) { return WidenPiece<M>(a) op b; } \
   template <int N, int M, bool U> auto operator op(const T<M, U>& b, const Piece<N>& a) -> decltype(b op WidenPiece<M>(a)) { return b op WidenPiece<M>(a); } \
