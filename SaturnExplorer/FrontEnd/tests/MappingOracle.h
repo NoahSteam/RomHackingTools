@@ -473,7 +473,7 @@ inline std::map<uint32_t, std::vector<uint32_t>> BranchSources(const sfe::decomp
     return into;
 }
 inline WordValue RegisterBefore(const sfe::decomp::DecompileResult& r, const std::function<bool(uint32_t, uint16_t&)>& word,
-                                const std::map<uint32_t, std::vector<uint32_t>>& into, uint32_t at, int reg, int depth = 0);
+                                const std::map<uint32_t, std::vector<uint32_t>>& into, uint32_t at, int reg, int depth = 0, uint32_t ignoreWriter = 0);
 inline WordValue WrittenValue(const sfe::decomp::DecompileResult& r, const std::function<bool(uint32_t, uint16_t&)>& word,
                               const std::map<uint32_t, std::vector<uint32_t>>& into, uint32_t p, int reg, int depth);
 inline int TBefore(const sfe::decomp::DecompileResult& r, const std::function<bool(uint32_t, uint16_t&)>& word,
@@ -599,7 +599,7 @@ inline WordValue MemoryBefore(const sfe::decomp::DecompileResult& r, const std::
     return any ? result : WordValue();
 }
 inline WordValue RegisterBefore(const sfe::decomp::DecompileResult& r, const std::function<bool(uint32_t, uint16_t&)>& word,
-                                const std::map<uint32_t, std::vector<uint32_t>>& into, uint32_t at, int reg, int depth)
+                                const std::map<uint32_t, std::vector<uint32_t>>& into, uint32_t at, int reg, int depth, uint32_t ignoreWriter)
 {
     const auto decode = [&](uint32_t p, sfe::DisassembledInstruction& d) {
         uint16_t w = 0;
@@ -682,6 +682,32 @@ inline WordValue RegisterBefore(const sfe::decomp::DecompileResult& r, const std
                     }
                 }
             }
+            // (A7-64: `extu.w Rm,Rn ; cmp/pl Rn ; bf L` -- on the edge to L, with T 0, Rn is not above 0 and an extension is not below
+            // it: 0; likewise the fall-through of a `bt`; grammar 2 seed 2608245)
+            {
+                const bool tClear = ((w >> 8) == 0x8B && p + 2 != a) || ((w >> 8) == 0x89 && p + 2 == a);
+                uint16_t cw = 0;
+                if (tClear && word(p - 2, cw) && cw == (0x4015u | (static_cast<unsigned>(rg) << 8)) && into.find(p) == into.end())
+                {
+                    // (the extension is up to five instructions before the compare, none of them a branch's target, a branch or a write of Rn)
+                    bool extended = false;
+                    for (uint32_t q = p - 4, k = 0; k < 5 && !extended && r.InBody(q); q -= 2, ++k)
+                    {
+                        uint16_t xw = 0;
+                        sfe::DisassembledInstruction xd;
+                        if (!decode(q, xd) || !word(q, xw)) break;
+                        if ((xw & 0xF00F) == 0x600C || (xw & 0xF00F) == 0x600D)
+                            if (((xw >> 8) & 0xF) == static_cast<unsigned>(rg)) extended = true;
+                        if (extended) break;
+                        if (xd.IsBranch || xd.IsCall || xd.HasDelaySlot || WrittenRegisters(xd).count(rg) || into.find(q + 2) != into.end()) break;
+                    }
+                    if (extended)
+                    {
+                        if (!give(WordValue{ WordValue::Number, 0, true })) return WordValue();
+                        continue;
+                    }
+                }
+            }
             if ((w >> 12) == 0xE && ((w >> 8) & 0xF) == rg)
             {
                 if (!give(WordValue{ WordValue::Number, static_cast<int8_t>(w & 0xFF) })) return WordValue();
@@ -707,6 +733,9 @@ inline WordValue RegisterBefore(const sfe::decomp::DecompileResult& r, const std
             // `extu.w`, `shll2`, `and r1,r1`, a read of memory a store before it wrote), as the engine folds it
             if (WrittenRegisters(d).count(rg) || ((w >> 8) == 0xC7 && rg == 0))
             {
+                // (A7-64: the writer a loop's extension asks the value before, for the entries into the loop: its own result is the
+                // extension of what it extended, itself)
+                if (p == ignoreWriter && rg == st.second && ignoreWriter != 0) continue;
                 if (!give(depth < 6 ? WrittenValue(r, word, into, p, rg, depth + 1) : WordValue())) return WordValue();
                 continue;
             }
@@ -916,12 +945,23 @@ inline WordValue WrittenValue(const sfe::decomp::DecompileResult& r, const std::
     if (hi == 0x3 && n == reg && (lo == 0xC || lo == 0x8))
     {
         if (lo == 0x8 && m == n) return NumberValue(0);
+        // (A7-64: `sub r4,r0` with r0 a copy of the input r4 is 0; grammar 2 seed 2602445)
+        if (lo == 0x8)
+        {
+            const WordValue pn = before(n), pm = before(m);
+            if (pn.kind == WordValue::Param && pm.kind == WordValue::Param && pn.value == pm.value) return NumberValue(0);
+        }
         if (!number(before(n), a) || !number(before(m), b)) return WordValue();
         return NumberValue(lo == 0xC ? a + b : a - b);
     }
     if (hi == 0x2 && n == reg && (lo == 0x9 || lo == 0xA || lo == 0xB))
     {
         if (m == n) return lo == 0xA ? NumberValue(0) : before(n);
+        if (lo == 0xA)   // (A7-64: `xor` of two copies of one input)
+        {
+            const WordValue pn = before(n), pm = before(m);
+            if (pn.kind == WordValue::Param && pm.kind == WordValue::Param && pn.value == pm.value) return NumberValue(0);
+        }
         // (an AND with a known 0 is 0 whatever the other is)
         if (lo == 0x9 && ((number(before(n), a) && a == 0) || (number(before(m), b) && b == 0))) return NumberValue(0);
         if (!number(before(n), a) || !number(before(m), b)) return WordValue();
@@ -931,6 +971,12 @@ inline WordValue WrittenValue(const sfe::decomp::DecompileResult& r, const std::
     {
         const int t = TBefore(r, word, into, p, depth);
         return t < 0 ? WordValue() : NumberValue(static_cast<uint32_t>(t));
+    }
+    // (A7-68: `negc Rm,Rn` is 0 minus Rm minus T; a `bt`'s target after `tst` has T set; grammar 2 seed 2807206)
+    if (hi == 0x6 && lo == 0xA && n == reg)
+    {
+        const int t = TBefore(r, word, into, p, depth);
+        return t >= 0 && number(before(m), a) ? NumberValue(0u - a - static_cast<uint32_t>(t)) : WordValue();
     }
     if (reg == 0 && (w >> 8) == 0xC9 && (w & 0xFF) == 0) return NumberValue(0);
     if (reg == 0 && ((w >> 8) == 0xC9 || (w >> 8) == 0xCA || (w >> 8) == 0xCB))
@@ -949,7 +995,12 @@ inline WordValue WrittenValue(const sfe::decomp::DecompileResult& r, const std::
                 ((sw >> 8) & 0xF) == m && ((sw & 0xFF) == 0x28 || (lo == 0xC && (sw & 0xFF) == 0x18)))
                 return NumberValue(0);
         }
-        if (!number(before(m), a)) return WordValue();
+        if (!number(before(m), a))
+        {
+            // (A7-64: an extension that reads its own result round a loop, `extu.w r1,r1` at the head: what the entries into the loop
+            // give, extended, and the extension of that is itself; grammar 1 seed 2607749, 0x60000000 and then 0)
+            if (m != n || lo < 0xC || !number(RegisterBefore(r, word, into, p, m, depth, p), a)) return WordValue();
+        }
         switch (lo)
         {
         case 0x7: return NumberValue(static_cast<uint32_t>(~a));   // not.l: a 32-bit not, widened only after (MSVC C4319)
@@ -962,7 +1013,8 @@ inline WordValue WrittenValue(const sfe::decomp::DecompileResult& r, const std::
         default: return NumberValue(static_cast<uint32_t>(static_cast<int32_t>(static_cast<int16_t>(a & 0xFFFF))));
         }
     }
-    if (hi == 0x4 && n == reg)
+    // (`mac.w @Rm+,@Rn+` is 0100nnnnmmmm1111: Rn steps by 2 below, it is no shift; grammar 1 seed 2601280, A7-64)
+    if (hi == 0x4 && n == reg && lo != 0xF)
     {
         const int op = w & 0xFF;
         if (!number(before(n), a)) return WordValue();
@@ -1436,7 +1488,20 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
             const LineLookup k = index.Find(kv.first);
             const bool owner = k.kind == LineLookup::Exact && !k.lines.empty() && std::find(kv.second.begin(), kv.second.end(), k.lines[0]) != kv.second.end();
             const bool copyFirst = owner && copyOnly(kv.first, k.lines[0]) && ownDrawn.count(kv.first);
-            if (!owner || (firsts.count(kv.first) && r.lines[k.lines[0]].firstAddr != kv.first) || copyFirst)
+            // (A7-64: a branch's own statement, `if (...) {` at the `bt`, is the line a click on it goes to when the only lines that begin
+            // with the branch are plain copies drawn there, `cRam0600102f = (char)param_2;` at the `bt`: the product orders a copy it
+            // materialised at the instruction after the statement, and the lines are the ones a click should reach second; grammar 1 seed
+            // 2608672. Not for a line with an operation of its own, which begins with the branch and is answered first.)
+            bool statementFirst = false;
+            if (owner && !copyFirst && firsts.count(kv.first) && r.lines[k.lines[0]].firstAddr != kv.first && isBranch(kv.first) && !plainCopy(r.lines[k.lines[0]].text))
+            {
+                bool drawn = false;
+                for (const Token& t : r.lines[k.lines[0]].tokens) drawn = drawn || (t.addr == kv.first && t.begin < t.end);
+                statementFirst = drawn;
+                for (size_t li = 0; li < r.lines.size() && statementFirst; ++li)
+                    if (r.lines[li].firstAddr == kv.first && !plainCopy(r.lines[li].text)) statementFirst = false;
+            }
+            if (!owner || (firsts.count(kv.first) && r.lines[k.lines[0]].firstAddr != kv.first && !statementFirst) || copyFirst)
             {
                 ++a.backWrong;
                 problem("back", "the instruction " + MappingHex(kv.first) + " is answered " +
@@ -1725,6 +1790,22 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                                 if (k >= size || (anyAlone && !alone[static_cast<size_t>(k)])) continue;
                                 same = (static_cast<uint64_t>(got.value) >> (8 * (size - 1 - k)) & 0xFF) ==
                                        (static_cast<uint64_t>(shownValue.value) >> (8 * (bytes - 1 - j)) & 0xFF);
+                            }
+                            if (same) return false;
+                        }
+                        // (A7-64: the variable is wider than the store, an access the function makes at its address says so: a half-word store
+                        // writes the variable's high half, `xRam06001024 = 0x10000;` for the store of 1 beside a word store of the address)
+                        for (const AccessFate& f : r.accessFates)
+                        {
+                            const int wide = static_cast<int>(f.size);
+                            if (wide <= size - shift || wide > 4 || delta(f.address, at) != 0) continue;
+                            bool same = true;
+                            for (int j = 0; j < size - shift && same; ++j)
+                            {
+                                const int k = shift + j;
+                                if (k >= size || (anyAlone && !alone[static_cast<size_t>(k)])) continue;
+                                same = (static_cast<uint64_t>(got.value) >> (8 * (size - 1 - k)) & 0xFF) ==
+                                       (static_cast<uint64_t>(shownValue.value) >> (8 * (wide - 1 - j)) & 0xFF);
                             }
                             if (same) return false;
                         }
@@ -2086,6 +2167,16 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                             int size = 0;
                             const int reg = word(st, sw) ? StoredRegister(sw, size) : -1;
                             if (reg < 0) continue;   // (`tas.b`'s byte: made there)
+                            // (A7-64: a store narrower than the cast the line prints writes less than it shows: `xRamc0002024 =
+                            // (xunknown2)in_r1;` is the word store of r1 xored with a number whose low half is 0, not the byte store of
+                            // in_r1 beside it; grammar 1 seed 2601590)
+                            {
+                                const size_t cast = text.find(" = (");
+                                const size_t close = cast == std::string::npos ? cast : text.find(')', cast + 4);
+                                if (close != std::string::npos && close > cast + 4 && std::isdigit(static_cast<unsigned char>(text[close - 1])) &&
+                                    text[close - 1] - '0' > storeSize[st])
+                                    continue;
+                            }
                             std::set<uint32_t> makers;
                             if (!RegisterMakers(r, word, sources, st, reg, makers) || makers.count(0)) storesInput = true;
                             // (a load into the register may read the input back from where it was put -- `mov.l r3,@r15 ; mov.w
@@ -2394,6 +2485,24 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                                 if (ops[k] == 'r' && std::isdigit(static_cast<unsigned char>(ops[k + 1])) &&
                                     (k == 0 || !std::isalnum(static_cast<unsigned char>(ops[k - 1]))) && std::atoi(ops.c_str() + k + 1) == rn)
                                     computes = true;
+                        }
+                }
+                // (A7-64: an extension whose register the text uses only shifted right past the extended bits -- `uVar1 = 0;` at `extu.b
+                // r3,r1`, then `shlr16 r1` -- is the 0 the engine prints: the line's variable is the extended register where the
+                // shift's instruction names it. Grammar 2 seed 2604457)
+                if (!computes && want == 0 && ((w & 0xF00F) == 0x600C || (w & 0xF00F) == 0x600D))
+                {
+                    const size_t nameBegin = text.find_first_not_of(' ');
+                    const std::string name = text.substr(nameBegin, text.find(" = ", nameBegin) - nameBegin);
+                    const unsigned rn = (w >> 8) & 0xF;
+                    for (const Line& l : r.lines)
+                        for (const Token& t : l.tokens)
+                        {
+                            uint16_t tw = 0;
+                            if (computes || !t.addr || t.addr == at || t.begin >= t.end || t.end > l.text.size() ||
+                                l.text.compare(t.begin, t.end - t.begin, name) != 0 || !word(t.addr, tw))
+                                continue;
+                            if (tw == (0x4029u | rn << 8) || ((w & 0xF) == 0xC && tw == (0x4019u | rn << 8))) computes = true;
                         }
                 }
                 if (computes) continue;
