@@ -213,6 +213,11 @@ jobs:
       - name: Lint the patch bookkeeping
         run: python3 -I .github/scripts/check-vendored-tree.py lint SaturnExplorer/FrontEnd/third_party/ghidra-decompiler --tests-dir SaturnExplorer/FrontEnd/tests
 
+      # MSVC rejects a string literal over 16,380 bytes (C2026); gcc and clang do not, so only the
+      # Windows build would notice. Checked here so it fails on Linux first (A12-28).
+      - name: Raw string literals fit MSVC's limit
+        run: python3 -I .github/scripts/check-literal-size.py SaturnExplorer/FrontEnd SaturnExplorer/Drivers SaturnExplorer/include
+
       # The two upstream directories vendor.py reads (UPSTREAM_CPP, UPSTREAM_SPEC) and the two
       # licence files it copies. A blobless sparse clone fetches only those few MB.
       - name: Sparse-clone Ghidra at the pinned commit
