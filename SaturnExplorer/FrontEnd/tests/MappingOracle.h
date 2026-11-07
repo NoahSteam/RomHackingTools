@@ -2319,24 +2319,9 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     if (t >= 0 && sameNumber(static_cast<uint32_t>(t))) computes = true;
                 }
                 // (A7-58: `shll8 Rn` leaves Rn's low byte 0, `shll16` its low half: the engine prints the shifted register as 0 where it uses
-                // only those bits -- `iVar1 = 0;` stored by `mov.b r0,@(0xd,r4)` -- when the line's variable is Rn where the text uses it)
-                // (...and `shlr8`/`shlr16` of a register an `extu.b` made, or `shlr16` of an `extu.w`'s, is 0 whole: `uVar1 = 0;` at the
-                // `shlr8 r0` after `extu.b r5,r0`, grammar 1 seed 2402555)
-                if (!computes && want == 0 && ((w & 0xF0FF) == 0x4019 || (w & 0xF0FF) == 0x4029))
-                {
-                    const int rn = (w >> 8) & 0xF;
-                    std::set<uint32_t> makers;
-                    bool narrow = RegisterMakers(r, word, sources, at, rn, makers) && !makers.empty() && !makers.count(0);
-                    for (uint32_t m : makers)
-                    {
-                        uint16_t mw = 0;
-                        const bool byte = word(m, mw) && (mw & 0xF00F) == (0x600C | (rn << 8));
-                        const bool half = word(m, mw) && (mw & 0xF00F) == (0x600D | (rn << 8));
-                        narrow = narrow && (byte || (half && (w & 0xF0FF) == 0x4029));
-                    }
-                    if (narrow) computes = true;
-                }
-                if (!computes && want == 0 && ((w & 0xF0FF) == 0x4018 || (w & 0xF0FF) == 0x4028))
+                // only those bits -- `iVar1 = 0;` stored by `mov.b r0,@(0xd,r4)` -- when the line's variable is Rn where the text uses it.
+                // `shlr8`/`shlr16` shift a narrow value out: `uVar1 = 0;` at the `shlr8 r0` after `extu.b r5,r0`, grammar 1 seed 2402555)
+                if (!computes && want == 0 && ((w & 0xF0FF) == 0x4018 || (w & 0xF0FF) == 0x4028 || (w & 0xF0FF) == 0x4019 || (w & 0xF0FF) == 0x4029))
                 {
                     const size_t nameBegin = text.find_first_not_of(' ');
                     const std::string name = text.substr(nameBegin, text.find(" = ", nameBegin) - nameBegin);
