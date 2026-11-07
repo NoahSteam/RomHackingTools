@@ -12783,7 +12783,34 @@ void TestDomainPins(Sh2Decompiler& d)
     // `in_r3`) and grammar 2 seed 1910826 (`xStack_40 = 0x18;` at `mov #0x18,r0`, the frame store writing `mov #0x3,r1`'s 3 or a table
     // entry), both A7-45's count (`n:map-copy-store` once A7-46 stopped naming those stores). Grammar 1 seed 1904648 (A7-52:
     // `uRam2600200f = uRam2600200c;`, r0 the poll's byte load merged under the loop's store, printed with no instruction: the copy names
-    // the load; the oracle's `no-instruction` finds a statement with none that does not say so).
+    // the load; the oracle's `no-instruction` finds a statement with none that does not say so). Area 7 round 8, the A7-52 fixer's fresh
+    // seeds from 2,300,001: A7-55 grammar 2 seeds 2301680 (the oracle's: `pxStack_20 = param_1;`, r4 itself, counted apart), 2306761 (the
+    // product's: the `mov r4,r1` that put the input in the merged r1) and 2308270 (the product's: `iRam06001020 = unaff_gbr;`, a half read
+    // back from a frame word); A7-56 grammar 1 seeds 2301471 (the product's: an add of a known 0 passes on a loop's OR) and 2307885 (the
+    // oracle's: `cmp/eq r1,r1` ties nothing); A7-57 grammar 1 seeds 2304859 (the product's: a global's value kept at a gbr store, marked
+    // materialised) and 2306106 (the oracle's: a cast's operand at an `extu` is the extension's, as A7-53's seed 1904684); A7-58 grammar 1
+    // seed 2307943 and grammar 2 seed 2308936 (`shll8`'s low byte) and grammar 2 seed 2301509 (`tst r4,r3` of a known 0), the oracle's;
+    // A7-59 grammar 2 seed 2306048 (the product's: a global's value after a call, its stores after the call, drawn at the load). A7-60,
+    // the matrix's grammar 1 seed 7557 (A7-62, a regression from A7-52: a copy of a global read through an address made by an AND named nothing).
+    // Routed from the A2-127 fixer, the oracle's: grammar 1 seeds 2400221 (a cast's operand at a `movt`, A7-57), 2402555 (`shlr8` of an
+    // `extu.b`'s byte, A7-58) and 2404131 (A7-63: a register variable that holds a parameter through a global). A7-60's second
+    // seed, grammar 2 2061746 (A7-59's shape: the load and the store after the call on both paths of a test, past a jump). Routed from
+    // the area 2 round 20 reviewer: grammar 2 seeds 2500642 (a number agreeing on a tested bit) and 2502184 (`rotcl`'s T), A7-58's; grammar
+    // 1 seeds 2500514 (a compare with an input, A7-61's), 2501451 (A7-62's), 2509053 (a store inside the variable, A7-56's). This round's
+    // fresh run: grammar 1 seed 2406142 (an extension of a shifted register, A7-58's) and grammar 2 seed 2405581 (a call's output pushed
+    // after another push to the same word, A7-59's).
+    for (const auto& s : { std::make_pair(2, 2301680), std::make_pair(2, 2306761), std::make_pair(2, 2308270), std::make_pair(1, 2301471),
+                           std::make_pair(1, 2307885), std::make_pair(1, 2304859), std::make_pair(1, 2306106), std::make_pair(1, 1904684),
+                           std::make_pair(1, 2307943), std::make_pair(2, 2308936), std::make_pair(2, 2301509), std::make_pair(2, 2306048),
+                           std::make_pair(1, 7557), std::make_pair(1, 2400221), std::make_pair(1, 2402555), std::make_pair(1, 2404131),
+                           std::make_pair(2, 2061746), std::make_pair(2, 2500642), std::make_pair(2, 2502184), std::make_pair(1, 2500514),
+                           std::make_pair(1, 2501451), std::make_pair(1, 2509053), std::make_pair(1, 2406142), std::make_pair(2, 2405581) })
+    {
+        const Report rep = Evaluate(d, s.first == 2 ? MakeV2(s.second) : Generate(s.second), true);
+        std::printf("pin 'area 7 round 8: grammar %d seed %d': %zu finding(s)\n", s.first, s.second, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
     for (const auto& s : { std::make_pair(2, 304221), std::make_pair(2, 1700689), std::make_pair(1, 1832116), std::make_pair(1, 1843925),
                            std::make_pair(2, 1853425), std::make_pair(1, 1843373), std::make_pair(1, 1843207), std::make_pair(1, 1862210),
                            std::make_pair(2, 1872967), std::make_pair(2, 1873745), std::make_pair(1, 1862942),
