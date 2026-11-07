@@ -1506,6 +1506,15 @@ if(BUILD_TESTING)
                      COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/Integration/tests/check_vdp_poke.py
                              ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Mednafen/apply.py
                              ${CMAKE_CURRENT_BINARY_DIR}/vdp_poke_test ${SE_CXX_FOR_PADTEST})
+            # A MinGW g++ found by full path builds programs that need its runtime DLLs, which sit
+            # beside it; without that folder on PATH each run raises a "missing DLL" dialog on
+            # Windows (A12-29, verify7). The tests run with the compiler's folder put first.
+            if(WIN32 AND CMAKE_VERSION VERSION_GREATER_EQUAL 3.22)
+                get_filename_component(SE_CXX_FOR_PADTEST_DIR "${SE_CXX_FOR_PADTEST}" DIRECTORY)
+                set_tests_properties(SaturnExplorerMednafenPadInjection SaturnExplorerMednafenVdp1Latch
+                                     SaturnExplorerMednafenVdpPoke PROPERTIES
+                                     ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:${SE_CXX_FOR_PADTEST_DIR}")
+            endif()
         endif()
     endif()
 endif()

@@ -18269,6 +18269,53 @@ The counts are unchanged. Every changed line is a signed compare of a named piec
 
 Nothing. Note for the coordinator: 0085 is in the "Unused numbers" line of `patches/README.md` so that `lint` passes; remove it when the other patch merges.
 
+## Area 7 round 9 fixes: A7-64..A7-68
+
+Branch `review/7-r9-fix` from master `f0e029ff`. The worktree's RelWithDebInfo build, `-j2`, every test binary under `ulimit -v 3500000` and `timeout`, one heavy job at a time. **Every change is the oracle's** (`FrontEnd/tests/MappingOracle.h`): no seed of the eight was a product fault, and `Sh2Decompiler.cpp` and the vendored engine are untouched (no patch 0089). The five rows are closed (fixed): A7-64 to A7-67 for the eight seeds of the area 5 fixer's fresh run from 2,600,001, A7-68 for the one new class this round's own fresh run from 2,800,001 found. One part went to another area: A3-163 (open, area 3), grammar 2 seed 2807704, a `claim-wrong:leaks` finding that no area 7 check is involved in.
+
+### The seeds
+
+The eight failed on master's build (replayed with `SE_GENERATED_GRAMMAR=<g> SE_GENERATED_SEED=<s>`). `map-const-join` dominates (five of eight), and the common cause is one: the line is right and drawn at the instruction that makes the number, and the oracle's word walk (`WrittenValue`, `RegisterBefore`) could not follow the value the engine had folded. Five different gaps, one per seed.
+
+| Row | Seed | Whose | Cause | Fix |
+|---|---|---|---|---|
+| A7-64 (a) | grammar 1 2601280 | oracle | `uVar4 = 0x2600101a;` at `mac.w @r4+,@r6+` (r6 = the literal 0x26001018, stepped by 2): `mac.w` is `0100nnnnmmmm1111`, so `WrittenValue`'s shift case (`hi == 4 && n == reg`) took it for a shift and returned unknown before the case that steps a post-incremented register | the shift case leaves `lo == 0xF` alone |
+| A7-64 (b) | grammar 1 2607749 | oracle | `uVar1 = 0;` at `extu.w r1,r1` heading a loop: r1 is 0x60000000 on entry and the extension's own result (0) on the back edge; the backward walk met the instruction's own write and gave up at its depth bound | `RegisterBefore` takes the writer to ignore (`ignoreWriter`); an extension of its own register asks for the value on the entries only, the extension of an extension being itself |
+| A7-64 (c) | grammar 2 2602445 | oracle | `uVar1 = 0;` at `sub r4,r0`, r0 the copy of the input r4 made by the slot of the `bf/s` that jumps to it | `sub` and `xor` of two registers that hold the same parameter are 0 |
+| A7-64 (d) | grammar 2 2604457 | oracle | `uVar1 = 0;` at `extu.b r3,r1` whose only use is `shlr16 r1`: the engine prints the extension as the 0 it contributes | an extension whose register the variable's other tokens name only in a `shlr16` (or, for a byte, `shlr8`) is a 0 (A7-58's shift rule, from the other side) |
+| A7-64 (e) | grammar 2 2608245 | oracle | `uVar1 = 0xffffffe8;` at `add #0xE8,r1` on the edge of `extu.w r5,r1 ; cmp/pl r1 ; bf L`: r1 is 0 there (not above 0, and an extension is not below it) | `RegisterBefore` knows that edge (the extension up to five instructions before the compare, none a branch's target or a write of the register); likewise the fall-through of a `bt` |
+| A7-65 | grammar 1 2601640 | oracle | `xRam06001024 = 0x10000;` names `mov.w r0,@r7` (r0 = 1): the function also stores a word at that address, so the variable is four bytes and the half-word store is its HIGH half; `storeValueOther` compared the store's bytes with the shown number's low bytes | also compared with the high bytes of a number as wide as an access the function makes at the variable's address |
+| A7-66 | grammar 1 2608672 | oracle | the way back from a `bt` answers `if (in_r3 < 1) {`; the oracle wanted `cRam0600102f = (char)param_2;`, a copy drawn at the `bt` that begins with it (the product orders a copy it materialised at an instruction after the statement, A7-25) | the way back may answer a branch's drawn statement when the only lines beginning with the branch are plain copies; A7-35's pin (the copy answered first at a `bt`) is unchanged |
+| A7-67 | grammar 1 2601590 | oracle | `xRamc0002024 = (xunknown2)in_r1;` is the word store of `xor r0,r1` with r0's low half 0; it names nothing and says so (A7-52); `copyInputMerged` (A7-55) found the byte store of in_r1 beside it and counted a copy naming nothing | a store narrower than the cast the line prints is not a store of the line's input. Its `text-store` said-line (`uRam2600103c = uRam2600103c << 0x10;` in a loop) is A3-161's accepted class: said, never failed, area 3's, no new row |
+| A7-68 | grammar 2 2807206 (this round's fresh run) | oracle | `uVar1 = 0xfffffff5;` at `negc r0,r1` after `tst r5,r4 ; bt L`, r0 = 10: 0 minus r0 minus T, T set on the edge | `WrittenValue` gives `negc` from the register and `TBefore` |
+| A3-163 (area 3) | grammar 2 2807704 (this round's fresh run) | - | `n:claim-wrong:leaks` | routed, open |
+
+### Pins
+
+`TestArea7Round9` (in `SaturnExplorerSh2DecompilerTests`): the shrunk fixture of each seed with the line, the audit, and a damaged control that the loosened rule must still catch: the number changed by one (`constAtJoin` 1 for A7-64 (a) to (e) and A7-68; `storeValueOther` 1 for A7-65 with 0x20000), A7-64 (d) with the shift's tokens taken off (`constAtJoin` 1: the rule needs the use), A7-66 with the copy line made a line with an operation of its own (`backWrong`: it begins with the `bt` and is answered second), A7-67 with the `xor` a `nop` and the line's origin taken off (`copyStoreMissing` 1: a store of the input as wide as the line names it). The nine seeds are in `Sh2GeneratedTests` (`TestAreaSevenFixerPins`, the "round 9" loop).
+
+**Mutation.** With master's `MappingOracle.h` put back (build of the generator only), the nine seeds fail again, each with its original class (2601280, 2607749, 2602445, 2604457, 2608245, 2807206 `map-const-join`; 2601640 `map-store-value`; 2608672 `map-way-back`; 2601590 `map-copy-store`); with the branch's file all nine pass. The loosened rules were checked the other way by the damaged controls above: each passes only the shape it was written for, and the controls are counted (the fixtures' checks are in `TestArea7Round9`, which passes).
+
+### Runs
+
+The final runs are on the branch's last commit; the product code is master's, so the corpora's texts and counts are unchanged by construction and were run to see the oracle's verdicts.
+
+| Run | Result |
+|---|---|
+| fresh grammar 1, 10,000 seeds from 2,800,001 (pieces of 5,000, `SE_GENERATED_CANARY=0 SE_GENERATED_SHRINK=5`) | **0 failing seeds** |
+| fresh grammar 2, 10,000 seeds from 2,800,001 | 2 failing seeds on the first oracle: 2807206 (`map-const-join`, `negc`: A7-68, fixed) and 2807704 (`claim-wrong:leaks`, area 3: A3-163, routed). After the fix: 5,000 from 2,800,001 **0**; 5,000 from 2,805,001 **1** (2807704 only) |
+| the 20,000-seed run (`SE_GENERATED_SEEDS=20000`, seeds from 1, both grammars, the canary on) | **0 failing seeds** |
+| generator default run (in ctest, every mapping check a finding; the pins of this section) | 0 findings |
+| game corpus: hwram007 and hwram008, alone and `SE_GAME_LEND=1`, with the token dumps (`tools/a7_round2/corpus.sh`) | **0 violations** in all four (`Sh2DecompilerTests` passes, which checks `Violations() == 0` for alone and lent); functions 839 and 1,554 ok; missing and said 0 and 4; real entries lent 474 (645 parameters) of 999 and 724 (975) of 1,543, as before |
+| printed-C (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | agrees=5196, narrow-c=130. The product is master's `f0e029ff` byte for byte (the diff is the oracle and the tests), so this is master's number; the 5195 / 131 of the A5-109 record was taken before master's patch 0086 (A2-128) |
+| full `ctest -j2 -E SaturnExplorerLive` | **111 of 111** passed (250 s); no new test target (the pins are inside `Sh2DecompilerTests` and `Sh2GeneratedTests`) |
+| Live (`ctest -R SaturnExplorerLive`) | **6 of 6** passed |
+| fault suite (`SaturnExplorerDecompilerFaultTests`) | **0 of 94** jobs failed |
+| `check-literal-size.py` | ok |
+
+### Routed
+
+To area 3: A3-163 (open, P3), grammar 2 seed 2807704, `n:claim-wrong:leaks` (the replay line is in the row). The `text-store` said-line of seed 2601590 is A3-161's accepted class and needs no row.
 ## A5-111 fixer
 
 Branch `review/5-a5111-fix` from `review/5-a5109-fix` (`3520d0dd`), master merged in twice (`3fc2a304`, then `f0e029ff` with patch 0086) before the final runs; A12-28's split of `kCxxHeaderBase` kept (`check-literal-size.py`: ok). One engine patch, **0088** (`heritage.cc`, `coreaction.cc`); the order rule and pins in `Sh2GeneratedTests.cpp`, pins in `Sh2DecompilerTests.cpp`. 0087 is reserved for another agent and listed as unused so the gap check passes. RelWithDebInfo build, every test binary under `ulimit -v` and `timeout`, one heavy job at a time. Rows: A5-111 (P2) fixed, A5-112 (P3) filed open, A5-113 (P2, the fresh run's) filed and fixed.
