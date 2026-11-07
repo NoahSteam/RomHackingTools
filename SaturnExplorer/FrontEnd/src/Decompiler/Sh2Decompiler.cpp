@@ -4583,6 +4583,12 @@ struct FlowVn
     bool Constant() const { return space && space->getType() == ghidra::IPTR_CONSTANT; }
 };
 // ...and one op: what it writes, from what, at which instruction (InstructionOf), and the word a load of a constant address reads.
+bool A7R8Off(const char* k)   // TEMP-A7R8
+{
+    const char* e = std::getenv("SE_A7R8_OFF");
+    return e && std::strstr(e, k);
+}
+
 struct FlowOp
 {
     uint32_t insn = 0;
@@ -6111,7 +6117,7 @@ bool FlowIdentitySources(const FlowRecord& flow, const ghidra::Funcdata& fd, int
             // A7-56: or an op of the flow on the way that the op gives back, whatever the values below it are: `add r2,r3` with r3 0
             // after a `dt` loop passes on the `or r5,r2` the loop made, not a value read at a block's start (each test value put for
             // every leaf, the op's value and the top's compared; an op whose value does not change with them is a number, not x)
-            for (size_t k = 0; k < nodes.size() && !found; ++k)
+            for (size_t k = 0; k < nodes.size() && !found && !A7R8Off("P3"); ++k)
             {
                 const Node& cand = nodes[k];
                 if (static_cast<int>(k) == root || cand.kind != 2 || cand.opBlk < 0 || cand.size != top.out.size) continue;
@@ -6268,7 +6274,7 @@ bool FlowValueMayBe(const FlowRecord& flow, const ghidra::Funcdata& fd, int blk,
                 // (A7-55: a read of part of what the store wrote whole -- `mov.l r3,@r15 ; mov.w @(2,r15),r0`, r3's low half -- is that
                 // part of the stored register, or of the number: the bytes from the same place, the SH-2 being big-endian in memory and
                 // in its registers)
-                else if (m.second.size == op.in[2].size && st.vn.offset >= m.second.offset &&
+                else if (!A7R8Off("P2") && m.second.size == op.in[2].size && st.vn.offset >= m.second.offset &&
                          st.vn.offset + static_cast<ghidra::uintb>(st.vn.size) <= m.second.offset + static_cast<ghidra::uintb>(m.second.size))
                 {
                     const ghidra::uintb skip = st.vn.offset - m.second.offset;
@@ -7515,7 +7521,7 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                     // the variable's name at the join the copy feeds (r1, which a loop subtracts r4 from and stores): no instruction made
                     // r4, but the move that put it in r1 did (`mov r4,r1`). The join's register's last writers on each path into the end of
                     // the block, when each is a move of the input's register; else nothing, as before.
-                    if (registerMakers.empty() && in->isInput() && last != flow.insnBlock.end())
+                    if (!A7R8Off("P1") && registerMakers.empty() && in->isInput() && last != flow.insnBlock.end())
                     {
                         const ghidra::Varnode* merged = nullptr;
                         for (auto d = out->beginDescend(); d != out->endDescend() && !merged; ++d)
@@ -7627,7 +7633,7 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
         // stores all run after the call is not the call's effect on a value stored before it (A7-11): it is the value a load after the
         // call reads and those stores write. Its drawn tokens go to the nearest load of the memory after the call in the call's flow
         // block, when no store that may write the memory, and no other call, comes first; else they stay.
-        if (!target && code == ghidra::CPUI_COPY && flow.callInsns.count(at) && !o->isFromDelaySlot() && !chosen.empty() &&
+        if (!A7R8Off("P4") && !target && code == ghidra::CPUI_COPY && flow.callInsns.count(at) && !o->isFromDelaySlot() && !chosen.empty() &&
             (o->getIn(0)->getSpace()->getType() == ghidra::IPTR_SPACEBASE || o->getIn(0)->getSpace() == fd.getArch()->getDefaultDataSpace()))
         {
             const ghidra::Varnode* in = o->getIn(0);
@@ -9091,7 +9097,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         r.accesses = Accesses(*fd, printed, canonicalOf, flow);
         AddJoinConstantTokens(r.lines, printed, *fd, flow);
         AddFrameStoreTokens(r.lines, printed, *fd, flow);
-        MarkMaterialisedReads(r.lines, printed, *fd, flow);
+        if (!A7R8Off("P5")) MarkMaterialisedReads(r.lines, printed, *fd, flow);
         for (Line& l : r.lines)   // A7-12: the word flow halted at is no instruction; the line's hover text says so
             for (Token& t : l.tokens)
                 t.haltsFlow = t.addr != 0 && std::binary_search(r.badDataAt.begin(), r.badDataAt.end(), t.addr);

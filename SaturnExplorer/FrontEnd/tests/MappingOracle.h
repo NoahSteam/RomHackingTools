@@ -2038,6 +2038,16 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                             if (reg < 0) continue;   // (`tas.b`'s byte: made there)
                             std::set<uint32_t> makers;
                             if (!RegisterMakers(r, word, sources, st, reg, makers) || makers.count(0)) storesInput = true;
+                            // (a load into the register may read the input back from where it was put -- `mov.l r3,@r15 ; mov.w
+                            // @(2,r15),r0` -- and is not known to be another value; a post-increment's step of its address register is)
+                            for (uint32_t m : makers)
+                            {
+                                uint16_t mw = 0;
+                                if (!m || !word(m, mw)) continue;
+                                const bool step = (mw >> 12) == 0x6 && (mw & 0xF) >= 0x4 && (mw & 0xF) <= 0x6 && ((mw >> 4) & 0xF) == reg &&
+                                                  ((mw >> 8) & 0xF) != reg;
+                                if (ShapeOf(sfe::Sh2Decode(m, mw)).load && !step) storesInput = true;
+                            }
                         }
                         if (!storesInput)
                         {

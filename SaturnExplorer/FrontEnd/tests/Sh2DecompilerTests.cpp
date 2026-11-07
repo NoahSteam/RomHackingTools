@@ -1637,6 +1637,205 @@ void TestArea7Round7()
     }
 }
 
+// Area 7 round 8 (A7-55 to A7-59, filed by the A7-52 fixer from fresh generator seeds 2,300,001 on): each shrunk seed, the line it is
+// about, and the audit; for the rows that were the oracle's, the damaged result the relaxed check still catches.
+void TestArea7Round8()
+{
+    std::vector<uint8_t> hw(0x100000u, 0);
+    Sh2Decompiler d(gConfig);
+    const std::function<bool(uint32_t, uint16_t&)> word = [&hw](uint32_t x, uint16_t& w) {
+        if (x < 0x06000000u || x - 0x06000000u + 1 >= hw.size()) return false;
+        w = static_cast<uint16_t>(hw[x - 0x06000000u] << 8 | hw[x - 0x06000000u + 1]);
+        return true;
+    };
+    // A7-55 (P2), the product's (grammar 2 seed 2306761 shrunk): `mov r4,r1 ; mov.l lit,r7 ; mov #1,r3 ; L: sub r4,r1 ; mov.l r1,@(0x28,r7) ;
+    // dt r3 ; bf L`. The engine merges r1 under the global's name and puts a copy of r4, the input, at the end of the first block
+    // (`iRam26002130 = param_1;`). The A7-21 path looked for what last set r4 there, found the entry and took the tokens off: the line
+    // named nothing. The move that put the input in r1 is the line's (the join's register's last writer, a move of the input's): it now
+    // names 0x06009000. The store writes r1 minus r4, another value, and is not named.
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, { 0x6143, 0xD704, 0xE301, 0x3148, 0x171A, 0x4310, 0x8BFB, 0x000B, 0x0009,
+                                                                             0x0009, 0x2600, 0x2108 });
+        Print("A7-55 an input moved into a register merged under a global's name", r);
+        const Line* l = LineWith(r, "iRam26002130 = param_1;");
+        CHECK(l != nullptr);
+        if (l) CHECK(LineInstructions(*l) == (std::vector<uint32_t>{ 0x06009000u }) && !l->noOrigin);
+        const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_55 move");
+        CHECK(a.Violations() == 0 && a.copyInputMerged == 1);
+    }
+    // A7-55, the product's (grammar 2 seed 2308270 shrunk): `mov.l r3,@(0,r15) ; mov.w @(2,r15),r0 ; cmp/eq #1,r0 ; bt ; mov.w r0,@(8,r6)`.
+    // The store writes r3's low half, read back from the frame word r3 was put in; the value walk stopped at a store wider than the read
+    // and the line `iRam06001020 = in_r3;` named nothing. A narrower read of a wider store is now the stored register's piece (the same
+    // bytes, big-endian): the line names the store 0x0600900C.
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, { 0x7FFC, 0x1F30, 0xD603, 0x85F1, 0x8801, 0x8900, 0x8164, 0x7F04, 0x000B,
+                                                                             0x0009, 0x0600, 0x1018 });
+        Print("A7-55 a half read back from a frame word", r);
+        const Line* l = LineWith(r, "iRam06001020 = ");
+        CHECK(l != nullptr);
+        if (l) CHECK(LineInstructions(*l) == (std::vector<uint32_t>{ 0x0600900Cu }));
+        CHECK(dts::AuditMapping(r, word, "a7_55 piece").Violations() == 0);
+        // ...and the line as it was (no instruction, saying so) is still a violation under the check that counts a copy of an input
+        // apart (below): the store's register is a load's, which may read the input back
+        DecompileResult damaged = r;
+        int n = 0;
+        for (Line& x : damaged.lines)
+            if (Has(x.text, "iRam06001020 = "))
+            {
+                x.tokens.erase(std::remove_if(x.tokens.begin(), x.tokens.end(), [](const Token& t) { return t.begin == t.end; }), x.tokens.end());
+                for (Token& t : x.tokens) t.addr = 0;
+                x.firstAddr = 0;
+                x.noOrigin = true;
+                ++n;
+            }
+        const dts::MappingAudit da = dts::AuditMapping(damaged, word, "a7_55 piece damaged");
+        CHECK(n == 1 && da.copyInputMerged == 0 && da.copyStoreMissing == 1);
+    }
+    // A7-55, the oracle's (grammar 2 seed 2301680 shrunk): `pxStack_20 = param_1;` is r4 itself, the pointer a loop advances, merged with
+    // the frame word it is pushed to after the loop: no instruction made the value (the line says so) and the push writes param_1 plus 4.
+    // Counted apart (copyInputMerged), and the same line with the push's register made by a load (the input read back) still a violation.
+    {
+        // (the callees' prototypes lent, as the generator lends them)
+        const std::vector<uint16_t> w = { 0x2F86, 0x2F96, 0x2FA6, 0x2FB6, 0x2FC6, 0x0C2A, 0x7FF8, 0x6843, 0x6953,
+            0x6A63, 0x6B73, 0xE301, 0x6246, 0x4310, 0x8BFC, 0x2F46, 0x64F6, 0x62F3, 0x7208, 0xE102, 0x2216, 0x4110, 0x8BFC, 0xE200, 0xB013,
+            0x65B3, 0x6483, 0x6593, 0x66A3, 0x67B3, 0xB017, 0x0009, 0x6483, 0x6593, 0x66A3, 0x67B3, 0x7F08, 0x4C2A, 0x6CF6, 0x6BF6, 0x6AF6,
+            0x69F6, 0x68F6, 0x000B, 0x0009, 0x2FD6, 0x2FE6, 0x7FFC, 0x6EF3, 0x7E04, 0x6FE3, 0x6EF6, 0x6DF6, 0x000B, 0x0009, 0x7FF8, 0x6043,
+            0x7F08, 0x000B, 0x0009 };
+        std::fill(hw.begin(), hw.end(), 0);
+        for (size_t i = 0; i < w.size(); ++i) dts::Put16(hw, 0x9000u + 2 * i, w[i]);
+        auto snap = MakeSnapshot(hw);
+        DecompileRequest q = Request(0x06009000u);
+        for (uint32_t callee : { 0x0600905Au, 0x0600906Eu }) q.prototypes.emplace_back(callee, d.Decompile(snap, Request(callee)).prototype);
+        const DecompileResult r = d.Decompile(snap, q);
+        Print("A7-55 the input itself merged with a frame word", r);
+        const Line* l = LineWith(r, "pxStack_20 = param_1;");
+        CHECK(l != nullptr);
+        if (l) CHECK(LineInstructions(*l).empty() && l->noOrigin);
+        const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_55 input");
+        CHECK(a.Violations() == 0 && a.copyInputMerged == 1);
+    }
+    // A7-56 (P2), the product's (grammar 1 seed 2301471 shrunk): `mov #1,r3 ; L: or r5,r2 ; dt r3 ; bf L ; add r2,r3 ; mov #8,r0 ; mov.l
+    // r3,@(r0,r6) ; mov.b r0,@(0xd,r5)`. The store writes r3 = 0 + r2, the loop's OR; `uRam26002214 = in_r2;` is materialised at the byte
+    // store after it. The identity walk (A7-31) built the add back past the loop's OR to the values at the loop's start and found no one
+    // the add gives back; an op on the way (the OR) is now a value it may give back. The line names the store 0x0600900E.
+    const std::vector<uint16_t> orWords = { 0xD607, 0xE301, 0x225B, 0x4310, 0x8BFC, 0x332C, 0xE008, 0x0636, 0x805D, 0xD704, 0x6070, 0xC801,
+                                            0x8BFC, 0x000B, 0x0009, 0x0009, 0x2600, 0x220C, 0x2600, 0x1028 };
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, orWords);
+        Print("A7-56 an add of a known 0 passes on a loop's OR", r);
+        const Line* l = LineWith(r, "uRam26002214 = ");
+        CHECK(l != nullptr);
+        if (l)
+        {
+            const std::vector<uint32_t> at = LineInstructions(*l);
+            CHECK(std::find(at.begin(), at.end(), 0x0600900Eu) != at.end());
+        }
+        CHECK(dts::AuditMapping(r, word, "a7_56 or").Violations() == 0);
+    }
+    // A7-56, the oracle's (grammar 1 seed 2307885 shrunk): `uRam26001004 = 4;` at its `mov #4,r0` (r0, the poll's load, merged under the
+    // global's name) names no store: the only store of the global writes the input r2. A7-45's count took any compare of two registers for
+    // one that may tie the input to the number, and `cmp/eq r1,r1` compares nothing. Counted apart now; with `cmp/eq r2,r1` (r2, the
+    // stored input, compared) the check still asks for the store.
+    const std::vector<uint16_t> pollFour = { 0xD706, 0x6071, 0xC801, 0x8BFC, 0x8803, 0x8B01, 0xE004, 0x0635, 0x8176, 0x2721, 0x3110, 0x89FF,
+                                             0x000B, 0x0009, 0x2600, 0x1004 };
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, pollFour);
+        Print("A7-56 a number at its maker, the input stored, no compare of it", r);
+        const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_56 self compare");
+        CHECK(a.Violations() == 0 && a.copyNumberMade == 1);
+        std::vector<uint16_t> tied = pollFour;
+        tied[10] = 0x3120;   // cmp/eq r2,r1
+        const DecompileResult t = a7r4::DecompileWords(d, hw, 0x06009000u, tied);
+        const dts::MappingAudit ta = dts::AuditMapping(t, word, "a7_56 tied");
+        CHECK(ta.copyNumberMade == 0 && ta.copyStoreMissing == 1);
+    }
+    // A7-57 (P2), the product's (grammar 1 seed 2304859 shrunk): `shll2 r0 ; mov.w r0,@(0xc,gbr) ; mov.l @r6,r0 ; mov.l r0,@r6 ; mov.w
+    // @(2,r6),r0`. The engine keeps the global's value at the gbr store (which may alias it) in a copy printed inside `xRam26002080._2_2_ =
+    // (int2)xRam26002080;`, so that line began with 0x0600900C and the way back from the store answered it before the store's own
+    // statement. The copy's tokens are now marked materialised (MarkMaterialisedReads): the way back answers the store's statement.
+    const std::vector<uint16_t> gbrWords = { 0xD605, 0xD706, 0x6071, 0xC801, 0x89FC, 0x4008, 0xC106, 0x6062, 0x2602, 0x8561, 0x000B, 0x0009,
+                                             0x2600, 0x2080, 0x0600, 0x1034 };
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, gbrWords);
+        Print("A7-57 a global's value kept at a store that may alias it", r);
+        const LineLookup k = LineForInstruction(r, 0x0600900Cu);
+        CHECK(k.kind == LineLookup::Exact && !k.lines.empty());
+        if (!k.lines.empty()) CHECK(Has(r.lines[k.lines[0]].text, "unaff_gbr + 0xc"));
+        CHECK(dts::AuditMapping(r, word, "a7_57 gbr").Violations() == 0);
+        // ...the check (A7-25's, read from the text) still sees the copy first when the marks are taken off
+        DecompileResult damaged = r;
+        for (Line& x : damaged.lines)
+            for (Token& t : x.tokens) t.materialised = false;
+        CHECK(dts::AuditMapping(damaged, word, "a7_57 unmarked").backWrong >= 1);
+    }
+    // A7-57, the oracle's (grammar 1 seed 2306106 shrunk): `extu.w r5,r2` is stored by two stores, and both lines print the extension
+    // (`uRam2600219c = (uint4)param_2;` first). A7-25's check took the cast's operand, drawn at the extension, for a copy materialised there
+    // and wanted the second line first; the operand of a cast drawn at an `exts`/`extu` is the extension's own work. (A7-53's seed 1904684
+    // was the same.)
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, { 0xD607, 0xD708, 0xE001, 0x2702, 0x6072, 0xC801, 0x89FC, 0x8801,
+            0x8B02, 0x625D, 0xE014, 0x0626, 0x2622, 0x000B, 0x0009, 0x0009, 0x2600, 0x2188, 0x2600, 0x1010 });
+        Print("A7-57 an extension two stores store", r);
+        CHECK(dts::AuditMapping(r, word, "a7_57 extension").Violations() == 0);
+    }
+    // A7-58, the oracle's (grammar 1 seed 2307943 shrunk): `bt L ; mov #0x1c,r0 ; mov.l r3,@(r0,r7) ; L: shll8 r0 ; ... mov.b r0,@(0xd,r4)`.
+    // The engine uses only r0's low byte after the shift, which is 0, and prints `iVar1 = 0;` at the `shll8`, the join's first instruction:
+    // the shift makes the number. Not judged a violation now when the line's variable is the shifted register where the text uses it; the
+    // same line under the loop counter's name (r3) still is.
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, { 0x3020, 0x8901, 0xE01C, 0x0736, 0x4018, 0xE301, 0x804D, 0x3028,
+                                                                             0x4310, 0x8BFB, 0x000B, 0x0009 });
+        Print("A7-58 a shifted register's low byte", r);
+        const Line* l = LineWith(r, "iVar1 = 0;");
+        CHECK(l != nullptr && l->firstAddr == 0x06009008u);
+        CHECK(dts::AuditMapping(r, word, "a7_58 shll8").Violations() == 0);
+        DecompileResult renamed = r;
+        int n = 0;
+        for (Line& x : renamed.lines)
+            if (x.text == "  iVar1 = 0;")
+            {
+                x.text = "  iVar2 = 0;";
+                ++n;
+            }
+        CHECK(n == 1 && dts::AuditMapping(renamed, word, "a7_58 renamed").constAtJoin == 1);
+    }
+    // A7-58, the oracle's (grammar 2 seed 2301509, its second function shrunk): `mov #1,r3 ; L: dt r3 ; bt M ; bra L ; nop ; M: tst r4,r3`.
+    // r3 is 0 after the loop, so the `tst` sets T to 1: `uVar2 = 1;` (the bit `negc` reads) at the `tst` is that instruction's. The value a
+    // test or a compare gives T from registers the words give now counts as made; the same line showing 0 is still a violation.
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, { 0x7FC0, 0xE301, 0x4310, 0x8901, 0xAFFC, 0x0009, 0x2348, 0x89FF,
+            0xE301, 0x625A, 0x2722, 0x4310, 0x8901, 0xAFFA, 0x0009, 0x6033, 0x7F40, 0x000B, 0x0009 });
+        Print("A7-58 the T bit a tst of a known 0 sets", r);
+        const Line* l = LineWith(r, "uVar2 = 1;");
+        CHECK(l != nullptr && l->firstAddr == 0x0600900Cu);
+        CHECK(dts::AuditMapping(r, word, "a7_58 tst").Violations() == 0);
+        DecompileResult other = r;
+        int n = 0;
+        for (Line& x : other.lines)
+            if (Has(x.text, "uVar2 = 1;") && x.firstAddr == 0x0600900Cu)
+            {
+                x.text = "  uVar2 = 0;";
+                ++n;
+            }
+        CHECK(n == 1 && dts::AuditMapping(other, word, "a7_58 tst other").constAtJoin == 1);
+    }
+    // A7-59 (P2), the product's (grammar 2 seed 2306048 shrunk): `bsr f ; ... mov.l lit,r6 ; mov.l @(4,r6),r1 ; mov.w r2,@r5 ; mov.l r1,@r6`.
+    // The engine prints `xRam0600210c = xRam06002110;` at the `bsr` (the global's value after the call, ahead of the store through r5 that
+    // may alias it) and the line named the store after the call: a copy at a call is A7-11's, the call's effect on a value stored before
+    // it. No store of the variable runs before the call here: the line is the load after the call that reads the value (0x0600901A, its
+    // drawn tokens) and the store that writes it.
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, { 0x2F86, 0x2F96, 0x2FA6, 0x4F22, 0x6843, 0x6953, 0x6A63, 0xB00F,
+            0x65A3, 0x6483, 0x6593, 0x66A3, 0xD604, 0x5161, 0x2521, 0x2612, 0x4F26, 0x6AF6, 0x69F6, 0x68F6, 0x000B, 0x0009, 0x0600, 0x210C,
+            0x7FF8, 0x7F08, 0x000B, 0x0009 });
+        Print("A7-59 a global's value after a call, stored after it", r);
+        const Line* l = LineWith(r, "xRam0600210c = xRam06002110;");
+        CHECK(l != nullptr);
+        if (l) CHECK(LineInstructions(*l) == (std::vector<uint32_t>{ 0x0600901Au, 0x0600901Eu }) && l->firstAddr == 0x0600901Au);
+        CHECK(dts::AuditMapping(r, word, "a7_59").Violations() == 0);
+    }
+}
+
 void TestFixture1()
 {
     Sh2Decompiler d(gConfig);
@@ -15526,6 +15725,12 @@ int main(int argc, char** argv)
     CHECK(sfe::MakeDirectory(scratch));
     gConfig = dts::Join(scratch, "config");
     CHECK(sfe::MakeDirectory(gConfig));
+    if (std::getenv("SE_A7R8_ONLY"))   // TEMP-A7R8
+    {
+        TestArea7Round8();
+        dts::RemoveTree(scratch);
+        return dts::Finish("Sh2DecompilerTests (a7r8)", start);
+    }
     if (const char* probe = std::getenv("SE_A7R4_PROBE"))   // area 7 round 4: the reviewer's probe file, nothing else
     {
         TestArea7Round4Probe(probe);
@@ -15556,6 +15761,7 @@ int main(int argc, char** argv)
         RUN(TestArea7Round5());
         RUN(TestArea7Round6());
         RUN(TestArea7Round7());
+        RUN(TestArea7Round8());
         RUN(TestSlotMadeLineIsAddressedToItsBranch());
         RUN(TestFrameStoreMaterialisedAtCall());
         RUN(TestFixture1b());
