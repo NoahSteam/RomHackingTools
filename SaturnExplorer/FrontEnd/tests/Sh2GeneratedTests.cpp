@@ -5131,6 +5131,59 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                 }
             }
         }
+        // ---- (A3-164, patch 0087) A store made before a loop the text takes to run for ever is in the text ----
+        // A global's value is live at a return only, so once the engine took a poll of memory the request leaves unmarked for a loop that
+        // never ends (the poll reads back the function's own write: `do {} while( true );`) and removed the return, every store of ordinary
+        // memory the code made before it was dead to it and went: grammar 1 seed 2017373 lost the store of r6 to its global and the
+        // mailbox write the poll waits on, and r0 merged under the global's name (`xRam06002304 = 0x66;`). The ledger excuses a store of
+        // ordinary memory at a constant address (folded by design) and the run of an unmarked poll stops at the step limit, so no other
+        // check compares the stores. In a run that did not finish, of a text with such a loop, each such store the run made (the engine's
+        // records: a write folded to a constant address outside the frame) must have a store line of the text at an address it overlaps.
+        if (r.status == DecompileStatus::Ok)
+        {
+            static const std::regex endless("^\\s*\\}?\\s*while\\( true \\);?\\s*$");
+            static const std::regex storeAt("^\\s*[A-Za-z]*Ram([0-9a-f]{8})(?:\\._([0-9]+)_([0-9]+)_)?\\s*(?:[-+*/%&|^]|<<|>>)?=(?!=)");
+            bool forEver = false;
+            std::vector<std::pair<uint32_t, uint32_t>> printed;   // [first, last] of each global a line stores
+            for (const Line& line : r.lines)
+            {
+                forEver = forEver || std::regex_search(line.text, endless);
+                std::smatch m;
+                if (!std::regex_search(line.text, m, storeAt)) continue;
+                const uint32_t first = (static_cast<uint32_t>(std::stoul(m[1].str(), nullptr, 16)) + (m[2].matched ? static_cast<uint32_t>(std::stoul(m[2].str())) : 0u)) & 0x1FFFFFFFu;
+                const uint32_t width = m[3].matched ? static_cast<uint32_t>(std::stoul(m[3].str())) : 4u;
+                printed.emplace_back(first, first + width - 1);
+            }
+            std::set<std::pair<uint32_t, uint32_t>> said;
+            for (const RunOut& run : runs)
+            {
+                if (!forEver || run.finished) continue;
+                count("endless-store.runs");
+                for (const TraceRec& t : run.trace)
+                {
+                    if (t.depth != 0 || !t.write) continue;
+                    bool folded = false;
+                    for (const AccessFate& f : r.accessFates)
+                        folded = folded || (f.insn == t.insn && f.write && !f.frame && f.constantAddress && f.fate == AccessFate::FoldedOrdinary);
+                    if (!folded) continue;
+                    const uint32_t a = t.addr & 0x1FFFFFFFu, last = a + static_cast<uint32_t>(t.size) - 1;
+                    bool shown = false;
+                    for (const auto& pr : printed) shown = shown || (pr.first <= last && a <= pr.second);
+                    count("endless-store.checked");
+                    // ...or the output says it is missing (Sh2Decompiler::NoteStoresBeforeEndlessLoop): a store the engine saw no reader of
+                    // before it took the loop for endless (one the code replaces after the loop, in code removed with the loop's exit; one it
+                    // carried on as a number), said on its instruction, the signature withheld.
+                    if (!shown && SaidMissing(r, t.insn))
+                    {
+                        count("endless-store.said");
+                        continue;
+                    }
+                    if (!shown && said.insert({ t.insn, a }).second)
+                        add("endless-store-dropped", "the store of " + std::to_string(t.size) + " byte(s) at " + Hex(t.insn) + " to " + Hex(t.addr) +
+                                                         " is made before the loop the text takes to run for ever, and the text stores nothing there");
+                }
+            }
+        }
         // ---- Area 5, round 7 (A5-52): a word of work RAM the function reaches under two addresses is one memory ----
         // The bus gives a work-RAM word as many addresses as it has partitions, undecoded bits (28-27) and 1 MiB repeats; the emulator's
         // memory is the same bytes under all of them. The engine's data flow keys memory by address, and forwards a store to a load past
@@ -6005,22 +6058,27 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
             // indeterminate value in C, which the text shows as an uninitialised local. Each run is repeated with the 512 bytes below the entry
             // r15 refilled and every word refilled as the stack pointer rises past it (Machine::SetScrub); a function whose behaviour changes
             // reads a stale word, and its dependences are not counted (`excluded.stale-stack-read.*`).
+            // (A3-165) Two fills, each the other's complement: a stale word the function only tests for its sign (`cmp/pl`), or a bit of, reads
+            // the same under one fill as under the base run's leftover, and only the other fill shows the dependence (grammar 2 seed 2305596:
+            // function 1 stores MACL in its frame and tail-jumps to function 2, which tests that freed word with `cmp/pl`; the first fill's
+            // word is positive like the base run's, so MACL, the only way into that word, read as an input no signature passes).
             bool staleStack = false;
             for (const RunOut& base : runs)
-            {
-                if (!base.finished || staleStack) continue;
-                RunSpec rs;
-                rs.mode = base.mode;
-                rs.volatileRun = volatileRun;
-                if (base.selValue != RunOut::kNoSel && fn.sel >= 4)
+                for (uint32_t fill : { 0x5AA5C33Cu, 0xA55A3CC3u })
                 {
-                    rs.selReg = fn.sel;
-                    rs.selValue = static_cast<uint32_t>(base.selValue);
+                    if (!base.finished || staleStack) continue;
+                    RunSpec rs;
+                    rs.mode = base.mode;
+                    rs.volatileRun = volatileRun;
+                    if (base.selValue != RunOut::kNoSel && fn.sel >= 4)
+                    {
+                        rs.selReg = fn.sel;
+                        rs.selValue = static_cast<uint32_t>(base.selValue);
+                    }
+                    rs.stackFill = fill;
+                    const RunOut other = runner.One(fn, rs);
+                    if (!other.addressError && !SameBehaviour(base, other, true, marked)) staleStack = true;
                 }
-                rs.stackFill = 0x5AA5C33Cu;
-                const RunOut other = runner.One(fn, rs);
-                if (!other.addressError && !SameBehaviour(base, other, true, marked)) staleStack = true;
-            }
             if (staleStack) count("stale-stack-read.functions");
             for (int k = 4; k < 8; ++k)
             {
@@ -14548,6 +14606,61 @@ void TestA3161Pins(Sh2Decompiler& d)
     }
 }
 
+// Area 3 routed items (A3-164, A3-165).
+// A3-164 (patch 0087; A7-61's text, grammar 1 seed 2017373): the store of r6 to a global and the poll's own write, made before an unmarked
+// poll the engine takes for a loop that never ends, went as dead (no return to be live at), and r0 merged under the global's name. The
+// endless-store check (CheckFn) asks each such store of a run that stops in the loop for a store line of the text there: without the patch
+// the shrunk words give `endless-store-dropped` for the poll's write at 0x0600901A.
+// A3-165 (the oracle's; grammar 2 seed 2305596, `input-dropped:macl`): function 1 stores MACL in its frame and tail-jumps to function 2,
+// which tests that freed word with `cmp/pl` before it writes it; the one stack fill was positive like the base run's leftover, so the
+// stale read went unseen and MACL read as an input. The stale-stack test now fills twice, each fill the other's complement.
+void TestA3RoutedPins(Sh2Decompiler& d)
+{
+    auto count = [](const Report& rep, const char* name) {
+        const auto it = rep.counts.find(name);
+        return it == rep.counts.end() ? 0 : it->second;
+    };
+    {
+        const Report rep = EvaluateSubject(d, RawSubject("D309 6032 2362 2502 E301 8170 E066 4310 8BFB 3230 89FF D705 E001 2701 6071 C801 8BFC 000B 0009 0009 0600 2304 0600 1010"), true);
+        std::printf("pin 'A3-164 seed 2017373 shrunk': %zu finding(s), endless-store runs %d, checked %d\n", rep.findings.size(), count(rep, "endless-store.runs"),
+                    count(rep, "endless-store.checked"));
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+        CHECK(count(rep, "endless-store.runs") > 0 && count(rep, "endless-store.checked") >= 2 * count(rep, "endless-store.runs"));
+        // grammar 1 seeds 131 and 281 of the default run, shrunk: the poll's own write, with a byte store and a longword store after the loop
+        for (const char* words : { "D704 E002 2702 6072 C801 89FC 2710 000B 0009 0009 0600 1000", "D704 E003 2701 6071 C801 8BFC 2702 000B 0009 0009 2600 1038" })
+        {
+            const Report w = EvaluateSubject(d, RawSubject(words), true);
+            std::printf("pin 'A3-164 %s': %zu finding(s), endless-store checked %d\n", words, w.findings.size(), count(w, "endless-store.checked"));
+            for (const Finding& f : w.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+            CHECK(w.findings.empty() && count(w, "endless-store.checked") > 0);
+        }
+        // seeds 12705 and 1209 (the 20,000-seed run), shrunk: a write the engine still drops is said, and the check takes it as said; and
+        // grammar 1 seed 2632, shrunk: the store writes back the byte it read (`mov.b @(0,r6),r0 ; mac.w ; mov.b r0,@(0,r6)`), in the flow
+        // block where the engine removed `mac.w`'s saturating arm (a block of the instruction's own p-code, not the flow block: the note is given)
+        for (const char* words : { "D605 2612 D705 E001 2701 6071 C801 8BFC 2602 000B 0009 0009 0600 2000 2600 1008", "D705 E002 2700 6070 C801 89FC 066F 3210 8D00 6171 000B 0009 2600 1004",
+                                   "E00C 027D 400E D606 8460 477F 8060 D705 E003 2701 6071 C801 8BFC 000B 0009 0009 C000 0004 0600 1000" })
+        {
+            const Report w = EvaluateSubject(d, RawSubject(words), true);
+            std::printf("pin 'A3-164 said %s': %zu finding(s), endless-store said %d\n", words, w.findings.size(), count(w, "endless-store.said"));
+            for (const Finding& f : w.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+            CHECK(w.findings.empty() && count(w, "endless-store.said") > 0);
+        }
+        const Report seed = Evaluate(d, Generate(2017373), true);
+        std::printf("pin 'A3-164 grammar 1 seed 2017373': %zu finding(s)\n", seed.findings.size());
+        for (const Finding& f : seed.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(seed.findings.empty());
+    }
+    {
+        const Report rep = Evaluate(d, MakeV2(2305596), true);
+        std::printf("pin 'A3-165 grammar 2 seed 2305596': %zu finding(s), stale-stack readers %d, input-dropped excluded %d\n", rep.findings.size(),
+                    count(rep, "stale-stack-read.functions"), count(rep, "excluded.stale-stack-read.input-dropped"));
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+        CHECK(count(rep, "excluded.stale-stack-read.input-dropped") >= 1);
+    }
+}
+
 void TestA365Pins(Sh2Decompiler& d)
 {
     auto count = [](const Report& rep, const char* name) {
@@ -14929,6 +15042,7 @@ void TestGenerated()
         RUN(TestRound13FixPins(d));
         RUN(TestA365Pins(d));
         RUN(TestA3161Pins(d));
+        RUN(TestA3RoutedPins(d));
         if (EnvNumber("SE_GENERATED_CANARY", 240) > 0) RUN(TestCanary(d));
     }
     const long seeds = single ? 1 : EnvNumber("SE_GENERATED_SEEDS", 300);

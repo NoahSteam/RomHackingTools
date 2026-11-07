@@ -28,6 +28,7 @@
  * Modified for SaturnExplorer: a call's INDIRECT on a local of an escaped frame keeps its address force (patches/0068-engine-deadcode-late-stack-reads.patch).
  * Modified for SaturnExplorer: a save slot a STORE is aimed at, or that a pending STORE may reach, stays mapped (patches/0072-engine-frame-chains-and-save-slots.patch).
  * Modified for SaturnExplorer: a number is the address of a hardware register where the data flow uses it as one, not by a guess (patches/0073-engine-constant-pointer-guess-not-hardware.patch).
+ * Modified for SaturnExplorer: a write of a global on a path that never reaches a return is kept (patches/0087-engine-global-writes-without-return.patch).
  * Modified for SaturnExplorer: a LOAD that may read the frame and stays one holds the frame's writes (patches/0076-engine-frame-loads-keep-writes.patch).
  * Modified for SaturnExplorer: a catch handler that never reads its exception no longer names it, which MSVC warned about (C4101) (patches/0083-engine-msvc-unused-catch-names.patch).
  * Modified for SaturnExplorer: ActionVarnodeProps does not read a global as the constant zero where its next write would then be made after a memory access (patches/0085-engine-global-write-keeps-place.patch).
@@ -4460,6 +4461,144 @@ bool ActionDeadCode::callMayReadFrame(const Funcdata &data,const Varnode *vn)
   return false;
 }
 
+/// \brief Mark the blocks from which a block that never reaches a RETURN is reachable (SaturnExplorer, 0087)
+///
+/// \param data is the function being analyzed
+/// \param dooms is filled with one entry per basic block: 1 when a path from it reaches a block from which no live RETURN is reachable
+/// (a loop the analysis takes to run for ever, a call that does not return), the block itself included
+/// \return \b true if any block is so marked
+bool ActionDeadCode::doomedBlocks(const Funcdata &data,vector<char> &dooms)
+
+{
+  const BlockGraph &bbs(data.getBasicBlocks());
+  int4 n = bbs.getSize();
+  dooms.clear();
+  if (n == 0) return false;
+  // Every block from which a live RETURN is reachable, marked, to a fixed point. No allocation here: dead code runs in every pass and
+  // the allocation-failure matrix pins allocations by their order; only a function with a block that never returns pays for vectors.
+  for(int4 i=0;i<n;++i) bbs.getBlock(i)->clearMark();
+  list<PcodeOp *>::const_iterator iter = data.beginOp(CPUI_RETURN);
+  list<PcodeOp *>::const_iterator enditer = data.endOp(CPUI_RETURN);
+  for(;iter!=enditer;++iter) {
+    PcodeOp *op = *iter;
+    if (op->isDead()) continue;
+    op->getParent()->setMark();
+  }
+  bool changed = true;
+  while(changed) {
+    changed = false;
+    for(int4 i=n-1;i>=0;--i) {
+      FlowBlock *bl = bbs.getBlock(i);
+      if (bl->isMark()) continue;
+      for(int4 j=0;j<bl->sizeOut();++j) {
+	if (!bl->getOut(j)->isMark()) continue;
+	bl->setMark();
+	changed = true;
+	break;
+      }
+    }
+  }
+  bool any = false;
+  for(int4 i=0;i<n && !any;++i)
+    if (!bbs.getBlock(i)->isMark()) any = true;
+  if (any) {
+    dooms.assign(n,0);
+    for(int4 i=0;i<n;++i)
+      if (!bbs.getBlock(i)->isMark()) dooms[i] = 1;	// reaches no RETURN
+    changed = true;
+    while(changed) {		// ...and every block from which such a block is reachable
+      changed = false;
+      for(int4 i=n-1;i>=0;--i) {
+	if (dooms[i]) continue;
+	FlowBlock *bl = bbs.getBlock(i);
+	for(int4 j=0;j<bl->sizeOut();++j) {
+	  if (!dooms[bl->getOut(j)->getIndex()]) continue;
+	  dooms[i] = 1;
+	  changed = true;
+	  break;
+	}
+      }
+    }
+  }
+  for(int4 i=0;i<n;++i) bbs.getBlock(i)->clearMark();
+  return any;
+}
+
+/// \brief Whether a Varnode is the write of global storage that a STORE of the code became (SaturnExplorer, 0087)
+///
+/// RuleStoreVarnode turns a flow STORE at a constant address of ordinary memory into a COPY (the same op, its fold recorded as
+/// fate_folded_ordinary). The pieces and joins heritage makes around such a write are no store of the code's and are not held.
+/// \param data is the function being analyzed
+/// \param vn is the Varnode
+/// \return \b true if \b vn is written, persistent, in the default data space, by the op a flow STORE became
+bool ActionDeadCode::isFoldedFlowStore(const Funcdata &data,const Varnode *vn)
+
+{
+  if (!vn->isWritten() || !vn->isPersist()) return false;
+  if (vn->getSpace() != data.getArch()->getDefaultDataSpace()) return false;
+  const PcodeOp *def = vn->getDef();
+  if (def->isDead() || def->code() == CPUI_INDIRECT || def->code() == CPUI_MULTIEQUAL) return false;
+  const vector<AccessRecord> &fates(data.getAccessFates());
+  for(vector<AccessRecord>::const_iterator iter=fates.begin();iter!=fates.end();++iter) {
+    const AccessRecord &rec(*iter);
+    if (!rec.store || rec.fate != fate_folded_ordinary) continue;
+    if (rec.time == def->getTime()) return true;
+    // ...or a piece of it: heritage's refinement (Heritage::refineWrite) gives the op a temporary output and writes each piece of the
+    // range with a SUBPIECE at the store's address, which rules may fold to a COPY of a constant
+    if (rec.pc == def->getAddr() && rec.addr.getSpace() == vn->getSpace() && vn->getAddr().containedBy(vn->getSize(),rec.addr,rec.size))
+      return true;
+  }
+  return false;
+}
+
+/// \brief Whether a write of global storage must be kept because a path from it never returns (SaturnExplorer, 0087)
+///
+/// A global's value is live at a RETURN only, through the COPY heritage puts there (Heritage::guardReturns), so a write that no
+/// RETURN can follow (a loop the analysis takes to run for ever, such as a poll of memory it folds, or a call that does not return)
+/// had no reader and went as dead: the store the code makes before the loop vanished, and the register that held the global's old
+/// value could then merge with it, printing a write the code never makes. Memory another processor or an interrupt reads sees the
+/// writes made before such a loop. A function whose every block reaches a RETURN keeps none this way.
+/// \param data is the function being analyzed
+/// \param vn is the written Varnode
+/// \param dooms is the result of doomedBlocks for the function, or null to compute it here
+/// \return \b true if \b vn is a store of the code's to a global (isFoldedFlowStore) in a block that may never return
+bool ActionDeadCode::globalWriteWithoutReturn(const Funcdata &data,const Varnode *vn,const vector<char> *dooms)
+
+{
+  if (!isFoldedFlowStore(data,vn)) return false;
+  const PcodeOp *def = vn->getDef();
+  vector<char> local;
+  if (dooms == (const vector<char> *)0) {
+    if (!doomedBlocks(data,local)) return false;
+    dooms = &local;
+  }
+  if (dooms->empty()) return false;
+  int4 index = def->getParent()->getIndex();
+  return index >= 0 && index < (int4)dooms->size() && (*dooms)[index] != 0;
+}
+
+/// \brief Keep the writes of global storage made on a path that never returns (SaturnExplorer, 0087)
+///
+/// Each write that globalWriteWithoutReturn holds is consumed and address forced, as the COPY at a RETURN is (the force keeps it from
+/// RuleEarlyRemoval between the passes too, which also asks globalWriteWithoutReturn).
+/// \param data is the function being analyzed
+/// \param worklist is the consume work list
+void ActionDeadCode::keepGlobalWritesWithoutReturn(Funcdata &data,vector<Varnode *> &worklist)
+
+{
+  vector<char> dooms;
+  if (!doomedBlocks(data,dooms)) return;
+  AddrSpace *dataSpc = data.getArch()->getDefaultDataSpace();
+  VarnodeLocSet::const_iterator viter = data.beginLoc(dataSpc);
+  VarnodeLocSet::const_iterator endviter = data.endLoc(dataSpc);
+  for(;viter!=endviter;++viter) {
+    Varnode *vn = *viter;
+    if (!globalWriteWithoutReturn(data,vn,&dooms)) continue;
+    vn->setAddrForce();
+    pushConsumed(~((uintb)0),vn,worklist);
+  }
+}
+
 int4 ActionDeadCode::apply(Funcdata &data)
 
 {
@@ -4498,6 +4637,7 @@ int4 ActionDeadCode::apply(Funcdata &data)
   }
 
   keepFrameWritesForLoads(data,worklist);	// SaturnExplorer (patches/0076-engine-frame-loads-keep-writes.patch)
+  keepGlobalWritesWithoutReturn(data,worklist);	// SaturnExplorer (patches/0087-engine-global-writes-without-return.patch)
 
   returnConsume = gatherConsumedReturn(data);
   for(iter=data.beginOpAlive();iter!=data.endOpAlive();++iter) {
