@@ -14555,8 +14555,11 @@ void TestA3RoutedPins(Sh2Decompiler& d)
             for (const Finding& f : w.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
             CHECK(w.findings.empty() && count(w, "endless-store.checked") > 0);
         }
-        // seeds 12705 and 1209 (the 20,000-seed run), shrunk: a write the engine still drops is said, and the check takes it as said
-        for (const char* words : { "D605 2612 D705 E001 2701 6071 C801 8BFC 2602 000B 0009 0009 0600 2000 2600 1008", "D705 E002 2700 6070 C801 89FC 066F 3210 8D00 6171 000B 0009 2600 1004" })
+        // seeds 12705 and 1209 (the 20,000-seed run), shrunk: a write the engine still drops is said, and the check takes it as said; and
+        // grammar 1 seed 2632, shrunk: the store writes back the byte it read (`mov.b @(0,r6),r0 ; mac.w ; mov.b r0,@(0,r6)`), in the flow
+        // block where the engine removed `mac.w`'s saturating arm (a block of the instruction's own p-code, not the flow block: the note is given)
+        for (const char* words : { "D605 2612 D705 E001 2701 6071 C801 8BFC 2602 000B 0009 0009 0600 2000 2600 1008", "D705 E002 2700 6070 C801 89FC 066F 3210 8D00 6171 000B 0009 2600 1004",
+                                   "E00C 027D 400E D606 8460 477F 8060 D705 E003 2701 6071 C801 8BFC 000B 0009 0009 C000 0004 0600 1000" })
         {
             const Report w = EvaluateSubject(d, RawSubject(words), true);
             std::printf("pin 'A3-163 said %s': %zu finding(s), endless-store said %d\n", words, w.findings.size(), count(w, "endless-store.said"));

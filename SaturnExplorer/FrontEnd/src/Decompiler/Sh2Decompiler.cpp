@@ -8521,12 +8521,12 @@ void Sh2Decompiler::NoteStoresBeforeEndlessLoop(DecompileResult& r)
                 }
         }
     }
+    // A flow block the engine removed whole. A removed block that starts inside a flow block is one an instruction's own p-code made (the
+    // saturating arm of a `mac.w` once SR's S bit is known): the instruction's store is not in it.
     std::vector<char> removed(n, 0);
     for (uint32_t start : removedStarts)
-    {
-        const int b = blockOf(start);
-        if (b >= 0) removed[b] = 1;
-    }
+        for (size_t b = 0; b < n; ++b)
+            if (r.flowBlockRanges[b].first == start) removed[b] = 1;
     std::set<uint32_t> named;
     for (const Line& line : r.lines)
         for (const Token& t : line.tokens)
