@@ -18198,3 +18198,73 @@ Counts of the rule on grammar 1 (5,000 seeds): checked 5,783-6,106, read 2,252-2
 
 * **Area 7:** the ten `map-*` seeds of section 5 (not replayed on master's build).
 * **Area 5, next round:** A5-111 (P2, open).
+
+## A2-128 fixer
+
+Branch `review/2-a2128-fix`, cut at master `3cbbca32` (patches to 0084), merged with master `41b69ebf` before the final runs; patch **0086** (0085 is reserved for another agent and is listed under "Unused numbers" until it merges). Own RelWithDebInfo build (`-j2`), every test binary under `ulimit -v 3500000` (4,000,000 for the generator ranges) and `timeout`, one heavy job at a time.
+
+| Row | P | Status | How |
+|---|---|---|---|
+| A2-128 | P2 | **fixed** | patch **0086** (`typeop.cc`, `cast.cc`); the oracle reads an `xunknown` as unsigned in an ordered read, a shift, a division and an equality |
+| A2-129 | P3 | **fixed** (oracle) | an integer parameter is the machine's number in the memory mode; a parameter used as an address and as a number is `skipped:memory` |
+
+### 1. A2-128: the cause
+
+The declaration of a stack word comes from its symbol, `xunknown4 xStack_4`, and the text of a read of it comes from the cast pass, which sees the type propagated from the ops around it (`int4` for `cmp/gt`, `uint4` for `cmp/hi`). `castStandard` asked for no cast in either case (the high type of the read equals the op's input type), so the two ops printed one function. The same holds for a field (`xStack_4._0_2_`), for the shifts, and for the equality with a signed narrow side. A debug print in `TypeOpIntSless::getInputCast` showed `req=int4 cur=int4` while the declaration was `xunknown4`.
+
+### 2. The fix (patch 0086)
+
+Choice: an `xunknown` is the **unsigned value of its bytes** in C and in the guide (the guide says it has no sign; C has to read it one way, and unsigned is the one 0084 already gives a CONCAT), so a signed read is the text that must show something and an unsigned read is the bare name. The alternative, casting both (`(uint4)xStack_4`), would add a cast to every unsigned compare and shift in the corpus for no information.
+
+* `typeop.cc`: `unsignedNamedRead` (an explicit input whose symbol is of unknown type) and `unsignedTextRead` (that, or 0084's `impliedPieceRead`), used wherever 0084 used `impliedPieceRead`: the signed ordered compares, the arithmetic shift, the signed division and remainder cast such an input to the op's signed type; `comparePieceCast` casts it to the other side's type in an equality with a signed narrow side.
+* `cast.cc` (`isExtensionCastImplied`): the sign extension of such a variable read by a compare is no longer implied. `param_1 <= xStack_4._0_2_` is C's zero extension of the bytes, where the code sign-extends (the `mov.w` read): it is `param_1 <= (int4)xStack_4._0_2_` now, and `(xStack_2 < 0)` of a `subv` likewise. This was found by the families after the oracle change (122 functions, `mismatch`, all `narrow-c` after the cast).
+
+Texts: `return 5 < (int4)xStack_4;` (cmp/gt) against `return 5 < xStack_4;` (cmp/hi); `4 < (int2)xStack_4._0_2_` against `4 < xStack_4._0_2_`; `(int4)xStack_4 >> 1` against `xStack_4 >> 1`; `(int2)xStack_2 == param_1`.
+
+### 3. The oracle gap
+
+The engine reading (`CxxHeader`) took an `xunknown` as signed everywhere, so the signed op's one text agreed there and was `narrow-c`, while the unsigned op's agreed as C and was never asked. Now (`kCxxHeaderUnk`, a literal of its own, under the 12,000-byte limit of `check-literal-size.py`): an `xunknown` is read as unsigned in `==`, `!=`, `<`, `<=`, `>`, `>=`, `/`, `%` and as the left side of `>>`; its implicit conversions and casts to a signed type still extend by the sign (A3-150). The third reading (fields signed) is not given to a text that reads a bare field in an ordered compare, a shift or a division (`BareFieldOrderedRead`): it would excuse exactly that text.
+
+**Mutation.** The engine files at master's, this oracle: `A2-128 #0, #2, #4, #6` are `mismatch` (and `#7`), as are `A2-126 #0` and `#1`, whose old texts compared an `xunknown` signed with no cast. The oracle by itself: the casts taken out by the hook (`A2-128 oracle #0` to `#4`) are `mismatch`, not `narrow-c`.
+
+Pins (`SaturnExplorerSh2GeneratedTests`, the printed-C run): `A2-128 #0` to `#7` (`#0` to `#6` agree as C, `#7` is `narrow-c`: the cast of an `xunknown` field to a wider signed type is the sign extension the engine means), the pair check inside them (the signed and the unsigned text differ), and `A2-128 oracle #0` to `#4`. Seeds 2508533 and 2513643 are not pinned by seed: the printed-C stream is fixed by `SE_GENERATED_FIRST`, so the seeds are replayed from the record below; their functions (`if (xStack_4 < 1)`, `CONCAT44(xStack_8 >> 1,param_2)`) are the shapes of `#0` and `#4`.
+
+### 4. A2-129
+
+`CheckPrintedC` gave a parameter declared an integer the host's address of the arena. Now an integer parameter gets the machine number (`g_in[4+i]`), and a pointer parameter, or an integer parameter the text casts to a pointer, the host address. A parameter that is cast to a pointer and also read as a number (`mov.l r4,@r4`: `*(xunknown4 *)param_1 = param_1;`) needs two values: `skipped:memory`, with the reason. Pins `A2-129 #0` to `#3` (`mov r5,r0`, `shlr16`, `mov.l r5,@r4`: agree; `mov.l r4,@r4`: `skipped:memory`).
+
+### 5. Runs
+
+| Run | Result |
+|---|---|
+| `xpair20.py` (792, 396 pairs) | agrees 773, narrow-c 19 (the reviewer: 500 and 292); `pairs20.py`: **0 pairs print the same body or text** (the reviewer: 146 and 128); the 19 are the cast of an `xunknown` to a wider signed type, A3-150's reading |
+| `mkpiece.py` (4,550) | agrees 4,271, narrow-c 279, **0 `mismatch`** (round 19: 4,025 and 525) |
+| `mkpiece20.py` (5,200) | agrees 4,710, narrow-c 490, **0 `mismatch`** (the review: 4,625 and 575) |
+| `pgen.py` 1 to 400 and 1,000 to 6,999 (6,400) | agrees 6,256, narrow-c 125, skipped 19, **0 `mismatch`** (round 19: 6,088 and 293) |
+| printed-C, `SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000` (the matrix's run) | agrees **5,196**, narrow-c 130 (master 41b69ebf's matrix: 5,195; master's engine and oracle here: 5,195 and 131) |
+| printed-C, nightly size, `SE_GENERATED_FIRST` 1, 5,001, 10,001, 15,001 | **0 `mismatch`**; agrees 8,546 / 8,416 / 8,393 / 8,515, narrow-c 204 / 207 / 215 / 161 (master 8,545 / 8,415 / 8,392 / 8,513 and 205 / 208 / 216 / 163) |
+
+The increases are the signed compares of a named piece that were `narrow-c` (agreed in the engine's reading only) and now agree as C with the cast. There is no decrease of `agrees` anywhere; `narrow-c` falls by the same count.
+
+### 6. Corpus
+
+`SE_GAME_HWRAM=<img> SE_GAME_NOTES=1 SE_GAME_OUT=<dir> [SE_GAME_LEND=1] SaturnExplorerSh2DecompilerTests`, this branch's binary against the same tree with master's `typeop.cc` and `cast.cc`:
+
+| | hwram007 | hwram008 |
+|---|---|---|
+| real entries, lent after lending the effects | 474 (645) of 999 | 724 (975) of 1,543 |
+| missing and said | 0 | 4 |
+| output files that changed, alone | 6 of 839 (7 lines) | 5 of 1,554 (6 lines) |
+| output files that changed, with `SE_GAME_LEND=1` | 18 of 4,299 (21 lines) | 19 of 7,544 (26 lines) |
+
+The counts are unchanged. Every changed line is a signed compare of a named piece that now carries its cast: `if ((iVar2 != 0) && (xVar1 = xVar5, (int4)xStack_8 < 0x4000)) break;` (was `xStack_8 < 0x4000`), `0 < (int4)xStack_8`.
+
+### 7. Tests
+
+* **Full `ctest`:** `-j2 --timeout 900 -E SaturnExplorerLive` under `ulimit -v 3500000`: **111 of 111** (222 s); `-R SaturnExplorerLive`: **6 of 6**. No test was added to the list: the pins are in `SaturnExplorerSh2GeneratedTests` (run as `SaturnExplorerSh2PrintedCTests` and in its default run, 0 findings).
+* **Fault suite:** `SaturnExplorerDecompilerFaultTests` alone: **0 of 94 jobs failed**.
+* **Vendored tree:** `check-vendored-tree.py lint` and `rebuild` (against the pinned upstream): ok; `check-literal-size.py`: ok.
+
+### 8. Routed
+
+Nothing. Note for the coordinator: 0085 is in the "Unused numbers" line of `patches/README.md` so that `lint` passes; remove it when the other patch merges.

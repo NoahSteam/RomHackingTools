@@ -15,9 +15,11 @@
  *
  * Modified for SaturnExplorer: a compare of a narrow value with a constant of the other sign is cast, as C promotes both (patches/0071-engine-narrow-compare-constant-sign.patch).
  * Modified for SaturnExplorer: a narrow expression against a named narrow variable is cast too (patches/0077-engine-narrow-compare-cast-target.patch).
+ * Modified for SaturnExplorer: the sign extension of a variable declared with no sign is explicit in a compare (patches/0086-engine-xunknown-signed-read-cast.patch).
  */
 #include "cast.hh"
 #include "op.hh"
+#include "database.hh"
 
 namespace ghidra {
 
@@ -261,10 +263,39 @@ int4 CastStrategyC::intPromotionType(const Varnode *vn) const
   return UNKNOWN_PROMOTION;
 }
 
+/// \brief Whether an input is printed as a name, or a field of a name, whose symbol has no sign
+///
+/// The same test as typeop.cc's \b unsignedNamedRead. The declaration of such a variable is \b xunknown2 \b xStack_2, which C and the guide read as the unsigned value of
+/// its bytes, while the type the cast pass sees is the one propagated from the ops around it. (SaturnExplorer, patches/0086-engine-xunknown-signed-read-cast.patch)
+/// \param vn is the input
+/// \return \b true if it is an explicit variable with a symbol of unknown type
+static bool declaredWithoutSign(const Varnode *vn)
+
+{
+  if (vn->isConstant() || !vn->isExplicit()) return false;
+  const SymbolEntry *entry = vn->getHigh()->getSymbolEntry();
+  if (entry == (const SymbolEntry *)0) return false;
+  return entry->getSymbol()->getType()->getMetatype() == TYPE_UNKNOWN;
+}
+
 bool CastStrategyC::isExtensionCastImplied(const PcodeOp *op,const PcodeOp *readOp) const
 
 {
   const Varnode *outVn = op->getOut();
+  // A sign extension of such a variable read by a compare is C's zero extension of the bytes, not the sign extension the op is: the cast is written, `(int4)xStack_2`
+  if (op->code() == CPUI_INT_SEXT && readOp != (PcodeOp *)0 && declaredWithoutSign(op->getIn(0))) {
+    switch (readOp->code()) {
+      case CPUI_INT_EQUAL:
+      case CPUI_INT_NOTEQUAL:
+      case CPUI_INT_LESS:
+      case CPUI_INT_LESSEQUAL:
+      case CPUI_INT_SLESS:
+      case CPUI_INT_SLESSEQUAL:
+	return false;
+      default:
+	break;
+    }
+  }
   if (outVn->isExplicit()) {
 
   }

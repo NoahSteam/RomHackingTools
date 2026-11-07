@@ -8308,10 +8308,27 @@ static std::string BeHeaderBase()
     return h;
 }
 
+// The reading of an xunknown in the ordered reads (A2-128), a literal of its own: a string literal is limited to 16,380 bytes on MSVC.
+static const char kCxxHeaderUnk[] = R"CXX(// (A2-128, patch 0086) An xunknown is signed in the arithmetic around it, as before (its implicit conversions and its casts to a signed type extend by the sign,
+// the engine's SEXT), but it is read as unsigned where an op reads it as a number with a sign of its own: an equality (a compare of the narrow bytes is not the sign extension of one), an ordered compare, a right shift, a division, a
+// remainder. C reads it that way and so does the guide, and a signed read is the cast the engine now prints (`5 < (int4)xStack_4`). It used to be signed there
+// too, so `5 < xStack_4` agreed in this reading whichever op made it (cmp/gt or cmp/hi) and the two ops' one text was never asked which it meant.
+template <int N> static inline T<N, false> UnsignedOf(const Unk<N>& a) { T<N, false> r; r.v = a.v; return r; }
+#define UNKREAD(op) \
+  template <int N, int M> auto operator op(const Unk<N>& a, const Unk<M>& b) -> decltype(UnsignedOf(a) op UnsignedOf(b)) { return UnsignedOf(a) op UnsignedOf(b); } \
+  template <int N, int M, bool U> auto operator op(const Unk<N>& a, const T<M, U>& b) -> decltype(UnsignedOf(a) op b) { return UnsignedOf(a) op b; } \
+  template <int N, int M, bool U> auto operator op(const T<M, U>& a, const Unk<N>& b) -> decltype(a op UnsignedOf(b)) { return a op UnsignedOf(b); } \
+  template <int N, class I, class = typename std::enable_if<IsInt<I>::value>::type> auto operator op(const Unk<N>& a, I b) -> decltype(UnsignedOf(a) op b) { return UnsignedOf(a) op b; } \
+  template <int N, class I, class = typename std::enable_if<IsInt<I>::value>::type> auto operator op(I a, const Unk<N>& b) -> decltype(a op UnsignedOf(b)) { return a op UnsignedOf(b); }
+UNKREAD(==) UNKREAD(!=) UNKREAD(<) UNKREAD(<=) UNKREAD(>) UNKREAD(>=) UNKREAD(/) UNKREAD(%)
+template <int N, int M, bool U> auto operator>>(const Unk<N>& a, const T<M, U>& b) -> decltype(UnsignedOf(a) >> b) { return UnsignedOf(a) >> b; }
+template <int N, class I, class = typename std::enable_if<IsInt<I>::value>::type> auto operator>>(const Unk<N>& a, I b) -> decltype(UnsignedOf(a) >> b) { return UnsignedOf(a) >> b; }
+)CXX";
+
 std::string CxxHeader(bool be = false)
 {
     std::ostringstream o;
-    o << (be ? BeHeaderBase() : std::string(kCxxHeaderBase));
+    o << (be ? BeHeaderBase() : std::string(kCxxHeaderBase) + kCxxHeaderUnk);
     auto mask = [](int bytes) -> std::string {
         char b[32];
         std::snprintf(b, sizeof b, "0x%sULL", std::string(static_cast<size_t>(bytes) * 2, 'F').c_str());
@@ -8831,6 +8848,29 @@ std::string AddressAssignTyped(const std::string& text)
     std::string line, out;
     while (std::getline(in, line)) out += std::regex_replace(line, addressAssign, "$1$2 = (__typeof__($2))&$3;$4") + "\n";
     return out;
+}
+
+// (A2-128) A field of a variable (`xStack_4._0_2_`) that an ordered compare, a right shift, a division or a remainder reads with no cast in front of it is
+// unsigned, as C and the guide read an xunknown, and a signed read of one is the cast the engine prints (`4 < (int2)xStack_4._0_2_`). The third reading below
+// takes every field as signed, which is right for the casts A3-150 describes and would excuse exactly the bare field of a signed op (cmp/ge and cmp/hs printed
+// `4 < xStack_4._0_2_` alike): a text with such a read is not given that reading.
+bool BareFieldOrderedRead(const std::string& cText)
+{
+    static const std::regex before("(<=?|>=?|>>|/|%)\\s*FLD\\(");
+    static const std::regex after("FLD\\([^()]*\\)\\s*(<=?|>=?|>>|/|%)");
+    for (const std::regex* re : { &before, &after })
+        for (std::sregex_iterator it(cText.begin(), cText.end(), *re), end; it != end; ++it)
+        {
+            const std::string op = (*it)[1].str();
+            const size_t at = it->position(1);
+            const bool leftSide = re == &after;
+            // `<<` is no ordered read, and the second `<` of `<<` or the first of `>>` after a field is the shift
+            if (!leftSide && at > 0 && (op == "<" || op == "<=") && cText[at - 1] == '<') continue;
+            if (leftSide && (op == "<" || op == "<=") && at + 1 < cText.size() && cText[at + 1] == '<') continue;
+            if (!leftSide && op == ">>") continue;   // a shift by a field reads no sign of it
+            return true;
+        }
+    return false;
 }
 
 std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& cases, int nIn, const std::string& cc, uint64_t inputSeed,
@@ -9418,6 +9458,33 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
             v.cls = "skipped:emulator-unfinished";
             continue;
         }
+        if (ptrMode)
+        {
+            // (A2-129) an integer parameter that the text both casts to a pointer and reads as a number (`*(xunknown4 *)param_1 = param_1;`, mov.l r4,@r4) needs two
+            // values, the host's address and the machine's number: not run
+            bool mixed = false;
+            for (int i = 0; i < nParams && i < 2 && !mixed; ++i)
+            {
+                size_t b = 0;
+                for (int j = 0; j < i; ++j) b = plist.find(',', b) + 1;
+                const size_t e = plist.find(',', b);
+                const std::string decl = plist.substr(b, e == std::string::npos ? std::string::npos : e - b);
+                if (decl.rfind('*') != std::string::npos) continue;
+                const size_t nameAt = decl.find_last_not_of(" \t");
+                if (nameAt == std::string::npos) continue;
+                const std::string pname = decl.substr(decl.find_last_of(" \t*", nameAt) + 1, nameAt + 1 - (decl.find_last_of(" \t*", nameAt) + 1));
+                const std::regex any("\\b" + pname + "\\b"), asPointer("\\*\\s*\\)\\s*\\(?\\s*" + pname + "\\b");
+                const auto count = [&](const std::regex& re) { return std::distance(std::sregex_iterator(pr.cText.begin(), pr.cText.end(), re), std::sregex_iterator()); };
+                const auto asPtr = count(asPointer);
+                mixed = asPtr > 0 && count(any) - 1 > asPtr;
+            }
+            if (mixed)
+            {
+                v.cls = "skipped:memory";
+                v.detail = "an integer parameter is used both as an address (cast to a pointer) and as a number; the memory mode gives it one value";
+                continue;
+            }
+        }
         std::ostringstream m;
         const std::string ptrU = ptrW == 1 ? "uint8_t" : ptrW == 2 ? "uint16_t" : "uint32_t";   // (`char` is a macro in the engine's reading)
         m << "  { /* " << pr.name << " */\n    static const unsigned int D[][18] = {\n" << rows.str() << "    };\n";
@@ -9437,7 +9504,16 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
                 const std::string decl = plist.substr(b, e == std::string::npos ? std::string::npos : e - b);
                 const std::string addr = "(g_frame_base + 0x8000 + (g_in[" + std::to_string(4 + i) + "] - 0x06080000u))";
                 const size_t star = decl.rfind('*');   // `xunknown4 *param_1`: the cast is to `xunknown4 *` (C++ takes no void * for it)
-                call << (i ? ", " : "") << (star != std::string::npos ? "(" + decl.substr(0, star + 1) + ")(uintptr_t)" + addr : "(int)" + addr);
+                // (A2-129) An integer parameter is the machine's number (0x0608xxxx), as the run holds it: `mov r5,r0 ; rts` returns it, `shlr16` shifts it, `mov.l r5,@r4`
+                // stores it. It got the host's address of the arena, so a right text that used it as a number was `mismatch`. A text that casts the integer to a pointer
+                // (`*(xunknown4 *)param_1 = 1;`, `(xunknown4 *)param_1`) dereferences it, and there the number would be an address nothing maps, so it keeps the host's.
+                size_t nameAt = decl.find_last_not_of(" \t");
+                size_t nameBeg = nameAt == std::string::npos ? 0 : decl.find_last_of(" \t*", nameAt) + 1;
+                const std::string pname = nameAt == std::string::npos ? std::string() : decl.substr(nameBeg, nameAt + 1 - nameBeg);
+                const std::regex asPointer("\\*\\s*\\)\\s*\\(?\\s*" + pname + "\\b");
+                const bool derefInt = star == std::string::npos && !pname.empty() && std::regex_search(pr.cText, asPointer);
+                call << (i ? ", " : "") << (star != std::string::npos ? "(" + decl.substr(0, star + 1) + ")(uintptr_t)" + addr
+                                                                       : derefInt ? "(int)" + addr : "(int)g_in[" + std::to_string(4 + i) + "]");
             }
             else call << (i ? ", " : "") << "(int)g_in[" << 4 + i << "]";
         }
@@ -9728,7 +9804,7 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
             // is counted apart too (frame124 4602253.chain, 4605918, 4606911, 4511454, 3805863: each value right by hand).
             std::vector<size_t> third;
             for (size_t i : cand)
-                if (out[i].cls == "mismatch" && prep[i].cText.find("FLD(") != std::string::npos) third.push_back(i);
+                if (out[i].cls == "mismatch" && prep[i].cText.find("FLD(") != std::string::npos && !BareFieldOrderedRead(prep[i].cText)) third.push_back(i);
             if (!third.empty())
             {
                 static const char kSignedFields[] =
@@ -12089,6 +12165,70 @@ void TestPrintedC()
                     CHECK(b127[k].cls == "mismatch" && IsFailing(b127[k]));
                 }
             }
+            // A2-128 (patch 0086): a stack word named once it is built from pieces (`xunknown4 xStack_4; xStack_4 = CONCAT22(param_4,param_2);`) is an xunknown, which C and the guide
+            // read as unsigned, and a signed op that reads it casts it to its signed type (patch 0084 did it for the CONCAT printed in place): `5 < (int4)xStack_4` for cmp/gt
+            // against `5 < xStack_4` for cmp/hi (#0 and #1), the field `4 < (int2)xStack_4._0_2_` for cmp/ge and `4 < xStack_4._0_2_` for cmp/hs after extu.w (#2, #3), the
+            // arithmetic shift `(int4)xStack_4 >> 1` against the logical `xStack_4 >> 1` (#4, #5), and the equality with a signed narrow side, `(int2)xStack_2 == param_1`
+            // (#6, A2-127's text for a named piece), and the sign extension of a field that a compare reads, `param_1 <= (int4)xStack_4._0_2_` (#7: the cast is written, not implied). Each pair printed one text before the patch, and the oracle agreed with both: the unsigned one as C, the signed one in
+            // the engine's reading (an xunknown was signed there), never asked which it meant. The engine's reading reads an xunknown as unsigned in a compare, a shift, a
+            // division and a remainder now (UNKREAD), so the old texts (the casts taken out by the hook, the `A2-128 oracle` pins) are findings: `mismatch`, not `narrow-c`.
+            {
+                auto w = [](const char* t) {
+                    std::vector<uint16_t> v;
+                    std::istringstream in(t);
+                    std::string tok;
+                    while (in >> tok) v.push_back(static_cast<uint16_t>(std::strtoul(tok.c_str(), nullptr, 16)));
+                    return v;
+                };
+                const std::vector<CCase> k128 = {
+                    { "A2-128 #0: cmp/gt of a named word", w("7FFC 2F52 6073 81F0 60F2 7F04 E105 3017 0029 000B 0009") },
+                    { "A2-128 #1: cmp/hi of a named word", w("7FFC 2F52 6073 81F0 60F2 7F04 E105 3016 0029 000B 0009") },
+                    { "A2-128 #2: cmp/ge of a field", w("7FFC 2F62 6073 80F0 85F0 7F04 E105 3013 0029 000B 0009") },
+                    { "A2-128 #3: cmp/hs of a field after extu.w", w("7FFC 2F62 6073 80F0 85F0 7F04 600D E105 3012 0029 000B 0009") },
+                    { "A2-128 #4: shar of a named word", w("7FFC 2F62 6073 81F0 60F2 7F04 4021 000B 0009") },
+                    { "A2-128 #5: shlr of a named word", w("7FFC 2F62 6073 81F0 60F2 7F04 4001 000B 0009") },
+                    { "A2-128 #6: a named half equal to an int2", w("7FFC 2F62 6073 80F2 85F1 7F04 614F 3010 0029 000B 0009") },
+                    { "A2-128 #7: the sign extension of a field in a compare", w("7FFC 2F52 6073 80F0 85F0 7F04 6143 3013 0029 000B 0009") } };
+                const std::vector<CVerdict> r128 = CheckPrintedC(d, k128, nIn, cc, 0x51ED, 8966);
+                for (size_t k = 0; k < r128.size(); ++k)
+                {
+                    std::printf("pin '%s': %s (%s)\n", k128[k].name.c_str(), r128[k].cls.empty() ? "agrees" : r128[k].cls.c_str(), r128[k].detail.substr(0, 90).c_str());
+                    // #7 is the sign extension the engine means by `(int4)` of an xunknown field, which C reads as a zero extension (A3-150): narrow-c; the others agree as C
+                    if (k == 7) CHECK(r128[k].cls == "narrow-c" && r128[k].compared);
+                    else CHECK(r128[k].cls.empty() && r128[k].compared);
+                }
+                CHECK(r128[7].text.find("param_1 <= (int4)xStack_4._0_2_") != std::string::npos);
+                CHECK(r128[0].text.find("return 5 < (int4)xStack_4;") != std::string::npos);
+                CHECK(r128[1].text.find("return 5 < xStack_4;") != std::string::npos);
+                CHECK(r128[2].text.find("4 < (int2)xStack_4._0_2_") != std::string::npos);
+                CHECK(r128[3].text.find("4 < xStack_4._0_2_") != std::string::npos && r128[3].text.find("(int2)") == std::string::npos);
+                CHECK(r128[4].text.find("return (int4)xStack_4 >> 1;") != std::string::npos);
+                CHECK(r128[5].text.find("return xStack_4 >> 1;") != std::string::npos);
+                CHECK(r128[6].text.find("(int2)xStack_2 == param_1") != std::string::npos);
+                // the pair check (xpair20.py's): a signed and an unsigned op on the same word never print one text (the whole text, signature included)
+                CHECK(r128[0].text != r128[1].text);
+                CHECK(r128[2].text != r128[3].text);
+                CHECK(r128[4].text != r128[5].text);
+                // The oracle by itself: the texts of the signed ops before the patch (the casts taken out) are findings.
+                gPrintedCTextHook = [](const std::string& t) {
+                    std::string u = t;
+                    for (const char* with : { "(int4)FLD(xStack_4, 0, 2)", "(int4)xStack_4", "(int2)FLD(xStack_4, 0, 2)", "(int2)xStack_2" })
+                    {
+                        const std::string wi = with;
+                        const std::string bare = wi.substr(wi.find(')') + 1);
+                        for (size_t at = u.find(wi); at != std::string::npos; at = u.find(wi)) u.replace(at, wi.size(), bare);
+                    }
+                    return u;
+                };
+                const std::vector<CCase> old128 = { k128[0], k128[2], k128[4], k128[6], k128[7] };
+                const std::vector<CVerdict> b128 = CheckPrintedC(d, old128, nIn, cc, 0x51ED, 8967);
+                gPrintedCTextHook = nullptr;
+                for (size_t k = 0; k < b128.size(); ++k)
+                {
+                    std::printf("pin 'A2-128 oracle #%zu': %s (%s)\n", k, b128[k].cls.c_str(), b128[k].detail.substr(0, 150).c_str());
+                    CHECK(b128[k].cls == "mismatch" && IsFailing(b128[k]));
+                }
+            }
             // A2-126 (the oracle): `(uint4)` of an xunknown (no sign), a field `xStack_4._0_2_` (#0, pgen.py seed 77 shrunk) or a local (#1, seed 3372), is the zero
             // extension the code makes (`extu.w`), in C and as the engine prints a ZEXT; the engine's reading took it by the source's sign, and with C failing for
             // its own reason (an xunknown4 against an int4) no reading took the right text: `mismatch`. The cast of an xunknown to a wider unsigned type is the zero
@@ -12336,6 +12476,17 @@ void TestPrintedC()
                     gPrintedCTextHook = nullptr;
                     std::printf("pin 'A2-106 (c)': %s (%s)\n", m106c[0].cls.c_str(), m106c[0].detail.substr(0, 90).c_str());
                     CHECK(m106c[0].cls == "mismatch" && m106c[0].detail.find(" memory ") != std::string::npos);
+                    // A2-129: an integer parameter is the machine's number in the memory mode, not the host's address of the arena. `mov r5,r0 ; rts` returns it (#0), `shlr16` of r4
+                    // shifts it (#1), `mov.l r5,@r4` stores it through r4 (#2): each was `mismatch` (run=06081034, pseudo a host address). #3, `mov.l r4,@r4`
+                    // (`*(xunknown4 *)param_1 = param_1;`), is both an address and a number of one parameter and is not run: `skipped:memory`.
+                    const std::vector<CVerdict> m129 = CheckPrintedC(d, { mem("A2-129 #0: r5 returned", 4, { 0x6053, 0x000B, 0x0009 }),
+                                                                          mem("A2-129 #1: shlr16 of r4", 4, { 0x6043, 0x4029, 0x000B, 0x0009 }),
+                                                                          mem("A2-129 #2: r5 stored through r4", 4, { 0x2452, 0x000B, 0x0009 }),
+                                                                          mem("A2-129 #3: r4 stored through r4", 4, { 0x2442, 0x000B, 0x0009 }) }, nIn, cc, 0x51ED, 8991);
+                    for (size_t k = 0; k < m129.size(); ++k)
+                        std::printf("pin 'A2-129 #%zu': %s (%s)\n", k, m129[k].cls.empty() ? "agrees" : m129[k].cls.c_str(), m129[k].detail.substr(0, 60).c_str());
+                    for (size_t k = 0; k < 3; ++k) CHECK(m129[k].cls.empty() && (m129[k].compared || k == 2));   // #2 returns nothing: its arena is what is compared
+                    CHECK(m129[3].cls == "skipped:memory");
                 }
                 // A2-108: the same dereference without the mode is said to be memory, not run on random numbers as host pointers (it was `crashed`)
                 const std::vector<CVerdict> m108 = CheckPrintedC(d, { mem("A2-108: a pointer parameter without the mode", 0, { 0x2462, 0x6052, 0x000B, 0x0009 }) }, nIn, cc, 0x51ED, 8994);
