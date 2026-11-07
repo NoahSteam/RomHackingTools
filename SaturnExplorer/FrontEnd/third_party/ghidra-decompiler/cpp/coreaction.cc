@@ -1435,6 +1435,33 @@ void ActionVarnodeProps::handleExtendedZero(Varnode *vn,Funcdata &data)
   }
 }
 
+/// \brief Whether a memory access lies between a write of a global and the copy of it a later op makes (SaturnExplorer, 0088)
+///
+/// In one block, an access between the two (accessBetween). In a block that follows the write's directly, an access after the write in
+/// its block or before the copy in the copy's. Further apart: \b true, the cautious answer.
+/// \param wdef is the op that writes the global
+/// \param cdef is the COPY of it
+/// \return \b true if an access may lie between them
+static bool copyPastAccess(const PcodeOp *wdef,const PcodeOp *cdef)
+
+{
+  if (wdef->getParent() == cdef->getParent()) return accessBetween(wdef,cdef);
+  const BlockBasic *bl = cdef->getParent();
+  if (bl->sizeIn() != 1 || bl->getIn(0) != wdef->getParent()) return true;
+  if (accessBetween(wdef,(const PcodeOp *)0)) return true;
+  for(list<PcodeOp *>::const_iterator iter=bl->beginOp();iter!=bl->endOp();++iter) {
+    const PcodeOp *op = *iter;
+    if (op == cdef) return false;
+    switch(op->code()) {
+    case CPUI_LOAD: case CPUI_STORE: case CPUI_CALL: case CPUI_CALLIND: case CPUI_CALLOTHER:
+      return true;
+    default:
+      break;
+    }
+  }
+  return true;
+}
+
 int4 ActionVarnodeProps::apply(Funcdata &data)
 
 {
@@ -1520,7 +1547,7 @@ int4 ActionVarnodeProps::apply(Funcdata &data)
 	  if (vn->getDef()->code() == CPUI_COPY) {
 	    const Varnode *w = vn->getDef()->getIn(0);
 	    if (w->isWritten() && w->isAddrTied() && w->getAddr() == vn->getAddr() && w->getSize() == vn->getSize() &&
-		accessBetween(w->getDef(),vn->getDef()))
+		copyPastAccess(w->getDef(),vn->getDef()))
 	      moved = true;
 	  }
 	  if (moved) continue;
