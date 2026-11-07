@@ -15404,6 +15404,10 @@ void TestA3163Fix()
         // store after the loop replaces it on the way to the RETURN; the pieces heritage makes around the write are not printed as stores
         { "A3-163 seed 281: the poll's own write, a later store replacing it", { 0xD704, 0xE003, 0x2701, 0x6071, 0xC801, 0x8BFC, 0x2702, 0x000B, 0x0009, 0x0009, 0x2600, 0x1038 },
           { "xRam26001038 = 3;", "while( true )" }, { "0x30000", "_0_2_" } },
+        // mov.l @(lit),r7 ; mov #3,r0 ; mov.l r0,@r7 ; P: mov.l @r7,r0 ; tst #1,r0 ; bf P ; mac.w @r4+,@r7+ ; mov.l @r7,r0 ; rts ; nop (seed
+        // 14501, shrunk): the reads after the loop split the word into halves, and heritage writes each half from the store's op
+        { "A3-163 seed 14501: the poll's own write, split into halves", { 0xD704, 0xE003, 0x2702, 0x6072, 0xC801, 0x8BFC, 0x474F, 0x6072, 0x000B, 0x0009, 0x2600, 0x1014 },
+          { "xRam26001014 = 0;", "xRam26001016 = 3;", "while( true )" }, {} },
         // mov.l @(lit),r1 ; mov #1,r0 ; mov.l r0,@r1 ; mov #2,r0 ; mov.l r0,@r1 ; rts ; nop: every path returns, the replaced store goes
         { "A3-163 control: a function that returns", { 0xD103, 0xE001, 0x2102, 0xE002, 0x2102, 0x000B, 0x0009, 0x0009, 0x0600, 0x2000 },
           { "xRam06002000 = 2;" }, { "xRam06002000 = 1;" } },
