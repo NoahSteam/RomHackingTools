@@ -107,6 +107,7 @@ The embedded copy of the runtime files is `FrontEnd/src/Decompiler/Sh2SpecData.h
 | `0083-engine-msvc-unused-catch-names.patch` | The `catch` handlers in `funcdata_block.cc`, `database.cc` and `coreaction.cc` that patches 0001, 0044 and 0068 left naming an exception they never read no longer name it (MSVC C4101). No change in behaviour. |
 | `0084-engine-concat-compare-cast.patch` | `typeop.cc`: a `PIECE` printed in place (`CONCAT11(a,b)`, no type in the text, so the unsigned value of its bytes) is cast to its signed type where an op reads it signed: an equality with a signed narrow side (`comparePieceCast`), a signed ordered compare, an arithmetic shift, a signed division or remainder (`impliedPieceRead`): `(int2)CONCAT11(a,b) == param_1`. Ledger A2-127. |
 | `0085-engine-global-write-keeps-place.patch` | `ruleaction.cc`, `coreaction.cc`: a write of a global stays where the code makes it, before a later read through a pointer or register access, in three places: `RuleMultiCollapse` (two equal writes joined), `RulePropagateCopy` (the value fed into the global's next write) and `ActionVarnodeProps` (a zero-valued global read as a constant). Ledger A5-109 (P2). |
+| `0088-engine-global-piece-read-no-write.patch` | `heritage.cc`: a read of a byte or half of a global written wider is read into a temporary (`normalizeReadSize`), not made a write of the global's piece that the merge then writes back after later accesses. Ledger A5-111 (P2). |
 
 MSVC and Apple clang needed no patch beyond these.
 
@@ -221,6 +222,7 @@ applies 0005 to 0008) must run before `se-regen-sla`.
   - 0083: none beyond the build (a catch handler loses an unused name); the engine tests run unchanged.
   - 0084: the printed-C pins `A2-127 #0` to `#6` and `A2-127 oracle #0` to `#4` (`SaturnExplorerSh2GeneratedTests`; #0 to #4 are `mismatch` without the patch, the oracle reading a CONCAT as unsigned) and the stack-piece families of the record (15_DECOMPILER_STEP5.md, "Area 2 round 19 / area 3 round 18 fixer").
   - 0085: `TestArea5Confirm` `a5_109_join`, `a5_109_reg`, `a5_109_zero` and the module pins `A5-109 ...` of `TestA587Pins` (`SaturnExplorerSh2GeneratedTests`, with the order rule `folded-store-after-access` reporting reads and register accesses).
+  - 0088: `TestArea5Confirm` `a5_111`, `a5_111_long` (`Sh2DecompilerTests.cpp`; 4 checks fail without the patch) and the pins `A5-111, ...` of `TestA587Pins` (`SaturnExplorerSh2GeneratedTests`; `folded-store-after-access` without the patch, a piece stored that the code does not store and the wider store after the register reads).
 
 
   If upstream's Makefile source groups changed, update the lists in `vendor.py`.

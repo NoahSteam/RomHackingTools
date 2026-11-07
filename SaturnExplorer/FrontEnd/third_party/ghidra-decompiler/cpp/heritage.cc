@@ -23,6 +23,7 @@
  * Modified for SaturnExplorer: a STORE through a pointer read through a frame address keeps its guards when the stack is first heritaged (patches/0072-engine-frame-chains-and-save-slots.patch).
  * Modified for SaturnExplorer: a LOAD guard records whether heritage put its COPYs before the LOAD, and a held frame write is no address force of the guard's (patches/0076-engine-frame-loads-keep-writes.patch).
  * Modified for SaturnExplorer: the pieces heritage makes at a delay slot's op for it are the slot's too (patches/0079-engine-heritage-slot-pieces-marked.patch).
+ * Modified for SaturnExplorer: a read of a piece of a global the range holds wider is read into a temporary, not written to the piece (patches/0088-engine-global-piece-read-no-write.patch).
  */
 #include "heritage.hh"
 #include "funcdata.hh"
@@ -417,8 +418,7 @@ Varnode *Heritage::normalizeReadSize(Varnode *vn,PcodeOp *op,const Address &addr
   vn2 = fd->newConstant(addr.getAddrSize(),(uintb)overlap);
   fd->opSetInput(newop,vn1,0);
   fd->opSetInput(newop,vn2,1);
-  if (getenv("SE_DBG111")) fprintf(stderr,"DBG111 normRead %s:%llx sz=%d tied=%d type=%d size=%d\n",vn->getSpace()->getName().c_str(),(unsigned long long)vn->getOffset(),vn->getSize(),(int)vn->isAddrTied(),(int)vn->getSpace()->getType(),size);
-  if (getenv("SE_MUT111")==0 && vn->getSpace() == fd->getArch()->getDefaultDataSpace()) {
+  if (vn->getSpace() == fd->getArch()->getDefaultDataSpace()) {
     // SaturnExplorer (0088): the piece read of a global is read into a temporary, so that the read is not a write of the
     // global's piece (`g._0_1_ = (char)(g >> 8);`, a store the code does not make) that the merge then copies around (A5-111)
     Varnode *tmp = fd->newUniqueOut(vn->getSize(),newop);

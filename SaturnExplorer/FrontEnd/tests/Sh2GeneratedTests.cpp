@@ -5565,7 +5565,7 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                 // SUBPIECE whose output was the global's own address: `iRam26002314._0_1_ = (char)((uint2)iRam26002314 >> 8);`, a store the code
                 // does not make, whose overlap with the wider write had the merge write the wider value back at the end of the function, after a
                 // later register read, grammar 1 seed 2606069. A line that assigns a piece of the global is judged: some write of the code to
-                // those bytes must be named on it. The order is then judged as for any folded store.)
+                // those bytes, and no wider one, must be named on it. The order is then judged as for any folded store.)
                 {
                     char name[24];
                     std::snprintf(name, sizeof name, "Ram%08x._", static_cast<unsigned>(f.address));
@@ -5585,7 +5585,8 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                         bool made = false;
                         for (const AccessFate& o : r.accessFates)
                         {
-                            if (!o.write || o.address >= hi || lo >= o.address + o.size) continue;
+                            // (a write of those bytes: one inside the piece; a wider write named on the line is the value forwarded, not the piece's store)
+                            if (!o.write || o.address < lo || o.address + o.size > hi) continue;
                             for (const Token& t : l.tokens) made |= t.addr == o.insn;
                         }
                         if (!made && pieceStoresSaid.insert(li).second)
@@ -13290,6 +13291,14 @@ void TestA587Pins(Sh2Decompiler& d)
             nullptr, nullptr, nullptr, nullptr, nullptr }, "onchip.span.said", nullptr },
         { { "A5-110, grammar 1 seed 2508741 shrunk again (a step added in the loop)", "D305 273B E302 7701 D204 272A 4310 8BFA 6070 000B 0009 0009 FFFF FE00 2000 0000",
             nullptr, nullptr, nullptr, nullptr, nullptr }, "onchip.span.said", nullptr },
+        // A5-111 (grammar 1 seed 2606069, the A5-109 fixer's fresh run): a byte of a global read after a half-word write of it was made a write of
+        // that byte (`iRam26002314._0_1_ = ...`), and the half-word store was written back after the later SH2_VCRD read. The rule judges the line
+        // that assigns a piece (`order.folded-store.piece-store`, none now) and the order against the register read. (Shrunk, the poll's value is
+        // merged into the global's store in the loop, A3-161's accepted class, said as `text-store.loop-short`; the long form is judged in order.)
+        { { "A5-111, a byte of a global read after a half-word write of it, grammar 1 seed 2606069 shrunk", "D605 D706 6071 C801 8BFC 3230 8D01 8166 846C 6371 000B 0009 2600 2308 FFFF FE68",
+            nullptr, nullptr, nullptr, nullptr, nullptr }, "text-store.loop-short", nullptr },
+        { { "A5-111, the same with a long write and a byte read", "D605 D706 6071 C801 8BFC 3230 8D01 1603 846D 6371 000B 0009 2600 2308 FFFF FE68",
+            nullptr, nullptr, nullptr, nullptr, nullptr }, "order.folded-store.hardware-read", nullptr },
         { { "A5-103, a purge through (p & 0x1FFFFFF0) | 0x40000000", "D103 2149 D203 212B E000 000B 2102 0009 1FFF FFF0 4000 0000",
             nullptr, nullptr, nullptr, nullptr, nullptr }, nullptr, nullptr },
         { { "A5-104, a literal written and then loaded", "D102 2142 D002 000B 0009 0009 0600 9010 1234 5678",
@@ -13315,6 +13324,16 @@ void TestA587Pins(Sh2Decompiler& d)
         CHECK(rep.findings.empty());
         if (p.count) CHECK(count(p.count) > 0);
         if (p.count2) CHECK(count(p.count2) > 0);
+    }
+    // A5-111, grammar 1 seed 2606069 whole: no piece of the global stored, and its half-word store before the later SH2_VCRD reads.
+    {
+        const Report rep = Evaluate(d, Generate(2606069), true);
+        const auto it = rep.counts.find("order.folded-store.hardware-read");
+        const int judged = it == rep.counts.end() ? 0 : it->second;
+        std::printf("pin 'A5-111, grammar 1 seed 2606069': %zu finding(s), order.folded-store.hardware-read %d\n", rep.findings.size(), judged);
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+        CHECK(judged > 0);
     }
     // Grammar 2 seed 1804560 as a program (the new draws leave it as it was): the engine's span note is what the rule asks for.
     {

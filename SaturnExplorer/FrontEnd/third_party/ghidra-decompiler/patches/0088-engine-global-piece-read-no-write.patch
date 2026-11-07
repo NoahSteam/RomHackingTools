@@ -1,0 +1,31 @@
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.cc
+@@ -23,6 +23,7 @@
+  * Modified for SaturnExplorer: a STORE through a pointer read through a frame address keeps its guards when the stack is first heritaged (patches/0072-engine-frame-chains-and-save-slots.patch).
+  * Modified for SaturnExplorer: a LOAD guard records whether heritage put its COPYs before the LOAD, and a held frame write is no address force of the guard's (patches/0076-engine-frame-loads-keep-writes.patch).
+  * Modified for SaturnExplorer: the pieces heritage makes at a delay slot's op for it are the slot's too (patches/0079-engine-heritage-slot-pieces-marked.patch).
++ * Modified for SaturnExplorer: a read of a piece of a global the range holds wider is read into a temporary, not written to the piece (patches/0088-engine-global-piece-read-no-write.patch).
+  */
+ #include "heritage.hh"
+ #include "funcdata.hh"
+@@ -417,8 +418,17 @@ Varnode *Heritage::normalizeReadSize(Varnode *vn,PcodeOp *op,const Address &addr
+   vn2 = fd->newConstant(addr.getAddrSize(),(uintb)overlap);
+   fd->opSetInput(newop,vn1,0);
+   fd->opSetInput(newop,vn2,1);
+-  fd->opSetOutput(newop,vn);	// Old vn is no longer a free read
+-  newop->getOut()->setWriteMask();
++  if (vn->getSpace() == fd->getArch()->getDefaultDataSpace()) {
++    // SaturnExplorer (0088): the piece read of a global is read into a temporary, so that the read is not a write of the
++    // global's piece (`g._0_1_ = (char)(g >> 8);`, a store the code does not make) that the merge then copies around (A5-111)
++    Varnode *tmp = fd->newUniqueOut(vn->getSize(),newop);
++    fd->opSetInput(op,tmp,op->getSlot(vn));
++    fd->deleteVarnode(vn);
++  }
++  else {
++    fd->opSetOutput(newop,vn);	// Old vn is no longer a free read
++    newop->getOut()->setWriteMask();
++  }
+   fd->opInsertBefore(newop,op);
+   return vn1;			// But we have new free read of uniform size
+ }

@@ -15113,6 +15113,11 @@ void TestArea5Confirm()
         { "a5_109_reg", 0x06050F00u, { 0xD706, 0xD307, 0x6032, 0x2342, 0x2702, 0xE301, 0x4310, 0x8BFD, 0x445F, 0x4315, 0x8B00, 0x2402, 0x000B, 0x0009, 0x05B0, 0x0428, 0x2600, 0x2200 } },
         // A5-109 (c), grammar 1 seed 2006655 shrunk: a byte store of 0 at 0x2600210C in the slot of a branch that skips a write of SH2_BCR2
         { "a5_109_zero", 0x06051000u, { 0xD606, 0xE301, 0x4310, 0x8BFD, 0x2138, 0x8B01, 0x2239, 0xD704, 0x3020, 0x8D01, 0x2620, 0x2702, 0x000B, 0x0009, 0x2600, 0x210C, 0xFFFF, 0xFFE4 } },
+        // A5-111, grammar 1 seed 2606069 shrunk: poll SH2_VCRD into r0 ; cmp/eq r3,r2 ; bt/s L ; mov.w r0,@(0xc,r6) ; mov.b @(0xc,r6),r0 ; L: mov.w @r7,r3
+        // -- the byte read of the global after its half-word write was a write of that byte, and the half-word written back after the last read
+        { "a5_111", 0x06051100u, { 0xD605, 0xD706, 0x6071, 0xC801, 0x8BFC, 0x3230, 0x8D01, 0x8166, 0x846C, 0x6371, 0x000B, 0x0009, 0x2600, 0x2308, 0xFFFF, 0xFE68 } },
+        // ...and with a long write (mov.l r0,@(0xc,r6)) and a read of its second byte (mov.b @(0xd,r6),r0)
+        { "a5_111_long", 0x06051200u, { 0xD605, 0xD706, 0x6071, 0xC801, 0x8BFC, 0x3230, 0x8D01, 0x1603, 0x846D, 0x6371, 0x000B, 0x0009, 0x2600, 0x2308, 0xFFFF, 0xFE68 } },
     };
     for (const W& w : fx)
     {
@@ -15175,6 +15180,23 @@ void TestArea5Confirm()
         CHECK(before(out["a5_109_reg"].Text(), "pxRam26002200 = param_1;", "_SCSP_SCILV2 = "));          // FIXED (was after the register write)
         CHECK(before(out["a5_109_reg"].Text(), "= pxRam26002200;", "pxRam26002200 = param_1;"));         // the old value is read first
         CHECK(before(out["a5_109_zero"].Text(), "xRam2600210c = 0;", "SH2_BCR2 = in_r0;"));              // FIXED (was after the register write)
+    }
+    // A5-111 (P2): a byte or half of a global read after a wider write of it was made a write of that piece by heritage (the SUBPIECE that
+    // reads it had the global's own address for its output): the text stored a piece the code does not store (`iRam26002314._0_1_ = (char)(...)`)
+    // and, the piece and the whole overlapping, the merge wrote the whole back after the later SH2_VCRD read. FIXED (patch 0088: the piece is
+    // read into a temporary): no piece stored, no write of the global after the last register read.
+    {
+        auto lastBefore = [](const std::string& t, const char* a, const char* b) {
+            const size_t i = t.rfind(a), j = t.rfind(b);
+            return i != std::string::npos && j != std::string::npos && i < j;
+        };
+        const std::string t = out["a5_111"].Text();
+        CHECK(!Has(t, "iRam26002314._0_1_ ="));                                          // FIXED (was a store of the byte read)
+        CHECK(Has(t, "(char)((uint2)iRam26002314 >> 8)"));                               // the byte is read from the global
+        CHECK(lastBefore(t, "iRam26002314 = ", "= SH2_VCRD;"));                          // FIXED (was written back after the read)
+        const std::string l = out["a5_111_long"].Text();
+        CHECK(!Has(l, "Ram26002314._1_1_ ="));                                           // FIXED
+        CHECK(lastBefore(l, "uRam26002314 = ", "= SH2_VCRD;"));                          // FIXED
     }
     // A5-103 (P2): an associative purge through a pointer the code builds with the and/or idiom said nothing; the text is a store of 0.
     // FIXED (PointerValues::parts, MaskedPartitionNote): the partition the masks fix is said, certain for the idiom, "may" without the AND.
