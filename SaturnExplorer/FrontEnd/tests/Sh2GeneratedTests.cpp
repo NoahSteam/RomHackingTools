@@ -7942,6 +7942,20 @@ template <int N, bool S, int M, bool U> T<N, S> operator>>(const T<N, S>& a, con
   return T<N, S>(c >= 8 * N ? 0 : (a.Zext() >> c)); }
 template <int N, bool S, class I, class = typename std::enable_if<IsInt<I>::value>::type> T<N, S> operator<<(const T<N, S>& a, I b) { return a << T<4, false>(b); }
 template <int N, bool S, class I, class = typename std::enable_if<IsInt<I>::value>::type> T<N, S> operator>>(const T<N, S>& a, I b) { return a >> T<4, false>(b); }
+// (A2-128, patch 0086) An xunknown is signed in the arithmetic around it, as before (its implicit conversions and its casts to a signed type extend by the sign,
+// the engine's SEXT), but it is read as unsigned where an op reads it as a number with a sign of its own: an equality (a compare of the narrow bytes is not the sign extension of one), an ordered compare, a right shift, a division, a
+// remainder. C reads it that way and so does the guide, and a signed read is the cast the engine now prints (`5 < (int4)xStack_4`). It used to be signed there
+// too, so `5 < xStack_4` agreed in this reading whichever op made it (cmp/gt or cmp/hi) and the two ops' one text was never asked which it meant.
+template <int N> static inline T<N, false> UnsignedOf(const Unk<N>& a) { T<N, false> r; r.v = a.v; return r; }
+#define UNKREAD(op) \
+  template <int N, int M> auto operator op(const Unk<N>& a, const Unk<M>& b) -> decltype(UnsignedOf(a) op UnsignedOf(b)) { return UnsignedOf(a) op UnsignedOf(b); } \
+  template <int N, int M, bool U> auto operator op(const Unk<N>& a, const T<M, U>& b) -> decltype(UnsignedOf(a) op b) { return UnsignedOf(a) op b; } \
+  template <int N, int M, bool U> auto operator op(const T<M, U>& a, const Unk<N>& b) -> decltype(a op UnsignedOf(b)) { return a op UnsignedOf(b); } \
+  template <int N, class I, class = typename std::enable_if<IsInt<I>::value>::type> auto operator op(const Unk<N>& a, I b) -> decltype(UnsignedOf(a) op b) { return UnsignedOf(a) op b; } \
+  template <int N, class I, class = typename std::enable_if<IsInt<I>::value>::type> auto operator op(I a, const Unk<N>& b) -> decltype(a op UnsignedOf(b)) { return a op UnsignedOf(b); }
+UNKREAD(==) UNKREAD(!=) UNKREAD(<) UNKREAD(<=) UNKREAD(>) UNKREAD(>=) UNKREAD(/) UNKREAD(%)
+template <int N, int M, bool U> auto operator>>(const Unk<N>& a, const T<M, U>& b) -> decltype(UnsignedOf(a) >> b) { return UnsignedOf(a) >> b; }
+template <int N, class I, class = typename std::enable_if<IsInt<I>::value>::type> auto operator>>(const Unk<N>& a, I b) -> decltype(UnsignedOf(a) >> b) { return UnsignedOf(a) >> b; }
 template <int N, bool S> T<N, S> operator-(const T<N, S>& a) { return T<N, S>((0 - a.Zext()) & T<N, S>::Mask()); }
 template <int N, bool S> T<N, S> operator~(const T<N, S>& a) { return T<N, S>(~a.Zext() & T<N, S>::Mask()); }
 template <int N, bool S> T<N, S> operator+(const T<N, S>& a) { return a; }
@@ -8788,6 +8802,29 @@ std::string AddressAssignTyped(const std::string& text)
     std::string line, out;
     while (std::getline(in, line)) out += std::regex_replace(line, addressAssign, "$1$2 = (__typeof__($2))&$3;$4") + "\n";
     return out;
+}
+
+// (A2-128) A field of a variable (`xStack_4._0_2_`) that an ordered compare, a right shift, a division or a remainder reads with no cast in front of it is
+// unsigned, as C and the guide read an xunknown, and a signed read of one is the cast the engine prints (`4 < (int2)xStack_4._0_2_`). The third reading below
+// takes every field as signed, which is right for the casts A3-150 describes and would excuse exactly the bare field of a signed op (cmp/ge and cmp/hs printed
+// `4 < xStack_4._0_2_` alike): a text with such a read is not given that reading.
+bool BareFieldOrderedRead(const std::string& cText)
+{
+    static const std::regex before("(<=?|>=?|>>|/|%)\\s*FLD\\(");
+    static const std::regex after("FLD\\([^()]*\\)\\s*(<=?|>=?|>>|/|%)");
+    for (const std::regex* re : { &before, &after })
+        for (std::sregex_iterator it(cText.begin(), cText.end(), *re), end; it != end; ++it)
+        {
+            const std::string op = (*it)[1].str();
+            const size_t at = it->position(1);
+            const bool leftSide = re == &after;
+            // `<<` is no ordered read, and the second `<` of `<<` or the first of `>>` after a field is the shift
+            if (!leftSide && at > 0 && (op == "<" || op == "<=") && cText[at - 1] == '<') continue;
+            if (leftSide && (op == "<" || op == "<=") && at + 1 < cText.size() && cText[at + 1] == '<') continue;
+            if (!leftSide && op == ">>") continue;   // a shift by a field reads no sign of it
+            return true;
+        }
+    return false;
 }
 
 std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& cases, int nIn, const std::string& cc, uint64_t inputSeed,
@@ -9685,7 +9722,7 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
             // is counted apart too (frame124 4602253.chain, 4605918, 4606911, 4511454, 3805863: each value right by hand).
             std::vector<size_t> third;
             for (size_t i : cand)
-                if (out[i].cls == "mismatch" && prep[i].cText.find("FLD(") != std::string::npos) third.push_back(i);
+                if (out[i].cls == "mismatch" && prep[i].cText.find("FLD(") != std::string::npos && !BareFieldOrderedRead(prep[i].cText)) third.push_back(i);
             if (!third.empty())
             {
                 static const char kSignedFields[] =
@@ -12044,6 +12081,66 @@ void TestPrintedC()
                 {
                     std::printf("pin 'A2-127 oracle #%zu': %s (%s)\n", k, b127[k].cls.c_str(), b127[k].detail.substr(0, 150).c_str());
                     CHECK(b127[k].cls == "mismatch" && IsFailing(b127[k]));
+                }
+            }
+            // A2-128 (patch 0086): a stack word named once it is built from pieces (`xunknown4 xStack_4; xStack_4 = CONCAT22(param_4,param_2);`) is an xunknown, which C and the guide
+            // read as unsigned, and a signed op that reads it casts it to its signed type (patch 0084 did it for the CONCAT printed in place): `5 < (int4)xStack_4` for cmp/gt
+            // against `5 < xStack_4` for cmp/hi (#0 and #1), the field `4 < (int2)xStack_4._0_2_` for cmp/ge and `4 < xStack_4._0_2_` for cmp/hs after extu.w (#2, #3), the
+            // arithmetic shift `(int4)xStack_4 >> 1` against the logical `xStack_4 >> 1` (#4, #5), and the equality with a signed narrow side, `(int2)xStack_2 == param_1`
+            // (#6, A2-127's text for a named piece). Each pair printed one text before the patch, and the oracle agreed with both: the unsigned one as C, the signed one in
+            // the engine's reading (an xunknown was signed there), never asked which it meant. The engine's reading reads an xunknown as unsigned in a compare, a shift, a
+            // division and a remainder now (UNKREAD), so the old texts (the casts taken out by the hook, the `A2-128 oracle` pins) are findings: `mismatch`, not `narrow-c`.
+            {
+                auto w = [](const char* t) {
+                    std::vector<uint16_t> v;
+                    std::istringstream in(t);
+                    std::string tok;
+                    while (in >> tok) v.push_back(static_cast<uint16_t>(std::strtoul(tok.c_str(), nullptr, 16)));
+                    return v;
+                };
+                const std::vector<CCase> k128 = {
+                    { "A2-128 #0: cmp/gt of a named word", w("7FFC 2F52 6073 81F0 60F2 7F04 E105 3017 0029 000B 0009") },
+                    { "A2-128 #1: cmp/hi of a named word", w("7FFC 2F52 6073 81F0 60F2 7F04 E105 3016 0029 000B 0009") },
+                    { "A2-128 #2: cmp/ge of a field", w("7FFC 2F62 6073 80F0 85F0 7F04 E105 3013 0029 000B 0009") },
+                    { "A2-128 #3: cmp/hs of a field after extu.w", w("7FFC 2F62 6073 80F0 85F0 7F04 600D E105 3012 0029 000B 0009") },
+                    { "A2-128 #4: shar of a named word", w("7FFC 2F62 6073 81F0 60F2 7F04 4021 000B 0009") },
+                    { "A2-128 #5: shlr of a named word", w("7FFC 2F62 6073 81F0 60F2 7F04 4001 000B 0009") },
+                    { "A2-128 #6: a named half equal to an int2", w("7FFC 2F62 6073 80F2 85F1 7F04 614F 3010 0029 000B 0009") } };
+                const std::vector<CVerdict> r128 = CheckPrintedC(d, k128, nIn, cc, 0x51ED, 8966);
+                for (size_t k = 0; k < r128.size(); ++k)
+                {
+                    std::printf("pin '%s': %s (%s)\n", k128[k].name.c_str(), r128[k].cls.empty() ? "agrees" : r128[k].cls.c_str(), r128[k].detail.substr(0, 90).c_str());
+                    CHECK(r128[k].cls.empty() && r128[k].compared);   // agrees as C, not narrow-c
+                }
+                CHECK(r128[0].text.find("return 5 < (int4)xStack_4;") != std::string::npos);
+                CHECK(r128[1].text.find("return 5 < xStack_4;") != std::string::npos);
+                CHECK(r128[2].text.find("4 < (int2)xStack_4._0_2_") != std::string::npos);
+                CHECK(r128[3].text.find("4 < xStack_4._0_2_") != std::string::npos && r128[3].text.find("(int2)") == std::string::npos);
+                CHECK(r128[4].text.find("return (int4)xStack_4 >> 1;") != std::string::npos);
+                CHECK(r128[5].text.find("return xStack_4 >> 1;") != std::string::npos);
+                CHECK(r128[6].text.find("(int2)xStack_2 == param_1") != std::string::npos);
+                // the pair check (xpair20.py's): a signed and an unsigned op on the same word never print one text (the whole text, signature included)
+                CHECK(r128[0].text != r128[1].text);
+                CHECK(r128[2].text != r128[3].text);
+                CHECK(r128[4].text != r128[5].text);
+                // The oracle by itself: the texts of the signed ops before the patch (the casts taken out) are findings.
+                gPrintedCTextHook = [](const std::string& t) {
+                    std::string u = t;
+                    for (const char* with : { "(int4)xStack_4", "(int2)FLD(xStack_4, 0, 2)", "(int2)xStack_2" })
+                    {
+                        const std::string wi = with;
+                        const std::string bare = wi.substr(wi.find(')') + 1);
+                        for (size_t at = u.find(wi); at != std::string::npos; at = u.find(wi)) u.replace(at, wi.size(), bare);
+                    }
+                    return u;
+                };
+                const std::vector<CCase> old128 = { k128[0], k128[2], k128[4], k128[6] };
+                const std::vector<CVerdict> b128 = CheckPrintedC(d, old128, nIn, cc, 0x51ED, 8967);
+                gPrintedCTextHook = nullptr;
+                for (size_t k = 0; k < b128.size(); ++k)
+                {
+                    std::printf("pin 'A2-128 oracle #%zu': %s (%s)\n", k, b128[k].cls.c_str(), b128[k].detail.substr(0, 150).c_str());
+                    CHECK(b128[k].cls == "mismatch" && IsFailing(b128[k]));
                 }
             }
             // A2-126 (the oracle): `(uint4)` of an xunknown (no sign), a field `xStack_4._0_2_` (#0, pgen.py seed 77 shrunk) or a local (#1, seed 3372), is the zero
