@@ -972,6 +972,12 @@ inline WordValue WrittenValue(const sfe::decomp::DecompileResult& r, const std::
         const int t = TBefore(r, word, into, p, depth);
         return t < 0 ? WordValue() : NumberValue(static_cast<uint32_t>(t));
     }
+    // (A7-68: `negc Rm,Rn` is 0 minus Rm minus T; a `bt`'s target after `tst` has T set; grammar 2 seed 2807206)
+    if (hi == 0x6 && lo == 0xA && n == reg)
+    {
+        const int t = TBefore(r, word, into, p, depth);
+        return t >= 0 && number(before(m), a) ? NumberValue(0u - a - static_cast<uint32_t>(t)) : WordValue();
+    }
     if (reg == 0 && (w >> 8) == 0xC9 && (w & 0xFF) == 0) return NumberValue(0);
     if (reg == 0 && ((w >> 8) == 0xC9 || (w >> 8) == 0xCA || (w >> 8) == 0xCB))
     {

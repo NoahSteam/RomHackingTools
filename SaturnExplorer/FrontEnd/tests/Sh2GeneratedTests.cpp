@@ -13006,9 +13006,10 @@ void TestDomainPins(Sh2Decompiler& d)
     // `n:map-const-join`), 2607749 (an extension reading its own result round a loop), 2601640 (a half-word store into a word variable,
     // `n:map-store-value`), 2608672 (a copy drawn at the `bt` of an `if`, `n:map-way-back`), 2601590 (a word store of an input beside a byte
     // store, `n:map-copy-store`; its `text-store` said-line is area 3's accepted class); grammar 2 seeds 2602445 (`sub` of two copies of an
-    // input), 2604457 (an extension shifted away), 2608245 (an edge a compare of an extension gives).
+    // input), 2604457 (an extension shifted away), 2608245 (an edge a compare of an extension gives); from the run from 2,800,001 (A7-68), grammar 2 seed 2807206 (`negc` at a join after a `tst`).
     for (const auto& s : { std::make_pair(1, 2601280), std::make_pair(1, 2607749), std::make_pair(1, 2601640), std::make_pair(1, 2608672),
-                           std::make_pair(1, 2601590), std::make_pair(2, 2602445), std::make_pair(2, 2604457), std::make_pair(2, 2608245) })
+                           std::make_pair(1, 2601590), std::make_pair(2, 2602445), std::make_pair(2, 2604457), std::make_pair(2, 2608245),
+                           std::make_pair(2, 2807206) })
     {
         const Report rep = Evaluate(d, s.first == 2 ? MakeV2(s.second) : Generate(s.second), true);
         std::printf("pin 'area 7 round 9: grammar %d seed %d': %zu finding(s)\n", s.first, s.second, rep.findings.size());

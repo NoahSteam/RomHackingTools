@@ -2161,6 +2161,18 @@ void TestArea7Round9()
         const DecompileResult other = changed(r, "= 0xffffffe8;", "= 0xffffffe9;", n);
         CHECK(n == 1 && dts::AuditMapping(other, word, "a7_64 edge other").constAtJoin == 1);
     }
+    // A7-68 (the fresh run from 2,800,001): `tst r5,r4 ; bt L ; ... L: negc r0,r1` with r0 10: T is set on the edge, so r1 is -10 - 1
+    // (grammar 2 seed 2807206, function 1)
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, { 0x2FD6, 0x7FFC, 0x610D, 0xE00A, 0xCDAC, 0x2458, 0x8901, 0xA003, 0x0009,
+                                                                             0x610A, 0xA000, 0xE2B2, 0x6040, 0x7F04, 0x6DF6, 0x000B, 0x0009 });
+        Print("A7-68 negc at a join", r);
+        CHECK(LineWith(r, "= 0xfffffff5;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_68").Violations() == 0);
+        int n = 0;
+        const DecompileResult other = changed(r, "= 0xfffffff5;", "= 0xfffffff6;", n);
+        CHECK(n == 1 && dts::AuditMapping(other, word, "a7_68 other").constAtJoin == 1);
+    }
     // A7-65: `mov.w r0,@r7` (1) beside `mov.l r3,@r7`: the half-word store is the high half of the word variable, `xRam06001024 = 0x10000;`
     // (grammar 1 seed 2601640)
     {
