@@ -5131,6 +5131,51 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                 }
             }
         }
+        // ---- (A3-163, patch 0087) A store made before a loop the text takes to run for ever is in the text ----
+        // A global's value is live at a return only, so once the engine took a poll of memory the request leaves unmarked for a loop that
+        // never ends (the poll reads back the function's own write: `do {} while( true );`) and removed the return, every store of ordinary
+        // memory the code made before it was dead to it and went: grammar 1 seed 2017373 lost the store of r6 to its global and the
+        // mailbox write the poll waits on, and r0 merged under the global's name (`xRam06002304 = 0x66;`). The ledger excuses a store of
+        // ordinary memory at a constant address (folded by design) and the run of an unmarked poll stops at the step limit, so no other
+        // check compares the stores. In a run that did not finish, of a text with such a loop, each such store the run made (the engine's
+        // records: a write folded to a constant address outside the frame) must have a store line of the text at an address it overlaps.
+        if (r.status == DecompileStatus::Ok)
+        {
+            static const std::regex endless("^\\s*\\}?\\s*while\\( true \\);?\\s*$");
+            static const std::regex storeAt("^\\s*[A-Za-z]*Ram([0-9a-f]{8})(?:\\._([0-9]+)_([0-9]+)_)?\\s*(?:[-+*/%&|^]|<<|>>)?=(?!=)");
+            bool forEver = false;
+            std::vector<std::pair<uint32_t, uint32_t>> printed;   // [first, last] of each global a line stores
+            for (const Line& line : r.lines)
+            {
+                forEver = forEver || std::regex_search(line.text, endless);
+                std::smatch m;
+                if (!std::regex_search(line.text, m, storeAt)) continue;
+                const uint32_t first = (static_cast<uint32_t>(std::stoul(m[1].str(), nullptr, 16)) + (m[2].matched ? static_cast<uint32_t>(std::stoul(m[2].str())) : 0u)) & 0x1FFFFFFFu;
+                const uint32_t width = m[3].matched ? static_cast<uint32_t>(std::stoul(m[3].str())) : 4u;
+                printed.emplace_back(first, first + width - 1);
+            }
+            std::set<std::pair<uint32_t, uint32_t>> said;
+            for (const RunOut& run : runs)
+            {
+                if (!forEver || run.finished) continue;
+                count("endless-store.runs");
+                for (const TraceRec& t : run.trace)
+                {
+                    if (t.depth != 0 || !t.write) continue;
+                    bool folded = false;
+                    for (const AccessFate& f : r.accessFates)
+                        folded = folded || (f.insn == t.insn && f.write && !f.frame && f.constantAddress && f.fate == AccessFate::FoldedOrdinary);
+                    if (!folded) continue;
+                    const uint32_t a = t.addr & 0x1FFFFFFFu, last = a + static_cast<uint32_t>(t.size) - 1;
+                    bool shown = false;
+                    for (const auto& pr : printed) shown = shown || (pr.first <= last && a <= pr.second);
+                    count("endless-store.checked");
+                    if (!shown && said.insert({ t.insn, a }).second)
+                        add("endless-store-dropped", "the store of " + std::to_string(t.size) + " byte(s) at " + Hex(t.insn) + " to " + Hex(t.addr) +
+                                                         " is made before the loop the text takes to run for ever, and the text stores nothing there");
+                }
+            }
+        }
         // ---- Area 5, round 7 (A5-52): a word of work RAM the function reaches under two addresses is one memory ----
         // The bus gives a work-RAM word as many addresses as it has partitions, undecoded bits (28-27) and 1 MiB repeats; the emulator's
         // memory is the same bytes under all of them. The engine's data flow keys memory by address, and forwards a store to a load past
@@ -5934,22 +5979,27 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
             // indeterminate value in C, which the text shows as an uninitialised local. Each run is repeated with the 512 bytes below the entry
             // r15 refilled and every word refilled as the stack pointer rises past it (Machine::SetScrub); a function whose behaviour changes
             // reads a stale word, and its dependences are not counted (`excluded.stale-stack-read.*`).
+            // (A3-164) Two fills, each the other's complement: a stale word the function only tests for its sign (`cmp/pl`), or a bit of, reads
+            // the same under one fill as under the base run's leftover, and only the other fill shows the dependence (grammar 2 seed 2305596:
+            // function 1 stores MACL in its frame and tail-jumps to function 2, which tests that freed word with `cmp/pl`; the first fill's
+            // word is positive like the base run's, so MACL, the only way into that word, read as an input no signature passes).
             bool staleStack = false;
             for (const RunOut& base : runs)
-            {
-                if (!base.finished || staleStack) continue;
-                RunSpec rs;
-                rs.mode = base.mode;
-                rs.volatileRun = volatileRun;
-                if (base.selValue != RunOut::kNoSel && fn.sel >= 4)
+                for (uint32_t fill : { 0x5AA5C33Cu, 0xA55A3CC3u })
                 {
-                    rs.selReg = fn.sel;
-                    rs.selValue = static_cast<uint32_t>(base.selValue);
+                    if (!base.finished || staleStack) continue;
+                    RunSpec rs;
+                    rs.mode = base.mode;
+                    rs.volatileRun = volatileRun;
+                    if (base.selValue != RunOut::kNoSel && fn.sel >= 4)
+                    {
+                        rs.selReg = fn.sel;
+                        rs.selValue = static_cast<uint32_t>(base.selValue);
+                    }
+                    rs.stackFill = fill;
+                    const RunOut other = runner.One(fn, rs);
+                    if (!other.addressError && !SameBehaviour(base, other, true, marked)) staleStack = true;
                 }
-                rs.stackFill = 0x5AA5C33Cu;
-                const RunOut other = runner.One(fn, rs);
-                if (!other.addressError && !SameBehaviour(base, other, true, marked)) staleStack = true;
-            }
             if (staleStack) count("stale-stack-read.functions");
             for (int k = 4; k < 8; ++k)
             {

@@ -17,6 +17,7 @@
  * Modified for SaturnExplorer: a call's INDIRECT on a local of an escaped frame keeps its address force (patches/0068-engine-deadcode-late-stack-reads.patch).
  * Modified for SaturnExplorer: a STORE not folded yet and aimed at a local is data a call may read there (patches/0072-engine-frame-chains-and-save-slots.patch).
  * Modified for SaturnExplorer: a LOAD that may read the frame and stays one holds the frame's writes (patches/0076-engine-frame-loads-keep-writes.patch).
+ * Modified for SaturnExplorer: a write of a global on a path that never reaches a return is kept (patches/0087-engine-global-writes-without-return.patch).
  */
 /// \file coreaction.hh
 /// \brief Core decompilation actions which are indepedent of any particular architecture
@@ -580,6 +581,7 @@ class ActionDeadCode : public Action {
   static bool callMayReadFrame(const Funcdata &data,const Varnode *vn);	///< SaturnExplorer (0068): a call's INDIRECT on an escaped frame's local
   static bool storeMayWrite(const Funcdata &data,const PcodeOp *sop,const Varnode *local);	///< SaturnExplorer (0072): a STORE not folded yet aimed at the local
   static void keepFrameWritesForLoads(Funcdata &data,vector<Varnode *> &worklist);	///< SaturnExplorer (0076): a LOAD that may read the frame keeps its writes
+  static void keepGlobalWritesWithoutReturn(Funcdata &data,vector<Varnode *> &worklist);	///< SaturnExplorer (0087): a global's writes on a path that never returns are kept
 public:
   ActionDeadCode(const string &g) : Action(0,"deadcode",g) {}	///< Constructor
   virtual Action *clone(const ActionGroupList &grouplist) const {
