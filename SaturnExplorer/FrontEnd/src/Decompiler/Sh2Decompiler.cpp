@@ -4431,7 +4431,7 @@ std::string MaskedPartitionNote(uint8_t parts, uint32_t size, bool write, bool a
     if (parts & 0x24u) add("the associative purge (an access invalidates the cache line of its address and is no memory access)");
     if (parts & 0x08u) add("the cache address array (an access sets or reads a cache line's tag)");
     if (parts & 0x50u) add("the cache data array");
-    if (parts & 0x80u) add("the on-chip registers");
+    if (parts & 0x80u) add("the on-chip registers (the access may reach on-chip registers, whose width rules differ by address)");
     return prefix + "may not be a memory access: whatever the value it is made from, the address is in " + ranges + ", which hold " + kinds +
            "; which of them this " + std::to_string(size) + "-byte " + what + " reaches is not known";
 }

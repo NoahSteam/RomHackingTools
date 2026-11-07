@@ -14,6 +14,7 @@
  * limitations under the License.
  *
  * Modified for SaturnExplorer: RuleDivTermAdd and RuleDivTermAdd2 keep a product that overflows only for a division; RulePiecePathology needs the register it names (patches/0037-engine-division-piece-and-input-names.patch).
+ * Modified for SaturnExplorer: accessBetween and globalWriteMovesPastAccess are shared with ActionVarnodeProps (patches/0085-engine-global-write-keeps-place.patch).
  */
 /// \file ruleaction.hh
 /// \brief This is the basic set of transformation Rule objects.

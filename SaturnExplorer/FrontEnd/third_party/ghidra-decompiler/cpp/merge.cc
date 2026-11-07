@@ -15,8 +15,6 @@
  */
 #include "merge.hh"
 #include "funcdata.hh"
-#include <cstdlib>
-#include <iostream>
 
 namespace ghidra {
 
@@ -611,7 +609,6 @@ void Merge::unifyAddress(VarnodeLocSet::const_iterator startiter,VarnodeLocSet::
 void Merge::mergeAddrTied(void)
 
 {
-  if (getenv("SE_DUMP_PCODE")) { std::cerr << "=== mergeAddrTied " << data.getName() << "\n"; data.printRaw(std::cerr); }
   VarnodeLocSet::const_iterator startiter;
   vector<VarnodeLocSet::const_iterator> bounds;
   for(startiter=data.beginLoc();startiter!=data.endLoc();) {

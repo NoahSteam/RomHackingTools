@@ -30,6 +30,7 @@
  * Modified for SaturnExplorer: a number is the address of a hardware register where the data flow uses it as one, not by a guess (patches/0073-engine-constant-pointer-guess-not-hardware.patch).
  * Modified for SaturnExplorer: a LOAD that may read the frame and stays one holds the frame's writes (patches/0076-engine-frame-loads-keep-writes.patch).
  * Modified for SaturnExplorer: a catch handler that never reads its exception no longer names it, which MSVC warned about (C4101) (patches/0083-engine-msvc-unused-catch-names.patch).
+ * Modified for SaturnExplorer: ActionVarnodeProps does not read a global as the constant zero where its next write would then be made after a memory access (patches/0085-engine-global-write-keeps-place.patch).
  */
 #include "coreaction.hh"
 #include "condexe.hh"

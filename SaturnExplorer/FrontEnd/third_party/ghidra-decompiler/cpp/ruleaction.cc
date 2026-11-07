@@ -23,6 +23,7 @@
  * Modified for SaturnExplorer: RuleSignMod2nOpt2 tests that the sign steering its bias is V's own; RuleThreeWayCompare refuses unsigned constants that are neighbours only modulo 2^64; RuleShiftSub refuses a SUBPIECE that reads past the top of the shifted value (patches/0067-engine-round14-sign-mod-late-donothing-three-way-shift-sub.patch).
  * Modified for SaturnExplorer: RulePiecePathology leaves a word of the stack frame alone, which is no register a partial write fills in; RulePullsubIndirect takes the piece of the INDIRECT's input from the lowest byte its readers take (patches/0072-engine-frame-chains-and-save-slots.patch).
  * Modified for SaturnExplorer: RulePropagateCopy does not propagate a write of a global into the INDIRECT a STORE puts on it, nor into another marker past a memory access (patches/0082-engine-store-keeps-earlier-write.patch).
+ * Modified for SaturnExplorer: RuleMultiCollapse keeps two equal writes of a global that a memory access separates from the join, and RulePropagateCopy does not feed a global's value into the global's next write past one (patches/0085-engine-global-write-keeps-place.patch).
  */
 #include "ruleaction.hh"
 #include "coreaction.hh"

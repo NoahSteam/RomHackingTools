@@ -13207,6 +13207,15 @@ void TestA587Pins(Sh2Decompiler& d)
             nullptr, nullptr, nullptr, nullptr, nullptr }, "order.folded-store.checked", nullptr },
         { { "A5-102, through a pointer merged from SCU_D0EN and SCU_D1EN", "D306 6032 2352 D103 2448 8900 D102 2102 000B 0009 25FE 0010 25FE 0030 0603 0000",
             nullptr, nullptr, nullptr, nullptr, nullptr }, "order.folded-store.checked", nullptr },
+        // A5-109 (rule "folded-store-after-access" reports a read through a pointer and a register's access too): two writes of one value joined
+        // after a read through a pointer; the write carried to the return after a register write (grammar 1 seed 2012158); a zero byte store
+        // carried past a register write (seed 2006655).
+        { { "A5-109, g = v; x = *p; if (c) g = v;", "D604 2632 8802 8F02 6072 2632 6345 000B 0009 0009 0600 1010",
+            nullptr, nullptr, nullptr, nullptr, nullptr }, "order.folded-store.checked", nullptr },
+        { { "A5-109, x = g; g = r4; SCSP_SCILV2 = x, grammar 1 seed 2012158 shrunk", "D706 D307 6032 2342 2702 E301 4310 8BFD 445F 4315 8B00 2402 000B 0009 05B0 0428 2600 2200",
+            nullptr, nullptr, nullptr, nullptr, nullptr }, "order.folded-store.hardware-write", nullptr },
+        { { "A5-109, a byte store before a conditional SH2_BCR2 write, grammar 1 seed 2006655 shrunk", "D606 E301 4310 8BFD 2138 8B01 2239 D704 3020 8D01 2620 2702 000B 0009 2600 210C FFFF FFE4",
+            nullptr, nullptr, nullptr, nullptr, nullptr }, "order.folded-store.hardware-write", nullptr },
         { { "A5-103, a purge through (p & 0x1FFFFFF0) | 0x40000000", "D103 2149 D203 212B E000 000B 2102 0009 1FFF FFF0 4000 0000",
             nullptr, nullptr, nullptr, nullptr, nullptr }, nullptr, nullptr },
         { { "A5-104, a literal written and then loaded", "D102 2142 D002 000B 0009 0009 0600 9010 1234 5678",
