@@ -1425,17 +1425,6 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
             return word(text.substr(b, eq - b)) && v < text.size() && word(text.substr(v, text.size() - 1 - v));
         };
         std::map<uint32_t, std::set<size_t>> ownDrawn, copyDrawn;
-        // (A7-64: a branch's own statement, `if (...) {` at the `bt`, is the line a click on it goes to; a plain copy drawn there as well is a
-        // copy materialised at it, as at any other instruction: grammar 1 seed 2608672, `cRam0600102f = (char)param_2;` at the `bt`)
-        std::set<uint32_t> branchOwn;
-        for (size_t li = 0; li < r.lines.size(); ++li)
-            if (!plainCopy(r.lines[li].text))
-                for (const Token& t : r.lines[li].tokens)
-                    if (t.addr && t.begin < t.end && isBranch(t.addr))
-                    {
-                        branchOwn.insert(t.addr);
-                        ownDrawn[t.addr].insert(li);
-                    }
         for (size_t li = 0; li < r.lines.size(); ++li)
         {
             const bool plain = plainCopy(r.lines[li].text);
@@ -1474,7 +1463,7 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                         isStore(t.addr))
                         for (const Token& u : r.lines[li].tokens)
                             drawnAtOtherStore = drawnAtOtherStore || (u.addr && u.addr != t.addr && u.begin < u.end && u.end <= assign && isStore(u.addr));
-                    const bool copy = plain && (!isBranch(t.addr) || branchOwn.count(t.addr)) && ((!named.empty() && !named.count(t.addr)) || drawnAtOtherStore) && !castAtExtension;
+                    const bool copy = plain && !isBranch(t.addr) && ((!named.empty() && !named.count(t.addr)) || drawnAtOtherStore) && !castAtExtension;
                     (copy ? copyDrawn : ownDrawn)[t.addr].insert(li);
                 }
         }
@@ -1493,7 +1482,20 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
             const LineLookup k = index.Find(kv.first);
             const bool owner = k.kind == LineLookup::Exact && !k.lines.empty() && std::find(kv.second.begin(), kv.second.end(), k.lines[0]) != kv.second.end();
             const bool copyFirst = owner && copyOnly(kv.first, k.lines[0]) && ownDrawn.count(kv.first);
-            if (!owner || (firsts.count(kv.first) && r.lines[k.lines[0]].firstAddr != kv.first) || copyFirst)
+            // (A7-64: a branch's own statement, `if (...) {` at the `bt`, is the line a click on it goes to when the only lines that begin
+            // with the branch are plain copies drawn there, `cRam0600102f = (char)param_2;` at the `bt`: the product orders a copy it
+            // materialised at the instruction after the statement, and the lines are the ones a click should reach second; grammar 1 seed
+            // 2608672. Not for a line with an operation of its own, which begins with the branch and is answered first.)
+            bool statementFirst = false;
+            if (owner && !copyFirst && firsts.count(kv.first) && r.lines[k.lines[0]].firstAddr != kv.first && isBranch(kv.first) && !plainCopy(r.lines[k.lines[0]].text))
+            {
+                bool drawn = false;
+                for (const Token& t : r.lines[k.lines[0]].tokens) drawn = drawn || (t.addr == kv.first && t.begin < t.end);
+                statementFirst = drawn;
+                for (size_t li = 0; li < r.lines.size() && statementFirst; ++li)
+                    if (r.lines[li].firstAddr == kv.first && !plainCopy(r.lines[li].text)) statementFirst = false;
+            }
+            if (!owner || (firsts.count(kv.first) && r.lines[k.lines[0]].firstAddr != kv.first && !statementFirst) || copyFirst)
             {
                 ++a.backWrong;
                 problem("back", "the instruction " + MappingHex(kv.first) + " is answered " +
