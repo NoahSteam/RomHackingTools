@@ -23,6 +23,7 @@
  * Modified for SaturnExplorer: RuleSignMod2nOpt2 tests that the sign steering its bias is V's own; RuleThreeWayCompare refuses unsigned constants that are neighbours only modulo 2^64; RuleShiftSub refuses a SUBPIECE that reads past the top of the shifted value (patches/0067-engine-round14-sign-mod-late-donothing-three-way-shift-sub.patch).
  * Modified for SaturnExplorer: RulePiecePathology leaves a word of the stack frame alone, which is no register a partial write fills in; RulePullsubIndirect takes the piece of the INDIRECT's input from the lowest byte its readers take (patches/0072-engine-frame-chains-and-save-slots.patch).
  * Modified for SaturnExplorer: RulePropagateCopy does not propagate a write of a global into the INDIRECT a STORE puts on it, nor into another marker past a memory access (patches/0082-engine-store-keeps-earlier-write.patch).
+ * Modified for SaturnExplorer: RuleMultiCollapse keeps two equal writes of a global that a memory access separates from the join, and RulePropagateCopy does not feed a global's value into the global's next write past one (patches/0085-engine-global-write-keeps-place.patch).
  */
 #include "ruleaction.hh"
 #include "coreaction.hh"
@@ -3204,6 +3205,33 @@ int4 RuleAliasUpdate::applyOp(PcodeOp *op,Funcdata &data)
   return 1;
 }
 
+
+/// \brief Whether collapsing a MULTIEQUAL would move the write of a global past a memory access (SaturnExplorer, 0085)
+///
+/// A MULTIEQUAL whose inputs are equal only by function (`g = r3; x = *p; if (c) g = r3;`: two COPYs of the same value) is
+/// replaced by a copy of that value at the join, and the writes of the global it merges are left dead. The write is then made
+/// after the LOAD, STORE, call or volatile access that follows it in the code. The engine takes a LOAD to read no global the function
+/// wrote (only the stack space has load guards), so nothing keeps the write where it is (A5-109).
+/// \param vn is an input of the MULTIEQUAL
+/// \param mop is the MULTIEQUAL
+/// \return \b true if \b vn is the write of a global, and an access lies between it and the join
+bool globalWriteMovesPastAccess(const Varnode *vn,const PcodeOp *mop)
+
+{
+  if (!vn->isWritten() || !vn->isAddrTied() || vn->getSpace()->getType() != IPTR_PROCESSOR) return false;
+  const PcodeOp *def = vn->getDef();
+  if (def->code() == CPUI_MULTIEQUAL) return false;
+  const BlockBasic *bl = mop->getParent();
+  bool found = false;
+  for(int4 i=0;i<mop->numInput();++i) {
+    if (mop->getIn(i) != vn) continue;
+    found = true;
+    if (bl->getIn(i) != def->getParent()) return true;	// the write reaches the join through other blocks: cautious
+    if (accessBetween(def,(const PcodeOp *)0)) return true;
+  }
+  return !found;		// not a direct input (a nested MULTIEQUAL's): cautious
+}
+
 /// \class RuleMultiCollapse
 /// \brief Collapse MULTIEQUAL whose inputs all trace to the same value
 void RuleMultiCollapse::getOpList(vector<uint4> &oplist) const
@@ -3261,6 +3289,10 @@ int4 RuleMultiCollapse::applyOp(PcodeOp *op,Funcdata &data)
     else if ((defcopyr!=copyr)&&(!nofunc)&&functionalEquality(defcopyr,copyr)) {
 				// Cannot match MULTIEQUAL by functional equality
       //      if (nofunc) return 0;	// Not allowed to match by func equal
+      if (globalWriteMovesPastAccess(defcopyr,op) || globalWriteMovesPastAccess(copyr,op)) {
+	success = false;	// SaturnExplorer (0085): keep both writes of the global where the code makes them
+	break;
+      }
       func_eq = true;		// Now matching by functional equality
       continue;
     }
@@ -3942,7 +3974,7 @@ int4 RuleTransformCpool::applyOp(PcodeOp *op,Funcdata &data)
 /// \param from is the op the walk starts after
 /// \param to is the op it ends before, or null for the end of the block
 /// \return \b true if such an access was found
-static bool accessBetween(const PcodeOp *from,const PcodeOp *to)
+bool accessBetween(const PcodeOp *from,const PcodeOp *to)
 
 {
   if (to != (const PcodeOp *)0 && to->getParent() != from->getParent()) return true;
@@ -4019,6 +4051,9 @@ int4 RulePropagateCopy::applyOp(PcodeOp *op,Funcdata &data)
 	  otherOp->setCopyImmed(slot);
 	}
       }
+      else if (otherOp->code() == CPUI_COPY && vn->isAddrTied() && vn->getSpace()->getType() == IPTR_PROCESSOR &&
+	       otherOp->getOut()->isAddrTied() && otherOp->getOut()->getAddr() == vn->getAddr() && accessBetween(op,otherOp))
+	continue;		// SaturnExplorer (0085): the global's next write, made again after a memory access, would move the write there
       data.opSetInput(otherOp,invn,slot); // Propagate input of COPY into otherVn
       count += 1;
       break;			// Allow at most one propagation per descendant

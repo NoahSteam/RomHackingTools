@@ -30,6 +30,7 @@
  * Modified for SaturnExplorer: a number is the address of a hardware register where the data flow uses it as one, not by a guess (patches/0073-engine-constant-pointer-guess-not-hardware.patch).
  * Modified for SaturnExplorer: a LOAD that may read the frame and stays one holds the frame's writes (patches/0076-engine-frame-loads-keep-writes.patch).
  * Modified for SaturnExplorer: a catch handler that never reads its exception no longer names it, which MSVC warned about (C4101) (patches/0083-engine-msvc-unused-catch-names.patch).
+ * Modified for SaturnExplorer: ActionVarnodeProps does not read a global as the constant zero where its next write would then be made after a memory access (patches/0085-engine-global-write-keeps-place.patch).
  */
 #include "coreaction.hh"
 #include "condexe.hh"
@@ -1499,6 +1500,21 @@ int4 ActionVarnodeProps::apply(Funcdata &data)
 	}
       }
       if (!vn->hasNoDescend()) {
+	// SaturnExplorer (0085): the write of a global that a later write of the same global copies (`g = 0; x = *p; ... g = g`) is
+	// kept where the code makes it: read as a constant there, the later write would carry it past the access (A5-109)
+	if (vn->isWritten() && vn->isAddrTied() && vn->getSpace()->getType() == IPTR_PROCESSOR) {
+	  bool moved = false;
+	  if (vn->getDef()->code() == CPUI_MULTIEQUAL)
+	    for(int4 k=0;k<vn->getDef()->numInput();++k)
+	      if (globalWriteMovesPastAccess(vn->getDef()->getIn(k),vn->getDef())) moved = true;
+	  for(list<PcodeOp *>::const_iterator diter=vn->beginDescend();diter!=vn->endDescend();++diter) {
+	    const PcodeOp *rd = *diter;
+	    if (rd->code() == CPUI_COPY && rd->getOut()->isAddrTied() && rd->getOut()->getAddr() == vn->getAddr() &&
+		accessBetween(vn->getDef(),rd))
+	      moved = true;
+	  }
+	  if (moved) continue;
+	}
 	data.totalReplaceConstant(vn,0);
 	count += 1;
       }

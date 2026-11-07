@@ -5434,6 +5434,10 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                     named |= n.address == t.insn && (n.text.find("if the pointer holds 0x" + Hex(t.addr)) != std::string::npos ||
                                                        n.text.find("the pointer is based at 0x" + Hex(t.addr)) != std::string::npos);
                     said |= n.address == t.insn && n.caution && n.text.find("may reach on-chip registers") != std::string::npos;
+                    // (A5-110: the A5-103 note for a pointer whose partition bits a mask fixed says it too, naming the on-chip registers among
+                    // the partitions the access is in: `p | 0xe0000000` stepped by `xor 0x20000000` is 0xC or 0xE, the cache data array or the page)
+                    said |= n.address == t.insn && n.caution && n.text.find("may not be a memory access") != std::string::npos &&
+                            n.text.find("hold") != std::string::npos && n.text.find("the on-chip registers") != std::string::npos;
                     // (A5-101: an on-chip register's address plus an index says that another index reaches another register of the page)
                     said |= n.address == t.insn && n.caution && n.text.find("plus an index that is not known") != std::string::npos;
                 }
@@ -5556,6 +5560,20 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                         if (t.addr == f.insn) { first = static_cast<int>(li); break; }
                 }
                 if (first < 0) continue;
+                // (A5-111, open: a byte or half of the global read after a wider write is made a write of that piece by heritage, a SUBPIECE whose
+                // output is the global's own address (`iRam26002314._0_1_ = (char)(...)`, a store the code does not make, and an overlap that keeps
+                // the wider write to the end of the function, after a later register read: grammar 1 seed 2606069). Counted, not judged.)
+                {
+                    char name[24];
+                    std::snprintf(name, sizeof name, "Ram%08x._", static_cast<unsigned>(f.address));
+                    bool piece = false;
+                    for (const Line& l : r.lines) piece |= l.text.find(name) != std::string::npos;
+                    if (piece)
+                    {
+                        count("order.folded-store.piece-overlap");
+                        continue;
+                    }
+                }
                 // (a store a later folded store of the same address follows is the engine's to drop or merge: the later one writes what is
                 // left, whatever the pointer wrote in between, and the mapping names the dropped store on the later one's line. Ordinary
                 // memory, a variable by design. `g = r2; poll; tas.b @g` prints the poll, then `g = (uint1)in_r2 | 0x80;`.)
@@ -5576,6 +5594,14 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                 for (const MemoryAccess& m : got)
                 {
                     if (m.firstLine < 0 || m.insn == f.insn || m.origBlock < 0) continue;
+                    // (a read whose value is printed at several uses has its first emission on the line of the use that earlier code made, where a
+                    // value stored through the pointer is forwarded: `*p = v; ... ; return p[-1];` prints `v` at the store's line, grammar 1 seed
+                    // 2606069. Its place is not one line.)
+                    if (!m.write && (m.printed > 1 || m.printedLines > 1))
+                    {
+                        count("order.folded-store.read-reprinted");
+                        continue;
+                    }
                     // (the access runs after the store whenever both run: later in its block, or in a block only the store's reaches, outside
                     // any loop holding both; and a text without goto prints the blocks in the flow's order)
                     const size_t fb = static_cast<size_t>(f.origBlock), mb = static_cast<size_t>(m.origBlock);
@@ -5602,18 +5628,32 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                         }
                         return true;
                     };
-                    const bool after = fb == mb ? m.origOrder > f.origOrder : fr.reach[fb][mb] && !fr.reach[mb][fb] && !hasGoto && alwaysReaches(fb, mb);
+                    // (...or every path from the entry to the access's block runs through the store's: the access is conditional, the store is not
+                    // (a store in the slot of the branch that skips the access, seed 2006655), and the store was made first whenever the access runs)
+                    auto dominates = [&](size_t d, size_t x) {
+                        if (d == 0) return true;
+                        std::vector<char> seen(r.flowSuccessors.size(), 0);
+                        std::vector<size_t> todo{ 0 };
+                        while (!todo.empty())
+                        {
+                            const size_t y = todo.back();
+                            todo.pop_back();
+                            if (y == d || y >= seen.size() || seen[y]) continue;
+                            if (y == x) return false;
+                            seen[y] = 1;
+                            for (int z : r.flowSuccessors[y])
+                                if (z >= 0) todo.push_back(static_cast<size_t>(z));
+                        }
+                        return true;
+                    };
+                    const bool after = fb == mb ? m.origOrder > f.origOrder : fr.reach[fb][mb] && !fr.reach[mb][fb] && !hasGoto && (alwaysReaches(fb, mb) || dominates(fb, mb));
                     if (!after) continue;
-                    // (A5-109, open: a read through a pointer, or a register's access, is still printed before a folded store the code makes
-                    // first by routes patch 0082 does not close: the engine takes the store for dead or joins it with a later one (`g = v; x = *p;
-                    // if (c) g = v;` prints the store after the join), or writes the global at the return (grammar 1 seed 2012158: `x = g; g = r4;
-                    // SCSP_SCILV2 = x` prints the register write first). Counted until fixed; a write through a pointer, which may be the global's
-                    // own address, is judged.)
-                    if (!m.write || m.direct)
-                    {
-                        if (first > m.firstLine) count(m.direct ? "order.folded-store.hardware-past" : "order.folded-store.read-past");
-                        continue;
-                    }
+                    // (A5-109, fixed by patch 0085: a read through a pointer, or a register's access, the code makes after a folded store is
+                    // judged like a write through a pointer. The engine took such a store for dead when two writes of the same value joined
+                    // (`g = v; x = *p; if (c) g = v;`), or carried it into the next write of the global (`x = g; g = v; R = x`, `g = 0 ... g = g`),
+                    // and printed it after the access.)
+                    if (!m.write) count(m.direct ? "order.folded-store.hardware-read" : "order.folded-store.read");
+                    else if (m.direct) count("order.folded-store.hardware-write");
                     count("order.folded-store.checked");
                     if (first > m.firstLine)
                         add("folded-store-after-access", "the store at " + Hex(f.insn) + " the engine folded into " + Hex(f.address) + " is printed (line " +
@@ -13241,6 +13281,25 @@ void TestA587Pins(Sh2Decompiler& d)
             nullptr, nullptr, nullptr, nullptr, nullptr }, "order.folded-store.checked", nullptr },
         { { "A5-102, through a pointer merged from SCU_D0EN and SCU_D1EN", "D306 6032 2352 D103 2448 8900 D102 2102 000B 0009 25FE 0010 25FE 0030 0603 0000",
             nullptr, nullptr, nullptr, nullptr, nullptr }, "order.folded-store.checked", nullptr },
+        // A5-109 (rule "folded-store-after-access" reports a read through a pointer and a register's access too): two writes of one value joined
+        // after a read through a pointer; the write carried to the return after a register write (grammar 1 seed 2012158); a zero byte store
+        // carried past a register write (seed 2006655).
+        { { "A5-109, g = v; x = *p; if (c) g = v;", "D604 2632 8802 8F02 6072 2632 6345 000B 0009 0009 0600 1010",
+            nullptr, nullptr, nullptr, nullptr, nullptr }, "order.folded-store.overwritten", nullptr },
+        { { "A5-109, x = g; g = r4; SCSP_SCILV2 = x, grammar 1 seed 2012158 shrunk", "D706 D307 6032 2342 2702 E301 4310 8BFD 445F 4315 8B00 2402 000B 0009 05B0 0428 2600 2200",
+            nullptr, nullptr, nullptr, nullptr, nullptr }, "order.folded-store.hardware-write", nullptr },
+        { { "A5-109, a byte store before a conditional SH2_BCR2 write, grammar 1 seed 2006655 shrunk", "D606 E301 4310 8BFD 2138 8B01 2239 D704 3020 8D01 2620 2702 000B 0009 2600 210C FFFF FFE4",
+            nullptr, nullptr, nullptr, nullptr, nullptr }, "order.folded-store.hardware-write", nullptr },
+        { { "A5-109, a write of SCU_D2MD after a store folded into 0x26001030, grammar 1 seed 2013392 shrunk", "D60C D70D E303 2701 2602 2632 4310 8BFA 2308 8902 E29B 2526 4308 477F 2208 8900 D706 E302 C509 6060 4310 8BFB D704 C40F 000B 6051 25FE 0054 2600 1030 25F8 0076 0600 1030",
+            nullptr, nullptr, nullptr, nullptr, nullptr }, "order.folded-store.hardware-write", nullptr },
+        // A5-110 (grammar 1 seeds 2504292 and 2508741, from the area 2 round 20 reviewer): `p | 0xe0000000` and `p ^ 0x20000000` stepped in a loop,
+        // so the access is in the cache data array or the on-chip page: the A5-103 note says it, and rule 3f accepts it.
+        { { "A5-110, grammar 1 seed 2504292 shrunk", "D304 263B E304 D104 261A 4310 8BFB 160F 000B 0009 E000 0000 2000 0000",
+            nullptr, nullptr, nullptr, nullptr, nullptr }, "onchip.span.said", nullptr },
+        { { "A5-110, grammar 1 seed 2508741 shrunk", "D304 273B E302 D204 272A 4310 8BFB 6070 000B 0009 FFFF FE00 2000 0000",
+            nullptr, nullptr, nullptr, nullptr, nullptr }, "onchip.span.said", nullptr },
+        { { "A5-110, grammar 1 seed 2508741 shrunk again (a step added in the loop)", "D305 273B E302 7701 D204 272A 4310 8BFA 6070 000B 0009 0009 FFFF FE00 2000 0000",
+            nullptr, nullptr, nullptr, nullptr, nullptr }, "onchip.span.said", nullptr },
         { { "A5-103, a purge through (p & 0x1FFFFFF0) | 0x40000000", "D103 2149 D203 212B E000 000B 2102 0009 1FFF FFF0 4000 0000",
             nullptr, nullptr, nullptr, nullptr, nullptr }, nullptr, nullptr },
         { { "A5-104, a literal written and then loaded", "D102 2142 D002 000B 0009 0009 0600 9010 1234 5678",
