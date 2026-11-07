@@ -4408,32 +4408,11 @@ bool ActionDeadCode::callMayReadFrame(const Funcdata &data,const Varnode *vn)
   return false;
 }
 
-/// \brief Whether a CBRANCH whose condition is a constant leaves its block by another edge (SaturnExplorer, 0087)
-///
-/// The edge stays in the graph until ActionDeterminedBranch removes it, and rules run in between: a write of a global whose value
-/// heritage carried along such an edge to a RETURN reads as dead there before the RETURN's block is cut off.
-/// \param bl is the block the edge leaves
-/// \param outIndex is the edge's index among the block's out edges
-/// \return \b true if the block ends in a CBRANCH that never takes the edge
-static bool edgeNeverTaken(const FlowBlock *bl,int4 outIndex)
-
-{
-  if (bl->sizeOut() != 2) return false;
-  const PcodeOp *last = bl->lastOp();
-  if (last == (const PcodeOp *)0 || last->isDead() || last->code() != CPUI_CBRANCH) return false;
-  const Varnode *cond = last->getIn(1);
-  if (!cond->isConstant()) return false;
-  uintb val = cond->getOffset();
-  int4 removed = (((val!=0)&&(!last->isBooleanFlip())) || ((val==0)&&(last->isBooleanFlip()))) ? 0 : 1;	// as ActionDeterminedBranch
-  return outIndex == removed;
-}
-
 /// \brief Mark the blocks from which a block that never reaches a RETURN is reachable (SaturnExplorer, 0087)
 ///
 /// \param data is the function being analyzed
 /// \param dooms is filled with one entry per basic block: 1 when a path from it reaches a block from which no live RETURN is reachable
-/// (a loop the analysis takes to run for ever, a call that does not return), the block itself included; an edge a CBRANCH with a
-/// constant condition never takes is no path
+/// (a loop the analysis takes to run for ever, a call that does not return), the block itself included
 /// \return \b true if any block is so marked
 bool ActionDeadCode::doomedBlocks(const Funcdata &data,vector<char> &dooms)
 
@@ -4460,7 +4439,6 @@ bool ActionDeadCode::doomedBlocks(const Funcdata &data,vector<char> &dooms)
     for(int4 i=0;i<bl->sizeIn();++i) {
       FlowBlock *in = bl->getIn(i);
       if (returns[in->getIndex()]) continue;
-      if (edgeNeverTaken(in,bl->getInRevIndex(i))) continue;	// a branch decided away from this block: no path to the RETURN
       returns[in->getIndex()] = 1;
       work.push_back(in);
     }
@@ -4477,7 +4455,6 @@ bool ActionDeadCode::doomedBlocks(const Funcdata &data,vector<char> &dooms)
     for(int4 i=0;i<bl->sizeIn();++i) {
       FlowBlock *in = bl->getIn(i);
       if (dooms[in->getIndex()]) continue;
-      if (edgeNeverTaken(in,bl->getInRevIndex(i))) continue;
       dooms[in->getIndex()] = 1;
       work.push_back(in);
     }

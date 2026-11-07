@@ -15395,6 +15395,15 @@ void TestA3163Fix()
         // tst r4,r4 ; bt R ; mov.l @(lit),r1 ; mov #1,r0 ; mov.l r0,@r1 ; L: bra L ; nop ; R: rts ; nop: only one path never returns
         { "A3-163 a store on the path that never returns", { 0x2448, 0x8904, 0xD103, 0xE001, 0x2102, 0xAFFE, 0x0009, 0x000B, 0x0009, 0x0009, 0x0600, 0x2000 },
           { "xRam06002000 = 1;", "while( true )" }, {} },
+        // mov.l @(lit),r7 ; mov #2,r0 ; mov.l r0,@r7 ; P: mov.l @r7,r0 ; tst #1,r0 ; bt P ; mov.b r1,@r7 ; rts ; nop (generator grammar 1
+        // seed 131, shrunk): the poll's LOAD took the stored value, and the RETURN after the loop saw the byte store's join; the write read as
+        // dead between the branch's condition folding and the branch's removal (RuleEarlyRemoval)
+        { "A3-163 seed 131: the poll's own write, a byte store after it", { 0xD704, 0xE002, 0x2702, 0x6072, 0xC801, 0x89FC, 0x2710, 0x000B, 0x0009, 0x0009, 0x0600, 0x1000 },
+          { "xRam06001000 = 2;", "while( true )" }, {} },
+        // mov.l @(lit),r7 ; mov #3,r0 ; mov.w r0,@r7 ; P: mov.w @r7,r0 ; tst #1,r0 ; bf P ; mov.l r0,@r7 ; rts ; nop (seed 281, shrunk): the
+        // store after the loop replaces it on the way to the RETURN; the pieces heritage makes around the write are not printed as stores
+        { "A3-163 seed 281: the poll's own write, a later store replacing it", { 0xD704, 0xE003, 0x2701, 0x6071, 0xC801, 0x8BFC, 0x2702, 0x000B, 0x0009, 0x0009, 0x2600, 0x1038 },
+          { "xRam26001038 = 3;", "while( true )" }, { "0x30000", "_0_2_" } },
         // mov.l @(lit),r1 ; mov #1,r0 ; mov.l r0,@r1 ; mov #2,r0 ; mov.l r0,@r1 ; rts ; nop: every path returns, the replaced store goes
         { "A3-163 control: a function that returns", { 0xD103, 0xE001, 0x2102, 0xE002, 0x2102, 0x000B, 0x0009, 0x0009, 0x0600, 0x2000 },
           { "xRam06002000 = 2;" }, { "xRam06002000 = 1;" } },

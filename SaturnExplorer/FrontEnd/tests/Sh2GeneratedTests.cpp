@@ -14329,6 +14329,14 @@ void TestA3RoutedPins(Sh2Decompiler& d)
         for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
         CHECK(rep.findings.empty());
         CHECK(count(rep, "endless-store.runs") > 0 && count(rep, "endless-store.checked") >= 2 * count(rep, "endless-store.runs"));
+        // grammar 1 seeds 131 and 281 of the default run, shrunk: the poll's own write, with a byte store and a longword store after the loop
+        for (const char* words : { "D704 E002 2702 6072 C801 89FC 2710 000B 0009 0009 0600 1000", "D704 E003 2701 6071 C801 8BFC 2702 000B 0009 0009 2600 1038" })
+        {
+            const Report w = EvaluateSubject(d, RawSubject(words), true);
+            std::printf("pin 'A3-163 %s': %zu finding(s), endless-store checked %d\n", words, w.findings.size(), count(w, "endless-store.checked"));
+            for (const Finding& f : w.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+            CHECK(w.findings.empty() && count(w, "endless-store.checked") > 0);
+        }
         const Report seed = Evaluate(d, Generate(2017373), true);
         std::printf("pin 'A3-163 grammar 1 seed 2017373': %zu finding(s)\n", seed.findings.size());
         for (const Finding& f : seed.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
