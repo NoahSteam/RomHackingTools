@@ -4910,6 +4910,130 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                 if (h.first <= addr && addr <= h.last) return true;
             return false;
         };
+        // ---- (A3-161) A store the text prints in a loop at a constant address is a store the code makes on each trip ----
+        // The ledger below pairs the run's accesses with the engine's records, and an access of ordinary memory at a constant address is
+        // `FoldedOrdinary` there by design, whatever the text then does with it; the printed-C differential runs no function that touches absolute
+        // memory. So a store the text shows and the code does not make passed every oracle: grammar 1 seed 1862942 prints
+        // `iRam06002308 = -0x10;` before a loop and `iRam06002308 = iRam06002308 * 2;` in it (the loop's register merged into the global it is
+        // stored to after the loop), where the code writes 06002308 by a `tas.b` in the loop and a `mov.w` in the `rts` slot. Run by run: a line
+        // inside a loop of the text (`do {`, `while (...) {`, `for (...) {`) that assigns a global at a constant address (`xRam06002308 = ...`,
+        // `+=`, a field `._2_2_` of one) is a store each time it runs, as often as the least-run of its instructions (LineInstructions); the code
+        // must make as many stores there, of at least the global's width (a field's; else its token's inspection target; else the widest
+        // write there the engine's records keep), from instructions of the flow's blocks that lie on a cycle. Fewer is counted
+        // (`text-store.loop-short`) and said in the report, not failed: the row is accepted (P3), and the class is frequent in the generator's
+        // draws (2 of the default run's 300 seeds, besides 1862942 and 1843207 among the pinned seeds), so a finding would fail every run
+        // until the engine stops merging a register into the global it is stored to. The same merge outside a loop (a store printed on two
+        // paths where the code makes one after the join, `uRam2600104c = param_1;` then `uRam2600104c = ... >> 1 | ...` in an `if`) is
+        // counted too (`text-store.extra`: more stores of the global than the run makes, any width).
+        {
+            static const std::regex storeLine("^\\s*[A-Za-z]*Ram([0-9a-f]{8})(?:\\._([0-9]+)_([0-9]+)_)?\\s*(?:[-+*/%&|^]|<<|>>)?=(?!=)");
+            static const std::regex loopHead("^\\s*(?:\\}\\s*)*(?:do|while|for)\\b");
+            const FlowReach loopReach(r.flowSuccessors);
+            auto inCodeLoop = [&](uint32_t insn) {
+                for (size_t k = 0; k < r.flowBlockRanges.size() && k < loopReach.reach.size(); ++k)
+                    if (loopReach.reach[k][k] && r.flowBlockRanges[k].first <= insn && insn <= r.flowBlockRanges[k].second + 2) return true;
+                return false;
+            };
+            struct TextStore { uint32_t at; uint32_t width; bool inLoop; std::vector<uint32_t> insns; std::string text; };
+            std::vector<TextStore> stores;
+            std::vector<bool> scopes;   // the text's open braces: whether each opened a loop
+            for (const Line& line : r.lines)
+            {
+                const bool loopLine = std::regex_search(line.text, loopHead);
+                bool inLoop = false;
+                for (bool l : scopes) inLoop = inLoop || l;
+                std::smatch m;
+                if (std::regex_search(line.text, m, storeLine))
+                {
+                    const uint32_t at = (static_cast<uint32_t>(std::stoul(m[1].str(), nullptr, 16)) + (m[2].matched ? static_cast<uint32_t>(std::stoul(m[2].str())) : 0u)) & 0x1FFFFFFFu;
+                    uint32_t width = m[3].matched ? static_cast<uint32_t>(std::stoul(m[3].str())) : 0u;
+                    if (width == 0)
+                        for (const Token& tk : line.tokens)
+                            if (tk.inspectionTarget > 0 && tk.inspectionTarget <= r.inspectionTargets.size())
+                            {
+                                const InspectionTarget& it = r.inspectionTargets[tk.inspectionTarget - 1];
+                                if ((it.address & 0x1FFFFFFFu) == at)
+                                {
+                                    width = it.byteSize;
+                                    break;
+                                }
+                            }
+                    // ...else the widest write there the engine kept (its records), the width of the global it made of them
+                    if (width == 0)
+                        for (const AccessFate& f : r.accessFates)
+                            if (f.write && f.fate == AccessFate::FoldedOrdinary && f.constantAddress && (f.address & 0x1FFFFFFFu) <= at && at < (f.address & 0x1FFFFFFFu) + f.size)
+                                width = std::max(width, static_cast<uint32_t>(f.size));
+                    std::string trimmed = line.text;
+                    trimmed.erase(0, trimmed.find_first_not_of(' '));
+                    const std::vector<uint32_t> insns = LineInstructions(line);
+                    if (!insns.empty()) stores.push_back({ at, width, inLoop, insns, trimmed });
+                    count(inLoop ? "text-store.in-loop" : "text-store.lines");
+                }
+                for (char c : line.text)
+                {
+                    if (c == '}' && !scopes.empty()) scopes.pop_back();
+                    if (c == '{') scopes.push_back(loopLine);
+                }
+            }
+            std::set<uint32_t> extraCounted;
+            bool reported = false;
+            for (const RunOut& run : runs)
+            {
+                std::map<uint32_t, int> times;
+                for (size_t i = 0; i < run.pcs.size(); ++i)
+                {
+                    if (run.depths[i] != 0) continue;
+                    ++times[run.pcs[i]];
+                    if (sfe::Sh2Decode(run.pcs[i], subject.WordAt(run.pcs[i])).HasDelaySlot) ++times[run.pcs[i] + 2];
+                }
+                auto runsOf = [&](const TextStore& ts) {
+                    int least = INT32_MAX;
+                    for (uint32_t i : ts.insns)
+                    {
+                        const auto it = times.find(i);
+                        least = std::min(least, it == times.end() ? 0 : it->second);
+                    }
+                    return least;
+                };
+                auto made = [&](uint32_t at, uint32_t width, bool loopOnly) {
+                    long n = 0;
+                    for (const TraceRec& t : run.trace)
+                    {
+                        const uint32_t a = t.addr & 0x1FFFFFFFu;
+                        if (t.depth == 0 && t.write && a <= at && at < a + static_cast<uint32_t>(t.size) && static_cast<uint32_t>(t.size) >= width &&
+                            (!loopOnly || inCodeLoop(t.insn)))
+                            ++n;
+                    }
+                    return n;
+                };
+                std::map<uint32_t, long> printedAll;
+                for (const TextStore& ts : stores) printedAll[ts.at] += runsOf(ts);
+                for (const auto& pa : printedAll)
+                    if (pa.second > made(pa.first, 1, false) && extraCounted.insert(pa.first).second) count("text-store.extra");
+                std::map<uint32_t, long> printedLoop;
+                std::map<uint32_t, const TextStore*> firstLoop;
+                for (const TextStore& ts : stores)
+                    if (ts.inLoop && ts.width != 0)
+                    {
+                        printedLoop[ts.at] += runsOf(ts);
+                        firstLoop.emplace(ts.at, &ts);
+                    }
+                for (const auto& pl : printedLoop)
+                {
+                    count("text-store.checked");
+                    const TextStore& ts = *firstLoop[pl.first];
+                    const long code = made(pl.first, ts.width, true);
+                    if (pl.second > code && !reported)
+                    {
+                        reported = true;
+                        count("text-store.loop-short");
+                        rep.text += "  said [" + mode + "text-store] " + (subject.fns.size() > 1 ? "[function " + std::to_string(fi) + "] " : std::string()) + "the text stores " +
+                                    std::to_string(ts.width) + " byte(s) at " + Hex(pl.first) + " in a loop " + std::to_string(pl.second) + " time(s) in a run where the code's loops make " +
+                                    std::to_string(code) + " such store(s) there (`" + ts.text + "`)\n";
+                    }
+                }
+            }
+        }
         // ---- Area 5, round 7 (A5-52): a word of work RAM the function reaches under two addresses is one memory ----
         // The bus gives a work-RAM word as many addresses as it has partitions, undecoded bits (28-27) and 1 MiB repeats; the emulator's
         // memory is the same bytes under all of them. The engine's data flow keys memory by address, and forwards a store to a load past
@@ -7479,11 +7603,13 @@ static const char kCxxHeaderBase[] = R"CXX(// The engine's reading of its own ps
 #include <stdint.h>
 #include <string.h>
 #include <type_traits>
+#include <map>
 typedef unsigned long long u64;
 typedef long long s64;
 template <int N> struct Rep { typedef typename std::conditional<(N <= 1), uint8_t, typename std::conditional<(N <= 2), uint16_t, typename std::conditional<(N <= 4), uint32_t, uint64_t>::type>::type>::type type; };
 template <int N, bool S> struct T;
 template <int N> struct Piece;
+template <int N> struct Unk;
 template <class I> struct IsInt { static const bool value = std::is_integral<I>::value; };
 static inline u64 B2U(bool x) { return x ? 1 : 0; }
 template <class I> static inline typename std::enable_if<std::is_signed<I>::value && !std::is_same<I, bool>::value, u64>::type B2U(I x) { return (u64)(s64)x; }
@@ -7509,6 +7635,12 @@ template <int N, bool S> struct T {
   // (`(uint4)(int2)CONCAT11(...)`, `(int4)(int2)CONCAT11(...)`), so a CONCAT cast straight to a wider type is its unsigned value, as C has it.
   // Before 0081 `(int4)CONCAT11(...)` was the engine's sign extension of `mov.w` and agreed here only, so it was excused as 'narrow-c'.
   template <int M> explicit T(const Piece<M>& o) : v((R)(o.Zext() & Mask())) {}
+  // (A2-126) a cast of an xunknown (a value of no sign: a field `xStack_4._0_2_`, a local declared xunknown2) to a wider unsigned type is the zero
+  // extension, as for a CONCAT: the engine prints its ZEXT as `(uint4)xStack_4._0_2_` (`extu.w`) and `(uint4)xStack_2`. To a signed type it
+  // extends by the sign, as the engine prints its SEXT (`(int4)xStack_8`). It was the sign extension at every target, so the right text was
+  // `mismatch` in every reading. A local last assigned a signed value (`xStack_4 = (int2)(...); uVar1 = (uint4)xStack_4;`, the sign extension
+  // of `mov.w`) keeps that sign (Unk::Signed), as A3-150 reads such a text: the local's assignment says which extension the cast is.
+  template <int M> explicit T(const Unk<M>& o) : v((R)((N > M && (S || o.Signed()) ? o.Sext() : o.Zext()) & Mask())) {}
   // an implicit conversion, the one C does: by the source's sign
   template <int M, bool U> operator T<M, U>() const { return T<M, U>(B2U(Ext())); }
   u64 Zext() const { return (u64)v & Mask(); }
@@ -7522,10 +7654,27 @@ template <int N, bool S, int M, bool U> struct Common {
   static const bool sign = N == M ? (S && U) : (N > M ? S : U);
   typedef T<size, sign> type;
 };
-// The value of a CONCATab: signed as an xunknown is in this reading, with the cast above for the extension
-template <int N> struct Piece : T<N, true> {
+// The value of a CONCATab: the unsigned value of its bytes, as DECOMPILER_GUIDE.md reads it (and C does), with the cast above for the extension.
+// (A2-127, patch 0084) It was signed here, as an xunknown is: `CONCAT11(a,b) == param_1` with an int2 param_1 then compared two sign extensions,
+// agreed, and g_cmpc counted nothing, so a text false as C and in the guide's reading was excused as 'narrow-c'. A compare with a CONCAT is the
+// compare of its own width and sign now (CMP below), and a signed one needs the cast to a signed type the engine prints, `(int2)CONCAT11(a,b)`.
+template <int N> struct Piece : T<N, false> {
   Piece() {}
-  template <class I, class = typename std::enable_if<IsInt<I>::value>::type> Piece(I x) : T<N, true>(x) {}
+  template <class I, class = typename std::enable_if<IsInt<I>::value>::type> Piece(I x) : T<N, false>(x) {}
+};
+// (A2-126) xunknownN: signed in this reading as before, but a type of its own, for the cast to a wider unsigned type above
+// Signed(): the value it was last assigned had a signed type (a cast `(int2)` in the text, a signed variable); a field read out of a variable, a
+// CONCAT, a number or an unsigned value leave it clear. The flag is kept beside the object, keyed by its address, so that its size stays the
+// type's (the harness takes a returned value's width from sizeof); every constructor and assignment sets it for its own object first.
+static inline bool& UnkSign(const void* p) { static std::map<const void*, bool> m; return m[p]; }
+template <int N> struct Unk : T<N, true> {
+  Unk() { UnkSign(this) = false; }
+  template <class I, class = typename std::enable_if<IsInt<I>::value>::type> Unk(I x) : T<N, true>(x) { UnkSign(this) = false; }
+  template <int M, bool U> Unk(const T<M, U>& o) : T<N, true>(B2U(o.Ext())) { UnkSign(this) = U; }
+  template <int M> Unk(const Unk<M>& o) : T<N, true>(B2U(o.Ext())) { UnkSign(this) = o.Signed(); }
+  Unk(const Unk& o) : T<N, true>(o) { UnkSign(this) = o.Signed(); }
+  Unk& operator=(const Unk& o) { this->v = o.v; UnkSign(this) = o.Signed(); return *this; }
+  bool Signed() const { return UnkSign(this); }
 };
 typedef T<4, false> Bool4;
 // `&&` and `||` of the text (A2-96) arrive as LAND(a, b) and LOR(a, b) (ShortCircuitOps): the right operand is evaluated only when the left does not decide,
@@ -7578,7 +7727,8 @@ template <int M, int N> static inline typename PieceWide<N, M>::type WidenPiece(
   template <int N, int M, bool U> auto operator op(const T<M, U>& b, const Piece<N>& a) -> decltype(b op WidenPiece<M>(a)) { return b op WidenPiece<M>(a); } \
   template <int N, int M> auto operator op(const Piece<N>& a, const Piece<M>& b) -> decltype(WidenPiece<M>(a) op WidenPiece<N>(b)) { return WidenPiece<M>(a) op WidenPiece<N>(b); }
 PIECEOP(+) PIECEOP(-) PIECEOP(*) PIECEOP(&) PIECEOP(|) PIECEOP(^) PIECEOP(/) PIECEOP(%)
-PIECEOP(==) PIECEOP(!=) PIECEOP(<) PIECEOP(<=) PIECEOP(>) PIECEOP(>=)
+// (A2-127) A comparison with a CONCAT is CMP's, the CONCAT unsigned at its own width (Piece), so that a compare of two narrow sides whose C widening
+// differs (a CONCAT by zero, an int2 by sign) is counted by g_cmpc, and an ordered compare reads the CONCAT unsigned unless the text casts it.
 // shifts take the type of the left operand
 template <int N, bool S, int M, bool U> T<N, S> operator<<(const T<N, S>& a, const T<M, U>& b) { u64 c = b.Zext(); return T<N, S>(c >= 8 * N ? 0 : (a.Zext() << c)); }
 template <int N, bool S, int M, bool U> T<N, S> operator>>(const T<N, S>& a, const T<M, U>& b) {
@@ -7603,16 +7753,18 @@ typedef T<1, false> byte; typedef T<1, false> uchar; typedef T<2, false> ushort;
 typedef T<2, false> word; typedef T<4, false> dword; typedef T<8, false> qword;
 typedef T<3, true> int3; typedef T<1, true> int1; typedef T<2, true> int2; typedef T<4, true> int4; typedef T<8, true> int8;
 typedef T<1, false> uint1; typedef T<2, false> uint2; typedef T<4, false> uint4; typedef T<8, false> uint8;
-typedef T<1, true> xunknown1; typedef T<2, true> xunknown2; typedef T<4, true> xunknown4; typedef T<8, true> xunknown8;
+typedef Unk<1> xunknown1; typedef Unk<2> xunknown2; typedef Unk<4> xunknown4; typedef Unk<8> xunknown8;
 typedef T<3, true> unkbyte3; typedef T<3, false> unkuint3; typedef T<3, true> unkint3;
 typedef T<5, true> unkbyte5; typedef T<6, true> unkbyte6; typedef T<7, true> unkbyte7; typedef T<5, false> unkuint5; typedef T<6, false> unkuint6; typedef T<7, false> unkuint7;
 typedef T<5, true> unkint5; typedef T<6, true> unkint6; typedef T<7, true> unkint7;
 template <class X> static inline u64 RAW(const X& x) { return B2U(x); }
 template <int N, bool S> static inline u64 RAW(const T<N, S>& x) { return x.Zext(); }
 template <int N> static inline u64 RAW(const Piece<N>& x) { return x.Zext(); }
+template <int N> static inline u64 RAW(const Unk<N>& x) { return x.Zext(); }
 template <class X> struct SZ { static const int n = sizeof(X); };
 template <int N, bool S> struct SZ<T<N, S> > { static const int n = N; };
 template <int N> struct SZ<Piece<N> > { static const int n = N; };
+template <int N> struct SZ<Unk<N> > { static const int n = N; };
 #define SIZEOFV(v) (SZ<__typeof__(v)>::n)
 #define FLDMASK(n) ((n) >= 8 ? ~0ULL : ((1ULL << (8 * (n))) - 1))
 #define FLDRAW(v, o, n) ((RAW(v) >> (8 * (SIZEOFV(v) - (o) - (n)))) & FLDMASK(n))
@@ -11640,6 +11792,95 @@ void TestPrintedC()
                 std::printf("pin 'A10-17 oracle': %s (%s)\n", bad1017[0].cls.c_str(), bad1017[0].detail.substr(0, 150).c_str());
                 CHECK(bad1017[0].cls == "mismatch" && IsFailing(bad1017[0]));
             }
+            // A2-127 (patch 0084): a CONCAT printed in place has no type in the text, so C and DECOMPILER_GUIDE.md read it as the unsigned value of its bytes.
+            // Compared with a signed narrow side it printed bare, `return CONCAT11(xStack_4,param_4) == param_1;` (int2 param_1), false as C for the bytes 0xFFFF the
+            // code finds equal and right only for a CONCAT taken as signed, which the oracle's reading did (its Piece was signed, so g_cmpc counted nothing: narrow-c).
+            // The CONCAT is cast to its signed type where the op reads it signed: an equality with a signed narrow side (#0, #1), the signed ordered compares (#2, #3),
+            // an arithmetic shift (#4, pgen.py seed 1594: `(int2)CONCAT11(cVar1,param_1) >> 1`). #5 and #6 are controls: an unsigned compare with `extu.w`, and the
+            // CONCAT zero-extended by `extu.w` before the compare. Each of #0 to #4 is `mismatch` on the engine without 0084 under this oracle.
+            {
+                auto w = [](const char* t) {
+                    std::vector<uint16_t> v;
+                    std::istringstream in(t);
+                    std::string tok;
+                    while (in >> tok) v.push_back(static_cast<uint16_t>(std::strtoul(tok.c_str(), nullptr, 16)));
+                    return v;
+                };
+                const std::vector<CCase> k127 = {
+                    { "A2-127 #0: ==", w("7FFC 2F52 6073 80F1 85F0 7F04 614F 3010 0029 000B 0009") },
+                    { "A2-127 #1: !=", w("7FFC 2F52 6073 80F1 85F0 7F04 614F 3010 0029 CA01 000B 0009") },
+                    { "A2-127 #2: cmp/ge", w("7FFC 2F52 6073 80F1 85F0 7F04 614F 3013 0029 000B 0009") },
+                    { "A2-127 #3: cmp/gt the other way", w("7FFC 2F52 6073 80F1 85F0 7F04 614F 3107 0029 000B 0009") },
+                    { "A2-127 #4: shar of the CONCAT (pgen.py 1594)", w("7FF8 1F40 1F51 6043 80F1 6063 81F2 6043 80F7 84F6 6103 611F 85F3 6203 4221 3126 8B02 E001 A001 0009 E000 7F08 000B 0009") },
+                    { "A2-127 #5 control: cmp/hs against extu.w", w("7FFC 2F52 6073 80F1 85F0 7F04 614D 3012 0029 000B 0009") },
+                    { "A2-127 #6 control: the CONCAT zero-extended", w("7FFC 2F52 6073 80F1 85F0 7F04 600D 614F 3010 0029 000B 0009") } };
+                const std::vector<CVerdict> r127 = CheckPrintedC(d, k127, nIn, cc, 0x51ED, 8971);
+                for (size_t k = 0; k < r127.size(); ++k)
+                {
+                    std::printf("pin '%s': %s (%s)\n", k127[k].name.c_str(), r127[k].cls.empty() ? "agrees" : r127[k].cls.c_str(), r127[k].detail.substr(0, 90).c_str());
+                    CHECK(r127[k].cls.empty() && r127[k].compared);   // agrees as C, not narrow-c
+                }
+                CHECK(r127[0].text.find("(int2)CONCAT11(xStack_4,param_4) == param_1") != std::string::npos);
+                CHECK(r127[1].text.find("(int2)CONCAT11(xStack_4,param_4)") != std::string::npos);
+                CHECK(r127[2].text.find("param_1 <= (int2)CONCAT11(xStack_4,param_4)") != std::string::npos);
+                CHECK(r127[3].text.find("(int2)CONCAT11(xStack_4,param_4) < param_1") != std::string::npos);
+                CHECK(r127[4].text.find("(int2)CONCAT11(cVar1,param_1) >> 1") != std::string::npos);
+                // The oracle by itself: the texts before the patch (the casts taken out) agree only with a signed CONCAT, and are findings, not narrow-c.
+                gPrintedCTextHook = [](const std::string& t) {
+                    std::string u = t;
+                    const std::string with = "(int2)CONCAT11(";
+                    for (size_t at = u.find(with); at != std::string::npos; at = u.find(with)) u.replace(at, with.size(), "CONCAT11(");
+                    return u;
+                };
+                const std::vector<CCase> old127(k127.begin(), k127.begin() + 5);
+                const std::vector<CVerdict> b127 = CheckPrintedC(d, old127, nIn, cc, 0x51ED, 8972);
+                gPrintedCTextHook = nullptr;
+                for (size_t k = 0; k < b127.size(); ++k)
+                {
+                    std::printf("pin 'A2-127 oracle #%zu': %s (%s)\n", k, b127[k].cls.c_str(), b127[k].detail.substr(0, 150).c_str());
+                    CHECK(b127[k].cls == "mismatch" && IsFailing(b127[k]));
+                }
+            }
+            // A2-126 (the oracle): `(uint4)` of an xunknown (no sign), a field `xStack_4._0_2_` (#0, pgen.py seed 77 shrunk) or a local (#1, seed 3372), is the zero
+            // extension the code makes (`extu.w`), in C and as the engine prints a ZEXT; the engine's reading took it by the source's sign, and with C failing for
+            // its own reason (an xunknown4 against an int4) no reading took the right text: `mismatch`. The cast of an xunknown to a wider unsigned type is the zero
+            // extension there now, but for a local last assigned a signed value (#2: `xStack_4 = (int2)(...); uVar1 = (uint4)xStack_4;`, the `mov.w` sign
+            // extension, A3-150's reading). #3 is the field zero-extended into a sum (`agrees` as C); the same text with the field sign-extended
+            // (`(uint4)(int2)xStack_4._0_2_ + xStack_4`, a wrong text) is `mismatch`.
+            {
+                auto w = [](const char* t) {
+                    std::vector<uint16_t> v;
+                    std::istringstream in(t);
+                    std::string tok;
+                    while (in >> tok) v.push_back(static_cast<uint16_t>(std::strtoul(tok.c_str(), nullptr, 16)));
+                    return v;
+                };
+                const std::vector<CCase> k126 = {
+                    { "A2-126 #0: (uint4) of an xunknown2 field", w("7FFC 2F42 6053 81F1 51F0 85F0 600D 3017 0029 7F04 000B 0009") },
+                    { "A2-126 #1: (uint4) of an xunknown2 local (pgen.py 3372)", w("7FF8 1F40 1F51 6073 80F6 6073 80F3 6053 81F1 85F3 6103 611D 52F0 3217 8B02 E001 A001 0009 E000 7F08 000B 0009") },
+                    { "A2-126 #2: the local assigned a signed value", w("7FF8 1F40 1F51 6063 80F3 85F2 6103 84F5 6203 622D 3212 0029 7F08 000B 0009") },
+                    { "A2-126 #3: the field zero-extended into a sum", w("7FFC 2F42 6053 81F1 51F0 85F0 600D 301C 7F04 000B 0009") } };
+                const std::vector<CVerdict> r126 = CheckPrintedC(d, k126, nIn, cc, 0x51ED, 8973);
+                for (size_t k = 0; k < r126.size(); ++k)
+                {
+                    std::printf("pin '%s': %s (%s)\n", k126[k].name.c_str(), r126[k].cls.empty() ? "agrees" : r126[k].cls.c_str(), r126[k].detail.substr(0, 90).c_str());
+                    CHECK(!IsFailing(r126[k]) && r126[k].compared);
+                }
+                CHECK(r126[0].text.find("(int4)(uint4)xStack_4._0_2_") != std::string::npos);
+                CHECK(r126[2].text.find("uVar1 = (uint4)xStack_4;") != std::string::npos);
+                CHECK(r126[3].cls.empty() && r126[3].text.find("(uint4)xStack_4._0_2_ + xStack_4") != std::string::npos);
+                gPrintedCTextHook = [](const std::string& t) {
+                    std::string u = t;
+                    const std::string with = "(uint4)FLD(xStack_4, 0, 2) + xStack_4";   // the hook sees the text with its fields rewritten
+                    const size_t at = u.find(with);
+                    if (at != std::string::npos) u.replace(at, with.size(), "(uint4)(int2)FLD(xStack_4, 0, 2) + xStack_4");
+                    return u;
+                };
+                const std::vector<CVerdict> b126 = CheckPrintedC(d, { k126[3] }, nIn, cc, 0x51ED, 8974);
+                gPrintedCTextHook = nullptr;
+                std::printf("pin 'A2-126 oracle: the field sign-extended': %s (%s)\n", b126[0].cls.c_str(), b126[0].detail.substr(0, 150).c_str());
+                CHECK(b126[0].cls == "mismatch" && IsFailing(b126[0]));
+            }
             // (area 3 round 15 fix) frame124 seed 2268.chain (the merge's printed-C range): `(int4)uStack_24._0_1_` is the engine's sign extension
             // of the word's top byte, which the C reading takes unsigned (0x80FE for the run's 0x7FFE); the engine's reading, which has the
             // sign, did not compile: `pppxStack_8 = &ppuStack_c;` assigns a `uint4 ***` to an `xunknown4 ***`. With the address assignment cast to the local's type (AddressAssignTyped) it
@@ -13745,6 +13986,37 @@ void TestRound9Pins(Sh2Decompiler& d)
 // over the words function 0's pushes freed; the text read the walk's byte as the saved r13 (`(char)((uint4)unaff_r13 >> 0x10)`). With the patch the
 // save slot is a local the walk may write (`xStack_c = unaff_r13;` at the push, `xStack_c._1_1_` read after the walk), and check 12 takes the save
 // before any call for no read of r13 (SavesBeforeCallsDropped). The walk the printed-C differential draws (GenWalkFn) is drawn in every form.
+// (A3-161) The text-store count (CheckFn): grammar 1 seed 1862942, shrunk, prints `iRam06002308 = -0x10;` before its loop and
+// `iRam06002308 = iRam06002308 * 2;` in it, stores the code does not make (the loop's register merged into the global it is stored to after
+// the loop; the code writes 06002308 by `tas.b` in the loop and `mov.w` in the `rts` slot). The row is accepted (P3: the final memory and every
+// value are right); the check counts it and says it (`text-store.loop-short`), so the shape cannot pass unseen. The same loop with the store after it made on one path prints the
+// `tas.b` as a two-byte `uRam06002308 = uRam06002308 | 0x8000;` in the loop (the byte's read-modify-write at the width of the global it was
+// merged into, a store the code does not make either): counted too. The same loop with the `mov.w` in it prints the same text as the
+// seed, and its store in the loop is made on each trip: it passes (its store before the loop is no store of the code either, but the
+// `tas.b`'s byte store makes the run's count of stores there equal the text's: the count does not see it). The control: a `tas.b` loop
+// whose store the engine keeps (`uRam06002308 = uRam06002308 | 0x80;`).
+void TestA3161Pins(Sh2Decompiler& d)
+{
+    struct { const char* name; const char* words; bool loopShort; } pins[] = {
+        { "A3-161 seed 1862942 shrunk", "D104 241B D604 E301 461B 311C 4310 8BFB 000B 2611 FFFF FFF0 0600 2308", true },
+        { "A3-161 the store after the loop, on one path", "D106 241B D606 E301 461B 311C 4310 8BFB 2558 8900 2611 000B 0009 0009 FFFF FFF0 0600 2308", true },
+        { "A3-161 the store in the loop", "D105 241B D605 E301 461B 311C 2611 4310 8BFA 000B 0009 0009 FFFF FFF0 0600 2308", false },
+        { "A3-161 control: a tas.b loop", "D602 461B 89FD 000B 0009 0009 0600 2308", false } };
+    for (const auto& pin : pins)
+    {
+        const Report rep = EvaluateSubject(d, RawSubject(pin.words), true);
+        auto counted = [&](const char* name) { const auto it = rep.counts.find(name); return it == rep.counts.end() ? 0 : it->second; };
+        std::printf("pin '%s': %zu finding(s), text-store checked %d, loop-short %d, extra %d\n", pin.name, rep.findings.size(), counted("text-store.checked"),
+                    counted("text-store.loop-short"), counted("text-store.extra"));
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+        CHECK(counted("text-store.checked") > 0);
+        CHECK((counted("text-store.loop-short") > 0) == pin.loopShort);
+        CHECK(rep.text.find("text-store]") != std::string::npos || !pin.loopShort);
+        if (std::strstr(pin.name, "control")) CHECK(counted("text-store.extra") == 0);
+    }
+}
+
 void TestA365Pins(Sh2Decompiler& d)
 {
     auto count = [](const Report& rep, const char* name) {
@@ -14104,6 +14376,7 @@ void TestGenerated()
         RUN(TestRound12FixPins(d));
         RUN(TestRound13FixPins(d));
         RUN(TestA365Pins(d));
+        RUN(TestA3161Pins(d));
         if (EnvNumber("SE_GENERATED_CANARY", 240) > 0) RUN(TestCanary(d));
     }
     const long seeds = single ? 1 : EnvNumber("SE_GENERATED_SEEDS", 300);
