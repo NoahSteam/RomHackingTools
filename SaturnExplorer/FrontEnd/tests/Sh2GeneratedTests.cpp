@@ -5565,7 +5565,13 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                 // SUBPIECE whose output was the global's own address: `iRam26002314._0_1_ = (char)((uint2)iRam26002314 >> 8);`, a store the code
                 // does not make, whose overlap with the wider write had the merge write the wider value back at the end of the function, after a
                 // later register read, grammar 1 seed 2606069. A line that assigns a piece of the global is judged: some write of the code to
-                // those bytes, and no wider one, must be named on it. The order is then judged as for any folded store.)
+                // those bytes, and no wider one, must be named on it; one that names a read of those bytes instead is the read made a store, and
+                // reported. The order is then judged as for any folded store.
+                // A5-112, open (P3): a narrower write after a wider one is printed by heritage's pieces too (`Heritage::normalizeWriteSize`): the
+                // wider store as a store of the bytes the narrow one leaves (`xRam26002008._1_1_ = in_r1;` for `mov.w r1,@r6`) and the narrow one
+                // as a store of the whole (`xRam26002008 = CONCAT11(in_r2,(xunknown1)xRam26002008);` for `mov.b r2,@r6`). The values and the
+                // order are the code's, the widths are not: a line naming a write of the global and no read of the piece is counted
+                // (`order.folded-store.piece-split`), not judged.)
                 {
                     char name[24];
                     std::snprintf(name, sizeof name, "Ram%08x._", static_cast<unsigned>(f.address));
@@ -5582,14 +5588,18 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                         if (std::sscanf(l.text.c_str() + at + std::strlen(name), "%u_%u_", &off, &sz) != 2 || sz == 0) continue;
                         count("order.folded-store.piece-store");
                         const uint32_t lo = f.address + off, hi = lo + sz;
-                        bool made = false;
+                        bool made = false, readNamed = false;
                         for (const AccessFate& o : r.accessFates)
                         {
+                            bool named = false;
+                            for (const Token& t : l.tokens) named |= t.addr == o.insn;
+                            if (!named) continue;
                             // (a write of those bytes: one inside the piece; a wider write named on the line is the value forwarded, not the piece's store)
-                            if (!o.write || o.address < lo || o.address + o.size > hi) continue;
-                            for (const Token& t : l.tokens) made |= t.addr == o.insn;
+                            if (o.write && o.address >= lo && o.address + o.size <= hi) made = true;
+                            if (!o.write && o.address < hi && lo < o.address + o.size) readNamed = true;
                         }
-                        if (!made && pieceStoresSaid.insert(li).second)
+                        if (!made && !readNamed) count("order.folded-store.piece-split");
+                        else if (!made && pieceStoresSaid.insert(li).second)
                             add("folded-store-after-access", "line " + std::to_string(li) + " stores " + std::to_string(sz) + " byte(s) of the global at " +
                                                                  Hex(f.address) + " (`" + l.text.substr(b) + "`) that no write of the code there makes: a read of a piece " +
                                                                  "of the global, made a write of it");
@@ -13329,6 +13339,11 @@ void TestA587Pins(Sh2Decompiler& d)
             nullptr, nullptr, nullptr, nullptr, nullptr }, "text-store.loop-short", nullptr },
         { { "A5-111, the same with a long write and a byte read", "D605 D706 6071 C801 8BFC 3230 8D01 1603 846D 6371 000B 0009 2600 2308 FFFF FE68",
             nullptr, nullptr, nullptr, nullptr, nullptr }, "order.folded-store.hardware-read", nullptr },
+        // A5-112 (open, P3; the A5-111 fixer's 20,000-seed run, grammar 1 seeds 366, 1259, 1486 and 3284; 366 shrunk): a byte write after a half-word write of the
+        // global is printed as a store of the half's other byte and a store of the whole (`xRam26002008._1_1_ = in_r1; ... xRam26002008 =
+        // CONCAT11(in_r2,(xunknown1)xRam26002008);`); counted (`order.folded-store.piece-split`), not judged.
+        { { "A5-112, mov.w r1,@g ; mov.b r0,@r5 ; mov.b r2,@g (open)", "D602 2611 8050 000B 2620 0009 2600 2008",
+            nullptr, nullptr, nullptr, nullptr, nullptr }, "order.folded-store.piece-split", nullptr },
         { { "A5-103, a purge through (p & 0x1FFFFFF0) | 0x40000000", "D103 2149 D203 212B E000 000B 2102 0009 1FFF FFF0 4000 0000",
             nullptr, nullptr, nullptr, nullptr, nullptr }, nullptr, nullptr },
         { { "A5-104, a literal written and then loaded", "D102 2142 D002 000B 0009 0009 0600 9010 1234 5678",
