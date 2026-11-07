@@ -9412,6 +9412,33 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
             v.cls = "skipped:emulator-unfinished";
             continue;
         }
+        if (ptrMode)
+        {
+            // (A2-129) an integer parameter that the text both casts to a pointer and reads as a number (`*(xunknown4 *)param_1 = param_1;`, mov.l r4,@r4) needs two
+            // values, the host's address and the machine's number: not run
+            bool mixed = false;
+            for (int i = 0; i < nParams && i < 2 && !mixed; ++i)
+            {
+                size_t b = 0;
+                for (int j = 0; j < i; ++j) b = plist.find(',', b) + 1;
+                const size_t e = plist.find(',', b);
+                const std::string decl = plist.substr(b, e == std::string::npos ? std::string::npos : e - b);
+                if (decl.rfind('*') != std::string::npos) continue;
+                const size_t nameAt = decl.find_last_not_of(" \t");
+                if (nameAt == std::string::npos) continue;
+                const std::string pname = decl.substr(decl.find_last_of(" \t*", nameAt) + 1, nameAt + 1 - (decl.find_last_of(" \t*", nameAt) + 1));
+                const std::regex any("\\b" + pname + "\\b"), asPointer("\\*\\s*\\)\\s*\\(?\\s*" + pname + "\\b");
+                const auto count = [&](const std::regex& re) { return std::distance(std::sregex_iterator(pr.cText.begin(), pr.cText.end(), re), std::sregex_iterator()); };
+                const auto asPtr = count(asPointer);
+                mixed = asPtr > 0 && count(any) - 1 > asPtr;
+            }
+            if (mixed)
+            {
+                v.cls = "skipped:memory";
+                v.detail = "an integer parameter is used both as an address (cast to a pointer) and as a number; the memory mode gives it one value";
+                continue;
+            }
+        }
         std::ostringstream m;
         const std::string ptrU = ptrW == 1 ? "uint8_t" : ptrW == 2 ? "uint16_t" : "uint32_t";   // (`char` is a macro in the engine's reading)
         m << "  { /* " << pr.name << " */\n    static const unsigned int D[][18] = {\n" << rows.str() << "    };\n";
@@ -9431,7 +9458,16 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
                 const std::string decl = plist.substr(b, e == std::string::npos ? std::string::npos : e - b);
                 const std::string addr = "(g_frame_base + 0x8000 + (g_in[" + std::to_string(4 + i) + "] - 0x06080000u))";
                 const size_t star = decl.rfind('*');   // `xunknown4 *param_1`: the cast is to `xunknown4 *` (C++ takes no void * for it)
-                call << (i ? ", " : "") << (star != std::string::npos ? "(" + decl.substr(0, star + 1) + ")(uintptr_t)" + addr : "(int)" + addr);
+                // (A2-129) An integer parameter is the machine's number (0x0608xxxx), as the run holds it: `mov r5,r0 ; rts` returns it, `shlr16` shifts it, `mov.l r5,@r4`
+                // stores it. It got the host's address of the arena, so a right text that used it as a number was `mismatch`. A text that casts the integer to a pointer
+                // (`*(xunknown4 *)param_1 = 1;`, `(xunknown4 *)param_1`) dereferences it, and there the number would be an address nothing maps, so it keeps the host's.
+                size_t nameAt = decl.find_last_not_of(" \t");
+                size_t nameBeg = nameAt == std::string::npos ? 0 : decl.find_last_of(" \t*", nameAt) + 1;
+                const std::string pname = nameAt == std::string::npos ? std::string() : decl.substr(nameBeg, nameAt + 1 - nameBeg);
+                const std::regex asPointer("\\*\\s*\\)\\s*\\(?\\s*" + pname + "\\b");
+                const bool derefInt = star == std::string::npos && !pname.empty() && std::regex_search(pr.cText, asPointer);
+                call << (i ? ", " : "") << (star != std::string::npos ? "(" + decl.substr(0, star + 1) + ")(uintptr_t)" + addr
+                                                                       : derefInt ? "(int)" + addr : "(int)g_in[" + std::to_string(4 + i) + "]");
             }
             else call << (i ? ", " : "") << "(int)g_in[" << 4 + i << "]";
         }
@@ -12390,6 +12426,17 @@ void TestPrintedC()
                     gPrintedCTextHook = nullptr;
                     std::printf("pin 'A2-106 (c)': %s (%s)\n", m106c[0].cls.c_str(), m106c[0].detail.substr(0, 90).c_str());
                     CHECK(m106c[0].cls == "mismatch" && m106c[0].detail.find(" memory ") != std::string::npos);
+                    // A2-129: an integer parameter is the machine's number in the memory mode, not the host's address of the arena. `mov r5,r0 ; rts` returns it (#0), `shlr16` of r4
+                    // shifts it (#1), `mov.l r5,@r4` stores it through r4 (#2): each was `mismatch` (run=06081034, pseudo a host address). #3, `mov.l r4,@r4`
+                    // (`*(xunknown4 *)param_1 = param_1;`), is both an address and a number of one parameter and is not run: `skipped:memory`.
+                    const std::vector<CVerdict> m129 = CheckPrintedC(d, { mem("A2-129 #0: r5 returned", 4, { 0x6053, 0x000B, 0x0009 }),
+                                                                          mem("A2-129 #1: shlr16 of r4", 4, { 0x6043, 0x4029, 0x000B, 0x0009 }),
+                                                                          mem("A2-129 #2: r5 stored through r4", 4, { 0x2452, 0x000B, 0x0009 }),
+                                                                          mem("A2-129 #3: r4 stored through r4", 4, { 0x2442, 0x000B, 0x0009 }) }, nIn, cc, 0x51ED, 8991);
+                    for (size_t k = 0; k < m129.size(); ++k)
+                        std::printf("pin 'A2-129 #%zu': %s (%s)\n", k, m129[k].cls.empty() ? "agrees" : m129[k].cls.c_str(), m129[k].detail.substr(0, 60).c_str());
+                    for (size_t k = 0; k < 3; ++k) CHECK(m129[k].cls.empty() && (m129[k].compared || k == 2));   // #2 returns nothing: its arena is what is compared
+                    CHECK(m129[3].cls == "skipped:memory");
                 }
                 // A2-108: the same dereference without the mode is said to be memory, not run on random numbers as host pointers (it was `crashed`)
                 const std::vector<CVerdict> m108 = CheckPrintedC(d, { mem("A2-108: a pointer parameter without the mode", 0, { 0x2462, 0x6052, 0x000B, 0x0009 }) }, nIn, cc, 0x51ED, 8994);
