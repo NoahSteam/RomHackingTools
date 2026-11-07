@@ -4010,6 +4010,35 @@ private:
         v.back = rest;
         for (const SelfPath& p : mine) (p.Adds() ? stepped : exact).push_back(&p);
         constexpr size_t kMaxValues = 64;
+        // (A5-110) The partitions of the unknown values, closed under this loop's exact paths as the constants are: `p | 0xfffffe00`, then
+        // `p ^ 0x20000000` round a loop, is in partition 7 or 6 whatever the number of turns, not in 6 alone.
+        if (v.others && v.partsKnown && !mine.empty())
+        {
+            // (a step added each turn is taken to carry up into the next partition at most, never round the address space: the step is a positive
+            // few bytes, and a pointer in the last partition stays in it. Counting the turns down as well would make every partition of the
+            // ring reachable, and say nothing)
+            auto turn = [](const SelfPath& p, uint8_t in) {
+                uint8_t cur = in;
+                for (const SelfStep& st : p.steps)
+                {
+                    uint8_t next = 0;
+                    if (st.Adds()) next = static_cast<uint8_t>(cur | (cur << 1));
+                    else
+                        for (uint32_t part = 0; part < 8; ++part)
+                            if ((cur >> part) & 1u)
+                                for (uint32_t m : st.operands) next = static_cast<uint8_t>(next | (1u << (Apply(st.code, part << 29, m) >> 29)));
+                    cur = next;
+                }
+                return cur;
+            };
+            for (int round = 0; round < 16; ++round)
+            {
+                uint8_t grown = v.parts;
+                for (const SelfPath& p : mine) grown = static_cast<uint8_t>(grown | turn(p, v.parts));
+                if (grown == v.parts) break;
+                v.parts = grown;
+            }
+        }
         std::set<uint32_t> all;
         for (const auto& c : v.constants) all.insert(c.first);
         std::vector<uint32_t> work(all.begin(), all.end());
@@ -4111,7 +4140,8 @@ private:
             if (d == 0) out.partsKnown = true, out.parts = v.parts;
             else if (d > -0x20000000 && d < 0x20000000)
             {
-                const uint8_t moved = d > 0 ? static_cast<uint8_t>((v.parts << 1) | (v.parts >> 7)) : static_cast<uint8_t>((v.parts >> 1) | (v.parts << 7));
+                const uint8_t moved = d > 0 ? static_cast<uint8_t>(v.parts << 1) :   // (A5-110: up from the last partition is not a wrap round the address space: a field offset off a pointer into the on-chip page stays in it)
+                                        static_cast<uint8_t>((v.parts >> 1) | (v.parts << 7));
                 out.partsKnown = true;
                 out.parts = static_cast<uint8_t>(v.parts | moved);
             }
@@ -4237,6 +4267,19 @@ private:
             spanOfOr(out);
             // (the constants too, when they were too many to pair: they are among the unknown values now; an indexed pointer's are not known)
             if (set->bases.empty() && (set->others || !set->constants.empty())) partsOf(out, true);
+            // (A5-110) The pointer's own value round a loop, moved by the operation, as below: the node it comes back to closes it, and the
+            // partitions of the unknown values are closed under the loop's turns (`p | 0xfffffe00`, then `p ^ 0x20000000` round a loop, is in
+            // partition 7 or 6, not in 6 alone)
+            if (mask && !set->back.empty())
+            {
+                std::set<uint32_t> masks;
+                for (const auto& m : mask->constants) masks.insert(m.first);
+                for (SelfPath p : set->back)
+                {
+                    p.steps.push_back(SelfStep{ code, masks });
+                    out.back.push_back(std::move(p));
+                }
+            }
             return out;
         }
         for (const auto& s : set->constants)
@@ -4431,7 +4474,7 @@ std::string MaskedPartitionNote(uint8_t parts, uint32_t size, bool write, bool a
     if (parts & 0x24u) add("the associative purge (an access invalidates the cache line of its address and is no memory access)");
     if (parts & 0x08u) add("the cache address array (an access sets or reads a cache line's tag)");
     if (parts & 0x50u) add("the cache data array");
-    if (parts & 0x80u) add("the on-chip registers (the access may reach on-chip registers, whose width rules differ by address)");
+    if (parts & 0x80u) add("the on-chip registers");
     return prefix + "may not be a memory access: whatever the value it is made from, the address is in " + ranges + ", which hold " + kinds +
            "; which of them this " + std::to_string(size) + "-byte " + what + " reaches is not known";
 }
@@ -4536,7 +4579,7 @@ std::vector<HardwareNote> HardwareNotes(const ghidra::Funcdata& fd, const std::f
             if (!value) continue;
             const PointerValues pv = PointerResolver().Resolve(ptr);
             const uint32_t size = static_cast<uint32_t>(value->getSize());
-            // The addresses the pointer can hold that are a register's, by its symbol or by an alias the engine prints as a number
+                // The addresses the pointer can hold that are a register's, by its symbol or by an alias the engine prints as a number
             // (A5-38); a pointer that starts at one and is indexed is said for the register itself, as "if the index is 0".
             // (an address the bus decodes to a register area, named or not: the cache caution and the width cautions are about the access,
             // and an unnamed register in a SCSP or VDP2 block is read through the cache as a named one is)

@@ -5434,6 +5434,10 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                     named |= n.address == t.insn && (n.text.find("if the pointer holds 0x" + Hex(t.addr)) != std::string::npos ||
                                                        n.text.find("the pointer is based at 0x" + Hex(t.addr)) != std::string::npos);
                     said |= n.address == t.insn && n.caution && n.text.find("may reach on-chip registers") != std::string::npos;
+                    // (A5-110: the A5-103 note for a pointer whose partition bits a mask fixed says it too, naming the on-chip registers among
+                    // the partitions the access is in: `p | 0xe0000000` stepped by `xor 0x20000000` is 0xC or 0xE, the cache data array or the page)
+                    said |= n.address == t.insn && n.caution && n.text.find("may not be a memory access") != std::string::npos &&
+                            n.text.find("hold") != std::string::npos && n.text.find("the on-chip registers") != std::string::npos;
                     // (A5-101: an on-chip register's address plus an index says that another index reaches another register of the page)
                     said |= n.address == t.insn && n.caution && n.text.find("plus an index that is not known") != std::string::npos;
                 }
@@ -5602,7 +5606,25 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                         }
                         return true;
                     };
-                    const bool after = fb == mb ? m.origOrder > f.origOrder : fr.reach[fb][mb] && !fr.reach[mb][fb] && !hasGoto && alwaysReaches(fb, mb);
+                    // (...or every path from the entry to the access's block runs through the store's: the access is conditional, the store is not
+                    // (a store in the slot of the branch that skips the access, seed 2006655), and the store was made first whenever the access runs)
+                    auto dominates = [&](size_t d, size_t x) {
+                        if (d == 0) return true;
+                        std::vector<char> seen(r.flowSuccessors.size(), 0);
+                        std::vector<size_t> todo{ 0 };
+                        while (!todo.empty())
+                        {
+                            const size_t y = todo.back();
+                            todo.pop_back();
+                            if (y == d || y >= seen.size() || seen[y]) continue;
+                            if (y == x) return false;
+                            seen[y] = 1;
+                            for (int z : r.flowSuccessors[y])
+                                if (z >= 0) todo.push_back(static_cast<size_t>(z));
+                        }
+                        return true;
+                    };
+                    const bool after = fb == mb ? m.origOrder > f.origOrder : fr.reach[fb][mb] && !fr.reach[mb][fb] && !hasGoto && (alwaysReaches(fb, mb) || dominates(fb, mb));
                     if (!after) continue;
                     // (A5-109, fixed by patch 0085: a read through a pointer, or a register's access, the code makes after a folded store is
                     // judged like a write through a pointer. The engine took such a store for dead when two writes of the same value joined
@@ -13211,11 +13233,21 @@ void TestA587Pins(Sh2Decompiler& d)
         // after a read through a pointer; the write carried to the return after a register write (grammar 1 seed 2012158); a zero byte store
         // carried past a register write (seed 2006655).
         { { "A5-109, g = v; x = *p; if (c) g = v;", "D604 2632 8802 8F02 6072 2632 6345 000B 0009 0009 0600 1010",
-            nullptr, nullptr, nullptr, nullptr, nullptr }, "order.folded-store.checked", nullptr },
+            nullptr, nullptr, nullptr, nullptr, nullptr }, "order.folded-store.overwritten", nullptr },
         { { "A5-109, x = g; g = r4; SCSP_SCILV2 = x, grammar 1 seed 2012158 shrunk", "D706 D307 6032 2342 2702 E301 4310 8BFD 445F 4315 8B00 2402 000B 0009 05B0 0428 2600 2200",
             nullptr, nullptr, nullptr, nullptr, nullptr }, "order.folded-store.hardware-write", nullptr },
         { { "A5-109, a byte store before a conditional SH2_BCR2 write, grammar 1 seed 2006655 shrunk", "D606 E301 4310 8BFD 2138 8B01 2239 D704 3020 8D01 2620 2702 000B 0009 2600 210C FFFF FFE4",
             nullptr, nullptr, nullptr, nullptr, nullptr }, "order.folded-store.hardware-write", nullptr },
+        { { "A5-109, a write of SCU_D2MD after a store folded into 0x26001030, grammar 1 seed 2013392 shrunk", "D60C D70D E303 2701 2602 2632 4310 8BFA 2308 8902 E29B 2526 4308 477F 2208 8900 D706 E302 C509 6060 4310 8BFB D704 C40F 000B 6051 25FE 0054 2600 1030 25F8 0076 0600 1030",
+            nullptr, nullptr, nullptr, nullptr, nullptr }, "order.folded-store.hardware-write", nullptr },
+        // A5-110 (grammar 1 seeds 2504292 and 2508741, from the area 2 round 20 reviewer): `p | 0xe0000000` and `p ^ 0x20000000` stepped in a loop,
+        // so the access is in the cache data array or the on-chip page: the A5-103 note says it, and rule 3f accepts it.
+        { { "A5-110, grammar 1 seed 2504292 shrunk", "D304 263B E304 D104 261A 4310 8BFB 160F 000B 0009 E000 0000 2000 0000",
+            nullptr, nullptr, nullptr, nullptr, nullptr }, "onchip.span.said", nullptr },
+        { { "A5-110, grammar 1 seed 2508741 shrunk", "D304 273B E302 D204 272A 4310 8BFB 6070 000B 0009 FFFF FE00 2000 0000",
+            nullptr, nullptr, nullptr, nullptr, nullptr }, "onchip.span.said", nullptr },
+        { { "A5-110, grammar 1 seed 2508741 shrunk again (a step added in the loop)", "D305 273B E302 7701 D204 272A 4310 8BFA 6070 000B 0009 0009 FFFF FE00 2000 0000",
+            nullptr, nullptr, nullptr, nullptr, nullptr }, "onchip.span.said", nullptr },
         { { "A5-103, a purge through (p & 0x1FFFFFF0) | 0x40000000", "D103 2149 D203 212B E000 000B 2102 0009 1FFF FFF0 4000 0000",
             nullptr, nullptr, nullptr, nullptr, nullptr }, nullptr, nullptr },
         { { "A5-104, a literal written and then loaded", "D102 2142 D002 000B 0009 0009 0600 9010 1234 5678",
