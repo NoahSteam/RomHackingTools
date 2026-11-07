@@ -417,8 +417,18 @@ Varnode *Heritage::normalizeReadSize(Varnode *vn,PcodeOp *op,const Address &addr
   vn2 = fd->newConstant(addr.getAddrSize(),(uintb)overlap);
   fd->opSetInput(newop,vn1,0);
   fd->opSetInput(newop,vn2,1);
-  fd->opSetOutput(newop,vn);	// Old vn is no longer a free read
-  newop->getOut()->setWriteMask();
+  if (getenv("SE_DBG111")) fprintf(stderr,"DBG111 normRead %s:%llx sz=%d tied=%d type=%d size=%d\n",vn->getSpace()->getName().c_str(),(unsigned long long)vn->getOffset(),vn->getSize(),(int)vn->isAddrTied(),(int)vn->getSpace()->getType(),size);
+  if (getenv("SE_MUT111")==0 && vn->getSpace() == fd->getArch()->getDefaultDataSpace()) {
+    // SaturnExplorer (0088): the piece read of a global is read into a temporary, so that the read is not a write of the
+    // global's piece (`g._0_1_ = (char)(g >> 8);`, a store the code does not make) that the merge then copies around (A5-111)
+    Varnode *tmp = fd->newUniqueOut(vn->getSize(),newop);
+    fd->opSetInput(op,tmp,op->getSlot(vn));
+    fd->deleteVarnode(vn);
+  }
+  else {
+    fd->opSetOutput(newop,vn);	// Old vn is no longer a free read
+    newop->getOut()->setWriteMask();
+  }
   fd->opInsertBefore(newop,op);
   return vn1;			// But we have new free read of uniform size
 }

@@ -5544,6 +5544,7 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
         {
             bool hasGoto = false;
             for (const Line& l : r.lines) hasGoto |= l.text.find("goto ") != std::string::npos;
+            std::set<size_t> pieceStoresSaid;
             for (const AccessFate& f : r.accessFates)
             {
                 if (!f.write || f.fate != AccessFate::FoldedOrdinary || !f.constantAddress || f.frame || f.origBlock < 0) continue;
@@ -5560,18 +5561,37 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                         if (t.addr == f.insn) { first = static_cast<int>(li); break; }
                 }
                 if (first < 0) continue;
-                // (A5-111, open: a byte or half of the global read after a wider write is made a write of that piece by heritage, a SUBPIECE whose
-                // output is the global's own address (`iRam26002314._0_1_ = (char)(...)`, a store the code does not make, and an overlap that keeps
-                // the wider write to the end of the function, after a later register read: grammar 1 seed 2606069). Counted, not judged.)
+                // (A5-111, fixed by patch 0088: a byte or half of the global read after a wider write was made a write of that piece by heritage, a
+                // SUBPIECE whose output was the global's own address: `iRam26002314._0_1_ = (char)((uint2)iRam26002314 >> 8);`, a store the code
+                // does not make, whose overlap with the wider write had the merge write the wider value back at the end of the function, after a
+                // later register read, grammar 1 seed 2606069. A line that assigns a piece of the global is judged: some write of the code to
+                // those bytes must be named on it. The order is then judged as for any folded store.)
                 {
                     char name[24];
                     std::snprintf(name, sizeof name, "Ram%08x._", static_cast<unsigned>(f.address));
-                    bool piece = false;
-                    for (const Line& l : r.lines) piece |= l.text.find(name) != std::string::npos;
-                    if (piece)
+                    for (size_t li = 0; li < r.lines.size(); ++li)
                     {
-                        count("order.folded-store.piece-overlap");
-                        continue;
+                        const Line& l = r.lines[li];
+                        const size_t at = l.text.find(name);
+                        if (at == std::string::npos) continue;
+                        const size_t b = l.text.find_first_not_of(' ');
+                        size_t e = b;
+                        while (e < l.text.size() && (std::isalnum(static_cast<unsigned char>(l.text[e])) || l.text[e] == '_' || l.text[e] == '.')) ++e;
+                        if (b == std::string::npos || at < b || at >= e || l.text.compare(e, 3, " = ") != 0) continue;   // (a read of the piece)
+                        unsigned off = 0, sz = 0;
+                        if (std::sscanf(l.text.c_str() + at + std::strlen(name), "%u_%u_", &off, &sz) != 2 || sz == 0) continue;
+                        count("order.folded-store.piece-store");
+                        const uint32_t lo = f.address + off, hi = lo + sz;
+                        bool made = false;
+                        for (const AccessFate& o : r.accessFates)
+                        {
+                            if (!o.write || o.address >= hi || lo >= o.address + o.size) continue;
+                            for (const Token& t : l.tokens) made |= t.addr == o.insn;
+                        }
+                        if (!made && pieceStoresSaid.insert(li).second)
+                            add("folded-store-after-access", "line " + std::to_string(li) + " stores " + std::to_string(sz) + " byte(s) of the global at " +
+                                                                 Hex(f.address) + " (`" + l.text.substr(b) + "`) that no write of the code there makes: a read of a piece " +
+                                                                 "of the global, made a write of it");
                     }
                 }
                 // (a store a later folded store of the same address follows is the engine's to drop or merge: the later one writes what is
