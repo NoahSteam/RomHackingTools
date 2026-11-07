@@ -1949,7 +1949,7 @@ void TestArea7Round8()
     // A7-61 (the area 5 fixer's grammar 1 seed 2017373, shrunk), the oracle's: `xRam06002304 = 0x66;` at its `mov #0x66,r0` (r0,
     // the global's load, merged under its name) named no store; the only store writes the input r6. A7-45's count took `cmp/eq r3,r2`
     // (r3 the global's address) for a compare that may tie r6 to 0x66; only a compare of the stored register, or of one moved into it,
-    // does. The text itself was the engine's (A3-163): once the unmarked poll was taken for a loop that never ends, the store of r6 had no
+    // does. The text itself was the engine's (A3-164): once the unmarked poll was taken for a loop that never ends, the store of r6 had no
     // return to be live at, went as dead, and r0 merged under the global's name. Since patch 0087 the store and the poll's own write are
     // printed and r0 is a variable of its own, so the line A7-61's count was about is gone: the audit is clean with either compare.
     {
@@ -4016,7 +4016,7 @@ void TestHardwareVolatility()
     CHECK(!Has(r.Text(), "while( true )") && !Has(r.Text(), "while (true)"));
 
     // Work RAM folds by default (it is ordinary memory): the poll reads back the function's own write and is taken for a loop that never
-    // ends. The write itself is printed (A3-163, patch 0087: a global's write before a loop that never reaches a return is no dead store;
+    // ends. The write itself is printed (A3-164, patch 0087: a global's write before a loop that never reaches a return is no dead store;
     // the other processor sees it), as an ordinary variable, not a ledger access...
     r = run("work RAM mailbox, not marked", ramMailbox);
     CHECK(Ledger(r, {}));
@@ -15366,12 +15366,12 @@ void TestA3144Fix()
 // the lent effects say), read as kept: `xRam0603ac08 = xVar1;` where the run stores 9. Patch 0078: a restart for each call site that asks.
 // The r8 write is not the cause: the same caller with a callee that writes nothing (`rts ; mov r4,r0`) ended the same way, and is lent now.
 // With the write, the text reads the r8 each call leaves (`extraout_r8`, `extraout_r8_00`) and the signature is withheld for that (A3-3).
-// A3-163 (patch 0087), routed from A7-61: a global's value is live at a return only (the COPY heritage puts there), so a write no return
+// A3-164 (patch 0087), routed from A7-61: a global's value is live at a return only (the COPY heritage puts there), so a write no return
 // can follow went as dead: the store of r6 before an unmarked poll the engine takes for a loop that never ends (grammar 1 seed 2017373,
 // shrunk), the poll's own write, and r0 merged under the global's name (`xRam06002304 = 0x66;`, a write the code never makes). Memory
 // another processor reads sees those writes, and on the hardware the poll ends. Each write of a global on a path that cannot reach a
 // return is now kept; a function whose every path returns prints as before (the control: a store the next one replaces still goes).
-void TestA3163Fix()
+void TestA3164Fix()
 {
     std::vector<uint8_t> hw(0x100000u, 0);
     Sh2Decompiler d(gConfig);
@@ -15384,32 +15384,32 @@ void TestA3163Fix()
     const Case kCases[] = {
         // mov.l @(lit),r3 ; mov.l @r3,r0 ; mov.l r6,@r3 ; mov.l r0,@r5 ; mov #1,r3 ; L: mov.w r0,@(0,r7) ; mov #0x66,r0 ; dt r3 ; bf L ;
         // cmp/eq r3,r2 ; bt +0 ; mov.l @(lit),r7 ; mov #1,r0 ; mov.w r0,@r7 ; P: mov.w @r7,r0 ; tst #1,r0 ; bf P ; rts ; nop
-        { "A3-163 seed 2017373: the store before an unmarked poll",
+        { "A3-164 seed 2017373: the store before an unmarked poll",
           { 0xD309, 0x6032, 0x2362, 0x2502, 0xE301, 0x8170, 0xE066, 0x4310, 0x8BFB, 0x3230, 0x89FF, 0xD705, 0xE001, 0x2701, 0x6071, 0xC801,
             0x8BFC, 0x000B, 0x0009, 0x0009, 0x0600, 0x2304, 0x0600, 0x1010 },
           { "xVar1 = xRam06002304;", "xRam06002304 = param_3;", "*param_2 = xVar1;", "*param_4 = (int2)xVar1;", "xRam06001010 = 1;", "while( true )" },
           { "xRam06002304 = 0x66;" } },
         // mov.l @(lit),r1 ; mov.l r4,@r1 ; L: bra L ; nop: a store before an idle loop
-        { "A3-163 a store before bra to itself", { 0xD102, 0x2142, 0xAFFE, 0x0009, 0x0009, 0x0009, 0x0600, 0x2000 },
+        { "A3-164 a store before bra to itself", { 0xD102, 0x2142, 0xAFFE, 0x0009, 0x0009, 0x0009, 0x0600, 0x2000 },
           { "xRam06002000 = param_1;", "while( true )" }, {} },
         // tst r4,r4 ; bt R ; mov.l @(lit),r1 ; mov #1,r0 ; mov.l r0,@r1 ; L: bra L ; nop ; R: rts ; nop: only one path never returns
-        { "A3-163 a store on the path that never returns", { 0x2448, 0x8904, 0xD103, 0xE001, 0x2102, 0xAFFE, 0x0009, 0x000B, 0x0009, 0x0009, 0x0600, 0x2000 },
+        { "A3-164 a store on the path that never returns", { 0x2448, 0x8904, 0xD103, 0xE001, 0x2102, 0xAFFE, 0x0009, 0x000B, 0x0009, 0x0009, 0x0600, 0x2000 },
           { "xRam06002000 = 1;", "while( true )" }, {} },
         // mov.l @(lit),r7 ; mov #2,r0 ; mov.l r0,@r7 ; P: mov.l @r7,r0 ; tst #1,r0 ; bt P ; mov.b r1,@r7 ; rts ; nop (generator grammar 1
         // seed 131, shrunk): the poll's LOAD took the stored value, and the RETURN after the loop saw the byte store's join; the write read as
         // dead between the branch's condition folding and the branch's removal (RuleEarlyRemoval)
-        { "A3-163 seed 131: the poll's own write, a byte store after it", { 0xD704, 0xE002, 0x2702, 0x6072, 0xC801, 0x89FC, 0x2710, 0x000B, 0x0009, 0x0009, 0x0600, 0x1000 },
+        { "A3-164 seed 131: the poll's own write, a byte store after it", { 0xD704, 0xE002, 0x2702, 0x6072, 0xC801, 0x89FC, 0x2710, 0x000B, 0x0009, 0x0009, 0x0600, 0x1000 },
           { "xRam06001000 = 2;", "while( true )" }, {} },
         // mov.l @(lit),r7 ; mov #3,r0 ; mov.w r0,@r7 ; P: mov.w @r7,r0 ; tst #1,r0 ; bf P ; mov.l r0,@r7 ; rts ; nop (seed 281, shrunk): the
         // store after the loop replaces it on the way to the RETURN; the pieces heritage makes around the write are not printed as stores
-        { "A3-163 seed 281: the poll's own write, a later store replacing it", { 0xD704, 0xE003, 0x2701, 0x6071, 0xC801, 0x8BFC, 0x2702, 0x000B, 0x0009, 0x0009, 0x2600, 0x1038 },
+        { "A3-164 seed 281: the poll's own write, a later store replacing it", { 0xD704, 0xE003, 0x2701, 0x6071, 0xC801, 0x8BFC, 0x2702, 0x000B, 0x0009, 0x0009, 0x2600, 0x1038 },
           { "xRam26001038 = 3;", "while( true )" }, { "0x30000", "_0_2_" } },
         // mov.l @(lit),r7 ; mov #3,r0 ; mov.l r0,@r7 ; P: mov.l @r7,r0 ; tst #1,r0 ; bf P ; mac.w @r4+,@r7+ ; mov.l @r7,r0 ; rts ; nop (seed
         // 14501, shrunk): the reads after the loop split the word into halves, and heritage writes each half from the store's op
-        { "A3-163 seed 14501: the poll's own write, split into halves", { 0xD704, 0xE003, 0x2702, 0x6072, 0xC801, 0x8BFC, 0x474F, 0x6072, 0x000B, 0x0009, 0x2600, 0x1014 },
+        { "A3-164 seed 14501: the poll's own write, split into halves", { 0xD704, 0xE003, 0x2702, 0x6072, 0xC801, 0x8BFC, 0x474F, 0x6072, 0x000B, 0x0009, 0x2600, 0x1014 },
           { "xRam26001014 = 0;", "xRam26001016 = 3;", "while( true )" }, {} },
         // mov.l @(lit),r1 ; mov #1,r0 ; mov.l r0,@r1 ; mov #2,r0 ; mov.l r0,@r1 ; rts ; nop: every path returns, the replaced store goes
-        { "A3-163 control: a function that returns", { 0xD103, 0xE001, 0x2102, 0xE002, 0x2102, 0x000B, 0x0009, 0x0009, 0x0600, 0x2000 },
+        { "A3-164 control: a function that returns", { 0xD103, 0xE001, 0x2102, 0xE002, 0x2102, 0x000B, 0x0009, 0x0009, 0x0600, 0x2000 },
           { "xRam06002000 = 2;" }, { "xRam06002000 = 1;" } },
     };
     // What the engine still drops (it saw no reader of the write before it took the loop for endless) is said on the store's instruction
@@ -15423,9 +15423,9 @@ void TestA3163Fix()
         uint32_t store;
     };
     const Said kSaid[] = {
-        { "A3-163 seed 12705: a store the code replaces after the loop", { 0xD605, 0x2612, 0xD705, 0xE001, 0x2701, 0x6071, 0xC801, 0x8BFC, 0x2602, 0x000B, 0x0009,
+        { "A3-164 seed 12705: a store the code replaces after the loop", { 0xD605, 0x2612, 0xD705, 0xE001, 0x2701, 0x6071, 0xC801, 0x8BFC, 0x2602, 0x000B, 0x0009,
                                                                            0x0009, 0x0600, 0x2000, 0x2600, 0x1008 }, 0x06009002u },
-        { "A3-163 seed 1209: the poll's write carried on as a number", { 0xD705, 0xE002, 0x2700, 0x6070, 0xC801, 0x89FC, 0x066F, 0x3210, 0x8D00, 0x6171, 0x000B,
+        { "A3-164 seed 1209: the poll's write carried on as a number", { 0xD705, 0xE002, 0x2700, 0x6070, 0xC801, 0x89FC, 0x066F, 0x3210, 0x8D00, 0x6171, 0x000B,
                                                                          0x0009, 0x2600, 0x1004 }, 0x06009004u },
     };
     for (const Said& c : kSaid)
@@ -16190,7 +16190,7 @@ int main(int argc, char** argv)
         RUN(TestA3130Fix());
         RUN(TestA3144Fix());
         RUN(TestA3155Fix());
-        RUN(TestA3163Fix());
+        RUN(TestA3164Fix());
         RUN(TestArea10Round2());
         RUN(TestArea5Confirm());
         RUN(TestArea2Round8());

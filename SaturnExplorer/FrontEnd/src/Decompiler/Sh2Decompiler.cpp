@@ -8473,7 +8473,7 @@ void Sh2Decompiler::NoteRemovedAccesses(const std::shared_ptr<const MemorySnapsh
     r.prototype.known = false;
 }
 
-// A3-163: a store of ordinary memory that the code makes before a loop the analysis takes to run for ever, and that the text does not
+// A3-164: a store of ordinary memory that the code makes before a loop the analysis takes to run for ever, and that the text does not
 // print. The engine keeps such a store (patch 0087: a global's write no return follows is not dead), but not one it saw no reader of
 // before it took the loop for endless: a write the code replaces after the loop (the code there is removed with the loop's exit), or one
 // whose value it had joined into a wider word and carried on as a number. Another processor reads those writes while the loop runs, and

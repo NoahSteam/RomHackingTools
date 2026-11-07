@@ -18268,3 +18268,95 @@ The counts are unchanged. Every changed line is a signed compare of a named piec
 ### 8. Routed
 
 Nothing. Note for the coordinator: 0085 is in the "Unused numbers" line of `patches/README.md` so that `lint` passes; remove it when the other patch merges.
+
+## Area 3 routed items
+
+Fixer, branch `review/3-routed-fix`, cut at master `41b69ebf`, master `f0e029ff` (patches 0085 and 0086) merged before the final runs. The worktree's RelWithDebInfo build, `-j2` (the rule's `-j1` below 6,000 MB available never applied), every test binary under `ulimit -v 3500000` and `timeout`, one heavy job at a time. Four items had been routed to area 3 after it was declared done. A fifth, grammar 2 seed 2807704, came from the coordinator during the round. This round's rows start at A3-164, because A3-163 is the area 7 round 9 fixer's row for that seed. **Area 3 reopens: A3-164 is a P1 (a lost store and a wrong value shown, with nothing said), now fixed. Two P3 rows were filed besides: A3-165 (the oracle's, fixed) and A3-166 (accepted).** Patch 0087 is the engine's part; the host and the generator have a part each.
+
+| Item | Verdict | Row |
+|---|---|---|
+| A7-61's text (grammar 1 seed 2017373) | **P1, product.** The store of r6 to the global and the poll's own write were lost, and the text showed `xRam06002304 = 0x66;`, a write the code never makes, with nothing said. The "never ends" verdict itself is right for memory the request leaves unmarked, and the guide says so | A3-164, fixed (patch 0087, the host's note, a generator check) |
+| Grammar 2 seed 2305596, `input-dropped:macl` | **P3, the oracle's.** MACL reaches the module only through a stale stack word; the stale-stack test's one fill pattern missed it. Triage found a P3 text issue in function 2 | A3-165, fixed; A3-166, accepted |
+| Grammar 1 seed 7910 | **Not a defect on master; area 7's check, A3-161's text.** Not drawn by the matrix: the matrix alternates grammars, so seed 7910, an even seed, is grammar 2 there | none |
+| hwram008 0603ED52 | Not worked on, not refiled (the A5-109 fixer's: "0603ED52 no defect") | none |
+| Grammar 2 seed 2807704 (asked by the coordinator mid-round) | **P3, the oracle's**: a stored value made from r4 and r5 lands on r6's start | A3-163 (the area 7 round 9 fixer's row), triaged, left open |
+
+### A3-164: stores before a loop the analysis takes to run for ever
+
+The shrunk words (`TestArea7Round8`'s A7-61 fixture) are `mov.l @(lit),r3 ; mov.l @r3,r0 ; mov.l r6,@r3 ; mov.l r0,@r5 ; mov #1,r3 ; L: mov.w r0,@(0,r7) ; mov #0x66,r0 ; dt r3 ; bf L ; cmp/eq r3,r2 ; bt +0 ; mov.l @(lit),r7 ; mov #1,r0 ; mov.w r0,@r7 ; P: mov.w @r7,r0 ; tst #1,r0 ; bf P ; rts`. The poll writes 1 to 0x06001010 and waits for another processor to clear bit 0. In the request that leaves 0x06001010 unmarked, the engine forwards the 1 to the poll's read and `bf` loops for ever. That is right for memory the request calls ordinary, and the guide's Volatile section says an unmarked poll can print as `do {} while (true);`. **The fault is what went with it.** A global's value is live only at a RETURN, through the COPY `Heritage::guardReturns` puts there. With the return removed, nothing read the stores made before the loop, and dead code took them:
+
+```
+before:  *param_2 = xRam06002304;  do { *param_4 = (int2)xRam06002304; xRam06002304 = 0x66; ... } while (iVar1 != 0);  do {} while( true );
+after:   xVar1 = xRam06002304;  xRam06002304 = param_3;  *param_2 = xVar1;  do { *param_4 = (int2)xVar1; xVar1 = 0x66; ... } while (iVar2 != 0);
+         xRam06001010 = 1;  do {} while( true );
+```
+
+The store of `param_3` and the mailbox write were gone. With the store gone, r0 (the global's old value) merged under the global's name. On the hardware the other processor clears the bit and the function returns with the global holding `param_3`. While it waits, the other processor reads `param_3` there, and the text said 0x66. Nothing was said: `NoteRemovedAccesses` speaks only when the removed code held a hardware access or an access through a pointer, and here it held only the `rts`. The signature was lent `void (4 parameters)`. **P1.** No oracle saw it. The emulator's run of an unmarked poll stops at the step limit, so no final memory is compared, and the access ledger excuses a store of ordinary memory at a constant address (folded by design).
+
+**Oracle first.** The generator's CheckFn now has `endless-store-dropped`. It applies to a run that did not finish, of a text with a `while( true );` loop. Each store the run made that the engine folded to a constant address outside the frame must have a store line of the text at an overlapping address, or a caution on its instruction saying it is missing (`SaidMissing`). Counts: `endless-store.runs`, `.checked`, `.said`. On master's engine the check fails the shrunk words (the mailbox write at 0x0600901A). It also fails six seeds already pinned whole in `Sh2GeneratedTests` as other areas' pins: grammar 1 2301471, 2400221, 2500514 and 2406142 (area 7 round 8), and 1843207 and 1884426 (the area 7 fixer). **The class is common, and nothing had looked at it.**
+
+**Patch 0087 (engine, `coreaction.cc`, `ruleaction.cc`).**
+* `ActionDeadCode::doomedBlocks` finds the blocks from which a block that reaches no live RETURN is reachable. It uses block marks to a fixed point and allocates nothing unless such a block exists. The first form used vectors in every dead-code pass, which moved the allocation-failure matrix's pins in 17 cells of five fixtures (`FAIL:pin-moved`, an 8-byte allocation of `keepFrameWritesForLoads` renumbered).
+* `isFoldedFlowStore` is the write a flow STORE became: RuleStoreVarnode's COPY, the same op, its fold recorded `fate_folded_ordinary`. It also covers a piece of that write that heritage's refinement makes at the store's address inside its range (`Heritage::refineWrite`; seed 14501: a word store split into halves by the reads after the loop). It does not cover the joins and CONCATs heritage makes around such a write. The first form held every persistent write in those blocks and printed heritage's artefacts as stores (`xRam26001038._0_2_ = 3;` inside the endless loop and `xRam26001038 = 0x30000;`, seed 281, `map-store-value`).
+* `keepGlobalWritesWithoutReturn` (in `ActionDeadCode::apply`) consumes and address-forces each such write in such a block, as the COPY at a RETURN is.
+* `RuleEarlyRemoval` leaves such a write to dead code. Between a poll's condition folding and the branch's removal, the write reads as dead: the poll's LOAD took its value, and the RETURN after the loop sees a later write or a joined copy (seeds 131 and 281 of the default run).
+
+A function whose every block reaches a RETURN prints as before. **A test of a constant branch condition, tried on the way, changed nothing once `RuleEarlyRemoval` deferred to dead code, and was taken out.**
+
+**What the engine still drops, the host says.** A write the engine saw no reader of before it took the loop for endless is gone before 0087 can hold it. Two kinds were found:
+* a store the code replaces after the loop, in the code removed with the loop's exit (seeds 12705, 15657, 17149, `mov.l r1,@r6 ; poll ; mov.l r0,@r6`): ordinary memory's "write the next one replaces", which the text drops by design when the poll is real too;
+* a byte the engine joined with the next one for a word read after the loop and carried on as a number (seed 1209).
+
+`Sh2Decompiler::NoteStoresBeforeEndlessLoop` runs after `NoteRemovedAccesses`, when the engine reports a do-nothing loop. Each folded store of a constant address that no token of the text names is said, if its block is a flow block from which the loop is reached and is not in a removed block. The caution reads "the N-byte write of 0x… here is missing: the analysis takes the loop at 0x… to run for ever and drops a write before it that it sees no reader of. A poll of memory another processor writes folds so unless that memory is marked volatile". The signature is withheld. A block the engine removed counts as removed code only when it starts a flow block. In grammar 1 seed 2632 (the grammar 1 run of 20,000 seeds, first form) the engine removed `mac.w`'s saturating arm, a block of the instruction's own p-code. The first form took that for the whole flow block and said nothing of the store after it: `mov.b r0,@(0,r6)` writing back the byte it had read from 0xC0000004. The guide's Volatile paragraph says both.
+
+| Change | Switched off | Fails |
+|---|---|---|
+| patch 0087 whole (master's engine) | the three files | 14 checks of `Sh2DecompilerTests` (`TestA3164Fix` 10; the A7-61 fixture 3; the unmarked mailbox of `TestHardwareVolatility` 1); 10 of `Sh2GeneratedTests` (`endless-store-dropped`: 4 pins of this section, 6 of the pinned seeds above). Counted before the 14501 and said cases were added |
+| the dead-code hold | `keepGlobalWritesWithoutReturn` | the same 14 and 10 checks |
+| `RuleEarlyRemoval`'s deferral | its test | seeds 131 and 281 (2 checks of each suite) |
+| the refined pieces | the `rec.pc` match | seed 14501 (3 checks: the two halves, and the note the control must not have) |
+| the host's note | `NoteStoresBeforeEndlessLoop` | 3 checks of `TestA3164Fix` (seeds 12705, 1209), 2 generator pins `endless-store-dropped` |
+
+Pins: `TestA3164Fix` (`Sh2DecompilerTests.cpp`) covers the shrunk seed, a store before `bra` to itself, a store on the one path that never returns, seeds 131, 281 and 14501 shrunk, and a returning control (a store the next one replaces still goes; no note); its said cases are seeds 12705 and 1209, each with the note on the store and the signature withheld. `TestA3RoutedPins` (`Sh2GeneratedTests.cpp`) covers the shrunk words, seeds 131 and 281 shrunk, the said seeds, and seed 2017373 whole. The A7-61 fixture of `TestArea7Round8` and `TestHardwareVolatility`'s unmarked work-RAM mailbox now expect the stores printed.
+
+**Routed to area 7 (no row):** the line A7-61's count was about (`xRam06002304 = 0x66;` at its `mov #0x66,r0`) is no longer printed. The oracle rule the A7-61 fixer added (a two-register compare ties the stored input only when it compares the stored register or one moved into it) therefore has no product text left in its fixture. Its control in `TestArea7Round8` now checks only a clean audit. The rule still stands and is still reached by grammar 1 seed 2500514's pin.
+
+### A3-165 and A3-166: grammar 2 seed 2305596
+
+Function 1 (06009074) stores MACL into its frame (`sts macl,r1 ; mov.l r1,@r15`), reads its top byte back (`mov.b @r15,r3`) and stores that, pops, and tail-jumps to function 2. Function 2 reads that freed word as a local before writing it (`mov.l @(4,r15),r3`) and branches on its sign (`cmp/pl r3`). So MACL changes what the module does only through a stale stack word: an indeterminate value in C, and A3-111's excluded class. A3-111's test refilled the stack with one pattern (0x5AA5C33C, each word XORed with its address). Its top byte, 0x5C, is positive like the base run's leftover, so the stale read went unseen and MACL read as an input. **The oracle's (A3-165, P3).** The test now refills twice, each pattern the other's complement (0x5AA5C33C, 0xA55A3CC3). The seed has 0 findings (2 on master), with `excluded.stale-stack-read.input-dropped` 2. Function 1's text and lent prototype are right.
+
+Function 2's text prints the read after the loop, under the word's name: `piVar2 = &iStack_4; do { piVar2 = piVar2 + -1; *piVar2 = iVar3; ... } while (...); ... if (iStack_8 < 1)`. Read with the frame's layout, that is the 2 the loop stored, where the code compares what was there before. Shrunk to a leaf, it prints `return 0 < iStack_8;` after the loop. With the word written first, the text is right (`return 0;`). **A3-166, P3, accepted:** only a read of a local before anything writes it, which compiled code does not make. The generator excludes the class.
+
+### Grammar 2 seed 2807704 (A3-163, the area 7 round 9 fixer's, not on this branch)
+
+`n:claim-wrong:leaks` at function 1 (0600901A): "a run stores 06022100, a pointer from r6, at 06022100". The function stores r2 through r6 in a loop (`mov.l r2,@r6 ; add r5,r2`), with r2 = r4 ^ r5 on the path taken. With the runner's start values (r4 0x06020100, r5 0x06021100, r6 0x06022100) that is 0x00001000, and one step later 0x06022100, r6's start: a value made from r4 and r5 that lands on r6's start by the arenas' 0x1000 spacing. `PointerRegister` excludes an AND, OR or XOR of two other start values (`BitwiseOfOthers`, A3-100) but not one stepped by a third. **The oracle's, P3**, the class of A3-100, A3-115 and A3-123. Widening `BitwiseOfOthers` to sums would also excuse a real store of r6 in any function that reads r4 and r5. The fix that holds is to confirm a leak with a run in which that register starts elsewhere. **Left open for its row (A3-163, on the area 7 round 9 branch); not changed here.**
+
+### Seed 7910
+
+`n:map-copy-merge` (A7-21's check) on `iRam060022a4 = iVar1;` in a `tas.b` loop, where the engine merged the loop's register under the name of the global stored after it (A3-161's accepted text). That was the area 7 fixer's build at 00:29, before patch 0082 reached their branch (00:56). On master (`41b69ebf`, with 0082) the text is `iRam060022a4 = iVar1 + -0x14;`, one store, and the seed passes:
+* alone, and in a grammar 1 run of seeds 1 to 7,910 with the canary off (0 failing seeds), on master's binary;
+* its shrunk words likewise, on master's binary and on the branch.
+
+The matrix's command never drew it: it alternates grammars and draws seed 7910 as grammar 2. No row: the check is area 7's, and the text it saw is gone.
+
+### Runs
+
+Final runs on `f4256ccc` (master `f0e029ff` merged; the commits after it renumber the rows and change comments and test names only, and the binaries were rebuilt and `ctest` run again on the last of them).
+
+| Run | Result |
+|---|---|
+| full `ctest -j2` (Live excluded) | **111 of 111** passed; no new test target (the pins are inside `Sh2DecompilerTests` and `Sh2GeneratedTests`) |
+| Live (`ctest -R SaturnExplorerLive`) | **6 of 6** passed |
+| fault suite (`SaturnExplorerDecompilerFaultTests`) | **0 of 94** jobs failed (the first form of 0087 failed 17 cells, `pin-moved`; see above) |
+| generator default run (300 seeds) | 0 findings |
+| grammar 2, 3,000 seeds; grammar 1, 1,000 seeds | 0 findings each |
+| the matrix's 20,000 (`SE_GENERATED_SEEDS=20000`, both grammars, the canary on, in two pieces of 10,000) | **0 failing seeds**. On the first form of 0087 (before the refined pieces and the host's note) it had 9, all `endless-store-dropped`: they gave the pieces rule (14501) and the note (12705, 1209), and the other six pass with them |
+| grammar 1, 20,000 seeds (`SE_GENERATED_GRAMMAR=1`, the canary off, two pieces) | **0 failing seeds**. On the commit before `f4256ccc`: 1 (2632, the removed-block test above; pinned) |
+| printed-C (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | **agrees=5196**, master's baseline since 0086 (5195 before the merge, on this branch and on master alike); narrow-c 130, void-return 227, void-return-lent 24, skipped 8: the same classes as master |
+| `check-vendored-tree.py lint`, `check-literal-size.py` | ok, ok; `vendor.py` from the pinned upstream with 0001 to 0087 reproduces `cpp/`, `processors/` and `sources.cmake` exactly |
+
+The game corpus (hwram007 and hwram008, alone and `SE_GAME_LEND=1`, `tools/a7_round2/corpus.sh`) passes in all four: functions 839 and 1,554 ok; real entries lent **474 (645 parameters) of 999** and **724 (975) of 1,543**; missing and said **0** and **4**: all as on master. The new note is given in no game function. To separate 0087 from 0085 and 0086, the text of every function was compared with a build of master's engine and host (`f0e029ff`, the same tests) over both images alone. 0087 changes 3 functions of hwram007 and 6 of hwram008, and nothing else:
+* seven stores now printed before an idle loop that never ends, which the text had lost: `xRam0603a9d8 = 0;` at the end of 06005212 (`... do {} while( true );`), the second `xRam0603b4a0 = 0;` of 06005520 (the game's main loop), and 060051FA, 06005530, 06007D22, 0600C2DA and 0600C49A of hwram008. These are A3-164's class in the games;
+* 0600894A (hwram007) and 06008C0A (hwram008): `iRam06003028 = param_2;` (0x0600895A) now prints before `iVar5 = 0;` (0x0600895C), in the code's order.
+
+The other differences from the area 7 round 8 fixer's dumps of master (`41b69ebf`) are 0086's casts (`(int4)xStack_8`) and 0085's (06016142 prints its `iRam06057df4 = 8;` once per path, where it had printed the store at 0x0601647A three times).
