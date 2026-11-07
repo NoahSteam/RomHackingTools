@@ -1401,7 +1401,9 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                         if (close != std::string::npos && t.begin > close && word(t.addr, ew))
                         {
                             const std::string mnem = sfe::Sh2Decode(t.addr, ew).Mnemonic;
-                            castAtExtension = mnem.compare(0, 4, "exts") == 0 || mnem.compare(0, 4, "extu") == 0;
+                            // (and `movt`, which extends the T bit into a register: `uRam06001030 = (uint4)bVar1;` with bVar1 at the
+                            // `movt r2` both the store and the return use, grammar 1 seed 2400221)
+                            castAtExtension = mnem.compare(0, 4, "exts") == 0 || mnem.compare(0, 4, "extu") == 0 || mnem == "movt";
                         }
                     }
                     // (A7-57: or a value drawn at a store, on a line drawn at another store -- `iRam060a51e4 = iRam060a5068;` with its
@@ -1409,7 +1411,10 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     // it reads, so the global's value is kept there, as a copy materialised at it. hwram008 0x0601B0F0)
                     bool drawnAtOtherStore = false;
                     const size_t assign = r.lines[li].text.find(" = ");
-                    if (assign != std::string::npos && t.begin > assign && isStore(t.addr))
+                    // (a bare value only, `V = W;`: a cast's operand drawn at a store is the conversion the line prints, `Ram26001030 =
+                    // (uint2)uVar1;` at the next store, which the product does not take for a copy)
+                    if (assign != std::string::npos && t.begin > assign && assign + 3 < r.lines[li].text.size() && r.lines[li].text[assign + 3] != '(' &&
+                        isStore(t.addr))
                         for (const Token& u : r.lines[li].tokens)
                             drawnAtOtherStore = drawnAtOtherStore || (u.addr && u.addr != t.addr && u.begin < u.end && u.end <= assign && isStore(u.addr));
                     const bool copy = plain && !isBranch(t.addr) && ((!named.empty() && !named.count(t.addr)) || drawnAtOtherStore) && !castAtExtension;
@@ -1728,20 +1733,28 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     if (!registerVariable || got.kind != WordValue::Param) return false;
                     // (A7-42: a register variable the text assigns from that parameter, whole or through a cast, holds it -- a byte of
                     // param_1 is `xVar1 = (char)param_1;`, named after no parameter; grammar 1 seed 1843373)
+                    // (A7-61: or through the variables the text assigns it from in turn, `xVar1 = xRam26001000;` after `xRam26001000 =
+                    // param_1;`, grammar 1 seed 2404131; up to three steps)
                     const std::string from = "param_" + std::to_string(got.value) + ";";
-                    for (const auto& other : r.lines)
-                    {
-                        const size_t s = other.text.find_first_not_of(' ');
-                        if (s == std::string::npos || other.text.compare(s, shownText.size() + 3, shownText + " = ") != 0) continue;
-                        std::string rhs = other.text.substr(s + shownText.size() + 3);
-                        while (!rhs.empty() && rhs[0] == '(')
+                    std::vector<std::string> names = { shownText };
+                    for (size_t k = 0; k < names.size() && k < 4; ++k)
+                        for (const auto& other : r.lines)
                         {
-                            const size_t close = rhs.find(')');
-                            if (close == std::string::npos || rhs.find_first_not_of("abcdefghijklmnopqrstuvwxyz0123456789_ *", 1) < close) break;
-                            rhs = rhs.substr(close + 1);
+                            const size_t s = other.text.find_first_not_of(' ');
+                            if (s == std::string::npos || other.text.compare(s, names[k].size() + 3, names[k] + " = ") != 0) continue;
+                            std::string rhs = other.text.substr(s + names[k].size() + 3);
+                            while (!rhs.empty() && rhs[0] == '(')
+                            {
+                                const size_t close = rhs.find(')');
+                                if (close == std::string::npos || rhs.find_first_not_of("abcdefghijklmnopqrstuvwxyz0123456789_ *", 1) < close) break;
+                                rhs = rhs.substr(close + 1);
+                            }
+                            if (rhs == from) return false;
+                            const std::string name = rhs.empty() ? rhs : rhs.substr(0, rhs.size() - 1);
+                            if (!name.empty() && rhs.back() == ';' && name.find_first_not_of("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_") == std::string::npos &&
+                                std::find(names.begin(), names.end(), name) == names.end())
+                                names.push_back(name);
                         }
-                        if (rhs == from) return false;
-                    }
                     return true;
                 };
                 {
@@ -2307,6 +2320,22 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                 }
                 // (A7-58: `shll8 Rn` leaves Rn's low byte 0, `shll16` its low half: the engine prints the shifted register as 0 where it uses
                 // only those bits -- `iVar1 = 0;` stored by `mov.b r0,@(0xd,r4)` -- when the line's variable is Rn where the text uses it)
+                // (...and `shlr8`/`shlr16` of a register an `extu.b` made, or `shlr16` of an `extu.w`'s, is 0 whole: `uVar1 = 0;` at the
+                // `shlr8 r0` after `extu.b r5,r0`, grammar 1 seed 2402555)
+                if (!computes && want == 0 && ((w & 0xF0FF) == 0x4019 || (w & 0xF0FF) == 0x4029))
+                {
+                    const int rn = (w >> 8) & 0xF;
+                    std::set<uint32_t> makers;
+                    bool narrow = RegisterMakers(r, word, sources, at, rn, makers) && !makers.empty() && !makers.count(0);
+                    for (uint32_t m : makers)
+                    {
+                        uint16_t mw = 0;
+                        const bool byte = word(m, mw) && (mw & 0xF00F) == (0x600C | (rn << 8));
+                        const bool half = word(m, mw) && (mw & 0xF00F) == (0x600D | (rn << 8));
+                        narrow = narrow && (byte || (half && (w & 0xF0FF) == 0x4029));
+                    }
+                    if (narrow) computes = true;
+                }
                 if (!computes && want == 0 && ((w & 0xF0FF) == 0x4018 || (w & 0xF0FF) == 0x4028))
                 {
                     const size_t nameBegin = text.find_first_not_of(' ');

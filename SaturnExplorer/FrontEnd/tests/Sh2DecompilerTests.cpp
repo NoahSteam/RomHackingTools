@@ -1837,6 +1837,52 @@ void TestArea7Round8()
             }
         CHECK(n == 1 && dts::AuditMapping(other, word, "a7_58 tst other").constAtJoin == 1);
     }
+    // Routed from the A2-127 fixer's run (grammar 1 from 2,400,001), the oracle's each. Seed 2400221 (A7-57's shape): `movt r2` extends T
+    // into r2, which a store and the return both use, so both lines print the conversion `(uint4)bVar1` at the `movt`; the operand of a
+    // cast drawn at a `movt` is its own work, as at an `extu`.
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, { 0xD706, 0x6070, 0xC801, 0x8BFC, 0x0229, 0x2520, 0xE010, 0x0726,
+            0xC804, 0x8B01, 0x602D, 0x2430, 0x000B, 0x0009, 0x0600, 0x1020 });
+        Print("A7-57 a movt's T both lines convert", r);
+        CHECK(dts::AuditMapping(r, word, "a7_57 movt").Violations() == 0);
+    }
+    // Seed 2402555 (A7-58's shape): `extu.b r5,r0 ; ... L: shlr8 r0` leaves r0 0 whole; `uVar1 = 0;` at the join's `shlr8` is made there.
+    // The same line showing 1 is still a violation.
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, { 0x605C, 0x4315, 0x8BFF, 0x4019, 0xE301, 0x202B, 0x4310, 0x8BFC,
+                                                                             0x000B, 0x0009 });
+        Print("A7-58 a byte shifted out", r);
+        const Line* l = LineWith(r, "uVar1 = 0;");
+        CHECK(l != nullptr && l->firstAddr == 0x06009006u);
+        CHECK(dts::AuditMapping(r, word, "a7_58 shlr8").Violations() == 0);
+        DecompileResult other = r;
+        int n = 0;
+        for (Line& x : other.lines)
+            if (x.text == "  uVar1 = 0;")
+            {
+                x.text = "  uVar1 = 1;";
+                ++n;
+            }
+        CHECK(n == 1 && dts::AuditMapping(other, word, "a7_58 shlr8 other").constAtJoin == 1);
+    }
+    // Seed 2404131 (A7-61): `mov r4,r2 ; mov.l r2,@r6 ; mov.w @r6,r0`: the engine prints `xVar1 = xRam26001000;` after `xRam26001000 =
+    // param_1;` and puts the global back with `xRam26001000 = xVar1;` at the store of r4. A7-42's search for a register variable that holds
+    // a parameter looked one assignment deep; it follows the chain now. With xVar1 assigned another global, the store is still another value.
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, { 0xD602, 0x6243, 0x2622, 0x6061, 0x000B, 0x0009, 0x2600, 0x1000 });
+        Print("A7-61 a variable that holds a parameter through a global", r);
+        CHECK(LineWith(r, "xRam26001000 = xVar1;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_61").Violations() == 0);
+        DecompileResult other = r;
+        int n = 0;
+        for (Line& x : other.lines)
+            if (x.text == "  xVar1 = xRam26001000;")
+            {
+                x.text = "  xVar1 = xRam26001004;";
+                ++n;
+            }
+        CHECK(n == 1 && dts::AuditMapping(other, word, "a7_61 other").storeValueOther == 1);
+    }
     // A7-59 (P2), the product's (grammar 2 seed 2306048 shrunk): `bsr f ; ... mov.l lit,r6 ; mov.l @(4,r6),r1 ; mov.w r2,@r5 ; mov.l r1,@r6`.
     // The engine prints `xRam0600210c = xRam06002110;` at the `bsr` (the global's value after the call, ahead of the store through r5 that
     // may alias it) and the line named the store after the call: a copy at a call is A7-11's, the call's effect on a value stored before

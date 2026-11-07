@@ -7813,9 +7813,26 @@ void MarkMaterialisedReads(std::vector<Line>& lines, const PrintedOperations& pr
         if (reads || !store) continue;
         uint32_t own = at, c = 0;
         if (CanonicalAddress(own, c)) own = c;
+        // (only on a line that is itself a copy, `V = W;` or `V = (T)W;`: the value shown again. In a larger expression -- `return
+        // CONCAT44((int4)iRam2600210c,in_r1);` -- the read is part of what the line computes, and the line stays the instruction's)
+        const auto plainCopy = [](const std::string& text) {
+            const auto word = [](const std::string& x) {
+                return !x.empty() && x.find_first_not_of("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.-") == std::string::npos;
+            };
+            const size_t b = text.find_first_not_of(' '), eq = text.find(" = ");
+            if (b == std::string::npos || eq == std::string::npos || eq < b || text.empty() || text.back() != ';') return false;
+            size_t v = eq + 3;
+            if (v < text.size() && text[v] == '(')
+            {
+                const size_t close = text.find(')', v);
+                if (close == std::string::npos || !word(text.substr(v + 1, close - v - 1))) return false;
+                v = close + 1;
+            }
+            return word(text.substr(b, eq - b)) && v < text.size() && word(text.substr(v, text.size() - 1 - v));
+        };
         for (size_t line : printed.at(o).first)
         {
-            if (line >= lines.size() || shared.count(std::make_pair(line, own))) continue;
+            if (line >= lines.size() || shared.count(std::make_pair(line, own)) || !plainCopy(lines[line].text)) continue;
             for (Token& t : lines[line].tokens)
                 if (t.addr == own && t.begin < t.end) t.materialised = true;
         }
