@@ -425,6 +425,9 @@ struct Item
     uint16_t cond = 0;             // Skip: the tst or cmp that sets T
     bool onTrue = true;            // Skip: bt (else bf); Mask: and (else or, or xor with 'xorOp')
     bool xorOp = false;            // Mask: xor (A5-70)
+    bool addOp = false;            // Mask: add (A5-106: an on-chip register's address plus an index)
+    int oldStoreFrom = -1;         // Mask: not a mask (A5-106): the literal is a global's address, read into r0, rewritten from this register, and
+                                   // its old value stored through 'reg'
     bool delayed = false;          // Skip: bt/s, bf/s with 'slot'
     int counter = 3, count = 2;    // Loop, BraLoop, BraBack
     int width = 2;                 // Poll
@@ -534,6 +537,7 @@ struct Gen
     Rng bsrfRng;  // ...and one for which register-called calls are bsrf (A2-20)
     Rng choiceRng;   // ...and one for the return chosen by an input (A3-64)
     Rng regionRng;   // ...and one for the pointers into the purge, the cache address array and the on-chip registers' partition, by literals and by masks (A5-92)
+    Rng idiomRng;    // ...and one for the area 5 confirming round's shapes (A5-106): the cache idiom, an on-chip register plus an index, a global's old value stored
     // What the function being made changes for good / reads on entry through the wide alphabet and the GBR accesses
     // (an over-approximation: an item the grammar drops again is counted, which the checks that use it allow).
     uint32_t wideClobbers = 0;
@@ -555,7 +559,7 @@ struct Gen
     bool inSpill = false;     // r15 is moved: no local is addressed through it here
     int loopDepth = 0;        // inside a loop body: a pointer advanced here is advanced again by the next iteration
     std::vector<Func> built;  // the functions of this module generated so far (the later ones)
-    Gen(uint64_t seed) : rng(seed), macRng(seed ^ 0x6D61636D61636D61ull), guardRng(seed ^ 0x7367756172643A5Aull), convRng(seed ^ 0x636F6E7663727667ull), wideRng(seed ^ 0x77696465414C5521ull), aliasRng(seed ^ 0x616C696173526E67ull), maskRng(seed ^ 0x6D61736B52616E64ull), placeRng(seed ^ 0x706C616365526E67ull), loopMaskRng(seed ^ 0x6C6F6F704D61736Bull), frameRng(seed ^ 0x6672616D6557616Cull), partialRng(seed ^ 0x7061727469616C52ull), retRng(seed ^ 0x7265747263616C6Cull), bsrfRng(seed ^ 0x6273726652656C21ull), choiceRng(seed ^ 0x63686F6F73657221ull), regionRng(seed ^ 0x726567696F6E5074ull)
+    Gen(uint64_t seed) : rng(seed), macRng(seed ^ 0x6D61636D61636D61ull), guardRng(seed ^ 0x7367756172643A5Aull), convRng(seed ^ 0x636F6E7663727667ull), wideRng(seed ^ 0x77696465414C5521ull), aliasRng(seed ^ 0x616C696173526E67ull), maskRng(seed ^ 0x6D61736B52616E64ull), placeRng(seed ^ 0x706C616365526E67ull), loopMaskRng(seed ^ 0x6C6F6F704D61736Bull), frameRng(seed ^ 0x6672616D6557616Cull), partialRng(seed ^ 0x7061727469616C52ull), retRng(seed ^ 0x7265747263616C6Cull), bsrfRng(seed ^ 0x6273726652656C21ull), choiceRng(seed ^ 0x63686F6F73657221ull), regionRng(seed ^ 0x726567696F6E5074ull), idiomRng(seed ^ 0x69646F6D52616E64ull)
     {
         for (int i = 0; i < 8; ++i) align[i] = 4, pref[i] = 4;
         p.mbox = 0x26001000u + 0x10u * rng.Below(4);
@@ -904,6 +908,77 @@ struct Gen
         for (size_t i = 0; i < items.size(); ++i)
             if (items[i].type == Item::LitPtr && items[i].reg == reg) at = i + 1;
         items.insert(items.begin() + static_cast<std::ptrdiff_t>(at), m);
+    }
+
+    // The area 5 confirming round's shapes (A5-106), from a stream of their own, in one function in twelve, at the start of the items or after the
+    // register's literal: (a) the cache idiom on a pointer register, `and` 0x1FFFFFF0 then `or` the partition of the associative purge (0x4, 0xA)
+    // or of the cache address array (0x6), whatever the register held (A5-103); (b) a register made an index into the on-chip page, `and` a small
+    // aligned mask then `add` an on-chip register's address (the DMAC's and the FRT's routines, A5-101); (c) a global read into r0, rewritten from
+    // another argument register and its old value stored through the pointer register (A5-102: the order rule for folded stores judges it).
+    void AddConfirmShapes(std::vector<Item>& items, int avoidReg, uint32_t avoidScratch)
+    {
+        if (!idiomRng.Chance(12)) return;
+        const uint32_t which = idiomRng.Below(3);
+        int reg = 4 + static_cast<int>(idiomRng.Below(4));
+        for (int tries = 0; reg == avoidReg && tries < 4; ++tries) reg = 4 + ((reg - 3) & 3);
+        if (reg == avoidReg) return;
+        int jsr = 1 + static_cast<int>(idiomRng.Below(3));
+        for (int tries = 0; ((avoidScratch >> jsr) & 1u) && tries < 3; ++tries) jsr = 1 + (jsr % 3);
+        if ((avoidScratch >> jsr) & 1u) return;
+        auto mask = [&](const char* shape, uint32_t value, bool andOp, bool addOp) {
+            Item m;
+            m.type = Item::Mask;
+            m.reg = reg;
+            m.jsrReg = jsr;
+            m.onTrue = andOp;
+            m.addOp = addOp;
+            m.shape = shape;
+            Lit l;
+            l.kind = LitKind::Mask;
+            l.value = value;
+            m.lit = static_cast<int>(p.lits.size());
+            p.lits.push_back(l);
+            return m;
+        };
+        std::vector<Item> add;
+        if (which == 0)
+        {
+            static const uint32_t kPart[] = { 0x40000000u, 0xA0000000u, 0x60000000u };
+            add.push_back(mask("region.idiom.and", 0x1FFFFFF0u, true, false));
+            add.push_back(mask("region.idiom.or", kPart[idiomRng.Below(3)], false, false));
+        }
+        else if (which == 1)
+        {
+            static const uint32_t kIndex[] = { 0x0Cu, 0x1Cu, 0x3Cu };
+            static const uint32_t kBase[] = { 0xFFFFFF80u, 0xFFFFFE10u, 0xFFFFFF00u, 0xFFFFFFE0u, 0xFFFFFE60u };
+            add.push_back(mask("region.index.and", kIndex[idiomRng.Below(3)], true, false));
+            add.push_back(mask("region.index.add", kBase[idiomRng.Below(5)], false, true));
+        }
+        else
+        {
+            // (through a parameter: a pointer register a literal loads is a global's address, and the store a store of one global to another;
+            // that shape is A7-60's, the mapping's)
+            for (const Item& it : items)
+                if ((it.type == Item::LitPtr || it.type == Item::Poll || it.type == Item::Mask) && it.reg == reg) return;
+            int from = 4 + static_cast<int>(idiomRng.Below(4));
+            if (from == reg) from = 4 + ((from - 3) & 3);
+            Lit l;
+            l.kind = LitKind::Ram;
+            l.value = (idiomRng.Chance(50) ? 0x06000000u : 0x26000000u) + 0x2000u + 0x80u * idiomRng.Below(8) + 4u * idiomRng.Below(4);
+            Item m;
+            m.type = Item::Mask;
+            m.reg = reg;
+            m.jsrReg = jsr;
+            m.oldStoreFrom = from;
+            m.shape = "global.old-store";
+            m.lit = static_cast<int>(p.lits.size());
+            p.lits.push_back(l);
+            add.push_back(m);
+        }
+        size_t at = 0;
+        for (size_t i = 0; i < items.size(); ++i)
+            if (items[i].type == Item::LitPtr && items[i].reg == reg) at = i + 1;
+        items.insert(items.begin() + static_cast<std::ptrdiff_t>(at), add.begin(), add.end());
     }
 
     // A literal pointer to hardware stepped in a loop and flipped between partitions by an xor, then written through (A5-91): `p = (p + 4) ^ 0x20000000`
@@ -1848,6 +1923,7 @@ struct Gen
         }
         AddRegionMask(f.items, f.sel, convDefined | leftScratch);
         AddRegionWalk(f.items, f.sel, convDefined | leftScratch);
+        AddConfirmShapes(f.items, f.sel, convDefined | leftScratch);
         if (hasConvRead) f.items.insert(f.items.begin(), convRead);   // first: before anything can write what it reads
         // A return chosen by an input (A3-64), from a stream of its own and after every other draw, so no program a seed made before it changes but
         // for this item: in a function that returns, makes no call (a callee may leave anything in r0), and has no table (mova writes r0) and no
@@ -2024,6 +2100,7 @@ struct Gen
         }
         AddRegionMask(items, -1, 0);
         AddRegionWalk(items, -1, 0);
+        AddConfirmShapes(items, -1, 0);
         // A pointer moved between bus partitions with a mask -- `and` 0x1FFFFFFF (to the cached partition) or `or` 0x20000000 (to the
         // cache-through one), the idiom SBL calls CACHE_THROUGH (A5-51) -- in one program of eight, after the pointer's literal. The pointer
         // is then a merge of addresses whenever a skipped reload gave it two values, which the engine does not fold to a constant.
@@ -2394,7 +2471,16 @@ struct Emitter
             break;
         case Item::Mask:
             PutLitLoad(it.jsrReg, it.lit);
-            Put(static_cast<uint16_t>((it.xorOp ? 0x200A : it.onTrue ? 0x2009 : 0x200B) | it.reg << 8 | it.jsrReg << 4));   // and / xor / or Rm,Rn
+            if (it.oldStoreFrom >= 0)
+            {
+                Put(static_cast<uint16_t>(0x6002 | it.jsrReg << 4));                               // mov.l @Rj,r0
+                Put(static_cast<uint16_t>(0x2002 | it.jsrReg << 8 | it.oldStoreFrom << 4));        // mov.l Rk,@Rj
+                Put(static_cast<uint16_t>(0x2002 | it.reg << 8));                                  // mov.l r0,@Rn
+            }
+            else if (it.addOp)
+                Put(static_cast<uint16_t>(0x300C | it.reg << 8 | it.jsrReg << 4));   // add Rm,Rn
+            else
+                Put(static_cast<uint16_t>((it.xorOp ? 0x200A : it.onTrue ? 0x2009 : 0x200B) | it.reg << 8 | it.jsrReg << 4));   // and / xor / or Rm,Rn
             break;
         case Item::Choice:
         {
@@ -3364,8 +3450,56 @@ std::vector<std::pair<size_t, size_t>> BackEdgeSpans(const std::vector<Line>& li
     return spans;
 }
 
-// The operands of the dereferences in a statement's text: what follows a unary `*` (up to the end of its operand: a `,`, a `;`, a `)` that closes
-// nothing, ` = `), and the name before a `[` (A5-85). A `*` is unary at the start, after an operator or an opening parenthesis, or after a cast
+// The cast types the engine prints, for telling `(type *)p` from a parenthesised expression.
+const std::regex& CastTypeRe()
+{
+    static const std::regex castRe("^\\s*(?:[A-Za-z_]\\w*\\s*)+\\*+\\s*$|^\\s*(?:u?int\\d|xunknown\\d|undefined\\d?|char|uchar|short|ushort|bool|byte|word|dword|qword|long|ulong|float\\d*|code|void|unkbyte\\d+|unkuint\\d+|unkint\\d+)\\s*$");
+    return castRe;
+}
+
+// Where the operand of the unary `*` at 'at' ends: a unary `*` takes one operand, a name with its subscripts, or a parenthesised expression
+// after the casts, or another `*` and its operand. `*param_2 | 0xffffffc0` loads through param_2 and ORs the mask into the value loaded, and
+// `*(uint4 *)(x + -0x80) | 0xffffffc0` through `x + -0x80` (A5-105).
+size_t UnaryOperandEnd(const std::string& text, size_t at)
+{
+    size_t k = at + 1;
+    while (k < text.size() && (text[k] == ' ' || text[k] == '*')) ++k;
+    size_t end = k;
+    while (k < text.size() && text[k] == '(')
+    {
+        int depth = 0;
+        size_t close = std::string::npos;
+        for (size_t q = k; q < text.size(); ++q)
+        {
+            if (text[q] == '(') ++depth;
+            else if (text[q] == ')' && --depth == 0) { close = q; break; }
+        }
+        if (close == std::string::npos) return text.size();
+        end = close + 1;
+        if (!std::regex_match(text.substr(k + 1, close - k - 1), CastTypeRe())) break;
+        k = close + 1;
+        while (k < text.size() && text[k] == ' ') ++k;
+        end = k;
+    }
+    if (end == k)
+    {
+        while (end < text.size() && (std::isalnum(static_cast<unsigned char>(text[end])) || text[end] == '_')) ++end;
+        while (end < text.size() && text[end] == '[')
+        {
+            int depth = 0;
+            for (; end < text.size(); ++end)
+            {
+                if (text[end] == '[') ++depth;
+                else if (text[end] == ']' && --depth == 0) { ++end; break; }
+            }
+        }
+    }
+    return end;
+}
+
+// The operands of the dereferences in a statement's text: what follows a unary `*` (its operand, UnaryOperandEnd: before A5-105 it ran on to
+// the end of the expression, a `,`, a `;`, a `)` that closes nothing, ` = `, and took a mask ORed into the value loaded for the pointer's), and
+// the name before a `[` (A5-85). A `*` is unary at the start, after an operator or an opening parenthesis, or after a cast
 // (`(int4)*p`, `(xunknown4 *)`); after a name, a number or another closing parenthesis it multiplies. Empty when the text dereferences nothing.
 std::vector<std::pair<std::string, size_t>> DerefOperandList(const std::string& text)
 {
@@ -3403,15 +3537,7 @@ std::vector<std::pair<std::string, size_t>> DerefOperandList(const std::string& 
             else unary = !(std::isalnum(static_cast<unsigned char>(p)) || p == '_' || p == ']');
         }
         if (!unary) continue;
-        int depth = 0;
-        size_t j = i + 1;
-        for (; j < text.size(); ++j)
-        {
-            const char c = text[j];
-            if (c == '(' || c == '[') ++depth;
-            else if (c == ')' || c == ']') { if (depth == 0) break; --depth; }
-            else if (depth == 0 && (c == ',' || c == ';' || text.compare(j, 3, " = ") == 0)) break;
-        }
+        const size_t j = std::min(UnaryOperandEnd(text, i), text.size());
         const std::string operand = text.substr(i + 1, j - i - 1);
         if (operand.find_first_not_of(" *") != std::string::npos) out.emplace_back(operand, i);
     }
@@ -3423,48 +3549,14 @@ std::vector<std::pair<std::string, size_t>> DerefOperandList(const std::string& 
 // not the masked address).
 std::string LoadsBlanked(const std::string& text)
 {
-    static const std::regex castRe("^\\s*(?:[A-Za-z_]\\w*\\s*)+\\*+\\s*$|^\\s*(?:u?int\\d|xunknown\\d|undefined\\d?|char|uchar|short|ushort|bool|byte|word|dword|qword|long|ulong|float\\d*|code|void|unkbyte\\d+|unkuint\\d+|unkint\\d+)\\s*$");
     std::string out = text;
     for (const auto& one : DerefOperandList(text))
     {
         const size_t at = one.second;
         if (text[at] == '*')
         {
-            // (a unary `*` takes one operand, which DerefOperandList reads on to the end of the expression: `*param_2 | 0xffffffc0` loads through
-            // param_2 and ORs the mask into the value loaded. The operand is a name with its subscripts, or a parenthesised expression after the
-            // casts, or another `*` and its operand.)
-            size_t k = at + 1;
-            while (k < text.size() && (text[k] == ' ' || text[k] == '*')) ++k;
-            size_t end = k;
-            while (k < text.size() && text[k] == '(')
-            {
-                int depth = 0;
-                size_t close = std::string::npos;
-                for (size_t q = k; q < text.size(); ++q)
-                {
-                    if (text[q] == '(') ++depth;
-                    else if (text[q] == ')' && --depth == 0) { close = q; break; }
-                }
-                if (close == std::string::npos) { end = text.size(); break; }
-                end = close + 1;
-                if (!std::regex_match(text.substr(k + 1, close - k - 1), castRe)) break;
-                k = close + 1;
-                while (k < text.size() && text[k] == ' ') ++k;
-                end = k;
-            }
-            if (end == k)
-            {
-                while (end < text.size() && (std::isalnum(static_cast<unsigned char>(text[end])) || text[end] == '_')) ++end;
-                while (end < text.size() && text[end] == '[')
-                {
-                    int depth = 0;
-                    for (; end < text.size(); ++end)
-                    {
-                        if (text[end] == '[') ++depth;
-                        else if (text[end] == ']' && --depth == 0) { ++end; break; }
-                    }
-                }
-            }
+            // (a unary `*` takes one operand: UnaryOperandEnd)
+            const size_t end = UnaryOperandEnd(text, at);
             for (size_t q = at + 1; q < end && q < out.size(); ++q) out[q] = ' ';
             continue;
         }
@@ -5342,6 +5434,8 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                     named |= n.address == t.insn && (n.text.find("if the pointer holds 0x" + Hex(t.addr)) != std::string::npos ||
                                                        n.text.find("the pointer is based at 0x" + Hex(t.addr)) != std::string::npos);
                     said |= n.address == t.insn && n.caution && n.text.find("may reach on-chip registers") != std::string::npos;
+                    // (A5-101: an on-chip register's address plus an index says that another index reaches another register of the page)
+                    said |= n.address == t.insn && n.caution && n.text.find("plus an index that is not known") != std::string::npos;
                 }
                 if (named)
                 {
@@ -5427,6 +5521,106 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
         {
             std::string what;
             if (PrintedPast(m, got, r.calls, &what)) add("printed-past", "the read at " + Hex(m.insn) + " is printed past " + what);
+        }
+        // (A5-102) ...and a store the engine folded into a global at a constant address, before a write through a pointer the ledger holds
+        // that the code makes after it: its statement is printed before that write's (a read through a pointer and a register's access are
+        // counted, A5-109). The ledger holds no
+        // folded store, so the order rule above could not see `*puVar2 = uRam06030000; uRam06030000 = xVar1;`, the DMA enable printed before the
+        // buffer write the code makes first (and the old value left in the global when the pointer is its address). The folded store's
+        // statement is the first line that assigns a variable and names its instruction (AddFrameStoreTokens names the store on the line it
+        // went to); a store no line names was dropped or merged, which the conservation rules judge, and one a later store of the same address
+        // follows is the later one's to stand for.
+        // (a poll of memory this request does not mark is ordinary memory to the engine, by design: it folds the poll, may take the loop for
+        // one that never ends or never runs, and what is printed around it is not the code's order to judge; the request that marks it is)
+        bool foldedPoll = false;
+        for (const Env::Poll& poll : subject.polls)
+            if (!InHardwareRange(poll.addr) && !inMarked(poll.raw)) foldedPoll = true;
+        if (foldedPoll) count("order.folded-store.folded-poll");
+        else
+        {
+            bool hasGoto = false;
+            for (const Line& l : r.lines) hasGoto |= l.text.find("goto ") != std::string::npos;
+            for (const AccessFate& f : r.accessFates)
+            {
+                if (!f.write || f.fate != AccessFate::FoldedOrdinary || !f.constantAddress || f.frame || f.origBlock < 0) continue;
+                int first = -1;
+                for (size_t li = 0; li < r.lines.size() && first < 0; ++li)
+                {
+                    const Line& l = r.lines[li];
+                    const size_t b = l.text.find_first_not_of(' ');
+                    if (b == std::string::npos) continue;
+                    size_t e = b;
+                    while (e < l.text.size() && (std::isalnum(static_cast<unsigned char>(l.text[e])) || l.text[e] == '_' || l.text[e] == '.')) ++e;
+                    if (e == b || l.text.compare(e, 3, " = ") != 0) continue;
+                    for (const Token& t : l.tokens)
+                        if (t.addr == f.insn) { first = static_cast<int>(li); break; }
+                }
+                if (first < 0) continue;
+                // (a store a later folded store of the same address follows is the engine's to drop or merge: the later one writes what is
+                // left, whatever the pointer wrote in between, and the mapping names the dropped store on the later one's line. Ordinary
+                // memory, a variable by design. `g = r2; poll; tas.b @g` prints the poll, then `g = (uint1)in_r2 | 0x80;`.)
+                bool overwritten = false;
+                for (const AccessFate& o : r.accessFates)
+                {
+                    if (&o == &f || !o.write || o.fate != AccessFate::FoldedOrdinary || !o.constantAddress || o.frame || o.origBlock < 0 || o.insn == f.insn) continue;
+                    if (o.address >= f.address + f.size || f.address >= o.address + o.size) continue;
+                    const size_t ob = static_cast<size_t>(o.origBlock), fb0 = static_cast<size_t>(f.origBlock);
+                    if (ob >= fr.reach.size() || fb0 >= fr.reach.size()) continue;
+                    overwritten |= ob == fb0 ? o.origOrder > f.origOrder : fr.reach[fb0][ob] != 0;
+                }
+                if (overwritten)
+                {
+                    count("order.folded-store.overwritten");
+                    continue;
+                }
+                for (const MemoryAccess& m : got)
+                {
+                    if (m.firstLine < 0 || m.insn == f.insn || m.origBlock < 0) continue;
+                    // (the access runs after the store whenever both run: later in its block, or in a block only the store's reaches, outside
+                    // any loop holding both; and a text without goto prints the blocks in the flow's order)
+                    const size_t fb = static_cast<size_t>(f.origBlock), mb = static_cast<size_t>(m.origBlock);
+                    if (fb >= fr.reach.size() || mb >= fr.reach.size()) continue;
+                    // (in another block, one every path from the store's block runs through: two complementary `if`s the engine prints as
+                    // one `if`/`else` make the access on the paths that skip the store, grammar 2 seed 2070495)
+                    auto alwaysReaches = [&](size_t from, size_t to) {
+                        std::vector<char> seen(r.flowSuccessors.size(), 0);
+                        std::vector<size_t> todo{ from };
+                        while (!todo.empty())
+                        {
+                            const size_t x = todo.back();
+                            todo.pop_back();
+                            if (x == to || x >= seen.size() || seen[x]) continue;
+                            seen[x] = 1;
+                            bool any = false;
+                            for (int y : r.flowSuccessors[x])
+                                if (y >= 0)
+                                {
+                                    any = true;
+                                    todo.push_back(static_cast<size_t>(y));
+                                }
+                            if (!any) return false;   // (an exit reached without passing 'to')
+                        }
+                        return true;
+                    };
+                    const bool after = fb == mb ? m.origOrder > f.origOrder : fr.reach[fb][mb] && !fr.reach[mb][fb] && !hasGoto && alwaysReaches(fb, mb);
+                    if (!after) continue;
+                    // (A5-109, open: a read through a pointer, or a register's access, is still printed before a folded store the code makes
+                    // first by routes patch 0082 does not close: the engine takes the store for dead or joins it with a later one (`g = v; x = *p;
+                    // if (c) g = v;` prints the store after the join), or writes the global at the return (grammar 1 seed 2012158: `x = g; g = r4;
+                    // SCSP_SCILV2 = x` prints the register write first). Counted until fixed; a write through a pointer, which may be the global's
+                    // own address, is judged.)
+                    if (!m.write || m.direct)
+                    {
+                        if (first > m.firstLine) count(m.direct ? "order.folded-store.hardware-past" : "order.folded-store.read-past");
+                        continue;
+                    }
+                    count("order.folded-store.checked");
+                    if (first > m.firstLine)
+                        add("folded-store-after-access", "the store at " + Hex(f.insn) + " the engine folded into " + Hex(f.address) + " is printed (line " +
+                                                             std::to_string(first) + ") after the " + (m.write ? "write" : "read") + " at " + Hex(m.insn) +
+                                                             " (line " + std::to_string(m.firstLine) + "), which the code makes after it");
+                }
+            }
         }
 
         // ---- Area 4: control flow and boundaries ----
@@ -6524,7 +6718,11 @@ void CountMnemonics(const std::vector<Item>& items, std::map<std::string, int>& 
         case Item::BraLoop: case Item::BraBack: m["bra"] += 1; break;
         case Item::DataSkip: m["bra"] += 1; break;
         case Item::Choice: m[it.onTrue ? "bt" : "bf"] += 1; m["bra"] += 1; break;
-        case Item::Mask: m["mov.l"] += 1; m[it.xorOp ? "xor" : it.onTrue ? "and" : "or"] += 1; break;
+        case Item::Mask:
+            m["mov.l"] += 1;
+            if (it.oldStoreFrom >= 0) m["mov.l"] += 3;
+            else m[it.addOp ? "add" : it.xorOp ? "xor" : it.onTrue ? "and" : "or"] += 1;
+            break;
         default: break;
         }
         CountMnemonics(it.slot, m);
@@ -12918,7 +13116,11 @@ void TestA582Pins(Sh2Decompiler& d)
     check("a product is no dereference (A5-85 control)", { "puVar1 = &VDP2_TVSTAT;", "uVar2 = puVar1[iVar3 * 2];" }, 1, tvstat, true, false);
     CHECK(DerefOperands("return CONCAT44((int4)*param_1,xVar1);") == "param_1 ; ");
     CHECK(DerefOperands("x = a * b;").empty());
-    CHECK(DerefOperands("x = *(xunknown4 *)(p + 4) + y;") == "(xunknown4 *)(p + 4) + y ; ");
+    // (A5-105: a unary `*` takes its own operand only, and what is added to or ORed into the value loaded is not the pointer)
+    CHECK(DerefOperands("x = *(xunknown4 *)(p + 4) + y;") == "(xunknown4 *)(p + 4) ; ");
+    CHECK(DerefOperands("*(uint4 *)(param_1 + 8) = *(uint4 *)((param_1 & 3) * 4 + -0x80) | 0xffffffc0;") ==
+          "(uint4 *)(param_1 + 8) ; (uint4 *)((param_1 & 3) * 4 + -0x80) ; ");
+    CHECK(DerefOperands("x = *param_2 | 0xffffffc0;") == "param_2 ; ");
 }
 
 // ---- Area 5, A5-87: the five seeds, and what the pointer rules may take for the pointer -------------------------------------------------------
@@ -12999,6 +13201,28 @@ void TestA587Pins(Sh2Decompiler& d)
             "0/0/18,20/20/2c", nullptr, "1,1", "104000,0", "0,0" }, nullptr, nullptr },
         { { "A5-100, grammar 2 seed 298629 shrunk", "4F22 2622 D101 4F26 412B 0009 0600 9010 D302 243A D302 432B 0009 0009 E000 0000 0600 9024 2FD6 D103 241B 6361 2436 6DF6 000B 0009 FFFF FE00",
             "0/0/c,10/10/1a,24/24/34", nullptr, "0,0,0", nullptr, nullptr }, nullptr, nullptr },
+        // The area 5 confirming round's replays (A5-101 to A5-108), each with no finding once fixed. A5-102, and its hardware form, a pointer merged
+        // from SCU_D0EN and SCU_D1EN: the folded store's statement before the pointer's (rule "folded-store-after-access", the order rule's gap,
+        // counted when checked). (With the global in r4's arena the old value left there is seen only as the arena rule's `dropped`, A5-102.) A5-105: the
+        // OR into the loaded value is not the read's pointer (rule 3f). A5-104: the literal the function writes, then loads.
+        { { "A5-101, a byte read-modify-write of SH2_TIER by an index", "D105 E003 2049 4000 021C CB00 E380 223B 0124 000B 0009 0009 FFFF FE10",
+            nullptr, nullptr, nullptr, nullptr, nullptr }, nullptr, nullptr },
+        { { "A5-102, the global read, rewritten and its old value stored through param_1", "D302 6032 2352 2402 000B 0009 0603 0000",
+            nullptr, nullptr, nullptr, nullptr, nullptr }, "order.folded-store.checked", nullptr },
+        { { "A5-102, through a pointer merged from SCU_D0EN and SCU_D1EN", "D306 6032 2352 D103 2448 8900 D102 2102 000B 0009 25FE 0010 25FE 0030 0603 0000",
+            nullptr, nullptr, nullptr, nullptr, nullptr }, "order.folded-store.checked", nullptr },
+        { { "A5-103, a purge through (p & 0x1FFFFFF0) | 0x40000000", "D103 2149 D203 212B E000 000B 2102 0009 1FFF FFF0 4000 0000",
+            nullptr, nullptr, nullptr, nullptr, nullptr }, nullptr, nullptr },
+        { { "A5-104, a literal written and then loaded", "D102 2142 D002 000B 0009 0009 0600 9010 1234 5678",
+            nullptr, nullptr, nullptr, nullptr, nullptr }, nullptr, nullptr },
+        { { "A5-105, an OR into the value loaded through an on-chip index", "D105 E003 2049 4008 310C 6212 E3C0 223B 1422 000B 0009 0009 FFFF FF80",
+            nullptr, nullptr, nullptr, nullptr, nullptr }, nullptr, nullptr },
+        { { "A5-107, grammar 1 seed 2027066 shrunk", "D607 E304 7604 D107 261A 4310 8BFA E304 8561 7604 D204 262A 4310 8BF9 000B 0009 25F8 00DC 8000 0000 2000 0000",
+            nullptr, nullptr, nullptr, nullptr, nullptr }, "cache.read.pointer.said", nullptr },
+        // A5-108 (grammar 1 seed 9400696, the A10-16 fixer's run): A5-107's class, a first loop flipping with 0x60000000 and a second stepping and
+        // flipping with 0x20000000; the 1-byte reads at 06009020 come to 05F80102 and 05F8010A, through the cached partition.
+        { { "A5-108, grammar 1 seed 9400696 shrunk", "D612 E302 7604 D112 261A 4310 8BFA 2662 D710 71DE 4315 8B00 C20E E304 205A E006 006C 855B 7604 D20C 262A 4310 8BF6 E304 615F 4015 4310 8BFB E399 D708 E002 2701 6071 C801 8BFC 000B 0009 0009 25F8 00F0 6000 0000 2600 1034 2000 0000 2600 1034",
+            nullptr, nullptr, nullptr, nullptr, nullptr }, "cache.read.pointer.said", nullptr },
     };
     for (const Pin& p : kPins)
     {
