@@ -23,6 +23,7 @@
  * Modified for SaturnExplorer: RuleSignMod2nOpt2 tests that the sign steering its bias is V's own; RuleThreeWayCompare refuses unsigned constants that are neighbours only modulo 2^64; RuleShiftSub refuses a SUBPIECE that reads past the top of the shifted value (patches/0067-engine-round14-sign-mod-late-donothing-three-way-shift-sub.patch).
  * Modified for SaturnExplorer: RulePiecePathology leaves a word of the stack frame alone, which is no register a partial write fills in; RulePullsubIndirect takes the piece of the INDIRECT's input from the lowest byte its readers take (patches/0072-engine-frame-chains-and-save-slots.patch).
  * Modified for SaturnExplorer: RulePropagateCopy does not propagate a write of a global into the INDIRECT a STORE puts on it, nor into another marker past a memory access (patches/0082-engine-store-keeps-earlier-write.patch).
+ * Modified for SaturnExplorer: RuleEarlyRemoval keeps a write of a global on a path that never reaches a return (patches/0087-engine-global-writes-without-return.patch).
  */
 #include "ruleaction.hh"
 #include "coreaction.hh"
@@ -68,6 +69,10 @@ int4 RuleEarlyRemoval::applyOp(PcodeOp *op,Funcdata &data)
   if (spc->doesDeadcode())
     if (!data.deadRemovalAllowedSeen(spc))
       return 0;
+  // SaturnExplorer (0087): the code's own store to a global is left to ActionDeadCode, which keeps it when a path from it never returns.
+  // Here, between a branch's condition folding and the branch's removal, the write can read as dead though the loop it is made before
+  // never ends: the poll's LOAD took its value, and the RETURN after the loop sees a later write.
+  if (ActionDeadCode::isFoldedFlowStore(data,vn)) return 0;
 
   data.opDestroy(op);		// Get rid of unused op
   return 1;

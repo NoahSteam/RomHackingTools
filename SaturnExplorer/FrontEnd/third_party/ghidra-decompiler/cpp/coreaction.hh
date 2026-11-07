@@ -583,6 +583,9 @@ class ActionDeadCode : public Action {
   static void keepFrameWritesForLoads(Funcdata &data,vector<Varnode *> &worklist);	///< SaturnExplorer (0076): a LOAD that may read the frame keeps its writes
   static void keepGlobalWritesWithoutReturn(Funcdata &data,vector<Varnode *> &worklist);	///< SaturnExplorer (0087): a global's writes on a path that never returns are kept
 public:
+  static bool doomedBlocks(const Funcdata &data,vector<char> &dooms);	///< SaturnExplorer (0087): the blocks a path from which never returns
+  static bool globalWriteWithoutReturn(const Funcdata &data,const Varnode *vn,const vector<char> *dooms);	///< SaturnExplorer (0087): a global's write no RETURN may follow
+  static bool isFoldedFlowStore(const Funcdata &data,const Varnode *vn);	///< SaturnExplorer (0087): the write a STORE of the code's became
   ActionDeadCode(const string &g) : Action(0,"deadcode",g) {}	///< Constructor
   virtual Action *clone(const ActionGroupList &grouplist) const {
     if (!grouplist.contains(getGroup())) return (Action *)0;

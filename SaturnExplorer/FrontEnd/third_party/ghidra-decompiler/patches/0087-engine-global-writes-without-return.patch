@@ -9,26 +9,44 @@ diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc b/Ghidra
   */
  #include "coreaction.hh"
  #include "condexe.hh"
-@@ -4407,6 +4408,75 @@ bool ActionDeadCode::callMayReadFrame(const Funcdata &data,const Varnode *vn)
+@@ -4407,6 +4408,150 @@ bool ActionDeadCode::callMayReadFrame(const Funcdata &data,const Varnode *vn)
    return false;
  }
  
-+/// \brief Keep the writes of global storage made on a path that never returns (SaturnExplorer, 0087)
++/// \brief Whether a CBRANCH whose condition is a constant leaves its block by another edge (SaturnExplorer, 0087)
 +///
-+/// A global's value is live at a RETURN only, through the COPY heritage puts there (Heritage::guardReturns), so a write that no
-+/// RETURN can follow (a loop the analysis takes to run for ever, such as a poll of memory it folds, or a call that does not return)
-+/// had no reader and went as dead: the store the code makes before the loop vanished, and the register that held the global's old
-+/// value could then merge with it, printing a write the code never makes. Memory another processor or an interrupt reads sees the
-+/// writes made before such a loop, so each write of persistent storage in a block from which a block that never returns is
-+/// reachable is consumed and address forced, as the COPY at a RETURN is. A function whose every block reaches a RETURN is not changed.
++/// The edge stays in the graph until ActionDeterminedBranch removes it, and rules run in between: a write of a global whose value
++/// heritage carried along such an edge to a RETURN reads as dead there before the RETURN's block is cut off.
++/// \param bl is the block the edge leaves
++/// \param outIndex is the edge's index among the block's out edges
++/// \return \b true if the block ends in a CBRANCH that never takes the edge
++static bool edgeNeverTaken(const FlowBlock *bl,int4 outIndex)
++
++{
++  if (bl->sizeOut() != 2) return false;
++  const PcodeOp *last = bl->lastOp();
++  if (last == (const PcodeOp *)0 || last->isDead() || last->code() != CPUI_CBRANCH) return false;
++  const Varnode *cond = last->getIn(1);
++  if (!cond->isConstant()) return false;
++  uintb val = cond->getOffset();
++  int4 removed = (((val!=0)&&(!last->isBooleanFlip())) || ((val==0)&&(last->isBooleanFlip()))) ? 0 : 1;	// as ActionDeterminedBranch
++  return outIndex == removed;
++}
++
++/// \brief Mark the blocks from which a block that never reaches a RETURN is reachable (SaturnExplorer, 0087)
++///
 +/// \param data is the function being analyzed
-+/// \param worklist is the consume work list
-+void ActionDeadCode::keepGlobalWritesWithoutReturn(Funcdata &data,vector<Varnode *> &worklist)
++/// \param dooms is filled with one entry per basic block: 1 when a path from it reaches a block from which no live RETURN is reachable
++/// (a loop the analysis takes to run for ever, a call that does not return), the block itself included; an edge a CBRANCH with a
++/// constant condition never takes is no path
++/// \return \b true if any block is so marked
++bool ActionDeadCode::doomedBlocks(const Funcdata &data,vector<char> &dooms)
 +
 +{
 +  const BlockGraph &bbs(data.getBasicBlocks());
 +  int4 n = bbs.getSize();
-+  if (n == 0) return;
++  dooms.assign(n,0);
++  if (n == 0) return false;
 +  vector<char> returns(n,0);
 +  vector<FlowBlock *> work;
 +  list<PcodeOp *>::const_iterator iter = data.beginOp(CPUI_RETURN);
@@ -47,37 +65,94 @@ diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc b/Ghidra
 +    for(int4 i=0;i<bl->sizeIn();++i) {
 +      FlowBlock *in = bl->getIn(i);
 +      if (returns[in->getIndex()]) continue;
++      if (edgeNeverTaken(in,bl->getInRevIndex(i))) continue;	// a branch decided away from this block: no path to the RETURN
 +      returns[in->getIndex()] = 1;
 +      work.push_back(in);
 +    }
 +  }
-+  vector<char> dooms(n,0);	// every block from which a block that never returns is reachable
 +  for(int4 i=0;i<n;++i) {
 +    if (returns[i]) continue;
 +    dooms[i] = 1;
 +    work.push_back(bbs.getBlock(i));
 +  }
-+  if (work.empty()) return;
++  if (work.empty()) return false;
 +  while(!work.empty()) {
 +    FlowBlock *bl = work.back();
 +    work.pop_back();
 +    for(int4 i=0;i<bl->sizeIn();++i) {
 +      FlowBlock *in = bl->getIn(i);
 +      if (dooms[in->getIndex()]) continue;
++      if (edgeNeverTaken(in,bl->getInRevIndex(i))) continue;
 +      dooms[in->getIndex()] = 1;
 +      work.push_back(in);
 +    }
 +  }
++  return true;
++}
++
++/// \brief Whether a Varnode is the write of global storage that a STORE of the code became (SaturnExplorer, 0087)
++///
++/// RuleStoreVarnode turns a flow STORE at a constant address of ordinary memory into a COPY (the same op, its fold recorded as
++/// fate_folded_ordinary). The pieces and joins heritage makes around such a write are no store of the code's and are not held.
++/// \param data is the function being analyzed
++/// \param vn is the Varnode
++/// \return \b true if \b vn is written, persistent, in the default data space, by the op a flow STORE became
++bool ActionDeadCode::isFoldedFlowStore(const Funcdata &data,const Varnode *vn)
++
++{
++  if (!vn->isWritten() || !vn->isPersist()) return false;
++  if (vn->getSpace() != data.getArch()->getDefaultDataSpace()) return false;
++  const PcodeOp *def = vn->getDef();
++  if (def->isDead() || def->code() == CPUI_INDIRECT || def->code() == CPUI_MULTIEQUAL) return false;
++  const vector<AccessRecord> &fates(data.getAccessFates());
++  for(vector<AccessRecord>::const_iterator iter=fates.begin();iter!=fates.end();++iter)
++    if ((*iter).time == def->getTime() && (*iter).store && (*iter).fate == fate_folded_ordinary) return true;
++  return false;
++}
++
++/// \brief Whether a write of global storage must be kept because a path from it never returns (SaturnExplorer, 0087)
++///
++/// A global's value is live at a RETURN only, through the COPY heritage puts there (Heritage::guardReturns), so a write that no
++/// RETURN can follow (a loop the analysis takes to run for ever, such as a poll of memory it folds, or a call that does not return)
++/// had no reader and went as dead: the store the code makes before the loop vanished, and the register that held the global's old
++/// value could then merge with it, printing a write the code never makes. Memory another processor or an interrupt reads sees the
++/// writes made before such a loop. A function whose every block reaches a RETURN keeps none this way.
++/// \param data is the function being analyzed
++/// \param vn is the written Varnode
++/// \param dooms is the result of doomedBlocks for the function, or null to compute it here
++/// \return \b true if \b vn is a store of the code's to a global (isFoldedFlowStore) in a block that may never return
++bool ActionDeadCode::globalWriteWithoutReturn(const Funcdata &data,const Varnode *vn,const vector<char> *dooms)
++
++{
++  if (!isFoldedFlowStore(data,vn)) return false;
++  const PcodeOp *def = vn->getDef();
++  vector<char> local;
++  if (dooms == (const vector<char> *)0) {
++    if (!doomedBlocks(data,local)) return false;
++    dooms = &local;
++  }
++  int4 index = def->getParent()->getIndex();
++  return index >= 0 && index < (int4)dooms->size() && (*dooms)[index] != 0;
++}
++
++/// \brief Keep the writes of global storage made on a path that never returns (SaturnExplorer, 0087)
++///
++/// Each write that globalWriteWithoutReturn holds is consumed and address forced, as the COPY at a RETURN is (the force keeps it from
++/// RuleEarlyRemoval between the passes too, which also asks globalWriteWithoutReturn).
++/// \param data is the function being analyzed
++/// \param worklist is the consume work list
++void ActionDeadCode::keepGlobalWritesWithoutReturn(Funcdata &data,vector<Varnode *> &worklist)
++
++{
++  vector<char> dooms;
++  if (!doomedBlocks(data,dooms)) return;
 +  AddrSpace *dataSpc = data.getArch()->getDefaultDataSpace();
 +  VarnodeLocSet::const_iterator viter = data.beginLoc(dataSpc);
 +  VarnodeLocSet::const_iterator endviter = data.endLoc(dataSpc);
 +  for(;viter!=endviter;++viter) {
 +    Varnode *vn = *viter;
-+    if (!vn->isWritten() || !vn->isPersist()) continue;
-+    const PcodeOp *def = vn->getDef();
-+    if (def->isDead() || def->code() == CPUI_INDIRECT || def->code() == CPUI_MULTIEQUAL) continue;
-+    if (!dooms[def->getParent()->getIndex()]) continue;
-+    vn->setAddrForce();		// held between the passes too: RuleEarlyRemoval takes a write that nothing reads and that is not forced
++    if (!globalWriteWithoutReturn(data,vn,&dooms)) continue;
++    vn->setAddrForce();
 +    pushConsumed(~((uintb)0),vn,worklist);
 +  }
 +}
@@ -85,7 +160,7 @@ diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc b/Ghidra
  int4 ActionDeadCode::apply(Funcdata &data)
  
  {
-@@ -4445,6 +4515,7 @@ int4 ActionDeadCode::apply(Funcdata &data)
+@@ -4445,6 +4590,7 @@ int4 ActionDeadCode::apply(Funcdata &data)
    }
  
    keepFrameWritesForLoads(data,worklist);	// SaturnExplorer (patches/0076-engine-frame-loads-keep-writes.patch)
@@ -104,11 +179,37 @@ diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.hh b/Ghidra
   */
  /// \file coreaction.hh
  /// \brief Core decompilation actions which are indepedent of any particular architecture
-@@ -580,6 +581,7 @@ class ActionDeadCode : public Action {
+@@ -580,7 +581,11 @@ class ActionDeadCode : public Action {
    static bool callMayReadFrame(const Funcdata &data,const Varnode *vn);	///< SaturnExplorer (0068): a call's INDIRECT on an escaped frame's local
    static bool storeMayWrite(const Funcdata &data,const PcodeOp *sop,const Varnode *local);	///< SaturnExplorer (0072): a STORE not folded yet aimed at the local
    static void keepFrameWritesForLoads(Funcdata &data,vector<Varnode *> &worklist);	///< SaturnExplorer (0076): a LOAD that may read the frame keeps its writes
 +  static void keepGlobalWritesWithoutReturn(Funcdata &data,vector<Varnode *> &worklist);	///< SaturnExplorer (0087): a global's writes on a path that never returns are kept
  public:
++  static bool doomedBlocks(const Funcdata &data,vector<char> &dooms);	///< SaturnExplorer (0087): the blocks a path from which never returns
++  static bool globalWriteWithoutReturn(const Funcdata &data,const Varnode *vn,const vector<char> *dooms);	///< SaturnExplorer (0087): a global's write no RETURN may follow
++  static bool isFoldedFlowStore(const Funcdata &data,const Varnode *vn);	///< SaturnExplorer (0087): the write a STORE of the code's became
    ActionDeadCode(const string &g) : Action(0,"deadcode",g) {}	///< Constructor
    virtual Action *clone(const ActionGroupList &grouplist) const {
+     if (!grouplist.contains(getGroup())) return (Action *)0;
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/ruleaction.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/ruleaction.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/ruleaction.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/ruleaction.cc
+@@ -23,6 +23,7 @@
+  * Modified for SaturnExplorer: RuleSignMod2nOpt2 tests that the sign steering its bias is V's own; RuleThreeWayCompare refuses unsigned constants that are neighbours only modulo 2^64; RuleShiftSub refuses a SUBPIECE that reads past the top of the shifted value (patches/0067-engine-round14-sign-mod-late-donothing-three-way-shift-sub.patch).
+  * Modified for SaturnExplorer: RulePiecePathology leaves a word of the stack frame alone, which is no register a partial write fills in; RulePullsubIndirect takes the piece of the INDIRECT's input from the lowest byte its readers take (patches/0072-engine-frame-chains-and-save-slots.patch).
+  * Modified for SaturnExplorer: RulePropagateCopy does not propagate a write of a global into the INDIRECT a STORE puts on it, nor into another marker past a memory access (patches/0082-engine-store-keeps-earlier-write.patch).
++ * Modified for SaturnExplorer: RuleEarlyRemoval keeps a write of a global on a path that never reaches a return (patches/0087-engine-global-writes-without-return.patch).
+  */
+ #include "ruleaction.hh"
+ #include "coreaction.hh"
+@@ -68,6 +69,10 @@ int4 RuleEarlyRemoval::applyOp(PcodeOp *op,Funcdata &data)
+   if (spc->doesDeadcode())
+     if (!data.deadRemovalAllowedSeen(spc))
+       return 0;
++  // SaturnExplorer (0087): the code's own store to a global is left to ActionDeadCode, which keeps it when a path from it never returns.
++  // Here, between a branch's condition folding and the branch's removal, the write can read as dead though the loop it is made before
++  // never ends: the poll's LOAD took its value, and the RETURN after the loop sees a later write.
++  if (ActionDeadCode::isFoldedFlowStore(data,vn)) return 0;
+ 
+   data.opDestroy(op);		// Get rid of unused op
+   return 1;

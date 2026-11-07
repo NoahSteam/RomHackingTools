@@ -1947,20 +1947,23 @@ void TestArea7Round8()
         CHECK(dts::AuditMapping(r, word, "a7_60").Violations() == 0);
     }
     // A7-61 (the area 5 fixer's grammar 1 seed 2017373, shrunk), the oracle's: `xRam06002304 = 0x66;` at its `mov #0x66,r0` (r0,
-    // the global's load, merged under its name) names no store; the only store writes the input r6. A7-45's count took `cmp/eq r3,r2`
+    // the global's load, merged under its name) named no store; the only store writes the input r6. A7-45's count took `cmp/eq r3,r2`
     // (r3 the global's address) for a compare that may tie r6 to 0x66; only a compare of the stored register, or of one moved into it,
-    // does. With `cmp/eq r0,r6` (r0 the 0x66) the check still asks for the store. (The text's loop is the engine's: area 3.)
+    // does. The text itself was the engine's (A3-163): once the unmarked poll was taken for a loop that never ends, the store of r6 had no
+    // return to be live at, went as dead, and r0 merged under the global's name. Since patch 0087 the store and the poll's own write are
+    // printed and r0 is a variable of its own, so the line A7-61's count was about is gone: the audit is clean with either compare.
     {
         std::vector<uint16_t> w = { 0xD309, 0x6032, 0x2362, 0x2502, 0xE301, 0x8170, 0xE066, 0x4310, 0x8BFB, 0x3230, 0x89FF, 0xD705, 0xE001,
                                     0x2701, 0x6071, 0xC801, 0x8BFC, 0x000B, 0x0009, 0x0009, 0x0600, 0x2304, 0x0600, 0x1010 };
         const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, w);
         Print("A7-61 a number at its maker, a compare of other registers", r);
         const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_61");
-        CHECK(a.Violations() == 0 && a.copyNumberMade == 1);
+        CHECK(a.Violations() == 0 && a.copyNumberMade == 0);
+        CHECK(Has(r.Text(), "xRam06002304 = param_3;") && Has(r.Text(), "xRam06001010 = 1;") && !Has(r.Text(), "xRam06002304 = 0x66;"));
         w[9] = 0x3600;   // cmp/eq r0,r6
         const DecompileResult t = a7r4::DecompileWords(d, hw, 0x06009000u, w);
         const dts::MappingAudit ta = dts::AuditMapping(t, word, "a7_61 tied");
-        CHECK(ta.copyNumberMade == 0 && ta.copyStoreMissing == 1);
+        CHECK(ta.Violations() == 0 && ta.copyNumberMade == 0 && Has(t.Text(), "xRam06002304 = param_3;"));
     }
     // Routed from the area 2 round 20 reviewer (each fails the same on master's binary) and this round's fresh run, shrunk.
     // A7-59 (the product's), grammar 2 seed 2405581 of the fresh run: `bsr f ; ... mov.l @(0x14,r6),r2 ; mov.l r2,@-r15 ; ... mov.l
@@ -4012,10 +4015,12 @@ void TestHardwareVolatility()
     CHECK(Count(r.Text(), "Ram25a01000") >= 2);
     CHECK(!Has(r.Text(), "while( true )") && !Has(r.Text(), "while (true)"));
 
-    // Work RAM folds by default (it is ordinary memory)...
+    // Work RAM folds by default (it is ordinary memory): the poll reads back the function's own write and is taken for a loop that never
+    // ends. The write itself is printed (A3-163, patch 0087: a global's write before a loop that never reaches a return is no dead store;
+    // the other processor sees it), as an ordinary variable, not a ledger access...
     r = run("work RAM mailbox, not marked", ramMailbox);
     CHECK(Ledger(r, {}));
-    CHECK(!Has(r.Text(), "Ram26001000 = 1;"));
+    CHECK(Has(r.Text(), "xRam26001000 = 1;") && Has(r.Text(), "while( true )"));
     // ...and is kept once marked, through either partition.
     for (uint32_t marked : { 0x26001000u, 0x06001000u })
     {
@@ -15361,6 +15366,59 @@ void TestA3144Fix()
 // the lent effects say), read as kept: `xRam0603ac08 = xVar1;` where the run stores 9. Patch 0078: a restart for each call site that asks.
 // The r8 write is not the cause: the same caller with a callee that writes nothing (`rts ; mov r4,r0`) ended the same way, and is lent now.
 // With the write, the text reads the r8 each call leaves (`extraout_r8`, `extraout_r8_00`) and the signature is withheld for that (A3-3).
+// A3-163 (patch 0087), routed from A7-61: a global's value is live at a return only (the COPY heritage puts there), so a write no return
+// can follow went as dead: the store of r6 before an unmarked poll the engine takes for a loop that never ends (grammar 1 seed 2017373,
+// shrunk), the poll's own write, and r0 merged under the global's name (`xRam06002304 = 0x66;`, a write the code never makes). Memory
+// another processor reads sees those writes, and on the hardware the poll ends. Each write of a global on a path that cannot reach a
+// return is now kept; a function whose every path returns prints as before (the control: a store the next one replaces still goes).
+void TestA3163Fix()
+{
+    std::vector<uint8_t> hw(0x100000u, 0);
+    Sh2Decompiler d(gConfig);
+    struct Case
+    {
+        const char* name;
+        std::vector<uint16_t> words;
+        std::vector<const char*> has, hasNot;
+    };
+    const Case kCases[] = {
+        // mov.l @(lit),r3 ; mov.l @r3,r0 ; mov.l r6,@r3 ; mov.l r0,@r5 ; mov #1,r3 ; L: mov.w r0,@(0,r7) ; mov #0x66,r0 ; dt r3 ; bf L ;
+        // cmp/eq r3,r2 ; bt +0 ; mov.l @(lit),r7 ; mov #1,r0 ; mov.w r0,@r7 ; P: mov.w @r7,r0 ; tst #1,r0 ; bf P ; rts ; nop
+        { "A3-163 seed 2017373: the store before an unmarked poll",
+          { 0xD309, 0x6032, 0x2362, 0x2502, 0xE301, 0x8170, 0xE066, 0x4310, 0x8BFB, 0x3230, 0x89FF, 0xD705, 0xE001, 0x2701, 0x6071, 0xC801,
+            0x8BFC, 0x000B, 0x0009, 0x0009, 0x0600, 0x2304, 0x0600, 0x1010 },
+          { "xVar1 = xRam06002304;", "xRam06002304 = param_3;", "*param_2 = xVar1;", "*param_4 = (int2)xVar1;", "xRam06001010 = 1;", "while( true )" },
+          { "xRam06002304 = 0x66;" } },
+        // mov.l @(lit),r1 ; mov.l r4,@r1 ; L: bra L ; nop: a store before an idle loop
+        { "A3-163 a store before bra to itself", { 0xD102, 0x2142, 0xAFFE, 0x0009, 0x0009, 0x0009, 0x0600, 0x2000 },
+          { "xRam06002000 = param_1;", "while( true )" }, {} },
+        // tst r4,r4 ; bt R ; mov.l @(lit),r1 ; mov #1,r0 ; mov.l r0,@r1 ; L: bra L ; nop ; R: rts ; nop: only one path never returns
+        { "A3-163 a store on the path that never returns", { 0x2448, 0x8904, 0xD103, 0xE001, 0x2102, 0xAFFE, 0x0009, 0x000B, 0x0009, 0x0009, 0x0600, 0x2000 },
+          { "xRam06002000 = 1;", "while( true )" }, {} },
+        // mov.l @(lit),r1 ; mov #1,r0 ; mov.l r0,@r1 ; mov #2,r0 ; mov.l r0,@r1 ; rts ; nop: every path returns, the replaced store goes
+        { "A3-163 control: a function that returns", { 0xD103, 0xE001, 0x2102, 0xE002, 0x2102, 0x000B, 0x0009, 0x0009, 0x0600, 0x2000 },
+          { "xRam06002000 = 2;" }, { "xRam06002000 = 1;" } },
+    };
+    for (const Case& c : kCases)
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, c.words);
+        Print(c.name, r);
+        CHECK(r.status == DecompileStatus::Ok);
+        for (const char* h : c.has)
+            if (!Has(r.Text(), h))
+            {
+                std::printf("  %s: missing `%s`\n", c.name, h);
+                CHECK(false);
+            }
+        for (const char* h : c.hasNot)
+            if (Has(r.Text(), h))
+            {
+                std::printf("  %s: has `%s`\n", c.name, h);
+                CHECK(false);
+            }
+    }
+}
+
 void TestA3155Fix()
 {
     Sh2Decompiler d(gConfig);
@@ -16073,6 +16131,7 @@ int main(int argc, char** argv)
         RUN(TestA3130Fix());
         RUN(TestA3144Fix());
         RUN(TestA3155Fix());
+        RUN(TestA3163Fix());
         RUN(TestArea10Round2());
         RUN(TestArea5Confirm());
         RUN(TestArea2Round8());
