@@ -18018,3 +18018,54 @@ No area 5 class: 0 `cache-read-pointer-unsaid` (A5-107's seed 2027066 passes), 0
 * **Area 7:** A7-60 and A7-61 (filed here, from A5-106's new shape); the 33 seeds of section 5 that fail on master too (the mapping's later checks, now default); A7-25's, A7-30 (a)'s and A7-31's global pins and A7-39 (b) and (c) changed with patch 0082 (section 3): no materialised copy at a may-alias store any more.
 * **Area 3:** the frame lead of section 4 (hwram008 0603ED52), not traced.
 * **Area 5, next round:** A5-109 (P2, open), the rule's counts its fixer turns into findings.
+
+
+## A5-109 fixer
+
+Branch `review/5-a5109-fix` from master `4e06d794`. One engine patch, **0085** (`ruleaction.cc`, `ruleaction.hh`, `coreaction.cc`); product change in `Sh2Decompiler.cpp` (A5-110); oracle and pins in `Sh2GeneratedTests.cpp` and `Sh2DecompilerTests.cpp`. RelWithDebInfo build, every test binary under `ulimit -v` and `timeout`, one heavy job at a time. Rows: A5-109 (P2) fixed, A5-110 (P3, from the area 2 round 20 reviewer's seeds 2504292 and 2508741) fixed, A5-111 (P2) filed open.
+
+### 1. A5-109: the routes and patch 0085
+
+The engine takes a LOAD to read no global the function wrote (only the stack space has load guards), so a write of a global keeps its place only while something reads it there. Patch 0082 closed propagation into a marker; three more routes, each found from the p-code before the merge (a scratch dump of `Funcdata::printRaw` at the start of `Merge::mergeAddrTied` and after each rule, not kept):
+
+* **(a) `RuleMultiCollapse`**: `g = r3 ; x = *r7 ; if (r0 == 2) g = r3 ;` has `g3 = MULTIEQUAL(g1, g2)` with both inputs COPYs of `r3`, equal by function. The rule replaced it by a COPY of `r3` at the join and left both writes dead: `xVar2 = *param_4; ... xRam06001010 = in_r3;`. It now declines (`globalWriteMovesPastAccess`) when a global's write would pass a LOAD, STORE, call or volatile access on its way to the join, or reaches it through other blocks. Text: `xRam06001010 = in_r3; xVar2 = *param_4;`.
+* **(b) `RulePropagateCopy`** into a plain COPY: the global's COPY `g = r4` was propagated into the global's next COPY (the return's `g = g`, the multiequal having collapsed after unreachable code went), so the write moved to the return, after the register write the code makes later (grammar 1 seed 2012158). Refused when `accessBetween` finds an access between the two. Text: `xVar2 = pxRam26002200; pxRam26002200 = param_1; _SCSP_SCILV2 = xVar2;`.
+* **(c) `ActionVarnodeProps`**: a global whose non-zero mask is empty is read as the constant 0 by every reader (`totalReplaceConstant`); the MULTIEQUAL of two copies of `g = 0` lost its readers, the earlier write died and the return's copy was `g = 0` after a conditional `SH2_BCR2` write (seeds 2006655, 2013392). The replacement is skipped for a global whose write would then be made past an access.
+
+`accessBetween` (0082) and `globalWriteMovesPastAccess` are shared through `ruleaction.hh`. Pins: `TestArea5Confirm` `a5_109_join`, `a5_109_reg`, `a5_109_zero` (the text order); module pins in `TestA587Pins` (the shrunk words of seeds 2012158, 2006655, 2013392 and the join shape), which fail without the patch.
+
+The rule `folded-store-after-access` now judges a read through a pointer and a register access the code makes after a folded store, and a store that dominates the access's block (a store in the slot of the branch that skips the access, which the all-paths test had excused). The counts `order.folded-store.read`, `.hardware-read`, `.hardware-write` say what it checks; it sets aside a read printed at several uses (its first emission is a forwarded value) and a global whose text holds a piece of it (A5-111).
+
+**Mutation**: the three engine changes reverted (the `if (false)` form), the default run fails seed 113 (`folded-store-after-access`, 1 seed, 8 findings) and four `A5-109` module pins fail (join: 1 finding; 2012158: 3 findings; 2006655 with the dominance test; 2013392: 2); with the patch the default run and the pins pass. The corpora's texts change as the fix says: hwram008 211 of the alone texts and hwram007 8 lose a duplicate write the engine had invented at a return (`xRam060a84ba = 1;` again in an arm that returns, 0602A9A8) or print the write where the code makes it (0600B134: `xRam060a3b00 = 0xff;` before the loop and in the arm that makes it; 0604F422: `xRam060a6a88 = 0;` before the byte reads, as at 060510D8). No count of the matrix changed.
+
+### 2. A5-110: seeds 2504292 and 2508741 (routed)
+
+Not A5-109's class (`onchip-span-unsaid`, rule 3f). `p | 0xe0000000` (or `0xfffffe00`) then `p ^ 0x20000000` round a loop: `Bitwise`'s early branch (an unknown with a known mask) dropped the pointer's own value round the loop, so the partitions of the unknown values stayed those of the first turn (partition 6, the cache data array, which is memory) and no note was made. `Bitwise` now carries the loop path, `CloseBack` closes the partitions under the loop's turns (a step added each turn carries up one partition, never round the address space), and `Shift` takes a positive offset off the last partition to stay in it (it wrapped to partition 0, bus memory, and hid the note for `*(p + 0x3c)`). The A5-103 note is accepted by rule 3f as saying the on-chip registers may be reached (`onchip.span.said`). Pins: three module pins. The corpora carry three more cautions in each image: hwram007 06024764 (0602477E, 06024780, 06024784) and hwram008 06064404 (0606441E, 06064420, 06064424), more accesses off the pointers the A5-103 note already named.
+
+### 3. The lead: hwram008 0603ED52
+
+Traced with the disassembly and the token map (`SE_GAME_TOKENS`, `SE_GAME_DISASM`). The text of the function is unchanged by 0085. At 0603F1FC and 0603EF14 the store through a frame pointer slot (`mov.w r12,@r6`, r6 = `[r14+0x30]`) is followed in the code by the load of the next frame slot (0603F1FE `mov.l @r0,r6`), which the text prints on the same line (`piVar4 = piStack_44;`) after the store: the code's order. The frame local written before the store (`xStack_c`, 0603EEF4/0603F1EC) is printed before it. The detector of the previous fixer saw the merge's `trimOpOutput` insert a copy of a pointer slot, not a write after the store. **No defect; no row.**
+
+### 4. Fresh route, A5-111 (open, P2)
+
+The fresh run found one more area 5 shape, grammar 1 seed 2606069 (`order.folded-store.piece-overlap` now counts it): a narrower read of a global written wider is a write of that piece to the engine, so the text holds a store the code does not make and the wider store is kept to the end of the function, after a later register read. Same on master. Filed open with the repro; the rule counts and does not judge it.
+
+### 5. Results
+
+| | |
+|---|---|
+| `check-vendored-tree.py lint` / `check` (patches 0001-0085) | ok / ok |
+| full `ctest -j2 -E SaturnExplorerLive` / `-R SaturnExplorerLive` | 111 of 111 / 6 of 6 (no new test binary: the pins are functions in existing ones) |
+| fault suite | 0 of 94 jobs failed |
+| generator default run (300 seeds) | 0 findings |
+| printed-C (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | agrees=5195 (master 5195), narrow-c=131 |
+| corpora, alone and `SE_GAME_LEND=1` | hwram007 474 (645) of 999, lending 678 (956); hwram008 724 (975) of 1,543, lending 1,038 (1,310); missing and said 0 and 4; 0 accesses dropped or not printed once; cautions 5 (was 2) and 11 (was 8), the six addresses above |
+| fresh run, grammar 1, 2,600,001 to 2,610,000 (pieces of 5,000, `SE_GENERATED_CANARY=0 SE_GENERATED_SHRINK=5`) | no area 5 class; area 7 `map-*` seeds 2601280, 2601590, 2601640, 2607749, 2608672 (`map-const-join`, `map-copy-store`, `map-store-value`, `map-way-back`); the first run's two `folded-store-after-access` seeds were 2606069 (A5-111) and a read printed at two uses (the oracle's) |
+| fresh run, grammar 2, 2,600,001 to 2,610,000 | no area 5 class; area 7 seeds 2602015, 2602445, 2604457, 2605576 (`map-const-join`), 2608245 (`map-store-after`) |
+
+Counts of the rule on grammar 1 (5,000 seeds): checked 5,783-6,106, read 2,252-2,303, hardware-read 968-1,074, hardware-write 735-826, overwritten 58-63.
+
+### 6. Routed
+
+* **Area 7:** the ten `map-*` seeds of section 5 (not replayed on master's build).
+* **Area 5, next round:** A5-111 (P2, open).

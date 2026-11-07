@@ -5560,6 +5560,20 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                         if (t.addr == f.insn) { first = static_cast<int>(li); break; }
                 }
                 if (first < 0) continue;
+                // (A5-111, open: a byte or half of the global read after a wider write is made a write of that piece by heritage, a SUBPIECE whose
+                // output is the global's own address (`iRam26002314._0_1_ = (char)(...)`, a store the code does not make, and an overlap that keeps
+                // the wider write to the end of the function, after a later register read: grammar 1 seed 2606069). Counted, not judged.)
+                {
+                    char name[24];
+                    std::snprintf(name, sizeof name, "Ram%08x._", static_cast<unsigned>(f.address));
+                    bool piece = false;
+                    for (const Line& l : r.lines) piece |= l.text.find(name) != std::string::npos;
+                    if (piece)
+                    {
+                        count("order.folded-store.piece-overlap");
+                        continue;
+                    }
+                }
                 // (a store a later folded store of the same address follows is the engine's to drop or merge: the later one writes what is
                 // left, whatever the pointer wrote in between, and the mapping names the dropped store on the later one's line. Ordinary
                 // memory, a variable by design. `g = r2; poll; tas.b @g` prints the poll, then `g = (uint1)in_r2 | 0x80;`.)
@@ -5580,6 +5594,14 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                 for (const MemoryAccess& m : got)
                 {
                     if (m.firstLine < 0 || m.insn == f.insn || m.origBlock < 0) continue;
+                    // (a read whose value is printed at several uses has its first emission on the line of the use that earlier code made, where a
+                    // value stored through the pointer is forwarded: `*p = v; ... ; return p[-1];` prints `v` at the store's line, grammar 1 seed
+                    // 2606069. Its place is not one line.)
+                    if (!m.write && (m.printed > 1 || m.printedLines > 1))
+                    {
+                        count("order.folded-store.read-reprinted");
+                        continue;
+                    }
                     // (the access runs after the store whenever both run: later in its block, or in a block only the store's reaches, outside
                     // any loop holding both; and a text without goto prints the blocks in the flow's order)
                     const size_t fb = static_cast<size_t>(f.origBlock), mb = static_cast<size_t>(m.origBlock);
