@@ -3773,6 +3773,11 @@ struct PointerValues
     // is named: the access is said to "may reach on-chip registers".
     bool ranged = false;
     int64_t rangeLo = 0, rangeHi = 0;
+    // The bus partitions (bits 31-29 of the address, one bit each) the values 'others' stands for can be in, where AND, OR and XOR with known
+    // numbers fixed some of those bits (A5-103: `(param_1 & 0x1ffffff0) | 0x40000000` is in partition 2, the associative purge, whatever param_1
+    // is; `param_1 | 0x40000000` in 2, 3, 6 or 7). Unknown unless 'partsKnown'. An offset added moves a value at most one partition either way.
+    bool partsKnown = false;
+    uint8_t parts = 0;
 };
 
 // An address of a register area through the cached partition: a read there is a cache read (A5-19, A5-70).
@@ -3781,13 +3786,39 @@ bool CachedRegister(uint32_t address)
     return (address >> 29) == 0 && IsRegisterArea(address);
 }
 
+// A value the code computes as an index (A5-101): a multiply, a left shift or a mask with a constant, through the copies and extensions that
+// carry it. A pointer is none of these, so an on-chip register's address added to one is the base of an indexed access.
+bool IsComputedIndex(const ghidra::Varnode* vn)
+{
+    for (int depth = 0; depth < 8 && vn->isWritten(); ++depth)
+    {
+        const ghidra::PcodeOp* d = vn->getDef();
+        switch (d->code())
+        {
+        case ghidra::CPUI_COPY:
+        case ghidra::CPUI_CAST:
+        case ghidra::CPUI_INT_ZEXT:
+        case ghidra::CPUI_INT_SEXT:
+            vn = d->getIn(0);
+            continue;
+        case ghidra::CPUI_INT_MULT:
+        case ghidra::CPUI_INT_LEFT:
+        case ghidra::CPUI_INT_AND:
+            return d->getIn(1)->isConstant() || d->getIn(0)->isConstant();
+        default:
+            return false;
+        }
+    }
+    return false;
+}
+
 class PointerResolver
 {
 public:
     PointerValues Resolve(const ghidra::Varnode* start)
     {
         PointerValues v = Walk(start, 0);
-        if (budget_ <= 0 || !v.back.empty()) v.others = true;   // (a path round a loop no node closed)
+        if (budget_ <= 0 || !v.back.empty()) v.others = true, v.partsKnown = false;   // (a path round a loop no node closed)
         for (const SelfPath& p : v.back) v.steps |= p.Adds();
         v.back.clear();
         return v;
@@ -3851,8 +3882,18 @@ private:
                 // index (`param + 0x25F00000`), not a small offset of an unknown. The engine prints a symbol's address as the symbol (and the
                 // pointer is based at it already); colour RAM has none, nor has an unnamed register (A5-78). Said for the index 0, as an indexed
                 // pointer is. (Not the on-chip registers' partition: `param_1 + 0xFFFFFFF4` is `param_1 - 12`, A5-28's rawconst.)
-                if (!sub && out.others && out.constants.empty() && out.bases.empty() && out.back.empty() && !out.steps && k < 0xE0000000u && (InColorRam(k) || IsRegisterArea(k)))
-                    out.bases.insert(k);
+                // (A5-101) An on-chip register's address is a base too where it cannot be a small negative offset: below the page's upper half
+                // (0xFFFFFE01-0xFFFFFEFF, 257 to 511 bytes back, the SCI, FRT, WDT, TIER and DRCR registers), but not a round -0x100 or -0x200
+                // (`x + y + -0x200` in hwram008 0602A19E is an index made relative), or added to an index the code computes (a multiply, a
+                // shift, a mask: `param_1 * 0x10 + -0x74` is the DMAC channel's CHCR, `(param_1 & 3) * 2 + -0x1f0` the FRT's). `param_1 + -0xc`
+                // off a pointer parameter stays `param_1 - 12`.
+                // (an on-chip address subtracted is the same base added: `(param_1 & 0x1c) - 0x198` is 0xFFFFFE68 plus an index)
+                const uint32_t added = sub ? 0u - k : k;
+                const bool onChip = added >= 0xE0000000u;
+                if ((!sub || onChip) && out.others && out.constants.empty() && out.bases.empty() && out.back.empty() && !out.steps &&
+                    (!onChip || (added > 0xFFFFFE00u && added <= 0xFFFFFEFFu && (added & 0xFFu) != 0) || IsComputedIndex(base)) &&
+                    (InColorRam(added) || IsRegisterArea(added)))
+                    out.bases.insert(added);
             }
             else
             {
@@ -3868,6 +3909,7 @@ private:
                     Merge(out, y);
                     out.ranged = false;   // (a span plus an unknown is no span)
                     out.others = true;
+                    out.partsKnown = false;
                     if (loops) out.steps = true;
                 }
                 else
@@ -3905,6 +3947,20 @@ private:
     static void Merge(PointerValues& into, const PointerValues& from)
     {
         constexpr size_t kMaxPaths = 32;   // (a loop body with more paths than this is not worked out)
+        // (the partitions of the unknown values: those of either side's)
+        if (from.others)
+        {
+            if (!into.others)
+            {
+                into.partsKnown = from.partsKnown;
+                into.parts = from.parts;
+            }
+            else
+            {
+                into.partsKnown = into.partsKnown && from.partsKnown;
+                into.parts |= from.parts;
+            }
+        }
         for (const auto& c : from.constants)
         {
             auto at = into.constants.find(c.first);
@@ -3920,6 +3976,7 @@ private:
         {
             into.back.clear();
             into.others = into.steps = true;
+            into.partsKnown = false;
         }
         if (!into.steppedCached && from.steppedCached)
         {
@@ -3968,7 +4025,7 @@ private:
                     if (!all.insert(r).second) continue;
                     v.constants[r] = true;
                     work.push_back(r);
-                    if (all.size() > kMaxValues) { v.others = true; overflow = true; break; }
+                    if (all.size() > kMaxValues) { v.others = true; v.partsKnown = false; overflow = true; break; }
                 }
                 if (overflow) break;
             }
@@ -4005,6 +4062,11 @@ private:
         const bool needCached = !v.steppedCached && !cachedKnown;
         std::set<uint32_t> seen = all;
         std::vector<uint32_t> queue(all.begin(), all.end());
+        // (A5-107) ...from the later values of a pointer an earlier loop stepped too: a second loop that steps and flips (`p = (p + 4) ^
+        // 0x20000000`) after one that flipped another bit (`p = (p + 4) ^ 0x80000000` from 0x25F800DC) starts where the first one left it,
+        // at one of those values (0x25F800EC after four turns), and reads 0x05F800F2 through the cached partition next.
+        for (uint32_t l : std::vector<uint32_t>(v.later))
+            if (seen.insert(l).second) queue.push_back(l);
         size_t derived = 0;
         for (size_t i = 0; i < queue.size() && derived < kMaxValues; ++i)
             for (const SelfPath& p : mine)
@@ -4042,6 +4104,18 @@ private:
         PointerValues out;
         out.others = v.others;
         out.steps = v.steps;
+        if (v.partsKnown)
+        {
+            // (an offset smaller than a partition carries into the partition bits at most once, up for a positive one and down for a negative one)
+            const int32_t d = static_cast<int32_t>(k);
+            if (d == 0) out.partsKnown = true, out.parts = v.parts;
+            else if (d > -0x20000000 && d < 0x20000000)
+            {
+                const uint8_t moved = d > 0 ? static_cast<uint8_t>((v.parts << 1) | (v.parts >> 7)) : static_cast<uint8_t>((v.parts >> 1) | (v.parts << 7));
+                out.partsKnown = true;
+                out.parts = static_cast<uint8_t>(v.parts | moved);
+            }
+        }
         out.steppedCached = v.steppedCached;
         out.steppedCachedAt = v.steppedCachedAt + k;
         for (uint32_t l : v.later) out.later.push_back(l + k);
@@ -4142,11 +4216,27 @@ private:
             into.rangeLo = lowest;
             into.rangeHi = 0xFFFFFFFFll;
         };
+        // (A5-103) The partitions the unknown values come to: a known mask fixes the bits of the partition it sets, clears or flips.
+        auto partsOf = [&](PointerValues& into, bool withConstants) {
+            if (!mask) return;
+            const uint8_t from = set->partsKnown ? set->parts : 0xFFu;
+            uint8_t res = 0;
+            for (uint32_t p = 0; p < 8; ++p)
+                if ((from >> p) & 1u)
+                    for (const auto& m : mask->constants) res = static_cast<uint8_t>(res | 1u << (Apply(code, p << 29, m.first) >> 29));
+            if (withConstants)
+                for (const auto& c : set->constants)
+                    for (const auto& m : mask->constants) res = static_cast<uint8_t>(res | 1u << (Apply(code, c.first, m.first) >> 29));
+            into.partsKnown = true;
+            into.parts = res;
+        };
         if (!mask || (set->constants.empty() && set->bases.empty()) ||
             mask->constants.size() * (set->constants.size() + set->bases.size()) > kMaxPairs)
         {
             out.others = true;
             spanOfOr(out);
+            // (the constants too, when they were too many to pair: they are among the unknown values now; an indexed pointer's are not known)
+            if (set->bases.empty() && (set->others || !set->constants.empty())) partsOf(out, true);
             return out;
         }
         for (const auto& s : set->constants)
@@ -4180,6 +4270,7 @@ private:
                 out.bases.insert(Apply(code, base, m.first));
         out.others = set->others;
         spanOfOr(out);
+        if (set->others) partsOf(out, false);
         // The pointer's own value round a loop, moved by the operation: a path that the node it comes back to closes (A5-60, A5-70).
         if (!set->back.empty())
         {
@@ -4315,6 +4406,34 @@ std::string OnChipSpanNote(uint32_t lo, uint32_t hi, uint32_t size, bool write)
         text += "; a 4-byte access at an address with bit 8 clear (0xFFFFFE00-0xFFFFFEFF) is an address error on the SH-2: those registers take byte "
                 "and word accesses only";
     return text;
+}
+
+// The note for an access through a pointer whose partition bits masks fixed (PointerValues::parts, A5-103), when none of the partitions it can
+// be in is bus memory (0 cached, 1 cache-through) and some is no memory at all (2 and 5 the associative purge, 3 the cache address array, 7 the
+// on-chip registers): empty otherwise. The cache data array (4 and 6) is memory to the decompiler. 'alsoKnown': the pointer holds addresses the
+// analysis knows besides; 'stepped': it is stepped in a loop from the masked value.
+std::string MaskedPartitionNote(uint8_t parts, uint32_t size, bool write, bool alsoKnown, bool stepped)
+{
+    if (parts == 0 || (parts & 0x03u) != 0 || (parts & 0xACu) == 0) return std::string();
+    std::string prefix = alsoKnown ? "where the pointer is the masked value (it may hold other values too): " : "";
+    if (stepped) prefix += "the pointer is stepped in a loop from the masked value, and the iterations after the first may reach other addresses: ";
+    if (parts == 0x80u) return prefix + OnChipSpanNote(0xE0000000u, 0xFFFFFFFFu, size, write);
+    std::string ranges;
+    for (uint32_t p = 0; p < 8; ++p)
+        if ((parts >> p) & 1u) ranges += (ranges.empty() ? "" : ", ") + Hex8(p << 29) + "-" + Hex8((p << 29) | 0x1FFFFFFFu);
+    const char* what = write ? "write" : "read";
+    if ((parts & ~0x24u) == 0)
+        return prefix + "an access through this pointer is an associative purge, not a memory access: whatever the value it is made from, the address is in " +
+               ranges + ", so the " + std::to_string(size) + "-byte " + what + " invalidates the cache line of its address" +
+               (write ? " and writes no memory" : " and reads no memory (Mednafen returns all ones)");
+    std::string kinds;
+    auto add = [&](const char* k) { kinds += (kinds.empty() ? "" : ", ") + std::string(k); };
+    if (parts & 0x24u) add("the associative purge (an access invalidates the cache line of its address and is no memory access)");
+    if (parts & 0x08u) add("the cache address array (an access sets or reads a cache line's tag)");
+    if (parts & 0x50u) add("the cache data array");
+    if (parts & 0x80u) add("the on-chip registers");
+    return prefix + "may not be a memory access: whatever the value it is made from, the address is in " + ranges + ", which hold " + kinds +
+           "; which of them this " + std::to_string(size) + "-byte " + what + " reaches is not known";
 }
 
 std::vector<HardwareNote> HardwareNotes(const ghidra::Funcdata& fd, const std::function<uint32_t(uint32_t)>& canonicalOf)
@@ -4457,6 +4576,13 @@ std::vector<HardwareNote> HardwareNotes(const ghidra::Funcdata& fd, const std::f
                 const int64_t lo = std::max<int64_t>(pv.rangeLo, 0xE0000000ll), hi = std::min<int64_t>(pv.rangeHi, 0xFFFFFFFFll);
                 if (lo <= hi) noteRaw(insn, OnChipSpanNote(static_cast<uint32_t>(lo), static_cast<uint32_t>(hi), size, write), true);
             }
+            // (A5-103) ...and one that masks put in partitions that are no bus memory whatever the rest of its value is (the cache idiom `(p & 0x1FFFFFF0) |
+            // 0x40000000`, the games' purge loops): said, as an access at such a constant address is.
+            else if (pv.others && pv.partsKnown)
+            {
+                const std::string text = MaskedPartitionNote(pv.parts, size, write, !pv.constants.empty() || !pv.bases.empty(), pv.steps);
+                if (!text.empty()) noteRaw(insn, text, true);
+            }
             // (A5-91) A pointer stepped in a loop from an address that is no hardware, whose later values are: said under the same words as the
             // stepped note of a register's pointer, with the address the walk came to.
             uint32_t laterAt = 0;
@@ -4481,6 +4607,22 @@ std::vector<HardwareNote> HardwareNotes(const ghidra::Funcdata& fd, const std::f
                 else if (!certain)
                     prefix = "if the pointer holds " + Hex8(rc.address) + name + (otherValues ? " (it may hold other values too)" : "") + ": ";
                 account(insn, rc.address, size, write, value, prefix, !rc.shifted);
+                // (A5-101) An on-chip register plus an index (the DMAC's channel registers, `param_1 * 0x10 + -0x74`): the page decodes the low 9
+                // bits, so another index is another register of it, and the page's two halves take different widths. The register at the index 0
+                // may have nothing to say (SH2_TIER), and the access is no less a register's.
+                if (rc.indexed && (rc.address >> 29) == 7)
+                {
+                    std::string text = "the pointer is " + Hex8(rc.address) + name + " plus an index that is not known: the " + std::to_string(size) + "-byte " +
+                                       (write ? "write" : "read") + " is in the SH-2's on-chip register page for a small index, and another index reaches "
+                                       "another register of it (decoded by the low 9 bits of the address), whose effects are not said";
+                    if (size == 1)
+                        text += "; a 1-byte access at an address with bit 8 set (0xFFFFFF00-0xFFFFFFFF) is an address error on the SH-2: those registers "
+                                "take word and longword accesses only";
+                    if (size == 4)
+                        text += "; a 4-byte access at an address with bit 8 clear (0xFFFFFE00-0xFFFFFEFF) is an address error on the SH-2: those registers "
+                                "take byte and word accesses only";
+                    noteRaw(insn, text, true);
+                }
             }
             // (said for a pointer that starts at a register, or in a register area within kSteppedReach bytes of one: A5-54, a walk from the SCU's
             // hole at 0x25FE0018 reaches SCU_D1EN, one from the last SCSP slot reaches MVOL and MOBUF. A walk through the SCSP's DSP program
@@ -8470,8 +8612,18 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         }
         for (const HardwareRange& h : VolatileAliases(v.first, v.second)) userVolatile.push_back(h);
     }
+    // The literal words a pass found the function writes (A5-104), with the instruction that writes each first: not read-only for the
+    // passes after it.
+    struct WrittenLiteral { uint32_t at; int size; uint32_t by; };
+    std::vector<WrittenLiteral> writtenLiterals;
+    auto writtenLiteral = [&](uint32_t at, int size) {
+        for (const WrittenLiteral& w : writtenLiterals)
+            if (at < w.at + static_cast<uint32_t>(w.size) && w.at < at + static_cast<uint32_t>(size)) return true;
+        return false;
+    };
     auto sharedLiteral = [&](uint32_t at, int size) {
         const uint32_t end = at + static_cast<uint32_t>(size) - 1;
+        if (writtenLiteral(at, size)) return true;
         if (InHardwareRange(at) || InHardwareRange(end)) return true;
         for (const HardwareRange& v : userVolatile)
             if (at <= v.last && end >= v.first) return true;
@@ -8642,7 +8794,13 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         if (fd->hasNoCode()) return std::string();
         const FlowRecord flow = RecordFlow(*fd, canonicalOf, *snapshot);
 
-        const RawScan scan = ScanRawPcode(*fd, *snapshot);
+        const RawScan scan = [&] {
+            RawScan raw = ScanRawPcode(*fd, *snapshot);
+            // (A5-104) a literal word an earlier pass found written is memory: no probe or rule here may read it as the snapshot's constant
+            for (auto it = raw.literalWords.begin(); it != raw.literalWords.end();)
+                it = writtenLiteral(*it, 1) ? raw.literalWords.erase(it) : std::next(it);
+            return raw;
+        }();
         knownLiterals = scan.readonly;
         JumpDests flowTables;
         AddJumpTables(*fd, flowTables);
@@ -8790,6 +8948,46 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
                 if (skipped.count(sn.first)) continue;
                 arch->commentdb->addComment(ghidra::Comment::user2, fd->getAddress(), ghidra::Address(ram, sn.first),
                                             likewise.count(sn.first) ? sn.second + kFrameEscapeNoteLikewise : sn.second);
+            }
+        }
+
+        // (A5-104) A literal-pool word the function writes, by a store the engine folded at its constant address: marked read-only, every
+        // load of it is folded to the word the snapshot holds, though a load after the store reads what the store wrote (`mov.l r4,@r1` to
+        // the next literal, then `mov.l @(lit),r0` returned 0x12345678 for param_1). The engine's own "Read-only address ... is written"
+        // says nothing of the loads. The word is ordinary memory for the passes after this one, and a pass that prints gives way to one.
+        {
+            // (a write the actions kept: a store folded at first and then removed with code found unreachable -- the literal itself decides the
+            // branch around it, as a mova compared with its literal does in a function run through a mirror -- writes nothing)
+            bool freshWritten = false;
+            for (auto it = fd->beginOpAlive(); it != fd->endOpAlive(); ++it)
+            {
+                const ghidra::PcodeOp* o = *it;
+                if (o->isMarker()) continue;
+                uint32_t lo = 0, hi = 0;
+                if (o->code() == ghidra::CPUI_STORE && o->getIn(1)->isConstant() && o->getIn(0)->getSpaceFromConst() == ram)
+                {
+                    lo = static_cast<uint32_t>(o->getIn(1)->getOffset());
+                    hi = lo + static_cast<uint32_t>(o->getIn(2)->getSize());
+                }
+                else if (o->getOut() && o->getOut()->getSpace() == ram)
+                {
+                    lo = static_cast<uint32_t>(o->getOut()->getOffset());
+                    hi = lo + static_cast<uint32_t>(o->getOut()->getSize());
+                }
+                else
+                    continue;
+                for (const auto& ro : scan.readonly)
+                {
+                    const uint32_t rlo = ro.first, rhi = ro.first + static_cast<uint32_t>(ro.second);
+                    if (lo >= rhi || rlo >= hi || writtenLiteral(rlo, ro.second)) continue;
+                    writtenLiterals.push_back(WrittenLiteral{ rlo, ro.second, canonicalOf(InstructionOf(o)) });
+                    freshWritten = true;
+                }
+            }
+            if (freshWritten && print && mayRetry)
+            {
+                aliasRetry = true;
+                return std::string();
             }
         }
 
@@ -9230,6 +9428,9 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
     mWorkPhase = DecompilePhase::Idle;
     if (gEngineDoneHookForTests) gEngineDoneHookForTests();
     for (const HardwareRange& h : aliasRanges) r.aliasedMemory.emplace_back(h.first, h.last);
+    for (const WrittenLiteral& w : writtenLiterals)
+        r.warnings.push_back(Hex8(w.by) + ": the literal-pool word at " + Hex8(w.at) + " is written by the function: it is shown as memory, not "
+                             "folded to the constant the snapshot holds, so a load of it after the write is the value written");
     if (printed.empty())
     {
         r.status = DecompileStatus::NoCode;
