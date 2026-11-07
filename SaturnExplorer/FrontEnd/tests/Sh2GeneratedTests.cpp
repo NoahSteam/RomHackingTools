@@ -3767,12 +3767,15 @@ bool PointerPrintsFromHardware(const DecompileResult& r, uint32_t insn, const st
 // `mov.w @r15` reads the half of the push slot that is read later, so the push prints as `iStack_c = (int2)((uint4)unaff_r10 >> 0x10);`. A cast,
 // a right shift by a constant and the parentheses around them change which bits are kept, not when the register is read.
 bool WholeWord(const std::string& text, const std::string& word);
-std::string SavesBeforeCallsDropped(const std::string& text, const char* reg)
+// (A3-158) With 'changers' given, only a call to one of those addresses is a call for this: the callees a lent signature says change the
+// register. A call to one that keeps it (or that was not lent: the calling convention keeps it) leaves the entry value as it was, so it is no
+// call at all for the order the text is read in; without it every call counts.
+std::string SavesBeforeCallsDropped(const std::string& text, const char* reg, const std::set<uint32_t>* changers = nullptr)
 {
     static const std::string cast = "(?:\\(\\s*\\w+\\s*\\**\\s*\\)\\s*)";
     const std::regex save("^\\s*_?[A-Za-z]*Stack_[0-9a-f]+ = " + cast + "*\\(?\\s*" + cast + "*unaff_" + std::string(reg) +
                           "(?:\\s*>>\\s*(?:0x[0-9a-f]+|\\d+))?\\s*\\)?;\\s*$");
-    static const std::regex call("\\bfunc_0x[0-9a-fA-F]+\\s*\\(");
+    static const std::regex call("\\bfunc_0x([0-9a-fA-F]+)\\s*\\(");
     // A3-78, seed 1418819: the variable of the entry value is given the call's output after the call (`unaff_r10 = extraout_r10;` in the
     // branch that calls, the engine's join of the two values under one name), and a read of it after that is a read of what the call left.
     // Followed in the text's order, so only outside loops and in a text without gotos, where that order is the order the code runs in.
@@ -3794,7 +3797,9 @@ std::string SavesBeforeCallsDropped(const std::string& text, const char* reg)
             out += line + "\n";
             continue;
         }
-        const bool callHere = std::regex_search(line, call);
+        bool callHere = false;
+        for (std::sregex_iterator it(line.begin(), line.end(), call), end; it != end; ++it)
+            callHere |= !changers || changers->count(static_cast<uint32_t>(std::stoul((*it)[1].str(), nullptr, 16))) != 0;
         std::smatch am;
         // `unaff_r10 = extraout_r10;` right after the call, in its block (no brace between), when no earlier call had left the entry value
         // stale: every path that reaches a later read either ran the call and this assignment, or neither
@@ -6022,14 +6027,16 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
             {
                 if ((readsOnPurpose >> k.bit) & 1u) continue;
                 bool changed = false;
+                std::set<uint32_t> changers;   // (A3-158) the callees that change it
                 for (uint32_t c : r.calledAt)
                 {
                     const auto l = lent.find(c);
-                    if (l != lent.end() && c != fn.layout.entry && l->second.known && !((l->second.effects.preserved >> k.bit) & 1u)) changed = true;
+                    if (l != lent.end() && c != fn.layout.entry && l->second.known && !((l->second.effects.preserved >> k.bit) & 1u))
+                        changed = true, changers.insert(c);
                 }
                 if (!changed) continue;
                 count("lent.changed.checked");
-                if (WholeWord(SavesBeforeCallsDropped(text, k.name), std::string("unaff_") + k.name) || WholeWord(text, std::string("in_") + k.name))
+                if (WholeWord(SavesBeforeCallsDropped(text, k.name, &changers), std::string("unaff_") + k.name) || WholeWord(text, std::string("in_") + k.name))
                     add(std::string("kept-read:") + k.name, std::string("a function it calls was lent a signature that changes ") + k.name +
                                                                 ", and the text reads " + k.name + " as the value it had on entry");
             }
@@ -14081,6 +14088,27 @@ void TestA365Pins(Sh2Decompiler& d)
     CHECK(WholeWord(SavesBeforeCallsDropped(head2 + "  func_0x06009028();\n  unaff_r13 = unaff_r13 + 1;\n  *p = unaff_r13;\n}\n", "r13"), "unaff_r13"));
     CHECK(WholeWord(SavesBeforeCallsDropped(head2 + "  func_0x06009028();\n  unaff_r13 = extraout_r13;\n  do {\n    *p = unaff_r13;\n    func_0x06009028();\n  } while (c);\n}\n", "r13"), "unaff_r13"));
     CHECK(WholeWord(SavesBeforeCallsDropped(head2 + "  func_0x06009028();\n  unaff_r13 = extraout_r13;\n  func_0x06009028();\n  *p = unaff_r13;\n}\n", "r13"), "unaff_r13"));
+    // A3-158 (grammar 2, specials, seed 1953264): an earlier call to a callee that keeps the register leaves the entry value, so the join after a
+    // later call that changes it is no stale read; an earlier call that changes it still is
+    {
+        const std::set<uint32_t> only28 = { 0x6009028 }, both = { 0x6009020, 0x6009028 };
+        const std::string t = head2 + "  func_0x06009020();\n  if (c) {\n    func_0x06009028();\n    unaff_r13 = extraout_r13;\n  }\n  *p = unaff_r13;\n}\n";
+        CHECK(!WholeWord(SavesBeforeCallsDropped(t, "r13", &only28), "unaff_r13"));
+        CHECK(WholeWord(SavesBeforeCallsDropped(t, "r13", &both), "unaff_r13"));
+        CHECK(WholeWord(SavesBeforeCallsDropped(t, "r13"), "unaff_r13"));
+        // ...and a read right after the changing call, whatever the keeper before it, is still found
+        const std::string u = head2 + "  func_0x06009020();\n  func_0x06009028();\n  *p = unaff_r13;\n}\n";
+        CHECK(WholeWord(SavesBeforeCallsDropped(u, "r13", &only28), "unaff_r13"));
+        const ModulePin m = { "A3-158, seed 1953264 shrunk",
+                              "2F86 2F96 2FD6 2FE6 4F22 7FE0 6EF3 6843 6953 B02E 0009 6483 6593 8800 8903 B00F 0009 6483 6593 D205 7E20 6FE3 4F26 6EF6 6DF6 69F6 68F6 422B 0009 0009 0600 9040 "
+                              "2F86 2F96 2FA6 2FB6 2FC6 0C2A 6843 6953 6A63 6B73 B00D 0009 6483 6593 66A3 67B3 604D 4C2A 6CF6 6BF6 6AF6 69F6 68F6 000B 0009 "
+                              "2FE6 7FFC 6EF3 62F3 7204 E101 2216 4110 8BFC E200 7E04 6FE3 6EF6 000B 0009",
+                              "0/0/3a,40/40/72,72/72/90", nullptr, "1,1,0", "0,0,0", "0,100000,0" };
+        const Report rep = EvaluateSubject(d, ModuleSubject(m), true);
+        std::printf("pin '%s': %zu finding(s)\n", m.name, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty() && count(rep, "lent.changed.checked") > 0);
+    }
     // the walk functions of the printed-C differential: every width, both directions, the read back up, within the first 400 seeds
     {
         std::map<std::string, int> drawn;
