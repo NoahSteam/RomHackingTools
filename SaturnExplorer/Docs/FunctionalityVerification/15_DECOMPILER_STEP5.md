@@ -18371,7 +18371,7 @@ After the last merge of master (`de000cda`, area 7 round 9's oracle fixes) the b
 
 ## Area 3 routed items
 
-Fixer, branch `review/3-routed-fix`, cut at master `41b69ebf`, master `f0e029ff` (patches 0085 and 0086) merged before the final runs. The worktree's RelWithDebInfo build, `-j2` (the rule's `-j1` below 6,000 MB available never applied), every test binary under `ulimit -v 3500000` and `timeout`, one heavy job at a time. Four items had been routed to area 3 after it was declared done. A fifth, grammar 2 seed 2807704, came from the coordinator during the round. This round's rows start at A3-164, because A3-163 is the area 7 round 9 fixer's row for that seed. **Area 3 reopens: A3-164 is a P1 (a lost store and a wrong value shown, with nothing said), now fixed. Two P3 rows were filed besides: A3-165 (the oracle's, fixed) and A3-166 (accepted).** Patch 0087 is the engine's part; the host and the generator have a part each.
+Fixer, branch `review/3-routed-fix`, cut at master `41b69ebf`. Master was merged twice: `f0e029ff` (patches 0085 and 0086) and, before the final runs, `273c3793` (area 7 round 9, patch 0088). Patch 0088 was made without 0087 and continues 0085's notice in `coreaction.cc`, so 0087's notice there sits above 0088's context. `vendor.py` from the pinned upstream with 0001 to 0088 reproduces the tree. The worktree's RelWithDebInfo build, `-j2` (the rule's `-j1` below 6,000 MB available never applied), every test binary under `ulimit -v 3500000` and `timeout`, one heavy job at a time. Four items had been routed to area 3 after it was declared done. A fifth, grammar 2 seed 2807704, came from the coordinator during the round. This round's rows start at A3-164, because A3-163 is the area 7 round 9 fixer's row for that seed. **Area 3 reopens: A3-164 is a P1 (a lost store and a wrong value shown, with nothing said), now fixed. Two P3 rows were filed besides: A3-165 (the oracle's, fixed) and A3-166 (accepted).** Patch 0087 is the engine's part; the host and the generator have a part each.
 
 | Item | Verdict | Row |
 |---|---|---|
@@ -18427,9 +18427,9 @@ Function 1 (06009074) stores MACL into its frame (`sts macl,r1 ; mov.l r1,@r15`)
 
 Function 2's text prints the read after the loop, under the word's name: `piVar2 = &iStack_4; do { piVar2 = piVar2 + -1; *piVar2 = iVar3; ... } while (...); ... if (iStack_8 < 1)`. Read with the frame's layout, that is the 2 the loop stored, where the code compares what was there before. Shrunk to a leaf, it prints `return 0 < iStack_8;` after the loop. With the word written first, the text is right (`return 0;`). **A3-166, P3, accepted:** only a read of a local before anything writes it, which compiled code does not make. The generator excludes the class.
 
-### Grammar 2 seed 2807704 (A3-163, the area 7 round 9 fixer's, not on this branch)
+### Grammar 2 seed 2807704 (A3-163, the area 7 round 9 fixer's row)
 
-`n:claim-wrong:leaks` at function 1 (0600901A): "a run stores 06022100, a pointer from r6, at 06022100". The function stores r2 through r6 in a loop (`mov.l r2,@r6 ; add r5,r2`), with r2 = r4 ^ r5 on the path taken. With the runner's start values (r4 0x06020100, r5 0x06021100, r6 0x06022100) that is 0x00001000, and one step later 0x06022100, r6's start: a value made from r4 and r5 that lands on r6's start by the arenas' 0x1000 spacing. `PointerRegister` excludes an AND, OR or XOR of two other start values (`BitwiseOfOthers`, A3-100) but not one stepped by a third. **The oracle's, P3**, the class of A3-100, A3-115 and A3-123. Widening `BitwiseOfOthers` to sums would also excuse a real store of r6 in any function that reads r4 and r5. The fix that holds is to confirm a leak with a run in which that register starts elsewhere. **Left open for its row (A3-163, on the area 7 round 9 branch); not changed here.**
+`n:claim-wrong:leaks` at function 1 (0600901A): "a run stores 06022100, a pointer from r6, at 06022100". The function stores r2 through r6 in a loop (`mov.l r2,@r6 ; add r5,r2`), with r2 = r4 ^ r5 on the path taken. With the runner's start values (r4 0x06020100, r5 0x06021100, r6 0x06022100) that is 0x00001000, and one step later 0x06022100, r6's start: a value made from r4 and r5 that lands on r6's start by the arenas' 0x1000 spacing. `PointerRegister` excludes an AND, OR or XOR of two other start values (`BitwiseOfOthers`, A3-100) but not one stepped by a third. **The oracle's, P3**, the class of A3-100, A3-115 and A3-123. Widening `BitwiseOfOthers` to sums would also excuse a real store of r6 in any function that reads r4 and r5. The fix that holds is to confirm a leak with a run in which that register starts elsewhere. **Left open.** The triage is in A3-163's status cell; the oracle is not changed here.
 
 ### Seed 7910
 
@@ -18441,7 +18441,7 @@ The matrix's command never drew it: it alternates grammars and draws seed 7910 a
 
 ### Runs
 
-Final runs on `f4256ccc` (master `f0e029ff` merged; the commits after it renumber the rows and change comments and test names only, and the binaries were rebuilt and `ctest` run again on the last of them).
+Final runs on `8adfaaae`, master `273c3793` merged (patch 0088); the run on `f4256ccc`, before that merge, gave the same results. The commits after `8adfaaae` change only the ledger and this record.
 
 | Run | Result |
 |---|---|
@@ -18452,10 +18452,10 @@ Final runs on `f4256ccc` (master `f0e029ff` merged; the commits after it renumbe
 | grammar 2, 3,000 seeds; grammar 1, 1,000 seeds | 0 findings each |
 | the matrix's 20,000 (`SE_GENERATED_SEEDS=20000`, both grammars, the canary on, in two pieces of 10,000) | **0 failing seeds**. On the first form of 0087 (before the refined pieces and the host's note) it had 9, all `endless-store-dropped`: they gave the pieces rule (14501) and the note (12705, 1209), and the other six pass with them |
 | grammar 1, 20,000 seeds (`SE_GENERATED_GRAMMAR=1`, the canary off, two pieces) | **0 failing seeds**. On the commit before `f4256ccc`: 1 (2632, the removed-block test above; pinned) |
-| printed-C (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | **agrees=5196**, master's baseline since 0086 (5195 before the merge, on this branch and on master alike); narrow-c 130, void-return 227, void-return-lent 24, skipped 8: the same classes as master |
-| `check-vendored-tree.py lint`, `check-literal-size.py` | ok, ok; `vendor.py` from the pinned upstream with 0001 to 0087 reproduces `cpp/`, `processors/` and `sources.cmake` exactly |
+| printed-C (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | **agrees=5196**, master's baseline since 0086 (5195 before the first merge, on this branch and on master alike); narrow-c 130, void-return 227, void-return-lent 24, skipped 8: the same classes as master |
+| `check-vendored-tree.py lint`, `check-literal-size.py` | ok, ok; `vendor.py` from the pinned upstream with 0001 to 0088 reproduces `cpp/`, `processors/` and `sources.cmake` exactly |
 
-The game corpus (hwram007 and hwram008, alone and `SE_GAME_LEND=1`, `tools/a7_round2/corpus.sh`) passes in all four: functions 839 and 1,554 ok; real entries lent **474 (645 parameters) of 999** and **724 (975) of 1,543**; missing and said **0** and **4**: all as on master. The new note is given in no game function. To separate 0087 from 0085 and 0086, the text of every function was compared with a build of master's engine and host (`f0e029ff`, the same tests) over both images alone. 0087 changes 3 functions of hwram007 and 6 of hwram008, and nothing else:
+The game corpus (hwram007 and hwram008, alone and `SE_GAME_LEND=1`, `tools/a7_round2/corpus.sh`) passes in all four: functions 839 and 1,554 ok; real entries lent **474 (645 parameters) of 999** and **724 (975) of 1,543**; missing and said **0** and **4**: all as on master. The new note is given in no game function. To separate 0087 from 0085 and 0086, the text of every function was compared with a build of master's engine and host (`f0e029ff`, the same tests) over both images alone. Patch 0088, merged later, changes 3 and 18 other functions and none of these. 0087 changes 3 functions of hwram007 and 6 of hwram008, and nothing else:
 * seven stores now printed before an idle loop that never ends, which the text had lost: `xRam0603a9d8 = 0;` at the end of 06005212 (`... do {} while( true );`), the second `xRam0603b4a0 = 0;` of 06005520 (the game's main loop), and 060051FA, 06005530, 06007D22, 0600C2DA and 0600C49A of hwram008. These are A3-164's class in the games;
 * 0600894A (hwram007) and 06008C0A (hwram008): `iRam06003028 = param_2;` (0x0600895A) now prints before `iVar5 = 0;` (0x0600895C), in the code's order.
 
