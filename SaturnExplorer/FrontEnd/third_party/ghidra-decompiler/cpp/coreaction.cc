@@ -28,10 +28,11 @@
  * Modified for SaturnExplorer: a call's INDIRECT on a local of an escaped frame keeps its address force (patches/0068-engine-deadcode-late-stack-reads.patch).
  * Modified for SaturnExplorer: a save slot a STORE is aimed at, or that a pending STORE may reach, stays mapped (patches/0072-engine-frame-chains-and-save-slots.patch).
  * Modified for SaturnExplorer: a number is the address of a hardware register where the data flow uses it as one, not by a guess (patches/0073-engine-constant-pointer-guess-not-hardware.patch).
+ * Modified for SaturnExplorer: a write of a global on a path that never reaches a return is kept (patches/0087-engine-global-writes-without-return.patch).
  * Modified for SaturnExplorer: a LOAD that may read the frame and stays one holds the frame's writes (patches/0076-engine-frame-loads-keep-writes.patch).
  * Modified for SaturnExplorer: a catch handler that never reads its exception no longer names it, which MSVC warned about (C4101) (patches/0083-engine-msvc-unused-catch-names.patch).
  * Modified for SaturnExplorer: ActionVarnodeProps does not read a global as the constant zero where its next write would then be made after a memory access (patches/0085-engine-global-write-keeps-place.patch).
- * Modified for SaturnExplorer: a write of a global on a path that never reaches a return is kept (patches/0087-engine-global-writes-without-return.patch).
+ * Modified for SaturnExplorer: nor a copy of an earlier write of a global with an access between them (patches/0088-engine-global-piece-read-and-join-copy.patch).
  */
 #include "coreaction.hh"
 #include "condexe.hh"
@@ -1435,6 +1436,33 @@ void ActionVarnodeProps::handleExtendedZero(Varnode *vn,Funcdata &data)
   }
 }
 
+/// \brief Whether a memory access lies between a write of a global and the copy of it a later op makes (SaturnExplorer, 0088)
+///
+/// In one block, an access between the two (accessBetween). In a block that follows the write's directly, an access after the write in
+/// its block or before the copy in the copy's. Further apart: \b true, the cautious answer.
+/// \param wdef is the op that writes the global
+/// \param cdef is the COPY of it
+/// \return \b true if an access may lie between them
+static bool copyPastAccess(const PcodeOp *wdef,const PcodeOp *cdef)
+
+{
+  if (wdef->getParent() == cdef->getParent()) return accessBetween(wdef,cdef);
+  const BlockBasic *bl = cdef->getParent();
+  if (bl->sizeIn() != 1 || bl->getIn(0) != wdef->getParent()) return true;
+  if (accessBetween(wdef,(const PcodeOp *)0)) return true;
+  for(list<PcodeOp *>::const_iterator iter=bl->beginOp();iter!=bl->endOp();++iter) {
+    const PcodeOp *op = *iter;
+    if (op == cdef) return false;
+    switch(op->code()) {
+    case CPUI_LOAD: case CPUI_STORE: case CPUI_CALL: case CPUI_CALLIND: case CPUI_CALLOTHER:
+      return true;
+    default:
+      break;
+    }
+  }
+  return true;
+}
+
 int4 ActionVarnodeProps::apply(Funcdata &data)
 
 {
@@ -1512,6 +1540,15 @@ int4 ActionVarnodeProps::apply(Funcdata &data)
 	    const PcodeOp *rd = *diter;
 	    if (rd->code() == CPUI_COPY && rd->getOut()->isAddrTied() && rd->getOut()->getAddr() == vn->getAddr() &&
 		accessBetween(vn->getDef(),rd))
+	      moved = true;
+	  }
+	  // SaturnExplorer (0088): ...and a copy of an earlier write of the global (a join left with one input once a branch was
+	  // removed as unreachable): read as a constant, it would leave the earlier write dead and the later write would carry it
+	  // past the access between them (`g = 0; x = *p;` then the join and the return's copy of `g`, A5-113)
+	  if (vn->getDef()->code() == CPUI_COPY) {
+	    const Varnode *w = vn->getDef()->getIn(0);
+	    if (w->isWritten() && w->isAddrTied() && w->getAddr() == vn->getAddr() && w->getSize() == vn->getSize() &&
+		copyPastAccess(w->getDef(),vn->getDef()))
 	      moved = true;
 	  }
 	  if (moved) continue;

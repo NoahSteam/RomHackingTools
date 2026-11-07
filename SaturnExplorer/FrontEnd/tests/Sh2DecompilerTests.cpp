@@ -1818,17 +1818,17 @@ void TestArea7Round8()
     const std::vector<uint16_t> gbrWords = { 0xD605, 0xD706, 0x6071, 0xC801, 0x89FC, 0x4008, 0xC106, 0x6062, 0x2602, 0x8561, 0x000B, 0x0009,
                                              0x2600, 0x2080, 0x0600, 0x1034 };
     {
+        // (A5-111, patch 0088: the half read at 06009012 was the piece store `xRam26002080._2_2_ = (int2)xRam26002080;`, the copy this pin was
+        // about; the half is now read into a temporary, the store goes, and the value kept at the gbr store is the return's)
         const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, gbrWords);
         Print("A7-57 a global's value kept at a store that may alias it", r);
         const LineLookup k = LineForInstruction(r, 0x0600900Cu);
         CHECK(k.kind == LineLookup::Exact && !k.lines.empty());
-        if (!k.lines.empty()) CHECK(Has(r.lines[k.lines[0]].text, "unaff_gbr + 0xc"));
+        CHECK(!Has(r.Text(), "._2_2_ ="));
+        const Line* store = LineWith(r, "unaff_gbr + 0xc");
+        const Line* ret = LineWith(r, "return (int4)(int2)xRam26002080;");
+        CHECK(store != nullptr && ret != nullptr && store < ret);
         CHECK(dts::AuditMapping(r, word, "a7_57 gbr").Violations() == 0);
-        // ...the check (A7-25's, read from the text) still sees the copy first when the marks are taken off
-        DecompileResult damaged = r;
-        for (Line& x : damaged.lines)
-            for (Token& t : x.tokens) t.materialised = false;
-        CHECK(dts::AuditMapping(damaged, word, "a7_57 unmarked").backWrong >= 1);
     }
     // A7-57, the oracle's (grammar 1 seed 2306106 shrunk): `extu.w r5,r2` is stored by two stores, and both lines print the extension
     // (`uRam2600219c = (uint4)param_2;` first). A7-25's check took the cast's operand, drawn at the extension, for a copy materialised there
@@ -1913,16 +1913,20 @@ void TestArea7Round8()
     // param_1;` and puts the global back with `xRam26001000 = xVar1;` at the store of r4. A7-42's search for a register variable that holds
     // a parameter looked one assignment deep; it follows the chain now. With xVar1 assigned another global, the store is still another value.
     {
+        // (A5-111, patch 0088: the half read of the global was a store of that half, and the merge kept the parameter in xVar1 and wrote it back;
+        // the half is now read into a temporary: `xRam26001000 = param_1;` at the store, no write-back. The chain A7-63's oracle change follows is
+        // not printed for these words any more; the store's value is still judged.)
         const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, { 0xD602, 0x6243, 0x2622, 0x6061, 0x000B, 0x0009, 0x2600, 0x1000 });
         Print("A7-63 a variable that holds a parameter through a global", r);
-        CHECK(LineWith(r, "xRam26001000 = xVar1;") != nullptr);
+        CHECK(LineWith(r, "xRam26001000 = param_1;") != nullptr);
+        CHECK(LineWith(r, "xRam26001000 = xVar1;") == nullptr);
         CHECK(dts::AuditMapping(r, word, "a7_63").Violations() == 0);
         DecompileResult other = r;
         int n = 0;
         for (Line& x : other.lines)
-            if (x.text == "  xVar1 = xRam26001000;")
+            if (x.text == "  xRam26001000 = param_1;")
             {
-                x.text = "  xVar1 = xRam26001004;";
+                x.text = "  xRam26001000 = param_2;";
                 ++n;
             }
         CHECK(n == 1 && dts::AuditMapping(other, word, "a7_63 other").storeValueOther == 1);
@@ -2068,6 +2072,166 @@ void TestArea7Round8()
         CHECK(l != nullptr);
         if (l) CHECK(LineInstructions(*l) == (std::vector<uint32_t>{ 0x0600901Au, 0x0600901Eu }) && l->firstAddr == 0x0600901Au);
         CHECK(dts::AuditMapping(r, word, "a7_59").Violations() == 0);
+    }
+}
+
+// Area 7 round 9 (A7-64..A7-68): the shrunk fixtures of the fresh run's eight seeds from 2,600,001 (the oracle's, all but one), each with
+// the damaged result the loosened rule must still catch.
+void TestArea7Round9()
+{
+    std::vector<uint8_t> hw(0x100000u, 0);
+    Sh2Decompiler d(gConfig);
+    const std::function<bool(uint32_t, uint16_t&)> word = [&hw](uint32_t x, uint16_t& w) {
+        if (x < 0x06000000u || x - 0x06000000u + 1 >= hw.size()) return false;
+        w = static_cast<uint16_t>(hw[x - 0x06000000u] << 8 | hw[x - 0x06000000u + 1]);
+        return true;
+    };
+    // the result with the text of the line that has `from` changed to `to` (the same length)
+    const auto changed = [](const DecompileResult& r, const std::string& from, const std::string& to, int& n) {
+        DecompileResult x = r;
+        n = 0;
+        for (Line& l : x.lines)
+        {
+            const size_t at = l.text.find(from);
+            if (at == std::string::npos) continue;
+            l.text.replace(at, from.size(), to);
+            ++n;
+        }
+        return x;
+    };
+    // A7-64 (a): `mac.w @r4+,@r6+` at a join steps r6 by 2 (the early shift case took it for a shift and gave up), so the engine's
+    // `uVar4 = 0x2600101a;` is the instruction's (grammar 1 seed 2601280)
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, { 0xD605, 0x4015, 0x8BFF, 0x464F, 0xE301, 0x8568, 0xD203, 0x2629, 0x4310,
+                                                                             0x8BFA, 0x000B, 0x0009, 0x2600, 0x1018, 0xFFFF, 0xFFF0 });
+        Print("A7-64 mac.w at a join", r);
+        CHECK(LineWith(r, "= 0x2600101a;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_64 mac").Violations() == 0);
+        int n = 0;
+        const DecompileResult other = changed(r, "= 0x2600101a;", "= 0x2600101c;", n);
+        CHECK(n == 1 && dts::AuditMapping(other, word, "a7_64 mac other").constAtJoin == 1);
+    }
+    // A7-64 (b): `extu.w r1,r1` at a loop's head reads its own result round the loop (0x60000000, then 0): 0 on every turn (grammar 1 seed 2607749)
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, { 0xD106, 0x261A, 0xE301, 0x611D, 0x4310, 0x8BFC, 0x621D, 0xC810, 0x8B01,
+                                                                             0x210B, 0x620C, 0x6023, 0x000B, 0x0009, 0x6000, 0x0000 });
+        Print("A7-64 an extension reading itself round a loop", r);
+        CHECK(LineWith(r, "Var1 = 0;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_64 loop").Violations() == 0);
+        int n = 0;
+        const DecompileResult other = changed(r, "Var1 = 0;", "Var1 = 1;", n);
+        CHECK(n >= 1 && dts::AuditMapping(other, word, "a7_64 loop other").constAtJoin >= 1);
+        // ...and with the literal's low half not 0 the extension is not 0 (0x60000001: no line, or a violation if the text says 0)
+    }
+    // A7-64 (c): `sub r4,r0` with r0 a copy of the input r4 (the slot of the `bf/s` that jumps to it) is 0 (grammar 2 seed 2602445, function 1)
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, { 0x2FE6, 0x7FF0, 0x6EF3, 0x4315, 0x8F00, 0x6043, 0x3048, 0xE301, 0x3028,
+            0x4310, 0x8BFC, 0x2408, 0x8B02, 0x311C, 0xA002, 0x0009, 0xA000, 0xE118, 0xE052, 0x7E10, 0x6FE3, 0x6EF6, 0x000B, 0x0009 });
+        Print("A7-64 sub of two copies of the input", r);
+        CHECK(LineWith(r, "Var1 = 0;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_64 sub").Violations() == 0);
+        int n = 0;
+        const DecompileResult other = changed(r, "Var1 = 0;", "Var1 = 1;", n);
+        CHECK(n >= 1 && dts::AuditMapping(other, word, "a7_64 sub other").constAtJoin >= 1);
+    }
+    // A7-64 (d): `extu.b r3,r1` then `shlr16 r1`: the engine prints the extension as 0 where the text uses it only shifted away (grammar 2 seed 2604457)
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, { 0x4615, 0x89FF, 0x613C, 0xE301, 0xA001, 0x0009, 0xE1AC, 0x4310, 0x8BFC,
+                                                                             0x4129, 0x604D, 0x000B, 0x0009 });
+        Print("A7-64 an extension shifted away", r);
+        CHECK(LineWith(r, "Var1 = 0;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_64 shifted").Violations() == 0);
+        int n = 0;
+        const DecompileResult other = changed(r, "Var1 = 0;", "Var1 = 1;", n);
+        CHECK(n >= 1 && dts::AuditMapping(other, word, "a7_64 shifted other").constAtJoin >= 1);
+        // the shift's tokens gone (nothing names the shift): the rule has no use of the variable to excuse the 0
+        DecompileResult bare = r;
+        for (Line& l : bare.lines)
+            for (Token& t : l.tokens)
+            {
+                uint16_t tw = 0;
+                if (t.addr && word(t.addr, tw) && tw == 0x4129) t.addr = 0;
+            }
+        CHECK(dts::AuditMapping(bare, word, "a7_64 shifted bare").constAtJoin >= 1);
+    }
+    // A7-64 (e): `extu.w r5,r1 ; cmp/pl r1 ; bf L`: on the edge to L r1 is 0, so `add #-0x18,r1` there makes 0xffffffe8 (grammar 2 seed 2608245);
+    // the same with an instruction between the extension and the compare
+    for (int between = 0; between < 2; ++between)
+    {
+        std::vector<uint16_t> w = { 0x2FD6, 0x7FE8, 0x615D, 0x4115, 0x8B01, 0xA003, 0x0009, 0x71E8, 0xA000, 0x0009, 0xE0D3, 0x7F18, 0x6DF6, 0x000B, 0x0009 };
+        if (between) w.insert(w.begin() + 3, 0x6C73);
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, w);
+        Print("A7-64 an edge a compare of an extension gives", r);
+        CHECK(LineWith(r, "= 0xffffffe8;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_64 edge").Violations() == 0);
+        int n = 0;
+        const DecompileResult other = changed(r, "= 0xffffffe8;", "= 0xffffffe9;", n);
+        CHECK(n == 1 && dts::AuditMapping(other, word, "a7_64 edge other").constAtJoin == 1);
+    }
+    // A7-68 (the fresh run from 2,800,001): `tst r5,r4 ; bt L ; ... L: negc r0,r1` with r0 10: T is set on the edge, so r1 is -10 - 1
+    // (grammar 2 seed 2807206, function 1)
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, { 0x2FD6, 0x7FFC, 0x610D, 0xE00A, 0xCDAC, 0x2458, 0x8901, 0xA003, 0x0009,
+                                                                             0x610A, 0xA000, 0xE2B2, 0x6040, 0x7F04, 0x6DF6, 0x000B, 0x0009 });
+        Print("A7-68 negc at a join", r);
+        CHECK(LineWith(r, "= 0xfffffff5;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_68").Violations() == 0);
+        int n = 0;
+        const DecompileResult other = changed(r, "= 0xfffffff5;", "= 0xfffffff6;", n);
+        CHECK(n == 1 && dts::AuditMapping(other, word, "a7_68 other").constAtJoin == 1);
+    }
+    // A7-65: `mov.w r0,@r7` (1) beside `mov.l r3,@r7`: the half-word store is the high half of the word variable, `xRam06001024 = 0x10000;`
+    // (grammar 1 seed 2601640)
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, { 0xD707, 0xE001, 0x2701, 0x6071, 0xC801, 0x89FC, 0xE301, 0x2411, 0x4310,
+            0x8BFC, 0xE3FD, 0x6071, 0x2732, 0x000B, 0x0009, 0x0009, 0x0600, 0x1024 });
+        Print("A7-65 a half-word store into a word variable", r);
+        CHECK(LineWith(r, "xRam06001024 = 0x10000;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_65").Violations() == 0);
+        int n = 0;
+        const DecompileResult other = changed(r, "xRam06001024 = 0x10000;", "xRam06001024 = 0x20000;", n);
+        CHECK(n == 1 && dts::AuditMapping(other, word, "a7_65 other").storeValueOther == 1);
+    }
+    // A7-66: a copy of a branch's statement: `cRam0600102f = (char)param_2;` is drawn at the `bt` the `if` is the statement of; the way back
+    // from the `bt` is the `if` (grammar 1 seed 2608672)
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, { 0xD707, 0xC820, 0x8F01, 0x605D, 0x1617, 0x4315, 0x8900, 0x8072, 0x2521,
+            0x8077, 0x3358, 0xE003, 0x0434, 0x000B, 0x0009, 0x0009, 0x0600, 0x1028 });
+        Print("A7-66 a copy drawn at the branch of an if", r);
+        CHECK(dts::AuditMapping(r, word, "a7_66").Violations() == 0);
+        // the line with an operation of its own (not a plain copy) beginning with the `bt`, answered second: the way back is wrong
+        int n = 0;
+        const DecompileResult bad = changed(r, "Ram0600102f = (char)param_2;", "Ram0600102f = (char)param_2 + 1;", n);
+        CHECK(n == 1 && dts::AuditMapping(bad, word, "a7_66 bad").backWrong >= 1);
+    }
+    // A7-67: `xRamc0002024 = (xunknown2)in_r1;` is the word store of r1 xored with a number of a zero low half; the byte store of in_r1 beside
+    // it writes less than the line shows (grammar 1 seed 2601590)
+    {
+        const std::vector<uint16_t> w = { 0xD606, 0xE004, 0xCC5A, 0x4028, 0x2118, 0x8B00, 0x6344, 0x2610, 0x4315, 0x8B01, 0x210A, 0x2611, 0x000B, 0x0009,
+                                          0xC000, 0x2024 };
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, w);
+        Print("A7-67 a word store of an input beside a byte store", r);
+        const Line* l = LineWith(r, "xRamc0002024 = (xunknown2)in_r1;");
+        CHECK(l != nullptr);
+        const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_67");
+        CHECK(a.Violations() == 0 && a.copyInputMerged == 1);
+        // the xor gone (a nop): the word store writes in_r1 itself, which the line must name
+        std::vector<uint16_t> v = w;
+        v[10] = 0x0009;
+        const DecompileResult r2 = a7r4::DecompileWords(d, hw, 0x06009000u, v);
+        Print("A7-67 the same with the store of the input itself", r2);
+        DecompileResult damaged = r2;
+        int n = 0;
+        for (Line& x : damaged.lines)
+            if (x.text.find("xRamc0002024 = (xunknown2)in_r1;") != std::string::npos)
+            {
+                x.tokens.erase(std::remove_if(x.tokens.begin(), x.tokens.end(), [](const Token& t) { return t.begin == t.end; }), x.tokens.end());
+                for (Token& t : x.tokens) t.addr = 0;
+                x.firstAddr = 0;
+                x.noOrigin = true;
+                ++n;
+            }
+        CHECK(n == 1 && dts::AuditMapping(damaged, word, "a7_67 damaged").copyStoreMissing == 1);
     }
 }
 
@@ -15596,6 +15760,15 @@ void TestArea5Confirm()
         { "a5_109_reg", 0x06050F00u, { 0xD706, 0xD307, 0x6032, 0x2342, 0x2702, 0xE301, 0x4310, 0x8BFD, 0x445F, 0x4315, 0x8B00, 0x2402, 0x000B, 0x0009, 0x05B0, 0x0428, 0x2600, 0x2200 } },
         // A5-109 (c), grammar 1 seed 2006655 shrunk: a byte store of 0 at 0x2600210C in the slot of a branch that skips a write of SH2_BCR2
         { "a5_109_zero", 0x06051000u, { 0xD606, 0xE301, 0x4310, 0x8BFD, 0x2138, 0x8B01, 0x2239, 0xD704, 0x3020, 0x8D01, 0x2620, 0x2702, 0x000B, 0x0009, 0x2600, 0x210C, 0xFFFF, 0xFFE4 } },
+        // A5-111, grammar 1 seed 2606069 shrunk: poll SH2_VCRD into r0 ; cmp/eq r3,r2 ; bt/s L ; mov.w r0,@(0xc,r6) ; mov.b @(0xc,r6),r0 ; L: mov.w @r7,r3
+        // -- the byte read of the global after its half-word write was a write of that byte, and the half-word written back after the last read
+        { "a5_111", 0x06051100u, { 0xD605, 0xD706, 0x6071, 0xC801, 0x8BFC, 0x3230, 0x8D01, 0x8166, 0x846C, 0x6371, 0x000B, 0x0009, 0x2600, 0x2308, 0xFFFF, 0xFE68 } },
+        // ...and with a long write (mov.l r0,@(0xc,r6)) and a read of its second byte (mov.b @(0xd,r6),r0)
+        // A5-113, grammar 2 seed 2701218 shrunk: a dt loop leaves r3 0 ; tst r3,r4 ; bt L (always) ; ... L: mov.b r3,@r6 (0x26002388) ; mov.b @r4,r2
+        // -- the zero store was carried to the return, after the read through r4
+        { "a5_113", 0x06051300u, { 0x7FD0, 0xD609, 0xE301, 0x4310, 0x8BFD, 0x2638, 0x8900, 0x6351, 0x2438, 0x8901, 0xA004, 0x0009, 0x2630, 0x6240,
+                                   0xA000, 0x0009, 0x7F30, 0x000B, 0x0009, 0x0009, 0x2600, 0x2388 } },
+        { "a5_111_long", 0x06051200u, { 0xD605, 0xD706, 0x6071, 0xC801, 0x8BFC, 0x3230, 0x8D01, 0x1603, 0x846D, 0x6371, 0x000B, 0x0009, 0x2600, 0x2308, 0xFFFF, 0xFE68 } },
     };
     for (const W& w : fx)
     {
@@ -15658,6 +15831,30 @@ void TestArea5Confirm()
         CHECK(before(out["a5_109_reg"].Text(), "pxRam26002200 = param_1;", "_SCSP_SCILV2 = "));          // FIXED (was after the register write)
         CHECK(before(out["a5_109_reg"].Text(), "= pxRam26002200;", "pxRam26002200 = param_1;"));         // the old value is read first
         CHECK(before(out["a5_109_zero"].Text(), "xRam2600210c = 0;", "SH2_BCR2 = in_r0;"));              // FIXED (was after the register write)
+    }
+    // A5-111 (P2): a byte or half of a global read after a wider write of it was made a write of that piece by heritage (the SUBPIECE that
+    // reads it had the global's own address for its output): the text stored a piece the code does not store (`iRam26002314._0_1_ = (char)(...)`)
+    // and, the piece and the whole overlapping, the merge wrote the whole back after the later SH2_VCRD read. FIXED (patch 0088: the piece is
+    // read into a temporary): no piece stored, no write of the global after the last register read.
+    {
+        auto lastBefore = [](const std::string& t, const char* a, const char* b) {
+            const size_t i = t.rfind(a), j = t.rfind(b);
+            return i != std::string::npos && j != std::string::npos && i < j;
+        };
+        const std::string t = out["a5_111"].Text();
+        CHECK(!Has(t, "iRam26002314._0_1_ ="));                                          // FIXED (was a store of the byte read)
+        CHECK(Has(t, "(char)((uint2)iRam26002314 >> 8)"));                               // the byte is read from the global
+        CHECK(lastBefore(t, "iRam26002314 = ", "= SH2_VCRD;"));                          // FIXED (was written back after the read)
+        const std::string l = out["a5_111_long"].Text();
+        CHECK(!Has(l, "Ram26002314._1_1_ ="));                                           // FIXED
+        CHECK(lastBefore(l, "uRam26002314 = ", "= SH2_VCRD;"));                          // FIXED
+    }
+    // A5-113 (P2): A5-109's class by one more route, a copy of an earlier write of a global (a join left with one input once a branch was removed
+    // as unreachable) read as the constant 0. FIXED (patch 0088, ActionVarnodeProps): the store before the read through the pointer.
+    {
+        const std::string t = out["a5_113"].Text();
+        const size_t st = t.find("xRam26002388 = 0;"), rd = t.find("= *param_1;");
+        CHECK(st != std::string::npos && rd != std::string::npos && st < rd);   // FIXED (was after the read)
     }
     // A5-103 (P2): an associative purge through a pointer the code builds with the and/or idiom said nothing; the text is a store of 0.
     // FIXED (PointerValues::parts, MaskedPartitionNote): the partition the masks fix is said, certain for the idiom, "may" without the AND.
@@ -16137,6 +16334,7 @@ int main(int argc, char** argv)
         RUN(TestArea7Round6());
         RUN(TestArea7Round7());
         RUN(TestArea7Round8());
+        RUN(TestArea7Round9());
         RUN(TestSlotMadeLineIsAddressedToItsBranch());
         RUN(TestFrameStoreMaterialisedAtCall());
         RUN(TestFixture1b());
