@@ -106,6 +106,7 @@ The embedded copy of the runtime files is `FrontEnd/src/Decompiler/Sh2SpecData.h
 | `0082-engine-store-keeps-earlier-write.patch` | `RulePropagateCopy` (`ruleaction.cc`): the COPY that writes a global is not propagated into the INDIRECT a STORE puts on it, nor into another marker past a LOAD, STORE, call or CALLOTHER (`accessBetween`), so the write stays where the code makes it and the merge does not write it back after a store or an access that may alias it (`x = g; g = v; *p = x;` printed the store of v after `*p = x`). Ledger A5-102. |
 | `0083-engine-msvc-unused-catch-names.patch` | The `catch` handlers in `funcdata_block.cc`, `database.cc` and `coreaction.cc` that patches 0001, 0044 and 0068 left naming an exception they never read no longer name it (MSVC C4101). No change in behaviour. |
 | `0084-engine-concat-compare-cast.patch` | `typeop.cc`: a `PIECE` printed in place (`CONCAT11(a,b)`, no type in the text, so the unsigned value of its bytes) is cast to its signed type where an op reads it signed: an equality with a signed narrow side (`comparePieceCast`), a signed ordered compare, an arithmetic shift, a signed division or remainder (`impliedPieceRead`): `(int2)CONCAT11(a,b) == param_1`. Ledger A2-127. |
+| `0087-engine-global-writes-without-return.patch` | `ActionDeadCode` (`coreaction.cc`) keeps the code's own store to a global (the COPY a flow STORE became) in a block from which a path never reaches a RETURN (a loop the analysis takes to run for ever, such as an unmarked poll it folds), consumed and address forced as the COPY at a RETURN is; `RuleEarlyRemoval` (`ruleaction.cc`) leaves such a write to dead code. Ledger A3-163. |
 
 MSVC and Apple clang needed no patch beyond these.
 
@@ -219,6 +220,7 @@ applies 0005 to 0008) must run before `se-regen-sla`.
   - 0082: `TestArea5Confirm` (`a5_102`, `a5_102_hw`) and the A7-25, A7-30 (a) and A7-31 global pins (`Sh2DecompilerTests.cpp`; 12 checks fail without the patch), and the pins `A5-102, ...` of `TestA587Pins` (`SaturnExplorerSh2GeneratedTests`; `folded-store-after-access` without the patch, with 12 of the default run's 300 seeds).
   - 0083: none beyond the build (a catch handler loses an unused name); the engine tests run unchanged.
   - 0084: the printed-C pins `A2-127 #0` to `#6` and `A2-127 oracle #0` to `#4` (`SaturnExplorerSh2GeneratedTests`; #0 to #4 are `mismatch` without the patch, the oracle reading a CONCAT as unsigned) and the stack-piece families of the record (15_DECOMPILER_STEP5.md, "Area 2 round 19 / area 3 round 18 fixer").
+  - 0087: `TestA3163Fix` (`Sh2DecompilerTests.cpp`; 10 checks fail without the patch, 2 without its `RuleEarlyRemoval` part), the A7-61 fixture of `TestArea7Round8` and the unmarked mailbox of `TestHardwareVolatility`, and `TestA3RoutedPins` (`SaturnExplorerSh2GeneratedTests`: `endless-store-dropped` without the patch).
 
 
   If upstream's Makefile source groups changed, update the lists in `vendor.py`.

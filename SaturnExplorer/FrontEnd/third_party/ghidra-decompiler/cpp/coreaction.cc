@@ -4419,47 +4419,56 @@ bool ActionDeadCode::doomedBlocks(const Funcdata &data,vector<char> &dooms)
 {
   const BlockGraph &bbs(data.getBasicBlocks());
   int4 n = bbs.getSize();
-  dooms.assign(n,0);
+  dooms.clear();
   if (n == 0) return false;
-  vector<char> returns(n,0);
-  vector<FlowBlock *> work;
+  // Every block from which a live RETURN is reachable, marked, to a fixed point. No allocation here: dead code runs in every pass and
+  // the allocation-failure matrix pins allocations by their order; only a function with a block that never returns pays for vectors.
+  for(int4 i=0;i<n;++i) bbs.getBlock(i)->clearMark();
   list<PcodeOp *>::const_iterator iter = data.beginOp(CPUI_RETURN);
   list<PcodeOp *>::const_iterator enditer = data.endOp(CPUI_RETURN);
   for(;iter!=enditer;++iter) {
     PcodeOp *op = *iter;
     if (op->isDead()) continue;
-    FlowBlock *bl = op->getParent();
-    if (returns[bl->getIndex()]) continue;
-    returns[bl->getIndex()] = 1;
-    work.push_back(bl);
+    op->getParent()->setMark();
   }
-  while(!work.empty()) {		// every block from which a RETURN is reachable
-    FlowBlock *bl = work.back();
-    work.pop_back();
-    for(int4 i=0;i<bl->sizeIn();++i) {
-      FlowBlock *in = bl->getIn(i);
-      if (returns[in->getIndex()]) continue;
-      returns[in->getIndex()] = 1;
-      work.push_back(in);
+  bool changed = true;
+  while(changed) {
+    changed = false;
+    for(int4 i=n-1;i>=0;--i) {
+      FlowBlock *bl = bbs.getBlock(i);
+      if (bl->isMark()) continue;
+      for(int4 j=0;j<bl->sizeOut();++j) {
+	if (!bl->getOut(j)->isMark()) continue;
+	bl->setMark();
+	changed = true;
+	break;
+      }
     }
   }
-  for(int4 i=0;i<n;++i) {
-    if (returns[i]) continue;
-    dooms[i] = 1;
-    work.push_back(bbs.getBlock(i));
-  }
-  if (work.empty()) return false;
-  while(!work.empty()) {
-    FlowBlock *bl = work.back();
-    work.pop_back();
-    for(int4 i=0;i<bl->sizeIn();++i) {
-      FlowBlock *in = bl->getIn(i);
-      if (dooms[in->getIndex()]) continue;
-      dooms[in->getIndex()] = 1;
-      work.push_back(in);
+  bool any = false;
+  for(int4 i=0;i<n && !any;++i)
+    if (!bbs.getBlock(i)->isMark()) any = true;
+  if (any) {
+    dooms.assign(n,0);
+    for(int4 i=0;i<n;++i)
+      if (!bbs.getBlock(i)->isMark()) dooms[i] = 1;	// reaches no RETURN
+    changed = true;
+    while(changed) {		// ...and every block from which such a block is reachable
+      changed = false;
+      for(int4 i=n-1;i>=0;--i) {
+	if (dooms[i]) continue;
+	FlowBlock *bl = bbs.getBlock(i);
+	for(int4 j=0;j<bl->sizeOut();++j) {
+	  if (!dooms[bl->getOut(j)->getIndex()]) continue;
+	  dooms[i] = 1;
+	  changed = true;
+	  break;
+	}
+      }
     }
   }
-  return true;
+  for(int4 i=0;i<n;++i) bbs.getBlock(i)->clearMark();
+  return any;
 }
 
 /// \brief Whether a Varnode is the write of global storage that a STORE of the code became (SaturnExplorer, 0087)
@@ -4503,6 +4512,7 @@ bool ActionDeadCode::globalWriteWithoutReturn(const Funcdata &data,const Varnode
     if (!doomedBlocks(data,local)) return false;
     dooms = &local;
   }
+  if (dooms->empty()) return false;
   int4 index = def->getParent()->getIndex();
   return index >= 0 && index < (int4)dooms->size() && (*dooms)[index] != 0;
 }
