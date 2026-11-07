@@ -957,7 +957,7 @@ struct Gen
         else
         {
             // (through a parameter: a pointer register a literal loads is a global's address, and the store a store of one global to another;
-            // that shape is A7-55's, the mapping's)
+            // that shape is A7-60's, the mapping's)
             for (const Item& it : items)
                 if ((it.type == Item::LitPtr || it.type == Item::Poll || it.type == Item::Mask) && it.reg == reg) return;
             int from = 4 + static_cast<int>(idiomRng.Below(4));

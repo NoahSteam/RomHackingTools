@@ -8643,16 +8643,31 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         // the next literal, then `mov.l @(lit),r0` returned 0x12345678 for param_1). The engine's own "Read-only address ... is written"
         // says nothing of the loads. The word is ordinary memory for the passes after this one, and a pass that prints gives way to one.
         {
+            // (a write the actions kept: a store folded at first and then removed with code found unreachable -- the literal itself decides the
+            // branch around it, as a mova compared with its literal does in a function run through a mirror -- writes nothing)
             bool freshWritten = false;
-            for (const ghidra::AccessRecord& rec : fd->getAccessFates())
+            for (auto it = fd->beginOpAlive(); it != fd->endOpAlive(); ++it)
             {
-                if (!rec.store || rec.fate != ghidra::fate_folded_ordinary || rec.addr.isInvalid() || rec.addr.getSpace() != ram) continue;
-                const uint32_t lo = static_cast<uint32_t>(rec.addr.getOffset()), hi = lo + static_cast<uint32_t>(rec.size);
+                const ghidra::PcodeOp* o = *it;
+                if (o->isMarker()) continue;
+                uint32_t lo = 0, hi = 0;
+                if (o->code() == ghidra::CPUI_STORE && o->getIn(1)->isConstant() && o->getIn(0)->getSpaceFromConst() == ram)
+                {
+                    lo = static_cast<uint32_t>(o->getIn(1)->getOffset());
+                    hi = lo + static_cast<uint32_t>(o->getIn(2)->getSize());
+                }
+                else if (o->getOut() && o->getOut()->getSpace() == ram)
+                {
+                    lo = static_cast<uint32_t>(o->getOut()->getOffset());
+                    hi = lo + static_cast<uint32_t>(o->getOut()->getSize());
+                }
+                else
+                    continue;
                 for (const auto& ro : scan.readonly)
                 {
                     const uint32_t rlo = ro.first, rhi = ro.first + static_cast<uint32_t>(ro.second);
                     if (lo >= rhi || rlo >= hi || writtenLiteral(rlo, ro.second)) continue;
-                    writtenLiterals.push_back(WrittenLiteral{ rlo, ro.second, canonicalOf(static_cast<uint32_t>(rec.pc.getOffset())) });
+                    writtenLiterals.push_back(WrittenLiteral{ rlo, ro.second, canonicalOf(InstructionOf(o)) });
                     freshWritten = true;
                 }
             }
