@@ -17,6 +17,7 @@
  * Modified for SaturnExplorer: the other side of an equality compare whose one side is cast is cast to the same type (patches/0080-engine-narrow-compare-both-sides-cast.patch).
  * Modified for SaturnExplorer: the sign extension of a CONCAT printed in place casts the CONCAT to its signed type first (patches/0081-engine-sext-of-concat-cast.patch).
  * Modified for SaturnExplorer: a CONCAT printed in place is cast to a signed type where a compare, a shift or a division reads it signed (patches/0084-engine-concat-compare-cast.patch).
+ * Modified for SaturnExplorer: so is a variable the text declares with no sign (xunknown), which C reads as unsigned (patches/0086-engine-xunknown-signed-read-cast.patch).
  */
 #include "typeop.hh"
 #include "funcdata.hh"
@@ -997,6 +998,32 @@ static bool impliedPieceRead(const Varnode *vn)
   return (vn->getDef()->code() == CPUI_PIECE);
 }
 
+/// \brief Whether an input is a variable the text declares with no sign
+///
+/// The declaration of a variable comes from its symbol, \b xunknown4 \b xStack_4, while the type the cast pass sees for a read of it is the one propagated
+/// from the ops around it, \b int4 or \b uint4, so \b castStandard asks for no cast of a signed or unsigned read and the text of the two is the same. The guide
+/// and C read such a variable (and a field of it, \b xStack_4._0_2_) as the unsigned value of its bytes, so an op that reads it signed casts it to its signed type.
+/// (SaturnExplorer, patches/0086-engine-xunknown-signed-read-cast.patch)
+/// \param vn is the input
+/// \return \b true if it is printed as a name or a field of a name whose symbol has no sign
+static bool unsignedNamedRead(const Varnode *vn)
+
+{
+  if (vn->isConstant() || !vn->isExplicit()) return false;
+  const SymbolEntry *entry = vn->getHigh()->getSymbolEntry();
+  if (entry == (const SymbolEntry *)0) return false;
+  return entry->getSymbol()->getType()->getMetatype() == TYPE_UNKNOWN;
+}
+
+/// \brief Whether an input is read as the unsigned value of its bytes whatever type the engine propagated to it
+///
+/// A CONCAT printed in place (patch 0084) or a variable the text declares with no sign (patch 0086)
+static bool unsignedTextRead(const Varnode *vn)
+
+{
+  return impliedPieceRead(vn) || unsignedNamedRead(vn);
+}
+
 /// \brief The type a CONCAT printed in place is cast to in an equality compare with a signed narrow side
 ///
 /// The equality of two narrow inputs is the engine's compare of their bytes. With one side a CONCAT (no type in the text, so its unsigned value)
@@ -1015,9 +1042,9 @@ static Datatype *comparePieceCast(const PcodeOp *op,int4 slot,Datatype *reqtype,
 
 {
   const Varnode *vn = op->getIn(slot);
-  if (!impliedPieceRead(vn) || vn->getSize() >= tlst->getSizeOfInt()) return (Datatype *)0;
+  if (!unsignedTextRead(vn) || vn->getSize() >= tlst->getSizeOfInt()) return (Datatype *)0;
   const Varnode *othervn = op->getIn(1-slot);
-  if (impliedPieceRead(othervn)) return (Datatype *)0;
+  if (unsignedTextRead(othervn)) return (Datatype *)0;
   Datatype *otherType = othervn->getHighTypeReadFacing(op);
   // The other side is cast to compareCastTarget's type when C would extend it otherwise; the cast pass takes the inputs in order, so that CAST
   // is already made when it is slot 0 and not yet when it is slot 1
@@ -1158,7 +1185,7 @@ Datatype *TypeOpIntSless::getInputCast(const PcodeOp *op,int4 slot,const CastStr
   Datatype *curtype = op->getIn(slot)->getHighTypeReadFacing(op);
   Datatype *ct = castStrategy->castStandard(reqtype,curtype,true,true);
   // SaturnExplorer (0084): a CONCAT printed in place reads as unsigned, so a signed compare casts it to its signed type even when the engine typed it so
-  if (ct == (Datatype *)0 && impliedPieceRead(op->getIn(slot)))
+  if (ct == (Datatype *)0 && unsignedTextRead(op->getIn(slot)))
     ct = reqtype;
   return ct;
 }
@@ -1198,7 +1225,7 @@ Datatype *TypeOpIntSlessEqual::getInputCast(const PcodeOp *op,int4 slot,const Ca
   Datatype *curtype = op->getIn(slot)->getHighTypeReadFacing(op);
   Datatype *ct = castStrategy->castStandard(reqtype,curtype,true,true);
   // SaturnExplorer (0084): a CONCAT printed in place reads as unsigned, so a signed compare casts it to its signed type even when the engine typed it so
-  if (ct == (Datatype *)0 && impliedPieceRead(op->getIn(slot)))
+  if (ct == (Datatype *)0 && unsignedTextRead(op->getIn(slot)))
     ct = reqtype;
   return ct;
 }
@@ -1760,7 +1787,7 @@ Datatype *TypeOpIntSright::getInputCast(const PcodeOp *op,int4 slot,const CastSt
     if (promoType != CastStrategy::NO_PROMOTION && ((promoType & CastStrategy::SIGNED_EXTENSION)==0))
       return reqtype;
     Datatype *ct = castStrategy->castStandard(reqtype,curtype,true,true);
-    if (ct == (Datatype *)0 && impliedPieceRead(vn))	// SaturnExplorer (0084): `(int2)CONCAT11(a,b) >> 1`, an arithmetic shift
+    if (ct == (Datatype *)0 && unsignedTextRead(vn))	// SaturnExplorer (0084): `(int2)CONCAT11(a,b) >> 1`, an arithmetic shift
       ct = reqtype;
     return ct;
   }
@@ -1836,7 +1863,7 @@ Datatype *TypeOpIntSdiv::getInputCast(const PcodeOp *op,int4 slot,const CastStra
   if (promoType != CastStrategy::NO_PROMOTION && ((promoType & CastStrategy::SIGNED_EXTENSION)==0))
     return reqtype;
   Datatype *ct = castStrategy->castStandard(reqtype,curtype,true,true);
-  if (ct == (Datatype *)0 && impliedPieceRead(vn))	// SaturnExplorer (0084): a signed division of a CONCAT
+  if (ct == (Datatype *)0 && unsignedTextRead(vn))	// SaturnExplorer (0084): a signed division of a CONCAT
     ct = reqtype;
   return ct;
 }
@@ -1899,7 +1926,7 @@ Datatype *TypeOpIntSrem::getInputCast(const PcodeOp *op,int4 slot,const CastStra
   if (promoType != CastStrategy::NO_PROMOTION && ((promoType & CastStrategy::SIGNED_EXTENSION)==0))
     return reqtype;
   Datatype *ct = castStrategy->castStandard(reqtype,curtype,true,true);
-  if (ct == (Datatype *)0 && impliedPieceRead(vn))	// SaturnExplorer (0084): the signed remainder of a CONCAT
+  if (ct == (Datatype *)0 && unsignedTextRead(vn))	// SaturnExplorer (0084): the signed remainder of a CONCAT
     ct = reqtype;
   return ct;
 }
