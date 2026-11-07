@@ -1,4 +1,4 @@
-# cls.py log list : per-function class and text, keyed by the list's names
+# cls20.py log list : per-function class and text, keyed by the list's names
 import re, sys
 log, lst = sys.argv[1], sys.argv[2]
 names = [l.split(' ', 1) for l in open(lst).read().splitlines()]

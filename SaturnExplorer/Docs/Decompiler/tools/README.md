@@ -8,6 +8,10 @@ Kept here:
 * `derive_handler_cases.py` and `audit_hardware_map.py`: regenerate `FrontEnd/tests/MednafenHandlerCases.txt`
   and the hardware register audit.
 * The latest round of each area (`a2_round17/`, `a3_round14/`, `a8_fix/`, `a8_round3/`, `a8_round4/`, `a8_round5/`, `a8_round6/`, `a9_round1/`), which the next round starts from.
+  `a2_round20/` (area 2, round 20): `mkpiece20.py` (a stack piece read by every op that may read it signed or unsigned), `xpair20.py` (the same piece
+  under a signed and an unsigned op, as pairs) with `pairs20.py` (pairs whose texts are the same, A2-128), `cls20.py` (a family log's verdicts by
+  name), `xcount20.py` (printed-C logs: an `xunknown` read by an ordered compare or shift), `pc20.sh` (one function), `q20.sh` (the generator queue);
+  the family runner is `../a23_round19/famrun19.sh`.
   `a2_round17/`: `dagen17.py` (families 100 to 111: narrow compares, hardware-register addresses as numbers, and the mixed-width memory families, on top of
   `a2_round16/dagen16.py`), `fam17.sh` (the printed-C differential per family; `BE=1` reads the memory families on a big-endian arena), `oldnew17.sh` and `oldnewmem17.sh`
   (the same words through two engines, `diff17.py` counts the texts that differ), `mkrc17.sh` and `relink17.sh` and `famrc17.sh` (the in-situ rule checks on the tree with patch
