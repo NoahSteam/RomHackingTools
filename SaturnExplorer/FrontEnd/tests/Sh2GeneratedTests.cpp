@@ -12341,10 +12341,12 @@ void TestDomainPins(Sh2Decompiler& d)
     // oracle's: `cmp/eq r1,r1` ties nothing); A7-57 grammar 1 seeds 2304859 (the product's: a global's value kept at a gbr store, marked
     // materialised) and 2306106 (the oracle's: a cast's operand at an `extu` is the extension's, as A7-53's seed 1904684); A7-58 grammar 1
     // seed 2307943 and grammar 2 seed 2308936 (`shll8`'s low byte) and grammar 2 seed 2301509 (`tst r4,r3` of a known 0), the oracle's;
-    // A7-59 grammar 2 seed 2306048 (the product's: a global's value after a call, its stores after the call, drawn at the load).
+    // A7-59 grammar 2 seed 2306048 (the product's: a global's value after a call, its stores after the call, drawn at the load). A7-60,
+    // the matrix's grammar 1 seed 7557 (a regression from A7-52: a copy of a global read through an address made by an AND named nothing).
     for (const auto& s : { std::make_pair(2, 2301680), std::make_pair(2, 2306761), std::make_pair(2, 2308270), std::make_pair(1, 2301471),
                            std::make_pair(1, 2307885), std::make_pair(1, 2304859), std::make_pair(1, 2306106), std::make_pair(1, 1904684),
-                           std::make_pair(1, 2307943), std::make_pair(2, 2308936), std::make_pair(2, 2301509), std::make_pair(2, 2306048) })
+                           std::make_pair(1, 2307943), std::make_pair(2, 2308936), std::make_pair(2, 2301509), std::make_pair(2, 2306048),
+                           std::make_pair(1, 7557) })
     {
         const Report rep = Evaluate(d, s.first == 2 ? MakeV2(s.second) : Generate(s.second), true);
         std::printf("pin 'area 7 round 8: grammar %d seed %d': %zu finding(s)\n", s.first, s.second, rep.findings.size());

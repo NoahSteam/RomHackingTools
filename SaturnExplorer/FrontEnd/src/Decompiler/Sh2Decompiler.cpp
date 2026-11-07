@@ -5271,6 +5271,18 @@ bool FlowPointerIn(PointerWalk& w, const FlowRecord& flow, const ghidra::Funcdat
             offset = o1 + o2;
             return true;
         }
+        // (A7-60: an address masked or combined from numbers, `mov.l lit,r7 ; mov.l lit2,r2 ; and r2,r7` for 0x0400000C & 0x1FFFFFFF: the
+        // engine folds it to the global it reads, and the walk must place it too, or a copy of that global finds no load of it)
+        if (!A7R8Off("P6") && (op.code == ghidra::CPUI_INT_AND || op.code == ghidra::CPUI_INT_OR || op.code == ghidra::CPUI_INT_XOR) && op.numIn == 2)
+        {
+            bool s1 = false, s2 = false;
+            ghidra::uintb o1 = 0, o2 = 0;
+            if (!FlowPointerIn(w, flow, fd, blk, i, op.in[0], s1, o1) || !FlowPointerIn(w, flow, fd, blk, i, op.in[1], s2, o2) || s1 || s2)
+                return false;
+            stack = false;
+            offset = op.code == ghidra::CPUI_INT_AND ? (o1 & o2) : op.code == ghidra::CPUI_INT_OR ? (o1 | o2) : (o1 ^ o2);
+            return true;
+        }
         return false;
     }
     if (blk == flow.entryBlock)

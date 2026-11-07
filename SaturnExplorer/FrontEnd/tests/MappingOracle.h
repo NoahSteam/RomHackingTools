@@ -1404,7 +1404,15 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                             castAtExtension = mnem.compare(0, 4, "exts") == 0 || mnem.compare(0, 4, "extu") == 0;
                         }
                     }
-                    const bool copy = plain && !isBranch(t.addr) && !named.empty() && !named.count(t.addr) && !castAtExtension;
+                    // (A7-57: or a value drawn at a store, on a line drawn at another store -- `iRam060a51e4 = iRam060a5068;` with its
+                    // name at `mov.l r1,@(0x4,r2)` and iRam060a5068 at `mov.l r1,@(0x8,r2)`, which may alias it: a store makes no value
+                    // it reads, so the global's value is kept there, as a copy materialised at it. hwram008 0x0601B0F0)
+                    bool drawnAtOtherStore = false;
+                    const size_t assign = r.lines[li].text.find(" = ");
+                    if (assign != std::string::npos && t.begin > assign && isStore(t.addr))
+                        for (const Token& u : r.lines[li].tokens)
+                            drawnAtOtherStore = drawnAtOtherStore || (u.addr && u.addr != t.addr && u.begin < u.end && u.end <= assign && isStore(u.addr));
+                    const bool copy = plain && !isBranch(t.addr) && ((!named.empty() && !named.count(t.addr)) || drawnAtOtherStore) && !castAtExtension;
                     (copy ? copyDrawn : ownDrawn)[t.addr].insert(li);
                 }
         }

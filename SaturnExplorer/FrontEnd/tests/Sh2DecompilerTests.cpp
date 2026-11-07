@@ -1637,8 +1637,9 @@ void TestArea7Round7()
     }
 }
 
-// Area 7 round 8 (A7-55 to A7-59, filed by the A7-52 fixer from fresh generator seeds 2,300,001 on): each shrunk seed, the line it is
-// about, and the audit; for the rows that were the oracle's, the damaged result the relaxed check still catches.
+// Area 7 round 8 (A7-55 to A7-59, filed by the A7-52 fixer from fresh generator seeds 2,300,001 on; A7-60, the matrix's regression from
+// A7-52): each shrunk seed, the line it is about, and the audit; for the rows that were the oracle's, the damaged result the relaxed
+// check still catches.
 void TestArea7Round8()
 {
     std::vector<uint8_t> hw(0x100000u, 0);
@@ -1648,6 +1649,23 @@ void TestArea7Round8()
         w = static_cast<uint16_t>(hw[x - 0x06000000u] << 8 | hw[x - 0x06000000u + 1]);
         return true;
     };
+    // A7-60 (P2, a regression from A7-52; grammar 1 seed 7557 of the matrix's 20,000): `mov.l lit,r7 ; ... mov.l lit,r2 ; and r2,r7 ;
+    // mov.l @r7,r2`, the global's address 0x0400000C masked with 0x1FFFFFFF. The engine merges r2 under the name of the global the second
+    // loop stores and puts the copy `uRam04000014 = uRam0400000c;` at the function's first instruction. A7-52's search for the load that
+    // read the global could not place an address made by an AND, found none, and took the tokens off (before A7-52 they stayed at the
+    // literal load, the oracle's counted A7-16 shape). The flow's pointer walk now places an AND, OR or XOR of placed numbers: the line
+    // names the load 0x0600900C.
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, { 0xD610, 0xD711, 0xD611, 0xD612, 0xD212, 0x2729, 0x6272, 0xE303,
+            0x3048, 0x5162, 0x2432, 0x4310, 0x8BFA, 0x2525, 0x2219, 0x7046, 0xE303, 0x3248, 0x171E, 0x4310, 0x8BFB, 0x1722, 0x2029, 0x2208,
+            0x8B00, 0x6242, 0x8162, 0xE303, 0x8169, 0x4310, 0x8BFC, 0x000B, 0x0009, 0x0009, 0x0600, 0x1028, 0x0400, 0x000C, 0x05F8, 0x0028,
+            0xC000, 0x0004, 0x1FFF, 0xFFFF });
+        Print("A7-60 a copy of a global read through a masked address", r);
+        const Line* l = LineWith(r, "uRam04000014 = uRam0400000c;");
+        CHECK(l != nullptr);
+        if (l) CHECK(LineInstructions(*l) == (std::vector<uint32_t>{ 0x0600900Cu }) && !l->noOrigin);
+        CHECK(dts::AuditMapping(r, word, "a7_60").Violations() == 0);
+    }
     // A7-55 (P2), the product's (grammar 2 seed 2306761 shrunk): `mov r4,r1 ; mov.l lit,r7 ; mov #1,r3 ; L: sub r4,r1 ; mov.l r1,@(0x28,r7) ;
     // dt r3 ; bf L`. The engine merges r1 under the global's name and puts a copy of r4, the input, at the end of the first block
     // (`iRam26002130 = param_1;`). The A7-21 path looked for what last set r4 there, found the entry and took the tokens off: the line
