@@ -12123,7 +12123,7 @@ void TestPrintedC()
             // read as unsigned, and a signed op that reads it casts it to its signed type (patch 0084 did it for the CONCAT printed in place): `5 < (int4)xStack_4` for cmp/gt
             // against `5 < xStack_4` for cmp/hi (#0 and #1), the field `4 < (int2)xStack_4._0_2_` for cmp/ge and `4 < xStack_4._0_2_` for cmp/hs after extu.w (#2, #3), the
             // arithmetic shift `(int4)xStack_4 >> 1` against the logical `xStack_4 >> 1` (#4, #5), and the equality with a signed narrow side, `(int2)xStack_2 == param_1`
-            // (#6, A2-127's text for a named piece). Each pair printed one text before the patch, and the oracle agreed with both: the unsigned one as C, the signed one in
+            // (#6, A2-127's text for a named piece), and the sign extension of a field that a compare reads, `param_1 <= (int4)xStack_4._0_2_` (#7: the cast is written, not implied). Each pair printed one text before the patch, and the oracle agreed with both: the unsigned one as C, the signed one in
             // the engine's reading (an xunknown was signed there), never asked which it meant. The engine's reading reads an xunknown as unsigned in a compare, a shift, a
             // division and a remainder now (UNKREAD), so the old texts (the casts taken out by the hook, the `A2-128 oracle` pins) are findings: `mismatch`, not `narrow-c`.
             {
@@ -12141,13 +12141,17 @@ void TestPrintedC()
                     { "A2-128 #3: cmp/hs of a field after extu.w", w("7FFC 2F62 6073 80F0 85F0 7F04 600D E105 3012 0029 000B 0009") },
                     { "A2-128 #4: shar of a named word", w("7FFC 2F62 6073 81F0 60F2 7F04 4021 000B 0009") },
                     { "A2-128 #5: shlr of a named word", w("7FFC 2F62 6073 81F0 60F2 7F04 4001 000B 0009") },
-                    { "A2-128 #6: a named half equal to an int2", w("7FFC 2F62 6073 80F2 85F1 7F04 614F 3010 0029 000B 0009") } };
+                    { "A2-128 #6: a named half equal to an int2", w("7FFC 2F62 6073 80F2 85F1 7F04 614F 3010 0029 000B 0009") },
+                    { "A2-128 #7: the sign extension of a field in a compare", w("7FFC 2F52 6073 80F0 85F0 7F04 6143 3013 0029 000B 0009") } };
                 const std::vector<CVerdict> r128 = CheckPrintedC(d, k128, nIn, cc, 0x51ED, 8966);
                 for (size_t k = 0; k < r128.size(); ++k)
                 {
                     std::printf("pin '%s': %s (%s)\n", k128[k].name.c_str(), r128[k].cls.empty() ? "agrees" : r128[k].cls.c_str(), r128[k].detail.substr(0, 90).c_str());
-                    CHECK(r128[k].cls.empty() && r128[k].compared);   // agrees as C, not narrow-c
+                    // #7 is the sign extension the engine means by `(int4)` of an xunknown field, which C reads as a zero extension (A3-150): narrow-c; the others agree as C
+                    if (k == 7) CHECK(r128[k].cls == "narrow-c" && r128[k].compared);
+                    else CHECK(r128[k].cls.empty() && r128[k].compared);
                 }
+                CHECK(r128[7].text.find("param_1 <= (int4)xStack_4._0_2_") != std::string::npos);
                 CHECK(r128[0].text.find("return 5 < (int4)xStack_4;") != std::string::npos);
                 CHECK(r128[1].text.find("return 5 < xStack_4;") != std::string::npos);
                 CHECK(r128[2].text.find("4 < (int2)xStack_4._0_2_") != std::string::npos);
@@ -12162,7 +12166,7 @@ void TestPrintedC()
                 // The oracle by itself: the texts of the signed ops before the patch (the casts taken out) are findings.
                 gPrintedCTextHook = [](const std::string& t) {
                     std::string u = t;
-                    for (const char* with : { "(int4)xStack_4", "(int2)FLD(xStack_4, 0, 2)", "(int2)xStack_2" })
+                    for (const char* with : { "(int4)FLD(xStack_4, 0, 2)", "(int4)xStack_4", "(int2)FLD(xStack_4, 0, 2)", "(int2)xStack_2" })
                     {
                         const std::string wi = with;
                         const std::string bare = wi.substr(wi.find(')') + 1);
@@ -12170,7 +12174,7 @@ void TestPrintedC()
                     }
                     return u;
                 };
-                const std::vector<CCase> old128 = { k128[0], k128[2], k128[4], k128[6] };
+                const std::vector<CCase> old128 = { k128[0], k128[2], k128[4], k128[6], k128[7] };
                 const std::vector<CVerdict> b128 = CheckPrintedC(d, old128, nIn, cc, 0x51ED, 8967);
                 gPrintedCTextHook = nullptr;
                 for (size_t k = 0; k < b128.size(); ++k)
