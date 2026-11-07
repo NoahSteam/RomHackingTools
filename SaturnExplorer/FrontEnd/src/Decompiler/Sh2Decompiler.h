@@ -553,6 +553,7 @@ public:
 private:
     void NoteRemovedAccesses(const std::shared_ptr<const MemorySnapshot>& snapshot, const DecompileRequest& request,
                              std::atomic<bool>* cancel, DecompileResult& r, const PassSeed& seed);
+    static void NoteStoresBeforeEndlessLoop(DecompileResult& r);
     // 'seedIn' makes the printed pass follow its flow with another pass's literals and callees (one
     // pass, the same flow); 'seedOut' receives the printed pass's own.
     void DecompileInto(const std::shared_ptr<const MemorySnapshot>& snapshot, const DecompileRequest& request,

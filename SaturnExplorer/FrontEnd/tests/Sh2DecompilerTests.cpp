@@ -15408,11 +15408,36 @@ void TestA3163Fix()
         { "A3-163 control: a function that returns", { 0xD103, 0xE001, 0x2102, 0xE002, 0x2102, 0x000B, 0x0009, 0x0009, 0x0600, 0x2000 },
           { "xRam06002000 = 2;" }, { "xRam06002000 = 1;" } },
     };
+    // What the engine still drops (it saw no reader of the write before it took the loop for endless) is said on the store's instruction
+    // (Sh2Decompiler::NoteStoresBeforeEndlessLoop), and the signature is withheld. Generator grammar 1 seed 12705, shrunk: `mov.l r1,@r6`
+    // (0x06002000), the poll's write and the poll, and `mov.l r0,@r6` after the loop replaces the first store; seed 1209, shrunk: the poll's
+    // own byte write, joined by the engine with the next byte for a word read after the loop and carried on as a number.
+    struct Said
+    {
+        const char* name;
+        std::vector<uint16_t> words;
+        uint32_t store;
+    };
+    const Said kSaid[] = {
+        { "A3-163 seed 12705: a store the code replaces after the loop", { 0xD605, 0x2612, 0xD705, 0xE001, 0x2701, 0x6071, 0xC801, 0x8BFC, 0x2602, 0x000B, 0x0009,
+                                                                           0x0009, 0x0600, 0x2000, 0x2600, 0x1008 }, 0x06009002u },
+        { "A3-163 seed 1209: the poll's write carried on as a number", { 0xD705, 0xE002, 0x2700, 0x6070, 0xC801, 0x89FC, 0x066F, 0x3210, 0x8D00, 0x6171, 0x000B,
+                                                                         0x0009, 0x2600, 0x1004 }, 0x06009004u },
+    };
+    for (const Said& c : kSaid)
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, c.words);
+        Print(c.name, r);
+        CHECK(r.status == DecompileStatus::Ok && Has(r.Text(), "while( true )") && !r.prototype.known);
+        CHECK(HasNoteAt(r, c.store, "here is missing: the analysis takes the loop at"));
+    }
+    // ...and a store the text prints is not said: the control of the cases above
     for (const Case& c : kCases)
     {
         const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, c.words);
         Print(c.name, r);
         CHECK(r.status == DecompileStatus::Ok);
+        CHECK(!HasNote(r, "here is missing: the analysis takes the loop at", true));
         for (const char* h : c.has)
             if (!Has(r.Text(), h))
             {

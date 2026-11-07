@@ -4486,8 +4486,15 @@ bool ActionDeadCode::isFoldedFlowStore(const Funcdata &data,const Varnode *vn)
   const PcodeOp *def = vn->getDef();
   if (def->isDead() || def->code() == CPUI_INDIRECT || def->code() == CPUI_MULTIEQUAL) return false;
   const vector<AccessRecord> &fates(data.getAccessFates());
-  for(vector<AccessRecord>::const_iterator iter=fates.begin();iter!=fates.end();++iter)
-    if ((*iter).time == def->getTime() && (*iter).store && (*iter).fate == fate_folded_ordinary) return true;
+  for(vector<AccessRecord>::const_iterator iter=fates.begin();iter!=fates.end();++iter) {
+    const AccessRecord &rec(*iter);
+    if (!rec.store || rec.fate != fate_folded_ordinary) continue;
+    if (rec.time == def->getTime()) return true;
+    // ...or a piece of it: heritage's refinement (Heritage::refineWrite) gives the op a temporary output and writes each piece of the
+    // range with a SUBPIECE at the store's address, which rules may fold to a COPY of a constant
+    if (rec.pc == def->getAddr() && rec.addr.getSpace() == vn->getSpace() && vn->getAddr().containedBy(vn->getSize(),rec.addr,rec.size))
+      return true;
+  }
   return false;
 }
 

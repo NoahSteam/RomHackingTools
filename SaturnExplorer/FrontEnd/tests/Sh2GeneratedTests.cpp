@@ -5170,6 +5170,14 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                     bool shown = false;
                     for (const auto& pr : printed) shown = shown || (pr.first <= last && a <= pr.second);
                     count("endless-store.checked");
+                    // ...or the output says it is missing (Sh2Decompiler::NoteStoresBeforeEndlessLoop): a store the engine saw no reader of
+                    // before it took the loop for endless (one the code replaces after the loop, in code removed with the loop's exit; one it
+                    // carried on as a number), said on its instruction, the signature withheld.
+                    if (!shown && SaidMissing(r, t.insn))
+                    {
+                        count("endless-store.said");
+                        continue;
+                    }
                     if (!shown && said.insert({ t.insn, a }).second)
                         add("endless-store-dropped", "the store of " + std::to_string(t.size) + " byte(s) at " + Hex(t.insn) + " to " + Hex(t.addr) +
                                                          " is made before the loop the text takes to run for ever, and the text stores nothing there");
@@ -14336,6 +14344,14 @@ void TestA3RoutedPins(Sh2Decompiler& d)
             std::printf("pin 'A3-163 %s': %zu finding(s), endless-store checked %d\n", words, w.findings.size(), count(w, "endless-store.checked"));
             for (const Finding& f : w.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
             CHECK(w.findings.empty() && count(w, "endless-store.checked") > 0);
+        }
+        // seeds 12705 and 1209 (the 20,000-seed run), shrunk: a write the engine still drops is said, and the check takes it as said
+        for (const char* words : { "D605 2612 D705 E001 2701 6071 C801 8BFC 2602 000B 0009 0009 0600 2000 2600 1008", "D705 E002 2700 6070 C801 89FC 066F 3210 8D00 6171 000B 0009 2600 1004" })
+        {
+            const Report w = EvaluateSubject(d, RawSubject(words), true);
+            std::printf("pin 'A3-163 said %s': %zu finding(s), endless-store said %d\n", words, w.findings.size(), count(w, "endless-store.said"));
+            for (const Finding& f : w.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+            CHECK(w.findings.empty() && count(w, "endless-store.said") > 0);
         }
         const Report seed = Evaluate(d, Generate(2017373), true);
         std::printf("pin 'A3-163 grammar 1 seed 2017373': %zu finding(s)\n", seed.findings.size());

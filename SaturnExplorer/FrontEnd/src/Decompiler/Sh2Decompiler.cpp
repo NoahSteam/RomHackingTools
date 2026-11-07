@@ -8241,6 +8241,7 @@ DecompileResult Sh2Decompiler::Decompile(const std::shared_ptr<const MemorySnaps
         PassSeed seed;
         DecompileInto(snapshot, request, cancel, r, nullptr, &seed);
         if (r.status == DecompileStatus::Ok && !request.allMemoryVolatile) NoteRemovedAccesses(snapshot, request, cancel, r, seed);
+        if (r.status == DecompileStatus::Ok && !request.allMemoryVolatile) NoteStoresBeforeEndlessLoop(r);
     }
     catch (ghidra::CancelError&)
     {
@@ -8426,6 +8427,85 @@ void Sh2Decompiler::NoteRemovedAccesses(const std::shared_ptr<const MemorySnapsh
     std::stable_sort(r.hardwareNotes.begin(), r.hardwareNotes.end(),
                      [](const HardwareNote& x, const HardwareNote& y) { return x.address < y.address; });
     if (r.prototypeWithheld.empty()) r.prototypeWithheld = "code removed as unreachable holds hardware accesses";
+    r.prototype.known = false;
+}
+
+// A3-163: a store of ordinary memory that the code makes before a loop the analysis takes to run for ever, and that the text does not
+// print. The engine keeps such a store (patch 0087: a global's write no return follows is not dead), but not one it saw no reader of
+// before it took the loop for endless: a write the code replaces after the loop (the code there is removed with the loop's exit), or one
+// whose value it had joined into a wider word and carried on as a number. Another processor reads those writes while the loop runs, and
+// on the hardware a poll of memory it writes ends; the request marks no such memory. So each folded store of a constant address, in a
+// block of the flow from which the loop is reached and not in removed code, that no token of the text names is said on its instruction,
+// and the signature is withheld.
+void Sh2Decompiler::NoteStoresBeforeEndlessLoop(DecompileResult& r)
+{
+    static const char kLoop[] = "Do nothing block with infinite loop";
+    static const char kRemoved[] = "Removing unreachable block (ram,0x";
+    std::vector<uint32_t> loops, removedStarts;
+    for (const std::string& w : r.warnings)
+    {
+        if (w.find(kLoop) != std::string::npos && w.compare(0, 2, "0x") == 0)
+            loops.push_back(static_cast<uint32_t>(std::strtoul(w.c_str() + 2, nullptr, 16)));
+        const size_t at = w.find(kRemoved);
+        if (at != std::string::npos) removedStarts.push_back(static_cast<uint32_t>(std::strtoul(w.c_str() + at + sizeof kRemoved - 1, nullptr, 16)));
+    }
+    if (loops.empty() || r.flowBlockRanges.empty()) return;
+    const size_t n = r.flowBlockRanges.size();
+    auto blockOf = [&](uint32_t insn) {
+        for (size_t b = 0; b < n; ++b)
+            if (r.flowBlockRanges[b].first <= insn && insn <= r.flowBlockRanges[b].second + 2u) return static_cast<int>(b);
+        return -1;
+    };
+    // The flow's blocks from which a loop the analysis takes to run for ever is reached, by the flow's own edges.
+    std::vector<char> reaches(n, 0);
+    bool changed = false;
+    for (uint32_t l : loops)
+    {
+        const int b = blockOf(l);
+        if (b >= 0 && !reaches[b]) reaches[b] = changed = 1;
+    }
+    while (changed)
+    {
+        changed = false;
+        for (size_t b = 0; b < n && b < r.flowSuccessors.size(); ++b)
+        {
+            if (reaches[b]) continue;
+            for (int s : r.flowSuccessors[b])
+                if (s >= 0 && static_cast<size_t>(s) < n && reaches[s])
+                {
+                    reaches[b] = changed = 1;
+                    break;
+                }
+        }
+    }
+    std::vector<char> removed(n, 0);
+    for (uint32_t start : removedStarts)
+    {
+        const int b = blockOf(start);
+        if (b >= 0) removed[b] = 1;
+    }
+    std::set<uint32_t> named;
+    for (const Line& line : r.lines)
+        for (const Token& t : line.tokens)
+            if (t.addr != 0 && !t.haltsFlow) named.insert(t.addr);
+    std::set<uint32_t> said;
+    bool any = false;
+    for (const AccessFate& f : r.accessFates)
+    {
+        if (!f.write || f.frame || !f.constantAddress || f.fate != AccessFate::FoldedOrdinary) continue;
+        const int b = blockOf(f.insn);
+        if (b < 0 || !reaches[b] || removed[b] || named.count(f.insn) != 0 || !said.insert(f.insn).second) continue;
+        const std::string text = "the " + std::to_string(f.size) + "-byte write of " + Hex8(f.address) + " here is missing: the analysis takes "
+                                 "the loop at " + Hex8(loops.front()) + " to run for ever and drops a write before it that it sees no reader of. A "
+                                 "poll of memory another processor writes folds so unless that memory is marked volatile";
+        r.hardwareNotes.push_back(HardwareNote{ f.insn, text, true });
+        r.warnings.push_back(Hex8(f.insn) + ": " + text);
+        any = true;
+    }
+    if (!any) return;
+    std::stable_sort(r.hardwareNotes.begin(), r.hardwareNotes.end(),
+                     [](const HardwareNote& x, const HardwareNote& y) { return x.address < y.address; });
+    if (r.prototypeWithheld.empty()) r.prototypeWithheld = "a write before a loop the analysis takes to run for ever is missing";
     r.prototype.known = false;
 }
 
