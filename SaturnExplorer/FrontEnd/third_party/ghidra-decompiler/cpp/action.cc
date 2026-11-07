@@ -21,6 +21,8 @@
  * Modified for SaturnExplorer: ...and one more for each call site whose conversion to a direct call asked for one (patches/0078-engine-deindirect-restart-per-call-site.patch).
  */
 #include "action.hh"
+#include <cstdlib>
+#include <iostream>
 #include "funcdata.hh"
 
 #include "coreaction.hh"
@@ -336,6 +338,7 @@ int4 Action::perform(Funcdata &data)
 	return res;
       }
       else if (lcount < count) { // Action has been applied
+	if (getenv("SE_TRACE_RULES")) { std::cerr << "--- action " << getName() << "\n"; data.printRaw(std::cerr); }
 	issueWarning(data.getArch());
 	count_apply += 1;
 	if (checkActionBreak()) {
@@ -890,6 +893,7 @@ int4 ActionPool::processOp(PcodeOp *op,Funcdata &data)
     data.debugModPrint(rl->getName());
 #endif
     if (res>0) {
+      if (getenv("SE_TRACE_RULES")) { std::cerr << "--- rule " << rl->getName() << "\n"; data.printRaw(std::cerr); }
       rl->count_apply += 1;
       count += res;
       rl->issueWarning(data.getArch()); // Check if we need to issue a warning

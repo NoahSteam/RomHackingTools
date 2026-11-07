@@ -5604,16 +5604,12 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                     };
                     const bool after = fb == mb ? m.origOrder > f.origOrder : fr.reach[fb][mb] && !fr.reach[mb][fb] && !hasGoto && alwaysReaches(fb, mb);
                     if (!after) continue;
-                    // (A5-109, open: a read through a pointer, or a register's access, is still printed before a folded store the code makes
-                    // first by routes patch 0082 does not close: the engine takes the store for dead or joins it with a later one (`g = v; x = *p;
-                    // if (c) g = v;` prints the store after the join), or writes the global at the return (grammar 1 seed 2012158: `x = g; g = r4;
-                    // SCSP_SCILV2 = x` prints the register write first). Counted until fixed; a write through a pointer, which may be the global's
-                    // own address, is judged.)
-                    if (!m.write || m.direct)
-                    {
-                        if (first > m.firstLine) count(m.direct ? "order.folded-store.hardware-past" : "order.folded-store.read-past");
-                        continue;
-                    }
+                    // (A5-109, fixed by patch 0085: a read through a pointer, or a register's access, the code makes after a folded store is
+                    // judged like a write through a pointer. The engine took such a store for dead when two writes of the same value joined
+                    // (`g = v; x = *p; if (c) g = v;`), or carried it into the next write of the global (`x = g; g = v; R = x`, `g = 0 ... g = g`),
+                    // and printed it after the access.)
+                    if (!m.write) count(m.direct ? "order.folded-store.hardware-read" : "order.folded-store.read");
+                    else if (m.direct) count("order.folded-store.hardware-write");
                     count("order.folded-store.checked");
                     if (first > m.firstLine)
                         add("folded-store-after-access", "the store at " + Hex(f.insn) + " the engine folded into " + Hex(f.address) + " is printed (line " +

@@ -716,6 +716,8 @@ public:
   virtual void getOpList(vector<uint4> &oplist) const;
   virtual int4 applyOp(PcodeOp *op,Funcdata &data);
 };
+extern bool accessBetween(const PcodeOp *from,const PcodeOp *to);	///< SaturnExplorer (0082, 0085): a memory access lies between two ops of a block
+extern bool globalWriteMovesPastAccess(const Varnode *vn,const PcodeOp *mop);	///< SaturnExplorer (0085): collapsing MULTIEQUAL \b mop would move the write \b vn of a global past a memory access
 class RulePropagateCopy : public Rule {
 public:
   RulePropagateCopy(const string &g) : Rule(g, 0, "propagatecopy") {}	///< Constructor
