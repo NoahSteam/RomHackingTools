@@ -1,0 +1,92 @@
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc
+@@ -31,6 +31,7 @@
+  * Modified for SaturnExplorer: a LOAD that may read the frame and stays one holds the frame's writes (patches/0076-engine-frame-loads-keep-writes.patch).
+  * Modified for SaturnExplorer: a catch handler that never reads its exception no longer names it, which MSVC warned about (C4101) (patches/0083-engine-msvc-unused-catch-names.patch).
+  * Modified for SaturnExplorer: ActionVarnodeProps does not read a global as the constant zero where its next write would then be made after a memory access (patches/0085-engine-global-write-keeps-place.patch).
++ * Modified for SaturnExplorer: nor a copy of an earlier write of a global with an access between them (patches/0088-engine-global-piece-read-and-join-copy.patch).
+  */
+ #include "coreaction.hh"
+ #include "condexe.hh"
+@@ -1434,6 +1435,33 @@ void ActionVarnodeProps::handleExtendedZero(Varnode *vn,Funcdata &data)
+   }
+ }
+ 
++/// \brief Whether a memory access lies between a write of a global and the copy of it a later op makes (SaturnExplorer, 0088)
++///
++/// In one block, an access between the two (accessBetween). In a block that follows the write's directly, an access after the write in
++/// its block or before the copy in the copy's. Further apart: \b true, the cautious answer.
++/// \param wdef is the op that writes the global
++/// \param cdef is the COPY of it
++/// \return \b true if an access may lie between them
++static bool copyPastAccess(const PcodeOp *wdef,const PcodeOp *cdef)
++
++{
++  if (wdef->getParent() == cdef->getParent()) return accessBetween(wdef,cdef);
++  const BlockBasic *bl = cdef->getParent();
++  if (bl->sizeIn() != 1 || bl->getIn(0) != wdef->getParent()) return true;
++  if (accessBetween(wdef,(const PcodeOp *)0)) return true;
++  for(list<PcodeOp *>::const_iterator iter=bl->beginOp();iter!=bl->endOp();++iter) {
++    const PcodeOp *op = *iter;
++    if (op == cdef) return false;
++    switch(op->code()) {
++    case CPUI_LOAD: case CPUI_STORE: case CPUI_CALL: case CPUI_CALLIND: case CPUI_CALLOTHER:
++      return true;
++    default:
++      break;
++    }
++  }
++  return true;
++}
++
+ int4 ActionVarnodeProps::apply(Funcdata &data)
+ 
+ {
+@@ -1513,6 +1541,15 @@ int4 ActionVarnodeProps::apply(Funcdata &data)
+ 		accessBetween(vn->getDef(),rd))
+ 	      moved = true;
+ 	  }
++	  // SaturnExplorer (0088): ...and a copy of an earlier write of the global (a join left with one input once a branch was
++	  // removed as unreachable): read as a constant, it would leave the earlier write dead and the later write would carry it
++	  // past the access between them (`g = 0; x = *p;` then the join and the return's copy of `g`, A5-113)
++	  if (vn->getDef()->code() == CPUI_COPY) {
++	    const Varnode *w = vn->getDef()->getIn(0);
++	    if (w->isWritten() && w->isAddrTied() && w->getAddr() == vn->getAddr() && w->getSize() == vn->getSize() &&
++		copyPastAccess(w->getDef(),vn->getDef()))
++	      moved = true;
++	  }
+ 	  if (moved) continue;
+ 	}
+ 	data.totalReplaceConstant(vn,0);
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.cc
+@@ -23,6 +23,7 @@
+  * Modified for SaturnExplorer: a STORE through a pointer read through a frame address keeps its guards when the stack is first heritaged (patches/0072-engine-frame-chains-and-save-slots.patch).
+  * Modified for SaturnExplorer: a LOAD guard records whether heritage put its COPYs before the LOAD, and a held frame write is no address force of the guard's (patches/0076-engine-frame-loads-keep-writes.patch).
+  * Modified for SaturnExplorer: the pieces heritage makes at a delay slot's op for it are the slot's too (patches/0079-engine-heritage-slot-pieces-marked.patch).
++ * Modified for SaturnExplorer: a read of a piece of a global the range holds wider is read into a temporary, not written to the piece (patches/0088-engine-global-piece-read-and-join-copy.patch).
+  */
+ #include "heritage.hh"
+ #include "funcdata.hh"
+@@ -417,8 +418,17 @@ Varnode *Heritage::normalizeReadSize(Varnode *vn,PcodeOp *op,const Address &addr
+   vn2 = fd->newConstant(addr.getAddrSize(),(uintb)overlap);
+   fd->opSetInput(newop,vn1,0);
+   fd->opSetInput(newop,vn2,1);
+-  fd->opSetOutput(newop,vn);	// Old vn is no longer a free read
+-  newop->getOut()->setWriteMask();
++  if (vn->getSpace() == fd->getArch()->getDefaultDataSpace()) {
++    // SaturnExplorer (0088): the piece read of a global is read into a temporary, so that the read is not a write of the
++    // global's piece (`g._0_1_ = (char)(g >> 8);`, a store the code does not make) that the merge then copies around (A5-111)
++    Varnode *tmp = fd->newUniqueOut(vn->getSize(),newop);
++    fd->opSetInput(op,tmp,op->getSlot(vn));
++    fd->deleteVarnode(vn);
++  }
++  else {
++    fd->opSetOutput(newop,vn);	// Old vn is no longer a free read
++    newop->getOut()->setWriteMask();
++  }
+   fd->opInsertBefore(newop,op);
+   return vn1;			// But we have new free read of uniform size
+ }

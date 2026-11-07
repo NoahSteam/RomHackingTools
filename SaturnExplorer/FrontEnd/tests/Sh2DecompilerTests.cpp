@@ -1818,17 +1818,17 @@ void TestArea7Round8()
     const std::vector<uint16_t> gbrWords = { 0xD605, 0xD706, 0x6071, 0xC801, 0x89FC, 0x4008, 0xC106, 0x6062, 0x2602, 0x8561, 0x000B, 0x0009,
                                              0x2600, 0x2080, 0x0600, 0x1034 };
     {
+        // (A5-111, patch 0088: the half read at 06009012 was the piece store `xRam26002080._2_2_ = (int2)xRam26002080;`, the copy this pin was
+        // about; the half is now read into a temporary, the store goes, and the value kept at the gbr store is the return's)
         const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, gbrWords);
         Print("A7-57 a global's value kept at a store that may alias it", r);
         const LineLookup k = LineForInstruction(r, 0x0600900Cu);
         CHECK(k.kind == LineLookup::Exact && !k.lines.empty());
-        if (!k.lines.empty()) CHECK(Has(r.lines[k.lines[0]].text, "unaff_gbr + 0xc"));
+        CHECK(!Has(r.Text(), "._2_2_ ="));
+        const Line* store = LineWith(r, "unaff_gbr + 0xc");
+        const Line* ret = LineWith(r, "return (int4)(int2)xRam26002080;");
+        CHECK(store != nullptr && ret != nullptr && store < ret);
         CHECK(dts::AuditMapping(r, word, "a7_57 gbr").Violations() == 0);
-        // ...the check (A7-25's, read from the text) still sees the copy first when the marks are taken off
-        DecompileResult damaged = r;
-        for (Line& x : damaged.lines)
-            for (Token& t : x.tokens) t.materialised = false;
-        CHECK(dts::AuditMapping(damaged, word, "a7_57 unmarked").backWrong >= 1);
     }
     // A7-57, the oracle's (grammar 1 seed 2306106 shrunk): `extu.w r5,r2` is stored by two stores, and both lines print the extension
     // (`uRam2600219c = (uint4)param_2;` first). A7-25's check took the cast's operand, drawn at the extension, for a copy materialised there
@@ -1913,16 +1913,20 @@ void TestArea7Round8()
     // param_1;` and puts the global back with `xRam26001000 = xVar1;` at the store of r4. A7-42's search for a register variable that holds
     // a parameter looked one assignment deep; it follows the chain now. With xVar1 assigned another global, the store is still another value.
     {
+        // (A5-111, patch 0088: the half read of the global was a store of that half, and the merge kept the parameter in xVar1 and wrote it back;
+        // the half is now read into a temporary: `xRam26001000 = param_1;` at the store, no write-back. The chain A7-63's oracle change follows is
+        // not printed for these words any more; the store's value is still judged.)
         const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, { 0xD602, 0x6243, 0x2622, 0x6061, 0x000B, 0x0009, 0x2600, 0x1000 });
         Print("A7-63 a variable that holds a parameter through a global", r);
-        CHECK(LineWith(r, "xRam26001000 = xVar1;") != nullptr);
+        CHECK(LineWith(r, "xRam26001000 = param_1;") != nullptr);
+        CHECK(LineWith(r, "xRam26001000 = xVar1;") == nullptr);
         CHECK(dts::AuditMapping(r, word, "a7_63").Violations() == 0);
         DecompileResult other = r;
         int n = 0;
         for (Line& x : other.lines)
-            if (x.text == "  xVar1 = xRam26001000;")
+            if (x.text == "  xRam26001000 = param_1;")
             {
-                x.text = "  xVar1 = xRam26001004;";
+                x.text = "  xRam26001000 = param_2;";
                 ++n;
             }
         CHECK(n == 1 && dts::AuditMapping(other, word, "a7_63 other").storeValueOther == 1);
@@ -15660,6 +15664,15 @@ void TestArea5Confirm()
         { "a5_109_reg", 0x06050F00u, { 0xD706, 0xD307, 0x6032, 0x2342, 0x2702, 0xE301, 0x4310, 0x8BFD, 0x445F, 0x4315, 0x8B00, 0x2402, 0x000B, 0x0009, 0x05B0, 0x0428, 0x2600, 0x2200 } },
         // A5-109 (c), grammar 1 seed 2006655 shrunk: a byte store of 0 at 0x2600210C in the slot of a branch that skips a write of SH2_BCR2
         { "a5_109_zero", 0x06051000u, { 0xD606, 0xE301, 0x4310, 0x8BFD, 0x2138, 0x8B01, 0x2239, 0xD704, 0x3020, 0x8D01, 0x2620, 0x2702, 0x000B, 0x0009, 0x2600, 0x210C, 0xFFFF, 0xFFE4 } },
+        // A5-111, grammar 1 seed 2606069 shrunk: poll SH2_VCRD into r0 ; cmp/eq r3,r2 ; bt/s L ; mov.w r0,@(0xc,r6) ; mov.b @(0xc,r6),r0 ; L: mov.w @r7,r3
+        // -- the byte read of the global after its half-word write was a write of that byte, and the half-word written back after the last read
+        { "a5_111", 0x06051100u, { 0xD605, 0xD706, 0x6071, 0xC801, 0x8BFC, 0x3230, 0x8D01, 0x8166, 0x846C, 0x6371, 0x000B, 0x0009, 0x2600, 0x2308, 0xFFFF, 0xFE68 } },
+        // ...and with a long write (mov.l r0,@(0xc,r6)) and a read of its second byte (mov.b @(0xd,r6),r0)
+        // A5-113, grammar 2 seed 2701218 shrunk: a dt loop leaves r3 0 ; tst r3,r4 ; bt L (always) ; ... L: mov.b r3,@r6 (0x26002388) ; mov.b @r4,r2
+        // -- the zero store was carried to the return, after the read through r4
+        { "a5_113", 0x06051300u, { 0x7FD0, 0xD609, 0xE301, 0x4310, 0x8BFD, 0x2638, 0x8900, 0x6351, 0x2438, 0x8901, 0xA004, 0x0009, 0x2630, 0x6240,
+                                   0xA000, 0x0009, 0x7F30, 0x000B, 0x0009, 0x0009, 0x2600, 0x2388 } },
+        { "a5_111_long", 0x06051200u, { 0xD605, 0xD706, 0x6071, 0xC801, 0x8BFC, 0x3230, 0x8D01, 0x1603, 0x846D, 0x6371, 0x000B, 0x0009, 0x2600, 0x2308, 0xFFFF, 0xFE68 } },
     };
     for (const W& w : fx)
     {
@@ -15722,6 +15735,30 @@ void TestArea5Confirm()
         CHECK(before(out["a5_109_reg"].Text(), "pxRam26002200 = param_1;", "_SCSP_SCILV2 = "));          // FIXED (was after the register write)
         CHECK(before(out["a5_109_reg"].Text(), "= pxRam26002200;", "pxRam26002200 = param_1;"));         // the old value is read first
         CHECK(before(out["a5_109_zero"].Text(), "xRam2600210c = 0;", "SH2_BCR2 = in_r0;"));              // FIXED (was after the register write)
+    }
+    // A5-111 (P2): a byte or half of a global read after a wider write of it was made a write of that piece by heritage (the SUBPIECE that
+    // reads it had the global's own address for its output): the text stored a piece the code does not store (`iRam26002314._0_1_ = (char)(...)`)
+    // and, the piece and the whole overlapping, the merge wrote the whole back after the later SH2_VCRD read. FIXED (patch 0088: the piece is
+    // read into a temporary): no piece stored, no write of the global after the last register read.
+    {
+        auto lastBefore = [](const std::string& t, const char* a, const char* b) {
+            const size_t i = t.rfind(a), j = t.rfind(b);
+            return i != std::string::npos && j != std::string::npos && i < j;
+        };
+        const std::string t = out["a5_111"].Text();
+        CHECK(!Has(t, "iRam26002314._0_1_ ="));                                          // FIXED (was a store of the byte read)
+        CHECK(Has(t, "(char)((uint2)iRam26002314 >> 8)"));                               // the byte is read from the global
+        CHECK(lastBefore(t, "iRam26002314 = ", "= SH2_VCRD;"));                          // FIXED (was written back after the read)
+        const std::string l = out["a5_111_long"].Text();
+        CHECK(!Has(l, "Ram26002314._1_1_ ="));                                           // FIXED
+        CHECK(lastBefore(l, "uRam26002314 = ", "= SH2_VCRD;"));                          // FIXED
+    }
+    // A5-113 (P2): A5-109's class by one more route, a copy of an earlier write of a global (a join left with one input once a branch was removed
+    // as unreachable) read as the constant 0. FIXED (patch 0088, ActionVarnodeProps): the store before the read through the pointer.
+    {
+        const std::string t = out["a5_113"].Text();
+        const size_t st = t.find("xRam26002388 = 0;"), rd = t.find("= *param_1;");
+        CHECK(st != std::string::npos && rd != std::string::npos && st < rd);   // FIXED (was after the read)
     }
     // A5-103 (P2): an associative purge through a pointer the code builds with the and/or idiom said nothing; the text is a store of 0.
     // FIXED (PointerValues::parts, MaskedPartitionNote): the partition the masks fix is said, certain for the idiom, "may" without the AND.

@@ -5544,6 +5544,7 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
         {
             bool hasGoto = false;
             for (const Line& l : r.lines) hasGoto |= l.text.find("goto ") != std::string::npos;
+            std::set<size_t> pieceStoresSaid;
             for (const AccessFate& f : r.accessFates)
             {
                 if (!f.write || f.fate != AccessFate::FoldedOrdinary || !f.constantAddress || f.frame || f.origBlock < 0) continue;
@@ -5560,18 +5561,48 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                         if (t.addr == f.insn) { first = static_cast<int>(li); break; }
                 }
                 if (first < 0) continue;
-                // (A5-111, open: a byte or half of the global read after a wider write is made a write of that piece by heritage, a SUBPIECE whose
-                // output is the global's own address (`iRam26002314._0_1_ = (char)(...)`, a store the code does not make, and an overlap that keeps
-                // the wider write to the end of the function, after a later register read: grammar 1 seed 2606069). Counted, not judged.)
+                // (A5-111, fixed by patch 0088: a byte or half of the global read after a wider write was made a write of that piece by heritage, a
+                // SUBPIECE whose output was the global's own address: `iRam26002314._0_1_ = (char)((uint2)iRam26002314 >> 8);`, a store the code
+                // does not make, whose overlap with the wider write had the merge write the wider value back at the end of the function, after a
+                // later register read, grammar 1 seed 2606069. A line that assigns a piece of the global is judged: some write of the code to
+                // those bytes, and no wider one, must be named on it; one that names a read of those bytes instead is the read made a store, and
+                // reported. The order is then judged as for any folded store.
+                // A5-112, open (P3): a narrower write after a wider one is printed by heritage's pieces too (`Heritage::normalizeWriteSize`): the
+                // wider store as a store of the bytes the narrow one leaves (`xRam26002008._1_1_ = in_r1;` for `mov.w r1,@r6`) and the narrow one
+                // as a store of the whole (`xRam26002008 = CONCAT11(in_r2,(xunknown1)xRam26002008);` for `mov.b r2,@r6`). The values and the
+                // order are the code's, the widths are not: a line naming a write of the global and no read of the piece is counted
+                // (`order.folded-store.piece-split`), not judged.)
                 {
                     char name[24];
                     std::snprintf(name, sizeof name, "Ram%08x._", static_cast<unsigned>(f.address));
-                    bool piece = false;
-                    for (const Line& l : r.lines) piece |= l.text.find(name) != std::string::npos;
-                    if (piece)
+                    for (size_t li = 0; li < r.lines.size(); ++li)
                     {
-                        count("order.folded-store.piece-overlap");
-                        continue;
+                        const Line& l = r.lines[li];
+                        const size_t at = l.text.find(name);
+                        if (at == std::string::npos) continue;
+                        const size_t b = l.text.find_first_not_of(' ');
+                        size_t e = b;
+                        while (e < l.text.size() && (std::isalnum(static_cast<unsigned char>(l.text[e])) || l.text[e] == '_' || l.text[e] == '.')) ++e;
+                        if (b == std::string::npos || at < b || at >= e || l.text.compare(e, 3, " = ") != 0) continue;   // (a read of the piece)
+                        unsigned off = 0, sz = 0;
+                        if (std::sscanf(l.text.c_str() + at + std::strlen(name), "%u_%u_", &off, &sz) != 2 || sz == 0) continue;
+                        count("order.folded-store.piece-store");
+                        const uint32_t lo = f.address + off, hi = lo + sz;
+                        bool made = false, readNamed = false;
+                        for (const AccessFate& o : r.accessFates)
+                        {
+                            bool named = false;
+                            for (const Token& t : l.tokens) named |= t.addr == o.insn;
+                            if (!named) continue;
+                            // (a write of those bytes: one inside the piece; a wider write named on the line is the value forwarded, not the piece's store)
+                            if (o.write && o.address >= lo && o.address + o.size <= hi) made = true;
+                            if (!o.write && o.address < hi && lo < o.address + o.size) readNamed = true;
+                        }
+                        if (!made && !readNamed) count("order.folded-store.piece-split");
+                        else if (!made && pieceStoresSaid.insert(li).second)
+                            add("folded-store-after-access", "line " + std::to_string(li) + " stores " + std::to_string(sz) + " byte(s) of the global at " +
+                                                                 Hex(f.address) + " (`" + l.text.substr(b) + "`) that no write of the code there makes: a read of a piece " +
+                                                                 "of the global, made a write of it");
                     }
                 }
                 // (a store a later folded store of the same address follows is the engine's to drop or merge: the later one writes what is
@@ -13465,6 +13496,24 @@ void TestA587Pins(Sh2Decompiler& d)
             nullptr, nullptr, nullptr, nullptr, nullptr }, "onchip.span.said", nullptr },
         { { "A5-110, grammar 1 seed 2508741 shrunk again (a step added in the loop)", "D305 273B E302 7701 D204 272A 4310 8BFA 6070 000B 0009 0009 FFFF FE00 2000 0000",
             nullptr, nullptr, nullptr, nullptr, nullptr }, "onchip.span.said", nullptr },
+        // A5-111 (grammar 1 seed 2606069, the A5-109 fixer's fresh run): a byte of a global read after a half-word write of it was made a write of
+        // that byte (`iRam26002314._0_1_ = ...`), and the half-word store was written back after the later SH2_VCRD read. The rule judges the line
+        // that assigns a piece (`order.folded-store.piece-store`, none now) and the order against the register read. (Shrunk, the poll's value is
+        // merged into the global's store in the loop, A3-161's accepted class, said as `text-store.loop-short`; the long form is judged in order.)
+        { { "A5-111, a byte of a global read after a half-word write of it, grammar 1 seed 2606069 shrunk", "D605 D706 6071 C801 8BFC 3230 8D01 8166 846C 6371 000B 0009 2600 2308 FFFF FE68",
+            nullptr, nullptr, nullptr, nullptr, nullptr }, "text-store.loop-short", nullptr },
+        { { "A5-111, the same with a long write and a byte read", "D605 D706 6071 C801 8BFC 3230 8D01 1603 846D 6371 000B 0009 2600 2308 FFFF FE68",
+            nullptr, nullptr, nullptr, nullptr, nullptr }, "order.folded-store.hardware-read", nullptr },
+        // A5-113 (grammar 2 seed 2701218 of the A5-111 fixer's fresh run): `g = 0 (a byte, r3 after a dt loop) ; r2 = *r4` on the arm a constant
+        // test always takes; once the other arm went as unreachable, the join of the global's writes was a copy of the earlier write, read as the
+        // constant 0 by ActionVarnodeProps, and the write went to the return's copy, after the read through r4.
+        { { "A5-113, a zero byte store before a read through a pointer, grammar 2 seed 2701218 shrunk", "7FD0 D609 E301 4310 8BFD 2638 8900 6351 2438 8901 A004 0009 2630 6240 A000 0009 7F30 000B 0009 0009 2600 2388",
+            "0/0/26", nullptr, "2", nullptr, nullptr }, "order.folded-store.read", nullptr },
+        // A5-112 (open, P3; the A5-111 fixer's 20,000-seed run, grammar 1 seeds 366, 1259, 1486 and 3284; 366 shrunk): a byte write after a half-word write of the
+        // global is printed as a store of the half's other byte and a store of the whole (`xRam26002008._1_1_ = in_r1; ... xRam26002008 =
+        // CONCAT11(in_r2,(xunknown1)xRam26002008);`); counted (`order.folded-store.piece-split`), not judged.
+        { { "A5-112, mov.w r1,@g ; mov.b r0,@r5 ; mov.b r2,@g (open)", "D602 2611 8050 000B 2620 0009 2600 2008",
+            nullptr, nullptr, nullptr, nullptr, nullptr }, "order.folded-store.piece-split", nullptr },
         { { "A5-103, a purge through (p & 0x1FFFFFF0) | 0x40000000", "D103 2149 D203 212B E000 000B 2102 0009 1FFF FFF0 4000 0000",
             nullptr, nullptr, nullptr, nullptr, nullptr }, nullptr, nullptr },
         { { "A5-104, a literal written and then loaded", "D102 2142 D002 000B 0009 0009 0600 9010 1234 5678",
@@ -13490,6 +13539,23 @@ void TestA587Pins(Sh2Decompiler& d)
         CHECK(rep.findings.empty());
         if (p.count) CHECK(count(p.count) > 0);
         if (p.count2) CHECK(count(p.count2) > 0);
+    }
+    // A5-113, grammar 2 seed 2701218 whole: the zero store before the read through r4.
+    {
+        const Report rep = Evaluate(d, MakeV2(2701218), true);
+        std::printf("pin 'A5-113, grammar 2 seed 2701218': %zu finding(s)\n", rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+    // A5-111, grammar 1 seed 2606069 whole: no piece of the global stored, and its half-word store before the later SH2_VCRD reads.
+    {
+        const Report rep = Evaluate(d, Generate(2606069), true);
+        const auto it = rep.counts.find("order.folded-store.hardware-read");
+        const int judged = it == rep.counts.end() ? 0 : it->second;
+        std::printf("pin 'A5-111, grammar 1 seed 2606069': %zu finding(s), order.folded-store.hardware-read %d\n", rep.findings.size(), judged);
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+        CHECK(judged > 0);
     }
     // Grammar 2 seed 1804560 as a program (the new draws leave it as it was): the engine's span note is what the rule asks for.
     {
