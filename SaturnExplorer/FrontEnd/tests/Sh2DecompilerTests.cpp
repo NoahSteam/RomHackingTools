@@ -15589,6 +15589,13 @@ void TestArea5Confirm()
         { "a5_103_or", 0x06050C00u, { 0xD202, 0x224B, 0xE000, 0x000B, 0x2202, 0x0009, 0x4000, 0x0000 } },
         // (fixer) control for A5-104: the store goes to 0x06050D18, next to the pool and no literal of it; the literal is folded
         { "a5_104_other", 0x06050D00u, { 0xD102, 0x2142, 0xD002, 0x000B, 0x0009, 0x0009, 0x0605, 0x0D18, 0x1234, 0x5678 } },
+        // A5-109 (a): mov.l @(lit),r6 (0x06001010) ; mov.l r3,@r6 ; cmp/eq #2,r0 ; bf/s skip ; mov.l @r7,r0 ; mov.l r3,@r6 ; mov.w @r4+,r3 ; skip: rts ; nop
+        // -- two writes of one value joined: the write is made once, after the read through r7 (which is the global when r7 is its address)
+        { "a5_109_join", 0x06050E00u, { 0xD604, 0x2632, 0x8802, 0x8F02, 0x6072, 0x2632, 0x6345, 0x000B, 0x0009, 0x0009, 0x0600, 0x1010 } },
+        // A5-109 (b), grammar 1 seed 2012158 shrunk: x = g ; g = r4 ; SCSP_SCILV2 = x -- the global's write is carried to the return, after the register's
+        { "a5_109_reg", 0x06050F00u, { 0xD706, 0xD307, 0x6032, 0x2342, 0x2702, 0xE301, 0x4310, 0x8BFD, 0x445F, 0x4315, 0x8B00, 0x2402, 0x000B, 0x0009, 0x05B0, 0x0428, 0x2600, 0x2200 } },
+        // A5-109 (c), grammar 1 seed 2006655 shrunk: a byte store of 0 at 0x2600210C in the slot of a branch that skips a write of SH2_BCR2
+        { "a5_109_zero", 0x06051000u, { 0xD606, 0xE301, 0x4310, 0x8BFD, 0x2138, 0x8B01, 0x2239, 0xD704, 0x3020, 0x8D01, 0x2620, 0x2702, 0x000B, 0x0009, 0x2600, 0x210C, 0xFFFF, 0xFFE4 } },
     };
     for (const W& w : fx)
     {
@@ -15637,6 +15644,20 @@ void TestArea5Confirm()
         CHECK(before(h, "uVar1 = uRam06030000;", "uRam06030000 = param_2;") && before(h, "uRam06030000 = param_2;", "*puVar2 = uVar1;"));   // FIXED: the RAM write first
         CHECK(!Has(h, "uRam06030000 = xVar1;"));
         CHECK(before(out["a5_102_byte"].Text(), "cRam06030000 = param_2;", "*param_1 = iVar1;"));        // control: in the code's order
+    }
+    // A5-109 (P2): a store folded into a global was printed after a later read through a pointer or a register write by routes other than
+    // propagation into a marker. FIXED (patch 0085): RuleMultiCollapse keeps two writes of one value where a read lies between them and the
+    // join, RulePropagateCopy does not feed a global's value into the global's next write past a memory access, and ActionVarnodeProps does not
+    // read a global as the constant zero where that would do the same.
+    {
+        auto before = [](const std::string& t, const char* a, const char* b) {
+            const size_t i = t.find(a), j = t.find(b);
+            return i != std::string::npos && j != std::string::npos && i < j;
+        };
+        CHECK(before(out["a5_109_join"].Text(), "xRam06001010 = in_r3;", "= *param_4;"));                  // FIXED (was after the read)
+        CHECK(before(out["a5_109_reg"].Text(), "pxRam26002200 = param_1;", "_SCSP_SCILV2 = "));          // FIXED (was after the register write)
+        CHECK(before(out["a5_109_reg"].Text(), "= pxRam26002200;", "pxRam26002200 = param_1;"));         // the old value is read first
+        CHECK(before(out["a5_109_zero"].Text(), "xRam2600210c = 0;", "SH2_BCR2 = in_r0;"));              // FIXED (was after the register write)
     }
     // A5-103 (P2): an associative purge through a pointer the code builds with the and/or idiom said nothing; the text is a store of 0.
     // FIXED (PointerValues::parts, MaskedPartitionNote): the partition the masks fix is said, certain for the idiom, "may" without the AND.

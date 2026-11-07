@@ -14,6 +14,7 @@
  * limitations under the License.
  *
  * Modified for SaturnExplorer: RuleDivTermAdd and RuleDivTermAdd2 keep a product that overflows only for a division; RulePiecePathology needs the register it names (patches/0037-engine-division-piece-and-input-names.patch).
+ * Modified for SaturnExplorer: accessBetween and globalWriteMovesPastAccess are shared with ActionVarnodeProps (patches/0085-engine-global-write-keeps-place.patch).
  */
 /// \file ruleaction.hh
 /// \brief This is the basic set of transformation Rule objects.
@@ -716,6 +717,8 @@ public:
   virtual void getOpList(vector<uint4> &oplist) const;
   virtual int4 applyOp(PcodeOp *op,Funcdata &data);
 };
+extern bool accessBetween(const PcodeOp *from,const PcodeOp *to);	///< SaturnExplorer (0082, 0085): a memory access lies between two ops of a block
+extern bool globalWriteMovesPastAccess(const Varnode *vn,const PcodeOp *mop);	///< SaturnExplorer (0085): collapsing MULTIEQUAL \b mop would move the write \b vn of a global past a memory access
 class RulePropagateCopy : public Rule {
 public:
   RulePropagateCopy(const string &g) : Rule(g, 0, "propagatecopy") {}	///< Constructor

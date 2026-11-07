@@ -18148,3 +18148,123 @@ The corpus caught two things on the way, both above: hwram008 0x0601B0F0 (the or
 ### Routed
 
 To area 3: A7-61's text (the area 5 fixer's seed 2017373: the store of r6 to the global gone and an unmarked poll printed as a loop that never ends), as the row says; grammar 2 seed 2305596 (`input-dropped:macl`), left as A7-52's record said. Grammar 1 seed 2501451 (routed as possibly A7-62's) does not fail here on master's code or the branch's. Grammar 1 seed 7910 (`n:map-copy-merge`, a register merge drawn only at instructions that make nothing, A7-21's check) fails on master's code with `SE_GENERATED_CANARY=0` and not under the matrix's command; it is not filed by this round.
+
+## A5-109 fixer
+
+Branch `review/5-a5109-fix` from master `4e06d794`. One engine patch, **0085** (`ruleaction.cc`, `ruleaction.hh`, `coreaction.cc`); product change in `Sh2Decompiler.cpp` (A5-110); oracle and pins in `Sh2GeneratedTests.cpp` and `Sh2DecompilerTests.cpp`. RelWithDebInfo build, every test binary under `ulimit -v` and `timeout`, one heavy job at a time. Rows: A5-109 (P2) fixed, A5-110 (P3, from the area 2 round 20 reviewer's seeds 2504292 and 2508741) fixed, A5-111 (P2) filed open.
+
+### 1. A5-109: the routes and patch 0085
+
+The engine takes a LOAD to read no global the function wrote (only the stack space has load guards), so a write of a global keeps its place only while something reads it there. Patch 0082 closed propagation into a marker; three more routes, each found from the p-code before the merge (a scratch dump of `Funcdata::printRaw` at the start of `Merge::mergeAddrTied` and after each rule, not kept):
+
+* **(a) `RuleMultiCollapse`**: `g = r3 ; x = *r7 ; if (r0 == 2) g = r3 ;` has `g3 = MULTIEQUAL(g1, g2)` with both inputs COPYs of `r3`, equal by function. The rule replaced it by a COPY of `r3` at the join and left both writes dead: `xVar2 = *param_4; ... xRam06001010 = in_r3;`. It now declines (`globalWriteMovesPastAccess`) when a global's write would pass a LOAD, STORE, call or volatile access on its way to the join, or reaches it through other blocks. Text: `xRam06001010 = in_r3; xVar2 = *param_4;`.
+* **(b) `RulePropagateCopy`** into a plain COPY: the global's COPY `g = r4` was propagated into the global's next COPY (the return's `g = g`, the multiequal having collapsed after unreachable code went), so the write moved to the return, after the register write the code makes later (grammar 1 seed 2012158). Refused when `accessBetween` finds an access between the two. Text: `xVar2 = pxRam26002200; pxRam26002200 = param_1; _SCSP_SCILV2 = xVar2;`.
+* **(c) `ActionVarnodeProps`**: a global whose non-zero mask is empty is read as the constant 0 by every reader (`totalReplaceConstant`); the MULTIEQUAL of two copies of `g = 0` lost its readers, the earlier write died and the return's copy was `g = 0` after a conditional `SH2_BCR2` write (seeds 2006655, 2013392). The replacement is skipped for a global whose write would then be made past an access.
+
+`accessBetween` (0082) and `globalWriteMovesPastAccess` are shared through `ruleaction.hh`. Pins: `TestArea5Confirm` `a5_109_join`, `a5_109_reg`, `a5_109_zero` (the text order); module pins in `TestA587Pins` (the shrunk words of seeds 2012158, 2006655, 2013392 and the join shape), which fail without the patch.
+
+The rule `folded-store-after-access` now judges a read through a pointer and a register access the code makes after a folded store, and a store that dominates the access's block (a store in the slot of the branch that skips the access, which the all-paths test had excused). The counts `order.folded-store.read`, `.hardware-read`, `.hardware-write` say what it checks; it sets aside a read printed at several uses (its first emission is a forwarded value) and a global whose text holds a piece of it (A5-111).
+
+**Mutation**: the three engine changes reverted (the `if (false)` form), the default run fails seed 113 (`folded-store-after-access`, 1 seed, 8 findings) and four `A5-109` module pins fail (join: 1 finding; 2012158: 3 findings; 2006655 with the dominance test; 2013392: 2); with the patch the default run and the pins pass. The corpora's texts change as the fix says: hwram008 211 of the alone texts and hwram007 8 lose a duplicate write the engine had invented at a return (`xRam060a84ba = 1;` again in an arm that returns, 0602A9A8) or print the write where the code makes it (0600B134: `xRam060a3b00 = 0xff;` before the loop and in the arm that makes it; 0604F422: `xRam060a6a88 = 0;` before the byte reads, as at 060510D8). No count of the matrix changed.
+
+### 2. A5-110: seeds 2504292 and 2508741 (routed)
+
+Not A5-109's class (`onchip-span-unsaid`, rule 3f). `p | 0xe0000000` (or `0xfffffe00`) then `p ^ 0x20000000` round a loop: `Bitwise`'s early branch (an unknown with a known mask) dropped the pointer's own value round the loop, so the partitions of the unknown values stayed those of the first turn (partition 6, the cache data array, which is memory) and no note was made. `Bitwise` now carries the loop path, `CloseBack` closes the partitions under the loop's turns (a step added each turn carries up one partition, never round the address space), and `Shift` takes a positive offset off the last partition to stay in it (it wrapped to partition 0, bus memory, and hid the note for `*(p + 0x3c)`). The A5-103 note is accepted by rule 3f as saying the on-chip registers may be reached (`onchip.span.said`). Pins: three module pins. The corpora carry three more cautions in each image: hwram007 06024764 (0602477E, 06024780, 06024784) and hwram008 06064404 (0606441E, 06064420, 06064424), more accesses off the pointers the A5-103 note already named.
+
+### 3. The lead: hwram008 0603ED52
+
+Traced with the disassembly and the token map (`SE_GAME_TOKENS`, `SE_GAME_DISASM`). The text of the function is unchanged by 0085. At 0603F1FC and 0603EF14 the store through a frame pointer slot (`mov.w r12,@r6`, r6 = `[r14+0x30]`) is followed in the code by the load of the next frame slot (0603F1FE `mov.l @r0,r6`), which the text prints on the same line (`piVar4 = piStack_44;`) after the store: the code's order. The frame local written before the store (`xStack_c`, 0603EEF4/0603F1EC) is printed before it. The detector of the previous fixer saw the merge's `trimOpOutput` insert a copy of a pointer slot, not a write after the store. **No defect; no row.**
+
+### 4. Fresh route, A5-111 (open, P2)
+
+The fresh run found one more area 5 shape, grammar 1 seed 2606069 (`order.folded-store.piece-overlap` now counts it): a narrower read of a global written wider is a write of that piece to the engine, so the text holds a store the code does not make and the wider store is kept to the end of the function, after a later register read. Same on master. Filed open with the repro; the rule counts and does not judge it.
+
+### 5. Results
+
+| | |
+|---|---|
+| `check-vendored-tree.py lint` / `check` (patches 0001-0085) | ok / ok |
+| full `ctest -j2 -E SaturnExplorerLive` / `-R SaturnExplorerLive` | 111 of 111 / 6 of 6 (no new test binary: the pins are functions in existing ones) |
+| fault suite | 0 of 94 jobs failed |
+| generator default run (300 seeds) | 0 findings |
+| printed-C (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | agrees=5195 (master 5195), narrow-c=131 |
+| corpora, alone and `SE_GAME_LEND=1` | hwram007 474 (645) of 999, lending 678 (956); hwram008 724 (975) of 1,543, lending 1,038 (1,310); missing and said 0 and 4; 0 accesses dropped or not printed once; cautions 5 (was 2) and 11 (was 8), the six addresses above |
+| fresh run, grammar 1, 2,600,001 to 2,610,000 (pieces of 5,000, `SE_GENERATED_CANARY=0 SE_GENERATED_SHRINK=5`) | no area 5 class; area 7 `map-*` seeds 2601280, 2601590, 2601640, 2607749, 2608672 (`map-const-join`, `map-copy-store`, `map-store-value`, `map-way-back`); the first run's two `folded-store-after-access` seeds were 2606069 (A5-111) and a read printed at two uses (the oracle's) |
+| fresh run, grammar 2, 2,600,001 to 2,610,000 | no area 5 class; area 7 seeds 2602015, 2602445, 2604457, 2605576 (`map-const-join`), 2608245 (`map-store-after`) |
+
+Counts of the rule on grammar 1 (5,000 seeds): checked 5,783-6,106, read 2,252-2,303, hardware-read 968-1,074, hardware-write 735-826, overwritten 58-63.
+
+### 6. Routed
+
+* **Area 7:** the ten `map-*` seeds of section 5 (not replayed on master's build).
+* **Area 5, next round:** A5-111 (P2, open).
+
+## A2-128 fixer
+
+Branch `review/2-a2128-fix`, cut at master `3cbbca32` (patches to 0084), merged with master `41b69ebf` before the final runs; patch **0086** (0085 is reserved for another agent and is listed under "Unused numbers" until it merges). Own RelWithDebInfo build (`-j2`), every test binary under `ulimit -v 3500000` (4,000,000 for the generator ranges) and `timeout`, one heavy job at a time.
+
+| Row | P | Status | How |
+|---|---|---|---|
+| A2-128 | P2 | **fixed** | patch **0086** (`typeop.cc`, `cast.cc`); the oracle reads an `xunknown` as unsigned in an ordered read, a shift, a division and an equality |
+| A2-129 | P3 | **fixed** (oracle) | an integer parameter is the machine's number in the memory mode; a parameter used as an address and as a number is `skipped:memory` |
+
+### 1. A2-128: the cause
+
+The declaration of a stack word comes from its symbol, `xunknown4 xStack_4`, and the text of a read of it comes from the cast pass, which sees the type propagated from the ops around it (`int4` for `cmp/gt`, `uint4` for `cmp/hi`). `castStandard` asked for no cast in either case (the high type of the read equals the op's input type), so the two ops printed one function. The same holds for a field (`xStack_4._0_2_`), for the shifts, and for the equality with a signed narrow side. A debug print in `TypeOpIntSless::getInputCast` showed `req=int4 cur=int4` while the declaration was `xunknown4`.
+
+### 2. The fix (patch 0086)
+
+Choice: an `xunknown` is the **unsigned value of its bytes** in C and in the guide (the guide says it has no sign; C has to read it one way, and unsigned is the one 0084 already gives a CONCAT), so a signed read is the text that must show something and an unsigned read is the bare name. The alternative, casting both (`(uint4)xStack_4`), would add a cast to every unsigned compare and shift in the corpus for no information.
+
+* `typeop.cc`: `unsignedNamedRead` (an explicit input whose symbol is of unknown type) and `unsignedTextRead` (that, or 0084's `impliedPieceRead`), used wherever 0084 used `impliedPieceRead`: the signed ordered compares, the arithmetic shift, the signed division and remainder cast such an input to the op's signed type; `comparePieceCast` casts it to the other side's type in an equality with a signed narrow side.
+* `cast.cc` (`isExtensionCastImplied`): the sign extension of such a variable read by a compare is no longer implied. `param_1 <= xStack_4._0_2_` is C's zero extension of the bytes, where the code sign-extends (the `mov.w` read): it is `param_1 <= (int4)xStack_4._0_2_` now, and `(xStack_2 < 0)` of a `subv` likewise. This was found by the families after the oracle change (122 functions, `mismatch`, all `narrow-c` after the cast).
+
+Texts: `return 5 < (int4)xStack_4;` (cmp/gt) against `return 5 < xStack_4;` (cmp/hi); `4 < (int2)xStack_4._0_2_` against `4 < xStack_4._0_2_`; `(int4)xStack_4 >> 1` against `xStack_4 >> 1`; `(int2)xStack_2 == param_1`.
+
+### 3. The oracle gap
+
+The engine reading (`CxxHeader`) took an `xunknown` as signed everywhere, so the signed op's one text agreed there and was `narrow-c`, while the unsigned op's agreed as C and was never asked. Now (`kCxxHeaderUnk`, a literal of its own, under the 12,000-byte limit of `check-literal-size.py`): an `xunknown` is read as unsigned in `==`, `!=`, `<`, `<=`, `>`, `>=`, `/`, `%` and as the left side of `>>`; its implicit conversions and casts to a signed type still extend by the sign (A3-150). The third reading (fields signed) is not given to a text that reads a bare field in an ordered compare, a shift or a division (`BareFieldOrderedRead`): it would excuse exactly that text.
+
+**Mutation.** The engine files at master's, this oracle: `A2-128 #0, #2, #4, #6` are `mismatch` (and `#7`), as are `A2-126 #0` and `#1`, whose old texts compared an `xunknown` signed with no cast. The oracle by itself: the casts taken out by the hook (`A2-128 oracle #0` to `#4`) are `mismatch`, not `narrow-c`.
+
+Pins (`SaturnExplorerSh2GeneratedTests`, the printed-C run): `A2-128 #0` to `#7` (`#0` to `#6` agree as C, `#7` is `narrow-c`: the cast of an `xunknown` field to a wider signed type is the sign extension the engine means), the pair check inside them (the signed and the unsigned text differ), and `A2-128 oracle #0` to `#4`. Seeds 2508533 and 2513643 are not pinned by seed: the printed-C stream is fixed by `SE_GENERATED_FIRST`, so the seeds are replayed from the record below; their functions (`if (xStack_4 < 1)`, `CONCAT44(xStack_8 >> 1,param_2)`) are the shapes of `#0` and `#4`.
+
+### 4. A2-129
+
+`CheckPrintedC` gave a parameter declared an integer the host's address of the arena. Now an integer parameter gets the machine number (`g_in[4+i]`), and a pointer parameter, or an integer parameter the text casts to a pointer, the host address. A parameter that is cast to a pointer and also read as a number (`mov.l r4,@r4`: `*(xunknown4 *)param_1 = param_1;`) needs two values: `skipped:memory`, with the reason. Pins `A2-129 #0` to `#3` (`mov r5,r0`, `shlr16`, `mov.l r5,@r4`: agree; `mov.l r4,@r4`: `skipped:memory`).
+
+### 5. Runs
+
+| Run | Result |
+|---|---|
+| `xpair20.py` (792, 396 pairs) | agrees 773, narrow-c 19 (the reviewer: 500 and 292); `pairs20.py`: **0 pairs print the same body or text** (the reviewer: 146 and 128); the 19 are the cast of an `xunknown` to a wider signed type, A3-150's reading |
+| `mkpiece.py` (4,550) | agrees 4,271, narrow-c 279, **0 `mismatch`** (round 19: 4,025 and 525) |
+| `mkpiece20.py` (5,200) | agrees 4,710, narrow-c 490, **0 `mismatch`** (the review: 4,625 and 575) |
+| `pgen.py` 1 to 400 and 1,000 to 6,999 (6,400) | agrees 6,256, narrow-c 125, skipped 19, **0 `mismatch`** (round 19: 6,088 and 293) |
+| printed-C, `SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000` (the matrix's run) | agrees **5,196**, narrow-c 130 (master 41b69ebf's matrix: 5,195; master's engine and oracle here: 5,195 and 131) |
+| printed-C, nightly size, `SE_GENERATED_FIRST` 1, 5,001, 10,001, 15,001 | **0 `mismatch`**; agrees 8,546 / 8,416 / 8,393 / 8,515, narrow-c 204 / 207 / 215 / 161 (master 8,545 / 8,415 / 8,392 / 8,513 and 205 / 208 / 216 / 163) |
+
+The increases are the signed compares of a named piece that were `narrow-c` (agreed in the engine's reading only) and now agree as C with the cast. There is no decrease of `agrees` anywhere; `narrow-c` falls by the same count.
+
+### 6. Corpus
+
+`SE_GAME_HWRAM=<img> SE_GAME_NOTES=1 SE_GAME_OUT=<dir> [SE_GAME_LEND=1] SaturnExplorerSh2DecompilerTests`, this branch's binary against the same tree with master's `typeop.cc` and `cast.cc`:
+
+| | hwram007 | hwram008 |
+|---|---|---|
+| real entries, lent after lending the effects | 474 (645) of 999 | 724 (975) of 1,543 |
+| missing and said | 0 | 4 |
+| output files that changed, alone | 6 of 839 (7 lines) | 5 of 1,554 (6 lines) |
+| output files that changed, with `SE_GAME_LEND=1` | 18 of 4,299 (21 lines) | 19 of 7,544 (26 lines) |
+
+The counts are unchanged. Every changed line is a signed compare of a named piece that now carries its cast: `if ((iVar2 != 0) && (xVar1 = xVar5, (int4)xStack_8 < 0x4000)) break;` (was `xStack_8 < 0x4000`), `0 < (int4)xStack_8`.
+
+### 7. Tests
+
+* **Full `ctest`:** `-j2 --timeout 900 -E SaturnExplorerLive` under `ulimit -v 3500000`: **111 of 111** (222 s); `-R SaturnExplorerLive`: **6 of 6**. No test was added to the list: the pins are in `SaturnExplorerSh2GeneratedTests` (run as `SaturnExplorerSh2PrintedCTests` and in its default run, 0 findings).
+* **Fault suite:** `SaturnExplorerDecompilerFaultTests` alone: **0 of 94 jobs failed**.
+* **Vendored tree:** `check-vendored-tree.py lint` and `rebuild` (against the pinned upstream): ok; `check-literal-size.py`: ok.
+
+### 8. Routed
+
+Nothing. Note for the coordinator: 0085 is in the "Unused numbers" line of `patches/README.md` so that `lint` passes; remove it when the other patch merges.
