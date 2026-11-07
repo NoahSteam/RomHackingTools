@@ -17792,3 +17792,96 @@ Grammar 1 seed 1862942, shrunk `D104 241B D604 E301 461B 311C 4310 8BFB 000B 261
 * **Full `ctest`:** `-E SaturnExplorerLive -j2 --timeout 900` under `ulimit -v 3500000`: **109 of 109** passed (324 s; `SaturnExplorerSh2DecompilerEngineTests` 51 s, `SaturnExplorerSh2PrintedCTests` 40 s, `SaturnExplorerSh2GeneratedTests` 24 s); `-R SaturnExplorerLive`: **6 of 6** (29 s). 109 plus 6 Live, the master count. **No test was added** and no suite file changed: the rows are P2 and P3 and their fixtures are in the tools directory. The fault suite was not run: no engine, spec or host file changed. No file was mutated.
 
 Tools: `Docs/Decompiler/tools/a23_round19/` (`mkpiece.py`, `pgen.py` the new families; `famrun19.sh` runs a list of `name words` lines through the printed-C differential 150 at a time; `pcwords.sh` one function verbose; `q1.sh` the round's generator queue; `n.src` the area 3 fixtures N1 to N4, which `../a3_round16/mk.py` turns into specs for `../a23_round18/genrep.sh`).
+
+## Area 2 round 19 / area 3 round 18 fixer
+
+Branch `review/2-a2127-fix`, cut at master `88a4ffac` (patches to 0083; 0082 reserved for the area 5 fixer). Own RelWithDebInfo build (`-j2`), every test binary under `ulimit -v 3500000` (4,000,000 for the generator ranges) and `timeout`, one heavy job at a time, each run at most 20 minutes. The machine restarted once during the runs; the queue was resumed from its last finished piece.
+
+| Row | P | Status | How |
+|---|---|---|---|
+| A2-127 | P2 | **fixed** | patch **0084** (`typeop.cc`); the oracle reads a CONCAT as unsigned |
+| A2-126 | P3 | **fixed** (oracle) | the engine reading gives `xunknown` a type of its own: a cast to a wider unsigned type is the zero extension |
+| A3-161 | P3 | **accepted** | the oracle side added: a store printed in a loop counted against the code's stores in its loops (`text-store.loop-short`), said, not failed |
+| A3-162 | P3 | **accepted** | not A3-156's mechanism: a callee's literal output is no effect a lent prototype carries |
+| A3-156 | P3 | **accepted** | needs a speculative direct call, which the per-site restart (0078) cannot give |
+
+### 1. A2-127: a CONCAT in an op that reads it signed (patch 0084)
+
+The engine propagates the other side's type across a compare, so the `PIECE` of `sext(piece) == exts.w r4` is typed `int2`, and `castStandard` asks for no cast; the CONCAT prints bare, `return CONCAT11(xStack_4,param_4) == param_1;`, which C and the guide read as the unsigned value of the bytes (0 for r4 = 0xFFFF and the bytes 0xFFFF, where the code returns 1). Patch 0080's `compareOtherSideCast` pairs only `int` and `uint` sides. 0084 adds, in `typeop.cc`:
+
+* `impliedPieceRead`: a `PIECE` that is not a variable of its own (0081's test, for any reader).
+* `comparePieceCast`, after 0080's in `TypeOpEqual::getInputCast` and `TypeOpNotEqual::getInputCast`: such a `PIECE` narrower than an int is cast to the other side's type when that side is a signed narrow integer of its size (a named `int2`, a cast, a negative constant), taking for the other side the type `compareCastTarget` gives it when C would extend it otherwise (the cast pass takes slot 0 first). Not when the other side is a CONCAT too, or one C extends by zero.
+* `TypeOpIntSless`, `TypeOpIntSlessEqual`, `TypeOpIntSright` (input 0), `TypeOpIntSdiv`, `TypeOpIntSrem`: the `PIECE` is cast to the op's signed input type whenever `castStandard` asks for no cast.
+
+Texts: `return (int2)CONCAT11(xStack_4,param_4) == param_1;`, `return param_1 <= (int2)CONCAT11(xStack_4,param_4);` (`cmp/ge`), `return (int2)CONCAT11(xStack_4,param_4) < param_1;` (`cmp/gt` the other way), `!=` the same; `(uint2)((int2)CONCAT11(cVar1,param_1) >> 1) < (uint2)(int2)cVar1` (`shar`, `pgen.py` seed 1594). An unsigned compare and a zero extension keep the bare CONCAT. About 35 functional lines in one file.
+
+The shift was not in the row. The first fixed build, with the oracle below, ran `pgen.py` and found seed 1594 `mismatch`: `CONCAT11(cVar1,param_1) >> 1` for `shar` of the `mov.w` read, an arithmetic shift of a value the text gives no sign, which the old oracle's signed `Piece` had excused as `narrow-c`. The same class; 0084 covers the arithmetic shift and the signed division and remainder too.
+
+**The oracle.** The engine reading (`CxxHeader`) took a `Piece` as signed, so `CONCAT11(a,b) == param_1` compared two sign extensions and `g_cmpc` (A10-12) saw no widening difference. `Piece` is `T<N, false>` now, the unsigned value of its bytes, as the guide reads it; the comparison operators of `PIECEOP` are gone, so a compare with a CONCAT is `CMP`'s at its own width and sign: `g_cmpc` counts a narrow compare whose C widening differs (a CONCAT by zero against an `int2` by sign), and an ordered compare reads the CONCAT unsigned unless the text casts it. Arithmetic with a CONCAT keeps `PIECEOP`'s widening by zero (A10-16). A shift of a CONCAT is the logical shift now (the third reading's comment, A3-150, had it the other way in this reading).
+
+Pins (`TestPrintedC`): `A2-127 #0` to `#4` (the class: `==`, `!=`, `cmp/ge`, `cmp/gt` the other way, the shift) and the controls `#5` (`cmp/hs` against `extu.w`) and `#6` (the CONCAT zero-extended first) all `agrees` as C; `A2-127 oracle #0` to `#4`, the same five with the casts taken out by the text hook (the texts before the patch), all `mismatch`.
+
+### 2. A2-126: an `xunknown`'s cast to a wider unsigned type (the oracle)
+
+`xunknownN` is `Unk<N>` in the engine reading: signed as before (an implicit conversion and a cast to a signed type extend by the sign), but `T`'s explicit cast from it to a wider unsigned type is the zero extension, as the engine prints a ZEXT (`(uint4)xStack_4._0_2_`, `(uint4)xStack_2` of `extu.w`) and as the harness reads a CONCAT. A local last assigned a signed value keeps that sign: `xStack_4 = (int2)(...); uVar1 = (uint4)xStack_4;` (the review's hand fixture, the sign extension of `mov.w`) is still the sign extension, A3-150's reading by the assignment. The flag lives beside the object (a map keyed by its address, set by every constructor and assignment), not in it: the harness takes a returned value's width from `sizeof`, and a first version with the flag as a member made every `xunknown8` return 16 bytes (six `stackword16.py` functions `mismatch` on `CONCAT44(param_4,...)`).
+
+Pins: `A2-126 #0` (the row's shrunk words, `pgen.py` seed 77: `narrow-c`, was `mismatch`), `#1` (seed 3372, a local: `narrow-c`), `#2` (the signed local: `narrow-c`, as before), `#3` (the field zero-extended into a sum, `return (uint4)xStack_4._0_2_ + xStack_4;`: `agrees`), and `A2-126 oracle`: the same text with the field sign-extended (`(uint4)(int2)xStack_4._0_2_ + xStack_4`, through the hook) is `mismatch`. (The row's own text with the field sign-extended, `(int4)(int2)xStack_4._0_2_`, agrees with the run on all 32 inputs, a compare that the sign rarely decides, so it is not the pin.)
+
+### 3. A3-161: the oracle side
+
+**What was tried.** (a) Each line that assigns a global at a constant address must hold an instruction that writes there in the run: false positives in the area 7 pins (1843925, 1843207, 1881632, 1894780), because a store's statement need not hold the store's instruction (the engine draws `iRam06002308 = iRam06002308 * 2` at the `add` whose output it merged into the global). (b) The text's stores of an address against the run's stores there that the engine keeps: the `tas.b`'s byte store is `FoldedOrdinary` in the records, so the seed's two printed stores met two code stores, and the same false positives remained (a store printed on both paths of an `if` where the code stores once after the join: the same merge, outside a loop).
+
+**What is in.** `CheckFn` counts, run by run, each line inside a loop of the text (`do {`, `while (...) {`, `for (...) {`) that assigns a global at a constant address (`+=` and fields too) as a store each time it runs (as often as the least-run of its instructions, `LineInstructions`), and the code's stores there of at least the global's width (a field's; else the token's inspection target; else the widest write the engine keeps there) made by instructions in a block on a cycle of the flow (`FlowReach`). A shortfall is counted, `text-store.loop-short`, and said in the report (`said [n:text-store] ...`). A store printed more often than the run stores the address at all, anywhere, is counted as `text-store.extra`. Neither fails: the class is frequent (below), the row is accepted, and a finding would fail every run until the engine stops merging a register into the global it is stored to. The count includes texts that are honest about their bytes (`uRam26001028 = CONCAT13(in_r1,uRam26001028._1_3_);`, a byte stored in a loop written as the four-byte global with three bytes kept): it is an upper bound on the row's class.
+
+Pins (`TestA3161Pins`, in the generator's default run): the row's words, `loop-short` 1; the same loop followed by the store on one path (`tst r5,r5 ; bt`), whose text prints the `tas.b` as `uRam06002308 = uRam06002308 | 0x8000;` (the byte's read-modify-write at the global's two-byte width): `loop-short` 1; the `mov.w` moved into the loop (the same text as the seed; its store in the loop is made each trip): 0, its store before the loop not seen because the `tas.b`'s byte makes the counts equal; a `tas.b` loop the engine keeps (`uRam06002308 = uRam06002308 | 0x80;`): 0 and `extra` 0. None of the four has a finding.
+
+Counts at 2,400,001 (5,000 seeds each): grammar 1, `text-store.checked` 1,578, `loop-short` 77, `extra` 102; grammar 2, 700, 20 and 22. The generator's default run (300 seeds and the pins): `loop-short` 2, `extra` 2.
+
+**A3-161 accepted** (P3): the final memory and every value are right; the engine fix (not merging a loop's register into the address-tied global, or not printing the merged copies as stores) is in the merge, not simple.
+
+### 4. A3-162 and A3-156: accepted
+
+**A3-162.** A lent callee's effects are the registers it keeps (`CallEffects::preserved`, patch 0028); the value it leaves in a register it does not keep is the call's output, which no prototype carries. So after B sets r3 to C's address, r3 is `extraout_r3` for the engine whatever B's code says, and the third `jsr @r3` is never a constant target; A3-156's mechanism (0078: a restart for each site that converts) never starts because the site does not convert. Carrying it would need a new kind of effect (a register's constant value at every return) through the host's summaries, the engine's prototype and the call's outputs. The text is honest, nothing is lent wrongly, the function is withheld; a compiled caller reloads a call target rather than taking it from a callee's scratch register.
+
+**A3-156.** The loop's join of the literal and the call's own r3 is the literal only once the call is direct with the callee's effects, and the call is direct only once its target is a constant: the engine would have to convert the call on the assumption that the join resolves, restart, and undo the conversion if it does not. 0078 restarts per site that converts; it has no such speculation. Accepted as filed (honest text, withheld).
+
+### 5. Runs
+
+| Run | Result |
+|---|---|
+| `mkpiece.py` (4,550) | agrees 4,025, narrow-c 525, **0 `mismatch`** (the review: 4,007, 543, 0: 18 texts that agreed only with a signed CONCAT print the cast and agree as C) |
+| `pgen.py` 1 to 400 and 1,000 to 6,999 (6,400) | agrees 6,088, narrow-c 293, skipped 19, **0 `mismatch`** (the review: 6,075, 304, 2 `mismatch`: A2-126) |
+| `pgen.py` 7,000 to 12,999 (6,000, fresh) | agrees 5,740, narrow-c 237, skipped 23, **0 `mismatch`** |
+| `stackword16.py` (572) | agrees 481, narrow-c 89, as before |
+| printed-C, nightly size, `SE_GENERATED_FIRST` 1, 5,001, 10,001, 15,001 (5,000 each) | 9,168 / 9,033 / 9,007 / 9,072 functions, **0 `mismatch`**; agrees 8,545 / 8,415 / 8,392 / 8,513, narrow-c 205 / 208 / 216 / 163 |
+| printed-C, 2,400,001 to 2,405,000 (fresh) | 9,148 functions, **0 `mismatch`**: agrees 8,533, narrow-c 217, void-return 352 + 35, skipped 11 |
+| grammar 1, 2,400,001 to 2,405,000 | 3 failing seeds, **none this branch's**: 2400221 (`map-way-back`), 2402555 (`map-const-join`), 2404131 (`map-store-value`), area 7's mapping checks, each the same on master's engine (`gen_base`); routed to area 7 |
+| grammar 2, 2,400,001 to 2,405,000 | **0 failing seeds** |
+| corpus | below |
+
+The printed-C counts differ from the "Printed-C harness: A2-125 and A3-159" table (8,533 / 217 for the first piece) by the C compiler: that table is gcc-14's, these are the system `cc` (gcc 13). Seeds 1 to 5,000 run with master's binary and this branch's with the same compiler give the same classes, function for function (the narrow-c names compared): the nightly's stream draws no CONCAT compare, shift or division.
+
+### 6. Corpus
+
+`SE_GAME_HWRAM=<img> SE_GAME_LEND=1 SE_GAME_NOTES=1 SE_GAME_OUT=<dir> SaturnExplorerSh2DecompilerTests`, both images, with this branch's binary and with the same binary built on master's `typeop.cc` (patches to 0083):
+
+| | hwram007 | hwram008 |
+|---|---|---|
+| real entries, lent after lending the effects | 474 (645) of 999 | 724 (975) of 1,543 |
+| missing and said | 0 | 4 |
+| result | all passed (134 s) | all passed (506 s) |
+| output files against master's engine | 4,299, **all identical** | 7,544, **all identical** |
+
+The expected counts. No game function prints a CONCAT in a signed compare, shift or division: 0084 changes no corpus text (the two `(int2)CONCAT` of each image are 0081's sign extensions).
+
+### 7. Tests
+
+* **Full `ctest`:** `-j2 --timeout 900 -E SaturnExplorerLive` under `ulimit -v 3500000`: **111 of 111** (274 s; `SaturnExplorerSh2DecompilerTests` 40 s, `SaturnExplorerSh2PrintedCTests` 43 s, `SaturnExplorerSh2GeneratedTests` 29 s); `-R SaturnExplorerLive`: **6 of 6** (29 s). 111 plus 6 Live, the master count. **No test was added to the list**: the new pins (`A2-127 #0` to `#6`, `A2-127 oracle #0` to `#4`, `A2-126 #0` to `#3`, `A2-126 oracle`) are in `SaturnExplorerSh2PrintedCTests`, and `TestA3161Pins` in the generator's default run (`SaturnExplorerSh2GeneratedTests`).
+* **Default runs:** the printed-C default run passes (651 functions, `agrees=612 narrow-c=16`, the same classes as before); the generator's default run passes, 0 findings (`text-store.loop-short` 2, said).
+* **Fault suite** (`SaturnExplorerDecompilerFaultTests` alone): **0 of 94 jobs failed** (96 s).
+* **Vendored tree:** `check-vendored-tree.py lint` and `rebuild` (against the pinned upstream at 918d44eb): ok. 0084 has its rows in `patches/README.md` and `VENDOR.md` and the notice in `typeop.cc`; 0082 stays reserved.
+
+### 8. Routed
+
+* **Area 7:** grammar 1 seeds **2400221** (`map-way-back`: 0600902A answered with a copy materialised before its own statement, A7-25's check), **2402555** (`map-const-join`: `uVar4 = 0;` drawn at the `shlr8` that begins a join) and **2404131** (`map-store-value`: `xRam26001000 = xVar2;` names the store at 0600901C, whose register holds another value). Each is the same on master's engine. Replay: `SE_GENERATED_GRAMMAR=1 SE_GENERATED_SEED=<seed> SE_GENERATED_CANARY=0`.
+* **A3-161's class** is frequent (1.5 percent of grammar 1 seeds have a store printed in a loop that the code's loops do not make at that width), and is now counted; the engine side (the merge of a register with the address-tied global it is stored to) is for area 3 if the coordinator wants it fixed rather than accepted.
