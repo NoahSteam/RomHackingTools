@@ -15789,12 +15789,6 @@ int main(int argc, char** argv)
     CHECK(sfe::MakeDirectory(scratch));
     gConfig = dts::Join(scratch, "config");
     CHECK(sfe::MakeDirectory(gConfig));
-    if (std::getenv("SE_A7R8_ONLY"))   // TEMP-A7R8
-    {
-        TestArea7Round8();
-        dts::RemoveTree(scratch);
-        return dts::Finish("Sh2DecompilerTests (a7r8)", start);
-    }
     if (const char* probe = std::getenv("SE_A7R4_PROBE"))   // area 7 round 4: the reviewer's probe file, nothing else
     {
         TestArea7Round4Probe(probe);
