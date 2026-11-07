@@ -1818,17 +1818,17 @@ void TestArea7Round8()
     const std::vector<uint16_t> gbrWords = { 0xD605, 0xD706, 0x6071, 0xC801, 0x89FC, 0x4008, 0xC106, 0x6062, 0x2602, 0x8561, 0x000B, 0x0009,
                                              0x2600, 0x2080, 0x0600, 0x1034 };
     {
+        // (A5-111, patch 0088: the half read at 06009012 was the piece store `xRam26002080._2_2_ = (int2)xRam26002080;`, the copy this pin was
+        // about; the half is now read into a temporary, the store goes, and the value kept at the gbr store is the return's)
         const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, gbrWords);
         Print("A7-57 a global's value kept at a store that may alias it", r);
         const LineLookup k = LineForInstruction(r, 0x0600900Cu);
         CHECK(k.kind == LineLookup::Exact && !k.lines.empty());
-        if (!k.lines.empty()) CHECK(Has(r.lines[k.lines[0]].text, "unaff_gbr + 0xc"));
+        CHECK(!Has(r.Text(), "._2_2_ ="));
+        const Line* store = LineWith(r, "unaff_gbr + 0xc");
+        const Line* ret = LineWith(r, "return (int4)(int2)xRam26002080;");
+        CHECK(store != nullptr && ret != nullptr && store < ret);
         CHECK(dts::AuditMapping(r, word, "a7_57 gbr").Violations() == 0);
-        // ...the check (A7-25's, read from the text) still sees the copy first when the marks are taken off
-        DecompileResult damaged = r;
-        for (Line& x : damaged.lines)
-            for (Token& t : x.tokens) t.materialised = false;
-        CHECK(dts::AuditMapping(damaged, word, "a7_57 unmarked").backWrong >= 1);
     }
     // A7-57, the oracle's (grammar 1 seed 2306106 shrunk): `extu.w r5,r2` is stored by two stores, and both lines print the extension
     // (`uRam2600219c = (uint4)param_2;` first). A7-25's check took the cast's operand, drawn at the extension, for a copy materialised there
@@ -1913,16 +1913,20 @@ void TestArea7Round8()
     // param_1;` and puts the global back with `xRam26001000 = xVar1;` at the store of r4. A7-42's search for a register variable that holds
     // a parameter looked one assignment deep; it follows the chain now. With xVar1 assigned another global, the store is still another value.
     {
+        // (A5-111, patch 0088: the half read of the global was a store of that half, and the merge kept the parameter in xVar1 and wrote it back;
+        // the half is now read into a temporary: `xRam26001000 = param_1;` at the store, no write-back. The chain A7-63's oracle change follows is
+        // not printed for these words any more; the store's value is still judged.)
         const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, { 0xD602, 0x6243, 0x2622, 0x6061, 0x000B, 0x0009, 0x2600, 0x1000 });
         Print("A7-63 a variable that holds a parameter through a global", r);
-        CHECK(LineWith(r, "xRam26001000 = xVar1;") != nullptr);
+        CHECK(LineWith(r, "xRam26001000 = param_1;") != nullptr);
+        CHECK(LineWith(r, "xRam26001000 = xVar1;") == nullptr);
         CHECK(dts::AuditMapping(r, word, "a7_63").Violations() == 0);
         DecompileResult other = r;
         int n = 0;
         for (Line& x : other.lines)
-            if (x.text == "  xVar1 = xRam26001000;")
+            if (x.text == "  xRam26001000 = param_1;")
             {
-                x.text = "  xVar1 = xRam26001004;";
+                x.text = "  xRam26001000 = param_2;";
                 ++n;
             }
         CHECK(n == 1 && dts::AuditMapping(other, word, "a7_63 other").storeValueOther == 1);
