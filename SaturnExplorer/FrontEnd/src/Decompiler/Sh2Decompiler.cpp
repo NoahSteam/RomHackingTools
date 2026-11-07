@@ -7222,6 +7222,12 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                 if (w->insn == at) return true;
             return false;
         };
+        // A7-59: a statement of a call's own output at the call (`xStack_58 = (xunknown4)Var4;`, the call's r1) is shown by a store only
+        // when the call's value reaches it: the call among the last writers of the register the store stores. The push of a loaded r2
+        // after the call, whose value the walk cannot place ("may"), is another value; the push of r1 is the statement's.
+        // (not a copy of memory the call may change, `xRam0600210c = xRam06002110;`: the global's value after it, whose load is A7-59's)
+        const bool callOutput = flow.callInsns.count(at) && o->numInput() > 0 && o->getIn(0)->getSpace()->getType() != ghidra::IPTR_SPACEBASE &&
+                                o->getIn(0)->getSpace() != fd.getArch()->getDefaultDataSpace() && StatementValues(o, flow.opsEnd).insns.count(at);
         // A7-23: a store is the statement's only when it wrote the statement's value (StoreShowsValue). The search below finds the stores
         // of the variable by where they are; this says which of them the line shows.
         bool valuesFound = false;
@@ -7235,7 +7241,7 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
             }
             const auto f = shown.find(r);
             if (f != shown.end()) return f->second;
-            if (ownNumber && !ownOpReaches(r))
+            if ((ownNumber || callOutput) && !ownOpReaches(r))
             {
                 shown[r] = false;
                 return false;

@@ -1796,8 +1796,8 @@ void TestArea7Round8()
     }
     // A7-56, the oracle's (grammar 1 seed 2307885 shrunk): `uRam26001004 = 4;` at its `mov #4,r0` (r0, the poll's load, merged under the
     // global's name) names no store: the only store of the global writes the input r2. A7-45's count took any compare of two registers for
-    // one that may tie the input to the number, and `cmp/eq r1,r1` compares nothing. Counted apart now; with `cmp/eq r2,r1` (r2, the
-    // stored input, compared) the check still asks for the store.
+    // one that may tie the input to the number, and `cmp/eq r1,r1` compares nothing. Counted apart now; with `cmp/eq r0,r2` (r2, the
+    // stored input, compared with r0, which the code makes) the check still asks for the store.
     const std::vector<uint16_t> pollFour = { 0xD706, 0x6071, 0xC801, 0x8BFC, 0x8803, 0x8B01, 0xE004, 0x0635, 0x8176, 0x2721, 0x3110, 0x89FF,
                                              0x000B, 0x0009, 0x2600, 0x1004 };
     {
@@ -1806,7 +1806,7 @@ void TestArea7Round8()
         const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_56 self compare");
         CHECK(a.Violations() == 0 && a.copyNumberMade == 1);
         std::vector<uint16_t> tied = pollFour;
-        tied[10] = 0x3120;   // cmp/eq r2,r1
+        tied[10] = 0x3200;   // cmp/eq r0,r2
         const DecompileResult t = a7r4::DecompileWords(d, hw, 0x06009000u, tied);
         const dts::MappingAudit ta = dts::AuditMapping(t, word, "a7_56 tied");
         CHECK(ta.copyNumberMade == 0 && ta.copyStoreMissing == 1);
@@ -1949,7 +1949,7 @@ void TestArea7Round8()
     // A7-61 (the area 5 fixer's grammar 1 seed 2017373, shrunk), the oracle's: `xRam06002304 = 0x66;` at its `mov #0x66,r0` (r0,
     // the global's load, merged under its name) names no store; the only store writes the input r6. A7-45's count took `cmp/eq r3,r2`
     // (r3 the global's address) for a compare that may tie r6 to 0x66; only a compare of the stored register, or of one moved into it,
-    // does. With `cmp/eq r6,r2` the check still asks for the store. (The text's loop is the engine's: area 3.)
+    // does. With `cmp/eq r0,r6` (r0 the 0x66) the check still asks for the store. (The text's loop is the engine's: area 3.)
     {
         std::vector<uint16_t> w = { 0xD309, 0x6032, 0x2362, 0x2502, 0xE301, 0x8170, 0xE066, 0x4310, 0x8BFB, 0x3230, 0x89FF, 0xD705, 0xE001,
                                     0x2701, 0x6071, 0xC801, 0x8BFC, 0x000B, 0x0009, 0x0009, 0x0600, 0x2304, 0x0600, 0x1010 };
@@ -1957,10 +1957,99 @@ void TestArea7Round8()
         Print("A7-61 a number at its maker, a compare of other registers", r);
         const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_61");
         CHECK(a.Violations() == 0 && a.copyNumberMade == 1);
-        w[9] = 0x3260;   // cmp/eq r6,r2
+        w[9] = 0x3600;   // cmp/eq r0,r6
         const DecompileResult t = a7r4::DecompileWords(d, hw, 0x06009000u, w);
         const dts::MappingAudit ta = dts::AuditMapping(t, word, "a7_61 tied");
         CHECK(ta.copyNumberMade == 0 && ta.copyStoreMissing == 1);
+    }
+    // Routed from the area 2 round 20 reviewer (each fails the same on master's binary) and this round's fresh run, shrunk.
+    // A7-59 (the product's), grammar 2 seed 2405581 of the fresh run: `bsr f ; ... mov.l @(0x14,r6),r2 ; mov.l r2,@-r15 ; ... mov.l
+    // r1,@-r15` to one frame word. `xStack_58 = (xunknown4)Var4;` (the call's r1) at the `bsr` named the push of the loaded r2, whose value
+    // the walk cannot place; a statement of the call's own output is shown only by a store the call's value reaches: the push of r1.
+    {
+        const std::vector<uint16_t> w = { 0x2F86, 0x2F96, 0x2FA6, 0x2FC6, 0x2FE6, 0x0C2A, 0x7FC0, 0x6EF3, 0x6843, 0x6953, 0x6A63, 0x62F3, 0x7240, 0xE103, 0x2216, 0x4110, 0x8BFC, 0xE200, 0xB018, 0x0009, 0x6483, 0x6593, 0x66A3, 0x5265, 0x2F26, 0x2401, 0x62F6, 0x2F16, 0x61F6, 0xB00D, 0x0009, 0x6483, 0x6593, 0x66A3, 0x7E40, 0x6FE3, 0x4C2A, 0x6EF6, 0x6CF6, 0x6AF6, 0x69F6, 0x68F6, 0x000B, 0x0009, 0x2FD6, 0x2068, 0x8901, 0xA004, 0x0009, 0xE006, 0xCEDA, 0xA000, 0x0009, 0xE04A, 0x6DF6, 0x000B, 0x0009 };
+        std::fill(hw.begin(), hw.end(), 0);
+        for (size_t i = 0; i < w.size(); ++i) dts::Put16(hw, 0x9000u + 2 * i, w[i]);
+        auto snap = MakeSnapshot(hw);
+        DecompileRequest q = Request(0x06009000u);
+        q.prototypes.emplace_back(0x06009058u, d.Decompile(snap, Request(0x06009058u)).prototype);
+        const DecompileResult r = d.Decompile(snap, q);
+        Print("A7-59 a call's output pushed after another push to the same word", r);
+        const Line* l = LineWith(r, "xStack_58 = ");
+        CHECK(l != nullptr);
+        if (l)
+        {
+            const std::vector<uint32_t> at = LineInstructions(*l);
+            CHECK(std::find(at.begin(), at.end(), 0x06009036u) != at.end() && std::find(at.begin(), at.end(), 0x06009030u) == at.end());
+        }
+        CHECK(dts::AuditMapping(r, word, "a7_59 call output").Violations() == 0);
+    }
+    // A7-58 (the oracle's), grammar 2 seed 2502184: `rotcl r3` with r3 0 after a `dt` loop sets T to 0 (`bVar2 = false;` at it). A shift
+    // or a rotate gives T the bit it shifts out; the line showing 2 (neither T nor what the rotate leaves in r3) is still a violation.
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, { 0x2FD6, 0xE301, 0x4310, 0x8901, 0xAFFC, 0x0009, 0x4324, 0xE301,
+            0x0129, 0x2410, 0x4310, 0x8BFB, 0x6DF6, 0x000B, 0x0009 });
+        Print("A7-58 the T bit a rotcl of a known 0 sets", r);
+        CHECK(dts::AuditMapping(r, word, "a7_58 rotcl").Violations() == 0);
+        DecompileResult other = r;
+        int n = 0;
+        for (Line& x : other.lines)
+            if (Has(x.text, "bVar2 = false;") && x.firstAddr == 0x0600900Cu)
+            {
+                x.text = "  bVar2 = 2;";
+                ++n;
+            }
+        CHECK(n == 1 && dts::AuditMapping(other, word, "a7_58 rotcl other").constAtJoin == 1);
+    }
+    // A7-58 (the oracle's), grammar 2 seed 2500642: `mov #0x1c,r0` at a join, then only `tst #0x40,r0`: the engine shows `uStack_8 = 0;`
+    // (0x1C has bit 6 clear). A number that agrees with the shown one on the bits a `tst`/`and #imm,r0` keeps, put in r0 the line's
+    // variable is, is made there; the line showing 0x40 is still a violation.
+    {
+        const std::vector<uint16_t> w = { 0x2F86, 0x2F96, 0x2FC6, 0x0C2A, 0x6843, 0x6953, 0xE07E, 0x4C2A, 0x6CF6, 0x69F6, 0x68F6, 0x000B, 0x0009, 0x2FE6, 0x7FFC, 0x6EF3, 0x85E0, 0xE301, 0xA002, 0x0009, 0xE01C, 0x015E, 0x4310, 0x8BFB, 0xC840, 0x8B00, 0x6242, 0x6063, 0x7E04, 0x6FE3, 0x6EF6, 0x000B, 0x0009 };
+        std::fill(hw.begin(), hw.end(), 0);
+        for (size_t i = 0; i < w.size(); ++i) dts::Put16(hw, 0x9000u + 2 * i, w[i]);
+        const DecompileResult r = d.Decompile(MakeSnapshot(hw), Request(0x0600901Au));
+        Print("A7-58 a number at a join of which only a tested bit is used", r);
+        CHECK(dts::AuditMapping(r, word, "a7_58 tst bit").Violations() == 0);
+        DecompileResult other = r;
+        int n = 0;
+        for (Line& x : other.lines)
+            if (Has(x.text, "uStack_8 = 0;"))
+            {
+                x.text.replace(x.text.find("= 0;"), 4, "= 0x40;");
+                ++n;
+            }
+        CHECK(n == 1 && dts::AuditMapping(other, word, "a7_58 tst bit other").constAtJoin == 1);
+    }
+    // A7-61 (the oracle's), grammar 1 seed 2500514: `cmp/eq r1,r3`, r1 only the function's input, ties the stored r3 to no number:
+    // `uRam26001034 = 6;` at its `mov #6,r0` is counted apart. With `cmp/eq r0,r3` (r0 the 6) the check still asks for a store.
+    {
+        std::vector<uint16_t> w = { 0xD707, 0x8801, 0x8F03, 0x6070, 0x2730, 0xE006, 0xCC12, 0x2028, 0x8F00, 0x230B, 0x2730, 0x3310, 0x89FF,
+                                    0x000B, 0x0009, 0x0009, 0x2600, 0x1034 };
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, w);
+        Print("A7-61 a compare with an input", r);
+        const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_61 input compare");
+        CHECK(a.Violations() == 0 && a.copyNumberMade == 1);
+        w[11] = 0x3300;   // cmp/eq r0,r3
+        const DecompileResult t = a7r4::DecompileWords(d, hw, 0x06009000u, w);
+        CHECK(dts::AuditMapping(t, word, "a7_61 number compare").copyNumberMade == 0);
+    }
+    // A7-58 (the oracle's), grammar 1 seed 2406142 of the fresh run: `cmp/pl r1 ; bt/s L ; shll16 r1 ; L: ... M: extu.b r1,r2` at a loop's
+    // head is 0 (`xVar1 = 0;`): the low bits the shifts that made r1 left 0, on every path. Showing 1 is still a violation.
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, { 0x4115, 0x8D00, 0x4128, 0xD707, 0x6070, 0xC801, 0x8BFC, 0xE301,
+            0x621C, 0x2008, 0x8901, 0xD204, 0x262A, 0x4310, 0x8BF8, 0x2522, 0x000B, 0x0009, 0x0600, 0x1008, 0x2000, 0x0000 });
+        Print("A7-58 an extension of a shifted register", r);
+        CHECK(dts::AuditMapping(r, word, "a7_58 extension").Violations() == 0);
+        DecompileResult other = r;
+        int n = 0;
+        for (Line& x : other.lines)
+            if (Has(x.text, "Var1 = 0;") && x.firstAddr == 0x06009010u)
+            {
+                x.text.replace(x.text.find("= 0;"), 4, "= 1;");
+                ++n;
+            }
+        CHECK(n == 1 && dts::AuditMapping(other, word, "a7_58 extension other").constAtJoin == 1);
     }
     // A7-59 (P2), the product's (grammar 2 seed 2306048 shrunk): `bsr f ; ... mov.l lit,r6 ; mov.l @(4,r6),r1 ; mov.w r2,@r5 ; mov.l r1,@r6`.
     // The engine prints `xRam0600210c = xRam06002110;` at the `bsr` (the global's value after the call, ahead of the store through r5 that

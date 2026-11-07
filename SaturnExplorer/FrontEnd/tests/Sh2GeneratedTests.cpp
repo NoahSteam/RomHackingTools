@@ -12791,12 +12791,17 @@ void TestDomainPins(Sh2Decompiler& d)
     // the matrix's grammar 1 seed 7557 (A7-62, a regression from A7-52: a copy of a global read through an address made by an AND named nothing).
     // Routed from the A2-127 fixer, the oracle's: grammar 1 seeds 2400221 (a cast's operand at a `movt`, A7-57), 2402555 (`shlr8` of an
     // `extu.b`'s byte, A7-58) and 2404131 (A7-63: a register variable that holds a parameter through a global). A7-60's second
-    // seed, grammar 2 2061746 (A7-59's shape: the load and the store after the call on both paths of a test, past a jump).
+    // seed, grammar 2 2061746 (A7-59's shape: the load and the store after the call on both paths of a test, past a jump). Routed from
+    // the area 2 round 20 reviewer: grammar 2 seeds 2500642 (a number agreeing on a tested bit) and 2502184 (`rotcl`'s T), A7-58's; grammar
+    // 1 seeds 2500514 (a compare with an input, A7-61's), 2501451 (A7-62's), 2509053 (a store inside the variable, A7-56's). This round's
+    // fresh run: grammar 1 seed 2406142 (an extension of a shifted register, A7-58's) and grammar 2 seed 2405581 (a call's output pushed
+    // after another push to the same word, A7-59's).
     for (const auto& s : { std::make_pair(2, 2301680), std::make_pair(2, 2306761), std::make_pair(2, 2308270), std::make_pair(1, 2301471),
                            std::make_pair(1, 2307885), std::make_pair(1, 2304859), std::make_pair(1, 2306106), std::make_pair(1, 1904684),
                            std::make_pair(1, 2307943), std::make_pair(2, 2308936), std::make_pair(2, 2301509), std::make_pair(2, 2306048),
                            std::make_pair(1, 7557), std::make_pair(1, 2400221), std::make_pair(1, 2402555), std::make_pair(1, 2404131),
-                           std::make_pair(2, 2061746) })
+                           std::make_pair(2, 2061746), std::make_pair(2, 2500642), std::make_pair(2, 2502184), std::make_pair(1, 2500514),
+                           std::make_pair(1, 2501451), std::make_pair(1, 2509053), std::make_pair(1, 2406142), std::make_pair(2, 2405581) })
     {
         const Report rep = Evaluate(d, s.first == 2 ? MakeV2(s.second) : Generate(s.second), true);
         std::printf("pin 'area 7 round 8: grammar %d seed %d': %zu finding(s)\n", s.first, s.second, rep.findings.size());

@@ -1887,7 +1887,15 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     // at its own instruction)
                     if (!frame && t.begin < t.end)
                         for (const MemoryAccess& m : r.accesses)
+                            // (or inside it: `mov.w r1,@(r0,r7)` writing 0x26002306, the low half of `uRam26002304 = (uint4)in_r1;`,
+                            // grammar 1 seed 2509053 routed from the area 2 round 20 reviewer)
                             if (m.write && m.direct && m.insn == t.addr && GlobalDelta(at, m.address) < m.size) named = true;
+                    // (A7-56: or a folded store drawn there that writes inside the variable, after its first byte: `mov.w r1,@(r0,r7)`
+                    // writing 0x26002306, the low half of `uRam26002304 = (uint4)in_r1;`, grammar 1 seed 2509053 routed from the area 2
+                    // round 20 reviewer)
+                    if (t.begin < t.end)
+                        for (const AccessFate* f : folded)
+                            if (f->insn == t.addr && f->frame == frame && (frame ? f->address - at : GlobalDelta(f->address, at)) < 4) named = true;
                     uint16_t w = 0;
                     if (t.begin == t.end || !word(t.addr, w)) continue;
                     const sfe::DisassembledInstruction d = sfe::Sh2Decode(t.addr, w);
@@ -1973,7 +1981,17 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                                 if (!word(p, cw)) continue;
                                 if ((cw >> 8) == 0x88 && sameNumber(static_cast<uint32_t>(static_cast<int32_t>(static_cast<int8_t>(cw & 0xFF))))) return true;
                                 const int n = (cw >> 8) & 0xF, m = (cw >> 4) & 0xF;
-                                if ((cw >> 12) == 0x3 && (cw & 0xF) == 0x0 && n != m && (chain.count(n) || chain.count(m))) return true;
+                                if ((cw >> 12) == 0x3 && (cw & 0xF) == 0x0 && n != m && (chain.count(n) || chain.count(m)))
+                                {
+                                    // (...against a register that is only the function's input, which no number made: `cmp/eq r1,r3` with
+                                    // r1 in_r1 ties r3 to nothing the engine knows, grammar 1 seed 2500514 routed from the area 2 round 20
+                                    // reviewer)
+                                    const int other = chain.count(n) ? m : n;
+                                    std::set<uint32_t> makers;
+                                    if (!chain.count(other) && RegisterMakers(r, word, sources, p, other, makers) && makers.size() == 1 && makers.count(0))
+                                        continue;
+                                    return true;
+                                }
                             }
                         return false;
                     };
@@ -2304,6 +2322,27 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     if (imm && ((w & 0xFFu) & widthMask) == 0) computes = true;
                 }
                 if (w == 0x0018 && want == 1) computes = true;
+                // (an extension of a register only shifts left made: `extu.b r1,r2` after `shll16 r1` is 0, the A7-43 pair apart, grammar
+                // 1 seed 2406142, this round's fresh run)
+                // (the low bits the left shifts that made it, on every path, leave 0: `shll16` then, on one path, `shll2`, 16 or 18)
+                if (!computes && want == 0 && ((w & 0xF00F) == 0x600C || (w & 0xF00F) == 0x600D))
+                {
+                    std::function<int(uint32_t, int, int)> zeroBits = [&](uint32_t before, int reg, int depth) -> int {
+                        std::set<uint32_t> makers;
+                        if (depth > 4 || !RegisterMakers(r, word, sources, before, reg, makers) || makers.empty() || makers.count(0)) return 0;
+                        int least = 64;
+                        for (uint32_t m : makers)
+                        {
+                            uint16_t mw = 0;
+                            int k = 0;
+                            if (word(m, mw) && (mw >> 12) == 0x4 && ((mw >> 8) & 0xF) == reg)
+                                k = (mw & 0xFF) == 0x28 ? 16 : (mw & 0xFF) == 0x18 ? 8 : (mw & 0xFF) == 0x08 ? 2 : ((mw & 0xFF) == 0x00 || (mw & 0xFF) == 0x20) ? 1 : 0;
+                            least = std::min(least, k ? k + zeroBits(m, reg, depth + 1) : 0);
+                        }
+                        return least;
+                    };
+                    if (zeroBits(at, (w >> 4) & 0xF, 0) >= ((w & 0xF) == 0xC ? 8 : 16)) computes = true;
+                }
                 // (A7-58: a test or a compare sets the T bit from registers whose values the words give -- `tst r4,r3` with r3 0 after a
                 // `dt` loop is 1, `uVar2 = 1;` the bit `negc` reads -- as `sett` does)
                 if (!computes)
@@ -2327,6 +2366,12 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     else if ((w >> 12) == 0x3 && (w & 0xF) == 0x0 && known(rn, a1) && known(rm, a2)) t = a1 == a2 ? 1 : 0;   // cmp/eq Rm,Rn
                     else if ((w >> 8) == 0x88 && known(0, a1))   // cmp/eq #imm,r0
                         t = a1 == static_cast<uint32_t>(static_cast<int32_t>(static_cast<int8_t>(w & 0xFF))) ? 1 : 0;
+                    // (a shift or a rotate puts the bit it shifts out in T: `rotcl r3` with r3 0 after a `dt` loop is 0, grammar 2 seed
+                    // 2502184 routed from the area 2 round 20 reviewer)
+                    else if ((w >> 12) == 0x4 && ((w & 0xFF) == 0x00 || (w & 0xFF) == 0x04 || (w & 0xFF) == 0x20 || (w & 0xFF) == 0x24) && known(rn, a1))
+                        t = static_cast<int>(a1 >> 31);   // shll, rotl, shal, rotcl
+                    else if ((w >> 12) == 0x4 && ((w & 0xFF) == 0x01 || (w & 0xFF) == 0x05 || (w & 0xFF) == 0x21 || (w & 0xFF) == 0x25) && known(rn, a1))
+                        t = static_cast<int>(a1 & 1);     // shlr, rotr, shar, rotcr
                     if (t >= 0 && sameNumber(static_cast<uint32_t>(t))) computes = true;
                 }
                 // (A7-58: `shll8 Rn` leaves Rn's low byte 0, `shll16` its low half: the engine prints the shifted register as 0 where it uses
@@ -2423,6 +2468,35 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                                           "), the first instruction of a join, which makes the number into r" + std::to_string(rm) +
                                           "; the paths into the join set it in r" + std::to_string(other));
                 continue;
+            }
+            // (A7-58: a `mov #imm,r0` of another number where the code then uses only bits of r0 on which the two agree -- `mov #0x1c,r0`
+            // and `tst #0x40,r0`, shown as `uStack_8 = 0;` -- when the line's variable is r0 where the text uses it: grammar 2 seed 2500642
+            // routed from the area 2 round 20 reviewer)
+            if (numberInsn && (w >> 12) == 0xE && ((w >> 8) & 0xF) == 0 && made(at, w, got))
+            {
+                bool agree = false;
+                for (uint32_t p = r.entry; p <= highest && highest - r.entry < 0x100000u && !agree; p += 2)
+                {
+                    uint16_t tw = 0;
+                    if (word(p, tw) && ((tw >> 8) == 0xC8 || (tw >> 8) == 0xC9) && ((got ^ want) & (tw & 0xFFu)) == 0) agree = true;
+                }
+                const size_t nameBegin = text.find_first_not_of(' ');
+                const std::string name = text.substr(nameBegin, text.find(" = ", nameBegin) - nameBegin);
+                bool usesR0 = false;
+                for (const Line& l : r.lines)
+                    for (const Token& t : l.tokens)
+                    {
+                        uint16_t tw = 0;
+                        if (usesR0 || !agree || !t.addr || t.addr == at || t.begin >= t.end || t.end > l.text.size() ||
+                            l.text.compare(t.begin, t.end - t.begin, name) != 0 || !word(t.addr, tw))
+                            continue;
+                        const std::string ops = sfe::Sh2Decode(t.addr, tw).Operands;
+                        for (size_t k = 0; k + 1 < ops.size(); ++k)
+                            if (ops[k] == 'r' && ops[k + 1] == '0' && (k + 2 >= ops.size() || !std::isdigit(static_cast<unsigned char>(ops[k + 2]))) &&
+                                (k == 0 || !std::isalnum(static_cast<unsigned char>(ops[k - 1]))))
+                                usesR0 = true;
+                    }
+                if (agree && usesR0) continue;
             }
             ++a.constAtJoin;
             problem("const-join", "line " + std::to_string(li) + " '" + text + "' is drawn at " + MappingHex(at) + " (" + d.Mnemonic + " " + d.Operands +
