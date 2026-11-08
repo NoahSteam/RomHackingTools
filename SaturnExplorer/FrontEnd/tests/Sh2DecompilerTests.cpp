@@ -15891,6 +15891,72 @@ void TestArea5Confirm()
     }
 }
 
+// Area 5, review round after patches 0082, 0085 and 0088 (rows A5-114 to A5-116). Each fixture holds today's text (the checks marked DEFECT,
+// which the fixer turns round) beside a control that has the right order. The global is 0x06030000; when the pointer the code reads through
+// is that address, or a register write between starts a transfer of it, the order is the value.
+void TestArea5Review()
+{
+    Sh2Decompiler d(gConfig);
+    std::vector<uint8_t> hw(0x100000u, 0);
+    struct W { const char* name; uint32_t base; std::vector<uint16_t> words; };
+    const std::vector<W> fx = {
+        // A5-114: mov.l @(lit),r6 (0x06030000) ; mov.l @(lit),r3 (SCU_D0EN) ; mov #1,r7 ; mov.w r1,@r6 ; mov.l r7,@r3 ; rts ; mov.b r2,@r6
+        // -- the half-word write, then the DMA enable, then a byte write over the half's first byte
+        { "a5_114_hw", 0x06052000u, { 0xD603, 0xD304, 0xE701, 0x2611, 0x2372, 0x000B, 0x2620, 0x0009, 0x0603, 0x0000, 0x25FE, 0x0010 } },
+        // ...a register read between: mov.l @(lit),r6 ; mov.l @(lit),r7 (VDP2_TVSTAT) ; mov.w r1,@r6 ; mov.w @r7,r0 ; rts ; mov.b r2,@r6
+        { "a5_114_hwread", 0x06052100u, { 0xD602, 0xD703, 0x2611, 0x6071, 0x000B, 0x2620, 0x0603, 0x0000, 0x25F8, 0x0004 } },
+        // ...a read through a pointer between: mov.l @(lit),r6 ; mov.w r1,@r6 ; mov.l @r4,r3 ; mov.b r2,@r6 ; mov.l r3,@r5 ; rts ; mov r3,r0
+        { "a5_114_read", 0x06052200u, { 0xD603, 0x2611, 0x6342, 0x2620, 0x2532, 0x000B, 0x6033, 0x0009, 0x0603, 0x0000 } },
+        // control: a write through a pointer between (A5-112's shape): mov.l @(lit),r6 ; mov #1,r7 ; mov.w r1,@r6 ; mov.l r7,@r4 ; rts ; mov.b r2,@r6
+        { "a5_114_ptrw", 0x06052300u, { 0xD602, 0xE701, 0x2611, 0x2472, 0x000B, 0x2620, 0x0603, 0x0000 } },
+        // A5-115: mov.l @(lit),r6 (0x06030000) ; mov.l @r4,r0 ; mov.l r2,@r6 ; rts ; mov.l r0,@r5 -- read through r4, store the global, store the value read
+        { "a5_115", 0x06052400u, { 0xD602, 0x6042, 0x2622, 0x000B, 0x2502, 0x0009, 0x0603, 0x0000 } },
+        // ...the value read returned: mov.l @(lit),r6 ; mov.l @r4,r0 ; mov.l r2,@r6 ; rts ; nop
+        { "a5_115_ret", 0x06052500u, { 0xD602, 0x6042, 0x2622, 0x000B, 0x0009, 0x0009, 0x0603, 0x0000 } },
+        // control: a register write in the global's place: mov.l @(lit),r6 (SCU_D0EN) ; mov #1,r2 ; mov.l @r4,r0 ; rts ; mov.l r2,@r6
+        { "a5_115_hw", 0x06052600u, { 0xD602, 0xE201, 0x6042, 0x000B, 0x2622, 0x0009, 0x25FE, 0x0010 } },
+        // A5-116: mov.l @(lit),r1 (0x06030000) ; mov.l @r1,r0 ; mov.l @(lit),r2 (SCU_D0EN) ; mov.l @(lit),r3 (0x101) ; mov.l r3,@r2 ; rts ; nop
+        // -- the global read, then the DMA enable
+        { "a5_116", 0x06052700u, { 0xD103, 0x6012, 0xD203, 0xD304, 0x2232, 0x000B, 0x0009, 0x0009, 0x0603, 0x0000, 0x25FE, 0x0010, 0x0000, 0x0101 } },
+        // control: a write through a pointer in the register write's place: mov.l @(lit),r6 ; mov.l @r6,r0 ; rts ; mov.l r2,@r4
+        { "a5_116_ptr", 0x06052800u, { 0xD601, 0x6062, 0x000B, 0x2422, 0x0603, 0x0000 } },
+    };
+    for (const W& w : fx)
+    {
+        size_t off = w.base - 0x06000000u;
+        for (uint16_t c : w.words) { dts::Put16(hw, off, c); off += 2; }
+    }
+    auto snap = MakeSnapshot(hw);
+    std::map<std::string, std::string> out;
+    for (const W& w : fx)
+    {
+        const DecompileResult r = d.Decompile(snap, Request(w.base));
+        Print(w.name, r);
+        CHECK(r.status == DecompileStatus::Ok);
+        out[w.name] = r.Text();
+    }
+    auto before = [](const std::string& t, const char* a, const char* b) {
+        const size_t i = t.find(a), j = t.find(b);
+        return i != std::string::npos && j != std::string::npos && i < j;
+    };
+    // A5-114 (P2): a wider write of a global that a narrower one overwrites in part is joined into the narrower one's statement (heritage's
+    // pieces, A5-112) and printed after the access the code makes between the two: the bytes the narrow write leaves are written after the DMA
+    // enable, after the register read, after the read through the pointer. The order rule sets the store aside as overwritten.
+    CHECK(Has(out["a5_114_hw"], "xRam06030000 = CONCAT11(in_r2,in_r1);"));
+    CHECK(before(out["a5_114_hw"], "SCU_D0EN = 1;", "xRam06030000 = "));                    // DEFECT (want the half's write before the enable)
+    CHECK(before(out["a5_114_hwread"], "= VDP2_TVSTAT;", "xRam06030000 = "));               // DEFECT (want the half's write before the read)
+    CHECK(before(out["a5_114_read"], "= *param_1;", "xRam06030000 = "));                    // DEFECT (want the half's write before the read)
+    CHECK(before(out["a5_114_ptrw"], "xRam06030000._1_1_ = in_r1;", "*param_1 = 1;"));      // control: the order kept (the widths are A5-112's)
+    // A5-115 (P1): a read through a pointer whose value is used after a later store to a global is printed at the use, after the store: when the
+    // pointer is the global's address the code stores (or returns) the old value, the text the new one.
+    CHECK(before(out["a5_115"], "xRam06030000 = in_r2;", "*param_2 = *param_1;"));        // DEFECT (want the read before the store)
+    CHECK(before(out["a5_115_ret"], "xRam06030000 = in_r2;", "return *param_1;"));        // DEFECT
+    CHECK(before(out["a5_115_hw"], "= *param_1;", "SCU_D0EN = 1;"));                      // control: a register write keeps the read in place
+    // A5-116 (P2): a read of a global is printed at its use, after a register write the code makes after the read (the DMA enable here).
+    CHECK(before(out["a5_116"], "SCU_D0EN = 0x101;", "return xRam06030000;"));            // DEFECT (want the read before the enable)
+    CHECK(before(out["a5_116_ptr"], "= xRam06030000;", "*param_1 = in_r2;"));             // control: a store through a pointer keeps it
+}
+
 void TestFetchAndDataRefusals()
 {
     Sh2Decompiler d(gConfig);
@@ -16391,6 +16457,7 @@ int main(int argc, char** argv)
         RUN(TestA3164Fix());
         RUN(TestArea10Round2());
         RUN(TestArea5Confirm());
+        RUN(TestArea5Review());
         RUN(TestArea2Round8());
         RUN(TestArea2Round9());
         RUN(TestArea2Round10());
