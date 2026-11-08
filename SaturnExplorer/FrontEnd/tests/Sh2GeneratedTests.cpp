@@ -14748,6 +14748,7 @@ void TestA3RoutedPins(Sh2Decompiler& d)
             // last word of the removed block before it (0x06009012-0x06009016) and said nothing. A store is now placed by its op
             { "A3-167 grammar 1 seed 3509562", "D60F D710 E00E 0625 4200 D60F 4015 8D03 305C D60E 6261 5051 2601 4315 8D02 225B 311C 7277 2712 D70A E001 2702 6072 C801 "
                                                "8BFC 2601 8043 2410 4219 471B 000B 223B 2589 0024 2900 0004 0600 2308 0610 2308 2600 1034", true },
+            { "A3-167 grammar 1 seed 3509562 shrunk", "E00E 0625 D606 4015 8900 D606 2601 D706 E001 2702 6072 C801 8BFC 2601 000B 0009 0600 2308 0610 2308 2600 1034", true },
             // grammar 1 seed 3302668 (the new poll-body production, 5,000 seeds from 3,300,001), shrunk: the body writes back the word read
             // before the loop (`mov.w @r6,r3 ; ... P: mov.w r3,@r6 ; poll`). The store's op is alive but prints only as the `while` keyword
             // of `do { } while( true );`: said as a write in the loop

@@ -15958,6 +15958,12 @@ void TestA3164Fix()
                                         0x0600, 0x1010 }, 0x06009002u },
         // grammar 1 seed 3302668, shrunk: a poll whose body writes back the word read before it (`mov.w @r6,r3 ; ... P: mov.w r3,@r6 ;
         // poll`): the store's op stays, but the text prints of it only the `while` of `do { } while( true );`
+        // grammar 1 seed 3509562 (area 7 round 10, routed), shrunk by its finder: `cmp/pl r0 ; bt +0 ; mov.l =0x06002308,r6 ; mov.w r0,@r6`,
+        // the store at the branch's target, replaced after the poll. The old caution placed a store in the flow by address with a slot's two
+        // bytes of slack and took it for the removed block before it; a store is placed by its op now
+        { "A3-167 seed 3509562: a store at a branch target after a removed block", { 0xE00E, 0x0625, 0xD606, 0x4015, 0x8900, 0xD606, 0x2601, 0xD706, 0xE001,
+                                                                                      0x2702, 0x6072, 0xC801, 0x8BFC, 0x2601, 0x000B, 0x0009, 0x0600, 0x2308,
+                                                                                      0x0610, 0x2308, 0x2600, 0x1034 }, 0x0600900Cu },
         { "A3-167 seed 3302668: a body that writes back the word", { 0xD605, 0xD706, 0x6361, 0xE001, 0x2700, 0x2631, 0x6070, 0xC801, 0x8BFB, 0x000B, 0x0009,
                                                                        0x0009, 0x2600, 0x1028, 0x0600, 0x2280 }, 0x0600900Au },
     };
