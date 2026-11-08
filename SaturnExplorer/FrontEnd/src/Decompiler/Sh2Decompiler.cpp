@@ -8490,7 +8490,8 @@ namespace
 // * a store the code itself replaces is dropped in any function (A3-169): it is said only if a path of the flow from it reaches such a
 //   loop with some byte of it not written again by a later store of the code's at a constant address. A path that leaves the loop, by
 //   an exit the engine cut, finds the store after the loop that replaces it; the path that stays in the loop does not.
-// A store in a flow block the engine removed whole is removed code (the removal is the engine's to say), not a write before the loop.
+// A store in a flow block the engine removed (one that starts where a removed block starts, with no op of it left) is removed code (the
+// removal is the engine's to say), not a write before the loop.
 // Nothing is allocated unless the function has a block that reaches no RETURN.
 std::vector<DecompileResult::EndlessLoopStore> StoresBeforeEndlessLoop(const ghidra::Funcdata& fd, const FlowRecord& flow,
                                                                        const std::set<uint32_t>& removedBlocks,
@@ -8588,14 +8589,23 @@ std::vector<DecompileResult::EndlessLoopStore> StoresBeforeEndlessLoop(const ghi
             }
     }
     if (!loops) return out;
-    // The bytes of the address space each op of an instruction still writes (not a MULTIEQUAL or INDIRECT: no write of the code's).
+    // The bytes of the address space each op of an instruction still writes (not a MULTIEQUAL or INDIRECT: no write of the code's), and
+    // the flow blocks that still hold an op of theirs.
     const ghidra::AddrSpace* ram = fd.getArch()->getDefaultDataSpace();
     std::map<uint32_t, std::vector<std::pair<uint32_t, uint32_t>>> written;
+    std::vector<char> live(nf, 0);   // the flow blocks an op of the flow is still alive in
     for (auto it = fd.beginOpAlive(); it != fd.endOpAlive(); ++it)
     {
         const ghidra::PcodeOp* o = *it;
+        auto f = flow.ops.find(o->getTime());
+        if (f != flow.ops.end() && f->second.first >= 0 && static_cast<size_t>(f->second.first) < nf) live[static_cast<size_t>(f->second.first)] = 1;
         const ghidra::Varnode* v = o->getOut();
         if (!v || v->getSpace() != ram || o->code() == ghidra::CPUI_MULTIEQUAL || o->code() == ghidra::CPUI_INDIRECT) continue;
+        // A copy of the word's own value into it (`mov.b @(0,r6),r0 ; ... ; mov.b r0,@(0,r6)` once the engine knows r0 is unchanged)
+        // writes what is there: the text prints nothing for it (grammar 1 seed 2632).
+        if (o->code() == ghidra::CPUI_COPY && o->getIn(0) && o->getIn(0)->getSpace() == ram && o->getIn(0)->getOffset() == v->getOffset() &&
+            o->getIn(0)->getSize() == v->getSize())
+            continue;
         written[InstructionOf(o)].emplace_back(static_cast<uint32_t>(v->getOffset()), static_cast<uint32_t>(v->getSize()));
     }
     struct Store
@@ -8634,10 +8644,12 @@ std::vector<DecompileResult::EndlessLoopStore> StoresBeforeEndlessLoop(const ghi
         if (w != written.end())
             for (const auto& x : w->second) kept |= bytesOf(s, x.first, x.second);
         if ((kept & all) == all || said.count(s.insn)) continue;
+        // (By the instruction it starts at, and with nothing of it left: an instruction's own p-code can make blocks that start at one
+        // instruction, as `mac.w`'s saturating arm does, and the flow block that goes on after the arm starts there too: grammar 1 seed 2632.)
         const uint32_t first = flow.ranges[static_cast<size_t>(s.block)].first;
         bool removed = false;
         for (uint32_t r : removedBlocks) removed = removed || canonicalOf(r) == first;
-        if (removed) continue;
+        if (removed && !live[static_cast<size_t>(s.block)]) continue;
         // The later stores of the code's to its bytes along each path, until the path reaches a loop that runs for ever with a byte unwritten.
         auto replaced = [&](int block, bool after) {
             uint32_t m = 0;
