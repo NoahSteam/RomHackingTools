@@ -18460,3 +18460,79 @@ The game corpus (hwram007 and hwram008, alone and `SE_GAME_LEND=1`, `tools/a7_ro
 * 0600894A (hwram007) and 06008C0A (hwram008): `iRam06003028 = param_2;` (0x0600895A) now prints before `iVar5 = 0;` (0x0600895C), in the code's order.
 
 The other differences from the area 7 round 8 fixer's dumps of master (`41b69ebf`) are 0086's casts (`(int4)xStack_8`) and 0085's (06016142 prints its `iRam06057df4 = 8;` once per path, where it had printed the store at 0x0601647A three times).
+
+## Area 5, review round
+
+Reviewer, branch `review/5-round-next` from master `e4bce675` (patches up to 0088; A5-101 to A5-111 and A5-113 fixed, A5-112 open). The worktree's RelWithDebInfo build (`-j2`), every test binary under `ulimit -v 3500000` (4,000,000 for the generator) and `timeout`, one heavy job at a time, generator runs in pieces of 5,000 seeds. No product code changed. The round adds one test function, `TestArea5Review` in `Sh2DecompilerTests.cpp` (inside `SaturnExplorerSh2DecompilerTests`, so the ctest count is unchanged), which pins each new row's fixture as the head prints it (the checks marked DEFECT) beside a control with the right order; and the ledger rows **A5-114 to A5-117** (A5-117 is the coordinator's routed seed, triaged here).
+
+**The round is not clean: A5-115 is P1, and A5-114, A5-116 and A5-117 are P2.** The area's count of consecutive clean rounds stays 0.
+
+### 1. The fixes, and the shapes beside them
+
+Probed by hand with an assembler of the round's own (scratch, not committed) through `SE_GENERATED_WORDS`, so each shape ran on the emulator beside the text.
+
+| Shape | Result |
+|---|---|
+| A5-102's shape with the register address computed (`mov.l =0x25FE0000,r1 ; add #0x10,r1`, or an add of a register), and A5-109's with a computed VDP2_TVSTAT read | in order: `xVar1 = xRam06030000; xRam06030000 = param_2; SCU_D0EN = xVar1;` |
+| The global's old value read after a call, or passed to it; a store in a `bsr` slot read by the callee | in order (`xVar1 = g; g = param_2; xVar2 = func(); *param_1 = xVar1;`) |
+| 0088's piece read in another block than the wide write, before a register read | `(char)((uint4)param_1 >> 0x10)`, in order |
+| A pointer to SH2_TIER kept in r8 across a call, read, then read-modified-written | each access once, in order |
+| A write then a read back of the cartridge (0x22000000) and of the BIOS ROM (0x00000100) at another width (a byte or half read of a long write, a long read of a byte or half write, after 0088) | folded, each with its caution |
+| A wide write, an access, a narrower write over part of it (A5-112's route) | **reordered** past a register write, a register read or a read through a pointer: **A5-114** |
+| A read through a pointer, a store to a global, the value read used | **the read printed after the store**: **A5-115** |
+| A read of a global, then a register write | **the read printed after the register write**: **A5-116** |
+| A whole overwrite of a global across a register write (`g = r1; SCU_D0EN = 1; g = r2`) | the first write dropped: the order rule's `overwritten` set-aside, by design (listed in A5-114 for the coordinator) |
+
+A5-112 is left open at P3 (its fix is the engine's printing of a narrow store of a global the merge holds wider, not an oracle change); its status cell now points at A5-114, which is the same route with an access between the two writes.
+
+### 2. The rows
+
+| Row | Severity | What |
+|---|---|---|
+| A5-114 | **P2** | A5-112's route moves the bytes a narrower write leaves past an access between: `mov.w r1,@g ; SCU_D0EN = 1 ; mov.b r2,@g` prints `SCU_D0EN = 1; xRam06030000 = CONCAT11(in_r2,in_r1);` (the half's store at 0x...06 is named on no line). Same past a VDP2_TVSTAT read and a read through a pointer (a value the code does not compute when the pointer is &g). `RulePropagateCopy` feeds the wide write's input into heritage's piece of it (0085 refuses only a COPY of the same global). The order rule sets the store aside as `overwritten` (an overlap, not a cover): 0 findings |
+| A5-115 | **P1** | `x = *p; g = v; *q = x` prints `g = v; *q = *p;` (and `return *param_1;`, `SCU_D0EN = *param_1;`): when p is &g the text copies v where the code copies the old word. Patch 0010's `checkImpliedCover` keeps a LOAD's chain from crossing a STORE, LOAD, CALLOTHER or call, not a COPY into a global. `printed-past` asks only of ledger accesses and calls: 0 findings. A scan of both corpora's token maps finds no instance (the one candidate, hwram007 0600CD42 / hwram008 0600DD9E, is a post-increment's address token, not the read) |
+| A5-116 | **P2** | `x = g; SCU_D0EN = 0x101; return x` prints `SCU_D0EN = 0x101; return xRam06030000;`: a volatile write puts no INDIRECT on a global, so the read is printed past the DMA enable. A5-109 (b)'s mirror for a read; no oracle asks (a folded read is no ledger access) |
+| A5-117 | **P2** | Routed (area 3 round 19, grammar 1 seed 3007538, `v:folded-store-after-access`), triaged real: two equal stores of a global (one in a `bf/s` slot) that join are printed after the marked mailbox read the code makes after both, and after a later store. A5-109's class by a route the three patches leave (not traced in the p-code; the likely route is propagation into the join, each write being last in its block, and the join's collapse of two identical inputs, with the access in the join's own block) |
+
+Each fixture is in `TestArea5Review`: `a5_114_hw`, `a5_114_hwread`, `a5_114_read` and the control `a5_114_ptrw` (a write through a pointer between keeps the order); `a5_115`, `a5_115_ret`, `a5_115_reg` and the control `a5_115_hw` (a register write keeps the read in place); `a5_116` and the control `a5_116_ptr`; `a5_117` (the shrunk words with the mailbox marked volatile). The replay lines are in the rows.
+
+### 3. The generator, fresh seeds
+
+`SE_GENERATED_CANARY=0 SE_GENERATED_SHRINK=5`, pieces of 5,000:
+
+| Range | Seeds | Failing | Classes |
+|---|---|---|---|
+| grammar 1, 3,200,001 to 3,220,000 | 20,000 | 4: 3204967, 3208727, 3214852, 3216185 | area 7 only: `n:map-way-back`, `n:map-copy-store`, `n:map-const-join` (two) |
+| grammar 2, 3,200,001 to 3,220,000 | 20,000 | 7: 3200926, 3201911, 3204314, 3210493, 3217274, 3218040, 3218780 | area 7 only: `map-const-join`, `map-store-after`, `map-store-value` (n and v) |
+
+About 1,200 s in all; no piece timed out or crashed. 283 seeds of grammar 1 and 1,435 of grammar 2 had a run excluded as an address error (the domain rule). No area 5 class. The area 5 checks (grammar 1 / grammar 2): `cache.read.said` 7,149 / 927, `cache.read.pointer.said` 1,202 / 432, `pointer.effect.derived` 2,514 / 175, `pointer.effect.open` 57 / 443, `onchip.span.said` 1,657 / 2,767, `cart.write.said` 355 / 98; the order rule `order.folded-store.checked` 23,421 / 12,956 (`overwritten` 199 / 112, `folded-poll` 10,776 / 0, `piece-split` 40 / 8). None of the four rows' shapes is reported by the generator: A5-114 is under `overwritten`, A5-115 and A5-116 are reads no rule places, and A5-117 is found only in the marked request.
+
+### 4. The corpora
+
+`SE_GAME_HWRAM=<img> SE_GAME_LEND=1 SE_GAME_NOTES=1 SE_GAME_OUT=<dir>`, both images, on the branch's build (no product change):
+
+| | hwram007 | hwram008 | expected |
+|---|---|---|---|
+| functions, all ok; lending run | 839; 1,730 | 1,554; 2,995 | as the record |
+| real entries, lent after lending the effects | 474 (645) of 999 | 724 (975) of 1,543 | **the same** |
+| missing and said | 0 | 4 | **the same** |
+| accesses dropped / not printed exactly once | 0 / 0 | 0 / 0 | 0 |
+| hardware notes and cautions | 35 and 5 | 57 and 13 | 13 in hwram008: A5-111's 11 and the two of A3-164's fix (patch 0087: 0600C2DA and 0600C49A, "the 4-byte write of 0x0608D220 here is missing", three lines each) |
+| frame writes lost / malformed pieces / frame unchecked | 0 / 0 / 0 | 0 / 0 / 0 | 0 |
+
+A token-map scan (`SE_GAME_TOKEN_DUMP`, both images alone) for A5-115's shape finds none (section 2).
+
+### 5. Tests
+
+| | Result |
+|---|---|
+| build (all targets), `-j2` | ok |
+| `ctest -j2 --timeout 900 -E SaturnExplorerLive` | 110 of 111 under a load of 9 (another agent's build): `SaturnExplorerDecompilerFaultTests` failed one runner-disable cell ("a cancelled decompilation ... did not stop within 0.1 s"); rerun alone, **passed** (221 s). The engine suite passed (81 s), `SaturnExplorerSh2DecompilerTests` with `TestArea5Review` passed (42 s) |
+| `ctest -R SaturnExplorerLive` | **6 of 6** |
+
+111 plus 6 Live, the master count: no new ctest test (the pins are a function inside `SaturnExplorerSh2DecompilerTests`). No product file changed.
+
+### 6. Routed
+
+* **Area 7:** grammar 1 seeds 3204967 (`n:map-way-back`), 3208727 (`n:map-copy-store`), 3214852, 3216185 (`n:map-const-join`); grammar 2 seeds 3200926, 3201911, 3204314, 3210493, 3217274, 3218040, 3218780 (`map-const-join`, `map-store-after`, `map-store-value`). Replay: `SE_GENERATED_GRAMMAR=<g> SE_GENERATED_SEED=<seed> SE_GENERATED_CANARY=0`. Not replayed on master's build. Also A5-114's fixture: the half-word store at 0x06052006 is named on no line (the CONCAT line names only the byte store).
+* **The coordinator:** A5-114's note on the `overwritten` set-aside across a register write (a RAM write dropped before a DMA enable), accepted by design so far.
