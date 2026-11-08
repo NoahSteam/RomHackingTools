@@ -2394,10 +2394,20 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                         }
                         return false;
                     };
+                    // (A7-69: or at the instruction that writes the input's own register next -- `xRam06002080 = in_r2;` at `xtrct r2,r2`, the
+                    // engine keeping the input ahead of the write that destroys it; grammar 1 seed 3208727)
+                    int inputRegister = -1;
+                    if (shownText.compare(0, 4, "in_r") == 0 && shownText.size() > 4 && shownText.find_first_not_of("0123456789", 4) == std::string::npos)
+                        inputRegister = std::atoi(shownText.c_str() + 4);
+                    else if (shownValue.kind == WordValue::Param)
+                        inputRegister = 3 + static_cast<int>(shownValue.value);
                     for (const Token& t : r.lines[li].tokens)
                     {
                         uint16_t mw = 0;
-                        if (t.addr && (!word(t.addr, mw) || (((mw >> 12) != 0x6 || (mw & 0xF) != 0x3) && !(t.begin < t.end && sameValueStore(t.addr, mw))))) movesOnly = false;
+                        if (t.addr && (!word(t.addr, mw) ||
+                                       (((mw >> 12) != 0x6 || (mw & 0xF) != 0x3) && !(t.begin < t.end && sameValueStore(t.addr, mw)) &&
+                                        !(inputRegister >= 0 && WrittenRegisters(sfe::Sh2Decode(t.addr, mw)).count(inputRegister)))))
+                            movesOnly = false;
                     }
                     if (inputShown && (anyAddress ? movesOnly : r.lines[li].noOrigin))
                     {
