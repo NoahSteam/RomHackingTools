@@ -14743,6 +14743,11 @@ void TestA3RoutedPins(Sh2Decompiler& d)
             { "A3-168 control f6c (no store after)", "D305 431B 0129 2512 D704 E001 2701 6071 C801 8BFC 000B 0009 0600 2304 0600 1010", false },
             { "A3-169 f4", "D305 2352 2362 D705 E001 2701 6071 C801 8BFC 000B 0009 0009 0600 2304 0600 1010", false },
             { "A3-161's merge in a body, f9", "D305 E100 D705 E001 2701 7101 2312 6071 C801 8BFA 000B 0009 0600 2304 0600 1010", false },
+            // grammar 1 seed 3509562 (area 7 round 10, routed): `mov.w r0,@r6` at 0x06009018, the target of a `bt/s`, replaced after the poll.
+            // The old caution placed a store in the flow by address, a slot's two bytes of slack included, so it took 0x06009018 for the
+            // last word of the removed block before it (0x06009012-0x06009016) and said nothing. A store is now placed by its op
+            { "A3-167 grammar 1 seed 3509562", "D60F D710 E00E 0625 4200 D60F 4015 8D03 305C D60E 6261 5051 2601 4315 8D02 225B 311C 7277 2712 D70A E001 2702 6072 C801 "
+                                               "8BFC 2601 8043 2410 4219 471B 000B 223B 2589 0024 2900 0004 0600 2308 0610 2308 2600 1034", true },
             // grammar 1 seed 3302668 (the new poll-body production, 5,000 seeds from 3,300,001), shrunk: the body writes back the word read
             // before the loop (`mov.w @r6,r3 ; ... P: mov.w r3,@r6 ; poll`). The store's op is alive but prints only as the `while` keyword
             // of `do { } while( true );`: said as a write in the loop
