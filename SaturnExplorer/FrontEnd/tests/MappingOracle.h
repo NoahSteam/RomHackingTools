@@ -2024,6 +2024,7 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                         if (pieceSize > 0 && pieceSize < size - shift) widths = { pieceSize };
                         // (A7-69: the variable ends where the next global the text names begins: `xRam2600200e = 0xffff;` beside
                         // `xRam26002010 = 0xff9d;` is the high half of a word store; grammar 1 seed 3000756)
+                        std::set<int> neighbourWidths;   // (these must have a byte to compare)
                         if (!frame)
                             for (const auto& other : r.lines)
                                 for (size_t g = other.text.find("Ram"); g != std::string::npos; g = other.text.find("Ram", g + 3))
@@ -2031,7 +2032,7 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                                     if (g + 11 > other.text.size() || other.text.find_first_not_of("0123456789abcdef", g + 3) != g + 11) continue;
                                     const uint32_t ga = static_cast<uint32_t>(std::strtoul(other.text.substr(g + 3, 8).c_str(), nullptr, 16));
                                     const uint32_t gd = GlobalDelta(ga, at);
-                                    if (gd > 0 && gd < static_cast<uint32_t>(size - shift)) widths.insert(static_cast<int>(gd));
+                                    if (gd > 0 && gd < static_cast<uint32_t>(size - shift) && widths.insert(static_cast<int>(gd)).second) neighbourWidths.insert(static_cast<int>(gd));
                                 }
                         // (the store's bytes another store of the variable writes too may be that store's in the value shown: compared are
                         // the ones no other writes, when there are such, as the product compares them -- `xRam26001014 = 0;` for a word
@@ -2051,14 +2052,16 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                         for (int bytes : widths)
                         {
                             bool same = true;
+                            int compared = 0;
                             for (int j = 0; j < bytes && same; ++j)
                             {
                                 const int k = shift + j;   // (the store's byte, from its address)
-                                if (k >= size || (anyAlone && !alone[static_cast<size_t>(k)])) continue;
+                                if (k >= size || (anyAlone && !alone[static_cast<size_t>(k)] && !neighbourWidths.count(bytes))) continue;
+                                ++compared;
                                 same = (static_cast<uint64_t>(got.value) >> (8 * (size - 1 - k)) & 0xFF) ==
                                        (static_cast<uint64_t>(shownValue.value) >> (8 * (bytes - 1 - j)) & 0xFF);
                             }
-                            if (same) return false;
+                            if (same && (compared > 0 || !neighbourWidths.count(bytes))) return false;
                         }
                         // (A7-64: the variable is wider than the store, an access the function makes at its address says so: a half-word store
                         // writes the variable's high half, `xRam06001024 = 0x10000;` for the store of 1 beside a word store of the address)
