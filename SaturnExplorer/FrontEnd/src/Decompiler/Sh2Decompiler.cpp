@@ -7184,7 +7184,9 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
         const bool atLoadOrCall = when != flow.loadCallTime.end();
         const ghidra::OpCode code = o->code();
         const bool conversion = code == ghidra::CPUI_INT_ZEXT || code == ghidra::CPUI_INT_SEXT || code == ghidra::CPUI_SUBPIECE || code == ghidra::CPUI_CAST;
-        if (!atLoadOrCall && ((code != ghidra::CPUI_COPY && !conversion) || out->isImplied())) continue;
+        // (A7-69: a PIECE with an explicit output is a statement too: `xRam06030000 = CONCAT11(in_r2,in_r1);` shows the bytes of two stores, which it
+        // names, not only the one at its own instruction; the A5-114 fixture)
+        if (!atLoadOrCall && ((code != ghidra::CPUI_COPY && !conversion && code != ghidra::CPUI_PIECE) || out->isImplied())) continue;
         // The storage the statement assigns: the output itself when it is in a space a store was folded into (a piece of a local, a
         // global), else the storage the output's variable is mapped to (a copy is a temporary the engine names after the variable).
         const ghidra::AddrSpace* space = nullptr;
@@ -7438,7 +7440,9 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                 chosen.insert(r);
                 return true;
             };
-            if (conversion && take(nextInHome())) continue;
+            // (A7-69: not at a load: a piece of the word a load reads back, `iStack_2 = (int2)param_1;` at `mov.w @(r0,r15),r2`, is the value of
+            // the stores before the load, not of one after it)
+            if (conversion && !(atLoadOrCall && !flow.callInsns.count(at)) && take(nextInHome())) continue;
             // the emptied stores of the byte on an edge between two blocks
             const auto edgeStores = [&](const ghidra::FlowBlock* from, const ghidra::FlowBlock* to) {
                 std::vector<const ghidra::AccessRecord*> on;
@@ -7479,6 +7483,28 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                     continue;
                 }
                 for (ghidra::int4 i = 0; i < blk->sizeIn(); ++i) todo.emplace_back(blk->getIn(i), blk);
+            }
+            // A7-69: a store of the byte the engine emptied (no basic block covers it any more: the push `mov.l r4,@-r15` whose pop folded
+            // with it) that runs before the statement in its own flow block reaches it, whatever the blocks left cover: the last such store
+            // is the statement's, not the one after it (`iStack_2 = (int2)param_1;` at the read of the pushed word's half, with the store
+            // that overwrites the word after the read; grammar 2 seed 3201911)
+            if (!reached && !prior)
+            {
+                const auto here = flow.insnBlock.find(at);
+                const ghidra::AccessRecord* latest = nullptr;
+                size_t latestAt = 0;
+                if (here != flow.insnBlock.end())
+                    for (const ghidra::AccessRecord* r : orphans)
+                    {
+                        const auto f = flow.ops.find(r->time);
+                        if (!writes(r) || f == flow.ops.end() || f->second.first != here->second.first || f->second.second >= here->second.second) continue;
+                        if (!latest || f->second.second > latestAt)
+                        {
+                            latest = r;
+                            latestAt = f->second.second;
+                        }
+                    }
+                if (latest) reached = take(latest);
             }
             if (reached || take(nextInHome())) continue;
             // the nearest stores of the byte after the statement's instruction in the flow: in its flow block after it, else the first in
@@ -7883,10 +7909,22 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
         // call reads and those stores write. Its drawn tokens go to the nearest load of the memory after the call (on every path,
         // FlowNextReads; the lowest when the paths have several), when no store that may write the memory, and no other call, comes
         // first; else they stay.
-        if (!target && code == ghidra::CPUI_COPY && flow.callInsns.count(at) && !o->isFromDelaySlot() && !chosen.empty() &&
-            (o->getIn(0)->getSpace()->getType() == ghidra::IPTR_SPACEBASE || o->getIn(0)->getSpace() == fd.getArch()->getDefaultDataSpace()))
+        bool a759Target = false;
+        // (A7-69: through the conversions that print as a cast, `uRam06001000 = (uint4)pxRam0600228c;`, whose input is the temporary the
+        // cast makes of the global; grammar 2 seed 3200926)
+        const ghidra::Varnode* memIn = code == ghidra::CPUI_COPY ? o->getIn(0) : nullptr;
+        for (int k = 0; k < 4 && memIn && memIn->isWritten() && memIn->getSpace()->getType() == ghidra::IPTR_INTERNAL; ++k)
         {
-            const ghidra::Varnode* in = o->getIn(0);
+            const ghidra::PcodeOp* def = memIn->getDef();
+            if (def->code() == ghidra::CPUI_COPY || def->code() == ghidra::CPUI_CAST || def->code() == ghidra::CPUI_INT_ZEXT || def->code() == ghidra::CPUI_INT_SEXT)
+                memIn = def->getIn(0);
+            else
+                break;
+        }
+        if (!target && code == ghidra::CPUI_COPY && flow.callInsns.count(at) && !o->isFromDelaySlot() && !chosen.empty() &&
+            (memIn->getSpace()->getType() == ghidra::IPTR_SPACEBASE || memIn->getSpace() == fd.getArch()->getDefaultDataSpace()))
+        {
+            const ghidra::Varnode* in = memIn;
             const auto ib = flow.insnBlock.find(at);
             const int cb = ib == flow.insnBlock.end() ? -1 : ib->second.first;
             bool before = cb < 0 || static_cast<size_t>(cb) >= flow.blockOps.size();
@@ -7924,6 +7962,7 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                 std::set<uint32_t> reads;
                 if (FlowNextReads(flow, fd, cb, static_cast<int>(ib->second.second) + 1, mem, reads))
                 {
+                    a759Target = true;
                     uint32_t c = 0;
                     target = CanonicalAddress(*reads.begin(), c) ? c : *reads.begin();
                 }
@@ -7948,11 +7987,26 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                         if (t.addr == own && t.begin < t.end) t.materialised = true;
                 }
         }
+        // (A7-69: the other ops of the instruction on the line of A7-59's copy are the casts the line prints round the memory's name, which
+        // are the same statement's: `uRam06001000 = (uint4)pxRam0600228c;`; grammar 2 seed 3200926)
+        const auto sharedOnlyByCasts = [&](size_t line) {
+            for (const auto& other : ordered)
+            {
+                if (other.first == o || !other.second->first.count(line)) continue;
+                uint32_t oi = InstructionOf(other.first), c = 0;
+                if (CanonicalAddress(oi, c)) oi = c;
+                if (oi != own) continue;
+                const ghidra::Varnode* oo = other.first->getOut();
+                const ghidra::OpCode oc = other.first->code();
+                if (!(oo && oo->isImplied() && (oc == ghidra::CPUI_CAST || oc == ghidra::CPUI_INT_ZEXT || oc == ghidra::CPUI_INT_SEXT))) return false;
+            }
+            return true;
+        };
         if (target)
             for (size_t line : kv.second->first)
             {
                 // (only when no other op printed on the line has the same instruction: its tokens are not this statement's)
-                if (line >= lines.size() || sharedLines.count(std::make_pair(line, own))) continue;
+                if (line >= lines.size() || (sharedLines.count(std::make_pair(line, own)) && !(a759Target && sharedOnlyByCasts(line)))) continue;
                 Line& l = lines[line];
                 l.firstAddr = 0;
                 for (Token& t : l.tokens)
