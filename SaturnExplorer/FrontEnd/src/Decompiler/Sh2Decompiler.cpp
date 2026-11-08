@@ -7184,7 +7184,9 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
         const bool atLoadOrCall = when != flow.loadCallTime.end();
         const ghidra::OpCode code = o->code();
         const bool conversion = code == ghidra::CPUI_INT_ZEXT || code == ghidra::CPUI_INT_SEXT || code == ghidra::CPUI_SUBPIECE || code == ghidra::CPUI_CAST;
-        if (!atLoadOrCall && ((code != ghidra::CPUI_COPY && !conversion) || out->isImplied())) continue;
+        // (A7-69: a PIECE with an explicit output is a statement too: `xRam06030000 = CONCAT11(in_r2,in_r1);` shows the bytes of two stores, which it
+        // names, not only the one at its own instruction; the A5-114 fixture)
+        if (!atLoadOrCall && ((code != ghidra::CPUI_COPY && !conversion && code != ghidra::CPUI_PIECE) || out->isImplied())) continue;
         // The storage the statement assigns: the output itself when it is in a space a store was folded into (a piece of a local, a
         // global), else the storage the output's variable is mapped to (a copy is a temporary the engine names after the variable).
         const ghidra::AddrSpace* space = nullptr;

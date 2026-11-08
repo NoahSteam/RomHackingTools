@@ -2545,6 +2545,19 @@ void TestArea7Round10()
         const DecompileResult t = a7r4::DecompileWords(d, hw, 0x06009000u, w);
         CHECK(dts::AuditMapping(t, word, "a7_61 number compare 2").copyNumberMade == 0);
     }
+
+    // The area 5 reviewer's note on A5-114's fixture: `mov.w r1,@r6 ; mov.l r7,@r3 ; rts ; mov.b r2,@r6` prints `xRam06030000 =
+    // CONCAT11(in_r2,in_r1);`, whose half-word store (0x06009006) was on no line: the statement is a PIECE, which AddFrameStoreTokens did
+    // not take for one. The line names both stores now (A7-77). (The order of the statement against the DMA enable is A5-114's.)
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, { 0xD603, 0xD304, 0xE701, 0x2611, 0x2372, 0x000B, 0x2620, 0x0009,
+                                                                             0x0603, 0x0000, 0x25FE, 0x0010 });
+        Print("A7-77 a CONCAT of two stores' bytes", r);
+        const Line* l = LineWith(r, "xRam06030000 = CONCAT11(in_r2,in_r1);");
+        CHECK(l != nullptr);
+        if (l) CHECK(LineInstructions(*l) == (std::vector<uint32_t>{ 0x06009006u, 0x0600900Cu }));
+        CHECK(dts::AuditMapping(r, word, "a7_77").Violations() == 0);
+    }
 }
 
 
