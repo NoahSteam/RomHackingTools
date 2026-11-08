@@ -133,3 +133,10 @@ tst #1,r0
 bf P
 rts
 nop
+name f4r
+# A3-169 control: the same two stores in a function that returns: no caution, the signature lent
+mov.l =0x06002304,r3
+mov.l r5,@r3
+mov.l r6,@r3
+rts
+nop
