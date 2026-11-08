@@ -18727,18 +18727,18 @@ The grammar 1 run of 5,000 seeds (below) drew 1,177 bodies and 419 moved T. On t
 * `TestA3RoutedPins` (`Sh2GeneratedTests.cpp`). Each of f3, f2, f6, f3d, f3c, f6c, f4, f9, seed 3302668 shrunk, and seed 3509562 (its words and the shrink), through `endless-store-dropped`: 0 findings, with `endless-store.said` above 0 exactly for the said ones.
 * No new test target. Each of the three rows' reproducers fails its pins on master's host.
 
-### Runs (final code `ed1ce084`; the commits after it change pins and docs only)
+### Runs (on `80d4f3f4`: the final code `ed1ce084` with master `de0dddee` merged; the commits after it change docs only)
 
 | Run | Result |
 |---|---|
 | game corpus (`SE_GAME_LEND=1`, hwram007, hwram008) | functions ok; real entries lent **474 (645 parameters) of 999** and **724 (975) of 1,543**; missing and said **0** and **4**: as expected. The text of every function is the same as round 19's dumps (master's host) in both images, alone and lent. The caution is given in the same two functions, hwram008 0600C2DA and 0600C49A. Its wording there changes from "a write before it" to "a write in it": the store `mov.l r9,@r10` is at the poll's head, 0x0600C320 and 0x0600C4E6, which is where the loop starts. No other game function gets it or loses it |
 | printed-C (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | **agrees=5196**, the baseline; narrow-c 130, void-return 227, void-return-lent 24, skipped 8: unchanged. The new productions are version 1's polls and `tas.b`, and the class counts did not move |
-| grammar 1, 3,300,001 to 3,305,000 (canary off) | 3 failing seeds, none area 3's: 3300932 and 3300988 (`map-way-back`), 3302704 (`map-const-join`), area 7's checks. None of the three draws a poll body or a moved T. `endless-store` runs 2,220, checked 50,389, said 1,505 (trace records: a store in a body is counted each turn of the loop) |
+| grammar 1, 3,300,001 to 3,305,000 (canary off) | 2 failing seeds, none area 3's: 3300988 (`map-way-back`) and 3302704 (`map-const-join`), area 7's checks; neither draws a poll body or a moved T. Before the merge of master a third, 3300932 (`map-way-back`), failed too: area 7 round 10's host changes fixed it. `endless-store` runs 2,220, checked 50,389, said 1,505 (trace records: a store in a body is counted each turn of the loop) |
 | grammar 2, 3,300,001 to 3,305,000 (two pieces of 2,500) | 0 failing seeds |
 | generator default run (300 seeds and the pins) | 0 findings (polls 102, of them with a body 38; `tas.b` 122, T moved 18) |
-| full `ctest -E SaturnExplorerLive -j2` | **111 of 111** (251 s; Sh2DecompilerEngine 52 s); Live **6 of 6**. No new test |
+| full `ctest -E SaturnExplorerLive -j2` | **111 of 111** (234 s; Sh2DecompilerEngine 46 s); Live **6 of 6**. No new test |
 | fault suite (`SaturnExplorerDecompilerFaultTests`) | **0 of 94** jobs failed |
 
 ### Routed, no row here
 
-* **Area 7:** grammar 1 seeds 3300932 (`map-way-back`, A7-25: `D60F D710 D710 E003 2700 6070 C801 89FC 8153 525C 471B 4115 8B02 6162 E00E 0535 8076 8143 4015 8900 614D 2621 2602 6362 E002 0425 224B E014 0626 000B 0009 0009 0600 2004 2600 1024 2600 1024`), 3300988 (`map-way-back`) and 3302704 (`map-const-join`: `uVar3 = 2;` drawn at the first instruction of a join). The same classes as the ones round 19 routed.
+* **Area 7:** grammar 1 seeds 3300988 (`map-way-back`, A7-25: `D609 D70A 6272 6356 8802 8D04 601D 6223 8167 E006 036D 412E 471B 3138 1736 D704 D304 273B 000B 2611 2600 1034 2600 2104 2600 1038 E000 0000`) and 3302704 (`map-const-join`: `uVar3 = 2;` drawn at the first instruction of a join). These are the same classes as the ones round 19 routed. Both still fail with master `de0dddee` merged.
