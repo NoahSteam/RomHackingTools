@@ -18460,3 +18460,50 @@ The game corpus (hwram007 and hwram008, alone and `SE_GAME_LEND=1`, `tools/a7_ro
 * 0600894A (hwram007) and 06008C0A (hwram008): `iRam06003028 = param_2;` (0x0600895A) now prints before `iVar5 = 0;` (0x0600895C), in the code's order.
 
 The other differences from the area 7 round 8 fixer's dumps of master (`41b69ebf`) are 0086's casts (`(int4)xStack_8`) and 0085's (06016142 prints its `iRam06057df4 = 8;` once per path, where it had printed the store at 0x0601647A three times).
+
+## Area 3, round 19 review
+
+Reviewer, branch `review/3-round19`, cut at master `e4bce675` (patches to 0088). No engine, host or product file changed. The repository gets one oracle change (A3-163, `Sh2GeneratedTests.cpp`, with a pin), fixtures (`Docs/Decompiler/tools/a3_round19/`: `fixtures.src`, assembled by `../a3_round16/asm.py`, and `run19.sh`, which runs one through the generator's `SE_GENERATED_WORDS` mode), ledger rows **A3-167 to A3-169**, A3-163's status, and this record. The worktree's RelWithDebInfo build (`-j2`), every test binary under `ulimit -v 3500000` (4,000,000 for the generator ranges) and `timeout`, one heavy job at a time, each run at most 20 minutes.
+
+**Verdict, area 3: not clean.** Two P1 rows: patch 0087's host caution (`NoteStoresBeforeEndlessLoop`) does not reach two shapes of A3-164's class, so a store before a loop the analysis takes to run for ever is still dropped with nothing said and the signature lent. One P3 row (the caution given for a write that is dropped for another reason). A3-163 is fixed (the oracle). The clean count stays 0.
+
+| Row | P | What |
+|---|---|---|
+| A3-167 | P1 | a store the code replaces after the poll is dropped with nothing said when the loop has a body (a store, a hardware write): the caution keys on "Do nothing block with infinite loop"; the lent prototype drops r6 |
+| A3-168 | P1 | a `tas.b` whose T is used: its read names the instruction, so the caution skips its dropped write (the semaphore's bit 7) |
+| A3-169 | P3 | the caution is given, and the signature withheld, for a store the next store before the loop replaces, which any function drops |
+| A3-163 | P3 | fixed here (the oracle): a pointer store is confirmed by a run with the register started elsewhere |
+
+### 1. Patch 0087 and the host caution
+
+The engine half held on every neighbour tried: a store in the slot of a `bra` into the poll, in the slot of the poll's own `bf/s`, on one path of two that join before the loop (each path's store printed, nothing said), a loop that is endless on a register (`mov #0,r1 ; L: ... tst r1,r1 ; bt L`: folded before heritage, the store printed), a spinlock before the poll (`S: tas.b @r3 ; bf S`: the `tas.b` write printed in its loop), a try-lock that returns on failure (printed), a pre-decrement store whose register the text uses (`mov.l r6,@-r3 ; mov.l r3,@r5`: the caution given). No store 0087 holds printed a value the code does not store, except the A3-161 merge: a loop counter stored to a global each turn of an endless poll prints `iRam06002304 = 0;` before the loop, a store the code never makes (`fixtures.src` f9; A3-161's accepted class, here in an endless loop; no row).
+
+The host half is where it fails. `NoteStoresBeforeEndlessLoop` is called only when the engine warns "Do nothing block with infinite loop", and says a dropped store only when no token of the text names its instruction. Both gates let A3-164's class through:
+
+* **A3-167.** The engine warns of a do-nothing block only when the loop's body is empty. A poll that also stores (`mov.l r5,@(4,r3)`, a global 0087 now holds in the loop) or writes a hardware register (`mov.w r5,@r8`, VDP2_TVMD) is not empty, so a store before it that the code replaces after the loop is dropped and nothing is said: `xRam06001010 = 1; do { xRam06002308 = param_2; } while( true );`, signature lent `void (xunknown4 param_1,xunknown4 param_2)`. r6, which the function reads and stores, is not a parameter. With an empty body (control) the caution is given and the signature withheld. The generator's `endless-store-dropped` rejects it; its grammar's polls have no body, so it never draws it.
+* **A3-168.** A `tas.b` reads and writes in one instruction. When T is used (`movt r1 ; mov.l r1,@r5`), the read is printed (`*param_2 = (uint4)(cRam06002304 == '\0');`), its token names the instruction, and the dropped write is not said. With T unused the caution is given. `endless-store-dropped` rejects it too. A semaphore taken before signalling and waiting is the SH-2 idiom for it.
+* **A3-169** (the other direction). `mov.l r5,@r3 ; mov.l r6,@r3` before the poll: the first store is dropped as in any function (a write the next one replaces; the same two stores before an `rts` print the same text, lent), but the caution says the loop dropped it and the signature is withheld.
+
+The game corpus gives the caution in two functions of hwram008 (0600C2DA and 0600C49A, "the 4-byte write of 0x0608D220 here is missing", the store `mov.l r9,@r10` at the head of a poll that reads a word the code set to 0). That store writes the value already stored before the loop, and the caution is right. The routed-items record says the new note is given in no game function; on this head it is given in these two. No game function shows A3-167's or A3-168's shape: the endless loops with a removed block are 06005212 and 06005520 (hwram007) and the five A3-164 functions of hwram008, all with empty bodies.
+
+### 2. A3-163, settled
+
+The leak check (`claim-wrong:leaks`, `frameValues`) took a stored value for a pointer from r6 because it lies within a step of r6's start. The value was r4 ^ r5 + r5, which is r6's start by the arenas' 0x1000 spacing. Widening `BitwiseOfOthers` to sums would excuse every real store of r6 in a function that reads r4 and r5, as the triage said. Instead the check now confirms: for a pointer store the claims leave out, it runs the function again with that register started 0x40 further on (the runner's `perturbReg`), takes the same store (the same instruction, the same occurrence, the same call depth) and requires its value to have moved by 0x40. A value that did not move is counted (`excluded.pointer-not-moved.claim-wrong`) and not reported. A run that stops, faults or takes another path keeps the finding. Seed 2807704 now has 0 findings (4 stores not moved, 4 confirming runs). `TestA3RoutedPins` pins the seed, and checks by hand that a store whose value moves is still `claim-wrong:leaks` and that the check without a confirmation is as before. The two grammar 2 ranges below excused nothing and found nothing, and the default run (with A3-54's claims mutation pin) passes.
+
+### 3. Runs
+
+| Run | Result |
+|---|---|
+| game corpus (`SE_GAME_LEND=1`, hwram007 then hwram008) | functions 839 and 1,554 ok; real entries lent **474 (645 parameters) of 999** and **724 (975) of 1,543**; missing and said **0** and **4**: as expected |
+| grammar 1, 3,000,001 to 3,010,000 (two pieces of 5,000, canary off) | 4 failing seeds, none area 3's: 3000756, 3004177, 3005842 (area 7's map checks), 3007538 (area 5's order check); `endless-store` runs 6,034, checked 7,215, said 41 |
+| grammar 2, 3,000,001 to 3,010,000 (two pieces) | 1 failing seed, 3007721 (area 7's `map-const-join`); claims checked 59,083 on 14,117 lent prototypes; 0 pointer stores excused |
+| printed-C, 3,000,001 to 3,004,000 | 7,223 functions: **0 `mismatch`**; agrees 6,725, narrow-c 163, void-return 297, void-return-lent 22, skipped 16 (array-local 8, stack-piece 8) |
+| generator default run (300 seeds and the pins) | 0 findings |
+| hand fixtures | sections 1 and 2; `tools/a3_round19/fixtures.src` |
+| full `ctest` | **111 of 111** (`-E SaturnExplorerLive -j2`, 297 s; Sh2DecompilerEngine 53 s); Live **6 of 6**. No test target added; the A3-163 pin is inside `TestA3RoutedPins` |
+
+### 4. Routed, no row here
+
+* **Area 7:** grammar 1 seeds 3000756 (`map-store-value`; shrunk `D602 2632 465F E29D 000B 2622 2600 200C`: a misaligned longword store, an address error the run excludes, split by the text into two halves whose values are right), 3005842 (`map-store-value`; shrunk `D705 E001 2700 6070 C801 89FC 471B 6070 2700 000B 0009 0009 2600 208C`: `xRam2600208c = 0x81;` is the byte `mov.b` stores, the check reads the register's sign-extended 0xFFFFFF81), 3004177 (`map-way-back`); grammar 2 seed 3007721 (`map-const-join`).
+* **Area 5:** grammar 1 seed 3007538, `v:folded-store-after-access` (A5-109's class): shrunk `D606 D707 6072 C801 8BFC 8801 8F02 2632 2632 7221 6171 1622 000B 0009 2600 220C 2600 1028`. A store in the slot of `bf/s` and the same store on the path not taken join, and the request with the mailbox marked prints the joined store (`xRam2600220c = in_r3;`) after the mailbox read the code makes after both (`xVar1 = Ram26001028;`).
+* **Area 11:** the generator's polls have no body, so neither grammar can draw A3-167; and no production makes a `tas.b` whose T is stored before a poll (A3-168).
