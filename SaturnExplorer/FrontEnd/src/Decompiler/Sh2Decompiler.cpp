@@ -8485,8 +8485,9 @@ namespace
 // Everything is read from the final p-code and the flow, not from the engine's warnings (A3-167: "Do nothing block with infinite loop"
 // is given only for a loop with an empty body):
 // * the loops: the final blocks from which no live RETURN is reached that lie on a cycle, and the flow blocks whose code they hold;
-// * a store is still made when ops of its own instruction that the text prints write every byte of it into the address space (A3-168:
-//   a token of the text naming the instruction is no evidence, a `tas.b` whose T is used has its read printed and its write gone);
+// * a store is still made when ops of its own instruction write every byte of it into the address space and the text prints them (or
+//   each is a copy within a variable the text prints another write of); a token of the text naming the instruction is no evidence (A3-168:
+//   a `tas.b` whose T is used has its read printed and its write gone);
 // * a store the code itself replaces is dropped in any function (A3-169): it is said only if a path of the flow from it reaches such a
 //   loop with some byte of it not written again by a later store of the code's at a constant address. A path that leaves the loop, by
 //   an exit the engine cut, finds the store after the loop that replaces it; the path that stays in the loop does not.
@@ -8591,10 +8592,28 @@ std::vector<DecompileResult::EndlessLoopStore> StoresBeforeEndlessLoop(const ghi
             }
     }
     if (!loops) return out;
-    // The bytes of the address space each op of an instruction still writes (not a MULTIEQUAL or INDIRECT: no write of the code's), and
-    // the flow blocks that still hold an op of theirs.
+    // Whether the text prints an op, as more than a keyword: an op that is alive is not always printed. The `while` of `do { } while( true );`
+    // is drawn at the loop's last op (grammar 1 seed 3302668: a store in a poll's body that printed as nothing else).
+    auto shown = [&](const ghidra::PcodeOp* o) {
+        auto pr = printed.find(o);
+        if (pr == printed.end()) return false;
+        const uint32_t at = canonicalOf(InstructionOf(o));
+        for (size_t l : pr->second.first)
+            if (l < lines.size())
+                for (const Token& t : lines[l].tokens)
+                    if (t.addr == at && t.begin < t.end && t.kind != TokenKind::Keyword) return true;
+        return false;
+    };
+    // The bytes of the address space each op of an instruction still writes (not a MULTIEQUAL or INDIRECT: no write of the code's) when the
+    // text prints it; or, when it does not, when the op is a copy within one variable of the text that the text prints another write of. A
+    // stored register the engine merged under the global's name prints no copy: `add #1,r1 ; mov.l r1,@r3` in a poll's body prints
+    // `iRam06002304 = iRam06002304 + 1;` at the add (A3-161's merge, round 19's fixture f9). A copy of the word's own value into it, with
+    // nothing else writing it (`mov.b @(0,r6),r0 ; mac.w ; mov.b r0,@(0,r6)`, grammar 1 seed 2632; the write-back of seed 3302668), prints
+    // nothing and is no such write. And the flow blocks that still hold an op of theirs.
     const ghidra::AddrSpace* ram = fd.getArch()->getDefaultDataSpace();
     std::map<uint32_t, std::vector<std::pair<uint32_t, uint32_t>>> written;
+    std::vector<const ghidra::PcodeOp*> silent;
+    std::set<const ghidra::HighVariable*> printedHighs;
     std::vector<char> live(nf, 0);   // the flow blocks an op of the flow is still alive in
     for (auto it = fd.beginOpAlive(); it != fd.endOpAlive(); ++it)
     {
@@ -8602,22 +8621,16 @@ std::vector<DecompileResult::EndlessLoopStore> StoresBeforeEndlessLoop(const ghi
         auto f = flow.ops.find(o->getTime());
         if (f != flow.ops.end() && f->second.first >= 0 && static_cast<size_t>(f->second.first) < nf) live[static_cast<size_t>(f->second.first)] = 1;
         const ghidra::Varnode* v = o->getOut();
-        if (!v || v->getSpace() != ram || o->code() == ghidra::CPUI_MULTIEQUAL || o->code() == ghidra::CPUI_INDIRECT) continue;
-        // ...and that the text prints, as more than a keyword: an op that is alive is not always printed. A copy of the word's own value into
-        // it (`mov.b @(0,r6),r0 ; mac.w ; mov.b r0,@(0,r6)` once the engine knows r0 is unchanged, grammar 1 seed 2632) prints nothing; the
-        // store in a poll's body (grammar 1 seed 3302668) printed only the `while` of `do { } while( true );`, which the emitter draws at
-        // the loop's last op.
-        auto pr = printed.find(o);
-        if (pr == printed.end()) continue;
-        const uint32_t at = canonicalOf(InstructionOf(o));
-        bool shown = false;
-        for (size_t l : pr->second.first)
-            if (l < lines.size())
-                for (const Token& t : lines[l].tokens)
-                    shown = shown || (t.addr == at && t.begin < t.end && t.kind != TokenKind::Keyword);
-        if (!shown) continue;
-        written[InstructionOf(o)].emplace_back(static_cast<uint32_t>(v->getOffset()), static_cast<uint32_t>(v->getSize()));
+        if (!v || o->code() == ghidra::CPUI_MULTIEQUAL || o->code() == ghidra::CPUI_INDIRECT) continue;
+        const bool isShown = shown(o);
+        if (isShown && fd.isHighOn()) printedHighs.insert(v->getHigh());
+        if (v->getSpace() != ram) continue;
+        if (isShown) written[InstructionOf(o)].emplace_back(static_cast<uint32_t>(v->getOffset()), static_cast<uint32_t>(v->getSize()));
+        else if (o->code() == ghidra::CPUI_COPY && fd.isHighOn()) silent.push_back(o);
     }
+    for (const ghidra::PcodeOp* o : silent)
+        if (o->getIn(0) && !o->getIn(0)->isConstant() && printedHighs.count(o->getOut()->getHigh()) != 0 && o->getIn(0)->getHigh() == o->getOut()->getHigh())
+            written[InstructionOf(o)].emplace_back(static_cast<uint32_t>(o->getOut()->getOffset()), static_cast<uint32_t>(o->getOut()->getSize()));
     struct Store
     {
         uint32_t insn = 0, address = 0, size = 0;
