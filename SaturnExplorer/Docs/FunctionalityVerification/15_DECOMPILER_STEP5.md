@@ -18476,7 +18476,7 @@ Patch 0086 first (`unsignedNamedRead`, `unsignedTextRead`, `declaredWithoutSign`
 | grammar 2, 3,100,001 to 3,110,000 (two pieces of 5,000) | 1 failing seed, area 7's (`map-const-join`, A7-58/A7-64's class): **3106681** (`xVar4 = 0;` drawn at `subv r1,r1`, the first instruction of a join) |
 | grammar 1, 3,100,001 to 3,110,000 | 0 findings |
 | grammar 2, `SE_GENERATED_ALPHABET=specials`, 3,120,001 to 3,125,000 | 0 findings |
-| printed-C, 3,100,001 to 3,115,000 (three pieces of 5,000) | 0 `mismatch`; agrees 8,395 + 8,450 + (third piece, see the log), narrow-c 200 / 233, void-return 357 / 362 |
+| printed-C, 3,100,001 to 3,115,000 (three pieces of 5,000) | 0 `mismatch`; agrees 8,395 + 8,450 + 8,440, narrow-c 200 + 233 + 203, void-return 357 + 362 + 360 |
 | printed-C matrix (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | agrees **5,196** (the baseline), narrow-c 130, 0 `mismatch` |
 | `mkx21.py` (new): round 20's stack pieces (store, overwrite, read by byte, half or long; five cuts) compared with four constants by nine compare forms (`cmp/gt`, `ge`, `hi`, `hs`, `eq`, and the constant on the left) read through `bt` and `bf` branches, so the engine must negate `<` into `<=` with the cast kept | 7,920 functions, **0 `mismatch`**: agrees 7,909, narrow-c 11 |
 | `pgen.py` 3,100,001 for 6,000 | **0 `mismatch`**: agrees 5,849, narrow-c 134, skipped 17 |
