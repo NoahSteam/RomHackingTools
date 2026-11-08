@@ -18520,7 +18520,8 @@ Patch 0087's host caution (`NoteStoresBeforeEndlessLoop`) decided "a store the c
 
 * **The loops.** The final blocks from which no live RETURN is reached (block marks to a fixed point, as `ActionDeadCode::doomedBlocks` has it) that lie on a cycle. Each one's start, and the flow blocks that hold its code, by op time or instruction, and the instruction it starts at. The warning text plays no part.
 * **The stores.** The engine's fold records (`fate_folded_ordinary`, a store of a constant address in the address space), placed in the flow by op time.
-* **Made or not.** A store is in the text when the ops of its own instruction that the text prints write every byte of it. Printed means the op is in the printer's op map with a token of its instruction that is not a keyword. MULTIEQUAL and INDIRECT are no writes. A token that merely names the instruction (A3-168's read) is not evidence.
+* **Made or not.** A store is in the text when the ops of its own instruction write every byte of it and the text prints them. Printed means the op is in the printer's op map with a token of its instruction that is not a keyword. MULTIEQUAL and INDIRECT are no writes. A token that merely names the instruction (A3-168's read) is not evidence.
+* **A copy the text does not print.** A store's op that is alive but not printed still counts when it is a COPY within one variable of the text (input and output in one HighVariable) and the text prints another write of that variable. Round 19's f9 is such a case: `add #1,r1 ; mov.l r1,@r3` in a poll's body, where the engine merged r1 under the global's name. The add prints `iRam06002304 = iRam06002304 + 1;` and the store's copy prints nothing.
 * **Dropped by the loop, not as in any function.** From the store's place, every flow path is followed, the bytes later stores of the code's rewrite collected along it, until it reaches one of the loops' flow blocks. The store is said if a path reaches a loop with some byte not yet rewritten. A path out of the loop, by an exit the engine cut, finds the store after the loop that replaces it; the path that stays in the loop does not. So A3-167's store is said and A3-169's first store, rewritten by the next before the loop, is not.
 * **Removed code.** A store in a flow block the engine removed is not said (the removal is the engine's to say). A flow block counts as removed when it starts where a removed block starts *and* no op of the flow is left in it: `mac.w`'s saturating arm starts at the instruction, and so does the flow block that goes on after it (grammar 1 seed 2632's pin).
 * Nothing is allocated unless the function has a block that reaches no RETURN. The fault suite's allocation pins did not move.
@@ -18540,7 +18541,7 @@ The caution's text names the loop's start. It says "drops a write **in** it" for
 | f6d (control: T unused) | caution | the same caution |
 | f4 (A3-169) | caution, withheld | no caution; `xRam06002304 = param_3;`, lent with 3 parameters |
 | f4r (control: the two stores before `rts`) | lent | lent |
-| f9 (A3-161's accepted merge in an endless loop) | no caution | no caution (the store is printed) |
+| f9 (A3-161's accepted merge in an endless loop) | no caution | no caution, lent. The second form of the fix, before the variable rule above, said this store: its copy prints nothing |
 
 ### What the new grammar production found
 
@@ -18550,15 +18551,15 @@ The generator's grammar gets two productions, each drawn from a stream of its ow
 
 The coverage summary prints both counts.
 
-The grammar 1 run of 5,000 seeds (below) drew 1,177 bodies and 419 moved T. On the first form of the fix it gave one `endless-store-dropped`, seed 3302668. Its poll's body writes back the word read before the loop: `mov.w @r6,r3 ; ... P: mov.w r3,@r6 ; mov.b @r7,r0 ; tst #1,r0 ; bf P`. The engine kept the store's op (`r0x26001028 = u...`). The text printed `do { } while( true );`, and the op's only token was the `while` keyword, which the emitter draws at the loop's last op. The first form took an alive op that writes the bytes as made. **Now a store is made only when its op is printed as more than a keyword**, and this one is said: "drops a write in it". Grammar 1 seed 2632's write-back after `mac.w` is the same shape before a loop: a self-copy the text prints nothing for, which the printed-op test settles too. Shrunk and pinned: `D605 D706 6361 E001 2700 2631 6070 C801 8BFB 000B 0009 0009 2600 1028 0600 2280`. Writing back the value the code read is a no-op for ordinary memory, and in a function that returns it is dropped unsaid. Before a loop that runs for ever the generator's `endless-store-dropped` asks for it, as it did for 2632: said, no row.
+The grammar 1 run of 5,000 seeds (below) drew 1,177 bodies and 419 moved T. On the first form of the fix it gave one `endless-store-dropped`, seed 3302668. Its poll's body writes back the word read before the loop: `mov.w @r6,r3 ; ... P: mov.w r3,@r6 ; mov.b @r7,r0 ; tst #1,r0 ; bf P`. The engine kept the store's op (`r0x26001028 = u...`), a copy within the variable that the read before the loop made. The text printed `do { } while( true );`, and the op's only token was the `while` keyword, which the emitter draws at the loop's last op. The first form took an alive op that writes the bytes as made. **Now a store is made only when its op is printed as more than a keyword**, or is a copy within a variable the text prints another write of, which this one is not (the variable's only other def is the read). It is said: "drops a write in it". Grammar 1 seed 2632's write-back after `mac.w` is the same shape before a loop: a self-copy the text prints nothing for, which the printed-op test settles too. Shrunk and pinned: `D605 D706 6361 E001 2700 2631 6070 C801 8BFB 000B 0009 0009 2600 1028 0600 2280`. Writing back the value the code read is a no-op for ordinary memory, and in a function that returns it is dropped unsaid. Before a loop that runs for ever the generator's `endless-store-dropped` asks for it, as it did for 2632: said, no row.
 
 ### Pins
 
-* `TestA3164Fix` (`Sh2DecompilerTests.cpp`). Said, with the signature withheld: f3, f2, f3d, f6, f6d and seed 3302668 shrunk. Printed with no caution: f3c, f6c, f4 and f4r, each also checked lent. f4 also checks that `param_2;` is not printed.
-* `TestA3RoutedPins` (`Sh2GeneratedTests.cpp`). Each of f3, f2, f6, f3d, f3c, f6c, f4 and seed 3302668 shrunk, through `endless-store-dropped`: 0 findings, with `endless-store.said` above 0 exactly for the said ones.
+* `TestA3164Fix` (`Sh2DecompilerTests.cpp`). Said, with the signature withheld: f3, f2, f3d, f6, f6d and seed 3302668 shrunk. Printed with no caution: f3c, f6c, f4, f4r and f9, each also checked lent. f4 also checks that `param_2;` is not printed.
+* `TestA3RoutedPins` (`Sh2GeneratedTests.cpp`). Each of f3, f2, f6, f3d, f3c, f6c, f4, f9 and seed 3302668 shrunk, through `endless-store-dropped`: 0 findings, with `endless-store.said` above 0 exactly for the said ones.
 * No new test target. Each of the three rows' reproducers fails its pins on master's host.
 
-### Runs (final code `f91d5d16`; the commits after it change docs only)
+### Runs (final code `ed1ce084`; the commits after it change pins and docs only)
 
 | Run | Result |
 |---|---|

@@ -172,7 +172,8 @@ and lists these classes as open until they are fixed.
    `NoteRemovedAccesses` may additionally analyze an all-volatile reference when unreachable
    removal needs checking. `StoresBeforeEndlessLoop` (A3-167 to A3-169) reads the final p-code
    for stores of ordinary memory the text does not print (no op of the store's instruction that
-   the text prints as more than a keyword writes all its bytes) from which a flow path reaches a
+   the text prints as more than a keyword, or that is a copy within a variable the text prints
+   another write of, writes all its bytes) from which a flow path reaches a
    final block that reaches no RETURN and lies on a cycle, with no later store of the code's
    rewriting those bytes first (`DecompileResult::storesBeforeEndlessLoop`);
    `NoteStoresBeforeEndlessLoop` says each and withholds the signature. Neither depends on the
