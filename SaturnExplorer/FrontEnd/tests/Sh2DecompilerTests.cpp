@@ -15625,6 +15625,10 @@ void TestA3164Fix()
                                               0x0009, 0x0600, 0x2304, 0x0600, 0x1010 }, 0x06009002u },
         { "A3-168 control: T unused", { 0xD305, 0x431B, 0xD705, 0xE001, 0x2701, 0x6071, 0xC801, 0x8BFC, 0x2300, 0x000B, 0x0009, 0x0009, 0x0600, 0x2304,
                                         0x0600, 0x1010 }, 0x06009002u },
+        // grammar 1 seed 3302668, shrunk: a poll whose body writes back the word read before it (`mov.w @r6,r3 ; ... P: mov.w r3,@r6 ;
+        // poll`): the store's op stays, but the text prints of it only the `while` of `do { } while( true );`
+        { "A3-167 seed 3302668: a body that writes back the word", { 0xD605, 0xD706, 0x6361, 0xE001, 0x2700, 0x2631, 0x6070, 0xC801, 0x8BFB, 0x000B, 0x0009,
+                                                                       0x0009, 0x2600, 0x1028, 0x0600, 0x2280 }, 0x0600900Au },
     };
     for (const Said& c : kSaid)
     {

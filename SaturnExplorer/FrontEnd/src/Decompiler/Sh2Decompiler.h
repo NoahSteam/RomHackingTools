@@ -421,6 +421,7 @@ struct DecompileResult
         uint32_t address = 0;
         uint32_t size = 0;
         uint32_t loop = 0;
+        bool inLoop = false;   // the store is in the loop's own code (a store in a poll's body), not before it
     };
     std::vector<EndlessLoopStore> storesBeforeEndlessLoop;
     std::vector<uint32_t> callees;        // constant call targets, canonical, sorted

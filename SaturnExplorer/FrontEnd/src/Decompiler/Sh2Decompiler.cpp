@@ -8485,8 +8485,8 @@ namespace
 // Everything is read from the final p-code and the flow, not from the engine's warnings (A3-167: "Do nothing block with infinite loop"
 // is given only for a loop with an empty body):
 // * the loops: the final blocks from which no live RETURN is reached that lie on a cycle, and the flow blocks whose code they hold;
-// * a store is still made when ops of its own instruction write every byte of it into the address space (A3-168: a token of the text
-//   naming the instruction is no evidence, a `tas.b` whose T is used has its read printed and its write gone);
+// * a store is still made when ops of its own instruction that the text prints write every byte of it into the address space (A3-168:
+//   a token of the text naming the instruction is no evidence, a `tas.b` whose T is used has its read printed and its write gone);
 // * a store the code itself replaces is dropped in any function (A3-169): it is said only if a path of the flow from it reaches such a
 //   loop with some byte of it not written again by a later store of the code's at a constant address. A path that leaves the loop, by
 //   an exit the engine cut, finds the store after the loop that replaces it; the path that stays in the loop does not.
@@ -8495,6 +8495,8 @@ namespace
 // Nothing is allocated unless the function has a block that reaches no RETURN.
 std::vector<DecompileResult::EndlessLoopStore> StoresBeforeEndlessLoop(const ghidra::Funcdata& fd, const FlowRecord& flow,
                                                                        const std::set<uint32_t>& removedBlocks,
+                                                                       const std::map<const ghidra::PcodeOp*, std::pair<std::set<size_t>, int>>& printed,
+                                                                       const std::vector<Line>& lines,
                                                                        const std::function<uint32_t(uint32_t)>& canonicalOf)
 {
     std::vector<DecompileResult::EndlessLoopStore> out;
@@ -8601,11 +8603,19 @@ std::vector<DecompileResult::EndlessLoopStore> StoresBeforeEndlessLoop(const ghi
         if (f != flow.ops.end() && f->second.first >= 0 && static_cast<size_t>(f->second.first) < nf) live[static_cast<size_t>(f->second.first)] = 1;
         const ghidra::Varnode* v = o->getOut();
         if (!v || v->getSpace() != ram || o->code() == ghidra::CPUI_MULTIEQUAL || o->code() == ghidra::CPUI_INDIRECT) continue;
-        // A copy of the word's own value into it (`mov.b @(0,r6),r0 ; ... ; mov.b r0,@(0,r6)` once the engine knows r0 is unchanged)
-        // writes what is there: the text prints nothing for it (grammar 1 seed 2632).
-        if (o->code() == ghidra::CPUI_COPY && o->getIn(0) && o->getIn(0)->getSpace() == ram && o->getIn(0)->getOffset() == v->getOffset() &&
-            o->getIn(0)->getSize() == v->getSize())
-            continue;
+        // ...and that the text prints, as more than a keyword: an op that is alive is not always printed. A copy of the word's own value into
+        // it (`mov.b @(0,r6),r0 ; mac.w ; mov.b r0,@(0,r6)` once the engine knows r0 is unchanged, grammar 1 seed 2632) prints nothing; the
+        // store in a poll's body (grammar 1 seed 3302668) printed only the `while` of `do { } while( true );`, which the emitter draws at
+        // the loop's last op.
+        auto pr = printed.find(o);
+        if (pr == printed.end()) continue;
+        const uint32_t at = canonicalOf(InstructionOf(o));
+        bool shown = false;
+        for (size_t l : pr->second.first)
+            if (l < lines.size())
+                for (const Token& t : lines[l].tokens)
+                    shown = shown || (t.addr == at && t.begin < t.end && t.kind != TokenKind::Keyword);
+        if (!shown) continue;
         written[InstructionOf(o)].emplace_back(static_cast<uint32_t>(v->getOffset()), static_cast<uint32_t>(v->getSize()));
     }
     struct Store
@@ -8659,13 +8669,14 @@ std::vector<DecompileResult::EndlessLoopStore> StoresBeforeEndlessLoop(const ghi
             return m;
         };
         uint32_t loop = 0;
+        bool inLoop = false;
         std::set<std::pair<int, uint32_t>> visited;
         std::vector<std::pair<int, uint32_t>> work;
         {
             const uint32_t m = replaced(s.block, true) & all;
             if (m != all)
             {
-                if (loopAt[static_cast<size_t>(s.block)]) loop = loopAt[static_cast<size_t>(s.block)];
+                if (loopAt[static_cast<size_t>(s.block)]) loop = loopAt[static_cast<size_t>(s.block)], inLoop = true;
                 else
                     for (int next : flow.successors[static_cast<size_t>(s.block)]) work.emplace_back(next, m);
             }
@@ -8691,6 +8702,7 @@ std::vector<DecompileResult::EndlessLoopStore> StoresBeforeEndlessLoop(const ghi
         e.address = s.address;
         e.size = s.size;
         e.loop = loop;
+        e.inLoop = inLoop;
         out.push_back(e);
     }
     return out;
@@ -8706,7 +8718,7 @@ void Sh2Decompiler::NoteStoresBeforeEndlessLoop(DecompileResult& r)
     for (const DecompileResult::EndlessLoopStore& s : r.storesBeforeEndlessLoop)
     {
         const std::string text = "the " + std::to_string(s.size) + "-byte write of " + Hex8(s.address) + " here is missing: the analysis takes "
-                                 "the loop at " + Hex8(s.loop) + " to run for ever and drops a write before it that it sees no reader of. A "
+                                 "the loop at " + Hex8(s.loop) + " to run for ever and drops a write " + (s.inLoop ? "in" : "before") + " it that it sees no reader of. A "
                                  "poll of memory another processor writes folds so unless that memory is marked volatile";
         r.hardwareNotes.push_back(HardwareNote{ s.insn, text, true });
         r.warnings.push_back(Hex8(s.insn) + ": " + text);
@@ -9707,7 +9719,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         r.calls = Calls(*fd, flow, canonicalOf);
         r.flowSuccessors = flow.successors;
         r.flowBlockRanges = flow.ranges;
-        r.storesBeforeEndlessLoop = StoresBeforeEndlessLoop(*fd, flow, removedBlocks, canonicalOf);   // A3-167 to A3-169
+        r.storesBeforeEndlessLoop = StoresBeforeEndlessLoop(*fd, flow, removedBlocks, printed, r.lines, canonicalOf);   // A3-167 to A3-169
         r.frameLedgerCapped = fd->isFrameLedgerCapped();   // (A3-133, patch 0072) the frame records hide any loss: unchecked
         for (const ghidra::FrameCallRecord& c : fd->getFrameCalls())
         {
