@@ -15901,7 +15901,31 @@ void TestA3164Fix()
         // mov.l @(lit),r1 ; mov #1,r0 ; mov.l r0,@r1 ; mov #2,r0 ; mov.l r0,@r1 ; rts ; nop: every path returns, the replaced store goes
         { "A3-164 control: a function that returns", { 0xD103, 0xE001, 0x2102, 0xE002, 0x2102, 0x000B, 0x0009, 0x0009, 0x0600, 0x2000 },
           { "xRam06002000 = 2;" }, { "xRam06002000 = 1;" } },
+        // A3-167 control (round 19 fixture f3c): the poll with a body, no store after the loop: the store is printed, 3 parameters
+        { "A3-167 control: a body, no store after the loop", { 0xD305, 0x2362, 0xD705, 0xE001, 0x2701, 0x1351, 0x6071, 0xC801, 0x8BFB, 0x000B, 0x0009,
+                                                                0x0009, 0x0600, 0x2304, 0x0600, 0x1010 },
+          { "xRam06002304 = param_3;", "xRam06002308 = param_2;", "while( true )" }, {} },
+        // A3-168 control (f6c): the tas.b with T used and no store after the loop: its write is printed
+        { "A3-168 control: tas.b, no store after the loop", { 0xD305, 0x431B, 0x0129, 0x2512, 0xD704, 0xE001, 0x2701, 0x6071, 0xC801, 0x8BFC, 0x000B,
+                                                               0x0009, 0x0600, 0x2304, 0x0600, 0x1010 },
+          { "uRam06002304 = uRam06002304 | 0x80;", "while( true )" }, {} },
+        // A3-169 (f4): mov.l r5,@r3 ; mov.l r6,@r3 ; the mailbox write ; the poll: the first store is one the next replaces, dropped in any
+        // function, and not said
+        { "A3-169 a store the next store before the loop replaces", { 0xD305, 0x2352, 0x2362, 0xD705, 0xE001, 0x2701, 0x6071, 0xC801, 0x8BFC, 0x000B,
+                                                                       0x0009, 0x0009, 0x0600, 0x2304, 0x0600, 0x1010 },
+          { "xRam06002304 = param_3;", "xRam06001010 = 1;", "while( true )" }, { "param_2;" } },
+        // round 19's fixture f9 (A3-161's merge in a poll's body, `add #1,r1 ; mov.l r1,@r3`): the store's copy prints nothing, the add writes
+        // the global's variable: printed, not said
+        { "A3-167 control: a stored register merged under the global's name", { 0xD305, 0xE100, 0xD705, 0xE001, 0x2701, 0x7101, 0x2312, 0x6071, 0xC801,
+                                                                                 0x8BFA, 0x000B, 0x0009, 0x0600, 0x2304, 0x0600, 0x1010 },
+          { "iRam06002304 = iRam06002304 + 1;", "while( true )" }, {} },
+        // A3-169 control (f4r): the same two stores before an rts
+        { "A3-169 control: the two stores before rts", { 0xD302, 0x2352, 0x2362, 0x000B, 0x0009, 0x0009, 0x0600, 0x2304 },
+          { "xRam06002304 = param_3;" }, { "param_2;" } },
     };
+    // ...of which these are lent a signature (nothing of the code is missing from their text)
+    const char* const kLent[] = { "A3-167 control: a body, no store after the loop", "A3-167 control: a stored register merged under the global's name", "A3-168 control: tas.b, no store after the loop",
+                                  "A3-169 a store the next store before the loop replaces", "A3-169 control: the two stores before rts" };
     // What the engine still drops (it saw no reader of the write before it took the loop for endless) is said on the store's instruction
     // (Sh2Decompiler::NoteStoresBeforeEndlessLoop), and the signature is withheld. Generator grammar 1 seed 12705, shrunk: `mov.l r1,@r6`
     // (0x06002000), the poll's write and the poll, and `mov.l r0,@r6` after the loop replaces the first store; seed 1209, shrunk: the poll's
@@ -15917,6 +15941,31 @@ void TestA3164Fix()
                                                                            0x0009, 0x0600, 0x2000, 0x2600, 0x1008 }, 0x06009002u },
         { "A3-164 seed 1209: the poll's write carried on as a number", { 0xD705, 0xE002, 0x2700, 0x6070, 0xC801, 0x89FC, 0x066F, 0x3210, 0x8D00, 0x6171, 0x000B,
                                                                          0x0009, 0x2600, 0x1004 }, 0x06009004u },
+        // A3-167 (round 19 fixtures f3, f2, f3d): the poll has a body, a store (`mov.l r5,@(4,r3)`) or a write of VDP2_TVMD (`mov.w r5,@r8`),
+        // so the engine gives no "Do nothing block" warning: the store of r6 the code replaces after the loop was dropped with nothing
+        // said and the signature lent without r6. The empty body (f3d) was said before and still is.
+        { "A3-167 a store in the poll's body", { 0xD305, 0x2362, 0xD705, 0xE001, 0x2701, 0x1351, 0x6071, 0xC801, 0x8BFB, 0x2302, 0x000B, 0x0009, 0x0600,
+                                                  0x2304, 0x0600, 0x1010 }, 0x06009002u },
+        { "A3-167 a hardware write in the poll's body", { 0xD306, 0x2362, 0xD706, 0xD807, 0xE001, 0x2701, 0x2851, 0x6071, 0xC801, 0x8BFB, 0x2302, 0x000B,
+                                                          0x0009, 0x0009, 0x0600, 0x2304, 0x0600, 0x1010, 0x25F8, 0x0000 }, 0x06009002u },
+        { "A3-167 control: an empty body", { 0xD305, 0x2362, 0xD705, 0xE001, 0x2701, 0x0009, 0x6071, 0xC801, 0x8BFB, 0x2302, 0x000B, 0x0009, 0x0600, 0x2304,
+                                             0x0600, 0x1010 }, 0x06009002u },
+        // A3-168 (f6, f6d): a tas.b whose T is stored (`movt r1 ; mov.l r1,@r5`): its read is printed and names the instruction, and its
+        // write, which the code replaces after the loop, was not said. With T unused (f6d) it was, and still is.
+        { "A3-168 a tas.b whose T is used", { 0xD306, 0x431B, 0x0129, 0x2512, 0xD705, 0xE001, 0x2701, 0x6071, 0xC801, 0x8BFC, 0x2300, 0x000B, 0x0009,
+                                              0x0009, 0x0600, 0x2304, 0x0600, 0x1010 }, 0x06009002u },
+        { "A3-168 control: T unused", { 0xD305, 0x431B, 0xD705, 0xE001, 0x2701, 0x6071, 0xC801, 0x8BFC, 0x2300, 0x000B, 0x0009, 0x0009, 0x0600, 0x2304,
+                                        0x0600, 0x1010 }, 0x06009002u },
+        // grammar 1 seed 3302668, shrunk: a poll whose body writes back the word read before it (`mov.w @r6,r3 ; ... P: mov.w r3,@r6 ;
+        // poll`): the store's op stays, but the text prints of it only the `while` of `do { } while( true );`
+        // grammar 1 seed 3509562 (area 7 round 10, routed), shrunk by its finder: `cmp/pl r0 ; bt +0 ; mov.l =0x06002308,r6 ; mov.w r0,@r6`,
+        // the store at the branch's target, replaced after the poll. The old caution placed a store in the flow by address with a slot's two
+        // bytes of slack and took it for the removed block before it; a store is placed by its op now
+        { "A3-167 seed 3509562: a store at a branch target after a removed block", { 0xE00E, 0x0625, 0xD606, 0x4015, 0x8900, 0xD606, 0x2601, 0xD706, 0xE001,
+                                                                                      0x2702, 0x6072, 0xC801, 0x8BFC, 0x2601, 0x000B, 0x0009, 0x0600, 0x2308,
+                                                                                      0x0610, 0x2308, 0x2600, 0x1034 }, 0x0600900Cu },
+        { "A3-167 seed 3302668: a body that writes back the word", { 0xD605, 0xD706, 0x6361, 0xE001, 0x2700, 0x2631, 0x6070, 0xC801, 0x8BFB, 0x000B, 0x0009,
+                                                                       0x0009, 0x2600, 0x1028, 0x0600, 0x2280 }, 0x0600900Au },
     };
     for (const Said& c : kSaid)
     {
@@ -15932,6 +15981,12 @@ void TestA3164Fix()
         Print(c.name, r);
         CHECK(r.status == DecompileStatus::Ok);
         CHECK(!HasNote(r, "here is missing: the analysis takes the loop at", true));
+        for (const char* l : kLent)
+            if (std::string(l) == c.name && !r.prototype.known)
+            {
+                std::printf("  %s: withheld: %s\n", c.name, r.prototypeWithheld.c_str());
+                CHECK(false);
+            }
         for (const char* h : c.has)
             if (!Has(r.Text(), h))
             {

@@ -410,6 +410,20 @@ struct DecompileResult
     // ordinary memory, or as the read of a switch's table, or was removed with unreachable code --
     // which the removal caution says. One that ended dead, or has no record, was dropped.
     std::vector<AccessFate> accessFates;
+    // A3-164, A3-167 to A3-169: the stores of ordinary memory at a constant address that the code makes and the final p-code no longer
+    // writes (no op of the store's instruction writes every byte of it), from which a path of the flow reaches a loop the analysis takes
+    // to run for ever (a block from which no RETURN is reached, on a cycle) with no later store of the code's to those bytes first. Each
+    // with the instruction (canonical), the address, the width and where that loop starts. Read from the final p-code, not from the
+    // engine's warnings; said by NoteStoresBeforeEndlessLoop.
+    struct EndlessLoopStore
+    {
+        uint32_t insn = 0;
+        uint32_t address = 0;
+        uint32_t size = 0;
+        uint32_t loop = 0;
+        bool inLoop = false;   // the store is in the loop's own code (a store in a poll's body), not before it
+    };
+    std::vector<EndlessLoopStore> storesBeforeEndlessLoop;
     std::vector<uint32_t> callees;        // constant call targets, canonical, sorted
     // ...and the addresses they are called at (a mirror when the call goes through one), sorted:
     // what DecompileRequest::prototypes is keyed by, since a callee's signature can depend on the
