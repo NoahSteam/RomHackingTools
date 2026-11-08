@@ -17,7 +17,8 @@
 //   * a forward conditional branch (tst/cmp, then bt/bf or bt/s/bf/s with a delay-slot
 //     instruction) over one to three instructions, which may reload a pointer register.
 //   * a counted loop: mov #n,r3 ; body ; dt r3 ; bf.
-//   * a mailbox write-then-poll: store a value, then read until another processor changes it.
+//   * a mailbox write-then-poll: store a value, then read until another processor changes it; a poll in three has a body, a store
+//     through r4, r5 or r6 before each read (A3-167). A tas.b in three moves its T into r1-r3 (`movt`, A3-168).
 //   * rts with a nop or an instruction in its delay slot. A delay slot never holds a
 //     PC-relative load or a branch (the decompiler declares that unsupported, by policy).
 // Version 2 is a module of one to three functions laid out one after the other, each built from the
@@ -420,7 +421,7 @@ struct Item
     enum Type : uint8_t { Alu, Mem, LitPtr, Skip, Loop, Poll, Spill, Call, Table, BraLoop, BraBack, DataSkip, Mask, Choice } type = Alu;
     const char* shape = "";
     std::vector<uint16_t> words;   // Alu, Mem: the instruction words (an indexed access: mov #k,r0 first)
-    int base = -1;                 // Mem: the pointer register
+    int base = -1;                 // Mem: the pointer register; Poll: its body's (A3-167), -1 for none
     int reg = 6, lit = 0;          // LitPtr, Poll: the pointer register and its literal; Mask: the pointer register and the mask's literal (loaded into jsrReg)
     uint16_t cond = 0;             // Skip: the tst or cmp that sets T
     bool onTrue = true;            // Skip: bt (else bf); Mask: and (else or, or xor with 'xorOp')
@@ -538,6 +539,9 @@ struct Gen
     Rng choiceRng;   // ...and one for the return chosen by an input (A3-64)
     Rng regionRng;   // ...and one for the pointers into the purge, the cache address array and the on-chip registers' partition, by literals and by masks (A5-92)
     Rng idiomRng;    // ...and one for the area 5 confirming round's shapes (A5-106): the cache idiom, an on-chip register plus an index, a global's old value stored
+    // ...and one for A3-167 and A3-168 (a store in a poll's body; a `tas.b` whose T is moved into a register): which polls and which
+    // `tas.b` get them is drawn here, so the programs of the seeds without them are unchanged.
+    Rng pollBodyRng;
     // What the function being made changes for good / reads on entry through the wide alphabet and the GBR accesses
     // (an over-approximation: an item the grammar drops again is counted, which the checks that use it allow).
     uint32_t wideClobbers = 0;
@@ -559,7 +563,7 @@ struct Gen
     bool inSpill = false;     // r15 is moved: no local is addressed through it here
     int loopDepth = 0;        // inside a loop body: a pointer advanced here is advanced again by the next iteration
     std::vector<Func> built;  // the functions of this module generated so far (the later ones)
-    Gen(uint64_t seed) : rng(seed), macRng(seed ^ 0x6D61636D61636D61ull), guardRng(seed ^ 0x7367756172643A5Aull), convRng(seed ^ 0x636F6E7663727667ull), wideRng(seed ^ 0x77696465414C5521ull), aliasRng(seed ^ 0x616C696173526E67ull), maskRng(seed ^ 0x6D61736B52616E64ull), placeRng(seed ^ 0x706C616365526E67ull), loopMaskRng(seed ^ 0x6C6F6F704D61736Bull), frameRng(seed ^ 0x6672616D6557616Cull), partialRng(seed ^ 0x7061727469616C52ull), retRng(seed ^ 0x7265747263616C6Cull), bsrfRng(seed ^ 0x6273726652656C21ull), choiceRng(seed ^ 0x63686F6F73657221ull), regionRng(seed ^ 0x726567696F6E5074ull), idiomRng(seed ^ 0x69646F6D52616E64ull)
+    Gen(uint64_t seed) : rng(seed), macRng(seed ^ 0x6D61636D61636D61ull), guardRng(seed ^ 0x7367756172643A5Aull), convRng(seed ^ 0x636F6E7663727667ull), wideRng(seed ^ 0x77696465414C5521ull), aliasRng(seed ^ 0x616C696173526E67ull), maskRng(seed ^ 0x6D61736B52616E64ull), placeRng(seed ^ 0x706C616365526E67ull), loopMaskRng(seed ^ 0x6C6F6F704D61736Bull), frameRng(seed ^ 0x6672616D6557616Cull), partialRng(seed ^ 0x7061727469616C52ull), retRng(seed ^ 0x7265747263616C6Cull), bsrfRng(seed ^ 0x6273726652656C21ull), choiceRng(seed ^ 0x63686F6F73657221ull), regionRng(seed ^ 0x726567696F6E5074ull), idiomRng(seed ^ 0x69646F6D52616E64ull), pollBodyRng(seed ^ 0x706F6C6C426F6479ull)
     {
         for (int i = 0; i < 8; ++i) align[i] = 4, pref[i] = 4;
         p.mbox = 0x26001000u + 0x10u * rng.Below(4);
@@ -1263,6 +1267,13 @@ struct Gen
         default:
             it.words = { uint16_t(0x401B | base << 8) };
             w = 1;
+            // A3-168: the T it sets (the byte was zero: a semaphore taken) moved into r1-r3, which later items may store or return. Version 1
+            // only (the discipline of version 2 tracks every register a value is in), never the register to avoid (a loop's counter).
+            if (!disc && !single && pollBodyRng.Chance(30))
+            {
+                const int t = 1 + static_cast<int>(pollBodyRng.Below(3));
+                if (t != avoid) it.words.push_back(uint16_t(0x0029 | t << 8));   // movt Rt
+            }
             break;
         }
         it.width = w;
@@ -1389,6 +1400,18 @@ struct Gen
         it.pollValue = 1 + static_cast<int>(rng.Below(3));
         it.untilSet = rng.Chance(30);
         it.shape = kind == LitKind::Hw ? "poll.hw" : kind == LitKind::Ram ? "poll.ram" : "poll.mbox";
+        // A3-167: a body before the poll's read, a store through r4, r5 or r6 (r6 holds a literal pointer in version 1: a hardware register,
+        // ordinary RAM, a mailbox): a loop the analysis takes to run for ever whose body is not empty. `it.words`, `it.base`.
+        if (pollBodyRng.Chance(35))
+        {
+            const int base = 4 + static_cast<int>(pollBodyRng.Below(3));
+            int w = 1 << pollBodyRng.Below(3);
+            if (base >= 6 || gTrackAlignment) w = std::min(w, align[base]);
+            const int data = 1 + static_cast<int>(pollBodyRng.Below(3));
+            const int sz = w == 1 ? 0 : w == 2 ? 1 : 2;
+            it.words = { uint16_t(0x2000 | base << 8 | data << 4 | sz) };   // mov.x Rdata,@Rbase
+            it.base = base;
+        }
         return it;
     }
 
@@ -1531,6 +1554,7 @@ struct Gen
         {
             if ((it.type == Item::Mem && !it.stack && it.base >= 4 && it.base < 8) || (it.type == Item::Poll && it.reg >= 4 && it.reg < 8))
                 m |= 1u << (it.type == Item::Mem ? it.base : it.reg);
+            if (it.type == Item::Poll && it.base >= 4 && it.base < 8) m |= 1u << it.base;   // the poll's body (A3-167)
             m |= UsedAsPointer(it.slot) | UsedAsPointer(it.kids);
             for (const std::vector<Item>& c : it.cases) m |= UsedAsPointer(c);
         }
@@ -2526,6 +2550,7 @@ struct Emitter
             }
             const int top = NewLabel();
             Place(top);
+            for (uint16_t x : it.words) Put(x);                                         // the body (A3-167)
             Put(static_cast<uint16_t>(0x6000 | it.reg << 4 | sz));       // mov.x @r7,r0
             Put(0xC801);                                                                  // tst #1,r0
             PutBranch(it.untilSet ? 0x8900 : 0x8B00, top);                                // bt (until set) / bf
@@ -6831,6 +6856,11 @@ void CountShapes(const std::vector<Item>& items, std::map<std::string, int>& sha
         {
             if (it.pollWrite) ++shapes["poll.write_first"];
             if (it.untilSet) ++shapes["poll.until_set"];
+            if (!it.words.empty()) ++shapes["poll.body"];   // A3-167
+        }
+        if (it.type == Item::Mem && it.words.size() == 2 && (it.words[0] & 0xF0FF) == 0x401B)
+        {
+            ++shapes["mem.tas.movt"];   // A3-168
         }
         if (it.type == Item::Call)
         {
@@ -14694,6 +14724,36 @@ void TestA3RoutedPins(Sh2Decompiler& d)
         CHECK(seed.findings.empty());
     }
     {
+        // A3-167 to A3-169 (area 3 round 19; Docs/Decompiler/tools/a3_round19/fixtures.src): the caution is decided from the final p-code,
+        // store by store, not from the engine's "Do nothing block" warning or from a token naming the instruction. A store the code replaces
+        // after a poll with a body (f3: a store; f2: VDP2_TVMD), and a tas.b whose T is stored (f6), each gave `endless-store-dropped`; each
+        // is now said. The empty body (f3d) is still said; a store the next store before the loop replaces (f4) is not.
+        struct Pin
+        {
+            const char* name;
+            const char* words;
+            bool said;
+        };
+        const Pin kPins[] = {
+            { "A3-167 f3", "D305 2362 D705 E001 2701 1351 6071 C801 8BFB 2302 000B 0009 0600 2304 0600 1010", true },
+            { "A3-167 f2", "D306 2362 D706 D807 E001 2701 2851 6071 C801 8BFB 2302 000B 0009 0009 0600 2304 0600 1010 25F8 0000", true },
+            { "A3-168 f6", "D306 431B 0129 2512 D705 E001 2701 6071 C801 8BFC 2300 000B 0009 0009 0600 2304 0600 1010", true },
+            { "A3-167 control f3d (empty body)", "D305 2362 D705 E001 2701 0009 6071 C801 8BFB 2302 000B 0009 0600 2304 0600 1010", true },
+            { "A3-167 control f3c (no store after)", "D305 2362 D705 E001 2701 1351 6071 C801 8BFB 000B 0009 0009 0600 2304 0600 1010", false },
+            { "A3-168 control f6c (no store after)", "D305 431B 0129 2512 D704 E001 2701 6071 C801 8BFC 000B 0009 0600 2304 0600 1010", false },
+            { "A3-169 f4", "D305 2352 2362 D705 E001 2701 6071 C801 8BFC 000B 0009 0009 0600 2304 0600 1010", false },
+        };
+        for (const Pin& pin : kPins)
+        {
+            const Report w = EvaluateSubject(d, RawSubject(pin.words), true);
+            std::printf("pin '%s': %zu finding(s), endless-store checked %d, said %d\n", pin.name, w.findings.size(), count(w, "endless-store.checked"),
+                        count(w, "endless-store.said"));
+            for (const Finding& f : w.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+            CHECK(w.findings.empty() && count(w, "endless-store.checked") > 0);
+            CHECK((count(w, "endless-store.said") > 0) == pin.said);
+        }
+    }
+    {
         const Report rep = Evaluate(d, MakeV2(2305596), true);
         std::printf("pin 'A3-165 grammar 2 seed 2305596': %zu finding(s), stale-stack readers %d, input-dropped excluded %d\n", rep.findings.size(),
                     count(rep, "stale-stack-read.functions"), count(rep, "excluded.stale-stack-read.input-dropped"));
@@ -15194,13 +15254,13 @@ void TestGenerated()
     auto c = [&](const char* k) { auto it = counts.find(k); return it == counts.end() ? 0 : it->second; };
     char covered[1536];
     std::snprintf(covered, sizeof covered,
-                  "alu=%d loads=%d stores=%d (plain %d disp %d indexed %d inc/dec %d) tas=%d widths b/w/l=%d/%d/%d literal pointers hw/ram/mailbox=%d/%d/%d "
-                  "skips=%d (delayed %d) loops=%d polls=%d (write first %d, until set %d; mailbox %d hw %d ram %d) rts slot insn=%d",
+                  "alu=%d loads=%d stores=%d (plain %d disp %d indexed %d inc/dec %d) tas=%d (T moved %d) widths b/w/l=%d/%d/%d literal pointers hw/ram/mailbox=%d/%d/%d "
+                  "skips=%d (delayed %d) loops=%d polls=%d (write first %d, until set %d, body %d; mailbox %d hw %d ram %d) rts slot insn=%d",
                   sum("alu."), sum("mem.ld."), sum("mem.st."), n("mem.ld.plain") + n("mem.st.plain"), n("mem.ld.disp") + n("mem.st.disp"),
-                  n("mem.ld.indexed") + n("mem.st.indexed"), n("mem.ld.inc") + n("mem.st.dec"), n("mem.tas"), n("width.1"), n("width.2"),
+                  n("mem.ld.indexed") + n("mem.st.indexed"), n("mem.ld.inc") + n("mem.st.dec"), n("mem.tas"), n("mem.tas.movt"), n("width.1"), n("width.2"),
                   n("width.4"), n("litptr.hw") + n("poll.hw"), n("litptr.ram") + n("poll.ram"), n("litptr.mbox") + n("poll.mbox"), sum("skip."),
                   n("skip.bt_s") + n("skip.bf_s"), n("loop"), sum("poll.h") + sum("poll.r") + sum("poll.m"), n("poll.write_first"),
-                  n("poll.until_set"), n("poll.mbox"), n("poll.hw"), n("poll.ram"), n("rts.slot_insn"));
+                  n("poll.until_set"), n("poll.body"), n("poll.mbox"), n("poll.hw"), n("poll.ram"), n("rts.slot_insn"));
     if (coverage)
     {
         std::printf("coverage: %zu distinct mnemonics over %ld seeds:", mnemonics.size(), seeds);
