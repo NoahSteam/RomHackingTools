@@ -18674,7 +18674,7 @@ No new test target: the pins are a function in `Sh2DecompilerTests.cpp`.
 
 ## Area 3, A3-167 to A3-169 fixer
 
-Fixer, branch `review/3-a3167-fix`, cut at master `ecd98581`. Host and oracle only: no engine patch, so no patch number was used (0089 stays free). The worktree's RelWithDebInfo build (`-j2`), every test binary under `ulimit -v 3500000` (4,000,000 for the generator ranges) and `timeout`, one heavy job at a time, each run under 20 minutes. **All three rows are fixed: A3-167 (P1), A3-168 (P1), A3-169 (P3). No new row.**
+Fixer, branch `review/3-a3167-fix`, cut at master `ecd98581`. Master `de0dddee` (area 7 round 10) was merged before the final runs. Host and oracle only: no engine patch, so no patch number was used (0089 stays free). The worktree's RelWithDebInfo build (`-j2`), every test binary under `ulimit -v 3500000` (4,000,000 for the generator ranges) and `timeout`, one heavy job at a time, each run under 20 minutes. **All three rows are fixed: A3-167 (P1), A3-168 (P1), A3-169 (P3). No new row.**
 
 ### The root cause
 
@@ -18717,10 +18717,14 @@ The coverage summary prints both counts.
 
 The grammar 1 run of 5,000 seeds (below) drew 1,177 bodies and 419 moved T. On the first form of the fix it gave one `endless-store-dropped`, seed 3302668. Its poll's body writes back the word read before the loop: `mov.w @r6,r3 ; ... P: mov.w r3,@r6 ; mov.b @r7,r0 ; tst #1,r0 ; bf P`. The engine kept the store's op (`r0x26001028 = u...`), a copy within the variable that the read before the loop made. The text printed `do { } while( true );`, and the op's only token was the `while` keyword, which the emitter draws at the loop's last op. The first form took an alive op that writes the bytes as made. **Now a store is made only when its op is printed as more than a keyword**, or is a copy within a variable the text prints another write of, which this one is not (the variable's only other def is the read). It is said: "drops a write in it". Grammar 1 seed 2632's write-back after `mac.w` is the same shape before a loop: a self-copy the text prints nothing for, which the printed-op test settles too. Shrunk and pinned: `D605 D706 6361 E001 2700 2631 6070 C801 8BFB 000B 0009 0009 2600 1028 0600 2280`. Writing back the value the code read is a no-op for ordinary memory, and in a function that returns it is dropped unsaid. Before a loop that runs for ever the generator's `endless-store-dropped` asks for it, as it did for 2632: said, no row.
 
+### Grammar 1 seed 3509562 (routed by the coordinator from area 7 round 10)
+
+`n:endless-store-dropped` on master `de0dddee`, a third way round the old caution, with neither a body nor a `tas.b`. The store `mov.w r0,@r6` (0x06002308) sits at the target of a branch (`bt/s` in the seed, `bt +0` in the finder's shrink). The code replaces it after the poll, and the loop's body is empty, so the engine warns of a do-nothing block. But the old caution placed a store in the flow by address, allowing a delay slot's two bytes past each block's last instruction. So it took 0x06009018 for part of the removed block before it (0x06009012-0x06009016), and skipped it as removed code. **Now a store is placed by its op** (`FlowRecord::ops`, the op's time), and the store is said: "the 2-byte write of 0x06002308 here is missing". The seed and the shrink have 0 findings after the merge of master. Both are pinned: the shrink in `TestA3164Fix`, the seed's replay words and the shrink in `TestA3RoutedPins`. No row: A3-167's root cause, decided on the evidence of the store.
+
 ### Pins
 
-* `TestA3164Fix` (`Sh2DecompilerTests.cpp`). Said, with the signature withheld: f3, f2, f3d, f6, f6d and seed 3302668 shrunk. Printed with no caution: f3c, f6c, f4, f4r and f9, each also checked lent. f4 also checks that `param_2;` is not printed.
-* `TestA3RoutedPins` (`Sh2GeneratedTests.cpp`). Each of f3, f2, f6, f3d, f3c, f6c, f4, f9 and seed 3302668 shrunk, through `endless-store-dropped`: 0 findings, with `endless-store.said` above 0 exactly for the said ones.
+* `TestA3164Fix` (`Sh2DecompilerTests.cpp`). Said, with the signature withheld: f3, f2, f3d, f6, f6d, seed 3302668 shrunk and seed 3509562 shrunk. Printed with no caution: f3c, f6c, f4, f4r and f9, each also checked lent. f4 also checks that `param_2;` is not printed.
+* `TestA3RoutedPins` (`Sh2GeneratedTests.cpp`). Each of f3, f2, f6, f3d, f3c, f6c, f4, f9, seed 3302668 shrunk, and seed 3509562 (its words and the shrink), through `endless-store-dropped`: 0 findings, with `endless-store.said` above 0 exactly for the said ones.
 * No new test target. Each of the three rows' reproducers fails its pins on master's host.
 
 ### Runs (final code `ed1ce084`; the commits after it change pins and docs only)
