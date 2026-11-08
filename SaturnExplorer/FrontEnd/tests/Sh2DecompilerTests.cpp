@@ -2235,6 +2235,332 @@ void TestArea7Round9()
     }
 }
 
+// Area 7 round 10 (A7-69..A7-76): the shrunk fixtures of the 21 seeds of the fresh run from 2,700,001 and 3,000,001 (grammar 1 and 2), each
+// with the damaged result the loosened rule must still catch where the line is a number. They run the words as the generator does (the
+// callees' prototypes lent).
+void TestArea7Round10()
+{
+    std::vector<uint8_t> hw(0x100000u, 0);
+    Sh2Decompiler d(gConfig);
+    const std::function<bool(uint32_t, uint16_t&)> word = [&hw](uint32_t x, uint16_t& w) {
+        if (x < 0x06000000u || x - 0x06000000u + 1 >= hw.size()) return false;
+        w = static_cast<uint16_t>(hw[x - 0x06000000u] << 8 | hw[x - 0x06000000u + 1]);
+        return true;
+    };
+    const auto run = [&](const std::vector<uint16_t>& w, uint32_t entry, const std::vector<uint32_t>& lend) {
+        std::fill(hw.begin(), hw.end(), 0);
+        for (size_t i = 0; i < w.size(); ++i) dts::Put16(hw, 0x9000u + 2 * i, w[i]);
+        const auto snap = MakeSnapshot(hw);
+        DecompileRequest q = Request(entry);
+        for (uint32_t l : lend) q.prototypes.emplace_back(l, d.Decompile(snap, Request(l)).prototype);
+        return d.Decompile(snap, q);
+    };
+    // the result with the text of the line that has `from` changed to `to`
+    const auto changed = [](const DecompileResult& r, const std::string& from, const std::string& to, int& n) {
+        DecompileResult x = r;
+        n = 0;
+        for (Line& l : x.lines)
+        {
+            const size_t at = l.text.find(from);
+            if (at == std::string::npos) continue;
+            l.text.replace(at, from.size(), to);
+            ++n;
+        }
+        return x;
+    };
+    // tas.b sets bit 7 of the byte a later load reads (2702841)
+    {
+        const std::vector<uint16_t> w = { 0xD606, 0xD707, 0xE001, 0x2700, 0x6070, 0xC801, 0x89FC, 0x471B, 0x6370, 0xE008, 0x0636, 0x000B, 0x0009, 0x0009, 0x2600, 0x2084, 0x2600, 0x1030 };
+        const DecompileResult r = run(w, 0x06009000u, {  });
+        Print("A7-69 tas.b sets bit 7 of the byte a later load reads (2702841)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "xRam2600208c = 0xffffff81;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_69_1_2702841").Violations() == 0);
+        int n = 0;
+        const DecompileResult other = changed(r, "xRam2600208c = 0xffffff81;", "xRam2600208c = 0xffffff82;", n);
+        CHECK(n >= 1 && dts::AuditMapping(other, word, "a7_69_1_2702841 other").storeValueOther >= 1);
+    }
+    // tas.b then a byte store (3005842)
+    {
+        const std::vector<uint16_t> w = { 0xD705, 0xE001, 0x2700, 0x6070, 0xC801, 0x89FC, 0x471B, 0x6070, 0x2700, 0x000B, 0x0009, 0x0009, 0x2600, 0x208C };
+        const DecompileResult r = run(w, 0x06009000u, {  });
+        Print("A7-69 tas.b then a byte store (3005842)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "xRam2600208c = 0x81;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_69_1_3005842").Violations() == 0);
+        int n = 0;
+        const DecompileResult other = changed(r, "xRam2600208c = 0x81;", "xRam2600208c = 0x82;", n);
+        CHECK(n >= 1 && dts::AuditMapping(other, word, "a7_69_1_3005842 other").storeValueOther >= 1);
+    }
+    // a word store whose neighbour variable begins two bytes on (3000756)
+    {
+        const std::vector<uint16_t> w = { 0xD602, 0x2632, 0x465F, 0xE29D, 0x000B, 0x2622, 0x2600, 0x200C };
+        const DecompileResult r = run(w, 0x06009000u, {  });
+        Print("A7-69 a word store whose neighbour variable begins two bytes on (3000756)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "xRam2600200e = 0xffff;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_69_1_3000756").Violations() == 0);
+        int n = 0;
+        const DecompileResult other = changed(r, "xRam2600200e = 0xffff;", "xRam2600200e = 0xfffe;", n);
+        CHECK(n >= 1 && dts::AuditMapping(other, word, "a7_69_1_3000756 other").storeValueOther >= 1);
+    }
+    // a copy of the input at the pointer store of the same byte (2704995)
+    {
+        const std::vector<uint16_t> w = { 0xD105, 0x251A, 0xD605, 0x615D, 0x211B, 0x2514, 0xD604, 0x2710, 0x2610, 0x000B, 0x0009, 0x0009, 0x2000, 0x0000, 0x2600, 0x1014, 0x2600, 0x2108 };
+        const DecompileResult r = run(w, 0x06009000u, {  });
+        Print("A7-69 a copy of the input at the pointer store of the same byte (2704995)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "xRam26002108 = (xunknown1)param_2;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_69_1_2704995").Violations() == 0);
+    }
+    // a number a loop updates in place before the store (2708608)
+    {
+        const std::vector<uint16_t> w = { 0xD706, 0xE00A, 0x024D, 0xC801, 0x8B01, 0xE001, 0x0534, 0xE301, 0x3058, 0x2702, 0x4310, 0x8BFB, 0x000B, 0x0009, 0x8000, 0x2014 };
+        const DecompileResult r = run(w, 0x06009000u, {  });
+        Print("A7-69 a number a loop updates in place before the store (2708608)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "iRam80002014 = 1;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_69_1_2708608").Violations() == 0);
+    }
+    // a read of memory drawn at an aliasing store (3004177)
+    {
+        const std::vector<uint16_t> w = { 0xD607, 0xE301, 0x4008, 0x4310, 0x8BFC, 0x446F, 0x4315, 0x8900, 0x2400, 0x4015, 0x8B01, 0xE008, 0x006D, 0x000B, 0x0009, 0x0009, 0x2600, 0x1004 };
+        const DecompileResult r = run(w, 0x06009000u, {  });
+        Print("A7-69 a read of memory drawn at an aliasing store (3004177)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "in_r0 = (int4)iRam2600100e;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_69_1_3004177").Violations() == 0);
+    }
+    // a store beside its heritage piece write-back (3204967)
+    {
+        const std::vector<uint16_t> w = { 0xD707, 0xE002, 0x2702, 0x6072, 0xC801, 0x8BFC, 0x2710, 0xE301, 0x1526, 0x4310, 0x8BFC, 0x8153, 0x2731, 0x000B, 0x0009, 0x0009, 0x0600, 0x1034 };
+        const DecompileResult r = run(w, 0x06009000u, {  });
+        Print("A7-69 a store beside its heritage piece write-back (3204967)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "uRam06001034 = 2;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_69_1_3204967").Violations() == 0);
+    }
+    // a copy of the input at its register next write (3208727)
+    {
+        const std::vector<uint16_t> w = { 0xD708, 0xE301, 0x4310, 0x8BFD, 0xC801, 0x8900, 0x6233, 0x2019, 0x232B, 0x222D, 0x2732, 0xE301, 0x1417, 0x4310, 0x8BFC, 0x000B, 0x0009, 0x0009, 0x0600, 0x2080 };
+        const DecompileResult r = run(w, 0x06009000u, {  });
+        Print("A7-69 a copy of the input at its register next write (3208727)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "xRam06002080 = in_r2;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_69_1_3208727").Violations() == 0);
+    }
+    // a bf/s that never branches (3214852)
+    {
+        const std::vector<uint16_t> w = { 0xD708, 0xE001, 0x2700, 0x6070, 0xC801, 0x89FC, 0xC820, 0x8F02, 0x201B, 0xE000, 0x0605, 0x7048, 0x4215, 0x8901, 0xE006, 0x0724, 0x000B, 0x0009, 0x0600, 0x1000 };
+        const DecompileResult r = run(w, 0x06009000u, {  });
+        Print("A7-69 a bf/s that never branches (3214852)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "xVar1 = 0x48;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_69_1_3214852").Violations() == 0);
+        int n = 0;
+        const DecompileResult other = changed(r, "xVar1 = 0x48;", "xVar1 = 0x49;", n);
+        CHECK(n >= 1 && dts::AuditMapping(other, word, "a7_69_1_3214852 other").constAtJoin >= 1);
+    }
+    // a half-word read of a word store (3216185)
+    {
+        const std::vector<uint16_t> w = { 0xD707, 0xE002, 0x2702, 0x6072, 0xC801, 0x8BFC, 0x2138, 0x8BFF, 0x6271, 0xE301, 0x220A, 0x4310, 0x8BFC, 0x3028, 0x000B, 0x0009, 0x2600, 0x1038 };
+        const DecompileResult r = run(w, 0x06009000u, {  });
+        Print("A7-69 a half-word read of a word store (3216185)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "Var1 = 0;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_69_1_3216185").Violations() == 0);
+        int n = 0;
+        const DecompileResult other = changed(r, "Var1 = 0;", "Var1 = 1;", n);
+        CHECK(n >= 1 && dts::AuditMapping(other, word, "a7_69_1_3216185 other").constAtJoin >= 1);
+    }
+    // a bf/s never taken, the slot value dropped (2702788)
+    {
+        const std::vector<uint16_t> w = { 0x7FFC, 0x7F04, 0x000B, 0x0009, 0x2FD6, 0x7FE8, 0x62F3, 0x7218, 0xE103, 0x2216, 0x4110, 0x8BFC, 0xE200, 0x3220, 0x8F02, 0xE093, 0xE00F, 0xCD1B, 0x2448, 0x8901, 0xA003, 0xE271, 0x210A, 0xA000, 0xE2BA, 0x6061, 0x7F18, 0x6DF6, 0x000B, 0x0009 };
+        const DecompileResult r = run(w, 0x06009008u, {  });
+        Print("A7-69 a bf/s never taken, the slot value dropped (2702788)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "xVar2 = 0xf;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_69_2_2702788").Violations() == 0);
+        int n = 0;
+        const DecompileResult other = changed(r, "xVar2 = 0xf;", "xVar2 = 0xe;", n);
+        CHECK(n >= 1 && dts::AuditMapping(other, word, "a7_69_2_2702788 other").constAtJoin >= 1);
+    }
+    // the T a cmp/pl of a literal sets (2707916)
+    {
+        const std::vector<uint16_t> w = { 0x4F22, 0x2468, 0x8B01, 0xA002, 0xE290, 0xA000, 0xE1C8, 0xD302, 0x4F26, 0x432B, 0x0009, 0x0009, 0x0600, 0x901C, 0x7FC0, 0xA001, 0x0009, 0x8D15, 0x4315, 0x8BFF, 0xE301, 0x2421, 0x3244, 0x4310, 0x8BFB, 0x7F40, 0x000B, 0x0009 };
+        const DecompileResult r = run(w, 0x06009000u, { 0x0600901Cu });
+        Print("A7-69 the T a cmp/pl of a literal sets (2707916)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "bVar1 = true;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_69_2_2707916").Violations() == 0);
+        int n = 0;
+        const DecompileResult other = changed(r, "bVar1 = true;", "bVar1 = false;", n);
+        CHECK(n >= 1 && dts::AuditMapping(other, word, "a7_69_2_2707916 other").constAtJoin >= 1);
+    }
+    // addc with the carry a dt loop leaves (3007721)
+    {
+        const std::vector<uint16_t> w = { 0x7FE8, 0x62F3, 0x7218, 0xE103, 0x2216, 0x4110, 0x8BFC, 0xE200, 0x312E, 0x3610, 0x8BFF, 0x611C, 0x2448, 0x8901, 0xA002, 0x0009, 0xA000, 0xE133, 0x6073, 0x7F18, 0x000B, 0x0009 };
+        const DecompileResult r = run(w, 0x06009000u, {  });
+        Print("A7-69 addc with the carry a dt loop leaves (3007721)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "xVar2 = 1;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_69_2_3007721").Violations() == 0);
+        int n = 0;
+        const DecompileResult other = changed(r, "xVar2 = 1;", "xVar2 = 2;", n);
+        CHECK(n >= 1 && dts::AuditMapping(other, word, "a7_69_2_3007721 other").constAtJoin >= 1);
+    }
+    // subv of a register with itself (3106681)
+    {
+        const std::vector<uint16_t> w = { 0x2F86, 0x2F96, 0x4F22, 0x6843, 0x6953, 0xB00F, 0x6763, 0x6483, 0x6593, 0xE13F, 0x2048, 0x8901, 0xA003, 0x0009, 0x311B, 0xA000, 0x0009, 0x4F26, 0x69F6, 0x68F6, 0x000B, 0x0009, 0x2FD6, 0x7FD0, 0x6162, 0x6013, 0x7F30, 0x6DF6, 0x000B, 0x0009 };
+        const DecompileResult r = run(w, 0x06009000u, { 0x0600902Cu });
+        Print("A7-69 subv of a register with itself (3106681)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "xVar2 = 0;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_69_2_3106681").Violations() == 0);
+        int n = 0;
+        const DecompileResult other = changed(r, "xVar2 = 0;", "xVar2 = 1;", n);
+        CHECK(n >= 1 && dts::AuditMapping(other, word, "a7_69_2_3106681 other").constAtJoin >= 1);
+    }
+    // a global copy under a cast at a call (3200926)
+    {
+        const std::vector<uint16_t> w = { 0x2F86, 0x2F96, 0x2FA6, 0x2FB6, 0x2FE6, 0x4F22, 0x7FD0, 0x6EF3, 0x6843, 0x6953, 0x6A63, 0x6B73, 0xB014, 0x0009, 0x6483, 0x6593, 0x66A3, 0x67B3, 0xD705, 0xD306, 0x7E30, 0x6FE3, 0x4F26, 0x6EF6, 0x6BF6, 0x6AF6, 0x69F6, 0x68F6, 0x432B, 0x0009, 0x0600, 0x1000, 0x0600, 0x9068, 0x2F86, 0x2F96, 0x2FC6, 0x0C2A, 0x7FE0, 0x6843, 0x6953, 0xD304, 0x7F20, 0x4C2A, 0x6CF6, 0x69F6, 0x68F6, 0x432B, 0x0009, 0x0009, 0x0600, 0x9068, 0xD207, 0x6022, 0x2242, 0x2702, 0x624D, 0x2421, 0x4615, 0x8902, 0x2722, 0xA002, 0x0009, 0xA000, 0x0009, 0x000B, 0x0009, 0x0009, 0x0600, 0x228C };
+        const DecompileResult r = run(w, 0x06009000u, { 0x06009044u, 0x06009068u });
+        Print("A7-69 a global copy under a cast at a call (3200926)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "uRam06001000 = (uint4)pxRam0600228c;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_69_2_3200926").Violations() == 0);
+    }
+    // the half of a pushed word read back (3201911)
+    {
+        const std::vector<uint16_t> w = { 0x2F86, 0x2F96, 0x2FA6, 0x2FB6, 0x2FC6, 0x0C2A, 0x6843, 0x6953, 0x6A63, 0x6B73, 0xE04F, 0x4C2A, 0x6CF6, 0x6BF6, 0x6AF6, 0x69F6, 0x68F6, 0x000B, 0x0009, 0x2F46, 0x64F6, 0x7FF8, 0x6042, 0xE006, 0x02FD, 0x1F01, 0x3230, 0x8B01, 0xE000, 0x0706, 0xE00A, 0x7F08, 0x000B, 0x0009 };
+        const DecompileResult r = run(w, 0x06009026u, {  });
+        Print("A7-69 the half of a pushed word read back (3201911)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "iStack_2 = (int2)param_1;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_69_2_3201911").Violations() == 0);
+    }
+    // xtrct of a number and a register (3204314)
+    {
+        const std::vector<uint16_t> w = { 0x7FF4, 0xE104, 0x3413, 0x8917, 0x4408, 0xC703, 0x014E, 0x412B, 0x0009, 0x0009, 0x0600, 0x9030, 0x0600, 0x9028, 0x0600, 0x902C, 0x0600, 0x9030, 0x0600, 0x9034, 0xA006, 0x0009, 0xA004, 0x0009, 0xA002, 0x0009, 0xA000, 0x0009, 0xE301, 0x221D, 0x4310, 0x8901, 0xAFFB, 0x0009, 0x602C, 0x7F0C, 0x000B, 0x0009 };
+        const DecompileResult r = run(w, 0x06009000u, {  });
+        Print("A7-69 xtrct of a number and a register (3204314)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "in_r2 = 0x40000;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_69_2_3204314").Violations() == 0);
+        int n = 0;
+        const DecompileResult other = changed(r, "in_r2 = 0x40000;", "in_r2 = 0x50000;", n);
+        CHECK(n >= 1 && dts::AuditMapping(other, word, "a7_69_2_3204314 other").constAtJoin >= 1);
+    }
+    // subv r0,r0 (3210493)
+    {
+        const std::vector<uint16_t> w = { 0x6052, 0xE301, 0xA001, 0x0009, 0x300B, 0x4310, 0x8BFC, 0x8055, 0x000B, 0x0009 };
+        const DecompileResult r = run(w, 0x06009000u, {  });
+        Print("A7-69 subv r0,r0 (3210493)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "xVar1 = 0;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_69_2_3210493").Violations() == 0);
+        int n = 0;
+        const DecompileResult other = changed(r, "xVar1 = 0;", "xVar1 = 1;", n);
+        CHECK(n >= 1 && dts::AuditMapping(other, word, "a7_69_2_3210493 other").constAtJoin >= 1);
+    }
+    // the register a tst ; bt edge makes 0 (3217274)
+    {
+        const std::vector<uint16_t> w = { 0x7FF0, 0x614F, 0x2448, 0x8901, 0xA003, 0x0009, 0x6118, 0xA000, 0x0009, 0x6063, 0x7F10, 0x000B, 0x0009 };
+        const DecompileResult r = run(w, 0x06009000u, {  });
+        Print("A7-69 the register a tst ; bt edge makes 0 (3217274)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "iVar1 = 0;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_69_2_3217274").Violations() == 0);
+        int n = 0;
+        const DecompileResult other = changed(r, "iVar1 = 0;", "iVar1 = 1;", n);
+        CHECK(n >= 1 && dts::AuditMapping(other, word, "a7_69_2_3217274 other").constAtJoin >= 1);
+    }
+    // a number stored by a half-word store (3218040)
+    {
+        const std::vector<uint16_t> w = { 0x2F86, 0x2F96, 0x2FC6, 0x0C2A, 0x6843, 0x6953, 0x3450, 0x89FF, 0xE19B, 0x2518, 0x8B00, 0x214B, 0xD704, 0xE002, 0x0715, 0xD304, 0x4C2A, 0x6CF6, 0x69F6, 0x68F6, 0x432B, 0x0009, 0x0600, 0x2104, 0x0600, 0x9034, 0x2FE6, 0x7FF0, 0x6EF3, 0x6060, 0x7E10, 0x6FE3, 0x6EF6, 0x000B, 0x0009 };
+        const DecompileResult r = run(w, 0x06009000u, { 0x06009034u });
+        Print("A7-69 a number stored by a half-word store (3218040)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "uRam06002106 = 0xff9b;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_69_2_3218040").Violations() == 0);
+        int n = 0;
+        const DecompileResult other = changed(r, "uRam06002106 = 0xff9b;", "uRam06002106 = 0xff9a;", n);
+        CHECK(n >= 1 && dts::AuditMapping(other, word, "a7_69_2_3218040 other").constAtJoin >= 1);
+    }
+    // a frame slot read after a bt that always branches (3218780)
+    {
+        const std::vector<uint16_t> w = { 0x2F86, 0x2F96, 0x2FA6, 0x2FB6, 0x2FE6, 0x4F22, 0x7FF0, 0x6EF3, 0x6843, 0x6953, 0x6A63, 0x6B73, 0xE002, 0x014D, 0x1E00, 0xC804, 0x8905, 0xB01A, 0x0009, 0x6483, 0x6593, 0x66A3, 0x67B3, 0x52E0, 0x2248, 0x8900, 0x6251, 0x2628, 0x8B02, 0x6041, 0xA002, 0x0009, 0xA000, 0x0009, 0xE05C, 0x7E10, 0x6FE3, 0x4F26, 0x6EF6, 0x6BF6, 0x6AF6, 0x69F6, 0x68F6, 0x000B, 0x0009, 0x2F86, 0x2F96, 0x2FA6, 0x2FC6, 0x0C2A, 0x7FE8, 0x6843, 0x6953, 0x6A63, 0x6041, 0x7F18, 0x4C2A, 0x6CF6, 0x6AF6, 0x69F6, 0x68F6, 0x000B, 0x0009 };
+        const DecompileResult r = run(w, 0x06009000u, { 0x0600905Au });
+        Print("A7-69 a frame slot read after a bt that always branches (3218780)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "uVar2 = 2;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_69_2_3218780").Violations() == 0);
+        int n = 0;
+        const DecompileResult other = changed(r, "uVar2 = 2;", "uVar2 = 3;", n);
+        CHECK(n >= 1 && dts::AuditMapping(other, word, "a7_69_2_3218780 other").constAtJoin >= 1);
+    }
+    // A7-63 (rebuilt; the original fixture's text changed with patch 0088): the oracle follows the variables the text assigns a register
+    // variable from, up to three steps, to see that it holds the stored parameter -- `xVar1 = xRam26002000;` after `xRam26002000 =
+    // param_1;` -- so `xRam26001000 = xVar1;` at the store of r4 is that parameter's. The engine no longer prints the chain for any words
+    // of the shape (the half read of a stored word is a temporary now), so the fixture is the text of `mov r4,r2 ; mov.l r2,@r6` with the
+    // chain written round the store's line; the same chain ending in another parameter is still another value.
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, { 0xD602, 0x6243, 0x2622, 0x6061, 0x000B, 0x0009, 0x2600, 0x1000 });
+        Print("A7-63 the store of a parameter", r);
+        CHECK(LineWith(r, "xRam26001000 = param_1;") != nullptr);
+        const auto chain = [&](const char* end) {
+            DecompileResult x = r;
+            size_t at = x.lines.size();
+            for (size_t k = 0; k < x.lines.size(); ++k)
+                if (x.lines[k].text == "  xRam26001000 = param_1;") at = k;
+            CHECK(at < x.lines.size());
+            if (at >= x.lines.size()) return x;
+            Line link = x.lines[at], source = x.lines[at];
+            link.tokens.clear();
+            link.firstAddr = 0;
+            source.tokens.clear();
+            source.firstAddr = 0;
+            link.text = "  xVar1 = xRam26002000;";
+            source.text = std::string("  xRam26002000 = ") + end + ";";
+            x.lines[at].text = "  xRam26001000 = xVar1;";
+            x.lines.insert(x.lines.begin() + static_cast<std::ptrdiff_t>(at), { source, link });
+            return x;
+        };
+        const DecompileResult held = chain("param_1");
+        CHECK(dts::AuditMapping(held, word, "a7_63 chain").storeValueOther == 0);
+        const DecompileResult other = chain("param_2");
+        CHECK(dts::AuditMapping(other, word, "a7_63 chain other").storeValueOther == 1);
+    }
+    // A7-61 (rebuilt; the original text changed with patch 0087): a number line drawn at its `mov #imm,r0`, whose only store writes the
+    // input, is counted apart (A7-45) unless a compare of the body ties that input to the number. `cmp/eq r5,r2` (two registers that are
+    // neither the stored r3 nor one moved into it) ties nothing; `cmp/eq r0,r3` (r0 the 6) does, and the check asks for the store.
+    {
+        std::vector<uint16_t> w = { 0xD707, 0x8801, 0x8F03, 0x6070, 0x2730, 0xE006, 0xCC12, 0x2028, 0x8F00, 0x230B, 0x2730, 0x3250, 0x89FF,
+                                    0x000B, 0x0009, 0x0009, 0x2600, 0x1034 };
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, w);
+        Print("A7-61 a compare of other registers", r);
+        const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_61 other registers");
+        CHECK(a.Violations() == 0 && a.copyNumberMade == 1 && LineWith(r, "uRam26001034 = 6;") != nullptr);
+        w[11] = 0x3300;   // cmp/eq r0,r3
+        const DecompileResult t = a7r4::DecompileWords(d, hw, 0x06009000u, w);
+        CHECK(dts::AuditMapping(t, word, "a7_61 number compare 2").copyNumberMade == 0);
+    }
+
+    // The area 5 reviewer's note on A5-114's fixture: `mov.w r1,@r6 ; mov.l r7,@r3 ; rts ; mov.b r2,@r6` prints `xRam06030000 =
+    // CONCAT11(in_r2,in_r1);`, whose half-word store (0x06009006) was on no line: the statement is a PIECE, which AddFrameStoreTokens did
+    // not take for one. The line names both stores now (A7-77). (The order of the statement against the DMA enable is A5-114's.)
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, { 0xD603, 0xD304, 0xE701, 0x2611, 0x2372, 0x000B, 0x2620, 0x0009,
+                                                                             0x0603, 0x0000, 0x25FE, 0x0010 });
+        Print("A7-77 a CONCAT of two stores' bytes", r);
+        const Line* l = LineWith(r, "xRam06030000 = CONCAT11(in_r2,in_r1);");
+        CHECK(l != nullptr);
+        if (l) CHECK(LineInstructions(*l) == (std::vector<uint32_t>{ 0x06009006u, 0x0600900Cu }));
+        CHECK(dts::AuditMapping(r, word, "a7_77").Violations() == 0);
+    }
+}
+
+
 void TestFixture1()
 {
     Sh2Decompiler d(gConfig);
@@ -16423,6 +16749,7 @@ int main(int argc, char** argv)
         RUN(TestArea7Round7());
         RUN(TestArea7Round8());
         RUN(TestArea7Round9());
+        RUN(TestArea7Round10());
         RUN(TestSlotMadeLineIsAddressedToItsBranch());
         RUN(TestFrameStoreMaterialisedAtCall());
         RUN(TestFixture1b());
