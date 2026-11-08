@@ -536,6 +536,35 @@ inline bool AccessAddress(const sfe::decomp::DecompileResult& r, const std::func
     addr = static_cast<uint32_t>(a);
     return true;
 }
+// A7-69: is the edge from instruction `p` (a branch, a delayed branch's slot, or the one before `a`) to `a` never taken, by the T the
+// words give (`tst #4,r0 ; bt L` with r0 2 always branches) or because `p` is never run (RegisterBefore's pruning, for the walks over
+// memory too)?
+inline bool EdgeImpossible(const sfe::decomp::DecompileResult& r, const std::function<bool(uint32_t, uint16_t&)>& word,
+                           const std::map<uint32_t, std::vector<uint32_t>>& into, uint32_t p, uint32_t a, int depth)
+{
+    if (depth >= 6) return false;
+    if (p + 2 == a && NeverRun(r, word, into, p, depth + 1)) return true;
+    uint16_t w = 0, bw = 0;
+    if (!r.InBody(p) || !word(p, w)) return false;
+    const sfe::DisassembledInstruction d = sfe::Sh2Decode(p, w);
+    if (d.IsValid && ((w >> 8) == 0x89 || (w >> 8) == 0x8B) && d.BranchTarget != p + 2)
+    {
+        const bool taken = p + 2 != a;
+        const int t = TBefore(r, word, into, p, depth + 1);
+        if (t >= 0 && taken != (((w >> 8) == 0x89) == (t == 1))) return true;
+    }
+    if (r.InBody(p - 2) && word(p - 2, bw) && ((bw >> 8) == 0x8D || (bw >> 8) == 0x8F))
+    {
+        const sfe::DisassembledInstruction br = sfe::Sh2Decode(p - 2, bw);
+        if (br.IsValid && br.BranchTarget != p + 2 && (p + 2 == a || br.BranchTarget == a))
+        {
+            const int t = TBefore(r, word, into, p - 2, depth + 1);
+            const bool taken = p + 2 != a;
+            if (t >= 0 && taken != (((bw >> 8) == 0x8D) == (t == 1))) return true;
+        }
+    }
+    return false;
+}
 // A7-34 (the area 7 fixer): what memory holds before `at`, by the stores of the function's own words on every path into it: a store of
 // the same address and size whose register's value is known and that the engine folded (an access fate FoldedOrdinary: not hardware, not
 // memory the request marks volatile). Any other store that may write it (its address not known, or a part of it), a call, the entry, or
@@ -582,6 +611,7 @@ inline WordValue MemoryBefore(const sfe::decomp::DecompileResult& r, const std::
         {
             sfe::DisassembledInstruction d;
             if (!decode(p, d) || d.IsCall || d.Mnemonic == "rte" || d.Mnemonic == "trapa") return WordValue();
+            if (EdgeImpossible(r, word, into, p, a, depth)) continue;
             uint16_t w = 0;
             word(p, w);
             int ssize = 0;
@@ -690,6 +720,7 @@ inline WordValue SlotBefore(const sfe::decomp::DecompileResult& r, const std::fu
         {
             sfe::DisassembledInstruction d;
             if (!decode(p, d) || d.IsCall || d.Mnemonic == "rte" || d.Mnemonic == "trapa") return WordValue();
+            if (EdgeImpossible(r, word, into, p, a, depth)) continue;
             uint16_t w = 0;
             word(p, w);
             if (WrittenRegisters(d).count(base)) return WordValue();
@@ -949,6 +980,20 @@ inline bool NeverRun(const sfe::decomp::DecompileResult& r, const std::function<
         if ((in != into.end() && !in->second.empty()) || x == r.entry || !r.InBody(x - 2)) return false;
         uint16_t w = 0, sw = 0;
         if (!word(x - 2, w)) return false;
+        // (A7-69: the code after a call and its slot is entered by the call's return: go on to what runs before the call; grammar 2 seed
+        // 3218780, `tst #4,r0 ; bt L ; bsr f ; nop ; mov r8,r4` with r0 2)
+        {
+            uint16_t cw = 0;
+            if (r.InBody(x - 4) && word(x - 4, cw))
+            {
+                const sfe::DisassembledInstruction cd = sfe::Sh2Decode(x - 4, cw);
+                if (cd.IsValid && cd.IsCall && cd.HasDelaySlot)
+                {
+                    x -= 2;
+                    continue;
+                }
+            }
+        }
         // (the instruction after a `bt/s` or `bf/s` and its slot: the slot runs either way)
         if (r.InBody(x - 4) && word(x - 4, sw) && ((sw >> 8) == 0x8D || (sw >> 8) == 0x8F))
         {
