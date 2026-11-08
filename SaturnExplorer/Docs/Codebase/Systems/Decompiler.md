@@ -1,6 +1,6 @@
 # SH-2 pseudocode and embedded decompiler
 
-Inspected revision: `ff6a3b1fb1c54e4c0344613094ea65292b0023c2` (2026-10-20); the pseudocode-to-assembly mapping (steps 7 and 9) rechecked at the area 7 fixer branch `review/7-a710-fix` (2026-10-30), and step 7's store tokens at `review/7-a719-fix` (2026-11-04), `review/7-a722-fix` (2026-11-05), `review/7-a726-fix` (2026-11-05) and `review/7-round7-fix` (2026-11-06).
+Inspected revision: `ff6a3b1fb1c54e4c0344613094ea65292b0023c2` (2026-10-20); the pseudocode-to-assembly mapping (steps 7 and 9) rechecked at the area 7 fixer branch `review/7-a710-fix` (2026-10-30), and step 7's store tokens at `review/7-a719-fix` (2026-11-04), `review/7-a722-fix` (2026-11-05), `review/7-a726-fix` (2026-11-05) and `review/7-round7-fix` (2026-11-06); step 7's endless-loop store caution at `review/3-a3167-fix` (2026-11-08).
 Captured-inspection sections rechecked against `codex/decompiler-variable-inspection` (2026-10-20).
 The panel's status/trust drawing, Decompile-as-a-request and Copy marks rechecked against `5428fe6` plus the area 8 fixer branch (2026-10-30).
 Unless labelled otherwise, behavior below is verified from the cited implementation.
@@ -170,7 +170,13 @@ and lists these classes as open until they are fixed.
    halted at carry `haltsFlow`. The result records flow body ranges, warnings,
    hardware notes, memory-access provenance and optional recovered prototype/effects.
    `NoteRemovedAccesses` may additionally analyze an all-volatile reference when unreachable
-   removal needs checking. Engine objects are destroyed before results reach the UI.
+   removal needs checking. `StoresBeforeEndlessLoop` (A3-167 to A3-169) reads the final p-code
+   for stores of ordinary memory the text does not print (no op of the store's instruction that
+   the text prints as more than a keyword writes all its bytes) from which a flow path reaches a
+   final block that reaches no RETURN and lies on a cycle, with no later store of the code's
+   rewriting those bytes first (`DecompileResult::storesBeforeEndlessLoop`);
+   `NoteStoresBeforeEndlessLoop` says each and withholds the signature. Neither depends on the
+   engine's "Do nothing block" warning. Engine objects are destroyed before results reach the UI.
 8. `Poll` returns current-generation/current-epoch work. `DecompilerPanel::Accept` also
    checks the snapshot, requested execution entry, names, function set, current lent
    prototypes, volatile ranges, and whether the held capture still represents the view.
