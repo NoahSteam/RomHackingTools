@@ -4837,7 +4837,13 @@ int PointerRegister(const RunOut& run, uint32_t v)
 uint32_t PointerOrigin(int k) { return k == 15 ? origin::kStack : 1u << k; }
 std::string PointerName(int k) { return k == 15 ? std::string("r15 (the stack)") : k == 17 ? std::string("gbr") : "r" + std::to_string(k); }
 
-std::string EffectClaimsContradicted(const CallEffects& e, const RunOut& run, std::string* sigOut = nullptr)
+// (area 3 round 19, A3-163) 'moves', when given, confirms that the value a run stores is a pointer from register k: called with k and the
+// store's index in run.trace, it answers whether the same store, in a run with k started elsewhere, stores a value moved by as much. A value
+// that only lands on k's start by arithmetic on other registers does not move (grammar 2 seed 2807704: r4 ^ r5 + r5 is r6's start, by the
+// arenas' 0x1000 spacing) and is no evidence of a leak; 'unmoved' counts the stores so excused.
+using PointerMoves = std::function<bool(int k, size_t traceIndex)>;
+std::string EffectClaimsContradicted(const CallEffects& e, const RunOut& run, std::string* sigOut = nullptr, const PointerMoves* moves = nullptr,
+                                     int* unmoved = nullptr)
 {
     auto fail = [&](const char* sig, const std::string& what) {
         if (sigOut) *sigOut = sig;
@@ -4881,13 +4887,20 @@ std::string EffectClaimsContradicted(const CallEffects& e, const RunOut& run, st
     // (A3-63) What it stores: a pointer (a register's start value stepped, or a stack address) stored at or above the entry r15 needs that origin,
     // or memory, in `frameValues`; stored anywhere else outside the stack (memory the function does not track: an arena, a literal's target,
     // hardware), in `leaks`. A caller's `escaped` flag, the notes at its calls and A3-21's hand-back rest on both.
-    for (const TraceRec& t : run.trace)
+    for (size_t ti = 0; ti < run.trace.size(); ++ti)
     {
+        const TraceRec& t = run.trace[ti];
         if (!t.write || t.size != 4) continue;
         const int k = PointerRegister(run, static_cast<uint32_t>(t.value));
         if (k < 0) continue;
         const uint32_t a = t.addr & 0x0FFFFFFFu;
         const uint32_t want = PointerOrigin(k) | origin::kMemory;
+        const bool claimed = (a >= kStackTop && a < kStackHi) ? (e.frameValues & want) != 0 : (a < kStackLo || a >= kStackHi) ? (e.leaks & want) != 0 : true;
+        if (!claimed && moves && k != 15 && !(*moves)(k, ti))
+        {
+            if (unmoved) ++*unmoved;
+            continue;
+        }
         if (a >= kStackTop && a < kStackHi)
         {
             if (!(e.frameValues & want))
@@ -6276,7 +6289,36 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                 if (!run.finished) continue;
                 count("claims.checked");
                 std::string sig;
-                const std::string what = EffectClaimsContradicted(pr.effects, run, &sig);
+                // (A3-163) a pointer store the claims leave out is confirmed by a run with that register started 0x40 further on: the same
+                // store (the same instruction, the same occurrence) must store a value 0x40 further on too. A run that stops early or takes
+                // another path is no evidence either way and keeps the finding.
+                const PointerMoves moves = [&](int k, size_t ti) -> bool {
+                    const TraceRec& t = run.trace[ti];
+                    RunSpec rs;
+                    rs.mode = run.mode;
+                    rs.volatileRun = volatileRun;
+                    if (run.selValue != RunOut::kNoSel && fn.sel >= 4)
+                    {
+                        rs.selReg = fn.sel;
+                        rs.selValue = static_cast<uint32_t>(run.selValue);
+                    }
+                    const uint32_t delta = 0x40u;
+                    rs.perturbReg = k;
+                    rs.perturbValue = (k == 17 ? run.initState[0] : run.init[k]) + delta;
+                    const RunOut other = runner.One(fn, rs);
+                    count("claims.pointer-confirm-runs");
+                    if (!other.finished || other.addressError) return true;
+                    int nth = 0;
+                    for (size_t i = 0; i < ti; ++i)
+                        if (run.trace[i].write && run.trace[i].insn == t.insn && run.trace[i].depth == t.depth) ++nth;
+                    for (const TraceRec& o : other.trace)
+                        if (o.write && o.insn == t.insn && o.depth == t.depth && nth-- == 0)
+                            return o.size != t.size || static_cast<uint32_t>(o.value) == static_cast<uint32_t>(t.value) + delta;
+                    return true;
+                };
+                int unmoved = 0;
+                const std::string what = EffectClaimsContradicted(pr.effects, run, &sig, &moves, &unmoved);
+                if (unmoved) count("excluded.pointer-not-moved.claim-wrong", unmoved);
                 if (!what.empty())
                 {
                     add(sig, what);
@@ -14658,6 +14700,45 @@ void TestA3RoutedPins(Sh2Decompiler& d)
         for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
         CHECK(rep.findings.empty());
         CHECK(count(rep, "excluded.stale-stack-read.input-dropped") >= 1);
+    }
+    {
+        // A3-163 (area 3 round 19): function 1 of grammar 2 seed 2807704 stores r4 ^ r5 + r5, which is r6's start by the arenas' spacing, and
+        // was taken for a leak of r6. A run with r6 started 0x40 further on stores the same value: not a pointer from r6.
+        const Report rep = Evaluate(d, MakeV2(2807704), true);
+        std::printf("pin 'A3-163 grammar 2 seed 2807704': %zu finding(s), pointer stores not moved %d, confirm runs %d\n", rep.findings.size(),
+                    count(rep, "excluded.pointer-not-moved.claim-wrong"), count(rep, "claims.pointer-confirm-runs"));
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+        CHECK(count(rep, "excluded.pointer-not-moved.claim-wrong") >= 1);
+        // ...and a store whose value moves with the register is still a leak the claims must name (the confirmation, by hand).
+        RunOut run;
+        run.finished = true;
+        for (int r = 0; r < 16; ++r) run.init[r] = run.fin[r] = 0x1000u + r;
+        run.init[6] = run.fin[6] = kScratch6;
+        run.init[15] = run.fin[15] = kStackTop;
+        run.use.readFirst = 1u << 6;
+        TraceRec t;
+        t.insn = kCode;
+        t.write = true;
+        t.size = 4;
+        t.addr = 0x06002000u;
+        t.value = kScratch6;
+        run.trace.push_back(t);
+        CallEffects none;   // a function that preserves everything and stores nowhere
+        none.preserved = (1u << 22) - 1;
+        none.storesThrough = 0;
+        none.outOrigins = 0;
+        none.leaks = 0;
+        none.frameValues = 0;
+        none.frameWords = 0;
+        none.spDelta = 0;
+        const PointerMoves moved = [](int, size_t) { return true; };
+        const PointerMoves still = [](int, size_t) { return false; };
+        std::string sig;
+        int unmoved = 0;
+        CHECK(!EffectClaimsContradicted(none, run, &sig, &moved, &unmoved).empty() && sig == "claim-wrong:leaks" && unmoved == 0);
+        CHECK(EffectClaimsContradicted(none, run, &sig, &still, &unmoved).empty() && unmoved == 1);
+        CHECK(!EffectClaimsContradicted(none, run, &sig).empty());   // without a confirmation, as before
     }
 }
 
