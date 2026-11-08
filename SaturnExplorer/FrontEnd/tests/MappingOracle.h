@@ -572,6 +572,26 @@ inline WordValue MemoryBefore(const sfe::decomp::DecompileResult& r, const std::
             word(p, w);
             int ssize = 0;
             const int reg = StoredRegister(w, ssize);
+            // (A7-69: `tas.b @Rn` writes the byte it read with bit 7 set; grammar 1 seeds 2702841, 3005842)
+            if ((w & 0xF0FF) == 0x401B)
+            {
+                const WordValue tb = RegisterBefore(r, word, into, p, (w >> 8) & 0xF, depth + 1);
+                if (tb.kind != WordValue::Number) return WordValue();
+                const uint32_t tx = static_cast<uint32_t>(tb.value) & 0x07FFFFFFu, ty = addr & 0x07FFFFFFu;
+                if (tx + 1 <= ty || ty + static_cast<uint32_t>(size) <= tx)
+                {
+                    todo.push_back(p);
+                    continue;
+                }
+                if (tx != ty || size != 1 || !FoldedAccess(r, p, true)) return WordValue();
+                const WordValue old = MemoryBefore(r, word, into, p, addr, 1, depth + 1);
+                if (old.kind != WordValue::Number) return WordValue();
+                const WordValue set{ WordValue::Number, (old.value & 0xFF) | 0x80 };
+                if (any && !(set == result)) return WordValue();
+                result = set;
+                any = true;
+                continue;
+            }
             if (reg < 0 && (w >> 8) != 0xC0 && (w >> 8) != 0xC1 && (w >> 8) != 0xC2)
             {
                 todo.push_back(p);
@@ -586,11 +606,14 @@ inline WordValue MemoryBefore(const sfe::decomp::DecompileResult& r, const std::
                 todo.push_back(p);
                 continue;
             }
-            if (x != y || ssize != size || !FoldedAccess(r, p, true)) return WordValue();
+            // (A7-69: a read of the first bytes of a wider store -- `mov.w @r7,r2` after `mov.l r0,@r7` -- is the stored value's piece, the
+            // SH-2 being big-endian; grammar 1 seed 3216185)
+            if (x > y || y + static_cast<uint32_t>(size) > x + static_cast<uint32_t>(ssize) || !FoldedAccess(r, p, true)) return WordValue();
             const WordValue v = RegisterBefore(r, word, into, p, reg, depth + 1);
             if (v.kind != WordValue::Number) return WordValue();
             const uint64_t bytes = size >= 4 ? 0xFFFFFFFFull : (1ull << (8 * size)) - 1;
-            const WordValue masked{ WordValue::Number, static_cast<int64_t>(static_cast<uint64_t>(v.value) & bytes) };
+            const uint32_t drop = 8 * (static_cast<uint32_t>(ssize) - (y - x) - static_cast<uint32_t>(size));
+            const WordValue masked{ WordValue::Number, static_cast<int64_t>((static_cast<uint64_t>(v.value) & 0xFFFFFFFFull) >> drop & bytes) };
             if (any && !(masked == result)) return WordValue();
             result = masked;
             any = true;
@@ -655,6 +678,19 @@ inline WordValue RegisterBefore(const sfe::decomp::DecompileResult& r, const std
             // A7-34 (the area 7 fixer): an edge never taken, by a T the words give (`cmp/eq r1,r2` of two numbers), or an instruction
             // never run after one: no path
             if (p + 2 == a && depth < 6 && NeverRun(r, word, into, p, depth + 1)) continue;
+            // A7-69: the edge of a delayed `bt/s` or `bf/s` (reached from its slot) that T says is never taken, or the fall-through of one
+            // that always branches; grammar 2 seed 2702788, grammar 1 seed 3214852
+            {
+                uint16_t bw = 0;
+                sfe::DisassembledInstruction br;
+                if (depth < 6 && r.InBody(p - 2) && word(p - 2, bw) && ((bw >> 8) == 0x8D || (bw >> 8) == 0x8F) && decode(p - 2, br) &&
+                    br.BranchTarget != p + 2 && (p + 2 == a || br.BranchTarget == a))
+                {
+                    const int t = TBefore(r, word, into, p - 2, depth + 1);
+                    const bool taken = p + 2 != a;
+                    if (t >= 0 && taken != (((bw >> 8) == 0x8D) == (t == 1))) continue;
+                }
+            }
             if (((w >> 8) == 0x89 || (w >> 8) == 0x8B) && depth < 6 && d.BranchTarget != p + 2)
             {
                 const bool taken = p + 2 != a;
@@ -942,17 +978,27 @@ inline WordValue WrittenValue(const sfe::decomp::DecompileResult& r, const std::
         return NumberValue(hi == 0x9 ? static_cast<uint32_t>(static_cast<int32_t>(static_cast<int16_t>(l))) : (static_cast<uint32_t>(h) << 16 | l));
     }
     if (hi == 0x7 && n == reg) return number(before(n), a) ? NumberValue(a + static_cast<uint32_t>(static_cast<int32_t>(static_cast<int8_t>(w & 0xFF)))) : WordValue();
-    if (hi == 0x3 && n == reg && (lo == 0xC || lo == 0x8))
+    // (A7-69: `subv`/`addv` give the value `sub`/`add` do -- `subv r1,r1` is 0 -- and `addc`/`subc` add or take the carry, T before;
+    // grammar 2 seeds 3106681, 3210493, 3007721)
+    if (hi == 0x3 && n == reg && (lo == 0xC || lo == 0x8 || lo == 0xB || lo == 0xF || lo == 0xE || lo == 0xA))
     {
-        if (lo == 0x8 && m == n) return NumberValue(0);
+        const bool subtract = lo == 0x8 || lo == 0xB || lo == 0xA, carry = lo == 0xE || lo == 0xA;
+        if (!carry && subtract && m == n) return NumberValue(0);
         // (A7-64: `sub r4,r0` with r0 a copy of the input r4 is 0; grammar 2 seed 2602445)
-        if (lo == 0x8)
+        if (!carry && subtract)
         {
             const WordValue pn = before(n), pm = before(m);
             if (pn.kind == WordValue::Param && pm.kind == WordValue::Param && pn.value == pm.value) return NumberValue(0);
         }
         if (!number(before(n), a) || !number(before(m), b)) return WordValue();
-        return NumberValue(lo == 0xC ? a + b : a - b);
+        uint32_t t = 0;
+        if (carry)
+        {
+            const int tb = TBefore(r, word, into, p, depth);
+            if (tb < 0) return WordValue();
+            t = static_cast<uint32_t>(tb);
+        }
+        return NumberValue(subtract ? a - b - t : a + b + t);
     }
     if (hi == 0x2 && n == reg && (lo == 0x9 || lo == 0xA || lo == 0xB))
     {
