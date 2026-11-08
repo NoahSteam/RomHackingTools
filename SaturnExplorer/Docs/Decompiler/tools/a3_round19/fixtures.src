@@ -1,0 +1,135 @@
+# Area 3 round 19 fixtures (asm syntax of ../a3_round16/asm.py). Run with run19.sh <name>.
+name f3
+# A3-167 a store before a poll the analysis takes to run for ever, with a store in the loop's body: dropped, nothing said, r6 dropped from the lent prototype
+mov.l =0x06002304,r3
+mov.l r6,@r3
+mov.l =0x06001010,r7
+mov #1,r0
+mov.w r0,@r7
+P:
+mov.l r5,@(4,r3)
+mov.w @r7,r0
+tst #1,r0
+bf P
+mov.l r0,@r3
+rts
+nop
+name f2
+# A3-167 the same with a hardware register written in the body
+mov.l =0x06002304,r3
+mov.l r6,@r3
+mov.l =0x06001010,r7
+mov.l =0x25F80000,r8
+mov #1,r0
+mov.w r0,@r7
+P:
+mov.w r5,@r8
+mov.w @r7,r0
+tst #1,r0
+bf P
+mov.l r0,@r3
+rts
+nop
+name f3c
+# A3-167 control: no store after the loop: the store is printed
+mov.l =0x06002304,r3
+mov.l r6,@r3
+mov.l =0x06001010,r7
+mov #1,r0
+mov.w r0,@r7
+P:
+mov.l r5,@(4,r3)
+mov.w @r7,r0
+tst #1,r0
+bf P
+rts
+nop
+name f3d
+# A3-167 control: an empty body: the note is given and the signature withheld
+mov.l =0x06002304,r3
+mov.l r6,@r3
+mov.l =0x06001010,r7
+mov #1,r0
+mov.w r0,@r7
+P:
+nop
+mov.w @r7,r0
+tst #1,r0
+bf P
+mov.l r0,@r3
+rts
+nop
+name f6
+# A3-168 tas.b whose T is stored, before the poll: its write dropped, the note suppressed because the read names the instruction
+mov.l =0x06002304,r3
+tas.b @r3
+movt r1
+mov.l r1,@r5
+mov.l =0x06001010,r7
+mov #1,r0
+mov.w r0,@r7
+P:
+mov.w @r7,r0
+tst #1,r0
+bf P
+mov.b r0,@r3
+rts
+nop
+name f6c
+# A3-168 control: no store after the loop: the tas.b write is printed
+mov.l =0x06002304,r3
+tas.b @r3
+movt r1
+mov.l r1,@r5
+mov.l =0x06001010,r7
+mov #1,r0
+mov.w r0,@r7
+P:
+mov.w @r7,r0
+tst #1,r0
+bf P
+rts
+nop
+name f6d
+# A3-168 control: T unused: the note is given
+mov.l =0x06002304,r3
+tas.b @r3
+mov.l =0x06001010,r7
+mov #1,r0
+mov.w r0,@r7
+P:
+mov.w @r7,r0
+tst #1,r0
+bf P
+mov.b r0,@r3
+rts
+nop
+name f4
+# A3-169 a store the next store replaces before the loop: the note says the loop drops it
+mov.l =0x06002304,r3
+mov.l r5,@r3
+mov.l r6,@r3
+mov.l =0x06001010,r7
+mov #1,r0
+mov.w r0,@r7
+P:
+mov.w @r7,r0
+tst #1,r0
+bf P
+rts
+nop
+name f9
+# A3-161 class in an endless loop: iRam = 0 before the loop, a store the code does not make (accepted class, no row)
+mov.l =0x06002304,r3
+mov #0,r1
+mov.l =0x06001010,r7
+mov #1,r0
+mov.w r0,@r7
+P:
+add #1,r1
+mov.l r1,@r3
+mov.w @r7,r0
+tst #1,r0
+bf P
+rts
+nop
