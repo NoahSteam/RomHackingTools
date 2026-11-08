@@ -15588,12 +15588,17 @@ void TestA3164Fix()
         { "A3-169 a store the next store before the loop replaces", { 0xD305, 0x2352, 0x2362, 0xD705, 0xE001, 0x2701, 0x6071, 0xC801, 0x8BFC, 0x000B,
                                                                        0x0009, 0x0009, 0x0600, 0x2304, 0x0600, 0x1010 },
           { "xRam06002304 = param_3;", "xRam06001010 = 1;", "while( true )" }, { "param_2;" } },
+        // round 19's fixture f9 (A3-161's merge in a poll's body, `add #1,r1 ; mov.l r1,@r3`): the store's copy prints nothing, the add writes
+        // the global's variable: printed, not said
+        { "A3-167 control: a stored register merged under the global's name", { 0xD305, 0xE100, 0xD705, 0xE001, 0x2701, 0x7101, 0x2312, 0x6071, 0xC801,
+                                                                                 0x8BFA, 0x000B, 0x0009, 0x0600, 0x2304, 0x0600, 0x1010 },
+          { "iRam06002304 = iRam06002304 + 1;", "while( true )" }, {} },
         // A3-169 control (f4r): the same two stores before an rts
         { "A3-169 control: the two stores before rts", { 0xD302, 0x2352, 0x2362, 0x000B, 0x0009, 0x0009, 0x0600, 0x2304 },
           { "xRam06002304 = param_3;" }, { "param_2;" } },
     };
     // ...of which these are lent a signature (nothing of the code is missing from their text)
-    const char* const kLent[] = { "A3-167 control: a body, no store after the loop", "A3-168 control: tas.b, no store after the loop",
+    const char* const kLent[] = { "A3-167 control: a body, no store after the loop", "A3-167 control: a stored register merged under the global's name", "A3-168 control: tas.b, no store after the loop",
                                   "A3-169 a store the next store before the loop replaces", "A3-169 control: the two stores before rts" };
     // What the engine still drops (it saw no reader of the write before it took the loop for endless) is said on the store's instruction
     // (Sh2Decompiler::NoteStoresBeforeEndlessLoop), and the signature is withheld. Generator grammar 1 seed 12705, shrunk: `mov.l r1,@r6`

@@ -14742,6 +14742,7 @@ void TestA3RoutedPins(Sh2Decompiler& d)
             { "A3-167 control f3c (no store after)", "D305 2362 D705 E001 2701 1351 6071 C801 8BFB 000B 0009 0009 0600 2304 0600 1010", false },
             { "A3-168 control f6c (no store after)", "D305 431B 0129 2512 D704 E001 2701 6071 C801 8BFC 000B 0009 0600 2304 0600 1010", false },
             { "A3-169 f4", "D305 2352 2362 D705 E001 2701 6071 C801 8BFC 000B 0009 0009 0600 2304 0600 1010", false },
+            { "A3-161's merge in a body, f9", "D305 E100 D705 E001 2701 7101 2312 6071 C801 8BFA 000B 0009 0600 2304 0600 1010", false },
             // grammar 1 seed 3302668 (the new poll-body production, 5,000 seeds from 3,300,001), shrunk: the body writes back the word read
             // before the loop (`mov.w @r6,r3 ; ... P: mov.w r3,@r6 ; poll`). The store's op is alive but prints only as the `while` keyword
             // of `do { } while( true );`: said as a write in the loop
