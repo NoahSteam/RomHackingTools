@@ -18460,3 +18460,36 @@ The game corpus (hwram007 and hwram008, alone and `SE_GAME_LEND=1`, `tools/a7_ro
 * 0600894A (hwram007) and 06008C0A (hwram008): `iRam06003028 = param_2;` (0x0600895A) now prints before `iVar5 = 0;` (0x0600895C), in the code's order.
 
 The other differences from the area 7 round 8 fixer's dumps of master (`41b69ebf`) are 0086's casts (`(int4)xStack_8`) and 0085's (06016142 prints its `iRam06057df4 = 8;` once per path, where it had printed the store at 0x0601647A three times).
+
+## Area 2, round 21 review
+
+Reviewer, branch `review/2-round21`, cut at master `e4bce675` (patches to 0088, 0086 in the tree). Findings only: no engine, host or suite file changed. The repository gets one tool (`Docs/Decompiler/tools/a2_round20/mkx21.py`) and this record; no ledger row was filed (A2-130 stays unused). Own RelWithDebInfo build (`-j2`), every test binary under `ulimit -v 3500000` (4,000,000 for the generator ranges) and `timeout`, one heavy job at a time, each run at most 20 minutes.
+
+**Verdict: clean (no P1, no P2, no P3 in area 2).** The clean count of area 2 becomes 1 (round 20 was not clean).
+
+### 1. What I attacked
+
+Patch 0086 first (`unsignedNamedRead`, `unsignedTextRead`, `declaredWithoutSign`, the `isExtensionCastImplied` change), then its neighbours 0084 (in-place CONCAT casts) and 0087/0088 where they touch printed semantics (no area 2 text changed).
+
+| Run | Result |
+|---|---|
+| grammar 2, 3,100,001 to 3,110,000 (two pieces of 5,000) | 1 failing seed, area 7's (`map-const-join`, A7-58/A7-64's class): **3106681** (`xVar4 = 0;` drawn at `subv r1,r1`, the first instruction of a join) |
+| grammar 1, 3,100,001 to 3,110,000 | 0 findings |
+| grammar 2, `SE_GENERATED_ALPHABET=specials`, 3,120,001 to 3,125,000 | 0 findings |
+| printed-C, 3,100,001 to 3,115,000 (three pieces of 5,000) | 0 `mismatch`; agrees 8,395 + 8,450 + (third piece, see the log), narrow-c 200 / 233, void-return 357 / 362 |
+| printed-C matrix (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | agrees **5,196** (the baseline), narrow-c 130, 0 `mismatch` |
+| `mkx21.py` (new): round 20's stack pieces (store, overwrite, read by byte, half or long; five cuts) compared with four constants by nine compare forms (`cmp/gt`, `ge`, `hi`, `hs`, `eq`, and the constant on the left) read through `bt` and `bf` branches, so the engine must negate `<` into `<=` with the cast kept | 7,920 functions, **0 `mismatch`**: agrees 7,909, narrow-c 11 |
+| `pgen.py` 3,100,001 for 6,000 | **0 `mismatch`**: agrees 5,849, narrow-c 134, skipped 17 |
+| hand fixtures | a parameter used signed and unsigned (`(param_3 < param_1) + (param_2 < (int4)param_1)`: the cast is present where one value is read both ways), a named piece compared in a branch both ways round (`if ((int4)xStack_4 < 6)` against `if (xStack_4 < 6)`, and the `bf` forms), all `agrees` |
+
+### 2. Patch 0086 held
+
+A signed read of an `xunknown` local or field prints the cast and an unsigned read the bare name in every form tried: `bool`-returning compares, `bt` and `bf` branches (the negated compare keeps the cast), constants on either side, a byte, half and long piece, and the same variable read both ways. The 11 `narrow-c` of `mkx21.py` are known classes: a 3-byte `unkint3 param_2` against 0 (round 20's "3-byte types", not filed) and a piece whose upper half is read before any store, so its bytes are the frame's initial content (`xStack_4._2_2_`), which the harness fills differently (the oracle's stack-initial-value difference, not a semantic one). No register-only path found a signed op whose text equals the unsigned op's.
+
+### 3. Tests
+
+* **Full `ctest`:** see the hand-back report (the figures are in the commit message of the record).
+
+### 4. Routed
+
+* **Area 7:** grammar 2 seed **3106681** (`map-const-join`). Replay: `SE_GENERATED_GRAMMAR=2 SE_GENERATED_SEED=3106681 SE_GENERATED_CANARY=0`.
