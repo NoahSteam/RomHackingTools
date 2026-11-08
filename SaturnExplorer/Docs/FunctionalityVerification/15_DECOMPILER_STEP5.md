@@ -18616,3 +18616,58 @@ A signed read of an `xunknown` local or field prints the cast and an unsigned re
 ### 4. Routed
 
 * **Area 7:** grammar 2 seed **3106681** (`map-const-join`). Replay: `SE_GENERATED_GRAMMAR=2 SE_GENERATED_SEED=3106681 SE_GENERATED_CANARY=0`.
+
+## Area 7, round 10
+
+Branch `review/7-round10` from master `d5c53d9f`. The worktree's RelWithDebInfo build, `-j2`, every test binary under `ulimit -v 3500000` and `timeout`, one heavy job at a time. Nine rows filed and fixed: A7-69 to A7-75 for the 21 seeds, A7-76 for the two fixtures that lost their rule, A7-77 for the area 5 reviewer's note on A5-114's fixture. **Five are the oracle's alone** (A7-69 to A7-73, 17 seeds). **Three are the product's** (A7-74, A7-75, A7-77, in `AddFrameStoreTokens`; text, engine and vendored tree untouched, so no patch 0091 and no lint). Nothing here is a wrong value or a lost one: P2 for the two lines whose click went to the wrong instruction, P3 for the rest. One seed of the fresh run went to area 3 (below).
+
+### The seeds
+
+All 21 failed on master's build, each with one finding of the class the brief names. They share a few causes (the fixtures are shrunk by the generator; the oracle fixes are in `MappingOracle.h`).
+
+| Row | Seeds | Whose | Cause | Fix |
+|---|---|---|---|---|
+| A7-69 (a) | g2 3106681, 3210493, 3007721 | oracle | `xVar4 = 0;` at `subv r1,r1` (r1 - r1 is 0 whatever r1 holds); `xVar2 = 1;` at `extu.b r1,r1` after `addc r2,r1` (r1 0, T set by the `dt` loop that left it). `WrittenValue` had `sub`/`add` only | `subv`/`addv` as `sub`/`add`; `addc`/`subc` from the register values and `TBefore` |
+| A7-69 (b) | g2 2702788, g1 3214852 | oracle | `xVar2 = 0xf;` at `xor r0,r1`: `cmp/eq r2,r2 ; bf/s L ; mov #-0x6d,r0` never branches, so r0 is the `mov #0xf,r0` after it; `xVar1 = 0x48;` at `add #0x48,r0` after `tst #0x20,r0 ; bf/s` with r0 1 (the poll's forwarded write). `RegisterBefore` pruned `bt`/`bf` edges only | a delayed `bt/s`/`bf/s` edge T says is never taken (or always taken, the fall-through) is pruned, from its slot (`EdgeImpossible`, also in the memory walks) |
+| A7-69 (c) | g2 3217274 | oracle | `iVar1 = 0;` at `swap.b r1,r1`, the target of `tst r4,r4 ; bt L`: r1 is `exts.w r4,r1` and r4 is 0 on the edge, but the edge is after the extension | `EdgeFacts`: for the instruction the const-join check asks about, whose only way in is a `tst Rn,Rn`/`dt Rn` edge, Rn is 0 for the instructions before the branch on the straight line with no write of it |
+| A7-69 (d) | g2 3204314 | oracle | `in_r2 = 0x40000;` at `xtrct r1,r2` with r1 4: the engine prints the number part of the result (Rm << 16) as the variable's value and the other part (`in_r2 >> 0x10`) as another | `xtrct` makes Rm << 16 |
+| A7-69 (e) | g2 2707916 | oracle | `bVar1 = true;` at `cmp/pl r3`, the first instruction of a join entered by a tail jump into the callee's body, r3 the literal 0x0600901C: the T the compare sets | the T bit a compare/test of known registers sets (`TSetBy`) |
+| A7-69 (f) | g2 3218040 | oracle | `uRam06002106 = 0xff9b;` at `mov #-0x65,r1`: the variable is a half word (the only store the line names is `mov.w r1,@(r0,r7)`), and a global the text declares nowhere was four bytes wide | width = the widest store the line names, when all are narrower than a word |
+| A7-69 (g) | g2 3218780 | oracle | `uVar2 = 2;` at `mov.l @(0x0,r14),r2`: r14 is a copy of r15, the slot was stored `mov.l r0,@(0x0,r14)` (r0 2) before `tst #4,r0 ; bt L` (always branches), and the fall-through ran through a `bsr`, where the walk gave up | `SlotBefore` (a store and a load through one base register and displacement), memory walks prune impossible edges, `NeverRun` goes on past a call and its slot |
+| A7-70 | g1 2702841, 3005842, 3000756, 3216185 | oracle | `xRam2600208c = 0xffffff81;` / `= 0x81;`: `tas.b @r7` writes the byte with bit 7 set; `uVar1 = 0;` at `mov.w @r7,r2` read from `mov.l r0,@r7` (r0 2): the first two bytes; `xRam2600200e = 0xffff;` the first two bytes of the store of 0xffffff9d, the next global `xRam26002010` beginning two bytes on | `MemoryBefore` knows `tas.b` and the bytes of a wider store; `storeValueOther` also compares at the distance to the next global the text names (a byte must be compared) |
+| A7-71 | g1 2708608 | oracle | `iRam80002014 = 1;` at `mov #1,r0` of a loop that stores `r0 - r5`: the makers of the stored register were the `sub` alone | `RegisterMakers` through in-place updates, for A7-28 |
+| A7-72 | g1 2704995, 3208727 | oracle | copies of the input drawn at a store of the same byte through another address, and at the next write of the input's own register (`xtrct r2,r2`) | the A7-55 test takes both (counted apart as before) |
+| A7-73 | g1 3004177, 3204967 | oracle | `in_r0 = (int4)iRam2600100e;` drawn at an aliasing store (a copy the product marks materialised, cast or not); `uRam06001034 = 2;` at the word store of its own variable (the oracle called it a copy because it names the byte store beside it) | `readAtStore`, `ownStoreHere` in the way-back classification |
+| A7-74 | g2 3200926 | **product** | the statement `uRam06001000 = (uint4)pxRam0600228c;` is drawn at the `bsr` and names the store after the call: A7-59's retarget to the load after it did not apply (the COPY's input is the cast's temporary; the cast is a second op of the instruction on the line) | the input is followed through the conversions; a line shared only with implied casts of the instruction is retargeted |
+| A7-75 | g2 3201911 | **product** | `iStack_2 = (int2)param_1;` at the load of the half of a word pushed and popped (folded) names the store that overwrites the word after the load | a conversion at a load looks at the stores before it first; an emptied store before the statement in its flow block reaches it |
+| A7-77 | (A5-114's fixture) | **product** | `xRam06030000 = CONCAT11(in_r2,in_r1);` named the byte store alone, the half-word store whose r1 it shows on no line: a PIECE with an explicit output was no statement for `AddFrameStoreTokens` | it is, and names both |
+
+The brief's "3106681 `xVar4 = 0;` drawn at `subv r1,r1`" is (a). Whether the half-word store of A5-114's fixture being on no line is an area 7 defect: yes, A7-77 (the way back answered Folded, the hover text named one instruction of two); the order of the statement against the DMA enable is A5-114's and unchanged (engine behaviour not touched: the fix names instructions, the text is the same).
+
+### Pins
+
+`TestArea7Round10` (in `SaturnExplorerSh2DecompilerTests`): the shrunk words of each of the 21 seeds, run as the generator does (the callees' prototypes lent), with the line, the audit (`Violations() == 0`), and, for the number lines, a damaged control (the number changed by one is `constAtJoin` 1; the store-value ones `storeValueOther` 1, the 0xfffe against the word's 0xffff included); A7-77's fixture checks the line's instructions (0x06009006 and 0x0600900C). **A7-63 and A7-61 rebuilt** (A7-76): A7-63 as the text of `mov r4,r2 ; mov.l r2,@r6` with the chain `xVar1 = xRam26002000;` / `xRam26002000 = param_1;` written round the store's line (the engine prints no such chain for any words of the shape since patch 0088: the half read of a stored word is a temporary), the chain ending in `param_2` the damaged control (`storeValueOther` 1); A7-61 as grammar 1 seed 2500514's words with `cmp/eq r5,r2` (a compare of neither the stored r3 nor one moved into it: `copyNumberMade` 1, no violation) against `cmp/eq r0,r3` (r0 the 6: 0). The seeds are replayed in the pieces named in the ledger rows.
+
+**Mutation.** With master's `MappingOracle.h` and `Sh2Decompiler.cpp` put back, all 21 fixtures fail (each audit reports its class); with the branch's oracle and master's `Sh2Decompiler.cpp` exactly the two product fixtures fail (3200926 `map-store-after`, 3201911 `map-store-value`); the third product fix (A7-77) is shown by the token dump (`xRam06030000 = CONCAT11(in_r2,in_r1);    // 600900C` before, `// 6009006 600900C` after).
+
+### Runs
+
+| Run | Result |
+|---|---|
+| the 21 seeds (`SE_GENERATED_GRAMMAR=<g> SE_GENERATED_SEED=<s> SE_GENERATED_CANARY=0`) | **0 findings** (21 of 21) |
+| fresh grammar 1, 10,000 seeds from 3,500,001 (pieces of 5,000, `SE_GENERATED_CANARY=0 SE_GENERATED_SHRINK=5`) | 1 failing seed: **3509562**, `n:endless-store-dropped` (A3-164's check, area 3; no mapping check is involved: routed, below) |
+| fresh grammar 2, 10,000 seeds from 3,500,001 | **0 findings** |
+| the 20,000-seed matrix (`SE_GENERATED_SEEDS=20000` from seed 1, both grammars, pieces of 5,000, the canary on in the first) | **0 failing seeds** |
+| printed-C (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | agrees=5196, narrow-c=130 (as master) |
+| game corpus: hwram007 and hwram008, alone and `SE_GAME_LEND=1` | 4 of 4 runs pass (`Violations() == 0`): 839 and 1,554 functions ok alone, 1,730 and 2,995 lent |
+| `check-literal-size.py` (FrontEnd, Drivers, include) | ok |
+| full `ctest -j2 -E SaturnExplorerLive` | **111 of 111** passed (255 s; the fault suite and `SaturnExplorerSh2DecompilerEngineTests` among them, the latter 53 s) |
+| Live (`ctest -R SaturnExplorerLive`) | **6 of 6** passed |
+| fault suite (`SaturnExplorerDecompilerFaultTests`, product code changed) | **0 of 94** jobs failed |
+
+No new test target: the pins are a function in `Sh2DecompilerTests.cpp`.
+
+### Routed
+
+* **Area 3:** grammar 1 seed **3509562** (the fresh run), `n:endless-store-dropped` (A3-164's check: a store of 2 bytes at 0x06002308 made before an unmarked poll the text takes to run for ever, with no store of it in the text). Shrunk: `SE_GENERATED_WORDS="E00E 0625 D606 4015 8900 D606 2601 D706 E001 2702 6072 C801 8BFC 2601 000B 0009 0600 2308 0610 2308 2600 1034"`; the seed: `SE_GENERATED_GRAMMAR=1 SE_GENERATED_SEED=3509562 SE_GENERATED_CANARY=0`. Not caused by this round: no line's text changed, only tokens.
+* **Area 5:** nothing new; A5-114's order is its fixer's (A7-77 only names the instructions the line shows).
