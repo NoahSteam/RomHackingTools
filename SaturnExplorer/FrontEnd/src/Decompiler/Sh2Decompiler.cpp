@@ -8473,76 +8473,231 @@ void Sh2Decompiler::NoteRemovedAccesses(const std::shared_ptr<const MemorySnapsh
     r.prototype.known = false;
 }
 
-// A3-164: a store of ordinary memory that the code makes before a loop the analysis takes to run for ever, and that the text does not
-// print. The engine keeps such a store (patch 0087: a global's write no return follows is not dead), but not one it saw no reader of
-// before it took the loop for endless: a write the code replaces after the loop (the code there is removed with the loop's exit), or one
-// whose value it had joined into a wider word and carried on as a number. Another processor reads those writes while the loop runs, and
-// on the hardware a poll of memory it writes ends; the request marks no such memory. So each folded store of a constant address, in a
-// block of the flow from which the loop is reached and not in removed code, that no token of the text names is said on its instruction,
-// and the signature is withheld.
-void Sh2Decompiler::NoteStoresBeforeEndlessLoop(DecompileResult& r)
+namespace
 {
-    static const char kLoop[] = "Do nothing block with infinite loop";
-    static const char kRemoved[] = "Removing unreachable block (ram,0x";
-    std::vector<uint32_t> loops, removedStarts;
-    for (const std::string& w : r.warnings)
-    {
-        if (w.find(kLoop) != std::string::npos && w.compare(0, 2, "0x") == 0)
-            loops.push_back(static_cast<uint32_t>(std::strtoul(w.c_str() + 2, nullptr, 16)));
-        const size_t at = w.find(kRemoved);
-        if (at != std::string::npos) removedStarts.push_back(static_cast<uint32_t>(std::strtoul(w.c_str() + at + sizeof kRemoved - 1, nullptr, 16)));
-    }
-    if (loops.empty() || r.flowBlockRanges.empty()) return;
-    const size_t n = r.flowBlockRanges.size();
-    auto blockOf = [&](uint32_t insn) {
-        for (size_t b = 0; b < n; ++b)
-            if (r.flowBlockRanges[b].first <= insn && insn <= r.flowBlockRanges[b].second + 2u) return static_cast<int>(b);
-        return -1;
-    };
-    // The flow's blocks from which a loop the analysis takes to run for ever is reached, by the flow's own edges.
-    std::vector<char> reaches(n, 0);
-    bool changed = false;
-    for (uint32_t l : loops)
-    {
-        const int b = blockOf(l);
-        if (b >= 0 && !reaches[b]) reaches[b] = changed = 1;
-    }
-    while (changed)
+
+// A3-164, A3-167 to A3-169: the stores of ordinary memory at a constant address that the code makes, that the final p-code no longer
+// writes, and that a loop the analysis takes to run for ever can be the last word on. The engine keeps a global's write from which a
+// path never reaches a RETURN (patch 0087), but not one it saw no reader of before it took the loop for endless: a write the code
+// replaces after the loop (the code there is removed with the loop's exit), or one whose value it joined into a wider word and carried
+// on as a number. Another processor reads those writes while the loop runs, and on the hardware a poll of memory it writes ends.
+//
+// Everything is read from the final p-code and the flow, not from the engine's warnings (A3-167: "Do nothing block with infinite loop"
+// is given only for a loop with an empty body):
+// * the loops: the final blocks from which no live RETURN is reached that lie on a cycle, and the flow blocks whose code they hold;
+// * a store is still made when ops of its own instruction write every byte of it into the address space (A3-168: a token of the text
+//   naming the instruction is no evidence, a `tas.b` whose T is used has its read printed and its write gone);
+// * a store the code itself replaces is dropped in any function (A3-169): it is said only if a path of the flow from it reaches such a
+//   loop with some byte of it not written again by a later store of the code's at a constant address. A path that leaves the loop, by
+//   an exit the engine cut, finds the store after the loop that replaces it; the path that stays in the loop does not.
+// A store in a flow block the engine removed whole is removed code (the removal is the engine's to say), not a write before the loop.
+// Nothing is allocated unless the function has a block that reaches no RETURN.
+std::vector<DecompileResult::EndlessLoopStore> StoresBeforeEndlessLoop(const ghidra::Funcdata& fd, const FlowRecord& flow,
+                                                                       const std::set<uint32_t>& removedBlocks,
+                                                                       const std::function<uint32_t(uint32_t)>& canonicalOf)
+{
+    std::vector<DecompileResult::EndlessLoopStore> out;
+    const ghidra::BlockGraph& g = fd.getBasicBlocks();
+    const ghidra::int4 n = g.getSize();
+    if (n == 0 || flow.successors.empty()) return out;
+    // The final blocks from which a live RETURN is reached, marked to a fixed point (as ActionDeadCode::doomedBlocks has it).
+    for (ghidra::int4 i = 0; i < n; ++i) g.getBlock(i)->clearMark();
+    for (auto it = fd.beginOp(ghidra::CPUI_RETURN); it != fd.endOp(ghidra::CPUI_RETURN); ++it)
+        if (!(*it)->isDead() && (*it)->getParent()) (*it)->getParent()->setMark();
+    for (bool changed = true; changed;)
     {
         changed = false;
-        for (size_t b = 0; b < n && b < r.flowSuccessors.size(); ++b)
+        for (ghidra::int4 i = n - 1; i >= 0; --i)
         {
-            if (reaches[b]) continue;
-            for (int s : r.flowSuccessors[b])
-                if (s >= 0 && static_cast<size_t>(s) < n && reaches[s])
+            ghidra::FlowBlock* b = g.getBlock(i);
+            if (b->isMark()) continue;
+            for (ghidra::int4 k = 0; k < b->sizeOut(); ++k)
+                if (b->getOut(k)->isMark())
                 {
-                    reaches[b] = changed = 1;
+                    b->setMark();
+                    changed = true;
                     break;
                 }
         }
     }
-    // A flow block the engine removed whole. A removed block that starts inside a flow block is one an instruction's own p-code made (the
-    // saturating arm of a `mac.w` once SR's S bit is known): the instruction's store is not in it.
-    std::vector<char> removed(n, 0);
-    for (uint32_t start : removedStarts)
-        for (size_t b = 0; b < n; ++b)
-            if (r.flowBlockRanges[b].first == start) removed[b] = 1;
-    std::set<uint32_t> named;
-    for (const Line& line : r.lines)
-        for (const Token& t : line.tokens)
-            if (t.addr != 0 && !t.haltsFlow) named.insert(t.addr);
-    std::set<uint32_t> said;
     bool any = false;
-    for (const AccessFate& f : r.accessFates)
+    for (ghidra::int4 i = 0; i < n && !any; ++i) any = !g.getBlock(i)->isMark();
+    if (!any)
     {
-        if (!f.write || f.frame || !f.constantAddress || f.fate != AccessFate::FoldedOrdinary) continue;
-        const int b = blockOf(f.insn);
-        if (b < 0 || !reaches[b] || removed[b] || named.count(f.insn) != 0 || !said.insert(f.insn).second) continue;
-        const std::string text = "the " + std::to_string(f.size) + "-byte write of " + Hex8(f.address) + " here is missing: the analysis takes "
-                                 "the loop at " + Hex8(loops.front()) + " to run for ever and drops a write before it that it sees no reader of. A "
+        for (ghidra::int4 i = 0; i < n; ++i) g.getBlock(i)->clearMark();
+        return out;
+    }
+    std::vector<char> dead(static_cast<size_t>(n), 0);
+    for (ghidra::int4 i = 0; i < n; ++i)
+    {
+        dead[static_cast<size_t>(i)] = !g.getBlock(i)->isMark();
+        g.getBlock(i)->clearMark();
+    }
+    // Each such block on a cycle (every block it reaches reaches no RETURN either) is a loop that runs for ever; the flow blocks that hold
+    // its code (its ops, by their place in the flow or their instruction, and the instruction it starts at) take its start.
+    const size_t nf = flow.successors.size();
+    std::vector<uint32_t> loopAt(nf, 0);
+    bool loops = false;
+    for (ghidra::int4 i = 0; i < n; ++i)
+    {
+        if (!dead[static_cast<size_t>(i)]) continue;
+        std::vector<char> seen(static_cast<size_t>(n), 0);
+        std::vector<const ghidra::FlowBlock*> work;
+        const ghidra::FlowBlock* b = g.getBlock(i);
+        for (ghidra::int4 k = 0; k < b->sizeOut(); ++k) work.push_back(b->getOut(k));
+        bool cycle = false;
+        while (!work.empty() && !cycle)
+        {
+            const ghidra::FlowBlock* x = work.back();
+            work.pop_back();
+            const ghidra::int4 xi = x->getIndex();
+            if (xi < 0 || xi >= n || seen[static_cast<size_t>(xi)]) continue;
+            seen[static_cast<size_t>(xi)] = 1;
+            if (xi == i) cycle = true;
+            for (ghidra::int4 k = 0; k < x->sizeOut(); ++k) work.push_back(x->getOut(k));
+        }
+        if (!cycle) continue;
+        const ghidra::BlockBasic* bb = static_cast<const ghidra::BlockBasic*>(b);
+        std::vector<int> held;
+        uint32_t at = 0;
+        const ghidra::Address start = bb->getStart();
+        if (!start.isInvalid())
+        {
+            at = canonicalOf(static_cast<uint32_t>(start.getOffset()));
+            auto f = flow.insnBlock.find(static_cast<uint32_t>(start.getOffset()));
+            if (f != flow.insnBlock.end()) held.push_back(f->second.first);
+        }
+        for (auto it = bb->beginOp(); it != bb->endOp(); ++it)
+        {
+            const ghidra::PcodeOp* o = *it;
+            if (at == 0) at = canonicalOf(InstructionOf(o));
+            auto f = flow.ops.find(o->getTime());
+            if (f != flow.ops.end()) held.push_back(f->second.first);
+            else
+            {
+                auto fi = flow.insnBlock.find(InstructionOf(o));
+                if (fi != flow.insnBlock.end()) held.push_back(fi->second.first);
+            }
+        }
+        if (at == 0) continue;
+        for (int fb : held)
+            if (fb >= 0 && static_cast<size_t>(fb) < nf && (loopAt[static_cast<size_t>(fb)] == 0 || at < loopAt[static_cast<size_t>(fb)]))
+            {
+                loopAt[static_cast<size_t>(fb)] = at;
+                loops = true;
+            }
+    }
+    if (!loops) return out;
+    // The bytes of the address space each op of an instruction still writes (not a MULTIEQUAL or INDIRECT: no write of the code's).
+    const ghidra::AddrSpace* ram = fd.getArch()->getDefaultDataSpace();
+    std::map<uint32_t, std::vector<std::pair<uint32_t, uint32_t>>> written;
+    for (auto it = fd.beginOpAlive(); it != fd.endOpAlive(); ++it)
+    {
+        const ghidra::PcodeOp* o = *it;
+        const ghidra::Varnode* v = o->getOut();
+        if (!v || v->getSpace() != ram || o->code() == ghidra::CPUI_MULTIEQUAL || o->code() == ghidra::CPUI_INDIRECT) continue;
+        written[InstructionOf(o)].emplace_back(static_cast<uint32_t>(v->getOffset()), static_cast<uint32_t>(v->getSize()));
+    }
+    struct Store
+    {
+        uint32_t insn = 0, address = 0, size = 0;
+        int block = -1;
+        uint32_t pos = 0;
+    };
+    std::vector<Store> stores;
+    for (const ghidra::AccessRecord& rec : fd.getAccessFates())
+    {
+        if (!rec.store || rec.fate != ghidra::fate_folded_ordinary || rec.addr.isInvalid() || rec.addr.getSpace() != ram) continue;
+        auto f = flow.ops.find(rec.time);
+        if (f == flow.ops.end() || f->second.first < 0 || static_cast<size_t>(f->second.first) >= nf) continue;
+        Store s;
+        s.insn = InstructionOf(rec);
+        s.address = static_cast<uint32_t>(rec.addr.getOffset());
+        s.size = std::min<uint32_t>(static_cast<uint32_t>(rec.size), 32u);
+        s.block = f->second.first;
+        s.pos = f->second.second;
+        stores.push_back(s);
+    }
+    auto bytesOf = [](const Store& s, uint32_t address, uint32_t size) {
+        uint32_t m = 0;
+        for (uint32_t k = 0; k < s.size; ++k)
+            if (address <= s.address + k && s.address + k - address < size) m |= 1u << k;
+        return m;
+    };
+    std::set<uint32_t> said;
+    for (size_t i = 0; i < stores.size(); ++i)
+    {
+        const Store& s = stores[i];
+        const uint32_t all = s.size >= 32 ? ~0u : (1u << s.size) - 1u;
+        uint32_t kept = 0;
+        auto w = written.find(s.insn);
+        if (w != written.end())
+            for (const auto& x : w->second) kept |= bytesOf(s, x.first, x.second);
+        if ((kept & all) == all || said.count(s.insn)) continue;
+        const uint32_t first = flow.ranges[static_cast<size_t>(s.block)].first;
+        bool removed = false;
+        for (uint32_t r : removedBlocks) removed = removed || canonicalOf(r) == first;
+        if (removed) continue;
+        // The later stores of the code's to its bytes along each path, until the path reaches a loop that runs for ever with a byte unwritten.
+        auto replaced = [&](int block, bool after) {
+            uint32_t m = 0;
+            for (size_t k = 0; k < stores.size(); ++k)
+                if (k != i && stores[k].block == block && (!after || stores[k].pos > s.pos))
+                    m |= bytesOf(s, stores[k].address, stores[k].size);
+            return m;
+        };
+        uint32_t loop = 0;
+        std::set<std::pair<int, uint32_t>> visited;
+        std::vector<std::pair<int, uint32_t>> work;
+        {
+            const uint32_t m = replaced(s.block, true) & all;
+            if (m != all)
+            {
+                if (loopAt[static_cast<size_t>(s.block)]) loop = loopAt[static_cast<size_t>(s.block)];
+                else
+                    for (int next : flow.successors[static_cast<size_t>(s.block)]) work.emplace_back(next, m);
+            }
+        }
+        while (!work.empty() && loop == 0)
+        {
+            const std::pair<int, uint32_t> st = work.back();
+            work.pop_back();
+            if (st.first < 0 || static_cast<size_t>(st.first) >= nf || !visited.insert(st).second) continue;
+            const uint32_t m = (st.second | replaced(st.first, false)) & all;
+            if (m == all) continue;
+            if (loopAt[static_cast<size_t>(st.first)])
+            {
+                loop = loopAt[static_cast<size_t>(st.first)];
+                break;
+            }
+            for (int next : flow.successors[static_cast<size_t>(st.first)]) work.emplace_back(next, m);
+        }
+        if (loop == 0) continue;
+        said.insert(s.insn);
+        DecompileResult::EndlessLoopStore e;
+        e.insn = canonicalOf(s.insn);
+        e.address = s.address;
+        e.size = s.size;
+        e.loop = loop;
+        out.push_back(e);
+    }
+    return out;
+}
+
+}  // namespace
+
+// What StoresBeforeEndlessLoop found is said on each store's instruction, and the signature is withheld: it describes a function that
+// stops at the loop.
+void Sh2Decompiler::NoteStoresBeforeEndlessLoop(DecompileResult& r)
+{
+    bool any = false;
+    for (const DecompileResult::EndlessLoopStore& s : r.storesBeforeEndlessLoop)
+    {
+        const std::string text = "the " + std::to_string(s.size) + "-byte write of " + Hex8(s.address) + " here is missing: the analysis takes "
+                                 "the loop at " + Hex8(s.loop) + " to run for ever and drops a write before it that it sees no reader of. A "
                                  "poll of memory another processor writes folds so unless that memory is marked volatile";
-        r.hardwareNotes.push_back(HardwareNote{ f.insn, text, true });
-        r.warnings.push_back(Hex8(f.insn) + ": " + text);
+        r.hardwareNotes.push_back(HardwareNote{ s.insn, text, true });
+        r.warnings.push_back(Hex8(s.insn) + ": " + text);
         any = true;
     }
     if (!any) return;
@@ -9540,6 +9695,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         r.calls = Calls(*fd, flow, canonicalOf);
         r.flowSuccessors = flow.successors;
         r.flowBlockRanges = flow.ranges;
+        r.storesBeforeEndlessLoop = StoresBeforeEndlessLoop(*fd, flow, removedBlocks, canonicalOf);   // A3-167 to A3-169
         r.frameLedgerCapped = fd->isFrameLedgerCapped();   // (A3-133, patch 0072) the frame records hide any loss: unchecked
         for (const ghidra::FrameCallRecord& c : fd->getFrameCalls())
         {
