@@ -15913,6 +15913,8 @@ void TestArea5Review()
         { "a5_115", 0x06052400u, { 0xD602, 0x6042, 0x2622, 0x000B, 0x2502, 0x0009, 0x0603, 0x0000 } },
         // ...the value read returned: mov.l @(lit),r6 ; mov.l @r4,r0 ; mov.l r2,@r6 ; rts ; nop
         { "a5_115_ret", 0x06052500u, { 0xD602, 0x6042, 0x2622, 0x000B, 0x0009, 0x0009, 0x0603, 0x0000 } },
+        // ...the value read written to a register: mov.l @(lit),r6 ; mov.l @(lit),r7 (SCU_D0EN) ; mov.l @r4,r0 ; mov.l r2,@r6 ; rts ; mov.l r0,@r7
+        { "a5_115_reg", 0x06052900u, { 0xD602, 0xD703, 0x6042, 0x2622, 0x000B, 0x2702, 0x0603, 0x0000, 0x25FE, 0x0010 } },
         // control: a register write in the global's place: mov.l @(lit),r6 (SCU_D0EN) ; mov #1,r2 ; mov.l @r4,r0 ; rts ; mov.l r2,@r6
         { "a5_115_hw", 0x06052600u, { 0xD602, 0xE201, 0x6042, 0x000B, 0x2622, 0x0009, 0x25FE, 0x0010 } },
         // A5-116: mov.l @(lit),r1 (0x06030000) ; mov.l @r1,r0 ; mov.l @(lit),r2 (SCU_D0EN) ; mov.l @(lit),r3 (0x101) ; mov.l r3,@r2 ; rts ; nop
@@ -15951,10 +15953,30 @@ void TestArea5Review()
     // pointer is the global's address the code stores (or returns) the old value, the text the new one.
     CHECK(before(out["a5_115"], "xRam06030000 = in_r2;", "*param_2 = *param_1;"));        // DEFECT (want the read before the store)
     CHECK(before(out["a5_115_ret"], "xRam06030000 = in_r2;", "return *param_1;"));        // DEFECT
+    CHECK(before(out["a5_115_reg"], "xRam06030000 = in_r2;", "SCU_D0EN = *param_1;"));   // DEFECT (the register gets the new value then)
     CHECK(before(out["a5_115_hw"], "= *param_1;", "SCU_D0EN = 1;"));                      // control: a register write keeps the read in place
     // A5-116 (P2): a read of a global is printed at its use, after a register write the code makes after the read (the DMA enable here).
     CHECK(before(out["a5_116"], "SCU_D0EN = 0x101;", "return xRam06030000;"));            // DEFECT (want the read before the enable)
     CHECK(before(out["a5_116_ptr"], "= xRam06030000;", "*param_1 = in_r2;"));             // control: a store through a pointer keeps it
+    // A5-117 (P2; grammar 1 seed 3007538 shrunk, routed from the area 3 round 19 review): poll the mailbox 0x26001028 ; cmp/eq #1,r0 ; bf/s L ;
+    // mov.l r3,@r6 (0x2600220C) ; mov.l r3,@r6 ; add #0x21,r2 ; L: mov.w @r7,r1 (the mailbox again) ; mov.l r2,@(8,r6) ; rts ; nop -- with the
+    // mailbox marked volatile, the two equal stores of the global (one in the slot, both paths) are printed after the mailbox read that follows them
+    {
+        const std::vector<uint16_t> words = { 0xD606, 0xD707, 0x6072, 0xC801, 0x8BFC, 0x8801, 0x8F02, 0x2632, 0x2632, 0x7221, 0x6171, 0x1622, 0x000B,
+                                              0x0009, 0x2600, 0x220C, 0x2600, 0x1028 };
+        std::vector<uint8_t> mem(0x100000u, 0);
+        size_t off = 0x52A00u;
+        for (uint16_t c : words) { dts::Put16(mem, off, c); off += 2; }
+        auto snap2 = MakeSnapshot(mem);
+        DecompileRequest q = Request(0x06052A00u);
+        q.volatileMemory.emplace_back(0x26001028u, 0x2600102Bu);
+        const DecompileResult r = d.Decompile(snap2, q);
+        Print("a5_117", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        const std::string t = r.Text();
+        const size_t rd = t.rfind("= Ram26001028;"), st = t.find("xRam2600220c = in_r3;");
+        CHECK(rd != std::string::npos && st != std::string::npos && rd < st);   // DEFECT (want the store before the mailbox's second read)
+    }
 }
 
 void TestFetchAndDataRefusals()
