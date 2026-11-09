@@ -18923,3 +18923,64 @@ The productions' doubled instances give two classes, both where the engine joins
 * **Area 5** (A5-117's class: equal stores joined after a later access, here the two instances of one instruction): `n:` or `v:folded-store-after-access` on 19 of the 33 new seeds from 3,800,001, e.g. grammar 1 seed 3800275, shrunk: `SE_GENERATED_WORDS="D604 D705 2548 8901 C804 8F01 2622 6350 000B 0009 2600 208C 4600 208C"` (`tst r4,r5 ; bt S ; tst #4,r0 ; bf/s R ; S: mov.w r2,@r6 ; mov.b @r5,r3 ; R: rts`) prints `if (...) { xVar1 = *param_2; } xRam2600208c = in_r2;`, the store after the read the code makes after it.
 * **Area 7** (the mapping of the joined store): `map-copy-store` on 13 seeds, `map-copy-merge` on 1, `map-const-join` on 1 (with `map-copy-store`, 3801805), e.g. grammar 1 seed 3800320, shrunk: `SE_GENERATED_WORDS="D603 2228 8B01 4315 8D00 2611 000B 0009 2600 1030"` (`tst r2,r2 ; bf S ; cmp/pl r3 ; bt/s +0 ; S: mov.l r1,@r6`) prints `xRam26001030 = in_r1;` with no token of an instruction (a click goes to 00000000), and seed 3800354, shrunk: `SE_GENERATED_WORDS="D703 2208 8901 C801 8F00 2731 000B 0009 2600 1010"`. And grammar 2 seed 3802371 (`map-copy-store`, `map-const-join`: `xRam26001024 = 0;` names neither of its 2 stores), shrunk: `SE_GENERATED_WORDS="D605 4715 8902 2630 A003 E35A 2630 A000 0009 607C 000B 0009 2600 1024" SE_GENERATED_FUNCS="0/0/18" SE_GENERATED_RETURNS="1"`.
 * The baseline seeds of the range: 3800581 (area 7), 3801285 (area 5), 3804173 (area 7); and the matrix's 4123 (area 5) and 17737 (area 7), already with their areas.
+
+## Area 3, round 21 review
+
+Reviewer, branch `review/3-round21`, cut at master `c38138018` (the per-instance store tracking of A3-170). No engine, host or product file changed. The repository gets fixtures (`Docs/Decompiler/tools/a3_round21/`: `fixtures.src`, assembled by `asm21.py`, which is `../a3_round16/asm.py` with `.addr LABEL` and `mova @(LABEL,pc),r0` for jump tables; `run21.sh` runs one through the generator's `SE_GENERATED_WORDS` mode), ledger rows **A3-173 and A3-174**, and this record. The worktree's RelWithDebInfo build (`-j2`), every test binary under `ulimit -v 3500000` (4,000,000 for the generator ranges) and `timeout`, one heavy job at a time, each piece under 20 minutes. For one question (below) the host was built with temporary prints, read, and restored; no run in the table used that build.
+
+**Verdict, area 3: not clean.** One P1 row (A3-173: a parameter the code reads only after a poll the analysis takes to run for ever is dropped from the lent signature, nothing said, and its callers lose the argument) and one P3 row (A3-174: the caution can name a loop that ends). The clean count stays 0.
+
+| Row | P | What |
+|---|---|---|
+| A3-173 | P1 | `mov #1,r0 ; mov.w r0,@r7 ; P: mov.w @r7,r0 ; tst #1,r0 ; bf P ; mov.l r6,@r3 ; rts` is lent `void (void)`; a caller's `r6 = r4 + r5 ; jsr F` prints `func_0x06009020(); return;`. A return computed from r6 after the loop is withheld (pp6), a store before it is said (A3-164), but a parameter read after it is not |
+| A3-174 | P3 | a hardware poll that ends, then the mailbox poll: the caution names the first loop ("the loop at 0x0600900C"), which the text prints with its exit |
+
+### 1. The per-instance fix (A3-170)
+
+Every shape was assembled by hand (`fixtures.src`) and run beside the emulator's trace. The fix held on all of them:
+
+| Shape | Result |
+|---|---|
+| a store before a `switch` (`mova`, `mov.l @(r0,r4)`, `jmp`), case 0 the poll, case 1 and the default replacing the store and returning (sw2) | said ("the loop at 0x06009024"), withheld. With the default returning the store live (sw1) it is printed and lent: right |
+| the store as the slot of a `bra` into the poll and as the head of a return block several `bt` reach (r1); an irreducible loop with two entries whose exit goes to that block (r2) | said, withheld |
+| the same with the return block reached by a loop exit and by a test after the loop, which `ActionReturnSplit` splits (r3; r3c the control with the store written out) | the store line printed twice, the slot instance said |
+| the poll's own `bf/s` slot a store, entered from outside too: the outside instance returns (dl1), is replaced before its return (dl2), a store before the loop that the slot replaces each turn (dl3), a loop body that is only the doubled slot, entered by `bra` (dl4) | dl1 printed in the loop (`do { xRam06002304 = param_2; } while( true );`) and lent; dl2, dl3 and dl4: the slot said "in it", the store dl3 makes before the loop not said (the slot replaces it each turn, A3-171's design) |
+| two polls in a row: a VDP2_TVSTAT poll then the mailbox (pp1), the mailbox then VDP2 (pp2), two mailbox polls (pp3), a first loop whose exit tests a parameter (pp4) | pp1, pp3, pp4 said and withheld; pp2's removed VDP2 read said by `NoteRemovedAccesses`. pp1 and pp4 name the first loop (A3-174) |
+| a long store, then the word through its cache-through mirror before the poll (al1); a half and a byte over three of its bytes (al2); all four bytes (al3) | al1: both names kept as marked, the removed store after the loop said; al2: all three said (the long has a byte nothing rewrites); al3: the long not said (fully rewritten before the loop), the three later ones said |
+
+**Ops with no time of the flow (block -1, counted for every instance).** The only such ops alive in the shapes above are the copies `ActionReturnSplit`'s `nodeSplit` makes of a split return block, and with the host built to print them (r3, r3c) they are the guard copies at the `rts` (`xRam = xRam` for the globals live at the return, the RETURN's address, never printed as a write of the store's instruction). In r3 and r3c the store itself is not cloned: the only alive write of its instruction is the original op, in its own instance's block, and the block the second `iRam06002304 = param_3;` line is drawn in holds, of the global, only guard copies at the `rts` (the token the line shows is the host's mapping of the value), so that line counts for no store. More is said, never less. A store op cloned into a block -1 that would cover a dropped instance was not found: `isSplittable` takes a return block of copies and the RETURN only, and in every split seen the store sat in the block before. `RuleConditionalMove`'s clone takes a boolean expression, never a store.
+
+**Three or more instances.** One address is at most two instances of the flow (the slot of the one delayed branch before it, and its own block); a third exists only as such a clone. Nothing more found.
+
+**Instruction to block placement.** A loop block of a doubled instruction is placed by its ops' flow times; with no time, only when nothing else places the loop (more said, never less). dl1 to dl4 put the doubled slot inside the loop: the loop is placed and the slot said "in it".
+
+**The oracle's excuse** ("a later folded store fully rewrites it"): al2 and al3 agree with the host (only a store every byte of which is rewritten before the loop is excused); a pointer store (not folded) excuses nothing; a mirror makes both names marked. A3-172 (the oracle's "shown" by address) is still open; not refiled.
+
+### 2. A3-173: a parameter read after the loop
+
+The engine removes the code after an unmarked poll it takes to run for ever (the guide says so). That reading is the analysis's; the host takes the hardware's wherever the reading would lose something the code does: a store the loop drops is said and the signature withheld (A3-164, A3-167), a hardware or pointer access in the removed code is said and withheld (`NoteRemovedAccesses`), and a return computed from a register read after the loop is withheld (`ReturnCheck`, pp6). A parameter register read after the loop is neither: pp5 is lent `void (void)` (with the mailbox marked, 3 parameters), and a caller (m1, a module of two functions) keeps nothing of the argument: `func_0x06009020(); return;`, the `r4 + r5` it computes for r6 gone, and is itself lent `void (void)`. The lent signature says the callee returns, so callers print what follows the call: the hardware reading, where the callee stores the caller's sum. Nothing checks it: grammar 2, the grammar of lent signatures, draws no poll (polls=0 below), and a hand fixture run with `SE_GENERATED_POLL` does not finish (the trace stops at the poll's first read). Neither image has a lent function of the shape: the functions with an endless loop (hwram007 06005212, 06005520, 0602346C; hwram008 060051F8, 060051FA, 06005528, 06005530, 06062954, 06062958, and the two with the caution) are all withheld for other reasons. A test always decided the same way (a read of the function's own store, no loop) removes code by the same reading, but there the code is unreachable unless another processor writes in between; not filed.
+
+### 3. Other parts of area 3
+
+| Shape | Result |
+|---|---|
+| parameters only partly read: r4's high half (q1), a byte on one path and the word on the other (q2), a return of r4's high half (q4), the low byte compared and the word stored (w3), the low byte stored and the word passed to a lent callee by `jmp` (w4) or `jsr` (w5) | each signature as wide as the widest read: `xunknown4`/`uint4`, and w5's caller passes `param_1` whole; a callee with no signature withholds (w1, w2) |
+| a stack word written whole, then a byte or a half over part of it on one path, read at another width after the join (k1 to k4, through the printed-C differential) | k1 and k3 agree; k2 and k4 `narrow-c` ("agrees when read as the engine means it"), the known class |
+| the word at r15 at a call (the callee's first stack argument), which the callee rewrites, read after the call (c1) | the caller says it ("a local at or above the stack pointer is read after this call, which may write it as one of its stack arguments") and is withheld; the callee is withheld ("its return is computed from a stack argument") |
+
+### 4. Runs
+
+| Run | Result |
+|---|---|
+| game corpus (`SE_GAME_LEND=1`, hwram007 then hwram008) | real entries lent **474 (645 parameters) of 999** and **724 (975) of 1,543**; missing and said **0** and **4**; the caution in hwram008 0600C2DA and 0600C49A only: as expected |
+| grammar 1, 4,100,001 to 4,110,000 (two pieces of 5,000, canary off) | 22 + 25 failing seeds, none area 3's: `folded-store-after-access` (area 5; n: 9 + 11, v: 6 + 8 seeds), `map-copy-store` 7 + 5 (+2 v), `map-way-back` 1 + 0 (+1 v), `map-copy-merge` 0 + 1 (+1 v), `map-store-value` 0 + 1 (area 7). **No `endless-store-dropped`.** `endless-store` runs 3,038 + 3,036, checked 68,517 + 60,070, said 12,754 + 9,719; slot entered 1,296 + 1,197, the whole shape before a poll 478 + 440 |
+| grammar 2, 4,100,001 to 4,110,000 (two pieces) | 1 + 2 failing seeds, none area 3's: 4103690 (`map-const-join`), 4109566 and 4109706 (`map-copy-store`, `map-frame-store`, `map-number-store`; area 7). Claims checked 29,249 + 29,537; polls 0 |
+| printed-C (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | 5,585 functions, 5,297 compared: **agrees=5196**, the baseline; narrow-c 130, void-return 227, void-return-lent 24, skipped 8; 0 `mismatch` |
+| hand fixtures | sections 1 to 3; `tools/a3_round21/fixtures.src` (25) |
+| full `ctest` | **111 of 111** (`-E SaturnExplorerLive -j2`, 251 s); Live **6 of 6**. No test target added; the fixtures are scratch beside the rows, not yet pinned |
+
+### 5. Routed, no row here
+
+* **Area 7:** grammar 1 seeds 4100259, 4100749, 4101693, 4101969, 4103377, 4104223, 4104402, 4104642, 4106174, 4106307, 4106324, 4107185, 4108075, 4108474, 4108617, 4108706, 4109252 (`map-copy-store`, `map-way-back`, `map-copy-merge`, `map-store-value`; the known classes of the delay-slot productions from 3,800,001); grammar 2 seeds 4103690 (`map-const-join`), 4109566 and 4109706 (`map-copy-store`, `map-frame-store`, `map-number-store`).
+* **Area 5:** grammar 1 seeds 4100190, 4100589, 4100793, 4100950, 4101780, 4102944, 4104110, 4104172, 4104228, 4104413, 4104447, 4104490, 4104843, 4104931, 4105458, 4105546, 4105895, 4106565, 4106575, 4106682, 4107166, 4107182, 4107964, 4108172, 4108445, 4108554, 4108851, 4109354, 4109493, 4109631 (`folded-store-after-access`, A5-117's class).
+* **Area 11:** no grammar draws A3-173: grammar 2 has no poll, and grammar 1 (polls 3,222 + 3,261) found none in 10,000 seeds; a hand fixture's run with `SE_GENERATED_POLL=<addr>` stops at the poll's first read.

@@ -1,0 +1,523 @@
+# Area 3 round 21 fixtures (asm syntax of ../a3_round16/asm.py, with .addr and mova @(LABEL,pc) from asm21.py). Run with run21.sh <name>.
+# Modules (caller and callee) take SE_GENERATED_FUNCS and SE_GENERATED_RETURNS as well: m1 "0/0/20,20/20/40", w5 "0/0/20,20/20/28",
+# w4 "0/0/10,10/10/18", c1 "0/0/20,20/20/2C" (RETURNS "0,0", c1 "1,1"). k1 to k4 are register and stack only: run them through the printed-C
+# differential (SE_GENERATED_PRINTEDC=only SE_GENERATED_PRINTEDC_WORDS=<words>).
+name sw1
+# a store before a switch whose case 0 is the poll (the code replaces the store after it) and case 1 replaces it and returns
+mov.l =0x06002304,r3
+mov.l =0x06001010,r7
+mov.l r6,@r3
+mov #1,r0
+mov.w r0,@r7
+mov #2,r1
+cmp/hs r1,r4
+bt DEF
+shll2 r4
+mova @(TAB,pc),r0
+mov.l @(r0,r4),r1
+jmp @r1
+nop
+nop
+TAB:
+.addr C0
+.addr C1
+C0:
+mov.w @r7,r0
+tst #1,r0
+bf C0
+mov.l r5,@r3
+rts
+nop
+C1:
+mov.l r5,@r3
+DEF:
+rts
+nop
+name sw2
+# sw1 with the default going to case 1 (every returning path replaces the store); case 0 is the poll (the code replaces the store after it) and case 1 replaces it and returns
+mov.l =0x06002304,r3
+mov.l =0x06001010,r7
+mov.l r6,@r3
+mov #1,r0
+mov.w r0,@r7
+mov #2,r1
+cmp/hs r1,r4
+bt C1
+shll2 r4
+mova @(TAB,pc),r0
+mov.l @(r0,r4),r1
+jmp @r1
+nop
+nop
+TAB:
+.addr C0
+.addr C1
+C0:
+mov.w @r7,r0
+tst #1,r0
+bf C0
+mov.l r5,@r3
+rts
+nop
+C1:
+mov.l r5,@r3
+DEF:
+rts
+nop
+name r1
+# the store is the slot of a `bra` into the poll and also the head of a return block that several paths reach
+mov.l =0x06002304,r3
+mov.l =0x06001010,r7
+mov #1,r0
+mov.w r0,@r7
+tst r4,r4
+bt X
+mov.l r5,@r3
+cmp/pl r5
+bt X
+mov.l r4,@r3
+cmp/pz r4
+bf X
+bra P
+X:
+mov.l r6,@r3
+rts
+nop
+P:
+mov.w @r7,r0
+tst #1,r0
+bf P
+mov.l r4,@r3
+rts
+nop
+name r2
+# r1 with an irreducible loop (two entries) whose exit goes to the return block that starts with the store
+mov.l =0x06002304,r3
+mov.l =0x06001010,r7
+mov.l =0x06002308,r8
+mov #1,r0
+mov.w r0,@r7
+tst r4,r4
+bt L2
+L1:
+mov.l r5,@r8
+dt r5
+bt X
+L2:
+add #1,r4
+mov.l r4,@r8
+cmp/pl r4
+bt L1
+bra P
+X:
+mov.l r6,@r3
+rts
+nop
+P:
+mov.w @r7,r0
+tst #1,r0
+bf P
+mov.l r4,@r3
+rts
+nop
+name pp1
+# a store, a poll of VDP2_TVSTAT (a real exit), then the mailbox poll the analysis takes to run for ever; the code replaces the store after both
+mov.l =0x06002304,r3
+mov.l =0x06001010,r7
+mov.l =0x25F80004,r8
+mov.l r6,@r3
+mov #1,r0
+mov.w r0,@r7
+H:
+mov.w @r8,r0
+tst #8,r0
+bt H
+P:
+mov.w @r7,r0
+tst #1,r0
+bf P
+mov.l r4,@r3
+rts
+nop
+name pp4
+# two polls in a row, the first's exit test on a register the analysis cannot fold (r5 bit), the second the mailbox
+mov.l =0x06002304,r3
+mov.l =0x06001010,r7
+mov.l r6,@r3
+mov #1,r0
+mov.w r0,@r7
+H:
+mov.w @r7,r0
+and r5,r0
+tst r0,r0
+bt H
+P:
+mov.w @r7,r0
+tst #1,r0
+bf P
+mov.l r4,@r3
+rts
+nop
+name pp5
+# the mailbox poll, then a store of r6 the code makes after it (removed with the loop's exit): no store before the loop
+mov.l =0x06002304,r3
+mov.l =0x06001010,r7
+mov #1,r0
+mov.w r0,@r7
+P:
+mov.w @r7,r0
+tst #1,r0
+bf P
+mov.l r6,@r3
+rts
+nop
+name pp6
+# pp5 with the value after the loop returned in r0 instead of stored
+mov.l =0x06001010,r7
+mov #1,r0
+mov.w r0,@r7
+P:
+mov.w @r7,r0
+tst #1,r0
+bf P
+rts
+mov r6,r0
+name m1
+# caller: r6 = r4 + r5, calls F (0x06009020), which writes the mailbox, polls it, and stores r6 after the poll
+sts pr,r1
+mov.l r1,@-r15
+mov.l =0x06009020,r2
+add r5,r4
+mov r4,r6
+jsr @r2
+nop
+mov.l @r15+,r1
+lds r1,pr
+rts
+nop
+nop
+nop
+nop
+nop
+nop
+F:
+mov.l =0x06002304,r3
+mov.l =0x06001010,r7
+mov #1,r0
+mov.w r0,@r7
+P:
+mov.w @r7,r0
+tst #1,r0
+bf P
+mov.l r6,@r3
+rts
+nop
+name r3
+mov.l =0x06002304,r3
+mov.l =0x06001010,r7
+mov.l =0x06002308,r8
+mov #1,r0
+mov.w r0,@r7
+L:
+mov.l r5,@r8
+dt r5
+bt X
+add #1,r4
+cmp/pl r4
+bt L
+cmp/eq r4,r6
+bt X
+bra P
+X:
+mov.l r6,@r3
+rts
+nop
+P:
+mov.w @r7,r0
+tst #1,r0
+bf P
+mov.l r4,@r3
+rts
+nop
+name r3c
+# control: r3 without the bra slot instance (the store written out before the poll)
+mov.l =0x06002304,r3
+mov.l =0x06001010,r7
+mov.l =0x06002308,r8
+mov #1,r0
+mov.w r0,@r7
+L:
+mov.l r5,@r8
+dt r5
+bt X
+add #1,r4
+cmp/pl r4
+bt L
+cmp/eq r4,r6
+bt X
+mov.l r6,@r3
+bra P
+nop
+X:
+mov.l r6,@r3
+rts
+nop
+P:
+mov.w @r7,r0
+tst #1,r0
+bf P
+mov.l r4,@r3
+rts
+nop
+name dl1
+# the poll's bf/s slot stores r5 (each turn of the loop); a branch from outside enters the slot's own instance, which returns
+mov.l =0x06002304,r3
+mov.l =0x06001010,r7
+mov #1,r0
+mov.w r0,@r7
+tst r4,r4
+bt X
+P:
+mov.w @r7,r0
+tst #1,r0
+bf/s P
+X:
+mov.l r5,@r3
+rts
+nop
+name dl2
+# dl1, the own instance replaced before its return (both instances dropped)
+mov.l =0x06002304,r3
+mov.l =0x06001010,r7
+mov #1,r0
+mov.w r0,@r7
+tst r4,r4
+bt X
+P:
+mov.w @r7,r0
+tst #1,r0
+bf/s P
+X:
+mov.l r5,@r3
+mov.l r6,@r3
+rts
+nop
+name dl3
+# a store before the loop, the loop's bf/s slot its own instance too (a bra from below enters it, to the poll)
+mov.l =0x06002304,r3
+mov.l =0x06001010,r7
+mov #1,r0
+mov.w r0,@r7
+mov.l r6,@r3
+tst r4,r4
+bt T
+P:
+mov.w @r7,r0
+tst #1,r0
+bf/s P
+X:
+mov.l r5,@r3
+mov.l r4,@r3
+rts
+nop
+T:
+bra X
+nop
+name dl4
+# the loop body is only the doubled slot: `bra X` enters the slot, the slot falls into the poll head
+mov.l =0x06002304,r3
+mov.l =0x06001010,r7
+mov #1,r0
+mov.w r0,@r7
+tst r4,r4
+bt T
+mov.l r6,@r3
+rts
+nop
+T:
+mov.l r6,@r3
+bra X
+nop
+P:
+mov.w @r7,r0
+tst #1,r0
+bt/s Q
+X:
+mov.l r5,@r3
+bra P
+nop
+Q:
+mov.l r4,@r3
+rts
+nop
+name al1
+# a store, then the same word through its cache-through mirror before the poll, the code replacing it after
+mov.l =0x06002304,r3
+mov.l =0x26002304,r8
+mov.l =0x06001010,r7
+mov.l r6,@r3
+mov.l r5,@r8
+mov #1,r0
+mov.w r0,@r7
+P:
+mov.w @r7,r0
+tst #1,r0
+bf P
+mov.l r4,@r3
+rts
+nop
+name al2
+# a long store, then a half and a byte that together rewrite three of its bytes, then the poll
+mov.l =0x06002304,r3
+mov.l =0x06001010,r7
+mov.l r6,@r3
+mov.w r5,@r3
+mov r5,r0
+mov.b r0,@(2,r3)
+mov #1,r0
+mov.w r0,@r7
+P:
+mov.w @r7,r0
+tst #1,r0
+bf P
+mov.l r4,@r3
+rts
+nop
+name al3
+# al2 with the last byte too: every byte rewritten before the poll
+mov.l =0x06002304,r3
+mov.l =0x06001010,r7
+mov.l r6,@r3
+mov.w r5,@r3
+mov r5,r0
+mov.b r0,@(2,r3)
+mov.b r0,@(3,r3)
+mov #1,r0
+mov.w r0,@r7
+P:
+mov.w @r7,r0
+tst #1,r0
+bf P
+mov.l r4,@r3
+rts
+nop
+name k1
+# a stack word written whole, its first byte rewritten on one path, read whole
+add #-8,r15
+mov.l r4,@r15
+tst r6,r6
+bt A
+mov.b r5,@r15
+A:
+mov.l @r15,r0
+rts
+add #8,r15
+name k2
+# a stack word; a half at +2 on one path, a byte at +1 on the other; the half at +0 and the word read after the join
+add #-8,r15
+mov.l r4,@r15
+tst r6,r6
+bt A
+mov r5,r0
+mov.w r0,@(2,r15)
+bra J
+nop
+A:
+mov r5,r0
+mov.b r0,@(1,r15)
+J:
+mov.w @r15,r1
+mov.l @r15,r0
+add r1,r0
+rts
+add #8,r15
+name k3
+# a byte written over a word on one path; the byte at +3 read sign-extended after the join
+add #-8,r15
+mov.l r4,@r15
+tst r6,r6
+bt J
+mov r5,r0
+mov.b r0,@(3,r15)
+J:
+mov.b @(3,r15),r0
+rts
+add #8,r15
+name k4
+# two stack slots swapped on one path (a register holds one across), read after the join with different widths
+add #-8,r15
+mov.l r4,@r15
+mov.l r5,@(4,r15)
+tst r6,r6
+bt J
+mov.l @r15,r1
+mov.l @(4,r15),r2
+mov.l r2,@r15
+mov.l r1,@(4,r15)
+J:
+mov.w @(2,r15),r0
+mov r0,r1
+mov.b @(4,r15),r0
+add r1,r0
+rts
+add #8,r15
+name w4
+# f reads r4's low byte and tail-jumps to g, which stores r4 whole through r6 (g lent)
+mov.l =0x06009010,r2
+mov.b r4,@r5
+jmp @r2
+nop
+nop
+nop
+nop
+nop
+G:
+mov.l r4,@r6
+rts
+nop
+name w5
+# f reads r4's low byte and calls g (lent), which stores r4 whole through r6
+sts pr,r1
+mov.l r1,@-r15
+mov.l =0x06009020,r2
+mov.b r4,@r5
+jsr @r2
+nop
+mov.l @r15+,r1
+lds r1,pr
+rts
+nop
+nop
+nop
+nop
+nop
+nop
+nop
+G:
+mov.l r4,@r6
+rts
+nop
+name c1
+# caller: r6 into the word at r15 (the callee's first stack word), call, read the word back; the callee adds 1 to its stack word
+sts pr,r1
+mov.l r1,@-r15
+add #-4,r15
+mov.l r6,@r15
+mov.l =0x06009020,r2
+jsr @r2
+nop
+mov.l @r15,r0
+add #4,r15
+mov.l @r15+,r1
+lds r1,pr
+rts
+nop
+nop
+nop
+nop
+G:
+mov.l @r15,r0
+add #1,r0
+mov.l r0,@r15
+rts
+nop
