@@ -2439,6 +2439,41 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                 // known (RegisterMakers, through moves), none the entry -- naming a store would name another value. Counted apart.)
                 {
                     const bool inputShown = shownValue.kind == WordValue::Param || shownText.compare(0, 3, "in_") == 0 || shownText.compare(0, 6, "unaff_") == 0;
+                    // (A7-78: a load into the register may read the input back only when the body stores the input -- a store whose register's
+                    // makers include the entry or are not known -- somewhere; a body that stores nothing of it holds the input nowhere in
+                    // memory, and the load is the memory's own value, `mov.w @r6,r0` of a register: grammar 1 seed 3706930)
+                    const auto bodyStores = [&]() {
+                        std::set<uint32_t> pool;   // (the literal pool among the body's words is data: the words a pc-relative load reads)
+                        for (const auto& range : r.body)
+                            for (uint32_t q = range.first; q < range.second; q += 2)
+                            {
+                                uint16_t qw = 0;
+                                if (!word(q, qw)) continue;
+                                if ((qw >> 12) == 0x9) pool.insert(q + 4 + (qw & 0xFFu) * 2);
+                                if ((qw >> 12) == 0xD || (qw >> 8) == 0xC7)
+                                {
+                                    pool.insert((q & ~3u) + 4 + (qw & 0xFFu) * 4);
+                                    pool.insert((q & ~3u) + 4 + (qw & 0xFFu) * 4 + 2);
+                                }
+                            }
+                        if (!haveSources)
+                        {
+                            sources = BranchSources(r, word);
+                            haveSources = true;
+                        }
+                        for (const auto& range : r.body)
+                            for (uint32_t q = range.first; q < range.second; q += 2)
+                            {
+                                uint16_t qw = 0;
+                                int qsize = 0;
+                                if (pool.count(q) || !word(q, qw)) continue;
+                                const sfe::DisassembledInstruction qd = sfe::Sh2Decode(q, qw);
+                                const int qreg = qd.IsValid && ShapeOf(qd).store ? StoredRegister(qw, qsize) : -1;
+                                std::set<uint32_t> qm;
+                                if (qreg >= 0 && (!RegisterMakers(r, word, sources, q, qreg, qm) || qm.count(0))) return true;
+                            }
+                        return false;
+                    };
                     bool movesOnly = anyAddress;
                     // (A7-69: or at a store of the same value -- the register's makers the variable's folded store's register has -- through
                     // another address: `xRam26002108 = (xunknown1)param_2;` at the pointer store `mov.b r1,@-r5` of the byte `mov.b r1,@r6` stores
@@ -2513,7 +2548,9 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                                 if (!m || !word(m, mw)) continue;
                                 const bool step = (mw >> 12) == 0x6 && (mw & 0xF) >= 0x4 && (mw & 0xF) <= 0x6 && ((mw >> 4) & 0xF) == reg &&
                                                   ((mw >> 8) & 0xF) != reg;
-                                if (ShapeOf(sfe::Sh2Decode(m, mw)).load && !step) storesInput = true;
+                                // (A7-78: only in a body that stores something; one without a store holds the input nowhere in memory, and the load
+                                // is the memory's own value, `mov.w @r6,r0` of a register: grammar 1 seed 3706930)
+                                if (ShapeOf(sfe::Sh2Decode(m, mw)).load && !step && bodyStores()) storesInput = true;
                             }
                         }
                         if (!storesInput)
