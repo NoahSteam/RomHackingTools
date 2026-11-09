@@ -6617,6 +6617,15 @@ bool FlowValueMayBe(const FlowRecord& flow, const ghidra::Funcdata& fd, int blk,
         // the block's start: the function's input at the entry, else each block before it
         if (st.blk == flow.entryBlock)
         {
+            // (A7-91: a statement that shows a number and nothing else is an input's only where the engine can know the input equals the
+            // number, as A7-41's rule has it for a statement of an input: a condition of the flow compares with that number. `xStack_3 =
+            // 0x65;` at the slot's `mov #0x65,r3` is not the store of r3's value on entry; grammar 2 seed 4109706)
+            if (numbersOnly && !memory(st.vn) && !want.HasInput(st.vn))
+            {
+                for (const auto& n : want.numbers)
+                    if (ties(n.first, st.vn.size)) return true;
+                continue;
+            }
             if (other(want.HasInput(st.vn) || (memory(st.vn) && want.HasLocation(st.vn)))) return true;
             continue;
         }
@@ -7805,6 +7814,9 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                     const auto first = flow.insnFirst.find(a);
                     if (first == flow.insnFirst.end()) continue;
                     const std::vector<FlowOp>& ops = flow.blockOps[static_cast<size_t>(first->second.first)];
+                    // (A7-91: past the block's last instruction only a delay slot is the block's; the next block's first instruction, a `tas.b`
+                    // that begins a loop, is not: grammar 1 seed 4108706)
+                    if (home->getStop() < ghidra::Address(home->getStop().getSpace(), a) && !ops[first->second.second].slot) continue;
                     bool reads1 = false;
                     for (size_t i = first->second.second; i < ops.size() && ops[i].insn == a && !reads1; ++i)
                     {
@@ -8061,7 +8073,9 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
         }
         // A7-25: a statement that keeps its drawn tokens at its instruction beside the stores it names is a copy the engine materialised
         // there (at a call, at a store that may alias): the instruction's own statement is another's, which the way back offers first.
-        if (!target)
+        // (A7-91: not an operation the instruction does itself -- the `r4 + 2` of `mov.w @r4+,r2`, `iRam0600220c = (int2)param_1 + 2;`, which
+        // the store of r4 after it names: it is no copy of a value made elsewhere; grammar 1 seed 4108474)
+        if (!target && (code == ghidra::CPUI_COPY || conversion || code == ghidra::CPUI_PIECE))
         {
             bool ownStore = false;
             for (const ghidra::AccessRecord* r : chosen)

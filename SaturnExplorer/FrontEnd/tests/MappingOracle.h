@@ -857,6 +857,22 @@ inline WordValue RegisterBefore(const sfe::decomp::DecompileResult& r, const std
                         if (!give(WordValue{ WordValue::Number, static_cast<int8_t>(cw & 0xFF), true })) return WordValue();
                         continue;
                     }
+                    // (A7-91: `cmp/eq Rm,Rn ; bf L` falls through, and `bt L` branches, with Rm equal to Rn: a register the words give a number
+                    // for is that number in the other too -- `mov #0,r2 ; cmp/eq r2,r0 ; bf L ; add r0,r2` adds 0 and 0; grammar 2 seed 4103690)
+                    if ((cw & 0xF00F) == 0x3000 && into.find(p) == into.end() && depth < 6)
+                    {
+                        const int cm = (cw >> 4) & 0xF;
+                        const int other = cn == rg ? cm : cm == rg ? cn : -1;
+                        if (other >= 0 && other != rg)
+                        {
+                            const WordValue v = RegisterBefore(r, word, into, p - 2, other, depth + 1);
+                            if (v.kind == WordValue::Number)
+                            {
+                                if (!give(WordValue{ WordValue::Number, v.value, true })) return WordValue();
+                                continue;
+                            }
+                        }
+                    }
                 }
             }
             // (A7-64: `extu.w Rm,Rn ; cmp/pl Rn ; bf L` -- on the edge to L, with T 0, Rn is not above 0 and an extension is not below
@@ -999,6 +1015,10 @@ inline bool NeverRun(const sfe::decomp::DecompileResult& r, const std::function<
         {
             const sfe::DisassembledInstruction b = sfe::Sh2Decode(x - 4, sw);
             if (b.BranchTarget == x) return false;
+            // (A7-91: the slot is also entered by a branch of its own -- `bf L` to the slot's address, which runs on: the code after it
+            // is run by that way in; grammar 1 seed 4108075)
+            const auto slotIn = into.find(x - 2);
+            if (slotIn != into.end() && !slotIn->second.empty()) return false;
             const int t = TBefore(r, word, into, x - 4, depth + 1);
             return t >= 0 && (((sw >> 8) == 0x8D) == (t == 1));
         }
