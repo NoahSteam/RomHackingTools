@@ -1402,6 +1402,29 @@ inline bool RegisterMakers(const sfe::decomp::DecompileResult& r, const std::fun
                 todo.emplace_back(p, (w >> 4) & 0xF);
                 continue;
             }
+            // (A7-78: MACH and MACL are followed as registers 16 and 17: `sts mach,Rn` takes the value `lds Rm,mach` put there, so the
+            // number a register is stored from after the pair is made where Rm was; grammar 2 seed 3706722)
+            if (rg < 16 && ((w & 0xF0FF) == 0x000A || (w & 0xF0FF) == 0x001A) && ((w >> 8) & 0xF) == rg)
+            {
+                todo.emplace_back(p, (w & 0xF0FF) == 0x000A ? 16 : 17);
+                continue;
+            }
+            if (rg >= 16)
+            {
+                if ((w & 0xF0FF) == (rg == 16 ? 0x400Au : 0x401Au))
+                {
+                    todo.emplace_back(p, (w >> 8) & 0xF);
+                    continue;
+                }
+                const std::string& mn = d.Mnemonic;
+                if (mn == "clrmac" || mn == "dmuls.l" || mn == "dmulu.l" || mn == "mac.l" || mn == "mac.w" || (rg == 17 && (mn == "mul.l" || mn == "muls.w" || mn == "mulu.w")))
+                {
+                    makers.insert(p);
+                    continue;
+                }
+                todo.emplace_back(p, rg);
+                continue;
+            }
             if (WrittenRegisters(d).count(rg))
             {
                 makers.insert(p);
