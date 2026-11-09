@@ -18863,5 +18863,11 @@ The three texts of the row, `SE_GENERATED_PRINTEDC=only SE_GENERATED_PRINTEDC_WO
 | Run | Result |
 |---|---|
 | printed-C matrix (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | 5,585 functions, 5,297 compared: agrees **5,196** (the baseline, unchanged: the register-only grammar makes no global, so no seed meets the new declaration), narrow-c 130, 0 `mismatch` |
-| printed-C, 10,000 fresh seeds (`SE_GENERATED_FIRST` 3,900,001 and 3,905,001, 5,000 each) | see the table below |
-| `SaturnExplorerSh2PrintedCTests` | passed with the new pins |
+| printed-C, 10,000 fresh seeds (`SE_GENERATED_FIRST` 3,900,001 and 3,905,001, 5,000 each) | 9,029 and 9,051 functions (8,598 and 8,601 compared): **0 `mismatch`**; agrees 8,443 + 8,448, narrow-c 210 + 203 (known classes), void-return 327 + 350 |
+| `famall22.sh` | not run (6,600 functions, not quick on a shared machine); the change reaches only a text that assigns a global, which no register-only family makes, and the matrix and the fresh seeds are unchanged |
+| full `ctest` (`-j2 --timeout 900`, `ulimit -v 3500000`) | **117 of 117** passed (the 111 plus the 6 Live; 306 s). No test target added: the pins `A2-130 #0` to `#4` and `A2-130 oracle #0` to `#4` are in `SaturnExplorerSh2PrintedCTests` (`Sh2GeneratedTests.cpp`) |
+| fault suite | not run: no product code changed (harness, guide and ledger only; it is in the full `ctest` above and passed) |
+
+### Status of area 2
+
+No area 2 row is open (`A2-1` to `A2-132`: fixed or accepted). With rounds 21 and 22 clean (P3s only) and these closed, **area 2 is DONE**. New defects from here are `A2-133`.
