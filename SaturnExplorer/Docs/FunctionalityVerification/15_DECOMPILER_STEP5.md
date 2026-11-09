@@ -19020,7 +19020,7 @@ The engine removes the code after a poll it takes to run for ever (the documente
 | game corpus (`SE_GAME_LEND=1`, hwram007, hwram008) | real entries lent **474 (645 parameters) of 999** and **724 (975) of 1,543**; missing and said **0** and **4**: unchanged. The text of every function is the same as the A3-170 fixer's dumps in both images. The caution is given in hwram008 0600C2DA and 0600C49A only, unchanged |
 | printed-C (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | **agrees=5196**, the baseline |
 | generator default run (300 seeds and the pins) | **0 findings** |
-| grammar 1, 4,200,001 to 4,205,000 (two pieces) | 22 failing seeds, all `folded-store-after-access` (area 5, 10 seeds with the `v:` ones) and `map-copy-store` (area 7, 12): n:folded-store-after-access 10, v:folded-store-after-access 4, n:map-copy-store 7, v:map-copy-store 5. Nothing else; `endless-read-dropped` none (checked 158 in the first piece) |
+| grammar 1, 4,200,001 to 4,205,000 (two pieces) | 22 failing seeds, all area 5 (`folded-store-after-access`) or area 7 (`map-copy-store`): n:folded-store-after-access 10, v:folded-store-after-access 4, n:map-copy-store 7, v:map-copy-store 5. Nothing else; `endless-read-dropped` none (checked 158 in the first piece) |
 | grammar 2, 4,200,001 to 4,205,000 (two pieces) | 2 failing seeds: `n:map-copy-merge` (area 7) and `n:folded-store-after-access` (area 5) |
 | full `ctest -E SaturnExplorerLive -j2` | **111 of 111** (284 s); Live **6 of 6**. No new test target: the new pins are in `TestA3173Fix` (`SaturnExplorerSh2DecompilerTests`) and `TestA3RoutedPins` (`SaturnExplorerSh2GeneratedTests`) |
 | fault suite (`SaturnExplorerDecompilerFaultTests`) | **0 of 94** jobs failed |
