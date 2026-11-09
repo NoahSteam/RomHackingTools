@@ -19030,3 +19030,27 @@ Branch `review/7-round11` from master `810872142`; master `c38138018` (area 3, A
 | full `ctest -j2 -E SaturnExplorerLive` | **111 of 111** passed (269 s) |
 | Live (`ctest -R SaturnExplorerLive`) | **6 of 6** passed |
 | fault suite (`SaturnExplorerDecompilerFaultTests`, product code changed) | **0 of 94** jobs failed |
+
+## Areas 11 and 12, leftovers
+
+Branch `review/11-12-leftovers`, from master 3be5daa5d. Closes the open P3 rows of areas 11 and 12 except A12-29, which awaits a Windows confirmation. No engine patch.
+
+| Row | Outcome | What |
+|---|---|---|
+| A11-6 | fixed in part, rest accepted | `a11_mis_*` fixtures (misaligned word and long reads at B-bus, cached, cache-through, VDP2-mirror, on-chip below and above 0xFFFFFF00 and 0xE0000000 addresses) and `a11_ptr_sub`; mutants `H-note-reach` and an `added`-sign mutant are killed. `H-ptr-sub` is equivalent on every input tried (the engine writes `x - k` as `x + -k` wherever there is something to shift); the loop branch of `PointerResolver::Resolve` is dead by construction |
+| A11-8 | accepted | the generator's productions and seeds are frozen; the suite and the corpus kill the three patches |
+| A11-9 | fixed (instrument) | `mutate.py` assigns patch 0001 to the engine tests and 0004 to the suite, which kill them |
+| A11-13 | fixed | test switch `SetAccessCountsIgnoredForTests`: `mac.l` then has `repeatedOnPath` set on both reads; `H-led-repeat` killed |
+| A12-5 | fixed in the build files, Windows to confirm | `/wd4101 /wd4005 /wd4146 /wd4099 /wd4838 /wd4996` for the engine (CMake and vcxproj) |
+| A12-7 | fixed | the re-halt wait was 5 s, now 60 s with a 50 us sleep; 4 of 4 runs pass under six busy loops |
+| A12-14, A12-19 | accepted | the remaining programs are built on `fork`, `waitpid`, `dirent.h`, `dlfcn.h`; no Windows build to port against |
+| A12-17 | accepted | manual checks and known limits, nothing to build |
+
+### For the Windows bot
+
+* A12-5: engine warnings at /W3 should now be 0 (were 42); `SaturnExplorerGhidraDecomp.vcxproj` builds with the same list. If a number reappears, a patch added a line.
+* A12-29 is untouched.
+
+### Runs
+
+Mutants were applied by hand to `Sh2Decompiler.cpp` (reverted) and run against `SaturnExplorerSh2DecompilerTests`: `H-note-reach`, `H-led-repeat` and the `added` mutant fail a check; `H-ptr-sub` passes (equivalent, above). Full `ctest` results are in the hand-back.
