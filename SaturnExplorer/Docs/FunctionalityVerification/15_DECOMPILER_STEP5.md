@@ -19271,3 +19271,50 @@ A first form of g1 (the generator's form with a G that returns nothing) is withh
 * **Area 5:** `folded-store-after-access` (A5-117's class), grammar 1 seeds 4800323, 4800745, 4801035, 4801288, 4801460, 4801510, 4801662, 4801717, 4802504, 4802898, 4803067, 4803181, 4803295, 4803372, 4803377, 4803400, 4803829, 4803897, 4804239, 4804248, 4804545, 4804641.
 * **Area 7:** grammar 1 seed 4802131 (`n:map-way-back`). No seed was shrunk.
 * **Area 11 / area 3:** A3-181, grammar 2 draws no poll.
+## Area 7, round 12
+
+Fixer, branch `review/7-round12` from master `43e945b2`. The worktree's RelWithDebInfo build (`-j2`), every test binary under `ulimit -v 4000000` and `timeout`, one heavy job at a time. Thirteen rows filed and fixed: **A7-91 to A7-103**, all P3, for the `map-*` findings of grammar 1 and 2 over 4,100,001 to 4,110,000 and 4,200,001 to 4,205,000, of the fresh run from 4,500,001, and of the seeds routed by the area 3 round 22 review. **Seven are the product's (A7-91, 92, 95, 96, 97, 100, 103) and six the oracle's (A7-93, 94, 98, 99, 101, 102).** No engine patch: 0091 stays free. Changes are in `Sh2Decompiler.cpp` (tokens and the way back only) and `MappingOracle.h`; generator productions untouched.
+
+### Replay of the seeds
+
+Most of the seeds named in the brief were already clean on master (4100259, 4100749, 4101693, 4101969, 4103377, 4104223, 4104642, 4106174, 4106307, 4107185, 4108617, 4109252, 4109566 and the 12 `map-copy-store` seeds of 4,200,001 to 4,205,000 gave no `map-*` in the ranges). What the ranges still gave:
+
+| Row | Seeds | Whose | Cause | Fix |
+|---|---|---|---|---|
+| A7-91 | g1 4106324 | product | the value test refused a path whose inputs are all numbers (`add r0,r3`, r3 0 after a `dt` loop, r0 0 on a `tst ; bf` edge) | `FlowIdentitySources`: the value is any storage that held that number there |
+| A7-92 | g2 4201215 | product | an engine-made copy of a global merged under a pushed word's name was not followed to the memory | the memory-merge rule follows the copy |
+| A7-93 | g1 4106897; g2 4102952, 4108341 | oracle | a join's own instruction (`dt r3`) left out as a merge's token | only a bare copy's token is passed over |
+| A7-94 | g2 4103690 | oracle | `cmp/eq Rm,Rn ; bf` edge fact missing | added to `RegisterBefore` |
+| A7-95 | g2 4109706 | product | a number statement taken for the store of an input | an input is a number's only where a condition compares with it |
+| A7-96 | g1 4108706 | product | the next block's first instruction taken as the block's read | past the end only a delay slot |
+| A7-97 | g1 4108474, 4104402 | product | the post-increment's addition marked a materialised copy | only copies and conversions are marked |
+| A7-98 | g1 4108075 | oracle | `NeverRun` past a `bt/s` whose slot has an entry of its own | stops there |
+| A7-99 | g1 4502735; g2 4506709, 4509740 | oracle | a number the engine trims to the bits used (or knows from a compare), line says it names no instruction | counted apart as `copyNoAddress` |
+| A7-100 | g1 4501198 | product | two instances of one slot store counted as rivals for the byte | not rivals |
+| A7-101 | g2 4506207 | oracle | the dot of a piece's name judged as an operand | skipped |
+| A7-102 | g2 4508555 | oracle | `SUB41(param_2,0)` not the parameter | counted as it |
+| A7-103 | g1 4604444 | product | slot store emptied by the engine not looked for when the store before it does not show the value | looked for then too |
+
+Routed and replayed: 4603517, 4402821, 4404345 were clean; 4606794 gives only `v:folded-store-after-access` (area 5).
+
+### Pins and mutation
+
+`TestArea7Round12` (`SaturnExplorerSh2DecompilerTests`): the shrunk words of each seed with the line, the audit, and a damaged result where one makes sense. With master's `Sh2Decompiler.cpp` the product fixtures fail (A7-91, 92, 95, 96, 97, 100); with master's `MappingOracle.h` the oracle ones fail (A7-93, 94, 98, 99, 101, 102). `TestArea7Round12Pins` (`SaturnExplorerSh2GeneratedTests`) replays the 19 whole seeds. No new test target.
+
+### Routed
+
+* **Area 5:** `folded-store-after-access` only (matrix seed 4123, and the shapes of the ranges).
+
+### Runs
+
+| Run | Result |
+|---|---|
+| grammar 1 and 2, 4,100,001 to 4,110,000 and 4,200,001 to 4,205,000 (pieces of 5,000, canary off) | **0 `map-*`**; g1 17 + 18 + 15 failing seeds, g2 0 + 0 + 1, all `folded-store-after-access` |
+| fresh grammar 1 and 2, 10,000 seeds each from 4,500,001 | **0 `map-*`** (g1 18 + 14 failing seeds, g2 0, area 5) |
+| 20,000-seed matrix (pieces of 5,000, canary in the first) | 1 failing seed, **4123** (area 5) |
+| default run and grammar 1, 2 with 3000 seeds | 0 failing seeds |
+| printed-C (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | **agrees=5196** |
+| fault suite | **0 of 94** jobs failed |
+| full `ctest -j2` | all passed but the A7-67 pin of `TestArea7Round4`'s successor in `Sh2DecompilerTests` (its line `xRamc0002024 = (xunknown2)in_r1;` now names the word store, an improvement; the pin expects that now); then `SaturnExplorerSh2DecompilerTests` and the 6 Live tests passed |
+| game corpus (`corpus.sh`, lent) | hwram007: lent **474 (645)** of 999, missing and said **0**; hwram008: lent **724 (975)** of 1,543, missing and said **4**; token dump clean |
+| lints | `check-literal-size.py` ok; the vendored tree is untouched |

@@ -857,6 +857,22 @@ inline WordValue RegisterBefore(const sfe::decomp::DecompileResult& r, const std
                         if (!give(WordValue{ WordValue::Number, static_cast<int8_t>(cw & 0xFF), true })) return WordValue();
                         continue;
                     }
+                    // (A7-91: `cmp/eq Rm,Rn ; bf L` falls through, and `bt L` branches, with Rm equal to Rn: a register the words give a number
+                    // for is that number in the other too -- `mov #0,r2 ; cmp/eq r2,r0 ; bf L ; add r0,r2` adds 0 and 0; grammar 2 seed 4103690)
+                    if ((cw & 0xF00F) == 0x3000 && into.find(p) == into.end() && depth < 6)
+                    {
+                        const int cm = (cw >> 4) & 0xF;
+                        const int other = cn == rg ? cm : cm == rg ? cn : -1;
+                        if (other >= 0 && other != rg)
+                        {
+                            const WordValue v = RegisterBefore(r, word, into, p - 2, other, depth + 1);
+                            if (v.kind == WordValue::Number)
+                            {
+                                if (!give(WordValue{ WordValue::Number, v.value, true })) return WordValue();
+                                continue;
+                            }
+                        }
+                    }
                 }
             }
             // (A7-64: `extu.w Rm,Rn ; cmp/pl Rn ; bf L` -- on the edge to L, with T 0, Rn is not above 0 and an extension is not below
@@ -999,6 +1015,10 @@ inline bool NeverRun(const sfe::decomp::DecompileResult& r, const std::function<
         {
             const sfe::DisassembledInstruction b = sfe::Sh2Decode(x - 4, sw);
             if (b.BranchTarget == x) return false;
+            // (A7-91: the slot is also entered by a branch of its own -- `bf L` to the slot's address, which runs on: the code after it
+            // is run by that way in; grammar 1 seed 4108075)
+            const auto slotIn = into.find(x - 2);
+            if (slotIn != into.end() && !slotIn->second.empty()) return false;
             const int t = TBefore(r, word, into, x - 4, depth + 1);
             return t >= 0 && (((sw >> 8) == 0x8D) == (t == 1));
         }
@@ -1690,7 +1710,8 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
             for (const Token& t : r.lines[li].tokens)
                 if (t.addr && t.begin == t.end && isStore(t.addr)) named.insert(t.addr);
             for (const Token& t : r.lines[li].tokens)
-                if (t.addr && t.begin < t.end)
+                // (A7-101: the dot of a piece's name, `xRam0600228c._2_2_`, is the name's: the operand is judged by the token before it)
+                if (t.addr && t.begin < t.end && !(t.end == t.begin + 1 && t.end <= r.lines[li].text.size() && r.lines[li].text[t.begin] == '.'))
                 {
                     // (A7-34's triage: at any instruction but a branch, `xRam26002208 = (xunknown2)uVar1;` at the `and` making uVar1)
                     // (A7-57: the operand of the line's cast drawn at an extension, `uRam2600219c = (uint4)param_2;` with param_2 at the
@@ -1726,7 +1747,9 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     bool readAtStore = false;
                     if (plain && assign != std::string::npos && t.begin > assign && t.end <= r.lines[li].text.size() && isStore(t.addr))
                     {
-                        const std::string operand = r.lines[li].text.substr(t.begin, t.end - t.begin);
+                        std::string operand = r.lines[li].text.substr(t.begin, t.end - t.begin);
+                        // (A7-101: a piece of the global, `xRam0600228c._2_2_`, is the global's copy as the product marks it; grammar 2 seed 4506207)
+                        if (const size_t piece = operand.find("._"); piece != std::string::npos) operand.resize(piece);
                         if (operand.size() >= 11 && operand.compare(operand.size() - 11, 3, "Ram") == 0 &&
                             operand.find_first_not_of("0123456789abcdef", operand.size() - 8) == std::string::npos)
                         {
@@ -2195,6 +2218,10 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                                 rhs = rhs.substr(close + 1);
                             }
                             if (rhs == from) return false;
+                            // (A7-102: the low part of the parameter, `SUB41(param_2,0)`, is the register the narrow store stores; grammar 2 seed 4508555)
+                            if (rhs.compare(0, 3, "SUB") == 0 && rhs.find('(') != std::string::npos &&
+                                rhs.compare(rhs.find('(') + 1, std::string::npos, from.substr(0, from.size() - 1) + ",0);") == 0)
+                                return false;
                             const std::string name = rhs.empty() ? rhs : rhs.substr(0, rhs.size() - 1);
                             if (!name.empty() && rhs.back() == ';' && name.find_first_not_of("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_") == std::string::npos &&
                                 std::find(names.begin(), names.end(), name) == names.end())
@@ -2813,6 +2840,14 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                         }
                     }
                 }
+                // (A7-99: a number the engine trimmed to the bits the code uses -- `uRam06002380 = 0;` for the byte store of 2, the loop testing
+                // `& 0x1000000`; `xStack_c = 0;` for the half-word store of 8 read back by its high byte -- is no store's value, and the line
+                // says it names no instruction; grammar 1 seed 4502735, grammar 2 seed 4506709)
+                if (r.lines[li].noOrigin && !anyAddress && number)
+                {
+                    ++a.copyNoAddress;
+                    continue;
+                }
                 ++a.copyStoreMissing;
                 ++(frame ? a.copyFrameMissing : a.copyGlobalMissing);
                 ++(atCall ? a.copyAtCall : atReturn ? a.copyAtReturn : atBranch ? a.copyAtBranch : atLoad ? a.copyAtLoad : a.copyAtOther);
@@ -3209,6 +3244,23 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                 const size_t nameEnd = text.find(" = ", nameBegin);
                 const std::string name = text.substr(nameBegin, nameEnd - nameBegin);
                 std::set<int> used;
+                // (A7-91: only a line that is a bare copy, `uVar4 = (uint2)uVar3;` -- `iVar1 = iVar1 + -1;` at the `dt r3` that begins
+                // a loop's tail is the instruction's own; grammar 1 seed 4106897)
+                const auto bareCopy = [](const std::string& line) {
+                    const size_t eq = line.find(" = ");
+                    if (eq == std::string::npos || line.empty() || line.back() != ';') return false;
+                    size_t q = eq + 3;
+                    while (q < line.size() && line[q] == '(')
+                    {
+                        const size_t close = line.find(')', q);
+                        if (close == std::string::npos) return false;
+                        q = close + 1;
+                    }
+                    if (q + 1 >= line.size()) return false;
+                    for (size_t k = q; k + 1 < line.size(); ++k)
+                        if (!std::isalnum(static_cast<unsigned char>(line[k])) && line[k] != '_') return false;
+                    return true;
+                };
                 for (const Line& l : r.lines)
                     for (const Token& t : l.tokens)
                     {
@@ -3216,7 +3268,7 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                         // (A7-78: a token at another join's first instruction names no register: the engine keeps a merge's copy,
                         // `uVar4 = uVar3;`, at the address of the block's first instruction, a `mov.b @(0xe,r5),r0` that neither reads nor
                         // writes r3; grammar 1 seed 3302704)
-                        if (!t.addr || t.addr == at || targets.count(t.addr) || t.begin >= t.end || t.end > l.text.size() ||
+                        if (!t.addr || t.addr == at || (targets.count(t.addr) && bareCopy(l.text)) || t.begin >= t.end || t.end > l.text.size() ||
                             l.text.compare(t.begin, t.end - t.begin, name) != 0 || !word(t.addr, tw))
                             continue;
                         const std::string ops = sfe::Sh2Decode(t.addr, tw).Operands;

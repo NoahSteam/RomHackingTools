@@ -15267,6 +15267,26 @@ void TestA3161Pins(Sh2Decompiler& d)
 // A3-165 (the oracle's; grammar 2 seed 2305596, `input-dropped:macl`): function 1 stores MACL in its frame and tail-jumps to function 2,
 // which tests that freed word with `cmp/pl` before it writes it; the one stack fill was positive like the base run's leftover, so the
 // stale read went unseen and MACL read as an input. The stale-stack test now fills twice, each fill the other's complement.
+// Area 7 round 12 (A7-91..A7-98): the `map-*` seeds of the ranges from 4,100,001 and 4,200,001, whole (the shrunk words are in
+// `TestArea7Round12`, Sh2DecompilerTests.cpp). Grammar 1: 4104402 and 4108474 (a post-increment's work offered after the line), 4106324 (an
+// identity through numbers), 4106897 (a loop counter's number at a join), 4108075 (a `bt/s` that always branches, its slot entered by a
+// `bf`), 4108706 (a copy ahead of a `tas.b`). Grammar 2: 4102952, 4103690, 4108341 (const-join), 4109706 (a number beside an input's
+// store), 4201215 (a copy of a global the engine made of its own).
+void TestArea7Round12Pins(Sh2Decompiler& d)
+{
+    for (const auto& s : { std::make_pair(1, 4104402), std::make_pair(1, 4106324), std::make_pair(1, 4106897), std::make_pair(1, 4108075),
+                           std::make_pair(1, 4108474), std::make_pair(1, 4108706), std::make_pair(2, 4102952), std::make_pair(2, 4103690),
+                           std::make_pair(2, 4108341), std::make_pair(2, 4109706), std::make_pair(2, 4201215), std::make_pair(1, 4501198),
+                           std::make_pair(1, 4502735), std::make_pair(2, 4506207), std::make_pair(2, 4506709), std::make_pair(2, 4508555), std::make_pair(2, 4509740), std::make_pair(1, 4604444),
+                           std::make_pair(2, 4603517) })
+    {
+        const Report rep = Evaluate(d, s.first == 2 ? MakeV2(s.second) : Generate(s.second), true);
+        std::printf("pin 'area 7 round 12: grammar %d seed %d': %zu finding(s)\n", s.first, s.second, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        for (const Finding& f : rep.findings) CHECK(f.sig.find("map-") == std::string::npos);
+    }
+}
+
 void TestA3RoutedPins(Sh2Decompiler& d)
 {
     auto count = [](const Report& rep, const char* name) {
@@ -15862,6 +15882,7 @@ void TestGenerated()
         RUN(TestA365Pins(d));
         RUN(TestA3161Pins(d));
         RUN(TestA3RoutedPins(d));
+        RUN(TestArea7Round12Pins(d));
         if (EnvNumber("SE_GENERATED_CANARY", 240) > 0) RUN(TestCanary(d));
     }
     const long seeds = single ? 1 : EnvNumber("SE_GENERATED_SEEDS", 300);
