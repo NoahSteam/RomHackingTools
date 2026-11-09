@@ -15135,6 +15135,19 @@ void TestA3RoutedPins(Sh2Decompiler& d)
             for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
             CHECK(rep.findings.empty() && shapes["slot_entry.poll"] == 1 && count(rep, "endless-store.said") > 0);
         }
+        // A3-173's production (grammar 1, from seed 4,200,001): the program's last item stores r5 after a poll the text takes to run for ever. On the
+        // old host the lent signature had no parameter for it (`endless-read-dropped`, seeds 4200851 and 4201231 among the first 2,500); now the
+        // signature is withheld and the oracle counts it
+        for (const uint64_t sd : { 4200851ull, 4201231ull })
+        {
+            const Program prog = Generate(sd);
+            const Report rep = Evaluate(d, prog, true);
+            std::printf("pin 'A3-173 grammar 1 seed %llu (the post-poll store of r%d)': %zu finding(s), endless-read checked %d, withheld %d\n", static_cast<unsigned long long>(sd),
+                        prog.postPollRead, rep.findings.size(), count(rep, "endless-read.checked"), count(rep, "endless-read.withheld"));
+            for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+            CHECK(prog.postPollRead >= 4 && count(rep, "endless-read.checked") > 0 && count(rep, "endless-read.withheld") > 0);
+            for (const Finding& f : rep.findings) CHECK(f.sig.find("endless-read") == std::string::npos);
+        }
         const Report seed = Evaluate(d, Generate(3704634), true);
         std::printf("pin 'A3-171 grammar 1 seed 3704634': %zu finding(s), endless-store replaced %d\n", seed.findings.size(), count(seed, "endless-store.replaced"));
         for (const Finding& f : seed.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
