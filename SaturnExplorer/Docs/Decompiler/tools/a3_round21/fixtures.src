@@ -117,3 +117,152 @@ bf P
 mov.l r4,@r3
 rts
 nop
+name pp1
+# a store, a poll of VDP2_TVSTAT (a real exit), then the mailbox poll the analysis takes to run for ever; the code replaces the store after both
+mov.l =0x06002304,r3
+mov.l =0x06001010,r7
+mov.l =0x25F80004,r8
+mov.l r6,@r3
+mov #1,r0
+mov.w r0,@r7
+H:
+mov.w @r8,r0
+tst #8,r0
+bt H
+P:
+mov.w @r7,r0
+tst #1,r0
+bf P
+mov.l r4,@r3
+rts
+nop
+name pp4
+# two polls in a row, the first's exit test on a register the analysis cannot fold (r5 bit), the second the mailbox
+mov.l =0x06002304,r3
+mov.l =0x06001010,r7
+mov.l r6,@r3
+mov #1,r0
+mov.w r0,@r7
+H:
+mov.w @r7,r0
+and r5,r0
+tst r0,r0
+bt H
+P:
+mov.w @r7,r0
+tst #1,r0
+bf P
+mov.l r4,@r3
+rts
+nop
+name pp5
+# the mailbox poll, then a store of r6 the code makes after it (removed with the loop's exit): no store before the loop
+mov.l =0x06002304,r3
+mov.l =0x06001010,r7
+mov #1,r0
+mov.w r0,@r7
+P:
+mov.w @r7,r0
+tst #1,r0
+bf P
+mov.l r6,@r3
+rts
+nop
+name pp6
+# pp5 with the value after the loop returned in r0 instead of stored
+mov.l =0x06001010,r7
+mov #1,r0
+mov.w r0,@r7
+P:
+mov.w @r7,r0
+tst #1,r0
+bf P
+rts
+mov r6,r0
+name m1
+# caller: r6 = r4 + r5, calls F (0x06009020), which writes the mailbox, polls it, and stores r6 after the poll
+sts pr,r1
+mov.l r1,@-r15
+mov.l =0x06009020,r2
+add r5,r4
+mov r4,r6
+jsr @r2
+nop
+mov.l @r15+,r1
+lds r1,pr
+rts
+nop
+nop
+nop
+nop
+nop
+nop
+F:
+mov.l =0x06002304,r3
+mov.l =0x06001010,r7
+mov #1,r0
+mov.w r0,@r7
+P:
+mov.w @r7,r0
+tst #1,r0
+bf P
+mov.l r6,@r3
+rts
+nop
+name r3
+mov.l =0x06002304,r3
+mov.l =0x06001010,r7
+mov.l =0x06002308,r8
+mov #1,r0
+mov.w r0,@r7
+L:
+mov.l r5,@r8
+dt r5
+bt X
+add #1,r4
+cmp/pl r4
+bt L
+cmp/eq r4,r6
+bt X
+bra P
+X:
+mov.l r6,@r3
+rts
+nop
+P:
+mov.w @r7,r0
+tst #1,r0
+bf P
+mov.l r4,@r3
+rts
+nop
+name r3c
+# control: r3 without the bra slot instance (the store written out before the poll)
+mov.l =0x06002304,r3
+mov.l =0x06001010,r7
+mov.l =0x06002308,r8
+mov #1,r0
+mov.w r0,@r7
+L:
+mov.l r5,@r8
+dt r5
+bt X
+add #1,r4
+cmp/pl r4
+bt L
+cmp/eq r4,r6
+bt X
+mov.l r6,@r3
+bra P
+nop
+X:
+mov.l r6,@r3
+rts
+nop
+P:
+mov.w @r7,r0
+tst #1,r0
+bf P
+mov.l r4,@r3
+rts
+nop
