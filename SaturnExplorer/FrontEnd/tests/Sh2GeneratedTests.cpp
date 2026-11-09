@@ -5922,6 +5922,66 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                             break;
                         }
                 }
+                bool storeRan = false;   // (some run made the store: a store in a block the engine removed as unreachable is named, never made)
+                {
+                    bool made = false, writeBack = true;
+                    for (const RunOut& run : runs)
+                    {
+                        const TraceRec* prev = nullptr;
+                        for (const TraceRec& t : run.trace)
+                        {
+                            if (t.depth == 0 && !t.write && r.InBody(t.addr)) continue;   // (a literal of the function)
+                            if (t.depth == 0 && t.write && t.insn == f.insn)
+                            {
+                                made = true;
+                                writeBack = writeBack && prev && prev->depth == 0 && prev->addr == t.addr && prev->size == t.size && prev->value == t.value;
+                            }
+                            prev = &t;
+                        }
+                    }
+                    storeRan = made;
+                    if (made && writeBack)
+                    {
+                        count("order.folded-store.write-back");
+                        continue;
+                    }
+                }
+                // (a register the engine merged under the global's name is written where the register is made: the store's statement is the
+                // line that assigns the global at the instruction that made the register the store stores, which names the stored register's
+                // maker, not the store; the store itself is named on a later line that shows its bytes, grammar 1 seed 4001469,
+                // `uRam26001018 = -(uint2)(in_sr & 1) - in_r3;` at the `negc` before `mov.w r0,@r6`, and `uRam26001018 = uRam26001018 | 0x8000;`
+                // at the `tas.b`)
+                {
+                    const auto word = [&](uint32_t pc, uint16_t& w) {
+                        if (pc < kCode || (pc - kCode) / 2 >= subject.words.size()) return false;
+                        w = subject.WordAt(pc);
+                        return true;
+                    };
+                    int ssize = 0;
+                    const int reg = dts::StoredRegister(subject.WordAt(f.insn), ssize);
+                    std::set<uint32_t> makers;
+                    if (reg >= 0 && dts::RegisterMakers(r, word, dts::BranchSources(r, word), f.insn, reg, makers) && !makers.count(0))
+                        for (int li = 0; li < (first < 0 ? static_cast<int>(r.lines.size()) : first); ++li)
+                        {
+                            const Line& l = r.lines[static_cast<size_t>(li)];
+                            const size_t b = l.text.find_first_not_of(' ');
+                            if (b == std::string::npos) continue;
+                            size_t e = b;
+                            while (e < l.text.size() && (std::isalnum(static_cast<unsigned char>(l.text[e])) || l.text[e] == '_')) ++e;
+                            if (e == b || l.text.compare(e, 3, " = ") != 0 || e - b < 11 || l.text.compare(e - 11, 3, "Ram") != 0) continue;
+                            unsigned v = 0;
+                            if (std::sscanf(l.text.c_str() + e - 8, "%8x", &v) != 1 || v > f.address || f.address >= v + 8u) continue;
+                            bool atMaker = false;
+                            for (const Token& t : l.tokens) atMaker = atMaker || makers.count(t.addr) != 0;
+                            if (atMaker)
+                            {
+                                count("order.folded-store.at-maker");
+                                first = li;
+                                if (last < 0) last = li;
+                                break;
+                            }
+                        }
+                }
                 if (first < 0)
                 {
                     // (A5-118: a store no line names is one the engine dropped. Dropped before a later store of the same bytes with an access
@@ -5951,41 +6011,6 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                         break;
                     }
                     continue;
-                }
-                // (a register the engine merged under the global's name is written where the register is made: the store's statement is the
-                // line that assigns the global at the instruction that made the register the store stores, which names the stored register's
-                // maker, not the store; the store itself is named on a later line that shows its bytes, grammar 1 seed 4001469,
-                // `uRam26001018 = -(uint2)(in_sr & 1) - in_r3;` at the `negc` before `mov.w r0,@r6`, and `uRam26001018 = uRam26001018 | 0x8000;`
-                // at the `tas.b`)
-                {
-                    const auto word = [&](uint32_t pc, uint16_t& w) {
-                        if (pc < kCode || (pc - kCode) / 2 >= subject.words.size()) return false;
-                        w = subject.WordAt(pc);
-                        return true;
-                    };
-                    int ssize = 0;
-                    const int reg = dts::StoredRegister(subject.WordAt(f.insn), ssize);
-                    std::set<uint32_t> makers;
-                    if (reg >= 0 && dts::RegisterMakers(r, word, dts::BranchSources(r, word), f.insn, reg, makers) && !makers.count(0))
-                        for (int li = 0; li < first; ++li)
-                        {
-                            const Line& l = r.lines[static_cast<size_t>(li)];
-                            const size_t b = l.text.find_first_not_of(' ');
-                            if (b == std::string::npos) continue;
-                            size_t e = b;
-                            while (e < l.text.size() && (std::isalnum(static_cast<unsigned char>(l.text[e])) || l.text[e] == '_')) ++e;
-                            if (e == b || l.text.compare(e, 3, " = ") != 0 || e - b < 11 || l.text.compare(e - 11, 3, "Ram") != 0) continue;
-                            unsigned v = 0;
-                            if (std::sscanf(l.text.c_str() + e - 8, "%8x", &v) != 1 || v > f.address || f.address >= v + 8u) continue;
-                            bool atMaker = false;
-                            for (const Token& t : l.tokens) atMaker = atMaker || makers.count(t.addr) != 0;
-                            if (atMaker)
-                            {
-                                count("order.folded-store.at-maker");
-                                first = li;
-                                break;
-                            }
-                        }
                 }
                 // (A5-111, fixed by patch 0088: a byte or half of the global read after a wider write was made a write of that piece by heritage, a
                 // SUBPIECE whose output was the global's own address: `iRam26002314._0_1_ = (char)((uint2)iRam26002314 >> 8);`, a store the code
@@ -6031,33 +6056,10 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                                                                  "of the global, made a write of it");
                     }
                 }
-                // (a store that writes back what the access just before it read from the same bytes, in every run that makes it, is no change of
-                // memory: the engine drops it as a copy of the global to itself, and the mapping names it on the next line that shows the bytes,
-                // grammar 1 seed 4204949, `mov.w @(r0,r6),r3 ; mov.w r3,@r6 ; mov.w r2,@(r0,r5) ; mov.b r5,@r6`)
-                bool storeRan = false;   // (some run made the store: a store in a block the engine removed as unreachable is named, never made)
-                {
-                    bool made = false, writeBack = true;
-                    for (const RunOut& run : runs)
-                    {
-                        const TraceRec* prev = nullptr;
-                        for (const TraceRec& t : run.trace)
-                        {
-                            if (t.depth == 0 && !t.write && r.InBody(t.addr)) continue;   // (a literal of the function)
-                            if (t.depth == 0 && t.write && t.insn == f.insn)
-                            {
-                                made = true;
-                                writeBack = writeBack && prev && !prev->write && prev->depth == 0 && prev->addr == t.addr && prev->size == t.size && prev->value == t.value;
-                            }
-                            prev = &t;
-                        }
-                    }
-                    storeRan = made;
-                    if (made && writeBack)
-                    {
-                        count("order.folded-store.write-back");
-                        continue;
-                    }
-                }
+                // (a store that writes back what the access just before it read from the same bytes, or wrote there, in every run that makes it,
+                // is no change of memory: the engine drops it as a copy of the global to itself or joins it with the equal store before it, and
+                // the mapping names it on the next line that shows the bytes, or on none: grammar 1 seed 4204949, `mov.w @(r0,r6),r3 ; mov.w
+                // r3,@r6 ; mov.w r2,@(r0,r5) ; mov.b r5,@r6`; seed 3801285, `mov.l r1,@r6 ; bt L ; mov.l r1,@r6 ; L: mov.l @r4,r2`)
                 // (A5-118: a store a later folded store of the same address follows was set aside here, as the engine's to drop or merge, ordinary
                 // memory being a variable: `g = r1; SCU_D0EN = 1; g = r2` printed `SCU_D0EN = 1; g = r2;`, the first write dropped before the DMA
                 // enable. A hardware access, and a read or write through a pointer, which may be one, is a barrier no write of ordinary memory is

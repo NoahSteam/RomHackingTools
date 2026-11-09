@@ -2669,8 +2669,10 @@ const Pin kPins[] = {
     { "mailbox", "actions", 0, 40, 0, "VarnodeBank::create(;Funcdata::newConstant#0", "A6-9 Funcdata::newConstant (VarnodeBank::create), in ActionPrototypeTypes" },
     { "mailbox", "actions", 0, 24, 169, "BlockGraph::newBlockCopy;BlockGraph::buildCopy#0", "A6-9 BlockGraph::newBlockCopy: the copy is freed when it cannot be added" },
     { "mailbox", "actions", 1, 24, 169, "BlockGraph::newBlockCopy;BlockGraph::buildCopy#0", "A6-9 the same, in the printing pass" },
-    { "mailbox", "actions", 0, 40, 212, "CommentDatabaseInternal::addCommentNoDuplicate#0", "A6-9 CommentDatabaseInternal::addCommentNoDuplicate: the comment is freed when it cannot be stored" },
-    { "mailbox", "actions", 1, 40, 212, "CommentDatabaseInternal::addCommentNoDuplicate#0", "A6-9 the same, in the printing pass" },
+    // (re-pinned for patch 0090, whose guards of the mailbox fixture's globals at its volatile accesses make ten more 40-byte and fourteen more
+    // 24-byte allocations before these sites in actions #0 and #1: 212 -> 222, 220 -> 234)
+    { "mailbox", "actions", 0, 40, 222, "CommentDatabaseInternal::addCommentNoDuplicate#0", "A6-9 CommentDatabaseInternal::addCommentNoDuplicate: the comment is freed when it cannot be stored" },
+    { "mailbox", "actions", 1, 40, 222, "CommentDatabaseInternal::addCommentNoDuplicate#0", "A6-9 the same, in the printing pass" },
     // Round 2 (patch 0032): the sweeps of the other fixtures. A6-10 and A6-11 crash without the fix; A6-14 and A6-15 leak, seen under LeakSanitizer.
     { "fixture1", "actions", 0, 64, 84, "ProtoStoreSymbol::clone;FuncProto::copy#0", "A6-10 FuncProto::copy: the other prototype's store is cloned before the old one is freed (ProtoStoreSymbol)" },
     { "fixture1", "actions", 0, 72, 26, "ProtoStoreSymbol::clone;FuncProto::copy#0", "A6-10 ProtoStoreSymbol::clone: the constructor's parameter" },
@@ -2696,7 +2698,7 @@ const Pin kPins[] = {
     // The leaks the round 2 survey found in the Flow and Print phases and in the action tree's clone (patch 0032), seen under LeakSanitizer:
     { "fixture1", "followFlow", 0, 8, 15, "FlowInfo::setupCallindSpecs#0", "A6-8 FlowInfo::setupCallindSpecs: the call site is freed when the function cannot list it" },
     { "mailbox", "followFlow", 0, 8, 13, "BlockGraph::addBlock;BlockGraph::newBlockBasic#0", "A6-8 BlockGraph::newBlockBasic: the block is freed when the graph cannot take it" },
-    { "mailbox", "actions", 0, 24, 220, "BlockGraph::createVirtualRoot#0", "A6-9 BlockGraph::createVirtualRoot: the virtual root is freed when an edge cannot be made" },
+    { "mailbox", "actions", 0, 24, 234, "BlockGraph::createVirtualRoot#0", "A6-9 BlockGraph::createVirtualRoot: the virtual root is freed when an edge cannot be made" },
     { "mailbox", "print", 0, 32, 3, "PackedDecode::ingestStream#0", "A6-9 PackedDecode::allocateNextInputBuffer: the buffer is freed when the stream cannot hold it" },
     { "jumptable", "followFlow", 0, 144, 0, "ActionRestartGroup::clone;ActionDatabase::deriveAction#0", "A6-7 ActionRestartGroup::clone: the copy of the action tree is freed when it cannot be completed" },
     { "jumptable", "followFlow", 0, 8, 42, "ActionRestartGroup::clone;ActionDatabase::deriveAction#0", "A6-7 the same, the member in hand when the group's list cannot grow" },
