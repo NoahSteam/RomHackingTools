@@ -15275,6 +15275,20 @@ void TestA3RoutedPins(Sh2Decompiler& d)
             CHECK(prog.postPollRead >= 4 && count(rep, "endless-read.checked") > 0 && count(rep, "endless-read.withheld") > 0);
             for (const Finding& f : rep.findings) CHECK(f.sig.find("endless-read") == std::string::npos);
         }
+        // A3-175's production (grammar 1, from seed 4,400,001): the program ends with a constant stored at a constant address of work RAM after a
+        // poll the text takes to run for ever. Master's host removed the store with the loop's exit and said nothing (`endless-after-store-dropped`
+        // on all 337 such programs of the 5,000 seeds from 4,400,001, 4400005 and 4400007 the first); now it is said and the signature withheld
+        for (const uint64_t sd : { 4400005ull, 4400007ull })
+        {
+            const Program prog = Generate(sd);
+            const Report rep = Evaluate(d, prog, true);
+            std::printf("pin 'A3-175 grammar 1 seed %llu (the post-poll store at %08X)': %zu finding(s), endless-after-store checked %d, said %d\n",
+                        static_cast<unsigned long long>(sd), prog.postPollStore, rep.findings.size(), count(rep, "endless-after-store.checked"),
+                        count(rep, "endless-after-store.said"));
+            for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+            CHECK(prog.postPollStore != 0 && count(rep, "endless-after-store.checked") > 0 && count(rep, "endless-after-store.said") > 0);
+            for (const Finding& f : rep.findings) CHECK(f.sig.find("endless-after-store") == std::string::npos);
+        }
         const Report seed = Evaluate(d, Generate(3704634), true);
         std::printf("pin 'A3-171 grammar 1 seed 3704634': %zu finding(s), endless-store replaced %d\n", seed.findings.size(), count(seed, "endless-store.replaced"));
         for (const Finding& f : seed.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
