@@ -149,6 +149,13 @@ bool Merge::heldAcrossAccess(HighVariable *tied,HighVariable *other)
     }
     if (any && selfOnly) return false;
   }
+  // (...and a value a register's access reads: merged, the global would be written at the access itself, which its guard there says
+  // nothing of, and its own value read before the access would be printed as the merge's copy: `uVar1 = uRam06058338; uRam06058338 =
+  // CD_HIRQ;` for `x = g; y = CD_HIRQ; g = x | y`, hwram007 06021414)
+  for(int4 i=0;i<other->numInstances();++i) {
+    Varnode *vn = other->getInstance(i);
+    if (vn->isWritten() && isHardwareAccessOp(fd,vn->getDef())) return true;
+  }
   // ...and an access on a path from where the register is written to where the code stores it to the global: merged, the global is written
   // where the register is, before the access (`r0 = 4; if (c) r0 = *p; g = r0;` printed `g = 4; if (c) g = *p;`: the read through p
   // then reads what was written when p is the global's address)
