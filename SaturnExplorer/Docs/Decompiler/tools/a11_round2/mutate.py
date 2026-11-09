@@ -275,7 +275,10 @@ PATCH_NOTES = {
 }
 PATCH_SHOULD = {
     # allocation failure and cancellation: the fault matrix
-    "0001": ["fault"], "0003": ["fault"], "0004": ["fault"], "0016": ["fault"], "0023": ["fault"], "0032": ["fault"],
+    # A11-9: the matrix's cancel cells ask only for a cancelled outcome, which the host's next check-point also gives, so 0001's engine
+    # check-points are watched by the engine tests (TestCancelDuringJumpTableRecovery) and 0004's freed output by the suite
+    # (TestFunctionFreesActiveOutput); the matrix is not the oracle for those two.
+    "0001": ["engine"], "0003": ["fault"], "0004": ["unit"], "0016": ["fault"], "0023": ["fault"], "0032": ["fault"],
     "0040": ["fault"], "0002": ["fault", "engine"], "0020": ["engine", "unit"], "0047": ["decode", "unit"],
     "0074": ["engine"], "0022": ["engine", "unit"], "0055": ["unit", "engine"],
 }

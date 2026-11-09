@@ -19,6 +19,12 @@ if(MSVC)
     endforeach()
     # Ghidra's Windows build flags (/EHsc /W3), plus /bigobj for the largest units.
     add_compile_options(/EHsc /W3 /bigobj)
+    # The MSVC counterpart of the -Wno-* list below (A12-5): the warnings /W3 gives upstream's own
+    # unmodified lines -- C4101 unreferenced `catch (X &err)`, C4005 macro redefinition in the flex
+    # output, C4146 unary minus on unsigned, C4099 class/struct, C4838 narrowing, C4996 `fileno`.
+    # The patches' own lines are warning free (0083), so a new one from a patch still shows as one
+    # of the other warnings; only these six numbers are hidden.
+    add_compile_options(/wd4101 /wd4005 /wd4146 /wd4099 /wd4838 /wd4996)
     add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
 else()
     string(REGEX REPLACE "(^| )-g( |$)" "\\1-g1\\2" CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG}")

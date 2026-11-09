@@ -140,7 +140,7 @@ non-zero mask, a consume mask that leaves out a bit that changes a root) over `d
   through static objects nothing references by name, so an ordinary library link may drop
   them, and the first `Architecture` then throws "No print languages registered".
 - Both: C++14, optimised in every configuration, MSVC `/EHsc /W3 /bigobj` with `_WINDOWS`
-  (upstream's own Windows define), clang/gcc with the sign-compare and similar warnings off.
+  (upstream's own Windows define) and `/wd4101 /wd4005 /wd4146 /wd4099 /wd4838 /wd4996` (the warnings upstream's unmodified lines give at /W3), clang/gcc with the sign-compare and similar warnings off.
 
 ## Bumping Ghidra — checklist
 

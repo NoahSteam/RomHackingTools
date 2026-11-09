@@ -209,13 +209,16 @@ public:
     uint32_t Halts() const { return mHalts.load(); }
     // Waits until more than `n` halts have been published. The deadline only bounds a broken run:
     // how soon the CPU thread gets scheduled after a release is up to the machine, not the test.
+    // The CPU thread spins in the gate (SE_EXPORT_SPIN_GATE), so on a loaded machine it can wait
+    // seconds for a core (A12-7: 5 s was too short while three builds shared four cores), and
+    // yielding rather than burning the waiter's own core lets it run sooner.
     bool WaitForHaltsAbove(uint32_t n) const
     {
-        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(60);
         while (Halts() <= n)
         {
             if (std::chrono::steady_clock::now() > deadline) return false;
-            std::this_thread::yield();
+            std::this_thread::sleep_for(std::chrono::microseconds(50));
         }
         return true;
     }

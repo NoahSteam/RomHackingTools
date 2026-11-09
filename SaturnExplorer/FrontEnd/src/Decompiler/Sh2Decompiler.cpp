@@ -49,6 +49,7 @@ std::string Hex8(uint32_t v)
 // Tests only: the bound on the passes of one repeating action of the engine (patch 0055), 0 for the engine's own.
 int gActionRepeatLimitForTests = 0;
 bool gLoadsNotDuplicatedForTests = true;
+bool gAccessCountsIgnoredForTests = false;
 
 std::unique_ptr<SaturnArchitecture> BuildArchitecture(const std::shared_ptr<const MemorySnapshot>& snapshot,
                                                       uint32_t maxInstructions, std::atomic<bool>* cancel,
@@ -3655,6 +3656,11 @@ void Sh2Decompiler::SetLoadsNotDuplicatedForTests(bool on)
     gLoadsNotDuplicatedForTests = on;
 }
 
+void Sh2Decompiler::SetAccessCountsIgnoredForTests(bool on)
+{
+    gAccessCountsIgnoredForTests = on;
+}
+
 void Sh2Decompiler::SetNoReturnForTests(const std::set<uint32_t>& entries)
 {
     gNoReturnForTests = entries;
@@ -5174,7 +5180,7 @@ std::vector<MemoryAccess> Accesses(const ghidra::Funcdata& fd,
     for (size_t j = 0; j < out.size(); ++j)
     {
         if (!outOps[j]->getParent()) continue;
-        const int allowed = std::max(1, made[std::make_pair(out[j].insn, out[j].write)]);
+        const int allowed = gAccessCountsIgnoredForTests ? 1 : std::max(1, made[std::make_pair(out[j].insn, out[j].write)]);
         std::vector<size_t> before;
         for (size_t i = 0; i < out.size(); ++i)
             if (i != j && out[i].insn == out[j].insn && out[i].write == out[j].write && outOps[i]->getParent() &&
