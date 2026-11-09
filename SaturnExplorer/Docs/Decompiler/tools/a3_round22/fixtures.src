@@ -1,0 +1,658 @@
+# Area 3 round 22 fixtures (asm syntax of ../a3_round16/asm.py with .addr and mova @(LABEL,pc) from asm22.py). Run with run22.sh <name>.
+name ctl
+# control (A3-173's pp10 with no store): poll, then rts
+mov.l =0x06002304,r3
+mov.l =0x06001010,r7
+mov #1,r0
+mov.w r0,@r7
+P:
+mov.w @r7,r0
+tst #1,r0
+bf P
+rts
+nop
+name cl2
+# prologue pushes pr before the poll; a call after the poll takes r4 to r7 as they were on entry
+sts pr,r1
+mov.l r1,@-r15
+mov.l =0x06001010,r7
+mov #1,r0
+mov.w r0,@r7
+P:
+mov.w @r7,r0
+tst #1,r0
+bf P
+mov.l =0x06009040,r2
+jsr @r2
+nop
+mov.l @r15+,r1
+lds r1,pr
+rts
+nop
+nop
+nop
+nop
+nop
+nop
+nop
+nop
+nop
+nop
+nop
+nop
+nop
+nop
+G:
+mov.l r4,@r5
+rts
+nop
+name tc2
+# a tail call (bra) after the poll, r4 and r5 passed on unread
+mov.l =0x06001010,r7
+mov #1,r0
+mov.w r0,@r7
+P:
+mov.w @r7,r0
+tst #1,r0
+bf P
+bra G
+nop
+G:
+mov.l r4,@r5
+rts
+nop
+name sa1
+# a store to the caller's stack argument word after the poll
+mov.l =0x06001010,r7
+mov #1,r0
+mov.w r0,@r7
+P:
+mov.w @r7,r0
+tst #1,r0
+bf P
+mov #9,r1
+mov.l r1,@(16,r15)
+rts
+nop
+name tc3
+# module "0/0/20,20/20/28": F polls (r1 as the mailbox register), then tail-jumps to G (0x06009020), which stores r4 through r5
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+mov.l =0x06009020,r2
+jmp @r2
+nop
+nop
+nop
+nop
+nop
+nop
+nop
+nop
+G:
+mov.l r4,@r5
+rts
+nop
+nop
+name cl3
+# pr kept in r14 (no push); the call after the poll takes r4 and r5 unread
+sts pr,r14
+mov.l =0x06001010,r7
+mov #1,r0
+mov.w r0,@r7
+P:
+mov.w @r7,r0
+tst #1,r0
+bf P
+mov.l =0x06009040,r2
+jsr @r2
+nop
+lds r14,pr
+rts
+nop
+name cl4
+# control of cl2: the call with no poll before it
+sts pr,r1
+mov.l r1,@-r15
+mov.l =0x06009040,r2
+jsr @r2
+nop
+mov.l @r15+,r1
+lds r1,pr
+rts
+nop
+name cl5
+# module "0/0/20,20/20/28": F polls, then calls G (0x06009020) with r4 and r5 unread; G stores r4 through r5
+sts pr,r1
+mov.l r1,@-r15
+mov.l =0x06001010,r7
+mov #1,r0
+mov.w r0,@r7
+P:
+mov.w @r7,r0
+tst #1,r0
+bf P
+mov.l =0x06009020,r2
+jsr @r2
+nop
+mov.l @r15+,r1
+lds r1,pr
+rts
+nop
+nop
+G:
+mov.l r4,@r5
+rts
+nop
+name cl6
+# module "0/0/20,20/20/28": F polls, then calls G (0x06009020) with r4 and r5 unread; G stores r4 through r5
+sts pr,r3
+mov.l r3,@-r15
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+mov.l =0x06009020,r2
+jsr @r2
+nop
+mov.l @r15+,r3
+lds r3,pr
+rts
+nop
+nop
+G:
+mov.l r4,@r5
+rts
+nop
+name cl7
+# module "0/0/20,20/20/28": F polls, then calls G (0x06009020), which writes the word 0x06002304 (G takes nothing)
+sts pr,r3
+mov.l r3,@-r15
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+mov.l =0x06009020,r2
+jsr @r2
+nop
+mov.l @r15+,r3
+lds r3,pr
+rts
+nop
+nop
+G:
+mov.l =0x06002304,r3
+mov #7,r2
+mov.l r2,@r3
+rts
+nop
+name m1
+# module "0/0/20,20/20/40,40/40/48" (RETURNS 0,0,0): C(0x06009000) passes 5 and a pointer to F (0x06009020), which polls and then calls G (0x06009040): G stores r4 through r5
+sts pr,r3
+mov.l r3,@-r15
+mov.l =0x06009020,r2
+mov #5,r4
+mov.l =0x06002300,r5
+jsr @r2
+nop
+mov.l @r15+,r3
+lds r3,pr
+rts
+nop
+nop
+nop
+nop
+nop
+nop
+F:
+sts pr,r3
+mov.l r3,@-r15
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+mov.l =0x06009040,r2
+jsr @r2
+nop
+mov.l @r15+,r3
+lds r3,pr
+rts
+nop
+nop
+G:
+mov.l r4,@r5
+rts
+nop
+name jt1
+# a jump table after the poll: the cases store constants to two globals and return; the index is r5 (read only after the poll)
+mov.l =0x06002304,r3
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+mov #2,r1
+cmp/hs r1,r5
+bt D
+shll2 r5
+mova @(TAB,pc),r0
+mov.l @(r0,r5),r1
+jmp @r1
+nop
+nop
+TAB:
+.addr C0
+.addr C1
+C0:
+mov #7,r2
+mov.l r2,@r3
+rts
+nop
+C1:
+mov #8,r2
+mov.l r2,@r3
+D:
+rts
+nop
+name jt2
+# jt1 with the index tested before the poll (r5 held) and the tables' cases after it
+mov.l =0x06002304,r3
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+tst r5,r5
+bt D
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+mov #2,r1
+cmp/hs r1,r5
+bt D
+shll2 r5
+mova @(TAB,pc),r0
+mov.l @(r0,r5),r1
+jmp @r1
+nop
+nop
+TAB:
+.addr C0
+.addr C1
+C0:
+mov #7,r2
+mov.l r2,@r3
+rts
+nop
+C1:
+mov #8,r2
+mov.l r2,@r3
+D:
+rts
+nop
+name n1
+# a counted loop around the poll, the store after the poll in the outer body
+mov.l =0x06002304,r3
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+mov #3,r8
+O:
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+mov.l r6,@r3
+dt r8
+bf O
+rts
+nop
+name n2
+# a first poll, a store between, a second poll on a second mailbox; the first store is before the second loop
+mov.l =0x06002304,r3
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+mov.l =0x06001020,r6
+mov #2,r1
+mov.w r1,@r6
+P1:
+mov.w @r7,r1
+tst r1,r1
+bf P1
+mov #5,r2
+mov.l r2,@r3
+P2:
+mov.w @r6,r1
+tst r1,r1
+bf P2
+mov #6,r2
+mov.l r2,@r3
+rts
+nop
+name ds1
+# a bt/s poll whose delay slot stores, exit taken; mailbox 1 never clears
+mov.l =0x06002304,r3
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+P:
+mov.w @r7,r1
+tst r1,r1
+bt/s X
+mov.l r6,@r3
+bra P
+nop
+X:
+mov #9,r2
+mov.l r2,@r3
+rts
+nop
+name ds2
+# the poll read in the bf/s delay slot; the store after
+mov.l =0x06002304,r3
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+mov.w @r7,r1
+P:
+tst r1,r1
+bf/s P
+mov.w @r7,r1
+mov.l r6,@r3
+rts
+nop
+name rt1
+# the poll on one arm of a test; the other arm returns r5; the store after the loop is on the poll arm only (no r5 read after)
+mov.l =0x06002304,r3
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+tst r4,r4
+bt R
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+mov.l r6,@r3
+R:
+rts
+mov r5,r0
+name rt2
+# as rt1, but the code after the poll sets r0 and joins the returning block (shared epilogue)
+mov.l =0x06002304,r3
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+tst r4,r4
+bt R
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+mov #7,r5
+R:
+rts
+mov r5,r0
+name rt3
+# as rt2 with r5 read after the poll via r6 (r6 not held)
+mov.l =0x06002304,r3
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+tst r4,r4
+bt R
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+mov r6,r5
+R:
+rts
+mov r5,r0
+name sp1
+# a push in the prologue; a stack argument word read after the poll and stored to a global
+mov.l =0x06002304,r3
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+mov.l r8,@-r15
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+mov.l @(20,r15),r1
+mov.l r1,@r3
+mov.l @r15+,r8
+rts
+nop
+name sp2
+# a push in the prologue; a stack argument word written after the poll
+mov.l =0x06002304,r3
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+mov.l r8,@-r15
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+mov #9,r1
+mov.l r1,@(20,r15)
+mov.l @r15+,r8
+rts
+nop
+name gb1
+# gbr-relative store to a global after the poll (gbr from a literal)
+mov.l =0x06002304,r3
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+mov.l =0x06002300,r2
+ldc r2,gbr
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+mov #7,r0
+mov.l r0,@(1,gbr)
+rts
+nop
+name ar1
+# a store through a pointer built by arithmetic from a literal after the poll
+mov.l =0x06002304,r3
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+mov.l =0x06002000,r2
+add #4,r2
+mov #7,r1
+mov.l r1,@(0,r2)
+rts
+nop
+name ar2
+# the pointer is loaded from a global (a pointer in memory) after the poll
+mov.l =0x06002304,r3
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+mov.l @r3,r2
+mov #7,r1
+mov.l r1,@r2
+rts
+nop
+name ld1
+# r5 held (tested before the poll); after the poll the interrupt mask is set from it
+mov.l =0x06002304,r3
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+tst r5,r5
+bt R
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+ldc r5,sr
+R:
+rts
+nop
+name ld3
+# as ld1 with tas.b on a constant ordinary address
+mov.l =0x06002304,r3
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+tst r5,r5
+bt R
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+tas.b @r3
+R:
+rts
+nop
+name ld4
+# as ld1 with lds r5,pr then jmp through the stack-free return: pr set from a held parameter, then rts
+mov.l =0x06002304,r3
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+tst r5,r5
+bt R
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+lds r5,pr
+R:
+rts
+nop
+name ld5
+# as ld1 with ldc r5,gbr
+mov.l =0x06002304,r3
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+tst r5,r5
+bt R
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+ldc r5,gbr
+R:
+rts
+nop
+name tj1
+# module "0/0/10,10/10/20,20/20/28": F tail-jumps to G (0x06009010) when r4 is zero and to H (0x06009020) otherwise; G stores r6 through r5, H returns r7
+tst r4,r4
+mov.l =0x06009010,r2
+bt S
+mov.l =0x06009020,r2
+S:
+jmp @r2
+nop
+nop
+nop
+G:
+mov.l r6,@r5
+rts
+nop
+nop
+nop
+nop
+nop
+nop
+H:
+rts
+mov r7,r0
+nop
+nop
+name cl8
+# r4 tested before the poll (held); after the poll a tail jump through r4 (a callback), r5 to r7 passed on unread
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+tst r4,r4
+bt R
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+jmp @r4
+nop
+R:
+rts
+nop
+name cl9
+# module "0/0/22,22/22/2a" with the call in the live arm too: r4 tested before, the poll arm calls G(r4, r5) with r5 unread elsewhere
+sts pr,r3
+mov.l r3,@-r15
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+tst r4,r4
+bt R
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+mov.l =0x06009022,r2
+jsr @r2
+nop
+R:
+mov.l @r15+,r3
+lds r3,pr
+rts
+nop
+G:
+mov.l r4,@r5
+rts
+nop
+nop
+name cl10
+# module "0/0/20,20/20/28": F polls, then calls G (0x06009020), which returns 5 in r0 (G takes nothing and writes nothing)
+sts pr,r3
+mov.l r3,@-r15
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+mov.l =0x06009020,r2
+jsr @r2
+nop
+mov.l @r15+,r3
+lds r3,pr
+rts
+nop
+nop
+G:
+rts
+mov #5,r0

@@ -19160,3 +19160,60 @@ The same range gave `endless-store-dropped` on seed 4404731 for a store the text
 
 * **Area 5:** `folded-store-after-access` (A5-117's class), grammar 1 seeds 4400311, 4401071, 4401126, 4401188, 4402363, 4402564, 4403289, 4403409, 4403532, 4403759, 4403774, 4404673, 4404683, 4404917, and 3800275, 3800320, 3800756, 3800827, 3800897, 3800910, 3801089, 3801285, 3801785, 3802338, 3802344, 3802348, 3802488, 3802640, 3803233, 3803245, 3803249, 3803640, 3803669, 3804280, 3804443, 3804515, 3804622.
 * **Area 7:** grammar 1 seeds 4402821 (`v:map-copy-store`) and 4404345 (`v:map-way-back`): the known classes. No seed was shrunk.
+
+## Area 3, round 22 review
+
+Reviewer, branch `review/3-round22`, cut at master `3e83e725` (the merged A3-175/A3-172 fixes, A3-176, A3-177). No engine, host or product file changed. The repository gets fixtures (`Docs/Decompiler/tools/a3_round22/`: `fixtures.src`, assembled by `asm22.py` (round 21's, with `.addr` and `mova @(LABEL,pc),r0`); `run22.sh`, which runs one through the generator's `SE_GENERATED_WORDS` mode; `variants.py`, the A3-177 shape in 288 variants), ledger rows **A3-178 to A3-180**, and this record. The worktree's RelWithDebInfo build (no rebuild needed), every test binary under `ulimit -v 3500000` (4,000,000 for the generator ranges) and `timeout`, one heavy job at a time.
+
+**Verdict, area 3: not clean.** One P1 row (A3-178), one P2 row (A3-179) and one P3 row (A3-180). The clean count stays 0.
+
+| Row | P | What |
+|---|---|---|
+| A3-178 | P1 | a CALL in the code after a poll the analysis takes to run for ever: the engine removes it with the loop's exit, and the arguments it hands on (r4 to r7 unread by this function) and the value it returns in r0 are lost from the lent signature, nothing said |
+| A3-179 | P2 | the same call, with a callee that takes nothing and writes a word of ordinary memory: F is lent `void (void)`, callers keep the old word |
+| A3-180 | P3 | no production draws a call after a poll (grammar 2 draws no poll), so the A3-173 and A3-175 oracles check reads and stores only |
+
+### 1. A3-178 and A3-179: the call after the poll
+
+The A3-173 reads pass looks at the operands of the ops of the flow and the A3-175 pass at the stores of the function's own code. A call is neither: a CALL op has no operand for the argument registers it hands on and no output for r0, and the stores of its callee are not this function's. The shape (`fixtures.src` cl6, cl7, cl9, cl10, m1; modules take `SE_GENERATED_FUNCS` and `SE_GENERATED_RETURNS`):
+
+* cl6: F `sts pr,r3 ; push r3 ; mailbox write ; poll ; mov.l =G,r2 ; jsr @r2 ; nop ; pop r3 ; lds r3,pr ; rts`, G `mov.l r4,@r5 ; rts`. G is lent `void (xunknown4, xunknown4 *)`; F prints `xRam06001010 = 1; do { } while( true );` and is lent `void (void)`. m1 puts a caller C above it (`mov #5,r4 ; mov.l =0x06002300,r5 ; jsr F`): C prints `func_0x06009020();` and is itself lent `void (void)`. On the hardware the poll ends, G stores 5 at 0x06002300.
+* cl9: the same with `tst r4,r4 ; bt R` before the poll: F is lent with one parameter, r5 lost.
+* cl10: G `rts ; mov #5,r0`: F returns 5 on the hardware and is lent `void`.
+* cl7 (A3-179): G takes nothing and writes 7 at 0x06002304: F lent `void (void)`.
+
+What did not reach the bug, by accident: PR saved with a push before the poll (cl2, cl4) is withheld ("a return not to its caller" or "holds a value in r0 across a call"), PR in r14 (cl3) too; only cl6's form, PR in a register the poll does not use and r0 free, is lent. A `jmp` into another function's entry is shown as part of this function by the engine (tc3: the read, the store and the caution are given); `jmp @r4` is withheld (cl8); an unresolved tail call is withheld (tj1). So the open shape is the call.
+
+### 2. What held
+
+| Shape | Result |
+|---|---|
+| a counted loop around the poll, store after the poll in the outer body (n1) | store and read of r6 said, withheld |
+| a first poll, a store between, a second poll on another mailbox, a store after it (n2) | the store after the second said, withheld |
+| a `bt/s` poll whose delay slot stores, exit taken, a store at the exit (ds1) | the slot "in" the loop and the exit's store after it, both said |
+| the poll read in the `bf/s` slot (ds2) | store and read said |
+| the poll on one arm, the other arm returns r5 (rt1); the code after the poll sets r5 and joins the returning block (rt2: withheld, "leaves a value in r0"); reads r6 into r5 (rt3) | said or withheld in each |
+| a prologue push, a stack argument word read after the poll and stored to a global (sp1), written after it (sp2) | sp1 store said; sp2 withheld ("writes a word of its caller's frame") |
+| a gbr-relative store (gb1), a store through a pointer built from a literal (ar1), through a pointer loaded from memory (ar2), `tas.b` on a constant address (ld3) | each said |
+| a jump table after the poll, index read after it (jt1) or tested before it (jt2) | the cases' stores said, the index read said (jt1), withheld |
+| `ldc r5,sr` and `ldc r5,gbr` after the poll, r5 held (ld1, ld5) | lent; a state no caller reads, not filed. `lds r5,pr` (ld4) is withheld |
+| A3-177's shape in 288 variants (`variants.py`: the slot a byte, half, long, displacement, pre-decrement or indexed store; the read after the return a byte, half, long or none; `bt/s` or `bf/s`; which path polls; a store after the poll none, byte or long) | no finding; the 92 lent variants all have no store after the poll, and the slot's store is printed on every path |
+
+### 3. Runs
+
+| Run | Result |
+|---|---|
+| game corpus (`SE_GAME_LEND=1`, hwram007 then hwram008) | real entries lent **474 (645 parameters) of 999** and **724 (975) of 1,543**; missing and said **0** and **4**; every ledger count 0 |
+| grammar 1, 4,600,001 to 4,610,000 (two pieces of 5,000, canary off) | 14 + 12 failing seeds, none area 3's: `folded-store-after-access` (13 + 12 findings in the pieces' seeds) and `map-copy-store` (4604444, 4606794). `endless-store` checked 38,974 + 61,124, said 5,358 + 11,312; `endless-after-store` checked and said 361 + 343; `endless-read` checked and withheld 345 + 332; polls 3,255 + 3,270 |
+| grammar 2, 4,600,001 to 4,610,000 (two pieces) | 1 + 0 failing seeds: 4603517 (`map-const-join`, area 7). Claims checked 30,273 + 29,264; polls 0 |
+| specials, grammar 1 and 2, 4,600,001 to 4,603,000 | 6 failing seeds (`folded-store-after-access`, the same as the default alphabet's); grammar 2: 0 findings. Polls 1,935 and 0 |
+| printed-C (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | 5,585 functions, 5,297 compared: **agrees=5196**, the baseline; narrow-c 130, void-return 227, void-return-lent 24 |
+| hand fixtures | `tools/a3_round22/fixtures.src` (33) and the 288 variants |
+| full `ctest` (`-E SaturnExplorerLive -j2`) | **111 of 111** (319 s); no test target added |
+| fault suite | not run: no product code changed |
+
+### 4. Routed, no row here
+
+* **Area 5:** `folded-store-after-access` (A5-117's class), grammar 1 seeds 4600677, 4600750, 4600997, 4601304, 4601566, 4602172, 4602256, 4603984, 4604078, 4604261, 4604708, 4604858, 4604910, 4605016, 4605218, 4606580, 4606794, 4607525, 4607611, 4608029, 4608531, 4609006, 4609394, 4609451, 4609798.
+* **Area 7:** grammar 1 seeds 4604444 and 4606794 (`map-copy-store`), grammar 2 seed 4603517 (`map-const-join`). No seed was shrunk.
+* **Area 11:** A3-180, no production draws a call after a poll.
