@@ -19217,3 +19217,57 @@ What did not reach the bug, by accident: PR saved with a push before the poll (c
 * **Area 5:** `folded-store-after-access` (A5-117's class), grammar 1 seeds 4600677, 4600750, 4600997, 4601304, 4601566, 4602172, 4602256, 4603984, 4604078, 4604261, 4604708, 4604858, 4604910, 4605016, 4605218, 4606580, 4606794, 4607525, 4607611, 4608029, 4608531, 4609006, 4609394, 4609451, 4609798.
 * **Area 7:** grammar 1 seeds 4604444 and 4606794 (`map-copy-store`), grammar 2 seed 4603517 (`map-const-join`). No seed was shrunk.
 * **Area 11:** A3-180, no production draws a call after a poll.
+
+## Area 3, A3-178 to A3-180 fixer
+
+Fixer, branch `review/3-a3178-fix`, cut at master `d278072b`. Host, oracle and generator only: no engine patch, so 0089 stays free. The worktree's RelWithDebInfo build (`-j2`, `ulimit -v 6000000`), the test binaries and the game corpus under `ulimit -v 3500000` to `4000000`. **The three rows are fixed: A3-178 (P1), A3-179 (P2) and A3-180 (P3, for grammar 1). One new row: A3-181 (P3, open: grammar 2 still draws no poll).**
+
+### A3-178 and A3-179: a call after the endless poll
+
+The engine removes the code after a poll it takes to run for ever (unmarked memory), and a call there went with it: A3-173's reads pass sees the operands of the flow's ops and a CALL has none for the r4 to r7 it hands on and no output for r0, and A3-175's pass sees the function's own stores, not a callee's. The same pass now takes each CALL and CALLIND of the flow in that region (the flow blocks reached from the loop without entering a block with a live op or another loop; `jsr`, `bsr`, `bsrf` and `trapa` are all calls in the SLEIGH): a caution on the call's instruction, "the call here is missing: the analysis takes the loop at 0x0600900A to run for ever and removes the code after it, this call with it, so neither the text nor the signature holds what it is passed, what it returns or what it writes. A poll of memory another processor writes folds so unless that memory is marked volatile", and the signature withheld ("a call after a loop the analysis takes to run for ever is missing", after the two store reasons). (`DecompileResult::EndlessLoopRead::call`, said by `NoteStoresBeforeEndlessLoop`.)
+
+**Withheld always**, not only when the call could pass on arguments or return a value. The callee's lent signature cannot tell soundly: one that takes and returns nothing may still write memory (cl7, A3-179), and A3-175 withholds for exactly that write when the function makes it itself. A caller of the function then sees a callee whose signature is not known and prints the call with its arguments.
+
+| Fixture | Master | Now |
+|---|---|---|
+| cl6 (G(r4, r5) stores r4 through r5) | lent `void (void)`, nothing said | caution on 0x06009012, withheld |
+| cl7 (A3-179: G writes 7 at 0x06002304) | lent `void (void)` | said, withheld |
+| cl9 (r4 tested before the poll) | lent with 1 parameter | said on 0x06009016, withheld |
+| cl10 (G returns 5) | lent `void` | said, withheld |
+| g2, g3 (`tools/a3_fix178/fixtures.src`: the generator's form, the poll through r0 and PR saved after it; G returns 5, and stores r4 through r5 or writes 7 at 0x06003020) | lent `void (void)` | said, withheld |
+| m1 (C passes 5 and 0x06002300 to F, which polls and calls G) | F lent `void (void)`, C prints `func_0x06009020();` and is lent | F said and withheld; C prints `func_0x06009020(5,0x6002300);` and is withheld ("it calls 0x06009020, whose signature is not known") |
+| control c1 (the call before the poll) | lent, 2 parameters, `func_0x06009020(param_1,param_2);` | unchanged |
+| control cl6 with the mailbox marked | lent, 2 parameters, the call printed after the poll | unchanged |
+
+A first form of g1 (the generator's form with a G that returns nothing) is withheld on master already, for "it holds a value in r0 across a call that keeps r0" (the poll's r0 reaches the return through a void callee), so the production gives G a return value.
+
+### A3-180: the generator
+
+* **Production** (`Gen::AddPostPollCall`, a stream of its own `postCallRng`, **only for the grammar 1 seeds from 4,800,001**, `kPostCallFirst`): in one program of two with a poll, the program ends with `sts pr,r3 ; mov.l r3,@-r15 ; jsr @r2` (or `bsr`) `; nop ; mov.l @r15+,r3 ; lds r3,pr`, a call of a second function, `fns[1]`, which returns a value in r0 (`mov #k,r0` or `add #k,r0` in its `rts` slot) and either writes a constant at a word of 0x06003040 to 0x0600305C or its cache-through name (no other production names 0x3040 on), returns r4 + k, or stores r4 there. PR is kept on the stack in the code after the poll, so nothing of the call is left once the analysis removes that code. Every seed below 4,800,001 keeps the program it had; the A3-173 and A3-175 oracles now ask for `fi == 0` of a version 1 program instead of a program of one function (the same programs below 4,800,001).
+* **Oracle** `endless-call-dropped`: in a text with `while( true );` of a program with the item, a line calls the callee (`func_0x<entry>(`), or a caution says the call is missing and the signature is withheld. Counts `endless-call.checked`, `.printed`, `.said`. With master's host (master's `Sh2Decompiler.cpp` and `.h` in a temporary build of the generator): **all 349** such programs of the 5,000 seeds from 4,800,001 fail it (318 in the default request, 31 in the marked one, where another poll still runs for ever; 4800002 and 4800042 the first); on the fix none (349 checked, 349 said).
+* **Grammar 2** still draws no poll: not added here. Its harness takes every function to return (the `generator:no-return` contract is skipped for a module with a poll, but the callers' runs, the PR and r8-r15 contract and the claims checks then meet unfinished runs), and its defined-register rules would need a mailbox discipline (the poll writes r0 and r7). New row A3-181 (P3, open).
+
+### Pins (each fails on master's host: the decompiler suite built with master's `Sh2Decompiler.cpp` and `.h` fails 20 checks, all in `TestA3178Fix`'s said cases and m1; its controls pass)
+
+* `TestA3178Fix` (`Sh2DecompilerTests.cpp`): cl6, cl7, cl9, cl10, g2, g3 said on the call and withheld with the reason; m1's F said and withheld, its caller printing the call with both arguments and withheld; the controls c1 and cl6 marked lent with 2 parameters and the call printed. `TestA3175Fix`'s s3 (a call between two stores after the loop) is now said on its call as well; its checks are unchanged.
+* `TestA3RoutedPins` (`Sh2GeneratedTests.cpp`): grammar 1 seeds 4800002 and 4800042 (`endless-call` checked and all said, 0 findings).
+* Fixtures: `tools/a3_fix178/fixtures.src` (g1 to g3, c1) and `run.sh` (round 22's runner with `BIN=` for a second build; it finds round 22's fixtures too). No new test target.
+
+### Runs (on the final code)
+
+| Run | Result |
+|---|---|
+| game corpus (`SE_GAME_LEND=1 SE_GAME_NOTES=1`, hwram007, hwram008; `tools/a7_round2/corpus.sh`, master's binary and the fix's side by side) | every ledger count 0; real entries lent **474 (645 parameters) of 999** and **724 (975) of 1,543**; missing and said **0** and **4**: unchanged. The token dumps of both builds, alone and lent, are identical in both images (no text changed). Cautions 7 to 15 (hwram007) and 22 to 43 (hwram008), every new one the call caution: hwram007 06005212 at 0600523A, 06005520 at 060055CA, 060055D0, 060055D6, 060055DC, 060055E2, 060055EE and 060055F4; hwram008 060051FA at 06005222, 06005530 at eleven calls from 060055D8 to 06005620, 06007D22 at 06007D4C, 06007D64, 06007D76, 06007D8E and 06007DAA, 0600C2DA at 0600C33A and 0600C344, 0600C49A at 0600C4FE and 0600C508. All seven functions were already withheld (A3-164's idle loops; A3-175's stores after the loop), so the lent counts do not move |
+| printed-C (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | 5,585 functions, 5,297 compared: **agrees=5196**, the baseline; narrow-c 130, void-return 227, void-return-lent 24 |
+| generator default run (300 seeds and the pins) | **0 findings**, all passed |
+| grammar 1, 4,800,001 to 4,805,000 (the new range, canary off) | 23 failing seeds, only the known classes: `folded-store-after-access` (n 40, v 47 findings; area 5) and `n:map-way-back` 1 (area 7). `endless-call` checked 349, said 349; `endless-after-store` checked and said 354; `endless-read` checked and withheld 362; `endless-store` checked 51,003, said 8,283. Master's host on the same range: the same plus `endless-call-dropped` on 318 + 31 programs (339 failing seeds) |
+| decompiler suite with master's `Sh2Decompiler.cpp` and `.h` | 20 checks fail, in `TestA3178Fix` only; its controls pass |
+| full `ctest -j2` | **117 of 117** (111 and the 6 Live tests; 277 s). No new test target |
+| fault suite (`SaturnExplorerDecompilerFaultTests`) | **0 of 94** jobs failed |
+| lints | `check-literal-size.py`: ok. No vendored file touched |
+
+### Routed, no row here
+
+* **Area 5:** `folded-store-after-access` (A5-117's class), grammar 1 seeds 4800323, 4800745, 4801035, 4801288, 4801460, 4801510, 4801662, 4801717, 4802504, 4802898, 4803067, 4803181, 4803295, 4803372, 4803377, 4803400, 4803829, 4803897, 4804239, 4804248, 4804545, 4804641.
+* **Area 7:** grammar 1 seed 4802131 (`n:map-way-back`). No seed was shrunk.
+* **Area 11 / area 3:** A3-181, grammar 2 draws no poll.
