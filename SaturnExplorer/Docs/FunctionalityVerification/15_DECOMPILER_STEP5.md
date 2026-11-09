@@ -18783,3 +18783,9 @@ A3-170 is the one break. The caution keys `written` (the bytes the text writes) 
 | grammar 2, 3,700,001 to 3,710,000 (two pieces) | 2 failing seeds, none area 3's: 3706722 (area 7, `map-number-store`) and 3709052 (area 5, `cache-read-pointer-unsaid`); claims checked 59,821 |
 | printed-C, 3,000 seeds | 5,585 functions, 5,297 compared: **0 `mismatch`**; **agrees=5196**, the baseline; narrow-c 130, void-return 227, void-return-lent 24, skipped 8 |
 | generator default run (300 seeds and the pins) | 0 findings |
+| full `ctest` | **111 of 111** (`-E SaturnExplorerLive -j2`, 239 s); Live **6 of 6**. No test target added; the fixtures are scratch beside the rows, not yet pinned |
+
+### 3. Routed, no row here
+
+* **Area 7:** grammar 1 seed 3706930 (`map-copy-store`; replay `D60F D710 D710 6072 C801 8BFC C801 8D01 8058 6033 2701 2522 2029 6361 630C 2319 2238 8D01 2522 6061 1703 6272 3030 8D03 6233 2632 2511 142B 5168 6341 000B 6361 05F8 00F0 4600 00C0 2600 2380`), grammar 2 seed 3706722 (`map-number-store`: `xRam26001000 = 4;`).
+* **Area 5:** grammar 2 seed 3709052 (`cache-read-pointer-unsaid`, a 1-byte read at 0x06009140 through a pointer derived from a register address).
