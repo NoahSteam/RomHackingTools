@@ -13,6 +13,7 @@
 #include "prettyprint.hh"
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <chrono>
 #include <cstdio>
@@ -8642,6 +8643,536 @@ void Sh2Decompiler::NoteRemovedAccesses(const std::shared_ptr<const MemorySnapsh
 namespace
 {
 
+// A3-182: a loop the analysis takes to run for ever can leave by an edge into code the text keeps (a block the code before the loop also
+// reaches: `tst r6,r6 ; bt Q ; (poll) ; mov #7,r5 ; Q: mov.l r5,@r4`). The engine removes that edge with the loop's exit, so what the
+// path through the loop leaves in a register or a word of the frame (set after the loop, in it, or before it on that path only) is not
+// what the text and the signature give the joined code: it reads r5 as the other path leaves it. A3-173's region stops at such a block, and
+// its reads, stores and calls are not what is lost here: a value the path carries in is.
+//
+// From the flow's own p-code: reaching definitions over the flow (each register; T apart from the rest of SR, as the bit-inserts of the
+// SLEIGH write it; each word of the frame at a known offset from the entry r15), a definition marked when it crosses a removed edge (from a
+// loop block or a block of the code after it, A3-173's region, into a block outside both). A read in kept code is lost when a marked
+// definition reaches it that no unmarked path brings, or a definition computed from a lost read; the value is followed through registers,
+// temporaries and frame words to its first use: a store (its address or value), a load's address, a branch's condition or target, a call
+// (its target, r4 to r7, the words its stack arguments are in) or a return (PR; r0 is A3-173's r0: no caution, a signature withheld).
+void JoinedAfterEndlessLoop(const ghidra::Funcdata& fd, const FlowRecord& flow, const std::vector<uint32_t>& loopAt, const std::vector<uint32_t>& after,
+                            const std::function<uint32_t(uint32_t)>& canonicalOf, std::vector<DecompileResult::EndlessLoopRead>& reads)
+{
+    const size_t nf = std::min(flow.successors.size(), flow.blockOps.size());
+    // A3-173's region is the flow blocks after a loop up to one with a live op; a block the text keeps with no op of the flow alive in it
+    // (`rts ; nop`, whose RETURN the engine rebuilt) is in it. Here a block of the region whose code a block of the final graph still
+    // covers is kept: the code after the loop is what the final graph no longer has.
+    // (By the instructions of its ops, not by a block's address range: a final block can hold ops of instructions on both sides of the code
+    // after a loop, a `bra` back into a delay slot (grammar 1 seed 5600146), and its range would cover that code.)
+    std::set<uint32_t> finalInsns;
+    {
+        const ghidra::BlockGraph& g = fd.getBasicBlocks();
+        for (ghidra::int4 i = 0; i < g.getSize(); ++i)
+        {
+            const ghidra::BlockBasic* bb = static_cast<const ghidra::BlockBasic*>(g.getBlock(i));
+            if (!bb->getStart().isInvalid()) finalInsns.insert(static_cast<uint32_t>(bb->getStart().getOffset()));
+            for (auto it = bb->beginOp(); it != bb->endOp(); ++it)
+            {
+                finalInsns.insert(InstructionOf(*it));
+                finalInsns.insert(static_cast<uint32_t>((*it)->getAddr().getOffset()));
+            }
+        }
+    }
+    std::vector<char> gone(nf, 0);
+    for (size_t b = 0; b < nf; ++b)
+    {
+        if (loopAt[b]) gone[b] = 1;
+        if (!after[b]) continue;
+        bool covered = false;
+        for (const FlowOp& x : flow.blockOps[b]) covered = covered || finalInsns.count(x.insn) != 0;
+        gone[b] = !covered;
+    }
+    auto removed = [&](size_t b) { return gone[b] != 0; };
+    auto cut = [&](size_t from, int to) {
+        return to >= 0 && static_cast<size_t>(to) < nf && removed(from) && !removed(static_cast<size_t>(to));
+    };
+    bool anyCut = false;
+    size_t total = 0;
+    for (size_t b = 0; b < nf; ++b)
+    {
+        total += flow.blockOps[b].size();
+        for (int next : flow.successors[b]) anyCut = anyCut || cut(b, next);
+    }
+    if (!anyCut || total > 200000 || flow.entryBlock < 0 || static_cast<size_t>(flow.entryBlock) >= nf) return;
+    // The blocks the flow reaches from its entry without a removed edge: the code the text keeps.
+    std::vector<char> kept(nf, 0);
+    {
+        std::vector<int> work{ flow.entryBlock };
+        while (!work.empty())
+        {
+            const int b = work.back();
+            work.pop_back();
+            if (b < 0 || static_cast<size_t>(b) >= nf || kept[static_cast<size_t>(b)]) continue;
+            kept[static_cast<size_t>(b)] = 1;
+            for (int next : flow.successors[static_cast<size_t>(b)])
+                if (!cut(static_cast<size_t>(b), next)) work.push_back(next);
+        }
+    }
+    bool joins = false;
+    for (size_t b = 0; b < nf; ++b)
+        for (int next : flow.successors[b])
+            joins = joins || (cut(b, next) && kept[static_cast<size_t>(next)]);
+    if (!joins) return;
+    // The keys: r0 to r15 (0 to 15), T (16), GBR, VBR, MACH, MACL, PR, PC (17 to 22), another register (23), the rest of SR (24), and
+    // a word of the frame at entry r15 + an offset (25 on).
+    const ghidra::Translate* translate = fd.getArch()->translate;
+    std::vector<ghidra::VarnodeData> named;
+    static const char* const kNames[] = { "r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7", "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15",
+                                          "sr", "gbr", "vbr", "mach", "macl", "pr", "pc" };
+    for (const char* name : kNames) named.push_back(translate->getRegister(name));
+    const ghidra::AddrSpace* regSpace = named[0].space;
+    constexpr int kT = 16, kOther = 23, kSrRest = 24, kFrame0 = 25;
+    std::map<int64_t, int> frameKey;   // word offset from the entry r15 -> key
+    std::vector<int64_t> frameOff;
+    bool frozen = false;   // (every word is given its key before the walks)
+    auto keyOfFrame = [&](int64_t off) {
+        const int64_t w = off & ~int64_t(3);
+        auto f = frameKey.find(w);
+        if (f != frameKey.end()) return f->second;
+        if (frozen) return kOther;
+        const int k = kFrame0 + static_cast<int>(frameOff.size());
+        frameKey[w] = k;
+        frameOff.push_back(w);
+        return k;
+    };
+    // The registers a varnode covers, as keys (SR as both of its keys)
+    auto keysOf = [&](const FlowVn& v, std::vector<int>& out) {
+        out.clear();
+        if (!v.space || v.space != regSpace) return;
+        bool any = false;
+        for (size_t k = 0; k < named.size(); ++k)
+            if (named[k].space == v.space && v.offset < named[k].offset + named[k].size && named[k].offset < v.offset + static_cast<ghidra::uintb>(v.size))
+            {
+                any = true;
+                if (k == kT) out.push_back(kT), out.push_back(kSrRest);
+                else out.push_back(static_cast<int>(k));
+            }
+        if (!any) out.push_back(kOther);
+    };
+    auto whole = [&](const FlowVn& v, int k) {
+        const ghidra::VarnodeData& r = named[static_cast<size_t>(k == kSrRest ? kT : k)];
+        return v.offset <= r.offset && v.offset + static_cast<ghidra::uintb>(v.size) >= r.offset + r.size;
+    };
+    const ghidra::VarnodeData& sr = named[kT];
+    auto isSr = [&](const FlowVn& v) { return v.space == sr.space && v.offset == sr.offset && v.size == static_cast<ghidra::int4>(sr.size); };
+    auto isTemp = [](const FlowVn& v) { return v.space && v.space->getType() == ghidra::IPTR_INTERNAL; };
+    // 1. Where each register points into the frame (entry r15 + an offset), forward to a fixed point; a merge of two offsets is none.
+    constexpr int64_t kTop = INT64_MIN, kNone = INT64_MIN + 1;
+    std::vector<std::array<int64_t, 16>> spIn(nf);
+    for (auto& s : spIn) s.fill(kTop);
+    spIn[static_cast<size_t>(flow.entryBlock)].fill(kNone);
+    spIn[static_cast<size_t>(flow.entryBlock)][15] = 0;
+    // The frame offset of each op's address (a LOAD's or a STORE's), by block and position, once the fixed point holds
+    std::vector<std::vector<int64_t>> addrOff(nf);
+    auto spRun = [&](size_t b, std::array<int64_t, 16> st, bool record) {
+        std::map<ghidra::uintb, int64_t> temps;
+        std::vector<int> ks;
+        auto valueOf = [&](const FlowVn& v) -> int64_t {
+            if (isTemp(v))
+            {
+                auto f = temps.find(v.offset);
+                return f == temps.end() ? kNone : f->second;
+            }
+            keysOf(v, ks);
+            if (ks.size() == 1 && ks[0] < 16 && whole(v, ks[0])) return st[static_cast<size_t>(ks[0])];
+            return kNone;
+        };
+        if (record) addrOff[b].assign(flow.blockOps[b].size(), kNone);
+        for (size_t i = 0; i < flow.blockOps[b].size(); ++i)
+        {
+            const FlowOp& x = flow.blockOps[b][i];
+            if (record && (x.code == ghidra::CPUI_LOAD || x.code == ghidra::CPUI_STORE) && x.numIn >= 2)
+            {
+                const int64_t a = valueOf(x.in[1]);
+                addrOff[b][i] = a == kTop ? kNone : a;
+            }
+            if (record && (x.code == ghidra::CPUI_CALL || x.code == ghidra::CPUI_CALLIND)) addrOff[b][i] = st[15] == kTop ? kNone : st[15];   // (r15 at the call)
+            if (x.code == ghidra::CPUI_CALL || x.code == ghidra::CPUI_CALLIND)
+                for (int k = 0; k < 8; ++k) st[static_cast<size_t>(k)] = kNone;
+            if (!x.hasOut) continue;
+            int64_t v = kNone;
+            if (x.code == ghidra::CPUI_COPY && x.numIn >= 1) v = valueOf(x.in[0]);
+            else if ((x.code == ghidra::CPUI_INT_ADD || x.code == ghidra::CPUI_INT_SUB) && x.numIn == 2)
+            {
+                const int c = x.in[1].Constant() ? 1 : x.code == ghidra::CPUI_INT_ADD && x.in[0].Constant() ? 0 : -1;
+                if (c >= 0)
+                {
+                    const int64_t base = valueOf(x.in[1 - c]);
+                    const int64_t k = static_cast<int32_t>(static_cast<uint32_t>(x.in[c].offset));
+                    if (base != kNone && base != kTop) v = x.code == ghidra::CPUI_INT_ADD ? base + k : base - k;
+                }
+            }
+            if (isTemp(x.out)) temps[x.out.offset] = v;
+            else
+            {
+                keysOf(x.out, ks);
+                for (int k : ks)
+                    if (k < 16) st[static_cast<size_t>(k)] = whole(x.out, k) ? v : kNone;
+            }
+        }
+        return st;
+    };
+    {
+        std::vector<char> queued(nf, 0);
+        std::vector<size_t> work{ static_cast<size_t>(flow.entryBlock) };
+        queued[static_cast<size_t>(flow.entryBlock)] = 1;
+        size_t steps = 0;
+        while (!work.empty() && ++steps < 200000)
+        {
+            const size_t b = work.back();
+            work.pop_back();
+            queued[b] = 0;
+            const std::array<int64_t, 16> out = spRun(b, spIn[b], false);
+            for (int next : flow.successors[b])
+            {
+                if (next < 0 || static_cast<size_t>(next) >= nf) continue;
+                std::array<int64_t, 16>& in = spIn[static_cast<size_t>(next)];
+                bool changed = false;
+                for (size_t k = 0; k < 16; ++k)
+                {
+                    const int64_t m = in[k] == kTop ? out[k] : out[k] == kTop || out[k] == in[k] ? in[k] : kNone;
+                    if (m != in[k]) in[k] = m, changed = true;
+                }
+                if (changed && !queued[static_cast<size_t>(next)]) queued[static_cast<size_t>(next)] = 1, work.push_back(static_cast<size_t>(next));
+            }
+        }
+        for (size_t b = 0; b < nf; ++b) spRun(b, spIn[b], true);
+    }
+    // 2. Reaching definitions with the mark. A definition is (op index + 1) << 16 | key (0 << 16 | key: the value on entry), and an element
+    // of a set is that << 1 | the mark. A call defines r0 to r7.
+    std::vector<size_t> base(nf + 1, 0);
+    for (size_t b = 0; b < nf; ++b) base[b + 1] = base[b] + flow.blockOps[b].size();
+    // the keys of the frame are found by the walk: give every word an op addresses its key first
+    for (size_t b = 0; b < nf; ++b)
+        for (size_t i = 0; i < addrOff[b].size(); ++i)
+            if (addrOff[b][i] != kNone && flow.blockOps[b][i].code != ghidra::CPUI_CALL && flow.blockOps[b][i].code != ghidra::CPUI_CALLIND)
+            {
+                const FlowOp& x = flow.blockOps[b][i];
+                const int64_t a = addrOff[b][i];
+                const int64_t size = x.code == ghidra::CPUI_STORE ? (x.numIn >= 3 ? x.in[2].size : 4) : x.hasOut ? x.out.size : 4;
+                for (int64_t w = a & ~int64_t(3); w < a + size; w += 4) keyOfFrame(w);
+            }
+    frozen = true;
+    const size_t nk = static_cast<size_t>(kFrame0) + frameOff.size();
+    if (nk > 4096) return;
+    using Set = std::vector<uint64_t>;
+    using State = std::vector<Set>;
+    // (r1 to r7 after a call are what the callee left, no value of the code's: such a definition, 0x8000 in its key's half, is lost by no edge)
+    auto defId = [&](size_t b, size_t i, int k) {
+        const ghidra::OpCode c = flow.blockOps[b][i].code;
+        const bool clobber = (c == ghidra::CPUI_CALL || c == ghidra::CPUI_CALLIND) && k >= 1 && k < 8;
+        return (static_cast<uint64_t>(base[b] + i + 1) << 16) | static_cast<uint64_t>(k) | (clobber ? 0x8000u : 0u);
+    };
+    std::vector<State> in(nf);
+    std::vector<char> reached(nf, 0);
+    {
+        State& e = in[static_cast<size_t>(flow.entryBlock)];
+        e.assign(nk, Set());
+        for (size_t k = 0; k < nk; ++k) e[k].push_back(static_cast<uint64_t>(k) << 1);
+        reached[static_cast<size_t>(flow.entryBlock)] = 1;
+    }
+    // The pass-through temporaries of an SR bit-insert (INT_AND of SR with a constant, the other input of an INT_OR into SR): a write of T
+    // keeps the rest of SR, and a temporary of SR & C reads only the bits of C.
+    std::vector<int> ks, ks2;
+    auto defsOf = [&](size_t b, size_t i, std::vector<std::pair<int, bool>>& out, const std::map<ghidra::uintb, uint32_t>& srAnd) {
+        // (key, the definition replaces the key's value entire)
+        out.clear();
+        const FlowOp& x = flow.blockOps[b][i];
+        if (x.code == ghidra::CPUI_CALL || x.code == ghidra::CPUI_CALLIND)
+            for (int k = 0; k < 8; ++k) out.emplace_back(k, true);
+        if ((x.code == ghidra::CPUI_STORE) && x.numIn >= 3 && addrOff[b][i] != kNone)
+        {
+            const int64_t a = addrOff[b][i];
+            for (int64_t w = a & ~int64_t(3); w < a + x.in[2].size; w += 4)
+                out.emplace_back(keyOfFrame(w), w == a && x.in[2].size == 4);
+        }
+        if (!x.hasOut || isTemp(x.out)) return;
+        if (isSr(x.out))
+        {
+            uint32_t keep = 0;   // the bits of SR this write passes through
+            if (x.code == ghidra::CPUI_INT_OR && x.numIn == 2)
+                for (int a = 0; a < 2; ++a)
+                    if (isTemp(x.in[a]))
+                    {
+                        auto f = srAnd.find(x.in[a].offset);
+                        if (f != srAnd.end()) keep |= f->second;
+                    }
+            if (!(keep & 1u)) out.emplace_back(kT, true);
+            if ((keep | 1u) != ~0u) out.emplace_back(kSrRest, (keep & ~1u) == 0);
+            return;
+        }
+        keysOf(x.out, ks);
+        for (int k : ks) out.emplace_back(k, whole(x.out, k));
+    };
+    auto put = [](Set& s, uint64_t e) {
+        auto it = std::lower_bound(s.begin(), s.end(), e);
+        if (it == s.end() || *it != e) s.insert(it, e);
+    };
+    // Walk a block from a state; 'visit' is called before each op with the state then
+    auto walk = [&](size_t b, State st, const std::function<void(size_t, const State&, const std::map<ghidra::uintb, uint32_t>&)>& visit) {
+        std::map<ghidra::uintb, uint32_t> srAnd;
+        std::vector<std::pair<int, bool>> defs;
+        for (size_t i = 0; i < flow.blockOps[b].size(); ++i)
+        {
+            const FlowOp& x = flow.blockOps[b][i];
+            if (visit) visit(i, st, srAnd);
+            defsOf(b, i, defs, srAnd);
+            for (const auto& d : defs)
+            {
+                Set& s = st[static_cast<size_t>(d.first)];
+                const uint64_t e = defId(b, i, d.first) << 1;
+                if (d.second) s.assign(1, e);
+                else put(s, e);
+            }
+            if (x.hasOut && isTemp(x.out))
+            {
+                srAnd.erase(x.out.offset);
+                if (x.code == ghidra::CPUI_INT_AND && x.numIn == 2)
+                    for (int a = 0; a < 2; ++a)
+                        if (isSr(x.in[a]) && x.in[1 - a].Constant()) srAnd[x.out.offset] = static_cast<uint32_t>(x.in[1 - a].offset);
+            }
+        }
+        return st;
+    };
+    {
+        std::vector<char> queued(nf, 0);
+        std::vector<size_t> work{ static_cast<size_t>(flow.entryBlock) };
+        queued[static_cast<size_t>(flow.entryBlock)] = 1;
+        size_t steps = 0;
+        while (!work.empty())
+        {
+            if (++steps > 400000) return;   // (no answer: nothing said)
+            const size_t b = work.back();
+            work.pop_back();
+            queued[b] = 0;
+            const State out = walk(b, in[b], nullptr);
+            for (int next : flow.successors[b])
+            {
+                if (next < 0 || static_cast<size_t>(next) >= nf) continue;
+                const bool mark = cut(b, next);
+                State& to = in[static_cast<size_t>(next)];
+                if (to.empty()) to.assign(nk, Set());
+                bool changed = !reached[static_cast<size_t>(next)];
+                reached[static_cast<size_t>(next)] = 1;
+                for (size_t k = 0; k < nk; ++k)
+                    for (uint64_t e : out[k])
+                    {
+                        const uint64_t m = mark ? (e | 1u) : e;
+                        const size_t before = to[k].size();
+                        put(to[k], m);
+                        changed = changed || to[k].size() != before;
+                    }
+                if (changed && !queued[static_cast<size_t>(next)]) queued[static_cast<size_t>(next)] = 1, work.push_back(static_cast<size_t>(next));
+            }
+        }
+    }
+    // 3. The lost reads: a marked definition that no unmarked path brings, or a definition computed from a lost read (to a fixed point).
+    // Each lost value carries the key it was lost by (its root), for what is said.
+    std::map<uint64_t, int> tainted;   // definition -> root key
+    auto lostRoot = [&](const Set& s) {
+        for (uint64_t e : s)
+        {
+            if ((e & 1u) && !((e >> 1) & 0x8000u) && !std::binary_search(s.begin(), s.end(), e & ~uint64_t(1))) return static_cast<int>((e >> 1) & 0x0FFFu);
+            auto t = tainted.find(e >> 1);
+            if (t != tainted.end()) return t->second;
+        }
+        return -1;
+    };
+    struct Use
+    {
+        size_t block, op;
+        int root;
+        bool r0;   // r0 at a return
+    };
+    std::vector<Use> uses;
+    for (bool grew = true; grew;)
+    {
+        grew = false;
+        uses.clear();
+        for (size_t b = 0; b < nf; ++b)
+        {
+            if (!kept[b] || !reached[b] || removed(b)) continue;
+            std::map<ghidra::uintb, int> tempRoot;   // a temporary computed from a lost read
+            std::vector<std::pair<int, bool>> defs;
+            walk(b, in[b], [&](size_t i, const State& st, const std::map<ghidra::uintb, uint32_t>& srAnd) {
+                const FlowOp& x = flow.blockOps[b][i];
+                // the root of each input (-1: not lost)
+                auto rootOf = [&](const FlowVn& v) {
+                    if (!v.space || v.Constant()) return -1;
+                    if (isTemp(v))
+                    {
+                        auto f = tempRoot.find(v.offset);
+                        return f == tempRoot.end() ? -1 : f->second;
+                    }
+                    keysOf(v, ks2);
+                    for (int k : ks2)
+                    {
+                        const int r = lostRoot(st[static_cast<size_t>(k)]);
+                        if (r >= 0) return r;
+                    }
+                    return -1;
+                };
+                int inRoot[3] = { -1, -1, -1 };
+                for (int a = 0; a < x.numIn && a < 3; ++a)
+                {
+                    inRoot[a] = rootOf(x.in[a]);
+                    // SR & C reads the bits of C only
+                    if (isSr(x.in[a]) && x.code == ghidra::CPUI_INT_AND && x.numIn == 2 && x.in[1 - a].Constant())
+                    {
+                        const uint32_t c = static_cast<uint32_t>(x.in[1 - a].offset);
+                        inRoot[a] = -1;
+                        if (c & 1u) inRoot[a] = lostRoot(st[kT]);
+                        if (inRoot[a] < 0 && (c & ~1u)) inRoot[a] = lostRoot(st[kSrRest]);
+                    }
+                }
+                // an INT_OR into SR takes nothing from the pass-through half of its bit-insert
+                if (x.hasOut && isSr(x.out) && x.code == ghidra::CPUI_INT_OR && x.numIn == 2)
+                    for (int a = 0; a < 2; ++a)
+                        if (isTemp(x.in[a]) && srAnd.count(x.in[a].offset)) inRoot[a] = -1;
+                auto use = [&](int root) {
+                    if (root >= 0) uses.push_back(Use{ b, i, root, false });
+                };
+                int frameRoot = -1;   // a load of a frame word
+                if (x.code == ghidra::CPUI_LOAD && addrOff[b][i] != kNone)
+                {
+                    const int64_t a = addrOff[b][i];
+                    for (int64_t w = a & ~int64_t(3); w < a + (x.hasOut ? x.out.size : 4) && frameRoot < 0; w += 4)
+                        frameRoot = lostRoot(st[static_cast<size_t>(keyOfFrame(w))]);
+                }
+                switch (x.code)
+                {
+                case ghidra::CPUI_STORE:
+                    use(inRoot[1]);
+                    if (addrOff[b][i] == kNone) use(inRoot[2]);
+                    break;
+                case ghidra::CPUI_LOAD:
+                    use(inRoot[1]);
+                    break;
+                case ghidra::CPUI_CBRANCH:
+                    use(inRoot[1]);
+                    break;
+                case ghidra::CPUI_BRANCHIND:
+                    use(inRoot[0]);
+                    break;
+                case ghidra::CPUI_CALL:
+                case ghidra::CPUI_CALLIND:
+                {
+                    if (x.code == ghidra::CPUI_CALLIND) use(inRoot[0]);
+                    // What the call is passed, as the text has it: the parameters of the engine's call (r4 to r7, a stack word at r15 + an
+                    // offset at the call). A call the engine no longer has is taken to be passed r4 to r7 and the four words at r15.
+                    const ghidra::FuncCallSpecs* fc = nullptr;
+                    for (ghidra::int4 c = 0; c < fd.numCalls() && !fc; ++c)
+                        if (fd.getCallSpecs(c) && fd.getCallSpecs(c)->getOp() && InstructionOf(fd.getCallSpecs(c)->getOp()) == x.insn) fc = fd.getCallSpecs(c);
+                    int arg = -1;
+                    auto stackWord = [&](int64_t off) {
+                        if (addrOff[b][i] == kNone) return;
+                        auto f = frameKey.find((addrOff[b][i] + off) & ~int64_t(3));
+                        if (f != frameKey.end() && arg < 0) arg = lostRoot(st[static_cast<size_t>(f->second)]);
+                    };
+                    if (fc)
+                        for (ghidra::int4 p = 0; p < fc->numParams() && arg < 0; ++p)
+                        {
+                            const ghidra::Address a = fc->getParam(p)->getAddress();
+                            if (a.isInvalid()) continue;
+                            if (a.getSpace() == regSpace)
+                            {
+                                FlowVn v;
+                                v.space = a.getSpace();
+                                v.offset = a.getOffset();
+                                v.size = fc->getParam(p)->getSize();
+                                keysOf(v, ks2);
+                                for (int k : ks2)
+                                    if (arg < 0) arg = lostRoot(st[static_cast<size_t>(k)]);
+                            }
+                            else if (a.getSpace()->getType() == ghidra::IPTR_SPACEBASE)
+                                stackWord(static_cast<int32_t>(static_cast<uint32_t>(a.getOffset())));
+                        }
+                    else
+                    {
+                        for (int k = 4; k < 8 && arg < 0; ++k) arg = lostRoot(st[static_cast<size_t>(k)]);
+                        for (int64_t w = 0; w < 16; w += 4) stackWord(w);
+                    }
+                    use(arg);
+                    break;
+                }
+                case ghidra::CPUI_RETURN:
+                {
+                    use(inRoot[0]);
+                    // r0: as A3-173 has it, a value the code after the loop puts there (or one the kept code computes from a lost value). The
+                    // loop's own r0 (a poll read through r0) or one set before it is no more said here than where the return is removed with it.
+                    for (uint64_t e : st[0])
+                    {
+                        const uint64_t def = e >> 1;
+                        const size_t op = static_cast<size_t>(def >> 16);
+                        bool counts = tainted.count(def) != 0;
+                        if (!counts && (e & 1u) && op > 0 && !std::binary_search(st[0].begin(), st[0].end(), e & ~uint64_t(1)))
+                        {
+                            const size_t db = static_cast<size_t>(std::upper_bound(base.begin(), base.end(), op - 1) - base.begin()) - 1;
+                            counts = db < nf && gone[db] && !loopAt[db];
+                        }
+                        if (counts)
+                        {
+                            uses.push_back(Use{ b, i, 0, true });
+                            break;
+                        }
+                    }
+                    break;
+                }
+                default:
+                    break;
+                }
+                // what the op computes from a lost read is lost
+                int root = frameRoot;
+                if (x.code != ghidra::CPUI_STORE && x.code != ghidra::CPUI_LOAD)
+                    for (int a = 0; a < x.numIn && a < 3 && root < 0; ++a) root = inRoot[a];
+                else if (x.code == ghidra::CPUI_STORE && addrOff[b][i] != kNone)
+                    root = inRoot[2];
+                if (x.code == ghidra::CPUI_LOAD && root < 0) root = inRoot[1];
+                if (x.hasOut && isTemp(x.out))
+                {
+                    if (root >= 0) tempRoot[x.out.offset] = root;
+                    else tempRoot.erase(x.out.offset);
+                }
+                if (root < 0) return;
+                defsOf(b, i, defs, srAnd);
+                for (const auto& d : defs)
+                    if (tainted.emplace(defId(b, i, d.first), root).second) grew = true;
+            });
+        }
+    }
+    if (uses.empty()) return;
+    uint32_t firstLoop = 0;
+    for (size_t b = 0; b < nf; ++b)
+        if (loopAt[b] && (firstLoop == 0 || loopAt[b] < firstLoop)) firstLoop = loopAt[b];
+    std::set<std::pair<uint32_t, int>> said;
+    for (const Use& u : uses)
+    {
+        const uint32_t insn = canonicalOf(flow.blockOps[u.block][u.op].insn);
+        if (!said.insert(std::make_pair(insn, u.r0 ? -1 : u.root)).second) continue;
+        std::string what;
+        if (u.root < 16) what = "r" + std::to_string(u.root);
+        else if (u.root == kT) what = "T";
+        else if (u.root == kSrRest) what = "SR";
+        else if (u.root < kOther) what = kNames[u.root];
+        else if (u.root == kOther) what = "a register";
+        else
+        {
+            const int64_t off = frameOff[static_cast<size_t>(u.root - kFrame0)];
+            what = "the frame word at r15 " + std::string(off < 0 ? "- " : "+ ") + std::to_string(off < 0 ? -off : off) + " on entry";
+        }
+        for (char& c : what)
+            if (u.root >= 17 && u.root < kOther) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+        DecompileResult::EndlessLoopRead e{ insn, what, firstLoop, u.r0 };
+        e.join = true;
+        reads.push_back(e);
+    }
+}
+
 // A3-164, A3-167 to A3-169: the stores of ordinary memory at a constant address that the code makes, that the final p-code no longer
 // writes, and that a loop the analysis takes to run for ever can be the last word on. The engine keeps a global's write from which a
 // path never reaches a RETURN (patch 0087), but not one it saw no reader of before it took the loop for endless: a write the code
@@ -8994,6 +9525,7 @@ std::vector<DecompileResult::EndlessLoopStore> StoresBeforeEndlessLoop(const ghi
                 if (after[b]) run(b, entryIn[b], true);
         }
     }
+    JoinedAfterEndlessLoop(fd, flow, loopAt, after, canonicalOf, reads);   // A3-182
     struct Store
     {
         uint32_t insn = 0, address = 0, size = 0;
@@ -9201,30 +9733,49 @@ void Sh2Decompiler::NoteStoresBeforeEndlessLoop(DecompileResult& r)
         any = true;
     }
     // A3-173: the code after the loop is removed with it, and what it reads of the caller's would be no input of the signature.
-    bool leavesR0 = false, call = false;
+    bool leavesR0 = false, regionR0 = false, call = false, join = false;
     for (const DecompileResult::EndlessLoopRead& s : r.readsAfterEndlessLoop)
     {
         // (r0 written there is scratch as often as a value: it is no caution on the text, and withholds only a signature that would be lent)
+        // (A3-182: r0 at a return the text prints a value at is said, as the text's `return` is wrong on that path)
+        if (s.writesR0 && s.join && r.prototype.ret.size > 0)
+        {
+            const std::string text = "the value returned here is missing on one path: the analysis takes the loop at " + Hex8(s.loop) + " to run for ever and removes "
+                                     "the edge by which it leaves for this code, so the text and the signature return only what the other paths leave in r0. A "
+                                     "poll of memory another processor writes folds so unless that memory is marked volatile";
+            join = true;
+            r.hardwareNotes.push_back(HardwareNote{ s.insn, text, true });
+            r.warnings.push_back(Hex8(s.insn) + ": " + text);
+            any = true;
+            continue;
+        }
         if (s.writesR0)
         {
             leavesR0 = true;
+            regionR0 = regionR0 || !s.join;
             continue;
         }
         // (A3-178, A3-179: a call there, with what it is handed, what it returns and what it writes)
-        const std::string text = s.call ? "the call here is missing: the analysis takes the loop at " + Hex8(s.loop) + " to run for ever and removes the code after "
+        const std::string text = s.join ? "the value of " + s.what + " here is missing on one path: the analysis takes the loop at " + Hex8(s.loop) + " to run for ever and "
+                                          "removes the edge by which it leaves for this code, so the text and the signature have " + s.what + " here only as the other "
+                                          "paths leave it, not as the path through the loop sets it. A poll of memory another processor writes folds so unless that "
+                                          "memory is marked volatile"
+                                 : s.call ? "the call here is missing: the analysis takes the loop at " + Hex8(s.loop) + " to run for ever and removes the code after "
                                           "it, this call with it, so neither the text nor the signature holds what it is passed, what it returns or what it "
                                           "writes. A poll of memory another processor writes folds so unless that memory is marked volatile"
                                         : "the read of " + s.what + " here is missing: the analysis takes the loop at " + Hex8(s.loop) + " to run for ever and removes the "
                                           "code after it, so the signature does not hold that input. A poll of memory another processor writes folds so unless that "
                                           "memory is marked volatile";
         call = call || s.call;
+        join = join || s.join;
         r.hardwareNotes.push_back(HardwareNote{ s.insn, text, true });
         r.warnings.push_back(Hex8(s.insn) + ": " + text);
         any = true;
     }
     if (!any && leavesR0 && r.prototype.known)
     {
-        r.prototypeWithheld = "code after a loop the analysis takes to run for ever leaves a value in r0, which a caller would read";
+        r.prototypeWithheld = regionR0 ? "code after a loop the analysis takes to run for ever leaves a value in r0, which a caller would read"
+                                       : "a loop the analysis takes to run for ever leaves for a return the text keeps with a value in r0, which a caller would read";   // (A3-182)
         r.prototype.known = false;
     }
     if (!any) return;
@@ -9234,6 +9785,7 @@ void Sh2Decompiler::NoteStoresBeforeEndlessLoop(DecompileResult& r)
         r.prototypeWithheld = before ? "a write before a loop the analysis takes to run for ever is missing"
                                      : !r.storesBeforeEndlessLoop.empty() ? "a write after a loop the analysis takes to run for ever is missing"   // (A3-175)
                                      : call ? "a call after a loop the analysis takes to run for ever is missing"   // (A3-178)
+                                     : join ? "a loop the analysis takes to run for ever leaves for code the text keeps with a value the text does not hold"   // (A3-182)
                                             : "code after a loop the analysis takes to run for ever reads or leaves what the signature does not hold";
     r.prototype.known = false;
 }

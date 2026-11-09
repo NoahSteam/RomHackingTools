@@ -1,0 +1,186 @@
+# Area 3, A3-182 and A3-183 fixer: hand fixtures for a poll whose exit joins code the text keeps (round 23's jn1 to jn4 are in
+# ../a3_round23/fixtures.src; run.sh finds both). Format as round 23's: `name N`, then SH-2 lines, `fn` between functions, `ret a,b`.
+name jv1
+# the value set BEFORE the poll, on the poll's path only: the loop's exit falls straight into the join (no code after the poll at all)
+tst r6,r6
+bt Q
+mov #7,r5
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+Q:
+mov.l r5,@r4
+rts
+nop
+name jv2
+# the value moves through a copy in the join before it is stored (the first use is the store of r2)
+tst r6,r6
+bt Q
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+mov #7,r5
+Q:
+mov r5,r2
+add #1,r2
+mov.l r2,@r4
+rts
+nop
+name jv3
+# T set after the poll and tested in the join: which way the join goes
+tst r6,r6
+bt Q
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+cmp/eq r4,r5
+Q:
+bt R
+mov.l r5,@r4
+R:
+rts
+nop
+name jv4
+# the pointer of the join's store set after the poll
+tst r6,r6
+bt Q
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+mov.l =0x06002300,r4
+Q:
+mov.l r5,@r4
+rts
+nop
+name jv5
+# a word of the frame written after the poll and read in the join
+add #-8,r15
+mov.l r5,@(4,r15)
+tst r6,r6
+bt Q
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+mov #7,r1
+mov.l r1,@(4,r15)
+Q:
+mov.l @(4,r15),r2
+mov.l r2,@r4
+rts
+add #8,r15
+name jc1
+# control: the code after the poll sets r5, the join overwrites it before it stores it
+tst r6,r6
+bt Q
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+mov #7,r5
+Q:
+mov #3,r5
+mov.l r5,@r4
+rts
+nop
+name jc2
+# control: the poll's own test sets T, the join sets T again before it branches on it
+tst r6,r6
+bt Q
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+Q:
+cmp/eq r4,r5
+bt R
+mov.l r5,@r4
+R:
+rts
+nop
+name jc3
+# control: the poll's path writes r1 (the loop) and r7 (the mailbox pointer), which the join does not read
+tst r6,r6
+bt Q
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+Q:
+mov.l r5,@r4
+rts
+nop
+name jv6
+# control: the poll reads through r0 (the generator's poll) and leaves for the returning block: r0 at the return is the poll's on that path, which
+# is no more said than where the return goes with the code after the poll (lent)
+tst r6,r6
+bt Q
+mov.l =0x06001010,r7
+mov #1,r0
+mov.w r0,@r7
+P:
+mov.w @r7,r0
+tst #1,r0
+bf P
+Q:
+rts
+nop
+name jv7
+# the code after the poll sets r5 and the join returns it in r0: the kept code computes r0 from it (withheld, no caution: A3-173's r0)
+tst r6,r6
+bt Q
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+mov #7,r5
+Q:
+rts
+mov r5,r0
+name jo1
+# (A3-184) the join block keeps no op alive (r5 copied to r1, which nothing reads): A3-173's region takes it for code after the loop and says
+# the read of r5 there, which no path through the poll makes alone
+tst r4,r4
+bt Q
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+Q:
+mov r5,r1
+rts
+nop

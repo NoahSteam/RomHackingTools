@@ -16804,6 +16804,145 @@ void TestA3178Fix()
     }
 }
 
+// A3-182 (area 3 round 23; Docs/Decompiler/tools/a3_round23/fixtures.src jn1 to jn4 and a3_fix182/fixtures.src jv1 to jv7, jc1 to jc3). A
+// poll the analysis takes to run for ever can leave for code the path around it also reaches (`tst r6,r6 ; bt Q ; (poll) ; mov #7,r5 ; Q:
+// mov.l r5,@r4`). The engine removes that edge with the loop's exit, and the joined code read r5 as the other path leaves it: the text
+// printed `*param_1 = param_2` where the hardware stores 7, nothing was said and the signature was lent. A3-173's region stops at the join,
+// so its reads, stores and calls never saw it. The first use of such a value in the kept code is said now ("the value of r5 here is missing
+// on one path") and the signature withheld; a value the code after the loop leaves in r0 at a return withholds it as A3-173's r0 does, and is
+// said when the text returns a value there.
+void TestA3182Fix()
+{
+    std::vector<uint8_t> hw(0x100000u, 0);
+    Sh2Decompiler d(gConfig);
+    auto run = [&](const char* name, const std::vector<uint16_t>& words, uint32_t callee, bool marked) {
+        std::fill(hw.begin(), hw.end(), 0);
+        for (size_t i = 0; i < words.size(); ++i) dts::Put16(hw, 0x9000u + 2 * i, words[i]);
+        auto snap = MakeSnapshot(hw);
+        DecompileRequest q = Request(0x06009000u);
+        if (marked) q.volatileMemory.emplace_back(0x06001010u, 0x06001013u);
+        if (callee)
+        {
+            DecompileRequest qg = Request(callee);
+            if (marked) qg.volatileMemory.emplace_back(0x06001010u, 0x06001013u);
+            const DecompileResult g = d.Decompile(snap, qg);
+            CHECK(g.status == DecompileStatus::Ok && g.prototype.known);
+            if (g.prototype.known) q.prototypes.emplace_back(callee, g.prototype);
+        }
+        const DecompileResult r = d.Decompile(snap, q);
+        Print(name, r);
+        return r;
+    };
+    struct Case
+    {
+        const char* name;
+        std::vector<uint16_t> words;
+        uint32_t callee;
+        uint32_t at;   // the first use
+        const char* what;
+    };
+    const Case kSaid[] = {
+        // jn1: the code after the poll sets r5, the join stores it through r4 (master: `*param_1 = param_2;`, lent with 3 parameters)
+        { "A3-182 jn1: r5 set after the poll, stored in the join", { 0x2668, 0x8906, 0xD706, 0xE101, 0x2711, 0x6171, 0x2118, 0x8BFC, 0xE507, 0x2452, 0x000B, 0x0009,
+                                                                    0x0009, 0x0009, 0x0009, 0x0009, 0x0600, 0x1010 },
+          0, 0x06009012u, "the value of r5 here is missing on one path" },
+        // jn2: the code after the poll sets r4, the join calls G(r4, r5) (master: `func_0x06009040(param_1,param_2);`, lent)
+        { "A3-182 jn2: r4 set after the poll, passed in the join", { 0x032A, 0x2F36, 0x2668, 0x8906, 0xD715, 0xE101, 0x2711, 0x6171, 0x2118, 0x8BFC, 0xE407, 0xD213,
+                                                                    0x420B, 0x0009, 0x63F6, 0x432A, 0x000B, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009,
+                                                                    0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x2542, 0x000B, 0x0009, 0x0009,
+                                                                    0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009,
+                                                                    0x0600, 0x1010, 0x0600, 0x9040 },
+          0x06009040u, 0x06009018u, "the value of r4 here is missing on one path" },
+        // jv1: r5 set before the poll, on its path only, and no code after the poll at all (the loop's exit is the join)
+        { "A3-182 jv1: r5 set before the poll", { 0x2668, 0x8906, 0xE507, 0xD706, 0xE101, 0x2711, 0x6171, 0x2118, 0x8BFC, 0x2452, 0x000B, 0x0009, 0x0009, 0x0009,
+                                                  0x0009, 0x0009, 0x0600, 0x1010 },
+          0, 0x06009012u, "the value of r5 here is missing on one path" },
+        // jv2: through a copy and an add in the join: the first use is the store of r2
+        { "A3-182 jv2: through a copy", { 0x2668, 0x8906, 0xD706, 0xE101, 0x2711, 0x6171, 0x2118, 0x8BFC, 0xE507, 0x6253, 0x7201, 0x2422, 0x000B, 0x0009, 0x0009,
+                                          0x0009, 0x0600, 0x1010 },
+          0, 0x06009016u, "the value of r5 here is missing on one path" },
+        // jv3: T set after the poll, the join branches on it
+        { "A3-182 jv3: T set after the poll", { 0x2668, 0x8906, 0xD706, 0xE101, 0x2711, 0x6171, 0x2118, 0x8BFC, 0x3540, 0x8900, 0x2452, 0x000B, 0x0009, 0x0009,
+                                                0x0009, 0x0009, 0x0600, 0x1010 },
+          0, 0x06009012u, "the value of T here is missing on one path" },
+        // jv4: the join's pointer set after the poll
+        { "A3-182 jv4: the pointer set after the poll", { 0x2668, 0x8906, 0xD706, 0xE101, 0x2711, 0x6171, 0x2118, 0x8BFC, 0xD404, 0x2452, 0x000B, 0x0009, 0x0009,
+                                                          0x0009, 0x0009, 0x0009, 0x0600, 0x1010, 0x0600, 0x2300 },
+          0, 0x06009012u, "the value of r4 here is missing on one path" },
+        // jv5: a word of the frame written after the poll, read in the join
+        { "A3-182 jv5: a frame word", { 0x7FF8, 0x1F51, 0x2668, 0x8907, 0xD705, 0xE101, 0x2711, 0x6171, 0x2118, 0x8BFC, 0xE107, 0x1F11, 0x52F1, 0x2422, 0x000B,
+                                        0x7F08, 0x0600, 0x1010 },
+          0, 0x0600901Au, "the value of the frame word at r15 - 4 on entry here is missing on one path" },
+    };
+    for (const Case& c : kSaid)
+    {
+        const DecompileResult r = run(c.name, c.words, c.callee, false);
+        CHECK(r.status == DecompileStatus::Ok && Has(r.Text(), "while( true )") && !r.prototype.known);
+        CHECK(HasNoteAt(r, c.at, c.what));
+        // (jv3's join store is removed with the branch the engine folds, said by NoteRemovedAccesses first)
+        CHECK(Has(r.prototypeWithheld, "a loop the analysis takes to run for ever leaves for code the text keeps with a value the text does not hold") ||
+              Has(r.prototypeWithheld, "code removed as unreachable holds hardware accesses"));
+        // ...and jn1 with the mailbox marked: the poll ends, the store of 7 is printed, lent, nothing said
+        if (c.at == 0x06009012u && c.words[8] == 0xE507)
+        {
+            const DecompileResult m = run("A3-182 control: jn1 with the mailbox marked", c.words, 0, true);
+            CHECK(m.status == DecompileStatus::Ok && m.prototype.known && !Has(m.Text(), "while( true )"));
+            CHECK(!HasNote(m, "missing on one path", true));
+        }
+    }
+    // jv7: the code after the poll sets r5 and the join returns it (`rts ; mov r5,r0`): the text's `return param_2;` is wrong on that path. Said
+    // on the return, the signature withheld
+    {
+        const DecompileResult r = run("A3-182 jv7: r0 computed in the join", { 0x2668, 0x8906, 0xD706, 0xE101, 0x2711, 0x6171, 0x2118, 0x8BFC, 0xE507, 0x000B, 0x6053,
+                                                                               0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0600, 0x1010 },
+                                      0, false);
+        CHECK(r.status == DecompileStatus::Ok && !r.prototype.known && HasNoteAt(r, 0x06009012u, "the value returned here is missing on one path"));
+        CHECK(Has(r.prototypeWithheld, "a loop the analysis takes to run for ever leaves for code the text keeps with a value the text does not hold"));
+    }
+    // jv6 (a control): the generator's poll reads through r0 and leaves for the return, so r0 there is the poll's on that path. That is no
+    // more said than where the return goes with the code after the poll (A3-173 takes r0 written after the loop only): lent, nothing said
+    {
+        const DecompileResult r = run("A3-182 control jv6: the poll's own r0 at the return", { 0x2668, 0x8905, 0xD706, 0xE001, 0x2701, 0x6071, 0xC801, 0x8BFC, 0x000B,
+                                                                                               0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0600, 0x1010 },
+                                      0, false);
+        CHECK(r.status == DecompileStatus::Ok && r.prototype.known && !HasNote(r, "here is missing", true));
+    }
+    // The controls, as round 23 left them: jn3 (r0 set after the poll: withheld for A3-173's r0, no caution), jn4 (the store after the poll:
+    // said by NoteRemovedAccesses); and jc1 (the join overwrites r5 first), jc2 (the join sets T again before it branches), jc3 (the poll's
+    // path writes r1 and r7 only, which the join does not read): lent, nothing said
+    {
+        const DecompileResult r = run("A3-182 control jn3: r0 after the poll", { 0x2668, 0x8906, 0xD706, 0xE101, 0x2711, 0x6171, 0x2118, 0x8BFC, 0xE007, 0x000B, 0x0009,
+                                                                                 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0600, 0x1010 },
+                                      0, false);
+        CHECK(r.status == DecompileStatus::Ok && !r.prototype.known && !HasNote(r, "here is missing", true));
+        CHECK(Has(r.prototypeWithheld, "code after a loop the analysis takes to run for ever leaves a value in r0"));
+    }
+    {
+        const DecompileResult r = run("A3-182 control jn4: a store after the poll", { 0x2668, 0x8907, 0xD706, 0xE101, 0x2711, 0x6171, 0x2118, 0x8BFC, 0xE507, 0x2452,
+                                                                                      0x000B, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0600, 0x1010 },
+                                      0, false);
+        CHECK(r.status == DecompileStatus::Ok && !r.prototype.known && HasNoteAt(r, 0x06009012u, "the 4-byte write through a pointer here is missing"));
+        CHECK(!HasNote(r, "missing on one path", true));
+    }
+    const Case kLent[] = {
+        { "A3-182 control jc1: the join overwrites r5", { 0x2668, 0x8906, 0xD706, 0xE101, 0x2711, 0x6171, 0x2118, 0x8BFC, 0xE507, 0xE503, 0x2452, 0x000B, 0x0009,
+                                                          0x0009, 0x0009, 0x0009, 0x0600, 0x1010 },
+          0, 0, "*param_1 = 3;" },
+        { "A3-182 control jc2: the join sets T again", { 0x2668, 0x8905, 0xD706, 0xE101, 0x2711, 0x6171, 0x2118, 0x8BFC, 0x3540, 0x8900, 0x2452, 0x000B, 0x0009,
+                                                         0x0009, 0x0009, 0x0009, 0x0600, 0x1010 },
+          0, 0, "if (param_2 != param_1) {" },
+        { "A3-182 control jc3: the join reads nothing the poll's path wrote", { 0x2668, 0x8905, 0xD706, 0xE101, 0x2711, 0x6171, 0x2118, 0x8BFC, 0x2452, 0x000B, 0x0009,
+                                                                                0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0600, 0x1010 },
+          0, 0, "*param_1 = param_2;" },
+    };
+    for (const Case& c : kLent)
+    {
+        const DecompileResult r = run(c.name, c.words, c.callee, false);
+        CHECK(r.status == DecompileStatus::Ok && Has(r.Text(), "while( true )") && r.prototype.known && r.prototype.params.size() == 3 && Has(r.Text(), c.what));
+        CHECK(!HasNote(r, "here is missing", true));
+    }
+}
+
 void TestA3155Fix()
 {
     Sh2Decompiler d(gConfig);
@@ -17707,6 +17846,7 @@ int main(int argc, char** argv)
         RUN(TestA3173Fix());
         RUN(TestA3175Fix());
         RUN(TestA3178Fix());
+        RUN(TestA3182Fix());
         RUN(TestArea10Round2());
         RUN(TestArea5Confirm());
         RUN(TestArea5Review());
