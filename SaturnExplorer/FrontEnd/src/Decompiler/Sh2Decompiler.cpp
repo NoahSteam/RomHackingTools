@@ -7165,7 +7165,10 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
     };
     const auto onEdge = [&](const ghidra::AccessRecord* r, const ghidra::FlowBlock* from, const ghidra::FlowBlock* to) {
         const uint32_t insn = InstructionOf(*r);
-        const int store = flowBlockOf(insn);
+        // (A7-78: the flow block of this instance of the store -- one instruction can be in two blocks, a delay slot run on both ways of a
+        // branch and again after it -- by the store's own op; grammar 1 seed 3800320)
+        const auto instance = flow.ops.find(r->time);
+        const int store = instance != flow.ops.end() ? instance->second.first : flowBlockOf(insn);
         const uint32_t last = static_cast<uint32_t>(from->getStop().getOffset()), first = static_cast<uint32_t>(to->getStart().getOffset());
         const int fromBlock = flowBlockOf(last), toBlock = flowBlockOf(first);
         if (store < 0 || fromBlock < 0 || toBlock < 0) return false;
@@ -7520,6 +7523,25 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                 if (latest) reached = take(latest);
             }
             if (reached || take(nextInHome())) continue;
+            // A7-78: the stores of the byte the engine emptied and joined into one statement in a block with no way in -- the two
+            // instances of one instruction, a delay slot run on both ways of a branch and again after it (`bt/s` over a `mov.w r1,@r6`),
+            // whose line the engine put after both: every emptied store of the byte whose flow reaches the statement's instruction is
+            // its (grammar 1 seed 3800320)
+            if (!prior)
+            {
+                const auto here = flow.insnBlock.find(at);
+                bool found = false;
+                if (here != flow.insnBlock.end())
+                    for (const ghidra::AccessRecord* r : orphans)
+                    {
+                        const auto f = flow.ops.find(r->time);
+                        if (!writes(r) || f == flow.ops.end()) continue;
+                        const bool before = f->second.first == here->second.first ? f->second.second < here->second.second
+                                                                                   : flowSucceeds(f->second.first, here->second.first, 0, 0);
+                        if (before) found = take(r) || found;
+                    }
+                if (found) continue;
+            }
             // the nearest stores of the byte after the statement's instruction in the flow: in its flow block after it, else the first in
             // each block of the nearest level of successors that has one
             const auto fb = flow.insnBlock.find(at);
