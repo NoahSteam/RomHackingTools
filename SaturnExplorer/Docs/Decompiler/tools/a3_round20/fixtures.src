@@ -1,0 +1,89 @@
+# Area 3 round 20 fixtures (asm syntax of ../a3_round16/asm.py). Run with run20.sh <name>.
+name d1
+# A3-170: the store instruction is the delay slot of a bf/s and also the target of a bra (two instances of one address): one instance is
+# printed (the path that returns), the other (the path that reaches the poll only) is dropped; the caution takes the printed one for both
+mov.l =0x06002304,r3
+mov.l =0x06001010,r7
+mov #1,r0
+mov.w r0,@r7
+mov r4,r0
+tst #1,r0
+bt T
+cmp/eq r5,r4
+bf/s Q
+S:
+mov.l r6,@r3
+P:
+mov.w @r7,r0
+tst #1,r0
+bf P
+mov.l r4,@r3
+rts
+nop
+Q:
+rts
+nop
+T:
+bra S
+nop
+name d1c
+# control: the same code with the store written out on the T path (a second instruction): the caution is given, the signature withheld
+mov.l =0x06002304,r3
+mov.l =0x06001010,r7
+mov #1,r0
+mov.w r0,@r7
+mov r4,r0
+tst #1,r0
+bt T
+cmp/eq r5,r4
+bf/s Q
+S:
+mov.l r6,@r3
+P:
+mov.w @r7,r0
+tst #1,r0
+bf P
+mov.l r4,@r3
+rts
+nop
+Q:
+rts
+nop
+T:
+mov.l r6,@r3
+bra P
+nop
+name c1
+# A3-171: two stores of one word before the poll, the poll's body stores it again, the code stores it after: the first is replaced by the
+# body's store, which is said; the first is not (the generator's endless-store-dropped asks for it)
+mov.l =0x06002304,r3
+mov.l @r3,r1
+add #1,r1
+mov.l r1,@r3
+mov.l =0x06001010,r7
+mov #1,r0
+mov.w r0,@r7
+P:
+add #1,r1
+mov.l r1,@r3
+mov.w @r7,r0
+tst #1,r0
+bf P
+mov.l r4,@r3
+rts
+nop
+name c2
+# A3-171 (seed 3704634 shrunk, as the words): mov.w r3,@r6 ; mov.w r2,@r6 ; the mailbox poll ; mov.w r3,@r6
+mov.l =0x2600210C,r6
+mov.w r3,@r6
+mov.w r2,@r6
+mov.l =0x06001004,r7
+mov #2,r0
+mov.l r0,@r7
+P:
+mov.l @r7,r0
+tst #1,r0
+bt P
+mov.w r3,@r6
+rts
+nop
