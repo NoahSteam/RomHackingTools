@@ -14985,6 +14985,17 @@ void TestA3RoutedPins(Sh2Decompiler& d)
             for (const Finding& f : w.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
             CHECK(w.findings.empty() && count(w, "endless-store.said") > 0 && count(w, "endless-store.replaced") > 0);
         }
+        // A3-170's production (grammar 1, from seed 3,800,001): grammar 1 seed 3800027 draws the whole shape before a poll. On the old host
+        // its slot's store was dropped unsaid (`endless-store-dropped`, as on 124 of the 5,000 seeds from 3,800,001); now it is said
+        {
+            std::map<std::string, int> shapes;
+            CountProgram(Generate(3800027), shapes);
+            const Report rep = Evaluate(d, Generate(3800027), true);
+            std::printf("pin 'A3-170 grammar 1 seed 3800027 (the slot-entry production)': %zu finding(s), whole shapes %d, endless-store said %d\n", rep.findings.size(),
+                        shapes["slot_entry.poll"], count(rep, "endless-store.said"));
+            for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+            CHECK(rep.findings.empty() && shapes["slot_entry.poll"] == 1 && count(rep, "endless-store.said") > 0);
+        }
         const Report seed = Evaluate(d, Generate(3704634), true);
         std::printf("pin 'A3-171 grammar 1 seed 3704634': %zu finding(s), endless-store replaced %d\n", seed.findings.size(), count(seed, "endless-store.replaced"));
         for (const Finding& f : seed.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
