@@ -33,6 +33,7 @@
  * Modified for SaturnExplorer: a catch handler that never reads its exception no longer names it, which MSVC warned about (C4101) (patches/0083-engine-msvc-unused-catch-names.patch).
  * Modified for SaturnExplorer: ActionVarnodeProps does not read a global as the constant zero where its next write would then be made after a memory access (patches/0085-engine-global-write-keeps-place.patch).
  * Modified for SaturnExplorer: nor a copy of an earlier write of a global with an access between them (patches/0088-engine-global-piece-read-and-join-copy.patch).
+ * Modified for SaturnExplorer: a LOAD is not printed past a write of a global (patches/0090-engine-hardware-access-orders-globals.patch).
  */
 #include "coreaction.hh"
 #include "condexe.hh"
@@ -3768,6 +3769,27 @@ bool ActionMarkImplied::checkImpliedCover(Funcdata &data,Varnode *vn)
 	for(int4 c=0;c<chain.size();++c)
 	  if (chain[c]->getCover()->contain(other,2)) return false;
       }
+    }
+    // SaturnExplorer (0090): ...and a write of a global, which is a store the engine folded: the pointer may be the global's address,
+    // and the read printed after the write would read the value written (`x = *p; g = v; *q = x;` printed `g = v; *q = *p;`, A5-115).
+    // An op whose output only a COPY to a global reads is one too: the merge that follows makes it the global's write (a register's
+    // piece made before a branch and stored on both ways printed `g = (int2)param_1; if ((param_2 & *(param_1 + 8)) == 0)`)
+    list<PcodeOp *>::const_iterator aiter = data.beginOpAlive();
+    list<PcodeOp *>::const_iterator aend = data.endOpAlive();
+    for(;aiter!=aend;++aiter) {
+      PcodeOp *other = *aiter;
+      Varnode *wvn = other->getOut();
+      if (wvn == (Varnode *)0 || other->code() == CPUI_MULTIEQUAL || other->code() == CPUI_INDIRECT) continue;
+      bool global = wvn->isAddrTied() && wvn->getSpace()->getType() == IPTR_PROCESSOR;
+      // (not a copy of the global to itself, the value a RETURN holds or the merge's own: it writes nothing)
+      if (global && other->code() == CPUI_COPY && other->getIn(0)->getAddr() == wvn->getAddr()) continue;
+      for(list<PcodeOp *>::const_iterator diter=wvn->beginDescend();!global && diter!=wvn->endDescend();++diter) {
+	const Varnode *cvn = (*diter)->getOut();
+	global = (*diter)->code() == CPUI_COPY && cvn != (Varnode *)0 && cvn->isAddrTied() && cvn->getSpace()->getType() == IPTR_PROCESSOR;
+      }
+      if (!global) continue;
+      for(int4 c=0;c<chain.size();++c)
+	if (chain[c]->getCover()->contain(other,2)) return false;
     }
   }
   if (op->code() == CPUI_LOAD) { // Check for loads crossing stores

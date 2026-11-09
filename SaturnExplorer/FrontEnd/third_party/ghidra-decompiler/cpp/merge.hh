@@ -12,6 +12,7 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ * Modified for SaturnExplorer: a global is not merged with a value the code holds in a register across a hardware access or an access through a pointer (patches/0090-engine-hardware-access-orders-globals.patch).
  */
 #ifndef __MERGE_HH__
 #define __MERGE_HH__
@@ -86,6 +87,7 @@ class Merge {
   HighIntersectTest testCache;	///< Cached intersection tests
   vector<PcodeOp *> copyTrims;	///< COPY ops inserted to facilitate merges
   vector<PcodeOp *> protoPartial;	///< Roots of unmapped CONCAT trees
+  static bool heldAcrossAccess(HighVariable *tied,HighVariable *other);	///< SaturnExplorer (0090)
   static bool mergeTestRequired(HighVariable *high_out,HighVariable *high_in);
   static bool mergeTestAdjacent(HighVariable *high_out,HighVariable *high_in);
   static bool mergeTestSpeculative(HighVariable *high_out,HighVariable *high_in);

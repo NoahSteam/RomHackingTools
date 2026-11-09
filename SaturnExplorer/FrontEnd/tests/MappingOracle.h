@@ -2218,7 +2218,9 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                                 rhs = rhs.substr(close + 1);
                             }
                             if (rhs == from) return false;
-                            // (A7-102: the low part of the parameter, `SUB41(param_2,0)`, is the register the narrow store stores; grammar 2 seed 4508555)
+                            // (A7-102: the low part of the parameter, `SUB41(param_2,0)`, is the register the narrow store stores; grammar 2 seed 4508555.
+                            // A5-118's merge rule, patch 0090, makes the same shape: a byte or half of a pointer parameter held in a variable across a
+                            // register's access, `xVar2 = SUB41(param_2,0);`, which a `mov.b` stores; grammar 1 seed 3800027)
                             if (rhs.compare(0, 3, "SUB") == 0 && rhs.find('(') != std::string::npos &&
                                 rhs.compare(rhs.find('(') + 1, std::string::npos, from.substr(0, from.size() - 1) + ",0);") == 0)
                                 return false;
@@ -2530,6 +2532,15 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     for (uint32_t st : candidates)
                     {
                         if (!apart) break;
+                        // (A5-118's rule, patch 0090: a store of the number that is the statement of another line, its own, is not this line's: a
+                        // loop counter started at 2 and merged under the global's name beside a store of 2 the barrier keeps, grammar 1 seed 15125)
+                        bool ownLine = false;
+                        for (size_t lj = 0; lj < r.lines.size() && !ownLine; ++lj)
+                        {
+                            if (lj == li || r.lines[lj].text.find(" = ") == std::string::npos) continue;
+                            for (const Token& t : r.lines[lj].tokens) ownLine = ownLine || (t.addr == st && t.begin < t.end);
+                        }
+                        if (ownLine) continue;
                         uint16_t sw = 0;
                         int size = 0;
                         const int reg = word(st, sw) ? StoredRegister(sw, size) : -1;

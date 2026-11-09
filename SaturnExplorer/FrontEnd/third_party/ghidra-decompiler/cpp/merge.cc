@@ -12,6 +12,7 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ * Modified for SaturnExplorer: a global is not merged with a value the code holds in a register across a hardware access or an access through a pointer (patches/0090-engine-hardware-access-orders-globals.patch).
  */
 #include "merge.hh"
 #include "funcdata.hh"
@@ -88,6 +89,140 @@ bool StackAffectingOps::affectsTest(PcodeOp *op,Varnode *vn) const
   return true;
 }
 
+/// \brief Does the value of the given Varnode come only from the given global, through COPYs and MULTIEQUALs (SaturnExplorer, 0090)
+static bool holdsGlobal(const Varnode *vn,const Varnode *tvn,int4 depth)
+
+{
+  if (depth > 8) return false;
+  if (vn->isAddrTied() && vn->getSpace() == tvn->getSpace() && vn->getOffset() == tvn->getOffset() && vn->getSize() == tvn->getSize())
+    return true;
+  if (!vn->isWritten()) return false;
+  const PcodeOp *def = vn->getDef();
+  if (def->code() == CPUI_COPY) return holdsGlobal(def->getIn(0),tvn,depth+1);
+  if (def->code() != CPUI_MULTIEQUAL) return false;
+  for(int4 i=0;i<def->numInput();++i) {
+    const Varnode *in = def->getIn(i);
+    if (in == vn) continue;
+    if (!holdsGlobal(in,tvn,depth+1)) return false;
+  }
+  return true;
+}
+
+/// \brief Would a global, merged with another variable, hold that variable's value across an access (SaturnExplorer, 0090)
+///
+/// Merged into a global (an address-tied variable of the processor space), every write of a register variable becomes a write of the
+/// global, made where the register is written: a value the code holds in a register across a hardware access, or a read or write
+/// through a pointer, which may be one or the global's own address, and stores to the global after it, would be printed as stored
+/// before it (`x = *p; SCU_D0EN = 1; g = x` as `g = *p; SCU_D0EN = 1;`; a register a branch sets, stored after a poll, as the
+/// global written before the poll); and so would a register written on two paths, with such an access between one of its writes and the
+/// store. Such a merge is refused, and the variables stay apart.
+/// \param tied is the HighVariable that may be the global
+/// \param other is the HighVariable to be merged into it
+/// \return \b true if \b other's cover holds such an access
+bool Merge::heldAcrossAccess(HighVariable *tied,HighVariable *other)
+
+{
+  if (!tied->isAddrTied() || other->isAddrTied() || other->isInput()) return false;
+  Varnode *tvn = tied->getTiedVarnode();
+  if (tvn == (Varnode *)0 || tvn->getSpace()->getType() != IPTR_PROCESSOR) return false;
+  Funcdata *fd = (Funcdata *)0;
+  for(int4 i=0;i<other->numInstances() && fd == (Funcdata *)0;++i) {
+    Varnode *vn = other->getInstance(i);
+    if (vn->isWritten())
+      fd = vn->getDef()->getParent()->getFuncdata();
+    else if (!vn->hasNoDescend())
+      fd = (*vn->beginDescend())->getParent()->getFuncdata();
+  }
+  if (fd == (Funcdata *)0) return false;
+  // (a variable whose every write copies the global itself, directly or through the merge's own copies and joins, holds the global's own
+  // value: merged, it writes nothing the code does not hold there; refused, the merge's copies of a global joined round a loop of stores
+  // through a pointer print as writes back of the global in the loop, hwram008 06036828)
+  {
+    bool selfOnly = true, any = false;
+    for(int4 i=0;i<other->numInstances() && selfOnly;++i) {
+      Varnode *vn = other->getInstance(i);
+      if (!vn->isWritten()) continue;
+      const PcodeOp *def = vn->getDef();
+      if (def->code() == CPUI_MULTIEQUAL || def->code() == CPUI_INDIRECT) continue;
+      any = true;
+      selfOnly = def->code() == CPUI_COPY && holdsGlobal(def->getIn(0),tvn,0);
+    }
+    if (any && selfOnly) return false;
+  }
+  // (...and a value a register's access reads: merged, the global would be written at the access itself, which its guard there says
+  // nothing of, and its own value read before the access would be printed as the merge's copy: `uVar1 = uRam06058338; uRam06058338 =
+  // CD_HIRQ;` for `x = g; y = CD_HIRQ; g = x | y`, hwram007 06021414)
+  // (a value stored as it is read, `g = SMPC_OREG8;`, is the store's own statement)
+  for(int4 i=0;i<other->numInstances();++i) {
+    Varnode *vn = other->getInstance(i);
+    if (!vn->isWritten() || !isHardwareAccessOp(fd,vn->getDef())) continue;
+    const PcodeOp *use = vn->loneDescend();
+    const Varnode *uvn = (use != (const PcodeOp *)0 && use->code() == CPUI_COPY) ? use->getOut() : (const Varnode *)0;
+    if (uvn == (const Varnode *)0 || !uvn->isAddrTied() || uvn->getSpace() != tvn->getSpace() || uvn->getOffset() != tvn->getOffset())
+      return true;
+  }
+  // ...and an access on a path from where the register is written to where the code stores it to the global: merged, the global is written
+  // where the register is, before the access (`r0 = 4; if (c) r0 = *p; g = r0;` printed `g = 4; if (c) g = *p;`: the read through p
+  // then reads what was written when p is the global's address)
+  {
+    vector<const PcodeOp *> defs;
+    for(int4 i=0;i<other->numInstances();++i) {
+      Varnode *vn = other->getInstance(i);
+      if (!vn->isWritten()) continue;
+      const PcodeOp *def = vn->getDef();
+      if (def->code() == CPUI_MULTIEQUAL || def->code() == CPUI_INDIRECT) continue;
+      defs.push_back(def);
+    }
+    if (defs.size() > 1) {
+      for(int4 i=0;i<defs.size();++i) {
+	vector<const BlockBasic *> todo;
+	vector<const BlockBasic *> seen;
+	const BlockBasic *bl = defs[i]->getParent();
+	list<PcodeOp *>::iterator it = defs[i]->getBasicIter();
+	++it;
+	for(;;) {
+	  bool stop = false;
+	  for(;it!=((BlockBasic *)bl)->endOp();++it) {
+	    const PcodeOp *op = *it;
+	    if (((op->code() == CPUI_LOAD || op->code() == CPUI_STORE) && !op->getIn(1)->isConstant()) || isHardwareAccessOp(fd,op))
+	      return true;	// (the access may be the register's other write itself: the read is still after this write)
+	    if (find(defs.begin(),defs.end(),op) != defs.end()) { stop = true; break; }
+	    const Varnode *ovn = op->getOut();
+	    if (ovn != (const Varnode *)0 && ovn->isAddrTied() && ovn->getSpace() == tvn->getSpace() && ovn->getOffset() == tvn->getOffset()) { stop = true; break; }
+	  }
+	  if (!stop)
+	    for(int4 k=0;k<bl->sizeOut();++k) {
+	      const BlockBasic *nb = (const BlockBasic *)bl->getOut(k);
+	      if (find(seen.begin(),seen.end(),nb) == seen.end()) { seen.push_back(nb); todo.push_back(nb); }
+	    }
+	  if (todo.empty() || seen.size() > 64) break;
+	  bl = todo.back();
+	  todo.pop_back();
+	  it = ((BlockBasic *)bl)->beginOp();
+	}
+      }
+    }
+  }
+  other->updateCover();
+  const Cover &cov(other->getCover());
+  const OpCode opcs[] = { CPUI_LOAD, CPUI_STORE, CPUI_CALLOTHER };
+  for(int4 k=0;k<3;++k) {
+    list<PcodeOp *>::const_iterator iter = fd->beginOp(opcs[k]);
+    list<PcodeOp *>::const_iterator enditer = fd->endOp(opcs[k]);
+    for(;iter!=enditer;++iter) {
+      const PcodeOp *op = *iter;
+      if (op->isDead()) continue;
+      if (opcs[k] == CPUI_CALLOTHER) {
+	if (!isHardwareAccessOp(fd,op)) continue;
+      }
+      else if (op->getIn(1)->isConstant())
+	continue;
+      if (cov.contain(op,2)) return true;
+    }
+  }
+  return false;
+}
+
 /// \brief Required tests to merge HighVariables that are not Cover related
 ///
 /// This is designed to short circuit merge tests, when we know properties of the
@@ -103,6 +238,8 @@ bool Merge::mergeTestRequired(HighVariable *high_out,HighVariable *high_in)
 
 {
   if (high_in == high_out) return true; // Already merged
+
+  if (heldAcrossAccess(high_out,high_in) || heldAcrossAccess(high_in,high_out)) return false;	// SaturnExplorer (0090)
 
   if (high_in->isTypeLock())	// If types are locked
     if (high_out->isTypeLock())	// dont merge unless
