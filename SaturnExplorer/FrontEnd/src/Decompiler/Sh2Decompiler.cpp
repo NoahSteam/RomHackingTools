@@ -8969,16 +8969,26 @@ void Sh2Decompiler::NoteStoresBeforeEndlessLoop(DecompileResult& r)
         any = true;
     }
     // A3-173: the code after the loop is removed with it, and what it reads of the caller's would be no input of the signature.
+    bool leavesR0 = false;
     for (const DecompileResult::EndlessLoopRead& s : r.readsAfterEndlessLoop)
     {
-        const std::string text = s.writesR0
-            ? "the write of r0 here is missing: the analysis takes the loop at " + Hex8(s.loop) + " to run for ever and removes the code after it, "
-              "so the value a caller would read in r0 is gone. A poll of memory another processor writes folds so unless that memory is marked volatile"
-            : "the read of " + s.what + " here is missing: the analysis takes the loop at " + Hex8(s.loop) + " to run for ever and removes the code after it, "
-              "so the signature does not hold that input. A poll of memory another processor writes folds so unless that memory is marked volatile";
+        // (r0 written there is scratch as often as a value: it is no caution on the text, and withholds only a signature that would be lent)
+        if (s.writesR0)
+        {
+            leavesR0 = true;
+            continue;
+        }
+        const std::string text = "the read of " + s.what + " here is missing: the analysis takes the loop at " + Hex8(s.loop) + " to run for ever and removes the "
+                                 "code after it, so the signature does not hold that input. A poll of memory another processor writes folds so unless that "
+                                 "memory is marked volatile";
         r.hardwareNotes.push_back(HardwareNote{ s.insn, text, true });
         r.warnings.push_back(Hex8(s.insn) + ": " + text);
         any = true;
+    }
+    if (!any && leavesR0 && r.prototype.known)
+    {
+        r.prototypeWithheld = "code after a loop the analysis takes to run for ever leaves a value in r0, which a caller would read";
+        r.prototype.known = false;
     }
     if (!any) return;
     std::stable_sort(r.hardwareNotes.begin(), r.hardwareNotes.end(),

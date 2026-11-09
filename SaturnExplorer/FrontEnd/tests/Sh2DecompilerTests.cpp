@@ -16012,7 +16012,8 @@ void TestA3164Fix()
         const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, c.words);
         Print(c.name, r);
         CHECK(r.status == DecompileStatus::Ok);
-        CHECK(!HasNote(r, "here is missing: the analysis takes the loop at", true));
+        // (a store the text prints is not said; A3-173: the code some of these have after the loop reads an input, which is said apart)
+        for (const HardwareNote& n : r.hardwareNotes) CHECK(!(Has(n.text, "-byte write of") && Has(n.text, "here is missing: the analysis takes the loop at")));
         for (const char* l : kLent)
             if (std::string(l) == c.name && !r.prototype.known)
             {
@@ -16060,7 +16061,7 @@ void TestA3173Fix()
                                                                0x0600, 0x2304, 0x0600, 0x1010 },
           0x0600900Eu, "the read of a stack argument (the word at r15 + 4 on entry) here is missing" },
         { "A3-173 pp9: r0 written after the poll", { 0xD703, 0xE001, 0x2701, 0x6071, 0xC801, 0x8BFC, 0x000B, 0xE005, 0x0600, 0x1010 },
-          0x0600900Eu, "the write of r0 here is missing" },
+          0, "code after a loop the analysis takes to run for ever leaves a value in r0" },
         // A3-174, pp1: a poll of VDP2_TVSTAT that ends, then the mailbox poll; the store before both is said, and the loop named is the second
         { "A3-174 pp1: the poll that ends, then the one that does not", { 0xD307, 0xD708, 0xD808, 0x2362, 0xE001, 0x2701, 0x6081, 0xC808, 0x89FC, 0x6071, 0xC801,
                                                                          0x8BFC, 0x2342, 0x000B, 0x0009, 0x0009, 0x0600, 0x2304, 0x0600, 0x1010, 0x25F8, 0x0004 },
@@ -16074,7 +16075,8 @@ void TestA3173Fix()
         const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, c.words);
         Print(c.name, r);
         CHECK(r.status == DecompileStatus::Ok && !r.prototype.known);
-        CHECK(HasNoteAt(r, c.at, c.what));
+        if (c.at != 0) CHECK(HasNoteAt(r, c.at, c.what));
+        else CHECK(Has(r.prototypeWithheld, c.what));   // (r0 left after the loop: the signature is withheld, nothing said on the text)
         if (Has(c.name, "pp1"))   // (and nothing names the poll that ends)
             CHECK(!HasNote(r, "the loop at 0x0600900C", true));
     }
