@@ -7845,7 +7845,9 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
             const ghidra::Varnode* in = o->getIn(0);
             const bool atEnd = code == ghidra::CPUI_COPY && !atLoadOrCall && o->getAddr() == home->getStop() && !o->isFromDelaySlot() &&
                                !in->isConstant();
-            const bool atJoinStart = code == ghidra::CPUI_COPY && !atLoadOrCall && o->getAddr() == home->getStart() && home->sizeIn() >= 2 &&
+            // (A7-114: a conversion there too -- `uRam0240000e = (uint2)in_r0;` at the `cmp/pl r1` after `cmp/eq #2,r0 ; bf ; sub r3,r0`, r0
+            // merged under the global's name that the slot's `mov.w r0,@(0x6,r7)` stores after an `xor`; grammar 1 seed 5602142)
+            const bool atJoinStart = (code == ghidra::CPUI_COPY || conversion) && !atLoadOrCall && o->getAddr() == home->getStart() && home->sizeIn() >= 2 &&
                                      !o->isFromDelaySlot() && !in->isConstant() && !atEnd;
             // (A7-91: the memory a copy the engine made of its own is a copy of -- `uStack_4 = uVar1;` at the `bt` ending a poll loop, the
             // variable's copy of the global the loop's load reads, merged under a pushed word's name: the global itself, as below)

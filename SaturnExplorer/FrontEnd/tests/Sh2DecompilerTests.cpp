@@ -3252,6 +3252,33 @@ void TestArea7Round13()
         const DecompileResult before = redrawn(r, line, 0x0600900Au, 0, n);
         CHECK(n == 1 && dts::AuditMapping(before, word, "a7_112_5203853 before").Violations() >= 1);
     }
+    // A7-114 a conversion of a register merged under a global's name at a join's first instruction (`cmp/pl r1` after `cmp/eq #2,r0 ;
+    // bf ; sub r3,r0`): r0's makers on the paths into it are the `sub` and the entry, so it names none and says so, never the `cmp/pl`
+    // (grammar 1 seed 5602142, this branch's program)
+    {
+        const std::vector<uint16_t> w = { 0xD707, 0x8802, 0x8B00, 0x3038, 0x4115, 0x8901, 0xE01C, 0x014E, 0x203A, 0x4215, 0x8D01, 0x8173, 0x8169, 0x000B, 0x0009, 0x0009,
+                                          0x0240, 0x0008 };
+        const DecompileResult r = run(w, 0x06009000u, {});
+        Print("A7-114 a conversion of a merged register at a join's first instruction (grammar 1 seed 5602142)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        const char* line = "uRam0240000e = (uint2)in_r0;";
+        const Line* l = LineWith(r, line);
+        CHECK(l != nullptr && l->noOrigin && !tokenAt(r, line, 0x06009008u));
+        CHECK(dts::AuditMapping(r, word, "a7_114_5602142").Violations() == 0);
+        int n = 0;
+        DecompileResult before = r;
+        for (Line& x : before.lines)
+        {
+            if (x.text.find(line) == std::string::npos) continue;
+            const size_t eq = x.text.find(" = ");
+            for (Token& t : x.tokens)
+                if (t.begin < t.end && (t.end <= eq || t.begin == eq + 1 || x.text.compare(t.begin, t.end - t.begin, "in_r0") == 0)) t.addr = 0x06009008u;
+            x.firstAddr = 0x06009008u;
+            x.noOrigin = false;
+            ++n;
+        }
+        CHECK(n == 1 && dts::AuditMapping(before, word, "a7_114_5602142 before").Violations() >= 1);
+    }
     // A7-113 the engine's copy of a byte a word store wrote, kept over a `tas.b` of the byte beside it in a loop, names that store (grammar
     // 1 seed 5304635, specials)
     {

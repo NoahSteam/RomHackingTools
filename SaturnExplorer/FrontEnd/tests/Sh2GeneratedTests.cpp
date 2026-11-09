@@ -15300,7 +15300,7 @@ void TestArea7Round13Pins(Sh2Decompiler& d)
     };
     const bool savedSpecials = gSpecialReads;
     for (const Pin& s : { Pin{ 1, 4802131, false }, Pin{ 1, 5000472, true }, Pin{ 1, 5002388, true }, Pin{ 1, 5003735, false }, Pin{ 1, 5204339, false }, Pin{ 1, 5207679, false },
-                          Pin{ 1, 5208620, false }, Pin{ 2, 5203853, false }, Pin{ 2, 5204684, false }, Pin{ 1, 5304635, true } })
+                          Pin{ 1, 5208620, false }, Pin{ 2, 5203853, false }, Pin{ 2, 5204684, false }, Pin{ 1, 5304635, true }, Pin{ 1, 5602142, false } })
     {
         gSpecialReads = s.specials;
         const Report rep = Evaluate(d, s.grammar == 2 ? MakeV2(s.seed) : Generate(s.seed), true);
