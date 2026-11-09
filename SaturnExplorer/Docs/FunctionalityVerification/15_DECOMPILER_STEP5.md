@@ -19139,7 +19139,15 @@ The 20,000-seed run's counts: `order.folded-store.checked` 20,242 (read 8,460, h
 
 On master `43e945b2` the brief's ranges failed with `folded-store-after-access` (and the matrix's seed 4123). On the branch's final generator every one passes:
 
-TBD_SEEDS
+| Run (`SE_GENERATED_CANARY=0` for the ranges) | Result |
+|---|---|
+| the 20,000-seed matrix (`SE_GENERATED_SEEDS=20000`, both grammars, the canary on) | **0 failing seeds** (seed 4123 grammar 1 passes; pinned whole and shrunk) |
+| default run, and `SE_GENERATED_GRAMMAR=1`, `=2` (300 seeds each, with every pin) | **0 findings** each |
+| grammar 1, 3,800,001 to 3,805,000 | **0 failing** (master: about 23, all `folded-store-after-access`; 3800275 and 3801285 pinned whole) |
+| grammar 1, 4,000,001 to 4,010,000 (two pieces) | **0 failing** (master: about 47) |
+| grammar 1, 4,200,001 to 4,205,000 | **0 failing** (master: about 14) |
+| grammar 2, 4,200,001 to 4,205,000 | 1 failing seed, 4201215, `n:map-copy-merge` (area 7's, the same on master) |
+| grammar 1 seeds 3007538 (A5-117), 3605366, 3709052 | **0 findings** each (3007538 and 3605366 pinned whole) |
 
 Grammar 2 seed 3709052 fails with `cache-read-pointer-unsaid` (byte reads at 0x06009140, 0x06009148 and 0x0600906E through a pointer derived from a register address, 0x18100058 and 0x18100063 in the cached partition, not called a cache read): **not this class**. Master's binary gives the same findings; it is A5-107's class (the cache caution of a derived pointer), left for area 5's next round. Grammar 1 seed 3709052 passes. Grammar 2 seed 4201215 (`map-copy-merge`, `uStack_4 = uVar2;`) is area 7's and the same on master; the brief's "grammar 2, same range: 1" is this seed.
 
@@ -19168,7 +19176,13 @@ Patch 0090 reverted (the six files at master's), the branch's tests: `SaturnExpl
 
 ### 8. Runs
 
-TBD_RUNS
+| Run | Result |
+|---|---|
+| full `ctest -j2` (Live included) | **117 of 117** (111 plus the 6 Live tests, 273 s); no new test target (the pins are functions in `Sh2DecompilerTests` and `Sh2GeneratedTests`) |
+| fault suite (`SaturnExplorerDecompilerFaultTests`) | **0 of 94** jobs failed (before the re-pin of section 5: 1 of 94, `alloc mailbox` `FAIL:pin-moved` 3) |
+| printed-C (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | **agrees=5196**, narrow-c 130, void-return 227, void-return-lent 24, skipped 8: master's baseline, unchanged |
+| game corpus, both images, lent (section 6) | all four runs pass; 474 (645) of 999, 724 (975) of 1,543; missing and said 0 and 4 |
+| `check-vendored-tree.py lint`, `check-literal-size.py` | ok, ok; `patches/0090-...` applied to master's six files reproduces the tree byte for byte |
 
 ### 9. Routed
 
