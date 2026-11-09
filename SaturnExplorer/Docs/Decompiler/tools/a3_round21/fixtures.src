@@ -266,3 +266,255 @@ bf P
 mov.l r4,@r3
 rts
 nop
+name dl1
+# the poll's bf/s slot stores r5 (each turn of the loop); a branch from outside enters the slot's own instance, which returns
+mov.l =0x06002304,r3
+mov.l =0x06001010,r7
+mov #1,r0
+mov.w r0,@r7
+tst r4,r4
+bt X
+P:
+mov.w @r7,r0
+tst #1,r0
+bf/s P
+X:
+mov.l r5,@r3
+rts
+nop
+name dl2
+# dl1, the own instance replaced before its return (both instances dropped)
+mov.l =0x06002304,r3
+mov.l =0x06001010,r7
+mov #1,r0
+mov.w r0,@r7
+tst r4,r4
+bt X
+P:
+mov.w @r7,r0
+tst #1,r0
+bf/s P
+X:
+mov.l r5,@r3
+mov.l r6,@r3
+rts
+nop
+name dl3
+# a store before the loop, the loop's bf/s slot its own instance too (a bra from below enters it, to the poll)
+mov.l =0x06002304,r3
+mov.l =0x06001010,r7
+mov #1,r0
+mov.w r0,@r7
+mov.l r6,@r3
+tst r4,r4
+bt T
+P:
+mov.w @r7,r0
+tst #1,r0
+bf/s P
+X:
+mov.l r5,@r3
+mov.l r4,@r3
+rts
+nop
+T:
+bra X
+nop
+name dl4
+# the loop body is only the doubled slot: `bra X` enters the slot, the slot falls into the poll head
+mov.l =0x06002304,r3
+mov.l =0x06001010,r7
+mov #1,r0
+mov.w r0,@r7
+tst r4,r4
+bt T
+mov.l r6,@r3
+rts
+nop
+T:
+mov.l r6,@r3
+bra X
+nop
+P:
+mov.w @r7,r0
+tst #1,r0
+bt/s Q
+X:
+mov.l r5,@r3
+bra P
+nop
+Q:
+mov.l r4,@r3
+rts
+nop
+name al1
+# a store, then the same word through its cache-through mirror before the poll, the code replacing it after
+mov.l =0x06002304,r3
+mov.l =0x26002304,r8
+mov.l =0x06001010,r7
+mov.l r6,@r3
+mov.l r5,@r8
+mov #1,r0
+mov.w r0,@r7
+P:
+mov.w @r7,r0
+tst #1,r0
+bf P
+mov.l r4,@r3
+rts
+nop
+name al2
+# a long store, then a half and a byte that together rewrite three of its bytes, then the poll
+mov.l =0x06002304,r3
+mov.l =0x06001010,r7
+mov.l r6,@r3
+mov.w r5,@r3
+mov r5,r0
+mov.b r0,@(2,r3)
+mov #1,r0
+mov.w r0,@r7
+P:
+mov.w @r7,r0
+tst #1,r0
+bf P
+mov.l r4,@r3
+rts
+nop
+name al3
+# al2 with the last byte too: every byte rewritten before the poll
+mov.l =0x06002304,r3
+mov.l =0x06001010,r7
+mov.l r6,@r3
+mov.w r5,@r3
+mov r5,r0
+mov.b r0,@(2,r3)
+mov.b r0,@(3,r3)
+mov #1,r0
+mov.w r0,@r7
+P:
+mov.w @r7,r0
+tst #1,r0
+bf P
+mov.l r4,@r3
+rts
+nop
+name k1
+# a stack word written whole, its first byte rewritten on one path, read whole
+add #-8,r15
+mov.l r4,@r15
+tst r6,r6
+bt A
+mov.b r5,@r15
+A:
+mov.l @r15,r0
+rts
+add #8,r15
+name k2
+# a stack word; a half at +2 on one path, a byte at +1 on the other; the half at +0 and the word read after the join
+add #-8,r15
+mov.l r4,@r15
+tst r6,r6
+bt A
+mov r5,r0
+mov.w r0,@(2,r15)
+bra J
+nop
+A:
+mov r5,r0
+mov.b r0,@(1,r15)
+J:
+mov.w @r15,r1
+mov.l @r15,r0
+add r1,r0
+rts
+add #8,r15
+name k3
+# a byte written over a word on one path; the byte at +3 read sign-extended after the join
+add #-8,r15
+mov.l r4,@r15
+tst r6,r6
+bt J
+mov r5,r0
+mov.b r0,@(3,r15)
+J:
+mov.b @(3,r15),r0
+rts
+add #8,r15
+name k4
+# two stack slots swapped on one path (a register holds one across), read after the join with different widths
+add #-8,r15
+mov.l r4,@r15
+mov.l r5,@(4,r15)
+tst r6,r6
+bt J
+mov.l @r15,r1
+mov.l @(4,r15),r2
+mov.l r2,@r15
+mov.l r1,@(4,r15)
+J:
+mov.w @(2,r15),r0
+mov r0,r1
+mov.b @(4,r15),r0
+add r1,r0
+rts
+add #8,r15
+name w4
+# f reads r4's low byte and tail-jumps to g, which stores r4 whole through r6 (g lent)
+mov.l =0x06009010,r2
+mov.b r4,@r5
+jmp @r2
+nop
+nop
+nop
+nop
+nop
+G:
+mov.l r4,@r6
+rts
+nop
+name w5
+# f reads r4's low byte and calls g (lent), which stores r4 whole through r6
+sts pr,r1
+mov.l r1,@-r15
+mov.l =0x06009020,r2
+mov.b r4,@r5
+jsr @r2
+nop
+mov.l @r15+,r1
+lds r1,pr
+rts
+nop
+nop
+nop
+nop
+nop
+nop
+nop
+G:
+mov.l r4,@r6
+rts
+nop
+name c1
+# caller: r6 into the word at r15 (the callee's first stack word), call, read the word back; the callee adds 1 to its stack word
+sts pr,r1
+mov.l r1,@-r15
+add #-4,r15
+mov.l r6,@r15
+mov.l =0x06009020,r2
+jsr @r2
+nop
+mov.l @r15,r0
+add #4,r15
+mov.l @r15+,r1
+lds r1,pr
+rts
+nop
+nop
+nop
+nop
+G:
+mov.l @r15,r0
+add #1,r0
+mov.l r0,@r15
+rts
+nop
