@@ -2497,7 +2497,9 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     ++a.copyRegisterMade;
                     continue;
                 }
-                if (mergedRegister && !anyAddress)
+                // (A7-78: a statement the product says names no instruction -- `iRamc0001004 = iRamc000103c;`, the engine's copy of a folded
+                // read into the variable a later store names -- has no click to be wrong; A7-52 judges that it says so; grammar 2 seed 3622362)
+                if ((mergedRegister || r.lines[li].noOrigin) && !anyAddress)
                 {
                     ++a.copyNoAddress;
                     continue;

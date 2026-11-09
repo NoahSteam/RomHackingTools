@@ -7298,6 +7298,19 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
             {
                 values = StatementValues(o, flow.opsEnd);
                 valuesFound = true;
+                // (A7-78: a statement of a number whose only instructions are those that make that number -- `iStack_20 = 2;` at the
+                // `mov #2,r1` the COPY chain starts at -- shows that number and no other: a store of 0 is not its; grammar 2 seed 3620180)
+                if (!values.numbers.empty() && values.inputs.empty() && values.locations.empty() && !values.rebuilt && !values.insns.empty())
+                {
+                    bool all = true;
+                    for (uint32_t insn : values.insns)
+                    {
+                        bool makes = false;
+                        for (const auto& n : values.numbers) makes = makes || InstructionMakesNumber(flow, insn, n.first, n.second);
+                        all = all && makes;
+                    }
+                    if (all) values.insns.clear();
+                }
             }
             const auto f = shown.find(r);
             if (f != shown.end()) return f->second;
