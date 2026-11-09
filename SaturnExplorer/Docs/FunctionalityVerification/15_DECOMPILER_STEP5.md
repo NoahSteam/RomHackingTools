@@ -18869,7 +18869,7 @@ The first form alone drew the shape 819 times in 5,000 seeds (410 with their own
 * Fixtures: `tools/a3_round20/fixtures.src` gains d2 and d1n.
 * No new test target.
 
-### Runs (on `0e78b0a6`; the commits after it change docs only)
+### Runs (on `72944b06`, the final code; the commits after it change docs only)
 
 | Run | Result |
 |---|---|
@@ -18880,8 +18880,8 @@ The first form alone drew the shape 819 times in 5,000 seeds (410 with their own
 | grammar 2, 3,800,001 to 3,805,000 | 1 failing seed, 3802371 (area 7, routed below); the productions are version 1's, grammar 2 is unchanged. Claims checked 29,936 |
 | the 20,000-seed matrix (`SE_GENERATED_SEEDS=20000` from seed 1, both grammars, two pieces of 10,000, the canary on in the first) | 2 failing seeds, **4123** (`n:folded-store-after-access`) and **17737** (`map-const-join`): the known baseline on master `5601733a`, nothing beyond it |
 | generator default run (300 seeds and the pins) | 0 findings |
-| full `ctest` | CTEST_RESULT |
-| fault suite (`SaturnExplorerDecompilerFaultTests`) | FAULT_RESULT |
+| full `ctest -E SaturnExplorerLive -j2` | **111 of 111** (257 s; Sh2DecompilerEngine 49 s); Live **6 of 6**. No new test: the new pins are in `TestA3164Fix` and `TestA3RoutedPins` |
+| fault suite (`SaturnExplorerDecompilerFaultTests`) | **0 of 94** jobs failed |
 
 ### Routed, no row here
 
