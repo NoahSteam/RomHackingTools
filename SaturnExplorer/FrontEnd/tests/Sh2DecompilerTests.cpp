@@ -16421,6 +16421,13 @@ void TestArea5Confirm()
         { "a11_mis_chip", 0x06051560u, { 0xD102, 0x6011, 0x000B, 0x0009, 0x0009, 0x0009, 0xFFFF, 0xFE11 } },
         { "a11_mis_chip_mirror", 0x06051580u, { 0xD102, 0x6011, 0x000B, 0x0009, 0x0009, 0x0009, 0xFFFF, 0xFE13 } },
         { "a11_mis_long", 0x060515A0u, { 0xD102, 0x6012, 0x000B, 0x0009, 0x0009, 0x0009, 0x25F8, 0x0002 } },
+        // A11-6 (1), the control the mutant needs: a pointer that is one of TWO register addresses minus a constant (`p ? 0x25F80030 : 0x25F80020`, then
+        // `- 0x10`): the subtraction is applied to each address (mutant H-ptr-sub added the constant). tst r4,r4 ; bt L ; ... ; L: sub r2,r1 ; mov.l @r1,r0
+        { "a11_ptr_sub2", 0x06051600u, { 0xD104, 0x2448, 0x8900, 0xD104, 0xD204, 0x3128, 0x6012, 0x000B, 0x0009, 0x0009, 0x25F8, 0x0020, 0x25F8, 0x0030, 0x0000, 0x0010 } },
+        { "a11_mis_vdp2mirror", 0x06051620u, { 0xD102, 0x6011, 0x000B, 0x0009, 0x0009, 0x0009, 0x25F8, 0x0203 } },
+        { "a11_mis_chip_hi", 0x06051640u, { 0xD102, 0x6011, 0x000B, 0x0009, 0x0009, 0x0009, 0xFFFF, 0xFF81 } },
+        { "a11_mis_chip_hi_long", 0x06051660u, { 0xD102, 0x6012, 0x000B, 0x0009, 0x0009, 0x0009, 0xFFFF, 0xFF83 } },
+        { "a11_mis_chip_mirror2", 0x06051680u, { 0xD102, 0x6011, 0x000B, 0x0009, 0x0009, 0x0009, 0xE000, 0x0F81 } },
     };
     for (const W& w : fx)
     {
@@ -16461,6 +16468,13 @@ void TestArea5Confirm()
         CHECK(Has(r.Text(), "(param_1 & 0x1c) - 0x198"));
         CHECK(HasNoteAt(r, 0x06051408u, "the pointer is 0xFFFFFE68 (SH2_VCRD) plus an index that is not known", true));
     }
+    // ...and a pointer that is one of two register addresses, less a constant: each is reduced by it (H-ptr-sub added it).
+    {
+        const DecompileResult& r = out["a11_ptr_sub2"];
+        CHECK(HasNoteAt(r, 0x0605160Cu, "if the pointer holds 0x25F80010 (VDP2_CYCA0L)", true));
+        CHECK(HasNoteAt(r, 0x0605160Cu, "if the pointer holds 0x25F80020 (VDP2_BGON)", true));
+        CHECK(!HasNote(r, "0x25F80040", true) && !HasNote(r, "0x25F80030 (", true));
+    }
     // A11-6 (2): a misaligned access is made at the aligned address, and the registers it reaches are that address's (mutant H-note-reach took
     // the address as given for the "named" test, and said a "mirror" of a register the line names as it is). Below 0xFFFFFF00 on-chip the
     // address is decoded as given. No access here is a mirror: the line is the symbol.
@@ -16471,7 +16485,12 @@ void TestArea5Confirm()
         CHECK(HasNoteAt(out["a11_mis_chip"], 0x06051562u, "so the access is made at 0xFFFFFE11 (SH2_FTCSR)", true));
         CHECK(HasNoteAt(out["a11_mis_chip_mirror"], 0x06051582u, "so the access is made at 0xFFFFFE13 (SH2_FRCL)", true));
         CHECK(HasNoteAt(out["a11_mis_long"], 0x060515A2u, "the access is made at 0x25F80000 (VDP2_TVMD)", true));
-        for (const char* n : { "a11_mis_b", "a11_mis_cached", "a11_mis_chip", "a11_mis_chip_mirror", "a11_mis_long" })
+        CHECK(HasNoteAt(out["a11_mis_vdp2mirror"], 0x06051622u, "the access is made at 0x25F80202 (VDP2_EXTEN)", true));
+        CHECK(HasNoteAt(out["a11_mis_chip_hi"], 0x06051642u, "the access is made at 0xFFFFFF80 (SH2_SAR0)", true));
+        CHECK(HasNoteAt(out["a11_mis_chip_hi_long"], 0x06051662u, "the access is made at 0xFFFFFF80 (SH2_SAR0)", true));
+        CHECK(HasNoteAt(out["a11_mis_chip_mirror2"], 0x06051682u, "the access is made at 0xE0000F80 (SH2_SAR0)", true));
+        for (const char* n : { "a11_mis_b", "a11_mis_cached", "a11_mis_chip", "a11_mis_chip_mirror", "a11_mis_long", "a11_mis_vdp2mirror",
+                               "a11_mis_chip_hi", "a11_mis_chip_hi_long", "a11_mis_chip_mirror2" })
             CHECK(!HasNote(out[n], "through a mirror", false));
     }
     // A5-102 (P1): a store to a global was printed after a later store through a pointer that writes the global's old value, so when the
