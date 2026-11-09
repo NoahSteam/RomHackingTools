@@ -424,6 +424,18 @@ struct DecompileResult
         bool inLoop = false;   // the store is in the loop's own code (a store in a poll's body), not before it
     };
     std::vector<EndlessLoopStore> storesBeforeEndlessLoop;
+    // A3-173: what the code after such a loop reads of the caller's (a register that still holds its value on entry that the signature does
+    // not hold, or a word of the frame) or writes of the return register, which the analysis removed with the loop's exit and a lent
+    // signature would leave out. Read from the flow's p-code; said by NoteStoresBeforeEndlessLoop. 'insn' is canonical, 'loop' where the
+    // loop the code follows starts.
+    struct EndlessLoopRead
+    {
+        uint32_t insn = 0;
+        std::string what;
+        uint32_t loop = 0;
+        bool writesR0 = false;
+    };
+    std::vector<EndlessLoopRead> readsAfterEndlessLoop;
     std::vector<uint32_t> callees;        // constant call targets, canonical, sorted
     // ...and the addresses they are called at (a mirror when the call goes through one), sorted:
     // what DecompileRequest::prototypes is keyed by, since a callee's signature can depend on the
