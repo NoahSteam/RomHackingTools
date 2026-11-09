@@ -18977,10 +18977,10 @@ The engine removes the code after an unmarked poll it takes to run for ever (the
 | grammar 2, 4,100,001 to 4,110,000 (two pieces) | 1 + 2 failing seeds, none area 3's: 4103690 (`map-const-join`), 4109566 and 4109706 (`map-copy-store`, `map-frame-store`, `map-number-store`; area 7). Claims checked 29,249 + 29,537; polls 0 |
 | printed-C (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | 5,585 functions, 5,297 compared: **agrees=5196**, the baseline; narrow-c 130, void-return 227, void-return-lent 24, skipped 8; 0 `mismatch` |
 | hand fixtures | sections 1 to 3; `tools/a3_round21/fixtures.src` (25) |
-| full `ctest` | CTEST_RESULT |
+| full `ctest` | **111 of 111** (`-E SaturnExplorerLive -j2`, 251 s); Live **6 of 6**. No test target added; the fixtures are scratch beside the rows, not yet pinned |
 
 ### 5. Routed, no row here
 
 * **Area 7:** grammar 1 seeds 4100259, 4100749, 4101693, 4101969, 4103377, 4104223, 4104402, 4104642, 4106174, 4106307, 4106324, 4107185, 4108075, 4108474, 4108617, 4108706, 4109252 (`map-copy-store`, `map-way-back`, `map-copy-merge`, `map-store-value`; the known classes of the delay-slot productions from 3,800,001); grammar 2 seeds 4103690 (`map-const-join`), 4109566 and 4109706 (`map-copy-store`, `map-frame-store`, `map-number-store`).
 * **Area 5:** grammar 1 seeds 4100190, 4100589, 4100793, 4100950, 4101780, 4102944, 4104110, 4104172, 4104228, 4104413, 4104447, 4104490, 4104843, 4104931, 4105458, 4105546, 4105895, 4106565, 4106575, 4106682, 4107166, 4107182, 4107964, 4108172, 4108445, 4108554, 4108851, 4109354, 4109493, 4109631 (`folded-store-after-access`, A5-117's class).
-* **Area 11:** no grammar draws A3-173: grammar 2 has no poll, and grammar 1's polls are not followed by a read of a parameter that only the code after the poll makes; a hand fixture's run with `SE_GENERATED_POLL=<addr>` stops at the poll's first read.
+* **Area 11:** no grammar draws A3-173: grammar 2 has no poll, and grammar 1 (polls 3,222 + 3,261) found none in 10,000 seeds; a hand fixture's run with `SE_GENERATED_POLL=<addr>` stops at the poll's first read.
