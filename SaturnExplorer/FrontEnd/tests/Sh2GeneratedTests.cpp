@@ -513,6 +513,8 @@ struct Program
     int postPollRead = 0;          // version 1 (A3-173): the parameter register (4 to 7) the program's last item stores, after a poll; 0: none
     uint32_t postPollStore = 0;    // version 1 (A3-175): the address of work RAM the program's last item stores a constant at, after a poll; 0: none
     int postPollStoreWidth = 0;    // ...and the store's width
+    int postPollCall = 0;          // version 1 (A3-178): the function (an index of fns, 1) the program's last item calls after a poll; 0: none
+    uint32_t postPollCallStore = 0;   // ...and the word of work RAM that function writes, 0: none (A3-179)
     std::vector<Func> fns;         // fns[0] is the function a version 1 program is about; later ones follow in memory
 };
 
@@ -557,6 +559,8 @@ struct Gen
     bool postPollOn = false;
     Rng postStoreRng;           // ...and one for A3-175 (a constant stored at a constant address of work RAM after a poll), from kPostStoreFirst on only
     bool postStoreOn = false;
+    Rng postCallRng;            // ...and one for A3-178 (a call after a poll, to a second function), from kPostCallFirst on only
+    bool postCallOn = false;
     // What the function being made changes for good / reads on entry through the wide alphabet and the GBR accesses
     // (an over-approximation: an item the grammar drops again is counted, which the checks that use it allow).
     uint32_t wideClobbers = 0;
@@ -578,7 +582,7 @@ struct Gen
     bool inSpill = false;     // r15 is moved: no local is addressed through it here
     int loopDepth = 0;        // inside a loop body: a pointer advanced here is advanced again by the next iteration
     std::vector<Func> built;  // the functions of this module generated so far (the later ones)
-    Gen(uint64_t seed) : rng(seed), macRng(seed ^ 0x6D61636D61636D61ull), guardRng(seed ^ 0x7367756172643A5Aull), convRng(seed ^ 0x636F6E7663727667ull), wideRng(seed ^ 0x77696465414C5521ull), aliasRng(seed ^ 0x616C696173526E67ull), maskRng(seed ^ 0x6D61736B52616E64ull), placeRng(seed ^ 0x706C616365526E67ull), loopMaskRng(seed ^ 0x6C6F6F704D61736Bull), frameRng(seed ^ 0x6672616D6557616Cull), partialRng(seed ^ 0x7061727469616C52ull), retRng(seed ^ 0x7265747263616C6Cull), bsrfRng(seed ^ 0x6273726652656C21ull), choiceRng(seed ^ 0x63686F6F73657221ull), regionRng(seed ^ 0x726567696F6E5074ull), idiomRng(seed ^ 0x69646F6D52616E64ull), pollBodyRng(seed ^ 0x706F6C6C426F6479ull), slotEntryRng(seed ^ 0x736C6F74456E7472ull), postPollRng(seed ^ 0x706F7374506F6C6Cull), postStoreRng(seed ^ 0x706F737453746F72ull)
+    Gen(uint64_t seed) : rng(seed), macRng(seed ^ 0x6D61636D61636D61ull), guardRng(seed ^ 0x7367756172643A5Aull), convRng(seed ^ 0x636F6E7663727667ull), wideRng(seed ^ 0x77696465414C5521ull), aliasRng(seed ^ 0x616C696173526E67ull), maskRng(seed ^ 0x6D61736B52616E64ull), placeRng(seed ^ 0x706C616365526E67ull), loopMaskRng(seed ^ 0x6C6F6F704D61736Bull), frameRng(seed ^ 0x6672616D6557616Cull), partialRng(seed ^ 0x7061727469616C52ull), retRng(seed ^ 0x7265747263616C6Cull), bsrfRng(seed ^ 0x6273726652656C21ull), choiceRng(seed ^ 0x63686F6F73657221ull), regionRng(seed ^ 0x726567696F6E5074ull), idiomRng(seed ^ 0x69646F6D52616E64ull), pollBodyRng(seed ^ 0x706F6C6C426F6479ull), slotEntryRng(seed ^ 0x736C6F74456E7472ull), postPollRng(seed ^ 0x706F7374506F6C6Cull), postStoreRng(seed ^ 0x706F737453746F72ull), postCallRng(seed ^ 0x706F737443616C6Cull)
     {
         for (int i = 0; i < 8; ++i) align[i] = 4, pref[i] = 4;
         p.mbox = 0x26001000u + 0x10u * rng.Below(4);
@@ -2276,7 +2280,87 @@ struct Gen
         AddSlotEntryPoll(items, polled);
         AddPostPollRead(items, polled);
         AddPostPollStore(items, polled);
+        AddPostPollCall(items, polled);   // (last: it adds a function to p.fns, which moves 'items')
         return p;
+    }
+
+    // A3-178, A3-179: in one program of two with a poll (from the seeds where the production is drawn), the program ends with a call of a
+    // second function after the poll: `sts pr,r3 ; mov.l r3,@-r15 ; (jsr through r2 | bsr) G ; nop ; mov.l @r15+,r3 ; lds r3,pr`, PR kept on
+    // the stack in the code after the poll, so nothing of it is left once the analysis removes that code. G returns a value in r0 (so r0 at the
+    // return is G's, and the poll's r0 is not held across the call) and does one of: write a constant at a word of work RAM nothing else of
+    // the program names (0x3040 to 0x305C of a partition; A3-179's form), return r4 plus a constant (an argument this function hands on), or
+    // both, r4 stored there. The analysis takes an unmarked poll of memory the function wrote to run for ever and removes the code after it,
+    // the call with it: the text must print the call, or say it is missing and withhold the signature (the oracle's `endless-call-dropped`).
+    // Everything is drawn from postCallRng and appended, so nothing before it moves. Must run last: p.fns grows, and 'items' is p.fns[0]'s.
+    void AddPostPollCall(std::vector<Item>& items, bool polled)
+    {
+        if (!postCallOn || !polled || disc || !postCallRng.Chance(50)) return;
+        Item call;
+        call.type = Item::Call;
+        call.callee = 1;
+        call.viaJsr = postCallRng.Chance(50);
+        call.shape = call.viaJsr ? "post_call.jsr" : "post_call.bsr";
+        call.setup = { 0x032A, 0x2F36 };   // sts pr,r3 ; mov.l r3,@-r15
+        call.after = { 0x63F6, 0x432A };   // mov.l @r15+,r3 ; lds r3,pr
+        if (call.viaJsr)
+        {
+            call.jsrReg = 2;
+            Lit l;
+            l.kind = LitKind::Fn;
+            l.fn = 1;
+            call.fnLit = static_cast<int>(p.lits.size());
+            p.lits.push_back(l);
+        }
+        items.push_back(call);
+        Func g;
+        const uint32_t kind = postCallRng.Below(3);   // 0: writes a constant, 1: returns r4 + k, 2: writes r4 and returns a constant
+        const uint16_t k = uint16_t(1 + postCallRng.Below(0x7F));
+        if (kind != 1)
+        {
+            Lit ram;
+            ram.kind = LitKind::Ram;
+            ram.value = (postCallRng.Chance(50) ? 0x26000000u : 0x06000000u) + 0x3040u + 4u * postCallRng.Below(8);
+            ram.width = 4;
+            Item ptr;
+            ptr.type = Item::LitPtr;
+            ptr.shape = "post_call.callee.litptr";
+            ptr.reg = 1;
+            ptr.lit = static_cast<int>(p.lits.size());
+            p.lits.push_back(ram);
+            g.items.push_back(ptr);
+            if (kind == 0)
+            {
+                Item c;
+                c.type = Item::Alu;
+                c.shape = "post_call.callee.const";
+                c.words = { uint16_t(0xE200 | k) };   // mov #k,r2
+                g.items.push_back(c);
+            }
+            Item st;
+            st.type = Item::Mem;
+            st.shape = "post_call.callee.store";
+            st.base = 1;
+            st.width = 4;
+            st.words = { uint16_t(kind == 0 ? 0x2122 : 0x2142) };   // mov.l r2,@r1 / mov.l r4,@r1
+            g.items.push_back(st);
+            p.postPollCallStore = ram.value;
+        }
+        Item ret;
+        ret.type = Item::Alu;
+        ret.shape = "post_call.callee.ret";
+        if (kind == 1)
+        {
+            Item mv;
+            mv.type = Item::Alu;
+            mv.shape = "post_call.callee.arg";
+            mv.words = { 0x6043 };   // mov r4,r0
+            g.items.push_back(mv);
+            ret.words = { uint16_t(0x7000 | k) };   // add #k,r0 (in rts's slot)
+        }
+        else ret.words = { uint16_t(0xE000 | k) };   // mov #k,r0 (in rts's slot)
+        g.tail.push_back(ret);
+        p.postPollCall = 1;
+        p.fns.push_back(g);
     }
 
     // A3-175: in one program of two with a poll (from the seeds where the production is drawn), the program ends with a store of a constant
@@ -2410,6 +2494,8 @@ constexpr uint64_t kSlotEntryFirst = 3800001;
 constexpr uint64_t kPostPollFirst = 4200001;
 // ...and A3-175's (a constant stored at a constant address of work RAM after a poll), likewise.
 constexpr uint64_t kPostStoreFirst = 4400001;
+// ...and A3-178's (a call of a second function after a poll), likewise.
+constexpr uint64_t kPostCallFirst = 4800001;
 
 Program Generate(uint64_t seed)
 {
@@ -2417,6 +2503,7 @@ Program Generate(uint64_t seed)
     g.slotEntryOn = seed >= kSlotEntryFirst;
     g.postPollOn = seed >= kPostPollFirst;
     g.postStoreOn = seed >= kPostStoreFirst;
+    g.postCallOn = seed >= kPostCallFirst;
     return g.Run();
 }
 
@@ -4258,6 +4345,8 @@ struct Subject
     int postPollRead = 0;                  // version 1 (A3-173): the parameter register the last item stores after a poll
     uint32_t postPollStore = 0;            // version 1 (A3-175): the address of work RAM the last item stores a constant at after a poll
     int postPollStoreWidth = 0;
+    int postPollCall = 0;                  // version 1 (A3-178): the function the last item calls after a poll (an index of fns), 0: none
+    uint32_t postPollCallStore = 0;        // ...and the word of work RAM it writes, 0: none
     std::string literals;                  // for the report
 
     uint16_t WordAt(uint32_t addr) const
@@ -4287,6 +4376,8 @@ Subject MakeSubject(const Program& p)
     s.postPollRead = p.postPollRead;
     s.postPollStore = p.postPollStore;
     s.postPollStoreWidth = p.postPollStoreWidth;
+    s.postPollCall = p.postPollCall;
+    s.postPollCallStore = p.postPollCallStore;
     s.bad = !a.ok;
     s.words = a.words;
     s.codeWords = a.codeWords;
@@ -5424,7 +5515,7 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
         // register read only there; its callers then lose the argument. The program stores r<m> (m = 4 to 7) as its last item
         // (Gen::AddPostPollRead): a lent signature holds r4 to r<m> (the parameters are consecutive), else the function is withheld or the
         // register is read before the poll.
-        if (r.status == DecompileStatus::Ok && subject.postPollRead >= 4 && subject.fns.size() == 1)
+        if (r.status == DecompileStatus::Ok && subject.postPollRead >= 4 && fi == 0 && !subject.v2)
         {
             static const std::regex endlessLoop("^\\s*\\}?\\s*while\\( true \\);?\\s*$");
             bool forEver = false;
@@ -5443,7 +5534,7 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
         // with nothing said, the signature lent: its callers keep the old word across the call, where on the hardware the poll ends and the
         // callee writes it. The program ends with a store of a constant at an address nothing else of it names (Gen::AddPostPollStore): in a
         // text with `while( true );` a line stores it, or a caution says the write of that address is missing and the signature is withheld.
-        if (r.status == DecompileStatus::Ok && subject.postPollStore != 0 && subject.fns.size() == 1)
+        if (r.status == DecompileStatus::Ok && subject.postPollStore != 0 && fi == 0 && !subject.v2)
         {
             static const std::regex endlessLoop("^\\s*\\}?\\s*while\\( true \\);?\\s*$");
             static const std::regex storeLine("^\\s*_?[A-Za-z]*Ram([0-9a-f]{8})(?:\\._([0-9]+)_([0-9]+)_)?\\s*(?:[-+*/%&|^]|<<|>>)?=(?!=)");
@@ -5473,6 +5564,38 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                 else
                     add("endless-after-store-dropped", "the program stores " + std::to_string(subject.postPollStoreWidth) + " byte(s) at " + Hex(subject.postPollStore) +
                                                            " after a poll the text takes to run for ever, and the text " + (said ? "says it is missing but lends the signature" : "neither stores there nor says it is missing"));
+            }
+        }
+        // ---- (A3-178, A3-179) A call the code makes after a poll the text takes to run for ever is printed, or said ----
+        // The engine removes the code after such a poll with the loop's exit, and a call there went with nothing said, the signature lent:
+        // what the call is handed in r4 to r7, what it returns in r0 and what the callee writes were lost to the callers, where on the
+        // hardware the poll ends and the call is made. The program ends with a call of its second function (Gen::AddPostPollCall): in a text
+        // with `while( true );` a line calls it, or a caution says the call is missing and the signature is withheld.
+        if (r.status == DecompileStatus::Ok && subject.postPollCall > 0 && static_cast<size_t>(subject.postPollCall) < subject.fns.size() && fi == 0 && !subject.v2)
+        {
+            static const std::regex endlessLoop("^\\s*\\}?\\s*while\\( true \\);?\\s*$");
+            char name[32];
+            std::snprintf(name, sizeof name, "func_0x%08x(", subject.fns[static_cast<size_t>(subject.postPollCall)].layout.entry);
+            bool forEver = false, printed = false;
+            for (const Line& line : r.lines)
+            {
+                forEver = forEver || std::regex_search(line.text, endlessLoop);
+                std::string lower = line.text;
+                for (char& c : lower) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                printed = printed || lower.find(name) != std::string::npos;
+            }
+            if (forEver)
+            {
+                count("endless-call.checked");
+                bool said = false;
+                for (const HardwareNote& n : r.hardwareNotes) said = said || (n.caution && n.text.find("the call here is missing") != std::string::npos);
+                if (printed) count("endless-call.printed");
+                else if (said && !r.prototype.known) count("endless-call.said");
+                else
+                    add("endless-call-dropped", "the program calls " + Hex(subject.fns[static_cast<size_t>(subject.postPollCall)].layout.entry) +
+                                                    (subject.postPollCallStore ? " (which writes " + Hex(subject.postPollCallStore) + ")" : std::string()) +
+                                                    " after a poll the text takes to run for ever, and the text " +
+                                                    (said ? "says it is missing but lends the signature" : "neither calls it nor says it is missing"));
             }
         }
         // ---- (A3-164, patch 0087) A store made before a loop the text takes to run for ever is in the text ----
@@ -15288,6 +15411,20 @@ void TestA3RoutedPins(Sh2Decompiler& d)
             for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
             CHECK(prog.postPollStore != 0 && count(rep, "endless-after-store.checked") > 0 && count(rep, "endless-after-store.said") > 0);
             for (const Finding& f : rep.findings) CHECK(f.sig.find("endless-after-store") == std::string::npos);
+        }
+        // A3-178's production (grammar 1, from seed 4,800,001): the program ends with a call of a second function after a poll the text takes to
+        // run for ever. Master's host removed the call with the loop's exit and said nothing, the signature lent (`endless-call-dropped` on all
+        // 349 such programs of the 5,000 seeds from 4,800,001: 4800002 a bsr to a callee that writes a word, 4800042 one that stores r4, in both
+        // requests); now it is said on the call and the signature withheld
+        for (const uint64_t sd : { 4800002ull, 4800042ull })
+        {
+            const Program prog = Generate(sd);
+            const Report rep = Evaluate(d, prog, true);
+            std::printf("pin 'A3-178 grammar 1 seed %llu (the post-poll call)': %zu finding(s), endless-call checked %d, said %d\n", static_cast<unsigned long long>(sd),
+                        rep.findings.size(), count(rep, "endless-call.checked"), count(rep, "endless-call.said"));
+            for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+            CHECK(prog.postPollCall == 1 && prog.fns.size() == 2 && count(rep, "endless-call.checked") > 0 && count(rep, "endless-call.said") == count(rep, "endless-call.checked"));
+            for (const Finding& f : rep.findings) CHECK(f.sig.find("endless-call") == std::string::npos);
         }
         const Report seed = Evaluate(d, Generate(3704634), true);
         std::printf("pin 'A3-171 grammar 1 seed 3704634': %zu finding(s), endless-store replaced %d\n", seed.findings.size(), count(seed, "endless-store.replaced"));

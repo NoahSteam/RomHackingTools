@@ -8899,7 +8899,17 @@ std::vector<DecompileResult::EndlessLoopStore> StoresBeforeEndlessLoop(const ghi
                             }
                         }
                     }
-                    if (x.code == ghidra::CPUI_CALL || x.code == ghidra::CPUI_CALLIND) state &= ~0xFFu;   // the call returns what it likes in r0-r7
+                    if (x.code == ghidra::CPUI_CALL || x.code == ghidra::CPUI_CALLIND)
+                    {
+                        // A3-178, A3-179: a call there goes with the code. A CALL has no operand for the registers it hands on (r4 to r7 this
+                        // function never reads), no output for the r0 it returns, and its callee's writes are not this function's stores, so
+                        // neither the reads above nor A3-175's stores see what is lost. Whether the callee takes, returns or writes nothing
+                        // cannot be told from a lent signature (one that takes and returns nothing may still write memory, cl7), so every
+                        // call there is said.
+                        if (report && after[b] && said.insert(std::make_pair(x.insn, -1)).second)
+                            reads.push_back(DecompileResult::EndlessLoopRead{ canonicalOf(x.insn), "a call", after[b], false, true });
+                        state &= ~0xFFu;   // the call returns what it likes in r0-r7
+                    }
                     if (x.hasOut)
                     {
                         const int r = regOf(x.out);
@@ -9139,7 +9149,7 @@ void Sh2Decompiler::NoteStoresBeforeEndlessLoop(DecompileResult& r)
         any = true;
     }
     // A3-173: the code after the loop is removed with it, and what it reads of the caller's would be no input of the signature.
-    bool leavesR0 = false;
+    bool leavesR0 = false, call = false;
     for (const DecompileResult::EndlessLoopRead& s : r.readsAfterEndlessLoop)
     {
         // (r0 written there is scratch as often as a value: it is no caution on the text, and withholds only a signature that would be lent)
@@ -9148,9 +9158,14 @@ void Sh2Decompiler::NoteStoresBeforeEndlessLoop(DecompileResult& r)
             leavesR0 = true;
             continue;
         }
-        const std::string text = "the read of " + s.what + " here is missing: the analysis takes the loop at " + Hex8(s.loop) + " to run for ever and removes the "
-                                 "code after it, so the signature does not hold that input. A poll of memory another processor writes folds so unless that "
-                                 "memory is marked volatile";
+        // (A3-178, A3-179: a call there, with what it is handed, what it returns and what it writes)
+        const std::string text = s.call ? "the call here is missing: the analysis takes the loop at " + Hex8(s.loop) + " to run for ever and removes the code after "
+                                          "it, this call with it, so neither the text nor the signature holds what it is passed, what it returns or what it "
+                                          "writes. A poll of memory another processor writes folds so unless that memory is marked volatile"
+                                        : "the read of " + s.what + " here is missing: the analysis takes the loop at " + Hex8(s.loop) + " to run for ever and removes the "
+                                          "code after it, so the signature does not hold that input. A poll of memory another processor writes folds so unless that "
+                                          "memory is marked volatile";
+        call = call || s.call;
         r.hardwareNotes.push_back(HardwareNote{ s.insn, text, true });
         r.warnings.push_back(Hex8(s.insn) + ": " + text);
         any = true;
@@ -9166,7 +9181,8 @@ void Sh2Decompiler::NoteStoresBeforeEndlessLoop(DecompileResult& r)
     if (r.prototypeWithheld.empty())
         r.prototypeWithheld = before ? "a write before a loop the analysis takes to run for ever is missing"
                                      : !r.storesBeforeEndlessLoop.empty() ? "a write after a loop the analysis takes to run for ever is missing"   // (A3-175)
-                                                                          : "code after a loop the analysis takes to run for ever reads or leaves what the signature does not hold";
+                                     : call ? "a call after a loop the analysis takes to run for ever is missing"   // (A3-178)
+                                            : "code after a loop the analysis takes to run for ever reads or leaves what the signature does not hold";
     r.prototype.known = false;
 }
 

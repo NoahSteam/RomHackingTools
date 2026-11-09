@@ -1,0 +1,96 @@
+# Area 3, A3-178 to A3-180 fixer: the call after a poll in grammar 1's form (the poll reads through r0, PR saved after the poll).
+# Syntax of ../a3_round22/fixtures.src; run with run.sh <name> SE_GENERATED_FUNCS=... SE_GENERATED_RETURNS=...
+name g1
+# module "0/0/20,20/20/28": F polls through r0, then saves PR, calls G with r4 and r5 unread, restores PR; G stores r4 through r5
+mov.l =0x06001010,r7
+mov #1,r0
+mov.w r0,@r7
+P:
+mov.w @r7,r0
+tst #1,r0
+bf P
+sts pr,r3
+mov.l r3,@-r15
+mov.l =0x06009020,r2
+jsr @r2
+nop
+mov.l @r15+,r3
+lds r3,pr
+rts
+nop
+nop
+G:
+mov.l r4,@r5
+rts
+nop
+name g2
+# module "0/0/20,20/20/28" (RETURNS 0,1): g1 with G returning 5 (`mov.l r4,@r5 ; rts ; mov #5,r0`): r0 at F's return is G's, not the poll's
+mov.l =0x06001010,r7
+mov #1,r0
+mov.w r0,@r7
+P:
+mov.w @r7,r0
+tst #1,r0
+bf P
+sts pr,r3
+mov.l r3,@-r15
+mov.l =0x06009020,r2
+jsr @r2
+nop
+mov.l @r15+,r3
+lds r3,pr
+rts
+nop
+nop
+G:
+mov.l r4,@r5
+rts
+mov #5,r0
+name g3
+# module "0/0/20,20/20/2c" (RETURNS 0,1): g2 with G writing 7 at 0x06003020 and taking nothing (A3-179's form)
+mov.l =0x06001010,r7
+mov #1,r0
+mov.w r0,@r7
+P:
+mov.w @r7,r0
+tst #1,r0
+bf P
+sts pr,r3
+mov.l r3,@-r15
+mov.l =0x06009020,r2
+jsr @r2
+nop
+mov.l @r15+,r3
+lds r3,pr
+rts
+nop
+nop
+G:
+mov.l =0x06003020,r1
+mov #7,r2
+mov.l r2,@r1
+rts
+mov #5,r0
+name c1
+# control, module "0/0/20,20/20/28" (RETURNS 0,0): cl6 with the call before the poll (G stores r4 through r5; F returns after the poll)
+sts pr,r3
+mov.l r3,@-r15
+mov.l =0x06009020,r2
+jsr @r2
+nop
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+mov.l @r15+,r3
+lds r3,pr
+rts
+nop
+nop
+G:
+mov.l r4,@r5
+rts
+nop
