@@ -1,0 +1,672 @@
+# Area 3 round 23 fixtures. Run: W=<SaturnExplorer> S=<scratch> run23.py <name> [KEY=VAL ...]
+# Common shapes. PRO: sts pr,r3 ; mov.l r3,@-r15 ; mov.l =0x06001010,r7 ; mov #1,r1 ; mov.w r1,@r7 ; P: mov.w @r7,r1 ; tst r1,r1 ; bf P
+# G stores r4 through r5.
+name j0
+# control: cl6 with a label-resolved callee
+sts pr,r3
+mov.l r3,@-r15
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+mov.l =@G,r2
+jsr @r2
+nop
+mov.l @r15+,r3
+lds r3,pr
+rts
+nop
+fn
+G:
+mov.l r4,@r5
+rts
+nop
+name b1
+# bsr after the poll
+sts pr,r3
+mov.l r3,@-r15
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+bsr G
+nop
+mov.l @r15+,r3
+lds r3,pr
+rts
+nop
+fn
+G:
+mov.l r4,@r5
+rts
+nop
+name t1
+# jmp tail call after the poll, PR not touched (G returns to F's caller)
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+mov.l =@G,r2
+jmp @r2
+nop
+fn
+G:
+mov.l r4,@r5
+rts
+nop
+name t2
+# jmp tail call with the argument set in the delay slot
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+mov.l =@G,r2
+jmp @r2
+mov #9,r4
+fn
+G:
+mov.l r4,@r5
+rts
+nop
+name sf1
+# bsrf after the poll
+sts pr,r3
+mov.l r3,@-r15
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+mov.l =@G-@BS,r2
+.word 0x0203
+nop
+BS:
+mov.l @r15+,r3
+lds r3,pr
+rts
+nop
+fn
+G:
+mov.l r4,@r5
+rts
+nop
+name sd1
+# jsr with an argument register set in the delay slot (r5 from r6, read on entry)
+sts pr,r3
+mov.l r3,@-r15
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+mov.l =@G,r2
+jsr @r2
+mov r6,r5
+mov.l @r15+,r3
+lds r3,pr
+rts
+nop
+fn
+G:
+mov.l r4,@r5
+rts
+nop
+name br1
+# the call on one branch only after the poll
+sts pr,r3
+mov.l r3,@-r15
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+tst r6,r6
+bt S
+mov.l =@G,r2
+jsr @r2
+nop
+S:
+mov.l @r15+,r3
+lds r3,pr
+rts
+nop
+fn
+G:
+mov.l r4,@r5
+rts
+nop
+name ind1
+# a call through a register loaded from memory after the poll
+sts pr,r3
+mov.l r3,@-r15
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+mov.l =0x06002100,r2
+mov.l @r2,r2
+jsr @r2
+nop
+mov.l @r15+,r3
+lds r3,pr
+rts
+nop
+fn
+G:
+mov.l r4,@r5
+rts
+nop
+name ce1
+# the callee is itself endless (G polls an unmarked mailbox for ever); F polls first, then calls G
+sts pr,r3
+mov.l r3,@-r15
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+mov.l =@G,r2
+jsr @r2
+nop
+mov.l @r15+,r3
+lds r3,pr
+rts
+nop
+fn
+G:
+mov.l =0x06001020,r7
+mov #1,r1
+mov.w r1,@r7
+Q:
+mov.w @r7,r1
+tst r1,r1
+bf Q
+rts
+nop
+name ce2
+# the call before the poll, to a callee that is endless; the code after the poll is empty
+sts pr,r3
+mov.l r3,@-r15
+mov.l =@G,r2
+jsr @r2
+nop
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+mov.l @r15+,r3
+lds r3,pr
+rts
+nop
+fn
+G:
+mov.l =0x06001020,r7
+mov #1,r1
+mov.w r1,@r7
+Q:
+mov.w @r7,r1
+tst r1,r1
+bf Q
+rts
+nop
+name cb1
+# a call between two polls
+sts pr,r3
+mov.l r3,@-r15
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+mov.l =@G,r2
+jsr @r2
+nop
+mov.l =0x06001020,r7
+mov #1,r1
+mov.w r1,@r7
+Q:
+mov.w @r7,r1
+tst r1,r1
+bf Q
+mov.l @r15+,r3
+lds r3,pr
+rts
+nop
+fn
+G:
+mov.l r4,@r5
+rts
+nop
+name jn1
+# the code after the poll sets r5 and joins a block another path reaches: the join stores r5
+tst r6,r6
+bt Q
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+mov #7,r5
+Q:
+mov.l r5,@r4
+rts
+nop
+name jn2
+# the same with a call in the join: the poll path sets r4 for G
+sts pr,r3
+mov.l r3,@-r15
+tst r6,r6
+bt Q
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+mov #7,r4
+Q:
+mov.l =@G,r2
+jsr @r2
+nop
+mov.l @r15+,r3
+lds r3,pr
+rts
+nop
+fn
+G:
+mov.l r4,@r5
+rts
+nop
+name t3
+# jmp tail call after the poll, G returns 5 in r0 and reads nothing
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+mov.l =@G,r2
+jmp @r2
+nop
+fn
+G:
+rts
+mov #5,r0
+name t4
+# jmp tail call after the poll, G takes nothing and writes 7 at 0x06002304
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+mov.l =@G,r2
+jmp @r2
+nop
+fn
+G:
+mov.l =0x06002304,r3
+mov #7,r2
+mov.l r2,@r3
+rts
+nop
+name t5
+# jmp tail call after the poll, G is a separate function that also has a caller (C calls G) in the module
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+mov.l =@G,r2
+jmp @r2
+nop
+fn
+G:
+rts
+mov #5,r0
+fn
+C:
+sts pr,r3
+mov.l r3,@-r15
+mov.l =@G,r2
+jsr @r2
+nop
+mov.l @r15+,r3
+lds r3,pr
+rts
+nop
+name m3
+# C1(0x0) -> C2 -> F (polls, then calls G); C1 passes 5 and a pointer; C2 passes r4/r5 on and adds r6 = 3; the chain's callers keep r0 from F
+ret 0,0,0,0
+sts pr,r3
+mov.l r3,@-r15
+mov.l =@C2,r2
+mov #5,r4
+mov.l =0x06002300,r5
+jsr @r2
+mov #1,r6
+mov.l @r15+,r3
+lds r3,pr
+rts
+nop
+fn
+C2:
+sts pr,r3
+mov.l r3,@-r15
+mov.l =@F,r2
+jsr @r2
+add #3,r6
+mov.l @r15+,r3
+lds r3,pr
+rts
+nop
+fn
+F:
+sts pr,r3
+mov.l r3,@-r15
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+mov.l =@G,r2
+jsr @r2
+nop
+mov.l @r15+,r3
+lds r3,pr
+rts
+nop
+fn
+G:
+mov.l r4,@r5
+rts
+nop
+name m4
+# a caller of F that reads F's r0 and stores it; F polls and calls G, which returns 5 (RETURNS 0,0,1)
+ret 0,0,1
+sts pr,r3
+mov.l r3,@-r15
+mov.l =@F,r2
+jsr @r2
+nop
+mov.l =0x06002300,r1
+mov.l r0,@r1
+mov.l @r15+,r3
+lds r3,pr
+rts
+nop
+fn
+F:
+sts pr,r3
+mov.l r3,@-r15
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+mov.l =@G,r2
+jsr @r2
+nop
+mov.l @r15+,r3
+lds r3,pr
+rts
+nop
+fn
+G:
+rts
+mov #5,r0
+name jt3
+# a jump table after the poll; case 0 calls G with r4, r5 untouched... index in r6; PR saved first
+sts pr,r8
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+mov #2,r1
+cmp/hs r1,r6
+bt D
+shll2 r6
+mova @(TAB,pc),r0
+mov.l @(r0,r6),r1
+jmp @r1
+nop
+nop
+TAB:
+.addr C0
+.addr C1
+C0:
+mov.l =@G,r2
+jsr @r2
+nop
+C1:
+D:
+lds r8,pr
+rts
+nop
+fn
+G:
+mov.l r4,@r5
+rts
+nop
+name tr1
+# trapa after the poll
+sts pr,r8
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+.word 0xC309
+lds r8,pr
+rts
+nop
+name br2
+# braf into a piece of code after the poll that stores r4 through r5 (a jump, not a call)
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+mov.l =@G-@BS,r2
+.word 0x0223
+nop
+BS:
+fn
+G:
+mov.l r4,@r5
+rts
+nop
+name n1c
+# a counted loop around the poll; the call after the poll is in the outer body
+sts pr,r3
+mov.l r3,@-r15
+mov.l =0x06001010,r7
+mov #3,r8
+mov #1,r1
+O:
+mov.w r1,@r7
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+mov.l =@G,r2
+jsr @r2
+nop
+dt r8
+bf O
+mov.l @r15+,r3
+lds r3,pr
+rts
+nop
+fn
+G:
+mov.l r4,@r5
+rts
+nop
+name bs2
+# bf/s poll; the slot copies r4 to r6; the call after passes r6 (unset by this code) on
+sts pr,r3
+mov.l r3,@-r15
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+P:
+mov.w @r7,r1
+tst r1,r1
+bf/s P
+mov r4,r6
+mov.l =@G,r2
+jsr @r2
+nop
+mov.l @r15+,r3
+lds r3,pr
+rts
+nop
+fn
+G:
+mov.l r6,@r5
+rts
+nop
+name m5
+# C tail-jumps (jmp) to F, which polls and calls G; C sets r4/r5 for it
+ret 0,0,0
+mov #5,r4
+mov.l =0x06002300,r5
+mov.l =@F,r2
+jmp @r2
+nop
+fn
+F:
+sts pr,r3
+mov.l r3,@-r15
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+mov.l =@G,r2
+jsr @r2
+nop
+mov.l @r15+,r3
+lds r3,pr
+rts
+nop
+fn
+G:
+mov.l r4,@r5
+rts
+nop
+name m6
+# C calls F through bsr; F polls and bsr's G; bsrf-style caller
+ret 0,0,0
+sts pr,r3
+mov.l r3,@-r15
+mov #5,r4
+mov.l =0x06002300,r5
+bsr F
+nop
+mov.l @r15+,r3
+lds r3,pr
+rts
+nop
+fn
+F:
+sts pr,r3
+mov.l r3,@-r15
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+bsr G
+nop
+mov.l @r15+,r3
+lds r3,pr
+rts
+nop
+fn
+G:
+mov.l r4,@r5
+rts
+nop
+name jn3
+# control for jn1: the code after the poll sets r0 (the return value) and joins the returning block
+tst r6,r6
+bt Q
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+mov #7,r0
+Q:
+rts
+nop
+name jn4
+# control for jn1: the code after the poll stores 7 through r4 and joins the returning block
+tst r6,r6
+bt Q
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+mov #7,r5
+mov.l r5,@r4
+Q:
+rts
+nop

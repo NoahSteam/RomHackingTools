@@ -19318,3 +19318,64 @@ Routed and replayed: 4603517, 4402821, 4404345 were clean; 4606794 gives only `v
 | full `ctest -j2` | all passed but the A7-67 pin of `TestArea7Round4`'s successor in `Sh2DecompilerTests` (its line `xRamc0002024 = (xunknown2)in_r1;` now names the word store, an improvement; the pin expects that now); then `SaturnExplorerSh2DecompilerTests` and the 6 Live tests passed |
 | game corpus (`corpus.sh`, lent) | hwram007: lent **474 (645)** of 999, missing and said **0**; hwram008: lent **724 (975)** of 1,543, missing and said **4**; token dump clean |
 | lints | `check-literal-size.py` ok; the vendored tree is untouched |
+
+## Area 3, round 23 review
+
+Reviewer, branch `review/3-round23`, cut at master `4759421a` (the merged A3-178 to A3-180 fixes, A3-181 open). No engine, host or product file changed. The repository gets fixtures (`Docs/Decompiler/tools/a3_round23/`: `fixtures.src`, 27 fixtures; `run23.py`, which assembles a fixture whose functions are separated by `fn` lines, pads each to 0x20, resolves `=@LABEL` and `=@A-@B` literals and runs it through the generator's `SE_GENERATED_WORDS` mode with the module's `FUNCS` and `RETURNS` worked out), ledger rows **A3-182 and A3-183**, and this record. The worktree's RelWithDebInfo build (rebuilt, nothing to compile), test binaries under `ulimit -v 3500000` to `4000000`, one heavy job at a time.
+
+**Verdict, area 3: not clean.** One P1 row (A3-182) and one P3 row (A3-183). The clean count stays 0.
+
+| Row | P | What |
+|---|---|---|
+| A3-182 | P1 | the code after a poll joins a block the code before the poll also reaches, and writes a register that block reads (a stored value, a call's argument): the region of A3-173/175/178 ends at the live block, nothing is said, the signature is lent |
+| A3-183 | P3 | no production draws that join (grammar 2 still draws no poll, A3-181) |
+
+### 1. The new call handling, attacked
+
+Every call shape after the poll was said on its own instruction and withheld the signature, or was inlined by the engine and said at the inlined instruction. No finding in them:
+
+| Shape | Fixture | Result |
+|---|---|---|
+| `jsr @r2` (control), `bsr`, `bsrf` | j0, b1, sf1 | call said at the call's address (0x...12, 0x...10, 0x...12); `bsr` withheld for "a return not to its caller" first, `jsr` and `bsrf` for the call |
+| `jmp @r2` tail call, PR untouched; with an argument set in the slot; G returns 5; G writes a word | t1, t2, t3, t4 | the engine inlines G's body into F; G's reads of r4 and r5 are said at G's instructions, the r0 value withheld ("leaves a value in r0"), G's write withheld ("holds hardware accesses"); cautions are on the callee's instructions (tc3's behaviour) |
+| `braf` into code after the poll | br2 | as `jmp`: reads and the write said at the target's instructions, withheld |
+| `trapa` | tr1 | said as a call, withheld |
+| `jsr` with an argument copied in its slot (`mov r6,r5`) | sd1 | call said at the `jsr`, the slot's read of r6 said at the slot |
+| a call on one branch after the poll | br1 | the read of r6 and the call both said |
+| a call through a pointer loaded from memory | ind1 | said |
+| a call in a jump table's case | jt3 | the index reads and the call said |
+| the callee itself polls for ever; the call before the poll with an endless callee | ce1, ce2 | ce1 said and withheld; ce2 (call before the poll) lent, the call printed |
+| a call between two polls | cb1 | the call said, and the store before the second poll |
+| the call in the outer body of a counted loop around the poll | n1c | withheld (for r1 after a call, a reason of its own) |
+| a three-function chain C1 to C2 to F (m3), a caller that stores F's r0 (m4), a caller that tail-jumps to F (m5), a `bsr` chain (m6) | m3 to m6 | F withheld, C2 and C1 withheld ("it calls ..., whose signature is not known"), the calls print every argument register the caller set (C1: `func(5,0x6002300,1)`; C2: `func(param_1,param_2,param_3 + 3)`), m4's caller prints `xRam06002300 = func_0x06009020();` |
+| entry reads (r4 to r7) are cleared by the call; the stack-argument read when r15 is written anywhere (`spWritten`) is not looked for | code reading | no loss found: the only effects of a read in the region are a store, a call or r0, each of which is said |
+
+Over-withholding: the corpus shows none (section 3: the lent counts are unchanged, 474 and 724, and the call cautions (16 and 29 log lines) are all in functions that were already withheld, as the fixer recorded).
+
+### 2. A3-182: the join
+
+The region ends where it meets a block that still has an op (`live`), so a block that both the code before the poll and the code after it reach is out of it. The code after the poll that leads there is removed, and what it puts in registers is lost, with nothing said:
+
+* jn1: `tst r6,r6 ; bt Q ; (poll) ; mov #7,r5 ; Q: mov.l r5,@r4 ; rts`. Text `if (param_3 == 0) { *param_1 = param_2; return; } xRam06001010 = 1; do { } while( true );`, lent `void (int4 *, int4, int4)`, no caution. The hardware stores 7, not r5, through r4 after the poll.
+* jn2: the same with `Q: jsr @G` and `mov #7,r4` after the poll; F is lent with three parameters, the call prints `param_1`.
+* Controls that hold: r0 set after the poll (jn3: withheld), a store after the poll (jn4: said, withheld).
+
+The write is not an r0 write, a store or a call, the three things the pass looks for in the region; a register that a live join block reads is a fourth.
+
+### 3. Runs
+
+| Run | Result |
+|---|---|
+| game corpus (`SE_GAME_LEND=1 SE_GAME_NOTES=1`, hwram007 then hwram008) | real entries lent **474 (645 parameters) of 999** and **724 (975) of 1,543**; missing and said **0** and **4**; every ledger count 0; both runs "all passed" |
+| grammar 1, 5,000,001 to 5,010,000 (two pieces of 5,000, canary off) | 14 + 18 failing seeds, none area 3's: `folded-store-after-access` (12 + 18 seeds) and `map-copy-merge` 5003735, `map-number-store` 5000472. `endless-call` checked and said 355 + 354; `endless-after-store` 339 + 320 checked and said; `endless-read` 336 + 311 checked and withheld; `endless-store` checked 57,887 + 55,788; polls 3,274 + 3,259 |
+| grammar 2, 5,000,001 to 5,010,000 (two pieces) | 0 failing seeds, 0 findings; polls 0 (A3-181) |
+| specials, grammar 1 and 2, 5,000,001 to 5,003,000 | grammar 1: 7 failing seeds (`folded-store-after-access` 5000290 5001076 5001563 5001852 5002882, `map-number-store` 5000472, `map-const-join` 5002388); grammar 2: 1 (5001825, `map-const-join`) |
+| printed-C (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | 5,585 functions, 5,297 compared: **agrees=5196** |
+| hand fixtures | `tools/a3_round23/fixtures.src`, 27 |
+| full `ctest`, fault suite | not run: no product code changed |
+
+### 4. Routed, no row here
+
+* **Area 5:** `folded-store-after-access`, grammar 1 seeds 5000290 5001076 5001563 5001852 5002882 5003726 5003852 5003972 5004127 5004494 5004522 5004539 5005245 5005444 5005642 5005694 5006365 5006909 5006976 5007052 5007081 5007891 5008314 5008398 5008461 5008983 5009015 5009054 5009150 5009608.
+* **Area 7:** grammar 1 `map-copy-merge` 5003735, `map-number-store` 5000472, `map-const-join` 5002388 (specials); grammar 2 `map-const-join` 5001825 (specials). No seed was shrunk.
+* **Area 11 / area 3:** A3-181 (grammar 2 draws no poll) is still open; A3-183 is its sibling for the join.
