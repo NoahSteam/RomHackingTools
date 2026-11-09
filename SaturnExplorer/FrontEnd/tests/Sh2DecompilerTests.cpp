@@ -16428,6 +16428,117 @@ void TestA3175Fix()
     }
 }
 
+// A3-178, A3-179 (area 3 round 22; Docs/Decompiler/tools/a3_round22/fixtures.src cl6, cl7, cl9, cl10, m1 and a3_fix178/fixtures.src g2,
+// g3, c1). A call the code makes after a poll the analysis takes to run for ever went with the loop's exit, nothing said: a CALL has no
+// operand for the registers it hands on and no output for r0, and the callee's stores are not this function's, so neither A3-173's reads
+// nor A3-175's stores saw it, and the function was lent without the arguments it passes on, without the value it returns, or `void (void)`
+// over a callee that writes memory. Said on the call now ("the call here is missing") and the signature withheld; a caller of it then
+// prints the call with its arguments (m1).
+void TestA3178Fix()
+{
+    std::vector<uint8_t> hw(0x100000u, 0);
+    Sh2Decompiler d(gConfig);
+    // F at 0x06009000 and G at 'callee': G is decompiled and lent first, as a caller's request has it
+    auto run = [&](const char* name, const std::vector<uint16_t>& words, uint32_t callee, bool marked, DecompileResult& g) {
+        std::fill(hw.begin(), hw.end(), 0);
+        for (size_t i = 0; i < words.size(); ++i) dts::Put16(hw, 0x9000u + 2 * i, words[i]);
+        auto snap = MakeSnapshot(hw);
+        DecompileRequest qg = Request(callee);
+        if (marked) qg.volatileMemory.emplace_back(0x06001010u, 0x06001013u);
+        g = d.Decompile(snap, qg);
+        DecompileRequest q = Request(0x06009000u);
+        if (marked) q.volatileMemory.emplace_back(0x06001010u, 0x06001013u);
+        if (g.status == DecompileStatus::Ok && g.prototype.known) q.prototypes.emplace_back(callee, g.prototype);
+        const DecompileResult r = d.Decompile(snap, q);
+        Print(name, r);
+        return r;
+    };
+    struct Case
+    {
+        const char* name;
+        std::vector<uint16_t> words;
+        uint32_t callee;
+        uint32_t at;   // the call
+    };
+    const Case kSaid[] = {
+        // G(r4, r5) stores r4 through r5: F was lent `void (void)`
+        { "A3-178 cl6: G(r4, r5) after the poll", { 0x032A, 0x2F36, 0xD708, 0xE101, 0x2711, 0x6171, 0x2118, 0x8BFC, 0xD206, 0x420B, 0x0009, 0x63F6, 0x432A, 0x000B,
+                                                   0x0009, 0x0009, 0x2542, 0x000B, 0x0009, 0x0009, 0x0600, 0x1010, 0x0600, 0x9020 },
+          0x06009020u, 0x06009012u },
+        // A3-179: G takes nothing and writes 7 at 0x06002304
+        { "A3-179 cl7: G writes a word", { 0x032A, 0x2F36, 0xD709, 0xE101, 0x2711, 0x6171, 0x2118, 0x8BFC, 0xD207, 0x420B, 0x0009, 0x63F6, 0x432A, 0x000B, 0x0009,
+                                          0x0009, 0xD304, 0xE207, 0x2322, 0x000B, 0x0009, 0x0009, 0x0600, 0x1010, 0x0600, 0x9020, 0x0600, 0x2304 },
+          0x06009020u, 0x06009012u },
+        // r4 tested before the poll: F was lent with 1 parameter, r5 lost
+        { "A3-178 cl9: r4 held, r5 handed on", { 0x032A, 0x2F36, 0xD709, 0xE101, 0x2711, 0x2448, 0x8905, 0x6171, 0x2118, 0x8BFC, 0xD206, 0x420B, 0x0009, 0x63F6,
+                                                0x432A, 0x000B, 0x0009, 0x2542, 0x000B, 0x0009, 0x0009, 0x0009, 0x0600, 0x1010, 0x0600, 0x9022 },
+          0x06009022u, 0x06009016u },
+        // G returns 5: F was lent `void`
+        { "A3-178 cl10: G returns a value", { 0x032A, 0x2F36, 0xD707, 0xE101, 0x2711, 0x6171, 0x2118, 0x8BFC, 0xD205, 0x420B, 0x0009, 0x63F6, 0x432A, 0x000B, 0x0009,
+                                             0x0009, 0x000B, 0xE005, 0x0600, 0x1010, 0x0600, 0x9020 },
+          0x06009020u, 0x06009012u },
+        // the generator's form (Gen::AddPostPollCall): the poll through r0, PR saved after it, G returns a value (and stores r4 through r5)
+        { "A3-178 g2: the poll through r0, PR saved after it", { 0xD709, 0xE001, 0x2701, 0x6071, 0xC801, 0x8BFC, 0x032A, 0x2F36, 0xD206, 0x420B, 0x0009, 0x63F6,
+                                                                0x432A, 0x000B, 0x0009, 0x0009, 0x2542, 0x000B, 0xE005, 0x0009, 0x0600, 0x1010, 0x0600, 0x9020 },
+          0x06009020u, 0x06009012u },
+        // ...and G writing 7 at 0x06003020, taking nothing
+        { "A3-179 g3: the generator's form, G writes a word", { 0xD70A, 0xE001, 0x2701, 0x6071, 0xC801, 0x8BFC, 0x032A, 0x2F36, 0xD207, 0x420B, 0x0009, 0x63F6,
+                                                               0x432A, 0x000B, 0x0009, 0x0009, 0xD104, 0xE207, 0x2122, 0x000B, 0xE005, 0x0009, 0x0600, 0x1010,
+                                                               0x0600, 0x9020, 0x0600, 0x3020 },
+          0x06009020u, 0x06009012u },
+    };
+    for (const Case& c : kSaid)
+    {
+        DecompileResult g;
+        const DecompileResult r = run(c.name, c.words, c.callee, false, g);
+        CHECK(g.status == DecompileStatus::Ok && g.prototype.known);   // (the callee is lent: F's call resolves)
+        CHECK(r.status == DecompileStatus::Ok && Has(r.Text(), "while( true )") && !r.prototype.known);
+        CHECK(HasNoteAt(r, c.at, "the call here is missing: the analysis takes the loop at"));
+        CHECK(Has(r.prototypeWithheld, "a call after a loop the analysis takes to run for ever is missing"));
+    }
+    // The controls: the call before the poll (c1), and cl6 with the mailbox marked (the poll ends): the call printed with both arguments,
+    // F lent with 2 parameters, nothing said
+    {
+        DecompileResult g;
+        const DecompileResult r = run("A3-178 control c1: the call before the poll",
+                                      { 0x032A, 0x2F36, 0xD208, 0x420B, 0x0009, 0xD708, 0xE101, 0x2711, 0x6171, 0x2118, 0x8BFC, 0x63F6, 0x432A, 0x000B, 0x0009, 0x0009,
+                                        0x2542, 0x000B, 0x0009, 0x0009, 0x0600, 0x9020, 0x0600, 0x1010 },
+                                      0x06009020u, false, g);
+        CHECK(r.status == DecompileStatus::Ok && r.prototype.known && r.prototype.params.size() == 2 && Has(r.Text(), "func_0x06009020(param_1,param_2);"));
+        CHECK(!HasNote(r, "the call here is missing", true));
+    }
+    {
+        DecompileResult g;
+        const DecompileResult r = run("A3-178 control cl6 with the mailbox marked", kSaid[0].words, 0x06009020u, true, g);
+        CHECK(r.status == DecompileStatus::Ok && r.prototype.known && r.prototype.params.size() == 2 && Has(r.Text(), "func_0x06009020(param_1,param_2);") &&
+              !Has(r.Text(), "while( true )"));
+        CHECK(!HasNote(r, "the call here is missing", true));
+    }
+    // m1: C (0x06009000) passes 5 and 0x06002300 to F (0x06009020), which polls and then calls G (0x06009040). F is withheld, so C prints the
+    // call with its arguments (on master it printed `func_0x06009020();`) and is withheld with it
+    {
+        const std::vector<uint16_t> words = { 0x032A, 0x2F36, 0xD210, 0xE405, 0xD510, 0x420B, 0x0009, 0x63F6, 0x432A, 0x000B, 0x0009, 0x0009, 0x0009, 0x0009,
+                                              0x0009, 0x0009, 0x032A, 0x2F36, 0xD70A, 0xE101, 0x2711, 0x6171, 0x2118, 0x8BFC, 0xD208, 0x420B, 0x0009, 0x63F6,
+                                              0x432A, 0x000B, 0x0009, 0x0009, 0x2542, 0x000B, 0x0009, 0x0009, 0x0600, 0x9020, 0x0600, 0x2300, 0x0600, 0x1010,
+                                              0x0600, 0x9040 };
+        std::fill(hw.begin(), hw.end(), 0);
+        for (size_t i = 0; i < words.size(); ++i) dts::Put16(hw, 0x9000u + 2 * i, words[i]);
+        auto snap = MakeSnapshot(hw);
+        const DecompileResult g = d.Decompile(snap, Request(0x06009040u));
+        CHECK(g.status == DecompileStatus::Ok && g.prototype.known);
+        DecompileRequest qf = Request(0x06009020u);
+        if (g.prototype.known) qf.prototypes.emplace_back(0x06009040u, g.prototype);
+        const DecompileResult f = d.Decompile(snap, qf);
+        Print("A3-178 m1 F", f);
+        CHECK(f.status == DecompileStatus::Ok && !f.prototype.known && HasNoteAt(f, 0x06009032u, "the call here is missing"));
+        DecompileRequest qc = Request(0x06009000u);
+        if (f.prototype.known) qc.prototypes.emplace_back(0x06009020u, f.prototype);
+        const DecompileResult c = d.Decompile(snap, qc);
+        Print("A3-178 m1 caller", c);
+        CHECK(c.status == DecompileStatus::Ok && !c.prototype.known && Has(c.Text(), "func_0x06009020(5,0x6002300);"));
+    }
+}
+
 void TestA3155Fix()
 {
     Sh2Decompiler d(gConfig);
@@ -17329,6 +17440,7 @@ int main(int argc, char** argv)
         RUN(TestA3164Fix());
         RUN(TestA3173Fix());
         RUN(TestA3175Fix());
+        RUN(TestA3178Fix());
         RUN(TestArea10Round2());
         RUN(TestArea5Confirm());
         RUN(TestArea5Review());
