@@ -19444,3 +19444,39 @@ A3-173's region takes in a kept block with no live op of the flow, and A3-173, A
 * **Area 5:** `folded-store-after-access` (A5-117's class), grammar 1 seeds 5600013, 5600501, 5602642, 5602732, 5603261, 5604275, 5604318, 5604506, 5604617, 5604941.
 * **Area 7:** grammar 1 seeds 5602142 (`n:map-copy-store`), 5601418 and 5602264 (`v:map-store-value`). No seed was shrunk.
 * **Area 3 / 11:** A3-181 (grammar 2 draws no poll) is still open; A3-184 (above) is open.
+
+## Area 3, A3-184 and A3-181 fixer
+
+Fixer, branch `review/3-a3184-fix`, cut at master `c055b0a4`. Host, generator and oracle only: no engine patch, so 0089 stays free. The worktree's RelWithDebInfo build (`-j2`, `ulimit -v 6000000`). **Both rows are fixed: A3-184 (P3) and A3-181 (P3). Two new rows are routed, not worked: A3-185 and A3-186.**
+
+### A3-184: the region counts only code the engine removed
+
+`StoresBeforeEndlessLoop` (Sh2Decompiler.cpp) builds `after`, the flow blocks reached from a loop the analysis takes to run for ever up to a block with an op alive (`live`). A3-173's reads, A3-175's stores and A3-178's calls read that region. A block the text keeps with no live op of the flow (`Q: mov r5,r1 ; rts ; nop`: the copy is dead and the RETURN is rebuilt by the engine, with no time of the flow) was in it, so a read there was said as missing and the signature withheld (jo1: "read of r5 missing", where `void (int4)` is right).
+
+The walk now also stops at a flow block marked `keptBlock`: (a) an op alive in the final graph with no flow time whose instruction is one flow block (the rebuilt RETURN), or, for a doubled instruction, the slot instance `instanceOf` names; (b) a block whose first instruction (one instance) a block of the final graph starts at (a block whose only op is dead, falling into the returning block). `live` is unchanged (its other user, the replaced-store test, keeps its reading), and a doubled instruction that names no unique block marks nothing, so the region is only ever smaller where the text really keeps the block.
+
+Fixtures in `Docs/Decompiler/tools/a3_fix184/` (`run.sh`, `fixtures.src`; jo1 is in `a3_fix182/`): jo1 (dead copy), jo3 (dead read of the caller's frame), jo4 (dead sum of r6 and r7), jo5 (r0 poll, dead chain of copies), jo6 (bare `rts`) were withheld with a caution on master and are lent with nothing said; jo2 (a dead-only block falling into a shared return) was already lent. `TestA3184Fix` pins all six plus two controls that stay said (A3-173's store of r6 after the poll; A3-182's jn1). `TestA3173Fix`, `TestA3175Fix`, `TestA3178Fix` and `TestA3182Fix` pass unchanged.
+
+### A3-181: grammar 2 polls (accepted as worth doing, in a bounded form)
+
+The A3-178 fixer feared the harness assumes every function returns. It does not for a module with a poll: `generator:no-return` is already skipped when `subject.polls` is non-empty, the other world answers the poll, and `Env::Poll` is registered for every function's items. What was missing was a production and the oracles' function test. `Gen::AddModulePoll` (stream `modPollRng`, gated `kModPollFirst` = 5,800,001, so no lower seed changes): in one function of three that returns in r0, ends with a plain `rts` and has no table or shared exit, the body ends with a poll through r7 and a store through a fresh RAM pointer in r6 (0x3100 on) of a constant, or of r4 or r5 (parameters a module's functions only read). r0 is free because the function returns; r7, r6 and r1 are registered as written. The oracles `endless-read-dropped` and `endless-after-store-dropped` test `PostPollFn` (version 1: function 0; version 2: `postPollFn`). The call and join forms stay in grammar 1. Pins in `TestA3RoutedPins`: grammar 2 seeds 5800032 (stores r5) and 5800080 (a constant).
+
+### Runs, after the last edit
+
+| run | result |
+|---|---|
+| ctest (with the 6 Live tests) | 117 of 117 passed |
+| fault suite | **0 of 94** jobs failed |
+| printed-C (`SE_GENERATED_SEEDS=3000`) | agrees=**5196** |
+| default generator | failing seeds=0; findings=0 |
+| grammar 1 5,000 seeds each from 4,200,001 / 4,400,001 / 4,800,001 / 5,600,001 | no `endless-*` finding; checked and said/withheld equal (read 316/316, 336/336, 362/362, 342/342; after-store 337, 354, 370; call 349, 361; join 610); the only findings are `folded-store-after-access`, `map-*` (area 5 and 7 classes), and every failing seed fails on master's binary too |
+| grammar 2, 5,000 seeds from 5,800,001 | `endless-read` 110 checked, 110 withheld; `endless-after-store` 148 checked, 148 said; 3 `folded-into-switch` findings (seed 5804937 first), a known area 5 class, unrelated to the poll |
+| corpus (`corpus.sh`, alone and lent, both images) | lent **474 (645)** of 999 and **724 (975)** of 1,543; missing and said **0** and **4**. The token dumps are byte-identical to master's in all six files: no function changed, so none became lent |
+| lints | `check-literal-size.py` ok; no vendored file touched |
+
+### Routed, no work here
+
+* **A3-185 (new, P3):** grammar 1 seed 5201834 (area 7 round 13): a store at 0x26003008 in a shape with an overlapping decode is neither printed nor said; same on master.
+* **A3-186 (new, P2):** grammar 2 seed 5202322 (area 7 round 13): `kept-read:r13`; same on master.
+* **Area 5 known class:** `folded-store-after-access` (A5-117) over the four grammar 1 ranges; `folded-into-switch` in grammar 2 from 5,800,001.
+* **Area 7 known classes:** `map-copy-store`, `map-store-value`, `map-way-back` seen in the 4,800,001 and 5,600,001 ranges.

@@ -15684,12 +15684,19 @@ void TestA3RoutedPins(Sh2Decompiler& d)
             CHECK(prog.postJoin != 0 && count(rep, "endless-join.checked") > 0 && count(rep, "endless-join.said") == count(rep, "endless-join.checked"));
             for (const Finding& f : rep.findings) CHECK(f.sig.find("endless-join") == std::string::npos);
         }
-        for (uint64_t sd = 5800001; sd < 5800400; ++sd)
+        // A3-181's production (grammar 2, from seed 5,800,001): a module's function ends with a poll and a store of a constant or of r4 or r5.
+        // 5800032 stores r5 (function 0), 5800080 a constant (function 2): the endless-* oracles run on a module, and both are said and withheld
+        for (const uint64_t sd : { 5800032ull, 5800080ull })
         {
             const Program prog = MakeV2(sd);
-            if (prog.postPollFn < 0) continue;
-            const Report rep = Evaluate(d, prog, false);
-            std::printf("SCAN %llu read=%d store=%08X fn=%d chk %d %d\n", (unsigned long long)sd, prog.postPollRead, prog.postPollStore, prog.postPollFn, count(rep, "endless-read.checked"), count(rep, "endless-after-store.checked"));
+            const Report rep = Evaluate(d, prog, true);
+            std::printf("pin 'A3-181 grammar 2 seed %llu (function %d polls, then stores %s)': %zu finding(s), endless-read checked %d, endless-after-store checked %d, said %d\n",
+                        static_cast<unsigned long long>(sd), prog.postPollFn, prog.postPollRead ? "a parameter" : "a constant", rep.findings.size(),
+                        count(rep, "endless-read.checked"), count(rep, "endless-after-store.checked"), count(rep, "endless-after-store.said"));
+            for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+            CHECK(prog.postPollFn >= 0 && count(rep, "endless-read.checked") + count(rep, "endless-after-store.checked") > 0);
+            CHECK(count(rep, "endless-read.withheld") == count(rep, "endless-read.checked") && count(rep, "endless-after-store.said") == count(rep, "endless-after-store.checked"));
+            for (const Finding& f : rep.findings) CHECK(f.sig.find("endless-") == std::string::npos);
         }
         const Report seed = Evaluate(d, Generate(3704634), true);
         std::printf("pin 'A3-171 grammar 1 seed 3704634': %zu finding(s), endless-store replaced %d\n", seed.findings.size(), count(seed, "endless-store.replaced"));
