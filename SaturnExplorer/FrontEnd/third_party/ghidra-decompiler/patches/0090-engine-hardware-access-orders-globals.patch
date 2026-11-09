@@ -1,0 +1,363 @@
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc
+@@ -33,6 +33,7 @@
+  * Modified for SaturnExplorer: a catch handler that never reads its exception no longer names it, which MSVC warned about (C4101) (patches/0083-engine-msvc-unused-catch-names.patch).
+  * Modified for SaturnExplorer: ActionVarnodeProps does not read a global as the constant zero where its next write would then be made after a memory access (patches/0085-engine-global-write-keeps-place.patch).
+  * Modified for SaturnExplorer: nor a copy of an earlier write of a global with an access between them (patches/0088-engine-global-piece-read-and-join-copy.patch).
++ * Modified for SaturnExplorer: a LOAD is not printed past a write of a global (patches/0090-engine-hardware-access-orders-globals.patch).
+  */
+ #include "coreaction.hh"
+ #include "condexe.hh"
+@@ -3769,6 +3770,25 @@ bool ActionMarkImplied::checkImpliedCover(Funcdata &data,Varnode *vn)
+ 	  if (chain[c]->getCover()->contain(other,2)) return false;
+       }
+     }
++    // SaturnExplorer (0090): ...and a write of a global, which is a store the engine folded: the pointer may be the global's address,
++    // and the read printed after the write would read the value written (`x = *p; g = v; *q = x;` printed `g = v; *q = *p;`, A5-115).
++    // An op whose output only a COPY to a global reads is one too: the merge that follows makes it the global's write (a register's
++    // piece made before a branch and stored on both ways printed `g = (int2)param_1; if ((param_2 & *(param_1 + 8)) == 0)`)
++    list<PcodeOp *>::const_iterator aiter = data.beginOpAlive();
++    list<PcodeOp *>::const_iterator aend = data.endOpAlive();
++    for(;aiter!=aend;++aiter) {
++      PcodeOp *other = *aiter;
++      Varnode *wvn = other->getOut();
++      if (wvn == (Varnode *)0 || other->code() == CPUI_MULTIEQUAL || other->code() == CPUI_INDIRECT) continue;
++      bool global = wvn->isAddrTied() && wvn->getSpace()->getType() == IPTR_PROCESSOR;
++      for(list<PcodeOp *>::const_iterator diter=wvn->beginDescend();!global && diter!=wvn->endDescend();++diter) {
++	const Varnode *cvn = (*diter)->getOut();
++	global = (*diter)->code() == CPUI_COPY && cvn != (Varnode *)0 && cvn->isAddrTied() && cvn->getSpace()->getType() == IPTR_PROCESSOR;
++      }
++      if (!global) continue;
++      for(int4 c=0;c<chain.size();++c)
++	if (chain[c]->getCover()->contain(other,2)) return false;
++    }
+   }
+   if (op->code() == CPUI_LOAD) { // Check for loads crossing stores
+     list<PcodeOp *>::const_iterator oiter,iterend;
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.cc
+@@ -24,6 +24,7 @@
+  * Modified for SaturnExplorer: a LOAD guard records whether heritage put its COPYs before the LOAD, and a held frame write is no address force of the guard's (patches/0076-engine-frame-loads-keep-writes.patch).
+  * Modified for SaturnExplorer: the pieces heritage makes at a delay slot's op for it are the slot's too (patches/0079-engine-heritage-slot-pieces-marked.patch).
+  * Modified for SaturnExplorer: a read of a piece of a global the range holds wider is read into a temporary, not written to the piece (patches/0088-engine-global-piece-read-and-join-copy.patch).
++ * Modified for SaturnExplorer: a hardware access is a barrier to the writes and reads of a global (patches/0090-engine-hardware-access-orders-globals.patch).
+  */
+ #include "heritage.hh"
+ #include "funcdata.hh"
+@@ -2179,6 +2180,7 @@ void Heritage::guard(const Address &addr,int4 size,bool addIndirects,
+       guardStores(addr,size,write);
+       guardLoads(fl,addr,size,write);
+     }
++    guardHardwareAccesses(fl,addr,size,write);	// SaturnExplorer (0090)
+   }
+ }
+ 
+@@ -2604,6 +2606,97 @@ void Heritage::guardLoads(uint4 fl,const Address &addr,int4 size,vector<Varnode
+   }
+ }
+ 
++/// \brief Is the op a hardware access: the user op of a volatile read or write (SaturnExplorer, 0090)
++bool isHardwareAccessOp(const Funcdata *fd,const PcodeOp *op)
++
++{
++  if (op->code() != CPUI_CALLOTHER || op->isDead() || op->numInput() < 2) return false;
++  const Varnode *id = op->getIn(0);
++  if (id == (const Varnode *)0 || !id->isConstant()) return false;
++  const UserPcodeOp *u = fd->getArch()->userops.getOp((uint4)id->getOffset());
++  if (u == (const UserPcodeOp *)0) return false;
++  return (u->getType() == UserPcodeOp::volatile_read || u->getType() == UserPcodeOp::volatile_write);
++}
++
++/// \brief Make each hardware access a barrier to a global (SaturnExplorer, 0090)
++///
++/// A register read or write, or an access of memory the request marks volatile (a mailbox), is a user op the engine takes to touch
++/// no variable: a global's write before it could be dropped (another write after it), merged into a later write, or carried past it
++/// by a rule, and a read of the global before it printed after it, though the access may start a transfer that reads or writes the
++/// global, or tell another processor to (ledger A5-114, A5-116, A5-117, A5-118). Each such access gets the guards of a STORE (an
++/// INDIRECT, so the global's value after the access is another than before it), and a COPY sink before it whose writes are address
++/// forced (as a LOAD guard's are), so the value the global holds when the access is made is in memory then.
++/// \param fl is the boolean properties of the range
++/// \param addr is the first address of the range
++/// \param size is the number of bytes in the range
++/// \param write is the list of written Varnodes in the range (may be updated)
++void Heritage::guardHardwareAccesses(uint4 fl,const Address &addr,int4 size,vector<Varnode *> &write)
++
++{
++  if (addr.getSpace()->getType() != IPTR_PROCESSOR) return;
++  if ((fl & Varnode::addrtied) == 0 || (fl & Varnode::volatil) != 0) return;
++  list<PcodeOp *>::const_iterator iter = fd->beginOp(CPUI_CALLOTHER);
++  list<PcodeOp *>::const_iterator iterend = fd->endOp(CPUI_CALLOTHER);
++  vector<PcodeOp *> accesses;
++  for(;iter!=iterend;++iter)
++    if (isHardwareAccessOp(fd,*iter)) accesses.push_back(*iter);
++  size_t hardware = accesses.size();
++  // ...and a read or write through a pointer of this space, which may be a register's address (or the global's own): a sink only, as a
++  // STORE has its own guards and a LOAD changes nothing
++  for(int4 k=0;k<2;++k) {
++    OpCode opc = (k == 0) ? CPUI_LOAD : CPUI_STORE;
++    for(iter=fd->beginOp(opc);iter!=fd->endOp(opc);++iter) {
++      PcodeOp *op = *iter;
++      if (op->isDead() || op->usesSpacebasePtr()) continue;
++      if (op->getIn(0)->getSpaceFromConst() != addr.getSpace()) continue;
++      if (op->getIn(1)->isConstant()) continue;
++      accesses.push_back(op);
++    }
++  }
++  for(int4 i=0;i<accesses.size();++i) {
++    PcodeOp *op = accesses[i];
++    PcodeOp *copyop = fd->newOp(1,op->getAddr());
++    Varnode *vn = fd->newVarnodeOut(size,addr,copyop);
++    vn->setActiveHeritage();
++    vn->setAddrForce();
++    fd->opSetOpcode(copyop,CPUI_COPY);
++    Varnode *invn = fd->newVarnode(size,addr);
++    invn->setActiveHeritage();
++    fd->opSetInput(copyop,invn,0);
++    fd->opInsertBefore(copyop,op);
++    barrierCopyOps.push_back(copyop);
++    if (i >= hardware) continue;
++    PcodeOp *indop = fd->newIndirectOp(op,addr,size,PcodeOp::indirect_store);
++    indop->getIn(0)->setActiveHeritage();
++    indop->getOut()->setActiveHeritage();
++    indop->getOut()->setAddrForce();	// kept when nothing reads the global after it: a read before it is still not the value after
++    write.push_back(indop->getOut());
++  }
++}
++
++/// \brief Keep the writes a hardware access's sinks reach, then remove the sinks (SaturnExplorer, 0090)
++///
++/// The last writes of the global that reach a sink through artificial COPYs, MULTIEQUALs and STORE guards are address forced, so dead
++/// code, a rule's propagation or a collapsed join cannot take them away from the place the code makes them, before the access.
++void Heritage::handleBarrierCopies(void)
++
++{
++  if (barrierCopyOps.empty()) return;
++  vector<PcodeOp *> forces;
++  int4 copySinkSize = barrierCopyOps.size();
++  findAddressForces(barrierCopyOps, forces);
++  for(int4 i=0;i<forces.size();++i) {
++    PcodeOp *op = forces[i];
++    op->getOut()->setAddrForce();
++    op->clearMark();
++  }
++  for(int4 i=0;i<copySinkSize;++i)
++    propagateCopyAway(barrierCopyOps[i]);
++  for(int4 i=copySinkSize;i<barrierCopyOps.size();++i)
++    barrierCopyOps[i]->clearMark();
++  barrierCopyOps.clear();
++}
++
+ /// \brief Guard data-flow at RETURN ops, where range properly contains potention return storage
+ ///
+ /// The RETURN ops need to take a new input because of the potential of a return value,
+@@ -3777,6 +3870,7 @@ void Heritage::heritage(void)
+   analyzeNewLoadGuards();
+   widenEscapedStoreGuards();	// SaturnExplorer (patches/0061-engine-stack-frame-escape.patch)
+   handleNewLoadCopies();
++  handleBarrierCopies();	// SaturnExplorer (0090)
+   fd->checkPieceSizes();	// SaturnExplorer (patches/0068-engine-deadcode-late-stack-reads.patch)
+   if (pass == 0)
+     splitmanage.splitAdditional();
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.hh b/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.hh
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.hh
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/heritage.hh
+@@ -22,6 +22,7 @@
+  * Modified for SaturnExplorer: the dead code delay a late read asks for, and its bound (patches/0068-engine-deadcode-late-stack-reads.patch).
+  * Modified for SaturnExplorer: a STORE through a value read through a frame address is a STORE through a frame address in waiting (patches/0072-engine-frame-chains-and-save-slots.patch).
+  * Modified for SaturnExplorer: a LOAD guard records whether heritage put its COPYs before the LOAD; whether a LOAD may read the frame (patches/0076-engine-frame-loads-keep-writes.patch).
++ * Modified for SaturnExplorer: a hardware access is a barrier to the writes and reads of a global (patches/0090-engine-hardware-access-orders-globals.patch).
+  */
+ /// \file heritage.hh
+ /// \brief Utilities for building Static Single Assignment (SSA) form 
+@@ -282,6 +283,8 @@ public:
+ /// R. Cytron, J. Ferrante, B. K. Rosen, M. N. Wegman, and F. K. Zadeck
+ /// ACM Transactions on Programming Languages and Systems,
+ /// 13(4):451-490, October 1991
++extern bool isHardwareAccessOp(const Funcdata *fd,const PcodeOp *op);	///< SaturnExplorer (0090): the user op of a volatile read or write
++
+ class Heritage {
+   /// Extra boolean properties on basic blocks for the Augmented Dominator Tree
+   enum heritage_flags {
+@@ -332,6 +335,7 @@ class Heritage {
+   list<LoadGuard> loadGuard;	///< List of LOAD operations that need to be guarded
+   list<LoadGuard> storeGuard;	///< List of STORE operations taking an indexed pointer to the stack
+   vector<PcodeOp *> loadCopyOps;	///< List of COPY ops generated by load guards
++  vector<PcodeOp *> barrierCopyOps;	///< SaturnExplorer (0090): COPY sinks of a global put before each hardware access
+   void clearInfoList(void);	 ///< Reset heritage status for all address spaces
+ 
+   /// \brief Get the heritage status for the given address space
+@@ -358,6 +362,7 @@ class Heritage {
+   void findAddressForces(vector<PcodeOp *> &copySinks,vector<PcodeOp *> &forces);
+   void propagateCopyAway(PcodeOp *op);
+   void handleNewLoadCopies(void);
++  void handleBarrierCopies(void);	///< SaturnExplorer (0090)
+   void analyzeNewLoadGuards(void);
+   void generateLoadGuard(StackNode &node,PcodeOp *op,AddrSpace *spc);
+   void generateStoreGuard(StackNode &node,PcodeOp *op,AddrSpace *spc);
+@@ -382,6 +387,7 @@ class Heritage {
+   void guardCalls(uint4 fl,const Address &addr,int4 size,vector<Varnode *> &write);
+   void guardStores(const Address &addr,int4 size,vector<Varnode *> &write);
+   void guardLoads(uint4 fl,const Address &addr,int4 size,vector<Varnode *> &write);
++  void guardHardwareAccesses(uint4 fl,const Address &addr,int4 size,vector<Varnode *> &write);	///< SaturnExplorer (0090)
+   void guardReturnsOverlapping(const Address &addr,int4 size);
+   void guardReturns(uint4 fl,const Address &addr,int4 size,vector<Varnode *> &write);
+   static void buildRefinement(vector<int4> &refine,const Address &addr,const vector<Varnode *> &vnlist);
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/merge.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/merge.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/merge.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/merge.cc
+@@ -12,6 +12,7 @@
+  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
++ * Modified for SaturnExplorer: a global is not merged with a value the code holds in a register across a hardware access or an access through a pointer (patches/0090-engine-hardware-access-orders-globals.patch).
+  */
+ #include "merge.hh"
+ #include "funcdata.hh"
+@@ -88,6 +89,94 @@ bool StackAffectingOps::affectsTest(PcodeOp *op,Varnode *vn) const
+   return true;
+ }
+ 
++/// \brief Would a global, merged with another variable, hold that variable's value across an access (SaturnExplorer, 0090)
++///
++/// Merged into a global (an address-tied variable of the processor space), every write of a register variable becomes a write of the
++/// global, made where the register is written: a value the code holds in a register across a hardware access, or a read or write
++/// through a pointer, which may be one or the global's own address, and stores to the global after it, would be printed as stored
++/// before it (`x = *p; SCU_D0EN = 1; g = x` as `g = *p; SCU_D0EN = 1;`; a register a branch sets, stored after a poll, as the
++/// global written before the poll); and so would a register written on two paths, with such an access between one of its writes and the
++/// store. Such a merge is refused, and the variables stay apart.
++/// \param tied is the HighVariable that may be the global
++/// \param other is the HighVariable to be merged into it
++/// \return \b true if \b other's cover holds such an access
++bool Merge::heldAcrossAccess(HighVariable *tied,HighVariable *other)
++
++{
++  if (!tied->isAddrTied() || other->isAddrTied() || other->isInput()) return false;
++  Varnode *tvn = tied->getTiedVarnode();
++  if (tvn == (Varnode *)0 || tvn->getSpace()->getType() != IPTR_PROCESSOR) return false;
++  Funcdata *fd = (Funcdata *)0;
++  for(int4 i=0;i<other->numInstances() && fd == (Funcdata *)0;++i) {
++    Varnode *vn = other->getInstance(i);
++    if (vn->isWritten())
++      fd = vn->getDef()->getParent()->getFuncdata();
++    else if (!vn->hasNoDescend())
++      fd = (*vn->beginDescend())->getParent()->getFuncdata();
++  }
++  if (fd == (Funcdata *)0) return false;
++  // ...and an access on a path from where the register is written to where the code stores it to the global: merged, the global is written
++  // where the register is, before the access (`r0 = 4; if (c) r0 = *p; g = r0;` printed `g = 4; if (c) g = *p;`: the read through p
++  // then reads what was written when p is the global's address)
++  {
++    vector<const PcodeOp *> defs;
++    for(int4 i=0;i<other->numInstances();++i) {
++      Varnode *vn = other->getInstance(i);
++      if (!vn->isWritten()) continue;
++      const PcodeOp *def = vn->getDef();
++      if (def->code() == CPUI_MULTIEQUAL || def->code() == CPUI_INDIRECT) continue;
++      defs.push_back(def);
++    }
++    if (defs.size() > 1) {
++      for(int4 i=0;i<defs.size();++i) {
++	vector<const BlockBasic *> todo;
++	vector<const BlockBasic *> seen;
++	const BlockBasic *bl = defs[i]->getParent();
++	list<PcodeOp *>::iterator it = defs[i]->getBasicIter();
++	++it;
++	for(;;) {
++	  bool stop = false;
++	  for(;it!=((BlockBasic *)bl)->endOp();++it) {
++	    const PcodeOp *op = *it;
++	    if (((op->code() == CPUI_LOAD || op->code() == CPUI_STORE) && !op->getIn(1)->isConstant()) || isHardwareAccessOp(fd,op))
++	      return true;	// (the access may be the register's other write itself: the read is still after this write)
++	    if (find(defs.begin(),defs.end(),op) != defs.end()) { stop = true; break; }
++	    const Varnode *ovn = op->getOut();
++	    if (ovn != (const Varnode *)0 && ovn->isAddrTied() && ovn->getSpace() == tvn->getSpace() && ovn->getOffset() == tvn->getOffset()) { stop = true; break; }
++	  }
++	  if (!stop)
++	    for(int4 k=0;k<bl->sizeOut();++k) {
++	      const BlockBasic *nb = (const BlockBasic *)bl->getOut(k);
++	      if (find(seen.begin(),seen.end(),nb) == seen.end()) { seen.push_back(nb); todo.push_back(nb); }
++	    }
++	  if (todo.empty() || seen.size() > 64) break;
++	  bl = todo.back();
++	  todo.pop_back();
++	  it = ((BlockBasic *)bl)->beginOp();
++	}
++      }
++    }
++  }
++  other->updateCover();
++  const Cover &cov(other->getCover());
++  const OpCode opcs[] = { CPUI_LOAD, CPUI_STORE, CPUI_CALLOTHER };
++  for(int4 k=0;k<3;++k) {
++    list<PcodeOp *>::const_iterator iter = fd->beginOp(opcs[k]);
++    list<PcodeOp *>::const_iterator enditer = fd->endOp(opcs[k]);
++    for(;iter!=enditer;++iter) {
++      const PcodeOp *op = *iter;
++      if (op->isDead()) continue;
++      if (opcs[k] == CPUI_CALLOTHER) {
++	if (!isHardwareAccessOp(fd,op)) continue;
++      }
++      else if (op->getIn(1)->isConstant())
++	continue;
++      if (cov.contain(op,2)) return true;
++    }
++  }
++  return false;
++}
++
+ /// \brief Required tests to merge HighVariables that are not Cover related
+ ///
+ /// This is designed to short circuit merge tests, when we know properties of the
+@@ -104,6 +193,8 @@ bool Merge::mergeTestRequired(HighVariable *high_out,HighVariable *high_in)
+ {
+   if (high_in == high_out) return true; // Already merged
+ 
++  if (heldAcrossAccess(high_out,high_in) || heldAcrossAccess(high_in,high_out)) return false;	// SaturnExplorer (0090)
++
+   if (high_in->isTypeLock())	// If types are locked
+     if (high_out->isTypeLock())	// dont merge unless
+       if (high_in->getType() != high_out->getType()) return false; // both types are the same
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/merge.hh b/Ghidra/Features/Decompiler/src/decompile/cpp/merge.hh
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/merge.hh
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/merge.hh
+@@ -12,6 +12,7 @@
+  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
++ * Modified for SaturnExplorer: a global is not merged with a value the code holds in a register across a hardware access or an access through a pointer (patches/0090-engine-hardware-access-orders-globals.patch).
+  */
+ #ifndef __MERGE_HH__
+ #define __MERGE_HH__
+@@ -86,6 +87,7 @@ class Merge {
+   HighIntersectTest testCache;	///< Cached intersection tests
+   vector<PcodeOp *> copyTrims;	///< COPY ops inserted to facilitate merges
+   vector<PcodeOp *> protoPartial;	///< Roots of unmapped CONCAT trees
++  static bool heldAcrossAccess(HighVariable *tied,HighVariable *other);	///< SaturnExplorer (0090)
+   static bool mergeTestRequired(HighVariable *high_out,HighVariable *high_in);
+   static bool mergeTestAdjacent(HighVariable *high_out,HighVariable *high_in);
+   static bool mergeTestSpeculative(HighVariable *high_out,HighVariable *high_in);
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/ruleaction.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/ruleaction.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/ruleaction.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/ruleaction.cc
+@@ -25,6 +25,7 @@
+  * Modified for SaturnExplorer: RulePropagateCopy does not propagate a write of a global into the INDIRECT a STORE puts on it, nor into another marker past a memory access (patches/0082-engine-store-keeps-earlier-write.patch).
+  * Modified for SaturnExplorer: RuleMultiCollapse keeps two equal writes of a global that a memory access separates from the join, and RulePropagateCopy does not feed a global's value into the global's next write past one (patches/0085-engine-global-write-keeps-place.patch).
+  * Modified for SaturnExplorer: RuleEarlyRemoval keeps a write of a global on a path that never reaches a return (patches/0087-engine-global-writes-without-return.patch).
++ * Modified for SaturnExplorer: RulePushMulti does not move a write of a global an access holds to the join (patches/0090-engine-hardware-access-orders-globals.patch).
+  */
+ #include "ruleaction.hh"
+ #include "coreaction.hh"
+@@ -1122,6 +1123,11 @@ int4 RulePushMulti::applyOp(PcodeOp *op,Funcdata &data)
+   PcodeOp *op2 = in2->getDef();
+   if (in1->loneDescend() != op) return 0;
+   if (in2->loneDescend() != op) return 0;
++  // SaturnExplorer (0090): a write of a global that an access after it holds (address forced, Heritage::handleBarrierCopies) is made where
++  // the code makes it, not at the join: two pieces of it pushed through the MULTIEQUAL printed the first after a read through a pointer
++  if ((in1->isAddrForce() && in1->isAddrTied() && in1->getSpace()->getType() == IPTR_PROCESSOR) ||
++      (in2->isAddrForce() && in2->isAddrTied() && in2->getSpace()->getType() == IPTR_PROCESSOR))
++    return 0;
+ 
+   Varnode *outvn = op->getOut();
+ 

@@ -2509,6 +2509,15 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     for (uint32_t st : candidates)
                     {
                         if (!apart) break;
+                        // (A5-118's rule, patch 0090: a store of the number that is the statement of another line, its own, is not this line's: a
+                        // loop counter started at 2 and merged under the global's name beside a store of 2 the barrier keeps, grammar 1 seed 15125)
+                        bool ownLine = false;
+                        for (size_t lj = 0; lj < r.lines.size() && !ownLine; ++lj)
+                        {
+                            if (lj == li || r.lines[lj].text.find(" = ") == std::string::npos) continue;
+                            for (const Token& t : r.lines[lj].tokens) ownLine = ownLine || (t.addr == st && t.begin < t.end);
+                        }
+                        if (ownLine) continue;
                         uint16_t sw = 0;
                         int size = 0;
                         const int reg = word(st, sw) ? StoredRegister(sw, size) : -1;
