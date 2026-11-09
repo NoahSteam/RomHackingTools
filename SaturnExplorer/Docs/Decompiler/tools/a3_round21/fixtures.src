@@ -1,0 +1,119 @@
+# Area 3 round 21 fixtures (asm syntax of ../a3_round16/asm.py, with .addr and mova @(LABEL,pc) from asm21.py). Run with run21.sh <name>.
+name sw1
+# a store before a switch whose case 0 is the poll (the code replaces the store after it) and case 1 replaces it and returns
+mov.l =0x06002304,r3
+mov.l =0x06001010,r7
+mov.l r6,@r3
+mov #1,r0
+mov.w r0,@r7
+mov #2,r1
+cmp/hs r1,r4
+bt DEF
+shll2 r4
+mova @(TAB,pc),r0
+mov.l @(r0,r4),r1
+jmp @r1
+nop
+nop
+TAB:
+.addr C0
+.addr C1
+C0:
+mov.w @r7,r0
+tst #1,r0
+bf C0
+mov.l r5,@r3
+rts
+nop
+C1:
+mov.l r5,@r3
+DEF:
+rts
+nop
+name sw2
+# sw1 with the default going to case 1 (every returning path replaces the store); case 0 is the poll (the code replaces the store after it) and case 1 replaces it and returns
+mov.l =0x06002304,r3
+mov.l =0x06001010,r7
+mov.l r6,@r3
+mov #1,r0
+mov.w r0,@r7
+mov #2,r1
+cmp/hs r1,r4
+bt C1
+shll2 r4
+mova @(TAB,pc),r0
+mov.l @(r0,r4),r1
+jmp @r1
+nop
+nop
+TAB:
+.addr C0
+.addr C1
+C0:
+mov.w @r7,r0
+tst #1,r0
+bf C0
+mov.l r5,@r3
+rts
+nop
+C1:
+mov.l r5,@r3
+DEF:
+rts
+nop
+name r1
+# the store is the slot of a `bra` into the poll and also the head of a return block that several paths reach
+mov.l =0x06002304,r3
+mov.l =0x06001010,r7
+mov #1,r0
+mov.w r0,@r7
+tst r4,r4
+bt X
+mov.l r5,@r3
+cmp/pl r5
+bt X
+mov.l r4,@r3
+cmp/pz r4
+bf X
+bra P
+X:
+mov.l r6,@r3
+rts
+nop
+P:
+mov.w @r7,r0
+tst #1,r0
+bf P
+mov.l r4,@r3
+rts
+nop
+name r2
+# r1 with an irreducible loop (two entries) whose exit goes to the return block that starts with the store
+mov.l =0x06002304,r3
+mov.l =0x06001010,r7
+mov.l =0x06002308,r8
+mov #1,r0
+mov.w r0,@r7
+tst r4,r4
+bt L2
+L1:
+mov.l r5,@r8
+dt r5
+bt X
+L2:
+add #1,r4
+mov.l r4,@r8
+cmp/pl r4
+bt L1
+bra P
+X:
+mov.l r6,@r3
+rts
+nop
+P:
+mov.w @r7,r0
+tst #1,r0
+bf P
+mov.l r4,@r3
+rts
+nop
