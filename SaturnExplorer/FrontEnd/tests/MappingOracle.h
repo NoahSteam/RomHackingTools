@@ -2843,7 +2843,27 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                 // (A7-99: a number the engine trimmed to the bits the code uses -- `uRam06002380 = 0;` for the byte store of 2, the loop testing
                 // `& 0x1000000`; `xStack_c = 0;` for the half-word store of 8 read back by its high byte -- is no store's value, and the line
                 // says it names no instruction; grammar 1 seed 4502735, grammar 2 seed 4506709)
+                // (A7-108: not when a store of the variable is known to store the number the line shows -- RegisterBefore gives it a number
+                // and it is the line's at the bytes the store writes (writesOther, as the store-value check compares): the line then has a
+                // store to name, and saying it names none hides it. The trimmed number of A7-99 is no store's: the byte store of 2 shows
+                // 0x2000000, not 0)
+                bool storesShown = false;
                 if (r.lines[li].noOrigin && !anyAddress && number)
+                    for (uint32_t st : candidates)
+                    {
+                        uint16_t sw = 0;
+                        int size = 0;
+                        const int reg = word(st, sw) ? StoredRegister(sw, size) : -1;
+                        if (reg < 0) continue;
+                        if (!haveSources)
+                        {
+                            sources = BranchSources(r, word);
+                            haveSources = true;
+                        }
+                        const WordValue got = RegisterBefore(r, word, sources, st, reg);
+                        if (got.kind == WordValue::Number && !writesOther(st, false)) storesShown = true;
+                    }
+                if (r.lines[li].noOrigin && !anyAddress && number && !storesShown)
                 {
                     ++a.copyNoAddress;
                     continue;
@@ -2974,7 +2994,18 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
             const bool move = (w >> 12) == 0x6 && (w & 0xF) == 0x3;
             // (A7-34's triage: a read-modify-write of memory, `tas.b @r7` or `or.b #imm,@(r0,gbr)`, stores the variable as a `mov` does)
             const bool modifies = (w & 0xF0FF) == 0x401B || (w >> 8) == 0xCD || (w >> 8) == 0xCE || (w >> 8) == 0xCF;
-            const bool makes = numberInsn || (d.Mnemonic.compare(0, 3, "mov") == 0 && m.store) || modifies || control || move;
+            // (A7-106: `mac.l` and `mac.w` clamp the sum when the S bit is set: a bound of the clamp, `uVar3 = 0xffff800000000000;` at a
+            // `mac.l` a `bt` joins, is the instruction's own number, made by its saturation; grammar 1 seed 5002388, specials)
+            bool saturates = false;
+            if ((w & 0xF00F) == 0x000F || (w & 0xF00F) == 0x400F)
+            {
+                const bool neg = value[0] == '-';
+                uint64_t full = std::strtoull(value.c_str() + (neg ? 1 : 0), nullptr, 0);
+                if (neg) full = 0 - full;
+                saturates = (w & 0xF00F) == 0x000F ? full == 0x00007FFFFFFFFFFFull || full == 0xFFFF800000000000ull
+                                                   : full == 0x7FFFFFFFull || full == 0x80000000ull || full == 0xFFFFFFFF80000000ull;
+            }
+            const bool makes = numberInsn || (d.Mnemonic.compare(0, 3, "mov") == 0 && m.store) || modifies || control || move || saturates;
             // A7-34 (the area 7 fixer): the number at the variable's width, its declaration's (`uVar4 = 0xffab;` at `mov #0xAB,r2`: the
             // sign-extended 0xffffffab of a two-byte variable)
             const size_t nameAt = text.find_first_not_of(' ');

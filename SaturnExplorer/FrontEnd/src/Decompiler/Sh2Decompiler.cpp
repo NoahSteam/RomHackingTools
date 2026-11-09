@@ -7443,7 +7443,48 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
             reachesUse[rb] = reached;
             return reached;
         };
-        for (ghidra::int4 b = 0; b < out->getSize(); ++b)
+        // A7-104: a statement of the function's input itself (a copy, or a truncation to its low bytes, of an input register:
+        // `iRam26002288._0_2_ = (xunknown2)in_r1;`) shows the stores that store that input unchanged into exactly the variable -- the
+        // stored register's low bytes, which no instruction wrote on any path from the entry. A store of the variable's bytes before it
+        // of another register, one a load made (`mov.l r2,@r6` of `mov.w @r5,r2`), only "may" show it, as the value walk answers for a
+        // load; when the engine hoisted the input's store to a branch ahead of the paths that run it (the `bt` before a `bt/s` whose slot
+        // is `mov.w r1,@r6`, entered again by a `bra`), the stores of the input are the statement's, not the stores of the loaded word
+        // before the branch. Only when the statement is at no store of the variable (its own store decides then); grammar 1 seed 4802131.
+        std::vector<const ghidra::AccessRecord*> inputStores;
+        {
+            const ghidra::Varnode* v = o->numInput() >= 1 ? o->getIn(0) : nullptr;
+            bool lowBytes = code == ghidra::CPUI_COPY || code == ghidra::CPUI_CAST || (code == ghidra::CPUI_SUBPIECE && o->numInput() == 2 && o->getIn(1)->getOffset() == 0);
+            for (int k = 0; k < 4 && lowBytes && v && v->isWritten(); ++k)
+            {
+                const ghidra::PcodeOp* def = v->getDef();
+                if (def->code() == ghidra::CPUI_COPY || def->code() == ghidra::CPUI_CAST) v = def->getIn(0);
+                else if (def->code() == ghidra::CPUI_SUBPIECE && def->getIn(1)->getOffset() == 0) v = def->getIn(0);
+                else lowBytes = false;
+            }
+            bool atOwnStore = false;
+            for (const ghidra::AccessRecord* r : stores)
+                atOwnStore = atOwnStore || (InstructionOf(*r) == at && r->addr.getSpace() == space);
+            if (lowBytes && v && v->isInput() && v->getSpace()->getType() == ghidra::IPTR_PROCESSOR && v->getSize() >= out->getSize() && !atOwnStore)
+            {
+                // (the input's low bytes in the register space: at the high end of the register on a big-endian processor)
+                const ghidra::uintb low = v->getSpace()->isBigEndian() ? v->getOffset() + static_cast<ghidra::uintb>(v->getSize() - out->getSize()) : v->getOffset();
+                for (const ghidra::AccessRecord* r : stores)
+                {
+                    if (r->addr.getSpace() != space || r->addr.getOffset() != base || r->size != out->getSize()) continue;
+                    FlowVn stored;
+                    if (!storedRegister(r, stored) || stored.space != v->getSpace() || stored.offset != low || stored.size != out->getSize()) continue;
+                    const auto pos = flow.ops.find(r->time);
+                    std::vector<const FlowOp*> writers;
+                    bool input = false;
+                    if (pos != flow.ops.end() &&
+                        FlowLastWriters(flow, fd, pos->second.first, static_cast<int>(pos->second.second), stored, writers, &input, false) &&
+                        writers.empty() && input)
+                        inputStores.push_back(r);
+                }
+            }
+        }
+        for (const ghidra::AccessRecord* r : inputStores) chosen.insert(r);
+        for (ghidra::int4 b = 0; b < out->getSize() && inputStores.empty(); ++b)
         {
             const ghidra::uintb byte = (base + static_cast<ghidra::uintb>(b)) & space->getHighest();
             const auto writes = [&](const ghidra::AccessRecord* r) {
@@ -7640,6 +7681,16 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                 level = std::move(next);
             }
         }
+        if (std::getenv("SE_A7DBG"))   // DEBUG-A7R13
+        {
+            std::fprintf(stderr, "A7DBG at=%08x code=%d slot=%d size=%d base=%llx ownOther=%d chosen:", at, static_cast<int>(code), o->isFromDelaySlot() ? 1 : 0,
+                         out->getSize(), static_cast<unsigned long long>(base), ownOther ? 1 : 0);
+            for (const ghidra::AccessRecord* r : chosen) std::fprintf(stderr, " %08x", InstructionOf(*r));
+            std::fprintf(stderr, " | shows:");
+            for (const ghidra::AccessRecord* r : stores)
+                if (r->addr.getSpace() == space) std::fprintf(stderr, " %08x=%d%s", InstructionOf(*r), shows(r) ? 1 : 0, covered.count(r) ? "" : "o");
+            std::fprintf(stderr, "\n");
+        }
         if (chosen.empty() && atLoadOrCall)
             for (ghidra::int4 b = 0; b < out->getSize(); ++b)
             {
@@ -7684,7 +7735,10 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                 whole.offset &= ~static_cast<ghidra::uintb>(3);
                 whole.size = 4;
             }
-            if (pos == flow.ops.end() || !FlowLastWriters(flow, fd, pos->second.first, static_cast<int>(pos->second.second), whole, writers))
+            // (A7-105: a path that reaches the entry is the function's input there, no instruction's number: the walk goes on past it.
+            // `mov.l r0,@r6` of the input r0 at the entry is no store of the `mov #0,r0` after it; grammar 1 seed 5000472)
+            bool input = false;
+            if (pos == flow.ops.end() || !FlowLastWriters(flow, fd, pos->second.first, static_cast<int>(pos->second.second), whole, writers, &input))
                 return true;   // (the walk is not finished: the register's number is all that is known)
             for (const FlowOp* w : writers)
                 if (w->insn == insn) return true;
@@ -7772,6 +7826,8 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
             const ghidra::Varnode* in = o->getIn(0);
             const bool atEnd = code == ghidra::CPUI_COPY && !atLoadOrCall && o->getAddr() == home->getStop() && !o->isFromDelaySlot() &&
                                !in->isConstant();
+            const bool atJoinStart = code == ghidra::CPUI_COPY && !atLoadOrCall && o->getAddr() == home->getStart() && home->sizeIn() >= 2 &&
+                                     !o->isFromDelaySlot() && !in->isConstant() && !atEnd;
             // (A7-91: the memory a copy the engine made of its own is a copy of -- `uStack_4 = uVar1;` at the `bt` ending a poll loop, the
             // variable's copy of the global the loop's load reads, merged under a pushed word's name: the global itself, as below)
             const ghidra::Varnode* src = in;
@@ -7875,7 +7931,10 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                     }
                 registerMerge = true;
             }
-            else if (!maker && atEnd && !(in->isWritten() && in->getDef()->getTime() < flow.opsEnd))
+            // (A7-107: or at the first instruction of a join -- `iRam06002208 = iVar1;` at the `ldc r0,gbr` that begins a `dt r3` loop,
+            // r3 merged under the global's name, which the slot's `mov.l r3,@r6` after the loop stores less 3: the register's last writers on
+            // each path into the instruction, the `mov #1,r3` before the loop and the `dt r3` of the loop; grammar 1 seed 5003735)
+            else if (!maker && (atEnd || atJoinStart) && !(in->isWritten() && in->getDef()->getTime() < flow.opsEnd))
             {
                 ghidra::Address reg = in->getAddr();
                 ghidra::int4 regSize = in->getSize();
@@ -7893,8 +7952,11 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                     storage.space = reg.getSpace();
                     storage.offset = reg.getOffset();
                     storage.size = regSize;
-                    if (last != flow.insnBlock.end() &&
-                        FlowLastWriters(flow, fd, last->second.first, static_cast<int>(last->second.second) + 1, storage, writers))
+                    const auto start = flow.insnFirst.find(at);
+                    if (!atEnd && start != flow.insnFirst.end()
+                            ? FlowLastWriters(flow, fd, start->second.first, static_cast<int>(start->second.second), storage, writers)
+                            : atEnd && last != flow.insnBlock.end() &&
+                                  FlowLastWriters(flow, fd, last->second.first, static_cast<int>(last->second.second) + 1, storage, writers))
                         for (const FlowOp* w : writers)
                         {
                             uint32_t m = w->insn, c = 0;
@@ -7904,7 +7966,7 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                     // the variable's name at the join the copy feeds (r1, which a loop subtracts r4 from and stores): no instruction made
                     // r4, but the move that put it in r1 did (`mov r4,r1`). The join's register's last writers on each path into the end of
                     // the block, when each is a move of the input's register; else nothing, as before.
-                    if (registerMakers.empty() && in->isInput() && last != flow.insnBlock.end())
+                    if (atEnd && registerMakers.empty() && in->isInput() && last != flow.insnBlock.end())
                     {
                         const ghidra::Varnode* merged = nullptr;
                         for (auto d = out->beginDescend(); d != out->endDescend() && !merged; ++d)

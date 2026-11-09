@@ -6953,7 +6953,8 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                 if (std::strcmp(std::getenv("SE_GENERATED_TOKENS"), "2") == 0)   // =2: each token with its address, to see which text an instruction owns
                 {
                     o << "\n      tokens:";
-                    for (const Token& t : l.tokens) o << " [" << Hex(t.addr, 4) << " '" << l.text.substr(t.begin, t.end - t.begin) << "']";
+                    // (an 'm' after the address: the token is a copy materialised at the instruction, A7-25)
+                    for (const Token& t : l.tokens) o << " [" << Hex(t.addr, 4) << (t.materialised ? "m" : "") << " '" << l.text.substr(t.begin, t.end - t.begin) << "']";
                 }
             }
             o << "\n";
