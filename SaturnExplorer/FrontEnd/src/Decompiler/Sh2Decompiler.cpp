@@ -9371,11 +9371,20 @@ std::vector<DecompileResult::EndlessLoopStore> StoresBeforeEndlessLoop(const ghi
     std::vector<const ghidra::PcodeOp*> silent;
     std::set<const ghidra::HighVariable*> printedHighs;
     std::vector<char> live(nf, 0);   // the flow blocks an op of the flow is still alive in
+    std::vector<char> keptBlock(nf, 0);   // (A3-184) ...and the flow blocks the final graph holds code of, by an op of the actions' with no time
     for (auto it = fd.beginOpAlive(); it != fd.endOpAlive(); ++it)
     {
         const ghidra::PcodeOp* o = *it;
         auto f = flow.ops.find(o->getTime());
         if (f != flow.ops.end() && f->second.first >= 0 && static_cast<size_t>(f->second.first) < nf) live[static_cast<size_t>(f->second.first)] = 1;
+        else if (f == flow.ops.end())
+        {
+            // (A3-184: an op the actions made, with no time of the flow (the RETURN of `rts ; nop` the engine rebuilds), is the code of its
+            // instruction's block, when that is one block: the text keeps that block.)
+            const std::vector<int>& inst = instancesOf(InstructionOf(o));
+            const int fb = inst.size() == 1 ? inst[0] : instanceOf(o).first;
+            if (fb >= 0 && static_cast<size_t>(fb) < nf) keptBlock[static_cast<size_t>(fb)] = 1;
+        }
         const ghidra::Varnode* v = o->getOut();
         if (!v || o->code() == ghidra::CPUI_MULTIEQUAL || o->code() == ghidra::CPUI_INDIRECT) continue;
         const bool isShown = shown(o);
@@ -9383,6 +9392,17 @@ std::vector<DecompileResult::EndlessLoopStore> StoresBeforeEndlessLoop(const ghi
         if (v->getSpace() != ram) continue;
         if (isShown) written[instanceOf(o)].emplace_back(static_cast<uint32_t>(v->getOffset()), static_cast<uint32_t>(v->getSize()));
         else if (o->code() == ghidra::CPUI_COPY && fd.isHighOn()) silent.push_back(o);
+    }
+    // (A3-184: and a flow block of one instance that a block of the final graph starts at, whatever ops it kept: `mov r5,r1 ; rts` whose copy
+    // is dead and whose return is rebuilt, or a block whose only op is dead and which falls into the one that returns.)
+    for (ghidra::int4 i = 0; i < n; ++i)
+    {
+        const ghidra::BlockBasic* bb = static_cast<const ghidra::BlockBasic*>(g.getBlock(i));
+        if (bb->getStart().isInvalid()) continue;
+        auto f = flow.insnBlock.find(static_cast<uint32_t>(bb->getStart().getOffset()));
+        if (f != flow.insnBlock.end() && f->second.first >= 0 && static_cast<size_t>(f->second.first) < nf &&
+            instancesOf(static_cast<uint32_t>(bb->getStart().getOffset())).size() < 2)
+            keptBlock[static_cast<size_t>(f->second.first)] = 1;
     }
     for (const ghidra::PcodeOp* o : silent)
         if (o->getIn(0) && !o->getIn(0)->isConstant() && printedHighs.count(o->getOut()->getHigh()) != 0 && o->getIn(0)->getHigh() == o->getOut()->getHigh())
@@ -9400,7 +9420,7 @@ std::vector<DecompileResult::EndlessLoopStore> StoresBeforeEndlessLoop(const ghi
             const std::pair<int, uint32_t> w = work.back();
             work.pop_back();
             if (w.first < 0 || static_cast<size_t>(w.first) >= nf || after[static_cast<size_t>(w.first)] || loopAt[static_cast<size_t>(w.first)] ||
-                live[static_cast<size_t>(w.first)])
+                live[static_cast<size_t>(w.first)] || keptBlock[static_cast<size_t>(w.first)])
                 continue;
             after[static_cast<size_t>(w.first)] = w.second;
             for (int next : flow.successors[static_cast<size_t>(w.first)]) work.emplace_back(next, w.second);

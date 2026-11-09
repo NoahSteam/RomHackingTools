@@ -16943,6 +16943,67 @@ void TestA3182Fix()
     }
 }
 
+// A3-184: the region A3-173's reads, A3-175's stores and A3-178's calls say as removed code (the flow blocks after a loop the analysis takes to run
+// for ever, up to a block the text keeps) is code the engine removed. A block with no op of the flow alive in it that the text keeps (the join
+// `Q: mov r5,r1 ; rts ; nop`, whose copy is dead and whose return the engine rebuilt) is not in it: the read of r5 there was said as missing, and
+// the signature withheld, where `void (int4)` is right. Controls: the shapes that were said and stay said (A3-173's read after the poll, the
+// join A3-182 says), and the join shapes that were never said.
+void TestA3184Fix()
+{
+    std::vector<uint8_t> hw(0x100000u, 0);
+    Sh2Decompiler d(gConfig);
+    auto run = [&](const char* name, const std::vector<uint16_t>& words) {
+        std::fill(hw.begin(), hw.end(), 0);
+        for (size_t i = 0; i < words.size(); ++i) dts::Put16(hw, 0x9000u + 2 * i, words[i]);
+        auto snap = MakeSnapshot(hw);
+        const DecompileResult r = d.Decompile(snap, Request(0x06009000u));
+        Print(name, r);
+        return r;
+    };
+    struct Case
+    {
+        const char* name;
+        std::vector<uint16_t> words;
+        size_t params;
+    };
+    // `tst r4,r4 ; bt Q ; (poll of the unmarked mailbox 0x06001010) ; Q: <join> ; rts ; nop`: the join keeps no op alive. Lent, nothing said.
+    const Case kLent[] = {
+        { "A3-184 jo1: r5 copied into a dead r1", { 0x2448, 0x8905, 0xD706, 0xE101, 0x2711, 0x6171, 0x2118, 0x8BFC, 0x6153, 0x000B, 0x0009, 0x0009, 0x0009, 0x0009,
+                                                    0x0009, 0x0009, 0x0600, 0x1010 }, 1 },
+        { "A3-184 jo3: a word of the caller's frame read into a dead r1", { 0x2448, 0x8905, 0xD706, 0xE101, 0x2711, 0x6171, 0x2118, 0x8BFC, 0x51F1, 0x000B, 0x0009,
+                                                                           0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0600, 0x1010 }, 1 },
+        { "A3-184 jo4: a dead sum of r6 and r7", { 0x2448, 0x8905, 0xD206, 0xE101, 0x2211, 0x6121, 0x2118, 0x8BFC, 0x6363, 0x337C, 0x000B, 0x0009, 0x0009, 0x0009,
+                                                   0x0009, 0x0009, 0x0600, 0x1010 }, 1 },
+        { "A3-184 jo5: the poll through r0, a dead chain of copies", { 0x2448, 0x8905, 0xD706, 0xE001, 0x2701, 0x6071, 0xC801, 0x8BFC, 0x6253, 0x6323, 0x000B, 0x0009,
+                                                                      0x0009, 0x0009, 0x0009, 0x0009, 0x0600, 0x1010 }, 1 },
+        { "A3-184 jo6: the join is a bare rts", { 0x2448, 0x8905, 0xD706, 0xE101, 0x2711, 0x6171, 0x2118, 0x8BFC, 0x000B, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009,
+                                                  0x0009, 0x0009, 0x0600, 0x1010 }, 1 },
+        // jo2: the join is a block of its own with only a dead op that falls into the returning block R, a target of another branch
+        { "A3-184 jo2: a dead-only join falling into the return", { 0x2668, 0x8908, 0x2448, 0x8905, 0xD705, 0xE101, 0x2711, 0x6171, 0x2118, 0x8BFC, 0x6153, 0x000B,
+                                                                   0x0009, 0x0009, 0x0009, 0x0009, 0x0600, 0x1010 }, 3 },
+    };
+    for (const Case& c : kLent)
+    {
+        const DecompileResult r = run(c.name, c.words);
+        CHECK(r.status == DecompileStatus::Ok && Has(r.Text(), "while( true )") && r.prototype.known && r.prototype.params.size() == c.params);
+        CHECK(!HasNote(r, "here is missing", true) && r.prototypeWithheld.empty());
+    }
+    // Still said: A3-173's read after the poll (`mov.l r6,@r3` between the poll and the `rts`; no block the text keeps follows the loop)
+    {
+        const DecompileResult r = run("A3-184 control pp: a store of r6 after the poll", { 0xD304, 0xD705, 0xE001, 0x2701, 0x6071, 0xC801, 0x8BFC, 0x2362, 0x000B, 0x0009,
+                                                                                         0x0600, 0x2304, 0x0600, 0x1010 });
+        CHECK(r.status == DecompileStatus::Ok && !r.prototype.known && Has(r.Text(), "while( true )"));
+        CHECK(HasNote(r, "is missing", true));
+    }
+    // Still said: the join that A3-182 says (r5 set after the poll, stored through r4 in the join, kept by the other path)
+    {
+        const DecompileResult r = run("A3-184 control jn1: r5 set after the poll, stored in the join",
+                                      { 0x2668, 0x8906, 0xD706, 0xE101, 0x2711, 0x6171, 0x2118, 0x8BFC, 0xE507, 0x2452, 0x000B, 0x0009, 0x0009, 0x0009, 0x0009,
+                                        0x0009, 0x0600, 0x1010 });
+        CHECK(r.status == DecompileStatus::Ok && !r.prototype.known && HasNoteAt(r, 0x06009012u, "the value of r5 here is missing on one path"));
+    }
+}
+
 void TestA3155Fix()
 {
     Sh2Decompiler d(gConfig);
@@ -17847,6 +17908,7 @@ int main(int argc, char** argv)
         RUN(TestA3175Fix());
         RUN(TestA3178Fix());
         RUN(TestA3182Fix());
+        RUN(TestA3184Fix());
         RUN(TestArea10Round2());
         RUN(TestArea5Confirm());
         RUN(TestArea5Review());

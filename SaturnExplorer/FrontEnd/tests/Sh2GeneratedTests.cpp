@@ -518,6 +518,7 @@ struct Program
     uint32_t postJoin = 0;         // version 1 (A3-183): the address of work RAM the code a poll leaves for, joined by the path around it, stores at; 0: none
     int postJoinValue = 0;         // ...the constant the path through the poll gives the stored register
     int postJoinPoll = -1;         // ...and the poll's literal (the poll is inside a skip, not an item of the function's own)
+    int postPollFn = -1;           // version 2 (A3-181): the function of the module that ends with a poll and the store or read above (postPollRead, postPollStore); -1: none
     std::vector<Func> fns;         // fns[0] is the function a version 1 program is about; later ones follow in memory
 };
 
@@ -566,6 +567,8 @@ struct Gen
     bool postCallOn = false;
     Rng postJoinRng;            // ...and one for A3-182 (a poll inside a skip, whose exit joins the skip's end with a register set), from kPostJoinFirst on only
     bool postJoinOn = false;
+    Rng modPollRng;             // ...and one for A3-181 (a poll at the end of a version 2 function, then a store or a read of a parameter), from kModPollFirst on only
+    bool modPollOn = false;
     // What the function being made changes for good / reads on entry through the wide alphabet and the GBR accesses
     // (an over-approximation: an item the grammar drops again is counted, which the checks that use it allow).
     uint32_t wideClobbers = 0;
@@ -587,7 +590,7 @@ struct Gen
     bool inSpill = false;     // r15 is moved: no local is addressed through it here
     int loopDepth = 0;        // inside a loop body: a pointer advanced here is advanced again by the next iteration
     std::vector<Func> built;  // the functions of this module generated so far (the later ones)
-    Gen(uint64_t seed) : rng(seed), macRng(seed ^ 0x6D61636D61636D61ull), guardRng(seed ^ 0x7367756172643A5Aull), convRng(seed ^ 0x636F6E7663727667ull), wideRng(seed ^ 0x77696465414C5521ull), aliasRng(seed ^ 0x616C696173526E67ull), maskRng(seed ^ 0x6D61736B52616E64ull), placeRng(seed ^ 0x706C616365526E67ull), loopMaskRng(seed ^ 0x6C6F6F704D61736Bull), frameRng(seed ^ 0x6672616D6557616Cull), partialRng(seed ^ 0x7061727469616C52ull), retRng(seed ^ 0x7265747263616C6Cull), bsrfRng(seed ^ 0x6273726652656C21ull), choiceRng(seed ^ 0x63686F6F73657221ull), regionRng(seed ^ 0x726567696F6E5074ull), idiomRng(seed ^ 0x69646F6D52616E64ull), pollBodyRng(seed ^ 0x706F6C6C426F6479ull), slotEntryRng(seed ^ 0x736C6F74456E7472ull), postPollRng(seed ^ 0x706F7374506F6C6Cull), postStoreRng(seed ^ 0x706F737453746F72ull), postCallRng(seed ^ 0x706F737443616C6Cull), postJoinRng(seed ^ 0x706F73744A6F696Eull)
+    Gen(uint64_t seed) : rng(seed), macRng(seed ^ 0x6D61636D61636D61ull), guardRng(seed ^ 0x7367756172643A5Aull), convRng(seed ^ 0x636F6E7663727667ull), wideRng(seed ^ 0x77696465414C5521ull), aliasRng(seed ^ 0x616C696173526E67ull), maskRng(seed ^ 0x6D61736B52616E64ull), placeRng(seed ^ 0x706C616365526E67ull), loopMaskRng(seed ^ 0x6C6F6F704D61736Bull), frameRng(seed ^ 0x6672616D6557616Cull), partialRng(seed ^ 0x7061727469616C52ull), retRng(seed ^ 0x7265747263616C6Cull), bsrfRng(seed ^ 0x6273726652656C21ull), choiceRng(seed ^ 0x63686F6F73657221ull), regionRng(seed ^ 0x726567696F6E5074ull), idiomRng(seed ^ 0x69646F6D52616E64ull), pollBodyRng(seed ^ 0x706F6C6C426F6479ull), slotEntryRng(seed ^ 0x736C6F74456E7472ull), postPollRng(seed ^ 0x706F7374506F6C6Cull), postStoreRng(seed ^ 0x706F737453746F72ull), postCallRng(seed ^ 0x706F737443616C6Cull), postJoinRng(seed ^ 0x706F73744A6F696Eull), modPollRng(seed ^ 0x6D6F64506F6C6C21ull)
     {
         for (int i = 0; i < 8; ++i) align[i] = 4, pref[i] = 4;
         p.mbox = 0x26001000u + 0x10u * rng.Below(4);
@@ -2002,6 +2005,7 @@ struct Gen
         AddRegionMask(f.items, f.sel, convDefined | leftScratch);
         AddRegionWalk(f.items, f.sel, convDefined | leftScratch);
         AddConfirmShapes(f.items, f.sel, convDefined | leftScratch);
+        AddModulePoll(f, idx);
         if (hasConvRead) f.items.insert(f.items.begin(), convRead);   // first: before anything can write what it reads
         // A return chosen by an input (A3-64), from a stream of its own and after every other draw, so no program a seed made before it changes but
         // for this item: in a function that returns, makes no call (a callee may leave anything in r0), and has no table (mova writes r0) and no
@@ -2290,6 +2294,82 @@ struct Gen
         return p;
     }
 
+    // A3-181: grammar 2 drew no poll, so a caller of a function that polls, and the oracles of the code after a poll (A3-173, A3-175), were not
+    // exercised on modules. From the seeds where the production is drawn, in one function of three that returns its value in r0 (so r0, which the
+    // poll reads through, is free) and ends with a plain `rts` (no table, no shared exit, no fall or tail jump), the body ends with a poll of a
+    // mailbox, a hardware register or work RAM through r7 (the generator's own poll: a write of a value first, then `mov.x @r7,r0 ; tst #1,r0 ;
+    // bf`), and after it a store through a fresh work RAM pointer in r6: a constant (`mov #k,r1`; the oracle's `endless-after-store-dropped`) or
+    // r4 or r5, the parameters no item of a module's function changes but by reading them (`endless-read-dropped`). In the other world the other
+    // processor answers the poll and the function returns; in the first it does not, and the harness's "returns" contract (generator:no-return)
+    // is already skipped for a module with a poll. At most one function of a module has it (the last one drawn). Everything is drawn from
+    // modPollRng, the literals from the streams NewLit has, so no seed below kModPollFirst moves.
+    void AddModulePoll(Func& f, int idx)
+    {
+        if (!modPollOn || !disc || p.postPollFn >= 0 || !f.returns || f.end != Func::Rts || f.sel >= 0 || f.shared || !modPollRng.Chance(30)) return;
+        Item poll;
+        poll.type = Item::Poll;
+        poll.reg = 7;
+        const uint32_t r = modPollRng.Below(100);
+        const LitKind kind = r < 60 ? LitKind::Mbox : r < 85 ? LitKind::Hw : LitKind::Ram;
+        Item ptr = MakeLitPtr(7, kind, true);   // registers the literal; the poll item carries it
+        poll.lit = ptr.lit;
+        poll.width = p.lits[poll.lit].width;
+        poll.pollWrite = modPollRng.Chance(70);
+        poll.pollValue = 1 + static_cast<int>(modPollRng.Below(3));
+        poll.untilSet = modPollRng.Chance(30);
+        poll.shape = kind == LitKind::Hw ? "poll.hw" : kind == LitKind::Ram ? "poll.ram" : "poll.mbox";
+        f.items.push_back(poll);
+        const bool read = modPollRng.Chance(50);
+        Lit ram;
+        ram.kind = LitKind::Ram;
+        // (0x3100 on: the other productions' RAM literals are at 0x2000 to 0x23FF, 0x3000 to 0x307F, and the mailboxes at 0x1000 to 0x103F)
+        ram.value = (modPollRng.Chance(50) ? 0x26000000u : 0x06000000u) + 0x3100u + 4u * modPollRng.Below(8);
+        const int w = read ? 1 : 1 << modPollRng.Below(3);
+        ram.width = w;
+        Item lp;
+        lp.type = Item::LitPtr;
+        lp.shape = "mod_poll.litptr";
+        lp.reg = 6;
+        lp.lit = static_cast<int>(p.lits.size());
+        p.lits.push_back(ram);
+        align[6] = std::min(4, w);
+        pref[6] = w;
+        defined |= 1u << 6;
+        f.items.push_back(lp);
+        Item st;
+        st.type = Item::Mem;
+        st.base = 6;
+        st.width = w;
+        const int sz = w == 1 ? 0 : w == 2 ? 1 : 2;
+        if (read)
+        {
+            const int m = 4 + static_cast<int>(modPollRng.Below(2));   // r4 or r5: only read by the items before (a post-increment, a copy)
+            st.shape = "mod_poll.store_param";
+            st.words = { uint16_t(0x2000 | 6 << 8 | m << 4) };   // mov.b Rm,@r6
+            f.items.push_back(st);
+            p.postPollRead = m;
+            p.postPollStore = 0;
+            p.postPollStoreWidth = 0;
+        }
+        else
+        {
+            Item k;
+            k.type = Item::Alu;
+            k.shape = "mod_poll.const";
+            k.words = { uint16_t(0xE100 | (1 + modPollRng.Below(0x7F))) };   // mov #k,r1
+            defined |= 1u << 1;
+            f.items.push_back(k);
+            st.shape = "mod_poll.store";
+            st.words = { uint16_t(0x2000 | 6 << 8 | 1 << 4 | sz) };   // mov.x r1,@r6
+            f.items.push_back(st);
+            p.postPollStore = ram.value;
+            p.postPollStoreWidth = w;
+            p.postPollRead = 0;
+        }
+        defined |= 1u;   // (the poll's r0)
+        p.postPollFn = idx;
+    }
+
     // A3-178, A3-179: in one program of two with a poll (from the seeds where the production is drawn), the program ends with a call of a
     // second function after the poll: `sts pr,r3 ; mov.l r3,@-r15 ; (jsr through r2 | bsr) G ; nop ; mov.l @r15+,r3 ; lds r3,pr`, PR kept on
     // the stack in the code after the poll, so nothing of it is left once the analysis removes that code. G returns a value in r0 (so r0 at the
@@ -2574,6 +2654,9 @@ constexpr uint64_t kPostStoreFirst = 4400001;
 constexpr uint64_t kPostCallFirst = 4800001;
 // ...and A3-182's (a poll inside a skip whose exit joins the skip's end, A3-183), likewise.
 constexpr uint64_t kPostJoinFirst = 5600001;
+// ...and A3-181's (version 2: a poll at the end of a function of a module, then a store of a constant or of a parameter), likewise. The first
+// production of grammar 2 that polls; no seed below keeps anything but its program.
+constexpr uint64_t kModPollFirst = 5800001;
 
 Program Generate(uint64_t seed)
 {
@@ -2590,6 +2673,7 @@ Program Generate(uint64_t seed)
 Program Generate2(uint64_t seed, int attempt)
 {
     Gen g(seed ^ (static_cast<uint64_t>(attempt) << 40));
+    g.modPollOn = seed >= kModPollFirst;
     return g.Module();
 }
 
@@ -4428,6 +4512,7 @@ struct Subject
     uint32_t postPollCallStore = 0;        // ...and the word of work RAM it writes, 0: none
     uint32_t postJoin = 0;                 // version 1 (A3-183): the address of work RAM the store after a poll's join writes, 0: none
     int postJoinValue = 0;                 // ...and the constant the path through the poll gives it
+    int postPollFn = -1;                   // version 2 (A3-181): the function that holds postPollRead / postPollStore (version 1: function 0)
     std::string literals;                  // for the report
 
     uint16_t WordAt(uint32_t addr) const
@@ -4461,6 +4546,7 @@ Subject MakeSubject(const Program& p)
     s.postPollCallStore = p.postPollCallStore;
     s.postJoin = p.postJoin;
     s.postJoinValue = p.postJoinValue;
+    s.postPollFn = p.postPollFn;
     s.bad = !a.ok;
     s.words = a.words;
     s.codeWords = a.codeWords;
@@ -5384,6 +5470,13 @@ std::string EffectClaimsContradicted(const CallEffects& e, const RunOut& run, st
     return std::string();
 }
 
+// The function the program's post-poll facts (postPollRead, postPollStore) are about: version 1's function 0, or the module's function that
+// ends with the poll (A3-181).
+bool PostPollFn(const Subject& s, int fi)
+{
+    return s.v2 ? s.postPollFn == fi : fi == 0;
+}
+
 void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, const Subject& subject, int fi,
              const std::map<uint32_t, Prototype>& lent, const std::vector<DecompileResult>& results, bool volatileRun,
              const std::vector<RunOut>& runs, Runner& runner, Report& rep, bool wantText, DecompileResult& r)
@@ -5601,7 +5694,7 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
         // register read only there; its callers then lose the argument. The program stores r<m> (m = 4 to 7) as its last item
         // (Gen::AddPostPollRead): a lent signature holds r4 to r<m> (the parameters are consecutive), else the function is withheld or the
         // register is read before the poll.
-        if (r.status == DecompileStatus::Ok && subject.postPollRead >= 4 && fi == 0 && !subject.v2)
+        if (r.status == DecompileStatus::Ok && subject.postPollRead >= 4 && PostPollFn(subject, fi))
         {
             static const std::regex endlessLoop("^\\s*\\}?\\s*while\\( true \\);?\\s*$");
             bool forEver = false;
@@ -5620,7 +5713,7 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
         // with nothing said, the signature lent: its callers keep the old word across the call, where on the hardware the poll ends and the
         // callee writes it. The program ends with a store of a constant at an address nothing else of it names (Gen::AddPostPollStore): in a
         // text with `while( true );` a line stores it, or a caution says the write of that address is missing and the signature is withheld.
-        if (r.status == DecompileStatus::Ok && subject.postPollStore != 0 && fi == 0 && !subject.v2)
+        if (r.status == DecompileStatus::Ok && subject.postPollStore != 0 && PostPollFn(subject, fi))
         {
             static const std::regex endlessLoop("^\\s*\\}?\\s*while\\( true \\);?\\s*$");
             static const std::regex storeLine("^\\s*_?[A-Za-z]*Ram([0-9a-f]{8})(?:\\._([0-9]+)_([0-9]+)_)?\\s*(?:[-+*/%&|^]|<<|>>)?=(?!=)");
@@ -15590,6 +15683,13 @@ void TestA3RoutedPins(Sh2Decompiler& d)
             for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
             CHECK(prog.postJoin != 0 && count(rep, "endless-join.checked") > 0 && count(rep, "endless-join.said") == count(rep, "endless-join.checked"));
             for (const Finding& f : rep.findings) CHECK(f.sig.find("endless-join") == std::string::npos);
+        }
+        for (uint64_t sd = 5800001; sd < 5800400; ++sd)
+        {
+            const Program prog = MakeV2(sd);
+            if (prog.postPollFn < 0) continue;
+            const Report rep = Evaluate(d, prog, false);
+            std::printf("SCAN %llu read=%d store=%08X fn=%d chk %d %d\n", (unsigned long long)sd, prog.postPollRead, prog.postPollStore, prog.postPollFn, count(rep, "endless-read.checked"), count(rep, "endless-after-store.checked"));
         }
         const Report seed = Evaluate(d, Generate(3704634), true);
         std::printf("pin 'A3-171 grammar 1 seed 3704634': %zu finding(s), endless-store replaced %d\n", seed.findings.size(), count(seed, "endless-store.replaced"));

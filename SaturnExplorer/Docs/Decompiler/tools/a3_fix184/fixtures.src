@@ -1,0 +1,82 @@
+# Area 3, A3-184 fixer: hand fixtures for a poll whose exit leads to a block the text keeps with no op of the flow alive in it (jo1 is in
+# ../a3_fix182/fixtures.src). Format as round 23's. Right for each jo: lent, `void (...)`, no caution, as the poll's path is the one the hardware
+# takes too (the kept block's code is dead on both paths).
+name jo2
+# the join is a block of its own whose only op is dead (r5 copied to r1) and which falls into the returning block R, a target of another branch
+tst r6,r6
+bt R
+tst r4,r4
+bt Q
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+Q:
+mov r5,r1
+R:
+rts
+nop
+name jo3
+# a word of the caller's frame read (into a dead r1) in the kept join
+tst r4,r4
+bt Q
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+Q:
+mov.l @(4,r15),r1
+rts
+nop
+name jo4
+# a dead sum of two held parameters in the kept join (r6 and r7 are read and nothing keeps the sum)
+tst r4,r4
+bt Q
+mov.l =0x06001010,r2
+mov #1,r1
+mov.w r1,@r2
+P:
+mov.w @r2,r1
+tst r1,r1
+bf P
+Q:
+mov r6,r3
+add r7,r3
+rts
+nop
+name jo5
+# the poll's own register r0 is read in the kept join and nothing keeps it (a bare `rts ; nop` follows)
+tst r4,r4
+bt Q
+mov.l =0x06001010,r7
+mov #1,r0
+mov.w r0,@r7
+P:
+mov.w @r7,r0
+tst #1,r0
+bf P
+Q:
+mov r5,r2
+mov r2,r3
+rts
+nop
+name jo6
+# the join is the bare `rts ; nop`, reached from the poll's exit by falling through: nothing at all is read
+tst r4,r4
+bt Q
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+Q:
+rts
+nop
