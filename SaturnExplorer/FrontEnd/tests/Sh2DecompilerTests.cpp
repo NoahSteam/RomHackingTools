@@ -3040,6 +3040,274 @@ void TestArea7Round12()
     }
 }
 
+// Area 7 round 13 (A7-104 to A7-113): the shrunk words of each seed, run as the generator runs them (callees' prototypes lent, deepest
+// first), with the line, the audit, and a damaged result: the line drawn where it was before the fix, or a number it does not show.
+void TestArea7Round13()
+{
+    std::vector<uint8_t> hw(0x100000u, 0);
+    Sh2Decompiler d(gConfig);
+    const std::function<bool(uint32_t, uint16_t&)> word = [&hw](uint32_t x, uint16_t& w) {
+        if (x < 0x06000000u || x - 0x06000000u + 1 >= hw.size()) return false;
+        w = static_cast<uint16_t>(hw[x - 0x06000000u] << 8 | hw[x - 0x06000000u + 1]);
+        return true;
+    };
+    const auto run = [&](const std::vector<uint16_t>& w, uint32_t entry, const std::vector<uint32_t>& lend) {
+        std::fill(hw.begin(), hw.end(), 0);
+        for (size_t i = 0; i < w.size(); ++i) dts::Put16(hw, 0x9000u + 2 * i, w[i]);
+        const auto snap = MakeSnapshot(hw);
+        DecompileRequest q = Request(entry);
+        for (uint32_t l : lend)
+        {
+            DecompileRequest c = Request(l);
+            c.prototypes = q.prototypes;
+            q.prototypes.emplace_back(l, d.Decompile(snap, c).prototype);
+        }
+        return d.Decompile(snap, q);
+    };
+    const auto changed = [](const DecompileResult& r, const std::string& from, const std::string& to, int& n) {
+        DecompileResult x = r;
+        n = 0;
+        for (Line& l : x.lines)
+        {
+            const size_t at = l.text.find(from);
+            if (at == std::string::npos) continue;
+            l.text.replace(at, from.size(), to);
+            ++n;
+        }
+        return x;
+    };
+    // the line `what` is on: its drawn tokens addressed to `insn`, its empty ones (the stores it names) to `named` when that is not 0
+    const auto redrawn = [](const DecompileResult& r, const std::string& what, uint32_t insn, uint32_t named, int& n) {
+        DecompileResult x = r;
+        n = 0;
+        for (Line& l : x.lines)
+        {
+            if (l.text.find(what) == std::string::npos) continue;
+            l.firstAddr = 0;
+            bool empty = false;
+            for (Token& t : l.tokens)
+            {
+                if (t.addr && t.begin < t.end) t.addr = insn, t.materialised = false;
+                else if (t.addr && named) t.addr = named, empty = true;
+            }
+            if (named && !empty)
+            {
+                Token e;
+                e.begin = e.end = static_cast<uint16_t>(l.text.size());
+                e.addr = named;
+                l.tokens.push_back(e);
+            }
+            for (const Token& t : l.tokens)
+                if (t.addr && (l.firstAddr == 0 || t.addr < l.firstAddr)) l.firstAddr = t.addr;
+            ++n;
+        }
+        return x;
+    };
+    const auto tokenAt = [](const DecompileResult& r, const char* what, uint32_t insn) {
+        const Line* l = LineWith(r, what);
+        if (!l) return false;
+        for (const Token& t : l->tokens)
+            if (t.addr == insn) return true;
+        return false;
+    };
+    // A7-104 a truncation of the input stored by the slot of a `bt/s` that a `bra` enters too, hoisted by the engine to the `bt` before
+    // both paths: the stores of the input (`mov.w r1,@r6`) are the line's, not the word and byte stores of a loaded r2 before the branch,
+    // which the way back from the word store would offer before that store's own line (grammar 1 seed 4802131)
+    {
+        const std::vector<uint16_t> w = { 0xD60A, 0x6251, 0x2622, 0x2620, 0x2558, 0x890C, 0x2118, 0x8D08, 0x2611, 0xD707, 0xE001, 0x2701, 0x6071, 0xC801, 0x8BFC,
+                                          0x000B, 0x0009, 0x000B, 0x0009, 0xAFF3, 0x0009, 0x0009, 0x2600, 0x2288, 0x2600, 0x1000 };
+        const DecompileResult r = run(w, 0x06009000u, {});
+        Print("A7-104 the stores of the input are the truncation's line (grammar 1 seed 4802131)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        const char* line = "iRam26002288._0_2_ = (xunknown2)in_r1;";
+        CHECK(LineWith(r, line) != nullptr && tokenAt(r, line, 0x06009010u) && !tokenAt(r, line, 0x06009004u) && !tokenAt(r, line, 0x06009006u));
+        CHECK(dts::AuditMapping(r, word, "a7_104_4802131").Violations() == 0);
+        int n = 0;
+        const DecompileResult before = redrawn(r, line, 0x06009004u, 0x06009006u, n);
+        CHECK(n == 1 && dts::AuditMapping(before, word, "a7_104_4802131 before").Violations() >= 1);
+    }
+    // A7-105 the input r0 stored at the entry is no store of the `mov #0,r0` after it: the line of the number the slot's store of r3 (0
+    // after a `dt` loop) writes is that store's (grammar 1 seed 5000472, specials)
+    {
+        const std::vector<uint16_t> w = { 0xD607, 0x2602, 0xE301, 0x4310, 0x8BFD, 0x2248, 0x8B06, 0x4215, 0x8D02, 0x2632, 0xE000, 0x004E, 0x000B, 0x0009, 0xAFF9, 0x0009, 0x2600, 0x220C };
+        const DecompileResult r = run(w, 0x06009000u, {});
+        Print("A7-105 the input stored at the entry is no store of a later number (grammar 1 seed 5000472)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        const char* line = "xRam2600220c = 0;";
+        CHECK(LineWith(r, line) != nullptr && tokenAt(r, line, 0x06009012u) && !tokenAt(r, line, 0x06009002u));
+        CHECK(dts::AuditMapping(r, word, "a7_105_5000472").Violations() == 0);
+        int n = 0;
+        const DecompileResult before = redrawn(r, line, 0x06009014u, 0x06009002u, n);
+        CHECK(n == 1 && dts::AuditMapping(before, word, "a7_105_5000472 before").Violations() >= 1);
+    }
+    // A7-106 a bound of `mac.l`'s saturation at a join is the instruction's own number (grammar 1 seed 5002388, specials)
+    {
+        const std::vector<uint16_t> w = { 0x8801, 0x89FF, 0x057F, 0x030A, 0xE008, 0x0535, 0x000B, 0x0009 };
+        const DecompileResult r = run(w, 0x06009000u, {});
+        Print("A7-106 a bound of mac.l's saturation at a join (grammar 1 seed 5002388)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "uVar3 = 0xffff800000000000;") != nullptr && tokenAt(r, "uVar3 = 0xffff800000000000;", 0x06009004u));
+        CHECK(dts::AuditMapping(r, word, "a7_106_5002388").Violations() == 0);
+        int n = 0;
+        const DecompileResult other = changed(r, "uVar3 = 0xffff800000000000;", "uVar3 = 0xffff800000000001;", n);
+        CHECK(n == 1 && dts::AuditMapping(other, word, "a7_106_5002388 other").Violations() >= 1);
+    }
+    // A7-107 a register merged under a global's name at the first instruction of a `dt` loop names the register's makers on the paths
+    // into it, the `mov #1,r3` and the `dt r3`, not the `ldc r0,gbr` there (grammar 1 seed 5003735)
+    {
+        const std::vector<uint16_t> w = { 0xD708, 0xE301, 0x401E, 0x4310, 0x8BFC, 0x73FD, 0xD606, 0x2518, 0x8906, 0x3440, 0x8D02, 0x2632, 0x000B, 0x0009,
+                                          0x000B, 0x0009, 0xAFF9, 0x0009, 0x4600, 0x218C, 0x0600, 0x2208 };
+        const DecompileResult r = run(w, 0x06009000u, {});
+        Print("A7-107 a register merged under a global's name at a loop's first instruction (grammar 1 seed 5003735)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        const char* line = "iRam06002208 = iVar1;";
+        CHECK(LineWith(r, line) != nullptr && tokenAt(r, line, 0x06009002u) && tokenAt(r, line, 0x06009006u) && !tokenAt(r, line, 0x06009004u));
+        CHECK(dts::AuditMapping(r, word, "a7_107_5003735").Violations() == 0);
+        int n = 0;
+        const DecompileResult before = redrawn(r, line, 0x06009004u, 0x06009004u, n);
+        CHECK(n == 1 && dts::AuditMapping(before, word, "a7_107_5003735 before").Violations() >= 1);
+    }
+    // A7-108 a number line that says it names no instruction, while a store of the variable is known to store that number, hides the
+    // store: A7-99's variant whose store the loop's bit keeps, with the line's tokens taken away
+    {
+        const std::vector<uint16_t> w = { 0xD705, 0xE002, 0x2700, 0x2421, 0x6070, 0xC802, 0x8BFB, 0xE00C, 0x0406, 0x2702, 0x000B, 0x0009, 0x0600, 0x2380 };
+        const DecompileResult r = run(w, 0x06009000u, {});
+        CHECK(r.status == DecompileStatus::Ok);
+        const char* line = "uRam06002380 = 0x2000000;";
+        CHECK(LineWith(r, line) != nullptr && tokenAt(r, line, 0x06009004u));
+        CHECK(dts::AuditMapping(r, word, "a7_108").Violations() == 0);
+        DecompileResult hidden = r;
+        int n = 0;
+        for (Line& l : hidden.lines)
+        {
+            if (l.text.find(line) == std::string::npos) continue;
+            for (Token& t : l.tokens) t.addr = 0;
+            l.firstAddr = 0;
+            l.noOrigin = true;
+            ++n;
+        }
+        CHECK(n == 1 && dts::AuditMapping(hidden, word, "a7_108 hidden").Violations() >= 1);
+    }
+    // ...but a store of the number another store of the variable overwrites in its block before any read is no value to name: the 0 of
+    // `mov.b r3,@r6` before the poll's own store of 2, `uRam26001018 = 0;` the trimmed 2, names none and says so (grammar 1 seed 5204339)
+    {
+        const std::vector<uint16_t> w = { 0xD607, 0xE301, 0x4310, 0x8BFD, 0x2630, 0xD706, 0xE002, 0x2700, 0x2512, 0x6070, 0xC801, 0x8BFB, 0x2670, 0x000B, 0x0009, 0x0009,
+                                          0x2600, 0x1018, 0x2600, 0x1018 };
+        const DecompileResult r = run(w, 0x06009000u, {});
+        Print("A7-108 a number an overwritten store wrote names no store and says so (grammar 1 seed 5204339)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        const Line* l = LineWith(r, "uRam26001018 = 0;");
+        CHECK(l != nullptr && l->noOrigin);
+        CHECK(dts::AuditMapping(r, word, "a7_108_5204339").Violations() == 0);
+    }
+    // A7-109 `or #0xBD,r0` at a join whose paths bring 8 and 5 makes 0xBD on both (grammar 1 seed 5208620)
+    {
+        const std::vector<uint16_t> w = { 0xE008, 0x037D, 0x2128, 0x8901, 0xE005, 0xCE7A, 0xCBBD, 0x4315, 0x8B00, 0x4008, 0x000B, 0x0009 };
+        const DecompileResult r = run(w, 0x06009000u, {});
+        Print("A7-109 an or of numbers that give one result at a join (grammar 1 seed 5208620)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "xVar2 = 0xbd;") != nullptr && tokenAt(r, "xVar2 = 0xbd;", 0x0600900Cu));
+        CHECK(dts::AuditMapping(r, word, "a7_109_5208620").Violations() == 0);
+        int n = 0;
+        const DecompileResult other = changed(r, "xVar2 = 0xbd;", "xVar2 = 0xbf;", n);
+        CHECK(n == 1 && dts::AuditMapping(other, word, "a7_109_5208620 other").Violations() >= 1);
+    }
+    // A7-110 `and r2,r0` of the 2 a poll reads back and an r2 `shll2` shifted is 0 (grammar 1 seed 5207679)
+    {
+        const std::vector<uint16_t> w = { 0x4208, 0xD707, 0xE002, 0x2701, 0x6071, 0xC801, 0x8BFC, 0x8802, 0x89FF, 0x2029, 0xE301, 0x700B, 0x4310, 0x8BFC, 0x000B, 0x0009, 0x2E00, 0x1038 };
+        const DecompileResult r = run(w, 0x06009000u, {});
+        Print("A7-110 an and of a number and a register shifted left past it (grammar 1 seed 5207679)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "iVar1 = 0;") != nullptr && tokenAt(r, "iVar1 = 0;", 0x06009012u));
+        CHECK(dts::AuditMapping(r, word, "a7_110_5207679").Violations() == 0);
+        int n = 0;
+        const DecompileResult other = changed(r, "iVar1 = 0;", "iVar1 = 2;", n);
+        CHECK(n == 1 && dts::AuditMapping(other, word, "a7_110_5207679 other").Violations() >= 1);
+    }
+    // A7-111 an extension whose register the text uses only through `xtrct`, its high half: the 0 the engine prints (grammar 2 seed 5204684)
+    {
+        const std::vector<uint16_t> w = { 0x7FE0, 0x6033, 0x7F20, 0x000B, 0x0009, 0xE301, 0xA001, 0x0009, 0x615D, 0x4310, 0x8BFC, 0x215D, 0x4115, 0x8900, 0x6150, 0x000B, 0x0009 };
+        const DecompileResult r = run(w, 0x0600900Au, {});
+        Print("A7-111 an extension used only through xtrct's high half (grammar 2 seed 5204684)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "in_r1 = 0;") != nullptr && tokenAt(r, "in_r1 = 0;", 0x06009010u));
+        CHECK(dts::AuditMapping(r, word, "a7_111_5204684").Violations() == 0);
+        int n = 0;
+        const DecompileResult other = changed(r, "in_r1 = 0;", "in_r1 = 1;", n);
+        CHECK(n == 1 && dts::AuditMapping(other, word, "a7_111_5204684 other").Violations() >= 1);
+    }
+    // A7-112 a copy of a global the engine put at a `bsr` whose store runs after a tail `jmp` into the callee: the load there reads the
+    // value, past the push through r15 the walk cannot place (grammar 2 seed 5203853)
+    {
+        const std::vector<uint16_t> w = { 0x2F86, 0x2F96, 0x4F22, 0x6843, 0x6953, 0xB013, 0xE65B, 0x6483, 0x6593, 0x0212, 0xE301, 0x4310, 0x8901, 0xAFFC, 0x0009, 0x2F26,
+                                          0x62F6, 0xD103, 0x4F26, 0x69F6, 0x68F6, 0x412B, 0x0009, 0x0009, 0x0600, 0x9034, 0xD102, 0x6012, 0x2142, 0x2602, 0x000B, 0x0009,
+                                          0x2600, 0x228C };
+        const DecompileResult r = run(w, 0x06009000u, { 0x06009034u });
+        Print("A7-112 a copy at a call whose store runs after a tail jump (grammar 2 seed 5203853)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        const char* line = "xRam0000005b = xRam2600228c;";
+        CHECK(LineWith(r, line) != nullptr && tokenAt(r, line, 0x06009036u) && !tokenAt(r, line, 0x0600900Au));
+        CHECK(dts::AuditMapping(r, word, "a7_112_5203853").Violations() == 0);
+        int n = 0;
+        const DecompileResult before = redrawn(r, line, 0x0600900Au, 0, n);
+        CHECK(n == 1 && dts::AuditMapping(before, word, "a7_112_5203853 before").Violations() >= 1);
+    }
+    // A7-114 a conversion of a register merged under a global's name at a join's first instruction (`cmp/pl r1` after `cmp/eq #2,r0 ;
+    // bf ; sub r3,r0`): r0's makers on the paths into it are the `sub` and the entry, so it names none and says so, never the `cmp/pl`
+    // (grammar 1 seed 5602142, this branch's program)
+    {
+        const std::vector<uint16_t> w = { 0xD707, 0x8802, 0x8B00, 0x3038, 0x4115, 0x8901, 0xE01C, 0x014E, 0x203A, 0x4215, 0x8D01, 0x8173, 0x8169, 0x000B, 0x0009, 0x0009,
+                                          0x0240, 0x0008 };
+        const DecompileResult r = run(w, 0x06009000u, {});
+        Print("A7-114 a conversion of a merged register at a join's first instruction (grammar 1 seed 5602142)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        const char* line = "uRam0240000e = (uint2)in_r0;";
+        const Line* l = LineWith(r, line);
+        CHECK(l != nullptr && l->noOrigin && !tokenAt(r, line, 0x06009008u));
+        CHECK(dts::AuditMapping(r, word, "a7_114_5602142").Violations() == 0);
+        int n = 0;
+        DecompileResult before = r;
+        for (Line& x : before.lines)
+        {
+            if (x.text.find(line) == std::string::npos) continue;
+            const size_t eq = x.text.find(" = ");
+            for (Token& t : x.tokens)
+                if (t.begin < t.end && (t.end <= eq || t.begin == eq + 1 || x.text.compare(t.begin, t.end - t.begin, "in_r0") == 0)) t.addr = 0x06009008u;
+            x.firstAddr = 0x06009008u;
+            x.noOrigin = false;
+            ++n;
+        }
+        CHECK(n == 1 && dts::AuditMapping(before, word, "a7_114_5602142 before").Violations() >= 1);
+    }
+    // A7-113 the engine's copy of a byte a word store wrote, kept over a `tas.b` of the byte beside it in a loop, names that store (grammar
+    // 1 seed 5304635, specials)
+    {
+        const std::vector<uint16_t> w = { 0xD608, 0xE301, 0x4310, 0x8BFD, 0xD707, 0x2631, 0x6070, 0xC801, 0x8BFB, 0x2410, 0xE301, 0x471B, 0x0229, 0x4310, 0x8BFB,
+                                          0x000B, 0x0009, 0x0009, 0x2600, 0x1024, 0x2600, 0x1024 };
+        const DecompileResult r = run(w, 0x06009000u, {});
+        Print("A7-113 a copy of a byte a word store wrote, over a tas.b beside it (grammar 1 seed 5304635)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        const char* line = "xRam26001025 = xRam26001025;";
+        CHECK(LineWith(r, line) != nullptr && tokenAt(r, line, 0x0600900Au));
+        CHECK(dts::AuditMapping(r, word, "a7_113_5304635").Violations() == 0);
+        DecompileResult before = r;
+        int n = 0;
+        for (Line& l : before.lines)
+        {
+            if (l.text.find(line) == std::string::npos) continue;
+            std::vector<Token> kept;
+            for (const Token& t : l.tokens)
+                if (t.begin < t.end) kept.push_back(t);
+            for (Token& t : kept)
+                if (t.addr == 0x06009016u) t.addr = 0;
+            l.tokens = kept;
+            l.firstAddr = 0x06009012u;
+            ++n;
+        }
+        CHECK(n == 1 && dts::AuditMapping(before, word, "a7_113_5304635 before").Violations() >= 1);
+    }
+}
+
 void TestFixture1()
 {
     Sh2Decompiler d(gConfig);
@@ -17789,6 +18057,7 @@ int main(int argc, char** argv)
         RUN(TestArea7Round10());
         RUN(TestArea7Round11());
         RUN(TestArea7Round12());
+        RUN(TestArea7Round13());
         RUN(TestSlotMadeLineIsAddressedToItsBranch());
         RUN(TestFrameStoreMaterialisedAtCall());
         RUN(TestFixture1b());

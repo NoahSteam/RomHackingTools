@@ -70,6 +70,9 @@ Kept here:
   sit on lines that show a read. The reviewer's probe is `SE_A7R4_PROBE=<file>` in `Sh2DecompilerTests.cpp` (`name|base|words|lend`,
   `img|<image>|<entry>`, `dis|<image>|<from>|<to>`): a function's text with each token's instruction, its fates and flow blocks, and the
   mapping audit, without rebuilding.
+* `a7_round13/`: area 7 round 13. `ranges.sh` runs generator ranges in pieces (`grammar alphabet first count` lines on stdin) and
+  `classes.py` lists each failing seed's finding classes other than area 5's `folded-store-after-access`. The generator's token dump
+  (`SE_GENERATED_TOKENS=2`) marks a token the product flags as a copy materialised at its instruction with an `m` after the address.
 
 Everything else that earlier rounds committed (their drivers, fuzzers, fixtures and summaries) was
 removed after commit `215d303`. The record (`FunctionalityVerification/15_DECOMPILER_STEP5.md`) still
