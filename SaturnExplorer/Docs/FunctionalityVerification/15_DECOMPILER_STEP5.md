@@ -18742,3 +18742,44 @@ The grammar 1 run of 5,000 seeds (below) drew 1,177 bodies and 419 moved T. On t
 ### Routed, no row here
 
 * **Area 7:** grammar 1 seeds 3300988 (`map-way-back`, A7-25: `D609 D70A 6272 6356 8802 8D04 601D 6223 8167 E006 036D 412E 471B 3138 1736 D704 D304 273B 000B 2611 2600 1034 2600 2104 2600 1038 E000 0000`) and 3302704 (`map-const-join`: `uVar3 = 2;` drawn at the first instruction of a join). These are the same classes as the ones round 19 routed. Both still fail with master `de0dddee` merged.
+
+## Area 3, round 20 review
+
+Reviewer, branch `review/3-round20`, cut at master `6433711b` (the host-only rewrite of the endless-loop caution, `StoresBeforeEndlessLoop`). No engine, host or product file changed. The repository gets fixtures (`Docs/Decompiler/tools/a3_round20/`: `fixtures.src`, assembled by `../a3_round16/asm.py`, and `run20.sh`, which runs one through the generator's `SE_GENERATED_WORDS` mode), ledger rows **A3-170 and A3-171**, and this record. The worktree's RelWithDebInfo build (no rebuild needed), every test binary under `ulimit -v 3500000` (4,000,000 for the generator ranges) and `timeout`, one heavy job at a time.
+
+**Verdict, area 3: not clean.** One P1 row (A3-170: the caution decides "made" by instruction address, and one address can be two instances of the flow) and one P3 row (A3-171: the host and the oracle disagree about the first of two stores when the second is itself dropped). The clean count stays 0.
+
+| Row | P | What |
+|---|---|---|
+| A3-170 | P1 | an instruction that is the delay slot of a `bf/s` and the target of a `bra` has two instances; one is printed on the path that returns, the other (a store dropped by the endless loop) counts as printed too: nothing said, signature lent |
+| A3-171 | P3 | `mov.w r3,@r6 ; mov.w r2,@r6 ; poll ; mov.w r3,@r6`: the second store is said, the first is not, and the oracle's `endless-store-dropped` asks for it (grammar 1 seed 3704634) |
+
+### 1. What was attacked on the new caution
+
+Each shape was assembled by hand and run through the generator's single-subject mode, so the emulator's trace stood beside the text (`tools/a3_round20/fixtures.src` holds the two that failed and their controls; the rest were scratch). The shapes the caution held on:
+
+| Shape | Result |
+|---|---|
+| a long store with a byte store over one of its bytes before the loop, the code rewriting the long (p1) or only a half (p2) after it | p1: both said; p2: both printed (`xRam06002304 = param_3; xRam06002304._3_1_ = param_2;`), nothing said |
+| four byte stores, then a half store over two of them after the loop | the two bytes the half does not rewrite are printed, the other two said (each byte store on its own) |
+| two half stores that tile a long, the long stored after the loop | both said |
+| a store on both of two paths that join before the loop; on one path only | each path's store said; the one-path store said |
+| a store through a pointer beside a store to the global | the pointer store printed, the global's said |
+| pre-decrement store (`mov.l r6,@-r3`), `@(r0,r3)` store, both to a literal | said |
+| nested loops (a counted loop before the endless one; two endless loops on the two arms of a branch) | the store in the counted loop said "in" its loop (the outer loop is dead too); each arm's said at its loop |
+| a store before a branch whose one arm returns and the other waits for ever (n3) | the arm that returns prints the replacing store; the store before the branch said |
+| a loop whose exit never fires but whose body reads VDP2_TVSTAT (h2), a poll of VDP2_TVSTAT with a real exit (h3), a `tas.b` spinlock before a store (h4), `sett ; P: bt P` (h5) | nothing silent: the store is printed, or the loop is not endless |
+| the "silent copy" excuse: `mov.l @r3,r1 ; add #1,r1 ; mov.l r1,@r3` chains before and in the loop (s1 to s4, c1) | the dropped store of the last in the chain is always said; the earlier ones of the chain are not (A3-171), and no store the code makes is lost with nothing said. A merged counter prints a value the code never stores in an endless loop (round 19's f9, A3-161's class): not refiled |
+| a loop whose exit depends on a hardware read | the read stays in the text; the loop is not taken for endless unless the exit test is constant |
+
+A3-170 is the one break. The caution keys `written` (the bytes the text writes) on the instruction's address, but the engine decodes an address twice when a `bra` goes to the delay slot of a `bf/s`. The two instances sit in two flow blocks, and one can be printed (the path that returns, where the global is live) while the other (the path that reaches only the loop) is dropped. The control that writes the store out a second time gets the caution. The generator finds it by itself (`endless-store-dropped`), but its programs never branch into a delay slot.
+
+### 2. Runs
+
+| Run | Result |
+|---|---|
+| game corpus (`SE_GAME_LEND=1`, hwram007 then hwram008) | real entries lent **474 (645 parameters) of 999** and **724 (975) of 1,543**; missing and said **0** and **4**; the caution appears in hwram008 0600C2DA and 0600C49A only, in no function of hwram007: as expected |
+| grammar 1, 3,700,001 to 3,710,000 (two pieces of 5,000, canary off) | 2 failing seeds: **3704634** (area 3, A3-171) and 3706930 (area 7, `map-copy-store`); polls 6,490 (with a body 2,245), `tas.b` 3,175 (T moved 871); `endless-store` runs 4,236, checked 118,395, said 19,408 |
+| grammar 2, 3,700,001 to 3,710,000 (two pieces) | 2 failing seeds, none area 3's: 3706722 (area 7, `map-number-store`) and 3709052 (area 5, `cache-read-pointer-unsaid`); claims checked 59,821 |
+| printed-C, 3,000 seeds | 5,585 functions, 5,297 compared: **0 `mismatch`**; **agrees=5196**, the baseline; narrow-c 130, void-return 227, void-return-lent 24, skipped 8 |
+| generator default run (300 seeds and the pins) | 0 findings |
