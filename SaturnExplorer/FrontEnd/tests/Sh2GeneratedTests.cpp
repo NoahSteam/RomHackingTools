@@ -5900,6 +5900,7 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                 }, "", OriginTextUnderTest);
             auto flag = [&](const char* sig, int n) {
                 if (n) add(sig, std::to_string(n) + " time(s); first: " + (audit.problems.empty() ? std::string("-") : audit.problems[0]));
+                if (n && std::getenv("SE_A7R_ALL")) for (const std::string& pr : audit.problems) std::fprintf(stderr, "A7ALL %s\n", pr.c_str());
             };
             flag("map-odd", audit.odd);
             flag("map-outside", audit.outside);

@@ -1346,7 +1346,7 @@ inline WordValue WrittenValue(const sfe::decomp::DecompileResult& r, const std::
 // that stores `r0 - r5`)
 inline bool RegisterMakers(const sfe::decomp::DecompileResult& r, const std::function<bool(uint32_t, uint16_t&)>& word,
                            const std::map<uint32_t, std::vector<uint32_t>>& into, uint32_t at, int reg, std::set<uint32_t>& makers,
-                           bool throughUpdate = false)
+                           bool throughUpdate = false, std::set<int>* entryRegs = nullptr)
 {
     const auto decode = [&](uint32_t p, sfe::DisassembledInstruction& d) {
         uint16_t w = 0;
@@ -1377,6 +1377,7 @@ inline bool RegisterMakers(const sfe::decomp::DecompileResult& r, const std::fun
         if (a == r.entry)
         {
             makers.insert(0);
+            if (entryRegs) entryRegs->insert(rg);
             continue;
         }
         if (preds.empty()) return false;
@@ -2537,7 +2538,7 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     // (A7-78: a load into the register may read the input back only when the body stores the input -- a store whose register's
                     // makers include the entry or are not known -- somewhere; a body that stores nothing of it holds the input nowhere in
                     // memory, and the load is the memory's own value, `mov.w @r6,r0` of a register: grammar 1 seed 3706930)
-                    const auto bodyStores = [&]() {
+                    const auto bodyStores = [&](bool loadKnown, uint32_t loadAt, int loadSize, int inputReg) {
                         std::set<uint32_t> pool;   // (the literal pool among the body's words is data: the words a pc-relative load reads)
                         for (const auto& range : r.body)
                             for (uint32_t q = range.first; q < range.second; q += 2)
@@ -2565,7 +2566,18 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                                 const sfe::DisassembledInstruction qd = sfe::Sh2Decode(q, qw);
                                 const int qreg = qd.IsValid && ShapeOf(qd).store ? StoredRegister(qw, qsize) : -1;
                                 std::set<uint32_t> qm;
-                                if (qreg >= 0 && (!RegisterMakers(r, word, sources, q, qreg, qm) || qm.count(0))) return true;
+                                std::set<int> entered;
+                                if (qreg < 0) continue;
+                                const bool walked = RegisterMakers(r, word, sources, q, qreg, qm, false, &entered);
+                                if (walked && !qm.count(0)) continue;
+                                // (the input the line shows: a store of another input's register holds another value)
+                                if (walked && inputReg >= 0 && !entered.empty() && !entered.count(inputReg)) continue;
+                                // (the load's address and the store's both known, and apart: the load reads another word)
+                                uint32_t sa = 0;
+                                int ss = 0;
+                                if (loadKnown && AccessAddress(r, word, sources, q, qw, true, sa, ss, 0) && (sa + static_cast<uint32_t>(ss) <= loadAt || loadAt + static_cast<uint32_t>(loadSize) <= sa))
+                                    continue;
+                                return true;
                             }
                         return false;
                     };
@@ -2645,7 +2657,18 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                                                   ((mw >> 8) & 0xF) != reg;
                                 // (A7-78: only in a body that stores something; one without a store holds the input nowhere in memory, and the load
                                 // is the memory's own value, `mov.w @r6,r0` of a register: grammar 1 seed 3706930)
-                                if (ShapeOf(sfe::Sh2Decode(m, mw)).load && !step && bodyStores()) storesInput = true;
+                                if (ShapeOf(sfe::Sh2Decode(m, mw)).load && !step)
+                                {
+                                    uint32_t la = 0;
+                                    int ls = 0;
+                                    if (!haveSources)
+                                    {
+                                        sources = BranchSources(r, word);
+                                        haveSources = true;
+                                    }
+                                    const bool known = AccessAddress(r, word, sources, m, mw, false, la, ls, 0);
+                                    if (bodyStores(known, la, ls, inputRegister)) storesInput = true;
+                                }
                             }
                         }
                         if (!storesInput)
