@@ -563,7 +563,7 @@ bf P
 rts
 mov #5,r0
 name pp10
-# A3-173 control: r6 loaded after the loop is no input
+# A3-173 control: r6 loaded after the loop is no input (lent; the store after the loop is dropped unsaid: A3-175)
 mov.l =0x06002304,r3
 mov.l =0x06001010,r7
 mov #1,r0
