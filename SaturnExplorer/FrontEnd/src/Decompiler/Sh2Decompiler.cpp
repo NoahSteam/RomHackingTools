@@ -8662,14 +8662,20 @@ void JoinedAfterEndlessLoop(const ghidra::Funcdata& fd, const FlowRecord& flow, 
     // A3-173's region is the flow blocks after a loop up to one with a live op; a block the text keeps with no op of the flow alive in it
     // (`rts ; nop`, whose RETURN the engine rebuilt) is in it. Here a block of the region whose code a block of the final graph still
     // covers is kept: the code after the loop is what the final graph no longer has.
-    std::vector<std::pair<uint64_t, uint64_t>> spans;
+    // (By the instructions of its ops, not by a block's address range: a final block can hold ops of instructions on both sides of the code
+    // after a loop, a `bra` back into a delay slot (grammar 1 seed 5600146), and its range would cover that code.)
+    std::set<uint32_t> finalInsns;
     {
         const ghidra::BlockGraph& g = fd.getBasicBlocks();
         for (ghidra::int4 i = 0; i < g.getSize(); ++i)
         {
             const ghidra::BlockBasic* bb = static_cast<const ghidra::BlockBasic*>(g.getBlock(i));
-            const ghidra::Address a = bb->getStart(), z = bb->getStop();
-            if (!a.isInvalid() && !z.isInvalid() && a.getSpace() == z.getSpace()) spans.emplace_back(a.getOffset(), z.getOffset());
+            if (!bb->getStart().isInvalid()) finalInsns.insert(static_cast<uint32_t>(bb->getStart().getOffset()));
+            for (auto it = bb->beginOp(); it != bb->endOp(); ++it)
+            {
+                finalInsns.insert(InstructionOf(*it));
+                finalInsns.insert(static_cast<uint32_t>((*it)->getAddr().getOffset()));
+            }
         }
     }
     std::vector<char> gone(nf, 0);
@@ -8678,8 +8684,7 @@ void JoinedAfterEndlessLoop(const ghidra::Funcdata& fd, const FlowRecord& flow, 
         if (loopAt[b]) gone[b] = 1;
         if (!after[b]) continue;
         bool covered = false;
-        for (const FlowOp& x : flow.blockOps[b])
-            for (const auto& sp : spans) covered = covered || (sp.first <= x.insn && x.insn <= sp.second);
+        for (const FlowOp& x : flow.blockOps[b]) covered = covered || finalInsns.count(x.insn) != 0;
         gone[b] = !covered;
     }
     auto removed = [&](size_t b) { return gone[b] != 0; };
@@ -8839,7 +8844,7 @@ void JoinedAfterEndlessLoop(const ghidra::Funcdata& fd, const FlowRecord& flow, 
         for (size_t b = 0; b < nf; ++b) spRun(b, spIn[b], true);
     }
     // 2. Reaching definitions with the mark. A definition is (op index + 1) << 16 | key (0 << 16 | key: the value on entry), and an element
-    // of a set is that << 1 | the mark.
+    // of a set is that << 1 | the mark. A call defines r0 to r7.
     std::vector<size_t> base(nf + 1, 0);
     for (size_t b = 0; b < nf; ++b) base[b + 1] = base[b] + flow.blockOps[b].size();
     // the keys of the frame are found by the walk: give every word an op addresses its key first
@@ -8857,7 +8862,12 @@ void JoinedAfterEndlessLoop(const ghidra::Funcdata& fd, const FlowRecord& flow, 
     if (nk > 4096) return;
     using Set = std::vector<uint64_t>;
     using State = std::vector<Set>;
-    auto defId = [&](size_t b, size_t i, int k) { return (static_cast<uint64_t>(base[b] + i + 1) << 16) | static_cast<uint64_t>(k); };
+    // (r1 to r7 after a call are what the callee left, no value of the code's: such a definition, 0x8000 in its key's half, is lost by no edge)
+    auto defId = [&](size_t b, size_t i, int k) {
+        const ghidra::OpCode c = flow.blockOps[b][i].code;
+        const bool clobber = (c == ghidra::CPUI_CALL || c == ghidra::CPUI_CALLIND) && k >= 1 && k < 8;
+        return (static_cast<uint64_t>(base[b] + i + 1) << 16) | static_cast<uint64_t>(k) | (clobber ? 0x8000u : 0u);
+    };
     std::vector<State> in(nf);
     std::vector<char> reached(nf, 0);
     {
@@ -8967,7 +8977,7 @@ void JoinedAfterEndlessLoop(const ghidra::Funcdata& fd, const FlowRecord& flow, 
     auto lostRoot = [&](const Set& s) {
         for (uint64_t e : s)
         {
-            if ((e & 1u) && !std::binary_search(s.begin(), s.end(), e & ~uint64_t(1))) return static_cast<int>((e >> 1) & 0xFFFFu);
+            if ((e & 1u) && !((e >> 1) & 0x8000u) && !std::binary_search(s.begin(), s.end(), e & ~uint64_t(1))) return static_cast<int>((e >> 1) & 0x0FFFu);
             auto t = tainted.find(e >> 1);
             if (t != tainted.end()) return t->second;
         }
@@ -9053,15 +9063,40 @@ void JoinedAfterEndlessLoop(const ghidra::Funcdata& fd, const FlowRecord& flow, 
                 case ghidra::CPUI_CALLIND:
                 {
                     if (x.code == ghidra::CPUI_CALLIND) use(inRoot[0]);
+                    // What the call is passed, as the text has it: the parameters of the engine's call (r4 to r7, a stack word at r15 + an
+                    // offset at the call). A call the engine no longer has is taken to be passed r4 to r7 and the four words at r15.
+                    const ghidra::FuncCallSpecs* fc = nullptr;
+                    for (ghidra::int4 c = 0; c < fd.numCalls() && !fc; ++c)
+                        if (fd.getCallSpecs(c) && fd.getCallSpecs(c)->getOp() && InstructionOf(fd.getCallSpecs(c)->getOp()) == x.insn) fc = fd.getCallSpecs(c);
                     int arg = -1;
-                    for (int k = 4; k < 8 && arg < 0; ++k) arg = lostRoot(st[static_cast<size_t>(k)]);
-                    // the words its stack arguments are in (r15 + 0 to 15 at the call)
-                    if (addrOff[b][i] != kNone)
-                        for (int64_t w = addrOff[b][i] & ~int64_t(3); w < addrOff[b][i] + 16 && arg < 0; w += 4)
+                    auto stackWord = [&](int64_t off) {
+                        if (addrOff[b][i] == kNone) return;
+                        auto f = frameKey.find((addrOff[b][i] + off) & ~int64_t(3));
+                        if (f != frameKey.end() && arg < 0) arg = lostRoot(st[static_cast<size_t>(f->second)]);
+                    };
+                    if (fc)
+                        for (ghidra::int4 p = 0; p < fc->numParams() && arg < 0; ++p)
                         {
-                            auto f = frameKey.find(w);
-                            if (f != frameKey.end()) arg = lostRoot(st[static_cast<size_t>(f->second)]);
+                            const ghidra::Address a = fc->getParam(p)->getAddress();
+                            if (a.isInvalid()) continue;
+                            if (a.getSpace() == regSpace)
+                            {
+                                FlowVn v;
+                                v.space = a.getSpace();
+                                v.offset = a.getOffset();
+                                v.size = fc->getParam(p)->getSize();
+                                keysOf(v, ks2);
+                                for (int k : ks2)
+                                    if (arg < 0) arg = lostRoot(st[static_cast<size_t>(k)]);
+                            }
+                            else if (a.getSpace()->getType() == ghidra::IPTR_SPACEBASE)
+                                stackWord(static_cast<int32_t>(static_cast<uint32_t>(a.getOffset())));
                         }
+                    else
+                    {
+                        for (int k = 4; k < 8 && arg < 0; ++k) arg = lostRoot(st[static_cast<size_t>(k)]);
+                        for (int64_t w = 0; w < 16; w += 4) stackWord(w);
+                    }
                     use(arg);
                     break;
                 }
