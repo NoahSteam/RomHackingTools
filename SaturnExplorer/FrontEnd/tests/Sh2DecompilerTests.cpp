@@ -16076,10 +16076,16 @@ void TestA3164Fix()
         // A3-169 control (f4r): the same two stores before an rts
         { "A3-169 control: the two stores before rts", { 0xD302, 0x2352, 0x2362, 0x000B, 0x0009, 0x0009, 0x0600, 0x2304 },
           { "xRam06002304 = param_3;" }, { "param_2;" } },
+        // A3-170 control (round 20's d1 without its `bt T`, Docs/Decompiler/tools/a3_round20/fixtures.src d1n): the slot's address is one
+        // instance, on a path to the return and on one to the poll, and the text prints its store
+        { "A3-170 control: one instance of the slot", { 0xD308, 0xD709, 0xE001, 0x2701, 0x6043, 0xC801, 0x3450, 0x8F06, 0x2362, 0x6071, 0xC801, 0x8BFC,
+            0x2342, 0x000B, 0x0009, 0x000B, 0x0009, 0x0009, 0x0600, 0x2304, 0x0600, 0x1010 },
+          { "xRam06002304 = param_3;", "while( true )" }, {} },
     };
     // ...of which these are lent a signature (nothing of the code is missing from their text)
     const char* const kLent[] = { "A3-167 control: a body, no store after the loop", "A3-167 control: a stored register merged under the global's name", "A3-168 control: tas.b, no store after the loop",
-                                  "A3-169 a store the next store before the loop replaces", "A3-169 control: the two stores before rts" };
+                                  "A3-169 a store the next store before the loop replaces", "A3-169 control: the two stores before rts",
+                                  "A3-170 control: one instance of the slot" };
     // What the engine still drops (it saw no reader of the write before it took the loop for endless) is said on the store's instruction
     // (Sh2Decompiler::NoteStoresBeforeEndlessLoop), and the signature is withheld. Generator grammar 1 seed 12705, shrunk: `mov.l r1,@r6`
     // (0x06002000), the poll's write and the poll, and `mov.l r0,@r6` after the loop replaces the first store; seed 1209, shrunk: the poll's
@@ -16120,6 +16126,25 @@ void TestA3164Fix()
                                                                                       0x0610, 0x2308, 0x2600, 0x1034 }, 0x0600900Cu },
         { "A3-167 seed 3302668: a body that writes back the word", { 0xD605, 0xD706, 0x6361, 0xE001, 0x2700, 0x2631, 0x6070, 0xC801, 0x8BFB, 0x000B, 0x0009,
                                                                        0x0009, 0x2600, 0x1028, 0x0600, 0x2280 }, 0x0600900Au },
+        // A3-170 (round 20's d1): `bt T ; cmp/eq r5,r4 ; bf/s Q ; S: mov.l r6,@r3 ; P: poll ; ... ; T: bra S`. The slot's address is two
+        // instances of the flow: the slot's, printed on the path to the return in Q, and S's own, on the path through T, which reaches only the
+        // poll. "Made" was decided by the address, so the second counted as printed: nothing said, the signature lent. It is decided by the
+        // instance (the op's flow block) now
+        { "A3-170 d1: a branch into the slot of a bf/s", { 0xD309, 0xD70A, 0xE001, 0x2701, 0x6043, 0xC801, 0x890A, 0x3450, 0x8F06, 0x2362, 0x6071, 0xC801,
+            0x8BFC, 0x2342, 0x000B, 0x0009, 0x000B, 0x0009, 0xAFF5, 0x0009, 0x0600, 0x2304, 0x0600, 0x1010 }, 0x06009012u },
+        // ...the control that writes the store out a second time on T's path (d1c), said before and now
+        { "A3-170 control d1c: the store written out twice", { 0xD30A, 0xD70B, 0xE001, 0x2701, 0x6043, 0xC801, 0x890A, 0x3450, 0x8F06, 0x2362, 0x6071, 0xC801,
+            0x8BFC, 0x2342, 0x000B, 0x0009, 0x000B, 0x0009, 0x2362, 0xAFF5, 0x0009, 0x0009, 0x0600, 0x2304,
+            0x0600, 0x1010 }, 0x06009024u },
+        // ...and with the printed instance a statement of its own (`bt T ; bf/s Q`, d2): `if ((param_1 & 1) != 0) { xRam06002304 = param_3; return param_2; }`
+        { "A3-170 d2: the printed instance a statement", { 0xD309, 0xD70A, 0xE001, 0x2701, 0x6043, 0xC801, 0x8909, 0x8F06, 0x2362, 0x6071, 0xC801, 0x8BFC,
+            0x2342, 0x000B, 0x0009, 0x000B, 0x6053, 0xAFF5, 0x0009, 0x0009, 0x0600, 0x2304, 0x0600, 0x1010 }, 0x06009010u },
+        // A3-171 (grammar 1 seed 3704634 shrunk, round 20's c2; c1 the body form): the store a later one before the loop replaces is not said,
+        // when the later one is said too (checked below)
+        { "A3-171 c2: two stores of a word before the poll", { 0xD605, 0x2631, 0x2621, 0xD705, 0xE002, 0x2702, 0x6072, 0xC801, 0x89FC, 0x2631, 0x000B, 0x0009,
+            0x2600, 0x210C, 0x0600, 0x1004 }, 0x06009004u },
+        { "A3-171 c1: the replacing store in the poll's body", { 0xD307, 0x6132, 0x7101, 0x2312, 0xD706, 0xE001, 0x2701, 0x7101, 0x2312, 0x6071, 0xC801, 0x8BFA,
+            0x2342, 0x000B, 0x0009, 0x0009, 0x0600, 0x2304, 0x0600, 0x1010 }, 0x06009010u },
     };
     for (const Said& c : kSaid)
     {
@@ -16127,6 +16152,13 @@ void TestA3164Fix()
         Print(c.name, r);
         CHECK(r.status == DecompileStatus::Ok && Has(r.Text(), "while( true )") && !r.prototype.known);
         CHECK(HasNoteAt(r, c.store, "here is missing: the analysis takes the loop at"));
+        // (A3-171: the first store of c2 and of c1 is replaced by the next before the loop, as in any function: not said)
+        if (std::string(c.name).compare(0, 6, "A3-171") == 0)
+            CHECK(!HasNoteAt(r, std::string(c.name).find("c2") != std::string::npos ? 0x06009002u : 0x06009006u, "here is missing"));
+        // (A3-170: one caution per address, whatever the instances)
+        size_t notes = 0;
+        for (const HardwareNote& n : r.hardwareNotes) notes += n.address == c.store && Has(n.text, "here is missing: the analysis takes the loop at");
+        CHECK(notes == 1);
     }
     // ...and a store the text prints is not said: the control of the cases above
     for (const Case& c : kCases)

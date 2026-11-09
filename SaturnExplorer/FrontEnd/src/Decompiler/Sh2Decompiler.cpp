@@ -8610,6 +8610,20 @@ std::vector<DecompileResult::EndlessLoopStore> StoresBeforeEndlessLoop(const ghi
     // its code (its ops, by their place in the flow or their instruction, and the instruction it starts at) take its start.
     const size_t nf = flow.successors.size();
     std::vector<uint32_t> loopAt(nf, 0);
+    // A3-170: the flow blocks that hold ops of an instruction (as the engine has it, InstructionOf). One address is two instances of the
+    // flow when a branch reaches the delay slot of a `bf/s` or `bt/s`: the slot's ops in the branch's block, and the instruction's own block.
+    std::map<uint32_t, std::vector<int>> instances;
+    for (size_t b = 0; b < nf && b < flow.blockOps.size(); ++b)
+        for (const FlowOp& x : flow.blockOps[b])
+        {
+            std::vector<int>& in = instances[x.insn];
+            if (in.empty() || in.back() != static_cast<int>(b)) in.push_back(static_cast<int>(b));
+        }
+    const std::vector<int> none;
+    auto instancesOf = [&instances, &none](uint32_t insn) -> const std::vector<int>& {
+        auto f = instances.find(insn);
+        return f == instances.end() ? none : f->second;
+    };
     bool loops = false;
     for (ghidra::int4 i = 0; i < n; ++i)
     {
@@ -8638,20 +8652,28 @@ std::vector<DecompileResult::EndlessLoopStore> StoresBeforeEndlessLoop(const ghi
         {
             at = canonicalOf(static_cast<uint32_t>(start.getOffset()));
             auto f = flow.insnBlock.find(static_cast<uint32_t>(start.getOffset()));
-            if (f != flow.insnBlock.end()) held.push_back(f->second.first);
+            if (f != flow.insnBlock.end() && instancesOf(static_cast<uint32_t>(start.getOffset())).size() < 2) held.push_back(f->second.first);
         }
+        std::vector<uint32_t> doubledHeld;   // (A3-170: an instruction of the flow in more than one block, an op of it with no time of the flow)
         for (auto it = bb->beginOp(); it != bb->endOp(); ++it)
         {
             const ghidra::PcodeOp* o = *it;
             if (at == 0) at = canonicalOf(InstructionOf(o));
             auto f = flow.ops.find(o->getTime());
             if (f != flow.ops.end()) held.push_back(f->second.first);
+            else if (instancesOf(InstructionOf(o)).size() > 1) doubledHeld.push_back(InstructionOf(o));
             else
             {
                 auto fi = flow.insnBlock.find(InstructionOf(o));
                 if (fi != flow.insnBlock.end()) held.push_back(fi->second.first);
             }
         }
+        // An instruction decoded twice (the delay slot of a `bf/s` that a `bra` also reaches) is in two flow blocks, and only one of them
+        // need be the loop's; flow.insnBlock names the first. Its instances are taken only when nothing else places the loop (more
+        // said, never less).
+        if (held.empty())
+            for (uint32_t insn : doubledHeld)
+                for (int fb : instancesOf(insn)) held.push_back(fb);
         if (at == 0) continue;
         for (int fb : held)
             if (fb >= 0 && static_cast<size_t>(fb) < nf && (loopAt[static_cast<size_t>(fb)] == 0 || at < loopAt[static_cast<size_t>(fb)]))
@@ -8679,8 +8701,16 @@ std::vector<DecompileResult::EndlessLoopStore> StoresBeforeEndlessLoop(const ghi
     // `iRam06002304 = iRam06002304 + 1;` at the add (A3-161's merge, round 19's fixture f9). A copy of the word's own value into it, with
     // nothing else writing it (`mov.b @(0,r6),r0 ; mac.w ; mov.b r0,@(0,r6)`, grammar 1 seed 2632; the write-back of seed 3302668), prints
     // nothing and is no such write. And the flow blocks that still hold an op of theirs.
+    // (A3-170: by the instance, the op's flow block, not by the instruction alone: an address decoded twice has one instance printed on a
+    // path that returns and the other dropped on the path that reaches only the loop. An op the actions made, with no time of the flow,
+    // is the instruction's at any instance, block -1.)
     const ghidra::AddrSpace* ram = fd.getArch()->getDefaultDataSpace();
-    std::map<uint32_t, std::vector<std::pair<uint32_t, uint32_t>>> written;
+    std::map<std::pair<int, uint32_t>, std::vector<std::pair<uint32_t, uint32_t>>> written;
+    auto instanceOf = [&flow, nf](const ghidra::PcodeOp* o) {
+        auto f = flow.ops.find(o->getTime());
+        return f != flow.ops.end() && f->second.first >= 0 && static_cast<size_t>(f->second.first) < nf ? std::make_pair(f->second.first, InstructionOf(o))
+                                                                                                          : std::make_pair(-1, InstructionOf(o));
+    };
     std::vector<const ghidra::PcodeOp*> silent;
     std::set<const ghidra::HighVariable*> printedHighs;
     std::vector<char> live(nf, 0);   // the flow blocks an op of the flow is still alive in
@@ -8694,12 +8724,12 @@ std::vector<DecompileResult::EndlessLoopStore> StoresBeforeEndlessLoop(const ghi
         const bool isShown = shown(o);
         if (isShown && fd.isHighOn()) printedHighs.insert(v->getHigh());
         if (v->getSpace() != ram) continue;
-        if (isShown) written[InstructionOf(o)].emplace_back(static_cast<uint32_t>(v->getOffset()), static_cast<uint32_t>(v->getSize()));
+        if (isShown) written[instanceOf(o)].emplace_back(static_cast<uint32_t>(v->getOffset()), static_cast<uint32_t>(v->getSize()));
         else if (o->code() == ghidra::CPUI_COPY && fd.isHighOn()) silent.push_back(o);
     }
     for (const ghidra::PcodeOp* o : silent)
         if (o->getIn(0) && !o->getIn(0)->isConstant() && printedHighs.count(o->getOut()->getHigh()) != 0 && o->getIn(0)->getHigh() == o->getOut()->getHigh())
-            written[InstructionOf(o)].emplace_back(static_cast<uint32_t>(o->getOut()->getOffset()), static_cast<uint32_t>(o->getOut()->getSize()));
+            written[instanceOf(o)].emplace_back(static_cast<uint32_t>(o->getOut()->getOffset()), static_cast<uint32_t>(o->getOut()->getSize()));
     struct Store
     {
         uint32_t insn = 0, address = 0, size = 0;
@@ -8732,9 +8762,12 @@ std::vector<DecompileResult::EndlessLoopStore> StoresBeforeEndlessLoop(const ghi
         const Store& s = stores[i];
         const uint32_t all = s.size >= 32 ? ~0u : (1u << s.size) - 1u;
         uint32_t kept = 0;
-        auto w = written.find(s.insn);
-        if (w != written.end())
-            for (const auto& x : w->second) kept |= bytesOf(s, x.first, x.second);
+        for (int b : { s.block, -1 })
+        {
+            auto w = written.find(std::make_pair(b, s.insn));
+            if (w != written.end())
+                for (const auto& x : w->second) kept |= bytesOf(s, x.first, x.second);
+        }
         if ((kept & all) == all || said.count(s.insn)) continue;
         // (By the instruction it starts at, and with nothing of it left: an instruction's own p-code can make blocks that start at one
         // instruction, as `mac.w`'s saturating arm does, and the flow block that goes on after the arm starts there too: grammar 1 seed 2632.)
