@@ -18837,3 +18837,55 @@ A3-170 is the one break. The caution keys `written` (the bytes the text writes) 
 
 * **Area 7:** grammar 1 seed 3706930 (`map-copy-store`; replay `D60F D710 D710 6072 C801 8BFC C801 8D01 8058 6033 2701 2522 2029 6361 630C 2319 2238 8D01 2522 6061 1703 6272 3030 8D03 6233 2632 2511 142B 5168 6341 000B 6361 05F8 00F0 4600 00C0 2600 2380`), grammar 2 seed 3706722 (`map-number-store`: `xRam26001000 = 4;`).
 * **Area 5:** grammar 2 seed 3709052 (`cache-read-pointer-unsaid`, a 1-byte read at 0x06009140 through a pointer derived from a register address).
+
+## Area 3, A3-170 and A3-171 fixer
+
+Fixer, branch `review/3-a3170-fix`, cut at master `5601733a`. Host, oracle and generator only: no engine patch, so no patch number was used (0089 stays free). The worktree's RelWithDebInfo build (`-j2`), every test binary under `ulimit -v 3500000` (4,000,000 for the generator ranges) and `timeout`, one heavy job at a time, each run under 20 minutes. **Both rows are fixed: A3-170 (P1) and A3-171 (P3). One new row: A3-172 (P3, the oracle).**
+
+### A3-170: "made" by the instance, not the address
+
+The engine decodes an address twice when a branch goes to the delay slot of a `bf/s` or `bt/s`: the slot's ops sit in the branch's flow block, and the target's own instance in a block of its own (the engine warns "Instruction at ... overlaps instruction at ..."). `StoresBeforeEndlessLoop` collected the bytes the text writes in a map keyed by the instruction (`InstructionOf`), so when one instance's store was printed (round 20's d1: the slot's, on the path to the return in Q), the other instance's (S's own, on the path through T, which reaches only the poll) counted as printed too.
+
+**Now the map is keyed by the instance**: the op's flow block (its time in `FlowRecord::ops`) with its instruction. The engine's fold records, which give the stores, are placed by the same time, so a store looks up only what its own instance's ops write. An op the actions made, with no time of the flow, counts for every instance of its instruction (block -1, the old rule). The same assumption was in the placing of the loops: an op of a loop block with no flow time was placed by `flow.insnBlock`, which names an instruction's first instance only, and so was the instruction a final block starts at. Both now place an instruction by its block only when it is one instance; the instances of a doubled one are taken only when nothing else places the loop (more said, never less). The `said` set stays per address: one caution per instruction, whatever the instances. Nothing else in the function keys by address: the removed-code test, the replacing stores and the walk are per flow block already.
+
+The generator's `endless-store-dropped` keys by address too, in two ways. Its "said" asks for the host's caution on the instruction, which is right (the caution is per address). Its "shown" takes a store as printed when any line stores the global, whichever instance the line is: round 20 found d1 only because its printed instance sits in an `if` condition the line pattern does not match. d2 (`bt T ; bf/s Q`, the printed instance a statement of its own) passes master's host with nothing said and the signature lent. The text gives no way to tell the instances apart (both lines' tokens name the one instruction), so this is filed, **A3-172 (P3, open)**, and the host's per-instance rule is held by the host's pins.
+
+### A3-171: the host is right, the oracle changed
+
+`mov.w r3,@r6 ; mov.w r2,@r6 ; mailbox write ; poll ; mov.w r3,@r6`: the code itself replaces the first store before the loop, so the word holds r2 when the loop starts, and already before the mailbox write that tells the other processor anything. The first store is dropped as in any function (A3-169's design: "a write the next one replaces"). That the replacing store is itself dropped by the loop, and said, does not make the first one a write anyone can read; saying it would say more than happens (A3-169's own class), and a reader who restores the said store gets the code's last word. So **the oracle changed**: `endless-store-dropped` takes a store of the run every byte of which a later folded store of the run writes again as replaced, and counts it (`endless-store.replaced`). The later store is checked itself, and a run that never leaves the loop makes every later store before the loop or in it, so the last word of each byte is still asked for. c2 (seed 3704634 shrunk), c1 (the replacing store in the poll's body) and the seed: 0 findings; the second store is said, the first not.
+
+### The generator: branches into a delay slot
+
+Two productions, drawn from a stream of their own (`slotEntryRng`) and **only for the seeds from 3,800,001 on** (`kSlotEntryFirst`, the first fresh range after they were added). Every seed below keeps the program it always had: the pins (grammar 1 seed 1904648, an area 7 pin, drew the first form and changed when the gate was a chance alone), the default run, the printed-C baseline and the 20,000-seed matrix. Above the gate a seed's program changes only where the decision fires.
+* **A slot entered** (version 1, one delayed skip in three): `tst ; bt/bf E` ahead of the skip's test, or `bt/bf T` there and `T: bra E ; nop` after the function, E being the slot; and in one of two the delayed branch goes to a return of its own after the function (`rts`, the function's own slot), so that one instance reaches a return and the other only what follows. Half the time the slot is a store through r6. (The entry's form and the early return come from one draw: this generator's draws two apart are correlated, and drawn separately the two always agreed.)
+* **The whole shape before a poll** (version 1, one program without a poll in four): a fresh RAM pointer in r6, the entered slot of a `cmp/eq` delayed branch with its own return, a store through r6 in the slot, a mailbox poll that reads back its own write, and a store through r6 after it: round 20's d1 in the grammar's terms.
+
+The first form alone drew the shape 819 times in 5,000 seeds (410 with their own return) but no store dropped on one instance only (none of its slot stores was before a poll the analysis takes for endless and not replaced); master's host and the fix gave the same text on 10,000 seeds. The second form draws the class: **on master's host the 5,000 grammar 1 seeds from 3,800,001 give `endless-store-dropped` on 124 seeds, on the fix none.** The coverage summary prints the counts (`slot entered ahead 590, below 602, own return 783; the whole shape before a poll 373`).
+
+### Pins
+
+* `TestA3164Fix` (`Sh2DecompilerTests.cpp`). Said, the signature withheld, one caution at the address: d1 (0x06009012), d1c (0x06009024), d2 (0x06009010), c2 (0x06009004) and c1 (0x06009010), and for c2 and c1 no caution on the first store. Printed, no caution, lent: d1n (one instance). d1 and d2 fail on master's host.
+* `TestA3RoutedPins` (`Sh2GeneratedTests.cpp`). d1, d1c (said) and d2 (0 findings; the check counts it shown, A3-172); c2, c1 and grammar 1 seed 3704634 (0 findings, `endless-store.replaced` above 0, which fail with the old check); grammar 1 seed 3800027, the production's whole shape (0 findings and said; `endless-store-dropped` on master's host).
+* Fixtures: `tools/a3_round20/fixtures.src` gains d2 and d1n.
+* No new test target.
+
+### Runs (on `0e78b0a6`; the commits after it change docs only)
+
+| Run | Result |
+|---|---|
+| game corpus (`SE_GAME_LEND=1`, hwram007, hwram008) | real entries lent **474 (645 parameters) of 999** and **724 (975) of 1,543**; missing and said **0** and **4**: as expected. The text of every function is the same as the A3-167 fixer's dumps in both images. The caution is given in hwram008 0600C2DA and 0600C49A only |
+| printed-C (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | **agrees=5196**, the baseline; narrow-c 130, void-return 227, void-return-lent 24, skipped 8: unchanged |
+| grammar 1, 3,800,001 to 3,805,000 (canary off) | 36 failing seeds, none area 3's; **no `endless-store-dropped`** (124 on master's host). With the productions off (the gate moved out of reach) the range has 4: 3800458, 3800581 (`v:map-copy-merge`), 3801285 (`n:folded-store-after-access`) and 3804173 (`n:map-way-back`); 3800458's program changes with them and passes. The other 33 are new, all from the productions' doubled instances (routed below). `endless-store` runs 3,005, checked 57,722, said 6,242, replaced 6 |
+| grammar 1, 3,805,001 to 3,815,000, first form only (before the second) | master's host and the fix: the same counts to the unit (said 3,027, lent 2,012) and the same findings |
+| grammar 2, 3,800,001 to 3,805,000 | 1 failing seed, 3802371 (area 7, routed below); the productions are version 1's, grammar 2 is unchanged. Claims checked 29,936 |
+| the 20,000-seed matrix (`SE_GENERATED_SEEDS=20000` from seed 1, both grammars, two pieces of 10,000, the canary on in the first) | 2 failing seeds, **4123** (`n:folded-store-after-access`) and **17737** (`map-const-join`): the known baseline on master `5601733a`, nothing beyond it |
+| generator default run (300 seeds and the pins) | 0 findings |
+| full `ctest` | CTEST_RESULT |
+| fault suite (`SaturnExplorerDecompilerFaultTests`) | FAULT_RESULT |
+
+### Routed, no row here
+
+The productions' doubled instances give two classes, both where the engine joins the two instances' equal stores of one slot into one store at the join:
+* **Area 5** (A5-117's class: equal stores joined after a later access, here the two instances of one instruction): `n:` or `v:folded-store-after-access` on 19 of the 33 new seeds from 3,800,001, e.g. grammar 1 seed 3800275, shrunk: `SE_GENERATED_WORDS="D604 D705 2548 8901 C804 8F01 2622 6350 000B 0009 2600 208C 4600 208C"` (`tst r4,r5 ; bt S ; tst #4,r0 ; bf/s R ; S: mov.w r2,@r6 ; mov.b @r5,r3 ; R: rts`) prints `if (...) { xVar1 = *param_2; } xRam2600208c = in_r2;`, the store after the read the code makes after it.
+* **Area 7** (the mapping of the joined store): `map-copy-store` on 13 seeds, `map-copy-merge` on 1, `map-const-join` on 1 (with `map-copy-store`, 3801805), e.g. grammar 1 seed 3800320, shrunk: `SE_GENERATED_WORDS="D603 2228 8B01 4315 8D00 2611 000B 0009 2600 1030"` (`tst r2,r2 ; bf S ; cmp/pl r3 ; bt/s +0 ; S: mov.l r1,@r6`) prints `xRam26001030 = in_r1;` with no token of an instruction (a click goes to 00000000), and seed 3800354, shrunk: `SE_GENERATED_WORDS="D703 2208 8901 C801 8F00 2731 000B 0009 2600 1010"`. And grammar 2 seed 3802371 (`map-copy-store`, `map-const-join`: `xRam26001024 = 0;` names neither of its 2 stores), shrunk: `SE_GENERATED_WORDS="D605 4715 8902 2630 A003 E35A 2630 A000 0009 607C 000B 0009 2600 1024" SE_GENERATED_FUNCS="0/0/18" SE_GENERATED_RETURNS="1"`.
+* The baseline seeds of the range: 3800581 (area 7), 3801285 (area 5), 3804173 (area 7); and the matrix's 4123 (area 5) and 17737 (area 7), already with their areas.
