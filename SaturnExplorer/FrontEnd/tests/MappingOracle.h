@@ -2855,7 +2855,8 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                         int size = 0;
                         const int reg = word(st, sw) ? StoredRegister(sw, size) : -1;
                         const int shift = storeShift.count(st) ? storeShift[st] : -1;
-                        if (reg < 0 || size <= 0 || size > 4 || shift < 0 || shift + size > 4) continue;
+                        // (a store that begins at the variable: `storeShift` is where in the store the variable begins)
+                        if (reg < 0 || size <= 0 || size > 4 || shift != 0) continue;
                         if (!haveSources)
                         {
                             sources = BranchSources(r, word);
@@ -2863,6 +2864,26 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                         }
                         const WordValue got = RegisterBefore(r, word, sources, st, reg);
                         if (got.kind != WordValue::Number) continue;
+                        // (a store another store of the variable overwrites in its block before anything reads the variable is no value the
+                        // text can show: the 0 of `mov.b r3,@r6` before the poll's own store of 2, `uRam26001018 = 0;` the trimmed 2;
+                        // grammar 1 seed 5204339)
+                        bool overwritten = false;
+                        for (const auto& range : r.flowBlockRanges)
+                        {
+                            if (st < range.first || st > range.second) continue;
+                            for (uint32_t p = st + 2; p <= range.second && !overwritten; p += 2)
+                            {
+                                bool reads = false;
+                                for (const AccessFate& f : r.accessFates)
+                                    reads = reads || (f.insn == p && !f.write && f.frame == frame &&
+                                                      (frame ? at - f.address : GlobalDelta(at, f.address)) < f.size);
+                                if (reads) break;
+                                if (candidates.count(p) && storeShift.count(p) && storeSize.count(p) && storeShift[p] >= 0 &&
+                                    storeSize[p] - storeShift[p] >= size)
+                                    overwritten = true;
+                            }
+                        }
+                        if (overwritten) continue;
                         const uint64_t shownNumber = static_cast<uint32_t>(shownValue.value);
                         const uint64_t storedBytes = static_cast<uint64_t>(got.value) & ((1ull << (8 * size)) - 1);
                         for (int width : { shift + size, 4 })

@@ -3188,6 +3188,18 @@ void TestArea7Round13()
         }
         CHECK(n == 1 && dts::AuditMapping(hidden, word, "a7_108 hidden").Violations() >= 1);
     }
+    // ...but a store of the number another store of the variable overwrites in its block before any read is no value to name: the 0 of
+    // `mov.b r3,@r6` before the poll's own store of 2, `uRam26001018 = 0;` the trimmed 2, names none and says so (grammar 1 seed 5204339)
+    {
+        const std::vector<uint16_t> w = { 0xD607, 0xE301, 0x4310, 0x8BFD, 0x2630, 0xD706, 0xE002, 0x2700, 0x2512, 0x6070, 0xC801, 0x8BFB, 0x2670, 0x000B, 0x0009, 0x0009,
+                                          0x2600, 0x1018, 0x2600, 0x1018 };
+        const DecompileResult r = run(w, 0x06009000u, {});
+        Print("A7-108 a number an overwritten store wrote names no store and says so (grammar 1 seed 5204339)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        const Line* l = LineWith(r, "uRam26001018 = 0;");
+        CHECK(l != nullptr && l->noOrigin);
+        CHECK(dts::AuditMapping(r, word, "a7_108_5204339").Violations() == 0);
+    }
     // A7-109 `or #0xBD,r0` at a join whose paths bring 8 and 5 makes 0xBD on both (grammar 1 seed 5208620)
     {
         const std::vector<uint16_t> w = { 0xE008, 0x037D, 0x2128, 0x8901, 0xE005, 0xCE7A, 0xCBBD, 0x4315, 0x8B00, 0x4008, 0x000B, 0x0009 };
