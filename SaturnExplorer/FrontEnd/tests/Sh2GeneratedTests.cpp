@@ -6005,6 +6005,7 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                 // (a store that writes back what the access just before it read from the same bytes, in every run that makes it, is no change of
                 // memory: the engine drops it as a copy of the global to itself, and the mapping names it on the next line that shows the bytes,
                 // grammar 1 seed 4204949, `mov.w @(r0,r6),r3 ; mov.w r3,@r6 ; mov.w r2,@(r0,r5) ; mov.b r5,@r6`)
+                bool storeRan = false;   // (some run made the store: a store in a block the engine removed as unreachable is named, never made)
                 {
                     bool made = false, writeBack = true;
                     for (const RunOut& run : runs)
@@ -6021,6 +6022,7 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                             prev = &t;
                         }
                     }
+                    storeRan = made;
                     if (made && writeBack)
                     {
                         count("order.folded-store.write-back");
@@ -6051,7 +6053,15 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                                 runsAfter(fb0, f.origOrder, static_cast<size_t>(m.origBlock), m.origOrder) &&
                                 runsAfter(static_cast<size_t>(m.origBlock), m.origOrder, ob, o.origOrder))
                                 between = true;
-                        if (!between) joined = true;
+                        // (...and the later store is named on a line of its own, which is judged in its place: when the engine joins the two the
+                        // other way, naming only the earlier, A5-117's slot store before the same store, the earlier is judged)
+                        bool laterNamed = false;
+                        for (const Line& l : r.lines)
+                        {
+                            if (l.text.find(" = ") == std::string::npos) continue;
+                            for (const Token& t : l.tokens) laterNamed = laterNamed || t.addr == o.insn;
+                        }
+                        if (!between && laterNamed) joined = true;
                     }
                     if (joined)
                     {
@@ -6096,6 +6106,9 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                 // `g = g | 0x8000;` for a `tas.b` in a loop and a `mov.w` after it, grammar 1 seed 1862942.)
                 for (const MemoryAccess& m : got)
                 {
+                    // (a store no run makes, in a block the engine removed as unreachable, has no place to judge a read against: grammar 2 seed
+                    // 5854 of the 20,000-seed matrix, `cmp/pl r7 ; bt` with r7 a literal, the skipped store named on the line of the one before)
+                    if (!storeRan) break;
                     if (m.write || m.direct || m.firstLine < 0 || m.origBlock < 0) continue;
                     if (m.printed > 1 || m.printedLines > 1) continue;   // (its place is not one line: counted above)
                     if (!runsAfter(static_cast<size_t>(m.origBlock), m.origOrder, static_cast<size_t>(f.origBlock), f.origOrder)) continue;

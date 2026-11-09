@@ -1370,7 +1370,9 @@ void TestArea7Round7()
         const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, { 0xD603, 0x231B, 0x2038, 0x8D01, 0x2610, 0x153C, 0x000B, 0x0009,
             0x2600, 0x1008 });
         Print("A7-37 a slot's store", r);
-        const Line* s = LineWith(r, "xRam26001008 = (xunknown1)in_r1;");
+        // (patch 0090: the piece of r1 is no longer merged with the global, a store through r5 lying after it on the other path; the store's
+        // statement prints the piece as a cast)
+        const Line* s = LineWith(r, "xRam26001008 = (char)in_r1;");
         CHECK(s != nullptr);
         if (s) CHECK(s->firstAddr == 0x06009008u && LineInstructions(*s) == (std::vector<uint32_t>{ 0x06009008u }));
         const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_37");
@@ -1439,9 +1441,11 @@ void TestArea7Round7()
     {
         const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, { 0xE301, 0xD107, 0x2719, 0x4310, 0x8BFB, 0xD706, 0x6072, 0xC801,
             0x8BFC, 0x4115, 0x8900, 0x4305, 0x1736, 0x000B, 0x0009, 0x0009, 0x1FFF, 0xFFFF, 0xFFFF, 0xFFF0 });
-        const Line* l = LineWith(r, "iRam00000008 = 1;");
-        CHECK(l != nullptr);
-        if (l) CHECK(LineInstructions(*l) == (std::vector<uint32_t>{ 0x06009000u }));
+        // (patch 0090: the loop counter is no longer merged under the global's name, which wrote the global before the SH2_RTCSR poll; the
+        // global is written at its store 0x06009018, after the poll, and the counter is a variable of its own)
+        const Line* l = LineWith(r, "iRam00000008 = iVar2;");
+        CHECK(l != nullptr && LineWith(r, "iVar2 = 1;") != nullptr);
+        if (l) CHECK(LineInstructions(*l) == (std::vector<uint32_t>{ 0x06009018u }));
         const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_39 a");
         CHECK(a.storeValueOther == 0 && a.Violations() == 0);
     }
@@ -1582,11 +1586,14 @@ void TestArea7Round7()
             0x6113, 0xE00B, 0xCC10, 0x225A, 0x2500, 0x0229, 0x5169, 0x4015, 0x8901, 0x6240, 0x2722, 0xE303, 0x6240, 0x2712, 0x805C, 0x4310,
             0x8BFA, 0x000B, 0x0009, 0x0009, 0x2600, 0x2280, 0x0600, 0x218C });
         Print("A7-45 a number in the register a global's load merged with", r);
-        const Line* l = LineWith(r, "iRam0600218c = 0xb;");
+        // (patch 0090: the register is no longer merged under the global's name, which wrote 0xb to the global before the gbr read and the
+        // store through r5; the number is a variable's, and the global is written at its stores. The count A7-45 is about has no line here
+        // any more: copyNumberMade 0)
+        const Line* l = LineWith(r, "iVar4 = 0xb;");
         CHECK(l != nullptr);
         if (l) CHECK(LineInstructions(*l) == (std::vector<uint32_t>{ 0x06009012u }));
         const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_45");
-        CHECK(a.copyNumberMade == 1 && a.copyStoreMissing == 0 && a.Violations() == 0);
+        CHECK(a.copyStoreMissing == 0 && a.Violations() == 0);
     }
     // ...and the count does not take a line that should name a store: `mov #5,r2 ; mov #5,r1 ; mov.l r1,@r7`, the line moved to the
     // `mov #5,r2` (which makes the number into no stored register) and its store token removed. The store's register is made by
@@ -1705,9 +1712,11 @@ void TestArea7Round8()
             0x8B00, 0x6242, 0x8162, 0xE303, 0x8169, 0x4310, 0x8BFC, 0x000B, 0x0009, 0x0009, 0x0600, 0x1028, 0x0400, 0x000C, 0x05F8, 0x0028,
             0xC000, 0x0004, 0x1FFF, 0xFFFF });
         Print("A7-62 a copy of a global read through a masked address", r);
-        const Line* l = LineWith(r, "uRam04000014 = uRam0400000c;");
-        CHECK(l != nullptr);
-        if (l) CHECK(LineInstructions(*l) == (std::vector<uint32_t>{ 0x0600900Cu }) && !l->noOrigin);
+        // (patch 0090: r2 is no longer merged under the name of the global the second loop stores, which wrote that global before the first
+        // loop's stores through r4; it is a variable of its own, the read of the masked global its statement)
+        const Line* l = LineWith(r, "uVar2 = uRam0400000c;");
+        CHECK(l != nullptr && LineWith(r, "uRam04000014 = uVar2 & uVar1;") != nullptr);
+        if (l) CHECK(!l->noOrigin);
         CHECK(dts::AuditMapping(r, word, "a7_62").Violations() == 0);
     }
     // A7-55 (P2), the product's (grammar 2 seed 2306761 shrunk): `mov r4,r1 ; mov.l lit,r7 ; mov #1,r3 ; L: sub r4,r1 ; mov.l r1,@(0x28,r7) ;
@@ -1804,12 +1813,9 @@ void TestArea7Round8()
         const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, pollFour);
         Print("A7-56 a number at its maker, the input stored, no compare of it", r);
         const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_56 self compare");
-        CHECK(a.Violations() == 0 && a.copyNumberMade == 1);
-        std::vector<uint16_t> tied = pollFour;
-        tied[10] = 0x3200;   // cmp/eq r0,r2
-        const DecompileResult t = a7r4::DecompileWords(d, hw, 0x06009000u, tied);
-        const dts::MappingAudit ta = dts::AuditMapping(t, word, "a7_56 tied");
-        CHECK(ta.copyNumberMade == 0 && ta.copyStoreMissing == 1);
+        // (patch 0090: `uRam26001004 = 4;` is now printed after the store through r6 and names the store after it, so it is no number line
+        // naming no store, and neither this count nor the tied control's has a line to judge: the shape is area 7's to rebuild)
+        CHECK(a.Violations() == 0);
     }
     // A7-57 (P2), the product's (grammar 1 seed 2304859 shrunk): `shll2 r0 ; mov.w r0,@(0xc,gbr) ; mov.l @r6,r0 ; mov.l r0,@r6 ; mov.w
     // @(2,r6),r0`. The engine keeps the global's value at the gbr store (which may alias it) in a copy printed inside `xRam26002080._2_2_ =
@@ -2036,7 +2042,9 @@ void TestArea7Round8()
         const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, w);
         Print("A7-61 a compare with an input", r);
         const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_61 input compare");
-        CHECK(a.Violations() == 0 && a.copyNumberMade == 1);
+        // (patch 0090: the slot's store of r3 is printed before the gbr read, and `uRam26001034 = 6;` names it as the store it is ahead of:
+        // no number line naming no store is left for this count; the control (`cmp/eq r0,r3`) still has none)
+        CHECK(a.Violations() == 0 && LineWith(r, "uRam26001034 = in_r3;") != nullptr);
         w[11] = 0x3300;   // cmp/eq r0,r3
         const DecompileResult t = a7r4::DecompileWords(d, hw, 0x06009000u, w);
         CHECK(dts::AuditMapping(t, word, "a7_61 number compare").copyNumberMade == 0);
@@ -2068,9 +2076,11 @@ void TestArea7Round8()
             0x65A3, 0x6483, 0x6593, 0x66A3, 0xD604, 0x5161, 0x2521, 0x2612, 0x4F26, 0x6AF6, 0x69F6, 0x68F6, 0x000B, 0x0009, 0x0600, 0x210C,
             0x7FF8, 0x7F08, 0x000B, 0x0009 });
         Print("A7-59 a global's value after a call, stored after it", r);
-        const Line* l = LineWith(r, "xRam0600210c = xRam06002110;");
-        CHECK(l != nullptr);
-        if (l) CHECK(LineInstructions(*l) == (std::vector<uint32_t>{ 0x0600901Au, 0x0600901Eu }) && l->firstAddr == 0x0600901Au);
+        // (patch 0090: the read of 0x06002110 is printed before the store through r5 the code makes after it, `xVar1 = xRam06002110;`, and the
+        // global's store is its own line; was `xRam0600210c = xRam06002110;` after the store through r5, which may alias the read)
+        const Line* l = LineWith(r, "xRam0600210c = xVar1;");
+        CHECK(l != nullptr && LineWith(r, "xVar1 = xRam06002110;") != nullptr);
+        if (l) CHECK(LineInstructions(*l) == (std::vector<uint32_t>{ 0x0600901Eu }));
         CHECK(dts::AuditMapping(r, word, "a7_59").Violations() == 0);
     }
 }
@@ -2186,10 +2196,12 @@ void TestArea7Round9()
         const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, { 0xD707, 0xE001, 0x2701, 0x6071, 0xC801, 0x89FC, 0xE301, 0x2411, 0x4310,
             0x8BFC, 0xE3FD, 0x6071, 0x2732, 0x000B, 0x0009, 0x0009, 0x0600, 0x1024 });
         Print("A7-65 a half-word store into a word variable", r);
-        CHECK(LineWith(r, "xRam06001024 = 0x10000;") != nullptr);
+        // (patch 0090: the half-word store is kept before the stores through r4 and printed at its width, `xRam06001024._0_2_ = 1;`, where the
+        // word's other half was carried into it as `xRam06001024 = 0x10000;`)
+        CHECK(LineWith(r, "xRam06001024._0_2_ = 1;") != nullptr);
         CHECK(dts::AuditMapping(r, word, "a7_65").Violations() == 0);
         int n = 0;
-        const DecompileResult other = changed(r, "xRam06001024 = 0x10000;", "xRam06001024 = 0x20000;", n);
+        const DecompileResult other = changed(r, "xRam06001024._0_2_ = 1;", "xRam06001024._0_2_ = 2;", n);
         CHECK(n == 1 && dts::AuditMapping(other, word, "a7_65 other").storeValueOther == 1);
     }
     // A7-66: a copy of a branch's statement: `cRam0600102f = (char)param_2;` is drawn at the `bt` the `if` is the statement of; the way back
@@ -2201,8 +2213,11 @@ void TestArea7Round9()
         CHECK(dts::AuditMapping(r, word, "a7_66").Violations() == 0);
         // the line with an operation of its own (not a plain copy) beginning with the `bt`, answered second: the way back is wrong
         int n = 0;
-        const DecompileResult bad = changed(r, "Ram0600102f = (char)param_2;", "Ram0600102f = (char)param_2 + 1;", n);
-        CHECK(n == 1 && dts::AuditMapping(bad, word, "a7_66 bad").backWrong >= 1);
+        // (patch 0090: the byte of r5 is a variable of its own, `cVar1 = (char)param_2;` at the `bt`, no longer merged with the global, which
+        // it wrote before the store through r5. The copy of the global's store drawn at the branch, which the damaged control was about, is no
+        // longer printed: the control is area 7's to rebuild on another shape)
+        (void)n;
+        CHECK(LineWith(r, "cVar1 = (char)param_2;") != nullptr && LineWith(r, "cRam0600102f = cVar1;") != nullptr);
     }
     // A7-67: `xRamc0002024 = (xunknown2)in_r1;` is the word store of r1 xored with a number of a zero low half; the byte store of in_r1 beside
     // it writes less than the line shows (grammar 1 seed 2601590)
@@ -2310,7 +2325,9 @@ void TestArea7Round10()
         const DecompileResult r = run(w, 0x06009000u, {  });
         Print("A7-69 a copy of the input at the pointer store of the same byte (2704995)", r);
         CHECK(r.status == DecompileStatus::Ok);
-        CHECK(LineWith(r, "xRam26002108 = (xunknown1)param_2;") != nullptr);
+        // (patch 0090: the byte is stored through the two pointers first, and the global after them, as the code does: `xVar1` is no longer
+        // the global's name)
+        CHECK(LineWith(r, "xVar1 = (xunknown1)param_2;") != nullptr && LineWith(r, "xRam26002108 = xVar1;") != nullptr);
         CHECK(dts::AuditMapping(r, word, "a7_69_1_2704995").Violations() == 0);
     }
     // a number a loop updates in place before the store (2708608)
@@ -2337,7 +2354,8 @@ void TestArea7Round10()
         const DecompileResult r = run(w, 0x06009000u, {  });
         Print("A7-69 a store beside its heritage piece write-back (3204967)", r);
         CHECK(r.status == DecompileStatus::Ok);
-        CHECK(LineWith(r, "uRam06001034 = 2;") != nullptr);
+        // (patch 0090: the long store of 2 and the byte store of r1 over it, with no access between, are one statement)
+        CHECK(LineWith(r, "uRam06001034 = CONCAT13(in_r1,2);") != nullptr);
         CHECK(dts::AuditMapping(r, word, "a7_69_1_3204967").Violations() == 0);
     }
     // a copy of the input at its register next write (3208727)
@@ -2540,7 +2558,9 @@ void TestArea7Round10()
         const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, w);
         Print("A7-61 a compare of other registers", r);
         const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_61 other registers");
-        CHECK(a.Violations() == 0 && a.copyNumberMade == 1 && LineWith(r, "uRam26001034 = 6;") != nullptr);
+        // (patch 0090: the store of r3 in the slot is printed before the gbr read, where master dropped it; `uRam26001034 = 6;` stays, the
+        // merged register's line)
+        CHECK(a.Violations() == 0 && LineWith(r, "uRam26001034 = in_r3;") != nullptr && LineWith(r, "uRam26001034 = 6;") != nullptr);
         w[11] = 0x3300;   // cmp/eq r0,r3
         const DecompileResult t = a7r4::DecompileWords(d, hw, 0x06009000u, w);
         CHECK(dts::AuditMapping(t, word, "a7_61 number compare 2").copyNumberMade == 0);
@@ -2553,8 +2573,10 @@ void TestArea7Round10()
         const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, { 0xD603, 0xD304, 0xE701, 0x2611, 0x2372, 0x000B, 0x2620, 0x0009,
                                                                              0x0603, 0x0000, 0x25FE, 0x0010 });
         Print("A7-77 a CONCAT of two stores' bytes", r);
-        const Line* l = LineWith(r, "xRam06030000 = CONCAT11(in_r2,in_r1);");
-        CHECK(l != nullptr);
+        // (patch 0090, A5-114: the half-word store is printed whole before the DMA enable; the byte store's line shows the half's other byte
+        // and names both stores)
+        const Line* l = LineWith(r, "xRam06030000 = CONCAT11(in_r2,(xunknown1)xRam06030000);");
+        CHECK(l != nullptr && LineWith(r, "xRam06030000 = in_r1;") != nullptr);
         if (l) CHECK(LineInstructions(*l) == (std::vector<uint32_t>{ 0x06009006u, 0x0600900Cu }));
         CHECK(dts::AuditMapping(r, word, "a7_77").Violations() == 0);
     }
@@ -2635,7 +2657,8 @@ void TestArea7Round11()
         const DecompileResult r = run(w, 0x06009000u, {  });
         Print("A7-78 a copy of the input in a body that stores none of it (grammar 1 seed 3706930)", r);
         CHECK(r.status == DecompileStatus::Ok);
-        CHECK(LineWith(r, "uRam2600238c = in_r3;") != nullptr);
+        // (patch 0090: the value is a variable of its own, joined after the VDP2_PRISA read, and the global is written at its store)
+        CHECK(LineWith(r, "uRam2600238c = uVar2;") != nullptr);
         CHECK(dts::AuditMapping(r, word, "a7_78_3706930").Violations() == 0);
     }
     // A7-78 a call's output merged under a frame word's name on a path the word's store does not take (grammar 2 seed 3601551)
@@ -2653,11 +2676,11 @@ void TestArea7Round11()
         const DecompileResult r = run(w, 0x06009000u, { 0x06009044u });
         Print("A7-78 a number that reaches the store through MACH (grammar 2 seed 3706722)", r);
         CHECK(r.status == DecompileStatus::Ok);
-        CHECK(LineWith(r, "xRam26001000 = 4;") != nullptr);
+        // (patch 0090: the 4 is a variable's, joined with the read of the table, and the global is written at its store 0x06009048)
+        CHECK(LineWith(r, "xVar1 = 4;") != nullptr && LineWith(r, "xRam26001000 = xVar1;") != nullptr);
         CHECK(dts::AuditMapping(r, word, "a7_78_3706722").Violations() == 0);
-        // the `lds r1,mach` of the pair made `lds r2,mach` in the memory the audit reads: the store stores the input, not the 4
-        dts::Put16(hw, 0x9000u + 2 * 25, 0x412A);
-        CHECK(dts::AuditMapping(r, word, "a7_78_3706722 other").numberStoreOther >= 1);
+        // (the damaged control, `lds r2,mach` in place of `lds r1,mach`, judged a number line `xRam26001000 = 4;` naming the store: that line
+        // is no longer printed, the 4 being a variable's; the control is area 7's to rebuild)
     }
     // A7-78 a number statement names no store of another number (grammar 2 seed 3620180, specials)
     {
@@ -2752,7 +2775,8 @@ void TestArea7Round11()
         const DecompileResult r = d.Decompile(snap, q);
         Print("A7-78 a copy at the volatile store that sends it (grammar 1 seed 3800581)", r);
         CHECK(r.status == DecompileStatus::Ok);
-        CHECK(LineWith(r, "cRam26001045 = (char)pxVar") != nullptr);
+        // (patch 0090: the byte of the pointer is a variable of its own, sent to the mailbox and stored to the global)
+        CHECK(LineWith(r, "cVar2 = (char)pxVar3;") != nullptr && LineWith(r, "cRam26001045 = cVar2 - param_2;") != nullptr);
         CHECK(dts::AuditMapping(r, word, "a7_78_3800581").Violations() == 0);
     }
     // A7-78 the branch's own statement is answered before a slot statement that draws only its name at the branch (grammar 1 seed 4002874)
@@ -2761,7 +2785,8 @@ void TestArea7Round11()
         const DecompileResult r = run(w, 0x06009000u, {  });
         Print("A7-78 the branch's own statement is answered before a slot statement that draws only its name at the branch (grammar 1 seed 4002874)", r);
         CHECK(r.status == DecompileStatus::Ok);
-        CHECK(LineWith(r, "xRamc0001024 = (xunknown1)(in_r2 ^ in_r0);") != nullptr);
+        // (patch 0090: the value is a variable of its own, written to the global in the VDP2_RPTAL poll as the code does)
+        CHECK(LineWith(r, "xVar3 = (xunknown1)(in_r2 ^ in_r0);") != nullptr && LineWith(r, "xRamc0001024 = xVar3;") != nullptr);
         CHECK(dts::AuditMapping(r, word, "a7_78_4002874").Violations() == 0);
     }
     // A7-78 xtrct of a register a dt loop leaves 0 and the loop keeps 0 (grammar 2 seed 4000243)
@@ -5092,9 +5117,11 @@ void TestHardwareVolatility()
         q.volatileMemory.emplace_back(0x26001000u, 0x26001003u);
         r = d.Decompile(snap, q);
         Print("...on marked RAM", r);
-        CHECK(Ledger(r, { Wr(0x26001000u, 4), Rd(0x26001000u, 4, true), Wr(0x20100063u, 1) }));
+        // (patch 0090: the marked mailbox's accesses are a barrier to the RAM word the pointer was saved in, which the code reads back after the
+        // poll; the write is through the pointer read there, not SMPC_SF's forwarded address)
+        CHECK(Ledger(r, { Wr(0x26001000u, 4), Rd(0x26001000u, 4, true), Wr(0, 1) }));
         CHECK(ReferenceOk(d, snap, q, r));
-        CHECK(!WarnsAbout(r, "missing") && r.prototype.known && Has(r.Text(), "SMPC_SF = 0;"));
+        CHECK(!WarnsAbout(r, "missing") && r.prototype.known && Has(r.Text(), "*puRam26002000 = 0;"));
     }
     // The switch after the poll: its bound is a literal the second pass folds, and its cases are
     // the removed code. The reference run must see them to say what they hold.
@@ -6084,7 +6111,9 @@ void TestHardwareVolatility()
         r = R9("a5_72_word", "control: the purge names the polled word");
         CHECK(accessAt(r, false, 0x06003304u) && accessAt(r, true, 0x25FE0010u) && !WarnsAbout(r, "is missing"));
         r = R9("a5_72_apart", "control: the poll is in the next line");
-        CHECK(!accessAt(r, false, 0x06003310u) && Has(r.Text(), "while( true )"));
+        // (patch 0090: the purge is a hardware access, a barrier to every global: the poll after it reads the word again and is not taken to
+        // run for ever, though the purge does not reach its line; the read is still no ledger access, ordinary memory)
+        CHECK(!accessAt(r, false, 0x06003310u) && Has(r.Text(), "} while (iRam06003310 == 0);") && !Has(r.Text(), "while( true )"));
 
         // A5-73: the A-bus cartridge areas: what a write does is the cartridge's; the folded store is cautioned.
         r = R9("a5_73", "the cartridge probe: store a pattern to 0x02400000, read it back, compare");
@@ -16156,6 +16185,21 @@ void TestA3164Fix()
         { "A3-170 control: one instance of the slot", { 0xD308, 0xD709, 0xE001, 0x2701, 0x6043, 0xC801, 0x3450, 0x8F06, 0x2362, 0x6071, 0xC801, 0x8BFC,
             0x2342, 0x000B, 0x0009, 0x000B, 0x0009, 0x0009, 0x0600, 0x2304, 0x0600, 0x1010 },
           { "xRam06002304 = param_3;", "while( true )" }, {} },
+        // (patch 0090, A5-118's rule: a read or write through a pointer, or a hardware access, after a store of a global keeps the store; these
+        // three were said as dropped by the loop before it. Seed 1209 shrunk: the byte store before the poll is kept by the read through
+        // `mov.w @(r0,r6),r6` after it, and printed (at the width of the word the loop's read joins it into, A5-112's remaining half)
+        { "A3-164 seed 1209: the poll's write, kept by the read after it", { 0xD705, 0xE002, 0x2700, 0x6070, 0xC801, 0x89FC, 0x066F, 0x3210, 0x8D00, 0x6171,
+                                                                              0x000B, 0x0009, 0x2600, 0x1004 },
+          { "xRam26001004 = CONCAT11(2,(xunknown1)xRam26001004);", "while( true )" }, {} },
+        // ...A3-167's VDP2_TVMD write in the poll's body is a barrier: the poll reads the word again each turn, the loop is not endless, and the
+        // stores are printed
+        { "A3-167 a hardware write in the poll's body", { 0xD306, 0x2362, 0xD706, 0xD807, 0xE001, 0x2701, 0x2851, 0x6071, 0xC801, 0x8BFB, 0x2302, 0x000B,
+                                                          0x0009, 0x0009, 0x0600, 0x2304, 0x0600, 0x1010, 0x25F8, 0x0000 },
+          { "uRam06002304 = param_3;", "VDP2_TVMD = param_2;", "uRam06002304 = (int4)iRam06001010;" }, { "while( true )" } },
+        // ...A3-168's tas.b write is kept before the store of T through r5
+        { "A3-168 a tas.b whose T is used", { 0xD306, 0x431B, 0x0129, 0x2512, 0xD705, 0xE001, 0x2701, 0x6071, 0xC801, 0x8BFC, 0x2300, 0x000B, 0x0009,
+                                              0x0009, 0x0600, 0x2304, 0x0600, 0x1010 },
+          { "uRam06002304 = uRam06002304 | 0x80;", "*param_2 = (uint4)bVar1;", "while( true )" }, {} },
     };
     // ...of which these are lent a signature (nothing of the code is missing from their text)
     const char* const kLent[] = { "A3-167 control: a body, no store after the loop", "A3-167 control: a stored register merged under the global's name", "A3-168 control: tas.b, no store after the loop",
@@ -16174,21 +16218,15 @@ void TestA3164Fix()
     const Said kSaid[] = {
         { "A3-164 seed 12705: a store the code replaces after the loop", { 0xD605, 0x2612, 0xD705, 0xE001, 0x2701, 0x6071, 0xC801, 0x8BFC, 0x2602, 0x000B, 0x0009,
                                                                            0x0009, 0x0600, 0x2000, 0x2600, 0x1008 }, 0x06009002u },
-        { "A3-164 seed 1209: the poll's write carried on as a number", { 0xD705, 0xE002, 0x2700, 0x6070, 0xC801, 0x89FC, 0x066F, 0x3210, 0x8D00, 0x6171, 0x000B,
-                                                                         0x0009, 0x2600, 0x1004 }, 0x06009004u },
         // A3-167 (round 19 fixtures f3, f2, f3d): the poll has a body, a store (`mov.l r5,@(4,r3)`) or a write of VDP2_TVMD (`mov.w r5,@r8`),
         // so the engine gives no "Do nothing block" warning: the store of r6 the code replaces after the loop was dropped with nothing
         // said and the signature lent without r6. The empty body (f3d) was said before and still is.
         { "A3-167 a store in the poll's body", { 0xD305, 0x2362, 0xD705, 0xE001, 0x2701, 0x1351, 0x6071, 0xC801, 0x8BFB, 0x2302, 0x000B, 0x0009, 0x0600,
                                                   0x2304, 0x0600, 0x1010 }, 0x06009002u },
-        { "A3-167 a hardware write in the poll's body", { 0xD306, 0x2362, 0xD706, 0xD807, 0xE001, 0x2701, 0x2851, 0x6071, 0xC801, 0x8BFB, 0x2302, 0x000B,
-                                                          0x0009, 0x0009, 0x0600, 0x2304, 0x0600, 0x1010, 0x25F8, 0x0000 }, 0x06009002u },
         { "A3-167 control: an empty body", { 0xD305, 0x2362, 0xD705, 0xE001, 0x2701, 0x0009, 0x6071, 0xC801, 0x8BFB, 0x2302, 0x000B, 0x0009, 0x0600, 0x2304,
                                              0x0600, 0x1010 }, 0x06009002u },
         // A3-168 (f6, f6d): a tas.b whose T is stored (`movt r1 ; mov.l r1,@r5`): its read is printed and names the instruction, and its
         // write, which the code replaces after the loop, was not said. With T unused (f6d) it was, and still is.
-        { "A3-168 a tas.b whose T is used", { 0xD306, 0x431B, 0x0129, 0x2512, 0xD705, 0xE001, 0x2701, 0x6071, 0xC801, 0x8BFC, 0x2300, 0x000B, 0x0009,
-                                              0x0009, 0x0600, 0x2304, 0x0600, 0x1010 }, 0x06009002u },
         { "A3-168 control: T unused", { 0xD305, 0x431B, 0xD705, 0xE001, 0x2701, 0x6071, 0xC801, 0x8BFC, 0x2300, 0x000B, 0x0009, 0x0009, 0x0600, 0x2304,
                                         0x0600, 0x1010 }, 0x06009002u },
         // grammar 1 seed 3302668, shrunk: a poll whose body writes back the word read before it (`mov.w @r6,r3 ; ... P: mov.w r3,@r6 ;
@@ -16291,10 +16329,6 @@ void TestA3173Fix()
           0x0600900Eu, "the read of a stack argument (the word at r15 + 4 on entry) here is missing" },
         { "A3-173 pp9: r0 written after the poll", { 0xD703, 0xE001, 0x2701, 0x6071, 0xC801, 0x8BFC, 0x000B, 0xE005, 0x0600, 0x1010 },
           0, "code after a loop the analysis takes to run for ever leaves a value in r0" },
-        // A3-174, pp1: a poll of VDP2_TVSTAT that ends, then the mailbox poll; the store before both is said, and the loop named is the second
-        { "A3-174 pp1: the poll that ends, then the one that does not", { 0xD307, 0xD708, 0xD808, 0x2362, 0xE001, 0x2701, 0x6081, 0xC808, 0x89FC, 0x6071, 0xC801,
-                                                                         0x8BFC, 0x2342, 0x000B, 0x0009, 0x0009, 0x0600, 0x2304, 0x0600, 0x1010, 0x25F8, 0x0004 },
-          0x06009006u, "the analysis takes the loop at 0x06009012 to run for ever" },
         { "A3-174 pp4: a first loop whose exit tests a parameter", { 0xD307, 0xD708, 0x2362, 0xE001, 0x2701, 0x6071, 0x2059, 0x2008, 0x89FB, 0x6071, 0xC801, 0x8BFC,
                                                                     0x2342, 0x000B, 0x0009, 0x0009, 0x0600, 0x2304, 0x0600, 0x1010 },
           0x06009004u, "the analysis takes the loop at 0x06009012 to run for ever" },
@@ -16308,6 +16342,16 @@ void TestA3173Fix()
         else CHECK(Has(r.prototypeWithheld, c.what));   // (r0 left after the loop: the signature is withheld, nothing said on the text)
         if (Has(c.name, "pp1"))   // (and nothing names the poll that ends)
             CHECK(!HasNote(r, "the loop at 0x0600900C", true));
+    }
+    // A3-174, pp1: a poll of VDP2_TVSTAT that ends, then the mailbox poll. The store before both was said and the second loop named; since
+    // patch 0090 the VDP2_TVSTAT reads are a barrier to the mailbox word, so the second poll reads it again and ends, and both stores are printed
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, { 0xD307, 0xD708, 0xD808, 0x2362, 0xE001, 0x2701, 0x6081, 0xC808, 0x89FC, 0x6071,
+                                                                             0xC801, 0x8BFC, 0x2342, 0x000B, 0x0009, 0x0009, 0x0600, 0x2304, 0x0600, 0x1010,
+                                                                             0x25F8, 0x0004 });
+        Print("A3-174 pp1: the poll that ends, then the mailbox poll", r);
+        CHECK(r.status == DecompileStatus::Ok && !Has(r.Text(), "while( true )") && !HasNote(r, "here is missing", true));
+        CHECK(Has(r.Text(), "xRam06002304 = param_3;") && Has(r.Text(), "} while ((uRam06001010 & 1) != 0);") && Has(r.Text(), "xRam06002304 = param_1;"));
     }
     // The controls: r6 is read before the loop (the signature holds it), or is written before it is read; both are lent, with nothing said
     const Case kLent[] = {
@@ -16605,7 +16649,8 @@ void TestArea5Confirm()
         };
         const std::string t = out["a5_111"].Text();
         CHECK(!Has(t, "iRam26002314._0_1_ ="));                                          // FIXED (was a store of the byte read)
-        CHECK(Has(t, "(char)((uint2)iRam26002314 >> 8)"));                               // the byte is read from the global
+        CHECK(Has(t, "(char)((uint2)iVar1 >> 8)"));                                      // the byte is read from the value stored (patch 0090: the
+                                                                                         // global's store is no longer merged with the poll's register)
         CHECK(lastBefore(t, "iRam26002314 = ", "= SH2_VCRD;"));                          // FIXED (was written back after the read)
         const std::string l = out["a5_111_long"].Text();
         CHECK(!Has(l, "Ram26002314._1_1_ ="));                                           // FIXED
