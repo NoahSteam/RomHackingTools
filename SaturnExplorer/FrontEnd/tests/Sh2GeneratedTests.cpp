@@ -5905,8 +5905,8 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
             for (const AccessFate& f : r.accessFates)
             {
                 if (!f.write || f.fate != AccessFate::FoldedOrdinary || !f.constantAddress || f.frame || f.origBlock < 0) continue;
-                int first = -1;
-                for (size_t li = 0; li < r.lines.size() && first < 0; ++li)
+                int first = -1, last = -1;
+                for (size_t li = 0; li < r.lines.size(); ++li)
                 {
                     const Line& l = r.lines[li];
                     const size_t b = l.text.find_first_not_of(' ');
@@ -5915,7 +5915,12 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                     while (e < l.text.size() && (std::isalnum(static_cast<unsigned char>(l.text[e])) || l.text[e] == '_' || l.text[e] == '.')) ++e;
                     if (e == b || l.text.compare(e, 3, " = ") != 0) continue;
                     for (const Token& t : l.tokens)
-                        if (t.addr == f.insn) { first = static_cast<int>(li); break; }
+                        if (t.addr == f.insn)
+                        {
+                            if (first < 0) first = static_cast<int>(li);
+                            last = static_cast<int>(li);
+                            break;
+                        }
                 }
                 if (first < 0) continue;
                 // (A5-111, fixed by patch 0088: a byte or half of the global read after a wider write was made a write of that piece by heritage, a
@@ -6010,17 +6015,19 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                 }
                 // (A5-115: a read through a pointer the code makes before the folded store is printed before it: printed at its use after the store,
                 // it reads the value stored when the pointer is the global's address. Patch 0010's rule kept a LOAD from crossing a STORE, a LOAD, a
-                // user op or a call, not a store the engine folded, and `x = *p; g = v; *q = x` printed `g = v; *q = *p;`.)
+                // user op or a call, not a store the engine folded, and `x = *p; g = v; *q = x` printed `g = v; *q = *p;`. Judged against the last
+                // line that names the store: an earlier one can be a write of the global the store is merged into, A3-161's accepted loop shape
+                // `g = g | 0x8000;` for a `tas.b` in a loop and a `mov.w` after it, grammar 1 seed 1862942.)
                 for (const MemoryAccess& m : got)
                 {
                     if (m.write || m.direct || m.firstLine < 0 || m.origBlock < 0) continue;
                     if (m.printed > 1 || m.printedLines > 1) continue;   // (its place is not one line: counted above)
                     if (!runsAfter(static_cast<size_t>(m.origBlock), m.origOrder, static_cast<size_t>(f.origBlock), f.origOrder)) continue;
                     count("order.read-before-folded-store.checked");
-                    if (m.firstLine > first)
+                    if (m.firstLine > last)
                         add("read-after-folded-store", "the read at " + Hex(m.insn) + " through a pointer is printed (line " + std::to_string(m.firstLine) +
                                                            ") after the store at " + Hex(f.insn) + " the engine folded into " + Hex(f.address) + " (line " +
-                                                           std::to_string(first) + "), which the code makes after the read");
+                                                           std::to_string(last) + "), which the code makes after the read");
                 }
             }
             // (A5-116: a read of a global the engine folded, which the code makes before a register's access, is printed before that access: the
@@ -14023,10 +14030,12 @@ void TestA587Pins(Sh2Decompiler& d)
             nullptr, nullptr, nullptr, nullptr, nullptr }, "onchip.span.said", nullptr },
         // A5-111 (grammar 1 seed 2606069, the A5-109 fixer's fresh run): a byte of a global read after a half-word write of it was made a write of
         // that byte (`iRam26002314._0_1_ = ...`), and the half-word store was written back after the later SH2_VCRD read. The rule judges the line
-        // that assigns a piece (`order.folded-store.piece-store`, none now) and the order against the register read. (Shrunk, the poll's value is
-        // merged into the global's store in the loop, A3-161's accepted class, said as `text-store.loop-short`; the long form is judged in order.)
+        // that assigns a piece (`order.folded-store.piece-store`, none now) and the order against the register read. (Shrunk, the poll's value was
+        // merged into the global's store in the loop, A3-161's accepted class, said as `text-store.loop-short`; since patch 0090 a global is not
+        // merged with a value the code holds across a register's access, the store is printed after the loop where the code makes it, and it is
+        // judged in order like the long form.)
         { { "A5-111, a byte of a global read after a half-word write of it, grammar 1 seed 2606069 shrunk", "D605 D706 6071 C801 8BFC 3230 8D01 8166 846C 6371 000B 0009 2600 2308 FFFF FE68",
-            nullptr, nullptr, nullptr, nullptr, nullptr }, "text-store.loop-short", nullptr },
+            nullptr, nullptr, nullptr, nullptr, nullptr }, "order.folded-store.hardware-read", nullptr },
         { { "A5-111, the same with a long write and a byte read", "D605 D706 6071 C801 8BFC 3230 8D01 1603 846D 6371 000B 0009 2600 2308 FFFF FE68",
             nullptr, nullptr, nullptr, nullptr, nullptr }, "order.folded-store.hardware-read", nullptr },
         // A5-113 (grammar 2 seed 2701218 of the A5-111 fixer's fresh run): `g = 0 (a byte, r3 after a dt loop) ; r2 = *r4` on the arm a constant
@@ -14036,9 +14045,11 @@ void TestA587Pins(Sh2Decompiler& d)
             "0/0/26", nullptr, "2", nullptr, nullptr }, "order.folded-store.read", nullptr },
         // A5-112 (open, P3; the A5-111 fixer's 20,000-seed run, grammar 1 seeds 366, 1259, 1486 and 3284; 366 shrunk): a byte write after a half-word write of the
         // global is printed as a store of the half's other byte and a store of the whole (`xRam26002008._1_1_ = in_r1; ... xRam26002008 =
-        // CONCAT11(in_r2,(xunknown1)xRam26002008);`); counted (`order.folded-store.piece-split`), not judged.
+        // CONCAT11(in_r2,(xunknown1)xRam26002008);`); counted (`order.folded-store.piece-split`), not judged. Since patch 0090 (A5-114) the
+        // half-word write is kept before the store through r5 and printed whole (`xRam26002008 = in_r1;`), so no line splits it and it is judged
+        // in order; the byte write is still printed as the whole (the row's remaining half).
         { { "A5-112, mov.w r1,@g ; mov.b r0,@r5 ; mov.b r2,@g (open)", "D602 2611 8050 000B 2620 0009 2600 2008",
-            nullptr, nullptr, nullptr, nullptr, nullptr }, "order.folded-store.piece-split", nullptr },
+            nullptr, nullptr, nullptr, nullptr, nullptr }, "order.folded-store.checked", nullptr },
         { { "A5-103, a purge through (p & 0x1FFFFFF0) | 0x40000000", "D103 2149 D203 212B E000 000B 2102 0009 1FFF FFF0 4000 0000",
             nullptr, nullptr, nullptr, nullptr, nullptr }, nullptr, nullptr },
         { { "A5-104, a literal written and then loaded", "D102 2142 D002 000B 0009 0009 0600 9010 1234 5678",
@@ -15081,6 +15092,79 @@ void TestA3161Pins(Sh2Decompiler& d)
 // A3-165 (the oracle's; grammar 2 seed 2305596, `input-dropped:macl`): function 1 stores MACL in its frame and tail-jumps to function 2,
 // which tests that freed word with `cmp/pl` before it writes it; the one stack fill was positive like the base run's leftover, so the
 // stale read went unseen and MACL read as an input. The stale-stack test now fills twice, each fill the other's complement.
+// ---- A5-114 to A5-118 (patch 0090): a hardware access is a barrier no read or write of ordinary memory is moved, merged or dropped across ----
+// The area 5 review round's fixtures (A5-114 to A5-117, Sh2DecompilerTests' TestArea5Review), the coordinator's A5-118 (a whole overwrite of a
+// global across a DMA enable), and the seeds that failed on master 43e945b2 with `folded-store-after-access`. Each module pin passes with the
+// patch and the order rules, and fails without the patch: the stores are judged now when a later store overwrites them (A5-118, the set-aside
+// gone), a read through a pointer is judged against a later folded store (A5-115, `read-after-folded-store`), and a folded read of a global
+// against a later register access (A5-116, `folded-read-after-access`).
+void TestA5114Pins(Sh2Decompiler& d)
+{
+    struct Pin
+    {
+        const char* name;
+        const char* words;
+        const char* count;
+        const char* volatileRange;   // SE_GENERATED_VOLATILE and SE_GENERATED_POLL for the request that marks a mailbox
+        const char* poll;
+    };
+    const Pin kPins[] = {
+        // A5-114: a half-word write, a register access or a read through a pointer, a byte write over part of it
+        { "A5-114, mov.w r1,@g ; SCU_D0EN = 1 ; mov.b r2,@g", "D603 D304 E701 2611 2372 000B 2620 0009 0603 0000 25FE 0010", "order.folded-store.hardware-write", nullptr, nullptr },
+        { "A5-114, mov.w r1,@g ; VDP2_TVSTAT read ; mov.b r2,@g", "D602 D703 2611 6071 000B 2620 0603 0000 25F8 0004", "order.folded-store.hardware-read", nullptr, nullptr },
+        { "A5-114, mov.w r1,@g ; mov.l @r4,r3 ; mov.b r2,@g", "D603 2611 6342 2620 2532 000B 6033 0009 0603 0000", "order.folded-store.read", nullptr, nullptr },
+        // A5-115: a read through r4, a store of the global, the value read stored, returned, written to a register
+        { "A5-115, x = *p ; g = v ; *q = x", "D602 6042 2622 000B 2502 0009 0603 0000", "order.read-before-folded-store.checked", nullptr, nullptr },
+        { "A5-115, x = *p ; g = v ; return x", "D602 6042 2622 000B 0009 0009 0603 0000", "order.read-before-folded-store.checked", nullptr, nullptr },
+        { "A5-115, x = *p ; g = v ; SCU_D0EN = x", "D602 D703 6042 2622 000B 2702 0603 0000 25FE 0010", "order.read-before-folded-store.checked", nullptr, nullptr },
+        // A5-116: a read of the global, then the DMA enable
+        { "A5-116, x = g ; SCU_D0EN = 0x101 ; return x", "D103 6012 D203 D304 2232 000B 0009 0009 0603 0000 25FE 0010 0000 0101", "order.folded-read-before-access.checked", nullptr, nullptr },
+        // A5-117 (grammar 1 seed 3007538 shrunk): two equal stores of a global that join, then the marked mailbox read
+        { "A5-117, two joined stores before the marked mailbox's read", "D606 D707 6072 C801 8BFC 8801 8F02 2632 2632 7221 6171 1622 000B 0009 2600 220C 2600 1028",
+          "order.folded-store.hardware-read", "26001028-2600102B", "26001028" },
+        // A5-118: a whole overwrite of the global across the DMA enable; and across a store through a pointer
+        { "A5-118, g = r1 ; SCU_D0EN = 1 ; g = r2", "D603 D304 E701 2612 2372 000B 2622 0009 0603 0000 25FE 0010", "order.folded-store.overwritten", nullptr, nullptr },
+        { "A5-118, g = r1 ; *r4 = 1 ; g = r2", "D602 E701 2612 2472 000B 2622 0603 0000", "order.folded-store.overwritten", nullptr, nullptr },
+        // grammar 1 seed 4123 of the 20,000-seed matrix, shrunk: a half-word store in a poll's loop, before the SCU_IMS read each turn
+        { "grammar 1 seed 4123 shrunk", "D608 E301 4310 8BFD E001 0634 D706 2631 6072 C801 8BFB 8463 064F 3220 8F00 8064 000B 0009 2600 1000 15FE 00A0",
+          "order.folded-store.hardware-read", nullptr, nullptr },
+        // grammar 1 seed 63 of the default run (the order rule for reads): a store after a join of two values of a register was printed as the
+        // global written where the register is, before the poll and the read through r5 the code makes first
+        { "default run, grammar 1 seed 63", "D30B 273B D60B 3128 D70B 6072 C801 8BFC 4315 8900 6272 2702 2328 8B01 632C 815F E008 0415 6150 2630 846E 000B 223B 0009 A000 0000 0600 2388 3810 0064",
+          "order.read-before-folded-store.checked", nullptr, nullptr },
+    };
+    for (const Pin& p : kPins)
+    {
+        std::string savedV, savedP;
+        const char* oldV = std::getenv("SE_GENERATED_VOLATILE");
+        const char* oldP = std::getenv("SE_GENERATED_POLL");
+        const bool hadV = oldV != nullptr, hadP = oldP != nullptr;
+        if (hadV) savedV = oldV;
+        if (hadP) savedP = oldP;
+        SetOrClear("SE_GENERATED_VOLATILE", p.volatileRange);
+        SetOrClear("SE_GENERATED_POLL", p.poll);
+        const Subject subject = RawSubject(p.words);
+        SetOrClear("SE_GENERATED_VOLATILE", hadV ? savedV.c_str() : nullptr);
+        SetOrClear("SE_GENERATED_POLL", hadP ? savedP.c_str() : nullptr);
+        const Report rep = EvaluateSubject(d, subject, true);
+        const auto it = rep.counts.find(p.count);
+        const int n = it == rep.counts.end() ? 0 : it->second;
+        std::printf("pin '%s': %zu finding(s), %s %d\n", p.name, rep.findings.size(), p.count, n);
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+        CHECK(n > 0);
+    }
+    // The seeds, whole (grammar, seed): each failed on master with `folded-store-after-access`
+    const std::pair<int, long> kSeeds[] = { { 1, 4123 }, { 1, 3007538 }, { 1, 3605366 }, { 1, 3800275 }, { 1, 3801285 } };
+    for (const auto& sd : kSeeds)
+    {
+        const Report rep = Evaluate(d, sd.first == 2 ? MakeV2(static_cast<uint64_t>(sd.second)) : Generate(static_cast<uint64_t>(sd.second)), true);
+        std::printf("pin 'A5-114 to A5-118, grammar %d seed %ld': %zu finding(s)\n", sd.first, sd.second, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+}
+
 void TestA3RoutedPins(Sh2Decompiler& d)
 {
     auto count = [](const Report& rep, const char* name) {
@@ -15095,17 +15179,20 @@ void TestA3RoutedPins(Sh2Decompiler& d)
         CHECK(rep.findings.empty());
         CHECK(count(rep, "endless-store.runs") > 0 && count(rep, "endless-store.checked") >= 2 * count(rep, "endless-store.runs"));
         // grammar 1 seeds 131 and 281 of the default run, shrunk: the poll's own write, with a byte store and a longword store after the loop
-        for (const char* words : { "D704 E002 2702 6072 C801 89FC 2710 000B 0009 0009 0600 1000", "D704 E003 2701 6071 C801 8BFC 2702 000B 0009 0009 2600 1038" })
+        // (and seed 1209 shrunk, said before patch 0090: the byte store before the poll is kept by the read through a pointer after it,
+        // `mov.w @(r0,r6),r6`, and printed, A5-118's rule)
+        for (const char* words : { "D704 E002 2702 6072 C801 89FC 2710 000B 0009 0009 0600 1000", "D704 E003 2701 6071 C801 8BFC 2702 000B 0009 0009 2600 1038",
+                                   "D705 E002 2700 6070 C801 89FC 066F 3210 8D00 6171 000B 0009 2600 1004" })
         {
             const Report w = EvaluateSubject(d, RawSubject(words), true);
             std::printf("pin 'A3-164 %s': %zu finding(s), endless-store checked %d\n", words, w.findings.size(), count(w, "endless-store.checked"));
             for (const Finding& f : w.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
             CHECK(w.findings.empty() && count(w, "endless-store.checked") > 0);
         }
-        // seeds 12705 and 1209 (the 20,000-seed run), shrunk: a write the engine still drops is said, and the check takes it as said; and
+        // seed 12705 (the 20,000-seed run), shrunk: a write the engine still drops is said, and the check takes it as said; and
         // grammar 1 seed 2632, shrunk: the store writes back the byte it read (`mov.b @(0,r6),r0 ; mac.w ; mov.b r0,@(0,r6)`), in the flow
         // block where the engine removed `mac.w`'s saturating arm (a block of the instruction's own p-code, not the flow block: the note is given)
-        for (const char* words : { "D605 2612 D705 E001 2701 6071 C801 8BFC 2602 000B 0009 0009 0600 2000 2600 1008", "D705 E002 2700 6070 C801 89FC 066F 3210 8D00 6171 000B 0009 2600 1004",
+        for (const char* words : { "D605 2612 D705 E001 2701 6071 C801 8BFC 2602 000B 0009 0009 0600 2000 2600 1008",
                                    "E00C 027D 400E D606 8460 477F 8060 D705 E003 2701 6071 C801 8BFC 000B 0009 0009 C000 0004 0600 1000" })
         {
             const Report w = EvaluateSubject(d, RawSubject(words), true);
@@ -15128,11 +15215,14 @@ void TestA3RoutedPins(Sh2Decompiler& d)
             const char* name;
             const char* words;
             bool said;
+            bool endless = true;   // (false: the analysis no longer takes the loop to run for ever)
         };
         const Pin kPins[] = {
             { "A3-167 f3", "D305 2362 D705 E001 2701 1351 6071 C801 8BFB 2302 000B 0009 0600 2304 0600 1010", true },
-            { "A3-167 f2", "D306 2362 D706 D807 E001 2701 2851 6071 C801 8BFB 2302 000B 0009 0009 0600 2304 0600 1010 25F8 0000", true },
-            { "A3-168 f6", "D306 431B 0129 2512 D705 E001 2701 6071 C801 8BFC 2300 000B 0009 0009 0600 2304 0600 1010", true },
+            // (patch 0090, A5-118: f2's VDP2_TVMD write in the body is a barrier, so the poll reads the word again each turn and the loop is no
+            // longer taken to run for ever: the stores are printed; f6's tas.b write is kept before the store through r5 and printed)
+            { "A3-167 f2", "D306 2362 D706 D807 E001 2701 2851 6071 C801 8BFB 2302 000B 0009 0009 0600 2304 0600 1010 25F8 0000", false, false },
+            { "A3-168 f6", "D306 431B 0129 2512 D705 E001 2701 6071 C801 8BFC 2300 000B 0009 0009 0600 2304 0600 1010", false },
             { "A3-167 control f3d (empty body)", "D305 2362 D705 E001 2701 0009 6071 C801 8BFB 2302 000B 0009 0600 2304 0600 1010", true },
             { "A3-167 control f3c (no store after)", "D305 2362 D705 E001 2701 1351 6071 C801 8BFB 000B 0009 0009 0600 2304 0600 1010", false },
             { "A3-168 control f6c (no store after)", "D305 431B 0129 2512 D704 E001 2701 6071 C801 8BFC 000B 0009 0600 2304 0600 1010", false },
@@ -15140,9 +15230,11 @@ void TestA3RoutedPins(Sh2Decompiler& d)
             { "A3-161's merge in a body, f9", "D305 E100 D705 E001 2701 7101 2312 6071 C801 8BFA 000B 0009 0600 2304 0600 1010", false },
             // grammar 1 seed 3509562 (area 7 round 10, routed): `mov.w r0,@r6` at 0x06009018, the target of a `bt/s`, replaced after the poll.
             // The old caution placed a store in the flow by address, a slot's two bytes of slack included, so it took 0x06009018 for the
-            // last word of the removed block before it (0x06009012-0x06009016) and said nothing. A store is now placed by its op
+            // last word of the removed block before it (0x06009012-0x06009016) and said nothing. A store is now placed by its op. (Since patch
+            // 0090 the whole seed's store is kept before the hardware writes after it and printed, `iRam06002308 = param_2 + 0xe;`; the shrunk
+            // words, with no access after the store, still have it said.)
             { "A3-167 grammar 1 seed 3509562", "D60F D710 E00E 0625 4200 D60F 4015 8D03 305C D60E 6261 5051 2601 4315 8D02 225B 311C 7277 2712 D70A E001 2702 6072 C801 "
-                                               "8BFC 2601 8043 2410 4219 471B 000B 223B 2589 0024 2900 0004 0600 2308 0610 2308 2600 1034", true },
+                                               "8BFC 2601 8043 2410 4219 471B 000B 223B 2589 0024 2900 0004 0600 2308 0610 2308 2600 1034", false },
             { "A3-167 grammar 1 seed 3509562 shrunk", "E00E 0625 D606 4015 8900 D606 2601 D706 E001 2702 6072 C801 8BFC 2601 000B 0009 0600 2308 0610 2308 2600 1034", true },
             // grammar 1 seed 3302668 (the new poll-body production, 5,000 seeds from 3,300,001), shrunk: the body writes back the word read
             // before the loop (`mov.w @r6,r3 ; ... P: mov.w r3,@r6 ; poll`). The store's op is alive but prints only as the `while` keyword
@@ -15164,7 +15256,7 @@ void TestA3RoutedPins(Sh2Decompiler& d)
             std::printf("pin '%s': %zu finding(s), endless-store checked %d, said %d\n", pin.name, w.findings.size(), count(w, "endless-store.checked"),
                         count(w, "endless-store.said"));
             for (const Finding& f : w.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
-            CHECK(w.findings.empty() && count(w, "endless-store.checked") > 0);
+            CHECK(w.findings.empty() && (count(w, "endless-store.checked") > 0 || !pin.endless));
             CHECK((count(w, "endless-store.said") > 0) == pin.said);
         }
         // A3-171 (round 20): the first of two stores of a word before the poll, the second said (the poll drops it), is replaced by the
@@ -15206,10 +15298,12 @@ void TestA3RoutedPins(Sh2Decompiler& d)
             CHECK(prog.postPollRead >= 4 && count(rep, "endless-read.checked") > 0 && count(rep, "endless-read.withheld") > 0);
             for (const Finding& f : rep.findings) CHECK(f.sig.find("endless-read") == std::string::npos);
         }
+        // (since patch 0090 the seed's first store is kept before the store through gbr after it and printed, so no store is replaced there;
+        // c2 above keeps the shape the check excuses)
         const Report seed = Evaluate(d, Generate(3704634), true);
         std::printf("pin 'A3-171 grammar 1 seed 3704634': %zu finding(s), endless-store replaced %d\n", seed.findings.size(), count(seed, "endless-store.replaced"));
         for (const Finding& f : seed.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
-        CHECK(seed.findings.empty() && count(seed, "endless-store.replaced") > 0);
+        CHECK(seed.findings.empty());
     }
     {
         const Report rep = Evaluate(d, MakeV2(2305596), true);
@@ -15642,6 +15736,7 @@ void TestGenerated()
         RUN(TestA365Pins(d));
         RUN(TestA3161Pins(d));
         RUN(TestA3RoutedPins(d));
+        RUN(TestA5114Pins(d));
         if (EnvNumber("SE_GENERATED_CANARY", 240) > 0) RUN(TestCanary(d));
     }
     const long seeds = single ? 1 : EnvNumber("SE_GENERATED_SEEDS", 300);

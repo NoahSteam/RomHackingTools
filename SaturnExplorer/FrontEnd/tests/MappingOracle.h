@@ -2195,6 +2195,12 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                                 rhs = rhs.substr(close + 1);
                             }
                             if (rhs == from) return false;
+                            // (A5-118's merge rule, patch 0090: a byte or half of a pointer parameter held in a variable across a register's
+                            // access is its low piece, `xVar2 = SUB41(param_2,0);`, which a `mov.b` stores; grammar 1 seed 3800027)
+                            if (rhs.size() == from.size() + 9 && rhs.compare(0, 3, "SUB") == 0 && std::isdigit(static_cast<unsigned char>(rhs[3])) &&
+                                std::isdigit(static_cast<unsigned char>(rhs[4])) && rhs[5] == '(' && rhs.compare(6, from.size() - 1, from, 0, from.size() - 1) == 0 &&
+                                rhs.compare(rhs.size() - 4, 4, ",0);") == 0)
+                                return false;
                             const std::string name = rhs.empty() ? rhs : rhs.substr(0, rhs.size() - 1);
                             if (!name.empty() && rhs.back() == ';' && name.find_first_not_of("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_") == std::string::npos &&
                                 std::find(names.begin(), names.end(), name) == names.end())
