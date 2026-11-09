@@ -25,6 +25,7 @@
  * Modified for SaturnExplorer: RulePropagateCopy does not propagate a write of a global into the INDIRECT a STORE puts on it, nor into another marker past a memory access (patches/0082-engine-store-keeps-earlier-write.patch).
  * Modified for SaturnExplorer: RuleMultiCollapse keeps two equal writes of a global that a memory access separates from the join, and RulePropagateCopy does not feed a global's value into the global's next write past one (patches/0085-engine-global-write-keeps-place.patch).
  * Modified for SaturnExplorer: RuleEarlyRemoval keeps a write of a global on a path that never reaches a return (patches/0087-engine-global-writes-without-return.patch).
+ * Modified for SaturnExplorer: RulePushMulti does not move a write of a global an access holds to the join (patches/0090-engine-hardware-access-orders-globals.patch).
  */
 #include "ruleaction.hh"
 #include "coreaction.hh"
@@ -1122,6 +1123,11 @@ int4 RulePushMulti::applyOp(PcodeOp *op,Funcdata &data)
   PcodeOp *op2 = in2->getDef();
   if (in1->loneDescend() != op) return 0;
   if (in2->loneDescend() != op) return 0;
+  // SaturnExplorer (0090): a write of a global that an access after it holds (address forced, Heritage::handleBarrierCopies) is made where
+  // the code makes it, not at the join: two pieces of it pushed through the MULTIEQUAL printed the first after a read through a pointer
+  if ((in1->isAddrForce() && in1->isAddrTied() && in1->getSpace()->getType() == IPTR_PROCESSOR) ||
+      (in2->isAddrForce() && in2->isAddrTied() && in2->getSpace()->getType() == IPTR_PROCESSOR))
+    return 0;
 
   Varnode *outvn = op->getOut();
 

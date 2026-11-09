@@ -16653,9 +16653,10 @@ void TestArea5Confirm()
     }
 }
 
-// Area 5, review round after patches 0082, 0085 and 0088 (rows A5-114 to A5-116). Each fixture holds today's text (the checks marked DEFECT,
-// which the fixer turns round) beside a control that has the right order. The global is 0x06030000; when the pointer the code reads through
-// is that address, or a register write between starts a transfer of it, the order is the value.
+// Area 5, review round after patches 0082, 0085 and 0088 (rows A5-114 to A5-117), and the coordinator's A5-118. Each fixture held the text of
+// the round (the checks marked DEFECT) beside a control that has the right order; patch 0090 (a hardware access, or an access through a
+// pointer, is a barrier no read or write of a global is moved, merged or dropped across) turned them round (FIXED). The global is 0x06030000;
+// when the pointer the code reads through is that address, or a register write between starts a transfer of it, the order is the value.
 void TestArea5Review()
 {
     Sh2Decompiler d(gConfig);
@@ -16684,6 +16685,9 @@ void TestArea5Review()
         { "a5_116", 0x06052700u, { 0xD103, 0x6012, 0xD203, 0xD304, 0x2232, 0x000B, 0x0009, 0x0009, 0x0603, 0x0000, 0x25FE, 0x0010, 0x0000, 0x0101 } },
         // control: a write through a pointer in the register write's place: mov.l @(lit),r6 ; mov.l @r6,r0 ; rts ; mov.l r2,@r4
         { "a5_116_ptr", 0x06052800u, { 0xD601, 0x6062, 0x000B, 0x2422, 0x0603, 0x0000 } },
+        // A5-118: mov.l @(lit),r6 (0x06030000) ; mov.l @(lit),r3 (SCU_D0EN) ; mov #1,r7 ; mov.l r1,@r6 ; mov.l r7,@r3 ; rts ; mov.l r2,@r6
+        // -- a whole overwrite of the global across the DMA enable
+        { "a5_118", 0x06052B00u, { 0xD603, 0xD304, 0xE701, 0x2612, 0x2372, 0x000B, 0x2622, 0x0009, 0x0603, 0x0000, 0x25FE, 0x0010 } },
     };
     for (const W& w : fx)
     {
@@ -16703,22 +16707,25 @@ void TestArea5Review()
         const size_t i = t.find(a), j = t.find(b);
         return i != std::string::npos && j != std::string::npos && i < j;
     };
-    // A5-114 (P2): a wider write of a global that a narrower one overwrites in part is joined into the narrower one's statement (heritage's
-    // pieces, A5-112) and printed after the access the code makes between the two: the bytes the narrow write leaves are written after the DMA
-    // enable, after the register read, after the read through the pointer. The order rule sets the store aside as overwritten.
-    CHECK(Has(out["a5_114_hw"], "xRam06030000 = CONCAT11(in_r2,in_r1);"));
-    CHECK(before(out["a5_114_hw"], "SCU_D0EN = 1;", "xRam06030000 = "));                    // DEFECT (want the half's write before the enable)
-    CHECK(before(out["a5_114_hwread"], "= VDP2_TVSTAT;", "xRam06030000 = "));               // DEFECT (want the half's write before the read)
-    CHECK(before(out["a5_114_read"], "= *param_1;", "xRam06030000 = "));                    // DEFECT (want the half's write before the read)
-    CHECK(before(out["a5_114_ptrw"], "xRam06030000._1_1_ = in_r1;", "*param_1 = 1;"));      // control: the order kept (the widths are A5-112's)
+    // A5-114 (P2): a wider write of a global that a narrower one overwrites in part was joined into the narrower one's statement (heritage's
+    // pieces, A5-112) and printed after the access the code makes between the two (`SCU_D0EN = 1; xRam06030000 = CONCAT11(in_r2,in_r1);`).
+    // FIXED (0090): the half's write is printed whole before the access, the byte's write after it.
+    CHECK(!Has(out["a5_114_hw"], "CONCAT11(in_r2,in_r1)"));
+    CHECK(before(out["a5_114_hw"], "xRam06030000 = in_r1;", "SCU_D0EN = 1;"));              // FIXED
+    CHECK(before(out["a5_114_hw"], "SCU_D0EN = 1;", "xRam06030000 = CONCAT11(in_r2,"));     // FIXED (the byte's write, at the half's width: A5-112)
+    CHECK(before(out["a5_114_hwread"], "xRam06030000 = in_r1;", "= VDP2_TVSTAT;"));         // FIXED
+    CHECK(before(out["a5_114_read"], "xRam06030000 = in_r1;", "= *param_1;"));              // FIXED
+    CHECK(before(out["a5_114_ptrw"], "xRam06030000 = in_r1;", "*param_1 = 1;"));            // control: the order kept (and the half now whole)
     // A5-115 (P1): a read through a pointer whose value is used after a later store to a global is printed at the use, after the store: when the
     // pointer is the global's address the code stores (or returns) the old value, the text the new one.
-    CHECK(before(out["a5_115"], "xRam06030000 = in_r2;", "*param_2 = *param_1;"));        // DEFECT (want the read before the store)
-    CHECK(before(out["a5_115_ret"], "xRam06030000 = in_r2;", "return *param_1;"));        // DEFECT
-    CHECK(before(out["a5_115_reg"], "xRam06030000 = in_r2;", "SCU_D0EN = *param_1;"));   // DEFECT (the register gets the new value then)
+    // FIXED (0090, ActionMarkImplied): the read is explicit, before the store.
+    CHECK(before(out["a5_115"], "xVar1 = *param_1;", "xRam06030000 = in_r2;") && Has(out["a5_115"], "*param_2 = xVar1;"));      // FIXED
+    CHECK(before(out["a5_115_ret"], "xVar1 = *param_1;", "xRam06030000 = in_r2;") && Has(out["a5_115_ret"], "return xVar1;"));  // FIXED
+    CHECK(before(out["a5_115_reg"], "xVar1 = *param_1;", "xRam06030000 = in_r2;") && Has(out["a5_115_reg"], "SCU_D0EN = xVar1;")); // FIXED
     CHECK(before(out["a5_115_hw"], "= *param_1;", "SCU_D0EN = 1;"));                      // control: a register write keeps the read in place
     // A5-116 (P2): a read of a global is printed at its use, after a register write the code makes after the read (the DMA enable here).
-    CHECK(before(out["a5_116"], "SCU_D0EN = 0x101;", "return xRam06030000;"));            // DEFECT (want the read before the enable)
+    // FIXED (0090: the register write is a STORE's guard to the global, so the value before it is another variable than the one after)
+    CHECK(before(out["a5_116"], "xVar1 = xRam06030000;", "SCU_D0EN = 0x101;") && Has(out["a5_116"], "return xVar1;"));   // FIXED
     CHECK(before(out["a5_116_ptr"], "= xRam06030000;", "*param_1 = in_r2;"));             // control: a store through a pointer keeps it
     // A5-117 (P2; grammar 1 seed 3007538 shrunk, routed from the area 3 round 19 review): poll the mailbox 0x26001028 ; cmp/eq #1,r0 ; bf/s L ;
     // mov.l r3,@r6 (0x2600220C) ; mov.l r3,@r6 ; add #0x21,r2 ; L: mov.w @r7,r1 (the mailbox again) ; mov.l r2,@(8,r6) ; rts ; nop -- with the
@@ -16737,8 +16744,11 @@ void TestArea5Review()
         CHECK(r.status == DecompileStatus::Ok);
         const std::string t = r.Text();
         const size_t rd = t.rfind("= Ram26001028;"), st = t.find("xRam2600220c = in_r3;");
-        CHECK(rd != std::string::npos && st != std::string::npos && rd < st);   // DEFECT (want the store before the mailbox's second read)
+        CHECK(rd != std::string::npos && st != std::string::npos && st < rd);   // FIXED (0090: the store before the mailbox's second read)
     }
+    // A5-118 (P2, the coordinator's): a whole overwrite of the global across the DMA enable dropped the first write (`SCU_D0EN = 1;
+    // xRam06030000 = in_r2;`). FIXED (0090): both writes, the enable between them.
+    CHECK(before(out["a5_118"], "xRam06030000 = in_r1;", "SCU_D0EN = 1;") && before(out["a5_118"], "SCU_D0EN = 1;", "xRam06030000 = in_r2;"));   // FIXED
 }
 
 void TestFetchAndDataRefusals()

@@ -95,7 +95,8 @@ bool StackAffectingOps::affectsTest(PcodeOp *op,Varnode *vn) const
 /// global, made where the register is written: a value the code holds in a register across a hardware access, or a read or write
 /// through a pointer, which may be one or the global's own address, and stores to the global after it, would be printed as stored
 /// before it (`x = *p; SCU_D0EN = 1; g = x` as `g = *p; SCU_D0EN = 1;`; a register a branch sets, stored after a poll, as the
-/// global written before the poll). Such a merge is refused, and the variables stay apart.
+/// global written before the poll); and so would a register written on two paths, with such an access between one of its writes and the
+/// store. Such a merge is refused, and the variables stay apart.
 /// \param tied is the HighVariable that may be the global
 /// \param other is the HighVariable to be merged into it
 /// \return \b true if \b other's cover holds such an access
@@ -114,6 +115,48 @@ bool Merge::heldAcrossAccess(HighVariable *tied,HighVariable *other)
       fd = (*vn->beginDescend())->getParent()->getFuncdata();
   }
   if (fd == (Funcdata *)0) return false;
+  // ...and an access on a path from where the register is written to where the code stores it to the global: merged, the global is written
+  // where the register is, before the access (`r0 = 4; if (c) r0 = *p; g = r0;` printed `g = 4; if (c) g = *p;`: the read through p
+  // then reads what was written when p is the global's address)
+  {
+    vector<const PcodeOp *> defs;
+    for(int4 i=0;i<other->numInstances();++i) {
+      Varnode *vn = other->getInstance(i);
+      if (!vn->isWritten()) continue;
+      const PcodeOp *def = vn->getDef();
+      if (def->code() == CPUI_MULTIEQUAL || def->code() == CPUI_INDIRECT) continue;
+      defs.push_back(def);
+    }
+    if (defs.size() > 1) {
+      for(int4 i=0;i<defs.size();++i) {
+	vector<const BlockBasic *> todo;
+	vector<const BlockBasic *> seen;
+	const BlockBasic *bl = defs[i]->getParent();
+	list<PcodeOp *>::iterator it = defs[i]->getBasicIter();
+	++it;
+	for(;;) {
+	  bool stop = false;
+	  for(;it!=((BlockBasic *)bl)->endOp();++it) {
+	    const PcodeOp *op = *it;
+	    if (((op->code() == CPUI_LOAD || op->code() == CPUI_STORE) && !op->getIn(1)->isConstant()) || isHardwareAccessOp(fd,op))
+	      return true;	// (the access may be the register's other write itself: the read is still after this write)
+	    if (find(defs.begin(),defs.end(),op) != defs.end()) { stop = true; break; }
+	    const Varnode *ovn = op->getOut();
+	    if (ovn != (const Varnode *)0 && ovn->isAddrTied() && ovn->getSpace() == tvn->getSpace() && ovn->getOffset() == tvn->getOffset()) { stop = true; break; }
+	  }
+	  if (!stop)
+	    for(int4 k=0;k<bl->sizeOut();++k) {
+	      const BlockBasic *nb = (const BlockBasic *)bl->getOut(k);
+	      if (find(seen.begin(),seen.end(),nb) == seen.end()) { seen.push_back(nb); todo.push_back(nb); }
+	    }
+	  if (todo.empty() || seen.size() > 64) break;
+	  bl = todo.back();
+	  todo.pop_back();
+	  it = ((BlockBasic *)bl)->beginOp();
+	}
+      }
+    }
+  }
   other->updateCover();
   const Cover &cov(other->getCover());
   const OpCode opcs[] = { CPUI_LOAD, CPUI_STORE, CPUI_CALLOTHER };

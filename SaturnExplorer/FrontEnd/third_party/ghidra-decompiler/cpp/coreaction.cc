@@ -3771,14 +3771,21 @@ bool ActionMarkImplied::checkImpliedCover(Funcdata &data,Varnode *vn)
       }
     }
     // SaturnExplorer (0090): ...and a write of a global, which is a store the engine folded: the pointer may be the global's address,
-    // and the read printed after the write would read the value written (`x = *p; g = v; *q = x;` printed `g = v; *q = *p;`, A5-115)
+    // and the read printed after the write would read the value written (`x = *p; g = v; *q = x;` printed `g = v; *q = *p;`, A5-115).
+    // An op whose output only a COPY to a global reads is one too: the merge that follows makes it the global's write (a register's
+    // piece made before a branch and stored on both ways printed `g = (int2)param_1; if ((param_2 & *(param_1 + 8)) == 0)`)
     list<PcodeOp *>::const_iterator aiter = data.beginOpAlive();
     list<PcodeOp *>::const_iterator aend = data.endOpAlive();
     for(;aiter!=aend;++aiter) {
       PcodeOp *other = *aiter;
       Varnode *wvn = other->getOut();
-      if (wvn == (Varnode *)0 || !wvn->isAddrTied() || wvn->getSpace()->getType() != IPTR_PROCESSOR) continue;
-      if (other->code() == CPUI_MULTIEQUAL || other->code() == CPUI_INDIRECT) continue;
+      if (wvn == (Varnode *)0 || other->code() == CPUI_MULTIEQUAL || other->code() == CPUI_INDIRECT) continue;
+      bool global = wvn->isAddrTied() && wvn->getSpace()->getType() == IPTR_PROCESSOR;
+      for(list<PcodeOp *>::const_iterator diter=wvn->beginDescend();!global && diter!=wvn->endDescend();++diter) {
+	const Varnode *cvn = (*diter)->getOut();
+	global = (*diter)->code() == CPUI_COPY && cvn != (Varnode *)0 && cvn->isAddrTied() && cvn->getSpace()->getType() == IPTR_PROCESSOR;
+      }
+      if (!global) continue;
       for(int4 c=0;c<chain.size();++c)
 	if (chain[c]->getCover()->contain(other,2)) return false;
     }

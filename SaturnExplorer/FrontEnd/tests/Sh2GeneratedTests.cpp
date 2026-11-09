@@ -5923,6 +5923,41 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                         }
                 }
                 if (first < 0) continue;
+                // (a register the engine merged under the global's name is written where the register is made: the store's statement is the
+                // line that assigns the global at the instruction that made the register the store stores, which names the stored register's
+                // maker, not the store; the store itself is named on a later line that shows its bytes, grammar 1 seed 4001469,
+                // `uRam26001018 = -(uint2)(in_sr & 1) - in_r3;` at the `negc` before `mov.w r0,@r6`, and `uRam26001018 = uRam26001018 | 0x8000;`
+                // at the `tas.b`)
+                {
+                    const auto word = [&](uint32_t pc, uint16_t& w) {
+                        if (pc < kCode || (pc - kCode) / 2 >= subject.words.size()) return false;
+                        w = subject.WordAt(pc);
+                        return true;
+                    };
+                    int ssize = 0;
+                    const int reg = dts::StoredRegister(subject.WordAt(f.insn), ssize);
+                    std::set<uint32_t> makers;
+                    if (reg >= 0 && dts::RegisterMakers(r, word, dts::BranchSources(r, word), f.insn, reg, makers) && !makers.count(0))
+                        for (int li = 0; li < first; ++li)
+                        {
+                            const Line& l = r.lines[static_cast<size_t>(li)];
+                            const size_t b = l.text.find_first_not_of(' ');
+                            if (b == std::string::npos) continue;
+                            size_t e = b;
+                            while (e < l.text.size() && (std::isalnum(static_cast<unsigned char>(l.text[e])) || l.text[e] == '_')) ++e;
+                            if (e == b || l.text.compare(e, 3, " = ") != 0 || e - b < 11 || l.text.compare(e - 11, 3, "Ram") != 0) continue;
+                            unsigned v = 0;
+                            if (std::sscanf(l.text.c_str() + e - 8, "%8x", &v) != 1 || v > f.address || f.address >= v + 8u) continue;
+                            bool atMaker = false;
+                            for (const Token& t : l.tokens) atMaker = atMaker || makers.count(t.addr) != 0;
+                            if (atMaker)
+                            {
+                                count("order.folded-store.at-maker");
+                                first = li;
+                                break;
+                            }
+                        }
+                }
                 // (A5-111, fixed by patch 0088: a byte or half of the global read after a wider write was made a write of that piece by heritage, a
                 // SUBPIECE whose output was the global's own address: `iRam26002314._0_1_ = (char)((uint2)iRam26002314 >> 8);`, a store the code
                 // does not make, whose overlap with the wider write had the merge write the wider value back at the end of the function, after a
@@ -5967,22 +6002,63 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                                                                  "of the global, made a write of it");
                     }
                 }
+                // (a store that writes back what the access just before it read from the same bytes, in every run that makes it, is no change of
+                // memory: the engine drops it as a copy of the global to itself, and the mapping names it on the next line that shows the bytes,
+                // grammar 1 seed 4204949, `mov.w @(r0,r6),r3 ; mov.w r3,@r6 ; mov.w r2,@(r0,r5) ; mov.b r5,@r6`)
+                {
+                    bool made = false, writeBack = true;
+                    for (const RunOut& run : runs)
+                    {
+                        const TraceRec* prev = nullptr;
+                        for (const TraceRec& t : run.trace)
+                        {
+                            if (t.depth == 0 && !t.write && r.InBody(t.addr)) continue;   // (a literal of the function)
+                            if (t.depth == 0 && t.write && t.insn == f.insn)
+                            {
+                                made = true;
+                                writeBack = writeBack && prev && !prev->write && prev->depth == 0 && prev->addr == t.addr && prev->size == t.size && prev->value == t.value;
+                            }
+                            prev = &t;
+                        }
+                    }
+                    if (made && writeBack)
+                    {
+                        count("order.folded-store.write-back");
+                        continue;
+                    }
+                }
                 // (A5-118: a store a later folded store of the same address follows was set aside here, as the engine's to drop or merge, ordinary
                 // memory being a variable: `g = r1; SCU_D0EN = 1; g = r2` printed `SCU_D0EN = 1; g = r2;`, the first write dropped before the DMA
                 // enable. A hardware access, and a read or write through a pointer, which may be one, is a barrier no write of ordinary memory is
-                // moved, merged or dropped across (patch 0090): such a store is judged like any other, and counted. With no access between the two,
-                // a dropped store is named on the later one's line, which is before any access after both.)
-                for (const AccessFate& o : r.accessFates)
+                // moved, merged or dropped across (patch 0090): such a store is judged like any other, and counted. Set aside, and counted, is one a
+                // later store of the same bytes follows with no access the ledger holds between the two: the engine may join it into the later
+                // one's statement (`xRam26002100 = 0x808;` for a half-word store of 8 and a byte store of 8 over it, grammar 1 seed 4200383), and
+                // that statement is judged as the later store's.)
                 {
-                    if (&o == &f || !o.write || o.fate != AccessFate::FoldedOrdinary || !o.constantAddress || o.frame || o.origBlock < 0 || o.insn == f.insn) continue;
-                    if (o.address >= f.address + f.size || f.address >= o.address + o.size) continue;
-                    const size_t ob = static_cast<size_t>(o.origBlock), fb0 = static_cast<size_t>(f.origBlock);
-                    if (ob >= fr.reach.size() || fb0 >= fr.reach.size()) continue;
-                    if (ob == fb0 ? o.origOrder > f.origOrder : fr.reach[fb0][ob] != 0)
+                    bool overwritten = false, joined = false;
+                    for (const AccessFate& o : r.accessFates)
                     {
-                        count("order.folded-store.overwritten");
-                        break;
+                        if (&o == &f || !o.write || o.fate != AccessFate::FoldedOrdinary || !o.constantAddress || o.frame || o.origBlock < 0 || o.insn == f.insn) continue;
+                        if (o.address >= f.address + f.size || f.address >= o.address + o.size) continue;
+                        const size_t ob = static_cast<size_t>(o.origBlock), fb0 = static_cast<size_t>(f.origBlock);
+                        if (ob >= fr.reach.size() || fb0 >= fr.reach.size()) continue;
+                        if (!(ob == fb0 ? o.origOrder > f.origOrder : fr.reach[fb0][ob] != 0)) continue;
+                        overwritten = true;
+                        if (!runsAfter(fb0, f.origOrder, ob, o.origOrder)) continue;
+                        bool between = false;
+                        for (const MemoryAccess& m : got)
+                            if (m.origBlock >= 0 && m.insn != f.insn && m.insn != o.insn &&
+                                runsAfter(fb0, f.origOrder, static_cast<size_t>(m.origBlock), m.origOrder) &&
+                                runsAfter(static_cast<size_t>(m.origBlock), m.origOrder, ob, o.origOrder))
+                                between = true;
+                        if (!between) joined = true;
                     }
+                    if (joined)
+                    {
+                        count("order.folded-store.overwritten-no-access");
+                        continue;
+                    }
+                    if (overwritten) count("order.folded-store.overwritten");
                 }
                 for (const MemoryAccess& m : got)
                 {
@@ -6033,8 +6109,8 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
             // (A5-116: a read of a global the engine folded, which the code makes before a register's access, is printed before that access: the
             // access may start a transfer, or tell another processor, that writes the global. A register write put no guard on a global, and
             // `x = g; SCU_D0EN = 0x101; return x` printed `SCU_D0EN = 0x101; return xRam06030000;`. A read is judged on the first line that
-            // names it and reads the global there (a name `...RamXXXXXXXX` at or below its address): a value forwarded from a store of the
-            // function is no read of memory.)
+            // names it and reads the global there (a name `...RamXXXXXXXX` at or below its address, not the one a statement assigns): a value
+            // forwarded from a store of the function is no read of memory.)
             for (const AccessFate& rd : r.accessFates)
             {
                 if (rd.write || rd.fate != AccessFate::FoldedOrdinary || !rd.constantAddress || rd.frame || rd.origBlock < 0) continue;
@@ -6045,7 +6121,16 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                     bool named = false;
                     for (const Token& t : l.tokens) named |= t.addr == rd.insn;
                     if (!named) continue;
-                    for (size_t at = l.text.find("Ram"); at != std::string::npos; at = l.text.find("Ram", at + 3))
+                    // (the value read, not the variable a statement assigns: `iRam06002080 = (int4)in_r0;` names a read forwarded from a store,
+                    // grammar 1 seed 3802097)
+                    size_t from = 0;
+                    {
+                        const size_t b = l.text.find_first_not_of(' ');
+                        size_t e = b;
+                        while (b != std::string::npos && e < l.text.size() && (std::isalnum(static_cast<unsigned char>(l.text[e])) || l.text[e] == '_' || l.text[e] == '.')) ++e;
+                        if (b != std::string::npos && e > b && l.text.compare(e, 3, " = ") == 0) from = e + 3;
+                    }
+                    for (size_t at = l.text.find("Ram", from); at != std::string::npos; at = l.text.find("Ram", at + 3))
                     {
                         unsigned v = 0;
                         if (at + 11 <= l.text.size() && std::sscanf(l.text.c_str() + at + 3, "%8x", &v) == 1 && v <= rd.address && rd.address < v + 8u)
