@@ -1710,7 +1710,8 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
             for (const Token& t : r.lines[li].tokens)
                 if (t.addr && t.begin == t.end && isStore(t.addr)) named.insert(t.addr);
             for (const Token& t : r.lines[li].tokens)
-                if (t.addr && t.begin < t.end)
+                // (A7-101: the dot of a piece's name, `xRam0600228c._2_2_`, is the name's: the operand is judged by the token before it)
+                if (t.addr && t.begin < t.end && !(t.end == t.begin + 1 && t.end <= r.lines[li].text.size() && r.lines[li].text[t.begin] == '.'))
                 {
                     // (A7-34's triage: at any instruction but a branch, `xRam26002208 = (xunknown2)uVar1;` at the `and` making uVar1)
                     // (A7-57: the operand of the line's cast drawn at an extension, `uRam2600219c = (uint4)param_2;` with param_2 at the
@@ -1746,7 +1747,9 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     bool readAtStore = false;
                     if (plain && assign != std::string::npos && t.begin > assign && t.end <= r.lines[li].text.size() && isStore(t.addr))
                     {
-                        const std::string operand = r.lines[li].text.substr(t.begin, t.end - t.begin);
+                        std::string operand = r.lines[li].text.substr(t.begin, t.end - t.begin);
+                        // (A7-101: a piece of the global, `xRam0600228c._2_2_`, is the global's copy as the product marks it; grammar 2 seed 4506207)
+                        if (const size_t piece = operand.find("._"); piece != std::string::npos) operand.resize(piece);
                         if (operand.size() >= 11 && operand.compare(operand.size() - 11, 3, "Ram") == 0 &&
                             operand.find_first_not_of("0123456789abcdef", operand.size() - 8) == std::string::npos)
                         {
@@ -2215,6 +2218,10 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                                 rhs = rhs.substr(close + 1);
                             }
                             if (rhs == from) return false;
+                            // (A7-102: the low part of the parameter, `SUB41(param_2,0)`, is the register the narrow store stores; grammar 2 seed 4508555)
+                            if (rhs.compare(0, 3, "SUB") == 0 && rhs.find('(') != std::string::npos &&
+                                rhs.compare(rhs.find('(') + 1, std::string::npos, from.substr(0, from.size() - 1) + ",0);") == 0)
+                                return false;
                             const std::string name = rhs.empty() ? rhs : rhs.substr(0, rhs.size() - 1);
                             if (!name.empty() && rhs.back() == ';' && name.find_first_not_of("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_") == std::string::npos &&
                                 std::find(names.begin(), names.end(), name) == names.end())
@@ -2832,6 +2839,14 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                             }
                         }
                     }
+                }
+                // (A7-99: a number the engine trimmed to the bits the code uses -- `uRam06002380 = 0;` for the byte store of 2, the loop testing
+                // `& 0x1000000`; `xStack_c = 0;` for the half-word store of 8 read back by its high byte -- is no store's value, and the line
+                // says it names no instruction; grammar 1 seed 4502735, grammar 2 seed 4506709)
+                if (r.lines[li].noOrigin && !anyAddress && number)
+                {
+                    ++a.copyNoAddress;
+                    continue;
                 }
                 ++a.copyStoreMissing;
                 ++(frame ? a.copyFrameMissing : a.copyGlobalMissing);

@@ -7382,7 +7382,11 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                     const ghidra::uintb byte = (base + static_cast<ghidra::uintb>(i)) & mask;
                     bool other = false;
                     for (const ghidra::AccessRecord* x : stores)
-                        if (x != r && x->addr.getSpace() == space && ((byte - x->addr.getOffset()) & mask) < static_cast<ghidra::uintb>(x->size)) other = true;
+                        // (A7-100: not the other instance of the same instruction, a delay slot run on both ways of a branch and again after it:
+                        // it writes the same value; grammar 1 seed 4501198)
+                        if (x != r && InstructionOf(*x) != InstructionOf(*r) && x->addr.getSpace() == space &&
+                            ((byte - x->addr.getOffset()) & mask) < static_cast<ghidra::uintb>(x->size))
+                            other = true;
                     if (!other) alone |= 1u << i;
                 }
                 part.compared = alone ? alone : mine;

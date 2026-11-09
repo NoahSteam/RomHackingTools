@@ -2959,6 +2959,68 @@ void TestArea7Round12()
         CHECK(LineWith(r, "xRam26001018 = 5;") != nullptr);
         CHECK(dts::AuditMapping(r, word, "a7_98_4108075").Violations() == 0);
     }
+    // A7-99 a number the engine trimmed to the bits the code uses names no store and says so: the byte store of 2, the loop testing
+    // `& 0x1000000` (grammar 1 seed 4502735); the half-word store of 8 read back by its high byte (grammar 2 seed 4506709)
+    {
+        const std::vector<uint16_t> w = { 0xD705, 0xE002, 0x2700, 0x2421, 0x6070, 0xC801, 0x8BFB, 0xE00C, 0x0406, 0x2702, 0x000B, 0x0009, 0x0600, 0x2380 };
+        const DecompileResult r = run(w, 0x06009000u, {  });
+        Print("A7-99 a trimmed number names no store and says so (grammar 1 seed 4502735)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        const Line* l = LineWith(r, "uRam06002380 = 0;");
+        CHECK(l != nullptr && l->noOrigin);
+        CHECK(dts::AuditMapping(r, word, "a7_99_4502735").Violations() == 0);
+        // the same with the bit the loop tests set by the store: the value is the store's and the line names it
+        std::vector<uint16_t> v = w;
+        v[5] = 0xC802;
+        const DecompileResult named = run(v, 0x06009000u, {  });
+        CHECK(LineWith(named, "uRam06002380 = 0x2000000;") != nullptr && tokenAt(named, "uRam06002380 = 0x2000000;", 0x06009004u));
+        CHECK(dts::AuditMapping(named, word, "a7_99_4502735 named").Violations() == 0);
+    }
+    {
+        const std::vector<uint16_t> w = { 0x2F86, 0x2F96, 0x2FA6, 0x2FB6, 0x2FC6, 0x0C2A, 0x7FF4, 0x6843, 0x6953, 0x6A63, 0x6B73, 0xE031, 0x7F0C, 0x4C2A, 0x6CF6, 0x6BF6, 0x6AF6, 0x69F6, 0x68F6, 0x000B, 0x0009, 0x7FF4, 0xE008, 0x02FE, 0x81F0, 0x62F3, 0x720C, 0xE103, 0x2216, 0x4110, 0x8BFC, 0xE200, 0x61F0, 0xE08C, 0x7F0C, 0x000B, 0x0009 };
+        const DecompileResult r = run(w, 0x0600902Au, {  });
+        Print("A7-99 a trimmed number names no store and says so (grammar 2 seed 4506709)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "xStack_c = 0;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_99_4506709").Violations() == 0);
+    }
+    {
+        const std::vector<uint16_t> w = { 0x2F86, 0x2F96, 0x2FE6, 0x4F22, 0x7FF4, 0x6EF3, 0x6843, 0x6953, 0x603D, 0x7E0C, 0x6FE3, 0x4F26, 0x6EF6, 0x69F6, 0x68F6, 0x000B, 0x0009, 0xD704, 0x442E, 0x0222, 0x3470, 0x8B00, 0x172D, 0x000B, 0x0009, 0x0009, 0x2600, 0x2308 };
+        const DecompileResult r = run(w, 0x06009022u, {  });
+        Print("A7-99 a value the engine knows from a compare names no store and says so (grammar 2 seed 4509740)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "xRam2600233c = 0x26002308;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_99_4509740").Violations() == 0);
+    }
+    // A7-100 the other instance of a delay slot's store writes the same value: the number a word store's three low bytes show, its
+    // high byte written again by a byte store, is the store's (grammar 1 seed 4501198)
+    {
+        const std::vector<uint16_t> w = { 0xD206, 0x242B, 0xD606, 0x2048, 0x8B06, 0x3100, 0x8D01, 0x2622, 0x441B, 0x2660, 0x000B, 0x0009, 0xAFF9, 0x0009, 0x4000, 0x0000, 0x2600, 0x1028 };
+        const DecompileResult r = run(w, 0x06009000u, {  });
+        Print("A7-100 the other instance of a delay slot's store writes the same value (grammar 1 seed 4501198)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "xRam26001028 = 0;") != nullptr);
+        CHECK(tokenAt(r, "xRam26001028 = 0;", 0x0600900Eu));
+        CHECK(dts::AuditMapping(r, word, "a7_100_4501198").Violations() == 0);
+    }
+    // A7-101 a piece of a global copied beside the store that may alias it is a copy materialised there (grammar 2 seed 4506207)
+    {
+        const std::vector<uint16_t> w = { 0x517B, 0x2412, 0x2FD6, 0x7FF4, 0xD705, 0x3750, 0x8B00, 0x6352, 0xE301, 0x2731, 0x4310, 0x8BFC, 0x7F0C, 0x6DF6, 0x000B, 0x0009, 0x0600, 0x228C };
+        const DecompileResult r = run(w, 0x06009000u, { 0x06009004u });
+        Print("A7-101 a piece of a global copied beside the store that may alias it (grammar 2 seed 4506207)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "xRam0600228c._2_2_ = xRam0600228c._2_2_;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_101_4506207").Violations() == 0);
+    }
+    // A7-102 the low part of a parameter is the register a narrow store stores (grammar 2 seed 4508555)
+    {
+        const std::vector<uint16_t> w = { 0xD605, 0x6253, 0x6023, 0x8068, 0x8064, 0x615E, 0xE008, 0x0506, 0x2510, 0xE0C5, 0x000B, 0x0009, 0x0600, 0x2100 };
+        const DecompileResult r = run(w, 0x06009000u, { 0x0600900Au });
+        Print("A7-102 the low part of a parameter is the register a narrow store stores (grammar 2 seed 4508555)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "xRam06002108 = xVar1;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_102_4508555").Violations() == 0);
+    }
 }
 
 void TestFixture1()

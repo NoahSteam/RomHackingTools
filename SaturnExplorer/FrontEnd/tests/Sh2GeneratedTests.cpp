@@ -15033,7 +15033,8 @@ void TestArea7Round12Pins(Sh2Decompiler& d)
 {
     for (const auto& s : { std::make_pair(1, 4104402), std::make_pair(1, 4106324), std::make_pair(1, 4106897), std::make_pair(1, 4108075),
                            std::make_pair(1, 4108474), std::make_pair(1, 4108706), std::make_pair(2, 4102952), std::make_pair(2, 4103690),
-                           std::make_pair(2, 4108341), std::make_pair(2, 4109706), std::make_pair(2, 4201215) })
+                           std::make_pair(2, 4108341), std::make_pair(2, 4109706), std::make_pair(2, 4201215), std::make_pair(1, 4501198),
+                           std::make_pair(1, 4502735), std::make_pair(2, 4506207), std::make_pair(2, 4506709), std::make_pair(2, 4508555), std::make_pair(2, 4509740) })
     {
         const Report rep = Evaluate(d, s.first == 2 ? MakeV2(s.second) : Generate(s.second), true);
         std::printf("pin 'area 7 round 12: grammar %d seed %d': %zu finding(s)\n", s.first, s.second, rep.findings.size());
