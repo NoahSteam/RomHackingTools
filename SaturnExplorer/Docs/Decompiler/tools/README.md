@@ -8,6 +8,9 @@ Kept here:
 * `derive_handler_cases.py` and `audit_hardware_map.py`: regenerate `FrontEnd/tests/MednafenHandlerCases.txt`
   and the hardware register audit.
 * The latest round of each area (`a2_round17/`, `a3_round14/`, `a8_fix/`, `a8_round3/`, `a8_round4/`, `a8_round5/`, `a8_round6/`, `a9_round1/`), which the next round starts from.
+  `a2_round22/` (area 2, round 22): `tsoup22.py` (dense register-only soups of flag, multiply, divide-step, MAC-register, extension and swap
+  ops with short skips), `famall22.sh` (every family of `dagen11.py` to `dagen17.py` through the printed-C differential, `GEN` the test binary),
+  `fixtures22.txt` (the round's hand fixtures as words, with the environment of each group: divisions, MAC, globals).
   `a2_round20/` (area 2, round 20): `mkpiece20.py` (a stack piece read by every op that may read it signed or unsigned), `xpair20.py` (the same piece
   under a signed and an unsigned op, as pairs) with `pairs20.py` (pairs whose texts are the same, A2-128), `cls20.py` (a family log's verdicts by
   name), `xcount20.py` (printed-C logs: an `xunknown` read by an ordered compare or shift), `pc20.sh` (one function), `q20.sh` (the generator queue);

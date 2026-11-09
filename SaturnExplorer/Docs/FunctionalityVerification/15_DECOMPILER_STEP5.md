@@ -18742,3 +18742,51 @@ The grammar 1 run of 5,000 seeds (below) drew 1,177 bodies and 419 moved T. On t
 ### Routed, no row here
 
 * **Area 7:** grammar 1 seeds 3300988 (`map-way-back`, A7-25: `D609 D70A 6272 6356 8802 8D04 601D 6223 8167 E006 036D 412E 471B 3138 1736 D704 D304 273B 000B 2611 2600 1034 2600 2104 2600 1038 E000 0000`) and 3302704 (`map-const-join`: `uVar3 = 2;` drawn at the first instruction of a join). These are the same classes as the ones round 19 routed. Both still fail with master `de0dddee` merged.
+
+## Area 2, round 22 review
+
+Reviewer, branch `review/2-round22`, cut at master `de0dddee` (patches to 0088). Findings only: no engine, host or suite file changed. The repository gets tools (`Docs/Decompiler/tools/a2_round22/`: `tsoup22.py`, a dense register-only soup; `famall22.sh`, the round 10 to 17 families through the printed-C differential; `fixtures22.txt`, the hand fixtures of this round with their words), ledger rows **A2-130**, **A2-131** and **A2-132**, and this record. RelWithDebInfo build (`-j2`), every test binary under `ulimit -v 3500000` (4,000,000 for the generator ranges) and `timeout`, one heavy job at a time, each run at most 20 minutes.
+
+**Verdict: clean (no P1, no P2).** Three P3s: an oracle false positive (A2-130), a readability item (A2-131) and a guide gap (A2-132). The clean count of area 2 becomes 2 (rounds 21 and 22), so only P3s remain.
+
+| Row | P | What |
+|---|---|---|
+| A2-130 | P3 | oracle: the printed-C harness declares a global by the type of the first value assigned to it, not by the engine's type (`iRam` signed, `uRam` unsigned): `iRam06002304 = CONCAT13(param_2,param_1); return iRam06002304 >> 1;` is right and `mismatch`; and a wrong sign in a global's name would pass |
+| A2-131 | P3 | readability: `mac.l`'s negative saturation bound is printed `uVar3 = 0;` (its low word, the only part read) in a `uint8` accumulator whose positive bound is printed whole (`0x7fffffffffff`) |
+| A2-132 | P3 | guide: a global is never declared, so its type (and the sign of a bare compare, shift or division of it) is only its name's first letter, which the guide does not explain |
+
+### 1. What I attacked
+
+Not round 21's angle (branch-form compares on stack pieces). This round took the instruction families the last three rounds did not: the division step chains, the multiplies and MACH/MACL after partial overwrites, `mac.w` and `mac.l` with the S bit, the T-bit chains of 64-bit arithmetic, `addv`/`subv`/`negc` overflow, `swap`/`xtrct` then signed use, extension chains, SR written and read around the flag ops, PC-relative word literals, GBR byte read-modify-writes, and globals at constant addresses (no oracle had run one).
+
+| Run | Result |
+|---|---|
+| grammar 2, 3,600,001 to 3,610,000 (two pieces of 5,000) | 1 failing seed, area 7's: **3601551** (`map-frame-store` / `map-copy-store`) (226 and 233 s) |
+| grammar 1, 3,600,001 to 3,610,000 | 1 failing seed, area 5's: **3605366** (`v:folded-store-after-access`, A5-109/A5-117's class) (131 and 132 s) |
+| grammar 2, `SE_GENERATED_ALPHABET=specials`, 3,620,001 to 3,630,000 | 4 failing seeds, all area 7's: **3620180** (`map-store-value`: `iStack_20 = 2;` names the store of 0 at 06009036; the value is right, the loop counter merged with the slot), **3622362** (`map-copy-store`), **3628408** and **3629843** (`map-const-join`) |
+| grammar 1, `SE_GENERATED_ALPHABET=specials`, 3,630,001 to 3,640,000 | 0 findings |
+| printed-C, 3,600,001 to 3,615,000 (three pieces of 5,000 seeds) | 9,074, 9,078 and 9,044 functions, **0 `mismatch`**: agrees 8,452 + 8,460 + 8,452, narrow-c 185 + 215 + 219 (known classes: an `xunknown` cast to a wider signed type, A3-150; `-0x80000000` typed as C types it, A2-71), void-return 388 + 362 + 327, void-return-lent 31 + 31 + 29, skipped 18 + 10 + 17 (array-local, stack-address, stack-piece, piece-name); 411, 522 and 576 s |
+| printed-C matrix (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | agrees **5,196** (the baseline), narrow-c 130, 0 `mismatch` |
+| `famall22.sh`: families 20 to 38, 40 to 87, 89 to 111 of `dagen11.py` to `dagen17.py` (the memory families at widths 4, 2 and 1, big-endian), 60 functions each from seed 3,600,001; the casts patches 0077 to 0088 added had not met these families | 6,600 functions, **0 `mismatch`**: agrees 6,474, narrow-c 28 (`-0x80000000`, A2-71; byte arithmetic, A2-19), void-return 13, void-return-lent 29, skipped:memory 54 (family 94, A2-108's integer used as an address), not-compilable 2 (family 107's hardware symbols; with `SE_GENERATED_PRINTEDC_HWSYM=1` one `mismatch`, `return &SMPC_SR + param_2;` scaled as a `uint4 *`, the hook's limit A2-112 states) |
+| `tsoup22.py` (new): 3,000 soups of 4 to 18 items, every item a flag op, multiply, `div0s`/`div0u`/`div1`, `rotcl`/`rotcr`, `sts`/`lds` MACH and MACL, extension or swap over r0 to r7, with `bt`/`bf`/`bt/s`/`bf/s` skips | **0 `mismatch`**: agrees 2,460, narrow-c 7 (a byte negated at its width, `(uint8)` of an `int4` zero-extended: A2-19's reading), void-return 531, void-return-lent 2 |
+| small families by hand | 80 extension pairs by five compares, 600 random extension chains with shifts, swaps and negations between, 128 rotate and shift chains of 1 to 40 steps, 256 same-register forms (`addc r4,r4`, `div1 r4,r4`, `dmuls.l r4,r4`, ... after `sett`, `clrt` or a compare), 104 inputs of unknown type (`in_mach`, `in_macl`, `in_r1`, GBR) read signed and unsigned after `swap`/`xtrct`: 0 `mismatch`; narrow-c 3 (A2-19) |
+
+### 2. Hand fixtures (`fixtures22.txt`)
+
+All `agrees` unless said: the Hitachi manual's 32/16 unsigned and signed divisions (`div0u` or `div0s` and 16 `div1`, the `exts.w`/`rotcl`/`addc` fix-up), a 64/32 division (32 `rotcl`/`div1` pairs), libgcc's `__udivsi3` and `__sdivsi3` bodies (32 steps; 1.8 and 3.2 s), `div1` with Q, M and T from the caller's SR; `dmuls.l`/`dmulu.l` with `mul.l`, `muls.w` or `lds macl` between and MACH or MACL read, MACH's sign tested, an 8-byte return of both; `mac.w` with S clear and set (from the caller's SR and from `ldc`), two in a row, `m == n`, MACH read after a saturation (`in_mach | 1`), `mac.l` with S set, after `clrmac`, after `lds mach`, `m == n`, and `mac.w` then `mac.l` (big-endian arena: a little-endian one gives a false `mismatch`, A2-110's reason); 64-bit shifts through T (`shll`/`rotcl`, `shar`/`rotcr`, `shlr`/`rotcr`, twice), 64-bit add, subtract, negate and the borrow out; `addv`/`subv` overflow of full, byte, half and shifted-half values, of `x + x`, `x - x`, `-x + x`, `~x + x`; `swap.b`, `swap.w`, `xtrct` then `exts`, `cmp/gt`, `cmp/pz`, `shar`; `stc sr` after `div0s`, `div0u`, `div1`, `rotcr`, `addv`, `ldc` of a masked SR; `mov.w` PC-relative literals 0x8000, 0xFF80, 0x8001 into compares, sums, `mulu.w`, `muls.w`, `dmulu.l`, `and`; GBR's `and.b`/`or.b`/`xor.b`/`tst.b #imm,@(r0,GBR)` and `mov.x @(disp,GBR)` (texts checked by hand: `skipped:memory`, the parameter is GBR and a number).
+
+**Globals (A2-130, A2-132).** A word stored to a global at a constant address, a byte or half overwritten and the word read back by a signed or an unsigned op prints `iRam06002304 = CONCAT13(param_2,param_1); return 5 < iRam06002304;` (`cmp/gt`) and `uRam06002304 = ...; return 5 < uRam06002304;` (`cmp/hi`), `iRam06002304 >> 1` and `uRam06002304 >> 1` (`shar`, `shlr`): the engine types the global by its reads and casts a read of the other sign (`(5 < uRam06002304) + (5 < (int4)uRam06002304)` for both compares, `5 < (int4)uRam06002304 ^ uRam06002304`), and a narrow read of it is cut by a shift and cast (`5 < (int2)((uint4)xRam06002304 >> 0x10)`); a global stored then read narrow through the same address forwards the stored value with the load's extension (`cRam06002304 = param_1; return (int4)param_1;`). Every text is right in the engine's types; the values were checked against the run by hand where the harness disagrees. The harness disagrees for the signed ones because it declares the global by the CONCAT's type (A2-130), and the text says which sign it means only by the name's first letter (A2-132). A2-128's class does not arise for a global: it has one type, its name's, and every read of the other sign is cast.
+
+**`mac.l` (A2-131).** `ldc r6,sr ; mac.l @r4+,@r5+ ; sts macl,r0` prints the negative bound as `uVar3 = 0;` while the positive one is `uVar3 = 0x7fffffffffff;`, in a `uint8` the line computes as the whole MAC; with `sts mach` after it the bound is printed whole. The value returned is right.
+
+Not new, not filed: a `div1` chain is printed step by step (Q, M and T as bits of `in_sr`, 32 steps of `bVar * (x - d) + !bVar * (x + d)`), not as a division; the value is right and the families 23 and 68 have it.
+
+### 3. Tests
+
+* **Full `ctest`:** `-E SaturnExplorerLive -j2 --timeout 900` under `ulimit -v 3500000`: **111 of 111** passed (241 s; `SaturnExplorerSh2DecompilerEngineTests` 49 s, `SaturnExplorerSh2PrintedCTests` 34 s, `SaturnExplorerSh2GeneratedTests` 27 s, `SaturnExplorerDecompilerFaultTests` 97 s); `-R SaturnExplorerLive`: **6 of 6** (28 s). 111 plus 6 Live, the master count. **No test was added** and no product file changed: the rows are open with their words in the ledger and `fixtures22.txt`. The fault suite ran inside the full `ctest` (passed).
+
+### 4. Routed
+
+* **Area 7:** grammar 2 seed **3601551** (`map-frame-store`, `map-copy-store`: `xStack_38 = (xunknown4)xVar4;` names none of the store folded into it); grammar 2 specials seeds **3620180** (`map-store-value`, `map-number-store`), **3622362** (`map-copy-store`: `iRamc0001004 = iRamc000103c;`), **3628408** and **3629843** (`map-const-join`: `uVar3 = 0;` at `shll2 r0`, `xVar2 = 0xffffffff;` at `negc r3,r1`). Replay: `SE_GENERATED_GRAMMAR=2 [SE_GENERATED_ALPHABET=specials] SE_GENERATED_SEED=<seed> SE_GENERATED_CANARY=0`.
+* **Area 5:** grammar 1 seed **3605366** (`v:folded-store-after-access`: the store at 06009014 folded into 2600218C printed after the read at 06009018 and the write at 06009020). Replay: `SE_GENERATED_GRAMMAR=1 SE_GENERATED_SEED=3605366 SE_GENERATED_CANARY=0`.
+* All six are on master's binary (this branch changes no product file).
