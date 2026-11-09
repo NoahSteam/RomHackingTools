@@ -8606,7 +8606,8 @@ std::vector<DecompileResult::EndlessLoopStore> StoresBeforeEndlessLoop(const ghi
                                                                        const std::set<uint32_t>& removedBlocks,
                                                                        const std::map<const ghidra::PcodeOp*, std::pair<std::set<size_t>, int>>& printed,
                                                                        const std::vector<Line>& lines,
-                                                                       const std::function<uint32_t(uint32_t)>& canonicalOf)
+                                                                       const std::function<uint32_t(uint32_t)>& canonicalOf,
+                                                                       std::vector<DecompileResult::EndlessLoopRead>& reads)
 {
     std::vector<DecompileResult::EndlessLoopStore> out;
     const ghidra::BlockGraph& g = fd.getBasicBlocks();
@@ -8664,25 +8665,42 @@ std::vector<DecompileResult::EndlessLoopStore> StoresBeforeEndlessLoop(const ghi
         return f == instances.end() ? none : f->second;
     };
     bool loops = false;
+    // A3-174: the blocks each dead block reaches, whole (no stop at the first return to itself), and whether it is on a cycle. A loop the
+    // analysis takes to run for ever is one that does not lead on to another loop (a loop it is not reached back from). A loop that
+    // ends, but leads only to the endless one (a poll of VDP2_TVSTAT before the mailbox poll), is dead too and on a cycle, and is not it.
+    std::vector<std::vector<char>> reachOf(static_cast<size_t>(n));
+    std::vector<char> onCycle(static_cast<size_t>(n), 0);
     for (ghidra::int4 i = 0; i < n; ++i)
     {
         if (!dead[static_cast<size_t>(i)]) continue;
-        std::vector<char> seen(static_cast<size_t>(n), 0);
+        std::vector<char>& seen = reachOf[static_cast<size_t>(i)];
+        seen.assign(static_cast<size_t>(n), 0);
         std::vector<const ghidra::FlowBlock*> work;
         const ghidra::FlowBlock* b = g.getBlock(i);
         for (ghidra::int4 k = 0; k < b->sizeOut(); ++k) work.push_back(b->getOut(k));
-        bool cycle = false;
-        while (!work.empty() && !cycle)
+        while (!work.empty())
         {
             const ghidra::FlowBlock* x = work.back();
             work.pop_back();
             const ghidra::int4 xi = x->getIndex();
             if (xi < 0 || xi >= n || seen[static_cast<size_t>(xi)]) continue;
             seen[static_cast<size_t>(xi)] = 1;
-            if (xi == i) cycle = true;
             for (ghidra::int4 k = 0; k < x->sizeOut(); ++k) work.push_back(x->getOut(k));
         }
-        if (!cycle) continue;
+        onCycle[static_cast<size_t>(i)] = seen[static_cast<size_t>(i)];
+        if (n > 4000) std::vector<char>().swap(seen);   // (a graph this large keeps the earlier reading: every cyclic dead block is a loop)
+    }
+    for (ghidra::int4 i = 0; i < n; ++i)
+    {
+        if (!dead[static_cast<size_t>(i)] || !onCycle[static_cast<size_t>(i)]) continue;
+        const ghidra::FlowBlock* b = g.getBlock(i);
+        {
+            bool terminal = true;
+            for (ghidra::int4 x = 0; x < n && terminal && !reachOf[static_cast<size_t>(i)].empty(); ++x)
+                if (reachOf[static_cast<size_t>(i)][static_cast<size_t>(x)] && onCycle[static_cast<size_t>(x)] && !reachOf[static_cast<size_t>(x)][static_cast<size_t>(i)])
+                    terminal = false;   // it leads to another loop, which it is not reached back from
+            if (!terminal) continue;
+        }
         const ghidra::BlockBasic* bb = static_cast<const ghidra::BlockBasic*>(b);
         std::vector<int> held;
         uint32_t at = 0;
@@ -8769,6 +8787,132 @@ std::vector<DecompileResult::EndlessLoopStore> StoresBeforeEndlessLoop(const ghi
     for (const ghidra::PcodeOp* o : silent)
         if (o->getIn(0) && !o->getIn(0)->isConstant() && printedHighs.count(o->getOut()->getHigh()) != 0 && o->getIn(0)->getHigh() == o->getOut()->getHigh())
             written[instanceOf(o)].emplace_back(static_cast<uint32_t>(o->getOut()->getOffset()), static_cast<uint32_t>(o->getOut()->getSize()));
+    // A3-173: the code after a loop the analysis takes to run for ever is removed with the loop's exit, and what it reads of the caller's
+    // is no input of the engine's prototype. The flow blocks that follow a loop (reached from a loop's block by the flow's own edges
+    // without entering a block that still has an op, or another loop) are that code. From the flow's own p-code, not the engine's
+    // warnings: a register read there while it still holds its value on entry (no write of the code's reaches it), and a word of the
+    // caller's frame read there, are inputs the signature must hold; r0 written there is the return value a caller reads.
+    {
+        const ghidra::Translate* translate = fd.getArch()->translate;
+        std::vector<ghidra::VarnodeData> regs;
+        for (int k = 0; k < 15; ++k) regs.push_back(translate->getRegister("r" + std::to_string(k)));
+        const ghidra::VarnodeData sp = translate->getRegister("r15");
+        const uint32_t held = HeldInputs(fd);
+        auto regOf = [&regs](const FlowVn& v) {
+            if (!v.space || v.Constant()) return -1;
+            for (int k = 0; k < 15; ++k)
+                if (v.space == regs[static_cast<size_t>(k)].space && v.offset < regs[static_cast<size_t>(k)].offset + regs[static_cast<size_t>(k)].size &&
+                    regs[static_cast<size_t>(k)].offset < v.offset + static_cast<ghidra::uintb>(v.size))
+                    return k;
+            return -1;
+        };
+        auto wholeReg = [&regs](const FlowVn& v, int k) {
+            return v.offset <= regs[static_cast<size_t>(k)].offset && v.offset + static_cast<ghidra::uintb>(v.size) >= regs[static_cast<size_t>(k)].offset + regs[static_cast<size_t>(k)].size;
+        };
+        auto isSp = [&sp](const FlowVn& v) { return v.space == sp.space && v.offset == sp.offset && v.size == static_cast<ghidra::int4>(sp.size); };
+        std::vector<uint32_t> after(nf, 0);   // the loop a block follows (0: none)
+        {
+            std::vector<std::pair<int, uint32_t>> work;
+            for (size_t b = 0; b < nf; ++b)
+                if (loopAt[b])
+                    for (int next : flow.successors[b]) work.emplace_back(next, loopAt[b]);
+            while (!work.empty())
+            {
+                const std::pair<int, uint32_t> w = work.back();
+                work.pop_back();
+                if (w.first < 0 || static_cast<size_t>(w.first) >= nf || after[static_cast<size_t>(w.first)] || loopAt[static_cast<size_t>(w.first)] ||
+                    live[static_cast<size_t>(w.first)])
+                    continue;
+                after[static_cast<size_t>(w.first)] = w.second;
+                for (int next : flow.successors[static_cast<size_t>(w.first)]) work.emplace_back(next, w.second);
+            }
+        }
+        bool region = false;
+        for (uint32_t a : after) region = region || a != 0;
+        bool spWritten = false;
+        size_t total = 0;
+        for (const auto& ops : flow.blockOps)
+        {
+            total += ops.size();
+            for (const FlowOp& x : ops) spWritten = spWritten || (x.hasOut && isSp(x.out));
+        }
+        if (region && total <= 200000)
+        {
+            // The registers that still hold their value on entry at the start of each block (bit k: r<k>), on some path: a fixed point.
+            std::vector<uint32_t> entryIn(nf, 0);
+            std::set<std::pair<uint32_t, int>> said;   // (instruction, what): one note each
+            auto run = [&](size_t b, uint32_t state, bool report) {
+                std::map<ghidra::uintb, int64_t> temps;   // temporaries that hold the entry r15 + a constant
+                for (const FlowOp& x : flow.blockOps[b])
+                {
+                    for (int k = 0; k < x.numIn; ++k)
+                    {
+                        const int r = regOf(x.in[k]);
+                        if (r < 0 || !((state >> r) & 1u)) continue;
+                        if ((x.code == ghidra::CPUI_INT_XOR || x.code == ghidra::CPUI_INT_SUB) && x.numIn == 2 && regOf(x.in[0]) == r && regOf(x.in[1]) == r)
+                            continue;   // `xor r0,r0`, `sub r1,r1`: a zero, read from nothing
+                        if (r >= 4 && r <= 7 && ((held >> r) & 1u)) continue;
+                        if (report && after[b] && said.insert(std::make_pair(x.insn, r)).second)
+                            reads.push_back(DecompileResult::EndlessLoopRead{ canonicalOf(x.insn), "r" + std::to_string(r) + " on entry", after[b] });
+                    }
+                    if (report && after[b] && !spWritten)
+                    {
+                        // A word of the caller's frame: a load through the entry r15 and a constant (`mov.l @(4,r15),r0`).
+                        if (x.code == ghidra::CPUI_INT_ADD && x.numIn == 2 && x.hasOut && x.out.space && x.out.space->getType() == ghidra::IPTR_INTERNAL)
+                        {
+                            for (int a = 0; a < 2; ++a)
+                                if (isSp(x.in[a]) && x.in[1 - a].Constant()) temps[x.out.offset] = static_cast<int32_t>(static_cast<uint32_t>(x.in[1 - a].offset));
+                        }
+                        else if (x.code == ghidra::CPUI_LOAD && x.numIn == 2)
+                        {
+                            int64_t off = -1;
+                            bool at = false;
+                            if (isSp(x.in[1])) off = 0, at = true;
+                            else if (x.in[1].space && x.in[1].space->getType() == ghidra::IPTR_INTERNAL && temps.count(x.in[1].offset)) off = temps[x.in[1].offset], at = true;
+                            if (at && off >= 0)
+                            {
+                                const int64_t w = off & ~int64_t(3);
+                                if ((held & ReturnCheck::ArgDep(w)) == 0 && said.insert(std::make_pair(x.insn, 100 + static_cast<int>(w))).second)
+                                    reads.push_back(DecompileResult::EndlessLoopRead{
+                                        canonicalOf(x.insn),
+                                        w < 16 ? "a stack argument (the word at r15 + " + std::to_string(w) + " on entry)" : std::string("a stack argument (a word at r15 + 16 or above on entry)"),
+                                        after[b] });
+                            }
+                        }
+                    }
+                    if (x.code == ghidra::CPUI_CALL || x.code == ghidra::CPUI_CALLIND) state &= ~0xFFu;   // the call returns what it likes in r0-r7
+                    if (x.hasOut)
+                    {
+                        const int r = regOf(x.out);
+                        if (r >= 0 && wholeReg(x.out, r))
+                        {
+                            state &= ~(1u << r);
+                            if (r == 0 && report && after[b] && said.insert(std::make_pair(x.insn, 0)).second)
+                                reads.push_back(DecompileResult::EndlessLoopRead{ canonicalOf(x.insn), "r0", after[b], true });
+                        }
+                    }
+                }
+                return state;
+            };
+            if (flow.entryBlock >= 0 && static_cast<size_t>(flow.entryBlock) < nf) entryIn[static_cast<size_t>(flow.entryBlock)] = 0x7FFFu;
+            for (bool changed = true; changed;)
+            {
+                changed = false;
+                for (size_t b = 0; b < nf; ++b)
+                {
+                    const uint32_t out = run(b, entryIn[b], false);
+                    for (int next : flow.successors[b])
+                        if (next >= 0 && static_cast<size_t>(next) < nf && (entryIn[static_cast<size_t>(next)] | out) != entryIn[static_cast<size_t>(next)])
+                        {
+                            entryIn[static_cast<size_t>(next)] |= out;
+                            changed = true;
+                        }
+                }
+            }
+            for (size_t b = 0; b < nf; ++b)
+                if (after[b]) run(b, entryIn[b], true);
+        }
+    }
     struct Store
     {
         uint32_t insn = 0, address = 0, size = 0;
@@ -8878,10 +9022,34 @@ void Sh2Decompiler::NoteStoresBeforeEndlessLoop(DecompileResult& r)
         r.warnings.push_back(Hex8(s.insn) + ": " + text);
         any = true;
     }
+    // A3-173: the code after the loop is removed with it, and what it reads of the caller's would be no input of the signature.
+    bool leavesR0 = false;
+    for (const DecompileResult::EndlessLoopRead& s : r.readsAfterEndlessLoop)
+    {
+        // (r0 written there is scratch as often as a value: it is no caution on the text, and withholds only a signature that would be lent)
+        if (s.writesR0)
+        {
+            leavesR0 = true;
+            continue;
+        }
+        const std::string text = "the read of " + s.what + " here is missing: the analysis takes the loop at " + Hex8(s.loop) + " to run for ever and removes the "
+                                 "code after it, so the signature does not hold that input. A poll of memory another processor writes folds so unless that "
+                                 "memory is marked volatile";
+        r.hardwareNotes.push_back(HardwareNote{ s.insn, text, true });
+        r.warnings.push_back(Hex8(s.insn) + ": " + text);
+        any = true;
+    }
+    if (!any && leavesR0 && r.prototype.known)
+    {
+        r.prototypeWithheld = "code after a loop the analysis takes to run for ever leaves a value in r0, which a caller would read";
+        r.prototype.known = false;
+    }
     if (!any) return;
     std::stable_sort(r.hardwareNotes.begin(), r.hardwareNotes.end(),
                      [](const HardwareNote& x, const HardwareNote& y) { return x.address < y.address; });
-    if (r.prototypeWithheld.empty()) r.prototypeWithheld = "a write before a loop the analysis takes to run for ever is missing";
+    if (r.prototypeWithheld.empty())
+        r.prototypeWithheld = r.storesBeforeEndlessLoop.empty() ? "code after a loop the analysis takes to run for ever reads or leaves what the signature does not hold"
+                                                                : "a write before a loop the analysis takes to run for ever is missing";
     r.prototype.known = false;
 }
 
@@ -9873,7 +10041,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         r.calls = Calls(*fd, flow, canonicalOf);
         r.flowSuccessors = flow.successors;
         r.flowBlockRanges = flow.ranges;
-        r.storesBeforeEndlessLoop = StoresBeforeEndlessLoop(*fd, flow, removedBlocks, printed, r.lines, canonicalOf);   // A3-167 to A3-169
+        r.storesBeforeEndlessLoop = StoresBeforeEndlessLoop(*fd, flow, removedBlocks, printed, r.lines, canonicalOf, r.readsAfterEndlessLoop);   // A3-167 to A3-169
         r.frameLedgerCapped = fd->isFrameLedgerCapped();   // (A3-133, patch 0072) the frame records hide any loss: unchecked
         for (const ghidra::FrameCallRecord& c : fd->getFrameCalls())
         {

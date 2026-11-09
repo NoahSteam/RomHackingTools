@@ -19030,3 +19030,51 @@ Branch `review/7-round11` from master `810872142`; master `c38138018` (area 3, A
 | full `ctest -j2 -E SaturnExplorerLive` | **111 of 111** passed (269 s) |
 | Live (`ctest -R SaturnExplorerLive`) | **6 of 6** passed |
 | fault suite (`SaturnExplorerDecompilerFaultTests`, product code changed) | **0 of 94** jobs failed |
+
+## Area 3, A3-173 and A3-174 fixer
+
+Fixer, branch `review/3-a3173-fix`, cut at master `4ba31ea1b`. Host, oracle and generator only: no engine patch, so no patch number was used (0089 stays free). The worktree's RelWithDebInfo build (`-j2`), every test binary under `ulimit -v 3500000` (4,000,000 for the generator ranges) and `timeout`, one heavy job at a time. **Both rows are fixed: A3-173 (P1) and A3-174 (P3). One new row: A3-175 (P2, the store after the loop).**
+
+### A3-173: what the code after an endless poll reads
+
+The engine removes the code after a poll it takes to run for ever (the documented reading of unmarked memory), so its prototype has no input for a register that only that code reads, and the host lent the prototype. The host's other rules take the hardware reading (the poll ends): a store before the loop is said (A3-164, A3-167), a removed hardware or pointer access is said (`NoteRemovedAccesses`), a return from r6 after the loop is withheld (pp6). The read side was missing. The decision is made from the original code, not from "Removing unreachable block":
+
+* **The region.** `StoresBeforeEndlessLoop` already places the loops (`loopAt`, by flow block). The code after a loop is the flow blocks reached from a loop block by the flow's own edges, without entering a block that still has a live op (the code the text keeps, which the signature already holds) or another loop.
+* **The reads.** Over the flow's p-code (`FlowRecord::blockOps`) a forward may-be-entry dataflow: at the entry all of r0 to r14 hold their value on entry; a full-width write to a register ends that on the path; a call ends it for r0 to r7; `xor Rn,Rn` and `sub Rn,Rn` read nothing (the zeroing idiom). A read in the region of a register that may still hold its entry value and that `HeldInputs` (the signature the engine recovered: r4 to r7 and the stack words) does not hold is `readsAfterEndlessLoop`. A word of the caller's frame read there (`mov.l @(4,r15),r1`: a load through the entry r15 and a constant, when the flow never writes r15) that the signature does not hold is one too.
+* **What is said.** Each read is a caution on its instruction ("the read of r6 on entry here is missing: the analysis takes the loop at 0x06009008 to run for ever and removes the code after it, so the signature does not hold that input. A poll of memory another processor writes folds so unless that memory is marked volatile") and the signature is withheld, through `NoteStoresBeforeEndlessLoop`. A register read before the loop is held, so the control stays lent.
+* **The return value.** r0 written in the region withholds a signature that would be lent ("leaves a value in r0, which a caller would read"), with no caution on the text: r0 is scratch as often as a value, and a first version that said it touched five functions of the two images (all already withheld, 0600C2DA and 0600C49A not among them). pp6, a return computed from r6, is withheld as before and now says the read too.
+
+### A3-174: the loop that does not end
+
+`loopAt` took every dead final block on a cycle for a loop that runs for ever, so a VDP2_TVSTAT poll that ends (a real exit toward the mailbox poll) was placed and a store's walk stopped there. A dead block is a loop that does not end only if it does not lead on to another cyclic dead block it is not reached back from (a bottom strongly connected component); a graph of more than 4,000 final blocks keeps the earlier reading. pp1 and pp4 now say "the loop at 0x06009012". A dead block that leads only to non-looping dead code (a halt, an unresolved jump) is still a loop, as before.
+
+### The generator
+
+* **Production** (`AddPostPollRead`, a stream of its own `postPollRng`, **only for the grammar 1 seeds from 4,200,001**, `kPostPollFirst`): in one program of two with a poll the last item stores r4 to r7 through r6 (`mov.b Rm,@r6`), code after the poll that reads an input. Every seed below keeps the program it had (the default run, the printed-C baseline, the pins).
+* **Oracle** `endless-read-dropped`: in a text with `while( true );` of a program that has the item, a lent signature must have at least m - 3 parameters for rm. Counts `endless-read.checked` and `endless-read.withheld`. With the host's reading switched off (a temporary build, not kept) the first 2,500 seeds from 4,200,001 give it on **2 seeds, 4200851 and 4201231**, and none on the fix (158 programs checked, all 158 withheld).
+
+### Pins
+
+* `TestA3173Fix` (`Sh2DecompilerTests.cpp`): pp5 (r6 stored after the poll, caution on 0x0600900E, withheld), pp6, pp8 (a stack word), pp9 (r0, withheld with the reason, no caution), pp1 and pp4 (the store's caution names 0x06009012, nothing names 0x0600900C), the controls pp7 (r6 tested before the loop: lent, 3 parameters) and pp10 (r6 loaded after the loop: lent), and m1 (the callee withheld, so the caller does not print a call that lost the argument; the caller is withheld with it). `TestA3164Fix`'s two old controls that read an input after the loop (seed 131's `mov.b r1,@r7`, seed 14501's `mac.w @r4+,@r7+`) now say it, so their "no store caution" check looks at store cautions only.
+* `TestA3RoutedPins` (`Sh2GeneratedTests.cpp`): grammar 1 seeds 4200851 and 4201231 (0 findings, checked and withheld above 0).
+* Fixtures: `tools/a3_round21/fixtures.src` gains pp7 to pp10. No new test target.
+
+### Runs (on the final code)
+
+| Run | Result |
+|---|---|
+| game corpus (`SE_GAME_LEND=1`, hwram007, hwram008) | real entries lent **474 (645 parameters) of 999** and **724 (975) of 1,543**; missing and said **0** and **4**: unchanged. The text of every function is the same as the A3-170 fixer's dumps in both images. The caution is given in hwram008 0600C2DA and 0600C49A only, unchanged |
+| printed-C (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | **agrees=5196**, the baseline |
+| generator default run (300 seeds and the pins) | **0 findings** |
+| grammar 1, 4,200,001 to 4,205,000 (two pieces) | 22 failing seeds, all area 5 (`folded-store-after-access`) or area 7 (`map-copy-store`): n:folded-store-after-access 10, v:folded-store-after-access 4, n:map-copy-store 7, v:map-copy-store 5. Nothing else; `endless-read-dropped` none (checked 158 in the first piece) |
+| grammar 2, 4,200,001 to 4,205,000 (two pieces) | 2 failing seeds: `n:map-copy-merge` (area 7) and `n:folded-store-after-access` (area 5) |
+| full `ctest -E SaturnExplorerLive -j2` | **111 of 111** (284 s); Live **6 of 6**. No new test target: the new pins are in `TestA3173Fix` (`SaturnExplorerSh2DecompilerTests`) and `TestA3RoutedPins` (`SaturnExplorerSh2GeneratedTests`) |
+| fault suite (`SaturnExplorerDecompilerFaultTests`) | **0 of 94** jobs failed |
+
+### New row
+
+* **A3-175 (P2, open):** a store of ordinary memory at a constant address that the code makes after the endless poll is removed with the loop's exit, unsaid, and the function is lent `void (void)` (pp10: `mov #7,r6 ; mov.l r6,@r3` after the loop). The same class as A3-173 for the memory the callee writes; `NoteRemovedAccesses` says hardware, marked and pointer accesses only.
+
+### Routed, no row here
+
+Area 5 and area 7 classes only, as counted above (`folded-store-after-access`, `map-copy-store`, `map-copy-merge`); no seed was shrunk, they are the known classes.

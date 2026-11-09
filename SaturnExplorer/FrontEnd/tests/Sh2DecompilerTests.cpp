@@ -16226,7 +16226,8 @@ void TestA3164Fix()
         const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, c.words);
         Print(c.name, r);
         CHECK(r.status == DecompileStatus::Ok);
-        CHECK(!HasNote(r, "here is missing: the analysis takes the loop at", true));
+        // (a store the text prints is not said; A3-173: the code some of these have after the loop reads an input, which is said apart)
+        for (const HardwareNote& n : r.hardwareNotes) CHECK(!(Has(n.text, "-byte write of") && Has(n.text, "here is missing: the analysis takes the loop at")));
         for (const char* l : kLent)
             if (std::string(l) == c.name && !r.prototype.known)
             {
@@ -16245,6 +16246,84 @@ void TestA3164Fix()
                 std::printf("  %s: has `%s`\n", c.name, h);
                 CHECK(false);
             }
+    }
+}
+
+// A3-173 (area 3 round 21 review; Docs/Decompiler/tools/a3_round21/fixtures.src pp5 to pp10, m1) and A3-174. The engine removes the code after a
+// poll it takes to run for ever, and a lent signature was recovered from what is left: a parameter register the code reads only there
+// (`mov.l r6,@r3` after `P: mov.w @r7,r0 ; tst #1,r0 ; bf P`) was no input of the prototype, `void (void)` was lent and the callers lost the
+// argument. Read from the flow's own p-code now (a register that still holds its value on entry, a word of the caller's frame, r0 written),
+// said on the instruction and the signature withheld. A3-174: the caution names the loop that does not end (0x06009012), not the poll of
+// VDP2_TVSTAT before it that does.
+void TestA3173Fix()
+{
+    std::vector<uint8_t> hw(0x100000u, 0);
+    Sh2Decompiler d(gConfig);
+    struct Case
+    {
+        const char* name;
+        std::vector<uint16_t> words;
+        uint32_t at;        // the instruction the caution is on, or 0 for none
+        const char* what;   // ...and its text
+    };
+    const Case kCases[] = {
+        { "A3-173 pp5: r6 stored after the poll", { 0xD304, 0xD705, 0xE001, 0x2701, 0x6071, 0xC801, 0x8BFC, 0x2362, 0x000B, 0x0009, 0x0600, 0x2304, 0x0600, 0x1010 },
+          0x0600900Eu, "the read of r6 on entry here is missing: the analysis takes the loop at 0x06009008 to run for ever" },
+        { "A3-173 pp6: r6 returned after the poll", { 0xD703, 0xE001, 0x2701, 0x6071, 0xC801, 0x8BFC, 0x000B, 0x6063, 0x0600, 0x1010 },
+          0x0600900Eu, "the read of r6 on entry here is missing" },
+        { "A3-173 pp8: a stack argument read after the poll", { 0xD305, 0xD706, 0xE001, 0x2701, 0x6071, 0xC801, 0x8BFC, 0x51F1, 0x2312, 0x000B, 0x0009, 0x0009,
+                                                               0x0600, 0x2304, 0x0600, 0x1010 },
+          0x0600900Eu, "the read of a stack argument (the word at r15 + 4 on entry) here is missing" },
+        { "A3-173 pp9: r0 written after the poll", { 0xD703, 0xE001, 0x2701, 0x6071, 0xC801, 0x8BFC, 0x000B, 0xE005, 0x0600, 0x1010 },
+          0, "code after a loop the analysis takes to run for ever leaves a value in r0" },
+        // A3-174, pp1: a poll of VDP2_TVSTAT that ends, then the mailbox poll; the store before both is said, and the loop named is the second
+        { "A3-174 pp1: the poll that ends, then the one that does not", { 0xD307, 0xD708, 0xD808, 0x2362, 0xE001, 0x2701, 0x6081, 0xC808, 0x89FC, 0x6071, 0xC801,
+                                                                         0x8BFC, 0x2342, 0x000B, 0x0009, 0x0009, 0x0600, 0x2304, 0x0600, 0x1010, 0x25F8, 0x0004 },
+          0x06009006u, "the analysis takes the loop at 0x06009012 to run for ever" },
+        { "A3-174 pp4: a first loop whose exit tests a parameter", { 0xD307, 0xD708, 0x2362, 0xE001, 0x2701, 0x6071, 0x2059, 0x2008, 0x89FB, 0x6071, 0xC801, 0x8BFC,
+                                                                    0x2342, 0x000B, 0x0009, 0x0009, 0x0600, 0x2304, 0x0600, 0x1010 },
+          0x06009004u, "the analysis takes the loop at 0x06009012 to run for ever" },
+    };
+    for (const Case& c : kCases)
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, c.words);
+        Print(c.name, r);
+        CHECK(r.status == DecompileStatus::Ok && !r.prototype.known);
+        if (c.at != 0) CHECK(HasNoteAt(r, c.at, c.what));
+        else CHECK(Has(r.prototypeWithheld, c.what));   // (r0 left after the loop: the signature is withheld, nothing said on the text)
+        if (Has(c.name, "pp1"))   // (and nothing names the poll that ends)
+            CHECK(!HasNote(r, "the loop at 0x0600900C", true));
+    }
+    // The controls: r6 is read before the loop (the signature holds it), or is written before it is read; both are lent, with nothing said
+    const Case kLent[] = {
+        { "A3-173 control pp7: r6 tested before the loop", { 0xD305, 0xD706, 0xE001, 0x2701, 0x2668, 0x8903, 0x6071, 0xC801, 0x8BFC, 0x2362, 0x000B, 0x0009,
+                                                              0x0600, 0x2304, 0x0600, 0x1010 }, 0, "" },
+        { "A3-173 control pp10: r6 loaded after the loop", { 0xD305, 0xD706, 0xE001, 0x2701, 0x6071, 0xC801, 0x8BFC, 0xE607, 0x2362, 0x000B, 0x0009, 0x0009,
+                                                            0x0600, 0x2304, 0x0600, 0x1010 }, 0, "" },
+    };
+    for (const Case& c : kLent)
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, c.words);
+        Print(c.name, r);
+        CHECK(r.status == DecompileStatus::Ok && r.prototype.known);
+        CHECK(!HasNote(r, "here is missing: the analysis takes the loop at", true));
+    }
+    // m1: the callee (function 1) is withheld, so its caller does not print a call that has lost the argument
+    {
+        const std::vector<uint16_t> words = { 0x012A, 0x2F16, 0xD20B, 0x345C, 0x6643, 0x420B, 0x0009, 0x61F6, 0x412A, 0x000B, 0x0009, 0x0009, 0x0009, 0x0009,
+                                              0x0009, 0x0009, 0xD305, 0xD706, 0xE001, 0x2701, 0x6071, 0xC801, 0x8BFC, 0x2362, 0x000B, 0x0009, 0x0600, 0x9020,
+                                              0x0600, 0x2304, 0x0600, 0x1010 };
+        std::fill(hw.begin(), hw.end(), 0);
+        for (size_t i = 0; i < words.size(); ++i) dts::Put16(hw, 0x9000u + 2 * i, words[i]);
+        auto snap = MakeSnapshot(hw);
+        const DecompileResult callee = d.Decompile(snap, Request(0x06009020u));
+        Print("A3-173 m1 callee", callee);
+        CHECK(callee.status == DecompileStatus::Ok && !callee.prototype.known);
+        DecompileRequest q = Request(0x06009000u);
+        if (callee.prototype.known) q.prototypes.emplace_back(0x06009020u, callee.prototype);
+        const DecompileResult caller = d.Decompile(snap, q);
+        Print("A3-173 m1 caller", caller);
+        CHECK(caller.status == DecompileStatus::Ok && !caller.prototype.known);
     }
 }
 
@@ -17106,6 +17185,7 @@ int main(int argc, char** argv)
         RUN(TestA3144Fix());
         RUN(TestA3155Fix());
         RUN(TestA3164Fix());
+        RUN(TestA3173Fix());
         RUN(TestArea10Round2());
         RUN(TestArea5Confirm());
         RUN(TestArea5Review());

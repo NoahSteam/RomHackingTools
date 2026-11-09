@@ -510,6 +510,7 @@ struct Program
     int version = 1;
     std::vector<Lit> lits;
     uint32_t mbox = 0x26001000u;   // the mailbox the request marks volatile, 16 bytes
+    int postPollRead = 0;          // version 1 (A3-173): the parameter register (4 to 7) the program's last item stores, after a poll; 0: none
     std::vector<Func> fns;         // fns[0] is the function a version 1 program is about; later ones follow in memory
 };
 
@@ -550,6 +551,8 @@ struct Gen
     Rng pollBodyRng;
     Rng slotEntryRng;   // ...and one for A3-170 (a branch into the slot of a delayed skip, and its early return)
     bool slotEntryOn = false;   // ...drawn for the seeds from kSlotEntryFirst on only (Generate)
+    Rng postPollRng;            // ...and one for A3-173 (a parameter register stored after a poll), for the seeds from kPostPollFirst on only
+    bool postPollOn = false;
     // What the function being made changes for good / reads on entry through the wide alphabet and the GBR accesses
     // (an over-approximation: an item the grammar drops again is counted, which the checks that use it allow).
     uint32_t wideClobbers = 0;
@@ -571,7 +574,7 @@ struct Gen
     bool inSpill = false;     // r15 is moved: no local is addressed through it here
     int loopDepth = 0;        // inside a loop body: a pointer advanced here is advanced again by the next iteration
     std::vector<Func> built;  // the functions of this module generated so far (the later ones)
-    Gen(uint64_t seed) : rng(seed), macRng(seed ^ 0x6D61636D61636D61ull), guardRng(seed ^ 0x7367756172643A5Aull), convRng(seed ^ 0x636F6E7663727667ull), wideRng(seed ^ 0x77696465414C5521ull), aliasRng(seed ^ 0x616C696173526E67ull), maskRng(seed ^ 0x6D61736B52616E64ull), placeRng(seed ^ 0x706C616365526E67ull), loopMaskRng(seed ^ 0x6C6F6F704D61736Bull), frameRng(seed ^ 0x6672616D6557616Cull), partialRng(seed ^ 0x7061727469616C52ull), retRng(seed ^ 0x7265747263616C6Cull), bsrfRng(seed ^ 0x6273726652656C21ull), choiceRng(seed ^ 0x63686F6F73657221ull), regionRng(seed ^ 0x726567696F6E5074ull), idiomRng(seed ^ 0x69646F6D52616E64ull), pollBodyRng(seed ^ 0x706F6C6C426F6479ull), slotEntryRng(seed ^ 0x736C6F74456E7472ull)
+    Gen(uint64_t seed) : rng(seed), macRng(seed ^ 0x6D61636D61636D61ull), guardRng(seed ^ 0x7367756172643A5Aull), convRng(seed ^ 0x636F6E7663727667ull), wideRng(seed ^ 0x77696465414C5521ull), aliasRng(seed ^ 0x616C696173526E67ull), maskRng(seed ^ 0x6D61736B52616E64ull), placeRng(seed ^ 0x706C616365526E67ull), loopMaskRng(seed ^ 0x6C6F6F704D61736Bull), frameRng(seed ^ 0x6672616D6557616Cull), partialRng(seed ^ 0x7061727469616C52ull), retRng(seed ^ 0x7265747263616C6Cull), bsrfRng(seed ^ 0x6273726652656C21ull), choiceRng(seed ^ 0x63686F6F73657221ull), regionRng(seed ^ 0x726567696F6E5074ull), idiomRng(seed ^ 0x69646F6D52616E64ull), pollBodyRng(seed ^ 0x706F6C6C426F6479ull), slotEntryRng(seed ^ 0x736C6F74456E7472ull), postPollRng(seed ^ 0x706F7374506F6C6Cull)
     {
         for (int i = 0; i < 8; ++i) align[i] = 4, pref[i] = 4;
         p.mbox = 0x26001000u + 0x10u * rng.Below(4);
@@ -2267,7 +2270,25 @@ struct Gen
             }
         }
         AddSlotEntryPoll(items, polled);
+        AddPostPollRead(items, polled);
         return p;
+    }
+
+    // A3-173: in one program of two with a poll (from the seeds where the production is drawn), the program's last item stores a parameter
+    // register (r4 to r7, `mov.b Rm,@r6`) through its pointer: code after the poll that reads an input. The analysis takes an unmarked poll of
+    // memory the function wrote to run for ever and removes the code after it; a lent signature must still hold the register (the oracle's
+    // `endless-read-dropped`). Everything is drawn from postPollRng and appended, so nothing before it moves.
+    void AddPostPollRead(std::vector<Item>& items, bool polled)
+    {
+        if (!postPollOn || !polled || disc || !postPollRng.Chance(50)) return;
+        const int m = 4 + static_cast<int>(postPollRng.Below(4));
+        Item st;
+        st.type = Item::Mem;
+        st.shape = "post.poll.store";
+        st.base = 6;
+        st.words = { uint16_t(0x2000 | 6 << 8 | m << 4) };   // mov.b Rm,@r6
+        items.push_back(st);
+        p.postPollRead = m;
     }
 
     // A3-170, the whole shape, in one program without a poll in four (from the seeds where the production is drawn): a fresh RAM pointer in r6,
@@ -2341,11 +2362,14 @@ struct Gen
 // A3-170's production (a branch into a delayed skip's slot) is drawn for the seeds from here on, the first fresh range after it was added:
 // every seed below keeps the program it always had, the pins, the default run, the printed-C baseline and the 20,000-seed matrix among them.
 constexpr uint64_t kSlotEntryFirst = 3800001;
+// ...and A3-173's (a parameter register stored after a poll), from the first fresh range after it was added.
+constexpr uint64_t kPostPollFirst = 4200001;
 
 Program Generate(uint64_t seed)
 {
     Gen g(seed);
     g.slotEntryOn = seed >= kSlotEntryFirst;
+    g.postPollOn = seed >= kPostPollFirst;
     return g.Run();
 }
 
@@ -4161,6 +4185,7 @@ struct Subject
     std::vector<Env::Poll> polls;          // addresses read busy, then ready
     bool markVolatile = false;             // a second request marks [volFirst, volLast] volatile
     uint32_t volFirst = 0, volLast = 0;
+    int postPollRead = 0;                  // version 1 (A3-173): the parameter register the last item stores after a poll
     std::string literals;                  // for the report
 
     uint16_t WordAt(uint32_t addr) const
@@ -4187,6 +4212,7 @@ Subject MakeSubject(const Program& p)
     Subject s;
     const Assembled a = Assemble(p);
     s.v2 = p.version == 2;
+    s.postPollRead = p.postPollRead;
     s.bad = !a.ok;
     s.words = a.words;
     s.codeWords = a.codeWords;
@@ -5317,6 +5343,25 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                                     std::to_string(code) + " such store(s) there (`" + ts.text + "`)\n";
                     }
                 }
+            }
+        }
+        // ---- (A3-173) A parameter register the code reads only after a poll the text takes to run for ever is held by a lent signature ----
+        // The engine removes the code after such a poll with the loop's exit, and the signature recovered from what is left has no input for a
+        // register read only there; its callers then lose the argument. The program stores r<m> (m = 4 to 7) as its last item
+        // (Gen::AddPostPollRead): a lent signature holds r4 to r<m> (the parameters are consecutive), else the function is withheld or the
+        // register is read before the poll.
+        if (r.status == DecompileStatus::Ok && subject.postPollRead >= 4 && subject.fns.size() == 1)
+        {
+            static const std::regex endlessLoop("^\\s*\\}?\\s*while\\( true \\);?\\s*$");
+            bool forEver = false;
+            for (const Line& line : r.lines) forEver = forEver || std::regex_search(line.text, endlessLoop);
+            if (forEver)
+            {
+                count("endless-read.checked");
+                if (!r.prototype.known) count("endless-read.withheld");
+                else if (r.prototype.params.size() < static_cast<size_t>(subject.postPollRead - 3))
+                    add("endless-read-dropped", "the program stores r" + std::to_string(subject.postPollRead) + " after a poll the text takes to run for ever, and the lent signature has " +
+                                                    std::to_string(r.prototype.params.size()) + " parameter(s)");
             }
         }
         // ---- (A3-164, patch 0087) A store made before a loop the text takes to run for ever is in the text ----
@@ -15090,6 +15135,19 @@ void TestA3RoutedPins(Sh2Decompiler& d)
                         shapes["slot_entry.poll"], count(rep, "endless-store.said"));
             for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
             CHECK(rep.findings.empty() && shapes["slot_entry.poll"] == 1 && count(rep, "endless-store.said") > 0);
+        }
+        // A3-173's production (grammar 1, from seed 4,200,001): the program's last item stores r5 after a poll the text takes to run for ever. On the
+        // old host the lent signature had no parameter for it (`endless-read-dropped`, seeds 4200851 and 4201231 among the first 2,500); now the
+        // signature is withheld and the oracle counts it
+        for (const uint64_t sd : { 4200851ull, 4201231ull })
+        {
+            const Program prog = Generate(sd);
+            const Report rep = Evaluate(d, prog, true);
+            std::printf("pin 'A3-173 grammar 1 seed %llu (the post-poll store of r%d)': %zu finding(s), endless-read checked %d, withheld %d\n", static_cast<unsigned long long>(sd),
+                        prog.postPollRead, rep.findings.size(), count(rep, "endless-read.checked"), count(rep, "endless-read.withheld"));
+            for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+            CHECK(prog.postPollRead >= 4 && count(rep, "endless-read.checked") > 0 && count(rep, "endless-read.withheld") > 0);
+            for (const Finding& f : rep.findings) CHECK(f.sig.find("endless-read") == std::string::npos);
         }
         const Report seed = Evaluate(d, Generate(3704634), true);
         std::printf("pin 'A3-171 grammar 1 seed 3704634': %zu finding(s), endless-store replaced %d\n", seed.findings.size(), count(seed, "endless-store.replaced"));
