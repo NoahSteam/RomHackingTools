@@ -6790,7 +6790,13 @@ bool FlowNextReads(const FlowRecord& flow, const ghidra::Funcdata& fd, int blk, 
             ghidra::uintb offset = 0;
             if (!FlowPointer(flow, fd, st.first, static_cast<int>(i), op.in[1], stack, offset) || (stack && !stackSpace))
             {
-                if (op.code == ghidra::CPUI_STORE) return false;
+                // (A7-112: a store through the stack pointer itself, `mov.l r2,@-r15` after a call the walk cannot place r15 across, writes
+                // the stack, which the engine never folds into a global: no store of memory in RAM; grammar 2 seed 5203853)
+                if (op.code == ghidra::CPUI_STORE && !(mem.space == ram && stackSpace && stackSpace->numSpacebase() > 0 &&
+                                                       op.in[1].space == stackSpace->getSpacebase(0).space &&
+                                                       op.in[1].offset == stackSpace->getSpacebase(0).offset &&
+                                                       op.in[1].size == static_cast<ghidra::int4>(stackSpace->getSpacebase(0).size)))
+                    return false;
                 continue;
             }
             FlowVn m;
@@ -7335,6 +7341,13 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
         // of the variable by where they are; this says which of them the line shows.
         bool valuesFound = false;
         ValueSet values;
+        // (through the engine's own copies into temporaries, as the memory-merge rule follows them)
+        const ghidra::Varnode* copied = code == ghidra::CPUI_COPY ? o->getIn(0) : nullptr;
+        for (int hop = 0; hop < 4 && copied && copied->getSpace()->getType() == ghidra::IPTR_INTERNAL && copied->isWritten() &&
+                          copied->getDef()->code() == ghidra::CPUI_COPY;
+             ++hop)
+            copied = copied->getDef()->getIn(0);
+        const bool selfCopy = copied && copied->getSpace() == space && copied->getOffset() == base && copied->getSize() == out->getSize();
         std::map<const ghidra::AccessRecord*, bool> shown;
         const auto shows = [&](const ghidra::AccessRecord* r) {
             if (!valuesFound)
@@ -7357,6 +7370,14 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
             }
             const auto f = shown.find(r);
             if (f != shown.end()) return f->second;
+            // A7-113: a copy of the variable's own memory (`xRam26001025 = xRam26001025;`, the byte a word store wrote, which the engine
+            // copies over a `tas.b` of the byte beside it in a loop) is whatever the stores of those bytes wrote: each store of them the
+            // search finds shows it; grammar 1 seed 5304635 (specials)
+            if (selfCopy && r->addr.getSpace() == space)
+            {
+                shown[r] = true;
+                return true;
+            }
             if ((ownNumber || callOutput) && !ownOpReaches(r))
             {
                 shown[r] = false;
@@ -7449,7 +7470,8 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
         // of another register, one a load made (`mov.l r2,@r6` of `mov.w @r5,r2`), only "may" show it, as the value walk answers for a
         // load; when the engine hoisted the input's store to a branch ahead of the paths that run it (the `bt` before a `bt/s` whose slot
         // is `mov.w r1,@r6`, entered again by a `bra`), the stores of the input are the statement's, not the stores of the loaded word
-        // before the branch. Only when the statement is at no store of the variable (its own store decides then); grammar 1 seed 4802131.
+        // before the branch. Only when the statement is at no store of the variable (its own store decides then) and the search below finds
+        // no store of the input itself; grammar 1 seed 4802131.
         std::vector<const ghidra::AccessRecord*> inputStores;
         {
             const ghidra::Varnode* v = o->numInput() >= 1 ? o->getIn(0) : nullptr;
@@ -7483,8 +7505,7 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                 }
             }
         }
-        for (const ghidra::AccessRecord* r : inputStores) chosen.insert(r);
-        for (ghidra::int4 b = 0; b < out->getSize() && inputStores.empty(); ++b)
+        for (ghidra::int4 b = 0; b < out->getSize(); ++b)
         {
             const ghidra::uintb byte = (base + static_cast<ghidra::uintb>(b)) & space->getHighest();
             const auto writes = [&](const ghidra::AccessRecord* r) {
@@ -7681,15 +7702,13 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                 level = std::move(next);
             }
         }
-        if (std::getenv("SE_A7DBG"))   // DEBUG-A7R13
+        // (A7-104: when the search found no store of the input, only stores of other registers that "may" show it, the stores of the
+        // input are the statement's; a store of the input it found is kept, the other path's store of it is that path's line)
+        if (!inputStores.empty())
         {
-            std::fprintf(stderr, "A7DBG at=%08x code=%d slot=%d size=%d base=%llx ownOther=%d chosen:", at, static_cast<int>(code), o->isFromDelaySlot() ? 1 : 0,
-                         out->getSize(), static_cast<unsigned long long>(base), ownOther ? 1 : 0);
-            for (const ghidra::AccessRecord* r : chosen) std::fprintf(stderr, " %08x", InstructionOf(*r));
-            std::fprintf(stderr, " | shows:");
-            for (const ghidra::AccessRecord* r : stores)
-                if (r->addr.getSpace() == space) std::fprintf(stderr, " %08x=%d%s", InstructionOf(*r), shows(r) ? 1 : 0, covered.count(r) ? "" : "o");
-            std::fprintf(stderr, "\n");
+            bool found = false;
+            for (const ghidra::AccessRecord* r : inputStores) found = found || chosen.count(r) != 0;
+            if (!found) chosen = std::set<const ghidra::AccessRecord*>(inputStores.begin(), inputStores.end());
         }
         if (chosen.empty() && atLoadOrCall)
             for (ghidra::int4 b = 0; b < out->getSize(); ++b)

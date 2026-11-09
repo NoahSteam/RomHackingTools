@@ -15288,6 +15288,29 @@ void TestArea7Round12Pins(Sh2Decompiler& d)
     }
 }
 
+// Area 7 round 13 (A7-104 to A7-113): the whole seeds of the round, each with no `map-*` finding. The specials seeds are other programs
+// under the default alphabet: the flag is set for them and put back.
+void TestArea7Round13Pins(Sh2Decompiler& d)
+{
+    struct Pin
+    {
+        int grammar;
+        int seed;
+        bool specials;
+    };
+    const bool savedSpecials = gSpecialReads;
+    for (const Pin& s : { Pin{ 1, 4802131, false }, Pin{ 1, 5000472, true }, Pin{ 1, 5002388, true }, Pin{ 1, 5003735, false }, Pin{ 1, 5207679, false },
+                          Pin{ 1, 5208620, false }, Pin{ 2, 5203853, false }, Pin{ 2, 5204684, false }, Pin{ 1, 5304635, true } })
+    {
+        gSpecialReads = s.specials;
+        const Report rep = Evaluate(d, s.grammar == 2 ? MakeV2(s.seed) : Generate(s.seed), true);
+        std::printf("pin 'area 7 round 13: grammar %d seed %d%s': %zu finding(s)\n", s.grammar, s.seed, s.specials ? " (specials)" : "", rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        for (const Finding& f : rep.findings) CHECK(f.sig.find("map-") == std::string::npos);
+    }
+    gSpecialReads = savedSpecials;
+}
+
 void TestA3RoutedPins(Sh2Decompiler& d)
 {
     auto count = [](const Report& rep, const char* name) {
@@ -15884,6 +15907,7 @@ void TestGenerated()
         RUN(TestA3161Pins(d));
         RUN(TestA3RoutedPins(d));
         RUN(TestArea7Round12Pins(d));
+        RUN(TestArea7Round13Pins(d));
         if (EnvNumber("SE_GENERATED_CANARY", 240) > 0) RUN(TestCanary(d));
     }
     const long seeds = single ? 1 : EnvNumber("SE_GENERATED_SEEDS", 300);

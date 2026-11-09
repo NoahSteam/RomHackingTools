@@ -2844,9 +2844,9 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                 // `& 0x1000000`; `xStack_c = 0;` for the half-word store of 8 read back by its high byte -- is no store's value, and the line
                 // says it names no instruction; grammar 1 seed 4502735, grammar 2 seed 4506709)
                 // (A7-108: not when a store of the variable is known to store the number the line shows -- RegisterBefore gives it a number
-                // and it is the line's at the bytes the store writes (writesOther, as the store-value check compares): the line then has a
-                // store to name, and saying it names none hides it. The trimmed number of A7-99 is no store's: the byte store of 2 shows
-                // 0x2000000, not 0)
+                // whose bytes are the line's number's at the bytes the store writes, the variable as wide as the store reaches or a word,
+                // big-endian: the line then has a store to name, and saying it names none hides it. The trimmed number of A7-99 is no
+                // store's: the byte store of 2 is 0x2000000 in the word, not 0)
                 bool storesShown = false;
                 if (r.lines[li].noOrigin && !anyAddress && number)
                     for (uint32_t st : candidates)
@@ -2854,14 +2854,23 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                         uint16_t sw = 0;
                         int size = 0;
                         const int reg = word(st, sw) ? StoredRegister(sw, size) : -1;
-                        if (reg < 0) continue;
+                        const int shift = storeShift.count(st) ? storeShift[st] : -1;
+                        if (reg < 0 || size <= 0 || size > 4 || shift < 0 || shift + size > 4) continue;
                         if (!haveSources)
                         {
                             sources = BranchSources(r, word);
                             haveSources = true;
                         }
                         const WordValue got = RegisterBefore(r, word, sources, st, reg);
-                        if (got.kind == WordValue::Number && !writesOther(st, false)) storesShown = true;
+                        if (got.kind != WordValue::Number) continue;
+                        const uint64_t shownNumber = static_cast<uint32_t>(shownValue.value);
+                        const uint64_t storedBytes = static_cast<uint64_t>(got.value) & ((1ull << (8 * size)) - 1);
+                        for (int width : { shift + size, 4 })
+                        {
+                            if (width < 4 && (shownNumber >> (8 * width)) != 0) continue;   // (the number does not fit that width)
+                            const uint64_t part = (shownNumber >> (8 * (width - shift - size))) & ((1ull << (8 * size)) - 1);
+                            if (part == storedBytes) storesShown = true;
+                        }
                     }
                 if (r.lines[li].noOrigin && !anyAddress && number && !storesShown)
                 {
@@ -3098,6 +3107,58 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     }
                     if (imm && ((w & 0xFFu) & kept) == 0) computes = true;
                 }
+                // (A7-109: `or #imm,r0` and `and #imm,r0` at a join whose paths bring r0 different numbers that give one result: `or
+                // #0xBD,r0` of 8 on one path and 5 on the other is 0xBD on both; every maker of r0 an instruction that makes a number, and
+                // each gives the line's; grammar 1 seed 5208620)
+                if (!computes && ((w >> 8) == 0xCB || (w >> 8) == 0xC9))
+                {
+                    std::set<uint32_t> makers;
+                    bool all = RegisterMakers(r, word, sources, at, 0, makers) && !makers.empty() && !makers.count(0);
+                    for (uint32_t m : makers)
+                    {
+                        uint16_t mw = 0;
+                        uint32_t v = 0;
+                        if (!all || !word(m, mw) || !made(m, mw, v)) { all = false; break; }
+                        all = sameNumber((w >> 8) == 0xCB ? (v | (w & 0xFFu)) : (v & (w & 0xFFu)));
+                    }
+                    if (all) computes = true;
+                }
+                // (A7-110: `and Rm,Rn` of a number and a register whose low bits left shifts made 0, the number inside those bits: `and
+                // r2,r0` with r0 the 2 a poll reads back and r2 shifted by `shll2` is 0; grammar 1 seed 5207679)
+                if (!computes && want == 0 && (w >> 12) == 0x2 && (w & 0xF) == 0x9)
+                {
+                    std::function<int(uint32_t, int, int)> lowZeros = [&](uint32_t before, int reg, int depth) -> int {
+                        std::set<uint32_t> makers;
+                        if (depth > 4 || !RegisterMakers(r, word, sources, before, reg, makers) || makers.empty() || makers.count(0)) return 0;
+                        int least = 32;
+                        for (uint32_t m : makers)
+                        {
+                            uint16_t mw = 0;
+                            uint32_t v = 0;
+                            int k = 0;
+                            if (!word(m, mw)) return 0;
+                            if ((mw >> 12) == 0x4 && ((mw >> 8) & 0xF) == static_cast<uint16_t>(reg) &&
+                                ((mw & 0xFF) == 0x00 || (mw & 0xFF) == 0x20 || (mw & 0xFF) == 0x08 || (mw & 0xFF) == 0x18 || (mw & 0xFF) == 0x28))
+                            {
+                                k = (mw & 0xFF) == 0x28 ? 16 : (mw & 0xFF) == 0x18 ? 8 : (mw & 0xFF) == 0x08 ? 2 : 1;
+                                k = std::min(32, k + lowZeros(m, reg, depth + 1));
+                            }
+                            else if (made(m, mw, v))
+                                for (k = 0; k < 32 && !(v >> k & 1); ++k) {}
+                            least = std::min(least, k);
+                        }
+                        return least;
+                    };
+                    const int rn = (w >> 8) & 0xF, rm = (w >> 4) & 0xF;
+                    for (int pass = 0; pass < 2 && !computes; ++pass)
+                    {
+                        const int numbered = pass ? rm : rn, shifted = pass ? rn : rm;
+                        const WordValue x = RegisterBefore(r, word, sources, at, numbered);
+                        if (x.kind != WordValue::Number) continue;
+                        const int z = lowZeros(at, shifted, 0);
+                        if (z > 0 && (z >= 32 || (static_cast<uint32_t>(x.value) >> z) == 0)) computes = true;
+                    }
+                }
                 if (w == 0x0018 && want == 1) computes = true;
                 // (A7-69: `xtrct Rm,Rn` is Rm's low half over Rn's high half; the engine prints the part that is a number -- Rm shifted
                 // left by 16 -- as a variable's value and the other part as another; grammar 2 seed 3204314, `in_r2 = 0x40000;` for r1 = 4)
@@ -3224,6 +3285,9 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                                 l.text.compare(t.begin, t.end - t.begin, name) != 0 || !word(t.addr, tw))
                                 continue;
                             if (tw == (0x4029u | rn << 8) || ((w & 0xF) == 0xC && tw == (0x4019u | rn << 8))) computes = true;
+                            // (A7-111: `xtrct Rm,Rn` keeps Rn's high half only, which the extension left 0: `in_r1 = 0;` at `extu.w r5,r1`
+                            // with `xtrct r5,r1` after it, printed `in_r1 >> 0x10`; grammar 2 seed 5204684)
+                            if ((tw & 0xFF0Fu) == (0x200Du | rn << 8) && ((tw >> 4) & 0xF) != rn) computes = true;
                         }
                 }
                 if (computes) continue;
