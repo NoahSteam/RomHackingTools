@@ -3209,6 +3209,23 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                 const size_t nameEnd = text.find(" = ", nameBegin);
                 const std::string name = text.substr(nameBegin, nameEnd - nameBegin);
                 std::set<int> used;
+                // (A7-91: only a line that is a bare copy, `uVar4 = (uint2)uVar3;` -- `iVar1 = iVar1 + -1;` at the `dt r3` that begins
+                // a loop's tail is the instruction's own; grammar 1 seed 4106897)
+                const auto bareCopy = [](const std::string& line) {
+                    const size_t eq = line.find(" = ");
+                    if (eq == std::string::npos || line.empty() || line.back() != ';') return false;
+                    size_t q = eq + 3;
+                    while (q < line.size() && line[q] == '(')
+                    {
+                        const size_t close = line.find(')', q);
+                        if (close == std::string::npos) return false;
+                        q = close + 1;
+                    }
+                    if (q + 1 >= line.size()) return false;
+                    for (size_t k = q; k + 1 < line.size(); ++k)
+                        if (!std::isalnum(static_cast<unsigned char>(line[k])) && line[k] != '_') return false;
+                    return true;
+                };
                 for (const Line& l : r.lines)
                     for (const Token& t : l.tokens)
                     {
@@ -3216,7 +3233,7 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                         // (A7-78: a token at another join's first instruction names no register: the engine keeps a merge's copy,
                         // `uVar4 = uVar3;`, at the address of the block's first instruction, a `mov.b @(0xe,r5),r0` that neither reads nor
                         // writes r3; grammar 1 seed 3302704)
-                        if (!t.addr || t.addr == at || targets.count(t.addr) || t.begin >= t.end || t.end > l.text.size() ||
+                        if (!t.addr || t.addr == at || (targets.count(t.addr) && bareCopy(l.text)) || t.begin >= t.end || t.end > l.text.size() ||
                             l.text.compare(t.begin, t.end - t.begin, name) != 0 || !word(t.addr, tw))
                             continue;
                         const std::string ops = sfe::Sh2Decode(t.addr, tw).Operands;
