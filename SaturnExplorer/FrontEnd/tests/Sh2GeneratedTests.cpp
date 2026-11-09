@@ -5926,19 +5926,29 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                 {
                     bool made = false, writeBack = true;
                     for (const RunOut& run : runs)
-                    {
-                        const TraceRec* prev = nullptr;
-                        for (const TraceRec& t : run.trace)
+                        for (size_t k = 0; k < run.trace.size(); ++k)
                         {
-                            if (t.depth == 0 && !t.write && r.InBody(t.addr)) continue;   // (a literal of the function)
-                            if (t.depth == 0 && t.write && t.insn == f.insn)
+                            const TraceRec& t = run.trace[k];
+                            if (t.depth != 0 || !t.write || t.insn != f.insn) continue;
+                            made = true;
+                            // (back over the accesses of other bytes that are no register's or marked memory's, which change none of these, to the
+                            // last access of these bytes: a read or a write of the same value; `mov.w @r7,r0 ; mov.w r0,@(8,r7) ; mov.w r0,@r7`,
+                            // seed 4009024)
+                            bool same = false;
+                            for (size_t j = k; j-- > 0;)
                             {
-                                made = true;
-                                writeBack = writeBack && prev && prev->depth == 0 && prev->addr == t.addr && prev->size == t.size && prev->value == t.value;
+                                const TraceRec& p = run.trace[j];
+                                if (p.depth == 0 && !p.write && r.InBody(p.addr)) continue;   // (a literal of the function)
+                                const bool overlaps = p.addr < t.addr + static_cast<uint32_t>(t.size) && t.addr < p.addr + static_cast<uint32_t>(p.size);
+                                if (p.addr == t.addr && p.size == t.size)
+                                {
+                                    same = p.value == t.value;
+                                    break;
+                                }
+                                if (overlaps || InHardwareRange(p.addr) || inMarked(p.addr)) break;
                             }
-                            prev = &t;
+                            writeBack = writeBack && same;
                         }
-                    }
                     storeRan = made;
                     if (made && writeBack)
                     {
@@ -5960,7 +5970,7 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                     int ssize = 0;
                     const int reg = dts::StoredRegister(subject.WordAt(f.insn), ssize);
                     std::set<uint32_t> makers;
-                    if (reg >= 0 && dts::RegisterMakers(r, word, dts::BranchSources(r, word), f.insn, reg, makers) && !makers.count(0))
+                    if (reg >= 0 && dts::RegisterMakers(r, word, dts::BranchSources(r, word), f.insn, reg, makers))
                         for (int li = 0; li < (first < 0 ? static_cast<int>(r.lines.size()) : first); ++li)
                         {
                             const Line& l = r.lines[static_cast<size_t>(li)];
@@ -5972,7 +5982,7 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                             unsigned v = 0;
                             if (std::sscanf(l.text.c_str() + e - 8, "%8x", &v) != 1 || v > f.address || f.address >= v + 8u) continue;
                             bool atMaker = false;
-                            for (const Token& t : l.tokens) atMaker = atMaker || makers.count(t.addr) != 0;
+                            for (const Token& t : l.tokens) atMaker = atMaker || (t.addr != 0 && makers.count(t.addr) != 0);
                             if (atMaker)
                             {
                                 count("order.folded-store.at-maker");
@@ -5982,34 +5992,170 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                             }
                         }
                 }
+                // (A5-118: a store a later folded store of the same address follows was set aside here, as the engine's to drop or merge, ordinary
+                // memory being a variable: `g = r1; SCU_D0EN = 1; g = r2` printed `SCU_D0EN = 1; g = r2;`, the first write dropped before the DMA
+                // enable. A hardware access, and a read or write through a pointer, which may be one, is a barrier no write of ordinary memory is
+                // moved, merged or dropped across (patch 0090): such a store is judged like any other, and counted. Set aside, and counted, is one a
+                // later store of the same bytes follows with no access the ledger holds between the two: the engine may join it into the later
+                // one's statement (`xRam26002100 = 0x808;` for a half-word store of 8 and a byte store of 8 over it, grammar 1 seed 4200383), and
+                // that statement is judged as the later store's.)
+                {
+                    bool overwritten = false, joined = false;
+                    for (const AccessFate& o : r.accessFates)
+                    {
+                        if (&o == &f || !o.write || o.fate != AccessFate::FoldedOrdinary || !o.constantAddress || o.frame || o.origBlock < 0 || o.insn == f.insn) continue;
+                        if (o.address >= f.address + f.size || f.address >= o.address + o.size) continue;
+                        const size_t ob = static_cast<size_t>(o.origBlock), fb0 = static_cast<size_t>(f.origBlock);
+                        if (ob >= fr.reach.size() || fb0 >= fr.reach.size()) continue;
+                        if (!(ob == fb0 ? o.origOrder > f.origOrder : fr.reach[fb0][ob] != 0)) continue;
+                        overwritten = true;
+                        if (!runsAfter(fb0, f.origOrder, ob, o.origOrder)) continue;
+                        bool between = false;
+                        for (const MemoryAccess& m : got)
+                            if (m.origBlock >= 0 && m.insn != f.insn && m.insn != o.insn &&
+                                runsAfter(fb0, f.origOrder, static_cast<size_t>(m.origBlock), m.origOrder) &&
+                                runsAfter(static_cast<size_t>(m.origBlock), m.origOrder, ob, o.origOrder))
+                                between = true;
+                        // (...and the later store is named on a line of its own, which is judged in its place: when the engine joins the two the
+                        // other way, naming only the earlier, A5-117's slot store before the same store, the earlier is judged)
+                        bool laterNamed = false;
+                        for (const Line& l : r.lines)
+                        {
+                            if (l.text.find(" = ") == std::string::npos) continue;
+                            for (const Token& t : l.tokens) laterNamed = laterNamed || t.addr == o.insn;
+                        }
+                        if (!between && laterNamed) joined = true;
+                    }
+                    if (joined)
+                    {
+                        count("order.folded-store.overwritten-no-access");
+                        continue;
+                    }
+                    if (overwritten) count("order.folded-store.overwritten");
+                }
+                // (a store no line names that an earlier store of the same bytes precedes with no access the ledger holds between them is
+                // printed on that store's line when the engine joins the two into it: `mov.w r1,@r6 ; ... ; add r5,r1 ; mov.w r1,@r6` printed
+                // `xRam26002380 = (xunknown2)in_r1;` at the first store with the second's value, grammar 1 seed 4007292. That line is judged as
+                // this store's.)
+                if (first < 0)
+                    for (const AccessFate& o : r.accessFates)
+                    {
+                        if (first >= 0) break;
+                        if (&o == &f || !o.write || o.fate != AccessFate::FoldedOrdinary || !o.constantAddress || o.frame || o.origBlock < 0 || o.insn == f.insn) continue;
+                        if (o.address >= f.address + f.size || f.address >= o.address + o.size) continue;
+                        const size_t ob = static_cast<size_t>(o.origBlock), fb0 = static_cast<size_t>(f.origBlock);
+                        if (!runsAfter(ob, o.origOrder, fb0, f.origOrder)) continue;
+                        bool between = false;
+                        for (const MemoryAccess& m : got)
+                            if (m.origBlock >= 0 && m.insn != f.insn && m.insn != o.insn && runsAfter(ob, o.origOrder, static_cast<size_t>(m.origBlock), m.origOrder) &&
+                                runsAfter(static_cast<size_t>(m.origBlock), m.origOrder, fb0, f.origOrder))
+                                between = true;
+                        if (between) continue;
+                        for (size_t li = 0; li < r.lines.size() && first < 0; ++li)
+                        {
+                            if (r.lines[li].text.find(" = ") == std::string::npos) continue;
+                            for (const Token& t : r.lines[li].tokens)
+                                if (t.addr == o.insn) { first = last = static_cast<int>(li); break; }
+                        }
+                        if (first >= 0) count("order.folded-store.joined-earlier");
+                    }
                 if (first < 0)
                 {
-                    // (A5-118: a store no line names is one the engine dropped. Dropped before a later store of the same bytes with an access
+                    // (A5-118: a store no line names, and none joined with a later one as above, is one the engine dropped. Dropped before a later store of the same bytes with an access
                     // the ledger holds between the two, or with no later store before the access, the access is made without it: `g = r1;
                     // SCU_D0EN = 1; g = r2` printed `SCU_D0EN = 1; g = r2;`. A store no run makes, in code the engine removed, is not judged.)
                     bool ran = false;
                     for (const RunOut& run : runs)
                         for (const TraceRec& t : run.trace) ran = ran || (t.depth == 0 && t.write && t.insn == f.insn);
                     if (!ran) continue;
-                    const size_t fb = static_cast<size_t>(f.origBlock);
-                    for (const MemoryAccess& m : got)
+                    // (...a store assigned inside an expression, a condition's comma operator, `if (c || (xRam26001030 = ..., 0 < in_r3))`, is
+                    // printed: a line that names the store and assigns the global's variable anywhere in it, grammar 1 seed 4203498)
+                    bool inExpression = false;
+                    for (const Line& l : r.lines)
                     {
-                        if (m.origBlock < 0 || m.insn == f.insn || !runsAfter(fb, f.origOrder, static_cast<size_t>(m.origBlock), m.origOrder)) continue;
-                        bool rewritten = false;
-                        for (const AccessFate& o : r.accessFates)
+                        bool named = false;
+                        for (const Token& t : l.tokens) named = named || t.addr == f.insn;
+                        if (!named) continue;
+                        for (size_t at = l.text.find("Ram"); at != std::string::npos && !inExpression; at = l.text.find("Ram", at + 3))
                         {
-                            if (&o == &f || !o.write || o.fate != AccessFate::FoldedOrdinary || !o.constantAddress || o.frame || o.origBlock < 0) continue;
-                            if (o.address > f.address || f.address + f.size > o.address + o.size) continue;   // (every byte of the store)
-                            rewritten = rewritten || (runsAfter(fb, f.origOrder, static_cast<size_t>(o.origBlock), o.origOrder) &&
-                                                      runsAfter(static_cast<size_t>(o.origBlock), o.origOrder, static_cast<size_t>(m.origBlock), m.origOrder));
+                            unsigned v = 0;
+                            if (at + 11 > l.text.size() || std::sscanf(l.text.c_str() + at + 3, "%8x", &v) != 1 || v > f.address || f.address >= v + 8u) continue;
+                            size_t e = at + 11;
+                            while (e < l.text.size() && (std::isalnum(static_cast<unsigned char>(l.text[e])) || l.text[e] == '_' || l.text[e] == '.')) ++e;
+                            inExpression = l.text.compare(e, 3, " = ") == 0;
                         }
-                        if (rewritten) continue;
-                        count("order.folded-store.dropped-checked");
-                        add("folded-store-after-access", "the store at " + Hex(f.insn) + " the engine folded into " + Hex(f.address) +
-                                                             " is printed nowhere, and the " + (m.write ? "write" : "read") + " at " + Hex(m.insn) +
-                                                             " the code makes after it is made without it");
-                        break;
                     }
+                    if (inExpression)
+                    {
+                        count("order.folded-store.in-expression");
+                        continue;
+                    }
+                    // (...made without it: in a run, a register's access, or one of memory the request marks, comes after the store and before a
+                    // write of all of its bytes (a read or write through a pointer between is judged by the rules above when the store is printed;
+                    // a store the mapping names on no line beside one through a pointer is the mapping's to name, and not judged here). The
+                    // runs say which paths are taken, the static order cannot: a slot's byte store a long store of the same word always follows,
+                    // `tst #0x40,r0 ; bf/s L ; mov.b r2,@r6 ; mov.l r2,@r6` with r0 0xC, grammar 1 seed 4202386)
+                    uint32_t without = 0;
+                    bool isWrite = false;
+                    for (const RunOut& run : runs)
+                    {
+                        bool live = false;
+                        for (const TraceRec& t : run.trace)
+                        {
+                            if (t.depth == 0 && t.write && t.insn == f.insn)
+                            {
+                                live = true;
+                                continue;
+                            }
+                            if (!live) continue;
+                            if (t.write && t.addr <= f.address && f.address + f.size <= t.addr + static_cast<uint32_t>(t.size))
+                            {
+                                live = false;   // (all of its bytes written again)
+                                continue;
+                            }
+                            for (const MemoryAccess& m : got)
+                                if (t.depth == 0 && m.direct && m.insn == t.insn && m.write == t.write && !without)
+                                {
+                                    without = m.insn;
+                                    isWrite = m.write;
+                                }
+                        }
+                    }
+                    if (!without)
+                    {
+                        count("order.folded-store.dropped-unobserved");
+                        continue;
+                    }
+                    // (...and the text assigns the global nowhere before that access: a line that does, named after another store of it, may be
+                    // this one's, which the engine joined there (the mapping names one instruction of two: grammar 1 seed 4007292). A5-118's text
+                    // assigns it after the DMA enable only.)
+                    {
+                        int accessLine = -1;
+                        for (const MemoryAccess& m : got)
+                            if (m.insn == without && m.firstLine >= 0 && (accessLine < 0 || m.firstLine < accessLine)) accessLine = m.firstLine;
+                        bool assignedBefore = false;
+                        for (int li = 0; li < accessLine && !assignedBefore; ++li)
+                        {
+                            const std::string& text = r.lines[static_cast<size_t>(li)].text;
+                            for (size_t at = text.find("Ram"); at != std::string::npos && !assignedBefore; at = text.find("Ram", at + 3))
+                            {
+                                unsigned v = 0;
+                                if (at + 11 > text.size() || std::sscanf(text.c_str() + at + 3, "%8x", &v) != 1 || v > f.address || f.address >= v + 8u) continue;
+                                size_t e = at + 11;
+                                while (e < text.size() && (std::isalnum(static_cast<unsigned char>(text[e])) || text[e] == '_' || text[e] == '.')) ++e;
+                                assignedBefore = text.compare(e, 3, " = ") == 0;
+                            }
+                        }
+                        if (assignedBefore)
+                        {
+                            count("order.folded-store.dropped-assigned");
+                            continue;
+                        }
+                    }
+                    count("order.folded-store.dropped-checked");
+                    add("folded-store-after-access", "the store at " + Hex(f.insn) + " the engine folded into " + Hex(f.address) +
+                                                         " is printed nowhere, and the " + (isWrite ? "write" : "read") + " at " + Hex(without) +
+                                                         " the code makes after it is made without it");
                     continue;
                 }
                 // (A5-111, fixed by patch 0088: a byte or half of the global read after a wider write was made a write of that piece by heritage, a
@@ -6060,47 +6206,6 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                 // is no change of memory: the engine drops it as a copy of the global to itself or joins it with the equal store before it, and
                 // the mapping names it on the next line that shows the bytes, or on none: grammar 1 seed 4204949, `mov.w @(r0,r6),r3 ; mov.w
                 // r3,@r6 ; mov.w r2,@(r0,r5) ; mov.b r5,@r6`; seed 3801285, `mov.l r1,@r6 ; bt L ; mov.l r1,@r6 ; L: mov.l @r4,r2`)
-                // (A5-118: a store a later folded store of the same address follows was set aside here, as the engine's to drop or merge, ordinary
-                // memory being a variable: `g = r1; SCU_D0EN = 1; g = r2` printed `SCU_D0EN = 1; g = r2;`, the first write dropped before the DMA
-                // enable. A hardware access, and a read or write through a pointer, which may be one, is a barrier no write of ordinary memory is
-                // moved, merged or dropped across (patch 0090): such a store is judged like any other, and counted. Set aside, and counted, is one a
-                // later store of the same bytes follows with no access the ledger holds between the two: the engine may join it into the later
-                // one's statement (`xRam26002100 = 0x808;` for a half-word store of 8 and a byte store of 8 over it, grammar 1 seed 4200383), and
-                // that statement is judged as the later store's.)
-                {
-                    bool overwritten = false, joined = false;
-                    for (const AccessFate& o : r.accessFates)
-                    {
-                        if (&o == &f || !o.write || o.fate != AccessFate::FoldedOrdinary || !o.constantAddress || o.frame || o.origBlock < 0 || o.insn == f.insn) continue;
-                        if (o.address >= f.address + f.size || f.address >= o.address + o.size) continue;
-                        const size_t ob = static_cast<size_t>(o.origBlock), fb0 = static_cast<size_t>(f.origBlock);
-                        if (ob >= fr.reach.size() || fb0 >= fr.reach.size()) continue;
-                        if (!(ob == fb0 ? o.origOrder > f.origOrder : fr.reach[fb0][ob] != 0)) continue;
-                        overwritten = true;
-                        if (!runsAfter(fb0, f.origOrder, ob, o.origOrder)) continue;
-                        bool between = false;
-                        for (const MemoryAccess& m : got)
-                            if (m.origBlock >= 0 && m.insn != f.insn && m.insn != o.insn &&
-                                runsAfter(fb0, f.origOrder, static_cast<size_t>(m.origBlock), m.origOrder) &&
-                                runsAfter(static_cast<size_t>(m.origBlock), m.origOrder, ob, o.origOrder))
-                                between = true;
-                        // (...and the later store is named on a line of its own, which is judged in its place: when the engine joins the two the
-                        // other way, naming only the earlier, A5-117's slot store before the same store, the earlier is judged)
-                        bool laterNamed = false;
-                        for (const Line& l : r.lines)
-                        {
-                            if (l.text.find(" = ") == std::string::npos) continue;
-                            for (const Token& t : l.tokens) laterNamed = laterNamed || t.addr == o.insn;
-                        }
-                        if (!between && laterNamed) joined = true;
-                    }
-                    if (joined)
-                    {
-                        count("order.folded-store.overwritten-no-access");
-                        continue;
-                    }
-                    if (overwritten) count("order.folded-store.overwritten");
-                }
                 for (const MemoryAccess& m : got)
                 {
                     if (m.firstLine < 0 || m.insn == f.insn || m.origBlock < 0) continue;
