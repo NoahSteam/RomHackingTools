@@ -436,6 +436,12 @@ struct Item
     int pollValue = 1;
     bool untilSet = false;         // Poll: waits for bit 0 to become set (else clear)
     std::vector<Item> slot;        // Skip with delayed: its one single-word instruction
+    // Skip with delayed, version 1 (A3-170): the slot's instruction is also the target of a branch, so the flow decodes its address twice.
+    // 1: `entryCond ; bt/bf E` ahead of the skip's test, E the slot; 2: `entryCond ; bt/bf T` there and `T: bra E ; nop` after the function.
+    int slotEntry = 0;
+    uint16_t entryCond = 0;
+    bool entryOnTrue = true;
+    bool earlyExit = false;        // ...and the delayed branch goes to a return of its own after the function (`rts`, the function's slot)
     std::vector<Item> kids;        // Skip: the skipped instructions; Loop: the body; Spill: the block; Table: the default case
     // Version 2.
     bool stack = false;            // Mem: a local, through r15 or the frame pointer
@@ -542,6 +548,8 @@ struct Gen
     // ...and one for A3-167 and A3-168 (a store in a poll's body; a `tas.b` whose T is moved into a register): which polls and which
     // `tas.b` get them is drawn here, so the programs of the seeds without them are unchanged.
     Rng pollBodyRng;
+    Rng slotEntryRng;   // ...and one for A3-170 (a branch into the slot of a delayed skip, and its early return)
+    bool slotEntryOn = false;   // ...drawn for the seeds from kSlotEntryFirst on only (Generate)
     // What the function being made changes for good / reads on entry through the wide alphabet and the GBR accesses
     // (an over-approximation: an item the grammar drops again is counted, which the checks that use it allow).
     uint32_t wideClobbers = 0;
@@ -563,7 +571,7 @@ struct Gen
     bool inSpill = false;     // r15 is moved: no local is addressed through it here
     int loopDepth = 0;        // inside a loop body: a pointer advanced here is advanced again by the next iteration
     std::vector<Func> built;  // the functions of this module generated so far (the later ones)
-    Gen(uint64_t seed) : rng(seed), macRng(seed ^ 0x6D61636D61636D61ull), guardRng(seed ^ 0x7367756172643A5Aull), convRng(seed ^ 0x636F6E7663727667ull), wideRng(seed ^ 0x77696465414C5521ull), aliasRng(seed ^ 0x616C696173526E67ull), maskRng(seed ^ 0x6D61736B52616E64ull), placeRng(seed ^ 0x706C616365526E67ull), loopMaskRng(seed ^ 0x6C6F6F704D61736Bull), frameRng(seed ^ 0x6672616D6557616Cull), partialRng(seed ^ 0x7061727469616C52ull), retRng(seed ^ 0x7265747263616C6Cull), bsrfRng(seed ^ 0x6273726652656C21ull), choiceRng(seed ^ 0x63686F6F73657221ull), regionRng(seed ^ 0x726567696F6E5074ull), idiomRng(seed ^ 0x69646F6D52616E64ull), pollBodyRng(seed ^ 0x706F6C6C426F6479ull)
+    Gen(uint64_t seed) : rng(seed), macRng(seed ^ 0x6D61636D61636D61ull), guardRng(seed ^ 0x7367756172643A5Aull), convRng(seed ^ 0x636F6E7663727667ull), wideRng(seed ^ 0x77696465414C5521ull), aliasRng(seed ^ 0x616C696173526E67ull), maskRng(seed ^ 0x6D61736B52616E64ull), placeRng(seed ^ 0x706C616365526E67ull), loopMaskRng(seed ^ 0x6C6F6F704D61736Bull), frameRng(seed ^ 0x6672616D6557616Cull), partialRng(seed ^ 0x7061727469616C52ull), retRng(seed ^ 0x7265747263616C6Cull), bsrfRng(seed ^ 0x6273726652656C21ull), choiceRng(seed ^ 0x63686F6F73657221ull), regionRng(seed ^ 0x726567696F6E5074ull), idiomRng(seed ^ 0x69646F6D52616E64ull), pollBodyRng(seed ^ 0x706F6C6C426F6479ull), slotEntryRng(seed ^ 0x736C6F74456E7472ull)
     {
         for (int i = 0; i < 8; ++i) align[i] = 4, pref[i] = 4;
         p.mbox = 0x26001000u + 0x10u * rng.Below(4);
@@ -1363,6 +1371,36 @@ struct Gen
         it.delayed = rng.Chance(35);
         it.shape = it.delayed ? (it.onTrue ? "skip.bt_s" : "skip.bf_s") : (it.onTrue ? "skip.bt" : "skip.bf");
         if (it.delayed) it.slot.push_back(MakeSimple(-1, true, false));
+        // A3-170: version 1, one delayed skip in three: a branch into its slot (a second instance of the slot's address), from a test ahead
+        // of it or from a `bra` after the function, and in one of two a return of its own on the delayed branch's taken path, so that one
+        // instance reaches a return and the other only what follows (a poll the analysis takes to run for ever). Half the time the slot is a
+        // store through r6 (a literal pointer in version 1). All drawn from slotEntryRng.
+        if (it.delayed && !disc && slotEntryOn && slotEntryRng.Chance(33))
+        {
+            static const int regs[5] = { 0, 1, 2, 4, 5 };
+            const int a = regs[slotEntryRng.Below(5)], b = regs[slotEntryRng.Below(5)];
+            // (the entry and the early return from one draw: two draws of this generator two apart are correlated, and drawn apart they
+            // came out the same)
+            const uint32_t form = slotEntryRng.Below(4);
+            it.slotEntry = 1 + static_cast<int>(form & 1);
+            it.earlyExit = (form & 2) != 0;
+            it.entryCond = uint16_t(0x2008 | a << 8 | b << 4);   // tst Rb,Ra
+            it.entryOnTrue = slotEntryRng.Chance(50);
+            if (slotEntryRng.Chance(50))
+            {
+                int w = 1 << slotEntryRng.Below(3);
+                w = std::min(w, align[6]);
+                const int data = 1 + static_cast<int>(slotEntryRng.Below(3));
+                const int sz = w == 1 ? 0 : w == 2 ? 1 : 2;
+                Item st;
+                st.type = Item::Mem;
+                st.shape = "mem.st.plain";
+                st.words = { uint16_t(0x2000 | 6 << 8 | data << 4 | sz) };   // mov.x Rdata,@r6
+                st.base = 6;
+                st.width = w;
+                it.slot.assign(1, st);
+            }
+        }
         const uint32_t afterSlot = defined;   // the slot runs on both paths, the skipped part on one
         const int kids = 1 + static_cast<int>(rng.Below(3));
         for (int i = 0; i < kids; ++i) it.kids.push_back(MakeSimple(-1, false, true));
@@ -2228,13 +2266,86 @@ struct Gen
                 }
             }
         }
+        AddSlotEntryPoll(items, polled);
         return p;
     }
+
+    // A3-170, the whole shape, in one program without a poll in four (from the seeds where the production is drawn): a fresh RAM pointer in r6,
+    // a test, a branch into the slot of a delayed `cmp/eq` branch whose taken path returns at once, a store through r6 in that slot, then a poll
+    // of the mailbox that reads back its own write (the analysis takes it to run for ever) and a store through r6 after it. One instance of the
+    // slot reaches the return and the store is live there; the other reaches only the poll. Everything is drawn from slotEntryRng and appended,
+    // so nothing before it moves.
+    void AddSlotEntryPoll(std::vector<Item>& items, bool polled)
+    {
+        if (!slotEntryOn || polled || disc || !slotEntryRng.Chance(25)) return;
+        Lit ram;
+        ram.kind = LitKind::Ram;
+        const uint32_t base = slotEntryRng.Chance(75) ? 0x26000000u : 0x06000000u;
+        const uint32_t line = slotEntryRng.Below(8), word = slotEntryRng.Below(4);
+        ram.value = base + 0x2000u + 0x80u * line + 4u * word;
+        const int w = 1 << slotEntryRng.Below(3);
+        ram.width = w;
+        Item ptr;
+        ptr.type = Item::LitPtr;
+        ptr.shape = "slot_entry.litptr";
+        ptr.reg = 6;
+        ptr.lit = static_cast<int>(p.lits.size());
+        p.lits.push_back(ram);
+        align[6] = std::min(4, w);
+        pref[6] = w;
+        items.push_back(ptr);
+        const int sz = w == 1 ? 0 : w == 2 ? 1 : 2;
+        auto store = [&](int data) {
+            Item st;
+            st.type = Item::Mem;
+            st.shape = "slot_entry.store";
+            st.words = { uint16_t(0x2000 | 6 << 8 | data << 4 | sz) };   // mov.x Rdata,@r6
+            st.base = 6;
+            st.width = w;
+            return st;
+        };
+        Item sk;
+        sk.type = Item::Skip;
+        sk.shape = "slot_entry.skip";
+        sk.delayed = true;
+        sk.onTrue = slotEntryRng.Chance(50);
+        const int n = 4 + static_cast<int>(slotEntryRng.Below(2)), m = 4 + static_cast<int>(slotEntryRng.Below(2));
+        sk.cond = uint16_t(0x3000 | n << 8 | m << 4);   // cmp/eq Rm,Rn
+        static const int regs[5] = { 0, 1, 2, 4, 5 };
+        sk.entryCond = uint16_t(0x2008 | regs[slotEntryRng.Below(5)] << 8 | regs[slotEntryRng.Below(5)] << 4);   // tst
+        sk.entryOnTrue = slotEntryRng.Chance(50);
+        sk.slotEntry = 1 + static_cast<int>(slotEntryRng.Below(2));
+        sk.earlyExit = true;
+        sk.slot.push_back(store(1 + static_cast<int>(slotEntryRng.Below(5))));
+        items.push_back(sk);
+        Item poll;
+        poll.type = Item::Poll;
+        poll.shape = "slot_entry.poll";
+        poll.reg = 7;
+        Lit mb;
+        mb.kind = LitKind::Mbox;
+        mb.value = p.mbox + 4u * slotEntryRng.Below(3);
+        mb.width = slotEntryRng.Chance(50) ? 2 : 4;
+        poll.lit = static_cast<int>(p.lits.size());
+        p.lits.push_back(mb);
+        poll.width = mb.width;
+        poll.pollWrite = true;
+        poll.pollValue = 1;
+        poll.untilSet = false;   // `bf`: it waits for bit 0 to clear, and reads back the 1 it wrote
+        align[7] = std::min(align[7], 4);
+        items.push_back(poll);
+        items.push_back(store(1 + static_cast<int>(slotEntryRng.Below(5))));
+    }
 };
+
+// A3-170's production (a branch into a delayed skip's slot) is drawn for the seeds from here on, the first fresh range after it was added:
+// every seed below keeps the program it always had, the pins, the default run, the printed-C baseline and the 20,000-seed matrix among them.
+constexpr uint64_t kSlotEntryFirst = 3800001;
 
 Program Generate(uint64_t seed)
 {
     Gen g(seed);
+    g.slotEntryOn = seed >= kSlotEntryFirst;
     return g.Run();
 }
 
@@ -2315,6 +2426,9 @@ struct Emitter
     std::vector<std::vector<size_t>> tablesOf;           // per unit: indices into 'tables'
     std::vector<std::vector<std::pair<size_t, size_t>>> dataOf;   // per unit: embedded data, word indices
     int unit = 0;
+    // A3-170: what follows a version 1 function's return: `T: bra E ; nop` stubs (label, target) and returns of their own (label).
+    std::vector<std::pair<int, int>> braStubs;
+    std::vector<int> exitStubs;
 
     explicit Emitter(const Program& prog) : p(prog)
     {
@@ -2433,10 +2547,26 @@ struct Emitter
         if (!f.v2)
         {
             Place(entryLabel[i]);
+            braStubs.clear();
+            exitStubs.clear();
             EmitList(f.items);
             Put(0x000B);   // rts
             if (f.tail.empty()) Put(0x0009);
             else EmitList(f.tail);
+            // (A3-170: a delayed skip's own return, the function's return again; a branch into a delayed skip's slot from below.)
+            for (int x : exitStubs)
+            {
+                Place(x);
+                Put(0x000B);   // rts
+                if (f.tail.empty()) Put(0x0009);
+                else EmitList(f.tail);
+            }
+            for (const std::pair<int, int>& b : braStubs)
+            {
+                Place(b.first);
+                PutBranch12(0xA000, b.second);   // bra E
+                Put(0x0009);
+            }
             return;
         }
         const int exitLabel = NewLabel();
@@ -2522,8 +2652,28 @@ struct Emitter
         case Item::Skip:
         {
             const int skip = NewLabel();
+            const bool entry = it.delayed && it.slotEntry != 0;   // (A3-170)
+            const int slotLabel = entry ? NewLabel() : -1;
+            if (entry)
+            {
+                Put(it.entryCond);
+                if (it.slotEntry == 1) PutBranch(it.entryOnTrue ? 0x8900 : 0x8B00, slotLabel);
+                else
+                {
+                    const int stub = NewLabel();
+                    PutBranch(it.entryOnTrue ? 0x8900 : 0x8B00, stub);
+                    braStubs.emplace_back(stub, slotLabel);
+                }
+            }
+            int taken = skip;
+            if (it.delayed && it.earlyExit)
+            {
+                taken = NewLabel();
+                exitStubs.push_back(taken);
+            }
             Put(it.cond);
-            PutBranch(static_cast<uint16_t>((it.onTrue ? 0x8900 : 0x8B00) | (it.delayed ? 0x0400 : 0)), skip);
+            PutBranch(static_cast<uint16_t>((it.onTrue ? 0x8900 : 0x8B00) | (it.delayed ? 0x0400 : 0)), taken);
+            if (entry) Place(slotLabel);
             if (it.delayed) EmitList(it.slot);
             EmitList(it.kids);
             Place(skip);
@@ -5197,13 +5347,33 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
             {
                 if (!forEver || run.finished) continue;
                 count("endless-store.runs");
-                for (const TraceRec& t : run.trace)
-                {
-                    if (t.depth != 0 || !t.write) continue;
-                    bool folded = false;
+                auto foldedStore = [&](const TraceRec& t) {
+                    if (t.depth != 0 || !t.write) return false;
                     for (const AccessFate& f : r.accessFates)
-                        folded = folded || (f.insn == t.insn && f.write && !f.frame && f.constantAddress && f.fate == AccessFate::FoldedOrdinary);
-                    if (!folded) continue;
+                        if (f.insn == t.insn && f.write && !f.frame && f.constantAddress && f.fate == AccessFate::FoldedOrdinary) return true;
+                    return false;
+                };
+                // (A3-171: a store whose every byte a later such store of the run writes again is dropped as in any function, a write the
+                // next one replaces (A3-169), whether the text prints the later store or says it is missing; the later store is checked
+                // here itself. The run never leaves the loop, so every later store is before it or in it.)
+                std::vector<char> replacedLater(run.trace.size(), 0);
+                {
+                    std::set<uint32_t> later;
+                    for (size_t i = run.trace.size(); i-- > 0;)
+                    {
+                        const TraceRec& t = run.trace[i];
+                        if (!foldedStore(t)) continue;
+                        const uint32_t a = t.addr & 0x1FFFFFFFu;
+                        bool all = true;
+                        for (uint32_t k = 0; k < static_cast<uint32_t>(t.size); ++k) all = all && later.count(a + k) != 0;
+                        replacedLater[i] = all;
+                        for (uint32_t k = 0; k < static_cast<uint32_t>(t.size); ++k) later.insert(a + k);
+                    }
+                }
+                for (size_t ti = 0; ti < run.trace.size(); ++ti)
+                {
+                    const TraceRec& t = run.trace[ti];
+                    if (!foldedStore(t)) continue;
                     const uint32_t a = t.addr & 0x1FFFFFFFu, last = a + static_cast<uint32_t>(t.size) - 1;
                     bool shown = false;
                     for (const auto& pr : printed) shown = shown || (pr.first <= last && a <= pr.second);
@@ -5214,6 +5384,11 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                     if (!shown && SaidMissing(r, t.insn))
                     {
                         count("endless-store.said");
+                        continue;
+                    }
+                    if (!shown && replacedLater[ti])
+                    {
+                        count("endless-store.replaced");
                         continue;
                     }
                     if (!shown && said.insert({ t.insn, a }).second)
@@ -6701,6 +6876,17 @@ struct Shrinker
                 list.insert(list.begin() + i, saved);
             }
             Item& cur = list[i];
+            if (cur.type == Item::Skip && cur.delayed && (cur.slotEntry != 0 || cur.earlyExit))   // (A3-170)
+            {
+                const int entry = cur.slotEntry;
+                cur.slotEntry = 0;
+                if (Still()) changed = true;
+                else cur.slotEntry = entry;
+                const bool early = cur.earlyExit;
+                cur.earlyExit = false;
+                if (Still()) changed = true;
+                else cur.earlyExit = early;
+            }
             if (cur.type == Item::Skip && cur.delayed)
             {
                 cur.delayed = false;
@@ -6858,6 +7044,11 @@ void CountShapes(const std::vector<Item>& items, std::map<std::string, int>& sha
             if (it.untilSet) ++shapes["poll.until_set"];
             if (!it.words.empty()) ++shapes["poll.body"];   // A3-167
         }
+        if (it.type == Item::Skip && it.delayed && it.slotEntry != 0)   // A3-170
+        {
+            ++shapes[it.slotEntry == 1 ? "slot_entry.ahead" : "slot_entry.below"];
+            if (it.earlyExit) ++shapes["slot_entry.early_exit"];
+        }
         if (it.type == Item::Mem && it.words.size() == 2 && (it.words[0] & 0xF0FF) == 0x401B)
         {
             ++shapes["mem.tas.movt"];   // A3-168
@@ -6912,6 +7103,13 @@ void CountMnemonics(const std::vector<Item>& items, std::map<std::string, int>& 
         case Item::Skip:
             m[it.delayed ? (it.onTrue ? "bt/s" : "bf/s") : (it.onTrue ? "bt" : "bf")] += 1;
             CountWords({ it.cond }, m);
+            if (it.delayed && it.slotEntry != 0)   // (A3-170)
+            {
+                CountWords({ it.entryCond }, m);
+                m[it.entryOnTrue ? "bt" : "bf"] += 1;
+                if (it.slotEntry == 2) m["bra"] += 1;
+            }
+            if (it.delayed && it.earlyExit) m["rts"] += 1;
             break;
         case Item::Loop: m["dt"] += 1; m["bf"] += 1; m["mov"] += 1; break;
         case Item::Call: m[it.viaBsrf ? "bsrf" : it.viaJsr ? "jsr" : "bsr"] += 1; break;
@@ -14847,6 +15045,15 @@ void TestA3RoutedPins(Sh2Decompiler& d)
             // before the loop (`mov.w @r6,r3 ; ... P: mov.w r3,@r6 ; poll`). The store's op is alive but prints only as the `while` keyword
             // of `do { } while( true );`: said as a write in the loop
             { "A3-167 seed 3302668 shrunk", "D605 D706 6361 E001 2700 2631 6070 C801 8BFB 000B 0009 0009 2600 1028 0600 2280", true },
+            // A3-170 (area 3 round 20; Docs/Decompiler/tools/a3_round20/fixtures.src): a `bra` into the slot of a `bf/s` makes the slot's
+            // address two instances of the flow. One is printed on the path to a return; the other, on the path that reaches only the poll,
+            // was taken for printed by its address: `endless-store-dropped` (d1). Now said: d1, and the control d1c (the store written out
+            // twice). d2, the printed instance a statement of its own, is said too, but this check does not count it: it takes the global's
+            // store line, `xRam06002304 = param_3;`, for every instance of the instruction, and so it was blind to d2 on the old host (A3-172).
+            // The host's pins in Sh2DecompilerTests (TestA3164Fix) hold d1, d1c, d2 and the control d1n
+            { "A3-170 d1", "D309 D70A E001 2701 6043 C801 890A 3450 8F06 2362 6071 C801 8BFC 2342 000B 0009 000B 0009 AFF5 0009 0600 2304 0600 1010", true },
+            { "A3-170 control d1c", "D30A D70B E001 2701 6043 C801 890A 3450 8F06 2362 6071 C801 8BFC 2342 000B 0009 000B 0009 2362 AFF5 0009 0009 0600 2304 0600 1010", true },
+            { "A3-170 d2 (shown by the text's store line)", "D309 D70A E001 2701 6043 C801 8909 8F06 2362 6071 C801 8BFC 2342 000B 0009 000B 6053 AFF5 0009 0009 0600 2304 0600 1010", false },
         };
         for (const Pin& pin : kPins)
         {
@@ -14857,6 +15064,36 @@ void TestA3RoutedPins(Sh2Decompiler& d)
             CHECK(w.findings.empty() && count(w, "endless-store.checked") > 0);
             CHECK((count(w, "endless-store.said") > 0) == pin.said);
         }
+        // A3-171 (round 20): the first of two stores of a word before the poll, the second said (the poll drops it), is replaced by the
+        // code as in any function and not said; the check asked for it (grammar 1 seed 3704634, shrunk c2; c1, the replacing store in the
+        // poll's body). It takes a store every byte of which a later store of the run writes again as the next one's (`endless-store.replaced`)
+        const Pin kReplaced[] = {
+            { "A3-171 seed 3704634 shrunk (c2)", "D605 2631 2621 D705 E002 2702 6072 C801 89FC 2631 000B 0009 2600 210C 0600 1004", true },
+            { "A3-171 c1", "D307 6132 7101 2312 D706 E001 2701 7101 2312 6071 C801 8BFA 2342 000B 0009 0009 0600 2304 0600 1010", true },
+        };
+        for (const Pin& pin : kReplaced)
+        {
+            const Report w = EvaluateSubject(d, RawSubject(pin.words), true);
+            std::printf("pin '%s': %zu finding(s), endless-store checked %d, said %d, replaced %d\n", pin.name, w.findings.size(), count(w, "endless-store.checked"),
+                        count(w, "endless-store.said"), count(w, "endless-store.replaced"));
+            for (const Finding& f : w.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+            CHECK(w.findings.empty() && count(w, "endless-store.said") > 0 && count(w, "endless-store.replaced") > 0);
+        }
+        // A3-170's production (grammar 1, from seed 3,800,001): grammar 1 seed 3800027 draws the whole shape before a poll. On the old host
+        // its slot's store was dropped unsaid (`endless-store-dropped`, as on 124 of the 5,000 seeds from 3,800,001); now it is said
+        {
+            std::map<std::string, int> shapes;
+            CountProgram(Generate(3800027), shapes);
+            const Report rep = Evaluate(d, Generate(3800027), true);
+            std::printf("pin 'A3-170 grammar 1 seed 3800027 (the slot-entry production)': %zu finding(s), whole shapes %d, endless-store said %d\n", rep.findings.size(),
+                        shapes["slot_entry.poll"], count(rep, "endless-store.said"));
+            for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+            CHECK(rep.findings.empty() && shapes["slot_entry.poll"] == 1 && count(rep, "endless-store.said") > 0);
+        }
+        const Report seed = Evaluate(d, Generate(3704634), true);
+        std::printf("pin 'A3-171 grammar 1 seed 3704634': %zu finding(s), endless-store replaced %d\n", seed.findings.size(), count(seed, "endless-store.replaced"));
+        for (const Finding& f : seed.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(seed.findings.empty() && count(seed, "endless-store.replaced") > 0);
     }
     {
         const Report rep = Evaluate(d, MakeV2(2305596), true);
@@ -15360,11 +15597,11 @@ void TestGenerated()
     char covered[1536];
     std::snprintf(covered, sizeof covered,
                   "alu=%d loads=%d stores=%d (plain %d disp %d indexed %d inc/dec %d) tas=%d (T moved %d) widths b/w/l=%d/%d/%d literal pointers hw/ram/mailbox=%d/%d/%d "
-                  "skips=%d (delayed %d) loops=%d polls=%d (write first %d, until set %d, body %d; mailbox %d hw %d ram %d) rts slot insn=%d",
+                  "skips=%d (delayed %d; slot entered ahead %d, below %d, own return %d; the whole shape before a poll %d) loops=%d polls=%d (write first %d, until set %d, body %d; mailbox %d hw %d ram %d) rts slot insn=%d",
                   sum("alu."), sum("mem.ld."), sum("mem.st."), n("mem.ld.plain") + n("mem.st.plain"), n("mem.ld.disp") + n("mem.st.disp"),
                   n("mem.ld.indexed") + n("mem.st.indexed"), n("mem.ld.inc") + n("mem.st.dec"), n("mem.tas"), n("mem.tas.movt"), n("width.1"), n("width.2"),
                   n("width.4"), n("litptr.hw") + n("poll.hw"), n("litptr.ram") + n("poll.ram"), n("litptr.mbox") + n("poll.mbox"), sum("skip."),
-                  n("skip.bt_s") + n("skip.bf_s"), n("loop"), sum("poll.h") + sum("poll.r") + sum("poll.m"), n("poll.write_first"),
+                  n("skip.bt_s") + n("skip.bf_s"), n("slot_entry.ahead"), n("slot_entry.below"), n("slot_entry.early_exit"), n("slot_entry.poll"), n("loop"), sum("poll.h") + sum("poll.r") + sum("poll.m"), n("poll.write_first"),
                   n("poll.until_set"), n("poll.body"), n("poll.mbox"), n("poll.hw"), n("poll.ram"), n("rts.slot_insn"));
     if (coverage)
     {
