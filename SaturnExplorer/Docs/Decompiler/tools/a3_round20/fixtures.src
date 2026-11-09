@@ -87,3 +87,52 @@ bt P
 mov.w r3,@r6
 rts
 nop
+# Added by the A3-170 and A3-171 fixer.
+name d2
+# A3-170, the returning instance printed as a statement of its own: `bt T ; bf/s Q` (T clear, so always taken) with the store in the slot;
+# T's path `bra S` runs the store's second instance into the poll
+mov.l =0x06002304,r3
+mov.l =0x06001010,r7
+mov #1,r0
+mov.w r0,@r7
+mov r4,r0
+tst #1,r0
+bt T
+bf/s Q
+S:
+mov.l r6,@r3
+P:
+mov.w @r7,r0
+tst #1,r0
+bf P
+mov.l r4,@r3
+rts
+nop
+Q:
+rts
+mov r5,r0
+T:
+bra S
+nop
+name d1n
+# control: d1 without the `bt T` (one instance of the slot's address, on a path to the return and on one to the poll): printed, not said
+mov.l =0x06002304,r3
+mov.l =0x06001010,r7
+mov #1,r0
+mov.w r0,@r7
+mov r4,r0
+tst #1,r0
+cmp/eq r5,r4
+bf/s Q
+S:
+mov.l r6,@r3
+P:
+mov.w @r7,r0
+tst #1,r0
+bf P
+mov.l r4,@r3
+rts
+nop
+Q:
+rts
+nop
