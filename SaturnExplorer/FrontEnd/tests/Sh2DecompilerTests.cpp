@@ -2561,6 +2561,160 @@ void TestArea7Round10()
 }
 
 
+// Area 7 round 11 (A7-78): the shrunk fixtures of the seeds the new generator productions (a poll loop with a body, `tas.b` with T used) and the
+// fresh runs from 3,300,001 and 3,600,001 raised. Each runs the words as the generator does (the callees' prototypes lent), with the line the
+// seed was about, the audit (`Violations() == 0`) and, where the line is a number, the damaged result the loosened rule must still catch.
+void TestArea7Round11()
+{
+    std::vector<uint8_t> hw(0x100000u, 0);
+    Sh2Decompiler d(gConfig);
+    const std::function<bool(uint32_t, uint16_t&)> word = [&hw](uint32_t x, uint16_t& w) {
+        if (x < 0x06000000u || x - 0x06000000u + 1 >= hw.size()) return false;
+        w = static_cast<uint16_t>(hw[x - 0x06000000u] << 8 | hw[x - 0x06000000u + 1]);
+        return true;
+    };
+    const auto run = [&](const std::vector<uint16_t>& w, uint32_t entry, const std::vector<uint32_t>& lend) {
+        std::fill(hw.begin(), hw.end(), 0);
+        for (size_t i = 0; i < w.size(); ++i) dts::Put16(hw, 0x9000u + 2 * i, w[i]);
+        const auto snap = MakeSnapshot(hw);
+        DecompileRequest q = Request(entry);
+        // (each callee's prototype is made with the ones lent before it: the callees in the order the list gives)
+        for (uint32_t l : lend)
+        {
+            DecompileRequest c = Request(l);
+            c.prototypes = q.prototypes;
+            q.prototypes.emplace_back(l, d.Decompile(snap, c).prototype);
+        }
+        return d.Decompile(snap, q);
+    };
+    const auto changed = [](const DecompileResult& r, const std::string& from, const std::string& to, int& n) {
+        DecompileResult x = r;
+        n = 0;
+        for (Line& l : x.lines)
+        {
+            const size_t at = l.text.find(from);
+            if (at == std::string::npos) continue;
+            l.text.replace(at, from.size(), to);
+            ++n;
+        }
+        return x;
+    };
+    // A7-78 a piece of a polled word drawn at the narrow store beside the store that names it (grammar 1 seed 902)
+    {
+        const std::vector<uint16_t> w = { 0xD705, 0x2421, 0x6072, 0xC801, 0x8BFB, 0x2309, 0xD703, 0x2701, 0x2531, 0x000B, 0x0009, 0x0009, 0x2600, 0x1034, 0x2600, 0x1030 };
+        const DecompileResult r = run(w, 0x06009000u, {  });
+        Print("A7-78 a piece of a polled word drawn at the narrow store beside the store that names it (grammar 1 seed 902)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "uRam26001030 = (uint2)uRam26001034;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_78_902").Violations() == 0);
+    }
+    // A7-78 a global read drawn at the load that reads it (grammar 1 seed 3300988)
+    {
+        const std::vector<uint16_t> w = { 0xD606, 0xD707, 0x6356, 0x8802, 0x8D03, 0x601D, 0x8167, 0xE006, 0x036D, 0x412E, 0x1736, 0x000B, 0x0009, 0x0009, 0x2600, 0x1034, 0x2600, 0x2104 };
+        const DecompileResult r = run(w, 0x06009000u, {  });
+        Print("A7-78 a global read drawn at the load that reads it (grammar 1 seed 3300988)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "iRam2600211c = (int4)iRam2600103a;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_78_3300988").Violations() == 0);
+    }
+    // A7-78 a merge copy at a join's first instruction names no register (grammar 1 seed 3302704)
+    {
+        const std::vector<uint16_t> w = { 0xE002, 0x016C, 0x4015, 0x89FF, 0xE302, 0x845E, 0x6133, 0x4310, 0x8BFB, 0xE002, 0x037C, 0x3100, 0x8900, 0x6350, 0x2138, 0x8B00, 0x8140, 0x000B, 0x0009 };
+        const DecompileResult r = run(w, 0x06009000u, {  });
+        Print("A7-78 a merge copy at a join's first instruction names no register (grammar 1 seed 3302704)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "uVar3 = 2;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_78_3302704").Violations() == 0);
+        int n = 0;
+        const DecompileResult other = changed(r, "uVar3 = 2;", "uVar3 = 3;", n);
+        CHECK(n >= 1 && dts::AuditMapping(other, word, "a7_78_3302704 other").Violations() >= 1);
+    }
+    // A7-78 a copy of the input in a body that stores none of it (grammar 1 seed 3706930)
+    {
+        const std::vector<uint16_t> w = { 0xD607, 0xD708, 0x6072, 0xC801, 0x8BFC, 0xC801, 0x8900, 0x6033, 0x2701, 0x2029, 0x2238, 0x8900, 0x6061, 0x1703, 0x000B, 0x0009, 0x05F8, 0x00F0, 0x2600, 0x2380 };
+        const DecompileResult r = run(w, 0x06009000u, {  });
+        Print("A7-78 a copy of the input in a body that stores none of it (grammar 1 seed 3706930)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "uRam2600238c = in_r3;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_78_3706930").Violations() == 0);
+    }
+    // A7-78 a call's output merged under a frame word's name on a path the word's store does not take (grammar 2 seed 3601551)
+    {
+        const std::vector<uint16_t> w = { 0x2F86, 0x2F96, 0x2FA6, 0x2FB6, 0x4F22, 0x7FE0, 0x6843, 0x6953, 0x6A63, 0x6B73, 0x62F3, 0x7220, 0xE103, 0x2216, 0x4110, 0x8BFC, 0xE200, 0xB017, 0x0009, 0x6483, 0x6593, 0x66A3, 0x67B3, 0x2F16, 0x61F6, 0x3450, 0x8905, 0xB00D, 0x0009, 0x6483, 0x6593, 0x66A3, 0x67B3, 0x6043, 0x7F20, 0x4F26, 0x6BF6, 0x6AF6, 0x69F6, 0x68F6, 0x000B, 0x0009, 0x2F86, 0x2F96, 0x2FA6, 0x2FC6, 0x0C2A, 0x7FC0, 0x6843, 0x6953, 0x6A63, 0xB00C, 0x0009, 0x6483, 0x6593, 0x66A3, 0x6063, 0x7F40, 0x4C2A, 0x6CF6, 0x6AF6, 0x69F6, 0x68F6, 0x000B, 0x0009, 0x2FE6, 0x7FF4, 0x6EF3, 0xE004, 0x015C, 0x604C, 0x7E0C, 0x6FE3, 0x6EF6, 0x000B, 0x0009 };
+        const DecompileResult r = run(w, 0x06009000u, { 0x06009082u, 0x06009054u });
+        Print("A7-78 a call's output merged under a frame word's name on a path the word's store does not take (grammar 2 seed 3601551)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "xStack_38 = (xunknown4)xVar3;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_78_3601551").Violations() == 0);
+    }
+    // A7-78 a number that reaches the store through MACH (grammar 2 seed 3706722)
+    {
+        const std::vector<uint16_t> w = { 0x4F22, 0xE104, 0x3712, 0x8913, 0x4708, 0xC702, 0x017E, 0x412B, 0x0009, 0x0009, 0x0600, 0x9024, 0x0600, 0x9028, 0x0600, 0x902C, 0x0600, 0x9030, 0xA004, 0x0009, 0xA002, 0x0009, 0xA000, 0x0009, 0xD602, 0x410A, 0xD202, 0x4F26, 0x422B, 0x0009, 0x2600, 0x1000, 0x0600, 0x9044, 0x7FFC, 0x010A, 0x2612, 0x6072, 0x7F04, 0x000B, 0x0009 };
+        const DecompileResult r = run(w, 0x06009000u, { 0x06009044u });
+        Print("A7-78 a number that reaches the store through MACH (grammar 2 seed 3706722)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "xRam26001000 = 4;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_78_3706722").Violations() == 0);
+        // the `lds r1,mach` of the pair made `lds r2,mach` in the memory the audit reads: the store stores the input, not the 4
+        dts::Put16(hw, 0x9000u + 2 * 25, 0x412A);
+        CHECK(dts::AuditMapping(r, word, "a7_78_3706722 other").numberStoreOther >= 1);
+    }
+    // A7-78 a number statement names no store of another number (grammar 2 seed 3620180, specials)
+    {
+        const std::vector<uint16_t> w = { 0x2F86, 0x2F96, 0x2FA6, 0x2FD6, 0x4F22, 0x7FF8, 0x6843, 0x6953, 0x6A63, 0x62F3, 0x7208, 0xE102, 0x2216, 0x4110, 0x8BFC, 0xE200, 0x2F26, 0x62F6, 0x2F16, 0x61F6, 0x716D, 0x2712, 0xB00C, 0x6443, 0x6483, 0x6593, 0x66A3, 0x6040, 0x7F08, 0x4F26, 0x6DF6, 0x6AF6, 0x69F6, 0x68F6, 0x000B, 0x0009, 0x7FD0, 0x7F30, 0x000B, 0x0009 };
+        const DecompileResult r = run(w, 0x06009000u, { 0x06009048u });
+        Print("A7-78 a number statement names no store of another number (grammar 2 seed 3620180, specials)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "iStack_20 = 2;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_78_3620180").Violations() == 0);
+    }
+    // A7-78 a copy of a folded read that names no instruction says so (grammar 2 seed 3622362, specials)
+    {
+        const std::vector<uint16_t> w = { 0xD60E, 0x2F86, 0x2F96, 0x2FA6, 0x2FD6, 0x4F22, 0x6843, 0x6953, 0x6A63, 0xE301, 0x4310, 0x8901, 0xAFFC, 0x0009, 0x526E, 0xE301, 0x324C, 0x4310, 0x8901, 0xAFFB, 0x0009, 0x2622, 0x4F26, 0x6DF6, 0x6AF6, 0x69F6, 0x68F6, 0x000B, 0x0009, 0x0009, 0xC000, 0x1004 };
+        const DecompileResult r = run(w, 0x06009000u, { 0x06009002u });
+        Print("A7-78 a copy of a folded read that names no instruction says so (grammar 2 seed 3622362, specials)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "iRamc0001004 = iRamc000103c;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_78_3622362").Violations() == 0);
+    }
+    // A7-78 shll2 leaves the low bits 0 (grammar 2 seed 3628408, specials)
+    {
+        const std::vector<uint16_t> w = { 0x2F86, 0x2F96, 0x2FC6, 0x0C2A, 0x7FE8, 0x6843, 0x6953, 0xD304, 0x7F18, 0x4C2A, 0x6CF6, 0x69F6, 0x68F6, 0x432B, 0x0009, 0x0009, 0x0600, 0x9024, 0x2FD6, 0xE106, 0x3612, 0x891A, 0x4608, 0xC702, 0x016E, 0x412B, 0x0009, 0x0009, 0x0600, 0x9050, 0x0600, 0x9062, 0x0600, 0x9056, 0x0600, 0x905A, 0x0600, 0x905E, 0x0600, 0x905E, 0x6023, 0xA007, 0x0009, 0xA005, 0x0009, 0xA003, 0x0009, 0xA001, 0x0009, 0x4008, 0xC802, 0x8900, 0x6250, 0x6052, 0x6DF6, 0x000B, 0x0009 };
+        const DecompileResult r = run(w, 0x06009024u, {  });
+        Print("A7-78 shll2 leaves the low bits 0 (grammar 2 seed 3628408, specials)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "in_r2 = 0;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_78_3628408").Violations() == 0);
+        int n = 0;
+        const DecompileResult other = changed(r, "in_r2 = 0;", "in_r2 = 1;", n);
+        CHECK(n >= 1 && dts::AuditMapping(other, word, "a7_78_3628408 other").Violations() >= 1);
+    }
+    // A7-78 negc of a copy of the input whose test the edge decides (grammar 2 seed 3629843, specials)
+    {
+        const std::vector<uint16_t> w = { 0x7FF0, 0xE099, 0x7F10, 0x000B, 0x0009, 0xE301, 0xD107, 0x261A, 0x4310, 0x8BFB, 0x334C, 0x2348, 0x8901, 0xA003, 0x0009, 0x613A, 0xA000, 0xE25F, 0xE0D5, 0x000B, 0x0009, 0x0009, 0x4000, 0x0000 };
+        const DecompileResult r = run(w, 0x0600900Au, {  });
+        Print("A7-78 negc of a copy of the input whose test the edge decides (grammar 2 seed 3629843, specials)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "xVar1 = 0xffffffff;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_78_3629843").Violations() == 0);
+        int n = 0;
+        const DecompileResult other = changed(r, "xVar1 = 0xffffffff;", "xVar1 = 0xfffffffe;", n);
+        CHECK(n >= 1 && dts::AuditMapping(other, word, "a7_78_3629843 other").Violations() >= 1);
+    }
+    // A7-78 the AND of a mask with a zero low half, a four-byte variable the text uses narrowed (matrix seed 17737)
+    {
+        const std::vector<uint16_t> w = { 0xD618, 0xD719, 0x3120, 0x8903, 0xD718, 0x6013, 0xE010, 0x0706, 0xD717, 0xD318, 0x273B, 0x8801, 0x8900, 0xE2A6, 0x2239, 0x8802, 0x8900, 0x3328, 0x3100, 0x8B01, 0x201B, 0x6240, 0xE302, 0x0008, 0x2402, 0x4310, 0x8BFB, 0xE043, 0x612D, 0x4315, 0x8901, 0x8154, 0x2521, 0x6342, 0xE304, 0x2432, 0x301C, 0x3258, 0x4310, 0x8BFA, 0xD709, 0xE002, 0x2702, 0x2420, 0x6072, 0xC801, 0x8BFB, 0x000B, 0x0009, 0x0009, 0x6000, 0x09F8, 0x25FE, 0x0054, 0x0DB0, 0x0068, 0x2600, 0x2188, 0x6000, 0x0000, 0x2600, 0x1018 };
+        const DecompileResult r = run(w, 0x06009000u, {  });
+        Print("A7-78 the AND of a mask with a zero low half, a four-byte variable the text uses narrowed (matrix seed 17737)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "iVar1 = 0;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_78_17737").Violations() == 0);
+        int n = 0;
+        const DecompileResult other = changed(r, "iVar1 = 0;", "iVar1 = 1;", n);
+        CHECK(n >= 1 && dts::AuditMapping(other, word, "a7_78_17737 other").Violations() >= 1);
+    }
+}
+
 void TestFixture1()
 {
     Sh2Decompiler d(gConfig);
@@ -16805,6 +16959,7 @@ int main(int argc, char** argv)
         RUN(TestArea7Round8());
         RUN(TestArea7Round9());
         RUN(TestArea7Round10());
+        RUN(TestArea7Round11());
         RUN(TestSlotMadeLineIsAddressedToItsBranch());
         RUN(TestFrameStoreMaterialisedAtCall());
         RUN(TestFixture1b());

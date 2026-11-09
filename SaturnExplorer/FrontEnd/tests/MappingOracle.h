@@ -2521,9 +2521,7 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     ++a.copyRegisterMade;
                     continue;
                 }
-                // (A7-78: a statement the product says names no instruction -- `iRamc0001004 = iRamc000103c;`, the engine's copy of a folded
-                // read into the variable a later store names -- has no click to be wrong; A7-52 judges that it says so; grammar 2 seed 3622362)
-                if ((mergedRegister || r.lines[li].noOrigin) && !anyAddress)
+                if (mergedRegister && !anyAddress)
                 {
                     ++a.copyNoAddress;
                     continue;
@@ -2723,6 +2721,36 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     {
                         ++a.copyUnconnected;
                         continue;
+                    }
+                }
+                // (A7-78: a statement the product says names no instruction -- `iRamc0001004 = iRamc000103c;`, the engine's copy of a folded
+                // read into the variable a later store names -- has no click to be wrong; A7-52 judges that it says so; grammar 2 seed 3622362)
+                if (r.lines[li].noOrigin && !anyAddress)
+                {
+                    // (the value is a global the code reads, a read the engine folded)
+                    const size_t eq = text.find(" = ");
+                    size_t v = eq == std::string::npos ? eq : eq + 3;
+                    if (v != std::string::npos && v < text.size() && text[v] == '(')
+                    {
+                        const size_t close = text.find(')', v);
+                        v = close == std::string::npos ? close : close + 1;
+                    }
+                    if (v != std::string::npos && text.size() > v + 12 && text.back() == ';')
+                    {
+                        const std::string operand = text.substr(v, text.size() - 1 - v);
+                        if (operand.size() >= 11 && operand.compare(operand.size() - 11, 3, "Ram") == 0 &&
+                            operand.find_first_not_of("0123456789abcdef", operand.size() - 8) == std::string::npos)
+                        {
+                            const uint32_t va = static_cast<uint32_t>(std::strtoul(operand.c_str() + operand.size() - 8, nullptr, 16));
+                            bool folded = false;
+                            for (const AccessFate& f : r.accessFates)
+                                folded = folded || (!f.write && !f.frame && f.fate == AccessFate::FoldedOrdinary && GlobalDelta(va, f.address) < f.size);
+                            if (folded)
+                            {
+                                ++a.copyNoAddress;
+                                continue;
+                            }
+                        }
                     }
                 }
                 ++a.copyStoreMissing;
