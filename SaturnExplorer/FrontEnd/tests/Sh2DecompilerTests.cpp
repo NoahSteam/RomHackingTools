@@ -3021,6 +3021,16 @@ void TestArea7Round12()
         CHECK(LineWith(r, "xRam06002108 = xVar1;") != nullptr);
         CHECK(dts::AuditMapping(r, word, "a7_102_4508555").Violations() == 0);
     }
+    // A7-103 the slot's store, emptied by the engine, is the statement's when the poll's store before it does not show the value (grammar 1 seed 4604444)
+    {
+        const std::vector<uint16_t> w = { 0xD706, 0xE002, 0x2701, 0x6071, 0xC801, 0x8BFC, 0x70EA, 0x2248, 0x8901, 0xC840, 0x8D00, 0x2701, 0x000B, 0x0009, 0x2600, 0x1028 };
+        const DecompileResult r = run(w, 0x06009000u, {  });
+        Print("A7-103 the slot's emptied store is the statement's when the store before does not show the value (grammar 1 seed 4604444)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "xRam26001028 = 0xffec;") != nullptr);
+        CHECK(tokenAt(r, "xRam26001028 = 0xffec;", 0x06009016u) || tokenAt(r, "xRam26001028 = 0xffec;", 0x06009014u));
+        CHECK(dts::AuditMapping(r, word, "a7_103_4604444").Violations() == 0);
+    }
 }
 
 void TestFixture1()

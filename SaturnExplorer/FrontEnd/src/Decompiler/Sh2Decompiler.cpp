@@ -7570,8 +7570,9 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
             // A7-78: the stores of the byte the engine emptied and joined into one statement in a block with no way in -- the two
             // instances of one instruction, a delay slot run on both ways of a branch and again after it (`bt/s` over a `mov.w r1,@r6`),
             // whose line the engine put after both: every emptied store of the byte whose flow reaches the statement's instruction is
-            // its (grammar 1 seed 3800320)
-            if (!prior)
+            // its (grammar 1 seed 3800320). A7-103: also when the store of the byte in the statement's block does not show its value (the
+            // poll's store of 2, the line `xRam26001028 = 0xffec;` of the slot's store of the polled word less 0x16; seed 4604444)
+            if (!prior || !shows(prior))
             {
                 // (any way on in the flow, through blocks the engine kept as well)
                 const auto flowReaches = [&](int from, int to) {
