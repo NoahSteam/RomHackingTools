@@ -1,4 +1,7 @@
 # Area 3 round 21 fixtures (asm syntax of ../a3_round16/asm.py, with .addr and mova @(LABEL,pc) from asm21.py). Run with run21.sh <name>.
+# Modules (caller and callee) take SE_GENERATED_FUNCS and SE_GENERATED_RETURNS as well: m1 "0/0/20,20/20/40", w5 "0/0/20,20/20/28",
+# w4 "0/0/10,10/10/18", c1 "0/0/20,20/20/2C" (RETURNS "0,0", c1 "1,1"). k1 to k4 are register and stack only: run them through the printed-C
+# differential (SE_GENERATED_PRINTEDC=only SE_GENERATED_PRINTEDC_WORDS=<words>).
 name sw1
 # a store before a switch whose case 0 is the poll (the code replaces the store after it) and case 1 replaces it and returns
 mov.l =0x06002304,r3
