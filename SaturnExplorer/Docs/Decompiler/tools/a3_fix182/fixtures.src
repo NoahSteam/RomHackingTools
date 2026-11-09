@@ -168,3 +168,19 @@ mov #7,r5
 Q:
 rts
 mov r5,r0
+name jo1
+# (A3-184) the join block keeps no op alive (r5 copied to r1, which nothing reads): A3-173's region takes it for code after the loop and says
+# the read of r5 there, which no path through the poll makes alone
+tst r4,r4
+bt Q
+mov.l =0x06001010,r7
+mov #1,r1
+mov.w r1,@r7
+P:
+mov.w @r7,r1
+tst r1,r1
+bf P
+Q:
+mov r5,r1
+rts
+nop

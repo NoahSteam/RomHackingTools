@@ -5689,7 +5689,7 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
         // registers as the other path leaves them, with nothing said and the signature lent (round 23's jn1: `*param_1 = param_2` where the
         // hardware stores 7). The program ends with a poll inside a skip and a store, at the skip's end, of a register the path through the poll
         // sets to k (Gen::AddPostPollJoin): in a text with `while( true );` a line stores that address with k in it, or a caution says a value is
-        // missing on one path and the signature is withheld.
+        // missing on one path (or the write of that address is missing) and the signature is withheld.
         if (r.status == DecompileStatus::Ok && subject.postJoin != 0 && fi == 0 && !subject.v2)
         {
             static const std::regex endlessLoop("^\\s*\\}?\\s*while\\( true \\);?\\s*$");
@@ -5711,8 +5711,16 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
             if (forEver)
             {
                 count("endless-join.checked");
+                // (or, where the engine folds the skip's test so that only the poll's path reaches the join, the join is code after the loop
+                // and its store A3-175's: the write of that address said missing; grammar 1 seed 5601011)
+                static const std::regex missingWrite("-byte write of 0x([0-9A-F]{8}) here is missing");
                 bool said = false;
-                for (const HardwareNote& n : r.hardwareNotes) said = said || (n.caution && n.text.find("here is missing on one path") != std::string::npos);
+                for (const HardwareNote& n : r.hardwareNotes)
+                {
+                    std::smatch m;
+                    said = said || (n.caution && n.text.find("here is missing on one path") != std::string::npos) ||
+                           (n.caution && std::regex_search(n.text, m, missingWrite) && (static_cast<uint32_t>(std::stoul(m[1].str(), nullptr, 16)) & 0x1FFFFFFFu) == a);
+                }
                 if (printed) count("endless-join.printed");
                 else if (said && !r.prototype.known) count("endless-join.said");
                 else

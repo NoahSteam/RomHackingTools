@@ -19379,3 +19379,68 @@ The write is not an r0 write, a store or a call, the three things the pass looks
 * **Area 5:** `folded-store-after-access`, grammar 1 seeds 5000290 5001076 5001563 5001852 5002882 5003726 5003852 5003972 5004127 5004494 5004522 5004539 5005245 5005444 5005642 5005694 5006365 5006909 5006976 5007052 5007081 5007891 5008314 5008398 5008461 5008983 5009015 5009054 5009150 5009608.
 * **Area 7:** grammar 1 `map-copy-merge` 5003735, `map-number-store` 5000472, `map-const-join` 5002388 (specials); grammar 2 `map-const-join` 5001825 (specials). No seed was shrunk.
 * **Area 11 / area 3:** A3-181 (grammar 2 draws no poll) is still open; A3-183 is its sibling for the join.
+
+## Area 3, A3-182 and A3-183 fixer
+
+Fixer, branch `review/3-a3182-fix`, cut at master `64beb17d`. Host, oracle and generator only: no engine patch, so 0089 stays free. The worktree's RelWithDebInfo build (`-j2`, `ulimit -v 6000000`), the test binaries and the game corpus under `ulimit -v 3500000` to `4000000`. **Both rows are fixed: A3-182 (P1) and A3-183 (P3). One new row: A3-184 (P3, open; on master too).**
+
+### A3-182: a poll's edge into code the text keeps
+
+A3-173's region (the flow blocks reached from a loop the analysis takes to run for ever without entering a block with a live op) ends where it meets code the text keeps, and its passes look for reads of entry registers, r0, stores and calls inside it. What the path through the loop carries into the joined block was looked at by nothing. It is not only what the code after the poll sets: jv1 sets r5 *before* the poll, on the poll's path only, and has no code after the poll at all (the loop's exit is the join), and it was lent with `*param_1 = param_2` too. So the fix is about the edge the engine removes, not the region.
+
+`JoinedAfterEndlessLoop` (Sh2Decompiler.cpp, called from `StoresBeforeEndlessLoop` after A3-173's pass), all from the flow's own p-code:
+
+* **Removed edges.** An edge from a loop block or a block of the code after it into a block outside both. A block of A3-173's region counts as kept when an op of the final graph still has one of its instructions (`rts ; nop`, whose RETURN the engine rebuilt, has no live op of the flow and is in A3-173's region; jv6, jv7). By the ops' instructions, not a final block's address range: grammar 1 seed 5600146 has a final block whose range runs from a `bra` at the end back into a delay slot near the top, across the code after the loop.
+* **Reaching definitions with a mark.** Keys: r0 to r15, T apart from the rest of SR (the SLEIGH bit-insert `sr = (sr & ~1) | t` defines T only, and `sr & 1` reads T only: jc2's `cmp/eq ; bt` after the join reads the join's own T), GBR, VBR, MACH, MACL, PR, and each frame word at a known offset from the entry r15 (a forward constant pass over r15 and the registers and temporaries that copy it). A definition crossing a removed edge is marked. A read in kept code is lost when a marked definition reaches it that no unmarked path brings, or a definition computed from a lost read reaches it (to a fixed point). r1 to r7 after a call are the callee's, never lost (06007D22 and 0600C2DA in hwram008: the code after their polls calls functions, and the clobbered r4 and r5 reached later calls; said by a first version, which was wrong).
+* **The first use, said.** A store's address or value (a store to a known frame word carries the value on instead), a load's address, a branch's condition or an indirect target, a call's parameters as the engine's call has them (its `FuncCallSpecs`; all of r4 to r7 and the four words at r15 when the engine has no such call), PR at a return: "the value of r5 here is missing on one path: the analysis takes the loop at 0x0600900A to run for ever and removes the edge by which it leaves for this code, so the text and the signature have r5 here only as the other paths leave it, not as the path through the loop sets it. A poll of memory another processor writes folds so unless that memory is marked volatile". The signature is withheld ("a loop the analysis takes to run for ever leaves for code the text keeps with a value the text does not hold", after A3-164, A3-175 and A3-178's reasons).
+* **r0 at a return.** As A3-173 has it: a value the code after the loop puts in r0 (or the kept code computes from a lost value) withholds a signature that would be lent, with no caution, and is said on the return ("the value returned here is missing on one path") when the text returns a value there (jv7, `return param_2;`). The loop's own r0 (the generator's poll reads through r0) or one set before it is not taken, as it is not where the return goes with the code after the poll: jv6 is lent, as master lends it.
+
+| Fixture | Master | Now |
+|---|---|---|
+| jn1 (`mov #7,r5` after the poll, Q stores r5 through r4) | `*param_1 = param_2;`, lent 3 parameters | said on 0x06009012 (r5), withheld |
+| jn2 (`mov #7,r4` after the poll, Q calls G(r4, r5)) | `func_0x06009040(param_1,param_2);`, lent | said on the call 0x06009018 (r4), withheld |
+| jv1 (r5 set before the poll, none after it) | lent | said on 0x06009012, withheld |
+| jv2 (through `mov r5,r2 ; add #1,r2` in the join) | lent | said on the store 0x06009016 |
+| jv3 (T set after the poll, `bt` in the join) | withheld (the join's store is removed with the folded branch, said) | also said on the `bt` 0x06009012 (T) |
+| jv4 (the join's pointer r4 set after the poll) | lent | said on 0x06009012 (r4), withheld |
+| jv5 (a frame word written after the poll, read in the join) | lent | said on 0x0600901A ("the frame word at r15 - 4 on entry"), withheld |
+| jv7 (`rts ; mov r5,r0` in the join, r5 set after the poll) | withheld for A3-173's r0 (Q is in its region), nothing said | said on the return, withheld |
+| controls jn3 (r0 after the poll), jn4 (a store after it) | withheld; jn4 said by `NoteRemovedAccesses` | unchanged |
+| controls jc1 (the join overwrites r5), jc2 (the join sets T again), jc3 (the poll's path writes r1 and r7 only), jv6 (the poll's own r0 at the return), jn1 with the mailbox marked | lent | unchanged, nothing said |
+
+Fixtures: `tools/a3_fix182/fixtures.src` (jv1 to jv7, jc1 to jc3, jo1) and `run.sh` (round 23's `run23.py` over both fixture files; `BIN=` for a second build).
+
+### A3-183: the generator
+
+* **Production** (`Gen::AddPostPollJoin`, a stream of its own `postJoinRng`, **only for the grammar 1 seeds from 5,600,001**, `kPostJoinFirst`; every lower seed keeps its program): in one program of two without a poll, `mov.l @(lit),r6 ; tst Rx,Rx ; bt J ; (poll of the mailbox, `bf`, reading back its own write) ; mov #k,Rn | add #k,Rn ; J: mov.l Rn,@r6`, or `mov #k,Rn` before the poll (Rx r4 or r5; Rn r1, r2, r3 or r5; a word of 0x06003060 to 0x0600307C or its cache-through name, which no other production names; k 0x50 to 0x7F). The poll is inside the skip, so `MakeSubject` registers it from the program (`Program::postJoinPoll`) for the emulator's other processor. Shapes `post_join.*`.
+* **Oracle** `endless-join-dropped`: in a text with `while( true );` of a program with the item, a store line of that address holds k, or a caution says a value is missing on one path (or the write of that address is missing: where the engine folds the skip's test because an earlier item ORed a mask into Rx, only the poll's path reaches J, J is code after the loop and its store is A3-175's; seeds 5601011, 5601238 and six more) and the signature is withheld. Counts `endless-join.checked`, `.printed`, `.said`.
+* **With the host fix off** (master's `Sh2Decompiler.cpp` and `.h` in a temporary build of the generator): the first 300 seeds give 47 such programs and all 47 fail it (5600001 and 5600021 the first); the 5,000 seeds from 5,600,001 give 610, and every one but the 8 folded ones (said by A3-175 on master too) is unsaid and lent. On the fix none: 610 checked, 610 said.
+* Grammar 2 still draws no poll (A3-181, open).
+
+### A3-184 (new, P3, open; on master too)
+
+A3-173's region takes in a kept block with no live op of the flow, and A3-173, A3-175 and A3-178's passes then say its reads, stores and calls as code the analysis removed. jo1 (`tst r4,r4 ; bt Q ; (poll) ; Q: mov r5,r1 ; rts ; nop`) is said ("the read of r5 on entry here is missing") and withheld, where `void (int4)` is right. Over-said, no value lost; not changed here, as it moves those three passes' region (the A3-182 pass already tells such a block by the final graph's ops). Ledger row A3-184.
+
+### Pins (each fails on master's host: the decompiler suite built with master's `Sh2Decompiler.cpp` and `.h` fails 21 checks, all in `TestA3182Fix`'s said cases; its controls pass)
+
+* `TestA3182Fix` (`Sh2DecompilerTests.cpp`): jn1, jn2, jv1 to jv5 said at their use and withheld; jv7 said on the return; jn1 with the mailbox marked lent; controls jn3, jn4 as round 23 left them; jc1, jc2, jc3, jv6 lent with nothing said.
+* `TestA3RoutedPins` (`Sh2GeneratedTests.cpp`): grammar 1 seeds 5600001 and 5600021 (`endless-join` checked and all said, no `endless-join` finding).
+
+### Runs (on the final code)
+
+| Run | Result |
+|---|---|
+| game corpus (`SE_GAME_LEND=1 SE_GAME_NOTES=1`, hwram007 then hwram008; `tools/a7_round2/corpus.sh`, master's binary and the fix's) | every ledger count 0, both "all passed"; real entries lent **474 (645 parameters) of 999** and **724 (975) of 1,543**; missing and said **0** and **4**: unchanged. The token dumps of both builds, alone and lent, are identical in both images, and so are the cautions (15 and 43 `game caution` lines, the same lines): no text, caution or signature changes, so no function is newly withheld. (A first version, with r1 to r7 after a call taken as lost and every call taken to read r4 to r7, gave five new cautions in hwram008, in 06007D22, 0600C2DA and 0600C49A, all already withheld; each was a register the code after the poll had a call clobber, which a later call was not shown to read. The final rules give none.) Decompiler time in the corpus runs moved with the shared machine's load (the pass runs only for a function with a loop taken to run for ever whose exit reaches kept code) |
+| printed-C (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | 5,585 functions, 5,297 compared: **agrees=5196**, the baseline; narrow-c 130, void-return 227, void-return-lent 24 |
+| generator default run (300 seeds and the pins) | **0 findings**, all passed |
+| grammar 1, 5,600,001 to 5,605,000 (the new range, canary off) | 13 failing seeds, only the known classes: `folded-store-after-access` (area 5) and `map-copy-store`, `map-store-value` (area 7). `endless-join` checked 610, said 610; `endless-call` checked and said 361; `endless-after-store` 370 and 370; `endless-read` checked and withheld 342; `endless-store` checked 69,415, said 10,835 |
+| decompiler suite with master's `Sh2Decompiler.cpp` and `.h` | 21 checks fail, in `TestA3182Fix` only; its controls pass |
+| full `ctest -j2` | **117 of 117** (111 and the 6 Live tests; 345 s). No new test target |
+| fault suite (`SaturnExplorerDecompilerFaultTests`) | **0 of 94** jobs failed |
+| lints | `check-literal-size.py`: ok. No vendored file touched |
+
+### Routed, no row here
+
+* **Area 5:** `folded-store-after-access` (A5-117's class), grammar 1 seeds 5600013, 5600501, 5602642, 5602732, 5603261, 5604275, 5604318, 5604506, 5604617, 5604941.
+* **Area 7:** grammar 1 seeds 5602142 (`n:map-copy-store`), 5601418 and 5602264 (`v:map-store-value`). No seed was shrunk.
+* **Area 3 / 11:** A3-181 (grammar 2 draws no poll) is still open; A3-184 (above) is open.
