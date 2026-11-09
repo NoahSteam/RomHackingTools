@@ -1145,6 +1145,13 @@ inline WordValue WrittenValue(const sfe::decomp::DecompileResult& r, const std::
             const WordValue pn = before(n), pm = before(m);
             if (pn.kind == WordValue::Param && pm.kind == WordValue::Param && pn.value == pm.value) return NumberValue(0);
         }
+        // (A7-78: `add r4,r3` with r3 0 is a copy of the input in r4; grammar 2 seed 3629843)
+        if (!carry && !subtract)
+        {
+            const WordValue pn = before(n), pm = before(m);
+            if (pn.kind == WordValue::Param && number(pm, b) && b == 0) return pn;
+            if (pm.kind == WordValue::Param && number(pn, a) && a == 0) return pm;
+        }
         if (!number(before(n), a) || !number(before(m), b)) return WordValue();
         uint32_t t = 0;
         if (carry)
@@ -2742,6 +2749,16 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                             const bool fallsThrough = (bw >> 8) == 0x8B && pb + 2 == at, branches = (bw >> 8) == 0x89 && pb + 2 != at;
                             if ((fallsThrough || branches) && ((cw & 0xF0FF) == 0x4010 || ((cw & 0xF00F) == 0x2008 && ((cw >> 4) & 0xF) == ((cw >> 8) & 0xF))))
                                 EdgeFacts().push_back(EdgeFact{ static_cast<int>((cw >> 8) & 0xF), 0, pb });
+                            // (A7-78: `tst r4,r3 ; bt L` with r3 a copy of the input r4: both are 0 at L; grammar 2 seed 3629843)
+                            else if ((fallsThrough || branches) && (cw & 0xF00F) == 0x2008)
+                            {
+                                const WordValue pn = RegisterBefore(r, word, sources, pb - 2, (cw >> 8) & 0xF), pm = RegisterBefore(r, word, sources, pb - 2, (cw >> 4) & 0xF);
+                                if (pn.kind == WordValue::Param && pn == pm)
+                                {
+                                    EdgeFacts().push_back(EdgeFact{ static_cast<int>((cw >> 8) & 0xF), 0, pb });
+                                    EdgeFacts().push_back(EdgeFact{ static_cast<int>((cw >> 4) & 0xF), 0, pb });
+                                }
+                            }
                         }
                     }
                 }
@@ -2762,12 +2779,15 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                 if (!computes && (want & widthMask) == 0 && (((w >> 12) == 0x2 && (w & 0xF) == 0x9) || (w >> 8) == 0xC9))
                 {
                     const bool imm = (w >> 8) == 0xC9;
+                    // (A7-78: the 0 of a four-byte variable the text uses only narrowed -- `(int2)iVar1`, `(char)iVar1` -- is the AND's with a
+                    // number whose low half is 0, `and r3,r2` with r3 0x60000000; the bits above are not the text's. Grammar 1 seed 17737)
+                    const uint32_t kept = widthMask == 0xFFFFFFFFu && want == 0 ? 0xFFFFu : widthMask;
                     for (int reg : imm ? std::vector<int>{} : std::vector<int>{ (w >> 8) & 0xF, (w >> 4) & 0xF })
                     {
                         const WordValue v = RegisterBefore(r, word, sources, at, reg);
-                        computes = computes || (v.kind == WordValue::Number && (static_cast<uint32_t>(v.value) & widthMask) == 0);
+                        computes = computes || (v.kind == WordValue::Number && (static_cast<uint32_t>(v.value) & kept) == 0);
                     }
-                    if (imm && ((w & 0xFFu) & widthMask) == 0) computes = true;
+                    if (imm && ((w & 0xFFu) & kept) == 0) computes = true;
                 }
                 if (w == 0x0018 && want == 1) computes = true;
                 // (A7-69: `xtrct Rm,Rn` is Rm's low half over Rn's high half; the engine prints the part that is a number -- Rm shifted
@@ -2838,7 +2858,10 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                 // (A7-58: `shll8 Rn` leaves Rn's low byte 0, `shll16` its low half: the engine prints the shifted register as 0 where it uses
                 // only those bits -- `iVar1 = 0;` stored by `mov.b r0,@(0xd,r4)` -- when the line's variable is Rn where the text uses it.
                 // `shlr8`/`shlr16` shift a narrow value out: `uVar1 = 0;` at the `shlr8 r0` after `extu.b r5,r0`, grammar 1 seed 2402555)
-                if (!computes && want == 0 && ((w & 0xF0FF) == 0x4018 || (w & 0xF0FF) == 0x4028 || (w & 0xF0FF) == 0x4019 || (w & 0xF0FF) == 0x4029))
+                // (A7-78: `shll`, `shal` and `shll2` leave the low bit or two 0: `in_r2 = 0;` at the `shll2 r0` whose r0 the text tests with
+                // `tst #2,r0`, printed `(in_r2 & 2) != 0`; grammar 2 seed 3628408 with the specials)
+                if (!computes && want == 0 && ((w & 0xF0FF) == 0x4018 || (w & 0xF0FF) == 0x4028 || (w & 0xF0FF) == 0x4019 || (w & 0xF0FF) == 0x4029 ||
+                                               (w & 0xF0FF) == 0x4008 || (w & 0xF0FF) == 0x4000 || (w & 0xF0FF) == 0x4020))
                 {
                     const size_t nameBegin = text.find_first_not_of(' ');
                     const std::string name = text.substr(nameBegin, text.find(" = ", nameBegin) - nameBegin);
@@ -2928,8 +2951,11 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     for (const Token& t : l.tokens)
                     {
                         uint16_t tw = 0;
-                        if (!t.addr || t.addr == at || t.begin >= t.end || t.end > l.text.size() || l.text.compare(t.begin, t.end - t.begin, name) != 0 ||
-                            !word(t.addr, tw))
+                        // (A7-78: a token at another join's first instruction names no register: the engine keeps a merge's copy,
+                        // `uVar4 = uVar3;`, at the address of the block's first instruction, a `mov.b @(0xe,r5),r0` that neither reads nor
+                        // writes r3; grammar 1 seed 3302704)
+                        if (!t.addr || t.addr == at || targets.count(t.addr) || t.begin >= t.end || t.end > l.text.size() ||
+                            l.text.compare(t.begin, t.end - t.begin, name) != 0 || !word(t.addr, tw))
                             continue;
                         const std::string ops = sfe::Sh2Decode(t.addr, tw).Operands;
                         for (size_t k = 0; k + 1 < ops.size(); ++k)
