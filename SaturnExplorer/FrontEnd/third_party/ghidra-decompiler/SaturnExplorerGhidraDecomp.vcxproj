@@ -85,6 +85,7 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
+      <DisableSpecificWarnings>4101;4005;4146;4099;4838;4996;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <!-- Optimised in every configuration, as in the CMake build: unoptimised the engine is many times slower and the larger units near the object section limit. /O2 excludes the Debug runtime checks; the runtime library stays the configuration's own so the objects link with the rest. -->
       <Optimization>MaxSpeed</Optimization>
       <BasicRuntimeChecks>Default</BasicRuntimeChecks>
@@ -100,6 +101,7 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
+      <DisableSpecificWarnings>4101;4005;4146;4099;4838;4996;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <!-- Optimised in every configuration, as in the CMake build: unoptimised the engine is many times slower and the larger units near the object section limit. /O2 excludes the Debug runtime checks; the runtime library stays the configuration's own so the objects link with the rest. -->
       <Optimization>MaxSpeed</Optimization>
       <BasicRuntimeChecks>Default</BasicRuntimeChecks>
@@ -116,6 +118,7 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
+      <DisableSpecificWarnings>4101;4005;4146;4099;4838;4996;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <!-- Optimised in every configuration, as in the CMake build: unoptimised the engine is many times slower and the larger units near the object section limit. /O2 excludes the Debug runtime checks; the runtime library stays the configuration's own so the objects link with the rest. -->
       <Optimization>MaxSpeed</Optimization>
       <BasicRuntimeChecks>Default</BasicRuntimeChecks>
@@ -131,6 +134,7 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
+      <DisableSpecificWarnings>4101;4005;4146;4099;4838;4996;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <!-- Optimised in every configuration, as in the CMake build: unoptimised the engine is many times slower and the larger units near the object section limit. /O2 excludes the Debug runtime checks; the runtime library stays the configuration's own so the objects link with the rest. -->
       <Optimization>MaxSpeed</Optimization>
       <BasicRuntimeChecks>Default</BasicRuntimeChecks>

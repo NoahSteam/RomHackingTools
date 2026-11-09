@@ -6149,6 +6149,21 @@ void TestHardwareVolatility()
     CHECK(Has(r.Text(), "*param_2") && Has(r.Text(), "*param_1"));
     r = run("mac.w through pointers", macWPtr);
     CHECK(Ledger(r, { Rd(0, 2), Rd(0, 2) }));
+    // A11-13: `repeatedOnPath` seen set. No correct engine output sets it (the corpus counts 0), so mutant H-led-repeat survived. With the
+    // ledger told that mac.l made one read (not two), its second read reaches the first on one path, and both are flagged; with the
+    // counts used, as above, neither is.
+    {
+        const DecompileResult macOk = d.Decompile(snap, Request(macPtr.base));
+        Sh2Decompiler::SetAccessCountsIgnoredForTests(true);
+        const DecompileResult macRep = d.Decompile(snap, Request(macPtr.base));
+        Sh2Decompiler::SetAccessCountsIgnoredForTests(false);
+        Print("mac.l, access counts ignored", macRep);
+        int flagged = 0, flaggedOk = 0;
+        for (const MemoryAccess& m : macRep.accesses) flagged += m.repeatedOnPath ? 1 : 0;
+        for (const MemoryAccess& m : macOk.accesses) flaggedOk += m.repeatedOnPath ? 1 : 0;
+        CHECK(macRep.accesses.size() == 2 && flagged == 2);
+        CHECK(macOk.accesses.size() == 2 && flaggedOk == 0);
+    }
     r = run("mac.l @r4+,@r4+: one pointer, two reads", macSame);
     CHECK(Ledger(r, { Rd(0, 4), Rd(0, 4) }));
     r = run("mac.l of two registers", macReg);
@@ -16396,6 +16411,16 @@ void TestArea5Confirm()
         { "a5_113", 0x06051300u, { 0x7FD0, 0xD609, 0xE301, 0x4310, 0x8BFD, 0x2638, 0x8900, 0x6351, 0x2438, 0x8901, 0xA004, 0x0009, 0x2630, 0x6240,
                                    0xA000, 0x0009, 0x7F30, 0x000B, 0x0009, 0x0009, 0x2600, 0x2388 } },
         { "a5_111_long", 0x06051200u, { 0xD605, 0xD706, 0x6071, 0xC801, 0x8BFC, 0x3230, 0x8D01, 0x1603, 0x846D, 0x6371, 0x000B, 0x0009, 0x2600, 0x2308, 0xFFFF, 0xFE68 } },
+        // A11-6 (1): `(param_1 & 0x1c) - 0x198`: a register area's address SUBTRACTED from an index the code computes is the same base added
+        // (PointerResolver, INT_SUB of a constant): mov #0x1c,r1 ; and r1,r4 ; mov.l @(lit),r2 (0x198) ; sub r2,r4 ; mov.l @r4,r0 ; rts ; nop
+        { "a11_ptr_sub", 0x06051400u, { 0xE11C, 0x2419, 0xD202, 0x3428, 0x6042, 0x000B, 0x0009, 0x0009, 0x0000, 0x0198 } },
+        // A11-6 (2): a word read at a misaligned address of a register: mov.l @(lit),r1 ; mov.w @r1,r0 ; rts ; nop, at the addresses below
+        { "a11_mis_b", 0x06051500u, { 0xD102, 0x6011, 0x000B, 0x0009, 0x0009, 0x0009, 0x25F8, 0x0003 } },
+        { "a11_mis_cached", 0x06051520u, { 0xD102, 0x6011, 0x000B, 0x0009, 0x0009, 0x0009, 0x05F8, 0x0003 } },
+        { "a11_mis_p3", 0x06051540u, { 0xD102, 0x6011, 0x000B, 0x0009, 0x0009, 0x0009, 0x65F8, 0x0003 } },
+        { "a11_mis_chip", 0x06051560u, { 0xD102, 0x6011, 0x000B, 0x0009, 0x0009, 0x0009, 0xFFFF, 0xFE11 } },
+        { "a11_mis_chip_mirror", 0x06051580u, { 0xD102, 0x6011, 0x000B, 0x0009, 0x0009, 0x0009, 0xFFFF, 0xFE13 } },
+        { "a11_mis_long", 0x060515A0u, { 0xD102, 0x6012, 0x000B, 0x0009, 0x0009, 0x0009, 0x25F8, 0x0002 } },
     };
     for (const W& w : fx)
     {
@@ -16428,6 +16453,26 @@ void TestArea5Confirm()
         // control (fixer): a small negative offset off a pointer parameter names no register
         CHECK(Has(out["a5_101_rawconst"].Text(), "param_1 + -0xc"));
         CHECK(out["a5_101_rawconst"].hardwareNotes.empty());
+    }
+    // A11-6 (1): the subtracted constant of `(param_1 & 0x1c) - 0x198` is the register area 0xFFFFFE68 (PointerResolver, mutant H-ptr-sub: added,
+    // the base is 0x198 and no note names a register).
+    {
+        const DecompileResult& r = out["a11_ptr_sub"];
+        CHECK(Has(r.Text(), "(param_1 & 0x1c) - 0x198"));
+        CHECK(HasNoteAt(r, 0x06051408u, "the pointer is 0xFFFFFE68 (SH2_VCRD) plus an index that is not known", true));
+    }
+    // A11-6 (2): a misaligned access is made at the aligned address, and the registers it reaches are that address's (mutant H-note-reach took
+    // the address as given for the "named" test, and said a "mirror" of a register the line names as it is). Below 0xFFFFFF00 on-chip the
+    // address is decoded as given. No access here is a mirror: the line is the symbol.
+    {
+        CHECK(HasNoteAt(out["a11_mis_b"], 0x06051502u, "the access is made at 0x25F80002 (VDP2_EXTEN)", true));
+        CHECK(HasNoteAt(out["a11_mis_cached"], 0x06051522u, "the access is made at 0x05F80002 (VDP2_EXTEN)", true));
+        CHECK(HasNoteAt(out["a11_mis_p3"], 0x06051542u, "the access is made at 0x65F80002", true));
+        CHECK(HasNoteAt(out["a11_mis_chip"], 0x06051562u, "so the access is made at 0xFFFFFE11 (SH2_FTCSR)", true));
+        CHECK(HasNoteAt(out["a11_mis_chip_mirror"], 0x06051582u, "so the access is made at 0xFFFFFE13 (SH2_FRCL)", true));
+        CHECK(HasNoteAt(out["a11_mis_long"], 0x060515A2u, "the access is made at 0x25F80000 (VDP2_TVMD)", true));
+        for (const char* n : { "a11_mis_b", "a11_mis_cached", "a11_mis_chip", "a11_mis_chip_mirror", "a11_mis_long" })
+            CHECK(!HasNote(out[n], "through a mirror", false));
     }
     // A5-102 (P1): a store to a global was printed after a later store through a pointer that writes the global's old value, so when the
     // pointer is the global's address the text ended with the new value and the code with the old. FIXED (patch 0082: RulePropagateCopy keeps

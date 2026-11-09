@@ -548,6 +548,10 @@ public:
     // use and past other memory operations as upstream prints it. The access ledger's print count and conditional flag are then seen set
     // (A11-5: with the policy on no correct output sets them). On unless cleared. Process-wide.
     static void SetLoadsNotDuplicatedForTests(bool on);
+    // Tests only: the access ledger takes every instruction to have made ONE access of each kind, so an instruction with two (mac.l's
+    // operands) has its second reach the first "on one path" and `repeatedOnPath` is seen set (A11-13: no correct engine output sets
+    // it, so the flag had no positive witness). Off unless set. Process-wide.
+    static void SetAccessCountsIgnoredForTests(bool on);
     // Tests only: the most passes one repeating action of the engine makes before it stops with "Exceeded maximum repeats of"
     // and the signature is withheld (patch 0055; 0 restores the engine's own bound). Process-wide.
     static void SetActionRepeatLimitForTests(int limit);
