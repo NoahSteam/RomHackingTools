@@ -430,7 +430,9 @@ struct DecompileResult
     // not hold, or a word of the frame) or writes of the return register, which the analysis removed with the loop's exit and a lent
     // signature would leave out. Read from the flow's p-code; said by NoteStoresBeforeEndlessLoop. 'insn' is canonical, 'loop' where the
     // loop the code follows starts. A3-178, A3-179: and each call there (`call`), which goes with the code: what it is handed in r4 to r7,
-    // what it returns in r0 and what it writes are lost from the text and from the signature alike.
+    // what it returns in r0 and what it writes are lost from the text and from the signature alike. A3-182: and the first use, in code the
+    // text keeps, of a value the path through such a loop carries into it by an edge the analysis removed (`join`; 'what' names the register
+    // or frame word; a value in r0 at a return is `writesR0`).
     struct EndlessLoopRead
     {
         uint32_t insn = 0;
@@ -438,6 +440,7 @@ struct DecompileResult
         uint32_t loop = 0;
         bool writesR0 = false;
         bool call = false;
+        bool join = false;
     };
     std::vector<EndlessLoopRead> readsAfterEndlessLoop;
     std::vector<uint32_t> callees;        // constant call targets, canonical, sorted

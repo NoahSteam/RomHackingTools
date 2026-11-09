@@ -515,6 +515,9 @@ struct Program
     int postPollStoreWidth = 0;    // ...and the store's width
     int postPollCall = 0;          // version 1 (A3-178): the function (an index of fns, 1) the program's last item calls after a poll; 0: none
     uint32_t postPollCallStore = 0;   // ...and the word of work RAM that function writes, 0: none (A3-179)
+    uint32_t postJoin = 0;         // version 1 (A3-183): the address of work RAM the code a poll leaves for, joined by the path around it, stores at; 0: none
+    int postJoinValue = 0;         // ...the constant the path through the poll gives the stored register
+    int postJoinPoll = -1;         // ...and the poll's literal (the poll is inside a skip, not an item of the function's own)
     std::vector<Func> fns;         // fns[0] is the function a version 1 program is about; later ones follow in memory
 };
 
@@ -561,6 +564,8 @@ struct Gen
     bool postStoreOn = false;
     Rng postCallRng;            // ...and one for A3-178 (a call after a poll, to a second function), from kPostCallFirst on only
     bool postCallOn = false;
+    Rng postJoinRng;            // ...and one for A3-182 (a poll inside a skip, whose exit joins the skip's end with a register set), from kPostJoinFirst on only
+    bool postJoinOn = false;
     // What the function being made changes for good / reads on entry through the wide alphabet and the GBR accesses
     // (an over-approximation: an item the grammar drops again is counted, which the checks that use it allow).
     uint32_t wideClobbers = 0;
@@ -582,7 +587,7 @@ struct Gen
     bool inSpill = false;     // r15 is moved: no local is addressed through it here
     int loopDepth = 0;        // inside a loop body: a pointer advanced here is advanced again by the next iteration
     std::vector<Func> built;  // the functions of this module generated so far (the later ones)
-    Gen(uint64_t seed) : rng(seed), macRng(seed ^ 0x6D61636D61636D61ull), guardRng(seed ^ 0x7367756172643A5Aull), convRng(seed ^ 0x636F6E7663727667ull), wideRng(seed ^ 0x77696465414C5521ull), aliasRng(seed ^ 0x616C696173526E67ull), maskRng(seed ^ 0x6D61736B52616E64ull), placeRng(seed ^ 0x706C616365526E67ull), loopMaskRng(seed ^ 0x6C6F6F704D61736Bull), frameRng(seed ^ 0x6672616D6557616Cull), partialRng(seed ^ 0x7061727469616C52ull), retRng(seed ^ 0x7265747263616C6Cull), bsrfRng(seed ^ 0x6273726652656C21ull), choiceRng(seed ^ 0x63686F6F73657221ull), regionRng(seed ^ 0x726567696F6E5074ull), idiomRng(seed ^ 0x69646F6D52616E64ull), pollBodyRng(seed ^ 0x706F6C6C426F6479ull), slotEntryRng(seed ^ 0x736C6F74456E7472ull), postPollRng(seed ^ 0x706F7374506F6C6Cull), postStoreRng(seed ^ 0x706F737453746F72ull), postCallRng(seed ^ 0x706F737443616C6Cull)
+    Gen(uint64_t seed) : rng(seed), macRng(seed ^ 0x6D61636D61636D61ull), guardRng(seed ^ 0x7367756172643A5Aull), convRng(seed ^ 0x636F6E7663727667ull), wideRng(seed ^ 0x77696465414C5521ull), aliasRng(seed ^ 0x616C696173526E67ull), maskRng(seed ^ 0x6D61736B52616E64ull), placeRng(seed ^ 0x706C616365526E67ull), loopMaskRng(seed ^ 0x6C6F6F704D61736Bull), frameRng(seed ^ 0x6672616D6557616Cull), partialRng(seed ^ 0x7061727469616C52ull), retRng(seed ^ 0x7265747263616C6Cull), bsrfRng(seed ^ 0x6273726652656C21ull), choiceRng(seed ^ 0x63686F6F73657221ull), regionRng(seed ^ 0x726567696F6E5074ull), idiomRng(seed ^ 0x69646F6D52616E64ull), pollBodyRng(seed ^ 0x706F6C6C426F6479ull), slotEntryRng(seed ^ 0x736C6F74456E7472ull), postPollRng(seed ^ 0x706F7374506F6C6Cull), postStoreRng(seed ^ 0x706F737453746F72ull), postCallRng(seed ^ 0x706F737443616C6Cull), postJoinRng(seed ^ 0x706F73744A6F696Eull)
     {
         for (int i = 0; i < 8; ++i) align[i] = 4, pref[i] = 4;
         p.mbox = 0x26001000u + 0x10u * rng.Below(4);
@@ -2280,6 +2285,7 @@ struct Gen
         AddSlotEntryPoll(items, polled);
         AddPostPollRead(items, polled);
         AddPostPollStore(items, polled);
+        AddPostPollJoin(items);
         AddPostPollCall(items, polled);   // (last: it adds a function to p.fns, which moves 'items')
         return p;
     }
@@ -2361,6 +2367,76 @@ struct Gen
         g.tail.push_back(ret);
         p.postPollCall = 1;
         p.fns.push_back(g);
+    }
+
+    // A3-182, A3-183: in one program of two without a poll (from the seeds where the production is drawn), the program ends with a poll
+    // inside a skip, so that the poll's exit joins code the path around it also reaches, and a store of a register that the path through the
+    // poll sets: `mov.l @(lit),r6 ; tst Rx,Rx ; bt J ; (poll) ; mov #k,Rn | add #k,Rn ; J: mov.l Rn,@r6`, or `mov #k,Rn` before the poll. The
+    // analysis takes an unmarked poll of memory the function wrote to run for ever and removes the edge from it to J; the store is kept, with
+    // Rn as the path around the poll leaves it. The text must store k there, or say what it lost and withhold the signature (the oracle's
+    // `endless-join-dropped`). The address is a word of 0x06003060 to 0x0600307C or its cache-through name (no other production names
+    // 0x3060 on), k is 0x50 to 0x7F. Everything is drawn from postJoinRng and appended, so nothing before it moves.
+    void AddPostPollJoin(std::vector<Item>& items)
+    {
+        if (!postJoinOn || disc) return;
+        for (const Item& it : items)
+            if (it.type == Item::Poll) return;   // (a poll before it: the code after that poll is removed with its exit, the join too)
+        if (!postJoinRng.Chance(50)) return;
+        Lit ram;
+        ram.kind = LitKind::Ram;
+        ram.value = (postJoinRng.Chance(50) ? 0x26000000u : 0x06000000u) + 0x3060u + 4u * postJoinRng.Below(8);
+        ram.width = 4;
+        Item ptr;
+        ptr.type = Item::LitPtr;
+        ptr.shape = "post_join.litptr";
+        ptr.reg = 6;
+        ptr.lit = static_cast<int>(p.lits.size());
+        p.lits.push_back(ram);
+        align[6] = 4;
+        pref[6] = 4;
+        items.push_back(ptr);
+        static const int kRegs[4] = { 1, 2, 3, 5 };
+        const int n = kRegs[postJoinRng.Below(4)];
+        const int x = 4 + static_cast<int>(postJoinRng.Below(2));
+        const uint32_t kind = postJoinRng.Below(3);   // 0: mov #k after the poll, 1: add #k after it, 2: mov #k before it
+        const int k = 0x50 + static_cast<int>(postJoinRng.Below(0x30));
+        Item poll;
+        poll.type = Item::Poll;
+        poll.shape = "post_join.poll";
+        poll.reg = 7;
+        Lit mb;
+        mb.kind = LitKind::Mbox;
+        mb.value = p.mbox + 4u * postJoinRng.Below(3);
+        mb.width = postJoinRng.Chance(50) ? 2 : 4;
+        poll.lit = static_cast<int>(p.lits.size());
+        p.lits.push_back(mb);
+        poll.width = mb.width;
+        poll.pollWrite = true;
+        poll.pollValue = 1;
+        poll.untilSet = false;   // `bf`: it waits for bit 0 to clear, and reads back the 1 it wrote
+        align[7] = std::min(align[7], 4);
+        Item set;
+        set.type = Item::Alu;
+        set.shape = kind == 0 ? "post_join.mov" : kind == 1 ? "post_join.add" : "post_join.mov_before";
+        set.words = { uint16_t((kind == 1 ? 0x7000 : 0xE000) | n << 8 | k) };   // mov #k,Rn / add #k,Rn
+        Item sk;
+        sk.type = Item::Skip;
+        sk.shape = "post_join.skip";
+        sk.cond = uint16_t(0x2008 | x << 8 | x << 4);   // tst Rx,Rx
+        sk.onTrue = true;
+        if (kind == 2) sk.kids = { set, poll };
+        else sk.kids = { poll, set };
+        items.push_back(sk);
+        Item st;
+        st.type = Item::Mem;
+        st.shape = "post_join.store";
+        st.base = 6;
+        st.width = 4;
+        st.words = { uint16_t(0x2002 | 6 << 8 | n << 4) };   // mov.l Rn,@r6
+        items.push_back(st);
+        p.postJoin = ram.value;
+        p.postJoinValue = k;
+        p.postJoinPoll = poll.lit;
     }
 
     // A3-175: in one program of two with a poll (from the seeds where the production is drawn), the program ends with a store of a constant
@@ -2496,6 +2572,8 @@ constexpr uint64_t kPostPollFirst = 4200001;
 constexpr uint64_t kPostStoreFirst = 4400001;
 // ...and A3-178's (a call of a second function after a poll), likewise.
 constexpr uint64_t kPostCallFirst = 4800001;
+// ...and A3-182's (a poll inside a skip whose exit joins the skip's end, A3-183), likewise.
+constexpr uint64_t kPostJoinFirst = 5600001;
 
 Program Generate(uint64_t seed)
 {
@@ -2504,6 +2582,7 @@ Program Generate(uint64_t seed)
     g.postPollOn = seed >= kPostPollFirst;
     g.postStoreOn = seed >= kPostStoreFirst;
     g.postCallOn = seed >= kPostCallFirst;
+    g.postJoinOn = seed >= kPostJoinFirst;
     return g.Run();
 }
 
@@ -4347,6 +4426,8 @@ struct Subject
     int postPollStoreWidth = 0;
     int postPollCall = 0;                  // version 1 (A3-178): the function the last item calls after a poll (an index of fns), 0: none
     uint32_t postPollCallStore = 0;        // ...and the word of work RAM it writes, 0: none
+    uint32_t postJoin = 0;                 // version 1 (A3-183): the address of work RAM the store after a poll's join writes, 0: none
+    int postJoinValue = 0;                 // ...and the constant the path through the poll gives it
     std::string literals;                  // for the report
 
     uint16_t WordAt(uint32_t addr) const
@@ -4378,6 +4459,8 @@ Subject MakeSubject(const Program& p)
     s.postPollStoreWidth = p.postPollStoreWidth;
     s.postPollCall = p.postPollCall;
     s.postPollCallStore = p.postPollCallStore;
+    s.postJoin = p.postJoin;
+    s.postJoinValue = p.postJoinValue;
     s.bad = !a.ok;
     s.words = a.words;
     s.codeWords = a.codeWords;
@@ -4406,6 +4489,9 @@ Subject MakeSubject(const Program& p)
         for (const Item& it : fn.items)
             if (it.type == Item::Poll)
                 s.polls.push_back({ Env::MemKey(p.lits[it.lit].value), it.untilSet ? 0u : 1u, it.untilSet ? 1u : 0u, 0, p.lits[it.lit].value });
+    // (A3-183: the poll inside the join's skip, which waits for bit 0 to clear)
+    if (p.postJoinPoll >= 0 && static_cast<size_t>(p.postJoinPoll) < p.lits.size())
+        s.polls.push_back({ Env::MemKey(p.lits[static_cast<size_t>(p.postJoinPoll)].value), 1u, 0u, 0, p.lits[static_cast<size_t>(p.postJoinPoll)].value });
     std::ostringstream o;
     for (size_t i = 0; i < p.lits.size(); ++i)
         if (a.litAddr[i])
@@ -5596,6 +5682,43 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                                                     (subject.postPollCallStore ? " (which writes " + Hex(subject.postPollCallStore) + ")" : std::string()) +
                                                     " after a poll the text takes to run for ever, and the text " +
                                                     (said ? "says it is missing but lends the signature" : "neither calls it nor says it is missing"));
+            }
+        }
+        // ---- (A3-182, A3-183) A value the path through a poll the text takes to run for ever carries into code the text keeps is printed, or said ----
+        // The engine removes the edge by which such a poll leaves for code that the path around it also reaches, and the code there read its
+        // registers as the other path leaves them, with nothing said and the signature lent (round 23's jn1: `*param_1 = param_2` where the
+        // hardware stores 7). The program ends with a poll inside a skip and a store, at the skip's end, of a register the path through the poll
+        // sets to k (Gen::AddPostPollJoin): in a text with `while( true );` a line stores that address with k in it, or a caution says a value is
+        // missing on one path and the signature is withheld.
+        if (r.status == DecompileStatus::Ok && subject.postJoin != 0 && fi == 0 && !subject.v2)
+        {
+            static const std::regex endlessLoop("^\\s*\\}?\\s*while\\( true \\);?\\s*$");
+            static const std::regex storeLine("^\\s*_?[A-Za-z]*Ram([0-9a-f]{8})(?:\\._([0-9]+)_([0-9]+)_)?\\s*(?:[-+*/%&|^]|<<|>>)?=(?!=)");
+            const uint32_t a = subject.postJoin & 0x1FFFFFFFu;
+            char hex[16];
+            std::snprintf(hex, sizeof hex, "0x%x", static_cast<unsigned>(subject.postJoinValue));
+            const std::regex value("(^|[^0-9A-Za-z_])(" + std::to_string(subject.postJoinValue) + "|" + hex + ")([^0-9A-Za-z_]|$)");
+            bool forEver = false, printed = false;
+            for (const Line& line : r.lines)
+            {
+                forEver = forEver || std::regex_search(line.text, endlessLoop);
+                std::smatch m;
+                if (!std::regex_search(line.text, m, storeLine)) continue;
+                const uint32_t first = (static_cast<uint32_t>(std::stoul(m[1].str(), nullptr, 16)) + (m[2].matched ? static_cast<uint32_t>(std::stoul(m[2].str())) : 0u)) & 0x1FFFFFFFu;
+                const uint32_t width = m[3].matched ? static_cast<uint32_t>(std::stoul(m[3].str())) : 4u;
+                printed = printed || (first <= a + 3 && a <= first + width - 1 && std::regex_search(line.text, value));
+            }
+            if (forEver)
+            {
+                count("endless-join.checked");
+                bool said = false;
+                for (const HardwareNote& n : r.hardwareNotes) said = said || (n.caution && n.text.find("here is missing on one path") != std::string::npos);
+                if (printed) count("endless-join.printed");
+                else if (said && !r.prototype.known) count("endless-join.said");
+                else
+                    add("endless-join-dropped", "the program stores " + std::to_string(subject.postJoinValue) + " at " + Hex(subject.postJoin) +
+                                                    " on the path through a poll the text takes to run for ever, and the text " +
+                                                    (said ? "says a value is missing but lends the signature" : "neither stores it nor says it is missing"));
             }
         }
         // ---- (A3-164, patch 0087) A store made before a loop the text takes to run for ever is in the text ----
@@ -15445,6 +15568,20 @@ void TestA3RoutedPins(Sh2Decompiler& d)
             for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
             CHECK(prog.postPollCall == 1 && prog.fns.size() == 2 && count(rep, "endless-call.checked") > 0 && count(rep, "endless-call.said") == count(rep, "endless-call.checked"));
             for (const Finding& f : rep.findings) CHECK(f.sig.find("endless-call") == std::string::npos);
+        }
+        // A3-183's production (grammar 1, from seed 5,600,001): a poll inside a skip whose exit joins the skip's end, where a register the path
+        // through the poll sets is stored. Master's host removed the edge from the poll to the join and said nothing, the signature lent
+        // (`endless-join-dropped` on every such program of the first 300 seeds: 5600001 and 5600021 the first two); now the store is said and the
+        // signature withheld
+        for (const uint64_t sd : { 5600001ull, 5600021ull })
+        {
+            const Program prog = Generate(sd);
+            const Report rep = Evaluate(d, prog, true);
+            std::printf("pin 'A3-182 grammar 1 seed %llu (the poll's join)': %zu finding(s), endless-join checked %d, said %d\n", static_cast<unsigned long long>(sd),
+                        rep.findings.size(), count(rep, "endless-join.checked"), count(rep, "endless-join.said"));
+            for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+            CHECK(prog.postJoin != 0 && count(rep, "endless-join.checked") > 0 && count(rep, "endless-join.said") == count(rep, "endless-join.checked"));
+            for (const Finding& f : rep.findings) CHECK(f.sig.find("endless-join") == std::string::npos);
         }
         const Report seed = Evaluate(d, Generate(3704634), true);
         std::printf("pin 'A3-171 grammar 1 seed 3704634': %zu finding(s), endless-store replaced %d\n", seed.findings.size(), count(seed, "endless-store.replaced"));
