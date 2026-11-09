@@ -576,3 +576,95 @@ mov #7,r6
 mov.l r6,@r3
 rts
 nop
+name s1
+# A3-175 fixer: pp10 with a byte store after the poll (said on 0x06009010, withheld)
+mov.l =0x06002304,r3
+mov.l =0x06001010,r7
+mov #1,r0
+mov.w r0,@r7
+P:
+mov.w @r7,r0
+tst #1,r0
+bf P
+mov #7,r6
+mov.b r6,@r3
+rts
+nop
+name s2
+# A3-175 fixer: two stores of the word after the poll, the second replaces the first (only the second said, on 0x06009012)
+mov.l =0x06002304,r3
+mov.l =0x06001010,r7
+mov #1,r0
+mov.w r0,@r7
+P:
+mov.w @r7,r0
+tst #1,r0
+bf P
+mov #7,r6
+mov.l r6,@r3
+mov #9,r6
+mov.l r6,@r3
+rts
+nop
+name s3
+# A3-175 fixer: a store after the poll, then a call that may read it, then a store that replaces it (the first said: the callee may read it)
+mov.l =0x06002304,r3
+mov.l =0x06001010,r7
+mov #1,r0
+mov.w r0,@r7
+P:
+mov.w @r7,r0
+tst #1,r0
+bf P
+mov.l =0x06009100,r1
+mov #7,r6
+mov.l r6,@r3
+jsr @r1
+nop
+mov #9,r6
+mov.l r6,@r3
+rts
+nop
+name s4
+# A3-175 fixer: the store after the poll on one arm of a test (each arm said where its path returns with the byte unwritten)
+mov.l =0x06002304,r3
+mov.l =0x06001010,r7
+mov #1,r0
+mov.w r0,@r7
+P:
+mov.w @r7,r0
+tst #1,r0
+bf P
+mov #7,r6
+tst #2,r0
+bt Q
+mov.l r6,@r3
+Q:
+rts
+nop
+name s1c
+# A3-175 control: the store before the poll (printed, lent)
+mov.l =0x06002304,r3
+mov.l =0x06001010,r7
+mov #7,r6
+mov.l r6,@r3
+mov #1,r0
+mov.w r0,@r7
+P:
+mov.w @r7,r0
+tst #1,r0
+bf P
+rts
+nop
+name s2c
+# A3-175 control: after the poll a register is written and nothing stored (lent, nothing said)
+mov.l =0x06001010,r7
+mov #1,r0
+mov.w r0,@r7
+P:
+mov.w @r7,r0
+tst #1,r0
+bf P
+mov #7,r6
+rts
+nop

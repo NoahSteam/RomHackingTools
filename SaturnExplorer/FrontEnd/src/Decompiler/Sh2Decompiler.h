@@ -414,7 +414,8 @@ struct DecompileResult
     // writes (no op of the store's instruction writes every byte of it), from which a path of the flow reaches a loop the analysis takes
     // to run for ever (a block from which no RETURN is reached, on a cycle) with no later store of the code's to those bytes first. Each
     // with the instruction (canonical), the address, the width and where that loop starts. Read from the final p-code, not from the
-    // engine's warnings; said by NoteStoresBeforeEndlessLoop.
+    // engine's warnings; said by NoteStoresBeforeEndlessLoop. A3-175: and such stores in the code after the loop, which the analysis
+    // removed with the loop's exit, that a path leaves that code (a return, a call, a block the text keeps) with a byte of unrewritten.
     struct EndlessLoopStore
     {
         uint32_t insn = 0;
@@ -422,6 +423,7 @@ struct DecompileResult
         uint32_t size = 0;
         uint32_t loop = 0;
         bool inLoop = false;   // the store is in the loop's own code (a store in a poll's body), not before it
+        bool afterLoop = false;   // (A3-175) ...or in the code after it, which the analysis removed with the loop's exit
     };
     std::vector<EndlessLoopStore> storesBeforeEndlessLoop;
     // A3-173: what the code after such a loop reads of the caller's (a register that still holds its value on entry that the signature does

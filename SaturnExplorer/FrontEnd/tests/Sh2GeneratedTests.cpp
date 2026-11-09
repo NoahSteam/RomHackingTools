@@ -511,6 +511,8 @@ struct Program
     std::vector<Lit> lits;
     uint32_t mbox = 0x26001000u;   // the mailbox the request marks volatile, 16 bytes
     int postPollRead = 0;          // version 1 (A3-173): the parameter register (4 to 7) the program's last item stores, after a poll; 0: none
+    uint32_t postPollStore = 0;    // version 1 (A3-175): the address of work RAM the program's last item stores a constant at, after a poll; 0: none
+    int postPollStoreWidth = 0;    // ...and the store's width
     std::vector<Func> fns;         // fns[0] is the function a version 1 program is about; later ones follow in memory
 };
 
@@ -553,6 +555,8 @@ struct Gen
     bool slotEntryOn = false;   // ...drawn for the seeds from kSlotEntryFirst on only (Generate)
     Rng postPollRng;            // ...and one for A3-173 (a parameter register stored after a poll), for the seeds from kPostPollFirst on only
     bool postPollOn = false;
+    Rng postStoreRng;           // ...and one for A3-175 (a constant stored at a constant address of work RAM after a poll), from kPostStoreFirst on only
+    bool postStoreOn = false;
     // What the function being made changes for good / reads on entry through the wide alphabet and the GBR accesses
     // (an over-approximation: an item the grammar drops again is counted, which the checks that use it allow).
     uint32_t wideClobbers = 0;
@@ -574,7 +578,7 @@ struct Gen
     bool inSpill = false;     // r15 is moved: no local is addressed through it here
     int loopDepth = 0;        // inside a loop body: a pointer advanced here is advanced again by the next iteration
     std::vector<Func> built;  // the functions of this module generated so far (the later ones)
-    Gen(uint64_t seed) : rng(seed), macRng(seed ^ 0x6D61636D61636D61ull), guardRng(seed ^ 0x7367756172643A5Aull), convRng(seed ^ 0x636F6E7663727667ull), wideRng(seed ^ 0x77696465414C5521ull), aliasRng(seed ^ 0x616C696173526E67ull), maskRng(seed ^ 0x6D61736B52616E64ull), placeRng(seed ^ 0x706C616365526E67ull), loopMaskRng(seed ^ 0x6C6F6F704D61736Bull), frameRng(seed ^ 0x6672616D6557616Cull), partialRng(seed ^ 0x7061727469616C52ull), retRng(seed ^ 0x7265747263616C6Cull), bsrfRng(seed ^ 0x6273726652656C21ull), choiceRng(seed ^ 0x63686F6F73657221ull), regionRng(seed ^ 0x726567696F6E5074ull), idiomRng(seed ^ 0x69646F6D52616E64ull), pollBodyRng(seed ^ 0x706F6C6C426F6479ull), slotEntryRng(seed ^ 0x736C6F74456E7472ull), postPollRng(seed ^ 0x706F7374506F6C6Cull)
+    Gen(uint64_t seed) : rng(seed), macRng(seed ^ 0x6D61636D61636D61ull), guardRng(seed ^ 0x7367756172643A5Aull), convRng(seed ^ 0x636F6E7663727667ull), wideRng(seed ^ 0x77696465414C5521ull), aliasRng(seed ^ 0x616C696173526E67ull), maskRng(seed ^ 0x6D61736B52616E64ull), placeRng(seed ^ 0x706C616365526E67ull), loopMaskRng(seed ^ 0x6C6F6F704D61736Bull), frameRng(seed ^ 0x6672616D6557616Cull), partialRng(seed ^ 0x7061727469616C52ull), retRng(seed ^ 0x7265747263616C6Cull), bsrfRng(seed ^ 0x6273726652656C21ull), choiceRng(seed ^ 0x63686F6F73657221ull), regionRng(seed ^ 0x726567696F6E5074ull), idiomRng(seed ^ 0x69646F6D52616E64ull), pollBodyRng(seed ^ 0x706F6C6C426F6479ull), slotEntryRng(seed ^ 0x736C6F74456E7472ull), postPollRng(seed ^ 0x706F7374506F6C6Cull), postStoreRng(seed ^ 0x706F737453746F72ull)
     {
         for (int i = 0; i < 8; ++i) align[i] = 4, pref[i] = 4;
         p.mbox = 0x26001000u + 0x10u * rng.Below(4);
@@ -2271,7 +2275,47 @@ struct Gen
         }
         AddSlotEntryPoll(items, polled);
         AddPostPollRead(items, polled);
+        AddPostPollStore(items, polled);
         return p;
+    }
+
+    // A3-175: in one program of two with a poll (from the seeds where the production is drawn), the program ends with a store of a constant
+    // at a constant address of work RAM that nothing else of the program names (`mov.l @(lit),r6 ; mov #k,r1 ; mov.x r1,@r6`): code after the
+    // poll that writes ordinary memory and reads nothing of the caller's. The analysis takes an unmarked poll of memory the function wrote to
+    // run for ever and removes the code after it, this store with it; the text must print it, or say it is missing and withhold the signature
+    // (the oracle's `endless-after-store-dropped`). Everything is drawn from postStoreRng and appended, so nothing before it moves.
+    void AddPostPollStore(std::vector<Item>& items, bool polled)
+    {
+        if (!postStoreOn || !polled || disc || !postStoreRng.Chance(50)) return;
+        Lit ram;
+        ram.kind = LitKind::Ram;
+        // (0x3000 on: the RAM literals of the other productions are at 0x2000 to 0x23FF of a partition, the mailboxes at 0x1000 to 0x103F)
+        ram.value = (postStoreRng.Chance(50) ? 0x26000000u : 0x06000000u) + 0x3000u + 4u * postStoreRng.Below(8);
+        const int w = 1 << postStoreRng.Below(3);
+        ram.width = w;
+        Item ptr;
+        ptr.type = Item::LitPtr;
+        ptr.shape = "post_store.litptr";
+        ptr.reg = 6;
+        ptr.lit = static_cast<int>(p.lits.size());
+        p.lits.push_back(ram);
+        align[6] = std::min(4, w);
+        pref[6] = w;
+        items.push_back(ptr);
+        Item k;
+        k.type = Item::Alu;
+        k.shape = "post_store.const";
+        k.words = { uint16_t(0xE100 | (1 + postStoreRng.Below(0x7F))) };   // mov #k,r1
+        items.push_back(k);
+        Item st;
+        st.type = Item::Mem;
+        st.shape = "post_store.store";
+        st.base = 6;
+        st.width = w;
+        st.words = { uint16_t(0x2000 | 6 << 8 | 1 << 4 | (w == 1 ? 0 : w == 2 ? 1 : 2)) };   // mov.x r1,@r6
+        items.push_back(st);
+        p.postPollStore = ram.value;
+        p.postPollStoreWidth = w;
     }
 
     // A3-173: in one program of two with a poll (from the seeds where the production is drawn), the program's last item stores a parameter
@@ -2364,12 +2408,15 @@ struct Gen
 constexpr uint64_t kSlotEntryFirst = 3800001;
 // ...and A3-173's (a parameter register stored after a poll), from the first fresh range after it was added.
 constexpr uint64_t kPostPollFirst = 4200001;
+// ...and A3-175's (a constant stored at a constant address of work RAM after a poll), likewise.
+constexpr uint64_t kPostStoreFirst = 4400001;
 
 Program Generate(uint64_t seed)
 {
     Gen g(seed);
     g.slotEntryOn = seed >= kSlotEntryFirst;
     g.postPollOn = seed >= kPostPollFirst;
+    g.postStoreOn = seed >= kPostStoreFirst;
     return g.Run();
 }
 
@@ -4134,6 +4181,29 @@ bool SaidMissing(const DecompileResult& r, uint32_t insn)
     return false;
 }
 
+// A3-172: a statement line of the text that reaches a `return` at its own depth, before its block closes, with nothing in between that could
+// leave that way (a `goto`, `break` or `continue`, a label, a loop the text takes to run for ever): every path of the text through it returns.
+// The store such a line prints is not one a run made before a loop it never leaves. Both instances of an instruction the flow decodes twice
+// (the slot of a `bf/s` that a branch also reaches) carry its address, so the address does not tell a line of the one from a line of the
+// other; where the text puts the line does.
+bool LineReturnsFirst(const std::vector<Line>& lines, size_t i)
+{
+    static const std::regex leaves("\\bgoto\\b|\\bbreak;|\\bcontinue;|while\\( true \\)|^\\s*[A-Za-z_][A-Za-z_0-9]*:\\s*$");
+    static const std::regex ret("^\\s*return\\b");
+    static const std::regex closes("^\\s*\\}");
+    int depth = 0;
+    for (size_t j = i + 1; j < lines.size(); ++j)
+    {
+        const std::string& t = lines[j].text;
+        if (std::regex_search(t, leaves)) return false;
+        if (depth == 0 && std::regex_search(t, closes)) return false;   // the block closes (`}`, `} else {`, `} while (...)`)
+        if (depth == 0 && std::regex_search(t, ret)) return true;
+        for (char c : t) depth += c == '{' ? 1 : c == '}' ? -1 : 0;
+        if (depth < 0) return false;
+    }
+    return false;
+}
+
 // ---- One seed -------------------------------------------------------------------------------
 
 struct Finding
@@ -4186,6 +4256,8 @@ struct Subject
     bool markVolatile = false;             // a second request marks [volFirst, volLast] volatile
     uint32_t volFirst = 0, volLast = 0;
     int postPollRead = 0;                  // version 1 (A3-173): the parameter register the last item stores after a poll
+    uint32_t postPollStore = 0;            // version 1 (A3-175): the address of work RAM the last item stores a constant at after a poll
+    int postPollStoreWidth = 0;
     std::string literals;                  // for the report
 
     uint16_t WordAt(uint32_t addr) const
@@ -4213,6 +4285,8 @@ Subject MakeSubject(const Program& p)
     const Assembled a = Assemble(p);
     s.v2 = p.version == 2;
     s.postPollRead = p.postPollRead;
+    s.postPollStore = p.postPollStore;
+    s.postPollStoreWidth = p.postPollStoreWidth;
     s.bad = !a.ok;
     s.words = a.words;
     s.codeWords = a.codeWords;
@@ -5364,6 +5438,43 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                                                     std::to_string(r.prototype.params.size()) + " parameter(s)");
             }
         }
+        // ---- (A3-175) A store of work RAM the code makes after a poll the text takes to run for ever is printed, or said ----
+        // The engine removes the code after such a poll with the loop's exit, and a store of ordinary memory at a constant address there went
+        // with nothing said, the signature lent: its callers keep the old word across the call, where on the hardware the poll ends and the
+        // callee writes it. The program ends with a store of a constant at an address nothing else of it names (Gen::AddPostPollStore): in a
+        // text with `while( true );` a line stores it, or a caution says the write of that address is missing and the signature is withheld.
+        if (r.status == DecompileStatus::Ok && subject.postPollStore != 0 && subject.fns.size() == 1)
+        {
+            static const std::regex endlessLoop("^\\s*\\}?\\s*while\\( true \\);?\\s*$");
+            static const std::regex storeLine("^\\s*[A-Za-z]*Ram([0-9a-f]{8})(?:\\._([0-9]+)_([0-9]+)_)?\\s*(?:[-+*/%&|^]|<<|>>)?=(?!=)");
+            static const std::regex missing("-byte write of 0x([0-9A-F]{8}) here is missing");
+            const uint32_t a = subject.postPollStore & 0x1FFFFFFFu, last = a + static_cast<uint32_t>(subject.postPollStoreWidth) - 1;
+            bool forEver = false, printed = false;
+            for (const Line& line : r.lines)
+            {
+                forEver = forEver || std::regex_search(line.text, endlessLoop);
+                std::smatch m;
+                if (!std::regex_search(line.text, m, storeLine)) continue;
+                const uint32_t first = (static_cast<uint32_t>(std::stoul(m[1].str(), nullptr, 16)) + (m[2].matched ? static_cast<uint32_t>(std::stoul(m[2].str())) : 0u)) & 0x1FFFFFFFu;
+                const uint32_t width = m[3].matched ? static_cast<uint32_t>(std::stoul(m[3].str())) : 4u;
+                printed = printed || (first <= last && a <= first + width - 1);
+            }
+            if (forEver)
+            {
+                count("endless-after-store.checked");
+                bool said = false;
+                for (const HardwareNote& n : r.hardwareNotes)
+                {
+                    std::smatch m;
+                    if (n.caution && std::regex_search(n.text, m, missing) && (static_cast<uint32_t>(std::stoul(m[1].str(), nullptr, 16)) & 0x1FFFFFFFu) == a) said = true;
+                }
+                if (printed) count("endless-after-store.printed");
+                else if (said && !r.prototype.known) count("endless-after-store.said");
+                else
+                    add("endless-after-store-dropped", "the program stores " + std::to_string(subject.postPollStoreWidth) + " byte(s) at " + Hex(subject.postPollStore) +
+                                                           " after a poll the text takes to run for ever, and the text " + (said ? "says it is missing but lends the signature" : "neither stores there nor says it is missing"));
+            }
+        }
         // ---- (A3-164, patch 0087) A store made before a loop the text takes to run for ever is in the text ----
         // A global's value is live at a return only, so once the engine took a poll of memory the request leaves unmarked for a loop that
         // never ends (the poll reads back the function's own write: `do {} while( true );`) and removed the return, every store of ordinary
@@ -5378,11 +5489,19 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
             static const std::regex storeAt("^\\s*[A-Za-z]*Ram([0-9a-f]{8})(?:\\._([0-9]+)_([0-9]+)_)?\\s*(?:[-+*/%&|^]|<<|>>)?=(?!=)");
             bool forEver = false;
             std::vector<std::pair<uint32_t, uint32_t>> printed;   // [first, last] of each global a line stores
-            for (const Line& line : r.lines)
+            int returning = 0;
+            for (size_t li = 0; li < r.lines.size(); ++li)
             {
+                const Line& line = r.lines[li];
                 forEver = forEver || std::regex_search(line.text, endless);
                 std::smatch m;
                 if (!std::regex_search(line.text, m, storeAt)) continue;
+                // (A3-172: a line every path of the text through which returns is no store a run that stays in the loop made)
+                if (LineReturnsFirst(r.lines, li))
+                {
+                    ++returning;
+                    continue;
+                }
                 const uint32_t first = (static_cast<uint32_t>(std::stoul(m[1].str(), nullptr, 16)) + (m[2].matched ? static_cast<uint32_t>(std::stoul(m[2].str())) : 0u)) & 0x1FFFFFFFu;
                 const uint32_t width = m[3].matched ? static_cast<uint32_t>(std::stoul(m[3].str())) : 4u;
                 printed.emplace_back(first, first + width - 1);
@@ -5392,6 +5511,7 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
             {
                 if (!forEver || run.finished) continue;
                 count("endless-store.runs");
+                if (returning) count("endless-store.returning-lines", returning);
                 auto foldedStore = [&](const TraceRec& t) {
                     if (t.depth != 0 || !t.write) return false;
                     for (const AccessFate& f : r.accessFates)
@@ -15094,12 +15214,14 @@ void TestA3RoutedPins(Sh2Decompiler& d)
             // A3-170 (area 3 round 20; Docs/Decompiler/tools/a3_round20/fixtures.src): a `bra` into the slot of a `bf/s` makes the slot's
             // address two instances of the flow. One is printed on the path to a return; the other, on the path that reaches only the poll,
             // was taken for printed by its address: `endless-store-dropped` (d1). Now said: d1, and the control d1c (the store written out
-            // twice). d2, the printed instance a statement of its own, is said too, but this check does not count it: it takes the global's
-            // store line, `xRam06002304 = param_3;`, for every instance of the instruction, and so it was blind to d2 on the old host (A3-172).
-            // The host's pins in Sh2DecompilerTests (TestA3164Fix) hold d1, d1c, d2 and the control d1n
+            // twice). d2, the printed instance a statement of its own, is said too. The check took the global's store line,
+            // `xRam06002304 = param_3;`, for every instance of the instruction, and so it was blind to d2 on the old host (A3-172); a store
+            // line every path of the text through which returns (LineReturnsFirst: `xRam06002304 = param_3; return param_2;`) counts for no
+            // store of a run that stays in the loop now, so d2 asks for the caution. The host's pins in Sh2DecompilerTests (TestA3164Fix)
+            // hold d1, d1c, d2 and the control d1n
             { "A3-170 d1", "D309 D70A E001 2701 6043 C801 890A 3450 8F06 2362 6071 C801 8BFC 2342 000B 0009 000B 0009 AFF5 0009 0600 2304 0600 1010", true },
             { "A3-170 control d1c", "D30A D70B E001 2701 6043 C801 890A 3450 8F06 2362 6071 C801 8BFC 2342 000B 0009 000B 0009 2362 AFF5 0009 0009 0600 2304 0600 1010", true },
-            { "A3-170 d2 (shown by the text's store line)", "D309 D70A E001 2701 6043 C801 8909 8F06 2362 6071 C801 8BFC 2342 000B 0009 000B 6053 AFF5 0009 0009 0600 2304 0600 1010", false },
+            { "A3-170 d2 (A3-172: the text's store line returns first)", "D309 D70A E001 2701 6043 C801 8909 8F06 2362 6071 C801 8BFC 2342 000B 0009 000B 6053 AFF5 0009 0009 0600 2304 0600 1010", true },
         };
         for (const Pin& pin : kPins)
         {

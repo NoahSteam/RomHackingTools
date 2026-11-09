@@ -16159,8 +16159,9 @@ void TestA3164Fix()
     };
     // ...of which these are lent a signature (nothing of the code is missing from their text)
     const char* const kLent[] = { "A3-167 control: a body, no store after the loop", "A3-167 control: a stored register merged under the global's name", "A3-168 control: tas.b, no store after the loop",
-                                  "A3-169 a store the next store before the loop replaces", "A3-169 control: the two stores before rts",
-                                  "A3-170 control: one instance of the slot" };
+                                  "A3-169 a store the next store before the loop replaces", "A3-169 control: the two stores before rts" };
+    // (A3-175: "A3-170 control: one instance of the slot" was lent; its store of r4 after the poll, which replaces the store it prints, is
+    // removed with the loop's exit and is said now, the signature withheld)
     // What the engine still drops (it saw no reader of the write before it took the loop for endless) is said on the store's instruction
     // (Sh2Decompiler::NoteStoresBeforeEndlessLoop), and the signature is withheld. Generator grammar 1 seed 12705, shrunk: `mov.l r1,@r6`
     // (0x06002000), the poll's write and the poll, and `mov.l r0,@r6` after the loop replaces the first store; seed 1209, shrunk: the poll's
@@ -16242,7 +16243,8 @@ void TestA3164Fix()
         Print(c.name, r);
         CHECK(r.status == DecompileStatus::Ok);
         // (a store the text prints is not said; A3-173: the code some of these have after the loop reads an input, which is said apart)
-        for (const HardwareNote& n : r.hardwareNotes) CHECK(!(Has(n.text, "-byte write of") && Has(n.text, "here is missing: the analysis takes the loop at")));
+        // (A3-175: a store after the loop that a return follows is said apart, "removes the code after it")
+        for (const HardwareNote& n : r.hardwareNotes) CHECK(!(Has(n.text, "-byte write of") && Has(n.text, "here is missing: the analysis takes the loop at") && Has(n.text, "drops a write")));
         for (const char* l : kLent)
             if (std::string(l) == c.name && !r.prototype.known)
             {
@@ -16311,10 +16313,14 @@ void TestA3173Fix()
     }
     // The controls: r6 is read before the loop (the signature holds it), or is written before it is read; both are lent, with nothing said
     const Case kLent[] = {
-        { "A3-173 control pp7: r6 tested before the loop", { 0xD305, 0xD706, 0xE001, 0x2701, 0x2668, 0x8903, 0x6071, 0xC801, 0x8BFC, 0x2362, 0x000B, 0x0009,
-                                                              0x0600, 0x2304, 0x0600, 0x1010 }, 0, "" },
-        { "A3-173 control pp10: r6 loaded after the loop", { 0xD305, 0xD706, 0xE001, 0x2701, 0x6071, 0xC801, 0x8BFC, 0xE607, 0x2362, 0x000B, 0x0009, 0x0009,
-                                                            0x0600, 0x2304, 0x0600, 0x1010 }, 0, "" },
+        // (pp7 stored r6 after the loop; that store is A3-175's, said now (TestA3175Fix). pp7m moves r6 to r1 there instead: a read the
+        // signature holds, and nothing stored)
+        { "A3-173 control pp7m: r6 tested before the loop", { 0xD305, 0xD706, 0xE001, 0x2701, 0x2668, 0x8903, 0x6071, 0xC801, 0x8BFC, 0x6163, 0x000B, 0x0009,
+                                                               0x0600, 0x2304, 0x0600, 0x1010 }, 0, "" },
+        // (pp10, r6 loaded after the loop and stored, was this control; its store is A3-175's, said and withheld now (TestA3175Fix). s2c is
+        // pp10 without the store)
+        { "A3-173 control s2c: r6 loaded after the loop", { 0xD704, 0xE001, 0x2701, 0x6071, 0xC801, 0x8BFC, 0xE607, 0x000B, 0x0009, 0x0009, 0x0600, 0x1010 },
+          0, "" },
     };
     for (const Case& c : kLent)
     {
@@ -16339,6 +16345,80 @@ void TestA3173Fix()
         const DecompileResult caller = d.Decompile(snap, q);
         Print("A3-173 m1 caller", caller);
         CHECK(caller.status == DecompileStatus::Ok && !caller.prototype.known);
+    }
+}
+
+// A3-175 (found by the A3-173 fixer; Docs/Decompiler/tools/a3_round21/fixtures.src pp10, s1 to s4, s1c). A store of ordinary memory at a
+// constant address that the code makes after a poll the analysis takes to run for ever went with the loop's exit, nothing said, and the
+// function was lent `void (void)`: its callers keep the old word across the call, where on the hardware the poll ends and the callee writes
+// it. Said on the store now ("removes the code after it, this write with it") and the signature withheld, as for a store before the loop.
+void TestA3175Fix()
+{
+    std::vector<uint8_t> hw(0x100000u, 0);
+    Sh2Decompiler d(gConfig);
+    struct Case
+    {
+        const char* name;
+        std::vector<uint16_t> words;
+        uint32_t at;          // the store the caution is on
+        const char* what;     // ...its text
+        uint32_t notAt;       // a store with no caution (the next one replaces it), or 0
+    };
+    const Case kSaid[] = {
+        { "A3-175 pp10: the word stored after the poll", { 0xD305, 0xD706, 0xE001, 0x2701, 0x6071, 0xC801, 0x8BFC, 0xE607, 0x2362, 0x000B, 0x0009, 0x0009,
+                                                          0x0600, 0x2304, 0x0600, 0x1010 },
+          0x06009010u, "the 4-byte write of 0x06002304 here is missing: the analysis takes the loop at 0x06009008 to run for ever and removes the code after it", 0 },
+        { "A3-175 s1: a byte", { 0xD305, 0xD706, 0xE001, 0x2701, 0x6071, 0xC801, 0x8BFC, 0xE607, 0x2360, 0x000B, 0x0009, 0x0009, 0x0600, 0x2304, 0x0600, 0x1010 },
+          0x06009010u, "the 1-byte write of 0x06002304 here is missing", 0 },
+        // (the first store is replaced by the second before the return, as in any function: not said)
+        { "A3-175 s2: two stores, the second replaces the first", { 0xD306, 0xD707, 0xE001, 0x2701, 0x6071, 0xC801, 0x8BFC, 0xE607, 0x2362, 0xE609, 0x2362,
+                                                                   0x000B, 0x0009, 0x0009, 0x0600, 0x2304, 0x0600, 0x1010 },
+          0x06009014u, "removes the code after it, this write with it", 0x06009010u },
+        // (a call between them may read the first: both said)
+        { "A3-175 s3: a call between the two stores", { 0xD307, 0xD708, 0xE001, 0x2701, 0x6071, 0xC801, 0x8BFC, 0xD106, 0xE607, 0x2362, 0x410B, 0x0009, 0xE609,
+                                                        0x2362, 0x000B, 0x0009, 0x0600, 0x2304, 0x0600, 0x1010, 0x0600, 0x9100 },
+          0x06009012u, "removes the code after it, this write with it", 0 },
+        // (pp7: r6 is tested before the loop, so the signature holds it and its read is not said; its store after the loop is)
+        { "A3-175 pp7: r6 tested before the loop, stored after it", { 0xD305, 0xD706, 0xE001, 0x2701, 0x2668, 0x8903, 0x6071, 0xC801, 0x8BFC, 0x2362, 0x000B,
+                                                                     0x0009, 0x0600, 0x2304, 0x0600, 0x1010 },
+          0x06009012u, "removes the code after it, this write with it", 0 },
+        { "A3-175 s4: the store on one arm of a test", { 0xD306, 0xD707, 0xE001, 0x2701, 0x6071, 0xC801, 0x8BFC, 0xE607, 0xC802, 0x8900, 0x2362, 0x000B, 0x0009,
+                                                         0x0009, 0x0600, 0x2304, 0x0600, 0x1010 },
+          0x06009014u, "removes the code after it, this write with it", 0 },
+    };
+    for (const Case& c : kSaid)
+    {
+        // (s3's callee at 0x06009100: rts ; nop)
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, c.words, { { 0x06009100u, 0x000B }, { 0x06009102u, 0x0009 } });
+        Print(c.name, r);
+        CHECK(r.status == DecompileStatus::Ok && Has(r.Text(), "while( true )") && !r.prototype.known);
+        CHECK(HasNoteAt(r, c.at, c.what));
+        if (c.notAt != 0) CHECK(!HasNoteAt(r, c.notAt, "here is missing"));
+        // (s3: the call may change r3, so the store after it is through a pointer, which the removal caution says)
+        if (Has(c.name, "s3")) CHECK(HasNoteAt(r, 0x0600901Au, "the 4-byte write through a pointer here is missing"));
+        else CHECK(Has(r.prototypeWithheld, "a write after a loop the analysis takes to run for ever is missing"));
+        CHECK(!HasNote(r, "the read of", true));   // (nothing of the caller's is read after the loop: r6 is written there, or held)
+    }
+    // The controls: the store before the poll is printed and lent (s1c); with the mailbox marked the poll ends and the store after it is
+    // printed and lent (pp10 marked)
+    {
+        const DecompileResult r = a7r4::DecompileWords(d, hw, 0x06009000u, { 0xD305, 0xD706, 0xE607, 0x2362, 0xE001, 0x2701, 0x6071, 0xC801, 0x8BFC, 0x000B, 0x0009,
+                                                                            0x0009, 0x0600, 0x2304, 0x0600, 0x1010 });
+        Print("A3-175 control s1c: the store before the poll", r);
+        CHECK(r.status == DecompileStatus::Ok && r.prototype.known && Has(r.Text(), "xRam06002304 = 7;"));
+        CHECK(!HasNote(r, "here is missing", true));
+    }
+    {
+        const std::vector<uint16_t> words = { 0xD305, 0xD706, 0xE001, 0x2701, 0x6071, 0xC801, 0x8BFC, 0xE607, 0x2362, 0x000B, 0x0009, 0x0009, 0x0600, 0x2304,
+                                              0x0600, 0x1010 };
+        std::fill(hw.begin(), hw.end(), 0);
+        for (size_t i = 0; i < words.size(); ++i) dts::Put16(hw, 0x9000u + 2 * i, words[i]);
+        DecompileRequest q = Request(0x06009000u);
+        q.volatileMemory.emplace_back(0x06001010u, 0x06001013u);
+        const DecompileResult r = d.Decompile(MakeSnapshot(hw), q);
+        Print("A3-175 control pp10 with the mailbox marked", r);
+        CHECK(r.status == DecompileStatus::Ok && r.prototype.known && Has(r.Text(), "xRam06002304 = 7;") && !Has(r.Text(), "while( true )"));
+        CHECK(!HasNote(r, "here is missing", true));
     }
 }
 
@@ -17242,6 +17322,7 @@ int main(int argc, char** argv)
         RUN(TestA3155Fix());
         RUN(TestA3164Fix());
         RUN(TestA3173Fix());
+        RUN(TestA3175Fix());
         RUN(TestArea10Round2());
         RUN(TestArea5Confirm());
         RUN(TestArea5Review());
