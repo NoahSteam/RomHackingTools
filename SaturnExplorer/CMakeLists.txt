@@ -413,11 +413,12 @@ if(SE_ENABLE_DECOMPILER)
         # The runner test decompiles the cancellation spike's large fixtures several times (A4).
         # The engine suite takes about 50 s on an idle 4-core machine, so 60 s timed it out
         # whenever anything else was building (A11-17); it shares the runner's ceiling.
-        set_tests_properties(SaturnExplorerSlaFreshnessTests
-                             SaturnExplorerSh2DecompilerTests SaturnExplorerMemorySnapshotTests
+        set_tests_properties(SaturnExplorerSlaFreshnessTests SaturnExplorerMemorySnapshotTests
                              SaturnExplorerSh2FunctionFinderTests SaturnExplorerSh2DecompilerFixtureTests
                              PROPERTIES TIMEOUT ${SE_DECOMP_TIMEOUT_60})
+        # The decompiler suite grows with every round's pins and timed out at 60 s under load too (A11-19).
         set_tests_properties(SaturnExplorerDecompilerRunnerTests SaturnExplorerSh2DecompilerEngineTests
+                             SaturnExplorerSh2DecompilerTests
                              PROPERTIES TIMEOUT ${SE_DECOMP_TIMEOUT_120})
         # Random SH-2 functions against the emulator's access trace (REVIEW_PROGRAM.md, Phase 0), in two
         # grammars: version 1, one function with loads, stores, branches, loops and polls; version 2, modules
