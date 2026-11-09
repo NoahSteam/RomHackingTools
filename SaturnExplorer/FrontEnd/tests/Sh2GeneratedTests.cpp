@@ -7926,6 +7926,8 @@ static void FrameInit(void)
 static int gPrintedCRunSeconds = 30;
 // A pin's hook (A2-98): the text of every function is passed through it before it is compiled, so that a text which never ends can be made from one that does.
 static std::string (*gPrintedCTextHook)(const std::string&) = nullptr;
+// ...and one applied before the globals are declared (A2-130: a global renamed with the other sign's letter is declared by the new name)
+static std::string (*gPrintedCEarlyHook)(const std::string&) = nullptr;
 static std::string RunGuardSource()
 {
     return "#if defined(__unix__) || defined(__APPLE__)\n#include <signal.h>\n#include <unistd.h>\n#include <sys/resource.h>\n"
@@ -7966,6 +7968,12 @@ std::string CHeader()
          // (A3-159) a byte array named whole as a value of its own length: its bytes, the first the most significant (the machine's order)
          "static inline unsigned long long BEARR_(const uint8_t *p, int n) { unsigned long long v = 0; for (int i = 0; i < n; ++i) v = (v << 8) | p[i]; return v; }\n"
          "#define BEARR(a, n) BEARR_((const uint8_t *)(a), (n))\n"
+         // (A2-130) a global's type from its name's letter, the width from the value: the sign of the type of the first value assigned to it is not the global's
+         "#define GSEL_(v, c, i8, u8, i16, u16, i32, u32, i64, u64) _Generic((v), char: c, signed char: i8, unsigned char: u8, short: i16, unsigned short: u16, int: i32, \\\n"
+         "  unsigned int: u32, long: i64, unsigned long: u64, long long: i64, unsigned long long: u64, default: (v))\n"
+         "#define GINT_(v) __typeof__(GSEL_(v, (signed char)0, (signed char)0, (signed char)0, (short)0, (short)0, (int)0, (int)0, (long long)0, (long long)0))\n"
+         "#define GUINT_(v) __typeof__(GSEL_(v, (unsigned char)0, (unsigned char)0, (unsigned char)0, (unsigned short)0, (unsigned short)0, (unsigned)0, (unsigned)0, (unsigned long long)0, (unsigned long long)0))\n"
+         "#define GUNK_(v) GUINT_(v)\n"
          "#define CARRY4(a, b) ((uint32_t)((uint32_t)(a) + (uint32_t)(b)) < (uint32_t)(a))\n"
          "#define CARRY1(a, b) ((uint8_t)((uint8_t)(a) + (uint8_t)(b)) < (uint8_t)(a))\n"
          "#define SCARRY4(a, b) (((int32_t)(a) >= 0) == ((int32_t)(b) >= 0) && (((int32_t)((uint32_t)(a) + (uint32_t)(b)) >= 0) != ((int32_t)(a) >= 0)))\n"
@@ -8486,10 +8494,53 @@ template <int N, int M, bool U> auto operator>>(const Unk<N>& a, const T<M, U>& 
 template <int N, class I, class = typename std::enable_if<IsInt<I>::value>::type> auto operator>>(const Unk<N>& a, I b) -> decltype(UnsignedOf(a) >> b) { return UnsignedOf(a) >> b; }
 )CXX";
 
+static const char kCxxHeaderGlobal[] = R"CXX(// (A2-130) the type of a global from its name's letter (K: 0 signed, 1 unsigned, 2 no sign), the width of the first value assigned to it
+template <int N, int K> struct GSet { typedef T<N, (K == 0)> type; };
+template <int N> struct GSet<N, 2> { typedef Unk<N> type; };
+template <class X, int K, bool I = std::is_integral<X>::value> struct GMk { typedef X type; };
+template <class X, int K> struct GMk<X, K, true> { typedef typename GSet<(int)sizeof(X), K>::type type; };
+template <int N, bool S, int K> struct GMk<T<N, S>, K, false> { typedef typename GSet<N, K>::type type; };
+template <int N, int K> struct GMk<Piece<N>, K, false> { typedef typename GSet<N, K>::type type; };
+template <int N, int K> struct GMk<Unk<N>, K, false> { typedef typename GSet<N, K>::type type; };
+#define GINT_(v) GMk<__typeof__(v), 0>::type
+#define GUINT_(v) GMk<__typeof__(v), 1>::type
+#define GUNK_(v) GMk<__typeof__(v), 2>::type
+)CXX";
+
+// (A2-130) The declaration of a global the text assigns (`iRam06002304 = ...;`). The text never declares it; its type is the engine's, and the only trace of it is the
+// letter its name starts with (type.hh printNameBase: `i` int, `u` uint, `x` no sign, `c` char or code, `b` bool, `f` float, `w` wchar; `p` or `a` before the letter of
+// the pointee or the element). The sign comes from that letter, the width from the value assigned (a CONCAT, SUB, ZEXT or SEXT names its own, which C's
+// reading of the macro does not keep), so a compare, shift or division of the global reads it with the sign the engine means.
+static std::string GlobalDeclType(const std::string& name, const std::string& rhs)
+{
+    const std::string prefix = name.substr(0, name.find("Ram"));
+    const char kind = prefix == "i" || prefix == "c" ? 'i' : prefix == "u" ? 'u' : prefix == "x" ? 'x' : 0;
+    if (kind == 0) return "__typeof__(" + rhs + ")";
+    int width = 0;
+    static const std::regex head("^(CONCAT|SUB|ZEXT|SEXT)([1-8])([1-8])\\(");
+    std::smatch hm;
+    if (std::regex_search(rhs, hm, head))
+    {
+        int depth = 0;
+        size_t end = std::string::npos;
+        for (size_t k = hm[0].length() - 1; k < rhs.size(); ++k)
+        {
+            if (rhs[k] == '(') ++depth;
+            else if (rhs[k] == ')' && --depth == 0) { end = k; break; }
+        }
+        if (end == rhs.size() - 1) width = hm[1].str() == "CONCAT" ? (hm[2].str()[0] - '0') + (hm[3].str()[0] - '0') : (hm[3].str()[0] - '0');
+    }
+    if (width == 0) return std::string(kind == 'i' ? "GINT_(" : kind == 'u' ? "GUINT_(" : "GUNK_(") + rhs + ")";
+    const std::string w = std::to_string(width);
+    if (width == 1 || width == 2 || width == 4 || width == 8) return (kind == 'i' ? "int" : kind == 'u' ? "uint" : "xunknown") + w;
+    return (kind == 'i' ? "unkint" : kind == 'u' ? "unkuint" : "unkbyte") + w;
+}
+
 std::string CxxHeader(bool be = false)
 {
     std::ostringstream o;
     o << (be ? BeHeaderBase() : std::string(kCxxHeaderBase) + kCxxHeaderUnk);
+    o << kCxxHeaderGlobal;
     auto mask = [](int bytes) -> std::string {
         char b[32];
         std::snprintf(b, sizeof b, "0x%sULL", std::string(static_cast<size_t>(bytes) * 2, 'F').c_str());
@@ -9406,6 +9457,7 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
                 rebuilt = out;
             }
         }
+        if (gPrintedCEarlyHook) rebuilt = gPrintedCEarlyHook(rebuilt);
         // (area 3 fixer, A3-148) A global the text names by its address (`pxRam0600f000 = axStack_44;`: a frame address published in RAM) is
         // declared nowhere, and the text did not compile. The function's own write of it gives its type: it is declared after the locals as a
         // static of the type of the first value assigned to it, so the text reads back what it wrote (a callee is not run with it: a text with a
@@ -9425,7 +9477,7 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
                 while (std::getline(lines, l))
                     if (std::regex_match(l, am, assign))
                     {
-                        if (am[1].str().find(n) == std::string::npos) decls += "  static __typeof__(" + am[1].str() + ") " + n + ";\n";
+                        if (am[1].str().find(n) == std::string::npos) decls += "  static " + GlobalDeclType(n, am[1].str()) + " " + n + ";\n";
                         break;
                     }
             }
@@ -12388,6 +12440,48 @@ void TestPrintedC()
                 {
                     std::printf("pin 'A2-128 oracle #%zu': %s (%s)\n", k, b128[k].cls.c_str(), b128[k].detail.substr(0, 150).c_str());
                     CHECK(b128[k].cls == "mismatch" && IsFailing(b128[k]));
+                }
+            }
+            // A2-130: a global at a constant address is declared by the letter its name starts with (the engine's type: `iRam` int4, `uRam` uint4), with the width of the value
+            // assigned, not by the type of that value (a CONCAT is unsigned in both readings). `shar`, `cmp/gt` and a half overwrite of a word read back signed (#0 to #2) agree; the
+            // same words with the unsigned ops (`shlr`, `cmp/hi`) are named `uRam` and agree (#3, #4). The damaged controls name the global with the other sign than its reader
+            // needs (the hook renames it): `mismatch` both ways, which the old declaration passed or failed by the first value assigned.
+            {
+                auto w = [](const char* t) {
+                    std::vector<uint16_t> v;
+                    std::istringstream in(t);
+                    std::string tok;
+                    while (in >> tok) v.push_back(static_cast<uint16_t>(std::strtoul(tok.c_str(), nullptr, 16)));
+                    return v;
+                };
+                const std::vector<CCase> k130 = {
+                    { "A2-130 #0: shar of a global", w("D104 2142 6053 2100 6212 E305 4221 000B 6023 0009 0600 2304") },
+                    { "A2-130 #1: cmp/gt of a global", w("D104 2142 6053 2100 6212 E305 3237 000B 0029 0009 0600 2304") },
+                    { "A2-130 #2: a half overwrite, shar", w("D103 2142 6053 8111 6012 4021 000B 0009 0600 2304") },
+                    { "A2-130 #3: shlr of a global", w("D104 2142 6053 2100 6212 E305 4201 000B 6023 0009 0600 2304") },
+                    { "A2-130 #4: cmp/hi of a global", w("D104 2142 6053 2100 6212 E305 3236 000B 0029 0009 0600 2304") } };
+                const std::vector<CVerdict> r130 = CheckPrintedC(d, k130, nIn, cc, 0x51ED, 8968);
+                for (size_t k = 0; k < r130.size(); ++k)
+                {
+                    std::printf("pin '%s': %s (%s)\n", k130[k].name.c_str(), r130[k].cls.empty() ? "agrees" : r130[k].cls.c_str(), r130[k].detail.substr(0, 90).c_str());
+                    CHECK(r130[k].cls.empty() && r130[k].compared);
+                }
+                CHECK(r130[0].text.find("iRam06002304 = CONCAT13") != std::string::npos);
+                CHECK(r130[3].text.find("uRam06002304 = CONCAT13") != std::string::npos);
+                gPrintedCEarlyHook = [](const std::string& t) {
+                    std::string u = t;
+                    const bool signedName = u.find("iRam") != std::string::npos;
+                    const std::string from = signedName ? "iRam06002304" : "uRam06002304", to = signedName ? "uRam06002304" : "iRam06002304";
+                    for (size_t at = u.find(from); at != std::string::npos; at = u.find(from, at + 1)) u.replace(at, from.size(), to);
+                    return u;
+                };
+                const std::vector<CCase> bad130 = { k130[0], k130[1], k130[2], k130[3], k130[4] };
+                const std::vector<CVerdict> b130 = CheckPrintedC(d, bad130, nIn, cc, 0x51ED, 8969);
+                gPrintedCEarlyHook = nullptr;
+                for (size_t k = 0; k < b130.size(); ++k)
+                {
+                    std::printf("pin 'A2-130 oracle #%zu': %s (%s)\n", k, b130[k].cls.c_str(), b130[k].detail.substr(0, 90).c_str());
+                    CHECK(b130[k].cls == "mismatch" && IsFailing(b130[k]));
                 }
             }
             // A2-126 (the oracle): `(uint4)` of an xunknown (no sign), a field `xStack_4._0_2_` (#0, pgen.py seed 77 shrunk) or a local (#1, seed 3372), is the zero
