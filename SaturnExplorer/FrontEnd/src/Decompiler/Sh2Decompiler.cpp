@@ -8769,10 +8769,21 @@ std::vector<DecompileResult::EndlessLoopStore> StoresBeforeEndlessLoop(const ghi
     // is the instruction's at any instance, block -1.)
     const ghidra::AddrSpace* ram = fd.getArch()->getDefaultDataSpace();
     std::map<std::pair<int, uint32_t>, std::vector<std::pair<uint32_t, uint32_t>>> written;
-    auto instanceOf = [&flow, nf](const ghidra::PcodeOp* o) {
+    // (A3-177: an op the actions made for an instruction that is two instances, the piece heritage joins the stored byte into (`xRam0600228c =
+    // CONCAT11(in_r2,...)`, grammar 1 seed 4404353), counted for both, and the instance on the path that reaches only the loop went unsaid. One
+    // of the two instances is the slot of a delayed branch and the other is not, and an op built for the slot's instruction is marked so
+    // (patch 0075; its address is the branch's): it is the instance whose flow ops are, or are not, the slot's.)
+    std::map<std::pair<uint32_t, bool>, std::set<int>> slotInstances;
+    for (size_t b = 0; b < nf && b < flow.blockOps.size(); ++b)
+        for (const FlowOp& x : flow.blockOps[b])
+            if (instancesOf(x.insn).size() > 1) slotInstances[std::make_pair(x.insn, x.slot)].insert(static_cast<int>(b));
+    auto instanceOf = [&flow, nf, &slotInstances](const ghidra::PcodeOp* o) {
         auto f = flow.ops.find(o->getTime());
-        return f != flow.ops.end() && f->second.first >= 0 && static_cast<size_t>(f->second.first) < nf ? std::make_pair(f->second.first, InstructionOf(o))
-                                                                                                          : std::make_pair(-1, InstructionOf(o));
+        if (f != flow.ops.end() && f->second.first >= 0 && static_cast<size_t>(f->second.first) < nf) return std::make_pair(f->second.first, InstructionOf(o));
+        const bool slot = o->isFromDelaySlot() || static_cast<uint32_t>(o->getAddr().getOffset()) != InstructionOf(o);
+        auto in = slotInstances.find(std::make_pair(InstructionOf(o), slot));
+        if (in != slotInstances.end() && in->second.size() == 1) return std::make_pair(*in->second.begin(), InstructionOf(o));
+        return std::make_pair(-1, InstructionOf(o));
     };
     std::vector<const ghidra::PcodeOp*> silent;
     std::set<const ghidra::HighVariable*> printedHighs;
@@ -8793,6 +8804,25 @@ std::vector<DecompileResult::EndlessLoopStore> StoresBeforeEndlessLoop(const ghi
     for (const ghidra::PcodeOp* o : silent)
         if (o->getIn(0) && !o->getIn(0)->isConstant() && printedHighs.count(o->getOut()->getHigh()) != 0 && o->getIn(0)->getHigh() == o->getOut()->getHigh())
             written[instanceOf(o)].emplace_back(static_cast<uint32_t>(o->getOut()->getOffset()), static_cast<uint32_t>(o->getOut()->getSize()));
+    // The flow blocks that follow a loop (reached from a loop's block by the flow's own edges without entering a block that still has an
+    // op, or another loop): the code the analysis removed with the loop's exit (A3-173, A3-175).
+    std::vector<uint32_t> after(nf, 0);   // the loop a block follows (0: none)
+    {
+        std::vector<std::pair<int, uint32_t>> work;
+        for (size_t b = 0; b < nf; ++b)
+            if (loopAt[b])
+                for (int next : flow.successors[b]) work.emplace_back(next, loopAt[b]);
+        while (!work.empty())
+        {
+            const std::pair<int, uint32_t> w = work.back();
+            work.pop_back();
+            if (w.first < 0 || static_cast<size_t>(w.first) >= nf || after[static_cast<size_t>(w.first)] || loopAt[static_cast<size_t>(w.first)] ||
+                live[static_cast<size_t>(w.first)])
+                continue;
+            after[static_cast<size_t>(w.first)] = w.second;
+            for (int next : flow.successors[static_cast<size_t>(w.first)]) work.emplace_back(next, w.second);
+        }
+    }
     // A3-173: the code after a loop the analysis takes to run for ever is removed with the loop's exit, and what it reads of the caller's
     // is no input of the engine's prototype. The flow blocks that follow a loop (reached from a loop's block by the flow's own edges
     // without entering a block that still has an op, or another loop) are that code. From the flow's own p-code, not the engine's
@@ -8816,23 +8846,6 @@ std::vector<DecompileResult::EndlessLoopStore> StoresBeforeEndlessLoop(const ghi
             return v.offset <= regs[static_cast<size_t>(k)].offset && v.offset + static_cast<ghidra::uintb>(v.size) >= regs[static_cast<size_t>(k)].offset + regs[static_cast<size_t>(k)].size;
         };
         auto isSp = [&sp](const FlowVn& v) { return v.space == sp.space && v.offset == sp.offset && v.size == static_cast<ghidra::int4>(sp.size); };
-        std::vector<uint32_t> after(nf, 0);   // the loop a block follows (0: none)
-        {
-            std::vector<std::pair<int, uint32_t>> work;
-            for (size_t b = 0; b < nf; ++b)
-                if (loopAt[b])
-                    for (int next : flow.successors[b]) work.emplace_back(next, loopAt[b]);
-            while (!work.empty())
-            {
-                const std::pair<int, uint32_t> w = work.back();
-                work.pop_back();
-                if (w.first < 0 || static_cast<size_t>(w.first) >= nf || after[static_cast<size_t>(w.first)] || loopAt[static_cast<size_t>(w.first)] ||
-                    live[static_cast<size_t>(w.first)])
-                    continue;
-                after[static_cast<size_t>(w.first)] = w.second;
-                for (int next : flow.successors[static_cast<size_t>(w.first)]) work.emplace_back(next, w.second);
-            }
-        }
         bool region = false;
         for (uint32_t a : after) region = region || a != 0;
         bool spWritten = false;
@@ -9009,6 +9022,100 @@ std::vector<DecompileResult::EndlessLoopStore> StoresBeforeEndlessLoop(const ghi
         e.inLoop = inLoop;
         out.push_back(e);
     }
+    // A3-175: a store of ordinary memory at a constant address in the code after such a loop goes with the loop's exit, and nothing else says
+    // it (NoteRemovedAccesses says the hardware, marked and pointer accesses only). On the hardware the poll ends and the code makes it, and a
+    // caller that reads the word after the call reads what it wrote. Its record is the fold (the engine made the store a write of the global
+    // before it removed the block) or, where the block went first, the removal with the constant address. It is said when a path of the flow
+    // from it leaves that code (a return, a block that still has an op, the loop again), or reaches a call, with a byte that no later store of
+    // the code's there rewrites first: a write the next one replaces is dropped in any function (A3-169's design).
+    {
+        std::vector<Store> later = stores;
+        for (const ghidra::AccessRecord& rec : fd.getAccessFates())
+        {
+            if (!rec.store || rec.fate != ghidra::fate_unreachable || rec.addr.isInvalid() || rec.addr.getSpace() != ram) continue;
+            const uint32_t a = static_cast<uint32_t>(rec.addr.getOffset());
+            if (InHardwareRange(a) || (fd.getArch()->symboltab->getProperty(rec.addr) & ghidra::Varnode::volatil) != 0) continue;
+            auto f = flow.ops.find(rec.time);
+            if (f == flow.ops.end() || f->second.first < 0 || static_cast<size_t>(f->second.first) >= nf) continue;
+            Store st;
+            st.insn = InstructionOf(rec);
+            st.address = a;
+            st.size = std::min<uint32_t>(static_cast<uint32_t>(rec.size), 32u);
+            st.block = f->second.first;
+            st.pos = f->second.second;
+            later.push_back(st);
+        }
+        // The position of the first call of a block at or after a position (the callee may read the word)
+        auto callFrom = [&flow](int block, uint32_t pos) {
+            const std::vector<FlowOp>& ops = flow.blockOps[static_cast<size_t>(block)];
+            for (size_t k = pos; k < ops.size(); ++k)
+                if (ops[k].code == ghidra::CPUI_CALL || ops[k].code == ghidra::CPUI_CALLIND) return static_cast<uint32_t>(k);
+            return UINT32_MAX;
+        };
+        for (size_t i = 0; i < later.size(); ++i)
+        {
+            const Store& s = later[i];
+            if (!after[static_cast<size_t>(s.block)] || said.count(s.insn) || static_cast<size_t>(s.block) >= flow.blockOps.size()) continue;
+            const uint32_t all = s.size >= 32 ? ~0u : (1u << s.size) - 1u;
+            uint32_t kept = 0;
+            for (int b : { s.block, -1 })
+            {
+                auto w = written.find(std::make_pair(b, s.insn));
+                if (w != written.end())
+                    for (const auto& x : w->second) kept |= bytesOf(s, x.first, x.second);
+            }
+            if ((kept & all) == all) continue;
+            // The bytes the later stores of a block rewrite in [from, to)
+            auto rewritten = [&](int block, uint32_t from, uint32_t to) {
+                uint32_t m = 0;
+                for (size_t k = 0; k < later.size(); ++k)
+                    if (k != i && later[k].block == block && later[k].pos >= from && later[k].pos < to) m |= bytesOf(s, later[k].address, later[k].size);
+                return m;
+            };
+            bool seen = false;
+            std::set<std::pair<int, uint32_t>> visited;
+            std::vector<std::pair<int, uint32_t>> work;
+            {
+                const uint32_t call = callFrom(s.block, s.pos + 1);
+                const uint32_t m = rewritten(s.block, s.pos + 1, call) & all;
+                if (m != all)
+                {
+                    if (call != UINT32_MAX || flow.successors[static_cast<size_t>(s.block)].empty()) seen = true;
+                    for (int next : flow.successors[static_cast<size_t>(s.block)]) work.emplace_back(next, m);
+                }
+            }
+            while (!work.empty() && !seen)
+            {
+                const std::pair<int, uint32_t> st = work.back();
+                work.pop_back();
+                if (st.first < 0 || static_cast<size_t>(st.first) >= nf || !after[static_cast<size_t>(st.first)] ||
+                    static_cast<size_t>(st.first) >= flow.blockOps.size())
+                {
+                    seen = true;   // it leaves the removed code: a block the text keeps, or the loop again
+                    break;
+                }
+                if (!visited.insert(st).second) continue;
+                const uint32_t call = callFrom(st.first, 0);
+                const uint32_t m = (st.second | rewritten(st.first, 0, call)) & all;
+                if (m == all) continue;
+                if (call != UINT32_MAX || flow.successors[static_cast<size_t>(st.first)].empty())
+                {
+                    seen = true;   // a call, or the return
+                    break;
+                }
+                for (int next : flow.successors[static_cast<size_t>(st.first)]) work.emplace_back(next, m);
+            }
+            if (!seen) continue;
+            said.insert(s.insn);
+            DecompileResult::EndlessLoopStore e;
+            e.insn = canonicalOf(s.insn);
+            e.address = s.address;
+            e.size = s.size;
+            e.loop = after[static_cast<size_t>(s.block)];
+            e.afterLoop = true;
+            out.push_back(e);
+        }
+    }
     return out;
 }
 
@@ -9018,12 +9125,15 @@ std::vector<DecompileResult::EndlessLoopStore> StoresBeforeEndlessLoop(const ghi
 // stops at the loop.
 void Sh2Decompiler::NoteStoresBeforeEndlessLoop(DecompileResult& r)
 {
-    bool any = false;
+    bool any = false, before = false;
     for (const DecompileResult::EndlessLoopStore& s : r.storesBeforeEndlessLoop)
     {
         const std::string text = "the " + std::to_string(s.size) + "-byte write of " + Hex8(s.address) + " here is missing: the analysis takes "
-                                 "the loop at " + Hex8(s.loop) + " to run for ever and drops a write " + (s.inLoop ? "in" : "before") + " it that it sees no reader of. A "
-                                 "poll of memory another processor writes folds so unless that memory is marked volatile";
+                                 "the loop at " + Hex8(s.loop) + " to run for ever and " +
+                                 (s.afterLoop ? std::string("removes the code after it, this write with it")
+                                              : std::string("drops a write ") + (s.inLoop ? "in" : "before") + " it that it sees no reader of") +
+                                 ". A poll of memory another processor writes folds so unless that memory is marked volatile";
+        before = before || !s.afterLoop;
         r.hardwareNotes.push_back(HardwareNote{ s.insn, text, true });
         r.warnings.push_back(Hex8(s.insn) + ": " + text);
         any = true;
@@ -9054,8 +9164,9 @@ void Sh2Decompiler::NoteStoresBeforeEndlessLoop(DecompileResult& r)
     std::stable_sort(r.hardwareNotes.begin(), r.hardwareNotes.end(),
                      [](const HardwareNote& x, const HardwareNote& y) { return x.address < y.address; });
     if (r.prototypeWithheld.empty())
-        r.prototypeWithheld = r.storesBeforeEndlessLoop.empty() ? "code after a loop the analysis takes to run for ever reads or leaves what the signature does not hold"
-                                                                : "a write before a loop the analysis takes to run for ever is missing";
+        r.prototypeWithheld = before ? "a write before a loop the analysis takes to run for ever is missing"
+                                     : !r.storesBeforeEndlessLoop.empty() ? "a write after a loop the analysis takes to run for ever is missing"   // (A3-175)
+                                                                          : "code after a loop the analysis takes to run for ever reads or leaves what the signature does not hold";
     r.prototype.known = false;
 }
 

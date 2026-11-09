@@ -19102,3 +19102,61 @@ Branch `review/11-12-leftovers`, from master 3be5daa5d. Closes the open P3 rows 
 ### Runs
 
 Mutants were applied by hand to `Sh2Decompiler.cpp` (reverted) and run against `SaturnExplorerSh2DecompilerTests`: `H-note-reach`, `H-led-repeat` and the `added` mutant fail a check; `H-ptr-sub` passes (equivalent, above). Full `ctest` results are in the hand-back.
+
+## Area 3, A3-175 and A3-172 fixer
+
+Fixer, branch `review/3-a3175-fix`, cut at master `43e945b2`. Host, oracle and generator only: no engine patch, so 0089 stays free. The worktree's RelWithDebInfo build (`-j2`, `ulimit -v 6000000`), the game corpus under `ulimit -v 3500000`. **Both rows are fixed: A3-175 (P2) and A3-172 (P3). Two new rows, both fixed here: A3-176 (P3, oracle) and A3-177 (P1, host), the second found by A3-172's check.**
+
+### A3-175: a store after the endless poll
+
+The engine removes the code after a poll it takes to run for ever (the documented reading of unmarked memory), and a store of ordinary memory at a constant address there went with it: `NoteRemovedAccesses` says hardware, marked and pointer accesses only, and `StoresBeforeEndlessLoop` said stores before the loop. pp10 printed `xRam06001010 = 1; do { } while( true );` and was lent `void (void)`, so a caller kept the old word at 0x06002304 across the call.
+
+* **The region.** A3-173's: the flow blocks reached from a loop block by the flow's own edges without entering a block that still has a live op or another loop. The computation is hoisted out of the read pass so both use it.
+* **The stores.** Each store record of the code's whose flow block is in the region: a fold to a constant address of ordinary memory (the engine made the store a write of the global before it removed the block), or a removal with a constant address that is neither hardware nor marked volatile (the block went first). A store an op of its instruction still writes and the text prints is not taken (as before the loop).
+* **When it is said.** A path of the flow from it leaves the region (a return, a block the text keeps, the loop again) or reaches a call, with a byte no later store of the code's there rewrites first. A write the next one replaces before the return is dropped in any function (A3-169's design) and is not said; a call between them may read the first, so then it is.
+* **What is said.** "the 4-byte write of 0x06002304 here is missing: the analysis takes the loop at 0x06009008 to run for ever and removes the code after it, this write with it. A poll of memory another processor writes folds so unless that memory is marked volatile", on the store's instruction, and the signature is withheld ("a write after a loop the analysis takes to run for ever is missing"). **Lending is withheld**, consistently with A3-173 and A3-164: a lent signature says the function returns, and its callers would then read the word it did not write in the text.
+
+Fixtures (`tools/a3_round21/fixtures.src`, new: s1 to s4, s1c, s2c): pp10, s1 (a byte), s2 (two stores after the loop: the second said, the first not), s3 (a call between them: the first said; the second goes through r3 after the call, a pointer, said by `NoteRemovedAccesses`), s4 (the store on one arm of a test) and pp7 (r6 tested before the loop, stored after it: the store said, the read not) are said and withheld. Controls, lent with nothing said: s1c (the same store before the poll: `xRam06002304 = 7;`), pp10 with the mailbox marked (the poll ends, the store printed). Three earlier controls stored after the loop and are withheld now, as they should be: A3-173's pp7 and pp10 (replaced in `TestA3173Fix` by pp7m, `mov r6,r1` after the loop, and s2c, pp10 without the store) and round 20's d1n in `TestA3164Fix` (its store of r4 after the poll). `TestA3164Fix`'s check that the controls have no store caution now looks at the before-the-loop text ("drops a write"): A3-164's seeds 131 and 281 store the mailbox after the loop and are said.
+
+### A3-172: which instance a store line is
+
+Both instances of a doubled instruction carry its address, so the text cannot be read by address. It can by place: a store line from which the text reaches a `return` at its own depth before its block closes, with no `goto`, `break`, `continue`, label or `while( true )` in between, is on paths that all return (`LineReturnsFirst`), so it is no store a run that never leaves the loop made, whichever instance it is. `endless-store-dropped` no longer takes such a line as showing the store (counted as `endless-store.returning-lines`). Round 20's d2 (`if ((param_1 & 1) != 0) { xRam06002304 = param_3; return param_2; } do { } while( true );`) now asks for the host's caution (its pin is `said`). The rule can only ask for more; in 5,000 seeds from 3,800,001 (the slot-entry production, 128 returning lines) and from 4,400,001 (150) it found nothing but A3-177.
+
+### A3-177 (new, P1): the piece of the other instance
+
+The first run of the new range found grammar 1 seed 4404353 with the A3-172 check, which master's host and master's check passed. Shrunk: `tst r4,r5 ; bf B ; cmp/eq r4,r4 ; bt/s R ; S: mov.b r2,@r6 ; mailbox write ; poll ; ... ; R: rts ; B: bra S`. The slot's instance returns and the text prints the store as `xRam0600228c = CONCAT11(in_r2,(xunknown1)xRam0600228c);` (the word is read after the return): a PIECE the actions made, with no time of the flow, which the A3-170 rule counted for every instance of the instruction. The instance B reaches goes only to the poll and was dropped unsaid. The op is the slot's (patch 0075 marks it, and its address is the branch's), so it is placed now by its slot mark: the instance whose flow ops are, or are not, the slot's, when that is one block; otherwise every instance, as before. The shrunk program gives the caution on 0x0600900A ("drops a write before it") and, for the store after the loop, on 0x06009018 (A3-175).
+
+### A3-176 (new, P3): `_Ram`
+
+The same range gave `endless-store-dropped` on seed 4404731 for a store the text prints as `_Ram26001004 = 1;` (the engine's name when a global's plain name is taken at another width): the store-line pattern did not allow the leading `_`. It does now, in `endless-store-dropped` and in the new check; 4404731 gives 0 findings. (`text-store`'s own pattern, area 3 round 17's, is unchanged.)
+
+### The generator
+
+* **Production** (`AddPostPollStore`, a stream of its own `postStoreRng`, **only for the grammar 1 seeds from 4,400,001**, `kPostStoreFirst`): in one program of two with a poll, the program ends with `mov.l =<addr>,r6 ; mov #k,r1 ; mov.x r1,@r6`, a constant stored at 0x06003000 to 0x0600301C or its cache-through name (no other production names 0x3000 on), at a width of 1, 2 or 4. Every seed below 4,400,001 keeps the program it had.
+* **Oracle** `endless-after-store-dropped`: in a text with `while( true );` of a program with the item, a line stores that address, or a caution says the write of that address is missing and the signature is withheld. Counts `endless-after-store.checked`, `.printed`, `.said`. On master's host: **all 337** such programs of the 5,000 seeds from 4,400,001 fail it (304 seeds in the default request, 33 in the marked one, where another poll still runs for ever); on the fix none (337 checked, 337 said).
+
+### Pins (each fails on master's host: the suite built with master's `Sh2Decompiler.cpp` and `.h` fails 18 checks, in `TestA3175Fix` and `TestA3164Fix`'s A3-177 case only)
+
+* `TestA3175Fix` (`Sh2DecompilerTests.cpp`): pp10, s1, s2, s3, pp7, s4 said and withheld; the controls s1c and pp10 marked lent.
+* `TestA3164Fix`: the A3-177 shrunk program in the said list; d1n out of the lent list.
+* `TestA3173Fix`: pp7m and s2c for pp7 and pp10.
+* `TestA3RoutedPins` (`Sh2GeneratedTests.cpp`): grammar 1 seeds 4400005 and 4400007 (`endless-after-store` checked and said, 0 findings); the words pins: d2 now `said`, the A3-177 shrunk program `said`.
+
+### Runs (on the final code)
+
+| Run | Result |
+|---|---|
+| game corpus (`SE_GAME_LEND=1`, hwram007, hwram008; `tools/a7_round2/corpus.sh`) | every ledger count 0; real entries lent **474 (645 parameters) of 999** and **724 (975) of 1,543**; missing and said **0** and **4**: unchanged. The text of every function, alone and lent, is the same as master's (token dumps of both builds, `F` and `L` lines: no difference). Cautions 5 to 7 (hwram007) and 13 to 22 (hwram008), all the new one (`SE_GAME_NOTES=1`, both builds diffed): hwram007 06005212 at 0600522C and 06005520 at 060055EA (A3-164's idle-loop functions); hwram008 060051FA at 06005214, 06005530 at 060055FE, 06007D22 at 06007D6C, 06007D7E and 06007D92 (three stores of 0x0608DA30 on branches after the loop, which the text prints as `xRam0608da30 = 0; do { } while( true );`), 0600C2DA at 0600C336 and 0600C34C, 0600C49A at 0600C4F6 and 0600C510. Every one of these functions was already withheld, so the lent counts do not move |
+| printed-C (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | 5,585 functions, 5,297 compared: **agrees=5196**, the baseline; narrow-c 130, void-return 227, void-return-lent 24, skipped 8 |
+| generator default run (300 seeds and the pins) | **0 findings**, all passed |
+| grammar 1, 4,400,001 to 4,405,000 (the new range, canary off) | 18 failing seeds, only the known classes: `folded-store-after-access` (n 10, v 6; area 5), `v:map-copy-store` 1, `v:map-way-back` 1 (area 7). `endless-after-store` checked 337, said 337; `endless-read` checked 336, withheld 336; `endless-store` checked 68,461, said 18,791, returning lines 150. Master's host on the same range: `endless-after-store-dropped` on 304 + 33 seeds, `endless-store-dropped` on 4404353 (A3-177) |
+| grammar 1, 3,800,001 to 3,805,000 (the slot-entry production; a check of A3-172's rule and A3-177's placement) | 25 failing seeds, all `folded-store-after-access` (n 11, v 14; area 5); no `endless-store-dropped` (checked 57,722, returning lines 128) |
+| decompiler suite with master's `Sh2Decompiler.cpp` and `.h` | 18 checks fail, in `TestA3175Fix` (the said cases) and `TestA3164Fix` (the A3-177 case) only; the controls pass |
+| full `ctest -E SaturnExplorerLive -j2` | **111 of 111** (313 s); Live **6 of 6**. No new test target |
+| fault suite (`SaturnExplorerDecompilerFaultTests`) | **0 of 94** jobs failed |
+| lints | `check-literal-size.py`: ok. No vendored file touched |
+
+### Routed, no row here
+
+* **Area 5:** `folded-store-after-access` (A5-117's class), grammar 1 seeds 4400311, 4401071, 4401126, 4401188, 4402363, 4402564, 4403289, 4403409, 4403532, 4403759, 4403774, 4404673, 4404683, 4404917, and 3800275, 3800320, 3800756, 3800827, 3800897, 3800910, 3801089, 3801285, 3801785, 3802338, 3802344, 3802348, 3802488, 3802640, 3803233, 3803245, 3803249, 3803640, 3803669, 3804280, 3804443, 3804515, 3804622.
+* **Area 7:** grammar 1 seeds 4402821 (`v:map-copy-store`) and 4404345 (`v:map-way-back`): the known classes. No seed was shrunk.
