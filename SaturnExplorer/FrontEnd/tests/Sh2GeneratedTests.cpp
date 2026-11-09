@@ -5922,7 +5922,36 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                             break;
                         }
                 }
-                if (first < 0) continue;
+                if (first < 0)
+                {
+                    // (A5-118: a store no line names is one the engine dropped. Dropped before a later store of the same bytes with an access
+                    // the ledger holds between the two, or with no later store before the access, the access is made without it: `g = r1;
+                    // SCU_D0EN = 1; g = r2` printed `SCU_D0EN = 1; g = r2;`. A store no run makes, in code the engine removed, is not judged.)
+                    bool ran = false;
+                    for (const RunOut& run : runs)
+                        for (const TraceRec& t : run.trace) ran = ran || (t.depth == 0 && t.write && t.insn == f.insn);
+                    if (!ran) continue;
+                    const size_t fb = static_cast<size_t>(f.origBlock);
+                    for (const MemoryAccess& m : got)
+                    {
+                        if (m.origBlock < 0 || m.insn == f.insn || !runsAfter(fb, f.origOrder, static_cast<size_t>(m.origBlock), m.origOrder)) continue;
+                        bool rewritten = false;
+                        for (const AccessFate& o : r.accessFates)
+                        {
+                            if (&o == &f || !o.write || o.fate != AccessFate::FoldedOrdinary || !o.constantAddress || o.frame || o.origBlock < 0) continue;
+                            if (o.address > f.address || f.address + f.size > o.address + o.size) continue;   // (every byte of the store)
+                            rewritten = rewritten || (runsAfter(fb, f.origOrder, static_cast<size_t>(o.origBlock), o.origOrder) &&
+                                                      runsAfter(static_cast<size_t>(o.origBlock), o.origOrder, static_cast<size_t>(m.origBlock), m.origOrder));
+                        }
+                        if (rewritten) continue;
+                        count("order.folded-store.dropped-checked");
+                        add("folded-store-after-access", "the store at " + Hex(f.insn) + " the engine folded into " + Hex(f.address) +
+                                                             " is printed nowhere, and the " + (m.write ? "write" : "read") + " at " + Hex(m.insn) +
+                                                             " the code makes after it is made without it");
+                        break;
+                    }
+                    continue;
+                }
                 // (a register the engine merged under the global's name is written where the register is made: the store's statement is the
                 // line that assigns the global at the instruction that made the register the store stores, which names the stored register's
                 // maker, not the store; the store itself is named on a later line that shows its bytes, grammar 1 seed 4001469,
