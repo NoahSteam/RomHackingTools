@@ -1809,7 +1809,18 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                 for (const Token& t : r.lines[k.lines[0]].tokens) drawn = drawn || (t.addr == kv.first && t.begin < t.end);
                 statementFirst = drawn;
                 for (size_t li = 0; li < r.lines.size() && statementFirst; ++li)
-                    if (r.lines[li].firstAddr == kv.first && !plainCopy(r.lines[li].text)) statementFirst = false;
+                    if (r.lines[li].firstAddr == kv.first && !plainCopy(r.lines[li].text))
+                    {
+                        // (A7-78: a statement of the slot whose assigned name and `=` only are drawn at the branch -- `xRamc0001024 =
+                        // (xunknown1)(in_r2 ^ in_r0);` with its operation at the slot `xor r0,r2` -- does not begin with the branch
+                        // for a click; grammar 1 seed 4002874)
+                        const std::string& lt = r.lines[li].text;
+                        const size_t eq = lt.find(" = ");
+                        bool onlyName = eq != std::string::npos;
+                        for (const Token& t : r.lines[li].tokens)
+                            if (t.addr == kv.first && t.begin < t.end && (eq == std::string::npos || t.end > eq + 3)) onlyName = false;
+                        if (!onlyName) statementFirst = false;
+                    }
             }
             if (!owner || (firsts.count(kv.first) && r.lines[k.lines[0]].firstAddr != kv.first && !statementFirst) || copyFirst)
             {
@@ -3028,6 +3039,25 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                 {
                     const WordValue v = RegisterBefore(r, word, sources, at, (w >> 4) & 0xF);
                     computes = v.kind == WordValue::Number && sameNumber(static_cast<uint32_t>(v.value) << 16);
+                }
+                // (A7-78: `xtrct r1,r1` of a register that is 0 -- a `dt` loop's counter, then kept 0 by the loop's own `extu.w r1,r1` and the
+                // `xtrct` itself, a cycle RegisterBefore cannot close: every maker a `dt`, a `mov #0` or an extension, a
+                // rotation or a shift of the register; grammar 2 seed 4000243)
+                if (!computes && want == 0 && (w & 0xF00F) == 0x200D && ((w >> 8) & 0xF) == ((w >> 4) & 0xF))
+                {
+                    std::set<uint32_t> makers;
+                    bool zero = RegisterMakers(r, word, sources, at, (w >> 8) & 0xF, makers) && !makers.empty() && !makers.count(0);
+                    for (uint32_t m : makers)
+                    {
+                        uint16_t mw = 0;
+                        if (!zero || !word(m, mw)) { zero = false; break; }
+                        const bool dt = (mw & 0xF0FF) == 0x4010, zeroMove = (mw >> 12) == 0xE && (mw & 0xFF) == 0, ext = (mw & 0xF00F) == 0x600C || (mw & 0xF00F) == 0x600D ||
+                                        (mw & 0xF00F) == 0x600E || (mw & 0xF00F) == 0x600F, rot = (mw & 0xF00F) == 0x200D && ((mw >> 8) & 0xF) == ((mw >> 4) & 0xF),
+                                        shift = (mw >> 12) == 0x4 && ((mw & 0xFF) == 0x00 || (mw & 0xFF) == 0x08 || (mw & 0xFF) == 0x18 || (mw & 0xFF) == 0x28 || (mw & 0xFF) == 0x01 ||
+                                                                      (mw & 0xFF) == 0x09 || (mw & 0xFF) == 0x19 || (mw & 0xFF) == 0x29);
+                        zero = dt || zeroMove || ext || rot || shift;
+                    }
+                    if (zero) computes = true;
                 }
                 // (A7-69: the T a compare of registers the words give sets, `cmp/pl r3` of a literal: `bVar1 = true;`; grammar 2 seed 2707916)
                 if (!computes)

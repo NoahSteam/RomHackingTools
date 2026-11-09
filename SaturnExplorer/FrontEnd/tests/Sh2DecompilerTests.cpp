@@ -2755,6 +2755,24 @@ void TestArea7Round11()
         CHECK(LineWith(r, "cRam26001045 = (char)pxVar") != nullptr);
         CHECK(dts::AuditMapping(r, word, "a7_78_3800581").Violations() == 0);
     }
+    // A7-78 the branch's own statement is answered before a slot statement that draws only its name at the branch (grammar 1 seed 4002874)
+    {
+        const std::vector<uint16_t> w = { 0xD609, 0x2158, 0x890E, 0x4015, 0x8D02, 0x220A, 0xE003, 0xCD7A, 0xC808, 0x8900, 0x4208, 0xD705, 0x2620, 0x6071, 0xC801, 0x8BFB, 0x000B, 0x0009, 0xAFF1, 0x0009, 0xC000, 0x1024, 0x05F8, 0x00BE };
+        const DecompileResult r = run(w, 0x06009000u, {  });
+        Print("A7-78 the branch's own statement is answered before a slot statement that draws only its name at the branch (grammar 1 seed 4002874)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "xRamc0001024 = (xunknown1)(in_r2 ^ in_r0);") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_78_4002874").Violations() == 0);
+    }
+    // A7-78 xtrct of a register a dt loop leaves 0 and the loop keeps 0 (grammar 2 seed 4000243)
+    {
+        const std::vector<uint16_t> w = { 0x7FF0, 0x601C, 0x7F10, 0x000B, 0x0009, 0x7FF8, 0x62F3, 0x7208, 0xE102, 0x2216, 0x4110, 0x8BFC, 0xE200, 0xE301, 0x211D, 0x611D, 0x4310, 0x8BFB, 0xE301, 0x313C, 0x4310, 0x8901, 0xAFFB, 0x0009, 0x604C, 0x7F08, 0x000B, 0x0009 };
+        const DecompileResult r = run(w, 0x0600900Au, {  });
+        Print("A7-78 xtrct of a register a dt loop leaves 0 and the loop keeps 0 (grammar 2 seed 4000243)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "iVar2 = 0;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_78_4000243").Violations() == 0);
+    }
 }
 
 void TestFixture1()
