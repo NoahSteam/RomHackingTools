@@ -3781,6 +3781,8 @@ bool ActionMarkImplied::checkImpliedCover(Funcdata &data,Varnode *vn)
       Varnode *wvn = other->getOut();
       if (wvn == (Varnode *)0 || other->code() == CPUI_MULTIEQUAL || other->code() == CPUI_INDIRECT) continue;
       bool global = wvn->isAddrTied() && wvn->getSpace()->getType() == IPTR_PROCESSOR;
+      // (not a copy of the global to itself, the value a RETURN holds or the merge's own: it writes nothing)
+      if (global && other->code() == CPUI_COPY && other->getIn(0)->getAddr() == wvn->getAddr()) continue;
       for(list<PcodeOp *>::const_iterator diter=wvn->beginDescend();!global && diter!=wvn->endDescend();++diter) {
 	const Varnode *cvn = (*diter)->getOut();
 	global = (*diter)->code() == CPUI_COPY && cvn != (Varnode *)0 && cvn->isAddrTied() && cvn->getSpace()->getType() == IPTR_PROCESSOR;

@@ -9,7 +9,7 @@ diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc b/Ghidra
   */
  #include "coreaction.hh"
  #include "condexe.hh"
-@@ -3769,6 +3770,25 @@ bool ActionMarkImplied::checkImpliedCover(Funcdata &data,Varnode *vn)
+@@ -3769,6 +3770,27 @@ bool ActionMarkImplied::checkImpliedCover(Funcdata &data,Varnode *vn)
  	  if (chain[c]->getCover()->contain(other,2)) return false;
        }
      }
@@ -24,6 +24,8 @@ diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc b/Ghidra
 +      Varnode *wvn = other->getOut();
 +      if (wvn == (Varnode *)0 || other->code() == CPUI_MULTIEQUAL || other->code() == CPUI_INDIRECT) continue;
 +      bool global = wvn->isAddrTied() && wvn->getSpace()->getType() == IPTR_PROCESSOR;
++      // (not a copy of the global to itself, the value a RETURN holds or the merge's own: it writes nothing)
++      if (global && other->code() == CPUI_COPY && other->getIn(0)->getAddr() == wvn->getAddr()) continue;
 +      for(list<PcodeOp *>::const_iterator diter=wvn->beginDescend();!global && diter!=wvn->endDescend();++diter) {
 +	const Varnode *cvn = (*diter)->getOut();
 +	global = (*diter)->code() == CPUI_COPY && cvn != (Varnode *)0 && cvn->isAddrTied() && cvn->getSpace()->getType() == IPTR_PROCESSOR;
@@ -215,10 +217,29 @@ diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/merge.cc b/Ghidra/Feat
   */
  #include "merge.hh"
  #include "funcdata.hh"
-@@ -88,6 +89,94 @@ bool StackAffectingOps::affectsTest(PcodeOp *op,Varnode *vn) const
+@@ -88,6 +89,140 @@ bool StackAffectingOps::affectsTest(PcodeOp *op,Varnode *vn) const
    return true;
  }
  
++/// \brief Does the value of the given Varnode come only from the given global, through COPYs and MULTIEQUALs (SaturnExplorer, 0090)
++static bool holdsGlobal(const Varnode *vn,const Varnode *tvn,int4 depth)
++
++{
++  if (depth > 8) return false;
++  if (vn->isAddrTied() && vn->getSpace() == tvn->getSpace() && vn->getOffset() == tvn->getOffset() && vn->getSize() == tvn->getSize())
++    return true;
++  if (!vn->isWritten()) return false;
++  const PcodeOp *def = vn->getDef();
++  if (def->code() == CPUI_COPY) return holdsGlobal(def->getIn(0),tvn,depth+1);
++  if (def->code() != CPUI_MULTIEQUAL) return false;
++  for(int4 i=0;i<def->numInput();++i) {
++    const Varnode *in = def->getIn(i);
++    if (in == vn) continue;
++    if (!holdsGlobal(in,tvn,depth+1)) return false;
++  }
++  return true;
++}
++
 +/// \brief Would a global, merged with another variable, hold that variable's value across an access (SaturnExplorer, 0090)
 +///
 +/// Merged into a global (an address-tied variable of the processor space), every write of a register variable becomes a write of the
@@ -245,6 +266,33 @@ diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/merge.cc b/Ghidra/Feat
 +      fd = (*vn->beginDescend())->getParent()->getFuncdata();
 +  }
 +  if (fd == (Funcdata *)0) return false;
++  // (a variable whose every write copies the global itself, directly or through the merge's own copies and joins, holds the global's own
++  // value: merged, it writes nothing the code does not hold there; refused, the merge's copies of a global joined round a loop of stores
++  // through a pointer print as writes back of the global in the loop, hwram008 06036828)
++  {
++    bool selfOnly = true, any = false;
++    for(int4 i=0;i<other->numInstances() && selfOnly;++i) {
++      Varnode *vn = other->getInstance(i);
++      if (!vn->isWritten()) continue;
++      const PcodeOp *def = vn->getDef();
++      if (def->code() == CPUI_MULTIEQUAL || def->code() == CPUI_INDIRECT) continue;
++      any = true;
++      selfOnly = def->code() == CPUI_COPY && holdsGlobal(def->getIn(0),tvn,0);
++    }
++    if (any && selfOnly) return false;
++  }
++  // (...and a value a register's access reads: merged, the global would be written at the access itself, which its guard there says
++  // nothing of, and its own value read before the access would be printed as the merge's copy: `uVar1 = uRam06058338; uRam06058338 =
++  // CD_HIRQ;` for `x = g; y = CD_HIRQ; g = x | y`, hwram007 06021414)
++  // (a value stored as it is read, `g = SMPC_OREG8;`, is the store's own statement)
++  for(int4 i=0;i<other->numInstances();++i) {
++    Varnode *vn = other->getInstance(i);
++    if (!vn->isWritten() || !isHardwareAccessOp(fd,vn->getDef())) continue;
++    const PcodeOp *use = vn->loneDescend();
++    const Varnode *uvn = (use != (const PcodeOp *)0 && use->code() == CPUI_COPY) ? use->getOut() : (const Varnode *)0;
++    if (uvn == (const Varnode *)0 || !uvn->isAddrTied() || uvn->getSpace() != tvn->getSpace() || uvn->getOffset() != tvn->getOffset())
++      return true;
++  }
 +  // ...and an access on a path from where the register is written to where the code stores it to the global: merged, the global is written
 +  // where the register is, before the access (`r0 = 4; if (c) r0 = *p; g = r0;` printed `g = 4; if (c) g = *p;`: the read through p
 +  // then reads what was written when p is the global's address)
@@ -310,7 +358,7 @@ diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/merge.cc b/Ghidra/Feat
  /// \brief Required tests to merge HighVariables that are not Cover related
  ///
  /// This is designed to short circuit merge tests, when we know properties of the
-@@ -104,6 +193,8 @@ bool Merge::mergeTestRequired(HighVariable *high_out,HighVariable *high_in)
+@@ -104,6 +239,8 @@ bool Merge::mergeTestRequired(HighVariable *high_out,HighVariable *high_in)
  {
    if (high_in == high_out) return true; // Already merged
  
@@ -345,7 +393,7 @@ diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/ruleaction.cc b/Ghidra
   * Modified for SaturnExplorer: RulePropagateCopy does not propagate a write of a global into the INDIRECT a STORE puts on it, nor into another marker past a memory access (patches/0082-engine-store-keeps-earlier-write.patch).
   * Modified for SaturnExplorer: RuleMultiCollapse keeps two equal writes of a global that a memory access separates from the join, and RulePropagateCopy does not feed a global's value into the global's next write past one (patches/0085-engine-global-write-keeps-place.patch).
   * Modified for SaturnExplorer: RuleEarlyRemoval keeps a write of a global on a path that never reaches a return (patches/0087-engine-global-writes-without-return.patch).
-+ * Modified for SaturnExplorer: RulePushMulti does not move a write of a global an access holds to the join (patches/0090-engine-hardware-access-orders-globals.patch).
++ * Modified for SaturnExplorer: RulePushMulti and RuleConditionalMove do not move or join writes of a global an access holds (patches/0090-engine-hardware-access-orders-globals.patch).
   */
  #include "ruleaction.hh"
  #include "coreaction.hh"
@@ -361,3 +409,16 @@ diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/ruleaction.cc b/Ghidra
  
    Varnode *outvn = op->getOut();
  
+@@ -9747,6 +9753,12 @@ int4 RuleConditionalMove::applyOp(PcodeOp *op,Funcdata &data)
+   FlowBlock *rootblock0,*rootblock1;
+ 
+   if (op->numInput() != 2) return 0; // MULTIEQUAL must have exactly 2 inputs
++  // SaturnExplorer (0090): two writes of a global that an access after the join holds (address forced) stay where the code makes them;
++  // the join's boolean would be a third write of the global, one the code does not make (hwram007 06019DF4)
++  for(int4 i=0;i<2;++i) {
++    const Varnode *in = op->getIn(i);
++    if (in->isAddrForce() && in->isAddrTied() && in->getSpace()->getType() == IPTR_PROCESSOR) return 0;
++  }
+ 
+   Varnode *bool0 = checkBoolean(op->getIn(0));
+   if (bool0 == (Varnode *)0) return 0;
