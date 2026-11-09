@@ -7529,6 +7529,23 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
             // its (grammar 1 seed 3800320)
             if (!prior)
             {
+                // (any way on in the flow, through blocks the engine kept as well)
+                const auto flowReaches = [&](int from, int to) {
+                    std::set<int> seen = { from };
+                    std::vector<int> todo = { from };
+                    while (!todo.empty() && seen.size() < 256)
+                    {
+                        const int blk = todo.back();
+                        todo.pop_back();
+                        if (blk < 0 || static_cast<size_t>(blk) >= flow.successors.size()) continue;
+                        for (int n : flow.successors[static_cast<size_t>(blk)])
+                        {
+                            if (n == to) return true;
+                            if (seen.insert(n).second) todo.push_back(n);
+                        }
+                    }
+                    return false;
+                };
                 const auto here = flow.insnBlock.find(at);
                 bool found = false;
                 if (here != flow.insnBlock.end())
@@ -7537,7 +7554,7 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                         const auto f = flow.ops.find(r->time);
                         if (!writes(r) || f == flow.ops.end()) continue;
                         const bool before = f->second.first == here->second.first ? f->second.second < here->second.second
-                                                                                   : flowSucceeds(f->second.first, here->second.first, 0, 0);
+                                                                                   : flowReaches(f->second.first, here->second.first);
                         if (before) found = take(r) || found;
                     }
                 if (found) continue;

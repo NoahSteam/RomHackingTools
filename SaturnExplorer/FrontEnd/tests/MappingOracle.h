@@ -1770,8 +1770,16 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                                 readHere = readHere || (f.insn == t.addr && !f.write && !f.frame && GlobalDelta(va, f.address) < f.size);
                         }
                     }
+                    // (A7-78: the function's input drawn at its first instruction -- `in_r3` at the entry's pool load -- is where the engine
+                    // keeps every input; it is no value materialised there; grammar 1 seed 3804173)
+                    bool inputAtEntry = false;
+                    if (t.addr == r.entry && t.end <= r.lines[li].text.size())
+                    {
+                        const std::string operand = r.lines[li].text.substr(t.begin, t.end - t.begin);
+                        inputAtEntry = operand.compare(0, 3, "in_") == 0 || operand.compare(0, 6, "param_") == 0 || operand.compare(0, 6, "unaff_") == 0;
+                    }
                     const bool copy = plain && !isBranch(t.addr) && ((!named.empty() && !named.count(t.addr)) || drawnAtOtherStore || readAtStore) && !castAtExtension &&
-                                      !ownStoreHere && !readHere;
+                                      !ownStoreHere && !readHere && !inputAtEntry;
                     (copy ? copyDrawn : ownDrawn)[t.addr].insert(li);
                 }
         }
@@ -2304,7 +2312,9 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                             {
                                 drawnAny = true;
                                 // (A7-30: any instruction that makes nothing -- a branch, a `tst`, a compare, a nop -- not only a branch)
-                                if (mm.call || mm.load || md.Mnemonic == "rts" || md.Mnemonic == "rte" || !WrittenRegisters(md).empty()) branchOnly = false;
+                                // (A7-78: a store too: the value a store of a volatile word sends is materialised at it, `cRam26001045 = (char)pxVar2;`
+                                // at `mov.b r0,@r7` beside `Ram26001038 = cRam26001045;`; grammar 1 seed 3800581)
+                                if (mm.call || mm.load || mm.store || md.Mnemonic == "rts" || md.Mnemonic == "rte" || !WrittenRegisters(md).empty()) branchOnly = false;
                             }
                         }
                     }
@@ -2674,6 +2684,45 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                             ++a.copyInputMerged;
                             continue;
                         }
+                    }
+                }
+                // (A7-78: a copy drawn only at stores of the value the variable's own store stores -- `cRam26001045 = (char)pxVar2;` at the
+                // volatile `mov.b r0,@r7` of the r0 that `mov.b r0,@(0xd,r7)` stores too: the same makers -- is the value materialised at
+                // them, which names a store of it already; grammar 1 seed 3800581, the volatile request. Counted apart.)
+                {
+                    if (!haveSources)
+                    {
+                        sources = BranchSources(r, word);
+                        haveSources = true;
+                    }
+                    bool any = false, all = true;
+                    for (const Token& t : r.lines[li].tokens)
+                    {
+                        if (!t.addr || t.begin >= t.end) continue;
+                        any = true;
+                        uint16_t aw = 0;
+                        int asize = 0;
+                        const int areg = word(t.addr, aw) ? StoredRegister(aw, asize) : -1;
+                        std::set<uint32_t> mine;
+                        bool same = false;
+                        if (areg >= 0 && RegisterMakers(r, word, sources, t.addr, areg, mine) && !mine.empty())
+                            for (uint32_t st : candidates)
+                            {
+                                uint16_t sw = 0;
+                                int ssz = 0;
+                                const int sreg = word(st, sw) ? StoredRegister(sw, ssz) : -1;
+                                std::set<uint32_t> theirs;
+                                // (through the updates: the stored r0 is the drawn r0 less r5)
+                                if (sreg >= 0 && RegisterMakers(r, word, sources, st, sreg, theirs, true) &&
+                                    std::includes(theirs.begin(), theirs.end(), mine.begin(), mine.end()))
+                                    same = true;
+                            }
+                        all = all && same;
+                    }
+                    if (any && all)
+                    {
+                        ++a.copyRegisterMade;
+                        continue;
                     }
                 }
                 // (every store of the variable writes a value the line does not show: a register the engine merged under the variable's

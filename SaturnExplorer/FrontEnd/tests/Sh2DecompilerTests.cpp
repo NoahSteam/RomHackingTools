@@ -2713,6 +2713,48 @@ void TestArea7Round11()
         const DecompileResult other = changed(r, "iVar1 = 0;", "iVar1 = 1;", n);
         CHECK(n >= 1 && dts::AuditMapping(other, word, "a7_78_17737 other").Violations() >= 1);
     }
+    // A7-78 the store of a delay slot run on both ways of a branch and again after it, joined into one statement (grammar 1 seed 3800320)
+    {
+        const std::vector<uint16_t> w = { 0xD603, 0x2228, 0x8B01, 0x4315, 0x8D00, 0x2611, 0x000B, 0x0009, 0x2600, 0x1030 };
+        const DecompileResult r = run(w, 0x06009000u, {  });
+        Print("A7-78 the store of a delay slot run on both ways of a branch and again after it, joined into one statement (grammar 1 seed 3800320)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "xRam26001030 = in_r1;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_78_3800320").Violations() == 0);
+    }
+    // A7-78 the same with a test the engine folds after the branch (grammar 1 seed 3800320, shrunk by the range)
+    {
+        const std::vector<uint16_t> w = { 0xD604, 0x2228, 0x8B01, 0x4315, 0x8D00, 0x2611, 0xC820, 0x89FF, 0x000B, 0x0009, 0x2600, 0x1030 };
+        const DecompileResult r = run(w, 0x06009000u, {  });
+        Print("A7-78 the same with a test the engine folds after the branch (grammar 1 seed 3800320, shrunk by the range)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "xRam26001030 = in_r1;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_78_3800320b").Violations() == 0);
+    }
+    // A7-78 the input drawn at the entry's pool load is no copy materialised there (grammar 1 seed 3804173)
+    {
+        const std::vector<uint16_t> w = { 0xD607, 0xD708, 0x2522, 0x6072, 0xC801, 0x89FB, 0x622D, 0x2238, 0x8901, 0x2631, 0x6361, 0xD604, 0x2631, 0x000B, 0x0009, 0x0009, 0x0600, 0x1010, 0x25FE, 0x0080, 0x2600, 0x2188 };
+        const DecompileResult r = run(w, 0x06009000u, {  });
+        Print("A7-78 the input drawn at the entry's pool load is no copy materialised there (grammar 1 seed 3804173)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "xRam26002188 = (int2)in_r3;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_78_3804173").Violations() == 0);
+    }
+    // a copy of a register's value drawn at the volatile store that sends it, beside the variable's own store (3800581, the request marks
+    // 0x26001038 volatile)
+    {
+        const std::vector<uint16_t> w = { 0xD207, 0x2429, 0xD207, 0x342C, 0xD707, 0x2432, 0x6070, 0xC801, 0x8BFB, 0x6043, 0x2700, 0x3058, 0x807D, 0x807C, 0x000B, 0x0009, 0x0000, 0x000C, 0xFFFF, 0xFF80, 0x2600, 0x1038 };
+        std::fill(hw.begin(), hw.end(), 0);
+        for (size_t i = 0; i < w.size(); ++i) dts::Put16(hw, 0x9000u + 2 * i, w[i]);
+        const auto snap = MakeSnapshot(hw);
+        DecompileRequest q = Request(0x06009000u);
+        q.volatileMemory.emplace_back(0x26001038u, 0x26001039u);
+        const DecompileResult r = d.Decompile(snap, q);
+        Print("A7-78 a copy at the volatile store that sends it (grammar 1 seed 3800581)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "cRam26001045 = (char)pxVar") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_78_3800581").Violations() == 0);
+    }
 }
 
 void TestFixture1()
