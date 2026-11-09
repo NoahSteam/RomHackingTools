@@ -1,0 +1,58 @@
+Machine rules for review-program agents (rebuilt 2026-11-09 after a container restart lost the scratchpad)
+
+S = /tmp/claude-0/-home-user-RomHackingTools/aae0ae36-3afa-5288-8786-5063bd965426/scratchpad
+
+WHERE YOU WORK
+- Only in the worktree and on the branch your brief names. Commit there. Never push to master, never merge,
+  never touch other worktrees or the main checkout (/home/user/RomHackingTools).
+- BACK UP YOUR WORK: the container can restart and lose everything not on GitHub. After every meaningful
+  commit (and at least once an hour), run from your worktree:
+      git push -q -f origin HEAD:refs/heads/backup/<your branch name with / replaced by ->
+  e.g. review/5-a5114-fix -> backup/review-5-a5114-fix. Keep scratch notes you would need to resume
+  (seed lists, half-shrunk fixtures) committed in the branch or in your record section draft.
+
+BUILD
+- 4 cores and ~15 GB RAM are shared by 3 agents and the coordinator's matrix. Use -j2 and ulimit -v 6000000.
+    cd <worktree>/SaturnExplorer
+    cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_TESTING=ON -DCMAKE_DISABLE_FIND_PACKAGE_SDL2=ON
+    ( ulimit -v 6000000; cmake --build build -j2 )
+- Build only the targets you need while iterating (SaturnExplorerSh2DecompilerTests, SaturnExplorerSh2GeneratedTests, ...).
+
+RUNS
+- ctest:     ctest --test-dir build --output-on-failure -j2   (expect all passed; 111 tests plus the Live tests)
+- fault:     build/bin/SaturnExplorerDecompilerFaultTests <scratch dir>   (expect "fault matrix: 0 of 94 job(s) failed")
+- generator: SE_GENERATED_SEEDS=20000 build/bin/SaturnExplorerSh2GeneratedTests <outdir>      (the 20k matrix)
+             SE_GENERATED_GRAMMAR=<1|2> [SE_GENERATED_ALPHABET=specials] SE_GENERATED_FIRST=<s> SE_GENERATED_SEEDS=<n> ...  (a range)
+             SE_GENERATED_GRAMMAR=<g> [SE_GENERATED_ALPHABET=specials] SE_GENERATED_SEED=<s> SE_GENERATED_CANARY=0 build/bin/SaturnExplorerSh2GeneratedTests <outdir>  (replay one)
+             The binary deletes its out dir: never point it at anything you want to keep.
+             Expect "failing seeds=0; findings=0"; look at failures with grep -A6 '^FINDING'.
+             (Check SE_GENERATED_FIRST's exact spelling/meaning in Sh2GeneratedTests.cpp before relying on it.)
+- printed-C: SE_GENERATED_PRINTEDC=only build/bin/SaturnExplorerSh2GeneratedTests <outdir>   (expect agrees=5196)
+- corpus:    the two game images are $S/h/hwram007.bin and $S/h/hwram008.bin (read-only; never delete $S/h).
+             SE_GAME_HWRAM=$S/h/hwram008.bin [SE_GAME_LEND=1] build/bin/SaturnExplorerSh2DecompilerTests <scratch>
+             Expect every ledger count 0; missing and said 0 (hwram007) and 4 (hwram008) with lending;
+             "[after] real entries 999: signatures lent 474 (645 parameters)" and "1543: 724 (975)".
+             Docs/Decompiler/tools/a7_round2/corpus.sh runs one image alone and lent with the token dump.
+- lints before your last commit:
+    python3 -I .github/scripts/check-literal-size.py SaturnExplorer/FrontEnd SaturnExplorer/Drivers SaturnExplorer/include
+    python3 -I .github/scripts/check-vendored-tree.py lint SaturnExplorer/FrontEnd/third_party/ghidra-decompiler --tests-dir SaturnExplorer/FrontEnd/tests   (when you touch patches/ or vendored files)
+
+LEDGER AND RECORD
+- SaturnExplorer/Docs/Decompiler/REVIEW_LEDGER.md: every row has exactly 8 cells; a literal | inside a cell is \|.
+  IDs are unique (A<area>-<n>, continue from the highest existing). Severity: P1 = a wrong value or lost data;
+  P2 = misleads or hides a P1; P3 = everything else. Fixed rows say "fixed <commit or branch>: how".
+- Append your own section to SaturnExplorer/Docs/FunctionalityVerification/15_DECOMPILER_STEP5.md (at the end;
+  never edit other sections). Put scripts under SaturnExplorer/Docs/Decompiler/tools/<round dir>/ (scripts only).
+- Engine changes go in patches/ under ghidra-decompiler with the number your brief reserves; record them as
+  patches/README.md and VENDOR.md require; run the vendored lint.
+- Generator: never change which program an existing seed produces. New productions go on their own random
+  stream and are gated to a fresh seed range.
+
+HOUSEKEEPING
+- Disk is shared; delete only your own scratch. Keep $S/h. Never SIGSTOP; never pkill -f; kill only PIDs you started.
+- On "Input/output error" for a tracked file: mv it to $S/badblocks/ and git checkout HEAD -- <file>.
+- No AI model names in repository files.
+- Commit messages end with:
+    Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+    Claude-Session: https://claude.ai/code/session_015yhSVBbgN7po8UTqDDxHqd
+- Report back briefly: branch head, each row's outcome, the runs and their numbers, anything routed to another area.
