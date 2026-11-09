@@ -5856,6 +5856,52 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
             bool hasGoto = false;
             for (const Line& l : r.lines) hasGoto |= l.text.find("goto ") != std::string::npos;
             std::set<size_t> pieceStoresSaid;
+            // (in another block, one every path from the store's block runs through: two complementary `if`s the engine prints as
+            // one `if`/`else` make the access on the paths that skip the store, grammar 2 seed 2070495)
+            auto alwaysReaches = [&](size_t from, size_t to) {
+                std::vector<char> seen(r.flowSuccessors.size(), 0);
+                std::vector<size_t> todo{ from };
+                while (!todo.empty())
+                {
+                    const size_t x = todo.back();
+                    todo.pop_back();
+                    if (x == to || x >= seen.size() || seen[x]) continue;
+                    seen[x] = 1;
+                    bool any = false;
+                    for (int y : r.flowSuccessors[x])
+                        if (y >= 0)
+                        {
+                            any = true;
+                            todo.push_back(static_cast<size_t>(y));
+                        }
+                    if (!any) return false;   // (an exit reached without passing 'to')
+                }
+                return true;
+            };
+            // (...or every path from the entry to the access's block runs through the store's: the access is conditional, the store is not
+            // (a store in the slot of the branch that skips the access, seed 2006655), and the store was made first whenever the access runs)
+            auto dominates = [&](size_t d, size_t x) {
+                if (d == 0) return true;
+                std::vector<char> seen(r.flowSuccessors.size(), 0);
+                std::vector<size_t> todo{ 0 };
+                while (!todo.empty())
+                {
+                    const size_t y = todo.back();
+                    todo.pop_back();
+                    if (y == d || y >= seen.size() || seen[y]) continue;
+                    if (y == x) return false;
+                    seen[y] = 1;
+                    for (int z : r.flowSuccessors[y])
+                        if (z >= 0) todo.push_back(static_cast<size_t>(z));
+                }
+                return true;
+            };
+            // (the second op runs after the first whenever both run: later in its block, or in a block only the first's reaches, outside any loop
+            // holding both; and a text without goto prints the blocks in the flow's order)
+            auto runsAfter = [&](size_t fb, uint32_t fo, size_t mb, uint32_t mo) {
+                if (fb >= fr.reach.size() || mb >= fr.reach.size()) return false;
+                return fb == mb ? mo > fo : fr.reach[fb][mb] && !fr.reach[mb][fb] && !hasGoto && (alwaysReaches(fb, mb) || dominates(fb, mb));
+            };
             for (const AccessFate& f : r.accessFates)
             {
                 if (!f.write || f.fate != AccessFate::FoldedOrdinary || !f.constantAddress || f.frame || f.origBlock < 0) continue;
@@ -5916,22 +5962,22 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                                                                  "of the global, made a write of it");
                     }
                 }
-                // (a store a later folded store of the same address follows is the engine's to drop or merge: the later one writes what is
-                // left, whatever the pointer wrote in between, and the mapping names the dropped store on the later one's line. Ordinary
-                // memory, a variable by design. `g = r2; poll; tas.b @g` prints the poll, then `g = (uint1)in_r2 | 0x80;`.)
-                bool overwritten = false;
+                // (A5-118: a store a later folded store of the same address follows was set aside here, as the engine's to drop or merge, ordinary
+                // memory being a variable: `g = r1; SCU_D0EN = 1; g = r2` printed `SCU_D0EN = 1; g = r2;`, the first write dropped before the DMA
+                // enable. A hardware access, and a read or write through a pointer, which may be one, is a barrier no write of ordinary memory is
+                // moved, merged or dropped across (patch 0090): such a store is judged like any other, and counted. With no access between the two,
+                // a dropped store is named on the later one's line, which is before any access after both.)
                 for (const AccessFate& o : r.accessFates)
                 {
                     if (&o == &f || !o.write || o.fate != AccessFate::FoldedOrdinary || !o.constantAddress || o.frame || o.origBlock < 0 || o.insn == f.insn) continue;
                     if (o.address >= f.address + f.size || f.address >= o.address + o.size) continue;
                     const size_t ob = static_cast<size_t>(o.origBlock), fb0 = static_cast<size_t>(f.origBlock);
                     if (ob >= fr.reach.size() || fb0 >= fr.reach.size()) continue;
-                    overwritten |= ob == fb0 ? o.origOrder > f.origOrder : fr.reach[fb0][ob] != 0;
-                }
-                if (overwritten)
-                {
-                    count("order.folded-store.overwritten");
-                    continue;
+                    if (ob == fb0 ? o.origOrder > f.origOrder : fr.reach[fb0][ob] != 0)
+                    {
+                        count("order.folded-store.overwritten");
+                        break;
+                    }
                 }
                 for (const MemoryAccess& m : got)
                 {
@@ -5948,47 +5994,7 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                     // any loop holding both; and a text without goto prints the blocks in the flow's order)
                     const size_t fb = static_cast<size_t>(f.origBlock), mb = static_cast<size_t>(m.origBlock);
                     if (fb >= fr.reach.size() || mb >= fr.reach.size()) continue;
-                    // (in another block, one every path from the store's block runs through: two complementary `if`s the engine prints as
-                    // one `if`/`else` make the access on the paths that skip the store, grammar 2 seed 2070495)
-                    auto alwaysReaches = [&](size_t from, size_t to) {
-                        std::vector<char> seen(r.flowSuccessors.size(), 0);
-                        std::vector<size_t> todo{ from };
-                        while (!todo.empty())
-                        {
-                            const size_t x = todo.back();
-                            todo.pop_back();
-                            if (x == to || x >= seen.size() || seen[x]) continue;
-                            seen[x] = 1;
-                            bool any = false;
-                            for (int y : r.flowSuccessors[x])
-                                if (y >= 0)
-                                {
-                                    any = true;
-                                    todo.push_back(static_cast<size_t>(y));
-                                }
-                            if (!any) return false;   // (an exit reached without passing 'to')
-                        }
-                        return true;
-                    };
-                    // (...or every path from the entry to the access's block runs through the store's: the access is conditional, the store is not
-                    // (a store in the slot of the branch that skips the access, seed 2006655), and the store was made first whenever the access runs)
-                    auto dominates = [&](size_t d, size_t x) {
-                        if (d == 0) return true;
-                        std::vector<char> seen(r.flowSuccessors.size(), 0);
-                        std::vector<size_t> todo{ 0 };
-                        while (!todo.empty())
-                        {
-                            const size_t y = todo.back();
-                            todo.pop_back();
-                            if (y == d || y >= seen.size() || seen[y]) continue;
-                            if (y == x) return false;
-                            seen[y] = 1;
-                            for (int z : r.flowSuccessors[y])
-                                if (z >= 0) todo.push_back(static_cast<size_t>(z));
-                        }
-                        return true;
-                    };
-                    const bool after = fb == mb ? m.origOrder > f.origOrder : fr.reach[fb][mb] && !fr.reach[mb][fb] && !hasGoto && (alwaysReaches(fb, mb) || dominates(fb, mb));
+                    const bool after = runsAfter(fb, f.origOrder, mb, m.origOrder);
                     if (!after) continue;
                     // (A5-109, fixed by patch 0085: a read through a pointer, or a register's access, the code makes after a folded store is
                     // judged like a write through a pointer. The engine took such a store for dead when two writes of the same value joined
@@ -6001,6 +6007,57 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                         add("folded-store-after-access", "the store at " + Hex(f.insn) + " the engine folded into " + Hex(f.address) + " is printed (line " +
                                                              std::to_string(first) + ") after the " + (m.write ? "write" : "read") + " at " + Hex(m.insn) +
                                                              " (line " + std::to_string(m.firstLine) + "), which the code makes after it");
+                }
+                // (A5-115: a read through a pointer the code makes before the folded store is printed before it: printed at its use after the store,
+                // it reads the value stored when the pointer is the global's address. Patch 0010's rule kept a LOAD from crossing a STORE, a LOAD, a
+                // user op or a call, not a store the engine folded, and `x = *p; g = v; *q = x` printed `g = v; *q = *p;`.)
+                for (const MemoryAccess& m : got)
+                {
+                    if (m.write || m.direct || m.firstLine < 0 || m.origBlock < 0) continue;
+                    if (m.printed > 1 || m.printedLines > 1) continue;   // (its place is not one line: counted above)
+                    if (!runsAfter(static_cast<size_t>(m.origBlock), m.origOrder, static_cast<size_t>(f.origBlock), f.origOrder)) continue;
+                    count("order.read-before-folded-store.checked");
+                    if (m.firstLine > first)
+                        add("read-after-folded-store", "the read at " + Hex(m.insn) + " through a pointer is printed (line " + std::to_string(m.firstLine) +
+                                                           ") after the store at " + Hex(f.insn) + " the engine folded into " + Hex(f.address) + " (line " +
+                                                           std::to_string(first) + "), which the code makes after the read");
+                }
+            }
+            // (A5-116: a read of a global the engine folded, which the code makes before a register's access, is printed before that access: the
+            // access may start a transfer, or tell another processor, that writes the global. A register write put no guard on a global, and
+            // `x = g; SCU_D0EN = 0x101; return x` printed `SCU_D0EN = 0x101; return xRam06030000;`. A read is judged on the first line that
+            // names it and reads the global there (a name `...RamXXXXXXXX` at or below its address): a value forwarded from a store of the
+            // function is no read of memory.)
+            for (const AccessFate& rd : r.accessFates)
+            {
+                if (rd.write || rd.fate != AccessFate::FoldedOrdinary || !rd.constantAddress || rd.frame || rd.origBlock < 0) continue;
+                int shown = -1;
+                for (size_t li = 0; li < r.lines.size() && shown < 0; ++li)
+                {
+                    const Line& l = r.lines[li];
+                    bool named = false;
+                    for (const Token& t : l.tokens) named |= t.addr == rd.insn;
+                    if (!named) continue;
+                    for (size_t at = l.text.find("Ram"); at != std::string::npos; at = l.text.find("Ram", at + 3))
+                    {
+                        unsigned v = 0;
+                        if (at + 11 <= l.text.size() && std::sscanf(l.text.c_str() + at + 3, "%8x", &v) == 1 && v <= rd.address && rd.address < v + 8u)
+                        {
+                            shown = static_cast<int>(li);
+                            break;
+                        }
+                    }
+                }
+                if (shown < 0) continue;
+                for (const MemoryAccess& m : got)
+                {
+                    if (!m.direct || m.firstLine < 0 || m.origBlock < 0) continue;
+                    if (!runsAfter(static_cast<size_t>(rd.origBlock), rd.origOrder, static_cast<size_t>(m.origBlock), m.origOrder)) continue;
+                    count("order.folded-read-before-access.checked");
+                    if (shown > m.firstLine)
+                        add("folded-read-after-access", "the read at " + Hex(rd.insn) + " the engine folded from " + Hex(rd.address) + " is printed (line " +
+                                                            std::to_string(shown) + ") after the " + (m.write ? "write" : "read") + " at " + Hex(m.insn) +
+                                                            " (line " + std::to_string(m.firstLine) + "), which the code makes after it");
                 }
             }
         }

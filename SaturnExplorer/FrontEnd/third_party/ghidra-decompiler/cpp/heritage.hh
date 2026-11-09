@@ -283,6 +283,8 @@ public:
 /// R. Cytron, J. Ferrante, B. K. Rosen, M. N. Wegman, and F. K. Zadeck
 /// ACM Transactions on Programming Languages and Systems,
 /// 13(4):451-490, October 1991
+extern bool isHardwareAccessOp(const Funcdata *fd,const PcodeOp *op);	///< SaturnExplorer (0090): the user op of a volatile read or write
+
 class Heritage {
   /// Extra boolean properties on basic blocks for the Augmented Dominator Tree
   enum heritage_flags {

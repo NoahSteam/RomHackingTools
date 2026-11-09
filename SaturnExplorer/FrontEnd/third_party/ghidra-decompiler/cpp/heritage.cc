@@ -2607,7 +2607,7 @@ void Heritage::guardLoads(uint4 fl,const Address &addr,int4 size,vector<Varnode 
 }
 
 /// \brief Is the op a hardware access: the user op of a volatile read or write (SaturnExplorer, 0090)
-static bool isHardwareAccessOp(Funcdata *fd,const PcodeOp *op)
+bool isHardwareAccessOp(const Funcdata *fd,const PcodeOp *op)
 
 {
   if (op->code() != CPUI_CALLOTHER || op->isDead() || op->numInput() < 2) return false;
@@ -2669,6 +2669,7 @@ void Heritage::guardHardwareAccesses(uint4 fl,const Address &addr,int4 size,vect
     PcodeOp *indop = fd->newIndirectOp(op,addr,size,PcodeOp::indirect_store);
     indop->getIn(0)->setActiveHeritage();
     indop->getOut()->setActiveHeritage();
+    indop->getOut()->setAddrForce();	// kept when nothing reads the global after it: a read before it is still not the value after
     write.push_back(indop->getOut());
   }
 }

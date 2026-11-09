@@ -12,6 +12,7 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ * Modified for SaturnExplorer: a global is not merged with a value the code holds in a register across a hardware access or an access through a pointer (patches/0090-engine-hardware-access-orders-globals.patch).
  */
 #include "merge.hh"
 #include "funcdata.hh"
@@ -88,6 +89,51 @@ bool StackAffectingOps::affectsTest(PcodeOp *op,Varnode *vn) const
   return true;
 }
 
+/// \brief Would a global, merged with another variable, hold that variable's value across an access (SaturnExplorer, 0090)
+///
+/// Merged into a global (an address-tied variable of the processor space), every write of a register variable becomes a write of the
+/// global, made where the register is written: a value the code holds in a register across a hardware access, or a read or write
+/// through a pointer, which may be one or the global's own address, and stores to the global after it, would be printed as stored
+/// before it (`x = *p; SCU_D0EN = 1; g = x` as `g = *p; SCU_D0EN = 1;`; a register a branch sets, stored after a poll, as the
+/// global written before the poll). Such a merge is refused, and the variables stay apart.
+/// \param tied is the HighVariable that may be the global
+/// \param other is the HighVariable to be merged into it
+/// \return \b true if \b other's cover holds such an access
+bool Merge::heldAcrossAccess(HighVariable *tied,HighVariable *other)
+
+{
+  if (!tied->isAddrTied() || other->isAddrTied() || other->isInput()) return false;
+  Varnode *tvn = tied->getTiedVarnode();
+  if (tvn == (Varnode *)0 || tvn->getSpace()->getType() != IPTR_PROCESSOR) return false;
+  Funcdata *fd = (Funcdata *)0;
+  for(int4 i=0;i<other->numInstances() && fd == (Funcdata *)0;++i) {
+    Varnode *vn = other->getInstance(i);
+    if (vn->isWritten())
+      fd = vn->getDef()->getParent()->getFuncdata();
+    else if (!vn->hasNoDescend())
+      fd = (*vn->beginDescend())->getParent()->getFuncdata();
+  }
+  if (fd == (Funcdata *)0) return false;
+  other->updateCover();
+  const Cover &cov(other->getCover());
+  const OpCode opcs[] = { CPUI_LOAD, CPUI_STORE, CPUI_CALLOTHER };
+  for(int4 k=0;k<3;++k) {
+    list<PcodeOp *>::const_iterator iter = fd->beginOp(opcs[k]);
+    list<PcodeOp *>::const_iterator enditer = fd->endOp(opcs[k]);
+    for(;iter!=enditer;++iter) {
+      const PcodeOp *op = *iter;
+      if (op->isDead()) continue;
+      if (opcs[k] == CPUI_CALLOTHER) {
+	if (!isHardwareAccessOp(fd,op)) continue;
+      }
+      else if (op->getIn(1)->isConstant())
+	continue;
+      if (cov.contain(op,2)) return true;
+    }
+  }
+  return false;
+}
+
 /// \brief Required tests to merge HighVariables that are not Cover related
 ///
 /// This is designed to short circuit merge tests, when we know properties of the
@@ -103,6 +149,8 @@ bool Merge::mergeTestRequired(HighVariable *high_out,HighVariable *high_in)
 
 {
   if (high_in == high_out) return true; // Already merged
+
+  if (heldAcrossAccess(high_out,high_in) || heldAcrossAccess(high_in,high_out)) return false;	// SaturnExplorer (0090)
 
   if (high_in->isTypeLock())	// If types are locked
     if (high_out->isTypeLock())	// dont merge unless
