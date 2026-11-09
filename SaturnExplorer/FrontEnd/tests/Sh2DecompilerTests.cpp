@@ -16421,9 +16421,6 @@ void TestArea5Confirm()
         { "a11_mis_chip", 0x06051560u, { 0xD102, 0x6011, 0x000B, 0x0009, 0x0009, 0x0009, 0xFFFF, 0xFE11 } },
         { "a11_mis_chip_mirror", 0x06051580u, { 0xD102, 0x6011, 0x000B, 0x0009, 0x0009, 0x0009, 0xFFFF, 0xFE13 } },
         { "a11_mis_long", 0x060515A0u, { 0xD102, 0x6012, 0x000B, 0x0009, 0x0009, 0x0009, 0x25F8, 0x0002 } },
-        // A11-6 (1), the control the mutant needs: a pointer that is one of TWO register addresses minus a constant (`p ? 0x25F80030 : 0x25F80020`, then
-        // `- 0x10`): the subtraction is applied to each address (mutant H-ptr-sub added the constant). tst r4,r4 ; bt L ; ... ; L: sub r2,r1 ; mov.l @r1,r0
-        { "a11_ptr_sub2", 0x06051600u, { 0xD104, 0x2448, 0x8900, 0xD104, 0xD204, 0x3128, 0x6012, 0x000B, 0x0009, 0x0009, 0x25F8, 0x0020, 0x25F8, 0x0030, 0x0000, 0x0010 } },
         { "a11_mis_vdp2mirror", 0x06051620u, { 0xD102, 0x6011, 0x000B, 0x0009, 0x0009, 0x0009, 0x25F8, 0x0203 } },
         { "a11_mis_chip_hi", 0x06051640u, { 0xD102, 0x6011, 0x000B, 0x0009, 0x0009, 0x0009, 0xFFFF, 0xFF81 } },
         { "a11_mis_chip_hi_long", 0x06051660u, { 0xD102, 0x6012, 0x000B, 0x0009, 0x0009, 0x0009, 0xFFFF, 0xFF83 } },
@@ -16461,19 +16458,14 @@ void TestArea5Confirm()
         CHECK(Has(out["a5_101_rawconst"].Text(), "param_1 + -0xc"));
         CHECK(out["a5_101_rawconst"].hardwareNotes.empty());
     }
-    // A11-6 (1): the subtracted constant of `(param_1 & 0x1c) - 0x198` is the register area 0xFFFFFE68 (PointerResolver, mutant H-ptr-sub: added,
-    // the base is 0x198 and no note names a register).
+    // A11-6 (1): the subtracted constant of `(param_1 & 0x1c) - 0x198` is the register area 0xFFFFFE68 (PointerResolver: the base is `0 - k`; a
+    // base of k, 0x198, names no register). The other use of the sign, `Shift(Walk(base), 0 - k)`, is not reached with a base worth shifting: the engine
+    // writes `x - k` as `x + -k` wherever x is a constant, a global's address or a pointer stepped in a loop (tried: two addresses joined, in a
+    // loop or not, and a pointer stepped down in a loop), so mutant H-ptr-sub is equivalent there (A11-6).
     {
         const DecompileResult& r = out["a11_ptr_sub"];
         CHECK(Has(r.Text(), "(param_1 & 0x1c) - 0x198"));
         CHECK(HasNoteAt(r, 0x06051408u, "the pointer is 0xFFFFFE68 (SH2_VCRD) plus an index that is not known", true));
-    }
-    // ...and a pointer that is one of two register addresses, less a constant: each is reduced by it (H-ptr-sub added it).
-    {
-        const DecompileResult& r = out["a11_ptr_sub2"];
-        CHECK(HasNoteAt(r, 0x0605160Cu, "if the pointer holds 0x25F80010 (VDP2_CYCA0L)", true));
-        CHECK(HasNoteAt(r, 0x0605160Cu, "if the pointer holds 0x25F80020 (VDP2_BGON)", true));
-        CHECK(!HasNote(r, "0x25F80040", true) && !HasNote(r, "0x25F80030 (", true));
     }
     // A11-6 (2): a misaligned access is made at the aligned address, and the registers it reaches are that address's (mutant H-note-reach took
     // the address as given for the "named" test, and said a "mirror" of a register the line names as it is). Below 0xFFFFFF00 on-chip the
