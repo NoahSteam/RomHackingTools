@@ -19318,3 +19318,57 @@ Routed and replayed: 4603517, 4402821, 4404345 were clean; 4606794 gives only `v
 | full `ctest -j2` | all passed but the A7-67 pin of `TestArea7Round4`'s successor in `Sh2DecompilerTests` (its line `xRamc0002024 = (xunknown2)in_r1;` now names the word store, an improvement; the pin expects that now); then `SaturnExplorerSh2DecompilerTests` and the 6 Live tests passed |
 | game corpus (`corpus.sh`, lent) | hwram007: lent **474 (645)** of 999, missing and said **0**; hwram008: lent **724 (975)** of 1,543, missing and said **4**; token dump clean |
 | lints | `check-literal-size.py` ok; the vendored tree is untouched |
+
+## Area 7, round 13
+
+Fixer, branch `review/7-round13` from master `94e4ea11`. The worktree's RelWithDebInfo build (`-j2`), every test binary under `ulimit -v 4000000` and `timeout`. Eleven rows filed and fixed: **A7-104 to A7-114**, all P3, for the `map-*` findings of seed 4802131, of grammar 1 and 2 over 4,800,001 to 4,810,000 and 5,200,001 to 5,210,000 and the specials over 5,300,001 to 5,305,000, of the seeds the area 3 round 23 review routed, of one seed the A3-182 fixer routed, and of this round's check of A7-99. **Six are the product's (A7-104, 105, 107, 112, 113, 114) and five the oracle's (A7-106, 108, 109, 110, 111).** No engine patch: 0091 stays free. Changes are in `Sh2Decompiler.cpp` (tokens and the way back only: `AddFrameStoreTokens`, `FlowNextReads`) and `MappingOracle.h`; generator productions untouched (the token dump of `SE_GENERATED_TOKENS=2` marks a materialised token with `m`).
+
+### A7-99 checked
+
+A7-99 counted apart every number line that says it names no instruction. It could hide a lost click: A7-99's own untrimmed variant (`uRam06002380 = 0x2000000;`, which names the byte store of 2) with its tokens taken away and `noOrigin` set passed the audit. **A7-108** tightens it: the line is counted apart only when no store that begins at the variable is known (`RegisterBefore`) to store the number's bytes (the variable as wide as the store, or a word). A store another store of the variable overwrites in its block before any read is not such a store: grammar 1 seed 5204339's `uRam26001018 = 0;` is the poll's store of 2 trimmed to the bit the loop tests, and the `mov.b r3,@r6` of 0 before it is dead (the first form of the check flagged it; pinned as passing). The three A7-99 seeds still pass.
+
+### Root causes
+
+| Row | Seeds | Whose | Cause | Fix |
+|---|---|---|---|---|
+| A7-104 | g1 4802131 | product | `iRam26002288._0_2_ = (xunknown2)in_r1;`, the slot store of the input hoisted to the `bt` before both paths, took the word and byte stores of a loaded r2 before the branch ("may"); the way back from the word store then offered it first | a statement of an input register's low bytes, at no store of the variable, names the stores of exactly those bytes unchanged from the entry when the search finds no store of the input |
+| A7-105 | g1 5000472 (specials) | product | the number-reach walk took a path to the entry for "not known": the later `mov #0,r0` "reached" the entry's store of the input r0 | the walk goes on past the entry |
+| A7-106 | g1 5002388 (specials) | oracle | `uVar3 = 0xffff800000000000;` at a `mac.l` a `bt` joins: a bound of its saturation | `mac.l`/`mac.w` make their clamp's bounds |
+| A7-107 | g1 5003735 | product | a register merged under a global's name at a loop's first instruction (`ldc r0,gbr`): A7-21's makers only for a copy at a block's end | also at a join's first instruction |
+| A7-109 | g1 5208620 | oracle | `or #0xBD,r0` of 8 or 5 is 0xBD on both paths | `or`/`and #imm,r0` of r0's makers' numbers |
+| A7-110 | g1 5207679 | oracle | `and r2,r0` of the poll's 2 and a `shll2`ed r2 is 0 | a known number inside the low bits left shifts made 0 |
+| A7-111 | g2 5204684 | oracle | `in_r1 = 0;` at `extu.w r5,r1` used only by `xtrct r5,r1` | A7-64's rule takes `xtrct` as a use of the high half |
+| A7-112 | g2 5203853 | product | A7-59's walk to the load after a `bsr` stopped at a push through r15 after the call | a store through the stack pointer is no store of a global |
+| A7-113 | g1 5304635 (specials) | product | `xRam26001025 = xRam26001025;` over a `tas.b` of the byte beside it named nothing | a copy of the variable's own memory is shown by the stores of its bytes |
+| A7-114 | g1 5602142 (A3-182 routing) | product | a conversion of a merged register at a join's first instruction (`cmp/pl r1`) | A7-107's rule takes a conversion too; with a path from the entry the line names none and says so |
+
+The area 3 round 23 routing: 5003735 (A7-107), 5000472 (A7-105, specials), 5002388 (A7-106, specials). Grammar 2 seed 5001825 (`map-const-join`, specials) gives no finding on this branch or on master's binary, alone or in the run of grammar 2 specials over 5,000,001 to 5,003,000 (0 failing seeds).
+
+### Pins and mutation
+
+`TestArea7Round13` (`SaturnExplorerSh2DecompilerTests`): the shrunk words of each seed with the line, the audit and a damaged result (the line drawn where it was, or another number); A7-108's damaged result and 5204339's passing line. With master's `Sh2Decompiler.cpp` the five product fixtures of A7-104, 105, 107, 112, 113 fail (line and audit each); with master's `MappingOracle.h` the five oracle fixtures (A7-106, 108's damaged result, 109, 110, 111) fail. A7-114 came after that run; its damaged result (the line back at the `cmp/pl`) is the finding the generator gave on master's binary. `TestArea7Round13Pins` (`SaturnExplorerSh2GeneratedTests`) replays the 11 whole seeds (4802131, 5000472, 5002388, 5003735, 5204339, 5207679, 5208620, 5203853, 5204684, 5304635, 5602142), the specials ones under that alphabet. No new test target.
+
+### Routed
+
+* **Area 5:** `folded-store-after-access` only (matrix seed 4123, and the shapes of the ranges).
+* **Area 3:** grammar 1 seed 5201834 (`endless-after-store-dropped`) and grammar 2 seed 5202322 (`kept-read:r13`), both on master's binary too.
+* **Back to the A3-182 fixer's branch:** 5602142, 5601418 and 5602264 were found on master `c055b0a4`, whose A3-183 join production draws another program from seed 5,600,001; this branch has no such production. Here 5601418 and 5602264 are clean and 5602142 gave A7-114. The three should be replayed once this round and A3-182 are both on master.
+
+### Runs
+
+All after the last code edit (`4ebccfb5`), with that build:
+
+| Run | Result |
+|---|---|
+| seed 4802131 (grammar 1) | `n:map-way-back` on master's binary; **0 findings** now |
+| grammar 1, 4,800,001 to 4,810,000 and 5,200,001 to 5,210,000 (pieces of 5,000, canary off) | **0 `map-*`**; 21 + 25 + 13 + 16 failing seeds: `folded-store-after-access` (area 5) and 5201834 `endless-after-store-dropped` (area 3) |
+| grammar 2, the same ranges | **0 `map-*`**; 0 + 0 + 1 + 0 failing seeds: 5202322 `kept-read:r13` (area 3) |
+| specials, grammar 1 and 2, 5,300,001 to 5,305,000 | **0 `map-*`**; grammar 1: 18 failing seeds, all `folded-store-after-access`; grammar 2: 0 |
+| the same ranges on master's binary (before the fixes) | `map-way-back` 4802131; `map-const-join` 5207679, 5208620 (g1), 5204684 (g2); `map-store-after` 5203853 (g2); `map-copy-store` 5304635 (g1 specials) |
+| 20,000-seed matrix (pieces of 5,000, canary in the first) | 1 failing seed, **4123** (`n:folded-store-after-access`, area 5) |
+| default run, grammar 1 and grammar 2, `SE_GENERATED_SEEDS=3000` | 0 failing seeds each |
+| printed-C (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | **agrees=5196**, narrow-c 130, void-return 227, void-return-lent 24 |
+| fault suite | **0 of 94** jobs failed |
+| full `ctest -j2` with Live | **117 of 117** passed (111 and the 6 Live tests) |
+| game corpus (`a7_round2/corpus.sh`, lent, token dump) | hwram007: lent **474 (645)** of 999, missing and said **0**; hwram008: lent **724 (975)** of 1,543, missing and said **4**; every ledger and mapping count 0 (both runs "all passed") |
+| lints | `check-literal-size.py` ok; the vendored tree is untouched |
