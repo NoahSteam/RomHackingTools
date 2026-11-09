@@ -18837,3 +18837,31 @@ A3-170 is the one break. The caution keys `written` (the bytes the text writes) 
 
 * **Area 7:** grammar 1 seed 3706930 (`map-copy-store`; replay `D60F D710 D710 6072 C801 8BFC C801 8D01 8058 6033 2701 2522 2029 6361 630C 2319 2238 8D01 2522 6061 1703 6272 3030 8D03 6233 2632 2511 142B 5168 6341 000B 6361 05F8 00F0 4600 00C0 2600 2380`), grammar 2 seed 3706722 (`map-number-store`: `xRam26001000 = 4;`).
 * **Area 5:** grammar 2 seed 3709052 (`cache-read-pointer-unsaid`, a 1-byte read at 0x06009140 through a pointer derived from a register address).
+
+## Area 2, P3 sweep
+
+Fixer, branch `review/2-p3-sweep`, cut at master `5601733a9`. The ledger still held five open area 2 rows after round 22: the three of that round (A2-130 to A2-132) and two older P3s that no round had closed (A2-123, A2-124, round 18). Every one is now fixed or accepted with a reason. The harness changed (`Sh2GeneratedTests.cpp`) and the guide gained a paragraph; no engine file and no patch changed (patch number 0092 was not needed).
+
+| Row | P | Outcome |
+|---|---|---|
+| A2-130 | P3 | **fixed** (harness). The printed-C harness declared a global at a constant address (`iRam06002304`) as `static __typeof__(<first value assigned>)`. It now declares it by the letter the engine's name starts with (`type.hh` `printNameBase`: the first letter of the type's name): `i` and `c` signed, `u` unsigned, `x` no sign (the engine reading's `Unk`, unsigned in the C reading); `p`/`a` before another letter, `b`, `f`, `w` and an empty prefix keep the type of the value. The width is the assignment's: a value that is one `CONCATab`, `SUBab`, `ZEXTab` or `SEXTab` call names its own (`CONCAT13` is four bytes, which C's reading of the macro, an 8-byte value, does not keep), any other value gives the width of its type through `GINT_`, `GUINT_` and `GUNK_` (`_Generic` in the C reading, class templates `GMk` in the engine reading, the big-endian header too). |
+| A2-131 | P3 | **accepted**: no wrong value; see below. |
+| A2-132 | P3 | **fixed** (guide): `DECOMPILER_GUIDE.md`, Limits: a global's name letter gives its type, a bare compare, shift or division of it has that type's sign, the width is the assignment's. |
+| A2-123 | P3 | **accepted** (readability, no wrong value; 1,812 runs agree): folding a T-selected PC-relative load in a `bt/s`/`bf/s` slot into its two literals is an engine change to the constant folder for the sake of a text that is already the load the code does. |
+| A2-124 | P3 | **accepted**: slot-load texts are `skipped:memory` (said, never a false pass), the slot forms are held to Mednafen one instruction at a time, and the whole decompilations were compared with runs by `dsfam.py` (302 functions, 1,812 runs, 0 disagree). |
+
+### A2-130: what the three reproducers and the controls do
+
+The three texts of the row, `SE_GENERATED_PRINTEDC=only SE_GENERATED_PRINTEDC_WORDS=...`, were `mismatch` and are `agrees (76 inputs)`: `D104 2142 6053 2100 6212 E305 4221 000B 6023 0009 0600 2304` (`iRam06002304 = CONCAT13(param_2,param_1); return iRam06002304 >> 1;`), `... E305 3237 000B 0029 ...` (`return 5 < iRam06002304;`) and `D103 2142 6053 8111 6012 4021 000B 0009 0600 2304` (the half overwrite, `CONCAT22(...)`). The unsigned twins (`4201` `shlr`, `3236` `cmp/hi`: `uRam`) still agree. The other direction, the gap behind the row, is closed too: a global named with the other sign's letter is declared by that letter, so the engine's mistake would be a finding. The test pins them (`SaturnExplorerSh2PrintedCTests`, in `Sh2GeneratedTests.cpp`): `A2-130 #0` to `#4` (the three and the two unsigned twins: agree, and the `iRam`/`uRam` names are checked in the text) and `A2-130 oracle #0` to `#4` (the same five with the letter swapped, `i` for `u` and `u` for `i`, by a new hook `gPrintedCEarlyHook` that renames before the declaration is made: `mismatch` and failing, all five). A first attempt used the existing `gPrintedCTextHook`, which runs after the declaration and so renamed the declaration with its type; the five controls then agreed, which is why the second hook exists.
+
+### A2-131: accepted
+
+`ldc r6,sr ; mac.l @r4+,@r5+ ; sts macl,r0` prints the negative saturation bound as `uVar3 = 0;` in a `uint8` accumulator, where the positive bound is `0x7fffffffffff`. The engine's subvariable pass narrows the constant 0xFFFF800000000000 to the one word the code reads after it (`(int4)uVar3`) and the declaration stays 8 bytes wide. The value returned is right on all 76 inputs, and with `sts mach` read after it (or a second `mac.l`) the bound is printed whole. Printing it whole means a change in the narrowing of constants on a variable the text declares wider: it is shared by every constant and every width in every function, and the gain is one line whose surrounding condition (`0x7fffffffffff < uVar3 && uVar3 < 0xffff800000000000`) already says which bound is meant. A host-side rewrite of the one `uVar3 = 0;` would be a guess at what the engine meant. Not changed.
+
+### Runs
+
+| Run | Result |
+|---|---|
+| printed-C matrix (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | 5,585 functions, 5,297 compared: agrees **5,196** (the baseline, unchanged: the register-only grammar makes no global, so no seed meets the new declaration), narrow-c 130, 0 `mismatch` |
+| printed-C, 10,000 fresh seeds (`SE_GENERATED_FIRST` 3,900,001 and 3,905,001, 5,000 each) | see the table below |
+| `SaturnExplorerSh2PrintedCTests` | passed with the new pins |
