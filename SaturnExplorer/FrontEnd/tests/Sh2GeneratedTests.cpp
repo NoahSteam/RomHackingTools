@@ -1379,10 +1379,13 @@ struct Gen
         {
             static const int regs[5] = { 0, 1, 2, 4, 5 };
             const int a = regs[slotEntryRng.Below(5)], b = regs[slotEntryRng.Below(5)];
-            it.slotEntry = 1 + static_cast<int>(slotEntryRng.Below(2));
+            // (the entry and the early return from one draw: two draws of this generator two apart are correlated, and drawn apart they
+            // came out the same)
+            const uint32_t form = slotEntryRng.Below(4);
+            it.slotEntry = 1 + static_cast<int>(form & 1);
+            it.earlyExit = (form & 2) != 0;
             it.entryCond = uint16_t(0x2008 | a << 8 | b << 4);   // tst Rb,Ra
             it.entryOnTrue = slotEntryRng.Chance(50);
-            it.earlyExit = slotEntryRng.Chance(50);
             if (slotEntryRng.Chance(50))
             {
                 int w = 1 << slotEntryRng.Below(3);
@@ -2263,7 +2266,75 @@ struct Gen
                 }
             }
         }
+        AddSlotEntryPoll(items, polled);
         return p;
+    }
+
+    // A3-170, the whole shape, in one program without a poll in four (from the seeds where the production is drawn): a fresh RAM pointer in r6,
+    // a test, a branch into the slot of a delayed `cmp/eq` branch whose taken path returns at once, a store through r6 in that slot, then a poll
+    // of the mailbox that reads back its own write (the analysis takes it to run for ever) and a store through r6 after it. One instance of the
+    // slot reaches the return and the store is live there; the other reaches only the poll. Everything is drawn from slotEntryRng and appended,
+    // so nothing before it moves.
+    void AddSlotEntryPoll(std::vector<Item>& items, bool polled)
+    {
+        if (!slotEntryOn || polled || disc || !slotEntryRng.Chance(25)) return;
+        Lit ram;
+        ram.kind = LitKind::Ram;
+        const uint32_t base = slotEntryRng.Chance(75) ? 0x26000000u : 0x06000000u;
+        const uint32_t line = slotEntryRng.Below(8), word = slotEntryRng.Below(4);
+        ram.value = base + 0x2000u + 0x80u * line + 4u * word;
+        const int w = 1 << slotEntryRng.Below(3);
+        ram.width = w;
+        Item ptr;
+        ptr.type = Item::LitPtr;
+        ptr.shape = "slot_entry.litptr";
+        ptr.reg = 6;
+        ptr.lit = static_cast<int>(p.lits.size());
+        p.lits.push_back(ram);
+        align[6] = std::min(4, w);
+        pref[6] = w;
+        items.push_back(ptr);
+        const int sz = w == 1 ? 0 : w == 2 ? 1 : 2;
+        auto store = [&](int data) {
+            Item st;
+            st.type = Item::Mem;
+            st.shape = "slot_entry.store";
+            st.words = { uint16_t(0x2000 | 6 << 8 | data << 4 | sz) };   // mov.x Rdata,@r6
+            st.base = 6;
+            st.width = w;
+            return st;
+        };
+        Item sk;
+        sk.type = Item::Skip;
+        sk.shape = "slot_entry.skip";
+        sk.delayed = true;
+        sk.onTrue = slotEntryRng.Chance(50);
+        const int n = 4 + static_cast<int>(slotEntryRng.Below(2)), m = 4 + static_cast<int>(slotEntryRng.Below(2));
+        sk.cond = uint16_t(0x3000 | n << 8 | m << 4);   // cmp/eq Rm,Rn
+        static const int regs[5] = { 0, 1, 2, 4, 5 };
+        sk.entryCond = uint16_t(0x2008 | regs[slotEntryRng.Below(5)] << 8 | regs[slotEntryRng.Below(5)] << 4);   // tst
+        sk.entryOnTrue = slotEntryRng.Chance(50);
+        sk.slotEntry = 1 + static_cast<int>(slotEntryRng.Below(2));
+        sk.earlyExit = true;
+        sk.slot.push_back(store(1 + static_cast<int>(slotEntryRng.Below(5))));
+        items.push_back(sk);
+        Item poll;
+        poll.type = Item::Poll;
+        poll.shape = "slot_entry.poll";
+        poll.reg = 7;
+        Lit mb;
+        mb.kind = LitKind::Mbox;
+        mb.value = p.mbox + 4u * slotEntryRng.Below(3);
+        mb.width = slotEntryRng.Chance(50) ? 2 : 4;
+        poll.lit = static_cast<int>(p.lits.size());
+        p.lits.push_back(mb);
+        poll.width = mb.width;
+        poll.pollWrite = true;
+        poll.pollValue = 1;
+        poll.untilSet = false;   // `bf`: it waits for bit 0 to clear, and reads back the 1 it wrote
+        align[7] = std::min(align[7], 4);
+        items.push_back(poll);
+        items.push_back(store(1 + static_cast<int>(slotEntryRng.Below(5))));
     }
 };
 
@@ -15421,11 +15492,11 @@ void TestGenerated()
     char covered[1536];
     std::snprintf(covered, sizeof covered,
                   "alu=%d loads=%d stores=%d (plain %d disp %d indexed %d inc/dec %d) tas=%d (T moved %d) widths b/w/l=%d/%d/%d literal pointers hw/ram/mailbox=%d/%d/%d "
-                  "skips=%d (delayed %d; slot entered ahead %d, below %d, own return %d) loops=%d polls=%d (write first %d, until set %d, body %d; mailbox %d hw %d ram %d) rts slot insn=%d",
+                  "skips=%d (delayed %d; slot entered ahead %d, below %d, own return %d; the whole shape before a poll %d) loops=%d polls=%d (write first %d, until set %d, body %d; mailbox %d hw %d ram %d) rts slot insn=%d",
                   sum("alu."), sum("mem.ld."), sum("mem.st."), n("mem.ld.plain") + n("mem.st.plain"), n("mem.ld.disp") + n("mem.st.disp"),
                   n("mem.ld.indexed") + n("mem.st.indexed"), n("mem.ld.inc") + n("mem.st.dec"), n("mem.tas"), n("mem.tas.movt"), n("width.1"), n("width.2"),
                   n("width.4"), n("litptr.hw") + n("poll.hw"), n("litptr.ram") + n("poll.ram"), n("litptr.mbox") + n("poll.mbox"), sum("skip."),
-                  n("skip.bt_s") + n("skip.bf_s"), n("slot_entry.ahead"), n("slot_entry.below"), n("slot_entry.early_exit"), n("loop"), sum("poll.h") + sum("poll.r") + sum("poll.m"), n("poll.write_first"),
+                  n("skip.bt_s") + n("skip.bf_s"), n("slot_entry.ahead"), n("slot_entry.below"), n("slot_entry.early_exit"), n("slot_entry.poll"), n("loop"), sum("poll.h") + sum("poll.r") + sum("poll.m"), n("poll.write_first"),
                   n("poll.until_set"), n("poll.body"), n("poll.mbox"), n("poll.hw"), n("poll.ram"), n("rts.slot_insn"));
     if (coverage)
     {
