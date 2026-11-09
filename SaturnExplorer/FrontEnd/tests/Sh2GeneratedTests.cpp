@@ -5446,7 +5446,7 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
         if (r.status == DecompileStatus::Ok && subject.postPollStore != 0 && subject.fns.size() == 1)
         {
             static const std::regex endlessLoop("^\\s*\\}?\\s*while\\( true \\);?\\s*$");
-            static const std::regex storeLine("^\\s*[A-Za-z]*Ram([0-9a-f]{8})(?:\\._([0-9]+)_([0-9]+)_)?\\s*(?:[-+*/%&|^]|<<|>>)?=(?!=)");
+            static const std::regex storeLine("^\\s*_?[A-Za-z]*Ram([0-9a-f]{8})(?:\\._([0-9]+)_([0-9]+)_)?\\s*(?:[-+*/%&|^]|<<|>>)?=(?!=)");
             static const std::regex missing("-byte write of 0x([0-9A-F]{8}) here is missing");
             const uint32_t a = subject.postPollStore & 0x1FFFFFFFu, last = a + static_cast<uint32_t>(subject.postPollStoreWidth) - 1;
             bool forEver = false, printed = false;
@@ -5486,7 +5486,7 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
         if (r.status == DecompileStatus::Ok)
         {
             static const std::regex endless("^\\s*\\}?\\s*while\\( true \\);?\\s*$");
-            static const std::regex storeAt("^\\s*[A-Za-z]*Ram([0-9a-f]{8})(?:\\._([0-9]+)_([0-9]+)_)?\\s*(?:[-+*/%&|^]|<<|>>)?=(?!=)");
+            static const std::regex storeAt("^\\s*_?[A-Za-z]*Ram([0-9a-f]{8})(?:\\._([0-9]+)_([0-9]+)_)?\\s*(?:[-+*/%&|^]|<<|>>)?=(?!=)");
             bool forEver = false;
             std::vector<std::pair<uint32_t, uint32_t>> printed;   // [first, last] of each global a line stores
             int returning = 0;
@@ -15222,6 +15222,10 @@ void TestA3RoutedPins(Sh2Decompiler& d)
             { "A3-170 d1", "D309 D70A E001 2701 6043 C801 890A 3450 8F06 2362 6071 C801 8BFC 2342 000B 0009 000B 0009 AFF5 0009 0600 2304 0600 1010", true },
             { "A3-170 control d1c", "D30A D70B E001 2701 6043 C801 890A 3450 8F06 2362 6071 C801 8BFC 2342 000B 0009 000B 0009 2362 AFF5 0009 0009 0600 2304 0600 1010", true },
             { "A3-170 d2 (A3-172: the text's store line returns first)", "D309 D70A E001 2701 6043 C801 8909 8F06 2362 6071 C801 8BFC 2342 000B 0009 000B 6053 AFF5 0009 0009 0600 2304 0600 1010", true },
+            // A3-177 (grammar 1 seed 4404353, shrunk, from the 5,000 seeds from 4,400,001): the slot's instance returns and prints a CONCAT11
+            // piece of the store (an op the actions made, with no time of the flow), which counted for the other instance too: that one, on the
+            // path that reaches only the poll, went unsaid. The check, which now takes no store line that returns first (A3-172), found it
+            { "A3-177 seed 4404353 shrunk", "D609 2548 8B0D 3440 8D09 2620 D707 E001 2701 6071 C801 8BFC 2640 000B 6361 000B 6361 AFF2 0009 0009 0600 228C 2600 1018", true },
         };
         for (const Pin& pin : kPins)
         {

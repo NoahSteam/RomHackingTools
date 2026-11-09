@@ -16219,6 +16219,12 @@ void TestA3164Fix()
         // when the later one is said too (checked below)
         { "A3-171 c2: two stores of a word before the poll", { 0xD605, 0x2631, 0x2621, 0xD705, 0xE002, 0x2702, 0x6072, 0xC801, 0x89FC, 0x2631, 0x000B, 0x0009,
             0x2600, 0x210C, 0x0600, 0x1004 }, 0x06009004u },
+        // A3-177 (grammar 1 seed 4404353, shrunk; found by the A3-172 check): `tst r4,r5 ; bf B ; cmp/eq r4,r4 ; bt/s R ; S: mov.b r2,@r6 ;
+        // mailbox write ; poll ; ... ; R: rts ; B: bra S`. The slot's instance returns and prints `xRam0600228c = CONCAT11(in_r2,...)`, a piece
+        // the actions made, with no time of the flow, which counted for both instances: the instance B reaches, which reaches only the poll,
+        // went unsaid. An op the actions made is placed by its slot mark now
+        { "A3-177 seed 4404353: a piece of the slot's instance", { 0xD609, 0x2548, 0x8B0D, 0x3440, 0x8D09, 0x2620, 0xD707, 0xE001, 0x2701, 0x6071, 0xC801,
+            0x8BFC, 0x2640, 0x000B, 0x6361, 0x000B, 0x6361, 0xAFF2, 0x0009, 0x0009, 0x0600, 0x228C, 0x2600, 0x1018 }, 0x0600900Au },
         { "A3-171 c1: the replacing store in the poll's body", { 0xD307, 0x6132, 0x7101, 0x2312, 0xD706, 0xE001, 0x2701, 0x7101, 0x2312, 0x6071, 0xC801, 0x8BFA,
             0x2342, 0x000B, 0x0009, 0x0009, 0x0600, 0x2304, 0x0600, 0x1010 }, 0x06009010u },
     };

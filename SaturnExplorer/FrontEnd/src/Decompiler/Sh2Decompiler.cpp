@@ -8769,10 +8769,21 @@ std::vector<DecompileResult::EndlessLoopStore> StoresBeforeEndlessLoop(const ghi
     // is the instruction's at any instance, block -1.)
     const ghidra::AddrSpace* ram = fd.getArch()->getDefaultDataSpace();
     std::map<std::pair<int, uint32_t>, std::vector<std::pair<uint32_t, uint32_t>>> written;
-    auto instanceOf = [&flow, nf](const ghidra::PcodeOp* o) {
+    // (A3-177: an op the actions made for an instruction that is two instances, the piece heritage joins the stored byte into (`xRam0600228c =
+    // CONCAT11(in_r2,...)`, grammar 1 seed 4404353), counted for both, and the instance on the path that reaches only the loop went unsaid. One
+    // of the two instances is the slot of a delayed branch and the other is not, and an op built for the slot's instruction is marked so
+    // (patch 0075; its address is the branch's): it is the instance whose flow ops are, or are not, the slot's.)
+    std::map<std::pair<uint32_t, bool>, std::set<int>> slotInstances;
+    for (size_t b = 0; b < nf && b < flow.blockOps.size(); ++b)
+        for (const FlowOp& x : flow.blockOps[b])
+            if (instancesOf(x.insn).size() > 1) slotInstances[std::make_pair(x.insn, x.slot)].insert(static_cast<int>(b));
+    auto instanceOf = [&flow, nf, &slotInstances](const ghidra::PcodeOp* o) {
         auto f = flow.ops.find(o->getTime());
-        return f != flow.ops.end() && f->second.first >= 0 && static_cast<size_t>(f->second.first) < nf ? std::make_pair(f->second.first, InstructionOf(o))
-                                                                                                          : std::make_pair(-1, InstructionOf(o));
+        if (f != flow.ops.end() && f->second.first >= 0 && static_cast<size_t>(f->second.first) < nf) return std::make_pair(f->second.first, InstructionOf(o));
+        const bool slot = o->isFromDelaySlot() || static_cast<uint32_t>(o->getAddr().getOffset()) != InstructionOf(o);
+        auto in = slotInstances.find(std::make_pair(InstructionOf(o), slot));
+        if (in != slotInstances.end() && in->second.size() == 1) return std::make_pair(*in->second.begin(), InstructionOf(o));
+        return std::make_pair(-1, InstructionOf(o));
     };
     std::vector<const ghidra::PcodeOp*> silent;
     std::set<const ghidra::HighVariable*> printedHighs;
