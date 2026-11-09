@@ -521,3 +521,58 @@ add #1,r0
 mov.l r0,@r15
 rts
 nop
+name pp7
+# A3-173 control: r6 is tested before the loop (the signature holds it), then stored after the loop: lent, nothing said
+mov.l =0x06002304,r3
+mov.l =0x06001010,r7
+mov #1,r0
+mov.w r0,@r7
+tst r6,r6
+bt Q
+P:
+mov.w @r7,r0
+tst #1,r0
+bf P
+mov.l r6,@r3
+Q:
+rts
+nop
+name pp8
+# A3-173: a word of the caller's frame read after the loop (and stored)
+mov.l =0x06002304,r3
+mov.l =0x06001010,r7
+mov #1,r0
+mov.w r0,@r7
+P:
+mov.w @r7,r0
+tst #1,r0
+bf P
+mov.l @(4,r15),r1
+mov.l r1,@r3
+rts
+nop
+name pp9
+# A3-173: the return register written after the loop
+mov.l =0x06001010,r7
+mov #1,r0
+mov.w r0,@r7
+P:
+mov.w @r7,r0
+tst #1,r0
+bf P
+rts
+mov #5,r0
+name pp10
+# A3-173 control: r6 loaded after the loop is no input
+mov.l =0x06002304,r3
+mov.l =0x06001010,r7
+mov #1,r0
+mov.w r0,@r7
+P:
+mov.w @r7,r0
+tst #1,r0
+bf P
+mov #7,r6
+mov.l r6,@r3
+rts
+nop
