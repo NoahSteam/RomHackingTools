@@ -24,6 +24,7 @@
  * Modified for SaturnExplorer: a LOAD guard records whether heritage put its COPYs before the LOAD, and a held frame write is no address force of the guard's (patches/0076-engine-frame-loads-keep-writes.patch).
  * Modified for SaturnExplorer: the pieces heritage makes at a delay slot's op for it are the slot's too (patches/0079-engine-heritage-slot-pieces-marked.patch).
  * Modified for SaturnExplorer: a read of a piece of a global the range holds wider is read into a temporary, not written to the piece (patches/0088-engine-global-piece-read-and-join-copy.patch).
+ * Modified for SaturnExplorer: a hardware access is a barrier to the writes and reads of a global (patches/0090-engine-hardware-access-orders-globals.patch).
  */
 #include "heritage.hh"
 #include "funcdata.hh"
@@ -2179,6 +2180,7 @@ void Heritage::guard(const Address &addr,int4 size,bool addIndirects,
       guardStores(addr,size,write);
       guardLoads(fl,addr,size,write);
     }
+    guardHardwareAccesses(fl,addr,size,write);	// SaturnExplorer (0090)
   }
 }
 
@@ -2602,6 +2604,96 @@ void Heritage::guardLoads(uint4 fl,const Address &addr,int4 size,vector<Varnode 
     guardRec.sunk = true;	// SaturnExplorer (patches/0076-engine-frame-loads-keep-writes.patch)
     loadCopyOps.push_back(copyop);
   }
+}
+
+/// \brief Is the op a hardware access: the user op of a volatile read or write (SaturnExplorer, 0090)
+static bool isHardwareAccessOp(Funcdata *fd,const PcodeOp *op)
+
+{
+  if (op->code() != CPUI_CALLOTHER || op->isDead() || op->numInput() < 2) return false;
+  const Varnode *id = op->getIn(0);
+  if (id == (const Varnode *)0 || !id->isConstant()) return false;
+  const UserPcodeOp *u = fd->getArch()->userops.getOp((uint4)id->getOffset());
+  if (u == (const UserPcodeOp *)0) return false;
+  return (u->getType() == UserPcodeOp::volatile_read || u->getType() == UserPcodeOp::volatile_write);
+}
+
+/// \brief Make each hardware access a barrier to a global (SaturnExplorer, 0090)
+///
+/// A register read or write, or an access of memory the request marks volatile (a mailbox), is a user op the engine takes to touch
+/// no variable: a global's write before it could be dropped (another write after it), merged into a later write, or carried past it
+/// by a rule, and a read of the global before it printed after it, though the access may start a transfer that reads or writes the
+/// global, or tell another processor to (ledger A5-114, A5-116, A5-117, A5-118). Each such access gets the guards of a STORE (an
+/// INDIRECT, so the global's value after the access is another than before it), and a COPY sink before it whose writes are address
+/// forced (as a LOAD guard's are), so the value the global holds when the access is made is in memory then.
+/// \param fl is the boolean properties of the range
+/// \param addr is the first address of the range
+/// \param size is the number of bytes in the range
+/// \param write is the list of written Varnodes in the range (may be updated)
+void Heritage::guardHardwareAccesses(uint4 fl,const Address &addr,int4 size,vector<Varnode *> &write)
+
+{
+  if (addr.getSpace()->getType() != IPTR_PROCESSOR) return;
+  if ((fl & Varnode::addrtied) == 0 || (fl & Varnode::volatil) != 0) return;
+  list<PcodeOp *>::const_iterator iter = fd->beginOp(CPUI_CALLOTHER);
+  list<PcodeOp *>::const_iterator iterend = fd->endOp(CPUI_CALLOTHER);
+  vector<PcodeOp *> accesses;
+  for(;iter!=iterend;++iter)
+    if (isHardwareAccessOp(fd,*iter)) accesses.push_back(*iter);
+  size_t hardware = accesses.size();
+  // ...and a read or write through a pointer of this space, which may be a register's address (or the global's own): a sink only, as a
+  // STORE has its own guards and a LOAD changes nothing
+  for(int4 k=0;k<2;++k) {
+    OpCode opc = (k == 0) ? CPUI_LOAD : CPUI_STORE;
+    for(iter=fd->beginOp(opc);iter!=fd->endOp(opc);++iter) {
+      PcodeOp *op = *iter;
+      if (op->isDead() || op->usesSpacebasePtr()) continue;
+      if (op->getIn(0)->getSpaceFromConst() != addr.getSpace()) continue;
+      if (op->getIn(1)->isConstant()) continue;
+      accesses.push_back(op);
+    }
+  }
+  for(int4 i=0;i<accesses.size();++i) {
+    PcodeOp *op = accesses[i];
+    PcodeOp *copyop = fd->newOp(1,op->getAddr());
+    Varnode *vn = fd->newVarnodeOut(size,addr,copyop);
+    vn->setActiveHeritage();
+    vn->setAddrForce();
+    fd->opSetOpcode(copyop,CPUI_COPY);
+    Varnode *invn = fd->newVarnode(size,addr);
+    invn->setActiveHeritage();
+    fd->opSetInput(copyop,invn,0);
+    fd->opInsertBefore(copyop,op);
+    barrierCopyOps.push_back(copyop);
+    if (i >= hardware) continue;
+    PcodeOp *indop = fd->newIndirectOp(op,addr,size,PcodeOp::indirect_store);
+    indop->getIn(0)->setActiveHeritage();
+    indop->getOut()->setActiveHeritage();
+    write.push_back(indop->getOut());
+  }
+}
+
+/// \brief Keep the writes a hardware access's sinks reach, then remove the sinks (SaturnExplorer, 0090)
+///
+/// The last writes of the global that reach a sink through artificial COPYs, MULTIEQUALs and STORE guards are address forced, so dead
+/// code, a rule's propagation or a collapsed join cannot take them away from the place the code makes them, before the access.
+void Heritage::handleBarrierCopies(void)
+
+{
+  if (barrierCopyOps.empty()) return;
+  vector<PcodeOp *> forces;
+  int4 copySinkSize = barrierCopyOps.size();
+  findAddressForces(barrierCopyOps, forces);
+  for(int4 i=0;i<forces.size();++i) {
+    PcodeOp *op = forces[i];
+    op->getOut()->setAddrForce();
+    op->clearMark();
+  }
+  for(int4 i=0;i<copySinkSize;++i)
+    propagateCopyAway(barrierCopyOps[i]);
+  for(int4 i=copySinkSize;i<barrierCopyOps.size();++i)
+    barrierCopyOps[i]->clearMark();
+  barrierCopyOps.clear();
 }
 
 /// \brief Guard data-flow at RETURN ops, where range properly contains potention return storage
@@ -3777,6 +3869,7 @@ void Heritage::heritage(void)
   analyzeNewLoadGuards();
   widenEscapedStoreGuards();	// SaturnExplorer (patches/0061-engine-stack-frame-escape.patch)
   handleNewLoadCopies();
+  handleBarrierCopies();	// SaturnExplorer (0090)
   fd->checkPieceSizes();	// SaturnExplorer (patches/0068-engine-deadcode-late-stack-reads.patch)
   if (pass == 0)
     splitmanage.splitAdditional();
