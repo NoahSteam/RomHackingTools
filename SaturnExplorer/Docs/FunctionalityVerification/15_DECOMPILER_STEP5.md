@@ -18984,3 +18984,49 @@ The engine removes the code after an unmarked poll it takes to run for ever (the
 * **Area 7:** grammar 1 seeds 4100259, 4100749, 4101693, 4101969, 4103377, 4104223, 4104402, 4104642, 4106174, 4106307, 4106324, 4107185, 4108075, 4108474, 4108617, 4108706, 4109252 (`map-copy-store`, `map-way-back`, `map-copy-merge`, `map-store-value`; the known classes of the delay-slot productions from 3,800,001); grammar 2 seeds 4103690 (`map-const-join`), 4109566 and 4109706 (`map-copy-store`, `map-frame-store`, `map-number-store`).
 * **Area 5:** grammar 1 seeds 4100190, 4100589, 4100793, 4100950, 4101780, 4102944, 4104110, 4104172, 4104228, 4104413, 4104447, 4104490, 4104843, 4104931, 4105458, 4105546, 4105895, 4106565, 4106575, 4106682, 4107166, 4107182, 4107964, 4108172, 4108445, 4108554, 4108851, 4109354, 4109493, 4109631 (`folded-store-after-access`, A5-117's class).
 * **Area 11:** no grammar draws A3-173: grammar 2 has no poll, and grammar 1 (polls 3,222 + 3,261) found none in 10,000 seeds; a hand fixture's run with `SE_GENERATED_POLL=<addr>` stops at the poll's first read.
+
+## Area 7, round 11
+
+Branch `review/7-round11` from master `810872142`; master `c38138018` (area 3, A3-170 and A3-171) merged during the round. The worktree's RelWithDebInfo build, `-j2`, every test binary under `ulimit -v 3500000` and `timeout`, one heavy job at a time. Thirteen rows filed and fixed: **A7-78 to A7-90**, for the two seeds that turned the master matrix red (17737, 902), the 10 queued seeds, the A3-170 fixer's routed delay-slot seeds (3800320 and its 13 siblings, 3800581, 3804173, 3802371) and two seeds of the fresh run from 4,000,001 (4002874, 4000243). **Two are the product's alone (A7-78 P2, A7-84 P2) and one the product's with the oracle's help (A7-86 P2)**; the other ten are the oracle's, all P3. Nothing here is a wrong value or a lost one. Text, engine and vendored tree untouched: no patch, 0091 stays free, no patch lint. The changes are in `MappingOracle.h` and, for the three product rows, in `Sh2Decompiler.cpp` (tokens and the way back only).
+
+### Root causes
+
+| Row | Seeds | Whose | Cause | Fix |
+|---|---|---|---|---|
+| A7-78 | g1 902 | product | `uRam26001030 = (uint2)uRam26001034;` draws the SUBPIECE of a polled word at the later narrow store; only a COPY was marked materialised, so the way back answered the store with the copy | `MarkMaterialisedReads` takes a SUBPIECE of the memory |
+| A7-79 | g1 3300988 | oracle | a global read drawn at its load, naming a store elsewhere, taken for a copy materialised at the load | `readHere` |
+| A7-80 | g1 17737 (matrix), 3302704; g2 3628408, 3629843 (specials) | oracle | const-join number rules: AND mask with a zero low half for a four-byte variable used narrowed; a join-head token names no register; `shll`/`shal`/`shll2` low bits; `add` of a zero and an input, and `tst Rm,Rn` of two copies of one input on the `bt` edge | see the row |
+| A7-81 | g1 3706930 | oracle | A7-55's "a load may read the input back" with no store of that input in the body | the load counts when a store of that same input register may write what it reads |
+| A7-82 | g2 3601551 | oracle | a call's output merged under a frame word's name where no store of the word stores a value that call made | counted apart (`copyOtherValue`), in both checks |
+| A7-83 | g2 3622362 (specials) | oracle | `iRamc0001004 = iRamc000103c;`, a folded read's copy that names no instruction and says so (A7-52) | counted apart (`copyNoAddress`), for a folded read only |
+| A7-84 | g2 3620180 (specials) | product | `iStack_20 = 2;` named the `mov.l r2,@-r15` that pushes 0: the number statement's value set held an instruction, so any constant "may" be its | the instructions that make the statement's number are dropped from its value set: the number decides |
+| A7-85 | g2 3706722 | oracle | the number reaches the store through `lds r1,mach ; sts mach,r1` | `RegisterMakers` follows MACH and MACL |
+| A7-86 | g1 3800320 and 13 more, 3801805; g2 3802371 | product | the two instances of a delay-slot store (the slot of a `bt/s` and again after it) joined into one statement in a block with no way in: no token named it | an instance's flow block is its op's; an emptied store of the byte whose flow reaches the statement is its |
+| A7-87 | g1 3804173 | oracle | the input drawn at the entry instruction taken for a materialised copy | `inputAtEntry` |
+| A7-88 | g1 3800581 (volatile) | oracle | a copy of a value drawn at the volatile store that sends it | a store makes the value; counted apart (`copyRegisterMade`) |
+| A7-89 | g1 4002874 | oracle | a slot statement draws only its name and `=` at the branch, and was taken for a line that begins with it | `statementFirst` ignores such a line |
+| A7-90 | g2 4000243 | oracle | `xtrct r1,r1` of a register a `dt` loop leaves 0 and keeps 0 | the cycle rule |
+
+### Pins and mutation
+
+`TestArea7Round11` (in `SaturnExplorerSh2DecompilerTests`): the shrunk words of each seed, run as the generator does (callees' prototypes lent, deepest first), with the line, the audit (`Violations() == 0`) and, for the number lines, a damaged result (`constAtJoin` or the audit over words changed so that the store stores another value). With master's `MappingOracle.h` the fixtures of 9 of the first 11 seeds fail (the 2 others are the product's); with master's `Sh2Decompiler.cpp` exactly the two product fixtures of the first batch fail (902, 3620180); A7-86's fixture fails on master's product by the token dump (`xRam26001030 = in_r1;` with no instruction before, `// 600900A` after). The existing pins (A7-55, A7-67 damaged results) kept: the noOrigin exemption is only for a folded read's copy. No new test target.
+
+### Routed
+
+* **Area 5:** `folded-store-after-access` only: matrix seed 4123 (as before), and the shapes of the ranges from 3,800,001 and 4,000,001 (A5-117's class, the two instances of one instruction); not replayed here.
+
+### Runs
+
+| Run | Result |
+|---|---|
+| the 10 queued seeds, the priority seeds 17737 and 902, and 3800320, 3800354, 3800581, 3802371, 3803230, 3803669, 3804173, 4002874, 4000243 | **0 map findings** each |
+| the 20,000-seed matrix (`SE_GENERATED_SEEDS=20000` from seed 1, pieces of 5,000, the canary on in the first) | 1 failing seed, **4123** (`n:folded-store-after-access`, area 5); 17737 is clean |
+| default grammar 1 and 2, `SE_GENERATED_SEEDS=3000` | 0 failing seeds each |
+| grammar 1, 3,800,001 to 3,805,000 (canary off) | 23 failing seeds, **all** `folded-store-after-access` (area 5); no `map-*` |
+| grammar 2, 3,800,001 to 3,805,000 | 0 failing seeds |
+| fresh grammar 1, 10,000 seeds from 4,000,001 | 47 failing seeds, all `folded-store-after-access` (area 5) |
+| fresh grammar 2, 10,000 seeds from 4,000,001 | 0 findings |
+| printed-C (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | agrees=5196, narrow-c=130 (as master) |
+| full `ctest -j2 -E SaturnExplorerLive` | **111 of 111** passed (269 s) |
+| Live (`ctest -R SaturnExplorerLive`) | **6 of 6** passed |
+| fault suite (`SaturnExplorerDecompilerFaultTests`, product code changed) | **0 of 94** jobs failed |

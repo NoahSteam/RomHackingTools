@@ -7165,7 +7165,10 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
     };
     const auto onEdge = [&](const ghidra::AccessRecord* r, const ghidra::FlowBlock* from, const ghidra::FlowBlock* to) {
         const uint32_t insn = InstructionOf(*r);
-        const int store = flowBlockOf(insn);
+        // (A7-78: the flow block of this instance of the store -- one instruction can be in two blocks, a delay slot run on both ways of a
+        // branch and again after it -- by the store's own op; grammar 1 seed 3800320)
+        const auto instance = flow.ops.find(r->time);
+        const int store = instance != flow.ops.end() ? instance->second.first : flowBlockOf(insn);
         const uint32_t last = static_cast<uint32_t>(from->getStop().getOffset()), first = static_cast<uint32_t>(to->getStart().getOffset());
         const int fromBlock = flowBlockOf(last), toBlock = flowBlockOf(first);
         if (store < 0 || fromBlock < 0 || toBlock < 0) return false;
@@ -7298,6 +7301,19 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
             {
                 values = StatementValues(o, flow.opsEnd);
                 valuesFound = true;
+                // (A7-78: a statement of a number whose only instructions are those that make that number -- `iStack_20 = 2;` at the
+                // `mov #2,r1` the COPY chain starts at -- shows that number and no other: a store of 0 is not its; grammar 2 seed 3620180)
+                if (!values.numbers.empty() && values.inputs.empty() && values.locations.empty() && !values.rebuilt && !values.insns.empty())
+                {
+                    bool all = true;
+                    for (uint32_t insn : values.insns)
+                    {
+                        bool makes = false;
+                        for (const auto& n : values.numbers) makes = makes || InstructionMakesNumber(flow, insn, n.first, n.second);
+                        all = all && makes;
+                    }
+                    if (all) values.insns.clear();
+                }
             }
             const auto f = shown.find(r);
             if (f != shown.end()) return f->second;
@@ -7507,6 +7523,42 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                 if (latest) reached = take(latest);
             }
             if (reached || take(nextInHome())) continue;
+            // A7-78: the stores of the byte the engine emptied and joined into one statement in a block with no way in -- the two
+            // instances of one instruction, a delay slot run on both ways of a branch and again after it (`bt/s` over a `mov.w r1,@r6`),
+            // whose line the engine put after both: every emptied store of the byte whose flow reaches the statement's instruction is
+            // its (grammar 1 seed 3800320)
+            if (!prior)
+            {
+                // (any way on in the flow, through blocks the engine kept as well)
+                const auto flowReaches = [&](int from, int to) {
+                    std::set<int> seen = { from };
+                    std::vector<int> todo = { from };
+                    while (!todo.empty() && seen.size() < 256)
+                    {
+                        const int blk = todo.back();
+                        todo.pop_back();
+                        if (blk < 0 || static_cast<size_t>(blk) >= flow.successors.size()) continue;
+                        for (int n : flow.successors[static_cast<size_t>(blk)])
+                        {
+                            if (n == to) return true;
+                            if (seen.insert(n).second) todo.push_back(n);
+                        }
+                    }
+                    return false;
+                };
+                const auto here = flow.insnBlock.find(at);
+                bool found = false;
+                if (here != flow.insnBlock.end())
+                    for (const ghidra::AccessRecord* r : orphans)
+                    {
+                        const auto f = flow.ops.find(r->time);
+                        if (!writes(r) || f == flow.ops.end()) continue;
+                        const bool before = f->second.first == here->second.first ? f->second.second < here->second.second
+                                                                                   : flowReaches(f->second.first, here->second.first);
+                        if (before) found = take(r) || found;
+                    }
+                if (found) continue;
+            }
             // the nearest stores of the byte after the statement's instruction in the flow: in its flow block after it, else the first in
             // each block of the nearest level of successors that has one
             const auto fb = flow.insnBlock.find(at);
@@ -8055,7 +8107,9 @@ void MarkMaterialisedReads(std::vector<Line>& lines, const PrintedOperations& pr
     for (const ghidra::PcodeOp* o : ordered)
     {
         const ghidra::Varnode* out = o->getOut();
-        if (o->code() != ghidra::CPUI_COPY || !out || !out->isImplied() || o->isFromDelaySlot()) continue;
+        // (A7-78: a piece of the memory's value is the same copy, `(uint2)uRam26001034` shared by the statement that stores it and the
+        // narrow store the engine made the piece at; grammar 1 seed 902)
+        if ((o->code() != ghidra::CPUI_COPY && o->code() != ghidra::CPUI_SUBPIECE) || !out || !out->isImplied() || o->isFromDelaySlot()) continue;
         const ghidra::Varnode* in = o->getIn(0);
         if (in->isConstant() || (in->getSpace() != ram && (!stackSpace || in->getSpace() != stackSpace))) continue;
         const uint32_t at = InstructionOf(o);
