@@ -89,6 +89,25 @@ bool StackAffectingOps::affectsTest(PcodeOp *op,Varnode *vn) const
   return true;
 }
 
+/// \brief Does the value of the given Varnode come only from the given global, through COPYs and MULTIEQUALs (SaturnExplorer, 0090)
+static bool holdsGlobal(const Varnode *vn,const Varnode *tvn,int4 depth)
+
+{
+  if (depth > 8) return false;
+  if (vn->isAddrTied() && vn->getSpace() == tvn->getSpace() && vn->getOffset() == tvn->getOffset() && vn->getSize() == tvn->getSize())
+    return true;
+  if (!vn->isWritten()) return false;
+  const PcodeOp *def = vn->getDef();
+  if (def->code() == CPUI_COPY) return holdsGlobal(def->getIn(0),tvn,depth+1);
+  if (def->code() != CPUI_MULTIEQUAL) return false;
+  for(int4 i=0;i<def->numInput();++i) {
+    const Varnode *in = def->getIn(i);
+    if (in == vn) continue;
+    if (!holdsGlobal(in,tvn,depth+1)) return false;
+  }
+  return true;
+}
+
 /// \brief Would a global, merged with another variable, hold that variable's value across an access (SaturnExplorer, 0090)
 ///
 /// Merged into a global (an address-tied variable of the processor space), every write of a register variable becomes a write of the
@@ -115,6 +134,21 @@ bool Merge::heldAcrossAccess(HighVariable *tied,HighVariable *other)
       fd = (*vn->beginDescend())->getParent()->getFuncdata();
   }
   if (fd == (Funcdata *)0) return false;
+  // (a variable whose every write copies the global itself, directly or through the merge's own copies and joins, holds the global's own
+  // value: merged, it writes nothing the code does not hold there; refused, the merge's copies of a global joined round a loop of stores
+  // through a pointer print as writes back of the global in the loop, hwram008 06036828)
+  {
+    bool selfOnly = true, any = false;
+    for(int4 i=0;i<other->numInstances() && selfOnly;++i) {
+      Varnode *vn = other->getInstance(i);
+      if (!vn->isWritten()) continue;
+      const PcodeOp *def = vn->getDef();
+      if (def->code() == CPUI_MULTIEQUAL || def->code() == CPUI_INDIRECT) continue;
+      any = true;
+      selfOnly = def->code() == CPUI_COPY && holdsGlobal(def->getIn(0),tvn,0);
+    }
+    if (any && selfOnly) return false;
+  }
   // ...and an access on a path from where the register is written to where the code stores it to the global: merged, the global is written
   // where the register is, before the access (`r0 = 4; if (c) r0 = *p; g = r0;` printed `g = 4; if (c) g = *p;`: the read through p
   // then reads what was written when p is the global's address)
