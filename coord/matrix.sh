@@ -14,7 +14,7 @@ G=$B/bin/SaturnExplorerSh2GeneratedTests
 ( SE_GENERATED_GRAMMAR=1 SE_GENERATED_SEEDS=3000 timeout 3600 $G "$OUT/gg1" > "$OUT/gen_g1.log" 2>&1 ) &
 ( SE_GENERATED_GRAMMAR=2 SE_GENERATED_SEEDS=3000 timeout 3600 $G "$OUT/gg2" > "$OUT/gen_g2.log" 2>&1 ) &
 wait
-SE_GENERATED_PRINTEDC=only timeout 3600 $G "$OUT/gpc" > "$OUT/gen_pc.log" 2>&1
+SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000 timeout 3600 $G "$OUT/gpc" > "$OUT/gen_pc.log" 2>&1
 ( SE_GAME_LEND=1 SE_GAME_HWRAM=$S/h/hwram007.bin timeout 3600 $B/bin/SaturnExplorerSh2DecompilerTests "$OUT/r7" > "$OUT/c7.log" 2>&1 ) &
 ( SE_GAME_LEND=1 SE_GAME_HWRAM=$S/h/hwram008.bin timeout 3600 $B/bin/SaturnExplorerSh2DecompilerTests "$OUT/r8" > "$OUT/c8.log" 2>&1 ) &
 wait

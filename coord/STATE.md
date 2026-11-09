@@ -13,3 +13,4 @@ Patch numbers: through 0088 vendored. 0089 A3-175 fixer; 0090 A5 fixer (0093+ if
 - restart: master restored to backup/master-latest 43e945b2 (69 commits ahead of origin/master de0ddde; not pushed: 4123 red in m303).
 - relaunched: A5-114..118 fixer (opus, a8r4, review/5-a5114-fix); A3-175/172 fixer (opus, a7fix22, review/3-a3175-fix); area 7 r12 (sonnet, a11mut, review/7-round12). All from 43e945b2.
 - Queue after: area 3 round 22 review (after A3-175); area 5 review round (after fixer); area 7 further rounds if seeds remain; area 10 round 3 if needed; Windows verify after push.
+- m304 baseline on 43e945b2 with rebuilt matrix: matches m303 exactly (only 20k seed 4123 red; printed-C needs SEEDS=3000 -> 5196, fixed in matrix.sh/rules7).

@@ -27,7 +27,7 @@ RUNS
              The binary deletes its out dir: never point it at anything you want to keep.
              Expect "failing seeds=0; findings=0"; look at failures with grep -A6 '^FINDING'.
              (Check SE_GENERATED_FIRST's exact spelling/meaning in Sh2GeneratedTests.cpp before relying on it.)
-- printed-C: SE_GENERATED_PRINTEDC=only build/bin/SaturnExplorerSh2GeneratedTests <outdir>   (expect agrees=5196)
+- printed-C: SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000 build/bin/SaturnExplorerSh2GeneratedTests <outdir>   (expect agrees=5196)
 - corpus:    the two game images are $S/h/hwram007.bin and $S/h/hwram008.bin (read-only; never delete $S/h).
              SE_GAME_HWRAM=$S/h/hwram008.bin [SE_GAME_LEND=1] build/bin/SaturnExplorerSh2DecompilerTests <scratch>
              Expect every ledger count 0; missing and said 0 (hwram007) and 4 (hwram008) with lending;
