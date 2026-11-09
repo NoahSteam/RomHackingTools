@@ -8055,7 +8055,9 @@ void MarkMaterialisedReads(std::vector<Line>& lines, const PrintedOperations& pr
     for (const ghidra::PcodeOp* o : ordered)
     {
         const ghidra::Varnode* out = o->getOut();
-        if (o->code() != ghidra::CPUI_COPY || !out || !out->isImplied() || o->isFromDelaySlot()) continue;
+        // (A7-78: a piece of the memory's value is the same copy, `(uint2)uRam26001034` shared by the statement that stores it and the
+        // narrow store the engine made the piece at; grammar 1 seed 902)
+        if ((o->code() != ghidra::CPUI_COPY && o->code() != ghidra::CPUI_SUBPIECE) || !out || !out->isImplied() || o->isFromDelaySlot()) continue;
         const ghidra::Varnode* in = o->getIn(0);
         if (in->isConstant() || (in->getSpace() != ram && (!stackSpace || in->getSpace() != stackSpace))) continue;
         const uint32_t at = InstructionOf(o);

@@ -1724,8 +1724,23 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                             }
                         }
                     }
+                    // (A7-78: a global the line reads, drawn at the instruction that reads it -- `iRam2600211c = (int4)iRam2600103a;` with
+                    // `iRam2600103a` at the `mov.w @(r0,r6),r3` that loads it, naming the store of r3 -- is that load's own statement;
+                    // grammar 1 seed 3300988)
+                    bool readHere = false;
+                    if (plain && t.end <= r.lines[li].text.size())
+                    {
+                        const std::string operand = r.lines[li].text.substr(t.begin, t.end - t.begin);
+                        if (operand.size() >= 11 && operand.compare(operand.size() - 11, 3, "Ram") == 0 &&
+                            operand.find_first_not_of("0123456789abcdef", operand.size() - 8) == std::string::npos)
+                        {
+                            const uint32_t va = static_cast<uint32_t>(std::strtoul(operand.c_str() + operand.size() - 8, nullptr, 16));
+                            for (const AccessFate& f : r.accessFates)
+                                readHere = readHere || (f.insn == t.addr && !f.write && !f.frame && GlobalDelta(va, f.address) < f.size);
+                        }
+                    }
                     const bool copy = plain && !isBranch(t.addr) && ((!named.empty() && !named.count(t.addr)) || drawnAtOtherStore || readAtStore) && !castAtExtension &&
-                                      !ownStoreHere;
+                                      !ownStoreHere && !readHere;
                     (copy ? copyDrawn : ownDrawn)[t.addr].insert(li);
                 }
         }
