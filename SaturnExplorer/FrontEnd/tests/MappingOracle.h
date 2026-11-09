@@ -1907,6 +1907,35 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                 if (!(isPiece ? atLoadOrCall : atCall) || atStore) continue;
                 ++a.frameAssigns;
                 if (named) continue;
+                // (A7-78: a call's output the engine merged under the frame word's name, on a path where the word's store does not store
+                // it -- `xStack_38 = (xunknown4)xVar3;` at the second `bsr` of two, the push of r1 before it storing the first call's output --
+                // is no copy of what the store wrote: when no store of the word stores a value the call made, the line names none (RegisterMakers
+                // of each store's register known, none a call the line is drawn at); grammar 2 seed 3601551)
+                if (atCall)
+                {
+                    std::set<uint32_t> drawnCalls;
+                    for (const Token& t : r.lines[li].tokens)
+                    {
+                        uint16_t cw = 0;
+                        if (t.addr && t.begin < t.end && word(t.addr, cw) && ShapeOf(sfe::Sh2Decode(t.addr, cw)).call) drawnCalls.insert(t.addr);
+                    }
+                    const std::map<uint32_t, std::vector<uint32_t>> into = BranchSources(r, word);
+                    bool known = true, related = false;
+                    for (uint32_t st : candidates)
+                    {
+                        uint16_t sw = 0;
+                        int size = 0;
+                        const int reg = word(st, sw) ? StoredRegister(sw, size) : -1;
+                        std::set<uint32_t> makers;
+                        if (reg < 0 || !RegisterMakers(r, word, into, st, reg, makers))
+                        {
+                            known = false;
+                            break;
+                        }
+                        for (uint32_t c : drawnCalls) related = related || makers.count(c) != 0;
+                    }
+                    if (known && !related) continue;
+                }
                 ++a.frameStoreMissing;
                 problem("frame-store", "line " + std::to_string(li) + " '" + text + "' assigns a frame local at a load or a call and names none of the " + std::to_string(candidates.size()) +
                                            " store(s) the engine folded into it (first " + MappingHex(*candidates.begin()) + ")");
@@ -2307,6 +2336,47 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     if (cast && (d.Mnemonic.compare(0, 4, "exts") == 0 || d.Mnemonic.compare(0, 4, "extu") == 0)) named = true;
                 }
                 if (named) continue;
+                // (A7-78: as the frame-store check: a call's output merged under the variable's name where no store of the variable stores
+                // a value that call made; grammar 2 seed 3601551)
+                if (atCall && frame)
+                {
+                    std::set<uint32_t> drawnCalls;
+                    bool callsOnly = true;
+                    for (const Token& t : r.lines[li].tokens)
+                    {
+                        uint16_t cw = 0;
+                        if (!t.addr || t.begin >= t.end) continue;
+                        if (word(t.addr, cw) && ShapeOf(sfe::Sh2Decode(t.addr, cw)).call) drawnCalls.insert(t.addr);
+                        else callsOnly = false;
+                    }
+                    if (callsOnly && !drawnCalls.empty())
+                    {
+                        if (!haveSources)
+                        {
+                            sources = BranchSources(r, word);
+                            haveSources = true;
+                        }
+                        bool known = true, related = false;
+                        for (uint32_t st : candidates)
+                        {
+                            uint16_t sw = 0;
+                            int size = 0;
+                            const int reg = word(st, sw) ? StoredRegister(sw, size) : -1;
+                            std::set<uint32_t> makers;
+                            if (reg < 0 || !RegisterMakers(r, word, sources, st, reg, makers))
+                            {
+                                known = false;
+                                break;
+                            }
+                            for (uint32_t c : drawnCalls) related = related || makers.count(c) != 0;
+                        }
+                        if (known && !related)
+                        {
+                            ++a.copyOtherValue;
+                            continue;
+                        }
+                    }
+                }
                 // (A7-45 (the area 7 fixer): a number line drawn only at instructions that make the number (`mov #imm`, a literal), when
                 // no store of the variable stores that number as an instruction makes it -- the makers of each store's register known
                 // (RegisterMakers), none a `mov #imm` or a literal of the line's number (an input, another number may be); a store of no
