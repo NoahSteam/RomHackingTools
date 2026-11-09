@@ -201,6 +201,16 @@ continue to work on those lines.
   a signed narrow value, an arithmetic shift or a signed division reads (`(int2)CONCAT11(a,b) == param_1`,
   `(int2)CONCAT11(a,b) >> 1`). An `xunknown` variable has no sign either: a cast of it to a wider unsigned type
   (`(uint4)xStack_4._0_2_`) is a zero extension unless the variable was last assigned a signed value.
+- A global at a constant address (`iRam06002304`, `0x06002304` in work RAM) is never declared in the text: its type is the
+  first letter of its name, and a bare read of it (a compare, a shift, a division) has that type's sign. `i` is a signed
+  integer (`iRam06002304 >> 1` shifts arithmetically, `5 < iRam06002304` is a signed compare), `u` an unsigned one
+  (`uRam06002304 >> 1` is logical, `5 < uRam06002304` unsigned), `x` a value with no sign (read as unsigned by a compare, a
+  shift or a division, like an `xunknown` variable), `c` a signed byte, `b` a bool, `f` a float, `w` a wide character,
+  and `p` or `a` before another letter a pointer to, or an array of, that type (`pxRam0600f000`). The letter does not give
+  the width, which the assignment shows (`iRam06002304 = CONCAT13(a,b);` is four bytes). Two texts that differ only in
+  that letter are two different values: the same code with `cmp/gt` prints `5 < iRam06002304`, with `cmp/hi`
+  `5 < uRam06002304`; so read a CONCAT assigned to an `iRam` as the signed value of its bytes once it is read back from the
+  global, though the CONCAT alone is unsigned.
 - Whether r0 is shown as the return follows the engine's rule, and not the instruction in `rts`'s delay slot. A value in r0 is the
   return when nothing else uses it (`mov #1,r0 ; rts`), or when it is the output of a call to a function whose signature is lent as
   returning a value (`return g(p);`, with whatever else the value is used for: compared, stored through). A value with another use
