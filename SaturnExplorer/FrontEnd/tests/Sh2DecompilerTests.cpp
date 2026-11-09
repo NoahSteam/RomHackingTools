@@ -2214,7 +2214,14 @@ void TestArea7Round9()
         const Line* l = LineWith(r, "xRamc0002024 = (xunknown2)in_r1;");
         CHECK(l != nullptr);
         const dts::MappingAudit a = dts::AuditMapping(r, word, "a7_67");
-        CHECK(a.Violations() == 0 && a.copyInputMerged == 1);
+        // (A7-100 and the rounds before it: the line is drawn at the word store of the input, whose low half the xor with a number of a
+        // zero low half leaves; it once named nothing -- copyInputMerged -- and now names the store, the byte store beside it not)
+        CHECK(a.Violations() == 0 && a.copyInputMerged == 0);
+        {
+            bool atWordStore = false;
+            for (const Token& t : l->tokens) atWordStore = atWordStore || t.addr == 0x06009016u;
+            CHECK(atWordStore);
+        }
         // the xor gone (a nop): the word store writes in_r1 itself, which the line must name
         std::vector<uint16_t> v = w;
         v[10] = 0x0009;
