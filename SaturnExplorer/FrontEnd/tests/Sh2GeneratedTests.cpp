@@ -5947,6 +5947,18 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                                 }
                                 if (overlaps || InHardwareRange(p.addr) || inMarked(p.addr)) break;
                             }
+                            // (...or of the value the function found there, its first access of these bytes a read of it: a write-back that undoes the
+                            // `tas.b` between, `mov.l @r7,r1 ; tas.b @r7 ; mov.l r1,@r7` in a loop, leaves memory as it was, grammar 1 seed 10223)
+                            if (!same)
+                                for (size_t j = 0; j < k; ++j)
+                                {
+                                    const TraceRec& p = run.trace[j];
+                                    if (p.addr < t.addr + static_cast<uint32_t>(t.size) && t.addr < p.addr + static_cast<uint32_t>(p.size))
+                                    {
+                                        same = !p.write && p.addr == t.addr && p.size == t.size && p.value == t.value;
+                                        break;
+                                    }
+                                }
                             writeBack = writeBack && same;
                         }
                     storeRan = made;
