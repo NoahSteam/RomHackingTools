@@ -19619,3 +19619,35 @@ The A3-178 fixer feared the harness assumes every function returns. It does not 
 * **A3-186 (new, P2):** grammar 2 seed 5202322 (area 7 round 13): `kept-read:r13`; same on master.
 * **Area 5 known class:** `folded-store-after-access` (A5-117) over the four grammar 1 ranges; `folded-into-switch` in grammar 2 from 5,800,001.
 * **Area 7 known classes:** `map-copy-store`, `map-store-value`, `map-way-back` seen in the 4,800,001 and 5,600,001 ranges.
+
+## Area 7, re-pins after patch 0090
+
+Branch `review/7-repin` from master `8db3f786` (patch 0090: a hardware access is a barrier for globals; then A3-184/A3-181). The merge matrix m306 failed 10 CHECKs of the area 7 round 12 and 13 hand fixtures in `SaturnExplorerSh2DecompilerTests`: the engine no longer prints the shapes they test. The whole-seed pins and the generator ranges passed. No product or oracle change in this branch: only fixtures, the ledger's status cells, and a hunt mode in the generator.
+
+**Instrument.** `SE_GENERATED_HUNT=<shape>` in `Sh2GeneratedTests.cpp` adds a finding `hunt-<shape>` where a program prints a shape an area 7 fixture is about, so the shrinker gives its words: `copy-number-made`, `copy-register-made`, `copy-no-address`, `copy-input-merged` (the audit's counted copies), `number-at-maker` (a number line drawn only at the `mov #imm` or literal load that makes it, naming a store) and `copy-at-branch` (a plain copy beginning at a conditional branch the `if` begins at too). It changes nothing without the variable.
+
+| Row | Was | Now |
+|---|---|---|
+| A7-97 | damaged control: the addition marked materialised was offered after `iVar2 = *param_1;` | the load is its own statement and is offered first either way; the control moved to `shll2 r5 ; mov.w @r4+,r2 ; tst r5,r2 ; bt L ; mov.w r4,@r6` (the load read inside the `if`, which begins at the `shll2`): marked, the `if` is offered first, backWrong 1. The rule itself is not reached: a mutation run with it taken out leaves the addition unmarked in both shapes |
+| A7-98 | `xRam26001018 = 5;` | the store prints `xRam26001018 = xVar3;`. Pinned on that result with the line given the 5 the slot's path makes: passes; with the rule taken out (`NeverRun` past the slot's own entry) storeValueOther 1 |
+| A7-99 (4502735) | `uRam06002380 = 0;`, noOrigin | the byte store is its own line, `xRam06002380._0_1_ = 2;`, with the tested bit set or not; the case is kept by 4506709 (`xStack_c = 0;`) and 4509740 (`xRam2600233c = 0x26002308;`), now checked for `noOrigin` |
+| A7-105 | damaged control, one line | each instance of the slot's store is its own statement (four lines): the number-reach walk is not asked by the fixture; the control damages all four and still fails |
+| A7-108 | hidden: `uRam06002380 = 0x2000000;`; 5204339: `uRam26001018 = 0;` noOrigin | hidden control on `xRam06002380._0_1_ = 2;` (fails the audit; passes with the rule taken out); 5204339 prints the poll's store `uRam26001018 = 2;`, and the overwrite exemption is pinned on its result with the line made the trimmed `= 0` (passes; fails with the exemption taken out) and `= 2` (fails; passes with A7-108 taken out) |
+| A7-114 | `uRam0240000e = (uint2)in_r0;` noOrigin; damaged control | r0 is a variable of its own, `uVar1 = (uint2)in_r0;` at the `cmp/pl`; no variant tried (the global in RAM, mailbox RAM or the cartridge, five store forms, eight loop forms) merges a register under a global's name with a conversion at a join. The fixture keeps the new text and its audit |
+
+The A5 fixer's re-pins (its section above): **A7-45**'s count is pinned again on A7-56's `pollFour`, whose `uRam26001004 = 4;` is counted (copyNumberMade 1) since A3-184; the A7-45 fixture's own register is a variable now. **A7-56**'s tied control and **A7-61**'s two compare fixtures no longer reach the input-compare rule: A5-118's oracle condition passes over a store that is another line's statement before any compare is asked, and after patch 0090 the stores in those shapes are lines of their own; no variant tried folds such a store into the number's line. They keep their new text and audit. **A7-66**'s damaged control is rebuilt on `cVar1 = (char)param_2;` at the `bt`: marked materialised, it may be offered after the `if (in_r3 < 1)` (backWrong 0, A7-64's exception for a plain copy); with `+ 1` it may not (backWrong 1; 0 with the exception taken out). **A7-78/A7-85**'s MACH control is rebuilt on `xRam06002108 = 0xfffffe00;`, drawn at a literal load whose number reaches the store through `lds r2,mach ; sts mach,r2`: with `lds r1,mach` in the words the audit reads, numberStoreOther 1; with the MACH walk taken out the fixture's own audit fails.
+
+Mutation: the oracle with A7-98's slot rule, the MACH walk, A7-108 and A7-64's copy-only condition taken out fails the five re-pinned checks that judge them; with the overwrite exemption taken out, 5204339's `= 0` check fails.
+
+### Runs
+
+All after the last code edit (`73c0751b`), with that build:
+
+| Run | Result |
+|---|---|
+| full `ctest -j2` with Live | **117 of 117** passed |
+| 20,000-seed matrix (pieces of 5,000, canary in the first) | **0 failing seeds** (4123 too, since the area 5 fix) |
+| default run, grammar 1 and grammar 2, `SE_GENERATED_SEEDS=3000` | 0 failing seeds each |
+| printed-C (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | **agrees=5196** |
+| game corpus (`a7_round2/corpus.sh`, lent, token dump) | both images "all passed", every mapping violation 0; lent 474 (645) of 999 and 724 (975) of 1,543; missing and said 0 and 4 |
+| lints | `check-literal-size.py` ok; the vendored tree untouched |
