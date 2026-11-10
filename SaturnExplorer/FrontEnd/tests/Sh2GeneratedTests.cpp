@@ -6928,6 +6928,39 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
             // A7-52: a statement line with no instruction that does not say so. Until then the audit counted the lines with none
             // (nonCodeLines) and judged only the shapes above, so a statement named by no check passed with a click that did nothing.
             flag("map-no-instruction", audit.noInstruction);
+            // SE_GENERATED_HUNT=<shape> (area 7, re-pins after patch 0090): a finding `hunt-<shape>` where a program prints a shape an
+            // area 7 fixture is about, so the shrinker gives its words. Shapes: copy-number-made, copy-register-made, copy-no-address,
+            // copy-input-merged (the audit's counted copies); number-at-maker (a number line drawn only at the `mov #imm` or literal load
+            // that makes it, naming a store); copy-at-branch (a plain copy drawn at a conditional branch whose `if` begins there too).
+            if (const char* hunt = std::getenv("SE_GENERATED_HUNT"))
+            {
+                const std::string h = hunt;
+                int n = h == "copy-number-made" ? audit.copyNumberMade : h == "copy-register-made" ? audit.copyRegisterMade
+                      : h == "copy-no-address" ? audit.copyNoAddress : h == "copy-input-merged" ? audit.copyInputMerged : 0;
+                const auto wordAt = [&](uint32_t pc, uint16_t& w) {
+                    if (pc < kCode || (pc - kCode) / 2 >= subject.words.size()) return false;
+                    w = subject.WordAt(pc);
+                    return true;
+                };
+                for (const Line& l : r.lines)
+                {
+                    const size_t eq = l.text.find(" = ");
+                    if (eq == std::string::npos || l.text.empty() || l.text.back() != ';') continue;
+                    const std::string value = l.text.substr(eq + 3, l.text.size() - eq - 4);
+                    std::set<uint32_t> drawn, empty;
+                    for (const Token& t : l.tokens)
+                        if (t.addr) (t.begin < t.end ? drawn : empty).insert(t.addr);
+                    uint16_t w = 0;
+                    if (h == "number-at-maker" && !value.empty() && std::isdigit(static_cast<unsigned char>(value[0])) && drawn.size() == 1 && !empty.empty() &&
+                        wordAt(*drawn.begin(), w) && ((w >> 12) == 0xE || (w >> 12) == 0x9 || (w >> 12) == 0xD))
+                        ++n;
+                    if (h == "copy-at-branch" && value.find_first_of(" +-*&|^<>") == std::string::npos && drawn.count(l.firstAddr) && wordAt(l.firstAddr, w) &&
+                        ((w >> 8) == 0x89 || (w >> 8) == 0x8B || (w >> 8) == 0x8D || (w >> 8) == 0x8F))
+                        for (const Line& o : r.lines)
+                            if (&o != &l && o.firstAddr == l.firstAddr && o.text.find("if (") != std::string::npos) ++n;
+                }
+                flag(("hunt-" + h).c_str(), n);
+            }
             count("map.no-origin", audit.noOriginLines);
             count("map.lines", audit.lines);
             count("map.lines.one", audit.single);
