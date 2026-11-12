@@ -1749,7 +1749,9 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     {
                         std::string operand = r.lines[li].text.substr(t.begin, t.end - t.begin);
                         // (A7-101: a piece of the global, `xRam0600228c._2_2_`, is the global's copy as the product marks it; grammar 2 seed 4506207)
-                        if (const size_t piece = operand.find("._"); piece != std::string::npos) operand.resize(piece);
+                        // (Core and the tests build as C++14, so no `if (init; cond)` here -- MSVC rejects it with C2429.)
+                        const size_t piece = operand.find("._");
+                        if (piece != std::string::npos) operand.resize(piece);
                         if (operand.size() >= 11 && operand.compare(operand.size() - 11, 3, "Ram") == 0 &&
                             operand.find_first_not_of("0123456789abcdef", operand.size() - 8) == std::string::npos)
                         {
