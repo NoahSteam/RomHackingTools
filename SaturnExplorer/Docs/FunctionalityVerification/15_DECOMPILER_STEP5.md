@@ -19651,3 +19651,70 @@ All after the last code edit (`73c0751b`), with that build:
 | printed-C (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | **agrees=5196** |
 | game corpus (`a7_round2/corpus.sh`, lent, token dump) | both images "all passed", every mapping violation 0; lent 474 (645) of 999 and 724 (975) of 1,543; missing and said 0 and 4 |
 | lints | `check-literal-size.py` ok; the vendored tree untouched |
+
+## Area 5, review round (after 0090)
+
+Reviewer, branch `review/5-round-next2` from master `3c39e2c2` (the v1.0 release, patches to 0090). The worktree's RelWithDebInfo build (`-j2`, `ulimit -v 6000000`), one heavy job at a time. No product code changed. The round adds the ledger rows **A5-119 to A5-122**, one test function (`TestArea5ReviewAfter0090` in `Sh2DecompilerTests.cpp`, inside `SaturnExplorerSh2DecompilerTests`, so the ctest count is unchanged) that pins each fixture as the head prints it (the checks marked DEFECT) beside controls, and a scratch assembler (`Docs/Decompiler/tools/a5_round_after0090/asm.py`, SH-2 text to the hex words of `SE_GENERATED_WORDS`).
+
+**The round is not clean: A5-119 is P1** (A5-120 to A5-122 are P3). The area's count of consecutive clean rounds stays 0.
+
+### 1. The barrier, probed by hand
+
+Each shape ran through `SE_GENERATED_WORDS` (the emulator beside the text; the global is 0x06030000).
+
+| Shape | Result |
+|---|---|
+| A pointer that is a register's address on one path only (`r2 = g or &SCU_D0EN`), a store to g before and after the read through it | in order, `puVar2 = &SCU_D0EN` on the branch |
+| Mirrors: a read of 0x26030000 (cache-through), 0x06130000 (HWRAM's own mirror), 0x20230000 (low work RAM's) between two stores of 0x06030000 / 0x00230000, and before one | the first store kept, the read before the store kept; the aliases are barriers |
+| A register write to a mirror of a register (0x05FE0010 for SCU_D0EN), to an on-chip register (SH2_CHCR0 at 0xFFFFFF8C), through GBR (`mov.b r0,@(0x10,gbr)`) between two stores | the first store kept, the register write between |
+| A marked mailbox read, written, polled, `tas.b`, between two stores; the same unmarked | marked: both stores and the access in order; unmarked: folded by design (the first store dropped before the unmarked poll, no caution; A3's design) |
+| `tas.b @r4` between two byte stores; `mac.l @r4+,@r5+` between two stores | both kept (the pointer sinks) |
+| A store to g, a read through a pointer / a word read through `@(r0,r4)` / a byte read, a second store, the value used | the first store kept, the read printed before the second store |
+| A store in a `bf/s` slot, a read through a pointer in a `bt/s` slot, with stores in the target and the fall-through | each store and access printed at its place; the dead store on the fall-through path (overwritten with nothing between) dropped |
+| A store in a loop with a read through a pointer in the loop; a store before a branch around a read; a store on one arm of a branch before the read | in order |
+| Poll loops (`g` unmarked) with a read through a pointer or a register read in the body | the poll re-reads the word each turn, no endless-loop caution: the loop is not endless in the text (the body is a barrier); A3's cautions are for a poll with no access in it |
+| A write of a byte to a global after a long write, across a DMA enable, a pointer store, a pointer read | the narrow store prints at the whole width (A5-112, still P3) but reads the bytes it leaves from memory when a barrier is between (`CONCAT13(in_r2,xRam06030000._1_3_)`); across a pointer read the old register (no change of the bytes) |
+| `ldc r0,sr`, `sleep`, `trapa` between two stores | not barriers: the first store is dropped (A2-13 and A2-30: interrupts and sleep have no model, documented limit; not filed) |
+| A read of g saved in a register, a store through a pointer, the register stored back or used: `x = g; *p = v; g = x + 1` | **A5-119**: the read printed after the store and the restore dropped (the same on the pre-0090 engine); controls with a register write or a call between are right |
+| The address of a register stored to a RAM word, a register read, the word read back and used as a pointer | **A5-120** (P3): the register is no longer named |
+
+A5-112 (the width of a narrow store printed as a store of the whole): no wrong value found in these shapes. The bytes the wide store leaves are read from the register that held them where nothing between can change them (a read through a pointer, no store), and from memory (`xRam06030000._1_3_`) across a DMA enable or a pointer store, so the widening cannot write a stale byte. The remaining cost is the width of the access (a 4-byte store for a byte store, a race with another processor's update of the neighbouring bytes), P3 as filed; not raised.
+
+### 2. The rows
+
+| Row | Severity | What |
+|---|---|---|
+| A5-119 | **P1** | A global read before a store through a pointer and used after it is printed as read after the store; a store back of the word read is dropped. 0090's merge exempts a register that only copies the global (`Merge::heldAcrossAccess`, the "selfOnly" test), so it is merged into the global across the pointer's STORE: `x = g; *p = v; g = x + 1` prints `*param_1 = in_r2; iRam06030000 = iRam06030000 + 1;`, `x = g; *p = v; g = x` prints `*param_1 = in_r2;`. When p is g's address the code ends with the old word (+ 1), the text with the stored one. The pointer form 0090 leaves (the A5-118 rule counts and does not judge it; no oracle asks); the same on the engine before 0090. In the corpus the counter of hwram007 0600733E and hwram008 060073AA has the shape, the two words distinct there (no wrong value). Fixtures `a5_119_inc`, `a5_119_restore`, `a5_119_restore2`, controls `a5_119_ctl_use`, `a5_119_ctl_reg`, `a5_119_ctl_call` |
+| A5-120 | P3 | Over-barrier: a register address stored to RAM, a register read, the word read back and written through is printed `*puRam06030000 = 1;`, not `SMPC_SF = 1;` (hwram008 060715B6: the SMPC command registers unnamed). Fixture `a5_120` |
+| A5-121 | P3 | Oracle: grammar 2 seed 3709052 (`cache-read-pointer-unsaid`) triaged. Not A5-107's class and not 0090's: the run reached 0x18100058 through the arm of a join that is a callee's output (`puVar3 = extraout_r7; if (...) puVar3 = &SMPC_OREG21;`), which no note can know; `PointerPrintsFromHardware` follows the register arm. No wrong text. Shrunk replay in the row |
+| A5-122 | P3 | Instrument: the generator never makes a store through a pointer write the global the function read before it, so A5-119 is invisible to it (0 findings in 40,000 seeds) |
+
+### 3. The generator, fresh seeds
+
+`SE_GENERATED_CANARY=0 SE_GENERATED_SHRINK=0`, 10,000 seeds from 6,200,001, one run at a time (about 300 to 410 s each):
+
+| Run | Failing | Classes |
+|---|---|---|
+| grammar 1 | 5: 6201923, 6202214, 6204852, 6206050, 6209595 | area 7: `v:map-const-join`, `n:map-way-back`, `n:map-copy-store`, `v:map-store-value`; area 3: `n:endless-store-dropped` (6204852) |
+| grammar 2 | 1: 6205642 | area 7: `n:map-way-back` |
+| grammar 1, `SE_GENERATED_ALPHABET=specials` | 4: 6201923, 6202214, 6204852, 6209595 | the same |
+| grammar 2, specials | 1: 6205642 | the same |
+
+No area 5 class. The order rules' counts (grammar 1 / grammar 2): `order.folded-store.checked` 16,916 / 6,693 (`read` 5,009 / 3,302, `hardware-read` 3,755 / 308, `hardware-write` 3,645 / 147, `overwritten` 2,143 / 47, `write-back` 132 / 67, `piece-split` 35 / 0), `order.read-before-folded-store.checked` 17,962 / 4,838, `order.folded-read-before-access.checked` 1,101 / 41. None of A5-119's runs is drawn (A5-122).
+
+### 4. The corpora
+
+`SE_GAME_HWRAM=<img> SE_GAME_LEND=1 SE_GAME_NOTES=1 SE_GAME_OUT=<dir>` on the head's build, both images: 1,730 and 2,995 functions, all ok; every ledger count 0; missing and said **0** and **4**; real entries lent **474 (645) of 999** and **724 (975) of 1,543**, as the record. The 66 functions the fixer's list names (13 of hwram007, 53 of hwram008) were compared again, normalised, against the engine before 0090 (the scratch runs of the fixer's review). Each change is the fixer's classes (a read through a pointer printed before the store, a global written at the code's store, a register no longer the global's name, a store kept before an access). Two are worth a line: 0600C2DA and 0600C49A keep the A3 caution for the loop (`do { xRam0608d220 = 1; } while( true );`, the warning now says "after a branch it takes always the same way"), the loop still printed as endless; and hwram008 06033F16 prints `xRam060a5284 = 0;` seven times (the stores at the code's paths and the join's): each is the code's, the repeated store before the join's own store with no access between being dead but the code's (not filed). 060715B6 is A5-120; 0600733E and 060073AA are A5-119's shape.
+
+### 5. Tests
+
+| | Result |
+|---|---|
+| build of `SaturnExplorerSh2DecompilerTests` and `SaturnExplorerSh2GeneratedTests`, `-j2` | ok |
+| `SaturnExplorerSh2DecompilerTests` (with `TestArea5ReviewAfter0090`) | all passed (23 s) |
+
+### 6. Routed
+
+* **Area 7:** grammar 1 seeds 6201923 (`v:map-const-join`), 6202214 (`n:map-way-back`), 6206050 (`n:map-copy-store`), 6209595 (`v:map-store-value`); grammar 2 seed 6205642 (`n:map-way-back`). Replay: `SE_GENERATED_GRAMMAR=<g> SE_GENERATED_SEED=<seed> SE_GENERATED_CANARY=0`.
+* **Area 3:** grammar 1 seed 6204852 (`n:endless-store-dropped`, the store of 2 bytes at 0600902A to 06021100).
+* **The coordinator:** the round's note that `ldc Rm,SR`, `sleep` and `trapa` are not barriers (A2-13, A2-30, the interrupt limit); and that a register read that cannot write RAM is a barrier too (A5-120's cost).
