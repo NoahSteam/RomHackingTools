@@ -3116,8 +3116,11 @@ void TestArea7Round12()
         const DecompileResult r = run(w, 0x06009000u, {  });
         Print("A7-100 the other instance of a delay slot's store writes the same value (grammar 1 seed 4501198)", r);
         CHECK(r.status == DecompileStatus::Ok);
-        CHECK(LineWith(r, "xRam26001028 = 0;") != nullptr);
-        CHECK(tokenAt(r, "xRam26001028 = 0;", 0x0600900Eu));
+        // (after patch 0093 the store before the `tas.b @r4` is printed whole, `xRam26001028 = 0x40000000;`: the `tas.b` is a store through
+        // a pointer, which may be the global's address, so the byte the later byte store overwrites is in memory at it. Before, the line was
+        // the three low bytes the byte store leaves, `xRam26001028 = 0;`, the number this pin was about; area 7 is told it is gone here)
+        CHECK(LineWith(r, "xRam26001028 = 0x40000000;") != nullptr);
+        CHECK(tokenAt(r, "xRam26001028 = 0x40000000;", 0x0600900Eu));
         CHECK(dts::AuditMapping(r, word, "a7_100_4501198").Violations() == 0);
     }
     // A7-101 a piece of a global copied beside the store that may alias it is a copy materialised there (grammar 2 seed 4506207)
@@ -17811,25 +17814,29 @@ void TestArea5ReviewAfter0090()
         const size_t i = t.find(a), j = t.find(b);
         return i != std::string::npos && j != std::string::npos && i < j;
     };
-    // A5-119 (P1): a global read before a store through a pointer and used after it is printed as read after the store (the merge takes the
-    // register that only copies the global for the global itself, 0090's `Merge::heldAcrossAccess` exempts it), so when the pointer is the
-    // global's address the text uses the word just stored where the code uses the old one; and a restore of the word read, after the store,
-    // is not printed at all (when the pointer is the global's address the code ends with the old word, the text with the stored one).
-    // DEFECT (the head): `*param_1 = in_r2; iRam06030000 = iRam06030000 + 1;`, and no store of the global in the restore fixtures.
+    // A5-119 (P1): a global read before a store through a pointer and used after it was printed as read after the store, so when the pointer
+    // is the global's address the text used the word just stored where the code uses the old one (`*param_1 = in_r2; iRam06030000 =
+    // iRam06030000 + 1;`); and a restore of the word read, after the store, was not printed at all (the code ends with the old word when the
+    // pointer is the global's address, the text with the stored one). Not the merge: the STORE's guard on the global was dead code (the code
+    // writes the global again before anything reads it), so nothing of the global's variable spanned the STORE and the read was propagated
+    // past it. FIXED (patch 0093, `Heritage::guardHardwareAccesses`): the guard is kept, address forced, as a call's is.
     {
         const std::string t = out["a5_119_inc"];
-        CHECK(before(t, "*param_1 = in_r2;", "iRam06030000 = iRam06030000 + 1;"));          // DEFECT (the read is after the store)
-        CHECK(!Has(t, "= iRam06030000;"));                                                   // DEFECT (no read of the global before the store)
-        CHECK(!Has(out["a5_119_restore"], "Ram06030000"));                                   // DEFECT (the restore is not printed)
-        CHECK(!Has(out["a5_119_restore2"], "Ram06030000"));                                  // DEFECT
+        CHECK(before(t, "iVar1 = iRam06030000;", "*param_1 = in_r2;") && before(t, "*param_1 = in_r2;", "iRam06030000 = iVar1 + 1;"));   // FIXED
+        CHECK(!Has(t, "iRam06030000 = iRam06030000 + 1;"));                                                                         // FIXED
+        CHECK(before(out["a5_119_restore"], "xVar1 = xRam06030000;", "*param_1 = in_r2;") &&
+              before(out["a5_119_restore"], "*param_1 = in_r2;", "xRam06030000 = xVar1;"));                                         // FIXED
+        CHECK(before(out["a5_119_restore2"], "xVar1 = xRam06030000;", "*param_2 = *param_1;") &&
+              before(out["a5_119_restore2"], "*param_2 = *param_1;", "xRam06030000 = xVar1;"));                                     // FIXED
         CHECK(before(out["a5_119_ctl_use"], "= xRam06030000;", "*param_1 = in_r2;"));       // control: the read before the store
         CHECK(before(out["a5_119_ctl_reg"], "= xRam06030000;", "_VDP2_TVSTAT = in_r2;") &&
               before(out["a5_119_ctl_reg"], "_VDP2_TVSTAT = in_r2;", "xRam06030000 = xVar1;"));   // control: a register write keeps both
         CHECK(Has(out["a5_119_ctl_call"], "xRam06030000 = xVar1;"));                         // control: a call keeps the restore
     }
-    // A5-120 (P3): the address of a register stored to a RAM word, a register read, and the word read back: the write through it is a write
-    // through a pointer read from memory, the register not named and none of its notes said (before 0090: `SMPC_SF = 1;`). The value is the
-    // code's, the barrier's cost.
+    // A5-120 (P3, accepted): the address of a register stored to a RAM word, a register read, and the word read back: the write through it is a
+    // write through a pointer read from memory, the register not named and none of its notes said (before 0090: `SMPC_SF = 1;`). The value is
+    // the code's, the barrier's cost: a register read is where the code learns that another processor or a transfer has written RAM (SMPC's
+    // SF, SCU_DSTA, CD_HIRQ), so a word read after it may not be the value stored before it.
     {
         const std::string t = out["a5_120"];
         CHECK(Has(t, "puRam06030000 = &SMPC_SF;") && Has(t, "*puRam06030000 = 1;"));

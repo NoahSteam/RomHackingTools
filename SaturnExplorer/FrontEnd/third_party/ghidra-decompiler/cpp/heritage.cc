@@ -25,6 +25,7 @@
  * Modified for SaturnExplorer: the pieces heritage makes at a delay slot's op for it are the slot's too (patches/0079-engine-heritage-slot-pieces-marked.patch).
  * Modified for SaturnExplorer: a read of a piece of a global the range holds wider is read into a temporary, not written to the piece (patches/0088-engine-global-piece-read-and-join-copy.patch).
  * Modified for SaturnExplorer: a hardware access is a barrier to the writes and reads of a global (patches/0090-engine-hardware-access-orders-globals.patch).
+ * Modified for SaturnExplorer: the guard a STORE through a pointer puts on a global is kept, as a call's is (patches/0093-engine-pointer-store-guard-kept.patch).
  */
 #include "heritage.hh"
 #include "funcdata.hh"
@@ -2651,6 +2652,18 @@ void Heritage::guardHardwareAccesses(uint4 fl,const Address &addr,int4 size,vect
       if (op->getIn(0)->getSpaceFromConst() != addr.getSpace()) continue;
       if (op->getIn(1)->isConstant()) continue;
       accesses.push_back(op);
+      // (...and the guard guardStores just put before a STORE is kept, as a call's is (address forced): the pointer may be the global's
+      // address, so the global's value after the STORE is another than before it even when the code writes the global again before
+      // anything reads it. Dead, the guard left nothing of the global spanning the STORE, and a read made before it was printed at its use
+      // after it, the value written then (`x = g; *p = v; g = x + 1` printed `*p = v; g = g + 1;`), or dropped when stored back (`g = x`
+      // printed nothing: the old word the code stores when p is &g, A5-119))
+      if (opc == CPUI_STORE && op->getBasicIter() != op->getParent()->beginOp()) {
+	list<PcodeOp *>::iterator pit = op->getBasicIter();
+	PcodeOp *prev = *(--pit);
+	if (prev->code() == CPUI_INDIRECT && prev->isIndirectStore() && prev->getOut()->getAddr() == addr &&
+	    prev->getOut()->getSize() == size && PcodeOp::getOpFromConst(prev->getIn(1)->getAddr()) == op)
+	  prev->getOut()->setAddrForce();
+      }
     }
   }
   for(int4 i=0;i<accesses.size();++i) {
