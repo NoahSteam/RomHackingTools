@@ -6972,6 +6972,20 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
             // `x = g; SCU_D0EN = 0x101; return x` printed `SCU_D0EN = 0x101; return xRam06030000;`. A read is judged on the first line that
             // names it and reads the global there (a name `...RamXXXXXXXX` at or below its address, not the one a statement assigns): a value
             // forwarded from a store of the function is no read of memory.)
+            // (the last line of the statement a line begins: the printer wraps a long one, and its value, read on a continuation line, is read
+            // before the statement's own write: `*(uint2 *)(unaff_gbr + 0x1e) =` and `(uint2)((int4)cRam06001024 << 1) | ...;` on the next,
+            // default run seed 33)
+            const auto statementEnd = [&](int li) {
+                int e = li;
+                for (int k = 0; k < 8 && e >= 0 && static_cast<size_t>(e) + 1 < r.lines.size(); ++k)
+                {
+                    const std::string& t = r.lines[static_cast<size_t>(e)].text;
+                    const size_t z = t.find_last_not_of(' ');
+                    if (z == std::string::npos || t[z] == ';' || t[z] == '{' || t[z] == '}') break;
+                    ++e;
+                }
+                return e;
+            };
             for (const AccessFate& rd : r.accessFates)
             {
                 if (rd.write || rd.fate != AccessFate::FoldedOrdinary || !rd.constantAddress || rd.frame || rd.origBlock < 0) continue;
@@ -7043,7 +7057,8 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                             return false;
                         };
                         bool before = false;
-                        for (size_t li = 0; li <= static_cast<size_t>(m.firstLine) && li < r.lines.size() && !before; ++li) before = readsGlobal(r.lines[li]);
+                        const size_t mEnd = static_cast<size_t>(statementEnd(m.firstLine));
+                        for (size_t li = 0; li <= mEnd && li < r.lines.size() && !before; ++li) before = readsGlobal(r.lines[li]);
                         if (before) continue;
                         // (...and whose value derives from the read: a store on the line, or the return, whose register the read made, through
                         // updates in place (`add #1,r1`). Not a store that reads the other bytes of the global it widens, A5-112's
@@ -7067,7 +7082,7 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                             }
                             return false;
                         };
-                        for (size_t li = static_cast<size_t>(m.firstLine) + 1; li < r.lines.size(); ++li)
+                        for (size_t li = mEnd + 1; li < r.lines.size(); ++li)
                         {
                             if (!readsGlobal(r.lines[li]) || !derives(r.lines[li])) continue;
                             add("folded-read-after-pointer-write", "the read at " + Hex(rd.insn) + " the engine folded from " + Hex(rd.address) +
@@ -7085,7 +7100,7 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                     if ((!m.direct && !m.write) || m.firstLine < 0 || m.origBlock < 0) continue;
                     if (!runsAfter(static_cast<size_t>(rd.origBlock), rd.origOrder, static_cast<size_t>(m.origBlock), m.origOrder)) continue;
                     count(m.direct ? "order.folded-read-before-access.checked" : "order.folded-read-before-pointer-write.checked");
-                    if (shown > m.firstLine)
+                    if (shown > statementEnd(m.firstLine))
                         add(m.direct ? "folded-read-after-access" : "folded-read-after-pointer-write",
                             "the read at " + Hex(rd.insn) + " the engine folded from " + Hex(rd.address) + " is printed (line " + std::to_string(shown) +
                                 ") after the " + (m.write ? "write" : "read") + (m.direct ? "" : " through a pointer") + " at " + Hex(m.insn) + " (line " +
