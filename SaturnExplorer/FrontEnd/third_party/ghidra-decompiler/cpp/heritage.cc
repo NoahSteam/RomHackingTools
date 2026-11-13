@@ -2651,6 +2651,18 @@ void Heritage::guardHardwareAccesses(uint4 fl,const Address &addr,int4 size,vect
       if (op->getIn(0)->getSpaceFromConst() != addr.getSpace()) continue;
       if (op->getIn(1)->isConstant()) continue;
       accesses.push_back(op);
+      // (...and the guard guardStores just put before a STORE is kept, as a call's is (address forced): the pointer may be the global's
+      // address, so the global's value after the STORE is another than before it even when the code writes the global again before
+      // anything reads it. Dead, the guard left nothing of the global spanning the STORE, and a read made before it was printed at its use
+      // after it, the value written then (`x = g; *p = v; g = x + 1` printed `*p = v; g = g + 1;`), or dropped when stored back (`g = x`
+      // printed nothing: the old word the code stores when p is &g, A5-119))
+      if (opc == CPUI_STORE && op->getBasicIter() != op->getParent()->beginOp() && getenv("SE_TMP_A5119_OFF") == nullptr) {
+	list<PcodeOp *>::iterator pit = op->getBasicIter();
+	PcodeOp *prev = *(--pit);
+	if (prev->code() == CPUI_INDIRECT && prev->isIndirectStore() && prev->getOut()->getAddr() == addr &&
+	    prev->getOut()->getSize() == size && PcodeOp::getOpFromConst(prev->getIn(1)->getAddr()) == op)
+	  prev->getOut()->setAddrForce();
+      }
     }
   }
   for(int4 i=0;i<accesses.size();++i) {

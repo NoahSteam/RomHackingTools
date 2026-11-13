@@ -519,6 +519,8 @@ struct Program
     int postJoinValue = 0;         // ...the constant the path through the poll gives the stored register
     int postJoinPoll = -1;         // ...and the poll's literal (the poll is inside a skip, not an item of the function's own)
     int postPollFn = -1;           // version 2 (A3-181): the function of the module that ends with a poll and the store or read above (postPollRead, postPollStore); -1: none
+    int aliasReg = 0;              // version 1 (A5-122): the parameter register (4 or 5) every run starts at aliasAddr, a global the program reads; 0: none
+    uint32_t aliasAddr = 0;
     std::vector<Func> fns;         // fns[0] is the function a version 1 program is about; later ones follow in memory
 };
 
@@ -569,6 +571,8 @@ struct Gen
     bool postJoinOn = false;
     Rng modPollRng;             // ...and one for A3-181 (a poll at the end of a version 2 function, then a store or a read of a parameter), from kModPollFirst on only
     bool modPollOn = false;
+    Rng ptrAliasRng;            // ...and one for A5-122 (a global read, a store through r4 or r5 that the run points at it, the value read used), from kPtrAliasFirst on only
+    bool ptrAliasOn = false;
     // What the function being made changes for good / reads on entry through the wide alphabet and the GBR accesses
     // (an over-approximation: an item the grammar drops again is counted, which the checks that use it allow).
     uint32_t wideClobbers = 0;
@@ -590,7 +594,7 @@ struct Gen
     bool inSpill = false;     // r15 is moved: no local is addressed through it here
     int loopDepth = 0;        // inside a loop body: a pointer advanced here is advanced again by the next iteration
     std::vector<Func> built;  // the functions of this module generated so far (the later ones)
-    Gen(uint64_t seed) : rng(seed), macRng(seed ^ 0x6D61636D61636D61ull), guardRng(seed ^ 0x7367756172643A5Aull), convRng(seed ^ 0x636F6E7663727667ull), wideRng(seed ^ 0x77696465414C5521ull), aliasRng(seed ^ 0x616C696173526E67ull), maskRng(seed ^ 0x6D61736B52616E64ull), placeRng(seed ^ 0x706C616365526E67ull), loopMaskRng(seed ^ 0x6C6F6F704D61736Bull), frameRng(seed ^ 0x6672616D6557616Cull), partialRng(seed ^ 0x7061727469616C52ull), retRng(seed ^ 0x7265747263616C6Cull), bsrfRng(seed ^ 0x6273726652656C21ull), choiceRng(seed ^ 0x63686F6F73657221ull), regionRng(seed ^ 0x726567696F6E5074ull), idiomRng(seed ^ 0x69646F6D52616E64ull), pollBodyRng(seed ^ 0x706F6C6C426F6479ull), slotEntryRng(seed ^ 0x736C6F74456E7472ull), postPollRng(seed ^ 0x706F7374506F6C6Cull), postStoreRng(seed ^ 0x706F737453746F72ull), postCallRng(seed ^ 0x706F737443616C6Cull), postJoinRng(seed ^ 0x706F73744A6F696Eull), modPollRng(seed ^ 0x6D6F64506F6C6C21ull)
+    Gen(uint64_t seed) : rng(seed), macRng(seed ^ 0x6D61636D61636D61ull), guardRng(seed ^ 0x7367756172643A5Aull), convRng(seed ^ 0x636F6E7663727667ull), wideRng(seed ^ 0x77696465414C5521ull), aliasRng(seed ^ 0x616C696173526E67ull), maskRng(seed ^ 0x6D61736B52616E64ull), placeRng(seed ^ 0x706C616365526E67ull), loopMaskRng(seed ^ 0x6C6F6F704D61736Bull), frameRng(seed ^ 0x6672616D6557616Cull), partialRng(seed ^ 0x7061727469616C52ull), retRng(seed ^ 0x7265747263616C6Cull), bsrfRng(seed ^ 0x6273726652656C21ull), choiceRng(seed ^ 0x63686F6F73657221ull), regionRng(seed ^ 0x726567696F6E5074ull), idiomRng(seed ^ 0x69646F6D52616E64ull), pollBodyRng(seed ^ 0x706F6C6C426F6479ull), slotEntryRng(seed ^ 0x736C6F74456E7472ull), postPollRng(seed ^ 0x706F7374506F6C6Cull), postStoreRng(seed ^ 0x706F737453746F72ull), postCallRng(seed ^ 0x706F737443616C6Cull), postJoinRng(seed ^ 0x706F73744A6F696Eull), modPollRng(seed ^ 0x6D6F64506F6C6C21ull), ptrAliasRng(seed ^ 0x707472416C696173ull)
     {
         for (int i = 0; i < 8; ++i) align[i] = 4, pref[i] = 4;
         p.mbox = 0x26001000u + 0x10u * rng.Below(4);
@@ -2290,7 +2294,8 @@ struct Gen
         AddPostPollRead(items, polled);
         AddPostPollStore(items, polled);
         AddPostPollJoin(items);
-        AddPostPollCall(items, polled);   // (last: it adds a function to p.fns, which moves 'items')
+        AddPostPollCall(items, polled);   // (it adds a function to p.fns, which moves 'items')
+        AddPointerAlias();
         return p;
     }
 
@@ -2303,6 +2308,82 @@ struct Gen
     // processor answers the poll and the function returns; in the first it does not, and the harness's "returns" contract (generator:no-return)
     // is already skipped for a module with a poll. At most one function of a module has it (the last one drawn). Everything is drawn from
     // modPollRng, the literals from the streams NewLit has, so no seed below kModPollFirst moves.
+    // A5-122: no run stored through a pointer at the global the function had read, so a read of a global printed after a store through a
+    // pointer (A5-119: `x = g; *p = v; g = x + 1` printed `*p = v; g = g + 1;`), or a store of the word read back that the text drops, read the
+    // same value either way. From the seeds where the production is drawn, in about one version 1 program in three, the function begins with
+    // `mov.l @(lit),r1` (a fresh word of work RAM, 0x3C00 on, which no other production's literal is near) ; `mov.l @r1,r2` ; `mov #k,r3` ;
+    // `mov.l r3,@r4` (or @r5), and then uses r2: `add #k,r2 ; mov.l r2,@r1` (A5-119's increment), `mov.l r2,@r1` (the restore), `mov.l
+    // r2,@(4,r1)` (another global), or `mov.l r2,@r5` (through the other pointer). Every run starts the register stored through at the
+    // global (Program::aliasReg), so the store through it writes the word the function read. At the start, before any item moves r4 or r5,
+    // and with registers of its own (r1 to r3, written first: no input of the function). Everything is drawn from ptrAliasRng.
+    void AddPointerAlias()
+    {
+        if (!ptrAliasOn || p.version != 1 || p.fns.empty() || !ptrAliasRng.Chance(35)) return;
+        std::vector<Item>& items = p.fns[0].items;
+        Lit g;
+        g.kind = LitKind::Ram;
+        g.value = (ptrAliasRng.Chance(50) ? 0x26000000u : 0x06000000u) + 0x3C00u + 4u * ptrAliasRng.Below(8);
+        g.width = 4;
+        const int via = ptrAliasRng.Chance(50) ? 4 : 5, other = 9 - via;
+        p.aliasReg = via;
+        p.aliasAddr = g.value;
+        std::vector<Item> block;
+        Item lp;
+        lp.type = Item::LitPtr;
+        lp.shape = "ptr_alias.litptr";
+        lp.reg = 1;
+        lp.lit = static_cast<int>(p.lits.size());
+        p.lits.push_back(g);
+        block.push_back(lp);
+        Item rd;
+        rd.type = Item::Mem;
+        rd.base = 1;
+        rd.width = 4;
+        rd.shape = "ptr_alias.read";
+        rd.words = { 0x6212 };   // mov.l @r1,r2
+        block.push_back(rd);
+        Item k;
+        k.type = Item::Alu;
+        k.shape = "ptr_alias.value";
+        k.words = { static_cast<uint16_t>(0xE300 | (1 + ptrAliasRng.Below(0x7F))) };   // mov #k,r3
+        block.push_back(k);
+        Item st;
+        st.type = Item::Mem;
+        st.base = via;
+        st.width = 4;
+        st.shape = "ptr_alias.store";
+        st.words = { static_cast<uint16_t>(0x2032 | via << 8) };   // mov.l r3,@r4 / @r5
+        block.push_back(st);
+        Item use;
+        use.type = Item::Mem;
+        use.width = 4;
+        switch (ptrAliasRng.Below(4))
+        {
+        case 0:
+            use.base = 1;
+            use.shape = "ptr_alias.inc";
+            use.words = { static_cast<uint16_t>(0x7200 | (1 + ptrAliasRng.Below(0x7F))), 0x2122 };   // add #k,r2 ; mov.l r2,@r1
+            break;
+        case 1:
+            use.base = 1;
+            use.shape = "ptr_alias.restore";
+            use.words = { 0x2122 };   // mov.l r2,@r1
+            break;
+        case 2:
+            use.base = 1;
+            use.shape = "ptr_alias.other_global";
+            use.words = { 0x1121 };   // mov.l r2,@(4,r1)
+            break;
+        default:
+            use.base = other;
+            use.shape = "ptr_alias.through_other";
+            use.words = { static_cast<uint16_t>(0x2022 | other << 8) };   // mov.l r2,@r5 / @r4
+            break;
+        }
+        block.push_back(use);
+        items.insert(items.begin(), block.begin(), block.end());
+    }
+
     void AddModulePoll(Func& f, int idx)
     {
         if (!modPollOn || !disc || p.postPollFn >= 0 || !f.returns || f.end != Func::Rts || f.sel >= 0 || f.shared || !modPollRng.Chance(30)) return;
@@ -2657,6 +2738,9 @@ constexpr uint64_t kPostJoinFirst = 5600001;
 // ...and A3-181's (version 2: a poll at the end of a function of a module, then a store of a constant or of a parameter), likewise. The first
 // production of grammar 2 that polls; no seed below keeps anything but its program.
 constexpr uint64_t kModPollFirst = 5800001;
+// ...and A5-122's (version 1: a global read, a store through r4 or r5, which every run points at that global, and the value read used after it),
+// likewise: no seed below keeps anything but its program.
+constexpr uint64_t kPtrAliasFirst = 6400001;
 
 Program Generate(uint64_t seed)
 {
@@ -2666,6 +2750,7 @@ Program Generate(uint64_t seed)
     g.postStoreOn = seed >= kPostStoreFirst;
     g.postCallOn = seed >= kPostCallFirst;
     g.postJoinOn = seed >= kPostJoinFirst;
+    g.ptrAliasOn = seed >= kPtrAliasFirst;
     return g.Run();
 }
 
@@ -4547,6 +4632,8 @@ struct Subject
     uint32_t postJoin = 0;                 // version 1 (A3-183): the address of work RAM the store after a poll's join writes, 0: none
     int postJoinValue = 0;                 // ...and the constant the path through the poll gives it
     int postPollFn = -1;                   // version 2 (A3-181): the function that holds postPollRead / postPollStore (version 1: function 0)
+    int aliasReg = 0;                      // (A5-122) the parameter register every run starts at aliasAddr instead of its arena, 0: none
+    uint32_t aliasAddr = 0;
     std::string literals;                  // for the report
 
     uint16_t WordAt(uint32_t addr) const
@@ -4581,6 +4668,8 @@ Subject MakeSubject(const Program& p)
     s.postJoin = p.postJoin;
     s.postJoinValue = p.postJoinValue;
     s.postPollFn = p.postPollFn;
+    s.aliasReg = p.aliasReg;
+    s.aliasAddr = p.aliasAddr;
     s.bad = !a.ok;
     s.words = a.words;
     s.codeWords = a.codeWords;
@@ -4640,6 +4729,7 @@ std::string SubjectText(const Subject& s, Sh2Decompiler& d, const std::shared_pt
     o << "  replay: SE_GENERATED_WORDS=\"";
     for (size_t i = 0; i < s.words.size(); ++i) o << (i ? " " : "") << Hex(s.words[i], 4);
     o << "\"";
+    if (s.aliasReg) o << " SE_GENERATED_ALIAS=" << s.aliasReg << ":" << Hex(s.aliasAddr);
     if (s.v2)
     {
         o << " SE_GENERATED_FUNCS=\"";
@@ -4799,6 +4889,8 @@ public:
         out.init[5] = kScratch5;
         out.init[6] = kScratch6;
         out.init[7] = kScratch7;
+        // (A5-122: the program's global, which the function reads and then stores through this register)
+        if (mS.aliasReg >= 4 && mS.aliasReg <= 7) out.init[mS.aliasReg] = mS.aliasAddr;
         // Callee-saved registers: distinct values, so a function that fails to restore one shows.
         for (int r = 8; r < 15; ++r) out.init[r] = 0x80000000u | uint32_t(rs.mode + 1) << 20 | uint32_t(r) << 8 | uint32_t(r);
         out.init[15] = kStackTop;
@@ -6491,6 +6583,8 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                             }
                             // (...or of the value the function found there, its first access of these bytes a read of it: a write-back that undoes the
                             // `tas.b` between, `mov.l @r7,r1 ; tas.b @r7 ; mov.l r1,@r7` in a loop, leaves memory as it was, grammar 1 seed 10223)
+                            // (...unless a write the text prints, through a pointer, changed the bytes between: A5-119's `x = g; *p = v; g = x`
+                            // with p the global's address, A5-122's runs, where the store undoes a write the text keeps)
                             if (!same)
                                 for (size_t j = 0; j < k; ++j)
                                 {
@@ -6498,6 +6592,13 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                                     if (p.addr < t.addr + static_cast<uint32_t>(t.size) && t.addr < p.addr + static_cast<uint32_t>(p.size))
                                     {
                                         same = !p.write && p.addr == t.addr && p.size == t.size && p.value == t.value;
+                                        for (size_t i = j + 1; same && i < k; ++i)
+                                        {
+                                            const TraceRec& w = run.trace[i];
+                                            if (w.depth != 0 || !w.write || w.addr >= t.addr + static_cast<uint32_t>(t.size) || t.addr >= w.addr + static_cast<uint32_t>(w.size)) continue;
+                                            for (const MemoryAccess& m : got)
+                                                if (m.write && m.insn == w.insn) same = false;
+                                        }
                                         break;
                                     }
                                 }
@@ -6524,8 +6625,14 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                     int ssize = 0;
                     const int reg = dts::StoredRegister(subject.WordAt(f.insn), ssize);
                     std::set<uint32_t> makers;
+                    // (A5-123: every such line, not only those before the first that names the store: the mapping can name the store on an
+                    // earlier line that is not its statement, a PIECE whose other bytes it takes for "ahead of" the store, and not on the
+                    // statement, a register's read the merge made the global's write (`xRam26001028 = SH2_RTCSR;` at the `mov.l @(0,r7),r2`
+                    // before `mov.l r2,@r6`, grammar 1 seed 5207177; `xRam26001004 = VDP2_MPABN0;` on the path through the read, 5207886): the
+                    // store's lines then run from the first to the last of them)
+                    bool atMakerFound = false;
                     if (reg >= 0 && dts::RegisterMakers(r, word, dts::BranchSources(r, word), f.insn, reg, makers))
-                        for (int li = 0; li < (first < 0 ? static_cast<int>(r.lines.size()) : first); ++li)
+                        for (int li = 0; li < static_cast<int>(r.lines.size()); ++li)
                         {
                             const Line& l = r.lines[static_cast<size_t>(li)];
                             const size_t b = l.text.find_first_not_of(' ');
@@ -6539,10 +6646,10 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                             for (const Token& t : l.tokens) atMaker = atMaker || (t.addr != 0 && makers.count(t.addr) != 0);
                             if (atMaker)
                             {
-                                count("order.folded-store.at-maker");
-                                first = li;
-                                if (last < 0) last = li;
-                                break;
+                                if (!atMakerFound) count("order.folded-store.at-maker");
+                                atMakerFound = true;
+                                if (first < 0 || li < first) first = li;
+                                if (li > last) last = li;
                             }
                         }
                 }
@@ -6605,11 +6712,19 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                                 runsAfter(static_cast<size_t>(m.origBlock), m.origOrder, fb0, f.origOrder))
                                 between = true;
                         if (between) continue;
-                        for (size_t li = 0; li < r.lines.size() && first < 0; ++li)
+                        // (A5-123: every line that names the earlier store: the mapping can name it on an earlier line too, a `tas.b`'s `g = g |
+                        // 0x80000000;` before `g = (uint4)*(uint2 *)(param_2 + 8);`, its statement, into which the slot's half-word store of 0 is
+                        // joined, after the read the code makes before both: grammar 1 seed 5203228)
+                        for (size_t li = 0; li < r.lines.size(); ++li)
                         {
                             if (r.lines[li].text.find(" = ") == std::string::npos) continue;
                             for (const Token& t : r.lines[li].tokens)
-                                if (t.addr == o.insn) { first = last = static_cast<int>(li); break; }
+                                if (t.addr == o.insn)
+                                {
+                                    if (first < 0) first = static_cast<int>(li);
+                                    last = static_cast<int>(li);
+                                    break;
+                                }
                         }
                         if (first >= 0) count("order.folded-store.joined-earlier");
                     }
@@ -6649,8 +6764,10 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                     // a store the mapping names on no line beside one through a pointer is the mapping's to name, and not judged here). The
                     // runs say which paths are taken, the static order cannot: a slot's byte store a long store of the same word always follows,
                     // `tst #0x40,r0 ; bf/s L ; mov.b r2,@r6 ; mov.l r2,@r6` with r0 0xC, grammar 1 seed 4202386)
+                    // (A5-119: ...or one through a pointer, which may be the global's address: the pointer form of `g = r1 ; *r4 = 1 ; g = r2`,
+                    // judged as the register's, after patch 0090 put a sink of the global before each LOAD and STORE through a pointer)
                     uint32_t without = 0;
-                    bool isWrite = false;
+                    bool isWrite = false, viaPointer = false;
                     for (const RunOut& run : runs)
                     {
                         bool live = false;
@@ -6668,15 +6785,54 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                                 continue;
                             }
                             for (const MemoryAccess& m : got)
-                                if (t.depth == 0 && m.direct && m.insn == t.insn && m.write == t.write && !without)
+                                if (t.depth == 0 && m.insn == t.insn && m.write == t.write && !without)
                                 {
                                     without = m.insn;
                                     isWrite = m.write;
+                                    viaPointer = !m.direct;
                                 }
                         }
                     }
+                    // (A5-119: ...and one no run follows with any access before the return, where a run's last access of its bytes before it is a
+                    // write through a pointer that the text prints, of another value: the text leaves that value in memory at the return, the code
+                    // the store's. `x = g; *p = v; g = x` printed `*p = v;`, no store of the global, which with p the global's address (A5-122's
+                    // runs) ends with v where the code ends with the word it read.)
                     if (!without)
                     {
+                        uint32_t lostTo = 0;
+                        for (const RunOut& run : runs)
+                        {
+                            size_t k = run.trace.size();
+                            for (size_t i = 0; i < run.trace.size(); ++i)
+                                if (run.trace[i].depth == 0 && run.trace[i].write && run.trace[i].insn == f.insn) k = i;
+                            if (k == run.trace.size()) continue;
+                            const TraceRec& t = run.trace[k];
+                            bool again = false;
+                            for (size_t i = k + 1; i < run.trace.size() && !again; ++i)
+                            {
+                                const TraceRec& w = run.trace[i];
+                                again = w.write && w.addr <= t.addr && t.addr + static_cast<uint32_t>(t.size) <= w.addr + static_cast<uint32_t>(w.size);
+                            }
+                            if (again) continue;
+                            for (size_t j = k; j-- > 0;)
+                            {
+                                const TraceRec& p = run.trace[j];
+                                if (p.depth == 0 && !p.write && r.InBody(p.addr)) continue;   // (a literal of the function)
+                                if (p.addr >= t.addr + static_cast<uint32_t>(t.size) || t.addr >= p.addr + static_cast<uint32_t>(p.size)) continue;
+                                if (p.write && p.value != t.value)
+                                    for (const MemoryAccess& m : got)
+                                        if (m.write && !m.direct && m.insn == p.insn && !lostTo) lostTo = m.insn;
+                                break;
+                            }
+                        }
+                        if (lostTo)
+                        {
+                            count("order.folded-store.dropped-at-return");
+                            add("folded-store-after-access", "the store at " + Hex(f.insn) + " the engine folded into " + Hex(f.address) +
+                                                                 " is printed nowhere, and the write through a pointer at " + Hex(lostTo) +
+                                                                 " before it is what the text leaves there at the return");
+                            continue;
+                        }
                         count("order.folded-store.dropped-unobserved");
                         continue;
                     }
@@ -6706,10 +6862,10 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                             continue;
                         }
                     }
-                    count("order.folded-store.dropped-checked");
+                    count(viaPointer ? "order.folded-store.dropped-checked-pointer" : "order.folded-store.dropped-checked");
                     add("folded-store-after-access", "the store at " + Hex(f.insn) + " the engine folded into " + Hex(f.address) +
-                                                         " is printed nowhere, and the " + (isWrite ? "write" : "read") + " at " + Hex(without) +
-                                                         " the code makes after it is made without it");
+                                                         " is printed nowhere, and the " + (isWrite ? "write" : "read") + (viaPointer ? " through a pointer" : "") +
+                                                         " at " + Hex(without) + " the code makes after it is made without it");
                     continue;
                 }
                 // (A5-111, fixed by patch 0088: a byte or half of the global read after a wider write was made a write of that piece by heritage, a
@@ -6843,16 +6999,101 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                         }
                     }
                 }
-                if (shown < 0) continue;
+                // (A5-119: a read named on no line, folded into the expression of a later statement, `iRam06030000 = iRam06030000 + 1;` for
+                // `mov.l @r6,r1 ; mov.l r2,@r4 ; add #1,r1 ; mov.l r1,@r6`, the mapping naming the `add` and the store only: a line after a write
+                // through a pointer that the code makes after the read, which reads the global on the value side, is the read's when no read of
+                // those bytes the code makes can run after that write (none in a block the write's reaches, or later in its own))
+                if (shown < 0)
+                {
+                    for (const MemoryAccess& m : got)
+                    {
+                        if (m.direct || !m.write || m.firstLine < 0 || m.origBlock < 0) continue;
+                        if (!runsAfter(static_cast<size_t>(rd.origBlock), rd.origOrder, static_cast<size_t>(m.origBlock), m.origOrder)) continue;
+                        const size_t mb = static_cast<size_t>(m.origBlock);
+                        bool readAgain = false;
+                        for (const AccessFate& o : r.accessFates)
+                        {
+                            if (o.write || o.origBlock < 0 || o.address >= rd.address + rd.size || rd.address >= o.address + o.size) continue;
+                            const size_t ob = static_cast<size_t>(o.origBlock);
+                            if (ob >= fr.reach.size() || mb >= fr.reach.size()) { readAgain = true; continue; }
+                            if ((ob == mb && o.origOrder > m.origOrder) || fr.reach[mb][ob]) readAgain = true;
+                        }
+                        for (const MemoryAccess& o : got)
+                        {
+                            if (o.write || o.origBlock < 0 || &o == &m) continue;
+                            const size_t ob = static_cast<size_t>(o.origBlock);
+                            if (ob >= fr.reach.size() || mb >= fr.reach.size()) { readAgain = true; continue; }
+                            if ((ob == mb && o.origOrder > m.origOrder) || fr.reach[mb][ob]) readAgain = true;   // (a read through a pointer may be of the global too)
+                        }
+                        if (readAgain) continue;
+                        count("order.folded-read-before-pointer-write.unnamed");
+                        // (a line that reads the global on the value side; not its address, `&xRam06003c10`. One at or before the write's line is
+                        // taken for the read's statement, its token at the literal load: grammar 1 seed 6400191, `xVar2 = xRam06003c10;`)
+                        const auto readsGlobal = [&](const Line& l) {
+                            size_t from = 0;
+                            {
+                                const size_t b = l.text.find_first_not_of(' ');
+                                size_t e = b;
+                                while (b != std::string::npos && e < l.text.size() && (std::isalnum(static_cast<unsigned char>(l.text[e])) || l.text[e] == '_' || l.text[e] == '.')) ++e;
+                                if (b != std::string::npos && e > b && l.text.compare(e, 3, " = ") == 0) from = e + 3;
+                            }
+                            for (size_t at = l.text.find("Ram", from); at != std::string::npos; at = l.text.find("Ram", at + 3))
+                            {
+                                unsigned v = 0;
+                                if (at + 11 > l.text.size() || std::sscanf(l.text.c_str() + at + 3, "%8x", &v) != 1 || v > rd.address || rd.address >= v + 8u) continue;
+                                if (at >= 2 && l.text[at - 2] == '&') continue;
+                                return true;
+                            }
+                            return false;
+                        };
+                        bool before = false;
+                        for (size_t li = 0; li <= static_cast<size_t>(m.firstLine) && li < r.lines.size() && !before; ++li) before = readsGlobal(r.lines[li]);
+                        if (before) continue;
+                        // (...and whose value derives from the read: a store on the line, or the return, whose register the read made, through
+                        // updates in place (`add #1,r1`). Not a store that reads the other bytes of the global it widens, A5-112's
+                        // `xRam26001010 = CONCAT11(0x10,(xunknown1)xRam26001010);` for a byte store, grammar 1 seed 6400725.)
+                        const auto word = [&](uint32_t pc, uint16_t& w) {
+                            if (pc < kCode || (pc - kCode) / 2 >= subject.words.size()) return false;
+                            w = subject.WordAt(pc);
+                            return true;
+                        };
+                        const std::map<uint32_t, std::vector<uint32_t>> into = dts::BranchSources(r, word);
+                        const auto derives = [&](const Line& l) {
+                            for (const Token& t : l.tokens)
+                            {
+                                if (!t.addr || !r.InBody(t.addr)) continue;
+                                const uint16_t w = subject.WordAt(t.addr);
+                                int ssize = 0;
+                                int reg = dts::StoredRegister(w, ssize);
+                                if (reg < 0 && w == 0x000B) reg = 0;   // (rts: the value returned)
+                                std::set<uint32_t> makers;
+                                if (reg >= 0 && dts::RegisterMakers(r, word, into, t.addr, reg, makers, true) && makers.count(rd.insn)) return true;
+                            }
+                            return false;
+                        };
+                        for (size_t li = static_cast<size_t>(m.firstLine) + 1; li < r.lines.size(); ++li)
+                        {
+                            if (!readsGlobal(r.lines[li]) || !derives(r.lines[li])) continue;
+                            add("folded-read-after-pointer-write", "the read at " + Hex(rd.insn) + " the engine folded from " + Hex(rd.address) +
+                                                                       " is named on no line, and line " + std::to_string(li) + " reads the global after the write through a pointer at " +
+                                                                       Hex(m.insn) + " (line " + std::to_string(m.firstLine) + "), which the code makes after the read and before no other read of it");
+                            break;
+                        }
+                    }
+                    continue;
+                }
                 for (const MemoryAccess& m : got)
                 {
-                    if (!m.direct || m.firstLine < 0 || m.origBlock < 0) continue;
+                    // (A5-119: ...and a write through a pointer, which may be the global's address: `x = g; *p = v; g = x + 1` printed `*p = v;
+                    // g = g + 1;`, the word read after the store that may have changed it. A read through a pointer changes nothing.)
+                    if ((!m.direct && !m.write) || m.firstLine < 0 || m.origBlock < 0) continue;
                     if (!runsAfter(static_cast<size_t>(rd.origBlock), rd.origOrder, static_cast<size_t>(m.origBlock), m.origOrder)) continue;
-                    count("order.folded-read-before-access.checked");
+                    count(m.direct ? "order.folded-read-before-access.checked" : "order.folded-read-before-pointer-write.checked");
                     if (shown > m.firstLine)
-                        add("folded-read-after-access", "the read at " + Hex(rd.insn) + " the engine folded from " + Hex(rd.address) + " is printed (line " +
-                                                            std::to_string(shown) + ") after the " + (m.write ? "write" : "read") + " at " + Hex(m.insn) +
-                                                            " (line " + std::to_string(m.firstLine) + "), which the code makes after it");
+                        add(m.direct ? "folded-read-after-access" : "folded-read-after-pointer-write",
+                            "the read at " + Hex(rd.insn) + " the engine folded from " + Hex(rd.address) + " is printed (line " + std::to_string(shown) +
+                                ") after the " + (m.write ? "write" : "read") + (m.direct ? "" : " through a pointer") + " at " + Hex(m.insn) + " (line " +
+                                std::to_string(m.firstLine) + "), which the code makes after it");
                 }
             }
         }
@@ -8267,6 +8508,17 @@ Subject RawSubject(const char* raw)
         const bool untilSet = std::strstr(poll, ":until-set") != nullptr;
         const uint32_t at = static_cast<uint32_t>(std::strtoul(poll, nullptr, 16));
         s.polls.push_back({ Env::MemKey(at), untilSet ? 0u : 1u, untilSet ? 1u : 0u, 0, at });
+    }
+    // (A5-122) SE_GENERATED_ALIAS=<4..7>:<address>: every run starts that register at the address (a global of the words) instead of its arena
+    if (const char* alias = std::getenv("SE_GENERATED_ALIAS"))
+    {
+        unsigned reg = 0;
+        unsigned long at = 0;
+        if (std::sscanf(alias, "%u:%lx", &reg, &at) == 2 && reg >= 4 && reg <= 7)
+        {
+            s.aliasReg = static_cast<int>(reg);
+            s.aliasAddr = static_cast<uint32_t>(at);
+        }
     }
     return s;
 }
