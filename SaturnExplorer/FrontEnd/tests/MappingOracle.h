@@ -3096,11 +3096,40 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                 }
                 ++a.copyStoreMissing;
                 ++(frame ? a.copyFrameMissing : a.copyGlobalMissing);
-                ++(atCall ? a.copyAtCall : atReturn ? a.copyAtReturn : atBranch ? a.copyAtBranch : atLoad ? a.copyAtLoad : a.copyAtOther);
+                // (A5-124: not a register's read the engine stores as read -- `xRam26001028 = SH2_RTCSR;`, 0090's merge of `mov.l @(0,r7),r2 ;
+                // mov.l r2,@r6` -- whose store stores the register the read wrote: the line is that store's statement as much as the read's,
+                // and a click on the store's instruction must reach it (grammar 1 seeds 5207177, 5207886). Switched off by
+                // SE_A7_RULE_OFF=5124)
+                bool readStored = false;
+                if (atLoad && !atCall && !atReturn && !atBranch && !frame && !A7RuleOff(5124))
+                    for (const Token& t : r.lines[li].tokens)
+                    {
+                        uint16_t lw = 0;
+                        if (readStored || !t.addr || t.begin == t.end || !word(t.addr, lw)) continue;
+                        bool registerRead = false;
+                        for (const MemoryAccess& m : r.accesses) registerRead = registerRead || (m.insn == t.addr && !m.write && m.direct);
+                        if (!registerRead) continue;
+                        const std::set<int> loaded = WrittenRegisters(sfe::Sh2Decode(t.addr, lw));
+                        for (uint32_t st : candidates)
+                        {
+                            uint16_t sw = 0;
+                            int size = 0;
+                            const int reg = word(st, sw) ? StoredRegister(sw, size) : -1;
+                            if (reg < 0 || !loaded.count(reg)) continue;
+                            if (!haveSources)
+                            {
+                                sources = BranchSources(r, word);
+                                haveSources = true;
+                            }
+                            std::set<uint32_t> makers;
+                            if (RegisterMakers(r, word, sources, st, reg, makers) && makers.count(t.addr)) readStored = true;
+                        }
+                    }
+                ++(atCall ? a.copyAtCall : atReturn ? a.copyAtReturn : atBranch ? a.copyAtBranch : atLoad && !readStored ? a.copyAtLoad : a.copyAtOther);
                 // (at a load it is counted: A7-16's shape, a global named after a hardware register is its load)
                 const std::string what = "line " + std::to_string(li) + " '" + text + "' names none of the " + std::to_string(candidates.size()) +
                                          " store(s) folded into the variable (first " + MappingHex(*candidates.begin()) + "); a click goes to " + MappingHex(r.lines[li].firstAddr);
-                if (atLoad && !atCall && !atReturn && !atBranch) a.Keep("copy-store (counted): " + where + ": " + what);
+                if (atLoad && !atCall && !atReturn && !atBranch && !readStored) a.Keep("copy-store (counted): " + where + ": " + what);
                 else problem("copy-store", what);
             }
     }
