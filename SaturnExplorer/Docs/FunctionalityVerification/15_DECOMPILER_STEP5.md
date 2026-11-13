@@ -19762,3 +19762,114 @@ With the argument rule and the gate both taken out (one build): the A3-185 pin f
 
 * **Area 5: A5-123** (new, P2 as A5-115's class, not triaged): `read-after-folded-store` after patch 0090 on grammar 1 seeds 5203228, 5207177 and 5207886; master's binary too. 5203228's shrunk text reads right on its value; whether the folded store's record names the wrong line or the text reorders is for area 5.
 * **Area 3: A3-187** (new, P3, open): above.
+
+## Area 5, A5-119 to A5-123 fixer
+
+Fixer, branch `review/5-a5119-fix`, cut at master `00dccb11` (patches to 0090). The worktree's RelWithDebInfo build (`-j2`, `ulimit -v 6000000`). One engine patch, **0093** (`heritage.cc`); `patches/README.md` lists 0089, 0091 and 0092 under "Reserved numbers" (other branches') so the gap check passes. The oracle and the generator are in `Sh2GeneratedTests.cpp`; the pins are `TestArea5ReviewAfter0090` turned round (`Sh2DecompilerTests.cpp`) and `TestA5119Pins` (`Sh2GeneratedTests.cpp`). Backups pushed to `backup/review-5-a5119-fix`.
+
+| Row | P | Outcome |
+|---|---|---|
+| A5-119 | P1 | **fixed** (0093: the STORE's guard on a global kept; the order oracle judges reads and dropped stores against writes through a pointer) |
+| A5-123 | P2 → P3 | **fixed, oracle**: the record names the wrong line; the text is right |
+| A5-122 | P3 | **fixed**: `Gen::AddPointerAlias`, grammar 1 from 6,400,001; the oracle catches A5-119 there with 0093 reverted |
+| A5-120 | P3 | **accepted** with the reason (no register read can be shown to leave RAM alone) |
+| A5-121 | P3 | as triaged (open) |
+| A5-124 | P3 | **filed** (area 7's mapping, routed) |
+| A5-125 | P3 | **filed** (engine: "Forced merge caused intersection", the same on master; open) |
+| A5-126 | P2 | **filed** (engine: a `tas.b` write dropped before a read through a pointer, found by the pointer form of the dropped rule; the same on master; open) |
+
+### 1. A5-119: not the merge
+
+The review suspected 0090's merge exemption (`Merge::heldAcrossAccess`, a register that only copies the global). Refusing that merge whenever the register's cover holds a STORE through a pointer changes none of the three texts. The cause is one step earlier. `Heritage::guardStores` gives every STORE through a pointer of the processor space an INDIRECT on each global (`indirect_store`), so the global after the STORE is another value; but unlike a call's guard (`guardCalls` address-forces its INDIRECT on an address-tied range, `holdind`), the STORE's output is not address forced. In `x = g; *p = v; g = x + 1` the code writes the global again before anything reads it, so the guard's output has no reader and dead code removes it; nothing of the global's variable then spans the STORE, `RulePropagateCopy` feeds the global's old value into the `add` after it, and the merge prints `*param_1 = in_r2; iRam06030000 = iRam06030000 + 1;`. In `g = x` the COPY becomes a copy of the global to itself and vanishes. A plain `x = g; *p = v; return x` was right because the global's value reaches the RETURN's guard and keeps the INDIRECT alive (`a5_116_ptr`).
+
+**Patch 0093** (12 lines in `Heritage::guardHardwareAccesses`, 0090's function, which already walks the STOREs through a pointer to put its sinks): the INDIRECT `guardStores` has just put before such a STORE, for an address-tied, non-volatile global of the same space, is address forced, as a call's is. The merge's cover test then keeps the old value in a variable of its own:
+
+* `a5_119_inc`: `iVar1 = iRam06030000; *param_1 = in_r2; iRam06030000 = iVar1 + 1;`
+* `a5_119_restore`: `xVar1 = xRam06030000; *param_1 = in_r2; xRam06030000 = xVar1;`
+* `a5_119_restore2`: `xVar1 = xRam06030000; *param_2 = *param_1; xRam06030000 = xVar1;`
+* the controls (`a5_119_ctl_use`, `_ctl_reg`, `_ctl_call`) print as before.
+
+0090 made a STORE through a pointer a barrier to a global's writes (the sinks); 0093 makes it one to the global's reads, which is the brief's rule: a global's value read before a store through a pointer is not read again after it. The merge exemption stays: with the guard alive, a register that copies the global across the STORE intersects the guard's output and is not merged; the exemption only covers copies the merge makes of the global with nothing between.
+
+### 2. The order oracle
+
+Three rules of `Sh2GeneratedTests.cpp` judge A5-119's forms, and A5-118's pointer form is judged now, not only counted:
+
+* `folded-read-after-access` (A5-116's) judges a write through a pointer the ledger holds as it judges a register's access (`folded-read-after-pointer-write`, counted `order.folded-read-before-pointer-write.checked`). A read the mapping names on no line (folded into the `add` of `g = g + 1`) is judged on the first line after the write that reads the global by name on the value side, not its address (`&xRam06003c10`, grammar 1 seed 6400191), and stores or returns a register the read made through updates in place (`dts::RegisterMakers`; not a byte store that rebuilds the other bytes of the global, A5-112's `CONCAT11(0x10,(xunknown1)xRam26001010)`, seed 6400725), when no line up to the write reads the global and no read of those bytes the code makes can run after the write (counted `.unnamed`).
+* The dropped-store rule (A5-118's) takes any access the ledger holds after the dropped store, one through a pointer included (`order.folded-store.dropped-checked-pointer`), and reports a store no line names, no access follows, and whose bytes a run last saw written by a printed write through a pointer of another value: the text leaves that value at the return (`dropped-at-return`).
+* The write-back set-aside (the value the function found there, seed 10223's `tas.b`) is refused when a write through a pointer the text prints changed the bytes between the read and the store (`order.folded-store.write-back-undone`): with p = &g the store undoes it.
+
+### 3. A5-122: the production
+
+`Gen::AddPointerAlias` (stream `ptrAliasRng`, version 1 only, `kPtrAliasFirst` = 6,400,001; no seed below draws it and no other stream moves): in about one program in three the function begins `mov.l @(lit),r1` (a fresh word of work RAM, 0x3C00 on, cached or cache-through) `; mov.l @r1,r2 ; mov #k,r3 ; mov.l r3,@r4` (or `@r5`) and then `add #k,r2 ; mov.l r2,@r1` (A5-119's increment), `mov.l r2,@r1` (the restore), `mov.l r2,@(4,r1)` (another global) or `mov.l r2,@r5` (through the other pointer). `Program::aliasReg` / `Subject::aliasReg` start that register at the global in every run (the runner's `init`), so the store through it writes the word the function read. The replay line carries `SE_GENERATED_ALIAS=<reg>:<addr>`, which a hand-written `SE_GENERATED_WORDS` run also takes. At the start of the items, before any item moves r4 or r5, with r1 to r3 written first (no new input).
+
+10,000 seeds from 6,400,001 (`SE_GENERATED_GRAMMAR=1 SE_GENERATED_FIRST=6400001 SE_GENERATED_SEEDS=10000 SE_GENERATED_CANARY=0`), the production in 3,511 programs (889 increments, 883 restores, 895 other globals, 844 through the other pointer):
+
+| Engine | Failing seeds | Classes |
+|---|---|---|
+| this branch (0093) | **7** | area 7 (`map-way-back`, `map-const-join`, `map-copy-store`, `map-store-value`): 6403189, 6403508, 6406365, 6407131, 6408035, 6409616, none of which draws the production, each failing on master's binary alike; `n:status` 6406139: **A5-125**, below |
+| 0093 reverted | **1,226** | 1,220 with `folded-store-after-access` (the restore dropped: before a register's or a pointer's access, 533 `dropped-checked-pointer`, and 9 at the return) or `folded-read-after-pointer-write` (the increment), all but six on the production's global; the same seven as above |
+
+So the order oracle catches A5-119 there with the fix switched off. Counts with the fix: `order.folded-store.write-back-undone` 903 (the restore judged where the set-aside would have taken it), `order.folded-read-before-pointer-write.checked` 921.
+
+Two seeds of the range shrunk with 0093 reverted, pinned (`TestA5119Pins`): 6400009, `mov.l @(lit),r1 ; mov.l @r1,r2 ; mov.l r3,@r5 ; mov.l r2,@r1 ; mov.l @(lit),r7` with r5 at the global (`SE_GENERATED_ALIAS=5:06003C14`), and 6400011, the restore through r4 (`D102 6212 2432 2122 000B 0009 2600 3C0C`, `SE_GENERATED_ALIAS=4:26003C0C`).
+
+### 4. A5-123: the oracle's line
+
+All three seeds fail on master's binary and on 0093 alike, and their texts are right:
+
+* **5203228** (shrunk: `tas.b @r6 ; mov.w @(8,r5),r0 ; mov.l r0,@r6 ; tst #8,r0 ; bt/s L ; mov.w r3,@r6`, r3 0 after the `dt` loop). The slot's half-word store of 0 over the high half is joined into the long store's statement `uRam26002304 = (uint4)*(uint2 *)(param_2 + 8);` (line 14: the zero extension is the zeroed half), after the read it holds. No line names the slot's store, so the oracle's `joined-earlier` took the first line naming the long store, and the mapping names it on the `tas.b`'s line 13 too.
+* **5207177**: the long store at 0x06009030 stores r2, which `mov.l @(0,r7),r2` read from SH2_RTCSR; the statement is `xRam26001028 = SH2_RTCSR;` (line 25), which names only the read, and the mapping names the store on line 13, the poll loop's `xRam26001028 = CONCAT22(in_r2,xRam26001028._2_2_);`, for the low half no store reaches ("the store it is ahead of").
+* **5207886** (shrunk): on the path through `mov.w @r6,r1` the store at 0x06009012 is `xRam26001004 = VDP2_MPABN0;` (named by the read only); the other path's `xRam26001004 = in_r1;` names it.
+
+Fixed in the oracle: `joined-earlier` takes every line that names the earlier store, first to last; `at-maker` scans every line that assigns the global at the stored register's maker, not only the lines before the first that names the store, and widens the store's lines to them. The three seeds pass, whole and shrunk (`TestA5119Pins`). The mapping's two habits (a CALLOTHER statement gets no store token; a PIECE's bytes no store reaches name the later store) are filed as **A5-124** for area 7: no value or order is wrong, a click on the store's line does not reach the store.
+
+### 5. A5-120: accepted
+
+A register read cannot be shown to leave RAM alone in the sense the barrier needs: it is where the code learns that another processor or a transfer has written RAM (SMPC's SF after a command writes the OREGs' results, SCU_DSTA after a DMA, CD_HIRQ after a sector), so a RAM word read after it may not be the value the code stored before it. A small fix would have to tell a register whose read observes such a write from one that does not, by register, which no map holds. The value and the order of 060715B6 are the code's; the cost is SMPC_SF named through a pointer read back from RAM. Accepted in the ledger.
+
+### 6. Other fixtures
+
+* **A7-100** (`TestArea7Round12`): grammar 1 seed 4501198's word store before `tas.b @r4` is printed whole, `xRam26001028 = 0x40000000;`, where the line was the three low bytes the later byte store leaves, `xRam26001028 = 0;`: the `tas.b` is a store through a pointer, which may be the global's address, so the high byte must be in memory there. Right by the code (the code stores 0x40000000). The fixture is re-pinned on the new line (its token at 0x0600900E, the audit clean); the trimmed number it was about no longer arises here, which area 7 is told.
+
+### 7. The corpora
+
+`SE_GAME_HWRAM=<img> SE_GAME_LEND=1 SE_GAME_NOTES=1 SE_GAME_OUT=<dir>`, both images, this branch's engine against master `00dccb11`'s binary: real entries lent **474 (645) of 999** and **724 (975) of 1,543**; missing and said **0** and **4**; every ledger count 0, the mapping audit passes; every summary line of both logs equal to master's. Texts that changed (variable renumbering left out), each A5-119's class, a counter or an index global read before stores through a pointer made from it and written after them, now read once before the stores:
+
+* hwram007: **0600733E** (alone and lent) and its fragment 06007330: `puVar5 = puRam06054c18; uVar1 = uRam06039acc;` before `puRam06054c18[3] = ...`, then `*puVar5 = ...; puVar5[1] = ...; puVar5[2] = ...; uRam06039acc = uVar1 + 1; puRam06054c18 = puVar5 + 4;` (the review's counter, 060073F8 to 06007434); **06006B78** (lent): `iVar2 = iRam06054b98;` before the four stores through `iRam06054b98 * 0x14 + 0x603b200`, `iRam06054b98 = iVar2 + 1;`.
+* hwram008: **060073AA** (alone and lent) and its fragment 0600739C, the same counter (`uRam0608c054`, `puRam060a3bd8`); **06006BD4**, **06006C14**, **0603232C** (lent): the same table insert as 06006B78 (`iRam060a3b58`, `iRam060a8570`); **06058260** (lent): `iVar2 = iRam0608b008;` before the two stores through `iRam0608b008 * 8 + ...`, `iRam0608b008 = iVar2 + 1; ... return iVar2;`, where master read the global after the stores and returned that.
+
+In each the text read the word after stores through a pointer computed from it, the old text right only while the pointer is not the word's address; the two counters' words are not the same as the table's in the game (no wrong value there, as the review found).
+
+### 8. Mutation
+
+0093 reverted (the 0090 tree), this branch's tests: `SaturnExplorerSh2DecompilerTests` fails 4 checks, the FIXED checks of `TestArea5ReviewAfter0090`; the generator's `TestA5119Pins` fails 8 (the increment and the restore with the pointer at the global, A5-122's two shrunk and four whole seeds); the controls, the second-pointer restore (a write-back in every run: the word copied is the one the global holds) and A5-123's pins pass. The A5-123 seeds failed with 0093 and the old oracle (section 4) and pass with the new one.
+
+### 9. Runs
+
+All after the last code edit (`a9b8e560`), with that build:
+
+| Run | Result |
+|---|---|
+| full `ctest -j2` with Live | **117 of 117** passed (the 6 Live tests among them) |
+| fault suite (`SaturnExplorerDecompilerFaultTests`) | **0 of 94** jobs failed; no allocation pin moved, none re-pinned |
+| printed-C (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | **agrees=5196**, narrow-c 130, void-return 227, void-return-lent 24, skipped 8 |
+| 20,000-seed matrix (`SE_GENERATED_SEEDS=20000`, the canary on: 240 programs, 0 failing) | **0 failing seeds, 0 findings** (`order.folded-read-before-pointer-write.checked` 1,217) |
+| default run, `SE_GENERATED_GRAMMAR=1` and `=2`, `SE_GENERATED_SEEDS=3000` | **0 failing seeds** each |
+| A5-122's range, grammar 1, 10,000 from 6,400,001 | 7 failing seeds, none area 5's by this branch (section 3) |
+| grammar 1, 5,200,001 to 5,210,000 | **1 failing seed, 5207741**: `folded-store-after-access` (the pointer form, judged now), **A5-126**, below; A5-123's three seeds pass (`joined-earlier` 8, `at-maker` 603). Before the last edit two more, 5203136 and 5203691, were the new rule's own false positives (a read printed on the return of the path without the pointer write), now pinned |
+| game corpus (section 7) | both images "all passed"; lent 474 (645) of 999 and 724 (975) of 1,543; missing and said 0 and 4 |
+| `check-literal-size.py`, `check-vendored-tree.py lint --tests-dir` | ok, ok; 0093 applied to master's `heritage.cc` reproduces the tree's byte for byte |
+
+### 10. New rows
+
+* **A5-125** (P3, engine, not triaged): grammar 1 seed 6406139 of A5-122's range is not decompiled, status 3 "Forced merge caused intersection", in the default request; shrunk to `mov.l @r6,r3 ; mac.w @r7+,@r6+` from a literal global and a byte store at the stepped pointer in a poll's loop, which fails the same on master's binary and on the engine before 0090 (the production is not in the shrunk words). The error is said.
+* **A5-126** (P2, engine): grammar 1 seed 5207741, found by the dropped-store rule's pointer form: `tas.b @r6 ; mov.b @r4,r3 ; mov.w @r6,r3 ; tas.b @r6` (r6 a literal global) prints `xVar1 = *param_1; uRam0600220c = uRam0600220c | 0x8000;`, the first `tas.b`'s write dropped before the read through r4. The same text on master and before 0090 (their oracle did not judge the pointer form). Without the `mov.w` or without the second `tas.b` the first write is kept; the half-word range's PIECE, which 0090's sink forces, is lost when the second `tas.b` computes the same value. Not traced further here.
+* **A5-124** (P3, area 7's mapping, routed): section 4.
+
+The new rules' own false positives, found and fixed on the way: a read on a wrapped statement's continuation line is the statement's own (`*(uint2 *)(unaff_gbr + 0x1e) =` on one line, the read on the next: default run seed 33, and five seeds of the 20,000); a read printed on the return of the path without the write (5203136, 5203691; `order.folded-read-before-pointer-write.other-path`); a line that takes the global's address, and a byte store that reads the other bytes it widens (6400191, 6400725), for a read named on no line.
+
+### 11. Routed
+
+* **Area 7: A5-124** (above). A7-100's trimmed number no longer arises in its fixture (section 6). Grammar 1 seeds 6403189, 6403508, 6406365, 6407131, 6408035, 6409616 of A5-122's range (`map-way-back`, `map-const-join`, `map-copy-store`, `map-store-value`): none draws the production, each fails on master's binary.
+* **Area 5, next round:** A5-125 and A5-126 (open), A5-121 (as triaged).
