@@ -16481,6 +16481,29 @@ void TestArea7Round16Pins(Sh2Decompiler& d)
     gSpecialReads = savedSpecials;
 }
 
+// Area 7 round 17: the seeds of A7-141 to A7-146, whole, pinned to no `map-*` finding (the shrunk programs are TestArea7Round17's in
+// Sh2DecompilerTests).
+void TestArea7Round17Pins(Sh2Decompiler& d)
+{
+    struct Pin
+    {
+        int grammar;
+        int seed;
+        bool specials;
+    };
+    const bool savedSpecials = gSpecialReads;
+    for (const Pin& s : { Pin{ 1, 7701445, true }, Pin{ 2, 7607636, false }, Pin{ 2, 7402123, false }, Pin{ 2, 7407523, false }, Pin{ 1, 7907547, false },
+                          Pin{ 1, 8002145, true }, Pin{ 1, 8002899, true }, Pin{ 1, 8004782, true } })
+    {
+        gSpecialReads = s.specials;
+        const Report rep = Evaluate(d, s.grammar == 2 ? MakeV2(s.seed) : Generate(s.seed), true);
+        std::printf("pin 'area 7 round 17: grammar %d seed %d%s': %zu finding(s)\n", s.grammar, s.seed, s.specials ? " (specials)" : "", rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        for (const Finding& f : rep.findings) CHECK(f.sig.find("map-") == std::string::npos);
+    }
+    gSpecialReads = savedSpecials;
+}
+
 // ---- A5-114 to A5-118 (patch 0090): a hardware access is a barrier no read or write of ordinary memory is moved, merged or dropped across ----
 // The area 5 review round's fixtures (A5-114 to A5-117, Sh2DecompilerTests' TestArea5Review), the coordinator's A5-118 (a whole overwrite of a
 // global across a DMA enable), and the seeds that failed on master 43e945b2 with `folded-store-after-access`. Each module pin passes with the
@@ -17563,6 +17586,7 @@ void TestGenerated()
         RUN(TestArea7Round14Pins(d));
         RUN(TestArea7Round15Pins(d));
         RUN(TestArea7Round16Pins(d));
+        RUN(TestArea7Round17Pins(d));
         RUN(TestA5114Pins(d));
         RUN(TestA5119Pins(d));
         RUN(TestA5126Pins(d));

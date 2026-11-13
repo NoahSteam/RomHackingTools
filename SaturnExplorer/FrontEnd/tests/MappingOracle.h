@@ -2366,13 +2366,26 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     if (shownValue.kind == WordValue::Param)
                     {
                         if (got == shownValue || (got.kind == WordValue::Number && got.byCondition)) return false;
-                        // (A7-146: a parameter the text assigns, `param_2 = param_2 + 2;` for the `mac.w @r5+,@r5+` that moves r5 on, is a
-                        // variable whose value is what the text gave it, not the input: not judged; grammar 1 seed 8002899 (specials))
-                        if (!A7RuleOff(146))
+                        // (A7-146: a parameter the text assigns a number, `param_2 = (xunknown2 *)0x5f;` on one path after `param_2 = param_2 +
+                        // 2;` for the `mac.w @r5+,@r5+` that moves r5 on, is a variable that holds that number there: a store of it shows the
+                        // line; grammar 1 seed 8002899 (specials))
+                        if (got.kind == WordValue::Number && !A7RuleOff(146))
                             for (const auto& other : r.lines)
                             {
                                 const size_t s = other.text.find_first_not_of(' ');
-                                if (s != std::string::npos && other.text.compare(s, shownText.size() + 3, shownText + " = ") == 0) return false;
+                                if (s == std::string::npos || other.text.compare(s, shownText.size() + 3, shownText + " = ") != 0) continue;
+                                std::string rhs = other.text.substr(s + shownText.size() + 3);
+                                if (!rhs.empty() && rhs[0] == '(' && rhs.find(')') != std::string::npos) rhs = rhs.substr(rhs.find(')') + 1);
+                                if (rhs.empty() || rhs.back() != ';') continue;
+                                rhs.pop_back();
+                                const bool negative = !rhs.empty() && rhs[0] == '-';
+                                if (negative) rhs = rhs.substr(1);
+                                if (rhs.empty() || !std::isdigit(static_cast<unsigned char>(rhs[0])) ||
+                                    rhs.find_first_not_of("0123456789abcdefx") != std::string::npos)
+                                    continue;
+                                uint32_t n = static_cast<uint32_t>(std::strtoull(rhs.c_str(), nullptr, 0));
+                                if (negative) n = 0u - n;
+                                if (n == static_cast<uint32_t>(got.value)) return false;
                             }
                         // (A7-120: or the store writes only bytes the extension of a narrow unsigned parameter makes 0 -- `(uint4)param_2` of a
                         // `uint2`, the byte store of 0 at the word's high byte -- and its bytes there are 0; grammar 1 seed 6603025)

@@ -3543,7 +3543,7 @@ void TestArea7Round14()
         CHECK(r2.status == DecompileStatus::Ok);
         CHECK(LineWith(r2, "uRam2600306c = param_2;") != nullptr && LineWith(r2, "param_2 = 0x62;") != nullptr);
         CHECK(dts::AuditMapping(r2, word, "a7_118_6209595").Violations() == 0);
-        CHECK(mutated(r2, "118", "a7_118_6209595 mutated") >= 1);
+        CHECK(mutated(r2, "118,146", "a7_118_6209595 mutated") >= 1);
     }
     // A7-121 (oracle) `xor r4,r1` of r1 = `not r4` is all ones: `param_1 = 0xffffffff;` (grammar 2 seed 6604995)
     {
@@ -4100,6 +4100,219 @@ void TestArea7Round16()
         CHECK(n == 1 && !tokenAt(before, zero, 0x0600900Eu));
         const LineLookup was = LineForInstruction(before, 0x0600900Eu);
         CHECK(was.kind == LineLookup::Exact && !was.lines.empty() && before.lines[was.lines[0]].text.find(zero) == std::string::npos);
+    }
+}
+
+// Area 7 round 17 (A7-141 to A7-146): one fixture per row, each the shrunk program of its seed. Product rows: the audit passes and a
+// damaged control (the tokens as master drew them) puts the finding back. Oracle rows: the audit passes, a damaged control fails, and
+// the audit with the row's rule off (SE_A7_RULE_OFF) finds the violation again.
+void TestArea7Round17()
+{
+    std::vector<uint8_t> hw(0x100000u, 0);
+    Sh2Decompiler d(gConfig);
+    const std::function<bool(uint32_t, uint16_t&)> word = [&hw](uint32_t x, uint16_t& w) {
+        if (x < 0x06000000u || x - 0x06000000u + 1 >= hw.size()) return false;
+        w = static_cast<uint16_t>(hw[x - 0x06000000u] << 8 | hw[x - 0x06000000u + 1]);
+        return true;
+    };
+    const auto snapOf = [&](const std::vector<uint16_t>& w) {
+        std::fill(hw.begin(), hw.end(), 0);
+        for (size_t i = 0; i < w.size(); ++i) dts::Put16(hw, 0x9000u + 2 * i, w[i]);
+        return MakeSnapshot(hw);
+    };
+    const auto run = [&](const std::vector<uint16_t>& w, uint32_t entry) { return d.Decompile(snapOf(w), Request(entry)); };
+    const auto changed = [](const DecompileResult& r, const std::string& from, const std::string& to, int& n) {
+        DecompileResult x = r;
+        n = 0;
+        for (Line& l : x.lines)
+        {
+            const size_t at = l.text.find(from);
+            if (at == std::string::npos) continue;
+            l.text.replace(at, from.size(), to);
+            ++n;
+        }
+        return x;
+    };
+    const auto tokenAt = [](const DecompileResult& r, const char* what, uint32_t insn) {
+        const Line* l = LineWith(r, what);
+        if (!l) return false;
+        for (const Token& t : l->tokens)
+            if (t.addr == insn) return true;
+        return false;
+    };
+    const auto ruleOff = [](const char* rows) {
+#ifdef _WIN32
+        _putenv_s("SE_A7_RULE_OFF", rows ? rows : "");
+#else
+        if (rows) setenv("SE_A7_RULE_OFF", rows, 1);
+        else unsetenv("SE_A7_RULE_OFF");
+#endif
+    };
+    const auto mutated = [&](const DecompileResult& r, const char* row, const char* name) {
+        ruleOff(row);
+        const int v = dts::AuditMapping(r, word, name).Violations();
+        ruleOff(nullptr);
+        return v;
+    };
+    // (the way back's first line for an instruction holds `what`)
+    const auto backFirst = [](const DecompileResult& r, uint32_t insn, const char* what) {
+        const LineLookup at = LineForInstruction(r, insn);
+        return at.kind == LineLookup::Exact && !at.lines.empty() && r.lines[at.lines[0]].text.find(what) != std::string::npos;
+    };
+    // (damaged: the line's tokens at an instruction not marked materialised, as master drew them)
+    const auto unmarked = [](const DecompileResult& r, const char* what, uint32_t insn, int& n) {
+        DecompileResult x = r;
+        n = 0;
+        for (Line& l : x.lines)
+            if (l.text.find(what) != std::string::npos)
+                for (Token& t : l.tokens)
+                    if (t.addr == insn && t.materialised)
+                    {
+                        t.materialised = false;
+                        ++n;
+                    }
+        return x;
+    };
+    // A7-141 (product) the path's copy of the store after the join: `bf L ; add r5,r2 ; L: mov.b r2,@r7` prints `cRam26001018 = 0; if
+    // (uVar2 == 1) { cRam26001018 = (char)param_2; }`, and the copy names the store at L (0x06009024), not the poll's store of 2 before the
+    // paths part (0x06009012) (grammar 1 seed 7701445, specials)
+    {
+        const std::vector<uint16_t> w = { 0xD30A, 0x6032, 0x2372, 0x2502, 0xD209, 0x262B, 0x4208, 0xD709, 0xE002, 0x2700, 0x2411, 0x6070, 0xC801, 0x8BFB, 0x2219, 0x8801,
+                                          0x8B00, 0x325C, 0x2720, 0x000B, 0x2602, 0x0009, 0x0600, 0x2200, 0xFFFF, 0xFFC0, 0x2600, 0x1018 };
+        const DecompileResult r = run(w, 0x06009000u);
+        Print("A7-141 a path's copy of the store after the join (grammar 1 seed 7701445)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        const char* copy = "cRam26001018 = (char)param_2;";
+        CHECK(LineWith(r, copy) != nullptr && tokenAt(r, copy, 0x06009024u) && !tokenAt(r, copy, 0x06009012u));
+        CHECK(dts::AuditMapping(r, word, "a7_141_7701445").Violations() == 0);
+        // (damaged: the store of 2 named instead, as master named it)
+        DecompileResult before = r;
+        int n = 0;
+        for (Line& l : before.lines)
+            if (l.text.find(copy) != std::string::npos)
+                for (Token& t : l.tokens)
+                    if (t.addr == 0x06009024u && t.begin == t.end)
+                    {
+                        t.addr = 0x06009012u;
+                        ++n;
+                    }
+        CHECK(n == 1 && dts::AuditMapping(before, word, "a7_141_7701445 before").Violations() >= 1);
+    }
+    // A7-142 (oracle) a variable assigned from `extraout_r9` holds r9's value when the calls return: the callee keeps r9 (r8 to r14), so
+    // `xRam06003104 = (char)pxVar1;` stores the r5 of entry `mov r5,r9` kept (grammar 2 seed 7607636)
+    {
+        const std::vector<uint16_t> w = { 0x2F86, 0x2F96, 0x2FA6, 0x2FE6, 0x4F22, 0x7FD0, 0x6EF3, 0x6843, 0x6953, 0x6A63, 0xB018, 0x6783, 0x6483, 0x6593, 0x66A3, 0x3620,
+                                          0x8B04, 0xB011, 0x6543, 0x6483, 0x6593, 0x66A3, 0xD605, 0x2650, 0x6052, 0x7E30, 0x6FE3, 0x4F26, 0x6EF6, 0x6AF6, 0x69F6, 0x68F6,
+                                          0x000B, 0x0009, 0x0600, 0x3104, 0x2F86, 0x2F96, 0x2FA6, 0x2FC6, 0x0C2A, 0x7FE8, 0x6843, 0x6953, 0x6A63, 0x62F3, 0x7218, 0xE103,
+                                          0x2216, 0x4110, 0x8BFC, 0xE200, 0x7F18, 0x4C2A, 0x6CF6, 0x6AF6, 0x69F6, 0x68F6, 0x000B, 0x0009 };
+        const auto snap = snapOf(w);
+        // (the callee's signature lent, as the generator lends it: decompiled first)
+        DecompileRequest cq = Request(0x06009048u);
+        cq.knownFunctions = { 0x06009000u };
+        const DecompileResult callee = d.Decompile(snap, cq);
+        CHECK(callee.status == DecompileStatus::Ok && callee.prototype.known);
+        DecompileRequest q = Request(0x06009000u);
+        q.knownFunctions = { 0x06009048u };
+        if (callee.prototype.known) q.prototypes.emplace_back(0x06009048u, callee.prototype);
+        const DecompileResult r = d.Decompile(snap, q);
+        Print("A7-142 a variable of extraout_r9 after calls that keep r9 (grammar 2 seed 7607636)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "xRam06003104 = (char)pxVar1;") != nullptr && LineWith(r, "pxVar1 = extraout_r9;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_142_7607636").Violations() == 0);
+        // (damaged: the variable of another kept register, r10, which holds r6 of entry)
+        int n = 0;
+        const DecompileResult other = changed(r, "extraout_r9", "extraout_r10", n);
+        CHECK(n >= 2 && dts::AuditMapping(other, word, "a7_142_7607636 other").Violations() >= 1);
+        CHECK(mutated(r, "142", "a7_142_7607636 mutated") >= 1);
+    }
+    // A7-143 (oracle) the fall-through edge into a join that reads T: a `bt` to the next instruction (grammar 2 seed 7402123 shrunk:
+    // `cmp/pl r6 ; bt L ; L: movt r2`), and straight code that leaves T as the `bt`'s fall-through gave it (the seed whole: `cmp/pl r6 ; bt
+    // L ; mov.l r2,@r5 ; mov.b r2,@r5 ; extu.b r2,r2 ; L: movt r2`): `movt` makes 0 there, `uVar1 = 0;` (only `r2 >> 2` is read)
+    {
+        const std::vector<uint16_t> w = { 0x7FE8, 0x4615, 0x89FF, 0x0229, 0xE301, 0x4209, 0x2622, 0x6272, 0x4310, 0x8BFA, 0x7F18, 0x000B, 0x0009 };
+        const DecompileResult r = run(w, 0x06009000u);
+        Print("A7-143 movt after a bt to the next instruction (grammar 2 seed 7402123)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "uVar1 = 0;") != nullptr && tokenAt(r, "uVar1 = 0;", 0x06009006u));
+        CHECK(dts::AuditMapping(r, word, "a7_143_7402123").Violations() == 0);
+        int n = 0;
+        const DecompileResult other = changed(r, "uVar1 = 0;", "uVar1 = 2;", n);
+        CHECK(n == 1 && dts::AuditMapping(other, word, "a7_143_7402123 other").Violations() >= 1);
+        CHECK(mutated(r, "143", "a7_143_7402123 mutated") >= 1);
+        const std::vector<uint16_t> w2 = { 0x4615, 0x8902, 0x2522, 0x2520, 0x622C, 0x0229, 0xE301, 0x4209, 0x2622, 0x6272, 0x4310, 0x8BFA, 0x000B, 0x0009 };
+        const DecompileResult r2 = run(w2, 0x06009000u);
+        Print("A7-143 movt after straight code on a bt's fall-through (grammar 2 seed 7402123)", r2);
+        CHECK(r2.status == DecompileStatus::Ok);
+        CHECK(LineWith(r2, "uVar1 = 0;") != nullptr && tokenAt(r2, "uVar1 = 0;", 0x0600900Au));
+        CHECK(dts::AuditMapping(r2, word, "a7_143_straight").Violations() == 0);
+        const DecompileResult other2 = changed(r2, "uVar1 = 0;", "uVar1 = 2;", n);
+        CHECK(n == 1 && dts::AuditMapping(other2, word, "a7_143_straight other").Violations() >= 1);
+        CHECK(mutated(r2, "143", "a7_143_straight mutated") >= 1);
+    }
+    // A7-144 (product) the merge copy of a number at the end of the block before a join, into a variable the engine named after the frame
+    // word a register was read from: `xStack_16 = 0;` is the `movt r1` of the loop's body (T clear: the `bf` after `dt r3`), not the `dt`
+    // at the join (grammar 2 seed 7407523)
+    {
+        const std::vector<uint16_t> w = { 0x2F86, 0x2F96, 0x4F22, 0x7FF4, 0x6843, 0x6953, 0x61F2, 0xE301, 0xA001, 0x0009, 0x0129, 0x4310, 0x8BFC, 0x2415, 0x7F0C, 0x4F26,
+                                          0x69F6, 0x68F6, 0x000B, 0x0009 };
+        const DecompileResult r = run(w, 0x06009000u);
+        Print("A7-144 a merge copy of a movt's number into a frame-named variable (grammar 2 seed 7407523)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "xStack_16 = 0;") != nullptr && tokenAt(r, "xStack_16 = 0;", 0x06009014u) && !tokenAt(r, "xStack_16 = 0;", 0x06009016u));
+        CHECK(dts::AuditMapping(r, word, "a7_144_7407523").Violations() == 0);
+        // (damaged: drawn at the `dt`, as master drew it)
+        DecompileResult before = r;
+        int n = 0;
+        for (Line& l : before.lines)
+            if (l.text.find("xStack_16 = 0;") != std::string::npos)
+            {
+                for (Token& t : l.tokens)
+                    if (t.addr == 0x06009014u) t.addr = 0x06009016u;
+                l.firstAddr = 0x06009016u;
+                ++n;
+            }
+        CHECK(n == 1 && dts::AuditMapping(before, word, "a7_144_7407523 before").Violations() >= 1);
+    }
+    // A7-145 (product) a copy the engine made of joined stores, drawn at the first store whose own statement is another line, is a copy
+    // materialised there: `uRam06001000 = 0;` (a word store of `in_r2 & 0x80000000` in a `bf/s` slot, the byte store of 0 over its high
+    // byte) and `xRam06001020 = 0x30009;` (two half-word stores); the way back from the first store answers its own line first (grammar 1
+    // seeds 8002145 and 8004782, specials)
+    {
+        const std::vector<uint16_t> w = { 0xD105, 0x261A, 0x2129, 0xD605, 0xC802, 0x8F01, 0x2612, 0x845A, 0x2660, 0x000B, 0x0009, 0x0009, 0x8000, 0x0000, 0x0600, 0x1000 };
+        const DecompileResult r = run(w, 0x06009000u);
+        Print("A7-145 a joined stores' copy at the first store (grammar 1 seed 8002145)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "uRam06001000 = 0;") != nullptr && tokenAt(r, "uRam06001000 = 0;", 0x06009010u));
+        CHECK(backFirst(r, 0x0600900Cu, "uRam06001000 = in_r2 & 0x80000000;"));
+        CHECK(dts::AuditMapping(r, word, "a7_145_8002145").Violations() == 0);
+        int n = 0;
+        const DecompileResult before = unmarked(r, "uRam06001000 = 0;", 0x0600900Cu, n);
+        CHECK(n >= 1 && !backFirst(before, 0x0600900Cu, "uRam06001000 = in_r2 & 0x80000000;") &&
+              dts::AuditMapping(before, word, "a7_145_8002145 before").Violations() >= 1);
+        const std::vector<uint16_t> w2 = { 0xD706, 0xE002, 0x2702, 0x6072, 0xC801, 0x8BFC, 0xE003, 0xCF1E, 0x2701, 0xE009, 0xCC19, 0x8171, 0x000B, 0x0009, 0x0600, 0x1020 };
+        const DecompileResult r2 = run(w2, 0x06009000u);
+        Print("A7-145 two half-word stores joined (grammar 1 seed 8004782)", r2);
+        CHECK(r2.status == DecompileStatus::Ok);
+        CHECK(LineWith(r2, "xRam06001020 = 0x30009;") != nullptr && tokenAt(r2, "xRam06001020 = 0x30009;", 0x06009016u));
+        CHECK(backFirst(r2, 0x06009010u, "CONCAT22(3,"));
+        CHECK(dts::AuditMapping(r2, word, "a7_145_8004782").Violations() == 0);
+        const DecompileResult before2 = unmarked(r2, "xRam06001020 = 0x30009;", 0x06009010u, n);
+        CHECK(n >= 1 && dts::AuditMapping(before2, word, "a7_145_8004782 before").Violations() >= 1);
+    }
+    // A7-146 (oracle) a parameter the text assigns is a variable: `param_2 = param_2 + 2;` (`mac.w @r5+,@r5+`), then `param_2 =
+    // (xunknown2 *)0x5f;` on one path, and `pxRam26003070 = param_2;` stores the variable, not r5 of entry (grammar 1 seed 8002899,
+    // specials; the request that marks the polled word volatile)
+    {
+        const std::vector<uint16_t> w = { 0xD106, 0x410E, 0x455F, 0xD606, 0x2448, 0x8904, 0xE55F, 0xD705, 0x6071, 0xC801, 0x8BFC, 0x2652, 0x000B, 0x0009, 0x0600, 0x3C14,
+                                          0x2600, 0x3070, 0x2600, 0x1018 };
+        DecompileRequest q = Request(0x06009000u);
+        q.volatileMemory.emplace_back(0x26001010u, 0x2600101Fu);
+        const DecompileResult r = d.Decompile(snapOf(w), q);
+        Print("A7-146 an assigned parameter (grammar 1 seed 8002899)", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(LineWith(r, "pxRam26003070 = param_2;") != nullptr && LineWith(r, "param_2 = param_2 + 2;") != nullptr);
+        CHECK(dts::AuditMapping(r, word, "a7_146_8002899").Violations() == 0);
+        CHECK(mutated(r, "146", "a7_146_8002899 mutated") >= 1);
     }
 }
 
@@ -19088,6 +19301,7 @@ int main(int argc, char** argv)
         RUN(TestArea7Round14());
         RUN(TestArea7Round15());
         RUN(TestArea7Round16());
+        RUN(TestArea7Round17());
         RUN(TestSlotMadeLineIsAddressedToItsBranch());
         RUN(TestFrameStoreMaterialisedAtCall());
         RUN(TestFixture1b());
