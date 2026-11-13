@@ -6582,7 +6582,7 @@ bool FlowValueMayBe(const FlowRecord& flow, const ghidra::Funcdata& fd, int blk,
             }
             // A7-31: arithmetic that leaves one input's value unchanged (`add r4,r3` with r3 0 after a `dt` loop, `add #0`, `and r1,r1`,
             // `or r2,r2`), which the engine folds to that input: the walk goes on from the input, which must still be the statement's
-            // A7-115: `xor r3,r1` with r3 0 (after a `dt` loop) is r1, whatever the paths into the instruction are: the walk goes on
+            // A7-117: `xor r3,r1` with r3 0 (after a `dt` loop) is r1, whatever the paths into the instruction are: the walk goes on
             // from the other input (FlowIdentitySources gives up when one path into the join goes around a cycle); grammar 1 seed 6206050
             if (whole && !passes && op.numIn == 2 && (op.code == ghidra::CPUI_INT_XOR || op.code == ghidra::CPUI_INT_OR || op.code == ghidra::CPUI_INT_ADD ||
                                                       op.code == ghidra::CPUI_INT_SUB))
@@ -6618,7 +6618,7 @@ bool FlowValueMayBe(const FlowRecord& flow, const ghidra::Funcdata& fd, int blk,
             }
             if (!whole || !passes || op.numIn < 1)
             {
-                // A7-115: the register a computation wrote, which a store of the flow stored into the memory the statement reads
+                // A7-117: the register a computation wrote, which a store of the flow stored into the memory the statement reads
                 // (`uRam2600200c = uRam26001016;`, the engine's copy of the byte `mov.b r1,@(r0,r7)` stored, r1 the `rotl`'s and kept by a
                 // `xor` of 0 after it): the memory is that value; grammar 1 seed 6206050
                 if (whole && !want.locations.empty())
@@ -8290,7 +8290,7 @@ void MarkMaterialisedReads(std::vector<Line>& lines, const PrintedOperations& pr
         // narrow store the engine made the piece at; grammar 1 seed 902)
         if ((o->code() != ghidra::CPUI_COPY && o->code() != ghidra::CPUI_SUBPIECE) || !out || !out->isImplied() || o->isFromDelaySlot()) continue;
         const ghidra::Varnode* in = o->getIn(0);
-        // (A7-115: or the low bytes of a variable that is no memory, `(char)param_1` or `(char)puVar6`, the SUBPIECE the engine made at a
+        // (A7-116: or the low bytes of a variable that is no memory, `(char)param_1` or `(char)puVar6`, the SUBPIECE the engine made at a
         // store of its own and shares with a later narrow store of the same value; grammar 1 seed 6202214)
         const bool inputPiece = o->code() == ghidra::CPUI_SUBPIECE && !in->isConstant();
         if (in->isConstant() || (!inputPiece && in->getSpace() != ram && (!stackSpace || in->getSpace() != stackSpace))) continue;
