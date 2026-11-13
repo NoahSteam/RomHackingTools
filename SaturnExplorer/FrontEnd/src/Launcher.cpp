@@ -217,6 +217,20 @@ std::string MednafenFirmwareDir(const std::string& exePath)
     return JoinPath(DirectoryOf(exePath), "firmware");
 }
 
+std::string ResolveMednafenExe(const std::string& path)
+{
+    if (path.empty() || !IsDirectory(path)) return path;
+#ifdef _WIN32
+    const char* leaf = "mednafen.exe";
+#else
+    const char* leaf = "mednafen";
+#endif
+    std::string dir = path;
+    while (dir.size() > 1 && (dir.back() == '/' || dir.back() == '\\')) dir.pop_back();
+    const std::string candidate = JoinPath(dir, leaf);
+    return FileExists(candidate) ? candidate : path;
+}
+
 std::string PathBasename(const std::string& path)
 {
     const size_t slash = path.find_last_of("/\\");
@@ -237,7 +251,7 @@ void Launcher::Load(const Settings& s, const std::string& executablePath)
         e.exePath      = s.Get("emulators", k.key, "");
         if (e.key == "mednafen")
         {
-            e.exePath = MigrateMednafenExe(e.exePath);
+            e.exePath = ResolveMednafenExe(MigrateMednafenExe(e.exePath));
             // A release ships its own patched Mednafen beside the program: with no path recorded, use it.
             // Save() leaves the path empty while the bundled copy is in use, so a download that is moved
             // keeps finding the copy beside it, and a path the user did record -- even one that is missing
@@ -340,6 +354,11 @@ LaunchValidation Launcher::Validate() const
     if (e->exePath.empty() || !PathExists(e->exePath))
     {
         result.message = e->label + " executable was not found. Open Launch Settings to configure it.";
+        return result;
+    }
+    if (IsDirectory(e->exePath))
+    {
+        result.message = e->label + " executable is set to a folder. Open Launch Settings and pick the program inside it.";
         return result;
     }
     if (mRom.empty())

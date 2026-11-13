@@ -140,6 +140,25 @@ int main()
     CHECK(MednafenFirmwareDir("/opt/se/mednafen-se/mednafen") == "/opt/se/mednafen-se/firmware");
     CHECK(MednafenFirmwareDir("mednafen").empty());
 
+    // The Executable field pointed at the mednafen-se folder means the Mednafen inside it, so the firmware
+    // check looks in mednafen-se/firmware rather than the folder above. Anything else is left alone.
+    {
+        const std::string folder = dir + "/plain/mednafen-se", inside = folder + "/mednafen";
+        CHECK(ResolveMednafenExe(folder) == inside);
+        CHECK(ResolveMednafenExe(folder + "/") == inside);
+        CHECK(ResolveMednafenExe(inside) == inside);
+        CHECK(ResolveMednafenExe(dir + "/bare") == dir + "/bare");               // a folder without one
+        CHECK(ResolveMednafenExe("/Volumes/gone/mednafen-se") == "/Volumes/gone/mednafen-se");
+        CHECK(ResolveMednafenExe("").empty());
+        CHECK(MednafenFirmwareDir(ResolveMednafenExe(folder)) == folder + "/firmware");
+
+        Settings saved;
+        saved.Set("emulators", "mednafen", folder);   // a setting recorded before this fix is repaired on load
+        Launcher l;
+        l.Load(saved, dir + "/bare/SaturnExplorerFrontEnd");
+        CHECK(l.Emulators()[0].exePath == inside);
+    }
+
     CHECK(::chdir(here) == 0);
     std::free(here);
     std::system(("rm -rf '" + dir + "'").c_str());
