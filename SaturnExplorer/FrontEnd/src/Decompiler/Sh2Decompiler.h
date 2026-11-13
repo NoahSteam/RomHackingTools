@@ -424,6 +424,7 @@ struct DecompileResult
         uint32_t loop = 0;
         bool inLoop = false;   // the store is in the loop's own code (a store in a poll's body), not before it
         bool afterLoop = false;   // (A3-175) ...or in the code after it, which the analysis removed with the loop's exit
+        int block = -1;           // (A3-187) the flow block of an afterLoop store
     };
     std::vector<EndlessLoopStore> storesBeforeEndlessLoop;
     // A3-173: what the code after such a loop reads of the caller's (a register that still holds its value on entry that the signature does
@@ -441,8 +442,13 @@ struct DecompileResult
         bool writesR0 = false;
         bool call = false;
         bool join = false;
+        int block = -1;   // (A3-187) the flow block of a read, a call or an r0 write in the code after the loop (not a join)
     };
     std::vector<EndlessLoopRead> readsAfterEndlessLoop;
+    // A3-187: of the all-volatile reference run only: for each flow block, whether the final p-code of that run holds code of it (a live op,
+    // or a block of the final graph starts there). A block it holds none of is removed as unreachable for a reason that is no poll's: the
+    // code after an endless loop of the shown pass that this run also removes is not the loop's (a branch a constant decides).
+    std::vector<char> flowKept;
     std::vector<uint32_t> callees;        // constant call targets, canonical, sorted
     // ...and the addresses they are called at (a mirror when the call goes through one), sorted:
     // what DecompileRequest::prototypes is keyed by, since a callee's signature can depend on the

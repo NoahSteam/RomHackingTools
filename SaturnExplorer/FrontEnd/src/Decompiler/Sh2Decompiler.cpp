@@ -8603,7 +8603,12 @@ void Sh2Decompiler::NoteRemovedAccesses(const std::shared_ptr<const MemorySnapsh
     bool removedCode = false;
     for (const AccessFate& f : r.accessFates)
         removedCode |= f.fate == AccessFate::Unreachable;
-    if (!removedCode) return;
+    // A3-187: the code after a loop the analysis takes to run for ever is read from the flow graph alone (what it reads, the calls and stores in
+    // it); the reference run says which of its blocks it removes too, which is no loop's doing.
+    bool afterLoopCode = false;
+    for (const DecompileResult::EndlessLoopRead& e : r.readsAfterEndlessLoop) afterLoopCode |= e.block >= 0;
+    for (const DecompileResult::EndlessLoopStore& e : r.storesBeforeEndlessLoop) afterLoopCode |= e.afterLoop && e.block >= 0;
+    if (!removedCode && !afterLoopCode) return;
     bool loop = false;
     for (const std::string& w : r.warnings)
         if (w.find("Do nothing block with infinite loop") != std::string::npos) loop = true;
@@ -8630,6 +8635,20 @@ void Sh2Decompiler::NoteRemovedAccesses(const std::shared_ptr<const MemorySnapsh
     // doubt: it leaves through Decompile's handlers, as from the shown run.
     mQuietPhases = false;
     if (notDone.empty() && rr.status != DecompileStatus::Ok) notDone = rr.error.empty() ? "no reference output" : rr.error;
+    if (notDone.empty() && afterLoopCode && rr.flowKept.size() == r.flowSuccessors.size() && rr.flowSuccessors == r.flowSuccessors &&
+        rr.flowBlockRanges == r.flowBlockRanges)
+    {
+        // A3-187: not what the loop removed: a flow block the reference run (no loop there) holds no code of either.
+        const std::vector<char>& kept = rr.flowKept;
+        auto gone = [&kept](int b) { return b >= 0 && static_cast<size_t>(b) < kept.size() && !kept[static_cast<size_t>(b)]; };
+        r.readsAfterEndlessLoop.erase(std::remove_if(r.readsAfterEndlessLoop.begin(), r.readsAfterEndlessLoop.end(),
+                                                     [&gone](const DecompileResult::EndlessLoopRead& e) { return gone(e.block); }),
+                                      r.readsAfterEndlessLoop.end());
+        r.storesBeforeEndlessLoop.erase(std::remove_if(r.storesBeforeEndlessLoop.begin(), r.storesBeforeEndlessLoop.end(),
+                                                       [&gone](const DecompileResult::EndlessLoopStore& e) { return e.afterLoop && gone(e.block); }),
+                                        r.storesBeforeEndlessLoop.end());
+    }
+    if (!removedCode) return;   // (no removed access to match: the reference run was for the filter alone, and a failure of it is no caution)
     const std::string cause = loop ? "the analysis removed the code around it as unreachable, after a loop it takes to run for "
                                      "ever. A poll of memory another processor writes folds so unless that memory is marked volatile"
                                    : "the analysis removed the code around it as unreachable, after a branch it takes always the "
@@ -9256,6 +9275,69 @@ void JoinedAfterEndlessLoop(const ghidra::Funcdata& fd, const FlowRecord& flow, 
     }
 }
 
+// A3-187: for each flow block, whether the final p-code holds code of it: a live op of it, an op the actions made for its instruction (when
+// that is one block of the flow), or a block of the final graph that starts at its instruction (A3-184's reading, the one StoresBeforeEndlessLoop
+// takes the code after a loop by). Run on the all-volatile reference run, a block it has none of is code the engine removes as unreachable
+// without any poll's help.
+std::vector<char> KeptFlowBlocks(const ghidra::Funcdata& fd, const FlowRecord& flow)
+{
+    const size_t nf = flow.successors.size();
+    std::vector<char> kept(nf, 0);
+    std::map<uint32_t, std::vector<int>> instances;
+    for (size_t b = 0; b < nf && b < flow.blockOps.size(); ++b)
+        for (const FlowOp& x : flow.blockOps[b])
+        {
+            std::vector<int>& in = instances[x.insn];
+            if (in.empty() || in.back() != static_cast<int>(b)) in.push_back(static_cast<int>(b));
+        }
+    std::map<std::pair<uint32_t, bool>, std::set<int>> slotInstances;
+    for (size_t b = 0; b < nf && b < flow.blockOps.size(); ++b)
+        for (const FlowOp& x : flow.blockOps[b])
+            if (instances[x.insn].size() > 1) slotInstances[std::make_pair(x.insn, x.slot)].insert(static_cast<int>(b));
+    for (auto it = fd.beginOpAlive(); it != fd.endOpAlive(); ++it)
+    {
+        const ghidra::PcodeOp* o = *it;
+        auto f = flow.ops.find(o->getTime());
+        if (f != flow.ops.end())
+        {
+            if (f->second.first >= 0 && static_cast<size_t>(f->second.first) < nf) kept[static_cast<size_t>(f->second.first)] = 1;
+            continue;
+        }
+        auto in = instances.find(InstructionOf(o));
+        int fb = -1;
+        if (in != instances.end() && in->second.size() == 1) fb = in->second[0];
+        else
+        {
+            const bool slot = o->isFromDelaySlot() || static_cast<uint32_t>(o->getAddr().getOffset()) != InstructionOf(o);
+            auto si = slotInstances.find(std::make_pair(InstructionOf(o), slot));
+            if (si != slotInstances.end() && si->second.size() == 1) fb = *si->second.begin();
+        }
+        if (fb >= 0 && static_cast<size_t>(fb) < nf) kept[static_cast<size_t>(fb)] = 1;
+    }
+    const ghidra::BlockGraph& g = fd.getBasicBlocks();
+    for (ghidra::int4 i = 0; i < g.getSize(); ++i)
+    {
+        const ghidra::BlockBasic* bb = static_cast<const ghidra::BlockBasic*>(g.getBlock(i));
+        if (bb->getStart().isInvalid()) continue;
+        const uint32_t at = static_cast<uint32_t>(bb->getStart().getOffset());
+        auto f = flow.insnBlock.find(at);
+        auto in = instances.find(at);
+        if (f != flow.insnBlock.end() && f->second.first >= 0 && static_cast<size_t>(f->second.first) < nf && (in == instances.end() || in->second.size() < 2))
+            kept[static_cast<size_t>(f->second.first)] = 1;
+    }
+    // A block whose flow ops are none that stays while it is reached (a load or store of the all-volatile run, a call, a return) may hold
+    // dead ops only and still be reached: it is no evidence of removal.
+    for (size_t b = 0; b < nf && b < flow.blockOps.size(); ++b)
+    {
+        bool fixed = false;
+        for (const FlowOp& x : flow.blockOps[b])
+            fixed = fixed || x.code == ghidra::CPUI_LOAD || x.code == ghidra::CPUI_STORE || x.code == ghidra::CPUI_CALL ||
+                    x.code == ghidra::CPUI_CALLIND || x.code == ghidra::CPUI_RETURN;
+        if (!fixed) kept[b] = 1;
+    }
+    return kept;
+}
+
 // A3-164, A3-167 to A3-169: the stores of ordinary memory at a constant address that the code makes, that the final p-code no longer
 // writes, and that a loop the analysis takes to run for ever can be the last word on. The engine keeps a global's write from which a
 // path never reaches a RETURN (patch 0087), but not one it saw no reader of before it took the loop for endless: a write the code
@@ -9625,7 +9707,12 @@ std::vector<DecompileResult::EndlessLoopStore> StoresBeforeEndlessLoop(const ghi
                 }
             }
             for (size_t b = 0; b < nf; ++b)
-                if (after[b]) run(b, entryIn[b], true);
+                if (after[b])
+                {
+                    const size_t first = reads.size();
+                    run(b, entryIn[b], true);
+                    for (size_t k = first; k < reads.size(); ++k) reads[k].block = static_cast<int>(b);   // (A3-187)
+                }
         }
     }
     JoinedAfterEndlessLoop(fd, flow, loopAt, after, canonicalOf, reads);   // A3-182
@@ -9810,6 +9897,7 @@ std::vector<DecompileResult::EndlessLoopStore> StoresBeforeEndlessLoop(const ghi
             e.size = s.size;
             e.loop = after[static_cast<size_t>(s.block)];
             e.afterLoop = true;
+            e.block = s.block;   // (A3-187)
             out.push_back(e);
         }
     }
@@ -10881,6 +10969,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         r.calls = Calls(*fd, flow, canonicalOf);
         r.flowSuccessors = flow.successors;
         r.flowBlockRanges = flow.ranges;
+        if (request.allMemoryVolatile) r.flowKept = KeptFlowBlocks(*fd, flow);   // A3-187
         r.storesBeforeEndlessLoop = StoresBeforeEndlessLoop(*fd, flow, removedBlocks, printed, r.lines, canonicalOf, r.readsAfterEndlessLoop);   // A3-167 to A3-169
         r.frameLedgerCapped = fd->isFrameLedgerCapped();   // (A3-133, patch 0072) the frame records hide any loss: unchecked
         for (const ghidra::FrameCallRecord& c : fd->getFrameCalls())
