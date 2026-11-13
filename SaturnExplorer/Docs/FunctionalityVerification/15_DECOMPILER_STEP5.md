@@ -20071,3 +20071,78 @@ All after the last code edit (`4145ece8`), with that build:
   * The token of 6906813's second copy of the slot's read, drawn at the instruction after the slot (A5-128 (b)).
 * **Area 3**: grammar 1 seed 6906675 (`endless-store-dropped`, and `endless-join-dropped` in the shrunk words `2448 8901 4115 8D00 814C D704 E001 2702 6072 C801 8BFC 000B 0009 0009 2600 1030` with `SE_GENERATED_ALIAS=4:06003C04`). A store through the production's pointer before an unmarked poll the analysis takes to run for ever; the same on master's engine.
 * **Area 5, next round**: A5-121 (open, as triaged).
+
+
+## Area 5, order-class round
+
+Fixer, branch `review/5-round-orders`, cut at `888f57e2` (master `79d907f7` with area 7 round 14, plus patch 0094 of `review/5-round-a5126`). The worktree's RelWithDebInfo build (`-j2`, `ulimit -v 6000000`). One engine change, in **0094** (`coreaction.cc`: extended, so the patch file is regenerated from master by `Docs/Decompiler/tools/a5_round_orders/regen_0094.sh`; 0089, 0091 and 0092 stay as they were). The rest is the oracle (`Sh2GeneratedTests.cpp`). Pins: `TestA5129Pins`, so the ctest count is unchanged at 117. Backups pushed to `backup/review-5-round-orders`.
+
+| Row | P | Outcome |
+|---|---|---|
+| A5-129 | P3 | **fixed, oracle** (a statement the printer wraps after its `=`; grammar 1 seed 6602319) |
+| A5-130 | P3 | **fixed, oracle** (a store every run overwrites before an access, in a text with a goto; grammar 1 seed 6605001) |
+| A5-131 | P3 | **fixed, oracle** (a piece of the global a half-word store keeps; grammar 1 specials seed 6703972) |
+| A5-132 | P2 | **fixed, engine** (0094: a read of a global in a loop printed after two register reads; sweep seed 7200345) |
+| A5-133 | P3 | **fixed, oracle** (a store assigned in a condition; sweep seed 7208969) |
+| A5-134 | P3 | **filed** (area 7's mapping, routed; sweep grammar 2 seed 7201580) |
+| A5-121 | P3 | **fixed, oracle** (open pointers are counted, not asked, by the cache-read rule) |
+
+### 1. The routed seeds, replayed on this branch before any change
+
+`SE_GENERATED_GRAMMAR=<g> [SE_GENERATED_ALPHABET=specials] SE_GENERATED_SEED=<s> SE_GENERATED_CANARY=0`:
+
+| Seed | On 888f57e2 (0094 in) | Cause |
+|---|---|---|
+| grammar 2 6607443 (`folded-read-after-access`) | **passes: 0094 already fixes it** | (A5-126 and A5-127's routes; which of 0094's changes was not isolated) |
+| grammar 1 specials 6702443 (`read-after-folded-store`) | **passes: 0094 already fixes it** | the same |
+| grammar 1 6602319 (`folded-store-after-access`) | fails | A5-129 (oracle) |
+| grammar 1 6605001 (`read-after-folded-store`) | fails | A5-130 (oracle) |
+| grammar 1 specials 6703972 (`folded-read-after-access`) | fails | A5-131 (oracle) |
+
+In each of the three the text was right and the oracle wrong (no P1).
+
+* **6602319.** The slot's store (`mov.l r1,@r6`, the swapped byte) is printed before the poll, on `pxRam26002180 =` and the next line; the printer breaks the statement after the `=`. The order rules read ` = ` (the line that begins a statement, `inExpression`, `assignedBefore`, the piece read, the read's `from`), so the store was "printed nowhere". `AssignsAt` and `HasAssign` take a line that ends in ` =`.
+* **6605001.** `mov.w r2,@g ; mov.b @(2,r4),r0 ; mov.l r0,@g ; ... ; mov.l r1,@g` on every path. The long store of r0 is overwritten in every run before any access, so the engine drops it; the mapping names its token on the first store's line, before the read. The existing static test of a later overwrite (`runsAfter`) wants a text without a goto, and this text has one. `read-after-folded-store` now sets aside a store that every run that makes it overwrites in all its bytes before any access the ledger holds, any marked or hardware address, or any read of those bytes (`order.read-before-folded-store.dead`).
+* **6703972.** `xVar2 = xRam26002204;` is printed before the register write, right; the oracle took the piece read in `xRam26002204 = CONCAT22((int2)xVar2,xRam26002204._2_2_);` (the other half, kept by the half-word store the engine writes as a word) for the read's line, after the write. `PieceOfAssignedGlobal`: a piece of the global the statement itself assigns is no read of it.
+
+### 2. A5-121, re-triaged
+
+Grammar 2 seed 3709052 gave 4 findings on this branch's code as triaged: `puVar3 = extraout_r7; if (c) puVar3 = &SMPC_OREG21;`, the run's cached address (0x18100058, within reach of OREG21) coming through the callee's r7. The text is right and says nothing for the unknown arm; no oracle can tell which arm the run's address came from. Fixed the way A5-89 fixed the pointer-effect rule: rule 3f passes `open` to `PointerPrintsFromHardware`, and a pointer that is also a value the text does not know is counted (`cache.read.pointer.open.unsaid`) and not asked. The seed passes whole.
+
+### 3. The sweeps (10,000 seeds each, `SE_GENERATED_CANARY=0 SE_GENERATED_SHRINK=0`)
+
+The A5-122 alias production (`Gen::AddPointerAlias`) is gated by `g.ptrAliasOn = seed >= kPtrAliasFirst` (6,400,001): a lower bound only, with no upper one, so grammar 1 from 7,200,001 draws it in every seed that rolls it; grammar 2 does not draw it (version 1 only, as the record of A5-122 says).
+
+| Run | First pass (before the changes of this round) | Final |
+|---|---|---|
+| grammar 1 from 7,200,001 | 4 failing seeds: 7200345, 7202663, 7205591, 7208969 | **2**: area 7's 7202663 and 7205591 (`map-const-join`, `uVar = 1;` drawn at the first instruction of a join: `rotcl r3`, `movt r0`) |
+| grammar 2 from 7,200,001 | 2: 7201580, 7202286 | **2**: A5-134's 7201580 (area 7's mapping, filed) and area 7's 7202286 (`map-way-back`, the instruction 0x0600903A answered with a line that does not begin with it) |
+
+* **7200345 (A5-132, P2, engine).** `mov.w @(r0,r7),r1` in a `dt` loop, then `mov.b @r6,r3 ; mov.b @(3,r6),r0 ; rts` (SMPC registers through the cached partition): `xVar1 = SMPC_OREG13; cVar2 = SMPC_OREG15._0_1_; return CONCAT44((int4)cVar2,(int4)iRam2600210e);`, the global read after the two register reads. The read is a SEXT of the global's own word, not a LOAD op, so 0090's check in `ActionMarkImplied::checkImpliedCover` (LOAD chains only) does not hold it. Not the merge: a trace in `heldAcrossAccess` showed it is not reached for the variable (a first attempt there, the self-copy exemption, was taken out). Outside a loop the read stays in place. **0094** (`coreaction.cc`): an op that is no LOAD, no MULTIEQUAL and no INDIRECT, that reads a processor-space global's own word, is not made implied when the implied chain it starts holds a volatile read or write: `do { iVar3 = (int4)iRam2600210e; iVar4 = iVar4 + -1; } while (iVar4 != 0); xVar1 = SMPC_OREG13; ...; return CONCAT44((int4)cVar2,iVar3);`.
+* **7208969 (A5-133, oracle).** `if (((in_r0 & in_r2) != 0) || (xRam06001010 = 0x44, in_r0 == 0x44))` prints the first store in the condition, before the read through the pointer; the oracle took the first line that begins with an assignment to name it, the later byte store's `CONCAT13(...,xRam06001010._1_3_)`. A line that names the store and assigns the global's bytes anywhere in it is the store's line too.
+* **7201580 (A5-134, filed).** A zero half-word store over a mailbox word is printed on a line the mapping names at the later `xor.b`; area 7's.
+
+### 4. Mutation
+
+Each oracle change was shown against the seed that needed it before it was written (the findings above, replayed on this branch's binary). 0094's new hunk: the shrunk words of 7200345 print the read after the registers and fail `TestA5129Pins` with it out (the first replay in this section), and pass with it.
+
+### 5. Runs
+
+All after the last code edit (the A5-134 row and this record changed after it only), with that build:
+
+| Run | Result |
+|---|---|
+| full `ctest -j2` with Live | **117 of 117** passed |
+| fault suite | **fault matrix: 0 of 94 job(s) failed** |
+| 20,000-seed matrix (canary on) | **failing seeds=0; findings=0** |
+| printed-C (`SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`) | **agrees=5196** |
+| grammar 1 and 2, 10,000 each from 7,200,001 | 2 and 2 failing seeds, none area 5's open ones except A5-134's (section 3) |
+| game corpus, both images, `SE_GAME_LEND=1` | "all passed", every ledger count 0; lent 474 (645) of 999 and 724 (975) of 1,543; missing and said 0 and 4 |
+| lints | `check-literal-size.py` ok; `check-vendored-tree.py lint --tests-dir` ok (0094 regenerated from master's three files) |
+
+The corpora's texts were not diffed against master's for this round (the corpus run is the oracle's: every count is 0).
+
+### 6. Routed
+
+* **Area 7** (mapping): grammar 1 seeds 7202663 and 7205591 (`map-const-join`); grammar 2 seeds 7202286 (`map-way-back`) and 7201580 (A5-134, the order rule's report of a mapping). The seeds area 7 round 15 already has (6800033, 6802425, 6807930, 6804434, 6806713, A5-124) and the queued ones (6900150, 6901649, 6902754, 6906408, 6803969, 6805860) were not taken.
+* **Area 3**: nothing (no `endless-*` finding in either sweep; 6906675 left to area 3).

@@ -271,6 +271,26 @@ namespace
 {
 
 std::string gConfig;
+// An assignment `x = ...` at text[e..]: the printer breaks a long statement after the `=`, so a line may end in " =" (A5-129)
+static bool AssignsAt(const std::string& t, size_t e)
+{
+    return e <= t.size() && (t.compare(e, 3, " = ") == 0 || t.compare(e, std::string::npos, " =") == 0);
+}
+static bool HasAssign(const std::string& t)
+{
+    return t.find(" = ") != std::string::npos || (t.size() >= 2 && t.compare(t.size() - 2, 2, " =") == 0);
+}
+// The address of the global a statement assigns (`xRam26002204 = ...`, `xRam26002204._2_2_ = ...`) and whether the text at `at` ("Ram...") is a piece of
+// that same global read in the statement (`xRam26002204._2_2_`): a half-word store the engine writes as a whole word keeps the other bytes with a read
+// of them, which is no read the code makes (A5-129, grammar 1 specials seed 6703972, `CONCAT22((int2)xVar2,xRam26002204._2_2_)`)
+static bool PieceOfAssignedGlobal(const std::string& text, size_t from, size_t at)
+{
+    if (from == 0 || at + 11 >= text.size() || text[at + 11] != '.') return false;
+    const size_t b = text.find_first_not_of(' ');
+    const size_t ram = text.find("Ram", b);
+    if (b == std::string::npos || ram == std::string::npos || ram + 11 > from) return false;
+    return text.compare(ram + 3, 8, text, at + 3, 8) == 0;
+}
 // A read whose value is used only by an expression the engine folds to a constant (x ^ x, x - x,
 // x == x, x & 0, a test of bits a shift cleared) is dropped (ledger A5-1), and that one class fills
 // a run. SE_GENERATED_FENCE keeps its triggers out of the grammar, so the run can look for others:
@@ -6249,12 +6269,12 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
             // An access the output shows at that constant address, or a read through a pointer the output derives from a hardware base
             // (PointerPrintsFromHardware): either must be said. A pointer it does not (a parameter, a loaded or computed address, a
             // callee's output) is a plain load (patches/0009) with no register for a note to be about, and is excused.
-            bool shown = false;
+            bool shown = false, open = false;
             for (const MemoryAccess& m : r.accesses) shown |= !m.write && m.insn == t.insn && m.direct && m.address == t.addr && m.size == t.size;
             if (!shown)
             {
                 bool unrelated = false;
-                if (!PointerPrintsFromHardware(r, t.insn, HardwareRegistersCovering(t.addr, t.size), canon, unrelated))
+                if (!PointerPrintsFromHardware(r, t.insn, HardwareRegistersCovering(t.addr, t.size), canon, unrelated, &open))
                 {
                     count(unrelated ? "cache.read.pointer.unrelated" : "cache.read.anonymous");
                     continue;
@@ -6263,6 +6283,14 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
             bool said = false;
             for (const HardwareNote& n : r.hardwareNotes)
                 said |= n.address == t.insn && n.caution && n.text.find("cache read") != std::string::npos;
+            // (A5-121, as A5-89's pointer-effect rule: a pointer that is also a value the text does not know, a callee's output on one arm of a join
+            // whose other arm names a register, `puVar3 = extraout_r7; if (c) puVar3 = &SMPC_OREG21;`, may have come to the cached address by that
+            // other value, and no note can say what the text does not hold: counted, not asked. Grammar 2 seed 3709052)
+            if (open && !said)
+            {
+                count("cache.read.pointer.open.unsaid");
+                continue;
+            }
             count(std::string(shown ? "cache.read." : "cache.read.pointer.") + (said ? "said" : "unsaid"));
             if (!said)
                 add(shown ? "cache-read-unsaid" : "cache-read-pointer-unsaid",
@@ -6553,7 +6581,19 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                     if (b == std::string::npos) continue;
                     size_t e = b;
                     while (e < l.text.size() && (std::isalnum(static_cast<unsigned char>(l.text[e])) || l.text[e] == '_' || l.text[e] == '.')) ++e;
-                    if (e == b || l.text.compare(e, 3, " = ") != 0) continue;
+                    // (A5-129: a store assigned inside an expression, a condition's comma operator, `if (c || (xRam06001010 = 0x44, d))`, is the
+                    // statement of its line too: a line that names the store and assigns the global's bytes anywhere in it, grammar 1 seed 7208969)
+                    bool starts = e != b && AssignsAt(l.text, e), inside = false;
+                    if (!starts)
+                        for (size_t at = l.text.find("Ram"); at != std::string::npos && !inside; at = l.text.find("Ram", at + 3))
+                        {
+                            unsigned v = 0;
+                            if (at + 11 > l.text.size() || std::sscanf(l.text.c_str() + at + 3, "%8x", &v) != 1 || v > f.address || f.address >= v + 8u) continue;
+                            size_t ne = at + 11;
+                            while (ne < l.text.size() && (std::isalnum(static_cast<unsigned char>(l.text[ne])) || l.text[ne] == '_' || l.text[ne] == '.')) ++ne;
+                            inside = AssignsAt(l.text, ne);
+                        }
+                    if (!starts && !inside) continue;
                     for (const Token& t : l.tokens)
                         if (t.addr == f.insn)
                         {
@@ -6646,7 +6686,7 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                             if (b == std::string::npos) continue;
                             size_t e = b;
                             while (e < l.text.size() && (std::isalnum(static_cast<unsigned char>(l.text[e])) || l.text[e] == '_')) ++e;
-                            if (e == b || l.text.compare(e, 3, " = ") != 0 || e - b < 11 || l.text.compare(e - 11, 3, "Ram") != 0) continue;
+                            if (e == b || !AssignsAt(l.text, e) || e - b < 11 || l.text.compare(e - 11, 3, "Ram") != 0) continue;
                             unsigned v = 0;
                             if (std::sscanf(l.text.c_str() + e - 8, "%8x", &v) != 1 || v > f.address || f.address >= v + 8u) continue;
                             bool atMaker = false;
@@ -6689,7 +6729,7 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                         bool laterNamed = false;
                         for (const Line& l : r.lines)
                         {
-                            if (l.text.find(" = ") == std::string::npos) continue;
+                            if (!HasAssign(l.text)) continue;
                             for (const Token& t : l.tokens) laterNamed = laterNamed || t.addr == o.insn;
                         }
                         if (!between && laterNamed) joined = true;
@@ -6724,7 +6764,7 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                         // joined, after the read the code makes before both: grammar 1 seed 5203228)
                         for (size_t li = 0; li < r.lines.size(); ++li)
                         {
-                            if (r.lines[li].text.find(" = ") == std::string::npos) continue;
+                            if (!HasAssign(r.lines[li].text)) continue;
                             for (const Token& t : r.lines[li].tokens)
                                 if (t.addr == o.insn)
                                 {
@@ -6758,7 +6798,7 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                             if (at + 11 > l.text.size() || std::sscanf(l.text.c_str() + at + 3, "%8x", &v) != 1 || v > f.address || f.address >= v + 8u) continue;
                             size_t e = at + 11;
                             while (e < l.text.size() && (std::isalnum(static_cast<unsigned char>(l.text[e])) || l.text[e] == '_' || l.text[e] == '.')) ++e;
-                            inExpression = l.text.compare(e, 3, " = ") == 0;
+                            inExpression = AssignsAt(l.text, e);
                         }
                     }
                     if (inExpression)
@@ -6860,7 +6900,7 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                                 if (at + 11 > text.size() || std::sscanf(text.c_str() + at + 3, "%8x", &v) != 1 || v > f.address || f.address >= v + 8u) continue;
                                 size_t e = at + 11;
                                 while (e < text.size() && (std::isalnum(static_cast<unsigned char>(text[e])) || text[e] == '_' || text[e] == '.')) ++e;
-                                assignedBefore = text.compare(e, 3, " = ") == 0;
+                                assignedBefore = AssignsAt(text, e);
                             }
                         }
                         if (assignedBefore)
@@ -6897,7 +6937,7 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                         const size_t b = l.text.find_first_not_of(' ');
                         size_t e = b;
                         while (e < l.text.size() && (std::isalnum(static_cast<unsigned char>(l.text[e])) || l.text[e] == '_' || l.text[e] == '.')) ++e;
-                        if (b == std::string::npos || at < b || at >= e || l.text.compare(e, 3, " = ") != 0) continue;   // (a read of the piece)
+                        if (b == std::string::npos || at < b || at >= e || !AssignsAt(l.text, e)) continue;   // (a read of the piece)
                         unsigned off = 0, sz = 0;
                         if (std::sscanf(l.text.c_str() + at + std::strlen(name), "%u_%u_", &off, &sz) != 2 || sz == 0) continue;
                         count("order.folded-store.piece-store");
@@ -6979,6 +7019,40 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                     if (m.write || m.direct || m.firstLine < 0 || m.origBlock < 0) continue;
                     if (m.printed > 1 || m.printedLines > 1) continue;   // (its place is not one line: counted above)
                     if (!runsAfter(static_cast<size_t>(m.origBlock), m.origOrder, static_cast<size_t>(f.origBlock), f.origOrder)) continue;
+                    // (A5-129: a store that every run makes dead, all of its bytes written again before any access the ledger holds or any read of
+                    // them, is no store the text must show: the engine drops it, and the mapping names it on the line of an earlier store of the
+                    // same bytes, which is no place to judge a read against. `mov.w r2,@r6 ; mov.b @(2,r4),r0 ; mov.l r0,@r6 ; ... mov.l r1,@r6` on
+                    // every path printed `g = CONCAT22(r2,..); c = *(r4 + 2); g = r1;`, grammar 1 seed 6605001; the text had a goto, so the
+                    // static overwrite test above, which wants a text without one, did not see it)
+                    {
+                        size_t made = 0, dead = 0;
+                        for (const RunOut& run : runs)
+                            for (size_t k = 0; k < run.trace.size(); ++k)
+                            {
+                                const TraceRec& t = run.trace[k];
+                                if (t.depth != 0 || !t.write || t.insn != f.insn) continue;
+                                ++made;
+                                for (size_t i = k + 1; i < run.trace.size(); ++i)
+                                {
+                                    const TraceRec& w = run.trace[i];
+                                    if (w.depth != 0) continue;
+                                    if (w.write && w.addr <= t.addr && t.addr + static_cast<uint32_t>(t.size) <= w.addr + static_cast<uint32_t>(w.size))
+                                    {
+                                        ++dead;
+                                        break;
+                                    }
+                                    bool held = InHardwareRange(w.addr) || inMarked(w.addr) ||
+                                                (w.addr < t.addr + static_cast<uint32_t>(t.size) && t.addr < w.addr + static_cast<uint32_t>(w.size));
+                                    for (const MemoryAccess& a : got) held = held || a.insn == w.insn;
+                                    if (held) break;
+                                }
+                            }
+                        if (made && dead == made)
+                        {
+                            count("order.read-before-folded-store.dead");
+                            continue;
+                        }
+                    }
                     count("order.read-before-folded-store.checked");
                     if (m.firstLine > last)
                         add("read-after-folded-store", "the read at " + Hex(m.insn) + " through a pointer is printed (line " + std::to_string(m.firstLine) +
@@ -7041,12 +7115,13 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                         const size_t b = l.text.find_first_not_of(' ');
                         size_t e = b;
                         while (b != std::string::npos && e < l.text.size() && (std::isalnum(static_cast<unsigned char>(l.text[e])) || l.text[e] == '_' || l.text[e] == '.')) ++e;
-                        if (b != std::string::npos && e > b && l.text.compare(e, 3, " = ") == 0) from = e + 3;
+                        if (b != std::string::npos && e > b && AssignsAt(l.text, e)) from = std::min(e + 3, l.text.size());
                     }
                     for (size_t at = l.text.find("Ram", from); at != std::string::npos; at = l.text.find("Ram", at + 3))
                     {
                         unsigned v = 0;
-                        if (at + 11 <= l.text.size() && std::sscanf(l.text.c_str() + at + 3, "%8x", &v) == 1 && v <= rd.address && rd.address < v + 8u)
+                        if (at + 11 <= l.text.size() && std::sscanf(l.text.c_str() + at + 3, "%8x", &v) == 1 && v <= rd.address && rd.address < v + 8u &&
+                            !PieceOfAssignedGlobal(l.text, from, at))
                         {
                             shown = static_cast<int>(li);
                             break;
@@ -7083,13 +7158,14 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                                 const size_t b = l.text.find_first_not_of(' ');
                                 size_t e = b;
                                 while (b != std::string::npos && e < l.text.size() && (std::isalnum(static_cast<unsigned char>(l.text[e])) || l.text[e] == '_' || l.text[e] == '.')) ++e;
-                                if (b != std::string::npos && e > b && l.text.compare(e, 3, " = ") == 0) from = e + 3;
+                                if (b != std::string::npos && e > b && AssignsAt(l.text, e)) from = std::min(e + 3, l.text.size());
                             }
                             for (size_t at = l.text.find("Ram", from); at != std::string::npos; at = l.text.find("Ram", at + 3))
                             {
                                 unsigned v = 0;
                                 if (at + 11 > l.text.size() || std::sscanf(l.text.c_str() + at + 3, "%8x", &v) != 1 || v > rd.address || rd.address >= v + 8u) continue;
                                 if (at >= 2 && l.text[at - 2] == '&') continue;
+                                if (PieceOfAssignedGlobal(l.text, from, at)) continue;
                                 return true;
                             }
                             return false;
@@ -16495,6 +16571,75 @@ void TestA5126Pins(Sh2Decompiler& d)
     }
 }
 
+// ---- A5-129 to A5-133 (the order-class round): five order seeds of area 7's round 14 and A5-121 ----
+// Whole seeds of the order classes (grammar, seed, specials) that failed on master before patch 0094 or before the oracle's changes of this
+// round, and the shrunk programs of those that need no configuration beyond the pointer the production makes (SE_GENERATED_ALIAS). The oracle's
+// own fixes are what pass 6602319 (a statement the printer wraps after its `=`), 6605001 (a store every run overwrites before an access, in a
+// text with a goto), 6703972 (a piece of the global a half-word store keeps), 7208969 (a store assigned inside a condition) and 3709052 (a
+// pointer that is also a callee's output); 7200345 is the engine's (0094: a read of a global held across two register reads); 6607443 and
+// 6702443 are 0094's (A5-126, A5-127) and are pinned here as the order seeds they were routed as.
+void TestA5129Pins(Sh2Decompiler& d)
+{
+    struct Pin
+    {
+        int grammar;
+        long seed;
+        bool specials;
+    };
+    const bool savedSpecials = gSpecialReads;
+    for (const Pin& s : { Pin{ 1, 6602319, false }, Pin{ 1, 6605001, false }, Pin{ 1, 6702443, true }, Pin{ 2, 6607443, false }, Pin{ 1, 6703972, true },
+                          Pin{ 1, 7200345, false }, Pin{ 1, 7208969, false }, Pin{ 2, 3709052, false } })
+    {
+        gSpecialReads = s.specials;
+        const Report rep = Evaluate(d, s.grammar == 2 ? MakeV2(static_cast<int>(s.seed)) : Generate(static_cast<uint64_t>(s.seed)), true);
+        std::printf("pin 'A5-129: grammar %d seed %ld%s': %zu finding(s)\n", s.grammar, s.seed, s.specials ? " (specials)" : "", rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+        if (s.seed == 3709052)
+        {
+            const auto it = rep.counts.find("cache.read.pointer.open.unsaid");
+            CHECK(it != rep.counts.end() && it->second > 0);
+        }
+    }
+    gSpecialReads = savedSpecials;
+    struct Shrunk
+    {
+        const char* name;
+        const char* words;
+        const char* alias;
+        const char* count;
+    };
+    const Shrunk kShrunk[] = {
+        // 6602319: `mov.l r1,@r6` in the slot of a bt/s, a poll, a store of r5 (the text wraps `pxRam26002180 =` after the `=`); the mailbox is marked
+        { "grammar 1 seed 6602319 shrunk", "2504 6148 D605 3540 8D00 2612 D704 6071 C801 8BFC 2652 000B 0009 0009 2600 2180 2600 1014", nullptr, nullptr },
+        // 6605001: mov.w r2,@g ; mov.b @(2,r4),r0 ; mov.l r0,@g, which a later store of r1 on every path overwrites (the text has a goto)
+        { "grammar 1 seed 6605001 shrunk", "D605 2621 8442 2602 2558 8901 2328 8D01 2612 8446 000B 0009 2600 2208", nullptr, "order.read-before-folded-store.dead" },
+        // 6703972: a byte store, a word read, a half-word store whose text keeps the other half of the global (`CONCAT22((int2)xVar2,xRam26002204._2_2_)`)
+        { "grammar 1 specials seed 6703972 shrunk", "2432 D607 2610 200A C840 8B00 6162 D705 E003 2702 2611 6072 C801 8BFB 000B 0009 2600 2204 2DA0 009C", "4:26003C08", nullptr },
+        // 7200345: a read of the global in a dt loop, used after two register reads (0094: the read is made where the code makes it)
+        { "grammar 1 seed 7200345 shrunk", "D606 D707 E301 E006 017D 4310 8BFB 2238 8900 D604 6360 8463 000B 0009 0010 003B 2600 2108 3600 2108", nullptr, nullptr },
+        // 7208969: a store assigned in a condition (`if (c || (xRam06001010 = 0x44, d))`), its bytes joined into the last store's line
+        { "grammar 1 seed 7208969 shrunk", "E37F D606 73C5 2208 8B01 3030 8F01 2632 2621 6344 2670 000B 0009 0009 0600 1010", "4:26003C10", nullptr },
+    };
+    for (const Shrunk& p : kShrunk)
+    {
+        const char* old = std::getenv("SE_GENERATED_ALIAS");
+        const std::string saved = old ? old : "";
+        SetOrClear("SE_GENERATED_ALIAS", p.alias);
+        const Subject subject = RawSubject(p.words);
+        SetOrClear("SE_GENERATED_ALIAS", old ? saved.c_str() : nullptr);
+        const Report rep = EvaluateSubject(d, subject, true);
+        std::printf("pin 'A5-129 %s': %zu finding(s)\n", p.name, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+        if (p.count)
+        {
+            const auto it = rep.counts.find(p.count);
+            CHECK(it != rep.counts.end() && it->second > 0);
+        }
+    }
+}
+
 void TestA3RoutedPins(Sh2Decompiler& d)
 {
     auto count = [](const Report& rep, const char* name) {
@@ -17220,6 +17365,7 @@ void TestGenerated()
         RUN(TestA5114Pins(d));
         RUN(TestA5119Pins(d));
         RUN(TestA5126Pins(d));
+        RUN(TestA5129Pins(d));
         if (EnvNumber("SE_GENERATED_CANARY", 240) > 0) RUN(TestCanary(d));
     }
     const long seeds = single ? 1 : EnvNumber("SE_GENERATED_SEEDS", 300);
