@@ -452,16 +452,57 @@ inline std::set<int> WrittenRegisters(const sfe::DisassembledInstruction& d)
     return out;
 }
 // The function's own branches, by target (not its calls): the instruction each comes from (a delayed branch's slot).
-inline std::map<uint32_t, std::vector<uint32_t>> BranchSources(const sfe::decomp::DecompileResult& r, const std::function<bool(uint32_t, uint16_t&)>& word)
+// A7-132: the instructions of the blocks the engine says it removed as unreachable ("Removing unreachable block (ram,0x...)": a block
+// that begins there and runs to the first branch, jump or return, its slot with it). The code of such a block is run by no path, so the
+// edges it makes carry no value: a jump table's cases whose `jmp` the engine found dead (the comparison before it always branches
+// past it, a register a call's result or a literal fixes) give a register at the join they run into no number of their own.
+inline std::set<uint32_t> RemovedBlockInsns(const sfe::decomp::DecompileResult& r, const std::function<bool(uint32_t, uint16_t&)>& word)
 {
-    std::map<uint32_t, std::vector<uint32_t>> into;
+    std::set<uint32_t> gone;
+    if (A7RuleOff(132)) return gone;
+    // (a block ends where the next instruction is another branch's target, a join the removed block does not extend into)
+    std::set<uint32_t> targets;
     for (const auto& range : r.body)
         for (uint32_t p = range.first; p < range.second; p += 2)
         {
             uint16_t w = 0;
             if (!word(p, w)) continue;
             const sfe::DisassembledInstruction d = sfe::Sh2Decode(p, w);
-            if (d.IsValid && d.HasBranchTarget && !d.IsCall) into[d.BranchTarget].push_back(d.HasDelaySlot ? p + 2 : p);
+            if (d.IsValid && d.HasBranchTarget && !d.IsCall) targets.insert(d.BranchTarget);
+        }
+    for (const std::string& warning : r.warnings)
+    {
+        const size_t at = warning.find("Removing unreachable block (ram,0x");
+        if (at == std::string::npos) continue;
+        uint32_t p = static_cast<uint32_t>(std::strtoul(warning.c_str() + at + 34, nullptr, 16));
+        const uint32_t start = p;
+        for (int steps = 0; steps < 64; ++steps, p += 2)
+        {
+            uint16_t w = 0;
+            if (!word(p, w) || (p != start && targets.count(p))) break;
+            const sfe::DisassembledInstruction d = sfe::Sh2Decode(p, w);
+            gone.insert(p);
+            if (!d.IsValid) break;
+            if (d.IsBranch || d.Mnemonic == "rts" || d.Mnemonic == "rte")
+            {
+                if (d.HasDelaySlot) gone.insert(p + 2);
+                break;
+            }
+        }
+    }
+    return gone;
+}
+inline std::map<uint32_t, std::vector<uint32_t>> BranchSources(const sfe::decomp::DecompileResult& r, const std::function<bool(uint32_t, uint16_t&)>& word)
+{
+    std::map<uint32_t, std::vector<uint32_t>> into;
+    const std::set<uint32_t> gone = RemovedBlockInsns(r, word);
+    for (const auto& range : r.body)
+        for (uint32_t p = range.first; p < range.second; p += 2)
+        {
+            uint16_t w = 0;
+            if (!word(p, w)) continue;
+            const sfe::DisassembledInstruction d = sfe::Sh2Decode(p, w);
+            if (d.IsValid && d.HasBranchTarget && !d.IsCall && !gone.count(p)) into[d.BranchTarget].push_back(d.HasDelaySlot ? p + 2 : p);
         }
     // A7-34 (the area 7 fixer): the edges no word names, a jump table's (`jmp @r1` to its cases), from the flow's blocks: the last
     // instruction of a block into the first of each block after it that does not follow it in memory
@@ -470,7 +511,7 @@ inline std::map<uint32_t, std::vector<uint32_t>> BranchSources(const sfe::decomp
         // (a block that ends in a `jmp`'s slot)
         uint16_t pw = 0;
         const uint32_t jump = r.flowBlockRanges[k].second;
-        if (!(word(jump - 2, pw) && sfe::Sh2Decode(jump - 2, pw).Mnemonic == "jmp")) continue;
+        if (!(word(jump - 2, pw) && sfe::Sh2Decode(jump - 2, pw).Mnemonic == "jmp") || gone.count(jump - 2)) continue;
         for (int n : r.flowSuccessors[k])
         {
             if (n < 0 || static_cast<size_t>(n) >= r.flowBlockRanges.size()) continue;
@@ -494,6 +535,18 @@ inline std::vector<EdgeFact>& EdgeFacts()
 {
     static thread_local std::vector<EdgeFact> facts;
     return facts;
+}
+// A7-131: the T bit on one edge into an instruction -- `tst r0,r0 ; bt L`'s edge to L has T set, its fall-through T clear -- for the
+// instruction at `at`, set only by the const-join check while it asks what the instruction computes on that edge; TBefore reads it.
+struct EdgeTruth
+{
+    int t = -1;
+    uint32_t at = 0;
+};
+inline EdgeTruth& EdgeT()
+{
+    static thread_local EdgeTruth e;
+    return e;
 }
 inline WordValue RegisterBefore(const sfe::decomp::DecompileResult& r, const std::function<bool(uint32_t, uint16_t&)>& word,
                                 const std::map<uint32_t, std::vector<uint32_t>>& into, uint32_t at, int reg, int depth = 0, uint32_t ignoreWriter = 0);
@@ -1084,6 +1137,37 @@ inline bool NeverRun(const sfe::decomp::DecompileResult& r, const std::function<
     }
     return false;
 }
+// A7-134: can the instruction at `at` be run, by the words and the T they give: some way into it (the instruction before it, or a
+// branch's source) is the entry or is itself reachable, and the edge is not one T says is never taken (EdgeImpossible). `cmp/eq`,
+// `tst` of numbers a store wrote -- a poll of a word the code itself set to a value the poll waits for, an endless loop -- make the
+// code after it unreachable by these words, though the engine prints it.
+inline bool OracleReachable(const sfe::decomp::DecompileResult& r, const std::function<bool(uint32_t, uint16_t&)>& word,
+                            const std::map<uint32_t, std::vector<uint32_t>>& into, uint32_t at)
+{
+    std::set<uint32_t> seen;
+    std::vector<uint32_t> todo = { at };
+    int steps = 0;
+    while (!todo.empty())
+    {
+        const uint32_t a = todo.back();
+        todo.pop_back();
+        if (!seen.insert(a).second) continue;
+        if (a == r.entry || ++steps > 2000) return true;
+        std::vector<uint32_t> preds;
+        uint16_t w = 0, w2 = 0;
+        if (r.InBody(a - 2) && word(a - 2, w))
+        {
+            const sfe::DisassembledInstruction prev = sfe::Sh2Decode(a - 2, w);
+            const sfe::DisassembledInstruction prev2 = r.InBody(a - 4) && word(a - 4, w2) ? sfe::Sh2Decode(a - 4, w2) : sfe::DisassembledInstruction();
+            if (prev.IsValid && !(prev2.IsValid && prev2.HasDelaySlot && !prev2.IsConditional && !prev2.IsCall)) preds.push_back(a - 2);
+        }
+        const auto in = into.find(a);
+        if (in != into.end()) preds.insert(preds.end(), in->second.begin(), in->second.end());
+        for (uint32_t p : preds)
+            if (!EdgeImpossible(r, word, into, p, a, 0)) todo.push_back(p);
+    }
+    return false;
+}
 inline bool SetsT(uint16_t w)
 {
     const int hi = w >> 12, lo = w & 0xF;
@@ -1096,6 +1180,7 @@ inline int TBefore(const sfe::decomp::DecompileResult& r, const std::function<bo
                    const std::map<uint32_t, std::vector<uint32_t>>& into, uint32_t at, int depth)
 {
     if (depth > 6) return -1;
+    if (EdgeT().t >= 0 && at == EdgeT().at) return EdgeT().t;
     const auto decode = [&](uint32_t p, sfe::DisassembledInstruction& d) {
         uint16_t w = 0;
         if (!r.InBody(p) || !word(p, w)) return false;
@@ -1427,6 +1512,9 @@ inline WordValue WrittenValue(const sfe::decomp::DecompileResult& r, const std::
                 }
                 return true;
             }
+            // (A7-138: nor a store through gbr, `mov.b r0,@(0xa,gbr)` between `mov.l r1,@-r15` and `mov.l @r15+,r1`: the engine keeps gbr's
+            // memory apart from the frame; grammar 2 seed 7606857)
+            if (store && !A7RuleOff(138) && (iw >> 8) >= 0xC0 && (iw >> 8) <= 0xC2) return true;
             return !store;
         };
         const auto isPush = [&](uint32_t q) {
@@ -3280,6 +3368,16 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
             }
             const uint32_t widthMask = width >= 4 ? 0xFFFFFFFFu : (1u << (8 * width)) - 1;
             const auto sameNumber = [&](uint32_t x) { return ((x ^ want) & widthMask) == 0; };
+            // (A7-134: code the words' own T makes unreachable is judged by nothing: no path runs the instruction)
+            const auto unreachable = [&]() {
+                if (A7RuleOff(134)) return false;
+                if (!haveSources)
+                {
+                    sources = BranchSources(r, word);
+                    haveSources = true;
+                }
+                return !OracleReachable(r, word, sources, at);
+            };
             // A7-34 (the area 7 fixer): an instruction that computes the number into the register it writes, from values the words give
             // (WrittenValue: `extu.w r3,r1` of 0xffe4, `shll2`, `add #imm`, `xor r1,r1`, a read of what a store before it wrote, as the
             // engine folds them), or into a control register (`ldc r1,gbr` for `unaff_gbr = 4`), or a status bit it sets (`div0u` for
@@ -3332,6 +3430,32 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     computes = computes || (v.kind == WordValue::Number && sameNumber(static_cast<uint32_t>(v.value)));
                 }
                 EdgeFacts().clear();
+                // (A7-131: on one edge into the join the instruction computes the number from the T the edge gives -- `tst r0,r0 ; bt L ;
+                // ... ; L: rotcl r3`, the bt's edge with T set: 0x33 rotated left with T is 0x67 -- when the instruction reads T and a
+                // `bt` or `bf` of its own is the edge; grammar 1 seeds 7202663 and 7205591)
+                if (!computes && !A7RuleOff(131))
+                {
+                    std::vector<std::pair<uint32_t, int>> edges;
+                    uint16_t pw = 0;
+                    const auto in = sources.find(at);
+                    if (in != sources.end())
+                        for (uint32_t pb : in->second)
+                            if (r.InBody(pb) && word(pb, pw) && ((pw >> 8) == 0x89 || (pw >> 8) == 0x8B) && sfe::Sh2Decode(pb, pw).BranchTarget == at)
+                                edges.emplace_back(pb, (pw >> 8) == 0x89 ? 1 : 0);
+                    if (r.InBody(at - 2) && word(at - 2, pw) && ((pw >> 8) == 0x89 || (pw >> 8) == 0x8B) && sfe::Sh2Decode(at - 2, pw).BranchTarget != at)
+                        edges.emplace_back(at - 2, (pw >> 8) == 0x89 ? 0 : 1);
+                    for (const auto& edge : edges)
+                    {
+                        EdgeT().t = edge.second;
+                        EdgeT().at = at;
+                        for (int reg : WrittenRegisters(d))
+                        {
+                            const WordValue v = WrittenValue(r, word, sources, at, reg, 0);
+                            computes = computes || (v.kind == WordValue::Number && sameNumber(static_cast<uint32_t>(v.value)));
+                        }
+                        EdgeT() = EdgeTruth();
+                    }
+                }
                 if ((w >> 12) == 0x4 && ((w & 0xFF) == 0x0E || (w & 0xFF) == 0x1E || (w & 0xFF) == 0x2E || (w & 0xFF) == 0x0A || (w & 0xFF) == 0x1A ||
                                          (w & 0xFF) == 0x2A))
                 {
@@ -3368,6 +3492,98 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                         all = sameNumber((w >> 8) == 0xCB ? (v | (w & 0xFFu)) : (v & (w & 0xFFu)));
                     }
                     if (all) computes = true;
+                }
+                // (A7-139: `mov.b @Rk,Rn` or `mov.w @Rk,Rn` of the first bytes of the word `mov.l Rs,@Rk` stored before it, when every maker of Rs is
+                // a `movt` (0 or 1): the high bytes are 0, whatever the T. Up to 10 instructions back, the conditional branches among them forward
+                // to the load or short of it (code skipped, which is scanned as well), none writing Rk or Rs or storing; grammar 2 seed 7608136, `movt r3 ; mov.l r3,@r15 ; tst r3,r4 ; bt L ;
+                // L: mov.b @r15,r1`)
+                if (!computes && want == 0 && (w >> 12) == 0x6 && ((w & 0xF) == 0x0 || (w & 0xF) == 0x1) && !A7RuleOff(139))
+                {
+                    const int rk = static_cast<int>((w >> 4) & 0xF);
+                    for (uint32_t q = at - 2, steps = 0; steps < 10 && r.InBody(q) && !computes; q -= 2, ++steps)
+                    {
+                        uint16_t qw = 0;
+                        if (!word(q, qw)) break;
+                        const sfe::DisassembledInstruction qd = sfe::Sh2Decode(q, qw);
+                        if (!qd.IsValid || qd.IsCall || qd.HasDelaySlot) break;
+                        const bool noopBranch = ((qw >> 8) == 0x89 || (qw >> 8) == 0x8B) && qd.BranchTarget > q && qd.BranchTarget <= at;
+                        if (qd.IsBranch && !noopBranch) break;
+                        if ((qw >> 12) == 0x2 && (qw & 0xF) == 0x2 && static_cast<int>((qw >> 8) & 0xF) == rk)
+                        {
+                            std::set<uint32_t> makersS;
+                            const int rs = static_cast<int>((qw >> 4) & 0xF);
+                            bool all = RegisterMakers(r, word, sources, q, rs, makersS) && !makersS.empty() && !makersS.count(0);
+                            for (uint32_t mk : makersS)
+                            {
+                                uint16_t mw = 0;
+                                all = all && word(mk, mw) && (mw & 0xF0FF) == 0x0029;
+                            }
+                            computes = all;
+                            break;
+                        }
+                        int sz = 0;
+                        if (StoredRegister(qw, sz) >= 0 || WrittenRegisters(qd).count(rk)) break;
+                    }
+                }
+                // (A7-137: `sub Rm,Rn` of a register and the word a store of it wrote just before: `mov.l r0,@r6 ; mov.l @r6,r2 ; ... ; sub
+                // r2,r0` is 0 whatever r0 is, the engine forwarding the stored word to the read. Rm's one maker is the `mov.l @Rk,Rm`, the
+                // instruction before it on the straight line (up to 8) that stores is `mov.l Rn,@Rk`, none of them writes Rk or Rn, and Rn has
+                // the same makers at the `sub` as at the store; grammar 1 seed 7600135)
+                if (!computes && want == 0 && (w >> 12) == 0x3 && (w & 0xF) == 0x8 && !A7RuleOff(137))
+                {
+                    const int dn = static_cast<int>((w >> 8) & 0xF), sm = static_cast<int>((w >> 4) & 0xF);
+                    std::set<uint32_t> makersM;
+                    uint16_t lw = 0;
+                    if (RegisterMakers(r, word, sources, at, sm, makersM) && makersM.size() == 1 && !makersM.count(0) && word(*makersM.begin(), lw) &&
+                        (lw >> 12) == 0x6 && (lw & 0xF) == 0x2 && static_cast<int>((lw >> 8) & 0xF) == sm)
+                    {
+                        const uint32_t load = *makersM.begin();
+                        const int k = static_cast<int>((lw >> 4) & 0xF);
+                        for (uint32_t q = load - 2, steps = 0; steps < 8 && r.InBody(q) && !computes; q -= 2, ++steps)
+                        {
+                            uint16_t qw = 0;
+                            if (!word(q, qw) || targets.count(q + 2) || sources.count(q + 2)) break;
+                            const sfe::DisassembledInstruction qd = sfe::Sh2Decode(q, qw);
+                            if (!qd.IsValid || qd.IsBranch || qd.IsCall || qd.HasDelaySlot) break;
+                            if (qw == static_cast<uint16_t>(0x2002u | (static_cast<unsigned>(k) << 8) | (static_cast<unsigned>(dn) << 4)))
+                            {
+                                std::set<uint32_t> before, now;
+                                computes = RegisterMakers(r, word, sources, q, dn, before) && RegisterMakers(r, word, sources, at, dn, now) && before == now;
+                                break;
+                            }
+                            int sz = 0;
+                            if (StoredRegister(qw, sz) >= 0 || WrittenRegisters(qd).count(k) || WrittenRegisters(qd).count(dn)) break;
+                        }
+                    }
+                }
+                // (A7-130: `and Rm,Rn` in a loop whose Rn is the mask a literal gave, `and`ed again each pass: `mov.l @(..),r1` of
+                // 0x20000000, then `and r5,r1` at the loop's head, r1 the literal's on the way in and the `and`'s own on the way round: every
+                // maker of a register is a number with the kept bits 0, or an `and` of such a register (a cycle is the loop's own `and`);
+                // the engine prints the 0 where the text uses the low bits only. Grammar 1 seed 6900150)
+                if (!computes && want == 0 && (w >> 12) == 0x2 && (w & 0xF) == 0x9 && !A7RuleOff(130))
+                {
+                    const uint32_t kept = widthMask == 0xFFFFFFFFu ? 0xFFFFu : widthMask;
+                    std::set<std::pair<uint32_t, int>> active;
+                    std::function<bool(uint32_t, int, int)> zeroKept = [&](uint32_t before, int reg, int depth) -> bool {
+                        std::set<uint32_t> makers;
+                        if (depth > 6 || !RegisterMakers(r, word, sources, before, reg, makers) || makers.empty() || makers.count(0)) return false;
+                        if (!active.insert(std::make_pair(before, reg)).second) return true;
+                        bool all = true;
+                        for (uint32_t m : makers)
+                        {
+                            uint16_t mw = 0;
+                            uint32_t v = 0;
+                            if (!word(m, mw)) { all = false; break; }
+                            if (made(m, mw, v)) all = (v & kept) == 0;
+                            else if ((mw >> 12) == 0x2 && (mw & 0xF) == 0x9 && static_cast<int>((mw >> 8) & 0xF) == reg)
+                                all = zeroKept(m, static_cast<int>((mw >> 8) & 0xF), depth + 1) || zeroKept(m, static_cast<int>((mw >> 4) & 0xF), depth + 1);
+                            else all = false;
+                            if (!all) break;
+                        }
+                        active.erase(std::make_pair(before, reg));
+                        return all;
+                    };
+                    if (zeroKept(at, static_cast<int>((w >> 8) & 0xF), 0) || zeroKept(at, static_cast<int>((w >> 4) & 0xF), 0)) computes = true;
                 }
                 // (A7-110: `and Rm,Rn` of a number and a register whose low bits left shifts made 0, the number inside those bits: `and
                 // r2,r0` with r0 the 2 a poll reads back and r2 shifted by `shll2` is 0; grammar 1 seed 5207679)
@@ -3412,6 +3628,11 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                 {
                     const WordValue v = RegisterBefore(r, word, sources, at, (w >> 4) & 0xF);
                     computes = v.kind == WordValue::Number && sameNumber(static_cast<uint32_t>(v.value) << 16);
+                    // (A7-140: both registers numbers, the whole of the result: r0 = 3 and r2 = 0x20000000 give `iVar1 = 0x32000;`; grammar 1
+                    // seed 7702852, specials)
+                    const WordValue rn = RegisterBefore(r, word, sources, at, (w >> 8) & 0xF);
+                    if (!computes && !A7RuleOff(140) && v.kind == WordValue::Number && rn.kind == WordValue::Number)
+                        computes = sameNumber(static_cast<uint32_t>(v.value) << 16 | static_cast<uint32_t>(rn.value) >> 16);
                 }
                 // (A7-78: `xtrct r1,r1` of a register that is 0 -- a `dt` loop's counter, then kept 0 by the loop's own `extu.w r1,r1` and the
                 // `xtrct` itself, a cycle RegisterBefore cannot close: every maker a `dt`, a `mov #0` or an extension, a
@@ -3568,6 +3789,7 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     if (!storeRegs.empty())
                     {
                         if (storeRegs.count(rm)) continue;
+                        if (unreachable()) continue;
                         ++a.constAtJoin;
                         problem("const-join", "line " + std::to_string(li) + " '" + text + "' is drawn at " + MappingHex(at) + " (" + d.Mnemonic + " " +
                                                   d.Operands + "), the first instruction of a join, which makes the number into r" + std::to_string(rm) +
@@ -3623,6 +3845,7 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                 for (int reg = 0; reg < 15 && other < 0; ++reg)
                     if (reg != rm && used.count(reg) && holds(reg)) other = reg;
                 if (other < 0) continue;
+                if (unreachable()) continue;
                 ++a.constAtJoin;
                 problem("const-join", "line " + std::to_string(li) + " '" + text + "' is drawn at " + MappingHex(at) + " (" + d.Mnemonic + " " + d.Operands +
                                           "), the first instruction of a join, which makes the number into r" + std::to_string(rm) +
@@ -3658,6 +3881,7 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
                     }
                 if (agree && usesR0) continue;
             }
+            if (unreachable()) continue;
             ++a.constAtJoin;
             problem("const-join", "line " + std::to_string(li) + " '" + text + "' is drawn at " + MappingHex(at) + " (" + d.Mnemonic + " " + d.Operands +
                                       "), the first instruction of a join, which does not make the number");

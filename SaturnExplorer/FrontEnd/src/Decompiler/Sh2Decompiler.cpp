@@ -7459,6 +7459,30 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
             // stores wrote -- and of those the ones no other store of the variable writes, when there are such)
             ValueSet part = values;
             const ghidra::uintb mask = space->getHighest();
+            // (A7-136: the bytes a zero extension adds -- `uRam26001014 = (uint4)uRam26001014._2_2_;`, the high half of the word, the
+            // half-word store of 0 over it -- are the number 0: a store that writes only those bytes shows the statement when the value it
+            // wrote may be 0, whatever the statement reads of the variable; grammar 2 seed 7201580, A5-134)
+            if (code == ghidra::CPUI_INT_ZEXT && o->numInput() == 1 && r->addr.getSpace() == space && out->getSize() <= 32 && r->size <= 8)
+            {
+                const ghidra::int4 inSize = o->getIn(0)->getSize();
+                const bool big = space->isBigEndian();
+                const ghidra::int4 zeroFrom = big ? 0 : inSize, zeroTo = big ? out->getSize() - inSize : out->getSize();
+                const ghidra::uintb rel2 = (r->addr.getOffset() - base) & mask;
+                if (rel2 <= mask / 2 && zeroTo > zeroFrom && static_cast<ghidra::int4>(std::min<ghidra::uintb>(rel2, 64)) >= zeroFrom &&
+                    static_cast<ghidra::int4>(std::min<ghidra::uintb>(rel2, 64)) + r->size <= zeroTo)
+                {
+                    ValueSet zero;
+                    zero.numbers.emplace_back(0, out->getSize());
+                    zero.partial = true;
+                    zero.storeSize = r->size;
+                    zero.varSize = out->getSize();
+                    zero.storeAt = static_cast<int>(rel2);
+                    for (int i = 0; i < r->size; ++i) zero.compared |= 1u << (static_cast<int>(rel2) + i);
+                    const bool v = StoreShowsValue(*r, flow, fd, zero);
+                    shown[r] = v;
+                    return v;
+                }
+            }
             const ghidra::uintb rel = (r->addr.getOffset() - base) & mask;   // the store's first byte from the variable's
             const int at = rel <= mask / 2 ? static_cast<int>(std::min<ghidra::uintb>(rel, 64)) : -static_cast<int>(std::min<ghidra::uintb>((base - r->addr.getOffset()) & mask, 64));
             if (r->addr.getSpace() == space && out->getSize() <= 32 && r->size <= 8)
@@ -8271,7 +8295,26 @@ int AddFrameStoreTokens(std::vector<Line>& lines, const PrintedOperations& print
                 if (CanonicalAddress(insn, canonical)) insn = canonical;
                 ownStore = ownStore || insn == own;
             }
-            if (!ownStore)
+            // (A7-133: the conversion an extension instruction makes -- `exts.b r5,r3`, whose byte the store after it writes: `cStack_34 =
+            // (char)param_2;` -- is that instruction's own statement, as the text prints the cast of what it extends: no copy of a value
+            // made elsewhere; grammar 2 seed 7202286)
+            bool extensionHere = false;
+            if (conversion && !flow.callInsns.count(at))
+            {
+                const auto first = flow.insnFirst.find(at);
+                if (first != flow.insnFirst.end() && first->second.first >= 0 && static_cast<size_t>(first->second.first) < flow.blockOps.size())
+                {
+                    const std::vector<FlowOp>& iops = flow.blockOps[static_cast<size_t>(first->second.first)];
+                    bool extends = false, memory = false;
+                    for (size_t i = first->second.second; i < iops.size() && iops[i].insn == at; ++i)
+                    {
+                        extends = extends || ((iops[i].code == ghidra::CPUI_INT_SEXT || iops[i].code == ghidra::CPUI_INT_ZEXT) && iops[i].numIn >= 1 && !iops[i].in[0].Constant() && iops[i].hasOut && iops[i].out.space && iops[i].out.space->getType() == ghidra::IPTR_PROCESSOR);
+                        memory = memory || iops[i].code == ghidra::CPUI_LOAD || iops[i].code == ghidra::CPUI_STORE;
+                    }
+                    extensionHere = extends && !memory;
+                }
+            }
+            if (!ownStore && !extensionHere)
                 for (size_t line : kv.second->first)
                 {
                     if (line >= lines.size() || sharedLines.count(std::make_pair(line, own))) continue;
@@ -8464,6 +8507,69 @@ void MarkMaterialisedReads(std::vector<Line>& lines, const PrintedOperations& pr
                 if (t.addr == own && t.begin < t.end) t.materialised = true;
         }
     }
+}
+
+// A7-135: a sign or zero extension the engine made itself -- after the flow, at the first address of a block -- as the twin of one the
+// flow made, on the same input: the slot of a `bt/s` reads a half-word (`mov.w @(6,r6),r0`, a SEXT of the read) before the branch, and
+// the fall-through path gets its own copy of that extension when the value is kept in a variable (`iVar3 = (int4)iRam2600100e;`), made
+// at the address of the block's first instruction, the `mov.l` after the slot, which extends nothing. The statement is the slot's:
+// its drawn tokens go to the instruction of the flow's op (a click on the line reaches the read, as the other copy's does). Only when the
+// instruction the engine's op is at has no extension of its own. Grammar 1 seed 6906813.
+int RetargetTwinExtensions(std::vector<Line>& lines, const PrintedOperations& printed, const FlowRecord& flow)
+{
+    std::vector<const ghidra::PcodeOp*> ordered;
+    for (const auto& kv : printed) ordered.push_back(kv.first);
+    std::sort(ordered.begin(), ordered.end(), [](const ghidra::PcodeOp* a, const ghidra::PcodeOp* b) { return a->getTime() < b->getTime(); });
+    const std::set<std::pair<size_t, uint32_t>> shared = SharedInstructionLines(printed, ordered);
+    int moved = 0;
+    for (const ghidra::PcodeOp* o : ordered)
+    {
+        if ((o->code() != ghidra::CPUI_INT_SEXT && o->code() != ghidra::CPUI_INT_ZEXT) || !o->getOut() || o->getOut()->isImplied() || o->getTime() < flow.opsEnd ||
+            o->isFromDelaySlot() || o->numInput() != 1)
+            continue;
+        const uint32_t at = InstructionOf(o);
+        // (an instruction that extends is where the op is made)
+        const auto first = flow.insnFirst.find(at);
+        if (first == flow.insnFirst.end() || first->second.first < 0 || static_cast<size_t>(first->second.first) >= flow.blockOps.size()) continue;
+        const std::vector<FlowOp>& iops = flow.blockOps[static_cast<size_t>(first->second.first)];
+        bool own = false;
+        for (size_t i = first->second.second; i < iops.size() && iops[i].insn == at; ++i)
+            own = own || ((iops[i].code == ghidra::CPUI_INT_SEXT || iops[i].code == ghidra::CPUI_INT_ZEXT) && iops[i].numIn >= 1 && !iops[i].in[0].Constant() && iops[i].hasOut && iops[i].out.space && iops[i].out.space->getType() == ghidra::IPTR_PROCESSOR);
+        if (own) continue;
+        const ghidra::Varnode* in = o->getIn(0);
+        uint32_t twin = 0;
+        bool several = false;
+        for (auto d = in->beginDescend(); d != in->endDescend(); ++d)
+        {
+            const ghidra::PcodeOp* x = *d;
+            if (x == o || x->code() != o->code() || x->getTime() >= flow.opsEnd || !x->getOut() || x->getOut()->getSize() != o->getOut()->getSize()) continue;
+            const uint32_t xi = InstructionOf(x);
+            if (twin && twin != xi) several = true;
+            twin = xi;
+        }
+        if (!twin || several || twin == at) continue;
+        uint32_t from = at, to = twin, c = 0;
+        if (CanonicalAddress(from, c)) from = c;
+        if (CanonicalAddress(to, c)) to = c;
+        for (size_t line : printed.at(o).first)
+        {
+            if (line >= lines.size() || shared.count(std::make_pair(line, from))) continue;
+            Line& l = lines[line];
+            bool any = false;
+            for (Token& t : l.tokens)
+                if (t.addr == from && t.begin < t.end)
+                {
+                    t.addr = to;
+                    any = true;
+                    ++moved;
+                }
+            if (!any) continue;
+            l.firstAddr = 0;
+            for (const Token& t : l.tokens)
+                if (t.addr && (l.firstAddr == 0 || t.addr < l.firstAddr)) l.firstAddr = t.addr;
+        }
+    }
+    return moved;
 }
 
 }  // namespace
@@ -11068,6 +11174,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         r.accesses = Accesses(*fd, printed, canonicalOf, flow);
         AddJoinConstantTokens(r.lines, printed, *fd, flow);
         AddFrameStoreTokens(r.lines, printed, *fd, flow);
+        RetargetTwinExtensions(r.lines, printed, flow);
         MarkMaterialisedReads(r.lines, printed, *fd, flow);
         for (Line& l : r.lines)   // A7-12: the word flow halted at is no instruction; the line's hover text says so
             for (Token& t : l.tokens)

@@ -1,0 +1,9 @@
+#!/bin/bash
+# usage: sweep.sh <bin dir> <tag>
+S=${SCRATCH:?set SCRATCH to a scratch directory}
+B=$1/SaturnExplorerSh2GeneratedTests
+TAG=$2
+ulimit -v 6000000
+SE_GENERATED_GRAMMAR=1 SE_GENERATED_FIRST=7600001 SE_GENERATED_SEEDS=10000 SE_GENERATED_CANARY=0 SE_GENERATED_SHRINK=0 $B $S/r16/sw_${TAG}_g1 > $S/r16/sweep_${TAG}_g1.log 2>&1; echo "EXIT $?" >> $S/r16/sweep_${TAG}_g1.log
+SE_GENERATED_GRAMMAR=2 SE_GENERATED_FIRST=7600001 SE_GENERATED_SEEDS=10000 SE_GENERATED_CANARY=0 SE_GENERATED_SHRINK=0 $B $S/r16/sw_${TAG}_g2 > $S/r16/sweep_${TAG}_g2.log 2>&1; echo "EXIT $?" >> $S/r16/sweep_${TAG}_g2.log
+SE_GENERATED_GRAMMAR=1 SE_GENERATED_ALPHABET=specials SE_GENERATED_FIRST=7700001 SE_GENERATED_SEEDS=5000 SE_GENERATED_CANARY=0 SE_GENERATED_SHRINK=0 $B $S/r16/sw_${TAG}_sp > $S/r16/sweep_${TAG}_sp.log 2>&1; echo "EXIT $?" >> $S/r16/sweep_${TAG}_sp.log

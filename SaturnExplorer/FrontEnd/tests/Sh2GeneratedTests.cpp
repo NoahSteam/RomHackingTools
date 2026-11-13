@@ -16457,6 +16457,30 @@ void TestArea7Round15Pins(Sh2Decompiler& d)
     gSpecialReads = savedSpecials;
 }
 
+void TestArea7Round16Pins(Sh2Decompiler& d)
+{
+    struct Pin
+    {
+        int grammar;
+        int seed;
+        bool specials;
+    };
+    const bool savedSpecials = gSpecialReads;
+    for (const Pin& s : { Pin{ 1, 6900150, false }, Pin{ 1, 6901649, false }, Pin{ 1, 6902754, false }, Pin{ 1, 7202663, false }, Pin{ 1, 7205591, false },
+                          Pin{ 1, 6906813, false }, Pin{ 2, 6906408, false }, Pin{ 2, 7202286, false }, Pin{ 2, 7201580, false }, Pin{ 1, 7600135, false },
+                          Pin{ 2, 7608136, false }, Pin{ 2, 7606857, false }, Pin{ 1, 7702852, true } })
+    {
+        gSpecialReads = s.specials;
+        const Report rep = Evaluate(d, s.grammar == 2 ? MakeV2(s.seed) : Generate(s.seed), true);
+        std::printf("pin 'area 7 round 16: grammar %d seed %d%s': %zu finding(s)\n", s.grammar, s.seed, s.specials ? " (specials)" : "", rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        for (const Finding& f : rep.findings) CHECK(f.sig.find("map-") == std::string::npos);
+        // (7201580 is A5-134's: the order rule's report of the mapping, which now draws the zero half at its store, is gone as well)
+        if (s.seed == 7201580) CHECK(rep.findings.empty());
+    }
+    gSpecialReads = savedSpecials;
+}
+
 // ---- A5-114 to A5-118 (patch 0090): a hardware access is a barrier no read or write of ordinary memory is moved, merged or dropped across ----
 // The area 5 review round's fixtures (A5-114 to A5-117, Sh2DecompilerTests' TestArea5Review), the coordinator's A5-118 (a whole overwrite of a
 // global across a DMA enable), and the seeds that failed on master 43e945b2 with `folded-store-after-access`. Each module pin passes with the
@@ -16561,7 +16585,7 @@ void TestA5119Pins(Sh2Decompiler& d)
         { "A5-118, g = r1 ; *r4 = 1 ; g = r2", "D602 E701 2612 2472 000B 2622 0603 0000", nullptr, "order.folded-store.checked", nullptr, nullptr },
         // A5-123: grammar 1 seed 5203228 shrunk (the mailbox marked): the slot's half-word store of 0 is joined into the long store's statement
         { "A5-123, grammar 1 seed 5203228 shrunk", "D607 E301 4310 8BFD D706 6071 C801 8BFC 461B 8554 2602 C808 8D00 2631 000B 0009 2600 2304 2600 1018", nullptr,
-          "order.folded-store.joined-earlier", "26001018-2600101B", "26001018" },
+          "order.folded-store.checked", "26001018-2600101B", "26001018" },   // (area 7 round 16, A7-136: the mapping names the zero half-word store on the zero extension's own line, so no set-aside, `joined-earlier`, is needed: the store is judged)
         // ...and 5207886 shrunk: the store's statement on the path through the register read is `xRam26001004 = VDP2_MPABN0;`, at the read
         { "A5-123, grammar 1 seed 5207886 shrunk", "D605 D706 2208 8B01 C810 8F02 816D 6245 6161 2711 000B 0009 25F8 0040 2600 1004", nullptr,
           "order.folded-store.at-maker", nullptr, nullptr },
@@ -16630,7 +16654,7 @@ void TestA5126Pins(Sh2Decompiler& d)
         { "A5-122 sweep, grammar 1 seed 6907692 shrunk", "D108 E303 D608 D709 2138 8900 1630 E00D CE7A E301 461B 0129 4310 8BFB 2632 8545 000B 0009 2600 3C1C 2600 2200 2600 1000",
           "order.folded-store.unrun", "4:26003C1C" },
         { "A5-122 sweep, grammar 1 seed 6906813 shrunk", "D608 D709 2621 6072 C801 8BFB 2248 8907 8802 8D03 8563 517B 000B 0009 000B 0009 AFF8 0009 2600 1008 0818 0044",
-          "order.folded-read-before-access.other-path", "4:06003C10" },
+          "order.folded-read-before-access.checked", "4:06003C10" },   // (area 7 round 16, A7-135: the other copy of the slot's read is drawn at the slot, so no set-aside, `other-path`, is needed: the read is judged)
     };
     for (const Pin& p : kPins)
     {
@@ -17538,6 +17562,7 @@ void TestGenerated()
         RUN(TestArea7Round13Pins(d));
         RUN(TestArea7Round14Pins(d));
         RUN(TestArea7Round15Pins(d));
+        RUN(TestArea7Round16Pins(d));
         RUN(TestA5114Pins(d));
         RUN(TestA5119Pins(d));
         RUN(TestA5126Pins(d));
