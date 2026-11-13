@@ -79,6 +79,12 @@ std::string BundledMednafenPath(const std::string& executablePath);
 // panel reports as present is the one the emulator is actually given.
 std::string MednafenFirmwareDir(const std::string& exePath);
 
+// The Mednafen executable a Launch Settings entry means. A release unpacks to a mednafen-se/ folder, and
+// pointing the Executable field at that folder is an easy slip: the firmware check would then look in
+// the folder ABOVE it and report a correctly installed BIOS as missing. So a folder holding mednafen
+// (mednafen.exe on Windows) stands for that file; any other path is returned unchanged.
+std::string ResolveMednafenExe(const std::string& path);
+
 // The launcher's persisted state: the known emulators (with per-emulator overrides),
 // which emulator + ROM are selected, a most-recently-used ROM list, and whether
 // launching should also use the ROM's containing folder as the Data Directory.

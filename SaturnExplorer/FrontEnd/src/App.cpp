@@ -9501,12 +9501,22 @@ void App::DrawLaunchSettingsModal(IPlatform& platform)
                 ImGui::TextUnformatted("Executable");
                 ImGui::SetNextItemWidth(-82.0f);
                 ImGui::InputText("##executable", mLaunchEdits[i].exe, sizeof(mLaunchEdits[i].exe));
+                const bool typingExe = ImGui::IsItemActive();
                 ImGui::SameLine();
                 if (ImGui::Button("Browse...", ImVec2(74, 0)))
                 {
                     std::string p;
                     if (platform.OpenFileDialog(p))
                         std::snprintf(mLaunchEdits[i].exe, sizeof(mLaunchEdits[i].exe), "%s", p.c_str());
+                }
+                // A mednafen-se folder stands for the Mednafen inside it. Rewritten only once the field is
+                // not being typed in: ImGui keeps its own copy of an active buffer, and the user may still be
+                // on the way to typing "\mednafen.exe" after the folder.
+                if (mednafen && !typingExe)
+                {
+                    const std::string resolved = ResolveMednafenExe(mLaunchEdits[i].exe);
+                    if (resolved != mLaunchEdits[i].exe)
+                        std::snprintf(mLaunchEdits[i].exe, sizeof(mLaunchEdits[i].exe), "%s", resolved.c_str());
                 }
 
                 ImGui::TextUnformatted("Arguments Template");
@@ -9645,7 +9655,8 @@ void App::DrawLaunchSettingsModal(IPlatform& platform)
     {
         for (size_t i = 0; i < emus.size() && i < mLaunchEdits.size(); ++i)
         {
-            emus[i].exePath      = mLaunchEdits[i].exe;
+            emus[i].exePath      = emus[i].key == "mednafen" ? ResolveMednafenExe(mLaunchEdits[i].exe)
+                                                             : std::string(mLaunchEdits[i].exe);
             emus[i].argsTemplate = mLaunchEdits[i].args;
             emus[i].workDir      = mLaunchEdits[i].workDir;
         }
